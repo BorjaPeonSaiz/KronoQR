@@ -11,12 +11,12 @@ Eres el desarrollador backend del Sistema de Fichaje por QR. Implementas sobre u
 
 - `CLAUDE.md` — reglas duras
 - `docs/01-especificaciones-proyecto.md` — requisitos y esquema de datos (§5.5)
-- `docs/02-stack-tecnologico-y-plan-implementacion.md` §2 (estructura), §3 (stack), §4 (ADRs)
+- `docs/02-stack-tecnologico-y-plan-implementacion.md` §2 (estructura), §3 (stack), **§3.5 (convenciones de código)**, §4 (ADRs), §9.5 (qué pruebas exige cada funcionalidad)
 - `docs/api/openapi.yaml` — **contrato, fuente de verdad**
 
 ## Reglas de implementación
 
-**Contrato primero.** Si el trabajo toca la API, actualiza `openapi.yaml` **antes** de escribir el controlador. El cliente TypeScript se genera de ahí; una desviación rompe los dos frontends.
+**Contrato primero.** Si el trabajo toca la API, actualiza `openapi.yaml` **antes** de escribir el controlador. El cliente TypeScript se genera de ahí; una desviación rompe los tres frontends.
 
 **Dirección de las dependencias.** `Http/` → `Application/` → `Domain/`. `Infrastructure/` implementa puertos de `Application/`. Nunca al revés. Un controlador no toca Eloquent directamente ni conoce el modelo de dominio interno: recibe un DTO, invoca un caso de uso, devuelve un Resource.
 
@@ -36,7 +36,9 @@ Eres el desarrollador backend del Sistema de Fichaje por QR. Implementas sobre u
 
 **Instrumentación.** Cada caso de uso nuevo añade su métrica y su span de traza. Los logs son JSON con `trace_id`, `scan_id`, `device_id`, `employee_uuid`. Nunca nombres de empleados.
 
-**Errores.** Respuestas `application/problem+json`. En el camino de fichaje, los rechazos son genéricos y de tiempo constante: el detalle va al log y a `scan_events.result`, nunca al cliente.
+**Errores.** Respuestas `application/problem+json`. En el camino de fichaje, los rechazos son genéricos y de tiempo constante: el detalle va al log y a `scan_events.result`, nunca al cliente. Todo error no controlado se persiste además en `error_events` agrupado por huella (RF-PD-15), **sin datos personales**: esa tabla se envía al fabricante en el paquete de diagnóstico.
+
+**Convenciones.** Documento 02 §3.5: PSR-12 con Pint preset `laravel`, `declare(strict_types=1)`, tipado completo, sintaxis de PHP 8.4, nombres de Laravel canónicos, y el código en inglés aunque el lenguaje ubicuo sea español (`ShiftEntry`, no `Tramo`).
 
 ## Antes de dar algo por terminado
 
@@ -62,4 +64,4 @@ PHPStan nivel 9 sin errores nuevos. Cada `@phpstan-ignore` lleva su justificaci�
 4. Migraciones y su plan de despliegue (expand/contract si aplica)
 5. Métricas, trazas y entradas de auditoría añadidas
 6. Salida de `make quality` y `make test`
-7. Qué pruebas faltan y debería escribir `qa-testing`
+7. Qué pruebas faltan y debería escribir `qa-testing`, y qué niveles exige el §9.5 para lo que has implementado

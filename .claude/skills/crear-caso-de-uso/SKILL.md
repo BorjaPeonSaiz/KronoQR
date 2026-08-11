@@ -82,6 +82,8 @@ Métrica del contador y del histograma de duración, span de traza, log estructu
 
 Si la operación es una escritura del quiosco, añade la prueba de **idempotencia bajo concurrencia**: N peticiones paralelas con el mismo `scan_id`, un solo efecto.
 
+**Etiqueta cada prueba con los requisitos que cubre** (`->group('RF-AT-04', 'RN-06')`). De ahí sale la matriz de trazabilidad, y `php artisan qa:traceability --check` bloquea la CI si el requisito que motivó este caso de uso no aparece en ninguna prueba (RQ-13).
+
 ## Verificación final
 
 ```bash
@@ -98,5 +100,7 @@ make quality && make test
 - [ ] `openapi.yaml` actualizado
 - [ ] Policy registrada y **prueba negativa por rol**
 - [ ] Métrica, traza y log añadidos
-- [ ] Pruebas en los cuatro niveles
+- [ ] Pruebas en los cuatro niveles, etiquetadas con sus requisitos
+- [ ] `qa:traceability --check` en verde
+- [ ] Convenciones del documento 02 §3.5: `declare(strict_types=1)`, tipado completo, nombres en inglés según el glosario del 01 §13, sin lógica de negocio en el controlador
 - [ ] `make quality && make test` en verde

@@ -1,4 +1,4 @@
-# Sistema de Fichaje por QR — Reglas del proyecto
+# KronoQR — Sistema de fichaje por QR · Reglas del proyecto
 
 **Producto licenciado** de control de presencia y **registro horario con valor legal** para hoteles. Los empleados fichan escaneando una tarjeta QR en una tablet-quiosco compartida.
 
@@ -10,9 +10,19 @@ Antes de escribir código, lee lo que corresponda a tu tarea:
 
 - [docs/01-especificaciones-proyecto.md](docs/01-especificaciones-proyecto.md) — requisitos (`RF-*`), reglas de negocio (`RN-*`), modelo de dominio, requisitos legales (`RL-*`), seguridad (`RS-*`), calidad (`RQ-*`)
 - [docs/02-stack-tecnologico-y-plan-implementacion.md](docs/02-stack-tecnologico-y-plan-implementacion.md) — arquitectura, stack, 20 ADRs, seguridad, observabilidad, pruebas y plan por fases **con el agente asignado a cada tarea**
+- [docs/03-agentes-y-skills-ia.md](docs/03-agentes-y-skills-ia.md) — qué agente y qué skill usar en cada situación, y los prompts de arranque de cada hito
 - [docs/04-decision-credencial.md](docs/04-decision-credencial.md) — por qué la credencial es una tarjeta física
+- [docs/05-presentacion-cliente.md](docs/05-presentacion-cliente.md) — **lo que se le ha prometido al cliente.** Si lo que vas a implementar contradice este documento, o el documento promete algo que no existe como requisito, para y dilo
 - [docs/adr/](docs/adr/) — decisiones arquitectónicas. **Si vas a contradecir un ADR, para y pregunta.**
 - [docs/api/openapi.yaml](docs/api/openapi.yaml) — contrato de la API. **Es la fuente de verdad: se modifica antes que el código.**
+
+**Si dos documentos se contradicen**, este es el orden de autoridad, y arreglar la contradicción forma parte de la tarea:
+
+1. `docs/adr/` — una decisión arquitectónica solo se cambia con otro ADR.
+2. `docs/api/openapi.yaml` — manda sobre la forma de cualquier endpoint.
+3. `docs/01` — manda sobre **qué** hace el producto (`RF-*`, `RN-*`, `RL-*`, `RS-*`).
+4. `docs/02` — manda sobre **cómo** se construye y en qué orden.
+5. `docs/05` — no manda, pero **obliga**: si promete algo que no existe como requisito, o el 01 dice algo distinto de lo que se le contó al cliente, hay que resolverlo antes de seguir, no después.
 
 ## Stack
 
@@ -25,6 +35,21 @@ Monolito modular con arquitectura hexagonal. Módulos en `backend/app/Modules/`:
 Cada módulo: `Domain/` → `Application/` → `Infrastructure/` + `Http/`.
 
 **Tres aplicaciones cliente:** `frontend-kiosk/` (PWA de la tablet), `frontend-admin/` (panel de gestión) y `frontend-portal/` (portal web del empleado para consultar su propio registro).
+
+## Convenciones de código
+
+Las del ecosistema, no un estilo propio. Detalle completo y herramienta que verifica cada una en [docs/02](docs/02-stack-tecnologico-y-plan-implementacion.md) §3.5. Lo innegociable:
+
+- **PHP:** PSR-12/PER con Pint preset `laravel`, `declare(strict_types=1)` en todo fichero, tipado completo, PHPStan 9. Sin lógica de negocio en controladores ni en modelos Eloquent. Sin facades en `Domain/` ni en `Application/`.
+- **Vue y TypeScript:** guía de estilo oficial de Vue 3 (prioridades A y B), Composition API con `<script setup lang="ts">`, TS estricto, **sin `any`**, tipos de la API generados del contrato.
+- **El código se escribe en inglés**; los textos de usuario van en `i18n`. El glosario del documento 01 §13 traduce el lenguaje ubicuo: *tramo* → `ShiftEntry`, *jornada* → `WorkDay`. Nunca identificadores en español.
+- **Una convención que no verifica una herramienta es una sugerencia.** Si propones una, ata su comprobación a Pint, PHPStan, Deptrac, ESLint o `vue-tsc`.
+
+## Pruebas: qué exige cada funcionalidad
+
+El nivel de prueba no lo decide quien implementa. La tabla que lo decide está en [docs/02](docs/02-stack-tecnologico-y-plan-implementacion.md) §9.5, y en resumen: regla de negocio → unitaria; esquema o restricción → integración; endpoint → feature, contrato **y autorización negativa por cada rol**; recorrido de usuario → E2E; escritura del quiosco → los cinco, más idempotencia concurrente.
+
+**Cada prueba se etiqueta con los requisitos que cubre** (`->group('RN-05', 'RF-AT-08')`). `php artisan qa:traceability --check` genera la matriz y **falla en CI si un requisito implementado no tiene prueba** (RQ-13, doc 02 §9.6).
 
 ## Reglas duras — no negociables
 
@@ -48,9 +73,9 @@ Estas reglas existen porque su incumplimiento produce un registro horario legalm
 16. **El fabricante no accede a los datos del cliente** salvo concesión expresa, temporal y auditada. El paquete de diagnóstico va anonimizado por defecto (ADR-020).
 17. **Los rechazos de escaneo son genéricos y de tiempo constante.** Nunca se revela si un código no existe, está revocado o tiene mala firma (RS-03).
 18. **Cada endpoint tiene su policy y su prueba de autorización negativa** (que un rol no autorizado recibe 403). Obligatorio, sin excepciones.
-19. **El quiosco nunca bloquea al empleado por falta de red.** Encola siempre y confirma localmente.
+19. **El quiosco nunca bloquea al empleado.** Ni por falta de red, ni por desfase de reloj, ni porque el padrón cacheado no reconozca la tarjeta: encola siempre, confirma localmente y, si algo no cuadra, genera una incidencia para revisión humana (RF-AT-10, RN-15).
 20. **Cero biometría.** Decisión firme (ADR-009). Si una tarea la sugiere, para y pregunta.
-21. **Nunca nombres de empleados en logs técnicos.** Se usa `employee_uuid`.
+21. **Nunca nombres de empleados en logs técnicos ni en `error_events`.** Se usa `employee_uuid`. El histórico de errores viaja al fabricante dentro del paquete de diagnóstico: si lleva PII, se ha filtrado.
 
 ## Comandos
 

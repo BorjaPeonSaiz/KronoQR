@@ -44,8 +44,11 @@ Ejecuta `EXPLAIN ANALYZE` con volumen realista (500 empleados × 2 años ≈ 400
 
 ## Paso 5 — Síncrono o asíncrono
 
-- **< 5 s:** respuesta directa
-- **≥ 5 s o más de 3 meses de datos:** job en cola, notificación al terminar y enlace de descarga con caducidad
+Presupuesto de referencia: RNF-P-05 exige que el informe mensual de 500 empleados salga en **menos de 5 s** de forma síncrona.
+
+- **< 5 s medidos con volumen real:** respuesta directa
+- **> 10 s, o más de 3 meses de datos:** job en cola, notificación al terminar y enlace de descarga con caducidad (RF-IN-06)
+- **Entre 5 y 10 s:** zona de aviso. Optimiza la consulta antes de aceptarla como síncrona; si no baja, pásala a asíncrona
 
 El enlace de descarga lleva token de un solo uso y expiración: contiene datos personales de la plantilla.
 

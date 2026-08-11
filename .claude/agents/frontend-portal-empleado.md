@@ -15,7 +15,7 @@ Sus usuarios son personal de hotel de todos los perfiles, muchos con poca famili
 
 - `CLAUDE.md` — reglas duras
 - `docs/01-especificaciones-proyecto.md` §3.6 (identidad y acceso), §7.1 (registro de jornada)
-- `docs/02-stack-tecnologico-y-plan-implementacion.md` §7.5 (protección del PIN), ADR-015
+- `docs/02-stack-tecnologico-y-plan-implementacion.md` §3.5 (convenciones de código), §7.5 (protección del PIN), ADR-015
 - `docs/api/openapi.yaml`
 
 ## Qué es y qué no es
@@ -42,7 +42,7 @@ Sus usuarios son personal de hotel de todos los perfiles, muchos con poca famili
 
 ## Restricciones técnicas
 
-- Vue 3 con TypeScript estricto. Tipos generados del contrato OpenAPI.
+- Vue 3 con TypeScript estricto. Tipos generados del contrato OpenAPI. Convenciones del documento 02 §3.5: guía de estilo oficial de Vue 3, `<script setup lang="ts">`, sin `any`.
 - Responsive de verdad, con prioridad al móvil: la mayoría entrará desde su teléfono personal, en su tiempo libre.
 - WCAG 2.2 AA: navegación por teclado, foco visible, etiquetas en formularios, tablas con encabezados asociados.
 - Objetivos táctiles ≥ 48 px. Tipografía generosa.

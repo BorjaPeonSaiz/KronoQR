@@ -53,7 +53,13 @@ Casos que debes cubrir siempre que la regla toque tiempo:
 
 Prefiere que el tipo impida el estado inválido a que una validación lo detecte después.
 
-Si la regla tiene un umbral configurable (horas máximas, minutos de gracia, horas de descanso), va como parámetro con su variable de entorno, documentada en el Anexo C del documento 02. **Nunca como número literal en el código.**
+**El enunciado va en español y el código en inglés** (documento 02 §3.5). La regla se lee `RN-16: se alerta si…` en el documento, y se llama `InsufficientRestPolicy` en el dominio. El glosario del 01 §13 es el puente; si la regla introduce un concepto nuevo del negocio, añádelo también ahí.
+
+Si la regla tiene un umbral configurable, **nunca va como número literal en el código** y el dominio lo recibe ya resuelto por un puerto (regla dura 14). Dónde vive según su naturaleza:
+
+- **Umbral legal** (descanso mínimo, jornada máxima, pausas, retención): campo del **perfil de cumplimiento** (`compliance_profiles`, RF-PD-07), servido por el puerto `CompliancePolicy`.
+- **Umbral operativo** (segundos de anti-rebote, horas para considerar un turno anómalo, tolerancia de reloj): `installation_settings` con ámbito de instalación o de centro (RF-PD-01).
+- La variable de entorno del **Anexo B** del documento 02 solo fija el **valor por defecto de la instalación**, no la fuente de verdad en ejecución.
 
 ## Paso 5 — Mutación
 
@@ -78,6 +84,6 @@ MSI del dominio ≥ 80 %. Si la mutación sobrevive a un cambio en tu regla nuev
 - [ ] Prueba unitaria que falló antes de implementar
 - [ ] Límites exactos, medianoche y DST cubiertos
 - [ ] Implementada en `Domain/`, no en un handler ni en un controlador
-- [ ] Umbrales parametrizados y documentados en el Anexo C
+- [ ] Umbrales parametrizados en el perfil de cumplimiento o en `installation_settings`, con su valor por defecto documentado en el Anexo B del documento 02
 - [ ] MSI ≥ 80 % tras `make mutate`
 - [ ] Decisión sobre retroactividad tomada y documentada

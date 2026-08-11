@@ -75,7 +75,9 @@ ALTER TABLE shift_entries ADD CONSTRAINT shift_entries_no_overlap
 
 Si la migración las elimina temporalmente, **el plan debe indicar cómo se restauran y cómo se verifica que ningún dato las viola al volver a activarlas.**
 
-## Reglas de tipos
+## Reglas de tipos y nombres
+
+Nombres según las convenciones de Laravel recogidas en el documento 02 §3.5: tablas en plural `snake_case`, claves foráneas `{singular}_id`, índices y restricciones con nombre explícito y descriptivo (`one_open_shift_per_employee`, no el autogenerado).
 
 - Todo instante es `TIMESTAMPTZ`. Nunca `TIMESTAMP` sin zona, nunca `DATETIME`.
 - Fechas de jornada (`work_date`) son `DATE`, sin hora.

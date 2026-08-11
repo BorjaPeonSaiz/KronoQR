@@ -1,10 +1,10 @@
 # Agentes y Skills de IA para la Construcción del Producto
-## Sistema de Control de Presencia y Registro Horario por QR
+## KronoQR — Sistema de Control de Presencia y Registro Horario por QR
 
 | Campo | Valor |
 |---|---|
 | **Fecha** | 11 de agosto de 2026 |
-| **Documentos hermanos** | `01-especificaciones-proyecto.md`, `02-stack-tecnologico-y-plan-implementacion.md`, `04-decision-credencial.md` |
+| **Documentos hermanos** | `01-especificaciones-proyecto.md`, `02-stack-tecnologico-y-plan-implementacion.md`, `04-decision-credencial.md`, `05-presentacion-cliente.md` |
 | **Estado** | Los agentes y skills descritos **están creados** en `.claude/` y son operativos |
 
 ---
@@ -76,7 +76,7 @@ El orden importa. **Diseñar antes de implementar y probar antes de codificar** 
 
 ### 2.2 Para ejecutar el plan
 
-**Consulta la columna `Agente / Skill` de las tablas del documento 02, §11.** Cada tarea, de la 0.1 a la 5.11, indica quién la ejecuta. Resumen por fase:
+**Consulta la columna `Agente / Skill` de las tablas del documento 02, §11.** Cada tarea, de la 0.1 a la 5.11, indica quién la ejecuta (el orden de ejecución es 0 → 1 → 2 → 5 → 3 → 4, así que la Fase 3 y sus tareas 3.1 a 3.12 van al final). Resumen por fase:
 
 | Fase | Agentes protagonistas |
 |---|---|
@@ -84,7 +84,7 @@ El orden importa. **Diseñar antes de implementar y probar antes de codificar** 
 | **Fase 1 — MVP de fichaje** | `arquitecto-dominio` → `qa-testing` → `backend-laravel`, con `frontend-quiosco` y `frontend-portal-empleado` en paralelo |
 | **Fase 2 — Gestión y cumplimiento** | `backend-laravel` y `frontend-panel`, con revisión obligatoria de `seguridad-cumplimiento` en auditoría y rotación de claves |
 | **Fase 5 — Productización** | `producto-licencia` como protagonista, con apoyo de `devops-observabilidad` y de los tres agentes de frontend para la marca blanca |
-| **Fase 3 — Operación** | `devops-observabilidad` y `qa-testing` |
+| **Fase 3 — Operación y refuerzo** | `devops-observabilidad` y `qa-testing` en la instrumentación y las pruebas; `backend-laravel` y `frontend-panel` en las tareas 3.9 a 3.12 (informes asíncronos, ausencias e importación, patrones anómalos, resumen semanal) |
 | **Cierre de cada fase** | `revisor-codigo` y `seguridad-cumplimiento` |
 
 ### 2.3 Qué invocar en trabajo ad-hoc
@@ -105,7 +105,7 @@ El orden importa. **Diseñar antes de implementar y probar antes de codificar** 
 
 ## 3. Contexto permanente — `CLAUDE.md`
 
-Se carga automáticamente en cada sesión. Contiene las 21 reglas duras del proyecto, la referencia a los cuatro documentos y los comandos del `make`.
+Se carga automáticamente en cada sesión. Contiene las 21 reglas duras del proyecto, la referencia a los cinco documentos —incluido el 05, que es lo que se le ha prometido al cliente— y los comandos del `make`.
 
 Su razón de ser: **las reglas que se pueden olvidar son las que se olvidan.** Que el dominio sea puro, que el reloj se inyecte, que nada se borre, que todo fichaje sea idempotente, que la credencial sea una tarjeta y que nada específico de un cliente entre en el código — son invariantes del sistema, no recordatorios. Estar en el contexto permanente las convierte en el punto de partida de cada tarea en lugar de en un hallazgo de revisión.
 
@@ -142,6 +142,7 @@ Todos siguen la misma estructura, y no por simetría: cada bloque resuelve un mo
 | **Contexto obligatorio** | Que invente requisitos en lugar de leer los que existen. Se le dice qué secciones leer |
 | **Principios con su porqué** | Que aplique una regla mecánicamente donde no procede. Un agente que entiende el motivo generaliza bien |
 | **Restricciones técnicas concretas** | Ambigüedad. "Usa buenas prácticas" no significa nada; "libera el `MediaStream` en `onUnmounted`" sí |
+| **Convenciones del stack** (documento 02 §3.5) | Que cada agente invente su estilo y que la revisión humana se gaste en discutir formato en lugar de corrección. Cada agente lleva además la parte que le toca: el lenguaje ubicuo al arquitecto, los scripts de shell a `producto-licencia` y `devops-observabilidad`, el código de pruebas a `qa-testing`, y a `revisor-codigo` solo lo que ninguna herramienta puede comprobar |
 | **Comandos de verificación** | Que dé por terminado algo que no compila o no pasa las pruebas |
 | **Reglas de conducta** | El fallo más caro: inventar reglas de negocio en lugar de preguntar. Todos tienen instrucción explícita de parar y preguntar |
 | **Formato de entrega** | Informes largos e inútiles. Se pide qué se hizo, qué requisito cubre, qué falta y quién sigue |
@@ -223,6 +224,8 @@ Fichero: [`.claude/agents/qa-testing.md`](../.claude/agents/qa-testing.md)
 Su criterio de partida: *una prueba que no podría fallar no vale nada*. Incluye una tabla de selección de nivel y el catálogo de escenarios ineludibles: DST en ambos sentidos, medianoche, idempotencia con 10 peticiones paralelas, **intento directo por SQL de violar las invariantes** (la prueba de que la última línea de defensa existe), ciclo offline completo, respuestas de tiempo constante, autorización negativa por rol, bloqueo del PIN, reconciliación y cadena de auditoría.
 
 Instrucción distintiva: si escribes la prueba después de la implementación y pasa a la primera, rompe la implementación a propósito para verificar que la prueba realmente puede fallar.
+
+Desde la incorporación de RQ-13 y RQ-14 no elige el nivel de prueba por intuición —lo determina la tabla del documento 02 §9.5— y **etiqueta cada prueba con los requisitos que cubre**, de donde sale la matriz de trazabilidad que la CI verifica. Cuando se le pregunte si algo está probado, responde ejecutando `qa:traceability`, no de memoria.
 
 </details>
 

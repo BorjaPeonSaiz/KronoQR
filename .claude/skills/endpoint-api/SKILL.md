@@ -5,7 +5,7 @@ description: Añade o modifica un endpoint de la API partiendo del contrato Open
 
 # Añadir o modificar un endpoint
 
-El contrato manda. `docs/api/openapi.yaml` es la fuente de verdad y se modifica **antes** que el código: de él se generan los clientes TypeScript de los dos frontends y contra él se validan las pruebas.
+El contrato manda. `docs/api/openapi.yaml` es la fuente de verdad y se modifica **antes** que el código: de él se generan los clientes TypeScript de los **tres** frontends —quiosco, panel y portal del empleado— y contra él se validan las pruebas.
 
 ## Paso 1 — Contrato primero
 
@@ -54,7 +54,7 @@ Contador por resultado, histograma de duración, span de traza que propaga el `t
 ## Paso 7 — Cliente TypeScript
 
 ```bash
-npm run api:generate     # en frontend-kiosk y en frontend-admin
+npm run api:generate     # en frontend-kiosk, frontend-admin y frontend-portal
 ```
 
 Si el generador produce cambios de tipo que rompen el compilado, ese es exactamente el aviso que querías tener: arréglalo ahora, no en producción.
@@ -86,8 +86,8 @@ Si es escritura del quiosco, añade además la de idempotencia con peticiones co
 - [ ] Rate limiting configurado por dispositivo o credencial
 - [ ] Validación estricta
 - [ ] Ámbito de token **y** policy, ambos comprobados
-- [ ] Controlador sin lógica de negocio
+- [ ] Controlador sin lógica de negocio, y convenciones del documento 02 §3.5 respetadas (`make quality` y `npm run lint` sin desviaciones)
 - [ ] Métrica, traza y log
-- [ ] Cliente TypeScript regenerado en ambos frontends
-- [ ] Las cuatro pruebas, incluida la negativa por cada rol
+- [ ] Cliente TypeScript regenerado en los tres frontends que consuman el endpoint
+- [ ] Las cuatro pruebas, incluida la negativa por cada rol, etiquetadas con sus requisitos (`qa:traceability --check` en verde)
 - [ ] Si es del quiosco: tiempo constante, mensaje genérico e idempotencia verificada

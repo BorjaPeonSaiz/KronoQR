@@ -11,14 +11,15 @@ Todo lo que hagas se juzga contra esa frase.
 
 ## Contexto obligatorio
 
-- `CLAUDE.md` — reglas duras, especialmente las 12 a 15
-- `docs/01-especificaciones-proyecto.md` §3.9 (requisitos de producto `RF-PD-*`), §7 (roles legales `RL-19..23`)
-- `docs/02-stack-tecnologico-y-plan-implementacion.md` §11.6 (empaquetado y soporte), ADR-016 a ADR-020
-- `docs/04-credencial-movil-vs-tarjeta.md` para todo lo que toque modos de credencial
+- `CLAUDE.md` — reglas duras, especialmente las 13 a 16
+- `docs/01-especificaciones-proyecto.md` §3.9 (requisitos de producto `RF-PD-*`), §7.3 (reparto de roles legales, `RL-16..21`)
+- `docs/02-stack-tecnologico-y-plan-implementacion.md` **§3.5 (convenciones, con la subsección de scripts de instalación y operación)**, §11.6 (empaquetado y soporte), ADR-016 a ADR-020
+- `docs/04-decision-credencial.md` para todo lo que toque la credencial
+- `docs/05-presentacion-cliente.md` — lo que se le ha prometido al cliente sobre instalación, licencia y soporte
 
 ## Principios
 
-**Nada específico de un cliente en el código.** Si vender a un cliente nuevo obliga a tocar el repositorio, has fallado. Marca, umbrales legales, idiomas, modos de credencial y funcionalidades activas son datos. Y jamás una rama por cliente: el tercer cliente convierte esa idea en un producto imposible de mantener.
+**Nada específico de un cliente en el código.** Si vender a un cliente nuevo obliga a tocar el repositorio, has fallado. Marca, umbrales legales, idiomas y funcionalidades activas son datos. La credencial **no** es una de esas variables: hay una sola modalidad, la tarjeta física (ADR-014), y no se configura por cliente. Y jamás una rama por cliente: el tercer cliente convierte esa idea en un producto imposible de mantener.
 
 **El registro legal nunca es rehén del negocio.** Una licencia caducada muestra avisos y recorta funcionalidades accesorias. **No bloquea el fichaje ni el acceso a los registros.** Hacerlo dejaría al cliente incumpliendo la ley por una acción tuya y le impediría acceder a datos que está obligado a conservar cuatro años. Si alguien te pide lo contrario, esa petición contradice ADR-019: párala y explica por qué.
 
@@ -26,7 +27,7 @@ Todo lo que hagas se juzga contra esa frase.
 
 **Verificación de licencia local, sin internet.** El servidor del cliente puede estar aislado. Una comprobación en línea convertiría tu conectividad en punto único de fallo del registro horario de tus clientes.
 
-**Un instalador que falla a medias es peor que uno que no arranca.** Comprueba requisitos **antes** de tocar nada, y si algo falla, deja el sistema como estaba y dilo con claridad.
+**Un instalador que falla a medias es peor que uno que no arranca.** Comprueba requisitos **antes** de tocar nada, y si algo falla, deja el sistema como estaba y dilo con claridad. Las convenciones que lo sostienen están en el §3.5: `set -euo pipefail` e `IFS` en todo script, formato `shfmt -i 2`, ShellCheck sin hallazgos, **idempotencia** —re-ejecutar `install.sh` no puede romper una instalación buena—, códigos de salida documentados en la cabecera, y mensajes de error que dicen qué hacer, no solo qué falló. Nunca un secreto en el script ni en su salida.
 
 **Una actualización sin vuelta atrás no es una actualización.** Copia previa verificada como paso bloqueante, migraciones encadenadas con punto de control, comprobación posterior, y regreso automático si algo falla. Y hay que soportar el salto entre versiones **no consecutivas**: habrá clientes en la 1.2 cuando vayas por la 1.6.
 

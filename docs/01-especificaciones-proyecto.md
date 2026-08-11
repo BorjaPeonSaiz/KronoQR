@@ -1,14 +1,16 @@
 # Especificaciones del Producto
-## Sistema de Control de Presencia y Registro Horario por QR — Sector Hotelero
+## KronoQR — Sistema de Control de Presencia y Registro Horario por QR · Sector Hotelero
 
 | Campo | Valor |
 |---|---|
-| **Producto** | Fichaje de empleados mediante QR en quiosco (tablet) |
+| **Producto** | **KronoQR** — fichaje de empleados mediante QR en quiosco (tablet) |
 | **Modelo de negocio** | Producto licenciado, desplegado en servidores del cliente, vendible a múltiples hoteles |
 | **Fecha** | 11 de agosto de 2026 |
 | **Clasificación** | Documentación técnica interna |
 | **Audiencia** | Product Owner, Arquitectura, Desarrollo, QA, DPO, Dirección de RRHH |
-| **Documentos hermanos** | `02-stack-tecnologico-y-plan-implementacion.md`, `03-agentes-y-skills-ia.md`, `04-decision-credencial.md` |
+| **Documentos hermanos** | `02-stack-tecnologico-y-plan-implementacion.md`, `03-agentes-y-skills-ia.md`, `04-decision-credencial.md`, `05-presentacion-cliente.md` |
+
+> **Nomenclatura.** *KronoQR* es el nombre comercial y el que ve el cliente (documento 05). Los identificadores técnicos internos —prefijo `FH1` del payload QR, nombres de servicios, rutas de copias— se mantienen tal cual: no son visibles para el usuario y renombrarlos rompería credenciales ya emitidas. El nombre de la aplicación que se muestra en pantalla es configuración de marca (RF-PD-08), no una constante.
 
 ---
 
@@ -77,6 +79,8 @@ Establecimientos hoteleros con plantilla en régimen de turnos rotatorios. Carac
 
 ### 1.3 Objetivos y métricas de éxito
 
+Estas métricas **no son una hoja de cálculo aparte**: el propio sistema las calcula y las presenta (RF-IN-08). Un objetivo que nadie mide no se cumple, y pedirle a RRHH que lo mida a mano contradice el objetivo de reducir su carga administrativa.
+
 | Objetivo | Métrica | Objetivo a 3 meses de producción |
 |---|---|---|
 | Cumplimiento legal del registro de jornada | % de jornadas con registro completo | ≥ 99 % |
@@ -122,7 +126,7 @@ Establecimientos hoteleros con plantilla en régimen de turnos rotatorios. Carac
 
 - Plantilla ≤ 500 empleados y ≤ 10 quioscos por centro. El diseño escala a 5.000 sin cambio arquitectónico.
 - Existe red interna en el centro, con posibilidad de cortes intermitentes.
-- La tablet es propiedad de la empresa y está gestionada en modo quiosco (MDM o *device owner*).
+- La tablet es propiedad de la empresa y está gestionada en **modo quiosco** (MDM o *device owner* de Android Enterprise): fijada a una sola aplicación, sin acceso al escritorio, a los ajustes ni a otras apps, con arranque automático de la PWA tras un reinicio o un corte de luz, y actualizaciones del sistema en ventana controlada. Es configuración del dispositivo, a cargo del cliente, no una funcionalidad del producto.
 - El cliente dispone de un servidor propio (físico o VPS) con Docker, y de personal de IT capaz de seguir una guía de instalación. No se asume experiencia en Laravel ni en PostgreSQL.
 - **No se presupone nada sobre el perfil de la plantilla del cliente.** Ni correo electrónico corporativo, ni smartphone, ni alfabetización digital.
 
@@ -145,9 +149,9 @@ Nomenclatura: `RF-<módulo>-<nº>`. Prioridad MoSCoW: **M**ust / **S**hould / **
 | RF-AT-07 | Los fichajes son **idempotentes**: un mismo `scan_id` procesado dos veces produce un único evento y la misma respuesta. | M |
 | RF-AT-08 | Un turno puede **cruzar la medianoche** sin ser dividido artificialmente. Se atribuye a la jornada laboral de su hora de inicio. | M |
 | RF-AT-09 | El sistema registra siempre **dos marcas de tiempo**: `occurred_at` (momento real del escaneo, incluso offline) y `recorded_at` (momento de recepción en servidor). | M |
-| RF-AT-10 | El sistema rechaza fichajes con desfase de reloj superior al umbral configurado (por defecto 15 min en línea) y los marca como incidencia si llegan de cola offline. | S |
+| RF-AT-10 | **Control de desfase de reloj.** Si el reloj del dispositivo diverge del servidor por encima del umbral configurado (por defecto 15 min), el fichaje **se acepta igualmente** y se registra con la hora del dispositivo, se marca como incidencia `clock_skew` para revisión del responsable y se avisa en el quiosco. **Nunca se rechaza un fichaje por desfase de reloj**: hacerlo dejaría una jornada sin registrar por un problema técnico ajeno al empleado. | S |
 | RF-AT-11 | **Entrada alternativa por PIN de 6 dígitos** cuando el empleado no puede presentar su tarjeta. Misma traza, marcada como `origen = PIN` y señalada para revisión del responsable. | M |
-| RF-AT-12 | El sistema soporta **fichaje de pausa** (inicio y fin de descanso) diferenciado del fin de turno, configurable por centro. | C |
+| RF-AT-12 | El sistema soporta **fichaje de pausa** (inicio y fin de descanso) diferenciado del fin de turno, configurable por centro. | S |
 
 > **RF-AT-11 no es un extra.** Es lo que impide que una tarjeta olvidada se convierta en una jornada sin registro y en una corrección manual.
 
@@ -187,6 +191,7 @@ Nomenclatura: `RF-<módulo>-<nº>`. Prioridad MoSCoW: **M**ust / **S**hould / **
 | RF-IN-05 | **Exportación normalizada para Inspección de Trabajo**: registro diario por trabajador y periodo, en formato tabular legible, con las correcciones y sus motivos. | M |
 | RF-IN-06 | Generación asíncrona (cola) de informes de gran volumen, con notificación y enlace de descarga caducable. | S |
 | RF-IN-07 | Exportación de datos para el sistema de nómina en formato configurable. | S |
+| RF-IN-08 | **Cuadro de impacto y adopción.** El sistema calcula y presenta, por periodo y con comparación contra el periodo anterior, los indicadores del §1.3: porcentaje de jornadas con registro completo, reparto de fichajes por origen (QR, PIN, corrección manual), ratio de correcciones sobre el total, incidencias abiertas y tiempo medio hasta resolverlas, empleados sin credencial entregada, y horas trabajadas frente a contratadas. Exportable y accesible por rol `admin` y `rrhh`. | S |
 
 ### 3.5 Módulo: Gestión de personas
 
@@ -208,7 +213,7 @@ Nomenclatura: `RF-<módulo>-<nº>`. Prioridad MoSCoW: **M**ust / **S**hould / **
 | RF-ID-04 | El quiosco se autentica con **token de dispositivo** de ámbito restringido (solo endpoints de fichaje y sincronización), revocable individualmente y rotable. | M |
 | RF-ID-05 | **Portal personal del empleado**: consulta de su propio registro y descarga de su histórico. Es una **exigencia legal** (RL-05), no una funcionalidad opcional. | M |
 | RF-ID-06 | El empleado accede al portal con su **código de empleado y su PIN**, el mismo del respaldo del quiosco. No requiere correo electrónico. Rate limiting agresivo y bloqueo temporal por intentos fallidos. | M |
-| RF-ID-07 | La sesión del portal tiene ámbito `self:*`: solo permite acceder a los datos del propio empleado. Nunca a datos de terceros. | M |
+| RF-ID-07 | La sesión del portal tiene ámbito `self:read`: solo permite **leer** los datos del propio empleado. Nunca datos de terceros y nunca escritura sobre el registro. | M |
 | RF-ID-08 | El portal es accesible **desde la red interna por defecto**. Exponerlo a internet es una decisión explícita del cliente que activa requisitos adicionales de contraseña. | M |
 
 > **Por qué código y PIN en lugar de correo y contraseña (RF-ID-06).** El producto no puede exigir correo electrónico a toda la plantilla. El PIN ya existe como respaldo del quiosco, así que reutilizarlo elimina una credencial que gestionar. El riesgo de un PIN de 6 dígitos se compensa con bloqueo por intentos, acceso restringido a la red interna y un ámbito que solo alcanza los datos propios del empleado.
@@ -235,7 +240,10 @@ Nomenclatura: `RF-<módulo>-<nº>`. Prioridad MoSCoW: **M**ust / **S**hould / **
 | RF-PR-02 | Consolidación nocturna y **reconciliación** de los agregados diarios contra los eventos origen, con alerta si hay divergencia. | M |
 | RF-PR-03 | Purga de datos superado el periodo de retención legal, **con confirmación del responsable** e informe de lo purgado. | M |
 | RF-PR-04 | Copia de seguridad diaria cifrada, verificada y con prueba de restauración periódica. | M |
-| RF-PR-05 | Resumen semanal por correo al responsable de cada departamento. | C |
+| RF-PR-05 | Resumen semanal por correo al responsable de cada departamento. | S |
+| RF-PR-06 | **Detección de patrones anómalos de uso de credencial**: dos fichajes consecutivos en el mismo quiosco separados por segundos, coincidencias sistemáticas entre dos empleados y secuencias imposibles. Genera incidencia de tipo `anomalous_pattern` para revisión humana. **Nunca decide por sí misma que ha habido fraude**: aporta el indicio y lo pone sobre la mesa del responsable. | S |
+
+> **Por qué RF-PR-06 es un requisito y no una nota de la sección de amenazas.** El préstamo físico de la tarjeta es el único fraude que la firma HMAC no impide (§8.1), y la detección de patrones es la contrapartida explícita del descarte de la biometría (§7.4, ADR-009). Sin un requisito con dueño, umbral y bandeja donde aterrizar, esa mitigación no existe en el producto.
 
 ### 3.9 Módulo: Producto, licencia y soporte
 
@@ -250,11 +258,12 @@ Nomenclatura: `RF-<módulo>-<nº>`. Prioridad MoSCoW: **M**ust / **S**hould / **
 | RF-PD-07 | **Perfiles de cumplimiento configurables**: jurisdicción, años de retención, descanso mínimo entre jornadas, jornada máxima diaria y semanal, pausas obligatorias, inicio de semana y calendario de festivos. Se entrega el perfil español de serie. | M |
 | RF-PD-08 | **Marca blanca**: logotipo, colores y nombre de la aplicación configurables, aplicados al quiosco, al panel, al portal y a las tarjetas y documentos PDF. | S |
 | RF-PD-09 | **Paquete de diagnóstico exportable** por el administrador del cliente: versión, configuración sin secretos, estado de servicios, últimos errores, salud de quioscos y comprobaciones internas. **Anonimizado por defecto.** | M |
-| RF-PD-10 | **Actualización asistida** con copia de seguridad previa automática, migraciones reversibles, comprobación posterior y vuelta atrás documentada. Debe soportar el salto entre versiones **no consecutivas**. | M |
+| RF-PD-10 | **Actualización asistida** con copia de seguridad previa automática y verificada —si la copia falla, la actualización no continúa—, migraciones reversibles, comprobación posterior de salud y **vuelta atrás automática a la copia previa si la comprobación falla**. Debe soportar el salto entre versiones **no consecutivas**. | M |
 | RF-PD-11 | **Acceso de soporte del fabricante**: solo con concesión expresa del cliente, con caducidad, alcance limitado y registro en auditoría visible para el cliente. Revocable en cualquier momento. | M |
 | RF-PD-12 | **Telemetría opcional y desactivada por defecto**: versión y métricas técnicas agregadas, jamás datos personales ni de jornada. El sistema funciona idénticamente sin ella. | S |
 | RF-PD-13 | **Comprobación de salud posinstalación**: un comando que valida base de datos, colas, correo, certificados, permisos y espacio en disco, y devuelve un informe accionable. | S |
 | RF-PD-14 | **Exportación íntegra de los datos del cliente** en formato abierto, ejecutable por el propio cliente sin intervención del fabricante. Es su garantía de no quedar atrapado. | M |
+| RF-PD-15 | **Histórico de errores en base de datos.** Todo error de aplicación, trabajo de cola, tarea programada o cliente (quiosco, panel, portal) se persiste en la tabla `error_events`, **agrupado por huella** para no multiplicar filas ante un fallo repetido, consultable desde el panel por el administrador de la instalación, filtrable por origen, severidad y periodo, marcable como resuelto, y volcado al paquete de diagnóstico. **Sin datos personales**: `employee_uuid` y `device_id`, nunca nombres, correos ni horas de nadie. Retención 90 días (RL-11). | M |
 
 > **Sobre RF-PD-05.** Bloquear el fichaje por una licencia caducada dejaría al cliente incumpliendo su obligación legal por una acción del fabricante, y le impediría acceder a registros que la ley le obliga a conservar cuatro años. Es inaceptable con independencia de lo que diga el contrato. La palanca comercial son los avisos y las funcionalidades accesorias; **el registro de jornada nunca es rehén de la relación comercial**.
 
@@ -354,7 +363,7 @@ Motor: **PostgreSQL 17**. Los tipos se expresan en su nomenclatura. El Anexo E d
 **`departments`** — `id`, `site_id`, `name`, `manager_user_id`
 
 **`employees`**
-`id` (BIGINT PK), `uuid` (UUID v7, identificador público), `site_id`, `department_id`, `first_name`, `last_name`, `employee_code` (CITEXT UNIQUE, **opaco y aleatorio**), `national_id_hash` (hash, no el DNI en claro), `email` (CITEXT NULL, **opcional**), `pin_hash` (RF-AT-11, RF-ID-06), `status` (`active`|`suspended`|`terminated`), `hired_at`, `terminated_at`, `locale`, `created_at`, `updated_at`
+`id` (BIGINT PK), `uuid` (UUID v7, identificador público), `site_id`, `department_id`, `first_name`, `last_name`, `employee_code` (CITEXT UNIQUE, **opaco y aleatorio**), `national_id_hash` (hash, no el DNI en claro), `email` (CITEXT NULL, **opcional**), `pin_hash` (RF-AT-11, RF-ID-06), `photo_path` (NULL; funcionalidad **desactivada por defecto**, RL-08), `status` (`active`|`suspended`|`terminated`), `hired_at`, `terminated_at`, `locale`, `created_at`, `updated_at`
 
 **`employment_contracts`** — `id`, `employee_id`, `weekly_hours`, `annual_hours`, `schedule_type` (`continua`|`partida`|`turnos`), `valid_from`, `valid_to`
 
@@ -407,9 +416,13 @@ ALTER TABLE shift_entries ADD CONSTRAINT shift_entries_chk_order
 
 **`shift_corrections`** — `id`, `shift_entry_id`, `performed_by_user_id`, `action`, `before` (JSONB), `after` (JSONB), `reason_code`, `reason_text`, `created_at`
 
-**`incidents`** — `id`, `employee_id`, `work_date`, `type` (`open_shift_expired`|`short_shift`|`long_shift`|`insufficient_rest`|`clock_skew`|`missing_clock_out`), `severity`, `status`, `assigned_to_user_id`, `resolved_at`, `resolution_note`
+**`incidents`** — `id`, `employee_id`, `work_date`, `type` (`open_shift_expired`|`short_shift`|`long_shift`|`insufficient_rest`|`clock_skew`|`missing_clock_out`|`anomalous_pattern`), `severity`, `status`, `assigned_to_user_id`, `resolved_at`, `resolution_note`
 
 **`absences`** — `id`, `employee_id`, `type`, `starts_on`, `ends_on`, `note`
+
+**`error_events`** — histórico de errores de aplicación (RF-PD-15)
+`id`, `fingerprint` (hash de clase + punto de fallo + mensaje normalizado, UNIQUE), `level` (`error`|`critical`), `source` (`api`|`worker`|`scheduler`|`console`|`kiosk`|`admin`|`portal`), `module`, `code`, `message`, `exception_class`, `file`, `line`, `context` (JSONB, **sin PII**), `trace_id`, `device_id` (NULL), `employee_uuid` (NULL, nunca el nombre), `app_version`, `occurrences` (INT), `first_seen_at`, `last_seen_at`, `resolved_at`, `resolved_by_user_id`
+*Un fallo que se repite mil veces es una fila con `occurrences = 1000`, no mil filas. Retención 90 días, igual que el log técnico (RL-11). No sustituye al log estructurado: lo complementa para que el cliente pueda diagnosticar desde el panel sin depender de que conserve el stack de observabilidad.*
 
 **`audit_log`** — solo-append, con encadenamiento por hash
 `id`, `occurred_at` (TIMESTAMPTZ), `actor_type`, `actor_id`, `action`, `subject_type`, `subject_id`, `payload` (JSONB), `prev_hash`, `hash`, `ip` (INET), `user_agent`
@@ -439,7 +452,7 @@ ALTER TABLE shift_entries ADD CONSTRAINT shift_entries_chk_order
 |---|---|
 | RNF-D-01 | Disponibilidad del servicio: 99,5 % mensual. **Disponibilidad del acto de fichar: 99,9 %**, gracias al modo offline. |
 | RNF-D-02 | RPO ≤ 15 min (copias más WAL). RTO ≤ 4 h. |
-| RNF-D-03 | Degradación elegante: si cae el WebSocket, el panel hace *fallback* a sondeo. Si cae Redis, las colas caen a driver de base de datos. |
+| RNF-D-03 | Degradación elegante: si cae el WebSocket, el panel hace *fallback* a sondeo cada 15 s. Si cae Redis, las colas caen a driver de base de datos. |
 | RNF-D-04 | Ninguna migración puede requerir parada de servicio (patrón *expand / migrate / contract*). |
 | RNF-D-05 | Prueba de restauración de copia documentada y ejecutada trimestralmente. |
 
@@ -456,6 +469,7 @@ Dimensionado objetivo por instalación: 500 empleados, 10 quioscos, ~6.000 event
 | RNF-M-03 | Las dependencias entre módulos se verifican automáticamente. El dominio no importa nada del framework. |
 | RNF-M-04 | Toda decisión arquitectónica relevante queda registrada como **ADR** versionado en el repositorio. |
 | RNF-M-05 | Deuda técnica visible: presupuesto máximo del 15 % de cada iteración dedicado a su reducción. |
+| RNF-M-06 | **El código sigue las convenciones publicadas de cada stack** (documento 02, §3.5): PSR-12/PER para PHP, convenciones de Laravel, guía de estilo oficial de Vue 3 y TypeScript estricto. **Se verifican por herramienta en la CI, no por revisión humana**: una convención que no comprueba una herramienta es una sugerencia. |
 
 ### 6.5 Usabilidad y accesibilidad
 
@@ -535,7 +549,7 @@ Los arts. 20.3 ET y 87-91 LOPDGDD exigen informar previamente a la plantilla y a
 | RS-04 | El token del quiosco tiene ámbito mínimo, caducidad y rotación automática; su compromiso no da acceso a datos de plantilla. |
 | RS-05 | Todo acceso a datos personales de terceros queda registrado en el trail de auditoría. |
 | RS-06 | 2FA obligatorio para `admin`, `rrhh` y `auditor`. |
-| RS-07 | El trail de auditoría es **detectablemente manipulable**: cada entrada encadena el hash de la anterior; se verifica periódicamente y se alerta ante rotura de cadena. |
+| RS-07 | El trail de auditoría es **detectablemente manipulable**: cada entrada encadena el hash de la anterior; la cadena **se verifica a diario** y cualquier rotura dispara alerta crítica de seguridad en menos de 24 h. |
 | RS-08 | Gestión de secretos fuera del repositorio, con rotación documentada. |
 | RS-09 | Cabeceras de seguridad completas (HSTS, CSP estricta, X-Content-Type-Options, Referrer-Policy, Permissions-Policy limitando cámara al origen propio). |
 | RS-10 | Análisis de dependencias y de código en cada *pull request*; ninguna vulnerabilidad crítica o alta puede llegar a una versión publicada. |
@@ -547,7 +561,7 @@ Los arts. 20.3 ET y 87-91 LOPDGDD exigen informar previamente a la plantilla y a
 | Amenaza | Vector | Mitigación |
 |---|---|---|
 | **Suplantación** | Generación de un QR falso para un compañero | **Resuelto**: firma HMAC del payload (RS-01). |
-| **Suplantación** | Préstamo de la tarjeta a un compañero (*buddy punching*) | Fraude **autolimitado**: prestarla deja al titular sin la suya, exige entrega y devolución, y solo funciona si el titular no piensa fichar. Mitigación: supervisión presencial y auditoría de patrones anómalos (dos fichajes en el mismo quiosco separados por segundos, coincidencias sistemáticas entre dos empleados). |
+| **Suplantación** | Préstamo de la tarjeta a un compañero (*buddy punching*) | Fraude **autolimitado**: prestarla deja al titular sin la suya, exige entrega y devolución, y solo funciona si el titular no piensa fichar. Mitigación: supervisión presencial y detección automática de patrones anómalos (RF-PR-06): dos fichajes en el mismo quiosco separados por segundos, coincidencias sistemáticas entre dos empleados. |
 | **Suplantación** | Fuerza bruta del PIN de portal o de quiosco | Bloqueo por intentos, limitación de tasa, portal restringido a red interna por defecto (RS-12, RF-ID-08). |
 | **Manipulación** | Alterar horas en base de datos | Auditoría encadenada, versionado de registros, usuario de base de datos con permisos mínimos, copias verificadas. |
 | **Manipulación** | Alteración de la clave de licencia | Clave firmada y verificada localmente. **Es un control comercial, no de seguridad de datos**: no debe protegerse a costa de bloquear el registro legal. |
@@ -579,9 +593,14 @@ Rate, errores y duración por endpoint, con foco en el de fichaje. Latencia p50/
 | Fichajes por PIN de respaldo | Una subida indica un problema con la emisión o el estado de las tarjetas |
 | Incidencias abiertas por tipo y antigüedad | Salud del proceso de RRHH |
 | Ratio de correcciones manuales | Calidad del dato y posible mal uso |
+| Patrones anómalos detectados por tipo | Indicio de préstamo de credencial (RF-PR-06). Se revisa, no se sanciona automáticamente |
 | Divergencia entre proyección y eventos origen | Integridad del sistema |
 | Horas trabajadas frente a contratadas por departamento | Control de costes laborales |
 | Tasa de absentismo e impuntualidad | Indicador de gestión |
+| **Jornadas con registro completo** | El indicador de impacto principal: mide si el sistema está cumpliendo su función (RF-IN-08) |
+| **Reparto de fichajes por origen** (QR, PIN, corrección manual) | Adopción real. Si las correcciones manuales suben, el registro se está degradando |
+| **Tiempo medio hasta resolver una incidencia** | Salud del proceso y contraste con el objetivo de < 24 h del §1.3 |
+| Errores de aplicación por origen y severidad | Estabilidad de la instalación (RF-PD-15). Alimenta el histórico de `error_events` |
 
 ### 9.3 Alertas mínimas
 
@@ -597,6 +616,7 @@ Rate, errores y duración por endpoint, con foco en el de fichaje. Latencia p50/
 | Copia de seguridad fallida o no verificada | cualquiera | Crítica |
 | Certificado TLS próximo a expirar | < 21 días | Alta |
 | Espacio en disco | < 20 % | Alta |
+| Errores nuevos de severidad crítica en `error_events` | cualquiera en 5 min | Alta (IT del cliente) |
 
 ### 9.4 Trazabilidad y logs
 
@@ -623,6 +643,8 @@ Rate, errores y duración por endpoint, con foco en el de fichaje. Latencia p50/
 | RQ-10 | Pruebas de mutación sobre el dominio con MSI mínimo del 80 %. |
 | RQ-11 | Prueba de **instalación limpia y de actualización desde la versión anterior** antes de cada publicación. |
 | RQ-12 | Ninguna funcionalidad se considera terminada sin cumplir la Definición de Terminado del documento 02, §10.3. |
+| RQ-13 | **Trazabilidad requisito ↔ prueba, verificada por la CI.** Cada prueba declara qué requisitos cubre mediante una etiqueta (`RF-*`, `RN-*`, `RL-*`, `RS-*`). Un comando genera la matriz `requisito → pruebas` y **la CI falla si un requisito ya implementado no tiene ninguna prueba que lo referencie**. Sin esto, "está probado" es una afirmación que nadie comprueba. |
+| RQ-14 | **Cobertura por niveles obligatoria según la naturaleza de la funcionalidad**, no a criterio de quien la implementa. La tabla que decide qué niveles aplican está en el documento 02, §9.5: toda funcionalidad con regla de negocio lleva prueba unitaria; toda la que toque la base de datos, de integración; toda la que exponga endpoint, de feature, contrato y **autorización negativa**; y toda la que tenga recorrido de usuario, E2E. |
 
 ---
 
@@ -720,6 +742,21 @@ Escenario: Idempotencia ante reintento
   Entonces no se crea un segundo tramo
   Y la respuesta es idéntica a la original
 
+Escenario: Reloj del quiosco desviado
+  Dado un quiosco cuyo reloj adelanta 40 minutos respecto al servidor
+  Cuando un empleado ficha en él
+  Entonces el fichaje se registra igualmente
+  Y se crea una incidencia de tipo clock_skew para revisión del responsable
+  Y en ningún caso se rechaza el fichaje
+
+Escenario: Patrón anómalo de uso de credencial
+  Dados dos fichajes de entrada de empleados distintos en el mismo quiosco separados por 4 segundos
+  Y repetidos en las mismas dos personas durante cinco días
+  Cuando se ejecuta la detección de patrones anómalos
+  Entonces se crea una incidencia de tipo anomalous_pattern
+  Y se asigna al responsable del departamento
+  Y el sistema no marca el fichaje como fraudulento ni lo anula
+
 Escenario: Turno olvidado
   Dado un tramo abierto desde hace 13 horas
   Cuando se ejecuta el proceso de detección de anomalías
@@ -775,7 +812,7 @@ Escenario: Perfil de cumplimiento distinto
 
 | # | Riesgo | Prob. | Impacto | Mitigación |
 |---|---|---|---|---|
-| R1 | *Buddy punching* por préstamo de tarjeta | Media | Alto | Firma HMAC (evita falsificación), supervisión presencial y auditoría de patrones anómalos. El préstamo físico es autolimitado |
+| R1 | *Buddy punching* por préstamo de tarjeta | Media | Alto | Firma HMAC (evita falsificación), supervisión presencial y detección automática de patrones anómalos (RF-PR-06). El préstamo físico es autolimitado |
 | R2 | Incumplimiento del deber de inalterabilidad del registro | Media | **Muy alto** (sanción) | Diseño solo-append, auditoría encadenada y revisión legal antes de la primera versión comercial |
 | R3 | Cambio normativo hacia registro digital interoperable | Media | Medio | Arquitectura ya digital con API y exportación normalizada; responsable de vigilancia normativa |
 | R4 | Cortes de red durante el cambio de turno | Alta | Alto | Modo offline obligatorio en el MVP, no como mejora posterior |
@@ -806,6 +843,7 @@ Escenario: Perfil de cumplimiento distinto
 | **Corrección** | Modificación de un registro por parte de una persona autorizada, siempre trazada y motivada. |
 | **Credencial** | Vínculo entre un empleado y un payload QR firmado, materializado en una tarjeta física. Revocable. |
 | **Quiosco** | Tablet en modo bloqueado que ejecuta la PWA de fichaje. |
+| **Modo quiosco** | Configuración del dispositivo (MDM o *device owner*) que lo fija a una sola aplicación, sin escritorio ni ajustes accesibles y con arranque automático de la PWA. Responsabilidad del cliente, no del producto. |
 | **Portal personal** | Interfaz web donde el empleado consulta su propio registro horario. Exigencia legal. |
 | **`scan_id`** | Identificador único generado en el cliente que garantiza la idempotencia. |
 | **`occurred_at` / `recorded_at`** | Momento real del fichaje / momento de registro en servidor. Difieren en modo offline. |
@@ -826,12 +864,14 @@ Orden de ejecución: **0 → 1 → 2 → 5 → 3 → 4**.
 
 | Fase | Requisitos incluidos |
 |---|---|
-| **Fase 0 — Cimientos** | RNF-M-01..05, RQ-01, RQ-06, RS-08 |
-| **Fase 1 — MVP de fichaje** | RF-AT-01..09, RF-AT-11, RF-QR-01..06, RF-QR-08, RF-ID-01..08, RF-KI-01..06, RF-KI-09, RF-GP-01, RF-GP-03, RN-01..09, RL-01, RL-04, RL-05, RS-01..04, RS-12 |
-| **Fase 2 — Gestión y cumplimiento** | RF-PA-01..05, RF-IN-01..05, RF-GP-02, RF-PR-01..04, RF-QR-07, RN-10..15, RL-02..03, RL-06..15, RS-05..07 |
-| **Fase 5 — Productización** | RF-PD-01..14, RL-16..21, RQ-11 |
-| **Fase 3 — Operación y refuerzo** | RF-PA-06..07, RF-KI-07..08, RF-AT-10, RF-AT-12, RF-IN-06..07, RF-GP-04..05, §9 completo, RS-11 |
+| **Fase 0 — Cimientos** | RNF-M-01..06, RQ-01, RQ-06, RQ-13..14, RS-08, RS-09, RS-10 |
+| **Fase 1 — MVP de fichaje** | RF-AT-01..09, RF-AT-11, RF-QR-01..06, RF-QR-08, RF-ID-01..02 (**autenticación de gestión básica, sin 2FA**), RF-ID-04..08, RF-KI-01..06, RF-KI-09, RF-GP-01, RF-GP-03, RN-01..09, RL-01, RL-05, RS-01..04, RS-12 |
+| **Fase 2 — Gestión y cumplimiento** | RF-PA-01..05, RF-IN-01..05, RF-GP-02, RF-PR-01..04, RF-QR-07, RF-ID-01..03 (**completos: 2FA y ámbito por departamento**), RN-10..15, RL-02..04, RL-06..15, RS-05..07 |
+| **Fase 5 — Productización** | RF-PD-01..15, RL-16..21, RQ-11 |
+| **Fase 3 — Operación y refuerzo** | RF-PA-06..07, RF-KI-07..08, RF-AT-10, RF-AT-12, RF-IN-06..08, RF-GP-04..05, RF-PR-05..06, §9 completo, RS-11 |
 | **Fase 4 — Evolución** | Cuadrantes, vacaciones con aprobación, integración de nómina, multi-centro avanzado |
+
+> **Sobre el reparto de `RF-ID-*` y `RL-04`.** La Fase 1 necesita una autenticación de gestión mínima —sin ella, RRHH no puede emitir tarjetas ni ver el panel de estado de credenciales (tarea 1.10)—, pero el 2FA obligatorio y el ámbito por departamento llegan con la tarea 2.1. `RL-04` (fiabilidad e inalterabilidad) se completa en la Fase 2: es donde aterrizan la auditoría encadenada (2.2) y las correcciones versionadas (2.3), que son lo que materializa el requisito.
 
 ## Anexo B — Endpoints (contrato de referencia)
 
@@ -842,6 +882,11 @@ POST   /api/v1/scan/pin                    Fichaje por PIN de respaldo  [scope: 
 GET    /api/v1/kiosk/roster                Padrón mínimo cacheable      [scope: kiosk]
 POST   /api/v1/kiosk/heartbeat             Latido y telemetría          [scope: kiosk]
 POST   /api/v1/kiosk/pair                  Emparejamiento por código    [público, un solo uso]
+
+POST   /api/v1/auth/login                  Acceso al panel de gestión   [público, throttle 5 r/m]
+POST   /api/v1/auth/2fa/verify             Segundo factor TOTP          [sesión pendiente de 2FA]
+POST   /api/v1/auth/logout                 Cierre de sesión             [autenticado]
+GET    /api/v1/auth/me                     Usuario, rol y ámbito        [autenticado]
 
 GET    /api/v1/attendance/live             Presencia en tiempo real     [rol: manager+]
 GET    /api/v1/employees/{uuid}/workdays   Jornadas de un empleado      [rol: manager+ | self]
@@ -861,7 +906,10 @@ GET    /api/v1/credentials/status          Estado de credenciales       [rol: rr
 
 GET    /api/v1/reports/period              Informe por periodo          [rol: manager+]
 POST   /api/v1/reports/exports             Generar exportación async    [rol: manager+]
+GET    /api/v1/reports/exports/{id}        Estado y enlace de descarga  [rol: manager+, caducable]
 GET    /api/v1/reports/legal-export        Exportación para Inspección  [rol: auditor|rrhh]
+GET    /api/v1/reports/payroll-export      Salida para nómina           [rol: rrhh]
+GET    /api/v1/reports/adoption            Cuadro de impacto y adopción [rol: admin|rrhh]
 
 POST   /api/v1/me/login                    Acceso con código y PIN      [público, con throttle]
 GET    /api/v1/me/workdays                 Mi propio registro           [scope: self:read]
@@ -874,8 +922,11 @@ POST   /api/v1/license/activate            Activar clave                [rol: ad
 POST   /api/v1/support/grants              Conceder acceso de soporte   [rol: admin, auditado]
 DELETE /api/v1/support/grants/{id}         Revocar acceso de soporte    [rol: admin]
 POST   /api/v1/diagnostics/bundle          Generar paquete diagnóstico  [rol: admin]
+GET    /api/v1/diagnostics/errors          Histórico de errores         [rol: admin]
+POST   /api/v1/diagnostics/errors/{id}/resolve  Marcar error resuelto   [rol: admin]
 
-CRUD   /api/v1/employees, /departments, /sites, /contracts, /devices
+POST   /api/v1/employees/import            Importación de plantilla     [rol: rrhh, modo simulación]
+CRUD   /api/v1/employees, /departments, /sites, /contracts, /devices, /absences
 GET    /api/v1/health  /api/v1/ready       Sondas de salud
 GET    /metrics                            Métricas Prometheus          [red interna]
 ```

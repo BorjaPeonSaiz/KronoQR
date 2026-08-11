@@ -39,6 +39,7 @@ Este sistema produce el registro de jornada de personas reales. Su falseamiento 
 - [ ] `audit_log` sigue siendo solo-append; el usuario de aplicación no ha ganado `UPDATE` ni `DELETE`.
 - [ ] La cadena de hash se calcula sobre una serialización canónica y determinista.
 - [ ] Ningún log técnico contiene nombres de empleados ni datos identificativos en claro.
+- [ ] **`error_events` no contiene PII** (RF-PD-15): ni nombres, ni correos, ni DNI, ni horas de fichaje. Solo `employee_uuid`, `device_id` y contexto técnico. Es la tabla que se envía al fabricante en el paquete de diagnóstico, así que un descuido aquí es una comunicación de datos, no un log feo.
 - [ ] El token de la credencial se almacena **hasheado**, nunca en claro.
 - [ ] El PIN está protegido con bloqueo creciente por intentos, por empleado y por origen (RS-12).
 - [ ] El portal del empleado sigue restringido a red interna salvo decisión explícita del cliente (RF-ID-08).

@@ -1,14 +1,17 @@
 # Stack Tecnológico, Arquitectura y Plan de Implementación
-## Sistema de Control de Presencia y Registro Horario por QR — Sector Hotelero
+## KronoQR — Sistema de Control de Presencia y Registro Horario por QR · Sector Hotelero
 
 | Campo | Valor |
 |---|---|
+| **Producto** | **KronoQR** |
 | **Modelo de negocio** | Producto licenciado, desplegado en servidores del cliente |
 | **Fecha** | 11 de agosto de 2026 |
-| **Documentos hermanos** | `01-especificaciones-proyecto.md`, `03-agentes-y-skills-ia.md`, `04-decision-credencial.md` |
+| **Documentos hermanos** | `01-especificaciones-proyecto.md`, `03-agentes-y-skills-ia.md`, `04-decision-credencial.md`, `05-presentacion-cliente.md` |
 | **Audiencia** | Arquitectura, Desarrollo, DevOps, QA |
 
 > Este documento asume leído el documento 01. Las referencias `RF-*`, `RN-*`, `RNF-*`, `RL-*`, `RS-*` y `RQ-*` apuntan a sus requisitos.
+>
+> **Nomenclatura.** *KronoQR* es el nombre comercial (documento 05). Los identificadores técnicos internos que aparecen en este documento —`fichaje-hotel`, prefijo `FH1` del payload, `BACKUP_PATH`, nombres de base de datos y de servicios— se mantienen deliberadamente: no son visibles para el usuario, y renombrar el prefijo `FH1` invalidaría credenciales ya impresas. El nombre que se muestra en pantalla es configuración de marca (RF-PD-08).
 
 ---
 
@@ -196,6 +199,7 @@ fichaje-hotel/
 │   ├── 02-stack-tecnologico-y-plan-implementacion.md
 │   ├── 03-agentes-y-skills-ia.md
 │   ├── 04-decision-credencial.md
+│   ├── 05-presentacion-cliente.md   # Documento comercial entregable al cliente
 │   ├── adr/                         # ADR-001 … ADR-020
 │   ├── api/openapi.yaml             # Contrato, fuente de verdad de la API
 │   ├── cliente/                     # Documentación que se entrega al cliente
@@ -376,6 +380,73 @@ El **Anexo E** recoge la equivalencia para MySQL 8 si la infraestructura de un c
 
 Servicios de desarrollo: `app`, `nginx`, `postgres`, `redis`, `horizon`, `reverb`, `scheduler`, `node-kiosk`, `node-admin`, `node-portal`, `mailpit`, `prometheus`, `grafana`, `loki`. Un `make up` debe dejar el entorno completo funcionando con datos de ejemplo.
 
+### 3.5 Convenciones de código (RNF-M-06)
+
+Se adoptan las convenciones **más establecidas de cada stack**, sin inventar un estilo propio. El criterio es deliberado: un producto que instalarán y mantendrán terceros no puede exigir aprender las manías de su autor, y las convenciones mayoritarias son las que cualquier desarrollador de PHP o de Vue ya conoce.
+
+**Regla que gobierna esta sección: una convención que no verifica una herramienta es una sugerencia.** Todo lo que sigue está atado a Pint, PHPStan, Deptrac, Rector, ESLint o `vue-tsc`, y bloquea en la CI. Lo que no se puede automatizar no se escribe aquí: se resuelve en revisión.
+
+#### Backend (PHP y Laravel)
+
+| Ámbito | Convención | Quién la verifica |
+|---|---|---|
+| Estilo | **PSR-12** y **PER Coding Style 2.0**, preset `laravel` de Pint | Laravel Pint |
+| Autoload y estructura | **PSR-4** | Composer, Deptrac |
+| Tipado | `declare(strict_types=1)` en todo fichero. Tipos en propiedades, parámetros y retornos. Sin `mixed` sin justificar. Genéricos anotados en PHPDoc | PHPStan nivel 9 |
+| Inmutabilidad | Objetos de valor y DTO con `readonly`. Los DTO son `final` | PHPStan, revisión |
+| Modernización | Sintaxis de PHP 8.4: promoción de constructor, `enum` en lugar de constantes de clase, `match`, *property hooks* donde aporten | Rector (sets PHP 8.4 + Laravel + code quality + dead code) |
+| Nombres de Laravel | Modelos en singular (`ShiftEntry`), tablas en plural `snake_case` (`shift_entries`), claves foráneas `{singular}_id`, controladores `{Recurso}Controller`, migraciones con verbo (`create_..._table`) | Pint, revisión |
+| Laravel idiomático | FormRequest para validar, Resource para serializar, Policy para autorizar, comandos de consola con firma explícita. **Sin lógica de negocio en controladores ni en modelos Eloquent** | Deptrac, `revisor-codigo` |
+| Facades | Prohibidas en `Domain/` y en `Application/`. En `Infrastructure/` y `Http/`, permitidas | Deptrac |
+| Complejidad | Complejidad ciclomática ≤ 10 por método; métodos que quepan en una pantalla | PHPStan (regla de complejidad) |
+
+#### Frontend (TypeScript y Vue 3)
+
+| Ámbito | Convención | Quién la verifica |
+|---|---|---|
+| Estilo de Vue | **Guía de estilo oficial de Vue 3**, reglas de prioridad A y B: nombres de componente de varias palabras, `PascalCase` en los ficheros, `props` tipadas y detalladas, `v-for` siempre con `key`, `v-if` y `v-for` nunca en el mismo elemento | `eslint-plugin-vue` con `flat/recommended` |
+| API de componente | Composition API con `<script setup lang="ts">`. Lógica reutilizable en *composables* `useAlgo()` | ESLint, revisión |
+| Tipado | TypeScript **estricto**, `noUncheckedIndexedAccess` incluido. **Sin `any`**; lo desconocido es `unknown` y se estrecha. Los tipos de la API se **generan** del contrato, nunca se escriben a mano | `vue-tsc`, `@typescript-eslint` en modo estricto |
+| Formato | Prettier, sin discusión de estilo en revisión | Prettier + ESLint |
+| Estado | Pinia con *stores* por dominio funcional, acciones tipadas, sin estado global mutable fuera de ellas | Revisión |
+| Estructura | Carpeta por *feature* (`features/scan/`, `features/live/`), no por tipo de fichero | Revisión |
+
+#### Scripts de instalación y operación
+
+`install.sh`, `update.sh`, `backup.sh`, `restore.sh` y `doctor.sh` **son entregables del producto** (§11.6.1): los ejecuta el IT de un hotel, en su servidor, a veces con una incidencia en marcha. Merecen la misma disciplina que el código de la aplicación.
+
+| Ámbito | Convención | Quién la verifica |
+|---|---|---|
+| Robustez | `set -euo pipefail` e `IFS=$'\n\t'` al principio de todo script | ShellCheck |
+| Estilo | Guía de estilo de Shell de Google; formato con `shfmt -i 2` | ShellCheck + shfmt |
+| Idempotencia | Re-ejecutable sin romper nada. Comprueba el estado antes de actuar, en lugar de asumirlo | Revisión |
+| Fallo seguro | Requisitos verificados **antes** de tocar nada; si algo falla, el sistema queda como estaba. Nada de trabajo a medias | Revisión |
+| Errores | El mensaje dice **qué hacer**, no solo qué falló. Códigos de salida documentados en la cabecera del script | Revisión |
+| Secretos | Nunca en el script ni en su salida: se generan en el servidor del cliente (§7.7) | Semgrep |
+
+Es la contrapartida técnica del principio que ya sostiene el agente `producto-licencia`: *un instalador que falla a medias es peor que uno que no arranca.*
+
+#### Código de pruebas
+
+La mitad del repositorio son pruebas y envejecen peor que el código si nadie las cuida.
+
+- **El nombre describe el comportamiento, no el método**: `it('no parte un turno que cruza medianoche')`, nunca `testCalculateDuration`. Quien lee el informe de una prueba fallida debe entender qué se ha roto sin abrir el fichero.
+- **Un concepto por prueba** y estructura *arrange / act / assert* visible. Si necesitas dos "cuando", son dos pruebas.
+- **Factories legibles** que dejan claro qué caso se está probando: `Employee::factory()->withOpenShiftSince('22:00')`. Un test que necesita comentarios para entenderse está mal escrito.
+- **Sin condicionales ni bucles con lógica** dentro de una prueba: un `if` en un test es una rama que nadie prueba. Para varios casos, *datasets*.
+- **Sin `sleep()`.** Se espera por condición o se inyecta el reloj.
+- **Los valores límite se escriben explícitos.** Si la regla dice "más de 12 h", el test contiene 11:59, 12:00 y 12:01 como números, no como cálculo.
+- **Toda prueba lleva su etiqueta de requisito** (`->group('RN-05')`), de la que sale la matriz de trazabilidad del §9.6.
+
+#### Transversal
+
+- **El código se escribe en inglés**; los textos que ve una persona van en `i18n` (ES y EN mínimo). El glosario del documento 01 §13 es el puente entre el lenguaje ubicuo en español y las clases en inglés: *tramo* → `ShiftEntry`, *jornada* → `WorkDay`, *credencial* → `Credential`, *incidencia* → `Incident`. **Nunca `Tramo` ni `getJornada()`**: mezclar idiomas en los identificadores es la vía rápida a tener dos nombres para la misma cosa.
+- **Los comentarios explican el porqué, no el qué.** Un comentario que parafrasea el código sobra; uno que explica por qué un turno no se parte a medianoche vale oro.
+- **Nombres del dominio, no del patrón.** `WorkDay`, no `WorkDayEntityImpl`. El sufijo solo aparece cuando distingue de verdad (`EloquentWorkDayRepository` frente al puerto `WorkDayRepository`).
+- **SOLID donde aporte, no por completitud.** Una interfaz con una sola implementación que nunca tendrá otra es coste sin beneficio, salvo que sea un puerto del hexágono, donde la segunda implementación es la del test.
+- **Regla del boy scout con límite:** deja el fichero que tocas algo mejor que como estaba, pero no mezcles refactor y funcionalidad en el mismo cambio. Son dos revisiones distintas.
+- **Conventional Commits** y ramas cortas (§10.5).
+
 ---
 
 ## 4. Registros de Decisión de Arquitectura (ADR)
@@ -448,7 +519,7 @@ Dos claves activas simultáneamente (`current` y `previous`) en el gestor de sec
 | Filtrar PII en el propio QR | ✅ Sí. Payload opaco |
 | Reemitir sin invalidar la anterior | ✅ Sí. Revocación por credencial |
 | Deterioro por uso diario | ✅ Sí. Corrección de errores nivel Q |
-| **Prestar la tarjeta a un compañero** | ❌ **No.** Pero es **autolimitado**: el titular se queda sin la suya, exige entrega y devolución, y solo funciona si el titular no piensa fichar. Se combate con supervisión y auditoría de patrones anómalos |
+| **Prestar la tarjeta a un compañero** | ❌ **No.** Pero es **autolimitado**: el titular se queda sin la suya, exige entrega y devolución, y solo funciona si el titular no piensa fichar. Se combate con supervisión y con la detección automática de patrones anómalos (RF-PR-06) |
 
 ### 5.5 Ciclo de vida de la credencial
 
@@ -604,7 +675,7 @@ Nada de secretos en el repositorio. En desarrollo, `.env` local a partir de `.en
 | **Métricas** | Prometheus + `promphp/prometheus_client_php`, expuesto en `/metrics` restringido a red interna | Técnicas (RED) y de negocio |
 | **Trazas** | OpenTelemetry, exportador OTLP | Desde el `fetch` del navegador del quiosco hasta la consulta SQL. `trace_id` propagado en cabecera |
 | **Logs** | Monolog en JSON → Loki | Con `trace_id`, `scan_id`, `device_id`, `employee_uuid`. **Nunca nombres en claro** |
-| **Errores** | Registro local con retención de 90 días | En on-premise no se envían errores al fabricante; se incluyen en el paquete de diagnóstico si el cliente lo genera |
+| **Errores** | Tabla `error_events` en PostgreSQL, 90 días (RF-PD-15) | Agrupados por huella y consultables desde el panel. En on-premise no se envían al fabricante: viajan en el paquete de diagnóstico si el cliente lo genera |
 | **Uptime** | Sonda interna sobre `/api/v1/health` | — |
 | **Auditoría** | Tabla `audit_log` propia | **Separada de los logs técnicos**: distinta retención, distinto propósito, valor probatorio |
 
@@ -629,6 +700,13 @@ kiosk_offline_queue_size{device}                         gauge
 sync_delay_seconds{device}                               histogram
 incidents_open{type,severity}                            gauge
 manual_corrections_total{reason_code}                    counter
+anomalous_patterns_detected_total{pattern}               counter
+
+# Impacto y adopción — alimentan RF-IN-08
+scans_by_origin_total{origin}                            counter
+workdays_complete_ratio{site}                            gauge
+incident_resolution_seconds{type}                        histogram
+application_errors_total{source,level}                   counter
 projection_divergence_total                              counter
 audit_chain_verification_failures_total                  counter
 worked_minutes_total{site,department}                    counter
@@ -645,6 +723,22 @@ pin_fallback_scans_total{site}                           counter
 
 Una subida de `pin_fallback_scans_total` indica un problema con la emisión, el estado de las tarjetas o la disciplina de la plantilla. Es un termómetro barato.
 
+### 8.2.1 Los tres registros del sistema, y por qué son tres
+
+Se confunden con facilidad y tienen propósitos incompatibles. Mezclarlos es un error que se paga tarde.
+
+| Registro | Dónde | Retención | Para qué | Quién lo lee |
+|---|---|---|---|---|
+| **Log técnico** | Monolog JSON → Loki | 90 días | Depurar con detalle y contexto de una petición concreta | Desarrollo, con el stack de observabilidad delante |
+| **`error_events`** | PostgreSQL (RF-PD-15) | 90 días | Que el cliente vea **qué está fallando** y desde cuándo, sin conocer el sistema | IT del cliente, desde el panel |
+| **`audit_log`** | PostgreSQL, solo-append encadenado | **4 años** | Valor probatorio ante una inspección | Auditor, Inspección, RRHH |
+
+**Por qué `error_events` no es redundante con Loki.** Loki es opcional en la instalación de un cliente: puede desactivarlo, puede no tener quien lo mire, y puede perderlo al reinstalar. El fabricante no puede entrar a consultarlo (ADR-020). Si el único rastro de un error vive en un stack que el cliente quizá no conserve, la primera pregunta de cada incidencia será *"¿puedes mirar los logs?"* — y la respuesta será que no. La tabla vive en la misma base de datos que se respalda a diario y viaja en el paquete de diagnóstico.
+
+**Por qué se agrupa por huella.** Un fallo en el endpoint de fichaje durante un cambio de turno genera cientos de errores idénticos. Sin agrupación, la tabla se llena de ruido y el error importante queda enterrado. La huella es el hash de clase de excepción, punto de fallo y mensaje normalizado —sin identificadores variables—, y cada repetición incrementa `occurrences` y actualiza `last_seen_at`.
+
+**Qué no puede contener.** Nombres, correos, DNI, ni horas de fichaje de nadie. El contexto se limita a `trace_id`, `employee_uuid`, `device_id` y datos técnicos. Es la misma regla dura 21 del log técnico, y aquí importa más porque esta tabla **se envía al fabricante** dentro del paquete de diagnóstico.
+
 ### 8.3 Cuadros de mando
 
 | Dashboard | Audiencia | Contenido |
@@ -653,6 +747,7 @@ Una subida de `pin_fallback_scans_total` indica un problema con la emisión, el 
 | **Salud de la API** | Desarrollo | RED por endpoint, colas, base de datos, errores |
 | **Integridad del dato** | Desarrollo y cumplimiento | Divergencias, verificación de cadena, correcciones manuales, incidencias por antigüedad |
 | **Negocio** | RRHH y dirección | Horas por departamento, trabajadas frente a contratadas, absentismo, impuntualidad, alertas de cumplimiento |
+| **Impacto y adopción** | Dirección y el propio fabricante en la venta | Jornadas con registro completo, reparto de fichajes por origen, ratio de correcciones, tiempo hasta resolver incidencias, credenciales pendientes. Es el cuadro que responde a *"¿esto está sirviendo para algo?"* y el que sostiene la renovación de la licencia (RF-IN-08) |
 
 ### 8.4 Alertas
 
@@ -686,6 +781,7 @@ Reglas anti-fatiga: agrupación por dispositivo, silenciamiento durante ventanas
 | Nivel | Herramienta | Umbral bloqueante |
 |---|---|---|
 | Estilo | Laravel Pint, ESLint + Prettier | Sin desviaciones |
+| **Scripts de shell** | ShellCheck + `shfmt -i 2 -d` | 0 hallazgos. Se aplica a `infra/scripts/` y a los scripts entregados al cliente |
 | Tipos backend | PHPStan/Larastan **nivel 9** | 0 errores; cada `@phpstan-ignore` requiere justificación en el propio comentario |
 | Tipos frontend | `vue-tsc` en modo estricto | 0 errores |
 | Modernización | Rector (dry-run en CI) | Informativo |
@@ -702,6 +798,7 @@ Reglas anti-fatiga: agrupación por dispositivo, silenciamiento durante ventanas
 | Dependencias | `composer audit`, `npm audit`, Dependabot | 0 vulnerabilidades críticas o altas |
 | SAST | Semgrep con reglas PHP/Laravel | 0 hallazgos de severidad alta |
 | Contenedores | Trivy | 0 CVE críticos en la imagen final |
+| **Trazabilidad** | `qa:traceability --check` (§9.6) | 0 requisitos implementados sin prueba que los referencie (RQ-13) |
 | **Instalación** | Script en CI: instalación limpia + actualización desde versión anterior | Verde antes de publicar (RQ-11) |
 
 ### 9.3 Por qué pruebas de mutación en el dominio
@@ -715,6 +812,9 @@ Una cobertura del 90 % dice qué líneas se ejecutan, no si las aserciones detec
 | **Cambio de hora (DST)** | Casos fijos para el último domingo de marzo y de octubre en `Europe/Madrid`, en ambos sentidos, con turnos que atraviesan el salto. La duración se compara contra el intervalo UTC real |
 | **Turno que cruza medianoche** | Verificación de duración, atribución a `work_date` y ausencia de tramos artificiales |
 | **Idempotencia bajo concurrencia** | 10 peticiones paralelas con el mismo `scan_id` → exactamente un tramo, diez respuestas idénticas |
+| **Cambio de turno real** | 30 empleados distintos fichando simultáneamente en el mismo quiosco → un tramo por persona, sin duplicados y con `daily_totals` cuadrando con los eventos origen. Es el pico que ocurre a diario, no un caso de laboratorio |
+| **Desfase de reloj** | Dispositivo con el reloj adelantado por encima del umbral → el fichaje **se acepta**, se registra la incidencia `clock_skew` y no se pierde ninguna jornada (RF-AT-10) |
+| **Patrones anómalos** | Serie de fichajes consecutivos en el mismo quiosco separados por segundos y coincidencias repetidas entre dos empleados → incidencia `anomalous_pattern`, sin anular ni marcar como fraude ningún fichaje (RF-PR-06) |
 | **Invariantes de base de datos** | Intento directo por SQL de crear un solape o un segundo turno abierto → la base de datos debe rechazarlo. Prueba de que la última línea de defensa funciona |
 | **Ciclo offline completo** | Playwright con red desconectada: fichar, verificar cola en IndexedDB, reconectar, verificar consolidación con el `occurred_at` original |
 | **Cámara simulada** | Chromium con `--use-fake-device-for-media-stream --use-file-for-fake-video-capture=e2e/fixtures/qr-video.y4m`, alimentando un vídeo generado a partir de un QR real de prueba |
@@ -726,6 +826,53 @@ Una cobertura del 90 % dice qué líneas se ejecutan, no si las aserciones detec
 | **Restauración de copia** | Script automatizado que restaura la última copia en un contenedor limpio y valida integridad referencial y conteos |
 | **Instalación y actualización** | Instalación limpia desde cero, y actualización desde cada versión soportada, con verificación posterior |
 
+### 9.5 Qué pruebas exige cada funcionalidad (RQ-14)
+
+El nivel de prueba **no lo decide quien implementa**. Se deriva de la naturaleza de lo que se ha construido, y esta tabla es la que se aplica:
+
+| Si la funcionalidad… | Unitaria | Integración | Feature + Contrato | Autorización negativa | E2E |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Introduce o modifica una **regla de negocio** (`RN-*`) | ✅ obligatoria | — | — | — | — |
+| Toca el **esquema o una restricción** de base de datos | — | ✅ | — | — | — |
+| Expone o modifica un **endpoint** | — | — | ✅ | ✅ **por cada rol no autorizado** | — |
+| Tiene **recorrido de usuario** en quiosco, panel o portal | — | — | — | — | ✅ |
+| Es una **escritura del quiosco** | ✅ | ✅ | ✅ | ✅ | ✅ + idempotencia concurrente |
+| Genera un **informe o exportación** | ✅ del cálculo | ✅ con volumen | ✅ | ✅ | — |
+| Cambia **configuración con efecto en el cálculo de horas** | ✅ | ✅ auditoría del cambio | ✅ | ✅ | — |
+
+Las casillas vacías no son opcionales por omisión: significan que ese nivel **no aplica**. Si aplica y falta, la funcionalidad no está terminada.
+
+### 9.6 Trazabilidad requisito ↔ prueba (RQ-13)
+
+Que exista la tabla anterior no garantiza que se cumpla. Lo que lo garantiza es que la CI lo compruebe.
+
+**Cada prueba declara qué requisitos cubre.** En Pest, por grupo; en PHPUnit, por atributo:
+
+```php
+it('no parte un turno que cruza medianoche', function () { /* … */ })
+    ->group('RN-05', 'RF-AT-08');
+```
+
+```ts
+// Playwright
+test('ficha sin red y sincroniza al reconectar', { tag: ['@RF-KI-03', '@RF-KI-04'] }, async ({ page }) => { /* … */ });
+```
+
+Un comando recorre la suite, extrae las etiquetas y genera `docs/trazabilidad-pruebas.md`:
+
+```bash
+php artisan qa:traceability            # Genera la matriz requisito → pruebas
+php artisan qa:traceability --check    # Falla si un requisito implementado no tiene prueba
+```
+
+**La etapa 3 de la CI ejecuta `--check` y bloquea.** El alcance de la comprobación son los requisitos de las fases ya ejecutadas, tomados del Anexo A del documento 01: un requisito de la Fase 3 no bloquea mientras se trabaja en la Fase 1.
+
+Esto resuelve tres cosas que ninguna métrica de cobertura resuelve:
+
+- **"¿Está probado RF-AT-11?"** deja de responderse de memoria y pasa a responderse con un comando.
+- Un requisito implementado sin prueba **no puede llegar a una versión publicada**, que es distinto de tener un 90 % de líneas cubiertas: se puede tener un 90 % y no haber probado nunca el fichaje por PIN.
+- Ante una inspección o una auditoría del cliente, la matriz es **evidencia documental** de que cada obligación legal (`RL-*`) tiene una prueba automática que la verifica en cada cambio.
+
 ---
 
 ## 10. CI/CD, entornos y calidad
@@ -734,10 +881,11 @@ Una cobertura del 90 % dice qué líneas se ejecutan, no si las aserciones detec
 
 ```mermaid
 graph LR
-    PR["Pull Request"] --> L["① Lint + Tipos<br/>Pint · PHPStan 9 · ESLint · vue-tsc<br/>~1 min"]
+    PR["Pull Request"] --> L["① Lint + Tipos<br/>Pint · PHPStan 9 · ESLint · vue-tsc · ShellCheck<br/>~1 min"]
     L --> A["② Arquitectura<br/>Deptrac · Pest Arch<br/>~30 s"]
     A --> U["③ Unitarias + Mutación<br/>Pest · MSI ≥ 80%<br/>~2 min"]
-    U --> I["④ Integración + Feature<br/>PostgreSQL real · Contrato OpenAPI<br/>~3 min"]
+    U --> T["③b Trazabilidad<br/>qa:traceability --check<br/>~10 s"]
+    T --> I["④ Integración + Feature<br/>PostgreSQL real · Contrato OpenAPI<br/>~3 min"]
     I --> S["⑤ Seguridad<br/>composer/npm audit · Semgrep · Trivy<br/>~2 min"]
     S --> F["⑥ Frontend<br/>Vitest · build · presupuesto de bundle<br/>~2 min"]
     F --> E["⑦ E2E<br/>Playwright + cámara simulada · axe<br/>~5 min"]
@@ -767,7 +915,9 @@ La semilla de desarrollo debe incluir los casos límite desde el principio. Un d
 
 **Terminado:**
 - [ ] Código conforme a la arquitectura (Deptrac en verde).
-- [ ] Pruebas en todos los niveles que apliquen; cobertura y MSI dentro de umbral.
+- [ ] Pruebas en **todos los niveles que la tabla del §9.5 marque como aplicables**; cobertura y MSI dentro de umbral.
+- [ ] Pruebas etiquetadas con los requisitos que cubren, y `qa:traceability --check` en verde (§9.6).
+- [ ] Convenciones de código del §3.5 respetadas, verificadas por Pint, PHPStan, ESLint y `vue-tsc`.
 - [ ] PHPStan nivel 9 sin errores nuevos.
 - [ ] Contrato OpenAPI actualizado y validado en las pruebas.
 - [ ] Autorización probada, incluido el caso negativo por rol.
@@ -805,7 +955,22 @@ Orden de ejecución: **0 → 1 → 2 → 5 → 3 → 4**. La Fase 5 se numeró d
 
 La columna **Agente / Skill** indica quién ejecuta cada tarea. Los agentes están en `.claude/agents/` y las skills se invocan con `/nombre`. Ver documento 03.
 
-### Fase 0 — Cimientos · 24–32 h
+### 11.0 Qué son estas horas
+
+**Son horas de una persona desarrollando con el andamiaje de agentes del documento 03, no de desarrollo manual.** Decirlo importa: la misma cifra interpretada como horas manuales convierte la planificación en ficción.
+
+**Incluyen** el diseño, la implementación, las pruebas de los niveles que exige el §9.5, la documentación y —sobre todo— **la revisión humana de lo que produce el agente**, que es tiempo real y es la parte que no se puede recortar. En este dominio, aceptar sin leer un cálculo de duraciones es exactamente el fallo que el proyecto entero existe para evitar.
+
+**No incluyen** aprender el dominio, esperar decisiones del cliente, ni las tres validaciones de la nota final (asesoría laboral, prueba de campo del hardware, contraste de costes de impresión).
+
+Dos advertencias sobre la extrapolación:
+
+- **La asistencia no acelera todo por igual.** El andamiaje rinde mucho en trabajo mecánico y repetitivo —adaptadores, endpoints, pruebas de contrato, migraciones, marca blanca— y bastante menos donde manda el criterio: el diseño del dominio (1.1), la documentación de cliente (5.11) y todo lo que exige decidir qué es correcto para un negocio concreto. En esas tareas la estimación es prácticamente la manual.
+- **La revisión no escala.** Si se acelera la producción de código sin acelerar la capacidad de revisarlo, el cuello de botella se desplaza a la persona, y el resultado es código que nadie ha leído en un sistema con valor probatorio. Las horas de arriba asumen que se revisa todo.
+
+Si se necesita una cifra de desarrollo **manual sin asistencia** para comparar con un presupuesto externo, el orden de magnitud es de **2,5 a 3 veces** estas horas. Es un juicio de orden de magnitud, no una medición: conviene recalibrarlo con los datos reales de la Fase 1, que es la primera oportunidad de contrastar estimación contra realidad (R16 del documento 01).
+
+### Fase 0 — Cimientos · 27–36 h
 
 | # | Tarea | h | Agente / Skill |
 |---|---|---|---|
@@ -815,10 +980,11 @@ La columna **Agente / Skill** indica quién ejecuta cada tarea. Los agentes est�
 | 0.4 | Pipeline de CI con las etapas 1–3 | 3–4 | `devops-observabilidad` |
 | 0.5 | Esqueleto de los tres frontends con TS estricto, Tailwind y Vitest | 4–6 | `frontend-quiosco` |
 | 0.6 | ADR-001 a ADR-020 escritos y `openapi.yaml` inicial | 3–4 | `arquitecto-dominio` |
+| 0.7 | Convenciones del §3.5 configuradas (Pint, PHPStan, Rector, ESLint con `eslint-plugin-vue`, Prettier, `vue-tsc`, **ShellCheck y shfmt**) y comando `qa:traceability` con su etapa de CI — RNF-M-06, RQ-13..14 | 3–4 | `devops-observabilidad` + `qa-testing` |
 
 **Entregable:** `make up` levanta el entorno completo; la CI está en verde; las fronteras arquitectónicas se verifican solas. **Verificación:** añadir a propósito un `use Illuminate\...` dentro de `Domain/` debe hacer fallar la CI.
 
-### Fase 1 — MVP de fichaje · 96–123 h
+### Fase 1 — MVP de fichaje · 98–125 h
 
 | # | Tarea | h | Requisitos | Agente / Skill |
 |---|---|---|---|---|
@@ -827,7 +993,7 @@ La columna **Agente / Skill** indica quién ejecuta cada tarea. Los agentes est�
 | 1.3 | Esquema y migraciones con **todas** las restricciones declarativas | 6–8 | RN-01..03 | `backend-laravel` + `/migracion-segura` |
 | 1.4 | Caso de uso `RegisterScan` con idempotencia y proyección transaccional | 8–10 | RF-AT-01..09 | `backend-laravel` + `/crear-caso-de-uso` |
 | 1.5 | Módulo `Identity`: credenciales HMAC, `key_id`, revocación, tokens de dispositivo | 8–10 | RF-QR-01..03, RF-ID-04 | `backend-laravel`, revisión de `seguridad-cumplimiento` |
-| 1.6 | `Workforce` básico: empleados, departamentos, centros, alta y baja | 6–8 | RF-GP-01, RF-GP-03 | `backend-laravel` |
+| 1.6 | `Workforce` básico: empleados, departamentos, centros, alta y baja, más autenticación de gestión mínima (login y roles, **sin 2FA**) | 8–10 | RF-GP-01, RF-GP-03, RF-ID-01..02 básicos | `backend-laravel` |
 | 1.7 | Endpoints de fichaje, lote, padrón y latido, con rate limiting | 6–8 | RS-02..04 | `backend-laravel` + `/endpoint-api` |
 | 1.8 | PWA quiosco: escaneo ZXing, feedback visual y sonoro, i18n, accesibilidad | 12–16 | RF-KI-01..02, RF-KI-05..06, RF-KI-09 | `frontend-quiosco` |
 | 1.9 | Cola offline Dexie con sincronización, reintentos e indicador | 10–12 | RF-KI-03..04 | `frontend-quiosco` |
@@ -837,13 +1003,15 @@ La columna **Agente / Skill** indica quién ejecuta cada tarea. Los agentes est�
 
 **Entregable:** un empleado recibe su tarjeta y ficha en la tablet, con o sin red, con credencial infalsificable y registro correcto. **Corte MVP mínimo defendible.**
 
+> **Dependencia implícita que conviene hacer explícita:** la tarea 1.10 necesita que alguien pueda entrar al panel, así que la Fase 1 incluye una **autenticación de gestión mínima** (login, roles `admin`/`rrhh`, sin 2FA) dentro de 1.6. El 2FA obligatorio y el ámbito por departamento son de la tarea 2.1 y no se adelantan. Anotarlo evita el descubrimiento tardío de que el panel de estado de credenciales no tiene puerta de entrada.
+
 > **Camino crítico:** 1.1 y 1.2 bloquean todo lo demás y son las más fáciles de subestimar. **No empezar la interfaz del quiosco hasta que el dominio esté cerrado y sus pruebas en verde.** Un cambio en las reglas de cálculo con el frontend construido cuesta el triple.
 
 ### Fase 2 — Gestión y cumplimiento · 86–109 h
 
 | # | Tarea | h | Requisitos | Agente / Skill |
 |---|---|---|---|---|
-| 2.1 | Autenticación de gestión con 2FA, RBAC con ámbito por departamento | 8–10 | RF-ID-01..03 | `backend-laravel`, revisión de `seguridad-cumplimiento` |
+| 2.1 | Autenticación de gestión **completa**: 2FA obligatorio y RBAC con ámbito por departamento sobre la base mínima de 1.6 | 8–10 | RF-ID-01..03 | `backend-laravel`, revisión de `seguridad-cumplimiento` |
 | 2.2 | `audit_log` encadenado, comando de verificación y alerta | 8–10 | RL-04, RS-07 | `backend-laravel` + `/revision-cumplimiento` |
 | 2.3 | Correcciones trazadas: versionado, catálogo de motivos, anulación | 10–12 | RF-PA-04, RN-13 | `arquitecto-dominio` → `backend-laravel` |
 | 2.4 | Panel: presencia en vivo con Reverb y *fallback* | 10–12 | RF-PA-01..02 | `frontend-panel` + `backend-laravel` |
@@ -858,7 +1026,7 @@ La columna **Agente / Skill** indica quién ejecuta cada tarea. Los agentes est�
 
 **Entregable:** sistema **legalmente defendible** y operable por RRHH. Es aquí, y no antes, donde se puede poner en producción con tranquilidad.
 
-### Fase 5 — Productización · 102–141 h
+### Fase 5 — Productización · 108–149 h
 
 Convierte el sistema en un producto que un tercero puede comprar, instalar y operar. **Es el hito que convierte el proyecto en negocio.**
 
@@ -875,12 +1043,13 @@ Convierte el sistema en un producto que un tercero puede comprar, instalar y ope
 | 5.9 | Paquete de diagnóstico anonimizado, comando `doctor`, accesos de soporte auditados | 12–16 | RF-PD-09, RF-PD-11, RF-PD-13 | `producto-licencia`, revisión de `seguridad-cumplimiento` |
 | 5.10 | Exportación íntegra de datos y telemetría opcional desactivada por defecto | 5–8 | RF-PD-12, RF-PD-14 | `producto-licencia` |
 | 5.11 | Documentación de instalación, operación, configuración y obligaciones legales | 10–15 | RL-21 | `producto-licencia` |
+| 5.12 | Histórico de errores en base de datos: captación desde API, colas, scheduler y los tres clientes, agrupación por huella, pantalla de consulta en el panel, purga a 90 días y volcado al paquete de diagnóstico | 6–8 | RF-PD-15 | `producto-licencia` + `backend-laravel` + `frontend-panel` |
 
-*(Suma bruta 112–154 h; se aplica solapamiento realista entre 5.4, 5.5 y 5.7, que comparten andamiaje de despliegue.)*
+*(Suma bruta 118–162 h; se aplica solapamiento realista entre 5.4, 5.5 y 5.7, que comparten andamiaje de despliegue.)*
 
 > **La tarea más subestimada es la 5.11.** Una documentación de instalación mediocre se paga en horas de soporte con cada cliente, indefinidamente. Con veinte instalaciones, es la diferencia entre un producto rentable y una consultora encubierta.
 
-### Fase 3 — Operación y refuerzo · 56–75 h
+### Fase 3 — Operación y refuerzo · 83–111 h
 
 | # | Tarea | h | Requisitos | Agente / Skill |
 |---|---|---|---|---|
@@ -892,20 +1061,27 @@ Convierte el sistema en un producto que un tercero puede comprar, instalar y ope
 | 3.6 | Pruebas de carga k6 y ajuste de rendimiento | 4–6 | RNF-P-06 | `qa-testing` + `devops-observabilidad` |
 | 3.7 | E2E con cámara simulada y suite de accesibilidad | 6–8 | RQ-04 | `qa-testing` |
 | 3.8 | Revisión de seguridad externa y corrección de hallazgos | 8–12 | RS-11 | `seguridad-cumplimiento` (preparación y corrección) |
+| 3.9 | Informes asíncronos con enlace de descarga caducable y exportación configurable para nómina | 6–8 | RF-IN-06..07 | `backend-laravel` + `/informe-nuevo` |
+| 3.10 | Ausencias e importación masiva de plantilla, con validación previa y modo simulación | 6–8 | RF-GP-04..05 | `backend-laravel` + `frontend-panel` |
+| 3.11 | Detección de patrones anómalos de uso de credencial, con incidencia y bandeja | 5–7 | RF-PR-06 | `backend-laravel`, revisión de `seguridad-cumplimiento` |
+| 3.12 | Resumen semanal por correo y ventana controlada de actualización del quiosco | 4–5 | RF-PR-05, RF-KI-07 | `backend-laravel` + `frontend-quiosco` |
+| 3.13 | Cuadro de impacto y adopción: proyección de los indicadores del §1.3, comparación entre periodos, pantalla y exportación | 6–8 | RF-IN-08 | `backend-laravel` + `frontend-panel` + `/informe-nuevo` |
+
+> **Las tareas 3.9 a 3.12 estaban comprometidas en el documento 05 y no tenían tarea asignada.** Son funcionalidades que el documento comercial presenta como parte del producto —informes en segundo plano, salida a nómina, importación de plantilla, registro de ausencias, resumen semanal y detección de patrones anómalos—, así que o tienen fase o no se pueden vender. La 3.11 es además la contrapartida explícita de haber descartado la biometría (ADR-009).
 
 ### Fase 4 — Evolución · 60–90 h (a decidir con datos de uso reales)
 
-Importación masiva de plantilla, ausencias con flujo de aprobación, cuadrantes y comparación planificado frente a real, integración con nómina, informes avanzados, consolidación multi-centro.
+Cuadrantes y comparación entre planificado y realmente trabajado, vacaciones y permisos con flujo de aprobación, integración directa con sistemas de nómina concretos, informes avanzados y consolidación multi-centro para cadenas. Coincide con lo anunciado al cliente en el documento 05, §11.
 
 ### 11.1 Resumen de esfuerzo
 
 | Alcance | Fases | Horas | ¿Vendible? |
 |---|---|---|---|
-| **MVP funcional** | 0 + 1 | 120–155 | ⚠️ Piloto interno controlado |
-| **Primera instalación a medida** | 0 + 1 + 2 | 206–264 | ⚠️ Sí, pero instalada y operada por el equipo de desarrollo |
-| **✅ Producto vendible** | 0 + 1 + 2 + 5 | **308–405** | ✅ **Sí: el cliente lo instala, configura y opera** |
-| **Producto vendible y operable** | 0 + 1 + 2 + 5 + 3 | **364–480** | ✅ Con observabilidad completa |
-| **Con evolución** | Todas | 424–570 | ✅ |
+| **MVP funcional** | 0 + 1 | 125–161 | ⚠️ Piloto interno controlado |
+| **Primera instalación a medida** | 0 + 1 + 2 | 211–270 | ⚠️ Sí, pero instalada y operada por el equipo de desarrollo |
+| **✅ Producto vendible** | 0 + 1 + 2 + 5 | **319–419** | ✅ **Sí: el cliente lo instala, configura y opera** |
+| **Producto vendible y operable** | 0 + 1 + 2 + 5 + 3 | **402–530** | ✅ Con observabilidad completa |
+| **Con evolución** | Todas | 462–620 | ✅ |
 
 > **La Fase 5 es lo que separa "un sistema" de "un producto".** Sin ella se puede entregar una instalación, pero cada cliente nuevo consume tiempo del equipo de desarrollo: instalar, configurar, actualizar y diagnosticar. Con veinte clientes eso no escala, y el negocio deja de ser vender software para pasar a ser consultoría. Las ~110 h de la Fase 5 son la inversión que hace que el cliente número veintiuno cueste lo mismo que el segundo.
 
@@ -921,7 +1097,7 @@ Importación masiva de plantilla, ausencias con flujo de aprobación, cuadrantes
 | **Fase 5 entera** | **No hay producto.** Cada cliente nuevo consume al equipo de desarrollo. Es el recorte que decide si esto es un negocio de software o una consultora |
 | Solo la documentación de cliente (tarea 5.11) | Falso ahorro. Cada instalación se paga en horas de soporte para siempre |
 | Solo el actualizador (tarea 5.7) | Actualizar veinte clientes a mano, cada uno en una versión distinta, con datos de nómina de por medio. Es el recorte con más probabilidad de acabar en pérdida de datos de un cliente |
-| Fase 3 completa | Aceptable a corto plazo **si** se implementan como mínimo: sonda de salud, alerta de quiosco sin latido y alerta de copia fallida. Sin eso, los fallos los descubre RRHH a fin de mes |
+| Fase 3 completa | Aceptable a corto plazo **si** se implementan como mínimo: sonda de salud, alerta de quiosco sin latido y alerta de copia fallida. Sin eso, los fallos los descubre RRHH a fin de mes. **Aviso:** las tareas 3.9 a 3.12 están comprometidas en el documento de presentación al cliente; recortarlas obliga a corregir antes ese documento, no a callarlo |
 
 ### 11.3 Camino crítico
 
@@ -975,6 +1151,10 @@ Las imágenes se distribuyen desde un registro privado del fabricante, con etiqu
 
 **Sin salida a internet el sistema funciona íntegramente.** Solo se pierden: certificados automáticos de Let's Encrypt (se usa uno propio), envío de correo si el SMTP es externo, y la telemetría opcional. La verificación de licencia es local por diseño (ADR-018).
 
+**Por cada punto de fichaje:** una tablet Android 10 o superior con cámara trasera con autoenfoque, soporte de pared o mesa, cobertura wifi en esa zona y el dispositivo **gestionado en modo quiosco**.
+
+> **Modo quiosco.** El dispositivo queda fijado a una sola aplicación mediante *device owner* de Android Enterprise, un MDM o el modo de aplicación fijada del fabricante: sin escritorio, sin acceso a ajustes ni a otras apps, con arranque automático de la PWA tras un reinicio o un corte de luz, brillo y suspensión fijados, y actualizaciones del sistema en ventana controlada. **No es una funcionalidad del producto**: es configuración del dispositivo, la ejecuta el IT del cliente y su procedimiento vive en el runbook `alta-nuevo-quiosco.md`. Sin ella, basta un deslizamiento accidental para dejar la tablet fuera de la aplicación, y el siguiente empleado no encuentra dónde fichar. Lo que sí aporta el producto es lo que se ejecuta dentro de esa ventana fijada (RF-KI-01): PWA instalable, a pantalla completa y con *wake lock*.
+
 ### 11.6.3 Reparto de responsabilidades
 
 | Tarea | Cliente | Fabricante |
@@ -1013,7 +1193,7 @@ Se publica y se cumple: la versión menor vigente y las dos anteriores reciben c
 
 ### 11.6.6 Paquete de diagnóstico
 
-Generado por el administrador del cliente con un clic o un comando. Contiene versión, configuración **sin secretos**, estado de los servicios, últimos errores con `trace_id`, salud de quioscos, tamaño de las colas, resultado de `doctor` y métricas agregadas.
+Generado por el administrador del cliente con un clic o un comando. Contiene versión, configuración **sin secretos**, estado de los servicios, el **histórico de `error_events` del periodo** con su agrupación por huella y su `trace_id` (RF-PD-15), salud de quioscos, tamaño de las colas, resultado de `doctor` y métricas agregadas.
 
 **No contiene datos personales.** Los identificadores de empleado se sustituyen por sus UUID, y no se incluyen nombres, correos ni registros de jornada. Si un incidente concreto exige incluirlos, es una acción distinta, explícita, avisada en la interfaz y auditada.
 
@@ -1034,10 +1214,12 @@ Generado por el administrador del cliente con un clic o un comando. Contiene ver
 | `tarjeta-perdida-o-rota.md` | Revocación, reemisión y reimpresión en el día |
 | `rotacion-clave-qr.md` | Reimpresión progresiva sin dejar a nadie sin fichar |
 | `requerimiento-inspeccion.md` | **Cómo generar la exportación legal en menos de 1 hora.** El más importante y el que nadie escribe hasta que hace falta |
+| `patron-anomalo-credencial.md` | Cómo revisar una incidencia `anomalous_pattern` sin convertir un indicio en una acusación |
 | `solicitud-derechos-rgpd.md` | Acceso, rectificación, portabilidad |
 | `brecha-de-seguridad.md` | Procedimiento de 72 h |
 | `actualizacion-cliente.md` | Procedimiento y vuelta atrás |
 | `incidencia-sin-acceso.md` | Cómo diagnosticar con el paquete que envía el cliente |
+| `errores-en-el-panel.md` | Cómo lee el IT del cliente el histórico de `error_events` y qué hacer con cada severidad |
 
 ---
 
@@ -1082,7 +1264,9 @@ QR_ERROR_CORRECTION=Q                  # Tolerancia al desgaste de la tarjeta
 
 ATTENDANCE_DEBOUNCE_SECONDS=60         # RF-AT-06
 ATTENDANCE_MAX_SHIFT_HOURS=12          # RN-08
-ATTENDANCE_MAX_CLOCK_SKEW_MINUTES=15   # RF-AT-10
+ATTENDANCE_MAX_CLOCK_SKEW_MINUTES=15   # RF-AT-10 · genera incidencia, nunca rechaza el fichaje
+ATTENDANCE_PATTERN_WINDOW_SECONDS=10   # RF-PR-06 · fichajes consecutivos en el mismo quiosco
+ATTENDANCE_PATTERN_MIN_REPEATS=3       # RF-PR-06 · coincidencias antes de generar incidencia
 PIN_MAX_ATTEMPTS=3                     # RS-12
 PIN_LOCKOUT_SECONDS=300
 PORTAL_INTERNAL_ONLY=true              # RF-ID-08
@@ -1090,6 +1274,7 @@ PORTAL_INTERNAL_ONLY=true              # RF-ID-08
 COMPLIANCE_PROFILE=ES-hosteleria       # RF-PD-07
 LICENSE_KEY=                           # Clave firmada, verificación local (ADR-018)
 TELEMETRY_ENABLED=false                # Desactivada por defecto (RF-PD-12)
+ERROR_HISTORY_RETENTION_DAYS=90        # RF-PD-15 · igual que el log técnico (RL-11)
 BRANDING_APP_NAME=
 BRANDING_LOGO_PATH=
 
@@ -1104,8 +1289,13 @@ BACKUP_ENCRYPTION_KEY=
 ```bash
 # Dominio y cumplimiento
 php artisan attendance:detect-incidents         # Turnos abiertos, duraciones anómalas, descansos
+php artisan attendance:detect-patterns          # Patrones anómalos de uso de credencial (RF-PR-06)
 php artisan attendance:reconcile --from= --to=  # Recalcula proyecciones y alerta si divergen
 php artisan compliance:verify-audit-chain       # Verifica la cadena de hash
+
+# Calidad y trazabilidad
+php artisan qa:traceability                     # Matriz requisito → pruebas (RQ-13)
+php artisan qa:traceability --check             # Falla si un requisito implementado no tiene prueba
 php artisan compliance:apply-retention --dry-run
 php artisan compliance:legal-export --from= --to= --employee=
 
@@ -1124,6 +1314,8 @@ php artisan kiosk:health                         # Estado de todos los quioscos
 
 # Producto y licencia
 php artisan product:doctor                       # Comprobación de salud (RF-PD-13)
+php artisan product:errors --since=24h --level=  # Histórico de errores agrupado (RF-PD-15)
+php artisan product:errors:prune                 # Purga a 90 días, en el scheduler
 php artisan product:diagnostics --anonymized     # Paquete de diagnóstico (RF-PD-09)
 php artisan product:export-all                   # Exportación íntegra del cliente (RF-PD-14)
 php artisan license:show / license:activate {key}

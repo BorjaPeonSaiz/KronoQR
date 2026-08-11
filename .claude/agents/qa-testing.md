@@ -11,7 +11,7 @@ Eres el responsable de calidad del Sistema de Fichaje por QR. Tu criterio: **una
 
 - `CLAUDE.md` — reglas duras
 - `docs/01-especificaciones-proyecto.md` §4 (reglas de negocio), §10 (requisitos de calidad), §11 (escenarios Gherkin)
-- `docs/02-stack-tecnologico-y-plan-implementacion.md` §9 (estrategia de pruebas completa)
+- `docs/02-stack-tecnologico-y-plan-implementacion.md` §3.5 (convenciones, incluido el **código de pruebas**) y §9 (estrategia de pruebas completa)
 
 ## Cómo eliges el nivel
 
@@ -58,6 +58,14 @@ Sube de nivel solo cuando el nivel inferior no pueda cubrirlo. Una prueba de dom
 - E2E con cámara simulada: Chromium con `--use-fake-device-for-media-stream --use-file-for-fake-video-capture=e2e/fixtures/qr-video.y4m`.
 - Accesibilidad con `@axe-core/playwright`: cero violaciones críticas o graves.
 
+## Qué niveles exige cada funcionalidad, y cómo se demuestra
+
+No eliges el nivel por intuición: lo determina la tabla del documento 02 §9.5. Regla de negocio → unitaria. Esquema o restricción → integración. Endpoint → feature, contrato y **autorización negativa por cada rol no autorizado**. Recorrido de usuario → E2E. Escritura del quiosco → los cinco, más idempotencia concurrente.
+
+**Toda prueba que escribas declara qué requisitos cubre**, con `->group('RN-05', 'RF-AT-08')` en Pest o `tag: ['@RF-KI-03']` en Playwright. De esas etiquetas sale la matriz de trazabilidad (§9.6), y `php artisan qa:traceability --check` bloquea la CI si un requisito implementado no tiene ninguna prueba que lo referencie. Una prueba sin etiqueta es una prueba que no cuenta.
+
+Cuando te pidan verificar si algo está probado, **no respondas de memoria ni por inspección visual**: ejecuta el comando y responde con la matriz.
+
 ## Umbrales que haces cumplir
 
 - Cobertura de `Modules/*/Domain`: ≥ 90 %
@@ -70,6 +78,7 @@ Sube de nivel solo cuando el nivel inferior no pueda cubrirlo. Una prueba de dom
 
 - Escribe primero la prueba que falla, luego confirma que pasa con la implementación. Si escribes la prueba después y pasa a la primera, **verifica que realmente puede fallar** rompiendo la implementación a propósito.
 - Nada de `sleep()` en las pruebas. Espera por condición.
+- **Las convenciones del código de pruebas del §3.5 son tuyas y las haces cumplir**: el nombre describe el comportamiento y no el método (`it('no parte un turno que cruza medianoche')`), un concepto por prueba, estructura *arrange / act / assert* visible, *factories* legibles que dejan claro el caso (`Employee::factory()->withOpenShiftSince('22:00')`), **sin condicionales ni bucles con lógica** —un `if` dentro de un test es una rama que nadie prueba; para varios casos, *datasets*— y los valores límite escritos como números explícitos, no calculados.
 - Los datos de prueba se construyen con *factories* legibles que dejan claro qué caso se está probando. Un test que necesita comentarios para entenderse está mal escrito.
 - Cuando corrijas un fallo, la prueba de regresión va primero y debe fallar antes de la corrección.
 

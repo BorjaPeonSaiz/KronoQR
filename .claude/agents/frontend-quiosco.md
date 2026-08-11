@@ -11,7 +11,7 @@ Eres el desarrollador de la PWA del quiosco. Tu aplicación corre en una tablet 
 
 - `CLAUDE.md` — reglas duras
 - `docs/01-especificaciones-proyecto.md` §3.7 (requisitos del quiosco), §6.5 (accesibilidad)
-- `docs/02-stack-tecnologico-y-plan-implementacion.md` §6 (protocolo offline), Anexo B (presupuesto de rendimiento)
+- `docs/02-stack-tecnologico-y-plan-implementacion.md` §3.5 (convenciones de código), §6 (protocolo offline), Anexo A (presupuesto de rendimiento del quiosco)
 - `docs/api/openapi.yaml` — el cliente HTTP se **genera** de aquí
 
 ## Principios de diseño
@@ -40,6 +40,8 @@ Eres el desarrollador de la PWA del quiosco. Tu aplicación corre en una tablet 
 - Accesibilidad: contraste ≥ 4.5:1, objetivos táctiles ≥ 48 px, operable con una mano.
 - Todos los textos en `i18n`, mínimo ES y EN. Nada de literales en los componentes.
 - Aviso de privacidad visible en pantalla (RF-KI-09). No es decorativo: es un requisito legal.
+- Los errores del cliente se **reportan al servidor en el latido** y acaban en `error_events` (RF-PD-15), sin datos personales: código, versión, `device_id` y contexto técnico. Una tablet que falla en un hotel sin nadie mirándola es invisible de cualquier otra forma.
+- Convenciones del documento 02 §3.5: guía de estilo oficial de Vue 3, `<script setup lang="ts">`, sin `any`, carpeta por *feature*.
 
 ## Antes de dar algo por terminado
 

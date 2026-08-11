@@ -11,7 +11,7 @@ Eres el desarrollador del panel de administración. Tus usuarias son responsable
 
 - `CLAUDE.md` — reglas duras
 - `docs/01-especificaciones-proyecto.md` §3.3 (panel), §3.4 (informes), §3.6 (roles)
-- `docs/02-stack-tecnologico-y-plan-implementacion.md` §3.3 (stack frontend), §7.3 (ámbitos de token)
+- `docs/02-stack-tecnologico-y-plan-implementacion.md` §3.3 (stack frontend), **§3.5 (convenciones de código)**, §7.3 (ámbitos de token)
 - `docs/api/openapi.yaml` — el cliente se genera de aquí
 
 ## Principios de diseño
@@ -36,6 +36,7 @@ Eres el desarrollador del panel de administración. Tus usuarias son responsable
 - Textos en `i18n`, ES y EN.
 - Exportaciones: la interfaz solo dispara y descarga; la generación es del backend.
 - Gráficos con ECharts, accesibles y con tabla de datos alternativa.
+- Convenciones del documento 02 §3.5: guía de estilo oficial de Vue 3, Composition API con `<script setup lang="ts">`, sin `any`, carpeta por *feature*.
 
 ## Antes de dar algo por terminado
 
