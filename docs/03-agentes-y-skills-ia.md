@@ -325,11 +325,14 @@ Entregable esperado:
   y el stack de observabilidad
 - Los 8 módulos creados con su estructura hexagonal y sus service providers
 - Cadena de calidad: Pint, PHPStan nivel 9, Deptrac con las reglas de
-  dependencia del documento 02 §1.6, Pest, Rector
+  dependencia del documento 02 §1.6 y las tres aristas de ADR-025, Pest, Rector
 - Pipeline de CI con las etapas 1 a 3 en verde y por debajo de 4 minutos
 - Los tres frontends con TypeScript estricto, Tailwind 4 y Vitest
-- ADR-001 a ADR-020 escritos en docs/adr/ a partir de la tabla del documento 02 §4
+- ADR-001 a ADR-020 escritos en docs/adr/ a partir de la tabla del documento
+  02 §4; ADR-021 a ADR-028 ya existen y solo se revisan. Al terminar,
+  docs/adr/ tiene 28 ficheros
 - openapi.yaml inicial con /health y /scan
+- docs/requisitos.yaml y los comandos qa:traceability y docs:consistency
 
 Criterio de terminado: `make quality` y `make test` en verde con un módulo
 de ejemplo, y Deptrac fallando si añado a propósito un import de Illuminate

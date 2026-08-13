@@ -215,6 +215,11 @@ Nomenclatura: `RF-<módulo>-<nº>`. Prioridad MoSCoW: **M**ust / **S**hould / **
 | RF-ID-06 | El empleado accede al portal con su **código de empleado y su PIN**, el mismo del respaldo del quiosco. No requiere correo electrónico. Rate limiting agresivo y bloqueo temporal por intentos fallidos. | M |
 | RF-ID-07 | La sesión del portal tiene ámbito `self:read`: solo permite **leer** los datos del propio empleado. Nunca datos de terceros y nunca escritura sobre el registro. | M |
 | RF-ID-08 | El portal es accesible **desde la red interna por defecto**. Exponerlo a internet es una decisión explícita del cliente que activa requisitos adicionales de contraseña. | M |
+| RF-ID-09 | **Provisión y restablecimiento del PIN.** El sistema genera un PIN aleatorio de 6 dígitos al dar de alta al empleado, permite a RRHH restablecerlo y registra la entrega —fecha y responsable— igual que la credencial. El PIN **nunca se almacena en claro** ni se muestra dos veces: se enseña una sola vez para su entrega y después solo puede restablecerse. Emisión, entrega y restablecimiento quedan en `audit_log`. | M |
+
+> **Por qué RF-ID-09 existe y por qué el canal de entrega importa.** El PIN sostiene dos cosas de las que el producto no puede prescindir: el fichaje de respaldo cuando falta la tarjeta (RF-AT-11) y el acceso al portal personal, que es **exigencia legal** (RL-05). Sin un requisito que lo provea, ambas quedan sin puerta de entrada.
+>
+> **No se imprime en la tarjeta.** Es la solución que se elige sola si nadie decide, y anula el respaldo: quien pierde la tarjeta perdería a la vez la credencial y su alternativa, que es justo el escenario que RF-AT-11 existe para cubrir. Se entrega en documento aparte, con su propio registro de entrega.
 
 > **Por qué código y PIN en lugar de correo y contraseña (RF-ID-06).** El producto no puede exigir correo electrónico a toda la plantilla. El PIN ya existe como respaldo del quiosco, así que reutilizarlo elimina una credencial que gestionar. El riesgo de un PIN de 6 dígitos se compensa con bloqueo por intentos, acceso restringido a la red interna y un ámbito que solo alcanza los datos propios del empleado.
 
@@ -274,6 +279,8 @@ Nomenclatura: `RF-<módulo>-<nº>`. Prioridad MoSCoW: **M**ust / **S**hould / **
 Estas reglas viven en el **núcleo de dominio** y deben estar cubiertas por pruebas unitarias puras.
 
 > Los umbrales de RN-10, RN-11 y RN-12 provienen del Estatuto de los Trabajadores español, pero **son parámetros del perfil de cumplimiento** (RF-PD-07), no constantes. Lo invariable es la forma de la regla; configurable es el número. RN-01 a RN-09 y RN-13 a RN-15 son estructurales y no se configuran.
+>
+> **RN-08 y RN-16 son un caso intermedio:** su forma es estructural, pero llevan un umbral configurable que **no proviene del marco normativo** sino de la operación de cada instalación —la duración anómala de un tramo y el tiempo de tránsito entre dos quioscos—. Viven en `installation_settings` (RF-PD-01), no en el perfil de cumplimiento (RF-PD-07). La distinción importa: un umbral legal lo fija la jurisdicción, uno operativo lo fija el hotel.
 
 | ID | Regla |
 |---|---|
@@ -281,7 +288,7 @@ Estas reglas viven en el **núcleo de dominio** y deben estar cubiertas por prue
 | RN-02 | Los tramos de un mismo empleado **no pueden solaparse** en el tiempo. Garantizado por restricción de exclusión en base de datos. |
 | RN-03 | `clocked_out_at` debe ser estrictamente posterior a `clocked_in_at`. |
 | RN-04 | Todas las marcas de tiempo se almacenan en **UTC**. El cálculo de jornada y los informes se resuelven en la **zona horaria del centro**. |
-| RN-05 | La **jornada laboral** (`work_date`) de un tramo es la fecha civil de su `clocked_in_at` en la zona del centro. Un turno 22:00→06:00 pertenece íntegramente al día de inicio. |
+| RN-05 | La **jornada laboral** (`work_date`) es la fecha civil, en la zona del centro, del `clocked_in_at` del tramo **que abre la jornada**. Un turno 22:00→06:00 pertenece íntegramente al día de inicio. Los tramos que **continúan** una jornada abierta —la vuelta de una pausa (RF-AT-12)— **heredan su `work_date`** y no abren jornada nueva, aunque empiecen en otro día natural. |
 | RN-06 | El total diario **se recalcula** como suma de los tramos de esa jornada dentro de la misma transacción; **nunca se incrementa** de forma acumulativa. Esto lo hace idempotente y correcto ante correcciones. |
 | RN-07 | Duración mínima de tramo computable: 1 minuto. Por debajo se registra el evento pero se marca como incidencia. |
 | RN-08 | Duración máxima de tramo antes de considerarse anómalo: 12 h (configurable). **Nunca se cierra automáticamente** sin intervención humana. |
@@ -292,6 +299,13 @@ Estas reglas viven en el **núcleo de dominio** y deben estar cubiertas por prue
 | RN-13 | Ningún registro de fichaje se **borra ni se sobrescribe**. Las correcciones generan una nueva versión y conservan la anterior con su autor, momento y motivo. |
 | RN-14 | Un empleado dado de baja conserva su historial; su credencial queda revocada y sus escaneos son rechazados. |
 | RN-15 | El horario de un fichaje offline es el `occurred_at` del dispositivo, marcado con su retraso de sincronización. Si supera el umbral, requiere validación del responsable. |
+| RN-16 | **Secuencia imposible de credencial**: dos escaneos de la misma credencial en **dispositivos distintos** separados por menos del tiempo mínimo de tránsito entre ellos (configurable, `ATTENDANCE_MIN_TRANSIT_SECONDS`). Genera incidencia `anomalous_pattern` para revisión humana. **Nunca anula el fichaje ni concluye que ha habido fraude** (RF-PR-06). **No se evalúa** si alguno de los dos escaneos tiene incidencia `clock_skew` (RF-AT-10) o llegó en un lote cuyo retraso de sincronización supera el umbral (RN-15). |
+
+> **Sobre RN-16.** RF-PR-06 enumera tres patrones anómalos y define dos por sus parámetros —fichajes consecutivos en el mismo quiosco (`ATTENDANCE_PATTERN_WINDOW_SECONDS`) y coincidencias sistemáticas entre dos empleados (`ATTENDANCE_PATTERN_MIN_REPEATS`)—, pero nombra el tercero, «secuencias imposibles», sin definirlo. Sin enunciado no hay umbral, no hay prueba y, sobre todo, **no hay forma de sostener el indicio ante la persona señalada**, que es precisamente lo que el runbook `patron-anomalo-credencial.md` existe para evitar. Es una regla estructural en su forma —dos escaneos, dos dispositivos, un umbral— y **configurable en su número**, porque la distancia entre dos quioscos depende del hotel.
+>
+> **Por qué la exclusión final no es un detalle.** La regla mide sobre `occurred_at`, que es la hora **del dispositivo** (RN-15). Dos quioscos con relojes desviados producen deltas ficticios —incluso negativos— entre dos escaneos perfectamente legítimos, y RF-AT-10 tolera desviaciones de 15 minutos. Sin la exclusión, la regla acusaría a personas concretas de un patrón que solo existe porque una tablet va adelantada. Un indicio que se dispara por un fallo técnico destruye la confianza en todos los demás.
+>
+> **Dos quioscos contiguos son un caso real, no un borde.** Una entrada de personal con dos tablets —una con la cámara sucia y el empleado probando en la otra— tiene un tránsito real de segundos. El umbral es **por instalación** y el asistente de puesta en marcha debe preguntarlo; el valor de serie no puede asumir distancias.
 
 ---
 
@@ -343,6 +357,8 @@ Estas reglas viven en el **núcleo de dominio** y deben estar cubiertas por prue
 | **Device** | Quiosco | Token válido, ámbito limitado, vinculación a centro. |
 | **AuditTrail** | Registro de auditoría | Solo-append, encadenamiento por hash. |
 
+> **`Device` es raíz de agregado en `Kiosk`, y `Identity` emite y revoca su token.** El agregado protege lo que es del dispositivo —identidad, centro al que está vinculado, estado y latido— y esas invariantes son propiedad de `Kiosk`, que es el módulo del punto de fichaje. **El token no lo es:** su emisión, su ámbito y su revocación son de `Identity`, igual que las credenciales, y se exponen a `Kiosk` **por caso de uso público explícito**, nunca por acceso directo a la tabla. `Device` no valida su propio token: recibe el resultado de esa validación. Queda escrito aquí, y no se decide al ejecutar la tarea que lo construye.
+
 ### 5.3 Objetos de valor
 
 `EmployeeCode`, `QrPayload`, `TimeRange` (instantes de inicio y fin en UTC), `WorkedDuration` (minutos, no negativo), `WorkDate` (fecha más zona), `ScanOrigin` (`QR_KIOSK` | `PIN_KIOSK` | `MANUAL_ADMIN` | `IMPORT`), `CorrectionReason`.
@@ -384,10 +400,12 @@ Motor: **PostgreSQL 17**. Los tipos se expresan en su nomenclatura. El Anexo E d
 **`support_grants`** — `id`, `granted_by_user_id`, `reason`, `scope`, `granted_at`, `expires_at`, `revoked_at`, `accessed_at`
 
 **`scan_events`** — log inmutable de todo escaneo, aceptado o no
-`id`, `scan_id` (UUID v7 generado en cliente, UNIQUE → idempotencia), `device_id`, `employee_id` (nullable si no resuelve), `occurred_at` (TIMESTAMPTZ), `recorded_at` (TIMESTAMPTZ), `origin`, `result` (`clock_in`|`clock_out`|`rejected_unknown`|`rejected_revoked`|`rejected_debounce`|`rejected_signature`), `shift_entry_id`, `payload_fingerprint`, `client_meta` (JSONB)
+`id`, `scan_id` (UUID v7 generado en cliente, UNIQUE → idempotencia), `device_id`, `employee_id` (nullable si no resuelve), `occurred_at` (TIMESTAMPTZ), `recorded_at` (TIMESTAMPTZ), `origin`, `intent` (`auto`|`break_start`|`break_end`; **lo declara el cliente**, `auto` por defecto), `result` (`clock_in`|`clock_out`|`break_start`|`break_end`|`rejected_unknown`|`rejected_revoked`|`rejected_debounce`|`rejected_signature`), `shift_entry_id`, `payload_fingerprint`, `client_meta` (JSONB)
+
+> **`intent` frente a `result`.** `intent` es lo que el quiosco **pide** y viaja en la petición; `result` es lo que el servidor **decidió** y viaja en la respuesta. Son dos campos porque con la pausa modelada como dos tramos (ADR-024) el servidor no puede deducir si un cierre de tramo es una pausa o un fin de jornada: son estructuralmente idénticos. `auto` preserva el comportamiento de un cliente que no declara intención, de modo que ampliar el enum es aditivo y no rompe la v1 (ADR-012).
 
 **`shift_entries`**
-`id`, `uuid`, `employee_id`, `site_id`, `work_date` (DATE, jornada según RN-05), `clocked_in_at` (TIMESTAMPTZ), `clocked_out_at` (TIMESTAMPTZ NULL), `duration_minutes` (INT NULL, derivada), `status` (`open`|`closed`|`anomalous`|`voided`), `clock_in_source`, `clock_out_source`, `version`, `superseded_by_id`, `created_at`, `updated_at`
+`id`, `uuid`, `employee_id`, `site_id`, `work_date` (DATE, jornada según RN-05), `clocked_in_at` (TIMESTAMPTZ), `clocked_out_at` (TIMESTAMPTZ NULL), `duration_minutes` (INT NULL, derivada), `status` (`open`|`closed`|`anomalous`|`voided`|`superseded`), `clock_in_source`, `clock_out_source`, `version`, `superseded_by_id`, `created_at`, `updated_at`
 
 *Restricciones garantizadas por la propia base de datos, no solo por la aplicación:*
 
@@ -397,19 +415,21 @@ CREATE EXTENSION IF NOT EXISTS btree_gist;
 -- RN-01: como máximo un turno abierto por empleado
 CREATE UNIQUE INDEX one_open_shift_per_employee
     ON shift_entries (employee_id)
-    WHERE clocked_out_at IS NULL AND status <> 'voided';
+    WHERE clocked_out_at IS NULL AND status NOT IN ('voided', 'superseded');
 
--- RN-02: los tramos de un mismo empleado no pueden solaparse
+-- RN-02: los tramos vigentes de un mismo empleado no pueden solaparse
 ALTER TABLE shift_entries ADD CONSTRAINT shift_entries_no_overlap
     EXCLUDE USING gist (
         employee_id WITH =,
         tstzrange(clocked_in_at, clocked_out_at) WITH &&
-    ) WHERE (status <> 'voided');
+    ) WHERE (status NOT IN ('voided', 'superseded'));
 
 -- RN-03: la salida es posterior a la entrada
 ALTER TABLE shift_entries ADD CONSTRAINT shift_entries_chk_order
     CHECK (clocked_out_at IS NULL OR clocked_out_at > clocked_in_at);
 ```
+
+> **Los dos estados no vigentes (ADR-026).** `voided` significa «este tramo no ocurrió» (anulación); `superseded` significa «ocurrió, se conserva, y otra versión lo sustituye» (corrección, RN-13). Las dos garantías declarativas y **el recálculo de `daily_totals` (RN-06) operan solo sobre el conjunto vigente**, es decir, `status NOT IN ('voided', 'superseded')`. Sin `superseded`, la fila anterior y la corregida se solaparían, la restricción de exclusión rechazaría la corrección y el recálculo duplicaría los minutos del día. El histórico íntegro se recorre por `version` y `superseded_by_id` (RL-04).
 
 **`daily_totals`** — **proyección de lectura reconstruible**, no fuente de verdad
 `id`, `employee_id`, `work_date`, `total_minutes`, `shift_count`, `first_in_at`, `last_out_at`, `has_open_shift`, `has_incident`, `recalculated_at`. UNIQUE `(employee_id, work_date)`.
@@ -424,9 +444,14 @@ ALTER TABLE shift_entries ADD CONSTRAINT shift_entries_chk_order
 `id`, `fingerprint` (hash de clase + punto de fallo + mensaje normalizado, UNIQUE), `level` (`error`|`critical`), `source` (`api`|`worker`|`scheduler`|`console`|`kiosk`|`admin`|`portal`), `module`, `code`, `message`, `exception_class`, `file`, `line`, `context` (JSONB, **sin PII**), `trace_id`, `device_id` (NULL), `employee_uuid` (NULL, nunca el nombre), `app_version`, `occurrences` (INT), `first_seen_at`, `last_seen_at`, `resolved_at`, `resolved_by_user_id`
 *Un fallo que se repite mil veces es una fila con `occurrences = 1000`, no mil filas. Retención 90 días, igual que el log técnico (RL-11). No sustituye al log estructurado: lo complementa para que el cliente pueda diagnosticar desde el panel sin depender de que conserve el stack de observabilidad.*
 
-**`audit_log`** — solo-append, con encadenamiento por hash
-`id`, `occurred_at` (TIMESTAMPTZ), `actor_type`, `actor_id`, `action`, `subject_type`, `subject_id`, `payload` (JSONB), `prev_hash`, `hash`, `ip` (INET), `user_agent`
-*Permisos:* el usuario de aplicación tiene `INSERT` y `SELECT`, **nunca** `UPDATE` ni `DELETE` sobre esta tabla.
+**`audit_log`** — solo-append, con encadenamiento por hash, **particionada por año** (ADR-027)
+`id`, `occurred_at` (TIMESTAMPTZ), `actor_type`, `actor_id`, `action`, `subject_type`, `subject_id`, `payload` (JSONB), `prev_hash`, `hash`, `ip` (INET), `user_agent`. Clave primaria `(id, occurred_at)`, porque la clave de partición debe formar parte de toda restricción única.
+*Permisos:* el usuario de aplicación tiene `INSERT` y `SELECT`, **nunca** `UPDATE` ni `DELETE` sobre esta tabla ni sobre ninguna de sus particiones.
+*Particionado:* `PARTITION BY RANGE (occurred_at)`, una partición por año natural, creada desde la primera migración. Una tarea programada crea la partición del año siguiente antes de que llegue y alerta si falta la del año en curso.
+
+**`audit_chain_anchors`** — sello de cada partición purgada (ADR-027)
+`id`, `partition_year` (INT UNIQUE), `first_hash`, `last_hash`, `row_count`, `sealed_at` (TIMESTAMPTZ), `sealed_by`
+*La purga de retención de RL-02 es `DROP PARTITION` ejecutada por un **rol de mantenimiento distinto** del usuario de aplicación, previa verificación de la cadena y previo sellado del ancla. `compliance:verify-audit-chain` resuelve un `prev_hash` huérfano contra el `last_hash` de un ancla: si encaja es una purga legítima, y si no encaja es manipulación y salta la alerta de RS-07.*
 
 **`users`, `roles`, `permissions`, `personal_access_tokens`** — identidad y acceso.
 
@@ -604,19 +629,29 @@ Rate, errores y duración por endpoint, con foco en el de fichaje. Latencia p50/
 
 ### 9.3 Alertas mínimas
 
-| Alerta | Umbral | Severidad |
-|---|---|---|
-| Quiosco sin latido | > 10 min | Crítica (operaciones) |
-| Tasa de error 5xx en el endpoint de fichaje | > 1 % en 5 min | Crítica |
-| Latencia p95 del endpoint de fichaje | > 500 ms en 10 min | Alta |
-| Cola offline de un dispositivo | > 50 elementos o > 2 h | Alta |
-| Turnos abiertos > 12 h | cualquiera | Media (RRHH) |
-| Divergencia en reconciliación nocturna | cualquiera | Crítica |
-| Rotura de la cadena de hash de auditoría | cualquiera | Crítica (seguridad) |
-| Copia de seguridad fallida o no verificada | cualquiera | Crítica |
-| Certificado TLS próximo a expirar | < 21 días | Alta |
-| Espacio en disco | < 20 % | Alta |
-| Errores nuevos de severidad crítica en `error_events` | cualquiera en 5 min | Alta (IT del cliente) |
+Cada alerta lleva **umbral, severidad, destinatario y enlace a su runbook**. Una alerta sin procedimiento asociado es ruido y se elimina (doc 02 §8.4).
+
+| Alerta | Umbral | Severidad | Destinatario | Runbook |
+|---|---|---|---|---|
+| Quiosco sin latido | > 10 min | Crítica (operaciones) | IT del cliente | `quiosco-no-responde.md` |
+| Tasa de error 5xx en el endpoint de fichaje | > 1 % en 5 min | Crítica | IT del cliente | `errores-en-el-panel.md` |
+| Latencia p95 del endpoint de fichaje | > 500 ms en 10 min | Alta | IT del cliente | `errores-en-el-panel.md` |
+| Cola offline de un dispositivo | > 50 elementos o > 2 h | Alta | IT del cliente | `cola-offline-atascada.md` |
+| Turnos abiertos > 12 h | cualquiera | Media | RRHH | `turno-abierto-prolongado.md` |
+| Divergencia en reconciliación nocturna | cualquiera | Crítica | IT del cliente | `divergencia-proyeccion.md` |
+| Rotura de la cadena de hash de auditoría | cualquiera | Crítica (seguridad) | Responsable de seguridad | `rotura-cadena-auditoria.md` |
+| Copia de seguridad fallida o no verificada | cualquiera | Crítica | IT del cliente | `restaurar-backup.md` |
+| Certificado TLS próximo a expirar | < 21 días | Alta | IT del cliente | `renovacion-certificado-tls.md` |
+| Espacio en disco | < 20 % | Alta | IT del cliente | `espacio-en-disco.md` |
+| Errores nuevos de severidad crítica en `error_events` | cualquiera en 5 min | Alta | IT del cliente | `errores-en-el-panel.md` |
+
+**Criterio de asignación del destinatario.** Cinco alertas no lo declaraban y se han asignado con esta regla, para que «crítica» no signifique cosas distintas según quién la lea:
+
+- **Crítica (seguridad)** → responsable de seguridad. Es un incidente, no una avería: exige preservación de evidencia antes que restablecimiento del servicio.
+- **Crítica (operaciones) y Alta** → IT del cliente. Es quien opera la instalación y el único que puede actuar sobre el servidor, la red o los dispositivos.
+- **Media** → RRHH. No es un fallo técnico: es trabajo de gestión sobre el registro, y avisar a IT de un turno sin cerrar sería ruido para quien no puede resolverlo.
+
+El fabricante **no es destinatario de ninguna alerta**: no tiene acceso a la instalación (ADR-020) y no puede intervenir.
 
 ### 9.4 Trazabilidad y logs
 
@@ -865,11 +900,13 @@ Orden de ejecución: **0 → 1 → 2 → 5 → 3 → 4**.
 | Fase | Requisitos incluidos |
 |---|---|
 | **Fase 0 — Cimientos** | RNF-M-01..06, RQ-01, RQ-06, RQ-13..14, RS-08, RS-09, RS-10 |
-| **Fase 1 — MVP de fichaje** | RF-AT-01..09, RF-AT-11, RF-QR-01..06, RF-QR-08, RF-ID-01..02 (**autenticación de gestión básica, sin 2FA**), RF-ID-04..08, RF-KI-01..06, RF-KI-09, RF-GP-01, RF-GP-03, RN-01..09, RL-01, RL-05, RS-01..04, RS-12 |
+| **Fase 1 — MVP de fichaje** | RF-AT-01..09, RF-AT-11, RF-QR-01..06, RF-QR-08, RF-ID-01..02 (**autenticación de gestión básica, sin 2FA**), RF-ID-04..09, RF-KI-01..06, RF-KI-09, RF-GP-01, RF-GP-03, RN-01..09, RL-01, RL-05, RS-01..04, RS-12 |
 | **Fase 2 — Gestión y cumplimiento** | RF-PA-01..05, RF-IN-01..05, RF-GP-02, RF-PR-01..04, RF-QR-07, RF-ID-01..03 (**completos: 2FA y ámbito por departamento**), RN-10..15, RL-02..04, RL-06..15, RS-05..07 |
-| **Fase 5 — Productización** | RF-PD-01..15, RL-16..21, RQ-11 |
-| **Fase 3 — Operación y refuerzo** | RF-PA-06..07, RF-KI-07..08, RF-AT-10, RF-AT-12, RF-IN-06..08, RF-GP-04..05, RF-PR-05..06, §9 completo, RS-11 |
+| **Fase 5 — Productización** | RF-PD-01..15, RL-16..21, RQ-11, **RF-GP-05** |
+| **Fase 3 — Operación y refuerzo** | RF-PA-06..07, RF-KI-07..08, RF-AT-10, RF-AT-12, RF-IN-06..08, RF-GP-04, RF-PR-05..06, **RN-16**, §9 completo, RS-11 |
 | **Fase 4 — Evolución** | Cuadrantes, vacaciones con aprobación, integración de nómina, multi-centro avanzado |
+
+> **Por qué RF-GP-05 se movió de la Fase 3 a la Fase 5.** La importación masiva de plantilla estaba asignada a la Fase 3, que en el orden real de ejecución (0 → 1 → 2 → 5 → 3 → 4) va **después** de la productización. Pero el asistente de puesta en marcha (RF-PD-03) es el primer contacto del cliente con el producto, y un asistente que obliga a teclear a mano la plantilla de un hotel no es un producto instalable — que es el criterio con el que se juzga la Fase 5 entera. Además, el documento 05 §10.2 ya se lo anuncia al cliente como paso de la puesta en marcha. Son 3–4 h que **cambian de fase, no que se suman**: el esfuerzo total del proyecto no varía.
 
 > **Sobre el reparto de `RF-ID-*` y `RL-04`.** La Fase 1 necesita una autenticación de gestión mínima —sin ella, RRHH no puede emitir tarjetas ni ver el panel de estado de credenciales (tarea 1.10)—, pero el 2FA obligatorio y el ámbito por departamento llegan con la tarea 2.1. `RL-04` (fiabilidad e inalterabilidad) se completa en la Fase 2: es donde aterrizan la auditoría encadenada (2.2) y las correcciones versionadas (2.3), que son lo que materializa el requisito.
 
@@ -881,7 +918,8 @@ POST   /api/v1/scan/batch                  Sincronizar cola offline     [scope: 
 POST   /api/v1/scan/pin                    Fichaje por PIN de respaldo  [scope: kiosk]
 GET    /api/v1/kiosk/roster                Padrón mínimo cacheable      [scope: kiosk]
 POST   /api/v1/kiosk/heartbeat             Latido y telemetría          [scope: kiosk]
-POST   /api/v1/kiosk/pair                  Emparejamiento por código    [público, un solo uso]
+POST   /api/v1/kiosk/pair                  Solicitar emparejamiento     [público, un solo uso]
+POST   /api/v1/kiosk/pair/confirm          Confirmar código y vincular  [rol: admin]
 
 POST   /api/v1/auth/login                  Acceso al panel de gestión   [público, throttle 5 r/m]
 POST   /api/v1/auth/2fa/verify             Segundo factor TOTP          [sesión pendiente de 2FA]
@@ -897,12 +935,17 @@ POST   /api/v1/shift-entries/{uuid}/void   Anulación trazada            [rol: r
 GET    /api/v1/incidents                   Bandeja de incidencias       [rol: manager+]
 POST   /api/v1/incidents/{id}/resolve      Resolver incidencia          [rol: manager+]
 
+GET    /api/v1/compliance/summary          Vista de cumplimiento        [rol: manager+]
+
 POST   /api/v1/credentials                 Emitir credencial            [rol: rrhh]
 POST   /api/v1/credentials/{uuid}/print    Generar PDF de tarjeta       [rol: rrhh]
 POST   /api/v1/credentials/print-batch     Impresión masiva en A4       [rol: rrhh]
 POST   /api/v1/credentials/{uuid}/deliver  Registrar entrega            [rol: rrhh]
 POST   /api/v1/credentials/{uuid}/revoke   Revocar                      [rol: rrhh]
-GET    /api/v1/credentials/status          Estado de credenciales       [rol: rrhh]
+GET    /api/v1/credentials/status          Estado de credenciales       [rol: rrhh, filtro ?key_id=]
+
+POST   /api/v1/employees/{uuid}/pin/reset  Generar o restablecer PIN    [rol: rrhh, auditado]
+POST   /api/v1/employees/{uuid}/pin/deliver Registrar entrega del PIN   [rol: rrhh, auditado]
 
 GET    /api/v1/reports/period              Informe por periodo          [rol: manager+]
 POST   /api/v1/reports/exports             Generar exportación async    [rol: manager+]
@@ -913,7 +956,7 @@ GET    /api/v1/reports/adoption            Cuadro de impacto y adopción [rol: a
 
 POST   /api/v1/me/login                    Acceso con código y PIN      [público, con throttle]
 GET    /api/v1/me/workdays                 Mi propio registro           [scope: self:read]
-GET    /api/v1/me/export                   Descarga de mi histórico     [scope: self:read]
+GET    /api/v1/me/export                   Descarga de mi histórico     [scope: self:read, ?format=csv|pdf]
 
 GET    /api/v1/settings                    Configuración de instalación [rol: admin]
 PATCH  /api/v1/settings                    Modificar configuración      [rol: admin, auditado]
@@ -930,6 +973,18 @@ CRUD   /api/v1/employees, /departments, /sites, /contracts, /devices, /absences
 GET    /api/v1/health  /api/v1/ready       Sondas de salud
 GET    /metrics                            Métricas Prometheus          [red interna]
 ```
+
+**Notas de contrato añadidas al planificar la implementación.** El `openapi.yaml` es la fuente de verdad (ADR-013) y estas decisiones se reflejan en él:
+
+| Endpoint | Decisión | Motivo |
+|---|---|---|
+| `POST /api/v1/scan` y `/scan/batch` | **La petición** gana el campo `intent` (`auto` \| `break_start` \| `break_end`, opcional, `auto` por defecto), y **la respuesta** amplía `action` a `clock_in`, `clock_out`, `break_start`, `break_end` | RF-AT-12 se resuelve en el endpoint existente, sin ruta nueva. **Los dos sentidos son necesarios**: con la pausa como dos tramos (ADR-024), `break_start` y `clock_out` son idénticos para el servidor, que no puede deducir cuál es. Sin `intent` en la petición, `work_date` se atribuye mal cuando la pausa cruza medianoche. Ambos cambios son aditivos y no rompen la v1 (ADR-012) |
+| `POST /api/v1/employees/{uuid}/pin/reset` y `/pin/deliver` | **Endpoints nuevos** para generar, restablecer y registrar la entrega del PIN | RF-ID-09. El PIN sostiene RF-AT-11 y el acceso al portal (RL-05), y ninguna tarea lo proveía. Se muestra una sola vez y nunca se almacena en claro |
+| `POST /api/v1/kiosk/pair` + `/pair/confirm` | **Dos pasos.** La tablet sin vincular llama a `/pair` y recibe el código de un solo uso que muestra en pantalla; el administrador lo teclea en el panel, que llama a `/pair/confirm` para vincularla al centro y emitir su token | Reconcilia RF-PD-06 («código mostrado en la tablet e introducido en el panel») con el carácter público y de un solo uso de `/pair`. `kiosk:pairing-code {site}` se conserva como vía alternativa de consola, coherente con «el cliente no tiene por qué usar SSH» |
+| `GET /api/v1/me/export` | **CSV y PDF**, seleccionables por `?format=`. CSV disponible desde la tarea 1.11; PDF se añade en la 2.9, cuando existe la maquinaria de exportación. **Sin XLSX** | CSV cubre la portabilidad del RGPD; el PDF es lo que una persona presenta. XLSX no aporta nada sobre CSV para un histórico personal |
+| `GET /api/v1/credentials/status` | Admite filtro `?key_id=` | Permite ver a quién le falta reimprimir durante una rotación de clave con solape (RF-QR-07, §5.3) sin añadir un endpoint |
+| `GET /api/v1/compliance/summary` | **Endpoint nuevo.** Sirve la vista de cumplimiento con filtros de periodo y ámbito | RF-PA-06 y RN-10..12 exigen la vista, y el contrato no tenía ruta para ella |
+| Rotación de clave de firma | **No hay endpoint.** Se ejecuta con `credentials:rotate-key` | Es un acto operativo con logística de reimpresión detrás (§5.3), no una acción de panel. El panel solo necesita leer, y `/credentials/status` ya lo cubre |
 
 ## Anexo C — Catálogo de motivos de corrección
 

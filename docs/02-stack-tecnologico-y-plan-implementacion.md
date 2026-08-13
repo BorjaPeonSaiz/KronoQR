@@ -125,19 +125,23 @@ graph LR
     subgraph INFRA["🔌 Infrastructure (adaptadores)"]
         CTRL["ScanController<br/><i>HTTP</i>"]
         REPO["EloquentWorkDay<br/>Repository"]
-        CLOCK["SystemClock"]
+        CLOCK["SystemClock<br/><i>en Shared</i>"]
         BUS["LaravelEventBus"]
-        SIGN["HmacSignatureVerifier"]
-        POL["DbCompliancePolicy<br/>Provider"]
+        SIGN["HmacSignatureVerifier<br/><i>en Identity</i>"]
+        DIR["EloquentEmployee<br/>Directory<br/><i>en Workforce</i>"]
+        CAL["EloquentSite<br/>Calendar<br/><i>en Workforce</i>"]
+        POL["DbCompliancePolicy<br/>Provider<br/><i>en Product</i>"]
     end
 
     subgraph APP["⚙️ Application (casos de uso)"]
         UC["RegisterScan<br/>Handler"]
         PORT_R["«port»<br/>WorkDayRepository"]
-        PORT_C["«port»<br/>Clock"]
+        PORT_C["«port»<br/>Clock<br/><i>en Shared</i>"]
         PORT_B["«port»<br/>EventPublisher"]
         PORT_S["«port»<br/>CredentialResolver"]
-        PORT_P["«port»<br/>CompliancePolicy"]
+        PORT_E["«port»<br/>EmployeeDirectory"]
+        PORT_T["«port»<br/>SiteCalendar"]
+        PORT_P["«port»<br/>CompliancePolicyProvider<br/><i>en Shared</i>"]
     end
 
     subgraph DOM["💎 Domain (puro, sin framework)"]
@@ -153,11 +157,15 @@ graph LR
     UC --> PORT_C
     UC --> PORT_B
     UC --> PORT_S
+    UC --> PORT_E
+    UC --> PORT_T
     UC --> PORT_P
     REPO -.implementa.-> PORT_R
     CLOCK -.implementa.-> PORT_C
     BUS -.implementa.-> PORT_B
     SIGN -.implementa.-> PORT_S
+    DIR -.implementa.-> PORT_E
+    CAL -.implementa.-> PORT_T
     POL -.implementa.-> PORT_P
     UC --> WD
     WD --> SE
@@ -168,7 +176,11 @@ graph LR
 
 **Regla de oro, verificada por test automático:** `Domain/` no puede importar nada de `Illuminate\*`, `App\Models\*` ni de otro módulo. Si alguien lo intenta, la CI falla.
 
-Nótese el puerto `CompliancePolicy`: el dominio **recibe** los umbrales legales ya resueltos. Nunca pregunta a la configuración.
+Nótese el puerto `CompliancePolicyProvider`: el dominio **recibe** los umbrales legales ya resueltos. Nunca pregunta a la configuración.
+
+> **Dónde vive cada pieza del diagrama.** El módulo que **necesita** algo declara el puerto; el que **tiene** el dato implementa el adaptador (ADR-025). Por eso las cajas de `Infrastructure` llevan anotado su módulo: `HmacSignatureVerifier` es de `Identity`, que es quien tiene la tabla `credentials`; `EloquentEmployeeDirectory` y `EloquentSiteCalendar` son de `Workforce`, que tiene `employees` y `sites`; `DbCompliancePolicyProvider` es de `Product`, que tiene `compliance_profiles`. La arista va siempre del satélite al núcleo.
+>
+> **Tres puertos no son de `Attendance`** aunque el diagrama los dibuje aquí porque los consume: **`Clock`** vive en `Shared` (ADR-021), y **`CompliancePolicyProvider`** y **`OperationalSettingsProvider`** también (ADR-025), porque `Compliance`, `Reporting` y `Kiosk` los necesitan igual. `WorkDayRepository`, `EventPublisher`, `CredentialResolver`, `EmployeeDirectory` y `SiteCalendar` sí son de `Attendance`: definen qué necesita saber el núcleo para decidir un fichaje.
 
 ### 1.6 Módulos y sus fronteras
 
@@ -176,16 +188,18 @@ Nótese el puerto `CompliancePolicy`: el dominio **recibe** los umbrales legales
 |---|---|---|
 | `Attendance` | **Núcleo.** Fichajes, tramos, jornadas, correcciones | `Shared` |
 | `Compliance` | Auditoría, incidencias, retención, exportación legal | `Shared`, eventos de `Attendance` |
-| `Workforce` | Empleados, departamentos, centros, contratos, ausencias | `Shared` |
-| `Identity` | Usuarios, roles, permisos, credenciales QR, tokens de dispositivo | `Shared` |
+| `Workforce` | Empleados, departamentos, centros, contratos, ausencias | `Shared`, `Attendance/Application/Port` (implementa `EmployeeDirectory` y `SiteCalendar`) |
+| `Identity` | Usuarios, roles, permisos, credenciales QR, tokens de dispositivo | `Shared`, `Attendance/Application/Port` (implementa `CredentialResolver`) |
 | `Reporting` | Proyecciones y consultas de lectura, exportaciones | `Shared`, eventos de otros módulos |
 | `Kiosk` | Dispositivos, emparejamiento, sincronización de lotes, telemetría | `Shared`, `Attendance` (vía caso de uso) |
-| `Product` | Configuración de instalación, perfiles de cumplimiento, marca, licencia, diagnóstico, soporte | `Shared` |
+| `Product` | Configuración de instalación, perfiles de cumplimiento, marca, licencia, diagnóstico, soporte | `Shared`, `Shared/Application/Port` (implementa `CompliancePolicyProvider` y `BrandingProvider`) |
 | `Shared` | Objetos de valor comunes, tipos base, contratos de eventos | — |
 
-**La comunicación entre módulos ocurre solo por dos vías:** casos de uso públicos con interfaz explícita, o eventos de dominio. Nunca por acceso directo a los modelos Eloquent de otro módulo.
+**La comunicación entre módulos ocurre solo por tres vías:** casos de uso públicos con interfaz explícita, eventos de dominio, o **implementar un puerto declarado por el módulo consumidor** (ADR-025). Nunca por acceso directo a los modelos Eloquent de otro módulo.
 
-> **`Product` es de soporte, pero lo consultan casi todos.** Para que no se convierta en un acoplamiento universal, los demás módulos no leen su configuración directamente: reciben los valores ya resueltos como parámetros, o mediante un puerto tipado (`CompliancePolicyProvider`, `BrandingProvider`). El dominio nunca pregunta "¿qué dice la configuración?": recibe el umbral ya decidido.
+> **La tercera vía es inversión de dependencias, no una excepción.** El módulo que **necesita** algo declara el puerto; el que **tiene** el dato implementa el adaptador, y la arista va del satélite al núcleo. Por eso `Identity` y `Workforce` figuran dependiendo de `Attendance` y no al revés: `Attendance` no nombra a ninguno de los dos, ni sabe quién le sirve la credencial o la zona del centro. Tres restricciones lo mantienen siendo una frontera: solo `Infrastructure` del satélite depende, y solo de `Application/Port` del núcleo —nunca de su `Domain/` ni de sus casos de uso—; los puertos hablan en tipos de `Shared` o escalares, nunca en modelos Eloquent ni entidades del satélite; y el enlace puerto→adaptador se declara en el `ServiceProvider` del satélite. Deptrac verifica las tres como **reglas declaradas, no como excepciones**.
+>
+> **`Product` es de soporte, pero lo consultan casi todos.** Para que no se convierta en un acoplamiento universal, los demás módulos no leen su configuración directamente: reciben los valores ya resueltos como parámetros, o mediante un puerto tipado (`CompliancePolicyProvider`, `OperationalSettingsProvider`, `BrandingProvider`). Esos puertos se declaran en **`Shared/Application/Port/`** —no en `Product` ni en `Attendance`— porque los consumen varios módulos y no representan una regla de negocio de ninguno, que es el criterio de admisión de ADR-021. Sus adaptadores viven en `Product/Infrastructure/Adapter/`, que es donde están las tablas. El dominio nunca pregunta "¿qué dice la configuración?": recibe el umbral ya decidido.
 
 ---
 
@@ -200,7 +214,7 @@ fichaje-hotel/
 │   ├── 03-agentes-y-skills-ia.md
 │   ├── 04-decision-credencial.md
 │   ├── 05-presentacion-cliente.md   # Documento comercial entregable al cliente
-│   ├── adr/                         # ADR-001 … ADR-020
+│   ├── adr/                         # ADR-001 … ADR-028
 │   ├── api/openapi.yaml             # Contrato, fuente de verdad de la API
 │   ├── cliente/                     # Documentación que se entrega al cliente
 │   │   ├── instalacion.md
@@ -243,9 +257,13 @@ fichaje-hotel/
 │   │   │   ├── Reporting/
 │   │   │   ├── Kiosk/
 │   │   │   ├── Product/
-│   │   │   └── Shared/
+│   │   │   └── Shared/              # Objetos de valor comunes y contratos transversales
+│   │   │       ├── Domain/          #    ValueObject/, contratos de eventos
+│   │   │       ├── Application/     #    Port/ — Clock y demás puertos transversales (ADR-021)
+│   │   │       └── Infrastructure/  #    Adapter/ — SystemClock
 │   │   └── Providers/
 │   ├── database/migrations/
+│   ├── database/seeders/            # Perfil ES-hosteleria, semilla con casos límite (§10.2)
 │   ├── routes/api_v1.php
 │   ├── tests/
 │   │   ├── Unit/                    # Dominio puro, sin BD. Milisegundos.
@@ -317,15 +335,17 @@ CREATE EXTENSION IF NOT EXISTS btree_gist;
 -- RN-01 · Como máximo un turno abierto por empleado.
 CREATE UNIQUE INDEX one_open_shift_per_employee
     ON shift_entries (employee_id)
-    WHERE clocked_out_at IS NULL AND status <> 'voided';
+    WHERE clocked_out_at IS NULL AND status NOT IN ('voided', 'superseded');
 
--- RN-02 · Los tramos de un mismo empleado nunca se solapan.
+-- RN-02 · Los tramos vigentes de un mismo empleado nunca se solapan.
 ALTER TABLE shift_entries ADD CONSTRAINT shift_entries_no_overlap
     EXCLUDE USING gist (
         employee_id WITH =,
         tstzrange(clocked_in_at, clocked_out_at) WITH &&
-    ) WHERE (status <> 'voided');
+    ) WHERE (status NOT IN ('voided', 'superseded'));
 ```
+
+**El predicado excluye los dos estados no vigentes (ADR-026):** `voided` (el tramo no ocurrió) y `superseded` (ocurrió y otra versión lo sustituye). Sin el segundo, la corrección de RN-13 —que conserva la fila anterior— haría solapar la versión vieja con la nueva, la restricción rechazaría la corrección y el recálculo de `daily_totals` sumaría las dos. El mismo predicado gobierna esa proyección (RN-06).
 
 Esto importa porque en un sistema con valor probatorio **la integridad no puede depender solo del código de aplicación**: un script de migración, una corrección manual mal hecha o una condición de carrera bajo concurrencia pueden introducir datos imposibles. La base de datos es la última línea de defensa y aquí la sostiene declarativamente.
 
@@ -476,6 +496,19 @@ Formato resumido. Cada uno vive completo en `docs/adr/`.
 | **019** | **La caducidad de la licencia nunca bloquea el registro ni su consulta** | Bloquear el fichaje dejaría al cliente incumpliendo la ley por acción del fabricante, e impediría el acceso a datos que debe conservar 4 años | La palanca comercial son los avisos y las funcionalidades accesorias. Exige separar en el código lo que es "registro legal" de lo que es "producto" |
 | **020** | **El soporte se presta con paquete de diagnóstico, no con acceso permanente** | El fabricante no debe tener acceso continuado a los datos personales de la plantilla de sus clientes | Exportación anonimizada por defecto, y acceso puntual solo con concesión expresa, temporal, limitada y auditada. Obliga a que los errores sean autoexplicativos |
 
+Los ocho siguientes **no proceden de esta tabla**: nacieron al desarrollar el plan de implementación tarea por tarea, al aparecer decisiones que ningún documento determinaba. Viven completos en [`docs/adr/`](adr/) desde el primer día.
+
+| # | Decisión | Contexto y motivo | Consecuencias |
+|---|---|---|---|
+| **021** | **El puerto `Clock` vive en `Shared`**, no en `Attendance` | El §1.5 lo dibuja como puerto de `Attendance`, pero `Compliance`, `Kiosk`, `Reporting` y el scheduler lo necesitan igual. Declararlo en `Attendance` obligaría a los demás a importarlo —rompiendo la frontera del §1.6— o a duplicar una interfaz de un método | `Shared` gana **`Application/Port/`** e `Infrastructure/Adapter/`, con criterio explícito de admisión para que no se convierta en cajón de sastre. **En `Application`, no en `Domain`**: el dominio recibe instantes, no los pide |
+| **022** | **No se entrega instalador de Windows** | El §11.6.1 entregaba `install.ps1` para un sistema operativo que los requisitos publicados no contemplan, sin analizador estático, sin formateador y sin etapa de CI que lo probara | El paquete pierde `install.ps1`. Un cliente con solo Windows instala sobre máquina virtual Linux, y se le dice en la documentación. Soportarlo de verdad sería otro ADR con su propio coste |
+| **023** | **Frontera explícita entre registro legal y funcionalidad accesoria** | ADR-019 dice qué **nunca** se degrada al caducar la licencia, pero ningún documento decía qué sí, y sin esa lista la degradación honesta no se puede implementar sin `if`s dispersos | Lista cerrada en el campo `features`, con punto único de decisión. Lo no clasificado es no degradable por defecto: ante la duda, el registro gana. **La lista la aprueba quien responde de la oferta comercial** |
+| **024** | **La pausa se modela como dos tramos**, no como intervalo interno | RF-AT-12 no decía cómo, y las dos formas son incompatibles. El modelo ya lo soportaba: RN-12 enuncia la regla sobre tramos y «jornada partida de 4 tramos» ya era escenario de prueba | Cero conceptos nuevos en el dominio. El enum `action` de `/scan` se amplía de forma aditiva. No se toca la restricción de exclusión de PostgreSQL, que es la última línea de defensa |
+| **025** | **El núcleo declara sus puertos; los satélites los implementan** | Con el §1.6 tal cual, `Attendance` no podía resolver una credencial (`Identity`), ni conocer la zona del centro ni el estado del empleado (`Workforce`): Deptrac fallaba se pusiera el adaptador donde se pusiera, y la salida bajo presión habría sido leer Eloquent de otro módulo, que es lo que la regla dura 1 prohíbe | Tercera vía de comunicación entre módulos, con tres restricciones que la mantienen siendo frontera. `Attendance` declara cinco puertos; los dos proveedores de umbrales suben a `Shared`. Reglas nuevas en `deptrac.yaml`, **no excepciones** |
+| **026** | **La corrección supersede: estado `superseded` en `shift_entries`** | Conservar la versión anterior (regla dura 5) hacía que la fila antigua y la nueva se solaparan, y `shift_entries_no_overlap` **rechazaba la corrección**; el recálculo de `daily_totals` sumaba las dos, duplicando los minutos del día. Colisión frontal entre las reglas duras 5 y 7 en la misma transacción | El enum gana `superseded` y las dos garantías declarativas pasan a `NOT IN ('voided','superseded')`. Se conserva el histórico íntegro sin tocar la restricción de exclusión, que sigue protegiendo el conjunto vigente |
+| **027** | **`audit_log` particionado por año, con anclas de cadena** | La retención de RL-02 obligaba a purgar una tabla sobre la que el usuario de aplicación solo tiene `INSERT` y `SELECT` (regla dura 6), y cualquier borrado habría hecho que el verificador denunciara la rotura de la cadena **cada día**, de forma permanente | Purga por `DROP PARTITION` con un rol de mantenimiento distinto. Tabla `audit_chain_anchors` que sella cada partición antes de soltarla y sirve de nueva génesis al verificador, que así distingue una purga legítima de una manipulación |
+| **028** | **Los límites del plan nunca bloquean el alta ni el emparejamiento** | Bloquear el alta al superar `max_employees` deja trabajando sin registro horario a quien no se puede dar de alta, y bloquear `max_devices` deja un centro sin punto de fichaje al sustituir un quiosco averiado. Es el resultado que ADR-019 declara inaceptable, alcanzado por un rodeo | El exceso produce aviso persistente, entrada en `audit_log` y cifra en `license:show`, que es la palanca comercial verificable en una auditoría. Ninguna ruta del producto puede devolver un error de licencia al dar de alta a una persona |
+
 ---
 
 ## 5. Diseño de la credencial QR
@@ -605,10 +638,16 @@ sequenceDiagram
 | Capa | Controles |
 |---|---|
 | **Red** | TLS 1.3 obligatorio, HSTS, quioscos en VLAN separada, portal del empleado restringido a red interna por defecto, fail2ban |
-| **Borde (Nginx)** | Rate limiting por zona: fichaje 30 r/m por IP con ráfaga de 10; autenticación 5 r/m; portal 10 r/m; resto 120 r/m. Límite de tamaño de cuerpo. Cabeceras de seguridad |
+| **Borde (Nginx)** | Rate limiting por zona: fichaje **600 r/m con ráfaga de 50 desde el CIDR de la VLAN de quioscos**, y **30 r/m con ráfaga de 10 desde cualquier otro origen**; autenticación 5 r/m; portal 10 r/m; resto 120 r/m. Límite de tamaño de cuerpo. Cabeceras de seguridad |
 | **Aplicación** | Throttling por `device_id`, por credencial y por empleado; autorización por policy en **cada** endpoint; validación estricta; respuestas de tiempo constante en el camino de fichaje; bloqueo por intentos en el PIN |
 | **Datos** | Usuario de base de datos con permisos mínimos (sin DDL, sin `UPDATE` ni `DELETE` en `audit_log`), DNI hasheado, copias cifradas con clave separada |
 | **Cliente** | CSP estricta sin `unsafe-inline`, `Permissions-Policy: camera=(self)`, SRI en assets, padrón cacheado cifrado con clave derivada del token del dispositivo |
+
+> **Por qué la zona de fichaje distingue el origen.** Los 30 r/m por IP son un control pensado para internet, y **todos los quioscos de un hotel salen por la misma IP**. Aplicado sin distinción, el propio Nginx frenaría el sistema tres órdenes de magnitud por debajo de lo que exige RNF-P-06 —50 fichajes por segundo—, y el síntoma en producción sería «el quiosco va lento a las 06:00» en el cambio de turno, que es justo el pico que el producto existe para absorber.
+>
+> **El límite no se elimina para la red interna: se eleva.** RS-02 exige limitar «por dispositivo, por credencial **y por IP**», y dejar el tráfico interno sin techo por origen permitiría a un equipo comprometido enchufado a esa VLAN barrer tokens al ritmo que dé la aplicación. Los 600 r/m con ráfaga de 50 sostienen RNF-P-06 con margen y mantienen RS-02 literalmente satisfecho.
+>
+> **El CIDR de la VLAN es un parámetro de instalación**, no una constante: va en `.env.example` y en la documentación de instalación. Si el cliente coloca los quioscos fuera de ese rango, quedan bajo el límite de 30 r/m — y eso hay que decírselo, porque el fallo es silencioso y se manifiesta como lentitud, no como error.
 
 ### 7.2 Cabeceras HTTP
 
@@ -970,7 +1009,7 @@ Dos advertencias sobre la extrapolación:
 
 Si se necesita una cifra de desarrollo **manual sin asistencia** para comparar con un presupuesto externo, el orden de magnitud es de **2,5 a 3 veces** estas horas. Es un juicio de orden de magnitud, no una medición: conviene recalibrarlo con los datos reales de la Fase 1, que es la primera oportunidad de contrastar estimación contra realidad (R16 del documento 01).
 
-### Fase 0 — Cimientos · 27–36 h
+### Fase 0 — Cimientos · 31–42 h
 
 | # | Tarea | h | Agente / Skill |
 |---|---|---|---|
@@ -979,12 +1018,12 @@ Si se necesita una cifra de desarrollo **manual sin asistencia** para comparar c
 | 0.3 | Cadena de calidad: Pint, PHPStan 9, Deptrac, Pest, Rector | 4–5 | `devops-observabilidad` + `qa-testing` |
 | 0.4 | Pipeline de CI con las etapas 1–3 | 3–4 | `devops-observabilidad` |
 | 0.5 | Esqueleto de los tres frontends con TS estricto, Tailwind y Vitest | 4–6 | `frontend-quiosco` |
-| 0.6 | ADR-001 a ADR-020 escritos y `openapi.yaml` inicial | 3–4 | `arquitecto-dominio` |
-| 0.7 | Convenciones del §3.5 configuradas (Pint, PHPStan, Rector, ESLint con `eslint-plugin-vue`, Prettier, `vue-tsc`, **ShellCheck y shfmt**) y comando `qa:traceability` con su etapa de CI — RNF-M-06, RQ-13..14 | 3–4 | `devops-observabilidad` + `qa-testing` |
+| 0.6 | ADR-001 a ADR-028 escritos y `openapi.yaml` inicial | 3–4 | `arquitecto-dominio` |
+| 0.7 | Convenciones del §3.5 configuradas (Pint, PHPStan, Rector, ESLint con `eslint-plugin-vue`, Prettier, `vue-tsc`, **ShellCheck y shfmt**), `docs/requisitos.yaml` como fuente legible por máquina del Anexo A, y los comandos `qa:traceability` y **`docs:consistency`** con su etapa de CI — RNF-M-06, RQ-12, RQ-13..14 | 7–10 | `devops-observabilidad` + `qa-testing` |
 
 **Entregable:** `make up` levanta el entorno completo; la CI está en verde; las fronteras arquitectónicas se verifican solas. **Verificación:** añadir a propósito un `use Illuminate\...` dentro de `Domain/` debe hacer fallar la CI.
 
-### Fase 1 — MVP de fichaje · 98–125 h
+### Fase 1 — MVP de fichaje · 102–130 h
 
 | # | Tarea | h | Requisitos | Agente / Skill |
 |---|---|---|---|---|
@@ -1000,12 +1039,15 @@ Si se necesita una cifra de desarrollo **manual sin asistencia** para comparar c
 | 1.10 | Generación de tarjetas en PDF, impresión masiva, registro de entrega y panel de estado | 6–8 | RF-QR-04..06, RF-QR-08 | `backend-laravel` + `frontend-panel` |
 | 1.11 | Portal del empleado: acceso con código y PIN, mi registro, mi exportación | 6–8 | RF-ID-05..08, RL-05 | `frontend-portal-empleado` + `backend-laravel` |
 | 1.12 | PIN de respaldo de 6 dígitos en el quiosco, con bloqueo por intentos | 4–5 | RF-AT-11, RS-12 | `backend-laravel` + `frontend-quiosco` |
+| 1.13 | Provisión, entrega y restablecimiento del PIN: generación en el alta, visualización de una sola vez, `pin_hash`, restablecimiento por RRHH y auditoría de las tres acciones | 4–5 | **RF-ID-09** | `backend-laravel` + `frontend-panel` |
 
 **Entregable:** un empleado recibe su tarjeta y ficha en la tablet, con o sin red, con credencial infalsificable y registro correcto. **Corte MVP mínimo defendible.**
 
 > **Dependencia implícita que conviene hacer explícita:** la tarea 1.10 necesita que alguien pueda entrar al panel, así que la Fase 1 incluye una **autenticación de gestión mínima** (login, roles `admin`/`rrhh`, sin 2FA) dentro de 1.6. El 2FA obligatorio y el ámbito por departamento son de la tarea 2.1 y no se adelantan. Anotarlo evita el descubrimiento tardío de que el panel de estado de credenciales no tiene puerta de entrada.
 
 > **Camino crítico:** 1.1 y 1.2 bloquean todo lo demás y son las más fáciles de subestimar. **No empezar la interfaz del quiosco hasta que el dominio esté cerrado y sus pruebas en verde.** Un cambio en las reglas de cálculo con el frontend construido cuesta el triple.
+
+> **La tarea 1.13 se añadió porque `RF-ID-09` no lo construía nadie.** La 1.6 crea la columna `pin_hash`, la 1.11 hace login con ella y la 1.12 ficha con ella, y ninguna la rellenaba: el E2E del portal no era ejecutable. Va después de la 1.6 y **bloquea a la 1.11 y a la 1.12**.
 
 ### Fase 2 — Gestión y cumplimiento · 86–109 h
 
@@ -1026,7 +1068,7 @@ Si se necesita una cifra de desarrollo **manual sin asistencia** para comparar c
 
 **Entregable:** sistema **legalmente defendible** y operable por RRHH. Es aquí, y no antes, donde se puede poner en producción con tranquilidad.
 
-### Fase 5 — Productización · 108–149 h
+### Fase 5 — Productización · 117–161 h
 
 Convierte el sistema en un producto que un tercero puede comprar, instalar y operar. **Es el hito que convierte el proyecto en negocio.**
 
@@ -1036,20 +1078,25 @@ Convierte el sistema en un producto que un tercero puede comprar, instalar y ope
 | 5.2 | Perfiles de cumplimiento; extraer RN-10/11/12 a parámetros; perfil `ES-hosteleria` | 10–12 | RF-PD-07 | `producto-licencia` + `/nueva-regla-de-negocio` |
 | 5.3 | Licencia: emisión firmada, verificación local, límites y degradación honesta | 15–20 | RF-PD-04..05 | `producto-licencia`, revisión de `seguridad-cumplimiento` |
 | 5.4 | Instalador, Compose de producción, comprobación de requisitos, generación de secretos | 12–16 | RF-PD-02 | `producto-licencia` + `devops-observabilidad` |
-| 5.5 | Asistente de puesta en marcha | 8–12 | RF-PD-03 | `producto-licencia` + `frontend-panel` |
+| 5.5 | Asistente de puesta en marcha, **incluida la importación masiva de plantilla** con validación previa y modo simulación | 11–16 | RF-PD-03, **RF-GP-05** | `producto-licencia` + `frontend-panel` |
 | 5.6 | Vinculación de quiosco por código de emparejamiento | 5–7 | RF-PD-06 | `frontend-quiosco` + `backend-laravel` |
 | 5.7 | Actualizador: copia previa, migraciones encadenadas, verificación, vuelta atrás | 15–20 | RF-PD-10 | `producto-licencia` + `/migracion-segura` |
 | 5.8 | Marca blanca en las tres aplicaciones y en los PDF | 12–18 | RF-PD-08 | `producto-licencia` + los tres agentes de frontend |
 | 5.9 | Paquete de diagnóstico anonimizado, comando `doctor`, accesos de soporte auditados | 12–16 | RF-PD-09, RF-PD-11, RF-PD-13 | `producto-licencia`, revisión de `seguridad-cumplimiento` |
 | 5.10 | Exportación íntegra de datos y telemetría opcional desactivada por defecto | 5–8 | RF-PD-12, RF-PD-14 | `producto-licencia` |
 | 5.11 | Documentación de instalación, operación, configuración y obligaciones legales | 10–15 | RL-21 | `producto-licencia` |
+| 5.11b | **Documentación de usuario**: guía del panel para RRHH, guía del portal del empleado y hoja de instrucciones que se entrega con la tarjeta | 6–8 | RL-05, RF-PA-*, RF-IN-* | `producto-licencia` + `frontend-panel` |
 | 5.12 | Histórico de errores en base de datos: captación desde API, colas, scheduler y los tres clientes, agrupación por huella, pantalla de consulta en el panel, purga a 90 días y volcado al paquete de diagnóstico | 6–8 | RF-PD-15 | `producto-licencia` + `backend-laravel` + `frontend-panel` |
 
-*(Suma bruta 118–162 h; se aplica solapamiento realista entre 5.4, 5.5 y 5.7, que comparten andamiaje de despliegue.)*
+*(Suma bruta 127–174 h; se aplica solapamiento realista entre 5.4, 5.5 y 5.7, que comparten andamiaje de despliegue.)*
+
+> **La 5.11b existe porque los cuatro manuales de la 5.11 son todos para el IT del cliente.** Ninguna tarea producía guía del panel para RRHH ni guía del portal, y **es RRHH quien opera la bandeja de incidencias, las correcciones trazadas y la exportación para Inspección**. Un portal cuyo acceso nadie explica cumple RL-05 de forma solo formal. No contradice el documento 05: su §10.8 promete esos cuatro manuales y no promete formación — es hueco de producto, no promesa incumplida.
+
+> **La tarea 5.5 absorbió RF-GP-05** —importación masiva de plantilla— que estaba en la tarea 3.10 de la Fase 3. Motivo en el Anexo A del documento 01: la Fase 3 se ejecuta **después** de la 5, y un asistente de puesta en marcha que obliga a teclear a mano la plantilla de un hotel no es un producto instalable, que es el criterio con el que se juzga esta fase. Son **3–4 h que cambian de fase, no que se suman**: el esfuerzo total del proyecto no varía.
 
 > **La tarea más subestimada es la 5.11.** Una documentación de instalación mediocre se paga en horas de soporte con cada cliente, indefinidamente. Con veinte instalaciones, es la diferencia entre un producto rentable y una consultora encubierta.
 
-### Fase 3 — Operación y refuerzo · 83–111 h
+### Fase 3 — Operación y refuerzo · 84–112 h
 
 | # | Tarea | h | Requisitos | Agente / Skill |
 |---|---|---|---|---|
@@ -1057,17 +1104,19 @@ Convierte el sistema en un producto que un tercero puede comprar, instalar y ope
 | 3.2 | Los 4 cuadros de mando y el catálogo de alertas con runbooks | 8–10 | §8.3, §8.4 | `devops-observabilidad` |
 | 3.3 | Panel de salud de quioscos y pantalla de diagnóstico | 6–8 | RF-PA-07, RF-KI-08 | `frontend-panel` + `frontend-quiosco` |
 | 3.4 | Vista de cumplimiento: descansos, jornada máxima, exceso semanal | 8–10 | RF-PA-06, RN-10..12 | `backend-laravel` + `frontend-panel` |
-| 3.5 | Fichaje de pausa y validación de desfase de reloj | 4–5 | RF-AT-10, RF-AT-12 | `arquitecto-dominio` → `backend-laravel` |
+| 3.5 | Fichaje de pausa y validación de desfase de reloj | 8–10 | RF-AT-10, RF-AT-12 | `arquitecto-dominio` → `backend-laravel` |
 | 3.6 | Pruebas de carga k6 y ajuste de rendimiento | 4–6 | RNF-P-06 | `qa-testing` + `devops-observabilidad` |
 | 3.7 | E2E con cámara simulada y suite de accesibilidad | 6–8 | RQ-04 | `qa-testing` |
 | 3.8 | Revisión de seguridad externa y corrección de hallazgos | 8–12 | RS-11 | `seguridad-cumplimiento` (preparación y corrección) |
 | 3.9 | Informes asíncronos con enlace de descarga caducable y exportación configurable para nómina | 6–8 | RF-IN-06..07 | `backend-laravel` + `/informe-nuevo` |
-| 3.10 | Ausencias e importación masiva de plantilla, con validación previa y modo simulación | 6–8 | RF-GP-04..05 | `backend-laravel` + `frontend-panel` |
+| 3.10 | Registro de ausencias | 3–4 | RF-GP-04 | `backend-laravel` + `frontend-panel` |
 | 3.11 | Detección de patrones anómalos de uso de credencial, con incidencia y bandeja | 5–7 | RF-PR-06 | `backend-laravel`, revisión de `seguridad-cumplimiento` |
 | 3.12 | Resumen semanal por correo y ventana controlada de actualización del quiosco | 4–5 | RF-PR-05, RF-KI-07 | `backend-laravel` + `frontend-quiosco` |
 | 3.13 | Cuadro de impacto y adopción: proyección de los indicadores del §1.3, comparación entre periodos, pantalla y exportación | 6–8 | RF-IN-08 | `backend-laravel` + `frontend-panel` + `/informe-nuevo` |
 
-> **Las tareas 3.9 a 3.12 estaban comprometidas en el documento 05 y no tenían tarea asignada.** Son funcionalidades que el documento comercial presenta como parte del producto —informes en segundo plano, salida a nómina, importación de plantilla, registro de ausencias, resumen semanal y detección de patrones anómalos—, así que o tienen fase o no se pueden vender. La 3.11 es además la contrapartida explícita de haber descartado la biometría (ADR-009).
+> **Las tareas 3.9 a 3.12 estaban comprometidas en el documento 05 y no tenían tarea asignada.** Son funcionalidades que el documento comercial presenta como parte del producto —informes en segundo plano, salida a nómina, registro de ausencias, resumen semanal y detección de patrones anómalos—, así que o tienen fase o no se pueden vender. La 3.11 es además la contrapartida explícita de haber descartado la biometría (ADR-009).
+>
+> **La importación de plantilla ya no está aquí:** pasó a la tarea 5.5 porque el documento 05 §10.2 la promete como paso de la **puesta en marcha**, y esta fase se ejecuta después de la 5. Era el único de estos compromisos que estaba además en la fase equivocada.
 
 ### Fase 4 — Evolución · 60–90 h (a decidir con datos de uso reales)
 
@@ -1077,11 +1126,11 @@ Cuadrantes y comparación entre planificado y realmente trabajado, vacaciones y 
 
 | Alcance | Fases | Horas | ¿Vendible? |
 |---|---|---|---|
-| **MVP funcional** | 0 + 1 | 125–161 | ⚠️ Piloto interno controlado |
-| **Primera instalación a medida** | 0 + 1 + 2 | 211–270 | ⚠️ Sí, pero instalada y operada por el equipo de desarrollo |
-| **✅ Producto vendible** | 0 + 1 + 2 + 5 | **319–419** | ✅ **Sí: el cliente lo instala, configura y opera** |
-| **Producto vendible y operable** | 0 + 1 + 2 + 5 + 3 | **402–530** | ✅ Con observabilidad completa |
-| **Con evolución** | Todas | 462–620 | ✅ |
+| **MVP funcional** | 0 + 1 | 133–172 | ⚠️ Piloto interno controlado |
+| **Primera instalación a medida** | 0 + 1 + 2 | 219–281 | ⚠️ Sí, pero instalada y operada por el equipo de desarrollo |
+| **✅ Producto vendible** | 0 + 1 + 2 + 5 | **336–442** | ✅ **Sí: el cliente lo instala, configura y opera** |
+| **Producto vendible y operable** | 0 + 1 + 2 + 5 + 3 | **420–554** | ✅ Con observabilidad completa |
+| **Con evolución** | Todas | 480–644 | ✅ |
 
 > **La Fase 5 es lo que separa "un sistema" de "un producto".** Sin ella se puede entregar una instalación, pero cada cliente nuevo consume tiempo del equipo de desarrollo: instalar, configurar, actualizar y diagnosticar. Con veinte clientes eso no escala, y el negocio deja de ser vender software para pasar a ser consultoría. Las ~110 h de la Fase 5 son la inversión que hace que el cliente número veintiuno cueste lo mismo que el segundo.
 
@@ -1104,9 +1153,10 @@ Cuadrantes y comparación entre planificado y realmente trabajado, vacaciones y 
 ```
 0.1→0.2→0.3 ──► 1.1→1.2 (dominio; bloquea todo lo demás)
                   ├─► 1.3→1.4 ──► 1.7 ──► 1.8→1.9 (quiosco)
-                  │                        └─► 1.12 (PIN)
+                  │                        └─► 1.12 (fichaje por PIN)
                   ├─► 1.5 (credenciales) ──► 1.10 (tarjetas y entrega)
-                  ├─► 1.6 ──► 1.11 (portal)
+                  ├─► 1.6 ──► 1.13 (provisión del PIN) ──► 1.11 (portal)
+                  │                                   └─► 1.12
                   └─► 2.1→2.2 ──► 2.3 ──► 2.5
                                     └─► 2.8→2.9
                                           └─► 5.1→5.2 ──► 5.3
@@ -1125,7 +1175,7 @@ Cuadrantes y comparación entre planificado y realmente trabajado, vacaciones y 
 fichaje-hotel-v1.4.2/
 ├── docker-compose.yml          # Producción, autocontenido, sin dependencias externas
 ├── .env.example                # Comentado, con los valores que el cliente debe rellenar
-├── install.sh / install.ps1    # Comprueba requisitos, genera secretos, arranca, verifica
+├── install.sh                  # Comprueba requisitos, genera secretos, arranca, verifica
 ├── update.sh                   # Copia previa, migra, verifica, vuelve atrás si falla
 ├── backup.sh / restore.sh      # Copia local cifrada y restauración
 ├── doctor.sh                   # Comprobación de salud (RF-PD-13)
@@ -1138,6 +1188,8 @@ fichaje-hotel-v1.4.2/
 ```
 
 Las imágenes se distribuyen desde un registro privado del fabricante, con etiquetas de versión inmutables. **Nada de `latest` en producción.**
+
+> **No se entrega instalador de PowerShell** (ADR-022). Los requisitos publicados del §11.6.2 exigen Linux con Docker, el §3.5 no define convenciones para `.ps1` y ni ShellCheck ni `shfmt` lo analizan, así que el umbral bloqueante del §9.2 no podría aplicársele. Un entregable que ninguna herramienta revisa y ninguna etapa de CI prueba, en manos de un IT que no conoce el producto, es peor que no tenerlo. Un cliente con solo infraestructura Windows instala sobre una máquina virtual Linux, y eso se dice en la documentación en lugar de descubrirse a mitad de la instalación.
 
 ### 11.6.2 Requisitos de servidor publicados
 
@@ -1206,6 +1258,9 @@ Generado por el administrador del cliente con un clic o un comando. Contiene ver
 | `quiosco-no-responde.md` | Alerta de latido perdido |
 | `cola-offline-atascada.md` | Cola de dispositivo por encima del umbral |
 | `divergencia-proyeccion.md` | La reconciliación detecta discrepancia |
+| `turno-abierto-prolongado.md` | Alerta de turno abierto más de 12 h. Destinatario RRHH: **no es una avería, es trabajo de gestión sobre el registro** |
+| `renovacion-certificado-tls.md` | Certificado a menos de 21 días de expirar |
+| `espacio-en-disco.md` | Espacio libre por debajo del 20 % |
 | `rotura-cadena-auditoria.md` | **Incidente de seguridad.** Incluye preservación de evidencia |
 | `restaurar-backup.md` | Recuperación y simulacro trimestral |
 | `rotacion-secretos.md` | Rotación programada o compromiso |
@@ -1267,9 +1322,17 @@ ATTENDANCE_MAX_SHIFT_HOURS=12          # RN-08
 ATTENDANCE_MAX_CLOCK_SKEW_MINUTES=15   # RF-AT-10 · genera incidencia, nunca rechaza el fichaje
 ATTENDANCE_PATTERN_WINDOW_SECONDS=10   # RF-PR-06 · fichajes consecutivos en el mismo quiosco
 ATTENDANCE_PATTERN_MIN_REPEATS=3       # RF-PR-06 · coincidencias antes de generar incidencia
-PIN_MAX_ATTEMPTS=3                     # RS-12
-PIN_LOCKOUT_SECONDS=300
+ATTENDANCE_MIN_TRANSIT_SECONDS=120     # RN-16 · tránsito mínimo entre dos quioscos distintos
+PIN_MAX_ATTEMPTS=3                     # RS-12 · primer escalón de bloqueo
+PIN_LOCKOUT_SECONDS=300                # RS-12 · 5 min tras PIN_MAX_ATTEMPTS fallos
+PIN_LOCKOUT_TIER2_ATTEMPTS=5           # RS-12 · §7.5 exige bloqueo creciente
+PIN_LOCKOUT_TIER2_SECONDS=900          # 15 min
+PIN_LOCKOUT_TIER3_ATTEMPTS=10
+PIN_LOCKOUT_TIER3_SECONDS=3600         # 60 min
+PIN_LOCKOUT_RESET_HOURS=24             # El contador de fallos se reinicia sin fallos en 24 h
 PORTAL_INTERNAL_ONLY=true              # RF-ID-08
+KIOSK_VLAN_CIDR=10.0.20.0/24           # §7.1 · zona de fichaje elevada para este rango.
+                                       # Fuera de él, los quioscos caen al límite de 30 r/m
 
 COMPLIANCE_PROFILE=ES-hosteleria       # RF-PD-07
 LICENSE_KEY=                           # Clave firmada, verificación local (ADR-018)

@@ -42,7 +42,9 @@ Eres el responsable de infraestructura y observabilidad. Tu objetivo: que un fal
 
 ## Configuración de Nginx que debes mantener correcta
 
-Rate limiting por zona (`/api/v1/scan` 30 r/m con ráfaga 10; `/api/v1/auth/*` 5 r/m), cabeceras completas del documento 02 §7.2 —incluido `Permissions-Policy: camera=(self)`, sin el cual la PWA no puede escanear—, límite de tamaño de cuerpo, y `/metrics` restringido a red interna.
+Rate limiting por zona del documento 02 §7.1, y **la zona de fichaje son dos, no una**: `/api/v1/scan*` admite **600 r/m con ráfaga de 50 desde `KIOSK_VLAN_CIDR`** y **30 r/m con ráfaga de 10 desde cualquier otro origen**; `/api/v1/auth/*` 5 r/m; portal 10 r/m; resto 120 r/m. Los 30 r/m por IP son un control pensado para internet, y **todos los quioscos de un hotel salen por la misma IP**: aplicarlos sin distinguir el origen frena el fichaje cien veces por debajo de RNF-P-06 y el síntoma es «el quiosco va lento a las 06:00». El límite interno **se eleva, no se elimina** (RS-02 exige limitar también por IP). `KIOSK_VLAN_CIDR` es parámetro de instalación: va en `.env.example` y en `docs/cliente/instalacion.md`.
+
+Además: cabeceras completas del documento 02 §7.2 —incluido `Permissions-Policy: camera=(self)`, sin el cual la PWA no puede escanear—, límite de tamaño de cuerpo, y `/metrics` restringido a red interna.
 
 ## Reglas de conducta
 

@@ -64,16 +64,20 @@ CREATE EXTENSION IF NOT EXISTS btree_gist;
 
 CREATE UNIQUE INDEX one_open_shift_per_employee
     ON shift_entries (employee_id)
-    WHERE clocked_out_at IS NULL AND status <> 'voided';
+    WHERE clocked_out_at IS NULL AND status NOT IN ('voided', 'superseded');
 
 ALTER TABLE shift_entries ADD CONSTRAINT shift_entries_no_overlap
     EXCLUDE USING gist (
         employee_id WITH =,
         tstzrange(clocked_in_at, clocked_out_at) WITH &&
-    ) WHERE (status <> 'voided');
+    ) WHERE (status NOT IN ('voided', 'superseded'));
 ```
 
+El predicado excluye los **dos** estados no vigentes (ADR-026): `voided` (el tramo no ocurrió) y `superseded` (ocurrió y otra versión lo sustituye, RN-13). Con solo `voided`, la corrección haría solapar la versión conservada con la nueva y la restricción la rechazaría. **Ningún literal `<> 'voided'` suelto**: el predicado vive en un solo sitio.
+
 Si la migración las elimina temporalmente, **el plan debe indicar cómo se restauran y cómo se verifica que ningún dato las viola al volver a activarlas.**
+
+`audit_log` está **particionada por año** (ADR-027) y su purga es `DROP PARTITION` con un rol de mantenimiento distinto, previo sellado de `audit_chain_anchors`. Ninguna migración le añade `UPDATE` ni `DELETE` al usuario de aplicación, ni sobre la tabla ni sobre sus particiones.
 
 ## Reglas de tipos y nombres
 
