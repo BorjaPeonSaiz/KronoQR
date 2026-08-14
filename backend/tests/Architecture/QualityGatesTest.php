@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use RuntimeException;
 use Tests\Architecture\Support\ModuleTree;
 
 /*
@@ -31,7 +32,30 @@ use Tests\Architecture\Support\ModuleTree;
  */
 function repoRoot(): string
 {
-    return is_dir('/var/www/repo') ? '/var/www/repo' : \dirname(ModuleTree::root(), 2);
+    // Se busca por MARCA y no contando niveles de directorio. La primera
+    // version contaba —y contaba mal—: dentro del contenedor el montaje
+    // /var/www/repo tapaba el error, y en la CI, que corre sobre el arbol
+    // completo, resolvia a <repo>/backend y buscaba backend/backend/phpstan.neon.
+    //
+    // Las nueve pruebas pasaban en local y fallaban en el runner, que es
+    // exactamente lo que este ayudante existe para evitar. Contar niveles es
+    // fragil ante cualquier cambio de ubicacion; una marca no.
+    $candidates = ['/var/www/repo', ...array_map(
+        static fn (int $levels): string => \dirname(ModuleTree::root(), $levels),
+        [2, 3, 4],
+    )];
+
+    foreach ($candidates as $candidate) {
+        if (is_file($candidate.'/Makefile') && is_dir($candidate.'/docs')) {
+            return $candidate;
+        }
+    }
+
+    throw new RuntimeException(
+        'No se encuentra la raiz del repositorio. Se reconoce por tener Makefile y docs/. '
+        .'Dentro del contenedor llega montada en /var/www/repo (infra/compose.dev.yaml); '
+        .'en la CI es el directorio padre de backend/.'
+    );
 }
 
 /** Ruta absoluta de un fichero del repositorio, relativa a su raiz. */
