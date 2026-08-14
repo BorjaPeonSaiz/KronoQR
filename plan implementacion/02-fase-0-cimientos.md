@@ -45,7 +45,7 @@ Entregable esperado:
 - Los tres frontends con TypeScript estricto, Tailwind 4 y Vitest
 - ADR-001 a ADR-020 escritos en docs/adr/ a partir de la tabla del documento
   02 §4; ADR-021 a ADR-028 ya existen y solo se revisan. Al terminar,
-  docs/adr/ tiene 28 ficheros
+  docs/adr/ tiene 29 ficheros (los 28 del §4 mas ADR-029)
 - openapi.yaml inicial con /health y /scan
 - docs/requisitos.yaml y los comandos qa:traceability y docs:consistency
 
@@ -219,12 +219,14 @@ Resultado esperado: los 14 servicios arriba, `/api/v1/health` respondiendo, las 
    |---|---|---|
    | `Attendance` | **Núcleo.** Fichajes, tramos, jornadas, correcciones | `Shared` |
    | `Compliance` | Auditoría, incidencias, retención, exportación legal | `Shared`, eventos de `Attendance` |
-   | `Workforce` | Empleados, departamentos, centros, contratos, ausencias | `Shared` |
-   | `Identity` | Usuarios, roles, permisos, credenciales QR, tokens de dispositivo | `Shared` |
+   | `Workforce` | Empleados, departamentos, centros, contratos, ausencias | `Shared`, `Attendance/Application/Port` (implementa `EmployeeDirectory` y `SiteCalendar`) |
+   | `Identity` | Usuarios, roles, permisos, credenciales QR, tokens de dispositivo | `Shared`, `Attendance/Application/Port` (implementa `CredentialResolver`) |
    | `Reporting` | Proyecciones y consultas de lectura, exportaciones | `Shared`, eventos de otros módulos |
    | `Kiosk` | Dispositivos, emparejamiento, sincronización de lotes, telemetría | `Shared`, `Attendance` (vía caso de uso) |
-   | `Product` | Configuración de instalación, perfiles de cumplimiento, marca, licencia, diagnóstico, soporte | `Shared` |
+   | `Product` | Configuración de instalación, perfiles de cumplimiento, marca, licencia, diagnóstico, soporte | `Shared`, `Shared/Application/Port` (implementa `CompliancePolicyProvider` y `BrandingProvider`) |
    | `Shared` | Objetos de valor comunes, tipos base, contratos de eventos | — |
+
+   > **Las tres aristas de la derecha son de [ADR-025](../docs/adr/ADR-025-frontera-de-dependencias-del-nucleo.md)**, y esta copia las omitía porque se escribió antes que el ADR. Son **reglas, no excepciones**: cada una nombra la capa de origen y la de destino, así que `Identity/Application` o `Identity/Domain` siguen sin poder tocar `Attendance`. Sin ellas, el `HmacSignatureVerifier` de la tarea 1.5 y el `EloquentEmployeeDirectory` de la 1.6 no tienen dónde vivir, y la salida bajo presión sería leer Eloquent de otro módulo — lo que la regla dura 1 prohíbe. **Manda el §1.6 del doc 02**, que ya las incorpora.
 
 3. Crear en cada módulo las cuatro capas con la estructura interna del §2: `Domain/{Model,ValueObject,Event,Policy,Exception}/`, `Application/{UseCase,Port,Command,Query}/`, `Infrastructure/{Persistence,Adapter,Projection}/`, `Http/`.
 4. Escribir un `{Módulo}ServiceProvider.php` por módulo y registrarlos en `backend/app/Providers/`. Es donde se enlazan puertos con adaptadores (skill `crear-caso-de-uso`, paso 4).
@@ -559,7 +561,7 @@ cd frontend-kiosk && npm run api:generate
 cd ../frontend-admin && npm run api:generate
 cd ../frontend-portal && npm run api:generate
 
-ls docs/adr/ | wc -l                              # 28 ficheros
+ls docs/adr/ | wc -l                              # 29 ficheros (28 del §4 + ADR-029, escrito en esta tarea)
 php artisan docs:consistency --check              # toda fila del §4 tiene su fichero (0.7)
 ```
 
@@ -568,7 +570,7 @@ Resultado esperado: el contrato pasa la validación, los tres clientes se genera
 **Terminado cuando** (subconjunto de §10.3):
 
 - [ ] Contrato OpenAPI actualizado y validado en las pruebas.
-- [ ] ADR escrito si la decisión es estructural — aquí se escriben los 20 primeros y se revisan los ocho ya existentes, hasta que `docs/adr/` tenga **28 ficheros** y ninguna fila del §4 se quede sin el suyo.
+- [ ] ADR escrito si la decisión es estructural — aquí se escriben los 20 primeros y se revisan los ocho ya existentes, hasta que `docs/adr/` tenga **29 ficheros** —los 28 de las tablas del §4 mas ADR-029, que documenta una decision estructural tomada al ejecutar la tarea 0.2— y ninguna fila del §4 se quede sin el suyo.
 - [ ] Convenciones del §3.5 respetadas.
 - [ ] Revisado por otra persona, o por `revisor-codigo` y validado por una persona.
 

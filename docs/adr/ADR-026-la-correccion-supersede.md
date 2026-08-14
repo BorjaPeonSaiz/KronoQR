@@ -6,7 +6,7 @@
 | **Fecha** | 13 de agosto de 2026 |
 | **Decide** | `arquitecto-dominio` |
 | **Afecta a** | Tareas 1.3, 2.3 · §5.5 del documento 01 · §3.2 del documento 02 · Reglas duras 5 y 7 de `CLAUDE.md` |
-| **Requisitos** | RN-01, RN-02, RN-06, RN-13, RL-04, RF-AT-14 |
+| **Requisitos** | RN-01, RN-02, RN-06, RN-13, RL-04, RF-PA-04 |
 
 ## Contexto
 

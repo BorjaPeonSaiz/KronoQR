@@ -8,7 +8,7 @@
 | **Afecta a** | Tareas 1.1 y 0.2 · Regla dura 2 de `CLAUDE.md` |
 | **Requisitos** | RN-04, RN-05, RN-09, RQ-01 |
 
-> Los ADR-001 a ADR-020 provienen de la tabla del [documento 02](../02-stack-tecnologico-y-plan-implementacion.md) §4 y se redactan en la tarea 0.6. Este es el primero que nace de una decisión tomada al desarrollar el plan de implementación.
+> Los ADR-001 a ADR-020 provienen de la tabla del [documento 02](../02-stack-tecnologico-y-plan-implementacion.md) §4 y se redactaron en la tarea 0.6. Este es el primero que nace de una decisión tomada al desarrollar el plan de implementación.
 
 ## Contexto
 

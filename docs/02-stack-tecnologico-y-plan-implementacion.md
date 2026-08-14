@@ -214,7 +214,7 @@ fichaje-hotel/
 │   ├── 03-agentes-y-skills-ia.md
 │   ├── 04-decision-credencial.md
 │   ├── 05-presentacion-cliente.md   # Documento comercial entregable al cliente
-│   ├── adr/                         # ADR-001 … ADR-028
+│   ├── adr/                         # ADR-001 … ADR-029
 │   ├── api/openapi.yaml             # Contrato, fuente de verdad de la API
 │   ├── cliente/                     # Documentación que se entrega al cliente
 │   │   ├── instalacion.md
@@ -362,7 +362,7 @@ Ventajas adicionales aprovechadas:
 | `pgcrypto` | Hash del DNI, cadena de hash de auditoría |
 | WAL archiving | RPO ≤ 15 min (RNF-D-02) |
 
-El **Anexo E** recoge la equivalencia para MySQL 8 si la infraestructura de un cliente lo impusiera, con la advertencia de qué garantías se pierden.
+El **Anexo D** recoge la equivalencia para MySQL 8 si la infraestructura de un cliente lo impusiera, con la advertencia de qué garantías se pierden.
 
 ### 3.3 Frontend
 
@@ -479,7 +479,7 @@ Formato resumido. Cada uno vive completo en `docs/adr/`.
 |---|---|---|---|
 | **001** | **Monolito modular**, no microservicios | Equipo pequeño, invariantes transaccionales, escala modesta, y cada cliente instala el producto | Un despliegue. Las fronteras se mantienen por disciplina y tests de arquitectura, no por la red |
 | **002** | **Arquitectura hexagonal** en `Attendance` y `Compliance` | Reglas densas y legalmente sensibles; deben probarse sin infraestructura y sobrevivir a cambios de framework | Más ficheros y algo de mapeo entre dominio y Eloquent. Los módulos de soporte usan una variante ligera para no sobredimensionar |
-| **003** | **PostgreSQL 17** | Restricción de exclusión e índices parciales garantizan RN-01 y RN-02 en la base de datos | El equipo debe conocer Postgres. Se documenta la variante MySQL (Anexo E) |
+| **003** | **PostgreSQL 17** | Restricción de exclusión e índices parciales garantizan RN-01 y RN-02 en la base de datos | El equipo debe conocer Postgres. Se documenta la variante MySQL (Anexo D) |
 | **004** | **UTC en almacenamiento, zona del centro en presentación** | RN-04, RN-09. `TIMESTAMP` sin zona da resultados erróneos en DST y en turnos nocturnos | Toda conversión pasa por un único servicio. Prohibido usar `now()` local en el dominio: se inyecta el puerto `Clock` |
 | **005** | **Payload QR firmado con HMAC-SHA256 y `key_id`** | Impide que nadie fabrique la credencial de un compañero. Un payload legible o secuencial sería falsificable, filtraría PII y permitiría enumeración | Requiere custodia y rotación de la clave. No impide el préstamo físico, que se combate por otras vías |
 | **006** | **Los turnos no se parten a medianoche** | Cortar un turno nocturno a las 23:59 fabrica registros que no ocurrieron: falsea el registro legal y rompe el cálculo de descanso entre jornadas | El informe de horas por día natural requiere prorrateo explícito, implementado en `Reporting` |
@@ -498,7 +498,7 @@ Formato resumido. Cada uno vive completo en `docs/adr/`.
 | **019** | **La caducidad de la licencia nunca bloquea el registro ni su consulta** | Bloquear el fichaje dejaría al cliente incumpliendo la ley por acción del fabricante, e impediría el acceso a datos que debe conservar 4 años | La palanca comercial son los avisos y las funcionalidades accesorias. Exige separar en el código lo que es "registro legal" de lo que es "producto" |
 | **020** | **El soporte se presta con paquete de diagnóstico, no con acceso permanente** | El fabricante no debe tener acceso continuado a los datos personales de la plantilla de sus clientes | Exportación anonimizada por defecto, y acceso puntual solo con concesión expresa, temporal, limitada y auditada. Obliga a que los errores sean autoexplicativos |
 
-Los ocho siguientes **no proceden de esta tabla**: nacieron al desarrollar el plan de implementación tarea por tarea, al aparecer decisiones que ningún documento determinaba. Viven completos en [`docs/adr/`](adr/) desde el primer día.
+Los nueve siguientes **no proceden de esta tabla**: nacieron al desarrollar el plan de implementación tarea por tarea, al aparecer decisiones que ningún documento determinaba. Viven completos en [`docs/adr/`](adr/): los ocho primeros desde antes de empezar la Fase 0, y ADR-029 desde la tarea 0.6, que documentó una decisión ya implementada en la 0.2.
 
 | # | Decisión | Contexto y motivo | Consecuencias |
 |---|---|---|---|
@@ -510,6 +510,7 @@ Los ocho siguientes **no proceden de esta tabla**: nacieron al desarrollar el pl
 | **026** | **La corrección supersede: estado `superseded` en `shift_entries`** | Conservar la versión anterior (regla dura 5) hacía que la fila antigua y la nueva se solaparan, y `shift_entries_no_overlap` **rechazaba la corrección**; el recálculo de `daily_totals` sumaba las dos, duplicando los minutos del día. Colisión frontal entre las reglas duras 5 y 7 en la misma transacción | El enum gana `superseded` y las dos garantías declarativas pasan a `NOT IN ('voided','superseded')`. Se conserva el histórico íntegro sin tocar la restricción de exclusión, que sigue protegiendo el conjunto vigente |
 | **027** | **`audit_log` particionado por año, con anclas de cadena** | La retención de RL-02 obligaba a purgar una tabla sobre la que el usuario de aplicación solo tiene `INSERT` y `SELECT` (regla dura 6), y cualquier borrado habría hecho que el verificador denunciara la rotura de la cadena **cada día**, de forma permanente | Purga por `DROP PARTITION` con un rol de mantenimiento distinto. Tabla `audit_chain_anchors` que sella cada partición antes de soltarla y sirve de nueva génesis al verificador, que así distingue una purga legítima de una manipulación |
 | **028** | **Los límites del plan nunca bloquean el alta ni el emparejamiento** | Bloquear el alta al superar `max_employees` deja trabajando sin registro horario a quien no se puede dar de alta, y bloquear `max_devices` deja un centro sin punto de fichaje al sustituir un quiosco averiado. Es el resultado que ADR-019 declara inaceptable, alcanzado por un rodeo | El exceso produce aviso persistente, entrada en `audit_log` y cifra en `license:show`, que es la palanca comercial verificable en una auditoría. Ninguna ruta del producto puede devolver un error de licencia al dar de alta a una persona |
+| **029** | **La configuración vive en el entorno del contenedor**, no en un `.env` del backend | El `.env` canónico está en la raíz y Compose lo inyecta, pero Laravel espera uno junto a `artisan` y sin él `php artisan test` avisa en cada prueba. Darle configuración real crearía dos fuentes de verdad con una precedencia que casi nadie tiene presente: el entorno gana | `backend/.env` existe **vacío y comentado**, creado de forma idempotente por el entrypoint: no configura nada. `key:generate` se usa con `--show`, y **una variable vacía nunca lleva comentario en su misma línea**, porque Compose se lo asigna como valor |
 
 ---
 

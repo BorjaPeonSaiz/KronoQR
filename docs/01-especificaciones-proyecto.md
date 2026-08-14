@@ -371,7 +371,7 @@ Alimentan las proyecciones de lectura, el trail de auditoría, las notificacione
 
 ### 5.5 Esquema de datos
 
-Motor: **PostgreSQL 17**. Los tipos se expresan en su nomenclatura. El Anexo E del documento 02 recoge la equivalencia para MySQL 8 si la infraestructura de un cliente lo impusiera.
+Motor: **PostgreSQL 17**. Los tipos se expresan en su nomenclatura. El Anexo D del documento 02 recoge la equivalencia para MySQL 8 si la infraestructura de un cliente lo impusiera.
 
 **`sites`** — centros de trabajo
 `id`, `name`, `timezone` (por defecto `Europe/Madrid`), `compliance_profile_id`, `settings` (JSONB), `created_at`
