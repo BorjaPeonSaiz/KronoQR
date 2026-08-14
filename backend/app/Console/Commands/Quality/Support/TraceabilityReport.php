@@ -64,7 +64,23 @@ final readonly class TraceabilityReport
     {
         return array_values(array_filter(
             $this->catalog->inScope($this->order, $this->currentPhase),
-            fn (Requirement $requirement): bool => ! isset($this->tests[$requirement->id]),
+            fn (Requirement $requirement): bool => $requirement->requiresTest()
+                && ! isset($this->tests[$requirement->id]),
+        ));
+    }
+
+    /**
+     * Los que verifica una persona, no una herramienta. No bloquean, pero se
+     * enseñan con nombre y apellidos: un requisito que nadie comprueba y del
+     * que nadie habla es indistinguible de uno olvidado.
+     *
+     * @return list<Requirement>
+     */
+    public function reviewedByHand(): array
+    {
+        return array_values(array_filter(
+            $this->catalog->requirements,
+            static fn (Requirement $requirement): bool => ! $requirement->requiresTest(),
         ));
     }
 

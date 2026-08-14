@@ -19,22 +19,24 @@
 # -> 4, y lo aplica config/quality.php: aqui solo se registra a que fase
 # pertenece cada requisito, no cual va antes.
 
-# --- Fase 0 -------------------------------------------- (13 requisitos)
+# --- Fase 0 -------------------------------------------- (15 requisitos)
 - { id: RNF-M-01,  fase: 0, titulo: "Cobertura de pruebas: ≥ 90 % en la capa de dominio, ≥ 75 % global" }
 - { id: RNF-M-02,  fase: 0, titulo: "Análisis estático en nivel máximo (PHPStan/Larastan nivel 9) sin errores suprimidos sin justificar" }
 - { id: RNF-M-03,  fase: 0, titulo: "Las dependencias entre módulos se verifican automáticamente" }
 - { id: RNF-M-04,  fase: 0, titulo: "Toda decisión arquitectónica relevante queda registrada como ADR versionado en el repositorio" }
-- { id: RNF-M-05,  fase: 0, titulo: "Deuda técnica visible: presupuesto máximo del 15 % de cada iteración dedicado a su reducción" }
+- { id: RNF-M-05,  fase: 0, titulo: "Deuda técnica visible: presupuesto máximo del 15 % de cada iteración dedicado a su reducción", verificacion: revision }
 - { id: RNF-M-06,  fase: 0, titulo: "El código sigue las convenciones publicadas de cada stack (documento 02, §3.5): PSR-12/PER para PHP, convenciones de Laravel, guía de estilo oficia..." }
+- { id: RNF-P-07,  fase: 0, titulo: "Presupuesto de bundle del quiosco" }
 - { id: RQ-01,     fase: 0, titulo: "Toda regla de negocio del §4 tiene al menos una prueba unitaria en el dominio, sin base de datos ni framework" }
 - { id: RQ-06,     fase: 0, titulo: "La API está descrita por un contrato OpenAPI y las respuestas se validan contra el esquema en las pruebas" }
+- { id: RQ-12,     fase: 0, titulo: "Ninguna funcionalidad se considera terminada sin cumplir la Definición de Terminado del documento 02, §10.3", verificacion: revision }
 - { id: RQ-13,     fase: 0, titulo: "Trazabilidad requisito ↔ prueba, verificada por la CI. Cada prueba declara qué requisitos cubre mediante una etiqueta (RF-, RN-, RL-, RS-)" }
 - { id: RQ-14,     fase: 0, titulo: "Cobertura por niveles obligatoria según la naturaleza de la funcionalidad, no a criterio de quien la implementa" }
 - { id: RS-08,     fase: 0, titulo: "Gestión de secretos fuera del repositorio, con rotación documentada" }
 - { id: RS-09,     fase: 0, titulo: "Cabeceras de seguridad completas (HSTS, CSP estricta, X-Content-Type-Options, Referrer-Policy, Permissions-Policy limitando cámara al origen propio)" }
 - { id: RS-10,     fase: 0, titulo: "Análisis de dependencias y de código en cada pull request; ninguna vulnerabilidad crítica o alta puede llegar a una versión publicada" }
 
-# --- Fase 1 -------------------------------------------- (50 requisitos)
+# --- Fase 1 -------------------------------------------- (57 requisitos)
 - { id: RF-AT-01,  fase: 1, titulo: "El sistema registra un evento de fichaje al escanear un QR válido en un quiosco autenticado" }
 - { id: RF-AT-02,  fase: 1, titulo: "Si el empleado no tiene turno abierto, el escaneo abre un turno (entrada)" }
 - { id: RF-AT-03,  fase: 1, titulo: "Si el empleado tiene un turno abierto, el escaneo lo cierra (salida) y calcula la duración" }
@@ -80,13 +82,20 @@
 - { id: RN-07,     fase: 1, titulo: "Duración mínima de tramo computable: 1 minuto" }
 - { id: RN-08,     fase: 1, titulo: "Duración máxima de tramo antes de considerarse anómalo: 12 h (configurable)" }
 - { id: RN-09,     fase: 1, titulo: "El cálculo de duración usa aritmética sobre instantes UTC, por lo que es inmune a los cambios de hora (DST)" }
+- { id: RNF-D-04,  fase: 1, titulo: "Ninguna migración puede requerir parada de servicio (patrón expand / migrate / contract)" }
+- { id: RNF-P-03,  fase: 1, titulo: "Tiempo de decodificación del QR en tablet de gama media" }
+- { id: RQ-02,     fase: 1, titulo: "El cálculo de duraciones se prueba con pruebas basadas en propiedades, incluyendo los días de cambio de hora y turnos que cruzan medianoche" }
+- { id: RQ-03,     fase: 1, titulo: "La idempotencia del fichaje se prueba con envíos concurrentes del mismo scan_id" }
+- { id: RQ-05,     fase: 1, titulo: "Existen pruebas del ciclo completo offline → reconexión → sincronización → consolidación" }
+- { id: RQ-07,     fase: 1, titulo: "Existen pruebas de autorización que verifican que cada rol no puede acceder a lo que no le corresponde" }
+- { id: RQ-10,     fase: 1, titulo: "Pruebas de mutación sobre el dominio con MSI mínimo del 80 %" }
 - { id: RS-01,     fase: 1, titulo: "El payload del QR está firmado y no permite generar credenciales válidas de terceros sin la clave del servidor" }
 - { id: RS-02,     fase: 1, titulo: "El sistema limita la tasa de escaneos por dispositivo, por credencial y por IP, con respuestas de tiempo constante para evitar enumeración" }
 - { id: RS-03,     fase: 1, titulo: "Las respuestas de error no revelan si un código existe, está revocado o es inválido: mensaje genérico al usuario, detalle solo en el log del servidor" }
 - { id: RS-04,     fase: 1, titulo: "El token del quiosco tiene ámbito mínimo, caducidad y rotación automática; su compromiso no da acceso a datos de plantilla" }
 - { id: RS-12,     fase: 1, titulo: "El PIN de acceso al portal está protegido con bloqueo temporal por intentos fallidos y limitación de tasa por empleado y por IP" }
 
-# --- Fase 2 -------------------------------------------- (39 requisitos)
+# --- Fase 2 -------------------------------------------- (45 requisitos)
 - { id: RF-GP-02,  fase: 2, titulo: "Registro de contrato: horas semanales y anuales contratadas, tipo de jornada, vigencia" }
 - { id: RF-ID-03,  fase: 2, titulo: "Autorización a nivel de recurso: un responsable solo accede a los empleados de su departamento y centro" }
 - { id: RF-IN-01,  fase: 2, titulo: "Informe de horas por empleado con granularidad diaria, semanal, mensual y rango libre" }
@@ -123,11 +132,17 @@
 - { id: RN-13,     fase: 2, titulo: "Ningún registro de fichaje se borra ni se sobrescribe" }
 - { id: RN-14,     fase: 2, titulo: "Un empleado dado de baja conserva su historial; su credencial queda revocada y sus escaneos son rechazados" }
 - { id: RN-15,     fase: 2, titulo: "El horario de un fichaje offline es el occurred_at del dispositivo, marcado con su retraso de sincronización" }
+- { id: RNF-D-02,  fase: 2, titulo: "RPO ≤ 15 min (copias más WAL)" }
+- { id: RNF-D-03,  fase: 2, titulo: "Degradación elegante: si cae el WebSocket, el panel hace fallback a sondeo cada 15 s" }
+- { id: RNF-D-05,  fase: 2, titulo: "Prueba de restauración de copia documentada y ejecutada trimestralmente" }
+- { id: RNF-P-04,  fase: 2, titulo: "Carga del panel de presencia en vivo (500 empleados)" }
+- { id: RNF-P-05,  fase: 2, titulo: "Generación de informe mensual de 500 empleados" }
+- { id: RQ-09,     fase: 2, titulo: "Prueba de restauración de copia automatizada y ejecutada al menos trimestralmente" }
 - { id: RS-05,     fase: 2, titulo: "Todo acceso a datos personales de terceros queda registrado en el trail de auditoría" }
 - { id: RS-06,     fase: 2, titulo: "2FA obligatorio para admin, rrhh y auditor" }
 - { id: RS-07,     fase: 2, titulo: "El trail de auditoría es detectablemente manipulable: cada entrada encadena el hash de la anterior; la cadena se verifica a diario y cualquier rotu..." }
 
-# --- Fase 3 -------------------------------------------- (14 requisitos)
+# --- Fase 3 -------------------------------------------- (20 requisitos)
 - { id: RF-AT-10,  fase: 3, titulo: "Control de desfase de reloj" }
 - { id: RF-AT-12,  fase: 3, titulo: "El sistema soporta fichaje de pausa (inicio y fin de descanso) diferenciado del fin de turno, configurable por centro" }
 - { id: RF-GP-04,  fase: 3, titulo: "Registro de ausencias (vacaciones, baja médica, permiso) para no contabilizar como absentismo no justificado" }
@@ -141,6 +156,12 @@
 - { id: RF-PR-05,  fase: 3, titulo: "Resumen semanal por correo al responsable de cada departamento" }
 - { id: RF-PR-06,  fase: 3, titulo: "Detección de patrones anómalos de uso de credencial: dos fichajes consecutivos en el mismo quiosco separados por segundos, coincidencias sistemátic..." }
 - { id: RN-16,     fase: 3, titulo: "Secuencia imposible de credencial: dos escaneos de la misma credencial en dispositivos distintos separados por menos del tiempo mínimo de tránsito..." }
+- { id: RNF-D-01,  fase: 3, titulo: "Disponibilidad del servicio: 99,5 % mensual" }
+- { id: RNF-P-01,  fase: 3, titulo: "Latencia percibida del fichaje (de escaneo a confirmación en pantalla)" }
+- { id: RNF-P-02,  fase: 3, titulo: "Latencia del endpoint de fichaje en servidor" }
+- { id: RNF-P-06,  fase: 3, titulo: "Pico de concurrencia soportado" }
+- { id: RQ-04,     fase: 3, titulo: "Existen pruebas E2E del flujo de quiosco con cámara simulada alimentada por vídeo con un QR real" }
+- { id: RQ-08,     fase: 3, titulo: "Prueba de carga que valida RNF-P-06 antes de cada versión mayor" }
 - { id: RS-11,     fase: 3, titulo: "Revisión de seguridad externa antes de la primera versión comercial y con periodicidad anual" }
 
 # --- Fase 5 -------------------------------------------- (23 requisitos)

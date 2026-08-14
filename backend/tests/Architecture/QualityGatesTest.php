@@ -162,6 +162,34 @@ it('sirve las cabeceras de seguridad completas', function (): void {
     expect($headers)->toContain('camera=(self)');
 })->group('RS-09');
 
+it('comprueba el presupuesto de bundle del quiosco en el propio build', function (): void {
+    // RNF-P-07 (Anexo A del doc 02): JS critico <= 250 KB gzip, CSS <= 40 KB.
+    //
+    // La tablet del hotel no es un portatil de desarrollo y la red del centro
+    // se cae: cada KB de mas es tiempo de arranque delante de una cola de
+    // gente a las 06:00. Por eso el presupuesto se comprueba EN EL BUILD y no
+    // en una revision: `npm run build` falla si se excede, asi que no hay
+    // forma de publicar un quiosco fuera de presupuesto sin verlo.
+    //
+    // Esta prueba no mide el bundle —eso lo hace el propio script—: comprueba
+    // que el guardian sigue enganchado al build. Un presupuesto que alguien
+    // desconecta del `build` deja de existir sin que nadie se entere.
+    $script = repoContents('frontend-kiosk/scripts/check-bundle-budget.mjs');
+
+    expect($script)->toContain('250 * KIB');
+    expect($script)->toContain('40 * KIB');
+
+    /** @var array{scripts?: array<string, string>} $package */
+    $package = json_decode(
+        repoContents('frontend-kiosk/package.json'),
+        true,
+        512,
+        JSON_THROW_ON_ERROR
+    );
+
+    expect($package['scripts']['build'] ?? '')->toContain('check-bundle-budget');
+})->group('RNF-P-07');
+
 it('bloquea la integracion si un requisito implementado no tiene prueba', function (): void {
     // RQ-13. Esta es la prueba de la propia trazabilidad: comprueba que el
     // catalogo existe, que no esta vacio y que la etapa que lo ejecuta sigue

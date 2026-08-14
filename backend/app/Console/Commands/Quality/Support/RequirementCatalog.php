@@ -109,6 +109,39 @@ final readonly class RequirementCatalog
             throw new RuntimeException('El requisito '.$id.' no tiene enunciado.');
         }
 
-        return new Requirement($id, $phase, $title);
+        return new Requirement($id, $phase, $title, self::reviewedByHand($entry, $id));
+    }
+
+    /**
+     * @param  array<mixed>  $entry
+     */
+    private static function reviewedByHand(array $entry, string $id): bool
+    {
+        $verification = $entry['verificacion'] ?? 'prueba';
+
+        if (! in_array($verification, ['prueba', 'revision'], true)) {
+            throw new RuntimeException(
+                'El requisito '.$id.' declara verificacion: '.var_export($verification, true)
+                .'. Solo se admite «prueba» o «revision».'
+            );
+        }
+
+        if ($verification === 'prueba') {
+            return false;
+        }
+
+        // No basta con que el catalogo diga «revision»: el requisito tiene que
+        // estar ademas en la lista cerrada del codigo. Si no, el campo se
+        // convierte en la excusa para no escribir una prueba que si se puede
+        // escribir, y la puerta deja de ser una puerta.
+        if (! in_array($id, Requirement::REVIEWED_BY_HAND, true)) {
+            throw new RuntimeException(
+                'El requisito '.$id.' se declara verificado por revision, pero no esta en la lista '
+                .'cerrada de Requirement::REVIEWED_BY_HAND. Si de verdad no lo puede comprobar una '
+                .'herramienta, anadelo alli y explica por que en el propio codigo.'
+            );
+        }
+
+        return true;
     }
 }

@@ -899,12 +899,20 @@ Orden de ejecución: **0 → 1 → 2 → 5 → 3 → 4**.
 
 | Fase | Requisitos incluidos |
 |---|---|
-| **Fase 0 — Cimientos** | RNF-M-01..06, RQ-01, RQ-06, RQ-13..14, RS-08, RS-09, RS-10 |
-| **Fase 1 — MVP de fichaje** | RF-AT-01..09, RF-AT-11, RF-QR-01..06, RF-QR-08, RF-ID-01..02 (**autenticación de gestión básica, sin 2FA**), RF-ID-04..09, RF-KI-01..06, RF-KI-09, RF-GP-01, RF-GP-03, RN-01..09, RL-01, RL-05, RS-01..04, RS-12 |
-| **Fase 2 — Gestión y cumplimiento** | RF-PA-01..05, RF-IN-01..05, RF-GP-02, RF-PR-01..04, RF-QR-07, RF-ID-01..03 (**completos: 2FA y ámbito por departamento**), RN-10..15, RL-02..04, RL-06..15, RS-05..07 |
+| **Fase 0 — Cimientos** | RNF-M-01..06, **RNF-P-07**, RQ-01, RQ-06, **RQ-12**, RQ-13..14, RS-08, RS-09, RS-10 |
+| **Fase 1 — MVP de fichaje** | RF-AT-01..09, RF-AT-11, RF-QR-01..06, RF-QR-08, RF-ID-01..02 (**autenticación de gestión básica, sin 2FA**), RF-ID-04..09, RF-KI-01..06, RF-KI-09, RF-GP-01, RF-GP-03, RN-01..09, RL-01, RL-05, RS-01..04, RS-12, **RNF-P-03**, **RNF-D-04**, **RQ-02..03**, **RQ-05**, **RQ-07**, **RQ-10** |
+| **Fase 2 — Gestión y cumplimiento** | RF-PA-01..05, RF-IN-01..05, RF-GP-02, RF-PR-01..04, RF-QR-07, RF-ID-01..03 (**completos: 2FA y ámbito por departamento**), RN-10..15, RL-02..04, RL-06..15, RS-05..07, **RNF-P-04..05**, **RNF-D-02..03**, **RNF-D-05**, **RQ-09** |
 | **Fase 5 — Productización** | RF-PD-01..15, RL-16..21, RQ-11, **RF-GP-05** |
-| **Fase 3 — Operación y refuerzo** | RF-PA-06..07, RF-KI-07..08, RF-AT-10, RF-AT-12, RF-IN-06..08, RF-GP-04, RF-PR-05..06, **RN-16**, §9 completo, RS-11 |
+| **Fase 3 — Operación y refuerzo** | RF-PA-06..07, RF-KI-07..08, RF-AT-10, RF-AT-12, RF-IN-06..08, RF-GP-04, RF-PR-05..06, **RN-16**, §9 completo, RS-11, **RNF-P-01..02**, **RNF-P-06**, **RNF-D-01**, **RQ-04**, **RQ-08** |
 | **Fase 4 — Evolución** | Cuadrantes, vacaciones con aprobación, integración de nómina, multi-centro avanzado |
+
+> **Los 21 requisitos en negrita se añadieron el 14 de agosto de 2026, y no son requisitos nuevos.** Existían desde la primera redacción, con su enunciado en las secciones §6.1, §6.2 y §10, pero **este anexo no los repartía a ninguna fase**. Lo detectó `qa:traceability` al construirse en la tarea 0.7, y no como una curiosidad: el comando avisó de que había pruebas ya escritas citando `RNF-D-01` y `RQ-07` que el catálogo no reconocía.
+>
+> **Por qué importaba.** Este anexo es la fuente de `docs/requisitos.yaml`, y ese fichero es el alcance de lo que `qa:traceability --check` bloquea. Un requisito que no aparece aquí **no lo exige nadie, nunca**. Entre los 21 estaban `RQ-07` —la autorización negativa por endpoint, que es la regla dura 18 de `CLAUDE.md`— y `RQ-10`, el MSI del 80 % que `make mutate` ya ejecuta. Se estaban implementando; simplemente ninguna herramienta habría notado su ausencia.
+>
+> **Criterio de asignación:** cada uno va a la fase de la tarea que lo hace verificable, no a la que lo menciona. `RNF-P-07` (presupuesto de bundle del quiosco) va a la Fase 0 porque la tarea 0.5 ya lo fija y lo comprueba en el build; `RQ-02` y `RQ-10` a la Fase 1 porque los cierra la tarea 1.2; `RQ-07` a la Fase 1 porque la 1.7 es la que expone los primeros endpoints; `RNF-P-06` y `RQ-08` a la Fase 3, con la prueba de carga de la 3.6.
+>
+> **Dos son de proceso y no los verifica una herramienta:** `RNF-M-05` (presupuesto del 15 % de deuda técnica por iteración) y `RQ-12` (nada se da por terminado sin la Definición de Terminado). Se declaran con `verificacion: revision` en el catálogo y pertenecen a la lista de `revisor-codigo`, no a la cadena de calidad. Fingir que los comprueba una máquina sería peor que admitir que no.
 
 > **Por qué RF-GP-05 se movió de la Fase 3 a la Fase 5.** La importación masiva de plantilla estaba asignada a la Fase 3, que en el orden real de ejecución (0 → 1 → 2 → 5 → 3 → 4) va **después** de la productización. Pero el asistente de puesta en marcha (RF-PD-03) es el primer contacto del cliente con el producto, y un asistente que obliga a teclear a mano la plantilla de un hotel no es un producto instalable — que es el criterio con el que se juzga la Fase 5 entera. Además, el documento 05 §10.2 ya se lo anuncia al cliente como paso de la puesta en marcha. Son 3–4 h que **cambian de fase, no que se suman**: el esfuerzo total del proyecto no varía.
 
