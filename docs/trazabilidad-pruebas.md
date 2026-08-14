@@ -13,13 +13,13 @@ así que un `git diff` sobre esta matriz solo enseña cambios reales de cobertur
 
 - Catálogo: `docs/requisitos.yaml`, **160 requisitos**.
 - Fase en curso (`CURRENT_PHASE`): **0**. Orden real de ejecución: 0 -> 1 -> 2 -> 5 -> 3 -> 4.
-- Pruebas etiquetadas: **43** (Pest 43, Playwright 0).
+- Pruebas etiquetadas: **45** (Pest 45, Playwright 0).
 - Bloquean solo las fases ya ejecutadas: un requisito de la Fase 3 no bloquea mientras se trabaja en la Fase 1.
 
 | Fase | ¿Ejecutada? | Requisitos | Con prueba | Sin prueba |
 |---|---|---|---|---|
 | 0 | sí | 14 | 12 | 2 |
-| 1 | no | 59 | 9 | 50 |
+| 1 | no | 59 | 10 | 49 |
 | 2 | no | 45 | 0 | 45 |
 | 5 | no | 23 | 0 | 23 |
 | 3 | no | 19 | 2 | 17 |
@@ -51,8 +51,8 @@ Ninguno.
 | `RF-AT-02` | 1 | — | Si el empleado no tiene turno abierto, el escaneo abre un turno (entrada) |
 | `RF-AT-03` | 1 | — | Si el empleado tiene un turno abierto, el escaneo lo cierra (salida) y calcula la duración |
 | `RF-AT-04` | 1 | — | El sistema admite N tramos por jornada sin límite configurado (jornada partida) |
-| `RF-AT-05` | 1 | `html/tests/Contract/OpenApiContractTest.php:184` — devuelve al quiosco lo que enseña en pantalla y nada mas | El quiosco muestra confirmación con nombre, acción realizada, hora y total acumulado del día |
-| `RF-AT-06` | 1 | — | El sistema aplica un periodo de gracia anti-rebote configurable (por defecto 60 s): un segundo escaneo del mismo empleado dentro de la ventana no c... |
+| `RF-AT-05` | 1 | `html/tests/Contract/OpenApiContractTest.php:184` — devuelve al quiosco lo que enseña en pantalla y nada mas<br>`html/tests/Contract/OpenApiContractTest.php:304` — no deja que el anti-rebote afirme un tramo que no se creo | El quiosco muestra confirmación con nombre, acción realizada, hora y total acumulado del día |
+| `RF-AT-06` | 1 | `html/tests/Contract/OpenApiContractTest.php:204` — distingue la pausa del fin de turno en los dos sentidos<br>`html/tests/Contract/OpenApiContractTest.php:282` — expresa el anti-rebote como desenlace aceptado y no como rechazo<br>`html/tests/Contract/OpenApiContractTest.php:304` — no deja que el anti-rebote afirme un tramo que no se creo | El sistema aplica un periodo de gracia anti-rebote configurable (por defecto 60 s): un segundo escaneo del mismo empleado dentro de la ventana no c... |
 | `RF-AT-07` | 1 | `html/tests/Contract/OpenApiContractTest.php:138` — exige la cabecera Idempotency-Key en la escritura del quiosco<br>`html/tests/Contract/OpenApiContractTest.php:146` — obliga a que el identificador del escaneo sea un UUID v7 del cliente | Los fichajes son idempotentes: un mismo scan_id procesado dos veces produce un único evento y la misma respuesta |
 | `RF-AT-08` | 1 | — | Un turno puede cruzar la medianoche sin ser dividido artificialmente |
 | `RF-AT-09` | 1 | `html/tests/Contract/OpenApiContractTest.php:166` — solo admite instantes en UTC con sufijo Z | El sistema registra siempre dos marcas de tiempo: occurred_at (momento real del escaneo, incluso offline) y recorded_at (momento de recepción en se... |
@@ -75,7 +75,7 @@ Ninguno.
 | `RF-KI-06` | 1 | — | Accesibilidad: contraste AA, tipografía ≥ 24 px en mensajes de confirmación, mensajes también sonoros |
 | `RF-KI-09` | 1 | — | Aviso de privacidad visible en la pantalla del quiosco (información del art |
 | `RF-QR-01` | 1 | — | Cada empleado tiene una credencial QR con payload opaco y firmado criptográficamente (HMAC), sin PII ni identificadores secuenciales |
-| `RF-QR-02` | 1 | `html/tests/Contract/OpenApiContractTest.php:212` — no impone un patron al payload del QR<br>`html/tests/Contract/OpenApiContractTest.php:224` — tiene una unica respuesta de rechazo de escaneo<br>`html/tests/Contract/OpenApiContractTest.php:246` — hace imposible que el rechazo describa su causa | El sistema valida la firma del payload antes de resolver el empleado |
+| `RF-QR-02` | 1 | `html/tests/Contract/OpenApiContractTest.php:219` — no impone un patron al payload del QR<br>`html/tests/Contract/OpenApiContractTest.php:231` — tiene una unica respuesta de rechazo de escaneo<br>`html/tests/Contract/OpenApiContractTest.php:253` — hace imposible que el rechazo describa su causa | El sistema valida la firma del payload antes de resolver el empleado |
 | `RF-QR-03` | 1 | — | Las credenciales son revocables y reemitibles (pérdida, robo, deterioro, baja) con invalidación inmediata de la anterior |
 | `RF-QR-04` | 1 | — | Generación de tarjetas imprimibles en PDF: formato tarjeta de crédito (85,6 × 54 mm) y hoja A4 con varias por página |
 | `RF-QR-05` | 1 | — | El QR se genera con corrección de errores nivel Q y tamaño mínimo garantizado, para tolerar el desgaste de una tarjeta en uso diario durante una te... |
@@ -103,7 +103,7 @@ Ninguno.
 | `RQ-10` | 1 | — | Pruebas de mutación sobre el dominio con MSI mínimo del 80 % |
 | `RS-01` | 1 | — | El payload del QR está firmado y no permite generar credenciales válidas de terceros sin la clave del servidor |
 | `RS-02` | 1 | — | El sistema limita la tasa de escaneos por dispositivo, por credencial y por IP, con respuestas de tiempo constante para evitar enumeración |
-| `RS-03` | 1 | `html/tests/Contract/OpenApiContractTest.php:212` — no impone un patron al payload del QR<br>`html/tests/Contract/OpenApiContractTest.php:224` — tiene una unica respuesta de rechazo de escaneo<br>`html/tests/Contract/OpenApiContractTest.php:246` — hace imposible que el rechazo describa su causa | Las respuestas de error no revelan si un código existe, está revocado o es inválido: mensaje genérico al usuario, detalle solo en el log del servidor |
+| `RS-03` | 1 | `html/tests/Contract/OpenApiContractTest.php:219` — no impone un patron al payload del QR<br>`html/tests/Contract/OpenApiContractTest.php:231` — tiene una unica respuesta de rechazo de escaneo<br>`html/tests/Contract/OpenApiContractTest.php:253` — hace imposible que el rechazo describa su causa | Las respuestas de error no revelan si un código existe, está revocado o es inválido: mensaje genérico al usuario, detalle solo en el log del servidor |
 | `RS-04` | 1 | `html/tests/Contract/OpenApiContractTest.php:67` — declara la seguridad de cada operacion de forma explicita<br>`html/tests/Contract/OpenApiContractTest.php:104` — declara todos los ambitos de token del documento 02 §7.3<br>`html/tests/Contract/OpenApiContractTest.php:128` — exige el ambito scan:write para registrar un escaneo<br>`html/tests/Contract/OpenApiContractTest.php:184` — devuelve al quiosco lo que enseña en pantalla y nada mas | El token del quiosco tiene ámbito mínimo, caducidad y rotación automática; su compromiso no da acceso a datos de plantilla |
 | `RS-12` | 1 | — | El PIN de acceso al portal está protegido con bloqueo temporal por intentos fallidos y limitación de tasa por empleado y por IP |
 | `RF-GP-02` | 2 | — | Registro de contrato: horas semanales y anuales contratadas, tipo de jornada, vigencia |
@@ -152,7 +152,7 @@ Ninguno.
 | `RS-06` | 2 | — | 2FA obligatorio para admin, rrhh y auditor |
 | `RS-07` | 2 | — | El trail de auditoría es detectablemente manipulable: cada entrada encadena el hash de la anterior; la cadena se verifica a diario y cualquier rotu... |
 | `RF-AT-10` | 3 | — | Control de desfase de reloj |
-| `RF-AT-12` | 3 | `html/tests/Contract/OpenApiContractTest.php:197` — distingue la pausa del fin de turno en los dos sentidos | El sistema soporta fichaje de pausa (inicio y fin de descanso) diferenciado del fin de turno, configurable por centro |
+| `RF-AT-12` | 3 | `html/tests/Contract/OpenApiContractTest.php:204` — distingue la pausa del fin de turno en los dos sentidos | El sistema soporta fichaje de pausa (inicio y fin de descanso) diferenciado del fin de turno, configurable por centro |
 | `RF-GP-04` | 3 | — | Registro de ausencias (vacaciones, baja médica, permiso) para no contabilizar como absentismo no justificado |
 | `RF-IN-06` | 3 | — | Generación asíncrona (cola) de informes de gran volumen, con notificación y enlace de descarga caducable |
 | `RF-IN-07` | 3 | — | Exportación de datos para el sistema de nómina en formato configurable |

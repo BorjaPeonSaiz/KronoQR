@@ -235,12 +235,36 @@ paths:
       responses:
         '200':
           description: |
-            Escaneo registrado. Es tambien la respuesta de un reenvio con el mismo
-            `scan_id`: identica a la original.
+            Escaneo procesado. **Dos desenlaces**, discriminados por `action`
+            (ADR-031):
+
+            - `clock_in`, `clock_out`, `break_start`, `break_end` → se creo o cerro
+              un tramo. Esquema `ScanAccepted`.
+            - `debounced` → el escaneo se procesado y **deliberadamente no cambio
+              nada**, porque cae dentro del periodo de gracia anti-rebote
+              (RF-AT-06). Esquema `ScanDebounced`.
+
+            Es tambien la respuesta de un **reenvio con el mismo `scan_id`**:
+            identica a la original, incluida su `action`. Reenvio e anti-rebote no
+            son lo mismo y no se confunden: el primero es el mismo escaneo que
+            vuelve —reintento de red o sincronizacion de la cola—, el segundo es un
+            escaneo NUEVO, con otro `scan_id`, porque la persona paso la tarjeta dos
+            veces. Un reenvio de un `clock_in` devuelve `clock_in`, nunca
+            `debounced`.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ScanAccepted'
+                oneOf:
+                  - $ref: '#/components/schemas/ScanAccepted'
+                  - $ref: '#/components/schemas/ScanDebounced'
+                discriminator:
+                  propertyName: action
+                  mapping:
+                    clock_in: '#/components/schemas/ScanAccepted'
+                    clock_out: '#/components/schemas/ScanAccepted'
+                    break_start: '#/components/schemas/ScanAccepted'
+                    break_end: '#/components/schemas/ScanAccepted'
+                    debounced: '#/components/schemas/ScanDebounced'
               examples:
                 entrada:
                   summary: Apertura de turno
@@ -252,6 +276,23 @@ paths:
                     occurred_at: '2026-08-14T05:58:31Z'
                     recorded_at: '2026-08-14T05:58:31.412Z'
                     worked_minutes: 0
+                anti-rebote:
+                  summary: |
+                    Segundo escaneo 20 s despues del que si registro la entrada
+                    (RF-AT-06, ADR-031). No se crea ni se cierra ningun tramo, el
+                    acumulado no varia, y `last_accepted_at` es lo que permite al
+                    quiosco decir «Ya has fichado hace unos segundos».
+
+                    Es un `200` a proposito: la cola offline reintenta ante fallo, y
+                    un `4xx` la dejaria reintentando contra una ventana ya pasada.
+                  value:
+                    scan_id: 0199f0c2-2a5b-7d4f-8c32-5e6f7a8b9c01
+                    action: debounced
+                    employee_display_name: Maria G.
+                    occurred_at: '2026-08-14T05:58:51Z'
+                    recorded_at: '2026-08-14T05:58:51.208Z'
+                    worked_minutes: 0
+                    last_accepted_at: '2026-08-14T05:58:31Z'
                 salida-de-turno-nocturno:
                   summary: |
                     Cierre a las 06:02 UTC de un turno que empezo a las 22:00 del dia
@@ -539,11 +580,20 @@ components:
     ScanAction:
       type: string
       title: ScanAction
-      enum: [clock_in, clock_out, break_start, break_end]
+      enum: [clock_in, clock_out, break_start, break_end, debounced]
       description: |
-        Accion que el servidor ha aplicado. La decide el agregado `WorkDay`, no el
-        cliente. El quiosco la usa para el feedback visual y sonoro diferenciado
-        (RF-AT-05).
+        Lo que el servidor ha hecho con el escaneo. Lo decide el agregado `WorkDay`,
+        no el cliente. El quiosco la usa para el feedback visual y sonoro
+        diferenciado (RF-AT-05), y **tiene que ramificar por ella**: el cliente
+        generado es una union discriminada, asi que `vue-tsc` no deja olvidarlo.
+
+        Los cuatro primeros crearon o cerraron un tramo. **`debounced` no cambio
+        nada** (RF-AT-06, ADR-031): es un desenlace aceptado, no un error, y por eso
+        viaja en un `200`. Devolverlo como `4xx` habria hecho que la cola offline lo
+        reintentara indefinidamente (RF-KI-04, regla dura 19).
+
+        Ampliar este enum es **aditivo y no rompe la v1** (ADR-012): un cliente
+        antiguo trata un valor desconocido como tal, nunca como error.
 
     ScanRequest:
       type: object
@@ -652,6 +702,83 @@ components:
             producto (regla dura 14, RN-11).
           examples:
             - 482
+
+    ScanDebounced:
+      type: object
+      title: ScanDebounced
+      description: |
+        El escaneo se proceso y **no cambio nada**: cae dentro del periodo de gracia
+        anti-rebote (RF-AT-06, por defecto 60 s, `ATTENDANCE_DEBOUNCE_SECONDS`).
+
+        Es un desenlace **aceptado**, no un rechazo (ADR-031). Se separa de
+        `ScanAccepted` en lugar de añadirle una bandera porque un booleano que
+        invalida el significado de otro campo obligatorio falla en silencio: el
+        cliente que no lo lea enseña «Entrada 07:02» por un fichaje que no ocurrio,
+        y el empleado se va convencido de haber fichado dos veces.
+
+        **Y no se parece a `ScanRejected`**, aunque el dominio lo registre como
+        `rejected_debounce`. RS-03 obliga a que un rechazo de credencial sea generico
+        y de tiempo constante porque revelar la causa filtra si un codigo existe o
+        esta revocado. Aqui la credencial es **valida y ya resuelta** —acaba de
+        funcionar hace segundos—, asi que devolver el nombre y el acumulado no añade
+        nada que el quiosco no tuviera. Aplicar la regla 17 por analogia habria
+        empeorado el producto sin ganar seguridad.
+
+        **No lleva `work_date`**: no se creo ningun tramo que atribuir a una jornada.
+      additionalProperties: false
+      required:
+        - scan_id
+        - action
+        - employee_display_name
+        - occurred_at
+        - recorded_at
+        - worked_minutes
+        - last_accepted_at
+      properties:
+        scan_id:
+          $ref: '#/components/schemas/ScanId'
+        action:
+          type: string
+          enum: [debounced]
+          description: |
+            Unico valor posible en este esquema. Es el discriminador del `oneOf` de
+            la respuesta `200`.
+        employee_display_name:
+          type: string
+          minLength: 1
+          maxLength: 60
+          description: |
+            Misma forma minima que en `ScanAccepted`, y por el mismo motivo: un token
+            de quiosco robado no debe reconstruir la plantilla del hotel (§7.3).
+          examples:
+            - Maria G.
+        occurred_at:
+          allOf:
+            - $ref: '#/components/schemas/UtcTimestamp'
+          description: Eco del escaneo que se acaba de descartar.
+        recorded_at:
+          allOf:
+            - $ref: '#/components/schemas/UtcTimestamp'
+          description: Momento en que el servidor lo recibio (regla dura 9).
+        worked_minutes:
+          type: integer
+          minimum: 0
+          description: |
+            Acumulado del dia, **sin variar**: es el mismo que devolvio el escaneo
+            anterior. Se envia para que el quiosco pueda seguir mostrando el total en
+            el aviso, en vez de dejar la pantalla a medias.
+          examples:
+            - 240
+        last_accepted_at:
+          allOf:
+            - $ref: '#/components/schemas/UtcTimestamp'
+          description: |
+            Momento del escaneo que **si** se registro, y contra el que se ha medido
+            la ventana de gracia.
+
+            Es lo que permite al quiosco decir «Ya has fichado hace unos segundos»
+            (escenario «Anti-rebote» del doc 01 §11) en lugar de un aviso vago. Sin
+            este campo tendria que inventarse el «hace unos segundos» o callarselo.
 
     Problem:
       type: object

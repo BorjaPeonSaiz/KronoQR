@@ -193,8 +193,15 @@ it('distingue la pausa del fin de turno en los dos sentidos', function (): void 
         ->and(Contract::value('components', 'schemas', 'ScanIntent', 'default'))
         ->toBe('auto')
         ->and(Contract::value('components', 'schemas', 'ScanAction', 'enum'))
-        ->toBe(['clock_in', 'clock_out', 'break_start', 'break_end']);
-})->group('RF-AT-12');
+        ->toBe(['clock_in', 'clock_out', 'break_start', 'break_end', 'debounced']);
+
+    // `debounced` no describe una accion sobre un tramo —no se creo ninguno— y
+    // por eso no tiene `intent` que le corresponda: el cliente pide `auto`,
+    // `break_start` o `break_end`, y el servidor puede responder que no hizo
+    // nada (RF-AT-06, ADR-031). Ampliar este enum es aditivo (ADR-012).
+    expect(Contract::value('components', 'schemas', 'ScanIntent', 'enum'))
+        ->not->toContain('debounced');
+})->group('RF-AT-12', 'RF-AT-06');
 
 it('no impone un patron al payload del QR', function (): void {
     // Regla dura 17, la trampa mas facil de este contrato. Un `pattern` aqui haria
@@ -244,3 +251,54 @@ it('hace imposible que el rechazo describa su causa', function (): void {
         expect($valores)->toBeArray()->toHaveCount(1);
     }
 })->group('RS-03', 'RF-QR-02');
+
+it('expresa el anti-rebote como desenlace aceptado y no como rechazo', function (): void {
+    // RF-AT-06 y ADR-031. Un segundo escaneo dentro de la ventana de gracia no
+    // crea evento, pero SI se proceso correctamente: viaja en el 200.
+    //
+    // Que sea 2xx no es una preferencia de estilo. La cola offline del quiosco
+    // reintenta con backoff ante fallo (RF-KI-04), asi que un 4xx dejaria un
+    // escaneo encolado reintentandose contra una ventana que ya paso. La regla
+    // dura 19 dice que el quiosco nunca bloquea al empleado, y una cola que no
+    // drena es exactamente eso con retraso.
+    $schema = ['paths', '/api/v1/scan', 'post', 'responses', '200', 'content', 'application/json', 'schema'];
+
+    expect(Contract::value(...[...$schema, 'oneOf']))->toBe([
+        ['$ref' => '#/components/schemas/ScanAccepted'],
+        ['$ref' => '#/components/schemas/ScanDebounced'],
+    ]);
+
+    // Discriminado por `action`: el cliente generado es una union y no se puede
+    // pintar la confirmacion sin ramificar.
+    expect(Contract::value(...[...$schema, 'discriminator', 'propertyName']))->toBe('action')
+        ->and(Contract::value(...[...$schema, 'discriminator', 'mapping', 'debounced']))
+        ->toBe('#/components/schemas/ScanDebounced');
+
+    // Y NO aparece entre los rechazos: el 422 sigue teniendo una sola forma.
+    expect(Contract::value(
+        'paths', '/api/v1/scan', 'post', 'responses', '422',
+        'content', 'application/problem+json', 'schema',
+    ))->toBe(['$ref' => '#/components/schemas/ScanRejected']);
+})->group('RF-AT-06');
+
+it('no deja que el anti-rebote afirme un tramo que no se creo', function (): void {
+    // El fallo que este esquema existe para impedir: que el quiosco enseñe
+    // «Entrada 07:02» por un fichaje que no ocurrio y el empleado se vaya
+    // convencido de haber fichado dos veces.
+    //
+    // Por eso ScanDebounced NO lleva work_date: no hay tramo que atribuir a
+    // ninguna jornada. Y por eso `action` esta clavado con enum de un solo
+    // valor, igual que en ScanRejected: el esquema no ofrece hueco donde
+    // afirmar otra cosa.
+    $campos = Contract::keys('components', 'schemas', 'ScanDebounced', 'properties');
+
+    expect($campos)->not->toContain('work_date')
+        ->and(Contract::map('components', 'schemas', 'ScanDebounced')['additionalProperties'])->toBeFalse()
+        ->and(Contract::value('components', 'schemas', 'ScanDebounced', 'properties', 'action', 'enum'))
+        ->toBe(['debounced']);
+
+    // last_accepted_at es obligatorio: sin el, el quiosco no puede decir «hace
+    // unos segundos» (escenario «Anti-rebote» del doc 01 §11) sin inventarselo.
+    expect(Contract::value('components', 'schemas', 'ScanDebounced', 'required'))
+        ->toContain('last_accepted_at');
+})->group('RF-AT-06', 'RF-AT-05');
