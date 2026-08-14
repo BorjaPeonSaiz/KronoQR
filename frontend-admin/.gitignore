@@ -1,0 +1,7 @@
+# El .gitignore de la raiz ya cubre node_modules/, dist/ y coverage/.
+# Aqui solo lo que produce esta aplicacion y no cubre aquel.
+dev-dist/
+*.local
+.vite/
+test-results/
+playwright-report/

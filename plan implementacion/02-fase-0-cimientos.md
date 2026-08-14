@@ -35,7 +35,7 @@ Arranca el proyecto siguiendo la Fase 0 del plan (docs/02, §11).
 Usa el agente indicado en la columna "Agente / Skill" de cada tarea.
 
 Entregable esperado:
-- `make up` levanta el entorno completo: PHP 8.4, Laravel 12, PostgreSQL 17,
+- `make up` levanta el entorno completo: PHP 8.4, Laravel 13, PostgreSQL 17,
   Redis, Horizon, Reverb, Nginx, los tres frontends con Vite, Mailpit
   y el stack de observabilidad
 - Los 8 módulos creados con su estructura hexagonal y sus service providers
@@ -45,7 +45,7 @@ Entregable esperado:
 - Los tres frontends con TypeScript estricto, Tailwind 4 y Vitest
 - ADR-001 a ADR-020 escritos en docs/adr/ a partir de la tabla del documento
   02 §4; ADR-021 a ADR-028 ya existen y solo se revisan. Al terminar,
-  docs/adr/ tiene 28 ficheros
+  docs/adr/ tiene 30 ficheros (los 28 del §4 mas ADR-029 y ADR-030)
 - openapi.yaml inicial con /health y /scan
 - docs/requisitos.yaml y los comandos qa:traceability y docs:consistency
 
@@ -61,7 +61,7 @@ dentro de Domain/. Verifícalo.
 | # | Tarea | h | Agente / Skill |
 |---|---|---|---|
 | [0.1](#tarea-01--repositorio-docker-compose-completo-make-de-arranque) | Repositorio, Docker Compose completo, `make` de arranque | 6–8 | `devops-observabilidad` |
-| [0.2](#tarea-02--esqueleto-laravel-12-con-los-8-módulos-y-sus-service-providers) | Esqueleto Laravel 12 con los 8 módulos y sus service providers | 4–5 | `arquitecto-dominio` |
+| [0.2](#tarea-02--esqueleto-laravel-13-con-los-8-módulos-y-sus-service-providers) | Esqueleto Laravel 13 con los 8 módulos y sus service providers | 4–5 | `arquitecto-dominio` |
 | [0.3](#tarea-03--cadena-de-calidad-pint-phpstan-9-deptrac-pest-rector) | Cadena de calidad: Pint, PHPStan 9, Deptrac, Pest, Rector | 4–5 | `devops-observabilidad` + `qa-testing` |
 | [0.4](#tarea-04--pipeline-de-ci-con-las-etapas-13) | Pipeline de CI con las etapas 1–3 | 3–4 | `devops-observabilidad` |
 | [0.5](#tarea-05--esqueleto-de-los-tres-frontends-con-ts-estricto-tailwind-y-vitest) | Esqueleto de los tres frontends con TS estricto, Tailwind y Vitest | 4–6 | `frontend-quiosco` |
@@ -100,7 +100,7 @@ dentro de Domain/. Verifícalo.
 
    | # | Servicio | Papel (§3.4, §1.4) |
    |---|---|---|
-   | 1 | `app` | API Laravel 12 sobre PHP 8.4-FPM |
+   | 1 | `app` | API Laravel 13 sobre PHP 8.4-FPM |
    | 2 | `nginx` | TLS, assets estáticos, rate limiting de borde |
    | 3 | `postgres` | PostgreSQL 17 · registro legal e invariantes declarativas |
    | 4 | `redis` | Redis 7 · colas, caché, rate limiting, sesiones |
@@ -192,7 +192,7 @@ Resultado esperado: los 14 servicios arriba, `/api/v1/health` respondiendo, las 
 
 ---
 
-### Tarea 0.2 — Esqueleto Laravel 12 con los 8 módulos y sus service providers
+### Tarea 0.2 — Esqueleto Laravel 13 con los 8 módulos y sus service providers
 
 | | |
 |---|---|
@@ -207,24 +207,26 @@ Resultado esperado: los 14 servicios arriba, `/api/v1/health` respondiendo, las 
 **Reglas duras aplicables.**
 
 - **1** (`Domain/` es puro): la estructura de carpetas es lo que hace la regla verificable. Sin `Domain/`, `Application/`, `Infrastructure/`, `Http/` separados, no hay frontera que comprobar.
-- **2** (nunca `now()` en el dominio): el puerto `Clock` se declara en **`Shared/Domain/Port/Clock.php`** ([ADR-021](../docs/adr/ADR-021-clock-en-shared.md)). `Compliance`, `Kiosk`, `Reporting` y el scheduler lo necesitan igual que `Attendance`, y el §1.6 admite `Shared` como dependencia de los ocho módulos, así que Deptrac queda en verde sin excepciones. El diagrama del §1.5 lo sitúa en `Attendance` y en ese detalle está desactualizado.
+- **2** (nunca `now()` en el dominio): el puerto `Clock` se declara en **`Shared/Application/Port/Clock.php`**, y su adaptador en `Shared/Infrastructure/Adapter/SystemClock.php` ([ADR-021](../docs/adr/ADR-021-clock-en-shared.md)). `Compliance`, `Kiosk`, `Reporting` y el scheduler lo necesitan igual que `Attendance`, y el §1.6 admite `Shared` como dependencia de los ocho módulos, así que Deptrac queda en verde sin excepciones. **En `Application`, no en `Domain`**: el ADR rechaza `Domain/Port/` explícitamente, porque el dominio recibe instantes en lugar de pedirlos, y porque la regla de Deptrac que prohíbe a `*/Domain` depender del `Domain` de otro módulo habría tumbado el reloj el primer día de la Fase 1. El diagrama del §1.5 lo sitúa en `Attendance` y en ese detalle está desactualizado.
 - **13** (nada específico de un cliente): el módulo `Product` existe precisamente para que la diferencia entre clientes sea dato.
 
 **Pasos.** Sin skill asignada. Orden derivado del método del agente `arquitecto-dominio` (doc 03 §4.3): módulo → capa → invariantes → objetos de valor → puertos.
 
-1. Instalar Laravel 12 en `backend/` (§3.1). Verificar la versión mayor vigente al arrancar y **actualizar el ADR si procede** (§3.1, nota literal).
+1. Instalar Laravel 13 en `backend/` (§3.1). Verificar la versión mayor vigente al arrancar y **actualizar el ADR si procede** (§3.1, nota literal).
 2. Crear los 8 módulos en `backend/app/Modules/` con las fronteras del §1.6:
 
    | Módulo | Responsabilidad | Puede depender de |
    |---|---|---|
    | `Attendance` | **Núcleo.** Fichajes, tramos, jornadas, correcciones | `Shared` |
    | `Compliance` | Auditoría, incidencias, retención, exportación legal | `Shared`, eventos de `Attendance` |
-   | `Workforce` | Empleados, departamentos, centros, contratos, ausencias | `Shared` |
-   | `Identity` | Usuarios, roles, permisos, credenciales QR, tokens de dispositivo | `Shared` |
+   | `Workforce` | Empleados, departamentos, centros, contratos, ausencias | `Shared`, `Attendance/Application/Port` (implementa `EmployeeDirectory` y `SiteCalendar`) |
+   | `Identity` | Usuarios, roles, permisos, credenciales QR, tokens de dispositivo | `Shared`, `Attendance/Application/Port` (implementa `CredentialResolver`) |
    | `Reporting` | Proyecciones y consultas de lectura, exportaciones | `Shared`, eventos de otros módulos |
    | `Kiosk` | Dispositivos, emparejamiento, sincronización de lotes, telemetría | `Shared`, `Attendance` (vía caso de uso) |
-   | `Product` | Configuración de instalación, perfiles de cumplimiento, marca, licencia, diagnóstico, soporte | `Shared` |
+   | `Product` | Configuración de instalación, perfiles de cumplimiento, marca, licencia, diagnóstico, soporte | `Shared`, `Shared/Application/Port` (implementa `CompliancePolicyProvider` y `BrandingProvider`) |
    | `Shared` | Objetos de valor comunes, tipos base, contratos de eventos | — |
+
+   > **Las tres aristas de la derecha son de [ADR-025](../docs/adr/ADR-025-frontera-de-dependencias-del-nucleo.md)**, y esta copia las omitía porque se escribió antes que el ADR. Son **reglas, no excepciones**: cada una nombra la capa de origen y la de destino, así que `Identity/Application` o `Identity/Domain` siguen sin poder tocar `Attendance`. Sin ellas, el `HmacSignatureVerifier` de la tarea 1.5 y el `EloquentEmployeeDirectory` de la 1.6 no tienen dónde vivir, y la salida bajo presión sería leer Eloquent de otro módulo — lo que la regla dura 1 prohíbe. **Manda el §1.6 del doc 02**, que ya las incorpora.
 
 3. Crear en cada módulo las cuatro capas con la estructura interna del §2: `Domain/{Model,ValueObject,Event,Policy,Exception}/`, `Application/{UseCase,Port,Command,Query}/`, `Infrastructure/{Persistence,Adapter,Projection}/`, `Http/`.
 4. Escribir un `{Módulo}ServiceProvider.php` por módulo y registrarlos en `backend/app/Providers/`. Es donde se enlazan puertos con adaptadores (skill `crear-caso-de-uso`, paso 4).
@@ -252,11 +254,11 @@ Resultado esperado: los 14 servicios arriba, `/api/v1/health` respondiendo, las 
 
 ```bash
 docker compose -f infra/compose.dev.yaml exec app composer dump-autoload
-docker compose -f infra/compose.dev.yaml exec app php artisan about   # Laravel 12, timezone UTC
+docker compose -f infra/compose.dev.yaml exec app php artisan about   # Laravel 13, timezone UTC
 make test                                                             # verde con el módulo de ejemplo
 ```
 
-Resultado esperado: `php artisan about` muestra Laravel 12 y zona horaria UTC; los 8 service providers cargados; `make test` en verde.
+Resultado esperado: `php artisan about` muestra Laravel 13 y zona horaria UTC; los 8 service providers cargados; `make test` en verde.
 
 **Terminado cuando** (subconjunto de §10.3):
 
@@ -468,7 +470,7 @@ Resultado esperado: las tres etapas en verde sobre `main` limpio, en menos de 4 
 7. Configurar Vitest + Vue Test Utils con umbral **≥ 70 %** (§9.2), y el guion `npm run api:generate` que generará el cliente HTTP del contrato (§3.3, skill `endpoint-api` paso 7). Sin `openapi.yaml` (tarea 0.6) el guion existe pero no produce nada útil todavía.
 8. Fijar el presupuesto de bundle del quiosco en el build: **JS crítico ≤ 250 KB gzip** y **CSS ≤ 40 KB gzip** (Anexo A del doc 02, RNF-P-07). La etapa ⑥ de la CI comprueba el presupuesto (§10.1).
 9. Preparar `frontend-kiosk/e2e/fixtures/` para el `qr-video.y4m` del §2 y §9.4. **El vídeo se genera cuando exista una credencial real de prueba** (tarea 1.5).
-10. Comprobar en los tres: `npm run typecheck && npm run lint && npm run test:unit && npm run build` (comando de verificación de los tres agentes de frontend).
+10. Comprobar en los tres: `npm run type-check && npm run lint && npm run test:unit && npm run build` (comando de verificación de los tres agentes de frontend).
 
 **Artefactos.**
 
@@ -486,7 +488,7 @@ Resultado esperado: las tres etapas en verde sobre `main` limpio, en menos de 4 
 
 ```bash
 # En cada uno de los tres proyectos
-npm run typecheck        # 0 errores de vue-tsc
+npm run type-check        # 0 errores de vue-tsc
 npm run lint             # sin desviaciones
 npm run test:unit        # verde
 npm run build            # el quiosco, dentro del presupuesto de 250 KB gzip
@@ -559,7 +561,7 @@ cd frontend-kiosk && npm run api:generate
 cd ../frontend-admin && npm run api:generate
 cd ../frontend-portal && npm run api:generate
 
-ls docs/adr/ | wc -l                              # 28 ficheros
+ls docs/adr/ | wc -l                              # 30 ficheros (28 del §4 + ADR-029 y ADR-030, escritos aqui)
 php artisan docs:consistency --check              # toda fila del §4 tiene su fichero (0.7)
 ```
 
@@ -568,7 +570,7 @@ Resultado esperado: el contrato pasa la validación, los tres clientes se genera
 **Terminado cuando** (subconjunto de §10.3):
 
 - [ ] Contrato OpenAPI actualizado y validado en las pruebas.
-- [ ] ADR escrito si la decisión es estructural — aquí se escriben los 20 primeros y se revisan los ocho ya existentes, hasta que `docs/adr/` tenga **28 ficheros** y ninguna fila del §4 se quede sin el suyo.
+- [ ] ADR escrito si la decisión es estructural — aquí se escriben los 20 primeros y se revisan los ocho ya existentes, hasta que `docs/adr/` tenga **30 ficheros** —los 28 de las tablas del §4, mas ADR-029 (configuracion en el entorno del contenedor) y ADR-030 (adopcion de Laravel 13)— y ninguna fila del §4 se quede sin el suyo.
 - [ ] Convenciones del §3.5 respetadas.
 - [ ] Revisado por otra persona, o por `revisor-codigo` y validado por una persona.
 

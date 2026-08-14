@@ -1,0 +1,239 @@
+#==============================================================================
+# KronoQR — despliegue en el servidor del cliente.
+#
+# ESTE FICHERO ES IDENTICO PARA TODOS LOS CLIENTES (ADR-017, regla dura 13).
+# Todo lo que difiere entre instalaciones —dominio, certificado, rango de la
+# VLAN de quioscos, umbrales, marca, licencia— vive en el .env que genera
+# install.sh en el servidor del cliente. Si algo obliga a editar este fichero
+# para vender a un cliente nuevo, esta mal disenado.
+#
+# Se entrega junto al .env, en el mismo directorio, asi que aqui Docker Compose
+# si encuentra el .env sin banderas adicionales.
+#
+# Uso:  docker compose -f compose.prod.yaml up -d
+#       (normalmente a traves de install.sh o update.sh, tareas 5.4 y 5.7)
+#
+# Diferencias deliberadas frente a desarrollo:
+#   · imagenes publicadas y etiquetadas, nunca build local
+#   · sin Mailpit, sin servidores de Vite, sin puertos de base de datos
+#     publicados
+#   · Alertmanager presente
+#   · Grafana escuchando solo en loopback: se llega por tunel o por el propio
+#     servidor, jamas expuesto a internet
+#   · reinicio automatico y rotacion de logs
+#==============================================================================
+
+name: kronoqr
+
+x-app-image: &app-image
+  image: ${IMAGE_REGISTRY:-ghcr.io/kronoqr}/php:${IMAGE_TAG:-latest}
+  env_file:
+    - .env
+  networks:
+    - app
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "20m"
+      max-file: "5"
+
+services:
+
+  app:
+    <<: *app-image
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["fpm"]
+    healthcheck:
+      test: ["CMD-SHELL", "SCRIPT_NAME=/ping SCRIPT_FILENAME=/ping REQUEST_METHOD=GET cgi-fcgi -bind -connect 127.0.0.1:9000 | grep -q pong"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  nginx:
+    image: ${IMAGE_REGISTRY:-ghcr.io/kronoqr}/nginx:${IMAGE_TAG:-latest}
+    env_file:
+      - .env
+    ports:
+      - "${HTTP_PORT:-80}:8080"
+      - "${HTTPS_PORT:-443}:8443"
+    volumes:
+      # El certificado del cliente. Si falta, el contenedor se para y dice
+      # donde colocarlo: un autofirmado en produccion acaba con alguien
+      # desactivando la comprobacion en los quioscos.
+      - ${TLS_CERT_DIR:-./certs}:/etc/nginx/certs:ro
+      # Nginx sirve la API y proxya el WebSocket. La entrega de los ficheros
+      # construidos de los tres frontends se define en el paquete de entrega
+      # (tarea 5.4): hasta entonces no se inventa aqui un volumen compartido
+      # que quedaria congelado en la primera version instalada.
+    depends_on:
+      - app
+    networks:
+      - app
+      - observability
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  postgres:
+    image: ${IMAGE_REGISTRY:-ghcr.io/kronoqr}/postgres:${IMAGE_TAG:-latest}
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-fichaje}
+      POSTGRES_USER: ${DB_USERNAME:-fichaje_app}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?define DB_PASSWORD en el .env; install.sh lo genera}
+      TZ: UTC
+      PGTZ: UTC
+    # Regla dura 3. Y archivado de WAL, que es lo que sostiene el RPO de 15 min
+    # (RNF-D-02). El destino lo monta backup.sh (tarea 2.11).
+    command:
+      - postgres
+      - -c
+      - timezone=UTC
+      - -c
+      - log_timezone=UTC
+      - -c
+      - wal_level=replica
+      - -c
+      - archive_mode=on
+      - -c
+      - archive_command=test ! -f /var/backups/wal/%f && cp %p /var/backups/wal/%f
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # install.sh crea este directorio y se lo asigna al uid de postgres antes
+      # del primer arranque (tarea 5.4). Si no puede escribir, el WAL se
+      # acumula en el volumen de datos hasta llenar el disco: doctor.sh lo
+      # comprueba y la alerta de espacio en disco (3.2) lo cubre.
+      - ${BACKUP_PATH:-/var/backups/fichaje}/wal:/var/backups/wal
+    # Sin puertos publicados: a la base de datos se llega desde la red interna
+    # de Docker, nunca desde la red del hotel.
+    networks:
+      - app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    volumes:
+      - redis-data:/data
+    networks:
+      - app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  horizon:
+    <<: *app-image
+    command: ["horizon"]
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  reverb:
+    <<: *app-image
+    command: ["reverb"]
+    expose:
+      - "8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  scheduler:
+    <<: *app-image
+    command: ["scheduler"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=90d
+    volumes:
+      - ./observability/prometheus:/etc/prometheus:ro
+      - prometheus-data:/prometheus
+    networks:
+      observability:
+        ipv4_address: 172.29.0.20
+    restart: unless-stopped
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.0
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    env_file:
+      - .env
+    volumes:
+      - ./observability/alertmanager:/etc/alertmanager:ro
+      - alertmanager-data:/alertmanager
+    networks:
+      - observability
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.5.1
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?define GRAFANA_ADMIN_PASSWORD en el .env; install.sh lo genera}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_DATE_FORMATS_DEFAULT_TIMEZONE: utc
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      # Solo loopback del servidor. Grafana NUNCA se publica a internet.
+      - "127.0.0.1:3000:3000"
+    networks:
+      - observability
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:3.3.2
+    command: ["-config.file=/etc/loki/loki.yaml"]
+    volumes:
+      - ./observability/loki/loki.yaml:/etc/loki/loki.yaml:ro
+      - loki-data:/loki
+    networks:
+      - app
+      - observability
+    restart: unless-stopped
+
+networks:
+  app:
+    name: kronoqr-app
+  observability:
+    name: kronoqr-observability
+    ipam:
+      config:
+        - subnet: 172.29.0.0/24
+
+volumes:
+  postgres-data:
+  redis-data:
+  prometheus-data:
+  alertmanager-data:
+  grafana-data:
+  loki-data:

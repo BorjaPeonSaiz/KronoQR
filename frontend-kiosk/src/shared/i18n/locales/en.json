@@ -1,0 +1,6 @@
+{
+  "app": {
+    "title": "Clock-in kiosk",
+    "skeletonNotice": "Application skeleton. The scanning screens, the offline queue and the PIN fallback arrive in tasks 1.8, 1.9 and 1.12."
+  }
+}

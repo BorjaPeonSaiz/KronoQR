@@ -1,0 +1,81 @@
+# Cadena de herramientas de PHP para las etapas 1-3 de la CI (doc 02 §10.1).
+#
+# Por que una accion compuesta y no repetir los pasos en cada etapa: las tres
+# etapas necesitan exactamente el mismo PHP, las mismas extensiones y el mismo
+# vendor/. Repetirlo tres veces garantiza que un dia dejen de ser iguales, y una
+# etapa que analiza con otra version de PHP no comprueba lo que dice comprobar.
+#
+# Por que NO se levanta Docker Compose aqui: en la maquina de desarrollo las
+# herramientas corren dentro del contenedor `app` porque en Windows el codigo
+# vive en NTFS y el bind mount es ~500 veces mas lento (el numero medido esta en
+# infra/compose.dev.yaml). En un runner Linux ese problema no existe: el checkout
+# esta en disco local. Medido en este repositorio, PHPStan tarda 46,8 s desde el
+# bind mount de Windows y 3,9 s en disco local. Compose en la CI solo anadiria
+# minutos de arranque y piezas que se pueden romper.
+
+name: Cadena de herramientas PHP
+description: Instala PHP 8.4 con sus extensiones y las dependencias de Composer cacheadas.
+
+inputs:
+  php-version:
+    description: Version de PHP. Fuente de verdad, infra/docker/php/Dockerfile.
+    required: false
+    default: "8.4"
+  coverage:
+    description: >
+      Controlador de cobertura: none en las etapas que no la necesitan, xdebug en
+      la de mutacion. Se instala apagado, igual que en la imagen de desarrollo.
+    required: false
+    default: none
+
+runs:
+  using: composite
+  steps:
+    - name: Instalar PHP y extensiones
+      uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+      with:
+        php-version: ${{ inputs.php-version }}
+        # Mismo juego que infra/docker/php/Dockerfile: si la CI analiza con menos
+        # extensiones que la imagen, hay codigo que solo se comprueba en produccion.
+        extensions: bcmath, gd, intl, pcntl, pdo_pgsql, pgsql, redis, sodium, zip
+        # Xdebug instalado pero APAGADO, como en la imagen de desarrollo. Lo
+        # enciende quien lo necesita con XDEBUG_MODE=coverage, y solo para su
+        # propio proceso: encenderlo aqui penalizaria todas las suites.
+        ini-values: memory_limit=1G, xdebug.mode=off
+        coverage: ${{ inputs.coverage }}
+        tools: composer:v2
+      env:
+        # Sin este token setup-php agota el limite anonimo de la API de GitHub al
+        # resolver versiones. Es el token efimero de la ejecucion, con permiso de
+        # solo lectura sobre el contenido: no es un secreto del repositorio.
+        GITHUB_TOKEN: ${{ github.token }}
+
+    - name: Localizar la cache de Composer
+      id: composer-cache
+      shell: bash
+      run: echo "dir=$(composer config cache-files-dir --working-dir=backend)" >>"$GITHUB_OUTPUT"
+
+    - name: Restaurar la cache de Composer
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.composer-cache.outputs.dir }}
+        # La clave es el lock: mismas dependencias, misma cache. El restore-keys
+        # deja aprovechar la cache anterior cuando el lock cambia poco, que es lo
+        # que mantiene la instalacion en segundos en vez de en minutos.
+        key: composer-${{ runner.os }}-php${{ inputs.php-version }}-${{ hashFiles('backend/composer.lock') }}
+        restore-keys: |
+          composer-${{ runner.os }}-php${{ inputs.php-version }}-
+
+    - name: Instalar dependencias
+      shell: bash
+      # --no-interaction porque nadie va a responder a un prompt en un runner.
+      # Sin --no-dev: Pint, PHPStan, Deptrac, Rector y Pest son dependencias de
+      # desarrollo, y son justo lo que estas etapas ejecutan.
+      run: composer install --working-dir=backend --no-interaction --no-progress --prefer-dist
+
+    - name: Marcar el inicio de las comprobaciones
+      shell: bash
+      # A partir de aqui empieza a contar el presupuesto de la etapa (§10.1). Lo
+      # anterior es preparacion del runner, que se amortiza con la cache; medir
+      # las dos cosas juntas no diria si la etapa se esta volviendo lenta.
+      run: echo "TOOLS_START=$(date +%s)" >>"$GITHUB_ENV"

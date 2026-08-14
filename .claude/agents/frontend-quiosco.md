@@ -46,7 +46,7 @@ Eres el desarrollador de la PWA del quiosco. Tu aplicación corre en una tablet 
 ## Antes de dar algo por terminado
 
 ```bash
-npm run typecheck && npm run lint && npm run test:unit && npm run build
+npm run type-check && npm run lint && npm run test:unit && npm run build
 ```
 
 Y si tocaste el flujo de escaneo o de sincronización, `make e2e`.

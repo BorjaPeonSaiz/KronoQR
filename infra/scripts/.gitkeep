@@ -1,0 +1,11 @@
+# Scripts de operacion. Son ENTREGABLES DEL PRODUCTO (doc 02 §11.6.1): los
+# ejecuta el IT de un hotel, en su servidor, a veces con una incidencia en
+# marcha. Convenciones del §3.5, verificadas por ShellCheck y shfmt -i 2 con
+# umbral de 0 hallazgos.
+#
+# Quien escribe cada uno:
+#   install.sh   tarea 5.4
+#   update.sh    tarea 5.7
+#   backup.sh    tarea 2.11
+#   restore.sh   tarea 2.11
+#   doctor.sh    tarea 5.9

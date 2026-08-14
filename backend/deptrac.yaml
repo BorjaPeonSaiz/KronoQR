@@ -1,0 +1,1283 @@
+# Fronteras entre modulos y entre capas — doc 02 §1.6 y §3.5, reglas duras 1 y 2
+# de CLAUDE.md, ADR-021 y ADR-025. Umbral del §9.2: 0 violaciones de frontera.
+#
+# Como leerlo. Deptrac es una lista blanca: una capa solo puede depender de lo
+# que su entrada del `ruleset` enumera, mas de si misma. Todo lo demas es
+# violacion. Por eso lo que NO aparece es tan importante como lo que aparece:
+# que `AttendanceDomain` no nombre a `Laravel` es la regla dura 1.
+#
+# Las capas son disjuntas: cada clase cae en una y solo una. Si aparece un
+# fichero en un sitio que no estaba previsto —un `Modules/X/Service/` o un
+# noveno modulo— cae en `ModuleUnclassified`, que no puede depender de nada, y
+# Deptrac falla en vez de dejarlo sin vigilar. Fallar cerrado es deliberado.
+#
+# Sin `skip_violations`. ADR-021 y ADR-025 lo exigen por escrito: si hiciera
+# falta una excepcion, la ubicacion del fichero seria la equivocada. Las tres
+# aristas de ADR-025 estan expresadas como reglas —con su capa de origen y su
+# capa de destino—, no como agujeros.
+#
+# El emisor `use` esta activado a proposito: sin el, un `use` de un facade que
+# todavia no se usa en el cuerpo no se ve, y esa es exactamente la forma en la
+# que una dependencia prohibida entra en un fichero de dominio.
+
+parameters:
+  paths:
+    - app
+
+  # Las clases internas de PHP (DateTimeImmutable, JsonSerializable...) no
+  # pertenecen a ninguna capa y no deben contarse como no cubiertas.
+  ignore_uncovered_internal_classes: true
+
+  analyser:
+    # Sin marcado `internal`. Declarado de forma explicita porque Deptrac 4.7
+    # emite un warning de PHP si la clave no aparece.
+    internal_tag: ~
+    types:
+      - class
+      - use
+      - function
+
+  layers:
+
+    # ---------------------------------------------------------------
+    # Codigo ajeno. Solo aparece como destino: nunca se analiza como origen.
+    # ---------------------------------------------------------------
+
+    # Capa propia y no parte de `Laravel` porque el §3.5 la prohibe en dos capas
+    # mas (Domain y Application) que el resto del framework.
+    - name: LaravelFacade
+      collectors:
+        - type: classNameRegex
+          value: '#^Illuminate\\Support\\Facades\\#'
+    # Regla dura 1: el ORM no entra en Domain ni en Application.
+    - name: Eloquent
+      collectors:
+        - type: classNameRegex
+          value: '#^Illuminate\\Database\\Eloquent\\#'
+    # El resto del framework: contratos, colecciones, cola, HTTP.
+    - name: Laravel
+      collectors:
+        - type: classNameRegex
+          value: '#^(Illuminate\\(?!Support\\Facades\\|Database\\Eloquent\\)|Laravel\\)#'
+
+    # Cualquier otra libreria de terceros: Carbon, Symfony, Psr, Ramsey,
+    # Spatie, OpenTelemetry... El `must_not` de php_internal deja fuera las
+    # clases internas de PHP, que no son una dependencia de infraestructura.
+    - name: ExternalCode
+      collectors:
+        - type: bool
+          must:
+            - type: classNameRegex
+              value: '#^(?!App\\|Tests\\|Database\\|Illuminate\\|Laravel\\)#'
+          must_not:
+            - type: php_internal
+              value: '.*'
+
+    # ---------------------------------------------------------------
+    # Codigo de la aplicacion fuera de los modulos.
+    # ---------------------------------------------------------------
+
+    # El directorio por defecto de Laravel. En KronoQR los modelos viven en
+    # Modules/*/Infrastructure/Persistence; esta capa existe para que la fila
+    # «*/Domain no puede depender de App\Models\*» sea una regla y no un acuerdo.
+    - name: AppEloquentModels
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Models\\#'
+    # App\Providers, App\Http\Controllers\Controller, App\Console. No puede
+    # alcanzar ningun modulo: el arranque de la aplicacion no es una puerta trasera.
+    - name: AppFramework
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\(?!Modules\\|Models\\)#'
+
+    # Red de seguridad: cualquier clase bajo App\Modules\ que no encaje en
+    # ninguna capa conocida —una capa inventada, un modulo nuevo sin declarar—
+    # cae aqui, y aqui no se puede depender de nada.
+    - name: ModuleUnclassified
+      collectors:
+        - type: bool
+          must:
+            - type: classNameRegex
+              value: '#^App\\Modules\\#'
+          must_not:
+            - type: classNameRegex
+              value: '#^App\\Modules\\(Attendance|Compliance|Workforce|Identity|Reporting|Kiosk|Product|Shared)\\(Domain|Application|Infrastructure|Http)\\#'
+            - type: classNameRegex
+              value: '#^App\\Modules\\(Attendance|Compliance|Workforce|Identity|Reporting|Kiosk|Product|Shared)\\[A-Za-z]+ServiceProvider$#'
+
+    # ---------------------------------------------------------------
+    # Modulo Attendance.
+    # ---------------------------------------------------------------
+
+    - name: AttendanceDomain
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Attendance\\Domain\\(?!Event\\)#'
+    - name: AttendanceDomainEvent
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Attendance\\Domain\\Event\\#'
+    - name: AttendanceApplicationPort
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Attendance\\Application\\Port\\#'
+    - name: AttendanceApplication
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Attendance\\Application\\(?!Port\\)#'
+    - name: AttendancePersistence
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Attendance\\Infrastructure\\Persistence\\#'
+    - name: AttendanceInfrastructure
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Attendance\\Infrastructure\\(?!Persistence\\)#'
+    - name: AttendanceHttp
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Attendance\\Http\\#'
+    - name: AttendanceProvider
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Attendance\\[A-Za-z]+ServiceProvider$#'
+
+    # ---------------------------------------------------------------
+    # Modulo Compliance.
+    # ---------------------------------------------------------------
+
+    - name: ComplianceDomain
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Compliance\\Domain\\(?!Event\\)#'
+    - name: ComplianceDomainEvent
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Compliance\\Domain\\Event\\#'
+    - name: ComplianceApplicationPort
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Compliance\\Application\\Port\\#'
+    - name: ComplianceApplication
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Compliance\\Application\\(?!Port\\)#'
+    - name: CompliancePersistence
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Compliance\\Infrastructure\\Persistence\\#'
+    - name: ComplianceInfrastructure
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Compliance\\Infrastructure\\(?!Persistence\\)#'
+    - name: ComplianceHttp
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Compliance\\Http\\#'
+    - name: ComplianceProvider
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Compliance\\[A-Za-z]+ServiceProvider$#'
+
+    # ---------------------------------------------------------------
+    # Modulo Workforce.
+    # ---------------------------------------------------------------
+
+    - name: WorkforceDomain
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Workforce\\Domain\\(?!Event\\)#'
+    - name: WorkforceDomainEvent
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Workforce\\Domain\\Event\\#'
+    - name: WorkforceApplicationPort
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Workforce\\Application\\Port\\#'
+    - name: WorkforceApplication
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Workforce\\Application\\(?!Port\\)#'
+    - name: WorkforcePersistence
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Workforce\\Infrastructure\\Persistence\\#'
+    - name: WorkforceInfrastructure
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Workforce\\Infrastructure\\(?!Persistence\\)#'
+    - name: WorkforceHttp
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Workforce\\Http\\#'
+    - name: WorkforceProvider
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Workforce\\[A-Za-z]+ServiceProvider$#'
+
+    # ---------------------------------------------------------------
+    # Modulo Identity.
+    # ---------------------------------------------------------------
+
+    - name: IdentityDomain
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Identity\\Domain\\(?!Event\\)#'
+    - name: IdentityDomainEvent
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Identity\\Domain\\Event\\#'
+    - name: IdentityApplicationPort
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Identity\\Application\\Port\\#'
+    - name: IdentityApplication
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Identity\\Application\\(?!Port\\)#'
+    - name: IdentityPersistence
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Identity\\Infrastructure\\Persistence\\#'
+    - name: IdentityInfrastructure
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Identity\\Infrastructure\\(?!Persistence\\)#'
+    - name: IdentityHttp
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Identity\\Http\\#'
+    - name: IdentityProvider
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Identity\\[A-Za-z]+ServiceProvider$#'
+
+    # ---------------------------------------------------------------
+    # Modulo Reporting.
+    # ---------------------------------------------------------------
+
+    - name: ReportingDomain
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Reporting\\Domain\\(?!Event\\)#'
+    - name: ReportingDomainEvent
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Reporting\\Domain\\Event\\#'
+    - name: ReportingApplicationPort
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Reporting\\Application\\Port\\#'
+    - name: ReportingApplication
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Reporting\\Application\\(?!Port\\)#'
+    - name: ReportingPersistence
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Reporting\\Infrastructure\\Persistence\\#'
+    - name: ReportingInfrastructure
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Reporting\\Infrastructure\\(?!Persistence\\)#'
+    - name: ReportingHttp
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Reporting\\Http\\#'
+    - name: ReportingProvider
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Reporting\\[A-Za-z]+ServiceProvider$#'
+
+    # ---------------------------------------------------------------
+    # Modulo Kiosk.
+    # ---------------------------------------------------------------
+
+    - name: KioskDomain
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Kiosk\\Domain\\(?!Event\\)#'
+    - name: KioskDomainEvent
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Kiosk\\Domain\\Event\\#'
+    - name: KioskApplicationPort
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Kiosk\\Application\\Port\\#'
+    - name: KioskApplication
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Kiosk\\Application\\(?!Port\\)#'
+    - name: KioskPersistence
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Kiosk\\Infrastructure\\Persistence\\#'
+    - name: KioskInfrastructure
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Kiosk\\Infrastructure\\(?!Persistence\\)#'
+    - name: KioskHttp
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Kiosk\\Http\\#'
+    - name: KioskProvider
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Kiosk\\[A-Za-z]+ServiceProvider$#'
+
+    # ---------------------------------------------------------------
+    # Modulo Product.
+    # ---------------------------------------------------------------
+
+    - name: ProductDomain
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Product\\Domain\\(?!Event\\)#'
+    - name: ProductDomainEvent
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Product\\Domain\\Event\\#'
+    - name: ProductApplicationPort
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Product\\Application\\Port\\#'
+    - name: ProductApplication
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Product\\Application\\(?!Port\\)#'
+    - name: ProductPersistence
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Product\\Infrastructure\\Persistence\\#'
+    - name: ProductInfrastructure
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Product\\Infrastructure\\(?!Persistence\\)#'
+    - name: ProductHttp
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Product\\Http\\#'
+    - name: ProductProvider
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Product\\[A-Za-z]+ServiceProvider$#'
+
+    # ---------------------------------------------------------------
+    # Modulo Shared.
+    # ---------------------------------------------------------------
+
+    - name: SharedDomain
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Shared\\Domain\\(?!Event\\)#'
+    - name: SharedDomainEvent
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Shared\\Domain\\Event\\#'
+    - name: SharedApplicationPort
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Shared\\Application\\Port\\#'
+    - name: SharedApplication
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Shared\\Application\\(?!Port\\)#'
+    - name: SharedInfrastructure
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Shared\\Infrastructure\\#'
+    - name: SharedHttp
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Shared\\Http\\#'
+    - name: SharedProvider
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Shared\\[A-Za-z]+ServiceProvider$#'
+
+  ruleset:
+
+    # --------------------------------------------------------------- Attendance
+
+    # Regla dura 1. Ni framework, ni ORM, ni libreria de terceros, ni otro
+    # modulo, ni las capas de arriba de este. Solo objetos de valor de Shared.
+    AttendanceDomain:
+      - AttendanceDomainEvent
+      - SharedDomain
+      - SharedDomainEvent
+
+    AttendanceDomainEvent:
+      - AttendanceDomain
+      - SharedDomain
+      - SharedDomainEvent
+
+    # Los puertos hablan en tipos del dominio propio, de Shared o escalares
+    # (ADR-025, restriccion 2): sin Laravel y sin tipos de otro modulo.
+    AttendanceApplicationPort:
+      - AttendanceDomain
+      - AttendanceDomainEvent
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplicationPort
+
+    # Sin LaravelFacade y sin Eloquent (§3.5, fila «Facades»): la persistencia
+    # entra por un puerto. Http nunca aparece: las dependencias van hacia dentro.
+    AttendanceApplication:
+      - AttendanceDomain
+      - AttendanceDomainEvent
+      - AttendanceApplicationPort
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplication
+      - SharedApplicationPort
+      - Laravel
+      - ExternalCode
+
+    AttendancePersistence:
+      - AttendanceDomain
+      - AttendanceDomainEvent
+      - AttendanceApplicationPort
+      - AttendanceApplication
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplication
+      - SharedApplicationPort
+      - SharedInfrastructure
+      - Laravel
+      - LaravelFacade
+      - Eloquent
+      - ExternalCode
+
+    AttendanceInfrastructure:
+      - AttendanceDomain
+      - AttendanceDomainEvent
+      - AttendanceApplicationPort
+      - AttendanceApplication
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplication
+      - SharedApplicationPort
+      - SharedInfrastructure
+      - Laravel
+      - LaravelFacade
+      - Eloquent
+      - ExternalCode
+      - AttendancePersistence
+
+    # Http entra por Application. Alcanza Persistence solo por los idiomas de
+    # Laravel que lo necesitan (route-model binding y Resources), nunca
+    # Infrastructure: un controlador no conoce adaptadores.
+    AttendanceHttp:
+      - AttendanceDomain
+      - AttendanceDomainEvent
+      - AttendanceApplicationPort
+      - AttendanceApplication
+      - AttendancePersistence
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplication
+      - SharedApplicationPort
+      - Laravel
+      - LaravelFacade
+      - Eloquent
+      - ExternalCode
+      - AppFramework
+
+    # El proveedor es la raiz de composicion del modulo: enlaza puerto con
+    # adaptador y registra rutas, listeners y comandos.
+    AttendanceProvider:
+      - AttendanceDomain
+      - AttendanceDomainEvent
+      - AttendanceApplicationPort
+      - AttendanceApplication
+      - AttendancePersistence
+      - AttendanceInfrastructure
+      - AttendanceHttp
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplication
+      - SharedApplicationPort
+      - SharedInfrastructure
+      - Laravel
+      - LaravelFacade
+      - Eloquent
+      - ExternalCode
+      - AppFramework
+
+    # --------------------------------------------------------------- Compliance
+
+    # Regla dura 1. Ni framework, ni ORM, ni libreria de terceros, ni otro
+    # modulo, ni las capas de arriba de este. Solo objetos de valor de Shared.
+    ComplianceDomain:
+      - ComplianceDomainEvent
+      - SharedDomain
+      - SharedDomainEvent
+
+    ComplianceDomainEvent:
+      - ComplianceDomain
+      - SharedDomain
+      - SharedDomainEvent
+
+    # Los puertos hablan en tipos del dominio propio, de Shared o escalares
+    # (ADR-025, restriccion 2): sin Laravel y sin tipos de otro modulo.
+    ComplianceApplicationPort:
+      - ComplianceDomain
+      - ComplianceDomainEvent
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplicationPort
+
+    # Sin LaravelFacade y sin Eloquent (§3.5, fila «Facades»): la persistencia
+    # entra por un puerto. Http nunca aparece: las dependencias van hacia dentro.
+    # Doc 02 §1.6: Compliance escucha los eventos de dominio de Attendance.
+    ComplianceApplication:
+      - ComplianceDomain
+      - ComplianceDomainEvent
+      - ComplianceApplicationPort
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplication
+      - SharedApplicationPort
+      - Laravel
+      - ExternalCode
+      - AttendanceDomainEvent
+
+    CompliancePersistence:
+      - ComplianceDomain
+      - ComplianceDomainEvent
+      - ComplianceApplicationPort
+      - ComplianceApplication
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplication
+      - SharedApplicationPort
+      - SharedInfrastructure
+      - Laravel
+      - LaravelFacade
+      - Eloquent
+      - ExternalCode
+
+    # Doc 02 §1.6: los listeners de los eventos de Attendance viven aqui.
+    ComplianceInfrastructure:
+      - ComplianceDomain
+      - ComplianceDomainEvent
+      - ComplianceApplicationPort
+      - ComplianceApplication
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplication
+      - SharedApplicationPort
+      - SharedInfrastructure
+      - Laravel
+      - LaravelFacade
+      - Eloquent
+      - ExternalCode
+      - CompliancePersistence
+      - AttendanceDomainEvent
+
+    # Http entra por Application. Alcanza Persistence solo por los idiomas de
+    # Laravel que lo necesitan (route-model binding y Resources), nunca
+    # Infrastructure: un controlador no conoce adaptadores.
+    ComplianceHttp:
+      - ComplianceDomain
+      - ComplianceDomainEvent
+      - ComplianceApplicationPort
+      - ComplianceApplication
+      - CompliancePersistence
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplication
+      - SharedApplicationPort
+      - Laravel
+      - LaravelFacade
+      - Eloquent
+      - ExternalCode
+      - AppFramework
+
+    # El proveedor es la raiz de composicion del modulo: enlaza puerto con
+    # adaptador y registra rutas, listeners y comandos.
+    # Doc 02 §1.6: el mapa evento -> listener nombra las clases de evento.
+    ComplianceProvider:
+      - ComplianceDomain
+      - ComplianceDomainEvent
+      - ComplianceApplicationPort
+      - ComplianceApplication
+      - CompliancePersistence
+      - ComplianceInfrastructure
+      - ComplianceHttp
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplication
+      - SharedApplicationPort
+      - SharedInfrastructure
+      - Laravel
+      - LaravelFacade
+      - Eloquent
+      - ExternalCode
+      - AppFramework
+      - AttendanceDomainEvent
+
+    # --------------------------------------------------------------- Workforce
+
+    # Regla dura 1. Ni framework, ni ORM, ni libreria de terceros, ni otro
+    # modulo, ni las capas de arriba de este. Solo objetos de valor de Shared.
+    WorkforceDomain:
+      - WorkforceDomainEvent
+      - SharedDomain
+      - SharedDomainEvent
+
+    WorkforceDomainEvent:
+      - WorkforceDomain
+      - SharedDomain
+      - SharedDomainEvent
+
+    # Los puertos hablan en tipos del dominio propio, de Shared o escalares
+    # (ADR-025, restriccion 2): sin Laravel y sin tipos de otro modulo.
+    WorkforceApplicationPort:
+      - WorkforceDomain
+      - WorkforceDomainEvent
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplicationPort
+
+    # Sin LaravelFacade y sin Eloquent (§3.5, fila «Facades»): la persistencia
+    # entra por un puerto. Http nunca aparece: las dependencias van hacia dentro.
+    WorkforceApplication:
+      - WorkforceDomain
+      - WorkforceDomainEvent
+      - WorkforceApplicationPort
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplication
+      - SharedApplicationPort
+      - Laravel
+      - ExternalCode
+
+    WorkforcePersistence:
+      - WorkforceDomain
+      - WorkforceDomainEvent
+      - WorkforceApplicationPort
+      - WorkforceApplication
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplication
+      - SharedApplicationPort
+      - SharedInfrastructure
+      - Laravel
+      - LaravelFacade
+      - Eloquent
+      - ExternalCode
+
+    # ADR-025: Workforce/Infrastructure implementa puertos declarados por el
+    # nucleo. La arista llega a Application/Port y para ahi: ni Domain, ni
+    # casos de uso, ni Persistence de Attendance.
+    WorkforceInfrastructure:
+      - WorkforceDomain
+      - WorkforceDomainEvent
+      - WorkforceApplicationPort
+      - WorkforceApplication
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplication
+      - SharedApplicationPort
+      - SharedInfrastructure
+      - Laravel
+      - LaravelFacade
+      - Eloquent
+      - ExternalCode
+      - WorkforcePersistence
+      - AttendanceApplicationPort
+
+    # Http entra por Application. Alcanza Persistence solo por los idiomas de
+    # Laravel que lo necesitan (route-model binding y Resources), nunca
+    # Infrastructure: un controlador no conoce adaptadores.
+    WorkforceHttp:
+      - WorkforceDomain
+      - WorkforceDomainEvent
+      - WorkforceApplicationPort
+      - WorkforceApplication
+      - WorkforcePersistence
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplication
+      - SharedApplicationPort
+      - Laravel
+      - LaravelFacade
+      - Eloquent
+      - ExternalCode
+      - AppFramework
+
+    # El proveedor es la raiz de composicion del modulo: enlaza puerto con
+    # adaptador y registra rutas, listeners y comandos.
+    # ADR-025, restriccion 3: el enlace puerto -> adaptador se declara en el
+    # ServiceProvider del satelite, que por eso nombra el puerto del nucleo.
+    WorkforceProvider:
+      - WorkforceDomain
+      - WorkforceDomainEvent
+      - WorkforceApplicationPort
+      - WorkforceApplication
+      - WorkforcePersistence
+      - WorkforceInfrastructure
+      - WorkforceHttp
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplication
+      - SharedApplicationPort
+      - SharedInfrastructure
+      - Laravel
+      - LaravelFacade
+      - Eloquent
+      - ExternalCode
+      - AppFramework
+      - AttendanceApplicationPort
+
+    # --------------------------------------------------------------- Identity
+
+    # Regla dura 1. Ni framework, ni ORM, ni libreria de terceros, ni otro
+    # modulo, ni las capas de arriba de este. Solo objetos de valor de Shared.
+    IdentityDomain:
+      - IdentityDomainEvent
+      - SharedDomain
+      - SharedDomainEvent
+
+    IdentityDomainEvent:
+      - IdentityDomain
+      - SharedDomain
+      - SharedDomainEvent
+
+    # Los puertos hablan en tipos del dominio propio, de Shared o escalares
+    # (ADR-025, restriccion 2): sin Laravel y sin tipos de otro modulo.
+    IdentityApplicationPort:
+      - IdentityDomain
+      - IdentityDomainEvent
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplicationPort
+
+    # Sin LaravelFacade y sin Eloquent (§3.5, fila «Facades»): la persistencia
+    # entra por un puerto. Http nunca aparece: las dependencias van hacia dentro.
+    IdentityApplication:
+      - IdentityDomain
+      - IdentityDomainEvent
+      - IdentityApplicationPort
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplication
+      - SharedApplicationPort
+      - Laravel
+      - ExternalCode
+
+    IdentityPersistence:
+      - IdentityDomain
+      - IdentityDomainEvent
+      - IdentityApplicationPort
+      - IdentityApplication
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplication
+      - SharedApplicationPort
+      - SharedInfrastructure
+      - Laravel
+      - LaravelFacade
+      - Eloquent
+      - ExternalCode
+
+    # ADR-025: Identity/Infrastructure implementa puertos declarados por el
+    # nucleo. La arista llega a Application/Port y para ahi: ni Domain, ni
+    # casos de uso, ni Persistence de Attendance.
+    IdentityInfrastructure:
+      - IdentityDomain
+      - IdentityDomainEvent
+      - IdentityApplicationPort
+      - IdentityApplication
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplication
+      - SharedApplicationPort
+      - SharedInfrastructure
+      - Laravel
+      - LaravelFacade
+      - Eloquent
+      - ExternalCode
+      - IdentityPersistence
+      - AttendanceApplicationPort
+
+    # Http entra por Application. Alcanza Persistence solo por los idiomas de
+    # Laravel que lo necesitan (route-model binding y Resources), nunca
+    # Infrastructure: un controlador no conoce adaptadores.
+    IdentityHttp:
+      - IdentityDomain
+      - IdentityDomainEvent
+      - IdentityApplicationPort
+      - IdentityApplication
+      - IdentityPersistence
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplication
+      - SharedApplicationPort
+      - Laravel
+      - LaravelFacade
+      - Eloquent
+      - ExternalCode
+      - AppFramework
+
+    # El proveedor es la raiz de composicion del modulo: enlaza puerto con
+    # adaptador y registra rutas, listeners y comandos.
+    # ADR-025, restriccion 3: el enlace puerto -> adaptador se declara en el
+    # ServiceProvider del satelite, que por eso nombra el puerto del nucleo.
+    IdentityProvider:
+      - IdentityDomain
+      - IdentityDomainEvent
+      - IdentityApplicationPort
+      - IdentityApplication
+      - IdentityPersistence
+      - IdentityInfrastructure
+      - IdentityHttp
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplication
+      - SharedApplicationPort
+      - SharedInfrastructure
+      - Laravel
+      - LaravelFacade
+      - Eloquent
+      - ExternalCode
+      - AppFramework
+      - AttendanceApplicationPort
+
+    # --------------------------------------------------------------- Reporting
+
+    # Regla dura 1. Ni framework, ni ORM, ni libreria de terceros, ni otro
+    # modulo, ni las capas de arriba de este. Solo objetos de valor de Shared.
+    ReportingDomain:
+      - ReportingDomainEvent
+      - SharedDomain
+      - SharedDomainEvent
+
+    ReportingDomainEvent:
+      - ReportingDomain
+      - SharedDomain
+      - SharedDomainEvent
+
+    # Los puertos hablan en tipos del dominio propio, de Shared o escalares
+    # (ADR-025, restriccion 2): sin Laravel y sin tipos de otro modulo.
+    ReportingApplicationPort:
+      - ReportingDomain
+      - ReportingDomainEvent
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplicationPort
+
+    # Sin LaravelFacade y sin Eloquent (§3.5, fila «Facades»): la persistencia
+    # entra por un puerto. Http nunca aparece: las dependencias van hacia dentro.
+    # Doc 02 §1.6: Reporting proyecta eventos de los demas modulos. Eventos,
+    # no agregados: ningun *Domain de otro modulo aparece en la lista.
+    ReportingApplication:
+      - ReportingDomain
+      - ReportingDomainEvent
+      - ReportingApplicationPort
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplication
+      - SharedApplicationPort
+      - Laravel
+      - ExternalCode
+      - AttendanceDomainEvent
+      - ComplianceDomainEvent
+      - WorkforceDomainEvent
+      - IdentityDomainEvent
+      - KioskDomainEvent
+      - ProductDomainEvent
+
+    ReportingPersistence:
+      - ReportingDomain
+      - ReportingDomainEvent
+      - ReportingApplicationPort
+      - ReportingApplication
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplication
+      - SharedApplicationPort
+      - SharedInfrastructure
+      - Laravel
+      - LaravelFacade
+      - Eloquent
+      - ExternalCode
+
+    ReportingInfrastructure:
+      - ReportingDomain
+      - ReportingDomainEvent
+      - ReportingApplicationPort
+      - ReportingApplication
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplication
+      - SharedApplicationPort
+      - SharedInfrastructure
+      - Laravel
+      - LaravelFacade
+      - Eloquent
+      - ExternalCode
+      - ReportingPersistence
+      - AttendanceDomainEvent
+      - ComplianceDomainEvent
+      - WorkforceDomainEvent
+      - IdentityDomainEvent
+      - KioskDomainEvent
+      - ProductDomainEvent
+
+    # Http entra por Application. Alcanza Persistence solo por los idiomas de
+    # Laravel que lo necesitan (route-model binding y Resources), nunca
+    # Infrastructure: un controlador no conoce adaptadores.
+    ReportingHttp:
+      - ReportingDomain
+      - ReportingDomainEvent
+      - ReportingApplicationPort
+      - ReportingApplication
+      - ReportingPersistence
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplication
+      - SharedApplicationPort
+      - Laravel
+      - LaravelFacade
+      - Eloquent
+      - ExternalCode
+      - AppFramework
+
+    # El proveedor es la raiz de composicion del modulo: enlaza puerto con
+    # adaptador y registra rutas, listeners y comandos.
+    ReportingProvider:
+      - ReportingDomain
+      - ReportingDomainEvent
+      - ReportingApplicationPort
+      - ReportingApplication
+      - ReportingPersistence
+      - ReportingInfrastructure
+      - ReportingHttp
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplication
+      - SharedApplicationPort
+      - SharedInfrastructure
+      - Laravel
+      - LaravelFacade
+      - Eloquent
+      - ExternalCode
+      - AppFramework
+      - AttendanceDomainEvent
+      - ComplianceDomainEvent
+      - WorkforceDomainEvent
+      - IdentityDomainEvent
+      - KioskDomainEvent
+      - ProductDomainEvent
+
+    # --------------------------------------------------------------- Kiosk
+
+    # Regla dura 1. Ni framework, ni ORM, ni libreria de terceros, ni otro
+    # modulo, ni las capas de arriba de este. Solo objetos de valor de Shared.
+    KioskDomain:
+      - KioskDomainEvent
+      - SharedDomain
+      - SharedDomainEvent
+
+    KioskDomainEvent:
+      - KioskDomain
+      - SharedDomain
+      - SharedDomainEvent
+
+    # Los puertos hablan en tipos del dominio propio, de Shared o escalares
+    # (ADR-025, restriccion 2): sin Laravel y sin tipos de otro modulo.
+    KioskApplicationPort:
+      - KioskDomain
+      - KioskDomainEvent
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplicationPort
+
+    # Sin LaravelFacade y sin Eloquent (§3.5, fila «Facades»): la persistencia
+    # entra por un puerto. Http nunca aparece: las dependencias van hacia dentro.
+    # Doc 02 §1.6: Kiosk usa Attendance *via caso de uso*. Alcanza
+    # Attendance/Application (casos de uso y sus comandos) y nada mas: ni
+    # Domain, ni Persistence.
+    KioskApplication:
+      - KioskDomain
+      - KioskDomainEvent
+      - KioskApplicationPort
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplication
+      - SharedApplicationPort
+      - Laravel
+      - ExternalCode
+      - AttendanceApplication
+
+    KioskPersistence:
+      - KioskDomain
+      - KioskDomainEvent
+      - KioskApplicationPort
+      - KioskApplication
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplication
+      - SharedApplicationPort
+      - SharedInfrastructure
+      - Laravel
+      - LaravelFacade
+      - Eloquent
+      - ExternalCode
+
+    KioskInfrastructure:
+      - KioskDomain
+      - KioskDomainEvent
+      - KioskApplicationPort
+      - KioskApplication
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplication
+      - SharedApplicationPort
+      - SharedInfrastructure
+      - Laravel
+      - LaravelFacade
+      - Eloquent
+      - ExternalCode
+      - KioskPersistence
+
+    # Http entra por Application. Alcanza Persistence solo por los idiomas de
+    # Laravel que lo necesitan (route-model binding y Resources), nunca
+    # Infrastructure: un controlador no conoce adaptadores.
+    KioskHttp:
+      - KioskDomain
+      - KioskDomainEvent
+      - KioskApplicationPort
+      - KioskApplication
+      - KioskPersistence
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplication
+      - SharedApplicationPort
+      - Laravel
+      - LaravelFacade
+      - Eloquent
+      - ExternalCode
+      - AppFramework
+      - AttendanceApplication
+
+    # El proveedor es la raiz de composicion del modulo: enlaza puerto con
+    # adaptador y registra rutas, listeners y comandos.
+    KioskProvider:
+      - KioskDomain
+      - KioskDomainEvent
+      - KioskApplicationPort
+      - KioskApplication
+      - KioskPersistence
+      - KioskInfrastructure
+      - KioskHttp
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplication
+      - SharedApplicationPort
+      - SharedInfrastructure
+      - Laravel
+      - LaravelFacade
+      - Eloquent
+      - ExternalCode
+      - AppFramework
+
+    # --------------------------------------------------------------- Product
+
+    # Regla dura 1. Ni framework, ni ORM, ni libreria de terceros, ni otro
+    # modulo, ni las capas de arriba de este. Solo objetos de valor de Shared.
+    ProductDomain:
+      - ProductDomainEvent
+      - SharedDomain
+      - SharedDomainEvent
+
+    ProductDomainEvent:
+      - ProductDomain
+      - SharedDomain
+      - SharedDomainEvent
+
+    # Los puertos hablan en tipos del dominio propio, de Shared o escalares
+    # (ADR-025, restriccion 2): sin Laravel y sin tipos de otro modulo.
+    ProductApplicationPort:
+      - ProductDomain
+      - ProductDomainEvent
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplicationPort
+
+    # Sin LaravelFacade y sin Eloquent (§3.5, fila «Facades»): la persistencia
+    # entra por un puerto. Http nunca aparece: las dependencias van hacia dentro.
+    ProductApplication:
+      - ProductDomain
+      - ProductDomainEvent
+      - ProductApplicationPort
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplication
+      - SharedApplicationPort
+      - Laravel
+      - ExternalCode
+
+    ProductPersistence:
+      - ProductDomain
+      - ProductDomainEvent
+      - ProductApplicationPort
+      - ProductApplication
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplication
+      - SharedApplicationPort
+      - SharedInfrastructure
+      - Laravel
+      - LaravelFacade
+      - Eloquent
+      - ExternalCode
+
+    # ADR-025: aqui viven DbCompliancePolicyProvider y
+    # DbOperationalSettingsProvider, que implementan puertos de
+    # Shared/Application/Port (ya admitido: Shared lo es para los ocho modulos).
+    ProductInfrastructure:
+      - ProductDomain
+      - ProductDomainEvent
+      - ProductApplicationPort
+      - ProductApplication
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplication
+      - SharedApplicationPort
+      - SharedInfrastructure
+      - Laravel
+      - LaravelFacade
+      - Eloquent
+      - ExternalCode
+      - ProductPersistence
+
+    # Http entra por Application. Alcanza Persistence solo por los idiomas de
+    # Laravel que lo necesitan (route-model binding y Resources), nunca
+    # Infrastructure: un controlador no conoce adaptadores.
+    ProductHttp:
+      - ProductDomain
+      - ProductDomainEvent
+      - ProductApplicationPort
+      - ProductApplication
+      - ProductPersistence
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplication
+      - SharedApplicationPort
+      - Laravel
+      - LaravelFacade
+      - Eloquent
+      - ExternalCode
+      - AppFramework
+
+    # El proveedor es la raiz de composicion del modulo: enlaza puerto con
+    # adaptador y registra rutas, listeners y comandos.
+    ProductProvider:
+      - ProductDomain
+      - ProductDomainEvent
+      - ProductApplicationPort
+      - ProductApplication
+      - ProductPersistence
+      - ProductInfrastructure
+      - ProductHttp
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplication
+      - SharedApplicationPort
+      - SharedInfrastructure
+      - Laravel
+      - LaravelFacade
+      - Eloquent
+      - ExternalCode
+      - AppFramework
+
+    # --------------------------------------------------------------- Shared
+
+    # Doc 02 §1.6: Shared no depende de nadie. Aqui empieza el grafo.
+    SharedDomain:
+      - SharedDomainEvent
+
+    SharedDomainEvent:
+      - SharedDomain
+
+    # Clock, CompliancePolicyProvider y OperationalSettingsProvider (ADR-021,
+    # ADR-025). Sin Laravel: un puerto que importa el framework deja de serlo.
+    SharedApplicationPort:
+      - SharedDomain
+      - SharedDomainEvent
+
+    SharedApplication:
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplicationPort
+      - Laravel
+      - ExternalCode
+
+    # SystemClock vive aqui (ADR-021).
+    SharedInfrastructure:
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplicationPort
+      - SharedApplication
+      - Laravel
+      - LaravelFacade
+      - Eloquent
+      - ExternalCode
+
+    SharedHttp:
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplicationPort
+      - SharedApplication
+      - Laravel
+      - LaravelFacade
+      - ExternalCode
+      - AppFramework
+
+    SharedProvider:
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplicationPort
+      - SharedApplication
+      - SharedInfrastructure
+      - SharedHttp
+      - Laravel
+      - LaravelFacade
+      - ExternalCode
+      - AppFramework
+
+    # --------------------------------------------------------------- Fuera de los modulos
+
+    # Sin ningun modulo: el arranque no conoce el dominio.
+    AppFramework:
+      - Laravel
+      - LaravelFacade
+      - Eloquent
+      - ExternalCode
+      - AppEloquentModels
+
+    AppEloquentModels:
+      - Laravel
+      - LaravelFacade
+      - Eloquent
+      - ExternalCode
+
+    # Nada. Si esta capa deja de estar vacia, hay codigo en un sitio que las
+    # fronteras no describen: o se mueve, o se declara su capa aqui.
+    ModuleUnclassified: ~
+
+    # Las cuatro capas de codigo ajeno solo aparecen como destino: `paths` no
+    # las analiza como origen. Se declaran para que el grafo este completo.
+    Laravel: ~
+
+    LaravelFacade: ~
+
+    Eloquent: ~
+
+    ExternalCode: ~

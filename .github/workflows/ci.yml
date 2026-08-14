@@ -1,0 +1,518 @@
+# KronoQR — etapas 1-3 del pipeline (doc 02 §10.1).
+#
+#   ① Lint + Tipos            Pint · PHPStan 9 · ESLint · vue-tsc · ShellCheck   ~1 min
+#                             + @redocly/cli sobre docs/api/openapi.yaml
+#   ② Arquitectura            Deptrac · Pest Arch                                ~30 s
+#   ③ Unitarias + Mutacion    Pest · MSI >= 80 %                                 ~2 min
+#
+# Las tres se ejecutan en CADA push y tienen que devolver resultado en menos de
+# 4 minutos en total. El limite no es estetico: una CI lenta se acaba ignorando,
+# y una cadena de calidad que nadie mira no verifica nada.
+#
+# Lo que NO esta aqui, y por que:
+#   ③b Trazabilidad   `qa:traceability --check`. Su comando lo crea la tarea 0.7.
+#                     Su sitio es entre la etapa ③ y la ④; hay un hueco marcado
+#                     al final de la etapa ③.
+#   ④-⑧              Integracion, seguridad, frontend, E2E e instalacion limpia.
+#                     Se ejecutan en pull request y antes de publicar version
+#                     (§10.1), y quedan fuera de la tarea 0.4.
+#
+# Consecuencia que conviene tener presente: hoy las suites Feature, Integration y
+# Contract NO se ejecutan en ningun push, porque su etapa es la ④. Mientras la ④
+# no exista, una regresion en una prueba Feature no la ve la CI.
+#
+# Secretos: ninguno. Este workflow no lee `secrets.*`, no escribe ficheros de
+# entorno y no imprime variables. El unico token que aparece es `github.token`,
+# efimero y de solo lectura (doc 02 §7.7).
+
+name: CI
+
+on:
+  # Sin filtro de ramas: el §10.1 dice "en cada push", y una rama corta que no
+  # se comprueba es una rama que llega a main sin comprobar.
+  push:
+  workflow_dispatch:
+
+# Minimo imprescindible. Este workflow lee el codigo y no escribe nada.
+permissions:
+  contents: read
+
+# Empujar dos veces seguidas no debe dejar dos ejecuciones compitiendo por los
+# runners: la anterior ya no interesa a nadie.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Fuente de verdad de estas versiones: infra/docker/php/Dockerfile e
+  # infra/docker/node/Dockerfile. Si cambian alli, cambian aqui.
+  PHP_VERSION: "8.4"
+  NODE_VERSION: "24"
+
+jobs:
+  #-----------------------------------------------------------------------------
+  # ① Lint + Tipos — backend y scripts de shell
+  #-----------------------------------------------------------------------------
+  lint-backend:
+    name: "① Lint + Tipos · backend"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+
+    steps:
+      - name: Marcar el inicio del job
+        run: echo "JOB_START=$(date +%s)" >>"$GITHUB_ENV"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # El token de checkout no tiene por que quedarse en .git/config: nada
+          # despues de este paso necesita empujar nada (doc 02 §7.7).
+          persist-credentials: false
+
+      - name: Fijar las versiones de ShellCheck y shfmt
+        # Se leen del Makefile en vez de escribirlas otra vez aqui. Es el mismo
+        # motivo por el que la CI llama a `make` y no a los binarios sueltos: si
+        # el runner comprueba con otra version que el portatil, el umbral de "0
+        # hallazgos" pasa a depender de quien ejecute.
+        run: |
+          # El filtro no sobra: `eval` de la salida de make ejecuta CUALQUIER
+          # cosa que make imprima. Solo se evalua lo que tiene forma de
+          # asignacion, para que un aviso del Makefile no acabe siendo una orden.
+          eval "$(make -s tool-versions | grep -E '^[A-Z_]+=')"
+          echo "Instalando shellcheck ${SHELLCHECK_VERSION} y shfmt ${SHFMT_VERSION}"
+          curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.xz" |
+            tar -xJ -C /tmp
+          sudo install -m 0755 "/tmp/shellcheck-${SHELLCHECK_VERSION}/shellcheck" /usr/local/bin/shellcheck
+          curl -fsSL -o /tmp/shfmt "https://github.com/mvdan/sh/releases/download/${SHFMT_VERSION}/shfmt_${SHFMT_VERSION}_linux_amd64"
+          sudo install -m 0755 /tmp/shfmt /usr/local/bin/shfmt
+          shellcheck --version | head -n 2
+          shfmt --version
+
+      - uses: ./.github/actions/php-toolchain
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          coverage: none
+
+      # A partir de aqui, cada paso es una orden del Makefile. El Makefile detecta
+      # CI=true —GitHub Actions la define sola— y ejecuta las herramientas
+      # directamente sobre backend/ en lugar de dentro del contenedor. La orden y
+      # el umbral se escriben una sola vez, en el Makefile o en el fichero de
+      # configuracion de cada herramienta.
+
+      # Marca el inicio de las comprobaciones, ya con el runner preparado. El
+      # presupuesto del §10.1 mide las herramientas, no la descarga de PHP.
+      - name: Marcar el inicio de las comprobaciones
+        run: echo "TOOLS_START=$(date +%s)" >>"$GITHUB_ENV"
+
+      - name: ShellCheck + shfmt -i 2 -d + robustez (0 hallazgos)
+        run: make sh-lint
+
+      - name: Pint + PHPStan nivel 9 (0 errores)
+        run: make php-lint
+
+      - name: Rector (informativo, no bloquea)
+        run: make rector
+
+      - name: Presupuesto de la etapa
+        if: always()
+        env:
+          ETAPA: "① Lint + Tipos · backend"
+          PRESUPUESTO: "60"
+        run: |
+          ahora=$(date +%s)
+          comprobaciones=$((ahora - ${TOOLS_START:-$ahora}))
+          total=$((ahora - ${JOB_START:-$ahora}))
+          {
+            echo "### ${ETAPA}"
+            echo ""
+            echo "| Comprobaciones | Presupuesto §10.1 | Job completo |"
+            echo "|---|---|---|"
+            echo "| ${comprobaciones} s | ${PRESUPUESTO} s | ${total} s |"
+          } >>"$GITHUB_STEP_SUMMARY"
+          if [ "$comprobaciones" -gt "$PRESUPUESTO" ]; then
+            echo "::warning title=Presupuesto excedido::${ETAPA} ha tardado ${comprobaciones} s frente a los ${PRESUPUESTO} s del doc 02 §10.1."
+          fi
+
+  #-----------------------------------------------------------------------------
+  # ① Lint + Tipos — frontends
+  #
+  # ESLint (con eslint-plugin-vue) y vue-tsc son parte de la etapa ① del §10.1,
+  # pero los tres frontends no existen hasta la tarea 0.5: hoy solo tienen
+  # src/.gitkeep y no hay package.json que instalar.
+  #
+  # La opcion facil era no escribir este job, o escribirlo de forma que pase
+  # siempre. Las dos son peores que esta: un paso en verde que no ha comprobado
+  # nada es una mentira que nadie revisa. Lo que hace este job es detectar la
+  # ausencia, anunciarla como anotacion y en el resumen de la ejecucion, y
+  # terminar. En cuanto la tarea 0.5 cree un package.json, el job empieza a
+  # instalar, a pasar ESLint y a pasar vue-tsc sin tocar una linea de este
+  # fichero.
+  #
+  # Contrato con la tarea 0.5: cada frontend expone en package.json los scripts
+  # `lint` (ESLint) y `type-check` (vue-tsc --noEmit). Si no estan, este job
+  # falla diciendo cual falta.
+  #-----------------------------------------------------------------------------
+  lint-frontend:
+    name: "① Lint + Tipos · ${{ matrix.app }}"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [frontend-kiosk, frontend-admin, frontend-portal]
+
+    steps:
+      - name: Marcar el inicio del job
+        run: |
+          echo "JOB_START=$(date +%s)" >>"$GITHUB_ENV"
+          echo "TOOLS_START=$(date +%s)" >>"$GITHUB_ENV"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Comprobar si ${{ matrix.app }} ya existe
+        id: detect
+        run: |
+          if [ -f "${{ matrix.app }}/package.json" ]; then
+            echo "present=true" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "present=false" >>"$GITHUB_OUTPUT"
+          echo "::notice title=Etapa ① omitida en ${{ matrix.app }}::No hay package.json todavia (lo crea la tarea 0.5). ESLint y vue-tsc no se han ejecutado: este job NO ha comprobado nada de ${{ matrix.app }}."
+          {
+            echo "### ① ${{ matrix.app }} — OMITIDA"
+            echo ""
+            echo "No existe \`${{ matrix.app }}/package.json\`: el esqueleto del frontend llega en la"
+            echo "tarea **0.5**. ESLint y \`vue-tsc\` **no se han ejecutado**, no es que hayan pasado."
+            echo "Este job se activa solo en cuanto el fichero exista."
+          } >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Comprobar el contrato de scripts de package.json
+        if: steps.detect.outputs.present == 'true'
+        run: |
+          faltan=""
+          for script in lint type-check; do
+            jq -e --arg s "$script" '.scripts[$s]' "${{ matrix.app }}/package.json" >/dev/null 2>&1 ||
+              faltan="${faltan} ${script}"
+          done
+          if [ -n "$faltan" ]; then
+            echo "::error title=Scripts que faltan en ${{ matrix.app }}::Anade a package.json los scripts:${faltan}. 'lint' ejecuta ESLint y 'type-check' ejecuta vue-tsc --noEmit (doc 02 §3.5 y §9.2)."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        if: steps.detect.outputs.present == 'true'
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ${{ matrix.app }}/package-lock.json
+
+      - name: Instalar dependencias
+        if: steps.detect.outputs.present == 'true'
+        # `npm ci` y no `npm install`: la CI instala lo que dice el lock, no lo
+        # que resuelva hoy el registro.
+        run: npm ci --prefix ${{ matrix.app }}
+
+      # El §3.5 exige que los tipos de la API se GENEREN del contrato y nunca se
+      # escriban a mano, y hasta ahora esa fila no tenia herramienta detras: un
+      # `schema.d.ts` retocado a mano, o simplemente olvidado tras cambiar el
+      # contrato, compilaba igual de bien. Aqui se regenera y se exige que el
+      # resultado sea identico a lo versionado. Si el contrato cambio y el
+      # cliente no, salta aqui y no en la tablet de un hotel (ADR-013).
+      - name: El cliente TypeScript esta regenerado desde el contrato
+        if: steps.detect.outputs.present == 'true'
+        env:
+          CLIENTE: ${{ matrix.app }}/src/shared/api/schema.d.ts
+        run: |
+          npm run api:generate --prefix ${{ matrix.app }}
+          if [ -n "$(git status --porcelain -- "$CLIENTE")" ]; then
+            echo "::error title=Cliente de la API desincronizado en ${{ matrix.app }}::docs/api/openapi.yaml ha cambiado y ${CLIENTE} no. Ejecuta 'npm run api:generate --prefix ${{ matrix.app }}' y versiona el resultado."
+            git --no-pager diff -- "$CLIENTE"
+            exit 1
+          fi
+
+      - name: ESLint (0 desviaciones)
+        if: steps.detect.outputs.present == 'true'
+        run: npm run lint --prefix ${{ matrix.app }}
+
+      - name: vue-tsc en modo estricto (0 errores)
+        if: steps.detect.outputs.present == 'true'
+        run: npm run type-check --prefix ${{ matrix.app }}
+
+      - name: Presupuesto de la etapa
+        if: always() && steps.detect.outputs.present == 'true'
+        env:
+          ETAPA: "① Lint + Tipos · frontend"
+          PRESUPUESTO: "60"
+        run: |
+          ahora=$(date +%s)
+          comprobaciones=$((ahora - ${TOOLS_START:-$ahora}))
+          {
+            echo "### ${ETAPA} · ${{ matrix.app }}"
+            echo ""
+            echo "| Comprobaciones | Presupuesto §10.1 |"
+            echo "|---|---|"
+            echo "| ${comprobaciones} s | ${PRESUPUESTO} s |"
+          } >>"$GITHUB_STEP_SUMMARY"
+          if [ "$comprobaciones" -gt "$PRESUPUESTO" ]; then
+            echo "::warning title=Presupuesto excedido::${ETAPA} (${{ matrix.app }}) ha tardado ${comprobaciones} s frente a los ${PRESUPUESTO} s del doc 02 §10.1."
+          fi
+
+  #-----------------------------------------------------------------------------
+  # ① Lint + Tipos — contrato de la API
+  #
+  # Job propio y no un paso mas del backend, por dos motivos. Uno: el contrato no
+  # es del backend ni de ninguno de los tres frontends, es de los cuatro, y quien
+  # reciba el fallo tiene que leer en el nombre del job que ha roto el contrato de
+  # la API y no el estilo de un fichero PHP. Dos: necesita Node y no necesita PHP,
+  # asi que compartirlo con `lint-backend` obligaria a instalar las dos cadenas en
+  # el mismo runner para ejecutar 40 ms de comprobacion.
+  #
+  # `docs/api/openapi.yaml` es la fuente de verdad de la API (ADR-013) y se
+  # modifica antes que el codigo. Sin esta etapa seria el unico artefacto que
+  # manda en el repositorio sin nadie que lo compruebe.
+  #-----------------------------------------------------------------------------
+  contract:
+    name: "① Lint + Tipos · contrato OpenAPI"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # La version de @redocly/cli la fija el Makefile, igual que las de
+      # ShellCheck y shfmt: entre versiones cambian las reglas del preset
+      # `recommended`, y el umbral de 0 problemas no puede depender de lo que
+      # resuelva npx el dia de la ejecucion.
+      - name: OpenAPI 3.1 valido (0 problemas)
+        run: make api-lint
+
+  #-----------------------------------------------------------------------------
+  # ② Arquitectura
+  #
+  # Etapa separada a proposito, y no un paso mas de la ①. Lo que se juega aqui
+  # son las reglas duras 1 y 2 de CLAUDE.md —el dominio no importa el framework y
+  # no llama al reloj del sistema—, y quien reciba un fallo tiene que poder leer
+  # en el nombre de la etapa que ha roto una frontera de arquitectura, no que se
+  # ha dejado un espacio. Si un `use Illuminate\...` dentro de Domain/ rompiera la
+  # etapa ①, las etapas estarian mal repartidas.
+  #
+  # Las dos herramientas son complementarias: Deptrac razona sobre imports y Pest
+  # Arch ve lo que no aparece en ningun `use` —now(), time(), strtotime()—.
+  #-----------------------------------------------------------------------------
+  architecture:
+    name: "② Arquitectura"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    needs: [lint-backend, lint-frontend, contract]
+
+    steps:
+      - name: Marcar el inicio del job
+        run: echo "JOB_START=$(date +%s)" >>"$GITHUB_ENV"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/php-toolchain
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          coverage: none
+
+      - name: Marcar el inicio de las comprobaciones
+        run: echo "TOOLS_START=$(date +%s)" >>"$GITHUB_ENV"
+
+      - name: Deptrac (0 violaciones de frontera)
+        run: make deptrac
+
+      - name: Pest Arch (reglas duras 1 y 2)
+        run: make test-arch
+
+      - name: Presupuesto de la etapa
+        if: always()
+        env:
+          ETAPA: "② Arquitectura"
+          PRESUPUESTO: "30"
+        run: |
+          ahora=$(date +%s)
+          comprobaciones=$((ahora - ${TOOLS_START:-$ahora}))
+          total=$((ahora - ${JOB_START:-$ahora}))
+          {
+            echo "### ${ETAPA}"
+            echo ""
+            echo "| Comprobaciones | Presupuesto §10.1 | Job completo |"
+            echo "|---|---|---|"
+            echo "| ${comprobaciones} s | ${PRESUPUESTO} s | ${total} s |"
+          } >>"$GITHUB_STEP_SUMMARY"
+          if [ "$comprobaciones" -gt "$PRESUPUESTO" ]; then
+            echo "::warning title=Presupuesto excedido::${ETAPA} ha tardado ${comprobaciones} s frente a los ${PRESUPUESTO} s del doc 02 §10.1."
+          fi
+
+  #-----------------------------------------------------------------------------
+  # ③ Unitarias + Mutacion
+  #-----------------------------------------------------------------------------
+  unit:
+    name: "③ Unitarias + Mutacion"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    needs: architecture
+
+    steps:
+      - name: Marcar el inicio del job
+        run: echo "JOB_START=$(date +%s)" >>"$GITHUB_ENV"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/php-toolchain
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          # La mutacion necesita cobertura. Xdebug se instala apagado y lo
+          # enciende el propio objetivo del Makefile con XDEBUG_MODE=coverage,
+          # para que la suite unitaria no pague el precio.
+          coverage: xdebug
+
+      - name: Marcar el inicio de las comprobaciones
+        run: echo "TOOLS_START=$(date +%s)" >>"$GITHUB_ENV"
+
+      - name: Pest — suite unitaria (dominio puro, sin base de datos)
+        run: make test-unit
+
+      - name: Mutacion sobre Modules/*/Domain (MSI >= 80 %)
+        # El umbral --min=80 vive en el Makefile, no aqui. Hoy este paso NO
+        # ejecuta mutantes: el dominio se escribe en la tarea 1.1 y el MSI empieza
+        # a exigirse en la 1.2. El objetivo lo dice por su cuenta y emite una
+        # anotacion de GitHub cuando corre en la CI, para que quede en el resumen
+        # de la ejecucion y no parezca una comprobacion que ha pasado.
+        run: make mutate
+
+      # --- etapa ③b · Trazabilidad y coherencia documental --------------------
+      #
+      # Los dos son BLOQUEANTES (§10.1, §9.6). Van juntos y aqui porque
+      # comprueban lo mismo desde dos lados: que lo que los documentos dicen y
+      # lo que el repositorio hace no han divergido.
+      #
+      # `--check` no escribe nada. La matriz se regenera con `make traceability`
+      # desde el host, porque docs/ se monta de solo lectura en el contenedor.
+
+      - name: Trazabilidad requisito → prueba (RQ-13)
+        # Falla si un requisito de una fase YA EJECUTADA no tiene ninguna prueba
+        # que lo referencie. El alcance sale de docs/requisitos.yaml filtrando
+        # por el orden real de ejecucion (0 -> 1 -> 2 -> 5 -> 3 -> 4), asi que un
+        # requisito de la Fase 3 no bloquea mientras se trabaja en la Fase 1.
+        run: make traceability-check
+
+      - name: Coherencia documental (RQ-12, RNF-M-04)
+        # Falla si un ADR del §4 no tiene fichero, si un requisito no lo
+        # construye ninguna tarea del plan, o si la fase de un requisito no
+        # coincide con la de su tarea. Los seis hallazgos bloqueantes de la
+        # auditoria previa fueron ese mismo fallo repetido, y los tres son
+        # mecanicamente detectables: los encontro una persona leyendo seis
+        # ficheros a la vez, que es justo lo que esto sustituye.
+        run: make docs-consistency
+
+      - name: Presupuesto de la etapa
+        if: always()
+        env:
+          ETAPA: "③ Unitarias + Mutacion"
+          PRESUPUESTO: "120"
+        run: |
+          ahora=$(date +%s)
+          comprobaciones=$((ahora - ${TOOLS_START:-$ahora}))
+          total=$((ahora - ${JOB_START:-$ahora}))
+          {
+            echo "### ${ETAPA}"
+            echo ""
+            echo "| Comprobaciones | Presupuesto §10.1 | Job completo |"
+            echo "|---|---|---|"
+            echo "| ${comprobaciones} s | ${PRESUPUESTO} s | ${total} s |"
+          } >>"$GITHUB_STEP_SUMMARY"
+          if [ "$comprobaciones" -gt "$PRESUPUESTO" ]; then
+            echo "::warning title=Presupuesto excedido::${ETAPA} ha tardado ${comprobaciones} s frente a los ${PRESUPUESTO} s del doc 02 §10.1."
+          fi
+
+  #-----------------------------------------------------------------------------
+  # Puerta de version — CHANGELOG (doc 02 §10.5)
+  #
+  # En cada push comprueba que el CHANGELOG existe y esta bien formado, que es
+  # barato. Cuando el push es una etiqueta `vX.Y.Z`, ademas exige que esa version
+  # tenga entrada con cambios: una version que se publica sin decir que cambia
+  # deja al IT del hotel actualizando a ciegas, y el actualizador de la tarea 5.7
+  # lee justamente este fichero.
+  #
+  # No depende de las otras etapas a proposito: es una comprobacion de metadatos y
+  # no tiene por que esperar a nadie.
+  #-----------------------------------------------------------------------------
+  #-----------------------------------------------------------------------------
+  # Analisis de dependencias y de codigo (RS-10)
+  #
+  # RS-10 exige «analisis de dependencias y de codigo en cada pull request;
+  # ninguna vulnerabilidad critica o alta puede llegar a una version publicada»,
+  # y es requisito de la Fase 0 en el Anexo A.
+  #
+  # El §10.1 lo situa en la etapa ⑤, que se ejecuta en pull request y queda
+  # fuera del alcance de la tarea 0.4. Pero las tres herramientas ya existen y
+  # engancharlas cuesta un job: diferirlo habria dejado un requisito de la Fase
+  # 0 sin cumplir por comodidad, no por criterio. Se ejecuta en cada push, que
+  # es mas estricto que lo que RS-10 pide, no menos.
+  #
+  # Trivy sobre las imagenes (§9.2) sigue siendo de la etapa ⑤: necesita
+  # construirlas, y eso no cabe en el presupuesto de 4 minutos.
+  #-----------------------------------------------------------------------------
+  security:
+    name: "Dependencias y SAST"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/php-toolchain
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          coverage: none
+
+      - name: composer audit (0 vulnerabilidades)
+        run: make deps-audit-php
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: npm audit en los tres frontends (0 criticas ni altas)
+        run: make deps-audit-js
+
+      - name: Semgrep sobre las reglas propias (0 hallazgos de severidad alta)
+        # Las reglas de .semgrep/ son las que ninguna otra herramienta puede
+        # ver: la regla dura 2 en su forma `new DateTimeImmutable()` sin
+        # instante, y las supresiones de PHPStan sin motivo escrito.
+        run: make sast
+
+  changelog:
+    name: "Puerta de version · CHANGELOG"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # El generador necesita el historico completo para clasificar los
+          # commits desde la ultima etiqueta.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Formato del CHANGELOG
+        run: make changelog-check
+
+      - name: La version etiquetada tiene entrada
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: make changelog-check VERSION="${GITHUB_REF_NAME#v}"

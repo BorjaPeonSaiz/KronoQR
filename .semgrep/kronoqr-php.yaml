@@ -1,0 +1,72 @@
+# Reglas propias de Semgrep para el backend — doc 02 §9.2 (SAST, umbral: 0
+# hallazgos de severidad alta) y §3.5.
+#
+# Aqui solo vive lo que ninguna otra herramienta de la cadena puede ver. Todo lo
+# que Pint, PHPStan, Deptrac o Rector detectan se queda en su herramienta: una
+# regla duplicada en dos sitios acaba divergiendo y nadie sabe cual manda.
+#
+#   make sast
+#   semgrep --config .semgrep --error
+
+rules:
+  # --------------------------------------------------------------------------
+  # Regla dura 2: nunca now(), time(), Carbon::now() ni new DateTime() en el
+  # dominio. Se inyecta el puerto Clock (ADR-021).
+  #
+  # Por que Semgrep y no Deptrac: Deptrac ve *imports*, y aqui el import es
+  # legitimo. `DateTimeImmutable` se importa en el dominio para tipar un
+  # parametro o un retorno —debe importarse—, y lo que delata la infraccion es
+  # construirlo **sin instante**: `new DateTimeImmutable()` y
+  # `new DateTimeImmutable('now')` leen el reloj del sistema. Ninguna regla de
+  # imports ni de nombres de funcion encuentra esa forma.
+  #
+  # Por que acotada a Modules/*/Domain: Shared/Infrastructure/Adapter/SystemClock
+  # es la unica construccion legitima de todo el backend —es precisamente el
+  # adaptador que existe para que el dominio no lo haga—. Una regla global
+  # naceria en rojo contra su propio diseno.
+  - id: kronoqr-domain-lee-el-reloj-del-sistema
+    languages: [php]
+    severity: ERROR
+    message: >-
+      Regla dura 2: este fichero de Domain construye una fecha con la hora del
+      sistema. El dominio no pregunta la hora, la recibe ya resuelta: el caso de
+      uso llama a Clock::now() (Shared\Application\Port\Clock, ADR-021) y le pasa
+      el instante al agregado. Sin esto no se pueden probar DST ni los turnos que
+      cruzan medianoche, que son la mitad del riesgo de este dominio.
+    paths:
+      include:
+        - /backend/app/Modules/*/Domain/**
+    patterns:
+      - pattern-either:
+          - pattern: new DateTime()
+          - pattern: new DateTime('now')
+          - pattern: new DateTime("now")
+          - pattern: new \DateTime()
+          - pattern: new \DateTime('now')
+          - pattern: new \DateTime("now")
+          - pattern: new DateTimeImmutable()
+          - pattern: new DateTimeImmutable('now')
+          - pattern: new DateTimeImmutable("now")
+          - pattern: new \DateTimeImmutable()
+          - pattern: new \DateTimeImmutable('now')
+          - pattern: new \DateTimeImmutable("now")
+
+  # --------------------------------------------------------------------------
+  # RNF-M-02: analisis estatico en el nivel maximo «sin errores suprimidos sin
+  # justificar». PHPStan 2 ya exige el identificador del error tras
+  # @phpstan-ignore, pero no puede exigir el motivo. Esto si.
+  #
+  # Forma valida:  @phpstan-ignore argument.type (La firma de X miente: ...)
+  - id: kronoqr-phpstan-ignore-sin-justificacion
+    languages: [generic]
+    severity: ERROR
+    message: >-
+      Supresion de PHPStan sin motivo. RNF-M-02 exige que cada @phpstan-ignore
+      lleve su justificacion en el propio comentario, entre parentesis y despues
+      del identificador del error:
+      @phpstan-ignore identificador.del.error (por que es inevitable aqui).
+    paths:
+      include:
+        - /backend/**/*.php
+    patterns:
+      - pattern-regex: '@phpstan-ignore(-next-line|-line)?[ \t]+[A-Za-z][A-Za-z0-9_.,: \t]*$'

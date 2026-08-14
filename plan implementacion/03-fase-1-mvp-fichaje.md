@@ -1089,7 +1089,7 @@ Etiquetas Playwright del §9.6: `{ tag: ['@RF-KI-01', '@RF-KI-02'] }`, `['@RF-KI
 **Verificación.**
 
 ```bash
-npm run typecheck && npm run lint && npm run test:unit && npm run build
+npm run type-check && npm run lint && npm run test:unit && npm run build
 make e2e                       # Playwright con cámara simulada
 
 # Presupuesto de bundle
@@ -1205,7 +1205,7 @@ Etiquetas: `{ tag: ['@RF-KI-03', '@RF-KI-04'] }` (ejemplo literal del §9.6), m�
 **Verificación.**
 
 ```bash
-npm run typecheck && npm run lint && npm run test:unit && npm run build
+npm run type-check && npm run lint && npm run test:unit && npm run build
 make e2e                        # ciclo offline completo con cámara simulada
 
 # Inspección de la cola durante el corte de red (en el E2E)
@@ -1442,7 +1442,7 @@ Etiquetas: `->group('RF-ID-05', 'RL-05')`, `->group('RF-ID-06')`, `->group('RF-I
 
 ```bash
 # Frontend
-npm run typecheck && npm run lint && npm run test:unit && npm run build
+npm run type-check && npm run lint && npm run test:unit && npm run build
 
 # Backend
 make quality && make test
@@ -1565,7 +1565,7 @@ make quality && make test
 php artisan test --filter=PinLockoutEscalation    # 3, 5 y 10 intentos
 php artisan test --filter=PinScanOrigin           # scan_events.origin = PIN_KIOSK
 
-npm run typecheck && npm run lint && npm run test:unit && npm run build
+npm run type-check && npm run lint && npm run test:unit && npm run build
 make e2e                                          # fichar por PIN, con y sin red
 
 curl -s http://localhost/metrics | grep pin_fallback_scans_total
@@ -1664,7 +1664,7 @@ make quality && make test
 php artisan test --filter=PinIssuance        # 6 dígitos, patrones triviales rechazados
 php artisan test --filter=PinNeverInClear    # ninguna columna ni log con el PIN
 
-npm run typecheck && npm run lint && npm run build
+npm run type-check && npm run lint && npm run build
 make e2e                                     # alta → PIN → login en el portal
 
 # El PIN nunca en claro, en ningún sitio

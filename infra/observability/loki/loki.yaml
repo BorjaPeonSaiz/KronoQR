@@ -1,0 +1,60 @@
+# KronoQR — configuracion base de Loki (doc 02 §8.1).
+#
+# Loki guarda el LOG TECNICO, que no es la auditoria ni error_events (§8.2.1):
+# retencion de 90 dias, sin valor probatorio, y jamas con nombres de empleado
+# (regla dura 21). El registro con valor legal vive en PostgreSQL.
+#
+# Instalacion de un solo nodo sobre sistema de ficheros: el producto se
+# despliega en el servidor de un cliente, no en un cluster.
+
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  log_level: warn
+
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: "2024-01-01"
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  # 90 dias, igual que error_events y que lo que exige RL-11.
+  retention_period: 2160h
+  # Los quioscos pueden sincronizar cola offline con horas de retraso: si Loki
+  # rechazara muestras antiguas, perderiamos justo los logs del incidente.
+  reject_old_samples: false
+  max_query_lookback: 2160h
+
+compactor:
+  working_directory: /loki/compactor
+  delete_request_store: filesystem
+  retention_enabled: true
+  compaction_interval: 10m
+
+ruler:
+  storage:
+    type: local
+    local:
+      directory: /loki/rules
+
+analytics:
+  reporting_enabled: false

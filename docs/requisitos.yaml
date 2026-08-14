@@ -1,0 +1,190 @@
+# Requisitos de KronoQR — fuente legible por maquina del Anexo A del documento 01.
+#
+# GENERADO. No se edita a mano:
+#
+#     php artisan qa:requisitos           (o el script de la tarea 0.7)
+#
+# Existe porque el Anexo A es una tabla en prosa, con rangos (`RF-ID-04..09`),
+# anotaciones entre parentesis y entradas en negrita. `qa:traceability --check`
+# necesita leer su alcance de algo que no haya que interpretar.
+#
+# El modo de fallo que este fichero evita no es que el comando reviente: es que
+# de VERDE por no saber expandir un rango. Asi fue como RF-ID-09 paso
+# desapercibido y se quedo sin tarea que lo construyera hasta que lo encontro
+# una auditoria manual. Una prueba comprueba que el conjunto de identificadores
+# y sus fases no divergen del Anexo A, y otra que el expansor convierte
+# RF-ID-04..09 en SEIS identificadores.
+#
+# `fase` es la del Anexo A. El orden REAL de ejecucion es 0 -> 1 -> 2 -> 5 -> 3
+# -> 4, y lo aplica config/quality.php: aqui solo se registra a que fase
+# pertenece cada requisito, no cual va antes.
+
+# --- Fase 0 -------------------------------------------- (14 requisitos)
+- { id: RNF-M-01,  fase: 0, titulo: "Cobertura de pruebas: ≥ 90 % en la capa de dominio, ≥ 75 % global" }
+- { id: RNF-M-02,  fase: 0, titulo: "Análisis estático en nivel máximo (PHPStan/Larastan nivel 9) sin errores suprimidos sin justificar" }
+- { id: RNF-M-03,  fase: 0, titulo: "Las dependencias entre módulos se verifican automáticamente" }
+- { id: RNF-M-04,  fase: 0, titulo: "Toda decisión arquitectónica relevante queda registrada como ADR versionado en el repositorio" }
+- { id: RNF-M-05,  fase: 0, titulo: "Deuda técnica visible: presupuesto máximo del 15 % de cada iteración dedicado a su reducción", verificacion: revision }
+- { id: RNF-M-06,  fase: 0, titulo: "El código sigue las convenciones publicadas de cada stack (documento 02, §3.5): PSR-12/PER para PHP, convenciones de Laravel, guía de estilo oficia..." }
+- { id: RNF-P-07,  fase: 0, titulo: "Presupuesto de bundle del quiosco" }
+- { id: RQ-06,     fase: 0, titulo: "La API está descrita por un contrato OpenAPI y las respuestas se validan contra el esquema en las pruebas" }
+- { id: RQ-12,     fase: 0, titulo: "Ninguna funcionalidad se considera terminada sin cumplir la Definición de Terminado del documento 02, §10.3", verificacion: revision }
+- { id: RQ-13,     fase: 0, titulo: "Trazabilidad requisito ↔ prueba, verificada por la CI. Cada prueba declara qué requisitos cubre mediante una etiqueta (RF-, RN-, RL-, RS-)" }
+- { id: RQ-14,     fase: 0, titulo: "Cobertura por niveles obligatoria según la naturaleza de la funcionalidad, no a criterio de quien la implementa" }
+- { id: RS-08,     fase: 0, titulo: "Gestión de secretos fuera del repositorio, con rotación documentada" }
+- { id: RS-09,     fase: 0, titulo: "Cabeceras de seguridad completas (HSTS, CSP estricta, X-Content-Type-Options, Referrer-Policy, Permissions-Policy limitando cámara al origen propio)" }
+- { id: RS-10,     fase: 0, titulo: "Análisis de dependencias y de código en cada pull request; ninguna vulnerabilidad crítica o alta puede llegar a una versión publicada" }
+
+# --- Fase 1 -------------------------------------------- (59 requisitos)
+- { id: RF-AT-01,  fase: 1, titulo: "El sistema registra un evento de fichaje al escanear un QR válido en un quiosco autenticado" }
+- { id: RF-AT-02,  fase: 1, titulo: "Si el empleado no tiene turno abierto, el escaneo abre un turno (entrada)" }
+- { id: RF-AT-03,  fase: 1, titulo: "Si el empleado tiene un turno abierto, el escaneo lo cierra (salida) y calcula la duración" }
+- { id: RF-AT-04,  fase: 1, titulo: "El sistema admite N tramos por jornada sin límite configurado (jornada partida)" }
+- { id: RF-AT-05,  fase: 1, titulo: "El quiosco muestra confirmación con nombre, acción realizada, hora y total acumulado del día" }
+- { id: RF-AT-06,  fase: 1, titulo: "El sistema aplica un periodo de gracia anti-rebote configurable (por defecto 60 s): un segundo escaneo del mismo empleado dentro de la ventana no c..." }
+- { id: RF-AT-07,  fase: 1, titulo: "Los fichajes son idempotentes: un mismo scan_id procesado dos veces produce un único evento y la misma respuesta" }
+- { id: RF-AT-08,  fase: 1, titulo: "Un turno puede cruzar la medianoche sin ser dividido artificialmente" }
+- { id: RF-AT-09,  fase: 1, titulo: "El sistema registra siempre dos marcas de tiempo: occurred_at (momento real del escaneo, incluso offline) y recorded_at (momento de recepción en se..." }
+- { id: RF-AT-11,  fase: 1, titulo: "Entrada alternativa por PIN de 6 dígitos cuando el empleado no puede presentar su tarjeta" }
+- { id: RF-GP-01,  fase: 1, titulo: "CRUD de empleados: datos identificativos mínimos, departamento, centro, fecha de alta y baja" }
+- { id: RF-GP-03,  fase: 1, titulo: "Baja de empleado: desactivación lógica, nunca borrado" }
+- { id: RF-ID-01,  fase: 1, titulo: "Autenticación de usuarios de gestión con contraseña, política de robustez, bloqueo por intentos y 2FA (TOTP) obligatorio para roles con acceso a da..." }
+- { id: RF-ID-02,  fase: 1, titulo: "Modelo RBAC con roles: admin, rrhh, responsable_departamento, auditor, empleado, kiosk" }
+- { id: RF-ID-04,  fase: 1, titulo: "El quiosco se autentica con token de dispositivo de ámbito restringido (solo endpoints de fichaje y sincronización), revocable individualmente y ro..." }
+- { id: RF-ID-05,  fase: 1, titulo: "Portal personal del empleado: consulta de su propio registro y descarga de su histórico" }
+- { id: RF-ID-06,  fase: 1, titulo: "El empleado accede al portal con su código de empleado y su PIN, el mismo del respaldo del quiosco" }
+- { id: RF-ID-07,  fase: 1, titulo: "La sesión del portal tiene ámbito self:read: solo permite leer los datos del propio empleado" }
+- { id: RF-ID-08,  fase: 1, titulo: "El portal es accesible desde la red interna por defecto" }
+- { id: RF-ID-09,  fase: 1, titulo: "Provisión y restablecimiento del PIN. El sistema genera un PIN aleatorio de 6 dígitos al dar de alta al empleado, permite a RRHH restablecerlo y re..." }
+- { id: RF-KI-01,  fase: 1, titulo: "PWA instalable, a pantalla completa, con wake lock para evitar suspensión" }
+- { id: RF-KI-02,  fase: 1, titulo: "Escaneo continuo por cámara sin interacción del usuario" }
+- { id: RF-KI-03,  fase: 1, titulo: "Modo offline: cola local persistente (IndexedDB) de escaneos, con resolución local del empleado contra un padrón cacheado y cifrado, y confirmación..." }
+- { id: RF-KI-04,  fase: 1, titulo: "Sincronización automática al recuperar conexión, con reintentos y backoff exponencial" }
+- { id: RF-KI-05,  fase: 1, titulo: "Multiidioma (mínimo español e inglés, extensible) con selector persistente y detección automática" }
+- { id: RF-KI-06,  fase: 1, titulo: "Accesibilidad: contraste AA, tipografía ≥ 24 px en mensajes de confirmación, mensajes también sonoros" }
+- { id: RF-KI-09,  fase: 1, titulo: "Aviso de privacidad visible en la pantalla del quiosco (información del art" }
+- { id: RF-QR-01,  fase: 1, titulo: "Cada empleado tiene una credencial QR con payload opaco y firmado criptográficamente (HMAC), sin PII ni identificadores secuenciales" }
+- { id: RF-QR-02,  fase: 1, titulo: "El sistema valida la firma del payload antes de resolver el empleado" }
+- { id: RF-QR-03,  fase: 1, titulo: "Las credenciales son revocables y reemitibles (pérdida, robo, deterioro, baja) con invalidación inmediata de la anterior" }
+- { id: RF-QR-04,  fase: 1, titulo: "Generación de tarjetas imprimibles en PDF: formato tarjeta de crédito (85,6 × 54 mm) y hoja A4 con varias por página" }
+- { id: RF-QR-05,  fase: 1, titulo: "El QR se genera con corrección de errores nivel Q y tamaño mínimo garantizado, para tolerar el desgaste de una tarjeta en uso diario durante una te..." }
+- { id: RF-QR-06,  fase: 1, titulo: "Registro de entrega: RRHH marca la tarjeta como entregada, con fecha y responsable" }
+- { id: RF-QR-08,  fase: 1, titulo: "Panel de estado de credenciales: quién la tiene emitida, pendiente de imprimir, pendiente de entregar o revocada" }
+- { id: RL-01,     fase: 1, titulo: "Registro diario con hora concreta de inicio y fin de la jornada de cada persona trabajadora" }
+- { id: RL-05,     fase: 1, titulo: "La persona trabajadora puede acceder a su propio registro en cualquier momento y obtener copia" }
+- { id: RN-01,     fase: 1, titulo: "Un empleado no puede tener más de un turno abierto simultáneamente" }
+- { id: RN-02,     fase: 1, titulo: "Los tramos de un mismo empleado no pueden solaparse en el tiempo" }
+- { id: RN-03,     fase: 1, titulo: "clocked_out_at debe ser estrictamente posterior a clocked_in_at" }
+- { id: RN-04,     fase: 1, titulo: "Todas las marcas de tiempo se almacenan en UTC. El cálculo de jornada y los informes se resuelven en la zona horaria del centro" }
+- { id: RN-05,     fase: 1, titulo: "La jornada laboral (work_date) es la fecha civil, en la zona del centro, del clocked_in_at del tramo que abre la jornada" }
+- { id: RN-06,     fase: 1, titulo: "El total diario se recalcula como suma de los tramos de esa jornada dentro de la misma transacción; nunca se incrementa de forma acumulativa" }
+- { id: RN-07,     fase: 1, titulo: "Duración mínima de tramo computable: 1 minuto" }
+- { id: RN-08,     fase: 1, titulo: "Duración máxima de tramo antes de considerarse anómalo: 12 h (configurable)" }
+- { id: RN-09,     fase: 1, titulo: "El cálculo de duración usa aritmética sobre instantes UTC, por lo que es inmune a los cambios de hora (DST)" }
+- { id: RNF-D-04,  fase: 1, titulo: "Ninguna migración puede requerir parada de servicio (patrón expand / migrate / contract)" }
+- { id: RNF-P-01,  fase: 1, titulo: "Latencia percibida del fichaje (de escaneo a confirmación en pantalla)" }
+- { id: RNF-P-03,  fase: 1, titulo: "Tiempo de decodificación del QR en tablet de gama media" }
+- { id: RQ-01,     fase: 1, titulo: "Toda regla de negocio del §4 tiene al menos una prueba unitaria en el dominio, sin base de datos ni framework" }
+- { id: RQ-02,     fase: 1, titulo: "El cálculo de duraciones se prueba con pruebas basadas en propiedades, incluyendo los días de cambio de hora y turnos que cruzan medianoche" }
+- { id: RQ-03,     fase: 1, titulo: "La idempotencia del fichaje se prueba con envíos concurrentes del mismo scan_id" }
+- { id: RQ-05,     fase: 1, titulo: "Existen pruebas del ciclo completo offline → reconexión → sincronización → consolidación" }
+- { id: RQ-07,     fase: 1, titulo: "Existen pruebas de autorización que verifican que cada rol no puede acceder a lo que no le corresponde" }
+- { id: RQ-10,     fase: 1, titulo: "Pruebas de mutación sobre el dominio con MSI mínimo del 80 %" }
+- { id: RS-01,     fase: 1, titulo: "El payload del QR está firmado y no permite generar credenciales válidas de terceros sin la clave del servidor" }
+- { id: RS-02,     fase: 1, titulo: "El sistema limita la tasa de escaneos por dispositivo, por credencial y por IP, con respuestas de tiempo constante para evitar enumeración" }
+- { id: RS-03,     fase: 1, titulo: "Las respuestas de error no revelan si un código existe, está revocado o es inválido: mensaje genérico al usuario, detalle solo en el log del servidor" }
+- { id: RS-04,     fase: 1, titulo: "El token del quiosco tiene ámbito mínimo, caducidad y rotación automática; su compromiso no da acceso a datos de plantilla" }
+- { id: RS-12,     fase: 1, titulo: "El PIN de acceso al portal está protegido con bloqueo temporal por intentos fallidos y limitación de tasa por empleado y por IP" }
+
+# --- Fase 2 -------------------------------------------- (45 requisitos)
+- { id: RF-GP-02,  fase: 2, titulo: "Registro de contrato: horas semanales y anuales contratadas, tipo de jornada, vigencia" }
+- { id: RF-ID-03,  fase: 2, titulo: "Autorización a nivel de recurso: un responsable solo accede a los empleados de su departamento y centro" }
+- { id: RF-IN-01,  fase: 2, titulo: "Informe de horas por empleado con granularidad diaria, semanal, mensual y rango libre" }
+- { id: RF-IN-02,  fase: 2, titulo: "Informe agregado por departamento y centro" }
+- { id: RF-IN-03,  fase: 2, titulo: "Comparativa horas trabajadas frente a horas contratadas, con desviación y exceso de jornada" }
+- { id: RF-IN-04,  fase: 2, titulo: "Exportación a CSV, XLSX y PDF. Los PDF incluyen sello temporal, identificación del emisor y hash del contenido" }
+- { id: RF-IN-05,  fase: 2, titulo: "Exportación normalizada para Inspección de Trabajo: registro diario por trabajador y periodo, en formato tabular legible, con las correcciones y su..." }
+- { id: RF-PA-01,  fase: 2, titulo: "Vista en tiempo real de empleados actualmente fichados: nombre, departamento, hora de entrada, tiempo transcurrido, quiosco de origen" }
+- { id: RF-PA-02,  fase: 2, titulo: "Filtrado por centro, departamento y estado" }
+- { id: RF-PA-03,  fase: 2, titulo: "Detalle de jornada por empleado y día: todos los tramos, totales, incidencias y correcciones" }
+- { id: RF-PA-04,  fase: 2, titulo: "Corrección manual de un fichaje (crear, modificar hora, cerrar turno abierto, anular) con motivo obligatorio de un catálogo más texto libre" }
+- { id: RF-PA-05,  fase: 2, titulo: "Bandeja de incidencias pendientes con flujo de resolución, asignada al responsable del departamento" }
+- { id: RF-PR-01,  fase: 2, titulo: "Detección de turnos abiertos anómalos superadas N horas (por defecto 12)" }
+- { id: RF-PR-02,  fase: 2, titulo: "Consolidación nocturna y reconciliación de los agregados diarios contra los eventos origen, con alerta si hay divergencia" }
+- { id: RF-PR-03,  fase: 2, titulo: "Purga de datos superado el periodo de retención legal, con confirmación del responsable e informe de lo purgado" }
+- { id: RF-PR-04,  fase: 2, titulo: "Copia de seguridad diaria cifrada, verificada y con prueba de restauración periódica" }
+- { id: RF-QR-07,  fase: 2, titulo: "Soporte de rotación de la clave de firma con periodo de solape (key_id en el payload), que permite reimprimir progresivamente sin invalidar toda la..." }
+- { id: RL-02,     fase: 2, titulo: "Conservación durante 4 años" }
+- { id: RL-03,     fase: 2, titulo: "Los registros permanecen a disposición de la persona trabajadora, de la representación legal y de la Inspección de Trabajo, con capacidad de entreg..." }
+- { id: RL-04,     fase: 2, titulo: "El registro debe ser fiable e inalterable: cualquier modificación posterior queda trazada con autor, momento, valor anterior y motivo" }
+- { id: RL-06,     fase: 2, titulo: "Exportación en formato legible y tratable, no propietario, para requerimientos de Inspección" }
+- { id: RL-07,     fase: 2, titulo: "Base jurídica: cumplimiento de obligación legal (art" }
+- { id: RL-08,     fase: 2, titulo: "Minimización: el sistema no almacena más datos de los necesarios" }
+- { id: RL-09,     fase: 2, titulo: "Información en capas: aviso visible en el quiosco con enlace o QR a la política completa" }
+- { id: RL-10,     fase: 2, titulo: "Derechos ARSULIPO: procedimientos para acceso, rectificación mediante corrección trazada, limitación y portabilidad" }
+- { id: RL-11,     fase: 2, titulo: "Retención: política por tipo de dato" }
+- { id: RL-12,     fase: 2, titulo: "Cifrado: TLS 1.3 en tránsito; cifrado en reposo de copias de seguridad y del padrón cacheado en la tablet" }
+- { id: RL-13,     fase: 2, titulo: "EIPD: se recomienda evaluación de impacto por tratarse de control sistemático de personal trabajadora" }
+- { id: RL-14,     fase: 2, titulo: "Datos alojados en la UE, en la infraestructura del propio cliente" }
+- { id: RL-15,     fase: 2, titulo: "Notificación de brechas: procedimiento documentado con plazo de 72 h y capacidad técnica de determinar el alcance a partir de los logs de auditoría" }
+- { id: RN-10,     fase: 2, titulo: "Descanso entre jornadas: se alerta si entre el fin de un turno y el inicio del siguiente median menos de 12 h (art" }
+- { id: RN-11,     fase: 2, titulo: "Jornada diaria ordinaria: se alerta si un empleado supera 9 h efectivas en una jornada" }
+- { id: RN-12,     fase: 2, titulo: "Descanso en jornada continuada: se alerta si un tramo continuo supera 6 h sin pausa registrada" }
+- { id: RN-13,     fase: 2, titulo: "Ningún registro de fichaje se borra ni se sobrescribe" }
+- { id: RN-14,     fase: 2, titulo: "Un empleado dado de baja conserva su historial; su credencial queda revocada y sus escaneos son rechazados" }
+- { id: RN-15,     fase: 2, titulo: "El horario de un fichaje offline es el occurred_at del dispositivo, marcado con su retraso de sincronización" }
+- { id: RNF-D-02,  fase: 2, titulo: "RPO ≤ 15 min (copias más WAL)" }
+- { id: RNF-D-03,  fase: 2, titulo: "Degradación elegante: si cae el WebSocket, el panel hace fallback a sondeo cada 15 s" }
+- { id: RNF-D-05,  fase: 2, titulo: "Prueba de restauración de copia documentada y ejecutada trimestralmente" }
+- { id: RNF-P-04,  fase: 2, titulo: "Carga del panel de presencia en vivo (500 empleados)" }
+- { id: RNF-P-05,  fase: 2, titulo: "Generación de informe mensual de 500 empleados" }
+- { id: RQ-09,     fase: 2, titulo: "Prueba de restauración de copia automatizada y ejecutada al menos trimestralmente" }
+- { id: RS-05,     fase: 2, titulo: "Todo acceso a datos personales de terceros queda registrado en el trail de auditoría" }
+- { id: RS-06,     fase: 2, titulo: "2FA obligatorio para admin, rrhh y auditor" }
+- { id: RS-07,     fase: 2, titulo: "El trail de auditoría es detectablemente manipulable: cada entrada encadena el hash de la anterior; la cadena se verifica a diario y cualquier rotu..." }
+
+# --- Fase 3 -------------------------------------------- (19 requisitos)
+- { id: RF-AT-10,  fase: 3, titulo: "Control de desfase de reloj" }
+- { id: RF-AT-12,  fase: 3, titulo: "El sistema soporta fichaje de pausa (inicio y fin de descanso) diferenciado del fin de turno, configurable por centro" }
+- { id: RF-GP-04,  fase: 3, titulo: "Registro de ausencias (vacaciones, baja médica, permiso) para no contabilizar como absentismo no justificado" }
+- { id: RF-IN-06,  fase: 3, titulo: "Generación asíncrona (cola) de informes de gran volumen, con notificación y enlace de descarga caducable" }
+- { id: RF-IN-07,  fase: 3, titulo: "Exportación de datos para el sistema de nómina en formato configurable" }
+- { id: RF-IN-08,  fase: 3, titulo: "Cuadro de impacto y adopción" }
+- { id: RF-KI-07,  fase: 3, titulo: "Actualización de la app controlada: no se actualiza durante un cambio de turno; ventana de actualización configurable" }
+- { id: RF-KI-08,  fase: 3, titulo: "Pantalla de diagnóstico accesible con código de servicio: estado de cámara, red, cola, token y versión" }
+- { id: RF-PA-06,  fase: 3, titulo: "Vista de cumplimiento: alertas de descanso insuficiente entre jornadas, jornada diaria excesiva, ausencia de pausa en jornadas largas y exceso de h..." }
+- { id: RF-PA-07,  fase: 3, titulo: "Panel de salud de quioscos: último latido, versión de la app, tamaño de la cola offline, nivel de batería" }
+- { id: RF-PR-05,  fase: 3, titulo: "Resumen semanal por correo al responsable de cada departamento" }
+- { id: RF-PR-06,  fase: 3, titulo: "Detección de patrones anómalos de uso de credencial: dos fichajes consecutivos en el mismo quiosco separados por segundos, coincidencias sistemátic..." }
+- { id: RN-16,     fase: 3, titulo: "Secuencia imposible de credencial: dos escaneos de la misma credencial en dispositivos distintos separados por menos del tiempo mínimo de tránsito..." }
+- { id: RNF-D-01,  fase: 3, titulo: "Disponibilidad del servicio: 99,5 % mensual" }
+- { id: RNF-P-02,  fase: 3, titulo: "Latencia del endpoint de fichaje en servidor" }
+- { id: RNF-P-06,  fase: 3, titulo: "Pico de concurrencia soportado" }
+- { id: RQ-04,     fase: 3, titulo: "Existen pruebas E2E del flujo de quiosco con cámara simulada alimentada por vídeo con un QR real" }
+- { id: RQ-08,     fase: 3, titulo: "Prueba de carga que valida RNF-P-06 antes de cada versión mayor" }
+- { id: RS-11,     fase: 3, titulo: "Revisión de seguridad externa antes de la primera versión comercial y con periodicidad anual" }
+
+# --- Fase 5 -------------------------------------------- (23 requisitos)
+- { id: RF-GP-05,  fase: 5, titulo: "Importación masiva inicial de plantilla desde CSV o XLSX, con validación previa y modo simulación" }
+- { id: RF-PD-01,  fase: 5, titulo: "Cero configuración en código" }
+- { id: RF-PD-02,  fase: 5, titulo: "Instalación autónoma: el personal de IT del cliente despliega el sistema siguiendo una guía, sin intervención del fabricante" }
+- { id: RF-PD-03,  fase: 5, titulo: "Asistente de puesta en marcha: datos de la organización, centros, departamentos, zona horaria, perfil de convenio, primer administrador y vinculaci..." }
+- { id: RF-PD-04,  fase: 5, titulo: "Licencia con clave firmada que codifica cliente, plan, límites (centros, empleados, quioscos) y vigencia del soporte" }
+- { id: RF-PD-05,  fase: 5, titulo: "Degradación honesta al expirar la licencia" }
+- { id: RF-PD-06,  fase: 5, titulo: "Vinculación de quiosco por código de emparejamiento mostrado en la tablet e introducido en el panel" }
+- { id: RF-PD-07,  fase: 5, titulo: "Perfiles de cumplimiento configurables: jurisdicción, años de retención, descanso mínimo entre jornadas, jornada máxima diaria y semanal, pausas ob..." }
+- { id: RF-PD-08,  fase: 5, titulo: "Marca blanca: logotipo, colores y nombre de la aplicación configurables, aplicados al quiosco, al panel, al portal y a las tarjetas y documentos PDF" }
+- { id: RF-PD-09,  fase: 5, titulo: "Paquete de diagnóstico exportable por el administrador del cliente: versión, configuración sin secretos, estado de servicios, últimos errores, salu..." }
+- { id: RF-PD-10,  fase: 5, titulo: "Actualización asistida con copia de seguridad previa automática y verificada —si la copia falla, la actualización no continúa—, migraciones reversi..." }
+- { id: RF-PD-11,  fase: 5, titulo: "Acceso de soporte del fabricante: solo con concesión expresa del cliente, con caducidad, alcance limitado y registro en auditoría visible para el c..." }
+- { id: RF-PD-12,  fase: 5, titulo: "Telemetría opcional y desactivada por defecto: versión y métricas técnicas agregadas, jamás datos personales ni de jornada" }
+- { id: RF-PD-13,  fase: 5, titulo: "Comprobación de salud posinstalación: un comando que valida base de datos, colas, correo, certificados, permisos y espacio en disco, y devuelve un..." }
+- { id: RF-PD-14,  fase: 5, titulo: "Exportación íntegra de los datos del cliente en formato abierto, ejecutable por el propio cliente sin intervención del fabricante" }
+- { id: RF-PD-15,  fase: 5, titulo: "Histórico de errores en base de datos" }
+- { id: RL-16,     fase: 5, titulo: "El cliente es responsable del tratamiento y operador del sistema: aloja los datos, controla los accesos y responde ante la Inspección y ante su pla..." }
+- { id: RL-17,     fase: 5, titulo: "El fabricante no es encargado del tratamiento en la operación ordinaria, porque no aloja ni accede a los datos" }
+- { id: RL-18,     fase: 5, titulo: "Encargo acotado a soporte" }
+- { id: RL-19,     fase: 5, titulo: "El paquete de diagnóstico no contiene datos personales por defecto (RF-PD-09)" }
+- { id: RL-20,     fase: 5, titulo: "Continuidad e independencia del cliente" }
+- { id: RL-21,     fase: 5, titulo: "La documentación entregada debe indicar con claridad qué obligaciones asume el cliente: registro de actividades, información a la plantilla y a su..." }
+- { id: RQ-11,     fase: 5, titulo: "Prueba de instalación limpia y de actualización desde la versión anterior antes de cada publicación" }

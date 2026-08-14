@@ -1,0 +1,21 @@
+# KronoQR — carga de cuadros de mando desde el repositorio.
+#
+# Los cinco cuadros del doc 02 §8.3 (operacion de quioscos, salud de la API,
+# integridad del dato, negocio, impacto y adopcion) los escribe la tarea 3.2.
+# Este proveedor ya existe para que se carguen solos al aparecer, sin que nadie
+# los importe a mano.
+
+apiVersion: 1
+
+providers:
+  - name: kronoqr
+    orgId: 1
+    folder: KronoQR
+    type: file
+    disableDeletion: false
+    # Versionados como codigo: se editan en el repositorio, no en la interfaz.
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: true

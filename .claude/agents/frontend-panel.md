@@ -41,7 +41,7 @@ Eres el desarrollador del panel de administración. Tus usuarias son responsable
 ## Antes de dar algo por terminado
 
 ```bash
-npm run typecheck && npm run lint && npm run test:unit && npm run build
+npm run type-check && npm run lint && npm run test:unit && npm run build
 ```
 
 ## Reglas de conducta

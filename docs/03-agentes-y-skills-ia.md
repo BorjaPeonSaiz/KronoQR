@@ -320,7 +320,7 @@ Arranca el proyecto siguiendo la Fase 0 del plan (docs/02, §11).
 Usa el agente indicado en la columna "Agente / Skill" de cada tarea.
 
 Entregable esperado:
-- `make up` levanta el entorno completo: PHP 8.4, Laravel 12, PostgreSQL 17,
+- `make up` levanta el entorno completo: PHP 8.4, Laravel 13, PostgreSQL 17,
   Redis, Horizon, Reverb, Nginx, los tres frontends con Vite, Mailpit
   y el stack de observabilidad
 - Los 8 módulos creados con su estructura hexagonal y sus service providers

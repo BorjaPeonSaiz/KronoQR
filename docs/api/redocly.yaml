@@ -1,0 +1,48 @@
+# Configuracion de @redocly/cli sobre el contrato de la API.
+#
+# POR QUE ESTA HERRAMIENTA. El documento 02 §3.1 fija Spectator para validar las
+# RESPUESTAS contra el contrato en las pruebas, pero ningun documento elegia
+# quien valida el CONTRATO EN SI; ADR-013 lo dejo anotado como decision
+# pendiente de la tarea 0.6. Se elige @redocly/cli porque entiende OpenAPI 3.1
+# de forma nativa, se ejecuta con `npx` sin instalar nada en la maquina y es la
+# que el propio plan proponia.
+#
+# POR QUE ELEVA REGLAS A `error`. La regla que gobierna el §3.5 dice que una
+# convencion que no verifica una herramienta es una sugerencia. Un aviso que no
+# bloquea es lo mismo: a los seis meses nadie lo lee. Las reglas de abajo son
+# exactamente lo que el paso 1 de la skill `endpoint-api` exige de cada
+# endpoint, asi que fallan la CI en vez de avisar.
+#
+# Las excepciones viven en .redocly.lint-ignore.yaml, una a una y con motivo.
+# `make api-lint` termina hoy con 0 problemas.
+
+apis:
+  kronoqr@v1:
+    root: ./openapi.yaml
+
+extends:
+  - recommended
+
+rules:
+  # Cada operacion se identifica, se explica y dice como sale bien y como sale
+  # mal. Lo ultimo es lo que mas se olvida y lo que mas caro le sale al cliente:
+  # un contrato que solo describe el camino feliz obliga a adivinar el otro.
+  operation-operationId: error
+  operation-summary: error
+  operation-description: error
+  operation-2xx-response: error
+  operation-4xx-response: error
+  operation-tag-defined: error
+  tag-description: error
+
+  # Los ejemplos son documentacion y datos de prueba a la vez (skill
+  # `endpoint-api`, paso 1). Un ejemplo que no valida contra su propio esquema
+  # es peor que no tenerlo, porque se copia y se pega.
+  no-invalid-media-type-examples: error
+  no-invalid-schema-examples: error
+  no-invalid-parameter-examples: error
+
+  # Ninguna operacion sin `security` declarado, ni siquiera para decir que es
+  # publica (`security: []`). El ambito de token es la mitad de la autorizacion
+  # —la otra es la policy— y no puede quedarse implicito (regla dura 18, §7.3).
+  security-defined: error
