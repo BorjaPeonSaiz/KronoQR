@@ -345,14 +345,14 @@ sast: ## Semgrep sobre las reglas de .semgrep (umbral: 0 hallazgos ERROR)
 # emite la matriz por la salida estandar con --output=- y es make quien la
 # guarda. Sus avisos van a la salida de error y no contaminan el fichero.
 traceability: ## Genera docs/trazabilidad-pruebas.md (RQ-13, doc 02 seccion 9.6)
-	$(COMPOSE_DEV) exec -T app php artisan qa:traceability --output=- >docs/trazabilidad-pruebas.md
+	( $(RUN_APP) php artisan qa:traceability --output=- ) >docs/trazabilidad-pruebas.md
 	@echo "[make] Matriz escrita en docs/trazabilidad-pruebas.md"
 
 traceability-check: ## Falla si un requisito ya implementado no tiene prueba (RQ-13)
-	$(COMPOSE_DEV) exec -T app php artisan qa:traceability --check
+	$(RUN_APP) php artisan qa:traceability --check
 
 docs-consistency: ## Coherencia entre los documentos y los ficheros que los ejecutan
-	$(COMPOSE_DEV) exec -T app php artisan docs:consistency --check
+	$(RUN_APP) php artisan docs:consistency --check
 
 # Estos dos objetivos llaman a vendor/bin/pest y no a `php artisan test`, que es
 # lo que usa el resto del fichero. No es un descuido: `artisan test --coverage`
