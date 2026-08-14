@@ -135,7 +135,7 @@ endif
 .DEFAULT_GOAL := help
 .PHONY: help up down restart build ps logs shell seed test test-unit test-integration \
         test-arch quality tools-ready php-lint deptrac rector sh-lint api-lint sast \
-        traceability traceability-check docs-consistency coverage coverage-now mutate e2e clean changelog changelog-check tool-versions
+        traceability traceability-check docs-consistency deps-audit-php deps-audit-js coverage coverage-now mutate e2e clean changelog changelog-check tool-versions
 
 help: ## Muestra esta ayuda
 	@echo KronoQR - objetivos disponibles:
@@ -318,6 +318,22 @@ else
 	$(REDOCLY) lint --config docs/api/redocly.yaml
 	@echo [make] Contrato OpenAPI 3.1: 0 problemas.
 endif
+
+deps-audit-php: tools-ready ## composer audit (RS-10, umbral: 0 vulnerabilidades)
+	$(RUN_APP) composer audit --no-interaction
+	@echo "[make] composer audit: sin avisos de seguridad."
+
+# --audit-level=high: el umbral del §9.2 es "0 vulnerabilidades criticas o
+# altas". Las moderadas y bajas se ven en el informe pero no bloquean, porque
+# una puerta que salta por un aviso informativo se acaba desactivando entera.
+deps-audit-js: ## npm audit en los tres frontends (RS-10, 0 criticas ni altas)
+	@for app in frontend-kiosk frontend-admin frontend-portal; do \
+		if [ -f "$$app/package-lock.json" ]; then \
+			echo "[make] npm audit en $$app"; \
+			npm audit --prefix "$$app" --audit-level=high || exit 1; \
+		fi; \
+	done
+	@echo "[make] npm audit: 0 vulnerabilidades criticas ni altas."
 
 sast: ## Semgrep sobre las reglas de .semgrep (umbral: 0 hallazgos ERROR)
 	$(SEMGREP) --config .semgrep --error --metrics=off --quiet

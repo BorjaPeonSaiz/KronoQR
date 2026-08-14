@@ -19,7 +19,7 @@
 # -> 4, y lo aplica config/quality.php: aqui solo se registra a que fase
 # pertenece cada requisito, no cual va antes.
 
-# --- Fase 0 -------------------------------------------- (15 requisitos)
+# --- Fase 0 -------------------------------------------- (14 requisitos)
 - { id: RNF-M-01,  fase: 0, titulo: "Cobertura de pruebas: ≥ 90 % en la capa de dominio, ≥ 75 % global" }
 - { id: RNF-M-02,  fase: 0, titulo: "Análisis estático en nivel máximo (PHPStan/Larastan nivel 9) sin errores suprimidos sin justificar" }
 - { id: RNF-M-03,  fase: 0, titulo: "Las dependencias entre módulos se verifican automáticamente" }
@@ -27,7 +27,6 @@
 - { id: RNF-M-05,  fase: 0, titulo: "Deuda técnica visible: presupuesto máximo del 15 % de cada iteración dedicado a su reducción", verificacion: revision }
 - { id: RNF-M-06,  fase: 0, titulo: "El código sigue las convenciones publicadas de cada stack (documento 02, §3.5): PSR-12/PER para PHP, convenciones de Laravel, guía de estilo oficia..." }
 - { id: RNF-P-07,  fase: 0, titulo: "Presupuesto de bundle del quiosco" }
-- { id: RQ-01,     fase: 0, titulo: "Toda regla de negocio del §4 tiene al menos una prueba unitaria en el dominio, sin base de datos ni framework" }
 - { id: RQ-06,     fase: 0, titulo: "La API está descrita por un contrato OpenAPI y las respuestas se validan contra el esquema en las pruebas" }
 - { id: RQ-12,     fase: 0, titulo: "Ninguna funcionalidad se considera terminada sin cumplir la Definición de Terminado del documento 02, §10.3", verificacion: revision }
 - { id: RQ-13,     fase: 0, titulo: "Trazabilidad requisito ↔ prueba, verificada por la CI. Cada prueba declara qué requisitos cubre mediante una etiqueta (RF-, RN-, RL-, RS-)" }
@@ -36,7 +35,7 @@
 - { id: RS-09,     fase: 0, titulo: "Cabeceras de seguridad completas (HSTS, CSP estricta, X-Content-Type-Options, Referrer-Policy, Permissions-Policy limitando cámara al origen propio)" }
 - { id: RS-10,     fase: 0, titulo: "Análisis de dependencias y de código en cada pull request; ninguna vulnerabilidad crítica o alta puede llegar a una versión publicada" }
 
-# --- Fase 1 -------------------------------------------- (58 requisitos)
+# --- Fase 1 -------------------------------------------- (59 requisitos)
 - { id: RF-AT-01,  fase: 1, titulo: "El sistema registra un evento de fichaje al escanear un QR válido en un quiosco autenticado" }
 - { id: RF-AT-02,  fase: 1, titulo: "Si el empleado no tiene turno abierto, el escaneo abre un turno (entrada)" }
 - { id: RF-AT-03,  fase: 1, titulo: "Si el empleado tiene un turno abierto, el escaneo lo cierra (salida) y calcula la duración" }
@@ -85,6 +84,7 @@
 - { id: RNF-D-04,  fase: 1, titulo: "Ninguna migración puede requerir parada de servicio (patrón expand / migrate / contract)" }
 - { id: RNF-P-01,  fase: 1, titulo: "Latencia percibida del fichaje (de escaneo a confirmación en pantalla)" }
 - { id: RNF-P-03,  fase: 1, titulo: "Tiempo de decodificación del QR en tablet de gama media" }
+- { id: RQ-01,     fase: 1, titulo: "Toda regla de negocio del §4 tiene al menos una prueba unitaria en el dominio, sin base de datos ni framework" }
 - { id: RQ-02,     fase: 1, titulo: "El cálculo de duraciones se prueba con pruebas basadas en propiedades, incluyendo los días de cambio de hora y turnos que cruzan medianoche" }
 - { id: RQ-03,     fase: 1, titulo: "La idempotencia del fichaje se prueba con envíos concurrentes del mismo scan_id" }
 - { id: RQ-05,     fase: 1, titulo: "Existen pruebas del ciclo completo offline → reconexión → sincronización → consolidación" }

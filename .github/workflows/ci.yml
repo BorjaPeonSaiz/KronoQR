@@ -450,6 +450,53 @@ jobs:
   # No depende de las otras etapas a proposito: es una comprobacion de metadatos y
   # no tiene por que esperar a nadie.
   #-----------------------------------------------------------------------------
+  #-----------------------------------------------------------------------------
+  # Analisis de dependencias y de codigo (RS-10)
+  #
+  # RS-10 exige «analisis de dependencias y de codigo en cada pull request;
+  # ninguna vulnerabilidad critica o alta puede llegar a una version publicada»,
+  # y es requisito de la Fase 0 en el Anexo A.
+  #
+  # El §10.1 lo situa en la etapa ⑤, que se ejecuta en pull request y queda
+  # fuera del alcance de la tarea 0.4. Pero las tres herramientas ya existen y
+  # engancharlas cuesta un job: diferirlo habria dejado un requisito de la Fase
+  # 0 sin cumplir por comodidad, no por criterio. Se ejecuta en cada push, que
+  # es mas estricto que lo que RS-10 pide, no menos.
+  #
+  # Trivy sobre las imagenes (§9.2) sigue siendo de la etapa ⑤: necesita
+  # construirlas, y eso no cabe en el presupuesto de 4 minutos.
+  #-----------------------------------------------------------------------------
+  security:
+    name: "Dependencias y SAST"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/php-toolchain
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          coverage: none
+
+      - name: composer audit (0 vulnerabilidades)
+        run: make deps-audit-php
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: npm audit en los tres frontends (0 criticas ni altas)
+        run: make deps-audit-js
+
+      - name: Semgrep sobre las reglas propias (0 hallazgos de severidad alta)
+        # Las reglas de .semgrep/ son las que ninguna otra herramienta puede
+        # ver: la regla dura 2 en su forma `new DateTimeImmutable()` sin
+        # instante, y las supresiones de PHPStan sin motivo escrito.
+        run: make sast
+
   changelog:
     name: "Puerta de version · CHANGELOG"
     runs-on: ubuntu-24.04

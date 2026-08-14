@@ -237,6 +237,27 @@ it('registra cada decision de arquitectura como ADR versionado', function (): vo
     expect($withoutConsequences)->toBe([]);
 })->group('RNF-M-04');
 
+it('analiza dependencias y codigo en cada integracion', function (): void {
+    // RS-10: «ninguna vulnerabilidad critica o alta puede llegar a una version
+    // publicada». Tres herramientas, y las tres tienen que estar enganchadas al
+    // pipeline: composer audit y npm audit miran lo que traemos de fuera,
+    // Semgrep lo que escribimos nosotros.
+    //
+    // El §10.1 situaba esto en la etapa ⑤, que se ejecuta en pull request. Se
+    // adelanta a cada push porque las herramientas ya existian y diferirlo
+    // habria dejado un requisito de la Fase 0 sin cumplir por comodidad. Trivy
+    // sobre las imagenes sigue en la ⑤: construirlas no cabe en 4 minutos.
+    $workflow = repoContents('.github/workflows/ci.yml');
+
+    foreach (['make deps-audit-php', 'make deps-audit-js', 'make sast'] as $step) {
+        expect($workflow)->toContain($step);
+    }
+
+    // Y el umbral: alto o critico bloquea, moderado no. Una puerta que salta
+    // por un aviso informativo se acaba desactivando entera.
+    expect(repoContents('Makefile'))->toContain('--audit-level=high');
+})->group('RS-10');
+
 it('bloquea la integracion si un requisito implementado no tiene prueba', function (): void {
     // RQ-13. Esta es la prueba de la propia trazabilidad: comprueba que el
     // catalogo existe, que no esta vacio y que la etapa que lo ejecuta sigue
