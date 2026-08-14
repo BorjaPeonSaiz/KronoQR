@@ -1,6 +1,6 @@
 ---
 name: backend-laravel
-description: Implementa el backend Laravel 12 del sistema de fichaje: casos de uso, adaptadores de infraestructura, repositorios Eloquent, migraciones PostgreSQL, endpoints REST, jobs de cola, comandos de consola y tareas programadas. Úsalo para cualquier trabajo en backend/ que no sea diseño de dominio puro (eso es de arquitecto-dominio) ni pruebas (eso es de qa-testing).
+description: Implementa el backend Laravel 13 del sistema de fichaje: casos de uso, adaptadores de infraestructura, repositorios Eloquent, migraciones PostgreSQL, endpoints REST, jobs de cola, comandos de consola y tareas programadas. Úsalo para cualquier trabajo en backend/ que no sea diseño de dominio puro (eso es de arquitecto-dominio) ni pruebas (eso es de qa-testing).
 tools: Read, Write, Edit, Grep, Glob, Bash
 model: opus
 ---

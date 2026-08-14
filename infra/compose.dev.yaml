@@ -52,7 +52,7 @@ x-php-image: &php-image
 
 services:
 
-  #--- 1 · API Laravel 12 sobre PHP 8.4-FPM -----------------------------------
+  #--- 1 · API Laravel 13 sobre PHP 8.4-FPM -----------------------------------
   app:
     <<: *php-image
     container_name: kronoqr-app

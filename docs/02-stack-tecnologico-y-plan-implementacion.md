@@ -83,7 +83,7 @@ graph TB
 
     subgraph SERVER["🖥️ Servidor del cliente"]
         NGINX["<b>Nginx</b><br/>TLS, assets estáticos,<br/>rate limiting de borde"]
-        API["<b>API Laravel 12</b><br/>PHP 8.4-FPM<br/>Monolito modular hexagonal"]
+        API["<b>API Laravel 13</b><br/>PHP 8.4-FPM<br/>Monolito modular hexagonal"]
         WORKER["<b>Worker de colas</b><br/>Horizon<br/>Proyecciones, informes,<br/>exportaciones, PDF"]
         SCHED["<b>Scheduler</b><br/>Reconciliación, incidencias,<br/>retención, copias"]
         WS["<b>Reverb</b><br/>WebSocket<br/>Presencia en tiempo real"]
@@ -312,14 +312,14 @@ fichaje-hotel/
 | Componente | Elección | Versión | Motivo |
 |---|---|---|---|
 | Lenguaje | PHP | **8.4** (mínimo 8.3) | *Property hooks*, `#[\Override]` y mejor rendimiento. |
-| Framework | Laravel | **12.x** | Ecosistema maduro, herramientas integradas de autenticación, colas y programación. Verificar la versión mayor vigente al arrancar y actualizar el ADR si procede. |
+| Framework | Laravel | **13.x** | Ecosistema maduro, herramientas integradas de autenticación, colas y programación. Verificar la versión mayor vigente al arrancar y actualizar **[ADR-030](adr/ADR-030-version-mayor-de-laravel.md)** si procede. |
 | Autenticación | Laravel Sanctum + `pragmarx/google2fa` | ^4.0 / ^8.0 | Tokens con ámbitos y 2FA obligatorio para roles con acceso global. |
 | Colas | Redis + **Laravel Horizon** | ^5.0 | Visibilidad de trabajos. Redis se necesita igualmente para caché y rate limiting. |
 | Tiempo real | **Laravel Reverb** | ^1.0 | First-party, autoalojado, sin coste por mensaje. *Fallback* a sondeo cada 15 s si el WebSocket cae. |
 | Programación | Laravel Scheduler | — | Consolidaciones, incidencias, retención, copias. |
 | Autorización | Policies + `spatie/laravel-permission` | ^6.0 | RBAC con ámbito por departamento. |
 | Generación QR | `endroid/qr-code` | ^5.0 | Librería directa y bien mantenida. Control sobre el nivel de corrección de errores, que aquí importa. |
-| PDF | `spatie/laravel-pdf` (Browsershot) | ^1.0 | **Tarjetas de credencial** e informes sellados. |
+| PDF | `spatie/laravel-pdf` (Browsershot) | ^2.12 | **Tarjetas de credencial** e informes sellados. |
 | Exportaciones | `spatie/simple-excel` | ^3.0 | Streaming: no carga en memoria un mes de 500 empleados. |
 | Contrato API | `spectator` en pruebas + OpenAPI 3.1 | — | Contrato como fuente de verdad. |
 | Firma de licencia | `sodium` de PHP (ed25519) | nativo | Verificación local sin dependencias externas. |
@@ -511,6 +511,7 @@ Los nueve siguientes **no proceden de esta tabla**: nacieron al desarrollar el p
 | **027** | **`audit_log` particionado por año, con anclas de cadena** | La retención de RL-02 obligaba a purgar una tabla sobre la que el usuario de aplicación solo tiene `INSERT` y `SELECT` (regla dura 6), y cualquier borrado habría hecho que el verificador denunciara la rotura de la cadena **cada día**, de forma permanente | Purga por `DROP PARTITION` con un rol de mantenimiento distinto. Tabla `audit_chain_anchors` que sella cada partición antes de soltarla y sirve de nueva génesis al verificador, que así distingue una purga legítima de una manipulación |
 | **028** | **Los límites del plan nunca bloquean el alta ni el emparejamiento** | Bloquear el alta al superar `max_employees` deja trabajando sin registro horario a quien no se puede dar de alta, y bloquear `max_devices` deja un centro sin punto de fichaje al sustituir un quiosco averiado. Es el resultado que ADR-019 declara inaceptable, alcanzado por un rodeo | El exceso produce aviso persistente, entrada en `audit_log` y cifra en `license:show`, que es la palanca comercial verificable en una auditoría. Ninguna ruta del producto puede devolver un error de licencia al dar de alta a una persona |
 | **029** | **La configuración vive en el entorno del contenedor**, no en un `.env` del backend | El `.env` canónico está en la raíz y Compose lo inyecta, pero Laravel espera uno junto a `artisan` y sin él `php artisan test` avisa en cada prueba. Darle configuración real crearía dos fuentes de verdad con una precedencia que casi nadie tiene presente: el entorno gana | `backend/.env` existe **vacío y comentado**, creado de forma idempotente por el entrypoint: no configura nada. `key:generate` se usa con `--show`, y **una variable vacía nunca lleva comentario en su misma línea**, porque Compose se lo asigna como valor |
+| **030** | **Se adopta Laravel 13 antes de escribir el dominio** | El §3.1 mandaba verificar la versión mayor vigente al arrancar, pero ninguna fila registraba la elección de framework: la instrucción **no tenía ADR donde aterrizar**. Al comprobarlo, Laravel 12 ya había salido de correcciones de fallos y solo conservaba parches de seguridad hasta febrero de 2027 | Restricción `^13.12`, porque las 13.0–13.11 arrastran tres avisos de seguridad. Sube también Tinker, `laravel-pdf`, Pest y PHPUnit. Se migró con el repositorio en esqueleto y **sin tocar una línea de código de aplicación**: era el momento más barato que iba a haber |
 
 ---
 
@@ -1017,7 +1018,7 @@ Si se necesita una cifra de desarrollo **manual sin asistencia** para comparar c
 | # | Tarea | h | Agente / Skill |
 |---|---|---|---|
 | 0.1 | Repositorio, Docker Compose completo, `make` de arranque | 6–8 | `devops-observabilidad` |
-| 0.2 | Esqueleto Laravel 12 con los 8 módulos y sus service providers | 4–5 | `arquitecto-dominio` |
+| 0.2 | Esqueleto Laravel 13 con los 8 módulos y sus service providers | 4–5 | `arquitecto-dominio` |
 | 0.3 | Cadena de calidad: Pint, PHPStan 9, Deptrac, Pest, Rector | 4–5 | `devops-observabilidad` + `qa-testing` |
 | 0.4 | Pipeline de CI con las etapas 1–3 | 3–4 | `devops-observabilidad` |
 | 0.5 | Esqueleto de los tres frontends con TS estricto, Tailwind y Vitest | 4–6 | `frontend-quiosco` |

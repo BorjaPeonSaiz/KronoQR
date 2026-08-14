@@ -292,7 +292,7 @@ La tabla del §3.1 tiene 13 filas. **Once son paquetes de Composer**; PHP es el 
 | Programación | Laravel Scheduler | — | Consolidaciones, incidencias, retención, copias. **Parte del framework** |
 | Autorización | Policies + `spatie/laravel-permission` | ^6.0 | RBAC con ámbito por departamento (RF-ID-02, RF-ID-03) |
 | Generación QR | `endroid/qr-code` | ^5.0 | Control sobre el nivel de corrección de errores, que aquí importa (RF-QR-05, nivel Q) |
-| PDF | `spatie/laravel-pdf` (Browsershot) | ^1.0 | **Tarjetas de credencial** e informes sellados (RF-QR-04, RF-IN-04) |
+| PDF | `spatie/laravel-pdf` (Browsershot) | ^2.12 | **Tarjetas de credencial** e informes sellados (RF-QR-04, RF-IN-04) |
 | Exportaciones | `spatie/simple-excel` | ^3.0 | Streaming: no carga en memoria un mes de 500 empleados |
 | Contrato API | `spectator` en pruebas + OpenAPI 3.1 | — | Contrato como fuente de verdad (ADR-013, RQ-06) |
 | Firma de licencia | `sodium` de PHP (ed25519) | nativo | Verificación local sin dependencias externas (ADR-018). **Extensión, no paquete** |

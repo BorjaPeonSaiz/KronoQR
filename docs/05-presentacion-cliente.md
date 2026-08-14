@@ -316,7 +316,7 @@ Sin internet solo se pierden tres cosas accesorias: los certificados de segurida
 
 | Pieza | Qué es | Por qué esta y no otra |
 |---|---|---|
-| **PHP 8.4 + Laravel 12** | El lenguaje y el marco de trabajo del servidor | Tecnología madura y muy extendida: el hotel puede encontrar quien la mantenga sin depender de un único proveedor |
+| **PHP 8.4 + Laravel 13** | El lenguaje y el marco de trabajo del servidor | Tecnología madura y muy extendida: el hotel puede encontrar quien la mantenga sin depender de un único proveedor |
 | **PostgreSQL 17** | La base de datos donde vive el registro | Es la única opción capaz de garantizar **en la propia base de datos** que un empleado no pueda tener dos turnos abiertos ni dos tramos solapados. No depende de que el programa esté bien escrito: la base de datos lo impide |
 | **Redis** | Memoria rápida auxiliar | Gestiona las tareas en segundo plano (informes, PDF, envíos) y los límites de tasa sin cargar la base de datos |
 | **Vue 3 + TypeScript** | Las tres aplicaciones de pantalla | Ligero y rápido en tablets modestas. TypeScript detecta errores antes de que lleguen a producción, algo que importa cuando se manipulan horas |

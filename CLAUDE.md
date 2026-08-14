@@ -26,7 +26,7 @@ Antes de escribir código, lee lo que corresponda a tu tarea:
 
 ## Stack
 
-PHP 8.4 · Laravel 12 · PostgreSQL 17 · Redis 7 · Reverb · Vue 3 + TypeScript estricto · Vite · Tailwind 4 · Pinia · Dexie · `@zxing/browser` · Pest · Playwright · Docker Compose
+PHP 8.4 · Laravel 13 · PostgreSQL 17 · Redis 7 · Reverb · Vue 3 + TypeScript estricto · Vite · Tailwind 4 · Pinia · Dexie · `@zxing/browser` · Pest · Playwright · Docker Compose
 
 ## Arquitectura
 

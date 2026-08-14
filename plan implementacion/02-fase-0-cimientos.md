@@ -35,7 +35,7 @@ Arranca el proyecto siguiendo la Fase 0 del plan (docs/02, §11).
 Usa el agente indicado en la columna "Agente / Skill" de cada tarea.
 
 Entregable esperado:
-- `make up` levanta el entorno completo: PHP 8.4, Laravel 12, PostgreSQL 17,
+- `make up` levanta el entorno completo: PHP 8.4, Laravel 13, PostgreSQL 17,
   Redis, Horizon, Reverb, Nginx, los tres frontends con Vite, Mailpit
   y el stack de observabilidad
 - Los 8 módulos creados con su estructura hexagonal y sus service providers
@@ -45,7 +45,7 @@ Entregable esperado:
 - Los tres frontends con TypeScript estricto, Tailwind 4 y Vitest
 - ADR-001 a ADR-020 escritos en docs/adr/ a partir de la tabla del documento
   02 §4; ADR-021 a ADR-028 ya existen y solo se revisan. Al terminar,
-  docs/adr/ tiene 29 ficheros (los 28 del §4 mas ADR-029)
+  docs/adr/ tiene 30 ficheros (los 28 del §4 mas ADR-029 y ADR-030)
 - openapi.yaml inicial con /health y /scan
 - docs/requisitos.yaml y los comandos qa:traceability y docs:consistency
 
@@ -61,7 +61,7 @@ dentro de Domain/. Verifícalo.
 | # | Tarea | h | Agente / Skill |
 |---|---|---|---|
 | [0.1](#tarea-01--repositorio-docker-compose-completo-make-de-arranque) | Repositorio, Docker Compose completo, `make` de arranque | 6–8 | `devops-observabilidad` |
-| [0.2](#tarea-02--esqueleto-laravel-12-con-los-8-módulos-y-sus-service-providers) | Esqueleto Laravel 12 con los 8 módulos y sus service providers | 4–5 | `arquitecto-dominio` |
+| [0.2](#tarea-02--esqueleto-laravel-13-con-los-8-módulos-y-sus-service-providers) | Esqueleto Laravel 13 con los 8 módulos y sus service providers | 4–5 | `arquitecto-dominio` |
 | [0.3](#tarea-03--cadena-de-calidad-pint-phpstan-9-deptrac-pest-rector) | Cadena de calidad: Pint, PHPStan 9, Deptrac, Pest, Rector | 4–5 | `devops-observabilidad` + `qa-testing` |
 | [0.4](#tarea-04--pipeline-de-ci-con-las-etapas-13) | Pipeline de CI con las etapas 1–3 | 3–4 | `devops-observabilidad` |
 | [0.5](#tarea-05--esqueleto-de-los-tres-frontends-con-ts-estricto-tailwind-y-vitest) | Esqueleto de los tres frontends con TS estricto, Tailwind y Vitest | 4–6 | `frontend-quiosco` |
@@ -100,7 +100,7 @@ dentro de Domain/. Verifícalo.
 
    | # | Servicio | Papel (§3.4, §1.4) |
    |---|---|---|
-   | 1 | `app` | API Laravel 12 sobre PHP 8.4-FPM |
+   | 1 | `app` | API Laravel 13 sobre PHP 8.4-FPM |
    | 2 | `nginx` | TLS, assets estáticos, rate limiting de borde |
    | 3 | `postgres` | PostgreSQL 17 · registro legal e invariantes declarativas |
    | 4 | `redis` | Redis 7 · colas, caché, rate limiting, sesiones |
@@ -192,7 +192,7 @@ Resultado esperado: los 14 servicios arriba, `/api/v1/health` respondiendo, las 
 
 ---
 
-### Tarea 0.2 — Esqueleto Laravel 12 con los 8 módulos y sus service providers
+### Tarea 0.2 — Esqueleto Laravel 13 con los 8 módulos y sus service providers
 
 | | |
 |---|---|
@@ -212,7 +212,7 @@ Resultado esperado: los 14 servicios arriba, `/api/v1/health` respondiendo, las 
 
 **Pasos.** Sin skill asignada. Orden derivado del método del agente `arquitecto-dominio` (doc 03 §4.3): módulo → capa → invariantes → objetos de valor → puertos.
 
-1. Instalar Laravel 12 en `backend/` (§3.1). Verificar la versión mayor vigente al arrancar y **actualizar el ADR si procede** (§3.1, nota literal).
+1. Instalar Laravel 13 en `backend/` (§3.1). Verificar la versión mayor vigente al arrancar y **actualizar el ADR si procede** (§3.1, nota literal).
 2. Crear los 8 módulos en `backend/app/Modules/` con las fronteras del §1.6:
 
    | Módulo | Responsabilidad | Puede depender de |
@@ -254,11 +254,11 @@ Resultado esperado: los 14 servicios arriba, `/api/v1/health` respondiendo, las 
 
 ```bash
 docker compose -f infra/compose.dev.yaml exec app composer dump-autoload
-docker compose -f infra/compose.dev.yaml exec app php artisan about   # Laravel 12, timezone UTC
+docker compose -f infra/compose.dev.yaml exec app php artisan about   # Laravel 13, timezone UTC
 make test                                                             # verde con el módulo de ejemplo
 ```
 
-Resultado esperado: `php artisan about` muestra Laravel 12 y zona horaria UTC; los 8 service providers cargados; `make test` en verde.
+Resultado esperado: `php artisan about` muestra Laravel 13 y zona horaria UTC; los 8 service providers cargados; `make test` en verde.
 
 **Terminado cuando** (subconjunto de §10.3):
 
@@ -561,7 +561,7 @@ cd frontend-kiosk && npm run api:generate
 cd ../frontend-admin && npm run api:generate
 cd ../frontend-portal && npm run api:generate
 
-ls docs/adr/ | wc -l                              # 29 ficheros (28 del §4 + ADR-029, escrito en esta tarea)
+ls docs/adr/ | wc -l                              # 30 ficheros (28 del §4 + ADR-029 y ADR-030, escritos aqui)
 php artisan docs:consistency --check              # toda fila del §4 tiene su fichero (0.7)
 ```
 
@@ -570,7 +570,7 @@ Resultado esperado: el contrato pasa la validación, los tres clientes se genera
 **Terminado cuando** (subconjunto de §10.3):
 
 - [ ] Contrato OpenAPI actualizado y validado en las pruebas.
-- [ ] ADR escrito si la decisión es estructural — aquí se escriben los 20 primeros y se revisan los ocho ya existentes, hasta que `docs/adr/` tenga **29 ficheros** —los 28 de las tablas del §4 mas ADR-029, que documenta una decision estructural tomada al ejecutar la tarea 0.2— y ninguna fila del §4 se quede sin el suyo.
+- [ ] ADR escrito si la decisión es estructural — aquí se escriben los 20 primeros y se revisan los ocho ya existentes, hasta que `docs/adr/` tenga **30 ficheros** —los 28 de las tablas del §4, mas ADR-029 (configuracion en el entorno del contenedor) y ADR-030 (adopcion de Laravel 13)— y ninguna fila del §4 se quede sin el suyo.
 - [ ] Convenciones del §3.5 respetadas.
 - [ ] Revisado por otra persona, o por `revisor-codigo` y validado por una persona.
 
