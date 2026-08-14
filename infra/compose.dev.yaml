@@ -46,6 +46,18 @@ x-php-image: &php-image
     # backend/vendor del host queda solo para que el IDE resuelva el autoload,
     # que es para lo que el doc de entorno §B.3 puso Composer en el host.
     - backend-vendor:/var/www/html/vendor
+    # La raiz del repositorio, de SOLO LECTURA.
+    #
+    # Los requisitos de la Fase 0 no describen comportamiento del producto:
+    # describen que la cadena de calidad esta puesta. Comprobarlos exige leer
+    # ficheros que viven fuera de backend/ —Makefile, .gitignore, .env.example,
+    # .semgrep/, infra/docker/nginx/, los eslint.config.js— y el contenedor no
+    # los veia. Sin este montaje, esas pruebas pasarian en la CI (que corre
+    # sobre el arbol completo) y fallarian en local: una suite que da resultados
+    # distintos segun donde se ejecute no verifica nada.
+    #
+    # Solo lectura y a proposito: desde aqui nada escribe en el repositorio.
+    - ..:/var/www/repo:ro
     # El contrato de la API vive FUERA de backend/ y las pruebas de contrato se
     # ejecutan DENTRO del contenedor, asi que sin este montaje Spectator no
     # encuentra docs/api/openapi.yaml y las pruebas de la suite Contract fallan

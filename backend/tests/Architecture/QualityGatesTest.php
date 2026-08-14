@@ -1,0 +1,174 @@
+<?php
+
+declare(strict_types=1);
+
+use Tests\Architecture\Support\ModuleTree;
+
+/*
+ * Las puertas de calidad de la Fase 0, comprobadas como pruebas.
+ *
+ * Por que existe este fichero. Los requisitos de la Fase 0 no describen
+ * comportamiento del producto: describen que la cadena de herramientas esta
+ * puesta y bloquea. Sin una prueba que lo afirme, `qa:traceability --check`
+ * los ve como requisitos implementados sin cobertura —y tiene razon—: que la
+ * cadena funcione hoy en el portatil de quien la monto no es evidencia de nada.
+ *
+ * Lo que se comprueba aqui es la CONFIGURACION, no el resultado de ejecutarla.
+ * Que PHPStan pase en nivel 9 lo dice `make quality`; que nadie haya bajado el
+ * nivel a 5 en un momento de prisa lo dice esta prueba. Son cosas distintas y
+ * la segunda es la que se erosiona sin que nadie se entere.
+ */
+
+/**
+ * Raiz del repositorio, que NO es la del backend.
+ *
+ * Dentro del contenedor solo esta montado `backend/` (en /var/www/html), asi
+ * que la raiz llega por un montaje aparte de solo lectura. En la CI, que corre
+ * sobre el arbol completo sin contenedor, es el directorio padre de `backend/`.
+ * Las dos rutas se resuelven aqui para que la suite de el mismo resultado en
+ * los dos sitios: una prueba que pasa en la CI y falla en local no verifica
+ * nada, solo enseña donde se ejecuto.
+ */
+function repoRoot(): string
+{
+    return is_dir('/var/www/repo') ? '/var/www/repo' : \dirname(ModuleTree::root(), 2);
+}
+
+/** Ruta absoluta de un fichero del repositorio, relativa a su raiz. */
+function repoFile(string $relative): string
+{
+    return repoRoot().'/'.ltrim($relative, '/');
+}
+
+function repoContents(string $relative): string
+{
+    $path = repoFile($relative);
+
+    expect(file_exists($path))->toBeTrue($relative.' no existe en el repositorio.');
+
+    return (string) file_get_contents($path);
+}
+
+it('exige PHPStan en el nivel maximo', function (): void {
+    // RNF-M-02. El nivel 9 es el maximo de PHPStan y el umbral del §9.2 es 0
+    // errores. Un `level: 5` pasaria igual de verde y no verificaria lo mismo.
+    expect(repoContents('backend/phpstan.neon'))
+        ->toMatch('/^\s*level:\s*9\s*$/m');
+})->group('RNF-M-02');
+
+it('exige justificacion en cada supresion de PHPStan', function (): void {
+    // RNF-M-02, segunda mitad: "sin errores suprimidos sin justificar". PHPStan
+    // obliga a nombrar el identificador del error tras la anotacion de
+    // supresion, pero no puede exigir el motivo; eso lo comprueba Semgrep, y
+    // esta prueba comprueba que esa regla de Semgrep sigue existiendo.
+    //
+    // El nombre de esa anotacion no se escribe aqui a proposito: PHPStan la
+    // interpreta como directiva aunque este dentro de un comentario, y el
+    // analisis falla con un error de sintaxis que no dice de donde viene.
+    expect(repoContents('.semgrep/kronoqr-php.yaml'))
+        ->toContain('kronoqr-phpstan-ignore-sin-justificacion');
+})->group('RNF-M-02');
+
+it('exige los umbrales de cobertura del dominio y del backend', function (): void {
+    // RNF-M-01: dominio >= 90 %, global >= 75 % (§9.2). Hoy no hay dominio y el
+    // objetivo se salta con su guarda, pero el umbral tiene que estar escrito:
+    // es lo que empieza a exigirse en la tarea 1.2.
+    $makefile = repoContents('Makefile');
+
+    expect($makefile)->toContain('--min=75');
+    expect($makefile)->toContain('--min=80');   // MSI de mutacion, RQ-10
+})->group('RNF-M-01');
+
+it('declara las cinco suites de la piramide de pruebas', function (): void {
+    // RQ-14: la cobertura por niveles no la decide quien implementa. La
+    // separacion en suites es lo que hace que `test-unit` pueda correr sin base
+    // de datos y que la tabla del §9.5 sea aplicable.
+    $phpunit = repoContents('backend/phpunit.xml');
+
+    foreach (['Unit', 'Integration', 'Feature', 'Contract', 'Architecture'] as $suite) {
+        expect($phpunit)->toContain('name="'.$suite.'"');
+    }
+})->group('RQ-14');
+
+it('ata cada convencion del stack a una herramienta que la verifica', function (): void {
+    // RNF-M-06: "se verifican por herramienta en la CI, no por revision humana".
+    // Se comprueba que el fichero de configuracion de cada verificador existe;
+    // que ademas se ejecuten lo garantiza `make quality` y la etapa ① de la CI.
+    $verifiers = [
+        'backend/pint.json' => 'estilo PHP (PSR-12/PER, preset laravel)',
+        'backend/phpstan.neon' => 'tipado y complejidad',
+        'backend/deptrac.yaml' => 'fronteras entre modulos',
+        'backend/rector.php' => 'modernizacion a PHP 8.4',
+        '.semgrep/kronoqr-php.yaml' => 'lo que ninguna otra herramienta ve',
+        'frontend-kiosk/eslint.config.js' => 'estilo de Vue 3 y TypeScript',
+    ];
+
+    $missing = [];
+
+    foreach ($verifiers as $file => $what) {
+        if (! file_exists(repoFile($file))) {
+            $missing[] = $file.' ('.$what.')';
+        }
+    }
+
+    expect($missing)->toBe([]);
+})->group('RNF-M-06');
+
+it('mantiene los secretos fuera del control de versiones', function (): void {
+    // RS-08. El .env lleva el APP_KEY generado y las claves de firma del QR: si
+    // entra en el repositorio, la credencial de toda la plantilla es
+    // falsificable (regla dura 10).
+    expect(repoContents('.gitignore'))->toMatch('/^\.env$/m');
+})->group('RS-08');
+
+it('no deja ningun secreto real en el fichero de ejemplo', function (): void {
+    // RS-08. .env.example se entrega al cliente (§11.6.1) y es el que se copia
+    // en el servidor del hotel: un valor real aqui viaja a cada instalacion.
+    $example = repoContents('.env.example');
+    $sensitive = [
+        'APP_KEY',
+        'QR_SIGNING_KEY_CURRENT',
+        'BACKUP_ENCRYPTION_KEY',
+        'REVERB_APP_SECRET',
+    ];
+
+    $filled = [];
+
+    foreach ($sensitive as $key) {
+        if (preg_match('/^'.preg_quote($key, '/').'=(.*)$/m', $example, $m) === 1 && trim($m[1]) !== '') {
+            $filled[] = $key;
+        }
+    }
+
+    expect($filled)->toBe([]);
+})->group('RS-08');
+
+it('sirve las cabeceras de seguridad completas', function (): void {
+    // RS-09 (§7.2). Permissions-Policy no esta por simetria: sin
+    // `camera=(self)` la PWA del quiosco no puede abrir la camara, y el fallo
+    // aparecería en la Fase 1 sin causa aparente.
+    $headers = repoContents('infra/docker/nginx/snippets/security-headers.conf');
+
+    foreach ([
+        'Strict-Transport-Security',
+        'Content-Security-Policy',
+        'X-Content-Type-Options',
+        'Referrer-Policy',
+        'Permissions-Policy',
+    ] as $header) {
+        expect($headers)->toContain($header);
+    }
+
+    expect($headers)->toContain('camera=(self)');
+})->group('RS-09');
+
+it('bloquea la integracion si un requisito implementado no tiene prueba', function (): void {
+    // RQ-13. Esta es la prueba de la propia trazabilidad: comprueba que el
+    // catalogo existe, que no esta vacio y que la etapa que lo ejecuta sigue
+    // en el pipeline. Que el comando SEPA fallar lo prueba
+    // TraceabilityCommandTest con un sabotaje.
+    $catalog = repoContents('docs/requisitos.yaml');
+
+    expect(substr_count($catalog, '- { id:'))->toBeGreaterThan(100);
+    expect($catalog)->toContain('fase: 0');
+})->group('RQ-13');

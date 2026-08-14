@@ -135,7 +135,7 @@ endif
 .DEFAULT_GOAL := help
 .PHONY: help up down restart build ps logs shell seed test test-unit test-integration \
         test-arch quality tools-ready php-lint deptrac rector sh-lint api-lint sast \
-        coverage coverage-now mutate e2e clean changelog changelog-check tool-versions
+        traceability traceability-check coverage coverage-now mutate e2e clean changelog changelog-check tool-versions
 
 help: ## Muestra esta ayuda
 	@echo KronoQR - objetivos disponibles:
@@ -157,6 +157,8 @@ help: ## Muestra esta ayuda
 	@echo   make sh-lint          Solo ShellCheck y shfmt   (etapa 1 de la CI)
 	@echo   make api-lint         Contrato OpenAPI 3.1      (etapa 1 de la CI)
 	@echo   make sast             Semgrep: reglas propias de .semgrep
+	@echo   make traceability     Matriz requisito - prueba (RQ-13)
+	@echo   make traceability-check  Falla si un requisito no tiene prueba
 	@echo   make coverage         Cobertura: dominio 90, global 75 por ciento
 	@echo   make coverage-now     Cobertura actual, sin umbral
 	@echo   make mutate           Mutacion sobre el dominio, MSI 80 por ciento
@@ -319,6 +321,18 @@ endif
 sast: ## Semgrep sobre las reglas de .semgrep (umbral: 0 hallazgos ERROR)
 	$(SEMGREP) --config .semgrep --error --metrics=off --quiet
 	@echo [make] Semgrep: 0 hallazgos de severidad alta.
+
+# La matriz se escribe DESDE FUERA del contenedor. docs/ se monta de solo
+# lectura (por lo mismo que la raiz del repositorio: nada de lo que corre
+# dentro tiene por que escribir en el arbol de fuentes), asi que el comando
+# emite la matriz por la salida estandar con --output=- y es make quien la
+# guarda. Sus avisos van a la salida de error y no contaminan el fichero.
+traceability: ## Genera docs/trazabilidad-pruebas.md (RQ-13, doc 02 seccion 9.6)
+	$(COMPOSE_DEV) exec -T app php artisan qa:traceability --output=- >docs/trazabilidad-pruebas.md
+	@echo "[make] Matriz escrita en docs/trazabilidad-pruebas.md"
+
+traceability-check: ## Falla si un requisito ya implementado no tiene prueba (RQ-13)
+	$(COMPOSE_DEV) exec -T app php artisan qa:traceability --check
 
 # Estos dos objetivos llaman a vendor/bin/pest y no a `php artisan test`, que es
 # lo que usa el resto del fichero. No es un descuido: `artisan test --coverage`
