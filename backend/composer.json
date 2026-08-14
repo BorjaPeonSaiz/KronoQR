@@ -1,0 +1,76 @@
+{
+    "$schema": "https://getcomposer.org/schema.json",
+    "name": "kronoqr/backend",
+    "type": "project",
+    "description": "KronoQR - control de presencia y registro horario con valor legal para hoteles.",
+    "keywords": ["kronoqr", "attendance", "laravel"],
+    "license": "proprietary",
+    "require": {
+        "php": "^8.4",
+        "ext-pdo": "*",
+        "ext-pgsql": "*",
+        "ext-redis": "*",
+        "ext-sodium": "*",
+        "endroid/qr-code": "^5.0",
+        "laravel/framework": "^12.0",
+        "laravel/horizon": "^5.0",
+        "laravel/reverb": "^1.0",
+        "laravel/sanctum": "^4.0",
+        "laravel/tinker": "^2.10.1",
+        "open-telemetry/sdk": "^1.0",
+        "pragmarx/google2fa": "^8.0",
+        "spatie/laravel-pdf": "^1.0",
+        "spatie/laravel-permission": "^6.0",
+        "spatie/simple-excel": "^3.0"
+    },
+    "require-dev": {
+        "deptrac/deptrac": "^4.0",
+        "driftingly/rector-laravel": "^2.0",
+        "fakerphp/faker": "^1.23",
+        "hotmeteor/spectator": "^3.0",
+        "larastan/larastan": "^3.0",
+        "laravel/pail": "^1.2.2",
+        "laravel/pint": "^1.0",
+        "mockery/mockery": "^1.6",
+        "nunomaduro/collision": "^8.6",
+        "pestphp/pest": "^3.0",
+        "pestphp/pest-plugin-laravel": "^3.0",
+        "phpunit/phpunit": "^11.5.50",
+        "rector/rector": "^2.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "app/",
+            "Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "tests/",
+            "KronoQR\\Tools\\": "tools/"
+        }
+    },
+    "scripts": {
+        "post-autoload-dump": [
+            "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
+            "@php artisan package:discover --ansi"
+        ]
+    },
+    "extra": {
+        "laravel": {
+            "dont-discover": []
+        }
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "preferred-install": "dist",
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true,
+            "php-http/discovery": true,
+            "tbachert/spi": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
