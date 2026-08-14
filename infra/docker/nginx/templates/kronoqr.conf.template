@@ -1,0 +1,252 @@
+#==============================================================================
+# KronoQR — configuracion del borde HTTP.
+#
+# Este fichero es una PLANTILLA: el punto de entrada de la imagen sustituye las
+# variables de entorno y lo deja en /etc/nginx/conf.d/kronoqr.conf. Se incluye
+# dentro del bloque http{}, por eso aqui pueden declararse geo, map y
+# limit_req_zone.
+#
+# Es el mismo fichero para desarrollo y para cualquier cliente (ADR-017): lo
+# que cambia va en .env.
+#==============================================================================
+
+#------------------------------------------------------------------------------
+# Rate limiting por zona — doc 02 §7.1
+#------------------------------------------------------------------------------
+# La zona de fichaje son DOS, no una:
+#
+#   desde KIOSK_VLAN_CIDR ...... 600 r/m con rafaga de 50
+#   desde cualquier otro origen .. 30 r/m con rafaga de 10
+#
+# Motivo: los 30 r/m por IP son un control pensado para internet, y TODOS los
+# quioscos de un hotel salen por la misma IP. Aplicado sin distinguir el
+# origen, Nginx frenaria el fichaje muy por debajo de RNF-P-06 (50 fichajes/s)
+# y el sintoma seria "el quiosco va lento a las 06:00", que es justo el pico
+# que el producto existe para absorber.
+#
+# El limite interno se ELEVA, no se elimina: RS-02 exige limitar por IP ademas
+# de por dispositivo y por credencial, y una maquina comprometida enchufada a
+# esa VLAN no puede quedar sin techo.
+geo $kronoqr_kiosk_vlan {
+  default 0;
+  ${KIOSK_VLAN_CIDR} 1;
+}
+
+# Clave vacia = peticion no contabilizada en esa zona. Asi cada peticion cae en
+# una sola de las dos zonas de fichaje, segun de donde venga.
+map $kronoqr_kiosk_vlan $kronoqr_scan_key_vlan {
+  1 $binary_remote_addr;
+  default "";
+}
+
+map $kronoqr_kiosk_vlan $kronoqr_scan_key_other {
+  1 "";
+  default $binary_remote_addr;
+}
+
+limit_req_zone $kronoqr_scan_key_vlan  zone=scan_kiosk_vlan:10m rate=600r/m;
+limit_req_zone $kronoqr_scan_key_other zone=scan_other:10m      rate=30r/m;
+limit_req_zone $binary_remote_addr     zone=auth:10m            rate=5r/m;
+limit_req_zone $binary_remote_addr     zone=portal:10m          rate=10r/m;
+limit_req_zone $binary_remote_addr     zone=api:10m             rate=120r/m;
+
+limit_req_status 429;
+limit_conn_zone $binary_remote_addr zone=conn_per_ip:10m;
+limit_conn_status 429;
+
+#------------------------------------------------------------------------------
+# /metrics restringido a red interna — doc 02 §8.1
+#------------------------------------------------------------------------------
+# Una sola red autorizada, la que scrapea Prometheus. Todo lo demas recibe 403,
+# incluido el host que publica los puertos. Si necesitas varias redes, anade
+# lineas aqui: es configuracion de instalacion, no codigo.
+geo $kronoqr_metrics_allowed {
+  default 0;
+  ${METRICS_ALLOW_CIDR} 1;
+}
+
+#------------------------------------------------------------------------------
+# Registro de acceso en JSON — doc 02 §8.1
+#------------------------------------------------------------------------------
+# Regla dura 21: ni un nombre de empleado. Aqui no se registran ni cuerpos, ni
+# cabeceras de autorizacion, ni el token del QR (que viaja en el cuerpo).
+log_format kronoqr_json escape=json
+  '{'
+  '"time":"$time_iso8601",'
+  '"level":"info",'
+  '"channel":"nginx.access",'
+  '"remote_addr":"$remote_addr",'
+  '"from_kiosk_vlan":$kronoqr_kiosk_vlan,'
+  '"method":"$request_method",'
+  '"path":"$uri",'
+  '"status":$status,'
+  '"bytes":$body_bytes_sent,'
+  '"duration_seconds":$request_time,'
+  '"upstream_seconds":"$upstream_response_time",'
+  '"trace_id":"$http_x_trace_id",'
+  '"device_id":"$http_x_device_id",'
+  '"user_agent":"$http_user_agent"'
+  '}';
+
+# access_log se declara DENTRO de cada server, no aqui: a nivel http se
+# sumaria al log combinado que trae la imagen base y cada peticion saldria dos
+# veces, una de ellas sin formato JSON.
+
+map $http_upgrade $connection_upgrade {
+  default upgrade;
+  ''      close;
+}
+
+# DNS interno de Docker. Es lo que permite que los destinos declarados como
+# variable se resuelvan en cada peticion en lugar de congelarse al arrancar.
+resolver 127.0.0.11 valid=10s ipv6=off;
+resolver_timeout 5s;
+
+# Si el cliente pone otro proxy o un balanceador por delante, el rate limiting
+# veria SIEMPRE la misma IP y las dos zonas de fichaje dejarian de distinguir
+# el origen. En ese caso hay que declarar aqui la IP del proxy:
+#   set_real_ip_from 10.0.0.5;
+#   real_ip_header X-Forwarded-For;
+#   real_ip_recursive on;
+
+#==============================================================================
+# Puerto 80 — redireccion a TLS, mas las dos rutas que no deben depender de el
+#==============================================================================
+server {
+  listen 8080;
+  server_name _;
+
+  access_log /dev/stdout kronoqr_json;
+
+  client_max_body_size ${NGINX_CLIENT_MAX_BODY_SIZE};
+  include /etc/nginx/snippets/security-headers.conf;
+
+  # Sonda del contenedor: comprueba Nginx, no la aplicacion. La sonda real del
+  # producto es /api/v1/health, que valida base de datos y Redis.
+  location = /healthz {
+    access_log off;
+    default_type text/plain;
+    return 200 "ok\n";
+  }
+
+  # Prometheus scrapea por la red interna, en claro y sin salir al exterior.
+  location = /metrics {
+    if ($kronoqr_metrics_allowed = 0) {
+      return 403;
+    }
+    access_log off;
+    include /etc/nginx/snippets/php-fpm.conf;
+  }
+
+  location / {
+    return 301 https://$host$request_uri;
+  }
+}
+
+#==============================================================================
+# Puerto 443 — la aplicacion
+#==============================================================================
+server {
+  listen 8443 ssl;
+  http2 on;
+  server_name _;
+
+  access_log /dev/stdout kronoqr_json;
+
+  ssl_certificate     ${TLS_CERT_FILE};
+  ssl_certificate_key ${TLS_KEY_FILE};
+
+  # TLS 1.3 obligatorio (§7.1). Si un dispositivo del cliente no lo soporta,
+  # la decision de anadir TLSv1.2 es suya y se documenta en la instalacion.
+  ssl_protocols TLSv1.3;
+  ssl_prefer_server_ciphers off;
+  ssl_session_cache shared:SSL:10m;
+  ssl_session_timeout 1d;
+  ssl_session_tickets off;
+
+  include /etc/nginx/snippets/security-headers.conf;
+
+  client_max_body_size ${NGINX_CLIENT_MAX_BODY_SIZE};
+  client_body_timeout 15s;
+  limit_conn conn_per_ip 64;
+
+  server_tokens off;
+
+  root /var/www/html/public;
+  index index.php;
+
+  location = /healthz {
+    access_log off;
+    default_type text/plain;
+    return 200 "ok\n";
+  }
+
+  location = /metrics {
+    if ($kronoqr_metrics_allowed = 0) {
+      return 403;
+    }
+    access_log off;
+    include /etc/nginx/snippets/php-fpm.conf;
+  }
+
+  #--- Fichaje: las dos zonas del §7.1 ---------------------------------------
+  # Cubre /api/v1/scan, /api/v1/scan/batch y /api/v1/scan/pin.
+  # nodelay: la rafaga se sirve de inmediato. Un cambio de turno es una rafaga
+  # legitima, y encolarla seria exactamente el sintoma que hay que evitar.
+  location ^~ /api/v1/scan {
+    limit_req zone=scan_kiosk_vlan burst=50 nodelay;
+    limit_req zone=scan_other burst=10 nodelay;
+    include /etc/nginx/snippets/php-fpm.conf;
+  }
+
+  #--- Autenticacion del panel: 5 r/m ----------------------------------------
+  location ^~ /api/v1/auth/ {
+    limit_req zone=auth burst=5 nodelay;
+    include /etc/nginx/snippets/php-fpm.conf;
+  }
+
+  #--- Portal del empleado: 10 r/m -------------------------------------------
+  # Se aplica a la API del portal (/api/v1/me/*), no a sus ficheros estaticos:
+  # limitar los assets a 10 r/m dejaria la pagina sin cargar.
+  location ^~ /api/v1/me/ {
+    limit_req zone=portal burst=10 nodelay;
+    include /etc/nginx/snippets/php-fpm.conf;
+  }
+
+  #--- Resto de la API: 120 r/m ----------------------------------------------
+  location ^~ /api/ {
+    limit_req zone=api burst=60 nodelay;
+    include /etc/nginx/snippets/php-fpm.conf;
+  }
+
+  #--- WebSocket de presencia en vivo (Reverb) -------------------------------
+  location ^~ /app/ {
+    set $kronoqr_reverb_upstream reverb:8080;
+    proxy_pass http://$kronoqr_reverb_upstream;
+    include /etc/nginx/snippets/proxy-websocket.conf;
+  }
+
+  location ^~ /apps/ {
+    set $kronoqr_reverb_upstream reverb:8080;
+    proxy_pass http://$kronoqr_reverb_upstream;
+    include /etc/nginx/snippets/proxy-websocket.conf;
+  }
+
+  # Aqui entran las locations de desarrollo (servidores de Vite de los tres
+  # frontends). En produccion el directorio esta vacio y se sirven los ficheros
+  # construidos. El glob no falla si no hay nada.
+  include /etc/nginx/extra/*.conf;
+
+  location / {
+    try_files $uri $uri/ /index.php?$query_string;
+  }
+
+  location ~ \.php$ {
+    include /etc/nginx/snippets/php-fpm.conf;
+  }
+
+  # Ficheros ocultos y copias de editor: nunca se sirven.
+  location ~ /\.(?!well-known) {
+    deny all;
+  }
+}

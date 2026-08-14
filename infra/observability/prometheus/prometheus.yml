@@ -1,0 +1,42 @@
+# KronoQR — configuracion base de Prometheus (doc 02 §8.1).
+#
+# Aqui NO hay reglas de alerta: el catalogo del doc 01 §9.3, con destinatario,
+# umbral y enlace a runbook en cada regla, es de la tarea 3.2. Lo que hay es el
+# esqueleto que esa tarea rellena: el directorio rules/ ya se carga.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  # La etiqueta de instalacion (una por cliente, ADR-016) la anade la tarea 3.2
+  # junto con el catalogo de alertas: sin reglas que la usen no aporta nada y
+  # obligaria a activar una feature flag de Prometheus desde el primer dia.
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+# El servicio alertmanager esta definido en compose.prod.yaml. Se activa en la
+# tarea 3.2, junto con las once reglas del catalogo: hasta que haya reglas, un
+# Alertmanager conectado no tiene nada que encaminar.
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: ["alertmanager:9093"]
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["127.0.0.1:9090"]
+
+  # Metricas de la aplicacion (§8.2). Se leen a traves del borde, que restringe
+  # /metrics a METRICS_ALLOW_CIDR: Prometheus es el unico origen autorizado.
+  #
+  # En la Fase 0 este objetivo aparece DOWN y es correcto: la aplicacion
+  # Laravel que expone /metrics llega en la tarea 0.2 y la instrumentacion, en
+  # la 3.1.
+  - job_name: kronoqr-api
+    metrics_path: /metrics
+    scheme: http
+    static_configs:
+      - targets: ["nginx:8080"]
+        labels:
+          service: api

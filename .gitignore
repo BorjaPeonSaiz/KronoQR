@@ -1,0 +1,35 @@
+# Secretos y configuración local (doc 02 §7.7: nada de secretos en el repositorio).
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+infra/docker/nginx/certs/
+
+# Dependencias
+/backend/vendor/
+node_modules/
+
+# Artefactos de ejecución
+#
+# storage/ y bootstrap/cache/ NO se ignoran enteros: Laravel versiona el
+# esqueleto de directorios con un .gitignore dentro de cada uno que ignora el
+# contenido y conserva la carpeta. Ignorarlos aquí de golpe dejaba una
+# instalación limpia sin storage/framework/{cache,sessions,views}, y la
+# aplicación no arranca sin esas carpetas.
+/backend/public/hot
+/backend/public/build/
+dist/
+coverage/
+.phpunit.result.cache
+.phpunit.cache/
+/load-tests/k6/results/
+
+# Herramientas de desarrollo
+.idea/
+.vscode/
+.fleet/
+*.log
+.DS_Store
+Thumbs.db

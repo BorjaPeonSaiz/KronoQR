@@ -1,0 +1,362 @@
+#==============================================================================
+# KronoQR — entorno de desarrollo. Los 14 servicios del doc 02 §3.4.
+#
+# Uso previsto:  make up      (desde la raiz del repositorio)
+#
+# Si lo invocas a mano, pasa el fichero de entorno explicitamente:
+#   docker compose --env-file .env -f infra/compose.dev.yaml up -d
+# El .env canonico vive en la raiz, junto a .env.example; este fichero esta en
+# infra/, asi que Docker Compose no lo encuentra solo.
+#
+# Estado en la Fase 0: la aplicacion Laravel llega en la tarea 0.2 y los tres
+# frontends en la 0.5. Los servicios que dependen de ellos arrancan, avisan por
+# el log y quedan a la espera, en lugar de reiniciarse en bucle.
+#==============================================================================
+
+name: kronoqr
+
+x-php-image: &php-image
+  build:
+    context: ..
+    dockerfile: infra/docker/php/Dockerfile
+    target: dev
+  image: kronoqr/php:dev
+  env_file:
+    - ../.env
+  volumes:
+    - ../backend:/var/www/html
+    # vendor/ NO viaja por el bind mount, y no es una optimizacion opcional.
+    #
+    # En una estacion Windows el codigo vive en NTFS y Docker lo expone a los
+    # contenedores Linux cruzando esa frontera en cada lectura. Medido en esta
+    # maquina: leer 2.000 ficheros desde el mount tarda 15.294 ms; los mismos
+    # ficheros en el disco del contenedor, 30 ms. Son 500 veces mas lento, y
+    # vendor/ son 16.919 de los 17.779 ficheros del backend.
+    #
+    # Efecto sobre la suite unitaria, misma suite y mismo contenedor:
+    #   desde el bind mount .... 3,84 s   (incumple el presupuesto de CLAUDE.md)
+    #   desde disco local ...... 0,10 s
+    #
+    # El codigo fuente sigue en bind mount, que es lo que hace que editar un
+    # fichero se vea al instante. Lo que se saca del mount es lo que nadie
+    # edita a mano y composer.lock gobierna.
+    #
+    # Consecuencia: las dependencias del contenedor viven en este volumen y se
+    # instalan dentro (lo hace el entrypoint si el volumen esta vacio). El
+    # backend/vendor del host queda solo para que el IDE resuelva el autoload,
+    # que es para lo que el doc de entorno §B.3 puso Composer en el host.
+    - backend-vendor:/var/www/html/vendor
+  networks:
+    - app
+  restart: unless-stopped
+
+services:
+
+  #--- 1 · API Laravel 12 sobre PHP 8.4-FPM -----------------------------------
+  app:
+    <<: *php-image
+    container_name: kronoqr-app
+    command: ["fpm"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      # Comprueba que el gestor de procesos responde, no solo que el proceso
+      # existe. La sonda de negocio es /api/v1/health y llega en la tarea 0.2.
+      test: ["CMD-SHELL", "SCRIPT_NAME=/ping SCRIPT_FILENAME=/ping REQUEST_METHOD=GET cgi-fcgi -bind -connect 127.0.0.1:9000 | grep -q pong"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  #--- 2 · Borde HTTP: TLS, cabeceras, rate limiting --------------------------
+  nginx:
+    build:
+      context: ..
+      dockerfile: infra/docker/nginx/Dockerfile
+    image: kronoqr/nginx:dev
+    container_name: kronoqr-nginx
+    env_file:
+      - ../.env
+    ports:
+      - "80:8080"
+      - "443:8443"
+    volumes:
+      # Solo lectura: el borde no escribe en el codigo.
+      - ../backend:/var/www/html:ro
+      - ./docker/nginx/dev-extra:/etc/nginx/extra:ro
+      - nginx-certs:/etc/nginx/certs
+    depends_on:
+      - app
+    networks:
+      - app
+      - observability
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  #--- 3 · PostgreSQL 17 ------------------------------------------------------
+  postgres:
+    build:
+      context: ..
+      dockerfile: infra/docker/postgres/Dockerfile
+    image: kronoqr/postgres:dev
+    container_name: kronoqr-postgres
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-fichaje}
+      POSTGRES_USER: ${DB_USERNAME:-fichaje_app}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-kronoqr_local_dev_only}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+      TZ: UTC
+      PGTZ: UTC
+    # Regla dura 3: UTC desde el primer arranque, tambien si alguien recrea el
+    # volumen con otra configuracion regional en la maquina.
+    command: ["postgres", "-c", "timezone=UTC", "-c", "log_timezone=UTC"]
+    ports:
+      # Solo accesible desde la propia maquina de desarrollo.
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  #--- 4 · Redis 7: colas, cache, rate limiting, sesiones ---------------------
+  redis:
+    image: redis:7-alpine
+    container_name: kronoqr-redis
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  #--- 5 · Worker de colas ----------------------------------------------------
+  horizon:
+    <<: *php-image
+    container_name: kronoqr-horizon
+    command: ["horizon"]
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    # Sin healthcheck hasta la tarea 0.2: la sonda util es la lista de
+    # supervisores de Horizon, y no existe sin aplicacion.
+
+  #--- 6 · WebSocket de presencia en vivo -------------------------------------
+  reverb:
+    <<: *php-image
+    container_name: kronoqr-reverb
+    command: ["reverb"]
+    expose:
+      - "8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  #--- 7 · Reconciliacion, incidencias, retencion, copias ---------------------
+  scheduler:
+    <<: *php-image
+    container_name: kronoqr-scheduler
+    command: ["scheduler"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  #--- 8 · Vite del quiosco ---------------------------------------------------
+  node-kiosk:
+    build:
+      context: ..
+      dockerfile: infra/docker/node/Dockerfile
+    image: kronoqr/node:dev
+    container_name: kronoqr-node-kiosk
+    environment:
+      FRONTEND_NAME: kiosk
+    volumes:
+      - ../frontend-kiosk:/app
+    ports:
+      - "127.0.0.1:5173:5173"
+    networks:
+      - app
+    restart: unless-stopped
+
+  #--- 9 · Vite del panel de gestion ------------------------------------------
+  node-admin:
+    build:
+      context: ..
+      dockerfile: infra/docker/node/Dockerfile
+    image: kronoqr/node:dev
+    container_name: kronoqr-node-admin
+    environment:
+      FRONTEND_NAME: admin
+    volumes:
+      - ../frontend-admin:/app
+    ports:
+      - "127.0.0.1:5174:5173"
+    networks:
+      - app
+    depends_on:
+      - node-kiosk
+    restart: unless-stopped
+
+  #--- 10 · Vite del portal del empleado --------------------------------------
+  node-portal:
+    build:
+      context: ..
+      dockerfile: infra/docker/node/Dockerfile
+    image: kronoqr/node:dev
+    container_name: kronoqr-node-portal
+    environment:
+      FRONTEND_NAME: portal
+    volumes:
+      - ../frontend-portal:/app
+    ports:
+      - "127.0.0.1:5175:5173"
+    networks:
+      - app
+    depends_on:
+      - node-kiosk
+    restart: unless-stopped
+
+  #--- 11 · Correo de desarrollo ----------------------------------------------
+  mailpit:
+    image: axllent/mailpit:v1.21
+    container_name: kronoqr-mailpit
+    environment:
+      MP_MAX_MESSAGES: "500"
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+    ports:
+      - "127.0.0.1:8025:8025"
+    networks:
+      - app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://127.0.0.1:8025/readyz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  #--- 12 · Metricas ----------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    container_name: kronoqr-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+      - --web.enable-lifecycle
+    volumes:
+      - ./observability/prometheus:/etc/prometheus:ro
+      - prometheus-data:/prometheus
+    ports:
+      # Nunca 0.0.0.0: Prometheus no se expone a internet.
+      - "127.0.0.1:9090:9090"
+    networks:
+      observability:
+        # IP fija dentro de METRICS_ALLOW_CIDR: es el unico origen autorizado a
+        # leer /metrics en el borde.
+        ipv4_address: 172.29.0.20
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://127.0.0.1:9090/-/healthy || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  #--- 13 · Cuadros de mando --------------------------------------------------
+  grafana:
+    image: grafana/grafana:11.5.1
+    container_name: kronoqr-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-kronoqr_local_dev_only}
+      # Grafana no se expone sin autenticacion, ni siquiera en desarrollo: el
+      # habito se traslada al servidor del cliente.
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_DATE_FORMATS_DEFAULT_TIMEZONE: utc
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+    networks:
+      - observability
+    depends_on:
+      - prometheus
+      - loki
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  #--- 14 · Logs estructurados ------------------------------------------------
+  loki:
+    image: grafana/loki:3.3.2
+    container_name: kronoqr-loki
+    command: ["-config.file=/etc/loki/loki.yaml"]
+    volumes:
+      - ./observability/loki/loki.yaml:/etc/loki/loki.yaml:ro
+      - loki-data:/loki
+    networks:
+      # Tambien en la red de la aplicacion: Monolog empuja los logs desde app,
+      # horizon y scheduler (tarea 0.2).
+      - app
+      - observability
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://127.0.0.1:3100/ready || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+networks:
+  app:
+    name: kronoqr-app
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+  observability:
+    name: kronoqr-observability
+    ipam:
+      config:
+        - subnet: 172.29.0.0/24
+
+volumes:
+  # Dependencias de PHP fuera del bind mount. El motivo, medido, esta junto al
+  # montaje en x-php-image.
+  backend-vendor:
+  postgres-data:
+  redis-data:
+  prometheus-data:
+  grafana-data:
+  loki-data:
+  nginx-certs:

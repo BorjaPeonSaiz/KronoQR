@@ -1,0 +1,60 @@
+# KronoQR — configuracion base de Alertmanager (doc 02 §8.4).
+#
+# Las once alertas del catalogo del doc 01 §9.3 y sus destinatarios reales son
+# de la tarea 3.2. Aqui esta lo que ya se puede fijar: las reglas ANTI-FATIGA,
+# que son las que deciden si alguien se cree las alertas o las ignora.
+#
+# Norma que no se negocia: cada alerta lleva destinatario, umbral y enlace a su
+# runbook. Una alerta sin procedimiento asociado es ruido y se elimina.
+#
+# NINGUN SECRETO EN ESTE FICHERO (§7.7). Las URL de webhook, los tokens de
+# mensajeria y las credenciales SMTP se inyectan por variable de entorno desde
+# el .env del cliente.
+
+global:
+  resolve_timeout: 5m
+
+route:
+  # Agrupacion por dispositivo: un quiosco que se reinicia no despierta a
+  # nadie; cinco a la vez llegan como una sola notificacion que si lo merece.
+  group_by: ["alertname", "site", "device"]
+  # Margen para que se agrupen los avisos del mismo suceso.
+  group_wait: 30s
+  group_interval: 5m
+  # Repetir cada 4 h lo que sigue sin resolverse. Mas frecuente se ignora.
+  repeat_interval: 4h
+  receiver: default
+
+  routes:
+    # Los incidentes de integridad no esperan a la agrupacion: divergencia de
+    # proyeccion y rotura de la cadena de auditoria deben permanecer SIEMPRE en
+    # cero, y cualquier incremento es un incidente, no una tendencia.
+    - matchers:
+        - severity = "critical-integrity"
+      receiver: default
+      group_wait: 0s
+      repeat_interval: 1h
+
+inhibit_rules:
+  # Si el centro entero esta caido, no notificar quiosco por quiosco.
+  - source_matchers:
+      - severity = "critical"
+    target_matchers:
+      - severity = "warning"
+    equal: ["site"]
+
+time_intervals:
+  # Ventana de mantenimiento declarada. La instalacion la ajusta a su horario:
+  # el cambio de turno de las 06:00 nunca debe caer dentro.
+  - name: ventana-mantenimiento
+    time_intervals:
+      - weekdays: ["sunday"]
+        times:
+          - start_time: "02:00"
+            end_time: "04:00"
+
+receivers:
+  # Receptor sin destino: en la Fase 0 no hay ninguna regla que encaminar y no
+  # se inventa un destinatario. Los reales los declara la tarea 3.2 a partir de
+  # la columna "destinatario" del catalogo del doc 01 §9.3.
+  - name: default

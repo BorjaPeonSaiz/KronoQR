@@ -1,0 +1,2 @@
+# Prueba de carga k6 (doc 02 §9.2): RNF-P-06, 50 fichajes/s con p95 < 150 ms.
+# scan-peak.js se escribe en la Fase 3.

@@ -1,0 +1,21 @@
+# Supresiones de Trivy. Umbral del doc 02 §9.2: 0 CVE criticos en la imagen
+# final. Una supresion es una excepcion razonada y CON FECHA DE CADUCIDAD: al
+# vencer, Trivy vuelve a marcarla y hay que decidir de nuevo.
+#
+# Regla de admision: solo entra aqui lo que (a) viene de una imagen base que no
+# controlamos, (b) no es alcanzable en nuestro uso, y (c) tiene explicado por
+# que. Todo lo demas se arregla.
+
+vulnerabilities:
+  - id: CVE-2025-68121
+    paths:
+      - usr/local/bin/gosu
+    statement: >-
+      Viene de la imagen oficial postgres:17-alpine, que empaqueta gosu
+      compilado con Go 1.24.6. El fallo esta en crypto/tls (validacion de
+      certificado al reanudar sesion TLS) y gosu no abre ninguna conexion TLS:
+      el entrypoint de PostgreSQL solo lo usa para bajar privilegios de root a
+      postgres durante el arranque. No es alcanzable en este uso. Se retira en
+      cuanto la imagen base se reconstruya con Go 1.24.13 o superior; la
+      comprobacion la fuerza la fecha de caducidad de abajo.
+    expired_at: 2026-11-30

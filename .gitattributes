@@ -1,0 +1,46 @@
+# KronoQR — normalización de finales de línea.
+#
+# Motivo (plan implementacion/01-herramientas-y-entorno.md §B.0): los scripts de
+# infra/scripts/ son entregables del producto y se ejecutan en el servidor Linux
+# del cliente. Un .sh con CRLF no arranca en Linux: el intérprete lee
+# "#!/usr/bin/env bash\r" y falla con un error que no dice nada útil.
+#
+# Complemento obligatorio en la estación de trabajo:  git config core.autocrlf input
+# Comprobación:                                       git ls-files --eol infra/
+
+* text=auto
+
+# Se ejecuta en Linux: LF siempre, sin excepción.
+*.sh            text eol=lf
+Makefile        text eol=lf
+*.mk            text eol=lf
+Dockerfile      text eol=lf
+*.dockerfile    text eol=lf
+.env.example    text eol=lf
+*.yaml          text eol=lf
+*.yml           text eol=lf
+*.conf          text eol=lf
+*.template      text eol=lf
+*.sql           text eol=lf
+
+# Código del producto: LF para que el diff no dependa del sistema operativo.
+*.php           text eol=lf
+*.ts            text eol=lf
+*.tsx           text eol=lf
+*.js            text eol=lf
+*.vue           text eol=lf
+*.css           text eol=lf
+*.json          text eol=lf
+*.md            text eol=lf
+*.neon          text eol=lf
+
+# Binarios: git no los toca.
+*.png           binary
+*.jpg           binary
+*.jpeg          binary
+*.gif           binary
+*.ico           binary
+*.pdf           binary
+*.woff          binary
+*.woff2         binary
+*.y4m           binary

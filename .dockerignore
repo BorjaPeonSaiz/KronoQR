@@ -1,0 +1,44 @@
+# El contexto de construccion de las tres imagenes es la raiz del repositorio.
+# Lo que no entre aqui viaja al demonio de Docker en cada build: mas lento y,
+# lo importante, mas superficie para que un COPY descuidado meta un secreto en
+# una capa (doc 02 §7.7).
+
+.git
+.gitignore
+.gitattributes
+
+# Secretos y configuracion local. NUNCA en una imagen.
+.env
+.env.*
+*.pem
+*.key
+*.crt
+infra/docker/nginx/certs/
+
+# Dependencias: las resuelve la propia imagen, con su version de PHP y de Node.
+# Copiar las del host produce imagenes que "funcionan en mi maquina".
+backend/vendor/
+node_modules/
+
+# Estado de ejecucion
+backend/storage/
+backend/bootstrap/cache/
+dist/
+coverage/
+.phpunit.result.cache
+.phpunit.cache/
+
+# Documentacion y planificacion: no forman parte de ninguna imagen.
+docs/
+plan implementacion/
+.claude/
+.github/
+load-tests/
+CLAUDE.md
+
+# Editor y sistema operativo
+.idea/
+.vscode/
+*.log
+.DS_Store
+Thumbs.db
