@@ -13,16 +13,16 @@ así que un `git diff` sobre esta matriz solo enseña cambios reales de cobertur
 
 - Catálogo: `docs/requisitos.yaml`, **160 requisitos**.
 - Fase en curso (`CURRENT_PHASE`): **0**. Orden real de ejecución: 0 -> 1 -> 2 -> 5 -> 3 -> 4.
-- Pruebas etiquetadas: **41** (Pest 41, Playwright 0).
+- Pruebas etiquetadas: **42** (Pest 42, Playwright 0).
 - Bloquean solo las fases ya ejecutadas: un requisito de la Fase 3 no bloquea mientras se trabaja en la Fase 1.
 
 | Fase | ¿Ejecutada? | Requisitos | Con prueba | Sin prueba |
 |---|---|---|---|---|
-| 0 | sí | 15 | 10 | 5 |
-| 1 | no | 57 | 9 | 48 |
+| 0 | sí | 15 | 11 | 4 |
+| 1 | no | 58 | 9 | 49 |
 | 2 | no | 45 | 0 | 45 |
 | 5 | no | 23 | 0 | 23 |
-| 3 | no | 20 | 2 | 18 |
+| 3 | no | 19 | 2 | 17 |
 | 4 | no | 0 | 0 | 0 |
 
 ## Requisitos en alcance sin prueba
@@ -31,7 +31,6 @@ Estos **bloquean** `qa:traceability --check` y, con él, la etapa ③b de la CI.
 
 | Requisito | Fase | Enunciado |
 |---|---|---|
-| `RNF-M-04` | 0 | Toda decisión arquitectónica relevante queda registrada como ADR versionado en el repositorio |
 | `RQ-01` | 0 | Toda regla de negocio del §4 tiene al menos una prueba unitaria en el dominio, sin base de datos ni framework |
 | `RS-10` | 0 | Análisis de dependencias y de código en cada pull request; ninguna vulnerabilidad crítica o alta puede llegar a una versión publicada |
 
@@ -42,14 +41,14 @@ Estos **bloquean** `qa:traceability --check` y, con él, la etapa ③b de la CI.
 | `RNF-M-01` | 0 | `html/tests/Architecture/QualityGatesTest.php:80` — exige los umbrales de cobertura del dominio y del backend | Cobertura de pruebas: ≥ 90 % en la capa de dominio, ≥ 75 % global |
 | `RNF-M-02` | 0 | `html/tests/Architecture/QualityGatesTest.php:57` — exige PHPStan en el nivel maximo<br>`html/tests/Architecture/QualityGatesTest.php:70` — exige justificacion en cada supresion de PHPStan | Análisis estático en nivel máximo (PHPStan/Larastan nivel 9) sin errores suprimidos sin justificar |
 | `RNF-M-03` | 0 | `html/tests/Architecture/CoreBoundariesTest.php:37` — mantiene el nucleo Attendance sin importar nada de los satelites<br>`html/tests/Architecture/CoreBoundariesTest.php:63` — mantiene la arista de ADR-025 acotada a Attendance\\Application\\Port<br>`html/tests/Architecture/CoreBoundariesTest.php:92` — mantiene los puertos de Attendance libres de tipos de satelites y del framework<br>`html/tests/Architecture/CoreBoundariesTest.php:127` — no permite dos declaraciones del mismo puerto transversal ni de su adaptador<br>`html/tests/Architecture/CoreBoundariesTest.php:138` — mantiene el puerto Clock en la capa de aplicacion de Shared<br>`html/tests/Architecture/DomainPurityTest.php:50` — no llama al reloj del sistema desde el dominio<br>`html/tests/Architecture/DomainPurityTest.php:64` — no importa Carbon en el dominio<br>`html/tests/Architecture/DomainPurityTest.php:81` — no importa el framework ni Eloquent en el dominio<br>`html/tests/Architecture/DomainPurityTest.php:97` — no conoce el puerto Clock desde el dominio<br>`html/tests/Feature/ModuleServiceProvidersTest.php:38` — carga el proveedor de servicios del modulo<br>`html/tests/Feature/ModuleServiceProvidersTest.php:44` — resuelve el puerto Clock al adaptador SystemClock<br>`html/tests/Feature/ModuleServiceProvidersTest.php:51` — sirve siempre la misma instancia del reloj<br>`html/tests/Feature/ModuleServiceProvidersTest.php:57` — arranca la aplicacion con la zona horaria en UTC<br>`html/tests/Unit/Shared/SystemClockTest.php:17` — implementa el puerto Clock que declara Shared<br>`html/tests/Unit/Shared/SystemClockTest.php:29` — devuelve el instante en UTC<br>`html/tests/Unit/Shared/SystemClockTest.php:45` — devuelve el instante actual aunque la zona del proceso no sea UTC | Las dependencias entre módulos se verifican automáticamente |
-| `RNF-M-04` | 0 | — | Toda decisión arquitectónica relevante queda registrada como ADR versionado en el repositorio |
+| `RNF-M-04` | 0 | `html/tests/Architecture/QualityGatesTest.php:214` — registra cada decision de arquitectura como ADR versionado | Toda decisión arquitectónica relevante queda registrada como ADR versionado en el repositorio |
 | `RNF-M-05` | 0 | — | Deuda técnica visible: presupuesto máximo del 15 % de cada iteración dedicado a su reducción |
 | `RNF-M-06` | 0 | `html/tests/Architecture/QualityGatesTest.php:115` — ata cada convencion del stack a una herramienta que la verifica | El código sigue las convenciones publicadas de cada stack (documento 02, §3.5): PSR-12/PER para PHP, convenciones de Laravel, guía de estilo oficia... |
 | `RNF-P-07` | 0 | `html/tests/Architecture/QualityGatesTest.php:191` — comprueba el presupuesto de bundle del quiosco en el propio build | Presupuesto de bundle del quiosco |
 | `RQ-01` | 0 | — | Toda regla de negocio del §4 tiene al menos una prueba unitaria en el dominio, sin base de datos ni framework |
 | `RQ-06` | 0 | `html/tests/Contract/OpenApiContractTest.php:39` — lo carga Spectator como documento OpenAPI 3.1<br>`html/tests/Contract/OpenApiContractTest.php:51` — describe solo los endpoints cuya tarea existe, y todos bajo /api/v1 | La API está descrita por un contrato OpenAPI y las respuestas se validan contra el esquema en las pruebas |
 | `RQ-12` | 0 | — | Ninguna funcionalidad se considera terminada sin cumplir la Definición de Terminado del documento 02, §10.3 |
-| `RQ-13` | 0 | `html/tests/Architecture/QualityGatesTest.php:202` — bloquea la integracion si un requisito implementado no tiene prueba | Trazabilidad requisito ↔ prueba, verificada por la CI. Cada prueba declara qué requisitos cubre mediante una etiqueta (RF-, RN-, RL-, RS-) |
+| `RQ-13` | 0 | `html/tests/Architecture/QualityGatesTest.php:225` — bloquea la integracion si un requisito implementado no tiene prueba | Trazabilidad requisito ↔ prueba, verificada por la CI. Cada prueba declara qué requisitos cubre mediante una etiqueta (RF-, RN-, RL-, RS-) |
 | `RQ-14` | 0 | `html/tests/Architecture/QualityGatesTest.php:91` — declara las cinco suites de la piramide de pruebas | Cobertura por niveles obligatoria según la naturaleza de la funcionalidad, no a criterio de quien la implementa |
 | `RS-08` | 0 | `html/tests/Architecture/QualityGatesTest.php:122` — mantiene los secretos fuera del control de versiones<br>`html/tests/Architecture/QualityGatesTest.php:144` — no deja ningun secreto real en el fichero de ejemplo | Gestión de secretos fuera del repositorio, con rotación documentada |
 | `RS-09` | 0 | `html/tests/Architecture/QualityGatesTest.php:163` — sirve las cabeceras de seguridad completas | Cabeceras de seguridad completas (HSTS, CSP estricta, X-Content-Type-Options, Referrer-Policy, Permissions-Policy limitando cámara al origen propio) |
@@ -100,6 +99,7 @@ Estos **bloquean** `qa:traceability --check` y, con él, la etapa ③b de la CI.
 | `RN-08` | 1 | — | Duración máxima de tramo antes de considerarse anómalo: 12 h (configurable) |
 | `RN-09` | 1 | — | El cálculo de duración usa aritmética sobre instantes UTC, por lo que es inmune a los cambios de hora (DST) |
 | `RNF-D-04` | 1 | — | Ninguna migración puede requerir parada de servicio (patrón expand / migrate / contract) |
+| `RNF-P-01` | 1 | — | Latencia percibida del fichaje (de escaneo a confirmación en pantalla) |
 | `RNF-P-03` | 1 | — | Tiempo de decodificación del QR en tablet de gama media |
 | `RQ-02` | 1 | — | El cálculo de duraciones se prueba con pruebas basadas en propiedades, incluyendo los días de cambio de hora y turnos que cruzan medianoche |
 | `RQ-03` | 1 | — | La idempotencia del fichaje se prueba con envíos concurrentes del mismo scan_id |
@@ -170,7 +170,6 @@ Estos **bloquean** `qa:traceability --check` y, con él, la etapa ③b de la CI.
 | `RF-PR-06` | 3 | — | Detección de patrones anómalos de uso de credencial: dos fichajes consecutivos en el mismo quiosco separados por segundos, coincidencias sistemátic... |
 | `RN-16` | 3 | — | Secuencia imposible de credencial: dos escaneos de la misma credencial en dispositivos distintos separados por menos del tiempo mínimo de tránsito... |
 | `RNF-D-01` | 3 | `html/tests/Contract/OpenApiContractTest.php:114` — publica la version desplegada en la sonda de vida<br>`html/tests/Contract/OpenApiContractTest.php:123` — separa la sonda de vida de la de disponibilidad | Disponibilidad del servicio: 99,5 % mensual |
-| `RNF-P-01` | 3 | — | Latencia percibida del fichaje (de escaneo a confirmación en pantalla) |
 | `RNF-P-02` | 3 | — | Latencia del endpoint de fichaje en servidor |
 | `RNF-P-06` | 3 | — | Pico de concurrencia soportado |
 | `RQ-04` | 3 | — | Existen pruebas E2E del flujo de quiosco con cámara simulada alimentada por vídeo con un QR real |

@@ -393,13 +393,30 @@ jobs:
         # de la ejecucion y no parezca una comprobacion que ha pasado.
         run: make mutate
 
-      # HUECO RESERVADO — etapa ③b Trazabilidad (doc 02 §10.1 y §9.6).
+      # --- etapa ③b · Trazabilidad y coherencia documental --------------------
       #
-      #   - name: Matriz de trazabilidad (RQ-13)
-      #     run: make traceability      # php artisan qa:traceability --check
+      # Los dos son BLOQUEANTES (§10.1, §9.6). Van juntos y aqui porque
+      # comprueban lo mismo desde dos lados: que lo que los documentos dicen y
+      # lo que el repositorio hace no han divergido.
       #
-      # El comando artisan lo crea la tarea 0.7. Va aqui, despues de las
-      # unitarias y antes de la etapa ④, con presupuesto de ~10 s.
+      # `--check` no escribe nada. La matriz se regenera con `make traceability`
+      # desde el host, porque docs/ se monta de solo lectura en el contenedor.
+
+      - name: Trazabilidad requisito → prueba (RQ-13)
+        # Falla si un requisito de una fase YA EJECUTADA no tiene ninguna prueba
+        # que lo referencie. El alcance sale de docs/requisitos.yaml filtrando
+        # por el orden real de ejecucion (0 -> 1 -> 2 -> 5 -> 3 -> 4), asi que un
+        # requisito de la Fase 3 no bloquea mientras se trabaja en la Fase 1.
+        run: make traceability-check
+
+      - name: Coherencia documental (RQ-12, RNF-M-04)
+        # Falla si un ADR del §4 no tiene fichero, si un requisito no lo
+        # construye ninguna tarea del plan, o si la fase de un requisito no
+        # coincide con la de su tarea. Los seis hallazgos bloqueantes de la
+        # auditoria previa fueron ese mismo fallo repetido, y los tres son
+        # mecanicamente detectables: los encontro una persona leyendo seis
+        # ficheros a la vez, que es justo lo que esto sustituye.
+        run: make docs-consistency
 
       - name: Presupuesto de la etapa
         if: always()

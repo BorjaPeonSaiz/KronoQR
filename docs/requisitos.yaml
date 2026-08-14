@@ -36,7 +36,7 @@
 - { id: RS-09,     fase: 0, titulo: "Cabeceras de seguridad completas (HSTS, CSP estricta, X-Content-Type-Options, Referrer-Policy, Permissions-Policy limitando cámara al origen propio)" }
 - { id: RS-10,     fase: 0, titulo: "Análisis de dependencias y de código en cada pull request; ninguna vulnerabilidad crítica o alta puede llegar a una versión publicada" }
 
-# --- Fase 1 -------------------------------------------- (57 requisitos)
+# --- Fase 1 -------------------------------------------- (58 requisitos)
 - { id: RF-AT-01,  fase: 1, titulo: "El sistema registra un evento de fichaje al escanear un QR válido en un quiosco autenticado" }
 - { id: RF-AT-02,  fase: 1, titulo: "Si el empleado no tiene turno abierto, el escaneo abre un turno (entrada)" }
 - { id: RF-AT-03,  fase: 1, titulo: "Si el empleado tiene un turno abierto, el escaneo lo cierra (salida) y calcula la duración" }
@@ -83,6 +83,7 @@
 - { id: RN-08,     fase: 1, titulo: "Duración máxima de tramo antes de considerarse anómalo: 12 h (configurable)" }
 - { id: RN-09,     fase: 1, titulo: "El cálculo de duración usa aritmética sobre instantes UTC, por lo que es inmune a los cambios de hora (DST)" }
 - { id: RNF-D-04,  fase: 1, titulo: "Ninguna migración puede requerir parada de servicio (patrón expand / migrate / contract)" }
+- { id: RNF-P-01,  fase: 1, titulo: "Latencia percibida del fichaje (de escaneo a confirmación en pantalla)" }
 - { id: RNF-P-03,  fase: 1, titulo: "Tiempo de decodificación del QR en tablet de gama media" }
 - { id: RQ-02,     fase: 1, titulo: "El cálculo de duraciones se prueba con pruebas basadas en propiedades, incluyendo los días de cambio de hora y turnos que cruzan medianoche" }
 - { id: RQ-03,     fase: 1, titulo: "La idempotencia del fichaje se prueba con envíos concurrentes del mismo scan_id" }
@@ -142,7 +143,7 @@
 - { id: RS-06,     fase: 2, titulo: "2FA obligatorio para admin, rrhh y auditor" }
 - { id: RS-07,     fase: 2, titulo: "El trail de auditoría es detectablemente manipulable: cada entrada encadena el hash de la anterior; la cadena se verifica a diario y cualquier rotu..." }
 
-# --- Fase 3 -------------------------------------------- (20 requisitos)
+# --- Fase 3 -------------------------------------------- (19 requisitos)
 - { id: RF-AT-10,  fase: 3, titulo: "Control de desfase de reloj" }
 - { id: RF-AT-12,  fase: 3, titulo: "El sistema soporta fichaje de pausa (inicio y fin de descanso) diferenciado del fin de turno, configurable por centro" }
 - { id: RF-GP-04,  fase: 3, titulo: "Registro de ausencias (vacaciones, baja médica, permiso) para no contabilizar como absentismo no justificado" }
@@ -157,7 +158,6 @@
 - { id: RF-PR-06,  fase: 3, titulo: "Detección de patrones anómalos de uso de credencial: dos fichajes consecutivos en el mismo quiosco separados por segundos, coincidencias sistemátic..." }
 - { id: RN-16,     fase: 3, titulo: "Secuencia imposible de credencial: dos escaneos de la misma credencial en dispositivos distintos separados por menos del tiempo mínimo de tránsito..." }
 - { id: RNF-D-01,  fase: 3, titulo: "Disponibilidad del servicio: 99,5 % mensual" }
-- { id: RNF-P-01,  fase: 3, titulo: "Latencia percibida del fichaje (de escaneo a confirmación en pantalla)" }
 - { id: RNF-P-02,  fase: 3, titulo: "Latencia del endpoint de fichaje en servidor" }
 - { id: RNF-P-06,  fase: 3, titulo: "Pico de concurrencia soportado" }
 - { id: RQ-04,     fase: 3, titulo: "Existen pruebas E2E del flujo de quiosco con cámara simulada alimentada por vídeo con un QR real" }

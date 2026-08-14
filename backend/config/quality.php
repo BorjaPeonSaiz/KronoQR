@@ -48,6 +48,20 @@ return [
      */
     'docs_path' => env('DOCS_PATH', base_path('../docs')),
 
+    /*
+     * La raiz del repositorio, que NO es la del backend.
+     *
+     * `docs:consistency` compara los documentos que mandan con los ficheros que
+     * los ejecutan, y el plan de implementacion vive fuera de docs/. Se resuelve
+     * igual que en tests/Architecture/QualityGatesTest.php y por el mismo
+     * motivo: dentro del contenedor la raiz llega por un montaje aparte de solo
+     * lectura (/var/www/repo), y en la CI —que corre sobre el arbol completo sin
+     * contenedor— es el directorio padre de backend/. Una comprobacion que solo
+     * funciona en uno de los dos sitios no comprueba nada, solo enseña donde se
+     * ejecuto.
+     */
+    'repo_path' => env('REPO_PATH', is_dir('/var/www/repo') ? '/var/www/repo' : base_path('..')),
+
     /* Fuente legible por maquina del Anexo A del doc 01. Relativa a docs_path. */
     'requirements_file' => 'requisitos.yaml',
 
@@ -56,6 +70,25 @@ return [
 
     /* El documento que manda sobre QUE hace el producto. Relativa a docs_path. */
     'specification_file' => '01-especificaciones-proyecto.md',
+
+    /*
+     * El documento que manda sobre COMO se construye. Su §4 es la tabla de ADR,
+     * y cada fila tiene que tener su fichero en docs/adr/: la tabla es autoridad
+     * #4 y el ADR es autoridad #1 (CLAUDE.md). Relativa a docs_path.
+     */
+    'stack_file' => '02-stack-tecnologico-y-plan-implementacion.md',
+
+    /* Decisiones de arquitectura, una por fichero ADR-NNN-*.md. Relativa a docs_path. */
+    'adr_path' => 'adr',
+
+    /*
+     * El plan de implementacion desarrollado tarea por tarea. Relativa a
+     * repo_path, y con espacio en el nombre porque asi se llama el directorio.
+     *
+     * De aqui sale la respuesta a «¿quien construye este requisito?»: una tarea
+     * `### Tarea N.M` de un fichero que declara su fase en la cabecera.
+     */
+    'plan_path' => 'plan implementacion',
 
     /*
      * Donde se buscan las etiquetas. Dos herramientas y dos formatos (§9.6):

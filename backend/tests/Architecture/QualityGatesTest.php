@@ -190,6 +190,29 @@ it('comprueba el presupuesto de bundle del quiosco en el propio build', function
     expect($package['scripts']['build'] ?? '')->toContain('check-bundle-budget');
 })->group('RNF-P-07');
 
+it('registra cada decision de arquitectura como ADR versionado', function (): void {
+    // RNF-M-04. La comprobacion de verdad la hace `docs:consistency`, que cruza
+    // las dos direcciones: cada fila del §4 tiene su fichero y cada fichero su
+    // fila. Aqui se ancla el requisito y se comprueba lo que da sentido a esa
+    // comprobacion: que los ADR existen como ficheros y no solo como tabla.
+    //
+    // ADR-026, ADR-027 y ADR-028 vivieron un tiempo solo como fila —autoridad
+    // #4 de CLAUDE.md— siendo autoridad #1. Se puede leer el resumen de una
+    // decision en una tabla; no su contexto ni sus alternativas descartadas,
+    // que es lo que hace falta el dia que alguien quiere revertirla.
+    $adrs = glob(repoFile('docs/adr').'/ADR-*.md') ?: [];
+
+    expect(\count($adrs))->toBeGreaterThanOrEqual(30);
+
+    // Y que ninguno sea un esqueleto: un ADR sin consecuencias es un titular.
+    $withoutConsequences = array_values(array_filter(
+        $adrs,
+        static fn (string $file): bool => ! str_contains((string) file_get_contents($file), '## Consecuencias'),
+    ));
+
+    expect($withoutConsequences)->toBe([]);
+})->group('RNF-M-04');
+
 it('bloquea la integracion si un requisito implementado no tiene prueba', function (): void {
     // RQ-13. Esta es la prueba de la propia trazabilidad: comprueba que el
     // catalogo existe, que no esta vacio y que la etapa que lo ejecuta sigue

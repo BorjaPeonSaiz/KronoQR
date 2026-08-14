@@ -135,7 +135,7 @@ endif
 .DEFAULT_GOAL := help
 .PHONY: help up down restart build ps logs shell seed test test-unit test-integration \
         test-arch quality tools-ready php-lint deptrac rector sh-lint api-lint sast \
-        traceability traceability-check coverage coverage-now mutate e2e clean changelog changelog-check tool-versions
+        traceability traceability-check docs-consistency coverage coverage-now mutate e2e clean changelog changelog-check tool-versions
 
 help: ## Muestra esta ayuda
 	@echo KronoQR - objetivos disponibles:
@@ -159,6 +159,7 @@ help: ## Muestra esta ayuda
 	@echo   make sast             Semgrep: reglas propias de .semgrep
 	@echo   make traceability     Matriz requisito - prueba (RQ-13)
 	@echo   make traceability-check  Falla si un requisito no tiene prueba
+	@echo   make docs-consistency  Coherencia documental (RQ-12, RNF-M-04)
 	@echo   make coverage         Cobertura: dominio 90, global 75 por ciento
 	@echo   make coverage-now     Cobertura actual, sin umbral
 	@echo   make mutate           Mutacion sobre el dominio, MSI 80 por ciento
@@ -333,6 +334,9 @@ traceability: ## Genera docs/trazabilidad-pruebas.md (RQ-13, doc 02 seccion 9.6)
 
 traceability-check: ## Falla si un requisito ya implementado no tiene prueba (RQ-13)
 	$(COMPOSE_DEV) exec -T app php artisan qa:traceability --check
+
+docs-consistency: ## Coherencia entre los documentos y los ficheros que los ejecutan
+	$(COMPOSE_DEV) exec -T app php artisan docs:consistency --check
 
 # Estos dos objetivos llaman a vendor/bin/pest y no a `php artisan test`, que es
 # lo que usa el resto del fichero. No es un descuido: `artisan test --coverage`
