@@ -468,7 +468,7 @@ Resultado esperado: las tres etapas en verde sobre `main` limpio, en menos de 4 
 7. Configurar Vitest + Vue Test Utils con umbral **≥ 70 %** (§9.2), y el guion `npm run api:generate` que generará el cliente HTTP del contrato (§3.3, skill `endpoint-api` paso 7). Sin `openapi.yaml` (tarea 0.6) el guion existe pero no produce nada útil todavía.
 8. Fijar el presupuesto de bundle del quiosco en el build: **JS crítico ≤ 250 KB gzip** y **CSS ≤ 40 KB gzip** (Anexo A del doc 02, RNF-P-07). La etapa ⑥ de la CI comprueba el presupuesto (§10.1).
 9. Preparar `frontend-kiosk/e2e/fixtures/` para el `qr-video.y4m` del §2 y §9.4. **El vídeo se genera cuando exista una credencial real de prueba** (tarea 1.5).
-10. Comprobar en los tres: `npm run typecheck && npm run lint && npm run test:unit && npm run build` (comando de verificación de los tres agentes de frontend).
+10. Comprobar en los tres: `npm run type-check && npm run lint && npm run test:unit && npm run build` (comando de verificación de los tres agentes de frontend).
 
 **Artefactos.**
 
@@ -486,7 +486,7 @@ Resultado esperado: las tres etapas en verde sobre `main` limpio, en menos de 4 
 
 ```bash
 # En cada uno de los tres proyectos
-npm run typecheck        # 0 errores de vue-tsc
+npm run type-check        # 0 errores de vue-tsc
 npm run lint             # sin desviaciones
 npm run test:unit        # verde
 npm run build            # el quiosco, dentro del presupuesto de 250 KB gzip

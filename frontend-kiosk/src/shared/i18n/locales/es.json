@@ -1,0 +1,6 @@
+{
+  "app": {
+    "title": "Quiosco de fichaje",
+    "skeletonNotice": "Esqueleto de la aplicacion. Las pantallas de escaneo, la cola offline y el fichaje por PIN llegan en las tareas 1.8, 1.9 y 1.12."
+  }
+}

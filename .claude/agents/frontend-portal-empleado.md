@@ -53,7 +53,7 @@ Sus usuarios son personal de hotel de todos los perfiles, muchos con poca famili
 ## Antes de dar algo por terminado
 
 ```bash
-npm run typecheck && npm run lint && npm run test:unit && npm run build
+npm run type-check && npm run lint && npm run test:unit && npm run build
 ```
 
 Y verifica el caso negativo: que un empleado autenticado **no** puede obtener datos de otro manipulando la URL o el identificador.
