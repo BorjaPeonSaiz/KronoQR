@@ -233,6 +233,45 @@ php -m | Select-String "pdo_pgsql|pgsql|redis|sodium"
 
 Resultado esperado: las cuatro extensiones listadas. Si `redis` no carga, se deja fuera: no es necesaria para el análisis estático.
 
+### B.6 El bind mount de Windows y por qué `vendor/` no viaja por él
+
+**Resuelto el 14 de agosto de 2026 al ejecutar la tarea 0.3.** Es la restricción de entorno con más impacto de todo este fichero, y no estaba prevista.
+
+**El hecho, medido en esta máquina.** El código vive en `D:\Trabajo\Trabajos\KronoQR` (NTFS) y Docker Desktop lo expone a los contenedores Linux por bind mount. Cada lectura cruza esa frontera:
+
+| Operación | Bind mount (NTFS) | Disco del contenedor |
+|---|---|---|
+| Leer 2.000 ficheros de `vendor/` | **15.294 ms** | **30 ms** |
+
+Son **500 veces más lento**. Y `vendor/` son **16.919 de los 17.779 ficheros** del backend.
+
+**Consecuencia sobre el presupuesto de `CLAUDE.md`.** La suite unitaria debe terminar por debajo de 2 s (§9.1). Con `vendor/` en el mount tardaba **3,84 s con solo tres pruebas triviales**: el presupuesto estaba agotado antes de que existiera el dominio, y las tareas 1.1 y 1.2 son las más iterativas del proyecto.
+
+**Qué se descartó antes de dar con la causa**, porque la lista ahorra el trabajo a quien lo revise:
+
+| Sospecha | Medición | Veredicto |
+|---|---|---|
+| Coste del `docker exec` | 0,59 s | No era |
+| Xdebug cargado | 4,08 s con la extensión descargada del todo | No era |
+| OPcache apagado en CLI | Activado con `file_cache`; sin cambio apreciable | No era |
+| **Latencia del bind mount** | 3,84 s desde el mount · **0,10 s desde disco local** | **Era esto** |
+
+**La solución.** `vendor/` se monta como **volumen nombrado** (`backend-vendor` en `infra/compose.dev.yaml`), no por el bind mount. El código fuente sigue en bind mount, que es lo que hace que editar un fichero se vea al instante; lo que sale del mount es lo que nadie edita a mano y que `composer.lock` gobierna.
+
+| Medida | Antes | Después |
+|---|---|---|
+| `make test-unit` | 3,84 s | **0,18 s** |
+| `make test` (suite completa) | 12,9 s | 4,5 s |
+
+**Dos detalles que cuestan una tarde si no se saben:**
+
+- **El volumen nace propiedad de `root`** si el directorio no existe en la imagen. El proceso corre como `app` (uid 1000) y `composer install` falla sin decir por qué. Por eso el `Dockerfile` crea `/var/www/html/vendor` con propietario `app`: Docker copia la propiedad del directorio de la imagen al inicializar un volumen vacío.
+- **Un volumen nuevo está vacío**, así que las dependencias se instalan dentro. Lo hace el entrypoint de forma idempotente cuando falta `vendor/autoload.php`; los roles `horizon`, `reverb` y `scheduler` esperan a que `fpm` termine, para que cuatro contenedores no instalen a la vez sobre el mismo volumen.
+
+**El `backend/vendor` del host se conserva** y ya no lo usa ningún contenedor: queda solo para que el IDE resuelva el autoload, que es exactamente para lo que el §B.3 puso Composer en el host. Las dos copias las gobierna el mismo `composer.lock`.
+
+> **Si se repone el entorno desde cero**, `make up` basta: el entrypoint puebla el volumen. Si `composer install` falla, el volumen quedó a medias y se borra con `docker volume rm kronoqr_backend-vendor` antes de repetir.
+
 ---
 
 ## Bloque C — Dependencias del proyecto
