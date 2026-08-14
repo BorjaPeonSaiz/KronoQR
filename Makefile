@@ -20,10 +20,60 @@ export BUILDX_NO_DEFAULT_ATTESTATIONS := 1
 COMPOSE_DEV  := docker compose --env-file .env -f infra/compose.dev.yaml
 COMPOSE_PROD := docker compose --env-file .env -f infra/compose.prod.yaml
 
+# Como se ejecutan las herramientas del backend (doc 02 §10.1).
+#
+# En la maquina de desarrollo, dentro del contenedor `app`: es donde estan PHP
+# 8.4 y sus extensiones, y donde vendor/ vive fuera del bind mount. El motivo,
+# medido, esta junto al montaje en infra/compose.dev.yaml.
+#
+# En la CI, NO. El runner es Linux, el checkout esta en disco local y el
+# problema del bind mount de NTFS no existe: medido en este repositorio, PHPStan
+# tarda 46,8 s desde el bind mount de Windows y 3,9 s desde disco local. Levantar
+# Compose en el runner solo anadiria minutos y piezas que se pueden romper, asi
+# que la CI instala PHP y ejecuta las mismas ordenes directamente sobre backend/.
+#
+# Lo que importa: la orden y el umbral se escriben UNA vez, aqui o en los
+# ficheros de configuracion (phpstan.neon, deptrac.yaml, pint.json), nunca
+# tambien en el workflow. Un umbral escrito en dos sitios acaba divergiendo.
+#
+# GitHub Actions define CI=true por si mismo: el workflow no pasa ninguna
+# bandera. Para reproducir en local lo que hace la CI:  make php-lint CI=true
+ifeq ($(CI),true)
+RUN_APP        := cd backend &&
+RUN_APP_XDEBUG := cd backend && XDEBUG_MODE=coverage
+else
+RUN_APP        := $(COMPOSE_DEV) exec -T app
+# Xdebug esta instalado pero con xdebug.mode=off, porque encenderlo cuesta
+# rendimiento en cada peticion (infra/docker/php/Dockerfile). Cobertura y
+# mutacion son las dos unicas cosas que lo necesitan, asi que lo encienden ellas
+# y solo para su propio proceso, en vez de penalizar todo el entorno.
+RUN_APP_XDEBUG := $(COMPOSE_DEV) exec -T -e XDEBUG_MODE=coverage app
+endif
+
+# Los pasos que hoy no pueden ejecutarse —mutacion sin dominio, ESLint sin
+# frontends— tienen que decirlo. Un paso que pasa por vacio sin avisar es peor
+# que no tenerlo: figura en verde como si hubiera comprobado algo. En la CI el
+# aviso se emite como anotacion de GitHub para que salga en el resumen de la
+# ejecucion, no enterrado en el log.
+ifeq ($(CI),true)
+notice = @echo "::notice title=KronoQR - paso omitido::$(1)"
+else
+notice = @echo "[make] $(1)"
+endif
+
 # Ficheros de shell del repositorio. Umbral del doc 02 §9.2: 0 hallazgos.
+# Incluye los scripts de la propia CI: tambien son codigo (doc 02 §3.5).
 SH_FILES := $(wildcard infra/scripts/*.sh) \
             $(wildcard infra/docker/*/*.sh) \
-            $(wildcard infra/docker/*/*/*.sh)
+            $(wildcard infra/docker/*/*/*.sh) \
+            $(wildcard .github/scripts/*.sh)
+
+# Versiones fijadas de las herramientas de shell. Se declaran aqui, y no en el
+# workflow, porque el workflow las LEE de aqui (objetivo `tool-versions`): la
+# maquina de desarrollo y la CI tienen que comprobar con la misma version, o el
+# umbral de 0 hallazgos depende de quien ejecute.
+SHELLCHECK_VERSION := v0.11.0
+SHFMT_VERSION      := v3.13.1
 
 # Ruta del repositorio tal y como la entiende el demonio de Docker. En Git Bash
 # hace falta `pwd -W` (D:/...); en Linux y macOS `pwd` ya vale.
@@ -37,12 +87,12 @@ DOCKER_RUN := MSYS_NO_PATHCONV=1 docker run --rm -v "$(HOST_PWD):/mnt" -w /mnt
 # portatil y en la CI.
 SHELLCHECK := $(shell command -v shellcheck 2>/dev/null)
 ifeq ($(SHELLCHECK),)
-SHELLCHECK := $(DOCKER_RUN) koalaman/shellcheck:stable
+SHELLCHECK := $(DOCKER_RUN) koalaman/shellcheck:$(SHELLCHECK_VERSION)
 endif
 
 SHFMT := $(shell command -v shfmt 2>/dev/null)
 ifeq ($(SHFMT),)
-SHFMT := $(DOCKER_RUN) mvdan/shfmt:v3
+SHFMT := $(DOCKER_RUN) mvdan/shfmt:$(SHFMT_VERSION)
 endif
 
 # La imagen de Semgrep exige el codigo en /src y se niega a analizar otra ruta.
@@ -55,13 +105,20 @@ endif
 # nunca uno existente. Se hace con funciones de make, no con cp, para que
 # funcione igual en Windows, Linux y macOS.
 ifeq ($(wildcard .env),)
+# El aviso solo se imprime fuera de la CI, y no por ahorrar ruido: `$(info ...)`
+# escribe en la SALIDA ESTANDAR, asi que contamina la de cualquier objetivo que
+# alguien consuma. La CI hace `eval "$(make -s tool-versions)"` en un checkout
+# limpio —donde .env nunca existe— y se comia esta linea como si fuera una orden.
+ifneq ($(CI),true)
 $(info [make] No habia .env: se crea a partir de .env.example. Revisalo antes de ir a produccion.)
+endif
 $(file >.env,$(file <.env.example))
 endif
 
 .DEFAULT_GOAL := help
 .PHONY: help up down restart build ps logs shell seed test test-unit test-integration \
-        quality sh-lint sast coverage coverage-now mutate e2e clean
+        test-arch quality tools-ready php-lint deptrac rector sh-lint sast coverage \
+        coverage-now mutate e2e clean changelog changelog-check tool-versions
 
 help: ## Muestra esta ayuda
 	@echo KronoQR - objetivos disponibles:
@@ -75,13 +132,19 @@ help: ## Muestra esta ayuda
 	@echo   make seed             Carga la semilla de desarrollo
 	@echo   make test             Toda la suite
 	@echo   make test-unit        Dominio, sin base de datos
+	@echo   make test-arch        Solo las pruebas de arquitectura (Pest Arch)
 	@echo   make quality          Pint + PHPStan 9 + Deptrac + Rector + ShellCheck + shfmt
-	@echo   make sh-lint          Solo ShellCheck y shfmt
+	@echo   make php-lint         Solo Pint y PHPStan       (etapa 1 de la CI)
+	@echo   make deptrac          Solo Deptrac              (etapa 2 de la CI)
+	@echo   make rector           Solo Rector, informativo  (etapa 1 de la CI)
+	@echo   make sh-lint          Solo ShellCheck y shfmt   (etapa 1 de la CI)
 	@echo   make sast             Semgrep: reglas propias de .semgrep
 	@echo   make coverage         Cobertura: dominio 90, global 75 por ciento
 	@echo   make coverage-now     Cobertura actual, sin umbral
 	@echo   make mutate           Mutacion sobre el dominio, MSI 80 por ciento
 	@echo   make e2e              Playwright con camara simulada
+	@echo   make changelog        Genera el CHANGELOG desde los commits convencionales
+	@echo   make changelog-check  Comprueba que una version tiene entrada (VERSION=1.2.3)
 	@echo   make clean            Para el entorno y BORRA los volumenes
 
 up: ## Levanta el entorno completo
@@ -130,57 +193,97 @@ test: ## Toda la suite
 ifeq ($(wildcard backend/artisan),)
 	@echo [make] La aplicacion Laravel llega en la tarea 0.2: todavia no hay suite que ejecutar.
 else
-	$(COMPOSE_DEV) exec -T app php artisan test
+	$(RUN_APP) php artisan test
 endif
 
 test-unit: ## Dominio puro, sin base de datos, menos de 2 s
 ifeq ($(wildcard backend/artisan),)
 	@echo [make] La aplicacion Laravel llega en la tarea 0.2: todavia no hay suite que ejecutar.
 else
-	$(COMPOSE_DEV) exec -T app php artisan test --testsuite=Unit
+	$(RUN_APP) php artisan test --testsuite=Unit
 endif
 
 test-integration: ## Repositorios contra PostgreSQL real
 ifeq ($(wildcard backend/artisan),)
 	@echo [make] La aplicacion Laravel llega en la tarea 0.2: todavia no hay suite que ejecutar.
 else
-	$(COMPOSE_DEV) exec -T app php artisan test --testsuite=Integration
+	$(RUN_APP) php artisan test --testsuite=Integration
+endif
+
+# Etapa 2 de la CI junto a Deptrac. Son las dos mitades de la misma frontera:
+# Deptrac razona sobre imports y Pest Arch ve lo que no aparece en ningun `use`
+# —now(), time(), strtotime()—, que es la regla dura 2.
+test-arch: ## Pruebas de arquitectura (doc 02 §9.2, etapa 2 de la CI)
+ifeq ($(wildcard backend/artisan),)
+	@echo [make] La aplicacion Laravel llega en la tarea 0.2: todavia no hay suite que ejecutar.
+else
+	$(RUN_APP) php artisan test --testsuite=Architecture
 endif
 
 # Orden deliberado: primero lo barato y lo que mas veces falla (estilo), luego
 # tipos, luego fronteras. Rector va el ultimo porque no bloquea.
-quality: sh-lint ## Cadena de calidad completa (doc 02 §9.2)
+#
+# Esta descompuesto en objetivos por herramienta desde la tarea 0.4 y no por
+# gusto: la CI reparte las mismas ordenes en etapas distintas —Pint y PHPStan en
+# la (1), Deptrac en la (2)— y necesita invocarlas por separado. La alternativa
+# era escribir las ordenes otra vez dentro del workflow, que es exactamente como
+# los umbrales acaban divergiendo entre el portatil y el runner.
+quality: sh-lint php-lint deptrac rector ## Cadena de calidad completa (doc 02 §9.2)
+	@echo [make] Calidad: Pint, PHPStan 9 y Deptrac en verde.
+
+# Guarda comun de las herramientas de PHP. Sin vendor/ no hay nada que ejecutar,
+# y es mejor decirlo que fallar con "command not found".
+tools-ready:
 ifeq ($(wildcard backend/vendor/bin/pint),)
 	@echo [make] Faltan las herramientas en backend/vendor: no hay nada que ejecutar.
-	@echo [make] Levanta el entorno e instala dependencias con: make up
+	@echo [make] En tu maquina:  make up
+	@echo [make] En la CI:       composer install --working-dir=backend
 	@exit 1
-else
-	$(COMPOSE_DEV) exec -T app vendor/bin/pint --test
-	$(COMPOSE_DEV) exec -T app vendor/bin/phpstan analyse --memory-limit=1G --no-progress
-	$(COMPOSE_DEV) exec -T app vendor/bin/deptrac analyse --fail-on-uncovered --no-progress
-	@echo "[make] Rector: umbral informativo (doc 02 seccion 9.2). Sus sugerencias no bloquean."
-	-$(COMPOSE_DEV) exec -T app vendor/bin/rector process --dry-run --no-progress-bar
-	@echo [make] Calidad: Pint, PHPStan 9 y Deptrac en verde.
 endif
 
+php-lint: tools-ready ## Estilo y tipos: Pint + PHPStan 9 (etapa 1 de la CI)
+	$(RUN_APP) vendor/bin/pint --test
+	$(RUN_APP) vendor/bin/phpstan analyse --memory-limit=1G --no-progress
+
+deptrac: tools-ready ## Fronteras entre capas y modulos (etapa 2 de la CI)
+	$(RUN_APP) vendor/bin/deptrac analyse --fail-on-uncovered --no-progress
+
+rector: tools-ready ## Modernizacion: informativo, NO bloquea (doc 02 §9.2)
+	@echo "[make] Rector: umbral informativo (doc 02 seccion 9.2). Sus sugerencias no bloquean."
+	-$(RUN_APP) vendor/bin/rector process --dry-run --no-progress-bar
+
+# La tercera comprobacion de sh-lint no sobra: ShellCheck NO verifica que un
+# script empiece por `set -euo pipefail`. Comprobado sobre este repositorio, un
+# script sin esa linea pasa ShellCheck y shfmt sin un solo hallazgo. El doc 02
+# §3.5 exige la linea y atribuye su verificacion a ShellCheck; sin esto, la fila
+# de "Robustez" seria una sugerencia con aspecto de regla. Y la diferencia es
+# real: un backup.sh sin `set -e` sigue adelante despues de fallar y termina
+# anunciando una copia que no existe.
 sh-lint: ## ShellCheck y shfmt sobre los scripts (umbral: 0 hallazgos)
 ifeq ($(SH_FILES),)
 	@echo [make] No hay scripts de shell que analizar.
 else
 	$(SHELLCHECK) $(SH_FILES)
 	$(SHFMT) -i 2 -d $(SH_FILES)
-	@echo [make] ShellCheck y shfmt: 0 hallazgos.
+	@fallos=0; \
+	for f in $(SH_FILES); do \
+	  grep -qE '^[[:space:]]*set -euo pipefail[[:space:]]*$$' "$$f" || { \
+	    echo "$$f: falta 'set -euo pipefail'. Anadelo tras la cabecera del script (doc 02 seccion 3.5)."; \
+	    fallos=1; }; \
+	  grep -qE "^[[:space:]]*IFS=" "$$f" || { \
+	    echo "$$f: falta IFS. Anade IFS=\$$'\\\\n\\\\t' junto al set -euo pipefail (doc 02 seccion 3.5)."; \
+	    fallos=1; }; \
+	done; \
+	if [ "$$fallos" -ne 0 ]; then \
+	  echo "[make] Robustez de scripts: hallazgos. Umbral del doc 02 seccion 9.2: 0."; \
+	  exit 1; \
+	fi
+	@echo [make] ShellCheck, shfmt y robustez: 0 hallazgos.
 endif
 
 sast: ## Semgrep sobre las reglas de .semgrep (umbral: 0 hallazgos ERROR)
 	$(SEMGREP) --config .semgrep --error --metrics=off --quiet
 	@echo [make] Semgrep: 0 hallazgos de severidad alta.
-
-# Xdebug esta instalado pero con xdebug.mode=off, porque encenderlo cuesta
-# rendimiento en cada peticion (infra/docker/php/Dockerfile). Cobertura y
-# mutacion son las dos unicas cosas que lo necesitan, asi que lo encienden ellas
-# y solo para su propio proceso, en vez de penalizar todo el entorno.
-XDEBUG_COVERAGE := -e XDEBUG_MODE=coverage
 
 # Estos dos objetivos llaman a vendor/bin/pest y no a `php artisan test`, que es
 # lo que usa el resto del fichero. No es un descuido: `artisan test --coverage`
@@ -195,19 +298,21 @@ ifeq ($(wildcard backend/app/Modules/Attendance/Domain/Model/*.php),)
 	@echo "[make] El dominio llega en la tarea 1.1: todavia no hay cobertura exigible."
 	@echo "[make] Para ver la cobertura actual sin umbral: make coverage-now"
 else
-	$(COMPOSE_DEV) exec -T $(XDEBUG_COVERAGE) app $(PEST) --coverage --min=75
+	$(RUN_APP_XDEBUG) $(PEST) --coverage --min=75
 endif
 
 coverage-now: ## Cobertura actual sin umbral, util antes de que exista el dominio
-	$(COMPOSE_DEV) exec -T $(XDEBUG_COVERAGE) app $(PEST) --coverage
+	$(RUN_APP_XDEBUG) $(PEST) --coverage
 
 mutate: ## Mutacion sobre el dominio, MSI mayor o igual a 80 por ciento
 ifeq ($(wildcard backend/app/Modules/Attendance/Domain/Model/*.php),)
+	$(call notice,Mutacion NO ejecutada: Modules/*/Domain no existe todavia.)
 	@echo "[make] La mutacion se ejecuta sobre Modules/*/Domain, que se escribe en la"
 	@echo "[make] tarea 1.1. Sin dominio no hay mutantes: el umbral MSI >= 80 por ciento"
 	@echo "[make] (doc 02 seccion 9.2, RQ-10) empieza a exigirse en la tarea 1.2."
+	@echo "[make] Este paso se activa solo en cuanto exista el primer modelo de dominio."
 else
-	$(COMPOSE_DEV) exec -T $(XDEBUG_COVERAGE) app $(PEST) --mutate --covered-only --min=80
+	$(RUN_APP_XDEBUG) $(PEST) --mutate --covered-only --min=80
 endif
 
 e2e: ## Playwright con camara simulada
@@ -216,6 +321,23 @@ ifeq ($(wildcard frontend-kiosk/package.json),)
 else
 	npm --prefix frontend-kiosk run test:e2e
 endif
+
+#--- Versionado (doc 02 §10.5) ------------------------------------------------
+# El CHANGELOG se GENERA de los mensajes de commit convencionales, no se escribe
+# a mano, y ninguna version se publica sin su entrada. Es lo que permite que el
+# actualizador de la tarea 5.7 diga al cliente que cambia antes de aplicar nada.
+
+changelog: ## Regenera la seccion [Unreleased] del CHANGELOG desde los commits
+	bash infra/scripts/changelog.sh generate --write
+
+changelog-check: ## Comprueba el CHANGELOG. Con VERSION=1.2.3, exige su entrada
+	bash infra/scripts/changelog.sh check $(VERSION)
+
+# Lo lee .github/workflows/ci.yml con `eval "$$(make -s tool-versions)"`, para
+# instalar en el runner exactamente las mismas versiones que se usan aqui.
+tool-versions: ## Imprime las versiones fijadas de las herramientas externas
+	@echo SHELLCHECK_VERSION=$(SHELLCHECK_VERSION)
+	@echo SHFMT_VERSION=$(SHFMT_VERSION)
 
 clean: ## Para el entorno y BORRA los volumenes de datos
 	$(COMPOSE_DEV) down -v --remove-orphans

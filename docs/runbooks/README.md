@@ -54,6 +54,17 @@ Asignación literal del plan de implementación
 | 19 | `renovacion-certificado-tls.md` | Certificado a menos de 21 días de expirar | Fase 3 · tarea 3.2 |
 | 20 | `espacio-en-disco.md` | Espacio libre por debajo del 20 % | Fase 3 · tarea 3.2 |
 
+## Runbooks fuera de esa lista
+
+Los 20 de arriba responden a **una alerta en el servidor de un cliente**. Hay
+modos de fallo internos que no encajan ahí y que aun así merecen procedimiento,
+por la misma razón del §10.3: *runbook actualizado si el cambio añade un modo de
+fallo*. Se escriben en la tarea que los introduce.
+
+| Runbook | Cuándo se usa | Lo escribió |
+|---|---|---|
+| [`fallo-de-ci.md`](fallo-de-ci.md) | Una etapa del pipeline está en rojo, o la puerta de versión bloquea una etiqueta | Fase 0 · tarea 0.4 |
+
 ## Qué debe contener un runbook
 
 Que una persona del equipo pueda diagnosticar el incidente a las 06:30 sin

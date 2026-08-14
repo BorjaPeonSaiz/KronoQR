@@ -437,12 +437,14 @@ Se adoptan las convenciones **más establecidas de cada stack**, sin inventar un
 
 | Ámbito | Convención | Quién la verifica |
 |---|---|---|
-| Robustez | `set -euo pipefail` e `IFS=$'\n\t'` al principio de todo script | ShellCheck |
+| Robustez | `set -euo pipefail` e `IFS=$'\n\t'` al principio de todo script | `make sh-lint` (comprobación propia) |
 | Estilo | Guía de estilo de Shell de Google; formato con `shfmt -i 2` | ShellCheck + shfmt |
 | Idempotencia | Re-ejecutable sin romper nada. Comprueba el estado antes de actuar, en lugar de asumirlo | Revisión |
 | Fallo seguro | Requisitos verificados **antes** de tocar nada; si algo falla, el sistema queda como estaba. Nada de trabajo a medias | Revisión |
 | Errores | El mensaje dice **qué hacer**, no solo qué falló. Códigos de salida documentados en la cabecera del script | Revisión |
 | Secretos | Nunca en el script ni en su salida: se generan en el servidor del cliente (§7.7) | Semgrep |
+
+> **Por qué la fila «Robustez» no la verifica ShellCheck**, aunque esta tabla se lo atribuyera hasta la tarea 0.4. **No lo hace, y se comprobó midiéndolo**: un script sin `set -euo pipefail` ni `IFS` pasa ShellCheck **y** `shfmt -i 2 -d` con cero hallazgos. Es un análisis de patrones peligrosos, no un verificador de preámbulo obligatorio. La convención estuvo un tiempo sin verificar por nadie, que es exactamente lo que la regla de esta sección prohíbe: *una convención que no verifica una herramienta es una sugerencia.* La comprobación vive ahora en `make sh-lint`, junto a ShellCheck y shfmt, y bloquea igual en local y en la etapa ① de la CI.
 
 Es la contrapartida técnica del principio que ya sostiene el agente `producto-licencia`: *un instalador que falla a medias es peor que uno que no arranca.*
 

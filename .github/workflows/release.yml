@@ -1,0 +1,44 @@
+# KronoQR — etapa ⑧ y publicacion de version: instalacion limpia, imagenes
+# etiquetadas y paquete de entrega.
+#
+# MARCADOR. Este workflow existe porque el arbol del doc 02 §2 lo lista, pero su
+# contenido NO es de la Fase 0: lo escribe la tarea 5.x.
+#
+# Que tendra que hacer (doc 02 §10.1, §9.2 y §10.5):
+#   - Etapa ⑧: instalacion limpia en un contenedor virgen MAS actualizacion desde
+#     la version anterior (RQ-11). Verde antes de publicar, sin excepcion.
+#   - Trivy sobre la imagen final: 0 CVE criticos.
+#   - `composer audit` y `npm audit`: 0 vulnerabilidades criticas o altas (RS-10).
+#   - Construir y etiquetar las imagenes con la version, y armar el paquete de
+#     entrega que instala el IT del hotel.
+#   - Cerrar el CHANGELOG de la version:
+#         bash infra/scripts/changelog.sh generate --release X.Y.Z --write
+#
+# Lo que ya esta activo y no espera a la tarea 5.x: la puerta de version del
+# CHANGELOG. Vive en ci.yml (job "Puerta de version") y se dispara con la
+# etiqueta `vX.Y.Z`, de modo que una version sin entrada en el CHANGELOG falla
+# desde hoy. El §10.5 lo exige y el actualizador de la tarea 5.7 lo necesita para
+# decirle al cliente que cambia antes de tocar su servidor.
+#
+# Secretos: cuando esta etapa se implemente necesitara credenciales de registro
+# de imagenes. Iran en secretos del repositorio, nunca en el arbol ni en la
+# salida del pipeline, y el paso que las use llevara `mask` (doc 02 §7.7).
+
+name: Publicacion de version (marcador — tarea 5.x)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pendiente:
+    name: "⑧ Instalacion limpia y publicacion — sin implementar"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Decir que no esta implementado
+        run: |
+          echo "::error title=Publicacion sin implementar::La etapa ⑧ y el empaquetado los escribe la tarea 5.x. Este workflow es un marcador: no construye ni publica nada."
+          exit 1

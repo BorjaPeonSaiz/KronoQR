@@ -1,0 +1,36 @@
+# KronoQR — etapa ⑦ del pipeline: E2E con Playwright y camara simulada.
+#
+# MARCADOR. Este workflow existe porque el arbol del doc 02 §2 lo lista, pero su
+# contenido NO es de la Fase 0: lo escribe la tarea 3.7.
+#
+# Que tendra que hacer (doc 02 §10.1 y §9.4):
+#   - Playwright con `--use-fake-device-for-media-stream` y un vídeo Y4M con un
+#     QR valido, para ejercitar el escaneo de verdad.
+#   - Los ~25 escenarios criticos: fichaje, ciclo offline completo (fichar sin
+#     red, cola en IndexedDB, reconectar y consolidar con el `occurred_at`
+#     original), cambio de turno con 30 personas, panel y portal.
+#   - `@axe-core/playwright`: 0 violaciones criticas o graves.
+#   - Presupuesto ~5 min. Se dispara en cada pull request, no en cada push.
+#
+# Hasta entonces solo se puede lanzar a mano, y falla a proposito. Un workflow
+# llamado "E2E" que devuelve verde sin ejecutar un solo escenario es peor que no
+# tenerlo: alguien lo usara como prueba de que el quiosco funciona.
+
+name: E2E (marcador — tarea 3.7)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pendiente:
+    name: "⑦ E2E — sin implementar"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Decir que no esta implementado
+        run: |
+          echo "::error title=Etapa ⑦ sin implementar::Los escenarios E2E los escribe la tarea 3.7. Este workflow es un marcador: no ha ejecutado ninguna prueba."
+          exit 1
