@@ -1,2 +1,0 @@
-# openapi.yaml es la fuente de verdad del contrato (ADR-013).
-# La version inicial con /health y /scan es de la tarea 0.6.

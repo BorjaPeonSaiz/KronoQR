@@ -1,6 +1,7 @@
 # KronoQR — etapas 1-3 del pipeline (doc 02 §10.1).
 #
 #   ① Lint + Tipos            Pint · PHPStan 9 · ESLint · vue-tsc · ShellCheck   ~1 min
+#                             + @redocly/cli sobre docs/api/openapi.yaml
 #   ② Arquitectura            Deptrac · Pest Arch                                ~30 s
 #   ③ Unitarias + Mutacion    Pest · MSI >= 80 %                                 ~2 min
 #
@@ -212,6 +213,24 @@ jobs:
         # que resuelva hoy el registro.
         run: npm ci --prefix ${{ matrix.app }}
 
+      # El §3.5 exige que los tipos de la API se GENEREN del contrato y nunca se
+      # escriban a mano, y hasta ahora esa fila no tenia herramienta detras: un
+      # `schema.d.ts` retocado a mano, o simplemente olvidado tras cambiar el
+      # contrato, compilaba igual de bien. Aqui se regenera y se exige que el
+      # resultado sea identico a lo versionado. Si el contrato cambio y el
+      # cliente no, salta aqui y no en la tablet de un hotel (ADR-013).
+      - name: El cliente TypeScript esta regenerado desde el contrato
+        if: steps.detect.outputs.present == 'true'
+        env:
+          CLIENTE: ${{ matrix.app }}/src/shared/api/schema.d.ts
+        run: |
+          npm run api:generate --prefix ${{ matrix.app }}
+          if [ -n "$(git status --porcelain -- "$CLIENTE")" ]; then
+            echo "::error title=Cliente de la API desincronizado en ${{ matrix.app }}::docs/api/openapi.yaml ha cambiado y ${CLIENTE} no. Ejecuta 'npm run api:generate --prefix ${{ matrix.app }}' y versiona el resultado."
+            git --no-pager diff -- "$CLIENTE"
+            exit 1
+          fi
+
       - name: ESLint (0 desviaciones)
         if: steps.detect.outputs.present == 'true'
         run: npm run lint --prefix ${{ matrix.app }}
@@ -240,6 +259,41 @@ jobs:
           fi
 
   #-----------------------------------------------------------------------------
+  # ① Lint + Tipos — contrato de la API
+  #
+  # Job propio y no un paso mas del backend, por dos motivos. Uno: el contrato no
+  # es del backend ni de ninguno de los tres frontends, es de los cuatro, y quien
+  # reciba el fallo tiene que leer en el nombre del job que ha roto el contrato de
+  # la API y no el estilo de un fichero PHP. Dos: necesita Node y no necesita PHP,
+  # asi que compartirlo con `lint-backend` obligaria a instalar las dos cadenas en
+  # el mismo runner para ejecutar 40 ms de comprobacion.
+  #
+  # `docs/api/openapi.yaml` es la fuente de verdad de la API (ADR-013) y se
+  # modifica antes que el codigo. Sin esta etapa seria el unico artefacto que
+  # manda en el repositorio sin nadie que lo compruebe.
+  #-----------------------------------------------------------------------------
+  contract:
+    name: "① Lint + Tipos · contrato OpenAPI"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # La version de @redocly/cli la fija el Makefile, igual que las de
+      # ShellCheck y shfmt: entre versiones cambian las reglas del preset
+      # `recommended`, y el umbral de 0 problemas no puede depender de lo que
+      # resuelva npx el dia de la ejecucion.
+      - name: OpenAPI 3.1 valido (0 problemas)
+        run: make api-lint
+
+  #-----------------------------------------------------------------------------
   # ② Arquitectura
   #
   # Etapa separada a proposito, y no un paso mas de la ①. Lo que se juega aqui
@@ -256,7 +310,7 @@ jobs:
     name: "② Arquitectura"
     runs-on: ubuntu-24.04
     timeout-minutes: 6
-    needs: [lint-backend, lint-frontend]
+    needs: [lint-backend, lint-frontend, contract]
 
     steps:
       - name: Marcar el inicio del job

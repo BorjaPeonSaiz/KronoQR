@@ -1,0 +1,743 @@
+# KronoQR — contrato de la API.
+#
+# ESTE FICHERO ES LA FUENTE DE VERDAD DE LA API (ADR-013, CLAUDE.md orden de
+# autoridad 2). Se modifica ANTES que el codigo, nunca despues: de aqui se
+# generan los clientes TypeScript de los tres frontends (`npm run api:generate`)
+# y contra este esquema se validan las respuestas en las pruebas de contrato
+# (Spectator, backend/tests/Contract, RQ-06).
+#
+# Que hay hoy y por que no hay mas. El Anexo B del documento 01 enumera unos 50
+# endpoints como CONTRATO DE REFERENCIA: son el mapa, no el contrato. Aqui solo
+# se describen los endpoints cuya tarea existe, porque describir la forma de un
+# endpoint cuyo caso de uso todavia no se ha diseñado es inventarla, y en este
+# fichero inventar sale caro: lo que entra en v1 no se puede quitar ni cambiar
+# de tipo sin v2 (ADR-012). Cada tarea que implemente un endpoint lo añade aqui
+# primero.
+#
+#   Descritos      GET  /api/v1/health   ·  GET /api/v1/ready  ·  POST /api/v1/scan
+#   Implementados  ninguno. `routes/api_v1.php` sigue vacio; el endpoint de
+#                  fichaje lo implementa la tarea 1.7 y las sondas con el.
+#
+# Como se comprueba este fichero:
+#   make api-lint      @redocly/cli sobre docs/api/redocly.yaml (0 problemas)
+#   make test          las pruebas de backend/tests/Contract lo cargan con Spectator
+#   npm run api:generate   en los tres frontends
+#
+openapi: 3.1.1
+
+info:
+  title: KronoQR — API de control de presencia
+  version: 1.0.0
+  summary: Registro horario con valor legal para hoteles, con fichaje por QR en quiosco.
+  description: |
+    API del sistema KronoQR. Sirve a tres aplicaciones cliente —quiosco, panel de
+    gestion y portal del empleado— y a las sondas de la infraestructura del cliente.
+
+    **Version en la ruta.** Toda ruta cuelga de `/api/v1` (ADR-012). Dentro de v1
+    solo caben cambios aditivos: campos nuevos opcionales, valores nuevos en un
+    enum de respuesta y endpoints nuevos. Quitar un campo, cambiar su tipo o
+    endurecer una validacion exige `/api/v2`, porque hay quioscos con la cola
+    offline llena que llevan dias sin conectar.
+
+    **Tiempo.** Todo instante viaja y se almacena en UTC, con sufijo `Z`
+    (regla dura 3). La conversion a la zona del centro ocurre en la capa de
+    presentacion, nunca en el transporte.
+
+    **Errores.** Todas las respuestas de error usan `application/problem+json`
+    (RFC 9457). El miembro `type` es un URN estable de KronoQR: es lo que el
+    cliente debe interpretar, no el texto de `title` ni el de `detail`.
+
+    **Idempotencia.** Las escrituras del quiosco llevan `Idempotency-Key` y son
+    idempotentes por `scan_id` (regla dura 8): un reenvio devuelve la respuesta
+    original, nunca un error ni un duplicado.
+  contact:
+    name: Soporte de KronoQR
+    url: https://example.invalid/kronoqr/soporte
+  license:
+    name: Licencia comercial de KronoQR
+    url: https://example.invalid/kronoqr/licencia
+
+servers:
+  - url: https://{host}
+    description: |
+      Instalacion del cliente. KronoQR se despliega en el servidor de cada cliente
+      (ADR-016): no hay servidor central ni entorno compartido, asi que el host es
+      siempre un parametro de instalacion.
+    variables:
+      host:
+        default: localhost
+        description: Nombre del servidor donde esta instalado KronoQR.
+
+tags:
+  - name: Health
+    description: |
+      Sondas de salud del Anexo B. Las consume la infraestructura —Docker, Nginx,
+      Prometheus y el actualizador de la tarea 5.7—, no las aplicaciones cliente.
+  - name: Attendance
+    description: |
+      Camino de fichaje. Es el nucleo del producto y el unico que nunca puede
+      degradarse: ni la caducidad de la licencia (ADR-019) ni la falta de red
+      pueden impedir que un empleado fiche.
+
+paths:
+  /api/v1/health:
+    get:
+      operationId: getHealth
+      summary: Sonda de vida
+      description: |
+        Indica que el proceso responde y **con que version esta desplegado**
+        (documento 02 §10.5): es lo que permite correlacionar una incidencia con
+        una version concreta cuando el cliente llama por telefono.
+
+        No consulta base de datos, ni Redis, ni disco. Una sonda de vida que toca
+        dependencias reinicia el contenedor cuando lo que esta caido es PostgreSQL,
+        que es exactamente el fallo que no se quiere. Para eso esta `/api/v1/ready`.
+
+        **Publica y sin autenticacion**, como toda sonda de vida: el orquestador la
+        consulta antes de que exista sesion alguna. Exponerla fuera de la red del
+        cliente es una decision de Nginx, no de la aplicacion.
+      tags: [Health]
+      security: []
+      responses:
+        '200':
+          description: El proceso responde.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+              examples:
+                vivo:
+                  summary: Instalacion en la version 1.4.2
+                  value:
+                    status: ok
+                    version: 1.4.2
+
+  /api/v1/ready:
+    get:
+      operationId: getReadiness
+      summary: Sonda de disponibilidad
+      description: |
+        Indica si la instancia puede aceptar trafico: comprueba las dependencias de
+        las que depende una peticion real. Es la sonda que gobierna el despliegue
+        sin parada (RNF-D-04) y la comprobacion posterior a una actualizacion
+        (RF-PD-10).
+
+        **No detalla que dependencia ha fallado.** El diagnostico por componente
+        vive en el paquete de diagnostico y en la comprobacion de salud
+        posinstalacion (RF-PD-09, RF-PD-13), que son acciones autenticadas del
+        administrador. Una sonda publica que enumera los servicios caidos es un
+        mapa gratuito de la instalacion.
+      tags: [Health]
+      security: []
+      responses:
+        '200':
+          description: La instancia acepta trafico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Readiness'
+              examples:
+                lista:
+                  value:
+                    status: ready
+        '503':
+          description: |
+            La instancia todavia no acepta trafico. El orquestador debe reintentar y
+            no enviarle peticiones mientras tanto.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                arrancando:
+                  value:
+                    type: 'urn:kronoqr:problem:not-ready'
+                    title: Servicio no disponible
+                    status: 503
+                    detail: La instancia todavia no esta lista para recibir trafico.
+
+  /api/v1/scan:
+    post:
+      operationId: recordScan
+      summary: Registrar un escaneo de credencial en el quiosco
+      description: |
+        Registra el escaneo de una tarjeta QR en un quiosco autenticado (RF-AT-01) y
+        devuelve al empleado lo que el quiosco tiene que enseñarle: nombre, accion,
+        hora y acumulado de la jornada (RF-AT-05).
+
+        **Que decide el servidor.** Si el empleado no tiene turno abierto, el escaneo
+        abre uno; si lo tiene, lo cierra (RF-AT-02, RF-AT-03). El cliente no decide la
+        accion: la deduce el agregado `WorkDay`. Lo unico que el cliente puede aportar
+        es la **intencion** (`intent`), porque con la pausa modelada como dos tramos
+        (ADR-024) un `break_start` y un `clock_out` son indistinguibles para el
+        servidor, y sin ese dato la jornada a la que se atribuye el tramo siguiente
+        se calcula mal cuando la pausa cruza medianoche.
+
+        **Idempotencia (regla dura 8, RF-AT-07).** El `scan_id` lo genera el cliente
+        (UUID v7) y es la clave de idempotencia. Reenviar el mismo `scan_id` devuelve
+        la respuesta original —el mismo cuerpo y el mismo codigo—, nunca un duplicado
+        ni un error. Es lo que hace segura la sincronizacion de la cola offline.
+
+        **Dos marcas de tiempo (regla dura 9, RF-AT-09).** `occurred_at` es el momento
+        real del escaneo y puede venir de la cola offline con dias de retraso; el
+        servidor añade `recorded_at`, el momento de recepcion. **El registro legal usa
+        `occurred_at`.**
+
+        **Rechazos indistinguibles (regla dura 17, RS-03, RF-QR-02).** Un escaneo que
+        no se puede registrar devuelve SIEMPRE la misma respuesta —`422` con
+        `urn:kronoqr:problem:scan-rejected`— y consume el mismo tiempo, ya sea porque
+        el prefijo no es `FH1`, porque la clave de firma es desconocida, porque la
+        firma no valida, porque la credencial esta revocada o porque el empleado no
+        esta activo. La causa concreta solo existe en `scan_events.result` y en el log
+        del servidor. Por eso `qr_payload` **no declara `pattern`**: un patron en el
+        contrato convertiria «formato invalido» en un `400` distinguible de un `422`,
+        que es la misma fuga que el codigo se cuida de no cometer.
+
+        **El quiosco no espera a esta respuesta** (regla dura 19, documento 02 §6).
+        Confirma al empleado en local en menos de 300 ms y encola; esta llamada
+        sincroniza. Un fallo de red no puede impedir fichar.
+      tags: [Attendance]
+      security:
+        - kioskToken: ['scan:write']
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScanRequest'
+            examples:
+              entrada-en-linea:
+                summary: Escaneo con red, el servidor decide que es una entrada
+                value:
+                  scan_id: 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                  occurred_at: '2026-08-14T05:58:31Z'
+                  qr_payload: FH1.a3.7QK2mXpR9vLdN4tZbYcF1w.k9Xm2pQrT5vN8wLa
+                  intent: auto
+              inicio-de-pausa:
+                summary: |
+                  Pausa declarada por el empleado. Sin `intent`, el servidor no puede
+                  distinguir este escaneo de un fin de turno (ADR-024).
+                value:
+                  scan_id: 0199f0d4-88b1-7a55-8c07-2f9e1a7c4d31
+                  occurred_at: '2026-08-14T09:30:02Z'
+                  qr_payload: FH1.a3.7QK2mXpR9vLdN4tZbYcF1w.k9Xm2pQrT5vN8wLa
+                  intent: break_start
+              cola-offline:
+                summary: |
+                  Escaneo generado sin red y sincronizado once horas despues. El
+                  registro legal usa `occurred_at`, no la hora de llegada.
+                value:
+                  scan_id: 0199efb0-0000-7def-b123-aa11bb22cc33
+                  occurred_at: '2026-08-13T22:04:57Z'
+                  qr_payload: FH1.a3.Wp7Lm2Qx8ZrT4vNc9YbK1e.3Bq7Rt9WzX2mK6pL
+      responses:
+        '200':
+          description: |
+            Escaneo registrado. Es tambien la respuesta de un reenvio con el mismo
+            `scan_id`: identica a la original.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanAccepted'
+              examples:
+                entrada:
+                  summary: Apertura de turno
+                  value:
+                    scan_id: 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                    action: clock_in
+                    employee_display_name: Maria G.
+                    work_date: '2026-08-14'
+                    occurred_at: '2026-08-14T05:58:31Z'
+                    recorded_at: '2026-08-14T05:58:31.412Z'
+                    worked_minutes: 0
+                salida-de-turno-nocturno:
+                  summary: |
+                    Cierre a las 06:02 UTC de un turno que empezo a las 22:00 del dia
+                    anterior. `work_date` es el 13, no el 14: el turno no se parte a
+                    medianoche y se atribuye a la jornada de su hora de inicio
+                    (RN-05, ADR-006).
+                  value:
+                    scan_id: 0199f13a-7c22-7b41-9e88-0c4d5e6f7a81
+                    action: clock_out
+                    employee_display_name: Juan P.
+                    work_date: '2026-08-13'
+                    occurred_at: '2026-08-14T06:02:10Z'
+                    recorded_at: '2026-08-14T06:02:10.688Z'
+                    worked_minutes: 482
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          description: |
+            **Escaneo rechazado.** Respuesta unica, generica y de tiempo constante
+            para toda causa de rechazo (regla dura 17, RS-03, documento 02 §5.2).
+            El cuerpo esta fijado campo a campo en el esquema y no admite miembros
+            adicionales: el contrato hace **imposible** describir la causa, que es
+            el unico modo de garantizar que nadie la filtre por descuido.
+
+            El quiosco muestra su propio texto de i18n a partir de `type`. Nunca
+            debe mostrar `title` ni `detail`, que son texto para quien depura.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ScanRejected'
+              examples:
+                rechazado:
+                  summary: La unica respuesta de rechazo que existe
+                  value:
+                    type: 'urn:kronoqr:problem:scan-rejected'
+                    title: Escaneo no valido
+                    status: 422
+                    detail: El escaneo no se ha podido registrar.
+                    scan_id: 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+components:
+  securitySchemes:
+    # Los tres esquemas declaran los ambitos del documento 02 §7.3, TODOS, aunque
+    # hoy solo `/scan` use uno: el ambito es lo que impide que un token de quiosco
+    # robado lea la plantilla completa, y esa frontera se declara una vez y se
+    # referencia, no se redescubre endpoint a endpoint.
+    #
+    # POR QUE `oauth2` SI NO HAY OAUTH. La autenticacion real son tokens Bearer de
+    # Laravel Sanctum con *abilities*; no hay flujo OAuth 2.0, ni cliente
+    # confidencial, ni consentimiento. Pero OpenAPI solo permite expresar «esta
+    # operacion exige este ambito» en un esquema `oauth2`, y sin eso el ambito
+    # dejaria de ser verificable y pasaria a ser un comentario. `tokenUrl` indica
+    # donde se emite cada token, que es la informacion util de verdad.
+    kioskToken:
+      type: oauth2
+      description: |
+        Token del dispositivo de quiosco. Se emite al vincular la tablet
+        (`/api/v1/kiosk/pair/confirm`), caduca a los 90 dias y rota
+        automaticamente al 80 % de su vida (§7.3).
+
+        Un token de quiosco comprometido **no da acceso a la plantilla completa**:
+        `roster:read` devuelve el minimo imprescindible —nombre de pila e inicial
+        del primer apellido— y solo del centro al que esta vinculado el dispositivo.
+      flows:
+        clientCredentials:
+          tokenUrl: /api/v1/kiosk/pair/confirm
+          scopes:
+            'scan:write': Registrar escaneos y sincronizar la cola offline.
+            'roster:read': Leer el padron minimo cacheable del centro del dispositivo.
+            'heartbeat:write': Enviar latido y telemetria del quiosco.
+    employeeToken:
+      type: oauth2
+      description: |
+        Sesion del portal del empleado. Se obtiene con codigo de empleado y PIN
+        (ADR-015): el producto no depende del correo electronico del empleado y no
+        hay invitaciones por correo. Sesion corta y alcance limitado a los datos
+        del propio empleado, de modo que un compromiso no escala.
+      flows:
+        password:
+          tokenUrl: /api/v1/me/login
+          scopes:
+            'self:read': Consultar y exportar el registro horario propio.
+    managementToken:
+      type: oauth2
+      description: |
+        Sesion del panel de gestion, con 2FA obligatorio para todo rol con acceso
+        global (§7.3). Los ambitos se conceden por rol —responsable, RRHH, auditor
+        y administrador de instalacion— y el alcance por departamento o centro lo
+        aplica ademas la policy de cada endpoint: el ambito dice **que** se puede
+        hacer y la policy **sobre que datos** (regla dura 18).
+      flows:
+        password:
+          tokenUrl: /api/v1/auth/login
+          scopes:
+            'attendance:read': Consultar presencia, jornadas y tramos.
+            'attendance:correct': Crear, corregir y anular tramos de forma trazada.
+            'incidents:*': Consultar y resolver incidencias.
+            'employees:*': Gestionar empleados, contratos, departamentos y centros.
+            'credentials:*': Emitir, imprimir, entregar y revocar credenciales.
+            'reports:*': Generar y descargar informes y exportaciones.
+            'reports:legal': Exportacion normalizada para la Inspeccion de Trabajo.
+            'audit:read': Consultar el registro de auditoria.
+            'settings:*': Leer y modificar la configuracion de la instalacion.
+            'license:*': Consultar y activar la licencia.
+            'support:*': Conceder y revocar accesos temporales de soporte.
+            'diagnostics:*': Generar paquetes de diagnostico y consultar errores.
+
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: |
+        Clave de idempotencia de la escritura. **Debe coincidir con el `scan_id` del
+        cuerpo**; si difieren, la peticion es invalida (`400`).
+
+        Va en cabecera ademas de en el cuerpo porque es la convencion que entienden
+        los intermediarios HTTP y porque deja la intencion explicita en el borde,
+        antes de deserializar nada. La garantia real la da el UNIQUE de
+        `scan_events.scan_id` (regla dura 8), no la cabecera.
+      schema:
+        $ref: '#/components/schemas/ScanId'
+      example: 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+
+  responses:
+    InvalidRequest:
+      description: |
+        La peticion esta mal formada: falta un campo, un formato no es valido o la
+        cabecera `Idempotency-Key` no coincide con `scan_id`. Es un fallo del
+        cliente, y ninguna de sus causas dice nada sobre credenciales: el rechazo de
+        un escaneo NUNCA llega por aqui, sino como `422`.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ValidationProblem'
+          examples:
+            falta-un-campo:
+              value:
+                type: 'urn:kronoqr:problem:invalid-request'
+                title: Peticion invalida
+                status: 400
+                detail: La peticion no cumple el contrato.
+                errors:
+                  occurred_at:
+                    - El instante debe ir en UTC con sufijo Z.
+    Unauthenticated:
+      description: Falta el token o no es valido.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            sin-token:
+              value:
+                type: 'urn:kronoqr:problem:unauthenticated'
+                title: No autenticado
+                status: 401
+                detail: Se requiere un token valido.
+    Forbidden:
+      description: |
+        El token es valido pero no tiene el ambito necesario, o la policy deniega el
+        acceso a estos datos. Cada endpoint tiene su prueba de autorizacion negativa
+        por rol (regla dura 18).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            sin-ambito:
+              value:
+                type: 'urn:kronoqr:problem:forbidden'
+                title: Acceso denegado
+                status: 403
+                detail: El token no tiene el ambito necesario para esta operacion.
+    TooManyRequests:
+      description: |
+        Se ha superado el limite de peticiones (§7.1). El cliente debe reintentar con
+        retroceso exponencial; el quiosco ya lo hace por diseño y el empleado no se
+        entera, porque su fichaje esta encolado en local desde el primer momento.
+      headers:
+        Retry-After:
+          description: Segundos que conviene esperar antes de reintentar.
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+          example: 2
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            limitado:
+              value:
+                type: 'urn:kronoqr:problem:too-many-requests'
+                title: Demasiadas peticiones
+                status: 429
+                detail: Reintenta pasados unos segundos.
+
+  schemas:
+    Health:
+      type: object
+      title: Health
+      description: Estado de vida del proceso y version desplegada.
+      additionalProperties: false
+      required: [status, version]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+          description: Unico valor posible. Si el proceso no esta vivo, no responde.
+        version:
+          type: string
+          pattern: '^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$'
+          description: |
+            Version SemVer desplegada (§10.5). Es lo que permite correlacionar una
+            incidencia con una version concreta sin entrar por SSH al servidor del
+            cliente.
+          examples:
+            - 1.4.2
+
+    Readiness:
+      type: object
+      title: Readiness
+      description: Disponibilidad de la instancia para aceptar trafico.
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ready]
+          description: |
+            Unico valor posible en un `200`. La no disponibilidad se expresa con el
+            codigo `503`, que es lo unico que lee un orquestador.
+
+    ScanId:
+      type: string
+      title: ScanId
+      format: uuid
+      description: |
+        Identificador del escaneo, **UUID v7 generado en el cliente**. Es la clave de
+        idempotencia (regla dura 8).
+
+        El patron exige la version 7 a proposito: v7 es ordenable temporalmente, lo
+        que mantiene la localidad del indice de `scan_events` y evita la
+        fragmentacion que produciria un v4 aleatorio con millones de filas
+        (documento 02 §6). Un v4 aqui es un fallo del cliente, no un caso a tolerar.
+      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+      examples:
+        - 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+
+    UtcTimestamp:
+      type: string
+      title: UtcTimestamp
+      format: date-time
+      description: |
+        Instante en UTC con sufijo `Z` (regla dura 3). El patron rechaza los desfases
+        explicitos (`+02:00`) y las horas sin zona: aceptarlos convertiria la zona
+        horaria en un dato del cliente, y con turnos nocturnos y cambio de hora eso
+        es una jornada mal atribuida.
+      pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$'
+      examples:
+        - '2026-08-14T05:58:31Z'
+
+    ScanIntent:
+      type: string
+      title: ScanIntent
+      enum: [auto, break_start, break_end]
+      default: auto
+      description: |
+        Intencion declarada por el empleado en el quiosco. `auto` deja que el servidor
+        deduzca la accion por el estado de la jornada, y es el comportamiento de
+        siempre: omitir el campo equivale a `auto` y no cambia nada (aditivo, ADR-012).
+
+        `break_start` y `break_end` existen porque la pausa son dos tramos (ADR-024) y
+        el servidor no puede distinguir un inicio de pausa de un fin de turno. Solo
+        tienen efecto si el fichaje de pausa esta habilitado en el centro (RF-AT-12).
+
+    ScanAction:
+      type: string
+      title: ScanAction
+      enum: [clock_in, clock_out, break_start, break_end]
+      description: |
+        Accion que el servidor ha aplicado. La decide el agregado `WorkDay`, no el
+        cliente. El quiosco la usa para el feedback visual y sonoro diferenciado
+        (RF-AT-05).
+
+    ScanRequest:
+      type: object
+      title: ScanRequest
+      description: Escaneo de una credencial en un quiosco.
+      additionalProperties: false
+      required: [scan_id, occurred_at, qr_payload]
+      properties:
+        scan_id:
+          $ref: '#/components/schemas/ScanId'
+        occurred_at:
+          allOf:
+            - $ref: '#/components/schemas/UtcTimestamp'
+          description: |
+            Momento real del escaneo, medido por el reloj del dispositivo. Puede venir
+            de la cola offline con dias de retraso. **Es la marca que usa el registro
+            legal** (regla dura 9, RF-AT-09).
+
+            Un desfase de reloj por encima del umbral no rechaza el fichaje: se acepta,
+            se marca como incidencia y se avisa en el quiosco (RF-AT-10). Nunca se
+            pierde una jornada por un problema tecnico ajeno al empleado.
+        qr_payload:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: |
+            Payload leido del QR, en el formato `FH1.<key_id>.<token>.<sig>`
+            (documento 02 §5.1). Opaco: sin PII y sin identificadores secuenciales.
+
+            **Sin `pattern` a proposito** (regla dura 17). Un patron aqui haria que un
+            payload con el prefijo cambiado devolviera `400` en vez del `422` generico,
+            y con eso el contrato distinguiria «formato invalido» de «credencial
+            desconocida»: justo lo que §5.2 obliga a no distinguir. Los limites de
+            longitud son proteccion de recursos, no validacion de formato, y no
+            dependen del contenido.
+          examples:
+            - FH1.a3.7QK2mXpR9vLdN4tZbYcF1w.k9Xm2pQrT5vN8wLa
+        intent:
+          $ref: '#/components/schemas/ScanIntent'
+
+    ScanAccepted:
+      type: object
+      title: ScanAccepted
+      description: |
+        Lo que el quiosco necesita para confirmar al empleado, y **nada mas**
+        (RF-AT-05). No es un endpoint de consulta: un token de quiosco no ve aqui
+        identificadores del empleado, ni su departamento, ni sus tramos, ni nada que
+        no quepa en la pantalla de confirmacion. `additionalProperties: false` lo
+        convierte en una comprobacion automatica y no en una buena intencion.
+      additionalProperties: false
+      required:
+        - scan_id
+        - action
+        - employee_display_name
+        - work_date
+        - occurred_at
+        - recorded_at
+        - worked_minutes
+      properties:
+        scan_id:
+          $ref: '#/components/schemas/ScanId'
+        action:
+          $ref: '#/components/schemas/ScanAction'
+        employee_display_name:
+          type: string
+          minLength: 1
+          maxLength: 60
+          description: |
+            Nombre en su forma minima: nombre de pila e inicial del primer apellido.
+            Es exactamente lo que devuelve `roster:read` (§7.3), y por el mismo motivo:
+            un token de quiosco robado no debe reconstruir la plantilla del hotel.
+          examples:
+            - Maria G.
+        work_date:
+          type: string
+          format: date
+          description: |
+            Jornada a la que se atribuye el tramo. **No es la fecha de `occurred_at`**:
+            un turno de 22:00 a 06:00 es un unico tramo atribuido a la jornada de su
+            hora de inicio (RN-05, ADR-006, regla dura 4). El quiosco la muestra para
+            que el acumulado no resulte incomprensible en el turno de noche.
+          examples:
+            - '2026-08-13'
+        occurred_at:
+          allOf:
+            - $ref: '#/components/schemas/UtcTimestamp'
+          description: Eco del momento real del escaneo, tal y como ha quedado registrado.
+        recorded_at:
+          allOf:
+            - $ref: '#/components/schemas/UtcTimestamp'
+          description: |
+            Momento en que el servidor recibio el escaneo (regla dura 9). Junto con
+            `occurred_at` permite al quiosco medir su propio desfase de reloj y
+            avisar, que es la mitad de cliente de RF-AT-10.
+        worked_minutes:
+          type: integer
+          minimum: 0
+          description: |
+            Minutos acumulados en la jornada `work_date`, **recalculados**, nunca
+            incrementados (RN-06, ADR-007, regla dura 7).
+
+            Se llama asi y no «minutos de hoy» porque en un turno nocturno la jornada
+            y el dia natural no coinciden, y un nombre que diga «hoy» acabaria
+            pintando el total del dia equivocado. No lleva `maximum`: la jornada
+            maxima es un umbral del perfil de cumplimiento, no una constante del
+            producto (regla dura 14, RN-11).
+          examples:
+            - 482
+
+    Problem:
+      type: object
+      title: Problem
+      description: |
+        Error en el formato `application/problem+json` (RFC 9457). El cliente
+        interpreta `type`, que es un URN estable; `title` y `detail` son texto para
+        personas y pueden cambiar sin que eso rompa a nadie.
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri
+          description: |
+            URN estable del tipo de problema. Se usa un URN y no una URL porque la
+            instalacion vive en el servidor del cliente, a menudo sin salida a
+            internet: una URL que nadie puede abrir no documenta nada y ademas
+            filtraria el host.
+          examples:
+            - 'urn:kronoqr:problem:scan-rejected'
+        title:
+          type: string
+          description: Resumen legible del tipo de problema.
+        status:
+          type: integer
+          minimum: 100
+          maximum: 599
+          description: Codigo HTTP, repetido en el cuerpo como exige RFC 9457.
+        detail:
+          type: string
+          description: Explicacion para quien depura. El cliente no la muestra al usuario.
+        instance:
+          type: string
+          format: uri-reference
+          description: Referencia a la ocurrencia concreta, cuando aporta algo.
+
+    ValidationProblem:
+      title: ValidationProblem
+      description: |
+        Problema con el detalle de los campos que incumplen el contrato. Solo aparece
+        en errores de forma de la peticion, nunca en un rechazo de escaneo.
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          required: [errors]
+          properties:
+            errors:
+              type: object
+              description: Mensajes por campo, indexados por el nombre del campo.
+              additionalProperties:
+                type: array
+                minItems: 1
+                items:
+                  type: string
+
+    ScanRejected:
+      type: object
+      title: ScanRejected
+      description: |
+        **La unica respuesta de rechazo de un escaneo.** Todos los campos estan fijados
+        a un valor unico y no se admiten miembros adicionales, de modo que el contrato
+        no ofrece ningun sitio donde alojar la causa: ni un codigo, ni un motivo, ni un
+        matiz en el texto (regla dura 17, RS-03, RF-QR-02).
+
+        Que sea imposible es el punto. Una respuesta generica que dependiera de que
+        nadie añada un campo «por comodidad de depuracion» duraria hasta la primera
+        tarde de diagnostico.
+      additionalProperties: false
+      required: [type, title, status, detail, scan_id]
+      properties:
+        type:
+          type: string
+          format: uri
+          enum: ['urn:kronoqr:problem:scan-rejected']
+        title:
+          type: string
+          enum: ['Escaneo no valido']
+        status:
+          type: integer
+          enum: [422]
+        detail:
+          type: string
+          enum: ['El escaneo no se ha podido registrar.']
+          description: |
+            Texto fijo. No se traduce ni se detalla: el quiosco muestra su propio texto
+            de i18n a partir de `type`, y cualquier variacion aqui seria un canal por
+            el que distinguir causas.
+        scan_id:
+          $ref: '#/components/schemas/ScanId'

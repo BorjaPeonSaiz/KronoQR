@@ -46,6 +46,21 @@ x-php-image: &php-image
     # backend/vendor del host queda solo para que el IDE resuelva el autoload,
     # que es para lo que el doc de entorno §B.3 puso Composer en el host.
     - backend-vendor:/var/www/html/vendor
+    # El contrato de la API vive FUERA de backend/ y las pruebas de contrato se
+    # ejecutan DENTRO del contenedor, asi que sin este montaje Spectator no
+    # encuentra docs/api/openapi.yaml y las pruebas de la suite Contract fallan
+    # con "missing or invalid spec".
+    #
+    # Se monta en /var/www/docs y no dentro de /var/www/html a proposito: asi la
+    # ruta relativa desde la aplicacion es la misma dentro del contenedor
+    # (base_path('../docs')) y en la CI, donde las herramientas corren sobre
+    # backend/ en el disco del runner. Una ruta que solo funciona en un sitio
+    # acaba en un `if (env('CI'))` dentro de la configuracion.
+    #
+    # Solo lectura: la aplicacion lee la documentacion, no la escribe. Se monta
+    # docs/ entera y no docs/api porque `docs:consistency` (tarea 0.7) tiene que
+    # leer tambien docs/adr/ y docs/requisitos.yaml.
+    - ../docs:/var/www/docs:ro
   networks:
     - app
   restart: unless-stopped

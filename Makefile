@@ -74,6 +74,12 @@ SH_FILES := $(wildcard infra/scripts/*.sh) \
 # umbral de 0 hallazgos depende de quien ejecute.
 SHELLCHECK_VERSION := v0.11.0
 SHFMT_VERSION      := v3.13.1
+# @redocly/cli valida el contrato OpenAPI (docs/api/redocly.yaml). Fijada por el
+# mismo motivo que las dos de arriba: entre versiones cambian las reglas del
+# preset `recommended`, y un umbral que depende de que version resuelva npx hoy
+# no es un umbral. Comprobado: 2.19.0 no avisa de esquemas de seguridad sin usar
+# y 2.46.1 si.
+REDOCLY_VERSION    := 2.46.1
 
 # Ruta del repositorio tal y como la entiende el demonio de Docker. En Git Bash
 # hace falta `pwd -W` (D:/...); en Linux y macOS `pwd` ya vale.
@@ -93,6 +99,17 @@ endif
 SHFMT := $(shell command -v shfmt 2>/dev/null)
 ifeq ($(SHFMT),)
 SHFMT := $(DOCKER_RUN) mvdan/shfmt:$(SHFMT_VERSION)
+endif
+
+# @redocly/cli no se instala en el repositorio: no es una dependencia de ninguna
+# de las tres aplicaciones —el contrato no es de nadie en particular—, asi que
+# meterlo en el package.json de una de ellas seria arbitrario. Se usa del PATH si
+# esta y con `npx` si no, que es el equivalente del contenedor para una
+# herramienta de Node. Node ya hace falta para los tres frontends, asi que no
+# añade ningun requisito nuevo a la maquina.
+REDOCLY := $(shell command -v redocly 2>/dev/null)
+ifeq ($(REDOCLY),)
+REDOCLY := npx --yes @redocly/cli@$(REDOCLY_VERSION)
 endif
 
 # La imagen de Semgrep exige el codigo en /src y se niega a analizar otra ruta.
@@ -117,8 +134,8 @@ endif
 
 .DEFAULT_GOAL := help
 .PHONY: help up down restart build ps logs shell seed test test-unit test-integration \
-        test-arch quality tools-ready php-lint deptrac rector sh-lint sast coverage \
-        coverage-now mutate e2e clean changelog changelog-check tool-versions
+        test-arch quality tools-ready php-lint deptrac rector sh-lint api-lint sast \
+        coverage coverage-now mutate e2e clean changelog changelog-check tool-versions
 
 help: ## Muestra esta ayuda
 	@echo KronoQR - objetivos disponibles:
@@ -138,6 +155,7 @@ help: ## Muestra esta ayuda
 	@echo   make deptrac          Solo Deptrac              (etapa 2 de la CI)
 	@echo   make rector           Solo Rector, informativo  (etapa 1 de la CI)
 	@echo   make sh-lint          Solo ShellCheck y shfmt   (etapa 1 de la CI)
+	@echo   make api-lint         Contrato OpenAPI 3.1      (etapa 1 de la CI)
 	@echo   make sast             Semgrep: reglas propias de .semgrep
 	@echo   make coverage         Cobertura: dominio 90, global 75 por ciento
 	@echo   make coverage-now     Cobertura actual, sin umbral
@@ -228,8 +246,8 @@ endif
 # la (1), Deptrac en la (2)— y necesita invocarlas por separado. La alternativa
 # era escribir las ordenes otra vez dentro del workflow, que es exactamente como
 # los umbrales acaban divergiendo entre el portatil y el runner.
-quality: sh-lint php-lint deptrac rector ## Cadena de calidad completa (doc 02 §9.2)
-	@echo [make] Calidad: Pint, PHPStan 9 y Deptrac en verde.
+quality: sh-lint api-lint php-lint deptrac rector ## Cadena de calidad completa (doc 02 §9.2)
+	@echo [make] Calidad: contrato OpenAPI, Pint, PHPStan 9 y Deptrac en verde.
 
 # Guarda comun de las herramientas de PHP. Sin vendor/ no hay nada que ejecutar,
 # y es mejor decirlo que fallar con "command not found".
@@ -279,6 +297,23 @@ else
 	  exit 1; \
 	fi
 	@echo [make] ShellCheck, shfmt y robustez: 0 hallazgos.
+endif
+
+# El contrato es la fuente de verdad de la API (ADR-013) y se modifica antes que
+# el codigo. Si nadie lo comprueba, el fichero que manda sobre la forma de cada
+# endpoint es el unico artefacto del repositorio sin herramienta detras.
+#
+# Umbral: 0 problemas, avisos incluidos. Las reglas del preset `recommended` que
+# de verdad importan estan elevadas a `error` en docs/api/redocly.yaml, y las
+# excepciones estan enumeradas una a una, con motivo, en
+# docs/api/.redocly.lint-ignore.yaml.
+api-lint: ## Valida docs/api/openapi.yaml como OpenAPI 3.1 (umbral: 0 problemas)
+ifeq ($(wildcard docs/api/openapi.yaml),)
+	@echo [make] No existe docs/api/openapi.yaml: no hay contrato que validar.
+	@exit 1
+else
+	$(REDOCLY) lint --config docs/api/redocly.yaml
+	@echo [make] Contrato OpenAPI 3.1: 0 problemas.
 endif
 
 sast: ## Semgrep sobre las reglas de .semgrep (umbral: 0 hallazgos ERROR)
@@ -338,6 +373,7 @@ changelog-check: ## Comprueba el CHANGELOG. Con VERSION=1.2.3, exige su entrada
 tool-versions: ## Imprime las versiones fijadas de las herramientas externas
 	@echo SHELLCHECK_VERSION=$(SHELLCHECK_VERSION)
 	@echo SHFMT_VERSION=$(SHFMT_VERSION)
+	@echo REDOCLY_VERSION=$(REDOCLY_VERSION)
 
 clean: ## Para el entorno y BORRA los volumenes de datos
 	$(COMPOSE_DEV) down -v --remove-orphans

@@ -45,13 +45,14 @@ Cuatro consecuencias operativas que forman parte de la decisión:
 - **Cambiar el contrato es un cambio revisable en el *pull request***, visible en el diff y evaluable contra ADR-012: ¿es aditivo o rompe v1?
 - **Los tres frontends dependen de un artefacto generado.** Si la generación falla, la CI falla; es preferible a que compile con tipos obsoletos.
 - **El contrato entra en la Definición de Terminado** (§10.3): ninguna funcionalidad con endpoint se cierra sin él actualizado.
-- **Falta fijar la herramienta de validación estática del propio fichero.** El §3.1 solo fija `spectator` para pruebas; validar que el YAML es OpenAPI 3.1 correcto necesita un *linter* y ningún documento lo elige. Queda anotado como decisión pendiente de la tarea 0.6.
+- **La herramienta de validación estática del propio fichero es `@redocly/cli`**, fijada al ejecutar la tarea 0.6. El §3.1 solo fijaba `spectator` para pruebas, que valida respuestas contra el contrato pero no que el contrato en sí sea OpenAPI 3.1 correcto. Se ata al objetivo `make api-lint`, entra en `make quality` y bloquea en la etapa ① de la CI, porque *una convención que no verifica una herramienta es una sugerencia* (§3.5). Su versión se fija en el `Makefile`, junto a las de ShellCheck y shfmt, para que el resultado no dependa de quién ejecute.
 - **El contrato no documenta lo interno.** Eventos de dominio, colas y canales de WebSocket no son API pública y no viven aquí.
 
 ## Verificación
 
 - Prueba de contrato con Spectator (RQ-06): toda respuesta de toda prueba de *feature* valida contra el esquema.
 - `npm run api:generate` produce el cliente en los tres frontends sin error de tipos (`vue-tsc` en 0).
-- El fichero valida como OpenAPI 3.1 en la CI, con el *linter* que se fije (pendiente, ver consecuencias).
+- El fichero valida como OpenAPI 3.1 en la CI: `make api-lint` con `@redocly/cli`, **0 errores**. Comprobado rompiéndolo a propósito —quitando un `operationId` y poniendo un ejemplo que viola su propio esquema—, porque un validador que no puede fallar no valida nada.
+- **El cliente TypeScript generado está versionado en los tres frontends**, y la etapa ① de la CI lo regenera y falla si difiere. Sin esa comprobación, el contrato podría cambiar y los clientes seguir compilando contra la forma antigua, que es exactamente la deriva que este ADR existe para impedir.
 - Prueba de contrato: los errores se devuelven en `application/problem+json` y `security` declara el ámbito de cada operación (§7.3).
 - Revisión en el *pull request*: si el diff toca un controlador de API y no toca `openapi.yaml`, se para. `docs:consistency` (tarea 0.7) lo verifica de forma automática.
