@@ -1,0 +1,57 @@
+# Analisis estatico del backend — doc 02 §9.2 (nivel 9, umbral 0 errores) y
+# §3.5 (tipado completo y complejidad ciclomatica <= 10 por metodo).
+#
+# RNF-M-02 exige el nivel maximo *sin errores suprimidos sin justificar*: por eso
+# `ignoreErrors` esta vacio y no hay baseline. Cuando una supresion sea
+# inevitable se escribe en el codigo, con su identificador y su motivo:
+#
+#     /** @phpstan-ignore argument.type (La firma de la libreria X miente: ...) */
+#
+# Semgrep comprueba que ninguna supresion se quede sin ese motivo entre
+# parentesis (.semgrep/kronoqr-php.yaml, regla phpstan-ignore-sin-justificacion).
+
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    level: 9
+
+    paths:
+        - app
+        - database
+        - routes
+        - tests
+        - tools
+
+    # El cache dentro del proyecto: el contenedor se recrea a menudo y /tmp se
+    # va con el. Con esto, un `make quality` repetido no vuelve a analizarlo todo.
+    tmpDir: storage/framework/cache/phpstan
+
+    # Umbral del §9.2: 0 errores. Ni baseline ni excepciones globales.
+    ignoreErrors: []
+
+    # Si una supresion deja de hacer falta, PHPStan lo dice en lugar de callar.
+    reportUnmatchedIgnoredErrors: true
+
+    # Regla dura 3: el codigo se analiza con la misma zona que produce.
+    # Larastan arranca la aplicacion para inferir tipos de Eloquent y del
+    # contenedor; sin esto tomaria la del proceso.
+    #
+    # noEnvCallsOutsideOfConfig: env() solo en config/, que es la unica capa que
+    # se cachea. Es la causa numero uno de "en produccion no lee la variable".
+    noEnvCallsOutsideOfConfig: true
+
+    # El producto se despliega en el servidor del cliente con Docker Compose,
+    # nunca con Octane (doc 02 §3.4): no analizamos compatibilidad que no aplica.
+    checkOctaneCompatibility: false
+
+services:
+    # Doc 02 §3.5, fila «Complejidad»: <= 10 por metodo, verificado por PHPStan.
+    # La regla es nuestra porque PHPStan no trae ninguna que mida complejidad
+    # ciclomatica; ver el docblock de la clase.
+    -
+        class: KronoQR\Tools\PHPStan\Rules\MethodCyclomaticComplexityRule
+        arguments:
+            maxComplexity: 10
+        tags:
+            - phpstan.rules.rule

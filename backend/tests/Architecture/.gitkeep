@@ -1,0 +1,1 @@
+# Fronteras entre modulos. Un use Illuminate en Domain/ debe romper la CI.
