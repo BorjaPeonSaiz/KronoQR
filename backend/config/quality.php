@@ -20,9 +20,21 @@ return [
      * posteriores no bloquean (§9.6).
      *
      * Se actualiza al cerrar cada fase, como parte del procedimiento de cierre
-     * (doc 03 §6.6). Variable nueva del Anexo B del doc 02.
+     * (doc 03 §6.6). Este literal ES el registro de que la fase se cerro.
+     *
+     * LITERAL Y NO `env()`, a proposito. Esto no es configuracion de despliegue:
+     * es ESTADO DEL REPOSITORIO. Leerlo del entorno tenia un fallo silencioso y
+     * permanente: la variable no existia en .env.example, ni en el workflow, ni
+     * en compose, asi que en la CI —donde backend/.env esta en .gitignore— el
+     * valor era siempre el de por defecto. Cerrada la Fase 1, el portatil habria
+     * exigido prueba a sus requisitos y la CI no, que es la forma mas cara de
+     * tener una puerta: la que solo salta en la maquina de quien la mira.
+     *
+     * La regla general, y vale para cualquier valor que se añada aqui: si el
+     * valor tiene que ser el mismo en todas las maquinas, no puede venir del
+     * entorno. QualityGatesTest lo verifica.
      */
-    'current_phase' => (int) env('CURRENT_PHASE', 0),
+    'current_phase' => 0,
 
     /*
      * El orden REAL de ejecucion de las fases, literal del Anexo A del doc 01:

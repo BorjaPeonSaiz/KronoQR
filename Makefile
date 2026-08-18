@@ -134,7 +134,7 @@ endif
 
 .DEFAULT_GOAL := help
 .PHONY: help up down restart build ps logs shell seed test test-unit test-integration \
-        test-arch quality tools-ready php-lint deptrac rector sh-lint api-lint sast \
+        test-arch test-contract quality tools-ready php-lint deptrac rector sh-lint api-lint sast \
         traceability traceability-check docs-consistency deps-audit-php deps-audit-js coverage coverage-now mutate e2e clean changelog changelog-check tool-versions
 
 help: ## Muestra esta ayuda
@@ -229,6 +229,27 @@ ifeq ($(wildcard backend/artisan),)
 	@echo [make] La aplicacion Laravel llega en la tarea 0.2: todavia no hay suite que ejecutar.
 else
 	$(RUN_APP) php artisan test --testsuite=Integration
+endif
+
+# Contract y Feature juntas y en cada push desde el cierre de la Fase 0.
+#
+# Hasta entonces su sitio era la etapa (4), que se ejecuta en pull request, y la
+# etapa (4) no existia: ninguna de las dos corria en ningun push. Eso dejaba dos
+# agujeros a la vez. El evidente, que una regresion en una prueba de contrato
+# —OpenAPI es la autoridad #2— podia vivir meses sin que nadie la viera. Y el
+# que no se ve: `qa:traceability` SI cuenta sus etiquetas, asi que un requisito
+# podia figurar cubierto en la matriz por una prueba que la CI no ejecutaba
+# nunca. La matriz es la evidencia de que cada obligacion legal esta verificada
+# en cada cambio; con una suite parada, era una lista de intenciones.
+#
+# Cuestan segundos y no necesitan base de datos. Cuando la etapa (4) exista con
+# Integration y E2E, esto se queda igual: son las baratas, y las baratas van en
+# cada push.
+test-contract: ## Contrato OpenAPI y feature, las dos suites que la CI ejecuta en cada push
+ifeq ($(wildcard backend/artisan),)
+	@echo [make] La aplicacion Laravel llega en la tarea 0.2: todavia no hay suite que ejecutar.
+else
+	$(RUN_APP) php artisan test --testsuite=Contract,Feature
 endif
 
 # Etapa 2 de la CI junto a Deptrac. Son las dos mitades de la misma frontera:
@@ -362,19 +383,40 @@ docs-consistency: ## Coherencia entre los documentos y los ficheros que los ejec
 # y --min bloquea; con artisan, ni una cosa ni la otra.
 PEST := vendor/bin/pest
 
+# Cobertura y mutacion se activan SOLAS en cuanto exista el primer modelo de
+# dominio, en el modulo que sea.
+#
+# La primera version miraba solo Attendance, porque es el modulo que escribe la
+# tarea 1.1. Pero si el primer modelo aterrizara en Compliance —o en cualquier
+# otro—, las dos puertas habrian seguido apagadas sin decir nada, y el dominio
+# habria crecido sin umbral de cobertura ni MSI hasta que alguien lo notara a
+# ojo. La condicion tiene que ser la que de verdad importa: «¿hay ya dominio que
+# medir?», no «¿hay dominio en el modulo que yo esperaba?».
+DOMAIN_MODELS := $(wildcard backend/app/Modules/*/Domain/Model/*.php)
+
 coverage: ## Cobertura: dominio >= 90 por ciento, global >= 75 (doc 02 seccion 9.2)
-ifeq ($(wildcard backend/app/Modules/Attendance/Domain/Model/*.php),)
+ifeq ($(DOMAIN_MODELS),)
 	@echo "[make] El dominio llega en la tarea 1.1: todavia no hay cobertura exigible."
 	@echo "[make] Para ver la cobertura actual sin umbral: make coverage-now"
 else
 	$(RUN_APP_XDEBUG) $(PEST) --coverage --min=75
+# PENDIENTE (tarea 1.2, RNF-M-01): aqui se aplica el umbral GLOBAL del 75 %, y
+# el requisito son dos: dominio >= 90 % y global >= 75 % (doc 02 §9.2). El
+# `--min` de Pest es uno solo y global, asi que la mitad del dominio no la
+# comprueba nadie hoy —ni este objetivo ni su prueba de QualityGatesTest, que
+# solo verifica que el 75 esta escrito—.
+#
+# Se deja anotado y no resuelto a proposito: sin dominio no hay nada que medir,
+# y un umbral inventado sobre cero ficheros seria otra puerta decorativa. Lo
+# cierra la 1.2, con el primer modelo delante, y la via es una segunda pasada
+# acotada a Modules/*/Domain con su propio minimo.
 endif
 
 coverage-now: ## Cobertura actual sin umbral, util antes de que exista el dominio
 	$(RUN_APP_XDEBUG) $(PEST) --coverage
 
 mutate: ## Mutacion sobre el dominio, MSI mayor o igual a 80 por ciento
-ifeq ($(wildcard backend/app/Modules/Attendance/Domain/Model/*.php),)
+ifeq ($(DOMAIN_MODELS),)
 	$(call notice,Mutacion NO ejecutada: Modules/*/Domain no existe todavia.)
 	@echo "[make] La mutacion se ejecuta sobre Modules/*/Domain, que se escribe en la"
 	@echo "[make] tarea 1.1. Sin dominio no hay mutantes: el umbral MSI >= 80 por ciento"

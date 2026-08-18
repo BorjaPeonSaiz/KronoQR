@@ -184,7 +184,7 @@ final readonly class TraceabilityReport
             '## Alcance',
             '',
             '- Catálogo: `docs/requisitos.yaml`, **'.count($this->catalog->requirements).' requisitos**.',
-            '- Fase en curso (`CURRENT_PHASE`): **'.$this->currentPhase.'**. Orden real de ejecución: '.$this->order->describe().'.',
+            '- Fase en curso (`quality.current_phase`): **'.$this->currentPhase.'**. Orden real de ejecución: '.$this->order->describe().'.',
             '- Pruebas etiquetadas: **'.count($this->scan->tests).'** (Pest '.$pest.', Playwright '.$playwright.').',
             '- Bloquean solo las fases ya ejecutadas: un requisito de la Fase 3 no bloquea mientras se trabaja en la Fase 1.',
             '',
