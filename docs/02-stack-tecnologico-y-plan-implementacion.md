@@ -513,6 +513,7 @@ Los diez siguientes **no proceden de esta tabla**: nacieron al desarrollar el pl
 | **029** | **La configuración vive en el entorno del contenedor**, no en un `.env` del backend | El `.env` canónico está en la raíz y Compose lo inyecta, pero Laravel espera uno junto a `artisan` y sin él `php artisan test` avisa en cada prueba. Darle configuración real crearía dos fuentes de verdad con una precedencia que casi nadie tiene presente: el entorno gana | `backend/.env` existe **vacío y comentado**, creado de forma idempotente por el entrypoint: no configura nada. `key:generate` se usa con `--show`, y **una variable vacía nunca lleva comentario en su misma línea**, porque Compose se lo asigna como valor |
 | **030** | **Se adopta Laravel 13 antes de escribir el dominio** | El §3.1 mandaba verificar la versión mayor vigente al arrancar, pero ninguna fila registraba la elección de framework: la instrucción **no tenía ADR donde aterrizar**. Al comprobarlo, Laravel 12 ya había salido de correcciones de fallos y solo conservaba parches de seguridad hasta febrero de 2027 | Restricción `^13.12`, porque las 13.0–13.11 arrastran tres avisos de seguridad. Sube también Tinker, `laravel-pdf`, Pest y PHPUnit. Se migró con el repositorio en esqueleto y **sin tocar una línea de código de aplicación**: era el momento más barato que iba a haber |
 | **031** | **El anti-rebote es un resultado aceptado, no un rechazo** | `RF-AT-06` es Must de la Fase 1 y **no cabía en el contrato**: con `200 ScanAccepted` habría que devolver una `action` que no ocurrió, y con `422 ScanRejected` se confundiría con el rechazo de credencial, que es genérico por diseño (RS-03) | `200` con `action: debounced` y esquema propio `ScanDebounced`, discriminado por `oneOf`. Es `2xx` porque la cola offline reintenta ante fallo: un `4xx` la dejaría reintentando contra una ventana ya pasada. `scan_events.result` conserva `rejected_debounce`: son dos capas y dos vocabularios |
+| **032** | **La Fase 1 entrega un sistema legalmente defendible, no un piloto** | La Fase 1 se cerraba como "piloto interno controlado, no vendible" (doc 02 §11.2: sin auditoría inmutable, retención y exportación para Inspección, el registro no satisface el art. 34.9 ET). Tres tareas de la Fase 1 ya afirmaban escribir en `audit_log`, cuya tabla era de la 2.2 | Cinco tareas de la Fase 2 se mueven a la Fase 1 (1.14–1.18): `audit_log` encadenado, correcciones trazadas, detalle de jornada, exportación legal y copias verificadas. El esfuerzo total no cambia; `0+1` pasa de "piloto interno" a "instalable y legalmente defendible" |
 
 ---
 
@@ -1028,25 +1029,32 @@ Si se necesita una cifra de desarrollo **manual sin asistencia** para comparar c
 
 **Entregable:** `make up` levanta el entorno completo; la CI está en verde; las fronteras arquitectónicas se verifican solas. **Verificación:** añadir a propósito un `use Illuminate\...` dentro de `Domain/` debe hacer fallar la CI.
 
-### Fase 1 — MVP de fichaje · 102–130 h
+### Fase 1 — MVP de fichaje · 135–172 h
+
+> **[ADR-032](adr/ADR-032-la-fase-1-entrega-un-sistema-legalmente-defendible.md).** Cinco tareas que eran de la Fase 2 se adelantan a esta fase (1.14–1.18): sin ellas, el registro no satisfacía el art. 34.9 ET hasta la Fase 2, y el estado de venta al cerrar `0+1` era «piloto interno controlado». El esfuerzo total del proyecto no cambia; cambia de fase.
 
 | # | Tarea | h | Requisitos | Agente / Skill |
 |---|---|---|---|---|
 | 1.1 | Dominio `Attendance`: `WorkDay`, `ShiftEntry`, objetos de valor, `ClockingPolicy`, eventos | 14–18 | RN-01..09 | `arquitecto-dominio` |
 | 1.2 | Pruebas unitarias del dominio, incluidas DST y medianoche, con mutación | 10–12 | RQ-01, RQ-02 | `qa-testing` |
 | 1.3 | Esquema y migraciones con **todas** las restricciones declarativas | 6–8 | RN-01..03 | `backend-laravel` + `/migracion-segura` |
+| 1.14 | `audit_log` encadenado, comando de verificación y permisos | 8–10 | RS-07 | `backend-laravel` + `/revision-cumplimiento` |
 | 1.4 | Caso de uso `RegisterScan` con idempotencia y proyección transaccional | 8–10 | RF-AT-01..09 | `backend-laravel` + `/crear-caso-de-uso` |
 | 1.5 | Módulo `Identity`: credenciales HMAC, `key_id`, revocación, tokens de dispositivo | 8–10 | RF-QR-01..03, RF-ID-04 | `backend-laravel`, revisión de `seguridad-cumplimiento` |
 | 1.6 | `Workforce` básico: empleados, departamentos, centros, alta y baja, más autenticación de gestión mínima (login y roles, **sin 2FA**) | 8–10 | RF-GP-01, RF-GP-03, RF-ID-01..02 básicos | `backend-laravel` |
 | 1.7 | Endpoints de fichaje, lote, padrón y latido, con rate limiting | 6–8 | RS-02..04 | `backend-laravel` + `/endpoint-api` |
-| 1.8 | PWA quiosco: escaneo ZXing, feedback visual y sonoro, i18n, accesibilidad | 12–16 | RF-KI-01..02, RF-KI-05..06, RF-KI-09 | `frontend-quiosco` |
-| 1.9 | Cola offline Dexie con sincronización, reintentos e indicador | 10–12 | RF-KI-03..04 | `frontend-quiosco` |
+| 1.15 | Correcciones trazadas: versionado, catálogo de motivos, anulación | 10–12 | RN-13, RL-04, RF-PA-04 | `arquitecto-dominio` → `backend-laravel` |
+| 1.16 | Panel: detalle de jornada | 6–8 | RF-PA-03 | `frontend-panel` |
+| 1.17 | Exportación legal para Inspección | 5–6 | RL-03, RL-06, RF-IN-05 | `backend-laravel` + `/informe-nuevo` |
+| 1.8 | PWA quiosco: escaneo ZXing, feedback visual y sonoro, i18n, accesibilidad | 12–16 | RF-KI-01..02, RF-KI-05..06, RF-KI-09, RL-09 | `frontend-quiosco` |
+| 1.9 | Cola offline Dexie con sincronización, reintentos e indicador | 10–12 | RF-KI-03..04, RN-15, RL-12 | `frontend-quiosco` |
 | 1.10 | Generación de tarjetas en PDF, impresión masiva, registro de entrega y panel de estado | 6–8 | RF-QR-04..06, RF-QR-08 | `backend-laravel` + `frontend-panel` |
 | 1.11 | Portal del empleado: acceso con código y PIN, mi registro, mi exportación | 6–8 | RF-ID-05..08, RL-05 | `frontend-portal-empleado` + `backend-laravel` |
 | 1.12 | PIN de respaldo de 6 dígitos en el quiosco, con bloqueo por intentos | 4–5 | RF-AT-11, RS-12 | `backend-laravel` + `frontend-quiosco` |
 | 1.13 | Provisión, entrega y restablecimiento del PIN: generación en el alta, visualización de una sola vez, `pin_hash`, restablecimiento por RRHH y auditoría de las tres acciones | 4–5 | **RF-ID-09** | `backend-laravel` + `frontend-panel` |
+| 1.18 | Copias cifradas, verificadas, con prueba de restauración | 4–6 | RF-PR-04, RNF-D-02, RNF-D-05, RQ-09 | `devops-observabilidad` |
 
-**Entregable:** un empleado recibe su tarjeta y ficha en la tablet, con o sin red, con credencial infalsificable y registro correcto. **Corte MVP mínimo defendible.**
+**Entregable:** un empleado recibe su tarjeta y ficha en la tablet, con o sin red, con credencial infalsificable y registro correcto, **corregible con trazabilidad completa, respaldado con copia verificada y exportable a Inspección de Trabajo**. **Instalable y legalmente defendible** (ADR-032) — no es aún «producto vendible a escala», que sigue siendo la Fase 5.
 
 > **Dependencia implícita que conviene hacer explícita:** la tarea 1.10 necesita que alguien pueda entrar al panel, así que la Fase 1 incluye una **autenticación de gestión mínima** (login, roles `admin`/`rrhh`, sin 2FA) dentro de 1.6. El 2FA obligatorio y el ámbito por departamento son de la tarea 2.1 y no se adelantan. Anotarlo evita el descubrimiento tardío de que el panel de estado de credenciales no tiene puerta de entrada.
 
@@ -1054,24 +1062,25 @@ Si se necesita una cifra de desarrollo **manual sin asistencia** para comparar c
 
 > **La tarea 1.13 se añadió porque `RF-ID-09` no lo construía nadie.** La 1.6 crea la columna `pin_hash`, la 1.11 hace login con ella y la 1.12 ficha con ella, y ninguna la rellenaba: el E2E del portal no era ejecutable. Va después de la 1.6 y **bloquea a la 1.11 y a la 1.12**.
 
-### Fase 2 — Gestión y cumplimiento · 86–109 h
+> **1.14–1.18 se añadieron por [ADR-032](adr/ADR-032-la-fase-1-entrega-un-sistema-legalmente-defendible.md).** `1.14` va entre 1.3 y 1.4 porque `RegisterScan` ya escribe en `audit_log`. `1.15` va tras 1.4, porque corrige lo que esa tarea crea. `1.16` va tras 1.7, que es quien expone los primeros endpoints de lectura. `1.17` va tras 1.15, porque la exportación legal debe incluir las correcciones con su autor y motivo. `1.18` no depende de nada de la fase salvo el entorno de 0.1 y avanza en paralelo desde el principio.
+
+### Fase 2 — Gestión y cumplimiento · 53–68 h
 
 | # | Tarea | h | Requisitos | Agente / Skill |
 |---|---|---|---|---|
 | 2.1 | Autenticación de gestión **completa**: 2FA obligatorio y RBAC con ámbito por departamento sobre la base mínima de 1.6 | 8–10 | RF-ID-01..03 | `backend-laravel`, revisión de `seguridad-cumplimiento` |
-| 2.2 | `audit_log` encadenado, comando de verificación y alerta | 8–10 | RL-04, RS-07 | `backend-laravel` + `/revision-cumplimiento` |
-| 2.3 | Correcciones trazadas: versionado, catálogo de motivos, anulación | 10–12 | RF-PA-04, RN-13 | `arquitecto-dominio` → `backend-laravel` |
 | 2.4 | Panel: presencia en vivo con Reverb y *fallback* | 10–12 | RF-PA-01..02 | `frontend-panel` + `backend-laravel` |
-| 2.5 | Panel: detalle de jornada, bandeja de incidencias, resolución | 10–12 | RF-PA-03, RF-PA-05 | `frontend-panel` |
+| 2.5 | Panel: bandeja de incidencias y resolución | 4–5 | RF-PA-05 | `frontend-panel` |
 | 2.6 | Detección automática de incidencias (scheduler) | 6–8 | RF-PR-01 | `backend-laravel` + `/nueva-regla-de-negocio` |
 | 2.7 | Reconciliación nocturna con alerta de divergencia | 4–6 | RF-PR-02 | `backend-laravel` |
 | 2.8 | Informes por periodo, contratos, trabajadas frente a contratadas | 10–12 | RF-IN-01..03, RF-GP-02 | `backend-laravel` + `/informe-nuevo` |
-| 2.9 | Exportaciones CSV/XLSX/PDF y **exportación legal para Inspección** | 8–10 | RF-IN-04..05, RL-06 | `backend-laravel` + `/informe-nuevo` |
+| 2.9 | Exportaciones CSV/XLSX/PDF de conveniencia | 3–4 | RF-IN-04 | `backend-laravel` + `/informe-nuevo` |
 | 2.10 | Retención con confirmación y purga documentada | 4–6 | RL-02, RL-11, RF-PR-03 | `backend-laravel` + `/revision-cumplimiento` |
-| 2.11 | Copias cifradas, verificadas, con prueba de restauración | 4–6 | RF-PR-04, RNF-D-05 | `devops-observabilidad` |
 | 2.12 | Rotación de clave de firma con solape y reimpresión progresiva | 4–5 | RF-QR-07 | `backend-laravel`, revisión de `seguridad-cumplimiento` |
 
-**Entregable:** sistema **legalmente defendible** y operable por RRHH. Es aquí, y no antes, donde se puede poner en producción con tranquilidad.
+**Entregable:** sistema operable con comodidad por RRHH y por cada responsable de departamento — presencia en vivo, detección automática de incidencias, 2FA obligatorio. La validez legal del registro (ADR-032) ya la entregó la Fase 1; esta fase la hace agradable de operar a diario.
+
+> **Por qué la tabla ya no suma 86–109 h.** Cinco tareas —2.2, 2.3, 2.11 enteras, y las partes de 2.5 y 2.9 con relevancia legal— se movieron a la Fase 1 por ADR-032. El esfuerzo no desapareció: está en la tabla de la Fase 1.
 
 ### Fase 5 — Productización · 117–161 h
 
@@ -1131,11 +1140,13 @@ Cuadrantes y comparación entre planificado y realmente trabajado, vacaciones y 
 
 | Alcance | Fases | Horas | ¿Vendible? |
 |---|---|---|---|
-| **MVP funcional** | 0 + 1 | 133–172 | ⚠️ Piloto interno controlado |
-| **Primera instalación a medida** | 0 + 1 + 2 | 219–281 | ⚠️ Sí, pero instalada y operada por el equipo de desarrollo |
+| **MVP funcional** | 0 + 1 | 166–214 | ✅ **Instalable y legalmente defendible** ([ADR-032](adr/ADR-032-la-fase-1-entrega-un-sistema-legalmente-defendible.md)) |
+| **Primera instalación a medida** | 0 + 1 + 2 | 219–282 | ⚠️ Sí, pero instalada y operada por el equipo de desarrollo |
 | **✅ Producto vendible** | 0 + 1 + 2 + 5 | **336–442** | ✅ **Sí: el cliente lo instala, configura y opera** |
 | **Producto vendible y operable** | 0 + 1 + 2 + 5 + 3 | **420–554** | ✅ Con observabilidad completa |
 | **Con evolución** | Todas | 480–644 | ✅ |
+
+> **`0 + 1` cambió el 15 de agosto de 2026 (ADR-032).** Antes eran 133–172 h y el estado era «piloto interno controlado»: sin auditoría inmutable, correcciones trazadas ni exportación para Inspección, el registro no satisfacía el art. 34.9 ET. Cinco tareas de la Fase 2 se adelantaron a la Fase 1 (1.14–1.18); el total del proyecto no cambió, cambió de fase. `0 + 1 + 2` sigue siendo prácticamente la misma cifra (219–282 frente a 219–281): lo que antes estaba en la Fase 2 sigue estándolo en algún lado, solo que ahora la mitad de ello ya se hizo antes.
 
 > **La Fase 5 es lo que separa "un sistema" de "un producto".** Sin ella se puede entregar una instalación, pero cada cliente nuevo consume tiempo del equipo de desarrollo: instalar, configurar, actualizar y diagnosticar. Con veinte clientes eso no escala, y el negocio deja de ser vender software para pasar a ser consultoría. Las ~110 h de la Fase 5 son la inversión que hace que el cliente número veintiuno cueste lo mismo que el segundo.
 
@@ -1143,7 +1154,8 @@ Cuadrantes y comparación entre planificado y realmente trabajado, vacaciones y 
 
 | Si se recorta… | Riesgo que se asume |
 |---|---|
-| **Fase 2 completa** | **Incumplimiento legal.** Sin auditoría inmutable, retención y exportación para Inspección, el registro no satisface el art. 34.9 ET. Es el recorte que no se debe hacer |
+| **Fase 2 completa** (tal como queda tras ADR-032) | Se pierde comodidad de operación, no validez legal: la auditoría inmutable, las correcciones trazadas y la exportación para Inspección ya las entrega la Fase 1. Lo que se pierde es 2FA obligatorio, presencia en vivo, detección automática de incidencias y purga por retención automatizada — molesto para RRHH, no un incumplimiento |
+| **Fase 1 sin 1.14–1.18** (revertir ADR-032) | **Incumplimiento legal.** Sin auditoría inmutable, correcciones trazadas y exportación para Inspección desde el primer fichaje, el registro no satisface el art. 34.9 ET. Es el recorte que no se debe hacer |
 | Solo la firma HMAC del QR (tarea 1.5) | Cualquiera puede fabricar la credencial de otro con un generador online. Se pierde la fiabilidad del registro completo, que es la razón de ser del sistema |
 | Solo el modo offline (tarea 1.9) | Un corte de red en el cambio de turno deja a la plantilla sin poder fichar. En un hotel esto ocurre, y el registro en papel resultante contamina el sistema |
 | Solo el PIN de respaldo (tarea 1.12) | Un empleado sin su tarjeta no puede fichar y su jornada acaba registrada a mano. Recorte de 4 h que genera correcciones manuales a diario |
@@ -1157,16 +1169,22 @@ Cuadrantes y comparación entre planificado y realmente trabajado, vacaciones y 
 
 ```
 0.1→0.2→0.3 ──► 1.1→1.2 (dominio; bloquea todo lo demás)
-                  ├─► 1.3→1.4 ──► 1.7 ──► 1.8→1.9 (quiosco)
-                  │                        └─► 1.12 (fichaje por PIN)
+                  ├─► 1.3→1.14 (audit_log) ──► 1.4 ──► 1.7 ──► 1.8→1.9 (quiosco)
+                  │                             │                └─► 1.12 (fichaje por PIN)
+                  │                             └─► 1.15 (correcciones) ──► 1.16 (detalle de jornada)
+                  │                                                    └─► 1.17 (exportación legal)
                   ├─► 1.5 (credenciales) ──► 1.10 (tarjetas y entrega)
                   ├─► 1.6 ──► 1.13 (provisión del PIN) ──► 1.11 (portal)
                   │                                   └─► 1.12
-                  └─► 2.1→2.2 ──► 2.3 ──► 2.5
-                                    └─► 2.8→2.9
-                                          └─► 5.1→5.2 ──► 5.3
-                                                └─► 5.4→5.5→5.7
+                  ├─► 1.18 (copias verificadas) — solo necesita 0.1, avanza en paralelo
+                  └─► 2.1──► 2.4
+                        ├─► 2.6──► 2.5 (bandeja de incidencias) ──► 2.7
+                        └─► 2.8──► 2.9 (exportaciones de conveniencia)
+                                     └─► 5.1→5.2 ──► 5.3
+                                           └─► 5.4→5.5→5.7
 ```
+
+**ADR-032 mueve `audit_log` (2.2→1.14), correcciones trazadas (2.3→1.15) y parte de 2.5 y 2.9 a la Fase 1** (1.16, 1.17). `1.14` no necesita el RBAC completo de 2.1 —eso llega después—: el actor que encadena en la Fase 1 es el dispositivo (tokens de 1.5) o la autenticación de gestión mínima de 1.6, suficiente para identificar quién actúa aunque el ámbito por departamento aún no exista.
 
 **Dos ramas que deben avanzar en paralelo desde el principio:** el quiosco (1.8, 1.9) y la emisión de credenciales (1.5, 1.10). Un quiosco perfecto sin tarjetas que escanear no sirve de nada, y es un error de planificación fácil de cometer porque el quiosco es la parte visible.
 
