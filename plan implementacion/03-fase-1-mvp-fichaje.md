@@ -3,19 +3,21 @@
 | Campo | Valor |
 |---|---|
 | **Fase** | 1 — MVP de fichaje |
-| **Horas** | **102–130 h** (doc 02 §11, tabla de la Fase 1, con la tarea 1.13 añadida) |
+| **Horas** | **135–172 h** (doc 02 §11, tabla de la Fase 1, con la tarea 1.13 añadida y las tareas 1.14–1.18 de [ADR-032](../docs/adr/ADR-032-la-fase-1-entrega-un-sistema-legalmente-defendible.md)) |
 | **Orden de ejecución** | **Segunda.** El orden global de fases es **0 → 1 → 2 → 5 → 3 → 4** (doc 02 §11, doc 01 Anexo A) |
 | **Documento origen** | [`../docs/02-stack-tecnologico-y-plan-implementacion.md`](../docs/02-stack-tecnologico-y-plan-implementacion.md) §11 (plan), §3.2 (invariantes en BD), §5 (credencial), §6 (protocolo offline), §7 (seguridad), §9 (pruebas), Anexo A (rendimiento del quiosco), Anexo B (variables), Anexo C (comandos) · [`../docs/01-especificaciones-proyecto.md`](../docs/01-especificaciones-proyecto.md) §3, §4, §5.5, §11, Anexo A, Anexo B · [`../docs/03-agentes-y-skills-ia.md`](../docs/03-agentes-y-skills-ia.md) §5, §6.2, §6.3, §6.4, §6.6 |
 
 **Entregable (literal del doc 02 §11).**
 
-> **Entregable:** un empleado recibe su tarjeta y ficha en la tablet, con o sin red, con credencial infalsificable y registro correcto. **Corte MVP mínimo defendible.**
+> **Entregable:** un empleado recibe su tarjeta y ficha en la tablet, con o sin red, con credencial infalsificable y registro correcto, **corregible con trazabilidad completa, respaldado con copia verificada y exportable a Inspección de Trabajo**. **Instalable y legalmente defendible** ([ADR-032](../docs/adr/ADR-032-la-fase-1-entrega-un-sistema-legalmente-defendible.md)) — no es aún «producto vendible a escala», que sigue siendo la Fase 5.
 
 **Requisitos que cubre la fase** (doc 01, Anexo A — Trazabilidad requisito → fase):
 
-`RF-AT-01..09`, `RF-AT-11`, `RF-QR-01..06`, `RF-QR-08`, `RF-ID-01..02` (**autenticación de gestión básica, sin 2FA**), `RF-ID-04..09`, `RF-KI-01..06`, `RF-KI-09`, `RF-GP-01`, `RF-GP-03`, `RN-01..09`, `RL-01`, `RL-05`, `RS-01..04`, `RS-12`
+`RF-AT-01..09`, `RF-AT-11`, `RF-QR-01..06`, `RF-QR-08`, `RF-ID-01..02` (**autenticación de gestión básica, sin 2FA**), `RF-ID-04..09`, `RF-KI-01..06`, `RF-KI-09`, `RF-GP-01`, `RF-GP-03`, `RF-PA-03..04`, `RF-IN-05`, `RF-PR-04`, `RN-01..09`, `RN-13`, `RN-15`, `RL-01`, `RL-03..06`, `RL-09`, `RL-12`, `RS-01..04`, `RS-07`, `RS-12`, `RNF-D-02`, `RNF-D-05`, `RQ-09`
 
-> **Nota del Anexo A del doc 01 sobre el reparto de `RF-ID-*`.** *«La Fase 1 necesita una autenticación de gestión mínima —sin ella, RRHH no puede emitir tarjetas ni ver el panel de estado de credenciales (tarea 1.10)—, pero el 2FA obligatorio y el ámbito por departamento llegan con la tarea 2.1. `RL-04` (fiabilidad e inalterabilidad) se completa en la Fase 2.»*
+> **Nota del Anexo A del doc 01 sobre el reparto de `RF-ID-*`.** *«La Fase 1 necesita una autenticación de gestión mínima —sin ella, RRHH no puede emitir tarjetas ni ver el panel de estado de credenciales (tarea 1.10)—, pero el 2FA obligatorio y el ámbito por departamento llegan con la tarea 2.1.»*
+>
+> **[ADR-032](../docs/adr/ADR-032-la-fase-1-entrega-un-sistema-legalmente-defendible.md) — quince requisitos que eran de la Fase 2 se adelantan aquí.** `RN-13`, `RL-04`, `RF-PA-04` (correcciones trazadas, 1.15); `RS-07` (auditoría encadenada, 1.14); `RF-PA-03` (detalle de jornada, 1.16); `RL-03`, `RL-06`, `RF-IN-05` (exportación legal, 1.17); `RF-PR-04`, `RNF-D-02`, `RNF-D-05`, `RQ-09` (copias verificadas, 1.18); `RN-15`, `RL-09`, `RL-12` (ya los construían 1.8 y 1.9, solo se corrige la fase). Sin ellos, cerrar `0+1` dejaba un «piloto interno controlado» que no satisfacía el art. 34.9 ET.
 
 **Agentes protagonistas** (doc 03 §2.2):
 
@@ -29,22 +31,34 @@
 
 ## Índice de tareas
 
-| # | Tarea | h | Requisitos | Agente / Skill |
-|---|---|---|---|---|
-| [1.1](#tarea-11--dominio-attendance-workday-shiftentry-objetos-de-valor-clockingpolicy-eventos) | Dominio `Attendance`: `WorkDay`, `ShiftEntry`, objetos de valor, `ClockingPolicy`, eventos | 14–18 | RN-01..09 | `arquitecto-dominio` |
-| [1.2](#tarea-12--pruebas-unitarias-del-dominio-incluidas-dst-y-medianoche-con-mutación) | Pruebas unitarias del dominio, incluidas DST y medianoche, con mutación | 10–12 | RQ-01, RQ-02 | `qa-testing` |
-| [1.3](#tarea-13--esquema-y-migraciones-con-todas-las-restricciones-declarativas) | Esquema y migraciones con **todas** las restricciones declarativas | 6–8 | RN-01..03 | `backend-laravel` + `/migracion-segura` |
-| [1.4](#tarea-14--caso-de-uso-registerscan-con-idempotencia-y-proyección-transaccional) | Caso de uso `RegisterScan` con idempotencia y proyección transaccional | 8–10 | RF-AT-01..09 | `backend-laravel` + `/crear-caso-de-uso` |
-| [1.5](#tarea-15--módulo-identity-credenciales-hmac-key_id-revocación-tokens-de-dispositivo) | Módulo `Identity`: credenciales HMAC, `key_id`, revocación, tokens de dispositivo | 8–10 | RF-QR-01..03, RF-ID-04 | `backend-laravel`, revisión de `seguridad-cumplimiento` |
-| [1.6](#tarea-16--workforce-básico-más-autenticación-de-gestión-mínima) | `Workforce` básico + autenticación de gestión mínima (login y roles, **sin 2FA**) | 8–10 | RF-GP-01, RF-GP-03, RF-ID-01..02 básicos | `backend-laravel` |
-| [1.7](#tarea-17--endpoints-de-fichaje-lote-padrón-y-latido-con-rate-limiting) | Endpoints de fichaje, lote, padrón y latido, con rate limiting | 6–8 | RS-02..04 | `backend-laravel` + `/endpoint-api` |
-| [1.8](#tarea-18--pwa-quiosco-escaneo-zxing-feedback-visual-y-sonoro-i18n-accesibilidad) | PWA quiosco: escaneo ZXing, feedback visual y sonoro, i18n, accesibilidad | 12–16 | RF-KI-01..02, RF-KI-05..06, RF-KI-09 | `frontend-quiosco` |
-| [1.9](#tarea-19--cola-offline-dexie-con-sincronización-reintentos-e-indicador) | Cola offline Dexie con sincronización, reintentos e indicador | 10–12 | RF-KI-03..04 | `frontend-quiosco` |
-| [1.10](#tarea-110--generación-de-tarjetas-en-pdf-impresión-masiva-registro-de-entrega-y-panel-de-estado) | Generación de tarjetas en PDF, impresión masiva, registro de entrega y panel de estado | 6–8 | RF-QR-04..06, RF-QR-08 | `backend-laravel` + `frontend-panel` |
-| [1.11](#tarea-111--portal-del-empleado-acceso-con-código-y-pin-mi-registro-mi-exportación) | Portal del empleado: acceso con código y PIN, mi registro, mi exportación | 6–8 | RF-ID-05..08, RL-05 | `frontend-portal-empleado` + `backend-laravel` |
-| [1.12](#tarea-112--pin-de-respaldo-de-6-dígitos-en-el-quiosco-con-bloqueo-por-intentos) | PIN de respaldo de 6 dígitos en el quiosco, con bloqueo por intentos | 4–5 | RF-AT-11, RS-12 | `backend-laravel` + `frontend-quiosco` |
-| [1.13](#tarea-113--provisión-entrega-y-restablecimiento-del-pin) | Provisión, entrega y restablecimiento del PIN | 4–5 | RF-ID-09 | `backend-laravel` + `frontend-panel` |
-| [—](#cierre-de-fase-doc-03-66) | Cierre de fase | — | — | `revisor-codigo` + `seguridad-cumplimiento` + `qa-testing` + `devops-observabilidad` |
+Numeradas en el orden del doc 02 §11 (que **no** es el orden de ejecución: 1.13 ya se ejecuta
+antes que 1.11 pese a su número). La columna **Orden** da la posición real; el detalle completo
+está en el diagrama de [«Camino crítico completo de la fase»](#camino-crítico-completo-de-la-fase)
+al cierre de este documento.
+
+| # | Orden | Tarea | h | Requisitos | Agente / Skill |
+|---|---|---|---|---|---|
+| [1.1](#tarea-11--dominio-attendance-workday-shiftentry-objetos-de-valor-clockingpolicy-eventos) | 1 | Dominio `Attendance`: `WorkDay`, `ShiftEntry`, objetos de valor, `ClockingPolicy`, eventos | 14–18 | RN-01..09 | `arquitecto-dominio` |
+| [1.2](#tarea-12--pruebas-unitarias-del-dominio-incluidas-dst-y-medianoche-con-mutación) | 2 | Pruebas unitarias del dominio, incluidas DST y medianoche, con mutación | 10–12 | RQ-01, RQ-02 | `qa-testing` |
+| [1.3](#tarea-13--esquema-y-migraciones-con-todas-las-restricciones-declarativas) | 3 | Esquema y migraciones con **todas** las restricciones declarativas | 6–8 | RN-01..03 | `backend-laravel` + `/migracion-segura` |
+| [1.4](#tarea-14--caso-de-uso-registerscan-con-idempotencia-y-proyección-transaccional) | 5 | Caso de uso `RegisterScan` con idempotencia y proyección transaccional | 8–10 | RF-AT-01..09 | `backend-laravel` + `/crear-caso-de-uso` |
+| [1.5](#tarea-15--módulo-identity-credenciales-hmac-key_id-revocación-tokens-de-dispositivo) | 4 | Módulo `Identity`: credenciales HMAC, `key_id`, revocación, tokens de dispositivo | 8–10 | RF-QR-01..03, RF-ID-04 | `backend-laravel`, revisión de `seguridad-cumplimiento` |
+| [1.6](#tarea-16--workforce-básico-más-autenticación-de-gestión-mínima) | 4 | `Workforce` básico + autenticación de gestión mínima (login y roles, **sin 2FA**) | 8–10 | RF-GP-01, RF-GP-03, RF-ID-01..02 básicos | `backend-laravel` |
+| [1.7](#tarea-17--endpoints-de-fichaje-lote-padrón-y-latido-con-rate-limiting) | 6 | Endpoints de fichaje, lote, padrón y latido, con rate limiting | 6–8 | RS-02..04 | `backend-laravel` + `/endpoint-api` |
+| [1.8](#tarea-18--pwa-quiosco-escaneo-zxing-feedback-visual-y-sonoro-i18n-accesibilidad) | 7 | PWA quiosco: escaneo ZXing, feedback visual y sonoro, i18n, accesibilidad | 12–16 | RF-KI-01..02, RF-KI-05..06, RF-KI-09, RL-09 | `frontend-quiosco` |
+| [1.9](#tarea-19--cola-offline-dexie-con-sincronización-reintentos-e-indicador) | 8 | Cola offline Dexie con sincronización, reintentos e indicador | 10–12 | RF-KI-03..04, RN-15, RL-12 | `frontend-quiosco` |
+| [1.10](#tarea-110--generación-de-tarjetas-en-pdf-impresión-masiva-registro-de-entrega-y-panel-de-estado) | 5 | Generación de tarjetas en PDF, impresión masiva, registro de entrega y panel de estado | 6–8 | RF-QR-04..06, RF-QR-08 | `backend-laravel` + `frontend-panel` |
+| [1.11](#tarea-111--portal-del-empleado-acceso-con-código-y-pin-mi-registro-mi-exportación) | 9 | Portal del empleado: acceso con código y PIN, mi registro, mi exportación | 6–8 | RF-ID-05..08, RL-05 | `frontend-portal-empleado` + `backend-laravel` |
+| [1.12](#tarea-112--pin-de-respaldo-de-6-dígitos-en-el-quiosco-con-bloqueo-por-intentos) | 9 | PIN de respaldo de 6 dígitos en el quiosco, con bloqueo por intentos | 4–5 | RF-AT-11, RS-12 | `backend-laravel` + `frontend-quiosco` |
+| [1.13](#tarea-113--provisión-entrega-y-restablecimiento-del-pin) | 8 | Provisión, entrega y restablecimiento del PIN | 4–5 | RF-ID-09 | `backend-laravel` + `frontend-panel` |
+| [1.14](#tarea-114--audit_log-encadenado-comando-de-verificación-y-permisos) | **4** | `audit_log` encadenado, comando de verificación y permisos | 8–10 | RS-07 | `backend-laravel` + `/revision-cumplimiento` |
+| [1.15](#tarea-115--correcciones-trazadas-versionado-catálogo-de-motivos-anulación) | 6 | Correcciones trazadas: versionado, catálogo de motivos, anulación | 10–12 | RN-13, RL-04, RF-PA-04 | `arquitecto-dominio` → `backend-laravel` |
+| [1.16](#tarea-116--panel-detalle-de-jornada) | 7 | Panel: detalle de jornada | 6–8 | RF-PA-03 | `frontend-panel` |
+| [1.17](#tarea-117--exportación-legal-para-inspección) | 7 | Exportación legal para Inspección | 5–6 | RL-03, RL-06, RF-IN-05 | `backend-laravel` + `/informe-nuevo` |
+| [1.18](#tarea-118--copias-cifradas-verificadas-con-prueba-de-restauración) | 2 | Copias cifradas, verificadas, con prueba de restauración | 4–6 | RF-PR-04, RNF-D-02, RNF-D-05, RQ-09 | `devops-observabilidad` |
+| [—](#cierre-de-fase-doc-03-66) | — | Cierre de fase | — | — | `revisor-codigo` + `seguridad-cumplimiento` + `qa-testing` + `devops-observabilidad` |
+
+**Añadidas por [ADR-032](../docs/adr/ADR-032-la-fase-1-entrega-un-sistema-legalmente-defendible.md):** 1.14–1.18, numeradas al final para no romper las referencias cruzadas de 1.1–1.13, pero ejecutadas donde su dependencia real las sitúa — `1.14` justo tras el esquema (orden 4, entre 1.3 y 1.4); `1.18` en paralelo desde el principio (orden 2, solo necesita 0.1); `1.15`–`1.17` tras lo que corrigen y exportan.
 
 ---
 
@@ -307,7 +321,7 @@ Resultado esperado: `make test-unit` en verde en menos de 2 s, Deptrac y PHPStan
 **Artefactos.**
 
 - `backend/tests/Unit/Attendance/` — pruebas de dominio, sin BD (§2)
-- ⚠️ No cubierto por los documentos — decidir: la ubicación de las *factories* de dominio puro, dado que las de Eloquent (`Employee::factory()`) pertenecen a `Infrastructure/Persistence/` y no existen hasta 1.3
+- `backend/tests/Support/Factory/` — *factories* de dominio puro (`WorkDayFactory`, `ShiftEntryFactory`…). Viven en `tests/`, no en `app/`: son código de prueba, no de producción, y `Domain/` tiene que seguir sin depender de nada que no sea PHP puro (regla dura 1). Las de Eloquent (`Employee::factory()`) son distintas y pertenecen a `Infrastructure/Persistence/Factory/` desde la tarea 1.3
 
 **Pruebas exigidas** (§9.5). La tarea **es** las pruebas de una funcionalidad que introduce reglas de negocio:
 
@@ -374,7 +388,7 @@ Resultado esperado: los cuatro en verde, y la matriz mostrando `RN-01` a `RN-09`
    | `employees` | RF-GP-01, RF-GP-03, `pin_hash` para RF-AT-11 y RF-ID-06 | 1.6, 1.11, 1.12 |
    | `credentials` | RF-QR-01..03, RF-QR-06 (`printed_at`, `delivered_at`) | 1.5, 1.10 |
    | `devices` | RF-ID-04, `pending_queue_size` y `last_seen_at` para el latido | 1.5, 1.7 |
-   | `scan_events` | RF-AT-01, RF-AT-07, RF-AT-09. `scan_id` UNIQUE, e `intent` desde el primer día (ADR-024) | 1.4 |
+   | `scan_events` | RF-AT-01, RF-AT-07, RF-AT-09. `scan_id` UNIQUE, `intent` desde el primer día (ADR-024), `clock_skew_seconds` desde el primer día (RF-AT-10) y `flagged_for_review` desde el primer día (RF-AT-11) | 1.4 |
    | `shift_entries` | RN-01..09 | 1.4 |
    | `daily_totals` | RN-06, proyección con UNIQUE `(employee_id, work_date)` | 1.4 |
    | `users`, `roles`, `permissions`, `personal_access_tokens` | RF-ID-01..02 básicos | 1.6 |
@@ -414,6 +428,10 @@ Resultado esperado: los cuatro en verde, y la matriz mostrando `RN-01` a `RN-09`
    > **El enum de `status` nace con `superseded` (ADR-026).** `open`|`closed`|`anomalous`|`voided`|`superseded`, y los dos predicados excluyen **los dos** estados no vigentes. No es una anticipación gratuita de la tarea 2.3: sin `superseded`, la primera corrección de la Fase 2 —que conserva la fila anterior por la regla dura 5— haría solapar la versión vieja con la nueva, `shift_entries_no_overlap` **rechazaría la corrección**, y si no lo hiciera el recálculo de `daily_totals` sumaría las dos y duplicaría los minutos del día. **Aquí el esquema nace vacío y corregirlo no toca datos**; en la Fase 2 sería una migración sobre la tabla con valor probatorio del producto.
    >
    > **`scan_events.intent` nace ahora aunque su uso llegue en la 3.5 (ADR-024).** El campo es `auto`|`break_start`|`break_end`, con `auto` por defecto, y hasta RF-AT-12 el quiosco lo envía siempre como `auto`. Se crea aquí porque el mismo campo tiene que existir en el registro de la **cola offline** (tarea 1.9), y **cambiar el esquema de IndexedDB con la cola cargada en producción es caro**: obliga a migrar peticiones pendientes de fichaje, que son registro legal sin escribir. El doc 01 §5.5 ya lo define, junto a la nota de por qué `intent` y `result` son dos campos.
+   >
+   > **`scan_events.clock_skew_seconds` nace ahora por el mismo motivo.** RF-AT-10 exige que el desfase de reloj **nunca rechace el fichaje** (regla dura 19), y la tarea 1.4 ya calcula `recorded_at - occurred_at` para decidirlo. La incidencia `clock_skew` que consume ese dato es de la **3.5**: si el campo no existe hasta entonces, el desfase de cada fichaje de la Fase 1 y la Fase 2 se pierde sin registrar, y la 3.5 no tiene con qué construir la incidencia hacia atrás. Nullable, entero, en segundos con signo.
+   >
+   > **`scan_events.flagged_for_review`** (booleano, por defecto `false`) es la misma historia con el fichaje por PIN: RF-AT-11 exige que quede marcado para revisión del responsable, y la bandeja que trabaja esa marca es la **2.5**, en la Fase 2. Sin el campo desde el primer fichaje por PIN, la bandeja nacería sin histórico que mostrar.
 
 4. **Reglas de tipos y nombres** (skill): tablas en plural `snake_case`, claves foráneas `{singular}_id`, **restricciones e índices con nombre explícito y descriptivo** (`one_open_shift_per_employee`, no el autogenerado). `TIMESTAMPTZ` para instantes, `DATE` para `work_date`, `JSONB` con GIN si se consulta (`client_meta`), `UUID` para identificadores públicos, `BIGINT` para claves primarias internas, **enteros para duraciones, nunca coma flotante**.
 5. **Especificidades de PostgreSQL** (skill): `CREATE INDEX CONCURRENTLY` con `public $withinTransaction = false;` en tablas con datos, `SET lock_timeout = '3s'` y `SET statement_timeout = '30s'`. En la migración inicial las tablas están vacías, pero los ajustes se establecen ya para que la plantilla de migraciones sea la correcta.
@@ -435,7 +453,7 @@ Resultado esperado: los cuatro en verde, y la matriz mostrando `RN-01` a `RN-09`
 
 - `backend/database/migrations/` (§2) — una migración por tabla, con verbo en el nombre (`create_..._table`, §3.5)
 - `backend/tests/Integration/Attendance/` — pruebas de restricciones contra PostgreSQL real
-- `backend/database/seeders/` — **amplía el esqueleto de la tarea 0.1**, que solo pudo sembrar centros y departamentos porque el esquema de fichaje no existía. Aquí se añaden empleados, credenciales, dispositivos y los **90 días de tramos** del `VolumeSeeder`; los casos límite (turnos nocturnos, los dos cambios de hora, olvido de salida) los añade la tarea 1.4 y las correcciones la 2.3. ⚠️ No cubierto por el árbol del §2, que no lista `seeders/`. El §10.2 sí exige la semilla con casos límite y la skill menciona `VolumeSeeder`
+- `backend/database/seeders/` — **amplía el esqueleto de la tarea 0.1**, que solo pudo sembrar centros y departamentos porque el esquema de fichaje no existía. Aquí se añaden empleados, credenciales, dispositivos y los **90 días de tramos** del `VolumeSeeder`; los casos límite (turnos nocturnos, los dos cambios de hora, olvido de salida) los añade la tarea 1.4 y las correcciones la **1.15**. Vive en `backend/database/seeders/`, la ubicación estándar de Laravel: el árbol del §2 no la lista porque es infraestructura de framework, no una decisión de diseño propia, igual que no lista `bootstrap/` ni `routes/`. El §10.2 exige la semilla con casos límite y la skill menciona `VolumeSeeder`
 
 **Pruebas exigidas** (§9.5). Esta tarea *toca el esquema y las restricciones de base de datos*:
 
@@ -486,8 +504,8 @@ Resultado esperado: la migración aplica y revierte limpiamente, las tres restri
 | **Horas** | 8–10 |
 | **Agente / Skill** | `backend-laravel` + skill **`/crear-caso-de-uso`** |
 | **Requisitos** | **RF-AT-01..09** (literal del doc 02 §11). Concuerda con el Anexo A del doc 01 |
-| **Precondiciones** | **1.3** (§11.3: `1.3→1.4`). Y el dominio de 1.1 y 1.2 |
-| **Bloquea a** | **1.7** (§11.3: `1.3→1.4 ──► 1.7`) |
+| **Precondiciones** | **1.3** (§11.3: `1.3→1.4`) y **1.14**, que crea `audit_log` (§11.3: `1.3→1.14→1.4`). Y el dominio de 1.1 y 1.2 |
+| **Bloquea a** | **1.7** (§11.3: `1.3→1.4 ──► 1.7`) y **1.15**, que corrige lo que este caso de uso crea |
 
 **Objetivo.** Existe el caso de uso que convierte un escaneo en un tramo: idempotente por `scan_id`, con la proyección `daily_totals` recalculada en la misma transacción y las dos marcas de tiempo siempre presentes.
 
@@ -498,7 +516,7 @@ Resultado esperado: la migración aplica y revierte limpiamente, las tres restri
 - **9** (dos marcas de tiempo): `occurred_at` viaja desde el cliente y puede venir de la cola offline; `recorded_at` lo pone el servidor. **El registro legal usa `occurred_at`** (RF-AT-09, §6).
 - **2**: el handler recibe el `Clock`; no llama a `now()`.
 - **17** (rechazos genéricos de tiempo constante): el resultado detallado va a `scan_events.result` y al log; al cliente, mensaje genérico.
-- **19** (el quiosco nunca bloquea al empleado): el caso de uso debe aceptar un escaneo cuyo `occurred_at` esté desfasado y generar incidencia, no rechazarlo. *La incidencia `clock_skew` es de la tarea 3.5 (RF-AT-10, Anexo A); en la Fase 1 lo exigible es que el fichaje **no se rechace**.*
+- **19** (el quiosco nunca bloquea al empleado): el caso de uso debe aceptar un escaneo cuyo `occurred_at` esté desfasado y generar incidencia, no rechazarlo. *La incidencia `clock_skew` es de la tarea 3.5 (RF-AT-10, Anexo A); en la Fase 1 lo exigible es que el fichaje **no se rechace** y que el desfase se persista en `scan_events.clock_skew_seconds` (tarea 1.3), para que la 3.5 tenga con qué construir la incidencia hacia atrás sin perder los fichajes ya ocurridos.*
 - **21** (nunca nombres de empleados en logs técnicos): el log estructurado lleva `employee_uuid`, `scan_id`, `device_id`, `trace_id`.
 
 **Pasos.** Skill **`/crear-caso-de-uso`**, **8 pasos** (doc 03 §5), de dentro hacia fuera. *«Nunca empieces por el controlador.»*
@@ -523,7 +541,7 @@ Resultado esperado: la migración aplica y revierte limpiamente, las tres restri
      ```
 
      *«El handler orquesta, no decide. Si estás escribiendo un `if` con una regla de negocio dentro del handler, esa regla pertenece al dominio.»*
-   - El paso 6 escribe en `audit_log` — un fichaje **tiene relevancia legal** (RL-01). ⚠️ Dependencia: la tabla `audit_log` encadenada es de la tarea 2.2. Decidir si en la Fase 1 se escribe la entrada sin cadena y 2.2 la encadena, o si el registro de auditoría del fichaje espera a la Fase 2. El Anexo A del doc 01 sitúa `RL-04` en la Fase 2, pero `RL-01` en la Fase 1.
+   - El paso 6 escribe en `audit_log` — un fichaje **tiene relevancia legal** (RL-01). Resuelto por [ADR-032](../docs/adr/ADR-032-la-fase-1-entrega-un-sistema-legalmente-defendible.md): la tabla encadenada por hash es de la tarea **1.14**, que precede a esta. La entrada se escribe encadenada desde el primer fichaje, no sin cadena a la espera de que una tarea posterior la selle.
 4. **Adaptadores.**
    - `Infrastructure/Persistence/` — `EloquentWorkDayRepository` con el mapeo explícito entre modelo de persistencia y modelo de dominio. **No se filtra un `Model` hacia arriba.**
    - `Infrastructure/Adapter/` — `LaravelEventBus`, el único adaptador de esta tarea que es de `Attendance`. `SystemClock` es de `Shared` (ADR-021); `DbCompliancePolicyProvider` y `DbOperationalSettingsProvider` son de `Product`, y `HmacSignatureVerifier` de `Identity` (ADR-025). Aquí se **consumen**, no se declaran.
@@ -777,9 +795,12 @@ Resultado esperado: los cuatro rechazos indistinguibles en respuesta y en tiempo
    | `POST /api/v1/auth/login` | público, **throttle 5 r/m** | §7.1: autenticación 5 r/m |
    | `POST /api/v1/auth/logout` | autenticado | — |
    | `GET /api/v1/auth/me` | autenticado | Usuario, rol y ámbito |
-   | `CRUD /api/v1/employees` | ⚠️ el Anexo B agrupa el CRUD sin detallar rol por verbo — decidir | RF-GP-01 |
-   | `CRUD /api/v1/departments` | íd. | — |
-   | `CRUD /api/v1/sites` | íd. | — |
+   | `GET /api/v1/employees`, `GET /api/v1/employees/{uuid}` | rol **manager+** (Anexo B). En esta fase resuelve a `admin`/`rrhh`: `responsable_departamento` no existe hasta 2.1 | RF-GP-01 |
+   | `POST /api/v1/employees` (alta), `PATCH /api/v1/employees/{uuid}` | rol **rrhh+** | RF-GP-01 |
+   | `POST /api/v1/employees/{uuid}/offboard` (baja) | rol **rrhh+** | RF-GP-01, RN-14 |
+   | `CRUD /api/v1/departments`, `CRUD /api/v1/sites` | rol **rrhh+** | — |
+
+   > Rol por verbo resuelto aquí y propagado al Anexo B del doc 01: el CRUD de `employees`/`departments`/`sites` no llevaba anotación de rol. Consulta separada de escritura porque **RF-ID-03 (ámbito por departamento) es de 2.1**: en Fase 1, un `responsable_departamento` no existe todavía, así que `manager+` resuelve al conjunto `{admin, rrhh}` hasta que 2.1 añada el tercer rol y su ámbito.
 
    **`POST /api/v1/auth/2fa/verify` NO se implementa en esta fase**: el Anexo A sitúa el 2FA en la Fase 2 (tarea 2.1).
 8. Ámbitos de token del §7.3 para los roles de gestión, declarados aunque el 2FA no esté activo.
@@ -1016,7 +1037,7 @@ y no con la hora de llegada.
 |---|---|
 | **Horas** | 12–16 |
 | **Agente / Skill** | `frontend-quiosco` |
-| **Requisitos** | **RF-KI-01..02, RF-KI-05..06, RF-KI-09** (literal del doc 02 §11). Concuerda con el Anexo A del doc 01 (Fase 1: `RF-KI-01..06`, `RF-KI-09`) |
+| **Requisitos** | **RF-KI-01..02, RF-KI-05..06, RF-KI-09** (literal del doc 02 §11) y **RL-09** (aviso de privacidad en capas, paso 11). Concuerda con el Anexo A del doc 01 (Fase 1: `RF-KI-01..06`, `RF-KI-09`, `RL-09`) |
 | **Precondiciones** | **1.7** (§11.3: `1.7 ──► 1.8→1.9`). **Y 1.2 cerrada**, por el aviso del camino crítico |
 | **Bloquea a** | **1.9** (§11.3) |
 
@@ -1121,7 +1142,7 @@ Resultado esperado: los cuatro comandos en verde, el E2E con cámara simulada de
 |---|---|
 | **Horas** | 10–12 |
 | **Agente / Skill** | `frontend-quiosco` |
-| **Requisitos** | **RF-KI-03..04** (literal del doc 02 §11). Sirven a `RQ-05` (ciclo completo offline → reconexión → sincronización → consolidación) |
+| **Requisitos** | **RF-KI-03..04** (literal del doc 02 §11), **RN-15** (el horario offline es el `occurred_at` del dispositivo) y **RL-12** (cifrado del padrón cacheado). Sirven a `RQ-05` (ciclo completo offline → reconexión → sincronización → consolidación) |
 | **Precondiciones** | **1.8** (§11.3: `1.8→1.9`) |
 | **Bloquea a** | **1.12** (§11.3: `1.8→1.9 └─► 1.12`) |
 
@@ -1160,7 +1181,7 @@ Resultado esperado: los cuatro comandos en verde, el E2E con cámara simulada de
 
     > Sobre el UUID v7, del §6: *«se elige frente a v4 porque es ordenable temporalmente, lo que mantiene la localidad del índice en `scan_events` y evita la fragmentación de páginas»*.
     >
-    > La incidencia de la cuarta garantía (`clock_skew`) es de la tarea **3.5** según el Anexo A (RF-AT-10). En la Fase 1 lo exigible es que el fichaje **se acepte y no se pierda**.
+    > La incidencia de la cuarta garantía (`clock_skew`) es de la tarea **3.5** según el Anexo A (RF-AT-10). En la Fase 1 lo exigible es que el fichaje **se acepte y no se pierda**, y que el desfase quede persistido en `scan_events.clock_skew_seconds` (tarea 1.3): sin ese dato, la 3.5 no tendría con qué construir la incidencia de los fichajes que ya ocurrieron.
 
 11. **Actualización diferida del service worker**, que **nunca ocurre durante un cambio de turno** (agente `frontend-quiosco`). *La ventana configurable es RF-KI-07, tarea 3.12.*
 12. **Presupuesto de memoria**: ≤ 250 MB en 12 h **sin crecimiento sostenido** (Anexo A). La cola no puede ser la fuga.
@@ -1296,7 +1317,7 @@ Resultado esperado: el E2E completo en verde; el tramo consolidado con el `occur
 
 - `backend/app/Modules/Identity/Application/UseCase/` — impresión, lote, entrega
 - `backend/app/Modules/Identity/Http/` — los cuatro endpoints
-- Plantillas de PDF — ⚠️ No cubierto por los documentos — decidir: la ruta de las plantillas Blade de los PDF. El árbol del §2 no las ubica
+- `backend/resources/views/pdf/` — plantillas Blade de los PDF, la ubicación convencional de `spatie/laravel-pdf` (§3.1). El árbol del §2 no la lista por ser infraestructura de framework, igual que `seeders/` (nota de la tarea 1.4)
 - `frontend-admin/src/features/credentials/` (§2)
 - `docs/runbooks/alta-nuevo-empleado.md`, `docs/runbooks/tarjeta-perdida-o-rota.md` (§12)
 - `docs/api/openapi.yaml` (actualizado)
@@ -1406,7 +1427,7 @@ Resultado esperado: los dos PDF con las medidas correctas y el QR en nivel Q; la
 **Artefactos.**
 
 - `frontend-portal/src/features/{login,my-records,my-export}/` (§2)
-- `backend/app/Modules/Reporting/` o `Attendance/Application/Query/` — ⚠️ No cubierto por los documentos — decidir: el módulo que sirve `GET /api/v1/me/workdays`. El §1.6 asigna a `Reporting` las *«proyecciones y consultas de lectura»*, lo que apunta ahí
+- `backend/app/Modules/Reporting/Application/Query/` — sirve `GET /api/v1/me/workdays`. Decidido por el §1.6, que asigna a `Reporting` las *«proyecciones y consultas de lectura»*: es una consulta de lectura sobre datos de otro módulo (`Attendance`), no una regla de negocio nueva, y por eso no vive en `Attendance/Application/Query/`. La misma consulta la reutiliza **1.16** (detalle de jornada para el responsable) con el ámbito de autorización cambiado
 - `backend/app/Modules/Identity/Http/` — `POST /api/v1/me/login`
 - `docs/api/openapi.yaml` (actualizado)
 
@@ -1519,7 +1540,7 @@ Resultado esperado: el aislamiento de ámbito demostrado con pruebas negativas; 
    >
    > Escalado geométrico: cada escalón triplica aproximadamente el anterior, lo que hace inviable el barrido de un espacio de 10⁶ sin castigar a quien se equivoca una vez. ✅ **Minutos confirmados como decisión de producto** (13 de agosto de 2026): son un equilibrio entre seguridad y no dejar a un empleado sin fichar delante del quiosco, no una medición ni un requisito legal, y quedan fijados con esa salvedad — ajustables si la operación real de un cliente aconseja otro punto de equilibrio. Lo que no es negociable es que sean configuración y no constantes.
 4. **`ScanOrigin = PIN_KIOSK`** (doc 01 §5.3) y `scan_events.origin` con ese valor. **Misma traza que el QR** (RF-AT-11).
-5. **Marcado para revisión del responsable** (RF-AT-11, §7.5): *«En el quiosco, el fichaje por PIN queda marcado para revisión del responsable, lo que hace visible cualquier uso anómalo.»* ⚠️ La bandeja de incidencias donde aterriza es la tarea 2.5 (RF-PA-05); en la Fase 1, la marca debe quedar registrada.
+5. **Marcado para revisión del responsable** (RF-AT-11, §7.5): *«En el quiosco, el fichaje por PIN queda marcado para revisión del responsable, lo que hace visible cualquier uso anómalo.»* La bandeja donde se **trabaja** esa marca es la tarea 2.5 (RF-PA-05, `resto de la bandeja de incidencias tras ADR-032`), que sigue en la Fase 2. En la Fase 1 lo exigible es que el fichaje por PIN persista `flagged_for_review = true` en `scan_events` desde el primer día: sin ese campo, la 2.5 no tendría marcas históricas que mostrar el día que se construya la bandeja, igual que `clock_skew_seconds` para la 3.5.
 6. **Pantalla del quiosco** en `frontend-kiosk/src/features/pin/` (§2): teclado numérico con objetivos táctiles ≥ 48 px, texto ≥ 24 px, operable con una mano y con guantes (doc 01 §6.5). **Encolable offline** como cualquier otro fichaje (regla dura 19).
 7. **Instrumentación** del §8.2: `pin_fallback_scans_total{site}`. El §8.2 explica su valor: *«Una subida de `pin_fallback_scans_total` indica un problema con la emisión, el estado de las tarjetas o la disciplina de la plantilla. Es un termómetro barato.»*
 8. **Textos en i18n**, ES y EN.
@@ -1611,7 +1632,7 @@ POST   /api/v1/employees/{uuid}/pin/deliver    Registrar la entrega del PIN  [ro
 
 **Reglas duras aplicables.**
 
-- **6** (`audit_log`): las **tres** acciones —emisión en el alta, restablecimiento y registro de entrega— tienen relevancia legal, porque el PIN es lo que da acceso al registro horario personal (RL-05). Se auditan con actor, momento y empleado sujeto. ⚠️ Misma dependencia que la tarea 1.4: la tabla encadenada es de la 2.2, y aplica la misma decisión que se tome allí.
+- **6** (`audit_log`): las **tres** acciones —emisión en el alta, restablecimiento y registro de entrega— tienen relevancia legal, porque el PIN es lo que da acceso al registro horario personal (RL-05). Se auditan con actor, momento y empleado sujeto. Resuelto por [ADR-032](../docs/adr/ADR-032-la-fase-1-entrega-un-sistema-legalmente-defendible.md): la tabla encadenada es de la tarea **1.14**, que en el orden real de ejecución precede a esta tarea aunque su número sea mayor (igual que la propia 1.13 ya precede a 1.11 y 1.12 pese a numerarlas después).
 - **12** (el producto no depende del correo electrónico): **el PIN es precisamente la vía que hace eso posible** (ADR-015). Por eso la entrega es un acto presencial y registrado, no un correo. No hay «enviar PIN por email», ni enlace de recuperación, ni invitación.
 - **11** (la credencial es una tarjeta física): el PIN **no es una credencial alternativa**, es el respaldo de la tarjeta y la llave del portal. No se imprime en la tarjeta: si se imprimiera, perder la tarjeta sería perder las dos cosas a la vez.
 - **17** (rechazos genéricos): esta tarea no verifica PIN —eso es de la 1.12— pero **`/pin/reset` no revela si el `uuid` existe**: responde igual para un empleado inexistente que para uno sin permiso de alcance.
@@ -1687,23 +1708,393 @@ Resultado esperado: el alta genera PIN, el panel lo muestra una vez y nunca más
 
 ---
 
+## Tareas 1.14–1.18 ([ADR-032](../docs/adr/ADR-032-la-fase-1-entrega-un-sistema-legalmente-defendible.md))
+
+Numeradas al final para no romper las referencias cruzadas de 1.1–1.13. Su **orden de ejecución
+real** está en el índice del principio de este documento y en el diagrama de camino crítico que
+sigue a estas cinco tareas: `1.14` entre 1.3 y 1.4, `1.15`–`1.17` tras lo que corrigen y exportan,
+`1.18` en paralelo desde el principio.
+
+### Tarea 1.14 — `audit_log` encadenado, comando de verificación y permisos
+
+| | |
+|---|---|
+| **Horas** | 8–10 |
+| **Agente / Skill** | `backend-laravel` + `/revision-cumplimiento` |
+| **Requisitos** | **RS-07** (doc 01 Anexo A, ADR-032). Sostiene **RL-01** (la 1.4 escribe en esta tabla) y **RL-15** (capacidad técnica de determinar el alcance de una brecha a partir de los logs de auditoría) |
+| **Precondiciones** | **1.3** (esquema). No necesita el RBAC completo de 2.1: el actor que encadena en esta fase es el dispositivo (tokens de **1.5**) o la autenticación mínima de **1.6** |
+| **Bloquea a** | **1.4**, **1.5**, **1.13**, que ya escriben en esta tabla, y **1.15** |
+
+**Objetivo.** Existe un `audit_log` solo-append encadenado por hash, verificable a diario por comando, con alerta crítica de seguridad ante cualquier rotura y una métrica que debe permanecer siempre en cero. A partir de aquí se puede afirmar ante una inspección que el registro es **detectablemente inalterable** desde el primer fichaje (doc 02 §7.4).
+
+**Reglas duras aplicables.**
+
+- **6** — toda acción con relevancia legal escribe en `audit_log`, que es solo-append y encadenado por hash, y **el usuario de base de datos de la aplicación no tiene `UPDATE` ni `DELETE`** sobre esa tabla. Es el corazón de la tarea.
+- **5** — la auditoría es el soporte de «nada se borra ni se sobrescribe»; la 1.15 se apoya en esto.
+- **21** — el `payload` de auditoría no lleva nombres en claro donde baste `employee_uuid`.
+- **3** — `occurred_at` en `TIMESTAMPTZ` UTC; la cadena se calcula sobre el valor UTC, no sobre una representación local.
+- **16** — `audit_log` tiene 4 años de retención (doc 02 §8.2.1) y viaja a Inspección, no al fabricante.
+
+**Fórmula de la cadena (literal, doc 02 §7.4).**
+
+```
+hash_n = SHA256( prev_hash || occurred_at || actor || action || subject || canonical_json(payload) )
+```
+
+> La entrada génesis usa `prev_hash = SHA256("FICHAJE-HOTEL-GENESIS")`. Un comando `compliance:verify-audit-chain` recorre la cadena a diario; cualquier rotura dispara alerta crítica de seguridad. Es lo que permite afirmar ante una inspección que el registro **es detectablemente inalterable** (RS-07), no solo que "confiamos en que nadie lo tocó".
+
+**Pasos.** Con skill `/revision-cumplimiento` como filtro de cierre (6 bloques: A registro horario, B privacidad, C seguridad, C bis producto licenciado, D trazabilidad de auditoría, E cambios retroactivos). La implementación sigue el método de `backend-laravel`.
+
+1. Migración de `audit_log` con el esquema literal del doc 01 §5.5 —`id`, `occurred_at` (TIMESTAMPTZ), `actor_type`, `actor_id`, `action`, `subject_type`, `subject_id`, `payload` (JSONB), `prev_hash`, `hash`, `ip` (INET), `user_agent`— **creada ya particionada por año** y acompañada de `audit_chain_anchors` ([ADR-027](../docs/adr/ADR-027-audit-log-particionado.md)):
+
+   ```sql
+   CREATE TABLE audit_log ( … , PRIMARY KEY (id, occurred_at) )
+       PARTITION BY RANGE (occurred_at);
+
+   CREATE TABLE audit_log_2026 PARTITION OF audit_log
+       FOR VALUES FROM ('2026-01-01Z') TO ('2027-01-01Z');
+
+   CREATE TABLE audit_chain_anchors (
+       id BIGSERIAL PRIMARY KEY,
+       partition_year INT NOT NULL UNIQUE,
+       first_hash TEXT NOT NULL, last_hash TEXT NOT NULL,
+       row_count BIGINT NOT NULL,
+       sealed_at TIMESTAMPTZ NOT NULL, sealed_by TEXT NOT NULL
+   );
+   ```
+
+   > **Por qué particionada desde el minuto cero, y no plana.** La retención de RL-02 (tarea 2.10) tiene que purgar esta tabla a los 4 años, y la regla dura 6 no da `DELETE` al usuario de aplicación sobre ella. Aunque se borrase con otro rol, **borrar filas rompe el eslabón**: la primera fila superviviente apuntaría con su `prev_hash` a una fila inexistente y `compliance:verify-audit-chain` denunciaría rotura **todos los días de forma permanente**. La purga tiene que ser `DROP PARTITION`, y **convertir después en particionada una tabla solo-append con millones de filas no es una migración trivial.**
+
+2. Otorgar al usuario de aplicación **solo `INSERT` y `SELECT`** sobre la tabla **y sobre cada una de sus particiones** (doc 01 §5.5, «Permisos»; doc 02 Anexo B: `DB_USERNAME=fichaje_app # Sin DDL. Sin UPDATE/DELETE sobre audit_log`). Se provisiona además un **segundo rol, el de mantenimiento**, único con permiso de `DROP PARTITION`, que ejecutará la purga en la tarea **2.10**. No aparece en el `.env` de la aplicación.
+
+   Y con la tabla particionada aparece una obligación operativa: una **tarea programada de creación de particiones**, que crea la del año `N+1` en noviembre y **alerta si falta la del año en curso**. Un `INSERT` sin partición de destino falla, y un fallo de escritura en `audit_log` bloquea la acción auditada: no puede quedarse en silencio, pero tampoco puede llegar a ocurrir.
+3. Implementar la **serialización canónica y determinista** del `payload` (`/revision-cumplimiento`, bloque C). Orden de claves estable, sin espacios variables, UTF-8.
+4. Implementar el cálculo de `hash_n` con la fórmula literal del §7.4 y la entrada génesis `prev_hash = SHA256("FICHAJE-HOTEL-GENESIS")`. Sin facades en `Domain/`/`Application/` (doc 02 §3.5).
+5. Escritor de auditoría como puerto del módulo `Compliance`, consumido por los demás módulos vía caso de uso o evento de dominio (doc 02 §1.6).
+6. Cablear el bloque D de `/revision-cumplimiento` — la lista de qué **debe** escribir en `audit_log`: crear, modificar, anular o cerrar un fichaje; emitir, imprimir, entregar, revocar o reemitir una credencial; provisionar, emparejar o revocar un dispositivo; acceder a datos personales de terceros; generar una exportación legal; cambiar roles, permisos o configuración con efecto en el cálculo de horas. *Ante la duda, sí.*
+7. Comando `php artisan compliance:verify-audit-chain` (doc 02 Anexo C) y su registro en el Scheduler con ejecución **diaria** (RS-07). **El verificador entiende las anclas desde el primer día** (ADR-027): cuando encuentra una fila cuyo `prev_hash` no existe en la tabla, lo busca como `last_hash` en `audit_chain_anchors`; si encaja, informa de una purga sellada; **si no encaja, es manipulación** y salta la alerta.
+8. Instrumentar `audit_chain_verification_failures_total` (counter, doc 02 §8.2) y dejarla en cero.
+9. Regla de alerta y runbook. Del catálogo del doc 01 §9.3: **«Rotura de la cadena de hash de auditoría | cualquiera | Crítica (seguridad)»**. Runbook `docs/runbooks/rotura-cadena-auditoria.md` (doc 02 §12).
+10. Pasar `/revision-cumplimiento` completo y adjuntar el informe.
+
+**Artefactos.**
+
+- `backend/app/Modules/Compliance/Domain/` — cálculo del hash y objeto de valor de la entrada de auditoría (dominio puro).
+- `backend/app/Modules/Compliance/Application/Port/` — puerto del escritor de auditoría.
+- `backend/app/Modules/Compliance/Infrastructure/Persistence/` — modelo solo-append y repositorio.
+- `backend/database/migrations/` — `create_audit_log_table` **particionada por año**, `create_audit_chain_anchors_table`, la partición del año en curso, y los `GRANT`/`REVOKE` de los **dos** roles.
+- `backend/app/Modules/Compliance/…` — tarea programada de creación de partición, comando `compliance:verify-audit-chain`.
+- `infra/observability/` — regla de alerta de rotura de cadena.
+- `docs/runbooks/rotura-cadena-auditoria.md`.
+
+**Pruebas exigidas.** Tabla del §9.5: toca **esquema y restricción** → **Integración**. No expone endpoint del Anexo B en esta tarea.
+
+- Integración: la fila génesis usa `SHA256("FICHAJE-HOTEL-GENESIS")` como `prev_hash` → `->group('RS-07')`.
+- Integración: el usuario de aplicación recibe error al intentar `UPDATE` y `DELETE` sobre `audit_log` y sobre una partición directamente → `->group('RS-07')`.
+- **Escenario ineludible del §9.4 «Cadena de auditoría»:** modificar una fila por SQL directo, verificar que `verify-audit-chain` la detecta → `->group('RS-07')`. Comprobar que la métrica se incrementa.
+- Integración: `canonical_json` produce el mismo hash con las claves del `payload` en distinto orden de inserción → `->group('RS-07')`.
+- Unitaria del cálculo de hash con vectores fijos, sin base de datos → `->group('RS-07')`.
+- Integración: insertar con `occurred_at` de un año sin partición **falla de forma visible** y la acción auditada no se confirma → `->group('RS-07')`.
+
+**Verificación.**
+
+```bash
+php artisan migrate:fresh
+php artisan compliance:verify-audit-chain          # Cadena íntegra: salida OK, código 0
+psql -U fichaje_app -d fichaje -c "UPDATE audit_log SET action='x' WHERE id=1;"   # debe fallar por permisos
+php artisan test --group=RS-07
+curl -s http://localhost/metrics | grep audit_chain_verification_failures_total    # valor 0
+```
+
+**Terminado cuando** (§10.3): Deptrac en verde · pruebas de integración y unitarias en verde con el escenario del §9.4 cubierto · trazabilidad en verde · PHPStan 9 limpio · instrumentación añadida · migración reversible y verificada con volumen realista · runbook `rotura-cadena-auditoria.md` escrito · informe de `/revision-cumplimiento` sin bloqueantes.
+
+---
+
+### Tarea 1.15 — Correcciones trazadas: versionado, catálogo de motivos, anulación
+
+| | |
+|---|---|
+| **Horas** | 10–12 |
+| **Agente / Skill** | `arquitecto-dominio` → `backend-laravel` (en ese orden) |
+| **Requisitos** | **RN-13, RL-04, RF-PA-04** (doc 01 Anexo A, ADR-032). Aplica también RN-06 (el total se recalcula, nunca se incrementa) |
+| **Precondiciones** | **1.14** (necesita `audit_log`) y **1.4** (necesita `shift_entries` y el caso de uso que los crea) |
+| **Bloquea a** | **1.16** y **1.17** |
+
+**Objetivo.** Una persona autorizada puede crear, modificar, cerrar o anular un tramo indicando un motivo del catálogo, y el sistema conserva la versión anterior con su autor, momento, valor previo y motivo, recalcula el total del día y deja la traza en `audit_log`. El registro original permanece consultable.
+
+**Reglas duras aplicables.**
+
+- **5** — nada se borra ni se sobrescribe: las correcciones crean una versión nueva y conservan la anterior con autor, momento y motivo (RN-13, RL-04). Es la razón de ser de la tarea.
+- **7** — `daily_totals` se **recalcula** en la misma transacción, nunca se incrementa (RN-06, ADR-007). Una corrección que incrementase el acumulado produciría horas falsas.
+- **6** — cada corrección y cada anulación escriben en `audit_log`.
+- **4** — corregir la hora de un turno 22:00→06:00 no puede partirlo ni cambiar su `work_date` salvo que cambie la hora de inicio (RN-05, ADR-006).
+- **2** — el momento de la corrección llega por el puerto `Clock`.
+- **9** — `occurred_at` y `recorded_at` se conservan ambos.
+- **1** — la regla de versionado vive en `Domain/`, no en el controlador ni en el modelo Eloquent.
+- **18** — `PATCH` y `void` llevan policy y prueba negativa por rol.
+
+**Catálogo de motivos — Anexo C del doc 01, literal.**
+
+`OLVIDO_FICHAJE_ENTRADA`, `OLVIDO_FICHAJE_SALIDA`, `FALLO_TECNICO_QUIOSCO`, `TARJETA_NO_DISPONIBLE`, `CREDENCIAL_NO_ENTREGADA`, `ERROR_DE_ESCANEO_DUPLICADO`, `AJUSTE_ACORDADO_CON_RRHH`, `ALTA_RETROACTIVA`, `OTROS` (**obliga a texto libre de al menos 20 caracteres**).
+
+**Pasos.** Relevo `arquitecto-dominio` → `backend-laravel`. El método de `arquitecto-dominio` (doc 03 §4.3) es: módulo → capa → invariantes con su `RN-*` → objetos de valor → puertos → firmas y casos de prueba → implementación.
+
+1. `arquitecto-dominio`: situar la corrección en el módulo `Attendance` y en la capa de dominio, con `WorkDay` como frontera transaccional (doc 01 §5.2). Nadie toca `ShiftEntry` por fuera del agregado.
+2. `arquitecto-dominio`: enunciar las invariantes con su regla — RN-13 (versión nueva, nunca sobrescritura), RN-03, RN-02, RN-01, RN-06.
+3. `arquitecto-dominio`: objeto de valor `CorrectionReason` (doc 01 §5.3) que hace **inconstruible** el estado inválido: `OTROS` sin texto de ≥ 20 caracteres no compila un objeto válido.
+4. `arquitecto-dominio`: puertos necesarios (`Clock`, repositorio de `WorkDay`, publicador de eventos, escritor de auditoría) y firma del caso de uso `CorrectShiftHandler`. Evento de dominio `ShiftCorrected`.
+5. `qa-testing`/`backend-laravel`: pruebas unitarias que fallan antes de implementar, con los límites explícitos.
+6. `backend-laravel`: actualizar `docs/api/openapi.yaml` con los endpoints del Anexo B: `POST /api/v1/shift-entries` (alta manual, rol manager+), **`PATCH /api/v1/shift-entries/{uuid}`** (corrección, rol manager+) y **`POST /api/v1/shift-entries/{uuid}/void`** (anulación, rol **rrhh+**).
+7. `backend-laravel`: migración de `shift_corrections` con el esquema del doc 01 §5.5 — `id`, `shift_entry_id`, `performed_by_user_id`, `action`, `before` (JSONB), `after` (JSONB), `reason_code`, `reason_text`, `created_at` — y uso de `version` y `superseded_by_id` en `shift_entries`.
+8. `backend-laravel`: una transacción por caso de uso con el **recálculo de `daily_totals` dentro** (ADR-007). Los estados **`voided` y `superseded`** están fuera del índice parcial y de la restricción de exclusión (`WHERE status NOT IN ('voided','superseded')`, ADR-026), así que anular libera el hueco y corregir no lo ocupa dos veces.
+
+   > **Los dos estados no vigentes y por qué son dos** ([ADR-026](../docs/adr/ADR-026-la-correccion-supersede.md)). `voided` significa «este tramo no ocurrió»; `superseded` significa «ocurrió, se conserva y otra versión lo sustituye». Sin `superseded`, la regla dura 5 y la 7 chocan de frente. El enum y los predicados ya nacen así en la tarea 1.3.
+9. `backend-laravel`: policies por endpoint, con `admin`/`rrhh` en esta fase (RF-ID-03 completo es de 2.1), y escritura en `audit_log` de la corrección y la anulación.
+10. Instrumentar `manual_corrections_total{reason_code}` (counter, doc 02 §8.2).
+11. Textos del catálogo de motivos en `i18n`, ES y EN.
+
+**Artefactos.**
+
+- `backend/app/Modules/Attendance/Domain/Model/` (`WorkDay`, `ShiftEntry`), `Domain/ValueObject/CorrectionReason.php`, `Domain/Event/ShiftCorrected.php`.
+- `backend/app/Modules/Attendance/Application/UseCase/CorrectShiftHandler.php`.
+- `backend/app/Modules/Attendance/Infrastructure/Persistence/`, `Infrastructure/Projection/`.
+- `backend/app/Modules/Attendance/Http/` — controladores, FormRequests, Resources, Policies.
+- `backend/database/migrations/` — `create_shift_corrections_table`.
+- `docs/api/openapi.yaml`.
+- `backend/database/seeders/` — correcciones con su motivo y tramos en estado `superseded` (§10.2).
+
+**Pruebas exigidas.** §9.5: introduce/modifica **regla de negocio** → **Unitaria**; toca **esquema** → **Integración**; expone **endpoints** → **Feature + Contrato** y **autorización negativa por cada rol**.
+
+- Unitaria: corregir no muta la versión anterior; `version` incrementa y `superseded_by_id` apunta correctamente → `->group('RN-13', 'RF-PA-04')`.
+- Unitaria: `OTROS` con 19 caracteres es inválido, con 20 es válido → `->group('RF-PA-04')`.
+- Unitaria: tras corregir la hora de salida, el total del día se **recalcula** → `->group('RN-06', 'RN-13')`.
+- Unitaria: corregir un turno 22:00→06:00 no genera tramo artificial → `->group('RN-05', 'RF-AT-08')`.
+- Integración: anular deja el hueco libre y no viola `shift_entries_no_overlap` → `->group('RN-02')`.
+- **Integración (ADR-026):** corregir un tramo cerrado no viola `shift_entries_no_overlap` y el recálculo de `daily_totals` no duplica minutos → `->group('RN-02', 'RN-06', 'RN-13')`.
+- Integración: la fila anterior **sigue en la tabla**, y el agregado `WorkDay` reconstruido **no la incluye** → `->group('RN-13', 'RL-04')`.
+- Integración: la corrección deja fila en `shift_corrections` y entrada en `audit_log` → `->group('RL-04', 'RN-13')`.
+- Feature + Contrato de `PATCH /shift-entries/{uuid}` y `POST /shift-entries/{uuid}/void` → `->group('RF-PA-04')`.
+- Autorización negativa: `empleado` no puede corregir ni anular nada → `->group('RF-ID-03', 'RF-PA-04')`.
+- Gherkin del doc 01 §11 «Corrección manual trazada» al pie de la letra → `->group('RN-13', 'RN-06', 'RF-PA-04')`.
+
+**Verificación.**
+
+```bash
+make test-unit                       # Dominio en verde, < 2 s
+make mutate                          # MSI del dominio ≥ 80 %
+php artisan test --group=RN-13
+php artisan test tests/Integration/Attendance tests/Feature/Attendance tests/Contract
+php artisan qa:traceability --check
+```
+
+**Terminado cuando** (§10.3): Deptrac en verde · pruebas unitarias, de integración, feature, contrato y autorización negativa · MSI dentro de umbral · trazabilidad en verde · PHPStan 9 limpio · contrato OpenAPI actualizado y validado · autorización probada en negativo por rol · instrumentación (`manual_corrections_total`) · `audit_log` escrito · migración reversible · textos en ES y EN.
+
+---
+
+### Tarea 1.16 — Panel: detalle de jornada
+
+| | |
+|---|---|
+| **Horas** | 6–8 |
+| **Agente / Skill** | `frontend-panel` |
+| **Requisitos** | **RF-PA-03** (doc 01 Anexo A, ADR-032) |
+| **Precondiciones** | **1.7** (endpoints de fichaje) y **1.15** (correcciones, que el detalle debe mostrar) |
+| **Bloquea a** | Nada dentro de la Fase 1. La **2.5** (bandeja de incidencias) reutiliza el mismo patrón de consulta |
+
+**Objetivo.** Un `admin`/`rrhh` ve el detalle de una jornada de cualquier empleado: todos sus tramos, totales, y el historial de correcciones con autor, momento, valor anterior y motivo. Es la primera pantalla desde la que alguien con responsabilidad de gestión puede ver el registro de otra persona — hasta esta tarea, solo el propio empleado podía verlo, desde el portal de la 1.11.
+
+**Reglas duras aplicables.**
+
+- **5** — la interfaz muestra el historial de versiones y el original sigue visible; nunca presenta la corrección como si fuera el dato primigenio.
+- **9** — se muestran **ambas** marcas: `occurred_at` y `recorded_at`, y se explica la diferencia cuando el fichaje llegó de la cola offline.
+- **3** — zonas horarias mostradas, no adivinadas.
+- **4** — un turno nocturno se muestra como un solo tramo, atribuido a su jornada de inicio.
+- **18** — la interfaz refleja permisos, pero la autorización real está en el servidor.
+
+**Los principios de `frontend-panel` (doc 03 §4.3) que aquí aplican.**
+
+1. **El dato tiene consecuencias:** nunca redondear de forma que las partes no sumen el total.
+2. **Las zonas horarias se muestran y no se adivinan.**
+3. **La autorización se refleja en la interfaz pero no se confía en ella.**
+
+**Pasos.**
+
+1. Confirmar en `docs/api/openapi.yaml` `GET /api/v1/employees/{uuid}/workdays` (Anexo B, rol manager+ | self), ya definido para el portal en la 1.11: esta tarea reutiliza el mismo endpoint con el ámbito de un `admin`/`rrhh` en vez del propio empleado.
+2. Backend, si falta: la consulta ya existe desde 1.11 (módulo `Reporting`, `Application/Query/`); aquí solo cambia quién la invoca y con qué ámbito de autorización.
+3. Vista de detalle de jornada: tramos con hora de entrada y salida en la zona del centro, duración por tramo, total del día que **cuadra con la suma**, y bloque de historial de versiones con autor, momento y motivo de cada corrección de la 1.15.
+4. Diálogo de corrección: selector del catálogo del Anexo C del doc 01, texto libre obligatorio de ≥ 20 caracteres para `OTROS`, y **resumen "de → a" antes de confirmar**.
+5. i18n ES/EN y accesibilidad AA (doc 01 §6.5).
+
+**Artefactos.**
+
+- `frontend-admin/src/features/workdays/`.
+- `docs/api/openapi.yaml` — confirmación del endpoint compartido con 1.11.
+
+**Pruebas exigidas.** §9.5: **recorrido de usuario** en el panel → **E2E**; consume **endpoint** → **Feature + Contrato** y **autorización negativa por rol**.
+
+- Feature + Contrato de `GET /employees/{uuid}/workdays` con ámbito de gestión → `->group('RF-PA-03')`.
+- Autorización negativa: `empleado` no puede ver el detalle de otro empleado → `->group('RF-ID-03', 'RS-04')`.
+- E2E: abrir el detalle de una jornada con una corrección de la 1.15 y ver el resumen "de → a" en el historial → `tag: ['@RF-PA-03']`.
+- Vitest del componente de suma de tramos, con el caso de que las partes sumen el total → `->group('RF-PA-03')`.
+- Accesibilidad con `@axe-core/playwright`: 0 violaciones críticas o graves (§9.2).
+
+**Verificación.**
+
+```bash
+make e2e -- --grep "@RF-PA-03"
+npm --prefix frontend-admin run test:unit
+npx vue-tsc --noEmit -p frontend-admin
+```
+
+**Terminado cuando** (§10.3): pruebas Feature, Contrato, autorización negativa y E2E en verde · convenciones del §3.5 verificadas · contrato OpenAPI actualizado · autorización probada en negativo · textos en ES y EN · accesibilidad verificada.
+
+---
+
+### Tarea 1.17 — Exportación legal para Inspección
+
+| | |
+|---|---|
+| **Horas** | 5–6 |
+| **Agente / Skill** | `backend-laravel` + `/informe-nuevo` |
+| **Requisitos** | **RL-03, RL-06, RF-IN-05** (doc 01 Anexo A, ADR-032) |
+| **Precondiciones** | **1.15** — la exportación legal debe incluir las correcciones con su autor y motivo |
+| **Bloquea a** | Nada dentro de la Fase 1. La **2.9** (exportaciones ofimáticas de conveniencia) es hermana, no dependiente |
+
+**Objetivo.** El sistema genera la **exportación normalizada para Inspección de Trabajo**: registro diario por trabajador y periodo, en formato tabular legible y tratable, **con las correcciones y sus motivos**. Existe el comando de consola y el runbook para generarla en menos de una hora sin depender del panel.
+
+**Reglas duras aplicables.**
+
+- **5** y **6** — la exportación legal muestra las correcciones con autor, momento y motivo. Un informe que las oculte no cumple.
+- **9** — se exportan ambas marcas donde corresponda; el registro legal usa `occurred_at`.
+- **4** — un turno nocturno aparece como un tramo, en su jornada de inicio.
+- **18** — `GET /api/v1/reports/legal-export` es de rol `auditor|rrhh` (Anexo B, `rrhh` en esta fase: `auditor` es rol de 2.1) y lleva prueba negativa por cada otro rol.
+- **6** — «Genera una exportación legal» está en la lista del bloque D de `/revision-cumplimiento`: se audita siempre.
+- **21** — el fichero exportado contiene datos personales por su finalidad legal; el **log** de la generación no.
+
+**Pasos.** Pasada acotada de `/informe-nuevo` (8 pasos), centrada en el formato legal y no en los ofimáticos de conveniencia (esos son de la 2.9):
+
+1. **Pregunta exacta**: registro diario por trabajador y periodo para un requerimiento de Inspección (RF-IN-05, RL-06). Criterios de inclusión visibles en el propio fichero.
+2. **Fuente**: `shift_entries` para el detalle de tramos y `shift_corrections` + `audit_log` (de la 1.14/1.15) para la trazabilidad de correcciones.
+3. **Consulta** con agrupación por `work_date` y `AT TIME ZONE` de la zona del centro.
+4. **Formato tabular legible y tratable, no propietario** (RL-06): CSV con streaming (`spatie/simple-excel`, doc 02 §3.1), UTF-8 con BOM, horas como texto `HH:MM`, nunca decimal.
+5. **Autorización y auditoría**: ámbito en la consulta y registro en `audit_log` de quién exportó, qué periodo y qué empleados.
+6. Actualizar `docs/api/openapi.yaml` con `GET /api/v1/reports/legal-export` (Anexo B, rol `auditor|rrhh`).
+7. Comando `php artisan compliance:legal-export --from= --to= --employee=` (doc 02 Anexo C), para atender un requerimiento desde la consola sin depender del panel.
+8. Escribir el runbook `docs/runbooks/requerimiento-inspeccion.md` — *«cómo generar la exportación legal en menos de 1 hora»*.
+
+**Artefactos.**
+
+- `backend/app/Modules/Compliance/…` — exportación legal (doc 01 §5.1 sitúa `LegalExport` en `Compliance`).
+- Comando de consola `compliance:legal-export`.
+- `docs/api/openapi.yaml`.
+- `docs/runbooks/requerimiento-inspeccion.md`.
+- `frontend-admin/src/features/reports/` — descarga desde el panel.
+
+**Pruebas exigidas.** §9.5, fila «Genera un informe o exportación»: **Unitaria** + **Integración con volumen** + **Feature + Contrato** + **Autorización negativa**.
+
+- Integración: la exportación incluye, por trabajador y día, hora de inicio y fin de cada tramo, total y **las correcciones con su autor, fecha y motivo** → `->group('RF-IN-05', 'RL-06', 'RL-04')`.
+- Unitaria: formato de horas `HH:MM`, nunca decimal → `->group('RF-IN-05')`.
+- Feature + Contrato de `GET /api/v1/reports/legal-export` → `->group('RF-IN-05')`.
+- Autorización negativa: `empleado` no accede a la exportación legal completa → `->group('RF-ID-03', 'RL-06')`.
+- Integración: la generación queda en `audit_log` con periodo y empleados → `->group('RS-05', 'RL-04')`.
+- Apertura correcta en Excel y LibreOffice, con acentos → verificación manual documentada.
+
+**Verificación.**
+
+```bash
+php artisan compliance:legal-export --from=2026-01-01 --to=2026-01-31 --employee=<uuid>
+php artisan test --group=RF-IN-05
+php artisan qa:traceability --check
+```
+
+**Terminado cuando** (§10.3): Deptrac en verde · unitarias, integración con volumen, feature, contrato y autorización negativa · trazabilidad en verde · PHPStan 9 limpio · contrato OpenAPI actualizado · autorización probada en negativo · generación de exportación legal auditada · textos en ES y EN · runbook `requerimiento-inspeccion.md` escrito.
+
+---
+
+### Tarea 1.18 — Copias cifradas, verificadas, con prueba de restauración
+
+| | |
+|---|---|
+| **Horas** | 4–6 |
+| **Agente / Skill** | `devops-observabilidad` |
+| **Requisitos** | **RF-PR-04, RNF-D-05, RNF-D-02, RQ-09** (doc 01 Anexo A, ADR-032). RQ-09 y RNF-D-05 describen la misma prueba de restauración trimestral con dos numeraciones distintas del catálogo; RNF-D-02 es el RPO ≤ 15 min que entrega el WAL archiving del paso 1. RTO ≤ 4 h es un objetivo del doc 01 §6.2 sin identificador propio en el catálogo: se mide y se documenta en el runbook, no bloquea `qa:traceability`. Cifrado en reposo (RL-12), datos en la UE en la infraestructura del cliente (RL-14) |
+| **Precondiciones** | **0.1** (entorno de Compose). No depende de ninguna otra tarea de esta fase: avanza en paralelo desde el principio |
+| **Bloquea a** | Nada dentro de la Fase 1. RF-PD-10 (actualizador, tarea 5.7) exige «copia previa automática y verificada — si la copia falla, la actualización no continúa», así que se apoya en esta tarea |
+
+**Objetivo.** Existe una copia diaria cifrada, **verificada automáticamente**, con archivado de WAL que sostiene el RPO de 15 minutos, y un simulacro de restauración automatizado que levanta la última copia en un contenedor limpio y valida integridad referencial y conteos. Existe la alerta de copia fallida con su runbook.
+
+**Principio que gobierna la tarea** (doc 03 §4.3, `devops-observabilidad`): **una copia no verificada no es una copia.**
+
+**Reglas duras aplicables.**
+
+- **16** — la copia se queda en la infraestructura del cliente; el fabricante no la recibe ni la custodia.
+- **21** — la salida de los scripts no imprime datos personales.
+- **13** — rutas, destinos y retención son configuración (`BACKUP_PATH`, `BACKUP_ENCRYPTION_KEY`), no código.
+- **6** — la restauración de una copia en producción queda registrada en el informe y en el runbook.
+
+**Convenciones obligatorias de los scripts** (doc 02 §3.5): `set -euo pipefail` e `IFS=$'\n\t'`; formato con `shfmt -i 2`; **idempotencia**; **fallo seguro**; mensajes de error que dicen **qué hacer**; **ningún secreto en el script ni en su salida**.
+
+**Pasos.**
+
+1. Configurar **WAL archiving** en PostgreSQL 17 (RPO ≤ 15 min, RNF-D-02) en `infra/docker/postgres/` y en el Compose de producción.
+2. Implementar `infra/scripts/backup.sh`: volcado completo, **cifrado** con `BACKUP_ENCRYPTION_KEY`, destino `BACKUP_PATH`.
+3. Implementar `infra/scripts/restore.sh`: restauración con verificación previa de precondiciones.
+4. Comandos `php artisan backup:run && php artisan backup:verify` que envuelvan los scripts.
+5. **Simulacro de restauración automatizado**: script que restaura la última copia en un **contenedor limpio** y valida integridad referencial y conteos. Ejecución **trimestral** (RNF-D-05).
+6. Instrumentar el resultado de la copia y de su verificación (métrica de resultado de copia, sección de respaldo del §8.2).
+7. Alerta: **«Copia de seguridad fallida o no verificada | cualquiera | Crítica»**, con enlace a `docs/runbooks/restaurar-backup.md`.
+8. Escribir `docs/runbooks/restaurar-backup.md` con el procedimiento de recuperación dentro del **RTO de 4 h**.
+
+**Artefactos.**
+
+- `infra/scripts/backup.sh`, `infra/scripts/restore.sh`.
+- `infra/docker/postgres/` — configuración de WAL archiving.
+- `infra/observability/` — reglas de alerta de copia fallida y de disco.
+- `docs/runbooks/restaurar-backup.md`.
+- Script del simulacro de restauración y su ejecución programada.
+
+**Pruebas exigidas.** §9.5 no tiene fila para infraestructura: aplican los umbrales del §9.2 y el escenario del §9.4.
+
+- **Escenario ineludible del §9.4 «Restauración de copia»:** script automatizado que restaura la última copia en un contenedor limpio y valida integridad referencial y conteos → `->group('RF-PR-04', 'RNF-D-05')`.
+- **ShellCheck + `shfmt -i 2 -d`: 0 hallazgos** sobre `infra/scripts/`.
+- Verificación de que la copia está **cifrada**: el fichero no es legible sin la clave → `->group('RL-12')`.
+- Idempotencia: ejecutar `backup.sh` dos veces no corrompe la copia anterior.
+- Fallo seguro: simular disco lleno y comprobar que el sistema queda como estaba.
+
+**Verificación.**
+
+```bash
+shellcheck infra/scripts/*.sh
+shfmt -i 2 -d infra/scripts/
+php artisan backup:run && php artisan backup:verify
+bash infra/scripts/restore.sh --dry-run
+```
+
+**Terminado cuando** (§10.3, subconjunto aplicable): scripts conformes al §3.5 y verificados por ShellCheck y shfmt · instrumentación añadida · alerta con runbook · simulacro de restauración automatizado y ejecutable · ningún secreto en el repositorio, en las imágenes ni en los logs del pipeline.
+
+---
+
 ## Las dos ramas que avanzan en paralelo (doc 02 §11.3, literal)
 
 > **Dos ramas que deben avanzar en paralelo desde el principio:** el quiosco (1.8, 1.9) y la emisión de credenciales (1.5, 1.10). Un quiosco perfecto sin tarjetas que escanear no sirve de nada, y es un error de planificación fácil de cometer porque el quiosco es la parte visible.
 
-Camino crítico completo de la fase (§11.3):
+Camino crítico completo de la fase (§11.3, ya con [ADR-032](../docs/adr/ADR-032-la-fase-1-entrega-un-sistema-legalmente-defendible.md)):
 
 ```
 0.1→0.2→0.3 ──► 1.1→1.2 (dominio; bloquea todo lo demás)
-                  ├─► 1.3→1.4 ──► 1.7 ──► 1.8→1.9 (quiosco)
-                  │                        └─► 1.12 (fichaje por PIN)
+                  ├─► 1.3→1.14 (audit_log) ──► 1.4 ──► 1.7 ──► 1.8→1.9 (quiosco)
+                  │                             │                └─► 1.12 (fichaje por PIN)
+                  │                             └─► 1.15 (correcciones) ──► 1.16 (detalle de jornada)
+                  │                                                    └─► 1.17 (exportación legal)
                   ├─► 1.5 (credenciales) ──► 1.10 (tarjetas y entrega)
                   ├─► 1.6 ──► 1.13 (provisión del PIN) ──► 1.11 (portal)
                   │                                   └─► 1.12
-                  └─► 2.1→2.2 ──► 2.3 ──► 2.5
+                  └─► 1.18 (copias verificadas) — solo necesita 0.1
 ```
 
 > **La 1.13 se intercala entre la 1.6 y las dos que consumen el PIN.** Es una arista nueva respecto al §11.3 del doc 02: sin ella, el E2E del portal (1.11) y el fichaje de respaldo (1.12) se construyen contra una columna `pin_hash` que nadie rellena.
+>
+> **1.14–1.18 son la incorporación de ADR-032.** `1.14` no espera a 2.1: el actor que encadena en la Fase 1 es el dispositivo o la autenticación mínima de 1.6, no el RBAC completo. `1.18` no depende de nada de esta fase salvo el entorno de 0.1, y puede avanzar en paralelo desde el principio.
 
 ---
 
@@ -1725,9 +2116,11 @@ Entrégame: los hallazgos bloqueantes, los requisitos de la fase sin
 cobertura de prueba, y qué queda pendiente para pasar a la siguiente.
 ```
 
-**Requisitos que `qa:traceability --check` debe encontrar cubiertos** (doc 01, Anexo A):
+**Requisitos que `qa:traceability --check` debe encontrar cubiertos** (doc 01, Anexo A, ya con [ADR-032](../docs/adr/ADR-032-la-fase-1-entrega-un-sistema-legalmente-defendible.md)):
 
-`RF-AT-01..09`, `RF-AT-11`, `RF-QR-01..06`, `RF-QR-08`, `RF-ID-01..02` (básicos), `RF-ID-04..09`, `RF-KI-01..06`, `RF-KI-09`, `RF-GP-01`, `RF-GP-03`, `RN-01..09`, `RL-01`, `RL-05`, `RS-01..04`, `RS-12`
+`RF-AT-01..09`, `RF-AT-11`, `RF-QR-01..06`, `RF-QR-08`, `RF-ID-01..02` (básicos), `RF-ID-04..09`, `RF-KI-01..06`, `RF-KI-09`, `RF-GP-01`, `RF-GP-03`, `RF-PA-03..04`, `RF-IN-05`, `RF-PR-04`, `RN-01..09`, `RN-13`, `RN-15`, `RL-01`, `RL-03..06`, `RL-09`, `RL-12`, `RS-01..04`, `RS-07`, `RS-12`, `RNF-D-02`, `RNF-D-05`, `RQ-09`
+
+> Quince de estos —`RN-13`, `RN-15`, `RS-07`, `RF-PA-03`, `RF-PA-04`, `RL-03`, `RL-04`, `RL-06`, `RF-IN-05`, `RF-PR-04`, `RNF-D-02`, `RNF-D-05`, `RQ-09`, `RL-09`, `RL-12`— llegan con las tareas 1.14–1.18. Antes de ADR-032 no eran exigibles hasta el cierre de la Fase 2.
 
 **Umbrales que deben estar en verde** (§9.2, RNF-M-01):
 
@@ -1746,7 +2139,7 @@ cobertura de prueba, y qué queda pendiente para pasar a la siguiente.
 2. **Una tarjeta impresa y plastificada, escaneada en el quiosco** (prompt §6.3, doc 03 §7).
 3. **Recalibración de la estimación.** El §11.0 lo pide expresamente: la Fase 1 *«es la primera oportunidad de contrastar estimación contra realidad (R16 del documento 01)»*.
 
-**Estado de venta al cerrar la fase** (§11.1): `0 + 1` = **125–161 h** → ⚠️ **Piloto interno controlado**, no vendible. El §11.2 avisa de por qué: sin la Fase 2 no hay auditoría inmutable, retención ni exportación para Inspección, y *«el registro no satisface el art. 34.9 ET. Es el recorte que no se debe hacer»*.
+**Estado de venta al cerrar la fase** (§11.1, ya con [ADR-032](../docs/adr/ADR-032-la-fase-1-entrega-un-sistema-legalmente-defendible.md)): `0 + 1` = **166–214 h** → ✅ **Instalable y legalmente defendible**. La auditoría encadenada por hash (1.14), las correcciones trazadas (1.15) y la exportación legal para Inspección (1.17) ya están construidas: el registro satisface el art. 34.9 ET desde el cierre de esta fase, no desde el cierre de la Fase 2. Sigue sin ser «producto vendible a escala» —eso es la Fase 5— y la Fase 2 sigue aportando lo que hace la operación diaria cómoda: 2FA obligatorio, presencia en vivo, detección automática de incidencias y purga por retención automatizada.
 
 ---
 

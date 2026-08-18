@@ -38,8 +38,8 @@ Este plan iría en un sexto escalón: es derivado y no manda sobre ninguno.
 |---|---|---|---|---|
 | 01 | [Herramientas y entorno](01-herramientas-y-entorno.md) | Puesta a punto de la máquina de desarrollo y dependencias del proyecto | — | — |
 | 02 | [Fase 0 — Cimientos](02-fase-0-cimientos.md) | Repositorio, Compose, módulos, cadena de calidad, CI, ADRs | 7 | 31–42 |
-| 03 | [Fase 1 — MVP de fichaje](03-fase-1-mvp-fichaje.md) | Dominio, esquema, credenciales, quiosco offline, portal, PIN | 13 | 102–130 |
-| 04 | [Fase 2 — Gestión y cumplimiento](04-fase-2-gestion-y-cumplimiento.md) | 2FA, auditoría encadenada, correcciones, panel, informes, retención | 12 | 86–109 |
+| 03 | [Fase 1 — MVP de fichaje](03-fase-1-mvp-fichaje.md) | Dominio, esquema, credenciales, quiosco offline, portal, PIN, auditoría encadenada, correcciones, exportación legal, copias verificadas | 18 | 135–172 |
+| 04 | [Fase 2 — Gestión y cumplimiento](04-fase-2-gestion-y-cumplimiento.md) | 2FA, panel en vivo, bandeja de incidencias, informes, retención | 9 | 53–68 |
 | 05 | [Fase 5 — Productización](05-fase-5-productizacion.md) | Configuración, perfiles, licencia, instalador, actualizador, marca, diagnóstico, documentación | 13 | 117–161 |
 | 06 | [Fase 3 — Operación y refuerzo](06-fase-3-operacion-y-refuerzo.md) | Observabilidad, cuadros de mando, cumplimiento, carga, E2E, seguridad externa | 13 | 84–112 |
 | 07 | [Fase 4 — Evolución](07-fase-4-evolucion.md) | Cuadrantes, aprobaciones, nómina, multi-centro. Sin desglosar por diseño | 0 | 60–90 |
@@ -60,8 +60,8 @@ No es el orden numérico, y la razón está en el documento 02 §11:
 | Orden | Fase | Horas | Qué se consigue al terminarla |
 |:---:|---|---|---|
 | 1.º | **0 — Cimientos** | 31–42 | `make up` levanta el entorno completo, la CI está en verde y las fronteras arquitectónicas —y la coherencia entre los documentos— se verifican solas |
-| 2.º | **1 — MVP de fichaje** | 102–130 | Un empleado recibe su tarjeta y ficha en la tablet, con o sin red, con credencial infalsificable y registro correcto. **Corte MVP mínimo defendible** |
-| 3.º | **2 — Gestión y cumplimiento** | 86–109 | Sistema **legalmente defendible** y operable por RRHH. Es aquí, y no antes, donde se puede poner en producción con tranquilidad |
+| 2.º | **1 — MVP de fichaje** | 135–172 | Un empleado recibe su tarjeta y ficha en la tablet, con o sin red, con credencial infalsificable, registro correcto, corregible con trazabilidad completa, respaldado y exportable a Inspección. **Instalable y legalmente defendible** ([ADR-032](../docs/adr/ADR-032-la-fase-1-entrega-un-sistema-legalmente-defendible.md)) |
+| 3.º | **2 — Gestión y cumplimiento** | 53–68 | Sistema operable **con comodidad** por RRHH y por cada responsable de departamento — 2FA, presencia en vivo, detección automática de incidencias. La validez legal ya la entregó la Fase 1 |
 | 4.º | **5 — Productización** | 117–161 | **El hito que convierte el proyecto en negocio.** Un tercero puede comprar, instalar y operar el producto |
 | 5.º | **3 — Operación y refuerzo** | 84–112 | Observabilidad completa, cumplimiento visible, carga verificada, seguridad revisada por terceros |
 | 6.º | **4 — Evolución** | 60–90 | A decidir con datos de uso reales |
@@ -72,8 +72,8 @@ Del documento 02 §11.1:
 
 | Alcance | Fases | Horas | ¿Vendible? |
 |---|---|---|---|
-| **MVP funcional** | 0 + 1 | 133–172 | ⚠️ Piloto interno controlado |
-| **Primera instalación a medida** | 0 + 1 + 2 | 219–281 | ⚠️ Sí, pero instalada y operada por el equipo de desarrollo |
+| **MVP funcional** | 0 + 1 | 166–214 | ✅ **Instalable y legalmente defendible** ([ADR-032](../docs/adr/ADR-032-la-fase-1-entrega-un-sistema-legalmente-defendible.md)) |
+| **Primera instalación a medida** | 0 + 1 + 2 | 219–282 | ⚠️ Sí, pero instalada y operada por el equipo de desarrollo |
 | **✅ Producto vendible** | 0 + 1 + 2 + 5 | **336–442** | ✅ **Sí: el cliente lo instala, configura y opera** |
 | **Producto vendible y operable** | 0 + 1 + 2 + 5 + 3 | **420–554** | ✅ Con observabilidad completa |
 | **Con evolución** | Todas | 480–644 | ✅ |
@@ -388,9 +388,12 @@ Las que estaban marcadas 🔴 aparecen ahora como ✅ o ⚠️, con la decisión
 | 1-2 | 1.11 | ✅ **CSV en 1.11, PDF en 2.9**, por `?format=`. CSV cubre la portabilidad del RGPD sin arrastrar Browsershot al camino crítico; el PDF —que es lo que una persona presenta— llega con la maquinaria de exportación. **Sin XLSX**: no aporta nada sobre CSV para un histórico personal. En las notas de contrato del Anexo B del doc 01 | ✅ |
 | 1-3 | 1.12 | ✅ **Escalado geométrico, ya parametrizado y confirmado**: 3 fallos → 5 min, 5 → 15 min, 10 → 60 min, contador que se reinicia sin fallos en 24 h (Anexo B del doc 02). Cada escalón triplica el anterior, lo que hace inviable barrer 10⁶ sin castigar a quien se equivoca una vez. **Minutos confirmados como decisión de producto** el 13 de agosto de 2026: equilibran seguridad y no dejar a nadie sin fichar delante del quiosco; ajustables si la operación real de un cliente lo pide | ✅ |
 | 1-4 | 1.1 | ✅ **Misma decisión que 0-1** ([ADR-021](../docs/adr/ADR-021-clock-en-shared.md)). Y en la misma nota se resolvió una tensión de orden que no estaba en la lista: `CompliancePolicyProvider` y la tabla `compliance_profiles` con su semilla `ES-hosteleria` se adelantan a las tareas 1.1 y 1.3, para que la regla dura 14 no se incumpla durante las Fases 1 y 2 | ✅ |
-| 1-5 | 1.2 | **Dónde viven las *factories* de dominio puro**, dado que las de Eloquent pertenecen a `Infrastructure/Persistence/` y no existen hasta 1.3 | 🟡 |
-| 1-6 | 1.11 | **Qué módulo sirve `GET /api/v1/me/workdays`:** `Reporting` (el §1.6 le asigna las consultas de lectura) o `Attendance/Application/Query/` | 🟡 |
-| 1-7 | 1.10 | **Ruta de las plantillas Blade de los PDF de tarjeta.** El árbol del §2 no las ubica | 🟡 |
+| 1-5 | 1.2 | ✅ **`backend/tests/Support/Factory/`.** Es código de prueba, no de producción: vive en `tests/`, no en `app/`, para que `Domain/` no dependa de nada que no sea PHP puro (regla dura 1). Distinta de las de Eloquent, que siguen en `Infrastructure/Persistence/Factory/` desde 1.3 | ✅ |
+| 1-6 | 1.11 | ✅ **`Reporting`, decidido por el §1.6** (proyecciones y consultas de lectura). La misma consulta la reutiliza **1.16** con el ámbito de un `admin`/`rrhh` en vez del propio empleado | ✅ |
+| 1-7 | 1.10 | ✅ **`backend/resources/views/pdf/`**, la ubicación convencional de `spatie/laravel-pdf`. El árbol del §2 no la lista por ser infraestructura de framework, igual que `seeders/` | ✅ |
+| 1-8 | 1.6 | ✅ **Rol por verbo en el CRUD de empleados**, resuelto y propagado al Anexo B del doc 01: `GET` es `manager+` (resuelve a `admin`/`rrhh` hasta que 2.1 añada `responsable_departamento`), `POST`/`PATCH`/`offboard` son `rrhh+` | ✅ |
+
+> **[ADR-032](../docs/adr/ADR-032-la-fase-1-entrega-un-sistema-legalmente-defendible.md) movió `2.2`, `2.3` y `2.11` a la Fase 1** (`1.14`, `1.15`, `1.18`), y con ellas dos de las decisiones de esta tabla: **2-12** y **2-13**, que hoy son de la 1.18 y siguen abiertas — no se resolvieron al mover la tarea, solo cambiaron de fichero. **2-14** se decidió al escribir 1.18: el simulacro vive en `infra/scripts/`, junto al resto de los scripts de operación, y no como *workflow* de CI, porque tiene que poder ejecutarse en el servidor del cliente sin GitHub Actions delante.
 
 ### Fase 2 — [04-fase-2-gestion-y-cumplimiento](04-fase-2-gestion-y-cumplimiento.md)
 
@@ -398,18 +401,15 @@ Las que estaban marcadas 🔴 aparecen ahora como ✅ o ⚠️, con la decisión
 |:---:|:---:|---|:---:|
 | 2-1 | 2.6 | ✅ **Se adelanta la tabla, no la funcionalidad.** `compliance_profiles` y su semilla `ES-hosteleria` se crean en la tarea **1.3**; el puerto, en la **1.1**. Los umbrales de la semilla son los que RN-10/11/12 ya fijan (12 h, 9 h, 6 h), así que no se inventa nada. Las tareas 5.1 y 5.2 conservan lo caro: edición, cascada y auditoría del cambio. **~2 h adelantadas, cero rehacer**, y ningún adaptador desechable con literales dentro | ✅ |
 | 2-2 | 2.10 | ✅ **Misma resolución que 2-1**, con los 4 años de RL-02 en la semilla. `COMPLIANCE_PROFILE` del Anexo B sigue siendo solo el valor por defecto de la instalación, no la fuente de verdad en ejecución | ✅ |
-| 2-3 | 2.6 | ✅ **`turno-abierto-prolongado.md`, escrito en la tarea 2.6**, que es la que crea la alerta. Añadido al §12 del doc 02. Destinatario **RRHH** y no IT: no es una avería, es trabajo de gestión sobre el registro. El runbook deja claro lo que RN-08 impone — **el sistema nunca cierra el turno por su cuenta** — y remite a la corrección trazada de 2.3 con motivo `OLVIDO_FICHAJE_SALIDA` | ✅ |
+| 2-3 | 2.6 | ✅ **`turno-abierto-prolongado.md`, escrito en la tarea 2.6**, que es la que crea la alerta. Añadido al §12 del doc 02. Destinatario **RRHH** y no IT: no es una avería, es trabajo de gestión sobre el registro. El runbook deja claro lo que RN-08 impone — **el sistema nunca cierra el turno por su cuenta** — y remite a la corrección trazada de **1.15** con motivo `OLVIDO_FICHAJE_SALIDA` | ✅ |
 | 2-4 | 2.12 | ✅ **No hay endpoint, y es deliberado.** Rotar la clave no es una acción de panel: es un acto operativo con semanas de reimpresión detrás (§5.3), y un botón que lo dispare invita a pulsarlo. Se queda en `credentials:rotate-key`. El panel solo lee: `GET /api/v1/credentials/status` admite ahora **`?key_id=`** para ver a quién le falta reimprimir, que es lo que permite retirar la clave anterior con seguridad | ✅ |
-| 2-5 | 2.4, 2.6, 2.7, 2.10, 2.11, 2.12 | **Posición dentro de la fase de seis tareas que no figuran en el camino crítico del §11.3.** Sus precondiciones están derivadas y marcadas en cada ficha, pero el orden entre ellas es decisión abierta | 🟡 |
-| 2-6 | 2.5 | **Con qué herramienta se mide el LCP del panel en CI** (RNF-P-04: 500 empleados por debajo de 1,5 s). El §9.2 solo fija k6 para carga de API y `@axe-core/playwright` para accesibilidad | 🟡 |
-| 2-7 | 2.5 | **Si 2.6 precede a 2.5** o se integran en paralelo con datos de semilla: la bandeja de incidencias necesita incidencias que las produce 2.6 | 🟡 |
-| 2-8 | 2.7 | **Destinatario de la alerta de divergencia en reconciliación.** El §9.3 fija severidad crítica pero no a quién avisa | 🟡 |
-| 2-9 | 2.8 | **Cuánto de la pantalla de informes entra en 2.8** y cuánto en 2.5 o 3.13. El §11 asigna la tarea a `backend-laravel`, lo que sugiere que la pantalla no es suya | 🟡 |
-| 2-10 | 2.10 | **Si la documentación de cliente sobre conservación se redacta aquí** o se acumula a la tarea 5.11, que es la dueña de esa documentación | 🟡 |
-| 2-11 | 2.10 | **Si el cálculo de la fecha de corte de retención se documenta como una `RN-*` nueva** en el documento 01 | 🟡 |
-| 2-12 | 2.11 | **Si la restauración de una copia escribe en `audit_log`.** El bloque D de `/revision-cumplimiento` no la lista entre las acciones auditables | 🟡 |
-| 2-13 | 2.11 | **Nombre de la métrica de respaldo.** El §8.2 no incluye ninguna, pese a que su último bloque se titula «Credenciales y respaldo» | 🟡 |
-| 2-14 | 2.11 | **Si el simulacro de restauración vive en `infra/scripts/`** o como *workflow* de CI | 🟢 |
+| 2-5 | 2.4, 2.6, 2.7, 2.10, 2.12 | **Posición dentro de la fase de cinco tareas que no figuran en el camino crítico del §11.3.** `2.11` salió de esta lista por ADR-032 (es ahora 1.18, Fase 1). Sus precondiciones están derivadas y marcadas en cada ficha, pero el orden entre ellas es decisión abierta | 🟡 |
+| 2-6 | 2.4 | ✅ **Lighthouse CI** (`@lhci/cli`) contra la build de producción con datos de semilla de 500 empleados. Es la herramienta estándar para LCP en CI y no exige infraestructura nueva, a diferencia de k6 (que el §9.2 reserva para carga de API) | ✅ |
+| 2-7 | 2.5 | ✅ **2.6 precede a 2.5**, declarado como precondición: la bandeja de incidencias necesita los tipos que produce 2.6 | ✅ |
+| 2-8 | 2.7 | ✅ **`admin`**, el mismo destinatario que la alerta de rotura de cadena de auditoría (1.14): misma familia —integridad del registro—, mismo canal ya configurado | ✅ |
+| 2-9 | 2.8 | ✅ **Endpoint y pantalla mínima de consulta en 2.8**; el cuadro de impacto y las comparaciones visuales avanzadas son de **3.13**, que ya tiene agente dedicado y depende de indicadores que 2.8 no calcula | ✅ |
+| 2-10 | 2.10 | ✅ **Se redacta en 2.10, no en 5.11.** La 5.11 escribe la documentación general del producto terminado, tres fases después de que 2.10 decida la política de retención; redactarla con el diseño delante evita que la 5.11 reconstruya de memoria una decisión ajena | ✅ |
+| 2-11 | 2.10 | ✅ **Política de `Compliance` derivada de RL-02, no `RN-*` nueva.** Las `RN-*` son las reglas de cálculo de tiempo del núcleo (`Attendance`, RN-01..16 con numeración cerrada); esta regla vive en `Compliance` sobre un umbral de configuración (regla dura 14), y no activa `/nueva-regla-de-negocio` | ✅ |
 
 ### Fase 5 — [05-fase-5-productizacion](05-fase-5-productizacion.md)
 

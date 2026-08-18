@@ -900,8 +900,8 @@ Orden de ejecución: **0 → 1 → 2 → 5 → 3 → 4**.
 | Fase | Requisitos incluidos |
 |---|---|
 | **Fase 0 — Cimientos** | RNF-M-01..06, **RNF-P-07**, RQ-06, **RQ-12**, RQ-13..14, RS-08, RS-09, RS-10 |
-| **Fase 1 — MVP de fichaje** | RF-AT-01..09, RF-AT-11, RF-QR-01..06, RF-QR-08, RF-ID-01..02 (**autenticación de gestión básica, sin 2FA**), RF-ID-04..09, RF-KI-01..06, RF-KI-09, RF-GP-01, RF-GP-03, RN-01..09, RL-01, RL-05, RS-01..04, RS-12, **RNF-P-01**, **RNF-P-03**, **RNF-D-04**, **RQ-01..03**, **RQ-05**, **RQ-07**, **RQ-10** |
-| **Fase 2 — Gestión y cumplimiento** | RF-PA-01..05, RF-IN-01..05, RF-GP-02, RF-PR-01..04, RF-QR-07, RF-ID-01..03 (**completos: 2FA y ámbito por departamento**), RN-10..15, RL-02..04, RL-06..15, RS-05..07, **RNF-P-04..05**, **RNF-D-02..03**, **RNF-D-05**, **RQ-09** |
+| **Fase 1 — MVP de fichaje** | RF-AT-01..09, RF-AT-11, RF-QR-01..06, RF-QR-08, RF-ID-01..02 (**autenticación de gestión básica, sin 2FA**), RF-ID-04..09, RF-KI-01..06, RF-KI-09, RF-GP-01, RF-GP-03, RF-PA-03..04, RF-IN-05, RF-PR-04, RN-01..09, RN-13, RN-15, RL-01, RL-03..06, RL-09, RL-12, RS-01..04, RS-07, RS-12, RNF-D-02, **RNF-P-01**, **RNF-P-03**, **RNF-D-04**, **RNF-D-05**, **RQ-01..03**, **RQ-05**, **RQ-07**, **RQ-09**, **RQ-10** |
+| **Fase 2 — Gestión y cumplimiento** | RF-PA-01..02, RF-PA-05, RF-IN-01..04, RF-GP-02, RF-PR-01..03, RF-QR-07, RF-ID-01..03 (**completos: 2FA y ámbito por departamento**), RN-10..12, RN-14, RL-02, RL-07..08, RL-10..11, RL-13..15, RS-05..06, **RNF-P-04..05**, **RNF-D-03** |
 | **Fase 5 — Productización** | RF-PD-01..15, RL-16..21, RQ-11, **RF-GP-05** |
 | **Fase 3 — Operación y refuerzo** | RF-PA-06..07, RF-KI-07..08, RF-AT-10, RF-AT-12, RF-IN-06..08, RF-GP-04, RF-PR-05..06, **RN-16**, §9 completo, RS-11, **RNF-P-02**, **RNF-P-06**, **RNF-D-01**, **RQ-04**, **RQ-08** |
 | **Fase 4 — Evolución** | Cuadrantes, vacaciones con aprobación, integración de nómina, multi-centro avanzado |
@@ -918,7 +918,18 @@ Orden de ejecución: **0 → 1 → 2 → 5 → 3 → 4**.
 
 > **Por qué RF-GP-05 se movió de la Fase 3 a la Fase 5.** La importación masiva de plantilla estaba asignada a la Fase 3, que en el orden real de ejecución (0 → 1 → 2 → 5 → 3 → 4) va **después** de la productización. Pero el asistente de puesta en marcha (RF-PD-03) es el primer contacto del cliente con el producto, y un asistente que obliga a teclear a mano la plantilla de un hotel no es un producto instalable — que es el criterio con el que se juzga la Fase 5 entera. Además, el documento 05 §10.2 ya se lo anuncia al cliente como paso de la puesta en marcha. Son 3–4 h que **cambian de fase, no que se suman**: el esfuerzo total del proyecto no varía.
 
-> **Sobre el reparto de `RF-ID-*` y `RL-04`.** La Fase 1 necesita una autenticación de gestión mínima —sin ella, RRHH no puede emitir tarjetas ni ver el panel de estado de credenciales (tarea 1.10)—, pero el 2FA obligatorio y el ámbito por departamento llegan con la tarea 2.1. `RL-04` (fiabilidad e inalterabilidad) se completa en la Fase 2: es donde aterrizan la auditoría encadenada (2.2) y las correcciones versionadas (2.3), que son lo que materializa el requisito.
+> **Sobre el reparto de `RF-ID-*`.** La Fase 1 necesita una autenticación de gestión mínima —sin ella, RRHH no puede emitir tarjetas ni ver el panel de estado de credenciales (tarea 1.10)—, pero el 2FA obligatorio y el ámbito por departamento llegan con la tarea 2.1.
+
+> **[ADR-032](adr/ADR-032-la-fase-1-entrega-un-sistema-legalmente-defendible.md) — la Fase 1 pasa de «piloto interno» a «legalmente defendible».** Cerrada solo con lo que este anexo asignaba antes del 15 de agosto de 2026, la Fase 1 no satisfacía el art. 34.9 ET: sin auditoría inmutable, sin correcciones trazadas y sin exportación para Inspección, un registro erróneo el primer día quedaba sin forma de arreglarse y sin forma de entregarse a un requerimiento. Cinco tareas de la Fase 2 se adelantan a la Fase 1 (`1.14`–`1.18` del plan de implementación) y con ellas trece requisitos:
+>
+> - **`RN-13`, `RL-04`, `RF-PA-04`** — correcciones trazadas (tarea 1.14). Un olvido de fichaje el primer día no puede quedar sin corrección hasta la Fase 2.
+> - **`RS-07`** — cadena de auditoría por hash y su verificación (tarea 1.15). `RL-01` (registro con hora concreta) ya era de la Fase 1; sin la cadena, ese registro es alterable sin dejar rastro durante toda la fase.
+> - **`RF-PA-03`** — detalle de jornada (tarea 1.16). Hoy solo el propio empleado puede ver su registro (`RL-05`); nadie con responsabilidad de gestión puede consultar nada.
+> - **`RL-03`, `RL-06`, `RF-IN-05`** — exportación normalizada para Inspección (tarea 1.17). Uno de los tres pilares que el doc 02 §11.2 nombra como el recorte que no se debe hacer.
+> - **`RF-PR-04`, `RNF-D-05`** — copia de seguridad diaria cifrada, verificada, con prueba de restauración (tarea 1.18). El registro con valor legal no puede depender de un disco sin copia desde el primer fichaje.
+> - **`RN-15`, `RL-09`, `RL-12`** — no cambian de tarea, solo de fase: ya los construyen 1.8 y 1.9 (el quiosco y su cola offline), y el Anexo A simplemente no lo reflejaba.
+>
+> **Lo que NO se movió, a propósito:** `RL-02` (retención de 4 años) sigue en la Fase 2 porque una instalación de Fase 1 no tiene datos de 4 años que purgar — se satisface pasivamente por no construir todavía el purgado, no exige trabajo activo. `RN-14` (empleado de baja) sigue en la Fase 2 tal como ya anotaban las tareas 1.5 y 1.6: en la Fase 1 la revocación funciona; la conservación completa del historial en informes por periodo es de la 2.8.
 
 ## Anexo B — Endpoints (contrato de referencia)
 
@@ -979,7 +990,11 @@ GET    /api/v1/diagnostics/errors          Histórico de errores         [rol: a
 POST   /api/v1/diagnostics/errors/{id}/resolve  Marcar error resuelto   [rol: admin]
 
 POST   /api/v1/employees/import            Importación de plantilla     [rol: rrhh, modo simulación]
-CRUD   /api/v1/employees, /departments, /sites, /contracts, /devices, /absences
+GET    /api/v1/employees, /departments, /sites, /contracts, /devices, /absences
+                                            Consulta y listado            [rol: manager+]
+POST/PATCH /api/v1/employees, /departments, /sites, /contracts, /devices, /absences
+                                            Alta y modificación           [rol: rrhh+]
+POST   /api/v1/employees/{uuid}/offboard   Baja (RN-14)                  [rol: rrhh+]
 GET    /api/v1/health  /api/v1/ready       Sondas de salud
 GET    /metrics                            Métricas Prometheus          [red interna]
 ```

@@ -12,15 +12,15 @@ así que un `git diff` sobre esta matriz solo enseña cambios reales de cobertur
 ## Alcance
 
 - Catálogo: `docs/requisitos.yaml`, **160 requisitos**.
-- Fase en curso (`CURRENT_PHASE`): **0**. Orden real de ejecución: 0 -> 1 -> 2 -> 5 -> 3 -> 4.
+- Fase en curso (`quality.current_phase`): **0**. Orden real de ejecución: 0 -> 1 -> 2 -> 5 -> 3 -> 4.
 - Pruebas etiquetadas: **105** (Pest 105, Playwright 0).
 - Bloquean solo las fases ya ejecutadas: un requisito de la Fase 3 no bloquea mientras se trabaja en la Fase 1.
 
 | Fase | ¿Ejecutada? | Requisitos | Con prueba | Sin prueba |
 |---|---|---|---|---|
 | 0 | sí | 14 | 13 | 1 |
-| 1 | no | 59 | 12 | 47 |
-| 2 | no | 45 | 1 | 44 |
+| 1 | no | 74 | 13 | 61 |
+| 2 | no | 30 | 0 | 30 |
 | 5 | no | 23 | 0 | 23 |
 | 3 | no | 19 | 2 | 17 |
 | 4 | no | 0 | 0 | 0 |
@@ -112,45 +112,45 @@ Ninguno.
 | `RF-IN-02` | 2 | — | Informe agregado por departamento y centro |
 | `RF-IN-03` | 2 | — | Comparativa horas trabajadas frente a horas contratadas, con desviación y exceso de jornada |
 | `RF-IN-04` | 2 | — | Exportación a CSV, XLSX y PDF. Los PDF incluyen sello temporal, identificación del emisor y hash del contenido |
-| `RF-IN-05` | 2 | — | Exportación normalizada para Inspección de Trabajo: registro diario por trabajador y periodo, en formato tabular legible, con las correcciones y su... |
+| `RF-IN-05` | 1 | — | Exportación normalizada para Inspección de Trabajo: registro diario por trabajador y periodo, en formato tabular legible, con las correcciones y su... |
 | `RF-PA-01` | 2 | — | Vista en tiempo real de empleados actualmente fichados: nombre, departamento, hora de entrada, tiempo transcurrido, quiosco de origen |
 | `RF-PA-02` | 2 | — | Filtrado por centro, departamento y estado |
-| `RF-PA-03` | 2 | — | Detalle de jornada por empleado y día: todos los tramos, totales, incidencias y correcciones |
-| `RF-PA-04` | 2 | — | Corrección manual de un fichaje (crear, modificar hora, cerrar turno abierto, anular) con motivo obligatorio de un catálogo más texto libre |
+| `RF-PA-03` | 1 | — | Detalle de jornada por empleado y día: todos los tramos, totales, incidencias y correcciones |
+| `RF-PA-04` | 1 | — | Corrección manual de un fichaje (crear, modificar hora, cerrar turno abierto, anular) con motivo obligatorio de un catálogo más texto libre |
 | `RF-PA-05` | 2 | — | Bandeja de incidencias pendientes con flujo de resolución, asignada al responsable del departamento |
 | `RF-PR-01` | 2 | — | Detección de turnos abiertos anómalos superadas N horas (por defecto 12) |
 | `RF-PR-02` | 2 | — | Consolidación nocturna y reconciliación de los agregados diarios contra los eventos origen, con alerta si hay divergencia |
 | `RF-PR-03` | 2 | — | Purga de datos superado el periodo de retención legal, con confirmación del responsable e informe de lo purgado |
-| `RF-PR-04` | 2 | — | Copia de seguridad diaria cifrada, verificada y con prueba de restauración periódica |
+| `RF-PR-04` | 1 | — | Copia de seguridad diaria cifrada, verificada y con prueba de restauración periódica |
 | `RF-QR-07` | 2 | — | Soporte de rotación de la clave de firma con periodo de solape (key_id en el payload), que permite reimprimir progresivamente sin invalidar toda la... |
 | `RL-02` | 2 | — | Conservación durante 4 años |
-| `RL-03` | 2 | — | Los registros permanecen a disposición de la persona trabajadora, de la representación legal y de la Inspección de Trabajo, con capacidad de entreg... |
-| `RL-04` | 2 | `html/tests/Feature/Quality/TraceabilityCommandTest.php:114` — NO da por cubierto un requisito cuya unica prueba esta saltada | El registro debe ser fiable e inalterable: cualquier modificación posterior queda trazada con autor, momento, valor anterior y motivo |
-| `RL-06` | 2 | — | Exportación en formato legible y tratable, no propietario, para requerimientos de Inspección |
+| `RL-03` | 1 | — | Los registros permanecen a disposición de la persona trabajadora, de la representación legal y de la Inspección de Trabajo, con capacidad de entreg... |
+| `RL-04` | 1 | `html/tests/Feature/Quality/TraceabilityCommandTest.php:114` — NO da por cubierto un requisito cuya unica prueba esta saltada | El registro debe ser fiable e inalterable: cualquier modificación posterior queda trazada con autor, momento, valor anterior y motivo |
+| `RL-06` | 1 | — | Exportación en formato legible y tratable, no propietario, para requerimientos de Inspección |
 | `RL-07` | 2 | — | Base jurídica: cumplimiento de obligación legal (art |
 | `RL-08` | 2 | — | Minimización: el sistema no almacena más datos de los necesarios |
-| `RL-09` | 2 | — | Información en capas: aviso visible en el quiosco con enlace o QR a la política completa |
+| `RL-09` | 1 | — | Información en capas: aviso visible en el quiosco con enlace o QR a la política completa |
 | `RL-10` | 2 | — | Derechos ARSULIPO: procedimientos para acceso, rectificación mediante corrección trazada, limitación y portabilidad |
 | `RL-11` | 2 | — | Retención: política por tipo de dato |
-| `RL-12` | 2 | — | Cifrado: TLS 1.3 en tránsito; cifrado en reposo de copias de seguridad y del padrón cacheado en la tablet |
+| `RL-12` | 1 | — | Cifrado: TLS 1.3 en tránsito; cifrado en reposo de copias de seguridad y del padrón cacheado en la tablet |
 | `RL-13` | 2 | — | EIPD: se recomienda evaluación de impacto por tratarse de control sistemático de personal trabajadora |
 | `RL-14` | 2 | — | Datos alojados en la UE, en la infraestructura del propio cliente |
 | `RL-15` | 2 | — | Notificación de brechas: procedimiento documentado con plazo de 72 h y capacidad técnica de determinar el alcance a partir de los logs de auditoría |
 | `RN-10` | 2 | — | Descanso entre jornadas: se alerta si entre el fin de un turno y el inicio del siguiente median menos de 12 h (art |
 | `RN-11` | 2 | — | Jornada diaria ordinaria: se alerta si un empleado supera 9 h efectivas en una jornada |
 | `RN-12` | 2 | — | Descanso en jornada continuada: se alerta si un tramo continuo supera 6 h sin pausa registrada |
-| `RN-13` | 2 | — | Ningún registro de fichaje se borra ni se sobrescribe |
+| `RN-13` | 1 | — | Ningún registro de fichaje se borra ni se sobrescribe |
 | `RN-14` | 2 | — | Un empleado dado de baja conserva su historial; su credencial queda revocada y sus escaneos son rechazados |
-| `RN-15` | 2 | — | El horario de un fichaje offline es el occurred_at del dispositivo, marcado con su retraso de sincronización |
-| `RNF-D-02` | 2 | — | RPO ≤ 15 min (copias más WAL) |
+| `RN-15` | 1 | — | El horario de un fichaje offline es el occurred_at del dispositivo, marcado con su retraso de sincronización |
+| `RNF-D-02` | 1 | — | RPO ≤ 15 min (copias más WAL) |
 | `RNF-D-03` | 2 | — | Degradación elegante: si cae el WebSocket, el panel hace fallback a sondeo cada 15 s |
-| `RNF-D-05` | 2 | — | Prueba de restauración de copia documentada y ejecutada trimestralmente |
+| `RNF-D-05` | 1 | — | Prueba de restauración de copia documentada y ejecutada trimestralmente |
 | `RNF-P-04` | 2 | — | Carga del panel de presencia en vivo (500 empleados) |
 | `RNF-P-05` | 2 | — | Generación de informe mensual de 500 empleados |
-| `RQ-09` | 2 | — | Prueba de restauración de copia automatizada y ejecutada al menos trimestralmente |
+| `RQ-09` | 1 | — | Prueba de restauración de copia automatizada y ejecutada al menos trimestralmente |
 | `RS-05` | 2 | — | Todo acceso a datos personales de terceros queda registrado en el trail de auditoría |
 | `RS-06` | 2 | — | 2FA obligatorio para admin, rrhh y auditor |
-| `RS-07` | 2 | — | El trail de auditoría es detectablemente manipulable: cada entrada encadena el hash de la anterior; la cadena se verifica a diario y cualquier rotu... |
+| `RS-07` | 1 | — | El trail de auditoría es detectablemente manipulable: cada entrada encadena el hash de la anterior; la cadena se verifica a diario y cualquier rotu... |
 | `RF-AT-10` | 3 | — | Control de desfase de reloj |
 | `RF-AT-12` | 3 | `html/tests/Contract/OpenApiContractTest.php:204` — distingue la pausa del fin de turno en los dos sentidos | El sistema soporta fichaje de pausa (inicio y fin de descanso) diferenciado del fin de turno, configurable por centro |
 | `RF-GP-04` | 3 | — | Registro de ausencias (vacaciones, baja médica, permiso) para no contabilizar como absentismo no justificado |
