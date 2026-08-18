@@ -383,19 +383,40 @@ docs-consistency: ## Coherencia entre los documentos y los ficheros que los ejec
 # y --min bloquea; con artisan, ni una cosa ni la otra.
 PEST := vendor/bin/pest
 
+# Cobertura y mutacion se activan SOLAS en cuanto exista el primer modelo de
+# dominio, en el modulo que sea.
+#
+# La primera version miraba solo Attendance, porque es el modulo que escribe la
+# tarea 1.1. Pero si el primer modelo aterrizara en Compliance —o en cualquier
+# otro—, las dos puertas habrian seguido apagadas sin decir nada, y el dominio
+# habria crecido sin umbral de cobertura ni MSI hasta que alguien lo notara a
+# ojo. La condicion tiene que ser la que de verdad importa: «¿hay ya dominio que
+# medir?», no «¿hay dominio en el modulo que yo esperaba?».
+DOMAIN_MODELS := $(wildcard backend/app/Modules/*/Domain/Model/*.php)
+
 coverage: ## Cobertura: dominio >= 90 por ciento, global >= 75 (doc 02 seccion 9.2)
-ifeq ($(wildcard backend/app/Modules/Attendance/Domain/Model/*.php),)
+ifeq ($(DOMAIN_MODELS),)
 	@echo "[make] El dominio llega en la tarea 1.1: todavia no hay cobertura exigible."
 	@echo "[make] Para ver la cobertura actual sin umbral: make coverage-now"
 else
 	$(RUN_APP_XDEBUG) $(PEST) --coverage --min=75
+# PENDIENTE (tarea 1.2, RNF-M-01): aqui se aplica el umbral GLOBAL del 75 %, y
+# el requisito son dos: dominio >= 90 % y global >= 75 % (doc 02 §9.2). El
+# `--min` de Pest es uno solo y global, asi que la mitad del dominio no la
+# comprueba nadie hoy —ni este objetivo ni su prueba de QualityGatesTest, que
+# solo verifica que el 75 esta escrito—.
+#
+# Se deja anotado y no resuelto a proposito: sin dominio no hay nada que medir,
+# y un umbral inventado sobre cero ficheros seria otra puerta decorativa. Lo
+# cierra la 1.2, con el primer modelo delante, y la via es una segunda pasada
+# acotada a Modules/*/Domain con su propio minimo.
 endif
 
 coverage-now: ## Cobertura actual sin umbral, util antes de que exista el dominio
 	$(RUN_APP_XDEBUG) $(PEST) --coverage
 
 mutate: ## Mutacion sobre el dominio, MSI mayor o igual a 80 por ciento
-ifeq ($(wildcard backend/app/Modules/Attendance/Domain/Model/*.php),)
+ifeq ($(DOMAIN_MODELS),)
 	$(call notice,Mutacion NO ejecutada: Modules/*/Domain no existe todavia.)
 	@echo "[make] La mutacion se ejecuta sobre Modules/*/Domain, que se escribe en la"
 	@echo "[make] tarea 1.1. Sin dominio no hay mutantes: el umbral MSI >= 80 por ciento"
