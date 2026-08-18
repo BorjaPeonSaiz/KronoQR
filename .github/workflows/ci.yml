@@ -3,7 +3,7 @@
 #   ① Lint + Tipos            Pint · PHPStan 9 · ESLint · vue-tsc · ShellCheck   ~1 min
 #                             + @redocly/cli sobre docs/api/openapi.yaml
 #   ② Arquitectura            Deptrac · Pest Arch                                ~30 s
-#   ③ Unitarias + Mutacion    Pest · MSI >= 80 %                                 ~2 min
+#   ③ Unitarias + Mutacion    Pest Unit · Contract · Feature · MSI >= 80 %       ~2 min
 #
 # Las tres se ejecutan en CADA push y tienen que devolver resultado en menos de
 # 4 minutos en total. El limite no es estetico: una CI lenta se acaba ignorando,
@@ -17,9 +17,11 @@
 #                     Se ejecutan en pull request y antes de publicar version
 #                     (§10.1), y quedan fuera de la tarea 0.4.
 #
-# Consecuencia que conviene tener presente: hoy las suites Feature, Integration y
-# Contract NO se ejecutan en ningun push, porque su etapa es la ④. Mientras la ④
-# no exista, una regresion en una prueba Feature no la ve la CI.
+# Contract y Feature SI se ejecutan en cada push desde el cierre de la Fase 0,
+# aunque el §10.1 las situe en la ④. Mientras la ④ no existiera, no las ejecutaba
+# nadie, y `qa:traceability` cuenta sus etiquetas: un requisito podia figurar
+# cubierto en la matriz por una prueba parada. Cuestan segundos y no necesitan
+# base de datos. Integration sigue esperando a la ④ porque exige PostgreSQL.
 #
 # Secretos: ninguno. Este workflow no lee `secrets.*`, no escribe ficheros de
 # entorno y no imprime variables. El unico token que aparece es `github.token`,
@@ -384,6 +386,18 @@ jobs:
 
       - name: Pest — suite unitaria (dominio puro, sin base de datos)
         run: make test-unit
+
+      - name: Pest — contrato OpenAPI y feature
+        # Añadido al cerrar la Fase 0. Antes su sitio era la etapa ④, que se
+        # ejecuta en pull request y todavia no existe, asi que ninguna de las dos
+        # corria en ningun push: las pruebas de contrato de ADR-031 se escribieron
+        # y no las ejecutaba nadie.
+        #
+        # El agujero de verdad era el otro: `qa:traceability` si cuenta las
+        # etiquetas de estas suites, de modo que un requisito podia figurar
+        # cubierto en la matriz por una prueba parada. Cuestan segundos y no
+        # necesitan base de datos; no hay razon para que esperen a la ④.
+        run: make test-contract
 
       - name: Mutacion sobre Modules/*/Domain (MSI >= 80 %)
         # El umbral --min=80 vive en el Makefile, no aqui. Hoy este paso NO

@@ -2,8 +2,7 @@
 
 declare(strict_types=1);
 
-use RuntimeException;
-use Tests\Architecture\Support\ModuleTree;
+use Tests\Architecture\Support\Repo;
 
 /*
  * Las puertas de calidad de la Fase 0, comprobadas como pruebas.
@@ -21,56 +20,21 @@ use Tests\Architecture\Support\ModuleTree;
  */
 
 /**
- * Raiz del repositorio, que NO es la del backend.
+ * Ruta absoluta de un fichero del repositorio, relativa a su raiz.
  *
- * Dentro del contenedor solo esta montado `backend/` (en /var/www/html), asi
- * que la raiz llega por un montaje aparte de solo lectura. En la CI, que corre
- * sobre el arbol completo sin contenedor, es el directorio padre de `backend/`.
- * Las dos rutas se resuelven aqui para que la suite de el mismo resultado en
- * los dos sitios: una prueba que pasa en la CI y falla en local no verifica
- * nada, solo enseña donde se ejecuto.
+ * La resolucion de la raiz vive en Tests\Architecture\Support\Repo, que la
+ * comparte con las demas pruebas que leen ficheros de fuera de backend/.
  */
-function repoRoot(): string
-{
-    // Se busca por MARCA y no contando niveles de directorio. La primera
-    // version contaba —y contaba mal—: dentro del contenedor el montaje
-    // /var/www/repo tapaba el error, y en la CI, que corre sobre el arbol
-    // completo, resolvia a <repo>/backend y buscaba backend/backend/phpstan.neon.
-    //
-    // Las nueve pruebas pasaban en local y fallaban en el runner, que es
-    // exactamente lo que este ayudante existe para evitar. Contar niveles es
-    // fragil ante cualquier cambio de ubicacion; una marca no.
-    $candidates = ['/var/www/repo', ...array_map(
-        static fn (int $levels): string => \dirname(ModuleTree::root(), $levels),
-        [2, 3, 4],
-    )];
-
-    foreach ($candidates as $candidate) {
-        if (is_file($candidate.'/Makefile') && is_dir($candidate.'/docs')) {
-            return $candidate;
-        }
-    }
-
-    throw new RuntimeException(
-        'No se encuentra la raiz del repositorio. Se reconoce por tener Makefile y docs/. '
-        .'Dentro del contenedor llega montada en /var/www/repo (infra/compose.dev.yaml); '
-        .'en la CI es el directorio padre de backend/.'
-    );
-}
-
-/** Ruta absoluta de un fichero del repositorio, relativa a su raiz. */
 function repoFile(string $relative): string
 {
-    return repoRoot().'/'.ltrim($relative, '/');
+    return Repo::file($relative);
 }
 
 function repoContents(string $relative): string
 {
-    $path = repoFile($relative);
+    expect(is_file(Repo::file($relative)))->toBeTrue($relative.' no existe en el repositorio.');
 
-    expect(file_exists($path))->toBeTrue($relative.' no existe en el repositorio.');
-
-    return (string) file_get_contents($path);
+    return Repo::contents($relative);
 }
 
 it('exige PHPStan en el nivel maximo', function (): void {
@@ -261,10 +225,34 @@ it('analiza dependencias y codigo en cada integracion', function (): void {
 it('bloquea la integracion si un requisito implementado no tiene prueba', function (): void {
     // RQ-13. Esta es la prueba de la propia trazabilidad: comprueba que el
     // catalogo existe, que no esta vacio y que la etapa que lo ejecuta sigue
-    // en el pipeline. Que el comando SEPA fallar lo prueba
-    // TraceabilityCommandTest con un sabotaje.
+    // en el pipeline. Que el comando SEPA fallar lo prueban los sabotajes de
+    // tests/Feature/Quality/TraceabilityCommandTest.php.
     $catalog = repoContents('docs/requisitos.yaml');
 
     expect(substr_count($catalog, '- { id:'))->toBeGreaterThan(100);
     expect($catalog)->toContain('fase: 0');
+})->group('RQ-13');
+
+it('mantiene el alcance de la trazabilidad versionado y no en el entorno', function (): void {
+    // RQ-13. `current_phase` decide a que requisitos se les exige prueba. Es
+    // ESTADO DEL REPOSITORIO, no configuracion de despliegue, y por eso tiene
+    // que valer lo mismo en el portatil y en el runner.
+    //
+    // Nacio como `env('CURRENT_PHASE', 0)` y la variable no se declaraba en
+    // ningun sitio versionado: ni .env.example, ni ci.yml, ni compose. Como
+    // backend/.env esta en .gitignore, en la CI el valor era siempre 0. Cerrada
+    // la Fase 1, el portatil de quien la cerrara habria exigido prueba a sus
+    // requisitos y la CI no. Una puerta que solo salta donde nadie mira.
+    $config = repoContents('backend/config/quality.php');
+
+    expect($config)->toMatch(
+        '/\'current_phase\'\s*=>\s*\d+\s*,/',
+        'quality.current_phase tiene que ser un literal versionado. Si vuelve a leerse del '
+        .'entorno, la CI y el portatil dejaran de comprobar lo mismo sin que nadie se entere.'
+    );
+
+    expect($config)->not->toMatch(
+        '/\'current_phase\'\s*=>[^,]*env\s*\(/',
+        'quality.current_phase ha vuelto a leerse de una variable de entorno.'
+    );
 })->group('RQ-13');

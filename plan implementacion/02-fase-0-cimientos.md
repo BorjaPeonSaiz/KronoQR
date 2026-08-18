@@ -620,7 +620,7 @@ Resultado esperado: el contrato pasa la validación, los tres clientes se genera
 3. Configurar **ShellCheck** y **shfmt -i 2 -d** sobre `infra/scripts/` y sobre los scripts entregados al cliente, con umbral **0 hallazgos** (§9.2), en la etapa ①.
 4. Configurar **Semgrep** con reglas PHP/Laravel, umbral **0 hallazgos de severidad alta** (§9.2). Vive en la etapa ⑤, fuera del alcance de 0.4, pero se configura aquí.
 5. Implementar el comando `php artisan qa:traceability` (Anexo C del doc 02): recorre la suite, extrae las etiquetas y genera `docs/trazabilidad-pruebas.md` (§9.6).
-6. **Crear `docs/requisitos.yaml`, la fuente legible por máquina del Anexo A**, y una variable de configuración `CURRENT_PHASE`. Sin esto, `--check` no tiene de dónde leer su alcance:
+6. **Crear `docs/requisitos.yaml`, la fuente legible por máquina del Anexo A**, y la clave de configuración `quality.current_phase`. Sin esto, `--check` no tiene de dónde leer su alcance:
 
    ```yaml
    # docs/requisitos.yaml — una entrada por requisito, expandido, sin rangos
@@ -635,7 +635,7 @@ Resultado esperado: el contrato pasa la validación, los tres clientes se genera
    - **El YAML no diverge del Anexo A**: mismo conjunto de identificadores y misma fase, comparando contra la tabla del doc 01. Es el mismo patrón que la tarea 3.2 aplica a los runbooks —comprobar que el fichero referenciado existe y coincide—, aplicado aquí a los requisitos.
    - **El expansor de rangos funciona**: `RF-ID-04..09` produce **seis** identificadores, no dos ni una cadena literal.
 
-7. Implementar `php artisan qa:traceability --check`: **falla si un requisito implementado no tiene prueba**. Lee el alcance de `docs/requisitos.yaml` filtrando por `fase <= CURRENT_PHASE` en el orden real de ejecución (0 → 1 → 2 → 5 → 3 → 4), de modo que *«un requisito de la Fase 3 no bloquea mientras se trabaja en la Fase 1»* (§9.6).
+7. Implementar `php artisan qa:traceability --check`: **falla si un requisito implementado no tiene prueba**. Lee el alcance de `docs/requisitos.yaml` quedándose con las fases ya ejecutadas **en el orden real** (0 → 1 → 2 → 5 → 3 → 4), de modo que *«un requisito de la Fase 3 no bloquea mientras se trabaja en la Fase 1»* (§9.6). No es una comparación `fase <= actual`: numéricamente 3 < 5, y con `quality.current_phase = 5` esa comparación exigiría prueba a las fases 3 y 4, que todavía no se han ejecutado.
 8. Soportar los dos formatos de etiqueta del §9.6: Pest con `->group('RN-05', 'RF-AT-08')` y Playwright con `{ tag: ['@RF-KI-03', '@RF-KI-04'] }`.
 9. **Implementar `php artisan docs:consistency --check`**, que verifica la coherencia entre los documentos que mandan y los ficheros que los ejecutan. Falla si:
 
@@ -655,7 +655,7 @@ Resultado esperado: el contrato pasa la validación, los tres clientes se genera
 - Configuración de Pint, PHPStan, Rector, Deptrac, ESLint + `eslint-plugin-vue`, Prettier, `vue-tsc`, ShellCheck, shfmt y Semgrep
 - `backend/app/Modules/Product/…` o comando de consola equivalente para `qa:traceability` y `docs:consistency` — ⚠️ No cubierto por los documentos — decidir: el módulo en el que viven los comandos. El Anexo C los agruparía bajo «Calidad y trazabilidad», sin asignarles módulo
 - **`docs/requisitos.yaml`** — fuente legible por máquina del Anexo A, con `id`, `fase` y `titulo` por requisito, sin rangos
-- **`CURRENT_PHASE`** en configuración (Anexo B) — ⚠️ No cubierto por los documentos: es una variable nueva. Su valor por defecto es la fase en curso del plan y **se actualiza al cerrar cada fase**, como parte del procedimiento de cierre
+- **`quality.current_phase`** en `backend/config/quality.php` — ⚠️ No cubierto por los documentos: es una clave nueva. **Literal versionado, no variable de entorno**: es estado del repositorio, no configuración de despliegue, y tiene que valer lo mismo en la CI y en cualquier portátil. Nació como `env('CURRENT_PHASE', 0)` sin declararse en `.env.example` ni en el workflow, de modo que en la CI era siempre 0 y el bloqueo no habría avanzado nunca de fase. **Se actualiza al cerrar cada fase**, como parte del procedimiento de cierre
 - `docs/trazabilidad-pruebas.md` (§9.6), generado
 - Etapa ③b en `.github/workflows/ci.yml`, con los **dos** comandos
 
@@ -692,7 +692,7 @@ Resultado esperado: la matriz se genera, `--check` está en verde en el estado l
 - [ ] **`docs:consistency --check` en verde, en la etapa ③b y demostrado capaz de fallar en las tres comprobaciones.**
 - [ ] Convenciones del §3.5 respetadas, verificadas por Pint, PHPStan, ESLint y `vue-tsc`.
 - [ ] PHPStan nivel 9 sin errores nuevos.
-- [ ] Runbook o documentación actualizada si añade un modo de fallo o un parámetro — un `--check` en rojo lo es, y `CURRENT_PHASE` es un parámetro nuevo del Anexo B.
+- [ ] Runbook o documentación actualizada si añade un modo de fallo o un parámetro — un `--check` en rojo lo es, y `quality.current_phase` es una clave de configuración nueva.
 - [ ] Revisado por otra persona, o por `revisor-codigo` y validado por una persona.
 
 ---

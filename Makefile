@@ -134,7 +134,7 @@ endif
 
 .DEFAULT_GOAL := help
 .PHONY: help up down restart build ps logs shell seed test test-unit test-integration \
-        test-arch quality tools-ready php-lint deptrac rector sh-lint api-lint sast \
+        test-arch test-contract quality tools-ready php-lint deptrac rector sh-lint api-lint sast \
         traceability traceability-check docs-consistency deps-audit-php deps-audit-js coverage coverage-now mutate e2e clean changelog changelog-check tool-versions
 
 help: ## Muestra esta ayuda
@@ -229,6 +229,27 @@ ifeq ($(wildcard backend/artisan),)
 	@echo [make] La aplicacion Laravel llega en la tarea 0.2: todavia no hay suite que ejecutar.
 else
 	$(RUN_APP) php artisan test --testsuite=Integration
+endif
+
+# Contract y Feature juntas y en cada push desde el cierre de la Fase 0.
+#
+# Hasta entonces su sitio era la etapa (4), que se ejecuta en pull request, y la
+# etapa (4) no existia: ninguna de las dos corria en ningun push. Eso dejaba dos
+# agujeros a la vez. El evidente, que una regresion en una prueba de contrato
+# —OpenAPI es la autoridad #2— podia vivir meses sin que nadie la viera. Y el
+# que no se ve: `qa:traceability` SI cuenta sus etiquetas, asi que un requisito
+# podia figurar cubierto en la matriz por una prueba que la CI no ejecutaba
+# nunca. La matriz es la evidencia de que cada obligacion legal esta verificada
+# en cada cambio; con una suite parada, era una lista de intenciones.
+#
+# Cuestan segundos y no necesitan base de datos. Cuando la etapa (4) exista con
+# Integration y E2E, esto se queda igual: son las baratas, y las baratas van en
+# cada push.
+test-contract: ## Contrato OpenAPI y feature, las dos suites que la CI ejecuta en cada push
+ifeq ($(wildcard backend/artisan),)
+	@echo [make] La aplicacion Laravel llega en la tarea 0.2: todavia no hay suite que ejecutar.
+else
+	$(RUN_APP) php artisan test --testsuite=Contract,Feature
 endif
 
 # Etapa 2 de la CI junto a Deptrac. Son las dos mitades de la misma frontera:

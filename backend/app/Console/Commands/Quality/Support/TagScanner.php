@@ -37,6 +37,41 @@ final class TagScanner
     private const string LOOKS_LIKE_REQUIREMENT = '/^@?R[A-Z]{0,3}-/u';
 
     /**
+     * Una prueba que no se ejecuta no cubre nada.
+     *
+     * `it('conserva el registro anterior')->group('RL-04')->skip('pendiente de
+     * la 2.4')` haria figurar RL-04 como cubierto en la matriz —que se entrega
+     * como evidencia de que cada obligacion legal tiene una prueba automatica—
+     * sin que se verifique absolutamente nada. Lo mismo con `->todo()` y con
+     * `test.skip(` de Playwright.
+     *
+     * No se descartan en silencio: van a `malformed`, que el comando enseña. El
+     * requisito se queda entonces sin cobertura y `--check` bloquea, que es el
+     * lado correcto por el que fallar.
+     *
+     * El alcance es DELIBERADAMENTE el salto declarativo de la cadena, no un
+     * `markTestSkipped()` dentro del cuerpo: ese es condicional —«salta si no
+     * hay extension»— y leyendo el fichero como texto no hay forma de saber si
+     * la condicion se cumple. Marcarlo tambien habria quitado cobertura a
+     * pruebas que si se ejecutan.
+     */
+    private const string SKIPPED_AFTER = '/->\s*(?:skip|todo)\s*\(/u';
+
+    /**
+     * El mismo salto, encadenado por DELANTE: `->skip('...')->group('RL-04')`.
+     *
+     * Se ancla al final de la ventana —que termina justo donde empieza la
+     * etiqueta— para no entrar nunca en el cuerpo de la prueba. Sin ese ancla,
+     * una prueba que menciona `->skip(` en su cuerpo perdia sus propias
+     * etiquetas: paso de verdad al escribir esto, y el sintoma fue que las
+     * pruebas de este mismo fichero dejaron de cubrir RQ-13.
+     */
+    private const string SKIPPED_BEFORE = '/(?:->\s*(?:skip|todo)\s*\([^()]*\)|\btest\s*\.\s*(?:skip|fixme)\s*\([^()]*)\s*$/u';
+
+    /** Cuanto texto se mira por detras de la etiqueta. Una cadena no es mas larga. */
+    private const int CHAIN_LOOKBEHIND = 200;
+
+    /**
      * @param  array<string, list<string>>  $roots  Herramienta -> directorios.
      */
     public function __construct(private readonly array $roots, private readonly string $basePath) {}
@@ -117,6 +152,13 @@ final class TagScanner
 
             $offset = $match[0][1];
 
+            if (self::isSkipped($source, $offset)) {
+                $malformed[] = $this->relative($file).':'.self::lineAt($source, $offset)
+                    .': la prueba esta saltada y no cubre '.implode(', ', $classified['requirements']);
+
+                continue;
+            }
+
             $tests[] = new TaggedTest(
                 $tool,
                 $this->relative($file),
@@ -164,6 +206,33 @@ final class TagScanner
     private static function lineAt(string $source, int $offset): int
     {
         return substr_count(substr($source, 0, $offset), "\n") + 1;
+    }
+
+    /**
+     * ¿La etiqueta pertenece a una prueba que no se va a ejecutar?
+     *
+     * Se mira la CADENA, no la sentencia entera, porque el salto puede ir a
+     * cualquiera de los dos lados de la etiqueta:
+     *
+     *     it('...')->group('RL-04')->skip('pendiente');
+     *     it('...')->skip('pendiente')->group('RL-04');
+     *
+     * Por delante se mira una ventana corta y anclada; por detras, hasta el `;`
+     * que cierra la sentencia. Lo que nunca se mira es el cuerpo de la prueba:
+     * que una prueba HABLE de `->skip(` no la convierte en saltada.
+     */
+    private static function isSkipped(string $source, int $offset): bool
+    {
+        $end = strpos($source, ';', $offset);
+        $length = ($end === false ? strlen($source) : $end) - $offset;
+
+        if (preg_match(self::SKIPPED_AFTER, substr($source, $offset, $length)) === 1) {
+            return true;
+        }
+
+        $lookbehind = min($offset, self::CHAIN_LOOKBEHIND);
+
+        return preg_match(self::SKIPPED_BEFORE, substr($source, $offset - $lookbehind, $lookbehind)) === 1;
     }
 
     /**
