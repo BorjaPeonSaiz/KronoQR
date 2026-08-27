@@ -249,11 +249,39 @@ else
 	$(RUN_APP) php artisan test
 endif
 
-test-unit: ## Dominio puro, sin base de datos, menos de 2 s
+# El presupuesto de la suite unitaria (doc 02 §9.2, doc 03). El plan lo cita
+# tres veces como bloqueante del camino critico y era el unico umbral de la
+# tabla sin herramienta que lo verificase — y ya estaba superado (2,6-2,7 s
+# medidos en el cierre de la Fase 1) sin que nada avisara. El valor es mas
+# holgado que los "2 s" literales del plan porque se mide donde de verdad se
+# ejecuta: el contenedor sobre Docker Desktop/NTFS paga arranque y E/S que un
+# runner Linux no paga. Se puede apretar por entorno: make test-unit
+# UNIT_SUITE_MAX_SECONDS=2
+UNIT_SUITE_MAX_SECONDS ?= 4
+
+# La duracion se lee de la linea "Duration:" de Pest —el tiempo de la suite, no
+# el del arranque de artisan ni el de docker exec— y se compara con awk porque
+# sh no sabe de decimales. Si el formato de salida de Pest cambiara y la linea
+# no apareciera, el gate avisa en vez de aprobar en silencio.
+test-unit: ## Dominio puro, sin base de datos, con presupuesto de duracion
 ifeq ($(wildcard backend/artisan),)
 	@echo [make] La aplicacion Laravel llega en la tarea 0.2: todavia no hay suite que ejecutar.
 else
-	$(RUN_APP) php artisan test --testsuite=Unit
+	@$(RUN_APP) php artisan test --testsuite=Unit > .unit-suite.log 2>&1; \
+	status=$$?; \
+	cat .unit-suite.log; \
+	dur=$$(grep 'Duration:' .unit-suite.log | grep -oE '[0-9]+\.[0-9]+' | tail -1); \
+	rm -f .unit-suite.log; \
+	if [ $$status -ne 0 ]; then exit $$status; fi; \
+	if [ -z "$$dur" ]; then \
+		echo "[make] AVISO: no se pudo leer la duracion de la suite; el presupuesto de $(UNIT_SUITE_MAX_SECONDS) s no se ha comprobado."; \
+	elif awk "BEGIN { exit !($$dur > $(UNIT_SUITE_MAX_SECONDS)) }"; then \
+		echo "[make] La suite unitaria ha tardado $$dur s y el presupuesto es $(UNIT_SUITE_MAX_SECONDS) s (doc 02 §9.2)."; \
+		echo "[make] Una suite unitaria lenta deja de ejecutarse en cada cambio, que es su unica razon de ser."; \
+		exit 1; \
+	else \
+		echo "[make] Suite unitaria en $$dur s, dentro del presupuesto de $(UNIT_SUITE_MAX_SECONDS) s."; \
+	fi
 endif
 
 test-integration: ## Repositorios contra PostgreSQL real

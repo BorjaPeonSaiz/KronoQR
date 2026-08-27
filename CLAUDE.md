@@ -83,7 +83,7 @@ Estas reglas existen porque su incumplimiento produce un registro horario legalm
 ```bash
 make up                      # Levanta el entorno completo
 make test                    # Toda la suite
-make test-unit               # Dominio, sin base de datos, < 2 s
+make test-unit               # Dominio, sin base de datos, con presupuesto de duración
 make quality                 # Pint + PHPStan 9 + Deptrac + Rector dry-run
 make mutate                  # Mutación sobre el dominio (MSI ≥ 80 %)
 make e2e                     # Playwright con cámara simulada
