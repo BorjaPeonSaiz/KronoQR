@@ -9,8 +9,8 @@
 // Las dos cabeceras de recuento son las mismas cifras que quedan en `audit_log`.
 // Enseñarlas no es cosmetica: quien atiende un requerimiento tiene que poder
 // decir cuantos tramos y cuantas correcciones entrego sin abrir el fichero.
-import type { BinaryDocument } from '@/shared/api/http'
-import { requestBlob } from '@/shared/api/http'
+import type { BinaryDocument } from '@kronoqr/web-kit/http'
+import { requestBlob } from '@kronoqr/web-kit/http'
 
 export interface LegalExportQuery {
   /** Primer dia del periodo, `YYYY-MM-DD`, por fecha de jornada (RN-05). */
@@ -33,7 +33,7 @@ export interface LegalExport {
 }
 
 function counted(document_: BinaryDocument, header: string): number | null {
-  const raw = document_.headers?.get(header) ?? null
+  const raw = document_.headers.get(header)
   const value = raw === null ? Number.NaN : Number.parseInt(raw, 10)
 
   return Number.isFinite(value) ? value : null

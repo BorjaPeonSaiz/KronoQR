@@ -84,6 +84,9 @@ export type ClientErrorCode =
   | 'kiosk.clock.skew_detected'
   | 'kiosk.unhandled_error'
   | 'kiosk.service_worker.failed'
+  // Fichaje de respaldo por PIN (tarea 1.12). Nunca lleva el PIN, ni sellado ni
+  // en claro: solo dice que el sellado en si ha fallado (RF-AT-11, RL-12).
+  | 'kiosk.pin.seal_failed'
 
 export interface ClientErrorEvent {
   readonly code: ClientErrorCode

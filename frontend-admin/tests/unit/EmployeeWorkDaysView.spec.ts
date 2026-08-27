@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import EmployeeWorkDaysView from '@/features/workdays/EmployeeWorkDaysView.vue'
 import es from '@/shared/i18n/locales/es.json'
 import type { EmployeeWorkDays } from '@/shared/api/types'
-import { announcement, clearAnnouncement } from '@/shared/ui/announcer'
+import { announcement, clearAnnouncement } from '@kronoqr/web-kit/announcer'
 import { EMPLOYEE_UUID, employee, employeeWorkDays, shiftEntry, workDay } from './support/fixtures'
 import { jsonResponse, mountView, problemResponse, settle, stubFetch } from './support/harness'
 

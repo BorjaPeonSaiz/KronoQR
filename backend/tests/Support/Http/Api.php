@@ -6,6 +6,7 @@ namespace Tests\Support\Http;
 
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Testing\TestResponse;
 use Symfony\Component\HttpFoundation\Response;
 use Tests\Feature\Quality\Support\Commands;
@@ -129,6 +130,17 @@ final readonly class Api
             server: $server,
             content: $body === [] ? null : json_encode($body, JSON_THROW_ON_ERROR),
         );
+
+        // Cada llamada de este cliente simula una peticion HTTP NUEVA, y en una
+        // peticion nueva no hay nadie autenticado todavia. Sin esta linea no es
+        // asi: el `AuthManager` es un singleton del contenedor y `RequestGuard`
+        // memoriza el usuario que resolvio la primera vez, asi que la segunda
+        // llamada de una misma prueba reutiliza aquel sin volver a comprobar el
+        // token. Eso hace invisibles justo las comprobaciones que se hacen en
+        // CADA peticion —cuenta desactivada, quiosco revocado (RS-04), empleado
+        // dado de baja o PIN restablecido (RN-14, RF-ID-09)—: una prueba que las
+        // ejercite pasaria en verde con el codigo roto.
+        Auth::forgetGuards();
 
         /** @var Kernel $kernel */
         $kernel = app(Kernel::class);

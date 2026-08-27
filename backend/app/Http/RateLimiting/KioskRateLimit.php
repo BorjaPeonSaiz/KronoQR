@@ -18,14 +18,13 @@ use Illuminate\Http\Request;
  * **todos los quioscos salen por la misma IP**: con un limite unico por IP, una
  * tablet con un bucle defectuoso consumiria la cuota de todas las demas y el
  * sintoma seria «el quiosco de recepcion no ficha», con la causa a tres metros de
- * distancia. RS-02 lo dice literalmente: se limita «por dispositivo, por
- * credencial y por IP».
+ * distancia. RS-02 lo dice literalmente: se limita «por dispositivo y por IP».
  *
  * La clave por dispositivo sale del **token autenticado**, nunca de un campo de
  * la peticion: si viajara en el cuerpo, quien quisiera saltarse su cuota solo
  * tendria que cambiar el numero.
  *
- * ## Y por IP tambien, porque RS-02 enumera las tres
+ * ## Y por IP tambien, porque RS-02 enumera los dos
  *
  * El limite por IP **no se elimina para la red interna: se eleva** (§7.1). Se
  * fija al mismo valor que la zona interna de Nginx para que el techo efectivo lo
@@ -43,6 +42,17 @@ use Illuminate\Http\Request;
  * El trafico **sin autenticar** lo para Nginx (30 r/m desde fuera de
  * `KIOSK_VLAN_CIDR`), que es la capa que corresponde: un limitador de aplicacion
  * que quiera frenar peticiones anonimas ya ha pagado el arranque del framework.
+ *
+ * ## Lo que aqui NO hay: un limite por credencial (ADR-038)
+ *
+ * No falta, se decidio que no lo hubiera. Un contador por tarjeta no frena la
+ * enumeracion —quien enumera prueba credenciales distintas y nunca llega a
+ * disparar el contador de ninguna—, la repeticion de una misma tarjeta ya la
+ * absorbe el periodo de gracia de RF-AT-06 como desenlace **aceptado**
+ * (ADR-031), y un `429` por credencial seria la unica forma en que este producto
+ * puede dejar a una persona concreta sin fichar: bastaria con inundar con su
+ * tarjeta (regla dura 19). El limite por sujeto vive donde el secreto se puede
+ * adivinar, que es el PIN (RS-12).
  *
  * ## El 429 sale en `problem+json`
  *

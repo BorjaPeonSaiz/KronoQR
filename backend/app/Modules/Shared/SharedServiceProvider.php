@@ -6,7 +6,9 @@ namespace App\Modules\Shared;
 
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\PinAttempts;
+use App\Modules\Shared\Application\Port\SealedPinOpener;
 use App\Modules\Shared\Infrastructure\Adapter\CachePinAttempts;
+use App\Modules\Shared\Infrastructure\Adapter\SodiumSealedPinOpener;
 use App\Modules\Shared\Infrastructure\Adapter\SystemClock;
 use Illuminate\Support\ServiceProvider;
 
@@ -35,5 +37,13 @@ final class SharedServiceProvider extends ServiceProvider
         // importarse entre si necesitan el MISMO contador, o «restablecer
         // desbloquea» dependeria de por que puerta se este fallando.
         $this->app->singleton(PinAttempts::class, CachePinAttempts::class);
+
+        // El sobre cerrado con el que el quiosco protege el PIN hasta que llega
+        // al servidor (RF-AT-11, RL-12). Vive aqui, junto al contador de
+        // intentos y al verificador, porque los tres son piezas del mismo PIN y
+        // los tocan modulos que no pueden importarse entre si: el quiosco lo
+        // abre al fichar (tarea 1.12) y `Kiosk` publica su clave publica en el
+        // padron para que la tablet pueda cerrarlo sin red.
+        $this->app->singleton(SealedPinOpener::class, SodiumSealedPinOpener::class);
     }
 }

@@ -5,9 +5,9 @@
 // decir QUE se va a registrar y QUE efecto tiene, porque casi todo lo que pasa
 // por aqui escribe en `audit_log` y no se puede deshacer: una entrega, una
 // revocacion, una baja, un PIN restablecido.
+import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import { useI18n } from 'vue-i18n'
 import BaseDialog from './BaseDialog.vue'
-import ErrorNotice from './ErrorNotice.vue'
 
 withDefaults(
   defineProps<{

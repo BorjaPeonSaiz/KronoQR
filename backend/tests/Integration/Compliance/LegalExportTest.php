@@ -41,11 +41,11 @@ use Tests\Support\Workforce\WorkforceFixtures;
  * daria por buena una consulta que no funciona (doc 02 §9.5, fila «esquema o
  * restriccion»).
  *
- * **Con volumen, porque el fallo que importa solo aparece con volumen.** El doc
- * 02 §3.1 justifica `spatie/simple-excel` con «no carga en memoria un mes de 500
- * empleados»: una prueba de tres filas pasaria igual con un `SELECT` completo en
- * memoria, y el fallo se descubriria el dia del requerimiento, con el periodo
- * mas grande y el servidor mas pequeño.
+ * **Con volumen, porque el fallo que importa solo aparece con volumen.** Lo que
+ * el doc 02 §3.1 exige de una exportacion es que «no cargue en memoria un mes de
+ * 500 empleados»: una prueba de tres filas pasaria igual con un `SELECT`
+ * completo en memoria, y el fallo se descubriria el dia del requerimiento, con
+ * el periodo mas grande y el servidor mas pequeño.
  */
 
 uses(RefreshDatabase::class);
@@ -454,11 +454,11 @@ it('apunta el alcance cuando la exportacion es de una sola persona', function ()
 })->group('RS-05', 'RF-IN-05');
 
 it('recorre el origen sin materializarlo, que es lo que sostiene el streaming', function (): void {
-    // El doc 02 §3.1 elige `spatie/simple-excel` con una sola justificacion: «no
-    // carga en memoria un mes de 500 empleados». Si el puerto devolviera un
-    // array, esa decision quedaria anulada en el adaptador —el array estaria
-    // entero en memoria antes de escribir la primera linea— y nada fallaria
-    // hasta el dia del requerimiento.
+    // El doc 02 §3.1 pide de las exportaciones una sola cosa: «no carga en
+    // memoria un mes de 500 empleados». Quien la sostiene es este puerto, no el
+    // escritor: si devolviera un array, el array estaria entero en memoria antes
+    // de escribir la primera linea —cualquiera que sea la libreria que formatee
+    // la fila— y nada fallaria hasta el dia del requerimiento.
     $contexto = contextoDeExportacionLegal();
     $employee = WorkforceFixtures::employee($contexto['site']);
 

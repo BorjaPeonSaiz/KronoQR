@@ -60,6 +60,27 @@
     },
     "srAnnouncement": "Scan result"
   },
+  "pin": {
+    "entryButton": "No card? Clock in with your code and PIN",
+    "title": "Clock in with code and PIN",
+    "backToCard": "Back to card",
+    "code": {
+      "title": "Enter your employee code",
+      "label": "Employee code",
+      "continue": "Continue"
+    },
+    "pin": {
+      "title": "Enter your 6-digit PIN",
+      "progress": "{entered} of {total} digits entered",
+      "back": "Back",
+      "confirm": "Confirm"
+    },
+    "keypad": {
+      "label": "Numeric keypad",
+      "clear": "Clear all",
+      "backspace": "Delete last digit"
+    }
+  },
   "privacy": {
     "heading": "Data protection notice",
     "controllerKnown": "Controller: {controller}.",

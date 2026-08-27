@@ -13,6 +13,7 @@ import type {
   KioskHeartbeat,
   KioskHeartbeatRequest,
   KioskRoster,
+  PinScanRequest,
   ScanBatchRequest,
   ScanBatchResponse,
   ScanOk,
@@ -47,6 +48,12 @@ export interface ApiClientOptions {
 
 export interface ApiClient {
   recordScan(request: ScanRequest): Promise<ApiResult<ScanOk>>
+  /**
+   * Fichaje de respaldo por PIN (RF-AT-11, tarea 1.12). Misma forma de
+   * respuesta que `recordScan` y a proposito: para el empleado no hay dos
+   * caminos, hay uno con dos formas de identificarse.
+   */
+  recordPinScan(request: PinScanRequest): Promise<ApiResult<ScanOk>>
   /**
    * Sincroniza la cola offline. `batchKey` es la `Idempotency-Key` **del lote**
    * (un UUID v7 propio, nunca un `scan_id`): identifica el ENVIO y sirve para
@@ -150,6 +157,26 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
   return {
     async recordScan(request) {
       const result = await send('/api/v1/scan', {
+        method: 'POST',
+        body: request,
+        // Regla dura 8: el mismo `scan_id` en el envio y en todos los reintentos.
+        idempotencyKey: request.scan_id,
+      })
+      if ('failure' in result) return { outcome: 'failed', cause: result.failure }
+
+      if (result.status === 200) {
+        return isScanOk(result.body)
+          ? { outcome: 'ok', data: result.body }
+          : { outcome: 'failed', cause: 'malformed', httpStatus: 200 }
+      }
+      if (result.status === 422 && isScanRejected(result.body)) {
+        return { outcome: 'rejected', problem: result.body }
+      }
+      return { outcome: 'failed', cause: causeForStatus(result.status), httpStatus: result.status }
+    },
+
+    async recordPinScan(request) {
+      const result = await send('/api/v1/scan/pin', {
         method: 'POST',
         body: request,
         // Regla dura 8: el mismo `scan_id` en el envio y en todos los reintentos.

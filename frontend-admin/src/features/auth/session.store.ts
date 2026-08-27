@@ -10,9 +10,9 @@
 //    ademas comprueba que el token sigue valiendo.
 //  - **Aqui no entra ningun PIN, nunca.** El PIN en claro vive en el estado
 //    efimero del dialogo que lo muestra y desaparece al cerrarlo (RF-ID-09).
+import { isApiError } from '@kronoqr/web-kit/http'
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { isApiError } from '@/shared/api/http'
 import type { LoginRequest, ManagementUser, UserRole } from '@/shared/api/types'
 import { hasAbility } from './abilities'
 import { fetchCurrentUser, logIn as logInRequest, logOut as logOutRequest } from './auth.api'

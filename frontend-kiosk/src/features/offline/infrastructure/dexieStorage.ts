@@ -9,6 +9,14 @@
 // cola cargada obliga a migrar peticiones de fichaje pendientes en tablets que
 // pueden estar sin red, y eso es exactamente lo que no queremos hacer nunca.
 //
+// EL PIN (tarea 1.12) NO SUBE LA VERSION DEL ESQUEMA. `kind`, `employee_code` y
+// `pin_sealed` no son columnas indexadas: Dexie guarda el objeto completo tal
+// cual, y una fila QR escrita por una version anterior de la app simplemente no
+// tiene `kind`. `normalizeRecord()` la trata como `'qr'` al leerla: es la unica
+// forma sin la que un fichaje encolado antes de esta tarea dejaria de
+// reconocerse tras una actualizacion, y eso es exactamente lo que la regla dura
+// 19 prohibe.
+//
 // QUE NO SE PERSISTE: EL ESTADO «EN VUELO». Si la tablet se apaga mientras una
 // peticion viaja, un elemento marcado como «enviandose» en disco quedaria
 // atrapado para siempre. Aqui el arrendamiento vive solo en memoria: tras un
@@ -37,6 +45,27 @@ export function openKioskDatabase(name: string = DATABASE_NAME): KioskDatabase {
   return db
 }
 
+/** Forma que puede tener de verdad una fila leida de disco, sin la garantia del tipo. */
+interface RawQueuedScanRecord {
+  readonly kind?: 'qr' | 'pin'
+  readonly [key: string]: unknown
+}
+
+/**
+ * Ver la cabecera: una fila sin `kind` es de antes de la tarea 1.12 y es QR.
+ *
+ * El tipo estatico de `QueuedScanRecord` dice que `kind` SIEMPRE existe, asi
+ * que comprobarlo tal cual hace que TypeScript de por inalcanzable la rama que
+ * trata precisamente el dato real de una version anterior a esta — de ahi el
+ * escape a `RawQueuedScanRecord`, deliberado y unico sitio del fichero donde
+ * se hace.
+ */
+function normalizeRecord(record: QueuedScanRecord): QueuedScanRecord {
+  const raw = record as unknown as RawQueuedScanRecord
+  if (raw.kind !== undefined) return record
+  return { ...raw, kind: 'qr' } as unknown as QueuedScanRecord
+}
+
 export function createDexieQueueStorage(db: KioskDatabase): QueueStorage {
   return {
     durable: true,
@@ -55,7 +84,8 @@ export function createDexieQueueStorage(db: KioskDatabase): QueueStorage {
     },
 
     async list(limit) {
-      return db.scans.orderBy('occurred_at').limit(limit).toArray()
+      const rows = await db.scans.orderBy('occurred_at').limit(limit).toArray()
+      return rows.map(normalizeRecord)
     },
 
     async count() {

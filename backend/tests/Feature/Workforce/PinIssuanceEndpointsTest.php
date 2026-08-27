@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Modules\Shared\Application\Port\PinAttempts;
+use App\Modules\Shared\Domain\ValueObject\PinOrigin;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use App\Modules\Workforce\Application\Port\PinMetrics;
 use Illuminate\Support\Facades\DB;
@@ -140,10 +141,17 @@ it('restablece el PIN y devuelve uno distinto', function (): void {
     }
 })->group('RF-ID-09');
 
-it('restablecer desbloquea el PIN inmediatamente', function (): void {
+it('restablecer desbloquea el PIN inmediatamente, y en las dos puertas', function (): void {
     // RS-12 y RF-ID-09: un empleado bloqueado que pide un PIN nuevo tiene que
     // poder usarlo YA. Si no, la unica salida seria esperar quince minutos
     // delante del quiosco, que es exactamente lo que la regla dura 19 prohibe.
+    //
+    // LAS DOS PUERTAS, y esa es la mitad que la tarea 1.12 anadio: desde que el
+    // contador se lleva por empleado Y POR ORIGEN (§7.5), restablecer tiene que
+    // limpiar los dos. Si limpiara solo uno, quien pidiera un PIN nuevo despues
+    // de bloquearse en el portal seguiria sin poder fichar en el quiosco, y el
+    // sintoma —«me han dado un PIN nuevo y sigue sin funcionar»— apuntaria a
+    // cualquier sitio menos aqui.
     $context = pinContext();
 
     $uuid = Api::as($context['token'])->post('/api/v1/employees', [
@@ -159,14 +167,17 @@ it('restablecer desbloquea el PIN inmediatamente', function (): void {
 
     // Tantos fallos como haga falta para bloquear con la politica de serie.
     for ($i = 0; $i < 10; $i++) {
-        $attempts->recordFailure($uuid);
+        $attempts->recordFailure($uuid, PinOrigin::KIOSK);
+        $attempts->recordFailure($uuid, PinOrigin::PORTAL);
     }
 
-    expect($attempts->isLocked($uuid))->toBeTrue();
+    expect($attempts->isLocked($uuid, PinOrigin::KIOSK))->toBeTrue()
+        ->and($attempts->isLocked($uuid, PinOrigin::PORTAL))->toBeTrue();
 
     Api::as($context['token'])->post('/api/v1/employees/'.$uuid.'/pin/reset')->assertValidResponse(200);
 
-    expect($attempts->isLocked($uuid))->toBeFalse();
+    expect($attempts->isLocked($uuid, PinOrigin::KIOSK))->toBeFalse()
+        ->and($attempts->isLocked($uuid, PinOrigin::PORTAL))->toBeFalse();
 })->group('RF-ID-09', 'RS-12');
 
 it('cuenta los restablecimientos por centro', function (): void {

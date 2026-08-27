@@ -2,13 +2,17 @@
 //
 // DOS CAMINOS, Y LA DIFERENCIA NO ES COSMETICA
 // --------------------------------------------
-// «Hay conexion»  → `POST /api/v1/scan` con `Idempotency-Key: scan_id`. Se usa
-//                   SOLO cuando el escaneo recien encolado es el UNICO pendiente.
-//                   Su valor es la respuesta: trae el `action` y el acumulado
-//                   real del dia, y con eso la pantalla pasa de «pendiente de
-//                   validar» a «Entrada 06:02 · Hoy: 0 h 0 min».
-// «Sin conexion»  → `POST /api/v1/scan/batch`, lotes de 50 ordenados por
-//                   `occurred_at`, respuesta 207 elemento a elemento.
+// «Hay conexion»  → `POST /api/v1/scan` (o `POST /api/v1/scan/pin`) con
+//                   `Idempotency-Key: scan_id`. Se usa SOLO cuando el escaneo
+//                   recien encolado es el UNICO pendiente. Su valor es la
+//                   respuesta: trae el `action` y el acumulado real del dia, y
+//                   con eso la pantalla pasa de «pendiente de validar» a
+//                   «Entrada 06:02 · Hoy: 0 h 0 min».
+// «Sin conexion»  → lotes ordenados por `occurred_at`. Para QR, `POST
+//                   /api/v1/scan/batch` (respuesta 207 elemento a elemento). El
+//                   PIN NO TIENE variante de lote (RF-AT-11, doc 02 §11): cada
+//                   fichaje de esa via viaja en su propia llamada a `/scan/pin`,
+//                   una detras de otra, en el mismo orden.
 //
 // POR QUE «SOLO SI ES EL UNICO PENDIENTE». Porque si hay algo encolado por
 // delante, enviar el nuevo por su cuenta lo adelanta. Una entrada de las 08:00
@@ -16,6 +20,15 @@
 // salida sin turno abierto: la jornada queda del reves. En cuanto hay cola, TODO
 // va por el lote ordenado. Es la garantia «Orden correcto» aplicada tambien al
 // camino rapido.
+//
+// TRAMOS POR TIPO (tarea 1.12). Un drenaje puede tener QR y PIN entremezclados
+// por `occurred_at` — una entrada por tarjeta y una salida por PIN, o al reves.
+// `splitRuns()` los agrupa en tramos maximos de la misma via SIN reordenarlos,
+// y el drenaje procesa un tramo entero (con su llamada de lote o su secuencia
+// de llamadas individuales) antes de tocar el siguiente. Si un tramo se atasca
+// —nada progresa—, TODO lo que vendria despues, tramo actual incluido, se
+// aplaza con el mismo retroceso: dejar que un PIN mas tardio adelante a un QR
+// varado seria romper exactamente la garantia que esto existe para mantener.
 //
 // QUE SACA UN ELEMENTO DE LA COLA. Solo `200` o `422` para ESE `scan_id`.
 // - `200`: registrado (o anti-rebote, que es un desenlace aceptado, ADR-031).
@@ -30,12 +43,13 @@
 
 import type { QueuedScan, ScanSubmissionResult } from '@/features/scan/application/ports'
 import type { ApiClient } from '@/shared/api/client'
-import type { ScanBatchEntry, ScanRequest } from '@/shared/api/types'
+import type { PinScanRequest, ScanBatchEntry, ScanRequest } from '@/shared/api/types'
 import { uuidV7 } from '@/shared/ids/uuidV7'
 import type { Clock } from '@/shared/time/clock'
 import { systemClock } from '@/shared/time/clock'
-import { batchesOf, MAX_BATCH_SIZE } from '../domain/queueOrder'
-import type { QueuedScanRecord } from '../infrastructure/queueStorage'
+import { MAX_BATCH_SIZE, splitRuns } from '../domain/queueOrder'
+import type { QueuedPinScanRecord, QueuedQrScanRecord } from '../infrastructure/queueStorage'
+import { isPinScanRecord } from '../infrastructure/queueStorage'
 import type { ScanQueue } from './scanQueue'
 
 /** Cuando no hay nada elegible, se vuelve a mirar de vez en cuando por si acaso. */
@@ -84,11 +98,21 @@ export interface SyncRunner {
   drain(options?: { readonly ignoreSchedule?: boolean }): Promise<void>
 }
 
-function toRequest(record: QueuedScanRecord): ScanRequest {
+function toRequest(record: QueuedQrScanRecord): ScanRequest {
   return {
     scan_id: record.scan_id,
     occurred_at: record.occurred_at,
     qr_payload: record.qr_payload,
+    intent: record.intent,
+  }
+}
+
+function toPinRequest(record: QueuedPinScanRecord): PinScanRequest {
+  return {
+    scan_id: record.scan_id,
+    occurred_at: record.occurred_at,
+    employee_code: record.employee_code,
+    pin_sealed: record.pin_sealed,
     intent: record.intent,
   }
 }
@@ -142,7 +166,7 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
     return 'retry'
   }
 
-  async function sendBatch(records: readonly QueuedScanRecord[]): Promise<boolean> {
+  async function sendBatch(records: readonly QueuedQrScanRecord[]): Promise<boolean> {
     const result = await options.api.syncScanBatch({ scans: records.map(toRequest) }, newBatchKey())
 
     if (result.outcome !== 'ok') {
@@ -204,6 +228,58 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
     return confirmed.length > 0
   }
 
+  /**
+   * El tramo de PIN: sin variante de lote, cada elemento es su propia llamada a
+   * `/scan/pin`, ESPERADA antes de mandar la siguiente. Es lo que impide que un
+   * PIN mas tardio (dentro del mismo tramo) adelante a uno mas temprano que
+   * todavia no ha tenido respuesta.
+   */
+  async function sendPinRun(records: readonly QueuedPinScanRecord[]): Promise<boolean> {
+    let progressed = false
+
+    for (let index = 0; index < records.length; index += 1) {
+      const record = records[index]
+      if (record === undefined) break
+
+      const result = await options.api.recordPinScan(toPinRequest(record))
+
+      if (result.outcome === 'failed') {
+        options.onReachability?.(false)
+        if (result.cause === 'unauthorized') {
+          options.onDiagnostic?.('sync.unauthorized', { http_status: result.httpStatus ?? 0 })
+        } else if (result.cause === 'throttled') {
+          options.onDiagnostic?.('sync.throttled', { http_status: result.httpStatus ?? 0 })
+        } else if (result.cause !== 'offline') {
+          options.onDiagnostic?.('sync.transport_failed', { cause: result.cause })
+        }
+        // Este y los que quedan de ESTE tramo: ninguno se manda antes de saber
+        // que paso con el que fallo, o el orden se rompe igual que si se
+        // hubiera enviado de mas.
+        await queue.retryLater(
+          records.slice(index).map((item) => item.scan_id),
+          clock.now(),
+        )
+        return progressed
+      }
+
+      options.onReachability?.(true)
+      // `ok` y `rejected` son ambos un desenlace: el servidor ya ha decidido
+      // (regla dura 17, RS-03. La causa concreta no sale de `scan_events`).
+      const removed = await queue.confirm([record.scan_id])
+      if (!removed) {
+        options.onDiagnostic?.('sync.confirm_not_persisted', { items: 1 })
+        await queue.retryLater(
+          records.slice(index).map((item) => item.scan_id),
+          clock.now(),
+        )
+        return progressed
+      }
+      progressed = true
+    }
+
+    return progressed
+  }
+
   async function drain(drainOptions: { readonly ignoreSchedule?: boolean } = {}): Promise<void> {
     if (draining) {
       rerun = true
@@ -226,12 +302,43 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
           return
         }
 
-        const batches = batchesOf(claimed, MAX_BATCH_SIZE)
-        const batch = batches[0]
-        if (batch === undefined) return
+        // Tramos de la misma via, EN EL ORDEN en que `claim()` ya los entrego
+        // (por `occurred_at`, mezclando QR y PIN si hace falta). Ver cabecera.
+        const runs = splitRuns(claimed)
+        let stalledAt = runs.length
 
-        const progressed = await sendBatch(batch)
-        if (!progressed) return
+        for (let index = 0; index < runs.length; index += 1) {
+          const run = runs[index]
+          const first = run?.[0]
+          if (run === undefined || first === undefined) continue
+
+          // `run` ya viene con como maximo `MAX_BATCH_SIZE` elementos (es un
+          // subconjunto de `claimed`) y ya ordenado: una unica llamada de lote
+          // basta para la parte QR, sin volver a trocear.
+          const progressed = isPinScanRecord(first)
+            ? await sendPinRun(run as QueuedPinScanRecord[])
+            : await sendBatch(run as QueuedQrScanRecord[])
+
+          if (!progressed) {
+            stalledAt = index
+            break
+          }
+        }
+
+        if (stalledAt < runs.length) {
+          // El tramo que se atasco ya ha aplazado lo suyo. Lo que viene
+          // DESPUES en este drenaje todavia no se ha tocado: si no se aplaza
+          // tambien, un PIN o un QR mas tardio se reclamaria en la siguiente
+          // pasada y adelantaria al que sigue varado.
+          const untouched = runs.slice(stalledAt + 1).flat()
+          if (untouched.length > 0) {
+            await queue.retryLater(
+              untouched.map((record) => record.scan_id),
+              clock.now(),
+            )
+          }
+          return
+        }
 
         // Los siguientes lotes ya no se saltan la espera: solo el primero
         // hereda el «acabo de volver la red».
@@ -253,12 +360,21 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
     if (!outcome.stored) {
       // Ni IndexedDB ni memoria. No se puede prometer reintento, asi que se
       // intenta AHORA aunque sea lo unico que quede.
-      const rescue = await options.api.recordScan({
-        scan_id: scan.scan_id,
-        occurred_at: scan.occurred_at,
-        qr_payload: scan.qr_payload,
-        intent: scan.intent,
-      })
+      const rescue =
+        scan.kind === 'qr'
+          ? await options.api.recordScan({
+              scan_id: scan.scan_id,
+              occurred_at: scan.occurred_at,
+              qr_payload: scan.qr_payload,
+              intent: scan.intent,
+            })
+          : await options.api.recordPinScan({
+              scan_id: scan.scan_id,
+              occurred_at: scan.occurred_at,
+              employee_code: scan.employee_code,
+              pin_sealed: scan.pin_sealed,
+              intent: scan.intent,
+            })
       if (rescue.outcome === 'ok') {
         options.onReachability?.(true)
         return rescue.data.action === 'debounced'
@@ -291,7 +407,9 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
       claimed.filter((record) => record.scan_id !== scan.scan_id).map((record) => record.scan_id),
     )
 
-    const result = await options.api.recordScan(toRequest(mine))
+    const result = isPinScanRecord(mine)
+      ? await options.api.recordPinScan(toPinRequest(mine))
+      : await options.api.recordScan(toRequest(mine))
 
     if (result.outcome === 'ok') {
       options.onReachability?.(true)

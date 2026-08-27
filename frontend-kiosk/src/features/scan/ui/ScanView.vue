@@ -13,6 +13,7 @@
 // en continuo (RF-KI-02). Los botones son accesorios.
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { RouterLink } from 'vue-router'
 import { createApiClient } from '@/shared/api/client'
 import { readPrivacyNoticeConfig } from '@/shared/config/privacy'
 import { useConnectivity } from '@/shared/connectivity/useConnectivity'
@@ -207,6 +208,18 @@ onUnmounted(() => {
 
     <footer class="flex items-end justify-between gap-4 px-6 py-4">
       <PrivacyNoticePanel class="min-w-0 flex-1" :config="privacyConfig" />
+
+      <!-- Solo si la instalacion ofrece fichaje por PIN (ADR-017, tarea 1.12).
+           Nunca deshabilitado con explicacion: si no hay clave, esta via no
+           existe en esta instalacion, no existe "de momento". -->
+      <RouterLink
+        v-if="offline.pinSealingPublicKey.value !== null"
+        :to="{ name: 'pin' }"
+        class="kiosk-touch shrink-0 rounded-lg bg-slate-700 px-5 text-base font-medium text-slate-50"
+        data-testid="pin-entry-link"
+      >
+        {{ t('pin.entryButton') }}
+      </RouterLink>
 
       <button
         v-if="scanner.torchAvailable.value"

@@ -260,3 +260,44 @@ it('registra un escaneo que no resolvio a ningun empleado', function (): void {
         // rechazo haria imposible auditar por que existe una jornada.
         ->and($fila?->shift_entry_id)->toBeNull();
 })->group('RF-QR-02', 'RS-03');
+
+it('escribe el fichaje por PIN con su origen, su marca de revision y sin huella', function (): void {
+    // RF-AT-11 (tarea 1.12) contra el esquema real: el CHECK
+    // `scan_events_chk_origin` admite `pin_kiosk` desde la migracion de la 1.4, y
+    // `flagged_for_review` tiene su indice parcial esperando a la bandeja de la
+    // tarea 2.5. Sin esta fila, esa bandeja nacera sin historico que mostrar.
+    //
+    // **Sin huella de payload**: no hay tarjeta de la que tomarla. Inventar una a
+    // partir del codigo de empleado habria metido dos cosas distintas en la
+    // misma columna, y quien investigara un escaneo no sabria cual esta mirando.
+    $fixture = escaneoFixture();
+    $scanId = Str::uuid7()->toString();
+
+    $porPin = new ScanRecord(
+        scanId: $scanId,
+        deviceId: $fixture['device'],
+        employeeUuid: $fixture['employee'],
+        occurredAt: Instants::utc('2026-03-14 07:02:00'),
+        recordedAt: Instants::utc('2026-03-14 07:02:01'),
+        origin: ScanOrigin::PIN_KIOSK,
+        intent: ScanIntent::AUTO,
+        result: ScanResult::CLOCK_IN,
+        payloadFingerprint: null,
+        clockSkewSeconds: 1,
+        flaggedForReview: true,
+        workedMinutes: 0,
+    );
+
+    expect(app(ScanLog::class)->record($porPin))->toBeTrue();
+
+    $fila = DB::table('scan_events')->where('scan_id', $scanId)->first();
+
+    expect($fila?->origin)->toBe('pin_kiosk')
+        ->and($fila?->flagged_for_review)->toBeTrue()
+        ->and($fila?->payload_fingerprint)->toBeNull();
+
+    // Y el UNIQUE de `scan_id` vale igual por esta via (regla dura 8): un
+    // reenvio desde la cola offline no puede duplicar el fichaje.
+    expect(app(ScanLog::class)->record($porPin))->toBeFalse()
+        ->and(DB::table('scan_events')->where('scan_id', $scanId)->count())->toBe(1);
+})->group('RF-AT-11', 'RF-AT-07');

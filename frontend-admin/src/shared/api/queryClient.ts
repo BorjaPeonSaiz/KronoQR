@@ -5,8 +5,8 @@
 // reintentar cualquier cosa: un 403 o un 409 reintentado es ruido en el
 // servidor y una espera inutil para quien mira. Solo se reintenta el corte de
 // red, que es lo unico que puede arreglarse solo.
+import { isApiError } from '@kronoqr/web-kit/http'
 import { QueryClient } from '@tanstack/vue-query'
-import { isApiError } from './http'
 
 export function createAppQueryClient(): QueryClient {
   return new QueryClient({

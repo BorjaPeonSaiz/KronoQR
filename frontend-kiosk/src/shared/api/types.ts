@@ -13,6 +13,7 @@ export type ScanIntent = components['schemas']['ScanIntent']
 export type ScanAction = components['schemas']['ScanAction']
 
 export type ScanRequest = components['schemas']['ScanRequest']
+export type PinScanRequest = components['schemas']['PinScanRequest']
 export type ScanAccepted = components['schemas']['ScanAccepted']
 export type ScanDebounced = components['schemas']['ScanDebounced']
 export type ScanRejected = components['schemas']['ScanRejected']

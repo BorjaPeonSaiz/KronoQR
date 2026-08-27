@@ -1,0 +1,161 @@
+<script setup lang="ts">
+// Mi registro de jornada (RF-ID-05, RF-ID-06, RF-ID-07, RL-05, art. 34.9 ET).
+//
+// La razon de ser de todo el portal esta en esta pantalla: un resumen grande y
+// legible arriba -las horas de esta semana, o del periodo que se pida- y el
+// detalle debajo. Nadie que entra aqui quiere un panel de control: quiere saber
+// cuantas horas lleva.
+//
+//  - **Solo lee.** No hay ninguna accion en esta pantalla que cambie el
+//    registro: corregir un tramo es cosa de RRHH, con otro token y otro ambito.
+//  - **El rango lo resuelve el servidor cuando no se pide.** Calcular aqui
+//    «los ultimos 31 dias» usaria el reloj y la zona del navegador, y el dia de
+//    hoy en el centro no lo decide el telefono de quien mira (regla dura 3).
+//  - **No queda auditado.** A diferencia de cuando alguien de gestion mira el
+//    registro de un tercero (RS-05), consultar el propio no genera ningun
+//    asiento: es un derecho, no un acceso que vigilar.
+import { announce } from '@kronoqr/web-kit/announcer'
+import EmptyState from '@kronoqr/web-kit/components/EmptyState.vue'
+import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
+import FormField from '@kronoqr/web-kit/components/FormField.vue'
+import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
+import { exceedsMaxRange, isInvertedRange, MAX_RANGE_DAYS } from '@kronoqr/web-kit/dateRange'
+import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { useSessionStore } from '../login/session.store'
+import { useMyWorkDays } from './useMyWorkDays'
+import WorkDayCard from './WorkDayCard.vue'
+import type { WorkDateRange } from './workdays.api'
+import { UNBOUNDED_RANGE } from './workdays.api'
+
+const { t } = useI18n()
+const session = useSessionStore()
+
+/** Lo que hay escrito en el formulario. */
+const draft = ref<WorkDateRange>({ ...UNBOUNDED_RANGE })
+/** Lo que se ha pedido de verdad. Cambia al enviar, no al teclear. */
+const applied = ref<WorkDateRange>({ ...UNBOUNDED_RANGE })
+
+const inverted = computed(() => isInvertedRange(draft.value))
+const tooWide = computed(() => exceedsMaxRange(draft.value))
+const canSubmit = computed(() => !inverted.value && !tooWide.value)
+
+const rangeErrors = computed<string[]>(() => {
+  if (inverted.value) {
+    return [t('myRecords.filters.inverted')]
+  }
+
+  return tooWide.value ? [t('myRecords.filters.tooWide', { days: MAX_RANGE_DAYS })] : []
+})
+
+const { data, error, isPending, isFetching } = useMyWorkDays(applied)
+
+const days = computed(() => data.value?.data ?? [])
+
+function submit(): void {
+  if (canSubmit.value) {
+    applied.value = { ...draft.value }
+  }
+}
+
+// Cuando el servidor resuelve el rango por omision, el formulario se rellena
+// con el que de verdad se ha consultado, para que quien mira sepa que periodo
+// esta viendo sin tener que adivinarlo.
+watch(data, (value) => {
+  if (value === undefined) {
+    return
+  }
+
+  if (draft.value.from === '' && draft.value.to === '') {
+    draft.value = { from: value.from, to: value.to }
+  }
+
+  announce(
+    t('myRecords.announce.results', {
+      count: value.data.length,
+      from: value.from,
+      to: value.to,
+    }),
+  )
+})
+</script>
+
+<template>
+  <section>
+    <header>
+      <h1 class="text-2xl font-bold">{{ t('myRecords.title') }}</h1>
+      <p v-if="session.employee !== null" class="mt-1 text-lg">
+        {{ session.employee.display_name }}
+        <span class="font-mono text-slate-700">{{ session.employee.employee_code }}</span>
+      </p>
+      <p class="mt-2 max-w-prose text-slate-700">{{ t('myRecords.subtitle') }}</p>
+    </header>
+
+    <form class="mt-4 flex max-w-3xl flex-wrap items-end gap-4" novalidate @submit.prevent="submit">
+      <fieldset class="flex flex-wrap items-end gap-4 border-0 p-0">
+        <legend class="sr-only">{{ t('myRecords.filters.legend') }}</legend>
+
+        <FormField
+          v-slot="field"
+          :label="t('myRecords.filters.from')"
+          :hint="t('myRecords.filters.fromHint')"
+          label-class="text-lg font-medium text-slate-900"
+        >
+          <input
+            :id="field.id"
+            v-model="draft.from"
+            type="date"
+            :aria-describedby="field.describedBy"
+            class="min-h-12 rounded border border-slate-400 px-3 py-2 text-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+          />
+        </FormField>
+
+        <FormField
+          v-slot="field"
+          :label="t('myRecords.filters.to')"
+          :hint="t('myRecords.filters.toHint')"
+          :errors="rangeErrors"
+          label-class="text-lg font-medium text-slate-900"
+        >
+          <input
+            :id="field.id"
+            v-model="draft.to"
+            type="date"
+            :aria-describedby="field.describedBy"
+            :aria-invalid="field.invalid"
+            class="min-h-12 rounded border border-slate-400 px-3 py-2 text-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+          />
+        </FormField>
+      </fieldset>
+
+      <button
+        type="submit"
+        :disabled="!canSubmit"
+        class="min-h-12 rounded bg-slate-900 px-4 py-2 text-lg font-semibold text-white disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+      >
+        {{ t('myRecords.filters.apply') }}
+      </button>
+    </form>
+
+    <p v-if="data !== undefined" class="mt-3 text-slate-700" data-test="resolved-range">
+      {{ t('myRecords.filters.resolved', { from: data.from, to: data.to, zone: data.time_zone }) }}
+      <span v-if="isFetching" class="text-slate-500">{{ t('common.updating') }}</span>
+    </p>
+    <p class="mt-1 text-sm text-slate-600">{{ t('myRecords.zoneNotice') }}</p>
+
+    <LoadingPanel v-if="isPending" :label="t('myRecords.loading')" class="mt-4" />
+
+    <ErrorNotice v-else-if="error !== null" :error="error" class="mt-4" />
+
+    <EmptyState
+      v-else-if="days.length === 0"
+      class="mt-4"
+      :title="t('myRecords.empty.title')"
+      :description="t('myRecords.empty.description')"
+    />
+
+    <div v-else class="mt-4 flex flex-col gap-6">
+      <WorkDayCard v-for="day of days" :key="day.work_date" :day="day" />
+    </div>
+  </section>
+</template>

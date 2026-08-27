@@ -51,5 +51,7 @@ export type ShiftMarks = Schemas['ShiftMarks']
 export type ShiftEntryStatus = Schemas['ShiftEntryStatus']
 export type ClockingSource = Schemas['ClockingSource']
 
-export type Problem = Schemas['Problem']
-export type ValidationProblem = Schemas['ValidationProblem']
+// `Problem`/`ValidationProblem` (RFC 9457) ya no se alias aqui: el cliente HTTP
+// base que los consumia vive en `@kronoqr/web-kit/http`, que declara su propia
+// forma estructural para no depender del `schema.d.ts` de ninguna SPA
+// (ADR-036).

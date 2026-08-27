@@ -7,6 +7,8 @@ namespace App\Modules\Workforce\Infrastructure\Persistence;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
+use Laravel\Sanctum\HasApiTokens;
+use Laravel\Sanctum\PersonalAccessToken;
 
 /**
  * Fila de `employees` (doc 01 §5.5). **Detalle de persistencia**, no el modelo
@@ -22,6 +24,19 @@ use Illuminate\Support\Carbon;
  * nunca desde PHP. Lo calcula `pgcrypto` en la sentencia del repositorio (RL-08),
  * de modo que el documento en claro no pasa por un modelo, ni por un atributo,
  * ni por un `toArray()` de depuracion.
+ *
+ * **Es un `tokenable` de Sanctum desde la tarea 1.11** (portal del empleado,
+ * RF-ID-05..07, ADR-015). El token del portal cuelga de la persona y no de una
+ * cuenta de `users`, por lo mismo que el del quiosco cuelga de `devices`: dar de
+ * alta una cuenta de gestion por empleado habria significado exigir correo
+ * —regla dura 12—, politica de contraseña y, desde la tarea 2.1, segundo factor,
+ * para algo cuya credencial es un PIN de seis digitos. Y habria dejado una
+ * cuenta espejo que alguien tiene que acordarse de desactivar al dar una baja.
+ *
+ * El unico ambito que lleva ese token es `self:read` (RF-ID-07), y su validez
+ * la vuelve a comprobar `IdentityServiceProvider` en cada peticion contra
+ * `status`: una baja tiene efecto en la peticion siguiente, no cuando caduque el
+ * token.
  *
  * @property int $id
  * @property string $uuid
@@ -43,6 +58,9 @@ use Illuminate\Support\Carbon;
  */
 final class Employee extends Model
 {
+    /** @use HasApiTokens<PersonalAccessToken> */
+    use HasApiTokens;
+
     protected $table = 'employees';
 
     /**

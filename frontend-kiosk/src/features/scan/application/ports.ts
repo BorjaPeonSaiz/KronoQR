@@ -12,12 +12,13 @@
 
 import type { ScanAccepted, ScanDebounced, ScanIntent } from '@/shared/api/types'
 
-/** Un escaneo listo para viajar. Es tambien la fila de la cola de la tarea 1.9. */
-export interface QueuedScan {
-  /** UUID v7 generado AL ENCOLAR, no al enviar (regla dura 8). */
+/**
+ * Lo comun a cualquier fichaje que entra en la cola, sea cual sea su via.
+ * `scan_id` nace AL ENCOLAR, no al enviar (regla dura 8); `occurred_at` es el
+ * instante real en UTC y no se recalcula al sincronizar (regla dura 9).
+ */
+interface QueuedScanBase {
   readonly scan_id: string
-  readonly qr_payload: string
-  /** Instante real en UTC. No se recalcula al sincronizar (regla dura 9). */
   readonly occurred_at: string
   /**
    * Nace ya en el registro de la cola (ADR-024). En esta fase el quiosco escribe
@@ -27,6 +28,27 @@ export interface QueuedScan {
   readonly intent: ScanIntent
   readonly device_id: string
 }
+
+/** Fichaje por tarjeta QR (tarea 1.8/1.9). */
+export interface QueuedQrScan extends QueuedScanBase {
+  readonly kind: 'qr'
+  readonly qr_payload: string
+}
+
+/**
+ * Fichaje de respaldo por PIN (RF-AT-11, tarea 1.12). `pin_sealed` es el PIN
+ * YA CERRADO con la clave publica de la instalacion (sobre de libsodium): el
+ * PIN en claro no existe en ningun objeto que se serialice, ni de camino a la
+ * cola ni de camino a la red. Ver `features/pin/infrastructure/pinSealing.ts`.
+ */
+export interface QueuedPinScan extends QueuedScanBase {
+  readonly kind: 'pin'
+  readonly employee_code: string
+  readonly pin_sealed: string
+}
+
+/** Un escaneo listo para viajar. Es tambien la fila de la cola de la tarea 1.9. */
+export type QueuedScan = QueuedQrScan | QueuedPinScan
 
 export type ScanSubmissionResult =
   | { readonly kind: 'accepted'; readonly response: ScanAccepted }

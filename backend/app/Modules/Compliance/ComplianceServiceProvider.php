@@ -21,6 +21,7 @@ use App\Modules\Compliance\Infrastructure\Adapter\AuditedLegalExportGeneration;
 use App\Modules\Compliance\Infrastructure\Adapter\AuditedPersonalDataAccessLog;
 use App\Modules\Compliance\Infrastructure\Console\EnsureAuditPartitionsCommand;
 use App\Modules\Compliance\Infrastructure\Console\LegalExportCommand;
+use App\Modules\Compliance\Infrastructure\Console\PurgeOrphanedLegalExportTempFilesCommand;
 use App\Modules\Compliance\Infrastructure\Console\VerifyAuditChainCommand;
 use App\Modules\Compliance\Infrastructure\Export\CsvLegalExportWriter;
 use App\Modules\Compliance\Infrastructure\Listener\RecordCredentialLifecycle;
@@ -140,6 +141,15 @@ final class ComplianceServiceProvider extends ServiceProvider
                  * plantilla escribiendose en disco sin que nadie la pidiera.
                  */
                 LegalExportCommand::class,
+                /*
+                 * `compliance:purge-legal-export-temp` (MEDIO-3 del cierre de
+                 * Fase 1). Este SI se programa -en routes/console.php-: a
+                 * diferencia de la exportacion en si, que solo se genera
+                 * cuando alguien la pide, el huerfano de una descarga
+                 * abortada puede aparecer cualquier noche sin que nadie lo
+                 * pida ni lo note.
+                 */
+                PurgeOrphanedLegalExportTempFilesCommand::class,
             ]);
         }
     }

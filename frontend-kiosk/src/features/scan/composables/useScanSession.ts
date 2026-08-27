@@ -30,6 +30,12 @@ export interface ScanSession {
   readonly lastLatencyMs: Readonly<Ref<number | null>>
   /** Punto de entrada del bucle de decodificacion. */
   accept(rawText: string): void
+  /**
+   * Pinta una confirmacion NUEVA, con su sonido. La usa el fichaje por PIN
+   * (tarea 1.12), que no decodifica una camara: teclea, sella y llama aqui
+   * directamente en vez de pasar por `accept()`.
+   */
+  present(confirmation: ScanConfirmation): void
   /** Aplica el desenlace real del servidor sobre la confirmacion en pantalla. */
   settle(confirmation: ScanConfirmation): void
   dismiss(): void
@@ -74,6 +80,10 @@ export function useScanSession(options: UseScanSessionOptions): ScanSession {
       if (next === null) return // Repeticion inmediata del mismo codigo.
       show(next, true)
       lastLatencyMs.value = Math.round(now() - startedAt)
+    },
+
+    present(next) {
+      show(next, true)
     },
 
     settle(next) {

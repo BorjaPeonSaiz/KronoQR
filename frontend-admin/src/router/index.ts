@@ -1,3 +1,4 @@
+import NotFoundView from '@kronoqr/web-kit/components/NotFoundView.vue'
 import type { RouteRecordRaw } from 'vue-router'
 import { createRouter, createWebHistory } from 'vue-router'
 import {
@@ -14,7 +15,6 @@ import LegalExportView from '@/features/reports/LegalExportView.vue'
 import EmployeeWorkDaysView from '@/features/workdays/EmployeeWorkDaysView.vue'
 import AppShellView from '@/shared/ui/AppShellView.vue'
 import ForbiddenView from '@/shared/ui/ForbiddenView.vue'
-import NotFoundView from '@/shared/ui/NotFoundView.vue'
 
 // Las rutas se escriben en ingles como el resto del codigo (CLAUDE.md): una URL
 // no es un texto de usuario y no se traduce, asi que tenerla en un idioma y la
@@ -85,7 +85,14 @@ export const routes: RouteRecordRaw[] = [
         meta: { ability: REPORTS_LEGAL },
       },
       { path: 'forbidden', name: 'forbidden', component: ForbiddenView },
-      { path: ':pathMatch(.*)*', name: 'not-found', component: NotFoundView },
+      {
+        path: ':pathMatch(.*)*',
+        name: 'not-found',
+        component: NotFoundView,
+        // El panel es de gestion de plantilla: el rescate vuelve al listado de
+        // empleados, que es la pantalla de partida (`@kronoqr/web-kit`, ADR-036).
+        props: { backToRouteName: 'employees', backToLabelKey: 'notFound.backToEmployees' },
+      },
     ],
   },
 ]

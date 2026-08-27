@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Support\Version\DeployedVersion;
+
 return [
 
     /*
@@ -55,6 +57,38 @@ return [
     */
 
     'url' => env('APP_URL', 'http://localhost'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Version desplegada
+    |--------------------------------------------------------------------------
+    |
+    | Lo que publica `GET /api/v1/health` (doc 02 §10.5): es lo que permite
+    | correlacionar una incidencia con una version concreta sin entrar por SSH
+    | al servidor del cliente. NO es la version del framework —eso es
+    | `app()->version()`—, sino la del producto.
+    |
+    | El orden de resolucion y su porque estan en DeployedVersion. En resumen:
+    | manda el entorno si trae un SemVer, y si no, el fichero VERSION del
+    | repositorio.
+    |
+    | Las tres rutas candidatas del fichero son los tres sitios donde puede
+    | correr este proceso, y no sobra ninguna:
+    |
+    |   base_path('VERSION')     la imagen de produccion, que lo copia junto a
+    |                            la aplicacion (infra/docker/php/Dockerfile).
+    |   base_path('../VERSION')  el arbol de fuentes, donde backend/ cuelga de
+    |                            la raiz del repositorio (la CI y el host).
+    |   /var/www/repo/VERSION    el contenedor de desarrollo, donde /var/www/html
+    |                            es solo backend/ y la raiz llega montada de
+    |                            solo lectura (infra/compose.dev.yaml).
+    |
+    */
+
+    'version' => DeployedVersion::resolve(
+        [env('APP_VERSION'), env('IMAGE_TAG')],
+        [base_path('VERSION'), base_path('../VERSION'), '/var/www/repo/VERSION'],
+    ),
 
     /*
     |--------------------------------------------------------------------------

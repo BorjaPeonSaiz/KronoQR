@@ -6,10 +6,8 @@ namespace App\Modules\Reporting\Http\Support;
 
 use App\Http\Middleware\RecordHttpMetrics;
 use App\Modules\Reporting\Domain\ValueObject\WorkDayJournal;
-use OpenTelemetry\API\Globals;
-use OpenTelemetry\API\Trace\SpanInterface;
+use App\Modules\Shared\Application\Support\SpanScope;
 use OpenTelemetry\API\Trace\SpanKind;
-use OpenTelemetry\Context\Context;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -44,8 +42,9 @@ use Throwable;
  *
  * ## Medir no puede romper una consulta
  *
- * Todo va envuelto. Un fallo del exportador de trazas no puede dejar sin ver el
- * registro horario a quien tiene que corregirlo.
+ * Todo va envuelto, y lo envuelve {@see SpanScope}, que es el andamiaje comun de
+ * las siete telemetrias del backend. Un fallo del exportador de trazas no puede
+ * dejar sin ver el registro horario a quien tiene que corregirlo.
  */
 final readonly class JournalTelemetry
 {
@@ -56,80 +55,37 @@ final readonly class JournalTelemetry
      */
     public function measure(string $employeeUuid, callable $read): WorkDayJournal
     {
-        $span = $this->startSpan();
+        $span = SpanScope::start('kronoqr.reporting', 'reporting.read_employee_workdays', SpanKind::KIND_SERVER);
 
         try {
             $journal = $read();
         } catch (Throwable $failure) {
-            $this->endSpan($span, null);
+            $span->end();
 
             throw $failure;
         }
 
-        $this->endSpan($span, $journal);
+        // El span no lleva `employee_uuid`: una traza describe **la forma** de la
+        // consulta —cuantos dias, cuantas jornadas— y de quien era se responde
+        // desde `audit_log`, que es donde ese dato tiene retencion y control de
+        // acceso.
+        $span->end([
+            'reporting.range_days' => $journal->range->days(),
+            'reporting.work_days' => $journal->dayCount(),
+        ]);
         $this->log($employeeUuid, $journal, $span);
 
         return $journal;
     }
 
-    private function startSpan(): ?SpanInterface
-    {
-        try {
-            return Globals::tracerProvider()
-                ->getTracer('kronoqr.reporting')
-                ->spanBuilder('reporting.read_employee_workdays')
-                ->setSpanKind(SpanKind::KIND_SERVER)
-                ->setParent(Context::getCurrent())
-                ->startSpan();
-        } catch (Throwable) {
-            return null;
-        }
-    }
-
-    /**
-     * El span no lleva `employee_uuid`: una traza describe **la forma** de la
-     * consulta —cuantos dias, cuantas jornadas— y de quien era se responde desde
-     * `audit_log`, que es donde ese dato tiene retencion y control de acceso.
-     */
-    private function endSpan(?SpanInterface $span, ?WorkDayJournal $journal): void
-    {
-        if (! $span instanceof SpanInterface) {
-            return;
-        }
-
-        try {
-            if ($journal instanceof WorkDayJournal) {
-                $span->setAttribute('reporting.range_days', $journal->range->days());
-                $span->setAttribute('reporting.work_days', $journal->dayCount());
-            }
-
-            $span->end();
-        } catch (Throwable) {
-            // Ver el docblock: medir no puede romper una consulta.
-        }
-    }
-
-    private function log(string $employeeUuid, WorkDayJournal $journal, ?SpanInterface $span): void
+    private function log(string $employeeUuid, WorkDayJournal $journal, SpanScope $span): void
     {
         $this->logger->info('reporting.employee_workdays_read', [
-            'trace_id' => $this->traceIdOf($span),
+            'trace_id' => $span->traceId(),
             'employee_uuid' => $employeeUuid,
             'from' => $journal->range->isoFrom(),
             'to' => $journal->range->isoTo(),
             'work_days' => $journal->dayCount(),
         ]);
-    }
-
-    private function traceIdOf(?SpanInterface $span): ?string
-    {
-        if (! $span instanceof SpanInterface) {
-            return null;
-        }
-
-        $traceId = $span->getContext()->getTraceId();
-
-        // Un `trace_id` a ceros es el de un span inerte: escribirlo seria peor
-        // que no escribir nada, porque parece un identificador.
-        return trim($traceId, '0') === '' ? null : $traceId;
     }
 }

@@ -21,12 +21,12 @@
 // La descarga se confirma con las cifras que devuelve el servidor en cabeceras
 // —las mismas que quedan en `audit_log`— para que quien contesta el
 // requerimiento pueda decir cuanto entrego.
+import { announce } from '@kronoqr/web-kit/announcer'
+import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
+import FormField from '@kronoqr/web-kit/components/FormField.vue'
+import { downloadDocument } from '@kronoqr/web-kit/downloadDocument'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { downloadDocument } from '@/shared/download/downloadDocument'
-import { announce } from '@/shared/ui/announcer'
-import ErrorNotice from '@/shared/ui/ErrorNotice.vue'
-import FormField from '@/shared/ui/FormField.vue'
 import { downloadLegalExport, type LegalExportTally } from './legalExport.api'
 
 const { t } = useI18n()

@@ -12,6 +12,13 @@ export const routes: RouteRecordRaw[] = [
     name: 'home',
     component: ScanView,
   },
+  {
+    path: '/pin',
+    name: 'pin',
+    // Cargado bajo demanda (tarea 1.12): solo lo pide quien pulsa «¿Sin
+    // tarjeta?», y ese boton solo existe si la instalacion ofrece esta via.
+    component: () => import('@/features/pin/ui/PinView.vue'),
+  },
 ]
 
 export function createAppRouter(): ReturnType<typeof createRouter> {

@@ -144,9 +144,7 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
 
   return {
     async enqueue(scan) {
-      const record: QueuedScanRecord = {
-        scan_id: scan.scan_id,
-        qr_payload: scan.qr_payload,
+      const bookkeeping = {
         occurred_at: scan.occurred_at,
         intent: scan.intent,
         device_id: scan.device_id,
@@ -154,6 +152,16 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
         next_attempt_at: 0,
         enqueued_at: clock.now().getTime(),
       }
+      const record: QueuedScanRecord =
+        scan.kind === 'qr'
+          ? { kind: 'qr', scan_id: scan.scan_id, qr_payload: scan.qr_payload, ...bookkeeping }
+          : {
+              kind: 'pin',
+              scan_id: scan.scan_id,
+              employee_code: scan.employee_code,
+              pin_sealed: scan.pin_sealed,
+              ...bookkeeping,
+            }
 
       try {
         await store.add(record)

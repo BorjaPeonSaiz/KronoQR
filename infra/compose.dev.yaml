@@ -107,7 +107,12 @@ services:
         condition: service_healthy
     healthcheck:
       # Comprueba que el gestor de procesos responde, no solo que el proceso
-      # existe. La sonda de negocio es /api/v1/health y llega en la tarea 0.2.
+      # existe, y NO pasa por la aplicacion: `/ping` es de PHP-FPM.
+      #
+      # Sigue siendo la sonda correcta para este `healthcheck` aunque desde la
+      # tarea 1.7 exista /api/v1/health: aquella pasa por Nginx, que es otro
+      # contenedor, y lo que aqui se decide es si hay que reiniciar ESTE. Quien
+      # quiera saber si la instalacion acepta trafico pregunta a /api/v1/ready.
       test: ["CMD-SHELL", "SCRIPT_NAME=/ping SCRIPT_FILENAME=/ping REQUEST_METHOD=GET cgi-fcgi -bind -connect 127.0.0.1:9000 | grep -q pong"]
       interval: 15s
       timeout: 5s

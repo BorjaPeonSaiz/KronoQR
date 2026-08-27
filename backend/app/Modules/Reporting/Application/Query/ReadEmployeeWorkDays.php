@@ -52,6 +52,27 @@ use DateTimeZone;
  * El apunte se escribe **antes** de devolver: si la escritura de auditoria falla,
  * la divulgacion no ocurre. Es la misma decision que en el fichaje (regla dura 6,
  * ADR-027) y con la misma consecuencia deliberada.
+ *
+ * ## Consultar el registro PROPIO no lo deja
+ *
+ * Desde la tarea 1.11, este mismo caso de uso sirve tambien `GET
+ * /api/v1/me/workdays` (RF-ID-05, RL-05): la persona mirando sus propias horas
+ * desde el portal. Ahi no se escribe el apunte, y el motivo es el literal de
+ * RS-05 —*«acceso a datos personales de **terceros**»*—: no hay tercero. Un
+ * asiento por cada consulta convertiria un derecho reconocido por el art. 34.9
+ * ET en una traza del ejercicio de ese derecho, guardada cuatro años (RL-02) y
+ * consultable por el empleador.
+ *
+ * Hay ademas una razon tecnica que apunta en la misma direccion: el catalogo de
+ * actores de `audit_log` no tiene un tipo para un empleado —solo `user`,
+ * `device`, `system` y `maintenance`—, asi que el apunte saldria atribuido a
+ * `system`, que seria una entrada que miente en la tabla que se enseña en una
+ * inspeccion. Si el producto decidiera que quiere constancia de los accesos al
+ * portal, es un cambio del dominio de auditoria y de la restriccion de su
+ * esquema, no de este `if`.
+ *
+ * Lo decide la peticion, no el llamante: {@see EmployeeWorkDayRange} lo declara
+ * y por omision es `false`, de modo que el caso que audita es el que se asume.
  */
 final readonly class ReadEmployeeWorkDays
 {
@@ -83,11 +104,13 @@ final readonly class ReadEmployeeWorkDays
 
         $journal = $this->journal->journalFor($query->employeeUuid, $timeZone, $range);
 
-        $this->disclosures->recordDisclosure(self::DATASET, $journal->dayCount(), [
-            'employee_uuid' => $query->employeeUuid,
-            'from' => $range->isoFrom(),
-            'to' => $range->isoTo(),
-        ]);
+        if (! $query->selfService) {
+            $this->disclosures->recordDisclosure(self::DATASET, $journal->dayCount(), [
+                'employee_uuid' => $query->employeeUuid,
+                'from' => $range->isoFrom(),
+                'to' => $range->isoTo(),
+            ]);
+        }
 
         return $journal;
     }

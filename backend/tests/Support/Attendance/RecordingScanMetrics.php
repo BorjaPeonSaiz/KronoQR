@@ -29,6 +29,14 @@ final class RecordingScanMetrics implements ScanMetrics
      */
     public array $batches = [];
 
+    /**
+     * Fichajes de respaldo por PIN, por centro (`pin_fallback_scans_total`,
+     * RF-AT-11, tarea 1.12).
+     *
+     * @var list<int>
+     */
+    public array $pinFallbacks = [];
+
     public function scanProcessed(string $deviceUuid, ScanResult $result, float $durationSeconds): void
     {
         $this->observations[] = [
@@ -45,6 +53,11 @@ final class RecordingScanMetrics implements ScanMetrics
             'size' => $size,
             'delay' => $delaySeconds,
         ];
+    }
+
+    public function pinFallbackScan(int $siteId): void
+    {
+        $this->pinFallbacks[] = $siteId;
     }
 
     /**

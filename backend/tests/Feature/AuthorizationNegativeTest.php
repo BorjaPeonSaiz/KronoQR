@@ -2,10 +2,12 @@
 
 declare(strict_types=1);
 
+use App\Modules\Identity\Application\Port\CardRenderer;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\Auth;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
+use Tests\Support\Identity\FakeCardRenderer;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -74,6 +76,26 @@ function managementEndpoints(): array
         'revocar una credencial' => ['POST', '/api/v1/credentials/0199f0d1-2a5b-7d4f-8c32-5e6f7a8b9c01/revoke', [
             'reason' => 'Perdida',
         ]],
+
+        // Impresion y entrega (tarea 1.10, ADR-034). Comparten el ambito
+        // `credentials:*` con los dos de arriba, y aun asi entran uno a uno en la
+        // matriz: la policy se declara en el `FormRequest` de cada endpoint, asi
+        // que un `authorize()` que devolviera `true` en uno solo de los cuatro
+        // seria invisible desde los otros tres.
+        //
+        // `credentials/status` es el que mas datos reparte de toda la API —nombre,
+        // codigo, centro y departamento de la plantilla entera— y hasta ahora era
+        // el unico endpoint de gestion sin ninguna pareja rol x endpoint probada.
+        'ver el panel de credenciales' => ['GET', '/api/v1/credentials/status', []],
+        'imprimir el lote pendiente' => ['POST', '/api/v1/credentials/print-batch', []],
+        'imprimir una credencial' => ['POST', '/api/v1/credentials/0199f0d1-2a5b-7d4f-8c32-5e6f7a8b9c01/print', []],
+        'registrar la entrega' => ['POST', '/api/v1/credentials/0199f0d1-2a5b-7d4f-8c32-5e6f7a8b9c01/deliver', []],
+
+        // PIN de respaldo (tarea 1.13, RF-ID-09). Ambito `employees:*` y policy
+        // propia: restablecer el PIN de otra persona es entregarle la llave de su
+        // portal y de su fichaje sin tarjeta.
+        'restablecer el PIN' => ['POST', '/api/v1/employees/0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90/pin/reset', []],
+        'registrar la entrega del PIN' => ['POST', '/api/v1/employees/0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90/pin/deliver', []],
     ];
 }
 
@@ -160,6 +182,53 @@ it('deja pasar a RRHH a emitir credenciales, que es el control positivo del ambi
         ->post('/api/v1/credentials', ['employee_uuid' => $employee])
         ->assertStatus(201);
 })->group('RQ-07', 'RF-QR-01', 'RS-04');
+
+it('deja pasar a RRHH a imprimir, entregar y ver el panel, que es el control positivo de la 1.10', function (): void {
+    // El control positivo de las cuatro parejas nuevas de la matriz. Sin el, los
+    // cuarenta `403` de arriba sobre `/print`, `/print-batch`, `/deliver` y
+    // `/status` pasarian identicos si esas cuatro rutas estuvieran rotas: un
+    // endpoint que revienta y uno que deniega se parecen mucho desde una prueba
+    // que solo mira que no sea 200.
+    // Sin Chromium: el puerto `CardRenderer` existe para que la impresion se
+    // pueda probar sin arrancar un navegador (ver Tests\Support\Identity\
+    // FakeCardRenderer). Lo que se ejercita sigue siendo todo lo demas.
+    app()->instance(CardRenderer::class, new FakeCardRenderer);
+
+    $site = WorkforceFixtures::site();
+    $employee = WorkforceFixtures::employee($site);
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RRHH));
+
+    $uuid = Api::as($token)
+        ->post('/api/v1/credentials', ['employee_uuid' => $employee])
+        ->assertStatus(201)
+        ->json('uuid');
+
+    expect($uuid)->toBeString();
+
+    $credential = is_string($uuid) ? $uuid : '';
+
+    Api::as($token)->post('/api/v1/credentials/'.$credential.'/print')
+        ->assertStatus(200)
+        ->assertHeader('Content-Type', 'application/pdf');
+
+    Api::as($token)->post('/api/v1/credentials/'.$credential.'/deliver')
+        ->assertStatus(200);
+
+    // Ya no queda nada pendiente de imprimir, y el lote lo dice con `204`.
+    Api::as($token)->post('/api/v1/credentials/print-batch')->assertStatus(204);
+
+    Api::as($token)->get('/api/v1/credentials/status')->assertStatus(200);
+})->group('RQ-07', 'RF-QR-06', 'RF-QR-08');
+
+it('deja pasar a RRHH a restablecer y entregar el PIN, control positivo de la 1.13', function (): void {
+    // Lo mismo para las dos parejas nuevas de `/pin/*`.
+    $site = WorkforceFixtures::site();
+    $employee = WorkforceFixtures::employee($site);
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RRHH));
+
+    Api::as($token)->post('/api/v1/employees/'.$employee.'/pin/reset')->assertStatus(200);
+    Api::as($token)->post('/api/v1/employees/'.$employee.'/pin/deliver')->assertStatus(200);
+})->group('RQ-07', 'RF-ID-09');
 
 it('deniega a un token de quiosco emitir o revocar credenciales', function (string $uri, array $body): void {
     // RS-04 con nombre y apellidos. El token del quiosco lleva `scan:write`,

@@ -9,16 +9,16 @@
 // El listado NO esconde a los cesados por defecto: el historico se conserva
 // cuatro años (RL-02) y una inspeccion viene a mirar justo eso. Quien quiera ver
 // solo a los activos lo pide con el filtro, que esta a la vista.
+import { announce } from '@kronoqr/web-kit/announcer'
+import EmptyState from '@kronoqr/web-kit/components/EmptyState.vue'
+import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
+import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
 import { keepPreviousData, useQuery } from '@tanstack/vue-query'
 import { listDepartments, listSites } from '@/shared/api/organisation.api'
 import type { EmployeeProvisioned, EmploymentStatus } from '@/shared/api/types'
-import { announce } from '@/shared/ui/announcer'
-import EmptyState from '@/shared/ui/EmptyState.vue'
-import ErrorNotice from '@/shared/ui/ErrorNotice.vue'
-import LoadingPanel from '@/shared/ui/LoadingPanel.vue'
 import EmployeeCreateDialog from './EmployeeCreateDialog.vue'
 import PinRevealDialog from './PinRevealDialog.vue'
 import { listEmployees } from './employees.api'

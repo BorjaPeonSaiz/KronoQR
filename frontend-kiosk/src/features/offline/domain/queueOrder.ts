@@ -43,6 +43,31 @@ export function orderForSync<T extends HasOccurredAt>(records: readonly T[]): T[
   return [...records].sort(compareByOccurredAt)
 }
 
+interface HasKind {
+  readonly kind: string
+}
+
+/**
+ * Trocea una lista YA ORDENADA por `occurred_at` en tramos maximos de la misma
+ * `kind` (tarea 1.12). Existe porque `POST /api/v1/scan/pin` no tiene una
+ * variante de lote: un QR y un PIN encolados sin red no pueden viajar en la
+ * misma llamada, pero SI tienen que aplicarse en el mismo orden en que
+ * ocurrieron (§6, «orden correcto»). El drenaje procesa un tramo entero antes
+ * de pasar al siguiente, nunca al reves.
+ */
+export function splitRuns<T extends HasKind>(records: readonly T[]): T[][] {
+  const runs: T[][] = []
+  for (const record of records) {
+    const last = runs.at(-1)
+    if (last !== undefined && last[0]?.kind === record.kind) {
+      last.push(record)
+    } else {
+      runs.push([record])
+    }
+  }
+  return runs
+}
+
 /**
  * Trocea en lotes del tamano del contrato, **ya ordenados**. El primer lote
  * lleva siempre los mas antiguos: si solo llega a enviarse uno, lo que se

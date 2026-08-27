@@ -17,6 +17,7 @@
     "api:generate": "node scripts/generate-api-client.mjs"
   },
   "dependencies": {
+    "@kronoqr/web-kit": "*",
     "@tanstack/vue-query": "^5.101.4",
     "@tanstack/vue-table": "^9.1.2",
     "echarts": "^6.1.0",

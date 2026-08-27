@@ -63,4 +63,26 @@ interface ScanMetrics
      *                             su recepcion. Nunca negativo.
      */
     public function batchSynchronised(string $deviceUuid, int $size, int $delaySeconds): void;
+
+    /**
+     * `pin_fallback_scans_total{site}` (§8.2, RF-AT-11, tarea 1.12).
+     *
+     * **Es un termometro, no una alarma.** El §8.2 lo dice: *«una subida indica
+     * un problema con la emision, el estado de las tarjetas o la disciplina de
+     * la plantilla»*. Nadie ficha con el PIN porque le apetezca —hay que
+     * recordar un codigo y seis digitos, frente a acercar una tarjeta—, asi que
+     * una decena de fichajes por PIN en un centro en un dia significa que las
+     * tarjetas se estan cayendo a pedazos o que la ultima remesa no se entrego.
+     * Cuesta un contador y evita descubrirlo por la reclamacion de una nomina.
+     *
+     * **La etiqueta es el centro y no el dispositivo**, al reves que
+     * `scans_total`. La pregunta que se hace de verdad es «¿en que hotel estan
+     * fallando las tarjetas?», y no «¿en que tablet?»: el empleado usa la que
+     * tiene delante. Y desde luego no lleva `employee_uuid`: una serie temporal
+     * de quien ficha sin tarjeta seria una lista de sospechosos con retencion
+     * indefinida (regla dura 21, RGPD).
+     *
+     * @param  int  $siteId  Centro del empleado que ficho.
+     */
+    public function pinFallbackScan(int $siteId): void;
 }

@@ -12,10 +12,10 @@ use App\Modules\Compliance\Domain\ValueObject\ExportedShiftEntry;
 use App\Modules\Compliance\Domain\ValueObject\ExportedSubject;
 use App\Modules\Compliance\Domain\ValueObject\LegalExportManifest;
 use App\Modules\Compliance\Domain\ValueObject\LegalExportTally;
+use App\Modules\Shared\Infrastructure\Export\CsvDialect;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Lang;
 use RuntimeException;
-use Spatie\SimpleExcel\SimpleExcelWriter;
 use Throwable;
 
 /**
@@ -30,18 +30,28 @@ use Throwable;
  * ese fabricante o un conversor. Un CSV lo abre cualquier cosa, incluido un
  * `cat`, y sigue siendo tratable dentro de una hoja de calculo.
  *
- * ## Las tres decisiones de codificacion, y ninguna es cosmetica
+ * ## Las decisiones de codificacion no se declaran aqui
  *
- * - **BOM.** Sin marca de orden de bytes, Excel con configuracion regional
- *   española interpreta el fichero en Windows-1252 y «Duración» se lee
- *   «DuraciÃ³n». Un documento con efectos legales donde los apellidos salen
- *   rotos no se entrega.
- * - **Punto y coma.** En una configuracion regional donde la coma es el
- *   separador decimal, Excel espera `;`. Con `,` mete todas las columnas en la
- *   primera celda.
- * - **`HH:MM` como texto.** Es el requisito del plan: nunca decimal. Lo garantiza
- *   {@see ExportedDuration}, que es
- *   quien sabe formatear una duracion; aqui solo se pide la cadena.
+ * BOM, punto y coma, entrecomillado del RFC 4180, sin escapado propietario y
+ * `\r\n` como fin de linea viven en {@see CsvDialect}, que es tambien el que
+ * escribe el CSV del historico propio del portal. Estaban duplicadas y dejaron
+ * de coincidir sin que nadie se enterara: este fichero salia con `\n` y el otro
+ * con `\r\n`, es decir, el producto tenia dos formatos.
+ *
+ * **Por eso las filas ya no las escribe `spatie/simple-excel`.** La libreria del
+ * doc 02 §3.1 sigue siendo la del stack para las hojas de calculo de gestion
+ * (RF-IN-04), pero su escritor de CSV llama a `fputcsv` con el fin de linea por
+ * omision —`\n`— y no expone ninguna opcion para cambiarlo, asi que con ella era
+ * imposible entregar el RFC 4180 que espera Excel en Windows. Lo que justificaba
+ * la eleccion, «no carga en memoria un mes de 500 empleados», se conserva
+ * intacto: aqui se escribe fila a fila sobre un descriptor abierto, y lo que
+ * sostiene el streaming de verdad es que {@see LegalExportSource} ceda un
+ * `Generator` sobre un cursor de servidor, no la libreria que formatea la linea.
+ *
+ * La decision de formato que es de **contenido** y no de bytes sigue estando
+ * aqui: **`HH:MM` como texto, nunca decimal**. Es el requisito del plan y lo
+ * garantiza {@see ExportedDuration}, que es quien sabe formatear una duracion;
+ * aqui solo se pide la cadena.
  *
  * ## El fichero declara sus criterios antes de la tabla
  *
@@ -68,8 +78,6 @@ use Throwable;
  */
 final readonly class CsvLegalExportWriter implements LegalExportWriter
 {
-    private const string DELIMITER = ';';
-
     /**
      * Las columnas de la tabla, en orden. La clave es la de `lang/*` y el orden
      * es el del documento.
@@ -123,12 +131,11 @@ final readonly class CsvLegalExportWriter implements LegalExportWriter
     {
         $this->ensureDirectoryExists($destinationPath);
 
-        $writer = SimpleExcelWriter::create(
-            file: $destinationPath,
-            type: 'csv',
-            delimiter: self::DELIMITER,
-            shouldAddBom: true,
-        )->noHeaderRow();
+        $handle = fopen($destinationPath, 'wb');
+
+        if ($handle === false) {
+            throw new RuntimeException('No se ha podido abrir «'.$destinationPath.'» para escribir la exportacion legal.');
+        }
 
         $shiftEntries = 0;
         $corrections = 0;
@@ -136,21 +143,22 @@ final readonly class CsvLegalExportWriter implements LegalExportWriter
         $employees = [];
 
         try {
-            $this->writeManifest($writer, $manifest);
+            CsvDialect::writeByteOrderMark($handle);
+            $this->writeManifest($handle, $manifest);
 
             foreach ($records as $record) {
                 $employees[$record->subject()->employeeUuid] = true;
 
                 if ($record instanceof ExportedShiftEntry) {
                     $shiftEntries++;
-                    $writer->addRow($this->shiftEntryRow($record));
+                    CsvDialect::writeRow($handle, $this->shiftEntryRow($record));
 
                     continue;
                 }
 
                 if ($record instanceof ExportedCorrection) {
                     $corrections++;
-                    $writer->addRow($this->correctionRow($record));
+                    CsvDialect::writeRow($handle, $this->correctionRow($record));
 
                     continue;
                 }
@@ -158,11 +166,11 @@ final readonly class CsvLegalExportWriter implements LegalExportWriter
                 throw new RuntimeException('Tipo de fila desconocido en la exportacion legal: '.$record::class.'.');
             }
         } finally {
-            // `close()` y no confiar en el destructor: si algo falla a mitad, el
-            // fichero tiene que quedar cerrado antes de que quien llama decida
-            // que hacer con el. Un descriptor abierto en un `finally` ajeno es
-            // como se acaba entregando media exportacion.
-            $writer->close();
+            // `fclose()` en el `finally` y no al final del camino feliz: si algo
+            // falla a mitad, el fichero tiene que quedar cerrado antes de que
+            // quien llama decida que hacer con el. Un descriptor abierto en un
+            // `finally` ajeno es como se acaba entregando media exportacion.
+            fclose($handle);
         }
 
         return LegalExportTally::of($shiftEntries, $corrections, count($employees));
@@ -171,30 +179,35 @@ final readonly class CsvLegalExportWriter implements LegalExportWriter
     /**
      * La cabecera de criterios y, tras una linea en blanco, los rotulos de la
      * tabla.
+     *
+     * @param  resource  $handle
      */
-    private function writeManifest(SimpleExcelWriter $writer, LegalExportManifest $manifest): void
+    private function writeManifest($handle, LegalExportManifest $manifest): void
     {
-        $writer->addRow([$this->text('title')]);
-        $writer->addRow([$this->label('installation'), $this->installationName()]);
-        $writer->addRow([$this->label('generated_at'), $manifest->generatedAt->format('Y-m-d\TH:i:s\Z')]);
-        $writer->addRow([$this->label('period'), $this->text('period_value', [
+        CsvDialect::writeRow($handle, [$this->text('title')]);
+        CsvDialect::writeRow($handle, [$this->label('installation'), $this->installationName()]);
+        CsvDialect::writeRow($handle, [$this->label('generated_at'), $manifest->generatedAt->format('Y-m-d\TH:i:s\Z')]);
+        CsvDialect::writeRow($handle, [$this->label('period'), $this->text('period_value', [
             'from' => $manifest->period->from,
             'to' => $manifest->period->to,
         ])]);
-        $writer->addRow([$this->label('scope'), $this->scopeText($manifest)]);
-        $writer->addRow([$this->label('legal_basis'), $this->text('legal_basis_value')]);
+        CsvDialect::writeRow($handle, [$this->label('scope'), $this->scopeText($manifest)]);
+        CsvDialect::writeRow($handle, [$this->label('legal_basis'), $this->text('legal_basis_value')]);
 
         foreach (self::CRITERIA as $index => $criterion) {
             // El rotulo solo en la primera: las siguientes cuelgan de ella, que
             // es como se lee una lista en una tabla de dos columnas.
-            $writer->addRow([
+            CsvDialect::writeRow($handle, [
                 $index === 0 ? $this->label('criteria') : '',
                 $this->text('criteria.'.$criterion),
             ]);
         }
 
-        $writer->addRow([]);
-        $writer->addRow(array_map(fn (string $column): string => $this->text('columns.'.$column), self::COLUMNS));
+        CsvDialect::writeRow($handle, []);
+        CsvDialect::writeRow(
+            $handle,
+            array_map(fn (string $column): string => $this->text('columns.'.$column), self::COLUMNS),
+        );
     }
 
     /**
@@ -350,8 +363,8 @@ final readonly class CsvLegalExportWriter implements LegalExportWriter
     /**
      * El destino puede ser un temporal de la peticion o una ruta que escribio a
      * mano quien atiende un requerimiento. En el segundo caso el directorio
-     * puede no existir, y `SimpleExcelWriter` fallaria con un error de flujo que
-     * no dice cual es el problema.
+     * puede no existir, y `fopen()` fallaria con un error de flujo que no dice
+     * cual es el problema.
      */
     private function ensureDirectoryExists(string $destinationPath): void
     {

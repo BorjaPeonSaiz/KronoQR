@@ -14,10 +14,10 @@
 //  - La entrega en mano es un acto aparte, con su propia casilla de
 //    confirmacion: marcarla escribe en `audit_log` con fecha y responsable, y no
 //    se puede repetir (el servidor responde 409).
+import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { IssuedPin } from '@/shared/api/types'
-import ErrorNotice from '@/shared/ui/ErrorNotice.vue'
 import BaseDialog from '@/shared/ui/BaseDialog.vue'
 import { deliverEmployeePin } from './employees.api'
 

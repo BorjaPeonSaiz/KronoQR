@@ -5,12 +5,12 @@
 // La navegacion se construye desde los AMBITOS del token, no desde el rol: lo
 // que no se puede usar no se enseña. Es cortesia, no seguridad — la de verdad
 // esta en la policy de cada endpoint (regla dura 18).
+import { announcement } from '@kronoqr/web-kit/announcer'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, RouterView, useRouter } from 'vue-router'
 import { CREDENTIALS_MANAGE, EMPLOYEES_MANAGE, REPORTS_LEGAL } from '@/features/auth/abilities'
 import { useSessionStore } from '@/features/auth/session.store'
-import { announcement } from './announcer'
 
 const { t } = useI18n()
 const router = useRouter()

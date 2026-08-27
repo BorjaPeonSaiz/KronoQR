@@ -153,6 +153,14 @@ RUN composer install \
   --no-interaction
 
 COPY --chown=app:app backend/ ./
+
+# La version del repositorio viaja DENTRO de la imagen, junto a la aplicacion.
+# Es el respaldo de /api/v1/health cuando el despliegue no fija APP_VERSION ni
+# IMAGE_TAG con un SemVer valido: sin este fichero, esa instalacion informaria
+# 0.0.0 y una incidencia no se podria correlacionar con ninguna version
+# (doc 02 §10.5, App\Support\Version\DeployedVersion).
+COPY --chown=app:app VERSION ./VERSION
+
 RUN composer dump-autoload --no-dev --optimize --classmap-authoritative
 
 #------------------------------------------------------------------------------

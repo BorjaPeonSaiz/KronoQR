@@ -50,6 +50,50 @@ return [
         'token_hours' => (int) env('IDENTITY_SESSION_TOKEN_HOURS', 12),
     ],
 
+    /*
+     * Portal del empleado — RF-ID-05..08, RL-05.
+     */
+    'portal' => [
+        /*
+         * Vida de la sesion del portal, en horas.
+         *
+         * MAS CORTA QUE LA DEL PANEL, Y NO POR SIMETRIA. El §7.3 pide «sesion
+         * corta» para el portal, y el motivo es concreto: esto se abre desde un
+         * movil personal —con frecuencia prestado, compartido o sin bloqueo de
+         * pantalla— y lo que hay detras son las horas de trabajo de una persona.
+         * Doce horas, que son las del panel, dejarian la sesion viva desde el
+         * turno de mañana hasta el de noche.
+         *
+         * DOS HORAS ES DECISION DE PRODUCTO, no una medicion ni un requisito
+         * legal: sobra para mirar un mes de jornadas y descargarse el CSV, y no
+         * llega para que la sesion siga abierta al dia siguiente. Como todo lo
+         * de este fichero, es configuracion y no una constante (regla dura 13):
+         * un cliente cuya plantilla consulta desde ordenadores de la propia
+         * empresa puede subirla.
+         *
+         * NO BLOQUEA EL ACCESO AL REGISTRO cuando caduca: se vuelve a entrar con
+         * codigo y PIN, que es lo unico que hace falta (ADR-015). La caducidad
+         * de la LICENCIA, esa si, jamas afecta a este endpoint (ADR-019, regla
+         * dura 15): el portal es registro legal.
+         */
+        'token_hours' => (int) env('IDENTITY_PORTAL_SESSION_HOURS', 2),
+
+        /*
+         * Limite de peticiones de la zona `portal` (§7.1: 10 r/m).
+         *
+         * Se aplica por IP **y** por codigo de empleado a la vez, no solo por
+         * IP: en un hotel toda la plantilla que consulte desde la wifi del
+         * centro sale por la misma linea, y un limite solo por IP dejaria a un
+         * turno entero compartiendo diez intentos por minuto. Solo por codigo
+         * seria peor: bastaria con rotar codigos.
+         *
+         * Nginx aplica ademas el suyo en el borde (§7.2). Los dos, porque el del
+         * borde no distingue a quien se dirige la peticion y este no ve el
+         * trafico que nunca llega a PHP.
+         */
+        'rate_limit_per_minute' => (int) env('IDENTITY_PORTAL_RATE_LIMIT', 10),
+    ],
+
     'password' => [
         /*
          * Longitud minima de la contrasena de gestion (RF-ID-01). La politica
@@ -103,18 +147,98 @@ return [
         ), static fn (string $pin): bool => $pin !== '')),
 
         /*
-         * Bloqueo por intentos fallidos del PIN (RS-12), separado del de la
-         * contrasena de gestion porque son dos poblaciones distintas: quien
-         * teclea mal en un quiosco a las 06:00 con guantes puestos no es quien
-         * prueba contrasenas contra el panel.
+         * BLOQUEO CRECIENTE POR INTENTOS FALLIDOS (RS-12, doc 02 §7.5).
+         *
+         * Separado del de la contrasena de gestion porque son dos poblaciones
+         * distintas: quien teclea mal en un quiosco a las 06:00 con guantes
+         * puestos no es quien prueba contrasenas contra el panel.
+         *
+         * TRES ESCALONES, NO UNO. El §7.5 exige «bloqueo temporal creciente tras
+         * 3, 5 y 10 intentos fallidos», y estos son los numeros del Anexo B:
+         *
+         *     3 fallos  ->  5 min      max_attempts / lockout_seconds
+         *     5 fallos  -> 15 min      lockout_tier2_*
+         *    10 fallos  -> 60 min      lockout_tier3_*
+         *
+         * Escalado aproximadamente geometrico: cada escalon triplica al
+         * anterior. Con eso, barrer un espacio de 10^6 es inviable y a quien se
+         * equivoca una vez no se le castiga como a quien esta probando. Los
+         * minutos son DECISION DE PRODUCTO —13 de agosto de 2026—, no una
+         * medicion ni un requisito legal: son el equilibrio entre seguridad y no
+         * dejar a nadie sin fichar delante del quiosco, y se mueven si la
+         * operacion real de un cliente lo aconseja. Lo innegociable es que sean
+         * configuracion y no constantes (regla dura 13).
+         *
+         * EL PRIMER ESCALON REUTILIZA LAS DOS CLAVES QUE YA EXISTIAN (tarea
+         * 1.13) en vez de crear un `tier1_*` paralelo: dos nombres para el mismo
+         * numero es la forma en que una instalacion acaba con el valor cambiado
+         * en uno de los dos. Sus valores de serie BAJAN de 5/900 a 3/300 con la
+         * tarea 1.12, que es lo que el Anexo B pedia desde el principio.
+         *
+         * POR EMPLEADO Y POR ORIGEN. El contador del quiosco y el del portal son
+         * distintos (§7.5): sondear una puerta no puede cerrar la otra, porque
+         * eso permitiria dejar a alguien sin fichar atacando su portal. Los
+         * umbrales, en cambio, son los mismos para las dos.
          *
          * Lo consume el fichaje de respaldo (tarea 1.12) y el acceso al portal
-         * (tarea 1.11). Restablecer el PIN limpia el contador: quien pide uno
-         * nuevo tiene que poder usarlo en el momento (RF-ID-09).
+         * (tarea 1.11). Restablecer el PIN limpia los dos contadores: quien pide
+         * uno nuevo tiene que poder usarlo en el momento (RF-ID-09).
          */
-        'max_attempts' => (int) env('IDENTITY_PIN_MAX_ATTEMPTS', 5),
+        'max_attempts' => (int) env('IDENTITY_PIN_MAX_ATTEMPTS', 3),
 
-        'lockout_seconds' => (int) env('IDENTITY_PIN_LOCKOUT_SECONDS', 900),
+        'lockout_seconds' => (int) env('IDENTITY_PIN_LOCKOUT_SECONDS', 300),
+
+        'lockout_tier2_attempts' => (int) env('IDENTITY_PIN_LOCKOUT_TIER2_ATTEMPTS', 5),
+
+        'lockout_tier2_seconds' => (int) env('IDENTITY_PIN_LOCKOUT_TIER2_SECONDS', 900),
+
+        'lockout_tier3_attempts' => (int) env('IDENTITY_PIN_LOCKOUT_TIER3_ATTEMPTS', 10),
+
+        'lockout_tier3_seconds' => (int) env('IDENTITY_PIN_LOCKOUT_TIER3_SECONDS', 3600),
+
+        /*
+         * Horas sin fallos tras las que el contador vuelve a cero.
+         *
+         * VENTANA DESLIZANTE: la cuenta arranca en el ULTIMO fallo, no en el
+         * primero. Si arrancara en el primero, quien fallara una vez cada
+         * veintitres horas no acumularia nunca y el escalon alto seria
+         * inalcanzable para justo el patron que existe para frenar.
+         */
+        'lockout_reset_hours' => (int) env('IDENTITY_PIN_LOCKOUT_RESET_HOURS', 24),
+
+        /*
+         * SOBRE CERRADO DEL PIN DEL QUIOSCO (RF-AT-11, RL-12, regla dura 19).
+         *
+         * POR QUE EXISTE. El quiosco no puede esperar a tener red para aceptar
+         * un fichaje. Con la tarjeta es facil —el padron cacheado resuelve el QR
+         * sin servidor—, pero un PIN no se puede verificar sin `pin_hash`, que
+         * no sale de aqui. La unica salida que no obliga a elegir entre
+         * «bloquear al empleado» y «guardar el PIN en claro en IndexedDB» es que
+         * la tablet SELLE el PIN con esta clave publica al teclearlo: lo que
+         * queda en la cola es un criptograma que solo este servidor puede abrir.
+         *
+         * UNA SOLA CLAVE EN LA CONFIGURACION, LA PRIVADA. La publica se deriva
+         * de ella y se sirve en `GET /kiosk/roster`. Guardar las dos permitiria
+         * emparejarlas mal, y el sintoma de eso es que todos los fichajes por
+         * PIN se rechazan mientras nada mas parece roto.
+         *
+         * SE GENERA EN EL SERVIDOR DEL CLIENTE Y NO SE TRANSMITE (§7.7, regla
+         * dura 13). Quien tenga esta clave puede leer los PIN que viajen
+         * sellados. Nunca en el repositorio, nunca compartida entre
+         * instalaciones. Para generarla:
+         *
+         *   php artisan tinker --execute="echo base64_encode(sodium_crypto_box_secretkey(sodium_crypto_box_keypair()));"
+         *
+         * VACIA ES UN CASO LEGITIMO, NO UNA AVERIA: significa que esta
+         * instalacion no ofrece fichaje por PIN. El quiosco oculta el teclado en
+         * vez de ofrecer una puerta que rechaza siempre (ADR-017).
+         */
+        'sealing' => [
+            // Cadena siempre, nunca nulo: `Config::string()` es estricto con el
+            // tipo, y «no configurado» tiene que poder leerse sin excepcion
+            // porque es un estado normal del producto.
+            'secret_key' => (string) env('IDENTITY_PIN_SEALING_SECRET_KEY', ''),
+        ],
     ],
 
     /*

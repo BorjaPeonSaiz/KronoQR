@@ -2,7 +2,7 @@ import type { DOMWrapper } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import LegalExportView from '@/features/reports/LegalExportView.vue'
 import es from '@/shared/i18n/locales/es.json'
-import { announcement, clearAnnouncement } from '@/shared/ui/announcer'
+import { announcement, clearAnnouncement } from '@kronoqr/web-kit/announcer'
 import { mountView, problemResponse, settle, stubFetch } from './support/harness'
 
 // La pantalla de la exportacion para la Inspeccion (RF-IN-05, RL-06).

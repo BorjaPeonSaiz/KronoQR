@@ -73,4 +73,28 @@ final class ScanPolicy
     {
         return $this->record($actor);
     }
+
+    /**
+     * `POST /api/v1/scan/pin` — fichaje de respaldo por PIN (RF-AT-11, tarea
+     * 1.12).
+     *
+     * Misma respuesta que {@see record()} y **metodo propio de todos modos**,
+     * por lo mismo que {@see sync()}: la regla dura 18 pide una policy por
+     * endpoint, y un endpoint que reutiliza el metodo de otro es indistinguible
+     * de uno al que se le olvido la suya.
+     *
+     * Aqui ademas hay una razon concreta para que exista desde el primer dia:
+     * este es el unico endpoint del producto donde una persona se identifica con
+     * **algo que sabe** en lugar de con algo que lleva encima, y es plausible que
+     * un cliente quiera desactivar esa via en determinados quioscos —el de la
+     * entrada de proveedores, por ejemplo— sin tocar el fichaje por tarjeta. El
+     * dia que eso ocurra, este metodo ya existe y hay una prueba negativa
+     * apuntandole.
+     *
+     * @param  mixed  $actor  El `tokenable` del token de Sanctum.
+     */
+    public function recordByPin(mixed $actor): bool
+    {
+        return $this->record($actor);
+    }
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Application\Query;
 
+use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Workforce\Application\Port\EmployeePinRepository;
 use App\Modules\Workforce\Application\Port\EmployeeRepository;
@@ -20,12 +21,27 @@ use App\Modules\Workforce\Domain\Model\Employee;
  * controladores consultaran el repositorio directamente, ese filtro habria que
  * anadirlo en cada uno y bastaria olvidarlo en uno para que el ambito no
  * existiera.
+ *
+ * **Y por lo mismo es el sitio donde el listado deja constancia** (RS-05): una
+ * pagina de este listado es un conjunto de personas —nombre, codigo, centro,
+ * departamento— y quien la pide es un tercero. El asiento describe el alcance
+ * —filtros, pagina, cuantas filas— y nunca lo divulgado (regla dura 21).
+ *
+ * La ficha individual ({@see find()}) **no** deja asiento propio, y no es un
+ * olvido: quien puede abrir una ficha puede listar el indice, y el asiento del
+ * indice ya dice que esa cuenta tuvo el directorio delante. Duplicarlo por cada
+ * ficha abierta llenaria `audit_log` con la operativa ordinaria de RRHH sin
+ * cambiar la respuesta a «que se llevo esa cuenta» (RL-15).
  */
 final readonly class EmployeeQueries
 {
+    /** Vocabulario estable del `audit_log`, en ingles y sin datos dentro. */
+    private const string DATASET = 'employee_directory';
+
     public function __construct(
         private EmployeeRepository $employees,
         private EmployeePinRepository $pins,
+        private PersonalDataAccessLog $disclosures,
     ) {}
 
     /**
@@ -40,8 +56,22 @@ final readonly class EmployeeQueries
     ): array {
         $total = $this->employees->countMatching($siteId, $departmentId, $status);
 
+        $items = $this->employees->search($siteId, $departmentId, $status, $perPage, ($page - 1) * $perPage);
+
+        // Antes de devolver, no despues: si la escritura de auditoria falla, la
+        // divulgacion no ocurre (regla dura 6, ADR-027). El recuento es el de las
+        // filas de ESTA pagina, que es lo que de verdad sale por la respuesta;
+        // `total` describe el filtro, no lo entregado.
+        $this->disclosures->recordDisclosure(self::DATASET, \count($items), [
+            ...($siteId === null ? [] : ['site_id' => $siteId]),
+            ...($departmentId === null ? [] : ['department_id' => $departmentId]),
+            'status' => $status === null ? 'any' : $status->value,
+            'page' => $page,
+            'per_page' => $perPage,
+        ]);
+
         return [
-            'items' => $this->employees->search($siteId, $departmentId, $status, $perPage, ($page - 1) * $perPage),
+            'items' => $items,
             'total' => $total,
             'page' => $page,
             'per_page' => $perPage,

@@ -64,4 +64,22 @@ final class WorkforceFixtures
 
         return $uuid;
     }
+
+    /**
+     * Da de baja a un empleado sin pasar por el caso de uso.
+     *
+     * Existe para las pruebas que comprueban que RN-14 se aplica **en cada
+     * peticion** y no solo al emitir un token: lo que importa ahi es el estado
+     * de la fila, no el acto administrativo que lo produjo, que tiene sus
+     * propias pruebas en `Workforce`.
+     */
+    public static function terminate(string $employeeUuid): void
+    {
+        Employee::query()
+            ->where('uuid', $employeeUuid)
+            ->update([
+                'status' => 'terminated',
+                'terminated_at' => '2026-06-30',
+            ]);
+    }
 }

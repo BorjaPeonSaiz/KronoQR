@@ -60,6 +60,27 @@
     },
     "srAnnouncement": "Resultado del escaneo"
   },
+  "pin": {
+    "entryButton": "¿Sin tarjeta? Ficha con tu código y PIN",
+    "title": "Fichaje con código y PIN",
+    "backToCard": "Volver a la tarjeta",
+    "code": {
+      "title": "Introduce tu código de empleado",
+      "label": "Código de empleado",
+      "continue": "Continuar"
+    },
+    "pin": {
+      "title": "Introduce tu PIN de 6 dígitos",
+      "progress": "{entered} de {total} dígitos introducidos",
+      "back": "Atrás",
+      "confirm": "Confirmar"
+    },
+    "keypad": {
+      "label": "Teclado numérico",
+      "clear": "Borrar todo",
+      "backspace": "Borrar último dígito"
+    }
+  },
   "privacy": {
     "heading": "Aviso de protección de datos",
     "controllerKnown": "Responsable: {controller}.",

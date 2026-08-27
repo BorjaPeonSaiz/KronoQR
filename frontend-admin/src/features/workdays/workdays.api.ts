@@ -9,7 +9,7 @@
 // /shift-entries/{uuid}`, que exige otro ambito de token. Que esta pantalla solo
 // sepa leer no es una comodidad: es lo que permite que un rol de solo lectura la
 // abra sin poder tocar el registro.
-import { requestJson } from '@/shared/api/http'
+import { requestJson } from '@kronoqr/web-kit/http'
 import type { EmployeeWorkDays } from '@/shared/api/types'
 
 /** Rango de **jornadas** (`work_date`), no de instantes. Vacio = lo resuelve el servidor. */

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useSessionStore } from '@/features/auth/session.store'
-import { setAuthTokenProvider, setUnauthenticatedHandler } from '@/shared/api/http'
+import { setAuthTokenProvider, setUnauthenticatedHandler } from '@kronoqr/web-kit/http'
 import { managementUser, session as sessionFixture } from './support/fixtures'
 import { createTestPinia, jsonResponse, problemResponse, stubFetch } from './support/harness'
 

@@ -2,7 +2,7 @@
 //
 // El empleado NO entra por aqui: su portal usa codigo de empleado y PIN
 // (ADR-015, regla dura 12). Este panel es solo para personal de gestion.
-import { request, requestJson } from '@/shared/api/http'
+import { request, requestJson } from '@kronoqr/web-kit/http'
 import type { LoginRequest, ManagementUser, Session } from '@/shared/api/types'
 
 export function logIn(body: LoginRequest): Promise<Session> {

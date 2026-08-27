@@ -1449,7 +1449,7 @@ Resultado esperado: los dos PDF con las medidas correctas y el QR en nivel Q; la
    El §7.1 fija el rate limiting del portal en **10 r/m**.
 3. **Ámbito `self:read`** (§7.3, RF-ID-07): sesión corta, **solo lectura**, **solo los datos del propio empleado**. Nunca datos de terceros, nunca escritura sobre el registro. *«Es lo que hace tolerable un PIN de 6 dígitos.»*
 4. **Protección del PIN** (§7.5, RS-12): bloqueo temporal **creciente tras 3, 5 y 10 intentos fallidos, por empleado y por origen**; rate limiting independiente por IP; y **mensajes que no distinguen «código inexistente» de «PIN incorrecto»**. Valores del Anexo B: `PIN_MAX_ATTEMPTS=3`, `PIN_LOCKOUT_SECONDS=300`.
-5. **Restringido a red interna por defecto** (RF-ID-08, `PORTAL_INTERNAL_ONLY=true`). Exponerlo a internet es **decisión explícita del cliente** y activa requisitos adicionales de contraseña; la interfaz de configuración debe advertirlo (agente).
+5. **Restringido a red interna por defecto** (RF-ID-08, `PORTAL_INTERNAL_CIDR`, aplicado por Nginx con `geo`+403 sobre `/api/v1/me/*`, igual patrón que `KIOSK_VLAN_CIDR`/`METRICS_ALLOW_CIDR`). Exponerlo a internet es **decisión explícita del cliente** (`PORTAL_INTERNAL_CIDR=0.0.0.0/0`) y activa requisitos adicionales de contraseña; la interfaz de configuración debe advertirlo (agente). **Nota de cierre de Fase 1**: la restricción de red y su documentación están implementadas (`devops-observabilidad`); los requisitos adicionales de contraseña al exponer a internet son lógica de aplicación y siguen pendientes — no bloquean el cierre porque el valor por defecto es restringido.
 6. **Presentación de los números** (principio del agente, *«los números tienen consecuencias»*): **horas y minutos, nunca decimales ambiguos**; la suma de los tramos cuadra exactamente con el total de la jornada; y si un dato está pendiente de corrección o tiene una incidencia abierta, **decirlo en pantalla** en lugar de mostrar un número que cambiará mañana.
 7. **Zona horaria del centro**, no del navegador (RN-04, principio del agente).
 8. **Exportación de su histórico** (RF-ID-05, RL-05). El formato es **CSV en esta tarea y PDF en la 2.9**, seleccionable por `?format=` (registrado en las notas de contrato del Anexo B del doc 01). CSV cubre la portabilidad del RGPD y no arrastra Browsershot al camino crítico de la Fase 1; el PDF —que es lo que una persona presenta ante un tercero— llega cuando la tarea 2.9 monta la maquinaria de exportación. **Sin XLSX**: RF-IN-04 lo exige para los informes de gestión, donde alguien va a seguir calculando sobre la hoja, pero no aporta nada sobre CSV para el histórico personal de una persona.
@@ -1558,8 +1558,8 @@ Resultado esperado: el aislamiento de ámbito demostrado con pruebas negativas; 
    Mismas reglas del camino de fichaje que `/scan` (skill `endpoint-api`): tiempo constante, mensaje genérico, idempotencia por UNIQUE.
 2. **PIN de 6 dígitos** contra `employees.pin_hash` (doc 01 §5.5). Nunca el PIN en claro, ni en base de datos, ni en logs, ni en la cola offline.
 3. **Protección del §7.5**, con los valores del Anexo B:
-   - `PIN_MAX_ATTEMPTS=3`
-   - `PIN_LOCKOUT_SECONDS=300`
+   - `IDENTITY_PIN_MAX_ATTEMPTS=3`
+   - `IDENTITY_PIN_LOCKOUT_SECONDS=300`
    - **Bloqueo temporal creciente tras 3, 5 y 10 intentos fallidos, por empleado y por origen** (§7.5).
    - **Rate limiting independiente por IP** (§7.5, RS-12).
 
@@ -1567,10 +1567,12 @@ Resultado esperado: el aislamiento de ámbito demostrado con pruebas negativas; 
    >
    > | Fallos acumulados | Bloqueo | Variable |
    > |---|---|---|
-   > | 3 | 5 min | `PIN_MAX_ATTEMPTS` · `PIN_LOCKOUT_SECONDS=300` |
-   > | 5 | 15 min | `PIN_LOCKOUT_TIER2_ATTEMPTS` · `PIN_LOCKOUT_TIER2_SECONDS=900` |
-   > | 10 | 60 min | `PIN_LOCKOUT_TIER3_ATTEMPTS` · `PIN_LOCKOUT_TIER3_SECONDS=3600` |
-   > | — | El contador se reinicia sin fallos en 24 h | `PIN_LOCKOUT_RESET_HOURS=24` |
+   > | 3 | 5 min | `IDENTITY_PIN_MAX_ATTEMPTS` · `IDENTITY_PIN_LOCKOUT_SECONDS=300` |
+   > | 5 | 15 min | `IDENTITY_PIN_LOCKOUT_TIER2_ATTEMPTS` · `IDENTITY_PIN_LOCKOUT_TIER2_SECONDS=900` |
+   > | 10 | 60 min | `IDENTITY_PIN_LOCKOUT_TIER3_ATTEMPTS` · `IDENTITY_PIN_LOCKOUT_TIER3_SECONDS=3600` |
+   > | — | El contador se reinicia sin fallos en 24 h | `IDENTITY_PIN_LOCKOUT_RESET_HOURS=24` |
+   >
+   > **El prefijo `IDENTITY_PIN_` es el bueno, y esto se decidió al ejecutar esta tarea.** El Anexo B las escribía como `PIN_*` a secas y la tarea 1.13 ya había construido el bloqueo sobre `IDENTITY_PIN_MAX_ATTEMPTS` / `IDENTITY_PIN_LOCKOUT_SECONDS`, con valores distintos (5 fallos / 15 min). Es decir: dos juegos de variables para el mismo control, con números distintos y **solo uno leído por la aplicación**. Se unificó en el que ya funcionaba —el que comparte prefijo con `IDENTITY_PIN_FORBIDDEN` y con la clave de configuración `identity.pin.*`— y se bajaron sus valores de serie a los 3/300 que este Anexo pedía desde el principio. El bloque `PIN_*` huérfano se borró de `.env.example`.
    >
    > Escalado geométrico: cada escalón triplica aproximadamente el anterior, lo que hace inviable el barrido de un espacio de 10⁶ sin castigar a quien se equivoca una vez. ✅ **Minutos confirmados como decisión de producto** (13 de agosto de 2026): son un equilibrio entre seguridad y no dejar a un empleado sin fichar delante del quiosco, no una medición ni un requisito legal, y quedan fijados con esa salvedad — ajustables si la operación real de un cliente aconseja otro punto de equilibrio. Lo que no es negociable es que sean configuración y no constantes.
 4. **`ScanOrigin = PIN_KIOSK`** (doc 01 §5.3) y `scan_events.origin` con ese valor. **Misma traza que el QR** (RF-AT-11).

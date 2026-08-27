@@ -189,20 +189,24 @@ test(
   },
 )
 
-test('el aviso de privacidad esta siempre visible', { tag: ['@RF-KI-09'] }, async ({ page }) => {
-  await stubScanApi(page)
-  await page.goto('/')
+test(
+  'el aviso de privacidad esta siempre visible',
+  { tag: ['@RF-KI-09', '@RL-09'] },
+  async ({ page }) => {
+    await stubScanApi(page)
+    await page.goto('/')
 
-  const notice = page.getByTestId('privacy-notice')
-  await expect(notice).toBeVisible()
-  await expect(notice).toContainText('Finalidad')
-  await expect(notice).toContainText('Base jurídica')
-  await expect(notice).toContainText('Derechos')
+    const notice = page.getByTestId('privacy-notice')
+    await expect(notice).toBeVisible()
+    await expect(notice).toContainText('Finalidad')
+    await expect(notice).toContainText('Base jurídica')
+    await expect(notice).toContainText('Derechos')
 
-  // Y sigue estando mientras se confirma un fichaje.
-  await expect(page.getByTestId('scan-confirmation')).toBeVisible()
-  await expect(notice).toBeVisible()
-})
+    // Y sigue estando mientras se confirma un fichaje.
+    await expect(page.getByTestId('scan-confirmation')).toBeVisible()
+    await expect(notice).toBeVisible()
+  },
+)
 
 test(
   'se cambia de idioma y la eleccion sobrevive a una recarga',

@@ -11,18 +11,18 @@
 // quedaron escritas en el libro de correcciones. Se convierten aqui con la zona
 // del centro, que viaja en la respuesta, y nunca con la del navegador (regla
 // dura 3). La zona va escrita al lado.
-import { computed } from 'vue'
-import { useI18n } from 'vue-i18n'
-import type { ShiftMarks, WorkDayCorrection } from '@/shared/api/types'
 import {
   formatCivilDate,
   formatInstant,
   formatZoneLabel,
   readLocalTimestamp,
-} from '@/shared/time/datetime'
+} from '@kronoqr/web-kit/datetime'
+import { durationParts } from '@kronoqr/web-kit/workdayTotals'
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import type { ShiftMarks, WorkDayCorrection } from '@/shared/api/types'
 import type { Change } from '@/shared/ui/change'
 import ChangePreview from '@/shared/ui/ChangePreview.vue'
-import { durationParts } from './workdayTotals'
 
 const props = defineProps<{
   corrections: readonly WorkDayCorrection[]

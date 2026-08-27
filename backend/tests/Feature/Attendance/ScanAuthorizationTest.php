@@ -158,3 +158,40 @@ it('no revela nada sobre la credencial en una respuesta denegada', function (): 
 
     expect($cuerpos[0])->toBe($cuerpos[1]);
 })->group('RS-03', 'RS-04');
+
+it('limita el fichaje por dispositivo sin tocar la cuota de los demas quioscos', function (): void {
+    // RS-02, eje de dispositivo. Es la mitad que Nginx no puede dar: en un hotel
+    // **todos los quioscos salen por la misma IP**, asi que un limite unico por
+    // origen dejaria que una tablet con un bucle defectuoso consumiera la cuota
+    // de todas las demas. El sintoma seria «el quiosco de recepcion no ficha»
+    // con la causa a tres metros de distancia.
+    config()->set('kiosk.rate_limits.scan_per_device', 2);
+
+    $tablet = ManagementUsers::kioskToken();
+
+    for ($i = 0; $i < 2; $i++) {
+        [$scanId, $cuerpo] = escaneoValido();
+
+        Api::as($tablet)
+            ->withHeaders(['Idempotency-Key' => $scanId])
+            ->post('/api/v1/scan', $cuerpo)
+            ->assertStatus(403);
+    }
+
+    [$scanId, $cuerpo] = escaneoValido();
+
+    Api::as($tablet)
+        ->withHeaders(['Idempotency-Key' => $scanId])
+        ->post('/api/v1/scan', $cuerpo)
+        ->assertStatus(429)
+        // `problem+json` tambien en el camino de error, con su `Retry-After`.
+        ->assertHeader('Retry-After');
+
+    // La otra tablet del mismo hotel, con la misma IP, sigue fichando.
+    [$scanId, $cuerpo] = escaneoValido();
+
+    Api::as(ManagementUsers::kioskToken())
+        ->withHeaders(['Idempotency-Key' => $scanId])
+        ->post('/api/v1/scan', $cuerpo)
+        ->assertStatus(403);
+})->group('RS-02', 'RS-04');

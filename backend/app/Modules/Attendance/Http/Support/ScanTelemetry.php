@@ -6,10 +6,8 @@ namespace App\Modules\Attendance\Http\Support;
 
 use App\Modules\Attendance\Application\Port\ScanMetrics;
 use App\Modules\Attendance\Application\UseCase\RegisterScanResult;
-use OpenTelemetry\API\Globals;
-use OpenTelemetry\API\Trace\SpanInterface;
+use App\Modules\Shared\Application\Support\SpanScope;
 use OpenTelemetry\API\Trace\SpanKind;
-use OpenTelemetry\Context\Context;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -45,10 +43,12 @@ use Throwable;
  *
  * ## Medir no puede romper un fichaje
  *
- * Todo lo de esta clase esta envuelto para que un fallo de la capa de
- * observabilidad no convierta un fichaje correcto en un `500`. La regla dura 19
- * es tajante: el quiosco nunca bloquea al empleado, y perder una traza es
- * infinitamente mas barato que perder una jornada.
+ * De eso se encarga {@see SpanScope}, que envuelve el andamiaje del span para
+ * que un fallo de la capa de observabilidad no convierta un fichaje correcto en
+ * un `500`. La regla dura 19 es tajante: el quiosco nunca bloquea al empleado, y
+ * perder una traza es infinitamente mas barato que perder una jornada. Lo que se
+ * queda aqui son los atributos, el nivel del log y que puede y que no puede
+ * escribirse en el, que es lo que distingue a esta telemetria de las demas.
  */
 final readonly class ScanTelemetry
 {
@@ -66,13 +66,16 @@ final readonly class ScanTelemetry
      */
     public function measure(string $scanId, string $deviceUuid, callable $process): RegisterScanResult
     {
-        $span = $this->startSpan($scanId, $deviceUuid);
+        $span = SpanScope::start('kronoqr.attendance', self::SPAN_NAME, SpanKind::KIND_SERVER, [
+            'scan.id' => $scanId,
+            'device.id' => $deviceUuid,
+        ]);
         $startedAt = microtime(true);
 
         try {
             $result = $process();
         } catch (Throwable $failure) {
-            $this->endSpan($span, 'error');
+            $span->end(['scan.result' => 'error']);
 
             throw $failure;
         }
@@ -80,54 +83,16 @@ final readonly class ScanTelemetry
         $seconds = microtime(true) - $startedAt;
 
         $this->metrics->scanProcessed($deviceUuid, $result->result, $seconds);
-        $this->endSpan($span, $result->result->value);
+        $span->end(['scan.result' => $result->result->value]);
         $this->log($result, $deviceUuid, $seconds, $span);
 
         return $result;
     }
 
-    private function startSpan(string $scanId, string $deviceUuid): ?SpanInterface
-    {
-        try {
-            // `Globals` devuelve un proveedor inerte mientras el SDK no este
-            // configurado, asi que esto no cuesta nada en una instalacion que no
-            // exporta trazas — que es la de la mayoria de los clientes.
-            $span = Globals::tracerProvider()
-                ->getTracer('kronoqr.attendance')
-                ->spanBuilder(self::SPAN_NAME)
-                ->setSpanKind(SpanKind::KIND_SERVER)
-                // El contexto activo trae el `traceparent` que el middleware de
-                // OpenTelemetry ya extrajo de la peticion, de modo que este span
-                // cuelga del que abrio el navegador del quiosco.
-                ->setParent(Context::getCurrent())
-                ->setAttribute('scan.id', $scanId)
-                ->setAttribute('device.id', $deviceUuid)
-                ->startSpan();
-
-            return $span;
-        } catch (Throwable) {
-            return null;
-        }
-    }
-
-    private function endSpan(?SpanInterface $span, string $result): void
-    {
-        if (! $span instanceof SpanInterface) {
-            return;
-        }
-
-        try {
-            $span->setAttribute('scan.result', $result);
-            $span->end();
-        } catch (Throwable) {
-            // Ver el docblock de la clase: medir no puede romper un fichaje.
-        }
-    }
-
-    private function log(RegisterScanResult $result, string $deviceUuid, float $seconds, ?SpanInterface $span): void
+    private function log(RegisterScanResult $result, string $deviceUuid, float $seconds, SpanScope $span): void
     {
         $context = [
-            'trace_id' => $this->traceIdOf($span),
+            'trace_id' => $span->traceId(),
             'scan_id' => $result->scanId,
             'device_id' => $deviceUuid,
             'employee_uuid' => $result->employeeUuid,
@@ -148,18 +113,5 @@ final readonly class ScanTelemetry
         }
 
         $this->logger->info('attendance.scan_processed', $context);
-    }
-
-    private function traceIdOf(?SpanInterface $span): ?string
-    {
-        if (! $span instanceof SpanInterface) {
-            return null;
-        }
-
-        $traceId = $span->getContext()->getTraceId();
-
-        // Un `trace_id` a ceros es el que devuelve un span inerte: escribirlo
-        // seria peor que no escribir nada, porque parece un identificador.
-        return trim($traceId, '0') === '' ? null : $traceId;
     }
 }

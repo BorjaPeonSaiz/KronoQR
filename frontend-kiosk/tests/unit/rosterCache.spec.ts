@@ -26,6 +26,7 @@ const tokenHash = (value: string): string => createHash('sha256').update(value).
 function rosterApi(roster: KioskRoster, calls: { count: number }): ApiClient {
   return {
     recordScan: vi.fn(),
+    recordPinScan: vi.fn(),
     syncScanBatch: vi.fn(),
     fetchRoster: vi.fn(async () => {
       calls.count += 1
@@ -38,6 +39,10 @@ function rosterApi(roster: KioskRoster, calls: { count: number }): ApiClient {
 const ROSTER: KioskRoster = {
   generated_at: '2026-08-14T04:00:00.000Z',
   entries: [{ token_hash: tokenHash(TOKEN), display_name: 'Lucia G.' }],
+  // Nulo: esta instalacion no ofrece fichaje por PIN (RF-AT-11, tarea 1.12).
+  // El padron lo trae siempre, y quien lo consuma decide si ensena el teclado
+  // numerico o no; esta prueba solo mira el cache del padron.
+  pin_sealing_public_key: null,
 }
 
 describe('SHA-256 sincrono', () => {
@@ -67,7 +72,13 @@ describe('SHA-256 sincrono', () => {
 
 describe('cifrado del padron (RL-12)', () => {
   it('lo que se guarda no contiene el nombre en claro', async () => {
-    const sealed = await sealRoster(ROSTER.entries, ROSTER.generated_at, DEVICE_TOKEN, cryptoDeps)
+    const sealed = await sealRoster(
+      ROSTER.entries,
+      ROSTER.generated_at,
+      DEVICE_TOKEN,
+      ROSTER.pin_sealing_public_key,
+      cryptoDeps,
+    )
     expect(sealed).not.toBeNull()
 
     const asText = new TextDecoder().decode(sealed?.ciphertext)
@@ -76,21 +87,41 @@ describe('cifrado del padron (RL-12)', () => {
   })
 
   it('se abre con el token del dispositivo', async () => {
-    const sealed = await sealRoster(ROSTER.entries, ROSTER.generated_at, DEVICE_TOKEN, cryptoDeps)
+    const sealed = await sealRoster(
+      ROSTER.entries,
+      ROSTER.generated_at,
+      DEVICE_TOKEN,
+      ROSTER.pin_sealing_public_key,
+      cryptoDeps,
+    )
     const opened = sealed === null ? null : await openRoster(sealed, DEVICE_TOKEN, cryptoDeps)
 
     expect(opened).toEqual(ROSTER.entries)
   })
 
   it('NO se abre con otro token: la tablet reemparejada no lee el padron viejo', async () => {
-    const sealed = await sealRoster(ROSTER.entries, ROSTER.generated_at, DEVICE_TOKEN, cryptoDeps)
+    const sealed = await sealRoster(
+      ROSTER.entries,
+      ROSTER.generated_at,
+      DEVICE_TOKEN,
+      ROSTER.pin_sealing_public_key,
+      cryptoDeps,
+    )
     const opened = sealed === null ? null : await openRoster(sealed, 'otro-token', cryptoDeps)
 
     expect(opened).toBeNull()
   })
 
   it('sin token de dispositivo no se cifra nada, y por tanto no se cachea', async () => {
-    expect(await sealRoster(ROSTER.entries, ROSTER.generated_at, '', cryptoDeps)).toBeNull()
+    expect(
+      await sealRoster(
+        ROSTER.entries,
+        ROSTER.generated_at,
+        '',
+        ROSTER.pin_sealing_public_key,
+        cryptoDeps,
+      ),
+    ).toBeNull()
   })
 })
 
@@ -188,6 +219,7 @@ describe('padron cacheado en uso', () => {
 
     const offlineApi: ApiClient = {
       recordScan: vi.fn(),
+      recordPinScan: vi.fn(),
       syncScanBatch: vi.fn(),
       fetchRoster: vi.fn(async () => ({ outcome: 'failed' as const, cause: 'offline' as const })),
       sendHeartbeat: vi.fn(),
@@ -204,6 +236,36 @@ describe('padron cacheado en uso', () => {
     expect(roster.port.displayNameFor(PAYLOAD)).toBe('Lucia G.')
   })
 
+  it('no distingue "aun no se sabe" hasta que un refresh termina, exito o no', async () => {
+    const storage = createMemoryQueueStorage()
+    const { roster } = build(storage, DEVICE_TOKEN)
+
+    expect(roster.settled()).toBe(false)
+    await roster.refresh()
+    expect(roster.settled()).toBe(true)
+  })
+
+  it('queda resuelto tambien cuando el refresh falla: null deja de ser ambiguo', async () => {
+    const storage = createMemoryQueueStorage()
+    const offlineApi: ApiClient = {
+      recordScan: vi.fn(),
+      recordPinScan: vi.fn(),
+      syncScanBatch: vi.fn(),
+      fetchRoster: vi.fn(async () => ({ outcome: 'failed' as const, cause: 'offline' as const })),
+      sendHeartbeat: vi.fn(),
+    }
+    const roster = createCachedRoster({
+      api: offlineApi,
+      storage: () => storage,
+      deviceToken: () => DEVICE_TOKEN,
+      crypto: cryptoDeps,
+    })
+
+    expect(roster.settled()).toBe(false)
+    expect(await roster.refresh()).toBe(false)
+    expect(roster.settled()).toBe(true)
+  })
+
   it('sin WebCrypto no cachea nada: mejor sin nombre que con el padron en claro', async () => {
     const storage = createMemoryQueueStorage()
     const diagnostics: string[] = []
@@ -218,5 +280,73 @@ describe('padron cacheado en uso', () => {
     expect(await roster.refresh()).toBe(false)
     expect(await storage.readRoster()).toBeNull()
     expect(diagnostics).toContain('roster.not_cacheable')
+  })
+})
+
+describe('clave publica del PIN (RF-AT-11, ADR-017)', () => {
+  const PUBLIC_KEY = '7cXt0m5rXf8mB2mHnV1kQe0k0f5T2xY3rZq8w9AbCdE='
+
+  function build(storage: QueueStorage, roster: KioskRoster, deviceToken: string | null) {
+    return createCachedRoster({
+      api: rosterApi(roster, { count: 0 }),
+      storage: () => storage,
+      deviceToken: () => deviceToken,
+      crypto: cryptoDeps,
+    })
+  }
+
+  it('null si la instalacion no ofrece fichaje por PIN', async () => {
+    const storage = createMemoryQueueStorage()
+    const roster = build(storage, ROSTER, DEVICE_TOKEN)
+
+    await roster.refresh()
+
+    expect(roster.pinSealingPublicKey()).toBeNull()
+  })
+
+  it('distingue "aun no se sabe" de "esta instalacion no ofrece PIN": ambas son null', async () => {
+    const storage = createMemoryQueueStorage()
+    const roster = build(storage, ROSTER, DEVICE_TOKEN)
+
+    // Recien creado, sin ningun refresh: null es "no lo se todavia".
+    expect(roster.pinSealingPublicKey()).toBeNull()
+    expect(roster.settled()).toBe(false)
+
+    await roster.refresh()
+
+    // Tras el refresh, el mismo null pasa a significar, sin ambiguedad,
+    // "esta instalacion no ofrece PIN" (RF-AT-11, ADR-017).
+    expect(roster.pinSealingPublicKey()).toBeNull()
+    expect(roster.settled()).toBe(true)
+  })
+
+  it('la trae el padron cuando la instalacion si la ofrece', async () => {
+    const storage = createMemoryQueueStorage()
+    const roster = build(storage, { ...ROSTER, pin_sealing_public_key: PUBLIC_KEY }, DEVICE_TOKEN)
+
+    await roster.refresh()
+
+    expect(roster.pinSealingPublicKey()).toBe(PUBLIC_KEY)
+  })
+
+  it('sobrevive a un reinicio: viaja EN CLARO junto al padron cifrado, no dentro del sobre', async () => {
+    const storage = createMemoryQueueStorage()
+    await build(storage, { ...ROSTER, pin_sealing_public_key: PUBLIC_KEY }, DEVICE_TOKEN).refresh()
+
+    // Arranque siguiente: mismo almacenamiento, instancia nueva, SIN refresh.
+    const reloaded = build(storage, ROSTER, DEVICE_TOKEN)
+    await reloaded.load()
+
+    expect(reloaded.pinSealingPublicKey()).toBe(PUBLIC_KEY)
+  })
+
+  it('se purga junto con el resto de la copia al desvincular el dispositivo', async () => {
+    const storage = createMemoryQueueStorage()
+    await build(storage, { ...ROSTER, pin_sealing_public_key: PUBLIC_KEY }, DEVICE_TOKEN).refresh()
+
+    const unpaired = build(storage, ROSTER, null)
+    await unpaired.load()
+
+    expect(unpaired.pinSealingPublicKey()).toBeNull()
   })
 })

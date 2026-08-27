@@ -23,6 +23,23 @@ use Illuminate\Database\ConnectionInterface;
  *    Es `pg_advisory_xact_lock` y no `SELECT … FOR UPDATE` porque **no hay fila
  *    que bloquear** cuando la tabla esta vacia, que es justo el caso de la
  *    primera entrada de la instalacion.
+ *
+ *    **Y es un solo candado global, no uno por tipo de accion.** No es una
+ *    decision de granularidad que se pueda afinar: la cadena de ADR-010 es
+ *    *una* secuencia, cada eslabon lleva el hash del anterior, y dos candados
+ *    permitirian a dos escritores leer el mismo `prev_hash`. Eso no es
+ *    contencion menor: es la cadena bifurcada y la alerta critica de RS-07
+ *    sonando todos los dias por una rotura que nadie ha causado. Candados por
+ *    dataset exigirian cadenas por dataset, que es otro esquema y otro ADR.
+ *
+ *    Consecuencia asumida: **todo lo que audita se serializa con el fichaje**,
+ *    incluidas las lecturas en volumen del panel (RS-05). La seccion critica es
+ *    un `SELECT` por indice mas un `INSERT` —milisegundos— y el trafico de
+ *    gestion de un hotel se cuenta en peticiones por minuto, no por segundo, asi
+ *    que no amenaza el p95 de RNF-P-02. Si algun dia lo hiciera, la palanca es la
+ *    **frecuencia** de escritura —agrupar lecturas identicas del mismo actor en
+ *    una ventana—, no la concurrencia, y cabe entera detras del puerto
+ *    `PersonalDataAccessLog` sin tocar a quien lo llama.
  * 2. **Se une a la transaccion de quien llama.** Si el caso de uso que audita ya
  *    abrio una, esta escritura entra en ella: fallar aqui deshace la accion
  *    auditada, que es lo que hace que «toda accion con relevancia legal escribe

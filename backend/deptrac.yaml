@@ -385,10 +385,25 @@ parameters:
       collectors:
         - type: classNameRegex
           value: '#^App\\Modules\\Shared\\Application\\(?!Port\\)#'
+    # Todo Shared/Infrastructure MENOS Export. La exclusion no es cosmetica: en
+    # esta capa viven adaptadores (SystemClock, CachePinAttempts...) que ninguna
+    # capa Http debe poder alcanzar, y el dialecto CSV si. Separarlos es lo que
+    # permite conceder lo segundo sin conceder lo primero.
     - name: SharedInfrastructure
       collectors:
         - type: classNameRegex
-          value: '#^App\\Modules\\Shared\\Infrastructure\\#'
+          value: '#^App\\Modules\\Shared\\Infrastructure\\(?!Export\\)#'
+
+    # Las decisiones de codificacion del CSV del producto (CsvDialect). No es un
+    # adaptador de ningun puerto: es la forma de un fichero que el producto
+    # entrega por dos caminos —la exportacion legal de Compliance y la descarga
+    # del portal, que sirve Reporting/Http— y que tiene que ser la misma por los
+    # dos. Se declara como capa propia, con sus dos aristas nombradas una a una,
+    # en lugar de abrir SharedInfrastructure entera a Http.
+    - name: SharedExport
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Shared\\Infrastructure\\Export\\#'
     - name: SharedHttp
       collectors:
         - type: classNameRegex
@@ -585,6 +600,9 @@ parameters:
       - Eloquent
       - ExternalCode
       - CompliancePersistence
+      # CsvLegalExportWriter escribe el fichero de la Inspeccion con el mismo
+      # dialecto que el CSV del portal. Ver la capa SharedExport.
+      - SharedExport
       - AttendanceDomainEvent
       - IdentityDomainEvent
       # `WorkforceDomainEvent` entra con la tarea 1.13 y por la misma via y el
@@ -961,6 +979,10 @@ parameters:
       - SharedDomainEvent
       - SharedApplication
       - SharedApplicationPort
+      # PersonalRecordCsv escribe el CSV del portal con el mismo dialecto que el
+      # de la Inspeccion. Ver la capa SharedExport: es la forma de un fichero,
+      # no un adaptador, y por eso la arista llega a Export y para ahi.
+      - SharedExport
       - Laravel
       - LaravelFacade
       - Eloquent
@@ -1248,6 +1270,11 @@ parameters:
       - LaravelFacade
       - Eloquent
       - ExternalCode
+
+    # Nada. `CsvDialect` no depende de una sola clase de la aplicacion: son los
+    # bytes que envuelven a las celdas y nada mas. Si esta lista deja de estar
+    # vacia, lo que ha entrado en Export es contenido y no formato.
+    SharedExport: ~
 
     SharedHttp:
       - SharedDomain

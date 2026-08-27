@@ -57,6 +57,40 @@ return [
         'batch_per_device' => (int) env('KIOSK_BATCH_RATE_PER_DEVICE', 60),
 
         /*
+         * `POST /api/v1/scan/pin`, por dispositivo (RF-AT-11, RS-12).
+         *
+         * DOS ORDENES DE MAGNITUD POR DEBAJO DE `/scan`, Y NO ES UN DESCUIDO.
+         * Aqui no se frena un ritmo de fichaje sino FUERZA BRUTA sobre un
+         * espacio de 10^6: una persona teclea un codigo de empleado y seis
+         * digitos en decenas de segundos, y diez intentos por minuto en un mismo
+         * quiosco ya cubren a una cola de gente que ha olvidado la tarjeta el
+         * mismo dia —un escenario que, si se da, es un problema de emision de
+         * tarjetas, no de este limite—.
+         *
+         * NO SUSTITUYE AL BLOQUEO POR EMPLEADO del §7.5: este cuenta peticiones
+         * por dispositivo y aquel cuenta fallos por persona. Quien prueba PIN
+         * desde cinco quioscos esquiva este limite y no el otro.
+         */
+        'pin_scan_per_device' => (int) env('KIOSK_PIN_SCAN_RATE_PER_DEVICE', 10),
+
+        /*
+         * `POST /api/v1/scan/pin`, por IP.
+         *
+         * PROPIO Y MAS ESTRECHO QUE `per_ip`, al contrario que en las demas
+         * zonas. En el resto del camino del quiosco el techo por IP se iguala al
+         * del borde para que mande Nginx; aqui la pregunta es otra —«¿cuantos
+         * PIN se pueden probar por minuto desde un sitio?»— y heredar los 600
+         * generales habria dejado este control sin efecto practico. El §7.5 lo
+         * exige como control INDEPENDIENTE del bloqueo por empleado.
+         *
+         * Sesenta por minuto cubren de sobra a un hotel entero cuyos quioscos
+         * salgan por la misma IP: el fichaje por PIN es la excepcion, no la
+         * norma. Si un cliente lo alcanza de verdad, lo que hay que mirar es
+         * `pin_fallback_scans_total`, no este numero.
+         */
+        'pin_scan_per_ip' => (int) env('KIOSK_PIN_SCAN_RATE_PER_IP', 60),
+
+        /*
          * `GET /api/v1/kiosk/roster` y `POST /api/v1/kiosk/heartbeat`, por
          * dispositivo.
          *

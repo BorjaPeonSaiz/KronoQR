@@ -4,10 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Application\Support;
 
-use OpenTelemetry\API\Globals;
-use OpenTelemetry\API\Trace\SpanInterface;
+use App\Modules\Shared\Application\Support\SpanScope;
 use OpenTelemetry\API\Trace\SpanKind;
-use OpenTelemetry\Context\Context;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -29,9 +27,12 @@ use Throwable;
  * `employee_uuid`, `credential_uuid` y `trace_id`, que es lo que hace falta para
  * reconstruir un problema y nada mas.
  *
- * **Medir no puede romper una impresion.** Todo va envuelto: perder una traza es
- * infinitamente mas barato que dejar a alguien sin tarjeta el dia que entra a
- * trabajar.
+ * **Medir no puede romper una impresion.** Todo va envuelto, y lo envuelve
+ * {@see SpanScope}: perder una traza es infinitamente mas barato que dejar a
+ * alguien sin tarjeta el dia que entra a trabajar. Que esta clase viva en
+ * `Application` es tambien el motivo por el que ese andamiaje comun esta en
+ * `Shared\Application` y no en `Shared\Infrastructure`; el propio `SpanScope` lo
+ * explica.
  */
 final readonly class CredentialTelemetry
 {
@@ -49,17 +50,19 @@ final readonly class CredentialTelemetry
      */
     public function measure(string $name, array $attributes, callable $act): mixed
     {
-        $span = $this->startSpan($name, $attributes);
+        // KIND_INTERNAL y no KIND_SERVER: el acto puede venir del endpoint o del
+        // comando de consola, y ninguno de los dos es «este» span.
+        $span = SpanScope::start('kronoqr.identity', $name, SpanKind::KIND_INTERNAL, $attributes);
         $startedAt = microtime(true);
 
         try {
             $result = $act();
         } catch (Throwable $failure) {
-            $this->endSpan($span, 'error');
+            $span->end(['outcome' => 'error']);
 
             $this->logger->warning($name.'_failed', [
                 ...$attributes,
-                'trace_id' => $this->traceIdOf($span),
+                'trace_id' => $span->traceId(),
                 // La clase de la excepcion, no su mensaje: el mensaje de una
                 // excepcion de dominio puede llevar el UUID de una credencial, que
                 // es publico, pero el de una de infraestructura puede llevar una
@@ -70,67 +73,14 @@ final readonly class CredentialTelemetry
             throw $failure;
         }
 
-        $this->endSpan($span, 'ok');
+        $span->end(['outcome' => 'ok']);
 
         $this->logger->info($name, [
             ...$attributes,
-            'trace_id' => $this->traceIdOf($span),
+            'trace_id' => $span->traceId(),
             'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
         ]);
 
         return $result;
-    }
-
-    /**
-     * @param  non-empty-string  $name
-     * @param  array<string, scalar|null>  $attributes
-     */
-    private function startSpan(string $name, array $attributes): ?SpanInterface
-    {
-        try {
-            // `Globals` devuelve un proveedor inerte mientras el SDK no este
-            // configurado, asi que esto no cuesta nada en la instalacion de un
-            // cliente que no exporta trazas.
-            $builder = Globals::tracerProvider()
-                ->getTracer('kronoqr.identity')
-                ->spanBuilder($name)
-                ->setSpanKind(SpanKind::KIND_INTERNAL)
-                ->setParent(Context::getCurrent());
-
-            foreach ($attributes as $key => $value) {
-                $builder->setAttribute($key, $value);
-            }
-
-            return $builder->startSpan();
-        } catch (Throwable) {
-            return null;
-        }
-    }
-
-    private function endSpan(?SpanInterface $span, string $outcome): void
-    {
-        if (! $span instanceof SpanInterface) {
-            return;
-        }
-
-        try {
-            $span->setAttribute('outcome', $outcome);
-            $span->end();
-        } catch (Throwable) {
-            // Ver el docblock: medir no puede romper una impresion.
-        }
-    }
-
-    private function traceIdOf(?SpanInterface $span): ?string
-    {
-        if (! $span instanceof SpanInterface) {
-            return null;
-        }
-
-        $traceId = $span->getContext()->getTraceId();
-
-        // Un `trace_id` a ceros es el de un span inerte: escribirlo seria peor
-        // que no escribir nada, porque parece un identificador.
-        return trim($traceId, '0') === '' ? null : $traceId;
     }
 }

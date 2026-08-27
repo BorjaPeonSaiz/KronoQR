@@ -99,3 +99,24 @@ Schedule::command('credentials:status', ['--quiet-table'])
     ->hourly()
     ->withoutOverlapping()
     ->runInBackground();
+
+/*
+ * Temporales huerfanos de la exportacion legal (RF-IN-05, hallazgo MEDIO-3
+ * del cierre de la Fase 1, tarea 1.17).
+ *
+ * SOLO storage/framework/legal-exports/, el temporal de la descarga HTTP que
+ * `LegalExportController` no llega a borrar si el cliente aborta a medias.
+ * NUNCA toca storage/app/legal-exports/, la copia deliberada de
+ * `compliance:legal-export` que se entrega a Inspeccion: esa la custodia y
+ * la borra quien la genero (docs/runbooks/requerimiento-inspeccion.md §6).
+ *
+ * CADA HORA, con una ventana de
+ * config('compliance.legal_export_temp_retention_hours') (6 h por defecto):
+ * un huerfano con datos personales de la plantilla no debe esperar a la
+ * copia de madrugada para desaparecer, y la ventana es lo bastante ancha
+ * para no borrar una descarga legitima todavia en curso.
+ */
+Schedule::command('compliance:purge-legal-export-temp')
+    ->hourly()
+    ->withoutOverlapping()
+    ->runInBackground();

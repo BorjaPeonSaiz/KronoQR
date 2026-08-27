@@ -32,10 +32,20 @@ import { createDexieQueueStorage, openKioskDatabase } from './infrastructure/dex
 export interface OfflineQueueController {
   readonly submission: ScanSubmissionPort
   readonly roster: RosterLookupPort
+  /** Ver `CachedRoster.pinSealingPublicKey()`. `null` = sin fichaje por PIN. */
+  pinSealingPublicKey(): string | null
+  /** Ver `CachedRoster.settled()`: si `pinSealingPublicKey()` en `null` es definitivo. */
+  rosterSettled(): boolean
   stats(): QueueStats
   subscribe(listener: (stats: QueueStats) => void): () => void
   onSyncing(listener: (syncing: boolean) => void): () => void
   onReachability(listener: (reachable: boolean) => void): () => void
+  /**
+   * Se llama tras cada `load()`/`refresh()` del padron, con exito o sin el: es
+   * lo que permite que la pantalla reaccione en cuanto se sepa si esta
+   * instalacion ofrece fichaje por PIN, sin que nadie tenga que sondear.
+   */
+  onRosterUpdated(listener: () => void): () => void
   /** Lo que el latido declara de la cola: `pending_queue_size` y `oldest_pending_at`. */
   telemetry(appVersion: string): KioskTelemetrySnapshot
   /** Puerta del paso 11: una version nueva no se aplica en un cambio de turno. */
@@ -70,6 +80,10 @@ export function createOfflineQueueController(options: OfflineQueueOptions): Offl
   const reporter = options.reporter
   const syncingListeners = new Set<(syncing: boolean) => void>()
   const reachabilityListeners = new Set<(reachable: boolean) => void>()
+  const rosterUpdateListeners = new Set<() => void>()
+  const notifyRosterUpdated = (): void => {
+    for (const listener of rosterUpdateListeners) listener()
+  }
 
   const queue: ScanQueue = createScanQueue({
     openStorage: () => createDexieQueueStorage(openKioskDatabase(options.databaseName)),
@@ -105,12 +119,24 @@ export function createOfflineQueueController(options: OfflineQueueOptions): Offl
   }
 
   runner.start()
-  void roster.load().then(() => roster.refresh())
-  rosterTimer = setInterval(() => void roster.refresh(), ROSTER_REFRESH_MS)
+  // OJO: el aviso solo sale DESPUES de `refresh()`, no tras `load()` a secas.
+  // `load()` es una lectura de disco que en un dispositivo recien emparejado
+  // no tiene nada que leer todavia; avisar en ese punto diria «esta
+  // instalacion no ofrece PIN» cuando lo unico que pasa es que aun no se ha
+  // preguntado al servidor (ver `pinSealingKnown` en `useOfflineQueue`).
+  void roster
+    .load()
+    .then(() => roster.refresh())
+    .then(() => notifyRosterUpdated())
+  rosterTimer = setInterval(() => {
+    void roster.refresh().then(() => notifyRosterUpdated())
+  }, ROSTER_REFRESH_MS)
 
   return {
     submission: { submit: (scan) => runner.submit(scan) },
     roster: roster.port,
+    pinSealingPublicKey: () => roster.pinSealingPublicKey(),
+    rosterSettled: () => roster.settled(),
 
     stats: () => queue.stats(),
     subscribe: (listener) => queue.subscribe(listener),
@@ -126,6 +152,13 @@ export function createOfflineQueueController(options: OfflineQueueOptions): Offl
       reachabilityListeners.add(listener)
       return () => {
         reachabilityListeners.delete(listener)
+      }
+    },
+
+    onRosterUpdated(listener) {
+      rosterUpdateListeners.add(listener)
+      return () => {
+        rosterUpdateListeners.delete(listener)
       }
     },
 
@@ -156,6 +189,7 @@ export function createOfflineQueueController(options: OfflineQueueOptions): Offl
       }
       syncingListeners.clear()
       reachabilityListeners.clear()
+      rosterUpdateListeners.clear()
       queue.storage().close()
     },
   }
@@ -196,6 +230,29 @@ export interface UseOfflineQueue {
   readonly pendingCount: Readonly<Ref<number>>
   readonly syncing: Readonly<Ref<boolean>>
   telemetry(appVersion: string): KioskTelemetrySnapshot
+  /**
+   * Reactivo, no un metodo: la pantalla principal decide si ofrece «¿Sin
+   * tarjeta?» (y la de PIN si tiene algo que teclear) en cuanto el padron
+   * llega, sin sondear nada (RF-AT-11, ADR-017).
+   */
+  readonly pinSealingPublicKey: Readonly<Ref<string | null>>
+  /**
+   * Espejo reactivo de `CachedRoster.settled()` (via
+   * `OfflineQueueController.rosterSettled()`): `false` mientras el padron no
+   * ha completado NI UN `refresh()` contra el servidor. Antes de eso,
+   * `pinSealingPublicKey` en `null` no significa «esta instalacion no ofrece
+   * PIN»: significa «todavia no se sabe». La pantalla de PIN lo usa para no
+   * redirigirse sola a la de tarjeta en el instante de montarse tras una
+   * recarga (ADR-017): confundir «aun no lo se» con «no existe» expulsaria a
+   * alguien de una via que si tiene.
+   *
+   * Se lee del CONTROLADOR, no se infiere de `pinSealingPublicKey`: el
+   * controlador es un singleton por tablet (una cola, un drenaje) que puede
+   * llevar ya un ciclo completo resuelto cuando esta pantalla se monta —
+   * llegar aqui tras haber estado antes en la de escaneo, por ejemplo — y en
+   * ese caso no hay nada que esperar.
+   */
+  readonly pinSealingKnown: Readonly<Ref<boolean>>
 }
 
 /**
@@ -206,6 +263,12 @@ export function useOfflineQueue(options: UseOfflineQueueOptions): UseOfflineQueu
   const controller = getOfflineQueueController(options)
   const pendingCount = ref(controller.stats().size)
   const syncing = ref(false)
+  const pinSealingPublicKey = ref(controller.pinSealingPublicKey())
+  // Se pregunta al controlador si YA completo un ciclo de resolucion, no se
+  // infiere de si hay clave: una instalacion sin PIN tiene la clave en `null`
+  // tanto si no se sabe todavia como si ya se sabe con certeza, y son dos
+  // cosas distintas (ver el comentario de `pinSealingKnown` en la interfaz).
+  const pinSealingKnown = ref(controller.rosterSettled())
 
   const unsubscribes = [
     controller.subscribe((stats) => {
@@ -217,6 +280,10 @@ export function useOfflineQueue(options: UseOfflineQueueOptions): UseOfflineQueu
     }),
     controller.onReachability((reachable) => {
       options.connectivity.reportReachability(reachable)
+    }),
+    controller.onRosterUpdated(() => {
+      pinSealingPublicKey.value = controller.pinSealingPublicKey()
+      pinSealingKnown.value = controller.rosterSettled()
     }),
   ]
 
@@ -230,5 +297,7 @@ export function useOfflineQueue(options: UseOfflineQueueOptions): UseOfflineQueu
     pendingCount,
     syncing,
     telemetry: (appVersion) => controller.telemetry(appVersion),
+    pinSealingPublicKey,
+    pinSealingKnown,
   }
 }

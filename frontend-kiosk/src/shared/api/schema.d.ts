@@ -169,6 +169,69 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/scan/pin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Fichaje de respaldo por PIN en el quiosco
+         * @description Registra un fichaje cuando el empleado **no puede presentar su tarjeta**
+         *     (RF-AT-11): se identifica con su codigo de empleado y su PIN de seis digitos,
+         *     los mismos con los que entra al portal personal (ADR-015, regla dura 12).
+         *
+         *     **No es un extra.** El documento 01 §3.1 lo dice literalmente: *«es lo que
+         *     impide que una tarjeta olvidada se convierta en una jornada sin registro y en
+         *     una correccion manual»*.
+         *
+         *     **Misma traza que el escaneo de tarjeta.** El servidor decide si abre o cierra
+         *     turno igual que en `/scan`, la jornada se atribuye igual (RN-05), `daily_totals`
+         *     se recalcula igual (RN-06) y el fichaje queda en `audit_log` igual, con su
+         *     origen. La respuesta es **la misma** y a proposito: el empleado ha fichado, y su
+         *     pantalla de confirmacion no tiene por que ser distinta.
+         *
+         *     **Queda marcado para revision del responsable** (RF-AT-11, documento 02 §7.5).
+         *     Esa marca vive en `scan_events.flagged_for_review` y no sale por esta respuesta.
+         *     **Marcar no es rechazar** (regla dura 19): el fichaje se registra siempre, y lo
+         *     que se revisa despues es el patron, no la persona que llega sin tarjeta.
+         *
+         *     **El PIN viaja cerrado, tambien con red.** Ver `pin_sealed`: el quiosco lo sella
+         *     con la clave publica de la instalacion en el momento de teclearlo, para poder
+         *     encolarlo sin red sin dejar en la tablet nada que sirva para suplantar a nadie
+         *     (RL-12, RS-04). No existe una variante en claro de este endpoint.
+         *
+         *     **Idempotencia (regla dura 8, RF-AT-07).** Identica a `/scan`: el `scan_id` lo
+         *     genera el cliente y reenviarlo devuelve la respuesta original, el mismo cuerpo y
+         *     el mismo codigo. Es lo que hace segura la sincronizacion de la cola offline.
+         *
+         *     **Rechazos indistinguibles (regla dura 17, RS-03).** Un fichaje por PIN que no
+         *     se puede registrar devuelve SIEMPRE la misma respuesta —`422` con
+         *     `urn:kronoqr:problem:scan-rejected`— y consume el mismo tiempo, ya sea porque el
+         *     codigo de empleado no existe, porque el PIN no es correcto, porque el sobre no
+         *     abre, porque el empleado no esta activo o porque **el bloqueo por intentos esta
+         *     activo** (RS-12). La causa concreta solo existe en `scan_events.result` y en el
+         *     log del servidor.
+         *
+         *     **Bloqueo creciente por intentos** (RS-12, documento 02 §7.5): 3 fallos bloquean
+         *     5 minutos, 5 fallos 15 minutos y 10 fallos 60 minutos, **por empleado y por
+         *     origen** —el contador del quiosco y el del portal son distintos, para que sondear
+         *     una puerta no cierre la otra—, y el contador se reinicia tras 24 h sin fallos.
+         *     Restablecer el PIN desbloquea inmediatamente (RF-ID-09). Los umbrales son
+         *     configuracion de la instalacion. **Un bloqueo activo no deja a nadie sin fichar**:
+         *     la tarjeta sigue funcionando, y esta via es la alternativa a la tarjeta, no al
+         *     reves.
+         */
+        post: operations["recordPinScan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/kiosk/roster": {
         parameters: {
             query?: never;
@@ -204,6 +267,12 @@ export interface paths {
          *     **El quiosco lo guarda cifrado** (RL-12) y lo purga al desvincularse. Esta
          *     respuesta es datos personales de terceros y **su entrega queda registrada en
          *     `audit_log`** (RS-05).
+         *
+         *     **Trae ademas la clave publica del PIN** (`pin_sealing_public_key`), que no es
+         *     un dato de nadie y sirve para lo mismo que el resto de esta respuesta: que la
+         *     tablet pueda funcionar sin red. Con ella cierra el PIN que teclea el empleado
+         *     antes de encolarlo (RF-AT-11, RL-12), y una rotacion de clave le llega en el
+         *     mismo ciclo en que se refresca el padron.
          */
         get: operations["getKioskRoster"];
         put?: never;
@@ -343,6 +412,150 @@ export interface paths {
          *     `403`.
          */
         get: operations["getCurrentUser"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Acceso del empleado a su portal personal
+         * @description Abre la sesion del portal personal con **codigo de empleado y PIN**
+         *     (RF-ID-06, ADR-015). Devuelve un token de ambito `self:read` que solo
+         *     alcanza los datos de quien lo pidio.
+         *
+         *     **Ni correo ni contrasena, y no es una simplificacion.** El producto no
+         *     puede exigir correo electronico a toda la plantilla (regla dura 12), y el
+         *     PIN ya existe como respaldo de fichaje en el quiosco (RF-AT-11): reusarlo
+         *     elimina una credencial que emitir, entregar y restablecer. Recuperar el
+         *     acceso es que RRHH restablezca el PIN —`POST
+         *     /api/v1/employees/{uuid}/pin/reset`—, nunca un correo de recuperacion.
+         *
+         *     **El PIN viaja en claro sobre TLS, y aqui eso es lo correcto.** No es el
+         *     camino de la cola offline del quiosco, donde el PIN va sellado con
+         *     `crypto_box_seal` porque puede quedarse horas en IndexedDB antes de
+         *     salir. Este es un acceso sincrono con red: si no hay red, no hay sesion
+         *     que abrir. Un sobre aqui solo añadiria una clave publica que distribuir
+         *     sin proteger de nada que TLS no proteja ya.
+         *
+         *     **Una sola respuesta para todos los rechazos** (RS-03, regla dura 17).
+         *     Codigo inexistente, PIN incorrecto, PIN nunca emitido, empleado de baja
+         *     y **bloqueo por intentos activo** devuelven el mismo `401` y en tiempo
+         *     constante. El bloqueo tampoco se anuncia: decir «estas bloqueado»
+         *     confirmaria que ese codigo de empleado existe, y ademas convertiria el
+         *     propio bloqueo en un oraculo. Quien necesite saber por que no entra
+         *     pregunta a RRHH, que es quien puede restablecer el PIN.
+         *
+         *     **Bloqueo creciente por empleado y por origen** (RS-12, §7.5): 3 fallos
+         *     bloquean 5 min, 5 fallos 15 min y 10 fallos 60 min, con la cuenta a cero
+         *     tras 24 h sin fallar. El contador del portal es **distinto** del del
+         *     quiosco: sondear una puerta no puede dejar a nadie sin poder fichar por
+         *     la otra (regla dura 19). Acertar, o que RRHH restablezca el PIN, limpia
+         *     los dos.
+         *
+         *     **Y un limite de peticiones por origen que no lo sustituye** (§7.1, 10
+         *     r/m): uno frena a quien prueba muchos PIN de una persona y el otro a
+         *     quien prueba un PIN de mucha gente. Ninguno ve lo que ve el otro.
+         */
+        post: operations["logInToPortal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/workdays": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Mi propio registro de jornada
+         * @description El registro horario **de quien pregunta**, jornada a jornada, con sus
+         *     tramos vigentes, el total de cada dia y el historico de correcciones
+         *     (RF-ID-05, RL-05, art. 34.9 ET).
+         *
+         *     **Es la misma forma de respuesta que `GET
+         *     /api/v1/employees/{uuid}/workdays`** —el esquema `EmployeeWorkDays`— y es
+         *     deliberado: lo que cambia entre las dos rutas es **quien puede pedirlas y
+         *     sobre quien**, no lo que devuelven. Una segunda forma para el mismo dato
+         *     seria una segunda oportunidad de que los dos totales dejaran de cuadrar.
+         *
+         *     **No hay `uuid` en la URL, y esa ausencia es la autorizacion** (RF-ID-07,
+         *     regla dura 18). El empleado se resuelve del token de portal, que es lo
+         *     unico que el cliente no puede falsificar. Con un identificador en la ruta
+         *     habria que confiar en que una policy lo comparase bien en todas las
+         *     peticiones; sin el, no hay nada que manipular.
+         *
+         *     **Todos los instantes salen en UTC y ademas en la zona del centro**
+         *     (regla dura 3), nunca en la del navegador: quien consulte desde otro pais
+         *     —o desde un movil con la zona mal puesta— tiene que ver las horas que
+         *     vivio, que son las que constan en su contrato.
+         *
+         *     **Un turno de noche es un solo tramo** (RN-05, regla dura 4) y **las
+         *     correcciones no se ocultan** (RN-13, regla dura 5): si alguien cambio una
+         *     hora, aparece con su autor, su momento y su motivo. Es justo lo que la
+         *     persona trabajadora tiene derecho a poder mirar.
+         *
+         *     **No queda asiento en `audit_log`.** RS-05 registra el acceso a datos
+         *     personales **de terceros**, y aqui no hay tercero: es su propio registro.
+         *     Un apunte por cada consulta convertiria un derecho en una traza de uso de
+         *     ese derecho, con cuatro años de retencion.
+         */
+        get: operations["listMyWorkDays"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Descarga de mi propio historico
+         * @description Descarga el registro horario **propio** como fichero (RF-ID-05, RL-05).
+         *     Es la mitad de «capacidad de entrega inmediata» de RL-03 que mira al
+         *     trabajador, y tambien lo que cubre la portabilidad del articulo 20 del
+         *     RGPD sin ninguna maquinaria adicional.
+         *
+         *     **CSV en esta version, PDF en la siguiente.** `format` solo admite `csv`
+         *     hoy; el PDF —que es lo que una persona presenta ante un tercero— llega
+         *     con la maquinaria de exportacion de la tarea 2.9 y sera un valor mas del
+         *     mismo enumerado, es decir un cambio aditivo (ADR-012). **Sin XLSX**: no
+         *     aporta nada sobre CSV para el historico de una sola persona, y es un
+         *     formato propietario.
+         *
+         *     **No es la exportacion legal de `GET /api/v1/reports/legal-export`.**
+         *     Aquella la genera RRHH o auditoria ante un requerimiento, abarca a
+         *     terceros y queda auditada como tal. Esta la genera la persona sobre sus
+         *     propios datos: mismo rigor en las horas —`HH:MM`, nunca decimal— y otro
+         *     destinatario.
+         *
+         *     **El fichero no lleva ningun dato de nadie mas**, ni siquiera en el
+         *     nombre: el alcance de este endpoint es exactamente el del token que lo
+         *     pide.
+         */
+        get: operations["exportMyWorkDays"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1397,6 +1610,71 @@ export interface components {
             intent?: components["schemas"]["ScanIntent"];
         };
         /**
+         * PinScanRequest
+         * @description Fichaje de respaldo por PIN, cuando el empleado no puede presentar su tarjeta
+         *     (RF-AT-11).
+         *
+         *     **Las credenciales son las mismas que las del portal** (ADR-015, regla dura
+         *     12): codigo de empleado y PIN de seis digitos. No hay una segunda credencial
+         *     que emitir, entregar ni restablecer, y restablecer el PIN arregla las dos
+         *     puertas a la vez.
+         *
+         *     **El PIN no viaja en claro nunca**, ni siquiera con red. Ver `pin_sealed`.
+         */
+        PinScanRequest: {
+            scan_id: components["schemas"]["ScanId"];
+            /**
+             * @description Momento real del fichaje, medido por el reloj del dispositivo. Puede venir
+             *     de la cola offline con retraso. **Es la marca que usa el registro legal**
+             *     (regla dura 9, RF-AT-09).
+             */
+            occurred_at: components["schemas"]["UtcTimestamp"];
+            /**
+             * @description Codigo **opaco y aleatorio** del empleado (documento 01 §5.5), el mismo con
+             *     el que entra al portal personal. Va impreso en la tarjeta y en el documento
+             *     de entrega del PIN, que es donde lo tiene quien ha olvidado la tarjeta.
+             *
+             *     **Sin `pattern` a proposito** (regla dura 17), por el mismo motivo que
+             *     `qr_payload` en `/scan`: un patron haria que un codigo malformado devolviera
+             *     `400` y uno bien formado pero inexistente devolviera `422`, y con eso el
+             *     contrato convertiria el codigo de estado en un comprobador de plantillas.
+             * @example E7QK2MXPR
+             */
+            employee_code: string;
+            /**
+             * Format: password
+             * @description El PIN de seis digitos **cerrado con la clave publica de la instalacion**, en
+             *     base64.
+             *
+             *     ```
+             *     pin_sealed = base64( crypto_box_seal( "123456", pin_sealing_public_key ) )
+             *     ```
+             *
+             *     - Sobre cerrado de libsodium (`crypto_box_seal`, curva X25519). En el
+             *       navegador: `sodium.crypto_box_seal(pin, publicKey)` de `libsodium-wrappers`.
+             *     - `pin_sealing_public_key` lo sirve `GET /api/v1/kiosk/roster`, junto al
+             *       padron, y se refresca en el mismo ciclo.
+             *     - El mensaje es el PIN en ASCII, seis digitos, sin relleno ni terminador. El
+             *       criptograma resultante son 54 bytes, 72 caracteres en base64.
+             *
+             *     **Por que cerrado y no en claro sobre TLS.** El quiosco no puede esperar a
+             *     tener red para aceptar un fichaje (regla dura 19): confirma en local y
+             *     encola. Con la tarjeta eso es facil, porque el padron cacheado resuelve el QR
+             *     sin servidor; un PIN, en cambio, solo se puede comprobar contra `pin_hash`,
+             *     que no sale del servidor. Cerrarlo en el momento de teclearlo es lo unico que
+             *     evita elegir entre bloquear al empleado y dejar el PIN en claro en IndexedDB
+             *     (RL-12). Cada sobre lleva su propia clave efimera, asi que dos fichajes con
+             *     el mismo PIN producen criptogramas distintos: quien mire la cola no puede ni
+             *     agrupar por PIN.
+             *
+             *     **Este campo si lleva `pattern`, y no contradice lo anterior**: la forma del
+             *     sobre no depende de si el PIN es correcto ni de si el empleado existe. Un PIN
+             *     bueno y uno malo producen sobres indistinguibles.
+             */
+            pin_sealed: string;
+            intent?: components["schemas"]["ScanIntent"];
+        };
+        /**
          * ScanAccepted
          * @description Lo que el quiosco necesita para confirmar al empleado, y **nada mas**
          *     (RF-AT-05). No es un endpoint de consulta: un token de quiosco no ve aqui
@@ -1643,6 +1921,24 @@ export interface components {
              *     (regla dura 19, RF-AT-10).
              */
             entries: components["schemas"]["KioskRosterEntry"][];
+            /**
+             * @description Clave publica X25519 de la instalacion, en base64, con la que el quiosco
+             *     **cierra** el PIN antes de encolarlo (RF-AT-11, RL-12). Ver `pin_sealed` en
+             *     `PinScanRequest`.
+             *
+             *     No es un secreto y no identifica a nadie: es la mitad publica del par de
+             *     claves del servidor. Viaja con el padron porque es lo mismo que el padron
+             *     —lo que la tablet necesita para poder trabajar **sin red**— y porque asi una
+             *     rotacion llega al quiosco en el mismo ciclo, sin un segundo mecanismo que
+             *     mantener.
+             *
+             *     **`null` significa que esta instalacion no ofrece fichaje por PIN** y el
+             *     quiosco debe ocultar el teclado numerico. No es un error: el producto se
+             *     vende a clientes que pueden no querer la segunda via (ADR-017), y ofrecer
+             *     una puerta que rechaza siempre es peor que no ofrecerla.
+             * @example 7cXt0m5rXf8mB2mHnV1kQe0k0f5T2xY3rZq8w9AbCdE=
+             */
+            pin_sealing_public_key: string | null;
         };
         /**
          * KioskHeartbeatRequest
@@ -1752,6 +2048,108 @@ export interface components {
              */
             expires_at: components["schemas"]["UtcTimestamp"];
             user: components["schemas"]["ManagementUser"];
+        };
+        /**
+         * PortalLoginRequest
+         * @description Las dos mitades de la credencial del portal (RF-ID-06, ADR-015): el
+         *     codigo de empleado, que va impreso en la tarjeta, y el PIN de seis
+         *     digitos, que solo sabe su titular.
+         */
+        PortalLoginRequest: {
+            /**
+             * @description Codigo de empleado, opaco y aleatorio (documento 01 §5.5). Se compara
+             *     sin distinguir mayusculas —la columna es `CITEXT`—, porque quien lo
+             *     teclea desde un movil no tiene por que acertar la caja.
+             *
+             *     **Sin `pattern`, y es la regla dura 17.** Describir aqui su forma
+             *     haria que un codigo malformado devolviera `400` y uno bien formado
+             *     pero inexistente `401`: la validacion distinguiria lo que el resto
+             *     del endpoint se cuida de no distinguir.
+             * @example E7K2M9XQ4
+             */
+            employee_code: string;
+            /**
+             * @description PIN de seis digitos, en claro sobre TLS. **Aqui si lleva patron y no
+             *     contradice lo anterior**: la longitud del PIN es publica —el contrato
+             *     la fija en `IssuedPin.pin`— y no depende de si el codigo existe ni de
+             *     si el PIN acierta.
+             *
+             *     Nunca se registra, ni en un log, ni en una traza, ni en un volcado de
+             *     excepcion (regla dura 21).
+             * @example 284016
+             */
+            pin: string;
+        };
+        /**
+         * PortalEmployee
+         * @description Quien acaba de entrar en su portal, con lo justo para que la pantalla se
+         *     pinte bien y nada mas.
+         *
+         *     **Son sus propios datos**, no los de un tercero: por eso lleva nombre,
+         *     que en el resto de la API no viaja (regla dura 21). `time_zone` y
+         *     `locale` estan aqui porque sin ellos la interfaz tendria que adivinarlos
+         *     —y adivinaria con la zona y el idioma del navegador, que es exactamente
+         *     lo que la regla dura 3 prohibe para un registro con valor legal—.
+         */
+        PortalEmployee: {
+            /**
+             * Format: uuid
+             * @description Identificador publico del empleado (`employees.uuid`).
+             */
+            uuid: string;
+            /**
+             * @description Nombre completo, para que quien entra confirme de un vistazo que la
+             *     sesion es la suya y no la de un companero que dejo el movil abierto.
+             *
+             *     **Va completo y no abreviado**, al contrario que en el padron del
+             *     quiosco (`roster:read`, §7.3): alli el nombre se recorta porque un
+             *     token robado no puede permitir reconstruir la plantilla; aqui el
+             *     unico nombre que sale es el de quien pregunta, y abreviarselo no
+             *     protegeria de nada.
+             */
+            display_name: string;
+            /** @description El codigo con el que acaba de entrar, tal y como consta en la ficha. */
+            employee_code: string;
+            /**
+             * @description Idioma de la persona (`employees.locale`), no el del navegador (§6.6).
+             * @example es
+             */
+            locale: string;
+            /**
+             * @description Zona horaria del centro al que esta adscrita hoy. Es la que decide
+             *     que dia es «hoy» para esa persona (RN-04) y en la que se presentan
+             *     sus horas.
+             */
+            time_zone: components["schemas"]["TimeZoneName"];
+        };
+        /**
+         * PortalSession
+         * @description Sesion recien abierta en el portal del empleado (RF-ID-07).
+         *
+         *     **Corta y de solo lectura.** El unico ambito del token es `self:read`, y
+         *     por eso no se enumera en la respuesta como hace `Session`: no hay nada
+         *     que el portal tenga que decidir a partir de una lista de ambitos, porque
+         *     solo hay tres rutas y las tres son suyas.
+         */
+        PortalSession: {
+            /**
+             * @description Token `Bearer` de Sanctum con ambito `self:read`. **Se muestra una
+             *     sola vez**: el servidor guarda su hash.
+             */
+            token: string;
+            /**
+             * @description Unico esquema admitido en la cabecera `Authorization`.
+             * @enum {string}
+             */
+            token_type: "Bearer";
+            /**
+             * @description Caducidad de la sesion. Es **mas corta que la del panel** a proposito
+             *     (§7.3): esto se abre desde un movil personal, con frecuencia
+             *     prestado o compartido, y lo que hay detras son las horas de trabajo
+             *     de una persona.
+             */
+            expires_at: components["schemas"]["UtcTimestamp"];
+            employee: components["schemas"]["PortalEmployee"];
         };
         /**
          * ManagementUser
@@ -2869,6 +3267,26 @@ export interface components {
             };
         };
         /**
+         * @description No se abre sesion de portal. **Una sola respuesta para cinco causas**
+         *     —codigo de empleado inexistente, PIN incorrecto, PIN nunca emitido,
+         *     empleado que no esta en alta y bloqueo por intentos activo— y en tiempo
+         *     constante (RS-03, RS-12, regla dura 17).
+         *
+         *     Sin `Retry-After`, y no es un olvido: anunciar el bloqueo confirmaria que
+         *     ese codigo de empleado existe y convertiria el propio bloqueo en un
+         *     oraculo que dice cuando se ha acertado. El detalle real vive en el log
+         *     del servidor, que es donde el §8.1 lo quiere y donde no lo ve quien
+         *     teclea.
+         */
+        PortalAccessDenied: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
          * @description El recurso no existe, o el token no alcanza a verlo. Las dos causas
          *     comparten respuesta: enumerar lo que existe pero no se puede ver es una
          *     fuga con otro nombre.
@@ -3251,6 +3669,70 @@ export interface operations {
             429: components["responses"]["TooManyRequests"];
         };
     };
+    recordPinScan: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Clave de idempotencia de la escritura. **Debe coincidir con el `scan_id` del
+                 *     cuerpo**; si difieren, la peticion es invalida (`400`).
+                 *
+                 *     Va en cabecera ademas de en el cuerpo porque es la convencion que entienden
+                 *     los intermediarios HTTP y porque deja la intencion explicita en el borde,
+                 *     antes de deserializar nada. La garantia real la da el UNIQUE de
+                 *     `scan_events.scan_id` (regla dura 8), no la cabecera.
+                 * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PinScanRequest"];
+            };
+        };
+        responses: {
+            /**
+             * @description Fichaje procesado. **Los mismos dos desenlaces que `/scan`**, discriminados
+             *     por `action` (ADR-031), y con el mismo cuerpo: un campo que dijera «esto fue
+             *     por PIN» le contaria al cliente algo que solo le incumbe al responsable que
+             *     revisa la bandeja.
+             *
+             *     Es tambien la respuesta de un **reenvio con el mismo `scan_id`**.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScanAccepted"] | components["schemas"]["ScanDebounced"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /**
+             * @description **Fichaje rechazado.** Exactamente la misma respuesta que la de `/scan`, y no
+             *     una propia: si este endpoint tuviera su tipo de problema, distinguir «PIN» de
+             *     «tarjeta» seria distinguir por que fallo el intento (regla dura 17, RS-03).
+             *
+             *     El cuerpo esta fijado campo a campo en el esquema y no admite miembros
+             *     adicionales: el contrato hace **imposible** describir la causa, incluida la
+             *     de «tu PIN esta bloqueado durante 15 minutos», que es la que mas tienta.
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ScanRejected"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
     getKioskRoster: {
         parameters: {
             query?: never;
@@ -3367,6 +3849,145 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+        };
+    };
+    logInToPortal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortalLoginRequest"];
+            };
+        };
+        responses: {
+            /**
+             * @description Sesion abierta. El token viaja como `Bearer` en las dos rutas
+             *     restantes del portal y en ninguna mas: no alcanza ningun endpoint de
+             *     gestion, porque su unico ambito es `self:read`.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalSession"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["PortalAccessDenied"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listMyWorkDays: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Primera **jornada** del rango, inclusive (`shift_entries.work_date`). Es
+                 *     una fecha civil en la zona del centro, no un instante: filtrar por
+                 *     `work_date` y no por la hora de las marcas es lo que mantiene entero un
+                 *     turno que cruza la medianoche (RN-05, regla dura 4).
+                 *
+                 *     Sin `from` se toman los **31 dias** que terminan en `to`, que es el mes
+                 *     que el panel abre por omision. El rango no puede exceder **366 dias**: no
+                 *     es una regla de negocio, es el techo que impide que una URL manipulada
+                 *     pida el historico entero de una persona en una sola respuesta.
+                 * @example 2026-03-01
+                 */
+                from?: components["parameters"]["WorkDateFrom"];
+                /**
+                 * @description Ultima jornada del rango, inclusive. Sin `to` se toma **hoy** en la zona
+                 *     del centro del empleado —no la del navegador ni la del servidor—, que es
+                 *     la unica que decide que dia es hoy para esa persona (RN-04).
+                 * @example 2026-03-31
+                 */
+                to?: components["parameters"]["WorkDateTo"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description Las jornadas del rango, de la mas antigua a la mas reciente. Sin
+             *     jornadas en el rango, `data` viene vacio: no haber trabajado esos
+             *     dias es una respuesta.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmployeeWorkDays"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    exportMyWorkDays: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Primera **jornada** del rango, inclusive (`shift_entries.work_date`). Es
+                 *     una fecha civil en la zona del centro, no un instante: filtrar por
+                 *     `work_date` y no por la hora de las marcas es lo que mantiene entero un
+                 *     turno que cruza la medianoche (RN-05, regla dura 4).
+                 *
+                 *     Sin `from` se toman los **31 dias** que terminan en `to`, que es el mes
+                 *     que el panel abre por omision. El rango no puede exceder **366 dias**: no
+                 *     es una regla de negocio, es el techo que impide que una URL manipulada
+                 *     pida el historico entero de una persona en una sola respuesta.
+                 * @example 2026-03-01
+                 */
+                from?: components["parameters"]["WorkDateFrom"];
+                /**
+                 * @description Ultima jornada del rango, inclusive. Sin `to` se toma **hoy** en la zona
+                 *     del centro del empleado —no la del navegador ni la del servidor—, que es
+                 *     la unica que decide que dia es hoy para esa persona (RN-04).
+                 * @example 2026-03-31
+                 */
+                to?: components["parameters"]["WorkDateTo"];
+                /**
+                 * @description Formato del fichero. `csv` es el unico disponible en esta version y
+                 *     es el valor por omision; `pdf` llega con la tarea 2.9.
+                 * @example csv
+                 */
+                format?: "csv";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description El fichero con el historico propio. Puede no tener ninguna fila de
+             *     datos —un periodo sin jornadas es una respuesta valida— y aun asi
+             *     lleva su cabecera de criterios.
+             */
+            200: {
+                headers: {
+                    /** @description Adjunto, con un nombre de fichero que no lleva ningun nombre de persona. */
+                    "Content-Disposition"?: string;
+                    /** @description Siempre `no-store`: el cuerpo es el registro horario de una persona. */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     listEmployees: {

@@ -2,6 +2,9 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\HealthController;
+use App\Http\Controllers\ReadinessController;
+use App\Modules\Attendance\Http\Controller\PinScanController;
 use App\Modules\Attendance\Http\Controller\ScanBatchController;
 use App\Modules\Attendance\Http\Controller\ScanController;
 use App\Modules\Attendance\Http\Controller\ShiftEntryController;
@@ -14,12 +17,15 @@ use App\Modules\Identity\Http\Controller\CurrentUserController;
 use App\Modules\Identity\Http\Controller\DeliverCredentialController;
 use App\Modules\Identity\Http\Controller\LoginController;
 use App\Modules\Identity\Http\Controller\LogoutController;
+use App\Modules\Identity\Http\Controller\PortalLoginController;
 use App\Modules\Identity\Http\Controller\PrintCredentialBatchController;
 use App\Modules\Identity\Http\Controller\PrintCredentialController;
 use App\Modules\Identity\Http\Controller\RevokeCredentialController;
 use App\Modules\Kiosk\Http\Controller\HeartbeatController;
 use App\Modules\Kiosk\Http\Controller\RosterController;
 use App\Modules\Reporting\Http\Controller\EmployeeWorkDayController;
+use App\Modules\Reporting\Http\Controller\MyWorkDayController;
+use App\Modules\Reporting\Http\Controller\MyWorkDayExportController;
 use App\Modules\Workforce\Http\Controller\DepartmentController;
 use App\Modules\Workforce\Http\Controller\EmployeeController;
 use App\Modules\Workforce\Http\Controller\EmployeePinController;
@@ -38,11 +44,6 @@ use Illuminate\Support\Facades\Route;
  * modifica ANTES que el codigo (ADR-013): ningun endpoint entra aqui antes de
  * estar descrito alli.
  *
- * Todavia sin implementar, cada uno con su tarea:
- *
- *   GET  /api/v1/health   sonda de salud (doc 01 Anexo B)  -> tarea 1.7
- *   GET  /api/v1/ready    sonda de arranque                -> tarea 1.7
- *
  * DOS COMPROBACIONES POR RUTA, NO UNA (doc 02 §7.3, regla dura 18). El
  * middleware `ability` verifica el AMBITO del token y la policy del recurso
  * verifica SOBRE QUE DATOS. Con las dos, un token de quiosco robado no alcanza
@@ -50,6 +51,33 @@ use Illuminate\Support\Facades\Route;
  * La policy se declara en el FormRequest o en el controlador de cada endpoint;
  * aqui esta la mitad del ambito.
  */
+
+/*
+ * Las dos sondas del Anexo B. Las consume la infraestructura —Docker, Nginx, el
+ * orquestador y el actualizador de la tarea 5.7—, no las aplicaciones cliente.
+ *
+ * LAS UNICAS DOS RUTAS DE TODA LA API SIN `auth:sanctum` NI POLICY, y no es un
+ * olvido de la regla dura 18: el contrato las declara `security: []` porque
+ * quien las consulta lo hace ANTES de que exista sesion alguna —un contenedor
+ * que arranca no tiene con que autenticarse—. Que no se alcancen desde fuera de
+ * la red del cliente lo decide Nginx (§7.2), no la aplicacion. Ninguna de las
+ * dos revela nada: una devuelve un numero de version y la otra un si o un no.
+ *
+ * TAMPOCO LLEVAN `throttle`, Y ESO SI ES DELIBERADO. El limitador de Laravel
+ * cuenta en la cache, que en produccion es Redis: una sonda de VIDA que
+ * consultara Redis para saber si puede responder dejaria de responder cuando
+ * Redis se caiga, y Docker reiniciaria el contenedor de PHP por un fallo que no
+ * es suyo. El techo de peticiones de estas dos rutas es el de Nginx.
+ *
+ * SON DOS SONDAS Y NO UNA porque responden a preguntas distintas: `/health` dice
+ * «este proceso esta vivo» (si responde que no, reinicia el contenedor) y
+ * `/ready` dice «este proceso puede atender trafico» (si responde que no, no le
+ * mandes peticiones y espera). Fundirlas en una es como se acaba reiniciando PHP
+ * cada vez que la base de datos tarda en arrancar.
+ */
+Route::get('/health', HealthController::class)->name('health.live');
+
+Route::get('/ready', ReadinessController::class)->name('health.ready');
 
 /*
  * POST /api/v1/scan — el escaneo del quiosco (RF-AT-01, tarea 1.4).
@@ -91,6 +119,34 @@ Route::post('/scan', ScanController::class)
 Route::post('/scan/batch', ScanBatchController::class)
     ->middleware(['auth:sanctum', 'ability:'.TokenAbility::SCAN_WRITE->value, 'throttle:scan-batch'])
     ->name('attendance.scan.batch');
+
+/*
+ * POST /api/v1/scan/pin — fichaje de respaldo por PIN (RF-AT-11, RS-12, tarea
+ * 1.12).
+ *
+ * MISMO AMBITO QUE `/scan`, Y NO UNO PROPIO. Fichar sin tarjeta sigue siendo
+ * fichar: no es una potestad distinta, es la misma con otra credencial. Un
+ * ambito propio habria obligado ademas a reemitir el token de todos los quioscos
+ * instalados para activar una funcionalidad que RF-AT-11 declara obligatoria, y
+ * un quiosco al que se le olvidara el ambito dejaria sin fichar a quien llegara
+ * sin tarjeta —regla dura 19— sin que nadie se enterara hasta ese momento.
+ *
+ * ZONA DE LIMITE PROPIA, `scan-pin`, Y ESA SI TIENE QUE SERLO. Aqui no se frena
+ * un ritmo de fichaje, se frena FUERZA BRUTA sobre un espacio de 10^6 (RS-12), y
+ * los numeros razonables son dos ordenes de magnitud mas bajos que los de `/scan`:
+ * una persona teclea un codigo y seis digitos en decenas de segundos, no en
+ * milisegundos. Compartir contador con `/scan` habria significado elegir entre
+ * dejar el PIN practicamente sin techo o asfixiar el fichaje por tarjeta.
+ *
+ * TRES CONTROLES DISTINTOS Y NINGUNO SUSTITUYE A LOS OTROS (§7.1, §7.5, RS-12):
+ * Nginx limita por ORIGEN, `throttle:scan-pin` limita por DISPOSITIVO y por IP, y
+ * el bloqueo escalonado del caso de uso cuenta FALLOS POR EMPLEADO. El primero no
+ * distingue quioscos; el segundo no distingue a quien prueba PIN de quien ficha;
+ * el tercero no ve a quien prueba codigos al azar. Hacen falta los tres.
+ */
+Route::post('/scan/pin', PinScanController::class)
+    ->middleware(['auth:sanctum', 'ability:'.TokenAbility::SCAN_WRITE->value, 'throttle:scan-pin'])
+    ->name('attendance.scan.pin');
 
 /*
  * Correcciones trazadas del registro horario (RF-PA-04, RN-13, tarea 1.15).
@@ -242,6 +298,78 @@ Route::prefix('auth')->group(function (): void {
      * POST /api/v1/auth/2fa/verify NO existe todavia: el 2FA obligatorio es de
      * la tarea 2.1 (Anexo A del doc 01). Se anota aqui para que su ausencia sea
      * una decision visible y no un olvido.
+     */
+});
+
+/*
+ * Portal del empleado (RF-ID-05..08, RL-05, art. 34.9 ET, tarea 1.11).
+ *
+ * EXISTE POR OBLIGACION LEGAL. La persona trabajadora tiene que poder acceder a
+ * su propio registro de jornada y llevarselo. Si estas tres rutas no funcionan,
+ * el cliente incumple.
+ *
+ * NINGUNA LLEVA `{uuid}`, Y ESA AUSENCIA ES LA MITAD DE LA AUTORIZACION
+ * (RF-ID-07, regla dura 18). El empleado se resuelve del token, que es lo unico
+ * que el cliente no puede falsificar: sin identificador en la ruta, no hay URL
+ * que manipular para llegar al registro de otra persona. La otra mitad son el
+ * ambito `self:read` —que verifica el middleware `ability`— y `SelfJournalPolicy`,
+ * que comprueba que quien porta el token es una sesion de portal y no una cuenta
+ * de gestion. Con las tres, un token de panel recibe 403 aunque su portador sea
+ * administrador: el registro de otro se consulta por
+ * `GET /employees/{uuid}/workdays`, que queda auditado como divulgacion (RS-05).
+ *
+ * `self:read` Y NADA MAS. No hay ninguna ruta por la que un empleado pueda
+ * cambiar su propio registro horario: rectificarlo es `PATCH
+ * /shift-entries/{uuid}`, con ambito `attendance:correct` y una cuenta de
+ * gestion, y deja autor y motivo (RN-13). El ambito de lectura del panel
+ * —`attendance:read`— tampoco alcanza estas rutas.
+ *
+ * ZONA DE LIMITE PROPIA, `portal`, MAS ESTRECHA QUE LA DE AUTENTICACION (§7.1:
+ * 10 r/m frente a 5 r/m del panel... y por eso mismo mas estrecha en lo que
+ * importa). Aqui no se frena a quien prueba contraseñas: se frena fuerza bruta
+ * sobre un espacio de 10^6 (RS-12). Se aplica por IP y por codigo de empleado a
+ * la vez, y se declara en `IdentityServiceProvider`.
+ *
+ * TRES CONTROLES DISTINTOS Y NINGUNO SUSTITUYE A LOS OTROS, igual que en
+ * `/scan/pin`: Nginx limita por origen (§7.2), `throttle:portal` limita por IP y
+ * por codigo, y el bloqueo escalonado del §7.5 cuenta FALLOS POR EMPLEADO Y POR
+ * PUERTA. El contador del portal es distinto del del quiosco, para que sondear
+ * uno no deje a nadie sin poder fichar por el otro (regla dura 19).
+ *
+ * LA CADUCIDAD DE LA LICENCIA NO TOCA ESTAS RUTAS (ADR-019, regla dura 15). El
+ * portal es registro legal: se degradan funcionalidades accesorias, nunca esto.
+ */
+Route::post('/me/login', PortalLoginController::class)
+    ->middleware('throttle:portal')
+    ->name('portal.login');
+
+Route::middleware([
+    'auth:sanctum',
+    'ability:'.TokenAbility::SELF_READ->value,
+    'throttle:portal',
+])->group(function (): void {
+    Route::get('/me/workdays', MyWorkDayController::class)->name('portal.workdays');
+
+    /*
+     * La descarga del historico propio. `GET` y no `POST` porque solo lee: que
+     * devuelva un fichero no lo convierte en una escritura, y un `POST`
+     * impediria que el portal ofreciera la descarga como un enlace.
+     *
+     * `?format=csv` es el unico valor de esta fase; el PDF llega en la tarea 2.9
+     * como un valor mas del mismo enumerado (ADR-012).
+     */
+    Route::get('/me/export', MyWorkDayExportController::class)->name('portal.export');
+
+    /*
+     * POST /api/v1/me/logout NO existe, y no es un olvido. El Anexo B del doc 01
+     * lista tres rutas de portal y solo tres. La sesion es corta y el cliente
+     * olvida el token, que es lo mismo que hace hoy el panel cuando caduca.
+     *
+     * Y para el caso que de verdad importa —un movil perdido— ya hay un camino
+     * que ademas cierra las dos puertas a la vez: que RRHH restablezca el PIN
+     * (RF-ID-09). `IdentityServiceProvider` invalida toda sesion de portal
+     * anterior al ultimo `pin_issued_at`, asi que el restablecimiento tiene
+     * efecto en la peticion siguiente y no cuando caduque el token.
      */
 });
 

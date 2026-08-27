@@ -1,6 +1,6 @@
 // Plantilla: listado, ficha, alta, modificacion, baja y PIN (RF-GP-01, RF-GP-03,
 // RF-ID-09). Todas las formas salen del contrato; aqui no se inventa ninguna.
-import { requestJson } from '@/shared/api/http'
+import { requestJson } from '@kronoqr/web-kit/http'
 import type {
   CreateEmployeeRequest,
   Employee,

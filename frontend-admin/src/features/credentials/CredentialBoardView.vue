@@ -15,21 +15,21 @@
 // Lo que esta pantalla NO tiene, a proposito: un boton de reimprimir. No existe
 // (ADR-034). Reponer una tarjeta perdida son dos actos separados —revocar y
 // volver a emitir— y cada uno deja su asiento en `audit_log`.
+import { announce } from '@kronoqr/web-kit/announcer'
+import EmptyState from '@kronoqr/web-kit/components/EmptyState.vue'
+import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
+import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
+import { FALLBACK_TIMEZONE, formatInstantWithZone } from '@kronoqr/web-kit/datetime'
+import { downloadDocument } from '@kronoqr/web-kit/downloadDocument'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { useRoute } from 'vue-router'
 import { listSites } from '@/shared/api/organisation.api'
 import type { CredentialStatusRow } from '@/shared/api/types'
-import { downloadDocument } from '@/shared/download/downloadDocument'
-import { FALLBACK_TIMEZONE, formatInstantWithZone } from '@/shared/time/datetime'
-import { announce } from '@/shared/ui/announcer'
 import type { Change } from '@/shared/ui/change'
 import ChangePreview from '@/shared/ui/ChangePreview.vue'
 import ConfirmDialog from '@/shared/ui/ConfirmDialog.vue'
-import EmptyState from '@/shared/ui/EmptyState.vue'
-import ErrorNotice from '@/shared/ui/ErrorNotice.vue'
-import LoadingPanel from '@/shared/ui/LoadingPanel.vue'
 import {
   deliverCredential,
   fetchCredentialBoard,

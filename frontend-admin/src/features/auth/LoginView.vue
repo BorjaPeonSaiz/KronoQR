@@ -7,12 +7,12 @@
 //
 // Sin segundo factor: el 2FA obligatorio es de la Fase 2 y llegara como un
 // desenlace nuevo de este mismo endpoint (ADR-012).
+import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
+import FormField from '@kronoqr/web-kit/components/FormField.vue'
+import { isApiError } from '@kronoqr/web-kit/http'
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { isApiError } from '@/shared/api/http'
-import ErrorNotice from '@/shared/ui/ErrorNotice.vue'
-import FormField from '@/shared/ui/FormField.vue'
 import { useSessionStore } from './session.store'
 
 /** Nombre con el que queda registrada la sesion. Sin PII, como exige el contrato. */

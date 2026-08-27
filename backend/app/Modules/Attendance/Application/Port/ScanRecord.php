@@ -47,8 +47,10 @@ final readonly class ScanRecord
      *                                      desfase **nunca rechaza el fichaje** (regla dura 19):
      *                                      se registra para que la incidencia de la tarea 3.5
      *                                      pueda construirse hacia atras.
-     * @param  bool  $flaggedForReview  RF-AT-11: el fichaje por PIN queda marcado para el
-     *                                  responsable. La bandeja que lo trabaja es de la 2.5.
+     * @param  bool  $flaggedForReview  El fichaje pide validacion humana por su origen (RF-AT-11:
+     *                                  el PIN) o por su desfase (RN-15: el retraso supera el
+     *                                  umbral de la instalacion). Lo decide `ReviewPolicy` en el
+     *                                  dominio; la bandeja que lo trabaja es de la 2.5/3.5.
      * @param  int|null  $workedMinutes  El acumulado de la jornada tal y como este escaneo lo
      *                                   dejo, no como este HOY (regla dura 8): un reenvio tiene
      *                                   que devolver el mismo numero, y recalcularlo desde

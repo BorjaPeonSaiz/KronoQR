@@ -4,7 +4,7 @@
 // alguna deja de cumplirse, lo que falla dice exactamente cual.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { QueuedScan } from '@/features/scan/application/ports'
+import type { QueuedPinScan, QueuedScan } from '@/features/scan/application/ports'
 import { createScanQueue } from '@/features/offline/application/scanQueue'
 import type { ScanQueue } from '@/features/offline/application/scanQueue'
 import { createSyncRunner } from '@/features/offline/application/syncRunner'
@@ -19,8 +19,23 @@ const CLOCK = fixedClock(new Date('2026-08-14T09:30:00.000Z'))
 
 function scan(scanId: string, occurredAt: string): QueuedScan {
   return {
+    kind: 'qr',
     scan_id: scanId,
     qr_payload: PAYLOAD,
+    occurred_at: occurredAt,
+    intent: 'auto',
+    device_id: 'kiosk-1',
+  }
+}
+
+/** Fichaje de respaldo por PIN (tarea 1.12): mismo `scan_id`/`occurred_at`, otra via. */
+function pinScan(scanId: string, occurredAt: string): QueuedPinScan {
+  return {
+    kind: 'pin',
+    scan_id: scanId,
+    employee_code: 'E7QK2MXPR',
+    // Un sobre cerrado de mentira: al drenaje le da igual, solo lo transporta.
+    pin_sealed: 'c2VhbGVkLXBpbi1lbnZlbG9wZS1wbGFjZWhvbGRlcg==',
     occurred_at: occurredAt,
     intent: 'auto',
     device_id: 'kiosk-1',
@@ -45,6 +60,8 @@ interface Harness {
   readonly batches: ScanBatchRequest[]
   readonly batchKeys: string[]
   readonly singles: string[]
+  /** `scan_id` de cada llamada a `/scan/pin`, en el orden en que se hicieron. */
+  readonly pinCalls: string[]
   readonly diagnostics: SyncDiagnostic[]
   readonly queue: ScanQueue
 }
@@ -52,12 +69,14 @@ interface Harness {
 interface HarnessOptions {
   readonly onBatch?: (request: ScanBatchRequest) => ApiResult<ScanBatchResponse>
   readonly onSingle?: (scanId: string) => ApiResult<ScanOk>
+  readonly onPin?: (scanId: string) => ApiResult<ScanOk>
 }
 
 function harness(options: HarnessOptions = {}): Harness {
   const batches: ScanBatchRequest[] = []
   const batchKeys: string[] = []
   const singles: string[] = []
+  const pinCalls: string[] = []
   const diagnostics: SyncDiagnostic[] = []
 
   const api: ApiClient = {
@@ -65,6 +84,15 @@ function harness(options: HarnessOptions = {}): Harness {
       singles.push(request.scan_id)
       return (
         options.onSingle?.(request.scan_id) ?? {
+          outcome: 'ok' as const,
+          data: accepted(request.scan_id, request.occurred_at, 'clock_in'),
+        }
+      )
+    }),
+    recordPinScan: vi.fn(async (request) => {
+      pinCalls.push(request.scan_id)
+      return (
+        options.onPin?.(request.scan_id) ?? {
           outcome: 'ok' as const,
           data: accepted(request.scan_id, request.occurred_at, 'clock_in'),
         }
@@ -91,7 +119,7 @@ function harness(options: HarnessOptions = {}): Harness {
   }
 
   const queue = createScanQueue({ openStorage: createMemoryQueueStorage, clock: CLOCK })
-  return { api, batches, batchKeys, singles, diagnostics, queue }
+  return { api, batches, batchKeys, singles, pinCalls, diagnostics, queue }
 }
 
 function runnerFor(
@@ -535,5 +563,128 @@ describe('garantia 6 — degradacion honesta', () => {
 
     expect(result.kind).toBe('rejected')
     expect(rejecting.queue.stats().size).toBe(0)
+  })
+})
+
+describe('fichaje de respaldo por PIN (tarea 1.12, RF-AT-11)', () => {
+  it('con la cola vacia usa el envio individual a `/scan/pin`, no `/scan`', async () => {
+    const bench = harness()
+    const runner = runnerFor(bench)
+
+    const result = await runner.submit(
+      pinScan('0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90', '2026-08-14T08:00:00.000Z'),
+    )
+
+    expect(result.kind).toBe('accepted')
+    expect(bench.pinCalls).toEqual(['0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90'])
+    expect(bench.singles).toHaveLength(0)
+    expect(bench.batches).toHaveLength(0)
+  })
+
+  it('sin red se encola y se aplaza igual que un fichaje por tarjeta (regla dura 19)', async () => {
+    const bench = harness()
+    const runner = runnerFor(bench, { online: false })
+
+    const result = await runner.submit(
+      pinScan('0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90', '2026-08-14T08:00:00.000Z'),
+    )
+
+    expect(result.kind).toBe('deferred')
+    expect(bench.pinCalls).toHaveLength(0)
+    expect(bench.queue.stats().size).toBe(1)
+  })
+
+  it('el PIN no tiene lote: cada elemento del tramo viaja en su propia llamada, en orden', async () => {
+    const bench = harness()
+    const runner = runnerFor(bench)
+
+    // Dos fichajes por PIN encolados sin red: la salida antes que la entrada,
+    // como pasaria con una cola desordenada.
+    await bench.queue.enqueue(
+      pinScan('0199f13a-7c22-7b41-9e88-0c4d5e6f7a81', '2026-08-14T16:00:00.000Z'),
+    )
+    await bench.queue.enqueue(
+      pinScan('0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90', '2026-08-14T08:00:00.000Z'),
+    )
+
+    await runner.drain({ ignoreSchedule: true })
+
+    expect(bench.pinCalls).toEqual([
+      '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90',
+      '0199f13a-7c22-7b41-9e88-0c4d5e6f7a81',
+    ])
+    expect(bench.batches).toHaveLength(0)
+    expect(bench.queue.stats().size).toBe(0)
+  })
+
+  it('un PIN y un QR encolados se aplican en su orden real, cada uno por su via', async () => {
+    const bench = harness()
+    const runner = runnerFor(bench)
+
+    // Entrada por tarjeta a las 08:00; salida por PIN (tarjeta olvidada) a las
+    // 16:00. Se encolan al reves para que el orden de encolado no pueda
+    // confundirse con el orden de `occurred_at`.
+    await bench.queue.enqueue(
+      pinScan('0199f13a-7c22-7b41-9e88-0c4d5e6f7a81', '2026-08-14T16:00:00.000Z'),
+    )
+    await bench.queue.enqueue(
+      scan('0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90', '2026-08-14T08:00:00.000Z'),
+    )
+
+    await runner.drain({ ignoreSchedule: true })
+
+    // El QR (mas temprano) se envia por lote ANTES que el PIN (mas tardio).
+    expect(bench.batches[0]?.scans.map((item) => item.scan_id)).toEqual([
+      '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90',
+    ])
+    expect(bench.pinCalls).toEqual(['0199f13a-7c22-7b41-9e88-0c4d5e6f7a81'])
+    expect(bench.queue.stats().size).toBe(0)
+  })
+
+  it('un PIN atascado no deja que un QR mas tardio del mismo drenaje lo adelante', async () => {
+    const bench = harness({ onPin: () => ({ outcome: 'failed', cause: 'network' }) })
+    const runner = runnerFor(bench)
+
+    // PIN a las 08:00 (fallara), QR a las 16:00 (funcionaria si se probara).
+    await bench.queue.enqueue(
+      pinScan('0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90', '2026-08-14T08:00:00.000Z'),
+    )
+    await bench.queue.enqueue(
+      scan('0199f13a-7c22-7b41-9e88-0c4d5e6f7a81', '2026-08-14T16:00:00.000Z'),
+    )
+
+    await runner.drain({ ignoreSchedule: true })
+
+    // El QR NO se ha intentado: adelantarlo habria roto el orden real.
+    expect(bench.batches).toHaveLength(0)
+    expect(bench.pinCalls).toEqual(['0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90'])
+    // Los dos siguen en la cola: nada se ha perdido (garantia 5).
+    expect(bench.queue.stats().size).toBe(2)
+  })
+
+  it('el PIN rechazado por el servidor sale de la cola, como cualquier `422`', async () => {
+    const bench = harness({
+      onPin: (scanId) => ({
+        outcome: 'rejected',
+        problem: {
+          type: 'urn:kronoqr:problem:scan-rejected',
+          title: 'Escaneo no valido',
+          status: 422,
+          detail: 'El escaneo no se ha podido registrar.',
+          scan_id: scanId,
+        },
+      }),
+    })
+    const runner = runnerFor(bench)
+
+    await bench.queue.enqueue(
+      pinScan('0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90', '2026-08-14T08:00:00.000Z'),
+    )
+    await bench.queue.enqueue(
+      pinScan('0199f13a-7c22-7b41-9e88-0c4d5e6f7a81', '2026-08-14T16:00:00.000Z'),
+    )
+    await runner.drain({ ignoreSchedule: true })
+
+    expect(bench.queue.stats().size).toBe(0)
   })
 })

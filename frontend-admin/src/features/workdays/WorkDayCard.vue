@@ -11,13 +11,13 @@
 // (WCAG 2.2 AA, 1.4.1): un turno abierto significa que el total todavia va a
 // subir, y una incidencia que alguien tiene que mirar el dia. Ninguna de las dos
 // es un error del que haya que avisar a gritos.
+import { formatCivilDate, formatInstantWithZone, formatZoneLabel } from '@kronoqr/web-kit/datetime'
+import { durationParts } from '@kronoqr/web-kit/workdayTotals'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { WorkDayDetail } from '@/shared/api/types'
-import { formatCivilDate, formatInstantWithZone, formatZoneLabel } from '@/shared/time/datetime'
 import CorrectionHistory from './CorrectionHistory.vue'
 import ShiftEntryTable from './ShiftEntryTable.vue'
-import { durationParts } from './workdayTotals'
 
 const props = defineProps<{ day: WorkDayDetail }>()
 

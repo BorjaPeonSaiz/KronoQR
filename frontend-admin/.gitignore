@@ -5,3 +5,7 @@ dev-dist/
 .vite/
 test-results/
 playwright-report/
+# Cache incremental de tsc/vue-tsc: se regenera sola y, si queda commiteada,
+# arrastra referencias a ficheros ya borrados (como paso con la migracion a
+# @kronoqr/web-kit, ADR-036).
+tsconfig.tsbuildinfo

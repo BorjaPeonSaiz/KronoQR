@@ -44,6 +44,17 @@ final class ProblemDetails
     public const string TYPE_SERVICE_UNAVAILABLE = 'urn:kronoqr:problem:service-unavailable';
 
     /**
+     * La instancia todavia no acepta trafico: `GET /api/v1/ready`.
+     *
+     * **Tipo propio y no `TYPE_SERVICE_UNAVAILABLE`**, aunque los dos sean
+     * `503`, porque a quien los recibe le cambia la accion siguiente: aquel dice
+     * «falta configuracion en el servidor, avisa a quien administra» y este dice
+     * «reintenta, no me mandes trafico todavia». El segundo lo lee un
+     * orquestador, no una persona.
+     */
+    public const string TYPE_NOT_READY = 'urn:kronoqr:problem:not-ready';
+
+    /**
      * Peticion mal formada.
      *
      * **No es lo mismo que `TYPE_VALIDATION_FAILED` y la diferencia importa en
@@ -168,13 +179,29 @@ final class ProblemDetails
      * —correo desconocido, contrasena incorrecta y cuenta desactivada—. Si el
      * texto variara, el panel seria un comprobador de cuentas de la empresa.
      */
-    public static function invalidCredentials(): JsonResponse
+    /**
+     * `401` con el mismo `type` para las dos puertas de acceso del producto.
+     *
+     * **El `detail` cambia y el `type` no**, y ese reparto es el que importa: el
+     * `type` es el URN estable que el cliente interpreta —y los dos accesos
+     * quieren la misma reaccion, «vuelve a pedir credenciales»—, mientras que el
+     * `detail` es texto para una persona y tiene que nombrar lo que esa persona
+     * acaba de teclear. Decirle «el correo o la contraseña» a quien entro con su
+     * codigo de empleado y su PIN es decirle que revise algo que no existe
+     * (ADR-015, regla dura 12).
+     *
+     * Lo que **no** puede cambiar es que la respuesta sea la misma para todas
+     * las causas de cada puerta: en el portal son cinco —codigo inexistente, PIN
+     * incorrecto, PIN no emitido, empleado no en alta y bloqueo activo— y
+     * ninguna se distingue desde fuera (RS-03, regla dura 17).
+     */
+    public static function invalidCredentials(?string $detail = null): JsonResponse
     {
         return self::response(
             self::TYPE_INVALID_CREDENTIALS,
             'Credenciales no validas',
             JsonResponse::HTTP_UNAUTHORIZED,
-            'El correo o la contrasena no son correctos.',
+            $detail ?? 'El correo o la contrasena no son correctos.',
         );
     }
 
@@ -196,6 +223,25 @@ final class ProblemDetails
             'Servicio no disponible',
             JsonResponse::HTTP_SERVICE_UNAVAILABLE,
             $detail,
+        );
+    }
+
+    /**
+     * La instancia no esta lista para recibir trafico.
+     *
+     * **No acepta ningun detalle, y esa firma es el control**: el cuerpo es
+     * identico con la base de datos caida, con Redis caido o con las dos. Si
+     * este metodo admitiera un `detail` libre, la sonda publica acabaria
+     * enumerando los servicios caidos de la instalacion el dia que alguien
+     * quisiera depurar mas comodo. La causa se escribe en el log del servidor.
+     */
+    public static function notReady(): JsonResponse
+    {
+        return self::response(
+            self::TYPE_NOT_READY,
+            'Servicio no disponible',
+            JsonResponse::HTTP_SERVICE_UNAVAILABLE,
+            'La instancia todavia no esta lista para recibir trafico.',
         );
     }
 

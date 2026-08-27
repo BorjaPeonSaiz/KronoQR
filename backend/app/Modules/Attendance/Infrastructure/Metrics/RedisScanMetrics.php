@@ -51,6 +51,9 @@ final readonly class RedisScanMetrics implements ScanMetrics
 
     public const string BATCH_SIZE = self::KEY_PREFIX.'scan_batch_size';
 
+    /** RF-AT-11: fichajes por PIN de respaldo, por centro (§8.2, tarea 1.12). */
+    public const string PIN_FALLBACK_SCANS = self::KEY_PREFIX.'pin_fallback_scans_total';
+
     /**
      * Cubos en segundos, del contrato de Prometheus: cada uno cuenta las
      * observaciones **menores o iguales** que su limite.
@@ -138,6 +141,29 @@ final readonly class RedisScanMetrics implements ScanMetrics
             // Ver el metodo anterior: medir no puede romper una sincronizacion.
             // Aqui es todavia mas claro, porque los fichajes del lote ya estan
             // confirmados cuando se llega a esta linea.
+        }
+    }
+
+    /**
+     * `pin_fallback_scans_total{site}` (RF-AT-11, §8.2).
+     *
+     * Un contador simple y no un histograma: lo que se quiere saber es cuantos
+     * son, no cuanto tardaron. La cardinalidad es la de los centros de la
+     * instalacion —uno en la mayoria de los clientes, unos pocos en una cadena—,
+     * asi que la etiqueta cabe en el mismo hash que el resto.
+     */
+    public function pinFallbackScan(int $siteId): void
+    {
+        try {
+            $this->redis->connection()->command('HINCRBY', [
+                self::PIN_FALLBACK_SCANS,
+                'site='.$siteId,
+                1,
+            ]);
+        } catch (Throwable) {
+            // Ver `scanProcessed()`: cuando se llega aqui el fichaje ya esta
+            // confirmado, y una excepcion de la capa de metricas lo convertiria
+            // en un `500` para el quiosco.
         }
     }
 }

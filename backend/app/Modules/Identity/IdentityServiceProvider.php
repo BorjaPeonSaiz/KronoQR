@@ -18,6 +18,8 @@ use App\Modules\Identity\Application\Port\LoginAttempts;
 use App\Modules\Identity\Application\Port\QrKeyProvider;
 use App\Modules\Identity\Application\Port\UserAccounts;
 use App\Modules\Identity\Application\Support\CredentialTelemetry;
+use App\Modules\Identity\Application\Support\PortalAccessTelemetry;
+use App\Modules\Identity\Application\UseCase\AuthenticatePortalEmployeeHandler;
 use App\Modules\Identity\Application\UseCase\DeliverCredential;
 use App\Modules\Identity\Application\UseCase\IssueDeviceToken;
 use App\Modules\Identity\Application\UseCase\MintCards;
@@ -50,11 +52,16 @@ use App\Modules\Identity\Infrastructure\Persistence\EloquentUserAccounts;
 use App\Modules\Identity\Infrastructure\Persistence\User;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CredentialFingerprints;
+use App\Modules\Shared\Application\Port\EmployeePinVerifier;
 use App\Modules\Shared\Application\Port\EmployeeRegistry;
+use App\Modules\Shared\Application\Port\PortalSessionIssuer;
+use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
+use DateTimeInterface;
 use Illuminate\Cache\RateLimiter;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
@@ -89,6 +96,18 @@ use Psr\Log\LoggerInterface;
  */
 final class IdentityServiceProvider extends ServiceProvider
 {
+    /**
+     * La tabla del `tokenable` de una sesion de portal (RF-ID-07, tarea 1.11).
+     *
+     * Se compara la tabla y no la clase porque este modulo no puede importar el
+     * modelo `Employee` de `Workforce` (doc 02 §1.6). Es el mismo criterio que
+     * usan `Attendance\Http\Policy\ScanPolicy` y
+     * `Compliance\Infrastructure\Audit\CurrentAuditContext` con el quiosco
+     * —nombradas en prosa y no con `@see`, porque una referencia resoluble seria
+     * la dependencia entre modulos que la frontera prohibe—.
+     */
+    private const string EMPLOYEES_TABLE = 'employees';
+
     public function register(): void
     {
         $this->app->bind(UserAccounts::class, EloquentUserAccounts::class);
@@ -101,11 +120,13 @@ final class IdentityServiceProvider extends ServiceProvider
 
         $this->registerCredentials();
         $this->registerDevices();
+        $this->registerPortal();
     }
 
     public function boot(): void
     {
         $this->registerAuthenticationRateLimiter();
+        $this->registerPortalRateLimiter();
         $this->rejectTokensOfDeactivatedAccounts();
 
         Gate::policy(Credential::class, CredentialPolicy::class);
@@ -273,6 +294,109 @@ final class IdentityServiceProvider extends ServiceProvider
     }
 
     /**
+     * Portal del empleado (RF-ID-05..07, RL-05, tarea 1.11).
+     *
+     * **El caso de uso se declara explicitamente y no se deja al autowiring**
+     * porque la vida de la sesion entra como valor ya resuelto: `Application` no
+     * consulta la configuracion, la recibe (regla dura 14, mismo criterio que
+     * `IssueDeviceToken`). Es lo que permite que una prueba fije una caducidad de
+     * una hora sin tocar el `.env` de nadie.
+     *
+     * **Aqui no se enlaza ningun puerto de sesion.** `PortalSessionIssuer` lo
+     * declara `Shared` y lo implementa `Workforce`, que es quien tiene
+     * `employees` y por tanto el unico que puede acuñar un token colgado de una
+     * persona; su enlace vive en `WorkforceServiceProvider` (ADR-025,
+     * restriccion 3). Lo mismo vale para `EmployeePinVerifier`, que ya venia de
+     * la tarea 1.12.
+     */
+    private function registerPortal(): void
+    {
+        $this->app->bind(
+            PortalAccessTelemetry::class,
+            static fn (Application $app): PortalAccessTelemetry => new PortalAccessTelemetry(
+                $app->make(LoggerInterface::class),
+            ),
+        );
+
+        $this->app->bind(
+            AuthenticatePortalEmployeeHandler::class,
+            static fn (Application $app): AuthenticatePortalEmployeeHandler => new AuthenticatePortalEmployeeHandler(
+                pins: $app->make(EmployeePinVerifier::class),
+                sessions: $app->make(PortalSessionIssuer::class),
+                clock: $app->make(Clock::class),
+                telemetry: $app->make(PortalAccessTelemetry::class),
+                sessionHours: max(1, Config::integer('identity.portal.token_hours', 2)),
+            ),
+        );
+    }
+
+    /**
+     * Zona del portal del §7.1: **10 r/m**.
+     *
+     * **Mas estrecha que la de autenticacion, y tiene que serlo.** Aqui no se
+     * frena a quien prueba contraseñas contra un correo: se frena fuerza bruta
+     * sobre un espacio de 10^6 (RS-12), y ademas el portal esta pensado para
+     * abrirse desde la red interna (RF-ID-08). Una persona teclea un codigo y
+     * seis digitos en decenas de segundos, no en milisegundos.
+     *
+     * **Por codigo de empleado y por IP a la vez**, no solo por IP: en un hotel
+     * toda la plantilla que consulte desde la wifi del centro sale por la misma
+     * linea, y un limite solo por IP dejaria a un turno entero compartiendo diez
+     * intentos por minuto. Solo por codigo seria peor: bastaria con rotarlos.
+     *
+     * **Y no sustituye al bloqueo por intentos** (§7.5): este cuenta peticiones
+     * por origen y aquel cuenta fallos por empleado. Uno frena a quien prueba
+     * muchos PIN de una persona, el otro a quien prueba un PIN de mucha gente, y
+     * ninguno ve lo que ve el otro. RS-12 los enumera juntos.
+     */
+    private function registerPortalRateLimiter(): void
+    {
+        RateLimiterFacade::for('portal', static function (Request $request): array {
+            // El techo se lee EN CADA PETICION y no al arrancar: leerlo aqui
+            // fuera lo congelaria en el valor que tuviera la configuracion en el
+            // momento del `boot()`, y entonces `config:cache` —o una prueba que
+            // lo cambie— no tendria efecto hasta reiniciar el proceso.
+            $perMinute = max(1, Config::integer('identity.portal.rate_limit_per_minute', 10));
+
+            return [
+                Limit::perMinute($perMinute)->by('portal-ip:'.(string) $request->ip()),
+                Limit::perMinute($perMinute)->by('portal-subject:'.self::portalSubjectOf($request)),
+            ];
+        });
+    }
+
+    /**
+     * A quien se le cuenta la peticion del portal, ademas de a su IP.
+     *
+     * **Las tres rutas comparten zona pero no sujeto**, y tiene que ser asi:
+     *
+     * - En `/me/login` todavia no hay nadie autenticado, asi que el sujeto es el
+     *   **codigo de empleado** que se esta probando. En minusculas por lo mismo
+     *   que el correo del panel: la columna es `CITEXT`, y `E7K2` y `e7k2` son el
+     *   mismo codigo — darles dos cupos duplicaria el techo cambiando la caja.
+     * - En `/me/workdays` y `/me/export` el sujeto es la **persona autenticada**.
+     *   Usar aqui el codigo del cuerpo —que no existe en un `GET`— dejaria a
+     *   toda la plantilla compartiendo un unico cupo con clave vacia, y bastaria
+     *   con que dos personas consultaran a la vez para que una recibiera un
+     *   `429` sobre su propio registro horario (RL-05 no lo permite).
+     */
+    private static function portalSubjectOf(Request $request): string
+    {
+        $actor = $request->user();
+
+        if ($actor instanceof Model) {
+            $key = $actor->getKey();
+
+            // La clave primaria de `employees` es un `BIGINT`, pero el tipo de
+            // `getKey()` es `mixed` y no hay por que fiarse: lo que no puede
+            // pasar es que dos personas compartan cupo por una conversion rara.
+            return 'employee:'.(is_scalar($key) ? (string) $key : 'desconocido');
+        }
+
+        return 'code:'.mb_strtolower($request->string('employee_code')->trim()->value());
+    }
+
+    /**
      * Zona de autenticacion del §7.1: **5 r/m**.
      *
      * Se limita por correo **y** por IP a la vez, no solo por IP: en un hotel
@@ -303,6 +427,10 @@ final class IdentityServiceProvider extends ServiceProvider
      * Es la mitad que se olvida de la baja de un usuario: se marca `is_active`
      * a `false` y la sesion abierta en una tablet sigue funcionando hasta que
      * expira. Con esto, la baja tiene efecto en la peticion siguiente.
+     *
+     * **Vale para los tres `tokenable` del producto** —cuenta de gestion,
+     * quiosco y, desde la tarea 1.11, empleado con sesion de portal— y sigue
+     * fallando cerrado ante cualquier otro.
      */
     private function rejectTokensOfDeactivatedAccounts(): void
     {
@@ -329,14 +457,74 @@ final class IdentityServiceProvider extends ServiceProvider
                     return $owner->status === DeviceStatus::ACTIVE->value;
                 }
 
+                // El tercer tokenable, que ya existe: la sesion del portal del
+                // empleado (RF-ID-07, ADR-015, tarea 1.11). Cuelga de
+                // `employees` porque el producto no puede exigir correo a la
+                // plantilla (regla dura 12).
+                //
+                // SE RECONOCE POR LA TABLA Y NO POR LA CLASE, igual que hace
+                // `Attendance\Http\Policy\ScanPolicy` con el quiosco: `Identity`
+                // no puede importar el modelo `Employee` de `Workforce` (doc 02
+                // §1.6, verificado por Deptrac), y la tabla es lo estable.
+                //
+                // Y SE COMPRUEBA RN-14, no `is_active`: dar de baja a alguien
+                // tiene efecto en la peticion siguiente y no cuando caduque su
+                // sesion. Es la misma regla con la que su PIN deja de verificar,
+                // asi que las dos puertas se cierran a la vez.
+                if ($owner instanceof Model && $owner->getTable() === self::EMPLOYEES_TABLE) {
+                    return self::portalSessionIsStillValid($accessToken, $owner);
+                }
+
                 // Falla cerrado, no abierto (revision de seguridad de la tarea
                 // 1.5). Un tokenable que este metodo no reconoce es uno cuyo
                 // estado no se ha comprobado: aceptarlo por defecto reintroduce
-                // el fallo que este metodo existe para cerrar el dia que aparezca
-                // un tercer tokenable (el portal del empleado de ADR-015 es el
-                // candidato).
+                // el fallo que este metodo existe para cerrar.
                 return false;
             }
         );
+    }
+
+    /**
+     * Si una sesion de portal sigue valiendo (RF-ID-07, RF-ID-09, tarea 1.11).
+     *
+     * Dos condiciones, y las dos tienen que valer **en cada peticion**, no solo
+     * al emitir el token:
+     *
+     * 1. **RN-14: la persona sigue en alta.** Es la misma regla con la que su PIN
+     *    deja de verificar, asi que dar una baja cierra las dos puertas a la vez
+     *    y en la peticion siguiente, no cuando caduque la sesion.
+     * 2. **El PIN no se ha restablecido despues de abrirla.** Sin esto,
+     *    restablecer el PIN de alguien que perdio el movil no serviria de nada:
+     *    el token que quedo abierto en ese telefono seguiria leyendo su registro
+     *    horario hasta agotar su vida. RF-ID-09 existe justo para ese caso, y su
+     *    promesa es que el acceso anterior deja de valer. `pin_issued_at` cambia
+     *    en cada emision y en cada restablecimiento, asi que comparar contra el
+     *    corta todas las sesiones anteriores sin necesidad de que
+     *    `ResetEmployeePinHandler` sepa que existe un portal.
+     *
+     * **Sin `pin_issued_at` no hay sesion posible.** Un empleado sin PIN emitido
+     * no puede haber entrado nunca; si aparece un token asi, el estado es
+     * inconsistente y la respuesta correcta es cerrar.
+     */
+    private static function portalSessionIsStillValid(HasAbilities $accessToken, Model $employee): bool
+    {
+        $status = $employee->getAttribute('status');
+
+        if (! \is_string($status) || EmploymentStatus::tryFrom($status)?->canClock() !== true) {
+            return false;
+        }
+
+        $pinIssuedAt = $employee->getAttribute('pin_issued_at');
+        $tokenIssuedAt = $accessToken instanceof PersonalAccessToken ? $accessToken->created_at : null;
+
+        if (! $pinIssuedAt instanceof DateTimeInterface || ! $tokenIssuedAt instanceof DateTimeInterface) {
+            return false;
+        }
+
+        // `>=` y no `>`: los dos instantes se guardan con precision de segundo, y
+        // ante un empate lo correcto es dejar entrar a quien acaba de recibir su
+        // PIN nuevo. La regla dura 19 tiene su equivalente aqui — quien acaba de
+        // pedir un PIN tiene que poder usarlo en el momento (RF-ID-09).
+        return $tokenIssuedAt >= $pinIssuedAt;
     }
 }

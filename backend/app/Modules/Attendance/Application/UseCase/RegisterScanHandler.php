@@ -21,7 +21,8 @@ use App\Modules\Attendance\Domain\Exception\ShiftAlreadyOpen;
 use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\Policy\ClockingPolicy;
 use App\Modules\Attendance\Domain\Policy\DebouncePolicy;
-use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
+use App\Modules\Attendance\Domain\Policy\ReviewPolicy;
+use App\Modules\Attendance\Domain\ValueObject\ClockSkew;
 use App\Modules\Attendance\Domain\ValueObject\ScanRejectionReason;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Attendance\Domain\ValueObject\WorkedDuration;
@@ -122,10 +123,11 @@ use RuntimeException;
  *   dispositivo y puede llegar de la cola offline con dias de retraso;
  *   `recorded_at` se lo pide al puerto `Clock` (regla dura 2, 9, RF-AT-09).
  * - **No rechaza por desfase de reloj** (regla dura 19, RF-AT-10). El desfase se
- *   calcula y se persiste en `scan_events.clock_skew_seconds` para que la
- *   incidencia de la tarea 3.5 pueda construirse hacia atras; el fichaje se
- *   acepta siempre. Nunca se pierde una jornada por un problema tecnico ajeno al
- *   empleado.
+ *   calcula, se persiste en `scan_events.clock_skew_seconds` y, si supera el
+ *   umbral de la instalacion, deja el fichaje marcado para validacion humana
+ *   (RN-15, {@see ReviewPolicy}); el fichaje se acepta siempre. Nunca se pierde
+ *   una jornada por un problema tecnico ajeno al empleado. La incidencia
+ *   `clock_skew` que consume esa marca es de la tarea 3.5 (ADR-032).
  * - **No distingue causas de rechazo hacia fuera** (regla dura 17, RS-03). Las
  *   cuatro —prefijo, clave, firma, credencial revocada— y la quinta —empleado no
  *   activo, RN-14— recorren exactamente el mismo camino y escriben la misma
@@ -172,7 +174,23 @@ final readonly class RegisterScanHandler
         private Clock $clock,
     ) {}
 
-    public function handle(RegisterScanCommand $command): RegisterScanResult
+    /**
+     * @param  CredentialResolution|null  $resolution  Quien es el portador, si ya se sabe.
+     *
+     * **Existe por el fichaje de respaldo por PIN** (RF-AT-11, tarea 1.12), que
+     * identifica a la persona por un camino distinto —codigo de empleado y PIN
+     * contra `pin_hash`— pero hace exactamente lo mismo a partir de ahi. Pasarla
+     * ya resuelta es lo que permite que las dos vias compartan **este** metodo y
+     * no una copia suya: la transaccion, el agregado, el anti-rebote, la
+     * proyeccion de `daily_totals`, el `worked_minutes` que se fija y se guarda,
+     * la auditoria, los reintentos de carrera y la idempotencia por UNIQUE son
+     * los mismos, y un segundo camino seria un segundo sitio donde equivocarse
+     * con cualquiera de ellos —que ya paso una vez con `worked_minutes` en el
+     * reenvio (tarea 1.7)—.
+     *
+     * Nula en el camino normal: entonces la resuelve el `CredentialResolver`.
+     */
+    public function handle(RegisterScanCommand $command, ?CredentialResolution $resolution = null): RegisterScanResult
     {
         // Regla dura 9: la recepcion la fija el servidor una sola vez, antes de
         // hacer nada, para que un reintento interno no la desplace.
@@ -182,7 +200,10 @@ final readonly class RegisterScanHandler
         // del efecto, y mantenerla fuera acorta la ventana en la que esta
         // transaccion puede chocar con otra. El adaptador de `Identity` es quien
         // garantiza que sus rechazos son de tiempo constante (RS-03).
-        $resolution = $this->credentials->resolve($command->qrPayload);
+        //
+        // Quien ya trae la resolucion hecha —el fichaje por PIN— se la salta, y
+        // asume la MISMA obligacion de tiempo constante en su propio camino.
+        $resolution ??= $this->credentials->resolve($command->qrPayload ?? '');
 
         $attempt = 0;
 
@@ -281,6 +302,16 @@ final readonly class RegisterScanHandler
     ): RegisterScanResult {
         $settings = $this->settings->forSite($employee->siteId);
 
+        // RF-AT-11 y RN-15: si este fichaje pide validacion humana lo decide el
+        // dominio, con el umbral ya resuelto (regla dura 14). Se calcula una sola
+        // vez porque los dos desenlaces que producen fila —el tramo y el
+        // anti-rebote— tienen que responder lo mismo sobre el mismo escaneo.
+        //
+        // **Marcar no es rechazar** (regla dura 19, RF-AT-10): el escaneo sigue
+        // su camino exactamente igual, marcado o no.
+        $flaggedForReview = ReviewPolicy::toleratingSkewOfMinutes($settings->maximumClockSkewMinutes)
+            ->requiresReview($command->origin, ClockSkew::between($command->occurredAt, $recordedAt));
+
         // Paso 2: cargar el agregado. Se pregunta primero por el turno ABIERTO
         // y no por la fecha de hoy: un turno de noche que entro ayer a las 22:00
         // se cierra a las 06:00 dentro de la jornada de AYER (RN-05, ADR-006,
@@ -314,7 +345,7 @@ final readonly class RegisterScanHandler
         );
 
         if ($suppressor instanceof DateTimeImmutable) {
-            return $this->debounce($command, $recordedAt, $employee, $workDay, $suppressor);
+            return $this->debounce($command, $recordedAt, $employee, $workDay, $suppressor, $flaggedForReview);
         }
 
         // Paso 3: el dominio decide. `hasOpenEntry()` es RF-AT-02 y RF-AT-03.
@@ -357,9 +388,9 @@ final readonly class RegisterScanHandler
             result: $result,
             shiftEntryUuid: $entry->uuid(),
             payloadFingerprint: $this->fingerprintOf($command->qrPayload),
-            clockSkewSeconds: $this->clockSkewOf($command->occurredAt, $recordedAt),
-            // RF-AT-11: el fichaje por PIN queda marcado para el responsable.
-            flaggedForReview: $command->origin === ScanOrigin::PIN_KIOSK,
+            clockSkewSeconds: ClockSkew::between($command->occurredAt, $recordedAt)->seconds,
+            // RF-AT-11 y RN-15, ya decididos por `ReviewPolicy`.
+            flaggedForReview: $flaggedForReview,
             workedMinutes: $workedMinutes,
             clientMeta: $command->clientMeta,
         ));
@@ -396,6 +427,7 @@ final readonly class RegisterScanHandler
         EmployeeSnapshot $employee,
         WorkDay $workDay,
         DateTimeImmutable $lastAcceptedAt,
+        bool $flaggedForReview,
     ): RegisterScanResult {
         // El acumulado de la jornada que ya se cargo, **sin variar**: es el
         // mismo que devolvio el escaneo anterior, y sale del mismo objeto que
@@ -415,7 +447,14 @@ final readonly class RegisterScanHandler
             intent: $command->intent,
             result: ScanResult::REJECTED_DEBOUNCE,
             payloadFingerprint: $this->fingerprintOf($command->qrPayload),
-            clockSkewSeconds: $this->clockSkewOf($command->occurredAt, $recordedAt),
+            clockSkewSeconds: ClockSkew::between($command->occurredAt, $recordedAt)->seconds,
+            // RF-AT-11 y RN-15 tambien aqui: el anti-rebote es un desenlace
+            // ACEPTADO (ADR-031), asi que un PIN —o un escaneo retrodatado— que
+            // llega dentro de la ventana de gracia sigue siendo un escaneo que el
+            // responsable tiene que poder ver. Dejarlo sin marca escondería justo
+            // el patron que la hace util: repetir el gesto anomalo dos veces
+            // seguidas.
+            flaggedForReview: $flaggedForReview,
             workedMinutes: $workedMinutes,
             clientMeta: $command->clientMeta,
         ));
@@ -462,7 +501,10 @@ final readonly class RegisterScanHandler
             intent: $command->intent,
             result: $result,
             payloadFingerprint: $fingerprint,
-            clockSkewSeconds: $this->clockSkewOf($command->occurredAt, $recordedAt),
+            clockSkewSeconds: ClockSkew::between($command->occurredAt, $recordedAt)->seconds,
+            // Un rechazo no se marca: `flagged_for_review` alimenta una bandeja
+            // de FICHAJES que validar y aqui no hay tramo que validar. El rastro
+            // del intento esta en `scan_events.result` y en la metrica.
             clientMeta: $command->clientMeta,
         ));
 
@@ -600,33 +642,18 @@ final readonly class RegisterScanHandler
     }
 
     /**
-     * RF-AT-10: el desfase entre el reloj del quiosco y el del servidor, **con
-     * signo** y en segundos.
-     *
-     * Se registra siempre y **nunca rechaza el fichaje** (regla dura 19). La
-     * incidencia `clock_skew` que lo consume es de la tarea 3.5; sin esta
-     * columna no tendria con que construirse hacia atras sobre los fichajes que
-     * ya ocurrieron.
-     *
-     * El signo se conserve a proposito: un reloj adelantado y uno atrasado son
-     * dos averias distintas, y perder el signo perderia justo lo que se quiere
-     * diagnosticar.
-     */
-    private function clockSkewOf(DateTimeImmutable $occurredAt, DateTimeImmutable $recordedAt): int
-    {
-        return $recordedAt->getTimestamp() - $occurredAt->getTimestamp();
-    }
-
-    /**
      * Huella del payload, **nunca el payload** (RS-03).
      *
      * Sirve para agrupar escaneos de la misma tarjeta al investigar un problema
      * sin guardar lo que hay impreso en ella: quien lea `scan_events` no puede
      * fabricar una credencial valida.
      */
-    private function fingerprintOf(string $qrPayload): string
+    private function fingerprintOf(?string $qrPayload): ?string
     {
-        return hash('sha256', $qrPayload);
+        // Nulo en el fichaje por PIN: no hay tarjeta de la que tomar huella
+        // (RF-AT-11). Inventar una a partir del codigo de empleado habria metido
+        // dos cosas distintas en la misma columna.
+        return $qrPayload === null ? null : hash('sha256', $qrPayload);
     }
 
     private function rejectionReasonOf(ScanResult $result): ScanRejectionReason

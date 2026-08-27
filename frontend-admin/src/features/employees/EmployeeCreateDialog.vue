@@ -11,16 +11,16 @@
 // El alta emite el PIN en la misma transaccion, asi que al terminar hay un
 // secreto que enseñar una sola vez: por eso emite `created` con la respuesta
 // entera y no solo con la ficha.
+import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
+import FormField from '@kronoqr/web-kit/components/FormField.vue'
+import { todayInZone } from '@kronoqr/web-kit/datetime'
+import { isApiError } from '@kronoqr/web-kit/http'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useQuery } from '@tanstack/vue-query'
-import { isApiError } from '@/shared/api/http'
 import { listDepartments } from '@/shared/api/organisation.api'
 import type { CreateEmployeeRequest, EmployeeProvisioned, Site } from '@/shared/api/types'
-import { todayInZone } from '@/shared/time/datetime'
 import BaseDialog from '@/shared/ui/BaseDialog.vue'
-import ErrorNotice from '@/shared/ui/ErrorNotice.vue'
-import FormField from '@/shared/ui/FormField.vue'
 import { createEmployee } from './employees.api'
 
 const props = defineProps<{ sites: readonly Site[] }>()

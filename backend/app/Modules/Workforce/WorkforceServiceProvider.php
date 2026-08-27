@@ -8,7 +8,9 @@ use App\Modules\Attendance\Application\Port\EmployeeDirectory;
 use App\Modules\Attendance\Application\Port\SiteCalendar;
 use App\Modules\Shared\Application\Port\ClockingEmployees;
 use App\Modules\Shared\Application\Port\EmployeeCardDirectory;
+use App\Modules\Shared\Application\Port\EmployeePinVerifier;
 use App\Modules\Shared\Application\Port\EmployeeRegistry;
+use App\Modules\Shared\Application\Port\PortalSessionIssuer;
 use App\Modules\Workforce\Application\Port\DepartmentRepository;
 use App\Modules\Workforce\Application\Port\EmployeePinRepository;
 use App\Modules\Workforce\Application\Port\EmployeeRepository;
@@ -28,7 +30,9 @@ use App\Modules\Workforce\Infrastructure\Adapter\EloquentEmployeeCardDirectory;
 use App\Modules\Workforce\Infrastructure\Adapter\EloquentEmployeeDirectory;
 use App\Modules\Workforce\Infrastructure\Adapter\EloquentEmployeeRegistry;
 use App\Modules\Workforce\Infrastructure\Adapter\EloquentSiteCalendar;
+use App\Modules\Workforce\Infrastructure\Adapter\HashedEmployeePinVerifier;
 use App\Modules\Workforce\Infrastructure\Adapter\LaravelWorkforceEventPublisher;
+use App\Modules\Workforce\Infrastructure\Adapter\SanctumPortalSessionIssuer;
 use App\Modules\Workforce\Infrastructure\Metrics\RedisPinMetrics;
 use App\Modules\Workforce\Infrastructure\Persistence\EloquentDepartmentRepository;
 use App\Modules\Workforce\Infrastructure\Persistence\EloquentEmployeePinRepository;
@@ -69,6 +73,27 @@ final class WorkforceServiceProvider extends ServiceProvider
         $this->app->bind(EmployeePinRepository::class, EloquentEmployeePinRepository::class);
         $this->app->bind(PinPolicyProvider::class, ConfiguredPinPolicyProvider::class);
         $this->app->bind(PinMetrics::class, RedisPinMetrics::class);
+
+        // Y el que COMPRUEBA ese mismo PIN (RF-AT-11, RF-ID-06, RS-12). El
+        // puerto lo declara `Shared` porque lo necesitan dos satelites que no
+        // pueden verse entre si —el fichaje de respaldo del quiosco y el portal
+        // del empleado— y lo implementa este modulo, que es donde esta
+        // `employees.pin_hash`. Deliberadamente separado de
+        // `EmployeePinRepository`: aquel EMITE y ninguno de sus metodos lee el
+        // hash, este lo COMPRUEBA y no puede escribirlo. Un solo puerto habria
+        // dado a quien provisiona la capacidad de verificar y al reves.
+        $this->app->bind(EmployeePinVerifier::class, HashedEmployeePinVerifier::class);
+
+        // Y la SESION que se abre cuando ese PIN acierta en el portal (RF-ID-05,
+        // RF-ID-07, RL-05, tarea 1.11). Mismo reparto que el verificador y por
+        // la misma razon: quien decide si se abre sesion es `Identity`, y quien
+        // puede acuñar un token colgado de una persona es este modulo, porque el
+        // `tokenable` es la fila de `employees`. Que el token cuelgue del
+        // empleado y no de una cuenta de gestion es lo que evita una cuenta
+        // espejo por persona —con correo obligatorio (regla dura 12), politica
+        // de contraseña y el 2FA de la tarea 2.1— para algo cuya credencial es
+        // un PIN de seis digitos.
+        $this->app->bind(PortalSessionIssuer::class, SanctumPortalSessionIssuer::class);
 
         // ADR-025: los puertos los declara quien los necesita —el nucleo— y los
         // implementa quien tiene el dato.

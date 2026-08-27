@@ -575,7 +575,7 @@ Los arts. 20.3 ET y 87-91 LOPDGDD exigen informar previamente a la plantilla y a
 | ID | Requisito |
 |---|---|
 | RS-01 | El payload del QR está **firmado** y no permite generar credenciales válidas de terceros sin la clave del servidor. |
-| RS-02 | El sistema **limita la tasa** de escaneos por dispositivo, por credencial y por IP, con respuestas de tiempo constante para evitar enumeración. |
+| RS-02 | El sistema **limita la tasa** del camino de fichaje **por dispositivo y por IP**, con respuestas de tiempo constante para evitar enumeración. El límite **por sujeto** se aplica donde el secreto es adivinable —el PIN, por empleado y por origen (RS-12)— y **no** al escaneo de tarjeta, por el motivo que se explica bajo esta tabla. |
 | RS-03 | Las respuestas de error **no revelan** si un código existe, está revocado o es inválido: mensaje genérico al usuario, detalle solo en el log del servidor. |
 | RS-04 | El token del quiosco tiene ámbito mínimo, caducidad y rotación automática; su compromiso no da acceso a datos de plantilla. |
 | RS-05 | Todo acceso a datos personales de terceros queda registrado en el trail de auditoría. |
@@ -586,6 +586,8 @@ Los arts. 20.3 ET y 87-91 LOPDGDD exigen informar previamente a la plantilla y a
 | RS-10 | Análisis de dependencias y de código en cada *pull request*; ninguna vulnerabilidad crítica o alta puede llegar a una versión publicada. |
 | RS-11 | Revisión de seguridad externa antes de la primera versión comercial y con periodicidad anual. |
 | RS-12 | El PIN de acceso al portal está protegido con bloqueo temporal por intentos fallidos y limitación de tasa por empleado y por IP. |
+
+> **Por qué RS-02 ya no pide un límite por credencial en el escaneo de tarjeta (ADR-036).** La redacción anterior enumeraba tres ejes —dispositivo, credencial e IP— y solo se implementaron dos. Al revisarlo se vio que el tercero no protege de lo que la propia frase dice proteger, y que hacerlo tendría coste: **(a)** contra la enumeración no sirve, porque quien enumera prueba credenciales *distintas* y un contador por credencial nunca llega a dispararse —el eje que sí frena la enumeración es el de dispositivo y el de IP—; **(b)** la repetición de una misma tarjeta ya está resuelta por el periodo de gracia de RF-AT-06, que es un **desenlace aceptado** (ADR-031) y no un rechazo; **(c)** un `429` por credencial sería la única forma en que este producto puede dejar a una persona concreta sin fichar —basta con que alguien inunde con su tarjeta—, y eso contradice la regla que sostiene el registro legal: *el quiosco nunca bloquea al empleado*. El límite por sujeto se mantiene donde de verdad hace falta, que es donde el secreto se puede adivinar: el PIN (RS-12), con bloqueo escalonado por empleado y origen.
 
 ### 8.1 Modelo de amenazas (STRIDE)
 

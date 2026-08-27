@@ -1,6 +1,189 @@
 {
   "app": {
-    "title": "Portal del empleado",
-    "skeletonNotice": "Esqueleto de la aplicacion. Las pantallas del portal llegan en la tarea 1.11."
+    "title": "Mi portal del empleado",
+    "skipToContent": "Ir al contenido principal",
+    "signedInAs": "Hola, {name}",
+    "signOut": "Salir",
+    "nav": {
+      "label": "Secciones del portal",
+      "myRecords": "Mi registro",
+      "myExport": "Descargar mi historial"
+    }
+  },
+  "login": {
+    "heading": "Acceso al portal",
+    "intro": "Entra con tu código de empleado y tu PIN de seis dígitos, los mismos que usas en el quiosco.",
+    "employeeCode": "Código de empleado",
+    "pin": "PIN",
+    "pinHint": "Seis dígitos, sin espacios.",
+    "submit": "Entrar",
+    "submitting": "Entrando…",
+    "forgotPin": "¿No recuerdas tu PIN o tu código? Pide a Recursos Humanos que te lo restablezca. No se envía por correo electrónico ni por ningún enlace."
+  },
+  "common": {
+    "updating": "Actualizando…"
+  },
+  "errors": {
+    "retryAfter": "Puedes volver a intentarlo dentro de {seconds} s.",
+    "network": {
+      "title": "No se ha podido contactar con el servidor",
+      "advice": "Comprueba tu conexión y vuelve a intentarlo. Nada de lo que has hecho se ha perdido."
+    },
+    "unauthenticated": {
+      "title": "Tu sesión ha caducado",
+      "advice": "Vuelve a entrar con tu código y tu PIN para seguir consultando tu registro."
+    },
+    "invalidCredentials": {
+      "title": "El código de empleado o el PIN no son correctos",
+      "advice": "Revísalos y vuelve a intentarlo. Tras varios intentos fallidos el acceso se bloquea unos minutos, aunque después escribas el PIN correcto. Si no consigues entrar, pide a Recursos Humanos que te restablezca el PIN."
+    },
+    "forbidden": {
+      "title": "No se puede mostrar esta información",
+      "advice": "Vuelve a entrar. Si el problema continúa, avisa a Recursos Humanos."
+    },
+    "notFound": {
+      "title": "No se ha encontrado",
+      "advice": "Vuelve a mi registro y actualiza la pantalla."
+    },
+    "conflict": {
+      "title": "Algo ha cambiado mientras tanto",
+      "advice": "Actualiza la pantalla y vuelve a intentarlo."
+    },
+    "validation": {
+      "title": "Hay algo que revisar en las fechas",
+      "advice": "Corrige el periodo indicado y vuelve a intentarlo."
+    },
+    "rateLimited": {
+      "title": "Demasiados intentos seguidos",
+      "advice": "Espera unos segundos y vuelve a intentarlo."
+    },
+    "unavailable": {
+      "title": "El portal no puede atender esta petición ahora mismo",
+      "advice": "No es nada que hayas hecho tú. Avisa a Recursos Humanos si se repite."
+    },
+    "unexpected": {
+      "title": "Ha ocurrido un error inesperado",
+      "advice": "Vuelve a intentarlo. Si se repite, avisa a Recursos Humanos indicando la hora y qué estabas haciendo."
+    }
+  },
+  "notFound": {
+    "heading": "Esta página no existe",
+    "description": "El portal solo tiene dos pantallas: tu registro y la descarga de tu historial.",
+    "backToRecords": "Ir a mi registro"
+  },
+  "myRecords": {
+    "title": "Mi registro horario",
+    "subtitle": "Tus jornadas, tus tramos y el total de cada día. Nada se borra: si algo se corrigió, aparece explicado más abajo.",
+    "duration": "{hours} h {minutes} min",
+    "zoneNotice": "Las horas se muestran en la zona horaria de tu centro de trabajo, no en la de tu móvil ni la de tu ordenador.",
+    "loading": "Cargando tu registro…",
+    "filters": {
+      "legend": "Periodo consultado",
+      "from": "Desde",
+      "fromHint": "Por fecha de jornada: un turno que empezó a las 22:00 pertenece al día en que empezó, aunque salieras al día siguiente.",
+      "to": "Hasta",
+      "toHint": "Último día, incluido. En blanco, se consultan tus últimos 31 días.",
+      "inverted": "El periodo termina antes de empezar. Revisa las dos fechas.",
+      "tooWide": "El periodo no puede superar {days} días. Consulta tu historial por tramos más cortos.",
+      "apply": "Consultar",
+      "resolved": "Jornadas del {from} al {to}, en horario de {zone}."
+    },
+    "empty": {
+      "title": "No hay ninguna jornada en este periodo",
+      "description": "No es un fallo de la consulta: en esos días no tienes ningún fichaje registrado. Prueba con otro periodo."
+    },
+    "announce": {
+      "results": "{count} jornadas entre el {from} y el {to}."
+    },
+    "day": {
+      "total": "Total de la jornada",
+      "flags": {
+        "openShift": "Turno abierto",
+        "openShiftHint": "Todavía no has fichado la salida de este turno: el total de hoy va a subir.",
+        "incident": "Revisión pendiente",
+        "incidentHint": "Algún tramo de este día quedó marcado para que alguien lo revise. No es un error tuyo."
+      }
+    },
+    "entries": {
+      "caption": "Tramos de la jornada del {date}, en la zona horaria {zone}",
+      "in": "Entrada ({zone})",
+      "out": "Salida ({zone})",
+      "duration": "Duración",
+      "source": "Cómo se registró",
+      "utc": "UTC {time}",
+      "queued": "Se registró {delay} después de fichar: llegó desde la cola sin conexión del quiosco. Lo que cuenta es la hora a la que fichaste.",
+      "open": "Sin cerrar",
+      "openHint": "Este turno sigue abierto.",
+      "nextDay": "(día siguiente)",
+      "openDuration": "En curso",
+      "empty": "Esta jornada no tiene ningún tramo vigente. Si hay correcciones más abajo, es que se anularon: el historial sigue completo.",
+      "sum": "Suma de los tramos",
+      "declared": "Total registrado del día",
+      "mismatch": "El total registrado del día no coincide con la suma de sus tramos. Se muestran los dos números sin elegir ninguno: avisa a Recursos Humanos antes de usar estas horas para nada."
+    },
+    "sources": {
+      "qr_kiosk": "Escaneo de tu tarjeta",
+      "pin_kiosk": "PIN en el quiosco",
+      "manual_admin": "Registrado a mano por Recursos Humanos",
+      "import": "Importación"
+    },
+    "history": {
+      "heading": "Historial de correcciones",
+      "empty": "Esta jornada no se ha corregido: los tramos son los que se registraron al fichar.",
+      "notice": "Nada se borra ni se sobrescribe: cada corrección conserva lo que decía antes, con quién la hizo, cuándo y por qué.",
+      "by": "{author}, el {moment}",
+      "reason": "Motivo",
+      "caption": "Qué cambió la corrección del {moment}",
+      "fields": {
+        "in": "Entrada",
+        "out": "Salida",
+        "worked": "Tiempo trabajado"
+      },
+      "before": "Antes",
+      "after": "Después",
+      "noEntryBefore": "No existía el tramo",
+      "noEntryAfter": "Tramo anulado",
+      "openMark": "Sin salida"
+    },
+    "correctionAction": {
+      "created": "Tramo añadido",
+      "modified": "Horas corregidas",
+      "closed": "Turno cerrado",
+      "voided": "Tramo anulado"
+    },
+    "reasons": {
+      "OLVIDO_FICHAJE_ENTRADA": "Olvido de fichaje de entrada",
+      "OLVIDO_FICHAJE_SALIDA": "Olvido de fichaje de salida",
+      "FALLO_TECNICO_QUIOSCO": "Fallo técnico del quiosco",
+      "TARJETA_NO_DISPONIBLE": "Tarjeta no disponible",
+      "CREDENCIAL_NO_ENTREGADA": "Tarjeta todavía no entregada",
+      "ERROR_DE_ESCANEO_DUPLICADO": "Escaneo duplicado",
+      "AJUSTE_ACORDADO_CON_RRHH": "Ajuste acordado con Recursos Humanos",
+      "ALTA_RETROACTIVA": "Alta retroactiva",
+      "OTROS": "Otro motivo"
+    }
+  },
+  "myExport": {
+    "title": "Descargar mi historial",
+    "intro": "Descarga tu registro horario en un fichero que puedes guardar o entregar a quien lo necesite.",
+    "contents": {
+      "entries": "Una fila por cada tramo trabajado, con entrada, salida, duración y el total de cada jornada.",
+      "corrections": "Una fila por cada corrección de tu registro, con quién la hizo, cuándo y por qué.",
+      "format": "Fichero CSV, con las horas en formato HH:MM, nunca en decimal."
+    },
+    "filters": {
+      "legend": "Periodo a descargar",
+      "from": "Desde",
+      "fromHint": "Por fecha de jornada. En blanco, se incluye tu historial disponible.",
+      "to": "Hasta",
+      "toHint": "Último día, incluido.",
+      "inverted": "El periodo termina antes de empezar. Revisa las dos fechas.",
+      "tooWide": "El periodo no puede superar {days} días."
+    },
+    "download": "Descargar CSV",
+    "downloading": "Generando la descarga…",
+    "announce": {
+      "done": "Descarga generada. Revisa las descargas de tu dispositivo."
+    }
   }
 }

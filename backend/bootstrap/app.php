@@ -17,6 +17,7 @@ use App\Modules\Attendance\Domain\Exception\ShiftAlreadyOpen;
 use App\Modules\Compliance\Domain\Exception\InvalidLegalExportRequest;
 use App\Modules\Identity\Application\Exception\AccountTemporarilyLocked;
 use App\Modules\Identity\Application\Exception\AuthenticationFailed;
+use App\Modules\Identity\Application\Exception\PortalAccessDenied;
 use App\Modules\Identity\Domain\Exception\CredentialAlreadyDelivered;
 use App\Modules\Identity\Domain\Exception\CredentialAlreadyPrinted;
 use App\Modules\Identity\Domain\Exception\CredentialAlreadyRevoked;
@@ -48,15 +49,22 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
         // La version va en la ruta, no en una cabecera (ADR-012). Todo endpoint
-        // del producto cuelga de /api/v1. El fichero llega vacio de la tarea
-        // 0.2: los primeros endpoints son de las tareas 0.6 (contrato) y 1.7.
+        // del producto cuelga de /api/v1, incluidas las dos sondas de salud.
         api: __DIR__.'/../routes/api_v1.php',
         apiPrefix: 'api/v1',
         commands: __DIR__.'/../routes/console.php',
         // Sin rutas web: las tres aplicaciones cliente son SPA servidas por
-        // Nginx, y el backend solo expone API. Sin sonda /up del esqueleto: la
-        // del producto es GET /api/v1/health (doc 01 Anexo B), y su forma la
-        // fija el contrato OpenAPI antes que el codigo (ADR-013).
+        // Nginx, y el backend solo expone API. Sin sonda /up del esqueleto: las
+        // del producto son GET /api/v1/health y GET /api/v1/ready (doc 01
+        // Anexo B), y su forma la fija el contrato OpenAPI antes que el codigo
+        // (ADR-013).
+        //
+        // SIN `throttleApi()`, y no es una omision: anadirlo pondria `throttle`
+        // en TODAS las rutas del grupo `api`, tambien en las dos sondas, y el
+        // limitador cuenta en la cache —Redis en produccion—. Una sonda de VIDA
+        // que consultara Redis para saber si puede responder haria que Docker
+        // reiniciara PHP cuando el que se cae es Redis. Cada ruta declara su
+        // zona de limite en routes/api_v1.php.
     )
     ->withMiddleware(function (Middleware $middleware): void {
         /*
@@ -117,6 +125,20 @@ return Application::configure(basePath: dirname(__DIR__))
             static fn (Request $request, Throwable $exception): bool => true,
         );
 
+        /*
+         * Campos que NUNCA acompañan a un informe de excepcion (regla dura 21,
+         * ADR-020).
+         *
+         * `password` y `password_confirmation` son los de serie de Laravel. Los
+         * otros dos son de este producto y valen tanto como una contrasena:
+         * `qr_payload` es lo que hay impreso en una tarjeta y `pin_sealed` es el
+         * PIN de alguien —cerrado hoy, pero cerrado con una clave que vive en el
+         * mismo servidor que el volcado—. El historico de errores viaja al
+         * fabricante dentro del paquete de diagnostico: si lleva credenciales, se
+         * han filtrado.
+         */
+        $exceptions->dontFlash(['password', 'password_confirmation', 'qr_payload', 'pin_sealed']);
+
         $exceptions->render(static fn (ValidationException $exception): mixed => ProblemDetails::validationFailed($exception->errors()));
 
         $exceptions->render(static fn (AuthenticationException $exception): mixed => ProblemDetails::unauthenticated());
@@ -160,6 +182,23 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(static fn (AuthenticationFailed $exception): mixed => ProblemDetails::invalidCredentials());
 
         $exceptions->render(static fn (AccountTemporarilyLocked $exception): mixed => ProblemDetails::tooManyRequests($exception->retryAfterSeconds));
+
+        /*
+         * Portal del empleado (tarea 1.11, RF-ID-06, RS-03, RS-12).
+         *
+         * `401` PARA LAS CINCO CAUSAS, y sin `Retry-After` ni cuando el bloqueo
+         * por intentos esta activo. Es lo contrario de lo que hace el acceso al
+         * panel dos lineas mas arriba, y a proposito: alli quien entra ya sabe
+         * que su cuenta existe —tiene correo de empresa— y decirle cuanto falta
+         * le ahorra una llamada a soporte; aqui la mitad publica de la
+         * credencial es un codigo de empleado impreso en una tarjeta que se
+         * lleva colgada del cuello, y anunciar un bloqueo confirmaria que ese
+         * codigo existe (RS-03, regla dura 17). El detalle real —rechazo o
+         * bloqueo, y cuantos segundos faltan— queda en el log del servidor.
+         */
+        $exceptions->render(static fn (PortalAccessDenied $exception): mixed => ProblemDetails::invalidCredentials(
+            $exception->getMessage(),
+        ));
 
         $exceptions->render(static fn (EmployeeAlreadyTerminated $exception): mixed => ProblemDetails::conflict($exception->getMessage()));
 

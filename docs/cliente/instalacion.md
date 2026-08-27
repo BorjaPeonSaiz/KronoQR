@@ -54,6 +54,32 @@ Conviene que sea una dirección concreta y no una red entera: si se autoriza la
 red completa de contenedores, las peticiones hechas desde el propio servidor
 entran dentro de ese rango y `/metrics` queda accesible sin que nada lo avise.
 
+### `PORTAL_INTERNAL_CIDR` — desde dónde se puede entrar al portal del empleado
+
+```dotenv
+PORTAL_INTERNAL_CIDR=172.28.0.0/16
+```
+
+**Qué hace.** El portal del empleado (código de empleado + PIN de 6 dígitos)
+solo responde a las peticiones que llegan desde este rango. Cualquier otro
+origen recibe `403` en el propio servidor web, antes de llegar a la
+aplicación.
+
+**Por qué existe.** Un PIN de 6 dígitos es un espacio pequeño. Restringir el
+portal a la red interna es uno de los cuatro controles que lo compensan, junto
+con el bloqueo por intentos, el límite de peticiones por IP y que la sesión
+del portal solo pueda leer los datos del propio empleado.
+
+**El valor de ejemplo es de desarrollo**, no de producción: cubre la red
+interna de Docker Compose. Antes de desplegar, cámbialo por la LAN real del
+hotel o por el rango de la VPN corporativa que use la plantilla para entrar
+desde fuera.
+
+**Exponer el portal a internet es una decisión explícita**, nunca un valor por
+defecto. Se toma poniendo `PORTAL_INTERNAL_CIDR=0.0.0.0/0` y debe quedar
+anotada en el acta de entrega de la instalación: es lo que responde el día que
+alguien pregunte por qué el portal es alcanzable desde fuera del hotel.
+
 ### Certificado TLS
 
 ```dotenv
@@ -130,6 +156,7 @@ recuperarlos. Lo que hay que custodiar:
 | Contraseña de la base de datos | Se puede rotar; ver `docs/runbooks/rotacion-secretos.md` |
 | `QR_SIGNING_KEY_CURRENT` | **Hay que reimprimir todas las tarjetas** |
 | `BACKUP_ENCRYPTION_KEY` | **Las copias de seguridad dejan de poder restaurarse** |
+| `IDENTITY_PIN_SEALING_SECRET_KEY` | **Los fichajes por PIN encolados sin red en el quiosco no se pueden abrir nunca.** Genérala con `php artisan tinker --execute="echo base64_encode(sodium_crypto_box_secretkey(sodium_crypto_box_keypair()));"` (ver `.env.example`). Vacía es válida: significa que esta instalación no ofrece fichaje por PIN |
 
 El `.env.example` del repositorio no contiene ni un solo secreto real: son
 plantillas comentadas.

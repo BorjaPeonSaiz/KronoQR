@@ -1,0 +1,12 @@
+{
+  "name": "kronoqr",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Monorepo raiz de KronoQR. Une las tres SPA y el paquete compartido en un unico arbol de dependencias con npm workspaces (ADR-036); no contiene codigo de aplicacion propio.",
+  "workspaces": [
+    "frontend-admin",
+    "frontend-portal",
+    "frontend-kiosk",
+    "packages/*"
+  ]
+}

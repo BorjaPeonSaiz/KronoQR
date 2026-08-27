@@ -1,3 +1,4 @@
+import { setAuthTokenProvider, setUnauthenticatedHandler } from '@kronoqr/web-kit/http'
 import { VueQueryPlugin } from '@tanstack/vue-query'
 import { createPinia } from 'pinia'
 import { createApp, watch } from 'vue'
@@ -6,7 +7,6 @@ import './assets/main.css'
 import { useSessionStore } from './features/auth/session.store'
 import { createAppRouter } from './router'
 import { registerAuthGuard } from './router/guards'
-import { setAuthTokenProvider, setUnauthenticatedHandler } from './shared/api/http'
 import { createAppQueryClient } from './shared/api/queryClient'
 import { createAppI18n, isSupportedLocale, resolveLocale } from './shared/i18n'
 

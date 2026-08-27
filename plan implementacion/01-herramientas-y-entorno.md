@@ -405,7 +405,7 @@ La regla que gobierna esta lista es el §7.7: **nada de secretos en el repositor
 | `ATTENDANCE_PATTERN_MIN_REPEATS` | `3` | RF-PR-06 · coincidencias antes de generar incidencia |
 | `PIN_MAX_ATTEMPTS` | `3` | RS-12 |
 | `PIN_LOCKOUT_SECONDS` | `300` | — |
-| `PORTAL_INTERNAL_ONLY` | `true` | RF-ID-08 |
+| `PORTAL_INTERNAL_CIDR` | `172.28.0.0/16` (dev) | RF-ID-08 · lo aplica Nginx (`geo`+403), no la aplicación |
 | `COMPLIANCE_PROFILE` | `ES-hosteleria` | RF-PD-07 |
 | `LICENSE_KEY` | — | Clave firmada, verificación local (ADR-018). La emite el fabricante |
 | `TELEMETRY_ENABLED` | `false` | Desactivada por defecto (RF-PD-12) |

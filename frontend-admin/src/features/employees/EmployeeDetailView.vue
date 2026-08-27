@@ -6,6 +6,11 @@
 // enseña QUE se va a cambiar, DESDE que valor y HACIA cual, y solo despues se
 // confirma. Ninguna borra nada: la baja es logica y el historico se conserva
 // (regla dura 5, RL-02).
+import { announce } from '@kronoqr/web-kit/announcer'
+import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
+import FormField from '@kronoqr/web-kit/components/FormField.vue'
+import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
+import { formatCivilDate, todayInZone } from '@kronoqr/web-kit/datetime'
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
@@ -14,14 +19,9 @@ import { ATTENDANCE_READ } from '@/features/auth/abilities'
 import { useSessionStore } from '@/features/auth/session.store'
 import { listDepartments, listSites } from '@/shared/api/organisation.api'
 import type { Employee, IssuedPin, UpdateEmployeeRequest } from '@/shared/api/types'
-import { formatCivilDate, todayInZone } from '@/shared/time/datetime'
-import { announce } from '@/shared/ui/announcer'
 import type { Change } from '@/shared/ui/change'
 import ChangePreview from '@/shared/ui/ChangePreview.vue'
 import ConfirmDialog from '@/shared/ui/ConfirmDialog.vue'
-import ErrorNotice from '@/shared/ui/ErrorNotice.vue'
-import FormField from '@/shared/ui/FormField.vue'
-import LoadingPanel from '@/shared/ui/LoadingPanel.vue'
 import PinRevealDialog from './PinRevealDialog.vue'
 import {
   deliverEmployeePin,

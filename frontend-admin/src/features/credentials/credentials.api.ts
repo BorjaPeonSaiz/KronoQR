@@ -6,8 +6,8 @@
 //    imprimir la nueva, tres actos distintos.
 //  - Los PDF salen por `requestBlob`. Un `204` de la impresion por lotes NO es
 //    un error: es su idempotencia, y significa «no habia nada pendiente».
-import type { BinaryDocument } from '@/shared/api/http'
-import { requestBlob, requestJson } from '@/shared/api/http'
+import type { BinaryDocument } from '@kronoqr/web-kit/http'
+import { requestBlob, requestJson } from '@kronoqr/web-kit/http'
 import type {
   Credential,
   CredentialStatusBoard,
@@ -29,9 +29,15 @@ export function fetchCredentialBoard(query: CredentialBoardQuery): Promise<Crede
   })
 }
 
+/** Lo unico binario que sirve este modulo: el PDF de una tarjeta. */
+const PDF_ACCEPT = 'application/pdf, application/problem+json'
+
 /** El PDF de una tarjeta. Acuña su QR en el mismo acto: no tiene vuelta atras. */
 export function printCredential(uuid: string): Promise<BinaryDocument | null> {
-  return requestBlob(`/api/v1/credentials/${uuid}/print`, 'credencial.pdf', { method: 'POST' })
+  return requestBlob(`/api/v1/credentials/${uuid}/print`, 'credencial.pdf', {
+    method: 'POST',
+    accept: PDF_ACCEPT,
+  })
 }
 
 /** La hoja A4 con todas las pendientes del centro. `null` si no habia ninguna. */
@@ -41,6 +47,7 @@ export function printCredentialBatch(
   return requestBlob('/api/v1/credentials/print-batch', 'credenciales.pdf', {
     method: 'POST',
     body,
+    accept: PDF_ACCEPT,
   })
 }
 

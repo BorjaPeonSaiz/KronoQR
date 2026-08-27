@@ -2,7 +2,7 @@
 // los usan las dos: el alta de empleado los necesita para sus selectores y el
 // panel de credenciales necesita la ZONA HORARIA del centro para poder enseñar
 // una hora que signifique algo (regla dura 3, RN-05).
-import { requestJson } from './http'
+import { requestJson } from '@kronoqr/web-kit/http'
 import type { DepartmentCollection, SiteCollection } from './types'
 
 export function listSites(): Promise<SiteCollection> {

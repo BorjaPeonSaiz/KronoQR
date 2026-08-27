@@ -6,10 +6,8 @@ namespace App\Modules\Attendance\Http\Support;
 
 use App\Modules\Attendance\Application\Port\CorrectionMetrics;
 use App\Modules\Attendance\Application\UseCase\CorrectedShift;
-use OpenTelemetry\API\Globals;
-use OpenTelemetry\API\Trace\SpanInterface;
+use App\Modules\Shared\Application\Support\SpanScope;
 use OpenTelemetry\API\Trace\SpanKind;
-use OpenTelemetry\Context\Context;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -44,10 +42,11 @@ use Throwable;
  *
  * ## Medir no puede romper una correccion
  *
- * Igual que en el fichaje. Cuando se llega a la parte de medir, la transaccion
- * ya confirmo: el tramo esta rectificado, la fila del libro escrita y el asiento
- * de auditoria cerrado. Un fallo de Redis no puede convertir eso en un `500`,
- * porque quien corrigio volveria a intentarlo y acabaria con dos correcciones.
+ * Igual que en el fichaje, y con el mismo andamiaje envuelto, {@see SpanScope}.
+ * Cuando se llega a la parte de medir, la transaccion ya confirmo: el tramo esta
+ * rectificado, la fila del libro escrita y el asiento de auditoria cerrado. Un
+ * fallo de Redis no puede convertir eso en un `500`, porque quien corrigio
+ * volveria a intentarlo y acabaria con dos correcciones.
  */
 final readonly class CorrectionTelemetry
 {
@@ -66,59 +65,35 @@ final readonly class CorrectionTelemetry
      */
     public function measure(string $operation, string $reasonCode, callable $apply): CorrectedShift
     {
-        $span = $this->startSpan($operation, $reasonCode);
+        $span = SpanScope::start(
+            'kronoqr.attendance',
+            'attendance.'.$operation.'_shift_entry',
+            SpanKind::KIND_SERVER,
+            ['correction.reason_code' => $reasonCode],
+        );
 
         try {
             $corrected = $apply();
         } catch (Throwable $failure) {
-            $this->endSpan($span, 'error');
+            $span->end(['correction.action' => 'error']);
 
             throw $failure;
         }
 
         $this->metrics->correctionRecorded($reasonCode);
-        $this->endSpan($span, $corrected->action->value);
+        $span->end(['correction.action' => $corrected->action->value]);
         $this->log($corrected, $reasonCode, $span);
 
         return $corrected;
     }
 
-    private function startSpan(string $operation, string $reasonCode): ?SpanInterface
-    {
-        try {
-            return Globals::tracerProvider()
-                ->getTracer('kronoqr.attendance')
-                ->spanBuilder('attendance.'.$operation.'_shift_entry')
-                ->setSpanKind(SpanKind::KIND_SERVER)
-                ->setParent(Context::getCurrent())
-                ->setAttribute('correction.reason_code', $reasonCode)
-                ->startSpan();
-        } catch (Throwable) {
-            return null;
-        }
-    }
-
-    private function endSpan(?SpanInterface $span, string $action): void
-    {
-        if (! $span instanceof SpanInterface) {
-            return;
-        }
-
-        try {
-            $span->setAttribute('correction.action', $action);
-            $span->end();
-        } catch (Throwable) {
-            // Ver el docblock: medir no puede romper una correccion.
-        }
-    }
-
-    private function log(CorrectedShift $corrected, string $reasonCode, ?SpanInterface $span): void
+    private function log(CorrectedShift $corrected, string $reasonCode, SpanScope $span): void
     {
         // `notice` y no `info`: una correccion manual es poco frecuente y tiene
         // relevancia legal. Que destaque sobre el ruido de los fichajes es lo
         // que permite revisar de un vistazo quien toco que la semana pasada.
         $this->logger->notice('attendance.shift_corrected', [
-            'trace_id' => $this->traceIdOf($span),
+            'trace_id' => $span->traceId(),
             'employee_uuid' => $corrected->employeeUuid,
             'shift_entry_uuid' => $corrected->shiftEntryUuid,
             'superseded_shift_entry_uuid' => $corrected->supersededShiftEntryUuid,
@@ -127,18 +102,5 @@ final readonly class CorrectionTelemetry
             'reason_code' => $reasonCode,
             'daily_total_minutes' => $corrected->dailyTotalMinutes,
         ]);
-    }
-
-    private function traceIdOf(?SpanInterface $span): ?string
-    {
-        if (! $span instanceof SpanInterface) {
-            return null;
-        }
-
-        $traceId = $span->getContext()->getTraceId();
-
-        // Un `trace_id` a ceros es el de un span inerte: escribirlo seria peor
-        // que no escribir nada, porque parece un identificador.
-        return trim($traceId, '0') === '' ? null : $traceId;
     }
 }

@@ -328,8 +328,24 @@ it('respeta el occurred_at de un escaneo sincronizado once horas despues', funct
     expect(substr((string) $tramo?->clocked_in_at, 0, 19))->toBe('2026-03-14 08:00:00')
         // RF-AT-10: el desfase se persiste, con signo, y el fichaje se acepta.
         ->and($escaneo?->clock_skew_seconds)->toBe(11 * 3600)
-        ->and($escaneo?->result)->toBe('clock_in');
+        ->and($escaneo?->result)->toBe('clock_in')
+        // RN-15, segunda frase: «si supera el umbral, requiere validacion del
+        // responsable». Once horas pasan de los 15 minutos de serie, asi que el
+        // tramo entra en el registro legal **y** marcado.
+        ->and($escaneo?->flagged_for_review)->toBeTrue();
 })->group('RF-AT-09', 'RF-AT-10', 'RN-15');
+
+it('no marca para validacion un escaneo que llega en hora', function (): void {
+    // El contrapunto de la prueba anterior: si toda la plantilla apareciera
+    // marcada, la marca no distinguiria nada y la bandeja de la 3.5 naceria
+    // inservible.
+    $escenario = escenarioDeFichaje('2026-03-14 07:00:10');
+    $scanId = Str::uuid7()->toString();
+
+    escanear($escenario, $scanId, '2026-03-14T07:00:00Z')->assertOk();
+
+    expect(DB::table('scan_events')->where('scan_id', $scanId)->value('flagged_for_review'))->toBeFalse();
+})->group('RN-15');
 
 it('acepta el fichaje aunque el reloj del quiosco vaya adelantado', function (): void {
     // Gherkin «Reloj del quiosco desviado»: 40 minutos de adelanto y el fichaje
@@ -342,8 +358,12 @@ it('acepta el fichaje aunque el reloj del quiosco vaya adelantado', function ():
     $respuesta->assertOk();
 
     expect(DB::table('scan_events')->value('clock_skew_seconds'))->toBe(-2400)
-        ->and(DB::table('shift_entries')->count())->toBe(1);
-})->group('RF-AT-10');
+        ->and(DB::table('shift_entries')->count())->toBe(1)
+        // Marcado, no rechazado: el adelanto tambien supera el umbral, y la
+        // marca es lo que distingue «aceptado y verificado» de «aceptado porque
+        // el empleado no tiene la culpa del reloj» (RN-15).
+        ->and(DB::table('scan_events')->value('flagged_for_review'))->toBeTrue();
+})->group('RF-AT-10', 'RN-15');
 
 // --- Turno de noche ----------------------------------------------------------
 
@@ -504,3 +524,18 @@ it('acepta la intencion declarada y la registra sin interpretarla', function ():
     expect($respuesta->json('action'))->toBe('clock_in')
         ->and(DB::table('scan_events')->where('scan_id', $scanId)->value('intent'))->toBe('break_start');
 })->group('RF-AT-12');
+
+// --- RS-02: los ejes del limite de tasa --------------------------------------
+
+it('no limita por credencial: la misma tarjeta repetida no agota ninguna cuota', function (): void {
+    // ADR-038. Un `429` por credencial seria la unica forma en que este producto
+    // puede dejar a una persona concreta sin fichar —bastaria con inundar con su
+    // tarjeta— y contradice la regla dura 19. La repeticion de una misma tarjeta
+    // la resuelve el periodo de gracia de RF-AT-06 como desenlace ACEPTADO
+    // (ADR-031), no con un rechazo.
+    $escenario = escenarioDeFichaje();
+
+    for ($i = 0; $i < 6; $i++) {
+        escanear($escenario, Str::uuid7()->toString())->assertOk();
+    }
+})->group('RS-02', 'RF-AT-06');

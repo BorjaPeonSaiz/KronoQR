@@ -11,6 +11,7 @@ use App\Modules\Identity\Domain\ValueObject\CredentialLifecycleStatus;
 use App\Modules\Identity\Domain\ValueObject\SiteCredentialCoverage;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\EmployeeCardDirectory;
+use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
 use App\Modules\Shared\Domain\ValueObject\EmployeeCardProfile;
 
 /**
@@ -40,13 +41,39 @@ use App\Modules\Shared\Domain\ValueObject\EmployeeCardProfile;
  * `coverage` se calcula **antes** de aplicar `pendingOnly`. Es lo que permite
  * decir «faltan 3 de 60» en lugar de «faltan 3 de 3», y es tambien lo que
  * publican las dos metricas del §8.2.
+ *
+ * ## Abrir este panel deja constancia
+ *
+ * RS-05 no admite matices: *«todo acceso a datos personales de terceros queda
+ * registrado en el trail de auditoria»*. Cada fila lleva nombre completo, codigo
+ * de empleado, centro y departamento de una persona, y la respuesta las lleva
+ * **todas**: es el directorio del hotel. Sin asiento no se puede responder a la
+ * pregunta que RL-15 obliga a poder responder en 72 horas —«¿que se llevo esa
+ * cuenta?»— justo para el conjunto de datos mas completo que expone la API.
+ *
+ * La incoherencia que esto corrige es concreta: `GET /kiosk/roster` divulga
+ * **menos** —un hash y el nombre de pila— y si dejaba asiento.
+ *
+ * Se registra **el alcance** —que centro, si venia filtrado, cuantas filas— y
+ * nunca lo divulgado (regla dura 21): ni un nombre, ni un codigo, ni la lista de
+ * `employee_uuid` de los afectados. Enumerarlos aqui seria una segunda copia de
+ * la plantilla con cuatro años de retencion, que es exactamente lo que se
+ * intenta proteger.
+ *
+ * El apunte se escribe **antes** de devolver: si la escritura de auditoria
+ * falla, la divulgacion no ocurre. Misma decision que en el padron del quiosco y
+ * en el fichaje (regla dura 6, ADR-027).
  */
 final readonly class CredentialStatusBoard
 {
+    /** Vocabulario estable del `audit_log`, en ingles y sin datos dentro. */
+    private const string DATASET = 'credential_status';
+
     public function __construct(
         private EmployeeCardDirectory $directory,
         private CredentialRepository $credentials,
         private CredentialMetrics $metrics,
+        private PersonalDataAccessLog $disclosures,
         private Clock $clock,
     ) {}
 
@@ -86,6 +113,19 @@ final readonly class CredentialStatusBoard
             ));
         }
 
+        if (! $query->unattended) {
+            // El recuento es el de las filas que **salen**, no el de la
+            // plantilla: es lo que convierte «alguien miro» en «alguien se llevo
+            // el directorio entero».
+            $this->disclosures->recordDisclosure(self::DATASET, \count($rows), [
+                // `site_id` solo cuando lo hay: un `0` seria el identificador de
+                // un centro que no existe. Su ausencia es el alcance mas amplio
+                // —toda la instalacion—, que es tambien el que mas importa saber.
+                ...($query->siteId === null ? [] : ['site_id' => $query->siteId]),
+                'pending_only' => $query->pendingOnly,
+            ]);
+        }
+
         return new CredentialStatusReport($rows, $coverage);
     }
 
@@ -97,6 +137,13 @@ final readonly class CredentialStatusBoard
      * comando de consola `credentials:status`, que el planificador ejecuta cada
      * hora y que es el productor natural de un fichero para el colector *textfile*
      * de `node-exporter`.
+     *
+     * **Publicar metricas no es divulgar.** Cuando el planificador llama con
+     * `unattended`, las filas nominales no salen de este proceso: lo que sale son
+     * dos contadores por centro. Escribir un asiento de RS-05 cada hora afirmaria
+     * en la tabla que se enseña en una inspeccion que alguien accedio a la
+     * plantilla cuando no accedio nadie, y 8.760 apuntes al año de ese tipo
+     * estorban justo a quien intente acotar el alcance de una brecha (RL-15).
      */
     public function handleAndPublishMetrics(CredentialStatusQuery $query): CredentialStatusReport
     {

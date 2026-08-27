@@ -11,6 +11,16 @@ declare(strict_types=1);
  * tienen sentido con el arbol de fuentes delante.
  */
 
+/*
+ * La raiz del repositorio, resuelta UNA vez y usada por las dos claves que la
+ * necesitan (`repo_path` y `test_paths.playwright`).
+ *
+ * Dentro del contenedor `app` llega por un montaje aparte de solo lectura
+ * (/var/www/repo); en la CI —que corre sobre el arbol completo sin contenedor—
+ * es el directorio padre de backend/.
+ */
+$repoPath = env('REPO_PATH', is_dir('/var/www/repo') ? '/var/www/repo' : base_path('..'));
+
 return [
 
     /*
@@ -34,7 +44,7 @@ return [
      * valor tiene que ser el mismo en todas las maquinas, no puede venir del
      * entorno. QualityGatesTest lo verifica.
      */
-    'current_phase' => 0,
+    'current_phase' => 1,
 
     /*
      * El orden REAL de ejecucion de las fases, literal del Anexo A del doc 01:
@@ -72,7 +82,7 @@ return [
      * funciona en uno de los dos sitios no comprueba nada, solo enseña donde se
      * ejecuto.
      */
-    'repo_path' => env('REPO_PATH', is_dir('/var/www/repo') ? '/var/www/repo' : base_path('..')),
+    'repo_path' => $repoPath,
 
     /* Fuente legible por maquina del Anexo A del doc 01. Relativa a docs_path. */
     'requirements_file' => 'requisitos.yaml',
@@ -106,20 +116,34 @@ return [
      * Donde se buscan las etiquetas. Dos herramientas y dos formatos (§9.6):
      * Pest/PHPUnit con `->group('RN-05')` y Playwright con `{ tag: ['@RN-05'] }`.
      *
-     * Los frontends NO estan montados en el contenedor `app`, asi que ahi la
-     * exploracion de Playwright es parcial y el comando lo dice en vez de dar
-     * por hecho que no hay pruebas E2E. En la CI, que corre sobre el arbol
-     * completo, se exploran los seis directorios. La exploracion parcial solo
-     * puede añadir requisitos sin prueba, nunca quitarlos: falla cerrado.
+     * LOS FRONTENDS SE RESUELVEN DESDE `$repoPath`, NO DESDE `base_path('..')`,
+     * y esa diferencia es justo la que hacia que la puerta comprobara cosas
+     * distintas segun quien la ejecutara:
+     *
+     *   CI          base_path('..') = <repo>          -> los ve
+     *   contenedor  base_path('..') = /var/www        -> NO los ve
+     *               $repoPath       = /var/www/repo   -> si los ve
+     *
+     * Con la ruta antigua, `qa:traceability --check` daba 12 requisitos sin
+     * prueba en el portatil y 4 en la CI, para el mismo arbol: ocho de ellos
+     * —RF-KI-01/02/05/06/09, RF-QR-05, RQ-05, RL-09— si tienen su prueba E2E
+     * etiquetada en `frontend-kiosk/tests/e2e`, solo que el contenedor no podia
+     * verla. Es el mismo fallo que documenta `current_phase` mas arriba, con los
+     * papeles cambiados: una puerta que solo salta donde nadie va a mirar acaba
+     * ignorada, y con ella los avisos que si eran ciertos.
+     *
+     * Si aun asi falta algun directorio, el comando lo DICE en vez de dar por
+     * hecho que no hay pruebas E2E. La exploracion parcial solo puede añadir
+     * requisitos sin prueba, nunca quitarlos: falla cerrado.
      */
     'test_paths' => [
         'pest' => [
             base_path('tests'),
         ],
         'playwright' => [
-            base_path('../frontend-kiosk/tests/e2e'),
-            base_path('../frontend-admin/tests/e2e'),
-            base_path('../frontend-portal/tests/e2e'),
+            $repoPath.'/frontend-kiosk/tests/e2e',
+            $repoPath.'/frontend-admin/tests/e2e',
+            $repoPath.'/frontend-portal/tests/e2e',
         ],
     ],
 

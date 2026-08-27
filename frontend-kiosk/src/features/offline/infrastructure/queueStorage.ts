@@ -15,14 +15,14 @@
 import type { ScanIntent } from '@/shared/api/types'
 
 /**
- * Una fila de la cola. **`intent` esta desde la v1 del esquema** (ADR-024):
- * cambiar el esquema de IndexedDB con la cola cargada obliga a migrar fichajes
- * pendientes —registro legal sin escribir— en tablets que pueden estar sin red.
- * En esta fase el quiosco escribe siempre `'auto'`.
+ * Lo comun a cualquier fila de la cola, sea cual sea su via. **`intent` esta
+ * desde la v1 del esquema** (ADR-024): cambiar el esquema de IndexedDB con la
+ * cola cargada obliga a migrar fichajes pendientes —registro legal sin
+ * escribir— en tablets que pueden estar sin red. En esta fase el quiosco
+ * escribe siempre `'auto'`.
  */
-export interface QueuedScanRecord {
+interface QueuedScanRecordBase {
   readonly scan_id: string
-  readonly qr_payload: string
   readonly occurred_at: string
   readonly intent: ScanIntent
   readonly device_id: string
@@ -32,6 +32,40 @@ export interface QueuedScanRecord {
   readonly next_attempt_at: number
   /** Epoch ms del encolado. Solo diagnostico: el registro legal usa `occurred_at`. */
   readonly enqueued_at: number
+}
+
+/** Fila de la cola para un fichaje por tarjeta QR. */
+export interface QueuedQrScanRecord extends QueuedScanRecordBase {
+  readonly kind: 'qr'
+  readonly qr_payload: string
+}
+
+/**
+ * Fila de la cola para un fichaje de respaldo por PIN (tarea 1.12). `pin_sealed`
+ * es el UNICO rastro del PIN que existe: ya viaja cerrado con la clave publica
+ * de la instalacion (sobre de libsodium), asi que guardarlo tal cual en
+ * IndexedDB no incumple «cero PIN en claro» — es ciphertext, no el secreto.
+ */
+export interface QueuedPinScanRecord extends QueuedScanRecordBase {
+  readonly kind: 'pin'
+  readonly employee_code: string
+  readonly pin_sealed: string
+}
+
+/**
+ * Una fila de la cola. El esquema de Dexie (ver `dexieStorage.ts`) no declara
+ * columnas para `qr_payload`/`employee_code`/`pin_sealed`: solo se indexan
+ * `scan_id`, `occurred_at` y `next_attempt_at`, asi que anadir esta segunda
+ * forma NO exige subir la version del esquema ni migrar ninguna cola cargada.
+ */
+export type QueuedScanRecord = QueuedQrScanRecord | QueuedPinScanRecord
+
+export function isPinScanRecord(record: QueuedScanRecord): record is QueuedPinScanRecord {
+  return record.kind === 'pin'
+}
+
+export function isQrScanRecord(record: QueuedScanRecord): record is QueuedQrScanRecord {
+  return record.kind === 'qr'
 }
 
 export interface RetrySchedule {
@@ -52,6 +86,14 @@ export interface EncryptedRosterRecord {
   readonly ciphertext: Uint8Array<ArrayBuffer>
   /** `KioskRoster.generated_at`, en claro para la pantalla de diagnostico (RF-KI-08). */
   readonly generated_at: string
+  /**
+   * `KioskRoster.pin_sealing_public_key`, EN CLARO: no es un dato personal, es
+   * la mitad publica del par de claves del servidor (RF-AT-11). Va fuera del
+   * sobre cifrado a proposito, porque el teclado de PIN tiene que poder
+   * ofrecerse sin descifrar nada — y sin red, tras un reinicio de la tablet.
+   * `null` significa que esta instalacion no ofrece fichaje por PIN (ADR-017).
+   */
+  readonly pin_sealing_public_key: string | null
 }
 
 export interface QueueStorage {

@@ -16,9 +16,6 @@
 //    traslado no reescribe donde ocurrieron las jornadas— se dice en su fila.
 //  - **Un turno nocturno es UN tramo** (regla dura 4). No se parte: se marca que
 //    la salida cae en el dia siguiente.
-import { computed } from 'vue'
-import { useI18n } from 'vue-i18n'
-import type { ClockingSource, ShiftEntryStatus, WorkDayShiftEntry } from '@/shared/api/types'
 import {
   formatInstant,
   formatLocalTime,
@@ -26,8 +23,11 @@ import {
   formatZoneLabel,
   minutesBetween,
   readLocalTimestamp,
-} from '@/shared/time/datetime'
-import { durationParts, sumShiftMinutes } from './workdayTotals'
+} from '@kronoqr/web-kit/datetime'
+import { durationParts, sumShiftMinutes } from '@kronoqr/web-kit/workdayTotals'
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import type { ClockingSource, ShiftEntryStatus, WorkDayShiftEntry } from '@/shared/api/types'
 
 const props = defineProps<{
   entries: readonly WorkDayShiftEntry[]

@@ -117,12 +117,28 @@ final class AttendanceServiceProvider extends ServiceProvider
     }
 
     /**
-     * Las dos zonas de fichaje de la capa de Aplicacion (§7.1, RS-02, tarea 1.7).
+     * Las tres zonas de fichaje de la capa de Aplicacion (§7.1, §7.5, RS-02,
+     * RS-12).
      *
-     * **Dos y no una**, aunque las dos rutas empiecen por `/api/v1/scan`: un lote
-     * trae cincuenta escaneos por peticion y un escaneo suelto trae uno, asi que
-     * compartir contador significaria elegir entre asfixiar el drenaje de la cola
-     * o dejar el endpoint individual practicamente sin techo.
+     * **Tres y no una**, aunque las tres rutas empiecen por `/api/v1/scan`:
+     *
+     * - `scan` cuenta escaneos sueltos, uno por peticion.
+     * - `scan-batch` cuenta lotes de hasta cincuenta, asi que con el mismo
+     *   contador habria que elegir entre asfixiar el drenaje de la cola o dejar
+     *   el endpoint individual practicamente sin techo.
+     * - `scan-pin` no frena un ritmo de fichaje, frena **fuerza bruta** sobre un
+     *   espacio de 10^6 (RS-12, tarea 1.12). Sus numeros razonables son dos
+     *   ordenes de magnitud mas bajos: una persona teclea un codigo y seis
+     *   digitos en decenas de segundos.
+     *
+     * **El techo por IP de la zona del PIN tambien es propio y mas estrecho.** El
+     * de las otras dos se fija al valor del borde para que mande Nginx; aqui la
+     * pregunta es otra —«¿cuantos PIN se pueden probar por minuto desde un
+     * sitio?»— y heredar los 600 generales habria dejado ese limite sin efecto
+     * practico. El §7.5 lo pide por escrito como control **independiente** del
+     * bloqueo por empleado: uno frena a quien prueba muchos PIN de una persona,
+     * el otro a quien prueba un PIN de mucha gente, y ninguno ve lo que ve el
+     * otro.
      *
      * Los numeros salen de `config/kiosk.php` y no son constantes (regla dura
      * 13): un hotel con veinte quioscos no tiene el mismo techo razonable que uno
@@ -147,6 +163,13 @@ final class AttendanceServiceProvider extends ServiceProvider
             'scan-batch',
             Config::integer('kiosk.rate_limits.batch_per_device', 60),
             $perIp,
+        ));
+
+        RateLimiter::for('scan-pin', static fn (Request $request): array => KioskRateLimit::of(
+            $request,
+            'scan-pin',
+            Config::integer('kiosk.rate_limits.pin_scan_per_device', 10),
+            Config::integer('kiosk.rate_limits.pin_scan_per_ip', 60),
         ));
     }
 }

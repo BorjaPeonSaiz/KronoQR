@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import CredentialBoardView from '@/features/credentials/CredentialBoardView.vue'
 import es from '@/shared/i18n/locales/es.json'
 import type { CredentialStatusRow } from '@/shared/api/types'
-import { announcement, clearAnnouncement } from '@/shared/ui/announcer'
+import { announcement, clearAnnouncement } from '@kronoqr/web-kit/announcer'
 import { CREDENTIAL_UUID, SITE, board, boardRow, credential } from './support/fixtures'
 import { jsonResponse, mountView, settle, stubFetch } from './support/harness'
 

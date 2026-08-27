@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import EmployeeListView from '@/features/employees/EmployeeListView.vue'
 import es from '@/shared/i18n/locales/es.json'
-import { announcement, clearAnnouncement } from '@/shared/ui/announcer'
+import { announcement, clearAnnouncement } from '@kronoqr/web-kit/announcer'
 import { EMPLOYEE_UUID, SITE, employee, employeeCollection } from './support/fixtures'
 import { jsonResponse, mountView, settle, stubFetch } from './support/harness'
 

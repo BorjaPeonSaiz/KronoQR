@@ -49,12 +49,19 @@ it('describe solo los endpoints cuya tarea existe, y todos bajo /api/v1', functi
         '/api/v1/scan',
         // Tarea 1.7: sincronizacion de la cola offline y padron/latido del quiosco.
         '/api/v1/scan/batch',
+        // Tarea 1.12: fichaje de respaldo por PIN.
+        '/api/v1/scan/pin',
         '/api/v1/kiosk/roster',
         '/api/v1/kiosk/heartbeat',
         // Tarea 1.6: acceso de gestion y plantilla.
         '/api/v1/auth/login',
         '/api/v1/auth/logout',
         '/api/v1/auth/me',
+        // Tarea 1.11: portal del empleado (RF-ID-05..08, RL-05). Ninguna lleva
+        // `{uuid}`: el empleado sale del token, no de la URL.
+        '/api/v1/me/login',
+        '/api/v1/me/workdays',
+        '/api/v1/me/export',
         '/api/v1/employees',
         '/api/v1/employees/{uuid}',
         '/api/v1/employees/{uuid}/offboard',
@@ -714,3 +721,195 @@ it('publica en cabeceras cuanto se llevo cada exportacion legal', function (): v
         // navegador pueden guardarla.
         ->and($headers)->toContain('Cache-Control');
 })->group('RF-IN-05', 'RS-05');
+
+/*
+ * Portal del empleado (tarea 1.11, RF-ID-05..08, RL-05).
+ *
+ * Lo que estas pruebas vigilan no es la forma de tres endpoints: es que ninguna
+ * de las tres rutas gane nunca un identificador de empleado, que su unico ambito
+ * siga siendo `self:read` y que el rechazo del acceso siga sin poder decir por
+ * que.
+ */
+
+it('no admite ningun identificador de empleado en las rutas del portal', function (): void {
+    // RF-ID-07 y regla dura 18. Es la mitad de la autorizacion que no es un
+    // ambito ni una policy: sin `{uuid}` en la ruta no hay URL que manipular
+    // para llegar al registro de otra persona. Un parametro nuevo aqui —de ruta
+    // o de consulta— tiene que pasar por esta prueba.
+    $allowed = [
+        '/api/v1/me/login' => [],
+        '/api/v1/me/workdays' => ['from', 'to'],
+        '/api/v1/me/export' => ['from', 'to', 'format'],
+    ];
+
+    foreach ($allowed as $path => $expected) {
+        expect($path)->not->toContain('{');
+
+        $method = $path === '/api/v1/me/login' ? 'post' : 'get';
+        $declared = Contract::has('paths', $path, $method, 'parameters')
+            ? Contract::value('paths', $path, $method, 'parameters')
+            : [];
+        $parameters = is_array($declared) ? $declared : [];
+
+        $names = [];
+
+        foreach ($parameters as $parameter) {
+            expect($parameter)->toBeArray();
+
+            /** @var array<string, mixed> $parameter */
+            // Los parametros compartidos entran por `$ref`, asi que el nombre
+            // hay que resolverlo contra `components`.
+            $reference = $parameter['$ref'] ?? null;
+
+            if (is_string($reference)) {
+                $component = substr($reference, (int) strrpos($reference, '/') + 1);
+                $names[] = Contract::text('components', 'parameters', $component, 'name');
+
+                continue;
+            }
+
+            $name = $parameter['name'] ?? null;
+
+            expect($name)->toBeString();
+
+            /** @var string $name */
+            $names[] = $name;
+        }
+
+        expect($names)->toBe($expected, $path);
+    }
+})->group('RF-ID-07', 'RQ-07', 'RL-05');
+
+it('exige el ambito self:read en las dos rutas de lectura del portal', function (): void {
+    // §7.3 y RF-ID-07: la sesion del portal solo lee y solo lo propio. Un
+    // segundo ambito aqui —o el `attendance:read` del panel— convertiria el
+    // token de una persona en algo que alcanza mas de lo suyo.
+    foreach (['/api/v1/me/workdays', '/api/v1/me/export'] as $path) {
+        $security = Contract::value('paths', $path, 'get', 'security');
+
+        expect($security)->toBe([['employeeToken' => ['self:read']]], $path);
+    }
+
+    // Y el acceso es publico: todavia no hay token que exigir.
+    expect(Contract::value('paths', '/api/v1/me/login', 'post', 'security'))->toBe([]);
+})->group('RF-ID-07', 'RS-04');
+
+it('no deja que ningun endpoint de gestion acepte el token del portal', function (): void {
+    // La promesa de RF-ID-07 leida al reves: ni `employeeToken` ni `self:read`
+    // pueden aparecer en una operacion que no sea del portal.
+    foreach (Contract::operations() as $operation) {
+        $path = $operation['path'];
+
+        if (str_starts_with($path, '/api/v1/me/')) {
+            continue;
+        }
+
+        $declared = json_encode(
+            Contract::value('paths', $path, $operation['method'], 'security'),
+            JSON_THROW_ON_ERROR,
+        );
+
+        expect($declared)->not->toContain('employeeToken', $path)
+            ->and($declared)->not->toContain('self:read', $path);
+    }
+})->group('RF-ID-07', 'RS-04');
+
+it('no distingue las causas del rechazo del acceso al portal', function (): void {
+    // RS-03 y regla dura 17. El `401` es uno solo, y no hay `429` con
+    // `Retry-After` para el bloqueo: anunciarlo confirmaria que ese codigo de
+    // empleado existe (RS-12). El `429` que si esta es el del limite de tasa,
+    // que responde a la IP y no a la credencial.
+    $responses = Contract::keys('paths', '/api/v1/me/login', 'post', 'responses');
+
+    expect($responses)->toBe(['200', '400', '401', '429']);
+
+    $unauthorised = Contract::value('paths', '/api/v1/me/login', 'post', 'responses', '401');
+
+    expect($unauthorised)->toBe(['$ref' => '#/components/responses/PortalAccessDenied']);
+
+    // La respuesta compartida no tiene donde alojar la causa: `Problem` y nada
+    // mas, sin cabeceras.
+    $problem = Contract::value('components', 'responses', 'PortalAccessDenied');
+
+    expect($problem)->toBeArray();
+
+    /** @var array<string, mixed> $problem */
+    expect(array_keys($problem))->toBe(['description', 'content'])
+        ->and(Contract::value('components', 'responses', 'PortalAccessDenied', 'content', 'application/problem+json', 'schema'))
+        ->toBe(['$ref' => '#/components/schemas/Problem']);
+})->group('RS-03', 'RS-12', 'RF-ID-06');
+
+it('no ofrece ningun formato propietario en la descarga del historico propio', function (): void {
+    // El plan es explicito: CSV en la 1.11 y PDF en la 2.9, sin XLSX. CSV cubre
+    // la portabilidad del RGPD y no arrastra Browsershot al camino critico de la
+    // Fase 1; XLSX no aporta nada sobre CSV para el historico de una persona.
+    $content = Contract::keys('paths', '/api/v1/me/export', 'get', 'responses', '200', 'content');
+
+    expect($content)->toBe(['text/csv']);
+
+    // El enumerado es de un solo valor. **El PDF llega en la 2.9** y sera otro
+    // valor de este mismo enumerado, es decir un cambio aditivo (ADR-012);
+    // describirlo ahora fijaria en v1 la forma de algo que nadie ha hecho. La
+    // comprobacion es sobre el `enum` y no sobre el texto del parametro, que si
+    // menciona el PDF para explicar por que todavia no esta.
+    $parametros = Contract::value('paths', '/api/v1/me/export', 'get', 'parameters');
+
+    expect($parametros)->toBeArray();
+
+    /** @var list<array<string, mixed>> $parametros */
+    $formato = null;
+
+    foreach ($parametros as $parametro) {
+        if (($parametro['name'] ?? null) === 'format') {
+            $formato = $parametro;
+        }
+    }
+
+    expect($formato)->not->toBeNull()
+        ->and($formato['schema'] ?? null)->toBe([
+            'type' => 'string',
+            'enum' => ['csv'],
+            'default' => 'csv',
+        ]);
+})->group('RF-ID-05', 'RL-05');
+
+it('sirve el registro propio con la misma forma que el del panel', function (): void {
+    // Deliberado: lo que cambia entre `/me/workdays` y
+    // `/employees/{uuid}/workdays` es quien puede pedirlo y sobre quien, no lo
+    // que devuelven. Dos formas para el mismo dato serian dos oportunidades de
+    // que los totales dejaran de cuadrar (RN-06).
+    $mine = Contract::value('paths', '/api/v1/me/workdays', 'get', 'responses', '200', 'content', 'application/json', 'schema');
+    $theirs = Contract::value('paths', '/api/v1/employees/{uuid}/workdays', 'get', 'responses', '200', 'content', 'application/json', 'schema');
+
+    expect($mine)->toBe($theirs)
+        ->and($mine)->toBe(['$ref' => '#/components/schemas/EmployeeWorkDays']);
+})->group('RF-ID-05', 'RF-PA-03', 'RN-06');
+
+it('no deja que la sesion de portal publique el PIN ni los ambitos', function (): void {
+    // El PIN entra y no vuelve a salir por ningun sitio (regla dura 21). Y la
+    // respuesta no enumera ambitos, al contrario que `Session`: el portal no
+    // tiene nada que decidir con esa lista, y publicarla seria un sitio mas
+    // donde el ambito se escribe.
+    expect(Contract::keys('components', 'schemas', 'PortalSession', 'properties'))
+        ->toBe(['token', 'token_type', 'expires_at', 'employee'])
+        ->and(Contract::value('components', 'schemas', 'PortalSession', 'additionalProperties'))->toBeFalse()
+        ->and(Contract::keys('components', 'schemas', 'PortalEmployee', 'properties'))
+        ->toBe(['uuid', 'display_name', 'employee_code', 'locale', 'time_zone']);
+})->group('RF-ID-07', 'RS-08');
+
+it('no describe la forma del codigo de empleado en el acceso al portal', function (): void {
+    // Regla dura 17, la misma ausencia que vigila `qr_payload` en `/scan` y
+    // `employee_code` en `/scan/pin`: un `pattern` aqui haria que un codigo
+    // malformado devolviera `400` y uno inexistente `401`, y con eso la
+    // validacion diria que codigos existen.
+    $code = Contract::value('components', 'schemas', 'PortalLoginRequest', 'properties', 'employee_code');
+
+    expect($code)->toBeArray();
+
+    /** @var array<string, mixed> $code */
+    expect(array_key_exists('pattern', $code))->toBeFalse()
+        // El PIN si lo lleva, y no contradice lo anterior: su longitud es
+        // publica y no depende de si el codigo existe ni de si el PIN acierta.
+        ->and(Contract::text('components', 'schemas', 'PortalLoginRequest', 'properties', 'pin', 'pattern'))
+        ->toBe('^[0-9]{6}$');
+})->group('RS-03', 'RF-ID-06');

@@ -1155,7 +1155,7 @@ php artisan qa:traceability --check
 5. Idiomas y funcionalidades activas.
 6. Telemetría: qué se enviaría, campo a campo, y que viene desactivada.
 7. Lo que **no se toca**: `APP_TIMEZONE=UTC` (regla dura 3) y por qué; la zona horaria se configura **por centro**.
-8. Umbrales operativos del Anexo B (`ATTENDANCE_DEBOUNCE_SECONDS`, `ATTENDANCE_MAX_SHIFT_HOURS`, `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES`, `PIN_MAX_ATTEMPTS`, `PORTAL_INTERNAL_ONLY`), con la advertencia de RF-AT-10: el desfase de reloj **genera incidencia, nunca rechaza el fichaje**.
+8. Umbrales operativos del Anexo B (`ATTENDANCE_DEBOUNCE_SECONDS`, `ATTENDANCE_MAX_SHIFT_HOURS`, `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES`, `PIN_MAX_ATTEMPTS`, `PORTAL_INTERNAL_CIDR`), con la advertencia de RF-AT-10: el desfase de reloj **genera incidencia, nunca rechaza el fichaje**.
 
 **`docs/cliente/obligaciones-legales.md`** — *«Qué le corresponde al cliente (RL-21)»*.
 
@@ -1265,7 +1265,7 @@ Resultado esperado: se llega al primer fichaje **sin preguntar nada a nadie**. C
 
 **`docs/cliente/guia-portal-empleado.md`** — *para entregar o publicar internamente.*
 
-1. Cómo entrar: código de empleado y PIN, desde dónde (`PORTAL_INTERNAL_ONLY`, Anexo B) y qué hacer si el PIN no funciona o está bloqueado (1.12).
+1. Cómo entrar: código de empleado y PIN, desde dónde (`PORTAL_INTERNAL_CIDR`, Anexo B) y qué hacer si el PIN no funciona o está bloqueado (1.12).
 2. Qué se ve: jornadas, tramos y totales, y qué significa cada uno.
 3. Cómo descargar el propio registro (RL-05) y para qué sirve.
 4. Qué hacer si algo no cuadra: **avisar a RRHH**, que corrige de forma trazada. El empleado no edita su registro, y la guía dice por qué.

@@ -11,6 +11,7 @@ import { fixedClock } from '@/shared/time/clock'
 function apiReturning(serverTime: string): ApiClient {
   return {
     recordScan: vi.fn(),
+    recordPinScan: vi.fn(),
     syncScanBatch: vi.fn(),
     fetchRoster: vi.fn(),
     sendHeartbeat: vi.fn(async () => ({
@@ -78,6 +79,7 @@ describe('latido del quiosco', () => {
     const scheduler = createHeartbeatScheduler({
       api: {
         recordScan: vi.fn(),
+        recordPinScan: vi.fn(),
         syncScanBatch: vi.fn(),
         fetchRoster: vi.fn(),
         sendHeartbeat: vi.fn(async () => ({
@@ -98,6 +100,7 @@ describe('latido del quiosco', () => {
     const scheduler = createHeartbeatScheduler({
       api: {
         recordScan: vi.fn(),
+        recordPinScan: vi.fn(),
         syncScanBatch: vi.fn(),
         fetchRoster: vi.fn(),
         sendHeartbeat: vi.fn(async () => ({

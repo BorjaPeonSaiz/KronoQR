@@ -87,6 +87,7 @@ export async function sealRoster(
   entries: readonly KioskRosterEntry[],
   generatedAt: string,
   deviceToken: string,
+  pinSealingPublicKey: string | null,
   deps: RosterCryptoDeps = {},
 ): Promise<EncryptedRosterRecord | null> {
   const subtle = resolveSubtle(deps)
@@ -111,6 +112,10 @@ export async function sealRoster(
     iv,
     ciphertext: new Uint8Array(ciphertext),
     generated_at: generatedAt,
+    // Fuera del sobre A PROPOSITO: no es un dato personal (es la mitad publica
+    // de un par de claves del servidor), y el teclado de PIN tiene que poder
+    // leerla sin descifrar nada (RF-AT-11). Ver la cabecera de este fichero.
+    pin_sealing_public_key: pinSealingPublicKey,
   }
 }
 

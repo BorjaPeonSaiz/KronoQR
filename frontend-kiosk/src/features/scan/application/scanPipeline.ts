@@ -21,6 +21,7 @@ import { parseCredentialPayload } from '../domain/credentialPayload'
 import type { ScanConfirmation } from '../domain/scanOutcome'
 import type { QueuedScan, RosterLookupPort, ScanSubmissionPort } from './ports'
 import { emptyRoster } from './ports'
+import { settleFrom } from './settleFrom'
 
 /**
  * Ventana en la que un MISMO payload leido de nuevo se ignora sin producir nada.
@@ -86,38 +87,15 @@ export function createScanPipeline(options: ScanPipelineOptions): ScanPipeline {
       return
     }
 
-    switch (result.kind) {
-      case 'accepted':
-        settle({
-          kind: 'accepted',
-          scanId: scan.scan_id,
-          occurredAt: new Date(result.response.occurred_at),
-          action: result.response.action,
-          displayName: result.response.employee_display_name,
-          workedMinutes: result.response.worked_minutes,
-          workDate: result.response.work_date,
-        })
-        return
-      case 'debounced':
-        settle({
-          kind: 'debounced',
-          scanId: scan.scan_id,
-          occurredAt: new Date(result.response.occurred_at),
-          displayName: result.response.employee_display_name,
-          workedMinutes: result.response.worked_minutes,
-          lastAcceptedAt: new Date(result.response.last_accepted_at),
-        })
-        return
-      case 'rejected':
-        settle({ kind: 'rejected', scanId: scan.scan_id, occurredAt })
-        return
-      case 'deferred':
-        // Sigue en la cola. La pantalla ya dice «pendiente»: no se toca, porque
-        // corregir una confirmacion que era correcta solo confunde. `fallbackName`
-        // queda disponible para que la tarea 1.9 lo use al reintentar.
-        void fallbackName
-        return
+    const confirmation = settleFrom(result, scan.scan_id, occurredAt)
+    if (confirmation === null) {
+      // Sigue en la cola. La pantalla ya dice «pendiente»: no se toca, porque
+      // corregir una confirmacion que era correcta solo confunde. `fallbackName`
+      // queda disponible para que la tarea 1.9 lo use al reintentar.
+      void fallbackName
+      return
     }
+    settle(confirmation)
   }
 
   return {
@@ -142,6 +120,7 @@ export function createScanPipeline(options: ScanPipelineOptions): ScanPipeline {
       lastPayloadAtMs = nowMs
 
       const scan: QueuedScan = {
+        kind: 'qr',
         scan_id: newScanId(),
         qr_payload: payload.raw,
         occurred_at: toUtcIso(occurredAt),

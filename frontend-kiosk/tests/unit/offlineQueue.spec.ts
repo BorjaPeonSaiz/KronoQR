@@ -30,8 +30,25 @@ const PAYLOAD = 'FH1.a3.7QK2mXpR9vLdN4tZbYcF1w.k9Xm2pQrT5vN8wLa'
 
 function scan(scanId: string, occurredAt: string): QueuedScan {
   return {
+    kind: 'qr',
     scan_id: scanId,
     qr_payload: PAYLOAD,
+    occurred_at: occurredAt,
+    intent: 'auto',
+    device_id: 'kiosk-1',
+  }
+}
+
+const RAW_PIN = '483920'
+/** Sobre de mentira con forma valida (base64), del tamano real de un sellado. */
+const SEALED_PIN = 'c2VhbGVkLXBpbi1lbnZlbG9wZS1wbGFjZWhvbGRlci1ub3QtdGhlLXJlYWwtcGlu'
+
+function pinScan(scanId: string, occurredAt: string): QueuedScan {
+  return {
+    kind: 'pin',
+    scan_id: scanId,
+    employee_code: 'E7QK2MXPR',
+    pin_sealed: SEALED_PIN,
     occurred_at: occurredAt,
     intent: 'auto',
     device_id: 'kiosk-1',
@@ -256,5 +273,80 @@ describe('retroceso exponencial (§6)', () => {
     expect(retryDelayMs(9)).toBe(256_000)
     expect(retryDelayMs(10)).toBe(MAX_RETRY_DELAY_MS)
     expect(retryDelayMs(500)).toBe(MAX_RETRY_DELAY_MS)
+  })
+})
+
+// El PIN nunca en claro en la cola (tarea 1.12, regla dura del encargo, RL-12).
+//
+// El fichaje por PIN se encola igual que uno por tarjeta (regla dura 19): lo
+// que aqui se comprueba es que lo unico que llega a IndexedDB es el sobre
+// SELLADO (`pin_sealed`), nunca los 6 digitos. Se prueba sobre los DOS
+// backends -- memoria y Dexie de verdad -- y ademas se abre la base de datos
+// por debajo, con la API cruda de IndexedDB, para no fiarse de que la propia
+// cola lea lo que ella misma escribio.
+describe.each(backends)('PIN nunca en claro en la cola ($name)', (backend) => {
+  let queue: ScanQueue
+
+  beforeEach(() => {
+    queue = createScanQueue({
+      openStorage: backend.open,
+      clock: fixedClock(new Date('2026-08-14T06:00:00.000Z')),
+    })
+  })
+
+  it('lo que se encola no lleva el PIN en claro en ningun campo', async () => {
+    await queue.enqueue(pinScan('0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90', '2026-08-14T05:58:31.000Z'))
+
+    const [row] = await queue.claim(1)
+    expect(row).toBeDefined()
+
+    // Ni como valor de ` pin_sealed` (que es ciphertext, no el PIN) ni como
+    // valor de NINGUN OTRO campo de la fila: se serializa la fila entera y se
+    // busca la cadena de 6 digitos en cualquier sitio.
+    const serialized = JSON.stringify(row)
+    expect(serialized).not.toContain(RAW_PIN)
+
+    if (row?.kind === 'pin') {
+      expect(row.pin_sealed).toBe(SEALED_PIN)
+      expect(row.pin_sealed).not.toBe(RAW_PIN)
+    } else {
+      throw new Error('se esperaba una fila de PIN')
+    }
+  })
+
+  it('conviven QR y PIN en la misma cola sin que uno filtre nada del otro', async () => {
+    await queue.enqueue(scan('0199f13a-7c22-7b41-9e88-0c4d5e6f7a81', '2026-08-14T08:00:00.000Z'))
+    await queue.enqueue(pinScan('0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90', '2026-08-14T05:58:31.000Z'))
+
+    const rows = await queue.claim(10)
+    const serialized = JSON.stringify(rows)
+
+    expect(serialized).not.toContain(RAW_PIN)
+    expect(rows.map((row) => row.kind).sort()).toEqual(['pin', 'qr'])
+  })
+})
+
+describe('PIN nunca en claro, leido directamente de IndexedDB (sin pasar por la cola)', () => {
+  it('abre la base de datos con un manejador NUEVO y solo encuentra el sobre sellado', async () => {
+    const databaseName = `kronoqr-test-raw-${++databaseCounter}`
+    const queue = createScanQueue({
+      openStorage: () => createDexieQueueStorage(openKioskDatabase(databaseName)),
+      clock: fixedClock(new Date('2026-08-14T06:00:00.000Z')),
+    })
+
+    await queue.enqueue(pinScan('0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90', '2026-08-14T05:58:31.000Z'))
+
+    // Un segundo manejador de Dexie, independiente del que uso la cola para
+    // escribir: esto es exactamente lo que hara la tablet en el arranque
+    // siguiente, y es lo que impide que la prueba se limite a comprobar que la
+    // cola lee lo que ella misma acaba de escribir.
+    const reopened = openKioskDatabase(databaseName)
+    const rows = await reopened.scans.toArray()
+    reopened.close()
+
+    expect(rows).toHaveLength(1)
+    const serialized = JSON.stringify(rows)
+    expect(serialized).not.toContain(RAW_PIN)
+    expect(serialized).toContain(SEALED_PIN)
   })
 })

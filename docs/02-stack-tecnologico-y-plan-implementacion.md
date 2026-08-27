@@ -519,6 +519,9 @@ Los diez siguientes **no proceden de esta tabla**: nacieron al desarrollar el pl
 | **033** | **Tres roles de base de datos, no dos** | ADR-027 preveía dos roles (aplicación y mantenimiento), pero al implementar la tarea 1.14 `fichaje_app` resultó ser también `POSTGRES_USER`, el superusuario de arranque del clúster: el `REVOKE UPDATE, DELETE` de la regla dura 6 no impedía nada porque un superusuario ignora los permisos, y PostgreSQL 16+ no permite quitarle `SUPERUSER` al rol de arranque | Rol nuevo `fichaje_migrator`: `POSTGRES_USER` de arranque, propietario de las tablas, único con DDL. `fichaje_app` pasa a ser un rol de runtime sin `SUPERUSER` y sin DDL. `fichaje_maintenance` sigue como preveía ADR-027. Laravel usa conexiones distintas (`pgsql_migrator` / `pgsql`) para migrar y para operar |
 | **034** | **El token de la credencial nace al imprimir, no al emitir** | La tarea 1.5 acuñaba el token al emitir y lo devolvía una sola vez, irrecuperable después. Eso dejaba sin base los tres pilares de la tarea 1.10 que el §5.5 y RF-QR-08 dan por hechos —`credentials:print` sobre una credencial ya emitida, `print-batch --pending` y el estado «pendiente de imprimir»—: no quedaba nada con lo que dibujar el QR. Guardar el token cifrado habría metido un secreto reversible en la base de datos, que es justo lo que RS-01 elimina | `key_id` y `secret_hash` nacen nulos y los escribe la impresión junto a `printed_at`, en la misma operación que dibuja el PDF. Una credencial pendiente de imprimir **no es escaneable**. Imprimir es irrepetible (`409`, sin `--force`), lo que hace `print-batch --pending` idempotente por construcción; reponer una tarjeta es revocar, reemitir e imprimir. **Ninguna respuesta de la API lleva ya un QR**: el esquema `QrPayload` desaparece del contrato |
 | **035** | **La corrección estrena identificador y no cambia de jornada** | ADR-026 dejó sin decidir qué `uuid` tiene la versión corregida —la columna es UNIQUE— y si corregir la entrada puede mover el tramo a otra jornada (RN-05 frente a la regla dura 4) | La versión nueva estrena `uuid` y la anterior apunta a ella; el `PATCH` devuelve los dos. Mover la jornada se rechaza con `422`: se anula en origen y se da de alta en destino, dos acciones auditadas |
+| **036** | **Las tres SPA comparten un paquete de cálculo y presentación**, no cada una el suyo | `frontend-portal` copió ~1450 líneas de `frontend-admin` en vez de reutilizarlas —cliente HTTP, formateo de fecha/hora, cinco componentes de UI y, sobre todo, el cálculo de totales de jornada—, y la copia ya había divergido: el portal no leía `performed_at_local` y reconvertía en el navegador, con riesgo de discrepancia en cambio de hora | Paquete interno `@kronoqr/web-kit` vía `npm workspaces`, consumido por `frontend-admin` y `frontend-portal`. Solo cálculo/presentación/utilidades transversales sin lógica de negocio de una sola pantalla; nada específico de un flujo entra en el paquete |
+| **037** | **Las lecturas en volumen de datos de terceros dejan asiento; la ficha individual y lo propio, no** | RS-05 no tenía criterio operativo y cada tarea decidía por su cuenta: `/kiosk/roster` y `/employees/{uuid}/workdays` auditaban, `/credentials/status` y `/employees` no, pese a divulgar **más**. RL-15 exige poder acotar una brecha desde el trail, y para el conjunto de datos más completo de la API no se podía | Regla de tres condiciones (terceros · sale del proceso · es un conjunto o el registro horario de una persona). `credential_status` y `employee_directory` empiezan a auditar; `/me/*` queda confirmado sin asiento; la ficha individual tampoco, porque el asiento del índice ya la subsume. Se mantiene **un solo** candado de la cadena de hash: partirlo por dataset bifurcaría la cadena de ADR-010 |
+| **038** | **RS-02 se limita por dispositivo y por IP; el eje por sujeto vive en el PIN, no en el escaneo de tarjeta** | RS-02 enumeraba tres ejes y solo existían dos. Al revisarlo, el tercero no protege de lo que la propia frase dice proteger: contra la enumeración no sirve —quien enumera prueba credenciales *distintas*—, la repetición de una misma tarjeta ya la absorbe RF-AT-06 como desenlace aceptado (ADR-031), y un `429` por credencial sería la única forma en que este producto puede dejar a una persona concreta sin fichar (regla dura 19) | Se enmienda el enunciado de RS-02 en el doc 01 §8 y su fila en `docs/requisitos.yaml`. Los dos ejes existentes ganan prueba propia sobre `/scan`, que la matriz daba por cubiertos con pruebas de otros endpoints. El límite por sujeto se mantiene y se refuerza donde el secreto es adivinable: el PIN (RS-12) |
 
 ---
 
@@ -652,13 +655,13 @@ sequenceDiagram
 |---|---|
 | **Red** | TLS 1.3 obligatorio, HSTS, quioscos en VLAN separada, portal del empleado restringido a red interna por defecto, fail2ban |
 | **Borde (Nginx)** | Rate limiting por zona: fichaje **600 r/m con ráfaga de 50 desde el CIDR de la VLAN de quioscos**, y **30 r/m con ráfaga de 10 desde cualquier otro origen**; autenticación 5 r/m; portal 10 r/m; resto 120 r/m. Límite de tamaño de cuerpo. Cabeceras de seguridad |
-| **Aplicación** | Throttling por `device_id`, por credencial y por empleado; autorización por policy en **cada** endpoint; validación estricta; respuestas de tiempo constante en el camino de fichaje; bloqueo por intentos en el PIN |
+| **Aplicación** | Throttling por `device_id` y por IP en el camino de fichaje, y por empleado en el PIN (ADR-038: **no** por credencial en el escaneo de tarjeta); autorización por policy en **cada** endpoint; validación estricta; respuestas de tiempo constante en el camino de fichaje; bloqueo escalonado por intentos en el PIN |
 | **Datos** | Usuario de base de datos con permisos mínimos (sin DDL, sin `UPDATE` ni `DELETE` en `audit_log`), DNI hasheado, copias cifradas con clave separada |
 | **Cliente** | CSP estricta sin `unsafe-inline`, `Permissions-Policy: camera=(self)`, SRI en assets, padrón cacheado cifrado con clave derivada del token del dispositivo |
 
 > **Por qué la zona de fichaje distingue el origen.** Los 30 r/m por IP son un control pensado para internet, y **todos los quioscos de un hotel salen por la misma IP**. Aplicado sin distinción, el propio Nginx frenaría el sistema tres órdenes de magnitud por debajo de lo que exige RNF-P-06 —50 fichajes por segundo—, y el síntoma en producción sería «el quiosco va lento a las 06:00» en el cambio de turno, que es justo el pico que el producto existe para absorber.
 >
-> **El límite no se elimina para la red interna: se eleva.** RS-02 exige limitar «por dispositivo, por credencial **y por IP**», y dejar el tráfico interno sin techo por origen permitiría a un equipo comprometido enchufado a esa VLAN barrer tokens al ritmo que dé la aplicación. Los 600 r/m con ráfaga de 50 sostienen RNF-P-06 con margen y mantienen RS-02 literalmente satisfecho.
+> **El límite no se elimina para la red interna: se eleva.** RS-02 exige limitar «por dispositivo **y por IP**», y dejar el tráfico interno sin techo por origen permitiría a un equipo comprometido enchufado a esa VLAN barrer tokens al ritmo que dé la aplicación. Los 600 r/m con ráfaga de 50 sostienen RNF-P-06 con margen y mantienen RS-02 literalmente satisfecho. **El eje por credencial no existe y no es un olvido**: ADR-036 explica por qué un `429` por tarjeta sería la única forma de dejar a una persona concreta sin fichar.
 >
 > **El CIDR de la VLAN es un parámetro de instalación**, no una constante: va en `.env.example` y en la documentación de instalación. Si el cliente coloca los quioscos fuera de ese rango, quedan bajo el límite de 30 r/m — y eso hay que decírselo, porque el fallo es silencioso y se manifiesta como lentitud, no como error.
 
@@ -1387,14 +1390,21 @@ ATTENDANCE_MAX_CLOCK_SKEW_MINUTES=15   # RF-AT-10 · genera incidencia, nunca re
 ATTENDANCE_PATTERN_WINDOW_SECONDS=10   # RF-PR-06 · fichajes consecutivos en el mismo quiosco
 ATTENDANCE_PATTERN_MIN_REPEATS=3       # RF-PR-06 · coincidencias antes de generar incidencia
 ATTENDANCE_MIN_TRANSIT_SECONDS=120     # RN-16 · tránsito mínimo entre dos quioscos distintos
-PIN_MAX_ATTEMPTS=3                     # RS-12 · primer escalón de bloqueo
-PIN_LOCKOUT_SECONDS=300                # RS-12 · 5 min tras PIN_MAX_ATTEMPTS fallos
-PIN_LOCKOUT_TIER2_ATTEMPTS=5           # RS-12 · §7.5 exige bloqueo creciente
-PIN_LOCKOUT_TIER2_SECONDS=900          # 15 min
-PIN_LOCKOUT_TIER3_ATTEMPTS=10
-PIN_LOCKOUT_TIER3_SECONDS=3600         # 60 min
-PIN_LOCKOUT_RESET_HOURS=24             # El contador de fallos se reinicia sin fallos en 24 h
-PORTAL_INTERNAL_ONLY=true              # RF-ID-08
+IDENTITY_PIN_MAX_ATTEMPTS=3            # RS-12 · primer escalón de bloqueo
+IDENTITY_PIN_LOCKOUT_SECONDS=300       # RS-12 · 5 min tras IDENTITY_PIN_MAX_ATTEMPTS fallos
+IDENTITY_PIN_LOCKOUT_TIER2_ATTEMPTS=5  # RS-12 · §7.5 exige bloqueo creciente
+IDENTITY_PIN_LOCKOUT_TIER2_SECONDS=900 # 15 min
+IDENTITY_PIN_LOCKOUT_TIER3_ATTEMPTS=10
+IDENTITY_PIN_LOCKOUT_TIER3_SECONDS=3600  # 60 min
+IDENTITY_PIN_LOCKOUT_RESET_HOURS=24    # Ventana deslizante: sin fallos en 24 h vuelve a cero
+IDENTITY_PIN_SEALING_SECRET_KEY=       # RF-AT-11 · X25519 en base64, generada en el servidor
+                                       # del cliente. La pública se deriva y se sirve en
+                                       # GET /kiosk/roster. Vacía = sin fichaje por PIN
+KIOSK_PIN_SCAN_RATE_PER_DEVICE=10      # RS-12 · POST /scan/pin, por tablet
+KIOSK_PIN_SCAN_RATE_PER_IP=60          # RS-12 · §7.5 exige límite por IP independiente
+PORTAL_INTERNAL_CIDR=172.28.0.0/16     # RF-ID-08 · lo aplica Nginx (geo + 403), no la
+                                       # aplicación. 0.0.0.0/0 expone el portal a internet
+                                       # como decisión explícita del cliente
 KIOSK_VLAN_CIDR=10.0.20.0/24           # §7.1 · zona de fichaje elevada para este rango.
                                        # Fuera de él, los quioscos caen al límite de 30 r/m
 

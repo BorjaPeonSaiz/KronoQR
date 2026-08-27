@@ -4,7 +4,7 @@ import EmployeeDetailView from '@/features/employees/EmployeeDetailView.vue'
 import { useSessionStore } from '@/features/auth/session.store'
 import es from '@/shared/i18n/locales/es.json'
 import type { Employee } from '@/shared/api/types'
-import { clearAnnouncement } from '@/shared/ui/announcer'
+import { clearAnnouncement } from '@kronoqr/web-kit/announcer'
 import { EMPLOYEE_UUID, SITE, employee, managementUser } from './support/fixtures'
 import { createTestPinia, jsonResponse, mountView, settle, stubFetch } from './support/harness'
 

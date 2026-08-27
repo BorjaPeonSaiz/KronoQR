@@ -1,6 +1,189 @@
 {
   "app": {
-    "title": "Employee portal",
-    "skeletonNotice": "Application skeleton. The portal screens arrive in task 1.11."
+    "title": "My employee portal",
+    "skipToContent": "Skip to main content",
+    "signedInAs": "Hi, {name}",
+    "signOut": "Sign out",
+    "nav": {
+      "label": "Portal sections",
+      "myRecords": "My record",
+      "myExport": "Download my history"
+    }
+  },
+  "login": {
+    "heading": "Sign in to the portal",
+    "intro": "Sign in with your employee code and your six-digit PIN, the same ones you use at the kiosk.",
+    "employeeCode": "Employee code",
+    "pin": "PIN",
+    "pinHint": "Six digits, no spaces.",
+    "submit": "Sign in",
+    "submitting": "Signing in…",
+    "forgotPin": "Can't remember your PIN or your code? Ask Human Resources to reset it. It is never sent by email or by any link."
+  },
+  "common": {
+    "updating": "Updating…"
+  },
+  "errors": {
+    "retryAfter": "You can try again in {seconds} s.",
+    "network": {
+      "title": "Could not reach the server",
+      "advice": "Check your connection and try again. Nothing you have done has been lost."
+    },
+    "unauthenticated": {
+      "title": "Your session has expired",
+      "advice": "Sign in again with your code and your PIN to keep checking your record."
+    },
+    "invalidCredentials": {
+      "title": "The employee code or the PIN are not correct",
+      "advice": "Check them and try again. After several failed attempts, access is blocked for a few minutes, even if you then type the correct PIN. If you cannot sign in, ask Human Resources to reset your PIN."
+    },
+    "forbidden": {
+      "title": "This information cannot be shown",
+      "advice": "Sign in again. If the problem continues, tell Human Resources."
+    },
+    "notFound": {
+      "title": "Not found",
+      "advice": "Go back to my record and reload the page."
+    },
+    "conflict": {
+      "title": "Something changed in the meantime",
+      "advice": "Reload the page and try again."
+    },
+    "validation": {
+      "title": "There is something to review in the dates",
+      "advice": "Fix the period shown and try again."
+    },
+    "rateLimited": {
+      "title": "Too many attempts in a row",
+      "advice": "Wait a few seconds and try again."
+    },
+    "unavailable": {
+      "title": "The portal cannot handle this request right now",
+      "advice": "It is not something you did. Tell Human Resources if it happens again."
+    },
+    "unexpected": {
+      "title": "An unexpected error has occurred",
+      "advice": "Try again. If it happens again, tell Human Resources with the time and what you were doing."
+    }
+  },
+  "notFound": {
+    "heading": "This page does not exist",
+    "description": "The portal only has two screens: your record and downloading your history.",
+    "backToRecords": "Go to my record"
+  },
+  "myRecords": {
+    "title": "My working time record",
+    "subtitle": "Your work days, your shifts and the total for each day. Nothing is ever deleted: if something was corrected, it is explained below.",
+    "duration": "{hours} h {minutes} min",
+    "zoneNotice": "Times are shown in your workplace's time zone, not the one on your phone or computer.",
+    "loading": "Loading your record…",
+    "filters": {
+      "legend": "Period consulted",
+      "from": "From",
+      "fromHint": "By work day: a shift that started at 22:00 belongs to the day it started, even if you clocked out the next day.",
+      "to": "To",
+      "toHint": "Last day, included. Left blank, your last 31 days are shown.",
+      "inverted": "The period ends before it starts. Check both dates.",
+      "tooWide": "The period cannot exceed {days} days. Check your history in shorter stretches.",
+      "apply": "Search",
+      "resolved": "Work days from {from} to {to}, in {zone} time."
+    },
+    "empty": {
+      "title": "No work days in this period",
+      "description": "This is not a search error: you have no recorded clockings on those days. Try another period."
+    },
+    "announce": {
+      "results": "{count} work days between {from} and {to}."
+    },
+    "day": {
+      "total": "Total for the day",
+      "flags": {
+        "openShift": "Shift still open",
+        "openShiftHint": "You have not clocked out of this shift yet: today's total will still go up.",
+        "incident": "Pending review",
+        "incidentHint": "A shift on this day was flagged for someone to review. It is not your mistake."
+      }
+    },
+    "entries": {
+      "caption": "Shifts for the work day on {date}, in the {zone} time zone",
+      "in": "Clock in ({zone})",
+      "out": "Clock out ({zone})",
+      "duration": "Duration",
+      "source": "How it was recorded",
+      "utc": "UTC {time}",
+      "queued": "Recorded {delay} after clocking: it arrived from the kiosk's offline queue. What counts is the time you actually clocked.",
+      "open": "Not closed",
+      "openHint": "This shift is still open.",
+      "nextDay": "(next day)",
+      "openDuration": "In progress",
+      "empty": "This work day has no current shift. If there are corrections below, they were voided: the history is still complete.",
+      "sum": "Sum of the shifts",
+      "declared": "Recorded total for the day",
+      "mismatch": "The recorded total for the day does not match the sum of its shifts. Both numbers are shown without choosing one: tell Human Resources before using these hours for anything."
+    },
+    "sources": {
+      "qr_kiosk": "Card scan",
+      "pin_kiosk": "PIN at the kiosk",
+      "manual_admin": "Entered by hand by Human Resources",
+      "import": "Import"
+    },
+    "history": {
+      "heading": "Correction history",
+      "empty": "This work day has not been corrected: the shifts are the ones recorded when you clocked.",
+      "notice": "Nothing is ever deleted or overwritten: every correction keeps what it said before, with who made it, when and why.",
+      "by": "{author}, on {moment}",
+      "reason": "Reason",
+      "caption": "What the correction on {moment} changed",
+      "fields": {
+        "in": "Clock in",
+        "out": "Clock out",
+        "worked": "Time worked"
+      },
+      "before": "Before",
+      "after": "After",
+      "noEntryBefore": "The shift did not exist",
+      "noEntryAfter": "Shift voided",
+      "openMark": "No clock out"
+    },
+    "correctionAction": {
+      "created": "Shift added",
+      "modified": "Times corrected",
+      "closed": "Shift closed",
+      "voided": "Shift voided"
+    },
+    "reasons": {
+      "OLVIDO_FICHAJE_ENTRADA": "Forgot to clock in",
+      "OLVIDO_FICHAJE_SALIDA": "Forgot to clock out",
+      "FALLO_TECNICO_QUIOSCO": "Kiosk technical failure",
+      "TARJETA_NO_DISPONIBLE": "Card not available",
+      "CREDENCIAL_NO_ENTREGADA": "Card not yet handed over",
+      "ERROR_DE_ESCANEO_DUPLICADO": "Duplicate scan",
+      "AJUSTE_ACORDADO_CON_RRHH": "Adjustment agreed with Human Resources",
+      "ALTA_RETROACTIVA": "Retroactive entry",
+      "OTROS": "Other reason"
+    }
+  },
+  "myExport": {
+    "title": "Download my history",
+    "intro": "Download your working time record as a file you can keep or hand over to whoever needs it.",
+    "contents": {
+      "entries": "One row for every shift worked, with clock in, clock out, duration and the total for each work day.",
+      "corrections": "One row for every correction to your record, with who made it, when and why.",
+      "format": "CSV file, with times as HH:MM, never as a decimal."
+    },
+    "filters": {
+      "legend": "Period to download",
+      "from": "From",
+      "fromHint": "By work day. Left blank, your available history is included.",
+      "to": "To",
+      "toHint": "Last day, included.",
+      "inverted": "The period ends before it starts. Check both dates.",
+      "tooWide": "The period cannot exceed {days} days."
+    },
+    "download": "Download CSV",
+    "downloading": "Generating the download…",
+    "announce": {
+      "done": "Download ready. Check your device's downloads."
+    }
   }
 }

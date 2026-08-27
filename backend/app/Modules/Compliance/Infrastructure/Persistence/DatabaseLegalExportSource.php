@@ -14,6 +14,7 @@ use App\Modules\Compliance\Domain\ValueObject\LegalExportPeriod;
 use App\Modules\Compliance\Domain\ValueObject\LegalExportRecord;
 use App\Modules\Compliance\Domain\ValueObject\LegalExportRecordType;
 use App\Modules\Compliance\Domain\ValueObject\LegalExportScope;
+use App\Modules\Shared\Infrastructure\Persistence\Row;
 use Illuminate\Database\ConnectionInterface;
 
 /**
@@ -67,6 +68,17 @@ use Illuminate\Database\ConnectionInterface;
  * Un cursor sin `HOLD` **exige transaccion**, y la abre el caso de uso. Es la
  * misma transaccion que hace que lo exportado sea el registro en un instante y
  * no un promedio de los segundos que tarde la escritura.
+ *
+ * ## Las columnas se leen por {@see Row}, no con `(int)`
+ *
+ * PDO no promete el tipo PHP de una columna: un `integer` de PostgreSQL llega
+ * como `int` o como `string` segun como este compilado el driver. Aqui se
+ * escribia `(int) $row->day_minutes` confiando en una anotacion `@var` que
+ * PHPStan cree y el driver no garantiza — y un `(int)` sobre una columna nula
+ * devuelve un cero que **parece un dato**. En el total de una jornada que acaba
+ * en un documento con efectos legales, un cero silencioso es peor que una
+ * excepcion: `Row` distingue nulo de cero y falla en voz alta cuando falta una
+ * columna obligatoria.
  */
 final readonly class DatabaseLegalExportSource implements LegalExportSource
 {
@@ -219,7 +231,7 @@ final readonly class DatabaseLegalExportSource implements LegalExportSource
                 }
 
                 foreach ($rows as $row) {
-                    yield $this->toRecord($row);
+                    yield $this->toRecord(Row::of($row));
                 }
             }
         } finally {
@@ -247,90 +259,68 @@ final readonly class DatabaseLegalExportSource implements LegalExportSource
         return $name;
     }
 
-    private function toRecord(object $row): LegalExportRecord
+    private function toRecord(Row $row): LegalExportRecord
     {
-        /** @var object{record_type: string} $row */
-        return LegalExportRecordType::from($row->record_type) === LegalExportRecordType::ShiftEntry
+        return LegalExportRecordType::from($row->string('record_type')) === LegalExportRecordType::ShiftEntry
             ? $this->toShiftEntry($row)
             : $this->toCorrection($row);
     }
 
-    /**
-     * @param  object{employee_code: string, last_name: string, first_name: string, employee_uuid: string, site_name: string, department_name: string|null, site_timezone: string, work_date: string}  $row
-     */
-    private function toSubject(object $row): ExportedSubject
+    private function toSubject(Row $row): ExportedSubject
     {
         return new ExportedSubject(
-            employeeCode: $row->employee_code,
-            lastName: $row->last_name,
-            firstName: $row->first_name,
-            employeeUuid: $row->employee_uuid,
-            siteName: $row->site_name,
-            departmentName: $row->department_name,
-            timezone: $row->site_timezone,
-            workDate: $row->work_date,
+            employeeCode: $row->string('employee_code'),
+            lastName: $row->string('last_name'),
+            firstName: $row->string('first_name'),
+            employeeUuid: $row->string('employee_uuid'),
+            siteName: $row->string('site_name'),
+            departmentName: $row->nullableString('department_name'),
+            timezone: $row->string('site_timezone'),
+            workDate: $row->string('work_date'),
         );
     }
 
-    private function toShiftEntry(object $row): ExportedShiftEntry
+    private function toShiftEntry(Row $row): ExportedShiftEntry
     {
-        /**
-         * @var object{employee_code: string, last_name: string, first_name: string, employee_uuid: string,
-         *     site_name: string, department_name: string|null, site_timezone: string, work_date: string,
-         *     entry_number: int|string, shift_entry_uuid: string, local_in: string, local_out: string|null,
-         *     utc_in: string, utc_out: string|null, duration_minutes: int|string|null, day_minutes: int|string,
-         *     status: string, clock_in_source: string, clock_out_source: string|null} $row
-         */
         return new ExportedShiftEntry(
             subject: $this->toSubject($row),
-            entryNumber: (int) $row->entry_number,
-            shiftEntryUuid: $row->shift_entry_uuid,
-            localClockedInAt: $row->local_in,
-            localClockedOutAt: $row->local_out ?? '',
-            utcClockedInAt: $row->utc_in,
-            utcClockedOutAt: $row->utc_out ?? '',
-            duration: ExportedDuration::ofNullableMinutes(
-                $row->duration_minutes === null ? null : (int) $row->duration_minutes,
-            ),
-            dayTotal: ExportedDuration::ofMinutes((int) $row->day_minutes),
-            status: $row->status,
-            clockInSource: $row->clock_in_source,
-            clockOutSource: $row->clock_out_source ?? '',
+            entryNumber: $row->int('entry_number'),
+            shiftEntryUuid: $row->string('shift_entry_uuid'),
+            localClockedInAt: $row->string('local_in'),
+            localClockedOutAt: $row->nullableString('local_out') ?? '',
+            utcClockedInAt: $row->string('utc_in'),
+            utcClockedOutAt: $row->nullableString('utc_out') ?? '',
+            duration: ExportedDuration::ofNullableMinutes($row->nullableInt('duration_minutes')),
+            dayTotal: ExportedDuration::ofMinutes($row->int('day_minutes')),
+            status: $row->string('status'),
+            clockInSource: $row->string('clock_in_source'),
+            clockOutSource: $row->nullableString('clock_out_source') ?? '',
         );
     }
 
-    private function toCorrection(object $row): ExportedCorrection
+    private function toCorrection(Row $row): ExportedCorrection
     {
-        /**
-         * @var object{employee_code: string, last_name: string, first_name: string, employee_uuid: string,
-         *     site_name: string, department_name: string|null, site_timezone: string, work_date: string,
-         *     shift_entry_uuid: string, correction_local_at: string, correction_utc_at: string,
-         *     author_name: string, author_uuid: string, correction_action: string, reason_code: string,
-         *     reason_text: string|null, before_in: string|null, before_out: string|null,
-         *     before_minutes: int|string|null, after_in: string|null, after_out: string|null,
-         *     after_minutes: int|string|null, has_before: bool|string, has_after: bool|string} $row
-         */
         return new ExportedCorrection(
             subject: $this->toSubject($row),
-            shiftEntryUuid: $row->shift_entry_uuid,
-            localPerformedAt: $row->correction_local_at,
-            utcPerformedAt: $row->correction_utc_at,
-            authorName: $row->author_name,
-            authorUuid: $row->author_uuid,
-            action: $row->correction_action,
-            reasonCode: $row->reason_code,
-            reasonText: $row->reason_text ?? '',
+            shiftEntryUuid: $row->string('shift_entry_uuid'),
+            localPerformedAt: $row->string('correction_local_at'),
+            utcPerformedAt: $row->string('correction_utc_at'),
+            authorName: $row->string('author_name'),
+            authorUuid: $row->string('author_uuid'),
+            action: $row->string('correction_action'),
+            reasonCode: $row->string('reason_code'),
+            reasonText: $row->nullableString('reason_text') ?? '',
             before: $this->marks(
-                $this->isTrue($row->has_before),
-                $row->before_in,
-                $row->before_out,
-                $row->before_minutes === null ? null : (int) $row->before_minutes,
+                $row->bool('has_before'),
+                $row->nullableString('before_in'),
+                $row->nullableString('before_out'),
+                $row->nullableInt('before_minutes'),
             ),
             after: $this->marks(
-                $this->isTrue($row->has_after),
-                $row->after_in,
-                $row->after_out,
-                $row->after_minutes === null ? null : (int) $row->after_minutes,
+                $row->bool('has_after'),
+                $row->nullableString('after_in'),
+                $row->nullableString('after_out'),
+                $row->nullableInt('after_minutes'),
             ),
         );
     }
@@ -340,15 +330,5 @@ final readonly class DatabaseLegalExportSource implements LegalExportSource
         return $present
             ? ExportedMarks::of($localIn, $localOut, ExportedDuration::ofNullableMinutes($minutes))
             : ExportedMarks::none();
-    }
-
-    /**
-     * PDO devuelve los booleanos de PostgreSQL como `true`/`false` o como la
-     * cadena `'t'`/`'f'` segun la version del driver. Se normaliza aqui y no en
-     * el dominio, que no tiene por que saber que existe PDO.
-     */
-    private function isTrue(bool|string $value): bool
-    {
-        return $value === true || $value === 't' || $value === 'true' || $value === '1';
     }
 }

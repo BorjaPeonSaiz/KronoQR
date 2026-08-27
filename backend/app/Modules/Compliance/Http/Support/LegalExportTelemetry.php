@@ -5,10 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Compliance\Http\Support;
 
 use App\Modules\Compliance\Application\UseCase\LegalExport;
-use OpenTelemetry\API\Globals;
-use OpenTelemetry\API\Trace\SpanInterface;
+use App\Modules\Shared\Application\Support\SpanScope;
 use OpenTelemetry\API\Trace\SpanKind;
-use OpenTelemetry\Context\Context;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -45,7 +43,9 @@ use Throwable;
  * Cuando se llega a la parte de medir, la transaccion ya confirmo: el fichero
  * esta escrito y el asiento de auditoria cerrado. Un fallo del exportador de
  * trazas no puede convertir eso en un `500`, porque quien exporto lo repetiria y
- * duplicaria el asiento.
+ * duplicaria el asiento. Lo garantiza {@see SpanScope}, que es el andamiaje comun
+ * de las siete telemetrias; lo propio de esta son sus atributos y su nivel de
+ * log.
  */
 final readonly class LegalExportTelemetry
 {
@@ -56,66 +56,46 @@ final readonly class LegalExportTelemetry
      */
     public function measure(callable $generate): LegalExport
     {
-        $span = $this->startSpan();
+        $span = SpanScope::start('kronoqr.compliance', 'compliance.generate_legal_export', SpanKind::KIND_SERVER);
         $startedAt = microtime(true);
 
         try {
             $export = $generate();
         } catch (Throwable $failure) {
-            $this->endSpan($span, null);
+            $span->end();
 
             throw $failure;
         }
 
-        $this->endSpan($span, $export);
+        $span->end($this->spanAttributes($export));
         $this->log($export, $span, microtime(true) - $startedAt);
 
         return $export;
     }
 
-    private function startSpan(): ?SpanInterface
+    /**
+     * Solo cifras y el alcance en su forma de dos valores: un UUID en un atributo
+     * de traza acaba en el mismo sitio que un log (regla dura 21).
+     *
+     * @return array<string, scalar|null>
+     */
+    private function spanAttributes(LegalExport $export): array
     {
-        try {
-            return Globals::tracerProvider()
-                ->getTracer('kronoqr.compliance')
-                ->spanBuilder('compliance.generate_legal_export')
-                ->setSpanKind(SpanKind::KIND_SERVER)
-                ->setParent(Context::getCurrent())
-                ->startSpan();
-        } catch (Throwable) {
-            return null;
-        }
+        return [
+            'legal_export.scope' => $export->manifest->scope->metricLabel(),
+            'legal_export.shift_entry_rows' => $export->tally->shiftEntries,
+            'legal_export.correction_rows' => $export->tally->corrections,
+            'legal_export.employees' => $export->tally->employees,
+        ];
     }
 
-    private function endSpan(?SpanInterface $span, ?LegalExport $export): void
-    {
-        if (! $span instanceof SpanInterface) {
-            return;
-        }
-
-        try {
-            if ($export instanceof LegalExport) {
-                // Solo cifras y el alcance en su forma de dos valores: un UUID
-                // en un atributo de traza acaba en el mismo sitio que un log.
-                $span->setAttribute('legal_export.scope', $export->manifest->scope->metricLabel());
-                $span->setAttribute('legal_export.shift_entry_rows', $export->tally->shiftEntries);
-                $span->setAttribute('legal_export.correction_rows', $export->tally->corrections);
-                $span->setAttribute('legal_export.employees', $export->tally->employees);
-            }
-
-            $span->end();
-        } catch (Throwable) {
-            // Ver el docblock: medir no puede romper una exportacion legal.
-        }
-    }
-
-    private function log(LegalExport $export, ?SpanInterface $span, float $seconds): void
+    private function log(LegalExport $export, SpanScope $span, float $seconds): void
     {
         // `notice` y no `info`: una exportacion legal es un hecho raro —unas
         // pocas al año— y con relevancia legal. Que destaque sobre el ruido de
         // los fichajes es lo que permite ver de un vistazo quien se llevo que.
         $this->logger->notice('compliance.legal_export_generated', [
-            'trace_id' => $this->traceIdOf($span),
+            'trace_id' => $span->traceId(),
             'period_from' => $export->manifest->period->from,
             'period_to' => $export->manifest->period->to,
             'scope' => $export->manifest->scope->metricLabel(),
@@ -126,18 +106,5 @@ final readonly class LegalExportTelemetry
             'duration_seconds' => round($seconds, 3),
             'channel' => 'api',
         ]);
-    }
-
-    private function traceIdOf(?SpanInterface $span): ?string
-    {
-        if (! $span instanceof SpanInterface) {
-            return null;
-        }
-
-        $traceId = $span->getContext()->getTraceId();
-
-        // Un `trace_id` a ceros es el de un span inerte: escribirlo seria peor
-        // que no escribir nada, porque parece un identificador.
-        return trim($traceId, '0') === '' ? null : $traceId;
     }
 }

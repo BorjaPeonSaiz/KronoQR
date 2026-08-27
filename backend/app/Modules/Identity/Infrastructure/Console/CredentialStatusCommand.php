@@ -39,6 +39,11 @@ use Illuminate\Console\Command;
  * log tecnico. La regla dura 21 prohibe nombres en logs y en `error_events`,
  * porque esos viajan al fabricante; esta salida se queda en la terminal de quien
  * la pidio.
+ *
+ * Y **por eso mismo deja asiento en `audit_log`** (RS-05): sacar el directorio
+ * nominal por una terminal es la misma divulgacion que sacarlo por la API. La
+ * ejecucion del planificador —`--quiet-table`, que solo imprime el resumen por
+ * centro— no lo deja, porque ahi no hay ningun nombre que se lleve nadie.
  */
 final class CredentialStatusCommand extends Command
 {
@@ -61,9 +66,19 @@ final class CredentialStatusCommand extends Command
             return self::INVALID;
         }
 
+        // Una sola verdad para las dos decisiones que dependen de ella: si las
+        // filas nominales se pintan y si la lectura deja asiento en `audit_log`.
+        // Derivarlas por separado de la misma opcion es como se acaba auditando
+        // lo que no se ve o mostrando lo que no consta.
+        $quiet = (bool) $this->option('quiet-table');
+
         $query = new CredentialStatusQuery(
             siteId: $siteId,
             pendingOnly: (bool) $this->option('pending'),
+            // RS-05: con `--quiet-table` nadie ve un nombre —solo el resumen por
+            // centro—, asi que no hay divulgacion que registrar. Sin la opcion,
+            // la tabla nominal sale por pantalla y el asiento se escribe.
+            unattended: $quiet,
         );
 
         // Con `--site` NO se publican metricas aunque no se pida `--no-metrics`:
@@ -75,7 +90,7 @@ final class CredentialStatusCommand extends Command
             ? $board->handleAndPublishMetrics($query)
             : $board->handle($query);
 
-        if (! (bool) $this->option('quiet-table')) {
+        if (! $quiet) {
             $this->renderRows($report->rows);
         }
 

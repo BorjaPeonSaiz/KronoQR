@@ -40,16 +40,23 @@ final readonly class RegisterScanCommand
     /**
      * @param  string  $scanId  UUID v7 generado en el cliente: la clave de idempotencia
      *                          (regla dura 8, RF-AT-07).
-     * @param  string  $qrPayload  `FH1.<key_id>.<token>.<sig>` (doc 02 §5.1). Opaco: se
-     *                             entrega tal cual al `CredentialResolver` y **no se
-     *                             almacena**, solo su huella.
+     * @param  string|null  $qrPayload  `FH1.<key_id>.<token>.<sig>` (doc 02 §5.1). Opaco: se
+     *                                  entrega tal cual al `CredentialResolver` y **no se
+     *                                  almacena**, solo su huella.
+     *                                  **Nulo en el fichaje por PIN** (RF-AT-11): ahi no hay
+     *                                  tarjeta, luego no hay nada de que tomar huella, y
+     *                                  `scan_events.payload_fingerprint` se queda a nulo. La
+     *                                  alternativa —inventar una huella del codigo de empleado—
+     *                                  habria metido en la columna dos cosas distintas con el
+     *                                  mismo nombre, y quien investigara un escaneo no sabria
+     *                                  cual esta mirando.
      * @param  DateTimeImmutable  $occurredAt  Momento real del escaneo, en UTC.
      * @param  array<string, scalar>  $clientMeta  Version de la app, modelo de tablet, calidad
      *                                             del escaneo. Nunca datos personales.
      */
     public function __construct(
         public string $scanId,
-        public string $qrPayload,
+        public ?string $qrPayload,
         public DateTimeImmutable $occurredAt,
         public int $deviceId,
         public string $deviceUuid,

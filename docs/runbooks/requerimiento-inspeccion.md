@@ -230,7 +230,51 @@ de contestar a un requerimiento.
 
 ---
 
-## 7. Si algo falla
+## 7. Después de entregar: custodia y borrado del fichero
+
+El fichero que generó `compliance:legal-export` sigue en
+`storage/app/legal-exports/` dentro del contenedor. **Nadie lo borra
+automáticamente** (a propósito: es la única copia que se entrega a un
+tercero, y un cron que la hiciera desaparecer sin que nadie lo decidiera
+convertiría una limpieza en una pérdida de prueba). La custodia es
+responsabilidad de quien la generó, con el mismo criterio que un documento en
+papel:
+
+1. **Mientras dura el procedimiento con Inspección**, consérvalo donde lo
+   dejaste (dentro del contenedor, o la copia que sacaste con `docker compose
+   cp` a la máquina desde la que se entregó). No hace falta guardarlo en dos
+   sitios: `audit_log` ya prueba qué se generó y cuándo.
+2. **Cuando el procedimiento se cierra** (resolución, archivo, o simplemente
+   pasado el plazo de alegaciones sin novedad), bórralo:
+
+   ```bash
+   docker compose -f infra/compose.prod.yaml exec -T app \
+     rm -f storage/app/legal-exports/registro-horario-2026-01-01_2026-01-31.csv
+   ```
+
+   Borra también cualquier copia que hayas sacado a un disco personal o a un
+   recurso compartido fuera de la instalación: el registro horario nominal no
+   debe acumularse en más sitios de los necesarios (minimización del RGPD,
+   regla dura 21).
+3. **No hace falta borrar el asiento de `audit_log`.** Al contrario: es la
+   prueba de que la exportación existió, se pidió y se entregó, y se conserva
+   con la retención general de auditoría. Lo que se borra es el fichero, no
+   su rastro.
+4. **Si el requerimiento fue recurrente** (una exportación por mes, por
+   ejemplo), no dejes acumularse un fichero por mes indefinidamente: aplica el
+   mismo criterio de los puntos 1-2 a cada uno según se cierre su propio
+   procedimiento.
+
+**El temporal de la descarga por panel (`storage/framework/legal-exports/`,
+§2) es distinto y no necesita este procedimiento**: `compliance:purge-legal-export-temp`
+lo borra solo, cada hora, pasada una ventana de
+`COMPLIANCE_LEGAL_EXPORT_TEMP_RETENTION_HOURS` (6 horas por defecto). Esa
+limpieza automática existe **solo** para el huérfano de una descarga
+abortada a medias — nunca toca la copia de este apartado.
+
+---
+
+## 8. Si algo falla
 
 | Síntoma | Causa probable | Qué hacer |
 | --- | --- | --- |

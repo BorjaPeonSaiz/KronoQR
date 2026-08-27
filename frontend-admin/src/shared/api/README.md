@@ -6,10 +6,15 @@
   fichero que nadie edita.
 - `types.ts` — alias cortos de los tipos generados. **No declara ninguna forma de la API**, solo
   les pone nombre.
-- `http.ts` — la única puerta de salida hacia la API: token de sesión en un solo sitio, errores
-  traducidos a un tipo cerrado (`ApiErrorKind`) y descarga de documentos sin dejar rastro.
 - `queryClient.ts` — configuración de la caché de consultas.
 - `organisation.api.ts` — centros y departamentos, que usan varias _features_ a la vez.
+
+**`http.ts` ya no vive aquí.** La puerta de salida base hacia la API —token de sesión en un solo
+sitio, errores traducidos a un tipo cerrado (`ApiErrorKind`), descarga de documentos sin dejar
+rastro— se movió a `@kronoqr/web-kit/http` (ADR-036): es idéntica para cualquier SPA de KronoQR y
+`frontend-portal` la necesitaba tanto como este panel. Los endpoints concretos (`employees.api.ts`,
+`credentials.api.ts`, etc.) siguen siendo de este panel y consumen `requestJson`/`requestBlob`
+importándolos de `@kronoqr/web-kit/http`, no de un fichero local.
 
 Si una pantalla necesita algo que el contrato no da, se pide el cambio en `openapi.yaml`; no se
 improvisa aquí.
