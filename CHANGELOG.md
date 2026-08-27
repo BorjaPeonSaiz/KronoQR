@@ -13,10 +13,29 @@ lo siga no aparece aqui, y el generador lo avisa por la salida de error.
 Ninguna version se publica sin su entrada: `make changelog-check VERSION=1.2.3`
 falla si no la encuentra, y la CI ejecuta esa comprobacion al etiquetar.
 
-## [Unreleased]
+## [1.0.0] - 2026-08-27
+
+### Anadido
+
+- cierre de la Fase 1 - MVP de fichaje instalable y legalmente defendible
+- el anti-rebote es un desenlace aceptado, no un rechazo (ADR-031) (contrato)
+- cumplir RS-10 con analisis de dependencias y SAST en la CI (0.7)
+- docs:consistency y etapa 3b de la CI (RQ-12, RNF-M-04) (0.7)
+- catalogo de requisitos y comando qa:traceability (RQ-13) (0.7)
+- contrato OpenAPI 3.1 con /health, /ready y /scan, y Spectator (0.6)
+- adoptar Laravel 13 antes de escribir el dominio (ADR-030) (deps)
+
+### Corregido
+
+- los objetivos de trazabilidad no funcionaban en la CI (0.7)
+- resolver la raiz del repositorio por marca, no contando niveles (0.7)
+- repartir a su fase los 21 requisitos que el Anexo A no asignaba (docs)
 
 ### Interno
 
+- escribir ADR-001 a ADR-020 y ADR-029, y revisar los ocho existentes (0.6)
+- esqueleto de los tres frontends con TS estricto, Tailwind y Vitest (0.5)
+- pipeline de CI con las etapas 1-3 y puerta de version (0.4)
 - conservar las suites Contract e Integration vacias (0.2)
 - corregir la ubicacion del puerto Clock y documentar el bind mount
 - cadena de calidad y pruebas de arquitectura de ADR-021 y ADR-025 (0.3)
