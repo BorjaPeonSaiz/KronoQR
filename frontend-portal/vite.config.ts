@@ -38,7 +38,16 @@ export default defineConfig({
   },
   server: {
     host: true,
-    port: 5173,
+    // 5175 y no 5173: las tres SPA se arrancan a la vez desde el host
+    // (kiosk 5173, admin 5174, portal 5175). Dentro del contenedor node-* el
+    // entrypoint fuerza --port 5173 y este valor no aplica.
+    port: 5175,
     strictPort: true,
+    // El cliente HTTP llama a /api/v1 en el MISMO origen (sin CORS, ADR-017);
+    // en desarrollo ese origen es este servidor de Vite, que reenvia al Nginx
+    // del entorno. secure:false por el certificado autofirmado de desarrollo.
+    proxy: {
+      '/api': { target: 'https://localhost', changeOrigin: true, secure: false },
+    },
   },
 })

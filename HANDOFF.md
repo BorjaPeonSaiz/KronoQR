@@ -1,5 +1,24 @@
 # HANDOFF
 
+## Sesión de auditoría y corrección (27-08-2026, posterior al cierre)
+
+**Auditoría independiente de la Fase 1 ejecutada y publicada** (informe artifact: <https://claude.ai/code/artifact/271dbcba-2a1c-4d7c-a264-e89c09deac96>). Todas las puertas re-ejecutadas en vivo y en verde con los números declarados (1585→1592 pruebas, cobertura 91,54 %/85,1 %, MSI 84,04 %, E2E 32, audits limpios). Veredicto: implementación sólida; dos afirmaciones del cierre no se sostenían — la CI de GitHub **no podía estar en verde** desde mitad de la fase (job ③ sin PostgreSQL para las suites Feature/Contract, timeout 8 min < mutación ~25 min) y **p95 <150 ms no tenía ninguna evidencia** (k6 inexistente).
+
+**Siete correcciones aplicadas y commiteadas en la rama `fix/auditoria-fase-1`** (6 commits convencionales, sin push todavía):
+
+1. `security(export)` — CsvDialect neutraliza inyección de fórmulas CSV (OWASP A03; 7 pruebas byte a byte nuevas).
+2. `refactor(attendance)` — RN-07 vuelve a una sola fuente (`ClockingPolicies`); el handler tenía copia viva propia.
+3. `fix(ci)` — job ③ levanta el postgres del producto (initdb crea los 3 roles + `fichaje_test`) + redis, timeout 45; `deps-audit-js` audita el workspace raíz (antes se saltaba admin sin avisar); `lint-frontend` instala con `npm ci` de raíz; lockfiles anidados de kiosk/portal retirados. Verificado con actionlint + simulación local; **falta el push y mirar Actions de verdad** (gh sin auth en esta máquina).
+4. `test(quality)` — gate de duración de la suite unitaria (`UNIT_SUITE_MAX_SECONDS`, 4 s contenedor; medida real 2,6-2,7 s) y los docs dejan de prometer "<2 s" sin herramienta (8 menciones alineadas en plan/doc02/CLAUDE.md). Verificado rompiéndolo a propósito.
+5. `test(perf)` — herramienta k6 completa (aprovisionamiento server-side con firma real, N orígenes en paralelo porque el producto limita a ~10 fichajes/s por IP, agregado de muestras crudas). **Medido en esta máquina: ~450 ms/fichaje sin carga, saturación a ~21-25 aceptados/s → RNF-P-02/06 NO evaluable en Docker Desktop/Windows; pendiente pasada en hardware Linux de referencia** (herramienta lista: `load-tests/k6/run.sh`).
+6. `feat(web-kit)` — panel y portal capturan por fin errores (`clientErrors`, mismo contrato saneado del quiosco, buffer para el transporte de la 5.12; 9 pruebas). Sentry evaluado y descartado como servicio (ADR-016/020); conceptos adoptados.
+
+**Cambios de entorno de desarrollo (solo `.env`, no versionados)**: `QR_SIGNING_KEY_CURRENT` generada (antes vacía: el `/scan` real devolvía 503 en dev) y `KIOSK_VLAN_CIDR=172.28.0.0/16` (la red "app" de Compose, para que el tráfico local caiga en la zona VLAN). Contenedores `app` y `nginx` recreados.
+
+**Hallazgo de diseño anotado, sin tocar**: el borde limita el scan a 600 r/m por IP también en la VLAN, y el propio comentario del template dice que "todos los quioscos de un hotel salen por la misma IP" — con una sola IP el techo del hotel son ~10 fichajes/s + burst 50, por debajo de los 50/s de RNF-P-06. Revisar si RNF-P-06 asume varias IPs de quiosco o si la zona VLAN debe llevar otra clave (p. ej. por dispositivo).
+
+**Pendiente inmediato de esta sesión**: (1) push de la rama y verificación de Actions en verde; (2) pasada k6 en hardware de referencia; (3) los pendientes menores del informe que no se corrigieron (guarda de producción de `APP_DEBUG`, `config/sanctum.php`/`permission.php` publicados, cobertura de funciones de admin al 70,0 % justo, Rector 115 ficheros).
+
 ## Estado actual
 
 Ejecutando la **Fase 1 (MVP de fichaje)** del plan de implementación, por instrucción explícita del usuario: *"Ejecuta la fase 1 para tener el mínimo viable del proyecto. No crees nada fuera de esta fase 1."* Alcance: las 18 tareas de `plan implementacion/03-fase-1-mvp-fichaje.md`, en oleadas de agentes en paralelo según sus precondiciones.
@@ -14,6 +33,12 @@ Ejecutando la **Fase 1 (MVP de fichaje)** del plan de implementación, por instr
 4. `devops-observabilidad` — instrumentación y runbook de cada alerta nueva ✅
 
 Instrucción del usuario: continuar hasta cerrar la fase y **no más**. Cumplida — **no se ha empezado la Fase 2**. Próxima sesión: decidir con el usuario si se arranca la Fase 2 o si antes hay que resolver alguno de los pendientes explícitos de abajo.
+
+**Cerrado además, a petición del usuario, un hueco real de la tarea 1.7**: `GET /api/v1/health` y `GET /api/v1/ready` estaban completos en el contrato desde la Fase 0 pero nunca se habían implementado (solo comentarios que daban por hecho que existían). Implementados por `backend-laravel`: `/health` no toca ninguna dependencia (BD/Redis/disco) y expone la versión SemVer desplegada, resuelta de `APP_VERSION`/`IMAGE_TAG` o, si no son SemVer válido (p. ej. `latest` en desarrollo), del fichero `VERSION` nuevo en la raíz del repositorio; `/ready` sí comprueba PostgreSQL y Redis, con `503 problem+json` genérico sin detallar qué componente falló. Verificado en vivo: `curl https://localhost/api/v1/health` → `{"status":"ok","version":"1.0.0"}`. `make test` **1585 pruebas / 8530 aserciones** en verde.
+
+**Versionado con SemVer, según lo ya diseñado en doc 02 §10.5, puesto en marcha por primera vez en esta sesión.** Todo el trabajo pendiente del cierre de fase (297 ficheros) se ha commiteado en un único commit (`acc659a`, tipo `feat`, con `Co-Authored-By`) sobre el commit previo `23c7a1c` ("Fase 1 Sin optimizar", hecho fuera de esta sesión — ver aviso más abajo). `make changelog generate --release 1.0.0 --write` regeneró `CHANGELOG.md` (commit `ed5aa7a`) y se etiquetó **`v1.0.0`** (tag anotado, local, **todavía sin `git push`** — pendiente de que el usuario confirme el push).
+
+**Aviso importante sobre el CHANGELOG generado**: la mayoría de los commits del histórico (incluidos `23c7a1c` y el propio `acc659a` de este cierre) no siguen el formato de Conventional Commits, así que `infra/scripts/changelog.sh` los descarta con aviso por `stderr` en vez de inventarles contenido — es el comportamiento diseñado, no un fallo. La entrada de `1.0.0` en `CHANGELOG.md` es por tanto más corta de lo que el trabajo real de esta fase merece (una sola línea "cierre de la Fase 1..." representa 18 tareas + 4 pasos de cierre). **A partir de ahora, si se quiere un CHANGELOG fiel, cada commit debe llevar formato convencional** (`feat:`, `fix:`, `security:`, etc.) — no se puede corregir esto a mano sin romper la garantía del fichero de que "se genera, no se edita".
 
 Umbrales que deben quedar en verde (§9.2, RNF-M-01): cobertura dominio ≥90 % / backend ≥75 % / frontend ≥70 %; MSI ≥80 % sobre `Modules/*/Domain`; suite unitaria <2s; `vue-tsc`/PHPStan 9 con 0 errores; Deptrac/Pest Arch 0 violaciones; `axe` 0 violaciones críticas/graves; p95 fichaje <150ms (RNF-P-02); bundle crítico del quiosco ≤250KB gzip.
 
