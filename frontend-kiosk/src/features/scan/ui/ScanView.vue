@@ -17,7 +17,7 @@ import { RouterLink } from 'vue-router'
 import { createApiClient } from '@/shared/api/client'
 import { readPrivacyNoticeConfig } from '@/shared/config/privacy'
 import { useConnectivity } from '@/shared/connectivity/useConnectivity'
-import { APP_VERSION, resolveDeviceId } from '@/shared/telemetry/deviceIdentity'
+import { APP_VERSION, readDeviceToken, resolveDeviceId } from '@/shared/telemetry/deviceIdentity'
 import { createErrorReporter } from '@/shared/telemetry/errorReporter'
 import { createHeartbeatScheduler } from '@/shared/telemetry/heartbeat'
 import ConnectionStatusBadge from '@/shared/ui/ConnectionStatusBadge.vue'
@@ -44,6 +44,10 @@ const api = createApiClient({
   ...(import.meta.env.VITE_API_BASE_URL === undefined
     ? {}
     : { baseUrl: import.meta.env.VITE_API_BASE_URL }),
+  // Sin esto el quiosco nunca manda `Authorization`: padron, latido y fichajes
+  // reciben 401 aunque la tablet este emparejada. Se lee en cada peticion
+  // porque el token rota (doc 02 §7.3).
+  deviceToken: readDeviceToken,
 })
 
 // La cola de IndexedDB (tarea 1.9). El escaneo se encola ANTES de confirmar y
