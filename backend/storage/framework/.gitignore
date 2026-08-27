@@ -7,3 +7,5 @@ routes.php
 routes.scanned.php
 schedule-*
 services.json
+# Fixtures de la prueba de carga k6: llevan tokens de dispositivo y payloads firmados.
+k6-fixtures.json

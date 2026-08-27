@@ -67,7 +67,8 @@ SH_FILES := $(wildcard infra/scripts/*.sh) \
             $(wildcard infra/scripts/lib/*.sh) \
             $(wildcard infra/docker/*/*.sh) \
             $(wildcard infra/docker/*/*/*.sh) \
-            $(wildcard .github/scripts/*.sh)
+            $(wildcard .github/scripts/*.sh) \
+            $(wildcard load-tests/k6/*.sh)
 
 # Versiones fijadas de las herramientas de shell. Se declaran aqui, y no en el
 # workflow, porque el workflow las LEE de aqui (objetivo `tool-versions`): la
