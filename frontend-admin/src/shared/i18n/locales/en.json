@@ -1,6 +1,512 @@
 {
   "app": {
     "title": "Management console",
-    "skeletonNotice": "Application skeleton. The management screens arrive in task 2.4 and the ones that follow."
+    "skipToContent": "Skip to main content",
+    "signedInAs": "{name} ({roles})",
+    "signOut": "Sign out",
+    "nav": {
+      "label": "Console sections",
+      "employees": "Workforce",
+      "credentials": "Credentials",
+      "legalExport": "Inspectorate"
+    },
+    "roles": {
+      "admin": "Administration",
+      "rrhh": "HR",
+      "responsable_departamento": "Department manager",
+      "auditor": "Audit",
+      "empleado": "Employee",
+      "kiosk": "Kiosk"
+    }
+  },
+  "auth": {
+    "heading": "Sign in to the management console",
+    "intro": "Enter the email address and password of your management account.",
+    "email": "Email address",
+    "password": "Password",
+    "submit": "Sign in",
+    "submitting": "Signing in…",
+    "employeeNotice": "Are you an employee looking for your own time records? This is not the way in: the employee portal opens with your employee code and your PIN, both handed to you in person along with your card."
+  },
+  "common": {
+    "cancel": "Cancel",
+    "saving": "Saving…",
+    "edit": "Edit",
+    "updating": "Updating…",
+    "empty": "Not set",
+    "locales": {
+      "es": "Spanish",
+      "en": "English"
+    },
+    "change": {
+      "field": "Field",
+      "from": "Current value",
+      "to": "New value"
+    }
+  },
+  "errors": {
+    "retryAfter": "You can try again in {seconds} s.",
+    "network": {
+      "title": "The server could not be reached",
+      "advice": "Check the network connection and try again. If the console still does not answer, tell whoever administers this installation: nothing you did has been saved."
+    },
+    "unauthenticated": {
+      "title": "Your session has expired",
+      "advice": "Sign in again to carry on. Management sessions are deliberately short."
+    },
+    "invalidCredentials": {
+      "title": "The email address or the password is not correct",
+      "advice": "Check them and try again. After several failed attempts the account is locked for a few minutes, even if you then type the right password."
+    },
+    "forbidden": {
+      "title": "You are not allowed to do this",
+      "advice": "Your role does not reach this data. If you think it should, ask whoever administers this installation."
+    },
+    "notFound": {
+      "title": "Not found",
+      "advice": "It may no longer exist, or it may fall outside your scope. Go back to the list and refresh."
+    },
+    "conflict": {
+      "title": "This does not match the current state",
+      "advice": "Someone may have changed it before you, or the action was already done. Refresh the screen and check how things stand before repeating it."
+    },
+    "validation": {
+      "title": "Some data needs checking",
+      "advice": "Fix the fields listed below and submit the form again."
+    },
+    "rateLimited": {
+      "title": "Too many requests in a row",
+      "advice": "Wait a few seconds and try again."
+    },
+    "unavailable": {
+      "title": "This installation cannot handle the operation",
+      "advice": "Server configuration is missing. Tell whoever administers this installation: it is not a problem with what you typed."
+    },
+    "unexpected": {
+      "title": "Something went wrong",
+      "advice": "Try again. If it happens again, tell whoever administers this installation, with the exact time and what you were doing."
+    }
+  },
+  "forbidden": {
+    "heading": "No access to this section",
+    "description": "Your account does not hold the scope this screen needs. It is not a fault: the server would refuse it anyway."
+  },
+  "notFound": {
+    "heading": "This page does not exist",
+    "description": "The address does not match any section of the console.",
+    "backToEmployees": "Go to the workforce list"
+  },
+  "employees": {
+    "title": "Workforce",
+    "subtitle": "Hiring, records and offboarding. Nothing is deleted: offboarding keeps the record and its time entries.",
+    "loading": "Loading the workforce…",
+    "actions": {
+      "create": "Add employee"
+    },
+    "filters": {
+      "legend": "Workforce filters",
+      "status": "Employment status",
+      "statusAll": "All, including former staff",
+      "site": "Site",
+      "siteAll": "All sites"
+    },
+    "status": {
+      "active": "Active",
+      "suspended": "Suspended",
+      "terminated": "Former staff"
+    },
+    "empty": {
+      "title": "There is nobody to show",
+      "description": "No one has been added to this installation yet.",
+      "filtered": "Nobody matches the filters you chose. Try clearing them."
+    },
+    "table": {
+      "caption": "Workforce of this installation, with employment status and PIN state.",
+      "name": "Name",
+      "code": "Employee code",
+      "site": "Site",
+      "department": "Department",
+      "status": "Status",
+      "pinStatus": "PIN state"
+    },
+    "pagination": {
+      "label": "Workforce pagination",
+      "summary": "{from}–{to} of {total}",
+      "page": "Page {page} of {pages}",
+      "previous": "Previous",
+      "next": "Next"
+    },
+    "fields": {
+      "site": "Site",
+      "department": "Department",
+      "departmentHint": "Only departments belonging to the chosen site.",
+      "departmentNone": "No department",
+      "firstName": "First name",
+      "lastName": "Last name",
+      "email": "Email address",
+      "emailHint": "Optional. No feature of this product requires it: the portal is opened with an employee code and a PIN.",
+      "emailAbsent": "No email address",
+      "nationalId": "National identity document",
+      "nationalIdHint": "Optional. It is not stored: the server keeps only a digest of it, so the same person is not added twice.",
+      "hiredAt": "Hire date",
+      "terminatedAt": "Termination date",
+      "status": "Employment status",
+      "locale": "Language"
+    },
+    "create": {
+      "heading": "Add an employee",
+      "submit": "Add employee",
+      "pinNotice": "The employee code is generated by the server. Completing this form issues the portal PIN and shows it once only: be ready to write it down or hand it over right then."
+    },
+    "detail": {
+      "backToList": "Back to the workforce list",
+      "loading": "Loading the record…",
+      "dataHeading": "Personal details",
+      "statusHint": "Offboarding does not happen here: it has its own section because it carries a termination date and consequences.",
+      "reviewChanges": "Review the changes",
+      "confirmHeading": "Confirm the changes to this record",
+      "confirmExplanation": "This is what will change. Check the starting value before you confirm: who changed it and when will be recorded.",
+      "confirmAction": "Confirm and save",
+      "credentialHeading": "QR card",
+      "credentialExplanation": "Issuing, printing and handing over the card are managed in the credentials board, which shows at a glance who still cannot clock in.",
+      "credentialLink": "See the credential status for this site"
+    },
+    "offboard": {
+      "heading": "Offboarding",
+      "explanation": "Offboarding is logical, never a deletion: the record, its shift entries and its work days are kept for four years, because an inspection can ask for the records of someone who no longer works here.",
+      "action": "Offboard employee",
+      "confirmAction": "Confirm the offboarding",
+      "alreadyTerminated": "This person has been offboarded since {date}. Their history is still available.",
+      "dateHint": "Never earlier than the hire date. Record retention starts counting from it.",
+      "reasonLabel": "Reason for leaving",
+      "reasonHint": "It goes into the audit log. No health data and no value judgements.",
+      "reasonPlaceholder": "Choose a reason",
+      "reasonOtherLabel": "Describe the reason",
+      "reasons": {
+        "endOfContract": "End of contract",
+        "resignation": "Resignation",
+        "dismissal": "Dismissal",
+        "retirement": "Retirement",
+        "other": "Another reason"
+      },
+      "consequenceCredential": "Their QR card is revoked and stops working at the kiosk.",
+      "consequenceScan": "From the termination date on, they cannot clock in.",
+      "consequenceHistory": "Nothing is deleted: their time records are kept and can still be consulted."
+    },
+    "announce": {
+      "results": "Workforce results: {count}.",
+      "created": "{name} has been added.",
+      "updated": "Record updated.",
+      "offboarded": "The offboarding has been recorded."
+    }
+  },
+  "pin": {
+    "heading": "Employee portal PIN",
+    "explanation": "With their employee code and this PIN, the person checks their own time records in the portal. It is handed over in person, never by email.",
+    "field": "PIN state",
+    "status": {
+      "pending": "Not issued",
+      "issued": "Issued, not handed over yet",
+      "delivered": "Handed over"
+    },
+    "statusHint": {
+      "pending": "This person has no PIN and cannot open the portal. Reset it to issue one.",
+      "issued": "The PIN exists but has not been recorded as handed over.",
+      "delivered": "It was handed over in person, with the date and the responsible person in the audit log."
+    },
+    "actions": {
+      "reset": "Reset the PIN",
+      "registerDelivery": "Record the PIN handover"
+    },
+    "reset": {
+      "heading": "Reset the PIN",
+      "explanation": "A new six-digit PIN is generated and the previous one stops working immediately. The failed-attempt lockout is cleared as well.",
+      "action": "Reset and show the PIN",
+      "warning": "The new PIN will be shown once, now. It cannot be looked up again: if it is lost, it has to be reset once more."
+    },
+    "delivery": {
+      "heading": "Record the PIN handover",
+      "explanation": "It will be recorded that {name} received their PIN in person, with the date and you as the responsible person.",
+      "action": "Confirm the handover",
+      "auditNotice": "It goes into the audit log and cannot be repeated or undone. Tick it only once the handover has actually happened."
+    },
+    "reveal": {
+      "heading": "PIN issued",
+      "forEmployee": "PIN for {name} ({code}).",
+      "onlyOnce": "This PIN is shown once and cannot be looked up again. Write it down or hand it over right now. If it is lost, the only way out is to reset it.",
+      "handDelivery": "Handover is in person. This product never sends a PIN by email or through any link.",
+      "handedOverLabel": "I confirm that I have handed this PIN to {name} in person.",
+      "acknowledge": "I have written it down, I will hand it over later",
+      "registerDelivery": "Record the handover now"
+    },
+    "announce": {
+      "reset": "PIN reset. It is shown once only.",
+      "delivered": "PIN handover recorded."
+    }
+  },
+  "credentials": {
+    "title": "Credentials",
+    "subtitle": "Who can clock in with their card and who cannot yet. A card only works once it is printed and handed over.",
+    "loading": "Loading credential status…",
+    "filters": {
+      "legend": "Credential board filters",
+      "site": "Site",
+      "siteAll": "All sites",
+      "pendingOnly": "Only people who do not hold their card yet"
+    },
+    "summary": {
+      "withoutDelivered": "Without their card in hand: {missing} of {total}.",
+      "pendingPrint": "Waiting to be printed: {count}."
+    },
+    "empty": {
+      "title": "There are no rows to show",
+      "description": "Nobody is active within the chosen scope.",
+      "allDelivered": "Everyone within the chosen scope already holds their card."
+    },
+    "table": {
+      "caption": "Card status per person. Times are shown in the time zone of each site.",
+      "employee": "Person",
+      "site": "Site",
+      "department": "Department",
+      "status": "Card status",
+      "printedAt": "Printed",
+      "deliveredAt": "Handed over",
+      "actions": "Actions",
+      "noDepartment": "No department"
+    },
+    "status": {
+      "no_credential": "No credential",
+      "pending_print": "Waiting to be printed",
+      "pending_delivery": "Waiting to be handed over",
+      "delivered": "Handed over",
+      "revoked": "Revoked"
+    },
+    "actions": {
+      "issue": "Issue credential",
+      "print": "Print the card",
+      "deliver": "Record the handover",
+      "revoke": "Revoke"
+    },
+    "confirm": {
+      "issue": {
+        "heading": "Issue a credential",
+        "explanation": "A credential will be issued for {name}. It starts out waiting to be printed and cannot clock in yet.",
+        "action": "Issue",
+        "notice": "The QR is not generated yet: it is minted when the card is printed."
+      },
+      "print": {
+        "heading": "Print the card",
+        "explanation": "The PDF of the card for {name} will be generated and downloaded to this computer.",
+        "action": "Generate the PDF",
+        "notice": "Printing mints the QR and there is no way back: reprinting does not exist. If the PDF is lost, the only way out is to revoke the credential and issue another. Print it only with the printer ready."
+      },
+      "deliver": {
+        "heading": "Record the card handover",
+        "explanation": "It will be recorded that {name} received their card, with the date and you as the responsible person.",
+        "action": "Confirm the handover",
+        "notice": "It goes into the audit log and cannot be repeated or undone. It is what tells «the card was lost before we gave it to them» apart from «the employee lost it»."
+      },
+      "revoke": {
+        "heading": "Revoke the credential",
+        "explanation": "The card belonging to {name} will stop working at the kiosk from now on.",
+        "action": "Revoke the card",
+        "notice": "Nothing is deleted: the credential keeps its history and its scans. Replacing the card means issuing a new one and printing it, which are two further acts."
+      }
+    },
+    "revoke": {
+      "reasonLabel": "Reason for revoking",
+      "reasonPlaceholder": "Choose a reason",
+      "reasonOtherLabel": "Describe the reason",
+      "reasons": {
+        "lost": "Card lost",
+        "stolen": "Card stolen",
+        "damaged": "Card damaged",
+        "offboarding": "The person has left",
+        "printFailed": "Failed printing: the PDF never came out",
+        "other": "Another reason"
+      }
+    },
+    "batch": {
+      "action": "Print the pending cards",
+      "heading": "Print the batch of pending cards",
+      "allSites": "the whole installation",
+      "explanation": "All credentials waiting to be printed for {scope} will be laid out on a single A4 sheet. There are {count} right now.",
+      "confirmAction": "Generate the A4 sheet",
+      "warning": "Their QR codes are all minted now and there is no reprinting. If the PDF is lost, every card has to be revoked and issued again.",
+      "bearerNotice": "The PDF is a bearer document: whoever holds it can make somebody else's card. It is not stored on the server and it is never emailed."
+    },
+    "announce": {
+      "issued": "Credential issued for {name}. It is waiting to be printed.",
+      "printed": "Card for {name} generated. They can clock in once they receive it.",
+      "delivered": "Card handover for {name} recorded.",
+      "revoked": "Credential for {name} revoked.",
+      "batchEmpty": "There was no card waiting to be printed within the chosen scope.",
+      "batchPrinted": "Sheet generated. Cards included: {count}."
+    }
+  },
+  "corrections": {
+    "title": "Time record corrections",
+    "notice": "Nothing is deleted or overwritten: the previous version is kept with your name, the date and the reason, and stays available.",
+    "supersededNotice": "This entry is no longer the current version: somebody corrected or voided it before you. Reload the work day and check how it stands now.",
+    "wouldChangeWorkDate": "That clock-in time would move the work day to another date. To move hours from one day to another, void the entry here and create it on the right day: two actions, each with its own reason.",
+    "reasonLabel": "Reason for the correction",
+    "reasonPlaceholder": "Choose a reason",
+    "reasonHint": "It stays in the legal record and a labour inspection can read it. No health data, no value judgements.",
+    "reasonOtherLabel": "Explain the reason",
+    "reasonOtherHint": "At least 20 characters. \"Error\" or \"adjustment\" explain nothing to an inspection.",
+    "actions": {
+      "create": "Add an entry",
+      "correct": "Correct the times",
+      "void": "Void the entry"
+    },
+    "action": {
+      "created": "Entry added",
+      "modified": "Times corrected",
+      "closed": "Shift closed",
+      "voided": "Entry voided"
+    },
+    "reasons": {
+      "OLVIDO_FICHAJE_ENTRADA": "Missed clock-in",
+      "OLVIDO_FICHAJE_SALIDA": "Missed clock-out",
+      "FALLO_TECNICO_QUIOSCO": "Kiosk technical failure",
+      "TARJETA_NO_DISPONIBLE": "Card not available",
+      "CREDENCIAL_NO_ENTREGADA": "Card not handed over yet",
+      "ERROR_DE_ESCANEO_DUPLICADO": "Duplicate scan",
+      "AJUSTE_ACORDADO_CON_RRHH": "Adjustment agreed with HR",
+      "ALTA_RETROACTIVA": "Retroactive entry",
+      "OTROS": "Other reason"
+    },
+    "reasonHints": {
+      "OLVIDO_FICHAJE_ENTRADA": "The person started work and did not clock in.",
+      "OLVIDO_FICHAJE_SALIDA": "The person finished and did not clock out: the entry was left open.",
+      "FALLO_TECNICO_QUIOSCO": "The kiosk was not working: no power, no camera, or no network beyond the offline queue.",
+      "TARJETA_NO_DISPONIBLE": "The card was left in the locker, lost, or is damaged.",
+      "CREDENCIAL_NO_ENTREGADA": "Their card had not been handed over yet.",
+      "ERROR_DE_ESCANEO_DUPLICADO": "Two scans produced two entries where there was only one.",
+      "AJUSTE_ACORDADO_CON_RRHH": "Correction agreed with the person and with HR, not a system error.",
+      "ALTA_RETROACTIVA": "Work day before the system went live or before the person was registered.",
+      "OTROS": "None of the above. It must be explained in writing."
+    }
+  },
+  "reports": {
+    "legalExport": {
+      "heading": "Export for the Labour Inspectorate",
+      "intro": "Generates the daily working time record per worker and period that is handed over on a Labour Inspectorate request (article 34.9 of the Spanish Workers' Statute). The file downloads as CSV and is not kept in the browser.",
+      "from": "From",
+      "to": "To",
+      "workDateHint": "First day of the period, by work date: a shift that started on the 31st at 22:00 belongs to the 31st even if it ended on the 1st.",
+      "inclusiveHint": "Last day of the period, included.",
+      "inverted": "The period ends before it starts. Check both dates: they are not swapped for you.",
+      "employee": "Worker (optional)",
+      "employeeHint": "Worker identifier if the request names one person. Left blank, the whole workforce is exported.",
+      "submit": "Generate and download",
+      "running": "Generating the export…",
+      "done": "Export downloaded: {shiftEntries} shift entries and {corrections} corrections.",
+      "failed": "The export could not be generated.",
+      "audited": "Every generation is recorded in the audit trail with who exported, which period and which scope. The audit trail never stores worker names.",
+      "noSiteFilter": "The export is not filtered by site or department: every row states its site, and the scope can only be the whole workforce or one person.",
+      "contents": {
+        "heading": "What the file contains",
+        "entries": "One row per period of work, with clock in, clock out, duration and daily total. A night shift is a single entry, on the day it started.",
+        "corrections": "One row per amendment to the record, with its author, its moment and its reason.",
+        "voided": "Voided entries are included, with their status, and do not add hours to the daily total. Nothing is hidden.",
+        "times": "Times are given in the time zone of the site and also in UTC, which is how they are stored.",
+        "format": "CSV in UTF-8 with byte order mark, semicolon separated. Durations are written HH:MM, never as a decimal."
+      }
+    }
+  },
+  "workdays": {
+    "title": "Time record",
+    "subtitle": "Day by day, with every period of work, its total and every amendment it has had. Nothing is deleted: what was corrected is still here, with who did it and why.",
+    "fromEmployee": "The hours recorded for this person, day by day, with the amendment history of each day. Reading it changes nothing in the record.",
+    "linkFromEmployee": "View this person's time record",
+    "backToEmployee": "Back to the person's record",
+    "loading": "Loading the time record…",
+    "zoneNotice": "Times are shown in the time zone of the site where the person clocked in, not in the one of the computer you are looking from.",
+    "auditNotice": "Reading someone else's time record is written to the audit log, with who looked, at whom and for what period.",
+    "duration": "{hours} h {minutes} min",
+    "filters": {
+      "legend": "Period queried",
+      "from": "From",
+      "fromHint": "By work date: a shift that started at 22:00 belongs to the day it started, even though it ended the next day.",
+      "to": "To",
+      "toHint": "Last day, included. Left blank, the last 31 days are queried according to the site's calendar.",
+      "inverted": "The period ends before it starts. Check both dates: they do not swap themselves.",
+      "tooWide": "The period cannot exceed {days} days. Query the history in shorter stretches.",
+      "apply": "Query",
+      "resolved": "Work days from {from} to {to}, in {zone} time."
+    },
+    "empty": {
+      "title": "No work days recorded in this period",
+      "description": "This is not a failed query: on those days this person has no clockings at all. Try another period or check whether they were employed."
+    },
+    "announce": {
+      "results": "{count} work days between {from} and {to}."
+    },
+    "day": {
+      "total": "Daily total",
+      "recalculatedAt": "Total recalculated on {moment}.",
+      "recalculatedNever": "This day has no recalculated total yet: the one shown is the sum of its entries.",
+      "flags": {
+        "openShift": "Open shift",
+        "openShiftHint": "A shift is still open: the total for this day will still go up and cannot be used for payroll until it is closed.",
+        "incident": "Incident",
+        "incidentHint": "An entry was flagged as anomalous. It is not a system error: it means someone has to look at it."
+      }
+    },
+    "entries": {
+      "caption": "Periods of work on {date}, in the {zone} time zone",
+      "in": "Clock in ({zone})",
+      "out": "Clock out ({zone})",
+      "duration": "Duration",
+      "source": "Source",
+      "status": "Status",
+      "version": "Version {version}",
+      "open": "Not closed",
+      "openHint": "The shift is still open.",
+      "openDuration": "In progress",
+      "nextDay": "(next day)",
+      "utc": "UTC {time}",
+      "recorded": "Received by the server: {moment}",
+      "notRecorded": "No reception mark: this time was written by a person, not by a scan.",
+      "queued": "It arrived from the kiosk queue, {delay} after the clocking. What counts for the record is the time of the clocking.",
+      "empty": "This day has no current periods of work. If there are amendments below, they were voided: the history is still complete.",
+      "sum": "Sum of the entries",
+      "declared": "Recorded daily total",
+      "mismatch": "The recorded daily total does not match the sum of its entries. Both are shown and neither is chosen: tell whoever administers the system before using these hours for payroll."
+    },
+    "sources": {
+      "qr_kiosk": "Card scan",
+      "pin_kiosk": "PIN at the kiosk",
+      "manual_admin": "Entered by hand",
+      "import": "Import"
+    },
+    "entryStatus": {
+      "open": "Open",
+      "closed": "Closed",
+      "anomalous": "Anomalous",
+      "voided": "Voided",
+      "superseded": "Superseded"
+    },
+    "history": {
+      "heading": "Amendment history",
+      "notice": "Each amendment created a new version and kept the previous one. What you see here is what the record said before and what it says now.",
+      "empty": "This day has not been amended: the entries are the ones recorded when clocking.",
+      "by": "{author}, on {moment}",
+      "reason": "Reason",
+      "entry": "Entry: {uuid}",
+      "caption": "What the amendment of {moment} changed",
+      "before": "Before",
+      "after": "After",
+      "noEntryBefore": "The entry did not exist",
+      "noEntryAfter": "Entry voided",
+      "openMark": "No clock out",
+      "fields": {
+        "in": "Clock in",
+        "out": "Clock out",
+        "worked": "Time worked",
+        "version": "Version"
+      }
+    }
   }
 }

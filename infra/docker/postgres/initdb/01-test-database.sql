@@ -1,0 +1,20 @@
+-- KronoQR — base de datos de la suite de integracion.
+--
+-- Se ejecuta una sola vez, al inicializar el cluster, igual que 00-extensions.
+-- La suite de integracion NUNCA usa `fichaje`: `RefreshDatabase` empieza con un
+-- `migrate:fresh`, y contra la base de desarrollo cada `make test` se llevaria
+-- por delante las 220.000 filas del VolumeSeeder sin decir nada.
+--
+-- Solo en desarrollo tiene sentido, pero se crea siempre por la misma razon por
+-- la que el archivado de WAL esta encendido en los dos entornos: un fichero de
+-- arranque distinto en produccion es un fichero que nadie prueba. Una base
+-- vacia de mas no cuesta nada.
+--
+-- Las extensiones NO se crean aqui: son por base de datos y las instala la
+-- primera migracion, que es la unica que se ejecuta en las dos.
+--
+-- Si tu cluster ya existia cuando se anadio este fichero, la suite la crea sola
+-- (Tests\Support\Database\TestDatabase), y lo hace con el rol de MIGRACION: el
+-- de aplicacion no tiene CREATEDB desde la tarea 1.14 (regla dura 6). A mano:
+--   docker compose ... exec postgres createdb -U fichaje_migrator fichaje_test
+CREATE DATABASE fichaje_test;

@@ -1,0 +1,138 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Tests\Support\Http;
+
+use Illuminate\Contracts\Http\Kernel;
+use Illuminate\Http\Request;
+use Illuminate\Testing\TestResponse;
+use Symfony\Component\HttpFoundation\Response;
+use Tests\Feature\Quality\Support\Commands;
+
+/**
+ * Cliente HTTP tipado para las pruebas de la API.
+ *
+ * **Por que no `$this->getJson()` dentro de las clausuras de Pest.** Ahi `$this`
+ * es un `TestCall`, no el caso de prueba, y PHPStan 9 no resuelve ninguno de sus
+ * metodos: la suite entera saldria con decenas de errores de tipo o —peor— con
+ * supresiones. Es el mismo motivo por el que
+ * {@see Commands} existe para los comandos de
+ * consola, y la misma solucion: una clase con tipos de verdad.
+ *
+ * Devuelve el `TestResponse` de Laravel, asi que siguen valiendo tanto sus
+ * aserciones como las que anade Spectator (`assertValidRequest`,
+ * `assertValidResponse`), que es como se comprueba el contrato.
+ *
+ * La peticion se envia con `Accept: application/json` siempre: la API no tiene
+ * vistas y un error servido en HTML se convierte en «error de parseo» en el
+ * cliente, escondiendo la causa.
+ */
+final readonly class Api
+{
+    /**
+     * @param  array<string, string>  $headers
+     */
+    private function __construct(private ?string $token, private array $headers = []) {}
+
+    /**
+     * Peticiones autenticadas con un token de Sanctum.
+     */
+    public static function as(string $token): self
+    {
+        return new self($token);
+    }
+
+    /**
+     * Peticiones sin credenciales. Es la mitad de la regla dura 18 que mas se
+     * olvida: comprobar tambien que sin token no se entra.
+     */
+    public static function guest(): self
+    {
+        return new self(null);
+    }
+
+    /**
+     * Cabeceras adicionales.
+     *
+     * Existe por `Idempotency-Key`, que en la escritura del quiosco es
+     * **obligatoria** y tiene que coincidir con el `scan_id` del cuerpo
+     * (regla dura 8, contrato de `POST /api/v1/scan`): sin poder enviarla, la
+     * mitad de las pruebas de ese endpoint no se podrian escribir.
+     *
+     * @param  array<string, string>  $headers
+     */
+    public function withHeaders(array $headers): self
+    {
+        return new self($this->token, [...$this->headers, ...$headers]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $query
+     * @return TestResponse<Response>
+     */
+    public function get(string $uri, array $query = []): TestResponse
+    {
+        return $this->call('GET', $query === [] ? $uri : $uri.'?'.http_build_query($query));
+    }
+
+    /**
+     * @param  array<string, mixed>  $body
+     * @return TestResponse<Response>
+     */
+    public function post(string $uri, array $body = []): TestResponse
+    {
+        return $this->call('POST', $uri, $body);
+    }
+
+    /**
+     * @param  array<string, mixed>  $body
+     * @return TestResponse<Response>
+     */
+    public function patch(string $uri, array $body = []): TestResponse
+    {
+        return $this->call('PATCH', $uri, $body);
+    }
+
+    /**
+     * @return TestResponse<Response>
+     */
+    public function delete(string $uri): TestResponse
+    {
+        return $this->call('DELETE', $uri);
+    }
+
+    /**
+     * @param  array<string, mixed>  $body
+     * @return TestResponse<Response>
+     */
+    public function call(string $method, string $uri, array $body = []): TestResponse
+    {
+        $server = [
+            'HTTP_ACCEPT' => 'application/json',
+            'CONTENT_TYPE' => 'application/json',
+        ];
+
+        foreach ($this->headers as $name => $value) {
+            // La convencion de PHP para una cabecera en `$_SERVER`: `HTTP_` y el
+            // nombre en mayusculas con guiones bajos.
+            $server['HTTP_'.strtoupper(str_replace('-', '_', $name))] = $value;
+        }
+
+        if ($this->token !== null) {
+            $server['HTTP_AUTHORIZATION'] = 'Bearer '.$this->token;
+        }
+
+        $request = Request::create(
+            uri: $uri,
+            method: $method,
+            server: $server,
+            content: $body === [] ? null : json_encode($body, JSON_THROW_ON_ERROR),
+        );
+
+        /** @var Kernel $kernel */
+        $kernel = app(Kernel::class);
+
+        return TestResponse::fromBaseResponse($kernel->handle($request));
+    }
+}

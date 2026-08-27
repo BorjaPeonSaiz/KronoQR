@@ -1,0 +1,228 @@
+# KronoQR — simulacro de restauracion de copia (RNF-D-05, RQ-09, RF-PR-04).
+#
+# Ejecuta el ciclo COMPLETO contra PostgreSQL 17 de verdad: crea datos con
+# relaciones, hace la copia cifrada, la verifica, la restaura en un contenedor
+# LIMPIO y comprueba integridad referencial y conteos. Si algo de la cadena se
+# rompe —un cambio en backup.sh, una version de pg_dump que ya no lee el
+# volcado— se sabe aqui y no el dia de la restauracion.
+#
+# CUANDO se ejecuta, y por que asi:
+#
+#   · TRIMESTRAL (dia 1 de enero, abril, julio y octubre). Es la cadencia que
+#     exige RNF-D-05. Este workflow demuestra que EL PROCEDIMIENTO funciona;
+#     que funcionan las copias de un cliente concreto lo demuestra la entrada
+#     de cron de su servidor (docs/runbooks/restaurar-backup.md §7). Hacen
+#     falta las dos: el fabricante no tiene acceso a la instalacion del cliente
+#     (ADR-020) y no puede ensayar sobre sus datos.
+#   · En cada cambio de los scripts de copia. Un simulacro que solo corre cada
+#     tres meses convierte cualquier error en un hallazgo de dentro de tres
+#     meses.
+#   · A mano, cuando alguien quiera comprobarlo.
+#
+# NO se ejecuta en cada push: son ~3 minutos y no aporta nada a un cambio de
+# frontend. Por eso vive fuera del pipeline de `ci.yml` y de su presupuesto de
+# 4 minutos para las etapas 1-3 (doc 02 §10.1).
+
+name: Simulacro de restauracion de copia
+
+on:
+  schedule:
+    # 04:00 UTC del dia 1 de cada trimestre.
+    - cron: "0 4 1 1,4,7,10 *"
+  workflow_dispatch:
+  push:
+    paths:
+      - "infra/scripts/**"
+      - "infra/docker/postgres/**"
+      - ".github/workflows/backup-drill.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup-drill-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  simulacro:
+    name: "Copia cifrada, verificada y restaurada en contenedor limpio"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    env:
+      # Claves de usar y tirar para un servidor que vive tres minutos en un
+      # runner efimero. NO son secretos del producto: los del cliente los
+      # genera install.sh en su servidor y no los conoce nadie mas (§7.7).
+      PGPASSWORD: simulacro_local_ci
+      BACKUP_ENCRYPTION_KEY: simulacro_local_ci_clave_de_cifrado
+      BACKUP_PATH: /tmp/kronoqr-backups
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+      DB_DATABASE: fichaje
+      DB_USERNAME: fichaje_app
+      DB_PASSWORD: simulacro_local_ci
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Cliente de PostgreSQL 17
+        # La version mayor tiene que coincidir con la del servidor: un pg_dump
+        # 16 se niega a volcar un servidor 17, y ese fallo hay que verlo aqui y
+        # no en el servidor de un hotel.
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" |
+            sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client-17
+          pg_dump --version
+
+      - name: Servidor PostgreSQL 17 con archivado de WAL
+        # La imagen del producto, no la oficial: asi se prueba tambien el
+        # archivado de WAL y el pg_hba declarativo que hacen posible el RPO de
+        # 15 min (RNF-D-02).
+        run: |
+          docker build -f infra/docker/postgres/Dockerfile -t kronoqr/postgres:ci .
+          docker run -d --name kronoqr-pg \
+            -e POSTGRES_DB="$DB_DATABASE" \
+            -e POSTGRES_USER="$DB_USERNAME" \
+            -e POSTGRES_PASSWORD="$DB_PASSWORD" \
+            -e KRONOQR_WAL_ARCHIVE_DIR=/var/backups/fichaje/wal \
+            -p 5432:5432 \
+            kronoqr/postgres:ci \
+            postgres -c timezone=UTC -c log_timezone=UTC \
+              -c hba_file=/etc/kronoqr/pg_hba.conf \
+              -c wal_level=replica -c archive_mode=on -c archive_timeout=60 \
+              -c "archive_command=/usr/local/bin/kronoqr-archive-wal %p %f"
+          for i in $(seq 1 30); do
+            if docker exec kronoqr-pg pg_isready -U "$DB_USERNAME" -d "$DB_DATABASE" >/dev/null 2>&1; then
+              echo "Servidor listo en $((i * 2)) s"; break
+            fi
+            sleep 2
+          done
+
+      - name: Datos con relaciones y casos limite
+        # Turno nocturno que cruza medianoche y turno en el cambio de hora: si
+        # una copia se los comiera, el registro legal quedaria mal y los
+        # conteos por tabla lo dirian.
+        run: |
+          psql -h "$DB_HOST" -U "$DB_USERNAME" -d "$DB_DATABASE" -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE TABLE sites (id int PRIMARY KEY, code text NOT NULL);
+          CREATE TABLE employees (
+            id int PRIMARY KEY,
+            site_id int NOT NULL REFERENCES sites(id),
+            employee_code text NOT NULL UNIQUE
+          );
+          CREATE TABLE shift_entries (
+            id int PRIMARY KEY,
+            employee_id int NOT NULL REFERENCES employees(id),
+            started_at timestamptz NOT NULL,
+            ended_at timestamptz
+          );
+          INSERT INTO sites VALUES (1, 'HOTEL-A'), (2, 'HOTEL-B');
+          INSERT INTO employees SELECT g, 1 + (g % 2), 'EMP-' || g FROM generate_series(1, 500) g;
+          INSERT INTO shift_entries SELECT g, 1 + (g % 500),
+                 timestamptz '2026-01-15 22:00:00+00' - (g || ' hours')::interval,
+                 timestamptz '2026-01-16 06:00:00+00' - (g || ' hours')::interval
+          FROM generate_series(1, 5000) g;
+          -- Turno que cruza el cambio de hora (RN-05, ADR-006).
+          INSERT INTO shift_entries VALUES (99999, 1, '2026-03-29 01:30:00+01', '2026-03-29 09:00:00+02');
+          SELECT pg_switch_wal();
+          SQL
+
+      - name: Copia cifrada y verificada
+        run: |
+          mkdir -p "$BACKUP_PATH"
+          bash infra/scripts/backup.sh run --mode dump
+
+      - name: La copia esta CIFRADA (RL-12)
+        # Que no se pueda leer sin la clave no es una opinion: se comprueba.
+        run: |
+          copia="$(ls "$BACKUP_PATH"/daily/*.dump.enc | tail -n 1)"
+          head -c 6 "$copia" | grep -q "Salted" || { echo "::error::La copia no tiene cabecera de cifrado."; exit 1; }
+          if grep -qa "PGDMP" "$copia"; then echo "::error::La copia contiene la cabecera del volcado EN CLARO."; exit 1; fi
+          if grep -qa "employee_code" "$copia"; then echo "::error::Se leen nombres de columna en claro dentro de la copia."; exit 1; fi
+          if BACKUP_ENCRYPTION_KEY=clave_que_no_es bash infra/scripts/backup.sh verify >/dev/null 2>&1; then
+            echo "::error::La copia se ha verificado con una clave equivocada."; exit 1
+          fi
+          echo "Copia cifrada: ilegible sin la clave, y la clave equivocada no la abre."
+
+      - name: Archivado de WAL en marcha (RPO <= 15 min)
+        run: |
+          sleep 5
+          psql -h "$DB_HOST" -U "$DB_USERNAME" -d "$DB_DATABASE" -Atc \
+            "SELECT CASE WHEN archived_count > 0 AND failed_count = 0 THEN 'ok' ELSE 'mal' END FROM pg_stat_archiver" |
+            grep -qx ok || { echo "::error::El archivado de WAL no funciona: sin el no hay RPO de 15 minutos."; exit 1; }
+
+      - name: Idempotencia — dos copias seguidas no corrompen la anterior
+        run: |
+          anterior="$(ls "$BACKUP_PATH"/daily/*.dump.enc | tail -n 1)"
+          huella="$(sha256sum "$anterior" | cut -d' ' -f1)"
+          sleep 1
+          bash infra/scripts/backup.sh run --mode dump
+          [ "$huella" = "$(sha256sum "$anterior" | cut -d' ' -f1)" ] ||
+            { echo "::error::La segunda copia ha modificado la anterior."; exit 1; }
+          bash infra/scripts/backup.sh verify --file "$anterior"
+
+      - name: Fallo seguro — el sistema queda como estaba
+        run: |
+          antes="$(sha256sum "$BACKUP_PATH"/daily/*.dump.enc | sha256sum)"
+          codigo=0
+          BACKUP_DUMP_COMMAND=false bash infra/scripts/backup.sh run || codigo=$?
+          [ "$codigo" -ne 0 ] || { echo "::error::Una copia fallida ha devuelto exito."; exit 1; }
+          [ "$antes" = "$(sha256sum "$BACKUP_PATH"/daily/*.dump.enc | sha256sum)" ] ||
+            { echo "::error::Un fallo a mitad ha alterado las copias existentes."; exit 1; }
+          [ -z "$(find "$BACKUP_PATH" -name '*.part')" ] ||
+            { echo "::error::Ha quedado un fichero a medias en el destino."; exit 1; }
+          grep -q '^kronoqr_backup_last_result{type="dump"} 0$' "$BACKUP_PATH"/metrics/kronoqr_backup_run.prom ||
+            { echo "::error::El fallo no se ha publicado como metrica: la alerta no se enteraria."; exit 1; }
+          bash infra/scripts/backup.sh run --mode dump
+
+      - name: SIMULACRO — restaurar en contenedor limpio y validar (RNF-D-05)
+        run: bash infra/scripts/restore-drill.sh --timeout 120
+
+      - name: El simulacro detecta una copia que NO restaura
+        # Una comprobacion que nunca ha fallado no demuestra nada: aqui se le
+        # da una copia corrupta y se exige que la rechace.
+        run: |
+          cp "$(cat "$BACKUP_PATH"/daily/LATEST | sed "s|^|$BACKUP_PATH/daily/|")" /tmp/copia-buena.enc
+          copia="$BACKUP_PATH/daily/$(cat "$BACKUP_PATH"/daily/LATEST)"
+          printf 'basura' | dd of="$copia" bs=1 seek=200 conv=notrunc status=none
+          if bash infra/scripts/restore-drill.sh --timeout 120 >/dev/null 2>&1; then
+            echo "::error::El simulacro ha dado por buena una copia corrupta."; exit 1
+          fi
+          cp /tmp/copia-buena.enc "$copia"
+          echo "El simulacro rechaza una copia corrupta."
+
+      - name: Informe del simulacro (evidencia de RNF-D-05 y RQ-09)
+        if: always()
+        run: |
+          {
+            echo "### Simulacro de restauracion"
+            echo ""
+            echo '```'
+            cat "$BACKUP_PATH"/metrics/*.prom 2>/dev/null | grep -E '^kronoqr_' || echo "sin metricas"
+            echo '```'
+            echo ""
+            echo "Informes: $(ls "$BACKUP_PATH"/reports/ 2>/dev/null | tr '\n' ' ')"
+          } >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Recoger los informes
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: simulacro-restauracion
+          # Solo informes y metricas: nombres de tabla, numeros y marcas de
+          # tiempo. Ni una copia, ni un dato personal (regla dura 21).
+          path: |
+            /tmp/kronoqr-backups/reports/
+            /tmp/kronoqr-backups/metrics/
+          retention-days: 90
+
+      - name: Apagar el servidor de pruebas
+        if: always()
+        run: docker rm -f kronoqr-pg >/dev/null 2>&1 || true

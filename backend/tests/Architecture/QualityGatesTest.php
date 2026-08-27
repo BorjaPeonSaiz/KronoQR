@@ -58,13 +58,40 @@ it('exige justificacion en cada supresion de PHPStan', function (): void {
 })->group('RNF-M-02');
 
 it('exige los umbrales de cobertura del dominio y del backend', function (): void {
-    // RNF-M-01: dominio >= 90 %, global >= 75 % (§9.2). Hoy no hay dominio y el
-    // objetivo se salta con su guarda, pero el umbral tiene que estar escrito:
-    // es lo que empieza a exigirse en la tarea 1.2.
+    // RNF-M-01: dominio >= 90 %, global >= 75 % (§9.2). Son DOS umbrales, y el
+    // `--min` de Pest es uno solo y global: sin la segunda pasada acotada a
+    // Modules/*/Domain, el 90 % del dominio lo podia pagar cualquier otra parte
+    // del arbol y la puerta figuraba en verde sin comprobar lo que dice.
     $makefile = repoContents('Makefile');
 
-    expect($makefile)->toContain('--min=75');
+    expect($makefile)->toMatch('/^GLOBAL_COVERAGE_MIN\s*:=\s*75\s*$/m');
+    expect($makefile)->toMatch('/^DOMAIN_COVERAGE_MIN\s*:=\s*90\s*$/m');
+    expect($makefile)->toContain('tools/coverage-gate.php');
     expect($makefile)->toContain('--min=80');   // MSI de mutacion, RQ-10
+
+    // Y la segunda pasada tiene que poder ejecutarse: el objetivo la invoca, y
+    // un fichero que falte —o que .gitignore se lleve por delante, que ya paso
+    // con un directorio llamado Coverage/— convierte la puerta en un error de
+    // "clase no encontrada" que alguien acabaria comentando.
+    expect(is_file(repoFile('backend/tools/coverage-gate.php')))->toBeTrue();
+    expect(is_file(repoFile('backend/tools/Quality/DomainCoverageGate.php')))->toBeTrue();
+})->group('RNF-M-01');
+
+it('acota la mutacion al dominio y con OPcache apagado', function (): void {
+    // RQ-10. Dos condiciones sin las cuales el MSI no mide lo que dice:
+    //
+    // - acotado a Modules/*/Domain, o el numero mezcla el dominio con los
+    //   comandos del repositorio y basta con que estos compensen;
+    // - con OPcache apagado, porque el mutante se aplica interceptando el
+    //   protocolo file:// y el bytecode cacheado del fichero original lo
+    //   anula. Medido: 22 % con OPcache y 100 % sin el, sobre las MISMAS
+    //   pruebas y el mismo fichero.
+    $makefile = repoContents('Makefile');
+
+    expect($makefile)->toContain('--path=$(MUTATE_PATHS)');
+    expect($makefile)->toContain('tools/mutation');
+    expect(repoContents('backend/tools/mutation/zzz-no-opcache.ini'))
+        ->toMatch('/^opcache\.enable_cli\s*=\s*0\s*$/m');
 })->group('RNF-M-01');
 
 it('declara las cinco suites de la piramide de pruebas', function (): void {

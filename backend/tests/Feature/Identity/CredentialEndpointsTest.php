@@ -1,0 +1,311 @@
+<?php
+
+declare(strict_types=1);
+
+use App\Modules\Attendance\Application\Port\CredentialResolver;
+use App\Modules\Shared\Domain\ValueObject\CredentialRejectionReason;
+use App\Modules\Shared\Domain\ValueObject\UserRole;
+use Illuminate\Support\Facades\DB;
+use Spectator\Spectator;
+use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Http\Api;
+use Tests\Support\Identity\Credentials;
+use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Workforce\WorkforceFixtures;
+
+/*
+ * Emision y revocacion de credenciales por la API (RF-QR-01, RF-QR-03),
+ * validadas contra el contrato.
+ *
+ * Cada respuesta pasa por Spectator: el cliente TypeScript de los tres frontends
+ * se genera de `openapi.yaml`, asi que una desviacion aqui rompe a los tres a la
+ * vez y sin aviso (ADR-013).
+ */
+
+uses(RefreshDatabase::class);
+
+beforeEach(function (): void {
+    Spectator::using('openapi.yaml');
+});
+
+/**
+ * @return array{token: string, employee: string, site: int}
+ */
+function credentialsContext(string $status = 'active'): array
+{
+    $site = WorkforceFixtures::site();
+
+    return [
+        'token' => ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RRHH)),
+        'employee' => WorkforceFixtures::employee($site, null, $status),
+        'site' => $site,
+    ];
+}
+
+it('emite una credencial y la deja pendiente de imprimir, sin acuñar ningun QR', function (): void {
+    // ADR-034: emitir crea el derecho a una tarjeta. El token, su firma y su
+    // hash nacen al imprimir, dentro del PDF, que es de la tarea 1.10.
+    $context = credentialsContext();
+
+    $response = Api::as($context['token'])
+        ->post('/api/v1/credentials', ['employee_uuid' => $context['employee']])
+        ->assertValidRequest()
+        ->assertValidResponse(201)
+        ->assertJsonPath('employee_uuid', $context['employee'])
+        ->assertJsonPath('status', 'active')
+        ->assertJsonPath('reissue', false)
+        ->assertJsonPath('key_id', null)
+        ->assertJsonPath('printed_at', null)
+        ->assertJsonPath('revoked_at', null)
+        // **Ninguna respuesta de esta API lleva un QR.** Que el esquema lo
+        // prohiba (`additionalProperties: false`) y que se compruebe aqui son dos
+        // redes distintas: la primera cae si alguien toca el contrato.
+        ->assertJsonMissingPath('qr_payload');
+
+    $row = DB::table('credentials')->where('employee_id', '>', 0)->first();
+
+    expect($row?->secret_hash)->toBeNull()
+        ->and($row?->key_id)->toBeNull()
+        ->and($row?->printed_at)->toBeNull();
+
+    // Se conserva `no-store` aunque ya no viaje ningun secreto: es gestion de
+    // credenciales de personas identificadas. Se comprueba que CONTIENE
+    // `no-store` y no que sea exactamente eso: Laravel anade `private` por su
+    // cuenta, y las dos directivas juntas dicen lo mismo y algo mas.
+    expect($response->headers->get('Cache-Control'))->toContain('no-store');
+})->group('RF-QR-01', 'RF-QR-08', 'RS-01');
+
+it('una credencial pendiente de imprimir no la resuelve el quiosco', function (): void {
+    // La consecuencia operativa de ADR-034, y lo que el panel de RF-QR-08 tiene
+    // que enseñar antes de cada incorporacion: emitida no es lo mismo que
+    // «puede fichar». Sin hash no hay nada por lo que resolverla, ni siquiera
+    // con un payload bien firmado.
+    $context = credentialsContext();
+
+    Api::as($context['token'])->post('/api/v1/credentials', ['employee_uuid' => $context['employee']]);
+
+    $resolution = app(CredentialResolver::class)->resolve(Credentials::payloadFor()->toString());
+
+    expect($resolution->isResolved())->toBeFalse()
+        ->and($resolution->rejectionReason())->toBe(CredentialRejectionReason::UNKNOWN);
+})->group('RF-QR-01', 'RF-QR-02', 'RF-QR-08');
+
+it('una credencial impresa si la resuelve el quiosco', function (): void {
+    // El circuito completo: lo que se imprime es lo que el verificador acepta.
+    // Sin esta prueba, acuñado y verificacion podrian divergir sin que ninguno
+    // de los dos fallara por su cuenta. Mientras la impresion no exista como
+    // caso de uso (tarea 1.10), el acuñado lo simula el fixture.
+    $context = credentialsContext();
+
+    /** @var int $employeeId */
+    $employeeId = DB::table('employees')->where('uuid', $context['employee'])->value('id');
+
+    $payload = Credentials::issueFor($employeeId);
+
+    $resolution = app(CredentialResolver::class)->resolve($payload->toString());
+
+    expect($resolution->isResolved())->toBeTrue()
+        ->and($resolution->employeeUuid())->toBe($context['employee']);
+})->group('RF-QR-02', 'RF-QR-04');
+
+it('deja el asiento de la emision en audit_log', function (): void {
+    // Regla dura 6: a partir de aqui hay una tarjeta capaz de fichar en nombre de
+    // una persona.
+    $context = credentialsContext();
+
+    Api::as($context['token'])->post('/api/v1/credentials', ['employee_uuid' => $context['employee']]);
+
+    $entry = DB::table('audit_log')->where('subject_type', 'credential')->first();
+
+    expect($entry)->not->toBeNull()
+        ->and($entry?->action)->toBe('credential.issued')
+        ->and($entry?->actor_type)->toBe('user');
+
+    /** @var array<string, mixed> $payload */
+    $payload = json_decode((string) $entry?->payload, true, 512, JSON_THROW_ON_ERROR);
+
+    expect($payload['employee_uuid'])->toBe($context['employee'])
+        // Sin `key_id`: en la emision todavia no hay ninguno (ADR-034). Lo lleva
+        // el asiento de la impresion, que es de la tarea 1.10.
+        ->and($payload)->not->toHaveKey('key_id')
+        // Ni el token ni su hash: con el asiento se investiga, no se fabrica una
+        // tarjeta (regla dura 21).
+        ->and($payload)->not->toHaveKey('secret_hash')
+        ->and($payload)->not->toHaveKey('qr_payload');
+})->group('RF-QR-01', 'RS-07', 'RL-04');
+
+it('no emite una segunda credencial activa para el mismo empleado', function (): void {
+    // Invariante del doc 01 §5.2. La salida correcta es reemitir.
+    $context = credentialsContext();
+
+    Api::as($context['token'])->post('/api/v1/credentials', ['employee_uuid' => $context['employee']]);
+
+    Api::as($context['token'])
+        ->post('/api/v1/credentials', ['employee_uuid' => $context['employee']])
+        ->assertValidResponse(409)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:conflict');
+})->group('RF-QR-03');
+
+it('reemite revocando la anterior en la misma transaccion', function (): void {
+    // Gherkin «Reemision por perdida» del doc 01 §11 y primer paso del runbook
+    // `tarjeta-perdida-o-rota.md`: revocar, reemitir e imprimir. Aqui se
+    // comprueban los dos primeros; el tercero es de la tarea 1.10.
+    $context = credentialsContext();
+
+    /** @var int $employeeId */
+    $employeeId = DB::table('employees')->where('uuid', $context['employee'])->value('id');
+
+    // La tarjeta perdida es una que existe de verdad: impresa y en la calle.
+    $anterior = Credentials::issueFor($employeeId);
+
+    Api::as($context['token'])
+        ->post('/api/v1/credentials', [
+            'employee_uuid' => $context['employee'],
+            'reissue' => true,
+            'reason' => 'Tarjeta extraviada en el turno de noche',
+        ])
+        ->assertValidRequest()
+        ->assertValidResponse(201)
+        ->assertJsonPath('reissue', true)
+        // La sustituta nace pendiente de imprimir: hasta que no pase por la
+        // impresora, esa persona ficha con su PIN de respaldo (RF-AT-11).
+        ->assertJsonPath('printed_at', null);
+
+    // La perdida deja de ser aceptada en el mismo acto, que es lo que importa.
+    expect(app(CredentialResolver::class)->resolve($anterior->toString())->rejectionReason())
+        ->toBe(CredentialRejectionReason::REVOKED);
+
+    /** @var list<string> $acciones */
+    $acciones = DB::table('audit_log')
+        ->where('subject_type', 'credential')
+        ->orderBy('id')
+        ->pluck('action')
+        ->all();
+
+    expect($acciones)->toBe(['credential.revoked', 'credential.reissued']);
+})->group('RF-QR-03', 'RS-07');
+
+it('exige motivo para reemitir', function (): void {
+    $context = credentialsContext();
+
+    Api::as($context['token'])->post('/api/v1/credentials', ['employee_uuid' => $context['employee']]);
+
+    Api::as($context['token'])
+        ->post('/api/v1/credentials', ['employee_uuid' => $context['employee'], 'reissue' => true])
+        ->assertValidResponse(422)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:validation-failed');
+})->group('RF-QR-03');
+
+it('devuelve 404 cuando el empleado no existe', function (): void {
+    $context = credentialsContext();
+
+    Api::as($context['token'])
+        ->post('/api/v1/credentials', ['employee_uuid' => '0199f0c2-1f4a-7c3e-9b21-000000000000'])
+        ->assertValidResponse(404);
+})->group('RF-QR-01');
+
+it('rechaza campos que el endpoint no conoce', function (): void {
+    // Ni el token ni el key_id se aceptan del cliente: quien los enviara se iria
+    // convencido de haber fijado la tarjeta.
+    $context = credentialsContext();
+
+    Api::as($context['token'])
+        ->post('/api/v1/credentials', [
+            'employee_uuid' => $context['employee'],
+            'key_id' => 'zz',
+        ])
+        ->assertValidResponse(422);
+})->group('RF-QR-01', 'RS-01');
+
+it('revoca una credencial y deja su motivo', function (): void {
+    $context = credentialsContext();
+
+    Api::as($context['token'])->post('/api/v1/credentials', ['employee_uuid' => $context['employee']]);
+
+    /** @var string $uuid */
+    $uuid = DB::table('credentials')->value('uuid');
+
+    Api::as($context['token'])
+        ->post('/api/v1/credentials/'.$uuid.'/revoke', ['reason' => 'Tarjeta extraviada en el turno de noche'])
+        ->assertValidRequest()
+        ->assertValidResponse(200)
+        ->assertJsonPath('uuid', $uuid)
+        ->assertJsonPath('status', 'revoked')
+        ->assertJsonPath('revoked_reason', 'Tarjeta extraviada en el turno de noche')
+        ->assertJsonPath('employee_uuid', $context['employee'])
+        // La respuesta de una credencial ya emitida NO lleva el payload: solo
+        // existe en el 201 de la emision.
+        ->assertJsonMissingPath('qr_payload');
+})->group('RF-QR-03');
+
+it('no revoca dos veces', function (): void {
+    // Sobrescribir la primera revocacion cambiaria el motivo y el momento que ya
+    // constan en audit_log.
+    $context = credentialsContext();
+
+    Api::as($context['token'])->post('/api/v1/credentials', ['employee_uuid' => $context['employee']]);
+
+    /** @var string $uuid */
+    $uuid = DB::table('credentials')->value('uuid');
+
+    Api::as($context['token'])->post('/api/v1/credentials/'.$uuid.'/revoke', ['reason' => 'Perdida']);
+
+    Api::as($context['token'])
+        ->post('/api/v1/credentials/'.$uuid.'/revoke', ['reason' => 'Otra vez'])
+        ->assertValidResponse(409);
+})->group('RF-QR-03');
+
+it('exige un motivo que diga algo', function (string $reason): void {
+    $context = credentialsContext();
+
+    Api::as($context['token'])->post('/api/v1/credentials', ['employee_uuid' => $context['employee']]);
+
+    /** @var string $uuid */
+    $uuid = DB::table('credentials')->value('uuid');
+
+    Api::as($context['token'])
+        ->post('/api/v1/credentials/'.$uuid.'/revoke', ['reason' => $reason])
+        ->assertValidResponse(422);
+})->with([
+    'vacio' => [''],
+    'solo espacios' => ['     '],
+])->group('RF-QR-03');
+
+it('devuelve 404 al revocar una credencial que no existe', function (): void {
+    $context = credentialsContext();
+
+    Api::as($context['token'])
+        ->post('/api/v1/credentials/0199f0d1-2a5b-7d4f-8c32-000000000000/revoke', ['reason' => 'Perdida'])
+        ->assertValidResponse(404);
+})->group('RF-QR-03');
+
+it('no borra nada al revocar', function (): void {
+    // Regla dura 5: la fila conserva su historia. Es lo que permite explicar
+    // meses despues por que alguien no pudo fichar un martes.
+    $context = credentialsContext();
+
+    Api::as($context['token'])->post('/api/v1/credentials', ['employee_uuid' => $context['employee']]);
+
+    /** @var string $uuid */
+    $uuid = DB::table('credentials')->value('uuid');
+
+    Api::as($context['token'])->post('/api/v1/credentials/'.$uuid.'/revoke', ['reason' => 'Perdida']);
+
+    $row = DB::table('credentials')->where('uuid', $uuid)->first();
+
+    expect($row)->not->toBeNull()
+        ->and($row?->revoked_at)->not->toBeNull()
+        ->and($row?->revoked_reason)->toBe('Perdida')
+        ->and($row?->issued_at)->not->toBeNull();
+})->group('RF-QR-03', 'RL-04');
+
+it('un administrador tambien puede emitir', function (): void {
+    // «rrhh+» del Anexo B incluye a `admin`.
+    $site = WorkforceFixtures::site();
+    $employee = WorkforceFixtures::employee($site);
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN));
+
+    Api::as($token)
+        ->post('/api/v1/credentials', ['employee_uuid' => $employee])
+        ->assertValidResponse(201);
+})->group('RF-ID-02', 'RF-QR-01');

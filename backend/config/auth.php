@@ -42,6 +42,38 @@ return [
             'driver' => 'session',
             'provider' => 'users',
         ],
+
+        /*
+         * El guard con el que se autentica la API (tarea 1.6). Sanctum lo
+         * registraria solo, pero se declara aqui a proposito para que sea
+         * visible: es la puerta de todo el producto.
+         *
+         * **`provider` a `null`, y no es un descuido.** En este producto los
+         * tokens cuelgan de DOS modelos: las cuentas de gestion (`users`, tarea
+         * 1.6) y **los quioscos** (`devices`, RF-ID-04, tarea 1.5). Sanctum
+         * comprueba en `Guard::hasValidProvider()` que el `tokenable` sea del
+         * modelo del proveedor declarado; con `users` fijo aqui, **ningun token
+         * de dispositivo se autenticaria jamas** y `POST /api/v1/scan`
+         * devolveria 401 a un quiosco perfectamente emparejado. Con `null`, la
+         * comprobacion se salta y quien decide sigue siendo el token: su hash,
+         * su caducidad y sus *abilities*.
+         *
+         * Lo que se pierde con `null` es la comprobacion de modelo, que aqui no
+         * aporta nada: un token solo existe si alguien lo emitio contra su
+         * `tokenable`, y la autorizacion real son el ambito (middleware
+         * `ability`) y la policy de cada endpoint (regla dura 18, doc 02 §7.3).
+         * `ScanPolicy` comprueba explicitamente que quien porta el token es un
+         * dispositivo, y `EmployeePolicy` que es una persona con rol.
+         *
+         * El guard de los roles de Spatie sigue siendo explicito mas abajo
+         * (`permission.php`), que era el problema que este bloque documentaba
+         * antes: sin eso, los roles se resuelven con un guard distinto del que
+         * los creo y todo devuelve 403 sin explicacion.
+         */
+        'sanctum' => [
+            'driver' => 'sanctum',
+            'provider' => null,
+        ],
     ],
 
     /*
@@ -66,10 +98,9 @@ return [
             'driver' => 'eloquent',
             // El modelo de usuario es de Identity, no de App\Models: los
             // modelos Eloquent viven en Infrastructure/Persistence del modulo
-            // que los posee (doc 02 §1.6). La clase llega con la tarea 2.1, y
-            // hasta entonces esta referencia no se resuelve porque no hay
-            // autenticacion que resolver. Se escribe como cadena y no como
-            // ::class para no fingir que ya existe.
+            // que los posee (doc 02 §1.6). La clase existe desde la tarea 1.6.
+            // Se deja como cadena porque este fichero es configuracion y no
+            // puede importar codigo de un modulo (Deptrac).
             'model' => env('AUTH_MODEL', 'App\Modules\Identity\Infrastructure\Persistence\User'),
         ],
 

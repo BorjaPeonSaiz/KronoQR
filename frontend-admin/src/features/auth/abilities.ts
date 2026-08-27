@@ -1,0 +1,47 @@
+// Ambitos del token (doc 02 §7.3).
+//
+// Sirven para NO ofrecer lo que despues seria un 403. **No son autorizacion**:
+// la de verdad esta en la policy de cada endpoint, en el servidor (regla dura
+// 18). Ocultar un boton evita una frustracion, no protege un dato.
+
+/** Gestion de plantilla, departamentos y centros. */
+export const EMPLOYEES_MANAGE = 'employees:*'
+
+/** Emision, impresion, entrega y revocacion de credenciales. */
+export const CREDENTIALS_MANAGE = 'credentials:*'
+
+/**
+ * Lectura del registro horario ya escrito: el detalle de jornada (RF-PA-03).
+ *
+ * Es de **solo lectura** a proposito y no cubre corregir, que exige
+ * `attendance:correct`. Que la pantalla se abra con el ambito estrecho es lo que
+ * permite que un rol sin capacidad de rectificar consulte el registro sin poder
+ * tocarlo (doc 02 §7.3).
+ */
+export const ATTENDANCE_READ = 'attendance:read'
+
+/**
+ * Exportacion normalizada para la Inspeccion de Trabajo (RF-IN-05).
+ *
+ * Es el ambito ESTRECHO a proposito: el `auditor` lleva `reports:legal` y nada
+ * mas, y RRHH lleva `reports:*`, que lo cubre por el comodin de familia. Exigir
+ * `reports:*` habria escondido la pantalla justo al rol cuya funcion es esta.
+ */
+export const REPORTS_LEGAL = 'reports:legal'
+
+/**
+ * Si los ambitos concedidos cubren el exigido.
+ *
+ * Reconoce el comodin de familia (`employees:*` cubre `employees:read`) porque
+ * es como el contrato declara los ambitos, y el comodin total (`*`) por si la
+ * instalacion lo emite para administracion.
+ */
+export function hasAbility(granted: readonly string[], required: string): boolean {
+  if (granted.includes('*') || granted.includes(required)) {
+    return true
+  }
+
+  const namespace = required.split(':')[0]
+
+  return namespace !== undefined && namespace !== '' && granted.includes(`${namespace}:*`)
+}

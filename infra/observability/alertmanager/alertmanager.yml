@@ -35,6 +35,22 @@ route:
       group_wait: 0s
       repeat_interval: 1h
 
+    # Copias de seguridad (tarea 1.18). Se agrupan aparte de las alertas de
+    # dispositivo —no tienen etiqueta `device` y agruparlas con quioscos las
+    # enterraria— y se repiten cada 6 h: es un aviso que se atiende dentro de
+    # la jornada, no a las 03:00, salvo que llegue el archivado de WAL
+    # detenido, que si puede acabar parando la base de datos.
+    #
+    # La ventana de mantenimiento NO las silencia a proposito: la actualizacion
+    # del producto (RF-PD-10) exige copia previa verificada, asi que si la
+    # copia falla justo durante el mantenimiento es cuando mas hay que saberlo.
+    - matchers:
+        - component = "backup"
+      receiver: default
+      group_by: ["alertname"]
+      group_wait: 30s
+      repeat_interval: 6h
+
 inhibit_rules:
   # Si el centro entero esta caido, no notificar quiosco por quiosco.
   - source_matchers:

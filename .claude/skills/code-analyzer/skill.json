@@ -1,0 +1,31 @@
+{
+  "name": "Code Analyzer for KronoQR Project",
+  "description": "Skill especializada para analizar el proyecto KronoQR en busca de duplicaciones, problemas en la lógica de dominio, fallos en el manejo de excepciones y posibles optimizaciones.",
+  "version": "1.0.0",
+  "author": "KronoQR Team",
+  "icon": "🔍",
+  "categories": ["code-analysis", "refactoring", "quality-assurance"],
+  "inputs": {
+    "project_path": {
+      "type": "string",
+      "description": "Ruta del proyecto KronoQR a analizar",
+      "required": true
+    },
+    "analysis_type": {
+      "type": "string",
+      "description": "Tipo de análisis a realizar (duplication, domain_logic, exceptions, optimizations)",
+      "required": false,
+      "default": "all"
+    }
+  },
+  "outputs": {
+    "findings": {
+      "type": "array",
+      "description": "Lista de problemas encontrados durante el análisis"
+    },
+    "severity_summary": {
+      "type": "object",
+      "description": "Resumen por nivel de severidad"
+    }
+  }
+}

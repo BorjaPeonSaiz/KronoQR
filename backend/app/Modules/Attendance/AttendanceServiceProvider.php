@@ -4,19 +4,149 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance;
 
+use App\Http\RateLimiting\KioskRateLimit;
+use App\Modules\Attendance\Application\Port\CorrectionMetrics;
+use App\Modules\Attendance\Application\Port\EventPublisher;
+use App\Modules\Attendance\Application\Port\ScanLog;
+use App\Modules\Attendance\Application\Port\ScanMetrics;
+use App\Modules\Attendance\Application\Port\ShiftCorrectionLedger;
+use App\Modules\Attendance\Application\Port\ShiftEntryHistory;
+use App\Modules\Attendance\Application\Port\WorkDayRepository;
+use App\Modules\Attendance\Domain\Event\DailyTotalsRecalculated;
+use App\Modules\Attendance\Http\Policy\ScanPolicy;
+use App\Modules\Attendance\Http\Policy\ShiftEntryPolicy;
+use App\Modules\Attendance\Infrastructure\Adapter\LaravelEventBus;
+use App\Modules\Attendance\Infrastructure\Metrics\RedisCorrectionMetrics;
+use App\Modules\Attendance\Infrastructure\Metrics\RedisScanMetrics;
+use App\Modules\Attendance\Infrastructure\Persistence\DatabaseShiftCorrectionLedger;
+use App\Modules\Attendance\Infrastructure\Persistence\EloquentScanLog;
+use App\Modules\Attendance\Infrastructure\Persistence\EloquentShiftEntryHistory;
+use App\Modules\Attendance\Infrastructure\Persistence\EloquentWorkDayRepository;
+use App\Modules\Attendance\Infrastructure\Persistence\ShiftEntry;
+use App\Modules\Attendance\Infrastructure\Projection\DailyTotalsProjector;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
 /**
  * Modulo Attendance — nucleo del producto: fichajes, tramos, jornadas y
  * correcciones (doc 02 §1.6). Solo puede depender de Shared.
  *
- * El nucleo declara sus puertos y no nombra a quien los sirve (ADR-025). De
- * los cinco de Attendance/Application/Port/ (tarea 1.1), aqui se enlazan solo
- * los dos que implementa el propio modulo:
- *   - WorkDayRepository -> Attendance/Infrastructure/Persistence
- *   - EventPublisher    -> Attendance/Infrastructure/Adapter
- * Los otros tres los enlazan sus satelites: CredentialResolver en
- * IdentityServiceProvider; EmployeeDirectory y SiteCalendar en
- * WorkforceServiceProvider.
+ * El nucleo declara sus puertos y no nombra a quien los sirve (ADR-025). Aqui se
+ * enlazan **solo los que implementa el propio modulo**:
+ *
+ *   - `WorkDayRepository` -> `Infrastructure/Persistence`
+ *   - `ScanLog`           -> `Infrastructure/Persistence`
+ *   - `EventPublisher`    -> `Infrastructure/Adapter`
+ *   - `ScanMetrics`       -> `Infrastructure/Metrics`
+ *
+ * Los que sirve un satelite los enlaza el satelite, no este proveedor:
+ * `CredentialResolver` en `IdentityServiceProvider` (tarea 1.5);
+ * `EmployeeDirectory` y `SiteCalendar` en `WorkforceServiceProvider`;
+ * `Clock` en `SharedServiceProvider`; `OperationalSettingsProvider` en
+ * `ProductServiceProvider`. **`Attendance` no sabe quien le resuelve una
+ * credencial**, que es el punto entero de ADR-025.
+ *
+ * **De las dos policies del modulo, solo una entra por el `Gate`, y no es un
+ * olvido de la regla dura 18.** `ShiftEntryPolicy` si, porque quien corrige es
+ * una cuenta de `users` con roles. `ScanPolicy` no: se invoca por su nombre
+ * desde el `FormRequest` porque el pipeline de permisos exige que quien autoriza
+ * sea una cuenta con roles, y el portador de un token de quiosco es su fila de
+ * `devices`. El motivo completo esta en el docblock de {@see ScanPolicy}.
  */
-final class AttendanceServiceProvider extends ServiceProvider {}
+final class AttendanceServiceProvider extends ServiceProvider
+{
+    public function register(): void
+    {
+        $this->app->bind(WorkDayRepository::class, EloquentWorkDayRepository::class);
+        $this->app->bind(ScanLog::class, EloquentScanLog::class);
+        $this->app->bind(EventPublisher::class, LaravelEventBus::class);
+
+        // Correcciones (tarea 1.15). Las dos las sirve este mismo modulo:
+        // `shift_corrections` es parte del registro horario —se consulta al
+        // pintar una jornada y se exporta con el registro legal—, no auditoria
+        // de otro modulo.
+        $this->app->bind(ShiftCorrectionLedger::class, DatabaseShiftCorrectionLedger::class);
+        $this->app->bind(ShiftEntryHistory::class, EloquentShiftEntryHistory::class);
+
+        // Singleton: no tiene estado y se resuelve en cada peticion de escaneo.
+        // En las pruebas se sustituye por un doble que cuenta.
+        $this->app->singleton(ScanMetrics::class, RedisScanMetrics::class);
+        $this->app->singleton(CorrectionMetrics::class, RedisCorrectionMetrics::class);
+    }
+
+    public function boot(): void
+    {
+        $this->registerScanRateLimiters();
+
+        /*
+         * La policy de las correcciones (RF-PA-04, regla dura 18).
+         *
+         * Esta SI entra por el `Gate`, al contrario que `ScanPolicy`: quien
+         * autoriza aqui es una cuenta de `users` con roles, que es exactamente
+         * lo que el pipeline de permisos espera. La de escaneo no puede porque
+         * el portador de un token de quiosco es su fila de `devices` (ver su
+         * docblock).
+         *
+         * Se registra contra el modelo Eloquent del tramo porque es lo que
+         * Laravel usa para resolver una policy por clase, igual que hace
+         * `Workforce` con `Employee`. Lo que se autoriza no es esa fila —los
+         * tres endpoints comprueban rol, no propiedad— sino el tipo de recurso.
+         */
+        Gate::policy(ShiftEntry::class, ShiftEntryPolicy::class);
+
+        /*
+         * RN-06 y regla dura 7: `daily_totals` es una proyeccion reconstruible y
+         * la mantiene un listener, no el repositorio.
+         *
+         * El agregado emite `DailyTotalsRecalculated` con el estado COMPLETO del
+         * dia —nunca un delta— y el proyector escribe lo que recibe. Corre
+         * **dentro** de la transaccion del fichaje porque el caso de uso publica
+         * antes de confirmar: la proyeccion no puede quedar divergente del tramo
+         * que la provoco.
+         *
+         * Sincrono y sin `ShouldQueue` a proposito. Encolarlo dejaria una
+         * ventana —de milisegundos o de minutos, segun la cola— en la que el
+         * panel de presencia mostraria el total de antes del fichaje que acaba
+         * de ocurrir.
+         */
+        Event::listen(DailyTotalsRecalculated::class, [DailyTotalsProjector::class, 'handle']);
+    }
+
+    /**
+     * Las dos zonas de fichaje de la capa de Aplicacion (§7.1, RS-02, tarea 1.7).
+     *
+     * **Dos y no una**, aunque las dos rutas empiecen por `/api/v1/scan`: un lote
+     * trae cincuenta escaneos por peticion y un escaneo suelto trae uno, asi que
+     * compartir contador significaria elegir entre asfixiar el drenaje de la cola
+     * o dejar el endpoint individual practicamente sin techo.
+     *
+     * Los numeros salen de `config/kiosk.php` y no son constantes (regla dura
+     * 13): un hotel con veinte quioscos no tiene el mismo techo razonable que uno
+     * con dos, y cambiarlo no puede exigir tocar el repositorio.
+     *
+     * La zona `kiosk` —padron y latido— la registra `KioskServiceProvider`, que es
+     * el modulo de esos endpoints.
+     */
+    private function registerScanRateLimiters(): void
+    {
+        $perIp = Config::integer('kiosk.rate_limits.per_ip', 600);
+
+        RateLimiter::for('scan', static fn (Request $request): array => KioskRateLimit::of(
+            $request,
+            'scan',
+            Config::integer('kiosk.rate_limits.scan_per_device', 120),
+            $perIp,
+        ));
+
+        RateLimiter::for('scan-batch', static fn (Request $request): array => KioskRateLimit::of(
+            $request,
+            'scan-batch',
+            Config::integer('kiosk.rate_limits.batch_per_device', 60),
+            $perIp,
+        ));
+    }
+}

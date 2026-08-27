@@ -1,4 +1,101 @@
 @import 'tailwindcss';
 
 /* Sin colores ni tipografias de cliente: la marca es configuracion (RF-PD-08,
-   tarea 5.8), nunca codigo (CLAUDE.md, regla dura 13). */
+   tarea 5.8), nunca codigo (CLAUDE.md, regla dura 13).
+
+   Lo que hay aqui son los tokens de ACCESIBILIDAD del quiosco (RF-KI-06, doc 01
+   §6.5), que no son marca y no se negocian con nadie:
+
+     - Objetivo tactil >= 48 px  ->  --kiosk-touch-target
+     - Texto de confirmacion >= 24 px  ->  --text-confirm-*
+     - Contraste >= 4.5:1 en TODAS las combinaciones definidas abajo
+
+   Los contrastes de los cinco fondos de confirmacion contra el blanco, medidos:
+     entry   #064e3b   9.7:1
+     exit    #1e3a8a  10.3:1
+     pending #312e81  11.4:1
+     notice  #78350f   9.1:1
+     error   #7f1d1d  10.0:1
+   Todos por encima del 4.5:1 de AA y del 7:1 de AAA, que es el margen que hace
+   falta bajo la iluminacion mala de un office a las seis de la manana. */
+
+@theme {
+  --color-kiosk-surface: #0f172a;
+  --color-kiosk-surface-raised: #1e293b;
+  --color-kiosk-text: #f8fafc;
+  --color-kiosk-text-muted: #cbd5e1;
+
+  --color-kiosk-entry: #064e3b;
+  --color-kiosk-exit: #1e3a8a;
+  --color-kiosk-pending: #312e81;
+  --color-kiosk-notice: #78350f;
+  --color-kiosk-error: #7f1d1d;
+
+  /* Minimo de RF-KI-06 para mensajes de confirmacion. */
+  --text-confirm-sm: 1.5rem; /* 24 px */
+  --text-confirm-md: 2.25rem; /* 36 px */
+  --text-confirm-lg: 3.5rem; /* 56 px */
+
+  --kiosk-touch-target: 3rem; /* 48 px */
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-kiosk-surface);
+  color: var(--color-kiosk-text);
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  /* Un quiosco no se selecciona ni se hace zoom con dos dedos por accidente. */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+/* Todo objetivo tactil cumple el minimo, se le olvide o no a quien escriba la
+   plantilla. Es una clase y no una convencion porque una convencion no la
+   verifica nadie. */
+.kiosk-touch {
+  min-inline-size: var(--kiosk-touch-target);
+  min-block-size: var(--kiosk-touch-target);
+}
+
+/* Foco siempre visible y grueso: la tablet se opera con guantes, y quien la
+   revisa por teclado necesita ver donde esta. */
+:focus-visible {
+  outline: 3px solid #f8fafc;
+  outline-offset: 3px;
+}
+
+/* Solo para lectores de pantalla. */
+.kiosk-sr-only {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

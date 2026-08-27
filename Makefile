@@ -64,6 +64,7 @@ endif
 # Ficheros de shell del repositorio. Umbral del doc 02 §9.2: 0 hallazgos.
 # Incluye los scripts de la propia CI: tambien son codigo (doc 02 §3.5).
 SH_FILES := $(wildcard infra/scripts/*.sh) \
+            $(wildcard infra/scripts/lib/*.sh) \
             $(wildcard infra/docker/*/*.sh) \
             $(wildcard infra/docker/*/*/*.sh) \
             $(wildcard .github/scripts/*.sh)
@@ -135,7 +136,8 @@ endif
 .DEFAULT_GOAL := help
 .PHONY: help up down restart build ps logs shell seed test test-unit test-integration \
         test-arch test-contract quality tools-ready php-lint deptrac rector sh-lint api-lint sast \
-        traceability traceability-check docs-consistency deps-audit-php deps-audit-js coverage coverage-now mutate e2e clean changelog changelog-check tool-versions
+        traceability traceability-check docs-consistency deps-audit-php deps-audit-js coverage coverage-now mutate e2e clean changelog changelog-check tool-versions \
+        backup backup-verify restore-drill
 
 help: ## Muestra esta ayuda
 	@echo KronoQR - objetivos disponibles:
@@ -143,9 +145,11 @@ help: ## Muestra esta ayuda
 	@echo   make down             Para el entorno y conserva los volumenes
 	@echo   make restart          Reinicia los servicios
 	@echo   make build            Reconstruye las imagenes (tras tocar un Dockerfile)
-	@echo   make ps               Estado de los 14 servicios
+	@echo   make ps               Estado de los 15 servicios
 	@echo   make logs             Sigue los logs de todos los servicios
 	@echo   make shell            Abre una shell en el contenedor app
+	@echo   make migrate          Migra con el rol de migracion (regla dura 6)
+	@echo   make migrate-fresh    Recrea el esquema desde cero
 	@echo   make seed             Carga la semilla de desarrollo
 	@echo   make test             Toda la suite
 	@echo   make test-unit        Dominio, sin base de datos
@@ -166,6 +170,9 @@ help: ## Muestra esta ayuda
 	@echo   make e2e              Playwright con camara simulada
 	@echo   make changelog        Genera el CHANGELOG desde los commits convencionales
 	@echo   make changelog-check  Comprueba que una version tiene entrada (VERSION=1.2.3)
+	@echo   make backup           Copia cifrada y verificada del entorno de desarrollo
+	@echo   make backup-verify    Verifica la ultima copia (huella, descifrado, indice)
+	@echo   make restore-drill    Simulacro: restaura en contenedor limpio y valida
 	@echo   make clean            Para el entorno y BORRA los volumenes
 
 up: ## Levanta el entorno completo
@@ -201,12 +208,37 @@ logs: ## Sigue los logs
 shell: ## Shell en el contenedor de la aplicacion
 	$(COMPOSE_DEV) exec app sh
 
+# Las migraciones NO corren con el usuario de la aplicacion, y no es un detalle
+# de configuracion (tarea 1.14, regla dura 6). `fichaje_app` no tiene DDL y no es
+# propietario de nada: sobre un superusuario PostgreSQL ni comprueba los GRANT, y
+# un propietario puede volver a otorgarse lo que se le revoque, asi que con un
+# solo rol el "sin UPDATE ni DELETE sobre audit_log" no seria una garantia.
+#
+# La conexion `pgsql_migrator` esta declarada en backend/config/database.php y
+# usa DB_MIGRATION_USERNAME/DB_MIGRATION_PASSWORD. La primera migracion se niega
+# a correr si detecta que la lanza el rol de la aplicacion.
+MIGRATE_DB = --database=pgsql_migrator
+
+migrate: ## Aplica las migraciones con el rol de migracion (regla dura 6)
+ifeq ($(wildcard backend/artisan),)
+	@echo [make] No hay artisan que ejecutar.
+else
+	$(COMPOSE_DEV) exec -T app php artisan migrate $(MIGRATE_DB) --force
+endif
+
+migrate-fresh: ## Recrea el esquema desde cero con el rol de migracion
+ifeq ($(wildcard backend/artisan),)
+	@echo [make] No hay artisan que ejecutar.
+else
+	$(COMPOSE_DEV) exec -T app php artisan migrate:fresh $(MIGRATE_DB) --force
+endif
+
 seed: ## Semilla de desarrollo (doc 02 §10.2)
 ifeq ($(wildcard backend/artisan),)
 	@echo [make] La aplicacion Laravel llega en la tarea 0.2: todavia no hay artisan que ejecutar.
 	@echo [make] El esqueleto de la semilla ya existe en backend/database/seeders/DatabaseSeeder.php
 else
-	$(COMPOSE_DEV) exec -T app php artisan migrate --force
+	$(COMPOSE_DEV) exec -T app php artisan migrate $(MIGRATE_DB) --force
 	$(COMPOSE_DEV) exec -T app php artisan db:seed --force
 endif
 
@@ -305,7 +337,12 @@ sh-lint: ## ShellCheck y shfmt sobre los scripts (umbral: 0 hallazgos)
 ifeq ($(SH_FILES),)
 	@echo [make] No hay scripts de shell que analizar.
 else
-	$(SHELLCHECK) $(SH_FILES)
+	# -x: sigue los ficheros que los scripts cargan con `.` (infra/scripts/lib/).
+	# Sin esta bandera ShellCheck no entra en el fichero cargado y avisa por no
+	# poder seguirlo, que era el unico hallazgo del umbral desde la tarea 1.18:
+	# la biblioteca comun quedaria fuera del analisis justo donde vive el
+	# cifrado de las copias.
+	$(SHELLCHECK) -x $(SH_FILES)
 	$(SHFMT) -i 2 -d $(SH_FILES)
 	@fallos=0; \
 	for f in $(SH_FILES); do \
@@ -394,22 +431,40 @@ PEST := vendor/bin/pest
 # medir?», no «¿hay dominio en el modulo que yo esperaba?».
 DOMAIN_MODELS := $(wildcard backend/app/Modules/*/Domain/Model/*.php)
 
+# Las capas de dominio que existen hoy, en la forma que espera Pest: rutas
+# relativas a backend/ y separadas por comas.
+#
+# Se derivan del arbol y no se escriben a mano por lo mismo que DOMAIN_MODELS:
+# un modulo nuevo con dominio tiene que entrar solo en la mutacion. Una lista
+# escrita a mano se queda corta el dia que alguien añade Compliance/Domain, y el
+# MSI seguiria en verde midiendo la mitad.
+comma := ,
+empty :=
+space := $(empty) $(empty)
+DOMAIN_PATHS := $(patsubst backend/%,%,$(wildcard backend/app/Modules/*/Domain))
+MUTATE_PATHS := $(subst $(space),$(comma),$(strip $(DOMAIN_PATHS)))
+
+# Los DOS umbrales del §9.2 (RNF-M-01), y hacen falta los dos.
+#
+# `--min` de Pest es uno solo y GLOBAL. Con solo el 75 puesto, el 90 % del
+# dominio lo podia pagar cualquier otra parte del arbol: la puerta figuraba en
+# la CI sin comprobar lo que dice comprobar. Por eso la misma ejecucion escribe
+# el informe Clover y una segunda pasada acotada a Modules/*/Domain le aplica su
+# propio minimo (tools/coverage-gate.php). No se ejecuta la suite dos veces.
+#
+# El patron es Modules/*/Domain y no un modulo concreto, por lo mismo que
+# DOMAIN_MODELS: el umbral tiene que seguir al dominio, este donde este.
+DOMAIN_COVERAGE_MIN  := 90
+GLOBAL_COVERAGE_MIN  := 75
+CLOVER               := storage/framework/cache/clover.xml
+
 coverage: ## Cobertura: dominio >= 90 por ciento, global >= 75 (doc 02 seccion 9.2)
 ifeq ($(DOMAIN_MODELS),)
 	@echo "[make] El dominio llega en la tarea 1.1: todavia no hay cobertura exigible."
 	@echo "[make] Para ver la cobertura actual sin umbral: make coverage-now"
 else
-	$(RUN_APP_XDEBUG) $(PEST) --coverage --min=75
-# PENDIENTE (tarea 1.2, RNF-M-01): aqui se aplica el umbral GLOBAL del 75 %, y
-# el requisito son dos: dominio >= 90 % y global >= 75 % (doc 02 §9.2). El
-# `--min` de Pest es uno solo y global, asi que la mitad del dominio no la
-# comprueba nadie hoy —ni este objetivo ni su prueba de QualityGatesTest, que
-# solo verifica que el 75 esta escrito—.
-#
-# Se deja anotado y no resuelto a proposito: sin dominio no hay nada que medir,
-# y un umbral inventado sobre cero ficheros seria otra puerta decorativa. Lo
-# cierra la 1.2, con el primer modelo delante, y la via es una segunda pasada
-# acotada a Modules/*/Domain con su propio minimo.
+	$(RUN_APP_XDEBUG) $(PEST) --coverage --min=$(GLOBAL_COVERAGE_MIN) --coverage-clover=$(CLOVER)
+	$(RUN_APP) php tools/coverage-gate.php $(CLOVER) $(DOMAIN_COVERAGE_MIN) 'app/Modules/*/Domain/*'
 endif
 
 coverage-now: ## Cobertura actual sin umbral, util antes de que exista el dominio
@@ -423,7 +478,36 @@ ifeq ($(DOMAIN_MODELS),)
 	@echo "[make] (doc 02 seccion 9.2, RQ-10) empieza a exigirse en la tarea 1.2."
 	@echo "[make] Este paso se activa solo en cuanto exista el primer modelo de dominio."
 else
-	$(RUN_APP_XDEBUG) $(PEST) --mutate --covered-only --min=80
+# --path acotado a Modules/*/Domain, y no la raiz de app/, porque el umbral del
+# §9.2 es "MSI >= 80 % sobre Modules/*/Domain". Sin acotar, el MSI mezclaria el
+# dominio con los comandos del repositorio y con la infraestructura, y bastaria
+# con que las otras partes compensaran para dar el umbral por bueno.
+#
+# --testsuite=Unit porque los mutantes del dominio los mata la suite Unit y solo
+# ella: incluir Feature y Contract multiplicaria por N el tiempo de cada mutante
+# sin cambiar el veredicto de ninguno.
+#
+# --no-cache NO es una precaucion de mas: el cache de resultados de Pest se
+# indexa por la RUTA del fichero mutado (Pest\Mutate\Support\ResultCache::key),
+# no por el contenido de las pruebas. Un mutante que sobrevivio antes de que
+# existieran sus pruebas se queda marcado como «untested» para siempre, y el MSI
+# EMPEORA al escribir la prueba que lo mata.
+#
+# PHP_INI_SCAN_DIR aditivo (el «:» inicial conserva el directorio por defecto)
+# apaga OPcache solo para esta orden. El motivo, medido, esta escrito en
+# backend/tools/mutation/zzz-no-opcache.ini: con OPcache encendido el mutante se
+# compila una vez y luego se sirve el original, asi que el MSI mide el contenido
+# de una cache y no la calidad de las pruebas.
+#
+# --except: las tres mutaciones de concatenacion solo reordenan o parten el
+# TEXTO de un mensaje de excepcion. Matarlas exigiria afirmar el mensaje literal
+# en cada prueba, que acopla la suite a una prosa que no es contrato de nada
+# —CLAUDE.md regla 21 gobierna QUE lleva ese mensaje, no como se redacta— y que
+# cambiaria con cada retoque de estilo. El §9.3 justifica el MSI con «un > en
+# lugar de un >= produce minutos incorrectos en la nomina de alguien»: eso es lo
+# que este umbral tiene que vigilar. Los mutadores de comparacion, aritmetica,
+# condicional y retorno siguen TODOS activos.
+	$(RUN_APP_XDEBUG) sh -c 'PHP_INI_SCAN_DIR=":$$(pwd)/tools/mutation" $(PEST) --mutate --path=$(MUTATE_PATHS) --testsuite=Unit --covered-only --no-cache --except=StringConcatRemoveLeft,StringConcatRemoveRight,StringConcatSwitchSides --min=80'
 endif
 
 e2e: ## Playwright con camara simulada
@@ -450,6 +534,34 @@ tool-versions: ## Imprime las versiones fijadas de las herramientas externas
 	@echo SHELLCHECK_VERSION=$(SHELLCHECK_VERSION)
 	@echo SHFMT_VERSION=$(SHFMT_VERSION)
 	@echo REDOCLY_VERSION=$(REDOCLY_VERSION)
+
+# Copias de seguridad (tarea 1.18). Los tres objetivos ejecutan EXACTAMENTE lo
+# mismo que el servidor de un cliente: los scripts de infra/scripts, sin una
+# ruta alternativa "para desarrollo". Un procedimiento de recuperacion que solo
+# se ensaya en produccion no se ensaya.
+backup: ## Copia cifrada y verificada del entorno de desarrollo (RF-PR-04)
+	$(COMPOSE_DEV) exec -T app php artisan backup:run
+
+backup-verify: ## Verifica la ultima copia: huella, descifrado y lectura del indice
+	$(COMPOSE_DEV) exec -T app php artisan backup:verify
+
+# El simulacro se lanza DESDE EL ANFITRION y no dentro del contenedor: levanta
+# un contenedor de PostgreSQL limpio, y para eso necesita hablar con Docker.
+# Necesita ver el destino de copias, que en desarrollo es un volumen: se copia
+# a un directorio temporal, se ensaya alli y no se toca nada del entorno.
+restore-drill: ## Simulacro de restauracion en contenedor limpio (RNF-D-05, RQ-09)
+	@destino=$${TMPDIR:-/tmp}/kronoqr-drill; \
+	rm -rf "$$destino"; mkdir -p "$$destino"; \
+	destino_docker="$$(cygpath -w "$$destino" 2>/dev/null || echo "$$destino")"; \
+	MSYS_NO_PATHCONV=1 docker run --rm -v kronoqr_backup-data:/from -v "$$destino_docker:/to" alpine \
+	  sh -c 'cp -r /from/. /to/' >/dev/null; \
+	clave="$$($(COMPOSE_DEV) exec -T app printenv BACKUP_ENCRYPTION_KEY | tr -d '\r')"; \
+	BACKUP_PATH="$$destino" BACKUP_ENCRYPTION_KEY="$$clave" bash infra/scripts/restore-drill.sh; \
+	resultado=$$?; \
+	MSYS_NO_PATHCONV=1 docker run --rm -v kronoqr_backup-data:/to -v "$$destino_docker:/from:ro" alpine \
+	  sh -c 'cp -f /from/metrics/kronoqr_backup_drill.prom /to/metrics/ 2>/dev/null || true' >/dev/null; \
+	exit $$resultado
+	@echo [make] Simulacro terminado. El informe esta en el directorio temporal que indica la ultima linea.
 
 clean: ## Para el entorno y BORRA los volumenes de datos
 	$(COMPOSE_DEV) down -v --remove-orphans

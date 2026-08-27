@@ -365,7 +365,9 @@ Estas reglas viven en el **núcleo de dominio** y deben estar cubiertas por prue
 
 ### 5.4 Eventos de dominio
 
-`EmployeeClockedIn`, `EmployeeClockedOut`, `ScanRejected`, `ShiftCorrected`, `IncidentRaised`, `IncidentResolved`, `CredentialIssued`, `CredentialRevoked`, `OfflineBatchSynced`, `DailyTotalsRecalculated`.
+`EmployeeClockedIn`, `EmployeeClockedOut`, `ScanRejected`, `ShiftCorrected`, `IncidentRaised`, `IncidentResolved`, `CredentialIssued`, `CredentialPrinted`, `CredentialDelivered`, `CredentialRevoked`, `OfflineBatchSynced`, `DailyTotalsRecalculated`.
+
+> **`CredentialPrinted` y `CredentialDelivered` no son eventos nuevos del producto**, sino los dos actos que RF-QR-04 y RF-QR-06 ya exigían registrar y que faltaban en esta lista. `CredentialPrinted` es además el hecho con relevancia legal del ciclo: es el momento en que se acuña el QR y la tarjeta pasa a poder fichar ([ADR-034](adr/ADR-034-el-token-nace-al-imprimir-no-al-emitir.md)), y por eso es el que lleva el `key_id` — `CredentialIssued` no puede llevarlo, porque en la emisión todavía no hay clave elegida.
 
 Alimentan las proyecciones de lectura, el trail de auditoría, las notificaciones push al panel en vivo y las métricas de negocio.
 
@@ -383,7 +385,11 @@ Motor: **PostgreSQL 17**. Los tipos se expresan en su nomenclatura. El Anexo D d
 
 **`employment_contracts`** — `id`, `employee_id`, `weekly_hours`, `annual_hours`, `schedule_type` (`continua`|`partida`|`turnos`), `valid_from`, `valid_to`
 
-**`credentials`** — `id`, `employee_id`, `key_id`, `secret_hash`, `issued_at`, `printed_at`, `delivered_at`, `delivered_by_user_id`, `revoked_at`, `revoked_reason`
+**`credentials`** — `id`, `uuid`, `employee_id`, `key_id`, `secret_hash`, `issued_at`, `printed_at`, `delivered_at`, `delivered_by_user_id`, `revoked_at`, `revoked_reason`
+
+> `uuid` es el identificador **público** y se añadió en la tarea 1.5. Faltaba aquí, pero el Anexo B ya nombraba la credencial por UUID en la ruta (`POST /api/v1/credentials/{uuid}/revoke`): sin él, el contrato solo podía cumplirse exponiendo la clave interna, que revela cuántas tarjetas se han emitido y en qué orden. Es la misma decisión que ya tomaron `employees.uuid`, `users.uuid` y `devices.uuid`: el `BIGINT` no sale nunca de la base de datos.
+>
+> **`key_id` y `secret_hash` son NULL hasta que la tarjeta se imprime** ([ADR-034](adr/ADR-034-el-token-nace-al-imprimir-no-al-emitir.md)). El token en claro no se almacena nunca, así que se acuña en el mismo acto que dibuja el PDF: las tres columnas —`key_id`, `secret_hash` y `printed_at`— se escriben juntas o no se escribe ninguna. Una credencial pendiente de imprimir existe, cuenta en el panel de RF-QR-08 y **no puede fichar**, porque no hay hash por el que resolverla. La entrega, a su vez, lleva siempre `delivered_at` y `delivered_by_user_id`, y no puede preceder a la impresión.
 
 **`devices`** — `id`, `site_id`, `name`, `token_hash`, `app_version`, `last_seen_at`, `pending_queue_size`, `status`
 
@@ -922,8 +928,8 @@ Orden de ejecución: **0 → 1 → 2 → 5 → 3 → 4**.
 
 > **[ADR-032](adr/ADR-032-la-fase-1-entrega-un-sistema-legalmente-defendible.md) — la Fase 1 pasa de «piloto interno» a «legalmente defendible».** Cerrada solo con lo que este anexo asignaba antes del 15 de agosto de 2026, la Fase 1 no satisfacía el art. 34.9 ET: sin auditoría inmutable, sin correcciones trazadas y sin exportación para Inspección, un registro erróneo el primer día quedaba sin forma de arreglarse y sin forma de entregarse a un requerimiento. Cinco tareas de la Fase 2 se adelantan a la Fase 1 (`1.14`–`1.18` del plan de implementación) y con ellas trece requisitos:
 >
-> - **`RN-13`, `RL-04`, `RF-PA-04`** — correcciones trazadas (tarea 1.14). Un olvido de fichaje el primer día no puede quedar sin corrección hasta la Fase 2.
-> - **`RS-07`** — cadena de auditoría por hash y su verificación (tarea 1.15). `RL-01` (registro con hora concreta) ya era de la Fase 1; sin la cadena, ese registro es alterable sin dejar rastro durante toda la fase.
+> - **`RS-07`** — cadena de auditoría por hash y su verificación (tarea 1.14). `RL-01` (registro con hora concreta) ya era de la Fase 1; sin la cadena, ese registro es alterable sin dejar rastro durante toda la fase.
+> - **`RN-13`, `RL-04`, `RF-PA-04`** — correcciones trazadas (tarea 1.15). Un olvido de fichaje el primer día no puede quedar sin corrección hasta la Fase 2.
 > - **`RF-PA-03`** — detalle de jornada (tarea 1.16). Hoy solo el propio empleado puede ver su registro (`RL-05`); nadie con responsabilidad de gestión puede consultar nada.
 > - **`RL-03`, `RL-06`, `RF-IN-05`** — exportación normalizada para Inspección (tarea 1.17). Uno de los tres pilares que el doc 02 §11.2 nombra como el recorte que no se debe hacer.
 > - **`RF-PR-04`, `RNF-D-05`** — copia de seguridad diaria cifrada, verificada, con prueba de restauración (tarea 1.18). El registro con valor legal no puede depender de un disco sin copia desde el primer fichaje.

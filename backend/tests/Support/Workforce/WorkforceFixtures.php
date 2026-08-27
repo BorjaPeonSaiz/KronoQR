@@ -1,0 +1,67 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Tests\Support\Workforce;
+
+use App\Modules\Workforce\Infrastructure\Persistence\Department;
+use App\Modules\Workforce\Infrastructure\Persistence\Employee;
+use App\Modules\Workforce\Infrastructure\Persistence\Site;
+use Illuminate\Support\Str;
+
+/**
+ * Centros, departamentos y empleados para las pruebas de plantilla.
+ *
+ * Los datos son ficticios y ninguno viene de un cliente (regla dura 13). Las
+ * zonas horarias no son decorativas: `Atlantic/Canary` tiene una hora menos que
+ * `Europe/Madrid` siendo el mismo pais, que es lo que hace que una prueba de
+ * RN-05 signifique algo.
+ */
+final class WorkforceFixtures
+{
+    public static function site(string $name = 'Hotel de pruebas', string $timezone = 'Europe/Madrid'): int
+    {
+        $site = Site::query()->create([
+            'name' => $name.' '.Str::random(4),
+            'timezone' => $timezone,
+        ]);
+
+        return $site->id;
+    }
+
+    public static function department(int $siteId, string $name = 'Recepcion'): int
+    {
+        $department = Department::query()->create([
+            'site_id' => $siteId,
+            'name' => $name.' '.Str::random(4),
+        ]);
+
+        return $department->id;
+    }
+
+    /**
+     * Un empleado escrito con el constructor de consultas, sin pasar por el caso
+     * de uso: las pruebas de esquema tienen que poder crear filas que el dominio
+     * no crearia.
+     */
+    public static function employee(int $siteId, ?int $departmentId = null, string $status = 'active'): string
+    {
+        $uuid = Str::uuid7()->toString();
+
+        Employee::query()->create([
+            'uuid' => $uuid,
+            'site_id' => $siteId,
+            'department_id' => $departmentId,
+            'first_name' => 'Persona',
+            'last_name' => 'De Prueba',
+            'employee_code' => 'E'.Str::upper(Str::random(9)),
+            'email' => null,
+            'status' => $status,
+            'hired_at' => '2026-01-01',
+            'terminated_at' => $status === 'terminated' ? '2026-06-30' : null,
+            'locale' => 'es',
+        ]);
+
+        return $uuid;
+    }
+}

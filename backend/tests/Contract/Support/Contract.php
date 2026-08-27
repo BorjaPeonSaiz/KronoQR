@@ -150,6 +150,19 @@ final class Contract
     }
 
     /**
+     * Los metodos HTTP que OpenAPI admite dentro de un `pathItem`.
+     *
+     * Se enumeran porque un `pathItem` puede llevar tambien `parameters`,
+     * `summary`, `description` o `servers`, que **no son operaciones**. Sin esta
+     * lista, un parametro declarado a nivel de ruta —lo normal cuando dos verbos
+     * comparten el `{uuid}`— se contaria como una operacion sin `security` y la
+     * prueba de la regla dura 18 fallaria por un motivo falso.
+     *
+     * @var list<string>
+     */
+    private const array HTTP_METHODS = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'];
+
+    /**
      * Todas las operaciones descritas, como pares ruta/metodo.
      *
      * @return list<array{path: string, method: string}>
@@ -160,6 +173,10 @@ final class Contract
 
         foreach (self::keys('paths') as $path) {
             foreach (self::keys('paths', $path) as $method) {
+                if (! \in_array($method, self::HTTP_METHODS, true)) {
+                    continue;
+                }
+
                 $operations[] = ['path' => $path, 'method' => $method];
             }
         }

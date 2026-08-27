@@ -1,5 +1,5 @@
 #==============================================================================
-# KronoQR — entorno de desarrollo. Los 14 servicios del doc 02 §3.4.
+# KronoQR — entorno de desarrollo. Los 15 servicios del doc 02 §3.4.
 #
 # Uso previsto:  make up      (desde la raiz del repositorio)
 #
@@ -73,6 +73,22 @@ x-php-image: &php-image
     # docs/ entera y no docs/api porque `docs:consistency` (tarea 0.7) tiene que
     # leer tambien docs/adr/ y docs/requisitos.yaml.
     - ../docs:/var/www/docs:ro
+    # Destino de las copias. En desarrollo es un volumen con nombre y en
+    # produccion el disco del cliente (compose.prod.yaml): la ruta DENTRO del
+    # contenedor es la misma en los dos sitios, que es lo que hace que
+    # backup.sh no tenga que saber donde se ejecuta.
+    - backup-data:${BACKUP_PATH:-/var/backups/fichaje}
+  environment:
+    # En desarrollo los scripts se leen del repositorio montado, no de los que
+    # la imagen lleva dentro: editarlos y volver a lanzarlos no puede exigir
+    # reconstruir la imagen. En produccion no se define y valen los de la
+    # imagen (/opt/kronoqr/scripts), que son los de la version desplegada.
+    BACKUP_SCRIPT_PATH: /var/www/repo/infra/scripts
+    # Clave de cifrado de las copias. En desarrollo hay un valor de relleno
+    # para que `php artisan backup:run` funcione recien clonado el repositorio;
+    # en produccion NO hay valor por defecto: install.sh la genera en el
+    # servidor del cliente y sin ella la copia se niega a empezar (RL-12).
+    BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY:-kronoqr_local_dev_only_backup_key}
   networks:
     - app
   restart: unless-stopped
@@ -137,19 +153,62 @@ services:
     container_name: kronoqr-postgres
     environment:
       POSTGRES_DB: ${DB_DATABASE:-fichaje}
-      POSTGRES_USER: ${DB_USERNAME:-fichaje_app}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-kronoqr_local_dev_only}
+      # El rol de ARRANQUE es el de MIGRACION, no el de la aplicacion (tarea
+      # 1.14, regla dura 6). POSTGRES_USER es superusuario del cluster, y un
+      # GRANT o un REVOKE sobre un superusuario es decorativo: PostgreSQL ni
+      # los mira. Mientras la aplicacion corrio con este rol, "sin UPDATE ni
+      # DELETE sobre audit_log" era una frase, no una garantia.
+      #
+      # initdb/02-application-roles.sh crea a partir de aqui fichaje_app —el
+      # DB_USERNAME del .env, sin DDL— y fichaje_maintenance.
+      POSTGRES_USER: ${DB_MIGRATION_USERNAME:-fichaje_migrator}
+      POSTGRES_PASSWORD: ${DB_MIGRATION_PASSWORD:-kronoqr_local_dev_only_migrator}
       POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+      # Los lee el script de roles. Van aqui y no en el .env del contenedor de
+      # la aplicacion porque es este servicio el que los provisiona.
+      DB_APP_USERNAME: ${DB_USERNAME:-fichaje_app}
+      DB_PASSWORD: ${DB_PASSWORD:-kronoqr_local_dev_only}
+      DB_MAINTENANCE_USERNAME: ${DB_MAINTENANCE_USERNAME:-fichaje_maintenance}
+      # Sin valor por defecto y a proposito (ADR-027): el rol de mantenimiento
+      # se crea sin credencial utilizable. Se le asigna en el servidor del
+      # cliente cuando la tarea 2.10 active la purga por retencion.
+      DB_MAINTENANCE_PASSWORD: ${DB_MAINTENANCE_PASSWORD:-}
       TZ: UTC
       PGTZ: UTC
+      # Destino del WAL archivado. Igual que en produccion para que el
+      # simulacro de restauracion se pueda ensayar aqui (tarea 1.18).
+      KRONOQR_WAL_ARCHIVE_DIR: ${BACKUP_PATH:-/var/backups/fichaje}/wal
+      KRONOQR_WAL_RETENTION_DAYS: ${BACKUP_WAL_RETENTION_DAYS:-8}
     # Regla dura 3: UTC desde el primer arranque, tambien si alguien recrea el
     # volumen con otra configuracion regional en la maquina.
-    command: ["postgres", "-c", "timezone=UTC", "-c", "log_timezone=UTC"]
+    #
+    # Archivado de WAL activo tambien en desarrollo, con UNA diferencia
+    # deliberada respecto a produccion: aqui no se fija `archive_timeout`. En
+    # produccion vale 900 s y es lo que acota el RPO a 15 minutos (RNF-D-02);
+    # en una maquina de desarrollo forzaria un segmento de 16 MiB cada cuarto
+    # de hora para nada.
+    command:
+      - postgres
+      - -c
+      - timezone=UTC
+      - -c
+      - log_timezone=UTC
+      - -c
+      - hba_file=/etc/kronoqr/pg_hba.conf
+      - -c
+      - wal_level=replica
+      - -c
+      - archive_mode=on
+      - -c
+      - archive_command=/usr/local/bin/kronoqr-archive-wal %p %f
     ports:
       # Solo accesible desde la propia maquina de desarrollo.
       - "127.0.0.1:5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      # Volumen propio y no el de copias: lo escribe el usuario postgres y lo
+      # lee, en produccion, quien restaura. Ver docs/runbooks/restaurar-backup.md.
+      - wal-archive:${BACKUP_PATH:-/var/backups/fichaje}/wal
     networks:
       - app
     restart: unless-stopped
@@ -365,6 +424,37 @@ services:
       retries: 5
       start_period: 30s
 
+  #--- 15 · Metricas de la copia de seguridad y del disco ---------------------
+  #
+  # node-exporter esta aqui por UNA razon concreta: publicar el resultado de la
+  # copia diaria (tarea 1.18). Los scripts escriben ficheros .prom en
+  # BACKUP_PATH/metrics y el colector textfile los sirve a Prometheus. Sin
+  # esto, el resultado de la copia solo existiria en el log de un cron que no
+  # lee nadie, que es exactamente como se descubre a fin de mes que no habia
+  # copias.
+  node-exporter:
+    image: prom/node-exporter:v1.9.1
+    container_name: kronoqr-node-exporter
+    # Con el mismo uid que escribe las copias, y no como el `nobody` de la
+    # imagen. El arbol de copias es 0750 —dentro hay datos personales
+    # cifrados— y no se le abren permisos a todo el mundo para que un
+    # exportador pueda leer un fichero de metricas: se le da el uid justo.
+    user: "1000:1000"
+    command:
+      # Solo lo que se usa: el resto de colectores del anfitrion no aportan
+      # nada dentro de un contenedor y son ruido en la base de metricas.
+      - --collector.disable-defaults
+      - --collector.textfile
+      - --collector.textfile.directory=/var/backups/metrics
+      - --web.listen-address=:9100
+    volumes:
+      # Solo lectura: quien publica las metricas es la copia, no el exportador.
+      - backup-data:/var/backups:ro
+    networks:
+      - observability
+    restart: unless-stopped
+    # Sin puertos publicados: /metrics no se expone fuera de la red interna.
+
 networks:
   app:
     name: kronoqr-app
@@ -387,3 +477,10 @@ volumes:
   grafana-data:
   loki-data:
   nginx-certs:
+  # Copias cifradas, sus metricas y los informes de restauracion. En produccion
+  # esto es un disco del cliente montado en la misma ruta (regla dura 16: la
+  # copia no sale de su infraestructura).
+  backup-data:
+  # WAL archivado. Separado del anterior porque lo escribe el usuario postgres
+  # y porque su ciclo de vida es otro: se purga por dias, no por copias.
+  wal-archive:

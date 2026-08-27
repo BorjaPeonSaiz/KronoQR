@@ -69,6 +69,55 @@ desactivando la comprobación.
 
 `TLS_ALLOW_SELF_SIGNED=true` es exclusivo de entornos de prueba.
 
+### `BACKUP_PATH` — dónde se guardan las copias
+
+```dotenv
+BACKUP_PATH=/var/backups/fichaje
+BACKUP_RETENTION_DAYS=30
+BACKUP_WAL_RETENTION_DAYS=8
+```
+
+**Qué hace.** Es el destino de las copias cifradas, del WAL archivado y de los
+informes de restauración. **Se monta en la misma ruta dentro de los
+contenedores**, así que el valor sirve dentro y fuera.
+
+**Las copias no salen de aquí.** Viven en la infraestructura del cliente; el
+fabricante no las recibe ni las custodia (RL-14). Si el destino es un recurso de
+red (NAS, cabina), **tiene que estar montado antes de levantar los servicios**:
+si no lo está, PostgreSQL no puede archivar el WAL y acaba llenando su propio
+disco.
+
+**Permisos que hay que dejar puestos** (los deja el instalador; conviene
+comprobarlos tras mover el destino):
+
+```bash
+# El árbol de copias lo escribe la aplicación, que corre como uid 1000
+sudo install -d -o 1000 -g 1000 -m 0750 /var/backups/fichaje
+# El archivo de WAL lo escribe PostgreSQL, que corre como su propio usuario
+sudo install -d -o 70 -g 70 -m 0750 /var/backups/fichaje/wal
+```
+
+**Cuánto ocupa.** Aproximadamente: el tamaño de la base comprimido, por
+`BACKUP_RETENTION_DAYS`, más una copia física semanal, más el WAL de
+`BACKUP_WAL_RETENTION_DAYS` días. El registro horario se conserva **4 años** por
+obligación legal: el almacenamiento tiene que dar para eso.
+
+**`BACKUP_WAL_RETENTION_DAYS` debe ser mayor que el intervalo entre copias
+físicas** (semanal por defecto). Sin la copia física anterior, el WAL archivado
+no reconstruye nada y la pérdida máxima deja de ser de 15 minutos.
+
+**Cómo comprobar que funciona:**
+
+```bash
+docker compose exec app php artisan backup:run    # crea y verifica una copia
+docker compose exec app php artisan backup:verify # verifica la última
+bash /opt/kronoqr/scripts/restore-drill.sh        # simulacro trimestral
+```
+
+El procedimiento completo de recuperación —y el simulacro que hay que ejecutar
+cada trimestre— está en
+[`docs/runbooks/restaurar-backup.md`](../runbooks/restaurar-backup.md).
+
 ## Secretos
 
 **El instalador genera los secretos en el servidor del cliente y no los

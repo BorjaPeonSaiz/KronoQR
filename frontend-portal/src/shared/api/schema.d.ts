@@ -117,6 +117,1167 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/scan/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sincronizar la cola offline del quiosco
+         * @description Entrega de una vez los escaneos que el quiosco acumulo sin red (RF-KI-03,
+         *     RF-KI-04, documento 02 §6). Es el mismo registro que `POST /api/v1/scan`
+         *     repetido, con las mismas garantias, y **no un camino distinto**: quien decide
+         *     cada escaneo es el mismo caso de uso, y cada elemento abre su propia
+         *     transaccion.
+         *
+         *     **Se procesa en orden de `occurred_at`, no en orden de llegada.** Es lo mas
+         *     importante de este endpoint. Una entrada y una salida encoladas y enviadas del
+         *     reves crearian una salida sin turno abierto seguida de una entrada, es decir,
+         *     una jornada inventada. El servidor ordena el lote antes de tocar nada y
+         *     **devuelve los resultados en ese mismo orden**, para que lo que hizo sea
+         *     observable y no haya que creerselo.
+         *
+         *     **Un elemento fallido no invalida el lote** (regla dura 19). La respuesta es
+         *     `207 Multi-Status` y cada elemento lleva su propio desenlace: uno rechazado no
+         *     impide registrar los demas, y una jornada no se pierde porque otra tarjeta
+         *     estuviera revocada.
+         *
+         *     **Idempotencia por `scan_id`, elemento a elemento** (regla dura 8). Reenviar
+         *     el mismo lote —o un lote que solape con otro ya enviado— devuelve para cada
+         *     `scan_id` la respuesta original, sin duplicar ni un tramo. La cabecera
+         *     `Idempotency-Key` de esta peticion identifica el **lote** y sirve para
+         *     correlacionar el envio en los registros; la garantia real la da el UNIQUE de
+         *     `scan_events.scan_id`.
+         *
+         *     **`occurred_at` puede tener dias de retraso** y el registro legal lo usa tal
+         *     cual (regla dura 9, RF-AT-09). El retraso se mide y se publica como
+         *     `sync_delay_seconds`; en la Fase 2 abrira una incidencia de revision humana
+         *     (RN-15). En ningun caso se descarta un fichaje por llegar tarde.
+         *
+         *     **El lote es de 50 como maximo.** Es el tamano que usa el quiosco al drenar
+         *     (§6) y el techo existe para que un lote no monopolice un trabajador de PHP
+         *     durante el pico del cambio de turno.
+         */
+        post: operations["syncScanBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kiosk/roster": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Padron minimo cacheable del centro del quiosco
+         * @description Lo imprescindible para que el quiosco reconozca una tarjeta **sin red** y
+         *     pueda saludar por su nombre a quien acaba de fichar (RF-KI-03, RF-AT-05).
+         *
+         *     **Es el minimo del §7.3 y nada mas: hash del token y nombre en su forma
+         *     minima** —nombre de pila e inicial del primer apellido—. No hay UUID, ni
+         *     codigo de empleado, ni departamento, ni situacion laboral, ni fechas. Un
+         *     token de quiosco vive en una tablet colgada de una pared: su compromiso no
+         *     puede reconstruir la plantilla del hotel (RS-04).
+         *
+         *     **El hash no es la tarjeta.** Es `SHA-256` del token impreso, y con el no se
+         *     puede fabricar ninguna credencial valida: el token son 128 bits aleatorios y
+         *     el payload va firmado con una clave que no sale del servidor (§5.1, §5.2).
+         *     Sirve para lo unico que el quiosco necesita offline —«¿de quien es esta
+         *     tarjeta?»— y para nada mas.
+         *
+         *     **Solo del centro al que esta vinculado el dispositivo.** El centro no es un
+         *     parametro: sale del token. Un quiosco no puede pedir el padron de otro hotel
+         *     de la cadena aunque lo intente.
+         *
+         *     **Solo quien puede fichar.** Quien esta de baja no aparece (RN-14), y quien
+         *     aun no tiene tarjeta impresa tampoco: sin `secret_hash` no hay nada que
+         *     resolver (ADR-034).
+         *
+         *     **El quiosco lo guarda cifrado** (RL-12) y lo purga al desvincularse. Esta
+         *     respuesta es datos personales de terceros y **su entrega queda registrada en
+         *     `audit_log`** (RS-05).
+         */
+        get: operations["getKioskRoster"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kiosk/heartbeat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Latido y telemetria del quiosco
+         * @description El quiosco dice que sigue vivo, con que version corre y cuantos fichajes
+         *     tiene sin sincronizar (documento 01 §5.5, RF-PA-07).
+         *
+         *     **Es lo que hace visible un quiosco averiado antes de que alguien reclame una
+         *     jornada.** Alimenta `devices.last_seen_at`, `devices.app_version` y
+         *     `devices.pending_queue_size`, y con ellos las metricas
+         *     `kiosk_last_seen_seconds` y `kiosk_offline_queue_size` (§8.2). La alerta
+         *     «quiosco sin latido > 10 min» del documento 01 §9.3 se construye sobre la
+         *     primera y llega en la tarea 3.2; la metrica nace aqui.
+         *
+         *     **Informacion, no autoridad.** `pending_queue_size` lo declara el propio
+         *     dispositivo y nadie lo comprueba: sirve para operar, no para decidir nada
+         *     sobre el registro horario. Un quiosco que mienta sobre su cola no cambia ni
+         *     un fichaje.
+         *
+         *     **La respuesta lleva la hora del servidor** para que la tablet pueda medir su
+         *     propio desfase de reloj y avisar (RF-AT-10). Nunca se le impide fichar por
+         *     tenerlo mal: el desfase se registra en cada escaneo y se corrige despues
+         *     (regla dura 19).
+         *
+         *     **Sin datos personales, en ninguna direccion.** Ni el latido los envia ni la
+         *     respuesta los devuelve: el dispositivo se identifica por su token.
+         */
+        post: operations["recordKioskHeartbeat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Acceso al panel de gestion
+         * @description Autentica a una persona de gestion —administracion, RRHH, responsable de
+         *     departamento o auditoria— y devuelve el token con el que hablara el
+         *     panel (RF-ID-01).
+         *
+         *     **Correo y contrasena, y solo aqui.** El empleado NO entra por este
+         *     endpoint: su portal usa codigo de empleado y PIN (`POST /api/v1/me/login`,
+         *     ADR-015), porque el producto no puede exigir correo electronico a toda la
+         *     plantilla (regla dura 12).
+         *
+         *     **Ambitos en el token.** Las *abilities* del token son los permisos del
+         *     rol (documento 02 §7.3) y viajan en la respuesta para que el panel sepa
+         *     que puede pintar. El ambito dice **que** se puede hacer; la policy de
+         *     cada endpoint decide **sobre que datos** (regla dura 18).
+         *
+         *     **Respuesta unica ante el fallo.** Contrasena incorrecta, correo que no
+         *     existe y cuenta desactivada devuelven el mismo `401`: distinguirlos
+         *     convertiria este endpoint en un comprobador de cuentas.
+         *
+         *     **Bloqueo por intentos** (RF-ID-01). Superado el umbral de fallos para
+         *     una misma cuenta u origen, el endpoint responde `429` con `Retry-After`
+         *     durante el periodo de bloqueo, aunque la contrasena sea correcta.
+         *
+         *     **Sin segundo factor en esta version.** El 2FA obligatorio es de la
+         *     Fase 2; cuando llegue, esta respuesta ganara un desenlace de sesion
+         *     pendiente de verificar, que es un cambio aditivo (ADR-012).
+         */
+        post: operations["logIn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cierre de sesion
+         * @description Revoca **el token con el que se hace la llamada** y solo ese: cerrar
+         *     sesion en el portatil no puede echar a la misma persona de la tablet de
+         *     recepcion donde estaba revisando incidencias.
+         *
+         *     Es idempotente en la practica: repetir la llamada con un token ya
+         *     revocado devuelve `401`, que es lo que el cliente debe interpretar como
+         *     «ya no hay sesion».
+         */
+        post: operations["logOut"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Usuario, rol y ambito de la sesion en curso
+         * @description Lo que el panel necesita para decidir que menus enseña: quien es, que
+         *     roles tiene y que ambitos lleva su token (Anexo B del documento 01).
+         *
+         *     **No es autorizacion.** Ocultar un boton no protege nada: cada endpoint
+         *     comprueba su ambito y su policy en el servidor (regla dura 18). Esta
+         *     respuesta existe para que la interfaz no ofrezca lo que despues seria un
+         *     `403`.
+         */
+        get: operations["getCurrentUser"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/employees": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listado de la plantilla
+         * @description Plantilla del centro o del departamento indicados, paginada (RF-GP-01).
+         *
+         *     **Incluye a quien esta de baja**, salvo que se filtre por `status`: el
+         *     historico se conserva cuatro años (RF-GP-03, RL-02) y un listado que
+         *     escondiera a los cesados haria invisible justo lo que una inspeccion
+         *     viene a mirar.
+         *
+         *     El ambito por departamento de RF-ID-03 llega en la Fase 2. Hasta
+         *     entonces, quien puede leer esta lista la ve entera.
+         */
+        get: operations["listEmployees"];
+        put?: never;
+        /**
+         * Alta de empleado
+         * @description Da de alta a una persona en la plantilla (RF-GP-01).
+         *
+         *     **El correo es opcional y ninguna funcionalidad lo exige** (regla dura
+         *     12, ADR-015): el alta se completa sin el, y el acceso al portal personal
+         *     se resuelve con codigo de empleado y PIN.
+         *
+         *     **El `employee_code` lo genera el servidor**, opaco y aleatorio, y no se
+         *     acepta del cliente. Es la mitad publica de la credencial del portal
+         *     (RF-ID-06) y va impreso en una tarjeta: uno secuencial revelaria cuanta
+         *     gente hay y en que orden entro, y uno derivado del nombre seria un dato
+         *     personal impreso.
+         *
+         *     **El documento de identidad no se almacena** (RL-08). `national_id`
+         *     entra en la peticion, se convierte en digest dentro de la misma
+         *     transaccion y nunca se escribe en claro, ni en la tabla, ni en un log,
+         *     ni en una respuesta: no hay ningun campo por el que pueda salir.
+         *
+         *     **El alta emite el PIN en la misma transaccion** (RF-ID-09). Un empleado
+         *     sin PIN no puede fichar por respaldo (RF-AT-11) ni entrar al portal
+         *     (RL-05), y ese estado no debe poder existir. El PIN viaja **una sola
+         *     vez**, en esta respuesta: despues solo se restablece.
+         */
+        post: operations["createEmployee"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/employees/{uuid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** del empleado (`employees.uuid`, UUID v7). En la
+                 *     API nunca viaja la clave interna: un identificador secuencial en una URL
+                 *     es un mapa de cuanta gente hay y en que orden entro.
+                 * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                 */
+                uuid: components["parameters"]["EmployeeUuid"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Ficha de un empleado
+         * @description Datos identificativos, adscripcion y situacion laboral de una persona
+         *     (RF-GP-01). El documento de identidad no aparece: solo existe su digest
+         *     (RL-08).
+         */
+        get: operations["getEmployee"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Modificacion de la ficha de un empleado
+         * @description Cambia los datos que pueden cambiar: nombre, correo, idioma y
+         *     adscripcion a centro y departamento (RF-GP-01).
+         *
+         *     **La baja no se hace por aqui.** Pasar a `terminated` es una operacion
+         *     con consecuencias —revoca la credencial y cierra el computo (RN-14)— y
+         *     tiene su propio endpoint, `POST /employees/{uuid}/offboard`. Este
+         *     `PATCH` solo alterna entre `active` y `suspended`.
+         */
+        patch: operations["updateEmployee"];
+        trace?: never;
+    };
+    "/api/v1/employees/{uuid}/offboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** del empleado (`employees.uuid`, UUID v7). En la
+                 *     API nunca viaja la clave interna: un identificador secuencial en una URL
+                 *     es un mapa de cuanta gente hay y en que orden entro.
+                 * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                 */
+                uuid: components["parameters"]["EmployeeUuid"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Baja de empleado
+         * @description Da de baja a una persona: `status` pasa a `terminated` y se registra la
+         *     fecha de cese (RF-GP-03).
+         *
+         *     **Es una desactivacion logica y nunca un borrado** (regla dura 5). La
+         *     ficha, sus tramos y sus jornadas siguen ahi: el registro horario se
+         *     conserva cuatro años (RL-02) y una inspeccion puede pedir el de alguien
+         *     que ya no trabaja en el hotel.
+         *
+         *     A partir de la baja, el empleado no ficha (RN-14) y su credencial queda
+         *     revocada.
+         */
+        post: operations["offboardEmployee"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/employees/{uuid}/pin/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** del empleado (`employees.uuid`, UUID v7). En la
+                 *     API nunca viaja la clave interna: un identificador secuencial en una URL
+                 *     es un mapa de cuanta gente hay y en que orden entro.
+                 * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                 */
+                uuid: components["parameters"]["EmployeeUuid"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restablecimiento del PIN
+         * @description Genera un PIN nuevo de 6 digitos, invalida el anterior sustituyendo su
+         *     hash y **reinicia el contador de bloqueo por intentos** (RF-ID-09,
+         *     RF-ID-06, RF-AT-11). Quien pide un PIN nuevo tiene que poder usarlo en
+         *     el momento, aunque estuviera bloqueado.
+         *
+         *     **El PIN viaja una sola vez y solo en esta respuesta.** No se almacena
+         *     en claro —solo `employees.pin_hash`—, no aparece en `GET
+         *     /employees/{uuid}`, no se escribe en `audit_log` ni en ningun log, y no
+         *     hay ningun endpoint que lo devuelva despues. Si se pierde, se
+         *     restablece.
+         *
+         *     **La entrega es presencial** (regla dura 12, ADR-015). Ningun camino de
+         *     este producto envia un PIN por correo electronico, ni por enlace de
+         *     recuperacion, ni por invitacion: el correo del empleado es opcional y
+         *     nada puede depender de el.
+         *
+         *     **No dice si el empleado existe.** Un `uuid` desconocido y uno fuera del
+         *     alcance de quien pregunta responden lo mismo, `404` (regla dura 17).
+         */
+        post: operations["resetEmployeePin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/employees/{uuid}/pin/deliver": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** del empleado (`employees.uuid`, UUID v7). En la
+                 *     API nunca viaja la clave interna: un identificador secuencial en una URL
+                 *     es un mapa de cuanta gente hay y en que orden entro.
+                 * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                 */
+                uuid: components["parameters"]["EmployeeUuid"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Registro de la entrega del PIN
+         * @description Anota que el PIN se ha entregado en mano: a quien, cuando y quien lo
+         *     entrego (RF-ID-09), igual que la entrega de la tarjeta (RF-QR-06). La
+         *     hoja de instrucciones del empleado se entrega en el mismo acto: es un
+         *     unico momento presencial.
+         *
+         *     **No devuelve ningun PIN**, ni el que se entrego ni ningun otro: solo el
+         *     acuse. El PIN solo existe en claro en la respuesta que lo emitio.
+         *
+         *     Registrar la entrega de un PIN que no se ha emitido es un `409`: no se
+         *     puede entregar lo que no existe. Repetir la entrega tambien lo es, por
+         *     lo mismo que la revocacion de una credencial —sobrescribirla cambiaria
+         *     el momento y el responsable que ya constan en `audit_log`—.
+         */
+        post: operations["recordEmployeePinDelivery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/employees/{uuid}/workdays": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** del empleado (`employees.uuid`, UUID v7). En la
+                 *     API nunca viaja la clave interna: un identificador secuencial en una URL
+                 *     es un mapa de cuanta gente hay y en que orden entro.
+                 * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                 */
+                uuid: components["parameters"]["EmployeeUuid"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Jornadas de un empleado
+         * @description El registro horario de una persona, jornada a jornada, con sus tramos
+         *     vigentes, el total del dia y el historico completo de correcciones
+         *     (RF-PA-03, Anexo B del documento 01). Es lo que pinta el detalle de
+         *     jornada del panel.
+         *
+         *     **Solo lee.** Ninguna respuesta de este endpoint cambia nada: rectificar
+         *     es `PATCH /api/v1/shift-entries/{uuid}`, que exige el ambito
+         *     `attendance:correct` y no este.
+         *
+         *     **La suma cuadra, y no por convenio.** `total_minutes` de cada jornada es
+         *     exactamente la suma de `duration_minutes` de los tramos que vienen en
+         *     `shift_entries` —un tramo abierto todavia no aporta minutos y cuenta como
+         *     cero—. No hay redondeo por medio: los minutos son enteros desde el
+         *     esquema (RN-06, ADR-007, regla dura 7).
+         *
+         *     **Un turno nocturno es UN tramo** (RN-05, ADR-006, regla dura 4). Un
+         *     22:00 → 06:00 aparece una sola vez, en la jornada de su hora de inicio, y
+         *     no partido entre dos dias. Filtrar por `from`/`to` filtra por `work_date`,
+         *     no por la hora de las marcas: pedir el dia 15 no devuelve el tramo que
+         *     empezo el 14 a las 22:00.
+         *
+         *     **Las dos marcas de cada fichaje** (regla dura 9). `clocked_in_at` es
+         *     cuando la persona ficho —lo que vale para el registro legal— y
+         *     `clocked_in_recorded_at` cuando el servidor lo recibio: si el fichaje
+         *     llego por la cola offline del quiosco, se diferencian en horas. El
+         *     `recorded_at` de la fila dice cuando se escribio **esa version** del
+         *     tramo, que en una correccion es el momento de la correccion y no el del
+         *     fichaje.
+         *
+         *     **Todos los instantes salen en UTC** (regla dura 3) y ademas con su
+         *     equivalente en la zona del centro (`*_local`, con el desplazamiento
+         *     escrito). La zona viaja en la respuesta —por jornada y por tramo— para
+         *     que el cliente no tenga que adivinarla ni usar la del navegador.
+         *
+         *     **Nada se oculta y nada se borra** (regla dura 5). `shift_entries` trae
+         *     solo las versiones **vigentes**, pero `corrections` trae la cadena
+         *     entera: quien la firmo, cuando, con que motivo y con las marcas de antes
+         *     y de despues. Un dia cuyos tramos se anularon todos sigue apareciendo,
+         *     con la lista de tramos vacia y su historico intacto.
+         *
+         *     **Es un acceso a datos personales de un tercero** y queda registrado en
+         *     `audit_log` con su alcance —cuantas jornadas, que rango— y nunca con lo
+         *     divulgado (RS-05).
+         *
+         *     **El propio empleado no entra por aqui.** El `self` del Anexo B se sirve
+         *     en `GET /api/v1/me/workdays`, con ambito `self:read` y sesion de portal
+         *     (ADR-015): esta ruta es la de gestion y exige una cuenta de panel.
+         */
+        get: operations["listEmployeeWorkDays"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/departments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listado de departamentos
+         * @description Departamentos de la instalacion, opcionalmente filtrados por centro. Es
+         *     la lista con la que el panel construye el selector del alta de empleado.
+         */
+        get: operations["listDepartments"];
+        put?: never;
+        /**
+         * Alta de departamento
+         * @description Crea un departamento dentro de un centro. El nombre es unico **dentro
+         *     del centro** y no en la instalacion: dos hoteles del mismo cliente
+         *     tienen los dos una «Recepcion».
+         */
+        post: operations["createDepartment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/departments/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador del departamento (documento 01 §5.5).
+                 * @example 3
+                 */
+                id: components["parameters"]["DepartmentId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Detalle de un departamento
+         * @description Centro al que pertenece y nombre del departamento.
+         */
+        get: operations["getDepartment"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Renombrado de un departamento
+         * @description Cambia el nombre del departamento.
+         *
+         *     **No se puede mover a otro centro.** Sus empleados estan adscritos al
+         *     centro del departamento, y arrastrarlos con un renombrado cambiaria la
+         *     zona horaria con la que se calcula su jornada (RN-05) sin que nadie lo
+         *     pidiera. Mover a una persona de centro es una operacion sobre la
+         *     persona, no sobre el departamento.
+         */
+        patch: operations["updateDepartment"];
+        trace?: never;
+    };
+    "/api/v1/sites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listado de centros
+         * @description Centros de trabajo de la instalacion, con su zona horaria.
+         *
+         *     **La zona horaria no es decorativa**: es el dato del que depende RN-05,
+         *     que atribuye cada tramo a la jornada de su hora de inicio **en la zona
+         *     del centro**. Un hotel en Canarias y otro en la peninsula no comparten
+         *     fecha civil a las 00:30.
+         */
+        get: operations["listSites"];
+        put?: never;
+        /**
+         * Alta de centro
+         * @description Crea un centro de trabajo. `timezone` es un identificador IANA
+         *     (`Europe/Madrid`), nunca un desfase en horas: un desfase no sabe de
+         *     cambios de hora y rompe RN-09 dos veces al año.
+         */
+        post: operations["createSite"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sites/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador del centro. Aqui si es el numerico: `sites` no tiene UUID
+                 *     publico (documento 01 §5.5) porque un centro no es un dato personal ni
+                 *     aparece impreso en ninguna tarjeta.
+                 * @example 1
+                 */
+                id: components["parameters"]["SiteId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Detalle de un centro
+         * @description Nombre y zona horaria del centro.
+         */
+        get: operations["getSite"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Modificacion de un centro
+         * @description Cambia el nombre o la zona horaria del centro.
+         *
+         *     **Cambiar la zona horaria cambia el calculo de las jornadas
+         *     siguientes** (RN-05): es configuracion con efecto sobre el registro
+         *     legal, y por eso queda auditada. No reescribe el pasado — las jornadas
+         *     ya calculadas conservan su `work_date`.
+         */
+        patch: operations["updateSite"];
+        trace?: never;
+    };
+    "/api/v1/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Emision de credencial
+         * @description Emite la tarjeta QR de un empleado y la deja **pendiente de imprimir**
+         *     (RF-QR-01, RF-QR-03).
+         *
+         *     **Esta respuesta no contiene ningun QR, y ninguna otra de esta API lo
+         *     contiene tampoco** ([ADR-034](../adr/ADR-034-el-token-nace-al-imprimir-no-al-emitir.md)).
+         *     Emitir crea el derecho a una tarjeta; el token, su firma y su hash se
+         *     acuñan **al imprimir**, dentro del mismo acto que dibuja el PDF
+         *     (`POST /credentials/{uuid}/print`), que es el unico canal por el que el
+         *     payload sale del servidor. Por eso `key_id` es `null` aqui: hasta que no
+         *     se firma no hay clave con la que se haya firmado, y elegirla al imprimir
+         *     es lo que permite que una tarjeta emitida antes de una rotacion salga con
+         *     la clave nueva (doc 02 §5.3).
+         *
+         *     **Mientras este pendiente de imprimir, la credencial no puede fichar.**
+         *     No tiene hash por el que resolverla, asi que ningun escaneo la alcanza.
+         *     Es exactamente lo que cuenta el panel de estado de RF-QR-08 y la metrica
+         *     `credentials_pending_print`.
+         *
+         *     **Una credencial activa por empleado** (doc 01 §5.2). Emitir cuando ya
+         *     hay una devuelve `409`; para sustituirla se envia `reissue: true` con su
+         *     `reason`, y entonces la anterior se revoca y la nueva se emite en la
+         *     misma transaccion. Ese es el primer paso del flujo de tarjeta perdida:
+         *     revocar y reemitir aqui, imprimir despues.
+         */
+        post: operations["issueCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/credentials/{uuid}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** de la credencial (`credentials.uuid`). Por lo
+                 *     mismo que el del empleado: la clave interna no sale de la base de datos,
+                 *     y un identificador secuencial en una URL diria cuantas tarjetas se han
+                 *     emitido.
+                 *
+                 *     **No es el token del QR** y no tiene nada que ver con el: este UUID es
+                 *     publico y sirve para gestionar la credencial; el token es secreto, va
+                 *     impreso y no vuelve a aparecer en ninguna respuesta.
+                 * @example 0199f0d1-2a5b-7d4f-8c32-5e6f7a8b9c01
+                 */
+                uuid: components["parameters"]["CredentialUuid"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revocacion de credencial
+         * @description Retira una tarjeta: perdida, robo, deterioro, sustitucion o baja
+         *     (RF-QR-03).
+         *
+         *     **`reason` es obligatorio.** Es lo que distingue «se perdio antes de
+         *     entregarla» de «el empleado la perdio», y lo que explica meses despues
+         *     por que una persona no pudo fichar un martes. Acompana al asiento de
+         *     `audit_log`. **No se escriben nombres ahi**: el titular ya viaja como
+         *     `employee_uuid`.
+         *
+         *     **No borra nada** (regla dura 5): la fila conserva su historia y sus
+         *     escaneos. Por eso es un `POST` con nombre propio y no un `DELETE` — no
+         *     hay ningun `DELETE` en esta API.
+         *
+         *     **No es idempotente**: revocar una credencial ya revocada devuelve `409`.
+         *     Sobrescribir la primera revocacion cambiaria el motivo y el momento que
+         *     ya constan en la auditoria.
+         *
+         *     A partir de aqui, el siguiente escaneo de esa tarjeta se rechaza. Desde
+         *     el quiosco, de forma **indistinguible** de cualquier otro rechazo
+         *     (RS-03).
+         */
+        post: operations["revokeCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/credentials/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Panel de estado de credenciales
+         * @description **Quien no puede fichar todavia** (RF-QR-08).
+         *
+         *     El doc 02 §5.5 dice para que existe: *«RF-QR-08 existe para que RRHH vea
+         *     de un vistazo quien no puede fichar todavia. Sin el, el problema se
+         *     descubre delante del quiosco a las 06:00.»*
+         *
+         *     **La fila es del empleado, no de la credencial.** Es la decision que hace
+         *     util al panel: quien no puede fichar porque nunca se le emitio nada no
+         *     tiene ninguna credencial que listar, y un panel de credenciales dejaria
+         *     fuera precisamente a esas personas.
+         *
+         *     **Los cinco estados son derivados y no hay ninguna columna `status`** en
+         *     la base de datos: se calculan de `printed_at`, `delivered_at` y
+         *     `revoked_at`. Un estado almacenado y otro derivado acaban discrepando, y
+         *     aqui discrepar significa dar por entregada una tarjeta que nadie tiene.
+         *
+         *     **`summary` no se filtra.** Aunque `pending=true` deje tres filas, el
+         *     resumen sigue diciendo «3 de 60»: el numero que importa es cuanta gente
+         *     falta *de la que hay*. Es tambien lo que se publica como
+         *     `employees_without_delivered_credential{site}` y
+         *     `credentials_pending_print{site}` (doc 02 §8.2).
+         *
+         *     Sin paginacion a proposito: la respuesta es la plantilla de un centro
+         *     —decenas o pocos cientos de filas— y es una tabla que se ordena y se
+         *     filtra entera en el panel. Paginar obligaria a pedir todas las paginas
+         *     para poder contar, que es lo que este endpoint viene a evitar.
+         */
+        get: operations["credentialStatusBoard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/credentials/print-batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Impresion masiva en A4
+         * @description Devuelve **un solo PDF** en A4 con todas las credenciales **pendientes de
+         *     imprimir** del centro indicado (RF-QR-04).
+         *
+         *     El doc 02 §5.5 dice para que existe: *«La hoja A4 con varias tarjetas por
+         *     pagina es lo que hace viable dar de alta a 40 personas de temporada en
+         *     una tarde.»*
+         *
+         *     **Este es el acto que acuña los QR**
+         *     ([ADR-034](../adr/ADR-034-el-token-nace-al-imprimir-no-al-emitir.md)). Cada
+         *     tarjeta del lote recibe aqui su token, firmado con la clave **vigente en
+         *     este momento** —no con la de la emision, que nunca existio—, y a partir
+         *     del `200` esas credenciales pueden fichar.
+         *
+         *     **Un solo documento con N tarjetas, no N documentos.** Una sola llamada
+         *     cubre los sesenta empleados de un centro.
+         *
+         *     **`--pending` es la unica seleccion posible: no hay reimpresion.** No
+         *     existe ningun parametro que incluya las ya impresas. La idempotencia del
+         *     lote es esa: **la segunda llamada no encuentra nada pendiente y devuelve
+         *     `204`**. Es lo que impide que dos ejecuciones del mismo lote produzcan dos
+         *     juegos de tarjetas con QR distinto de los que solo el ultimo vale.
+         *
+         *     **Todo o nada.** Si entre la seleccion y la escritura alguien imprime una
+         *     de ellas, la operacion entera se deshace con `409` y no sale ninguna
+         *     tarjeta. Un lote a medias es peor que ninguno: nadie sabria cuales de las
+         *     sesenta de la hoja valen.
+         *
+         *     **El PDF es un instrumento al portador.** No se guarda en el servidor, no
+         *     viaja por correo y no se cachea (`Cache-Control: no-store`). Quien lo
+         *     tenga puede fabricar la tarjeta de otra persona y fichar por ella.
+         *
+         *     **Riesgo residual aceptado:** si esta respuesta se pierde despues de
+         *     confirmarse la escritura, los tokens son irrecuperables y esas
+         *     credenciales quedan impresas sin que nadie tenga la tarjeta. Se resuelve
+         *     revocando con motivo «impresion fallida» y reemitiendo — el runbook
+         *     `tarjeta-perdida-o-rota.md` lo describe. Lo que distingue ese caso de «el
+         *     empleado la perdio» es que `delivered_at` sigue vacio.
+         */
+        post: operations["printCredentialBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/credentials/{uuid}/print": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** de la credencial (`credentials.uuid`). Por lo
+                 *     mismo que el del empleado: la clave interna no sale de la base de datos,
+                 *     y un identificador secuencial en una URL diria cuantas tarjetas se han
+                 *     emitido.
+                 *
+                 *     **No es el token del QR** y no tiene nada que ver con el: este UUID es
+                 *     publico y sirve para gestionar la credencial; el token es secreto, va
+                 *     impreso y no vuelve a aparecer en ninguna respuesta.
+                 * @example 0199f0d1-2a5b-7d4f-8c32-5e6f7a8b9c01
+                 */
+                uuid: components["parameters"]["CredentialUuid"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generar el PDF de una tarjeta
+         * @description Devuelve el PDF de **una** tarjeta, en formato tarjeta de credito
+         *     (85,6 × 54 mm), y **acuña su QR en el mismo acto** (RF-QR-04, RF-QR-05,
+         *     [ADR-034](../adr/ADR-034-el-token-nace-al-imprimir-no-al-emitir.md)).
+         *
+         *     Antes de esta llamada la credencial existia como derecho administrativo y
+         *     **ningun escaneo la alcanzaba**: no habia hash por el que resolverla. A
+         *     partir del `200` puede fichar.
+         *
+         *     **El QR se genera con correccion de errores nivel Q** (RF-QR-05). El
+         *     doc 02 §5.1 justifica el margen: *«es lo que permite que una tarjeta
+         *     sobreviva una temporada de uso diario en una cocina, con roces, grasa y
+         *     dobleces»*.
+         *
+         *     **Es un `POST` y no un `GET` aunque devuelva un documento**, y esa es la
+         *     parte que importa: esta llamada **cambia el estado del sistema de forma
+         *     irreversible**. Un `GET` invitaria a que un navegador la repitiera al
+         *     recargar, a que un proxy la cachease y a que alguien la pusiera en un
+         *     enlace.
+         *
+         *     **No hay reimpresion y no existe ningun parametro que la habilite.** Una
+         *     credencial ya impresa devuelve `409`. «Reimprimir» solo puede significar
+         *     acuñar otro token, y eso mata la tarjeta que quiza ya esta en un bolsillo.
+         *     Reponer una tarjeta perdida es **revocar → reemitir
+         *     (`POST /credentials` con `reissue`) → imprimir la nueva**: tres actos y
+         *     tres asientos de auditoria.
+         *
+         *     **El PDF es un instrumento al portador.** No se guarda en el servidor, no
+         *     viaja por correo y no se cachea. **Es el unico canal por el que el payload
+         *     del QR sale de este sistema**; ninguna respuesta JSON de esta API lo
+         *     contiene.
+         *
+         *     **Riesgo residual aceptado:** si esta respuesta se pierde despues de
+         *     confirmarse la escritura, el token es irrecuperable y la credencial queda
+         *     impresa sin que nadie tenga la tarjeta. Se resuelve revocando con motivo
+         *     «impresion fallida» y reemitiendo (runbook `tarjeta-perdida-o-rota.md`).
+         */
+        post: operations["printCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/credentials/{uuid}/deliver": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** de la credencial (`credentials.uuid`). Por lo
+                 *     mismo que el del empleado: la clave interna no sale de la base de datos,
+                 *     y un identificador secuencial en una URL diria cuantas tarjetas se han
+                 *     emitido.
+                 *
+                 *     **No es el token del QR** y no tiene nada que ver con el: este UUID es
+                 *     publico y sirve para gestionar la credencial; el token es secreto, va
+                 *     impreso y no vuelve a aparecer en ninguna respuesta.
+                 * @example 0199f0d1-2a5b-7d4f-8c32-5e6f7a8b9c01
+                 */
+                uuid: components["parameters"]["CredentialUuid"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Registrar la entrega de una tarjeta
+         * @description Registra que la tarjeta llego a manos de su titular, **con fecha y
+         *     responsable** (RF-QR-06).
+         *
+         *     **No es burocracia.** El doc 02 §5.5: *«es lo que distingue "la tarjeta se
+         *     perdio antes de darsela" de "el empleado la perdio", que son incidencias
+         *     distintas»*. Sin este dato las dos se ven igual desde la base de datos, y
+         *     la segunda tiene consecuencias para una persona que la primera no tiene.
+         *
+         *     **El responsable es quien tiene la sesion abierta.** No se acepta en el
+         *     cuerpo: dejar que se declare permitiria firmar una entrega a nombre de un
+         *     companero. Por consola —donde no hay sesion— se declara con `--by=`, y el
+         *     actor del asiento de auditoria queda como `system`.
+         *
+         *     **La entrega es un solo acto presencial y arrastra tres cosas**: la
+         *     tarjeta, el PIN del portal y la hoja de instrucciones. El runbook
+         *     `alta-nuevo-empleado.md` describe el acto completo; partirlo en tres
+         *     momentos garantiza que dos de los tres no ocurran.
+         *
+         *     **No es idempotente**: marcar dos veces la misma entrega devuelve `409`.
+         *     Sobrescribirla cambiaria el responsable y el momento que ya constan en la
+         *     auditoria.
+         *
+         *     Una credencial **sin imprimir** tambien devuelve `409`: antes de imprimir
+         *     no hay tarjeta que entregar.
+         */
+        post: operations["deliverCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/shift-entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Alta manual de un tramo
+         * @description Da de alta un tramo que **nunca se ficho** (RF-PA-04, accion `created`):
+         *     el olvido de fichaje de entrada, el dia sin tarjeta entregada y las
+         *     jornadas anteriores a la puesta en marcha (`ALTA_RETROACTIVA`).
+         *
+         *     Un tramo escrito a mano vale para la nomina exactamente igual que uno
+         *     escaneado: pasa por las mismas invariantes —RN-01 un solo turno abierto,
+         *     RN-02 sin solapes, RN-03 salida posterior a entrada— y solo se distingue
+         *     por su origen `manual_admin` y por la fila de `shift_corrections` que lo
+         *     explica, con autor, momento y motivo (RN-13, RL-04).
+         *
+         *     **La jornada se declara, no se deduce.** `work_date` es obligatoria
+         *     porque derivarla de la fecha civil de la entrada mandaria la vuelta de
+         *     una pausa de madrugada al dia siguiente y partiria el turno de noche
+         *     (RN-05, ADR-006, ADR-024).
+         */
+        post: operations["addShiftEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/shift-entries/{uuid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** del tramo (`shift_entries.uuid`, UUID v7).
+                 *
+                 *     **Identifica una version, no un tramo a lo largo del tiempo** (ADR-035).
+                 *     Corregir crea una fila nueva con `uuid` propio y deja esta como
+                 *     historico, asi que el identificador que devolvio una correccion es el que
+                 *     hay que usar en la siguiente: reutilizar el anterior responde `409`.
+                 * @example 0199f0c2-9b30-7a21-8d40-1e2f3a4b5c60
+                 */
+                uuid: components["parameters"]["ShiftEntryUuid"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Corregir las marcas de un tramo
+         * @description Rectifica la hora de entrada, la de salida o las dos (RF-PA-04, RN-13).
+         *     Cubre tambien el **cierre de un turno que quedo abierto**: desde fuera es
+         *     la misma peticion, y cual de las dos acciones fue lo decide el servidor
+         *     mirando el estado anterior, no quien llama.
+         *
+         *     **Nada se sobrescribe** (regla dura 5). La version anterior se conserva
+         *     en `superseded` con sus marcas, su origen y su motivo, y la corregida
+         *     nace con `version + 1`.
+         *
+         *     **La respuesta trae un `uuid` distinto del que enviaste** (ADR-035):
+         *     cada version es una fila y `shift_entries.uuid` es unico. Por eso van los
+         *     dos —`shift_entry_uuid`, el vigente, y `superseded_shift_entry_uuid`, el
+         *     que acaba de dejar de serlo— y por eso repetir el `PATCH` sobre el
+         *     identificador viejo responde `409` y no `404`: ese tramo existio y ya no
+         *     es la version vigente.
+         *
+         *     **Un campo ausente significa «no lo toques»**, nunca «vacialo». No hay
+         *     forma de retirar una salida ya registrada: un tramo que no debio cerrarse
+         *     se anula y se vuelve a dar de alta, y asi consta lo que paso.
+         *
+         *     **Corregir la entrada que abre la jornada cruzando la medianoche local se
+         *     rechaza con `422`** (ADR-035, RN-05): mover horas de un dia a otro son dos
+         *     actos separados y auditados —anular en origen, dar de alta en destino—, no
+         *     un efecto lateral de un `PATCH`.
+         */
+        patch: operations["correctShiftEntry"];
+        trace?: never;
+    };
+    "/api/v1/shift-entries/{uuid}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** del tramo (`shift_entries.uuid`, UUID v7).
+                 *
+                 *     **Identifica una version, no un tramo a lo largo del tiempo** (ADR-035).
+                 *     Corregir crea una fila nueva con `uuid` propio y deja esta como
+                 *     historico, asi que el identificador que devolvio una correccion es el que
+                 *     hay que usar en la siguiente: reutilizar el anterior responde `409`.
+                 * @example 0199f0c2-9b30-7a21-8d40-1e2f3a4b5c60
+                 */
+                uuid: components["parameters"]["ShiftEntryUuid"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Anular un tramo
+         * @description Declara que **este tramo no ocurrio** (RF-PA-04, accion `voided`,
+         *     ADR-026). El caso tipico es el doble escaneo que produjo dos tramos donde
+         *     solo hubo uno.
+         *
+         *     **No se borra nada** (regla dura 5): la fila se queda en la tabla con sus
+         *     marcas, su autor y su motivo, y lo unico que cambia es que sale del
+         *     conjunto vigente. Con eso deja de contar para el total del dia (RN-06),
+         *     libera el hueco de RN-02 y, si estaba abierto, deja al empleado sin turno
+         *     abierto (RN-01).
+         *
+         *     **No crea version nueva**, y esa es toda la diferencia con corregir: no
+         *     hay una version posterior de un hecho que no paso. Por eso
+         *     `superseded_shift_entry_uuid` viene a `null`.
+         *
+         *     Es `POST` y no `DELETE` porque en esta API no hay ningun `DELETE`: anular
+         *     es un hecho con nombre propio y con asiento en `audit_log`.
+         *
+         *     **Reservado a RRHH**, mientras corregir la hora es de manager+: anular
+         *     quita horas del registro de una persona y no es la misma
+         *     responsabilidad que ajustar diez minutos.
+         */
+        post: operations["voidShiftEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/legal-export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Exportacion normalizada para la Inspeccion de Trabajo
+         * @description Genera el **registro diario por trabajador y periodo** que se entrega ante
+         *     un requerimiento de la Inspeccion de Trabajo (RF-IN-05, RL-03, RL-06,
+         *     art. 34.9 ET).
+         *
+         *     **Devuelve un fichero CSV, no JSON**, y esa es una decision del requisito:
+         *     RL-06 exige un formato «tabular, legible y tratable, no propietario». El
+         *     cuerpo es `text/csv` en UTF-8 **con BOM** y separador `;`, que es la
+         *     combinacion que abre correctamente y con acentos tanto en Excel con
+         *     configuracion regional española como en LibreOffice.
+         *
+         *     **Las horas van como texto `HH:MM`, nunca en decimal.** «7,5» no es una
+         *     hora y media larga de discusion en una inspeccion: es una cifra que hay
+         *     que interpretar. `07:30` no se interpreta.
+         *
+         *     **Cada fichero declara sus propios criterios de inclusion** en una
+         *     cabecera de metadatos anterior a la tabla: periodo, alcance, zona horaria
+         *     de cada centro, que tramos entran y que tramos no. Un documento legal que
+         *     no dice que contiene no se puede contrastar.
+         *
+         *     **Las correcciones no se ocultan** (RN-13, RL-04, regla dura 5). Cada
+         *     rectificacion del registro horario figura como una fila propia
+         *     (`tipo = CORRECCION`) con su autor, su momento y su motivo, y con las
+         *     marcas de antes y de despues. Un informe que enseñara solo el resultado
+         *     final estaria escondiendo justamente lo que una inspeccion viene a mirar.
+         *
+         *     **Las horas se dan dos veces**: en la zona horaria del centro —que es la
+         *     que el trabajador vivio y la que consta en su contrato— y en UTC, que es
+         *     como estan almacenadas (regla dura 3). El registro legal usa `occurred_at`
+         *     (regla dura 9), y un turno de noche aparece como **un solo tramo** en la
+         *     jornada en la que empezo (RN-05, regla dura 4).
+         *
+         *     **La generacion queda auditada** con quien exporto, que periodo y que
+         *     alcance (`legal_export.generated`, regla dura 6). Descargar el registro
+         *     horario de la plantilla es un acceso a datos personales de terceros y no
+         *     puede ser anonimo.
+         */
+        get: operations["generateLegalExport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -345,6 +1506,612 @@ export interface components {
             last_accepted_at: components["schemas"]["UtcTimestamp"];
         };
         /**
+         * ScanNotProcessed
+         * @description **El escaneo no se ha podido procesar y sigue pendiente.** No es un rechazo:
+         *     el servidor no ha llegado a decidir nada sobre esta tarjeta, asi que el
+         *     quiosco **tiene que conservarlo en la cola y reintentarlo** (RF-KI-04).
+         *
+         *     Existe para que un fallo transitorio en un elemento —una carrera perdida
+         *     tres veces, la base de datos que se cae a mitad del lote— no obligue a
+         *     elegir entre abortar el envio entero o dar por bueno que ese fichaje no
+         *     existio. Las dos opciones pierden jornadas, y la regla dura 19 no lo
+         *     permite.
+         *
+         *     `503` y no `500` porque describe la accion siguiente del cliente: reintentar
+         *     con retroceso, no descartar. **Nunca aparece en `POST /api/v1/scan`**, que
+         *     con un fallo asi responde `500` y el quiosco reintenta el envio completo.
+         */
+        ScanNotProcessed: {
+            /**
+             * Format: uri
+             * @enum {string}
+             */
+            type: "urn:kronoqr:problem:scan-not-processed";
+            /** @enum {string} */
+            title: "Escaneo no procesado";
+            /** @enum {integer} */
+            status: 503;
+            /**
+             * @description Texto fijo, por lo mismo que en `ScanRejected`: la causa concreta vive en
+             *     el log del servidor, no en la respuesta.
+             * @enum {string}
+             */
+            detail: "El escaneo no se ha podido procesar. Reintenta mas tarde.";
+            scan_id: components["schemas"]["ScanId"];
+        };
+        /**
+         * ScanBatchRequest
+         * @description Los escaneos que el quiosco tiene pendientes de sincronizar. Cada elemento es
+         *     exactamente el mismo `ScanRequest` que enviaria de uno en uno: el lote no es
+         *     un formato distinto, es el mismo repetido.
+         */
+        ScanBatchRequest: {
+            /**
+             * @description El techo de 50 es el que usa el quiosco al drenar (documento 02 §6). No es
+             *     un limite de la cola —puede tener cientos— sino del envio: un lote mayor
+             *     monopolizaria un trabajador de PHP durante el pico del cambio de turno.
+             *
+             *     **El orden de este array no importa.** El servidor ordena por
+             *     `occurred_at` antes de procesar nada.
+             */
+            scans: components["schemas"]["ScanRequest"][];
+        };
+        /**
+         * ScanBatchResponse
+         * @description Un resultado por elemento, en el orden en que se procesaron —es decir,
+         *     ordenados por `occurred_at`— y no en el orden en que llegaron.
+         */
+        ScanBatchResponse: {
+            results: components["schemas"]["ScanBatchEntry"][];
+        };
+        /**
+         * ScanBatchEntry
+         * @description El desenlace de **un** escaneo del lote, con su codigo propio. Es lo que hace
+         *     que un elemento fallido no invalide el envio (regla dura 19).
+         *
+         *     `scan_id` se repite fuera de `outcome` a proposito: en un rechazo el cuerpo
+         *     es identico para todas las causas, y sin el eco de fuera el cliente tendria
+         *     que abrir el problema para saber a que fichaje de su cola corresponde.
+         */
+        ScanBatchEntry: {
+            scan_id: components["schemas"]["ScanId"];
+            /**
+             * @description El mismo codigo que habria devuelto `POST /api/v1/scan` para este
+             *     elemento: `200` si se proceso —incluido el anti-rebote, que es un
+             *     desenlace aceptado (ADR-031)—, `422` si se rechazo y `503` si no se pudo
+             *     procesar y hay que reintentarlo.
+             *
+             *     El quiosco decide con este numero que hace con el elemento de su cola:
+             *     `200` y `422` lo sacan de la cola, `503` lo conserva.
+             * @enum {integer}
+             */
+            status: 200 | 422 | 503;
+            /**
+             * @description El cuerpo que habria devuelto el endpoint individual, sin cambios. Las
+             *     tres formas se distinguen sin ambiguedad: `action` discrimina las dos
+             *     aceptadas y `type` las dos de problema.
+             */
+            outcome: components["schemas"]["ScanAccepted"] | components["schemas"]["ScanDebounced"] | components["schemas"]["ScanRejected"] | components["schemas"]["ScanNotProcessed"];
+        };
+        /**
+         * KioskRosterEntry
+         * @description Una persona del padron, en la forma minima del §7.3: **lo justo para
+         *     resolver una tarjeta sin red y saludar por el nombre**.
+         *
+         *     Dos campos y ni uno mas. Cada campo que se añada aqui es un campo que se
+         *     filtra entero si alguien se lleva la tablet.
+         */
+        KioskRosterEntry: {
+            /**
+             * @description `SHA-256` en hexadecimal del token impreso en la tarjeta
+             *     (`credentials.secret_hash`). El quiosco calcula el mismo hash sobre lo
+             *     que lee la camara y busca aqui.
+             *
+             *     **No permite fabricar una tarjeta.** El token son 128 bits aleatorios
+             *     —invertir el hash es inviable— y ademas el payload va firmado con una
+             *     clave que no sale del servidor: un hash sin firma no ficha (§5.1, §5.2).
+             * @example 6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b
+             */
+            token_hash: string;
+            /**
+             * @description Nombre de pila e inicial del primer apellido, la misma forma que devuelve
+             *     `POST /api/v1/scan` (§7.3). Nunca el nombre completo, ni el codigo de
+             *     empleado, ni nada que reconstruya la plantilla.
+             * @example Maria G.
+             */
+            display_name: string;
+        };
+        /**
+         * KioskRoster
+         * @description Padron minimo del centro al que esta vinculado el dispositivo. **El centro no
+         *     se pide: sale del token.**
+         */
+        KioskRoster: {
+            /**
+             * @description Momento en que el servidor compuso este padron. El quiosco lo guarda con
+             *     la copia cifrada para poder decir en su pantalla de diagnostico cuando se
+             *     actualizo por ultima vez (RF-KI-08).
+             */
+            generated_at: components["schemas"]["UtcTimestamp"];
+            /**
+             * @description Solo quien puede fichar hoy: sin las personas de baja (RN-14) y sin las
+             *     que todavia no tienen tarjeta impresa, que no tienen hash por el que
+             *     resolverse (ADR-034).
+             *
+             *     Puede venir vacio —un centro recien dado de alta— y eso **no autoriza al
+             *     quiosco a bloquear a nadie**: sin padron encola igual y confirma en local
+             *     (regla dura 19, RF-AT-10).
+             */
+            entries: components["schemas"]["KioskRosterEntry"][];
+        };
+        /**
+         * KioskHeartbeatRequest
+         * @description Telemetria que declara el propio dispositivo. **Ningun campo de aqui influye
+         *     en el registro horario**: son datos de operacion.
+         */
+        KioskHeartbeatRequest: {
+            /**
+             * @description Version de la PWA que corre en la tablet. Es lo que permite saber si una
+             *     incidencia afecta solo a los quioscos que no se han actualizado
+             *     (RF-KI-07, §10.5).
+             * @example 1.4.2
+             */
+            app_version: string;
+            /**
+             * @description Fichajes en la cola local sin sincronizar. El techo es proteccion de
+             *     recursos, no una regla: una cola mayor que eso es una averia, no un dato.
+             * @example 37
+             */
+            pending_queue_size: number;
+            /**
+             * @description `occurred_at` del elemento mas antiguo de la cola. Opcional, y ausente
+             *     cuando la cola esta vacia.
+             *
+             *     Es lo que convierte «hay 37 pendientes» en «el mas antiguo es de hace tres
+             *     horas», que es la diferencia entre una sincronizacion en curso y un
+             *     quiosco que lleva media jornada incomunicado.
+             */
+            oldest_pending_at?: components["schemas"]["UtcTimestamp"];
+        };
+        /**
+         * KioskHeartbeat
+         * @description Lo unico que el servidor le devuelve al quiosco: su hora.
+         */
+        KioskHeartbeat: {
+            /**
+             * @description Hora del servidor en el momento de atender el latido. La tablet la compara
+             *     con la suya para saber si su reloj se ha ido y avisar (RF-AT-10).
+             *
+             *     **Nunca le impide fichar.** El desfase se registra escaneo a escaneo en
+             *     `scan_events.clock_skew_seconds` y se resuelve despues; el empleado no
+             *     tiene la culpa de que una tablet pierda la hora (regla dura 19).
+             */
+            server_time: components["schemas"]["UtcTimestamp"];
+        };
+        /**
+         * UserRole
+         * @description Los seis roles de RF-ID-02. **Son los mismos para todos los clientes**
+         *     (regla dura 13, ADR-017): lo que cambia de una instalacion a otra es
+         *     quien tiene cada rol, nunca el catalogo, porque una lista de roles por
+         *     cliente obligaria a tocar el repositorio para vender.
+         *
+         *     En la Fase 1 se usan `admin` y `rrhh`. `responsable_departamento` existe
+         *     en el catalogo pero no tiene ambito propio hasta la tarea 2.1 (RF-ID-03),
+         *     y `empleado` y `kiosk` no entran por este endpoint: el empleado accede a
+         *     su portal con codigo y PIN, y el quiosco con token de dispositivo.
+         * @enum {string}
+         */
+        UserRole: "admin" | "rrhh" | "responsable_departamento" | "auditor" | "empleado" | "kiosk";
+        /**
+         * LoginRequest
+         * @description Credenciales de una persona de gestion.
+         */
+        LoginRequest: {
+            /**
+             * Format: email
+             * @description Correo de la cuenta de gestion, **insensible a mayusculas** (la
+             *     columna es `citext`): `Ana@hotel.example` y `ana@hotel.example` no
+             *     son dos cuentas.
+             * @example rrhh@hotel.example
+             */
+            email: string;
+            /**
+             * @description Contrasena en claro sobre TLS. No se compara con `minLength` real a
+             *     proposito: la politica de robustez se aplica al **fijar** la
+             *     contrasena, no al usarla, y exigirla aqui revelaria su forma a quien
+             *     prueba credenciales.
+             */
+            password: string;
+            /**
+             * @description Nombre con el que se guarda la sesion, para que se pueda revocar una
+             *     sola. Sin PII: es «Panel de gestion» o «Portatil de recepcion», no
+             *     el nombre de una persona.
+             * @example Panel de gestion
+             */
+            device_name?: string;
+        };
+        /**
+         * Session
+         * @description Sesion recien abierta en el panel de gestion.
+         */
+        Session: {
+            /**
+             * @description Token `Bearer` de Sanctum. **Se muestra una sola vez**: el servidor
+             *     guarda su hash, no el token (documento 01 §5.5). Si se pierde, se
+             *     vuelve a entrar.
+             */
+            token: string;
+            /**
+             * @description Unico esquema admitido en la cabecera `Authorization`.
+             * @enum {string}
+             */
+            token_type: "Bearer";
+            /**
+             * @description Caducidad de la sesion (§7.3: sesion corta para gestion). Pasada esa
+             *     hora, el token deja de valer y el panel vuelve a pedir acceso.
+             */
+            expires_at: components["schemas"]["UtcTimestamp"];
+            user: components["schemas"]["ManagementUser"];
+        };
+        /**
+         * ManagementUser
+         * @description Quien ha entrado, con que roles y con que ambitos. Es lo que el panel usa
+         *     para no ofrecer lo que despues seria un `403`.
+         */
+        ManagementUser: {
+            /**
+             * Format: uuid
+             * @description Identificador publico de la cuenta. La clave interna no sale nunca.
+             */
+            uuid: string;
+            name: string;
+            /** Format: email */
+            email: string;
+            /**
+             * @description Idioma del panel para esta persona (ES y EN de serie).
+             * @example es
+             */
+            locale: string;
+            roles: components["schemas"]["UserRole"][];
+            /**
+             * @description Ambitos del token, los del documento 02 §7.3. Se derivan del rol y
+             *     **se comprueban en el servidor ademas de la policy** (regla dura 18):
+             *     el ambito dice que se puede hacer, la policy sobre que datos.
+             * @example [
+             *       "attendance:read",
+             *       "employees:*"
+             *     ]
+             */
+            abilities: string[];
+        };
+        /**
+         * EmploymentStatus
+         * @description Situacion laboral (`employees.status`, documento 01 §5.5).
+         *
+         *     `terminated` es una **desactivacion logica** (RF-GP-03, regla dura 5): la
+         *     ficha y su historial se conservan. Solo el `active` ficha (RN-14).
+         * @enum {string}
+         */
+        EmploymentStatus: "active" | "suspended" | "terminated";
+        /**
+         * Employee
+         * @description Ficha de una persona de la plantilla (RF-GP-01).
+         *
+         *     **No lleva el documento de identidad ni su digest** (RL-08): el digest
+         *     existe en la base de datos para no dar de alta dos veces a la misma
+         *     persona, y no hay ningun motivo para que salga por la API. Tampoco lleva
+         *     el PIN, que no se almacena en claro y solo se enseña una vez al
+         *     provisionarlo (RF-ID-09).
+         */
+        Employee: {
+            /**
+             * Format: uuid
+             * @description Identificador publico (UUID v7). Es el que aparece en logs y metricas.
+             */
+            uuid: string;
+            /**
+             * @description Codigo **opaco y aleatorio**, generado por el servidor (documento 01
+             *     §5.5). Es la mitad publica de la credencial del portal (RF-ID-06) y
+             *     va impreso en la tarjeta: ni secuencial, ni derivado del nombre.
+             * @example E7QK2MXPR
+             */
+            employee_code: string;
+            first_name: string;
+            last_name: string;
+            /**
+             * Format: email
+             * @description **Opcional, y ninguna funcionalidad puede exigirlo** (regla dura 12,
+             *     ADR-015). El acceso al portal personal es con codigo de empleado y
+             *     PIN precisamente para que la mayoria de la plantilla no necesite
+             *     correo.
+             */
+            email: string | null;
+            /**
+             * Format: int64
+             * @description Centro al que esta adscrito. De el sale la zona horaria de RN-05.
+             */
+            site_id: number;
+            /** Format: int64 */
+            department_id: number | null;
+            status: components["schemas"]["EmploymentStatus"];
+            /**
+             * Format: date
+             * @description Fecha de alta. Es una fecha civil, no un instante, y por eso no
+             *     lleva zona horaria.
+             */
+            hired_at: string;
+            /**
+             * Format: date
+             * @description Fecha de cese. Obligatoria en cuanto el estado es `terminated`: sin
+             *     ella, la retencion de RL-02 no sabe cuando empieza a contar.
+             */
+            terminated_at: string | null;
+            /** @example es */
+            locale: string;
+            pin_status: components["schemas"]["PinStatus"];
+        };
+        /**
+         * PinStatus
+         * @description Situacion del PIN de esta persona (RF-ID-09). **Es el estado, nunca el
+         *     PIN**: el valor no vuelve a salir de la instalacion despues de emitirse.
+         *
+         *     - `pending`: no tiene PIN. Solo puede darse en fichas anteriores a
+         *       RF-ID-09: el alta lo emite en la misma transaccion.
+         *     - `issued`: emitido y **pendiente de entregar en mano**.
+         *     - `delivered`: entregado, con fecha y responsable en `audit_log`.
+         * @enum {string}
+         */
+        PinStatus: "pending" | "issued" | "delivered";
+        /**
+         * IssuedPin
+         * @description Un PIN recien emitido (RF-ID-09). **Es la unica representacion en la que
+         *     el PIN existe en claro fuera del navegador de quien lo entrega**, y solo
+         *     en la respuesta que lo genera.
+         *
+         *     No se almacena en claro —solo `employees.pin_hash`, con el algoritmo de
+         *     contrasenas de la instalacion—, no se escribe en `audit_log` —ahi consta
+         *     que hubo emision, no que se emitio (regla dura 21)—, no se envia por
+         *     correo (regla dura 12, ADR-015) y no se imprime en la tarjeta: perder la
+         *     tarjeta no puede ser perder las dos cosas a la vez (regla dura 11).
+         *
+         *     El panel lo muestra en un dialogo con una confirmacion explicita y no lo
+         *     guarda en `sessionStorage` ni en estado persistido.
+         */
+        IssuedPin: {
+            /** Format: uuid */
+            employee_uuid: string;
+            /**
+             * @description Seis digitos, de un generador criptograficamente seguro y sin los
+             *     patrones triviales que la instalacion excluye por configuracion
+             *     (regla dura 13).
+             * @example 483920
+             */
+            pin: string;
+            /**
+             * Format: date-time
+             * @description Instante de emision, en UTC (regla dura 3).
+             */
+            issued_at: string;
+            pin_status: components["schemas"]["PinStatus"];
+        };
+        /**
+         * EmployeeProvisioned
+         * @description Alta completa: la ficha y el PIN que la acompana (RF-ID-09).
+         *
+         *     **Son dos objetos y no uno** a proposito. `Employee` es lo que se
+         *     consulta, se lista y se vuelve a pedir; `pin` es un secreto que existe
+         *     en esta respuesta y en ninguna otra. Fundirlos haria que el esquema de
+         *     la ficha admitiera un PIN, que es exactamente la puerta por la que un
+         *     dia acabaria saliendo en un listado.
+         */
+        EmployeeProvisioned: {
+            employee: components["schemas"]["Employee"];
+            pin: components["schemas"]["IssuedPin"];
+        };
+        /**
+         * PinDeliveryReceipt
+         * @description Acuse de la entrega presencial del PIN (RF-ID-09): a quien, cuando y
+         *     quien lo entrego. **Sin el PIN.**
+         */
+        PinDeliveryReceipt: {
+            /** Format: uuid */
+            employee_uuid: string;
+            /**
+             * Format: date-time
+             * @description Instante de la entrega, en UTC (regla dura 3).
+             */
+            delivered_at: string;
+            /**
+             * Format: uuid
+             * @description UUID publico de la cuenta de gestion que entrego el PIN. Nunca su
+             *     clave interna ni su nombre: ante una discusion sobre un fichaje hay
+             *     que poder decir quien entrego, y para eso basta el identificador.
+             */
+            delivered_by: string;
+            pin_status: components["schemas"]["PinStatus"];
+        };
+        /**
+         * EmployeeCollection
+         * @description Pagina de la plantilla.
+         */
+        EmployeeCollection: {
+            data: components["schemas"]["Employee"][];
+            meta: components["schemas"]["PageMeta"];
+        };
+        /**
+         * PageMeta
+         * @description Situacion de la pagina devuelta dentro del total.
+         */
+        PageMeta: {
+            page: number;
+            per_page: number;
+            total: number;
+            total_pages: number;
+        };
+        /**
+         * CreateEmployeeRequest
+         * @description Alta de empleado. **El `employee_code` no viaja aqui**: lo genera el
+         *     servidor para que sea opaco de verdad y no dependa de lo que teclee
+         *     quien da el alta.
+         */
+        CreateEmployeeRequest: {
+            /** Format: int64 */
+            site_id: number;
+            /**
+             * Format: int64
+             * @description Si se indica, **debe pertenecer al centro** de `site_id`. Un empleado
+             *     adscrito a un departamento de otro hotel es un dato imposible que
+             *     rompe los informes por centro.
+             */
+            department_id?: number | null;
+            first_name: string;
+            last_name: string;
+            /**
+             * Format: email
+             * @description Opcional (regla dura 12). El alta se completa sin el.
+             */
+            email?: string | null;
+            /**
+             * @description Documento de identidad. **No se almacena** (RL-08): se convierte en
+             *     digest con `pgcrypto` en la misma transaccion y el valor en claro no
+             *     sobrevive a la peticion. Es `writeOnly` porque no existe respuesta
+             *     que pueda devolverlo.
+             */
+            national_id?: string | null;
+            /** Format: date */
+            hired_at: string;
+            /** @default es */
+            locale: string;
+        };
+        /**
+         * UpdateEmployeeRequest
+         * @description Modificacion parcial. Al menos un campo, y solo los que pueden cambiar:
+         *     la baja tiene su propio endpoint y el `employee_code` no se reescribe
+         *     nunca —hay tarjetas impresas con el (RF-QR-01)—.
+         */
+        UpdateEmployeeRequest: {
+            /** Format: int64 */
+            site_id?: number;
+            /** Format: int64 */
+            department_id?: number | null;
+            first_name?: string;
+            last_name?: string;
+            /** Format: email */
+            email?: string | null;
+            /**
+             * @description Solo alterna entre activo y suspendido. **`terminated` no se acepta
+             *     aqui**: la baja lleva fecha de cese y consecuencias (RN-14), y por eso
+             *     va por `POST /employees/{uuid}/offboard`.
+             * @enum {string}
+             */
+            status?: "active" | "suspended";
+            locale?: string;
+        };
+        /**
+         * OffboardEmployeeRequest
+         * @description Baja logica de un empleado (RF-GP-03).
+         */
+        OffboardEmployeeRequest: {
+            /**
+             * Format: date
+             * @description Fecha de cese, **nunca anterior a la de alta**. Es el dato desde el
+             *     que cuenta la retencion de RL-02.
+             */
+            terminated_at: string;
+            /**
+             * @description Motivo del cese, para el registro de auditoria. Sin datos de salud ni
+             *     juicios de valor: es un texto operativo, no un expediente.
+             */
+            reason?: string;
+        };
+        /**
+         * Site
+         * @description Centro de trabajo (documento 01 §5.5).
+         */
+        Site: {
+            /** Format: int64 */
+            id: number;
+            name: string;
+            /**
+             * @description Identificador IANA. **Es el dato del que depende RN-05** y por eso se
+             *     guarda asi y no como desfase: `Europe/Madrid` sabe de cambios de
+             *     hora, `+02:00` no.
+             * @example Europe/Madrid
+             */
+            timezone: string;
+        };
+        /**
+         * SiteCollection
+         * @description Centros de la instalacion. Sin paginacion: un cliente tiene hoteles, no
+         *     miles de centros, y el limite real lo pone su licencia (`max_sites`).
+         */
+        SiteCollection: {
+            data: components["schemas"]["Site"][];
+        };
+        /**
+         * CreateSiteRequest
+         * @description Alta de centro de trabajo.
+         */
+        CreateSiteRequest: {
+            name: string;
+            /**
+             * @description Zona IANA del centro. El valor de serie es el del mercado inicial,
+             *     pero es un dato editable: nada especifico de un cliente vive en el
+             *     codigo (regla dura 13).
+             * @default Europe/Madrid
+             */
+            timezone: string;
+        };
+        /**
+         * UpdateSiteRequest
+         * @description Modificacion parcial de un centro. Al menos un campo.
+         */
+        UpdateSiteRequest: {
+            name?: string;
+            timezone?: string;
+        };
+        /**
+         * Department
+         * @description Departamento de un centro (documento 01 §5.5).
+         *
+         *     **No lleva responsable todavia.** `departments.manager_user_id` existe en
+         *     el esquema, pero asignarlo solo tiene efecto con el ambito por
+         *     departamento de RF-ID-03, que es de la tarea 2.1. Exponerlo antes seria
+         *     prometer un control de acceso que aun no se aplica.
+         */
+        Department: {
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            site_id: number;
+            name: string;
+        };
+        /**
+         * DepartmentCollection
+         * @description Departamentos, opcionalmente de un solo centro. Sin paginacion.
+         */
+        DepartmentCollection: {
+            data: components["schemas"]["Department"][];
+        };
+        /**
+         * CreateDepartmentRequest
+         * @description Alta de departamento dentro de un centro.
+         */
+        CreateDepartmentRequest: {
+            /** Format: int64 */
+            site_id: number;
+            name: string;
+        };
+        /**
+         * UpdateDepartmentRequest
+         * @description Renombrado del departamento. `site_id` no aparece a proposito: mover un
+         *     departamento de centro arrastraria a sus empleados a otra zona horaria y
+         *     cambiaria el calculo de sus jornadas (RN-05).
+         */
+        UpdateDepartmentRequest: {
+            name: string;
+        };
+        /**
          * Problem
          * @description Error en el formato `application/problem+json` (RFC 9457). El cliente
          *     interpreta `type`, que es un URN estable; `title` y `detail` son texto para
@@ -413,6 +2180,642 @@ export interface components {
             detail: "El escaneo no se ha podido registrar.";
             scan_id: components["schemas"]["ScanId"];
         };
+        /**
+         * CredentialStatus
+         * @description Situacion de la credencial. Se deriva de `revoked_at` y no es una columna
+         *     aparte: un estado almacenado y otro derivado acaban discrepando, y aqui
+         *     discrepar significa que alguien ficha con una tarjeta retirada.
+         *
+         *     El ciclo completo del §5.5 —pendiente de imprimir, pendiente de entregar,
+         *     entregada— lo expone el panel de estado de RF-QR-08, que es de la tarea
+         *     1.10 y se lee de `printed_at` y `delivered_at`.
+         *
+         *     **`active` no quiere decir «puede fichar».** Quiere decir «no se ha
+         *     revocado». Una credencial `active` sin `printed_at` esta pendiente de
+         *     imprimir y no la resuelve ningun escaneo, porque su QR todavia no se ha
+         *     acuñado (ADR-034).
+         * @enum {string}
+         */
+        CredentialStatus: "active" | "revoked";
+        /**
+         * Credential
+         * @description Una credencial tal y como se consulta y se gestiona (doc 01 §5.5).
+         *
+         *     **Nunca lleva el token ni su hash.** `secret_hash` no aparece en este
+         *     esquema y no aparecera: quien lo viera tendria la mitad del trabajo hecho
+         *     para reconocer una tarjeta concreta.
+         */
+        Credential: {
+            /**
+             * Format: uuid
+             * @description Identificador publico de la credencial.
+             */
+            uuid: string;
+            /**
+             * Format: uuid
+             * @description Titular, por su UUID publico. Nunca su nombre ni su codigo.
+             */
+            employee_uuid: string;
+            /**
+             * @description Clave con la que se firmo. Durante una rotacion (§5.3) es lo que dice
+             *     que tarjetas quedan por reimprimir antes de retirar la anterior.
+             *
+             *     **`null` mientras este pendiente de imprimir** (ADR-034): la clave se
+             *     elige al acuñar el QR, no al emitir. Va siempre acompañado de
+             *     `printed_at`: o estan los dos, o no esta ninguno.
+             * @example a3
+             */
+            key_id: string | null;
+            issued_at: components["schemas"]["UtcTimestamp"];
+            /**
+             * @description Cuando se acuño su QR y se genero su PDF (RF-QR-04, tarea 1.10).
+             *     Mientras sea `null`, la credencial existe pero **no puede fichar**.
+             */
+            printed_at: components["schemas"]["UtcTimestamp"] | null;
+            /**
+             * @description Cuando se entrego en mano (RF-QR-06, tarea 1.10). Marcarlo no es
+             *     burocracia: distingue «se perdio antes de darsela» de «la perdio el
+             *     empleado», que son incidencias distintas.
+             */
+            delivered_at: components["schemas"]["UtcTimestamp"] | null;
+            revoked_at: components["schemas"]["UtcTimestamp"] | null;
+            /**
+             * @description Motivo de la revocacion, escrito por quien la ordeno. **No se
+             *     escriben nombres**: el titular ya viaja como `employee_uuid`.
+             */
+            revoked_reason: string | null;
+            status: components["schemas"]["CredentialStatus"];
+        };
+        /**
+         * IssuedCredential
+         * @description La credencial **recien emitida**, pendiente de imprimir.
+         *
+         *     Se diferencia de `Credential` en un solo campo, `reissue`, que solo tiene
+         *     sentido en el momento de la emision. **No lleva ningun QR** (ADR-034): el
+         *     token se acuña al imprimir y sale del servidor dentro del PDF de la
+         *     tarjeta, no por JSON.
+         */
+        IssuedCredential: {
+            /** Format: uuid */
+            uuid: string;
+            /** Format: uuid */
+            employee_uuid: string;
+            /**
+             * @description Siempre `null` en una emision: la clave de firma se elige al
+             *     imprimir, no al emitir (ADR-034, doc 02 §5.3).
+             */
+            key_id: null;
+            issued_at: components["schemas"]["UtcTimestamp"];
+            /** @description Siempre `null` en una emision: nace pendiente de imprimir (§5.5). */
+            printed_at: null;
+            delivered_at: null;
+            revoked_at: null;
+            revoked_reason: null;
+            status: components["schemas"]["CredentialStatus"];
+            /**
+             * @description Si esta emision revoco una credencial anterior. Distinguirlo importa
+             *     para quien despues tenga que explicar por que una persona tuvo tres
+             *     tarjetas en un año.
+             */
+            reissue: boolean;
+        };
+        /**
+         * IssueCredentialRequest
+         * @description **El empleado llega por su UUID publico**, que es el unico identificador
+         *     de persona que viaja por esta API.
+         *
+         *     `reissue` es explicito y no se deduce: si el empleado ya tiene tarjeta
+         *     activa, emitir otra sin decirlo dejaria dos vivas —lo que la invariante
+         *     del doc 01 §5.2 prohibe— o revocaria la anterior sin que nadie lo hubiera
+         *     pedido.
+         */
+        IssueCredentialRequest: {
+            /** Format: uuid */
+            employee_uuid: string;
+            /**
+             * @description Revoca la credencial activa anterior, si la hay, en la misma transaccion.
+             * @default false
+             */
+            reissue: boolean;
+            /**
+             * @description Motivo de la revocacion de la anterior. **Obligatorio cuando
+             *     `reissue` es `true`.** Sin el, la reemision se rechaza con `422`.
+             */
+            reason?: string;
+        };
+        /**
+         * RevokeCredentialRequest
+         * @description El motivo es obligatorio y no tiene valor por defecto. Un motivo de serie
+         *     convertiria el campo en ruido, y este campo es lo que explica meses
+         *     despues por que una persona no pudo fichar.
+         */
+        RevokeCredentialRequest: {
+            /** @example Tarjeta extraviada en el turno de noche */
+            reason: string;
+        };
+        /**
+         * PrintCredentialBatchRequest
+         * @description **Solo el centro, y es opcional.** No hay ningun otro parametro, y su
+         *     ausencia es la parte importante del esquema: no existe `reprint`, ni
+         *     `force`, ni `include_printed`, porque no existe la reimpresion (ADR-034).
+         *     `additionalProperties: false` hace que el contrato no ofrezca ningun sitio
+         *     donde alojarlos el dia que alguien los eche de menos.
+         */
+        PrintCredentialBatchRequest: {
+            /**
+             * Format: int64
+             * @description Centro cuyas credenciales pendientes se imprimen. Sin el, toda la
+             *     instalacion — que en un cliente con varios hoteles produce una hoja
+             *     que despues hay que repartir, y por eso lo normal es indicarlo.
+             */
+            site_id?: number;
+        };
+        /**
+         * CredentialLifecycleStatus
+         * @description Situacion de la tarjeta de una persona en el panel de RF-QR-08. **Se
+         *     deriva de `printed_at`, `delivered_at` y `revoked_at`**; no hay ninguna
+         *     columna que la almacene.
+         *
+         *     | Valor | Significado |
+         *     |---|---|
+         *     | `no_credential` | No se le ha emitido ninguna credencial |
+         *     | `pending_print` | Emitida y sin imprimir. **Todavia no puede fichar** |
+         *     | `pending_delivery` | Impresa y sin entregar. La tarjeta existe, pero no la tiene |
+         *     | `delivered` | Entregada. Es el unico estado en el que puede fichar con tarjeta |
+         *     | `revoked` | Su ultima credencial esta revocada y no le queda ninguna activa |
+         *
+         *     **`no_credential` y `revoked` se separan a proposito** aunque las dos
+         *     signifiquen «no puede fichar»: la primera se arregla emitiendo y la
+         *     segunda es una reemision, y probablemente una incidencia.
+         * @enum {string}
+         */
+        CredentialLifecycleStatus: "no_credential" | "pending_print" | "pending_delivery" | "delivered" | "revoked";
+        /**
+         * CredentialStatusRow
+         * @description Una persona y la situacion de su tarjeta.
+         *
+         *     `full_name` es el nombre completo y no la forma minima del padron del
+         *     quiosco: esto lo lee RRHH sobre su propia plantilla, y un «Lucia M.» no
+         *     distingue entre dos personas de la misma cocina. **No puede acabar en un
+         *     log tecnico** (regla dura 21).
+         */
+        CredentialStatusRow: {
+            /** Format: uuid */
+            employee_uuid: string;
+            /** @description Opaco y aleatorio, nunca derivado de datos personales (doc 01 §5.5). */
+            employee_code: string;
+            full_name: string;
+            /** Format: int64 */
+            site_id: number;
+            site_name: string;
+            /** @description `null` cuando la persona no esta adscrita a ninguno: su tarjeta se imprime igual. */
+            department_name: string | null;
+            status: components["schemas"]["CredentialLifecycleStatus"];
+            /**
+             * @description La credencial **vigente** y, si no le queda ninguna activa, la ultima
+             *     que tuvo. `null` solo cuando nunca hubo ninguna.
+             */
+            credential: components["schemas"]["Credential"] | null;
+        };
+        /**
+         * SiteCredentialCoverage
+         * @description El recuento de un centro. Es lo mismo que publican
+         *     `employees_without_delivered_credential{site}` y
+         *     `credentials_pending_print{site}` (doc 02 §8.2).
+         *
+         *     **`employees` es el denominador y no cambia con el filtro**: es lo que
+         *     permite decir «faltan 3 de 60» en lugar de «faltan 3 de 3».
+         */
+        SiteCredentialCoverage: {
+            /** Format: int64 */
+            site_id: number;
+            site_name: string;
+            /** @description Empleados de alta del centro. */
+            employees: number;
+            /** @description Credenciales activas emitidas y todavia sin imprimir. */
+            pending_print: number;
+            /**
+             * @description Personas de alta que todavia no tienen la tarjeta en la mano.
+             *     **Debe llegar a cero antes del primer dia de cada incorporacion**
+             *     (doc 02 §8.2). Incluye a quien la tiene impresa pero sin entregar: un
+             *     PDF impreso que sigue en una bandeja no sirve de nada a las 06:00.
+             */
+            without_delivered_credential: number;
+        };
+        /**
+         * CredentialStatusBoard
+         * @description El panel completo (RF-QR-08): las filas y el recuento por centro.
+         *
+         *     Sin `meta` de paginacion porque no hay paginacion: ver la descripcion del
+         *     endpoint.
+         */
+        CredentialStatusBoard: {
+            /**
+             * @description Ordenadas por centro, departamento y apellido — el mismo orden en el
+             *     que salen las tarjetas de una hoja A4.
+             */
+            data: components["schemas"]["CredentialStatusRow"][];
+            /**
+             * @description **Todos los centros del alcance, tambien los que estan a cero.** Una
+             *     serie ausente y una serie en cero se ven igual en un panel, y solo la
+             *     segunda dice «ya esta todo entregado».
+             */
+            summary: components["schemas"]["SiteCredentialCoverage"][];
+        };
+        /**
+         * CorrectionReasonCode
+         * @description Catalogo cerrado de motivos de correccion (documento 01, Anexo C,
+         *     RF-PA-04). Es obligatorio en las tres operaciones: sin motivo, el
+         *     registro dice que las horas cambiaron y no dice por que (RN-13).
+         *
+         *     Los codigos van **en español y en mayusculas** a proposito: no son
+         *     identificadores del programador, son valores del Anexo C que se escriben
+         *     tal cual en `shift_corrections.reason_code`, se agrupan en la metrica
+         *     `manual_corrections_total{reason_code}` y salen en la exportacion legal.
+         *     El texto que ve el usuario vive en `i18n` y se resuelve por este codigo.
+         *
+         *     **`OTROS` obliga a `reason_text` de al menos 20 caracteres.** El resto lo
+         *     admiten opcional. Quien no sabe que poner tiene ocho codigos que si dicen
+         *     algo.
+         * @example OLVIDO_FICHAJE_SALIDA
+         * @enum {string}
+         */
+        CorrectionReasonCode: "OLVIDO_FICHAJE_ENTRADA" | "OLVIDO_FICHAJE_SALIDA" | "FALLO_TECNICO_QUIOSCO" | "TARJETA_NO_DISPONIBLE" | "CREDENCIAL_NO_ENTREGADA" | "ERROR_DE_ESCANEO_DUPLICADO" | "AJUSTE_ACORDADO_CON_RRHH" | "ALTA_RETROACTIVA" | "OTROS";
+        /**
+         * CorrectionAction
+         * @description Que se hizo con el tramo (`shift_corrections.action`). Son los cuatro
+         *     verbos de RF-PA-04 y ni uno mas.
+         *
+         *     **La decide el servidor, no quien llama.** Cerrar un turno abierto y
+         *     cambiarle la hora de salida a uno ya cerrado son la misma peticion desde
+         *     fuera; lo que las distingue es el estado anterior del tramo, que solo el
+         *     agregado conoce. Si el cliente la declarase, podria declararla mal y el
+         *     registro de auditoria contaria otra cosa que la que paso.
+         * @example closed
+         * @enum {string}
+         */
+        CorrectionAction: "created" | "modified" | "closed" | "voided";
+        /**
+         * ShiftEntryStatus
+         * @description Estado de la version del tramo que devuelve la respuesta
+         *     (`shift_entries.status`, documento 01 §5.5).
+         *
+         *     `voided` y `superseded` son dos hechos legalmente distintos y por eso son
+         *     dos valores (ADR-026): el primero dice «este tramo no ocurrio» y el
+         *     segundo «ocurrio, se conserva, y otra version lo sustituye». Ninguno de
+         *     los dos cuenta para el total del dia.
+         *
+         *     `anomalous` no es un error: el tramo esta cerrado con sus marcas reales y
+         *     lo que dice es que una persona tiene que mirarlo (RN-07, RN-08). Una
+         *     version corregida se vuelve a clasificar por la misma politica que una
+         *     fichada.
+         * @example closed
+         * @enum {string}
+         */
+        ShiftEntryStatus: "open" | "closed" | "anomalous" | "voided" | "superseded";
+        /**
+         * CorrectionReasonText
+         * @description Explicacion escrita del motivo. **Obligatoria y de al menos 20
+         *     caracteres cuando `reason_code` es `OTROS`** (Anexo C); opcional para los
+         *     otros ocho, que ya explican algo por si mismos.
+         *
+         *     Sin datos de salud ni juicios de valor: es un texto operativo que acaba
+         *     en el registro legal y puede leerlo una inspeccion.
+         */
+        CorrectionReasonText: string;
+        /**
+         * AddShiftEntryRequest
+         * @description Alta manual de un tramo que nunca se ficho (RF-PA-04).
+         */
+        AddShiftEntryRequest: {
+            /**
+             * Format: uuid
+             * @description Identificador publico de la persona a la que se le atribuyen las horas.
+             */
+            employee_uuid: string;
+            /**
+             * Format: date
+             * @description Jornada a la que se atribuye el tramo, en la zona del centro (RN-05).
+             *     **Se declara y no se deduce** de `clocked_in_at`: la vuelta de una
+             *     pausa a las 02:30 pertenece a la jornada que empezo ayer a las 22:00
+             *     (ADR-024), y derivarla la mandaria al dia siguiente.
+             */
+            work_date: string;
+            clocked_in_at: components["schemas"]["UtcTimestamp"];
+            /**
+             * @description Salida. `null` da de alta el tramo **abierto**, que es lo que hace
+             *     falta cuando la persona esta trabajando ahora mismo y no pudo fichar
+             *     la entrada.
+             */
+            clocked_out_at?: components["schemas"]["UtcTimestamp"] | null;
+            reason_code: components["schemas"]["CorrectionReasonCode"];
+            reason_text?: components["schemas"]["CorrectionReasonText"] | null;
+        };
+        /**
+         * CorrectShiftEntryRequest
+         * @description Rectificacion de las marcas de un tramo vigente (RF-PA-04, RN-13).
+         *
+         *     **Hay que enviar al menos una de las dos marcas.** Una peticion que solo
+         *     trae el motivo no corrige nada, y una correccion que no cambia nada es
+         *     una fila de auditoria que miente.
+         */
+        CorrectShiftEntryRequest: {
+            clocked_in_at?: components["schemas"]["UtcTimestamp"];
+            clocked_out_at?: components["schemas"]["UtcTimestamp"];
+            reason_code: components["schemas"]["CorrectionReasonCode"];
+            reason_text?: components["schemas"]["CorrectionReasonText"] | null;
+        };
+        /**
+         * VoidShiftEntryRequest
+         * @description Anulacion de un tramo (RF-PA-04, ADR-026). No lleva marcas: no hay nada
+         *     que rectificar, solo hace falta saber cual, quien y por que.
+         */
+        VoidShiftEntryRequest: {
+            reason_code: components["schemas"]["CorrectionReasonCode"];
+            reason_text?: components["schemas"]["CorrectionReasonText"] | null;
+        };
+        /**
+         * CorrectedShiftEntry
+         * @description Como queda el registro despues de una correccion (RF-PA-04, RN-13,
+         *     ADR-035).
+         *
+         *     **Lleva los dos identificadores** porque el panel necesita los dos: uno
+         *     para seguir trabajando y otro para enlazar el historico. Es tambien lo
+         *     que le dice al cliente que el `uuid` que envio en el `PATCH` **ya no es
+         *     el vigente**.
+         */
+        CorrectedShiftEntry: {
+            /** Format: uuid */
+            employee_uuid: string;
+            /**
+             * Format: date
+             * @description La jornada, que **no cambia** al corregir (RN-05, regla dura 4). Una
+             *     correccion que la moveria se rechaza con `422`.
+             */
+            work_date: string;
+            action: components["schemas"]["CorrectionAction"];
+            /**
+             * Format: uuid
+             * @description La version **resultante**: la corregida, la creada, o la anulada si
+             *     fue una anulacion. En un `PATCH` es un identificador **nuevo**, no el
+             *     que se envio (ADR-035).
+             */
+            shift_entry_uuid: string;
+            /**
+             * @description La version que acaba de dejar de ser vigente, o `null` si la accion
+             *     no sustituyo ninguna: un alta no sustituye nada, y una anulacion
+             *     tampoco —no hay version posterior de un hecho que no paso—.
+             */
+            superseded_shift_entry_uuid: string | null;
+            /**
+             * @description Numero de version del tramo resultante (`shift_entries.version`). La
+             *     primera es la 1 y cada correccion suma una, conservando la anterior
+             *     (RN-13).
+             */
+            version: number;
+            status: components["schemas"]["ShiftEntryStatus"];
+            clocked_in_at: components["schemas"]["UtcTimestamp"];
+            clocked_out_at: components["schemas"]["UtcTimestamp"] | null;
+            /**
+             * @description Total de la jornada **recalculado**, nunca incrementado (RN-06,
+             *     ADR-007, regla dura 7). Es el unico camino por el que este numero
+             *     puede **bajar**: anular un tramo le quita sus minutos al dia.
+             */
+            daily_total_minutes: number;
+        };
+        /**
+         * LocalTimestamp
+         * Format: date-time
+         * @description El mismo instante que su pareja en UTC, escrito en la **zona del centro**
+         *     y con el desplazamiento explicito (`+01:00`, `+02:00`).
+         *
+         *     No sustituye al de UTC: viaja **ademas**. Almacenar en UTC y presentar en
+         *     la zona del centro es la regla dura 3, y el cliente no tiene que hacer la
+         *     conversion —ni acertar con la zona— para pintar una hora. Con cambio de
+         *     hora y turnos nocturnos, esa conversion hecha en el navegador es una hora
+         *     mal escrita en un registro legal.
+         * @example 2026-03-14T06:00:00.000000+01:00
+         */
+        LocalTimestamp: string;
+        /**
+         * TimeZoneName
+         * @description Zona horaria IANA del centro (`sites.timezone`). **Se muestra, no se
+         *     adivina**: viaja en la respuesta para que ninguna pantalla use la del
+         *     navegador. Dos centros del mismo cliente pueden tener zonas distintas
+         *     —`Europe/Madrid` y `Atlantic/Canary` son el mismo pais y una hora de
+         *     diferencia—.
+         * @example Europe/Madrid
+         */
+        TimeZoneName: string;
+        /**
+         * ClockingSource
+         * @description De donde salio la marca (`shift_entries.clock_in_source`). Es lo que ante
+         *     una inspeccion distingue lo que produjo el quiosco de lo que declaro una
+         *     persona: `manual_admin` siempre tiene una fila en `corrections` que lo
+         *     explica (RN-13).
+         * @example qr_kiosk
+         * @enum {string}
+         */
+        ClockingSource: "qr_kiosk" | "pin_kiosk" | "manual_admin" | "import";
+        /**
+         * EmployeeWorkDays
+         * @description Registro horario de una persona en un rango de jornadas (RF-PA-03).
+         */
+        EmployeeWorkDays: {
+            /**
+             * Format: uuid
+             * @description El empleado consultado. Nunca su clave interna ni su nombre.
+             */
+            employee_uuid: string;
+            time_zone: components["schemas"]["TimeZoneName"];
+            /**
+             * Format: date
+             * @description Primera jornada del rango **resuelto**, que puede venir de la omision.
+             */
+            from: string;
+            /**
+             * Format: date
+             * @description Ultima jornada del rango resuelto, inclusive.
+             */
+            to: string;
+            /** @description Jornadas con actividad registrada, de la mas antigua a la mas reciente. */
+            data: components["schemas"]["WorkDayDetail"][];
+            meta: {
+                /**
+                 * @description Cuantas jornadas trae `data`. **No hay paginacion**: el rango ya
+                 *     acota el resultado y partir una jornada por la mitad no significa
+                 *     nada.
+                 */
+                total: number;
+            };
+        };
+        /**
+         * WorkDayDetail
+         * @description Una jornada: sus tramos vigentes, su total y por que cambio (RF-PA-03).
+         *
+         *     **`total_minutes` es la suma de los `duration_minutes` de
+         *     `shift_entries`**, con el tramo abierto contando cero. Si alguna vez no
+         *     cuadrara, el dato malo seria la proyeccion `daily_totals` y no los
+         *     tramos: los tramos son el registro y el total es una proyeccion
+         *     reconstruible (regla dura 7).
+         */
+        WorkDayDetail: {
+            /**
+             * Format: date
+             * @description La jornada, en la zona del centro. Un turno 22:00 → 06:00 pertenece
+             *     entera al dia en que **empezo** (RN-05, ADR-006, regla dura 4).
+             */
+            work_date: string;
+            time_zone: components["schemas"]["TimeZoneName"];
+            /** @description Minutos trabajados en la jornada. Enteros, nunca decimales (RN-06). */
+            total_minutes: number;
+            /** @description Numero de tramos vigentes, que es la longitud de `shift_entries`. */
+            shift_count: number;
+            /**
+             * @description La persona tiene un turno sin cerrar en esta jornada (RN-01). El
+             *     panel tiene que decirlo: el total de hoy todavia va a subir.
+             */
+            has_open_shift: boolean;
+            /**
+             * @description Algun tramo quedo clasificado como `anomalous` (RN-07, RN-08). No es
+             *     un error: es que alguien tiene que mirarlo.
+             */
+            has_incident: boolean;
+            /**
+             * @description Cuando se recalculo por ultima vez la proyeccion `daily_totals` de
+             *     este dia. `null` si la jornada aun no tiene fila de proyeccion, que
+             *     es el unico caso en que `total_minutes` sale de sumar los tramos.
+             */
+            recalculated_at: components["schemas"]["UtcTimestamp"] | null;
+            /**
+             * @description **Solo las versiones vigentes**: sin `voided` ni `superseded`
+             *     (ADR-026). Las que dejaron de serlo no desaparecen —nada se borra—,
+             *     estan en `corrections` con sus marcas.
+             */
+            shift_entries: components["schemas"]["WorkDayShiftEntry"][];
+            /**
+             * @description La cadena de versiones de la jornada, de la mas antigua a la mas
+             *     reciente (RN-13, RL-04). Incluye las correcciones sobre tramos que
+             *     hoy ya no son vigentes: es lo que permite reconstruir el historico
+             *     sin volver a consultar nada.
+             */
+            corrections: components["schemas"]["WorkDayCorrection"][];
+        };
+        /**
+         * WorkDayShiftEntry
+         * @description Un tramo vigente, con **sus dos marcas y las dos horas de cada una**
+         *     (regla dura 9): cuando se ficho y cuando lo recibio el servidor.
+         */
+        WorkDayShiftEntry: {
+            /**
+             * Format: uuid
+             * @description Identificador de **esta version** del tramo (ADR-035). Es el que hay
+             *     que enviar a `PATCH /api/v1/shift-entries/{uuid}`, y deja de valer en
+             *     cuanto alguien corrija.
+             */
+            uuid: string;
+            version: number;
+            status: components["schemas"]["ShiftEntryStatus"];
+            /**
+             * Format: int64
+             * @description Centro donde se ficho, que puede no ser el centro actual del
+             *     empleado: un traslado no reescribe donde ocurrieron las jornadas
+             *     anteriores.
+             */
+            site_id: number;
+            time_zone: components["schemas"]["TimeZoneName"];
+            clocked_in_at: components["schemas"]["UtcTimestamp"];
+            clocked_in_at_local: components["schemas"]["LocalTimestamp"];
+            /**
+             * @description Cuando el servidor recibio el escaneo que abrio el tramo. La
+             *     diferencia con `clocked_in_at` es el retraso de la cola offline del
+             *     quiosco (RF-KI-04): si son horas, ese fichaje viajo encolado.
+             *     `null` cuando la marca no vino de un escaneo —un alta manual—.
+             */
+            clocked_in_recorded_at: components["schemas"]["UtcTimestamp"] | null;
+            clock_in_source: components["schemas"]["ClockingSource"];
+            /** @description `null` mientras el turno siga abierto. */
+            clocked_out_at: components["schemas"]["UtcTimestamp"] | null;
+            clocked_out_at_local: components["schemas"]["LocalTimestamp"] | null;
+            clocked_out_recorded_at: components["schemas"]["UtcTimestamp"] | null;
+            clock_out_source: components["schemas"]["ClockingSource"] | null;
+            /**
+             * @description Minutos del tramo. `null` mientras esta abierto, y entonces aporta
+             *     **cero** a `total_minutes`: inventarle una duracion a un turno en
+             *     curso seria dar por terminado lo que no ha terminado.
+             */
+            duration_minutes: number | null;
+            /**
+             * @description Cuando el servidor escribio **esta version de la fila**. En una
+             *     version corregida es el momento de la correccion, no el del fichaje:
+             *     para eso estan las dos marcas `*_recorded_at`.
+             */
+            recorded_at: components["schemas"]["UtcTimestamp"];
+        };
+        /**
+         * WorkDayCorrection
+         * @description Un asiento del libro de correcciones (`shift_corrections`, RN-13, RL-04).
+         *
+         *     **Lleva las marcas completas de las dos versiones, no un delta**, para que
+         *     el panel pueda pintar el «de → a» sin recomponer nada.
+         */
+        WorkDayCorrection: {
+            /**
+             * Format: uuid
+             * @description La version del tramo que la accion **produjo** —la corregida o la
+             *     creada— o la que **termino** si fue una anulacion. Puede no aparecer
+             *     ya en `shift_entries`: ahi solo estan las vigentes.
+             */
+            shift_entry_uuid: string;
+            action: components["schemas"]["CorrectionAction"];
+            /**
+             * @description Cuando se corrigio, que no es ninguna de las marcas del tramo: una
+             *     jornada de hace tres semanas corregida hoy produce un asiento de hoy.
+             */
+            performed_at: components["schemas"]["UtcTimestamp"];
+            performed_at_local: components["schemas"]["LocalTimestamp"];
+            performed_by: components["schemas"]["CorrectionAuthor"];
+            reason_code: components["schemas"]["CorrectionReasonCode"];
+            reason_text: components["schemas"]["CorrectionReasonText"] | null;
+            /** @description `null` en un alta: antes no habia tramo. */
+            before: components["schemas"]["ShiftMarks"] | null;
+            /** @description `null` en una anulacion: no hay version posterior de un hecho que no paso. */
+            after: components["schemas"]["ShiftMarks"] | null;
+        };
+        /**
+         * CorrectionAuthor
+         * @description Quien firmo la correccion. **Es siempre una persona, nunca «el sistema»**
+         *     (RN-13): una correccion sin autor no explica nada ante una inspeccion.
+         *
+         *     Sale su nombre porque el panel tiene que mostrarlo; **no sale su correo**,
+         *     que no aporta nada a esta pantalla.
+         */
+        CorrectionAuthor: {
+            /**
+             * Format: uuid
+             * @description `users.uuid`. Es el identificador que aparece tambien en `audit_log`.
+             */
+            uuid: string;
+            name: string;
+        };
+        /**
+         * ShiftMarks
+         * @description Las marcas de **una version** del tramo, tal y como quedaron escritas en
+         *     `shift_corrections.before` / `.after`.
+         *
+         *     **No lleva el nombre de nadie** (regla dura 21): describe horas. La
+         *     persona esta en el tramo y quien firmo en `performed_by`.
+         */
+        ShiftMarks: {
+            version: number;
+            clocked_in_at: components["schemas"]["UtcTimestamp"];
+            clocked_out_at: components["schemas"]["UtcTimestamp"] | null;
+            /**
+             * @description Minutos que decia esta version. Van escritos y no se deducen al leer:
+             *     el historico responde «cuanto decia antes» sin recalcular nada.
+             */
+            worked_minutes: number;
+        };
     };
     responses: {
         /**
@@ -452,6 +2855,65 @@ export interface components {
             };
         };
         /**
+         * @description Las credenciales no son validas. **Una sola respuesta para las tres
+         *     causas** —contrasena incorrecta, correo que no existe y cuenta
+         *     desactivada—: distinguirlas convertiria el acceso al panel en un
+         *     comprobador de cuentas de la empresa.
+         */
+        InvalidCredentials: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
+         * @description El recurso no existe, o el token no alcanza a verlo. Las dos causas
+         *     comparten respuesta: enumerar lo que existe pero no se puede ver es una
+         *     fuga con otro nombre.
+         */
+        NotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
+         * @description La operacion choca con el estado actual del recurso: un correo o un
+         *     nombre ya usados, o una baja sobre alguien que ya estaba de baja.
+         *
+         *     Es `409` y no `422` porque la peticion es valida en si misma; lo que no
+         *     encaja es el estado del sistema. La distincion importa al cliente: ante
+         *     un `409` no sirve corregir el formulario, hay que releer el recurso.
+         */
+        Conflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
+         * @description La peticion no cumple el contrato: falta un campo, un formato no es
+         *     valido o un identificador referenciado no existe.
+         *
+         *     `errors` lleva el detalle por campo para que el panel lo pinte junto al
+         *     formulario. **Nunca describe el motivo de un rechazo de escaneo**: ese
+         *     camino tiene su propia respuesta generica (regla dura 17).
+         */
+        ValidationFailed: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["ValidationProblem"];
+            };
+        };
+        /**
          * @description Se ha superado el limite de peticiones (§7.1). El cliente debe reintentar con
          *     retroceso exponencial; el quiosco ya lo hace por diseño y el empleado no se
          *     entera, porque su fichaje esta encolado en local desde el primer momento.
@@ -463,6 +2925,25 @@ export interface components {
                  * @example 2
                  */
                 "Retry-After": number;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
+         * @description La instalacion no esta en condiciones de atender la operacion, y no es
+         *     culpa de quien la pide: falta configuracion del servidor. Hoy solo lo
+         *     produce la emision de credenciales cuando no hay clave de firma
+         *     configurada (doc 02 Anexo B, §7.7).
+         *
+         *     Es `503` y no `500` porque la accion siguiente es distinta: hay que
+         *     avisar a quien administra la instalacion, no reportar un fallo del
+         *     producto. **El detalle dice que falta, nunca su valor**: ninguna clave ni
+         *     parte de ella sale por aqui.
+         */
+        ServiceUnavailable: {
+            headers: {
                 [name: string]: unknown;
             };
             content: {
@@ -482,6 +2963,108 @@ export interface components {
          * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
          */
         IdempotencyKey: components["schemas"]["ScanId"];
+        /**
+         * @description Clave de idempotencia **del lote**, un UUID v7 que genera el quiosco al
+         *     formar el envio.
+         *
+         *     No puede coincidir con ningun `scan_id` porque un lote no es un escaneo:
+         *     identifica el ENVIO, y sirve para correlacionar en los registros el reintento
+         *     de una sincronizacion con el intento anterior. **La deduplicacion real es
+         *     elemento a elemento**, por el UNIQUE de `scan_events.scan_id` (regla dura 8),
+         *     y por eso reenviar un lote con la misma clave, con otra, o solapado con otro
+         *     lote da exactamente el mismo resultado.
+         * @example 0199f2aa-4c10-7f21-9a44-1b2c3d4e5f60
+         */
+        BatchIdempotencyKey: string;
+        /**
+         * @description Identificador **publico** del empleado (`employees.uuid`, UUID v7). En la
+         *     API nunca viaja la clave interna: un identificador secuencial en una URL
+         *     es un mapa de cuanta gente hay y en que orden entro.
+         * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+         */
+        EmployeeUuid: string;
+        /**
+         * @description Identificador **publico** de la credencial (`credentials.uuid`). Por lo
+         *     mismo que el del empleado: la clave interna no sale de la base de datos,
+         *     y un identificador secuencial en una URL diria cuantas tarjetas se han
+         *     emitido.
+         *
+         *     **No es el token del QR** y no tiene nada que ver con el: este UUID es
+         *     publico y sirve para gestionar la credencial; el token es secreto, va
+         *     impreso y no vuelve a aparecer en ninguna respuesta.
+         * @example 0199f0d1-2a5b-7d4f-8c32-5e6f7a8b9c01
+         */
+        CredentialUuid: string;
+        /**
+         * @description Identificador **publico** del tramo (`shift_entries.uuid`, UUID v7).
+         *
+         *     **Identifica una version, no un tramo a lo largo del tiempo** (ADR-035).
+         *     Corregir crea una fila nueva con `uuid` propio y deja esta como
+         *     historico, asi que el identificador que devolvio una correccion es el que
+         *     hay que usar en la siguiente: reutilizar el anterior responde `409`.
+         * @example 0199f0c2-9b30-7a21-8d40-1e2f3a4b5c60
+         */
+        ShiftEntryUuid: string;
+        /**
+         * @description Identificador del centro. Aqui si es el numerico: `sites` no tiene UUID
+         *     publico (documento 01 §5.5) porque un centro no es un dato personal ni
+         *     aparece impreso en ninguna tarjeta.
+         * @example 1
+         */
+        SiteId: number;
+        /**
+         * @description Identificador del departamento (documento 01 §5.5).
+         * @example 3
+         */
+        DepartmentId: number;
+        /**
+         * @description Limita el resultado al centro indicado.
+         * @example 1
+         */
+        SiteFilter: number;
+        /**
+         * @description Limita el resultado al departamento indicado.
+         * @example 3
+         */
+        DepartmentFilter: number;
+        /**
+         * @description Limita el resultado a una situacion laboral. Sin filtro se devuelven
+         *     tambien los cesados: el historico se conserva (RF-GP-03, RL-02).
+         * @example active
+         */
+        EmploymentStatusFilter: components["schemas"]["EmploymentStatus"];
+        /**
+         * @description Primera **jornada** del rango, inclusive (`shift_entries.work_date`). Es
+         *     una fecha civil en la zona del centro, no un instante: filtrar por
+         *     `work_date` y no por la hora de las marcas es lo que mantiene entero un
+         *     turno que cruza la medianoche (RN-05, regla dura 4).
+         *
+         *     Sin `from` se toman los **31 dias** que terminan en `to`, que es el mes
+         *     que el panel abre por omision. El rango no puede exceder **366 dias**: no
+         *     es una regla de negocio, es el techo que impide que una URL manipulada
+         *     pida el historico entero de una persona en una sola respuesta.
+         * @example 2026-03-01
+         */
+        WorkDateFrom: string;
+        /**
+         * @description Ultima jornada del rango, inclusive. Sin `to` se toma **hoy** en la zona
+         *     del centro del empleado —no la del navegador ni la del servidor—, que es
+         *     la unica que decide que dia es hoy para esa persona (RN-04).
+         * @example 2026-03-31
+         */
+        WorkDateTo: string;
+        /**
+         * @description Pagina solicitada, empezando en 1.
+         * @example 1
+         */
+        Page: number;
+        /**
+         * @description Elementos por pagina. El techo es deliberado: una plantilla de 600
+         *     personas no se sirve entera en una respuesta, y el panel virtualiza la
+         *     lista (documento 02, Anexo A).
+         * @example 25
+         */
+        PerPage: number;
     };
     requestBodies: never;
     headers: never;
@@ -613,6 +3196,1228 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ScanRejected"];
                 };
             };
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    syncScanBatch: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Clave de idempotencia **del lote**, un UUID v7 que genera el quiosco al
+                 *     formar el envio.
+                 *
+                 *     No puede coincidir con ningun `scan_id` porque un lote no es un escaneo:
+                 *     identifica el ENVIO, y sirve para correlacionar en los registros el reintento
+                 *     de una sincronizacion con el intento anterior. **La deduplicacion real es
+                 *     elemento a elemento**, por el UNIQUE de `scan_events.scan_id` (regla dura 8),
+                 *     y por eso reenviar un lote con la misma clave, con otra, o solapado con otro
+                 *     lote da exactamente el mismo resultado.
+                 * @example 0199f2aa-4c10-7f21-9a44-1b2c3d4e5f60
+                 */
+                "Idempotency-Key": components["parameters"]["BatchIdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScanBatchRequest"];
+            };
+        };
+        responses: {
+            /**
+             * @description Lote procesado. **Siempre `207`, aunque todos los elementos se hayan
+             *     aceptado o todos se hayan rechazado**: el codigo describe la forma de la
+             *     respuesta —un resultado por elemento—, no el desenlace agregado, que no
+             *     existe.
+             *
+             *     `results` viene **en el orden en que se proceso el lote**, es decir,
+             *     ordenado por `occurred_at`. Aun asi, el cliente debe emparejar por
+             *     `scan_id` y no por posicion: es lo unico que sigue valiendo si un dia se
+             *     reordena.
+             */
+            207: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScanBatchResponse"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getKioskRoster: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Padron minimo del centro del dispositivo. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KioskRoster"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    recordKioskHeartbeat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KioskHeartbeatRequest"];
+            };
+        };
+        responses: {
+            /** @description Latido registrado. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KioskHeartbeat"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    logIn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Sesion iniciada. El token viaja como `Bearer` en cada peticion posterior. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            401: components["responses"]["InvalidCredentials"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    logOut: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sesion cerrada. El token deja de ser valido de inmediato. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    getCurrentUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sesion en curso. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagementUser"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    listEmployees: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Limita el resultado al centro indicado.
+                 * @example 1
+                 */
+                site_id?: components["parameters"]["SiteFilter"];
+                /**
+                 * @description Limita el resultado al departamento indicado.
+                 * @example 3
+                 */
+                department_id?: components["parameters"]["DepartmentFilter"];
+                /**
+                 * @description Limita el resultado a una situacion laboral. Sin filtro se devuelven
+                 *     tambien los cesados: el historico se conserva (RF-GP-03, RL-02).
+                 * @example active
+                 */
+                status?: components["parameters"]["EmploymentStatusFilter"];
+                /**
+                 * @description Pagina solicitada, empezando en 1.
+                 * @example 1
+                 */
+                page?: components["parameters"]["Page"];
+                /**
+                 * @description Elementos por pagina. El techo es deliberado: una plantilla de 600
+                 *     personas no se sirve entera en una respuesta, y el panel virtualiza la
+                 *     lista (documento 02, Anexo A).
+                 * @example 25
+                 */
+                per_page?: components["parameters"]["PerPage"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pagina de la plantilla. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmployeeCollection"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    createEmployee: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateEmployeeRequest"];
+            };
+        };
+        responses: {
+            /**
+             * @description Empleado dado de alta, con el PIN que se acaba de emitir. **El PIN
+             *     solo aparece aqui**: no vuelve en ninguna consulta posterior.
+             */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmployeeProvisioned"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getEmployee: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** del empleado (`employees.uuid`, UUID v7). En la
+                 *     API nunca viaja la clave interna: un identificador secuencial en una URL
+                 *     es un mapa de cuanta gente hay y en que orden entro.
+                 * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                 */
+                uuid: components["parameters"]["EmployeeUuid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Ficha del empleado. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Employee"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    updateEmployee: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** del empleado (`employees.uuid`, UUID v7). En la
+                 *     API nunca viaja la clave interna: un identificador secuencial en una URL
+                 *     es un mapa de cuanta gente hay y en que orden entro.
+                 * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                 */
+                uuid: components["parameters"]["EmployeeUuid"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateEmployeeRequest"];
+            };
+        };
+        responses: {
+            /** @description Ficha actualizada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Employee"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    offboardEmployee: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** del empleado (`employees.uuid`, UUID v7). En la
+                 *     API nunca viaja la clave interna: un identificador secuencial en una URL
+                 *     es un mapa de cuanta gente hay y en que orden entro.
+                 * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                 */
+                uuid: components["parameters"]["EmployeeUuid"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OffboardEmployeeRequest"];
+            };
+        };
+        responses: {
+            /** @description Empleado dado de baja. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Employee"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    resetEmployeePin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** del empleado (`employees.uuid`, UUID v7). En la
+                 *     API nunca viaja la clave interna: un identificador secuencial en una URL
+                 *     es un mapa de cuanta gente hay y en que orden entro.
+                 * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                 */
+                uuid: components["parameters"]["EmployeeUuid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description PIN restablecido. **Es la unica vez que se muestra**: quien lo
+             *     recibe lo anota o lo entrega en ese momento.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuedPin"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    recordEmployeePinDelivery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** del empleado (`employees.uuid`, UUID v7). En la
+                 *     API nunca viaja la clave interna: un identificador secuencial en una URL
+                 *     es un mapa de cuanta gente hay y en que orden entro.
+                 * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                 */
+                uuid: components["parameters"]["EmployeeUuid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Entrega registrada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PinDeliveryReceipt"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listEmployeeWorkDays: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Primera **jornada** del rango, inclusive (`shift_entries.work_date`). Es
+                 *     una fecha civil en la zona del centro, no un instante: filtrar por
+                 *     `work_date` y no por la hora de las marcas es lo que mantiene entero un
+                 *     turno que cruza la medianoche (RN-05, regla dura 4).
+                 *
+                 *     Sin `from` se toman los **31 dias** que terminan en `to`, que es el mes
+                 *     que el panel abre por omision. El rango no puede exceder **366 dias**: no
+                 *     es una regla de negocio, es el techo que impide que una URL manipulada
+                 *     pida el historico entero de una persona en una sola respuesta.
+                 * @example 2026-03-01
+                 */
+                from?: components["parameters"]["WorkDateFrom"];
+                /**
+                 * @description Ultima jornada del rango, inclusive. Sin `to` se toma **hoy** en la zona
+                 *     del centro del empleado —no la del navegador ni la del servidor—, que es
+                 *     la unica que decide que dia es hoy para esa persona (RN-04).
+                 * @example 2026-03-31
+                 */
+                to?: components["parameters"]["WorkDateTo"];
+            };
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** del empleado (`employees.uuid`, UUID v7). En la
+                 *     API nunca viaja la clave interna: un identificador secuencial en una URL
+                 *     es un mapa de cuanta gente hay y en que orden entro.
+                 * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                 */
+                uuid: components["parameters"]["EmployeeUuid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description Las jornadas del rango, de la mas antigua a la mas reciente. Un
+             *     empleado sin jornadas en el rango devuelve `data` vacio, no un `404`:
+             *     no haber trabajado esos dias es una respuesta.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmployeeWorkDays"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listDepartments: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Limita el resultado al centro indicado.
+                 * @example 1
+                 */
+                site_id?: components["parameters"]["SiteFilter"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Departamentos. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DepartmentCollection"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    createDepartment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateDepartmentRequest"];
+            };
+        };
+        responses: {
+            /** @description Departamento creado. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Department"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getDepartment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador del departamento (documento 01 §5.5).
+                 * @example 3
+                 */
+                id: components["parameters"]["DepartmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Departamento. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Department"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    updateDepartment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador del departamento (documento 01 §5.5).
+                 * @example 3
+                 */
+                id: components["parameters"]["DepartmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateDepartmentRequest"];
+            };
+        };
+        responses: {
+            /** @description Departamento actualizado. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Department"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listSites: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Centros. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteCollection"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    createSite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSiteRequest"];
+            };
+        };
+        responses: {
+            /** @description Centro creado. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Site"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getSite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador del centro. Aqui si es el numerico: `sites` no tiene UUID
+                 *     publico (documento 01 §5.5) porque un centro no es un dato personal ni
+                 *     aparece impreso en ninguna tarjeta.
+                 * @example 1
+                 */
+                id: components["parameters"]["SiteId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Centro. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Site"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    updateSite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador del centro. Aqui si es el numerico: `sites` no tiene UUID
+                 *     publico (documento 01 §5.5) porque un centro no es un dato personal ni
+                 *     aparece impreso en ninguna tarjeta.
+                 * @example 1
+                 */
+                id: components["parameters"]["SiteId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSiteRequest"];
+            };
+        };
+        responses: {
+            /** @description Centro actualizado. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Site"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    issueCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssueCredentialRequest"];
+            };
+        };
+        responses: {
+            /**
+             * @description Credencial emitida y **pendiente de imprimir**. Todavia no puede
+             *     fichar con ella nadie.
+             */
+            201: {
+                headers: {
+                    /**
+                     * @description Incluye siempre `no-store`. No lleva ningun secreto, pero es
+                     *     gestion de credenciales de personas identificadas y no tiene por
+                     *     que quedarse en la cache de un proxy.
+                     */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuedCredential"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    revokeCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** de la credencial (`credentials.uuid`). Por lo
+                 *     mismo que el del empleado: la clave interna no sale de la base de datos,
+                 *     y un identificador secuencial en una URL diria cuantas tarjetas se han
+                 *     emitido.
+                 *
+                 *     **No es el token del QR** y no tiene nada que ver con el: este UUID es
+                 *     publico y sirve para gestionar la credencial; el token es secreto, va
+                 *     impreso y no vuelve a aparecer en ninguna respuesta.
+                 * @example 0199f0d1-2a5b-7d4f-8c32-5e6f7a8b9c01
+                 */
+                uuid: components["parameters"]["CredentialUuid"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RevokeCredentialRequest"];
+            };
+        };
+        responses: {
+            /** @description Credencial revocada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Credential"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    credentialStatusBoard: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Acota a un centro. Sin el, toda la instalacion.
+                 * @example 1
+                 */
+                site_id?: number;
+                /**
+                 * @description Solo quien **todavia no tiene la tarjeta en la mano**: sin
+                 *     credencial, pendiente de imprimir, pendiente de entregar y revocada.
+                 *     Con la lista completa de un hotel de trescientas personas delante,
+                 *     las cuatro que faltan no se ven.
+                 */
+                pending?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Estado de las credenciales de la plantilla de alta. */
+            200: {
+                headers: {
+                    /**
+                     * @description Incluye siempre `no-store`. Es una lista nominal de la plantilla
+                     *     y no tiene por que quedarse en la cache de un proxy.
+                     */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CredentialStatusBoard"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    printCredentialBatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PrintCredentialBatchRequest"];
+            };
+        };
+        responses: {
+            /**
+             * @description El PDF del lote. Las credenciales que lleva dentro constan ya como
+             *     impresas.
+             */
+            200: {
+                headers: {
+                    /** @description Siempre `no-store`: el cuerpo permite fichar en nombre de otras personas. */
+                    "Cache-Control"?: string;
+                    /** @description Adjunto, con un nombre de fichero que no lleva ningun nombre de persona. */
+                    "Content-Disposition"?: string;
+                    /**
+                     * @description Cuantas tarjetas lleva el documento. Va en cabecera porque el
+                     *     cuerpo es binario y el panel necesita poder decir «se han impreso
+                     *     40» sin abrir el PDF.
+                     * @example 40
+                     */
+                    "X-Kronoqr-Printed-Count"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                };
+            };
+            /**
+             * @description **No habia nada pendiente de imprimir.** No es un error: es la forma
+             *     que toma la idempotencia del lote (ADR-034). La segunda pasada del
+             *     mismo lote llega siempre aqui.
+             */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    printCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** de la credencial (`credentials.uuid`). Por lo
+                 *     mismo que el del empleado: la clave interna no sale de la base de datos,
+                 *     y un identificador secuencial en una URL diria cuantas tarjetas se han
+                 *     emitido.
+                 *
+                 *     **No es el token del QR** y no tiene nada que ver con el: este UUID es
+                 *     publico y sirve para gestionar la credencial; el token es secreto, va
+                 *     impreso y no vuelve a aparecer en ninguna respuesta.
+                 * @example 0199f0d1-2a5b-7d4f-8c32-5e6f7a8b9c01
+                 */
+                uuid: components["parameters"]["CredentialUuid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description El PDF de la tarjeta. La credencial consta ya como impresa. */
+            200: {
+                headers: {
+                    /** @description Siempre `no-store`: el cuerpo permite fichar en nombre de otra persona. */
+                    "Cache-Control"?: string;
+                    /** @description Adjunto, con un nombre de fichero que no lleva ningun nombre de persona. */
+                    "Content-Disposition"?: string;
+                    /**
+                     * @description Siempre `1` en este endpoint. Se declara para que el cliente lo trate igual que el lote.
+                     * @example 1
+                     */
+                    "X-Kronoqr-Printed-Count"?: 1;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /**
+             * @description La credencial **ya se imprimio** o esta revocada. No hay reimpresion
+             *     (ADR-034). Tambien llega aqui la carrera: alguien la imprimio entre
+             *     la lectura y la escritura.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    deliverCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** de la credencial (`credentials.uuid`). Por lo
+                 *     mismo que el del empleado: la clave interna no sale de la base de datos,
+                 *     y un identificador secuencial en una URL diria cuantas tarjetas se han
+                 *     emitido.
+                 *
+                 *     **No es el token del QR** y no tiene nada que ver con el: este UUID es
+                 *     publico y sirve para gestionar la credencial; el token es secreto, va
+                 *     impreso y no vuelve a aparecer en ninguna respuesta.
+                 * @example 0199f0d1-2a5b-7d4f-8c32-5e6f7a8b9c01
+                 */
+                uuid: components["parameters"]["CredentialUuid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Entrega registrada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Credential"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Ya estaba entregada, todavia no se ha impreso, o esta revocada. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    addShiftEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddShiftEntryRequest"];
+            };
+        };
+        responses: {
+            /** @description Tramo dado de alta, con el total del dia recalculado. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CorrectedShiftEntry"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    correctShiftEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** del tramo (`shift_entries.uuid`, UUID v7).
+                 *
+                 *     **Identifica una version, no un tramo a lo largo del tiempo** (ADR-035).
+                 *     Corregir crea una fila nueva con `uuid` propio y deja esta como
+                 *     historico, asi que el identificador que devolvio una correccion es el que
+                 *     hay que usar en la siguiente: reutilizar el anterior responde `409`.
+                 * @example 0199f0c2-9b30-7a21-8d40-1e2f3a4b5c60
+                 */
+                uuid: components["parameters"]["ShiftEntryUuid"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CorrectShiftEntryRequest"];
+            };
+        };
+        responses: {
+            /**
+             * @description Tramo corregido. `shift_entry_uuid` es la version **nueva** y
+             *     `superseded_shift_entry_uuid` la que queda como historico.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CorrectedShiftEntry"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /**
+             * @description Ese tramo ya no es la version vigente —lo corrigio o lo anulo alguien
+             *     antes— o la correccion dejaria dos turnos abiertos o dos tramos
+             *     solapados (RN-01, RN-02, ADR-026). Vuelve a leer la jornada.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    voidShiftEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** del tramo (`shift_entries.uuid`, UUID v7).
+                 *
+                 *     **Identifica una version, no un tramo a lo largo del tiempo** (ADR-035).
+                 *     Corregir crea una fila nueva con `uuid` propio y deja esta como
+                 *     historico, asi que el identificador que devolvio una correccion es el que
+                 *     hay que usar en la siguiente: reutilizar el anterior responde `409`.
+                 * @example 0199f0c2-9b30-7a21-8d40-1e2f3a4b5c60
+                 */
+                uuid: components["parameters"]["ShiftEntryUuid"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoidShiftEntryRequest"];
+            };
+        };
+        responses: {
+            /** @description Tramo anulado, con el total del dia recalculado a la baja. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CorrectedShiftEntry"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /**
+             * @description Ese tramo ya estaba anulado o ya fue sustituido por una version
+             *     posterior (ADR-026). Vuelve a leer la jornada.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    generateLegalExport: {
+        parameters: {
+            query: {
+                /**
+                 * @description Primer dia del periodo, por **fecha de jornada** (`work_date`) y no
+                 *     por fecha civil de la marca: un turno que entro el dia 31 a las 22:00
+                 *     pertenece al 31 aunque salga el 1 (RN-05).
+                 * @example 2026-01-01
+                 */
+                from: string;
+                /**
+                 * @description Ultimo dia del periodo, inclusive. No puede ser anterior a `from`.
+                 * @example 2026-01-31
+                 */
+                to: string;
+                /**
+                 * @description Limita la exportacion a un unico trabajador. Sin este parametro se
+                 *     exporta la plantilla completa, que es lo que suele pedir un
+                 *     requerimiento general.
+                 * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                 */
+                employee_uuid?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description El fichero CSV. Puede estar vacio de filas de datos —un periodo sin
+             *     jornadas registradas es una respuesta valida— y aun asi lleva su
+             *     cabecera de criterios: «no hay nada» tambien es una afirmacion que
+             *     hay que poder entregar.
+             */
+            200: {
+                headers: {
+                    /** @description Adjunto, con un nombre de fichero que no lleva ningun nombre de persona. */
+                    "Content-Disposition"?: string;
+                    /** @description Siempre `no-store`: el cuerpo es una lista nominal de la plantilla. */
+                    "Cache-Control"?: string;
+                    /**
+                     * @description Tramos exportados. Permite comprobar que la descarga esta completa.
+                     * @example 1240
+                     */
+                    "X-Kronoqr-Export-Shift-Rows"?: number;
+                    /**
+                     * @description Correcciones exportadas, con su autor y su motivo (RN-13, RL-04).
+                     * @example 17
+                     */
+                    "X-Kronoqr-Export-Correction-Rows"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
         };
     };

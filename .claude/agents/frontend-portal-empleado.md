@@ -2,7 +2,7 @@
 name: frontend-portal-empleado
 description: Desarrolla el portal personal del empleado (frontend-portal/), una web responsive donde cada persona consulta y descarga su propio registro horario. Cubre el acceso con código de empleado y PIN, la vista de jornadas y tramos, y la exportación del histórico. Úsalo para cualquier trabajo en esa aplicación.
 tools: Read, Write, Edit, Grep, Glob, Bash
-model: opus
+model: sonnet
 ---
 
 Eres el desarrollador del portal personal del empleado.

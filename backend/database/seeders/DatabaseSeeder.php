@@ -20,11 +20,18 @@ use Illuminate\Database\Seeder;
  * |---------------------------------------------------------|-------|
  * | Centros con zona horaria y departamentos base            | 0.1   |
  * | Empleados, credenciales, dispositivos, 90 dias de tramos | 1.3   |
- * | Casos limite: turnos nocturnos, DST, olvido de salida    | 1.4   |
- * | Correcciones y tramos superseded                         | 2.3   |
+ * | Casos limite: turnos nocturnos, DST, olvido de salida    | 1.4 ✔ |
+ * | Correcciones y tramos superseded                         | 1.15 ✔|
  *
  * El orden de ejecucion importa y esta fijado aqui: los departamentos cuelgan
- * de un centro, y los empleados de un departamento.
+ * de un centro, los empleados de un departamento, las credenciales de un
+ * empleado y los tramos de todo lo anterior.
+ *
+ * **El perfil de cumplimiento `ES-hosteleria` y los umbrales operativos del
+ * Anexo B no estan en esta lista y no es un olvido**: los siembran sus
+ * migraciones. Un seeder no se ejecuta en la instalacion de un cliente, y sin
+ * esos dos conjuntos de valores el primer calculo de jornada no tendria umbral
+ * que aplicar (regla dura 14). Son dato de producto, no dato de desarrollo.
  */
 final class DatabaseSeeder extends Seeder
 {
@@ -33,17 +40,28 @@ final class DatabaseSeeder extends Seeder
         $this->call([
             SiteSeeder::class,
             DepartmentSeeder::class,
+            UserSeeder::class,
+            // Reparte entre esas cuentas los seis roles de RF-ID-02, que crea
+            // su migracion porque son dato de producto y no de desarrollo.
+            RoleSeeder::class,
+            EmployeeSeeder::class,
+            CredentialSeeder::class,
+            DeviceSeeder::class,
+            VolumeSeeder::class,
 
-            // Llegan con su tarea. Se dejan enumerados para que el orden de
-            // ejecucion sea una decision tomada, no un descubrimiento.
-            //
-            // ComplianceProfileSeeder::class,  // 2.x — perfil ES-hosteleria
-            // EmployeeSeeder::class,           // 1.3
-            // CredentialSeeder::class,         // 1.3
-            // DeviceSeeder::class,             // 1.3
-            // VolumeSeeder::class,             // 1.3 — 90 dias de tramos
-            // EdgeCaseSeeder::class,           // 1.4 — nocturnos, DST, olvidos
-            // CorrectionSeeder::class,         // 2.3 — correcciones versionadas
+            // Despues del volumen y no antes: `VolumeSeeder` se salta el trabajo
+            // si ya hay tramos, y los casos limite son tramos. Ademas usa
+            // empleados propios, de modo que el turno olvidado —abierto, y por
+            // tanto con rango sin fin— no puede solapar con las jornadas
+            // aburridas de nadie (`shift_entries_no_overlap`).
+            EdgeCaseSeeder::class,
+
+            // Correcciones y tramos `superseded` (tarea 1.15). Va el ultimo y con
+            // empleados propios por el mismo motivo que los casos limite: siembra
+            // dos tramos que SE SOLAPAN a proposito —la version anterior y la
+            // corregida— y solo caben en la tabla porque uno de los dos ya no es
+            // vigente (ADR-026).
+            CorrectionSeeder::class,
         ]);
     }
 }

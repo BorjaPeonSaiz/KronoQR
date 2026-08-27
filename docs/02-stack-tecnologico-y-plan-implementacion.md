@@ -187,7 +187,7 @@ Nótese el puerto `CompliancePolicyProvider`: el dominio **recibe** los umbrales
 | Módulo | Responsabilidad | Puede depender de |
 |---|---|---|
 | `Attendance` | **Núcleo.** Fichajes, tramos, jornadas, correcciones | `Shared` |
-| `Compliance` | Auditoría, incidencias, retención, exportación legal | `Shared`, eventos de `Attendance` |
+| `Compliance` | Auditoría, incidencias, retención, exportación legal | `Shared`, **eventos de dominio** de `Attendance` e `Identity` |
 | `Workforce` | Empleados, departamentos, centros, contratos, ausencias | `Shared`, `Attendance/Application/Port` (implementa `EmployeeDirectory` y `SiteCalendar`) |
 | `Identity` | Usuarios, roles, permisos, credenciales QR, tokens de dispositivo | `Shared`, `Attendance/Application/Port` (implementa `CredentialResolver`) |
 | `Reporting` | Proyecciones y consultas de lectura, exportaciones | `Shared`, eventos de otros módulos |
@@ -398,7 +398,9 @@ El **Anexo D** recoge la equivalencia para MySQL 8 si la infraestructura de un c
 | Objetos | MinIO | Sistema de ficheros local o almacenamiento del cliente |
 | Observabilidad | Stack completo en Compose | Prometheus + Grafana + Loki + Alertmanager |
 
-Servicios de desarrollo: `app`, `nginx`, `postgres`, `redis`, `horizon`, `reverb`, `scheduler`, `node-kiosk`, `node-admin`, `node-portal`, `mailpit`, `prometheus`, `grafana`, `loki`. Un `make up` debe dejar el entorno completo funcionando con datos de ejemplo.
+Servicios de desarrollo: `app`, `nginx`, `postgres`, `redis`, `horizon`, `reverb`, `scheduler`, `node-kiosk`, `node-admin`, `node-portal`, `mailpit`, `prometheus`, `grafana`, `loki`, `node-exporter`. Un `make up` debe dejar el entorno completo funcionando con datos de ejemplo.
+
+`node-exporter` se añadió en la tarea 1.18 y tiene un único cometido: publicar a Prometheus el **resultado de la copia de seguridad, de su verificación y del simulacro de restauración** (§8.2), que los scripts escriben como ficheros en `BACKUP_PATH/metrics/`. Está en desarrollo y en producción por la misma razón por la que están las demás piezas de observabilidad: una alerta que solo existe en el servidor del cliente no la prueba nadie.
 
 ### 3.5 Convenciones de código (RNF-M-06)
 
@@ -514,6 +516,9 @@ Los diez siguientes **no proceden de esta tabla**: nacieron al desarrollar el pl
 | **030** | **Se adopta Laravel 13 antes de escribir el dominio** | El §3.1 mandaba verificar la versión mayor vigente al arrancar, pero ninguna fila registraba la elección de framework: la instrucción **no tenía ADR donde aterrizar**. Al comprobarlo, Laravel 12 ya había salido de correcciones de fallos y solo conservaba parches de seguridad hasta febrero de 2027 | Restricción `^13.12`, porque las 13.0–13.11 arrastran tres avisos de seguridad. Sube también Tinker, `laravel-pdf`, Pest y PHPUnit. Se migró con el repositorio en esqueleto y **sin tocar una línea de código de aplicación**: era el momento más barato que iba a haber |
 | **031** | **El anti-rebote es un resultado aceptado, no un rechazo** | `RF-AT-06` es Must de la Fase 1 y **no cabía en el contrato**: con `200 ScanAccepted` habría que devolver una `action` que no ocurrió, y con `422 ScanRejected` se confundiría con el rechazo de credencial, que es genérico por diseño (RS-03) | `200` con `action: debounced` y esquema propio `ScanDebounced`, discriminado por `oneOf`. Es `2xx` porque la cola offline reintenta ante fallo: un `4xx` la dejaría reintentando contra una ventana ya pasada. `scan_events.result` conserva `rejected_debounce`: son dos capas y dos vocabularios |
 | **032** | **La Fase 1 entrega un sistema legalmente defendible, no un piloto** | La Fase 1 se cerraba como "piloto interno controlado, no vendible" (doc 02 §11.2: sin auditoría inmutable, retención y exportación para Inspección, el registro no satisface el art. 34.9 ET). Tres tareas de la Fase 1 ya afirmaban escribir en `audit_log`, cuya tabla era de la 2.2 | Cinco tareas de la Fase 2 se mueven a la Fase 1 (1.14–1.18): `audit_log` encadenado, correcciones trazadas, detalle de jornada, exportación legal y copias verificadas. El esfuerzo total no cambia; `0+1` pasa de "piloto interno" a "instalable y legalmente defendible" |
+| **033** | **Tres roles de base de datos, no dos** | ADR-027 preveía dos roles (aplicación y mantenimiento), pero al implementar la tarea 1.14 `fichaje_app` resultó ser también `POSTGRES_USER`, el superusuario de arranque del clúster: el `REVOKE UPDATE, DELETE` de la regla dura 6 no impedía nada porque un superusuario ignora los permisos, y PostgreSQL 16+ no permite quitarle `SUPERUSER` al rol de arranque | Rol nuevo `fichaje_migrator`: `POSTGRES_USER` de arranque, propietario de las tablas, único con DDL. `fichaje_app` pasa a ser un rol de runtime sin `SUPERUSER` y sin DDL. `fichaje_maintenance` sigue como preveía ADR-027. Laravel usa conexiones distintas (`pgsql_migrator` / `pgsql`) para migrar y para operar |
+| **034** | **El token de la credencial nace al imprimir, no al emitir** | La tarea 1.5 acuñaba el token al emitir y lo devolvía una sola vez, irrecuperable después. Eso dejaba sin base los tres pilares de la tarea 1.10 que el §5.5 y RF-QR-08 dan por hechos —`credentials:print` sobre una credencial ya emitida, `print-batch --pending` y el estado «pendiente de imprimir»—: no quedaba nada con lo que dibujar el QR. Guardar el token cifrado habría metido un secreto reversible en la base de datos, que es justo lo que RS-01 elimina | `key_id` y `secret_hash` nacen nulos y los escribe la impresión junto a `printed_at`, en la misma operación que dibuja el PDF. Una credencial pendiente de imprimir **no es escaneable**. Imprimir es irrepetible (`409`, sin `--force`), lo que hace `print-batch --pending` idempotente por construcción; reponer una tarjeta es revocar, reemitir e imprimir. **Ninguna respuesta de la API lleva ya un QR**: el esquema `QrPayload` desaparece del contrato |
+| **035** | **La corrección estrena identificador y no cambia de jornada** | ADR-026 dejó sin decidir qué `uuid` tiene la versión corregida —la columna es UNIQUE— y si corregir la entrada puede mover el tramo a otra jornada (RN-05 frente a la regla dura 4) | La versión nueva estrena `uuid` y la anterior apunta a ella; el `PATCH` devuelve los dos. Mover la jornada se rechaza con `422`: se anula en origen y se da de alta en destino, dos acciones auditadas |
 
 ---
 
@@ -539,7 +544,7 @@ Unos 50 caracteres: cabe holgadamente en un QR versión 3 con **corrección de e
 1. Comprobar el prefijo `FH1`. Si no coincide → rechazo genérico.
 2. Resolver la clave por `key_id`. Clave desconocida o retirada → rechazo genérico.
 3. Recalcular el HMAC y comparar en **tiempo constante** (`hash_equals`).
-4. Buscar la credencial por hash del `token` (nunca se almacena el token en claro).
+4. Buscar la credencial por hash del `token` (nunca se almacena el token en claro, y por eso se acuña al imprimir: [ADR-034](adr/ADR-034-el-token-nace-al-imprimir-no-al-emitir.md)). Una credencial pendiente de imprimir no tiene hash y aquí no aparece nunca.
 5. Verificar que la credencial no está revocada y que el empleado está activo.
 6. **Todos los rechazos devuelven la misma respuesta y consumen el mismo tiempo** (RS-03): un atacante no puede distinguir "no existe" de "revocada" de "firma inválida". El detalle solo va al log del servidor y a `scan_events.result`.
 
@@ -564,17 +569,19 @@ Dos claves activas simultáneamente (`current` y `previous`) en el gestor de sec
 
 ```mermaid
 graph LR
-    A["RRHH da de alta<br/>al empleado"] --> B["Sistema emite<br/>credencial firmada"]
+    A["RRHH da de alta<br/>al empleado"] --> B["Sistema emite<br/>la credencial<br/><i>sin QR todavía</i>"]
     B --> C["Panel: 'pendiente<br/>de imprimir'"]
-    C --> D["Generación de PDF<br/><i>tarjeta o A4 múltiple</i>"]
+    C --> D["Generación de PDF<br/><i>acuña y firma el token</i>"]
     D --> E["Impresión y<br/>plastificado"]
     E --> F["Entrega registrada<br/><i>fecha y responsable</i>"]
     F --> G["Ficha en el quiosco"]
 
-    F -.->|pérdida o deterioro| H["Revocación<br/>→ reimpresión en el día"]
+    F -.->|pérdida o deterioro| H["Revocación, reemisión<br/>e impresión en el día"]
     F -.->|tarjeta olvidada| I["PIN de respaldo<br/>RF-AT-11"]
     B -.->|rotación de clave| J["Reemisión y<br/>reimpresión progresiva"]
 ```
+
+> **El QR se acuña al imprimir, no al emitir** ([ADR-034](adr/ADR-034-el-token-nace-al-imprimir-no-al-emitir.md)). El token en claro no se almacena nunca (§5.2), así que si naciera con la emisión no habría forma de dibujar el PDF días después — y «pendiente de imprimir», `print-batch --pending` y el panel de RF-QR-08 se quedarían sin base. Emitir crea el derecho a una tarjeta; el paso **D** es el que escribe `key_id`, `secret_hash` y `printed_at` en la misma operación que genera el documento. **Mientras esté pendiente de imprimir, la credencial no puede fichar**: no tiene hash por el que resolverla. Y como imprimir es irrepetible, ejecutar dos veces el lote no produce dos juegos de tarjetas distintas.
 
 **Detalles que hay que resolver bien:**
 
@@ -585,7 +592,7 @@ graph LR
 | **Registro de entrega** | Marcar la entrega no es burocracia: es lo que distingue "la tarjeta se perdió antes de dársela" de "el empleado la perdió", que son incidencias distintas. |
 | **Impresión masiva** | La hoja A4 con varias tarjetas por página es lo que hace viable dar de alta a 40 personas de temporada en una tarde. |
 | **Material** | PVC plastificado si el cliente tiene impresora de tarjetas; papel plastificado como alternativa económica. El diseño del PDF sirve para ambos. |
-| **Reposición** | El proceso de reimpresión debe ser de minutos, no de días. Una tarjeta rota que tarda una semana en reponerse son cinco días de fichajes por PIN. |
+| **Reposición** | El proceso debe ser de minutos, no de días. Una tarjeta rota que tarda una semana en reponerse son cinco días de fichajes por PIN. **No es «reimprimir la misma»**: es revocar, reemitir e imprimir la nueva (ADR-034), tres actos auditados que además dejan escrito por qué esa persona tuvo dos tarjetas. |
 
 ---
 
@@ -754,13 +761,44 @@ incident_resolution_seconds{type}                        histogram
 application_errors_total{source,level}                   counter
 projection_divergence_total                              counter
 audit_chain_verification_failures_total                  counter
+audit_chain_last_verification_timestamp_seconds          gauge
+audit_chain_last_verification_result                     gauge
+audit_chain_rows_verified                                gauge
+audit_log_partition_ready{horizon}                       gauge
+audit_log_partition_check_timestamp_seconds              gauge
 worked_minutes_total{site,department}                    counter
 
 # Credenciales y respaldo
 employees_without_delivered_credential{site}             gauge
 credentials_pending_print{site}                          gauge
 pin_fallback_scans_total{site}                           counter
+kronoqr_backup_last_result{type}                         gauge
+kronoqr_backup_last_success_timestamp_seconds{type}      gauge
+kronoqr_backup_last_duration_seconds{type}               gauge
+kronoqr_backup_last_size_bytes{type}                     gauge
+kronoqr_backup_copies_total{type}                        gauge
+kronoqr_backup_last_verify_result                        gauge
+kronoqr_backup_last_verified_timestamp_seconds           gauge
+kronoqr_backup_verified_copy_age_seconds                 gauge
+kronoqr_backup_wal_last_archived_age_seconds             gauge
+kronoqr_backup_wal_archive_failures_total                counter
+kronoqr_backup_volume_free_ratio                         gauge
+kronoqr_backup_restore_drill_last_result                 gauge
+kronoqr_backup_restore_drill_last_success_timestamp_seconds  gauge
+kronoqr_backup_restore_drill_duration_seconds            gauge
 ```
+
+**Las métricas de respaldo no las expone la aplicación.** Las escriben
+`infra/scripts/backup.sh` y `restore-drill.sh` como ficheros en
+`BACKUP_PATH/metrics/`, y las sirve el colector *textfile* de `node-exporter`.
+El motivo es que tienen que seguir publicándose **cuando la aplicación no
+arranca**, que es justo el día en que interesa saber si hay copia: una métrica
+de respaldo servida por el proceso que hay que restaurar no vale nada.
+
+`kronoqr_backup_last_verify_result` es la métrica que da sentido a las demás:
+*una copia no verificada no es una copia.* Y
+`kronoqr_backup_restore_drill_duration_seconds` es la única medida real del
+**RTO**: si crece, el objetivo de 4 h se está estrechando.
 
 `projection_divergence_total` y `audit_chain_verification_failures_total` deben permanecer **siempre en cero**. Cualquier incremento es un incidente de integridad, no una métrica de tendencia.
 
@@ -1285,13 +1323,13 @@ Generado por el administrador del cliente con un clic o un comando. Contiene ver
 | `renovacion-certificado-tls.md` | Certificado a menos de 21 días de expirar |
 | `espacio-en-disco.md` | Espacio libre por debajo del 20 % |
 | `rotura-cadena-auditoria.md` | **Incidente de seguridad.** Incluye preservación de evidencia |
-| `restaurar-backup.md` | Recuperación y simulacro trimestral |
+| [`restaurar-backup.md`](runbooks/restaurar-backup.md) | Recuperación y simulacro trimestral. **Escrito** en la tarea 1.18, junto con las alertas de copia que responde |
 | `rotacion-secretos.md` | Rotación programada o compromiso |
 | `alta-nuevo-quiosco.md` | Emparejamiento por código y vinculación |
 | `alta-nuevo-empleado.md` | Alta, emisión, impresión y entrega **con la antelación necesaria** |
 | `tarjeta-perdida-o-rota.md` | Revocación, reemisión y reimpresión en el día |
 | `rotacion-clave-qr.md` | Reimpresión progresiva sin dejar a nadie sin fichar |
-| `requerimiento-inspeccion.md` | **Cómo generar la exportación legal en menos de 1 hora.** El más importante y el que nadie escribe hasta que hace falta |
+| [`requerimiento-inspeccion.md`](runbooks/requerimiento-inspeccion.md) | **Cómo generar la exportación legal en menos de 1 hora.** El más importante y el que nadie escribe hasta que hace falta. **Escrito** en la tarea 1.17, junto con el comando `compliance:legal-export` en el que se apoya |
 | `patron-anomalo-credencial.md` | Cómo revisar una incidencia `anomalous_pattern` sin convertir un indicio en una acusación |
 | `solicitud-derechos-rgpd.md` | Acceso, rectificación, portabilidad |
 | `brecha-de-seguridad.md` | Procedimiento de 72 h |
@@ -1326,6 +1364,9 @@ DB_CONNECTION=pgsql
 DB_HOST=postgres
 DB_DATABASE=fichaje
 DB_USERNAME=fichaje_app               # Sin DDL. Sin UPDATE/DELETE sobre audit_log.
+DB_MIGRATION_USERNAME=fichaje_migrator  # POSTGRES_USER. Propietario. Solo migraciones.
+DB_MIGRATION_PASSWORD=                  # La genera install.sh
+DB_MAINTENANCE_USERNAME=fichaje_maintenance  # Retención (ADR-027). Su contraseña NO va aquí.
 
 REDIS_HOST=redis
 QUEUE_CONNECTION=redis

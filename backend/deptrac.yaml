@@ -560,7 +560,16 @@ parameters:
       - Eloquent
       - ExternalCode
 
-    # Doc 02 §1.6: los listeners de los eventos de Attendance viven aqui.
+    # Doc 02 §1.6: los listeners de los eventos de otros modulos viven aqui.
+    #
+    # `IdentityDomainEvent` entra con la tarea 1.5 y no amplia la frontera: la
+    # via era ya la concedida —evento de dominio recogido por un listener de
+    # Compliance/Infrastructure— y el propio puerto `AuditTrail` la nombra por
+    # escrito («los de credencial y dispositivo, con la 1.13 y la 1.5»). La
+    # alternativa habria sido que `Identity` importara `Compliance`, que es la
+    # arista que el §1.6 no concede en ningun caso. La dependencia sigue siendo
+    # de solo lectura y solo sobre EVENTOS: ni Domain, ni Application, ni
+    # Persistence de Identity aparecen aqui.
     ComplianceInfrastructure:
       - ComplianceDomain
       - ComplianceDomainEvent
@@ -577,6 +586,13 @@ parameters:
       - ExternalCode
       - CompliancePersistence
       - AttendanceDomainEvent
+      - IdentityDomainEvent
+      # `WorkforceDomainEvent` entra con la tarea 1.13 y por la misma via y el
+      # mismo motivo que `IdentityDomainEvent`: RF-ID-09 exige que la emision, la
+      # entrega y el restablecimiento del PIN queden en `audit_log`, y `Workforce`
+      # no puede importar `Compliance`. Sigue siendo de solo lectura y solo sobre
+      # EVENTOS.
+      - WorkforceDomainEvent
 
     # Http entra por Application. Alcanza Persistence solo por los idiomas de
     # Laravel que lo necesitan (route-model binding y Resources), nunca
@@ -619,6 +635,9 @@ parameters:
       - ExternalCode
       - AppFramework
       - AttendanceDomainEvent
+      - IdentityDomainEvent
+      # Tarea 1.13: el mapa evento -> listener del PIN nombra sus dos eventos.
+      - WorkforceDomainEvent
 
     # --------------------------------------------------------------- Workforce
 

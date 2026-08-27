@@ -1,0 +1,115 @@
+# KronoQR — alertas de la cadena de hash de la auditoria (doc 01 §9.3, RS-07).
+#
+# Fila del catalogo del doc 01 §9.3 que implementa este fichero:
+#
+#   | Rotura de la cadena de hash de auditoria | cualquiera | Critica (seguridad) |
+#
+# «Cualquiera» como umbral es literal y no hay margen que negociar: una sola
+# entrada alterada invalida la afirmacion de que el registro es DETECTABLEMENTE
+# inalterable, que es lo unico que audit_log aporta ante una inspeccion. No es
+# una metrica de tendencia (doc 02 §8.2:
+# `audit_chain_verification_failures_total` debe permanecer SIEMPRE en cero).
+#
+# DESTINATARIO: seguridad, no el IT del cliente. Lo fija ADR-010 —«alerta
+# critica de seguridad dirigida al responsable de seguridad, no al IT»— y la
+# razon es que la respuesta no es reiniciar nada: es determinar el alcance de un
+# posible acceso indebido (RL-15).
+#
+# Las metricas las escribe `php artisan compliance:verify-audit-chain` (diaria)
+# en BACKUP_PATH/metrics, y las sirve node-exporter por el colector textfile.
+# `/metrics` de la aplicacion llega en la tarea 3.1; estas reglas no cambian.
+
+groups:
+  - name: kronoqr-audit
+    interval: 60s
+    rules:
+      #------------------------------------------------------------------------
+      # La cadena esta rota. Critica y sin umbral.
+      #------------------------------------------------------------------------
+      - alert: RoturaDeCadenaDeAuditoria
+        expr: audit_chain_verification_failures_total > 0
+        for: 1m
+        labels:
+          severity: critical
+          destinatario: seguridad
+          component: audit
+        annotations:
+          summary: "La cadena de hash de audit_log esta rota"
+          description: >-
+            La verificacion diaria ha encontrado al menos una entrada de
+            audit_log cuyo contenido no produce su hash, o cuyo prev_hash no
+            encaja con la entrada anterior. Alguien ha escrito en la tabla por
+            fuera de la aplicacion. El fichaje NO esta afectado y no hay que
+            parar nada: lo que hay que hacer es acotar el alcance antes de que
+            se pierdan los registros del servidor (RL-15).
+          runbook_url: docs/runbooks/rotura-cadena-auditoria.md
+
+      #------------------------------------------------------------------------
+      # Nadie esta verificando. El silencio es el peor de los fallos: sin esta
+      # regla, apagar el comando programado seria la forma mas comoda de que la
+      # alerta de arriba no volviera a sonar nunca.
+      #------------------------------------------------------------------------
+      - alert: VerificacionDeAuditoriaAusente
+        expr: >-
+          absent(audit_chain_last_verification_timestamp_seconds)
+          or (time() - audit_chain_last_verification_timestamp_seconds) > 93600
+        for: 30m
+        labels:
+          severity: critical
+          destinatario: seguridad
+          component: audit
+        annotations:
+          summary: "Hace mas de 26 h que no se verifica la cadena de auditoria"
+          description: >-
+            RS-07 exige detectar una rotura en menos de 24 h, y eso solo es
+            cierto si el comando diario se ejecuta. O el scheduler esta parado, o
+            el comando falla antes de publicar la metrica, o el destino de
+            metricas no esta montado. El umbral son 26 h para que un retraso
+            normal de la ventana nocturna no dispare la alerta.
+          runbook_url: docs/runbooks/rotura-cadena-auditoria.md
+
+      #------------------------------------------------------------------------
+      # Falta la particion del año en curso: TODA accion auditable esta
+      # fallando, y con ella la accion que la produce (ADR-027).
+      #------------------------------------------------------------------------
+      - alert: ParticionDeAuditoriaAusente
+        expr: audit_log_partition_ready{horizon="current"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          destinatario: it-cliente
+          component: audit
+        annotations:
+          summary: "audit_log no tiene particion para el año en curso"
+          description: >-
+            Un INSERT en audit_log cuyo occurred_at no cae en ninguna particion
+            falla, y ese fallo tumba la transaccion de la accion auditada: el
+            fichaje deja de funcionar. `php artisan
+            compliance:ensure-audit-partitions` la crea; el runbook explica que
+            comprobar despues, porque haber llegado a este estado significa que
+            algo estuvo fallando antes.
+          runbook_url: docs/runbooks/rotura-cadena-auditoria.md
+
+      #------------------------------------------------------------------------
+      # Aviso temprano: en noviembre y diciembre debe existir ya la del año
+      # siguiente. No es urgente hoy; lo seria el 1 de enero a las 00:00, que es
+      # turno de noche y hotel lleno.
+      #------------------------------------------------------------------------
+      - alert: ParticionDeAuditoriaDelProximoAnoSinPreparar
+        expr: >-
+          audit_log_partition_ready{horizon="next"} == 0
+          and month() >= 11
+        for: 6h
+        labels:
+          severity: warning
+          destinatario: it-cliente
+          component: audit
+        annotations:
+          summary: "No existe la particion de audit_log del año que viene"
+          description: >-
+            La tarea programada la crea a partir de noviembre. Que no exista
+            significa que la tarea no se esta ejecutando o que no puede hacer
+            DDL: comprueba que el scheduler corre y que la conexion de migracion
+            esta configurada (DB_MIGRATION_USERNAME en el .env). Si llega el 1 de
+            enero sin ella, se para el fichaje.
+          runbook_url: docs/runbooks/rotura-cadena-auditoria.md

@@ -1,6 +1,80 @@
 {
   "app": {
     "title": "Clock-in kiosk",
-    "skeletonNotice": "Application skeleton. The scanning screens, the offline queue and the PIN fallback arrive in tasks 1.8, 1.9 and 1.12."
+    "name": "KronoQR"
+  },
+  "language": {
+    "label": "Language",
+    "es": "Español",
+    "en": "English"
+  },
+  "connection": {
+    "online": "Online",
+    "offline": "Offline",
+    "syncing": "Syncing",
+    "pending": "0 records pending | 1 record pending | {count} records pending",
+    "offlineHint": "You can still clock in. Records are sent once the connection is back."
+  },
+  "scan": {
+    "idle": {
+      "title": "Hold up your card",
+      "subtitle": "Place it in front of the camera, with the code facing the screen."
+    },
+    "camera": {
+      "starting": "Starting the camera…",
+      "deniedTitle": "No camera access",
+      "deniedBody": "The kiosk needs camera permission to read cards. Please tell the front desk.",
+      "unavailableTitle": "Camera unavailable",
+      "unavailableBody": "The camera could not be started. Please tell the front desk.",
+      "retry": "Try again",
+      "torchOn": "Turn light on",
+      "torchOff": "Turn light off"
+    },
+    "greeting": {
+      "morning": "Good morning, {name}",
+      "afternoon": "Good afternoon, {name}",
+      "night": "Good evening, {name}",
+      "farewell": "See you later, {name}"
+    },
+    "action": {
+      "clock_in": "Clock-in {time}",
+      "clock_out": "Clock-out {time}",
+      "break_start": "Break {time}",
+      "break_end": "Back {time}"
+    },
+    "duration": "{hours} h {minutes} min",
+    "todayTotal": "Today: {duration}",
+    "pending": {
+      "titleNamed": "Thank you, {name}",
+      "titleAnonymous": "Clock-in recorded",
+      "body": "Recorded at {time}. Pending validation.",
+      "badge": "Pending validation"
+    },
+    "debounced": {
+      "title": "You clocked in a few seconds ago",
+      "body": "Nothing new has been recorded."
+    },
+    "rejected": {
+      "title": "Invalid code",
+      "body": "The record could not be saved. Please tell the front desk."
+    },
+    "srAnnouncement": "Scan result"
+  },
+  "privacy": {
+    "heading": "Data protection notice",
+    "controllerKnown": "Controller: {controller}.",
+    "controllerUnknown": "Controller: the company operating this workplace.",
+    "purpose": "Purpose: daily working-time record (art. 34.9 of the Spanish Workers' Statute).",
+    "basis": "Legal basis: compliance with a legal obligation.",
+    "retention": "Retention: 4 years, as required by the applicable rules.",
+    "rights": "Rights: access, rectification, erasure, restriction, objection and portability. Request them at the front desk or in the employee portal.",
+    "noBiometrics": "This system does not process biometric data.",
+    "policyLink": "Full policy: {url}",
+    "policyPending": "The full policy is available at the front desk.",
+    "showQr": "Show policy QR code",
+    "qrDialogTitle": "Full privacy policy",
+    "qrDialogBody": "Scan this code with your phone to read the full policy.",
+    "qrUnavailable": "The code could not be generated.",
+    "close": "Close"
   }
 }

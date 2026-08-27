@@ -39,6 +39,13 @@ final class SiteSeeder extends Seeder
     {
         $now = now();
 
+        // El perfil de cumplimiento por defecto lo crea la migracion de
+        // `compliance_profiles` (tarea 1.3): es dato de producto, no de
+        // desarrollo. Aqui solo se asigna, y si faltara el centro nace sin
+        // perfil y cae en el `is_default`, que es lo que el esquema permite.
+        /** @var object{id: int}|null $profile */
+        $profile = DB::table('compliance_profiles')->select('id')->where('is_default', true)->first();
+
         foreach (self::SITES as $site) {
             // Idempotente: re-ejecutar la semilla no duplica centros ni pisa
             // los ajustes que alguien haya tocado a mano en su entorno.
@@ -46,6 +53,7 @@ final class SiteSeeder extends Seeder
                 ['name' => $site['name']],
                 [
                     'timezone' => $site['timezone'],
+                    'compliance_profile_id' => $profile?->id,
                     'settings' => json_encode([], JSON_THROW_ON_ERROR),
                     'created_at' => $now,
                 ],

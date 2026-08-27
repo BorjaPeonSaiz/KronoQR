@@ -1,6 +1,512 @@
 {
   "app": {
-    "title": "Panel de gestion",
-    "skeletonNotice": "Esqueleto de la aplicacion. Las pantallas del panel llegan en las tareas 2.4 y siguientes."
+    "title": "Panel de gestión",
+    "skipToContent": "Ir al contenido principal",
+    "signedInAs": "{name} ({roles})",
+    "signOut": "Cerrar sesión",
+    "nav": {
+      "label": "Secciones del panel",
+      "employees": "Plantilla",
+      "credentials": "Credenciales",
+      "legalExport": "Inspección"
+    },
+    "roles": {
+      "admin": "Administración",
+      "rrhh": "RRHH",
+      "responsable_departamento": "Responsable de departamento",
+      "auditor": "Auditoría",
+      "empleado": "Empleado",
+      "kiosk": "Quiosco"
+    }
+  },
+  "auth": {
+    "heading": "Acceso al panel de gestión",
+    "intro": "Introduce el correo y la contraseña de tu cuenta de gestión.",
+    "email": "Correo electrónico",
+    "password": "Contraseña",
+    "submit": "Entrar",
+    "submitting": "Entrando…",
+    "employeeNotice": "¿Eres empleado y quieres consultar tu registro horario? No se entra por aquí: el portal del empleado se abre con tu código de empleado y tu PIN, que te entregan en mano junto con la tarjeta."
+  },
+  "common": {
+    "cancel": "Cancelar",
+    "saving": "Guardando…",
+    "edit": "Editar",
+    "updating": "Actualizando…",
+    "empty": "Sin valor",
+    "locales": {
+      "es": "Español",
+      "en": "Inglés"
+    },
+    "change": {
+      "field": "Dato",
+      "from": "Valor actual",
+      "to": "Valor nuevo"
+    }
+  },
+  "errors": {
+    "retryAfter": "Puedes volver a intentarlo dentro de {seconds} s.",
+    "network": {
+      "title": "No se ha podido contactar con el servidor",
+      "advice": "Comprueba la conexión de red y vuelve a intentarlo. Si el panel sigue sin responder, avisa a quien administra la instalación: nada de lo que has hecho se ha guardado."
+    },
+    "unauthenticated": {
+      "title": "La sesión ha caducado",
+      "advice": "Vuelve a entrar para seguir trabajando. La sesión de gestión dura poco a propósito."
+    },
+    "invalidCredentials": {
+      "title": "El correo o la contraseña no son correctos",
+      "advice": "Revísalos y vuelve a intentarlo. Tras varios intentos fallidos el acceso se bloquea unos minutos, aunque después escribas la contraseña correcta."
+    },
+    "forbidden": {
+      "title": "No tienes permiso para esta acción",
+      "advice": "Tu rol no alcanza a estos datos. Si crees que debería, pídeselo a quien administra la instalación."
+    },
+    "notFound": {
+      "title": "No se ha encontrado",
+      "advice": "Puede que ya no exista o que quede fuera de tu ámbito. Vuelve al listado y actualiza la pantalla."
+    },
+    "conflict": {
+      "title": "La operación no encaja con el estado actual",
+      "advice": "Alguien puede haberlo cambiado antes que tú, o la acción ya estaba hecha. Actualiza la pantalla y comprueba cómo está ahora antes de repetirla."
+    },
+    "validation": {
+      "title": "Hay datos que revisar",
+      "advice": "Corrige los campos indicados y vuelve a enviar el formulario."
+    },
+    "rateLimited": {
+      "title": "Demasiadas peticiones seguidas",
+      "advice": "Espera unos segundos y vuelve a intentarlo."
+    },
+    "unavailable": {
+      "title": "La instalación no puede atender esta operación",
+      "advice": "Falta configuración en el servidor. Avisa a quien administra la instalación: no es un problema de lo que has escrito."
+    },
+    "unexpected": {
+      "title": "Ha ocurrido un error inesperado",
+      "advice": "Vuelve a intentarlo. Si se repite, avisa a quien administra la instalación indicando la hora exacta y qué estabas haciendo."
+    }
+  },
+  "forbidden": {
+    "heading": "Sin permiso para esta sección",
+    "description": "Tu cuenta no tiene el ámbito que esta pantalla necesita. No es un error: el servidor la rechazaría igualmente."
+  },
+  "notFound": {
+    "heading": "Esta página no existe",
+    "description": "La dirección no corresponde a ninguna sección del panel.",
+    "backToEmployees": "Ir a la plantilla"
+  },
+  "employees": {
+    "title": "Plantilla",
+    "subtitle": "Altas, fichas y bajas. Nada se borra: una baja conserva la ficha y su registro horario.",
+    "loading": "Cargando la plantilla…",
+    "actions": {
+      "create": "Dar de alta"
+    },
+    "filters": {
+      "legend": "Filtros de la plantilla",
+      "status": "Situación laboral",
+      "statusAll": "Todas, incluidas las bajas",
+      "site": "Centro",
+      "siteAll": "Todos los centros"
+    },
+    "status": {
+      "active": "En alta",
+      "suspended": "Suspendido",
+      "terminated": "De baja"
+    },
+    "empty": {
+      "title": "No hay nadie que mostrar",
+      "description": "Todavía no hay personas dadas de alta en esta instalación.",
+      "filtered": "Ninguna persona encaja con los filtros elegidos. Prueba a quitarlos."
+    },
+    "table": {
+      "caption": "Plantilla de la instalación, con su situación laboral y el estado de su PIN.",
+      "name": "Nombre",
+      "code": "Código de empleado",
+      "site": "Centro",
+      "department": "Departamento",
+      "status": "Situación",
+      "pinStatus": "Estado del PIN"
+    },
+    "pagination": {
+      "label": "Paginación de la plantilla",
+      "summary": "{from}–{to} de {total}",
+      "page": "Página {page} de {pages}",
+      "previous": "Anterior",
+      "next": "Siguiente"
+    },
+    "fields": {
+      "site": "Centro",
+      "department": "Departamento",
+      "departmentHint": "Solo departamentos del centro elegido.",
+      "departmentNone": "Sin departamento",
+      "firstName": "Nombre",
+      "lastName": "Apellidos",
+      "email": "Correo electrónico",
+      "emailHint": "Opcional. Ninguna función del producto lo exige: el acceso al portal es con código de empleado y PIN.",
+      "emailAbsent": "Sin correo",
+      "nationalId": "Documento de identidad",
+      "nationalIdHint": "Opcional. No se almacena: el servidor guarda solo su huella para no dar de alta dos veces a la misma persona.",
+      "hiredAt": "Fecha de alta",
+      "terminatedAt": "Fecha de cese",
+      "status": "Situación laboral",
+      "locale": "Idioma"
+    },
+    "create": {
+      "heading": "Alta de empleado",
+      "submit": "Dar de alta",
+      "pinNotice": "El código de empleado lo genera el servidor. Al completar el alta se emite el PIN del portal y se muestra una sola vez: tenlo a mano para anotarlo o entregarlo en ese momento."
+    },
+    "detail": {
+      "backToList": "Volver a la plantilla",
+      "loading": "Cargando la ficha…",
+      "dataHeading": "Datos de la persona",
+      "statusHint": "La baja no se hace desde aquí: tiene su propio apartado porque lleva fecha de cese y consecuencias.",
+      "reviewChanges": "Revisar los cambios",
+      "confirmHeading": "Confirmar los cambios de la ficha",
+      "confirmExplanation": "Esto es lo que se va a modificar. Comprueba el valor de partida antes de confirmar: quedará registrado quién lo cambió y cuándo.",
+      "confirmAction": "Confirmar y guardar",
+      "credentialHeading": "Tarjeta QR",
+      "credentialExplanation": "La emisión, la impresión y la entrega de la tarjeta se gestionan en el panel de credenciales, donde se ve de un vistazo quién todavía no puede fichar.",
+      "credentialLink": "Ver el estado de las credenciales de este centro"
+    },
+    "offboard": {
+      "heading": "Baja",
+      "explanation": "La baja es lógica: la ficha, sus tramos y sus jornadas se conservan cuatro años, porque una inspección puede pedir el registro de alguien que ya no trabaja aquí.",
+      "action": "Dar de baja",
+      "confirmAction": "Confirmar la baja",
+      "alreadyTerminated": "Esta persona está de baja desde el {date}. Su historial sigue disponible.",
+      "dateHint": "Nunca anterior a la fecha de alta. Desde ella empieza a contar la retención del registro.",
+      "reasonLabel": "Motivo del cese",
+      "reasonHint": "Queda en el registro de auditoría. Sin datos de salud ni juicios de valor.",
+      "reasonPlaceholder": "Elige un motivo",
+      "reasonOtherLabel": "Describe el motivo",
+      "reasons": {
+        "endOfContract": "Fin de contrato",
+        "resignation": "Baja voluntaria",
+        "dismissal": "Despido",
+        "retirement": "Jubilación",
+        "other": "Otro motivo"
+      },
+      "consequenceCredential": "Su tarjeta QR queda revocada y deja de servir en el quiosco.",
+      "consequenceScan": "A partir de la fecha de cese no puede fichar.",
+      "consequenceHistory": "No se borra nada: su registro horario se conserva y se puede seguir consultando."
+    },
+    "announce": {
+      "results": "Resultados de la plantilla: {count}.",
+      "created": "{name} se ha dado de alta.",
+      "updated": "Ficha actualizada.",
+      "offboarded": "La baja se ha registrado."
+    }
+  },
+  "pin": {
+    "heading": "PIN del portal del empleado",
+    "explanation": "Con su código de empleado y este PIN, la persona consulta su propio registro horario en el portal. Se entrega en mano, nunca por correo.",
+    "field": "Estado del PIN",
+    "status": {
+      "pending": "Sin emitir",
+      "issued": "Emitido, pendiente de entregar",
+      "delivered": "Entregado"
+    },
+    "statusHint": {
+      "pending": "Esta persona no tiene PIN y no puede entrar al portal. Restablécelo para emitir uno.",
+      "issued": "El PIN existe pero todavía no consta entregado en mano.",
+      "delivered": "Se entregó en mano, con fecha y responsable en el registro de auditoría."
+    },
+    "actions": {
+      "reset": "Restablecer el PIN",
+      "registerDelivery": "Registrar la entrega del PIN"
+    },
+    "reset": {
+      "heading": "Restablecer el PIN",
+      "explanation": "Se genera un PIN nuevo de seis dígitos y el anterior deja de funcionar en el acto. También se libera el bloqueo por intentos fallidos.",
+      "action": "Restablecer y mostrar el PIN",
+      "warning": "El PIN nuevo se mostrará una sola vez, ahora. No se podrá volver a consultar: si se pierde, hay que restablecerlo otra vez."
+    },
+    "delivery": {
+      "heading": "Registrar la entrega del PIN",
+      "explanation": "Se anotará que {name} ha recibido su PIN en mano, con la fecha y contigo como responsable.",
+      "action": "Confirmar la entrega",
+      "auditNotice": "Queda en el registro de auditoría y no se puede repetir ni deshacer. Márcalo solo si la entrega ya ha ocurrido."
+    },
+    "reveal": {
+      "heading": "PIN emitido",
+      "forEmployee": "PIN de {name} ({code}).",
+      "onlyOnce": "Este PIN se muestra una sola vez y no se podrá volver a consultar. Anótalo o entrégalo ahora mismo. Si se pierde, la única salida es restablecerlo.",
+      "handDelivery": "La entrega es presencial. Este producto no envía PIN por correo electrónico ni por ningún enlace.",
+      "handedOverLabel": "Confirmo que he entregado este PIN en mano a {name}.",
+      "acknowledge": "Ya lo he anotado, lo entregaré después",
+      "registerDelivery": "Registrar la entrega ahora"
+    },
+    "announce": {
+      "reset": "PIN restablecido. Se muestra una sola vez.",
+      "delivered": "Entrega del PIN registrada."
+    }
+  },
+  "credentials": {
+    "title": "Credenciales",
+    "subtitle": "Quién puede fichar con su tarjeta y quién todavía no. Una tarjeta solo sirve cuando está impresa y entregada.",
+    "loading": "Cargando el estado de las credenciales…",
+    "filters": {
+      "legend": "Filtros del panel de credenciales",
+      "site": "Centro",
+      "siteAll": "Todos los centros",
+      "pendingOnly": "Solo quien todavía no tiene la tarjeta en la mano"
+    },
+    "summary": {
+      "withoutDelivered": "Sin la tarjeta en la mano: {missing} de {total}.",
+      "pendingPrint": "Pendientes de imprimir: {count}."
+    },
+    "empty": {
+      "title": "No hay filas que mostrar",
+      "description": "No hay personas de alta en el alcance elegido.",
+      "allDelivered": "Todo el mundo tiene ya su tarjeta en la mano en el alcance elegido."
+    },
+    "table": {
+      "caption": "Estado de la tarjeta de cada persona. Las horas se muestran en la zona horaria de su centro.",
+      "employee": "Persona",
+      "site": "Centro",
+      "department": "Departamento",
+      "status": "Estado de la tarjeta",
+      "printedAt": "Impresa",
+      "deliveredAt": "Entregada",
+      "actions": "Acciones",
+      "noDepartment": "Sin departamento"
+    },
+    "status": {
+      "no_credential": "Sin credencial",
+      "pending_print": "Pendiente de imprimir",
+      "pending_delivery": "Pendiente de entregar",
+      "delivered": "Entregada",
+      "revoked": "Revocada"
+    },
+    "actions": {
+      "issue": "Emitir credencial",
+      "print": "Imprimir la tarjeta",
+      "deliver": "Registrar la entrega",
+      "revoke": "Revocar"
+    },
+    "confirm": {
+      "issue": {
+        "heading": "Emitir una credencial",
+        "explanation": "Se emitirá una credencial para {name}. Nace pendiente de imprimir y todavía no permite fichar.",
+        "action": "Emitir",
+        "notice": "El QR no se genera todavía: se acuña al imprimir la tarjeta."
+      },
+      "print": {
+        "heading": "Imprimir la tarjeta",
+        "explanation": "Se generará el PDF de la tarjeta de {name} y se descargará en este equipo.",
+        "action": "Generar el PDF",
+        "notice": "Al imprimir se acuña el QR y no hay vuelta atrás: no existe la reimpresión. Si el PDF se pierde, la única salida es revocar la credencial y emitir otra. Imprímelo solo si tienes la impresora lista."
+      },
+      "deliver": {
+        "heading": "Registrar la entrega de la tarjeta",
+        "explanation": "Se anotará que {name} ha recibido su tarjeta, con la fecha y contigo como responsable.",
+        "action": "Confirmar la entrega",
+        "notice": "Queda en el registro de auditoría y no se puede repetir ni deshacer. Es lo que distingue «la tarjeta se perdió antes de dársela» de «el empleado la perdió»."
+      },
+      "revoke": {
+        "heading": "Revocar la credencial",
+        "explanation": "La tarjeta de {name} dejará de servir en el quiosco a partir de este momento.",
+        "action": "Revocar la tarjeta",
+        "notice": "No se borra nada: la credencial conserva su historia y sus escaneos. Para reponer la tarjeta hay que emitir una nueva e imprimirla, que son dos actos más."
+      }
+    },
+    "revoke": {
+      "reasonLabel": "Motivo de la revocación",
+      "reasonPlaceholder": "Elige un motivo",
+      "reasonOtherLabel": "Describe el motivo",
+      "reasons": {
+        "lost": "Tarjeta extraviada",
+        "stolen": "Tarjeta sustraída",
+        "damaged": "Tarjeta deteriorada",
+        "offboarding": "Baja de la persona",
+        "printFailed": "Impresión fallida: el PDF no llegó a salir",
+        "other": "Otro motivo"
+      }
+    },
+    "batch": {
+      "action": "Imprimir las pendientes",
+      "heading": "Imprimir el lote de tarjetas pendientes",
+      "allSites": "toda la instalación",
+      "explanation": "Se imprimirán en una sola hoja A4 todas las credenciales pendientes de {scope}. Ahora mismo hay {count}.",
+      "confirmAction": "Generar la hoja A4",
+      "warning": "Se acuñan los QR de todas ellas en este momento y no hay reimpresión. Si el PDF se pierde, cada tarjeta habrá que revocarla y volver a emitirla.",
+      "bearerNotice": "El PDF es un documento al portador: quien lo tenga puede fabricar la tarjeta de otra persona. No se guarda en el servidor ni se envía por correo."
+    },
+    "announce": {
+      "issued": "Credencial emitida para {name}. Queda pendiente de imprimir.",
+      "printed": "Tarjeta de {name} generada. Ya puede fichar cuando la reciba.",
+      "delivered": "Entrega de la tarjeta de {name} registrada.",
+      "revoked": "Credencial de {name} revocada.",
+      "batchEmpty": "No había ninguna tarjeta pendiente de imprimir en el alcance elegido.",
+      "batchPrinted": "Hoja generada. Tarjetas incluidas: {count}."
+    }
+  },
+  "corrections": {
+    "title": "Correcciones del registro horario",
+    "notice": "No se borra ni se sobrescribe nada: la versión anterior se conserva con tu nombre, la fecha y el motivo, y sigue siendo consultable.",
+    "supersededNotice": "Este tramo ya no es la versión vigente: alguien lo corrigió o lo anuló antes que tú. Vuelve a cargar la jornada y comprueba cómo está ahora.",
+    "wouldChangeWorkDate": "Esa hora de entrada llevaría la jornada a otro día. Para mover las horas de un día a otro, anula el tramo aquí y dalo de alta en el día que corresponde: son dos acciones, cada una con su motivo.",
+    "reasonLabel": "Motivo de la corrección",
+    "reasonPlaceholder": "Elige un motivo",
+    "reasonHint": "Queda en el registro legal y puede leerlo una inspección. Sin datos de salud ni juicios de valor.",
+    "reasonOtherLabel": "Explica el motivo",
+    "reasonOtherHint": "Al menos 20 caracteres. «Error» o «ajuste» no explican nada ante una inspección.",
+    "actions": {
+      "create": "Añadir un tramo",
+      "correct": "Corregir las horas",
+      "void": "Anular el tramo"
+    },
+    "action": {
+      "created": "Tramo añadido",
+      "modified": "Horas corregidas",
+      "closed": "Turno cerrado",
+      "voided": "Tramo anulado"
+    },
+    "reasons": {
+      "OLVIDO_FICHAJE_ENTRADA": "Olvido de fichaje de entrada",
+      "OLVIDO_FICHAJE_SALIDA": "Olvido de fichaje de salida",
+      "FALLO_TECNICO_QUIOSCO": "Fallo técnico del quiosco",
+      "TARJETA_NO_DISPONIBLE": "Tarjeta no disponible",
+      "CREDENCIAL_NO_ENTREGADA": "Tarjeta todavía no entregada",
+      "ERROR_DE_ESCANEO_DUPLICADO": "Escaneo duplicado",
+      "AJUSTE_ACORDADO_CON_RRHH": "Ajuste acordado con RRHH",
+      "ALTA_RETROACTIVA": "Alta retroactiva",
+      "OTROS": "Otro motivo"
+    },
+    "reasonHints": {
+      "OLVIDO_FICHAJE_ENTRADA": "La persona entró a trabajar y no fichó la entrada.",
+      "OLVIDO_FICHAJE_SALIDA": "La persona terminó y no fichó la salida: el tramo quedó abierto.",
+      "FALLO_TECNICO_QUIOSCO": "El quiosco no estaba operativo: sin corriente, sin cámara o sin red más allá de la cola.",
+      "TARJETA_NO_DISPONIBLE": "La tarjeta se quedó en la taquilla, se perdió o está deteriorada.",
+      "CREDENCIAL_NO_ENTREGADA": "Todavía no se le había entregado su tarjeta.",
+      "ERROR_DE_ESCANEO_DUPLICADO": "Dos escaneos produjeron dos tramos donde solo hubo uno.",
+      "AJUSTE_ACORDADO_CON_RRHH": "Rectificación pactada con la persona y con RRHH, no un error del sistema.",
+      "ALTA_RETROACTIVA": "Jornada anterior a la puesta en marcha o al alta de la persona en el sistema.",
+      "OTROS": "Ninguno de los anteriores. Obliga a explicarlo por escrito."
+    }
+  },
+  "reports": {
+    "legalExport": {
+      "heading": "Exportación para la Inspección de Trabajo",
+      "intro": "Genera el registro diario de jornada por trabajador y periodo que se entrega ante un requerimiento de la Inspección de Trabajo (art. 34.9 del Estatuto de los Trabajadores). El fichero se descarga en formato CSV y no se guarda en el navegador.",
+      "from": "Desde",
+      "to": "Hasta",
+      "workDateHint": "Primer día del periodo, por fecha de jornada: un turno que entró el día 31 a las 22:00 pertenece al 31 aunque saliera el 1.",
+      "inclusiveHint": "Último día del periodo, incluido.",
+      "inverted": "El periodo termina antes de empezar. Revisa las dos fechas: no se dan la vuelta solas.",
+      "employee": "Trabajador (opcional)",
+      "employeeHint": "Identificador del trabajador si el requerimiento nombra a una persona. En blanco, se exporta la plantilla completa.",
+      "submit": "Generar y descargar",
+      "running": "Generando la exportación…",
+      "done": "Exportación descargada: {shiftEntries} tramos y {corrections} correcciones.",
+      "failed": "No se ha podido generar la exportación.",
+      "audited": "Cada generación queda registrada en la auditoría con quién exportó, qué periodo y qué alcance. El registro de auditoría no guarda nombres de trabajadores.",
+      "noSiteFilter": "La exportación no se filtra por centro ni por departamento: cada fila indica su centro, y el alcance solo puede ser la plantilla completa o una persona.",
+      "contents": {
+        "heading": "Qué contiene el fichero",
+        "entries": "Una fila por cada tramo de trabajo, con entrada, salida, duración y total de la jornada. Un turno de noche es un único tramo, en la jornada en la que empezó.",
+        "corrections": "Una fila por cada corrección del registro, con su autor, su momento y su motivo.",
+        "voided": "Los tramos anulados se incluyen, con su estado, y no suman horas al total del día. Nada se oculta.",
+        "times": "Las horas van en la zona horaria del centro y además en UTC, que es como están almacenadas.",
+        "format": "CSV en UTF-8 con marca de orden de bytes, separado por punto y coma. Las duraciones se escriben HH:MM, nunca en decimal."
+      }
+    }
+  },
+  "workdays": {
+    "title": "Registro horario",
+    "subtitle": "Jornada a jornada, con sus tramos, su total y todas las correcciones que ha tenido. Nada se borra: lo que se rectificó sigue aquí, con quién lo hizo y por qué.",
+    "fromEmployee": "Las horas registradas de esta persona, día a día, con el historial de correcciones de cada jornada. Consultarlo no cambia nada del registro.",
+    "linkFromEmployee": "Ver el registro horario de esta persona",
+    "backToEmployee": "Volver a la ficha de la persona",
+    "loading": "Cargando el registro horario…",
+    "zoneNotice": "Las horas se muestran en la zona horaria del centro donde se fichó, no en la del ordenador desde el que miras.",
+    "auditNotice": "Consultar el registro de otra persona queda anotado en la auditoría, con quién ha mirado, de quién y qué periodo.",
+    "duration": "{hours} h {minutes} min",
+    "filters": {
+      "legend": "Periodo consultado",
+      "from": "Desde",
+      "fromHint": "Por fecha de jornada: un turno que entró a las 22:00 pertenece al día en que empezó, aunque saliera al día siguiente.",
+      "to": "Hasta",
+      "toHint": "Último día, incluido. En blanco, se consultan los últimos 31 días según el calendario del centro.",
+      "inverted": "El periodo termina antes de empezar. Revisa las dos fechas: no se dan la vuelta solas.",
+      "tooWide": "El periodo no puede superar {days} días. Consulta el historial por tramos más cortos.",
+      "apply": "Consultar",
+      "resolved": "Jornadas del {from} al {to}, en horario de {zone}."
+    },
+    "empty": {
+      "title": "Ninguna jornada registrada en este periodo",
+      "description": "No es un fallo de la consulta: en esos días esta persona no tiene ningún fichaje. Prueba con otro periodo o comprueba si estaba de alta."
+    },
+    "announce": {
+      "results": "{count} jornadas entre el {from} y el {to}."
+    },
+    "day": {
+      "total": "Total de la jornada",
+      "recalculatedAt": "Total recalculado el {moment}.",
+      "recalculatedNever": "Esta jornada todavía no tiene total recalculado: el que se muestra es la suma de sus tramos.",
+      "flags": {
+        "openShift": "Turno abierto",
+        "openShiftHint": "Hay un turno sin cerrar: el total de esta jornada todavía va a subir y no sirve para una nómina hasta que se cierre.",
+        "incident": "Incidencia",
+        "incidentHint": "Algún tramo quedó marcado como anómalo. No es un error del sistema: es que alguien tiene que mirarlo."
+      }
+    },
+    "entries": {
+      "caption": "Tramos de la jornada del {date}, en la zona horaria {zone}",
+      "in": "Entrada ({zone})",
+      "out": "Salida ({zone})",
+      "duration": "Duración",
+      "source": "Origen",
+      "status": "Estado",
+      "version": "Versión {version}",
+      "open": "Sin cerrar",
+      "openHint": "El turno sigue abierto.",
+      "openDuration": "En curso",
+      "nextDay": "(día siguiente)",
+      "utc": "UTC {time}",
+      "recorded": "Recibido en el servidor: {moment}",
+      "notRecorded": "Sin marca de recepción: esta hora la escribió una persona, no un escaneo.",
+      "queued": "Llegó desde la cola del quiosco, {delay} después de fichar. Lo que cuenta para el registro es la hora del fichaje.",
+      "empty": "Esta jornada no tiene ningún tramo vigente. Si abajo hay correcciones, es que se anularon: el historial sigue completo.",
+      "sum": "Suma de los tramos",
+      "declared": "Total registrado del día",
+      "mismatch": "El total registrado del día no coincide con la suma de sus tramos. Se muestran los dos sin elegir ninguno: avisa a quien administre el sistema antes de usar estas horas para una nómina."
+    },
+    "sources": {
+      "qr_kiosk": "Escaneo de la tarjeta",
+      "pin_kiosk": "PIN en el quiosco",
+      "manual_admin": "Registrado a mano",
+      "import": "Importación"
+    },
+    "entryStatus": {
+      "open": "Abierto",
+      "closed": "Cerrado",
+      "anomalous": "Anómalo",
+      "voided": "Anulado",
+      "superseded": "Reemplazado"
+    },
+    "history": {
+      "heading": "Historial de correcciones",
+      "notice": "Cada corrección creó una versión nueva y conservó la anterior. Lo que ves aquí es lo que decía el registro antes y lo que dice ahora.",
+      "empty": "Esta jornada no se ha corregido: los tramos son los que se registraron al fichar.",
+      "by": "{author}, el {moment}",
+      "reason": "Motivo",
+      "entry": "Tramo: {uuid}",
+      "caption": "Qué cambió la corrección del {moment}",
+      "before": "Antes",
+      "after": "Después",
+      "noEntryBefore": "No existía el tramo",
+      "noEntryAfter": "Tramo anulado",
+      "openMark": "Sin salida",
+      "fields": {
+        "in": "Entrada",
+        "out": "Salida",
+        "worked": "Tiempo trabajado",
+        "version": "Versión"
+      }
+    }
   }
 }

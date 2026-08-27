@@ -15,6 +15,7 @@ Antes de escribir código, lee lo que corresponda a tu tarea:
 - [docs/05-presentacion-cliente.md](docs/05-presentacion-cliente.md) — **lo que se le ha prometido al cliente.** Si lo que vas a implementar contradice este documento, o el documento promete algo que no existe como requisito, para y dilo
 - [docs/adr/](docs/adr/) — decisiones arquitectónicas. **Si vas a contradecir un ADR, para y pregunta.**
 - [docs/api/openapi.yaml](docs/api/openapi.yaml) — contrato de la API. **Es la fuente de verdad: se modifica antes que el código.**
+- `plan implementacion/` — el detalle tarea a tarea (pasos, artefactos, pruebas exigidas, agente asignado) de cada fase. Doc 02 §11 da la tabla resumen; el detalle ejecutable de cada tarea vive aquí.
 
 **Si dos documentos se contradicen**, este es el orden de autoridad, y arreglar la contradicción forma parte de la tarea:
 
@@ -97,3 +98,15 @@ Consulta [docs/02-stack-tecnologico-y-plan-implementacion.md](docs/02-stack-tecn
 Hay 10 agentes en `.claude/agents/` y 6 skills en `.claude/skills/`.
 
 **El plan de implementación del documento 02, §11, indica el agente y la skill de cada tarea.** Si estás ejecutando una tarea del plan, usa el que ahí se indica. Para trabajo ad-hoc, consulta [docs/03-agentes-y-skills-ia.md](docs/03-agentes-y-skills-ia.md).
+
+## Trabajo entre sesiones
+
+Este proyecto se trabaja en muchas sesiones a lo largo de días o semanas. `HANDOFF.md`, en la raíz, es la memoria de continuidad entre una sesión y la siguiente — este archivo (`CLAUDE.md`) es conocimiento estable del proyecto y no cambia de una sesión a otra.
+
+- **Al empezar una sesión nueva**, lee primero este archivo y `HANDOFF.md`. Con los dos basta para saber el estado y el objetivo actual: no hace falta recuperar la conversación anterior con `/resume` salvo que necesites un razonamiento concreto que `HANDOFF.md` no recogiera.
+- No recorras el repositorio por costumbre. Antes de tocar código, identifica los ficheros exactos que afecta la tarea de `HANDOFF.md` → «Objetivo actual» / «Siguiente acción».
+- Consulta `docs/` y `plan implementacion/` solo cuando la tarea concreta lo requiera, no de forma preventiva.
+- Si aparece trabajo fuera del objetivo actual, anótalo en `HANDOFF.md` → «Pendiente» en vez de empezarlo sobre la marcha.
+- **Actualiza `HANDOFF.md` al terminar una tarea significativa** (no en cada mensaje): estado, completado, pendiente, archivos tocados, siguiente acción. Sé conciso — sin pegar código ni volcados de log, sin historial de la conversación.
+- **Cuando el usuario indique que va a terminar la sesión:** revisa el trabajo hecho, deja `HANDOFF.md` completo y actualizado, y responde con un resumen breve (qué se hizo, qué queda, ficheros tocados, problemas conocidos, siguiente acción) — nada de código ni detalle temporal en la respuesta.
+- Usa `/compact` para reducir el contexto dentro de la sesión actual cuando se alargue. Usa `/clear` para empezar limpio una vez `HANDOFF.md` está al día. Evita `/resume`: si `HANDOFF.md` está bien escrito, no hace falta.

@@ -1,0 +1,180 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Modules\Workforce\Infrastructure\Persistence;
+
+use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
+use App\Modules\Workforce\Application\Port\EmployeeRepository;
+use App\Modules\Workforce\Domain\Exception\EmployeeCodeAlreadyTaken;
+use App\Modules\Workforce\Domain\Exception\EmployeeEmailAlreadyTaken;
+use App\Modules\Workforce\Domain\Model\Employee as EmployeeEntity;
+use App\Modules\Workforce\Domain\ValueObject\EmployeeCode;
+use DateTimeImmutable;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\DB;
+
+/**
+ * La plantilla sobre Eloquent y PostgreSQL.
+ *
+ * **Traduce en los dos sentidos y no deja salir un modelo Eloquent.** Hacia
+ * arriba solo viaja {@see EmployeeEntity}: si el caso de uso tuviera el modelo,
+ * tendria tambien `->save()`, `->delete()` y la tentacion de usarlos, y con eso
+ * la baja logica de RF-GP-03 duraria hasta la primera prisa.
+ *
+ * **El documento de identidad se hashea con `pgcrypto` en la propia sentencia**
+ * (RL-08, doc 02 §3.2) y con parametro enlazado, no interpolado: asi el valor en
+ * claro no aparece en el texto de la consulta que podria acabar en un log lento
+ * de PostgreSQL. En ningun momento existe una columna, un atributo ni un objeto
+ * PHP que lo contenga.
+ *
+ * **Los choques de unicidad se detectan por la excepcion de PostgreSQL, no por
+ * un `SELECT` previo**: entre la consulta y la insercion cabe otra alta, y esa
+ * comprobacion solo daria una falsa sensacion de seguridad.
+ */
+final readonly class EloquentEmployeeRepository implements EmployeeRepository
+{
+    public function add(EmployeeEntity $employee, ?string $nationalId = null): void
+    {
+        // Las dos sentencias son un solo hecho: un empleado con ficha pero sin
+        // digest de documento, o al reves, es un dato a medias.
+        DB::transaction(function () use ($employee, $nationalId): void {
+            try {
+                Employee::query()->create($this->toRow($employee));
+            } catch (QueryException $exception) {
+                throw $this->translate($exception, $employee->code);
+            }
+
+            if ($nationalId !== null) {
+                $this->storeNationalIdDigest($employee->uuid, $nationalId);
+            }
+        });
+    }
+
+    public function save(EmployeeEntity $employee): void
+    {
+        try {
+            Employee::query()
+                ->where('uuid', $employee->uuid)
+                ->update($this->toRow($employee));
+        } catch (QueryException $exception) {
+            throw $this->translate($exception, $employee->code);
+        }
+    }
+
+    public function findByUuid(string $uuid): ?EmployeeEntity
+    {
+        $row = Employee::query()->where('uuid', $uuid)->first();
+
+        return $row instanceof Employee ? $this->toEntity($row) : null;
+    }
+
+    public function search(
+        ?int $siteId,
+        ?int $departmentId,
+        ?EmploymentStatus $status,
+        int $limit,
+        int $offset,
+    ): array {
+        $rows = $this->filtered($siteId, $departmentId, $status)
+            // Orden estable y previsible para quien pagina: dos personas con el
+            // mismo apellido no pueden cambiar de sitio entre dos paginas.
+            ->orderBy('last_name')
+            ->orderBy('first_name')
+            ->orderBy('id')
+            ->limit($limit)
+            ->offset($offset)
+            ->get();
+
+        return array_values(array_map($this->toEntity(...), $rows->all()));
+    }
+
+    public function countMatching(?int $siteId, ?int $departmentId, ?EmploymentStatus $status): int
+    {
+        return $this->filtered($siteId, $departmentId, $status)->count();
+    }
+
+    /**
+     * @return Builder<Employee>
+     */
+    private function filtered(?int $siteId, ?int $departmentId, ?EmploymentStatus $status): Builder
+    {
+        return Employee::query()
+            ->when($siteId !== null, static fn (Builder $query): Builder => $query->where('site_id', $siteId))
+            ->when($departmentId !== null, static fn (Builder $query): Builder => $query->where('department_id', $departmentId))
+            ->when($status instanceof EmploymentStatus, static fn (Builder $query): Builder => $query->where('status', $status?->value));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function toRow(EmployeeEntity $employee): array
+    {
+        return [
+            'uuid' => $employee->uuid,
+            'site_id' => $employee->siteId,
+            'department_id' => $employee->departmentId,
+            'first_name' => $employee->firstName,
+            'last_name' => $employee->lastName,
+            'employee_code' => $employee->code->value,
+            'email' => $employee->email,
+            'status' => $employee->status->value,
+            'hired_at' => $employee->hiredAt->format('Y-m-d'),
+            'terminated_at' => $employee->terminatedAt?->format('Y-m-d'),
+            'locale' => $employee->locale,
+        ];
+    }
+
+    private function toEntity(Employee $row): EmployeeEntity
+    {
+        return new EmployeeEntity(
+            uuid: $row->uuid,
+            code: EmployeeCode::fromString($row->employee_code),
+            firstName: $row->first_name,
+            lastName: $row->last_name,
+            email: $row->email,
+            siteId: $row->site_id,
+            departmentId: $row->department_id,
+            status: EmploymentStatus::from($row->status),
+            hiredAt: new DateTimeImmutable($row->hired_at->format('Y-m-d')),
+            terminatedAt: $row->terminated_at === null
+                ? null
+                : new DateTimeImmutable($row->terminated_at->format('Y-m-d')),
+            locale: $row->locale,
+        );
+    }
+
+    /**
+     * RL-08: el digest, nunca el documento.
+     *
+     * `digest()` es de `pgcrypto`, que la migracion de extensiones ya habilita.
+     * Se hace en SQL y no en PHP porque asi el valor en claro no llega a existir
+     * como cadena en memoria mas alla de la llamada, y porque es el mismo
+     * algoritmo que usa el resto del producto para esta columna.
+     */
+    private function storeNationalIdDigest(string $uuid, string $nationalId): void
+    {
+        DB::update(
+            'UPDATE employees SET national_id_hash = digest(?, ?) WHERE uuid = ?',
+            [$nationalId, 'sha256', $uuid],
+        );
+    }
+
+    private function translate(QueryException $exception, EmployeeCode $code): QueryException|EmployeeCodeAlreadyTaken|EmployeeEmailAlreadyTaken
+    {
+        $message = $exception->getMessage();
+
+        if (str_contains($message, 'employees_employee_code_unique')) {
+            return EmployeeCodeAlreadyTaken::forCode($code->value);
+        }
+
+        if (str_contains($message, 'employees_email_unique')) {
+            return EmployeeEmailAlreadyTaken::make();
+        }
+
+        // Cualquier otro fallo de base de datos sube tal cual: convertirlo en un
+        // conflicto de negocio ocultaria un problema real.
+        return $exception;
+    }
+}

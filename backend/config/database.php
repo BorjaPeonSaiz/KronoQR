@@ -86,6 +86,10 @@ return [
             ]) : [],
         ],
 
+        /*
+         * Conexion de RUNTIME. Corre con `fichaje_app`: sin DDL, y sobre
+         * `audit_log` solo `INSERT` y `SELECT` (regla dura 6, tarea 1.14).
+         */
         'pgsql' => [
             'driver' => 'pgsql',
             'url' => env('DB_URL'),
@@ -94,6 +98,42 @@ return [
             'database' => env('DB_DATABASE', 'laravel'),
             'username' => env('DB_USERNAME', 'root'),
             'password' => env('DB_PASSWORD', ''),
+            'charset' => env('DB_CHARSET', 'utf8'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'search_path' => 'public',
+            'sslmode' => env('DB_SSLMODE', 'prefer'),
+        ],
+
+        /*
+         * Conexion de MIGRACION. Misma base, otro rol.
+         *
+         * Existe porque la garantia de la regla dura 6 depende de que el rol de
+         * la aplicacion **no** sea propietario ni superusuario: sobre un
+         * superusuario, PostgreSQL ni siquiera comprueba los GRANT, y un
+         * propietario puede volver a otorgarse lo que se le revoque. Con un
+         * solo rol para todo, "sin UPDATE ni DELETE sobre audit_log" era una
+         * frase; con dos, es una comprobacion del motor.
+         *
+         * Consecuencia practica: las migraciones se lanzan indicando la
+         * conexion, y por eso `make seed` y el `migrateFreshUsing()` de la
+         * suite lo hacen explicitamente:
+         *
+         *   php artisan migrate --database=pgsql_migrator --force
+         *
+         * NADA de la aplicacion en marcha usa esta conexion. Si algun dia un
+         * caso de uso la resolviera, seria un defecto: la prueba de integracion
+         * de RS-07 comprueba que el rol de runtime sigue chocando con el
+         * REVOKE.
+         */
+        'pgsql_migrator' => [
+            'driver' => 'pgsql',
+            'url' => env('DB_MIGRATION_URL'),
+            'host' => env('DB_HOST', '127.0.0.1'),
+            'port' => env('DB_PORT', '5432'),
+            'database' => env('DB_DATABASE', 'laravel'),
+            'username' => env('DB_MIGRATION_USERNAME', 'fichaje_migrator'),
+            'password' => env('DB_MIGRATION_PASSWORD', ''),
             'charset' => env('DB_CHARSET', 'utf8'),
             'prefix' => '',
             'prefix_indexes' => true,
@@ -132,6 +172,36 @@ return [
     'migrations' => [
         'table' => 'migrations',
         'update_date_on_publish' => true,
+
+        /*
+         * La conexion con la que se ejecutan las migraciones. Laravel no lee
+         * esta clave —solo mira `--database`—, pero la lee KronoQR: la usan el
+         * `migrateFreshUsing()` de la suite y `Tests\Support\Database\
+         * TestDatabase`, para que la conexion correcta este declarada en un
+         * sitio y no repetida en cada invocacion.
+         */
+        'connection' => env('DB_MIGRATION_CONNECTION', 'pgsql_migrator'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Roles de base de datos (regla dura 6, ADR-027)
+    |--------------------------------------------------------------------------
+    |
+    | Tres roles con tres trabajos. Las migraciones necesitan los nombres para
+    | escribir los `GRANT` y los `REVOKE`, y la prueba de integracion de RS-07
+    | los necesita para comprobar que siguen puestos.
+    |
+    | `maintenance` es el unico que podra soltar una particion de `audit_log`
+    | (tarea 2.10). Aqui aparece su NOMBRE, nunca su contraseña: no es un rol de
+    | la aplicacion y su credencial no vive en el `.env` de la aplicacion.
+    |
+    */
+
+    'roles' => [
+        'application' => env('DB_USERNAME', 'fichaje_app'),
+        'migration' => env('DB_MIGRATION_USERNAME', 'fichaje_migrator'),
+        'maintenance' => env('DB_MAINTENANCE_USERNAME', 'fichaje_maintenance'),
     ],
 
     /*

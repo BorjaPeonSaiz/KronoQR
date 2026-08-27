@@ -1,6 +1,80 @@
 {
   "app": {
     "title": "Quiosco de fichaje",
-    "skeletonNotice": "Esqueleto de la aplicacion. Las pantallas de escaneo, la cola offline y el fichaje por PIN llegan en las tareas 1.8, 1.9 y 1.12."
+    "name": "KronoQR"
+  },
+  "language": {
+    "label": "Idioma",
+    "es": "Español",
+    "en": "English"
+  },
+  "connection": {
+    "online": "En línea",
+    "offline": "Sin conexión",
+    "syncing": "Sincronizando",
+    "pending": "0 fichajes pendientes | 1 fichaje pendiente | {count} fichajes pendientes",
+    "offlineHint": "Se puede fichar igual. Los registros se envían al recuperar la conexión."
+  },
+  "scan": {
+    "idle": {
+      "title": "Acerca tu tarjeta",
+      "subtitle": "Colócala delante de la cámara, con el código hacia la pantalla."
+    },
+    "camera": {
+      "starting": "Preparando la cámara…",
+      "deniedTitle": "Sin acceso a la cámara",
+      "deniedBody": "El quiosco necesita permiso de cámara para leer las tarjetas. Avisa a recepción.",
+      "unavailableTitle": "Cámara no disponible",
+      "unavailableBody": "No se ha podido iniciar la cámara. Avisa a recepción.",
+      "retry": "Reintentar",
+      "torchOn": "Encender luz",
+      "torchOff": "Apagar luz"
+    },
+    "greeting": {
+      "morning": "Buenos días, {name}",
+      "afternoon": "Buenas tardes, {name}",
+      "night": "Buenas noches, {name}",
+      "farewell": "Hasta luego, {name}"
+    },
+    "action": {
+      "clock_in": "Entrada {time}",
+      "clock_out": "Salida {time}",
+      "break_start": "Pausa {time}",
+      "break_end": "Vuelta {time}"
+    },
+    "duration": "{hours} h {minutes} min",
+    "todayTotal": "Hoy: {duration}",
+    "pending": {
+      "titleNamed": "Gracias, {name}",
+      "titleAnonymous": "Fichaje registrado",
+      "body": "Registrado a las {time}. Pendiente de validar.",
+      "badge": "Pendiente de validar"
+    },
+    "debounced": {
+      "title": "Ya has fichado hace unos segundos",
+      "body": "No se ha registrado nada nuevo."
+    },
+    "rejected": {
+      "title": "Código no válido",
+      "body": "No se ha podido registrar el fichaje. Avisa a recepción."
+    },
+    "srAnnouncement": "Resultado del escaneo"
+  },
+  "privacy": {
+    "heading": "Aviso de protección de datos",
+    "controllerKnown": "Responsable: {controller}.",
+    "controllerUnknown": "Responsable: la empresa titular de este centro de trabajo.",
+    "purpose": "Finalidad: registro diario de jornada (art. 34.9 del Estatuto de los Trabajadores).",
+    "basis": "Base jurídica: cumplimiento de una obligación legal.",
+    "retention": "Conservación: 4 años, según la normativa aplicable.",
+    "rights": "Derechos: acceso, rectificación, supresión, limitación, oposición y portabilidad. Solicítalos en recepción o en el portal del empleado.",
+    "noBiometrics": "Este sistema no trata datos biométricos.",
+    "policyLink": "Política completa: {url}",
+    "policyPending": "Política completa disponible en recepción.",
+    "showQr": "Ver código QR de la política",
+    "qrDialogTitle": "Política de privacidad completa",
+    "qrDialogBody": "Escanea este código con tu móvil para leer la política completa.",
+    "qrUnavailable": "No se ha podido generar el código.",
+    "close": "Cerrar"
   }
 }

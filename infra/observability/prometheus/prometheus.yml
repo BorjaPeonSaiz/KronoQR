@@ -1,8 +1,9 @@
 # KronoQR — configuracion base de Prometheus (doc 02 §8.1).
 #
-# Aqui NO hay reglas de alerta: el catalogo del doc 01 §9.3, con destinatario,
-# umbral y enlace a runbook en cada regla, es de la tarea 3.2. Lo que hay es el
-# esqueleto que esa tarea rellena: el directorio rules/ ya se carga.
+# El catalogo completo de alertas del doc 01 §9.3 es de la tarea 3.2. Lo que ya
+# vive en rules/ son las de la copia de seguridad (tarea 1.18), porque la copia
+# existe desde la Fase 1 y una copia que falla sin avisar es indistinguible de
+# no tener copias.
 
 global:
   scrape_interval: 15s
@@ -14,13 +15,16 @@ global:
 rule_files:
   - /etc/prometheus/rules/*.yml
 
-# El servicio alertmanager esta definido en compose.prod.yaml. Se activa en la
-# tarea 3.2, junto con las once reglas del catalogo: hasta que haya reglas, un
-# Alertmanager conectado no tiene nada que encaminar.
-# alerting:
-#   alertmanagers:
-#     - static_configs:
-#         - targets: ["alertmanager:9093"]
+# Alertmanager, ya conectado: desde la tarea 1.18 hay reglas que encaminar.
+#
+# En desarrollo no existe el servicio 'alertmanager' (solo esta en
+# compose.prod.yaml) y Prometheus lo dice en su log una vez cada intervalo. Es
+# ruido conocido y aceptado: la alternativa —dos ficheros de configuracion, uno
+# por entorno— acaba con reglas que solo se prueban en produccion.
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
 
 scrape_configs:
   - job_name: prometheus
@@ -40,3 +44,17 @@ scrape_configs:
       - targets: ["nginx:8080"]
         labels:
           service: api
+
+  # Resultado de la copia de seguridad, de su verificacion y del simulacro de
+  # restauracion (tarea 1.18), mas el espacio en disco del servidor.
+  #
+  # Las escriben los scripts de infra/scripts en BACKUP_PATH/metrics y las sirve
+  # el colector textfile de node-exporter. Se recogen cada minuto y no cada 15
+  # segundos: son ficheros que cambian una vez al dia, y sondearlos mas a
+  # menudo solo engorda la base de metricas.
+  - job_name: kronoqr-backup
+    scrape_interval: 60s
+    static_configs:
+      - targets: ["node-exporter:9100"]
+        labels:
+          service: backup

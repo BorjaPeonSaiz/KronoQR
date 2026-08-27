@@ -16,18 +16,27 @@
 # Si una entrada nueva aparece aqui sin explicacion, es una regla que alguien ha
 # apagado en vez de cumplir.
 #
-# `no-unused-components` avisa de los dos esquemas de seguridad que todavia no
-# usa ningun endpoint. Estan declarados a proposito: el §7.3 fija los ambitos de
+# `no-unused-components` avisa de los esquemas de seguridad que todavia no usa
+# ningun endpoint. Estan declarados a proposito: el §7.3 fija los ambitos de
 # TODOS los clientes —quiosco, portal y gestion— y declararlos de una vez es lo
-# que impide que cada tarea se invente el suyo. Las dos entradas se BORRAN, no se
+# que impide que cada tarea se invente el suyo. Las entradas se BORRAN, no se
 # amplian, en cuanto exista el primer endpoint que los use:
 #
 #   employeeToken     lo estrena `POST /api/v1/me/login` (tarea 1.11)
-#   managementToken   lo estrena `POST /api/v1/auth/login` (tarea 1.10)
+#   managementToken   BORRADA en la tarea 1.6: lo estrena `POST /api/v1/auth/login`
+#
+# `operation-4xx-response` gana en la tarea 1.6 una tercera excepcion legitima:
+#
+#   /api/v1/auth/logout  responde 204 y 401, y no hay tercer desenlace. Un cierre
+#                        de sesion que devolviera 403 o 404 estaria diciendo algo
+#                        sobre un token que ya no vale.
+#
+# Nota: la entrada de logout NO aparece abajo porque el 401 ya es un 4xx y la
+# regla queda satisfecha. Se documenta aqui para que nadie la «arregle» añadiendo
+# codigos que el endpoint no puede devolver.
 openapi.yaml:
   operation-4xx-response:
     - '#/paths/~1api~1v1~1health/get/responses'
     - '#/paths/~1api~1v1~1ready/get/responses'
   no-unused-components:
     - '#/components/securitySchemes/employeeToken'
-    - '#/components/securitySchemes/managementToken'

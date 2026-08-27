@@ -37,11 +37,83 @@
         <!-- Regla dura 3: el reloj de las pruebas tambien es UTC. -->
         <env name="APP_TIMEZONE" value="UTC"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
+        <!--
+            La suite de integracion NUNCA toca la base de desarrollo.
+            `RefreshDatabase` empieza con un `migrate:fresh`, asi que sin esto
+            cada `make test` se llevaria por delante las 220.000 filas del
+            VolumeSeeder sin avisar. force="true" es imprescindible: el
+            contenedor `app` ya define DB_DATABASE en su entorno y PHPUnit no
+            pisa una variable existente sin ella.
+            La base se crea sola si falta (Tests\Support\Database\TestDatabase).
+        -->
+        <env name="DB_DATABASE" value="fichaje_test" force="true"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>
         <env name="CACHE_STORE" value="array"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
+
+        <!--
+            Claves de firma de credenciales para la suite (doc 02 §5.1).
+
+            NO SON SECRETOS Y NO PUEDEN SERLO: estan en el repositorio, a la
+            vista, y por eso no valen para nada fuera de las pruebas. Las de una
+            instalacion las genera el instalador en el servidor del cliente y no
+            se transmiten (§7.7). Que sean fijas es el punto: una prueba de firma
+            que dependiera de una clave aleatoria no podria afirmar que un
+            payload concreto verifica.
+
+            Las dos, la actual y la anterior, porque la verificacion con solape
+            (§5.3, RF-QR-07) no se puede probar con una sola.
+        -->
+        <env name="QR_SIGNING_KEY_CURRENT_ID" value="a3" force="true"/>
+        <env name="QR_SIGNING_KEY_CURRENT" value="Y2xhdmUtZGUtZmlybWEtZGUtcHJ1ZWJhcy1Lcm5RUjE=" force="true"/>
+        <env name="QR_SIGNING_KEY_PREVIOUS_ID" value="a2" force="true"/>
+        <env name="QR_SIGNING_KEY_PREVIOUS" value="Y2xhdmUtYW50ZXJpb3ItZGUtcHJ1ZWJhcy1Lcm5RUjI=" force="true"/>
+
+        <!--
+            LAS MISMAS VARIABLES COMO `<server>`, Y NO ES REDUNDANCIA.
+
+            El repositorio de configuracion de Laravel lee **$_SERVER antes que
+            $_ENV y que getenv()**, y `<env force="true">` de PHPUnit solo
+            escribe en los dos ultimos. El contenedor `app` define estas
+            variables en su entorno —y Docker las deja tambien en $_SERVER—, asi
+            que el bloque de arriba, por si solo, no cambiaba ninguna:
+
+              DB_DATABASE   la suite entera corria contra la BASE DE DESARROLLO.
+                            `RefreshDatabase` empieza con `migrate:fresh`, de modo
+                            que cada `make test` se llevaba por delante las
+                            220.000 filas del VolumeSeeder sin decir nada.
+              CACHE_STORE   los contadores de rate limiting y de bloqueo por
+                            intentos (RF-ID-01) se guardaban en el REDIS
+                            compartido: una prueba heredaba el cupo gastado por
+                            otra y los fallos eran intermitentes.
+              APP_ENV       las pruebas se ejecutaban como `local`.
+
+            Se descubrio en la tarea 1.6, al fallar el borrado de tablas por
+            permisos despues de que la tarea 1.14 dejara de dar DDL al rol de la
+            aplicacion. El sintoma podia haber sido, simplemente, perder datos.
+
+            Regla para quien anada una variable aqui: **las dos lineas o
+            ninguna**. Una `<env>` sin su `<server>` no cambia nada si el
+            contenedor define esa variable.
+        -->
+        <server name="APP_ENV" value="testing" force="true"/>
+        <server name="APP_TIMEZONE" value="UTC" force="true"/>
+        <server name="APP_MAINTENANCE_DRIVER" value="file" force="true"/>
+        <server name="DB_DATABASE" value="fichaje_test" force="true"/>
+        <server name="BCRYPT_ROUNDS" value="4" force="true"/>
+        <server name="BROADCAST_CONNECTION" value="null" force="true"/>
+        <server name="CACHE_STORE" value="array" force="true"/>
+        <server name="MAIL_MAILER" value="array" force="true"/>
+        <server name="QUEUE_CONNECTION" value="sync" force="true"/>
+        <server name="SESSION_DRIVER" value="array" force="true"/>
+
+        <!-- Las dos lineas o ninguna: ver el comentario de arriba. -->
+        <server name="QR_SIGNING_KEY_CURRENT_ID" value="a3" force="true"/>
+        <server name="QR_SIGNING_KEY_CURRENT" value="Y2xhdmUtZGUtZmlybWEtZGUtcHJ1ZWJhcy1Lcm5RUjE=" force="true"/>
+        <server name="QR_SIGNING_KEY_PREVIOUS_ID" value="a2" force="true"/>
+        <server name="QR_SIGNING_KEY_PREVIOUS" value="Y2xhdmUtYW50ZXJpb3ItZGUtcHJ1ZWJhcy1Lcm5RUjI=" force="true"/>
     </php>
 </phpunit>

@@ -1,0 +1,173 @@
+<?php
+
+declare(strict_types=1);
+
+use App\Modules\Shared\Domain\ValueObject\UserRole;
+use Illuminate\Support\Facades\Auth;
+use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Http\Api;
+use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Workforce\WorkforceFixtures;
+
+/*
+ * Regla dura 18 y RQ-07: **cada endpoint tiene su prueba de autorizacion
+ * negativa, por cada rol no autorizado**, sin excepciones.
+ *
+ * Se prueba por PAREJAS (rol x endpoint) y no con un caso representativo: una
+ * policy olvidada en un solo endpoint es indistinguible de una bien puesta hasta
+ * que alguien la encuentra, y lo que se encuentra en un sistema de fichaje son
+ * datos de la plantilla.
+ *
+ * Dos controles distintos se comprueban aqui a la vez (doc 02 §7.3):
+ *
+ *   - **El ambito del token**, que verifica el middleware `ability`. Es lo que
+ *     deja fuera al token de quiosco y al auditor: no llevan `employees:*`.
+ *   - **La policy del recurso**, que verifica el rol. Es lo que dejaria fuera a
+ *     un rol con ambito pero sin permiso sobre esos datos.
+ *
+ * Los dos devuelven 403 a proposito: desde fuera no se distingue por que se ha
+ * denegado, que es lo correcto.
+ */
+
+uses(RefreshDatabase::class);
+
+/**
+ * Los endpoints de gestion de esta tarea, con un cuerpo valido para que lo que
+ * falle sea la autorizacion y no la validacion.
+ *
+ * @return array<string, array{0: string, 1: string, 2: array<string, mixed>}>
+ */
+function managementEndpoints(): array
+{
+    return [
+        'listar empleados' => ['GET', '/api/v1/employees', []],
+        'ver un empleado' => ['GET', '/api/v1/employees/0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90', []],
+        'dar de alta' => ['POST', '/api/v1/employees', [
+            'site_id' => 1,
+            'first_name' => 'Youssef',
+            'last_name' => 'Amrani',
+            'hired_at' => '2026-08-14',
+        ]],
+        'modificar un empleado' => ['PATCH', '/api/v1/employees/0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90', [
+            'first_name' => 'Lucia',
+        ]],
+        'dar de baja' => ['POST', '/api/v1/employees/0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90/offboard', [
+            'terminated_at' => '2026-09-30',
+        ]],
+        'listar departamentos' => ['GET', '/api/v1/departments', []],
+        'ver un departamento' => ['GET', '/api/v1/departments/1', []],
+        'crear un departamento' => ['POST', '/api/v1/departments', ['site_id' => 1, 'name' => 'Recepcion']],
+        'renombrar un departamento' => ['PATCH', '/api/v1/departments/1', ['name' => 'Recepcion']],
+        'listar centros' => ['GET', '/api/v1/sites', []],
+        'ver un centro' => ['GET', '/api/v1/sites/1', []],
+        'crear un centro' => ['POST', '/api/v1/sites', ['name' => 'Hotel Marina']],
+        'modificar un centro' => ['PATCH', '/api/v1/sites/1', ['name' => 'Hotel Marina']],
+
+        // Credenciales (tarea 1.5). Su ambito es `credentials:*` y no
+        // `employees:*`: emitir una tarjeta y corregir un apellido son dos
+        // potestades distintas del §7.3, y compartir ambito significaria que
+        // quien puede lo segundo puede tambien emitir una tarjeta a nombre de
+        // cualquiera.
+        'emitir una credencial' => ['POST', '/api/v1/credentials', [
+            'employee_uuid' => '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90',
+        ]],
+        'revocar una credencial' => ['POST', '/api/v1/credentials/0199f0d1-2a5b-7d4f-8c32-5e6f7a8b9c01/revoke', [
+            'reason' => 'Perdida',
+        ]],
+    ];
+}
+
+it('deniega a un token de quiosco cualquier endpoint de gestion', function (string $method, string $uri, array $body): void {
+    // RS-04 y §7.3: «un token de quiosco comprometido NO da acceso a la
+    // plantilla completa». Es el caso que mas importa de todo este fichero: el
+    // token vive en una tablet compartida colgada en una pared.
+    Api::as(ManagementUsers::kioskToken())->call($method, $uri, $body)->assertStatus(403);
+})->with(managementEndpoints())->group('RS-04', 'RQ-07', 'RF-ID-04');
+
+it('deniega a un auditor escribir o leer plantilla', function (string $method, string $uri, array $body): void {
+    // El auditor es de solo lectura y su ambito es `attendance:read`,
+    // `audit:read` y `reports:legal` (§7.3): la plantilla no esta ahi.
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::AUDITOR));
+
+    Api::as($token)->call($method, $uri, $body)->assertStatus(403);
+})->with(managementEndpoints())->group('RQ-07', 'RF-ID-02');
+
+it('deniega a un responsable de departamento el acceso a plantilla en esta fase', function (string $method, string $uri, array $body): void {
+    // El ambito por departamento es RF-ID-03 y es de la tarea 2.1. Hasta
+    // entonces, darle acceso seria darle la plantilla ENTERA, que es justo lo que
+    // ese requisito viene a impedir. La prueba fija esa decision: cuando 2.1
+    // cambie el alcance, este caso cambiara con ella y no en silencio.
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RESPONSABLE_DEPARTAMENTO));
+
+    Api::as($token)->call($method, $uri, $body)->assertStatus(403);
+})->with(managementEndpoints())->group('RQ-07', 'RF-ID-03');
+
+it('deniega a una cuenta con rol de empleado el acceso al panel', function (string $method, string $uri, array $body): void {
+    // El empleado consulta lo suyo en el portal, con ambito `self:read`
+    // (RF-ID-07). Nunca datos de terceros.
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::EMPLEADO));
+
+    Api::as($token)->call($method, $uri, $body)->assertStatus(403);
+})->with(managementEndpoints())->group('RQ-07', 'RF-ID-07');
+
+it('deniega el acceso sin token', function (string $method, string $uri, array $body): void {
+    Api::guest()->call($method, $uri, $body)
+        ->assertStatus(401)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:unauthenticated');
+})->with(managementEndpoints())->group('RQ-07');
+
+it('deniega el acceso con un token que ya no vale', function (): void {
+    $user = ManagementUsers::withRole(UserRole::RRHH);
+    $token = ManagementUsers::tokenFor($user);
+
+    Api::as($token)->post('/api/v1/auth/logout')->assertStatus(204);
+
+    // Artefacto de la suite, no del producto: las llamadas de una misma prueba
+    // comparten aplicacion y el guard de Sanctum cachea el usuario que ya
+    // resolvio. En produccion cada peticion arranca su propia aplicacion.
+    Auth::forgetGuards();
+
+    Api::as($token)->get('/api/v1/employees')->assertStatus(401);
+})->group('RQ-07', 'RF-ID-01');
+
+it('deja pasar a RRHH y al administrador, que es lo que hace significativo el resto', function (UserRole $role): void {
+    // Sin este caso, todas las pruebas de arriba pasarian igual con la API
+    // apagada. Es el control positivo.
+    $site = WorkforceFixtures::site();
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole($role));
+
+    Api::as($token)->get('/api/v1/employees')->assertStatus(200);
+
+    Api::as($token)->post('/api/v1/employees', [
+        'site_id' => $site,
+        'first_name' => 'Youssef',
+        'last_name' => 'Amrani',
+        'hired_at' => '2026-08-14',
+    ])->assertStatus(201);
+})->with([
+    'rrhh' => UserRole::RRHH,
+    'admin' => UserRole::ADMIN,
+])->group('RQ-07', 'RF-ID-02');
+
+it('deja pasar a RRHH a emitir credenciales, que es el control positivo del ambito credentials', function (): void {
+    // El mismo papel que el caso de arriba: sin el, las pruebas de denegacion
+    // sobre `/credentials` pasarian igual si la ruta no existiera.
+    $site = WorkforceFixtures::site();
+    $employee = WorkforceFixtures::employee($site);
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RRHH));
+
+    Api::as($token)
+        ->post('/api/v1/credentials', ['employee_uuid' => $employee])
+        ->assertStatus(201);
+})->group('RQ-07', 'RF-QR-01', 'RS-04');
+
+it('deniega a un token de quiosco emitir o revocar credenciales', function (string $uri, array $body): void {
+    // RS-04 con nombre y apellidos. El token del quiosco lleva `scan:write`,
+    // `roster:read` y `heartbeat:write` (§7.3): ninguno de los tres abre esta
+    // puerta. Si la abriera, quien robase la tablet de la puerta de servicio
+    // podria fabricarse una tarjeta a nombre de cualquiera.
+    Api::as(ManagementUsers::kioskToken())->post($uri, $body)->assertStatus(403);
+})->with([
+    'emitir' => ['/api/v1/credentials', ['employee_uuid' => '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90']],
+    'revocar' => ['/api/v1/credentials/0199f0d1-2a5b-7d4f-8c32-5e6f7a8b9c01/revoke', ['reason' => 'Perdida']],
+])->group('RS-04', 'RF-QR-01', 'RF-QR-03');

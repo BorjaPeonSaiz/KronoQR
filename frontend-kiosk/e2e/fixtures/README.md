@@ -8,34 +8,69 @@ chromium --use-fake-device-for-media-stream \
          --use-file-for-fake-video-capture=e2e/fixtures/qr-video.y4m
 ```
 
-## `qr-video.y4m` — que debe contener
+## Los dos videos
 
-Un video **sin comprimir en formato YUV4MPEG2** (`.y4m`), que es el unico que acepta
-`--use-file-for-fake-video-capture`. Requisitos:
+| Fichero                 | Contenido                                                     | Lo usa              |
+| ----------------------- | ------------------------------------------------------------- | ------------------- |
+| `qr-video.y4m`          | QR limpio con payload `FH1`, correccion de errores **Q**      | proyecto `kiosk-qr` |
+| `qr-video-degraded.y4m` | El mismo QR con un **28 % del lado tapado** (tarjeta gastada) | `kiosk-qr-degraded` |
 
-| Propiedad              | Valor                                                                                                                                                  |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Formato                | YUV4MPEG2, `yuv420p`                                                                                                                                   |
-| Resolucion             | 1280x720, la misma que pide el quiosco al `MediaStream`                                                                                                |
-| Fotogramas por segundo | 30                                                                                                                                                     |
-| Duracion               | 3–5 s, en bucle                                                                                                                                        |
-| Contenido              | Un QR **real** de prueba, con payload `FH1.<key_id>.<token>.<sig>` firmado por la clave de desarrollo, nivel de correccion de errores **Q** (RF-QR-05) |
+Formato YUV4MPEG2 `C420mpeg2`, 1280x720 a 30 fps, dos fotogramas (Chromium lo reproduce en
+bucle). Es el unico formato que acepta `--use-file-for-fake-video-capture`.
 
-Y una segunda variante, `qr-video-degraded.y4m`, con el QR **parcialmente ocluido**, para
-comprobar que el nivel Q cumple lo que promete (doc 02 §9.4, fila "QR degradado").
+## Se GENERAN, no se versionan
 
-## Por que todavia no esta
+```bash
+npm run e2e:fixtures        # y lo hace tambien playwright.config.ts antes de arrancar
+```
 
-Porque **necesita una credencial real**, y las credenciales HMAC con `key_id` y revocacion
-son de la **tarea 1.5**. Generar el video antes significaria inventar un payload que luego no
-validaria el servidor, y una prueba E2E que pasa contra un payload falso no prueba nada.
+`scripts/generate-qr-fixture.mjs` codifica el QR con el **mismo ZXing** que usa el quiosco
+para leerlo y escribe los fotogramas a mano. No hace falta `ffmpeg`.
+
+El motivo de no versionarlos es el tamano: el `.y4m` es video **sin comprimir**, y un solo
+fotograma de 1280x720 en `yuv420p` son 1,38 MB. Cada fichero pesa 2,6 MB y volveria a pesar
+lo mismo cada vez que rotara la clave de firma o cambiara el payload. El resultado es
+determinista: mismo payload, mismos bytes.
+
+## El payload
+
+Por defecto, el ejemplo literal del doc 02 §5.1, que es tambien el del contrato:
+
+```text
+FH1.a3.7QK2mXpR9vLdN4tZbYcF1w.k9Xm2pQrT5vN8wLa
+```
+
+Su **firma no es valida** contra ninguna clave real, y no importa para esta tarea:
+
+- el quiosco **no verifica firmas** (regla dura 10), solo el formato `FH1`;
+- el E2E de la tarea 1.8 no habla con el backend, lo intercepta con `page.route`.
+
+Cuando exista `php artisan credential:issue` (tarea 1.5), la CI puede inyectar un payload
+**realmente firmado** sin tocar ni el guion ni las pruebas:
+
+```bash
+KIOSK_E2E_QR_PAYLOAD="$(php artisan credential:issue --print-payload)" npm run test:e2e
+```
+
+Ese es el momento de conectar el E2E contra el servidor de verdad, que es lo que pide el
+ciclo offline completo de la **tarea 1.9**.
 
 El video **no lleva datos personales**: el payload de la tarjeta nunca los contiene
-(CLAUDE.md, regla dura 10).
+(regla dura 10).
 
-## Como se generara (tarea 1.5)
+## Cuanta degradacion aguanta, medido
 
-1. `php artisan credential:issue` sobre un empleado de la semilla de desarrollo.
-2. Renderizar el QR a PNG con nivel de correccion Q.
-3. `ffmpeg -loop 1 -i qr.png -t 4 -r 30 -s 1280x720 -pix_fmt yuv420p e2e/fixtures/qr-video.y4m`
-4. Repetir con la imagen parcialmente tapada para la variante degradada.
+Con oclusion **opaca y contigua** sobre este simbolo:
+
+| Fraccion del lado tapada | Area   | Resultado           |
+| ------------------------ | ------ | ------------------- |
+| 0,28                     | 7,8 %  | decodifica          |
+| 0,32                     | 10,2 % | `ChecksumException` |
+
+No contradice el «tolerante a un 25 % de degradacion» del doc 02 §5.1: ese 25 % son
+**palabras de codigo repartidas** por el simbolo —que es como se estropea una tarjeta de
+verdad: roces, grasa, un doblez—, mientras que un agujero de una pieza concentra el dano en
+pocos bloques Reed-Solomon y es el caso peor posible. Conviene tenerlo escrito: si alguien
+tapa media tarjeta con el dedo, el quiosco no la lee, y eso es correcto.
+
+Se puede explorar el limite con `KIOSK_E2E_QR_OCCLUSION=0.32 npm run e2e:fixtures`.

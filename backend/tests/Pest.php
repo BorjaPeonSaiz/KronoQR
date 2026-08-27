@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Tests\Support\Database\TestDatabase;
 use Tests\TestCase;
 
 /*
@@ -15,3 +16,21 @@ use Tests\TestCase;
  * la suite equivocada, no le falta configuracion.
  */
 pest()->extend(TestCase::class)->in('Feature', 'Integration', 'Contract');
+
+/*
+ * La suite de integracion corre contra PostgreSQL de verdad —es su razon de
+ * ser: las restricciones declarativas de RN-01..03 no existen en SQLite— y
+ * contra una base propia, `fichaje_test`, que nunca es la de desarrollo.
+ *
+ * La comprobacion va en `beforeAll` y no en `beforeEach` porque
+ * `RefreshDatabase` migra en el `setUp` de cada prueba: cuando `beforeEach`
+ * corre, ya seria tarde. El porque de la base aparte esta en
+ * Tests\Support\Database\TestDatabase.
+ */
+/*
+ * Feature entra en la misma comprobacion desde la tarea 1.6: sus pruebas llaman
+ * a endpoints que leen y escriben de verdad —alta de empleado, acceso al panel—
+ * y necesitan la misma base `fichaje_test`. Antes no la necesitaban porque no
+ * habia endpoints.
+ */
+pest()->beforeAll(fn () => TestDatabase::ensureExists())->in('Integration', 'Feature');

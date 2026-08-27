@@ -1265,6 +1265,40 @@ Resultado esperado: el E2E completo en verde; el tramo consolidado con el `occur
 
 **Objetivo.** RRHH imprime tarjetas en formato tarjeta y en A4 múltiple, registra la entrega con fecha y responsable, y ve de un vistazo quién todavía no puede fichar.
 
+> ### Lee esto antes de empezar: [ADR-034](../docs/adr/ADR-034-el-token-nace-al-imprimir-no-al-emitir.md)
+>
+> **Imprimir es el acto que acuña el QR.** La emisión (tarea 1.5) crea la credencial con `key_id`, `secret_hash` y `printed_at` **a NULL**: existe, cuenta en el panel como «pendiente de imprimir» y **no puede fichar**, porque no hay hash por el que resolverla. Esta tarea es la que la convierte en tarjeta.
+>
+> El orden de la impresión, y no es opcional:
+>
+> 1. Cargar la credencial (o las del lote) y **verificar que todas están pendientes de imprimir**. Si alguna ya lo está, `409` y no se imprime **ninguna**: el lote es todo o nada.
+> 2. Resolver la clave **vigente** con `QrKeyProvider` (no la de la emisión: no hay).
+> 3. Generar el token en memoria con `CredentialSecretFactory` y firmarlo con `QrSigningKey::sign()`.
+> 4. **Renderizar el QR y el PDF. Sin transacción abierta**: Browsershot es un proceso externo y no debe sostener bloqueos de fila.
+> 5. Abrir la transacción, llamar a `Credential::printedWith($key, $secret, $now)`, persistir con un `UPDATE ... WHERE printed_at IS NULL` cuyo recuento de filas se comprueba —si es 0, alguien imprimió en paralelo: `rollback` y `409`—, publicar `CredentialPrinted` y confirmar.
+> 6. Devolver el PDF en la respuesta.
+>
+> **Reglas que esta tarea no puede saltarse:**
+>
+> - **No hay reimpresión, y no se añade un `--force`.** `Credential::printedWith()` lanza `CredentialAlreadyPrinted` sobre una credencial ya impresa. Reponer una tarjeta perdida o rota es **revocar → reemitir (`POST /credentials` con `reissue`) → imprimir la nueva**, que es lo que dice el runbook. El panel puede encadenar las dos llamadas en un botón, pero son dos actos y dos asientos de auditoría.
+> - **`print-batch --pending` no lleva ningún flag que lo haga reimprimir.** Su idempotencia es que la segunda pasada no encuentra nada pendiente. Es lo que impide que dos ejecuciones del mismo lote produzcan dos juegos de tarjetas con QR distinto y solo el último válido.
+> - **El PDF es un instrumento al portador.** No se guarda en `storage/`, no viaja en el payload de un job en cola, no se envía por correo y no se cachea (`Cache-Control: no-store`). El endpoint lo **transmite**; el comando de consola solo escribe donde el operador pida, y el runbook debe mandar borrarlo tras imprimir. El lote es **un solo documento** con N tarjetas, no N documentos: así una sola llamada a Browsershot cubre los 60 empleados de la semilla.
+> - **Si la respuesta se pierde después de confirmar**, el token es irrecuperable y esa credencial queda impresa sin que nadie tenga la tarjeta. Es el riesgo residual aceptado: se resuelve revocando (motivo: impresión fallida) y reemitiendo, y **el runbook tiene que decirlo**. `delivered_at` es lo que distingue ese caso de «el empleado la perdió».
+>
+> **Estados del panel de RF-QR-08**, derivados y sin columna `status`:
+>
+> | Estado | Condición |
+> |---|---|
+> | Sin credencial | El empleado no tiene ninguna fila no revocada |
+> | Pendiente de imprimir | `revoked_at IS NULL AND printed_at IS NULL` |
+> | Pendiente de entregar | `revoked_at IS NULL AND printed_at IS NOT NULL AND delivered_at IS NULL` |
+> | Entregada | `revoked_at IS NULL AND delivered_at IS NOT NULL` |
+> | Revocada | `revoked_at IS NOT NULL` |
+>
+> `credentials_pending_print{site}` cuenta la segunda fila; `employees_without_delivered_credential{site}` cuenta la primera, la segunda y la tercera — todas las personas que están de alta y **todavía no pueden fichar con tarjeta**.
+>
+> **Lo que ya está hecho y no hay que rehacer:** el agregado `Credential` con `printedWith()`, `deliveredBy()`, `isPrinted()`, `isDelivered()` e `isScannable()`; sus excepciones (`CredentialAlreadyPrinted`, `CredentialNotPrintedYet`, `CredentialAlreadyDelivered`); los CHECK `credentials_chk_minted_at_print` y `credentials_chk_delivery_is_signed`; y sus pruebas unitarias y de integración. **Lo que falta y es tuyo:** los eventos `CredentialPrinted` —lleva `key_id`, la emisión ya no— y `CredentialDelivered`, sus asientos en `audit_log`, los casos de uso, el repositorio de pendientes por centro, los cuatro endpoints, las plantillas del PDF y el panel.
+
 **Reglas duras aplicables.**
 
 - **11** (la credencial es una tarjeta física impresa): esta tarea **es** ADR-014 hecho producto. Si algo sugiere enviar el QR por correo o mostrarlo en el móvil, **para y pregunta**.
@@ -1821,6 +1855,19 @@ curl -s http://localhost/metrics | grep audit_chain_verification_failures_total 
 | **Bloquea a** | **1.16** y **1.17** |
 
 **Objetivo.** Una persona autorizada puede crear, modificar, cerrar o anular un tramo indicando un motivo del catálogo, y el sistema conserva la versión anterior con su autor, momento, valor previo y motivo, recalcula el total del día y deja la traza en `audit_log`. El registro original permanece consultable.
+
+> ### Lee esto antes de empezar: [ADR-035](../docs/adr/ADR-035-la-correccion-estrena-identificador-y-no-cambia-de-jornada.md)
+>
+> `arquitecto-dominio` ya ha diseñado y dejado en verde la capa de dominio de esta tarea (pasos 1-5 de este documento): `WorkDay::addEntry()`, `WorkDay::correctEntry()`, `WorkDay::voidEntry()`, el objeto de valor `CorrectionReason`/`CorrectionReasonCode` (9 códigos, con `ALTA_RETROACTIVA` incluido — el Anexo C del doc 01 es la lista completa, no la de este documento si difieren), el evento `ShiftCorrected`, los puertos `WorkDayRepository::findWorkDayOfShiftEntry()` y `ShiftCorrectionLedger`, y las tres firmas de caso de uso (`CorrectShiftHandler`, `VoidShiftHandler`, `AddShiftEntryHandler`). **Lo que queda es exclusivamente infraestructura** (pasos 6-11): no rediseñes el dominio, impleméntalo.
+>
+> **Dos decisiones de ADR-035 que cambian la forma del contrato, no lo des por hecho:**
+>
+> 1. **La versión corregida estrena `uuid` propio.** `PATCH /shift-entries/{uuid}` responde con un `uuid` **distinto** del que recibió — cada versión es una fila y `shift_entries.uuid` es `UNIQUE`. La respuesta lleva los dos: el vigente (`shift_entry_uuid`) y el sustituido (`superseded_shift_entry_uuid`, nulo en alta o anulación). Un `PATCH` sobre una versión ya sustituida es `409`, no `404`.
+> 2. **Corregir la entrada que abre la jornada cruzando la medianoche local se rechaza con `422`** (`CorrectionWouldChangeWorkDate`): mover horas de un día a otro son dos actos separados y auditados —anular en origen, dar de alta en destino—, no un efecto lateral de un `PATCH`.
+>
+> **Urgente al empezar, antes que cualquier otra cosa de esta tarea:** `EloquentWorkDayRepository` todavía no implementa `findWorkDayOfShiftEntry()`. Mientras falte, la clase incumple la interfaz del puerto y **la aplicación entera no arranca** (PHPStan y `make test` fallan con un error fatal de PHP, no con un aviso). Es el primer paso, no uno más de la lista.
+>
+> El resto de la firma exacta de cada puerto y caso de uso, con el detalle columna-a-columna de `ShiftCorrected` para `shift_corrections` y `audit_log`, está en los docblocks de `backend/app/Modules/Attendance/Application/Port/WorkDayRepository.php` y `ShiftCorrectionLedger.php` — son la referencia, no este resumen.
 
 **Reglas duras aplicables.**
 

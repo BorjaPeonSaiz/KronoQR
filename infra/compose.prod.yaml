@@ -29,6 +29,15 @@ x-app-image: &app-image
   image: ${IMAGE_REGISTRY:-ghcr.io/kronoqr}/php:${IMAGE_TAG:-latest}
   env_file:
     - .env
+  volumes:
+    # Destino de las copias, en el disco del cliente y montado en la MISMA ruta
+    # dentro del contenedor. Asi `php artisan backup:run` escribe donde dice el
+    # .env sin que backup.sh tenga que saber si corre dentro o fuera de Docker.
+    #
+    # La copia se queda aqui: el fabricante no la recibe ni la custodia (regla
+    # dura 16, RL-14). Si BACKUP_PATH apunta a un recurso de red, debe estar
+    # montado antes de levantar el servicio.
+    - ${BACKUP_PATH:-/var/backups/fichaje}:${BACKUP_PATH:-/var/backups/fichaje}
   networks:
     - app
   restart: unless-stopped
@@ -87,12 +96,40 @@ services:
     image: ${IMAGE_REGISTRY:-ghcr.io/kronoqr}/postgres:${IMAGE_TAG:-latest}
     environment:
       POSTGRES_DB: ${DB_DATABASE:-fichaje}
-      POSTGRES_USER: ${DB_USERNAME:-fichaje_app}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:?define DB_PASSWORD en el .env; install.sh lo genera}
+      # El rol de ARRANQUE es el de MIGRACION, no el de la aplicacion (tarea
+      # 1.14, regla dura 6). POSTGRES_USER es superusuario del cluster y sobre
+      # un superusuario los GRANT y los REVOKE no se comprueban: con la
+      # aplicacion corriendo con este rol, "sin UPDATE ni DELETE sobre
+      # audit_log" no era una garantia, era una intencion.
+      #
+      # initdb/02-application-roles.sh crea a partir de aqui fichaje_app —el
+      # DB_USERNAME del .env, sin DDL— y fichaje_maintenance (ADR-027).
+      POSTGRES_USER: ${DB_MIGRATION_USERNAME:-fichaje_migrator}
+      POSTGRES_PASSWORD: ${DB_MIGRATION_PASSWORD:?define DB_MIGRATION_PASSWORD en el .env; install.sh lo genera}
+      DB_APP_USERNAME: ${DB_USERNAME:-fichaje_app}
+      DB_PASSWORD: ${DB_PASSWORD:?define DB_PASSWORD en el .env; install.sh lo genera}
+      DB_MAINTENANCE_USERNAME: ${DB_MAINTENANCE_USERNAME:-fichaje_maintenance}
+      # Sin valor por defecto y a proposito (ADR-027): el rol de mantenimiento
+      # nace sin credencial utilizable y no aparece en el .env de la
+      # aplicacion. Se le asigna cuando la tarea 2.10 active la purga.
+      DB_MAINTENANCE_PASSWORD: ${DB_MAINTENANCE_PASSWORD:-}
       TZ: UTC
       PGTZ: UTC
+      KRONOQR_WAL_ARCHIVE_DIR: ${BACKUP_PATH:-/var/backups/fichaje}/wal
+      KRONOQR_WAL_RETENTION_DAYS: ${BACKUP_WAL_RETENTION_DAYS:-8}
     # Regla dura 3. Y archivado de WAL, que es lo que sostiene el RPO de 15 min
-    # (RNF-D-02). El destino lo monta backup.sh (tarea 2.11).
+    # (RNF-D-02).
+    #
+    # `archive_timeout=900` es la linea de la que depende el RPO: obliga a
+    # cerrar y archivar un segmento cada 15 minutos aunque no haya trafico. Sin
+    # ella, un hotel tranquilo de madrugada puede tener horas de escrituras sin
+    # archivar y el RPO seria "lo que tarde en llenarse un segmento".
+    #
+    # El archivado NO es un `cp` en una linea: lo hace kronoqr-archive-wal, que
+    # comprime, escribe de forma atomica, se niega a sobrescribir un segmento
+    # distinto y purga los caducados. `archive_command` solo debe devolver 0 si
+    # el segmento esta de verdad a salvo, porque PostgreSQL borra el original
+    # en cuanto lo dice.
     command:
       - postgres
       - -c
@@ -100,18 +137,23 @@ services:
       - -c
       - log_timezone=UTC
       - -c
+      - hba_file=/etc/kronoqr/pg_hba.conf
+      - -c
       - wal_level=replica
       - -c
       - archive_mode=on
       - -c
-      - archive_command=test ! -f /var/backups/wal/%f && cp %p /var/backups/wal/%f
+      - archive_timeout=900
+      - -c
+      - archive_command=/usr/local/bin/kronoqr-archive-wal %p %f
     volumes:
       - postgres-data:/var/lib/postgresql/data
       # install.sh crea este directorio y se lo asigna al uid de postgres antes
-      # del primer arranque (tarea 5.4). Si no puede escribir, el WAL se
-      # acumula en el volumen de datos hasta llenar el disco: doctor.sh lo
-      # comprueba y la alerta de espacio en disco (3.2) lo cubre.
-      - ${BACKUP_PATH:-/var/backups/fichaje}/wal:/var/backups/wal
+      # del primer arranque (tarea 5.4). Si no puede escribir, el archivado
+      # falla, el WAL se acumula en el volumen de datos hasta llenar el disco y
+      # PostgreSQL acaba parandose: por eso la alerta de archivado detenido
+      # (infra/observability/prometheus/rules/backup.yml) es de las criticas.
+      - ${BACKUP_PATH:-/var/backups/fichaje}/wal:${BACKUP_PATH:-/var/backups/fichaje}/wal
     # Sin puertos publicados: a la base de datos se llega desde la red interna
     # de Docker, nunca desde la red del hotel.
     networks:
@@ -174,6 +216,38 @@ services:
       observability:
         ipv4_address: 172.29.0.20
     restart: unless-stopped
+
+  # Publica a Prometheus el resultado de la copia diaria, de su verificacion y
+  # del simulacro de restauracion: los scripts de infra/scripts escriben
+  # ficheros .prom en BACKUP_PATH/metrics y este servicio los sirve. Es lo que
+  # convierte "el cron fallo" en una alerta y no en un hallazgo de fin de mes.
+  node-exporter:
+    image: prom/node-exporter:v1.9.1
+    # El uid que escribe las copias (el mismo del contenedor de aplicacion).
+    # El arbol de copias es 0750 y contiene datos personales cifrados: se le da
+    # el uid justo en lugar de relajar los permisos del directorio.
+    user: "1000:1000"
+    command:
+      - --collector.disable-defaults
+      - --collector.textfile
+      - --collector.textfile.directory=/var/backups/metrics
+      - --collector.filesystem
+      - --path.rootfs=/host
+      - --web.listen-address=:9100
+    volumes:
+      - ${BACKUP_PATH:-/var/backups/fichaje}:/var/backups:ro
+      # Espacio en disco del servidor, de solo lectura. Sin esto no se puede
+      # avisar del disco lleno, que es el modo de fallo mas frecuente de una
+      # instalacion con archivado de WAL.
+      - /:/host:ro,rslave
+    networks:
+      - observability
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
 
   alertmanager:
     image: prom/alertmanager:v0.28.0

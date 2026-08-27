@@ -26,6 +26,15 @@ que introduce, `KIOSK_VLAN_CIDR` mal configurado, es un **parámetro de
 instalación**, así que se documenta donde le corresponde:
 [`docs/cliente/instalacion.md`](../cliente/instalacion.md).
 
+La Fase 1 aplica la misma regla en la otra dirección: la tarea 1.18 **sí** crea
+alertas —seis, sobre la copia de seguridad— y por eso trae escrito
+[`restaurar-backup.md`](restaurar-backup.md) en el mismo cambio. Lo mismo hace la
+tarea 1.14 con las cuatro alertas de la cadena de auditoría y
+[`rotura-cadena-auditoria.md`](rotura-cadena-auditoria.md). Ninguna alerta llegó
+antes que su procedimiento, y una prueba de arquitectura
+(`backend/tests/Architecture/BackupAndAlertingTest.php`) falla si alguien añade
+una regla cuyo `runbook_url` no existe.
+
 ## Los 20 runbooks y quién escribe cada uno
 
 Asignación literal del plan de implementación
@@ -36,14 +45,14 @@ Asignación literal del plan de implementación
 | 1 | `quiosco-no-responde.md` | Alerta de latido perdido | Fase 3 · tarea 3.2 |
 | 2 | `cola-offline-atascada.md` | Cola de un dispositivo por encima del umbral | Fase 3 · tarea 3.2 |
 | 3 | `divergencia-proyeccion.md` | La reconciliación nocturna detecta discrepancia | Fase 2 · tarea 2.7 → completado en 3.2 |
-| 4 | `rotura-cadena-auditoria.md` | **Incidente de seguridad.** Incluye preservación de evidencia | Fase 2 · tarea 2.2 |
-| 5 | `restaurar-backup.md` | Recuperación y simulacro trimestral | Fase 2 · tarea 2.11 → usado por 5.7 |
+| 4 | [`rotura-cadena-auditoria.md`](rotura-cadena-auditoria.md) | **Incidente de seguridad.** Incluye preservación de evidencia | ✅ Fase 1 · tarea 1.14 (era 2.2, adelantada por ADR-032) |
+| 5 | [`restaurar-backup.md`](restaurar-backup.md) | Recuperación y simulacro trimestral | ✅ Fase 1 · tarea 1.18 (era 2.11, adelantada por ADR-032) → usado por 5.7 |
 | 6 | `rotacion-secretos.md` | Rotación programada o compromiso | §7.7 · ampliado en 5.4 |
 | 7 | `alta-nuevo-quiosco.md` | Emparejamiento por código y vinculación | Fase 5 · tarea 5.6 |
 | 8 | `alta-nuevo-empleado.md` | Alta, emisión, impresión y entrega con la antelación necesaria | Fase 1 · tarea 1.10 |
 | 9 | `tarjeta-perdida-o-rota.md` | Revocación, reemisión y reimpresión en el día | Fase 1 · tarea 1.10 |
 | 10 | `rotacion-clave-qr.md` | Reimpresión progresiva sin dejar a nadie sin fichar | Fase 2 · tarea 2.12 |
-| 11 | `requerimiento-inspeccion.md` | **Cómo generar la exportación legal en menos de 1 hora** | Fase 2 · tarea 2.9 |
+| 11 | [`requerimiento-inspeccion.md`](requerimiento-inspeccion.md) | **Cómo generar la exportación legal en menos de 1 hora** | ✅ Fase 1 · tarea 1.17 (era 2.9, adelantada por ADR-032) |
 | 12 | `patron-anomalo-credencial.md` | Revisar una incidencia `anomalous_pattern` sin convertir un indicio en una acusación | Fase 3 · tarea 3.11 |
 | 13 | `solicitud-derechos-rgpd.md` | Acceso, rectificación, portabilidad | Fase 2 · tarea 2.10 |
 | 14 | `brecha-de-seguridad.md` | Procedimiento de 72 h | Fase 2 (RL-15) · revisado en 3.10 |

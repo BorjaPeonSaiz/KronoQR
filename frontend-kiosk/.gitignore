@@ -5,3 +5,12 @@ dev-dist/
 .vite/
 test-results/
 playwright-report/
+
+# Videos de camara simulada para el E2E. Se GENERAN con
+# `npm run e2e:fixtures` antes de cada ejecucion (lo hace el propio
+# playwright.config.ts) y son deterministas: mismo payload, mismos bytes.
+#
+# No se versionan porque son 2,6 MB cada uno de video sin comprimir —el unico
+# formato que acepta `--use-file-for-fake-video-capture`— y volverian a pesar lo
+# mismo cada vez que rotara la clave de firma o cambiara el payload de prueba.
+e2e/fixtures/*.y4m

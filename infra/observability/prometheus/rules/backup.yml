@@ -1,0 +1,171 @@
+# KronoQR — alertas de la copia de seguridad (doc 01 §9.3, doc 02 §8.4).
+#
+# Norma que gobierna este fichero: CADA alerta lleva umbral, severidad,
+# destinatario y enlace a su runbook. Una alerta sin procedimiento asociado es
+# ruido y se elimina. Las seis de aqui apuntan al mismo runbook porque se
+# responden con el mismo procedimiento, cada una por su seccion:
+# docs/runbooks/restaurar-backup.md.
+#
+# Fila del catalogo del doc 01 §9.3 que implementa este fichero:
+#
+#   | Copia de seguridad fallida o no verificada | cualquiera | Critica | IT del cliente | restaurar-backup.md |
+#
+# «Cualquiera» como umbral significa que no hay tolerancia: una copia fallida
+# no es una tendencia que mirar. Lo que si hay es `for:`, para no despertar a
+# nadie por un fichero de metricas escrito a medias.
+#
+# Las metricas las escriben infra/scripts/backup.sh y restore-drill.sh en
+# BACKUP_PATH/metrics, y las sirve node-exporter (colector textfile).
+
+groups:
+  - name: kronoqr-backup
+    interval: 60s
+    rules:
+      #------------------------------------------------------------------------
+      # La copia ha fallado. Critica y sin margen.
+      #------------------------------------------------------------------------
+      - alert: CopiaDeSeguridadFallida
+        expr: kronoqr_backup_last_result == 0
+        for: 5m
+        labels:
+          severity: critical
+          destinatario: it-cliente
+          component: backup
+        annotations:
+          summary: "La ultima copia de seguridad ha fallado"
+          description: >-
+            El ultimo intento de copia ({{ $labels.type }}) termino en error. La
+            instalacion sigue funcionando y el fichaje no esta afectado, pero
+            desde ahora se esta acumulando trabajo sin respaldo diario.
+          runbook_url: docs/runbooks/restaurar-backup.md
+
+      #------------------------------------------------------------------------
+      # La copia se escribio pero no supero la verificacion, o nadie la ha
+      # verificado desde hace mas de un dia. Una copia no verificada no es una
+      # copia: se trata igual que si hubiera fallado.
+      #------------------------------------------------------------------------
+      - alert: CopiaDeSeguridadSinVerificar
+        expr: >-
+          kronoqr_backup_last_verify_result == 0
+          or (time() - kronoqr_backup_last_verified_timestamp_seconds) > 93600
+        for: 15m
+        labels:
+          severity: critical
+          destinatario: it-cliente
+          component: backup
+        annotations:
+          summary: "No hay ninguna copia verificada de las ultimas 26 horas"
+          description: >-
+            O la verificacion dio error —la copia no se descifra o no la
+            entiende pg_restore— o hace mas de 26 h que no se verifica ninguna.
+            El umbral son 26 h y no 24 para que un retraso normal de la ventana
+            nocturna no dispare la alerta.
+          runbook_url: docs/runbooks/restaurar-backup.md
+
+      #------------------------------------------------------------------------
+      # El silencio es el peor de los fallos: si el cron no llega a ejecutarse,
+      # ninguna metrica cambia y sin esta regla nadie se entera.
+      #------------------------------------------------------------------------
+      - alert: CopiaDeSeguridadAusente
+        expr: >-
+          absent(kronoqr_backup_last_success_timestamp_seconds)
+          or absent(kronoqr_backup_last_verified_timestamp_seconds)
+        for: 30m
+        labels:
+          severity: critical
+          destinatario: it-cliente
+          component: backup
+        annotations:
+          summary: "No llega ninguna metrica de copia de seguridad"
+          description: >-
+            Prometheus no ve la metrica de resultado de la copia. O nunca se ha
+            ejecutado, o el destino de copias no esta montado, o node-exporter
+            no lee BACKUP_PATH/metrics. Es indistinguible de no tener copias.
+          runbook_url: docs/runbooks/restaurar-backup.md
+
+      #------------------------------------------------------------------------
+      # RPO. El WAL archivado es lo que separa "perdimos 15 minutos" de
+      # "perdimos el dia".
+      #------------------------------------------------------------------------
+      - alert: ArchivadoDeWalDetenido
+        expr: >-
+          kronoqr_backup_wal_last_archived_age_seconds > 1800
+          or increase(kronoqr_backup_wal_archive_failures_total[1h]) > 0
+        for: 10m
+        labels:
+          severity: critical
+          destinatario: it-cliente
+          component: backup
+        annotations:
+          summary: "El archivado de WAL esta detenido o falla"
+          description: >-
+            Hace mas de 30 min que no se archiva un segmento, con
+            archive_timeout=900 s, o ha habido fallos de archivado en la ultima
+            hora. Dos consecuencias, y la segunda es la urgente: el RPO deja de
+            ser 15 min (RNF-D-02), y PostgreSQL conserva el WAL sin reciclar
+            hasta llenar el disco de datos y pararse.
+          runbook_url: docs/runbooks/restaurar-backup.md
+
+      #------------------------------------------------------------------------
+      # Espacio en el destino de copias. La alerta general de disco es del
+      # catalogo (tarea 3.2, espacio-en-disco.md); esta mira SOLO el volumen de
+      # copias, que puede llenarse sin que el disco del sistema se resienta y
+      # cuyo sintoma es que la copia de mañana no cabe.
+      #------------------------------------------------------------------------
+      - alert: DiscoDeCopiasCasiLleno
+        expr: kronoqr_backup_volume_free_ratio < 0.20
+        for: 15m
+        labels:
+          severity: warning
+          destinatario: it-cliente
+          component: backup
+        annotations:
+          summary: "Queda menos del 20 % libre en el destino de copias"
+          description: >-
+            Con el destino lleno, la copia diaria falla y el archivado de WAL
+            tambien. Se resuelve bajando BACKUP_RETENTION_DAYS o ampliando el
+            almacenamiento; el runbook explica cual conviene en cada caso.
+          runbook_url: docs/runbooks/restaurar-backup.md
+
+      #------------------------------------------------------------------------
+      # Simulacro trimestral (RNF-D-05, RQ-09). No es urgente a las 06:30, pero
+      # si se deja pasar se descubre que la copia no restauraba el dia que hace
+      # falta restaurarla.
+      #
+      # Son dos reglas y no una porque «nunca se ha hecho» y «hace mas de un
+      # trimestre» se responden distinto, y la primera no la ve ninguna
+      # comparacion de fechas: sin metrica no hay nada que comparar. La espera
+      # de 24 h es para que una instalacion recien entregada no avise antes de
+      # que a nadie le haya dado tiempo a ejecutar el primero.
+      #------------------------------------------------------------------------
+      - alert: SimulacroDeRestauracionNuncaEjecutado
+        expr: absent(kronoqr_backup_restore_drill_last_success_timestamp_seconds)
+        for: 24h
+        labels:
+          severity: warning
+          destinatario: it-cliente
+          component: backup
+        annotations:
+          summary: "Nunca se ha ejecutado un simulacro de restauracion"
+          description: >-
+            No consta ningun simulacro correcto en esta instalacion. Hasta que
+            se ejecute uno, nadie ha comprobado que estas copias se puedan
+            restaurar: solo que existen y que se descifran.
+          runbook_url: docs/runbooks/restaurar-backup.md
+
+      - alert: SimulacroDeRestauracionCaducado
+        expr: >-
+          kronoqr_backup_restore_drill_last_result == 0
+          or (time() - kronoqr_backup_restore_drill_last_success_timestamp_seconds) > 8640000
+        for: 1h
+        labels:
+          severity: warning
+          destinatario: it-cliente
+          component: backup
+        annotations:
+          summary: "El simulacro de restauracion fallo o lleva mas de 100 dias sin ejecutarse"
+          description: >-
+            RNF-D-05 exige una prueba de restauracion trimestral. El umbral son
+            100 dias para dejar margen dentro del trimestre. Si el ultimo
+            simulacro FALLO, la ultima copia no restaura: eso si es urgente.
+          runbook_url: docs/runbooks/restaurar-backup.md
