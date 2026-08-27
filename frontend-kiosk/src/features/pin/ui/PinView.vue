@@ -25,7 +25,7 @@ import { RouterLink, useRouter } from 'vue-router'
 import { createApiClient } from '@/shared/api/client'
 import { readPrivacyNoticeConfig } from '@/shared/config/privacy'
 import { useConnectivity } from '@/shared/connectivity/useConnectivity'
-import { APP_VERSION, resolveDeviceId } from '@/shared/telemetry/deviceIdentity'
+import { APP_VERSION, readDeviceToken, resolveDeviceId } from '@/shared/telemetry/deviceIdentity'
 import { createErrorReporter } from '@/shared/telemetry/errorReporter'
 import { createHeartbeatScheduler } from '@/shared/telemetry/heartbeat'
 import ConnectionStatusBadge from '@/shared/ui/ConnectionStatusBadge.vue'
@@ -55,6 +55,8 @@ const api = createApiClient({
   ...(import.meta.env.VITE_API_BASE_URL === undefined
     ? {}
     : { baseUrl: import.meta.env.VITE_API_BASE_URL }),
+  // Ver ScanView: sin el token no hay `Authorization` y todo acaba en 401.
+  deviceToken: readDeviceToken,
 })
 
 // Mismo controlador de cola UNICO que la pantalla de escaneo (tarea 1.9): el

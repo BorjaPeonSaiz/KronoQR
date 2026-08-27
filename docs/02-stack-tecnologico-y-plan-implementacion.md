@@ -857,7 +857,7 @@ Reglas anti-fatiga: agrupación por dispositivo, silenciamiento durante ventanas
               ╱ Integración  ╲        ~80 pruebas · repositorios, proyecciones,
              ╱────────────────╲       restricciones de BD reales
             ╱     Unitarias    ╲      ~400 pruebas · dominio puro, sin BD
-           ╱────────────────────╲     < 2 segundos en total
+           ╱────────────────────╲     presupuesto de duración con gate (§9.2)
           ╱  Arquitectura + SAST ╲    Fronteras, tipos, dependencias
          ╱────────────────────────╲
 ```
@@ -872,7 +872,7 @@ Reglas anti-fatiga: agrupación por dispositivo, silenciamiento durante ventanas
 | Tipos frontend | `vue-tsc` en modo estricto | 0 errores |
 | Modernización | Rector (dry-run en CI) | Informativo |
 | **Arquitectura** | Pest Arch + **Deptrac** | 0 violaciones de frontera |
-| Unitarias | Pest | Cobertura de dominio ≥ 90 % |
+| Unitarias | Pest | Cobertura de dominio ≥ 90 % · duración dentro del presupuesto que verifica `make test-unit` (`UNIT_SUITE_MAX_SECONDS`, 4 s en el contenedor de desarrollo; el objetivo aspiracional de 2 s aplica al runner Linux de la CI) |
 | **Mutación** | Pest `--mutate` (o Infection) sobre `Modules/*/Domain` | **MSI ≥ 80 %** |
 | Propiedades | Generación dirigida | Duraciones, DST, medianoche |
 | Integración | Pest + PostgreSQL real en contenedor | — |

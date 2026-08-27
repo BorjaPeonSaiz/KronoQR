@@ -89,5 +89,11 @@ export default defineConfig({
     host: true,
     port: 5173,
     strictPort: true,
+    // El cliente HTTP llama a /api/v1 en el MISMO origen (sin CORS, ADR-017);
+    // en desarrollo ese origen es este servidor de Vite, que reenvia al Nginx
+    // del entorno. secure:false por el certificado autofirmado de desarrollo.
+    proxy: {
+      '/api': { target: 'https://localhost', changeOrigin: true, secure: false },
+    },
   },
 })

@@ -26,7 +26,7 @@ use RuntimeException;
  * forma** de escribir una fila con otro delimitador, otro entrecomillado u otro
  * fin de linea sin borrar antes esta clase.
  *
- * ## Las cinco decisiones, y ninguna es cosmetica
+ * ## Las seis decisiones, y ninguna es cosmetica
  *
  * - **BOM.** Sin marca de orden de bytes, Excel con configuracion regional
  *   española lee el fichero en Windows-1252 y «Duración» sale «DuraciÃ³n». Un
@@ -41,6 +41,15 @@ use RuntimeException;
  *   esta obsoleto, asi que se pasa explicito y vacio.
  * - **`\r\n` como fin de linea.** Es el que exige el RFC 4180 y el que espera
  *   Excel en Windows, que es donde se abre esto.
+ * - **Neutralizacion de formulas.** Una celda que empieza por `=`, `+`, `-`,
+ *   `@`, tabulador o retorno de carro es, para Excel, una formula que se
+ *   ejecuta al abrir el fichero. El texto libre de estas celdas lo escriben
+ *   personas —el motivo de una correccion, un apellido— y el fichero lo abre
+ *   un tercero con el que no se comparte confianza: la Inspeccion de Trabajo,
+ *   RRHH, el propio empleado. Se antepone una comilla simple, la marca de
+ *   texto de Excel, que no se muestra en la celda. Un numero negativo puro
+ *   (`-30`) se deja intacto: es un numero, no una formula, y anteponerle la
+ *   comilla lo convertiria en texto y romperia las sumas de quien lo reciba.
  *
  * ## Lo que NO decide esta clase
  *
@@ -90,6 +99,13 @@ final class CsvDialect
     }
 
     /**
+     * Primer caracter con el que Excel decide que la celda es una formula.
+     * `-` esta en la lista aunque tambien empiece numeros: la excepcion para el
+     * numero puro vive en `neutralized()`, no aqui.
+     */
+    private const array FORMULA_TRIGGERS = ['=', '+', '-', '@', "\t", "\r"];
+
+    /**
      * Una fila. Un array vacio escribe la linea en blanco que separa el bloque
      * de criterios de la tabla —la que permite que una hoja de calculo reconozca
      * la tabla al seleccionarla—.
@@ -101,7 +117,7 @@ final class CsvDialect
     {
         $written = fputcsv(
             $handle,
-            array_values($cells),
+            array_map(self::neutralized(...), array_values($cells)),
             self::DELIMITER,
             self::ENCLOSURE,
             self::NO_ESCAPE,
@@ -113,5 +129,28 @@ final class CsvDialect
             // forma de saber que le falta el final.
             throw new RuntimeException('No se ha podido escribir una fila del fichero CSV.');
         }
+    }
+
+    /**
+     * La celda, con la marca de texto de Excel delante si su primer caracter
+     * la convertiria en formula. Ver el docblock de la clase: el fichero lo
+     * abre un tercero, y `=HYPERLINK(...)` en un motivo de correccion se
+     * ejecutaria en su hoja de calculo.
+     */
+    private static function neutralized(string $cell): string
+    {
+        if ($cell === '' || ! \in_array($cell[0], self::FORMULA_TRIGGERS, true)) {
+            return $cell;
+        }
+
+        // Un numero negativo puro es un numero: Excel no lo ejecuta y la
+        // comilla si lo estropearia (dejaria de sumar en la hoja de quien lo
+        // recibe). Cualquier otra cosa que empiece por `-` —`-2+3+cmd|...`—
+        // sigue siendo formula y se neutraliza.
+        if (preg_match('/^-\d+(?:[.,]\d+)?$/', $cell) === 1) {
+            return $cell;
+        }
+
+        return "'".$cell;
     }
 }

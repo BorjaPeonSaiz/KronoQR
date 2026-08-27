@@ -67,7 +67,8 @@ SH_FILES := $(wildcard infra/scripts/*.sh) \
             $(wildcard infra/scripts/lib/*.sh) \
             $(wildcard infra/docker/*/*.sh) \
             $(wildcard infra/docker/*/*/*.sh) \
-            $(wildcard .github/scripts/*.sh)
+            $(wildcard .github/scripts/*.sh) \
+            $(wildcard load-tests/k6/*.sh)
 
 # Versiones fijadas de las herramientas de shell. Se declaran aqui, y no en el
 # workflow, porque el workflow las LEE de aqui (objetivo `tool-versions`): la
@@ -249,11 +250,39 @@ else
 	$(RUN_APP) php artisan test
 endif
 
-test-unit: ## Dominio puro, sin base de datos, menos de 2 s
+# El presupuesto de la suite unitaria (doc 02 §9.2, doc 03). El plan lo cita
+# tres veces como bloqueante del camino critico y era el unico umbral de la
+# tabla sin herramienta que lo verificase — y ya estaba superado (2,6-2,7 s
+# medidos en el cierre de la Fase 1) sin que nada avisara. El valor es mas
+# holgado que los "2 s" literales del plan porque se mide donde de verdad se
+# ejecuta: el contenedor sobre Docker Desktop/NTFS paga arranque y E/S que un
+# runner Linux no paga. Se puede apretar por entorno: make test-unit
+# UNIT_SUITE_MAX_SECONDS=2
+UNIT_SUITE_MAX_SECONDS ?= 4
+
+# La duracion se lee de la linea "Duration:" de Pest —el tiempo de la suite, no
+# el del arranque de artisan ni el de docker exec— y se compara con awk porque
+# sh no sabe de decimales. Si el formato de salida de Pest cambiara y la linea
+# no apareciera, el gate avisa en vez de aprobar en silencio.
+test-unit: ## Dominio puro, sin base de datos, con presupuesto de duracion
 ifeq ($(wildcard backend/artisan),)
 	@echo [make] La aplicacion Laravel llega en la tarea 0.2: todavia no hay suite que ejecutar.
 else
-	$(RUN_APP) php artisan test --testsuite=Unit
+	@$(RUN_APP) php artisan test --testsuite=Unit > .unit-suite.log 2>&1; \
+	status=$$?; \
+	cat .unit-suite.log; \
+	dur=$$(grep 'Duration:' .unit-suite.log | grep -oE '[0-9]+\.[0-9]+' | tail -1); \
+	rm -f .unit-suite.log; \
+	if [ $$status -ne 0 ]; then exit $$status; fi; \
+	if [ -z "$$dur" ]; then \
+		echo "[make] AVISO: no se pudo leer la duracion de la suite; el presupuesto de $(UNIT_SUITE_MAX_SECONDS) s no se ha comprobado."; \
+	elif awk "BEGIN { exit !($$dur > $(UNIT_SUITE_MAX_SECONDS)) }"; then \
+		echo "[make] La suite unitaria ha tardado $$dur s y el presupuesto es $(UNIT_SUITE_MAX_SECONDS) s (doc 02 §9.2)."; \
+		echo "[make] Una suite unitaria lenta deja de ejecutarse en cada cambio, que es su unica razon de ser."; \
+		exit 1; \
+	else \
+		echo "[make] Suite unitaria en $$dur s, dentro del presupuesto de $(UNIT_SUITE_MAX_SECONDS) s."; \
+	fi
 endif
 
 test-integration: ## Repositorios contra PostgreSQL real
@@ -384,14 +413,20 @@ deps-audit-php: tools-ready ## composer audit (RS-10, umbral: 0 vulnerabilidades
 # --audit-level=high: el umbral del §9.2 es "0 vulnerabilidades criticas o
 # altas". Las moderadas y bajas se ven en el informe pero no bloquean, porque
 # una puerta que salta por un aviso informativo se acaba desactivando entera.
-deps-audit-js: ## npm audit en los tres frontends (RS-10, 0 criticas ni altas)
-	@for app in frontend-kiosk frontend-admin frontend-portal; do \
-		if [ -f "$$app/package-lock.json" ]; then \
-			echo "[make] npm audit en $$app"; \
-			npm audit --prefix "$$app" --audit-level=high || exit 1; \
-		fi; \
-	done
-	@echo "[make] npm audit: 0 vulnerabilidades criticas ni altas."
+# En la raiz y no por aplicacion: desde ADR-036 el repositorio es un workspace
+# de npm con UN package-lock.json, que es el arbol que de verdad se instala. La
+# version anterior iteraba las tres SPA buscando lockfiles propios y, como
+# frontend-admin ya no tenia, se lo saltaba sin avisar e imprimia igualmente
+# "0 vulnerabilidades" — una puerta que afirma lo que no ha comprobado
+# (hallazgo de la auditoria de cierre de la Fase 1). El audit de raiz cubre las
+# tres SPA y packages/web-kit de una vez.
+deps-audit-js: ## npm audit del workspace completo (RS-10, 0 criticas ni altas)
+	@if [ ! -f package-lock.json ]; then \
+		echo "[make] No hay package-lock.json en la raiz: el workspace llega en la tarea 0.5."; \
+	else \
+		npm audit --audit-level=high || exit 1; \
+		echo "[make] npm audit (workspace): 0 vulnerabilidades criticas ni altas."; \
+	fi
 
 sast: ## Semgrep sobre las reglas de .semgrep (umbral: 0 hallazgos ERROR)
 	$(SEMGREP) --config .semgrep --error --metrics=off --quiet

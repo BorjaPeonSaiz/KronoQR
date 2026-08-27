@@ -12,12 +12,13 @@ use App\Modules\Shared\Domain\ValueObject\OperationalSettings;
  * Construye la politica de RN-07 y RN-08 con los umbrales del centro ya
  * resueltos (regla dura 14).
  *
- * **Existe para que el umbral no se escriba dos veces.** `RegisterScanHandler`
- * lo tenia en una constante propia con su deuda declarada; las correcciones de
- * la tarea 1.15 clasifican exactamente igual —un tramo corregido a catorce horas
- * pide revision humana como uno fichado—, y una segunda copia de la constante es
- * la forma segura de que dentro de seis meses un fichaje y una correccion
- * clasifiquen distinto la misma duracion.
+ * **Existe para que el umbral no se escriba dos veces, y es el UNICO sitio.**
+ * `RegisterScanHandler` llego a tener una copia propia de la constante (deuda
+ * de la 1.4 que la auditoria de cierre destapo como duplicacion viva); hoy
+ * consume este metodo, igual que las correcciones de la 1.15 —un tramo
+ * corregido a catorce horas pide revision humana como uno fichado—. Una
+ * segunda copia seria la forma segura de que dentro de seis meses un fichaje y
+ * una correccion clasifiquen distinto la misma duracion.
  *
  * **Deuda heredada de la tarea 1.4, no nueva.** RN-07 no tiene todavia clave en
  * `installation_settings`: el Anexo B siembra cuatro umbrales y ninguno es este.

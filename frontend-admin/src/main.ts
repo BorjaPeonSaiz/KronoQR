@@ -1,3 +1,4 @@
+import { createWebErrorReporter, installGlobalErrorCapture } from '@kronoqr/web-kit/clientErrors'
 import { setAuthTokenProvider, setUnauthenticatedHandler } from '@kronoqr/web-kit/http'
 import { VueQueryPlugin } from '@tanstack/vue-query'
 import { createPinia } from 'pinia'
@@ -11,6 +12,16 @@ import { createAppQueryClient } from './shared/api/queryClient'
 import { createAppI18n, isSupportedLocale, resolveLocale } from './shared/i18n'
 
 const app = createApp(App)
+
+// Antes que nada: un error durante el propio arranque tambien debe capturarse.
+// El transporte hacia error_events llega en la 5.12; hasta entonces el buffer
+// saneado es el punto unico donde mirar (regla dura 21: sin PII).
+const errorReporter = createWebErrorReporter({
+  app: 'admin',
+  appVersion: typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev',
+})
+installGlobalErrorCapture(app, errorReporter)
+
 const pinia = createPinia()
 
 app.use(pinia)

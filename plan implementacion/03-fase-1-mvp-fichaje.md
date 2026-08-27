@@ -88,7 +88,7 @@ Pruebas obligatorias: los dos cambios de hora de Europe/Madrid en ambos
 sentidos, turno 22:00→06:00, límites exactos de duración mínima y máxima,
 jornada partida de 4 tramos.
 
-Criterio de terminado: `make test-unit` en verde en menos de 2 segundos,
+Criterio de terminado: `make test-unit` en verde y dentro de su presupuesto de duración,
 cobertura del dominio ≥ 90 %, y `make mutate` con MSI ≥ 80 %.
 
 Esta es la tarea del camino crítico. No pases a otra cosa hasta cerrarla.
@@ -213,7 +213,7 @@ La escritura material de esas pruebas es la tarea 1.2. Lo que 1.1 entrega son la
 **Verificación.**
 
 ```bash
-make test-unit            # verde, y por debajo de 2 s
+make test-unit            # verde, dentro del presupuesto de duración (gate propio)
 vendor/bin/deptrac        # 0 violaciones de frontera
 make quality              # Pint + PHPStan 9 + Deptrac + Rector dry-run
 
@@ -227,7 +227,7 @@ grep -rn "Modules\\\\\(Identity\|Workforce\|Product\|Compliance\)" \
   backend/app/Modules/Attendance/           # sin resultados
 ```
 
-Resultado esperado: `make test-unit` en verde en menos de 2 s, Deptrac y PHPStan 9 limpios, y **cero coincidencias** en los dos `grep`.
+Resultado esperado: `make test-unit` en verde y dentro de su presupuesto de duración, Deptrac y PHPStan 9 limpios, y **cero coincidencias** en los dos `grep`.
 
 **Terminado cuando** (subconjunto aplicable de §10.3):
 
@@ -253,7 +253,7 @@ Resultado esperado: `make test-unit` en verde en menos de 2 s, Deptrac y PHPStan
 | **Precondiciones** | **1.1** (§11.3) |
 | **Bloquea a** | **1.3, 1.5, 1.6** y, por la nota del §11.3, **todo lo demás** |
 
-**Objetivo.** Cada regla `RN-01..09` tiene al menos una prueba unitaria que puede fallar; la suite completa corre en menos de 2 s; la cobertura del dominio supera el 90 % y el MSI el 80 %.
+**Objetivo.** Cada regla `RN-01..09` tiene al menos una prueba unitaria que puede fallar; la suite completa corre dentro del presupuesto de duración que verifica `make test-unit` (§9.2 del doc 02); la cobertura del dominio supera el 90 % y el MSI el 80 %.
 
 **Reglas duras aplicables.**
 
@@ -327,7 +327,7 @@ Resultado esperado: `make test-unit` en verde en menos de 2 s, Deptrac y PHPStan
 
 | Nivel | ¿Aplica? | Umbral (§9.2) |
 |---|:---:|---|
-| Unitaria | ✅ obligatoria | Cobertura de dominio **≥ 90 %**; suite completa **< 2 s** |
+| Unitaria | ✅ obligatoria | Cobertura de dominio **≥ 90 %**; suite completa dentro del presupuesto de duración de `make test-unit` (doc 02 §9.2) |
 | Mutación | ✅ | **MSI ≥ 80 %** sobre `Modules/*/Domain` |
 | Propiedades | ✅ | Duraciones, DST, medianoche (RQ-02) |
 | Integración / Feature / E2E | — | No aplican: no hay BD ni endpoint todavía |
@@ -335,7 +335,7 @@ Resultado esperado: `make test-unit` en verde en menos de 2 s, Deptrac y PHPStan
 **Verificación.**
 
 ```bash
-make test-unit                    # verde, < 2 s
+make test-unit                    # verde, dentro del presupuesto de duración
 make mutate                       # MSI ≥ 80 % sobre Modules/*/Domain
 php artisan test --coverage --min=90 --testsuite=Unit    # dominio ≥ 90 %
 php artisan qa:traceability       # RN-01..09 con al menos una prueba cada uno
@@ -1929,7 +1929,7 @@ curl -s http://localhost/metrics | grep audit_chain_verification_failures_total 
 **Verificación.**
 
 ```bash
-make test-unit                       # Dominio en verde, < 2 s
+make test-unit                       # Dominio en verde, dentro del presupuesto de duración
 make mutate                          # MSI del dominio ≥ 80 %
 php artisan test --group=RN-13
 php artisan test tests/Integration/Attendance tests/Feature/Attendance tests/Contract
@@ -2175,7 +2175,7 @@ cobertura de prueba, y qué queda pendiente para pasar a la siguiente.
 
 - Cobertura de dominio **≥ 90 %**; global backend **≥ 75 %**; frontend **≥ 70 %**
 - **MSI ≥ 80 %** sobre `Modules/*/Domain`
-- Suite unitaria completa **< 2 s**
+- Suite unitaria completa dentro del presupuesto de duración que verifica `make test-unit` (doc 02 §9.2; 2,6-2,7 s medidos en el contenedor al cierre, presupuesto 4 s)
 - `vue-tsc` y PHPStan 9 con **0 errores**
 - Deptrac y Pest Arch con **0 violaciones**
 - `axe` con **0 violaciones críticas o graves**

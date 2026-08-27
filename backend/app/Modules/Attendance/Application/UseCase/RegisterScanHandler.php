@@ -14,18 +14,17 @@ use App\Modules\Attendance\Application\Port\ScanRecord;
 use App\Modules\Attendance\Application\Port\ScanResult;
 use App\Modules\Attendance\Application\Port\SiteCalendar;
 use App\Modules\Attendance\Application\Port\WorkDayRepository;
+use App\Modules\Attendance\Application\Support\ClockingPolicies;
 use App\Modules\Attendance\Domain\Event\ScanRejected;
 use App\Modules\Attendance\Domain\Exception\ClockOutBeforeClockIn;
 use App\Modules\Attendance\Domain\Exception\OverlappingShiftEntry;
 use App\Modules\Attendance\Domain\Exception\ShiftAlreadyOpen;
 use App\Modules\Attendance\Domain\Model\WorkDay;
-use App\Modules\Attendance\Domain\Policy\ClockingPolicy;
 use App\Modules\Attendance\Domain\Policy\DebouncePolicy;
 use App\Modules\Attendance\Domain\Policy\ReviewPolicy;
 use App\Modules\Attendance\Domain\ValueObject\ClockSkew;
 use App\Modules\Attendance\Domain\ValueObject\ScanRejectionReason;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
-use App\Modules\Attendance\Domain\ValueObject\WorkedDuration;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
 use App\Modules\Shared\Domain\ValueObject\CredentialResolution;
@@ -146,21 +145,6 @@ final readonly class RegisterScanHandler
      * ademas, es un bucle que nadie ve.
      */
     private const int MAX_ATTEMPTS = 3;
-
-    /**
-     * RN-07, duracion minima computable.
-     *
-     * **Deuda declarada, no descuido.** La regla dura 14 exige que todo umbral
-     * llegue resuelto de la configuracion, y este no tiene todavia clave propia:
-     * `installation_settings` siembra los cuatro del Anexo B —tramo anomalo,
-     * anti-rebote, desfase de reloj y transito minimo— y `OperationalSettings`
-     * no tiene campo para este. Un minuto es el valor que documenta
-     * `ClockingPolicy` como perfil de serie, y coincide con el suelo real del
-     * calculo: un tramo por debajo de un minuto aporta cero al total porque
-     * `WorkedDuration` trunca. Cuando la tarea 5.1 abra la configuracion desde
-     * el panel, este valor sube a `installation_settings` con los otros cuatro.
-     */
-    private const int MINIMUM_COMPUTABLE_MINUTES = 1;
 
     public function __construct(
         private ConnectionInterface $connection,
@@ -350,13 +334,14 @@ final readonly class RegisterScanHandler
 
         // Paso 3: el dominio decide. `hasOpenEntry()` es RF-AT-02 y RF-AT-03.
         if ($workDay->hasOpenEntry()) {
+            // La politica sale de `ClockingPolicies` y no de una constante
+            // propia: es el unico sitio donde vive el umbral de RN-07, para que
+            // un fichaje y una correccion (1.15) nunca clasifiquen distinto la
+            // misma duracion.
             $entry = $workDay->clockOut(
                 $command->occurredAt,
                 $command->origin,
-                new ClockingPolicy(
-                    WorkedDuration::ofMinutes(self::MINIMUM_COMPUTABLE_MINUTES),
-                    WorkedDuration::ofMinutes($settings->anomalousShiftMinutes),
-                ),
+                ClockingPolicies::forSettings($settings),
             );
             $result = ScanResult::CLOCK_OUT;
         } else {

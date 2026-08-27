@@ -207,13 +207,18 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-          cache-dependency-path: ${{ matrix.app }}/package-lock.json
+          # El lock de la RAIZ: desde ADR-036 el repositorio es un workspace de
+          # npm y las aplicaciones no tienen lockfile propio (frontend-admin
+          # nunca lo tuvo tras la migracion, y `npm ci --prefix` sin lockfile
+          # falla en seco).
+          cache-dependency-path: package-lock.json
 
       - name: Instalar dependencias
         if: steps.detect.outputs.present == 'true'
         # `npm ci` y no `npm install`: la CI instala lo que dice el lock, no lo
-        # que resuelva hoy el registro.
-        run: npm ci --prefix ${{ matrix.app }}
+        # que resuelva hoy el registro. En la raiz del workspace: instala las
+        # tres SPA y packages/web-kit con el unico arbol real (ADR-036).
+        run: npm ci
 
       # El §3.5 exige que los tipos de la API se GENEREN del contrato y nunca se
       # escriban a mano, y hasta ahora esa fila no tenia herramienta detras: un
@@ -362,8 +367,30 @@ jobs:
   unit:
     name: "③ Unitarias + Mutacion"
     runs-on: ubuntu-24.04
-    timeout-minutes: 8
+    # 45 y no 8: la mutacion sola tarda ~25 min en la maquina de desarrollo.
+    # Con 8, el job moria por timeout antes de terminar aunque todo pasara.
+    timeout-minutes: 45
     needs: architecture
+
+    env:
+      # Credenciales de usar y tirar para servicios que viven lo que dura el
+      # runner (mismo criterio que backup-drill.yml: NO son secretos del
+      # producto, los del cliente los genera install.sh en su servidor).
+      #
+      # La APP_KEY es una clave estatica de pruebas: la suite no cifra nada
+      # que sobreviva al runner. DB_CONNECTION es obligatorio porque el
+      # default de config/database.php es sqlite y phpunit.xml no lo fuerza
+      # (en desarrollo lo aporta el entorno del contenedor `app`).
+      APP_KEY: "base64:a3Jvbm9xci1jaS1jbGF2ZS1kZS0zMi1ieXRlcyEhISE="
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+      DB_DATABASE: fichaje
+      DB_USERNAME: fichaje_app
+      DB_PASSWORD: ci_local_app
+      DB_MIGRATION_USERNAME: fichaje_migrator
+      DB_MIGRATION_PASSWORD: ci_local_migrator
+      REDIS_HOST: 127.0.0.1
 
     steps:
       - name: Marcar el inicio del job
@@ -372,6 +399,30 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: PostgreSQL 17 del producto y Redis 7
+        # La imagen del producto y no la oficial, como en backup-drill.yml: sus
+        # scripts de initdb crean los TRES roles (regla dura 6, ADR-033) y la
+        # base `fichaje_test` que exige phpunit.xml. Sin ellos, RefreshDatabase
+        # no puede migrar con el rol de migracion y la suite Feature entera
+        # falla. POSTGRES_USER es el rol de migracion porque en un cluster
+        # nuevo el rol de arranque ES el de migracion (02-application-roles.sh).
+        #
+        # Se arranca ANTES de instalar PHP para que el initdb corra en paralelo
+        # con composer install; la espera de pg_isready va justo antes de la
+        # primera suite que lo necesita.
+        run: |
+          docker build -f infra/docker/postgres/Dockerfile -t kronoqr/postgres:ci .
+          docker run -d --name kronoqr-pg \
+            -e POSTGRES_DB="$DB_DATABASE" \
+            -e POSTGRES_USER="$DB_MIGRATION_USERNAME" \
+            -e POSTGRES_PASSWORD="$DB_MIGRATION_PASSWORD" \
+            -e DB_PASSWORD="$DB_PASSWORD" \
+            -p 5432:5432 \
+            kronoqr/postgres:ci \
+            postgres -c timezone=UTC -c log_timezone=UTC \
+              -c hba_file=/etc/kronoqr/pg_hba.conf
+          docker run -d --name kronoqr-redis -p 6379:6379 redis:7-alpine
 
       - uses: ./.github/actions/php-toolchain
         with:
@@ -387,16 +438,33 @@ jobs:
       - name: Pest — suite unitaria (dominio puro, sin base de datos)
         run: make test-unit
 
+      - name: Esperar a PostgreSQL
+        # Recien aqui y no al arrancarlo: el initdb (extensiones, roles,
+        # fichaje_test) corre en paralelo con composer install y la suite
+        # unitaria, que no toca base de datos.
+        run: |
+          for i in $(seq 1 30); do
+            if docker exec kronoqr-pg pg_isready -U "$DB_MIGRATION_USERNAME" -d "$DB_DATABASE" >/dev/null 2>&1; then
+              echo "PostgreSQL listo en $((i * 2)) s"; exit 0
+            fi
+            sleep 2
+          done
+          echo "::error title=PostgreSQL no arranco::pg_isready sigue fallando tras 60 s."
+          docker logs kronoqr-pg | tail -50
+          exit 1
+
       - name: Pest — contrato OpenAPI y feature
-        # Añadido al cerrar la Fase 0. Antes su sitio era la etapa ④, que se
-        # ejecuta en pull request y todavia no existe, asi que ninguna de las dos
-        # corria en ningun push: las pruebas de contrato de ADR-031 se escribieron
-        # y no las ejecutaba nadie.
+        # Añadido al cerrar la Fase 0, cuando estas suites no tocaban base de
+        # datos. La Fase 1 les dio esquema real (1.3) y Feature entera migra con
+        # RefreshDatabase, asi que desde entonces necesitan el PostgreSQL del
+        # paso de servicios de arriba — sin el, este job estuvo fallando en cada
+        # push durante media fase sin que nadie mirase Actions (hallazgo de la
+        # auditoria de cierre de la Fase 1).
         #
-        # El agujero de verdad era el otro: `qa:traceability` si cuenta las
-        # etiquetas de estas suites, de modo que un requisito podia figurar
-        # cubierto en la matriz por una prueba parada. Cuestan segundos y no
-        # necesitan base de datos; no hay razon para que esperen a la ④.
+        # Siguen aqui y no en la etapa ④ (pull request, tarea 3.x) por la misma
+        # razon de entonces: `qa:traceability` cuenta las etiquetas de estas
+        # suites, y un requisito no puede figurar cubierto por una prueba que
+        # ningun workflow ejecuta.
         run: make test-contract
 
       - name: Mutacion sobre Modules/*/Domain (MSI >= 80 %)
@@ -502,7 +570,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: npm audit en los tres frontends (0 criticas ni altas)
+      - name: npm audit del workspace (0 criticas ni altas)
         run: make deps-audit-js
 
       - name: Semgrep sobre las reglas propias (0 hallazgos de severidad alta)

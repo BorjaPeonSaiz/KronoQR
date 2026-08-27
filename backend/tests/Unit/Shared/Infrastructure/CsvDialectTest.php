@@ -105,6 +105,53 @@ it('antepone la marca de orden de bytes y nada mas', function (): void {
         ->toBe("\xEF\xBB\xBF"."Duracion\r\n");
 })->group('RL-06', 'RF-IN-05');
 
+it('neutraliza una celda que Excel ejecutaria como formula', function (string $celda): void {
+    // Inyeccion de formulas CSV (OWASP): el texto libre lo escriben personas
+    // —el motivo de una correccion, un apellido— y el fichero lo abre un
+    // tercero: la Inspeccion, RRHH, el propio empleado. Sin la comilla simple
+    // delante, `=HYPERLINK(...)` se ejecutaria en su hoja de calculo. La
+    // comilla es la marca de texto de Excel: no se muestra en la celda.
+    expect(csvBytes([[$celda, 'x']]))
+        ->toBe("'".$celda.';x'."\r\n");
+})->with([
+    // Sin comillas dobles, punto y coma NI ESPACIOS a proposito: cualquiera
+    // de los tres hace que fputcsv entrecomille el campo y la comparacion
+    // byte a byte dejaria de leerse. El caso entrecomillado esta en la prueba
+    // del tabulador.
+    'igual' => '=HYPERLINK(A1)',
+    'mas' => '+2+5+cmd|/C_calc!A0',
+    'menos no numerico' => '-2+3+cmd|/C_calc!A0',
+    'arroba' => '@SUM(1+9)*cmd|/C_calc!A0',
+])->group('RL-06', 'RF-IN-05', 'RF-ID-05');
+
+it('neutraliza tambien el tabulador y el retorno de carro iniciales', function (): void {
+    // Los dos disparadores restantes no caben en el dataset de arriba porque
+    // fputcsv los entrecomilla: aqui se afirma que la comilla simple queda
+    // DENTRO del campo entrecomillado, que es donde Excel la lee.
+    expect(csvBytes([["\t=1+1", 'x']]))
+        ->toBe("\"'\t=1+1\";x\r\n");
+
+    expect(csvBytes([["\r=1+1", 'x']]))
+        ->toBe("\"'\r=1+1\";x\r\n");
+})->group('RL-06', 'RF-IN-05');
+
+it('deja intacto un numero negativo puro', function (): void {
+    // `-30` es un numero, no una formula. Anteponerle la comilla lo
+    // convertiria en texto y las sumas de quien recibe el fichero dejarian de
+    // cuadrar — en el documento que se entrega a la Inspeccion.
+    expect(csvBytes([['-30', '-1,5', '-2.75']]))
+        ->toBe("-30;-1,5;-2.75\r\n");
+})->group('RL-06', 'RF-IN-05');
+
+it('no toca una formula que aparece en mitad de la celda', function (): void {
+    // El disparador de Excel es el PRIMER caracter. Neutralizar apariciones
+    // interiores corromperia texto legitimo («Ajuste =pactado=») sin ganar
+    // nada: Excel no las ejecuta. Las comillas del literal esperado son el
+    // entrecomillado por espacios de fputcsv, no de la neutralizacion.
+    expect(csvBytes([['Ajuste =pactado= con RRHH', 'x']]))
+        ->toBe("\"Ajuste =pactado= con RRHH\";x\r\n");
+})->group('RL-06');
+
 it('conserva el orden de las celdas aunque el array venga con claves', function (): void {
     // Los escritores componen sus filas con claves para leerse mejor. Si la clase
     // no hiciera `array_values()`, `fputcsv` seguiria escribiendo los valores en

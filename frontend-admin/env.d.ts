@@ -12,3 +12,11 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+/**
+ * Version del panel, inyectada por Vite desde package.json en compilacion.
+ * Acompaña a cada error capturado (clientErrors) para saber en que version
+ * aparecio. En Vitest no existe: el codigo que la lea debe tolerar su ausencia
+ * con `typeof __APP_VERSION__ !== 'undefined'`.
+ */
+declare const __APP_VERSION__: string
