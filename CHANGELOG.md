@@ -13,6 +13,29 @@ lo siga no aparece aqui, y el generador lo avisa por la salida de error.
 Ninguna version se publica sin su entrada: `make changelog-check VERSION=1.2.3`
 falla si no la encuentra, y la CI ejecuta esa comprobacion al etiquetar.
 
+## [1.1.0] - 2026-08-27
+
+### Anadido
+
+- el panel y el portal capturan por fin sus errores (regla dura 21) (web-kit)
+
+### Corregido
+
+- el quiosco envia por fin su llave de dispositivo (kiosk)
+- las tres SPA se prueban desde el host, con proxy /api al Nginx del entorno (dev)
+- la etapa de unitarias levanta el PostgreSQL del producto y el workspace se audita entero (ci)
+
+### Seguridad
+
+- neutraliza la inyeccion de formulas CSV en los dos escritores (export)
+
+### Interno
+
+- retira suma.py, un fichero suelto ajeno al producto
+- prueba de carga k6 del fichaje, con aprovisionamiento y agregado multi-origen (perf)
+- la duracion de la suite unitaria gana gate y umbral honesto (quality)
+- el umbral de RN-07 vuelve a tener una sola fuente (attendance)
+
 ## [1.0.0] - 2026-08-27
 
 ### Anadido
