@@ -384,14 +384,20 @@ deps-audit-php: tools-ready ## composer audit (RS-10, umbral: 0 vulnerabilidades
 # --audit-level=high: el umbral del §9.2 es "0 vulnerabilidades criticas o
 # altas". Las moderadas y bajas se ven en el informe pero no bloquean, porque
 # una puerta que salta por un aviso informativo se acaba desactivando entera.
-deps-audit-js: ## npm audit en los tres frontends (RS-10, 0 criticas ni altas)
-	@for app in frontend-kiosk frontend-admin frontend-portal; do \
-		if [ -f "$$app/package-lock.json" ]; then \
-			echo "[make] npm audit en $$app"; \
-			npm audit --prefix "$$app" --audit-level=high || exit 1; \
-		fi; \
-	done
-	@echo "[make] npm audit: 0 vulnerabilidades criticas ni altas."
+# En la raiz y no por aplicacion: desde ADR-036 el repositorio es un workspace
+# de npm con UN package-lock.json, que es el arbol que de verdad se instala. La
+# version anterior iteraba las tres SPA buscando lockfiles propios y, como
+# frontend-admin ya no tenia, se lo saltaba sin avisar e imprimia igualmente
+# "0 vulnerabilidades" — una puerta que afirma lo que no ha comprobado
+# (hallazgo de la auditoria de cierre de la Fase 1). El audit de raiz cubre las
+# tres SPA y packages/web-kit de una vez.
+deps-audit-js: ## npm audit del workspace completo (RS-10, 0 criticas ni altas)
+	@if [ ! -f package-lock.json ]; then \
+		echo "[make] No hay package-lock.json en la raiz: el workspace llega en la tarea 0.5."; \
+	else \
+		npm audit --audit-level=high || exit 1; \
+		echo "[make] npm audit (workspace): 0 vulnerabilidades criticas ni altas."; \
+	fi
 
 sast: ## Semgrep sobre las reglas de .semgrep (umbral: 0 hallazgos ERROR)
 	$(SEMGREP) --config .semgrep --error --metrics=off --quiet
