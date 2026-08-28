@@ -309,3 +309,94 @@ it('un administrador tambien puede emitir', function (): void {
         ->post('/api/v1/credentials', ['employee_uuid' => $employee])
         ->assertValidResponse(201);
 })->group('RF-ID-02', 'RF-QR-01');
+
+/*
+ * El filtro `pending` del panel (RF-QR-08), tal y como lo serializa el contrato.
+ *
+ * El contrato declara `pending` como `schema: {type: boolean}` en la cadena de
+ * consulta, y la serializacion estandar de OpenAPI para eso es el literal
+ * `pending=true`. El cliente TypeScript de `@kronoqr/web-kit` la genera asi, y la
+ * regla `boolean` de Laravel NO acepta esas cadenas: marcar la casilla «Solo
+ * quien todavia no tiene la tarjeta en la mano» respondia `422`. La prueba que
+ * existia mandaba `pending=1`, que si pasa, y por eso no lo veia nadie.
+ */
+
+/**
+ * Dos personas: una con la tarjeta ya en la mano y otra sin nada.
+ *
+ * @return array{token: string, withCard: string, withoutCard: string}
+ */
+function credentialBoardContext(): array
+{
+    $site = WorkforceFixtures::site();
+    $rrhh = ManagementUsers::withRole(UserRole::RRHH);
+
+    $withCard = WorkforceFixtures::employee($site);
+    $withoutCard = WorkforceFixtures::employee($site);
+
+    $id = DB::table('employees')->where('uuid', $withCard)->value('id');
+
+    Credentials::deliveredFor(is_numeric($id) ? (int) $id : 0, $rrhh->id);
+
+    return ['token' => ManagementUsers::tokenFor($rrhh), 'withCard' => $withCard, 'withoutCard' => $withoutCard];
+}
+
+it('filtra con el `pending=true` que serializa el contrato', function (string $sent): void {
+    $context = credentialBoardContext();
+
+    Api::as($context['token'])
+        ->get('/api/v1/credentials/status', ['pending' => $sent])
+        ->assertValidRequest()
+        ->assertValidResponse(200)
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.employee_uuid', $context['withoutCard']);
+})->with([
+    // La forma que manda el cliente generado del contrato: la que fallaba.
+    'literal de OpenAPI' => ['true'],
+    // Las que ya funcionaban. Entran para que el arreglo no las rompa.
+    'entero' => ['1'],
+    // `filter_var` reconoce tambien las que escribe una persona a mano en la
+    // barra de direcciones. Aceptarlas no afloja nada: ninguna es ambigua.
+    'palabra' => ['yes'],
+    'interruptor' => ['on'],
+])->group('RF-QR-08');
+
+it('no filtra con `pending=false`, ni con nada equivalente', function (string $sent): void {
+    // Lo simetrico importa igual: si `false` se leyera como «hubo filtro», el
+    // panel esconderia a quien SI tiene su tarjeta y la lista completa dejaria
+    // de existir.
+    $context = credentialBoardContext();
+
+    Api::as($context['token'])
+        ->get('/api/v1/credentials/status', ['pending' => $sent])
+        ->assertValidRequest()
+        ->assertValidResponse(200)
+        ->assertJsonCount(2, 'data');
+})->with([
+    'literal de OpenAPI' => ['false'],
+    'entero' => ['0'],
+    'palabra' => ['no'],
+])->group('RF-QR-08');
+
+it('sigue rechazando un `pending` que no es un booleano', function (string $garbage): void {
+    // El arreglo normaliza lo que es reconociblemente booleano y NADA mas: un
+    // filtro mal escrito tiene que doler, no colarse como `false` y devolver la
+    // lista entera en silencio (mismo criterio que `rechaza un filtro que no
+    // existe` en el listado de plantilla).
+    $context = credentialBoardContext();
+
+    Api::as($context['token'])
+        ->get('/api/v1/credentials/status', ['pending' => $garbage])
+        ->assertStatus(422);
+})->with([
+    'palabra inventada' => ['maybe'],
+    'casi cierto' => ['truthy'],
+    'numero cualquiera' => ['2'],
+    // `?pending=` tampoco pasa, y queda fijado aqui a proposito. El contrato
+    // declara `type: boolean` y la cadena vacia no lo es; ademas
+    // `ConvertEmptyStringsToNull` la convierte en `null` antes de que este
+    // `FormRequest` la vea, asi que no hay nada que normalizar. Quien construya
+    // la peticion tiene que OMITIR el parametro para no filtrar, no mandarlo
+    // vacio.
+    'vacio' => [''],
+])->group('RF-QR-08');
