@@ -21,6 +21,8 @@ falla si no la encuentra, y la CI ejecuta esa comprobacion al etiquetar.
 
 ### Interno
 
+- RS-13, la autenticacion deja rastro consultable, entra en doc 01 (requisitos)
+- [Unreleased] arranca en v1.2.0 (changelog)
 - sesion SSDLC — pipeline, rastro de autenticacion, ATT&CK y SAMM (handoff)
 - columna ATT&CK en el modelo de amenazas y autoevaluacion SAMM (seguridad)
 - SAST comunitario, Trivy, gitleaks, Dependabot y SBOM en el pipeline (security)
