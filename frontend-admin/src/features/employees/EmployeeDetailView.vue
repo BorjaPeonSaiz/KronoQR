@@ -7,16 +7,20 @@
 // confirma. Ninguna borra nada: la baja es logica y el historico se conserva
 // (regla dura 5, RL-02).
 import { announce } from '@kronoqr/web-kit/announcer'
+import EmptyState from '@kronoqr/web-kit/components/EmptyState.vue'
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import FormField from '@kronoqr/web-kit/components/FormField.vue'
 import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
-import { formatCivilDate, todayInZone } from '@kronoqr/web-kit/datetime'
+import { formatCivilDate, formatInstantWithZone, todayInZone } from '@kronoqr/web-kit/datetime'
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { ATTENDANCE_READ } from '@/features/auth/abilities'
 import { useSessionStore } from '@/features/auth/session.store'
+import CredentialRowActions from '@/features/credentials/CredentialRowActions.vue'
+import { STATUS_PILL_CLASS as CREDENTIAL_STATUS_PILL_CLASS } from '@/features/credentials/credentialStatusPill'
+import { fetchCredentialStatusFor } from '@/features/credentials/credentials.api'
 import { listDepartments, listSites } from '@/shared/api/organisation.api'
 import type { Employee, IssuedPin, UpdateEmployeeRequest } from '@/shared/api/types'
 import type { Change } from '@/shared/ui/change'
@@ -64,6 +68,32 @@ const site = computed(
     (sites.value?.data ?? []).find((candidate) => candidate.id === employee.value?.site_id) ?? null,
 )
 const timezone = computed(() => site.value?.timezone ?? 'UTC')
+
+// --- Tarjeta QR (RF-QR-04, RF-QR-06, RF-QR-08) --------------------------------
+//
+// La misma fila que veria RRHH en el tablero de credenciales, pero de esta
+// persona sola: se pide con `employee_uuid` en vez de traer el tablero entero
+// y filtrar en cliente, porque cada lectura del tablero audita como
+// divulgado TODO lo que devuelve (ADR-037).
+
+const {
+  data: credentialRow,
+  error: credentialError,
+  isPending: credentialPending,
+} = useQuery({
+  queryKey: computed(() => ['credential-board', 'employee', props.uuid] as const),
+  queryFn: () => fetchCredentialStatusFor(props.uuid),
+})
+
+function instantInSiteZone(value: string | null): string {
+  return value === null
+    ? t('common.empty')
+    : formatInstantWithZone(value, timezone.value, locale.value)
+}
+
+async function refreshCredential(): Promise<void> {
+  await queryClient.invalidateQueries({ queryKey: ['credential-board'] })
+}
 
 function departmentName(id: number | null): string {
   if (id === null) {
@@ -601,18 +631,64 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
         </RouterLink>
       </section>
 
-      <!-- Credencial -->
+      <!-- Credencial (RF-QR-04, RF-QR-06, RF-QR-08) -->
       <section
         class="mt-6 rounded-kq border border-kq-border bg-kq-surface-raised p-4 shadow-kq-soft"
       >
         <h2 class="text-xl font-semibold">{{ t('employees.detail.credentialHeading') }}</h2>
-        <p class="mt-1 text-kq-text-muted">{{ t('employees.detail.credentialExplanation') }}</p>
-        <RouterLink
-          :to="{ name: 'credentials', query: { site: employee.site_id } }"
-          class="mt-3 inline-block text-kq-primary-strong underline"
-        >
-          {{ t('employees.detail.credentialLink') }}
-        </RouterLink>
+
+        <LoadingPanel v-if="credentialPending" :label="t('credentials.loading')" class="mt-4" />
+        <ErrorNotice v-else-if="credentialError !== null" :error="credentialError" class="mt-4" />
+        <EmptyState
+          v-else-if="credentialRow === null || credentialRow === undefined"
+          class="mt-4"
+          :title="t('employees.detail.credentialEmpty.title')"
+          :description="t('employees.detail.credentialEmpty.description')"
+        />
+
+        <div v-else class="mt-4 rounded-kq border border-kq-border bg-kq-surface-raised p-4">
+          <dl class="grid gap-3 sm:grid-cols-2">
+            <div>
+              <dt class="font-medium text-kq-text-muted">{{ t('credentials.table.site') }}</dt>
+              <dd>{{ credentialRow.site_name }}</dd>
+            </div>
+            <div>
+              <dt class="font-medium text-kq-text-muted">
+                {{ t('credentials.table.department') }}
+              </dt>
+              <dd>{{ credentialRow.department_name ?? t('credentials.table.noDepartment') }}</dd>
+            </div>
+            <div>
+              <dt class="font-medium text-kq-text-muted">{{ t('credentials.table.status') }}</dt>
+              <dd>
+                <span
+                  class="rounded-full px-2 py-0.5 text-sm"
+                  :class="CREDENTIAL_STATUS_PILL_CLASS[credentialRow.status]"
+                >
+                  {{ t(`credentials.status.${credentialRow.status}`) }}
+                </span>
+              </dd>
+            </div>
+            <div>
+              <dt class="font-medium text-kq-text-muted">{{ t('credentials.table.printedAt') }}</dt>
+              <dd>{{ instantInSiteZone(credentialRow.credential?.printed_at ?? null) }}</dd>
+            </div>
+            <div>
+              <dt class="font-medium text-kq-text-muted">
+                {{ t('credentials.table.deliveredAt') }}
+              </dt>
+              <dd>{{ instantInSiteZone(credentialRow.credential?.delivered_at ?? null) }}</dd>
+            </div>
+          </dl>
+
+          <div class="mt-4">
+            <CredentialRowActions
+              :row="credentialRow"
+              :time-zone="timezone"
+              @changed="refreshCredential"
+            />
+          </div>
+        </div>
       </section>
 
       <!-- Baja -->

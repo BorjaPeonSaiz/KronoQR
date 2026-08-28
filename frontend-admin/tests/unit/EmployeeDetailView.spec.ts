@@ -1,11 +1,21 @@
 import type { DOMWrapper } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import CredentialRowActions from '@/features/credentials/CredentialRowActions.vue'
 import EmployeeDetailView from '@/features/employees/EmployeeDetailView.vue'
 import { useSessionStore } from '@/features/auth/session.store'
 import es from '@/shared/i18n/locales/es.json'
 import type { Employee } from '@/shared/api/types'
 import { clearAnnouncement } from '@kronoqr/web-kit/announcer'
-import { EMPLOYEE_UUID, SITE, employee, managementUser } from './support/fixtures'
+import {
+  CREDENTIAL_UUID,
+  EMPLOYEE_UUID,
+  SITE,
+  board,
+  boardRow,
+  credential,
+  employee,
+  managementUser,
+} from './support/fixtures'
 import { createTestPinia, jsonResponse, mountView, settle, stubFetch } from './support/harness'
 
 const DEPARTMENTS = {
@@ -17,7 +27,14 @@ const DEPARTMENTS = {
 
 type Wrapper = Awaited<ReturnType<typeof mountView>>
 
-function buttonWith(wrapper: Wrapper, label: string): DOMWrapper<Element> {
+/** Cualquier envoltorio de prueba que sepa buscar botones dentro de si mismo:
+ * el de toda la vista, o el de un subcomponente localizado con
+ * `findComponent`. */
+interface ButtonSearchable {
+  findAll: (selector: string) => DOMWrapper<Element>[]
+}
+
+function buttonWith(wrapper: ButtonSearchable, label: string): DOMWrapper<Element> {
   const found = wrapper.findAll('button').find((button) => button.text().includes(label))
 
   if (found === undefined) {
@@ -27,6 +44,11 @@ function buttonWith(wrapper: Wrapper, label: string): DOMWrapper<Element> {
   return found
 }
 
+/**
+ * Salvo que una prueba diga lo contrario, la fila de credencial de la ficha
+ * esta «pendiente de entregar»: es el estado que ejercita mas ramas (boton de
+ * entrega, dialogo de confirmacion) sin ser el caso especial de `no_credential`.
+ */
 function routes(
   record: Employee,
   extra?: (url: string, init: RequestInit | undefined) => Response | null,
@@ -42,7 +64,17 @@ function routes(
 
     const handled = extra?.(url, init) ?? null
 
-    return handled ?? jsonResponse(record)
+    if (handled !== null) {
+      return handled
+    }
+
+    if (url.startsWith('/api/v1/credentials/status')) {
+      return jsonResponse(
+        board([boardRow({ employee_uuid: record.uuid, status: 'pending_delivery' })]),
+      )
+    }
+
+    return jsonResponse(record)
   }
 }
 
@@ -260,5 +292,82 @@ describe('EmployeeDetailView', () => {
     await settle()
 
     expect(wrapper.find('[role="alert"]').text()).toContain(es.errors.network.title)
+  })
+
+  // --- Tarjeta QR (RF-QR-04, RF-QR-06, RF-QR-08) ------------------------------
+  //
+  // La misma fila y las mismas acciones que en el tablero de credenciales
+  // (`CredentialBoardView`), pero de esta persona sola: no se pide el tablero
+  // entero para filtrarlo en cliente.
+  //
+  // Los botones se buscan DENTRO de `CredentialRowActions`, no en toda la
+  // ficha: «Registrar la entrega del PIN» (seccion PIN) y «Registrar la
+  // entrega» (seccion Tarjeta QR) comparten texto, y `find()` se quedaria con
+  // el primero que aparece en el documento.
+  describe('tarjeta QR', () => {
+    it('pinta la fila de esta persona con su estado de tarjeta y el boton que toca', async () => {
+      const wrapper = await mountDetail(employee())
+      const actions = wrapper.findComponent(CredentialRowActions)
+
+      expect(wrapper.text()).toContain(es.credentials.status.pending_delivery)
+      expect(wrapper.text()).toContain('Hotel Marina')
+      expect(actions.text()).toContain(es.credentials.actions.deliver)
+    })
+
+    it('al confirmar la entrega llama al endpoint de entrega y refresca la fila', async () => {
+      const spy = stubFetch(
+        routes(employee(), (url, init) =>
+          url.endsWith(`/credentials/${CREDENTIAL_UUID}/deliver`) && init?.method === 'POST'
+            ? jsonResponse(credential({ delivered_at: '2026-08-28T09:00:00.000000Z' }))
+            : null,
+        ),
+      )
+
+      const wrapper = await mountView(EmployeeDetailView, { props: { uuid: EMPLOYEE_UUID } })
+
+      await settle()
+
+      const actions = wrapper.findComponent(CredentialRowActions)
+
+      await buttonWith(actions, es.credentials.actions.deliver).trigger('click')
+      await settle(1)
+      await buttonWith(actions, es.credentials.confirm.deliver.action).trigger('click')
+      await settle()
+
+      const calledDeliver = spy.mock.calls.some(
+        (call) =>
+          String(call[0]).endsWith(`/credentials/${CREDENTIAL_UUID}/deliver`) &&
+          (call[1] as RequestInit | undefined)?.method === 'POST',
+      )
+
+      expect(calledDeliver).toBe(true)
+    })
+
+    it('ofrece «Emitir» cuando la persona no tiene ninguna credencial', async () => {
+      const wrapper = await mountDetail(employee(), (url) =>
+        url.startsWith('/api/v1/credentials/status')
+          ? jsonResponse(board([boardRow({ status: 'no_credential', credential: null })]))
+          : null,
+      )
+      const actions = wrapper.findComponent(CredentialRowActions)
+
+      expect(wrapper.text()).toContain(es.credentials.status.no_credential)
+      expect(actions.text()).toContain(es.credentials.actions.issue)
+      expect(actions.findAll('button')).toHaveLength(1)
+    })
+
+    it('cuenta que ha pasado si la tarjeta no se puede cargar', async () => {
+      const wrapper = await mountDetail(employee(), (url) => {
+        if (url.startsWith('/api/v1/credentials/status')) {
+          throw new TypeError('Failed to fetch')
+        }
+
+        return null
+      })
+
+      const alerts = wrapper.findAll('[role="alert"]')
+
+      expect(alerts.some((alert) => alert.text().includes(es.errors.network.title))).toBe(true)
+    })
   })
 })

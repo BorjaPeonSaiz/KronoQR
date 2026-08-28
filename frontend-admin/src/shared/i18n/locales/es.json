@@ -178,8 +178,10 @@
       "confirmExplanation": "Esto es lo que se va a modificar. Comprueba el valor de partida antes de confirmar: quedará registrado quién lo cambió y cuándo.",
       "confirmAction": "Confirmar y guardar",
       "credentialHeading": "Tarjeta QR",
-      "credentialExplanation": "La emisión, la impresión y la entrega de la tarjeta se gestionan en el panel de credenciales, donde se ve de un vistazo quién todavía no puede fichar.",
-      "credentialLink": "Ver el estado de las credenciales de este centro"
+      "credentialEmpty": {
+        "title": "Sin fila de credencial todavía",
+        "description": "Esta persona no tiene todavía ninguna fila en el panel de credenciales. Vuelve a intentarlo en unos minutos."
+      }
     },
     "offboard": {
       "heading": "Baja",

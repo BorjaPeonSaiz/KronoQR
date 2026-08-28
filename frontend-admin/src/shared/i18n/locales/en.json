@@ -178,8 +178,10 @@
       "confirmExplanation": "This is what will change. Check the starting value before you confirm: who changed it and when will be recorded.",
       "confirmAction": "Confirm and save",
       "credentialHeading": "QR card",
-      "credentialExplanation": "Issuing, printing and handing over the card are managed in the credentials board, which shows at a glance who still cannot clock in.",
-      "credentialLink": "See the credential status for this site"
+      "credentialEmpty": {
+        "title": "No credential row yet",
+        "description": "This person does not have a row in the credentials board yet. Try again in a few minutes."
+      }
     },
     "offboard": {
       "heading": "Offboarding",
