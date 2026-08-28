@@ -17,6 +17,7 @@ use App\Modules\Compliance\Application\Port\LegalExportSource;
 use App\Modules\Compliance\Application\Port\LegalExportWriter;
 use App\Modules\Compliance\Application\UseCase\LegalExport;
 use App\Modules\Compliance\Http\Policy\LegalExportPolicy;
+use App\Modules\Compliance\Infrastructure\Adapter\AuditedAuthenticationJournal;
 use App\Modules\Compliance\Infrastructure\Adapter\AuditedLegalExportGeneration;
 use App\Modules\Compliance\Infrastructure\Adapter\AuditedPersonalDataAccessLog;
 use App\Modules\Compliance\Infrastructure\Console\EnsureAuditPartitionsCommand;
@@ -39,6 +40,7 @@ use App\Modules\Identity\Domain\Event\CredentialPrinted;
 use App\Modules\Identity\Domain\Event\CredentialRevoked;
 use App\Modules\Identity\Domain\Event\DeviceTokenIssued;
 use App\Modules\Identity\Domain\Event\DeviceTokenRevoked;
+use App\Modules\Shared\Application\Port\AuthenticationJournal;
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
 use App\Modules\Workforce\Domain\Event\EmployeePinDelivered;
 use App\Modules\Workforce\Domain\Event\EmployeePinIssued;
@@ -104,6 +106,20 @@ final class ComplianceServiceProvider extends ServiceProvider
          * `AuditAction` dejaria de estar cerrado.
          */
         $this->app->bind(PersonalDataAccessLog::class, AuditedPersonalDataAccessLog::class);
+
+        /*
+         * OWASP A09: la autenticacion deja rastro consultable.
+         *
+         * Misma via que el puerto de arriba y por el mismo motivo: quien
+         * autentica —`Identity` en el panel y el portal, `Workforce` en el
+         * verificador del PIN, `Attendance` en el fichaje de respaldo— no puede
+         * importar este modulo. El reparto entre `audit_log` y el log tecnico lo
+         * decide el adaptador, no quien llama: si cada caso de uso pudiera
+         * elegir, el fallo acabaria en la cadena de hash el dia que a alguien le
+         * pareciera mas completo, y con el el candado global de ADR-010 dentro
+         * del camino de fichaje.
+         */
+        $this->app->bind(AuthenticationJournal::class, AuditedAuthenticationJournal::class);
 
         $this->registerLegalExport();
     }

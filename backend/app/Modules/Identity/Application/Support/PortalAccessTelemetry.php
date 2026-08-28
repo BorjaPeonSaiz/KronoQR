@@ -6,77 +6,56 @@ namespace App\Modules\Identity\Application\Support;
 
 use App\Modules\Shared\Application\Support\SpanScope;
 use OpenTelemetry\API\Trace\SpanKind;
-use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * El span y el log estructurado del acceso al portal del empleado (doc 02 §8.1,
- * RS-12).
+ * El span del acceso al portal del empleado (doc 02 §8.1, RS-12).
  *
- * ## Aqui esta lo que la respuesta HTTP no dice
+ * ## Un solo acto medido, y ningun apunte propio
  *
- * El endpoint devuelve un `401` identico para las cinco causas de rechazo (regla
- * dura 17). Ese detalle no se pierde: se escribe aqui, que es donde el §8.1 lo
- * quiere y donde no lo ve quien teclea. Sin esta clase, un ataque de fuerza
- * bruta contra el portal seria indistinguible en el servidor de un turno de
- * gente con los dedos frios.
+ * Esta clase **abrio** el rastro del portal y ya no lo escribe. Antes emitia sus
+ * tres apuntes —`identity.portal_login_succeeded`, `_rejected` y `_locked`—, y
+ * cuando `Shared\Application\Port\AuthenticationJournal` llego con `auth.*`, el
+ * mismo hecho quedaba apuntado dos veces con dos nombres y dos campos distintos:
+ * dos poblaciones que un panel cuenta como una y dos sitios donde arreglar la
+ * proxima regla de minimizacion. **Una sola autoridad**, y es el journal —lo es
+ * tambien para el panel y para el PIN del quiosco, que no tienen equivalente de
+ * esta clase—.
  *
- * ## Tres desenlaces, tres niveles
+ * Lo que queda aqui es lo que solo puede vivir aqui: el span que envuelve el
+ * intento entero, con su duracion y su desenlace implicito. El `retry_after` que
+ * el apunte `_locked` llevaba **no vuelve en otro sitio**, y es correcto que no
+ * vuelva: era el unico campo del log que separaba «este codigo existe y esta
+ * bloqueado» de «este codigo no existe», que es justo el oraculo que RS-03 evita
+ * hacia fuera. Los segundos del bloqueo se leen donde tienen que leerse, en el
+ * asiento `auth.lockout_started` (ADR-039).
  *
- * ```
- * portal_login_succeeded   info      con employee_uuid
- * portal_login_rejected    warning   sin employee_uuid: no se sabe cual es
- * portal_login_locked      warning   sin employee_uuid, con los segundos que faltan
- * ```
+ * ## Con metrica, y no es la de esta clase
  *
- * **Que el rechazo no lleve `employee_uuid` es consecuencia del diseño, no un
- * olvido.** `Shared\Domain\ValueObject\PinVerification` —nombrado en prosa y no
- * con `@see` para no traer un `use` que este fichero no necesita— no devuelve
- * nada identificable cuando no verifica, precisamente para que no haya ninguna
- * rama que distinga «ese codigo no existe» de «ese PIN no es» ni siquiera dentro
- * del servidor. La señal de que alguien esta sondeando el PIN de una persona
- * concreta no es este log: es el contador por empleado de `PinAttempts`, que si
- * se lleva por `employee_uuid` y es el que acaba bloqueando.
- *
- * ## Nunca el codigo de empleado, y nunca el PIN
- *
- * Ni siquiera en el rechazo, donde seria tentador para diagnosticar. El codigo
- * va impreso en la tarjeta que la persona lleva encima: registrarlo en un log
- * que puede acabar en el paquete de diagnostico del fabricante (ADR-020) es
- * publicar media credencial (regla dura 21).
- *
- * ## Sin metrica propia, y es deliberado
- *
- * El catalogo del §8.2 no tiene ninguna para el acceso al portal, y este
- * endpoint ya esta contado y cronometrado por `http_requests_total{route,...}`,
- * que emite `App\Http\Middleware\RecordHttpMetrics` con el nombre de la ruta como
- * etiqueta —y con el codigo de estado, asi que los `401` se distinguen de los
- * `200` sin inventar nada—. Una metrica fuera del catalogo se queda sin panel,
- * sin alerta y sin nadie que la mire.
+ * `kronoqr_auth_attempts_total{channel="portal"}` cuenta los tres desenlaces
+ * desde el journal, y `http_requests_total{route,...}` sigue cronometrando el
+ * endpoint. Nada de eso se cuenta aqui: una metrica emitida por dos sitios son
+ * dos series con el mismo nombre y distinto criterio.
  *
  * ## Medir no puede impedir que alguien entre a ver sus horas
  *
  * Todo va envuelto, y lo envuelve {@see SpanScope}. RL-05 no admite que el portal
  * falle porque el exportador de trazas no responda.
  *
- * ## El `trace_id` se lee del contexto en curso, y esa era la anomalia
+ * ## El span se **activa**, y de eso depende el `trace_id` del log
  *
- * Las otras seis telemetrias del backend escriben en el log el `trace_id` **de su
- * propio span**; esta leia el del contexto en curso, porque sus tres apuntes se
- * emiten desde metodos publicos que el caso de uso invoca dentro del acto medido,
- * donde no hay ningun span a mano. Eran dos respuestas distintas a la misma
- * pregunta: con una peticion sin `traceparent`, el span propio abre una traza que
- * el contexto ambiente no conoce y el apunte se quedaba sin identificador.
- *
- * **Resuelto activando el span** ({@see SpanScope::startActive()}): mientras dura
- * el intento, el contexto en curso *es* el span de este acto, asi que las dos
- * lecturas devuelven lo mismo siempre. La forma de leerlo sigue siendo la de aqui
- * —es la unica posible desde estos tres metodos—, pero ya no significa otra cosa.
+ * Es la unica de las siete telemetrias del backend que lo hace, y tiene motivo:
+ * los apuntes del intento no los escribe esta clase, sino el journal, desde
+ * dentro del acto medido y sin el span a mano. Su unica forma de fechar el
+ * apunte es {@see SpanScope::currentTraceId()}. Con el span sin activar, una
+ * peticion sin `traceparent` —la mayoria: al portal se llega escribiendo la
+ * direccion— abria una traza que el contexto ambiente no conocia, y el apunte
+ * salia con `trace_id: null`. Un apunte de acceso sin `trace_id` no es un detalle
+ * de observabilidad: es el unico hilo que une «alguien intento entrar 40 veces»
+ * con la traza que dice desde donde.
  */
 final readonly class PortalAccessTelemetry
 {
-    public function __construct(private LoggerInterface $logger) {}
-
     /**
      * @template T
      *
@@ -102,51 +81,5 @@ final readonly class PortalAccessTelemetry
         $span->end();
 
         return $result;
-    }
-
-    public function succeeded(string $employeeUuid): void
-    {
-        $this->logger->info('identity.portal_login_succeeded', [
-            'trace_id' => $this->currentTraceId(),
-            'employee_uuid' => $employeeUuid,
-        ]);
-    }
-
-    /**
-     * Codigo inexistente, PIN incorrecto, PIN no emitido o empleado que no esta
-     * en alta. Ver el docblock de la clase: los cuatro son este mismo apunte.
-     */
-    public function rejected(): void
-    {
-        $this->logger->warning('identity.portal_login_rejected', [
-            'trace_id' => $this->currentTraceId(),
-            'employee_uuid' => null,
-        ]);
-    }
-
-    /**
-     * El bloqueo por intentos estaba activo, asi que el PIN **ni se comprobo**.
-     *
-     * Los segundos que faltan se registran aqui y **no salen por la API**: son
-     * la señal operativa que permite ver un escalon alcanzado sin decirselo a
-     * quien lo alcanzo.
-     */
-    public function locked(int $retryAfterSeconds): void
-    {
-        $this->logger->warning('identity.portal_login_locked', [
-            'trace_id' => $this->currentTraceId(),
-            'employee_uuid' => null,
-            'retry_after_seconds' => $retryAfterSeconds,
-        ]);
-    }
-
-    /**
-     * El `trace_id` de la traza en curso. Ver el docblock de la clase: dentro de
-     * {@see self::measure()} es la del span de este mismo acto, porque ese span
-     * esta activado.
-     */
-    private function currentTraceId(): ?string
-    {
-        return SpanScope::currentTraceId();
     }
 }

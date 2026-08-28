@@ -50,6 +50,7 @@ use App\Modules\Identity\Infrastructure\Persistence\EloquentCredentialRepository
 use App\Modules\Identity\Infrastructure\Persistence\EloquentDeviceRepository;
 use App\Modules\Identity\Infrastructure\Persistence\EloquentUserAccounts;
 use App\Modules\Identity\Infrastructure\Persistence\User;
+use App\Modules\Shared\Application\Port\AuthenticationJournal;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CredentialFingerprints;
 use App\Modules\Shared\Application\Port\EmployeePinVerifier;
@@ -311,11 +312,11 @@ final class IdentityServiceProvider extends ServiceProvider
      */
     private function registerPortal(): void
     {
+        // Sin dependencias desde que los apuntes los escribe
+        // `AuthenticationJournal` (ADR-039): aqui solo queda el span.
         $this->app->bind(
             PortalAccessTelemetry::class,
-            static fn (Application $app): PortalAccessTelemetry => new PortalAccessTelemetry(
-                $app->make(LoggerInterface::class),
-            ),
+            static fn (): PortalAccessTelemetry => new PortalAccessTelemetry,
         );
 
         $this->app->bind(
@@ -325,6 +326,7 @@ final class IdentityServiceProvider extends ServiceProvider
                 sessions: $app->make(PortalSessionIssuer::class),
                 clock: $app->make(Clock::class),
                 telemetry: $app->make(PortalAccessTelemetry::class),
+                journal: $app->make(AuthenticationJournal::class),
                 sessionHours: max(1, Config::integer('identity.portal.token_hours', 2)),
             ),
         );

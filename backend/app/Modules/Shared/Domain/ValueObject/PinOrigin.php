@@ -35,4 +35,23 @@ enum PinOrigin: string
 
     /** Acceso del empleado a su propio registro horario (RF-ID-06, RL-05). */
     case PORTAL = 'portal';
+
+    /**
+     * La misma puerta, nombrada como la nombra el rastro de autenticacion
+     * (OWASP A09).
+     *
+     * Son dos vocabularios que describen lo mismo desde dos sitios: `PinOrigin`
+     * decide **contra que contador** se anota un fallo y forma parte de una
+     * clave de cache; {@see AuthChannel} decide **como se llama el canal** en la
+     * metrica, en el log y en el asiento. Traducir aqui, en un solo sitio, es lo
+     * que impide que el dia que alguien anada una tercera puerta el contador
+     * cuente por una y la alerta agrupe por otra.
+     */
+    public function authChannel(): AuthChannel
+    {
+        return match ($this) {
+            self::KIOSK => AuthChannel::KIOSK_PIN,
+            self::PORTAL => AuthChannel::PORTAL,
+        };
+    }
 }

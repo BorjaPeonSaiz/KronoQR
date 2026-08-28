@@ -195,9 +195,11 @@ it('no escribe el PIN ni el codigo de empleado en el log del acceso', function (
         ->and($registrado)->not->toContain($empleado['code'])
         // Lo que si tiene que estar: el acierto identificado por `employee_uuid`,
         // que es el unico identificador de persona admitido en un log tecnico.
-        ->and($registrado)->toContain('identity.portal_login_succeeded')
+        // Los nombres son los del rastro de autenticacion (ADR-039): el portal
+        // dejo de escribir un segundo apunte con otro nombre para el mismo hecho.
+        ->and($registrado)->toContain('auth.login_succeeded')
         ->and($registrado)->toContain($empleado['uuid'])
-        ->and($registrado)->toContain('identity.portal_login_rejected');
+        ->and($registrado)->toContain('auth.login_failed');
 })->group('RS-08', 'RF-ID-06');
 
 it('invalida las sesiones abiertas cuando RRHH restablece el PIN', function (): void {
