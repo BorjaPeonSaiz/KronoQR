@@ -17,6 +17,8 @@ falla si no la encuentra, y la CI ejecuta esa comprobacion al etiquetar.
 
 ### Anadido
 
+- la ficha del empleado muestra el estado de su tarjeta y sus acciones (admin)
+- el tablero de credenciales se acota a una persona con employee_uuid (identity)
 - los selectores filtran toda la plantilla y se pagina de 30 en 30 (admin)
 - registro mas legible y acceso sin textos de ayuda (portal)
 - filtro pin_status en GET /employees resuelto en servidor (workforce)
@@ -36,6 +38,9 @@ falla si no la encuentra, y la CI ejecuta esa comprobacion al etiquetar.
 
 ### Interno
 
+- una sola entrada 1.2.0 (changelog)
+- sesion 1.2.0 — quiosco, tarjeta, portal y panel (handoff)
+- la entrada 1.2.0 no repite lo publicado en 1.1.0 (changelog)
 - version 1.2.0 (release)
 - el envio de la tarjeta por correo queda descartado (handoff)
 - sesion de UI/UX, buscadores y sistema visual compartido (handoff)
