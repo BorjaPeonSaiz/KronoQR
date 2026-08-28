@@ -72,7 +72,6 @@ async function submit(): Promise<void> {
       class="w-full max-w-md rounded-kq border border-kq-border bg-kq-surface-raised p-6 shadow-kq-soft"
     >
       <h1 class="font-heading text-2xl font-bold text-kq-text">{{ t('login.heading') }}</h1>
-      <p class="mt-2 text-lg text-kq-text-muted">{{ t('login.intro') }}</p>
 
       <ErrorNotice v-if="error !== null" :error="error" class="mt-4" />
 
@@ -100,7 +99,6 @@ async function submit(): Promise<void> {
         <FormField
           v-slot="field"
           :label="t('login.pin')"
-          :hint="t('login.pinHint')"
           label-class="text-lg font-medium text-kq-text"
           required
         >

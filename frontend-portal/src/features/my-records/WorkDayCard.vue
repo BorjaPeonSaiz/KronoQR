@@ -10,7 +10,7 @@
 // incidencia que alguien tiene que revisar antes de dar el dia por cerrado.
 // Ninguna de las dos es un error del que haya que preocuparse: es informacion
 // para no confundir un numero provisional con uno definitivo.
-import { formatCivilDate, formatZoneLabel } from '@kronoqr/web-kit/datetime'
+import { formatCivilDate } from '@kronoqr/web-kit/datetime'
 import { durationParts } from '@kronoqr/web-kit/workdayTotals'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -24,10 +24,6 @@ const { t, locale } = useI18n()
 
 const heading = computed(() => formatCivilDate(props.day.work_date, locale.value))
 
-const zoneLabel = computed(() =>
-  formatZoneLabel(`${props.day.work_date}T12:00:00Z`, props.day.time_zone, locale.value),
-)
-
 const total = computed(() => t('myRecords.duration', durationParts(props.day.total_minutes)))
 </script>
 
@@ -40,9 +36,6 @@ const total = computed(() => t('myRecords.duration', durationParts(props.day.tot
       <div>
         <h2 class="font-heading text-xl font-bold text-kq-text">
           {{ heading }}
-          <span class="text-base font-normal text-kq-text-muted">
-            ({{ day.time_zone }}, {{ zoneLabel }})
-          </span>
         </h2>
         <p class="mt-1 flex flex-wrap gap-2">
           <span
