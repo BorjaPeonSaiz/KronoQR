@@ -1,5 +1,27 @@
 # HANDOFF
 
+## Sesión SSDLC (28-08-2026): seguridad en el pipeline, rastro de autenticación, ATT&CK y SAMM
+
+**Rama `feat/ssdlc-pipeline`** sobre `main` (`d8722e1`, merge de la PR #7), 4 commits convencionales, sin push. Sin cambio de versión (queda en `[Unreleased]`). Revisión de `revisor-codigo`: 2 bloqueantes, 8 importantes y 6 menores, **todos corregidos** (uno con matiz, abajo). Verificación: backend `make quality` limpio y **1723 pruebas / 9185 aserciones**; `docs:consistency` sin divergencias; `actionlint` solo con los 3 avisos preexistentes de `backup-drill.yml`; gitleaks 0 sobre los 75 commits del histórico; `promtool` en verde.
+
+**Hecho:**
+
+1. **Pipeline** (`devops-observabilidad`, commit `ci(security)`): job `security` de `ci.yml` con **gitleaks bloqueante** (`.gitleaks.toml` con allowlist por valor exacto, 17 falsos positivos analizados), **Semgrep comunitario** (`p/php`, `p/owasp-top-ten`, `p/javascript`, `p/typescript`; hoy 5 WARNING en `infra/docker/nginx`), **Trivy fs** (1 HIGH: `DS-0002` root en el Dockerfile de postgres, falso positivo probable) y **Trivy image** (`kronoqr/app:ci` 0; `kronoqr/postgres:ci` 21 HIGH heredados de `gosu`/Go stdlib) — los tres **en modo informe con vencimiento 2026-11-30**: un paso final del job falla pasada la fecha si siguen en informe; `--exit-code 0` para que una salida ≠ 0 signifique «la herramienta falló». **SBOM** CycloneDX (`make sbom`, Trivy sin BD de CVE) como artefacto; paso preparado y comentado en `release.yml`. **Dependabot** (composer, npm raíz, actions, docker). Imágenes base fijadas por **digest**; `apk upgrade` acotado a `libssl3 libcrypto3`; un único `make build-ci-images` para los tres sitios que construían. **Hallazgo colateral corregido**: la imagen de la app nunca había construido (`bootstrap/cache` en `.dockerignore`). Alertas `KronoqrAuthFailureBurst/Lockouts/FailureSpike` (T1110) con `docs/runbooks/ataque-a-credenciales.md` y `triaje-hallazgos-seguridad.md`; `BackupAndAlertingTest` cubre ahora `auth.yml`.
+2. **Rastro de autenticación** (`backend-laravel`, commit `feat(compliance)`, **ADR-039**): `auth.login_succeeded`, `auth.logout` (gestión) y `auth.lockout_started` (tres canales) en `audit_log`; los **fallos nunca** van a `audit_log` (cerrojo global de ADR-010) sino al log estructurado `auth.login_failed` (con `ip_hash` HMAC de `APP_KEY`) y al contador `kronoqr_auth_attempts_total{channel,outcome}` (`lockout` = uno por bloqueo abierto; `failure` = todo lo demás). Las cinco ramas de rechazo del PIN cuestan lo mismo (sujeto señuelo, prueba `PinRejectionSymmetryTest`); el asiento de bloqueo se escribe **tras responder** (`DeferredAuditEntry`, `app()->terminating()`) y un fallo de auditoría nunca da 500. `PortalAccessTelemetry` conserva solo el span. Los asientos usan la columna `ip` como el resto de la tabla. **Hallazgo colateral corregido**: `tests/Support/Http/Api.php` nunca llamaba a `$kernel->terminate()`.
+3. **Documentación** (`docs(seguridad)`): columna **ATT&CK** en doc 01 §8.1 (11 filas; dos «—» justificados) y **`docs/07-seguridad-madurez-y-amenazas.md`**: SAMM 2.0 práctica a práctica con evidencia (Gobierno 1,33 · Diseño 2,00 · Implementación 1,00 · Verificación 1,33 · Operaciones 1,67 · **total 1,47/3**), mapa SDL, shift-left y juicio humano, riesgos aceptados.
+
+**Decisiones pendientes del usuario:**
+- **`AuditActorType::Employee`**: `audit_log.actor_type` no admite empleado (CHECK + ADR-037), así que el acceso al portal y el fichaje por PIN **no dejan asiento de sesión** (sí el bloqueo). Añadirlo = VO + migración expand + nota en ADR-037. Hasta entonces, **RS-13** («toda autenticación deja rastro») queda como propuesta en doc 07 §6, no en doc 01.
+- Triaje antes del 2026-11-30 de los hallazgos en informe (5 Semgrep nginx, 1 Trivy DS-0002, 21 Trivy gosu): justificar con `expired_at` en `.trivyignore.yaml`/`# nosemgrep` o corregir, y pasar los pasos a bloqueante.
+- La primera ejecución real del job `security` en un runner Linux es la única verificación que no se pudo hacer en local (caché `type=gha`, Trivy fs completo).
+
+**Matiz sobre un hallazgo (16)**: `isLocked()` y `secondsUntilUnlock() > 0` **no** son equivalentes en `LoginAttempts` (el segundo es la ventana del contador), así que el panel se queda con `isLocked()` y el verificador del PIN con la lectura única; documentado en el docblock de `LoginAttempts`.
+
+**Pendiente menor**: `trace_id` sale `null` en gestión y PIN (falta un span de servidor por petición en middleware); reenvío idempotente del PIN cuenta dos veces en la métrica (anotado como causa benigna en el runbook); `docs/runbooks/rotacion-secretos.md` prometido en doc 02 y aún inexistente; SRI de assets prometido en doc 02 §7.1 y no implementado; `APP_DEBUG=false` de serie y rehash de contraseñas (mejoras del informe de seguridad, no ejecutadas).
+
+**Siguiente acción:** abrir PR de `feat/ssdlc-pipeline` a `main` y mirar la primera ejecución del job `security` en Actions.
+
+
 ## Sesión 1.2.0: quiosco, tarjeta, portal y panel (28-08-2026)
 
 **Rama `feat/quiosco-tarjeta-portal-panel-v1.2`** sobre `main` (`fa91e42`, merge de la PR #6), 9 commits convencionales, sin push. **`VERSION` = 1.2.0** y `CHANGELOG.md` con su entrada. **Etiquetas:** `v1.1.0` creada en local sobre `082d23f` (faltaba; sin ella el generador arrastraba la 1.1.0 a la 1.2.0) y **pendiente de `git push origin v1.1.0`**; `v1.2.0` se etiqueta sobre `main` tras el merge (`git tag -a v1.2.0 -m 1.2.0 && git push origin v1.2.0`; la CI valida el CHANGELOG al etiquetar).

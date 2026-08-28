@@ -13,6 +13,46 @@ lo siga no aparece aqui, y el generador lo avisa por la salida de error.
 Ninguna version se publica sin su entrada: `make changelog-check VERSION=1.2.3`
 falla si no la encuentra, y la CI ejecuta esa comprobacion al etiquetar.
 
+## [Unreleased]
+
+### Anadido
+
+- la autenticacion deja rastro consultable (OWASP A09) (compliance)
+- la ficha del empleado muestra el estado de su tarjeta y sus acciones (admin)
+- el tablero de credenciales se acota a una persona con employee_uuid (identity)
+- los selectores filtran toda la plantilla y se pagina de 30 en 30 (admin)
+- registro mas legible y acceso sin textos de ayuda (portal)
+- filtro pin_status en GET /employees resuelto en servidor (workforce)
+- el QR ocupa media tarjeta y el codigo va en negrita bajo el nombre (identity)
+- visor centrado para encuadrar el QR, sin velo sobre la camara (kiosk)
+- el registro ocupa el 88 % del ancho desde 1024 px, con tema (portal)
+- buscadores y paginacion en plantilla y credenciales, y tema (admin)
+- acceso por PIN bajo las instrucciones, aviso RGPD compacto y tema (kiosk)
+- busqueda q por nombre, apellidos y codigo en GET /employees (workforce)
+- sistema visual compartido con contraste medido por prueba (web-kit)
+- agente ui-ux para el sistema visual de las tres SPA (agents)
+
+### Corregido
+
+- la ficha elige la fila por employee_uuid y no permite un doble envio (admin)
+- la lectura acotada a una persona no deja asiento y baja al SQL (identity)
+- un PIN erroneo ya no muestra un exito antes del rechazo (kiosk)
+- el filtro pending de /credentials/status acepta true/false (identity)
+
+### Interno
+
+- columna ATT&CK en el modelo de amenazas y autoevaluacion SAMM (seguridad)
+- SAST comunitario, Trivy, gitleaks, Dependabot y SBOM en el pipeline (security)
+- pendiente de revocar la tarjeta en la baja; changelog 1.2.0 al dia (handoff)
+- ficha con estado de tarjeta y decision sobre la zona horaria (handoff)
+- una sola entrada 1.2.0 (changelog)
+- sesion 1.2.0 — quiosco, tarjeta, portal y panel (handoff)
+- la entrada 1.2.0 no repite lo publicado en 1.1.0 (changelog)
+- version 1.2.0 (release)
+- el envio de la tarjeta por correo queda descartado (handoff)
+- sesion de UI/UX, buscadores y sistema visual compartido (handoff)
+- version 1.1.0 empujada; la PR y la etiqueta quedan para main (handoff)
+
 ## [1.2.0] - 2026-08-28
 
 ### Anadido
