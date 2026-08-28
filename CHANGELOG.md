@@ -33,11 +33,14 @@ falla si no la encuentra, y la CI ejecuta esa comprobacion al etiquetar.
 
 ### Corregido
 
+- la ficha elige la fila por employee_uuid y no permite un doble envio (admin)
+- la lectura acotada a una persona no deja asiento y baja al SQL (identity)
 - un PIN erroneo ya no muestra un exito antes del rechazo (kiosk)
 - el filtro pending de /credentials/status acepta true/false (identity)
 
 ### Interno
 
+- ficha con estado de tarjeta y decision sobre la zona horaria (handoff)
 - una sola entrada 1.2.0 (changelog)
 - sesion 1.2.0 — quiosco, tarjeta, portal y panel (handoff)
 - la entrada 1.2.0 no repite lo publicado en 1.1.0 (changelog)

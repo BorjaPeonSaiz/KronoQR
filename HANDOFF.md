@@ -19,6 +19,8 @@ Verificación final en verde: `web-kit` 137 · panel 172 · portal 69 · quiosco
 
 **Decisión del usuario mantenida contra un hallazgo de la revisión:** el portal ya no rotula la zona en la tabla del registro. El día del cambio de hora (24-10-2026 en `EdgeCaseSeeder`, 23:00→07:00 = 9 h) se lee sin explicación, y el panel sí rotula «Entrada (CET)». Si molesta, la propuesta del revisor es devolver solo la abreviatura en las cabeceras.
 
+**Pendiente (hallazgo de revisión, fuera de alcance):** al dar de baja a un empleado (`OffboardEmployeeHandler`) **no se revoca su credencial** — sigue `delivered` y ningún oyente de `EmployeeOffboarded` la revoca, aunque el catálogo de motivos tenga `offboarding`. Decidir si la baja revoca automáticamente (asiento propio en `audit_log`) o si RRHH lo hace desde el tablero (la ficha de una persona no activa ya remite allí).
+
 **Pendiente menor:** `HELD_GAP_MS`/`PIN_VERIFY_TIMEOUT_MS`/visor en tablet real; prueba de integración de que `unaccent` está instalada; E2E del panel (`frontend-admin/tests/e2e` no existe); E2E del portal con la jornada del cambio de hora; en vertical (800×1280) el visor queda a 440 px — revisar `55vmin` si se quiere mayor; comando `product:doctor` (Fase 5) debería comprobar `qr_size_mm` contra lo imprimible.
 
 **Siguiente acción:** abrir PR de `feat/quiosco-tarjeta-portal-panel-v1.2` a `main`, `git push origin v1.1.0`, y etiquetar `v1.2.0` tras el merge.
