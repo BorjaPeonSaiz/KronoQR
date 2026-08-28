@@ -71,9 +71,18 @@ describe('sonidos del quiosco', () => {
     expect(new Set([signature('entry'), signature('exit'), signature('error')]).size).toBe(3)
   })
 
-  it('los cinco desenlaces suenan distinto', () => {
-    const all: FeedbackTone[] = ['entry', 'exit', 'pending', 'notice', 'error']
-    expect(new Set(all.map(signature)).size).toBe(5)
+  it('los seis desenlaces suenan distinto', () => {
+    const all: FeedbackTone[] = ['entry', 'exit', 'pending', 'verifying', 'notice', 'error']
+    expect(new Set(all.map(signature)).size).toBe(6)
+  })
+
+  it('«Comprobando…» (PIN, RF-AT-11) es un toque corto y neutro, distinto del doble toque de «pendiente»', () => {
+    const verifying = recordingContext()
+    createScanSound({ audioContextFactory: () => verifying.context }).play('verifying')
+
+    // Un unico oscilador, no dos: mas corto que cualquier otro desenlace.
+    expect(verifying.oscillators).toHaveLength(1)
+    expect(signature('verifying')).not.toBe(signature('pending'))
   })
 
   it('la entrada sube y la salida baja: se distinguen sin mirar la pantalla', () => {

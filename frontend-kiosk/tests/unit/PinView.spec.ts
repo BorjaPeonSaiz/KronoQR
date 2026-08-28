@@ -236,15 +236,25 @@ describe('pantalla de PIN — flujo completo (RF-AT-11)', () => {
     await wrapper.get('[data-testid="pin-confirm"]').trigger('click')
 
     // `confirm()` sella (async, aunque sin red) antes de encolar: una sola
-    // `$nextTick()` no basta para esperar esa cadena completa. El mock de
-    // `fetch` de esta prueba resuelve tan rapido que el paso «pendiente»
-    // puede ya haberse asentado en «aceptado» para cuando se comprueba: lo
-    // que importa aqui es que hay confirmacion, no en que fotograma exacto.
+    // `$nextTick()` no basta para esperar esa cadena completa. Con red (el
+    // caso de esta prueba), el PIN no se puede validar en local (viaja
+    // sellado, RF-AT-11): lo primero que se pinta es «Comprobando…», y el
+    // mock de `fetch` resuelve tan rapido que puede haberse asentado ya en
+    // «aceptado» para cuando se comprueba. Lo que importa aqui es que hay
+    // confirmacion en pantalla sin esperar a la red, no en que fotograma
+    // exacto de la carrera se atrapa.
     await vi.waitFor(() =>
       expect(wrapper.find('[data-testid="scan-confirmation"]').exists()).toBe(true),
     )
     const panel = wrapper.get('[data-testid="scan-confirmation"]')
-    expect(['pending', 'accepted']).toContain(panel.attributes('data-kind'))
+    expect(['verifying', 'pending', 'accepted']).toContain(panel.attributes('data-kind'))
+
+    // Deje donde deje la carrera, siempre asienta en el desenlace real.
+    await vi.waitFor(() =>
+      expect(wrapper.get('[data-testid="scan-confirmation"]').attributes('data-kind')).toBe(
+        'accepted',
+      ),
+    )
 
     wrapper.unmount()
   })
@@ -278,5 +288,125 @@ describe('pantalla de PIN — flujo completo (RF-AT-11)', () => {
       expect(wrapper.find('[data-testid="privacy-notice"]').exists()).toBe(true),
     )
     wrapper.unmount()
+  })
+
+  it('un onSettled tardio, tras desmontar, no navega: el router es un singleton compartido con quien venga despues', async () => {
+    // Wi-Fi degradada: la respuesta de `/api/v1/scan/pin` no llega sola. Se
+    // retiene a mano para poder desmontar la pantalla MIENTRAS sigue en el
+    // aire -- exactamente el escenario del hallazgo (empleado A ficha,
+    // vuelve a inicio, empleado B ocupa la tablet, Y ENTONCES contesta el
+    // servidor del fichaje de A).
+    // Sin `null`: dejarlo nulo hasta que el manejador de `fetch` lo asigne
+    // hace que TypeScript, al capturarlo en el cierre, pierda el
+    // estrechamiento y lo trate como `never` en usos posteriores (mismo
+    // problema documentado en `pinPipeline.spec.ts`). Una cadena vacia
+    // inicial evita el problema sin recurrir a aserciones de tipo.
+    let capturedBody: { scan_id: string; occurred_at: string } = { scan_id: '', occurred_at: '' }
+    let resolveScanResponse: (response: Response) => void = () => undefined
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input)
+
+        if (url.includes('/api/v1/kiosk/roster')) {
+          return new Response(
+            JSON.stringify({
+              generated_at: '2026-08-14T04:00:00.000Z',
+              entries: [],
+              pin_sealing_public_key: publicKeyBase64,
+            }),
+            { status: 200 },
+          )
+        }
+        if (url.includes('/api/v1/kiosk/heartbeat')) {
+          return new Response(JSON.stringify({ server_time: new Date().toISOString() }), {
+            status: 200,
+          })
+        }
+        if (url.includes('/api/v1/scan/pin')) {
+          capturedBody = JSON.parse(String(init?.body ?? '{}')) as {
+            scan_id: string
+            occurred_at: string
+          }
+          // Nunca se resuelve aqui: la prueba decide cuando, y desde donde.
+          return new Promise<Response>((resolve) => {
+            resolveScanResponse = resolve
+          })
+        }
+        throw new TypeError('Failed to fetch')
+      }),
+    )
+
+    const { wrapper, router } = await render()
+    await vi.waitFor(() =>
+      expect(wrapper.find('[data-testid="pin-step-code"]').exists()).toBe(true),
+    )
+
+    await wrapper.get('[data-testid="pin-code-input"]').setValue('E7QK2MXPR')
+    await wrapper.get('[data-testid="pin-code-continue"]').trigger('click')
+    await pressDigits(wrapper, '483920')
+    await vi.waitFor(() =>
+      expect(wrapper.get<HTMLButtonElement>('[data-testid="pin-confirm"]').element.disabled).toBe(
+        false,
+      ),
+    )
+
+    await wrapper.get('[data-testid="pin-confirm"]').trigger('click')
+
+    // Con red, y sin que el servidor haya contestado todavia, la pantalla
+    // pasa por «Comprobando…»: es el estado desde el que llega el desenlace
+    // real mas tarde, via `onSettled`.
+    await vi.waitFor(() =>
+      expect(wrapper.get('[data-testid="scan-confirmation"]').attributes('data-kind')).toBe(
+        'verifying',
+      ),
+    )
+
+    // El empleado A ya se fue: la pantalla vuelve a inicio y se desmonta
+    // (aqui, a mano; en la tablet real lo haria `scheduleReturn`). El
+    // servidor TODAVIA no ha contestado.
+    // `wrapper.unmount()` desmonta la app de Vue de verdad: vue-router lo
+    // detecta (parchea `app.unmount`) y, al quedarse sin ninguna app que lo
+    // use, resetea `currentRoute` a `START_LOCATION` el solo. Por eso lo que
+    // prueba esta prueba no es el valor de `currentRoute` despues de
+    // desmontar (eso cambia siempre, con o sin el arreglo), sino que NADIE
+    // mas -- el codigo de la aplicacion -- llame a `replace`/`push`.
+    wrapper.unmount()
+
+    const replaceSpy = vi.spyOn(router, 'replace')
+    const pushSpy = vi.spyOn(router, 'push')
+
+    // Ahora, con la pantalla ya desmontada, el servidor contesta: acepta el
+    // fichaje de A.
+    expect(capturedBody.scan_id).not.toBe('')
+    resolveScanResponse(
+      new Response(
+        JSON.stringify({
+          scan_id: capturedBody.scan_id,
+          action: 'clock_in',
+          employee_display_name: 'Lucia G.',
+          work_date: capturedBody.occurred_at.slice(0, 10),
+          occurred_at: capturedBody.occurred_at,
+          recorded_at: new Date().toISOString(),
+          worked_minutes: 0,
+        }),
+        { status: 200 },
+      ),
+    )
+
+    // Se agota, con reloj falso, cualquier plazo posible -- el de espera del
+    // PIN, el de pantalla del desenlace -- sin que nadie tenga que esperarlo
+    // de verdad: si el hallazgo no estuviera arreglado, la navegacion
+    // llegaria en algun punto de esta ventana.
+    vi.useFakeTimers()
+    try {
+      await vi.advanceTimersByTimeAsync(10_000)
+    } finally {
+      vi.useRealTimers()
+    }
+
+    expect(replaceSpy).not.toHaveBeenCalled()
+    expect(pushSpy).not.toHaveBeenCalled()
   })
 })

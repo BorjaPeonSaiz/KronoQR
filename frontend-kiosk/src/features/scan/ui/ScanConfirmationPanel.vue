@@ -17,6 +17,11 @@
 //   - Un desenlace `pending` NO dice «Entrada» ni «Salida». Todavia no se sabe:
 //     lo decide el agregado `WorkDay` en el servidor. Inventarlo aqui seria
 //     escribir un registro legal a ojo.
+//   - `verifying` (solo PIN, RF-AT-11) es un tono NEUTRO, no una de las cinco
+//     confirmaciones sagradas de `main.css`: usa los tokens del sistema
+//     (`bg-kq-kiosk-surface-raised`, `text-kq-kiosk-text`), no un color de
+//     desenlace. Nunca suena a exito: seria mentir mientras el servidor
+//     todavia no ha contestado.
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { formatClockTime } from '../domain/clockTime'
@@ -33,16 +38,38 @@ const BACKGROUNDS: Readonly<Record<ConfirmationVariant, string>> = {
   entry: 'bg-kiosk-entry',
   exit: 'bg-kiosk-exit',
   pending: 'bg-kiosk-pending',
+  // No es uno de los cinco colores de confirmacion (doc 06 §1.2): es el
+  // panel destacado neutro del propio sistema visual del quiosco.
+  verifying: 'bg-kq-kiosk-surface-raised',
   notice: 'bg-kiosk-notice',
   error: 'bg-kiosk-error',
 }
 
-/** Simbolo redundante con el color, para quien no lo distingue. */
+/** El resto de variantes son fondos oscuros saturados con blanco encima
+ *  (medido en `main.css`, > 9:1 los cinco). `verifying` usa el panel
+ *  destacado del sistema visual, y ahi el texto de la guia (doc 06) es el
+ *  token crema, no blanco puro. */
+const TEXT_CLASSES: Readonly<Record<ConfirmationVariant, string>> = {
+  entry: 'text-white',
+  exit: 'text-white',
+  pending: 'text-white',
+  verifying: 'text-kq-kiosk-text',
+  notice: 'text-white',
+  error: 'text-white',
+}
+
+/**
+ * Simbolo redundante con el color, para quien no lo distingue. `notice`
+ * (anti-rebote, «ya has fichado») no lleva ninguno: no es un aviso que
+ * necesite un glifo de 5 rem gritando encima del titular, y menos uno que se
+ * parezca a una exclamacion de alarma para algo que no es un error.
+ */
 const SYMBOLS: Readonly<Record<ConfirmationVariant, string>> = {
   entry: '→',
   exit: '←',
   pending: '⋯',
-  notice: 'i',
+  verifying: '↻',
+  notice: '',
   error: '✕',
 }
 
@@ -62,6 +89,8 @@ function headlineFor(confirmation: ScanConfirmation): string {
       return confirmation.displayName === null
         ? t('scan.pending.titleAnonymous')
         : t('scan.pending.titleNamed', { name: confirmation.displayName })
+    case 'verifying':
+      return t('scan.verifying.title')
     case 'debounced':
       return t('scan.debounced.title')
     case 'rejected':
@@ -79,6 +108,8 @@ function detailFor(confirmation: ScanConfirmation, at: string): string {
       return t(`scan.action.${confirmation.action}`, { time: at })
     case 'pending':
       return t('scan.pending.body', { time: at })
+    case 'verifying':
+      return t('scan.verifying.body')
     case 'debounced':
       return t('scan.debounced.body')
     case 'rejected':
@@ -104,8 +135,8 @@ const total = computed(() => {
 
 <template>
   <div
-    class="flex h-full w-full flex-col items-center justify-center gap-6 px-10 text-center text-white"
-    :class="BACKGROUNDS[variant]"
+    class="flex h-full w-full flex-col items-center justify-center gap-6 px-10 text-center"
+    :class="[BACKGROUNDS[variant], TEXT_CLASSES[variant]]"
     :data-variant="variant"
     :data-kind="props.confirmation.kind"
     data-testid="scan-confirmation"
@@ -113,7 +144,11 @@ const total = computed(() => {
     aria-live="assertive"
     aria-atomic="true"
   >
-    <span aria-hidden="true" class="text-[5rem] leading-none font-black">
+    <span
+      v-if="SYMBOLS[variant] !== ''"
+      aria-hidden="true"
+      class="text-[5rem] leading-none font-black"
+    >
       {{ SYMBOLS[variant] }}
     </span>
 

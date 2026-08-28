@@ -18,7 +18,8 @@
   "scan": {
     "idle": {
       "title": "Hold up your card",
-      "subtitle": "Place it in front of the camera, with the code facing the screen."
+      "subtitle": "Place it in front of the camera, with the code facing the screen.",
+      "viewfinderHint": "Center the code in the frame"
     },
     "camera": {
       "starting": "Starting the camera…",
@@ -49,6 +50,10 @@
       "titleAnonymous": "Clock-in recorded",
       "body": "Recorded at {time}. Pending validation.",
       "badge": "Pending validation"
+    },
+    "verifying": {
+      "title": "Checking…",
+      "body": "One moment, we're verifying your code."
     },
     "debounced": {
       "title": "You clocked in a few seconds ago",
