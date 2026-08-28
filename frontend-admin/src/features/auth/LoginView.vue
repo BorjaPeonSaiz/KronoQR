@@ -59,10 +59,12 @@ async function submit(): Promise<void> {
 </script>
 
 <template>
-  <main class="flex min-h-dvh items-center justify-center bg-slate-100 p-4">
-    <div class="w-full max-w-md rounded-lg border border-slate-300 bg-white p-6 shadow-sm">
-      <h1 class="text-2xl font-bold text-slate-900">{{ t('auth.heading') }}</h1>
-      <p class="mt-2 text-slate-700">{{ t('auth.intro') }}</p>
+  <main class="flex min-h-dvh items-center justify-center bg-kq-surface p-4">
+    <div
+      class="w-full max-w-md rounded-kq border border-kq-border bg-kq-surface-raised p-6 shadow-kq-soft"
+    >
+      <h1 class="text-2xl font-bold text-kq-text">{{ t('auth.heading') }}</h1>
+      <p class="mt-2 text-kq-text-muted">{{ t('auth.intro') }}</p>
 
       <ErrorNotice v-if="error !== null" :error="error" class="mt-4" />
 
@@ -77,7 +79,7 @@ async function submit(): Promise<void> {
             required
             :aria-describedby="field.describedBy"
             :aria-invalid="field.invalid"
-            class="rounded border border-slate-400 px-3 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+            class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text placeholder:text-kq-text-muted"
           />
         </FormField>
 
@@ -96,7 +98,7 @@ async function submit(): Promise<void> {
             required
             :aria-describedby="field.describedBy"
             :aria-invalid="field.invalid"
-            class="rounded border border-slate-400 px-3 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+            class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text placeholder:text-kq-text-muted"
           />
         </FormField>
 
@@ -104,13 +106,13 @@ async function submit(): Promise<void> {
           type="submit"
           :disabled="submitting"
           :aria-busy="submitting"
-          class="rounded bg-slate-900 px-4 py-2 font-semibold text-white disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+          class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary disabled:opacity-60"
         >
           {{ submitting ? t('auth.submitting') : t('auth.submit') }}
         </button>
       </form>
 
-      <p class="mt-6 text-sm text-slate-600">{{ t('auth.employeeNotice') }}</p>
+      <p class="mt-6 text-sm text-kq-text-muted">{{ t('auth.employeeNotice') }}</p>
     </div>
   </main>
 </template>

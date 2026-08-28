@@ -20,7 +20,7 @@ const props = withDefaults(
     required?: boolean
     labelClass?: string
   }>(),
-  { hint: '', errors: () => [], required: false, labelClass: 'font-medium text-slate-900' },
+  { hint: '', errors: () => [], required: false, labelClass: 'font-medium text-kq-text' },
 )
 
 const fieldId = useId()
@@ -51,8 +51,8 @@ const describedBy = computed(() => {
       <span v-if="required" aria-hidden="true">*</span>
     </label>
     <slot :id="fieldId" :described-by="describedBy" :invalid="invalid" />
-    <p v-if="hint !== ''" :id="hintId" class="text-sm text-slate-600">{{ hint }}</p>
-    <p v-if="invalid" :id="errorId" class="text-sm font-medium text-red-700">
+    <p v-if="hint !== ''" :id="hintId" class="text-sm text-kq-text-muted">{{ hint }}</p>
+    <p v-if="invalid" :id="errorId" class="text-sm font-medium text-kq-danger">
       {{ errors.join(' ') }}
     </p>
   </div>

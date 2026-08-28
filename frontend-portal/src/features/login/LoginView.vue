@@ -67,10 +67,12 @@ async function submit(): Promise<void> {
 </script>
 
 <template>
-  <main class="flex min-h-dvh items-center justify-center bg-slate-100 p-4">
-    <div class="w-full max-w-md rounded-lg border border-slate-300 bg-white p-6 shadow-sm">
-      <h1 class="text-2xl font-bold text-slate-900">{{ t('login.heading') }}</h1>
-      <p class="mt-2 text-lg text-slate-700">{{ t('login.intro') }}</p>
+  <main class="flex min-h-dvh items-center justify-center bg-kq-surface p-4">
+    <div
+      class="w-full max-w-md rounded-kq border border-kq-border bg-kq-surface-raised p-6 shadow-kq-soft"
+    >
+      <h1 class="font-heading text-2xl font-bold text-kq-text">{{ t('login.heading') }}</h1>
+      <p class="mt-2 text-lg text-kq-text-muted">{{ t('login.intro') }}</p>
 
       <ErrorNotice v-if="error !== null" :error="error" class="mt-4" />
 
@@ -78,7 +80,7 @@ async function submit(): Promise<void> {
         <FormField
           v-slot="field"
           :label="t('login.employeeCode')"
-          label-class="text-lg font-medium text-slate-900"
+          label-class="text-lg font-medium text-kq-text"
           required
         >
           <input
@@ -91,7 +93,7 @@ async function submit(): Promise<void> {
             maxlength="32"
             required
             :aria-describedby="field.describedBy"
-            class="min-h-12 rounded border border-slate-400 px-3 py-2 text-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+            class="min-h-12 rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-lg"
           />
         </FormField>
 
@@ -99,7 +101,7 @@ async function submit(): Promise<void> {
           v-slot="field"
           :label="t('login.pin')"
           :hint="t('login.pinHint')"
-          label-class="text-lg font-medium text-slate-900"
+          label-class="text-lg font-medium text-kq-text"
           required
         >
           <input
@@ -112,7 +114,7 @@ async function submit(): Promise<void> {
             maxlength="6"
             required
             :aria-describedby="field.describedBy"
-            class="min-h-12 rounded border border-slate-400 px-3 py-2 text-lg tracking-widest focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+            class="min-h-12 rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-lg tracking-widest"
           />
         </FormField>
 
@@ -120,13 +122,13 @@ async function submit(): Promise<void> {
           type="submit"
           :disabled="!canSubmit"
           :aria-busy="submitting"
-          class="min-h-12 rounded bg-slate-900 px-4 py-2 text-lg font-semibold text-white disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+          class="min-h-12 rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-lg font-semibold text-kq-on-primary disabled:opacity-60"
         >
           {{ submitting ? t('login.submitting') : t('login.submit') }}
         </button>
       </form>
 
-      <p class="mt-6 text-base text-slate-600">{{ t('login.forgotPin') }}</p>
+      <p class="mt-6 text-base text-kq-text-muted">{{ t('login.forgotPin') }}</p>
     </div>
   </main>
 </template>

@@ -1,0 +1,170 @@
+/* Sistema visual compartido de las tres SPA (docs/06-guia-visual.md).
+
+   MARCA POR DEFECTO DEL FABRICANTE, NO DE NINGUN CLIENTE (CLAUDE.md, regla dura
+   13; ADR-017). Es la paleta del producto tal como se instala; la tarea 5.8
+   (marca blanca, RF-PD-08) la hara configurable SIN tocar este fichero:
+
+     1. Todo lo que puede cambiar un cliente es una custom property `--kq-*`
+        declarada en `:root`. La tarea 5.8 recibira la marca del endpoint de
+        configuracion y la aplicara en tiempo de ejecucion con
+        `document.documentElement.style.setProperty('--kq-color-primary', ...)`
+        (o una hoja de estilo inyectada con un `:root { ... }`), sin recompilar
+        nada: recompilar por cliente seria una variante del producto.
+     2. Las utilidades de Tailwind se generan con `@theme inline`, de modo que
+        `bg-kq-surface` emite `background-color: var(--kq-color-surface)` y lee
+        el valor vigente en el momento de pintar, venga de este fichero o de la
+        sobreescritura de 5.8. Con `@theme` a secas Tailwind copiaria el valor
+        en su propia variable `--color-kq-*` y la sobreescritura no llegaria.
+     3. Cada pareja texto/fondo de esta paleta tiene su contraste medido en
+        `themePairs.ts` y verificado por `tests/unit/theme.spec.ts` (WCAG 2.2
+        AA, doc 01 §6.5). Cuando 5.8 acepte colores de un cliente, debe pasar
+        esas mismas parejas por `contrast.ts` y avisar si no alcanzan el minimo
+        (paso 9 de la tarea 5.8).
+
+   Lo que NO esta aqui, a proposito: los cinco colores de confirmacion del
+   quiosco (entrada, salida, pendiente, aviso, error). Son semanticos, estan
+   medidos contra el blanco y viven en `frontend-kiosk/src/assets/main.css`.
+   No son marca y no se cambian por estetica.
+
+   Uso desde una SPA (en su `main.css`, despues de `@import 'tailwindcss'`):
+
+     @import '@kronoqr/web-kit/theme.css';
+
+   Con eso basta: este fichero importa tambien `fonts.css` (tipografias) y
+   `base.css` (capa base: fondo y color de `body`, encabezados, foco visible,
+   `prefers-reduced-motion`), asi que ninguna SPA vuelve a declarar esas reglas
+   por su cuenta. `base.css` explica por que el quiosco (fondo oscuro) puede
+   compartirla sin repetirla.
+
+   Nombres: semanticos y en ingles (`surface`, `text-muted`, `primary-strong`,
+   `danger-soft`), nunca el nombre del color. Si una pantalla necesita un tono
+   que no esta aqui, es un token nuevo en este fichero con su pareja medida,
+   no un hexadecimal suelto en una plantilla. */
+
+@import './fonts.css';
+@import './base.css';
+
+:root {
+  /* --- Superficies y texto (panel y portal: fondo claro y calido) --- */
+  --kq-color-surface: #fff7ed; /* fondo de pagina */
+  --kq-color-surface-raised: #ffffff; /* tarjetas, dialogos, filas de tabla */
+  --kq-color-surface-alt: #fbeee0; /* filas alternas, cabeceras de tabla, secciones */
+  --kq-color-text: #3a2e28;
+  --kq-color-text-muted: #6b5d54; /* texto secundario, etiquetas, ayudas */
+  --kq-color-border: #eaddcf; /* separadores y bordes decorativos */
+  --kq-color-border-strong: #8f7b6d; /* bordes de controles: campos, botones con borde */
+
+  /* --- Primario (terracota) --- */
+  /* El terracota claro NO alcanza 4.5:1 con texto blanco: se reserva a acentos
+     grandes y decorativos (iconos, franjas, texto >= 24 px). Los botones
+     solidos y los enlaces usan el terracota oscuro. */
+  --kq-color-primary: #d66c3a;
+  --kq-color-primary-strong: #b8542a; /* boton solido, enlace, texto de marca */
+  --kq-color-primary-soft: #fff0e5; /* fondo tintado: chip, fila seleccionada */
+  --kq-color-on-primary: #ffffff; /* texto sobre primary-strong */
+  --kq-color-on-primary-soft: #9a4520; /* texto sobre primary-soft */
+
+  /* --- Acento (salvia): solo decorativo --- */
+  /* 3.1:1 sobre blanco y 2.9:1 sobre crema: nunca lleva texto ni delimita un
+     control. Para un estado de exito hay un verde propio mas abajo. */
+  --kq-color-accent: #7a9b76;
+  --kq-color-accent-soft: #edf2eb;
+  --kq-color-on-accent-soft: #3f6e3b;
+
+  /* --- Estados --- */
+  --kq-color-success: #3f6e3b; /* verde derivado de la salvia, medido para texto */
+  --kq-color-success-soft: #e8efe6;
+  --kq-color-on-success: #ffffff;
+  --kq-color-warning: #8a5312;
+  --kq-color-warning-soft: #fdf0d5;
+  --kq-color-on-warning: #ffffff;
+  --kq-color-danger: #a52a1f; /* acciones destructivas y errores */
+  --kq-color-danger-soft: #fbe5e2;
+  --kq-color-on-danger: #ffffff;
+
+  /* --- Foco visible (WCAG 2.4.7 y 2.4.11) --- */
+  --kq-color-focus: #b8542a;
+
+  /* --- Quiosco: pantalla de pared, fondo oscuro y calido derivado del texto --- */
+  /* Se mira de lejos y con mala luz: los contrastes de estas parejas estan muy
+     por encima del minimo a proposito. */
+  --kq-color-kiosk-surface: #241a15;
+  --kq-color-kiosk-surface-raised: #3a2e28;
+  --kq-color-kiosk-text: #fff7ed;
+  --kq-color-kiosk-text-muted: #d4c3b5;
+  --kq-color-kiosk-border: #8a7a6f;
+  --kq-color-kiosk-primary: #d66c3a; /* acento grande y decorativo */
+  --kq-color-kiosk-primary-strong: #f0a27a; /* boton solido sobre fondo oscuro */
+  --kq-color-kiosk-on-primary: #241a15; /* texto sobre kiosk-primary-strong */
+  --kq-color-kiosk-focus: #fff7ed;
+
+  /* --- Tipografia (ficheros en fonts.css; la pila de respaldo es del sistema) --- */
+  --kq-font-heading:
+    'Poppins', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --kq-font-body:
+    'Inter Variable', 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    sans-serif;
+
+  /* --- Forma --- */
+  --kq-radius: 14px; /* tarjetas, dialogos, botones grandes */
+  --kq-radius-sm: 8px; /* campos, chips, botones pequeños */
+  --kq-radius-lg: 22px; /* paneles destacados del quiosco */
+  --kq-shadow-soft: 0 8px 24px rgba(58, 46, 40, 0.08);
+  --kq-shadow-raised: 0 12px 32px rgba(58, 46, 40, 0.14); /* dialogos y menus flotantes */
+}
+
+/* Exposicion a Tailwind 4. `inline` es deliberado: ver cabecera, punto 2.
+   Cada token de color de `:root` tiene aqui su utilidad (`bg-kq-*`,
+   `text-kq-*`, `border-kq-*`, `ring-kq-*`...); `theme.spec.ts` comprueba que
+   ninguno se queda sin exponer ni sin medir. */
+@theme inline {
+  --color-kq-surface: var(--kq-color-surface);
+  --color-kq-surface-raised: var(--kq-color-surface-raised);
+  --color-kq-surface-alt: var(--kq-color-surface-alt);
+  --color-kq-text: var(--kq-color-text);
+  --color-kq-text-muted: var(--kq-color-text-muted);
+  --color-kq-border: var(--kq-color-border);
+  --color-kq-border-strong: var(--kq-color-border-strong);
+
+  --color-kq-primary: var(--kq-color-primary);
+  --color-kq-primary-strong: var(--kq-color-primary-strong);
+  --color-kq-primary-soft: var(--kq-color-primary-soft);
+  --color-kq-on-primary: var(--kq-color-on-primary);
+  --color-kq-on-primary-soft: var(--kq-color-on-primary-soft);
+
+  --color-kq-accent: var(--kq-color-accent);
+  --color-kq-accent-soft: var(--kq-color-accent-soft);
+  --color-kq-on-accent-soft: var(--kq-color-on-accent-soft);
+
+  --color-kq-success: var(--kq-color-success);
+  --color-kq-success-soft: var(--kq-color-success-soft);
+  --color-kq-on-success: var(--kq-color-on-success);
+  --color-kq-warning: var(--kq-color-warning);
+  --color-kq-warning-soft: var(--kq-color-warning-soft);
+  --color-kq-on-warning: var(--kq-color-on-warning);
+  --color-kq-danger: var(--kq-color-danger);
+  --color-kq-danger-soft: var(--kq-color-danger-soft);
+  --color-kq-on-danger: var(--kq-color-on-danger);
+
+  --color-kq-focus: var(--kq-color-focus);
+
+  --color-kq-kiosk-surface: var(--kq-color-kiosk-surface);
+  --color-kq-kiosk-surface-raised: var(--kq-color-kiosk-surface-raised);
+  --color-kq-kiosk-text: var(--kq-color-kiosk-text);
+  --color-kq-kiosk-text-muted: var(--kq-color-kiosk-text-muted);
+  --color-kq-kiosk-border: var(--kq-color-kiosk-border);
+  --color-kq-kiosk-primary: var(--kq-color-kiosk-primary);
+  --color-kq-kiosk-primary-strong: var(--kq-color-kiosk-primary-strong);
+  --color-kq-kiosk-on-primary: var(--kq-color-kiosk-on-primary);
+  --color-kq-kiosk-focus: var(--kq-color-kiosk-focus);
+
+  --font-heading: var(--kq-font-heading);
+  --font-body: var(--kq-font-body);
+
+  --radius-kq: var(--kq-radius);
+  --radius-kq-sm: var(--kq-radius-sm);
+  --radius-kq-lg: var(--kq-radius-lg);
+
+  --shadow-kq-soft: var(--kq-shadow-soft);
+  --shadow-kq-raised: var(--kq-shadow-raised);
+}

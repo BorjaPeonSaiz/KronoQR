@@ -23,8 +23,12 @@ function select(next: AppLocale): void {
       v-for="option in SUPPORTED_LOCALES"
       :key="option"
       type="button"
-      class="kiosk-touch rounded-lg px-4 text-lg font-semibold"
-      :class="locale === option ? 'bg-slate-100 text-slate-900' : 'bg-slate-700 text-slate-100'"
+      class="kiosk-touch rounded-kq-sm px-4 text-lg font-semibold"
+      :class="
+        locale === option
+          ? 'bg-kq-kiosk-primary-strong text-kq-kiosk-on-primary'
+          : 'border border-kq-kiosk-border bg-kq-kiosk-surface-raised text-kq-kiosk-text'
+      "
       :aria-pressed="locale === option"
       :lang="option"
       @click="select(option)"

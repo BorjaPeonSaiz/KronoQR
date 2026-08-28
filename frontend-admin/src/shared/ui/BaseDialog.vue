@@ -90,14 +90,14 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
-    <div class="absolute inset-0 bg-slate-950/70" aria-hidden="true" @click="requestClose" />
+    <div class="absolute inset-0 bg-kq-text/60" aria-hidden="true" @click="requestClose" />
     <div
       ref="panel"
       role="dialog"
       aria-modal="true"
       :aria-labelledby="titleId"
       tabindex="-1"
-      class="relative max-h-full w-full overflow-y-auto rounded-lg bg-white p-6 text-slate-900 shadow-xl"
+      class="relative max-h-full w-full overflow-y-auto rounded-kq bg-kq-surface-raised p-6 text-kq-text shadow-kq-raised"
       :class="size === 'wide' ? 'max-w-3xl' : 'max-w-xl'"
       @keydown="onKeydown"
     >

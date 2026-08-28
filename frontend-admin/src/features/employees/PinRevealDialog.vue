@@ -52,22 +52,25 @@ async function registerDelivery(): Promise<void> {
 
 <template>
   <BaseDialog :title="t('pin.reveal.heading')" :dismissible="false">
-    <p class="text-slate-700">
+    <p class="text-kq-text-muted">
       {{ t('pin.reveal.forEmployee', { name: employeeName, code: employeeCode }) }}
     </p>
 
     <p
-      class="mt-4 rounded border-2 border-slate-900 bg-slate-50 py-6 text-center font-mono text-4xl tracking-[0.4em] text-slate-900"
+      class="mt-4 rounded-kq border-2 border-kq-border-strong bg-kq-surface-alt py-6 text-center font-mono text-4xl tracking-[0.4em] text-kq-text"
       data-test="pin-value"
     >
       {{ pin.pin }}
     </p>
 
-    <p role="alert" class="mt-4 rounded border border-amber-400 bg-amber-50 p-3 text-amber-900">
+    <p
+      role="alert"
+      class="mt-4 rounded-kq-sm border border-kq-warning bg-kq-warning-soft p-3 text-kq-warning"
+    >
       {{ t('pin.reveal.onlyOnce') }}
     </p>
 
-    <p class="mt-3 text-sm text-slate-600">{{ t('pin.reveal.handDelivery') }}</p>
+    <p class="mt-3 text-sm text-kq-text-muted">{{ t('pin.reveal.handDelivery') }}</p>
 
     <ErrorNotice v-if="error !== null" :error="error" class="mt-4" />
 
@@ -79,7 +82,7 @@ async function registerDelivery(): Promise<void> {
     <template #actions>
       <button
         type="button"
-        class="rounded border border-slate-400 px-4 py-2"
+        class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-4 py-2 text-kq-text hover:bg-kq-surface-alt"
         @click="emit('acknowledged')"
       >
         {{ t('pin.reveal.acknowledge') }}
@@ -88,7 +91,7 @@ async function registerDelivery(): Promise<void> {
         type="button"
         :disabled="!handedOver || submitting"
         :aria-busy="submitting"
-        class="rounded bg-slate-900 px-4 py-2 font-semibold text-white disabled:opacity-60"
+        class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary disabled:opacity-60"
         @click="registerDelivery"
       >
         {{ submitting ? t('common.saving') : t('pin.reveal.registerDelivery') }}

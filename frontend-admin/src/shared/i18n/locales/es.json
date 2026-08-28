@@ -42,6 +42,16 @@
       "field": "Dato",
       "from": "Valor actual",
       "to": "Valor nuevo"
+    },
+    "pagination": {
+      "summary": "{from}–{to} de {total}",
+      "page": "Página {page} de {pages}",
+      "previous": "Anterior",
+      "next": "Siguiente"
+    },
+    "filters": {
+      "clear": "Limpiar filtros",
+      "clearSearch": "Borrar búsqueda"
     }
   },
   "errors": {
@@ -105,10 +115,17 @@
     },
     "filters": {
       "legend": "Filtros de la plantilla",
+      "search": "Nombre o código de empleado",
+      "searchPlaceholder": "Buscar por nombre o código…",
       "status": "Situación laboral",
       "statusAll": "Todas, incluidas las bajas",
       "site": "Centro",
-      "siteAll": "Todos los centros"
+      "siteAll": "Todos los centros",
+      "department": "Departamento",
+      "departmentAll": "Todos los departamentos",
+      "pinStatus": "Estado del PIN",
+      "pinStatusAll": "Cualquier estado del PIN",
+      "pinStatusHint": "Se aplica solo a la página que se está viendo, no a toda la plantilla."
     },
     "status": {
       "active": "En alta",
@@ -130,11 +147,7 @@
       "pinStatus": "Estado del PIN"
     },
     "pagination": {
-      "label": "Paginación de la plantilla",
-      "summary": "{from}–{to} de {total}",
-      "page": "Página {page} de {pages}",
-      "previous": "Anterior",
-      "next": "Siguiente"
+      "label": "Paginación de la plantilla"
     },
     "fields": {
       "site": "Centro",
@@ -250,8 +263,15 @@
     "loading": "Cargando el estado de las credenciales…",
     "filters": {
       "legend": "Filtros del panel de credenciales",
+      "search": "Nombre o código de empleado",
+      "searchPlaceholder": "Buscar por nombre o código…",
       "site": "Centro",
       "siteAll": "Todos los centros",
+      "department": "Departamento",
+      "departmentAll": "Todos los departamentos",
+      "departmentNone": "Sin departamento",
+      "status": "Estado de la tarjeta",
+      "statusAll": "Cualquier estado",
       "pendingOnly": "Solo quien todavía no tiene la tarjeta en la mano"
     },
     "summary": {
@@ -261,7 +281,11 @@
     "empty": {
       "title": "No hay filas que mostrar",
       "description": "No hay personas de alta en el alcance elegido.",
-      "allDelivered": "Todo el mundo tiene ya su tarjeta en la mano en el alcance elegido."
+      "allDelivered": "Todo el mundo tiene ya su tarjeta en la mano en el alcance elegido.",
+      "filtered": "Ninguna fila encaja con los filtros elegidos. Prueba a quitarlos."
+    },
+    "pagination": {
+      "label": "Paginación de credenciales"
     },
     "table": {
       "caption": "Estado de la tarjeta de cada persona. Las horas se muestran en la zona horaria de su centro.",
@@ -341,7 +365,8 @@
       "delivered": "Entrega de la tarjeta de {name} registrada.",
       "revoked": "Credencial de {name} revocada.",
       "batchEmpty": "No había ninguna tarjeta pendiente de imprimir en el alcance elegido.",
-      "batchPrinted": "Hoja generada. Tarjetas incluidas: {count}."
+      "batchPrinted": "Hoja generada. Tarjetas incluidas: {count}.",
+      "results": "Resultados del panel de credenciales: {count}."
     }
   },
   "corrections": {

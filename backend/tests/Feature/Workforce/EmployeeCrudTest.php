@@ -249,3 +249,208 @@ it('publica los eventos de plantilla que otros modulos necesitan', function (): 
             && $event->terminatedOn === '2026-09-30',
     );
 })->group('RF-GP-01', 'RF-GP-03');
+
+/*
+ * Busqueda libre del listado de plantilla (RF-GP-01, `q`).
+ *
+ * El panel ofrece un unico cuadro para «busca a esta persona», y quien lo usa no
+ * sabe —ni tiene por que saber— si esta escribiendo un nombre, un apellido o un
+ * codigo de tarjeta. Por eso `q` casa contra los cuatro campos y basta con que
+ * acierte uno.
+ */
+
+/**
+ * Tres personas con nombres distintos, que es lo que la busqueda necesita para
+ * significar algo: con «Persona De Prueba» tres veces, cualquier consulta
+ * «encuentra» a la persona correcta por accidente.
+ *
+ * @return array{token: string, site: int, department: int, otroSite: int}
+ */
+function searchContext(): array
+{
+    $context = hrContext();
+    $otroSite = WorkforceFixtures::site('Hotel Marina');
+
+    WorkforceFixtures::employee($context['site'], $context['department'], 'active', 'Youssef', 'Amrani', 'EK7Q2MXPR');
+    WorkforceFixtures::employee($context['site'], $context['department'], 'active', 'Lucia', 'Bermejo', 'EZ3T9WLDN');
+    WorkforceFixtures::employee($otroSite, null, 'active', 'Youssef', 'Cabrera', 'EM5H1VBQK');
+
+    return [...$context, 'otroSite' => $otroSite];
+}
+
+it('encuentra por nombre, apellido, nombre completo o codigo', function (string $q, int $total): void {
+    $context = searchContext();
+
+    Api::as($context['token'])
+        ->get('/api/v1/employees', ['q' => $q])
+        ->assertValidRequest()
+        ->assertValidResponse(200)
+        ->assertJsonPath('meta.total', $total)
+        ->assertJsonCount($total, 'data');
+})->with([
+    // Dos personas se llaman Youssef: el nombre solo no desempata, y el listado
+    // tiene que devolver las dos en vez de elegir una.
+    'por nombre' => ['Youssef', 2],
+    'por apellido' => ['Amrani', 1],
+    // El caso que obliga a concatenar en SQL: «Youssef Amrani» no esta ni en
+    // `first_name` ni en `last_name`.
+    'por nombre completo' => ['Youssef Amrani', 1],
+    'por codigo' => ['EZ3T9WLDN', 1],
+    // Por subcadena, no por prefijo: quien recuerda media palabra la escribe.
+    'por un trozo del apellido' => ['erme', 1],
+    'por un trozo del codigo' => ['9WLD', 1],
+    // Insensible a mayusculas en los dos sentidos. `employee_code` es `citext`
+    // y los nombres son `text`: sin `ILIKE`, los segundos no casarian.
+    'en minusculas' => ['amrani', 1],
+    'en mayusculas' => ['AMRANI', 1],
+    'codigo en minusculas' => ['ez3t9wldn', 1],
+    'sin ninguna coincidencia' => ['Nadie', 0],
+])->group('RF-GP-01');
+
+it('no deja que los comodines de LIKE actuen como tales', function (string $q): void {
+    // Sin escapar, `%` casaria con la plantilla entera y `_` con cualquier
+    // caracter: el usuario estaria manejando una sintaxis que nadie le ha
+    // contado, y una busqueda que no encuentra nada hace mucho menos daño que
+    // una que devuelve el directorio completo creyendo haber filtrado.
+    $context = searchContext();
+
+    Api::as($context['token'])
+        ->get('/api/v1/employees', ['q' => $q])
+        ->assertValidResponse(200)
+        ->assertJsonPath('meta.total', 0);
+})->with([
+    'comodin de varios caracteres' => ['%'],
+    'comodin combinado' => ['%rani'],
+    'comodin de un caracter' => ['Amran_'],
+    // La barra invertida es el caracter de escape de `LIKE` en PostgreSQL: si
+    // no se escapara ella misma, un `q` de `\` dejaria un escape colgando.
+    'barra invertida' => ['\\'],
+])->group('RF-GP-01');
+
+it('trata una busqueda vacia como si no se hubiera enviado', function (string $q): void {
+    // El panel omite `q` cuando el cuadro esta vacio, asi que esto no es lo que
+    // hace el cliente: es lo que ocurre con un enlace copiado que arrastra un
+    // `?q=` de una busqueda anterior. Devolver `422` por eso seria un callejon
+    // sin salida para quien pega la URL. Por eso el contrato declara `q` sin
+    // `minLength` y `assertValidRequest()` puede exigirse aqui.
+    $context = searchContext();
+
+    Api::as($context['token'])
+        ->get('/api/v1/employees', ['q' => $q])
+        ->assertValidRequest()
+        ->assertValidResponse(200)
+        ->assertJsonPath('meta.total', 3);
+})->with([
+    'cadena vacia' => [''],
+    'solo espacios' => ['   '],
+])->group('RF-GP-01');
+
+it('recorta el termino antes de buscar', function (): void {
+    $context = searchContext();
+
+    Api::as($context['token'])
+        ->get('/api/v1/employees', ['q' => '  Amrani  '])
+        ->assertValidResponse(200)
+        ->assertJsonPath('meta.total', 1);
+})->group('RF-GP-01');
+
+it('combina la busqueda con el resto de filtros con AND', function (): void {
+    // Los dos «Youssef» estan en centros distintos. Si la busqueda se aplicara
+    // al mismo nivel que `site_id` en vez de en su propio grupo, el `OR` se
+    // comeria el filtro de centro y saldrian los dos.
+    $context = searchContext();
+
+    Api::as($context['token'])
+        ->get('/api/v1/employees', ['q' => 'Youssef', 'site_id' => $context['site']])
+        ->assertValidRequest()
+        ->assertValidResponse(200)
+        ->assertJsonPath('meta.total', 1)
+        ->assertJsonPath('data.0.last_name', 'Amrani');
+})->group('RF-GP-01');
+
+it('pagina la busqueda como cualquier otro filtro', function (): void {
+    // `meta.total` describe lo que casa con la busqueda, no la plantilla: si
+    // contara la plantilla, el panel pediria paginas que no existen.
+    $context = searchContext();
+
+    Api::as($context['token'])
+        ->get('/api/v1/employees', ['q' => 'Youssef', 'per_page' => 1])
+        ->assertValidResponse(200)
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('meta.total', 2)
+        ->assertJsonPath('meta.total_pages', 2);
+})->group('RF-GP-01');
+
+it('rechaza una busqueda mas larga que el techo del contrato', function (): void {
+    // 100 caracteres es el `maxLength` que declara `EmployeeSearch`. El techo no
+    // es una regla de negocio: es lo que impide mandar un patron de megabytes a
+    // un `ILIKE` que no puede usar indice.
+    $context = searchContext();
+
+    Api::as($context['token'])
+        ->get('/api/v1/employees', ['q' => str_repeat('a', 101)])
+        ->assertStatus(422);
+
+    Api::as($context['token'])
+        ->get('/api/v1/employees', ['q' => str_repeat('a', 100)])
+        ->assertValidResponse(200);
+})->group('RF-GP-01');
+
+/**
+ * Acentos (RF-GP-01).
+ *
+ * Su propio contexto porque las cuatro personas de aqui existen solo para esto:
+ * meterlas en `searchContext()` cambiaria los recuentos de todo lo de arriba sin
+ * que ninguna de esas pruebas trate sobre diacriticos.
+ *
+ * Hay un «García» y un «Garcia» a la vez, escritos como se escriben de verdad en
+ * un alta hecha con prisa. Los dos son la misma consulta para quien busca, asi
+ * que toda variante del termino tiene que devolver los dos.
+ *
+ * @return array{token: string, site: int, department: int}
+ */
+function accentedSearchContext(): array
+{
+    $context = hrContext();
+
+    WorkforceFixtures::employee($context['site'], $context['department'], 'active', 'Marta', 'García', 'EG4R1CIAB');
+    WorkforceFixtures::employee($context['site'], $context['department'], 'active', 'Sara', 'Garcia', 'EG4R1CIAC');
+    WorkforceFixtures::employee($context['site'], $context['department'], 'active', 'Ivan', 'Núñez', 'ENU3N1EZD');
+    WorkforceFixtures::employee($context['site'], $context['department'], 'active', 'Lucia', 'Bermejo', 'EZ3T9WLDN');
+
+    return $context;
+}
+
+it('ignora los acentos en los dos sentidos', function (string $q, int $total): void {
+    // `ILIKE` ignora las mayusculas pero NO los diacriticos: sin `unaccent()`,
+    // «garcia» no encuentra a «García» y «garcía» no encuentra a «Garcia». El
+    // panel de credenciales ya normalizaba acentos en el navegador y los dos
+    // cuadros llevan la misma etiqueta: el que no lo hiciera pareceria averiado.
+    $context = accentedSearchContext();
+
+    Api::as($context['token'])
+        ->get('/api/v1/employees', ['q' => $q])
+        ->assertValidRequest()
+        ->assertValidResponse(200)
+        ->assertJsonPath('meta.total', $total)
+        ->assertJsonCount($total, 'data');
+})->with([
+    // Termino con tilde: tiene que encontrar tambien a quien esta dado de alta
+    // sin ella, que es el caso «a la inversa».
+    'con tilde encuentra a los dos' => ['García', 2],
+    'sin tilde encuentra a los dos' => ['Garcia', 2],
+    'en minusculas y con tilde' => ['garcía', 2],
+    'en minusculas y sin tilde' => ['garcia', 2],
+    'en mayusculas y sin tilde' => ['GARCIA', 2],
+    // La eñe ademas de la tilde: `unaccent` la trata igual que cualquier otro
+    // diacritico, y en un apellido español las dos aparecen juntas a menudo.
+    'eñe y tilde' => ['Núñez', 1],
+    'eñe y tilde escritas en llano' => ['nunez', 1],
+    'eñe y tilde en mayusculas' => ['NUNEZ', 1],
+    // Por subcadena, tambien normalizando: quien recuerda media palabra la
+    // escribe sin pararse a poner la tilde.
+    'trozo sin tilde' => ['unez', 1],
+    // El control negativo: normalizar acentos no puede convertir la busqueda en
+    // un comodin que case con quien no toca.
+    'sin coincidencia' => ['Nadie', 0],
+])->group('RF-GP-01');

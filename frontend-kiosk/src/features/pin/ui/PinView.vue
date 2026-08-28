@@ -94,7 +94,8 @@ const codeIsValid = computed(() => hasEmployeeCodeShape(employeeCode.value))
 // La clave puede tardar el primer instante tras un arranque en frio (recarga
 // justo en esta pantalla): mientras no llega, «Confirmar» se queda inactivo
 // en vez de fallar en silencio (rarisimo en marcha normal, donde el padron ya
-// esta cargado desde que se pulso «¿Sin tarjeta?» en la pantalla anterior).
+// esta cargado desde que se pulso «Ficha con tu código y PIN» en la pantalla
+// anterior).
 const canConfirm = computed(
   () => pin.isComplete.value && offline.pinSealingPublicKey.value !== null,
 )
@@ -174,7 +175,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <main class="flex h-dvh w-full flex-col bg-kiosk-surface text-kiosk-text">
+  <main class="flex h-dvh w-full flex-col bg-kq-kiosk-surface text-kq-kiosk-text">
     <h1 class="kiosk-sr-only">{{ t('pin.title') }}</h1>
 
     <header class="flex items-center justify-between gap-4 px-6 py-4">
@@ -189,7 +190,7 @@ onUnmounted(() => {
     <section class="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-8 px-10">
       <RouterLink
         :to="{ name: 'home' }"
-        class="kiosk-touch absolute top-0 left-6 flex items-center rounded-lg bg-slate-700 px-5 text-base font-medium text-slate-50"
+        class="kiosk-touch absolute top-0 left-6 flex items-center rounded-kq-sm border border-kq-kiosk-border bg-kq-kiosk-surface-raised px-5 text-base font-medium text-kq-kiosk-text"
         data-testid="pin-back-to-card"
       >
         {{ t('pin.backToCard') }}
@@ -201,7 +202,9 @@ onUnmounted(() => {
           class="flex w-full max-w-md flex-col gap-6"
           data-testid="pin-step-code"
         >
-          <p class="text-confirm-sm text-center font-bold">{{ t('pin.code.title') }}</p>
+          <p class="text-confirm-sm font-heading text-center font-bold">
+            {{ t('pin.code.title') }}
+          </p>
           <label class="flex flex-col gap-2">
             <span class="kiosk-sr-only">{{ t('pin.code.label') }}</span>
             <input
@@ -214,13 +217,13 @@ onUnmounted(() => {
               spellcheck="false"
               maxlength="32"
               data-testid="pin-code-input"
-              class="kiosk-touch rounded-lg bg-slate-800 px-4 text-center text-3xl font-semibold tracking-widest text-slate-50"
+              class="kiosk-touch rounded-kq-sm border border-kq-kiosk-border bg-kq-kiosk-surface-raised px-4 text-center text-3xl font-semibold tracking-widest text-kq-kiosk-text"
               @keyup.enter="goToPinStep"
             />
           </label>
           <button
             type="button"
-            class="kiosk-touch rounded-lg bg-emerald-700 text-2xl font-semibold text-white disabled:opacity-40"
+            class="kiosk-touch rounded-kq-sm bg-kq-kiosk-primary-strong text-2xl font-semibold text-kq-kiosk-on-primary disabled:opacity-40"
             :disabled="!codeIsValid"
             data-testid="pin-code-continue"
             @click="goToPinStep"
@@ -234,7 +237,9 @@ onUnmounted(() => {
           class="flex w-full max-w-sm flex-col gap-6"
           data-testid="pin-step-pin"
         >
-          <p class="text-confirm-sm text-center font-bold">{{ t('pin.pin.title') }}</p>
+          <p class="text-confirm-sm font-heading text-center font-bold">
+            {{ t('pin.pin.title') }}
+          </p>
 
           <div
             class="flex justify-center gap-3"
@@ -246,8 +251,8 @@ onUnmounted(() => {
               v-for="index in 6"
               :key="index"
               aria-hidden="true"
-              class="h-5 w-5 rounded-full border-2 border-slate-400"
-              :class="index <= pin.value.value.length ? 'bg-slate-100' : 'bg-transparent'"
+              class="h-5 w-5 rounded-full border-2 border-kq-kiosk-border"
+              :class="index <= pin.value.value.length ? 'bg-kq-kiosk-text' : 'bg-transparent'"
             ></span>
           </div>
 
@@ -256,7 +261,7 @@ onUnmounted(() => {
           <div class="flex gap-3">
             <button
               type="button"
-              class="kiosk-touch flex-1 rounded-lg bg-slate-700 text-xl font-semibold text-slate-50"
+              class="kiosk-touch flex-1 rounded-kq-sm border border-kq-kiosk-border bg-kq-kiosk-surface-raised text-xl font-semibold text-kq-kiosk-text"
               data-testid="pin-back-to-code"
               @click="goBackToCodeStep"
             >
@@ -264,7 +269,7 @@ onUnmounted(() => {
             </button>
             <button
               type="button"
-              class="kiosk-touch flex-1 rounded-lg bg-emerald-700 text-xl font-semibold text-white disabled:opacity-40"
+              class="kiosk-touch flex-1 rounded-kq-sm bg-kq-kiosk-primary-strong text-xl font-semibold text-kq-kiosk-on-primary disabled:opacity-40"
               :disabled="!canConfirm"
               data-testid="pin-confirm"
               @click="confirm"

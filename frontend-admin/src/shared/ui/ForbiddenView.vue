@@ -10,6 +10,6 @@ const { t } = useI18n()
 <template>
   <section>
     <h1 class="text-2xl font-bold">{{ t('forbidden.heading') }}</h1>
-    <p class="mt-2 max-w-prose text-slate-700">{{ t('forbidden.description') }}</p>
+    <p class="mt-2 max-w-prose text-kq-text-muted">{{ t('forbidden.description') }}</p>
   </section>
 </template>

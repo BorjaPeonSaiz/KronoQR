@@ -6,9 +6,14 @@
   "engines": {
     "node": ">=24"
   },
-  "sideEffects": false,
+  "sideEffects": [
+    "**/*.css"
+  ],
   "exports": {
     "./package.json": "./package.json",
+    "./theme.css": "./src/theme.css",
+    "./base.css": "./src/base.css",
+    "./fonts.css": "./src/fonts.css",
     "./components/*": "./src/components/*",
     "./*": "./src/*.ts"
   },
@@ -40,5 +45,9 @@
     "vue-i18n": "^10.0.8",
     "vue-router": "^4.6.4",
     "vue-tsc": "^3.3.9"
+  },
+  "dependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
+    "@fontsource/poppins": "^5.3.0"
   }
 }

@@ -1,0 +1,61 @@
+/* Capa base compartida de las tres SPA (docs/06-guia-visual.md §5). Fondo y
+   color de `body`, tipografia de encabezados, foco visible y
+   `prefers-reduced-motion` eran identicos, caracter por caracter, en
+   `frontend-admin/src/assets/main.css` y `frontend-portal/src/assets/main.css`,
+   y el quiosco repetia la regla de `:focus-visible` con su propio color y
+   desplazamiento: eso es exactamente lo que ADR-036 pide evitar ("antes de
+   escribir en una SPA una utilidad que ya exista en otra, se comprueba
+   `packages/web-kit` primero"). Vive aqui una sola vez.
+
+   Estas reglas NO son marca (CLAUDE.md regla dura 13; ADR-017): pintan con los
+   tokens `--kq-*` de `theme.css`, y la tarea 5.8 (marca blanca) sobrescribe
+   esos tokens en tiempo de ejecucion sin tocar este fichero.
+
+   `--kq-page-*` es la unica indireccion que hace falta para que el quiosco
+   (la unica SPA de fondo oscuro) comparta esta capa sin volver a declarar la
+   regla: por defecto apunta a los tokens claros del panel y el portal, y
+   `frontend-kiosk/src/assets/main.css` los redefine a los tokens `kiosk-*`
+   DESPUES de importar este fichero (via `theme.css`), asi que su `:root` gana
+   la cascada. No son tokens de marca ni de paleta —solo redirigen a un token
+   que ya esta declarado y medido en `theme.css`— y por eso no llevan el
+   prefijo `--kq-color-` que `theme.spec.ts` exige hexadecimal: viven en este
+   fichero, no en `theme.css`, y esa prueba no lo lee.
+
+   `--kq-page-focus-offset` conserva la diferencia intencional del quiosco: 2 px
+   en panel y portal, 3 px en el quiosco porque se opera con guantes y hace
+   falta un anillo mas grueso y separado para verlo bien (docs/06-guia-visual.md
+   §6.7). Sin este token, unificar la regla habria borrado esa decision. */
+
+:root {
+  --kq-page-bg: var(--kq-color-surface);
+  --kq-page-text: var(--kq-color-text);
+  --kq-page-focus: var(--kq-color-focus);
+  --kq-page-focus-offset: 2px;
+}
+
+body {
+  background: var(--kq-page-bg);
+  color: var(--kq-page-text);
+  font-family: var(--kq-font-body);
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--kq-font-heading);
+}
+
+:focus-visible {
+  outline: 3px solid var(--kq-page-focus);
+  outline-offset: var(--kq-page-focus-offset);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

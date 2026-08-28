@@ -83,12 +83,12 @@ watch(data, (value) => {
 <template>
   <section>
     <header>
-      <h1 class="text-2xl font-bold">{{ t('myRecords.title') }}</h1>
+      <h1 class="font-heading text-2xl font-bold text-kq-text">{{ t('myRecords.title') }}</h1>
       <p v-if="session.employee !== null" class="mt-1 text-lg">
         {{ session.employee.display_name }}
-        <span class="font-mono text-slate-700">{{ session.employee.employee_code }}</span>
+        <span class="font-mono text-kq-text-muted">{{ session.employee.employee_code }}</span>
       </p>
-      <p class="mt-2 max-w-prose text-slate-700">{{ t('myRecords.subtitle') }}</p>
+      <p class="mt-2 max-w-prose text-kq-text-muted">{{ t('myRecords.subtitle') }}</p>
     </header>
 
     <form class="mt-4 flex max-w-3xl flex-wrap items-end gap-4" novalidate @submit.prevent="submit">
@@ -99,14 +99,14 @@ watch(data, (value) => {
           v-slot="field"
           :label="t('myRecords.filters.from')"
           :hint="t('myRecords.filters.fromHint')"
-          label-class="text-lg font-medium text-slate-900"
+          label-class="text-lg font-medium text-kq-text"
         >
           <input
             :id="field.id"
             v-model="draft.from"
             type="date"
             :aria-describedby="field.describedBy"
-            class="min-h-12 rounded border border-slate-400 px-3 py-2 text-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+            class="min-h-12 rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-lg"
           />
         </FormField>
 
@@ -115,7 +115,7 @@ watch(data, (value) => {
           :label="t('myRecords.filters.to')"
           :hint="t('myRecords.filters.toHint')"
           :errors="rangeErrors"
-          label-class="text-lg font-medium text-slate-900"
+          label-class="text-lg font-medium text-kq-text"
         >
           <input
             :id="field.id"
@@ -123,7 +123,7 @@ watch(data, (value) => {
             type="date"
             :aria-describedby="field.describedBy"
             :aria-invalid="field.invalid"
-            class="min-h-12 rounded border border-slate-400 px-3 py-2 text-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+            class="min-h-12 rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-lg"
           />
         </FormField>
       </fieldset>
@@ -131,17 +131,17 @@ watch(data, (value) => {
       <button
         type="submit"
         :disabled="!canSubmit"
-        class="min-h-12 rounded bg-slate-900 px-4 py-2 text-lg font-semibold text-white disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+        class="min-h-12 rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-lg font-semibold text-kq-on-primary disabled:opacity-50"
       >
         {{ t('myRecords.filters.apply') }}
       </button>
     </form>
 
-    <p v-if="data !== undefined" class="mt-3 text-slate-700" data-test="resolved-range">
+    <p v-if="data !== undefined" class="mt-3 text-kq-text-muted" data-test="resolved-range">
       {{ t('myRecords.filters.resolved', { from: data.from, to: data.to, zone: data.time_zone }) }}
-      <span v-if="isFetching" class="text-slate-500">{{ t('common.updating') }}</span>
+      <span v-if="isFetching" class="text-kq-text-muted">{{ t('common.updating') }}</span>
     </p>
-    <p class="mt-1 text-sm text-slate-600">{{ t('myRecords.zoneNotice') }}</p>
+    <p class="mt-1 text-sm text-kq-text-muted">{{ t('myRecords.zoneNotice') }}</p>
 
     <LoadingPanel v-if="isPending" :label="t('myRecords.loading')" class="mt-4" />
 
@@ -154,6 +154,16 @@ watch(data, (value) => {
       :description="t('myRecords.empty.description')"
     />
 
+    <!--
+      Se queda en una sola columna a proposito, incluso con el ancho del
+      contenedor ampliado en `lg`. Una rejilla de dos columnas partiria la
+      lectura cronologica -dia 1 arriba a la izquierda, dia 2 arriba a la
+      derecha, dia 3 abajo a la izquierda- justo para quien menos puede
+      permitirse confundir el orden de las jornadas al comprobarlas contra una
+      nomina. El ancho ganado en pantallas grandes lo aprovecha la tabla de
+      tramos de cada tarjeta (`w-full`, sin `max-w` heredado), no una segunda
+      columna de tarjetas.
+    -->
     <div v-else class="mt-4 flex flex-col gap-6">
       <WorkDayCard v-for="day of days" :key="day.work_date" :day="day" />
     </div>

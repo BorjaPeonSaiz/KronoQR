@@ -3,7 +3,7 @@ import EmployeeListView from '@/features/employees/EmployeeListView.vue'
 import es from '@/shared/i18n/locales/es.json'
 import { announcement, clearAnnouncement } from '@kronoqr/web-kit/announcer'
 import { EMPLOYEE_UUID, SITE, employee, employeeCollection } from './support/fixtures'
-import { jsonResponse, mountView, settle, stubFetch } from './support/harness'
+import { createTestRouter, jsonResponse, mountView, settle, stubFetch } from './support/harness'
 
 const DEPARTMENTS = { data: [{ id: 3, site_id: 1, name: 'Recepcion' }] }
 
@@ -127,6 +127,157 @@ describe('EmployeeListView', () => {
     await settle()
 
     expect(spy.mock.calls.some((call) => String(call[0]).includes('page=2'))).toBe(true)
+  })
+
+  it('el buscador manda `q` al servidor tras el debounce y reinicia la pagina (RF-GP-01)', async () => {
+    const spy = stubFetch(routes(employeeCollection([employee()], 120)))
+
+    const wrapper = await mountView(EmployeeListView)
+
+    await settle()
+    await wrapper.findAll('nav button')[1]?.trigger('click')
+    await settle()
+
+    expect(spy.mock.calls.some((call) => String(call[0]).includes('page=2'))).toBe(true)
+
+    await wrapper.find('#employees-search-filter').setValue('maria')
+    // El debounce es de 300 ms: no debe mandar una peticion por cada tecla.
+    await new Promise((resolve) => setTimeout(resolve, 320))
+    await settle()
+
+    const urls = spy.mock.calls.map((call) => String(call[0]))
+
+    expect(urls.some((url) => url.includes('q=maria') && url.includes('page=1'))).toBe(true)
+  })
+
+  it('borrar la busqueda con el boton la vacia y vuelve a pedir sin `q` (RF-GP-01)', async () => {
+    const spy = stubFetch(routes(employeeCollection([employee()])))
+
+    const wrapper = await mountView(EmployeeListView)
+
+    await settle()
+    await wrapper.find('#employees-search-filter').setValue('maria')
+    await new Promise((resolve) => setTimeout(resolve, 320))
+    await settle()
+
+    expect(wrapper.find('#employees-search-filter').element).toHaveProperty('value', 'maria')
+
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text().includes(es.common.filters.clearSearch))
+      ?.trigger('click')
+    await settle()
+
+    expect(wrapper.find('#employees-search-filter').element).toHaveProperty('value', '')
+
+    const urls = spy.mock.calls.map((call) => String(call[0]))
+
+    expect(urls.at(-1)).not.toContain('q=')
+  })
+
+  it('el select de departamento manda `department_id` al servidor (RF-GP-01)', async () => {
+    const spy = stubFetch(routes(employeeCollection([employee()])))
+
+    const wrapper = await mountView(EmployeeListView)
+
+    await settle()
+    await wrapper.find('#employees-department-filter').setValue('3')
+    await settle()
+
+    const urls = spy.mock.calls.map((call) => String(call[0]))
+
+    expect(urls.some((url) => url.includes('department_id=3'))).toBe(true)
+  })
+
+  it('el estado del PIN se filtra sobre la pagina visible, no sobre toda la plantilla (RF-GP-01)', async () => {
+    stubFetch(
+      routes(
+        employeeCollection([
+          employee({ uuid: EMPLOYEE_UUID, pin_status: 'delivered' }),
+          employee({ uuid: '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b91', pin_status: 'pending' }),
+        ]),
+      ),
+    )
+
+    const wrapper = await mountView(EmployeeListView)
+
+    await settle()
+    expect(wrapper.findAll('tbody tr')).toHaveLength(2)
+
+    await wrapper.find('#employees-pin-status-filter').setValue('delivered')
+    await settle()
+
+    expect(wrapper.findAll('tbody tr')).toHaveLength(1)
+    expect(wrapper.text()).toContain(es.employees.filters.pinStatusHint)
+  })
+
+  it('la barra de paginacion sigue visible aunque el filtro de PIN deje la pagina vacia (RF-GP-01)', async () => {
+    stubFetch(routes(employeeCollection([employee({ pin_status: 'pending' })], 30)))
+
+    const wrapper = await mountView(EmployeeListView)
+
+    await settle()
+    await wrapper.find('#employees-pin-status-filter').setValue('delivered')
+    await settle()
+
+    // La pagina SI tiene filas del servidor (`rows`), solo que ninguna encaja
+    // con el filtro de PIN aplicado en cliente (`visibleRows`): sin la barra
+    // no habria forma de avanzar a la pagina donde si las hay.
+    expect(wrapper.text()).toContain(es.employees.empty.filtered)
+    expect(wrapper.find('nav').exists()).toBe(true)
+    expect(wrapper.text()).toContain(es.common.pagination.next)
+  })
+
+  it('acota la pagina si un favorito guardado apunta mas alla del total real (RF-GP-01)', async () => {
+    const rows = [employee()]
+    const spy = stubFetch((url: string) => {
+      if (url.startsWith('/api/v1/sites')) {
+        return jsonResponse({ data: [SITE] })
+      }
+
+      if (url.startsWith('/api/v1/departments')) {
+        return jsonResponse(DEPARTMENTS)
+      }
+
+      const requestedPage = Number(new URL(url, 'http://localhost').searchParams.get('page') ?? '1')
+
+      // La plantilla real solo tiene una pagina. Un `?page=4` guardado como
+      // favorito antes de una baja masiva queda fuera de rango.
+      return jsonResponse({
+        data: requestedPage === 1 ? rows : [],
+        meta: { page: requestedPage, per_page: 25, total: rows.length, total_pages: 1 },
+      })
+    })
+
+    const router = createTestRouter()
+    await router.push({ name: 'employees', query: { page: '4' } })
+
+    const wrapper = await mountView(EmployeeListView, { router })
+
+    await settle(8)
+
+    const urls = spy.mock.calls.map((call) => String(call[0]))
+
+    // Se pide la pagina del favorito al aterrizar...
+    expect(urls.some((url) => url.includes('page=4'))).toBe(true)
+    // ...pero, sabiendo que solo hay una pagina, se acota y se vuelve a pedir.
+    expect(urls.some((url) => url.includes('page=1'))).toBe(true)
+    expect(wrapper.text()).toContain('Youssef Amrani')
+    expect(wrapper.text()).not.toContain(es.employees.empty.description)
+    expect(router.currentRoute.value.query['page']).toBeUndefined()
+  })
+
+  it('refleja los filtros en la query de la ruta para reproducir la vista (RF-GP-01)', async () => {
+    stubFetch(routes(employeeCollection([employee()])))
+
+    const router = createTestRouter()
+    const wrapper = await mountView(EmployeeListView, { router })
+
+    await settle()
+    await wrapper.find('#employees-status-filter').setValue('terminated')
+    await settle()
+
+    expect(router.currentRoute.value.query['status']).toBe('terminated')
   })
 
   it('cuenta que ha pasado y que hacer cuando el servidor no responde', async () => {

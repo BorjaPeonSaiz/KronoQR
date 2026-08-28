@@ -74,10 +74,11 @@ final readonly class EloquentEmployeeRepository implements EmployeeRepository
         ?int $siteId,
         ?int $departmentId,
         ?EmploymentStatus $status,
+        ?string $search,
         int $limit,
         int $offset,
     ): array {
-        $rows = $this->filtered($siteId, $departmentId, $status)
+        $rows = $this->filtered($siteId, $departmentId, $status, $search)
             // Orden estable y previsible para quien pagina: dos personas con el
             // mismo apellido no pueden cambiar de sitio entre dos paginas.
             ->orderBy('last_name')
@@ -90,20 +91,89 @@ final readonly class EloquentEmployeeRepository implements EmployeeRepository
         return array_values(array_map($this->toEntity(...), $rows->all()));
     }
 
-    public function countMatching(?int $siteId, ?int $departmentId, ?EmploymentStatus $status): int
-    {
-        return $this->filtered($siteId, $departmentId, $status)->count();
+    public function countMatching(
+        ?int $siteId,
+        ?int $departmentId,
+        ?EmploymentStatus $status,
+        ?string $search,
+    ): int {
+        return $this->filtered($siteId, $departmentId, $status, $search)->count();
     }
 
     /**
      * @return Builder<Employee>
      */
-    private function filtered(?int $siteId, ?int $departmentId, ?EmploymentStatus $status): Builder
-    {
+    private function filtered(
+        ?int $siteId,
+        ?int $departmentId,
+        ?EmploymentStatus $status,
+        ?string $search,
+    ): Builder {
         return Employee::query()
             ->when($siteId !== null, static fn (Builder $query): Builder => $query->where('site_id', $siteId))
             ->when($departmentId !== null, static fn (Builder $query): Builder => $query->where('department_id', $departmentId))
-            ->when($status instanceof EmploymentStatus, static fn (Builder $query): Builder => $query->where('status', $status?->value));
+            ->when($status instanceof EmploymentStatus, static fn (Builder $query): Builder => $query->where('status', $status?->value))
+            ->when($search !== null, fn (Builder $query): Builder => $this->matchingSearch($query, (string) $search));
+    }
+
+    /**
+     * Busqueda libre por nombre, apellidos, nombre completo y codigo (RF-GP-01).
+     *
+     * **`ILIKE` y no `LIKE`.** `employee_code` es `citext`, asi que ahi daria
+     * igual, pero `first_name` y `last_name` son `text` normal: con `LIKE`,
+     * buscar «amrani» no encontraria a «Amrani», que es como lo escribe todo el
+     * mundo en un cuadro de busqueda.
+     *
+     * **`unaccent()` a los dos lados de la comparacion.** `ILIKE` ignora las
+     * mayusculas pero no los diacriticos: `'García' ILIKE '%garcia%'` es falso,
+     * y `'Garcia' ILIKE '%garcía%'` tambien. Quien escribe en el cuadro pone la
+     * tilde o no la pone segun le sale, y la persona es la misma. Normalizar
+     * tambien el termino, y no solo el campo, es lo que hace que funcione en los
+     * dos sentidos. La extension la habilita la migracion
+     * `2026_08_28_100000_enable_unaccent_extension`.
+     *
+     * El panel de credenciales ya normalizaba acentos filtrando en el navegador;
+     * los dos cuadros llevan la misma etiqueta y ahora se comportan igual.
+     *
+     * **El nombre completo se concatena en SQL** en vez de partir el termino por
+     * espacios: quien busca escribe «Youssef Amrani» de corrido, y esa cadena no
+     * esta ni en el nombre ni en el apellido por separado.
+     *
+     * **`%` y `_` se escapan.** Sin esto, un `q` de `%` seria un comodin que
+     * casa con la plantilla entera, y `_` casaria con cualquier caracter: el
+     * usuario acabaria filtrando por una sintaxis que nadie le ha contado. Se
+     * escapa tambien la propia barra invertida, que es el caracter de escape por
+     * defecto de `LIKE` en PostgreSQL. `unaccent()` no toca ninguno de los tres,
+     * asi que el escape sigue en pie despues de normalizar. El termino va
+     * SIEMPRE como parametro enlazado, nunca interpolado en el texto de la
+     * consulta.
+     *
+     * **Sin indice y a proposito.** `ILIKE '%…%'` no puede usar un indice btree,
+     * y `unaccent()` no es `IMMUTABLE` —depende del diccionario y del
+     * `search_path`—, asi que tampoco se podria indexar sin envolverla. No hace
+     * falta: la plantilla de una instalacion son cientos de filas (doc 02,
+     * Anexo A), no millones. Si algun dia lo fuera, la palanca es `pg_trgm` con
+     * un indice GIN sobre una envoltura `IMMUTABLE`, no partir esta consulta.
+     *
+     * @param  Builder<Employee>  $query
+     * @return Builder<Employee>
+     */
+    private function matchingSearch(Builder $query, string $search): Builder
+    {
+        $pattern = '%'.addcslashes($search, '\\%_').'%';
+
+        // El grupo anidado no es decorativo: sin el, el primer `orWhere` se
+        // aplicaria al mismo nivel que `site_id` y la busqueda dejaria de
+        // combinarse con `AND` con los demas filtros.
+        return $query->where(static function (Builder $group) use ($pattern): void {
+            // `employee_code` se lleva a `text` de forma explicita: `citext`
+            // tiene cast implicito, pero dejarlo escrito evita que la eleccion
+            // de sobrecarga de `unaccent()` dependa de el.
+            $group->whereRaw('unaccent(first_name) ILIKE unaccent(?)', [$pattern])
+                ->orWhereRaw('unaccent(last_name) ILIKE unaccent(?)', [$pattern])
+                ->orWhereRaw('unaccent(employee_code::text) ILIKE unaccent(?)', [$pattern])
+                ->orWhereRaw("unaccent(first_name || ' ' || last_name) ILIKE unaccent(?)", [$pattern]);
+        });
     }
 
     /**

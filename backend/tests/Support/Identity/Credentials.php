@@ -111,6 +111,39 @@ final class Credentials
     }
 
     /**
+     * Inserta una credencial **ya entregada**: impresa y con la entrega firmada.
+     *
+     * Es el unico estado en el que el panel de RF-QR-08 deja de contar a esa
+     * persona como «todavia no puede fichar», asi que es el que hace falta para
+     * probar el filtro `pending`. Se escribe en una sola sentencia y no por la
+     * API porque imprimir de verdad arranca un Chromium: lo que estas pruebas
+     * necesitan es el estado, no el PDF.
+     *
+     * `delivered_by_user_id` es obligatorio: `credentials_chk_delivery_is_signed`
+     * no admite una entrega sin responsable (RF-QR-06).
+     *
+     * @return string El UUID publico de la credencial.
+     */
+    public static function deliveredFor(int $employeeId, int $deliveredByUserId): string
+    {
+        $uuid = Str::uuid7()->toString();
+        $key = self::currentKey();
+
+        DB::table('credentials')->insert([
+            'uuid' => $uuid,
+            'employee_id' => $employeeId,
+            'key_id' => $key->id,
+            'secret_hash' => self::freshSecret()->hash(),
+            'issued_at' => '2026-08-14 06:00:00+00',
+            'printed_at' => '2026-08-15 06:00:00+00',
+            'delivered_at' => '2026-08-16 06:00:00+00',
+            'delivered_by_user_id' => $deliveredByUserId,
+        ]);
+
+        return $uuid;
+    }
+
+    /**
      * Un payload con la firma manipulada en un solo caracter.
      *
      * Cambiar un caracter y no la firma entera es el caso que importa: con una

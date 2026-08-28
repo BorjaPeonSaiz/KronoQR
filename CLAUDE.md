@@ -13,6 +13,7 @@ Antes de escribir código, lee lo que corresponda a tu tarea:
 - [docs/03-agentes-y-skills-ia.md](docs/03-agentes-y-skills-ia.md) — qué agente y qué skill usar en cada situación, y los prompts de arranque de cada hito
 - [docs/04-decision-credencial.md](docs/04-decision-credencial.md) — por qué la credencial es una tarjeta física
 - [docs/05-presentacion-cliente.md](docs/05-presentacion-cliente.md) — **lo que se le ha prometido al cliente.** Si lo que vas a implementar contradice este documento, o el documento promete algo que no existe como requisito, para y dilo
+- [docs/06-guia-visual.md](docs/06-guia-visual.md) — sistema visual compartido de las tres SPA: tokens `--kq-*` de `packages/web-kit`, contrastes WCAG medidos, tipografía autoalojada y reglas de uso. **Ninguna SPA declara un color propio**; la marca por defecto es del fabricante y la tarea 5.8 la hace configurable
 - [docs/adr/](docs/adr/) — decisiones arquitectónicas. **Si vas a contradecir un ADR, para y pregunta.**
 - [docs/api/openapi.yaml](docs/api/openapi.yaml) — contrato de la API. **Es la fuente de verdad: se modifica antes que el código.**
 - `plan implementacion/` — el detalle tarea a tarea (pasos, artefactos, pruebas exigidas, agente asignado) de cada fase. Doc 02 §11 da la tabla resumen; el detalle ejecutable de cada tarea vive aquí.

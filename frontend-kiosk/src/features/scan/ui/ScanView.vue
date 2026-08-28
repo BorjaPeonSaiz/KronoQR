@@ -5,9 +5,16 @@
 // GUANTES (RF-KI-06, doc 01 §6.5):
 //
 //   arriba    estado de conexion e idioma — informacion, se mira, no se toca
-//   centro    la camara, grande, y encima la confirmacion a pantalla completa
-//   abajo     aviso de privacidad y linterna — lo unico que se toca, al alcance
-//             del pulgar, con objetivos de 48 px
+//   centro    la camara, grande, con la confirmacion a pantalla completa
+//             encima. Bajo el subtitulo de instrucciones vive el acceso al
+//             fichaje por PIN («Ficha con tu código y PIN»): es un
+//             RESPALDO (RF-AT-11 lo marca para revision), asi que se pinta
+//             en estilo secundario y SOLO cuando no hay confirmacion en
+//             pantalla — nunca compite con ella. Si la camara cae, ese mismo
+//             enlace reaparece dentro del aviso de fallo, porque ahi deja de
+//             ser un respaldo y pasa a ser la unica via (regla dura 19).
+//   abajo     aviso de privacidad y linterna, al alcance del pulgar, con
+//             objetivos de 48 px
 //
 // Nada de esto exige interaccion para fichar: la camara arranca sola y decodifica
 // en continuo (RF-KI-02). Los botones son accesorios.
@@ -130,7 +137,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <main class="flex h-dvh w-full flex-col bg-kiosk-surface text-kiosk-text">
+  <main class="flex h-dvh w-full flex-col bg-kq-kiosk-surface text-kq-kiosk-text">
     <h1 class="kiosk-sr-only">{{ t('app.title') }}</h1>
 
     <header class="flex items-center justify-between gap-4 px-6 py-4">
@@ -156,31 +163,47 @@ onUnmounted(() => {
       <!-- Instrucciones. Se ocultan cuando hay confirmacion en pantalla. -->
       <div
         v-if="session.confirmation.value === null && !cameraFailed"
-        class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-4 bg-slate-950/55 px-10 text-center"
+        class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-4 bg-kq-kiosk-surface/70 px-10 text-center"
         data-testid="scan-idle"
       >
-        <p class="text-confirm-lg font-bold">{{ t('scan.idle.title') }}</p>
-        <p class="text-confirm-sm text-kiosk-text-muted">{{ t('scan.idle.subtitle') }}</p>
+        <p class="text-confirm-lg font-heading font-bold">{{ t('scan.idle.title') }}</p>
+        <p class="text-confirm-sm text-kq-kiosk-text-muted">{{ t('scan.idle.subtitle') }}</p>
+
+        <!-- Solo si la instalacion ofrece fichaje por PIN (ADR-017, tarea 1.12).
+             Nunca deshabilitado con explicacion: si no hay clave, esta via no
+             existe en esta instalacion, no existe "de momento". El bloque
+             padre es `pointer-events-none`: el enlace necesita recuperar los
+             eventos para poder tocarse. -->
+        <RouterLink
+          v-if="offline.pinSealingPublicKey.value !== null"
+          :to="{ name: 'pin' }"
+          class="kiosk-touch pointer-events-auto mt-6 inline-flex items-center justify-center rounded-kq-sm border border-kq-kiosk-border bg-kq-kiosk-surface-raised px-6 text-base font-semibold text-kq-kiosk-text"
+          data-testid="pin-entry-link"
+        >
+          {{ t('pin.entryButton') }}
+        </RouterLink>
+
         <p v-if="scanner.state.value === 'starting'" class="text-confirm-sm">
           {{ t('scan.camera.starting') }}
         </p>
         <p
           v-if="connectivity.status.value === 'offline'"
-          class="text-confirm-sm text-kiosk-text-muted"
+          class="text-confirm-sm text-kq-kiosk-text-muted"
         >
           {{ t('connection.offlineHint') }}
         </p>
       </div>
 
-      <!-- Camara caida. NO bloquea nada: se avisa y se ofrece reintentar; el
-           fichaje de respaldo por PIN es la tarea 1.12. -->
+      <!-- Camara caida. NO bloquea nada: se avisa, se ofrece reintentar y, con
+           la tarjeta inutilizable, el PIN pasa a ser la unica via de fichaje
+           (regla dura 19). -->
       <div
         v-if="cameraFailed"
         class="absolute inset-0 flex flex-col items-center justify-center gap-6 bg-kiosk-error px-10 text-center"
         role="alert"
         data-testid="camera-failure"
       >
-        <p class="text-confirm-lg font-bold">
+        <p class="text-confirm-lg font-heading font-bold">
           {{
             scanner.state.value === 'denied'
               ? t('scan.camera.deniedTitle')
@@ -196,11 +219,24 @@ onUnmounted(() => {
         </p>
         <button
           type="button"
-          class="kiosk-touch rounded-lg bg-white px-8 text-confirm-sm font-semibold text-slate-900"
+          class="kiosk-touch rounded-kq-sm bg-kq-kiosk-primary-strong px-8 text-confirm-sm font-semibold text-kq-kiosk-on-primary"
           @click="scanner.start()"
         >
           {{ t('scan.camera.retry') }}
         </button>
+
+        <!-- Con la camara caida, el PIN deja de ser una via alternativa y pasa a
+             ser la UNICA para fichar (regla dura 19): se ofrece aqui tambien.
+             Testid distinto del de `scan-idle` para que, con los dos bloques
+             excluyentes entre si, nunca haya dos enlaces visibles a la vez. -->
+        <RouterLink
+          v-if="offline.pinSealingPublicKey.value !== null"
+          :to="{ name: 'pin' }"
+          class="kiosk-touch mt-2 inline-flex items-center justify-center rounded-kq-sm border border-kq-kiosk-border bg-kq-kiosk-surface-raised px-6 text-confirm-sm font-semibold text-kq-kiosk-text"
+          data-testid="pin-entry-link-fallback"
+        >
+          {{ t('pin.entryButton') }}
+        </RouterLink>
       </div>
 
       <ScanConfirmationPanel
@@ -211,24 +247,15 @@ onUnmounted(() => {
     </section>
 
     <footer class="flex items-end justify-between gap-4 px-6 py-4">
+      <!-- El acceso por PIN vive ahora en el centro de la pantalla de escaneo
+           (junto al subtitulo, y como respaldo cuando la camara falla), no
+           aqui: el aviso de privacidad se queda solo y ocupa todo el ancho. -->
       <PrivacyNoticePanel class="min-w-0 flex-1" :config="privacyConfig" />
-
-      <!-- Solo si la instalacion ofrece fichaje por PIN (ADR-017, tarea 1.12).
-           Nunca deshabilitado con explicacion: si no hay clave, esta via no
-           existe en esta instalacion, no existe "de momento". -->
-      <RouterLink
-        v-if="offline.pinSealingPublicKey.value !== null"
-        :to="{ name: 'pin' }"
-        class="kiosk-touch shrink-0 rounded-lg bg-slate-700 px-5 text-base font-medium text-slate-50"
-        data-testid="pin-entry-link"
-      >
-        {{ t('pin.entryButton') }}
-      </RouterLink>
 
       <button
         v-if="scanner.torchAvailable.value"
         type="button"
-        class="kiosk-touch shrink-0 rounded-lg bg-slate-700 px-5 text-base font-medium text-slate-50"
+        class="kiosk-touch shrink-0 rounded-kq-sm border border-kq-kiosk-border bg-kq-kiosk-surface-raised px-5 text-base font-medium text-kq-kiosk-text"
         :aria-pressed="scanner.torchOn.value"
         data-testid="torch-toggle"
         @click="scanner.toggleTorch()"

@@ -56,30 +56,33 @@ watch(
 <template>
   <section
     v-bind="$attrs"
-    class="rounded-lg bg-slate-800 px-5 py-4 text-slate-200"
+    class="rounded-kq-sm bg-kq-kiosk-surface-raised px-4 py-2 text-kq-kiosk-text-muted"
     :aria-label="t('privacy.heading')"
     data-testid="privacy-notice"
   >
-    <h2 class="text-base font-semibold text-slate-100">{{ t('privacy.heading') }}</h2>
-    <p class="mt-1 text-base leading-relaxed">
+    <!-- Capa 1 del art. 13 RGPD en un unico parrafo: menos altura, ningun
+         contenido escondido. El encabezado abre la frase, no ocupa su propia
+         linea. -->
+    <p class="text-sm leading-snug">
+      <span class="font-semibold text-kq-kiosk-text">{{ t('privacy.heading') }}:</span>
       {{
         props.config.controller === null
           ? t('privacy.controllerUnknown')
           : t('privacy.controllerKnown', { controller: props.config.controller })
       }}
       {{ t('privacy.purpose') }} {{ t('privacy.basis') }} {{ t('privacy.retention') }}
-    </p>
-    <p class="mt-1 text-base leading-relaxed">
       {{ t('privacy.rights') }} {{ t('privacy.noBiometrics') }}
     </p>
 
-    <div class="mt-3 flex flex-wrap items-center gap-3">
-      <p v-if="props.config.policyUrl === null" class="text-base">
+    <!-- `kiosk-touch` fija el minimo de 48 px en el CONTROL, no en el texto:
+         la fila se compacta pero el objetivo tactil no baja de tamano. -->
+    <div class="mt-2 flex flex-wrap items-center gap-2">
+      <p v-if="props.config.policyUrl === null" class="text-sm">
         {{ t('privacy.policyPending') }}
       </p>
       <template v-else>
         <a
-          class="kiosk-touch inline-flex items-center rounded-lg bg-slate-700 px-4 text-base font-medium text-slate-50 underline"
+          class="kiosk-touch inline-flex items-center rounded-kq-sm border border-kq-kiosk-border px-3 text-sm font-medium text-kq-kiosk-text underline"
           :href="props.config.policyUrl"
           rel="noopener noreferrer"
         >
@@ -87,7 +90,7 @@ watch(
         </a>
         <button
           type="button"
-          class="kiosk-touch rounded-lg bg-slate-700 px-4 text-base font-medium text-slate-50"
+          class="kiosk-touch rounded-kq-sm border border-kq-kiosk-border px-3 text-sm font-medium text-kq-kiosk-text"
           @click="openDialog"
         >
           {{ t('privacy.showQr') }}
@@ -98,13 +101,13 @@ watch(
 
   <div
     v-if="dialogOpen"
-    class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/90 p-6"
+    class="fixed inset-0 z-50 flex items-center justify-center bg-kq-kiosk-surface/90 p-6"
     role="dialog"
     aria-modal="true"
     :aria-label="t('privacy.qrDialogTitle')"
   >
-    <div class="max-w-xl rounded-2xl bg-slate-100 p-8 text-slate-900">
-      <h2 class="text-2xl font-bold">{{ t('privacy.qrDialogTitle') }}</h2>
+    <div class="max-w-xl rounded-kq bg-kq-surface-raised p-8 text-kq-text">
+      <h2 class="font-heading text-2xl font-bold">{{ t('privacy.qrDialogTitle') }}</h2>
       <p class="mt-2 text-lg">{{ t('privacy.qrDialogBody') }}</p>
 
       <svg
@@ -123,7 +126,7 @@ watch(
 
       <button
         type="button"
-        class="kiosk-touch mt-6 w-full rounded-lg bg-slate-900 px-6 text-lg font-semibold text-slate-50"
+        class="kiosk-touch mt-6 w-full rounded-kq-sm bg-kq-primary-strong px-6 text-lg font-semibold text-kq-on-primary"
         @click="closeDialog"
       >
         {{ t('privacy.close') }}

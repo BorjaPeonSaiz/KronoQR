@@ -106,6 +106,42 @@ const total = (entries) => entries.reduce((sum, entry) => sum + entry.size, 0)
 const criticalJs = total(critical.js)
 const criticalCss = total(critical.css)
 
+// Presupuesto del precacheo de fuentes (doc 02 §6, RF-KI-01): el quiosco tiene
+// que arrancar SIN red con Poppins e Inter, no con la pila de respaldo del
+// sistema. `vite.config.ts` restringe Workbox a `**/*-latin-*.woff2`
+// precisamente para no arrastrar los subconjuntos que KronoQR no usa
+// (cyrillic, greek, devanagari...); si @fontsource cambia algun dia el nombre
+// de fichero y ese glob deja de casar con nada, el build sigue en verde y el
+// quiosco arranca en fuente de respaldo sin que nadie se entere hasta que
+// alguien lo note en la tablet, a las 06:00 y sin conexion. Se comprueba aqui,
+// leyendo el manifiesto de precacheo real que genero Workbox.
+const swPath = path.join(distDir, 'sw.js')
+if (!existsSync(swPath)) {
+  fail(
+    'No existe dist/sw.js: el service worker no se ha generado.',
+    'revisa que `VitePWA` siga usando la estrategia `generateSW` en vite.config.ts.',
+  )
+}
+const swContent = readFileSync(swPath, 'utf8')
+const precachedUrls = [...swContent.matchAll(/url:"([^"]+)"/g)].map((match) => match[1])
+const precachedWoff2 = precachedUrls.filter((url) => url.endsWith('.woff2'))
+const missingFamilies = [
+  ['Poppins', /poppins/i],
+  ['Inter', /inter/i],
+].filter(([, pattern]) => !precachedWoff2.some((url) => pattern.test(url)))
+
+if (missingFamilies.length > 0) {
+  fail(
+    'El precacheo del quiosco (dist/sw.js) no incluye ningun .woff2 de ' +
+      missingFamilies.map(([name]) => name).join(' ni ') +
+      '.',
+    'revisa el glob `**/*-latin-*.woff2` de `workbox.globPatterns` en ' +
+      'vite.config.ts contra los ficheros que genera @kronoqr/web-kit/fonts.css: ' +
+      'si @fontsource cambio el nombre, el quiosco arrancara sin red con la ' +
+      'tipografia de respaldo del sistema.',
+  )
+}
+
 const report = (title, entries) => {
   if (entries.length === 0) return
   process.stdout.write('  ' + title + '\n')

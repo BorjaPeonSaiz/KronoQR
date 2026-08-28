@@ -181,6 +181,18 @@ describe('aviso de privacidad (RF-KI-09, RL-09)', () => {
     expect(wrapper.text()).toContain('Data protection notice')
     expect(wrapper.text()).toContain('Legal basis')
   })
+
+  it('mantiene el objetivo tactil de 48 px en los controles aunque el texto sea pequeno', () => {
+    const wrapper = mount(PrivacyNoticePanel, {
+      props: { config },
+      global: { plugins: [createAppI18n('es')] },
+    })
+
+    const link = wrapper.find('a')
+    const button = wrapper.find('button')
+    expect(link.classes()).toContain('kiosk-touch')
+    expect(button.classes()).toContain('kiosk-touch')
+  })
 })
 
 describe('configuracion del aviso', () => {

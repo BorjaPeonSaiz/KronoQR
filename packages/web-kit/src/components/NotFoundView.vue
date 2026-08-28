@@ -27,11 +27,11 @@ const { t } = useI18n()
 
 <template>
   <section>
-    <h1 class="text-2xl font-bold">{{ t('notFound.heading') }}</h1>
-    <p class="mt-2 max-w-prose text-slate-700">{{ t('notFound.description') }}</p>
+    <h1 class="text-2xl font-bold font-heading">{{ t('notFound.heading') }}</h1>
+    <p class="mt-2 max-w-prose text-kq-text-muted">{{ t('notFound.description') }}</p>
     <RouterLink
       :to="{ name: backToRouteName }"
-      class="mt-4 inline-block rounded bg-slate-900 px-4 py-2 font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+      class="mt-4 inline-block rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary"
     >
       {{ t(backToLabelKey) }}
     </RouterLink>

@@ -39,24 +39,24 @@ async function signOut(): Promise<void> {
 </script>
 
 <template>
-  <div class="min-h-dvh bg-slate-100 text-slate-900">
+  <div class="min-h-dvh bg-kq-surface text-kq-text">
     <a
       href="#main"
-      class="sr-only rounded bg-slate-900 px-3 py-2 text-white focus:not-sr-only focus:absolute focus:top-2 focus:left-2"
+      class="sr-only rounded-kq-sm bg-kq-primary-strong px-3 py-2 text-kq-on-primary focus:not-sr-only focus:absolute focus:top-2 focus:left-2"
     >
       {{ t('app.skipToContent') }}
     </a>
 
-    <header class="border-b border-slate-300 bg-white">
+    <header class="border-b border-kq-border bg-kq-surface-raised">
       <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 p-4">
-        <p class="text-lg font-semibold">{{ t('app.title') }}</p>
+        <p class="font-heading text-lg font-bold text-kq-primary-strong">{{ t('app.title') }}</p>
         <nav :aria-label="t('app.nav.label')">
           <ul class="flex gap-2">
             <li v-for="item of navigation" :key="item.name">
               <RouterLink
                 :to="{ name: item.name }"
-                class="rounded px-3 py-2 hover:bg-slate-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
-                active-class="bg-slate-900 text-white hover:bg-slate-800"
+                class="rounded-kq-sm px-3 py-2 hover:bg-kq-surface-alt"
+                active-class="bg-kq-primary-strong text-kq-on-primary hover:brightness-95"
               >
                 {{ item.label }}
               </RouterLink>
@@ -64,12 +64,12 @@ async function signOut(): Promise<void> {
           </ul>
         </nav>
         <div class="flex items-center gap-3">
-          <p class="text-sm text-slate-700">
+          <p class="text-sm text-kq-text-muted">
             {{ t('app.signedInAs', { name: session.displayName, roles: roleLabels }) }}
           </p>
           <button
             type="button"
-            class="rounded border border-slate-400 px-3 py-2 hover:bg-slate-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+            class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text hover:bg-kq-surface-alt"
             @click="signOut"
           >
             {{ t('app.signOut') }}

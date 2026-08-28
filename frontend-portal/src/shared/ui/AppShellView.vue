@@ -22,24 +22,35 @@ async function signOut(): Promise<void> {
 </script>
 
 <template>
-  <div class="min-h-dvh bg-slate-100 text-slate-900">
+  <div class="min-h-dvh bg-kq-surface text-kq-text">
     <a
       href="#main"
-      class="sr-only rounded bg-slate-900 px-3 py-2 text-white focus:not-sr-only focus:absolute focus:top-2 focus:left-2"
+      class="sr-only rounded-kq-sm bg-kq-primary-strong px-3 py-2 text-kq-on-primary focus:not-sr-only focus:absolute focus:top-2 focus:left-2"
     >
       {{ t('app.skipToContent') }}
     </a>
 
-    <header class="border-b border-slate-300 bg-white">
-      <div class="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-4 p-4">
-        <p class="text-lg font-semibold">{{ t('app.title') }}</p>
+    <header class="border-b border-kq-border bg-kq-surface-raised">
+      <div
+        class="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-4 p-4 lg:w-[88%] lg:max-w-none 2xl:max-w-[1600px]"
+      >
+        <!--
+          Por debajo de 1024 px se mantiene el `max-w-3xl` de siempre. A partir de
+          `lg` la cabecera y el contenido comparten el mismo ancho -al menos el
+          80% de la ventana- para que un monitor de escritorio no deje el
+          registro horario apretado en la mitad izquierda de la pantalla. El
+          tope en `2xl` evita lineas de texto interminables en monitores
+          ultrapanoramicos sin bajar del 80% hasta los 2000 px de ancho.
+        -->
+
+        <p class="font-heading text-lg font-bold text-kq-primary-strong">{{ t('app.title') }}</p>
         <nav :aria-label="t('app.nav.label')">
           <ul class="flex gap-2">
             <li>
               <RouterLink
                 :to="{ name: 'my-records' }"
-                class="inline-block min-h-12 rounded px-3 py-2 text-lg hover:bg-slate-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
-                active-class="bg-slate-900 text-white hover:bg-slate-800"
+                class="inline-block min-h-12 rounded-kq-sm px-3 py-2 text-lg hover:bg-kq-surface-alt"
+                active-class="bg-kq-primary-strong text-kq-on-primary hover:bg-kq-primary-strong"
               >
                 {{ t('app.nav.myRecords') }}
               </RouterLink>
@@ -47,8 +58,8 @@ async function signOut(): Promise<void> {
             <li>
               <RouterLink
                 :to="{ name: 'my-export' }"
-                class="inline-block min-h-12 rounded px-3 py-2 text-lg hover:bg-slate-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
-                active-class="bg-slate-900 text-white hover:bg-slate-800"
+                class="inline-block min-h-12 rounded-kq-sm px-3 py-2 text-lg hover:bg-kq-surface-alt"
+                active-class="bg-kq-primary-strong text-kq-on-primary hover:bg-kq-primary-strong"
               >
                 {{ t('app.nav.myExport') }}
               </RouterLink>
@@ -56,12 +67,12 @@ async function signOut(): Promise<void> {
           </ul>
         </nav>
         <div class="flex items-center gap-3">
-          <p v-if="session.employee !== null" class="text-base text-slate-700">
+          <p v-if="session.employee !== null" class="text-base text-kq-text-muted">
             {{ t('app.signedInAs', { name: session.employee.display_name }) }}
           </p>
           <button
             type="button"
-            class="min-h-12 rounded border border-slate-400 px-3 py-2 text-lg hover:bg-slate-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+            class="min-h-12 rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-lg text-kq-text hover:bg-kq-surface-alt"
             @click="signOut"
           >
             {{ t('app.signOut') }}
@@ -74,7 +85,7 @@ async function signOut(): Promise<void> {
          mover el foco (WCAG 2.2 AA, 4.1.3). -->
     <p role="status" aria-live="polite" class="sr-only">{{ announcement }}</p>
 
-    <main id="main" class="mx-auto max-w-3xl p-4">
+    <main id="main" class="mx-auto max-w-3xl p-4 lg:w-[88%] lg:max-w-none 2xl:max-w-[1600px]">
       <RouterView />
     </main>
   </div>

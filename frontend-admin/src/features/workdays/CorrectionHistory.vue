@@ -138,30 +138,32 @@ const items = computed<CorrectionView[]>(() =>
   <section>
     <h3 class="text-lg font-semibold">{{ t('workdays.history.heading') }}</h3>
 
-    <p v-if="corrections.length === 0" data-test="history-empty" class="mt-2 text-slate-700">
+    <p v-if="corrections.length === 0" data-test="history-empty" class="mt-2 text-kq-text-muted">
       {{ t('workdays.history.empty') }}
     </p>
 
     <template v-else>
-      <p class="mt-1 max-w-prose text-slate-700">{{ t('workdays.history.notice') }}</p>
+      <p class="mt-1 max-w-prose text-kq-text-muted">{{ t('workdays.history.notice') }}</p>
 
       <ol class="mt-3 flex flex-col gap-4">
         <li
           v-for="item of items"
           :key="item.key"
           data-test="correction"
-          class="rounded border border-slate-300 bg-white p-4"
+          class="rounded-kq border border-kq-border bg-kq-surface-raised p-4"
         >
           <h4 class="font-semibold">{{ t(`corrections.action.${item.action}`) }}</h4>
-          <p class="text-slate-700">
+          <p class="text-kq-text-muted">
             {{ t('workdays.history.by', { author: item.author, moment: item.moment }) }}
-            <span class="text-slate-600">({{ item.zoneLabel }})</span>
+            <span class="text-kq-text-muted">({{ item.zoneLabel }})</span>
           </p>
           <p class="mt-1">
             <span class="font-medium">{{ t('workdays.history.reason') }}:</span>
             {{ item.reason }}
           </p>
-          <p v-if="item.reasonText !== null" class="mt-1 text-slate-700">{{ item.reasonText }}</p>
+          <p v-if="item.reasonText !== null" class="mt-1 text-kq-text-muted">
+            {{ item.reasonText }}
+          </p>
 
           <ChangePreview
             class="mt-3"
@@ -171,7 +173,7 @@ const items = computed<CorrectionView[]>(() =>
             :to-label="t('workdays.history.after')"
           />
 
-          <p class="mt-2 font-mono text-sm text-slate-600">
+          <p class="mt-2 font-mono text-sm text-kq-text-muted">
             {{ t('workdays.history.entry', { uuid: item.entryUuid }) }}
           </p>
         </li>

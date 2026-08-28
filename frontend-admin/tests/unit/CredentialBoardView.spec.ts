@@ -19,6 +19,25 @@ function buttonWith(wrapper: Wrapper, label: string): DOMWrapper<Element> {
   return found
 }
 
+/**
+ * Selecciona la opcion «solo quien todavia no tiene la tarjeta en la mano»
+ * del select de estado. Localiza la opcion por su texto en vez de por su
+ * valor interno (`__pending_only__`): las pruebas describen lo que ve quien
+ * usa el panel, no un detalle de implementacion del componente.
+ */
+async function selectPendingOnly(wrapper: Wrapper): Promise<void> {
+  const select = wrapper.find('#credentials-status-filter')
+  const option = select
+    .findAll('option')
+    .find((candidate) => candidate.text() === es.credentials.filters.pendingOnly)
+
+  if (option === undefined) {
+    throw new Error('No se encuentra la opcion "pendiente de tarjeta" en el select de estado')
+  }
+
+  await select.setValue((option.element as HTMLOptionElement).value)
+}
+
 function pdfResponse(count: number): Response {
   return new Response('%PDF-1.7', {
     status: 200,
@@ -165,6 +184,21 @@ describe('CredentialBoardView', () => {
     expect(dialog.text()).toContain(es.credentials.status.delivered)
   })
 
+  it('el anuncio de la accion es el ultimo en la region viva, no el recuento del refresco posterior', async () => {
+    const wrapper = await mountBoard([boardRow({ status: 'pending_delivery' })])
+
+    await buttonWith(wrapper, es.credentials.actions.deliver).trigger('click')
+    await settle(1)
+    await buttonWith(wrapper, es.credentials.confirm.deliver.action).trigger('click')
+    await settle()
+
+    // `refreshBoard()` recarga el panel tras la entrega. El recuento de filas
+    // visibles no cambia (sigue habiendo una), asi que el ultimo anuncio debe
+    // seguir siendo la confirmacion de la entrega, no un "Resultados: 1" que
+    // nadie ha pedido.
+    expect(announcement.value).toBe('Entrega de la tarjeta de Lucia Martinez Prieto registrada.')
+  })
+
   it('no deja revocar sin un motivo del catalogo', async () => {
     const wrapper = await mountBoard([boardRow({ status: 'pending_delivery' })])
 
@@ -247,10 +281,107 @@ describe('CredentialBoardView', () => {
   it('explica el vacio cuando ya todo el mundo tiene su tarjeta', async () => {
     const wrapper = await mountBoard([])
 
-    await wrapper.find('input[type="checkbox"]').setValue(true)
+    await selectPendingOnly(wrapper)
     await settle()
 
     expect(wrapper.text()).toContain(es.credentials.empty.allDelivered)
+  })
+
+  it('filtra las filas por estado en el cliente, sin volver a pedir al servidor (RF-QR-08)', async () => {
+    const spy = stubFetch(
+      routes([
+        boardRow({ employee_uuid: 'a', status: 'pending_print' }),
+        boardRow({ employee_uuid: 'b', status: 'delivered' }),
+      ]),
+    )
+
+    const wrapper = await mountView(CredentialBoardView)
+
+    await settle()
+    const callsBefore = spy.mock.calls.length
+
+    await wrapper.find('#credentials-status-filter').setValue('delivered')
+    await settle()
+
+    expect(wrapper.findAll('tbody tr')).toHaveLength(1)
+    expect(wrapper.find('tbody tr').text()).toContain(es.credentials.status.delivered)
+    expect(spy.mock.calls.length).toBe(callsBefore)
+  })
+
+  it('la busqueda ignora mayusculas y acentos (RF-QR-08)', async () => {
+    const wrapper = await mountBoard([
+      boardRow({ employee_uuid: 'a', full_name: 'García Núñez' }),
+      boardRow({ employee_uuid: 'b', full_name: 'Otra Persona' }),
+    ])
+
+    await wrapper.find('#credentials-search-filter').setValue('GARCIA nunez')
+    await settle()
+
+    expect(wrapper.findAll('tbody tr')).toHaveLength(1)
+    expect(wrapper.text()).toContain('García Núñez')
+  })
+
+  it('el filtro de departamento usa los nombres presentes en las filas (RF-QR-08)', async () => {
+    const wrapper = await mountBoard([
+      boardRow({ employee_uuid: 'a', department_name: 'Cocina' }),
+      boardRow({ employee_uuid: 'b', department_name: 'Recepcion' }),
+    ])
+
+    await wrapper.find('#credentials-department-filter').setValue('Cocina')
+    await settle()
+
+    expect(wrapper.findAll('tbody tr')).toHaveLength(1)
+    expect(wrapper.text()).toContain('Cocina')
+  })
+
+  it('pagina en el cliente de 25 en 25 y avanza a la siguiente pagina (RF-QR-08)', async () => {
+    const rows = Array.from({ length: 30 }, (_, index) =>
+      boardRow({
+        employee_uuid: `row-${index}`,
+        employee_code: `CODE${index}`,
+        full_name: `Persona ${index}`,
+      }),
+    )
+
+    const wrapper = await mountBoard(rows)
+
+    expect(wrapper.findAll('tbody tr')).toHaveLength(25)
+    expect(wrapper.text()).toContain('1–25 de 30')
+
+    await wrapper.findAll('nav button')[1]?.trigger('click')
+    await settle()
+
+    expect(wrapper.findAll('tbody tr')).toHaveLength(5)
+  })
+
+  it('«pendiente de tarjeta» es una opcion mas del select de estado, sin control deshabilitado que nadie con teclado o lector de pantalla pueda alcanzar (RF-QR-08)', async () => {
+    const spy = stubFetch(routes([boardRow({ status: 'pending_print' })]))
+
+    const wrapper = await mountView(CredentialBoardView)
+
+    await settle()
+    await selectPendingOnly(wrapper)
+    await settle()
+
+    // Va al servidor, como `site`: acota tambien el resumen y el lote de
+    // impresion, cosa que un filtro solo-en-cliente no podria hacer.
+    const urls = spy.mock.calls.map((call) => String(call[0]))
+
+    expect(urls.some((url) => url.includes('pending=true'))).toBe(true)
+
+    // Ningun control queda deshabilitado ni con `title` como unico aviso: no
+    // hay exclusion que anunciar, es una opcion mas.
+    expect(wrapper.find('#credentials-status-filter').attributes('disabled')).toBeUndefined()
+    expect(wrapper.find('input[type="checkbox"]').exists()).toBe(false)
+  })
+
+  it('el vacio filtrado es distinto del vacio real (RF-QR-08)', async () => {
+    const wrapper = await mountBoard([boardRow({ full_name: 'Lucia Martinez' })])
+
+    await wrapper.find('#credentials-search-filter').setValue('nadie encaja con esto')
+    await settle()
+
+    expect(wrapper.text()).toContain(es.credentials.empty.filtered)
   })
 
   it('cuenta que ha pasado si el panel no se puede cargar', async () => {

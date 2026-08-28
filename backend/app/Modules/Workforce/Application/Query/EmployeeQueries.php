@@ -51,12 +51,13 @@ final readonly class EmployeeQueries
         ?int $siteId,
         ?int $departmentId,
         ?EmploymentStatus $status,
+        ?string $search,
         int $page,
         int $perPage,
     ): array {
-        $total = $this->employees->countMatching($siteId, $departmentId, $status);
+        $total = $this->employees->countMatching($siteId, $departmentId, $status, $search);
 
-        $items = $this->employees->search($siteId, $departmentId, $status, $perPage, ($page - 1) * $perPage);
+        $items = $this->employees->search($siteId, $departmentId, $status, $search, $perPage, ($page - 1) * $perPage);
 
         // Antes de devolver, no despues: si la escritura de auditoria falla, la
         // divulgacion no ocurre (regla dura 6, ADR-027). El recuento es el de las
@@ -66,6 +67,15 @@ final readonly class EmployeeQueries
             ...($siteId === null ? [] : ['site_id' => $siteId]),
             ...($departmentId === null ? [] : ['department_id' => $departmentId]),
             'status' => $status === null ? 'any' : $status->value,
+            // **El termino NO se guarda, solo si lo hubo.** Quien busca en el
+            // panel escribe el nombre de una persona, asi que el termino es un
+            // dato personal: escribirlo en `audit_log` seria copiar nombres a la
+            // tabla de cuatro años de retencion que se enseña en una inspeccion
+            // (regla dura 21, y el criterio de este mismo fichero de registrar
+            // el alcance y nunca lo divulgado). Para acotar una brecha (RL-15)
+            // basta con saber que la pagina salio de una busqueda: el recuento
+            // de filas ya dice cuanto se llevo.
+            'search' => $search !== null,
             'page' => $page,
             'per_page' => $perPage,
         ]);

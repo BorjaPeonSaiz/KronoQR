@@ -8,6 +8,7 @@
 
 import { expect, test } from '@playwright/test'
 import { FIXTURE_PAYLOAD, stubKioskApi, stubScanApi } from './support/kiosk'
+import { stubKioskApiWithPin } from './support/pin'
 
 test.beforeEach(async ({ page }) => {
   await stubKioskApi(page)
@@ -154,6 +155,34 @@ test(
 
     expect(stub.recorded.length).toBeLessThanOrEqual(2)
     expect(stub.recorded[0]?.scanId).toBeTruthy()
+  },
+)
+
+test(
+  'tarjeta sostenida: un unico fichaje y la instruccion (con el PIN) vuelve tras la confirmacion',
+  { tag: ['@RF-KI-02'] },
+  async ({ page }) => {
+    // El `beforeEach` empareja el quiosco sin PIN: aqui hace falta lo contrario
+    // para comprobar que el enlace de respaldo sigue accesible cuando la
+    // instalacion SI lo ofrece — y `pin_sealing_public_key` solo llega si la
+    // tablet esta emparejada (ver el comentario de `pairDevice` en
+    // `support/pin.ts`).
+    await stubKioskApiWithPin(page)
+    const stub = await stubScanApi(page, { outcome: 'clock_in' })
+
+    await page.goto('/')
+    await expect(page.getByTestId('scan-confirmation')).toBeVisible()
+    await expect.poll(() => stub.recorded.length).toBeGreaterThan(0)
+
+    // El video de la camara falsa esta en bucle: la tarjeta sigue delante del
+    // objetivo mucho mas alla de lo que dura la confirmacion en pantalla
+    // (CONFIRMATION_DISPLAY_MS.accepted = 4000 ms). El mecanismo de "tarjeta
+    // sostenida" (HELD_GAP_MS) tiene que seguir absorbiendo cada relectura.
+    await expect(page.getByTestId('scan-idle')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByTestId('pin-entry-link')).toBeEnabled()
+
+    // Ni un fichaje mas mientras la tarjeta siga en el objetivo.
+    expect(stub.recorded.length).toBe(1)
   },
 )
 

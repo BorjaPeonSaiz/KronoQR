@@ -61,7 +61,7 @@
     "srAnnouncement": "Resultado del escaneo"
   },
   "pin": {
-    "entryButton": "¿Sin tarjeta? Ficha con tu código y PIN",
+    "entryButton": "Ficha con tu código y PIN",
     "title": "Fichaje con código y PIN",
     "backToCard": "Volver a la tarjeta",
     "code": {

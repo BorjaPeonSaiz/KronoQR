@@ -6,7 +6,10 @@ defineProps<{ label: string }>()
 </script>
 
 <template>
-  <p role="status" class="rounded-md border border-slate-200 bg-white p-4 text-slate-700">
+  <p
+    role="status"
+    class="rounded-kq border border-kq-border bg-kq-surface-raised p-4 text-kq-text-muted"
+  >
     {{ label }}
   </p>
 </template>

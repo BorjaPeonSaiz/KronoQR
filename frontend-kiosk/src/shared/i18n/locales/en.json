@@ -61,7 +61,7 @@
     "srAnnouncement": "Scan result"
   },
   "pin": {
-    "entryButton": "No card? Clock in with your code and PIN",
+    "entryButton": "Clock in with your code and PIN",
     "title": "Clock in with code and PIN",
     "backToCard": "Back to card",
     "code": {

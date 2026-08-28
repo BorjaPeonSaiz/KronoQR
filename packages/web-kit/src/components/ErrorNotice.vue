@@ -24,7 +24,7 @@ const fields = computed(() => Object.entries(apiError.value.fieldErrors))
 </script>
 
 <template>
-  <div role="alert" class="rounded-md border border-red-300 bg-red-50 p-4 text-red-900">
+  <div role="alert" class="rounded-kq border border-kq-danger bg-kq-danger-soft p-4 text-kq-danger">
     <p class="font-semibold">{{ t(apiError.titleKey) }}</p>
     <p class="mt-1">{{ t(apiError.adviceKey) }}</p>
     <p v-if="apiError.retryAfterSeconds !== null" class="mt-1">

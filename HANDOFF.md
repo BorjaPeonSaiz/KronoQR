@@ -1,5 +1,28 @@
 # HANDOFF
 
+## Sesión de UI/UX y buscadores (28-08-2026)
+
+**Rama `feat/ui-ux-panel-portal-quiosco`, 8 commits convencionales sobre `main` (`fd46569`), sin push.** Ejecutado en tres oleadas de agentes en paralelo con ficheros disjuntos, revisión de `revisor-codigo` en medio (0 bloqueantes, 9 importantes — todos corregidos salvo dos que chocaban con decisiones explícitas del usuario, ver abajo) y verificación conjunta final en verde: `web-kit` 137 · panel 171 · portal 69 · quiosco 300 unitarias + 33 E2E (axe limpio, bundle crítico 100,7/250 KiB) · backend `make quality` y `make test` **1635 pruebas / 8729 aserciones** · `qa:traceability --check` y `docs:consistency --check` en verde.
+
+**Hecho:**
+
+1. **Agente nuevo `ui-ux`** (`.claude/agents/ui-ux.md`, registrado en doc 03): sistema visual, contraste medido, disposición y coherencia entre SPA.
+2. **Sistema visual compartido** en `packages/web-kit` (`theme.css` + `base.css` + `fonts.css`, `contrast.ts`, `themePairs.ts`): paleta cálida del fabricante (kodigolab.es: terracota `#d66c3a`/`#b8542a`, crema `#fff7ed`, texto `#3a2e28`, Poppins/Inter **autoalojadas** con `@fontsource`, radio 14 px). Tokens `--kq-*` expuestos con `@theme inline` para que **la tarea 5.8 (marca blanca) los sobreescriba en tiempo de ejecución** sin recompilar. `theme.spec.ts` mide WCAG AA de cada pareja declarada (blanco sobre `#d66c3a` falla, 3,46:1 → los botones sólidos usan `primary-strong #b8542a`, 4,84:1). Guía en `docs/06-guia-visual.md`, enlazada desde `CLAUDE.md`. Aplicado a las tres SPA: cero `slate-*`/hex sueltos. Los cinco colores de confirmación del quiosco no son marca y no se tocan.
+3. **Quiosco**: enlace PIN bajo el subtítulo de instrucciones (texto «Ficha con tu código y PIN», estilo secundario) y repetido como única vía en `camera-failure`; aviso art. 13 a la mitad de alto sin recortar contenido; precaché de fuentes limitado a latin y verificado por `check-bundle-budget.mjs`. **Cambio de comportamiento en `scanPipeline.ts`**: tarjeta sostenida delante de la cámara se detecta por flanco (`HELD_GAP_MS = 2000`, cadencia de ZXing 800 ms) — antes reiniciaba la confirmación cada 2,5 s y la pantalla de instrucciones no volvía; `LOCAL_REPEAT_WINDOW_MS` sigue en 2500.
+4. **Panel**: `PaginationBar` reutilizable (en `frontend-admin/src/shared/ui`, no en web-kit: el portal no pagina, ADR-036); plantilla con cuadro nombre/código (`q`, debounce 300 ms, `maxlength` 100), selects de estado/centro/departamento con valores reales, estado del PIN filtrado en cliente con aviso, filtros en la query string y página acotada al total; credenciales con filtrado y paginación **en cliente** (el contrato no pagina a propósito), «pendiente de tarjeta» como opción del select de estado (`pending=true` al servidor).
+5. **Backend**: `pending` de `GET /credentials/status` acepta `true/false` (era el 422 «must be true or false»); **`GET /employees?q=`** nuevo en contrato y código, insensible a mayúsculas **y acentos** (extensión `unaccent`, migración `2026_08_28_100000`, reversible, verificada en ambos sentidos); comodines escapados; auditoría guarda `search: bool`, nunca el término (regla dura 21).
+6. **Portal**: contenedor `lg:w-[88%] 2xl:max-w-[1600px]`; jornadas en una columna (orden cronológico).
+
+**No hecho, a propósito:**
+
+- **Enviar por correo el PDF de la tarjeta al generarlo — descartado por el usuario (28-08-2026): no se ejecuta ese cambio.** Contradecía la regla dura 11 / ADR-014 (el plan lo repite en 2.12 y 5.6: «no hay envío por correo… no manda credenciales por correo») y roza la 12. Además «al usuario» es ambiguo: ¿al empleado (no tiene correo obligatorio, y la credencial dejaría de ser solo física) o al usuario de gestión que imprime (tiene correo, pero la tarjeta firmada quedaría en un buzón)? Sigue vigente el ADR-014 sin matices.
+- Dos hallazgos de `revisor-codigo` chocan con lo pedido y se dejaron como pidió el usuario: el enlace PIN dentro del bloque de instrucciones **no se ve mientras hay una confirmación en pantalla** (3,5–5 s); y el texto sin el calificador «¿Sin tarjeta?» puede hacer que el PIN se use por comodidad (cada fichaje por PIN se marca para revisión, RF-AT-11). Se mitigó con estilo secundario. Si el uso del PIN sube, revisar.
+
+**Pendiente menor:** integración que afirme que `unaccent` está instalada (hoy si se revierte la migración fallan 10 feature con un error SQL confuso); casos `ß`/ligaduras; E2E del panel (`frontend-admin/tests/e2e` no existe aún); el filtro de estado del PIN de plantilla es de la página visible — llevarlo al contrato si se usa; `HELD_GAP_MS` conviene medirlo en tablet real; el enlace «Volver a la plantilla» de la ficha no conserva los filtros (el botón atrás sí).
+
+**Siguiente acción:** abrir PR de `feat/ui-ux-panel-portal-quiosco` a `main`.
+
+
 ## Sesión de auditoría y corrección (27-08-2026, posterior al cierre)
 
 **Auditoría independiente de la Fase 1 ejecutada y publicada** (informe artifact: <https://claude.ai/code/artifact/271dbcba-2a1c-4d7c-a264-e89c09deac96>). Todas las puertas re-ejecutadas en vivo y en verde con los números declarados (1585→1592 pruebas, cobertura 91,54 %/85,1 %, MSI 84,04 %, E2E 32, audits limpios). Veredicto: implementación sólida; dos afirmaciones del cierre no se sostenían — la CI de GitHub **no podía estar en verde** desde mitad de la fase (job ③ sin PostgreSQL para las suites Feature/Contract, timeout 8 min < mutación ~25 min) y **p95 <150 ms no tenía ninguna evidencia** (k6 inexistente).

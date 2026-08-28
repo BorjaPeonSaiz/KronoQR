@@ -42,6 +42,16 @@
       "field": "Field",
       "from": "Current value",
       "to": "New value"
+    },
+    "pagination": {
+      "summary": "{from}–{to} of {total}",
+      "page": "Page {page} of {pages}",
+      "previous": "Previous",
+      "next": "Next"
+    },
+    "filters": {
+      "clear": "Clear filters",
+      "clearSearch": "Clear search"
     }
   },
   "errors": {
@@ -105,10 +115,17 @@
     },
     "filters": {
       "legend": "Workforce filters",
+      "search": "Name or employee code",
+      "searchPlaceholder": "Search by name or code…",
       "status": "Employment status",
       "statusAll": "All, including former staff",
       "site": "Site",
-      "siteAll": "All sites"
+      "siteAll": "All sites",
+      "department": "Department",
+      "departmentAll": "All departments",
+      "pinStatus": "PIN state",
+      "pinStatusAll": "Any PIN state",
+      "pinStatusHint": "Applies only to the page you are currently viewing, not the whole workforce."
     },
     "status": {
       "active": "Active",
@@ -130,11 +147,7 @@
       "pinStatus": "PIN state"
     },
     "pagination": {
-      "label": "Workforce pagination",
-      "summary": "{from}–{to} of {total}",
-      "page": "Page {page} of {pages}",
-      "previous": "Previous",
-      "next": "Next"
+      "label": "Workforce pagination"
     },
     "fields": {
       "site": "Site",
@@ -250,8 +263,15 @@
     "loading": "Loading credential status…",
     "filters": {
       "legend": "Credential board filters",
+      "search": "Name or employee code",
+      "searchPlaceholder": "Search by name or code…",
       "site": "Site",
       "siteAll": "All sites",
+      "department": "Department",
+      "departmentAll": "All departments",
+      "departmentNone": "No department",
+      "status": "Card status",
+      "statusAll": "Any status",
       "pendingOnly": "Only people who do not hold their card yet"
     },
     "summary": {
@@ -261,7 +281,11 @@
     "empty": {
       "title": "There are no rows to show",
       "description": "Nobody is active within the chosen scope.",
-      "allDelivered": "Everyone within the chosen scope already holds their card."
+      "allDelivered": "Everyone within the chosen scope already holds their card.",
+      "filtered": "Nobody matches the filters you chose. Try clearing them."
+    },
+    "pagination": {
+      "label": "Credential board pagination"
     },
     "table": {
       "caption": "Card status per person. Times are shown in the time zone of each site.",
@@ -341,7 +365,8 @@
       "delivered": "Card handover for {name} recorded.",
       "revoked": "Credential for {name} revoked.",
       "batchEmpty": "There was no card waiting to be printed within the chosen scope.",
-      "batchPrinted": "Sheet generated. Cards included: {count}."
+      "batchPrinted": "Sheet generated. Cards included: {count}.",
+      "results": "Credential board results: {count}."
     }
   },
   "corrections": {

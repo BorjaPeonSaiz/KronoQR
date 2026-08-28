@@ -9,27 +9,71 @@
 // El listado NO esconde a los cesados por defecto: el historico se conserva
 // cuatro años (RL-02) y una inspeccion viene a mirar justo eso. Quien quiera ver
 // solo a los activos lo pide con el filtro, que esta a la vista.
+//
+// Los filtros viven en la query string de la ruta: un enlace copiado, o el
+// boton «volver» del navegador desde la ficha de un empleado, reproducen la
+// misma busqueda (mismo patron que ya usa el panel de credenciales con
+// `site`).
 import { announce } from '@kronoqr/web-kit/announcer'
 import EmptyState from '@kronoqr/web-kit/components/EmptyState.vue'
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
-import { computed, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { keepPreviousData, useQuery } from '@tanstack/vue-query'
 import { listDepartments, listSites } from '@/shared/api/organisation.api'
-import type { EmployeeProvisioned, EmploymentStatus } from '@/shared/api/types'
+import type { EmployeeProvisioned, EmploymentStatus, PinStatus } from '@/shared/api/types'
+import PaginationBar from '@/shared/ui/PaginationBar.vue'
 import EmployeeCreateDialog from './EmployeeCreateDialog.vue'
 import PinRevealDialog from './PinRevealDialog.vue'
 import { listEmployees } from './employees.api'
 
 const PER_PAGE = 25
+const SEARCH_DEBOUNCE_MS = 300
+const EMPLOYMENT_STATUSES: readonly EmploymentStatus[] = ['active', 'suspended', 'terminated']
+const PIN_STATUSES: readonly PinStatus[] = ['pending', 'issued', 'delivered']
 
 const { t } = useI18n()
+const route = useRoute()
+const router = useRouter()
 
-const page = ref(1)
-const statusFilter = ref<EmploymentStatus | ''>('')
-const siteFilter = ref<number | ''>('')
+function queryParam(key: string): string {
+  const raw = route.query[key]
+
+  return typeof raw === 'string' ? raw : ''
+}
+
+function queryInt(key: string): number | '' {
+  const parsed = Number.parseInt(queryParam(key), 10)
+
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : ''
+}
+
+const initialPage = queryInt('page')
+const page = ref(initialPage === '' ? 1 : initialPage)
+
+const initialQ = queryParam('q')
+// `searchInput` es lo que teclea la persona; `qFilter` es lo que de verdad se
+// manda al servidor, con debounce. Separarlos evita una peticion por tecla.
+const searchInput = ref(initialQ)
+const qFilter = ref(initialQ)
+
+const initialStatus = queryParam('status')
+const statusFilter = ref<EmploymentStatus | ''>(
+  (EMPLOYMENT_STATUSES as readonly string[]).includes(initialStatus)
+    ? (initialStatus as EmploymentStatus)
+    : '',
+)
+
+const siteFilter = ref<number | ''>(queryInt('site'))
+const departmentFilter = ref<number | ''>(queryInt('department'))
+
+// Estado del PIN: el contrato no lo filtra en el servidor. Se filtra sobre la
+// pagina ya cargada y la interfaz lo advierte (ver `pinStatusHint` mas abajo):
+// es peor UX un select que promete algo que solo mira 25 filas sin decirlo,
+// que uno que lo dice.
+const pinStatusFilter = ref<PinStatus | ''>('')
 
 const creating = ref(false)
 
@@ -44,11 +88,20 @@ const { data: departments } = useQuery({
   queryFn: () => listDepartments(),
 })
 
+const allDepartments = computed(() => departments.value?.data ?? [])
+const departmentOptions = computed(() =>
+  siteFilter.value === ''
+    ? allDepartments.value
+    : allDepartments.value.filter((department) => department.site_id === siteFilter.value),
+)
+
 const query = computed(() => ({
   page: page.value,
   perPage: PER_PAGE,
+  ...(qFilter.value === '' ? {} : { q: qFilter.value }),
   ...(statusFilter.value === '' ? {} : { status: statusFilter.value }),
   ...(siteFilter.value === '' ? {} : { siteId: siteFilter.value }),
+  ...(departmentFilter.value === '' ? {} : { departmentId: departmentFilter.value }),
 }))
 
 const {
@@ -66,6 +119,27 @@ const {
 const rows = computed(() => employees.value?.data ?? [])
 const meta = computed(() => employees.value?.meta ?? null)
 
+// Una pagina favorita (`?page=4`) o un filtro que reduce el total pueden dejar
+// `page` apuntando mas alla de lo que ya existe. En cuanto el servidor
+// contesta con cuantas paginas hay de verdad, se acota aqui: sin esto la
+// vista se queda en un vacio que no es tal, sin forma de retroceder.
+watch(
+  () => meta.value?.total_pages,
+  (totalPages) => {
+    if (totalPages !== undefined && page.value > totalPages) {
+      page.value = Math.max(totalPages, 1)
+    }
+  },
+)
+
+// El filtro de estado del PIN se aplica AQUI, sobre la pagina que ya llego:
+// nunca sobre la plantilla entera, porque el servidor no la manda entera.
+const visibleRows = computed(() =>
+  pinStatusFilter.value === ''
+    ? rows.value
+    : rows.value.filter((employee) => employee.pin_status === pinStatusFilter.value),
+)
+
 const siteNames = computed(
   () => new Map((sites.value?.data ?? []).map((site) => [site.id, site.name])),
 )
@@ -73,15 +147,13 @@ const departmentNames = computed(
   () => new Map((departments.value?.data ?? []).map((item) => [item.id, item.name])),
 )
 
-const hasFilters = computed(() => statusFilter.value !== '' || siteFilter.value !== '')
-
-const rangeStart = computed(() =>
-  meta.value === null || meta.value.total === 0
-    ? 0
-    : (meta.value.page - 1) * meta.value.per_page + 1,
-)
-const rangeEnd = computed(() =>
-  meta.value === null ? 0 : Math.min(meta.value.page * meta.value.per_page, meta.value.total),
+const hasFilters = computed(
+  () =>
+    statusFilter.value !== '' ||
+    siteFilter.value !== '' ||
+    departmentFilter.value !== '' ||
+    pinStatusFilter.value !== '' ||
+    qFilter.value !== '',
 )
 
 watch(
@@ -98,10 +170,92 @@ function resetToFirstPage(): void {
 }
 
 function goToPage(next: number): void {
-  const totalPages = meta.value?.total_pages ?? 1
-
-  page.value = Math.min(Math.max(next, 1), Math.max(totalPages, 1))
+  page.value = next
 }
+
+function onSiteChange(): void {
+  // Un departamento de otro centro deja de tener sentido en cuanto se elige
+  // un centro que no es el suyo.
+  if (siteFilter.value !== '' && departmentFilter.value !== '') {
+    const chosen = allDepartments.value.find(
+      (department) => department.id === departmentFilter.value,
+    )
+
+    if (chosen === undefined || chosen.site_id !== siteFilter.value) {
+      departmentFilter.value = ''
+    }
+  }
+
+  resetToFirstPage()
+}
+
+let searchDebounce: ReturnType<typeof setTimeout> | undefined
+
+watch(searchInput, (value) => {
+  if (searchDebounce !== undefined) {
+    clearTimeout(searchDebounce)
+  }
+
+  searchDebounce = setTimeout(() => {
+    qFilter.value = value.trim()
+    resetToFirstPage()
+  }, SEARCH_DEBOUNCE_MS)
+})
+
+onUnmounted(() => {
+  if (searchDebounce !== undefined) {
+    clearTimeout(searchDebounce)
+  }
+})
+
+function clearSearch(): void {
+  if (searchDebounce !== undefined) {
+    clearTimeout(searchDebounce)
+  }
+
+  searchInput.value = ''
+  qFilter.value = ''
+  resetToFirstPage()
+}
+
+function clearFilters(): void {
+  clearSearch()
+  statusFilter.value = ''
+  siteFilter.value = ''
+  departmentFilter.value = ''
+  pinStatusFilter.value = ''
+}
+
+// La query string refleja el estado, para que un enlace copiado o el «volver»
+// del navegador reproduzcan la misma vista.
+watch(
+  [qFilter, statusFilter, siteFilter, departmentFilter, page],
+  ([q, status, site, department, currentPage]) => {
+    const nextQuery: Record<string, string> = {}
+
+    if (q !== '') {
+      nextQuery['q'] = q
+    }
+
+    if (status !== '') {
+      nextQuery['status'] = status
+    }
+
+    if (site !== '') {
+      nextQuery['site'] = String(site)
+    }
+
+    if (department !== '') {
+      nextQuery['department'] = String(department)
+    }
+
+    if (currentPage !== 1) {
+      nextQuery['page'] = String(currentPage)
+    }
+
+    void router.replace({ query: nextQuery })
+  },
+)
 
 function onCreated(result: EmployeeProvisioned): void {
   creating.value = false
@@ -130,7 +284,7 @@ function fullName(first: string, last: string): string {
 }
 
 const selectClass =
-  'rounded border border-slate-400 px-3 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900'
+  'rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text'
 </script>
 
 <template>
@@ -138,20 +292,47 @@ const selectClass =
     <div class="flex flex-wrap items-center justify-between gap-4">
       <div>
         <h1 class="text-2xl font-bold">{{ t('employees.title') }}</h1>
-        <p class="mt-1 text-slate-700">{{ t('employees.subtitle') }}</p>
+        <p class="mt-1 text-kq-text-muted">{{ t('employees.subtitle') }}</p>
       </div>
       <button
         type="button"
-        class="rounded bg-slate-900 px-4 py-2 font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+        class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary"
         @click="creating = true"
       >
         {{ t('employees.actions.create') }}
       </button>
     </div>
 
-    <form class="mt-4 flex flex-wrap items-end gap-4" @submit.prevent>
+    <form class="mt-4 flex flex-wrap items-end gap-4" role="search" @submit.prevent>
       <fieldset class="flex flex-wrap items-end gap-4 border-0 p-0">
         <legend class="sr-only">{{ t('employees.filters.legend') }}</legend>
+
+        <div class="flex flex-col gap-1">
+          <label for="employees-search-filter" class="font-medium">
+            {{ t('employees.filters.search') }}
+          </label>
+          <div class="flex items-center gap-2">
+            <input
+              id="employees-search-filter"
+              v-model="searchInput"
+              type="search"
+              maxlength="100"
+              :placeholder="t('employees.filters.searchPlaceholder')"
+              :class="selectClass"
+              @keydown.esc="clearSearch"
+            />
+            <button
+              v-if="searchInput !== ''"
+              type="button"
+              :class="selectClass"
+              class="px-2 py-2 text-sm"
+              @click="clearSearch"
+            >
+              <span aria-hidden="true">&times;</span>
+              <span class="sr-only">{{ t('common.filters.clearSearch') }}</span>
+            </button>
+          </div>
+        </div>
 
         <div class="flex flex-col gap-1">
           <label for="employees-status-filter" class="font-medium">
@@ -164,9 +345,9 @@ const selectClass =
             @change="resetToFirstPage"
           >
             <option value="">{{ t('employees.filters.statusAll') }}</option>
-            <option value="active">{{ t('employees.status.active') }}</option>
-            <option value="suspended">{{ t('employees.status.suspended') }}</option>
-            <option value="terminated">{{ t('employees.status.terminated') }}</option>
+            <option v-for="status of EMPLOYMENT_STATUSES" :key="status" :value="status">
+              {{ t(`employees.status.${status}`) }}
+            </option>
           </select>
         </div>
 
@@ -178,7 +359,7 @@ const selectClass =
             id="employees-site-filter"
             v-model="siteFilter"
             :class="selectClass"
-            @change="resetToFirstPage"
+            @change="onSiteChange"
           >
             <option value="">{{ t('employees.filters.siteAll') }}</option>
             <option v-for="site of sites?.data ?? []" :key="site.id" :value="site.id">
@@ -186,29 +367,84 @@ const selectClass =
             </option>
           </select>
         </div>
+
+        <div class="flex flex-col gap-1">
+          <label for="employees-department-filter" class="font-medium">
+            {{ t('employees.filters.department') }}
+          </label>
+          <select
+            id="employees-department-filter"
+            v-model="departmentFilter"
+            :class="selectClass"
+            @change="resetToFirstPage"
+          >
+            <option value="">{{ t('employees.filters.departmentAll') }}</option>
+            <option
+              v-for="department of departmentOptions"
+              :key="department.id"
+              :value="department.id"
+            >
+              {{ department.name }}
+            </option>
+          </select>
+        </div>
+
+        <div class="flex flex-col gap-1">
+          <label for="employees-pin-status-filter" class="font-medium">
+            {{ t('employees.filters.pinStatus') }}
+          </label>
+          <select id="employees-pin-status-filter" v-model="pinStatusFilter" :class="selectClass">
+            <option value="">{{ t('employees.filters.pinStatusAll') }}</option>
+            <option v-for="status of PIN_STATUSES" :key="status" :value="status">
+              {{ t(`pin.status.${status}`) }}
+            </option>
+          </select>
+          <p class="max-w-xs text-sm text-kq-text-muted">
+            {{ t('employees.filters.pinStatusHint') }}
+          </p>
+        </div>
       </fieldset>
+
+      <button
+        v-if="hasFilters"
+        type="button"
+        class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text hover:bg-kq-surface-alt"
+        @click="clearFilters"
+      >
+        {{ t('common.filters.clear') }}
+      </button>
     </form>
 
     <LoadingPanel v-if="isPending" :label="t('employees.loading')" class="mt-4" />
 
     <ErrorNotice v-else-if="error !== null" :error="error" class="mt-4" />
 
-    <EmptyState
-      v-else-if="rows.length === 0"
-      class="mt-4"
-      :title="t('employees.empty.title')"
-      :description="hasFilters ? t('employees.empty.filtered') : t('employees.empty.description')"
-    />
-
     <template v-else>
-      <div class="mt-4 overflow-x-auto rounded border border-slate-300 bg-white">
+      <EmptyState
+        v-if="rows.length === 0"
+        class="mt-4"
+        :title="t('employees.empty.title')"
+        :description="hasFilters ? t('employees.empty.filtered') : t('employees.empty.description')"
+      />
+
+      <EmptyState
+        v-else-if="visibleRows.length === 0"
+        class="mt-4"
+        :title="t('employees.empty.title')"
+        :description="t('employees.empty.filtered')"
+      />
+
+      <div
+        v-else
+        class="mt-4 overflow-x-auto rounded-kq border border-kq-border bg-kq-surface-raised shadow-kq-soft"
+      >
         <table class="w-full border-collapse text-left">
           <caption class="sr-only">
             {{
               t('employees.table.caption')
             }}
           </caption>
-          <thead class="border-b border-slate-300 bg-slate-50">
+          <thead class="border-b border-kq-border bg-kq-surface-alt">
             <tr>
               <th scope="col" class="px-3 py-2">{{ t('employees.table.name') }}</th>
               <th scope="col" class="px-3 py-2">{{ t('employees.table.code') }}</th>
@@ -221,11 +457,15 @@ const selectClass =
             </tr>
           </thead>
           <tbody>
-            <tr v-for="employee of rows" :key="employee.uuid" class="border-b border-slate-200">
+            <tr
+              v-for="employee of visibleRows"
+              :key="employee.uuid"
+              class="border-b border-kq-border"
+            >
               <th scope="row" class="px-3 py-2 font-medium">
                 <RouterLink
                   :to="{ name: 'employee', params: { uuid: employee.uuid } }"
-                  class="underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+                  class="text-kq-primary-strong underline"
                 >
                   {{ fullName(employee.first_name, employee.last_name) }}
                 </RouterLink>
@@ -246,43 +486,19 @@ const selectClass =
         </table>
       </div>
 
-      <nav
+      <!-- Se muestra siempre que hay respuesta del servidor, incluso con la
+           pagina visible vacia: sin la barra no habria forma de volver a la
+           pagina que si tiene filas. -->
+      <PaginationBar
         v-if="meta !== null"
-        :aria-label="t('employees.pagination.label')"
-        class="mt-4 flex flex-wrap items-center justify-between gap-3"
-      >
-        <p>
-          {{
-            t('employees.pagination.summary', {
-              from: rangeStart,
-              to: rangeEnd,
-              total: meta.total,
-            })
-          }}
-          <span v-if="isFetching" class="text-slate-500">{{ t('common.updating') }}</span>
-        </p>
-        <div class="flex gap-2">
-          <button
-            type="button"
-            class="rounded border border-slate-400 px-3 py-2 disabled:opacity-50"
-            :disabled="meta.page <= 1"
-            @click="goToPage(meta.page - 1)"
-          >
-            {{ t('employees.pagination.previous') }}
-          </button>
-          <p aria-current="page">
-            {{ t('employees.pagination.page', { page: meta.page, pages: meta.total_pages }) }}
-          </p>
-          <button
-            type="button"
-            class="rounded border border-slate-400 px-3 py-2 disabled:opacity-50"
-            :disabled="meta.page >= meta.total_pages"
-            @click="goToPage(meta.page + 1)"
-          >
-            {{ t('employees.pagination.next') }}
-          </button>
-        </div>
-      </nav>
+        :page="meta.page"
+        :per-page="meta.per_page"
+        :total="meta.total"
+        :total-pages="meta.total_pages"
+        :fetching="isFetching"
+        :label="t('employees.pagination.label')"
+        @update:page="goToPage"
+      />
     </template>
 
     <EmployeeCreateDialog

@@ -85,7 +85,7 @@ async function submit(): Promise<void> {
 }
 
 const inputClass =
-  'rounded border border-slate-400 px-3 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900'
+  'rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text'
 </script>
 
 <template>
@@ -228,13 +228,13 @@ const inputClass =
         </select>
       </FormField>
 
-      <p class="text-sm text-slate-600 sm:col-span-2">{{ t('employees.create.pinNotice') }}</p>
+      <p class="text-sm text-kq-text-muted sm:col-span-2">{{ t('employees.create.pinNotice') }}</p>
     </form>
 
     <template #actions>
       <button
         type="button"
-        class="rounded border border-slate-400 px-4 py-2"
+        class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-4 py-2 text-kq-text hover:bg-kq-surface-alt"
         @click="emit('close')"
       >
         {{ t('common.cancel') }}
@@ -244,7 +244,7 @@ const inputClass =
         form="employee-create-form"
         :disabled="submitting"
         :aria-busy="submitting"
-        class="rounded bg-slate-900 px-4 py-2 font-semibold text-white disabled:opacity-60"
+        class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary disabled:opacity-60"
       >
         {{ submitting ? t('common.saving') : t('employees.create.submit') }}
       </button>

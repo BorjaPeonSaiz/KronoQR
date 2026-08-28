@@ -1,4 +1,17 @@
 @import 'tailwindcss';
+@import '@kronoqr/web-kit/theme.css';
 
-/* Sin colores ni tipografias de cliente: la marca es configuracion (RF-PD-08,
-   tarea 5.8), nunca codigo (CLAUDE.md, regla dura 13). */
+/* Sistema visual compartido (docs/06-guia-visual.md). `@kronoqr/web-kit/theme.css`
+   trae los tokens `--kq-*`, las utilidades de Tailwind (`bg-kq-*`, `text-kq-*`,
+   `font-heading`...) y la capa base (fondo y color de `body`, encabezados,
+   foco visible, `prefers-reduced-motion`, via `base.css`). Es la MARCA POR
+   DEFECTO DEL FABRICANTE, no de ningun cliente (CLAUDE.md, regla dura 13;
+   ADR-017): la tarea 5.8 (marca blanca, RF-PD-08) la hara configurable
+   sobrescribiendo esas custom properties en tiempo de ejecucion, sin tocar
+   este fichero ni el paquete.
+
+   El panel no declara nada propio aqui: no tiene fondo oscuro, objetivo
+   tactil minimo ni colores de confirmacion (eso es del quiosco). Si una
+   pantalla necesita un tono que no esta en el paquete, es un token nuevo en
+   `packages/web-kit/src/theme.css` con su pareja medida en `themePairs.ts`,
+   nunca un hexadecimal suelto aqui. */

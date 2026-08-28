@@ -27,6 +27,44 @@ final class IndexCredentialStatusRequest extends FormRequest
     }
 
     /**
+     * Normaliza `pending` antes de validarlo.
+     *
+     * **Por que hace falta.** El contrato declara `pending` como
+     * `schema: {type: boolean}` en la cadena de consulta, y la serializacion
+     * estandar de OpenAPI para eso es el literal `pending=true`. La regla
+     * `boolean` de Laravel acepta `true`, `false`, `1`, `0`, `"1"` y `"0"`, pero
+     * **no** las cadenas `"true"` ni `"false"`, asi que el cliente generado del
+     * contrato recibia un `422` por enviar exactamente lo que el contrato pide.
+     *
+     * Es el unico booleano de consulta de la API: `reissue` de
+     * `POST /credentials` viaja en un cuerpo JSON, donde llega ya como booleano
+     * de verdad. Por eso esto vive aqui y no en un trait de `Shared`: un trait
+     * con un solo usuario es una abstraccion adivinada.
+     *
+     * **Lo que no hace: tragarse la basura.** `FILTER_NULL_ON_FAILURE` devuelve
+     * `null` ante cualquier cosa que no sea un booleano reconocible, y entonces
+     * el valor original se deja intacto para que la regla `boolean` siga
+     * respondiendo `422`. Un filtro mal escrito tiene que doler, no colarse como
+     * `false` y devolver la lista entera en silencio.
+     */
+    protected function prepareForValidation(): void
+    {
+        $pending = $this->input('pending');
+
+        if (! \is_string($pending)) {
+            return;
+        }
+
+        $normalised = filter_var($pending, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+
+        if ($normalised === null) {
+            return;
+        }
+
+        $this->merge(['pending' => $normalised]);
+    }
+
+    /**
      * @return array<string, list<string>>
      */
     public function rules(): array

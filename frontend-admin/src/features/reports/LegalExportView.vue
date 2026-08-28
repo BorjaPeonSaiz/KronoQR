@@ -87,7 +87,7 @@ async function submit(): Promise<void> {
   <section class="flex flex-col gap-6">
     <header class="flex flex-col gap-2">
       <h1 class="text-2xl font-semibold">{{ t('reports.legalExport.heading') }}</h1>
-      <p class="max-w-3xl text-slate-700">{{ t('reports.legalExport.intro') }}</p>
+      <p class="max-w-3xl text-kq-text-muted">{{ t('reports.legalExport.intro') }}</p>
     </header>
 
     <form class="flex max-w-3xl flex-col gap-4" novalidate @submit.prevent="submit">
@@ -104,7 +104,7 @@ async function submit(): Promise<void> {
               type="date"
               required
               :aria-describedby="describedBy"
-              class="rounded border border-slate-400 px-3 py-2"
+              class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text"
             />
           </template>
         </FormField>
@@ -123,7 +123,7 @@ async function submit(): Promise<void> {
               required
               :aria-describedby="describedBy"
               :aria-invalid="invalid"
-              class="rounded border border-slate-400 px-3 py-2"
+              class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text"
             />
           </template>
         </FormField>
@@ -141,7 +141,7 @@ async function submit(): Promise<void> {
             inputmode="text"
             autocomplete="off"
             :aria-describedby="describedBy"
-            class="rounded border border-slate-400 px-3 py-2 font-mono"
+            class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 font-mono text-kq-text"
           />
         </template>
       </FormField>
@@ -150,11 +150,11 @@ async function submit(): Promise<void> {
         <button
           type="submit"
           :disabled="!canSubmit"
-          class="rounded bg-slate-900 px-4 py-2 text-white hover:bg-slate-800 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+          class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-kq-on-primary hover:brightness-95 disabled:opacity-50"
         >
           {{ t('reports.legalExport.submit') }}
         </button>
-        <p v-if="running" class="text-slate-700">{{ t('reports.legalExport.running') }}</p>
+        <p v-if="running" class="text-kq-text-muted">{{ t('reports.legalExport.running') }}</p>
       </div>
     </form>
 
@@ -162,7 +162,7 @@ async function submit(): Promise<void> {
 
     <p
       v-if="lastTally !== null"
-      class="max-w-3xl rounded-md border border-emerald-300 bg-emerald-50 p-4 text-emerald-900"
+      class="max-w-3xl rounded-kq border border-kq-success bg-kq-success-soft p-4 text-kq-success"
     >
       {{
         t('reports.legalExport.done', {
@@ -172,17 +172,19 @@ async function submit(): Promise<void> {
       }}
     </p>
 
-    <section class="max-w-3xl rounded-md border border-slate-300 bg-white p-4">
+    <section
+      class="max-w-3xl rounded-kq border border-kq-border bg-kq-surface-raised p-4 shadow-kq-soft"
+    >
       <h2 class="font-semibold">{{ t('reports.legalExport.contents.heading') }}</h2>
-      <ul class="mt-2 list-disc pl-5 text-slate-700">
+      <ul class="mt-2 list-disc pl-5 text-kq-text-muted">
         <li>{{ t('reports.legalExport.contents.entries') }}</li>
         <li>{{ t('reports.legalExport.contents.corrections') }}</li>
         <li>{{ t('reports.legalExport.contents.voided') }}</li>
         <li>{{ t('reports.legalExport.contents.times') }}</li>
         <li>{{ t('reports.legalExport.contents.format') }}</li>
       </ul>
-      <p class="mt-3 text-sm text-slate-600">{{ t('reports.legalExport.audited') }}</p>
-      <p class="mt-1 text-sm text-slate-600">{{ t('reports.legalExport.noSiteFilter') }}</p>
+      <p class="mt-3 text-sm text-kq-text-muted">{{ t('reports.legalExport.audited') }}</p>
+      <p class="mt-1 text-sm text-kq-text-muted">{{ t('reports.legalExport.noSiteFilter') }}</p>
     </section>
   </section>
 </template>

@@ -53,7 +53,19 @@ export default defineConfig({
         icons: [],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,woff2}'],
+        // Las fuentes autoalojadas (@kronoqr/web-kit/fonts.css) se sirven un
+        // fichero .woff2 por subconjunto Unicode, y @fontsource genera todos
+        // los subconjuntos del tipo (latin, latin-ext, cyrillic, cyrillic-ext,
+        // greek, greek-ext, vietnamese, devanagari) aunque KronoQR solo ofrezca
+        // es/en (latin) y ca/ro (latin-ext) — vease docs/06-guia-visual.md §3.
+        // Precachear TODOS inflaria la instalacion sin uso: el navegador nunca
+        // pide el subconjunto devanagari si `lang` nunca vale "hi". El glob
+        // `*-latin-*.woff2` cubre latin Y latin-ext (el nombre de fichero de
+        // latin-ext contiene "-latin-" como subcadena), que es justo lo que
+        // hace falta para operar sin red en los idiomas soportados; el arabe
+        // (doc 01 §6.6) no lo cubre ninguno de los dos y usa la pila de
+        // respaldo del sistema, que no necesita precacheo.
+        globPatterns: ['**/*.{js,css,html,svg}', '**/*-latin-*.woff2'],
         // El *app shell* completo, decodificador incluido, cabe de sobra. El
         // techo por defecto de Workbox (2 MiB) dejaria fuera el trozo de ZXing y
         // el quiosco arrancaria sin poder escanear precisamente cuando no hay

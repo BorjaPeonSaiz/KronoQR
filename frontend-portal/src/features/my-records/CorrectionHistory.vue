@@ -114,32 +114,40 @@ const items = computed<CorrectionView[]>(() =>
 
 <template>
   <section>
-    <h3 class="text-lg font-semibold">{{ t('myRecords.history.heading') }}</h3>
+    <h3 class="font-heading text-lg font-semibold text-kq-text">
+      {{ t('myRecords.history.heading') }}
+    </h3>
 
-    <p v-if="corrections.length === 0" data-test="history-empty" class="mt-2 text-slate-700">
+    <p v-if="corrections.length === 0" data-test="history-empty" class="mt-2 text-kq-text-muted">
       {{ t('myRecords.history.empty') }}
     </p>
 
     <template v-else>
-      <p class="mt-1 max-w-prose text-slate-700">{{ t('myRecords.history.notice') }}</p>
+      <p class="mt-1 max-w-prose text-kq-text-muted">{{ t('myRecords.history.notice') }}</p>
 
       <ol class="mt-3 flex flex-col gap-4">
         <li
           v-for="item of items"
           :key="item.key"
           data-test="correction"
-          class="rounded border border-slate-300 bg-white p-4"
+          class="rounded-kq border border-kq-border bg-kq-surface-raised p-4 shadow-kq-soft"
         >
-          <h4 class="font-semibold">{{ t(`myRecords.correctionAction.${item.action}`) }}</h4>
-          <p class="text-slate-700">
+          <h4
+            class="inline-block rounded-full bg-kq-warning-soft px-3 py-1 text-sm font-semibold text-kq-warning"
+          >
+            {{ t(`myRecords.correctionAction.${item.action}`) }}
+          </h4>
+          <p class="mt-2 text-kq-text-muted">
             {{ t('myRecords.history.by', { author: item.author, moment: item.moment }) }}
-            <span class="text-slate-600">({{ item.zoneLabel }})</span>
+            <span class="text-kq-text-muted">({{ item.zoneLabel }})</span>
           </p>
-          <p class="mt-1">
+          <p class="mt-1 text-kq-text">
             <span class="font-medium">{{ t('myRecords.history.reason') }}:</span>
             {{ item.reason }}
           </p>
-          <p v-if="item.reasonText !== null" class="mt-1 text-slate-700">{{ item.reasonText }}</p>
+          <p v-if="item.reasonText !== null" class="mt-1 text-kq-text-muted">
+            {{ item.reasonText }}
+          </p>
 
           <table class="mt-3 w-full border-collapse text-left text-sm">
             <caption class="sr-only">
@@ -148,7 +156,7 @@ const items = computed<CorrectionView[]>(() =>
               }}
             </caption>
             <thead>
-              <tr class="border-b border-slate-300">
+              <tr class="border-b border-kq-border">
                 <th scope="col" class="py-1 pr-3"></th>
                 <th scope="col" class="py-1 pr-3">{{ t('myRecords.history.fields.in') }}</th>
                 <th scope="col" class="py-1 pr-3">{{ t('myRecords.history.fields.out') }}</th>
@@ -156,7 +164,13 @@ const items = computed<CorrectionView[]>(() =>
               </tr>
             </thead>
             <tbody>
-              <tr class="border-b border-slate-200">
+              <!--
+                El estado anterior a la correccion se ve, no se tacha (regla dura
+                5): esta fila nunca lleva `line-through` ni ningun otro estilo que
+                sugiera «esto se ha borrado». `text-kq-text-muted` la distingue de
+                la fila «despues» sin dar a entender que ha desaparecido.
+              -->
+              <tr class="border-b border-kq-border text-kq-text-muted">
                 <th scope="row" class="py-1 pr-3 font-medium">
                   {{ t('myRecords.history.before') }}
                 </th>
@@ -166,7 +180,7 @@ const items = computed<CorrectionView[]>(() =>
                 <td class="py-1 pr-3">{{ item.before?.clockOut ?? '—' }}</td>
                 <td class="py-1 pr-3">{{ item.before?.worked ?? '—' }}</td>
               </tr>
-              <tr>
+              <tr class="text-kq-text">
                 <th scope="row" class="py-1 pr-3 font-medium">
                   {{ t('myRecords.history.after') }}
                 </th>
