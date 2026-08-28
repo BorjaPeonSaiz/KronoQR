@@ -72,16 +72,25 @@ final class IndexCredentialStatusRequest extends FormRequest
         return [
             'site_id' => ['sometimes', 'integer', 'min:1', 'exists:sites,id'],
             'pending' => ['sometimes', 'boolean'],
+            // Solo la forma, **sin `exists`**: a diferencia de `site_id`, un
+            // UUID que no corresponde a nadie no es un error del cliente sino
+            // una consulta que no encuentra a nadie, y el contrato lo resuelve
+            // con `200` y `data: []`. Comprobarlo contra la tabla ademas
+            // convertiria este parametro en un oraculo de existencia de
+            // empleados para cualquiera que pueda leer el panel.
+            'employee_uuid' => ['sometimes', 'uuid'],
         ];
     }
 
     public function toQuery(): CredentialStatusQuery
     {
         $siteId = $this->input('site_id');
+        $employeeUuid = $this->input('employee_uuid');
 
         return new CredentialStatusQuery(
             siteId: \is_numeric($siteId) ? (int) $siteId : null,
             pendingOnly: $this->boolean('pending'),
+            employeeUuid: \is_string($employeeUuid) ? $employeeUuid : null,
         );
     }
 }

@@ -2261,11 +2261,17 @@ paths:
         `revoked_at`. Un estado almacenado y otro derivado acaban discrepando, y
         aqui discrepar significa dar por entregada una tarjeta que nadie tiene.
 
-        **`summary` no se filtra.** Aunque `pending=true` deje tres filas, el
-        resumen sigue diciendo «3 de 60»: el numero que importa es cuanta gente
-        falta *de la que hay*. Es tambien lo que se publica como
-        `employees_without_delivered_credential{site}` y
+        **`summary` no se filtra.** Aunque `pending=true` deje tres filas, o
+        `employee_uuid` deje una, el resumen sigue diciendo «3 de 60»: el numero
+        que importa es cuanta gente falta *de la que hay*. Es tambien lo que se
+        publica como `employees_without_delivered_credential{site}` y
         `credentials_pending_print{site}` (doc 02 §8.2).
+
+        **`employee_uuid` sirve a la ficha de empleado**, que muestra la fila de
+        estado de la tarjeta de esa persona con sus acciones. Sin el, la unica
+        forma seria pedir el tablero del centro entero y quedarse con una fila,
+        lo que divulga —y audita como divulgada— toda la plantilla del centro
+        cada vez que alguien abre una ficha (ADR-037, RS-05).
 
         Sin paginacion a proposito: la respuesta es la plantilla de un centro
         —decenas o pocos cientos de filas— y es una tabla que se ordena y se
@@ -2284,6 +2290,28 @@ paths:
             format: int64
             minimum: 1
           example: 1
+        - name: employee_uuid
+          in: query
+          required: false
+          description: |
+            Acota el tablero a **una sola persona** —la ficha de empleado del
+            panel—, de modo que `data` traiga 0 o 1 filas.
+
+            Se combina con `site_id` y con `pending` mediante **Y logico**: una
+            persona de otro centro, o que ya tiene su tarjeta en la mano cuando
+            se pide `pending=true`, devuelve `data: []`.
+
+            **`summary` sigue sin filtrarse**, igual que con `pending`: es el
+            del centro o el de la instalacion.
+
+            Un UUID con forma valida que no corresponde a ningun empleado de
+            alta devuelve `data: []` con `200`, **no `404`**: este tablero no es
+            un recurso por persona, es una consulta acotada. Una forma invalida
+            si es `422`.
+          schema:
+            type: string
+            format: uuid
+          example: 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
         - name: pending
           in: query
           required: false

@@ -6,6 +6,7 @@ use App\Modules\Attendance\Application\Port\CredentialResolver;
 use App\Modules\Shared\Domain\ValueObject\CredentialRejectionReason;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Spectator\Spectator;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
@@ -398,5 +399,97 @@ it('sigue rechazando un `pending` que no es un booleano', function (string $garb
     // `FormRequest` la vea, asi que no hay nada que normalizar. Quien construya
     // la peticion tiene que OMITIR el parametro para no filtrar, no mandarlo
     // vacio.
+    'vacio' => [''],
+])->group('RF-QR-08');
+
+/*
+ * El filtro `employee_uuid` del panel (RF-QR-08).
+ *
+ * La ficha de empleado enseña la fila de estado de la tarjeta de esa persona con
+ * sus acciones. Sin este filtro habria que pedir el tablero del centro entero y
+ * quedarse con una fila, lo que divulga —y audita como divulgada— toda la
+ * plantilla del centro cada vez que alguien abre una ficha (ADR-037, RS-05).
+ */
+
+it('acota el panel a una sola persona', function (): void {
+    $context = credentialBoardContext();
+
+    Api::as($context['token'])
+        ->get('/api/v1/credentials/status', ['employee_uuid' => $context['withoutCard']])
+        ->assertValidRequest()
+        ->assertValidResponse(200)
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.employee_uuid', $context['withoutCard'])
+        ->assertJsonPath('data.0.status', 'no_credential');
+})->group('RF-QR-08');
+
+it('deja el resumen del centro intacto aunque la fila sea una', function (): void {
+    // Mismo criterio que `pending`: el numero que importa en la ficha sigue
+    // siendo cuanta gente falta *de la que hay*, no «falta 1 de 1».
+    $context = credentialBoardContext();
+
+    Api::as($context['token'])
+        ->get('/api/v1/credentials/status', ['employee_uuid' => $context['withoutCard']])
+        ->assertValidResponse(200)
+        ->assertJsonCount(1, 'data')
+        ->assertJsonCount(1, 'summary')
+        ->assertJsonPath('summary.0.employees', 2)
+        ->assertJsonPath('summary.0.without_delivered_credential', 1);
+})->group('RF-QR-08');
+
+it('combina `employee_uuid` con `site_id` con Y logico', function (): void {
+    // Una persona que existe, pero no en el centro por el que se pregunta: la
+    // respuesta es vacia, no la fila «colandose» por el otro filtro.
+    $context = credentialBoardContext();
+    $otroCentro = WorkforceFixtures::site('Hotel Vecino');
+
+    Api::as($context['token'])
+        ->get('/api/v1/credentials/status', [
+            'employee_uuid' => $context['withoutCard'],
+            'site_id' => $otroCentro,
+        ])
+        ->assertValidRequest()
+        ->assertValidResponse(200)
+        ->assertJsonCount(0, 'data');
+})->group('RF-QR-08');
+
+it('combina `employee_uuid` con `pending` con Y logico', function (): void {
+    $context = credentialBoardContext();
+
+    Api::as($context['token'])
+        ->get('/api/v1/credentials/status', [
+            'employee_uuid' => $context['withCard'],
+            'pending' => 'true',
+        ])
+        ->assertValidResponse(200)
+        ->assertJsonCount(0, 'data');
+})->group('RF-QR-08');
+
+it('devuelve la lista vacia, y no un 404, para un UUID que no es de nadie', function (): void {
+    // Este tablero no es un recurso por persona: es una consulta acotada, y una
+    // consulta que no encuentra nada responde `200` con `data: []`. Un `404`
+    // ademas convertiria el parametro en un oraculo de que UUID existen.
+    $context = credentialBoardContext();
+
+    Api::as($context['token'])
+        ->get('/api/v1/credentials/status', ['employee_uuid' => Str::uuid7()->toString()])
+        ->assertValidRequest()
+        ->assertValidResponse(200)
+        ->assertJsonCount(0, 'data')
+        ->assertJsonCount(1, 'summary');
+})->group('RF-QR-08');
+
+it('rechaza un `employee_uuid` que no tiene forma de UUID', function (string $garbage): void {
+    $context = credentialBoardContext();
+
+    Api::as($context['token'])
+        ->get('/api/v1/credentials/status', ['employee_uuid' => $garbage])
+        ->assertStatus(422);
+})->with([
+    'codigo de empleado' => ['E7K2M9QX4B'],
+    'entero' => ['12'],
+    'casi un uuid' => ['0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b9'],
+    // `?employee_uuid=` tampoco pasa: `ConvertEmptyStringsToNull` lo deja en
+    // `null` y `uuid` lo rechaza. Para no filtrar hay que OMITIR el parametro.
     'vacio' => [''],
 ])->group('RF-QR-08');

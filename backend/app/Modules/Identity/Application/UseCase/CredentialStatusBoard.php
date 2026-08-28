@@ -54,11 +54,14 @@ use App\Modules\Shared\Domain\ValueObject\EmployeeCardProfile;
  * La incoherencia que esto corrige es concreta: `GET /kiosk/roster` divulga
  * **menos** —un hash y el nombre de pila— y si dejaba asiento.
  *
- * Se registra **el alcance** —que centro, si venia filtrado, cuantas filas— y
- * nunca lo divulgado (regla dura 21): ni un nombre, ni un codigo, ni la lista de
- * `employee_uuid` de los afectados. Enumerarlos aqui seria una segunda copia de
- * la plantilla con cuatro años de retencion, que es exactamente lo que se
- * intenta proteger.
+ * Se registra **el alcance** —que centro, si venia filtrado, a que persona si se
+ * acoto a una, cuantas filas— y nunca lo divulgado (regla dura 21): ni un
+ * nombre, ni un codigo, ni la lista de `employee_uuid` de los afectados.
+ * Enumerarlos aqui seria una segunda copia de la plantilla con cuatro años de
+ * retencion, que es exactamente lo que se intenta proteger. El `employee_uuid`
+ * que si consta es el **filtro que pidio quien consulta**, no la lista de a
+ * quien se leyo: es la diferencia entre un asiento que dice «abrio la ficha de
+ * esa persona» y otro que dice «se llevo el directorio del centro».
  *
  * El apunte se escribe **antes** de devolver: si la escritura de auditoria
  * falla, la divulgacion no ocurre. Misma decision que en el padron del quiosco y
@@ -102,6 +105,18 @@ final readonly class CredentialStatusBoard
 
         $coverage = $this->coverageOf($rows);
 
+        if ($query->employeeUuid !== null) {
+            // Se filtra aqui, y no en la consulta del directorio, porque
+            // `coverage` tiene que seguir siendo el del centro: la ficha de
+            // empleado enseña una fila, pero el resumen que la acompaña dice
+            // «faltan 3 de 60», no «falta 1 de 1». Mismo motivo que
+            // `pendingOnly`, y por eso el mismo sitio.
+            $rows = array_values(array_filter(
+                $rows,
+                static fn (CredentialStatusRow $row): bool => $row->employee->employeeUuid === $query->employeeUuid,
+            ));
+        }
+
         if ($query->pendingOnly) {
             $rows = array_values(array_filter(
                 $rows,
@@ -122,6 +137,14 @@ final readonly class CredentialStatusBoard
                 // un centro que no existe. Su ausencia es el alcance mas amplio
                 // —toda la instalacion—, que es tambien el que mas importa saber.
                 ...($query->siteId === null ? [] : ['site_id' => $query->siteId]),
+                // El UUID que aparece aqui es **el alcance pedido**, no la lista
+                // de lo divulgado: es lo que distingue «se consulto la ficha de
+                // una persona» de «se descargo el directorio del centro», que es
+                // justo lo que RL-15 obliga a poder responder. Un UUID no es un
+                // dato personal (regla dura 21: lo prohibido son los nombres, y
+                // enumerar a los afectados de una lectura masiva), y ya se
+                // registra igual en `employee_workdays`.
+                ...($query->employeeUuid === null ? [] : ['employee_uuid' => $query->employeeUuid]),
                 'pending_only' => $query->pendingOnly,
             ]);
         }
