@@ -1,0 +1,19 @@
+/* Tipografias autoalojadas del sistema visual (docs/06-guia-visual.md §3).
+
+   Se sirven desde la propia instalacion, nunca desde Google Fonts ni ningun
+   CDN: el quiosco funciona sin red, el producto es on-premise y una peticion a
+   un tercero desde el navegador del empleado seria una comunicacion de datos
+   que nadie ha autorizado (RGPD, doc 01 §6.7 y §7.2).
+
+   Los ficheros `.css` de @fontsource declaran un @font-face por subconjunto
+   con `unicode-range`: el navegador descarga solo el subconjunto que la pagina
+   usa (latin para español e ingles; latin-ext para catalan y rumano). Ni
+   Poppins ni Inter cubren arabe: para ese idioma actua la pila de respaldo del
+   sistema declarada en `--kq-font-*` (theme.css).
+
+   Solo los pesos que usa la guia: titulos 600/700, cuerpo 400-600 (Inter es
+   variable, un unico fichero por subconjunto cubre todos los pesos). */
+
+@import '@fontsource/poppins/600.css';
+@import '@fontsource/poppins/700.css';
+@import '@fontsource-variable/inter/wght.css';
