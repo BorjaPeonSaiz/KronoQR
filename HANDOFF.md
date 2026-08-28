@@ -13,14 +13,14 @@
 5. **Backend**: `pending` de `GET /credentials/status` acepta `true/false` (era el 422 «must be true or false»); **`GET /employees?q=`** nuevo en contrato y código, insensible a mayúsculas **y acentos** (extensión `unaccent`, migración `2026_08_28_100000`, reversible, verificada en ambos sentidos); comodines escapados; auditoría guarda `search: bool`, nunca el término (regla dura 21).
 6. **Portal**: contenedor `lg:w-[88%] 2xl:max-w-[1600px]`; jornadas en una columna (orden cronológico).
 
-**No hecho, a propósito — decisión del usuario pendiente:**
+**No hecho, a propósito:**
 
-- **Enviar por correo el PDF de la tarjeta al generarlo.** Contradice la regla dura 11 / ADR-014 (el plan lo repite en 2.12 y 5.6: «no hay envío por correo… no manda credenciales por correo») y roza la 12. Además «al usuario» es ambiguo: ¿al empleado (no tiene correo obligatorio, y la credencial dejaría de ser solo física) o al usuario de gestión que imprime (tiene correo, pero la tarjeta firmada quedaría en un buzón)? Necesita un ADR nuevo que matice el 014 antes de tocar código.
+- **Enviar por correo el PDF de la tarjeta al generarlo — descartado por el usuario (28-08-2026): no se ejecuta ese cambio.** Contradecía la regla dura 11 / ADR-014 (el plan lo repite en 2.12 y 5.6: «no hay envío por correo… no manda credenciales por correo») y roza la 12. Además «al usuario» es ambiguo: ¿al empleado (no tiene correo obligatorio, y la credencial dejaría de ser solo física) o al usuario de gestión que imprime (tiene correo, pero la tarjeta firmada quedaría en un buzón)? Sigue vigente el ADR-014 sin matices.
 - Dos hallazgos de `revisor-codigo` chocan con lo pedido y se dejaron como pidió el usuario: el enlace PIN dentro del bloque de instrucciones **no se ve mientras hay una confirmación en pantalla** (3,5–5 s); y el texto sin el calificador «¿Sin tarjeta?» puede hacer que el PIN se use por comodidad (cada fichaje por PIN se marca para revisión, RF-AT-11). Se mitigó con estilo secundario. Si el uso del PIN sube, revisar.
 
 **Pendiente menor:** integración que afirme que `unaccent` está instalada (hoy si se revierte la migración fallan 10 feature con un error SQL confuso); casos `ß`/ligaduras; E2E del panel (`frontend-admin/tests/e2e` no existe aún); el filtro de estado del PIN de plantilla es de la página visible — llevarlo al contrato si se usa; `HELD_GAP_MS` conviene medirlo en tablet real; el enlace «Volver a la plantilla» de la ficha no conserva los filtros (el botón atrás sí).
 
-**Siguiente acción:** abrir PR de `feat/ui-ux-panel-portal-quiosco` a `main` y decidir lo del correo.
+**Siguiente acción:** abrir PR de `feat/ui-ux-panel-portal-quiosco` a `main`.
 
 
 ## Sesión de auditoría y corrección (27-08-2026, posterior al cierre)
