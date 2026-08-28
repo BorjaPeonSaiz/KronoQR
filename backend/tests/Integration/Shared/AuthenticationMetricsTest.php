@@ -43,7 +43,7 @@ it('publica la serie con el nombre y las etiquetas que usan las alertas', functi
             'channel=management,outcome=failure' => '2',
             'channel=kiosk_pin,outcome=lockout' => '1',
         ]);
-})->group('RS-12');
+})->group('RS-13', 'RS-12');
 
 it('no rompe un acceso cuando Redis no responde', function (): void {
     // Regla dura 19 y RL-05: perder un contador es infinitamente mas barato que

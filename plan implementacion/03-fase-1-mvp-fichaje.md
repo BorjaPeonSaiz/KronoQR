@@ -13,7 +13,7 @@
 
 **Requisitos que cubre la fase** (doc 01, Anexo A — Trazabilidad requisito → fase):
 
-`RF-AT-01..09`, `RF-AT-11`, `RF-QR-01..06`, `RF-QR-08`, `RF-ID-01..02` (**autenticación de gestión básica, sin 2FA**), `RF-ID-04..09`, `RF-KI-01..06`, `RF-KI-09`, `RF-GP-01`, `RF-GP-03`, `RF-PA-03..04`, `RF-IN-05`, `RF-PR-04`, `RN-01..09`, `RN-13`, `RN-15`, `RL-01`, `RL-03..06`, `RL-09`, `RL-12`, `RS-01..04`, `RS-07`, `RS-12`, `RNF-D-02`, `RNF-D-05`, `RQ-09`
+`RF-AT-01..09`, `RF-AT-11`, `RF-QR-01..06`, `RF-QR-08`, `RF-ID-01..02` (**autenticación de gestión básica, sin 2FA**), `RF-ID-04..09`, `RF-KI-01..06`, `RF-KI-09`, `RF-GP-01`, `RF-GP-03`, `RF-PA-03..04`, `RF-IN-05`, `RF-PR-04`, `RN-01..09`, `RN-13`, `RN-15`, `RL-01`, `RL-03..06`, `RL-09`, `RL-12`, `RS-01..04`, `RS-07`, `RS-12`, `RS-13`, `RNF-D-02`, `RNF-D-05`, `RQ-09`
 
 > **Nota del Anexo A del doc 01 sobre el reparto de `RF-ID-*`.** *«La Fase 1 necesita una autenticación de gestión mínima —sin ella, RRHH no puede emitir tarjetas ni ver el panel de estado de credenciales (tarea 1.10)—, pero el 2FA obligatorio y el ámbito por departamento llegan con la tarea 2.1.»*
 >
@@ -762,7 +762,7 @@ Resultado esperado: los cuatro rechazos indistinguibles en respuesta y en tiempo
 |---|---|
 | **Horas** | 8–10 |
 | **Agente / Skill** | `backend-laravel` |
-| **Requisitos** | **RF-GP-01, RF-GP-03, RF-ID-01..02 básicos** (literal del doc 02 §11). El Anexo A del doc 01 lo confirma: `RF-ID-01..02` en la Fase 1 son *«autenticación de gestión básica, sin 2FA»* |
+| **Requisitos** | **RF-GP-01, RF-GP-03, RF-ID-01..02 básicos, RS-13** (literal del doc 02 §11). El Anexo A del doc 01 lo confirma: `RF-ID-01..02` en la Fase 1 son *«autenticación de gestión básica, sin 2FA»*. **RS-13** se cita desde el 29 de agosto de 2026: el rastro de autenticación de este canal lo entregó la rama SSDLC (ADR-039) sobre lo construido aquí |
 | **Precondiciones** | **1.2** (§11.3: `1.1→1.2 ├─► 1.6`) y el esquema de 1.3 |
 | **Bloquea a** | **1.11** (§11.3: `1.6 ──► 1.11`). Y, por la nota del §11, **1.10** |
 
@@ -1416,7 +1416,7 @@ Resultado esperado: los dos PDF con las medidas correctas y el QR en nivel Q; la
 |---|---|
 | **Horas** | 6–8 |
 | **Agente / Skill** | `frontend-portal-empleado` + `backend-laravel` |
-| **Requisitos** | **RF-ID-05..08, RL-05** (literal del doc 02 §11). Concuerda con el Anexo A del doc 01 |
+| **Requisitos** | **RF-ID-05..08, RL-05, RS-13** (literal del doc 02 §11). Concuerda con el Anexo A del doc 01. **RS-13** se cita desde el 29 de agosto de 2026: el rastro de autenticación de este canal lo entregó la rama SSDLC (ADR-039) sobre lo construido aquí |
 | **Precondiciones** | **1.6** (§11.3: `1.6 ──► 1.11`) |
 | **Bloquea a** | No figura en el camino crítico del §11.3 |
 
@@ -1531,7 +1531,7 @@ Resultado esperado: el aislamiento de ámbito demostrado con pruebas negativas; 
 |---|---|
 | **Horas** | 4–5 |
 | **Agente / Skill** | `backend-laravel` + `frontend-quiosco` |
-| **Requisitos** | **RF-AT-11, RS-12** (literal del doc 02 §11). Concuerda con el Anexo A del doc 01 |
+| **Requisitos** | **RF-AT-11, RS-12, RS-13** (literal del doc 02 §11). Concuerda con el Anexo A del doc 01. **RS-13** se cita desde el 29 de agosto de 2026: el rastro de autenticación de este canal lo entregó la rama SSDLC (ADR-039) sobre lo construido aquí |
 | **Precondiciones** | **1.9** (§11.3: `1.8→1.9 └─► 1.12`). Y el `pin_hash` de 1.6 |
 | **Bloquea a** | No figura en el camino crítico del §11.3 |
 
@@ -2167,7 +2167,7 @@ cobertura de prueba, y qué queda pendiente para pasar a la siguiente.
 
 **Requisitos que `qa:traceability --check` debe encontrar cubiertos** (doc 01, Anexo A, ya con [ADR-032](../docs/adr/ADR-032-la-fase-1-entrega-un-sistema-legalmente-defendible.md)):
 
-`RF-AT-01..09`, `RF-AT-11`, `RF-QR-01..06`, `RF-QR-08`, `RF-ID-01..02` (básicos), `RF-ID-04..09`, `RF-KI-01..06`, `RF-KI-09`, `RF-GP-01`, `RF-GP-03`, `RF-PA-03..04`, `RF-IN-05`, `RF-PR-04`, `RN-01..09`, `RN-13`, `RN-15`, `RL-01`, `RL-03..06`, `RL-09`, `RL-12`, `RS-01..04`, `RS-07`, `RS-12`, `RNF-D-02`, `RNF-D-05`, `RQ-09`
+`RF-AT-01..09`, `RF-AT-11`, `RF-QR-01..06`, `RF-QR-08`, `RF-ID-01..02` (básicos), `RF-ID-04..09`, `RF-KI-01..06`, `RF-KI-09`, `RF-GP-01`, `RF-GP-03`, `RF-PA-03..04`, `RF-IN-05`, `RF-PR-04`, `RN-01..09`, `RN-13`, `RN-15`, `RL-01`, `RL-03..06`, `RL-09`, `RL-12`, `RS-01..04`, `RS-07`, `RS-12`, `RS-13`, `RNF-D-02`, `RNF-D-05`, `RQ-09`
 
 > Quince de estos —`RN-13`, `RN-15`, `RS-07`, `RF-PA-03`, `RF-PA-04`, `RL-03`, `RL-04`, `RL-06`, `RF-IN-05`, `RF-PR-04`, `RNF-D-02`, `RNF-D-05`, `RQ-09`, `RL-09`, `RL-12`— llegan con las tareas 1.14–1.18. Antes de ADR-032 no eran exigibles hasta el cierre de la Fase 2.
 

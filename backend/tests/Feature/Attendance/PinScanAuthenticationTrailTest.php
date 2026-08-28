@@ -114,7 +114,7 @@ it('cuenta el fichaje por PIN sin duplicar el asiento del fichaje', function ():
     expect($contador->countOf(AuthChannel::KIOSK_PIN, AuthOutcome::SUCCESS))->toBe(1)
         // El fichaje si deja su asiento; la autenticacion que lo precedio, no.
         ->and($acciones)->toBe(['shift_entry.created']);
-})->group('RS-12', 'RF-AT-11');
+})->group('RS-13', 'RS-12', 'RF-AT-11');
 
 it('deja el fallo del PIN del quiosco en el log y en el contador', function (): void {
     $contador = AuthenticationTrail::countingMetrics();
@@ -133,7 +133,7 @@ it('deja el fallo del PIN del quiosco en el log y en el contador', function (): 
         ->and($apuntes[0]['context']['reason'])->toBe('invalid_credentials')
         ->and($apuntes[0]['context']['subject_uuid'])->toBeNull()
         ->and($contador->countOf(AuthChannel::KIOSK_PIN, AuthOutcome::FAILURE))->toBe(1);
-})->group('RS-12', 'RS-03', 'RF-AT-11');
+})->group('RS-13', 'RS-12', 'RS-03', 'RF-AT-11');
 
 it('distingue en el log el sobre que no abre del PIN que no coincide', function (): void {
     // Hacia fuera los dos son el mismo rechazo; hacia dentro no son lo mismo, y
@@ -151,7 +151,7 @@ it('distingue en el log el sobre que no abre del PIN que no coincide', function 
 
     expect($apuntes)->toHaveCount(1)
         ->and($apuntes[0]['context']['reason'])->toBe('sealed_pin_unreadable');
-})->group('RS-12', 'RF-AT-11');
+})->group('RS-13', 'RS-12', 'RF-AT-11');
 
 it('deja asiento del bloqueo del PIN con el quiosco como actor', function (): void {
     $contador = AuthenticationTrail::countingMetrics();
@@ -176,7 +176,7 @@ it('deja asiento del bloqueo del PIN con el quiosco como actor', function (): vo
     expect($contador->countOf(AuthChannel::KIOSK_PIN, AuthOutcome::FAILURE))->toBe(3)
         ->and($contador->countOf(AuthChannel::KIOSK_PIN, AuthOutcome::LOCKOUT))->toBe(1)
         ->and(app(VerifyAuditChain::class)->handle()->isIntact())->toBeTrue();
-})->group('RS-12', 'RS-07', 'RF-AT-11');
+})->group('RS-13', 'RS-12', 'RS-07', 'RF-AT-11');
 
 it('cuenta aparte el intento que llega con el bloqueo puesto y no repite el asiento', function (): void {
     $contador = AuthenticationTrail::countingMetrics();
@@ -195,4 +195,4 @@ it('cuenta aparte el intento que llega con el bloqueo puesto y no repite el asie
         ->and($contador->countOf(AuthChannel::KIOSK_PIN, AuthOutcome::LOCKOUT))->toBe(1)
         ->and($contador->countOf(AuthChannel::KIOSK_PIN, AuthOutcome::FAILURE))->toBe(4)
         ->and($contador->countOf(AuthChannel::KIOSK_PIN, AuthOutcome::SUCCESS))->toBe(0);
-})->group('RS-12', 'RF-AT-11');
+})->group('RS-13', 'RS-12', 'RF-AT-11');

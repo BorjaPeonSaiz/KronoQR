@@ -109,6 +109,11 @@ ninguno de sus llamantes.
 - Queda anotado para la Fase 2, cuando RS-05 es requisito de fase: si el producto decidiera dejar
   constancia de los accesos al portal, es un cambio del dominio de auditoría y de la restricción de su
   esquema —un tipo de actor nuevo—, no de un `if`.
+  **Matiz (29 de agosto de 2026, ADR-039 / RS-13):** el rastro de la autenticación no es ese motivo.
+  El acceso al portal es el ejercicio del derecho que esta decisión ya excluye de la traza, y el
+  fichaje por PIN deja el `shift_entry.created` que lo prueba. El tipo `employee` se crea con la
+  **primera acción de autoría del empleado con relevancia legal** —una solicitud de corrección desde
+  el portal, una conformidad sobre el registro—, que es cuando `system` mentiría; nunca para sesiones.
 
 ## Verificación
 

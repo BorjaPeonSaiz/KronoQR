@@ -84,7 +84,7 @@ it('cuenta el acceso correcto al portal sin escribir en audit_log', function ():
 
     expect($contador->countOf(AuthChannel::PORTAL, AuthOutcome::SUCCESS))->toBe(1)
         ->and(DB::table('audit_log')->count())->toBe(0);
-})->group('RS-12', 'RF-ID-06');
+})->group('RS-13', 'RS-12', 'RF-ID-06');
 
 it('deja el fallo del portal en el log y en el contador, y nunca en la cadena', function (): void {
     $contador = AuthenticationTrail::countingMetrics();
@@ -113,7 +113,7 @@ it('deja el fallo del portal en el log y en el contador, y nunca en la cadena', 
         ->not->toContain($empleado['code']);
 
     expect($contador->countOf(AuthChannel::PORTAL, AuthOutcome::FAILURE))->toBe(1);
-})->group('RS-12', 'RS-03', 'RF-ID-06');
+})->group('RS-13', 'RS-12', 'RS-03', 'RF-ID-06');
 
 it('registra igual el fallo de un codigo que existe y el de uno que no', function (): void {
     $empleado = empleadoDelRastro();
@@ -134,7 +134,7 @@ it('registra igual el fallo de un codigo que existe y el de uno que no', functio
 
     expect($apuntes)->toHaveCount(2)
         ->and($apuntes[0]['context'])->toBe($apuntes[1]['context']);
-})->group('RS-03', 'RS-12');
+})->group('RS-13', 'RS-03', 'RS-12');
 
 it('deja asiento del bloqueo del portal, con el empleado y sin su codigo', function (): void {
     $contador = AuthenticationTrail::countingMetrics();
@@ -161,7 +161,7 @@ it('deja asiento del bloqueo del portal, con el empleado y sin su codigo', funct
     expect($contador->countOf(AuthChannel::PORTAL, AuthOutcome::FAILURE))->toBe(3)
         ->and($contador->countOf(AuthChannel::PORTAL, AuthOutcome::LOCKOUT))->toBe(1)
         ->and(app(VerifyAuditChain::class)->handle()->isIntact())->toBeTrue();
-})->group('RS-12', 'RS-07', 'RF-ID-06');
+})->group('RS-13', 'RS-12', 'RS-07', 'RF-ID-06');
 
 it('no repite el asiento por cada intento que llega con el bloqueo puesto', function (): void {
     // Repetirlo llenaria la cadena de hash de ADR-010 con la insistencia de
@@ -186,7 +186,7 @@ it('no repite el asiento por cada intento que llega con el bloqueo puesto', func
         // varias cuentas alcanzando su limite a la vez.
         ->and($contador->countOf(AuthChannel::PORTAL, AuthOutcome::FAILURE))->toBe(6)
         ->and($contador->countOf(AuthChannel::PORTAL, AuthOutcome::LOCKOUT))->toBe(1);
-})->group('RS-12', 'RS-07');
+})->group('RS-13', 'RS-12', 'RS-07');
 
 it('no convierte el rechazo en un 500 cuando audit_log no puede escribir', function (): void {
     // ADR-039. El asiento del bloqueo es el unico que **provoca quien ataca**, y
@@ -234,4 +234,4 @@ it('no convierte el rechazo en un 500 cuando audit_log no puede escribir', funct
         // Regla dura 21: la clase de la excepcion, nunca su mensaje.
         ->and($errores[0]['context'])->not->toHaveKey('message')
         ->and($errores[0]['context']['exception'])->toBe(RuntimeException::class);
-})->group('RS-12', 'RS-07', 'RF-ID-06');
+})->group('RS-13', 'RS-12', 'RS-07', 'RF-ID-06');

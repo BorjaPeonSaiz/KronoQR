@@ -35,7 +35,7 @@
 - { id: RS-09,     fase: 0, titulo: "Cabeceras de seguridad completas (HSTS, CSP estricta, X-Content-Type-Options, Referrer-Policy, Permissions-Policy limitando cámara al origen propio)" }
 - { id: RS-10,     fase: 0, titulo: "Análisis de dependencias y de código en cada pull request; ninguna vulnerabilidad crítica o alta puede llegar a una versión publicada" }
 
-# --- Fase 1 -------------------------------------------- (59 requisitos)
+# --- Fase 1 -------------------------------------------- (60 requisitos)
 - { id: RF-AT-01,  fase: 1, titulo: "El sistema registra un evento de fichaje al escanear un QR válido en un quiosco autenticado" }
 - { id: RF-AT-02,  fase: 1, titulo: "Si el empleado no tiene turno abierto, el escaneo abre un turno (entrada)" }
 - { id: RF-AT-03,  fase: 1, titulo: "Si el empleado tiene un turno abierto, el escaneo lo cierra (salida) y calcula la duración" }
@@ -95,6 +95,7 @@
 - { id: RS-03,     fase: 1, titulo: "Las respuestas de error no revelan si un código existe, está revocado o es inválido: mensaje genérico al usuario, detalle solo en el log del servidor" }
 - { id: RS-04,     fase: 1, titulo: "El token del quiosco tiene ámbito mínimo, caducidad y rotación automática; su compromiso no da acceso a datos de plantilla" }
 - { id: RS-12,     fase: 1, titulo: "El PIN de acceso al portal está protegido con bloqueo temporal por intentos fallidos y limitación de tasa por empleado y por IP" }
+- { id: RS-13,     fase: 1, titulo: "Toda autenticación deja rastro consultable en los tres canales: acceso y cierre de gestión y apertura de bloqueo en audit_log; cada fallo en el log técnico y en kronoqr_auth_attempts_total (ADR-039)" }
 
 # --- Fase 2 -------------------------------------------- (45 requisitos)
 - { id: RF-GP-02,  fase: 2, titulo: "Registro de contrato: horas semanales y anuales contratadas, tipo de jornada, vigencia" }

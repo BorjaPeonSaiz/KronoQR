@@ -224,7 +224,7 @@ it('dirige las alertas de ataque a credenciales a seguridad, con runbook y tecni
 
     expect($porNombre['KronoqrAuthFailureSpike']['labels']['severity'] ?? '')->toBe('critical');
     expect($porNombre['KronoqrAuthLockouts']['expr'] ?? '')->toContain('outcome="lockout"');
-})->group('RS-12');
+})->group('RS-13', 'RS-12');
 
 it('verifica la cadena de auditoria a diario, que es lo que RS-07 exige', function (): void {
     // «La cadena se verifica a diario y cualquier rotura dispara alerta critica

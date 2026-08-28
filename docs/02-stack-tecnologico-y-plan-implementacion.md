@@ -1094,7 +1094,7 @@ Si se necesita una cifra de desarrollo **manual sin asistencia** para comparar c
 | 1.14 | `audit_log` encadenado, comando de verificación y permisos | 8–10 | RS-07 | `backend-laravel` + `/revision-cumplimiento` |
 | 1.4 | Caso de uso `RegisterScan` con idempotencia y proyección transaccional | 8–10 | RF-AT-01..09 | `backend-laravel` + `/crear-caso-de-uso` |
 | 1.5 | Módulo `Identity`: credenciales HMAC, `key_id`, revocación, tokens de dispositivo | 8–10 | RF-QR-01..03, RF-ID-04 | `backend-laravel`, revisión de `seguridad-cumplimiento` |
-| 1.6 | `Workforce` básico: empleados, departamentos, centros, alta y baja, más autenticación de gestión mínima (login y roles, **sin 2FA**) | 8–10 | RF-GP-01, RF-GP-03, RF-ID-01..02 básicos | `backend-laravel` |
+| 1.6 | `Workforce` básico: empleados, departamentos, centros, alta y baja, más autenticación de gestión mínima (login y roles, **sin 2FA**) | 8–10 | RF-GP-01, RF-GP-03, RF-ID-01..02 básicos, RS-13 | `backend-laravel` |
 | 1.7 | Endpoints de fichaje, lote, padrón y latido, con rate limiting | 6–8 | RS-02..04 | `backend-laravel` + `/endpoint-api` |
 | 1.15 | Correcciones trazadas: versionado, catálogo de motivos, anulación | 10–12 | RN-13, RL-04, RF-PA-04 | `arquitecto-dominio` → `backend-laravel` |
 | 1.16 | Panel: detalle de jornada | 6–8 | RF-PA-03 | `frontend-panel` |
@@ -1102,8 +1102,8 @@ Si se necesita una cifra de desarrollo **manual sin asistencia** para comparar c
 | 1.8 | PWA quiosco: escaneo ZXing, feedback visual y sonoro, i18n, accesibilidad | 12–16 | RF-KI-01..02, RF-KI-05..06, RF-KI-09, RL-09 | `frontend-quiosco` |
 | 1.9 | Cola offline Dexie con sincronización, reintentos e indicador | 10–12 | RF-KI-03..04, RN-15, RL-12 | `frontend-quiosco` |
 | 1.10 | Generación de tarjetas en PDF, impresión masiva, registro de entrega y panel de estado | 6–8 | RF-QR-04..06, RF-QR-08 | `backend-laravel` + `frontend-panel` |
-| 1.11 | Portal del empleado: acceso con código y PIN, mi registro, mi exportación | 6–8 | RF-ID-05..08, RL-05 | `frontend-portal-empleado` + `backend-laravel` |
-| 1.12 | PIN de respaldo de 6 dígitos en el quiosco, con bloqueo por intentos | 4–5 | RF-AT-11, RS-12 | `backend-laravel` + `frontend-quiosco` |
+| 1.11 | Portal del empleado: acceso con código y PIN, mi registro, mi exportación | 6–8 | RF-ID-05..08, RL-05, RS-13 | `frontend-portal-empleado` + `backend-laravel` |
+| 1.12 | PIN de respaldo de 6 dígitos en el quiosco, con bloqueo por intentos | 4–5 | RF-AT-11, RS-12, RS-13 | `backend-laravel` + `frontend-quiosco` |
 | 1.13 | Provisión, entrega y restablecimiento del PIN: generación en el alta, visualización de una sola vez, `pin_hash`, restablecimiento por RRHH y auditoría de las tres acciones | 4–5 | **RF-ID-09** | `backend-laravel` + `frontend-panel` |
 | 1.18 | Copias cifradas, verificadas, con prueba de restauración | 4–6 | RF-PR-04, RNF-D-02, RNF-D-05, RQ-09 | `devops-observabilidad` |
 

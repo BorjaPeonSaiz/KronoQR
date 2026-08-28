@@ -13,7 +13,8 @@
 Hasta esta rama, `AuditAction` no tenía **ni un solo caso de autenticación**. Se podía probar
 contraseñas contra `/auth/login` toda la noche, o PIN contra `/me/login`, y a la mañana siguiente no
 había ninguna consulta que respondiera «¿pasó algo?». Es el hueco de OWASP A09 que `docs/07` §5
-registra y que la propuesta RS-13 enuncia.
+registra y que RS-13 enuncia (doc 01 §8, incorporado el 29 de agosto de 2026 con esta decisión ya
+implementada y probada).
 
 Cerrarlo con «que todo lo de autenticación se audite» no vale, y no por gusto:
 

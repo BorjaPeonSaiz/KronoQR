@@ -78,7 +78,7 @@ it('deja asiento del acceso correcto al panel, con la cuenta y sin su correo', f
         ->and($asiento['raw'])->not->toContain(ManagementUsers::PASSWORD);
 
     expect($contador->countOf(AuthChannel::MANAGEMENT, AuthOutcome::SUCCESS))->toBe(1);
-})->group('RS-12', 'RS-05', 'RF-ID-01');
+})->group('RS-13', 'RS-12', 'RS-05', 'RF-ID-01');
 
 it('guarda el origen en la columna ip, como los otros cinco escritores', function (): void {
     // ADR-039. `audit_log` tiene su columna `ip` y **un solo criterio para toda
@@ -98,7 +98,7 @@ it('guarda el origen en la columna ip, como los otros cinco escritores', functio
     expect($asiento['ip'])->toBe('127.0.0.1')
         // Y una sola representacion: el seudonimo no se duplica en el payload.
         ->and($asiento['payload'])->not->toHaveKey('ip_hash');
-})->group('RS-12', 'RS-05');
+})->group('RS-13', 'RS-12', 'RS-05');
 
 it('seudonimiza el origen en el log tecnico, que es el que viaja al fabricante', function (): void {
     // El log tecnico si sale de la instalacion, dentro del paquete de
@@ -121,7 +121,7 @@ it('seudonimiza el origen en el log tecnico, que es el que viaja al fabricante',
         ->and($apuntes[0]['context']['ip_hash'])->not->toBe('127.0.0.1')
         ->and(json_encode($apuntes[0]['context'], JSON_THROW_ON_ERROR))
         ->not->toContain('127.0.0.1');
-})->group('RS-12', 'RS-05');
+})->group('RS-13', 'RS-12', 'RS-05');
 
 it('deja asiento del cierre de sesion', function (): void {
     $user = ManagementUsers::withRole(UserRole::RRHH);
@@ -136,7 +136,7 @@ it('deja asiento del cierre de sesion', function (): void {
         ->and($asiento['actor_id'])->toBe($user->id)
         ->and($asiento['payload']['channel'])->toBe('management')
         ->and($asiento['payload']['user_uuid'])->toBe($user->uuid);
-})->group('RS-12', 'RS-05', 'RF-ID-01');
+})->group('RS-13', 'RS-12', 'RS-05', 'RF-ID-01');
 
 it('no escribe en audit_log cuando el acceso falla, y aun asi lo deja consultable', function (): void {
     $contador = AuthenticationTrail::countingMetrics();
@@ -167,7 +167,7 @@ it('no escribe en audit_log cuando el acceso falla, y aun asi lo deja consultabl
         ->not->toContain('rrhh@hotel.example');
 
     expect($contador->countOf(AuthChannel::MANAGEMENT, AuthOutcome::FAILURE))->toBe(1);
-})->group('RS-12', 'RS-03', 'RF-ID-01');
+})->group('RS-13', 'RS-12', 'RS-03', 'RF-ID-01');
 
 it('registra igual el fallo de una cuenta que existe y el de una que no', function (): void {
     // RS-03 y regla dura 17. Si el log distinguiera los dos casos, el oraculo
@@ -193,7 +193,7 @@ it('registra igual el fallo de una cuenta que existe y el de una que no', functi
 
     expect($apuntes)->toHaveCount(2)
         ->and($apuntes[0]['context'])->toBe($apuntes[1]['context']);
-})->group('RS-03', 'RS-12');
+})->group('RS-13', 'RS-03', 'RS-12');
 
 it('deja asiento del bloqueo del panel, una sola vez y sin nombrar la cuenta', function (): void {
     $contador = AuthenticationTrail::countingMetrics();
@@ -237,7 +237,7 @@ it('deja asiento del bloqueo del panel, una sola vez y sin nombrar la cuenta', f
     // —dos con la contrasena mala y el tercero contra el bloqueo— son `failure`.
     expect($contador->countOf(AuthChannel::MANAGEMENT, AuthOutcome::LOCKOUT))->toBe(1)
         ->and($contador->countOf(AuthChannel::MANAGEMENT, AuthOutcome::FAILURE))->toBe(3);
-})->group('RS-12', 'RS-02', 'RF-ID-01');
+})->group('RS-13', 'RS-12', 'RS-02', 'RF-ID-01');
 
 it('mantiene la cadena de hash verificable con los asientos de autenticacion dentro', function (): void {
     // El modo de fallo silencioso de ADR-010: un payload que no se serializa de
@@ -256,4 +256,4 @@ it('mantiene la cadena de hash verificable con los asientos de autenticacion den
 
     expect(DB::table('audit_log')->count())->toBe(2)
         ->and(app(VerifyAuditChain::class)->handle()->isIntact())->toBeTrue();
-})->group('RS-07', 'RS-12');
+})->group('RS-13', 'RS-07', 'RS-12');

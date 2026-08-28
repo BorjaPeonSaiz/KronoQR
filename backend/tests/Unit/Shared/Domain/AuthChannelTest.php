@@ -46,7 +46,7 @@ it('solo audita los hechos de sesion del panel', function (): void {
     expect(AuthChannel::MANAGEMENT->sessionEventsAreAudited())->toBeTrue()
         ->and(AuthChannel::PORTAL->sessionEventsAreAudited())->toBeFalse()
         ->and(AuthChannel::KIOSK_PIN->sessionEventsAreAudited())->toBeFalse();
-})->group('RS-12', 'RS-05');
+})->group('RS-13', 'RS-12', 'RS-05');
 
 it('traduce cada puerta del PIN a su canal, en un solo sitio', function (): void {
     // Dos vocabularios que describen lo mismo: `PinOrigin` es parte de una clave
