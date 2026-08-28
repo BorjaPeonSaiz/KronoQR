@@ -382,12 +382,18 @@ async function invalidate(): Promise<void> {
 }
 
 const inputClass =
-  'rounded border border-slate-400 px-3 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900'
+  'rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text'
+
+const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
+  active: 'bg-kq-success-soft text-kq-success',
+  suspended: 'bg-kq-warning-soft text-kq-warning',
+  terminated: 'bg-kq-danger-soft text-kq-danger',
+}
 </script>
 
 <template>
   <section>
-    <RouterLink :to="{ name: 'employees' }" class="underline">
+    <RouterLink :to="{ name: 'employees' }" class="text-kq-primary-strong underline">
       {{ t('employees.detail.backToList') }}
     </RouterLink>
 
@@ -398,21 +404,23 @@ const inputClass =
       <header class="mt-4 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 class="text-2xl font-bold">{{ fullName }}</h1>
-          <p class="mt-1 font-mono text-slate-700">{{ employee.employee_code }}</p>
+          <p class="mt-1 font-mono text-kq-text-muted">{{ employee.employee_code }}</p>
         </div>
-        <p class="rounded-full border border-slate-400 px-3 py-1">
+        <p class="rounded-full px-3 py-1 text-sm" :class="STATUS_PILL_CLASS[employee.status]">
           {{ t(`employees.status.${employee.status}`) }}
         </p>
       </header>
 
       <!-- Datos -->
-      <section class="mt-6 rounded border border-slate-300 bg-white p-4">
+      <section
+        class="mt-6 rounded-kq border border-kq-border bg-kq-surface-raised p-4 shadow-kq-soft"
+      >
         <div class="flex flex-wrap items-center justify-between gap-3">
           <h2 class="text-xl font-semibold">{{ t('employees.detail.dataHeading') }}</h2>
           <button
             v-if="!editing"
             type="button"
-            class="rounded border border-slate-400 px-3 py-2"
+            class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text hover:bg-kq-surface-alt"
             @click="startEditing"
           >
             {{ t('common.edit') }}
@@ -421,27 +429,27 @@ const inputClass =
 
         <dl v-if="!editing" class="mt-4 grid gap-3 sm:grid-cols-2">
           <div>
-            <dt class="font-medium text-slate-600">{{ t('employees.fields.site') }}</dt>
+            <dt class="font-medium text-kq-text-muted">{{ t('employees.fields.site') }}</dt>
             <dd>{{ siteName(employee.site_id) }}</dd>
           </div>
           <div>
-            <dt class="font-medium text-slate-600">{{ t('employees.fields.department') }}</dt>
+            <dt class="font-medium text-kq-text-muted">{{ t('employees.fields.department') }}</dt>
             <dd>{{ departmentName(employee.department_id) }}</dd>
           </div>
           <div>
-            <dt class="font-medium text-slate-600">{{ t('employees.fields.email') }}</dt>
+            <dt class="font-medium text-kq-text-muted">{{ t('employees.fields.email') }}</dt>
             <dd>{{ employee.email ?? t('employees.fields.emailAbsent') }}</dd>
           </div>
           <div>
-            <dt class="font-medium text-slate-600">{{ t('employees.fields.locale') }}</dt>
+            <dt class="font-medium text-kq-text-muted">{{ t('employees.fields.locale') }}</dt>
             <dd>{{ employee.locale }}</dd>
           </div>
           <div>
-            <dt class="font-medium text-slate-600">{{ t('employees.fields.hiredAt') }}</dt>
+            <dt class="font-medium text-kq-text-muted">{{ t('employees.fields.hiredAt') }}</dt>
             <dd>{{ formatCivilDate(employee.hired_at, locale) }}</dd>
           </div>
           <div v-if="employee.terminated_at !== null">
-            <dt class="font-medium text-slate-600">{{ t('employees.fields.terminatedAt') }}</dt>
+            <dt class="font-medium text-kq-text-muted">{{ t('employees.fields.terminatedAt') }}</dt>
             <dd>{{ formatCivilDate(employee.terminated_at, locale) }}</dd>
           </div>
         </dl>
@@ -529,7 +537,7 @@ const inputClass =
           <div class="flex gap-3 sm:col-span-2">
             <button
               type="button"
-              class="rounded border border-slate-400 px-4 py-2"
+              class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-4 py-2 text-kq-text hover:bg-kq-surface-alt"
               @click="editing = false"
             >
               {{ t('common.cancel') }}
@@ -537,7 +545,7 @@ const inputClass =
             <button
               type="submit"
               :disabled="pendingUpdate.changes.length === 0"
-              class="rounded bg-slate-900 px-4 py-2 font-semibold text-white disabled:opacity-60"
+              class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary disabled:opacity-60"
             >
               {{ t('employees.detail.reviewChanges') }}
             </button>
@@ -546,19 +554,23 @@ const inputClass =
       </section>
 
       <!-- PIN -->
-      <section class="mt-6 rounded border border-slate-300 bg-white p-4">
+      <section
+        class="mt-6 rounded-kq border border-kq-border bg-kq-surface-raised p-4 shadow-kq-soft"
+      >
         <h2 class="text-xl font-semibold">{{ t('pin.heading') }}</h2>
-        <p class="mt-1 text-slate-700">{{ t('pin.explanation') }}</p>
+        <p class="mt-1 text-kq-text-muted">{{ t('pin.explanation') }}</p>
         <p class="mt-3">
           <span class="font-medium">{{ t('pin.field') }}:</span>
           {{ t(`pin.status.${employee.pin_status}`) }}
         </p>
-        <p class="mt-1 text-sm text-slate-600">{{ t(`pin.statusHint.${employee.pin_status}`) }}</p>
+        <p class="mt-1 text-sm text-kq-text-muted">
+          {{ t(`pin.statusHint.${employee.pin_status}`) }}
+        </p>
 
         <div class="mt-4 flex flex-wrap gap-3">
           <button
             type="button"
-            class="rounded border border-slate-400 px-4 py-2"
+            class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-4 py-2 text-kq-text hover:bg-kq-surface-alt"
             @click="confirmingPinReset = true"
           >
             {{ t('pin.actions.reset') }}
@@ -566,7 +578,7 @@ const inputClass =
           <button
             v-if="employee.pin_status === 'issued'"
             type="button"
-            class="rounded bg-slate-900 px-4 py-2 font-semibold text-white"
+            class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary"
             @click="confirmingPinDelivery = true"
           >
             {{ t('pin.actions.registerDelivery') }}
@@ -575,33 +587,40 @@ const inputClass =
       </section>
 
       <!-- Registro horario (RF-PA-03) -->
-      <section v-if="canReadAttendance" class="mt-6 rounded border border-slate-300 bg-white p-4">
+      <section
+        v-if="canReadAttendance"
+        class="mt-6 rounded-kq border border-kq-border bg-kq-surface-raised p-4 shadow-kq-soft"
+      >
         <h2 class="text-xl font-semibold">{{ t('workdays.title') }}</h2>
-        <p class="mt-1 max-w-prose text-slate-700">{{ t('workdays.fromEmployee') }}</p>
+        <p class="mt-1 max-w-prose text-kq-text-muted">{{ t('workdays.fromEmployee') }}</p>
         <RouterLink
           :to="{ name: 'employee-workdays', params: { uuid: employee.uuid } }"
-          class="mt-3 inline-block underline"
+          class="mt-3 inline-block text-kq-primary-strong underline"
         >
           {{ t('workdays.linkFromEmployee') }}
         </RouterLink>
       </section>
 
       <!-- Credencial -->
-      <section class="mt-6 rounded border border-slate-300 bg-white p-4">
+      <section
+        class="mt-6 rounded-kq border border-kq-border bg-kq-surface-raised p-4 shadow-kq-soft"
+      >
         <h2 class="text-xl font-semibold">{{ t('employees.detail.credentialHeading') }}</h2>
-        <p class="mt-1 text-slate-700">{{ t('employees.detail.credentialExplanation') }}</p>
+        <p class="mt-1 text-kq-text-muted">{{ t('employees.detail.credentialExplanation') }}</p>
         <RouterLink
           :to="{ name: 'credentials', query: { site: employee.site_id } }"
-          class="mt-3 inline-block underline"
+          class="mt-3 inline-block text-kq-primary-strong underline"
         >
           {{ t('employees.detail.credentialLink') }}
         </RouterLink>
       </section>
 
       <!-- Baja -->
-      <section class="mt-6 rounded border border-slate-300 bg-white p-4">
+      <section
+        class="mt-6 rounded-kq border border-kq-border bg-kq-surface-raised p-4 shadow-kq-soft"
+      >
         <h2 class="text-xl font-semibold">{{ t('employees.offboard.heading') }}</h2>
-        <p class="mt-1 max-w-prose text-slate-700">{{ t('employees.offboard.explanation') }}</p>
+        <p class="mt-1 max-w-prose text-kq-text-muted">{{ t('employees.offboard.explanation') }}</p>
         <p v-if="employee.status === 'terminated'" class="mt-3">
           {{
             t('employees.offboard.alreadyTerminated', {
@@ -612,7 +631,7 @@ const inputClass =
         <button
           v-else
           type="button"
-          class="mt-3 rounded border border-red-700 px-4 py-2 font-semibold text-red-700"
+          class="mt-3 rounded-kq-sm bg-kq-danger px-4 py-2 font-semibold text-kq-on-danger"
           @click="startOffboarding"
         >
           {{ t('employees.offboard.action') }}
@@ -650,7 +669,7 @@ const inputClass =
     >
       <p class="mb-4">{{ t('pin.reset.explanation') }}</p>
       <ChangePreview :changes="pinResetChanges" :caption="t('pin.reset.heading')" />
-      <p class="mt-4 rounded border border-amber-400 bg-amber-50 p-3 text-amber-900">
+      <p class="mt-4 rounded-kq-sm border border-kq-warning bg-kq-warning-soft p-3 text-kq-warning">
         {{ t('pin.reset.warning') }}
       </p>
     </ConfirmDialog>
@@ -666,7 +685,7 @@ const inputClass =
     >
       <p class="mb-4">{{ t('pin.delivery.explanation', { name: fullName }) }}</p>
       <ChangePreview :changes="pinDeliveryChanges" :caption="t('pin.delivery.heading')" />
-      <p class="mt-4 text-sm text-slate-600">{{ t('pin.delivery.auditNotice') }}</p>
+      <p class="mt-4 text-sm text-kq-text-muted">{{ t('pin.delivery.auditNotice') }}</p>
     </ConfirmDialog>
 
     <ConfirmDialog
@@ -740,7 +759,7 @@ const inputClass =
         :caption="t('employees.offboard.heading')"
       />
 
-      <ul class="mt-4 list-disc pl-5 text-slate-700">
+      <ul class="mt-4 list-disc pl-5 text-kq-text-muted">
         <li>{{ t('employees.offboard.consequenceCredential') }}</li>
         <li>{{ t('employees.offboard.consequenceScan') }}</li>
         <li>{{ t('employees.offboard.consequenceHistory') }}</li>

@@ -111,7 +111,10 @@ watch(data, (value) => {
 
 <template>
   <section>
-    <RouterLink :to="{ name: 'employee', params: { uuid } }" class="underline">
+    <RouterLink
+      :to="{ name: 'employee', params: { uuid } }"
+      class="text-kq-primary-strong underline"
+    >
       {{ t('workdays.backToEmployee') }}
     </RouterLink>
 
@@ -119,11 +122,11 @@ watch(data, (value) => {
       <h1 class="text-2xl font-bold">{{ t('workdays.title') }}</h1>
       <p class="mt-1 text-lg" data-test="person">
         {{ personLabel }}
-        <span v-if="employee !== undefined" class="font-mono text-slate-700">
+        <span v-if="employee !== undefined" class="font-mono text-kq-text-muted">
           {{ employee.employee_code }}
         </span>
       </p>
-      <p class="mt-2 max-w-prose text-slate-700">{{ t('workdays.subtitle') }}</p>
+      <p class="mt-2 max-w-prose text-kq-text-muted">{{ t('workdays.subtitle') }}</p>
     </header>
 
     <form class="mt-4 flex max-w-3xl flex-wrap items-end gap-4" novalidate @submit.prevent="submit">
@@ -140,7 +143,7 @@ watch(data, (value) => {
             v-model="draft.from"
             type="date"
             :aria-describedby="field.describedBy"
-            class="rounded border border-slate-400 px-3 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+            class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text"
           />
         </FormField>
 
@@ -156,7 +159,7 @@ watch(data, (value) => {
             type="date"
             :aria-describedby="field.describedBy"
             :aria-invalid="field.invalid"
-            class="rounded border border-slate-400 px-3 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+            class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text"
           />
         </FormField>
       </fieldset>
@@ -164,18 +167,18 @@ watch(data, (value) => {
       <button
         type="submit"
         :disabled="!canSubmit"
-        class="rounded bg-slate-900 px-4 py-2 font-semibold text-white disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+        class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary disabled:opacity-50"
       >
         {{ t('workdays.filters.apply') }}
       </button>
     </form>
 
-    <p v-if="data !== undefined" class="mt-3 text-slate-700" data-test="resolved-range">
+    <p v-if="data !== undefined" class="mt-3 text-kq-text-muted" data-test="resolved-range">
       {{ t('workdays.filters.resolved', { from: data.from, to: data.to, zone: data.time_zone }) }}
-      <span v-if="isFetching" class="text-slate-500">{{ t('common.updating') }}</span>
+      <span v-if="isFetching" class="text-kq-text-muted">{{ t('common.updating') }}</span>
     </p>
-    <p class="mt-1 text-sm text-slate-600">{{ t('workdays.zoneNotice') }}</p>
-    <p class="mt-1 text-sm text-slate-600">{{ t('workdays.auditNotice') }}</p>
+    <p class="mt-1 text-sm text-kq-text-muted">{{ t('workdays.zoneNotice') }}</p>
+    <p class="mt-1 text-sm text-kq-text-muted">{{ t('workdays.auditNotice') }}</p>
 
     <LoadingPanel v-if="isPending" :label="t('workdays.loading')" class="mt-4" />
 

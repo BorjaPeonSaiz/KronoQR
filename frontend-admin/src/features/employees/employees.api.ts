@@ -20,6 +20,12 @@ export interface EmployeeListQuery {
   status?: EmploymentStatus
   siteId?: number
   departmentId?: number
+  /**
+   * Subcadena sobre nombre, apellidos, «nombre apellidos» y codigo de
+   * empleado, insensible a mayusculas y a acentos. La resuelve el servidor (parametro `q`
+   * del contrato), no el cliente.
+   */
+  q?: string
 }
 
 export function listEmployees(query: EmployeeListQuery): Promise<EmployeeCollection> {
@@ -30,6 +36,7 @@ export function listEmployees(query: EmployeeListQuery): Promise<EmployeeCollect
       status: query.status,
       site_id: query.siteId,
       department_id: query.departmentId,
+      q: query.q,
     },
   })
 }

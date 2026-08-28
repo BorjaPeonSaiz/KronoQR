@@ -41,16 +41,16 @@ const toHeading = computed(() => (props.toLabel === '' ? t('common.change.to') :
       }}
     </caption>
     <thead>
-      <tr class="border-b border-slate-300">
+      <tr class="border-b border-kq-border">
         <th scope="col" class="py-2 pr-4 font-semibold">{{ t('common.change.field') }}</th>
         <th scope="col" class="py-2 pr-4 font-semibold">{{ fromHeading }}</th>
         <th scope="col" class="py-2 font-semibold">{{ toHeading }}</th>
       </tr>
     </thead>
     <tbody>
-      <tr v-for="change of changes" :key="change.label" class="border-b border-slate-200">
+      <tr v-for="change of changes" :key="change.label" class="border-b border-kq-border">
         <th scope="row" class="py-2 pr-4 font-medium">{{ change.label }}</th>
-        <td class="py-2 pr-4 text-slate-600">{{ change.from }}</td>
+        <td class="py-2 pr-4 text-kq-text-muted">{{ change.from }}</td>
         <td class="py-2 font-semibold">{{ change.to }}</td>
       </tr>
     </tbody>

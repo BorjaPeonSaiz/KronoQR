@@ -41,7 +41,7 @@ const { t } = useI18n()
     <template #actions>
       <button
         type="button"
-        class="rounded border border-slate-400 px-4 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+        class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-4 py-2 text-kq-text hover:bg-kq-surface-alt"
         @click="emit('cancel')"
       >
         {{ t('common.cancel') }}
@@ -50,8 +50,12 @@ const { t } = useI18n()
         type="button"
         :disabled="busy || confirmDisabled"
         :aria-busy="busy"
-        class="rounded px-4 py-2 font-semibold text-white disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
-        :class="tone === 'danger' ? 'bg-red-700' : 'bg-slate-900'"
+        class="rounded-kq-sm px-4 py-2 font-semibold disabled:opacity-60"
+        :class="
+          tone === 'danger'
+            ? 'bg-kq-danger text-kq-on-danger'
+            : 'bg-kq-primary-strong text-kq-on-primary'
+        "
         @click="emit('confirm')"
       >
         {{ busy ? t('common.saving') : confirmLabel }}

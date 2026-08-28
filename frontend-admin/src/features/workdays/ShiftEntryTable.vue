@@ -115,19 +115,19 @@ function duration(minutes: number): string {
     <p
       v-if="entries.length === 0"
       data-test="entries-empty"
-      class="rounded border border-dashed border-slate-300 bg-white p-4 text-slate-700"
+      class="rounded-kq border border-dashed border-kq-border bg-kq-surface-raised p-4 text-kq-text-muted"
     >
       {{ t('workdays.entries.empty') }}
     </p>
 
-    <div v-else class="overflow-x-auto rounded border border-slate-300 bg-white">
+    <div v-else class="overflow-x-auto rounded-kq border border-kq-border bg-kq-surface-raised">
       <table class="w-full border-collapse text-left">
         <caption class="sr-only">
           {{
             t('workdays.entries.caption', { date: workDate, zone: timeZone })
           }}
         </caption>
-        <thead class="border-b border-slate-300 bg-slate-50">
+        <thead class="border-b border-kq-border bg-kq-surface-alt">
           <tr>
             <th scope="col" class="px-3 py-2">
               {{ t('workdays.entries.in', { zone: zoneLabel }) }}
@@ -142,27 +142,27 @@ function duration(minutes: number): string {
         </thead>
 
         <tbody>
-          <tr v-for="row of rows" :key="row.uuid" class="border-b border-slate-200 align-top">
+          <tr v-for="row of rows" :key="row.uuid" class="border-b border-kq-border align-top">
             <th scope="row" class="px-3 py-2 font-medium">
               <span class="text-lg tabular-nums">{{ row.clockIn.local }}</span>
               <span v-if="row.otherTimeZone !== null" class="ml-1 text-sm font-normal">
                 ({{ row.otherTimeZone }})
               </span>
-              <span class="block text-sm font-normal text-slate-600">
+              <span class="block text-sm font-normal text-kq-text-muted">
                 {{ t('workdays.entries.utc', { time: row.clockIn.utc }) }}
               </span>
               <span
                 v-if="row.clockIn.recordedAt !== null"
-                class="block text-sm font-normal text-slate-600"
+                class="block text-sm font-normal text-kq-text-muted"
               >
                 {{ t('workdays.entries.recorded', { moment: row.clockIn.recordedAt }) }}
               </span>
-              <span v-else class="block text-sm font-normal text-slate-600">
+              <span v-else class="block text-sm font-normal text-kq-text-muted">
                 {{ t('workdays.entries.notRecorded') }}
               </span>
               <span
                 v-if="row.clockIn.queueDelayMinutes !== null"
-                class="mt-1 block text-sm font-normal text-amber-800"
+                class="mt-1 block text-sm font-normal text-kq-warning"
               >
                 {{
                   t('workdays.entries.queued', { delay: duration(row.clockIn.queueDelayMinutes) })
@@ -173,27 +173,30 @@ function duration(minutes: number): string {
             <td class="px-3 py-2">
               <template v-if="row.clockOut === null">
                 <span class="text-lg">{{ t('workdays.entries.open') }}</span>
-                <span class="block text-sm text-slate-600">
+                <span class="block text-sm text-kq-text-muted">
                   {{ t('workdays.entries.openHint') }}
                 </span>
               </template>
               <template v-else>
                 <span class="text-lg tabular-nums">{{ row.clockOut.local }}</span>
-                <span v-if="row.clockOut.nextDay" class="ml-1 text-sm text-slate-700">
+                <span v-if="row.clockOut.nextDay" class="ml-1 text-sm text-kq-text-muted">
                   {{ t('workdays.entries.nextDay') }}
                 </span>
-                <span class="block text-sm text-slate-600">
+                <span class="block text-sm text-kq-text-muted">
                   {{ t('workdays.entries.utc', { time: row.clockOut.utc }) }}
                 </span>
-                <span v-if="row.clockOut.recordedAt !== null" class="block text-sm text-slate-600">
+                <span
+                  v-if="row.clockOut.recordedAt !== null"
+                  class="block text-sm text-kq-text-muted"
+                >
                   {{ t('workdays.entries.recorded', { moment: row.clockOut.recordedAt }) }}
                 </span>
-                <span v-else class="block text-sm text-slate-600">
+                <span v-else class="block text-sm text-kq-text-muted">
                   {{ t('workdays.entries.notRecorded') }}
                 </span>
                 <span
                   v-if="row.clockOut.queueDelayMinutes !== null"
-                  class="mt-1 block text-sm text-amber-800"
+                  class="mt-1 block text-sm text-kq-warning"
                 >
                   {{
                     t('workdays.entries.queued', {
@@ -220,14 +223,14 @@ function duration(minutes: number): string {
 
             <td class="px-3 py-2">
               {{ t(`workdays.entryStatus.${row.status}`) }}
-              <span class="block text-sm text-slate-600">
+              <span class="block text-sm text-kq-text-muted">
                 {{ t('workdays.entries.version', { version: row.version }) }}
               </span>
             </td>
           </tr>
         </tbody>
 
-        <tfoot class="border-t-2 border-slate-400 bg-slate-50">
+        <tfoot class="border-t-2 border-kq-border-strong bg-kq-surface-alt">
           <tr>
             <th scope="row" colspan="2" class="px-3 py-2 text-right">
               {{ t('workdays.entries.sum') }}
@@ -253,7 +256,7 @@ function duration(minutes: number): string {
     <p
       v-if="!totalsAgree"
       data-test="totals-mismatch"
-      class="mt-2 rounded border border-amber-400 bg-amber-50 p-3 text-amber-900"
+      class="mt-2 rounded-kq-sm border border-kq-warning bg-kq-warning-soft p-3 text-kq-warning"
     >
       {{ t('workdays.entries.mismatch') }}
     </p>

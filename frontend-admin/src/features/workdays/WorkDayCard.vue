@@ -39,12 +39,12 @@ const recalculatedAt = computed(() =>
 </script>
 
 <template>
-  <article data-test="workday" class="rounded border border-slate-300 bg-slate-50 p-4">
+  <article data-test="workday" class="rounded-kq border border-kq-border bg-kq-surface-alt p-4">
     <header class="flex flex-wrap items-baseline justify-between gap-3">
       <div>
         <h2 class="text-xl font-bold">
           {{ heading }}
-          <span class="text-base font-normal text-slate-600">
+          <span class="text-base font-normal text-kq-text-muted">
             ({{ day.time_zone }}, {{ zoneLabel }})
           </span>
         </h2>
@@ -52,14 +52,14 @@ const recalculatedAt = computed(() =>
           <span
             v-if="day.has_open_shift"
             data-test="flag-open-shift"
-            class="rounded-full border border-amber-500 bg-amber-50 px-3 py-1 text-sm font-semibold text-amber-900"
+            class="rounded-full bg-kq-warning-soft px-3 py-1 text-sm font-semibold text-kq-warning"
           >
             {{ t('workdays.day.flags.openShift') }}
           </span>
           <span
             v-if="day.has_incident"
             data-test="flag-incident"
-            class="rounded-full border border-red-500 bg-red-50 px-3 py-1 text-sm font-semibold text-red-900"
+            class="rounded-full bg-kq-danger-soft px-3 py-1 text-sm font-semibold text-kq-danger"
           >
             {{ t('workdays.day.flags.incident') }}
           </span>
@@ -67,15 +67,15 @@ const recalculatedAt = computed(() =>
       </div>
 
       <p class="text-right">
-        <span class="block text-sm text-slate-600">{{ t('workdays.day.total') }}</span>
+        <span class="block text-sm text-kq-text-muted">{{ t('workdays.day.total') }}</span>
         <span class="text-2xl font-bold tabular-nums" data-test="day-total">{{ total }}</span>
       </p>
     </header>
 
-    <p v-if="day.has_open_shift" class="mt-2 text-slate-700">
+    <p v-if="day.has_open_shift" class="mt-2 text-kq-text-muted">
       {{ t('workdays.day.flags.openShiftHint') }}
     </p>
-    <p v-if="day.has_incident" class="mt-1 text-slate-700">
+    <p v-if="day.has_incident" class="mt-1 text-kq-text-muted">
       {{ t('workdays.day.flags.incidentHint') }}
     </p>
 
@@ -87,7 +87,7 @@ const recalculatedAt = computed(() =>
       :work-date="day.work_date"
     />
 
-    <p class="mt-2 text-sm text-slate-600">
+    <p class="mt-2 text-sm text-kq-text-muted">
       {{
         recalculatedAt === null
           ? t('workdays.day.recalculatedNever')
