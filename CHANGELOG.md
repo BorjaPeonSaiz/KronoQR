@@ -13,6 +13,46 @@ lo siga no aparece aqui, y el generador lo avisa por la salida de error.
 Ninguna version se publica sin su entrada: `make changelog-check VERSION=1.2.3`
 falla si no la encuentra, y la CI ejecuta esa comprobacion al etiquetar.
 
+## [1.2.0] - 2026-08-28
+
+### Anadido
+
+- los selectores filtran toda la plantilla y se pagina de 30 en 30 (admin)
+- registro mas legible y acceso sin textos de ayuda (portal)
+- filtro pin_status en GET /employees resuelto en servidor (workforce)
+- el QR ocupa media tarjeta y el codigo va en negrita bajo el nombre (identity)
+- visor centrado para encuadrar el QR, sin velo sobre la camara (kiosk)
+- el registro ocupa el 88 % del ancho desde 1024 px, con tema (portal)
+- buscadores y paginacion en plantilla y credenciales, y tema (admin)
+- acceso por PIN bajo las instrucciones, aviso RGPD compacto y tema (kiosk)
+- busqueda q por nombre, apellidos y codigo en GET /employees (workforce)
+- sistema visual compartido con contraste medido por prueba (web-kit)
+- agente ui-ux para el sistema visual de las tres SPA (agents)
+- el panel y el portal capturan por fin sus errores (regla dura 21) (web-kit)
+
+### Corregido
+
+- un PIN erroneo ya no muestra un exito antes del rechazo (kiosk)
+- el filtro pending de /credentials/status acepta true/false (identity)
+- el quiosco envia por fin su llave de dispositivo (kiosk)
+- las tres SPA se prueban desde el host, con proxy /api al Nginx del entorno (dev)
+- la etapa de unitarias levanta el PostgreSQL del producto y el workspace se audita entero (ci)
+
+### Seguridad
+
+- neutraliza la inyeccion de formulas CSV en los dos escritores (export)
+
+### Interno
+
+- el envio de la tarjeta por correo queda descartado (handoff)
+- sesion de UI/UX, buscadores y sistema visual compartido (handoff)
+- version 1.1.0 empujada; la PR y la etiqueta quedan para main (handoff)
+- version 1.1.0 (release)
+- retira suma.py, un fichero suelto ajeno al producto
+- prueba de carga k6 del fichaje, con aprovisionamiento y agregado multi-origen (perf)
+- la duracion de la suite unitaria gana gate y umbral honesto (quality)
+- el umbral de RN-07 vuelve a tener una sola fuente (attendance)
+
 ## [1.1.0] - 2026-08-27
 
 ### Anadido
