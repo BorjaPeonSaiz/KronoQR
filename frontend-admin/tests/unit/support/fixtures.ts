@@ -1,5 +1,6 @@
 // Datos de ejemplo, calcados de los del contrato. Si el contrato cambia de
 // forma, estas pruebas dejan de compilar antes que la aplicacion falle.
+import { EMPLOYEE_LIST_PER_PAGE } from '@/features/employees/employees.api'
 import type {
   Credential,
   CredentialStatusBoard,
@@ -38,10 +39,19 @@ export function employee(overrides: Partial<Employee> = {}): Employee {
   }
 }
 
+// Este mock no lee `per_page` de la peticion: pagina con el tamano real del
+// listado para que la aritmetica de las pruebas sea la del codigo.
+const EMPLOYEE_COLLECTION_PER_PAGE = EMPLOYEE_LIST_PER_PAGE
+
 export function employeeCollection(data: Employee[], total = data.length): EmployeeCollection {
   return {
     data,
-    meta: { page: 1, per_page: 25, total, total_pages: Math.max(Math.ceil(total / 25), 1) },
+    meta: {
+      page: 1,
+      per_page: EMPLOYEE_COLLECTION_PER_PAGE,
+      total,
+      total_pages: Math.max(Math.ceil(total / EMPLOYEE_COLLECTION_PER_PAGE), 1),
+    },
   }
 }
 

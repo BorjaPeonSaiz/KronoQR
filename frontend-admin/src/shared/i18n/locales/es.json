@@ -21,12 +21,10 @@
   },
   "auth": {
     "heading": "Acceso al panel de gestión",
-    "intro": "Introduce el correo y la contraseña de tu cuenta de gestión.",
     "email": "Correo electrónico",
     "password": "Contraseña",
     "submit": "Entrar",
-    "submitting": "Entrando…",
-    "employeeNotice": "¿Eres empleado y quieres consultar tu registro horario? No se entra por aquí: el portal del empleado se abre con tu código de empleado y tu PIN, que te entregan en mano junto con la tarjeta."
+    "submitting": "Entrando…"
   },
   "common": {
     "cancel": "Cancelar",
@@ -124,8 +122,7 @@
       "department": "Departamento",
       "departmentAll": "Todos los departamentos",
       "pinStatus": "Estado del PIN",
-      "pinStatusAll": "Cualquier estado del PIN",
-      "pinStatusHint": "Se aplica solo a la página que se está viendo, no a toda la plantilla."
+      "pinStatusAll": "Cualquier estado del PIN"
     },
     "status": {
       "active": "En alta",

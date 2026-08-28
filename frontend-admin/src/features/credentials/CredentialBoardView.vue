@@ -39,7 +39,13 @@ import {
   printCredentialBatch,
   revokeCredential,
 } from './credentials.api'
-import { NO_DEPARTMENT, departmentOptionsFrom, filterRows, paginate } from './useCredentialRows'
+import {
+  CLIENT_PER_PAGE,
+  NO_DEPARTMENT,
+  departmentOptionsFrom,
+  filterRows,
+  paginate,
+} from './useCredentialRows'
 
 /** Píldora de estado de la fila: refleja el ciclo de vida, no una decisión estética. */
 const STATUS_PILL_CLASS: Record<CredentialLifecycleStatus, string> = {
@@ -60,8 +66,6 @@ const CREDENTIAL_LIFECYCLE_STATUSES: readonly CredentialLifecycleStatus[] = [
   'delivered',
   'revoked',
 ]
-
-const CLIENT_PER_PAGE = 25
 
 /**
  * Valor del `<select>` de estado que significa «solo quien todavia no tiene

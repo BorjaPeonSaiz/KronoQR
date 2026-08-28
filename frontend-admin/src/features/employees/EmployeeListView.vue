@@ -27,9 +27,9 @@ import type { EmployeeProvisioned, EmploymentStatus, PinStatus } from '@/shared/
 import PaginationBar from '@/shared/ui/PaginationBar.vue'
 import EmployeeCreateDialog from './EmployeeCreateDialog.vue'
 import PinRevealDialog from './PinRevealDialog.vue'
-import { listEmployees } from './employees.api'
+import { EMPLOYEE_LIST_PER_PAGE, listEmployees } from './employees.api'
 
-const PER_PAGE = 25
+const PER_PAGE = EMPLOYEE_LIST_PER_PAGE
 const SEARCH_DEBOUNCE_MS = 300
 const EMPLOYMENT_STATUSES: readonly EmploymentStatus[] = ['active', 'suspended', 'terminated']
 const PIN_STATUSES: readonly PinStatus[] = ['pending', 'issued', 'delivered']
@@ -69,11 +69,12 @@ const statusFilter = ref<EmploymentStatus | ''>(
 const siteFilter = ref<number | ''>(queryInt('site'))
 const departmentFilter = ref<number | ''>(queryInt('department'))
 
-// Estado del PIN: el contrato no lo filtra en el servidor. Se filtra sobre la
-// pagina ya cargada y la interfaz lo advierte (ver `pinStatusHint` mas abajo):
-// es peor UX un select que promete algo que solo mira 25 filas sin decirlo,
-// que uno que lo dice.
-const pinStatusFilter = ref<PinStatus | ''>('')
+const initialPinStatus = queryParam('pin_status')
+const pinStatusFilter = ref<PinStatus | ''>(
+  (PIN_STATUSES as readonly string[]).includes(initialPinStatus)
+    ? (initialPinStatus as PinStatus)
+    : '',
+)
 
 const creating = ref(false)
 
@@ -102,6 +103,7 @@ const query = computed(() => ({
   ...(statusFilter.value === '' ? {} : { status: statusFilter.value }),
   ...(siteFilter.value === '' ? {} : { siteId: siteFilter.value }),
   ...(departmentFilter.value === '' ? {} : { departmentId: departmentFilter.value }),
+  ...(pinStatusFilter.value === '' ? {} : { pinStatus: pinStatusFilter.value }),
 }))
 
 const {
@@ -130,14 +132,6 @@ watch(
       page.value = Math.max(totalPages, 1)
     }
   },
-)
-
-// El filtro de estado del PIN se aplica AQUI, sobre la pagina que ya llego:
-// nunca sobre la plantilla entera, porque el servidor no la manda entera.
-const visibleRows = computed(() =>
-  pinStatusFilter.value === ''
-    ? rows.value
-    : rows.value.filter((employee) => employee.pin_status === pinStatusFilter.value),
 )
 
 const siteNames = computed(
@@ -229,8 +223,8 @@ function clearFilters(): void {
 // La query string refleja el estado, para que un enlace copiado o el «volver»
 // del navegador reproduzcan la misma vista.
 watch(
-  [qFilter, statusFilter, siteFilter, departmentFilter, page],
-  ([q, status, site, department, currentPage]) => {
+  [qFilter, statusFilter, siteFilter, departmentFilter, pinStatusFilter, page],
+  ([q, status, site, department, pinStatus, currentPage]) => {
     const nextQuery: Record<string, string> = {}
 
     if (q !== '') {
@@ -247,6 +241,10 @@ watch(
 
     if (department !== '') {
       nextQuery['department'] = String(department)
+    }
+
+    if (pinStatus !== '') {
+      nextQuery['pin_status'] = pinStatus
     }
 
     if (currentPage !== 1) {
@@ -393,15 +391,17 @@ const selectClass =
           <label for="employees-pin-status-filter" class="font-medium">
             {{ t('employees.filters.pinStatus') }}
           </label>
-          <select id="employees-pin-status-filter" v-model="pinStatusFilter" :class="selectClass">
+          <select
+            id="employees-pin-status-filter"
+            v-model="pinStatusFilter"
+            :class="selectClass"
+            @change="resetToFirstPage"
+          >
             <option value="">{{ t('employees.filters.pinStatusAll') }}</option>
             <option v-for="status of PIN_STATUSES" :key="status" :value="status">
               {{ t(`pin.status.${status}`) }}
             </option>
           </select>
-          <p class="max-w-xs text-sm text-kq-text-muted">
-            {{ t('employees.filters.pinStatusHint') }}
-          </p>
         </div>
       </fieldset>
 
@@ -427,13 +427,6 @@ const selectClass =
         :description="hasFilters ? t('employees.empty.filtered') : t('employees.empty.description')"
       />
 
-      <EmptyState
-        v-else-if="visibleRows.length === 0"
-        class="mt-4"
-        :title="t('employees.empty.title')"
-        :description="t('employees.empty.filtered')"
-      />
-
       <div
         v-else
         class="mt-4 overflow-x-auto rounded-kq border border-kq-border bg-kq-surface-raised shadow-kq-soft"
@@ -457,11 +450,7 @@ const selectClass =
             </tr>
           </thead>
           <tbody>
-            <tr
-              v-for="employee of visibleRows"
-              :key="employee.uuid"
-              class="border-b border-kq-border"
-            >
+            <tr v-for="employee of rows" :key="employee.uuid" class="border-b border-kq-border">
               <th scope="row" class="px-3 py-2 font-medium">
                 <RouterLink
                   :to="{ name: 'employee', params: { uuid: employee.uuid } }"

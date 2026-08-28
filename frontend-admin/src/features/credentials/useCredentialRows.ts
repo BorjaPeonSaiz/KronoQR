@@ -10,6 +10,9 @@ import type { CredentialLifecycleStatus, CredentialStatusRow } from '@/shared/ap
 /** Valor de `department` que significa «sin departamento asignado». */
 export const NO_DEPARTMENT = '__no_department__'
 
+/** Tamano de pagina EN CLIENTE del tablero (RF-QR-08). */
+export const CLIENT_PER_PAGE = 30
+
 export interface CredentialRowFilters {
   /** Subcadena sobre nombre y codigo de empleado. Insensible a mayusculas y a acentos. */
   search: string

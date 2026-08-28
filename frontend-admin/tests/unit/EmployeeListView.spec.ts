@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import EmployeeListView from '@/features/employees/EmployeeListView.vue'
+import { EMPLOYEE_LIST_PER_PAGE as PER_PAGE } from '@/features/employees/employees.api'
 import es from '@/shared/i18n/locales/es.json'
 import { announcement, clearAnnouncement } from '@kronoqr/web-kit/announcer'
 import { EMPLOYEE_UUID, SITE, employee, employeeCollection } from './support/fixtures'
@@ -120,8 +121,10 @@ describe('EmployeeListView', () => {
 
     await settle()
 
-    expect(spy.mock.calls.some((call) => String(call[0]).includes('per_page=25'))).toBe(true)
-    expect(wrapper.text()).toContain('1–25 de 120')
+    expect(spy.mock.calls.some((call) => String(call[0]).includes(`per_page=${PER_PAGE}`))).toBe(
+      true,
+    )
+    expect(wrapper.text()).toContain(`1–${PER_PAGE} de 120`)
 
     await wrapper.findAll('nav button')[1]?.trigger('click')
     await settle()
@@ -189,30 +192,45 @@ describe('EmployeeListView', () => {
     expect(urls.some((url) => url.includes('department_id=3'))).toBe(true)
   })
 
-  it('el estado del PIN se filtra sobre la pagina visible, no sobre toda la plantilla (RF-GP-01)', async () => {
-    stubFetch(
-      routes(
-        employeeCollection([
-          employee({ uuid: EMPLOYEE_UUID, pin_status: 'delivered' }),
-          employee({ uuid: '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b91', pin_status: 'pending' }),
-        ]),
-      ),
-    )
+  it('el estado del PIN se envia al servidor con `pin_status`, y reinicia la pagina (RF-GP-01)', async () => {
+    const spy = stubFetch(routes(employeeCollection([employee({ pin_status: 'delivered' })], 120)))
 
     const wrapper = await mountView(EmployeeListView)
 
     await settle()
-    expect(wrapper.findAll('tbody tr')).toHaveLength(2)
+    await wrapper.findAll('nav button')[1]?.trigger('click')
+    await settle()
+
+    expect(spy.mock.calls.some((call) => String(call[0]).includes('page=2'))).toBe(true)
 
     await wrapper.find('#employees-pin-status-filter').setValue('delivered')
     await settle()
 
-    expect(wrapper.findAll('tbody tr')).toHaveLength(1)
-    expect(wrapper.text()).toContain(es.employees.filters.pinStatusHint)
+    const urls = spy.mock.calls.map((call) => String(call[0]))
+
+    expect(urls.some((url) => url.includes('pin_status=delivered') && url.includes('page=1'))).toBe(
+      true,
+    )
   })
 
-  it('la barra de paginacion sigue visible aunque el filtro de PIN deje la pagina vacia (RF-GP-01)', async () => {
-    stubFetch(routes(employeeCollection([employee({ pin_status: 'pending' })], 30)))
+  it('la barra de paginacion sigue visible aunque el filtro de PIN no tenga resultados (RF-GP-01)', async () => {
+    const spy = stubFetch((url: string) => {
+      if (url.startsWith('/api/v1/sites')) {
+        return jsonResponse({ data: [SITE] })
+      }
+
+      if (url.startsWith('/api/v1/departments')) {
+        return jsonResponse(DEPARTMENTS)
+      }
+
+      // El servidor, no el cliente, decide que ninguna fila encaja con el
+      // filtro de estado del PIN elegido.
+      if (url.includes('pin_status=delivered')) {
+        return jsonResponse({ data: [], meta: { page: 1, per_page: 30, total: 0, total_pages: 0 } })
+      }
+
+      return jsonResponse(employeeCollection([employee({ pin_status: 'pending' })], 30))
+    })
 
     const wrapper = await mountView(EmployeeListView)
 
@@ -220,12 +238,11 @@ describe('EmployeeListView', () => {
     await wrapper.find('#employees-pin-status-filter').setValue('delivered')
     await settle()
 
-    // La pagina SI tiene filas del servidor (`rows`), solo que ninguna encaja
-    // con el filtro de PIN aplicado en cliente (`visibleRows`): sin la barra
-    // no habria forma de avanzar a la pagina donde si las hay.
+    expect(spy.mock.calls.some((call) => String(call[0]).includes('pin_status=delivered'))).toBe(
+      true,
+    )
     expect(wrapper.text()).toContain(es.employees.empty.filtered)
     expect(wrapper.find('nav').exists()).toBe(true)
-    expect(wrapper.text()).toContain(es.common.pagination.next)
   })
 
   it('acota la pagina si un favorito guardado apunta mas alla del total real (RF-GP-01)', async () => {
@@ -245,7 +262,7 @@ describe('EmployeeListView', () => {
       // favorito antes de una baja masiva queda fuera de rango.
       return jsonResponse({
         data: requestedPage === 1 ? rows : [],
-        meta: { page: requestedPage, per_page: 25, total: rows.length, total_pages: 1 },
+        meta: { page: requestedPage, per_page: PER_PAGE, total: rows.length, total_pages: 1 },
       })
     })
 
