@@ -591,19 +591,21 @@ Los arts. 20.3 ET y 87-91 LOPDGDD exigen informar previamente a la plantilla y a
 
 ### 8.1 Modelo de amenazas (STRIDE)
 
-| Amenaza | Vector | Mitigación |
-|---|---|---|
-| **Suplantación** | Generación de un QR falso para un compañero | **Resuelto**: firma HMAC del payload (RS-01). |
-| **Suplantación** | Préstamo de la tarjeta a un compañero (*buddy punching*) | Fraude **autolimitado**: prestarla deja al titular sin la suya, exige entrega y devolución, y solo funciona si el titular no piensa fichar. Mitigación: supervisión presencial y detección automática de patrones anómalos (RF-PR-06): dos fichajes en el mismo quiosco separados por segundos, coincidencias sistemáticas entre dos empleados. |
-| **Suplantación** | Fuerza bruta del PIN de portal o de quiosco | Bloqueo por intentos, limitación de tasa, portal restringido a red interna por defecto (RS-12, RF-ID-08). |
-| **Manipulación** | Alterar horas en base de datos | Auditoría encadenada, versionado de registros, usuario de base de datos con permisos mínimos, copias verificadas. |
-| **Manipulación** | Alteración de la clave de licencia | Clave firmada y verificada localmente. **Es un control comercial, no de seguridad de datos**: no debe protegerse a costa de bloquear el registro legal. |
-| **Repudio** | "Yo sí fiché" / "esa corrección no la hice yo" | `scan_events` inmutable, auditoría con actor y doble marca temporal. |
-| **Divulgación** | Filtración del padrón cacheado en la tablet | Cifrado en reposo, solo datos mínimos, purga al desvincular el dispositivo. |
-| **Divulgación** | El paquete de diagnóstico contiene datos personales | Anonimizado por defecto (RF-PD-09, RL-19). |
-| **Denegación de servicio** | Inundación del endpoint de fichaje | Rate limiting en Nginx y aplicación, colas, y **modo offline que mantiene operativo el fichaje**. |
-| **Elevación** | Token de quiosco usado contra endpoints de gestión | Ámbitos estrictos, autorización por política en cada endpoint y pruebas de autorización obligatorias. |
-| **Elevación** | Acceso de soporte usado fuera del incidente que lo motivó | Concesión expresa, temporal, de alcance limitado, revocable y auditada de forma visible para el cliente (RF-PD-11). |
+| Amenaza | Vector | Mitigación | ATT&CK |
+|---|---|---|---|
+| **Suplantación** | Generación de un QR falso para un compañero | **Resuelto**: firma HMAC del payload (RS-01). | `T1606 Forjado de credenciales web` |
+| **Suplantación** | Préstamo de la tarjeta a un compañero (*buddy punching*) | Fraude **autolimitado**: prestarla deja al titular sin la suya, exige entrega y devolución, y solo funciona si el titular no piensa fichar. Mitigación: supervisión presencial y detección automática de patrones anómalos (RF-PR-06): dos fichajes en el mismo quiosco separados por segundos, coincidencias sistemáticas entre dos empleados. | — |
+| **Suplantación** | Fuerza bruta del PIN de portal o de quiosco | Bloqueo por intentos, limitación de tasa, portal restringido a red interna por defecto (RS-12, RF-ID-08). | `T1110.001 Fuerza bruta: adivinación de contraseña` |
+| **Manipulación** | Alterar horas en base de datos | Auditoría encadenada, versionado de registros, usuario de base de datos con permisos mínimos, copias verificadas. | `T1565.001 Manipulación de datos almacenados` |
+| **Manipulación** | Alteración de la clave de licencia | Clave firmada y verificada localmente. **Es un control comercial, no de seguridad de datos**: no debe protegerse a costa de bloquear el registro legal. | `T1553 Subvertir controles de confianza` |
+| **Repudio** | "Yo sí fiché" / "esa corrección no la hice yo" | `scan_events` inmutable, auditoría con actor y doble marca temporal. | `T1070 Eliminación de indicadores` |
+| **Divulgación** | Filtración del padrón cacheado en la tablet | Cifrado en reposo, solo datos mínimos, purga al desvincular el dispositivo. | `T1005 Datos del sistema local` |
+| **Divulgación** | El paquete de diagnóstico contiene datos personales | Anonimizado por defecto (RF-PD-09, RL-19). | — |
+| **Denegación de servicio** | Inundación del endpoint de fichaje | Rate limiting en Nginx y aplicación, colas, y **modo offline que mantiene operativo el fichaje**. | `T1499.002 DoS de punto final: inundación de servicio` |
+| **Elevación** | Token de quiosco usado contra endpoints de gestión | Ámbitos estrictos, autorización por política en cada endpoint y pruebas de autorización obligatorias. | `T1550.001 Material de autenticación alternativo: token de aplicación` |
+| **Elevación** | Acceso de soporte usado fuera del incidente que lo motivó | Concesión expresa, temporal, de alcance limitado, revocable y auditada de forma visible para el cliente (RF-PD-11). | `T1199 Relación de confianza` |
+
+> **Para qué sirve la columna ATT&CK.** STRIDE dice qué se mitiga; MITRE ATT&CK (matriz Enterprise; el identificador es el canónico, el nombre corto va traducido) nombra la técnica tal como la buscaría un analista en un SIEM o en un informe de incidente, y obliga a mirar el otro lado del control: la **detección**. Cada técnica cuya mitigación figura como resuelta debería tener además una señal observable, porque un control sin señal no distingue «nadie lo intentó» de «lo intentaron y falló». Hoy la tienen `T1565.001` y `T1070` sobre `audit_log` —verificación diaria de la cadena y alerta `RoturaDeCadenaDeAuditoria` (RS-07)— y `T1110.001` la está recibiendo con la auditoría de autenticación y las alertas `KronoqrAuth*` que se incorporan en `infra/observability` (doc 07 §5; hasta que queden en verde, la señal es solo el bloqueo por intentos y la telemetría del portal, sin alerta). **Sin detección hoy:** `T1606` (los rechazos de firma se cuentan como métrica, sin alerta), `T1499.002` (el borde responde `429` pero la alerta de saturación llega con la tarea 3.2), `T1550.001` (un `403` no deja asiento ni alerta), `T1199` (la concesión auditada llega con la tarea 5.9) y `T1005` (por naturaleza solo es mitigable: cifrado y purga). Las dos filas con «—» no describen a un adversario informático sino a una persona con acceso legítimo o a un proceso propio: el préstamo de tarjeta es un fraude físico que ATT&CK no modela y cuya señal es el patrón anómalo (RF-PR-06); el paquete de diagnóstico con datos personales es un fallo de minimización, no un ataque. Cuatro técnicas relevantes no tienen fila porque su mitigación vive fuera de este modelo: `T1195.002 Cadena de suministro: software` (RS-10), `T1557 Intermediario` (TLS 1.3 obligatorio, doc 02 §7.1), `T1552 Credenciales no protegidas en ficheros` (RS-08) y `T1200 Hardware adicional` en la VLAN de quioscos (segmentación por `KIOSK_VLAN_CIDR`). La madurez y la cobertura técnica → detección se siguen en `docs/07-seguridad-madurez-y-amenazas.md`.
 
 ---
 

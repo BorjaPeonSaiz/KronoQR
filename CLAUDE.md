@@ -14,6 +14,7 @@ Antes de escribir código, lee lo que corresponda a tu tarea:
 - [docs/04-decision-credencial.md](docs/04-decision-credencial.md) — por qué la credencial es una tarjeta física
 - [docs/05-presentacion-cliente.md](docs/05-presentacion-cliente.md) — **lo que se le ha prometido al cliente.** Si lo que vas a implementar contradice este documento, o el documento promete algo que no existe como requisito, para y dilo
 - [docs/06-guia-visual.md](docs/06-guia-visual.md) — sistema visual compartido de las tres SPA: tokens `--kq-*` de `packages/web-kit`, contrastes WCAG medidos, tipografía autoalojada y reglas de uso. **Ninguna SPA declara un color propio**; la marca por defecto es del fabricante y la tarea 5.8 la hace configurable
+- [docs/07-seguridad-madurez-y-amenazas.md](docs/07-seguridad-madurez-y-amenazas.md) — autoevaluación OWASP SAMM 2.0 con la evidencia del repositorio, mapa a Microsoft SDL, técnicas ATT&CK del modelo de amenazas y riesgos aceptados. **Se revisa en cada cierre de fase** por `seguridad-cumplimiento`; un nivel solo sube con evidencia, nunca por intención
 - [docs/adr/](docs/adr/) — decisiones arquitectónicas. **Si vas a contradecir un ADR, para y pregunta.**
 - [docs/api/openapi.yaml](docs/api/openapi.yaml) — contrato de la API. **Es la fuente de verdad: se modifica antes que el código.**
 - `plan implementacion/` — el detalle tarea a tarea (pasos, artefactos, pruebas exigidas, agente asignado) de cada fase. Doc 02 §11 da la tabla resumen; el detalle ejecutable de cada tarea vive aquí.
