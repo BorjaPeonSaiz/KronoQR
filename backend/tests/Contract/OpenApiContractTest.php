@@ -913,3 +913,28 @@ it('no describe la forma del codigo de empleado en el acceso al portal', functio
         ->and(Contract::text('components', 'schemas', 'PortalLoginRequest', 'properties', 'pin', 'pattern'))
         ->toBe('^[0-9]{6}$');
 })->group('RS-03', 'RF-ID-06');
+
+it('filtra la plantilla por situacion del PIN con el mismo catalogo que la devuelve', function (): void {
+    // ADR-013: el contrato manda, y el cliente TypeScript de los tres frontends
+    // se genera de aqui. El filtro tiene que apuntar al MISMO enum que el campo
+    // `pin_status` de cada ficha: una segunda lista de estados escrita a mano se
+    // quedaria atras el dia que aparezca un estado nuevo, y el panel ofreceria
+    // en su `<select>` una opcion que el servidor rechaza con un 422.
+    $parameter = Contract::map('components', 'parameters', 'PinStatusFilter');
+
+    expect($parameter['name'] ?? null)->toBe('pin_status')
+        ->and($parameter['in'] ?? null)->toBe('query')
+        ->and($parameter['required'] ?? null)->toBeFalse()
+        ->and($parameter['schema'] ?? null)->toBe(['$ref' => '#/components/schemas/PinStatus']);
+
+    // Y esta declarado en el listado, que es el unico endpoint que lo acepta.
+    expect(Contract::value('paths', '/api/v1/employees', 'get', 'parameters'))
+        ->toContain(['$ref' => '#/components/parameters/PinStatusFilter']);
+})->group('RF-GP-01', 'RF-ID-09', 'RQ-06');
+
+it('no admite mas situaciones de PIN que las tres del catalogo', function (): void {
+    // Las tres de RF-ID-09 y ni una mas: el filtro las hereda por `$ref`, asi
+    // que este es el unico sitio donde se pueden escribir.
+    expect(Contract::value('components', 'schemas', 'PinStatus', 'enum'))
+        ->toBe(['pending', 'issued', 'delivered']);
+})->group('RF-ID-09', 'RQ-06');

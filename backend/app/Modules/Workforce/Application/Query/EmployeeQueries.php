@@ -52,12 +52,21 @@ final readonly class EmployeeQueries
         ?int $departmentId,
         ?EmploymentStatus $status,
         ?string $search,
+        ?PinStatus $pinStatus,
         int $page,
         int $perPage,
     ): array {
-        $total = $this->employees->countMatching($siteId, $departmentId, $status, $search);
+        $total = $this->employees->countMatching($siteId, $departmentId, $status, $search, $pinStatus);
 
-        $items = $this->employees->search($siteId, $departmentId, $status, $search, $perPage, ($page - 1) * $perPage);
+        $items = $this->employees->search(
+            $siteId,
+            $departmentId,
+            $status,
+            $search,
+            $pinStatus,
+            $perPage,
+            ($page - 1) * $perPage,
+        );
 
         // Antes de devolver, no despues: si la escritura de auditoria falla, la
         // divulgacion no ocurre (regla dura 6, ADR-027). El recuento es el de las
@@ -67,6 +76,11 @@ final readonly class EmployeeQueries
             ...($siteId === null ? [] : ['site_id' => $siteId]),
             ...($departmentId === null ? [] : ['department_id' => $departmentId]),
             'status' => $status === null ? 'any' : $status->value,
+            // El asiento describe el ALCANCE de lo divulgado, y un filtro por
+            // situacion de PIN lo acota igual que el de situacion laboral. No
+            // hay dato personal en el valor: es un estado de un catalogo de
+            // tres.
+            'pin_status' => $pinStatus === null ? 'any' : $pinStatus->value,
             // **El termino NO se guarda, solo si lo hubo.** Quien busca en el
             // panel escribe el nombre de una persona, asi que el termino es un
             // dato personal: escribirlo en `audit_log` seria copiar nombres a la

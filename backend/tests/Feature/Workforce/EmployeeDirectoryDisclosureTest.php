@@ -141,3 +141,52 @@ it('no repite el asiento por cada ficha abierta', function (): void {
 
     expect(DB::table('audit_log')->count())->toBe(0);
 })->group('RF-GP-01', 'RS-05');
+
+it('anota el filtro de situacion del PIN en el alcance del asiento', function (): void {
+    // El asiento describe el ALCANCE —que filtros, que pagina, cuantas filas— y
+    // jamas lo divulgado. `pin_status` acota el conjunto igual que `status`, y
+    // su valor es uno de tres estados de un catalogo, no un dato personal: sin
+    // el, dos accesos que se llevaron conjuntos distintos serian
+    // indistinguibles en una investigacion de RL-15.
+    $context = directoryContext(0);
+
+    WorkforceFixtures::employee($context['site'], $context['department'], 'active', 'Youssef', 'Amrani');
+
+    Api::as($context['token'])
+        ->get('/api/v1/employees', ['pin_status' => 'pending'])
+        ->assertValidResponse(200);
+
+    $entry = DB::table('audit_log')->orderBy('id')->first();
+
+    expect($entry)->not->toBeNull();
+
+    /** @var object{payload: string} $entry */
+    $payload = json_decode($entry->payload, true, 512, JSON_THROW_ON_ERROR);
+
+    expect($payload)->toMatchArray([
+        'dataset' => 'employee_directory',
+        'record_count' => 1,
+        'pin_status' => 'pending',
+    ])
+        ->and($entry->payload)->not->toContain('Amrani');
+})->group('RF-GP-01', 'RF-ID-09', 'RS-05', 'RL-15');
+
+it('dice «any» cuando no se filtra por situacion del PIN', function (): void {
+    // El mismo criterio que `status`: la ausencia de filtro se escribe, no se
+    // omite. Un asiento sin la clave y otro con ella se distinguen mal al
+    // leerlos meses despues, y «no filtro» es informacion sobre el alcance.
+    $context = directoryContext(2);
+
+    Api::as($context['token'])
+        ->get('/api/v1/employees')
+        ->assertValidResponse(200);
+
+    $entry = DB::table('audit_log')->orderBy('id')->first();
+
+    expect($entry)->not->toBeNull();
+
+    /** @var object{payload: string} $entry */
+    $payload = json_decode($entry->payload, true, 512, JSON_THROW_ON_ERROR);
+
+    expect($payload)->toMatchArray(['pin_status' => 'any', 'status' => 'any']);
+})->group('RF-GP-01', 'RF-ID-09', 'RS-05');

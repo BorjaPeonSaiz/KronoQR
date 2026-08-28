@@ -586,6 +586,12 @@ export interface paths {
          *     **`q` busca por nombre, apellidos, nombre completo y codigo de
          *     empleado**, sin distinguir mayusculas ni acentos y por subcadena. Se
          *     combina con `AND` con los demas filtros y se pagina igual que ellos.
+         *
+         *     **Todos los filtros actuan sobre la plantilla entera**, no sobre la
+         *     pagina devuelta —tambien `pin_status`, que se deriva en SQL con la misma
+         *     regla con la que se calcula el campo `pin_status` de cada ficha—. Un
+         *     filtro que se resolviera en el navegador daria un `meta.total` que
+         *     describe otra cosa y una paginacion que no cuadra.
          */
         get: operations["listEmployees"];
         put?: never;
@@ -3456,6 +3462,24 @@ export interface components {
          */
         EmploymentStatusFilter: components["schemas"]["EmploymentStatus"];
         /**
+         * @description Limita el resultado a quien esta en esa situacion de PIN (RF-ID-09).
+         *
+         *     Es el mismo estado que devuelve cada ficha en `pin_status`, y se deriva
+         *     de lo mismo: `delivered` si consta la entrega, `issued` si hay PIN sin
+         *     entregar, y `pending` si no hay PIN. La derivacion ocurre **en el
+         *     servidor y sobre toda la plantilla**, no sobre la pagina que el panel
+         *     tenga delante: filtrar en el navegador daria un recuento que solo
+         *     describe lo que ya se habia descargado.
+         *
+         *     **Se combina con `AND` con el resto de filtros** y **no altera la
+         *     paginacion**: `meta.total` sigue siendo el total de lo que casa.
+         *
+         *     Para que sirve: `issued` es la lista de quien tiene PIN y todavia no lo
+         *     ha recibido en mano, que es exactamente la cola de trabajo de RRHH.
+         * @example issued
+         */
+        PinStatusFilter: components["schemas"]["PinStatus"];
+        /**
          * @description Busqueda libre sobre la plantilla, **insensible a mayusculas y a
          *     acentos, y por subcadena**. Casa contra el nombre, los apellidos, el
          *     nombre completo («nombre apellidos», con un espacio) y el codigo de
@@ -4069,6 +4093,24 @@ export interface operations {
                  * @example active
                  */
                 status?: components["parameters"]["EmploymentStatusFilter"];
+                /**
+                 * @description Limita el resultado a quien esta en esa situacion de PIN (RF-ID-09).
+                 *
+                 *     Es el mismo estado que devuelve cada ficha en `pin_status`, y se deriva
+                 *     de lo mismo: `delivered` si consta la entrega, `issued` si hay PIN sin
+                 *     entregar, y `pending` si no hay PIN. La derivacion ocurre **en el
+                 *     servidor y sobre toda la plantilla**, no sobre la pagina que el panel
+                 *     tenga delante: filtrar en el navegador daria un recuento que solo
+                 *     describe lo que ya se habia descargado.
+                 *
+                 *     **Se combina con `AND` con el resto de filtros** y **no altera la
+                 *     paginacion**: `meta.total` sigue siendo el total de lo que casa.
+                 *
+                 *     Para que sirve: `issued` es la lista de quien tiene PIN y todavia no lo
+                 *     ha recibido en mano, que es exactamente la cola de trabajo de RRHH.
+                 * @example issued
+                 */
+                pin_status?: components["parameters"]["PinStatusFilter"];
                 /**
                  * @description Pagina solicitada, empezando en 1.
                  * @example 1

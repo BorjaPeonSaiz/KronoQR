@@ -6,6 +6,7 @@ namespace App\Modules\Workforce\Http\Request;
 
 use App\Http\Requests\RejectsUnknownInput;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
+use App\Modules\Workforce\Application\Port\PinStatus;
 use App\Modules\Workforce\Domain\Model\Employee;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
@@ -38,6 +39,10 @@ final class IndexEmployeeRequest extends FormRequest
             'site_id' => ['sometimes', 'integer', 'min:1', 'exists:sites,id'],
             'department_id' => ['sometimes', 'integer', 'min:1', 'exists:departments,id'],
             'status' => ['sometimes', 'string', 'in:'.implode(',', array_column(EmploymentStatus::cases(), 'value'))],
+            // Los casos salen del enum, no de una lista escrita a mano: un
+            // estado nuevo de PIN entraria aqui solo, y una lista copiada se
+            // quedaria atras sin que nada fallara.
+            'pin_status' => ['sometimes', 'string', 'in:'.implode(',', array_column(PinStatus::cases(), 'value'))],
             // El techo de 100 no es una regla de negocio: es lo que impide que
             // una URL manipulada mande un patron de megabytes a un `ILIKE` que
             // no puede usar indice. `nullable` por los enlaces copiados: el
@@ -73,6 +78,17 @@ final class IndexEmployeeRequest extends FormRequest
         $status = $this->string('status')->value();
 
         return $status === '' ? null : EmploymentStatus::from($status);
+    }
+
+    /**
+     * Situacion del PIN por la que se filtra (RF-ID-09), o `null` si no se
+     * filtra por ella.
+     */
+    public function pinStatusFilter(): ?PinStatus
+    {
+        $status = $this->string('pin_status')->value();
+
+        return $status === '' ? null : PinStatus::from($status);
     }
 
     public function siteFilter(): ?int
