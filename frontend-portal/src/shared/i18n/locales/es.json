@@ -12,10 +12,8 @@
   },
   "login": {
     "heading": "Acceso al portal",
-    "intro": "Entra con tu código de empleado y tu PIN de seis dígitos, los mismos que usas en el quiosco.",
     "employeeCode": "Código de empleado",
     "pin": "PIN",
-    "pinHint": "Seis dígitos, sin espacios.",
     "submit": "Entrar",
     "submitting": "Entrando…",
     "forgotPin": "¿No recuerdas tu PIN o tu código? Pide a Recursos Humanos que te lo restablezca. No se envía por correo electrónico ni por ningún enlace."
@@ -73,20 +71,19 @@
   },
   "myRecords": {
     "title": "Mi registro horario",
-    "subtitle": "Tus jornadas, tus tramos y el total de cada día. Nada se borra: si algo se corrigió, aparece explicado más abajo.",
+    "subtitle": "Tus jornadas, tus tramos y el total de cada día. Un turno que empezó a las 22:00 pertenece al día en que empezó, aunque terminara al día siguiente. Nada se borra: si algo se corrigió, aparece explicado más abajo.",
     "duration": "{hours} h {minutes} min",
-    "zoneNotice": "Las horas se muestran en la zona horaria de tu centro de trabajo, no en la de tu móvil ni la de tu ordenador.",
     "loading": "Cargando tu registro…",
     "filters": {
       "legend": "Periodo consultado",
       "from": "Desde",
-      "fromHint": "Por fecha de jornada: un turno que empezó a las 22:00 pertenece al día en que empezó, aunque salieras al día siguiente.",
+      "fromHint": "Por fecha de inicio de la jornada.",
       "to": "Hasta",
-      "toHint": "Último día, incluido. En blanco, se consultan tus últimos 31 días.",
+      "toHint": "Último día incluido. En blanco: últimos 31 días.",
       "inverted": "El periodo termina antes de empezar. Revisa las dos fechas.",
       "tooWide": "El periodo no puede superar {days} días. Consulta tu historial por tramos más cortos.",
       "apply": "Consultar",
-      "resolved": "Jornadas del {from} al {to}, en horario de {zone}."
+      "resolved": "Jornadas del {from} al {to}."
     },
     "empty": {
       "title": "No hay ninguna jornada en este periodo",
@@ -105,12 +102,11 @@
       }
     },
     "entries": {
-      "caption": "Tramos de la jornada del {date}, en la zona horaria {zone}",
-      "in": "Entrada ({zone})",
-      "out": "Salida ({zone})",
+      "caption": "Tramos de la jornada del {date}",
+      "in": "Entrada",
+      "out": "Salida",
       "duration": "Duración",
       "source": "Cómo se registró",
-      "utc": "UTC {time}",
       "queued": "Se registró {delay} después de fichar: llegó desde la cola sin conexión del quiosco. Lo que cuenta es la hora a la que fichaste.",
       "open": "Sin cerrar",
       "openHint": "Este turno sigue abierto.",

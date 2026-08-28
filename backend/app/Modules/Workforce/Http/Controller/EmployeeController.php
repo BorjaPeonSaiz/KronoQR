@@ -36,6 +36,7 @@ final class EmployeeController extends Controller
             departmentId: $request->departmentFilter(),
             status: $request->statusFilter(),
             search: $request->searchTerm(),
+            pinStatus: $request->pinStatusFilter(),
             page: $request->page(),
             perPage: $request->perPage(),
         );

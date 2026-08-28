@@ -21,12 +21,10 @@
   },
   "auth": {
     "heading": "Acceso al panel de gestión",
-    "intro": "Introduce el correo y la contraseña de tu cuenta de gestión.",
     "email": "Correo electrónico",
     "password": "Contraseña",
     "submit": "Entrar",
-    "submitting": "Entrando…",
-    "employeeNotice": "¿Eres empleado y quieres consultar tu registro horario? No se entra por aquí: el portal del empleado se abre con tu código de empleado y tu PIN, que te entregan en mano junto con la tarjeta."
+    "submitting": "Entrando…"
   },
   "common": {
     "cancel": "Cancelar",
@@ -124,8 +122,7 @@
       "department": "Departamento",
       "departmentAll": "Todos los departamentos",
       "pinStatus": "Estado del PIN",
-      "pinStatusAll": "Cualquier estado del PIN",
-      "pinStatusHint": "Se aplica solo a la página que se está viendo, no a toda la plantilla."
+      "pinStatusAll": "Cualquier estado del PIN"
     },
     "status": {
       "active": "En alta",
@@ -181,8 +178,15 @@
       "confirmExplanation": "Esto es lo que se va a modificar. Comprueba el valor de partida antes de confirmar: quedará registrado quién lo cambió y cuándo.",
       "confirmAction": "Confirmar y guardar",
       "credentialHeading": "Tarjeta QR",
-      "credentialExplanation": "La emisión, la impresión y la entrega de la tarjeta se gestionan en el panel de credenciales, donde se ve de un vistazo quién todavía no puede fichar.",
-      "credentialLink": "Ver el estado de las credenciales de este centro"
+      "credentialEmpty": {
+        "title": "Sin fila de credencial todavía",
+        "description": "Esta persona no tiene todavía ninguna fila en el panel de credenciales. Vuelve a intentarlo en unos minutos."
+      },
+      "credentialInactive": {
+        "title": "La tarjeta no se gestiona desde esta ficha",
+        "description": "Esta persona no está de alta, así que el panel de credenciales no le asigna ninguna fila aquí. Su tarjeta se gestiona desde el tablero de credenciales del centro.",
+        "link": "Ir al tablero de credenciales del centro"
+      }
     },
     "offboard": {
       "heading": "Baja",

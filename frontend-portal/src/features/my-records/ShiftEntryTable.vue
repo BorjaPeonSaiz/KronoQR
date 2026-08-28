@@ -17,8 +17,6 @@
 import {
   formatInstant,
   formatLocalTime,
-  formatUtcTime,
-  formatZoneLabel,
   minutesBetween,
   readLocalTimestamp,
 } from '@kronoqr/web-kit/datetime'
@@ -44,7 +42,6 @@ const QUEUE_NOTICE_MINUTES = 5
 
 interface MarkView {
   local: string
-  utc: string
   nextDay: boolean
   recordedAt: string | null
   queueDelayMinutes: number | null
@@ -67,7 +64,6 @@ function mark(utcValue: string, localValue: string, recordedAt: string | null): 
 
   return {
     local: formatLocalTime(localValue),
-    utc: formatUtcTime(utcValue),
     nextDay: parts !== null && parts.date !== props.workDate,
     recordedAt:
       recordedAt === null ? null : formatInstant(recordedAt, props.timeZone, locale.value),
@@ -94,11 +90,6 @@ const rows = computed<EntryRow[]>(() =>
 const summedMinutes = computed(() => sumShiftMinutes(props.entries))
 const totalsAgree = computed(() => summedMinutes.value === props.totalMinutes)
 
-/** La etiqueta corta de la zona ese dia: en marzo puede no ser la misma que en julio. */
-const zoneLabel = computed(() =>
-  formatZoneLabel(`${props.workDate}T12:00:00Z`, props.timeZone, locale.value),
-)
-
 function duration(minutes: number): string {
   return t('myRecords.duration', durationParts(minutes))
 }
@@ -120,19 +111,28 @@ function duration(minutes: number): string {
       v-else
       class="overflow-x-auto rounded-kq border border-kq-border bg-kq-surface-raised shadow-kq-soft"
     >
-      <table class="w-full border-collapse text-left">
+      <table class="w-full table-fixed border-collapse text-left">
         <caption class="sr-only">
           {{
-            t('myRecords.entries.caption', { date: workDate, zone: timeZone })
+            t('myRecords.entries.caption', { date: workDate })
           }}
         </caption>
+        <!-- La columna de duracion va un 10 % mas ancha que las demas: es el
+             numero que se compara con la nomina, y el resto del espacio se
+             reparte a partes iguales entre las otras tres columnas. -->
+        <colgroup>
+          <col class="w-[24.39%]" />
+          <col class="w-[24.39%]" />
+          <col class="w-[26.83%]" />
+          <col class="w-[24.39%]" />
+        </colgroup>
         <thead class="border-b border-kq-border bg-kq-surface-alt">
           <tr>
             <th scope="col" class="px-3 py-2">
-              {{ t('myRecords.entries.in', { zone: zoneLabel }) }}
+              {{ t('myRecords.entries.in') }}
             </th>
             <th scope="col" class="px-3 py-2">
-              {{ t('myRecords.entries.out', { zone: zoneLabel }) }}
+              {{ t('myRecords.entries.out') }}
             </th>
             <th scope="col" class="px-3 py-2">{{ t('myRecords.entries.duration') }}</th>
             <th scope="col" class="px-3 py-2">{{ t('myRecords.entries.source') }}</th>
@@ -145,9 +145,6 @@ function duration(minutes: number): string {
               <span class="text-lg tabular-nums">{{ row.clockIn.local }}</span>
               <span v-if="row.otherTimeZone !== null" class="ml-1 text-sm font-normal">
                 ({{ row.otherTimeZone }})
-              </span>
-              <span class="block text-sm font-normal text-kq-text-muted">
-                {{ t('myRecords.entries.utc', { time: row.clockIn.utc }) }}
               </span>
               <span
                 v-if="row.clockIn.queueDelayMinutes !== null"
@@ -172,9 +169,6 @@ function duration(minutes: number): string {
                 <span class="text-lg tabular-nums">{{ row.clockOut.local }}</span>
                 <span v-if="row.clockOut.nextDay" class="ml-1 text-sm text-kq-text-muted">
                   {{ t('myRecords.entries.nextDay') }}
-                </span>
-                <span class="block text-sm text-kq-text-muted">
-                  {{ t('myRecords.entries.utc', { time: row.clockOut.utc }) }}
                 </span>
                 <span
                   v-if="row.clockOut.queueDelayMinutes !== null"

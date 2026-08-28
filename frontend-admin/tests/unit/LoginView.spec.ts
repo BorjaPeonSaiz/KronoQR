@@ -40,12 +40,6 @@ describe('LoginView', () => {
     expect(labels).toContain(passwordId)
   })
 
-  it('deja claro que el empleado no entra por aqui', async () => {
-    const wrapper = await mountView(LoginView)
-
-    expect(wrapper.text()).toContain(es.auth.employeeNotice)
-  })
-
   it('abre sesion y lleva a donde se queria ir', async () => {
     stubFetch(() => jsonResponse(sessionFixture()))
 

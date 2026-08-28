@@ -36,9 +36,13 @@ interface ToneStep {
 }
 
 /**
- * Las cinco firmas sonoras. `entry` sube, `exit` baja, `error` es un zumbido
+ * Las seis firmas sonoras. `entry` sube, `exit` baja, `error` es un zumbido
  * grave y roto, `notice` es un unico toque neutro y `pending` un doble toque
- * apagado que no promete ni entrada ni salida.
+ * apagado que no promete ni entrada ni salida. `verifying` (RF-AT-11, solo
+ * PIN) es mas corto y mas suave que todos los demas y a proposito: es la
+ * unica firma que NO anuncia un desenlace, solo que se esta comprobando, y
+ * tiene que poder distinguirse de un pitido de exito para no mentir con el
+ * oido lo que la pantalla no dice todavia con el texto.
  */
 const TONES: Readonly<Record<FeedbackTone, readonly ToneStep[]>> = {
   entry: [
@@ -53,6 +57,7 @@ const TONES: Readonly<Record<FeedbackTone, readonly ToneStep[]>> = {
     { frequency: 587, at: 0, duration: 0.09, type: 'triangle', gain: 0.22 },
     { frequency: 587, at: 0.14, duration: 0.09, type: 'triangle', gain: 0.22 },
   ],
+  verifying: [{ frequency: 660, at: 0, duration: 0.06, type: 'sine', gain: 0.16 }],
   notice: [{ frequency: 880, at: 0, duration: 0.28, type: 'triangle', gain: 0.22 }],
   error: [
     { frequency: 196, at: 0, duration: 0.16, type: 'square', gain: 0.2 },

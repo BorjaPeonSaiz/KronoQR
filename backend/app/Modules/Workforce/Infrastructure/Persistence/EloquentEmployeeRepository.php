@@ -6,6 +6,7 @@ namespace App\Modules\Workforce\Infrastructure\Persistence;
 
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Workforce\Application\Port\EmployeeRepository;
+use App\Modules\Workforce\Application\Port\PinStatus;
 use App\Modules\Workforce\Domain\Exception\EmployeeCodeAlreadyTaken;
 use App\Modules\Workforce\Domain\Exception\EmployeeEmailAlreadyTaken;
 use App\Modules\Workforce\Domain\Model\Employee as EmployeeEntity;
@@ -75,10 +76,11 @@ final readonly class EloquentEmployeeRepository implements EmployeeRepository
         ?int $departmentId,
         ?EmploymentStatus $status,
         ?string $search,
+        ?PinStatus $pinStatus,
         int $limit,
         int $offset,
     ): array {
-        $rows = $this->filtered($siteId, $departmentId, $status, $search)
+        $rows = $this->filtered($siteId, $departmentId, $status, $search, $pinStatus)
             // Orden estable y previsible para quien pagina: dos personas con el
             // mismo apellido no pueden cambiar de sitio entre dos paginas.
             ->orderBy('last_name')
@@ -96,8 +98,9 @@ final readonly class EloquentEmployeeRepository implements EmployeeRepository
         ?int $departmentId,
         ?EmploymentStatus $status,
         ?string $search,
+        ?PinStatus $pinStatus,
     ): int {
-        return $this->filtered($siteId, $departmentId, $status, $search)->count();
+        return $this->filtered($siteId, $departmentId, $status, $search, $pinStatus)->count();
     }
 
     /**
@@ -108,12 +111,53 @@ final readonly class EloquentEmployeeRepository implements EmployeeRepository
         ?int $departmentId,
         ?EmploymentStatus $status,
         ?string $search,
+        ?PinStatus $pinStatus,
     ): Builder {
-        return Employee::query()
+        $query = Employee::query()
             ->when($siteId !== null, static fn (Builder $query): Builder => $query->where('site_id', $siteId))
             ->when($departmentId !== null, static fn (Builder $query): Builder => $query->where('department_id', $departmentId))
             ->when($status instanceof EmploymentStatus, static fn (Builder $query): Builder => $query->where('status', $status?->value))
             ->when($search !== null, fn (Builder $query): Builder => $this->matchingSearch($query, (string) $search));
+
+        // Fuera de la cadena de `when()` a proposito: dentro de la clausura, el
+        // analizador no puede saber que `$pinStatus` no es nulo, y el `match`
+        // exhaustivo que traduce el estado a columnas exige que no lo sea.
+        return $pinStatus instanceof PinStatus ? $this->withPinStatus($query, $pinStatus) : $query;
+    }
+
+    /**
+     * Filtra por situacion del PIN (RF-ID-09) **en SQL**.
+     *
+     * **La misma regla, escrita una sola vez.** Estas tres ramas son la
+     * traduccion literal de `EloquentEmployeePinRepository::statusOf()`, que es
+     * lo que decide el `pin_status` que sale en cada ficha: entregado si consta
+     * la entrega, emitido si hay emision sin entrega, pendiente si no hay nada.
+     * Si divergieran, el panel filtraria por un criterio y pintaria otro, y el
+     * sintoma seria una fila que aparece en «pendiente» rotulada como
+     * «emitido». Las invariantes de la migracion `add_pin_provisioning` sostienen
+     * la equivalencia: `pin_hash` y `pin_issued_at` son nulos a la vez, y no hay
+     * entrega sin emision.
+     *
+     * **En SQL y no en PHP** porque el filtro tiene que actuar sobre la plantilla
+     * entera. Resuelto sobre la pagina ya cargada —que es lo que hacia el panel—
+     * el recuento describe lo que se habia descargado y no lo que hay.
+     *
+     * **Sin indice, a proposito.** Son dos columnas nulas o no sobre una tabla de
+     * cientos de filas (doc 02, Anexo A). Un indice parcial aqui seria estructura
+     * que mantener sin nada que ganar; si la plantilla creciera de orden de
+     * magnitud, la palanca es un indice parcial sobre `pin_delivered_at` y
+     * `pin_issued_at`, no cambiar esta consulta.
+     *
+     * @param  Builder<Employee>  $query
+     * @return Builder<Employee>
+     */
+    private function withPinStatus(Builder $query, PinStatus $pinStatus): Builder
+    {
+        return match ($pinStatus) {
+            PinStatus::Delivered => $query->whereNotNull('pin_delivered_at'),
+            PinStatus::Issued => $query->whereNull('pin_delivered_at')->whereNotNull('pin_issued_at'),
+            PinStatus::Pending => $query->whereNull('pin_delivered_at')->whereNull('pin_issued_at'),
+        };
     }
 
     /**

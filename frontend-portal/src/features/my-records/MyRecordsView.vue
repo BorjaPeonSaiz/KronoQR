@@ -84,15 +84,19 @@ watch(data, (value) => {
   <section>
     <header>
       <h1 class="font-heading text-2xl font-bold text-kq-text">{{ t('myRecords.title') }}</h1>
-      <p v-if="session.employee !== null" class="mt-1 text-lg">
-        {{ session.employee.display_name }}
-        <span class="font-mono text-kq-text-muted">{{ session.employee.employee_code }}</span>
-      </p>
+      <div v-if="session.employee !== null" class="mt-1">
+        <p class="text-lg">{{ session.employee.display_name }}</p>
+        <p class="text-sm font-bold text-kq-text-muted">{{ session.employee.employee_code }}</p>
+      </div>
       <p class="mt-2 max-w-prose text-kq-text-muted">{{ t('myRecords.subtitle') }}</p>
     </header>
 
-    <form class="mt-4 flex max-w-3xl flex-wrap items-end gap-4" novalidate @submit.prevent="submit">
-      <fieldset class="flex flex-wrap items-end gap-4 border-0 p-0">
+    <form
+      class="mt-4 flex max-w-3xl flex-wrap items-start gap-4"
+      novalidate
+      @submit.prevent="submit"
+    >
+      <fieldset class="flex flex-wrap items-start gap-4 border-0 p-0">
         <legend class="sr-only">{{ t('myRecords.filters.legend') }}</legend>
 
         <FormField
@@ -100,13 +104,14 @@ watch(data, (value) => {
           :label="t('myRecords.filters.from')"
           :hint="t('myRecords.filters.fromHint')"
           label-class="text-lg font-medium text-kq-text"
+          class="w-full sm:w-96"
         >
           <input
             :id="field.id"
             v-model="draft.from"
             type="date"
             :aria-describedby="field.describedBy"
-            class="min-h-12 rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-lg"
+            class="min-h-12 w-full rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-lg"
           />
         </FormField>
 
@@ -116,6 +121,7 @@ watch(data, (value) => {
           :hint="t('myRecords.filters.toHint')"
           :errors="rangeErrors"
           label-class="text-lg font-medium text-kq-text"
+          class="w-full sm:w-96"
         >
           <input
             :id="field.id"
@@ -123,25 +129,36 @@ watch(data, (value) => {
             type="date"
             :aria-describedby="field.describedBy"
             :aria-invalid="field.invalid"
-            class="min-h-12 rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-lg"
+            class="min-h-12 w-full rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-lg"
           />
         </FormField>
       </fieldset>
 
-      <button
-        type="submit"
-        :disabled="!canSubmit"
-        class="min-h-12 rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-lg font-semibold text-kq-on-primary disabled:opacity-50"
-      >
-        {{ t('myRecords.filters.apply') }}
-      </button>
+      <!--
+        El boton se alinea con la parte de arriba de los dos `<input>`, no con
+        las etiquetas: el espaciador oculto reproduce, en `sm` y superior, la
+        altura de una etiqueta `text-lg` (line-height 1.75rem); el `gap-1` que
+        `FormField` deja entre la etiqueta y el campo lo aporta el `gap-1` de
+        este mismo contenedor, asi que el boton arranca a la altura del campo. En movil, cuando el
+        boton salta a su propia linea por el `flex-wrap` del formulario, el
+        espaciador desaparece para que no quede un hueco vacio antes del boton.
+      -->
+      <div class="flex flex-col gap-1">
+        <span class="hidden h-7 sm:block" aria-hidden="true"></span>
+        <button
+          type="submit"
+          :disabled="!canSubmit"
+          class="min-h-12 rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-lg font-semibold text-kq-on-primary disabled:opacity-50"
+        >
+          {{ t('myRecords.filters.apply') }}
+        </button>
+      </div>
     </form>
 
     <p v-if="data !== undefined" class="mt-3 text-kq-text-muted" data-test="resolved-range">
-      {{ t('myRecords.filters.resolved', { from: data.from, to: data.to, zone: data.time_zone }) }}
+      {{ t('myRecords.filters.resolved', { from: data.from, to: data.to }) }}
       <span v-if="isFetching" class="text-kq-text-muted">{{ t('common.updating') }}</span>
     </p>
-    <p class="mt-1 text-sm text-kq-text-muted">{{ t('myRecords.zoneNotice') }}</p>
 
     <LoadingPanel v-if="isPending" :label="t('myRecords.loading')" class="mt-4" />
 

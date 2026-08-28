@@ -21,12 +21,10 @@
   },
   "auth": {
     "heading": "Sign in to the management console",
-    "intro": "Enter the email address and password of your management account.",
     "email": "Email address",
     "password": "Password",
     "submit": "Sign in",
-    "submitting": "Signing in…",
-    "employeeNotice": "Are you an employee looking for your own time records? This is not the way in: the employee portal opens with your employee code and your PIN, both handed to you in person along with your card."
+    "submitting": "Signing in…"
   },
   "common": {
     "cancel": "Cancel",
@@ -124,8 +122,7 @@
       "department": "Department",
       "departmentAll": "All departments",
       "pinStatus": "PIN state",
-      "pinStatusAll": "Any PIN state",
-      "pinStatusHint": "Applies only to the page you are currently viewing, not the whole workforce."
+      "pinStatusAll": "Any PIN state"
     },
     "status": {
       "active": "Active",
@@ -181,8 +178,15 @@
       "confirmExplanation": "This is what will change. Check the starting value before you confirm: who changed it and when will be recorded.",
       "confirmAction": "Confirm and save",
       "credentialHeading": "QR card",
-      "credentialExplanation": "Issuing, printing and handing over the card are managed in the credentials board, which shows at a glance who still cannot clock in.",
-      "credentialLink": "See the credential status for this site"
+      "credentialEmpty": {
+        "title": "No credential row yet",
+        "description": "This person does not have a row in the credentials board yet. Try again in a few minutes."
+      },
+      "credentialInactive": {
+        "title": "The card is not managed from this record",
+        "description": "This person is not currently on staff, so the credentials board does not assign a row here. Their card is managed from the site's credentials board.",
+        "link": "Go to the site's credentials board"
+      }
     },
     "offboard": {
       "heading": "Offboarding",

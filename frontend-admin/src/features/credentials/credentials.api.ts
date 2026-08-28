@@ -11,6 +11,7 @@ import { requestBlob, requestJson } from '@kronoqr/web-kit/http'
 import type {
   Credential,
   CredentialStatusBoard,
+  CredentialStatusRow,
   IssueCredentialRequest,
   IssuedCredential,
   PrintCredentialBatchRequest,
@@ -21,12 +22,40 @@ export interface CredentialBoardQuery {
   siteId?: number
   /** Solo quien todavia no tiene la tarjeta en la mano. */
   pendingOnly?: boolean
+  /**
+   * Acota a una sola persona. La usa la ficha de empleado (RF-PA-03): pide
+   * su fila y nada mas, no el tablero entero filtrado en cliente. Cada
+   * lectura del tablero audita como divulgado TODO lo que devuelve
+   * (ADR-037), y aqui solo hace falta una fila.
+   */
+  employeeUuid?: string
 }
 
 export function fetchCredentialBoard(query: CredentialBoardQuery): Promise<CredentialStatusBoard> {
   return requestJson<CredentialStatusBoard>('/api/v1/credentials/status', {
-    query: { site_id: query.siteId, pending: query.pendingOnly },
+    query: { site_id: query.siteId, pending: query.pendingOnly, employee_uuid: query.employeeUuid },
   })
+}
+
+/**
+ * La fila de una sola persona del tablero de credenciales, para la seccion
+ * «Tarjeta QR» de la ficha de empleado. `null` cuando el servidor no devuelve
+ * ninguna fila (caso raro: un empleado sin nada que mostrar todavia).
+ *
+ * `siteId` acota tambien la peticion, para que el servidor resuelva sobre el
+ * centro de esta persona y no sobre la instalacion entera. Y aunque el
+ * contrato garantiza como mucho una fila para un `employee_uuid` dado,
+ * `find()` localiza esa fila por `employee_uuid` en vez de asumir la
+ * posicion: `data[0]` seria la fila de otra persona el dia que el filtro del
+ * servidor dejara de aplicarse.
+ */
+export async function fetchCredentialStatusFor(
+  employeeUuid: string,
+  siteId: number,
+): Promise<CredentialStatusRow | null> {
+  const board = await fetchCredentialBoard({ employeeUuid, siteId })
+
+  return board.data.find((row) => row.employee_uuid === employeeUuid) ?? null
 }
 
 /** Lo unico binario que sirve este modulo: el PDF de una tarjeta. */

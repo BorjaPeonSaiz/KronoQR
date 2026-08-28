@@ -64,7 +64,7 @@ export default defineConfig({
   projects: [
     {
       name: 'kiosk-qr',
-      testIgnore: /degraded\.spec\.ts$/,
+      testIgnore: /degraded\.spec\.ts$|layout\.spec\.ts$/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },
@@ -78,6 +78,20 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },
         launchOptions: { args: chromiumArgs(fixture('qr-video-degraded.y4m')) },
+      },
+    },
+    {
+      // `layout.spec.ts` mide la geometria de la pantalla de espera en varios
+      // viewports. Necesita esa pantalla estable e indefinidamente, asi que
+      // usa un fotograma SIN QR (`qr-video-blank.y4m`): con la camara mirando
+      // a una tarjeta de verdad, el bucle de decodificacion la sustituiria
+      // por la confirmacion a mitad de medicion.
+      name: 'kiosk-layout',
+      testMatch: /layout\.spec\.ts$/,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1280, height: 800 },
+        launchOptions: { args: chromiumArgs(fixture('qr-video-blank.y4m')) },
       },
     },
   ],

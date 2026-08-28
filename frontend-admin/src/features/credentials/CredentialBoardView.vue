@@ -26,32 +26,19 @@ import { useI18n } from 'vue-i18n'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { useRoute } from 'vue-router'
 import { listSites } from '@/shared/api/organisation.api'
-import type { CredentialLifecycleStatus, CredentialStatusRow } from '@/shared/api/types'
-import type { Change } from '@/shared/ui/change'
-import ChangePreview from '@/shared/ui/ChangePreview.vue'
+import type { CredentialLifecycleStatus } from '@/shared/api/types'
 import ConfirmDialog from '@/shared/ui/ConfirmDialog.vue'
 import PaginationBar from '@/shared/ui/PaginationBar.vue'
+import CredentialRowActions from './CredentialRowActions.vue'
+import { STATUS_PILL_CLASS } from './credentialStatusPill'
+import { fetchCredentialBoard, printCredentialBatch } from './credentials.api'
 import {
-  deliverCredential,
-  fetchCredentialBoard,
-  issueCredential,
-  printCredential,
-  printCredentialBatch,
-  revokeCredential,
-} from './credentials.api'
-import { NO_DEPARTMENT, departmentOptionsFrom, filterRows, paginate } from './useCredentialRows'
-
-/** Píldora de estado de la fila: refleja el ciclo de vida, no una decisión estética. */
-const STATUS_PILL_CLASS: Record<CredentialLifecycleStatus, string> = {
-  no_credential: 'bg-kq-surface-alt text-kq-text-muted',
-  pending_print: 'bg-kq-warning-soft text-kq-warning',
-  pending_delivery: 'bg-kq-warning-soft text-kq-warning',
-  delivered: 'bg-kq-success-soft text-kq-success',
-  revoked: 'bg-kq-danger-soft text-kq-danger',
-}
-
-/** Motivos de revocacion. Un catalogo evita el «se perdio» sin mas contexto. */
-const REVOCATION_REASONS = ['lost', 'stolen', 'damaged', 'offboarding', 'printFailed'] as const
+  CLIENT_PER_PAGE,
+  NO_DEPARTMENT,
+  departmentOptionsFrom,
+  filterRows,
+  paginate,
+} from './useCredentialRows'
 
 const CREDENTIAL_LIFECYCLE_STATUSES: readonly CredentialLifecycleStatus[] = [
   'no_credential',
@@ -60,8 +47,6 @@ const CREDENTIAL_LIFECYCLE_STATUSES: readonly CredentialLifecycleStatus[] = [
   'delivered',
   'revoked',
 ]
-
-const CLIENT_PER_PAGE = 25
 
 /**
  * Valor del `<select>` de estado que significa «solo quien todavia no tiene
@@ -75,8 +60,6 @@ const CLIENT_PER_PAGE = 25
  */
 const PENDING_ONLY_OPTION = '__pending_only__'
 type StatusFilterValue = CredentialLifecycleStatus | typeof PENDING_ONLY_OPTION | ''
-
-type RowActionKind = 'issue' | 'print' | 'deliver' | 'revoke'
 
 const { t, locale } = useI18n()
 const route = useRoute()
@@ -187,115 +170,19 @@ const scopeName = computed(() => {
   return (sites.value?.data ?? []).find((site) => site.id === siteFilter.value)?.name ?? ''
 })
 
-// --- Acciones ----------------------------------------------------------------
+// --- Acciones ------------------------------------------------------------
+//
+// Emitir, imprimir, entregar y revocar viven en `CredentialRowActions`
+// (botones + dialogos), una fuente unica compartida con la ficha de empleado.
+// Aqui solo queda invalidar la consulta cuando una fila avisa de que termino,
+// y el lote, que es exclusivo de este tablero.
 
-const action = ref<{ kind: RowActionKind; row: CredentialStatusRow } | null>(null)
 const batching = ref(false)
 const busy = ref(false)
 const actionError = ref<unknown>(null)
-const revocationReasonKey = ref('')
-const revocationReasonText = ref('')
-
-const revocationReason = computed(() =>
-  revocationReasonKey.value === 'other'
-    ? revocationReasonText.value.trim()
-    : revocationReasonKey.value === ''
-      ? ''
-      : t(`credentials.revoke.reasons.${revocationReasonKey.value}`),
-)
-
-function openAction(kind: RowActionKind, row: CredentialStatusRow): void {
-  actionError.value = null
-  revocationReasonKey.value = ''
-  revocationReasonText.value = ''
-  action.value = { kind, row }
-}
-
-function closeAction(): void {
-  action.value = null
-  actionError.value = null
-}
-
-function changesFor(kind: RowActionKind, row: CredentialStatusRow): Change[] {
-  const to: Record<RowActionKind, string> = {
-    issue: t('credentials.status.pending_print'),
-    print: t('credentials.status.pending_delivery'),
-    deliver: t('credentials.status.delivered'),
-    revoke: t('credentials.status.revoked'),
-  }
-
-  return [
-    {
-      label: t('credentials.table.status'),
-      from: t(`credentials.status.${row.status}`),
-      to: to[kind],
-    },
-  ]
-}
 
 async function refreshBoard(): Promise<void> {
   await queryClient.invalidateQueries({ queryKey: ['credential-board'] })
-}
-
-async function runAction(): Promise<void> {
-  const current = action.value
-
-  if (current === null) {
-    return
-  }
-
-  busy.value = true
-  actionError.value = null
-
-  try {
-    await perform(current.kind, current.row)
-    await refreshBoard()
-    closeAction()
-  } catch (caught) {
-    actionError.value = caught
-  } finally {
-    busy.value = false
-  }
-}
-
-async function perform(kind: RowActionKind, row: CredentialStatusRow): Promise<void> {
-  if (kind === 'issue') {
-    // `reissue: false` siempre: aqui solo se emite a quien NO tiene credencial
-    // activa —sin ninguna, o con la ultima revocada—. Una reemision revoca la
-    // anterior y exige motivo, y ese camino pasa por «revocar» primero.
-    await issueCredential({ employee_uuid: row.employee_uuid, reissue: false })
-    announce(t('credentials.announce.issued', { name: row.full_name }))
-
-    return
-  }
-
-  const credentialUuid = row.credential?.uuid
-
-  if (credentialUuid === undefined) {
-    return
-  }
-
-  if (kind === 'print') {
-    const document_ = await printCredential(credentialUuid)
-
-    if (document_ !== null) {
-      downloadDocument(document_)
-    }
-
-    announce(t('credentials.announce.printed', { name: row.full_name }))
-
-    return
-  }
-
-  if (kind === 'deliver') {
-    await deliverCredential(credentialUuid)
-    announce(t('credentials.announce.delivered', { name: row.full_name }))
-
-    return
-  }
-
-  await revokeCredential(credentialUuid, { reason: revocationReason.value })
-  announce(t('credentials.announce.revoked', { name: row.full_name }))
 }
 
 async function runBatch(): Promise<void> {
@@ -330,10 +217,6 @@ async function runBatch(): Promise<void> {
 
 const selectClass =
   'rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text'
-const rowButtonClass =
-  'rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-2 py-1 text-sm text-kq-text hover:bg-kq-surface-alt'
-const rowDangerButtonClass =
-  'rounded-kq-sm bg-kq-danger px-2 py-1 text-sm font-semibold text-kq-on-danger'
 </script>
 
 <template>
@@ -531,44 +414,7 @@ const rowDangerButtonClass =
                 {{ instant(row.credential?.delivered_at ?? null, row.site_id) }}
               </td>
               <td class="px-3 py-2">
-                <div class="flex flex-wrap gap-2">
-                  <button
-                    v-if="row.status === 'no_credential' || row.status === 'revoked'"
-                    type="button"
-                    :class="rowButtonClass"
-                    @click="openAction('issue', row)"
-                  >
-                    {{ t('credentials.actions.issue') }}
-                  </button>
-                  <button
-                    v-if="row.status === 'pending_print'"
-                    type="button"
-                    :class="rowButtonClass"
-                    @click="openAction('print', row)"
-                  >
-                    {{ t('credentials.actions.print') }}
-                  </button>
-                  <button
-                    v-if="row.status === 'pending_delivery'"
-                    type="button"
-                    :class="rowButtonClass"
-                    @click="openAction('deliver', row)"
-                  >
-                    {{ t('credentials.actions.deliver') }}
-                  </button>
-                  <button
-                    v-if="
-                      row.credential !== null &&
-                      row.status !== 'revoked' &&
-                      row.status !== 'no_credential'
-                    "
-                    type="button"
-                    :class="rowDangerButtonClass"
-                    @click="openAction('revoke', row)"
-                  >
-                    {{ t('credentials.actions.revoke') }}
-                  </button>
-                </div>
+                <CredentialRowActions :row="row" :on-changed="refreshBoard" />
               </td>
             </tr>
           </tbody>
@@ -586,59 +432,6 @@ const rowDangerButtonClass =
     </template>
 
     <!-- Confirmaciones -->
-    <ConfirmDialog
-      v-if="action !== null"
-      :title="t(`credentials.confirm.${action.kind}.heading`)"
-      :confirm-label="t(`credentials.confirm.${action.kind}.action`)"
-      :tone="action.kind === 'issue' ? 'normal' : 'danger'"
-      :busy="busy"
-      :error="actionError"
-      size="wide"
-      :confirm-disabled="action.kind === 'revoke' && revocationReason === ''"
-      @cancel="closeAction"
-      @confirm="runAction"
-    >
-      <p class="mb-4">
-        {{ t(`credentials.confirm.${action.kind}.explanation`, { name: action.row.full_name }) }}
-      </p>
-
-      <div v-if="action.kind === 'revoke'" class="mb-4 grid gap-4 sm:grid-cols-2">
-        <div class="flex flex-col gap-1">
-          <label for="revocation-reason" class="font-medium">
-            {{ t('credentials.revoke.reasonLabel') }}
-          </label>
-          <select id="revocation-reason" v-model="revocationReasonKey" :class="selectClass">
-            <option value="">{{ t('credentials.revoke.reasonPlaceholder') }}</option>
-            <option v-for="key of REVOCATION_REASONS" :key="key" :value="key">
-              {{ t(`credentials.revoke.reasons.${key}`) }}
-            </option>
-            <option value="other">{{ t('credentials.revoke.reasons.other') }}</option>
-          </select>
-        </div>
-        <div v-if="revocationReasonKey === 'other'" class="flex flex-col gap-1">
-          <label for="revocation-reason-text" class="font-medium">
-            {{ t('credentials.revoke.reasonOtherLabel') }}
-          </label>
-          <input
-            id="revocation-reason-text"
-            v-model="revocationReasonText"
-            type="text"
-            maxlength="190"
-            :class="selectClass"
-          />
-        </div>
-      </div>
-
-      <ChangePreview
-        :changes="changesFor(action.kind, action.row)"
-        :caption="t(`credentials.confirm.${action.kind}.heading`)"
-      />
-
-      <p class="mt-4 text-sm text-kq-text-muted">
-        {{ t(`credentials.confirm.${action.kind}.notice`) }}
-      </p>
-    </ConfirmDialog>
-
     <ConfirmDialog
       v-if="batching"
       :title="t('credentials.batch.heading')"

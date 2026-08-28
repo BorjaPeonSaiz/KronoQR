@@ -36,6 +36,7 @@ import ScanConfirmationPanel from '@/features/scan/ui/ScanConfirmationPanel.vue'
 import { useScanSessionWithCleanup } from '@/features/scan/composables/useScanSession'
 import { useScanSound } from '@/features/scan/composables/useScanSound'
 import { useWakeLock } from '@/features/scan/composables/useWakeLock'
+import type { ScanConfirmation } from '@/features/scan/domain/scanOutcome'
 import { CONFIRMATION_DISPLAY_MS } from '@/features/scan/domain/scanOutcome'
 import { createPinPipeline } from '../application/pinPipeline'
 import { hasEmployeeCodeShape, normalizeEmployeeCode } from '../domain/pinCode'
@@ -116,7 +117,36 @@ function clearSensitiveInputs(): void {
   pin.clear()
 }
 
+// El `router` es un singleton de la aplicacion, no algo local a esta
+// instancia de la pantalla: una clausura que sobrevive al desmontaje (por
+// ejemplo `onSettled` de `pinPipeline`, que puede llegar segundos despues de
+// que la persona ya se haya ido y otra este tecleando su PIN) no puede tocarlo.
+// `alive` es la guarda: se pone a `false` en `onUnmounted`, ANTES que
+// cualquier otra cosa, y toda funcion que programa algo sobre el router la
+// comprueba primero.
+let alive = true
 let returnTimer: ReturnType<typeof setTimeout> | null = null
+
+/**
+ * Programa la vuelta a inicio segun el desenlace QUE HAYA en pantalla ahora
+ * mismo, cancelando cualquier vuelta programada antes. Se llama tanto al
+ * pintar la primera confirmacion como, mas tarde, desde `onSettled`: un
+ * «Comprobando…» que se sustituye por «pendiente» o por el desenlace real no
+ * puede dejar viva la cuenta atras pensada para el «Comprobando…», o la
+ * pantalla volveria a inicio antes de que hubiera tiempo de leer lo que vino
+ * despues.
+ */
+function scheduleReturn(kind: ScanConfirmation['kind']): void {
+  // Defensa en profundidad: si algo llega a llamar aqui despues del
+  // desmontaje (el guard de `alive` en `onSettled` ya deberia haberlo
+  // evitado), no se programa nada sobre el `router` singleton.
+  if (!alive) return
+  if (returnTimer !== null) clearTimeout(returnTimer)
+  returnTimer = setTimeout(() => {
+    if (!alive) return
+    void router.replace({ name: 'home' })
+  }, CONFIRMATION_DISPLAY_MS[kind])
+}
 
 async function confirm(): Promise<void> {
   const publicKey = offline.pinSealingPublicKey.value
@@ -126,7 +156,30 @@ async function confirm(): Promise<void> {
     submission: offline.submission,
     deviceId,
     publicKey,
-    onSettled: (confirmation) => session.settle(confirmation),
+    isOffline: () => connectivity.status.value === 'offline',
+    onSettled: (confirmation) => {
+      // `onSettled` puede llegar segundos despues de que esta pantalla se
+      // haya desmontado (Wi-Fi degradada, respuesta tardia del servidor): la
+      // persona que la tecleo ya se fue y puede haber otra en su lugar. Nada
+      // de lo que sigue puede tocar el `session` de esta instancia (ya
+      // limpiado) ni, sobre todo, programar una vuelta a inicio sobre el
+      // `router` — que es un singleton compartido con quien haya despues.
+      if (!alive) return
+
+      // El PIN no se puede validar en local (regla dura 19 + RS-03: viaja
+      // sellado). Mientras estaba «Comprobando…» no ha sonado nada todavia,
+      // asi que el desenlace que llega ahora — real o «pendiente» por plazo
+      // vencido — se pinta CON su propio sonido (`present`), no en silencio.
+      // Si lo que habia en pantalla ya era «pendiente» (sin red, o una
+      // respuesta tardia tras el plazo), el sonido de reconocimiento ya sono
+      // entonces: repetirlo aqui daria dos pitidos por un unico fichaje.
+      if (session.confirmation.value?.kind === 'verifying') {
+        session.present(confirmation)
+      } else {
+        session.settle(confirmation)
+      }
+      scheduleReturn(confirmation.kind)
+    },
     onError: (code, context) =>
       reporter.report(
         code === 'seal_failed' ? 'kiosk.pin.seal_failed' : 'kiosk.scan.submit_failed',
@@ -146,10 +199,12 @@ async function confirm(): Promise<void> {
   const confirmation = await pipeline.submit(normalizedCode, pinValue)
   session.present(confirmation)
 
-  if (returnTimer !== null) clearTimeout(returnTimer)
-  returnTimer = setTimeout(() => {
-    void router.replace({ name: 'home' })
-  }, CONFIRMATION_DISPLAY_MS[confirmation.kind])
+  // Si esto es «Comprobando…», la vuelta a inicio programada aqui es solo la
+  // red de seguridad por si `onSettled` no llegara nunca (no deberia: la
+  // propia tuberia se rinde a «pendiente» al vencer `PIN_VERIFY_TIMEOUT_MS`).
+  // En cuanto `onSettled` dispare, `scheduleReturn` la sustituye por la
+  // correcta para el desenlace de verdad.
+  scheduleReturn(confirmation.kind)
 }
 
 const wakeLock = useWakeLock({
@@ -169,6 +224,9 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  // Primero: nada programado despues de este punto puede navegar. El resto
+  // de la limpieza (temporizador vivo, latido) va detras a proposito.
+  alive = false
   heartbeat.stop()
   if (returnTimer !== null) clearTimeout(returnTimer)
 })

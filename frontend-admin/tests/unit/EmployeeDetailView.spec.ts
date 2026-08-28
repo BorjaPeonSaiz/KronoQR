@@ -1,12 +1,28 @@
-import type { DOMWrapper } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import CredentialRowActions from '@/features/credentials/CredentialRowActions.vue'
 import EmployeeDetailView from '@/features/employees/EmployeeDetailView.vue'
 import { useSessionStore } from '@/features/auth/session.store'
 import es from '@/shared/i18n/locales/es.json'
 import type { Employee } from '@/shared/api/types'
 import { clearAnnouncement } from '@kronoqr/web-kit/announcer'
-import { EMPLOYEE_UUID, SITE, employee, managementUser } from './support/fixtures'
-import { createTestPinia, jsonResponse, mountView, settle, stubFetch } from './support/harness'
+import {
+  CREDENTIAL_UUID,
+  EMPLOYEE_UUID,
+  SITE,
+  board,
+  boardRow,
+  credential,
+  employee,
+  managementUser,
+} from './support/fixtures'
+import {
+  buttonWith,
+  createTestPinia,
+  jsonResponse,
+  mountView,
+  settle,
+  stubFetch,
+} from './support/harness'
 
 const DEPARTMENTS = {
   data: [
@@ -17,16 +33,11 @@ const DEPARTMENTS = {
 
 type Wrapper = Awaited<ReturnType<typeof mountView>>
 
-function buttonWith(wrapper: Wrapper, label: string): DOMWrapper<Element> {
-  const found = wrapper.findAll('button').find((button) => button.text().includes(label))
-
-  if (found === undefined) {
-    throw new Error(`No hay ningun boton con el texto «${label}»`)
-  }
-
-  return found
-}
-
+/**
+ * Salvo que una prueba diga lo contrario, la fila de credencial de la ficha
+ * esta «pendiente de entregar»: es el estado que ejercita mas ramas (boton de
+ * entrega, dialogo de confirmacion) sin ser el caso especial de `no_credential`.
+ */
 function routes(
   record: Employee,
   extra?: (url: string, init: RequestInit | undefined) => Response | null,
@@ -42,8 +53,41 @@ function routes(
 
     const handled = extra?.(url, init) ?? null
 
-    return handled ?? jsonResponse(record)
+    if (handled !== null) {
+      return handled
+    }
+
+    if (url.startsWith('/api/v1/credentials/status')) {
+      // El doble se comporta como el servidor real: solo devuelve la fila de
+      // esta persona cuando la peticion la acota por `employee_uuid` (y por
+      // `site_id`, ADR-037). Si el cliente dejara de mandar esos parametros,
+      // aqui volveria un tablero vacio y la prueba de mas abajo lo notaria.
+      const requestUrl = new URL(url, 'http://localhost')
+      const matchesEmployee = requestUrl.searchParams.get('employee_uuid') === record.uuid
+      const matchesSite = requestUrl.searchParams.get('site_id') === String(record.site_id)
+
+      return jsonResponse(
+        matchesEmployee && matchesSite
+          ? board([boardRow({ employee_uuid: record.uuid, status: 'pending_delivery' })])
+          : board([]),
+      )
+    }
+
+    return jsonResponse(record)
   }
+}
+
+/** Los parametros de consulta de la ultima peticion al tablero de credenciales. */
+function lastCredentialStatusQuery(spy: ReturnType<typeof stubFetch>): URLSearchParams {
+  const call = [...spy.mock.calls]
+    .reverse()
+    .find((call) => String(call[0]).startsWith('/api/v1/credentials/status'))
+
+  if (call === undefined) {
+    throw new Error('No se pidio el tablero de credenciales')
+  }
+
+  return new URL(String(call[0]), 'http://localhost').searchParams
 }
 
 async function mountDetail(
@@ -260,5 +304,156 @@ describe('EmployeeDetailView', () => {
     await settle()
 
     expect(wrapper.find('[role="alert"]').text()).toContain(es.errors.network.title)
+  })
+
+  // --- Tarjeta QR (RF-QR-04, RF-QR-06, RF-QR-08) ------------------------------
+  //
+  // La misma fila y las mismas acciones que en el tablero de credenciales
+  // (`CredentialBoardView`), pero de esta persona sola: no se pide el tablero
+  // entero para filtrarlo en cliente.
+  //
+  // Los botones se buscan DENTRO de `CredentialRowActions`, no en toda la
+  // ficha: «Registrar la entrega del PIN» (seccion PIN) y «Registrar la
+  // entrega» (seccion Tarjeta QR) comparten texto, y `find()` se quedaria con
+  // el primero que aparece en el documento.
+  describe('tarjeta QR', () => {
+    it('pinta la fila de esta persona con su estado de tarjeta y el boton que toca', async () => {
+      const wrapper = await mountDetail(employee())
+      const actions = wrapper.findComponent(CredentialRowActions)
+
+      expect(wrapper.text()).toContain(es.credentials.status.pending_delivery)
+      expect(wrapper.text()).toContain('Hotel Marina')
+      expect(actions.text()).toContain(es.credentials.actions.deliver)
+    })
+
+    it('pide la fila acotada a esta persona y a su centro, no el tablero entero (ADR-037)', async () => {
+      const spy = stubFetch(routes(employee()))
+
+      await mountView(EmployeeDetailView, { props: { uuid: EMPLOYEE_UUID } })
+      await settle()
+
+      const query = lastCredentialStatusQuery(spy)
+
+      expect(query.get('employee_uuid')).toBe(EMPLOYEE_UUID)
+      expect(query.get('site_id')).toBe('1')
+    })
+
+    it('elige la fila de esta persona por employee_uuid, nunca la primera del tablero', async () => {
+      // Si el servidor —o un doble de prueba descuidado— devolviera mas de
+      // una fila, tomar `data[0]` a ciegas pintaria la de otra persona. La
+      // fila de esta persona va aqui deliberadamente en segundo lugar.
+      const wrapper = await mountDetail(employee(), (url) =>
+        url.startsWith('/api/v1/credentials/status')
+          ? jsonResponse(
+              board([
+                boardRow({
+                  employee_uuid: 'otro-empleado-uuid',
+                  full_name: 'Otra Persona',
+                  status: 'delivered',
+                }),
+                boardRow({ employee_uuid: EMPLOYEE_UUID, status: 'pending_print' }),
+              ]),
+            )
+          : null,
+      )
+      const actions = wrapper.findComponent(CredentialRowActions)
+
+      expect(wrapper.text()).toContain(es.credentials.status.pending_print)
+      expect(actions.text()).toContain(es.credentials.actions.print)
+      expect(wrapper.text()).not.toContain('Otra Persona')
+    })
+
+    it('al confirmar la entrega llama al endpoint de entrega y refresca la fila', async () => {
+      const spy = stubFetch(
+        routes(employee(), (url, init) =>
+          url.endsWith(`/credentials/${CREDENTIAL_UUID}/deliver`) && init?.method === 'POST'
+            ? jsonResponse(credential({ delivered_at: '2026-08-28T09:00:00.000000Z' }))
+            : null,
+        ),
+      )
+
+      const wrapper = await mountView(EmployeeDetailView, { props: { uuid: EMPLOYEE_UUID } })
+
+      await settle()
+
+      const actions = wrapper.findComponent(CredentialRowActions)
+
+      await buttonWith(actions, es.credentials.actions.deliver).trigger('click')
+      await settle(1)
+      await buttonWith(actions, es.credentials.confirm.deliver.action).trigger('click')
+      await settle()
+
+      const calledDeliver = spy.mock.calls.some(
+        (call) =>
+          String(call[0]).endsWith(`/credentials/${CREDENTIAL_UUID}/deliver`) &&
+          (call[1] as RequestInit | undefined)?.method === 'POST',
+      )
+
+      expect(calledDeliver).toBe(true)
+    })
+
+    it('ofrece «Emitir» cuando la persona no tiene ninguna credencial', async () => {
+      const wrapper = await mountDetail(employee(), (url) =>
+        url.startsWith('/api/v1/credentials/status')
+          ? jsonResponse(board([boardRow({ status: 'no_credential', credential: null })]))
+          : null,
+      )
+      const actions = wrapper.findComponent(CredentialRowActions)
+
+      expect(wrapper.text()).toContain(es.credentials.status.no_credential)
+      expect(actions.text()).toContain(es.credentials.actions.issue)
+      expect(actions.findAll('button')).toHaveLength(1)
+    })
+
+    it('cuenta que ha pasado si la tarjeta no se puede cargar', async () => {
+      const wrapper = await mountDetail(employee(), (url) => {
+        if (url.startsWith('/api/v1/credentials/status')) {
+          throw new TypeError('Failed to fetch')
+        }
+
+        return null
+      })
+
+      const alerts = wrapper.findAll('[role="alert"]')
+
+      expect(alerts.some((alert) => alert.text().includes(es.errors.network.title))).toBe(true)
+    })
+
+    it('a quien no esta de alta no le ofrece la tarjeta: se gestiona desde el tablero del centro', async () => {
+      // El servidor solo devuelve fila para empleados de alta (activos). Sin
+      // esto, la ficha de alguien de baja o suspendido esperaria para
+      // siempre una fila que nunca llega: «vuelve a intentarlo en unos
+      // minutos» que no termina nunca.
+      const spy = stubFetch(routes(employee({ status: 'terminated', terminated_at: '2026-08-01' })))
+
+      const wrapper = await mountView(EmployeeDetailView, { props: { uuid: EMPLOYEE_UUID } })
+
+      await settle()
+
+      expect(wrapper.text()).toContain(es.employees.detail.credentialInactive.title)
+      expect(wrapper.text()).toContain(es.employees.detail.credentialInactive.description)
+      expect(wrapper.text()).not.toContain(es.employees.detail.credentialEmpty.title)
+
+      // Ni siquiera se pide: no hay fila que esperar, asi que no hay
+      // peticion pendiente que deje el panel cargando para siempre.
+      const askedCredentialStatus = spy.mock.calls.some((call) =>
+        String(call[0]).startsWith('/api/v1/credentials/status'),
+      )
+
+      expect(askedCredentialStatus).toBe(false)
+
+      const link = wrapper
+        .findAll('a')
+        .find((anchor) => anchor.text() === es.employees.detail.credentialInactive.link)
+
+      expect(link).toBeDefined()
+      expect(link?.attributes('href')).toContain('/credentials')
+    })
+
+    it('a quien esta suspendido tampoco le ofrece la tarjeta desde la ficha', async () => {
+      const wrapper = await mountDetail(employee({ status: 'suspended' }))
+
+      expect(wrapper.text()).toContain(es.employees.detail.credentialInactive.title)
+    })
   })
 })

@@ -586,6 +586,12 @@ export interface paths {
          *     **`q` busca por nombre, apellidos, nombre completo y codigo de
          *     empleado**, sin distinguir mayusculas ni acentos y por subcadena. Se
          *     combina con `AND` con los demas filtros y se pagina igual que ellos.
+         *
+         *     **Todos los filtros actuan sobre la plantilla entera**, no sobre la
+         *     pagina devuelta —tambien `pin_status`, que se deriva en SQL con la misma
+         *     regla con la que se calcula el campo `pin_status` de cada ficha—. Un
+         *     filtro que se resolviera en el navegador daria un `meta.total` que
+         *     describe otra cosa y una paginacion que no cuadra.
          */
         get: operations["listEmployees"];
         put?: never;
@@ -1105,11 +1111,29 @@ export interface paths {
          *     `revoked_at`. Un estado almacenado y otro derivado acaban discrepando, y
          *     aqui discrepar significa dar por entregada una tarjeta que nadie tiene.
          *
-         *     **`summary` no se filtra.** Aunque `pending=true` deje tres filas, el
-         *     resumen sigue diciendo «3 de 60»: el numero que importa es cuanta gente
-         *     falta *de la que hay*. Es tambien lo que se publica como
+         *     **`pending` no filtra el `summary`.** Aunque `pending=true` deje tres
+         *     filas, el resumen sigue diciendo «3 de 60»: el numero que importa es
+         *     cuanta gente falta *de la que hay*. Es tambien lo que se publica como
          *     `employees_without_delivered_credential{site}` y
-         *     `credentials_pending_print{site}` (doc 02 §8.2).
+         *     `credentials_pending_print{site}` (doc 02 §8.2). **`employee_uuid` si lo
+         *     acota** — ver su descripcion.
+         *
+         *     **`employee_uuid` sirve a la ficha de empleado**, que muestra la fila de
+         *     estado de la tarjeta de esa persona con sus acciones. Sin el, la unica
+         *     forma seria pedir el tablero del centro entero y quedarse con una fila,
+         *     lo que divulga —y audita como divulgada— toda la plantilla del centro
+         *     cada vez que alguien abre una ficha (ADR-037, RS-05).
+         *
+         *     **Solo aparece la plantilla de alta.** Quien esta de baja o suspendido no
+         *     sale de este panel, ni en el `summary` ni con `employee_uuid`: el panel
+         *     responde a «quien no puede fichar todavia» y la metrica que lo acompaña
+         *     cuenta a quien hay que darle una tarjeta. Pedir la fila de una persona no
+         *     activa devuelve `data: []` con `200`.
+         *
+         *     **Esta lectura queda registrada** (RS-05, RL-15) porque reparte un
+         *     conjunto de personas — **salvo** cuando se acota con `employee_uuid`, que
+         *     es la lectura de una sola persona y no deja asiento, igual que
+         *     `GET /employees/{uuid}` ([ADR-037](../adr/ADR-037-que-lecturas-de-datos-personales-dejan-asiento.md)).
          *
          *     Sin paginacion a proposito: la respuesta es la plantilla de un centro
          *     —decenas o pocos cientos de filas— y es una tabla que se ordena y se
@@ -2785,14 +2809,20 @@ export interface components {
          *     `employees_without_delivered_credential{site}` y
          *     `credentials_pending_print{site}` (doc 02 §8.2).
          *
-         *     **`employees` es el denominador y no cambia con el filtro**: es lo que
+         *     **`employees` es el denominador y no cambia con `pending`**: es lo que
          *     permite decir «faltan 3 de 60» en lugar de «faltan 3 de 3».
+         *
+         *     La excepcion es `employee_uuid`, que acota tambien el recuento porque
+         *     acota la consulta: ahi `employees` vale 1 y no es una cobertura.
          */
         SiteCredentialCoverage: {
             /** Format: int64 */
             site_id: number;
             site_name: string;
-            /** @description Empleados de alta del centro. */
+            /**
+             * @description Empleados de alta del centro — o solo la fila devuelta cuando se
+             *     consulta con `employee_uuid`.
+             */
             employees: number;
             /** @description Credenciales activas emitidas y todavia sin imprimir. */
             pending_print: number;
@@ -2821,6 +2851,10 @@ export interface components {
              * @description **Todos los centros del alcance, tambien los que estan a cero.** Una
              *     serie ausente y una serie en cero se ven igual en un panel, y solo la
              *     segunda dice «ya esta todo entregado».
+             *
+             *     `pending` no lo filtra; `employee_uuid` si — con el trae una sola
+             *     entrada, la del centro de esa persona y contando solo su fila, o
+             *     ninguna. Ver la descripcion del parametro.
              */
             summary: components["schemas"]["SiteCredentialCoverage"][];
         };
@@ -3456,6 +3490,24 @@ export interface components {
          */
         EmploymentStatusFilter: components["schemas"]["EmploymentStatus"];
         /**
+         * @description Limita el resultado a quien esta en esa situacion de PIN (RF-ID-09).
+         *
+         *     Es el mismo estado que devuelve cada ficha en `pin_status`, y se deriva
+         *     de lo mismo: `delivered` si consta la entrega, `issued` si hay PIN sin
+         *     entregar, y `pending` si no hay PIN. La derivacion ocurre **en el
+         *     servidor y sobre toda la plantilla**, no sobre la pagina que el panel
+         *     tenga delante: filtrar en el navegador daria un recuento que solo
+         *     describe lo que ya se habia descargado.
+         *
+         *     **Se combina con `AND` con el resto de filtros** y **no altera la
+         *     paginacion**: `meta.total` sigue siendo el total de lo que casa.
+         *
+         *     Para que sirve: `issued` es la lista de quien tiene PIN y todavia no lo
+         *     ha recibido en mano, que es exactamente la cola de trabajo de RRHH.
+         * @example issued
+         */
+        PinStatusFilter: components["schemas"]["PinStatus"];
+        /**
          * @description Busqueda libre sobre la plantilla, **insensible a mayusculas y a
          *     acentos, y por subcadena**. Casa contra el nombre, los apellidos, el
          *     nombre completo («nombre apellidos», con un espacio) y el codigo de
@@ -4069,6 +4121,24 @@ export interface operations {
                  * @example active
                  */
                 status?: components["parameters"]["EmploymentStatusFilter"];
+                /**
+                 * @description Limita el resultado a quien esta en esa situacion de PIN (RF-ID-09).
+                 *
+                 *     Es el mismo estado que devuelve cada ficha en `pin_status`, y se deriva
+                 *     de lo mismo: `delivered` si consta la entrega, `issued` si hay PIN sin
+                 *     entregar, y `pending` si no hay PIN. La derivacion ocurre **en el
+                 *     servidor y sobre toda la plantilla**, no sobre la pagina que el panel
+                 *     tenga delante: filtrar en el navegador daria un recuento que solo
+                 *     describe lo que ya se habia descargado.
+                 *
+                 *     **Se combina con `AND` con el resto de filtros** y **no altera la
+                 *     paginacion**: `meta.total` sigue siendo el total de lo que casa.
+                 *
+                 *     Para que sirve: `issued` es la lista de quien tiene PIN y todavia no lo
+                 *     ha recibido en mano, que es exactamente la cola de trabajo de RRHH.
+                 * @example issued
+                 */
+                pin_status?: components["parameters"]["PinStatusFilter"];
                 /**
                  * @description Pagina solicitada, empezando en 1.
                  * @example 1
@@ -4707,6 +4777,34 @@ export interface operations {
                  * @example 1
                  */
                 site_id?: number;
+                /**
+                 * @description Acota el tablero a **una sola persona** —la ficha de empleado del
+                 *     panel—, de modo que `data` traiga 0 o 1 filas.
+                 *
+                 *     Se combina con `site_id` y con `pending` mediante **Y logico**: una
+                 *     persona de otro centro, o que ya tiene su tarjeta en la mano cuando
+                 *     se pide `pending=true`, devuelve `data: []`.
+                 *
+                 *     **`summary` se acota con la persona**, al contrario que con
+                 *     `pending`: trae **una sola entrada** —la del centro de esa persona,
+                 *     contando solo la fila devuelta— o **ninguna** si no hay fila. No es
+                 *     la cobertura del centro: calcularla obliga a recorrer su plantilla
+                 *     entera, que es justo lo que este filtro evita. Quien necesite «faltan
+                 *     3 de 60» pide el tablero sin `employee_uuid`.
+                 *
+                 *     Un UUID con forma valida que no corresponde a ningun empleado **de
+                 *     alta** —porque no existe, o porque esa persona esta de baja o
+                 *     suspendida— devuelve `data: []` y `summary: []` con `200`, **no
+                 *     `404`**: este tablero no es un recurso por persona, es una consulta
+                 *     acotada. Una forma invalida si es `422`. Se acepta en mayusculas o en
+                 *     minusculas: la comparacion es sobre el tipo `uuid`, que no distingue.
+                 *
+                 *     **Acotado a una persona, la lectura no deja asiento en el trail**
+                 *     (ADR-037): es una sola persona y no un conjunto, el mismo criterio
+                 *     que `GET /employees/{uuid}`.
+                 * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                 */
+                employee_uuid?: string;
                 /**
                  * @description Solo quien **todavia no tiene la tarjeta en la mano**: sin
                  *     credencial, pendiente de imprimir, pendiente de entregar y revocada.

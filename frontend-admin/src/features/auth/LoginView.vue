@@ -64,7 +64,6 @@ async function submit(): Promise<void> {
       class="w-full max-w-md rounded-kq border border-kq-border bg-kq-surface-raised p-6 shadow-kq-soft"
     >
       <h1 class="text-2xl font-bold text-kq-text">{{ t('auth.heading') }}</h1>
-      <p class="mt-2 text-kq-text-muted">{{ t('auth.intro') }}</p>
 
       <ErrorNotice v-if="error !== null" :error="error" class="mt-4" />
 
@@ -111,8 +110,6 @@ async function submit(): Promise<void> {
           {{ submitting ? t('auth.submitting') : t('auth.submit') }}
         </button>
       </form>
-
-      <p class="mt-6 text-sm text-kq-text-muted">{{ t('auth.employeeNotice') }}</p>
     </div>
   </main>
 </template>

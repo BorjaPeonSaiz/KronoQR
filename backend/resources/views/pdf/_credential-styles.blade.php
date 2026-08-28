@@ -12,6 +12,22 @@
     QR de RF-QR-05 solo significa algo si se expresa en la unidad en la que se
     mide una tarjeta.
 
+    LA TARJETA SON DOS MITADES. La derecha —`$qrZoneMm`, la mitad exacta del
+    ancho— es del QR y de nadie mas; la izquierda es el texto. El reparto lo
+    calcula {@see BrowsershotCardRenderer} y llega hecho: aqui no hay ninguna
+    medida inventada. Se parte por el ancho y no por el alto porque la tarjeta es
+    apaisada: media tarjeta a lo ancho son 42,8 mm y media a lo alto 27 mm, asi
+    que partirla por el alto daria un QR que cabe en 27 mm —la mitad de area— sin
+    ninguna ganancia a cambio.
+
+    LA ZONA TRANQUILA NO ES UN `padding`. `* { box-sizing: border-box }` hace que
+    un `padding` sobre la propia imagen SE COMA el simbolo en vez de rodearlo:
+    con `width: 26mm; padding: 1.5mm` lo que se imprimia eran 23 mm de QR, tres
+    milimetros menos de los que prometia la configuracion, y nadie lo veia porque
+    el sintoma es «se lee un poco peor». El hueco blanco alrededor lo pone el
+    ancho sobrante de la mitad del QR, que es un espacio real de la tarjeta y no
+    depende de como interprete nadie el modelo de caja.
+
     SIN NINGUNA URL. Ni tipografias remotas, ni hojas de estilo externas: el
     producto se instala en servidores sin salida a internet (ADR-016) y una
     fuente de Google convertiria la impresion en algo que depende de la red del
@@ -19,7 +35,9 @@
 
     LA MARCA LLEGA DE FUERA (regla dura 13, RF-PD-08). El color de acento es una
     variable; el logotipo, si lo hay, viene incrustado. Nada de esto esta escrito
-    aqui.
+    aqui. Y la marca **no desplaza ni encoge el QR** (tarea 5.8): el logotipo
+    vive en la mitad del texto y su altura maxima esta acotada, de modo que un
+    logotipo grande recorta el texto y jamas el simbolo.
 --}}
 <style>
     @page {
@@ -38,11 +56,14 @@
         print-color-adjust: exact;
     }
 
+    /* Sin `padding` propio: cada mitad pone el suyo. Un `padding` en la tarjeta
+       le restaria milimetros a la mitad del QR y esa mitad tiene que medir
+       exactamente la mitad. */
     .card {
         position: relative;
-        width: {{ $widthMm }}mm;
-        height: {{ $heightMm }}mm;
-        padding: 4mm;
+        width: 100%;
+        height: 100%;
+        padding: 0;
         background: #ffffff;
         color: #111827;
         overflow: hidden;
@@ -59,18 +80,22 @@
         top: 0;
         left: 0;
         right: 0;
-        height: 2.5mm;
+        height: {{ $accentMm }}mm;
         background: {{ $brand['accent'] }};
     }
 
+    /* La mitad del texto: lo que sobra despues de reservar la del QR. `min-width`
+       a cero es lo que permite que el texto se recorte en vez de empujar; sin
+       eso, un nombre largo ensancharia esta columna y se llevaria por delante la
+       zona tranquila del simbolo. */
     .card__identity {
+        flex: 1 1 auto;
+        min-width: 0;
         display: flex;
         flex-direction: column;
         justify-content: center;
-        /* El QR manda: lo que sobra es para el texto, y el texto se recorta
-           antes de que el QR se encoja por debajo del minimo de RF-QR-05. */
-        width: calc({{ $widthMm }}mm - {{ $qrSizeMm }}mm - 12mm);
-        padding-top: 2.5mm;
+        /* Arriba, por debajo del filete de color. */
+        padding: calc({{ $accentMm }}mm + 2.5mm) 1.5mm 4mm 4.5mm;
     }
 
     .card__brand {
@@ -91,18 +116,40 @@
     }
 
     /* El nombre es lo que se lee de un vistazo cuando alguien busca su tarjeta
-       en una caja con cuarenta. Se permite que ocupe dos lineas y se corta a
-       partir de ahi: un nombre truncado sigue siendo reconocible por su dueno,
-       un QR encogido no lo lee nadie. */
+       en una caja con cuarenta, y por eso es el elemento mas grande. Se permite
+       que ocupe tres lineas —la columna es media tarjeta— y se corta a partir de
+       ahi: un nombre truncado sigue siendo reconocible por su dueno, un QR
+       encogido no lo lee nadie. */
     .card__name {
         font-size: 12pt;
         font-weight: 700;
         line-height: 1.15;
-        margin: 0 0 1.5mm 0;
+        margin: 0 0 1.2mm 0;
         display: -webkit-box;
-        -webkit-line-clamp: 2;
+        -webkit-line-clamp: 3;
         -webkit-box-orient: vertical;
         overflow: hidden;
+    }
+
+    /* El codigo de empleado, en negrita y justo debajo del nombre. NO ES EL
+       TOKEN y no sirve para fichar: es opaco y aleatorio (doc 01 §5.5), y esta
+       ahi para que RRHH pueda emparejar una tarjeta suelta con su dueno sin
+       escanearla, y para que quien entra al portal lo tenga a mano (ADR-015).
+       Va en `<strong>` y no en un `<p>` con `font-weight`: la negrita es del
+       documento, no de la hoja de estilos, asi que sobrevive a que alguien
+       imprima este HTML sin CSS.
+       Mas pequeno que el nombre a proposito: identifica, no titula. */
+    .card__code {
+        display: block;
+        font-family: "Courier New", Courier, monospace;
+        font-size: 9pt;
+        font-weight: 700;
+        letter-spacing: 0.5pt;
+        line-height: 1.1;
+        margin: 0 0 1.5mm 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     .card__department,
@@ -120,32 +167,26 @@
         color: #6b7280;
     }
 
+    /* La mitad del QR: ancho fijo y sin encogerse nunca. `flex-shrink: 0` es lo
+       que convierte en verdad la frase «el QR manda»: cuando el texto no cabe,
+       cede el texto. */
     .card__qr {
+        flex: 0 0 {{ $qrZoneMm }}mm;
+        width: {{ $qrZoneMm }}mm;
         display: flex;
-        flex-direction: column;
         align-items: center;
         justify-content: center;
-        padding-top: 2.5mm;
+        /* Para centrar el simbolo en la banda blanca, por debajo del filete. */
+        padding-top: {{ $accentMm }}mm;
     }
 
-    /* La zona tranquila del estandar, en milimetros de la tarjeta y no en
-       modulos: el hueco reservado es fijo y el numero de modulos no. */
+    /* El simbolo, a pelo: ni `padding` ni `border`. Lo que lo rodea es el blanco
+       que sobra de la mitad —{{ $qrZoneMm }} mm menos {{ $qrSizeMm }} mm— y es
+       zona tranquila de sobra para el estandar (>= 4 modulos). */
     .card__qr img {
         width: {{ $qrSizeMm }}mm;
         height: {{ $qrSizeMm }}mm;
         display: block;
-        padding: 1.5mm;
         background: #ffffff;
-    }
-
-    /* El codigo de empleado impreso debajo del QR. NO ES EL TOKEN y no sirve
-       para fichar: es opaco y aleatorio (doc 01 §5.5), y esta ahi para que RRHH
-       pueda emparejar una tarjeta suelta con su dueno sin escanearla. */
-    .card__code {
-        font-family: "Courier New", Courier, monospace;
-        font-size: 6pt;
-        letter-spacing: 0.6pt;
-        color: #6b7280;
-        margin-top: 0.8mm;
     }
 </style>

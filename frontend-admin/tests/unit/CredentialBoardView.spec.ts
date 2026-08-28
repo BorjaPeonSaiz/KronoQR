@@ -1,23 +1,13 @@
-import type { DOMWrapper } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import CredentialBoardView from '@/features/credentials/CredentialBoardView.vue'
+import { CLIENT_PER_PAGE } from '@/features/credentials/useCredentialRows'
 import es from '@/shared/i18n/locales/es.json'
 import type { CredentialStatusRow } from '@/shared/api/types'
 import { announcement, clearAnnouncement } from '@kronoqr/web-kit/announcer'
 import { CREDENTIAL_UUID, SITE, board, boardRow, credential } from './support/fixtures'
-import { jsonResponse, mountView, settle, stubFetch } from './support/harness'
+import { buttonWith, jsonResponse, mountView, settle, stubFetch } from './support/harness'
 
 type Wrapper = Awaited<ReturnType<typeof mountView>>
-
-function buttonWith(wrapper: Wrapper, label: string): DOMWrapper<Element> {
-  const found = wrapper.findAll('button').find((button) => button.text().includes(label))
-
-  if (found === undefined) {
-    throw new Error(`No hay ningun boton con el texto «${label}»`)
-  }
-
-  return found
-}
 
 /**
  * Selecciona la opcion «solo quien todavia no tiene la tarjeta en la mano»
@@ -334,8 +324,9 @@ describe('CredentialBoardView', () => {
     expect(wrapper.text()).toContain('Cocina')
   })
 
-  it('pagina en el cliente de 25 en 25 y avanza a la siguiente pagina (RF-QR-08)', async () => {
-    const rows = Array.from({ length: 30 }, (_, index) =>
+  it('pagina en el cliente y avanza a la siguiente pagina (RF-QR-08)', async () => {
+    const total = CLIENT_PER_PAGE + 5
+    const rows = Array.from({ length: total }, (_, index) =>
       boardRow({
         employee_uuid: `row-${index}`,
         employee_code: `CODE${index}`,
@@ -345,13 +336,67 @@ describe('CredentialBoardView', () => {
 
     const wrapper = await mountBoard(rows)
 
-    expect(wrapper.findAll('tbody tr')).toHaveLength(25)
-    expect(wrapper.text()).toContain('1–25 de 30')
+    expect(wrapper.findAll('tbody tr')).toHaveLength(CLIENT_PER_PAGE)
+    expect(wrapper.text()).toContain(`1–${CLIENT_PER_PAGE} de ${total}`)
 
     await wrapper.findAll('nav button')[1]?.trigger('click')
     await settle()
 
     expect(wrapper.findAll('tbody tr')).toHaveLength(5)
+  })
+
+  it('el filtro de departamento encaja aunque la fila viviera en una pagina en cliente distinta (RF-QR-08)', async () => {
+    // El tablero llega ENTERO del servidor (`board.data`): el filtro se aplica
+    // sobre todas esas filas antes de paginar en cliente, nunca solo sobre las
+    // 30 que se estarian viendo en la pagina 1. Se coloca la unica fila de
+    // «Cocina» en la posicion que, sin filtrar, caeria en la pagina 3.
+    const rows = Array.from({ length: CLIENT_PER_PAGE * 2 + 4 }, (_, index) =>
+      boardRow({
+        employee_uuid: `row-${index}`,
+        employee_code: `CODE${index}`,
+        full_name: `Persona ${index}`,
+        department_name: 'Recepcion',
+      }),
+    )
+    rows[rows.length - 1] = boardRow({
+      employee_uuid: 'cocina',
+      employee_code: 'CODE-COCINA',
+      full_name: 'Persona de Cocina',
+      department_name: 'Cocina',
+    })
+
+    const wrapper = await mountBoard(rows)
+
+    await wrapper.find('#credentials-department-filter').setValue('Cocina')
+    await settle()
+
+    expect(wrapper.findAll('tbody tr')).toHaveLength(1)
+    expect(wrapper.text()).toContain('Persona de Cocina')
+  })
+
+  it('el filtro de estado encaja aunque la fila viviera en una pagina en cliente distinta (RF-QR-08)', async () => {
+    const rows = Array.from({ length: CLIENT_PER_PAGE * 2 + 4 }, (_, index) =>
+      boardRow({
+        employee_uuid: `row-${index}`,
+        employee_code: `CODE${index}`,
+        full_name: `Persona ${index}`,
+        status: 'pending_print',
+      }),
+    )
+    rows[rows.length - 1] = boardRow({
+      employee_uuid: 'entregada',
+      employee_code: 'CODE-ENTREGADA',
+      full_name: 'Persona Entregada',
+      status: 'delivered',
+    })
+
+    const wrapper = await mountBoard(rows)
+
+    await wrapper.find('#credentials-status-filter').setValue('delivered')
+    await settle()
+
+    expect(wrapper.findAll('tbody tr')).toHaveLength(1)
+    expect(wrapper.text()).toContain('Persona Entregada')
   })
 
   it('«pendiente de tarjeta» es una opcion mas del select de estado, sin control deshabilitado que nadie con teclado o lector de pantalla pueda alcanzar (RF-QR-08)', async () => {

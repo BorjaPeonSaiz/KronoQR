@@ -10,8 +10,12 @@ import type {
   IssuedPin,
   OffboardEmployeeRequest,
   PinDeliveryReceipt,
+  PinStatus,
   UpdateEmployeeRequest,
 } from '@/shared/api/types'
+
+/** Tamano de pagina del listado (RF-GP-01). El contrato admite `per_page` hasta 100. */
+export const EMPLOYEE_LIST_PER_PAGE = 30
 
 /** Filtros y pagina del listado. La paginacion es del servidor (contrato §PerPage). */
 export interface EmployeeListQuery {
@@ -26,6 +30,8 @@ export interface EmployeeListQuery {
    * del contrato), no el cliente.
    */
   q?: string
+  /** Estado del PIN. Lo resuelve el servidor (parametro `pin_status` del contrato), no el cliente. */
+  pinStatus?: PinStatus
 }
 
 export function listEmployees(query: EmployeeListQuery): Promise<EmployeeCollection> {
@@ -37,6 +43,7 @@ export function listEmployees(query: EmployeeListQuery): Promise<EmployeeCollect
       site_id: query.siteId,
       department_id: query.departmentId,
       q: query.q,
+      pin_status: query.pinStatus,
     },
   })
 }

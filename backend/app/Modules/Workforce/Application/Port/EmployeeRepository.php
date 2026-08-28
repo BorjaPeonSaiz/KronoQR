@@ -57,6 +57,14 @@ interface EmployeeRepository
      *                               Llega ya recortada, y `null` significa «sin
      *                               busqueda»: la cadena vacia no es un filtro.
      *                               Se combina con `AND` con el resto.
+     * @param  PinStatus|null  $pinStatus  Situacion del PIN (RF-ID-09). El
+     *                                     adaptador la traduce a las MISMAS
+     *                                     columnas de las que
+     *                                     {@see EmployeePinRepository::statusesFor()}
+     *                                     deriva el estado que se muestra: si
+     *                                     las dos reglas divergieran, el panel
+     *                                     filtraria por una cosa y pintaria
+     *                                     otra.
      * @return list<Employee>
      */
     public function search(
@@ -64,6 +72,7 @@ interface EmployeeRepository
         ?int $departmentId,
         ?EmploymentStatus $status,
         ?string $search,
+        ?PinStatus $pinStatus,
         int $limit,
         int $offset,
     ): array;
@@ -80,5 +89,6 @@ interface EmployeeRepository
         ?int $departmentId,
         ?EmploymentStatus $status,
         ?string $search,
+        ?PinStatus $pinStatus,
     ): int;
 }

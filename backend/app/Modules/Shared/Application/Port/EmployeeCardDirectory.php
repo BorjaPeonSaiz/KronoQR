@@ -35,16 +35,29 @@ interface EmployeeCardDirectory
 {
     /**
      * Los empleados **de alta**, ordenados de forma estable, opcionalmente
-     * acotados a un centro.
+     * acotados a un centro y a una persona.
      *
      * El orden lo fija el adaptador y tiene que ser deterministico: es el orden
      * en el que salen las tarjetas de una hoja A4, y quien las recorta necesita
      * poder repetirlo.
      *
+     * **`$employeeUuid` se filtra aqui y no en quien llama.** La ficha de
+     * empleado del panel pinta **una** fila (RF-QR-08): resolverla trayendo la
+     * plantilla entera y descartando el resto convierte cada apertura de una
+     * ficha en un recorrido completo de `employees` de la instalacion. Empujado
+     * a la consulta, ademas, la comparacion la hace el tipo `uuid` nativo de
+     * PostgreSQL, que es insensible a mayusculas — un `===` en PHP contra un
+     * UUID escrito en mayusculas no casaba con la forma canonica que devuelve la
+     * base de datos.
+     *
+     * Los dos filtros se combinan con **Y logico**: una persona que no esta en
+     * el centro pedido no sale.
+     *
      * @param  int|null  $siteId  `null` = toda la instalacion.
+     * @param  string|null  $employeeUuid  `null` = toda la plantilla del alcance.
      * @return list<EmployeeCardProfile>
      */
-    public function activeProfiles(?int $siteId = null): array;
+    public function activeProfiles(?int $siteId = null, ?string $employeeUuid = null): array;
 
     /**
      * El perfil de un empleado por su clave interna, o `null` si no existe.

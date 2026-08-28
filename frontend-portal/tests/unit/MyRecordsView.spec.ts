@@ -92,12 +92,10 @@ describe('MyRecordsView', () => {
     expect(wrapper.find('[data-test="totals-mismatch"]').exists()).toBe(false)
   })
 
-  it('dice que periodo se esta viendo y en que zona horaria', async () => {
+  it('dice que periodo se esta viendo', async () => {
     const wrapper = await mountMyRecords()
 
     expect(wrapper.find('[data-test="resolved-range"]').text()).toContain('2026-03-14')
-    expect(wrapper.find('[data-test="resolved-range"]').text()).toContain('Europe/Madrid')
-    expect(wrapper.text()).toContain(es.myRecords.zoneNotice)
   })
 
   it('consulta el rango que se le pide, y lo pide al servidor', async () => {

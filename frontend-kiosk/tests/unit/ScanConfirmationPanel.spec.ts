@@ -94,6 +94,22 @@ describe('pantalla de confirmacion', () => {
     expect(wrapper.get('[data-testid="confirmation-detail"]').text()).toContain('07:02')
   })
 
+  it('el PIN «Comprobando…» es honesto: no dice pendiente, ni entrada, ni salida', () => {
+    const wrapper = render({ kind: 'verifying', scanId: 's-verifying', occurredAt: morning })
+    const panel = wrapper.get('[data-testid="scan-confirmation"]')
+
+    expect(panel.attributes('data-variant')).toBe('verifying')
+    expect(wrapper.get('[data-testid="confirmation-headline"]').text()).toBe('Comprobando…')
+    expect(wrapper.text()).not.toContain('Entrada')
+    expect(wrapper.text()).not.toContain('Salida')
+    expect(wrapper.find('[data-testid="confirmation-pending-badge"]').exists()).toBe(false)
+    // Tono NEUTRO del sistema visual (doc 06), no uno de los cinco colores de
+    // confirmacion: no es un desenlace, es una espera.
+    expect(panel.classes()).toContain('bg-kq-kiosk-surface-raised')
+    expect(panel.classes()).toContain('text-kq-kiosk-text')
+    expect(panel.classes()).not.toContain('bg-kiosk-pending')
+  })
+
   it('avisa del anti-rebote con el texto del documento 01 §11', () => {
     const wrapper = render({
       kind: 'debounced',
@@ -108,6 +124,8 @@ describe('pantalla de confirmacion', () => {
       'Ya has fichado hace unos segundos',
     )
     expect(wrapper.get('[data-testid="confirmation-total"]').text()).toBe('Hoy: 4 h 0 min')
+    // Sin el glifo grande de exclamacion: no es un error, no debe parecerlo.
+    expect(wrapper.find('span[aria-hidden="true"]').exists()).toBe(false)
   })
 
   it('da el MISMO mensaje a un rechazo local y a uno del servidor (regla dura 17)', () => {

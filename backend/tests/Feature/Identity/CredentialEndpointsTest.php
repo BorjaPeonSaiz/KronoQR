@@ -6,6 +6,7 @@ use App\Modules\Attendance\Application\Port\CredentialResolver;
 use App\Modules\Shared\Domain\ValueObject\CredentialRejectionReason;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Spectator\Spectator;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
@@ -398,5 +399,165 @@ it('sigue rechazando un `pending` que no es un booleano', function (string $garb
     // `FormRequest` la vea, asi que no hay nada que normalizar. Quien construya
     // la peticion tiene que OMITIR el parametro para no filtrar, no mandarlo
     // vacio.
+    'vacio' => [''],
+])->group('RF-QR-08');
+
+/*
+ * El filtro `employee_uuid` del panel (RF-QR-08).
+ *
+ * La ficha de empleado enseña la fila de estado de la tarjeta de esa persona con
+ * sus acciones. Sin este filtro habria que pedir el tablero del centro entero y
+ * quedarse con una fila, lo que divulga —y audita como divulgada— toda la
+ * plantilla del centro cada vez que alguien abre una ficha (ADR-037, RS-05).
+ */
+
+it('acota el panel a una sola persona', function (): void {
+    $context = credentialBoardContext();
+
+    Api::as($context['token'])
+        ->get('/api/v1/credentials/status', ['employee_uuid' => $context['withoutCard']])
+        ->assertValidRequest()
+        ->assertValidResponse(200)
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.employee_uuid', $context['withoutCard'])
+        ->assertJsonPath('data.0.status', 'no_credential');
+})->group('RF-QR-08');
+
+it('acota el resumen a la fila devuelta, y no cuenta el centro entero', function (): void {
+    // Al reves que `pending`: `employee_uuid` viaja hasta el `WHERE`, asi que el
+    // resumen no puede hablar de mas gente de la que se ha leido. Una sola
+    // entrada —la del centro de esa persona— con `employees: 1`. Es tambien
+    // como se afirma que la ficha NO recorre la plantilla del centro para
+    // pintar una fila: si lo hiciera, aqui pondria 2.
+    $context = credentialBoardContext();
+
+    Api::as($context['token'])
+        ->get('/api/v1/credentials/status', ['employee_uuid' => $context['withoutCard']])
+        ->assertValidResponse(200)
+        ->assertJsonCount(1, 'data')
+        ->assertJsonCount(1, 'summary')
+        ->assertJsonPath('summary.0.employees', 1)
+        ->assertJsonPath('summary.0.without_delivered_credential', 1);
+})->group('RF-QR-08');
+
+it('no consulta a nadie mas que a la persona pedida', function (): void {
+    // La afirmacion directa de lo mismo: una sola fila de `employees` sale de la
+    // base de datos. Antes salia la plantilla entera de la instalacion y se
+    // descartaba en PHP, y ademas se pedian las credenciales de todos sus
+    // identificadores.
+    $context = credentialBoardContext();
+    WorkforceFixtures::employee(WorkforceFixtures::site('Hotel Vecino'));
+
+    DB::enableQueryLog();
+
+    Api::as($context['token'])
+        ->get('/api/v1/credentials/status', ['employee_uuid' => $context['withoutCard']])
+        ->assertValidResponse(200)
+        ->assertJsonCount(1, 'data');
+
+    $plantilla = array_values(array_filter(
+        DB::getQueryLog(),
+        static fn (array $entry): bool => str_contains((string) $entry['query'], 'from "employees"'),
+    ));
+
+    DB::disableQueryLog();
+
+    expect($plantilla)->toHaveCount(1)
+        ->and($plantilla[0]['query'])->toContain('"employees"."uuid" = ?')
+        ->and($plantilla[0]['bindings'])->toContain($context['withoutCard']);
+})->group('RF-QR-08');
+
+it('encuentra la fila con el UUID escrito en mayusculas', function (): void {
+    // El tipo `uuid` de PostgreSQL no distingue mayusculas de minusculas, y el
+    // contrato declara `format: uuid` sin imponer una caja. Cuando el filtro se
+    // aplicaba en PHP con `===` contra el valor canonico de la columna, un
+    // cliente que mandara el UUID en mayusculas recibia `data: []` sin ningun
+    // error que lo explicara.
+    $context = credentialBoardContext();
+
+    Api::as($context['token'])
+        ->get('/api/v1/credentials/status', ['employee_uuid' => strtoupper($context['withoutCard'])])
+        ->assertValidRequest()
+        ->assertValidResponse(200)
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.employee_uuid', $context['withoutCard']);
+})->group('RF-QR-08');
+
+it('no devuelve la fila de quien no esta de alta', function (string $status): void {
+    // Este panel responde a «quien no puede fichar todavia» y la metrica que lo
+    // acompaña cuenta a quien hay que darle una tarjeta: quien esta de baja o
+    // suspendido no esta en ninguno de los dos. La ficha de esa persona recibe
+    // `data: []` con `200` y el panel enseña otro texto — que la baja revoque su
+    // tarjeta es trabajo aparte, y esta prueba fija lo que hoy ocurre.
+    $context = credentialBoardContext();
+    $site = WorkforceFixtures::site('Hotel Bajas');
+    $uuid = WorkforceFixtures::employee($site, null, $status);
+
+    Api::as($context['token'])
+        ->get('/api/v1/credentials/status', ['employee_uuid' => $uuid])
+        ->assertValidRequest()
+        ->assertValidResponse(200)
+        ->assertJsonCount(0, 'data')
+        ->assertJsonCount(0, 'summary');
+})->with([
+    'de baja' => ['terminated'],
+    'suspendido' => ['suspended'],
+])->group('RF-QR-08');
+
+it('combina `employee_uuid` con `site_id` con Y logico', function (): void {
+    // Una persona que existe, pero no en el centro por el que se pregunta: la
+    // respuesta es vacia, no la fila «colandose» por el otro filtro.
+    $context = credentialBoardContext();
+    $otroCentro = WorkforceFixtures::site('Hotel Vecino');
+
+    Api::as($context['token'])
+        ->get('/api/v1/credentials/status', [
+            'employee_uuid' => $context['withoutCard'],
+            'site_id' => $otroCentro,
+        ])
+        ->assertValidRequest()
+        ->assertValidResponse(200)
+        ->assertJsonCount(0, 'data');
+})->group('RF-QR-08');
+
+it('combina `employee_uuid` con `pending` con Y logico', function (): void {
+    $context = credentialBoardContext();
+
+    Api::as($context['token'])
+        ->get('/api/v1/credentials/status', [
+            'employee_uuid' => $context['withCard'],
+            'pending' => 'true',
+        ])
+        ->assertValidResponse(200)
+        ->assertJsonCount(0, 'data');
+})->group('RF-QR-08');
+
+it('devuelve la lista vacia, y no un 404, para un UUID que no es de nadie', function (): void {
+    // Este tablero no es un recurso por persona: es una consulta acotada, y una
+    // consulta que no encuentra nada responde `200` con `data: []`. Un `404`
+    // ademas convertiria el parametro en un oraculo de que UUID existen.
+    $context = credentialBoardContext();
+
+    Api::as($context['token'])
+        ->get('/api/v1/credentials/status', ['employee_uuid' => Str::uuid7()->toString()])
+        ->assertValidRequest()
+        ->assertValidResponse(200)
+        ->assertJsonCount(0, 'data')
+        // Sin fila no hay centro del que resumir: `summary` tambien viene vacio.
+        ->assertJsonCount(0, 'summary');
+})->group('RF-QR-08');
+
+it('rechaza un `employee_uuid` que no tiene forma de UUID', function (string $garbage): void {
+    $context = credentialBoardContext();
+
+    Api::as($context['token'])
+        ->get('/api/v1/credentials/status', ['employee_uuid' => $garbage])
+        ->assertStatus(422);
+})->with([
+    'codigo de empleado' => ['E7K2M9QX4B'],
+    'entero' => ['12'],
+    'casi un uuid' => ['0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b9'],
+    // `?employee_uuid=` tampoco pasa: `ConvertEmptyStringsToNull` lo deja en
+    // `null` y `uuid` lo rechaza. Para no filtrar hay que OMITIR el parametro.
     'vacio' => [''],
 ])->group('RF-QR-08');

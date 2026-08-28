@@ -149,7 +149,7 @@ onUnmounted(() => {
       <LanguageSelector />
     </header>
 
-    <section class="relative min-h-0 flex-1 overflow-hidden">
+    <section class="relative min-h-0 flex-1 overflow-hidden" data-testid="scan-camera-section">
       <video
         ref="video"
         class="h-full w-full object-cover"
@@ -160,38 +160,87 @@ onUnmounted(() => {
         data-testid="scan-video"
       ></video>
 
-      <!-- Instrucciones. Se ocultan cuando hay confirmacion en pantalla. -->
+      <!-- Instrucciones. Se ocultan cuando hay confirmacion en pantalla. SIN
+           VELO: la camara se ve limpia, nada de "agujero" con `box-shadow`
+           ni capa oscura sobre el fotograma entero (el cliente lo pidio
+           explicitamente). En su lugar, texto y visor van en COLUMNA, cada
+           bloque de texto sobre su propia banda semitransparente
+           (`bg-kq-kiosk-surface/80`) SOLO detras de ese bloque, para que se
+           lea sin tapar la imagen de la camara. Orden de arriba a abajo:
+           titulo -> subtitulo -> enlace de PIN -> visor -> pista corta.
+           El visor ocupa el espacio restante (`flex-1 min-h-0`) y su lado es
+           `min(55vmin, alto-disponible)` via `h-[min(55vmin,100%)]`, para
+           que quepa entero por debajo del bloque de texto tanto en tablets
+           apaisadas (1280x800, 1024x768) como en vertical. -->
       <div
         v-if="session.confirmation.value === null && !cameraFailed"
-        class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-4 bg-kq-kiosk-surface/70 px-10 text-center"
+        class="pointer-events-none absolute inset-0 flex flex-col items-center gap-4 px-6 py-4 text-center"
         data-testid="scan-idle"
       >
-        <p class="text-confirm-lg font-heading font-bold">{{ t('scan.idle.title') }}</p>
-        <p class="text-confirm-sm text-kq-kiosk-text-muted">{{ t('scan.idle.subtitle') }}</p>
-
-        <!-- Solo si la instalacion ofrece fichaje por PIN (ADR-017, tarea 1.12).
-             Nunca deshabilitado con explicacion: si no hay clave, esta via no
-             existe en esta instalacion, no existe "de momento". El bloque
-             padre es `pointer-events-none`: el enlace necesita recuperar los
-             eventos para poder tocarse. -->
-        <RouterLink
-          v-if="offline.pinSealingPublicKey.value !== null"
-          :to="{ name: 'pin' }"
-          class="kiosk-touch pointer-events-auto mt-6 inline-flex items-center justify-center rounded-kq-sm border border-kq-kiosk-border bg-kq-kiosk-surface-raised px-6 text-base font-semibold text-kq-kiosk-text"
-          data-testid="pin-entry-link"
+        <div
+          class="flex flex-none flex-col items-center gap-3 rounded-kq bg-kq-kiosk-surface/80 px-6 py-4"
         >
-          {{ t('pin.entryButton') }}
-        </RouterLink>
+          <p class="text-confirm-md font-heading font-bold" data-testid="scan-idle-title">
+            {{ t('scan.idle.title') }}
+          </p>
+          <p class="text-confirm-sm text-kq-kiosk-text-muted" data-testid="scan-idle-subtitle">
+            {{ t('scan.idle.subtitle') }}
+          </p>
 
-        <p v-if="scanner.state.value === 'starting'" class="text-confirm-sm">
-          {{ t('scan.camera.starting') }}
-        </p>
-        <p
-          v-if="connectivity.status.value === 'offline'"
-          class="text-confirm-sm text-kq-kiosk-text-muted"
+          <!-- Solo si la instalacion ofrece fichaje por PIN (ADR-017, tarea 1.12).
+               Nunca deshabilitado con explicacion: si no hay clave, esta via no
+               existe en esta instalacion, no existe "de momento". El bloque
+               padre es `pointer-events-none`: el enlace necesita recuperar los
+               eventos para poder tocarse. -->
+          <RouterLink
+            v-if="offline.pinSealingPublicKey.value !== null"
+            :to="{ name: 'pin' }"
+            class="kiosk-touch pointer-events-auto mt-1 inline-flex items-center justify-center rounded-kq-sm border border-kq-kiosk-border bg-kq-kiosk-surface-raised px-6 text-base font-semibold text-kq-kiosk-text"
+            data-testid="pin-entry-link"
+          >
+            {{ t('pin.entryButton') }}
+          </RouterLink>
+
+          <p v-if="scanner.state.value === 'starting'" class="text-confirm-sm">
+            {{ t('scan.camera.starting') }}
+          </p>
+          <p
+            v-if="connectivity.status.value === 'offline'"
+            class="text-confirm-sm text-kq-kiosk-text-muted"
+          >
+            {{ t('connection.offlineHint') }}
+          </p>
+        </div>
+
+        <!-- El visor: un cuadrado que guia donde poner la tarjeta, SIN
+             relleno, solo las cuatro esquinas. Decorativo (`aria-hidden`):
+             quien usa lector de pantalla ya tiene la misma idea en
+             `scan.idle.subtitle`, que si se anuncia. -->
+        <div
+          class="flex w-full min-h-0 flex-1 flex-col items-center justify-center gap-3"
+          aria-hidden="true"
         >
-          {{ t('connection.offlineHint') }}
-        </p>
+          <div
+            class="relative aspect-square h-[min(55vmin,100%)] max-h-full max-w-full"
+            data-testid="scan-viewfinder"
+          >
+            <span
+              class="absolute -top-1 -left-1 h-10 w-10 rounded-tl-kq-lg border-t-4 border-l-4 border-kq-kiosk-primary"
+            ></span>
+            <span
+              class="absolute -top-1 -right-1 h-10 w-10 rounded-tr-kq-lg border-t-4 border-r-4 border-kq-kiosk-primary"
+            ></span>
+            <span
+              class="absolute -bottom-1 -left-1 h-10 w-10 rounded-bl-kq-lg border-b-4 border-l-4 border-kq-kiosk-primary"
+            ></span>
+            <span
+              class="absolute -right-1 -bottom-1 h-10 w-10 rounded-br-kq-lg border-r-4 border-b-4 border-kq-kiosk-primary"
+            ></span>
+          </div>
+          <p class="flex-none rounded-kq bg-kq-kiosk-surface/80 px-6 py-2 text-base">
+            {{ t('scan.idle.viewfinderHint') }}
+          </p>
+        </div>
       </div>
 
       <!-- Camara caida. NO bloquea nada: se avisa, se ofrece reintentar y, con

@@ -18,7 +18,8 @@
   "scan": {
     "idle": {
       "title": "Acerca tu tarjeta",
-      "subtitle": "Colócala delante de la cámara, con el código hacia la pantalla."
+      "subtitle": "Colócala delante de la cámara, con el código hacia la pantalla.",
+      "viewfinderHint": "Centra el código en el recuadro"
     },
     "camera": {
       "starting": "Preparando la cámara…",
@@ -49,6 +50,10 @@
       "titleAnonymous": "Fichaje registrado",
       "body": "Registrado a las {time}. Pendiente de validar.",
       "badge": "Pendiente de validar"
+    },
+    "verifying": {
+      "title": "Comprobando…",
+      "body": "Un momento, estamos verificando tu código."
     },
     "debounced": {
       "title": "Ya has fichado hace unos segundos",

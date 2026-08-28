@@ -1,9 +1,24 @@
 // La tuberia del PIN. Hermana de `scanPipeline.spec.ts`: misma disciplina de
 // pruebas, con la comprobacion que este encargo exige en plata: lo que sale
 // hacia la cola nunca lleva el PIN en claro en NINGUN campo, en ningun caso.
+//
+// «Comprobando…» (RF-AT-11): el PIN viaja sellado y solo el servidor lo
+// valida, asi que —a diferencia del QR— no hay nada honesto que decir en
+// local salvo «se esta comprobando». Estas pruebas fijan el contrato exacto:
+//   - con red, la confirmacion INMEDIATA es siempre `verifying`, nunca `pending`.
+//   - si el servidor contesta antes de `PIN_VERIFY_TIMEOUT_MS`, se pinta ESE
+//     desenlace real (aceptado, anti-rebote o rechazado) via `onSettled`.
+//   - si no contesta a tiempo, se pinta `pending` via `onSettled`, y si el
+//     resultado real llega mas tarde, se aplica igual que siempre.
+//   - sin red, la confirmacion inmediata es `pending` directamente: esperar
+//     el plazo no aportaria nada que no se supiera ya (regla dura 19).
 
 import { describe, expect, it, vi } from 'vitest'
-import { createPinPipeline } from '@/features/pin/application/pinPipeline'
+import {
+  createPinPipeline,
+  PIN_VERIFY_GRACE_MS,
+  PIN_VERIFY_TIMEOUT_MS,
+} from '@/features/pin/application/pinPipeline'
 import type {
   QueuedScan,
   ScanSubmissionPort,
@@ -58,7 +73,7 @@ const debounced: ScanDebounced = {
 }
 
 describe('tuberia del PIN (RF-AT-11)', () => {
-  it('confirma «pendiente» sin decir si sera entrada o salida', async () => {
+  it('con red, confirma «Comprobando…» al instante: nunca «pendiente» de entrada', async () => {
     const { port } = recorder()
     const pipeline = createPinPipeline({
       submission: port,
@@ -69,7 +84,46 @@ describe('tuberia del PIN (RF-AT-11)', () => {
 
     const confirmation = await pipeline.submit('E7QK2MXPR', RAW_PIN)
 
+    expect(confirmation.kind).toBe('verifying')
+  })
+
+  it('sin red, confirma «pendiente» directamente: esperar el plazo no aportaria nada honesto', async () => {
+    const { port } = recorder()
+    const pipeline = createPinPipeline({
+      submission: port,
+      deviceId: 'dev-1',
+      publicKey: PUBLIC_KEY,
+      seal: fakeSeal,
+      isOffline: () => true,
+    })
+
+    const confirmation = await pipeline.submit('E7QK2MXPR', RAW_PIN)
+
     expect(confirmation.kind).toBe('pending')
+  })
+
+  it('sin red, «pendiente» llega sin esperar la ventana de gracia del PIN', async () => {
+    // Reloj falso SIN avanzarlo ni un milisegundo: si el camino sin red
+    // esperase `PIN_VERIFY_GRACE_MS` (o cualquier otro plazo) antes de
+    // resolver, este `await` se quedaria colgado para siempre y la prueba
+    // fallaria por tiempo agotado, no por una asercion.
+    vi.useFakeTimers()
+    try {
+      const { port } = recorder()
+      const pipeline = createPinPipeline({
+        submission: port,
+        deviceId: 'dev-1',
+        publicKey: PUBLIC_KEY,
+        seal: fakeSeal,
+        isOffline: () => true,
+      })
+
+      const confirmation = await pipeline.submit('E7QK2MXPR', RAW_PIN)
+
+      expect(confirmation.kind).toBe('pending')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('el objeto que viaja al puerto de envio SOLO lleva el sobre sellado, nunca el PIN', async () => {
@@ -182,61 +236,133 @@ describe('tuberia del PIN (RF-AT-11)', () => {
     expect(JSON.stringify(errors[0]?.context)).not.toContain(RAW_PIN)
   })
 
-  it('refresca la pantalla con el desenlace real del servidor', async () => {
-    const settled: ScanConfirmation[] = []
-    const pipeline = createPinPipeline({
-      submission: { submit: async () => ({ kind: 'accepted', response: accepted }) },
-      deviceId: 'dev-1',
-      publicKey: PUBLIC_KEY,
-      seal: fakeSeal,
-      onSettled: (confirmation) => settled.push(confirmation),
+  // La ventana de gracia (RF-AT-11, hallazgo de revision): en el despliegue
+  // habitual (servidor on-premise, misma VLAN) la respuesta llega en 50-200
+  // ms. Pintar «Comprobando…» y sustituirlo de inmediato por el desenlace
+  // real seria un parpadeo — dos pintados, dos sonidos, por un unico
+  // fichaje. Estas pruebas fijan el contrato exacto de `PIN_VERIFY_GRACE_MS`.
+  describe('ventana de gracia (RF-AT-11)', () => {
+    /** Envio que contesta al cabo de `delayMs`, controlado por reloj falso. */
+    function delayedSubmission(delayMs: number, result: ScanSubmissionResult): ScanSubmissionPort {
+      return {
+        submit: () =>
+          new Promise((resolve) => {
+            setTimeout(() => resolve(result), delayMs)
+          }),
+      }
+    }
+
+    it('respuesta aceptada a 100 ms: submit() la resuelve directamente, sin «Comprobando…» y sin onSettled', async () => {
+      vi.useFakeTimers()
+      try {
+        const settled: ScanConfirmation[] = []
+        const pipeline = createPinPipeline({
+          submission: delayedSubmission(100, { kind: 'accepted', response: accepted }),
+          deviceId: 'dev-1',
+          publicKey: PUBLIC_KEY,
+          seal: fakeSeal,
+          onSettled: (confirmation) => settled.push(confirmation),
+        })
+
+        const submitPromise = pipeline.submit('E7QK2MXPR', RAW_PIN)
+        await vi.advanceTimersByTimeAsync(100)
+        const confirmation = await submitPromise
+
+        expect(confirmation).toMatchObject({ kind: 'accepted', action: 'clock_in' })
+        // Nadie llama a `onSettled` para un desenlace que `submit()` ya
+        // entrego: un unico pintado, un unico sonido.
+        expect(settled).toHaveLength(0)
+      } finally {
+        vi.useRealTimers()
+      }
     })
 
-    await pipeline.submit('E7QK2MXPR', RAW_PIN)
-    await vi.waitFor(() => expect(settled).toHaveLength(1))
+    it('rechazo a 100 ms: submit() lo resuelve directamente, nunca «verifying» ni «pending» (regla dura 17)', async () => {
+      vi.useFakeTimers()
+      try {
+        const settled: ScanConfirmation[] = []
+        const pipeline = createPinPipeline({
+          submission: delayedSubmission(100, { kind: 'rejected' }),
+          deviceId: 'dev-1',
+          publicKey: PUBLIC_KEY,
+          seal: fakeSeal,
+          onSettled: (confirmation) => settled.push(confirmation),
+        })
 
-    expect(settled[0]).toMatchObject({ kind: 'accepted', action: 'clock_in' })
-  })
+        const submitPromise = pipeline.submit('E7QK2MXPR', RAW_PIN)
+        await vi.advanceTimersByTimeAsync(100)
+        const confirmation = await submitPromise
 
-  it('trata el anti-rebote como desenlace aceptado (ADR-031)', async () => {
-    const settled: ScanConfirmation[] = []
-    const pipeline = createPinPipeline({
-      submission: { submit: async () => ({ kind: 'debounced', response: debounced }) },
-      deviceId: 'dev-1',
-      publicKey: PUBLIC_KEY,
-      seal: fakeSeal,
-      onSettled: (confirmation) => settled.push(confirmation),
+        expect(confirmation.kind).toBe('rejected')
+        expect(Object.keys(confirmation).sort()).toEqual(['kind', 'occurredAt', 'scanId'])
+        expect(settled).toHaveLength(0)
+      } finally {
+        vi.useRealTimers()
+      }
     })
 
-    await pipeline.submit('E7QK2MXPR', RAW_PIN)
-    await vi.waitFor(() => expect(settled).toHaveLength(1))
+    it('anti-rebote a 100 ms: se trata como desenlace aceptado (ADR-031), directo y sin onSettled', async () => {
+      vi.useFakeTimers()
+      try {
+        const settled: ScanConfirmation[] = []
+        const pipeline = createPinPipeline({
+          submission: delayedSubmission(100, { kind: 'debounced', response: debounced }),
+          deviceId: 'dev-1',
+          publicKey: PUBLIC_KEY,
+          seal: fakeSeal,
+          onSettled: (confirmation) => settled.push(confirmation),
+        })
 
-    expect(settled[0]).toMatchObject({ kind: 'debounced', workedMinutes: 240 })
-  })
+        const submitPromise = pipeline.submit('E7QK2MXPR', RAW_PIN)
+        await vi.advanceTimersByTimeAsync(100)
+        const confirmation = await submitPromise
 
-  it('convierte un rechazo del servidor en un mensaje generico, sin causa (regla dura 17)', async () => {
-    const settled: ScanConfirmation[] = []
-    const pipeline = createPinPipeline({
-      submission: { submit: async () => ({ kind: 'rejected' }) },
-      deviceId: 'dev-1',
-      publicKey: PUBLIC_KEY,
-      seal: fakeSeal,
-      onSettled: (confirmation) => settled.push(confirmation),
+        expect(confirmation).toMatchObject({ kind: 'debounced', workedMinutes: 240 })
+        expect(settled).toHaveLength(0)
+      } finally {
+        vi.useRealTimers()
+      }
     })
 
-    await pipeline.submit('E7QK2MXPR', RAW_PIN)
-    await vi.waitFor(() => expect(settled).toHaveLength(1))
+    it('respuesta a 800 ms: agota la gracia («Comprobando…») y el desenlace real llega despues, por onSettled', async () => {
+      vi.useFakeTimers()
+      try {
+        const settled: ScanConfirmation[] = []
+        const pipeline = createPinPipeline({
+          submission: delayedSubmission(800, { kind: 'accepted', response: accepted }),
+          deviceId: 'dev-1',
+          publicKey: PUBLIC_KEY,
+          seal: fakeSeal,
+          onSettled: (confirmation) => settled.push(confirmation),
+        })
 
-    expect(settled[0]?.kind).toBe('rejected')
-    expect(Object.keys(settled[0] ?? {}).sort()).toEqual(['kind', 'occurredAt', 'scanId'])
+        const submitPromise = pipeline.submit('E7QK2MXPR', RAW_PIN)
+
+        // A los 300 ms se agota la gracia sin respuesta: `submit()` resuelve
+        // «Comprobando…», y todavia no hay nada asentado.
+        await vi.advanceTimersByTimeAsync(PIN_VERIFY_GRACE_MS)
+        const confirmation = await submitPromise
+        expect(confirmation.kind).toBe('verifying')
+        expect(settled).toHaveLength(0)
+
+        // A los 800 ms (500 ms mas tarde) contesta el servidor: un unico
+        // desenlace, por onSettled.
+        await vi.advanceTimersByTimeAsync(800 - PIN_VERIFY_GRACE_MS)
+        expect(settled).toHaveLength(1)
+        expect(settled[0]).toMatchObject({ kind: 'accepted', action: 'clock_in' })
+      } finally {
+        vi.useRealTimers()
+      }
+    })
   })
 
   it('un rechazo pinta la hora en que la persona pulso «confirmar», no la de la respuesta', async () => {
     // Mismo comportamiento que `scanPipeline` (via `settleFrom` compartido):
     // el rechazo no trae `occurred_at` del servidor, asi que lo unico
-    // honesto es el instante que la persona vivio delante de la tablet.
+    // honesto es el instante que la persona vivio delante de la tablet. La
+    // respuesta llega DENTRO de la gracia (sin retraso artificial), asi que
+    // `submit()` la entrega directamente.
     let nowMs = Date.parse('2026-08-14T05:59:02.000Z')
-    const settled: ScanConfirmation[] = []
     const pipeline = createPinPipeline({
       submission: {
         submit: async () => {
@@ -250,17 +376,16 @@ describe('tuberia del PIN (RF-AT-11)', () => {
       publicKey: PUBLIC_KEY,
       seal: fakeSeal,
       clock: { now: () => new Date(nowMs) },
-      onSettled: (confirmation) => settled.push(confirmation),
     })
 
-    await pipeline.submit('E7QK2MXPR', RAW_PIN)
-    await vi.waitFor(() => expect(settled).toHaveLength(1))
+    const confirmation = await pipeline.submit('E7QK2MXPR', RAW_PIN)
 
-    expect(settled[0]?.occurredAt).toEqual(new Date('2026-08-14T05:59:02.000Z'))
+    expect(confirmation.occurredAt).toEqual(new Date('2026-08-14T05:59:02.000Z'))
   })
 
-  it('sobrevive a un puerto de envio que lanza', async () => {
+  it('sobrevive a un puerto de envio que lanza: se rinde a «pendiente» via onSettled', async () => {
     const errors: string[] = []
+    const settled: ScanConfirmation[] = []
     const pipeline = createPinPipeline({
       submission: {
         submit: async () => {
@@ -271,11 +396,67 @@ describe('tuberia del PIN (RF-AT-11)', () => {
       publicKey: PUBLIC_KEY,
       seal: fakeSeal,
       onError: (code) => errors.push(code),
+      onSettled: (confirmation) => settled.push(confirmation),
     })
 
     const confirmation = await pipeline.submit('E7QK2MXPR', RAW_PIN)
-    await vi.waitFor(() => expect(errors).toEqual(['submit_failed']))
+    expect(confirmation.kind).toBe('verifying')
 
-    expect(confirmation.kind).toBe('pending')
+    await vi.waitFor(() => expect(errors).toEqual(['submit_failed']))
+    await vi.waitFor(() => expect(settled).toHaveLength(1))
+    expect(settled[0]?.kind).toBe('pending')
+  })
+
+  it('sin respuesta en el plazo, se rinde a «pendiente»; si el resultado llega tarde, se aplica igual que hoy', async () => {
+    vi.useFakeTimers()
+    try {
+      const settled: ScanConfirmation[] = []
+      // Sin `null`: dejarlo nulo hasta que el ejecutor de la promesa lo asigne
+      // hace que TypeScript, al capturarlo en el cierre, pierda el
+      // estrechamiento y lo trate como `never` en usos posteriores. Un no-op
+      // inicial evita el problema sin recurrir a aserciones de tipo.
+      let resolveSubmission: (result: ScanSubmissionResult) => void = () => undefined
+      const submission: ScanSubmissionPort = {
+        submit: () =>
+          new Promise<ScanSubmissionResult>((resolve) => {
+            resolveSubmission = resolve
+          }),
+      }
+      const pipeline = createPinPipeline({
+        submission,
+        deviceId: 'dev-1',
+        publicKey: PUBLIC_KEY,
+        seal: fakeSeal,
+        onSettled: (confirmation) => settled.push(confirmation),
+      })
+
+      // `submit()` no resuelve hasta que la ventana de gracia se agota (aqui
+      // nunca contesta el servidor): sin avanzar el reloj falso ese primer
+      // tramo, el `await` se quedaria colgado para siempre.
+      const submitPromise = pipeline.submit('E7QK2MXPR', RAW_PIN)
+      await vi.advanceTimersByTimeAsync(PIN_VERIFY_GRACE_MS)
+      const confirmation = await submitPromise
+      expect(confirmation.kind).toBe('verifying')
+      expect(settled).toHaveLength(0)
+
+      // Justo antes del plazo, todavia no se ha rendido.
+      await vi.advanceTimersByTimeAsync(PIN_VERIFY_TIMEOUT_MS - 1)
+      expect(settled).toHaveLength(0)
+
+      // Al vencer el plazo exacto, pasa a «pendiente».
+      await vi.advanceTimersByTimeAsync(1)
+      expect(settled).toHaveLength(1)
+      expect(settled[0]?.kind).toBe('pending')
+
+      // La respuesta real llega despues: se aplica igual que hoy (sin
+      // reemplazar lo que ya se pinto de golpe, solo anadiendo el desenlace).
+      resolveSubmission({ kind: 'accepted', response: accepted })
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(settled).toHaveLength(2)
+      expect(settled[1]).toMatchObject({ kind: 'accepted', action: 'clock_in' })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

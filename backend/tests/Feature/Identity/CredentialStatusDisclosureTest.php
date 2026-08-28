@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Spectator\Spectator;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
@@ -19,6 +20,9 @@ use Tests\Support\Workforce\WorkforceFixtures;
  * y departamento de TODA la plantilla activa: es el conjunto de datos personales
  * mas completo que expone la API. RL-15 exige poder determinar el alcance de una
  * brecha a partir del trail; sin asiento, para este conjunto no se podia.
+ *
+ * La excepcion es `employee_uuid`: acotado a una persona esto es la ficha de
+ * empleado, y ADR-037 decide que la ficha no deja asiento.
  */
 
 uses(RefreshDatabase::class);
@@ -132,4 +136,82 @@ it('deja asiento cuando el comando saca la tabla nominal por la terminal', funct
     expect($asiento->action)->toBe('personal_data.accessed')
         ->and($asiento->actor_type)->toBe('system')
         ->and($asiento->payload)->toContain('credential_status');
+})->group('RF-QR-08', 'RS-05');
+
+it('no deja asiento cuando la consulta se acota a una sola persona', function (): void {
+    // ADR-037 §Decision, condicion 3: deja asiento la lectura de un CONJUNTO de
+    // personas. Acotado a una, esto es la ficha de empleado —«`GET
+    // /employees/{uuid}` (ficha) | No»— y se trata igual: quien puede acotar
+    // puede pedir el tablero entero, que si deja asiento, y repetir el apunte
+    // en cada ficha llenaria `audit_log` de la operativa ordinaria de RRHH
+    // ademas de tomar el candado global de la cadena de hash en cada apertura.
+    $contexto = credentialStatusContext();
+    $uuid = WorkforceFixtures::employee($contexto['site'], $contexto['department']);
+
+    Api::as($contexto['token'])
+        ->get('/api/v1/credentials/status', ['employee_uuid' => $uuid])
+        ->assertValidResponse(200)
+        ->assertJsonCount(1, 'data');
+
+    expect(DB::table('audit_log')->count())->toBe(0);
+})->group('RF-QR-08', 'RS-05', 'RL-15');
+
+it('tampoco deja asiento cuando el UUID pedido no devuelve ninguna fila', function (): void {
+    // Si no auditara la lectura que SI encuentra a alguien, auditar la que no
+    // encuentra a nadie convertiria el trail en un oraculo de que UUID existen.
+    $contexto = credentialStatusContext();
+
+    Api::as($contexto['token'])
+        ->get('/api/v1/credentials/status', ['employee_uuid' => Str::uuid7()->toString()])
+        ->assertValidResponse(200)
+        ->assertJsonCount(0, 'data');
+
+    expect(DB::table('audit_log')->count())->toBe(0);
+})->group('RF-QR-08', 'RS-05');
+
+it('sigue dejando asiento del tablero completo aunque la ficha no lo deje', function (): void {
+    // El contrapeso de la prueba anterior: lo que ADR-037 exime es la persona,
+    // no el panel. Si esta falla junto con las de arriba, lo que se ha roto es
+    // la auditoria entera y no la excepcion de la ficha.
+    $contexto = credentialStatusContext();
+    $uuid = WorkforceFixtures::employee($contexto['site'], $contexto['department']);
+
+    Api::as($contexto['token'])
+        ->get('/api/v1/credentials/status', ['employee_uuid' => $uuid])
+        ->assertValidResponse(200);
+
+    Api::as($contexto['token'])
+        ->get('/api/v1/credentials/status')
+        ->assertValidResponse(200);
+
+    expect(DB::table('audit_log')->count())->toBe(1);
+
+    $asiento = DB::table('audit_log')->orderBy('id')->first();
+
+    /** @var object{payload: string} $asiento */
+    $payload = json_decode($asiento->payload, true, 512, JSON_THROW_ON_ERROR);
+
+    expect($payload)->toMatchArray([
+        'dataset' => 'credential_status',
+        'record_count' => 4,
+    ]);
+})->group('RF-QR-08', 'RS-05', 'RL-15');
+
+it('no mete `employee_uuid` en el asiento del tablero sin filtrar', function (): void {
+    // La ausencia de la clave es informacion: significa que el alcance fue el
+    // centro o la instalacion entera, que es el caso que mas importa saber.
+    $contexto = credentialStatusContext();
+
+    Api::as($contexto['token'])
+        ->get('/api/v1/credentials/status')
+        ->assertValidResponse(200);
+
+    $asiento = DB::table('audit_log')->orderBy('id')->first();
+
+    expect($asiento)->not->toBeNull();
+
+    /** @var object{payload: string} $asiento */
+    $payload = json_decode($asiento->payload, true, 512, JSON_THROW_ON_ERROR);
+
+    expect($payload)->not->toHaveKey('employee_uuid');
 })->group('RF-QR-08', 'RS-05');

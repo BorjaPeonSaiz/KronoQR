@@ -12,10 +12,8 @@
   },
   "login": {
     "heading": "Sign in to the portal",
-    "intro": "Sign in with your employee code and your six-digit PIN, the same ones you use at the kiosk.",
     "employeeCode": "Employee code",
     "pin": "PIN",
-    "pinHint": "Six digits, no spaces.",
     "submit": "Sign in",
     "submitting": "Signing in…",
     "forgotPin": "Can't remember your PIN or your code? Ask Human Resources to reset it. It is never sent by email or by any link."
@@ -73,20 +71,19 @@
   },
   "myRecords": {
     "title": "My working time record",
-    "subtitle": "Your work days, your shifts and the total for each day. Nothing is ever deleted: if something was corrected, it is explained below.",
+    "subtitle": "Your work days, your shifts and the total for each day. A shift that started at 22:00 belongs to the day it started, even if it ended the next day. Nothing is ever deleted: if something was corrected, it is explained below.",
     "duration": "{hours} h {minutes} min",
-    "zoneNotice": "Times are shown in your workplace's time zone, not the one on your phone or computer.",
     "loading": "Loading your record…",
     "filters": {
       "legend": "Period consulted",
       "from": "From",
-      "fromHint": "By work day: a shift that started at 22:00 belongs to the day it started, even if you clocked out the next day.",
+      "fromHint": "Based on the date the work day started.",
       "to": "To",
-      "toHint": "Last day, included. Left blank, your last 31 days are shown.",
+      "toHint": "Last day included. Left blank: last 31 days.",
       "inverted": "The period ends before it starts. Check both dates.",
       "tooWide": "The period cannot exceed {days} days. Check your history in shorter stretches.",
       "apply": "Search",
-      "resolved": "Work days from {from} to {to}, in {zone} time."
+      "resolved": "Work days from {from} to {to}."
     },
     "empty": {
       "title": "No work days in this period",
@@ -105,12 +102,11 @@
       }
     },
     "entries": {
-      "caption": "Shifts for the work day on {date}, in the {zone} time zone",
-      "in": "Clock in ({zone})",
-      "out": "Clock out ({zone})",
+      "caption": "Shifts for the work day on {date}",
+      "in": "Clock in",
+      "out": "Clock out",
       "duration": "Duration",
       "source": "How it was recorded",
-      "utc": "UTC {time}",
       "queued": "Recorded {delay} after clocking: it arrived from the kiosk's offline queue. What counts is the time you actually clocked.",
       "open": "Not closed",
       "openHint": "This shift is still open.",

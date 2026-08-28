@@ -454,3 +454,150 @@ it('ignora los acentos en los dos sentidos', function (string $q, int $total): v
     // un comodin que case con quien no toca.
     'sin coincidencia' => ['Nadie', 0],
 ])->group('RF-GP-01');
+
+/*
+ * Filtro por situacion del PIN (RF-GP-01, RF-ID-09).
+ *
+ * POR QUE ESTA EN EL SERVIDOR. El panel lo resolvia en el navegador, sobre la
+ * pagina que tuviera cargada: con veinticinco filas a la vista y una plantilla
+ * de doscientas, «quien tiene el PIN sin entregar» respondia por veinticinco
+ * personas y el recuento describia la descarga, no la plantilla. El resto de
+ * `<select>` del listado filtran en SQL; este no tenia por que ser distinto.
+ *
+ * LA REGLA DE DERIVACION ES LA MISMA QUE LA DE LA FICHA, y estas pruebas son las
+ * que lo sostienen: cada caso comprueba el recuento del filtro Y el `pin_status`
+ * de las filas devueltas. Si la traduccion a SQL se separara de `statusOf()`, el
+ * listado filtraria por un criterio y pintaria otro.
+ */
+
+/**
+ * Tres personas, una en cada estado de PIN.
+ *
+ * `pending` se fabrica con el constructor de consultas y no por la API a
+ * proposito: el alta emite el PIN en la misma transaccion (RF-ID-09), asi que no
+ * hay ningun camino de la aplicacion que produzca ese estado. Existe en fichas
+ * anteriores a RF-ID-09 y el catalogo lo conserva porque es un estado real de la
+ * tabla.
+ *
+ * @return array{token: string, site: int, department: int, pending: string, issued: string, delivered: string}
+ */
+function pinStatusContext(): array
+{
+    $context = hrContext();
+
+    $pending = WorkforceFixtures::employee($context['site'], $context['department'], 'active', 'Ana', 'Pendiente', 'EP0000001');
+
+    $issued = Api::as($context['token'])->post('/api/v1/employees', [
+        'site_id' => $context['site'],
+        'department_id' => $context['department'],
+        'first_name' => 'Bruno',
+        'last_name' => 'Emitido',
+        'hired_at' => '2026-08-14',
+    ])->json('employee.uuid');
+    $issued = is_string($issued) ? $issued : '';
+
+    $delivered = Api::as($context['token'])->post('/api/v1/employees', [
+        'site_id' => $context['site'],
+        'department_id' => $context['department'],
+        'first_name' => 'Carla',
+        'last_name' => 'Entregado',
+        'hired_at' => '2026-08-14',
+    ])->json('employee.uuid');
+    $delivered = is_string($delivered) ? $delivered : '';
+
+    Api::as($context['token'])->post('/api/v1/employees/'.$delivered.'/pin/deliver')->assertStatus(200);
+
+    return [...$context, 'pending' => $pending, 'issued' => $issued, 'delivered' => $delivered];
+}
+
+it('filtra por situacion del PIN sobre toda la plantilla', function (string $filtro): void {
+    $context = pinStatusContext();
+
+    Api::as($context['token'])
+        ->get('/api/v1/employees', ['pin_status' => $filtro])
+        ->assertValidRequest()
+        ->assertValidResponse(200)
+        ->assertJsonPath('meta.total', 1)
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.pin_status', $filtro)
+        // Y es la persona que toca, no una cualquiera con ese estado.
+        ->assertJsonPath('data.0.uuid', $context[$filtro]);
+})->with([
+    'pendiente de emitir' => ['pending'],
+    'emitido y sin entregar' => ['issued'],
+    'entregado en mano' => ['delivered'],
+])->group('RF-GP-01', 'RF-ID-09');
+
+it('devuelve la plantilla entera cuando no se filtra por PIN', function (): void {
+    // El control negativo de las tres de arriba: sin el, un filtro que no
+    // filtrara nada las pasaria todas menos una.
+    $context = pinStatusContext();
+
+    Api::as($context['token'])
+        ->get('/api/v1/employees')
+        ->assertValidResponse(200)
+        ->assertJsonPath('meta.total', 3);
+})->group('RF-GP-01', 'RF-ID-09');
+
+it('combina el filtro de PIN con el resto con AND', function (): void {
+    // Los tres estan en el mismo centro y activos; solo uno tiene el PIN sin
+    // entregar. Si el filtro se aplicara con `OR`, saldrian los tres.
+    $context = pinStatusContext();
+
+    Api::as($context['token'])
+        ->get('/api/v1/employees', [
+            'pin_status' => 'issued',
+            'site_id' => $context['site'],
+            'status' => 'active',
+            'q' => 'Bruno',
+        ])
+        ->assertValidRequest()
+        ->assertValidResponse(200)
+        ->assertJsonPath('meta.total', 1)
+        ->assertJsonPath('data.0.uuid', $context['issued']);
+
+    // Y el mismo filtro con una busqueda que apunta a otra persona no devuelve
+    // nada: los dos criterios tienen que cumplirse a la vez.
+    Api::as($context['token'])
+        ->get('/api/v1/employees', ['pin_status' => 'issued', 'q' => 'Carla'])
+        ->assertValidResponse(200)
+        ->assertJsonPath('meta.total', 0);
+})->group('RF-GP-01', 'RF-ID-09');
+
+it('pagina el filtro de PIN como cualquier otro', function (): void {
+    // `meta.total` describe lo que casa con el filtro y no la plantilla: si
+    // contara la plantilla, el panel pediria paginas que no existen. Es
+    // exactamente lo que no podia cumplirse filtrando en el navegador.
+    $context = pinStatusContext();
+
+    Api::as($context['token'])->post('/api/v1/employees', [
+        'site_id' => $context['site'],
+        'first_name' => 'Diego',
+        'last_name' => 'Emitido',
+        'hired_at' => '2026-08-14',
+    ])->assertStatus(201);
+
+    Api::as($context['token'])
+        ->get('/api/v1/employees', ['pin_status' => 'issued', 'per_page' => 1])
+        ->assertValidResponse(200)
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('meta.total', 2)
+        ->assertJsonPath('meta.total_pages', 2);
+})->group('RF-GP-01', 'RF-ID-09');
+
+it('rechaza una situacion de PIN que no existe en el catalogo', function (string $filtro): void {
+    // Rechazar en vez de ignorar: un `?pin_status=entregado` ignorado devolveria
+    // la plantilla entera y quien lo escribio se iria convencido de haber
+    // filtrado.
+    $context = hrContext();
+
+    Api::as($context['token'])
+        ->get('/api/v1/employees', ['pin_status' => $filtro])
+        ->assertStatus(422)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:validation-failed');
+})->with([
+    'un estado inventado' => ['entregado'],
+    'un estado de otro catalogo' => ['active'],
+    'con otra caja' => ['Issued'],
+    'vacio' => [''],
+])->group('RF-GP-01', 'RF-ID-09');

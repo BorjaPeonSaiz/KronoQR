@@ -101,6 +101,15 @@ export interface PinScanStub {
 export async function stubPinScanApi(
   page: Page,
   outcome: 'clock_in' | 'rejected' | 'offline' = 'clock_in',
+  /**
+   * Retraso artificial antes de contestar (RF-AT-11): la interceptacion de
+   * Playwright resuelve en microsegundos, demasiado rapido para observar con
+   * fiabilidad la pantalla intermedia «Comprobando…» antes de que se asiente
+   * en el desenlace real. Un retraso corto —muy por debajo de
+   * `PIN_VERIFY_TIMEOUT_MS`— la deja visible sin caer en la rama del plazo
+   * vencido.
+   */
+  delayMs = 0,
 ): Promise<PinScanStub> {
   const recorded: RecordedPinScan[] = []
 
@@ -118,6 +127,10 @@ export async function stubPinScanApi(
       occurredAt: body.occurred_at,
       idempotencyKey: route.request().headers()['idempotency-key'],
     })
+
+    if (delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
+    }
 
     if (outcome === 'offline') {
       await route.abort('failed')

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   CONFIRMATION_DISPLAY_MS,
   isArrival,
+  PIN_VERIFY_TIMEOUT_MS,
   toneFor,
   variantFor,
 } from '@/features/scan/domain/scanOutcome'
@@ -51,6 +52,20 @@ describe('feedback diferenciado', () => {
 
   it('un fichaje encolado NO suena como entrada ni como salida: aun no se sabe', () => {
     expect(toneFor(confirmation({ kind: 'pending', displayName: null } as never))).toBe('pending')
+  })
+
+  it('«Comprobando…» (PIN) tiene un tono propio, distinto de «pendiente» y de cualquier desenlace', () => {
+    const tone = toneFor(confirmation({ kind: 'verifying' }))
+
+    expect(tone).toBe('verifying')
+    expect(tone).not.toBe('pending')
+    expect(tone).not.toBe('entry')
+    expect(tone).not.toBe('exit')
+    expect(tone).not.toBe('error')
+  })
+
+  it('el plazo de «Comprobando…» en pantalla ES el plazo de espera del PIN, el mismo numero', () => {
+    expect(CONFIRMATION_DISPLAY_MS.verifying).toBe(PIN_VERIFY_TIMEOUT_MS)
   })
 
   it('el anti-rebote no suena a error, porque no lo es (ADR-031)', () => {
