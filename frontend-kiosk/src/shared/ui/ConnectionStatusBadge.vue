@@ -38,8 +38,12 @@ const label = computed(() => {
 
 <template>
   <div
-    class="flex items-center gap-3 rounded-lg px-4 py-2 text-lg font-medium"
-    :class="isOffline ? 'bg-amber-900 text-amber-50' : 'bg-slate-700 text-slate-100'"
+    class="flex items-center gap-3 rounded-kq-sm px-4 py-2 text-lg font-medium"
+    :class="
+      isOffline
+        ? 'bg-kiosk-notice text-white'
+        : 'border border-kq-kiosk-border bg-kq-kiosk-surface-raised text-kq-kiosk-text'
+    "
     role="status"
     aria-live="polite"
     data-testid="connection-status"

@@ -159,6 +159,9 @@ describe('tuberia del escaneo', () => {
       deviceId: 'dev-1',
       clock: { now: () => new Date(nowMs) },
       repeatWindowMs: 1000,
+      // Aislado del mecanismo de "tarjeta sostenida": esta prueba comprueba
+      // solo `repeatWindowMs`, y la tarjeta ha estado ausente todo el hueco.
+      heldGapMs: 500,
     })
 
     pipeline.handleDecoded(PAYLOAD)
@@ -166,6 +169,67 @@ describe('tuberia del escaneo', () => {
     expect(pipeline.handleDecoded(PAYLOAD)).not.toBeNull()
     expect(sent).toHaveLength(2)
     expect(sent[0]?.scan_id).not.toBe(sent[1]?.scan_id)
+  })
+
+  it('una tarjeta sostenida 20 s produce UN solo scan_id y UNA sola peticion', () => {
+    const { port, sent } = recorder()
+    let nowMs = Date.parse('2026-08-14T05:02:00.000Z')
+    const pipeline = createScanPipeline({
+      submission: port,
+      deviceId: 'dev-1',
+      clock: { now: () => new Date(nowMs) },
+    })
+
+    // Cadencia real medida de ZXing con la tarjeta quieta: un `onDecoded`
+    // cada `delayBetweenScanSuccess` (800 ms), ver el comentario de
+    // `HELD_GAP_MS` en scanPipeline.ts.
+    const first = pipeline.handleDecoded(PAYLOAD)
+    expect(first).not.toBeNull()
+
+    for (let elapsedMs = 800; elapsedMs <= 20_000; elapsedMs += 800) {
+      nowMs = Date.parse('2026-08-14T05:02:00.000Z') + elapsedMs
+      expect(pipeline.handleDecoded(PAYLOAD)).toBeNull()
+    }
+
+    expect(sent).toHaveLength(1)
+    expect(sent[0]?.scan_id).toBe(first?.scanId)
+  })
+
+  it('tarjeta retirada tras la confirmacion y presentada de nuevo a los 4,5 s: hay respuesta', () => {
+    const { port, sent } = recorder()
+    let nowMs = Date.parse('2026-08-14T05:02:00.000Z')
+    const pipeline = createScanPipeline({
+      submission: port,
+      deviceId: 'dev-1',
+      clock: { now: () => new Date(nowMs) },
+    })
+
+    pipeline.handleDecoded(PAYLOAD)
+    // Ni un solo `onDecoded` mas en medio: la tarjeta se retiro de verdad.
+    nowMs += 4_500
+    const second = pipeline.handleDecoded(PAYLOAD)
+
+    expect(second).not.toBeNull()
+    expect(sent).toHaveLength(2)
+    expect(sent[1]?.scan_id).not.toBe(sent[0]?.scan_id)
+  })
+
+  it('retirada breve (<2,5 s) y nueva presentacion dentro de la ventana: se sigue ignorando', () => {
+    const { port, sent } = recorder()
+    let nowMs = Date.parse('2026-08-14T05:02:00.000Z')
+    const pipeline = createScanPipeline({
+      submission: port,
+      deviceId: 'dev-1',
+      clock: { now: () => new Date(nowMs) },
+    })
+
+    pipeline.handleDecoded(PAYLOAD)
+    // Pasado HELD_GAP_MS (2000 ms) pero dentro de LOCAL_REPEAT_WINDOW_MS
+    // (2500 ms): ya no es "la misma presentacion", pero sigue siendo el
+    // mismo gesto de fichaje reciente.
+    nowMs += 2_200
+    expect(pipeline.handleDecoded(PAYLOAD)).toBeNull()
+    expect(sent).toHaveLength(1)
   })
 
   it('no confunde a dos personas seguidas: otra tarjeta pasa aunque sea inmediata', () => {

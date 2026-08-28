@@ -1,14 +1,44 @@
 @import 'tailwindcss';
+@import '@kronoqr/web-kit/theme.css';
 
-/* Sin colores ni tipografias de cliente: la marca es configuracion (RF-PD-08,
-   tarea 5.8), nunca codigo (CLAUDE.md, regla dura 13).
+/* Sistema visual compartido (docs/06-guia-visual.md). `@kronoqr/web-kit/theme.css`
+   trae los tokens `--kq-*`, las utilidades de Tailwind (`bg-kq-kiosk-*`,
+   `text-kq-kiosk-*`, `font-heading`...) y la capa base (fondo y color de
+   `body`, encabezados, foco visible, `prefers-reduced-motion`, via
+   `base.css`). Es la MARCA POR DEFECTO DEL FABRICANTE, no de ningun cliente
+   (CLAUDE.md, regla dura 13; ADR-017): la tarea 5.8 (marca blanca, RF-PD-08)
+   la hara configurable sobrescribiendo esas custom properties en tiempo de
+   ejecucion, sin tocar este fichero ni el paquete.
 
-   Lo que hay aqui son los tokens de ACCESIBILIDAD del quiosco (RF-KI-06, doc 01
-   §6.5), que no son marca y no se negocian con nadie:
+   El quiosco NO declara `--color-kiosk-surface`/`-surface-raised`/`-text`/
+   `-text-muted` propios: son los mismos `kq-kiosk-*` que ya expone el paquete
+   (oscuro y calido a proposito, para leerse de lejos y con poca luz), asi que
+   las plantillas usan directamente `bg-kq-kiosk-surface`, `text-kq-kiosk-text`,
+   etc.
+
+   Es la unica SPA de fondo oscuro, asi que en vez de repetir la regla de
+   `body`/`:focus-visible` de la capa base (`base.css`), redefine los tokens de
+   pagina que esa capa lee (`--kq-page-bg`, `--kq-page-text`, `--kq-page-focus`,
+   `--kq-page-focus-offset`) a los tokens oscuros del quiosco. Este bloque va
+   DESPUES de `@import '@kronoqr/web-kit/theme.css'` para ganar la cascada
+   sobre el valor por defecto que fija `base.css`. */
+:root {
+  --kq-page-bg: var(--kq-color-kiosk-surface);
+  --kq-page-text: var(--kq-color-kiosk-text);
+  --kq-page-focus: var(--kq-color-kiosk-focus);
+  /* La tablet se opera con guantes: el anillo de foco necesita mas separacion
+     que el 2 px por defecto del panel y el portal para verse bien. */
+  --kq-page-focus-offset: 3px;
+}
+
+/* Lo que SIGUE aqui, porque NO es marca y no se negocia con nadie (RF-KI-06,
+   doc 01 §6.5):
 
      - Objetivo tactil >= 48 px  ->  --kiosk-touch-target
      - Texto de confirmacion >= 24 px  ->  --text-confirm-*
-     - Contraste >= 4.5:1 en TODAS las combinaciones definidas abajo
+     - Los cinco colores de CONFIRMACION (entrada, salida, pendiente, aviso,
+       error): son semanticos, un cliente no los cambia por estetica, porque
+       el empleado aprende que verde es entrada y azul es salida.
 
    Los contrastes de los cinco fondos de confirmacion contra el blanco, medidos:
      entry   #064e3b   9.7:1
@@ -20,11 +50,6 @@
    falta bajo la iluminacion mala de un office a las seis de la manana. */
 
 @theme {
-  --color-kiosk-surface: #0f172a;
-  --color-kiosk-surface-raised: #1e293b;
-  --color-kiosk-text: #f8fafc;
-  --color-kiosk-text-muted: #cbd5e1;
-
   --color-kiosk-entry: #064e3b;
   --color-kiosk-exit: #1e3a8a;
   --color-kiosk-pending: #312e81;
@@ -45,17 +70,11 @@ body,
   height: 100%;
 }
 
+/* Lo que anade el quiosco al `body` de la capa base (fondo, color y tipografia
+   ya los pone `base.css` con los tokens de pagina de arriba): un quiosco no se
+   selecciona ni se hace zoom con dos dedos por accidente. */
 body {
   margin: 0;
-  background-color: var(--color-kiosk-surface);
-  color: var(--color-kiosk-text);
-  font-family:
-    system-ui,
-    -apple-system,
-    'Segoe UI',
-    Roboto,
-    sans-serif;
-  /* Un quiosco no se selecciona ni se hace zoom con dos dedos por accidente. */
   -webkit-user-select: none;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
@@ -70,13 +89,6 @@ body {
   min-block-size: var(--kiosk-touch-target);
 }
 
-/* Foco siempre visible y grueso: la tablet se opera con guantes, y quien la
-   revisa por teclado necesita ver donde esta. */
-:focus-visible {
-  outline: 3px solid #f8fafc;
-  outline-offset: 3px;
-}
-
 /* Solo para lectores de pantalla. */
 .kiosk-sr-only {
   position: absolute;
@@ -88,14 +100,4 @@ body {
   clip-path: inset(50%);
   white-space: nowrap;
   border-width: 0;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
 }

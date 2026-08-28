@@ -28,7 +28,7 @@ const DIGITS = ['1', '2', '3', '4', '5', '6', '7', '8', '9']
       v-for="digit in DIGITS"
       :key="digit"
       type="button"
-      class="kiosk-touch rounded-xl bg-slate-700 text-3xl font-semibold text-slate-50 disabled:opacity-40"
+      class="kiosk-touch rounded-kq-sm border border-kq-kiosk-border bg-kq-kiosk-surface-raised text-confirm-sm font-semibold text-kq-kiosk-text disabled:opacity-40"
       :disabled="props.disabled"
       @click="emit('digit', digit)"
     >
@@ -37,7 +37,7 @@ const DIGITS = ['1', '2', '3', '4', '5', '6', '7', '8', '9']
 
     <button
       type="button"
-      class="kiosk-touch rounded-xl bg-slate-800 text-lg font-semibold text-slate-200 disabled:opacity-40"
+      class="kiosk-touch rounded-kq-sm border border-kq-kiosk-border bg-kq-kiosk-surface-raised text-lg font-semibold text-kq-kiosk-text-muted disabled:opacity-40"
       :disabled="props.disabled"
       @click="emit('clear')"
     >
@@ -46,7 +46,7 @@ const DIGITS = ['1', '2', '3', '4', '5', '6', '7', '8', '9']
 
     <button
       type="button"
-      class="kiosk-touch rounded-xl bg-slate-700 text-3xl font-semibold text-slate-50 disabled:opacity-40"
+      class="kiosk-touch rounded-kq-sm border border-kq-kiosk-border bg-kq-kiosk-surface-raised text-confirm-sm font-semibold text-kq-kiosk-text disabled:opacity-40"
       :disabled="props.disabled"
       @click="emit('digit', '0')"
     >
@@ -55,7 +55,7 @@ const DIGITS = ['1', '2', '3', '4', '5', '6', '7', '8', '9']
 
     <button
       type="button"
-      class="kiosk-touch rounded-xl bg-slate-800 text-lg font-semibold text-slate-200 disabled:opacity-40"
+      class="kiosk-touch rounded-kq-sm border border-kq-kiosk-border bg-kq-kiosk-surface-raised text-lg font-semibold text-kq-kiosk-text-muted disabled:opacity-40"
       :disabled="props.disabled"
       :aria-label="t('pin.keypad.backspace')"
       data-testid="pin-backspace"
