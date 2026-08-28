@@ -20,6 +20,9 @@ use Tests\Support\Workforce\WorkforceFixtures;
  * y departamento de TODA la plantilla activa: es el conjunto de datos personales
  * mas completo que expone la API. RL-15 exige poder determinar el alcance de una
  * brecha a partir del trail; sin asiento, para este conjunto no se podia.
+ *
+ * La excepcion es `employee_uuid`: acotado a una persona esto es la ficha de
+ * empleado, y ADR-037 decide que la ficha no deja asiento.
  */
 
 uses(RefreshDatabase::class);
@@ -135,11 +138,13 @@ it('deja asiento cuando el comando saca la tabla nominal por la terminal', funct
         ->and($asiento->payload)->toContain('credential_status');
 })->group('RF-QR-08', 'RS-05');
 
-it('el asiento dice que se divulgo una persona, no el centro entero', function (): void {
-    // La ficha de empleado del panel enseña la fila de esa persona. Si para eso
-    // pidiera el tablero del centro, el asiento afirmaria —con razon— que
-    // alguien se llevo la plantilla completa cada vez que se abre una ficha, y
-    // el trail dejaria de servir para acotar el alcance de una brecha (RL-15).
+it('no deja asiento cuando la consulta se acota a una sola persona', function (): void {
+    // ADR-037 §Decision, condicion 3: deja asiento la lectura de un CONJUNTO de
+    // personas. Acotado a una, esto es la ficha de empleado —«`GET
+    // /employees/{uuid}` (ficha) | No»— y se trata igual: quien puede acotar
+    // puede pedir el tablero entero, que si deja asiento, y repetir el apunte
+    // en cada ficha llenaria `audit_log` de la operativa ordinaria de RRHH
+    // ademas de tomar el candado global de la cadena de hash en cada apertura.
     $contexto = credentialStatusContext();
     $uuid = WorkforceFixtures::employee($contexto['site'], $contexto['department']);
 
@@ -148,29 +153,12 @@ it('el asiento dice que se divulgo una persona, no el centro entero', function (
         ->assertValidResponse(200)
         ->assertJsonCount(1, 'data');
 
-    $asiento = DB::table('audit_log')->orderBy('id')->first();
-
-    expect($asiento)->not->toBeNull();
-
-    /** @var object{action: string, payload: string} $asiento */
-    $payload = json_decode($asiento->payload, true, 512, JSON_THROW_ON_ERROR);
-
-    expect($asiento->action)->toBe('personal_data.accessed')
-        ->and($payload)->toMatchArray([
-            'dataset' => 'credential_status',
-            'employee_uuid' => $uuid,
-            'record_count' => 1,
-            'pending_only' => false,
-        ])
-        // El UUID que consta es el alcance pedido, no un nombre: regla dura 21.
-        ->and($asiento->payload)->not->toContain('Persona')
-        ->and($asiento->payload)->not->toContain('De Prueba');
+    expect(DB::table('audit_log')->count())->toBe(0);
 })->group('RF-QR-08', 'RS-05', 'RL-15');
 
-it('cuenta cero cuando el UUID pedido no devuelve ninguna fila', function (): void {
-    // Que no salga ninguna fila tambien deja asiento: la consulta se hizo, y el
-    // `record_count` es lo que distingue haber preguntado de haberse llevado
-    // algo.
+it('tampoco deja asiento cuando el UUID pedido no devuelve ninguna fila', function (): void {
+    // Si no auditara la lectura que SI encuentra a alguien, auditar la que no
+    // encuentra a nadie convertiria el trail en un oraculo de que UUID existen.
     $contexto = credentialStatusContext();
 
     Api::as($contexto['token'])
@@ -178,18 +166,36 @@ it('cuenta cero cuando el UUID pedido no devuelve ninguna fila', function (): vo
         ->assertValidResponse(200)
         ->assertJsonCount(0, 'data');
 
-    $asiento = DB::table('audit_log')->orderBy('id')->first();
+    expect(DB::table('audit_log')->count())->toBe(0);
+})->group('RF-QR-08', 'RS-05');
 
-    expect($asiento)->not->toBeNull();
+it('sigue dejando asiento del tablero completo aunque la ficha no lo deje', function (): void {
+    // El contrapeso de la prueba anterior: lo que ADR-037 exime es la persona,
+    // no el panel. Si esta falla junto con las de arriba, lo que se ha roto es
+    // la auditoria entera y no la excepcion de la ficha.
+    $contexto = credentialStatusContext();
+    $uuid = WorkforceFixtures::employee($contexto['site'], $contexto['department']);
+
+    Api::as($contexto['token'])
+        ->get('/api/v1/credentials/status', ['employee_uuid' => $uuid])
+        ->assertValidResponse(200);
+
+    Api::as($contexto['token'])
+        ->get('/api/v1/credentials/status')
+        ->assertValidResponse(200);
+
+    expect(DB::table('audit_log')->count())->toBe(1);
+
+    $asiento = DB::table('audit_log')->orderBy('id')->first();
 
     /** @var object{payload: string} $asiento */
     $payload = json_decode($asiento->payload, true, 512, JSON_THROW_ON_ERROR);
 
     expect($payload)->toMatchArray([
         'dataset' => 'credential_status',
-        'record_count' => 0,
+        'record_count' => 4,
     ]);
-})->group('RF-QR-08', 'RS-05');
+})->group('RF-QR-08', 'RS-05', 'RL-15');
 
 it('no mete `employee_uuid` en el asiento del tablero sin filtrar', function (): void {
     // La ausencia de la clave es informacion: significa que el alcance fue el

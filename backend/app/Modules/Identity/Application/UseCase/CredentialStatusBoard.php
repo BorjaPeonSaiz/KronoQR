@@ -36,32 +36,45 @@ use App\Modules\Shared\Domain\ValueObject\EmployeeCardProfile;
  * personas eso son dos consultas; preguntando persona a persona serian
  * trescientas una, y este panel se abre varias veces al dia.
  *
- * ## El recuento no se filtra
+ * **`employeeUuid` viaja hasta la consulta**, no se filtra aqui. La ficha de
+ * empleado pinta una fila: resolverla trayendo la plantilla entera de la
+ * instalacion —y pidiendo despues las credenciales de todos sus identificadores—
+ * convertiria la apertura de una ficha en la lectura mas cara del panel.
  *
- * `coverage` se calcula **antes** de aplicar `pendingOnly`. Es lo que permite
+ * ## El recuento se filtra con la persona, y solo con ella
+ *
+ * `coverage` se calcula **antes** de aplicar `pendingOnly`: es lo que permite
  * decir «faltan 3 de 60» en lugar de «faltan 3 de 3», y es tambien lo que
  * publican las dos metricas del §8.2.
  *
- * ## Abrir este panel deja constancia
+ * Con `employeeUuid`, en cambio, el resumen describe **solo la fila devuelta**:
+ * una entrada, la del centro de esa persona, o ninguna si no hay fila. La
+ * cobertura del centro se calcula recorriendolo entero, y este es el caso que
+ * existe precisamente para no recorrerlo. Quien necesite «faltan 3 de 60» pide
+ * el tablero sin `employeeUuid`, que es de donde salen las metricas.
  *
- * RS-05 no admite matices: *«todo acceso a datos personales de terceros queda
- * registrado en el trail de auditoria»*. Cada fila lleva nombre completo, codigo
- * de empleado, centro y departamento de una persona, y la respuesta las lleva
- * **todas**: es el directorio del hotel. Sin asiento no se puede responder a la
- * pregunta que RL-15 obliga a poder responder en 72 horas —«¿que se llevo esa
- * cuenta?»— justo para el conjunto de datos mas completo que expone la API.
+ * ## Abrir el tablero deja constancia; abrir una ficha, no
  *
- * La incoherencia que esto corrige es concreta: `GET /kiosk/roster` divulga
- * **menos** —un hash y el nombre de pila— y si dejaba asiento.
+ * RS-05 dice *«todo acceso a datos personales de terceros queda registrado»*, y
+ * ADR-037 fija el criterio operativo: deja asiento la lectura de **un conjunto**
+ * de personas. El tablero lo es —nombre completo, codigo de empleado, centro y
+ * departamento de toda la plantilla, el conjunto mas completo que expone la
+ * API—, y sin asiento no se podia responder a la pregunta que RL-15 obliga a
+ * responder en 72 horas: «¿que se llevo esa cuenta?».
  *
- * Se registra **el alcance** —que centro, si venia filtrado, a que persona si se
- * acoto a una, cuantas filas— y nunca lo divulgado (regla dura 21): ni un
- * nombre, ni un codigo, ni la lista de `employee_uuid` de los afectados.
- * Enumerarlos aqui seria una segunda copia de la plantilla con cuatro años de
- * retencion, que es exactamente lo que se intenta proteger. El `employee_uuid`
- * que si consta es el **filtro que pidio quien consulta**, no la lista de a
- * quien se leyo: es la diferencia entre un asiento que dice «abrio la ficha de
- * esa persona» y otro que dice «se llevo el directorio del centro».
+ * **Acotado a una persona no audita** (ADR-037 §Decision, condicion 3, y su
+ * tabla: *«`GET /employees/{uuid}` (ficha) | No»*). Es la misma lectura que la
+ * ficha de empleado y se trata igual, por dos motivos que apuntan en la misma
+ * direccion: quien puede acotar a una persona puede pedir el tablero entero, que
+ * si deja asiento —el trail ya dice que esa cuenta tuvo el directorio delante—,
+ * y repetir el apunte en cada ficha que RRHH abre llenaria `audit_log` de
+ * operativa ordinaria, ademas de tomar el `pg_advisory_xact_lock` **global** de
+ * la cadena de hash en cada apertura, el mismo por el que pasa cada fichaje.
+ *
+ * Cuando si se escribe, se registra **el alcance** —que centro, cuantas filas—
+ * y nunca lo divulgado (regla dura 21): ni un nombre, ni un codigo, ni la lista
+ * de `employee_uuid` de los afectados. Enumerarlos seria una segunda copia de la
+ * plantilla con cuatro años de retencion, que es justo lo que se protege.
  *
  * El apunte se escribe **antes** de devolver: si la escritura de auditoria
  * falla, la divulgacion no ocurre. Misma decision que en el padron del quiosco y
@@ -82,7 +95,7 @@ final readonly class CredentialStatusBoard
 
     public function handle(CredentialStatusQuery $query): CredentialStatusReport
     {
-        $employees = $this->directory->activeProfiles($query->siteId);
+        $employees = $this->directory->activeProfiles($query->siteId, $query->employeeUuid);
 
         $employeeIds = array_map(
             static fn (EmployeeCardProfile $profile): int => $profile->employeeId,
@@ -103,19 +116,10 @@ final readonly class CredentialStatusBoard
             );
         }
 
+        // Con `employeeUuid` esto resume la unica fila que hay, que es lo que se
+        // ha leido: el alcance del resumen no puede ser mayor que el de la
+        // consulta que lo alimenta.
         $coverage = $this->coverageOf($rows);
-
-        if ($query->employeeUuid !== null) {
-            // Se filtra aqui, y no en la consulta del directorio, porque
-            // `coverage` tiene que seguir siendo el del centro: la ficha de
-            // empleado enseña una fila, pero el resumen que la acompaña dice
-            // «faltan 3 de 60», no «falta 1 de 1». Mismo motivo que
-            // `pendingOnly`, y por eso el mismo sitio.
-            $rows = array_values(array_filter(
-                $rows,
-                static fn (CredentialStatusRow $row): bool => $row->employee->employeeUuid === $query->employeeUuid,
-            ));
-        }
 
         if ($query->pendingOnly) {
             $rows = array_values(array_filter(
@@ -128,7 +132,10 @@ final readonly class CredentialStatusBoard
             ));
         }
 
-        if (! $query->unattended) {
+        // `employeeUuid === null` porque la lectura de **una** persona no deja
+        // asiento (ADR-037 §Decision, condicion 3): es la ficha de empleado, y
+        // la ficha no audita. Ver el docblock de la clase.
+        if (! $query->unattended && $query->employeeUuid === null) {
             // El recuento es el de las filas que **salen**, no el de la
             // plantilla: es lo que convierte «alguien miro» en «alguien se llevo
             // el directorio entero».
@@ -137,14 +144,6 @@ final readonly class CredentialStatusBoard
                 // un centro que no existe. Su ausencia es el alcance mas amplio
                 // —toda la instalacion—, que es tambien el que mas importa saber.
                 ...($query->siteId === null ? [] : ['site_id' => $query->siteId]),
-                // El UUID que aparece aqui es **el alcance pedido**, no la lista
-                // de lo divulgado: es lo que distingue «se consulto la ficha de
-                // una persona» de «se descargo el directorio del centro», que es
-                // justo lo que RL-15 obliga a poder responder. Un UUID no es un
-                // dato personal (regla dura 21: lo prohibido son los nombres, y
-                // enumerar a los afectados de una lectura masiva), y ya se
-                // registra igual en `employee_workdays`.
-                ...($query->employeeUuid === null ? [] : ['employee_uuid' => $query->employeeUuid]),
                 'pending_only' => $query->pendingOnly,
             ]);
         }

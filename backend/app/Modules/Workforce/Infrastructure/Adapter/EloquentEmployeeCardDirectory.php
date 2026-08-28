@@ -40,7 +40,7 @@ use Illuminate\Database\Eloquent\Builder;
  */
 final readonly class EloquentEmployeeCardDirectory implements EmployeeCardDirectory
 {
-    public function activeProfiles(?int $siteId = null): array
+    public function activeProfiles(?int $siteId = null, ?string $employeeUuid = null): array
     {
         $query = $this->baseQuery()
             ->where('employees.status', EmploymentStatus::ACTIVE->value)
@@ -56,6 +56,14 @@ final readonly class EloquentEmployeeCardDirectory implements EmployeeCardDirect
 
         if ($siteId !== null) {
             $query->where('employees.site_id', $siteId);
+        }
+
+        if ($employeeUuid !== null) {
+            // La comparacion la resuelve el tipo `uuid` nativo de PostgreSQL,
+            // que normaliza el literal: `0199F0C2-...` y `0199f0c2-...` son el
+            // mismo valor. Filtrar despues en PHP con `===` devolvia vacio para
+            // el primero, porque la columna se lee siempre en minusculas.
+            $query->where('employees.uuid', $employeeUuid);
         }
 
         /** @var list<EmployeeCardProfile> $profiles */

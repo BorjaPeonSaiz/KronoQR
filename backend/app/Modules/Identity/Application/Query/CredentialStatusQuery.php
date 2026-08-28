@@ -24,9 +24,13 @@ namespace App\Modules\Identity\Application\Query;
  * una fila, lo que divulga —y deja asiento de haber divulgado— toda la plantilla
  * del centro cada vez que alguien abre una ficha (ADR-037, RS-05).
  *
- * **`unattended` decide si la lectura deja asiento** (RS-05). Por omision es
- * `false`, de modo que el caso que se asume es el que audita: quien quiera una
- * lectura sin constancia tiene que pedirla, y al pedirla se ve en el codigo.
+ * Acotado asi, **la lectura no deja asiento**: es una persona y no un conjunto,
+ * igual que `GET /employees/{uuid}` (ADR-037 §Decision, condicion 3).
+ *
+ * **`unattended` decide si la lectura del tablero deja asiento** (RS-05). Por
+ * omision es `false`, de modo que el caso que se asume es el que audita: quien
+ * quiera una lectura sin constancia tiene que pedirla, y al pedirla se ve en el
+ * codigo.
  */
 final readonly class CredentialStatusQuery
 {
@@ -37,8 +41,12 @@ final readonly class CredentialStatusQuery
         public bool $pendingOnly = false,
         /**
          * Una sola persona por su UUID publico, o `null` para el tablero
-         * completo. Se combina con los demas filtros con Y logico, y no altera
-         * el recuento por centro: ese sigue siendo el del alcance sin filtrar.
+         * completo. Se combina con los demas filtros con Y logico.
+         *
+         * **Acota tambien el recuento**, al contrario que `pendingOnly`: el
+         * resumen pasa a describir la fila devuelta —una entrada, la de su
+         * centro, o ninguna—. La cobertura del centro exige recorrerlo entero,
+         * y no recorrerlo es la razon de ser de este filtro.
          */
         public ?string $employeeUuid = null,
         /**

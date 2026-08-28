@@ -423,9 +423,12 @@ it('acota el panel a una sola persona', function (): void {
         ->assertJsonPath('data.0.status', 'no_credential');
 })->group('RF-QR-08');
 
-it('deja el resumen del centro intacto aunque la fila sea una', function (): void {
-    // Mismo criterio que `pending`: el numero que importa en la ficha sigue
-    // siendo cuanta gente falta *de la que hay*, no «falta 1 de 1».
+it('acota el resumen a la fila devuelta, y no cuenta el centro entero', function (): void {
+    // Al reves que `pending`: `employee_uuid` viaja hasta el `WHERE`, asi que el
+    // resumen no puede hablar de mas gente de la que se ha leido. Una sola
+    // entrada —la del centro de esa persona— con `employees: 1`. Es tambien
+    // como se afirma que la ficha NO recorre la plantilla del centro para
+    // pintar una fila: si lo hiciera, aqui pondria 2.
     $context = credentialBoardContext();
 
     Api::as($context['token'])
@@ -433,9 +436,73 @@ it('deja el resumen del centro intacto aunque la fila sea una', function (): voi
         ->assertValidResponse(200)
         ->assertJsonCount(1, 'data')
         ->assertJsonCount(1, 'summary')
-        ->assertJsonPath('summary.0.employees', 2)
+        ->assertJsonPath('summary.0.employees', 1)
         ->assertJsonPath('summary.0.without_delivered_credential', 1);
 })->group('RF-QR-08');
+
+it('no consulta a nadie mas que a la persona pedida', function (): void {
+    // La afirmacion directa de lo mismo: una sola fila de `employees` sale de la
+    // base de datos. Antes salia la plantilla entera de la instalacion y se
+    // descartaba en PHP, y ademas se pedian las credenciales de todos sus
+    // identificadores.
+    $context = credentialBoardContext();
+    WorkforceFixtures::employee(WorkforceFixtures::site('Hotel Vecino'));
+
+    DB::enableQueryLog();
+
+    Api::as($context['token'])
+        ->get('/api/v1/credentials/status', ['employee_uuid' => $context['withoutCard']])
+        ->assertValidResponse(200)
+        ->assertJsonCount(1, 'data');
+
+    $plantilla = array_values(array_filter(
+        DB::getQueryLog(),
+        static fn (array $entry): bool => str_contains((string) $entry['query'], 'from "employees"'),
+    ));
+
+    DB::disableQueryLog();
+
+    expect($plantilla)->toHaveCount(1)
+        ->and($plantilla[0]['query'])->toContain('"employees"."uuid" = ?')
+        ->and($plantilla[0]['bindings'])->toContain($context['withoutCard']);
+})->group('RF-QR-08');
+
+it('encuentra la fila con el UUID escrito en mayusculas', function (): void {
+    // El tipo `uuid` de PostgreSQL no distingue mayusculas de minusculas, y el
+    // contrato declara `format: uuid` sin imponer una caja. Cuando el filtro se
+    // aplicaba en PHP con `===` contra el valor canonico de la columna, un
+    // cliente que mandara el UUID en mayusculas recibia `data: []` sin ningun
+    // error que lo explicara.
+    $context = credentialBoardContext();
+
+    Api::as($context['token'])
+        ->get('/api/v1/credentials/status', ['employee_uuid' => strtoupper($context['withoutCard'])])
+        ->assertValidRequest()
+        ->assertValidResponse(200)
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.employee_uuid', $context['withoutCard']);
+})->group('RF-QR-08');
+
+it('no devuelve la fila de quien no esta de alta', function (string $status): void {
+    // Este panel responde a «quien no puede fichar todavia» y la metrica que lo
+    // acompaña cuenta a quien hay que darle una tarjeta: quien esta de baja o
+    // suspendido no esta en ninguno de los dos. La ficha de esa persona recibe
+    // `data: []` con `200` y el panel enseña otro texto — que la baja revoque su
+    // tarjeta es trabajo aparte, y esta prueba fija lo que hoy ocurre.
+    $context = credentialBoardContext();
+    $site = WorkforceFixtures::site('Hotel Bajas');
+    $uuid = WorkforceFixtures::employee($site, null, $status);
+
+    Api::as($context['token'])
+        ->get('/api/v1/credentials/status', ['employee_uuid' => $uuid])
+        ->assertValidRequest()
+        ->assertValidResponse(200)
+        ->assertJsonCount(0, 'data')
+        ->assertJsonCount(0, 'summary');
+})->with([
+    'de baja' => ['terminated'],
+    'suspendido' => ['suspended'],
+])->group('RF-QR-08');
 
 it('combina `employee_uuid` con `site_id` con Y logico', function (): void {
     // Una persona que existe, pero no en el centro por el que se pregunta: la
@@ -476,7 +543,8 @@ it('devuelve la lista vacia, y no un 404, para un UUID que no es de nadie', func
         ->assertValidRequest()
         ->assertValidResponse(200)
         ->assertJsonCount(0, 'data')
-        ->assertJsonCount(1, 'summary');
+        // Sin fila no hay centro del que resumir: `summary` tambien viene vacio.
+        ->assertJsonCount(0, 'summary');
 })->group('RF-QR-08');
 
 it('rechaza un `employee_uuid` que no tiene forma de UUID', function (string $garbage): void {
