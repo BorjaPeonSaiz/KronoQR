@@ -72,9 +72,18 @@ const timezone = computed(() => site.value?.timezone ?? 'UTC')
 // --- Tarjeta QR (RF-QR-04, RF-QR-06, RF-QR-08) --------------------------------
 //
 // La misma fila que veria RRHH en el tablero de credenciales, pero de esta
-// persona sola: se pide con `employee_uuid` en vez de traer el tablero entero
-// y filtrar en cliente, porque cada lectura del tablero audita como
-// divulgado TODO lo que devuelve (ADR-037).
+// persona sola: se pide con `employee_uuid` (y `site_id`) en vez de traer el
+// tablero entero y filtrar en cliente. Leer el tablero audita como divulgado
+// TODO lo que devuelve; leer la ficha de una persona, como esta, no deja
+// asiento (ADR-037, condicion 3): se divulga lo minimo y se audita lo justo.
+
+// El servidor solo devuelve fila para empleados de alta (activos): de baja o
+// en suspension, `data` viene vacio. Pedirla igualmente dejaria a la ficha
+// esperando para siempre una fila que nunca llega, asi que aqui no se pide
+// —la peticion queda deshabilitada— y la plantilla explica por que, con un
+// enlace al tablero de credenciales del centro, que es donde de verdad se
+// gestiona la tarjeta de esa persona.
+const employeeIsActive = computed(() => employee.value?.status === 'active')
 
 const {
   data: credentialRow,
@@ -82,7 +91,16 @@ const {
   isPending: credentialPending,
 } = useQuery({
   queryKey: computed(() => ['credential-board', 'employee', props.uuid] as const),
-  queryFn: () => fetchCredentialStatusFor(props.uuid),
+  queryFn: () => {
+    const current = employee.value
+
+    if (current === undefined) {
+      return Promise.resolve(null)
+    }
+
+    return fetchCredentialStatusFor(props.uuid, current.site_id)
+  },
+  enabled: employeeIsActive,
 })
 
 function instantInSiteZone(value: string | null): string {
@@ -637,58 +655,72 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
       >
         <h2 class="text-xl font-semibold">{{ t('employees.detail.credentialHeading') }}</h2>
 
-        <LoadingPanel v-if="credentialPending" :label="t('credentials.loading')" class="mt-4" />
-        <ErrorNotice v-else-if="credentialError !== null" :error="credentialError" class="mt-4" />
         <EmptyState
-          v-else-if="credentialRow === null || credentialRow === undefined"
+          v-if="!employeeIsActive"
           class="mt-4"
-          :title="t('employees.detail.credentialEmpty.title')"
-          :description="t('employees.detail.credentialEmpty.description')"
-        />
+          :title="t('employees.detail.credentialInactive.title')"
+          :description="t('employees.detail.credentialInactive.description')"
+        >
+          <RouterLink
+            :to="{ name: 'credentials', query: { site: employee.site_id } }"
+            class="text-kq-primary-strong underline"
+          >
+            {{ t('employees.detail.credentialInactive.link') }}
+          </RouterLink>
+        </EmptyState>
 
-        <div v-else class="mt-4 rounded-kq border border-kq-border bg-kq-surface-raised p-4">
-          <dl class="grid gap-3 sm:grid-cols-2">
-            <div>
-              <dt class="font-medium text-kq-text-muted">{{ t('credentials.table.site') }}</dt>
-              <dd>{{ credentialRow.site_name }}</dd>
-            </div>
-            <div>
-              <dt class="font-medium text-kq-text-muted">
-                {{ t('credentials.table.department') }}
-              </dt>
-              <dd>{{ credentialRow.department_name ?? t('credentials.table.noDepartment') }}</dd>
-            </div>
-            <div>
-              <dt class="font-medium text-kq-text-muted">{{ t('credentials.table.status') }}</dt>
-              <dd>
-                <span
-                  class="rounded-full px-2 py-0.5 text-sm"
-                  :class="CREDENTIAL_STATUS_PILL_CLASS[credentialRow.status]"
-                >
-                  {{ t(`credentials.status.${credentialRow.status}`) }}
-                </span>
-              </dd>
-            </div>
-            <div>
-              <dt class="font-medium text-kq-text-muted">{{ t('credentials.table.printedAt') }}</dt>
-              <dd>{{ instantInSiteZone(credentialRow.credential?.printed_at ?? null) }}</dd>
-            </div>
-            <div>
-              <dt class="font-medium text-kq-text-muted">
-                {{ t('credentials.table.deliveredAt') }}
-              </dt>
-              <dd>{{ instantInSiteZone(credentialRow.credential?.delivered_at ?? null) }}</dd>
-            </div>
-          </dl>
+        <template v-else>
+          <LoadingPanel v-if="credentialPending" :label="t('credentials.loading')" class="mt-4" />
+          <ErrorNotice v-else-if="credentialError !== null" :error="credentialError" class="mt-4" />
+          <EmptyState
+            v-else-if="credentialRow === null || credentialRow === undefined"
+            class="mt-4"
+            :title="t('employees.detail.credentialEmpty.title')"
+            :description="t('employees.detail.credentialEmpty.description')"
+          />
 
-          <div class="mt-4">
-            <CredentialRowActions
-              :row="credentialRow"
-              :time-zone="timezone"
-              @changed="refreshCredential"
-            />
+          <div v-else class="mt-4 rounded-kq border border-kq-border bg-kq-surface-raised p-4">
+            <dl class="grid gap-3 sm:grid-cols-2">
+              <div>
+                <dt class="font-medium text-kq-text-muted">{{ t('credentials.table.site') }}</dt>
+                <dd>{{ credentialRow.site_name }}</dd>
+              </div>
+              <div>
+                <dt class="font-medium text-kq-text-muted">
+                  {{ t('credentials.table.department') }}
+                </dt>
+                <dd>{{ credentialRow.department_name ?? t('credentials.table.noDepartment') }}</dd>
+              </div>
+              <div>
+                <dt class="font-medium text-kq-text-muted">{{ t('credentials.table.status') }}</dt>
+                <dd>
+                  <span
+                    class="rounded-full px-2 py-0.5 text-sm"
+                    :class="CREDENTIAL_STATUS_PILL_CLASS[credentialRow.status]"
+                  >
+                    {{ t(`credentials.status.${credentialRow.status}`) }}
+                  </span>
+                </dd>
+              </div>
+              <div>
+                <dt class="font-medium text-kq-text-muted">
+                  {{ t('credentials.table.printedAt') }}
+                </dt>
+                <dd>{{ instantInSiteZone(credentialRow.credential?.printed_at ?? null) }}</dd>
+              </div>
+              <div>
+                <dt class="font-medium text-kq-text-muted">
+                  {{ t('credentials.table.deliveredAt') }}
+                </dt>
+                <dd>{{ instantInSiteZone(credentialRow.credential?.delivered_at ?? null) }}</dd>
+              </div>
+            </dl>
+
+            <div class="mt-4">
+              <CredentialRowActions :row="credentialRow" :on-changed="refreshCredential" />
+            </div>
           </div>
-        </div>
+        </template>
       </section>
 
       <!-- Baja -->

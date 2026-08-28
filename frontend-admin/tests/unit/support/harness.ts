@@ -5,7 +5,7 @@
 // pruebas describen respuestas de la API, no interioridades del cliente: si
 // mañana cambia como se envia una peticion, siguen valiendo.
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query'
-import type { ComponentMountingOptions } from '@vue/test-utils'
+import type { ComponentMountingOptions, DOMWrapper } from '@vue/test-utils'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import type { Component } from 'vue'
@@ -118,4 +118,24 @@ export async function settle(times = 4): Promise<void> {
     await Promise.resolve()
     await new Promise((resolve) => setTimeout(resolve, 0))
   }
+}
+
+/**
+ * Cualquier envoltorio de prueba que sepa buscar botones dentro de si mismo:
+ * el de toda la vista, o el de un subcomponente localizado con
+ * `findComponent`.
+ */
+export interface ButtonSearchable {
+  findAll: (selector: string) => DOMWrapper<Element>[]
+}
+
+/** El boton cuyo texto contiene `label`, dentro de `wrapper`. Falla claro si no hay ninguno. */
+export function buttonWith(wrapper: ButtonSearchable, label: string): DOMWrapper<Element> {
+  const found = wrapper.findAll('button').find((button) => button.text().includes(label))
+
+  if (found === undefined) {
+    throw new Error(`No hay ningun boton con el texto «${label}»`)
+  }
+
+  return found
 }

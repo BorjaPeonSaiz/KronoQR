@@ -414,11 +414,7 @@ const selectClass =
                 {{ instant(row.credential?.delivered_at ?? null, row.site_id) }}
               </td>
               <td class="px-3 py-2">
-                <CredentialRowActions
-                  :row="row"
-                  :time-zone="zoneOf(row.site_id)"
-                  @changed="refreshBoard"
-                />
+                <CredentialRowActions :row="row" :on-changed="refreshBoard" />
               </td>
             </tr>
           </tbody>

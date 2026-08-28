@@ -181,6 +181,11 @@
       "credentialEmpty": {
         "title": "No credential row yet",
         "description": "This person does not have a row in the credentials board yet. Try again in a few minutes."
+      },
+      "credentialInactive": {
+        "title": "The card is not managed from this record",
+        "description": "This person is not currently on staff, so the credentials board does not assign a row here. Their card is managed from the site's credentials board.",
+        "link": "Go to the site's credentials board"
       }
     },
     "offboard": {

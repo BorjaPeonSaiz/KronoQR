@@ -6,7 +6,12 @@
 // revocar se comporten y se expliquen igual en las dos pantallas.
 //
 // No decide cuándo refrescar: eso es cosa de quien la usa. Al terminar una
-// acción, emite `changed` y quien la contenga decide qué volver a pedir.
+// acción con éxito, espera a `onChanged()` —que quien la contiene le pasa, y
+// que hace el refresco de verdad— antes de cerrar el diálogo y liberar el
+// botón. Si se cerrara antes, el botón de confirmar quedaría disponible
+// mientras el refresco todavía está en vuelo y un segundo clic podría mandar
+// la misma acción dos veces (el servidor la rechazaría con 409, pero mejor no
+// dejar que se envíe).
 import { announce } from '@kronoqr/web-kit/announcer'
 import { downloadDocument } from '@kronoqr/web-kit/downloadDocument'
 import { computed, ref } from 'vue'
@@ -25,16 +30,12 @@ import {
 const props = defineProps<{
   row: CredentialStatusRow
   /**
-   * Zona horaria del centro de la fila. No formatea ninguna fecha aqui hoy
-   * —eso lo hace quien pinta «impresa el» / «entregada el»—, pero forma
-   * parte del contrato del componente para cuando un dialogo necesite decir
-   * «se emitio el…» en la zona correcta, y no en la del navegador de quien
-   * mira (regla dura del panel: la zona se muestra, no se adivina).
+   * Quien contiene este componente refresca su propia fila o tablero con
+   * esto tras una acción con éxito. El diálogo no se cierra, ni el botón se
+   * libera, hasta que esta promesa se resuelve.
    */
-  timeZone: string
+  onChanged: () => Promise<void>
 }>()
-
-const emit = defineEmits<{ changed: [] }>()
 
 type RowActionKind = 'issue' | 'print' | 'deliver' | 'revoke'
 
@@ -144,8 +145,11 @@ async function runAction(): Promise<void> {
 
   try {
     await perform(kind)
+    // El refresco va antes de cerrar el diálogo y de liberar `busy`: mientras
+    // esté en vuelo, el botón de confirmar sigue deshabilitado y no hay
+    // ventana para un segundo envío de la misma acción.
+    await props.onChanged()
     closeAction()
-    emit('changed')
   } catch (caught) {
     actionError.value = caught
   } finally {

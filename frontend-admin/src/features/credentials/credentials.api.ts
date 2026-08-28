@@ -41,13 +41,21 @@ export function fetchCredentialBoard(query: CredentialBoardQuery): Promise<Crede
  * La fila de una sola persona del tablero de credenciales, para la seccion
  * «Tarjeta QR» de la ficha de empleado. `null` cuando el servidor no devuelve
  * ninguna fila (caso raro: un empleado sin nada que mostrar todavia).
+ *
+ * `siteId` acota tambien la peticion, para que el servidor resuelva sobre el
+ * centro de esta persona y no sobre la instalacion entera. Y aunque el
+ * contrato garantiza como mucho una fila para un `employee_uuid` dado,
+ * `find()` localiza esa fila por `employee_uuid` en vez de asumir la
+ * posicion: `data[0]` seria la fila de otra persona el dia que el filtro del
+ * servidor dejara de aplicarse.
  */
 export async function fetchCredentialStatusFor(
   employeeUuid: string,
+  siteId: number,
 ): Promise<CredentialStatusRow | null> {
-  const board = await fetchCredentialBoard({ employeeUuid })
+  const board = await fetchCredentialBoard({ employeeUuid, siteId })
 
-  return board.data[0] ?? null
+  return board.data.find((row) => row.employee_uuid === employeeUuid) ?? null
 }
 
 /** Lo unico binario que sirve este modulo: el PDF de una tarjeta. */

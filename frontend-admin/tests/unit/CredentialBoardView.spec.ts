@@ -1,4 +1,3 @@
-import type { DOMWrapper } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import CredentialBoardView from '@/features/credentials/CredentialBoardView.vue'
 import { CLIENT_PER_PAGE } from '@/features/credentials/useCredentialRows'
@@ -6,19 +5,9 @@ import es from '@/shared/i18n/locales/es.json'
 import type { CredentialStatusRow } from '@/shared/api/types'
 import { announcement, clearAnnouncement } from '@kronoqr/web-kit/announcer'
 import { CREDENTIAL_UUID, SITE, board, boardRow, credential } from './support/fixtures'
-import { jsonResponse, mountView, settle, stubFetch } from './support/harness'
+import { buttonWith, jsonResponse, mountView, settle, stubFetch } from './support/harness'
 
 type Wrapper = Awaited<ReturnType<typeof mountView>>
-
-function buttonWith(wrapper: Wrapper, label: string): DOMWrapper<Element> {
-  const found = wrapper.findAll('button').find((button) => button.text().includes(label))
-
-  if (found === undefined) {
-    throw new Error(`No hay ningun boton con el texto «${label}»`)
-  }
-
-  return found
-}
 
 /**
  * Selecciona la opcion «solo quien todavia no tiene la tarjeta en la mano»
