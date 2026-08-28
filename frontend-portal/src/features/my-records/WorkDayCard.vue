@@ -32,12 +32,15 @@ const total = computed(() => t('myRecords.duration', durationParts(props.day.tot
 </script>
 
 <template>
-  <article data-test="workday" class="rounded border border-slate-300 bg-slate-50 p-4">
+  <article
+    data-test="workday"
+    class="rounded-kq border border-kq-border bg-kq-surface-raised p-4 shadow-kq-soft"
+  >
     <header class="flex flex-wrap items-baseline justify-between gap-3">
       <div>
-        <h2 class="text-xl font-bold">
+        <h2 class="font-heading text-xl font-bold text-kq-text">
           {{ heading }}
-          <span class="text-base font-normal text-slate-600">
+          <span class="text-base font-normal text-kq-text-muted">
             ({{ day.time_zone }}, {{ zoneLabel }})
           </span>
         </h2>
@@ -45,14 +48,14 @@ const total = computed(() => t('myRecords.duration', durationParts(props.day.tot
           <span
             v-if="day.has_open_shift"
             data-test="flag-open-shift"
-            class="rounded-full border border-amber-500 bg-amber-50 px-3 py-1 text-sm font-semibold text-amber-900"
+            class="rounded-full border border-kq-warning bg-kq-warning-soft px-3 py-1 text-sm font-semibold text-kq-warning"
           >
             {{ t('myRecords.day.flags.openShift') }}
           </span>
           <span
             v-if="day.has_incident"
             data-test="flag-incident"
-            class="rounded-full border border-red-500 bg-red-50 px-3 py-1 text-sm font-semibold text-red-900"
+            class="rounded-full border border-kq-danger bg-kq-danger-soft px-3 py-1 text-sm font-semibold text-kq-danger"
           >
             {{ t('myRecords.day.flags.incident') }}
           </span>
@@ -60,15 +63,19 @@ const total = computed(() => t('myRecords.duration', durationParts(props.day.tot
       </div>
 
       <p class="text-right">
-        <span class="block text-sm text-slate-600">{{ t('myRecords.day.total') }}</span>
-        <span class="text-2xl font-bold tabular-nums" data-test="day-total">{{ total }}</span>
+        <span class="block text-sm text-kq-text-muted">{{ t('myRecords.day.total') }}</span>
+        <span
+          class="font-heading text-2xl font-bold tabular-nums text-kq-primary-strong"
+          data-test="day-total"
+          >{{ total }}</span
+        >
       </p>
     </header>
 
-    <p v-if="day.has_open_shift" class="mt-2 text-slate-700">
+    <p v-if="day.has_open_shift" class="mt-2 text-kq-text-muted">
       {{ t('myRecords.day.flags.openShiftHint') }}
     </p>
-    <p v-if="day.has_incident" class="mt-1 text-slate-700">
+    <p v-if="day.has_incident" class="mt-1 text-kq-text-muted">
       {{ t('myRecords.day.flags.incidentHint') }}
     </p>
 

@@ -62,11 +62,11 @@ async function submit(): Promise<void> {
 <template>
   <section>
     <header>
-      <h1 class="text-2xl font-bold">{{ t('myExport.title') }}</h1>
-      <p class="mt-2 max-w-prose text-slate-700">{{ t('myExport.intro') }}</p>
+      <h1 class="font-heading text-2xl font-bold text-kq-text">{{ t('myExport.title') }}</h1>
+      <p class="mt-2 max-w-prose text-kq-text-muted">{{ t('myExport.intro') }}</p>
     </header>
 
-    <ul class="mt-4 max-w-prose list-disc space-y-1 pl-5 text-slate-700">
+    <ul class="mt-4 max-w-prose list-disc space-y-1 pl-5 text-kq-text-muted">
       <li>{{ t('myExport.contents.entries') }}</li>
       <li>{{ t('myExport.contents.corrections') }}</li>
       <li>{{ t('myExport.contents.format') }}</li>
@@ -80,14 +80,14 @@ async function submit(): Promise<void> {
           v-slot="field"
           :label="t('myExport.filters.from')"
           :hint="t('myExport.filters.fromHint')"
-          label-class="text-lg font-medium text-slate-900"
+          label-class="text-lg font-medium text-kq-text"
         >
           <input
             :id="field.id"
             v-model="range.from"
             type="date"
             :aria-describedby="field.describedBy"
-            class="min-h-12 rounded border border-slate-400 px-3 py-2 text-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+            class="min-h-12 rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-lg"
           />
         </FormField>
 
@@ -96,7 +96,7 @@ async function submit(): Promise<void> {
           :label="t('myExport.filters.to')"
           :hint="t('myExport.filters.toHint')"
           :errors="rangeErrors"
-          label-class="text-lg font-medium text-slate-900"
+          label-class="text-lg font-medium text-kq-text"
         >
           <input
             :id="field.id"
@@ -104,7 +104,7 @@ async function submit(): Promise<void> {
             type="date"
             :aria-describedby="field.describedBy"
             :aria-invalid="field.invalid"
-            class="min-h-12 rounded border border-slate-400 px-3 py-2 text-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+            class="min-h-12 rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-lg"
           />
         </FormField>
       </fieldset>
@@ -113,7 +113,7 @@ async function submit(): Promise<void> {
         type="submit"
         :disabled="!canSubmit"
         :aria-busy="submitting"
-        class="min-h-12 rounded bg-slate-900 px-4 py-2 text-lg font-semibold text-white disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+        class="min-h-12 rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-lg font-semibold text-kq-on-primary disabled:opacity-50"
       >
         {{ submitting ? t('myExport.downloading') : t('myExport.download') }}
       </button>
@@ -121,7 +121,7 @@ async function submit(): Promise<void> {
 
     <ErrorNotice v-if="error !== null" :error="error" class="mt-4" />
 
-    <p v-if="done && error === null" role="status" class="mt-4 text-slate-700">
+    <p v-if="done && error === null" role="status" class="mt-4 text-kq-text-muted">
       {{ t('myExport.announce.done') }}
     </p>
   </section>
