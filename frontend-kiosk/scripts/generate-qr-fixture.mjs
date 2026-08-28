@@ -161,12 +161,21 @@ try {
 
   const clean = path.join(outputDir, 'qr-video.y4m')
   const degraded = path.join(outputDir, 'qr-video-degraded.y4m')
+  const blank = path.join(outputDir, 'qr-video-blank.y4m')
 
   const cleanBytes = writeY4m(clean, renderLuma(matrix, 0))
   const degradedBytes = writeY4m(degraded, renderLuma(matrix, OCCLUSION_FRACTION))
+  // Blanco liso, SIN codigo: nadie ha acercado una tarjeta todavia. La usa el
+  // E2E de disposicion de pantalla (`layout.spec.ts`), que necesita la
+  // pantalla de espera estable e indefinidamente para medir su geometria —
+  // con `qr-video.y4m` el bucle de decodificacion la sustituye por la
+  // confirmacion en cuanto lee el QR, y esa carrera es justo lo que ese E2E
+  // no puede permitirse.
+  const blankBytes = writeY4m(blank, new Uint8Array(WIDTH * HEIGHT).fill(LUMA_WHITE))
 
   log(`Escrito e2e/fixtures/qr-video.y4m (${(cleanBytes / 1024 / 1024).toFixed(1)} MB)`)
   log(`Escrito e2e/fixtures/qr-video-degraded.y4m (${(degradedBytes / 1024 / 1024).toFixed(1)} MB)`)
+  log(`Escrito e2e/fixtures/qr-video-blank.y4m (${(blankBytes / 1024 / 1024).toFixed(1)} MB)`)
 } catch (error) {
   process.stderr.write('[qr-fixture] No se ha podido generar el video: ' + String(error) + '\n')
   process.stderr.write(

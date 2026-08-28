@@ -41,10 +41,40 @@ export type ScannerDiagnostic =
 const WATCHDOG_SILENCE_MS = 12_000
 const WATCHDOG_TICK_MS = 4_000
 
-/** Un intento cada 100 ms: 10 por segundo, de sobra para un gesto humano. */
+/**
+ * Un intento cada 100 ms: 10 por segundo, de sobra para un gesto humano y
+ * ya por debajo del rango de 150-200 ms que se barajo al revisar la
+ * fluidez del escaneo (RF-KI-02, doc 03 §4.3). Bajarlo mas no acorta lo que
+ * tarda LEER: `qr-decode-budget.spec.ts` mide una mediana de ~1 ms por
+ * intento con `QRCodeReader`, asi que el cuello de botella nunca ha sido
+ * este numero, sino cuanto tarda la persona en centrar la tarjeta —de ahi
+ * el visor de `ScanView.vue`, que ataca esa parte del problema.
+ */
 const DELAY_BETWEEN_ATTEMPTS_MS = 100
 /** Tras acertar, ZXing espera esto antes de volver a intentarlo. */
 const DELAY_BETWEEN_SUCCESS_MS = 800
+
+// DOS COSAS QUE SE EVALUARON Y SE DESCARTARON A PROPOSITO (tarea de revision
+// del visor, RF-KI-02):
+//
+//   - HINTS `TRY_HARDER`. Prueba mas rotaciones y binarizaciones por
+//     fotograma a cambio de mas CPU por intento. `qr-decode-budget.spec.ts`
+//     ya prueba una tarjeta girada un cuarto de vuelta con el lector simple
+//     y decodifica bien: no hay una tasa de acierto que este hint mejore en
+//     el fixture, y anadirlo sin ese beneficio medido es pura regresion de
+//     latencia sobre el presupuesto de 300 ms (RNF-P-03).
+//   - RECORTAR EL FOTOGRAMA A LA REGION DEL VISOR (ROI) antes de decodificar.
+//     `decodeFromStream()` es quien hoy posee el ciclo de vida completo del
+//     `MediaStream` y de sus recursos (`controls.stop()`, el perro guardian,
+//     el reinicio). Sustituirlo por un bucle propio que recorte cada
+//     fotograma a canvas significaria reimplementar ese ciclo de vida a
+//     mano en un componente que ya lleva la advertencia mas seria del
+//     fichero: una fuga aqui no se ve en cinco minutos, tumba la tablet a
+//     media tarde. Con la decodificacion ya muy por debajo del presupuesto
+//     (ver arriba), el riesgo de esa reescritura no tiene beneficio medible
+//     que lo justifique; el visor de `ScanView.vue` ataca el problema real
+//     —que la persona tarda en centrar la tarjeta— sin tocar la propiedad
+//     del recurso de camara.
 
 interface ScannerControls {
   stop: () => void
