@@ -25,7 +25,7 @@ Tres capas:
         ┌───────────────────┴───────────────────┐
         │                                       │
 ┌───────▼──────────────────┐        ┌───────────▼──────────────┐
-│  10 AGENTES              │        │  6 SKILLS                │
+│  11 AGENTES              │        │  6 SKILLS                │
 │  Especialistas con rol   │        │  Procedimientos repetibles│
 │  "quién hace esto"       │        │  "cómo se hace esto aquí" │
 └──────────────────────────┘        └──────────────────────────┘
@@ -113,7 +113,7 @@ Fichero: [`CLAUDE.md`](../CLAUDE.md)
 
 ---
 
-## 4. Los diez agentes
+## 4. Los once agentes
 
 Todos están creados en `.claude/agents/`.
 
@@ -126,6 +126,7 @@ Todos están creados en `.claude/agents/`.
 | `frontend-quiosco` | PWA de la tablet | Sí | Escaneo, offline, sincronización, PIN, accesibilidad |
 | `frontend-panel` | SPA de gestión | Sí | Presencia en vivo, correcciones, credenciales, informes |
 | `frontend-portal-empleado` | Portal web del empleado | Sí | Acceso con código y PIN, mi registro, mi exportación |
+| `ui-ux` | Diseño de interfaz y experiencia de usuario | Sí | Sistema visual compartido, contraste WCAG, disposición y coherencia entre las tres SPA |
 | `qa-testing` | Pirámide de pruebas | Sí | Cobertura, casos límite, fallos intermitentes |
 | `seguridad-cumplimiento` | STRIDE, RGPD y art. 34.9 ET | **No** | Antes de cerrar algo que toque datos o autenticación |
 | `devops-observabilidad` | Infra, CI/CD, métricas, alertas | Sí | Entorno, empaquetado, instrumentación |
@@ -213,6 +214,19 @@ Su premisa: **esta aplicación existe por obligación legal.** El art. 34.9 ET e
 Es deliberadamente sencillo: una web responsive de tres pantallas, sin PWA, sin service worker y sin caché offline, porque no hay ninguna credencial que mostrar. El acceso es con **código de empleado y PIN**, sin correo electrónico, porque el producto no puede exigirle una dirección corporativa a toda la plantilla de un hotel.
 
 Tiene instrucción explícita de parar y preguntar si alguien le pide añadir un QR, convertirlo en PWA o exigir correo: las tres cosas contradicen un ADR.
+
+</details>
+
+<details>
+<summary><b><code>ui-ux</code></b> — diseño de interfaz y experiencia de usuario</summary>
+
+Fichero: [`.claude/agents/ui-ux.md`](../.claude/agents/ui-ux.md)
+
+Añadido el 28 de agosto de 2026, cuando hizo falta aplicar un mismo sistema visual a las tres SPA y ninguno de los tres agentes de frontend tenía criterio transversal para decidirlo. Decide **cómo se ve y cómo se usa**, no qué hace el producto ni cómo se construye el backend.
+
+Sus principios: el sistema visual vive en un solo sitio (`packages/web-kit`, como tokens CSS que las tres aplicaciones consumen por el `@theme` de Tailwind); la marca por defecto es del fabricante y nunca de un cliente (regla dura 13, y lo que la tarea 5.8 hará configurable); **el contraste se mide, no se estima**, y esa medición queda como prueba automatizada; las fuentes se sirven desde la instalación, nunca desde un CDN; y cada aplicación conserva su contexto de uso —el quiosco oscuro y grande, el panel denso, el portal legible de un vistazo desde el móvil.
+
+Se usa para definir o aplicar tokens, revisar contraste y accesibilidad, reorganizar una pantalla o unificar el aspecto entre aplicaciones. Va **después** del agente de frontend que implementa el comportamiento, sobre ficheros distintos o en una oleada posterior, para no pisarse.
 
 </details>
 
@@ -513,6 +527,7 @@ CLAUDE.md                                          Contexto permanente, 21 regla
 ├── frontend-quiosco.md                            PWA de la tablet
 ├── frontend-panel.md                              SPA de gestión
 ├── frontend-portal-empleado.md                    Portal web del empleado
+├── ui-ux.md                                       Diseño de interfaz y UX de las tres SPA
 ├── qa-testing.md                                  Pirámide de pruebas
 ├── seguridad-cumplimiento.md                      STRIDE + RGPD + art. 34.9 ET (solo lectura)
 ├── devops-observabilidad.md                       Infra, CI/CD, métricas
