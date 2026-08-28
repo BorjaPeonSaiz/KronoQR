@@ -1,5 +1,26 @@
 # HANDOFF
 
+## Sesión 1.2.0: quiosco, tarjeta, portal y panel (28-08-2026)
+
+**Rama `feat/quiosco-tarjeta-portal-panel-v1.2`** sobre `main` (`fa91e42`, merge de la PR #6), 9 commits convencionales, sin push. **`VERSION` = 1.2.0** y `CHANGELOG.md` con su entrada. **Etiquetas:** `v1.1.0` creada en local sobre `082d23f` (faltaba; sin ella el generador arrastraba la 1.1.0 a la 1.2.0) y **pendiente de `git push origin v1.1.0`**; `v1.2.0` se etiqueta sobre `main` tras el merge (`git tag -a v1.2.0 -m 1.2.0 && git push origin v1.2.0`; la CI valida el CHANGELOG al etiquetar).
+
+Verificación final en verde: `web-kit` 137 · panel 172 · portal 69 · quiosco 309 unitarias + 37 E2E (axe limpio, bundle 101,1/250 KiB) · backend `make quality` y `make test` **1664 pruebas / 8859 aserciones** · trazabilidad y consistencia de docs. Revisión de `revisor-codigo`: 1 bloqueante y 3 importantes, corregidos salvo uno por decisión del usuario (abajo).
+
+**Hecho:**
+
+1. **Quiosco** (`frontend-quiosco`): estado **«Comprobando…»** para el PIN (`pinPipeline.ts`: gracia 300 ms → desenlace directo; hasta 2,5 s → «Comprobando…»; vencido o sin red → «pendiente», sobre en cola). Ya no aparece el panel índigo de éxito antes del rechazo rojo. Alcance anotado en **ADR-008** (su decisión es de la vía QR). Guarda `alive` en `PinView.vue` contra navegaciones tardías sobre el router. **Visor** centrado con esquinas terracota, banda con título/subtítulo/botón PIN encima, sin velo (`tests/e2e/layout.spec.ts` en 3 viewports con fixture de vídeo en blanco). Glifo «i» del anti-rebote eliminado. Decodificador: ya estaba al óptimo (100 ms, enfoque continuo, 1280×720); recorte ROI descartado por riesgo de fugas de cámara — **la fluidez real solo se mide en la tablet** (tamaño del QR impreso, luz).
+2. **Tarjeta PDF** (`backend-laravel`): ID-1 apaisada partida por el ancho, QR 34,4 mm (zona tranquila ≥ 4 módulos), nombre y **código en negrita más pequeño debajo**; `qr_size_mm` pasa a mínimo garantizado, con `Log::warning` si no cabe. **Bug corregido de paso**: un `padding` con `border-box` imprimía el QR a 23 mm en vez de 26. `CredentialCardLayoutTest` (15). **Pendiente físico: imprimir y escanear con la tablet.**
+3. **Portal**: código en negrita bajo el nombre; inputs de fecha `w-full sm:w-96` (medido con Inter real: la ayuda más larga 304 px) alineados por arriba, botón a la altura de los campos; Duración +10 % (`table-fixed` + `colgroup`); sin nombre de zona, sin «(WEST)» en cabeceras y sin línea UTC (**se conserva** CEST/CET en el historial de correcciones y la zona de otro centro en tramos trasladados); login sin `intro`/`pinHint`.
+4. **Panel**: `pin_status` al servidor (contrato + backend, misma regla que el recurso); 30 por página (`EMPLOYEE_LIST_PER_PAGE`, `CLIENT_PER_PAGE`); login sin `intro`/`employeeNotice`.
+5. **Seguridad** (informe de `seguridad-cumplimiento`, solo lectura): contraseñas y PIN con bcrypt coste 12 (verificado por `QualityGatesTest`), señuelos de tiempo constante, bloqueo 5/15 min y escalonado 3/5/10 para el PIN, sobre libsodium, QR con SHA-256 + HMAC de 128 bits. OWASP: A02/A04 cumplen; A07 parcial (sin 2FA hasta 2.1, sin rehash); A05 (`APP_DEBUG=true` en `.env.example`); A09 (sin asiento de autenticación en `audit_log`). Mejoras propuestas, por valor: rehash en login, auditar login/fallo/bloqueo, `APP_DEBUG=false` de serie, 2FA (2.1), cambio de contraseña y revocación de tokens por API.
+
+**Decisión del usuario mantenida contra un hallazgo de la revisión:** el portal ya no rotula la zona en la tabla del registro. El día del cambio de hora (24-10-2026 en `EdgeCaseSeeder`, 23:00→07:00 = 9 h) se lee sin explicación, y el panel sí rotula «Entrada (CET)». Si molesta, la propuesta del revisor es devolver solo la abreviatura en las cabeceras.
+
+**Pendiente menor:** `HELD_GAP_MS`/`PIN_VERIFY_TIMEOUT_MS`/visor en tablet real; prueba de integración de que `unaccent` está instalada; E2E del panel (`frontend-admin/tests/e2e` no existe); E2E del portal con la jornada del cambio de hora; en vertical (800×1280) el visor queda a 440 px — revisar `55vmin` si se quiere mayor; comando `product:doctor` (Fase 5) debería comprobar `qr_size_mm` contra lo imprimible.
+
+**Siguiente acción:** abrir PR de `feat/quiosco-tarjeta-portal-panel-v1.2` a `main`, `git push origin v1.1.0`, y etiquetar `v1.2.0` tras el merge.
+
+
 ## Sesión de UI/UX y buscadores (28-08-2026)
 
 **Rama `feat/ui-ux-panel-portal-quiosco`, 8 commits convencionales sobre `main` (`fd46569`), sin push.** Ejecutado en tres oleadas de agentes en paralelo con ficheros disjuntos, revisión de `revisor-codigo` en medio (0 bloqueantes, 9 importantes — todos corregidos salvo dos que chocaban con decisiones explícitas del usuario, ver abajo) y verificación conjunta final en verde: `web-kit` 137 · panel 171 · portal 69 · quiosco 300 unitarias + 33 E2E (axe limpio, bundle crítico 100,7/250 KiB) · backend `make quality` y `make test` **1635 pruebas / 8729 aserciones** · `qa:traceability --check` y `docs:consistency --check` en verde.
