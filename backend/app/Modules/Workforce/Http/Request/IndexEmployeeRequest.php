@@ -21,6 +21,9 @@ final class IndexEmployeeRequest extends FormRequest
 {
     use RejectsUnknownInput;
 
+    /** Techo de la busqueda libre. El mismo `maxLength` que declara el contrato. */
+    public const int MAX_SEARCH_LENGTH = 100;
+
     public function authorize(): bool
     {
         return Gate::allows('viewAny', Employee::class);
@@ -35,11 +38,34 @@ final class IndexEmployeeRequest extends FormRequest
             'site_id' => ['sometimes', 'integer', 'min:1', 'exists:sites,id'],
             'department_id' => ['sometimes', 'integer', 'min:1', 'exists:departments,id'],
             'status' => ['sometimes', 'string', 'in:'.implode(',', array_column(EmploymentStatus::cases(), 'value'))],
+            // El techo de 100 no es una regla de negocio: es lo que impide que
+            // una URL manipulada mande un patron de megabytes a un `ILIKE` que
+            // no puede usar indice. `nullable` por los enlaces copiados: el
+            // panel omite `q` cuando el cuadro esta vacio, pero una URL pegada
+            // que arrastra un `?q=` de una busqueda anterior tiene que devolver
+            // la lista entera, no un `422`. El contrato lo declara igual: `q`
+            // sin `minLength`.
+            'q' => ['sometimes', 'nullable', 'string', 'max:'.self::MAX_SEARCH_LENGTH],
             'page' => ['sometimes', 'integer', 'min:1'],
             // El techo de 100 es proteccion de recursos: una plantilla de 600
             // personas no se sirve entera en una respuesta.
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
         ];
+    }
+
+    /**
+     * Termino de busqueda libre, ya recortado.
+     *
+     * Devuelve `null` cuando no se envia y tambien cuando lo enviado se queda en
+     * nada al recortarlo: una busqueda de espacios en blanco casaria con toda la
+     * plantilla, que es justo lo contrario de lo que quiere quien escribe en el
+     * cuadro. «Vacia» y «ausente» son el mismo caso.
+     */
+    public function searchTerm(): ?string
+    {
+        $term = trim($this->string('q')->value());
+
+        return $term === '' ? null : $term;
     }
 
     public function statusFilter(): ?EmploymentStatus

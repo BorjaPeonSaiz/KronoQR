@@ -51,15 +51,34 @@ interface EmployeeRepository
     /**
      * Pagina de la plantilla que cumple los filtros, ordenada de forma estable.
      *
+     * @param  string|null  $search  Busqueda libre por nombre, apellidos, nombre
+     *                               completo o codigo de empleado, insensible a
+     *                               mayusculas y a acentos y por subcadena.
+     *                               Llega ya recortada, y `null` significa «sin
+     *                               busqueda»: la cadena vacia no es un filtro.
+     *                               Se combina con `AND` con el resto.
      * @return list<Employee>
      */
     public function search(
         ?int $siteId,
         ?int $departmentId,
         ?EmploymentStatus $status,
+        ?string $search,
         int $limit,
         int $offset,
     ): array;
 
-    public function countMatching(?int $siteId, ?int $departmentId, ?EmploymentStatus $status): int;
+    /**
+     * Cuantos empleados cumplen los MISMOS filtros que {@see search()}.
+     *
+     * Los dos metodos tienen que recibir los mismos criterios o `meta.total`
+     * describiria un conjunto distinto del que se devuelve, y quien pagina
+     * pediria paginas que no existen.
+     */
+    public function countMatching(
+        ?int $siteId,
+        ?int $departmentId,
+        ?EmploymentStatus $status,
+        ?string $search,
+    ): int;
 }

@@ -582,6 +582,10 @@ export interface paths {
          *
          *     El ambito por departamento de RF-ID-03 llega en la Fase 2. Hasta
          *     entonces, quien puede leer esta lista la ve entera.
+         *
+         *     **`q` busca por nombre, apellidos, nombre completo y codigo de
+         *     empleado**, sin distinguir mayusculas ni acentos y por subcadena. Se
+         *     combina con `AND` con los demas filtros y se pagina igual que ellos.
          */
         get: operations["listEmployees"];
         put?: never;
@@ -3452,6 +3456,34 @@ export interface components {
          */
         EmploymentStatusFilter: components["schemas"]["EmploymentStatus"];
         /**
+         * @description Busqueda libre sobre la plantilla, **insensible a mayusculas y a
+         *     acentos, y por subcadena**. Casa contra el nombre, los apellidos, el
+         *     nombre completo («nombre apellidos», con un espacio) y el codigo de
+         *     empleado. Basta con que case uno de los cuatro.
+         *
+         *     Los acentos se ignoran **en los dos sentidos**: `q=garcia` encuentra a
+         *     «García» y `q=garcía` encuentra a «Garcia». Quien busca escribe el
+         *     apellido como le sale, y la persona es la misma.
+         *
+         *     El nombre completo esta en la lista a proposito: quien busca a una
+         *     persona escribe «Youssef Amrani», y ni el nombre ni el apellido
+         *     contienen esa cadena por separado.
+         *
+         *     **Se recorta**, y una `q` vacia —o solo espacios— equivale a no
+         *     enviarla: devuelve la lista entera, no una lista vacia ni un `422`. No
+         *     es lo que hace el panel —omite el parametro cuando el cuadro esta
+         *     vacio—, sino lo que ocurre con un enlace copiado que arrastra un `?q=`
+         *     de una busqueda anterior.
+         *
+         *     **Se combina con `AND` con el resto de filtros** y **no altera la
+         *     paginacion**: `meta.total` sigue siendo el total de lo que casa, no el de
+         *     la plantilla, asi que la busqueda se pagina como cualquier otro filtro.
+         *
+         *     `%` y `_` no son comodines: se buscan como los caracteres que son.
+         * @example amrani
+         */
+        EmployeeSearch: string;
+        /**
          * @description Primera **jornada** del rango, inclusive (`shift_entries.work_date`). Es
          *     una fecha civil en la zona del centro, no un instante: filtrar por
          *     `work_date` y no por la hora de las marcas es lo que mantiene entero un
@@ -3993,6 +4025,34 @@ export interface operations {
     listEmployees: {
         parameters: {
             query?: {
+                /**
+                 * @description Busqueda libre sobre la plantilla, **insensible a mayusculas y a
+                 *     acentos, y por subcadena**. Casa contra el nombre, los apellidos, el
+                 *     nombre completo («nombre apellidos», con un espacio) y el codigo de
+                 *     empleado. Basta con que case uno de los cuatro.
+                 *
+                 *     Los acentos se ignoran **en los dos sentidos**: `q=garcia` encuentra a
+                 *     «García» y `q=garcía` encuentra a «Garcia». Quien busca escribe el
+                 *     apellido como le sale, y la persona es la misma.
+                 *
+                 *     El nombre completo esta en la lista a proposito: quien busca a una
+                 *     persona escribe «Youssef Amrani», y ni el nombre ni el apellido
+                 *     contienen esa cadena por separado.
+                 *
+                 *     **Se recorta**, y una `q` vacia —o solo espacios— equivale a no
+                 *     enviarla: devuelve la lista entera, no una lista vacia ni un `422`. No
+                 *     es lo que hace el panel —omite el parametro cuando el cuadro esta
+                 *     vacio—, sino lo que ocurre con un enlace copiado que arrastra un `?q=`
+                 *     de una busqueda anterior.
+                 *
+                 *     **Se combina con `AND` con el resto de filtros** y **no altera la
+                 *     paginacion**: `meta.total` sigue siendo el total de lo que casa, no el de
+                 *     la plantilla, asi que la busqueda se pagina como cualquier otro filtro.
+                 *
+                 *     `%` y `_` no son comodines: se buscan como los caracteres que son.
+                 * @example amrani
+                 */
+                q?: components["parameters"]["EmployeeSearch"];
                 /**
                  * @description Limita el resultado al centro indicado.
                  * @example 1

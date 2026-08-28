@@ -98,6 +98,35 @@ it('cuenta lo que sale en la pagina, no lo que cumple el filtro', function (): v
         ->and($asiento->payload)->not->toContain('De Prueba');
 })->group('RF-GP-01', 'RS-05');
 
+it('deja constancia de que hubo busqueda, nunca de lo que se busco', function (): void {
+    // Regla dura 21: quien busca escribe el nombre de una persona, asi que el
+    // termino es un dato personal. Guardarlo copiaria nombres a la tabla de
+    // cuatro años de retencion que se enseña en una inspeccion. Para acotar una
+    // brecha (RL-15) basta con saber que la pagina salio de una busqueda; el
+    // recuento ya dice cuanto se llevo.
+    $context = directoryContext(0);
+
+    WorkforceFixtures::employee($context['site'], $context['department'], 'active', 'Youssef', 'Amrani');
+
+    Api::as($context['token'])
+        ->get('/api/v1/employees', ['q' => 'Amrani'])
+        ->assertValidResponse(200);
+
+    $entry = DB::table('audit_log')->orderBy('id')->first();
+
+    expect($entry)->not->toBeNull();
+
+    /** @var object{payload: string} $entry */
+    $payload = json_decode($entry->payload, true, 512, JSON_THROW_ON_ERROR);
+
+    expect($payload)->toMatchArray([
+        'dataset' => 'employee_directory',
+        'record_count' => 1,
+        'search' => true,
+    ])
+        ->and($entry->payload)->not->toContain('Amrani');
+})->group('RF-GP-01', 'RS-05', 'RL-15');
+
 it('no repite el asiento por cada ficha abierta', function (): void {
     // Criterio explicito, no olvido: el indice ya consta y duplicarlo por ficha
     // llenaria `audit_log` de la operativa ordinaria de RRHH sin cambiar la

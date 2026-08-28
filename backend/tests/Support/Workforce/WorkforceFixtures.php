@@ -43,18 +43,30 @@ final class WorkforceFixtures
      * Un empleado escrito con el constructor de consultas, sin pasar por el caso
      * de uso: las pruebas de esquema tienen que poder crear filas que el dominio
      * no crearia.
+     *
+     * **Nombre, apellidos y codigo se pueden fijar** porque la busqueda libre de
+     * `GET /employees?q=` (RF-GP-01) casa precisamente contra ellos: con el
+     * nombre por defecto, «Persona De Prueba» para todo el mundo, no habria
+     * forma de afirmar que la consulta encuentra a quien tiene que encontrar y
+     * deja fuera al resto. Omitidos siguen siendo los de siempre.
      */
-    public static function employee(int $siteId, ?int $departmentId = null, string $status = 'active'): string
-    {
+    public static function employee(
+        int $siteId,
+        ?int $departmentId = null,
+        string $status = 'active',
+        ?string $firstName = null,
+        ?string $lastName = null,
+        ?string $employeeCode = null,
+    ): string {
         $uuid = Str::uuid7()->toString();
 
         Employee::query()->create([
             'uuid' => $uuid,
             'site_id' => $siteId,
             'department_id' => $departmentId,
-            'first_name' => 'Persona',
-            'last_name' => 'De Prueba',
-            'employee_code' => 'E'.Str::upper(Str::random(9)),
+            'first_name' => $firstName ?? 'Persona',
+            'last_name' => $lastName ?? 'De Prueba',
+            'employee_code' => $employeeCode ?? 'E'.Str::upper(Str::random(9)),
             'email' => null,
             'status' => $status,
             'hired_at' => '2026-01-01',
