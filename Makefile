@@ -86,7 +86,21 @@ REDOCLY_VERSION    := 2.46.1
 # Ruta del repositorio tal y como la entiende el demonio de Docker. En Git Bash
 # hace falta `pwd -W` (D:/...); en Linux y macOS `pwd` ya vale.
 HOST_PWD := $(shell pwd -W 2>/dev/null || pwd)
-DOCKER_RUN := MSYS_NO_PATHCONV=1 docker run --rm -v "$(HOST_PWD):/mnt" -w /mnt
+
+# gitleaks y Trivy invocan `git` internamente (gitleaks para leer el historico,
+# Trivy fs para resolver el estado del repositorio) y las dos imagenes corren
+# como root. Sobre el checkout de un runner de GitHub Actions -- propiedad de
+# un uid que no es root, tipicamente 1001 -- git desde 2.35.2 se niega a operar
+# con "detected dubious ownership in repository at '/mnt'" (mitigacion de
+# CVE-2022-24765) y el paso aborta antes de escanear nada. En local, en
+# cambio, el uid del contenedor y el del bind mount suelen coincidir y el
+# problema no aparece: por eso no se detecto hasta ejecutar en el runner
+# (BLOQUEANTE 2 de la auditoria). `safe.directory` marca `/mnt` como excepcion
+# de confianza SOLO dentro de este contenedor de usar y tirar, nunca en la
+# configuracion de git de quien ejecuta `make`.
+GIT_SAFE_DIRECTORY_ENV := -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/mnt
+
+DOCKER_RUN := MSYS_NO_PATHCONV=1 docker run --rm $(GIT_SAFE_DIRECTORY_ENV) -v "$(HOST_PWD):/mnt" -w /mnt
 
 # ShellCheck, shfmt y Semgrep no estan instalados en la maquina de quien
 # desarrolla —en Windows casi nunca—, asi que se usan del PATH si estan y en
@@ -115,9 +129,50 @@ REDOCLY := npx --yes @redocly/cli@$(REDOCLY_VERSION)
 endif
 
 # La imagen de Semgrep exige el codigo en /src y se niega a analizar otra ruta.
+#
+# Fijada por version Y por digest (MENOR 14 de la auditoria: el comentario de
+# mas abajo ya prometia una version fijada y la imagen seguia en `:latest`,
+# que cambia de contenido sin que este fichero cambie de una linea). El digest
+# hace immutable el TAG mismo -- sin el, `semgrep/semgrep:1.175.0` podria
+# volver a publicarse con otro contenido, algo que Docker Hub permite.
+SEMGREP_VERSION := 1.175.0
 SEMGREP := $(shell command -v semgrep 2>/dev/null)
 ifeq ($(SEMGREP),)
-SEMGREP := MSYS_NO_PATHCONV=1 docker run --rm -v "$(HOST_PWD):/src" -w /src semgrep/semgrep:latest semgrep
+SEMGREP := MSYS_NO_PATHCONV=1 docker run --rm -v "$(HOST_PWD):/src" -w /src semgrep/semgrep:$(SEMGREP_VERSION)@sha256:b94b53d02fd4a022f9eac4e2af1380f5c3c4c21400e79d3336bdff1d1db5e796 semgrep
+endif
+
+# Trivy y gitleaks, mismo patron que ShellCheck/shfmt/Semgrep: binario del PATH
+# si esta, contenedor fijado por version si no. Fijados porque son nuevos aqui
+# (tarea de SSDLC, doc 02 §9.2): sin version, el umbral "0 hallazgos" de
+# gitleaks dependeria de que base de datos de reglas trajera la imagen `latest`
+# el dia que alguien la ejecute.
+#
+# CAVEAT que la version NO cubre: `--config p/php` y compania en
+# `sast-community` resuelven el contenido de esas reglas del registro de
+# Semgrep EN CADA EJECUCION, fijar la version del binario de Semgrep no fija el
+# contenido de esos paquetes comunitarios. Es una limitacion conocida de usar
+# alias del registro en lugar de un fichero de reglas propio, y por eso ese
+# objetivo es informativo (ver el TODO fechado en ci.yml) hasta que se decida
+# si conviene vendorizarlas.
+TRIVY_VERSION    := 0.74.0
+GITLEAKS_VERSION := v8.30.1
+
+TRIVY := $(shell command -v trivy 2>/dev/null)
+ifeq ($(TRIVY),)
+TRIVY := $(DOCKER_RUN) aquasec/trivy:$(TRIVY_VERSION)
+endif
+
+# `trivy image` inspecciona una imagen YA CONSTRUIDA hablando con el demonio de
+# Docker: necesita el socket, que $(DOCKER_RUN) no monta (los demas usos de esa
+# variable solo leen ficheros del repositorio).
+TRIVY_IMAGE_CMD := $(shell command -v trivy 2>/dev/null)
+ifeq ($(TRIVY_IMAGE_CMD),)
+TRIVY_IMAGE_CMD := MSYS_NO_PATHCONV=1 docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$(HOST_PWD):/mnt" -w /mnt aquasec/trivy:$(TRIVY_VERSION)
+endif
+
+GITLEAKS := $(shell command -v gitleaks 2>/dev/null)
+ifeq ($(GITLEAKS),)
+GITLEAKS := $(DOCKER_RUN) zricethezav/gitleaks:$(GITLEAKS_VERSION)
 endif
 
 # El .env se crea la primera vez a partir de .env.example, sin sobrescribir
@@ -137,6 +192,7 @@ endif
 .DEFAULT_GOAL := help
 .PHONY: help up down restart build ps logs shell seed test test-unit test-integration \
         test-arch test-contract quality tools-ready php-lint deptrac rector sh-lint api-lint sast \
+        sast-community trivy-fs trivy-image secrets-scan sbom build-ci-images \
         traceability traceability-check docs-consistency deps-audit-php deps-audit-js coverage coverage-now mutate e2e clean changelog changelog-check tool-versions \
         backup backup-verify restore-drill
 
@@ -161,7 +217,13 @@ help: ## Muestra esta ayuda
 	@echo   make rector           Solo Rector, informativo  (etapa 1 de la CI)
 	@echo   make sh-lint          Solo ShellCheck y shfmt   (etapa 1 de la CI)
 	@echo   make api-lint         Contrato OpenAPI 3.1      (etapa 1 de la CI)
-	@echo   make sast             Semgrep: reglas propias de .semgrep
+	@echo   make sast             Semgrep: reglas propias de .semgrep (bloqueante)
+	@echo   make sast-community   Semgrep: reglas comunitarias PHP/JS/TS/OWASP (informe)
+	@echo   make trivy-fs         Trivy: dependencias, Dockerfiles y secretos del repo (informe)
+	@echo   make trivy-image      Trivy: postgres:ci y app:ci ya construidas (informe)
+	@echo   make secrets-scan     gitleaks sobre el historico completo (bloqueante)
+	@echo   make sbom             SBOM CycloneDX en sbom/kronoqr-VERSION.cdx.json
+	@echo   make build-ci-images  Construye kronoqr/postgres:ci y/o kronoqr/app:ci (IMAGES=postgres|app)
 	@echo   make traceability     Matriz requisito - prueba (RQ-13)
 	@echo   make traceability-check  Falla si un requisito no tiene prueba
 	@echo   make docs-consistency  Coherencia documental (RQ-12, RNF-M-04)
@@ -432,6 +494,189 @@ sast: ## Semgrep sobre las reglas de .semgrep (umbral: 0 hallazgos ERROR)
 	$(SEMGREP) --config .semgrep --error --metrics=off --quiet
 	@echo [make] Semgrep: 0 hallazgos de severidad alta.
 
+# Reglas COMUNITARIAS de Semgrep, distintas de las propias de .semgrep/ (que
+# siguen siendo `make sast`, bloqueante). No incluye `p/secrets`: solapa con
+# gitleaks (mismo tipo de hallazgo, patrones de claves y tokens en el
+# contenido) y las dos herramientas a la vez sobre lo mismo solo duplicarian el
+# ruido sin anadir cobertura -- gitleaks queda como la autoridad de secretos
+# porque ademas recorre el HISTORICO, que Semgrep no toca.
+#
+# Estado verificado en este repositorio (ver la entrega de la tarea que anadio
+# este objetivo): 5 hallazgos WARNING, los cinco en infra/docker/nginx/, del
+# paquete `p/owasp-top-ten`. Por eso es INFORMATIVO por ahora: la CI interpreta
+# el codigo de salida en vez de esconder el paso detras de
+# `continue-on-error: true` (1 = hay hallazgos, no bloquea; 2+ = Semgrep no
+# pudo terminar, eso SI rompe el job — IMPORTANTE 5 de la auditoria) y un TODO
+# fechado para revisarlo y, si procede, pasarlo a bloqueante o justificar cada
+# uno con `# nosemgrep` (ver el procedimiento de triaje en
+# docs/runbooks/triaje-hallazgos-seguridad.md).
+#
+# --metrics=off: no se telemetria a Semgrep App lo que este repositorio analiza.
+# Excluye lo que .semgrep/kronoqr-php.yaml ya excluye de facto por su `paths`,
+# mas los directorios de dependencias y de artefactos de build.
+#
+# SEMGREP_FORMAT=json cambia la salida a JSON (para que la CI cuente hallazgos
+# por severidad con `jq` sin volver a escanear); vacio por defecto, que es la
+# salida legible que quiere quien lo ejecuta en su maquina.
+sast-community: ## Semgrep: reglas comunitarias PHP/JS/TS/OWASP (informe, ver docs/runbooks/triaje-hallazgos-seguridad.md)
+	$(SEMGREP) \
+	  --config p/php --config p/owasp-top-ten --config p/javascript --config p/typescript \
+	  --error --metrics=off --quiet $(if $(filter json,$(SEMGREP_FORMAT)),--json,) \
+	  --exclude node_modules --exclude vendor --exclude dist --exclude storage \
+	  --exclude 'tests/fixtures' --exclude '*.fixture.*'
+
+# Las imagenes que la suite de pruebas y de seguridad necesitan CONTRA
+# SOFTWARE REAL: PostgreSQL del producto (roles, extensiones, archivado de
+# WAL) y la aplicacion. Un solo objetivo, en vez de la orden de build suelta
+# en el job `unit`, en el job `security` y en backup-drill.yml: las tres
+# podian divergir sin que nadie lo notase (IMPORTANTE 10 de la auditoria).
+#
+# IMAGES elige que imagenes construir (por defecto solo postgres, que es lo
+# unico que necesitan el job `unit` y backup-drill.yml): IMAGES=app o
+# IMAGES="postgres app" (el job `security`, que necesita las dos para Trivy).
+#
+# BUILDX_CACHE=gha activa `docker buildx build --cache-from/--cache-to
+# type=gha`, que solo funciona con `crazy-max/ghaction-github-runtime` ya
+# ejecutado en el job (exporta ACTIONS_RUNTIME_TOKEN/ACTIONS_CACHE_URL; ver
+# ci.yml, BLOQUEANTE 2 de la auditoria: sin ese paso, `docker buildx build
+# --cache-to type=gha` desde un `run:` suelto aborta con "failed to configure
+# gha cache exporter"). Vacio por defecto: el job `unit` y backup-drill.yml
+# construyen una imagen cada uno, una vez por ejecucion, y levantar un builder
+# buildx ahi cuesta mas de lo que ahorra.
+IMAGES        ?= postgres
+BUILDX_CACHE  ?=
+
+build-ci-images: ## Construye kronoqr/postgres:ci y/o kronoqr/app:ci (IMAGES=postgres|app|"postgres app", BUILDX_CACHE=gha)
+	@for imagen in $(IMAGES); do \
+	  case "$$imagen" in \
+	    postgres) dockerfile=infra/docker/postgres/Dockerfile; tag=kronoqr/postgres:ci; target=; scope=postgres-ci ;; \
+	    app) dockerfile=infra/docker/php/Dockerfile; tag=kronoqr/app:ci; target="--target prod"; scope=app-ci ;; \
+	    *) echo "[make] IMAGES desconocido: '$$imagen' (valores validos: postgres, app)"; exit 1 ;; \
+	  esac; \
+	  if [ "$(BUILDX_CACHE)" = "gha" ]; then \
+	    echo "[make] docker buildx build --cache type=gha -f $$dockerfile -t $$tag ."; \
+	    docker buildx build --load \
+	      --cache-from "type=gha,scope=$$scope" --cache-to "type=gha,mode=max,scope=$$scope" \
+	      -f "$$dockerfile" $$target -t "$$tag" . || exit $$?; \
+	  else \
+	    echo "[make] docker build -f $$dockerfile -t $$tag ."; \
+	    docker build -f "$$dockerfile" $$target -t "$$tag" . || exit $$?; \
+	  fi; \
+	done
+
+# Trivy sobre el arbol de fuentes: dependencias de composer.lock y
+# package-lock.json, misconfig de los Dockerfiles y secretos residuales (el
+# barrido completo del HISTORICO lo hace gitleaks, no este objetivo).
+#
+# --skip-dirs evita que Trivy entre en arboles que no aportan nada al analisis
+# y que, en un bind mount de Windows, multiplican el tiempo de recorrido (mismo
+# motivo que la nota de RUN_APP mas arriba). Aun con --skip-dirs, medido en ese
+# mismo bind mount: el recorrido del resto del arbol agota el --timeout de 5 m
+# por defecto de Trivy (FATAL "context deadline exceeded" a mitad de analisis,
+# no un hallazgo). --timeout 10m da margen de sobra en un disco Linux nativo
+# —donde la CI corre en segundos— y en el bind mount lento a la vez.
+#
+# Estado verificado: 1 hallazgo HIGH -- DS-0002 en infra/docker/postgres/
+# Dockerfile, "Image user should not be 'root'". La imagen NO añade un `USER`
+# propio porque hereda el entrypoint oficial de `postgres:17-alpine`, que
+# arranca como root a proposito para poder fijar los permisos del volumen de
+# datos y baja privilegios el con `gosu` antes de ejecutar el servidor: el
+# contenedor en marcha SI corre como `postgres`, algo que un analisis estatico
+# del Dockerfile no puede ver. Sigue siendo INFORMATIVO hasta que se confirme
+# la excepcion y se documente en infra/docker/.trivyignore.yaml con su motivo y
+# fecha de caducidad.
+#
+# TRIVY_EXIT_CODE=0 (que usa la CI en modo informe) hace que Trivy devuelva 0
+# tenga o no hallazgos: si el paso falla igualmente es porque la HERRAMIENTA no
+# pudo terminar, no porque encontrara algo (IMPORTANTE 5 de la auditoria: con
+# `continue-on-error: true` un Trivy que no arrancaba tambien quedaba en verde).
+# TRIVY_FORMAT=json es lo que usa la CI para contar hallazgos por severidad con
+# `jq` sin volver a escanear.
+TRIVY_EXIT_CODE ?= 1
+TRIVY_FORMAT    ?= table
+
+trivy-fs: ## Trivy sobre el repositorio: dependencias, Dockerfiles y secretos (informe, ver docs/runbooks/triaje-hallazgos-seguridad.md)
+	$(TRIVY) fs --scanners vuln,misconfig,secret --severity HIGH,CRITICAL --ignore-unfixed \
+	  --timeout 10m --exit-code $(TRIVY_EXIT_CODE) --format $(TRIVY_FORMAT) \
+	  --skip-dirs backend/vendor,node_modules,dist,storage,.git \
+	  .
+ifeq ($(TRIVY_EXIT_CODE),1)
+	@echo "[make] Trivy fs: 0 hallazgos HIGH/CRITICAL."
+endif
+
+# Trivy sobre las imagenes YA CONSTRUIDAS. No las construye este objetivo:
+# hazlo antes con `make build-ci-images` (en la CI lo hace el propio job, con
+# o sin cache segun corresponda).
+#
+# Estado verificado:
+#   kronoqr/app:ci        0 hallazgos HIGH/CRITICAL.
+#   kronoqr/postgres:ci   21 hallazgos HIGH, los 21 en usr/local/bin/gosu: CVE
+#                         de la libreria estandar de Go 1.24.6 con la que esta
+#                         compilado el `gosu` de la imagen oficial
+#                         postgres:17-alpine. Misma categoria y mismo
+#                         razonamiento que la excepcion YA aceptada en
+#                         infra/docker/.trivyignore.yaml (CVE-2025-68121):
+#                         gosu no abre ninguna conexion de red, solo baja
+#                         privilegios al arrancar, asi que ninguna de las 21
+#                         es alcanzable en este uso. Ampliar la lista de
+#                         excepciones con esa misma justificacion es una
+#                         decision de seguridad, no de este objetivo: queda
+#                         para el triaje.
+trivy-image: ## Trivy sobre las imagenes ya construidas kronoqr/postgres:ci y kronoqr/app:ci (informe, ver docs/runbooks/triaje-hallazgos-seguridad.md)
+	@docker image inspect kronoqr/postgres:ci >/dev/null 2>&1 || { \
+	  echo "[make] Falta la imagen kronoqr/postgres:ci. Construyela con: make build-ci-images"; \
+	  exit 1; \
+	}
+	@docker image inspect kronoqr/app:ci >/dev/null 2>&1 || { \
+	  echo "[make] Falta la imagen kronoqr/app:ci. Construyela con: make build-ci-images IMAGES=\"postgres app\""; \
+	  exit 1; \
+	}
+	$(TRIVY_IMAGE_CMD) image --severity HIGH,CRITICAL --ignore-unfixed --exit-code $(TRIVY_EXIT_CODE) --format $(TRIVY_FORMAT) \
+	  --ignorefile infra/docker/.trivyignore.yaml kronoqr/postgres:ci
+	$(TRIVY_IMAGE_CMD) image --severity HIGH,CRITICAL --ignore-unfixed --exit-code $(TRIVY_EXIT_CODE) --format $(TRIVY_FORMAT) kronoqr/app:ci
+ifeq ($(TRIVY_EXIT_CODE),1)
+	@echo "[make] Trivy image: 0 hallazgos HIGH/CRITICAL en las dos imagenes."
+endif
+
+# gitleaks sobre el HISTORICO COMPLETO, no solo el arbol de trabajo: un secreto
+# que alguien borro en el commit siguiente sigue legible con `git log -p`.
+#
+# Estado verificado en este repositorio (75 commits): 0 hallazgos, con la
+# allowlist minima y justificada de .gitleaks.toml (17 falsos positivos
+# analizados uno a uno: UUID e identificadores de prueba en fixtures, hashes de
+# ejemplo en docs/api/openapi.yaml y una variable vacia de .env.example mal
+# delimitada por el propio escaneo). Al pasar limpio HOY, este objetivo es
+# BLOQUEANTE desde el primer dia (doc 02 §9.2): no lleva `continue-on-error` en
+# la CI.
+secrets-scan: ## gitleaks sobre el historico completo (umbral: 0 hallazgos, bloqueante)
+	$(GITLEAKS) git --config .gitleaks.toml --exit-code 1 -v .
+	@echo "[make] gitleaks: 0 hallazgos en el historico."
+
+# SBOM CycloneDX del arbol de fuentes (composer.lock y package-lock.json): un
+# inventario de que trae cada version publicada, independiente de cualquier
+# vulnerabilidad conocida HOY -- eso es lo que distingue un SBOM de un informe
+# de Trivy. No se versiona (esta en .gitignore): es un artefacto que se genera
+# y se sube a cada ejecucion de la CI, igual que la matriz de trazabilidad no
+# se versiona su version de CI.
+#
+# SIN `--scanners vuln` a proposito (IMPORTANTE 7 de la auditoria): un SBOM es
+# un inventario, no un analisis de vulnerabilidades, y no necesita la base de
+# datos de CVE para enumerar paquetes. Verificado con este mismo Trivy: sin
+# `--scanners`, `--format cyclonedx` avisa "disables security scanning.
+# Specify --scanners vuln explicitly if you want to include vulnerabilities in
+# the cyclonedx report" y termina sin descargar la base de datos -- justo lo
+# que hace falta aqui, y bastante mas rapido.
+#
+# Lee VERSION para el nombre del fichero, la misma fuente de verdad que usa
+# infra/docker/php/Dockerfile para APP_VERSION.
+sbom: ## SBOM CycloneDX en sbom/kronoqr-<version>.cdx.json
+	@mkdir -p sbom
+	$(TRIVY) fs --format cyclonedx --timeout 10m \
+	  --skip-dirs backend/vendor,node_modules,dist,storage,.git \
+	  --output "sbom/kronoqr-$$(cat VERSION).cdx.json" \
+	  .
+	@echo "[make] SBOM escrito en sbom/kronoqr-$$(cat VERSION).cdx.json"
+
 # La matriz se escribe DESDE FUERA del contenedor. docs/ se monta de solo
 # lectura (por lo mismo que la raiz del repositorio: nada de lo que corre
 # dentro tiene por que escribir en el arbol de fuentes), asi que el comando
@@ -569,6 +814,9 @@ tool-versions: ## Imprime las versiones fijadas de las herramientas externas
 	@echo SHELLCHECK_VERSION=$(SHELLCHECK_VERSION)
 	@echo SHFMT_VERSION=$(SHFMT_VERSION)
 	@echo REDOCLY_VERSION=$(REDOCLY_VERSION)
+	@echo TRIVY_VERSION=$(TRIVY_VERSION)
+	@echo GITLEAKS_VERSION=$(GITLEAKS_VERSION)
+	@echo SEMGREP_VERSION=$(SEMGREP_VERSION)
 
 # Copias de seguridad (tarea 1.18). Los tres objetivos ejecutan EXACTAMENTE lo
 # mismo que el servidor de un cliente: los scripts de infra/scripts, sin una

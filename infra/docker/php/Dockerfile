@@ -13,8 +13,21 @@
 
 ARG PHP_VERSION=8.4
 
+# Fijada tambien por DIGEST, mismo criterio que infra/docker/postgres/Dockerfile
+# (IMPORTANTE 7 de la auditoria): `php:8.4-fpm-alpine` es un tag movil, y sin
+# el digest dos `docker build` el mismo dia en maquinas distintas podrian
+# partir de una base de Alpine distinta. Con el digest, quien decide CUANDO se
+# sube de base es un PR de Dependabot (.github/dependabot.yml, ecosistema
+# `docker`), no una reconstruccion silenciosa del tag. Esta imagen no lleva un
+# `apk upgrade` propio -- a diferencia de la de PostgreSQL, no hay aqui una
+# libreria concreta con un CVE conocido que justifique acotarlo -- asi que
+# fijar el digest es la unica pieza de este cambio que le toca. Actualizar con
+# `docker pull php:8.4-fpm-alpine && docker inspect --format='{{index
+# .RepoDigests 0}}' php:8.4-fpm-alpine`.
+ARG PHP_IMAGE_DIGEST=sha256:6cb5e4ffa03a7c1b01bb5b120ab3684ef76b75aa5ca417e343936db3f71f419f
+
 #------------------------------------------------------------------------------
-FROM php:${PHP_VERSION}-fpm-alpine AS base
+FROM php:${PHP_VERSION}-fpm-alpine@${PHP_IMAGE_DIGEST} AS base
 
 # install-php-extensions resuelve por si solo las dependencias de compilacion y
 # las de runtime, y borra las primeras. Es la via mas fiable de mantener la
@@ -161,7 +174,20 @@ COPY --chown=app:app backend/ ./
 # (doc 02 §10.5, App\Support\Version\DeployedVersion).
 COPY --chown=app:app VERSION ./VERSION
 
-RUN composer dump-autoload --no-dev --optimize --classmap-authoritative
+# storage/ y bootstrap/cache/ estan en .dockerignore (son estado de ejecucion,
+# no codigo: vease el comentario de ese fichero), asi que el COPY de arriba
+# nunca los trae. `composer dump-autoload` dispara el script postAutoloadDump
+# de Laravel (package:discover), que arranca el framework entero para
+# descubrir proveedores: registra ViewServiceProvider, que exige que
+# storage/framework/views ya exista como directorio ("Please provide a valid
+# cache path"), y escribe el manifiesto de paquetes en bootstrap/cache. El
+# esqueleto minimo se recrea aqui, antes de la unica orden de esta etapa que lo
+# necesita. La etapa prod, mas abajo, es quien deja storage/ y bootstrap/cache/
+# con la propiedad definitiva en la imagen final.
+RUN mkdir -p bootstrap/cache storage/app storage/framework/cache/data \
+  storage/framework/sessions storage/framework/testing storage/framework/views \
+  storage/logs && \
+  composer dump-autoload --no-dev --optimize --classmap-authoritative
 
 #------------------------------------------------------------------------------
 FROM base AS prod

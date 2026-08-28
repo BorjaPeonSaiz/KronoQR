@@ -1,0 +1,81 @@
+# KronoQR — configuracion de gitleaks (doc 02 §9.2, RS-10).
+#
+# Extiende el conjunto de reglas por defecto de gitleaks (patrones de claves de
+# proveedores conocidos, tokens JWT, claves privadas, etc.) y anade una
+# allowlist MINIMA, cada entrada con su motivo.
+#
+#   make secrets-scan
+#   gitleaks git --config .gitleaks.toml -v .
+#
+# Regla de admision de la allowlist, la misma que la de infra/docker/.trivyignore.yaml:
+# solo entra lo que se ha comprobado UNO A UNO que no es un secreto real. Nunca
+# una ruta entera "por si acaso": eso convertiria la allowlist en un agujero
+# donde esconder el proximo secreto de verdad. Por el mismo motivo, esta
+# allowlist NO perdona rutas (`backend/tests/.*`, `docs/api/openapi.yaml`, ...)
+# sino el VALOR EXACTO de cada uno de los 17 falsos positivos: un secreto real
+# que alguien pegara por error en cualquiera de esos ficheros seguiria
+# detectandose, porque su valor no coincidiria con ninguno de los de abajo
+# (hallazgo IMPORTANTE 4 de la auditoria; la version anterior de este fichero
+# perdonaba la ruta entera, que es justo el agujero que esta version cierra).
+#
+# `regexTarget = "secret"`: cada regex de abajo se compara solo contra el
+# SECRETO capturado por la regla que disparo (no contra la linea completa ni
+# contra el contexto), asi que el valor exacto basta —no hace falta reproducir
+# comillas, nombres de variable o el resto de la linea—.
+#
+# Estado tras el analisis del historico completo (75 commits,
+# `gitleaks git --config .gitleaks.toml -v .`, y tambien sin allowlist para
+# extraer el valor exacto de cada hallazgo): 17 hallazgos, los 17 de la regla
+# por defecto `generic-api-key`, los 17 falsos positivos. Ninguno es una clave,
+# un token o una contraseña real: identificadores de prueba con forma de
+# UUID/hex, dos hashes SHA-256 de ejemplo en la documentacion del contrato, y
+# el nombre de una variable de `.env.example` capturado por el hueco que deja
+# la variable anterior, vacia a proposito (ver la ultima entrada). Verificado
+# de nuevo tras este cambio: `make secrets-scan` sigue en 0.
+
+title = "KronoQR"
+
+[extend]
+useDefault = true
+
+[allowlist]
+  description = "Falsos positivos confirmados uno a uno (ver cabecera): valor EXACTO del secreto, nunca una ruta entera"
+  regexTarget = "secret"
+
+  regexes = [
+    # 1) backend/tests/Feature/Identity/CredentialCardLayoutTest.php: UUID de
+    #    prueba escrito a mano, deliberadamente TRUNCADO (le falta el ultimo
+    #    digito hexadecimal) porque el propio test lo completa concatenando
+    #    `.$i` en cada iteracion para generar UUID distintos. No es una
+    #    credencial: no viaja a ningun entorno real ni identifica nada.
+    '''^0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b9$''',
+
+    # 2) frontend-admin/tests/unit/support/fixtures.ts: UUID v7 de prueba
+    #    escrito a mano como identificador de una credencial de ejemplo.
+    '''^0199f0d1-2a5b-7d4f-8c32-5e6f7a8b9c01$''',
+
+    # 3) frontend-kiosk/tests/unit/{credentialPayload.spec.ts,rosterCache.spec.ts}:
+    #    token de 22 caracteres de un payload QR de ejemplo (`FH1.a3.<token>.<sig>`),
+    #    escrito a mano para las pruebas del parser. No firma nada real: la
+    #    clave HMAC que validaria la firma no existe fuera del servidor.
+    '''^7QK2mXpR9vLdN4tZbYcF1w$''',
+
+    # 4) y 5) docs/api/openapi.yaml: los `token_hash` de los ejemplos del
+    #    contrato son SHA-256 de cadenas literales de muestra ("hello" y
+    #    "world", verificado a mano), puestos ahi para que el ejemplo del
+    #    esquema tenga la longitud correcta de un hash real. redocly los valida
+    #    como ejemplos de documentacion, no como secretos.
+    '''^6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b$''',
+    '''^d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35$''',
+
+    # 6) .env.example, historico del bloque de rotacion de la clave QR con
+    #    solape (tarea 2.12, §5.3, RF-QR-07). `QR_SIGNING_KEY_CURRENT=` esta
+    #    VACIA a proposito -- install.sh la genera en el servidor del cliente,
+    #    §7.7 -- y en el commit 816f655e la regla `generic-api-key` de gitleaks
+    #    unio esa linea vacia con el NOMBRE de la variable siguiente
+    #    (`QR_SIGNING_KEY_PREVIOUS_ID=a2`, el identificador de dos caracteres
+    #    de la clave anterior, no un secreto) porque una sigue a otra sin nada
+    #    en medio. No es una clave: es el nombre de una variable, capturado por
+    #    el hueco que deja la vacia.
+    '''^QR_SIGNING_KEY_PREVIOUS_ID=a2$''',
+  ]

@@ -522,6 +522,7 @@ Los diez siguientes **no proceden de esta tabla**: nacieron al desarrollar el pl
 | **036** | **Las tres SPA comparten un paquete de cálculo y presentación**, no cada una el suyo | `frontend-portal` copió ~1450 líneas de `frontend-admin` en vez de reutilizarlas —cliente HTTP, formateo de fecha/hora, cinco componentes de UI y, sobre todo, el cálculo de totales de jornada—, y la copia ya había divergido: el portal no leía `performed_at_local` y reconvertía en el navegador, con riesgo de discrepancia en cambio de hora | Paquete interno `@kronoqr/web-kit` vía `npm workspaces`, consumido por `frontend-admin` y `frontend-portal`. Solo cálculo/presentación/utilidades transversales sin lógica de negocio de una sola pantalla; nada específico de un flujo entra en el paquete |
 | **037** | **Las lecturas en volumen de datos de terceros dejan asiento; la ficha individual y lo propio, no** | RS-05 no tenía criterio operativo y cada tarea decidía por su cuenta: `/kiosk/roster` y `/employees/{uuid}/workdays` auditaban, `/credentials/status` y `/employees` no, pese a divulgar **más**. RL-15 exige poder acotar una brecha desde el trail, y para el conjunto de datos más completo de la API no se podía | Regla de tres condiciones (terceros · sale del proceso · es un conjunto o el registro horario de una persona). `credential_status` y `employee_directory` empiezan a auditar; `/me/*` queda confirmado sin asiento; la ficha individual tampoco, porque el asiento del índice ya la subsume. Se mantiene **un solo** candado de la cadena de hash: partirlo por dataset bifurcaría la cadena de ADR-010 |
 | **038** | **RS-02 se limita por dispositivo y por IP; el eje por sujeto vive en el PIN, no en el escaneo de tarjeta** | RS-02 enumeraba tres ejes y solo existían dos. Al revisarlo, el tercero no protege de lo que la propia frase dice proteger: contra la enumeración no sirve —quien enumera prueba credenciales *distintas*—, la repetición de una misma tarjeta ya la absorbe RF-AT-06 como desenlace aceptado (ADR-031), y un `429` por credencial sería la única forma en que este producto puede dejar a una persona concreta sin fichar (regla dura 19) | Se enmienda el enunciado de RS-02 en el doc 01 §8 y su fila en `docs/requisitos.yaml`. Los dos ejes existentes ganan prueba propia sobre `/scan`, que la matriz daba por cubiertos con pruebas de otros endpoints. El límite por sujeto se mantiene y se refuerza donde el secreto es adivinable: el PIN (RS-12) |
+| **039** | **Qué hechos de autenticación dejan asiento en `audit_log`** | `AuditAction` no tenía ningún caso de autenticación (hueco de OWASP A09), y al cerrarlo la decisión «el fallo no se audita» quedó repetida en diez docblocks y en ningún ADR. Auditar cada intento metería el tráfico que un atacante controla dentro del candado global de ADR-010, por el que pasa cada fichaje | Éxito y cierre en `audit_log` **solo** en el panel —el catálogo de actores no tiene tipo para un empleado (ADR-037)—; apertura de bloqueo en los tres canales y **escrita después de responder**, para que ni el flanco cueste distinto ni un fallo de auditoría convierta un rechazo en `500`; el fallo solo en el log técnico y en `kronoqr_auth_attempts_total`. El origen va en la columna `ip` como en los otros cinco escritores; `ip_hash` se queda en el log técnico, y por eso el paquete de diagnóstico no puede incluir `APP_KEY` |
 
 ---
 
@@ -771,6 +772,9 @@ audit_log_partition_ready{horizon}                       gauge
 audit_log_partition_check_timestamp_seconds              gauge
 worked_minutes_total{site,department}                    counter
 
+# Autenticación — OWASP A09
+kronoqr_auth_attempts_total{channel,outcome}             counter
+
 # Credenciales y respaldo
 employees_without_delivered_credential{site}             gauge
 credentials_pending_print{site}                          gauge
@@ -808,6 +812,10 @@ de respaldo servida por el proceso que hay que restaurar no vale nada.
 `employees_without_delivered_credential` es la métrica operativa de la entrega: cuenta a quienes están de alta pero **todavía no pueden fichar**. Debe llegar a cero antes del primer día de cada incorporación.
 
 Una subida de `pin_fallback_scans_total` indica un problema con la emisión, el estado de las tarjetas o la disciplina de la plantilla. Es un termómetro barato.
+
+`kronoqr_auth_attempts_total{channel,outcome}` es la única señal barata que distingue «hoy la gente se equivoca más» de «alguien está probando credenciales». `channel` es `management`, `portal` o `kiosk_pin`; `outcome` es `success`, `failure` o `lockout`. Los tres canales la alimentan y **ninguna etiqueta identifica a nadie** (regla dura 21): una serie por persona sería un registro paralelo de quién se equivoca al entrar. `outcome="lockout"` cuenta los intentos que **ABREN** un bloqueo —uno por bloqueo abierto, no uno por intento rechazado— y deja además su asiento `auth.lockout_started` en `audit_log`; **todo lo demás que no acaba en sesión cuenta como `failure`**, incluido el intento que llega con un bloqueo ya activo (`App\Modules\Shared\Domain\ValueObject\AuthOutcome`). Contado así, `lockout` casa uno a uno con `auth.lockout_started`, y `KronoqrAuthLockouts` (`infra/observability/prometheus/rules/auth.yml`) puede leer «tres o más en quince minutos» como tres cuentas distintas alcanzando su límite, no como una sola persona insistiendo contra la suya.
+
+**El fallo suelto no entra en `audit_log`, y es una decisión, no un olvido.** Cada asiento toma el candado global de la cadena de [ADR-010](adr/ADR-010-auditoria-solo-append-encadenada.md) —el mismo por el que pasa cada fichaje—, y un ataque de fuerza bruta es justo el tráfico que más fallos produce: auditar cada intento convertiría una intrusión en curso en una degradación del registro horario. Los fallos viven en esta métrica y en el apunte estructurado `auth.login_failed` del log técnico, que lleva canal, motivo técnico y un `ip_hash` con clave de la instalación —nunca la dirección en claro, porque ese log viaja al fabricante dentro del paquete de diagnóstico ([ADR-020](adr/ADR-020-soporte-con-paquete-de-diagnostico.md))—.
 
 ### 8.2.1 Los tres registros del sistema, y por qué son tres
 
@@ -881,9 +889,13 @@ Reglas anti-fatiga: agrupación por dispositivo, silenciamiento durante ventanas
 | E2E | Playwright | Todos los escenarios críticos en verde |
 | Accesibilidad | `@axe-core/playwright` | 0 violaciones críticas o graves |
 | Carga | k6 | RNF-P-06: 50 fichajes/s con p95 < 150 ms |
-| Dependencias | `composer audit`, `npm audit`, Dependabot | 0 vulnerabilidades críticas o altas |
-| SAST | Semgrep con reglas PHP/Laravel | 0 hallazgos de severidad alta |
-| Contenedores | Trivy | 0 CVE críticos en la imagen final |
+| Dependencias | `composer audit`, `npm audit`, **Dependabot** (`.github/dependabot.yml`: composer, npm, github-actions, docker — semanal, agrupando menores/parches) | 0 vulnerabilidades críticas o altas. Dependabot es proactivo: no bloquea la CI, abre la PR antes de que un `audit` tenga algo que reportar |
+| SAST — reglas propias | Semgrep con `.semgrep/` (regla dura 2, justificación de `@phpstan-ignore`) | **Bloqueante.** 0 hallazgos de severidad alta (`make sast`) |
+| SAST — reglas comunitarias | Semgrep con `p/php`, `p/owasp-top-ten`, `p/javascript`, `p/typescript` (`make sast-community`). `p/secrets` queda fuera a propósito: solapa con gitleaks, que además cubre el histórico y ese es el único de los dos con autoridad sobre secretos | **Informe hasta 2026-11-30** (no `continue-on-error`: la CI interpreta el código de salida de Semgrep — 1 son hallazgos, no bloquea; 2+ significa que la herramienta no pudo terminar, eso sí rompe el job — e imprime el recuento por severidad en el resumen de la ejecución; pasada la fecha, un paso final del job `security` falla si sigue en informe) hasta que se trie cada hallazgo — verificado en local con 5 WARNING el día que se introdujo (detalle y procedimiento de triaje en `docs/runbooks/triaje-hallazgos-seguridad.md`) |
+| Secretos | gitleaks sobre el **historial completo** (`.gitleaks.toml`, `make secrets-scan`) | **Bloqueante desde el primer día**: pasó limpio (0 hallazgos) con una *allowlist* mínima y justificada uno a uno, por el VALOR exacto de cada falso positivo y nunca por una ruta entera |
+| Contenedores — repositorio | `trivy fs` (dependencias de los lockfiles, *misconfig* de Dockerfiles, secretos residuales; `make trivy-fs`) | **Informe hasta 2026-11-30** (mismo mecanismo que el SAST comunitario: `TRIVY_EXIT_CODE=0` hace que Trivy devuelva 0 tenga o no hallazgos, así que un fallo del paso sí significa que la herramienta no pudo terminar) — verificado con 1 hallazgo HIGH (`DS-0002`, `infra/docker/postgres/Dockerfile`) |
+| Contenedores — imagen final | `trivy image` sobre `kronoqr/postgres:ci` y `kronoqr/app:ci`, construidas en el job `security` con `make build-ci-images IMAGES="postgres app" BUILDX_CACHE=gha` (`make trivy-image`) | 0 CVE críticos en la imagen final. **Informe hasta 2026-11-30**: `app:ci` ya pasa limpio hoy; `postgres:ci` tiene 21 HIGH heredados de `gosu` en la imagen base oficial, misma categoría que la excepción ya aceptada en `infra/docker/.trivyignore.yaml` |
+| SBOM | CycloneDX vía `trivy fs --format cyclonedx` (`make sbom`), `sbom/kronoqr-<versión>.cdx.json` | No es una puerta de calidad: es un artefacto que se sube en cada ejecución del job `security` y, cuando exista la etapa ⑧, se adjunta a la *release* (marcador preparado en `release.yml`) |
 | **Trazabilidad** | `qa:traceability --check` (§9.6) | 0 requisitos implementados sin prueba que los referencie (RQ-13) |
 | **Instalación** | Script en CI: instalación limpia + actualización desde versión anterior | Verde antes de publicar (RQ-11) |
 
@@ -972,7 +984,7 @@ graph LR
     A --> U["③ Unitarias + Mutación<br/>Pest · MSI ≥ 80%<br/>~2 min"]
     U --> T["③b Trazabilidad<br/>qa:traceability --check<br/>~10 s"]
     T --> I["④ Integración + Feature<br/>PostgreSQL real · Contrato OpenAPI<br/>~3 min"]
-    I --> S["⑤ Seguridad<br/>composer/npm audit · Semgrep · Trivy<br/>~2 min"]
+    I --> S["⑤ Seguridad<br/>composer/npm audit · Semgrep propio + comunitario · gitleaks · Trivy fs/image · SBOM<br/>~2 min"]
     S --> F["⑥ Frontend<br/>Vitest · build · presupuesto de bundle<br/>~2 min"]
     F --> E["⑦ E2E<br/>Playwright + cámara simulada · axe<br/>~5 min"]
     E --> INST["⑧ Instalación limpia<br/>+ actualización desde versión anterior<br/>~4 min"]

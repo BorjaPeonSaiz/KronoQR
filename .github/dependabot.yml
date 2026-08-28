@@ -1,0 +1,82 @@
+# KronoQR — actualizaciones de dependencias (RS-10, doc 02 §9.2 y §10.1).
+#
+# RS-10 exige "analisis de dependencias y de codigo... ninguna vulnerabilidad
+# critica o alta puede llegar a una version publicada". `composer audit` y
+# `npm audit` (job `security` de ci.yml) son la mitad REACTIVA: avisan de un
+# CVE en lo que YA esta instalado. Este fichero es la mitad PROACTIVA: propone
+# la actualizacion antes de que haga falta un audit para descubrirla.
+#
+# Cuatro ecosistemas, uno por cada sitio del repositorio que fija versiones:
+#
+#   composer          backend/composer.lock
+#   npm               package-lock.json (RAIZ: ADR-036, un unico workspace
+#                     para las tres SPA y packages/web-kit)
+#   github-actions    .github/workflows/*.yml, .github/actions/*/action.yml
+#   docker            imagenes base de infra/docker/*/Dockerfile
+#
+# Las acciones de GitHub fijadas por SHA con comentario de version
+# (`uses: foo@<sha> # vX.Y.Z`) las actualiza Dependabot igual que a las demas:
+# abre el PR con el SHA nuevo y mantiene el comentario, sin que haga falta un
+# formato distinto para ellas.
+#
+# Agrupacion: menores y parches se PROPONEN JUNTOS por ecosistema, para no
+# generar una PR por cada dependencia transitiva que sube un parche —eso
+# entierra las mayores, que son las que de verdad piden lectura—. Las mayores
+# quedan fuera del grupo a proposito y llegan una a una.
+#
+# Limite de PR abiertas: sin el, un lockfile con muchas dependencias antiguas
+# puede abrir decenas de PR el primer lunes y dejar el resto de la cola
+# invisible detras. Con el limite, Dependabot va reponiendo conforme se
+# cierran, y la cola nunca abruma a quien revisa.
+
+version: 2
+
+updates:
+  - package-ecosystem: "composer"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    labels: ["dependencies", "backend"]
+    groups:
+      composer-menores-y-parches:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    labels: ["dependencies", "frontend"]
+    groups:
+      npm-menores-y-parches:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    labels: ["dependencies", "ci"]
+    groups:
+      actions-menores-y-parches:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "docker"
+    # Glob, no un directorio unico: las cuatro imagenes (nginx, node, php,
+    # postgres) viven cada una en su propio subdirectorio de infra/docker/, y
+    # el ecosistema docker de Dependabot no las recorre recursivamente desde
+    # un solo `directory`.
+    directories:
+      - "/infra/docker/*"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    labels: ["dependencies", "docker"]
+    groups:
+      docker-menores-y-parches:
+        update-types: ["minor", "patch"]

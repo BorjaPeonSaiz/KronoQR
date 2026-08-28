@@ -411,8 +411,12 @@ jobs:
         # Se arranca ANTES de instalar PHP para que el initdb corra en paralelo
         # con composer install; la espera de pg_isready va justo antes de la
         # primera suite que lo necesita.
+        # `make build-ci-images` (por defecto IMAGES=postgres, sin cache): la
+        # misma orden que usan el job `security` y backup-drill.yml, en un solo
+        # objetivo (IMPORTANTE 10 de la auditoria) para que las tres no puedan
+        # divergir sin que nadie lo note.
         run: |
-          docker build -f infra/docker/postgres/Dockerfile -t kronoqr/postgres:ci .
+          make build-ci-images
           docker run -d --name kronoqr-pg \
             -e POSTGRES_DB="$DB_DATABASE" \
             -e POSTGRES_USER="$DB_MIGRATION_USERNAME" \
@@ -540,23 +544,41 @@ jobs:
   # y es requisito de la Fase 0 en el Anexo A.
   #
   # El §10.1 lo situa en la etapa ⑤, que se ejecuta en pull request y queda
-  # fuera del alcance de la tarea 0.4. Pero las tres herramientas ya existen y
+  # fuera del alcance de la tarea 0.4. Pero las herramientas ya existen y
   # engancharlas cuesta un job: diferirlo habria dejado un requisito de la Fase
   # 0 sin cumplir por comodidad, no por criterio. Se ejecuta en cada push, que
   # es mas estricto que lo que RS-10 pide, no menos.
   #
-  # Trivy sobre las imagenes (§9.2) sigue siendo de la etapa ⑤: necesita
-  # construirlas, y eso no cabe en el presupuesto de 4 minutos.
+  # Cada control nuevo se ha probado EN LOCAL antes de decidir si bloquea (ver
+  # el detalle en cada objetivo del Makefile): lo que hoy pasa limpio es
+  # bloqueante desde el primer dia; lo que tiene hallazgos entra en modo
+  # informe —`continue-on-error: true` mas el log como artefacto— con un TODO
+  # fechado para revisarlo. Ninguna herramienta nueva trae su propia GitHub
+  # Action: todas se invocan con el `make` correspondiente, igual que
+  # `deps-audit-php`/`deps-audit-js`/`sast` de mas abajo, para que la orden y el
+  # umbral sigan viviendo en un solo sitio (cabecera del Makefile).
+  #
+  # gitleaks NO usa la Action oficial `gitleaks/gitleaks-action`: su `action.yml`
+  # esta bajo la licencia comercial de Gitleaks LLC y exige `GITLEAKS_LICENSE`
+  # para organizaciones — un secreto que este repositorio no tiene y que nadie
+  # ha pedido aprovisionar. El binario de gitleaks en si es MIT y gratuito:
+  # `make secrets-scan` lo invoca igual que Semgrep y Trivy, sin licencia que
+  # gestionar (TODO 2026-08-28: si en algun momento se paga la licencia, migrar
+  # a la Action oficial da anotaciones en el diff del PR que este paso no da).
   #-----------------------------------------------------------------------------
   security:
     name: "Dependencias y SAST"
     runs-on: ubuntu-24.04
-    timeout-minutes: 8
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # gitleaks recorre el HISTORICO completo (mas abajo), no solo el
+          # arbol de trabajo: con el checkout superficial por defecto no veria
+          # nada anterior al ultimo commit.
+          fetch-depth: 0
 
       - uses: ./.github/actions/php-toolchain
         with:
@@ -578,6 +600,191 @@ jobs:
         # ver: la regla dura 2 en su forma `new DateTimeImmutable()` sin
         # instante, y las supresiones de PHPStan sin motivo escrito.
         run: make sast
+
+      - name: Semgrep comunitario — PHP/JS/TS/OWASP (informe, no bloquea con hallazgos)
+        id: sast_community
+        # INFORME hasta la fecha de caducidad del ultimo paso de este job:
+        # verificado en local con 5 hallazgos WARNING (detalle en el objetivo
+        # del Makefile). Pendiente triar cada uno
+        # (docs/runbooks/triaje-hallazgos-seguridad.md) y pasarlo a
+        # bloqueante, o justificar cada uno con `# nosemgrep`.
+        #
+        # Semgrep con `--error`: 0 sin hallazgos, 1 CON hallazgos, 2+ si la
+        # herramienta no pudo terminar (config invalida, fallo al resolver
+        # `p/php` y compania, etc.). El `||` de la primera linea CAPTURA el
+        # codigo sin que `-e` (activado por defecto en los pasos `run:` de
+        # GitHub Actions) aborte el script -- si abortara ahi, jamas
+        # llegariamos a distinguir 1 (informe) de 2+ (fallo real), que es
+        # justo lo que faltaba: antes, `continue-on-error: true` trataba los
+        # dos casos igual (IMPORTANTE 5 de la auditoria).
+        run: |
+          make sast-community SEMGREP_FORMAT=json >sast-community.json || status=$?
+          status=${status:-0}
+          jq -r '(.results // []) | group_by(.extra.severity) | map("\(.[0].extra.severity): \(length)") | .[]' \
+            sast-community.json | tee sast-community.log
+          {
+            echo "### Semgrep comunitario — hallazgos por severidad (informe, no bloquea)"
+            echo ""
+            if [ -s sast-community.log ]; then
+              echo '```'
+              cat sast-community.log
+              echo '```'
+            else
+              echo "0 hallazgos."
+            fi
+          } >>"$GITHUB_STEP_SUMMARY"
+          [ "$status" -eq 0 ] || [ "$status" -eq 1 ] || {
+            echo "::error title=Semgrep comunitario ha fallado::codigo de salida ${status} (2+ significa que la herramienta no pudo terminar, no son hallazgos)."
+            exit "$status"
+          }
+
+      - name: gitleaks sobre el historico completo (0 hallazgos, bloqueante)
+        # BLOQUEANTE desde hoy: verificado en local sobre las 75 commits de
+        # este repositorio, 0 hallazgos con la allowlist minima de
+        # .gitleaks.toml (17 falsos positivos analizados uno a uno, ver el
+        # fichero). Si esto rompe algun dia, NO se reescribe el historico para
+        # arreglarlo: se reporta el commit y la ruta para que se decida
+        # (§7.7).
+        run: make secrets-scan
+
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+        # A partir de aqui, Trivy necesita imagenes YA CONSTRUIDAS: la de
+        # PostgreSQL (que el job `unit` tambien construye, en su propio
+        # runner, sin compartir cache con este) y la de la aplicacion, que
+        # NINGUN job construye todavia. `docker buildx` con la cache de
+        # GitHub Actions evita que cada push reconstruya desde cero: solo
+        # paga el precio completo la primera vez y cuando cambian las capas.
+
+      - uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
+        # Sin esto, `docker buildx build --cache-to type=gha` desde un paso
+        # `run:` suelto (no `docker/build-push-action`) no ve
+        # `ACTIONS_RUNTIME_TOKEN`/`ACTIONS_CACHE_URL` y aborta con "failed to
+        # configure gha cache exporter", tumbando el job entero porque el
+        # paso no lleva `continue-on-error` (BLOQUEANTE 2 de la auditoria).
+        # Esta accion exporta esas dos variables al entorno de los pasos
+        # siguientes. Alternativa descartada: quitar `type=gha` y construir
+        # sin cache -- se prueba en local que cuesta minutos extra en cada
+        # push por las dos imagenes (PostgreSQL con extensiones y la app con
+        # Chromium/Node), justo el tipo de coste que la cache de Actions
+        # existe para evitar; instalar esta accion, fijada por SHA, es mas
+        # barato que pagar esa reconstruccion en cada ejecucion.
+
+      - name: Construir kronoqr/postgres:ci y kronoqr/app:ci (con cache de Actions)
+        # `make build-ci-images` (IMPORTANTE 10 de la auditoria: la misma
+        # orden que usan el job `unit` y backup-drill.yml, en un solo
+        # objetivo). Aqui, y solo aqui, con BUILDX_CACHE=gha: es el unico job
+        # que construye las DOS imagenes en cada push y el unico que tiene
+        # justo encima el paso de `ghaction-github-runtime`.
+        run: make build-ci-images IMAGES="postgres app" BUILDX_CACHE=gha
+
+      - name: Trivy fs — dependencias, Dockerfiles y secretos del repo (informe, no bloquea con hallazgos)
+        id: trivy_fs
+        # INFORME hasta la fecha de caducidad del ultimo paso de este job:
+        # verificado en local con 1 hallazgo HIGH (misconfig del Dockerfile de
+        # PostgreSQL, detalle en el objetivo del Makefile). Pendiente
+        # confirmar si es una excepcion valida y anadirla a
+        # infra/docker/.trivyignore.yaml con motivo y fecha de caducidad, o
+        # corregirla.
+        #
+        # TRIVY_EXIT_CODE=0: Trivy devuelve 0 tenga o no hallazgos, asi que si
+        # ESTE comando falla (y con el `-e` por defecto de GitHub Actions,
+        # tumba el paso) es porque la herramienta no pudo terminar, no porque
+        # encontrara algo -- antes, `continue-on-error: true` ocultaba esa
+        # diferencia igual que en Semgrep (IMPORTANTE 5).
+        run: |
+          make trivy-fs TRIVY_EXIT_CODE=0 TRIVY_FORMAT=json >trivy-fs.json
+          jq -r '
+            [.Results[]? | (.Vulnerabilities // [])[], (.Misconfigurations // [])[], (.Secrets // [])[]]
+            | group_by(.Severity) | map("\(.[0].Severity): \(length)") | .[]
+          ' trivy-fs.json | tee trivy-fs.log
+          {
+            echo "### Trivy fs — hallazgos HIGH/CRITICAL por severidad (informe, no bloquea)"
+            echo ""
+            if [ -s trivy-fs.log ]; then
+              echo '```'
+              cat trivy-fs.log
+              echo '```'
+            else
+              echo "0 hallazgos."
+            fi
+          } >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Trivy image — postgres:ci y app:ci (informe, no bloquea con hallazgos)
+        id: trivy_image
+        # INFORME hasta la fecha de caducidad del ultimo paso de este job:
+        # verificado en local. kronoqr/app:ci ya sale con 0 hallazgos
+        # HIGH/CRITICAL hoy; kronoqr/postgres:ci tiene 21 HIGH, los 21 en
+        # usr/local/bin/gosu (Go stdlib de la imagen oficial
+        # postgres:17-alpine, misma categoria que la excepcion ya aceptada en
+        # infra/docker/.trivyignore.yaml). Pendiente triar y ampliar el
+        # .trivyignore.yaml con la misma justificacion si se confirma, o
+        # esperar a que la imagen base la resuelva. Mismo razonamiento de
+        # TRIVY_EXIT_CODE=0 que en el paso anterior.
+        run: |
+          make trivy-image TRIVY_EXIT_CODE=0 TRIVY_FORMAT=json >trivy-image.json
+          jq -s -r '
+            [.[] | .Results[]? | (.Vulnerabilities // [])[], (.Misconfigurations // [])[], (.Secrets // [])[]]
+            | group_by(.Severity) | map("\(.[0].Severity): \(length)") | .[]
+          ' trivy-image.json | tee trivy-image.log
+          {
+            echo "### Trivy image — hallazgos HIGH/CRITICAL por severidad (informe, no bloquea)"
+            echo ""
+            if [ -s trivy-image.log ]; then
+              echo '```'
+              cat trivy-image.log
+              echo '```'
+            else
+              echo "0 hallazgos."
+            fi
+          } >>"$GITHUB_STEP_SUMMARY"
+
+      - name: SBOM CycloneDX
+        run: make sbom
+
+      - name: Subir hallazgos en modo informe y el SBOM
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: seguridad-informe-y-sbom
+          path: |
+            sast-community.log
+            sast-community.json
+            trivy-fs.log
+            trivy-fs.json
+            trivy-image.log
+            trivy-image.json
+            sbom/
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: Los pasos en modo informe no han caducado
+        # MENOR 13 de la auditoria: cada paso informativo de este job lleva la
+        # misma convencion que infra/docker/.trivyignore.yaml -- una fecha de
+        # caducidad. Pasada esa fecha, la ejecucion falla para forzar una
+        # decision (triar y pasar a bloqueante, o renovar con una
+        # justificacion nueva) en vez de dejar un TODO fechado que nadie
+        # vuelve a mirar. `if: always()` para que se evalue aunque un paso
+        # anterior haya fallado por otro motivo.
+        if: always()
+        env:
+          # nombre;fecha de caducidad AAAA-MM-DD (fechados 2026-08-28, tres
+          # meses de margen igual que la excepcion de CVE-2025-68121 en
+          # infra/docker/.trivyignore.yaml).
+          PLAZOS: |
+            Semgrep comunitario;2026-11-30
+            Trivy fs;2026-11-30
+            Trivy image;2026-11-30
+        run: |
+          hoy=$(date -u +%Y-%m-%d)
+          fallo=0
+          while IFS=';' read -r nombre caduca; do
+            [ -n "$nombre" ] || continue
+            if [[ "$hoy" > "$caduca" ]]; then
+              echo "::error title=Paso informativo caducado::'${nombre}' lleva en modo informe desde antes de ${caduca} y hoy es ${hoy}. Triarlo (docs/runbooks/triaje-hallazgos-seguridad.md) y pasarlo a bloqueante, o renovar la fecha con una justificacion nueva."
+              fallo=1
+            fi
+          done <<<"$PLAZOS"
+          exit "$fallo"
 
   changelog:
     name: "Puerta de version · CHANGELOG"
