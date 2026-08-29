@@ -12,7 +12,8 @@
 # una ruta entera "por si acaso": eso convertiria la allowlist en un agujero
 # donde esconder el proximo secreto de verdad. Por el mismo motivo, esta
 # allowlist NO perdona rutas (`backend/tests/.*`, `docs/api/openapi.yaml`, ...)
-# sino el VALOR EXACTO de cada uno de los 17 falsos positivos: un secreto real
+# sino el VALOR EXACTO de cada uno de los falsos positivos (17 de la auditoria
+# mas el señuelo TOTP de la tarea 2.1): un secreto real
 # que alguien pegara por error en cualquiera de esos ficheros seguiria
 # detectandose, porque su valor no coincidiria con ninguno de los de abajo
 # (hallazgo IMPORTANTE 4 de la auditoria; la version anterior de este fichero
@@ -78,4 +79,14 @@ useDefault = true
     #    en medio. No es una clave: es el nombre de una variable, capturado por
     #    el hueco que deja la vacia.
     '''^QR_SIGNING_KEY_PREVIOUS_ID=a2$''',
+
+    # 18) backend/app/Modules/Identity/Application/UseCase/VerifyTwoFactorHandler.php:
+    #    `DECOY_SECRET`, el secreto SEÑUELO del rechazo de tiempo constante del
+    #    codigo TOTP (revision de seguridad de la tarea 2.1, hallazgo BAJO-10).
+    #    No esta asignado a ninguna cuenta ni lo tiene ningun autenticador: es
+    #    base32 valido de la longitud del producto para que la rama «sin TOTP
+    #    activo» pague las mismas franjas y los mismos HMAC que la rama «codigo
+    #    equivocado». Publico por diseño, como `DECOY_HASH` en el PIN; quien lo
+    #    conozca no obtiene nada. Fijado por TwoFactorRejectionSymmetryTest.
+    '''^K5CVGRKUKZLE6TCPKZDVSVKGKZLE6TCP$''',
   ]
