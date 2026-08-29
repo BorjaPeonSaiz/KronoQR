@@ -19,7 +19,9 @@
 - `kronoqr-node-admin` y `kronoqr-node-portal` estaban en bucle de reinicio (código 127) antes de esta sesión, con la rama anterior; no se ha investigado.
 - Ver la primera ejecución del job `security` con Trivy bloqueante en Actions (los cuatro puntos del bloque «Decisiones pendientes» de la sesión SSDLC siguen vigentes, salvo el (4), que ya no existe).
 
-**Siguiente acción:** PR de `fix/postgres-nonroot-image` a `main`; tras el merge, comprobar el job `security` en verde.
+**Estado en GitHub:** **PR #26** abierta (`fix/postgres-nonroot-image` → `main`, 3 commits). Para `6b3540e`: CI **en verde en los nueve jobs** (run 33249214623, con `security` ya bloqueante) y el workflow «Simulacro de restauracion de copia» **en verde por primera vez** (run 33249214676, los 13 pasos ejecutados). `gh` no está autenticado en esta estación: la PR se abrió y los logs se leyeron con la credencial de git (`git credential fill`) contra la API.
+
+**Siguiente acción:** mergear la PR #26. No cambia `VERSION` (queda para la siguiente entrega en `[Unreleased]`).
 
 ## Sesión «un centro por licencia» (29-08-2026), en `feat/ssdlc-pipeline`
 
