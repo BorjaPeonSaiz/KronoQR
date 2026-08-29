@@ -15,12 +15,17 @@ falla si no la encuentra, y la CI ejecuta esa comprobacion al etiquetar.
 
 ## [Unreleased]
 
+### Cambios incompatibles
+
+- un centro de trabajo por instalacion y por licencia (ADR-040) (workforce)
+
 ### Anadido
 
 - la autenticacion deja rastro consultable (OWASP A09) (compliance)
 
 ### Interno
 
+- [Unreleased] recoge RS-13 (changelog)
 - RS-13, la autenticacion deja rastro consultable, entra en doc 01 (requisitos)
 - [Unreleased] arranca en v1.2.0 (changelog)
 - sesion SSDLC — pipeline, rastro de autenticacion, ATT&CK y SAMM (handoff)
