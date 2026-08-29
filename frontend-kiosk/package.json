@@ -24,7 +24,7 @@
     "@zxing/library": "^0.23.0",
     "dexie": "^4.4.5",
     "libsodium-wrappers": "^0.8.4",
-    "pinia": "^2.3.1",
+    "pinia": "^4.0.3",
     "vue": "^3.5.41",
     "vue-i18n": "^10.0.8",
     "vue-router": "^4.6.4",
