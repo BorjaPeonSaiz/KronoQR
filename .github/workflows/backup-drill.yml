@@ -59,7 +59,14 @@ jobs:
       DB_HOST: 127.0.0.1
       DB_PORT: "5432"
       DB_DATABASE: fichaje
-      DB_USERNAME: fichaje_app
+      # El rol de ARRANQUE del cluster (POSTGRES_USER, superusuario), que es el
+      # que necesita este job: crea tablas, fuerza `pg_switch_wal()` y vuelca.
+      # Tiene que llamarse como el rol de migracion y NO `fichaje_app`:
+      # initdb.d/02-application-roles.sh se niega a inicializar un cluster
+      # cuyo superusuario sea el rol de la aplicacion (regla dura 6, ADR-033)
+      # y el contenedor muere antes de escuchar por TCP. Fue la causa de que
+      # este workflow fallara en todas las ramas desde la tarea 1.14.
+      DB_USERNAME: fichaje_migrator
       DB_PASSWORD: simulacro_local_ci
 
     steps:
