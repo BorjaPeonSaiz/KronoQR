@@ -14,14 +14,21 @@
 6. **Docs**: Makefile (comentarios y `##` de `trivy-fs`/`trivy-image`), `docs/runbooks/triaje-hallazgos-seguridad.md` (árbol de decisión con la lección de `gosu`, §2.2, §3 y tabla de estado), doc 02 §9.2 (tres filas: Semgrep comunitario seguía diciendo «informe» aunque ya era bloqueante, Trivy fs, Trivy image). `docs:consistency`, `sh-lint` y suite completa (**1725 pruebas / 9183 aserciones**) en verde.
 
 **Pendiente de esta sesión:**
+- **Subida de toolchain del frontend, como tarea propia** (una rama, un PR, `CHANGELOG` y versión; agente `frontend-quiosco` + `qa-testing`): Vite 8 (#23) + Vitest 4 (#22) + `@vitest/coverage-v8` 4 (#17) van juntas; ESLint 10 (#18); y las de runtime de las tres SPA — vue-router 5 (#25), Pinia 2→4 (#19, se salta la 3: leer las dos guías), vue-i18n 11 (#20). Sus checks están en verde, pero eso es lint, tipos y unitarias: exigir `make e2e`, el presupuesto de bundle del quiosco (250 KiB) y axe. Aparte, backend: `spatie/laravel-permission` 6→8 (#15), revisar la guía de actualización por si trae migraciones. Mientras tanto Dependabot seguirá rebasando esas PR; no mergearlas desde la lista.
 - **`install.sh` (Fase 5, tarea 5.4)**: crear `${BACKUP_PATH}/wal` en el anfitrión con `install -d -o 70 -g 70 -m 0750` antes del primer arranque; anotado en `compose.prod.yaml` junto al bind mount.
 - `make trivy-fs` en Windows: valorar una variante del objetivo que analice `git archive $(git write-tree)` desenpaquetado dentro del contenedor de Trivy (segundos) en vez del bind mount (no termina). Tres líneas de Makefile; no se hizo para no ampliar esta PR.
 - `kronoqr-node-admin` y `kronoqr-node-portal` estaban en bucle de reinicio (código 127) antes de esta sesión, con la rama anterior; no se ha investigado.
 - Ver la primera ejecución del job `security` con Trivy bloqueante en Actions (los cuatro puntos del bloque «Decisiones pendientes» de la sesión SSDLC siguen vigentes, salvo el (4), que ya no existe).
 
-**Estado en GitHub:** **PR #26** abierta (`fix/postgres-nonroot-image` → `main`, 3 commits). Para `6b3540e`: CI **en verde en los nueve jobs** (run 33249214623, con `security` ya bloqueante) y el workflow «Simulacro de restauracion de copia» **en verde por primera vez** (run 33249214676, los 13 pasos ejecutados). `gh` no está autenticado en esta estación: la PR se abrió y los logs se leyeron con la credencial de git (`git credential fill`) contra la API.
+**Estado en GitHub:** **PR #26 mergeada** en `main` (`a066d39`). Para `6b3540e`: CI **en verde en los nueve jobs** (run 33249214623, con `security` ya bloqueante) y el workflow «Simulacro de restauracion de copia» **en verde por primera vez** (run 33249214676, los 13 pasos ejecutados). `gh` no está autenticado en esta estación: las PR se abren, mergean y leen con la credencial de git (`git credential fill`) contra la API. No cambia `VERSION` (queda en `[Unreleased]`).
 
-**Siguiente acción:** mergear la PR #26. No cambia `VERSION` (queda para la siguiente entrega en `[Unreleased]`).
+**Triaje de las 16 PR de Dependabot** (abiertas al activarse `dependabot.yml` con el merge de la #9):
+- **Mergeadas** (menores/parche, CI verde): #16 grupo npm (la mergeó el usuario), #14 grupo composer, #11 `nginx-unprivileged` 1.27→1.31, #10 `actions/upload-artifact` 4→7 (tras `@dependabot rebase` para que corriera con el simulacro arreglado).
+- **Cerradas con `@dependabot ignore this major version`** y motivo en el comentario: #13 PostgreSQL 18 (la 17 está fijada por digest; subir la mayor del servidor exige plan de `pg_upgrade` y ADR), #12 Node 26 y #21 `@types/node` 26 (24 es la LTS hasta octubre de 2026), #24 TypeScript 7 (rompe `type-check`; compilador reescrito). Un `ignore` puesto por comentario no aparece en `dependabot.yml`; para revertirlo, la doc de GitHub («Managing pull requests for dependency updates» → *ignore conditions*) es la referencia.
+- **Abiertas a propósito, no mergear desde la lista** (ver Pendiente): #23 Vite 8, #22 Vitest 4, #17 `@vitest/coverage-v8` 4, #18 ESLint 10, #25 vue-router 5, #19 Pinia 2→4, #20 vue-i18n 11, #15 `spatie/laravel-permission` 6→8.
+- Creadas en el repo las etiquetas que `dependabot.yml` declara y no existían (`dependencies`, `backend`, `frontend`, `ci`, `docker`): Dependabot lo avisaba en cada PR.
+
+**Siguiente acción:** la subida de toolchain del frontend (Pendiente, primer punto).
 
 ## Sesión «un centro por licencia» (29-08-2026), en `feat/ssdlc-pipeline`
 
