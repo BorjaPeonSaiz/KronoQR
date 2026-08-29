@@ -19,7 +19,10 @@
     "isolatedModules": true,
     "moduleDetection": "force",
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    // vitest.config.ts importa ./vite.config.ts con extension (Vite 8 lo
+    // pide para su cargador nativo); noEmit hace inocua la opcion.
+    "allowImportingTsExtensions": true
   },
   "include": ["vite.config.ts", "vitest.config.ts", "eslint.config.js", "scripts/**/*.mjs"]
 }
