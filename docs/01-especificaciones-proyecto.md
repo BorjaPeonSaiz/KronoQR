@@ -959,6 +959,8 @@ POST   /api/v1/kiosk/pair/confirm          Confirmar código y vincular  [rol: a
 
 POST   /api/v1/auth/login                  Acceso al panel de gestión   [público, throttle 5 r/m]
 POST   /api/v1/auth/2fa/verify             Segundo factor TOTP          [sesión pendiente de 2FA]
+POST   /api/v1/auth/2fa/enrol              Alta del segundo factor      [sesión pendiente de 2FA]
+POST   /api/v1/auth/2fa/confirm            Activación del segundo factor [sesión pendiente de 2FA]
 POST   /api/v1/auth/logout                 Cierre de sesión             [autenticado]
 GET    /api/v1/auth/me                     Usuario, rol y ámbito        [autenticado]
 
@@ -1026,6 +1028,9 @@ GET    /metrics                            Métricas Prometheus          [red in
 | `GET /api/v1/me/export` | **CSV y PDF**, seleccionables por `?format=`. CSV disponible desde la tarea 1.11; PDF se añade en la 2.9, cuando existe la maquinaria de exportación. **Sin XLSX** | CSV cubre la portabilidad del RGPD; el PDF es lo que una persona presenta. XLSX no aporta nada sobre CSV para un histórico personal |
 | `GET /api/v1/credentials/status` | Admite filtro `?key_id=` | Permite ver a quién le falta reimprimir durante una rotación de clave con solape (RF-QR-07, §5.3) sin añadir un endpoint |
 | `GET /api/v1/compliance/summary` | **Endpoint nuevo.** Sirve la vista de cumplimiento con filtros de periodo y ámbito | RF-PA-06 y RN-10..12 exigen la vista, y el contrato no tenía ruta para ella |
+| `POST /api/v1/auth/2fa/enrol` y `/2fa/confirm` | **Dos endpoints nuevos** (tarea 2.1), los dos con la sesión pendiente que devuelve el `202` de `/auth/login`. El primero entrega el secreto TOTP y su URI `otpauth://` **una sola vez**; el segundo lo activa con un código y emite ya la sesión | Con los cuatro que este anexo lista, RS-06 es inaplicable: una cuenta nueva de `rrhh` no tendría forma de obtener su segundo factor y por tanto ninguna de entrar. La alternativa —repartir secretos por consola— obligaría al cliente a usar SSH para dar de alta a una persona. Son dos y no uno porque generar el secreto y activarlo son hechos distintos: entre ellos la cuenta tiene un secreto **sin confirmar** que no autoriza nada, así que un QR mal escaneado se repite sin dejar a nadie fuera de su cuenta. **Retirar** un segundo factor no tiene endpoint y sí comando (`identity:2fa-reset`, auditado): un «quítaselo a esta persona» por API sería, en manos de un administrador comprometido, la vía más cómoda de preparar el acceso a la cuenta de otro |
+| `POST /api/v1/auth/login` | **Gana un `202`** con la sesión **pendiente** de segundo factor (`challenge_token`), además del `200` con la sesión | RS-06. Dos códigos y dos nombres de campo distintos, y no un `oneOf` sobre el `200`: un cliente que leyera `token` sin mirar nada más guardaría el token pendiente como si fuera una sesión —y ese token no autoriza nada, así que el síntoma sería un `403` en cada pantalla—. Es aditivo sobre la v1 (ADR-012) |
+| `GET /api/v1/employees` y `GET /employees/{uuid}` | Pasan a exigir el ámbito **`employees:read`** en lugar de `employees:*` | RF-ID-03. «manager+» incluye al responsable de departamento, y el §7.3 del documento 02 no le daba ningún ámbito de plantilla: con la familia sin partir, dejarle leer su departamento era darle también la escritura sobre toda ella |
 | Rotación de clave de firma | **No hay endpoint.** Se ejecuta con `credentials:rotate-key` | Es un acto operativo con logística de reimpresión detrás (§5.3), no una acción de panel. El panel solo necesita leer, y `/credentials/status` ya lo cubre |
 
 ## Anexo C — Catálogo de motivos de corrección

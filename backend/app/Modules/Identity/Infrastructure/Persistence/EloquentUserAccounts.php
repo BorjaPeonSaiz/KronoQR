@@ -78,6 +78,14 @@ final readonly class EloquentUserAccounts implements UserAccounts
             locale: $user->locale,
             roles: $this->rolesOf($user),
             abilities: $this->abilitiesOf($user),
+            // RF-ID-03: el alcance se resuelve al leer la cuenta, no al emitir el
+            // token, para que quitarle un departamento a un responsable tenga
+            // efecto en la peticion siguiente.
+            scope: $user->accessScope(),
+            // RS-06: solo si esta CONFIRMADO. Un alta a medias no es un segundo
+            // factor y no debe hacer que el acceso se detenga esperando un codigo
+            // que nadie puede generar.
+            secondFactorActive: $user->two_factor_confirmed_at !== null,
         );
     }
 

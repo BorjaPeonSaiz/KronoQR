@@ -24,7 +24,26 @@
     "email": "Correo electrónico",
     "password": "Contraseña",
     "submit": "Entrar",
-    "submitting": "Entrando…"
+    "submitting": "Entrando…",
+    "twoFactor": {
+      "codeHeading": "Introduce el código de tu aplicación de autenticación",
+      "codeInstructions": "Abre la aplicación de autenticación de tu cuenta y escribe el código de seis dígitos que muestra en este momento.",
+      "codeLabel": "Código de verificación",
+      "codeSubmit": "Verificar",
+      "codeSubmitting": "Verificando…",
+      "codeStepAnnouncement": "Introduce el código de seis dígitos de tu aplicación de autenticación.",
+      "enrolHeading": "Configura tu segundo factor",
+      "enrolInstructions": "Es la primera vez que entras: escanea este código QR con tu aplicación de autenticación (Google Authenticator, Authy o similar). Si no puedes escanearlo, teclea la clave secreta a mano.",
+      "enrolLoading": "Generando tu clave secreta…",
+      "enrolSecretLabel": "Clave secreta",
+      "enrolQrAlt": "Código QR para configurar el segundo factor en tu aplicación de autenticación",
+      "enrolQrUnavailable": "No se ha podido generar el código QR. Usa la clave secreta de abajo para configurar tu aplicación de autenticación.",
+      "enrolCodeLabel": "Código del autenticador",
+      "enrolSubmit": "Activar y entrar",
+      "enrolSubmitting": "Activando…",
+      "enrolStepAnnouncement": "Configura tu segundo factor antes de poder entrar.",
+      "back": "Volver al acceso"
+    }
   },
   "common": {
     "cancel": "Cancelar",

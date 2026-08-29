@@ -10,12 +10,24 @@
 //    ademas comprueba que el token sigue valiendo.
 //  - **Aqui no entra ningun PIN, nunca.** El PIN en claro vive en el estado
 //    efimero del dialogo que lo muestra y desaparece al cerrarlo (RF-ID-09).
+//  - **Tampoco entra el `challenge_token` del segundo factor** (RS-06). No es
+//    una sesion —solo alcanza `/auth/2fa/*`— y vive en el estado efimero de
+//    `LoginView`: si se recarga la pagina a mitad del reto, se vuelve al
+//    acceso y hay que teclear la contrasena otra vez. Es la decision correcta,
+//    no un descuido: guardarlo en `sessionStorage` lo dejaria sobrevivir a una
+//    recarga como si fuera una sesion a medias.
 import { isApiError } from '@kronoqr/web-kit/http'
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import type { LoginRequest, ManagementUser, UserRole } from '@/shared/api/types'
+import type { LoginRequest, ManagementUser, Session, UserRole } from '@/shared/api/types'
 import { hasAbility } from './abilities'
-import { fetchCurrentUser, logIn as logInRequest, logOut as logOutRequest } from './auth.api'
+import {
+  fetchCurrentUser,
+  isTwoFactorChallenge,
+  logIn as logInRequest,
+  logOut as logOutRequest,
+  type LoginOutcome,
+} from './auth.api'
 
 const STORAGE_KEY = 'kronoqr.admin.session'
 
@@ -103,14 +115,34 @@ export const useSessionStore = defineStore('session', () => {
     writeStored(null)
   }
 
-  async function logIn(credentials: LoginRequest): Promise<void> {
-    const session = await logInRequest(credentials)
-
+  /**
+   * Adopta una sesion ya emitida: por `logIn` directamente, o por el panel tras
+   * canjear un reto de segundo factor (`verifyTwoFactor`/`confirmTwoFactor`,
+   * RS-06). Es el unico sitio que escribe el estado de sesion "de verdad";
+   * nunca se llama con el `challenge_token`, que no es una sesion.
+   */
+  function applySession(session: Session): void {
     token.value = session.token
     expiresAt.value = session.expires_at
     user.value = session.user
     status.value = 'authenticated'
     writeStored({ token: session.token, expiresAt: session.expires_at })
+  }
+
+  /**
+   * Contrasena correcta. Devuelve la sesion ya activa, o el reto de segundo
+   * factor (RS-06) sin tocar el estado de la tienda: mientras el segundo
+   * factor no se resuelve no hay sesion, y guardar el `challenge_token` aqui
+   * lo confundiria con uno que si autoriza el panel.
+   */
+  async function logIn(credentials: LoginRequest): Promise<LoginOutcome> {
+    const outcome = await logInRequest(credentials)
+
+    if (!isTwoFactorChallenge(outcome)) {
+      applySession(outcome)
+    }
+
+    return outcome
   }
 
   /**
@@ -162,6 +194,7 @@ export const useSessionStore = defineStore('session', () => {
     displayName,
     can,
     clear,
+    applySession,
     logIn,
     logOut,
     restore,

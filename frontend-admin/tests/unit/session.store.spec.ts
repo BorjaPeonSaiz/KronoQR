@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useSessionStore } from '@/features/auth/session.store'
 import { setAuthTokenProvider, setUnauthenticatedHandler } from '@kronoqr/web-kit/http'
-import { managementUser, session as sessionFixture } from './support/fixtures'
+import { managementUser, session as sessionFixture, twoFactorChallenge } from './support/fixtures'
 import { createTestPinia, jsonResponse, problemResponse, stubFetch } from './support/harness'
 
 const STORAGE_KEY = 'kronoqr.admin.session'
@@ -117,6 +117,32 @@ describe('tienda de sesion', () => {
     createTestPinia()
 
     expect(useSessionStore().isAuthenticated).toBe(false)
+  })
+
+  it('un reto de segundo factor no abre sesion ni se guarda como si lo fuera (RS-06)', async () => {
+    const challenge = twoFactorChallenge()
+
+    stubFetch(() => jsonResponse(challenge, 202))
+
+    const session = useSessionStore()
+    const outcome = await session.logIn({ email: 'rrhh@hotel.example', password: 'x' })
+
+    expect(outcome).toEqual(challenge)
+    expect(session.isAuthenticated).toBe(false)
+    expect(session.token).toBeNull()
+    expect(window.sessionStorage.getItem(STORAGE_KEY)).toBeNull()
+  })
+
+  it('adopta la sesion que llega tras canjear el segundo factor', async () => {
+    const session = useSessionStore()
+
+    expect(session.isAuthenticated).toBe(false)
+
+    session.applySession(sessionFixture())
+
+    expect(session.isAuthenticated).toBe(true)
+    expect(session.displayName).toBe('Direccion RRHH')
+    expect(window.sessionStorage.getItem(STORAGE_KEY)).toContain('token')
   })
 
   it('cierra la sesion aunque el servidor conteste que ya no existia', async () => {

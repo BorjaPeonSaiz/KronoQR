@@ -24,7 +24,26 @@
     "email": "Email address",
     "password": "Password",
     "submit": "Sign in",
-    "submitting": "Signing in…"
+    "submitting": "Signing in…",
+    "twoFactor": {
+      "codeHeading": "Enter the code from your authenticator app",
+      "codeInstructions": "Open the authenticator app for this account and type the six-digit code it shows right now.",
+      "codeLabel": "Verification code",
+      "codeSubmit": "Verify",
+      "codeSubmitting": "Verifying…",
+      "codeStepAnnouncement": "Enter the six-digit code from your authenticator app.",
+      "enrolHeading": "Set up your second factor",
+      "enrolInstructions": "This is your first time signing in: scan this QR code with your authenticator app (Google Authenticator, Authy or similar). If you can't scan it, type the secret key by hand instead.",
+      "enrolLoading": "Generating your secret key…",
+      "enrolSecretLabel": "Secret key",
+      "enrolQrAlt": "QR code to set up the second factor in your authenticator app",
+      "enrolQrUnavailable": "The QR code could not be generated. Use the secret key below to set up your authenticator app.",
+      "enrolCodeLabel": "Authenticator code",
+      "enrolSubmit": "Activate and sign in",
+      "enrolSubmitting": "Activating…",
+      "enrolStepAnnouncement": "Set up your second factor before you can sign in.",
+      "back": "Back to sign in"
+    }
   },
   "common": {
     "cancel": "Cancel",

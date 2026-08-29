@@ -34,7 +34,11 @@ final readonly class Api
     /**
      * @param  array<string, string>  $headers
      */
-    private function __construct(private ?string $token, private array $headers = []) {}
+    private function __construct(
+        private ?string $token,
+        private array $headers = [],
+        private ?string $ip = null,
+    ) {}
 
     /**
      * Peticiones autenticadas con un token de Sanctum.
@@ -54,6 +58,25 @@ final readonly class Api
     }
 
     /**
+     * La direccion de origen de la peticion.
+     *
+     * Existe por los limites y los bloqueos, que son la mitad de RS-12 que no se
+     * puede probar sin ella. Dos preguntas distintas necesitan cambiar de IP para
+     * responderse: que un limite **por cuenta** no deje sin cupo a las demas
+     * cuentas —hay que aislar el eje de la IP para verlo—, y que un contador de
+     * **fallos** no se reinicie cambiando de origen, que es la diferencia entre un
+     * bloqueo y un obstaculo de un solo salto.
+     *
+     * Va en `REMOTE_ADDR` y no en una cabecera a proposito: `X-Forwarded-For` solo
+     * lo lee Laravel si el origen es un proxy de confianza, asi que una prueba que
+     * la usara estaria comprobando la configuracion de proxies y no el limite.
+     */
+    public function fromIp(string $ip): self
+    {
+        return new self($this->token, $this->headers, $ip);
+    }
+
+    /**
      * Cabeceras adicionales.
      *
      * Existe por `Idempotency-Key`, que en la escritura del quiosco es
@@ -65,7 +88,7 @@ final readonly class Api
      */
     public function withHeaders(array $headers): self
     {
-        return new self($this->token, [...$this->headers, ...$headers]);
+        return new self($this->token, [...$this->headers, ...$headers], $this->ip);
     }
 
     /**
@@ -122,6 +145,10 @@ final readonly class Api
 
         if ($this->token !== null) {
             $server['HTTP_AUTHORIZATION'] = 'Bearer '.$this->token;
+        }
+
+        if ($this->ip !== null) {
+            $server['REMOTE_ADDR'] = $this->ip;
         }
 
         $request = Request::create(

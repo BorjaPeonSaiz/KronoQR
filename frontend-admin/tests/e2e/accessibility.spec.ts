@@ -10,7 +10,7 @@
 import AxeBuilder from '@axe-core/playwright'
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
-import { EMPLOYEE_UUID, logIn, stubManagementApi } from './support/admin'
+import { EMPLOYEE_UUID, logIn, stubManagementApi, USER } from './support/admin'
 
 /** Etiquetas WCAG que se comprueban: A y AA hasta la 2.2 (doc 01 §6.5). */
 const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
@@ -65,3 +65,37 @@ test('el registro horario tampoco', { tag: ['@RF-PA-03'] }, async ({ page }) => 
 
   await expectNoBlockingViolations(page)
 })
+
+test(
+  'la pantalla del codigo de segundo factor tampoco',
+  { tag: ['@RF-ID-01', '@RS-06'] },
+  async ({ page }) => {
+    await stubManagementApi(page, { twoFactor: 'verify' })
+
+    await page.goto('/login')
+    await page.getByLabel(/Correo electrónico/).fill(USER.email)
+    await page.getByLabel(/Contraseña/).fill('una-contraseña-larga-y-valida')
+    await page.getByRole('button', { name: 'Entrar' }).click()
+
+    await expect(page.getByLabel(/Código de verificación/)).toBeVisible()
+
+    await expectNoBlockingViolations(page)
+  },
+)
+
+test(
+  'la pantalla de alta del segundo factor, con el QR, tampoco',
+  { tag: ['@RF-ID-01', '@RS-06'] },
+  async ({ page }) => {
+    await stubManagementApi(page, { twoFactor: 'enrol' })
+
+    await page.goto('/login')
+    await page.getByLabel(/Correo electrónico/).fill(USER.email)
+    await page.getByLabel(/Contraseña/).fill('una-contraseña-larga-y-valida')
+    await page.getByRole('button', { name: 'Entrar' }).click()
+
+    await expect(page.getByTestId('two-factor-secret')).toBeVisible()
+
+    await expectNoBlockingViolations(page)
+  },
+)

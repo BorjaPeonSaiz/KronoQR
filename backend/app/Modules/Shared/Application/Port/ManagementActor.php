@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Shared\Application\Port;
 
+use App\Modules\Shared\Domain\ValueObject\AccessScope;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 
 /**
@@ -21,10 +22,9 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  * consumen varios modulos, no es una regla de negocio de ninguno, y el modulo
  * que **tiene** el dato —`Identity`— es quien lo implementa (ADR-025).
  *
- * **Dos metodos y ni uno mas.** Lo que una policy necesita preguntar es quien
- * es y que rol tiene. El alcance por departamento de RF-ID-03 llega en la tarea
- * 2.1 y no se anticipa aqui: cuando llegue, se añadira el dato que haga falta
- * —el departamento del actor— y sera un cambio aditivo sobre esta interfaz.
+ * **Tres metodos y ni uno mas.** Lo que una policy necesita preguntar es quien
+ * es, que rol tiene y hasta donde alcanza. El tercero lo añadio la tarea 2.1
+ * (RF-ID-03) como cambio aditivo, tal y como este mismo docblock anticipaba.
  *
  * **El ambito del token no se pregunta aqui.** Se comprueba antes, en el
  * middleware `ability` de Sanctum (doc 02 §7.3), y son dos controles distintos a
@@ -52,4 +52,20 @@ interface ManagementActor
      * a rol, ampliar ese conjunto obligaria a tocar cada policy.
      */
     public function actsAs(UserRole ...$roles): bool;
+
+    /**
+     * Hasta donde alcanza esta cuenta (**RF-ID-03**).
+     *
+     * **Se pregunta al actor y no se deduce del rol en cada policy.** Si cada
+     * policy resolviera «si es responsable, mira sus departamentos», la regla
+     * estaria escrita en ocho sitios y bastaria olvidarla en uno para que un
+     * endpoint sirviera la plantilla entera. Aqui esta una vez y la responde
+     * quien tiene el dato.
+     *
+     * **El alcance se resuelve en cada peticion, no al emitir el token.**
+     * Quitarle un departamento a un responsable tiene que notarse en la
+     * siguiente llamada y no cuando caduque su sesion, igual que ocurre con la
+     * desactivacion de una cuenta.
+     */
+    public function accessScope(): AccessScope;
 }

@@ -32,4 +32,26 @@ return [
      */
     'legal_export_temp_retention_hours' => (int) env('COMPLIANCE_LEGAL_EXPORT_TEMP_RETENTION_HOURS', 6),
 
+    /*
+     * Ventana, en segundos, en la que las denegaciones por alcance del MISMO actor
+     * sobre el MISMO conjunto de datos se agrupan en un solo asiento de
+     * `audit_log` (RF-ID-03, RS-05, ADR-010, ADR-037).
+     *
+     * POR QUE HAY VENTANA. `access.denied` es la unica escritura de `audit_log`
+     * que provoca quien esta siendo rechazado, no quien gestiona: un bucle de
+     * peticiones denegadas es un bucle de escrituras bajo el candado global de
+     * ADR-010, el mismo por el que pasa cada fichaje. ADR-037 nombra esta palanca
+     * —agrupar por frecuencia detras del puerto— para exactamente este problema.
+     *
+     * EL ASIENTO NO SE PIERDE: la primera denegacion de cada ventana se escribe
+     * siempre —es lo que exige el escenario «Aislamiento por departamento» del doc
+     * 01 §11— y las repeticiones se cuentan en
+     * `repeated_since_last_entry` del asiento siguiente.
+     *
+     * UN MINUTO NO ES UNA MEDICION: es el grano con el que se lee un incidente sin
+     * perder resolucion. `0` desactiva la agrupacion y devuelve un asiento por
+     * denegacion, para un cliente que prefiera la fila a la contencion.
+     */
+    'authorization_denial_window_seconds' => (int) env('COMPLIANCE_AUTHZ_DENIAL_WINDOW_SECONDS', 60),
+
 ];

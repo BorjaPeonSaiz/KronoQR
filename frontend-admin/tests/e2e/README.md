@@ -12,11 +12,28 @@ npx playwright test --ui                # para depurar
 
 ## Qué hay aquí
 
-| Fichero                    | Cubre                                                                                           |
-| -------------------------- | ----------------------------------------------------------------------------------------------- |
-| `login.spec.ts`            | `@RF-ID-01`, `@RF-ID-02` — acceso, redirección con `redirect`, rechazo, cierre de sesión        |
-| `workdays-journey.spec.ts` | `@RF-GP-01`, `@RF-PA-03`, `@RN-13` — plantilla → ficha → registro horario con su corrección     |
-| `accessibility.spec.ts`    | `@RF-ID-01`, `@RF-GP-01`, `@RF-PA-03` con `@axe-core/playwright`, 0 violaciones críticas/graves |
+| Fichero                    | Cubre                                                                                                     |
+| -------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `login.spec.ts`            | `@RF-ID-01`, `@RF-ID-02` — acceso, redirección con `redirect`, rechazo, cierre de sesión                  |
+| `two-factor.spec.ts`       | `@RF-ID-01`, `@RS-06` — segundo factor obligatorio: reto → código → plantilla, y alta con QR y secreto    |
+| `workdays-journey.spec.ts` | `@RF-GP-01`, `@RF-PA-03`, `@RN-13` — plantilla → ficha → registro horario con su corrección               |
+| `accessibility.spec.ts`    | `@RF-ID-01`, `@RF-GP-01`, `@RF-PA-03`, `@RS-06` con `@axe-core/playwright`, 0 violaciones críticas/graves |
+
+### El segundo factor (`two-factor.spec.ts`, RS-06)
+
+`stubManagementApi(page, { twoFactor: 'verify' | 'enrol' })` sustituye la respuesta de `POST
+/auth/login` por un `202` con el reto (`TwoFactorChallenge`) en vez de la sesión directa —
+`'verify'` simula una cuenta con TOTP ya activo, `'enrol'` la primera vez, sin segundo factor
+todavía. El código válido en los dos dobles es la constante `TOTP_CODE`; cualquier otro se
+rechaza con `401`. El `challenge_token` **no** vive en `sessionStorage` — es estado efímero del
+propio componente (`session.store.ts`) — así que no hay nada que comprobar ahí; lo que se
+prueba es que la pantalla pide el código o el alta, y que entrar deja la misma sesión que el
+acceso directo.
+
+El QR del alta se genera con `@kronoqr/web-kit/qr/renderQrPath` (carga diferida, el mismo
+codificador que usa el aviso de privacidad del quiosco): la prueba no decodifica el QR, solo
+comprueba que aparece con su `role="img"` y que el secreto en base32 sigue disponible en texto
+al lado, para quien no puede escanearlo.
 
 ## Se prueba el BUILD, no `vite dev`
 

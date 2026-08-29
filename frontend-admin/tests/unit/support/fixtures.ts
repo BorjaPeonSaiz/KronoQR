@@ -11,6 +11,8 @@ import type {
   ManagementUser,
   Session,
   Site,
+  TwoFactorChallenge,
+  TwoFactorEnrolment,
   WorkDayCorrection,
   WorkDayDetail,
   WorkDayShiftEntry,
@@ -61,7 +63,12 @@ export function managementUser(overrides: Partial<ManagementUser> = {}): Managem
     email: 'rrhh@hotel.example',
     locale: 'es',
     roles: ['rrhh'],
-    abilities: ['attendance:read', 'employees:*', 'credentials:*'],
+    abilities: ['attendance:read', 'employees:read', 'employees:*', 'credentials:*'],
+    // Alcance por departamento (RF-ID-03). RRHH llega a toda la plantilla, y por
+    // eso `department_ids` va vacio: con `kind: all` la lista no acota nada. Un
+    // responsable seria `{ kind: 'departments', department_ids: [3] }`, y ahi la
+    // lista vacia significaria «nadie».
+    scope: { kind: 'all', department_ids: [] },
     ...overrides,
   }
 }
@@ -72,6 +79,29 @@ export function session(overrides: Partial<Session> = {}): Session {
     token_type: 'Bearer',
     expires_at: '2099-01-01T00:00:00Z',
     user: managementUser(),
+    ...overrides,
+  }
+}
+
+export function twoFactorChallenge(
+  overrides: Partial<TwoFactorChallenge> = {},
+): TwoFactorChallenge {
+  return {
+    challenge_token: '41|Kd2pQ9vLmN4tZbYcF1wQ8sE3rT6uI0oP5aS7dXyZ',
+    token_type: 'Bearer',
+    expires_at: '2099-01-01T00:10:00Z',
+    enrolment_required: false,
+    ...overrides,
+  }
+}
+
+export function twoFactorEnrolment(
+  overrides: Partial<TwoFactorEnrolment> = {},
+): TwoFactorEnrolment {
+  return {
+    secret: 'JBSWY3DPEHPK3PXP',
+    otpauth_uri:
+      'otpauth://totp/KronoQR:rrhh%40hotel.example?secret=JBSWY3DPEHPK3PXP&issuer=KronoQR&algorithm=SHA1&digits=6&period=30',
     ...overrides,
   }
 }

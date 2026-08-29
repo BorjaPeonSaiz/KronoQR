@@ -18,10 +18,16 @@ import type {
   ManagementUser,
   Session,
   Site,
+  TwoFactorChallenge,
+  TwoFactorEnrolment,
 } from '@/shared/api/types'
 
 export const EMPLOYEE_UUID = '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90'
 export const SESSION_TOKEN = '17|GhK2mXpR9vLdN4tZbYcF1wQ8sE3rT6uI0oP5aS7d'
+/** Token del reto de segundo factor (RS-06): NO es una sesion, solo alcanza `/auth/2fa/*`. */
+export const CHALLENGE_TOKEN = '41|Kd2pQ9vLmN4tZbYcF1wQ8sE3rT6uI0oP5aS7dXyZ'
+/** Codigo TOTP que el doble acepta como valido. Cualquier otro es un rechazo. */
+export const TOTP_CODE = '492013'
 /** Clave de `sessionStorage` del panel (`session.store.ts`). */
 export const SESSION_STORAGE_KEY = 'kronoqr.admin.session'
 
@@ -40,7 +46,10 @@ export const USER: ManagementUser = {
   email: 'rrhh@hotel.example',
   locale: 'es',
   roles: ['rrhh'],
-  abilities: ['attendance:read', 'employees:*', 'credentials:*'],
+  abilities: ['attendance:read', 'employees:read', 'employees:*', 'credentials:*'],
+  // Alcance por departamento (RF-ID-03). RRHH llega a toda la plantilla: con
+  // `kind: all` la lista no acota nada y por eso va vacía.
+  scope: { kind: 'all', department_ids: [] },
 }
 
 export const SESSION: Session = {
@@ -48,6 +57,26 @@ export const SESSION: Session = {
   token_type: 'Bearer',
   expires_at: '2099-01-01T00:00:00Z',
   user: USER,
+}
+
+/** El `202` de `/auth/login` cuando la cuenta ya tiene el segundo factor activo. */
+export const TWO_FACTOR_CHALLENGE: TwoFactorChallenge = {
+  challenge_token: CHALLENGE_TOKEN,
+  token_type: 'Bearer',
+  expires_at: '2099-01-01T00:10:00Z',
+  enrolment_required: false,
+}
+
+/** El `202` de `/auth/login` la primera vez, sin segundo factor activo todavia. */
+export const TWO_FACTOR_ENROLMENT_CHALLENGE: TwoFactorChallenge = {
+  ...TWO_FACTOR_CHALLENGE,
+  enrolment_required: true,
+}
+
+export const TWO_FACTOR_ENROLMENT: TwoFactorEnrolment = {
+  secret: 'JBSWY3DPEHPK3PXP',
+  otpauth_uri:
+    'otpauth://totp/KronoQR:rrhh%40hotel.example?secret=JBSWY3DPEHPK3PXP&issuer=KronoQR&algorithm=SHA1&digits=6&period=30',
 }
 
 export const EMPLOYEE: Employee = {
@@ -149,6 +178,16 @@ export interface ManagementApiStub {
 export interface ManagementApiOptions {
   /** Si el acceso con contrasena se acepta. Por omision, si. */
   readonly loginOutcome?: 'ok' | 'invalid'
+  /**
+   * Segundo factor tras una contrasena correcta (RS-06). `off` (por omision)
+   * deja `/auth/login` con la sesion directa, como antes de la 2.1. `verify`
+   * simula una cuenta con TOTP ya activo: `/auth/login` responde `202` y hay
+   * que canjear el reto en `/auth/2fa/verify`. `enrol` simula la primera vez:
+   * `/auth/login` tambien responde `202`, pero con `enrolment_required` y hay
+   * que pasar por `/auth/2fa/enrol` + `/auth/2fa/confirm`. En los dos casos el
+   * codigo valido es `TOTP_CODE`; cualquier otro se rechaza con `401`.
+   */
+  readonly twoFactor?: 'off' | 'verify' | 'enrol'
 }
 
 async function json(route: Route, status: number, body: unknown): Promise<void> {
@@ -175,6 +214,16 @@ export async function stubManagementApi(
 ): Promise<ManagementApiStub> {
   const requests: RecordedRequest[] = []
   const loginOutcome = options.loginOutcome ?? 'ok'
+  const twoFactor = options.twoFactor ?? 'off'
+
+  /** El codigo del cuerpo, o cadena vacia si la peticion no llevaba uno legible. */
+  function codeFrom(route: Route): string {
+    const body: unknown = route.request().postDataJSON()
+
+    return typeof body === 'object' && body !== null && 'code' in body
+      ? String((body as { code: unknown }).code)
+      : ''
+  }
 
   await page.route(
     (url) => url.pathname.startsWith('/api/v1/'),
@@ -198,8 +247,47 @@ export async function stubManagementApi(
               'urn:kronoqr:problem:invalid-credentials',
               'Credenciales no válidas',
             )
+          } else if (twoFactor === 'verify') {
+            await route.fulfill({
+              status: 202,
+              contentType: 'application/json',
+              body: JSON.stringify(TWO_FACTOR_CHALLENGE),
+            })
+          } else if (twoFactor === 'enrol') {
+            await route.fulfill({
+              status: 202,
+              contentType: 'application/json',
+              body: JSON.stringify(TWO_FACTOR_ENROLMENT_CHALLENGE),
+            })
           } else {
             await json(route, 200, SESSION)
+          }
+          return
+        case 'POST /api/v1/auth/2fa/verify':
+          if (codeFrom(route) === TOTP_CODE) {
+            await json(route, 200, SESSION)
+          } else {
+            await problem(
+              route,
+              401,
+              'urn:kronoqr:problem:invalid-credentials',
+              'Credenciales no válidas',
+            )
+          }
+          return
+        case 'POST /api/v1/auth/2fa/enrol':
+          await json(route, 200, TWO_FACTOR_ENROLMENT)
+          return
+        case 'POST /api/v1/auth/2fa/confirm':
+          if (codeFrom(route) === TOTP_CODE) {
+            await json(route, 200, SESSION)
+          } else {
+            await problem(
+              route,
+              401,
+              'urn:kronoqr:problem:invalid-credentials',
+              'Credenciales no válidas',
+            )
           }
           return
         case 'GET /api/v1/auth/me':
@@ -235,11 +323,41 @@ export async function stubManagementApi(
   return { requests }
 }
 
-/** Entra al panel por la pantalla de acceso, como lo hace una persona. */
-export async function logIn(page: Page): Promise<void> {
+/** Rellena y envia el primer paso: correo y contrasena. No espera a lo que venga despues. */
+async function submitCredentials(page: Page): Promise<void> {
   await page.goto('/login')
   await page.getByLabel(/Correo electrónico/).fill(USER.email)
   await page.getByLabel(/Contraseña/).fill('una-contraseña-larga-y-valida')
   await page.getByRole('button', { name: 'Entrar' }).click()
+}
+
+/** Entra al panel por la pantalla de acceso, como lo hace una persona sin segundo factor. */
+export async function logIn(page: Page): Promise<void> {
+  await submitCredentials(page)
+  await page.waitForURL('**/employees')
+}
+
+/**
+ * Entra con contrasena y segundo factor ya activo (RS-06): `submitCredentials`
+ * deja `202` y la pantalla del codigo; se teclea `TOTP_CODE` y se verifica.
+ * Exige `stubManagementApi(page, { twoFactor: 'verify' })`.
+ */
+export async function logInWithTwoFactorCode(page: Page): Promise<void> {
+  await submitCredentials(page)
+  await page.getByLabel(/Código de verificación/).fill(TOTP_CODE)
+  await page.getByRole('button', { name: 'Verificar' }).click()
+  await page.waitForURL('**/employees')
+}
+
+/**
+ * Entra dando de alta el segundo factor por primera vez (RS-06):
+ * `submitCredentials` deja `202` con `enrolment_required` y la pantalla del
+ * QR; se teclea `TOTP_CODE` en el campo de confirmacion. Exige
+ * `stubManagementApi(page, { twoFactor: 'enrol' })`.
+ */
+export async function logInWithTwoFactorEnrolment(page: Page): Promise<void> {
+  await submitCredentials(page)
+  await page.getByLabel(/Código del autenticador/).fill(TOTP_CODE)
+  await page.getByRole('button', { name: 'Activar y entrar' }).click()
   await page.waitForURL('**/employees')
 }

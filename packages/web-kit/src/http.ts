@@ -109,8 +109,22 @@ export interface RequestOptions {
   query?: Readonly<Record<string, QueryValue>>
   body?: unknown
   signal?: AbortSignal
-  /** Sin token y sin redirigir al acceso ante un `401`: solo el propio acceso. */
+  /**
+   * Sin el token de la sesion y sin disparar `unauthenticatedHandler` ante un
+   * `401`: es lo que corresponde al propio acceso, donde un `401` significa
+   * «credenciales no validas», no «la sesion ha caducado».
+   */
   anonymous?: boolean
+  /**
+   * Cabecera `Authorization` explicita, en vez de la del proveedor de la
+   * sesion. Existe para el reto de segundo factor (RS-06): el
+   * `challenge_token` de `POST /auth/login` no es la sesion —vive en el
+   * estado del propio flujo, nunca en la tienda de sesion— y hay que poder
+   * mandarlo sin que un `401` (codigo equivocado) dispare el manejador global
+   * de sesion caducada, que asumiria que el token de la SESION ya no vale.
+   * Se combina con `anonymous: true` para conseguir las dos cosas a la vez.
+   */
+  token?: string
   /**
    * Tipos aceptados en la respuesta. Sin valor por omision especifico de un
    * formato: cada llamada dice si espera un PDF, un CSV o solo el problema de
@@ -239,7 +253,7 @@ async function toApiError(response: Response): Promise<ApiError> {
 
 async function send(path: string, options: RequestOptions, accept: string): Promise<Response> {
   const headers = new Headers({ Accept: accept })
-  const token = options.anonymous === true ? null : authTokenProvider()
+  const token = options.token ?? (options.anonymous === true ? null : authTokenProvider())
 
   if (token !== null) {
     headers.set('Authorization', `Bearer ${token}`)

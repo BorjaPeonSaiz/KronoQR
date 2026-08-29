@@ -357,11 +357,133 @@ export interface paths {
          *     una misma cuenta u origen, el endpoint responde `429` con `Retry-After`
          *     durante el periodo de bloqueo, aunque la contrasena sea correcta.
          *
-         *     **Sin segundo factor en esta version.** El 2FA obligatorio es de la
-         *     Fase 2; cuando llegue, esta respuesta ganara un desenlace de sesion
-         *     pendiente de verificar, que es un cambio aditivo (ADR-012).
+         *     **Segundo factor obligatorio para los roles de alcance global**
+         *     (RS-06: `admin`, `rrhh` y `auditor`) y para cualquier cuenta que ya haya
+         *     activado su TOTP. Para ellas este endpoint **no** devuelve una sesion:
+         *     devuelve `202` con un `TwoFactorChallenge`, y la sesion se emite en
+         *     `POST /api/v1/auth/2fa/verify`.
+         *
+         *     **`200` y `202` no comparten forma, y es deliberado.** Con un `oneOf`
+         *     sobre `200`, un cliente que leyera `token` sin mirar nada mas guardaria
+         *     el token pendiente como si fuera una sesion —y ese token no autoriza
+         *     nada, asi que el sintoma seria un `403` en cada pantalla—. Con dos
+         *     codigos y dos nombres distintos, `token` y `challenge_token`, esa
+         *     confusion no cabe. Es ademas aditivo sobre la v1 (ADR-012): un cliente
+         *     anterior que solo contemple `200` deja de funcionar solo para las
+         *     cuentas que activen 2FA, nunca en silencio.
          */
         post: operations["logIn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/2fa/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Segundo factor TOTP
+         * @description Completa el acceso de una sesion pendiente (RF-ID-01, RS-06) y devuelve
+         *     la sesion de verdad, con los ambitos del rol.
+         *
+         *     **Se llama con el `challenge_token`** que devolvio el `202` de
+         *     `/auth/login`, en la cabecera `Authorization`. Ese token lleva un unico
+         *     ambito, `2fa:pending`, y no alcanza ningun otro endpoint del producto:
+         *     ni la plantilla, ni el registro horario, ni siquiera `GET /auth/me`.
+         *
+         *     **Un codigo TOTP vale una sola vez.** Reenviar el mismo codigo, aunque
+         *     siga dentro de su ventana de treinta segundos, se rechaza igual que uno
+         *     equivocado: sin ello, un codigo interceptado serviria durante el minuto
+         *     siguiente.
+         *
+         *     **Rechazo unico y bloqueo por intentos.** Codigo incorrecto, codigo ya
+         *     usado y sesion pendiente sin segundo factor activo devuelven el mismo
+         *     `401`. Superado el umbral de fallos, `429` con `Retry-After`.
+         *
+         *     La sesion pendiente se consume: al emitir la sesion real, el
+         *     `challenge_token` deja de valer.
+         */
+        post: operations["verifyTwoFactor"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/2fa/enrol": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Alta del segundo factor
+         * @description Genera el secreto TOTP de la cuenta y lo devuelve **una sola vez**, junto
+         *     con la URI `otpauth://` con la que el panel dibuja el QR que se escanea
+         *     con el autenticador.
+         *
+         *     **Por que existe si el Anexo B no lo listaba.** El Anexo B enumera
+         *     `login`, `2fa/verify`, `logout` y `me`, y con esos cuatro RS-06 es
+         *     inaplicable: una cuenta nueva de `rrhh` no tendria ninguna forma de
+         *     obtener su segundo factor, y por tanto ninguna forma de entrar. La
+         *     alternativa —repartir secretos por consola— obligaria al cliente a usar
+         *     SSH para dar de alta a una persona. Se anaden dos endpoints y no uno
+         *     porque generar el secreto y activarlo son dos hechos distintos: entre los
+         *     dos, la cuenta tiene un secreto **sin confirmar** que no autoriza nada, y
+         *     si alguien se equivoca al escanear el QR basta con repetir el alta.
+         *
+         *     **Se llama con el `challenge_token`.** Es lo unico que tiene quien
+         *     todavia no puede entrar. Si la cuenta ya tiene un segundo factor
+         *     confirmado, este endpoint responde `409`: reemplazarlo es un acto de
+         *     administracion y no algo que se haga con la sesion pendiente de alguien
+         *     que acaba de teclear una contrasena.
+         *
+         *     **El secreto sale del servidor exactamente una vez** y se guarda cifrado
+         *     con `APP_KEY`. No aparece en ningun log, ni en la traza, ni en
+         *     `audit_log`: lo que se audita es que se activo un segundo factor, no
+         *     cual.
+         */
+        post: operations["enrolTwoFactor"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/2fa/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Activacion del segundo factor
+         * @description Comprueba el primer codigo del autenticador, deja el segundo factor
+         *     **activo** y emite ya la sesion con los ambitos del rol: quien acaba de
+         *     darlo de alta no tiene que volver a teclear su contrasena.
+         *
+         *     **Confirmar no es verificar.** `2fa/confirm` activa un secreto que
+         *     todavia no autorizaba nada; `2fa/verify` usa uno ya activo. Son dos
+         *     acciones con dos asientos distintos en `audit_log` —una es el ciclo de
+         *     vida de una credencial, la otra un acceso— y por eso son dos endpoints.
+         *
+         *     Si el codigo no cuadra, el secreto sigue **sin confirmar** y se puede
+         *     repetir: la cuenta no queda a medias ni bloqueada.
+         */
+        post: operations["confirmTwoFactor"];
         delete?: never;
         options?: never;
         head?: never;
@@ -410,6 +532,16 @@ export interface paths {
          *     comprueba su ambito y su policy en el servidor (regla dura 18). Esta
          *     respuesta existe para que la interfaz no ofrezca lo que despues seria un
          *     `403`.
+         *
+         *     **`scope` es el alcance por departamento de RF-ID-03**, y sirve para lo
+         *     mismo que `abilities`: para que el panel no ofrezca lo que el servidor va
+         *     a denegar. Un `responsable_departamento` sin ningun departamento asignado
+         *     recibe `kind: departments` con la lista vacia, que significa exactamente
+         *     lo que parece —no alcanza a nadie— y nunca «alcanza a todos».
+         *
+         *     **Una sesion pendiente de segundo factor no llega aqui.** Su token solo
+         *     lleva `2fa:pending` y este endpoint exige una sesion completa: mientras
+         *     el segundo factor no se verifique, no hay nada que contar sobre nadie.
          */
         get: operations["getCurrentUser"];
         put?: never;
@@ -580,8 +712,16 @@ export interface paths {
          *     escondiera a los cesados haria invisible justo lo que una inspeccion
          *     viene a mirar.
          *
-         *     El ambito por departamento de RF-ID-03 llega en la Fase 2. Hasta
-         *     entonces, quien puede leer esta lista la ve entera.
+         *     **El alcance por departamento de RF-ID-03 se aplica en la consulta**, no
+         *     despues: un `responsable_departamento` recibe una pagina que solo
+         *     contiene a la gente de los departamentos que dirige —`meta.total`
+         *     incluido—, y `admin`, `rrhh` y `auditor` la ven entera. Filtrar despues
+         *     de contar daria un `meta.total` que describe a personas que quien
+         *     pregunta no puede ver, que es una fuga por si misma.
+         *
+         *     Un responsable **sin ningun departamento asignado** recibe una pagina
+         *     vacia, no la plantilla entera. El caso existe: un departamento puede
+         *     quedarse sin responsable, y `departments.manager_user_id` es nullable.
          *
          *     **`q` busca por nombre, apellidos, nombre completo y codigo de
          *     empleado**, sin distinguir mayusculas ni acentos y por subcadena. Se
@@ -646,6 +786,12 @@ export interface paths {
          * @description Datos identificativos, adscripcion y situacion laboral de una persona
          *     (RF-GP-01). El documento de identidad no aparece: solo existe su digest
          *     (RL-08).
+         *
+         *     **Alcance por departamento** (RF-ID-03). Un `responsable_departamento`
+         *     que pide la ficha de alguien de otro departamento recibe `403` —no
+         *     `404`: la persona existe y el problema es de autorizacion— y el intento
+         *     queda en `audit_log` con el `employee_uuid` del recurso y nunca con su
+         *     nombre (RS-05, regla dura 21).
          */
         get: operations["getEmployee"];
         put?: never;
@@ -847,6 +993,10 @@ export interface paths {
          *     **Es un acceso a datos personales de un tercero** y queda registrado en
          *     `audit_log` con su alcance —cuantas jornadas, que rango— y nunca con lo
          *     divulgado (RS-05).
+         *
+         *     **Alcance por departamento** (RF-ID-03). Un `responsable_departamento`
+         *     lee el registro de la gente de sus departamentos y recibe `403` para
+         *     cualquier otra persona, con el intento anotado en `audit_log`.
          *
          *     **El propio empleado no entra por aqui.** El `self` del Anexo B se sirve
          *     en `GET /api/v1/me/workdays`, con ambito `self:read` y sesion de portal
@@ -2052,6 +2202,104 @@ export interface components {
             user: components["schemas"]["ManagementUser"];
         };
         /**
+         * TwoFactorChallenge
+         * @description Sesion **pendiente de segundo factor** (RS-06). No es una sesion: es el
+         *     permiso para presentar un codigo TOTP, y nada mas.
+         *
+         *     **Se llama `challenge_token` y no `token` a proposito.** Un cliente que
+         *     guardara esto donde guarda la sesion se quedaria con un token que no
+         *     autoriza ninguna pantalla del panel, y el sintoma —`403` en todas
+         *     partes— es dificil de relacionar con la causa. El nombre distinto lo hace
+         *     imposible.
+         */
+        TwoFactorChallenge: {
+            /**
+             * @description Token `Bearer` de ambito unico `2fa:pending`. Solo alcanza
+             *     `/auth/2fa/verify`, `/auth/2fa/enrol` y `/auth/2fa/confirm`.
+             */
+            challenge_token: string;
+            /** @enum {string} */
+            token_type: "Bearer";
+            /**
+             * @description Caducidad **corta**: son minutos, no horas. Lo que esta abierto aqui
+             *     es media autenticacion, y dejarla viva doce horas convertiria una
+             *     contrasena robada en un acceso pendiente de un solo codigo durante
+             *     toda la jornada.
+             */
+            expires_at: components["schemas"]["UtcTimestamp"];
+            /**
+             * @description `true` cuando la cuenta todavia no tiene segundo factor activo: hay
+             *     que pasar por `/auth/2fa/enrol` y `/auth/2fa/confirm` antes de poder
+             *     entrar. `false` cuando ya lo tiene y basta con `/auth/2fa/verify`.
+             *
+             *     **No revela nada que quien pregunta no sepa ya**: para llegar aqui
+             *     hace falta haber acertado la contrasena de esa cuenta.
+             */
+            enrolment_required: boolean;
+        };
+        /**
+         * TwoFactorCode
+         * @description Codigo de seis digitos del autenticador.
+         */
+        TwoFactorCode: {
+            /**
+             * @description Codigo TOTP vigente. Seis digitos, sin espacios: el cliente los quita
+             *     antes de enviar, porque algunos autenticadores los muestran en dos
+             *     grupos de tres.
+             */
+            code: string;
+        };
+        /**
+         * TwoFactorEnrolment
+         * @description El secreto TOTP recien generado y su URI `otpauth://`. **Se entrega una
+         *     sola vez**: despues solo puede volver a generarse otro, que invalida
+         *     este.
+         */
+        TwoFactorEnrolment: {
+            /**
+             * @description Secreto en base32, por si el autenticador no puede escanear el QR y
+             *     hay que teclearlo. **No se registra en ningun log** ni viaja a
+             *     `audit_log`.
+             */
+            secret: string;
+            /**
+             * @description URI `otpauth://totp/...` con el emisor, la cuenta y los parametros
+             *     del algoritmo. Es lo que el panel convierte en QR. **La genera el
+             *     servidor** y no el cliente: componerla en el navegador significaria
+             *     repartir por tres SPA la decision de con que algoritmo y con cuantos
+             *     digitos se calcula el codigo.
+             */
+            otpauth_uri: string;
+        };
+        /**
+         * AccessScope
+         * @description Hasta donde alcanza una cuenta de gestion (RF-ID-03). Es lo que permite
+         *     al panel no ofrecer lo que el servidor va a denegar; la autorizacion de
+         *     verdad se aplica en cada consulta (regla dura 18).
+         *
+         *     **No hay eje por centro** (ADR-040): hay exactamente un centro por
+         *     instalacion, asi que el unico eje de alcance es el departamento.
+         */
+        AccessScope: {
+            /**
+             * @description `all` es la plantilla entera —`admin`, `rrhh` y `auditor`—;
+             *     `departments` acota a los departamentos de `department_ids`.
+             * @enum {string}
+             */
+            kind: "all" | "departments";
+            /**
+             * @description Departamentos que dirige (`departments.manager_user_id`). **Vacio con
+             *     `kind: departments` significa que no alcanza a nadie**, no que
+             *     alcance a todos: es el estado normal de un responsable al que
+             *     todavia no se le ha asignado departamento. Con `kind: all` la lista
+             *     va vacia porque no acota nada.
+             * @example [
+             *       3
+             *     ]
+             */
+            department_ids: number[];
+        };
+        /**
          * PortalLoginRequest
          * @description Las dos mitades de la credencial del portal (RF-ID-06, ADR-015): el
          *     codigo de empleado, que va impreso en la tarjeta, y el PIN de seis
@@ -2183,6 +2431,13 @@ export interface components {
              *     ]
              */
             abilities: string[];
+            /**
+             * @description Alcance por departamento de esta cuenta (RF-ID-03). Se relee en cada
+             *     llamada a `GET /auth/me`, igual que los roles: quitarle un
+             *     departamento a un responsable tiene efecto en la peticion siguiente y
+             *     no cuando caduque su sesion.
+             */
+            scope: components["schemas"]["AccessScope"];
         };
         /**
          * EmploymentStatus
@@ -3798,7 +4053,101 @@ export interface operations {
                     "application/json": components["schemas"]["Session"];
                 };
             };
+            /**
+             * @description Contrasena correcta y **sesion todavia no emitida**: falta el segundo
+             *     factor (RS-06). El token que viaja aqui solo sirve para los tres
+             *     endpoints de `/auth/2fa/*`.
+             */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TwoFactorChallenge"];
+                };
+            };
             401: components["responses"]["InvalidCredentials"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    verifyTwoFactor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TwoFactorCode"];
+            };
+        };
+        responses: {
+            /** @description Sesion iniciada, ya con los ambitos del rol. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            401: components["responses"]["InvalidCredentials"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    enrolTwoFactor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Secreto emitido y pendiente de confirmar. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TwoFactorEnrolment"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    confirmTwoFactor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TwoFactorCode"];
+            };
+        };
+        responses: {
+            /** @description Segundo factor activo y sesion iniciada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            401: components["responses"]["InvalidCredentials"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
         };

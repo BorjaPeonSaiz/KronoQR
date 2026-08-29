@@ -5,12 +5,15 @@ declare(strict_types=1);
 namespace App\Modules\Attendance\Http\Controller;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Attendance\Application\Port\ShiftEntrySubject;
 use App\Modules\Attendance\Application\UseCase\AddShiftEntryHandler;
 use App\Modules\Attendance\Application\UseCase\CorrectShiftHandler;
 use App\Modules\Attendance\Http\Request\AddShiftEntryRequest;
 use App\Modules\Attendance\Http\Request\CorrectShiftEntryRequest;
 use App\Modules\Attendance\Http\Resource\CorrectedShiftEntryResource;
 use App\Modules\Attendance\Http\Support\CorrectionTelemetry;
+use App\Modules\Shared\Application\Authorization\ScopeGuard;
+use App\Modules\Shared\Application\Port\EmployeeScopeDirectory;
 use Illuminate\Http\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -28,6 +31,12 @@ use Symfony\Component\HttpFoundation\Response;
  * traduccion para toda la API. Repartirla por los controladores acabaria con dos
  * endpoints devolviendo codigos distintos para el mismo conflicto.
  *
+ * **El alcance por departamento se comprueba antes de tocar nada** (RF-ID-03).
+ * Un `responsable_departamento` da de alta y corrige tramos de la gente de sus
+ * departamentos, y recibe `403` —con asiento en `audit_log`— para cualquier otra
+ * persona. En el alta, el sujeto viene en el cuerpo; en la correccion se resuelve
+ * del propio tramo, porque quien corrige solo conoce su identificador.
+ *
  * **Ni el alta ni la correccion aceptan `Idempotency-Key`.** No es un olvido: la
  * idempotencia por `scan_id` es del quiosco, que reenvia desde una cola sin
  * saber si su peticion llego (regla dura 8). Aqui quien llama es una persona
@@ -44,8 +53,18 @@ final class ShiftEntryController extends Controller
         AddShiftEntryRequest $request,
         AddShiftEntryHandler $handler,
         CorrectionTelemetry $telemetry,
+        ScopeGuard $scope,
+        EmployeeScopeDirectory $employees,
     ): JsonResponse {
         $command = $request->toCommand();
+
+        $scope->ensureReaches(
+            $scope->scopeOf($request->user()),
+            $employees->departmentIdOf($command->employeeUuid),
+            'shift_entry',
+            $command->employeeUuid,
+            ['operation' => 'add'],
+        );
 
         $corrected = $telemetry->measure(
             'add',
@@ -73,7 +92,20 @@ final class ShiftEntryController extends Controller
         string $uuid,
         CorrectShiftHandler $handler,
         CorrectionTelemetry $telemetry,
+        ScopeGuard $scope,
+        EmployeeScopeDirectory $employees,
+        ShiftEntrySubject $subjects,
     ): JsonResponse {
+        $employeeUuid = $subjects->employeeUuidOf($uuid);
+
+        $scope->ensureReaches(
+            $scope->scopeOf($request->user()),
+            $employeeUuid === null ? null : $employees->departmentIdOf($employeeUuid),
+            'shift_entry',
+            $employeeUuid,
+            ['operation' => 'correct'],
+        );
+
         $command = $request->toCommand($uuid);
 
         $corrected = $telemetry->measure(

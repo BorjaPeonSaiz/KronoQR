@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Application\Query;
 
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
+use App\Modules\Shared\Domain\ValueObject\AccessScope;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Workforce\Application\Port\EmployeePinRepository;
 use App\Modules\Workforce\Application\Port\EmployeeRepository;
@@ -15,12 +16,17 @@ use App\Modules\Workforce\Domain\Model\Employee;
  * Lecturas de plantilla.
  *
  * **Por que existe si envuelve al repositorio casi sin anadir nada.** Porque es
- * donde entrara el ambito por departamento de RF-ID-03 en la tarea 2.1: un
- * responsable solo puede ver a los empleados de su departamento y su centro, y
+ * donde vive el alcance por departamento de RF-ID-03 desde la tarea 2.1: un
+ * responsable solo puede ver a los empleados de los departamentos que dirige, y
  * ese filtro tiene que aplicarse en un unico sitio del lado del servidor. Si los
  * controladores consultaran el repositorio directamente, ese filtro habria que
  * anadirlo en cada uno y bastaria olvidarlo en uno para que el ambito no
  * existiera.
+ *
+ * **El alcance entra como parametro y no se resuelve aqui.** Quien esta
+ * autenticado lo sabe la capa HTTP; esta capa no puede preguntarselo al
+ * contenedor sin atarse al transporte. Es el mismo criterio con el que
+ * `throttleKey` se compone en el `FormRequest` del acceso y no en el caso de uso.
  *
  * **Y por lo mismo es el sitio donde el listado deja constancia** (RS-05): una
  * pagina de este listado es un conjunto de personas —nombre, codigo, centro,
@@ -48,6 +54,7 @@ final readonly class EmployeeQueries
      * @return array{items: list<Employee>, total: int, page: int, per_page: int, total_pages: int}
      */
     public function page(
+        AccessScope $scope,
         ?int $departmentId,
         ?EmploymentStatus $status,
         ?string $search,
@@ -55,9 +62,10 @@ final readonly class EmployeeQueries
         int $page,
         int $perPage,
     ): array {
-        $total = $this->employees->countMatching($departmentId, $status, $search, $pinStatus);
+        $total = $this->employees->countMatching($scope, $departmentId, $status, $search, $pinStatus);
 
         $items = $this->employees->search(
+            $scope,
             $departmentId,
             $status,
             $search,
@@ -87,6 +95,12 @@ final readonly class EmployeeQueries
             // basta con saber que la pagina salio de una busqueda: el recuento
             // de filas ya dice cuanto se llevo.
             'search' => $search !== null,
+            // El alcance con el que se sirvio la pagina (RF-ID-03). Es lo que
+            // distingue «RRHH se llevo veinte fichas» de «un responsable vio a los
+            // veinte de su cocina», que ante una brecha (RL-15) no es lo mismo.
+            // Va el tipo de alcance, no la lista de departamentos: para acotar el
+            // alcance basta, y quien pregunto ya esta identificado como actor.
+            'scope' => $scope->isUnrestricted() ? 'all' : 'departments',
             'page' => $page,
             'per_page' => $perPage,
         ]);

@@ -10,8 +10,7 @@ use App\Modules\Identity\Application\Exception\AuthenticationFailed;
 use App\Modules\Identity\Application\Port\AccessTokenIssuer;
 use App\Modules\Identity\Application\Port\LoginAttempts;
 use App\Modules\Identity\Application\Port\UserAccounts;
-use App\Modules\Identity\Domain\ValueObject\AuthenticatedUser;
-use App\Modules\Identity\Domain\ValueObject\IssuedAccessToken;
+use App\Modules\Identity\Domain\Policy\TwoFactorRequirement;
 use App\Modules\Shared\Application\Port\AuthenticationJournal;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\AuthChannel;
@@ -21,10 +20,20 @@ use App\Modules\Shared\Domain\ValueObject\AuthFailureReason;
  * Acceso al panel de gestion (RF-ID-01): comprueba credenciales, aplica el
  * bloqueo por intentos y emite el token con los ambitos del rol.
  *
- * **Sin segundo factor.** El 2FA obligatorio de RF-ID-01 completo es de la
- * tarea 2.1 (Anexo A del doc 01) y aqui no se anticipa. El punto donde encajara
- * esta marcado abajo: entre la verificacion de la contrasena y la emision del
- * token, devolviendo una sesion pendiente de verificar en lugar del token.
+ * **Con segundo factor** (RS-06, tarea 2.1). Entre la comprobacion de la
+ * contrasena y la emision del token hay ahora una bifurcacion: si la cuenta debe
+ * llevar TOTP —por su rol o porque ya lo activo—, este caso de uso devuelve una
+ * **sesion pendiente** en lugar de una sesion, y quien emite la de verdad es
+ * {@see VerifyTwoFactorHandler}. Todo lo demas —el orden de los pasos, el bloqueo,
+ * el rastro— sigue igual.
+ *
+ * **Lo que se mueve con la bifurcacion, y por que.** `auth.login_succeeded`,
+ * `last_login_at` y el borrado del contador de intentos **no** ocurren aqui cuando
+ * hay reto: quien ha acertado la contrasena todavia no ha entrado, y un asiento de
+ * acceso en ese punto diria en `audit_log` que alguien entro cuando lo que hizo
+ * fue quedarse a medias. Los tres los hace el verificador. El contador de fallos
+ * de contrasena, en cambio, **si se limpia** al acertarla: lo que se cuenta ahi
+ * son contrasenas, y el segundo factor tiene su propio contador.
  *
  * **El orden de los pasos no es casual.** El bloqueo se consulta antes de mirar
  * la contrasena para que una cuenta bloqueada responda igual con la contrasena
@@ -54,15 +63,14 @@ final readonly class AuthenticateUserHandler
         private LoginAttempts $attempts,
         private Clock $clock,
         private AuthenticationJournal $journal,
+        private TwoFactorRequirement $secondFactor,
     ) {}
 
     /**
-     * @return array{user: AuthenticatedUser, token: IssuedAccessToken}
-     *
      * @throws AccountTemporarilyLocked cuando la clave esta bloqueada por fallos previos
      * @throws AuthenticationFailed cuando las credenciales no valen, por la causa que sea
      */
-    public function handle(AuthenticateUserCommand $command): array
+    public function handle(AuthenticateUserCommand $command): LoginOutcome
     {
         if ($this->attempts->isLocked($command->throttleKey)) {
             $this->journal->failed(AuthChannel::MANAGEMENT, null, AuthFailureReason::LOCKED);
@@ -80,27 +88,33 @@ final readonly class AuthenticateUserHandler
             throw new AuthenticationFailed;
         }
 
-        // ---------------------------------------------------------------
-        // Tarea 2.1 (RF-ID-01 completo): aqui va el segundo factor. Si la
-        // cuenta tiene TOTP activo, este metodo devolvera una sesion pendiente
-        // de verificar en lugar de un token utilizable, y `POST
-        // /api/v1/auth/2fa/verify` sera quien llame a issueFor(). Ningun otro
-        // punto de este caso de uso cambia.
-        // ---------------------------------------------------------------
-
+        // La contrasena era buena: el contador de contrasenas se limpia aqui,
+        // haya reto o no. Lo contrario dejaria a quien acierta a la quinta con el
+        // cupo gastado para el resto de la ventana.
         $this->attempts->clear($command->throttleKey);
+
+        if ($this->secondFactor->challenges($user->roles, $user->secondFactorActive)) {
+            // Media autenticacion. Ni asiento de acceso, ni `last_login_at`: no
+            // ha entrado nadie todavia (RS-06, ADR-039).
+            return LoginOutcome::challenge(
+                $user,
+                $this->tokens->issuePendingFor($user, $command->deviceName),
+                $this->secondFactor->enrolmentRequired($user->roles, $user->secondFactorActive),
+            );
+        }
+
         $this->accounts->recordSuccessfulLogin($user->uuid, $this->clock->now());
 
-        $session = [
-            'user' => $user,
-            'token' => $this->tokens->issueFor($user, $command->deviceName),
-        ];
+        $outcome = LoginOutcome::session(
+            $user,
+            $this->tokens->issueFor($user, $command->deviceName),
+        );
 
         // Despues de emitir, no antes: si la emision falla, no ha entrado nadie
         // y el asiento diria lo contrario.
         $this->journal->succeeded(AuthChannel::MANAGEMENT, $user->uuid);
 
-        return $session;
+        return $outcome;
     }
 
     /**

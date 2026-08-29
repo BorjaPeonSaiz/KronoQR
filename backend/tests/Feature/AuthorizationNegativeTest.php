@@ -112,15 +112,36 @@ it('deniega a un auditor escribir o leer plantilla', function (string $method, s
     Api::as($token)->call($method, $uri, $body)->assertStatus(403);
 })->with(managementEndpoints())->group('RQ-07', 'RF-ID-02');
 
-it('deniega a un responsable de departamento el acceso a plantilla en esta fase', function (string $method, string $uri, array $body): void {
-    // El ambito por departamento es RF-ID-03 y es de la tarea 2.1. Hasta
-    // entonces, darle acceso seria darle la plantilla ENTERA, que es justo lo que
-    // ese requisito viene a impedir. La prueba fija esa decision: cuando 2.1
-    // cambie el alcance, este caso cambiara con ella y no en silencio.
+/**
+ * Los endpoints de gestion que un `responsable_departamento` **sigue** sin poder
+ * tocar despues de la tarea 2.1.
+ *
+ * Es la matriz de arriba menos las dos rutas de lectura de plantilla —`GET
+ * /employees` y `GET /employees/{uuid}`—, que RF-ID-03 le concede **acotadas a su
+ * departamento**. Su alcance, y el `403` cuando se sale de el, se prueban en
+ * `Tests\Feature\Identity\DepartmentScopeTest`: aqui no caben, porque lo que esta
+ * matriz comprueba es el par rol x endpoint y aquello depende de a quien se pida.
+ *
+ * @return array<string, array{0: string, 1: string, 2: array<string, mixed>}>
+ */
+function endpointsDeniedToDepartmentManager(): array
+{
+    $endpoints = managementEndpoints();
+
+    unset($endpoints['listar empleados'], $endpoints['ver un empleado']);
+
+    return $endpoints;
+}
+
+it('deniega a un responsable de departamento todo lo que no sea leer su plantilla', function (string $method, string $uri, array $body): void {
+    // Tras la tarea 2.1, el responsable lee la plantilla **de su departamento** y
+    // nada mas: lleva `employees:read` y no `employees:*` ni `credentials:*`.
+    // Escribir, dar de baja, tocar el PIN o las credenciales sigue siendo `403`,
+    // y el alcance de lo que si puede leer lo comprueba `DepartmentScopeTest`.
     $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RESPONSABLE_DEPARTAMENTO));
 
     Api::as($token)->call($method, $uri, $body)->assertStatus(403);
-})->with(managementEndpoints())->group('RQ-07', 'RF-ID-03');
+})->with(endpointsDeniedToDepartmentManager())->group('RQ-07', 'RF-ID-03');
 
 it('deniega a una cuenta con rol de empleado el acceso al panel', function (string $method, string $uri, array $body): void {
     // El empleado consulta lo suyo en el portal, con ambito `self:read`
@@ -149,6 +170,17 @@ it('deniega el acceso con un token que ya no vale', function (): void {
 
     Api::as($token)->get('/api/v1/employees')->assertStatus(401);
 })->group('RQ-07', 'RF-ID-01');
+
+it('deja pasar a un responsable a leer plantilla, que es el control positivo de RF-ID-03', function (): void {
+    // Sin esto, los `403` de arriba pasarian igual si al responsable se le hubiera
+    // negado la plantilla por completo, que es como estaba antes de la tarea 2.1.
+    WorkforceFixtures::site();
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RESPONSABLE_DEPARTAMENTO));
+
+    // Sin departamento asignado no alcanza a nadie, y aun asi el endpoint le
+    // responde: la lista vacia es la respuesta correcta, no un `403`.
+    Api::as($token)->get('/api/v1/employees')->assertStatus(200);
+})->group('RQ-07', 'RF-ID-03');
 
 it('deja pasar a RRHH y al administrador, que es lo que hace significativo el resto', function (UserRole $role): void {
     // Sin este caso, todas las pruebas de arriba pasarian igual con la API

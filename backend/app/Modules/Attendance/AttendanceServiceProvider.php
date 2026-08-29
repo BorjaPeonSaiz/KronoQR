@@ -11,6 +11,7 @@ use App\Modules\Attendance\Application\Port\ScanLog;
 use App\Modules\Attendance\Application\Port\ScanMetrics;
 use App\Modules\Attendance\Application\Port\ShiftCorrectionLedger;
 use App\Modules\Attendance\Application\Port\ShiftEntryHistory;
+use App\Modules\Attendance\Application\Port\ShiftEntrySubject;
 use App\Modules\Attendance\Application\Port\WorkDayRepository;
 use App\Modules\Attendance\Domain\Event\DailyTotalsRecalculated;
 use App\Modules\Attendance\Http\Policy\ScanPolicy;
@@ -21,6 +22,7 @@ use App\Modules\Attendance\Infrastructure\Metrics\RedisScanMetrics;
 use App\Modules\Attendance\Infrastructure\Persistence\DatabaseShiftCorrectionLedger;
 use App\Modules\Attendance\Infrastructure\Persistence\EloquentScanLog;
 use App\Modules\Attendance\Infrastructure\Persistence\EloquentShiftEntryHistory;
+use App\Modules\Attendance\Infrastructure\Persistence\EloquentShiftEntrySubject;
 use App\Modules\Attendance\Infrastructure\Persistence\EloquentWorkDayRepository;
 use App\Modules\Attendance\Infrastructure\Persistence\ShiftEntry;
 use App\Modules\Attendance\Infrastructure\Projection\DailyTotalsProjector;
@@ -71,6 +73,11 @@ final class AttendanceServiceProvider extends ServiceProvider
         // de otro modulo.
         $this->app->bind(ShiftCorrectionLedger::class, DatabaseShiftCorrectionLedger::class);
         $this->app->bind(ShiftEntryHistory::class, EloquentShiftEntryHistory::class);
+
+        // De quien es un tramo, para autorizar la correccion antes de ejecutarla
+        // (RF-ID-03). Puerto propio y no un metodo mas del anterior: aquel existe
+        // para elegir entre 404 y 409 y lo dice de si mismo.
+        $this->app->bind(ShiftEntrySubject::class, EloquentShiftEntrySubject::class);
 
         // Singleton: no tiene estado y se resuelve en cada peticion de escaneo.
         // En las pruebas se sustituye por un doble que cuenta.

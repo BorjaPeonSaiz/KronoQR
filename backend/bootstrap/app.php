@@ -18,6 +18,8 @@ use App\Modules\Compliance\Domain\Exception\InvalidLegalExportRequest;
 use App\Modules\Identity\Application\Exception\AccountTemporarilyLocked;
 use App\Modules\Identity\Application\Exception\AuthenticationFailed;
 use App\Modules\Identity\Application\Exception\PortalAccessDenied;
+use App\Modules\Identity\Application\Exception\TwoFactorAlreadyEnabled;
+use App\Modules\Identity\Application\Exception\TwoFactorNotEnrolled;
 use App\Modules\Identity\Domain\Exception\CredentialAlreadyDelivered;
 use App\Modules\Identity\Domain\Exception\CredentialAlreadyPrinted;
 use App\Modules\Identity\Domain\Exception\CredentialAlreadyRevoked;
@@ -25,8 +27,10 @@ use App\Modules\Identity\Domain\Exception\CredentialNotPrintedYet;
 use App\Modules\Identity\Domain\Exception\CredentialRevocationNeedsReason;
 use App\Modules\Identity\Domain\Exception\EmployeeAlreadyHasCredential;
 use App\Modules\Identity\Domain\Exception\InvalidSigningKey;
+use App\Modules\Identity\Http\Middleware\RejectPendingTwoFactorSession;
 use App\Modules\Reporting\Application\Exception\EmployeeNotFound;
 use App\Modules\Reporting\Domain\Exception\InvalidDateRange;
+use App\Modules\Shared\Domain\Exception\AccessOutOfScope;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
 use App\Modules\Workforce\Domain\Exception\EmployeeAlreadyTerminated;
 use App\Modules\Workforce\Domain\Exception\InvalidEmploymentPeriod;
@@ -84,6 +88,17 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'abilities' => CheckAbilities::class,
             'ability' => CheckForAnyAbility::class,
+            /*
+             * La tercera comprobacion de la sesion de gestion (RS-06, tarea 2.1):
+             * que el token NO sea una sesion pendiente de segundo factor.
+             *
+             * Solo hace falta donde no se puede exigir un ambito concreto, que en
+             * toda la API es un unico endpoint: `GET /api/v1/auth/me`, al que
+             * llegan los cuatro roles de gestion con ambitos distintos. En el
+             * resto, el `ability` de la ruta ya deja fuera al token pendiente,
+             * que solo lleva `2fa:pending`.
+             */
+            'session.complete' => RejectPendingTwoFactorSession::class,
         ]);
 
         /*
@@ -145,6 +160,21 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $exceptions->render(static fn (AuthorizationException $exception): mixed => ProblemDetails::forbidden());
 
+        /*
+         * RF-ID-03: un responsable ha pedido datos de fuera de su departamento.
+         *
+         * `403` y con el **mismo cuerpo** que cualquier otra denegacion: desde
+         * fuera no se distingue «no tienes el rol» de «no alcanzas a esa persona»,
+         * y no debe distinguirse — la segunda respuesta confirmaria que esa
+         * persona existe y que esta en otro departamento.
+         *
+         * El asiento en `audit_log` ya se escribio en
+         * `Shared\Application\Authorization\ScopeGuard`, antes de lanzar: si
+         * dependiera de esta linea, un `catch` en cualquier punto del camino
+         * dejaria el intento sin traza.
+         */
+        $exceptions->render(static fn (AccessOutOfScope $exception): mixed => ProblemDetails::forbidden());
+
         $exceptions->render(static fn (AccessDeniedHttpException $exception): mixed => ProblemDetails::forbidden());
 
         $exceptions->render(static fn (ModelNotFoundException $exception): mixed => ProblemDetails::notFound());
@@ -182,6 +212,23 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(static fn (AuthenticationFailed $exception): mixed => ProblemDetails::invalidCredentials());
 
         $exceptions->render(static fn (AccountTemporarilyLocked $exception): mixed => ProblemDetails::tooManyRequests($exception->retryAfterSeconds));
+
+        /*
+         * Segundo factor (tarea 2.1, RS-06).
+         *
+         * `409` PARA LOS DOS, y no `422`: quien los recibe no tiene ningun campo
+         * que corregir —el cuerpo es correcto—, lo que pasa es que el estado del
+         * recurso no es el que la peticion supone. La accion siguiente es releer,
+         * no reescribir.
+         *
+         * **El codigo TOTP equivocado NO esta aqui**: es `AuthenticationFailed`, y
+         * por tanto un `401` identico al de una contrasena incorrecta. Un codigo
+         * de estado propio para «ese codigo no vale» le diria a quien prueba que
+         * la contrasena que uso si valia.
+         */
+        $exceptions->render(static fn (TwoFactorAlreadyEnabled $exception): mixed => ProblemDetails::conflict($exception->getMessage()));
+
+        $exceptions->render(static fn (TwoFactorNotEnrolled $exception): mixed => ProblemDetails::conflict($exception->getMessage()));
 
         /*
          * Portal del empleado (tarea 1.11, RF-ID-06, RS-03, RS-12).

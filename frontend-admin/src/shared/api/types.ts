@@ -12,6 +12,11 @@ export type UserRole = Schemas['UserRole']
 export type Session = Schemas['Session']
 export type LoginRequest = Schemas['LoginRequest']
 
+// Segundo factor obligatorio de las cuentas de gestion (RS-06, tarea 2.1).
+export type TwoFactorChallenge = Schemas['TwoFactorChallenge']
+export type TwoFactorCode = Schemas['TwoFactorCode']
+export type TwoFactorEnrolment = Schemas['TwoFactorEnrolment']
+
 export type Employee = Schemas['Employee']
 export type EmployeeCollection = Schemas['EmployeeCollection']
 export type EmployeeProvisioned = Schemas['EmployeeProvisioned']

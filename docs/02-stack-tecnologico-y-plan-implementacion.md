@@ -657,7 +657,7 @@ sequenceDiagram
 |---|---|
 | **Red** | TLS 1.3 obligatorio, HSTS, quioscos en VLAN separada, portal del empleado restringido a red interna por defecto, fail2ban |
 | **Borde (Nginx)** | Rate limiting por zona: fichaje **600 r/m con ráfaga de 50 desde el CIDR de la VLAN de quioscos**, y **30 r/m con ráfaga de 10 desde cualquier otro origen**; autenticación 5 r/m; portal 10 r/m; resto 120 r/m. Límite de tamaño de cuerpo. Cabeceras de seguridad |
-| **Aplicación** | Throttling por `device_id` y por IP en el camino de fichaje, y por empleado en el PIN (ADR-038: **no** por credencial en el escaneo de tarjeta); autorización por policy en **cada** endpoint; validación estricta; respuestas de tiempo constante en el camino de fichaje; bloqueo escalonado por intentos en el PIN |
+| **Aplicación** | Throttling por `device_id` y por IP en el camino de fichaje, y por empleado en el PIN (ADR-038: **no** por credencial en el escaneo de tarjeta); zonas propias por **cuenta** además de por IP para el segundo factor (`2fa`, 5 r/m, clave = dueño del reto) y para las rutas de gestión que leen o corrigen datos de terceros (`management`, 120 r/m), porque el borde no puede acotar por cuenta; autorización por policy en **cada** endpoint; validación estricta; respuestas de tiempo constante en el camino de fichaje y en el rechazo del código TOTP; bloqueo escalonado por intentos en el PIN y por cuenta (nunca por IP) en el código TOTP; denegaciones por ámbito repetidas agrupadas por ventana antes de escribir en `audit_log` (ADR-037) |
 | **Datos** | Usuario de base de datos con permisos mínimos (sin DDL, sin `UPDATE` ni `DELETE` en `audit_log`), DNI hasheado, copias cifradas con clave separada |
 | **Cliente** | CSP estricta sin `unsafe-inline`, `Permissions-Policy: camera=(self)`, SRI en assets, padrón cacheado cifrado con clave derivada del token del dispositivo |
 
@@ -686,12 +686,20 @@ add_header Cross-Origin-Opener-Policy "same-origin" always;
 |---|---|---|---|
 | Quiosco | `scan:write`, `roster:read`, `heartbeat:write` | 90 días | Automática al 80 % de vida |
 | Empleado (portal) | `self:read` | Sesión corta | — |
-| Responsable | `attendance:read`, `attendance:correct`, `incidents:*` (ámbito departamento) | Sesión + 2FA | — |
+| Responsable | `attendance:read`, `attendance:correct`, `incidents:*`, `employees:read` (ámbito departamento) | Sesión | — |
 | RRHH | + `employees:*`, `reports:*`, `credentials:*` | Sesión + 2FA | — |
 | Auditor | `attendance:read`, `audit:read`, `reports:legal` (solo lectura, ámbito completo) | Sesión + 2FA | — |
 | Administrador de instalación | + `settings:*`, `license:*`, `support:*`, `diagnostics:*` | Sesión + 2FA | — |
 
 Un token de quiosco comprometido **no da acceso a la plantilla completa**: `roster:read` devuelve solo el mínimo necesario (hash del token, nombre de pila e inicial del apellido) de la plantilla de la instalación.
+
+> **Tres precisiones que introdujo la tarea 2.1, y por qué esta tabla las necesitaba.**
+>
+> **1. La fila del responsable ya no dice «+ 2FA», y no es un descuido.** RS-06 obliga a segundo factor a `admin`, `rrhh` y `auditor` —los tres roles que alcanzan datos de **toda** la plantilla— y no al responsable de departamento, cuyo alcance está acotado por RF-ID-03. Cuando este documento y el 01 discrepan manda el 01 (orden de autoridad de `CLAUDE.md`). La lectura anterior sigue siendo alcanzable sin tocar el repositorio: la lista de roles obligados es configuración (`IDENTITY_2FA_REQUIRED_ROLES`, regla dura 13), y un cliente con una política más dura añade ahí a sus responsables. Y quien active su TOTP por su cuenta lo presentará siempre, esté o no su rol en la lista.
+>
+> **2. La familia `employees:*` se parte en dos.** El Anexo B del documento 01 sitúa `GET /employees` en «manager+», que incluye al responsable; esta tabla no le daba ningún ámbito de plantilla, así que RF-ID-03 —«un responsable solo accede a los empleados de su departamento»— era inaplicable: no accedía a **ninguno**. Se resuelve con un ámbito de lectura propio, `employees:read`, que llevan también `rrhh` y `admin`, en lugar de concederle la familia entera: con un solo ámbito, dejarle leer era dejarle escribir y la única defensa quedaba en la policy, cuando este mismo apartado exige que sean dos controles.
+>
+> **3. Hay un ámbito que no es de ningún rol: `2fa:pending`.** Lo emite el propio acceso —el `202` de `POST /api/v1/auth/login`— y solo abre los tres endpoints de `/auth/2fa/*`. No cuelga de ningún rol y no debe colgar: si lo tuviera, cualquier sesión de ese rol podría canjear un reto que nadie ha abierto.
 
 ### 7.4 Cadena de hash de la auditoría
 

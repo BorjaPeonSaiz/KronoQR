@@ -18,8 +18,11 @@ use App\Modules\Compliance\Application\Port\LegalExportWriter;
 use App\Modules\Compliance\Application\UseCase\LegalExport;
 use App\Modules\Compliance\Http\Policy\LegalExportPolicy;
 use App\Modules\Compliance\Infrastructure\Adapter\AuditedAuthenticationJournal;
+use App\Modules\Compliance\Infrastructure\Adapter\AuditedAuthorizationJournal;
 use App\Modules\Compliance\Infrastructure\Adapter\AuditedLegalExportGeneration;
 use App\Modules\Compliance\Infrastructure\Adapter\AuditedPersonalDataAccessLog;
+use App\Modules\Compliance\Infrastructure\Adapter\GroupedAuthorizationJournal;
+use App\Modules\Compliance\Infrastructure\Audit\CurrentAuditContext;
 use App\Modules\Compliance\Infrastructure\Console\EnsureAuditPartitionsCommand;
 use App\Modules\Compliance\Infrastructure\Console\LegalExportCommand;
 use App\Modules\Compliance\Infrastructure\Console\PurgeOrphanedLegalExportTempFilesCommand;
@@ -27,6 +30,7 @@ use App\Modules\Compliance\Infrastructure\Console\VerifyAuditChainCommand;
 use App\Modules\Compliance\Infrastructure\Export\CsvLegalExportWriter;
 use App\Modules\Compliance\Infrastructure\Listener\RecordCredentialLifecycle;
 use App\Modules\Compliance\Infrastructure\Listener\RecordEmployeePinLifecycle;
+use App\Modules\Compliance\Infrastructure\Listener\RecordManagementAccountLifecycle;
 use App\Modules\Compliance\Infrastructure\Listener\RecordShiftEntryAudit;
 use App\Modules\Compliance\Infrastructure\Metrics\TextfileAuditMetrics;
 use App\Modules\Compliance\Infrastructure\Metrics\TextfileLegalExportMetrics;
@@ -40,10 +44,16 @@ use App\Modules\Identity\Domain\Event\CredentialPrinted;
 use App\Modules\Identity\Domain\Event\CredentialRevoked;
 use App\Modules\Identity\Domain\Event\DeviceTokenIssued;
 use App\Modules\Identity\Domain\Event\DeviceTokenRevoked;
+use App\Modules\Identity\Domain\Event\ManagementRoleAssigned;
+use App\Modules\Identity\Domain\Event\TwoFactorEnabled;
+use App\Modules\Identity\Domain\Event\TwoFactorReset;
 use App\Modules\Shared\Application\Port\AuthenticationJournal;
+use App\Modules\Shared\Application\Port\AuthorizationJournal;
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
 use App\Modules\Workforce\Domain\Event\EmployeePinDelivered;
 use App\Modules\Workforce\Domain\Event\EmployeePinIssued;
+use Illuminate\Contracts\Cache\Repository as CacheRepository;
+use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -121,6 +131,44 @@ final class ComplianceServiceProvider extends ServiceProvider
          */
         $this->app->bind(AuthenticationJournal::class, AuditedAuthenticationJournal::class);
 
+        /*
+         * RF-ID-03 y RS-05: el intento de salirse del alcance por departamento.
+         *
+         * Tercer puerto por la misma via y con el mismo criterio que los dos de
+         * arriba. Es distinto de `PersonalDataAccessLog` a proposito: aquel
+         * describe una divulgacion —alguien se llevo N registros— y este
+         * describe un intento que **no** se sirvio. Mezclarlos obligaria a leer
+         * `record_count: 0` como «denegado», una convencion que nadie recuerda
+         * seis meses despues.
+         */
+        /*
+         * ENVUELTO EN LA AGRUPACION POR VENTANA, y esta es la unica escritura de
+         * `audit_log` que la lleva.
+         *
+         * Todas las demas las provoca un acto de gestion; esta la provoca **quien
+         * esta siendo rechazado**, asi que un bucle de peticiones denegadas es un
+         * bucle de escrituras bajo el candado global de ADR-010 —el mismo del
+         * camino de fichaje—. La palanca es la que nombra ADR-037 para este
+         * problema: agrupar por frecuencia, entera detras del puerto, sin que
+         * `Workforce`, `Reporting` ni `Attendance` se enteren y **sin quitar el
+         * asiento** que exige el escenario «Aislamiento por departamento».
+         *
+         * El decorado sigue siendo `AuditedAuthorizationJournal`: la cadena de
+         * hash no se toca.
+         */
+        $this->app->bind(
+            AuthorizationJournal::class,
+            static fn (Application $app): AuthorizationJournal => new GroupedAuthorizationJournal(
+                journal: $app->make(AuditedAuthorizationJournal::class),
+                context: $app->make(CurrentAuditContext::class),
+                cache: $app->make(CacheRepository::class),
+                // Se lee aqui y no dentro del decorador porque el enlace se
+                // resuelve por peticion: `config:cache` y una prueba que cambie el
+                // valor surten efecto igual.
+                windowSeconds: Config::integer('compliance.authorization_denial_window_seconds', 60),
+            ),
+        );
+
         $this->registerLegalExport();
     }
 
@@ -129,6 +177,7 @@ final class ComplianceServiceProvider extends ServiceProvider
         $this->recordShiftEntryLifecycle();
         $this->recordCredentialAndDeviceLifecycle();
         $this->recordEmployeePinLifecycle();
+        $this->recordManagementAccountLifecycle();
 
         /*
          * La policy de la exportacion legal (RF-IN-05, regla dura 18).
@@ -284,5 +333,25 @@ final class ComplianceServiceProvider extends ServiceProvider
     {
         Event::listen(EmployeePinIssued::class, [RecordEmployeePinLifecycle::class, 'handleIssued']);
         Event::listen(EmployeePinDelivered::class, [RecordEmployeePinLifecycle::class, 'handleDelivered']);
+    }
+
+    /**
+     * El mapa evento -> asiento de las **cuentas de gestion** (tarea 2.1, RS-05,
+     * RS-06).
+     *
+     * Dos familias del bloque D en un solo listener, y por eso no vive con las
+     * credenciales: el segundo factor es ciclo de vida de una credencial de
+     * acceso y el rol es «cambia roles, permisos o configuracion».
+     *
+     * Sincronos, sin `ShouldQueue` y sin `afterCommit`: si el asiento falla, ni
+     * se activa el segundo factor ni se asigna el rol (ADR-027). Un rol concedido
+     * sin traza deja sin respuesta la pregunta que se hace despues de un
+     * incidente: quien le dio acceso a esta persona.
+     */
+    private function recordManagementAccountLifecycle(): void
+    {
+        Event::listen(TwoFactorEnabled::class, [RecordManagementAccountLifecycle::class, 'handleTwoFactorEnabled']);
+        Event::listen(TwoFactorReset::class, [RecordManagementAccountLifecycle::class, 'handleTwoFactorReset']);
+        Event::listen(ManagementRoleAssigned::class, [RecordManagementAccountLifecycle::class, 'handleRoleAssigned']);
     }
 }

@@ -21,6 +21,7 @@ use App\Modules\Identity\Http\Controller\PortalLoginController;
 use App\Modules\Identity\Http\Controller\PrintCredentialBatchController;
 use App\Modules\Identity\Http\Controller\PrintCredentialController;
 use App\Modules\Identity\Http\Controller\RevokeCredentialController;
+use App\Modules\Identity\Http\Controller\TwoFactorController;
 use App\Modules\Kiosk\Http\Controller\HeartbeatController;
 use App\Modules\Kiosk\Http\Controller\RosterController;
 use App\Modules\Reporting\Http\Controller\EmployeeWorkDayController;
@@ -169,8 +170,20 @@ Route::post('/scan/pin', PinScanController::class)
  * EL `{uuid}` IDENTIFICA UNA VERSION, no un tramo a lo largo del tiempo
  * (ADR-035): corregir crea una fila nueva con identificador propio, asi que el
  * que devolvio la ultima correccion es el que hay que usar en la siguiente.
+ *
+ * `throttle:management` POR LO QUE ESCRIBEN CUANDO DENIEGAN. Las tres rutas pasan
+ * por `ScopeGuard` (RF-ID-03) y cada denegacion por alcance escribe `access.denied`
+ * en `audit_log`, que toma el candado global de ADR-010 — el mismo por el que pasa
+ * cada fichaje. Sin techo por cuenta, un bucle sobre UUID ajenos mete escrituras
+ * ilimitadas en el camino critico del cambio de turno. La otra mitad de esa
+ * defensa es la agrupacion de denegaciones repetidas, detras del puerto
+ * `AuthorizationJournal`. La zona se declara en `IdentityServiceProvider`.
  */
-Route::middleware(['auth:sanctum', 'ability:'.TokenAbility::ATTENDANCE_CORRECT->value])->group(function (): void {
+Route::middleware([
+    'auth:sanctum',
+    'ability:'.TokenAbility::ATTENDANCE_CORRECT->value,
+    'throttle:management',
+])->group(function (): void {
     Route::post('/shift-entries', [ShiftEntryController::class, 'store'])
         ->name('attendance.shift-entries.store');
 
@@ -213,7 +226,14 @@ Route::middleware(['auth:sanctum', 'ability:'.TokenAbility::ATTENDANCE_CORRECT->
  * policy, que es de plantilla y no de registro horario.
  */
 Route::get('/employees/{uuid}/workdays', EmployeeWorkDayController::class)
-    ->middleware(['auth:sanctum', 'ability:'.TokenAbility::ATTENDANCE_READ->value])
+    ->middleware([
+        'auth:sanctum',
+        'ability:'.TokenAbility::ATTENDANCE_READ->value,
+        // Pasa por `ScopeGuard`, asi que una denegacion por alcance escribe en
+        // `audit_log` bajo el candado global de ADR-010. Ver la zona `management`
+        // en `IdentityServiceProvider`.
+        'throttle:management',
+    ])
     ->whereUuid('uuid')
     ->name('reporting.employees.workdays');
 
@@ -286,19 +306,82 @@ Route::prefix('auth')->group(function (): void {
         ->middleware('throttle:auth')
         ->name('auth.login');
 
+    /*
+     * Segundo factor obligatorio (RF-ID-01 completo, RS-06, tarea 2.1).
+     *
+     * LOS TRES EXIGEN `2fa:pending` Y NADA MAS, que es el unico ambito que lleva
+     * el token del `202` de `/login`. Con eso, la sesion pendiente no alcanza
+     * ningun otro endpoint del producto: no es una sesion, es el permiso para
+     * presentar un codigo.
+     *
+     * LA OTRA MITAD ES `TwoFactorPolicy`, que comprueba QUIEN porta el token
+     * (regla dura 18): un token de quiosco o una sesion de portal a los que
+     * alguien añadiera este ambito seguirian sin poder canjearlos por una sesion
+     * de gestion. El empleado no tiene segundo factor y no puede tenerlo (reglas
+     * duras 11 y 12).
+     *
+     * ZONA `2fa` PROPIA, Y NO LA `auth` DEL ACCESO. Aquella toma la cuenta del
+     * `email` del cuerpo, y aqui no hay ninguno: `TwoFactorCodeRequest` solo
+     * admite `code` y el alta no admite nada. Con la zona `auth`, la clave por
+     * cuenta se componia siempre con la cadena vacia y los cinco intentos por
+     * minuto los compartia LA INSTALACION ENTERA — cualquiera con un reto abierto
+     * dejaba a los demas sin poder completar su acceso. La zona `2fa` toma el
+     * sujeto del DUEÑO DEL TOKEN PENDIENTE, que es lo unico que el cliente no
+     * puede falsificar.
+     *
+     * EL ORDEN DE LOS MIDDLEWARES IMPORTA, igual que en `/scan`: `throttle` va
+     * DESPUES de `auth:sanctum` porque sin actor resuelto no hay cuenta a la que
+     * contar la peticion.
+     *
+     * TRES CONTROLES Y NINGUNO SUSTITUYE A LOS OTROS: Nginx limita todo
+     * `^~ /api/v1/auth/` a 5 r/m en el borde (§7.1, tarea 1.7), `throttle:2fa`
+     * limita por cuenta y por IP, y el bloqueo por intentos de codigo vive en el
+     * caso de uso con contador propio distinto del de la contrasena.
+     *
+     * `enrol` Y `confirm` NO ESTAN EN EL ANEXO B, y su ausencia era un hueco: sin
+     * ellos, una cuenta nueva de `rrhh` no tiene forma de obtener su segundo
+     * factor y por tanto ninguna forma de entrar. La alternativa era repartir
+     * secretos por consola, que obliga al cliente a usar SSH para dar de alta a
+     * una persona. Se describen en el contrato antes que aqui (ADR-013).
+     */
+    Route::prefix('2fa')
+        ->middleware([
+            'auth:sanctum',
+            'ability:'.TokenAbility::TWO_FACTOR_PENDING->value,
+            'throttle:2fa',
+        ])
+        ->group(function (): void {
+            Route::post('/verify', [TwoFactorController::class, 'verify'])
+                ->name('auth.2fa.verify');
+
+            Route::post('/enrol', [TwoFactorController::class, 'enrol'])
+                ->name('auth.2fa.enrol');
+
+            Route::post('/confirm', [TwoFactorController::class, 'confirm'])
+                ->name('auth.2fa.confirm');
+        });
+
+    /*
+     * El cierre de sesion SI acepta un token pendiente, a proposito: abandonar un
+     * acceso a medias es lo que hace el panel cuando alguien cancela la pantalla
+     * del codigo, y negarselo dejaria el reto vivo hasta que caduque.
+     */
     Route::post('/logout', LogoutController::class)
         ->middleware('auth:sanctum')
         ->name('auth.logout');
 
-    Route::get('/me', CurrentUserController::class)
-        ->middleware('auth:sanctum')
-        ->name('auth.me');
-
     /*
-     * POST /api/v1/auth/2fa/verify NO existe todavia: el 2FA obligatorio es de
-     * la tarea 2.1 (Anexo A del doc 01). Se anota aqui para que su ausencia sea
-     * una decision visible y no un olvido.
+     * GET /api/v1/auth/me — EL UNICO ENDPOINT QUE NO PUEDE EXIGIR UN AMBITO.
+     *
+     * Lo llaman los cuatro roles de gestion y cada uno lleva los suyos, asi que
+     * aqui no hay ninguna lista que poner en `ability`. Sin `session.complete`,
+     * este seria el unico endpoint alcanzable con media autenticacion, y lo que
+     * adelantaria —rol y alcance por departamento— es justo lo que ayuda a decidir
+     * a que cuenta merece la pena seguir atacando (RS-06).
      */
+    Route::get('/me', CurrentUserController::class)
+        ->middleware(['auth:sanctum', 'session.complete'])
+        ->name('auth.me');
 });
 
 /*
@@ -373,12 +456,40 @@ Route::middleware([
      */
 });
 
-Route::middleware(['auth:sanctum', 'ability:'.TokenAbility::EMPLOYEES_ALL->value])->group(function (): void {
+/*
+ * LECTURA DE PLANTILLA: `employees:read`, no `employees:*` (RF-ID-03, tarea 2.1).
+ *
+ * La familia se parte en dos porque el Anexo B del doc 01 dice que `GET
+ * /employees` es «manager+» —lo que incluye al `responsable_departamento`— y el
+ * §7.3 no le daba ningun ambito de plantilla. Con un unico ambito de familia,
+ * dejarle leer era dejarle escribir, y la unica defensa quedaba en la policy.
+ *
+ * `admin` y `rrhh` llevan los dos ambitos, asi que no pierden nada.
+ *
+ * EL ALCANCE POR DEPARTAMENTO NO SE COMPRUEBA AQUI: se aplica **dentro de la
+ * consulta** (`EmployeeQueries`) para el listado, y con la policy contra la ficha
+ * cargada para el detalle. Un filtro posterior daria un `meta.total` que describe
+ * a personas que quien pregunta no puede ver.
+ *
+ * `throttle:management` POR LA FICHA: es la que pasa por `ScopeGuard` y por tanto
+ * la que puede escribir `access.denied` en `audit_log` bajo el candado global de
+ * ADR-010. Se aplica al grupo entero y no solo a `show` porque el listado sale de
+ * la misma pantalla y con el mismo token: un techo que solo cubriera una de las
+ * dos seria un techo que se rodea cambiando de URL.
+ */
+Route::middleware([
+    'auth:sanctum',
+    'ability:'.TokenAbility::EMPLOYEES_READ->value,
+    'throttle:management',
+])->group(function (): void {
     Route::get('/employees', [EmployeeController::class, 'index'])->name('employees.index');
-    Route::post('/employees', [EmployeeController::class, 'store'])->name('employees.store');
     Route::get('/employees/{uuid}', [EmployeeController::class, 'show'])
         ->whereUuid('uuid')
         ->name('employees.show');
+});
+
+Route::middleware(['auth:sanctum', 'ability:'.TokenAbility::EMPLOYEES_ALL->value])->group(function (): void {
+    Route::post('/employees', [EmployeeController::class, 'store'])->name('employees.store');
     Route::patch('/employees/{uuid}', [EmployeeController::class, 'update'])
         ->whereUuid('uuid')
         ->name('employees.update');

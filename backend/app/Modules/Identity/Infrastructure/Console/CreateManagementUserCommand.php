@@ -4,9 +4,13 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Infrastructure\Console;
 
+use App\Modules\Identity\Application\Port\IdentityEventPublisher;
+use App\Modules\Identity\Domain\Event\ManagementRoleAssigned;
 use App\Modules\Identity\Infrastructure\Persistence\User;
+use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
@@ -28,6 +32,19 @@ use Illuminate\Validation\Rules\Password;
  * servicio externo por HTTP y este producto se instala en servidores sin salida
  * a internet (ADR-016), donde la comprobacion fallaria o —peor— colgaria la
  * creacion del primer administrador.
+ *
+ * **El rol asignado deja asiento** (`role_assignment.changed`, RS-05, bloque D).
+ * Un rol decide quien puede corregir horas y quien ve la plantilla entera: sin
+ * traza, «¿quien le dio acceso a esta persona al registro de todo el hotel?» no
+ * tiene respuesta, y es la pregunta que se hace despues de un incidente. El alta y
+ * el asiento van en la **misma transaccion** (ADR-027): si el asiento falla, la
+ * cuenta no se crea.
+ *
+ * **El segundo factor NO se configura aqui** (RS-06). Una cuenta nueva de `admin`,
+ * `rrhh` o `auditor` nace sin el, y lo da de alta su titular en su primer acceso
+ * —`/auth/2fa/enrol` y `/auth/2fa/confirm`— con el reto que devuelve `/auth/login`.
+ * Generarlo aqui obligaria a que el secreto de una persona pasara por la consola
+ * de otra, que es exactamente lo que un segundo factor existe para evitar.
  */
 final class CreateManagementUserCommand extends Command
 {
@@ -39,7 +56,7 @@ final class CreateManagementUserCommand extends Command
 
     protected $description = 'Crea una cuenta de gestion con su rol (RF-ID-01, RF-ID-02).';
 
-    public function handle(): int
+    public function handle(IdentityEventPublisher $events, Clock $clock): int
     {
         $name = $this->stringOption('name') ?? $this->asked('Nombre');
         $email = $this->stringOption('email') ?? $this->asked('Correo');
@@ -67,20 +84,37 @@ final class CreateManagementUserCommand extends Command
             return self::FAILURE;
         }
 
-        $user = User::query()->create([
-            'uuid' => Str::uuid7()->toString(),
-            'name' => $name,
-            'email' => $email,
-            'password' => $password,
-            'locale' => $this->stringOption('locale') ?? 'es',
-            'is_active' => true,
-        ]);
+        $uuid = Str::uuid7()->toString();
 
-        $user->assignRole($role);
+        // Alta y asiento en la misma transaccion: el listener de auditoria es
+        // sincrono, asi que si la traza falla no queda una cuenta con rol sin
+        // constancia de quien se lo dio (ADR-027).
+        DB::transaction(function () use ($uuid, $name, $email, $password, $role, $events, $clock): void {
+            $user = User::query()->create([
+                'uuid' => $uuid,
+                'name' => $name,
+                'email' => $email,
+                'password' => $password,
+                'locale' => $this->stringOption('locale') ?? 'es',
+                'is_active' => true,
+            ]);
+
+            $user->assignRole($role);
+
+            $events->publish(new ManagementRoleAssigned(
+                userUuid: $uuid,
+                role: UserRole::from($role),
+                // Sin actor: un comando de consola no tiene sesion detras, y
+                // atribuirselo a la ultima persona que entro al panel seria
+                // falsificar el trail.
+                actorUuid: null,
+                occurredAt: $clock->now(),
+            ));
+        });
 
         // Sin el correo ni el nombre en la salida: este comando se ejecuta a
         // menudo con la salida redirigida a un fichero de instalacion.
-        $this->components->info('Cuenta de gestion creada con el rol '.$role.' y UUID '.$user->uuid.'.');
+        $this->components->info('Cuenta de gestion creada con el rol '.$role.' y UUID '.$uuid.'.');
 
         return self::SUCCESS;
     }

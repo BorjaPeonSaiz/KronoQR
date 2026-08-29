@@ -12,10 +12,10 @@
 //
 // El responsable y la URL son CONFIGURACION (regla dura 13): cambian con cada
 // cliente. Si faltan, el aviso sigue apareciendo con una redaccion generica.
+import type { QrPath } from '@kronoqr/web-kit/qr/renderQrPath'
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { PrivacyNoticeConfig } from '@/shared/config/privacy'
-import type { QrPath } from '@/shared/qr/renderQrPath'
 
 const props = defineProps<{ config: PrivacyNoticeConfig }>()
 
@@ -33,7 +33,7 @@ async function openDialog(): Promise<void> {
   dialogOpen.value = true
   if (qr.value !== null || props.config.policyUrl === null) return
 
-  const { renderQrPath } = await import('@/shared/qr/renderQrPath')
+  const { renderQrPath } = await import('@kronoqr/web-kit/qr/renderQrPath')
   const rendered = await renderQrPath(props.config.policyUrl)
   qr.value = rendered
   qrFailed.value = rendered === null

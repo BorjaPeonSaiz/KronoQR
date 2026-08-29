@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Infrastructure\Persistence;
 
+use App\Modules\Shared\Domain\ValueObject\AccessScope;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Workforce\Application\Port\EmployeeRepository;
 use App\Modules\Workforce\Application\Port\PinStatus;
@@ -72,6 +73,7 @@ final readonly class EloquentEmployeeRepository implements EmployeeRepository
     }
 
     public function search(
+        AccessScope $scope,
         ?int $departmentId,
         ?EmploymentStatus $status,
         ?string $search,
@@ -79,7 +81,7 @@ final readonly class EloquentEmployeeRepository implements EmployeeRepository
         int $limit,
         int $offset,
     ): array {
-        $rows = $this->filtered($departmentId, $status, $search, $pinStatus)
+        $rows = $this->filtered($scope, $departmentId, $status, $search, $pinStatus)
             // Orden estable y previsible para quien pagina: dos personas con el
             // mismo apellido no pueden cambiar de sitio entre dos paginas.
             ->orderBy('last_name')
@@ -93,24 +95,26 @@ final readonly class EloquentEmployeeRepository implements EmployeeRepository
     }
 
     public function countMatching(
+        AccessScope $scope,
         ?int $departmentId,
         ?EmploymentStatus $status,
         ?string $search,
         ?PinStatus $pinStatus,
     ): int {
-        return $this->filtered($departmentId, $status, $search, $pinStatus)->count();
+        return $this->filtered($scope, $departmentId, $status, $search, $pinStatus)->count();
     }
 
     /**
      * @return Builder<Employee>
      */
     private function filtered(
+        AccessScope $scope,
         ?int $departmentId,
         ?EmploymentStatus $status,
         ?string $search,
         ?PinStatus $pinStatus,
     ): Builder {
-        $query = Employee::query()
+        $query = $this->withinScope(Employee::query(), $scope)
             ->when($departmentId !== null, static fn (Builder $query): Builder => $query->where('department_id', $departmentId))
             ->when($status instanceof EmploymentStatus, static fn (Builder $query): Builder => $query->where('status', $status?->value))
             ->when($search !== null, fn (Builder $query): Builder => $this->matchingSearch($query, (string) $search));
@@ -119,6 +123,37 @@ final readonly class EloquentEmployeeRepository implements EmployeeRepository
         // analizador no puede saber que `$pinStatus` no es nulo, y el `match`
         // exhaustivo que traduce el estado a columnas exige que no lo sea.
         return $pinStatus instanceof PinStatus ? $this->withPinStatus($query, $pinStatus) : $query;
+    }
+
+    /**
+     * El alcance por departamento (**RF-ID-03**), **en la consulta**.
+     *
+     * **Aqui y no despues.** Un filtro aplicado sobre la pagina ya traida daria un
+     * `meta.total` que describe a personas que quien pregunta no puede ver —una
+     * fuga por si misma— y una paginacion con huecos: pedir la pagina 2 devolveria
+     * tres filas de veinticinco.
+     *
+     * **`whereRaw('false')` no es un truco: es la traduccion literal de «no
+     * alcanza a nadie».** Un responsable sin departamento asignado existe —el
+     * campo `departments.manager_user_id` es nullable— y la respuesta correcta es
+     * una pagina vacia. Con un `whereIn` sobre una lista vacia el resultado seria
+     * el mismo, pero depender de eso es depender de un detalle del constructor de
+     * consultas; escrito asi, la intencion no admite lectura.
+     *
+     * @param  Builder<Employee>  $query
+     * @return Builder<Employee>
+     */
+    private function withinScope(Builder $query, AccessScope $scope): Builder
+    {
+        if ($scope->isUnrestricted()) {
+            return $query;
+        }
+
+        if ($scope->reachesNobody()) {
+            return $query->whereRaw('false');
+        }
+
+        return $query->whereIn('department_id', $scope->departmentIds());
     }
 
     /**

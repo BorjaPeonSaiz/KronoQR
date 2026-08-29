@@ -1,5 +1,45 @@
 # HANDOFF
 
+## Sesión «tarea 2.1: 2FA obligatorio y ámbito por departamento» (29-08-2026), en `feat/2.1-auth-2fa-rbac` → PR #30
+
+**Tarea 2.1 de la Fase 2 implementada** (el bloque de abajo es el informe del agente de backend; el estado final está al final de esta sección). Cubre RF-ID-01 completo, RF-ID-02, RF-ID-03, RS-04, RS-05, RS-06 y RS-13.
+
+**Verificación real, no supuesta:** `make quality` en verde (sh-lint 0, api-lint 0, PHPStan 9 **0 errores**, Deptrac **0 violaciones / 4581 permitidas**; Rector 129 ficheros en dry-run, umbral informativo). `make test` **1786 pruebas / 9396 aserciones** (216 s). `make traceability-check` y `make docs-consistency` sin divergencias. `type-check` en verde en las tres SPA con `schema.d.ts` regenerado; unitarias del panel 191/191. Las dos migraciones aplicadas y revertidas con el rol `fichaje_migrator`.
+
+**Decisiones tomadas que conviene conocer antes de revisar:**
+
+1. **`POST /auth/login` gana un `202`** con `TwoFactorChallenge` (`challenge_token`), en vez de un `oneOf` sobre el `200`: con una sola forma, un cliente que leyera `token` guardaría como sesión un token que no autoriza nada.
+2. **Dos endpoints que el Anexo B no listaba**, `POST /auth/2fa/enrol` y `/2fa/confirm`. Sin ellos RS-06 es inaplicable: una cuenta nueva de `rrhh` no tiene forma de obtener su TOTP. Documentado en la tabla de notas de contrato del Anexo B.
+3. **Ámbito nuevo `employees:read`** para reconciliar el Anexo B («`GET /employees` es manager+», incluye al responsable) con el §7.3 del doc 02, que no le daba ningún ámbito de plantilla. `GET /employees` y `GET /employees/{uuid}` pasan a exigirlo; escribir sigue siendo `employees:*`.
+4. **RS-06 obliga a tres roles y no a cuatro.** El doc 02 §7.3 escribía «Sesión + 2FA» también para el responsable; manda el doc 01. Resuelto como configuración (`IDENTITY_2FA_REQUIRED_ROLES`) y anotado en el §7.3.
+5. **Retirar un segundo factor es `identity:2fa-reset`** (consola, auditado) y no un endpoint. **Sin códigos de recuperación**: deuda anotada.
+6. **`current_phase` sigue en `1`** en `backend/config/quality.php`. Ponerlo a `2` ahora exigiría prueba a los 20 requisitos de la Fase 2 y dejaría la CI en rojo durante las 8 tareas restantes; se sube al **cerrar** la fase, como dice el propio comentario del fichero.
+
+**Anomalía reproducible que conviene no tocar:** el nombre del fichero `backend/database/migrations/2026_08_30_100100_grant_read_ability.php` es corto a propósito. Con el nombre largo original, PHPStan pasaba de 0 a 13 errores en ficheros que la rama no toca (Larastan dejaba de reconocer las propiedades de `PersonalAccessToken`). Aislado cambiando solo el nombre, con la caché borrada; causa no encontrada. Está anotado en el docblock de la migración.
+
+**Pendiente de esta tarea:**
+- **Pantalla del segundo factor en `frontend-admin`** (`frontend-panel`) y su **E2E** `tag: ['@RF-ID-01', '@RS-06']`, que el plan exige y no está.
+- **Revisión de `seguridad-cumplimiento`** sobre los bloques C y D de `/revision-cumplimiento` (paso 9 de la tarea, obligatorio).
+- Códigos de recuperación de 2FA (hash y un solo uso) — hoy la única salida ante un teléfono perdido es la consola.
+- `GET /credentials/status` **no** lleva filtro por departamento: el responsable no tiene `credentials:*` y no llega, así que el filtro sería una rama inalcanzable. Si algún día se le concede, hay que añadirlo.
+
+**Nginx:** la zona `auth` ya estaba a 5 r/m y `location ^~ /api/v1/auth/` cubre los tres endpoints nuevos. **No se ha tocado** (paso 6 de la tarea, ya satisfecho por la 1.7).
+
+**Estado al cerrar la sesión (29-08-2026): tarea 2.1 completa y en PR #30** (`feat/2.1-auth-2fa-rbac`, apilada sobre #29 → #28; mergear en ese orden, GitHub reapunta la base). Cuatro commits: `feat(identity)!` (backend, `45c1bb1`, CI en verde), `feat(admin)` (pantalla del segundo factor en tres pasos + 17/17 E2E; `renderQrPath` movido a `web-kit` y opción `token` del cliente HTTP), `security(identity)` (los **10 hallazgos** de la revisión obligatoria de `seguridad-cumplimiento` aplicados, cada uno con prueba que falla sin el arreglo), y `docs(changelog)`. **Verificado por mí, no solo por los agentes:** `make quality` limpio, `make test` **1816 / 9511**, trazabilidad 1165 Pest + 52 Playwright sin huecos, `docs:consistency` sin divergencias; admin 200 unitarias + 17/17 E2E, web-kit 142, portal 69, quiosco 309 + 37/37 E2E y bundle 97,2/250 KiB.
+
+**Hallazgos de seguridad que conviene recordar** (los dos altos eran defectos reales del limitador, no de diseño): `throttle:auth` en `/auth/2fa/*` degeneraba en un cubo global de 5 r/m para toda la instalación (la clave por cuenta leía un `email` que esos cuerpos no llevan) → zona `2fa` por dueño del reto; el bloqueo por códigos fallidos era por cuenta+IP y se reiniciaba rotando origen → por cuenta. Además: zona `management` (120 r/m por cuenta+origen) en las rutas que llegan a `ScopeGuard`; `GroupedAuthorizationJournal` agrupa denegaciones repetidas (60 s) detrás del puerto sin quitar el asiento; `#[SensitiveParameter]` + `zend.exception_ignore_args=On`; el alta respeta el bloqueo; `identity:2fa-reset` cierra todas las sesiones; `config/sanctum.php` con `guard=[]`; señuelo con prueba de simetría. Doc 07 registra el riesgo residual de auto-alta con solo la contraseña.
+
+**Decisiones del usuario pendientes (anotadas también en la PR):**
+- ¿El `responsable_departamento` debe ver el tablero de credenciales de su gente? Hoy no llega (sin `credentials:*` por Anexo B ni §7.3); si sí, conceder el ámbito y filtrar por departamento.
+- Códigos de recuperación de 2FA (hoy la única salida ante un teléfono perdido es `identity:2fa-reset` en consola).
+- Vale de un solo uso en `identity:create-user` para cerrar la ventana de auto-alta (doc 07).
+
+**Deuda anotada por los agentes (no bloqueante):** `revokeAllFor()` no cuenta sesiones cerradas en el asiento (`arquitecto-dominio`, campo en `TwoFactorReset`); `qa-testing`: concurrencia de `/auth/2fa/verify` y de la agrupación (Redis real), `make mutate` sobre `VerifyTwoFactorHandler`, integración de `GroupedAuthorizationJournal` con Redis; `permission.changed` no se deja en la migración `grant_read_ability` (docblock); `clearAnnouncement()` al desmontar `LoginView`; `.env` local de desarrollo no tiene las variables nuevas (todas con valor por omisión).
+
+**Corrección a mi propio plan:** `current_phase` **se queda en `1`** hasta cerrar la Fase 2 — el comentario de `config/quality.php` dice que se sube «al cerrar cada fase» y que el literal es el registro del cierre; ponerlo a `2` ahora dejaría la CI en rojo durante las 8 tareas restantes.
+
+**Siguiente acción:** mergear #28 → #29 → #30 (CI en verde en #28/#29; la de #30 corre sobre `490852d`). Después, Fase 2 según el camino crítico `2.1 → 2.4 / 2.6 / 2.8` (`plan implementacion/04-fase-2-gestion-y-cumplimiento.md`): 2.4 exige presencia en vivo con Reverb y ahora tiene E2E del panel donde apoyarse. Las tres puertas de hardware de la Fase 1 siguen abiertas y son del usuario.
+
 ## Sesión «cierre de la Fase 1 con reservas» (29-08-2026), en `main`
 
 **Pregunta del usuario:** ¿puede darse por cerrada la Fase 1 y pasar a la Fase 2? **Veredicto, verificado con instrumento y no con este fichero:** sí, cerrada en todo lo que el software puede demostrar, con tres reservas de hardware/estimación que no bloquean la Fase 2.
@@ -23,11 +63,11 @@
 
 1. **Toolchain del frontend → PR #28** (`chore/frontend-toolchain`): Vite 8.2, Vitest 4.1 + coverage-v8, ESLint 10.9, Pinia 4.0 (salta la 3), vue-router 5.3, vue-i18n 11.4 en los cuatro workspaces; `spatie/laravel-permission` 6→8 (nuestras migraciones literales coinciden con los nombres por defecto de la v8). Verificado: `type-check`/`lint`/unitarias/`build` en las cuatro SPA, **37/37 E2E del quiosco** con axe, bundle crítico 97,2 KiB (baja), `make quality` y `make test` **1725/9183**, `npm audit` y `composer audit` a 0, `docs:consistency` sin divergencias. Doc 02 §3.3 y plan 01 con las versiones nuevas. Sustituye a las PR #15/#17/#18/#19/#20/#22/#23/#25 de Dependabot. **Defecto propio encontrado después y corregido en la misma rama** (`fix(deps)`): la importación `./vite.config.ts` con extensión (aviso de Vite 8) no compilaba bajo `tsconfig.node.json` sin `allowImportingTsExtensions` — el `type-check` de las tres SPA estaba en rojo y yo lo había verificado antes de hacer ese cambio.
 2. **E2E del panel → PR #29** (`feat/admin-e2e`, apilada sobre #28): Playwright + `@axe-core/playwright` en `frontend-admin` con la disposición del quiosco (build por `vite preview`, API interceptada con formas del contrato, sin backend, navegador en `Atlantic/Canary` a propósito). **10/10 escenarios**: acceso/redirect/rechazo/cierre (RF-ID-01, RF-ID-02), plantilla → ficha → registro horario con corrección y cabecera `Authorization` en cada petición (RF-GP-01, RF-PA-03, RN-13), axe en cuatro pantallas. `make e2e` corre quiosco y panel; `playwright.config.ts` usa `testIdAttribute: 'data-test'` (el panel no usa `data-testid`). Trazabilidad: 45 pruebas Playwright (antes 35). La etapa E2E de la CI sigue siendo el marcador de 3.7.
-3. **Fase 2, tarea 2.1**: ver abajo el estado al cerrar la sesión.
+3. **Fase 2, tarea 2.1 → PR #30**: ver la sección de arriba (backend, panel y revisión de seguridad hechos y verificados).
 
 **Ficheros tocados:** ver las PR #28 y #29; `HANDOFF.md`.
 
-**Siguiente acción:** mergear #28 y #29 (CI en verde) y seguir con la tarea 2.1 en `feat/2.1-auth-2fa-rbac`.
+**Siguiente acción:** mergear #28 → #29 → #30; luego 2.4/2.6/2.8 (ver la sección de la tarea 2.1).
 
 ## Sesión «Trivy a bloqueante» (29-08-2026), en `fix/postgres-nonroot-image`
 

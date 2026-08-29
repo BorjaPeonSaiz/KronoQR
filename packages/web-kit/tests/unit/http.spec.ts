@@ -44,6 +44,43 @@ describe('cliente HTTP', () => {
     expect(headers.get('Authorization')).toBeNull()
   })
 
+  it('manda el token explicito del reto de 2FA en vez del de la sesion', async () => {
+    setAuthTokenProvider(() => 'token-de-sesion')
+    const spy = stubFetch(() => jsonResponse({ ok: true }))
+
+    await request('/api/v1/auth/2fa/verify', {
+      method: 'POST',
+      body: { code: '123456' },
+      anonymous: true,
+      token: 'challenge-token',
+    })
+
+    const init = spy.mock.calls[0]?.[1] as RequestInit
+    const headers = init.headers as Headers
+
+    expect(headers.get('Authorization')).toBe('Bearer challenge-token')
+  })
+
+  it('un codigo equivocado en el reto de 2FA no dispara el cierre de sesion global', async () => {
+    // El `token` explicito no es el de la tienda de sesion: un 401 aqui es
+    // «codigo invalido», no «la sesion ha caducado», y quien llama decide que
+    // hacer sin que el manejador global redirija por su cuenta.
+    const onUnauthenticated = vi.fn()
+
+    setUnauthenticatedHandler(onUnauthenticated)
+    stubFetch(() => problemResponse(401, 'urn:kronoqr:problem:invalid-credentials'))
+
+    const error = await request('/api/v1/auth/2fa/verify', {
+      method: 'POST',
+      body: { code: '123456' },
+      anonymous: true,
+      token: 'challenge-token',
+    }).catch((caught: unknown) => caught)
+
+    expect((error as ApiError).kind).toBe('invalidCredentials')
+    expect(onUnauthenticated).not.toHaveBeenCalled()
+  })
+
   it('serializa la cadena de consulta y omite lo que no se ha pedido', async () => {
     const spy = stubFetch(() => jsonResponse({ ok: true }))
 

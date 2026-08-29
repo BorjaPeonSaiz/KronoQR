@@ -19,12 +19,15 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  *     efecto directo en su nomina. No es la misma responsabilidad que ajustar
  *     diez minutos, y por eso no es el mismo permiso.
  *
- * En la Fase 1 los dos resuelven a `{admin, rrhh}`, porque
- * `responsable_departamento` no tiene alcance propio hasta la tarea 2.1
- * (RF-ID-03): darselo hoy seria darle el registro horario de toda la
- * instalacion, que es justo lo que ese requisito viene a impedir. **Estan
- * escritos por separado porque en 2.1 dejan de coincidir**, y una sola lista
- * obligaria a repartirla entonces, que es cuando se cometen los errores.
+ * **Desde la tarea 2.1 dejan de coincidir**, que es exactamente lo que este
+ * docblock anticipaba: `responsable_departamento` entra en `manager+` —crea y
+ * corrige— y **no** en `rrhh+` —no anula—. Anular saca horas del registro de una
+ * persona y tiene efecto directo en su nomina; que quien lleva un turno pueda
+ * ajustar diez minutos no significa que pueda borrar una jornada.
+ *
+ * Su alcance lo acota `ScopeGuard` en el controlador (RF-ID-03): puede corregir a
+ * la gente de sus departamentos y recibe `403` con asiento en `audit_log` para
+ * cualquier otra persona.
  *
  * **La policy es la mitad de la autorizacion.** La otra es el ambito
  * `attendance:correct` del token, que comprueba el middleware `ability` antes de
@@ -46,7 +49,7 @@ final class ShiftEntryPolicy
      */
     private static function correctors(): array
     {
-        return [UserRole::ADMIN, UserRole::RRHH];
+        return [UserRole::ADMIN, UserRole::RRHH, UserRole::RESPONSABLE_DEPARTAMENTO];
     }
 
     /**

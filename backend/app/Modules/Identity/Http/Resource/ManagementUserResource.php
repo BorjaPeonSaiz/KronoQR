@@ -39,6 +39,14 @@ final class ManagementUserResource extends JsonResource
             // un 403. No es autorizacion: la de verdad esta en el servidor
             // (regla dura 18).
             'abilities' => $user->abilityNames(),
+            // Y el alcance por departamento, por lo mismo (RF-ID-03). `all` con
+            // lista vacia y `departments` con lista vacia son dos cosas
+            // distintas —toda la plantilla y nadie—, y por eso el discriminante
+            // es `kind` y no si la lista viene vacia.
+            'scope' => [
+                'kind' => $user->scope->isUnrestricted() ? 'all' : 'departments',
+                'department_ids' => $user->scope->departmentIds(),
+            ],
         ];
     }
 }
