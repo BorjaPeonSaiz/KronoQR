@@ -17,12 +17,16 @@ falla si no la encuentra, y la CI ejecuta esa comprobacion al etiquetar.
 
 ### Corregido
 
+- tsc acepta la extension .ts en la importacion de vitest.config (deps)
 - el simulacro de copia arranca el cluster como fichaje_migrator, no como fichaje_app (ci)
 - el simulacro de copia espera a PostgreSQL por TCP y vuelca los logs si no arranca (ci)
 - PostgreSQL arranca como postgres sin gosu y Trivy pasa a bloqueante (security)
 
 ### Interno
 
+- matriz regenerada con los E2E del panel (trazabilidad)
+- E2E con Playwright y axe del panel de gestion (admin)
+- [Unreleased] recoge la toolchain nueva y el cierre de la Fase 1 (changelog)
 - spatie/laravel-permission 6 a 8 (deps)
 - toolchain del frontend a Vite 8, Vitest 4, ESLint 10, Pinia 4, vue-router 5 y vue-i18n 11 (deps)
 - cierre de la Fase 1 con reservas y p95 como medicion informativa (fase-1)
