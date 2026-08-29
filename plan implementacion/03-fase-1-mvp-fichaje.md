@@ -2179,7 +2179,7 @@ cobertura de prueba, y qué queda pendiente para pasar a la siguiente.
 - `vue-tsc` y PHPStan 9 con **0 errores**
 - Deptrac y Pest Arch con **0 violaciones**
 - `axe` con **0 violaciones críticas o graves**
-- Latencia del endpoint de fichaje **p95 < 150 ms** (RNF-P-02)
+- Latencia del endpoint de fichaje **p95 < 150 ms** — **medición informativa, no puerta de esta fase**: `RNF-P-02` (y `RNF-P-06`, `RQ-08`) están en la **Fase 3** por el Anexo A del doc 01 y `docs/requisitos.yaml`; la tarea 1.7 ya lo dice («la prueba de carga completa es de la tarea 3.6»). La herramienta (`load-tests/k6/run.sh`) existe; en Docker Desktop/Windows mide ~450 ms y no es evaluable — la cifra válida sale del hardware Linux de referencia
 - Bundle crítico del quiosco **≤ 250 KB gzip** (RNF-P-07, Anexo A)
 
 **Lo que no cierra ninguna herramienta, y sin lo cual la fase no está terminada:**
@@ -2189,6 +2189,8 @@ cobertura de prueba, y qué queda pendiente para pasar a la siguiente.
 3. **Recalibración de la estimación.** El §11.0 lo pide expresamente: la Fase 1 *«es la primera oportunidad de contrastar estimación contra realidad (R16 del documento 01)»*.
 
 **Estado de venta al cerrar la fase** (§11.1, ya con [ADR-032](../docs/adr/ADR-032-la-fase-1-entrega-un-sistema-legalmente-defendible.md)): `0 + 1` = **166–214 h** → ✅ **Instalable y legalmente defendible**. La auditoría encadenada por hash (1.14), las correcciones trazadas (1.15) y la exportación legal para Inspección (1.17) ya están construidas: el registro satisface el art. 34.9 ET desde el cierre de esta fase, no desde el cierre de la Fase 2. Sigue sin ser «producto vendible a escala» —eso es la Fase 5— y la Fase 2 sigue aportando lo que hace la operación diaria cómoda: 2FA obligatorio, presencia en vivo, detección automática de incidencias y purga por retención automatizada.
+
+**Estado del cierre (29-08-2026): cerrada con reservas.** Las 18 tareas, los cuatro pasos del cierre, la auditoría independiente (27-08) y todos los umbrales que verifica una herramienta están en verde (trazabilidad 75/75, MSI 84 %, CI de `main` en verde); el sistema está versionado desde `v1.0.0` hasta `v2.0.0`. Quedan abiertas **solo las tres puertas de arriba que ninguna herramienta cierra** (12 h en tablet, tarjeta física escaneada, recalibración R16): ninguna tarea de la Fase 2 depende de ellas, así que la Fase 2 arranca y esas tres avanzan en paralelo con dueño (quien tiene la tablet y la impresora) y su resultado se anota en `HANDOFF.md`. Antes de abrir 2.1, dos tareas previas cortas: la subida de toolchain del frontend y la infraestructura Playwright de `frontend-admin` (§9.5 exige E2E por recorrido y el panel no la tiene). Detalle en `HANDOFF.md`, sesión «cierre de la Fase 1 con reservas».
 
 ---
 
