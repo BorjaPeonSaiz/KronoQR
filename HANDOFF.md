@@ -10,6 +10,8 @@
 
 **Deuda (no bloqueante):** plan de consulta no medido con volumen de producción (BD de desarrollo casi vacía); `open_shifts_current` hereda `service="backup"` del job textfile (comentado en `prometheus.yml`, para `devops-observabilidad` en la 3.2); alertas Prometheus de las dos métricas (3.2); LCP medido con `PerformanceObserver` en el E2E y no con Lighthouse CI; `.env` local lleva un `REVERB_APP_SECRET` de desarrollo (recrear `app` con `docker compose up -d app` si no lo lee).
 
+**CI:** la ejecución sobre `a1549d0` falló en `setup-php` a los 10 s en dos trabajos a la vez (transitorio de GitHub, no del código: los cinco trabajos sin PHP pasaron, incluido el del cliente TypeScript regenerado); este commit de handoff la relanza. Si vuelve a fallar ahí, «Re-run failed jobs» desde la web.
+
 **Siguiente acción:** abrir la **PR de la 2.4 contra `main`** (#28/#29/#30 ya están mergeadas; la base `2fb66f5` está en `main`, no hace falta rebase) y mergear con *merge commit*. Después, camino crítico de la Fase 2: **2.6** (detección automática de incidencias) o **2.8** (informes). `current_phase` sigue en `1` hasta cerrar la fase.
 
 ## Sesión «tarea 2.4, frontend» (29-08-2026), en `feat/2.4-live-presence`
