@@ -19,9 +19,15 @@
 3. **Abrir la Fase 2 por 2.1** (2FA + RBAC por departamento; `backend-laravel` con revisión de `seguridad-cumplimiento`), raíz del camino crítico `2.1 → 2.4/2.6/2.8`. **Al empezar: `current_phase` → `2` en `backend/config/quality.php`** (lección del ALTO-1) — hoy la trazabilidad da 20 requisitos de Fase 2 sin prueba, que es lo esperado.
 4. Decisiones que caben en la Fase 2 sin tarea nueva: revocar la credencial en la baja (`EmployeeOffboarded`, junto a 2.1 o 2.12), `POST /me/logout`, la mitad de aplicación de RF-ID-08 (encaja en 2.1).
 
-**Ficheros tocados:** `plan implementacion/03-fase-1-mvp-fichaje.md` (umbral p95 + bloque «Estado del cierre»), `HANDOFF.md`. Sin commit.
+**Ejecutado en la misma sesión (tras aprobar el plan):**
 
-**Siguiente acción:** el punto 1 del orden de arriba (toolchain del frontend), en rama propia.
+1. **Toolchain del frontend → PR #28** (`chore/frontend-toolchain`): Vite 8.2, Vitest 4.1 + coverage-v8, ESLint 10.9, Pinia 4.0 (salta la 3), vue-router 5.3, vue-i18n 11.4 en los cuatro workspaces; `spatie/laravel-permission` 6→8 (nuestras migraciones literales coinciden con los nombres por defecto de la v8). Verificado: `type-check`/`lint`/unitarias/`build` en las cuatro SPA, **37/37 E2E del quiosco** con axe, bundle crítico 97,2 KiB (baja), `make quality` y `make test` **1725/9183**, `npm audit` y `composer audit` a 0, `docs:consistency` sin divergencias. Doc 02 §3.3 y plan 01 con las versiones nuevas. Sustituye a las PR #15/#17/#18/#19/#20/#22/#23/#25 de Dependabot. **Defecto propio encontrado después y corregido en la misma rama** (`fix(deps)`): la importación `./vite.config.ts` con extensión (aviso de Vite 8) no compilaba bajo `tsconfig.node.json` sin `allowImportingTsExtensions` — el `type-check` de las tres SPA estaba en rojo y yo lo había verificado antes de hacer ese cambio.
+2. **E2E del panel → PR #29** (`feat/admin-e2e`, apilada sobre #28): Playwright + `@axe-core/playwright` en `frontend-admin` con la disposición del quiosco (build por `vite preview`, API interceptada con formas del contrato, sin backend, navegador en `Atlantic/Canary` a propósito). **10/10 escenarios**: acceso/redirect/rechazo/cierre (RF-ID-01, RF-ID-02), plantilla → ficha → registro horario con corrección y cabecera `Authorization` en cada petición (RF-GP-01, RF-PA-03, RN-13), axe en cuatro pantallas. `make e2e` corre quiosco y panel; `playwright.config.ts` usa `testIdAttribute: 'data-test'` (el panel no usa `data-testid`). Trazabilidad: 45 pruebas Playwright (antes 35). La etapa E2E de la CI sigue siendo el marcador de 3.7.
+3. **Fase 2, tarea 2.1**: ver abajo el estado al cerrar la sesión.
+
+**Ficheros tocados:** ver las PR #28 y #29; `HANDOFF.md`.
+
+**Siguiente acción:** mergear #28 y #29 (CI en verde) y seguir con la tarea 2.1 en `feat/2.1-auth-2fa-rbac`.
 
 ## Sesión «Trivy a bloqueante» (29-08-2026), en `fix/postgres-nonroot-image`
 
