@@ -40,7 +40,7 @@
     "@vue/eslint-config-prettier": "^10.2.0",
     "@vue/eslint-config-typescript": "^14.9.0",
     "@vue/test-utils": "^2.4.11",
-    "eslint": "^9.39.5",
+    "eslint": "^10.9.0",
     "eslint-plugin-vue": "^10.10.0",
     "fake-indexeddb": "^6.2.5",
     "jsdom": "^30.0.1",
