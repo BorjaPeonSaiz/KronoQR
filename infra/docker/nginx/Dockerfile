@@ -6,7 +6,7 @@
 # Base sin root: nginx-unprivileged corre como uid 101 y escucha en 8080/8443.
 # El mapeo a 80/443 lo hace el fichero de compose.
 
-FROM nginxinc/nginx-unprivileged:1.27-alpine
+FROM nginxinc/nginx-unprivileged:1.31-alpine
 
 USER root
 
