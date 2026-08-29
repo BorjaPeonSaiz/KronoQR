@@ -13,6 +13,26 @@ lo siga no aparece aqui, y el generador lo avisa por la salida de error.
 Ninguna version se publica sin su entrada: `make changelog-check VERSION=1.2.3`
 falla si no la encuentra, y la CI ejecuta esa comprobacion al etiquetar.
 
+## [Unreleased]
+
+### Corregido
+
+- el simulacro de copia arranca el cluster como fichaje_migrator, no como fichaje_app (ci)
+- el simulacro de copia espera a PostgreSQL por TCP y vuelca los logs si no arranca (ci)
+- PostgreSQL arranca como postgres sin gosu y Trivy pasa a bloqueante (security)
+
+### Interno
+
+- spatie/laravel-permission 6 a 8 (deps)
+- toolchain del frontend a Vite 8, Vitest 4, ESLint 10, Pinia 4, vue-router 5 y vue-i18n 11 (deps)
+- cierre de la Fase 1 con reservas y p95 como medicion informativa (fase-1)
+- triaje de las 16 PR de Dependabot y PR #26 mergeada (handoff)
+- Bump actions/upload-artifact from 4.6.2 to 7.0.1 (deps)
+- PR #26 abierta, CI y simulacro de copia en verde (handoff)
+- Bump the npm-menores-y-parches group with 2 updates (deps)
+- Bump the composer-menores-y-parches group (deps)
+- Bump nginxinc/nginx-unprivileged (deps)
+
 ## [2.0.0] - 2026-08-29
 
 ### Cambios incompatibles
