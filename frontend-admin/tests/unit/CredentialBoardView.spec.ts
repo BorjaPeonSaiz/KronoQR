@@ -44,8 +44,8 @@ function routes(
   extra?: (url: string, init: RequestInit | undefined) => Response | null,
 ) {
   return (url: string, init: RequestInit | undefined) => {
-    if (url.startsWith('/api/v1/sites')) {
-      return jsonResponse({ data: [SITE] })
+    if (url.startsWith('/api/v1/site')) {
+      return jsonResponse(SITE)
     }
 
     const handled = extra?.(url, init) ?? null
@@ -408,8 +408,8 @@ describe('CredentialBoardView', () => {
     await selectPendingOnly(wrapper)
     await settle()
 
-    // Va al servidor, como `site`: acota tambien el resumen y el lote de
-    // impresion, cosa que un filtro solo-en-cliente no podria hacer.
+    // Va al servidor: acota tambien el resumen y el lote de impresion, cosa
+    // que un filtro solo-en-cliente no podria hacer.
     const urls = spy.mock.calls.map((call) => String(call[0]))
 
     expect(urls.some((url) => url.includes('pending=true'))).toBe(true)

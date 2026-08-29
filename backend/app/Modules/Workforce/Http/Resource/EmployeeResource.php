@@ -49,7 +49,6 @@ final class EmployeeResource extends JsonResource
             // Siempre presente, aunque sea `null`: el contrato lo exige y un
             // campo que aparece y desaparece obliga al cliente a adivinar.
             'email' => $employee->email,
-            'site_id' => $employee->siteId,
             'department_id' => $employee->departmentId,
             'status' => $employee->status->value,
             'hired_at' => $employee->hiredAt->format('Y-m-d'),

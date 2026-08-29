@@ -46,7 +46,6 @@ export function shiftEntry(overrides: Partial<WorkDayShiftEntry> = {}): WorkDayS
     uuid: SHIFT_ENTRY_UUID,
     version: 2,
     status: 'closed',
-    site_id: 1,
     time_zone: 'Europe/Madrid',
     clocked_in_at: '2026-03-14T05:00:00.000000Z',
     clocked_in_at_local: '2026-03-14T06:00:00.000000+01:00',

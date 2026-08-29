@@ -36,6 +36,11 @@ use App\Modules\Compliance\Domain\Exception\AuditActionHasNoEvent;
  * —caen en la familia de credenciales, porque el PIN es otro soporte de la misma
  * potestad—, pero si el vocabulario, y por eso se decide aqui y no en el modulo
  * que las emite.
+ *
+ * Las tres acciones de `auth.*` cierran el hueco de OWASP A09. Solo entran aqui
+ * los hechos de **bajo volumen** —entrar, salir y que se abra un bloqueo—; el
+ * fallo suelto no, y el motivo esta en
+ * `docs/adr/ADR-039-que-hechos-de-autenticacion-dejan-asiento.md`.
  */
 enum AuditAction: string
 {
@@ -59,6 +64,12 @@ enum AuditAction: string
     case PinIssued = 'pin.issued';
     case PinReset = 'pin.reset';
     case PinDelivered = 'pin.delivered';
+
+    // --- Autenticacion (RF-ID-01, RF-ID-06, RS-12, OWASP A09) ----------------
+
+    case LoginSucceeded = 'auth.login_succeeded';
+    case Logout = 'auth.logout';
+    case LockoutStarted = 'auth.lockout_started';
 
     // --- Dispositivos (RF-KI-*) ----------------------------------------------
 
@@ -104,6 +115,11 @@ enum AuditAction: string
         // entrega que la tarjeta. Cae en la misma familia del bloque D: no es
         // una familia nueva, es otro soporte de la misma potestad.
         'pin' => AuditableEvent::CredentialLifecycle,
+        // La sesion es otra credencial de acceso, con el mismo ciclo de emision
+        // y revocacion que la tarjeta y que el PIN (ADR-039): no abre familia
+        // nueva del bloque D, abre vocabulario, y por eso se decide aqui y no en
+        // Identity.
+        'auth' => AuditableEvent::CredentialLifecycle,
         'device' => AuditableEvent::DeviceLifecycle,
         'personal_data' => AuditableEvent::PersonalDataAccess,
         'legal_export' => AuditableEvent::LegalExport,

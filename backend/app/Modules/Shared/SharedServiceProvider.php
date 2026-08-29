@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace App\Modules\Shared;
 
+use App\Modules\Shared\Application\Port\AuthenticationMetrics;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\PinAttempts;
 use App\Modules\Shared\Application\Port\SealedPinOpener;
 use App\Modules\Shared\Infrastructure\Adapter\CachePinAttempts;
 use App\Modules\Shared\Infrastructure\Adapter\SodiumSealedPinOpener;
 use App\Modules\Shared\Infrastructure\Adapter\SystemClock;
+use App\Modules\Shared\Infrastructure\Metrics\RedisAuthenticationMetrics;
 use Illuminate\Support\ServiceProvider;
 
 /**
@@ -45,5 +47,12 @@ final class SharedServiceProvider extends ServiceProvider
         // abre al fichar (tarea 1.12) y `Kiosk` publica su clave publica en el
         // padron para que la tablet pueda cerrarlo sin red.
         $this->app->singleton(SealedPinOpener::class, SodiumSealedPinOpener::class);
+
+        // `kronoqr_auth_attempts_total{channel,outcome}` (OWASP A09, §8.2). Vive
+        // aqui, y no en `Identity`, porque los tres canales que lo alimentan
+        // —panel, portal y PIN del quiosco— salen de tres modulos que no pueden
+        // importarse entre si, y una metrica contada por tres adaptadores
+        // distintos serian tres series con el mismo nombre y distinto criterio.
+        $this->app->singleton(AuthenticationMetrics::class, RedisAuthenticationMetrics::class);
     }
 }

@@ -12,16 +12,9 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
 
 /**
- * Modificacion parcial de una ficha (RF-GP-01).
+ * `PATCH /api/v1/employees/{uuid}` (contrato `UpdateEmployeeRequest`).
  *
- * **`terminated` no esta entre los estados admitidos.** La baja lleva fecha de
- * cese y consecuencias (RN-14) y tiene su propio endpoint; un `PATCH` que
- * pudiera darla acabaria produciendo bajas sin fecha, que es justo lo que la
- * restriccion `employees_chk_terminated_has_date` existe para impedir.
- *
- * La distincion entre «no enviado» y «enviado a null» se conserva hasta el caso
- * de uso: en un `PATCH` son dos ordenes distintas y confundirlas borraria el
- * correo de alguien por omision.
+ * Sin `site_id` (ADR-040) y sin `terminated`: la baja tiene su propio endpoint.
  */
 final class UpdateEmployeeRequest extends FormRequest
 {
@@ -38,7 +31,6 @@ final class UpdateEmployeeRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'site_id' => ['sometimes', 'integer', 'min:1', 'exists:sites,id'],
             'department_id' => ['sometimes', 'nullable', 'integer', 'min:1', 'exists:departments,id'],
             'first_name' => ['sometimes', 'string', 'max:100'],
             'last_name' => ['sometimes', 'string', 'max:150'],
@@ -56,7 +48,6 @@ final class UpdateEmployeeRequest extends FormRequest
             lastName: $this->filledString('last_name'),
             email: $this->nullableString('email'),
             emailGiven: $this->has('email'),
-            siteId: $this->has('site_id') ? $this->integer('site_id') : null,
             departmentId: $this->has('department_id') && $this->input('department_id') !== null
                 ? $this->integer('department_id')
                 : null,

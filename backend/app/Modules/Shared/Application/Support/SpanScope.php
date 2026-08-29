@@ -88,14 +88,13 @@ final class SpanScope
      * dura el acto.
      *
      * Existe por un caso concreto y documentado:
-     * `Identity\Application\Support\PortalAccessTelemetry` escribe sus tres
-     * apuntes —aceptado, rechazado, bloqueado— desde metodos publicos que el caso
-     * de uso invoca **dentro** del acto medido, donde no tiene a mano el span. Su
-     * unica forma de fechar esos apuntes era leer {@see self::currentTraceId()},
-     * y eso daba una respuesta distinta de la de las otras seis cuando la
-     * peticion llega sin `traceparent`: el span propio abre entonces una traza
-     * nueva que el contexto ambiente no conoce, y el log se quedaba sin
-     * identificador.
+     * `Identity\Application\Support\PortalAccessTelemetry` mide el acceso al
+     * portal y **no escribe sus apuntes**. Los escribe el rastro de
+     * autenticacion, desde dentro del acto medido y sin el span a mano, asi que
+     * su unica forma de fecharlos es leer {@see self::currentTraceId()} — y eso
+     * daba una respuesta distinta de la de las otras seis cuando la peticion
+     * llega sin `traceparent`: el span propio abre entonces una traza nueva que
+     * el contexto ambiente no conoce, y el log se quedaba sin identificador.
      *
      * Activando el span, el contexto en curso **es** el span propio: las dos
      * lecturas devuelven el mismo identificador siempre, y la divergencia deja de

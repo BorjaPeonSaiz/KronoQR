@@ -68,7 +68,6 @@ interface EmployeeRepository
      * @return list<Employee>
      */
     public function search(
-        ?int $siteId,
         ?int $departmentId,
         ?EmploymentStatus $status,
         ?string $search,
@@ -85,7 +84,6 @@ interface EmployeeRepository
      * pediria paginas que no existen.
      */
     public function countMatching(
-        ?int $siteId,
         ?int $departmentId,
         ?EmploymentStatus $status,
         ?string $search,

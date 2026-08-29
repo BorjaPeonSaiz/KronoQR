@@ -12,23 +12,29 @@ use Tests\Support\Workforce\EmployeePins;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
- * El `trace_id` del acceso al portal (doc 02 §8.1).
+ * El `trace_id` del acceso al portal (doc 02 §8.1) y **quien escribe su apunte**
+ * (ADR-039).
  *
- * ## El defecto que esta prueba fija
+ * ## Los dos defectos que estas pruebas fijan
  *
- * `PortalAccessTelemetry` escribe sus tres apuntes —aceptado, rechazado,
- * bloqueado— desde metodos que el caso de uso invoca **dentro** del acto medido,
- * donde no tiene el span a mano: los fecha leyendo la traza en curso. Mientras el
- * span se abria SIN activar, esa lectura daba una respuesta distinta de la del
- * span propio en el unico caso que importa: **una peticion que llega sin
- * `traceparent`**, que es la mayoria —el portal se abre escribiendo la direccion,
- * no navegando desde otra pagina instrumentada—. El span propio abria entonces
- * una traza nueva que el contexto ambiente no conocia, y el log salia con
- * `trace_id: null`.
+ * 1. **El apunte se quedaba sin `trace_id`.** `PortalAccessTelemetry` mide el
+ *    intento con un span propio, pero el apunte lo escribe otra pieza —hoy
+ *    `AuthenticationJournal`— desde dentro del acto medido, donde no tiene el
+ *    span a mano: lo fecha leyendo la traza en curso. Mientras el span se abria
+ *    SIN activar, esa lectura daba otra respuesta en el unico caso que importa,
+ *    **una peticion que llega sin `traceparent`** —la mayoria: al portal se llega
+ *    escribiendo la direccion—. El span propio abria entonces una traza nueva que
+ *    el contexto ambiente no conocia, y el log salia con `trace_id: null`.
  *
- * Un apunte de acceso sin `trace_id` no es un detalle de observabilidad: es el
- * unico hilo por el que se une «alguien intento entrar 40 veces» con la traza que
- * dice desde donde.
+ *    Un apunte de acceso sin `trace_id` no es un detalle de observabilidad: es el
+ *    unico hilo por el que se une «alguien intento entrar 40 veces» con la traza
+ *    que dice desde donde.
+ *
+ * 2. **El mismo hecho se apuntaba dos veces con dos nombres.**
+ *    `identity.portal_login_succeeded/_rejected/_locked` por un lado y `auth.*`
+ *    por otro: dos poblaciones que un panel cuenta como una. Ahora la autoridad
+ *    es una —el journal— y la telemetria conserva solo el span. Cada prueba de
+ *    abajo cuenta los apuntes para que una segunda voz vuelva a fallar.
  *
  * ## Por que sin `traceparent` y no con el
  *
@@ -54,14 +60,19 @@ function empleadoConTrazaReal(): array
 }
 
 /**
- * Recoge los apuntes de acceso al portal que se escriban a partir de ahora.
+ * Recoge **todo** apunte de acceso que se escriba a partir de ahora: los `auth.*`
+ * del rastro y los `identity.portal_login_*` que ya no debe escribir nadie.
+ *
+ * Se escuchan los dos prefijos a proposito: si alguien devolviera la segunda voz,
+ * las cuentas de abajo lo verian.
  *
  * @param  list<array{message: string, trace_id: string|null}>  $apuntes
  */
 function capturaApuntesDePortal(array &$apuntes): void
 {
     Log::listen(function (MessageLogged $evento) use (&$apuntes): void {
-        if (! str_starts_with($evento->message, 'identity.portal_login_')) {
+        if (! str_starts_with($evento->message, 'auth.')
+            && ! str_starts_with($evento->message, 'identity.portal_login_')) {
             return;
         }
 
@@ -105,6 +116,10 @@ it('fecha el apunte de acceso aceptado con el trace_id del span, sin traceparent
         expect($spans)->toHaveCount(1)
             ->and($spans[0]->getName())->toBe('identity.portal_login');
 
+        // Uno, y del rastro: la telemetria del portal ya no escribe el suyo.
+        expect($apuntes)->toHaveCount(1)
+            ->and($apuntes[0]['message'])->toBe('auth.login_succeeded');
+
         expect(traceIdsDe($apuntes))->toBe([$spans[0]->getContext()->getTraceId()]);
     });
 })->group('RF-ID-06', 'RL-05');
@@ -127,7 +142,9 @@ it('fecha tambien el apunte de acceso rechazado con el trace_id de su propio spa
         $spans = $tracer->finishedSpans();
 
         expect($spans)->toHaveCount(1)
-            ->and($apuntes[0]['message'] ?? '')->toBe('identity.portal_login_rejected');
+            // Uno solo: el verificador escribe el rechazo y nadie lo repite.
+            ->and($apuntes)->toHaveCount(1)
+            ->and($apuntes[0]['message'])->toBe('auth.login_failed');
 
         expect(traceIdsDe($apuntes))->toBe([$spans[0]->getContext()->getTraceId()]);
     });

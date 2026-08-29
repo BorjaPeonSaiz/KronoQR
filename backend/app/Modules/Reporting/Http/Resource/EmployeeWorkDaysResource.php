@@ -121,7 +121,6 @@ final class EmployeeWorkDaysResource extends JsonResource
             'uuid' => $entry->uuid,
             'version' => $entry->version,
             'status' => $entry->status,
-            'site_id' => $entry->siteId,
             'time_zone' => $entry->timeZone,
             'clocked_in_at' => self::utc($entry->clockedInAt),
             'clocked_in_at_local' => self::local($entry->clockedInAt, $entry->timeZone),

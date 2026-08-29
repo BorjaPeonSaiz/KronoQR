@@ -28,10 +28,8 @@ use Illuminate\Console\Command;
  * ejecuta cada hora con `--quiet`; el endpoint del panel **no** las escribe, para
  * no tocar disco en cada peticion.
  *
- * `--no-metrics` existe para que una consulta manual de madrugada no reescriba el
- * fichero con el alcance de un solo centro: si se pasa `--site`, la publicacion
- * dejaria fuera a los demas y sus series desapareceran. Por eso se apaga sola
- * cuando hay `--site`.
+ * `--no-metrics` existe para que una consulta manual no reescriba el fichero
+ * que alimenta el planificador.
  *
  * ## El nombre completo si sale por aqui
  *
@@ -42,13 +40,12 @@ use Illuminate\Console\Command;
  *
  * Y **por eso mismo deja asiento en `audit_log`** (RS-05): sacar el directorio
  * nominal por una terminal es la misma divulgacion que sacarlo por la API. La
- * ejecucion del planificador —`--quiet-table`, que solo imprime el resumen por
- * centro— no lo deja, porque ahi no hay ningun nombre que se lleve nadie.
+ * ejecucion del planificador —`--quiet-table`, que solo imprime el resumen— no
+ * lo deja, porque ahi no hay ningun nombre que se lleve nadie.
  */
 final class CredentialStatusCommand extends Command
 {
     protected $signature = 'credentials:status
-        {--site= : Identificador del centro. Sin el, toda la instalacion}
         {--pending : Solo quien todavia no tiene la tarjeta en la mano}
         {--no-metrics : No reescribe el fichero de metricas}
         {--quiet-table : Solo el resumen, sin la tabla. Para el planificador}';
@@ -57,15 +54,6 @@ final class CredentialStatusCommand extends Command
 
     public function handle(CredentialStatusBoard $board): int
     {
-        $site = $this->option('site');
-        $siteId = \is_string($site) && trim($site) !== '' ? (int) $site : null;
-
-        if ($siteId !== null && $siteId < 1) {
-            $this->error('--site tiene que ser el identificador de un centro.');
-
-            return self::INVALID;
-        }
-
         // Una sola verdad para las dos decisiones que dependen de ella: si las
         // filas nominales se pintan y si la lectura deja asiento en `audit_log`.
         // Derivarlas por separado de la misma opcion es como se acaba auditando
@@ -73,18 +61,14 @@ final class CredentialStatusCommand extends Command
         $quiet = (bool) $this->option('quiet-table');
 
         $query = new CredentialStatusQuery(
-            siteId: $siteId,
             pendingOnly: (bool) $this->option('pending'),
-            // RS-05: con `--quiet-table` nadie ve un nombre —solo el resumen por
-            // centro—, asi que no hay divulgacion que registrar. Sin la opcion,
+            // RS-05: con `--quiet-table` nadie ve un nombre —solo el resumen—,
+            // asi que no hay divulgacion que registrar. Sin la opcion,
             // la tabla nominal sale por pantalla y el asiento se escribe.
             unattended: $quiet,
         );
 
-        // Con `--site` NO se publican metricas aunque no se pida `--no-metrics`:
-        // el fichero es global y escribirlo con un solo centro dentro haria
-        // desaparecer las series de todos los demas.
-        $publish = ! (bool) $this->option('no-metrics') && $siteId === null;
+        $publish = ! (bool) $this->option('no-metrics');
 
         $report = $publish
             ? $board->handleAndPublishMetrics($query)
@@ -116,11 +100,10 @@ final class CredentialStatusCommand extends Command
         }
 
         $this->table(
-            ['Empleado', 'Codigo', 'Centro', 'Departamento', 'Estado', 'Credencial'],
+            ['Empleado', 'Codigo', 'Departamento', 'Estado', 'Credencial'],
             array_map(static fn (CredentialStatusRow $row): array => [
                 $row->employee->fullName,
                 $row->employee->employeeCode,
-                $row->employee->siteName,
                 $row->employee->departmentName ?? '—',
                 self::label($row->status),
                 $row->credential instanceof Credential ? $row->credential->uuid : '—',
@@ -128,20 +111,15 @@ final class CredentialStatusCommand extends Command
         );
     }
 
-    /**
-     * @param  list<SiteCredentialCoverage>  $coverage
-     */
-    private function renderCoverage(array $coverage): void
+    private function renderCoverage(SiteCredentialCoverage $coverage): void
     {
-        foreach ($coverage as $site) {
-            $this->line(sprintf(
-                '%s — sin tarjeta entregada: %d de %d · pendientes de imprimir: %d',
-                $site->siteName,
-                $site->withoutDeliveredCredential,
-                $site->employees,
-                $site->pendingPrint,
-            ));
-        }
+        $this->line(sprintf(
+            '%s — sin tarjeta entregada: %d de %d · pendientes de imprimir: %d',
+            $coverage->siteName,
+            $coverage->withoutDeliveredCredential,
+            $coverage->employees,
+            $coverage->pendingPrint,
+        ));
     }
 
     /**

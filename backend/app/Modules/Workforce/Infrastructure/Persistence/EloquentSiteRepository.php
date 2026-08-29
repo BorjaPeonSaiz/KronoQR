@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Infrastructure\Persistence;
 
 use App\Modules\Workforce\Application\Port\SiteRepository;
+use App\Modules\Workforce\Domain\Exception\SiteAlreadyConfigured;
 use App\Modules\Workforce\Domain\Exception\SiteNameAlreadyTaken;
 use App\Modules\Workforce\Domain\Model\Site as SiteEntity;
 use App\Modules\Workforce\Domain\ValueObject\SiteTimezone;
@@ -12,11 +13,12 @@ use Illuminate\Database\QueryException;
 use RuntimeException;
 
 /**
- * Los centros sobre Eloquent.
+ * `sites` con una sola fila (ADR-040).
  *
- * `settings` y `compliance_profile_id` no se tocan aqui aunque esten en la
- * tabla: son de `Product`. Este repositorio escribe exactamente los dos campos
- * que este modulo gobierna.
+ * La unicidad la impone el indice `sites_single_row_uidx`, no una consulta
+ * previa: entre el `SELECT` y el `INSERT` cabria otro alta, y el indice es lo
+ * que hace imposible el segundo centro tambien bajo concurrencia. Aqui solo se
+ * traduce su violacion a la excepcion del dominio.
  */
 final readonly class EloquentSiteRepository implements SiteRepository
 {
@@ -50,16 +52,11 @@ final readonly class EloquentSiteRepository implements SiteRepository
         }
     }
 
-    public function findById(int $id): ?SiteEntity
+    public function installationSite(): ?SiteEntity
     {
-        $row = Site::query()->find($id);
+        $row = Site::query()->orderBy('id')->first();
 
         return $row instanceof Site ? $this->toEntity($row) : null;
-    }
-
-    public function all(): array
-    {
-        return array_values(array_map($this->toEntity(...), Site::query()->orderBy('name')->get()->all()));
     }
 
     private function toEntity(Site $row): SiteEntity
@@ -71,9 +68,15 @@ final readonly class EloquentSiteRepository implements SiteRepository
         );
     }
 
-    private function translate(QueryException $exception, string $name): QueryException|SiteNameAlreadyTaken
+    private function translate(QueryException $exception, string $name): QueryException|SiteAlreadyConfigured|SiteNameAlreadyTaken
     {
-        return str_contains($exception->getMessage(), 'sites_name_unique')
+        $message = $exception->getMessage();
+
+        if (str_contains($message, 'sites_single_row_uidx')) {
+            return SiteAlreadyConfigured::make();
+        }
+
+        return str_contains($message, 'sites_name_unique')
             ? SiteNameAlreadyTaken::forName($name)
             : $exception;
     }

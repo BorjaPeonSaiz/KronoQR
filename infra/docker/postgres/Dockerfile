@@ -6,7 +6,7 @@
 # el arranque de extensiones: btree_gist (RN-02, restriccion de exclusion),
 # pgcrypto (hash del DNI y cadena de auditoria) y citext (employee_code).
 
-FROM postgres:17-alpine
+FROM postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
 
 # Regla dura 3: la base de datos nace en UTC. Si nace en Europe/Madrid, todo lo
 # que venga despues arrastra el error y no se nota hasta el cambio de hora.
@@ -14,9 +14,33 @@ ENV TZ=UTC \
   PGTZ=UTC \
   LANG=C.UTF-8
 
+# `apk upgrade` ACOTADO a las dos librerias que motivan la linea, no a ciegas
+# (IMPORTANTE 7 de la auditoria). La imagen base fija los paquetes de Alpine
+# al dia de su propia publicacion, y basta que pase una semana para que
+# `libssl3`/`libcrypto3` tengan una version parcheada disponible en el mismo
+# indice de paquetes sin que la imagen base se haya reconstruido todavia:
+# verificado con `trivy image` (doc 02 §9.2), sin esta linea aparecia
+# CVE-2026-14456 en las dos con arreglo ya publicado. Pero un `apk upgrade
+# --no-cache` SIN paquetes tambien puede subir `postgresql17` en si mismo si
+# el indice de Alpine publica un parche antes de que la imagen base se
+# reconstruya, y eso es justo lo que no puede pasar aqui: la version del
+# SERVIDOR tiene que ser la que dice el tag de la imagen, no la que resuelva
+# `apk` el dia del build. Acotar a los dos paquetes cierra el CVE sin abrir
+# esa puerta.
+#
+# La imagen base esta fijada por DIGEST y no solo por tag (mismo motivo):
+# `postgres:17-alpine` es un tag movil que Docker y Alpine reconstruyen sin
+# avisar, y dos `docker build` el mismo dia en maquinas distintas podrian
+# partir de contenidos distintos. Con el digest, quien decide CUANDO se sube
+# de base es un PR de Dependabot (.github/dependabot.yml, ecosistema
+# `docker`), no una reconstruccion silenciosa. Para actualizarlo a mano:
+# `docker pull postgres:17-alpine && docker inspect --format='{{index
+# .RepoDigests 0}}' postgres:17-alpine`.
+#
 # bash para el archivado de WAL: `set -o pipefail` no existe en el `sh` de
-# BusyBox, y el doc 02 §3.5 lo exige en todo script. Es lo unico que se añade.
-RUN apk add --no-cache bash
+# BusyBox, y el doc 02 §3.5 lo exige en todo script. Es lo unico que se añade
+# ademas de la actualizacion.
+RUN apk upgrade --no-cache libssl3 libcrypto3 && apk add --no-cache bash
 
 COPY infra/docker/postgres/initdb/ /docker-entrypoint-initdb.d/
 # El script de roles se EJECUTA, no se carga con `.`: el entrypoint oficial hace

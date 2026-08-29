@@ -1,16 +1,18 @@
-// Centros y departamentos. Viven en `shared` y no dentro de una feature porque
-// los usan las dos: el alta de empleado los necesita para sus selectores y el
-// panel de credenciales necesita la ZONA HORARIA del centro para poder enseñar
-// una hora que signifique algo (regla dura 3, RN-05).
+// El centro y los departamentos de la instalacion. Viven en `shared` y no
+// dentro de una feature porque los usan varias: el alta de empleado necesita
+// los departamentos para su selector, y el panel de credenciales y la ficha
+// necesitan la ZONA HORARIA del centro para poder enseñar una hora que
+// signifique algo (regla dura 3, RN-05).
+//
+// Hay exactamente un centro por instalacion (ADR-040): el recurso es singular
+// y ninguna pantalla lo elige.
 import { requestJson } from '@kronoqr/web-kit/http'
-import type { DepartmentCollection, SiteCollection } from './types'
+import type { DepartmentCollection, Site } from './types'
 
-export function listSites(): Promise<SiteCollection> {
-  return requestJson<SiteCollection>('/api/v1/sites')
+export function getSite(): Promise<Site> {
+  return requestJson<Site>('/api/v1/site')
 }
 
-export function listDepartments(siteId?: number): Promise<DepartmentCollection> {
-  return requestJson<DepartmentCollection>('/api/v1/departments', {
-    query: { site_id: siteId },
-  })
+export function listDepartments(): Promise<DepartmentCollection> {
+  return requestJson<DepartmentCollection>('/api/v1/departments')
 }

@@ -26,8 +26,8 @@ import {
 
 const DEPARTMENTS = {
   data: [
-    { id: 3, site_id: 1, name: 'Recepcion' },
-    { id: 4, site_id: 1, name: 'Cocina' },
+    { id: 3, name: 'Recepcion' },
+    { id: 4, name: 'Cocina' },
   ],
 }
 
@@ -43,8 +43,8 @@ function routes(
   extra?: (url: string, init: RequestInit | undefined) => Response | null,
 ) {
   return (url: string, init: RequestInit | undefined) => {
-    if (url.startsWith('/api/v1/sites')) {
-      return jsonResponse({ data: [SITE] })
+    if (url.startsWith('/api/v1/site')) {
+      return jsonResponse(SITE)
     }
 
     if (url.startsWith('/api/v1/departments')) {
@@ -59,15 +59,14 @@ function routes(
 
     if (url.startsWith('/api/v1/credentials/status')) {
       // El doble se comporta como el servidor real: solo devuelve la fila de
-      // esta persona cuando la peticion la acota por `employee_uuid` (y por
-      // `site_id`, ADR-037). Si el cliente dejara de mandar esos parametros,
-      // aqui volveria un tablero vacio y la prueba de mas abajo lo notaria.
+      // esta persona cuando la peticion la acota por `employee_uuid` (ADR-037).
+      // Si el cliente dejara de mandar ese parametro, aqui volveria un tablero
+      // vacio y la prueba de mas abajo lo notaria.
       const requestUrl = new URL(url, 'http://localhost')
       const matchesEmployee = requestUrl.searchParams.get('employee_uuid') === record.uuid
-      const matchesSite = requestUrl.searchParams.get('site_id') === String(record.site_id)
 
       return jsonResponse(
-        matchesEmployee && matchesSite
+        matchesEmployee
           ? board([boardRow({ employee_uuid: record.uuid, status: 'pending_delivery' })])
           : board([]),
       )
@@ -322,7 +321,6 @@ describe('EmployeeDetailView', () => {
       const actions = wrapper.findComponent(CredentialRowActions)
 
       expect(wrapper.text()).toContain(es.credentials.status.pending_delivery)
-      expect(wrapper.text()).toContain('Hotel Marina')
       expect(actions.text()).toContain(es.credentials.actions.deliver)
     })
 
@@ -335,7 +333,8 @@ describe('EmployeeDetailView', () => {
       const query = lastCredentialStatusQuery(spy)
 
       expect(query.get('employee_uuid')).toBe(EMPLOYEE_UUID)
-      expect(query.get('site_id')).toBe('1')
+      // ADR-040: no hay centro que elegir, y el servidor rechazaria el parametro.
+      expect(query.has('site_id')).toBe(false)
     })
 
     it('elige la fila de esta persona por employee_uuid, nunca la primera del tablero', async () => {

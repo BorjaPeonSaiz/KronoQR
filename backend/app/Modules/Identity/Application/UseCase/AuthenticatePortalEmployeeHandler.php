@@ -8,9 +8,12 @@ use App\Modules\Identity\Application\Command\AuthenticatePortalEmployeeCommand;
 use App\Modules\Identity\Application\Exception\PortalAccessDenied;
 use App\Modules\Identity\Application\Support\PortalAccessTelemetry;
 use App\Modules\Identity\Domain\ValueObject\TokenAbility;
+use App\Modules\Shared\Application\Port\AuthenticationJournal;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\EmployeePinVerifier;
 use App\Modules\Shared\Application\Port\PortalSessionIssuer;
+use App\Modules\Shared\Domain\ValueObject\AuthChannel;
+use App\Modules\Shared\Domain\ValueObject\AuthFailureReason;
 use App\Modules\Shared\Domain\ValueObject\PinOrigin;
 use App\Modules\Shared\Domain\ValueObject\PortalSession;
 use DateTimeImmutable;
@@ -84,6 +87,18 @@ use DateTimeImmutable;
  * enseña en una inspeccion. Si el producto decide que quiere constancia de los
  * accesos al portal, es un cambio del dominio de auditoria y de su restriccion
  * de esquema, no una linea de este fichero.
+ *
+ * **Lo que si deja rastro es {@see AuthenticationJournal}** (OWASP A09,
+ * ADR-039): el contador `kronoqr_auth_attempts_total{channel="portal"}` en los
+ * tres desenlaces, un apunte `auth.login_failed` por cada rechazo —sin sujeto,
+ * porque el verificador no devuelve ninguno (RS-03)— y el asiento
+ * `auth.lockout_started` cuando el bloqueo se abre, que si puede escribirse sin
+ * el tipo de actor que falta porque **lo decide el servidor**.
+ *
+ * Los apuntes del rechazo los emite **el verificador del PIN y solo el**, que es
+ * el unico que sabe por que se rechaza y el que ya lleva la cuenta: repetirlos
+ * aqui daria dos apuntes por intento y dos incrementos por fallo.
+ * {@see PortalAccessTelemetry} conserva unicamente el span.
  */
 final readonly class AuthenticatePortalEmployeeHandler
 {
@@ -92,6 +107,7 @@ final readonly class AuthenticatePortalEmployeeHandler
         private PortalSessionIssuer $sessions,
         private Clock $clock,
         private PortalAccessTelemetry $telemetry,
+        private AuthenticationJournal $journal,
         /**
          * Vida de la sesion, en horas, ya resuelta de la configuracion (regla
          * dura 13 y 14): el caso de uso no consulta `config()`.
@@ -115,17 +131,18 @@ final readonly class AuthenticatePortalEmployeeHandler
 
         sodium_memzero($pin);
 
+        // Los dos rechazos de aqui no apuntan nada: el verificador ya escribio su
+        // `auth.login_failed` —el mismo para los dos, que es lo que exige RS-03—
+        // y ya sumo el intento. Apuntarlo tambien aqui daria dos lineas por
+        // intento con dos nombres distintos, que es el defecto que ADR-039 y esta
+        // rama cierran.
         if ($verification->isLocked()) {
-            $this->telemetry->locked($verification->retryAfterSeconds());
-
             throw new PortalAccessDenied;
         }
 
         $employeeUuid = $verification->employeeUuid();
 
         if ($employeeUuid === null) {
-            $this->telemetry->rejected();
-
             throw new PortalAccessDenied;
         }
 
@@ -142,12 +159,19 @@ final readonly class AuthenticatePortalEmployeeHandler
         );
 
         if (! $session instanceof PortalSession) {
-            $this->telemetry->rejected();
+            // El unico rechazo del portal que si sabe a quien nombrar: el PIN
+            // era el bueno y la sesion no llego a existir. No lo puede emitir el
+            // verificador, que ya termino su parte diciendo que si.
+            $this->journal->failed(
+                AuthChannel::PORTAL,
+                $employeeUuid,
+                AuthFailureReason::SESSION_NOT_ISSUED,
+            );
 
             throw new PortalAccessDenied;
         }
 
-        $this->telemetry->succeeded($session->employeeUuid);
+        $this->journal->succeeded(AuthChannel::PORTAL, $session->employeeUuid);
 
         return $session;
     }

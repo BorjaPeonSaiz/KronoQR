@@ -45,7 +45,6 @@ function managementEndpoints(): array
         'listar empleados' => ['GET', '/api/v1/employees', []],
         'ver un empleado' => ['GET', '/api/v1/employees/0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90', []],
         'dar de alta' => ['POST', '/api/v1/employees', [
-            'site_id' => 1,
             'first_name' => 'Youssef',
             'last_name' => 'Amrani',
             'hired_at' => '2026-08-14',
@@ -58,12 +57,11 @@ function managementEndpoints(): array
         ]],
         'listar departamentos' => ['GET', '/api/v1/departments', []],
         'ver un departamento' => ['GET', '/api/v1/departments/1', []],
-        'crear un departamento' => ['POST', '/api/v1/departments', ['site_id' => 1, 'name' => 'Recepcion']],
+        'crear un departamento' => ['POST', '/api/v1/departments', ['name' => 'Recepcion']],
         'renombrar un departamento' => ['PATCH', '/api/v1/departments/1', ['name' => 'Recepcion']],
-        'listar centros' => ['GET', '/api/v1/sites', []],
-        'ver un centro' => ['GET', '/api/v1/sites/1', []],
-        'crear un centro' => ['POST', '/api/v1/sites', ['name' => 'Hotel Marina']],
-        'modificar un centro' => ['PATCH', '/api/v1/sites/1', ['name' => 'Hotel Marina']],
+        // El centro es un recurso singular (ADR-040): ni lista ni alta.
+        'ver el centro' => ['GET', '/api/v1/site', []],
+        'modificar el centro' => ['PATCH', '/api/v1/site', ['name' => 'Hotel Marina']],
 
         // Credenciales (tarea 1.5). Su ambito es `credentials:*` y no
         // `employees:*`: emitir una tarjeta y corregir un apellido son dos
@@ -155,13 +153,12 @@ it('deniega el acceso con un token que ya no vale', function (): void {
 it('deja pasar a RRHH y al administrador, que es lo que hace significativo el resto', function (UserRole $role): void {
     // Sin este caso, todas las pruebas de arriba pasarian igual con la API
     // apagada. Es el control positivo.
-    $site = WorkforceFixtures::site();
+    WorkforceFixtures::site();
     $token = ManagementUsers::tokenFor(ManagementUsers::withRole($role));
 
     Api::as($token)->get('/api/v1/employees')->assertStatus(200);
 
     Api::as($token)->post('/api/v1/employees', [
-        'site_id' => $site,
         'first_name' => 'Youssef',
         'last_name' => 'Amrani',
         'hired_at' => '2026-08-14',

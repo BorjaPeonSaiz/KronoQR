@@ -423,11 +423,10 @@ it('acota el panel a una sola persona', function (): void {
         ->assertJsonPath('data.0.status', 'no_credential');
 })->group('RF-QR-08');
 
-it('acota el resumen a la fila devuelta, y no cuenta el centro entero', function (): void {
+it('acota el resumen a la fila devuelta, y no cuenta la plantilla entera', function (): void {
     // Al reves que `pending`: `employee_uuid` viaja hasta el `WHERE`, asi que el
-    // resumen no puede hablar de mas gente de la que se ha leido. Una sola
-    // entrada —la del centro de esa persona— con `employees: 1`. Es tambien
-    // como se afirma que la ficha NO recorre la plantilla del centro para
+    // resumen no puede hablar de mas gente de la que se ha leido: `employees: 1`.
+    // Es tambien como se afirma que la ficha NO recorre la plantilla para
     // pintar una fila: si lo hiciera, aqui pondria 2.
     $context = credentialBoardContext();
 
@@ -435,9 +434,8 @@ it('acota el resumen a la fila devuelta, y no cuenta el centro entero', function
         ->get('/api/v1/credentials/status', ['employee_uuid' => $context['withoutCard']])
         ->assertValidResponse(200)
         ->assertJsonCount(1, 'data')
-        ->assertJsonCount(1, 'summary')
-        ->assertJsonPath('summary.0.employees', 1)
-        ->assertJsonPath('summary.0.without_delivered_credential', 1);
+        ->assertJsonPath('summary.employees', 1)
+        ->assertJsonPath('summary.without_delivered_credential', 1);
 })->group('RF-QR-08');
 
 it('no consulta a nadie mas que a la persona pedida', function (): void {
@@ -446,7 +444,7 @@ it('no consulta a nadie mas que a la persona pedida', function (): void {
     // descartaba en PHP, y ademas se pedian las credenciales de todos sus
     // identificadores.
     $context = credentialBoardContext();
-    WorkforceFixtures::employee(WorkforceFixtures::site('Hotel Vecino'));
+    WorkforceFixtures::employee(WorkforceFixtures::site());
 
     DB::enableQueryLog();
 
@@ -490,34 +488,30 @@ it('no devuelve la fila de quien no esta de alta', function (string $status): vo
     // `data: []` con `200` y el panel enseña otro texto — que la baja revoque su
     // tarjeta es trabajo aparte, y esta prueba fija lo que hoy ocurre.
     $context = credentialBoardContext();
-    $site = WorkforceFixtures::site('Hotel Bajas');
-    $uuid = WorkforceFixtures::employee($site, null, $status);
+    $uuid = WorkforceFixtures::employee(WorkforceFixtures::site(), null, $status);
 
     Api::as($context['token'])
         ->get('/api/v1/credentials/status', ['employee_uuid' => $uuid])
         ->assertValidRequest()
         ->assertValidResponse(200)
         ->assertJsonCount(0, 'data')
-        ->assertJsonCount(0, 'summary');
+        ->assertJsonPath('summary.employees', 0);
 })->with([
     'de baja' => ['terminated'],
     'suspendido' => ['suspended'],
 ])->group('RF-QR-08');
 
-it('combina `employee_uuid` con `site_id` con Y logico', function (): void {
-    // Una persona que existe, pero no en el centro por el que se pregunta: la
-    // respuesta es vacia, no la fila «colandose» por el otro filtro.
+it('rechaza un site_id en vez de ignorarlo: no hay otro centro por el que preguntar', function (): void {
+    // ADR-040. Ignorarlo dejaria a quien lo envia convencido de haber acotado
+    // el tablero a un centro que no existe.
     $context = credentialBoardContext();
-    $otroCentro = WorkforceFixtures::site('Hotel Vecino');
 
     Api::as($context['token'])
         ->get('/api/v1/credentials/status', [
             'employee_uuid' => $context['withoutCard'],
-            'site_id' => $otroCentro,
+            'site_id' => 1,
         ])
-        ->assertValidRequest()
-        ->assertValidResponse(200)
-        ->assertJsonCount(0, 'data');
+        ->assertStatus(422);
 })->group('RF-QR-08');
 
 it('combina `employee_uuid` con `pending` con Y logico', function (): void {
@@ -543,8 +537,10 @@ it('devuelve la lista vacia, y no un 404, para un UUID que no es de nadie', func
         ->assertValidRequest()
         ->assertValidResponse(200)
         ->assertJsonCount(0, 'data')
-        // Sin fila no hay centro del que resumir: `summary` tambien viene vacio.
-        ->assertJsonCount(0, 'summary');
+        // Sin fila, el resumen cuenta cero: sigue presente, porque un recuento
+        // ausente y uno en cero se ven igual y solo el segundo dice algo.
+        ->assertJsonPath('summary.employees', 0)
+        ->assertJsonPath('summary.pending_print', 0);
 })->group('RF-QR-08');
 
 it('rechaza un `employee_uuid` que no tiene forma de UUID', function (string $garbage): void {

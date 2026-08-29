@@ -28,11 +28,20 @@ interface LoginAttempts
     public function isLocked(string $key): bool;
 
     /**
-     * Segundos que faltan para que la clave se desbloquee. Cero si no lo esta.
+     * Segundos que faltan para que la clave se desbloquee.
      *
      * Es lo que viaja en `Retry-After`. Se da el dato porque el cliente legitimo
      * —una persona que se ha equivocado— necesita saber cuanto esperar, y no
      * revela nada que quien ataca no pueda medir con un reloj.
+     *
+     * **Se pregunta solo cuando {@see self::isLocked()} ya ha dicho que si, y no
+     * es una recomendacion.** El adaptador se apoya en el limitador de Laravel,
+     * cuyo `availableIn()` devuelve lo que queda de la **ventana del contador**:
+     * un numero mayor que cero desde el primer fallo, haya bloqueo o no. Usar
+     * `secondsUntilUnlock() > 0` como sustituto de `isLocked()` deja un bloqueo
+     * «abierto» en cada contrasena equivocada. **No es el contrato de
+     * `Shared\Application\Port\PinAttempts`**, que si devuelve cero sin bloqueo:
+     * los dos puertos se parecen y no dicen lo mismo.
      */
     public function secondsUntilUnlock(string $key): int;
 

@@ -117,8 +117,6 @@
       "searchPlaceholder": "Search by name or code…",
       "status": "Employment status",
       "statusAll": "All, including former staff",
-      "site": "Site",
-      "siteAll": "All sites",
       "department": "Department",
       "departmentAll": "All departments",
       "pinStatus": "PIN state",
@@ -138,7 +136,6 @@
       "caption": "Workforce of this installation, with employment status and PIN state.",
       "name": "Name",
       "code": "Employee code",
-      "site": "Site",
       "department": "Department",
       "status": "Status",
       "pinStatus": "PIN state"
@@ -147,9 +144,8 @@
       "label": "Workforce pagination"
     },
     "fields": {
-      "site": "Site",
       "department": "Department",
-      "departmentHint": "Only departments belonging to the chosen site.",
+      "departmentHint": "Optional. The person belongs to this installation's site.",
       "departmentNone": "No department",
       "firstName": "First name",
       "lastName": "Last name",
@@ -184,8 +180,8 @@
       },
       "credentialInactive": {
         "title": "The card is not managed from this record",
-        "description": "This person is not currently on staff, so the credentials board does not assign a row here. Their card is managed from the site's credentials board.",
-        "link": "Go to the site's credentials board"
+        "description": "This person is not currently on staff, so the credentials board does not assign a row here. Their card is managed from the credentials board.",
+        "link": "Go to the credentials board"
       }
     },
     "offboard": {
@@ -269,8 +265,6 @@
       "legend": "Credential board filters",
       "search": "Name or employee code",
       "searchPlaceholder": "Search by name or code…",
-      "site": "Site",
-      "siteAll": "All sites",
       "department": "Department",
       "departmentAll": "All departments",
       "departmentNone": "No department",
@@ -279,6 +273,7 @@
       "pendingOnly": "Only people who do not hold their card yet"
     },
     "summary": {
+      "heading": "Workforce of this installation",
       "withoutDelivered": "Without their card in hand: {missing} of {total}.",
       "pendingPrint": "Waiting to be printed: {count}."
     },
@@ -292,9 +287,8 @@
       "label": "Credential board pagination"
     },
     "table": {
-      "caption": "Card status per person. Times are shown in the time zone of each site.",
+      "caption": "Card status per person. Times are shown in the site's time zone.",
       "employee": "Person",
-      "site": "Site",
       "department": "Department",
       "status": "Card status",
       "printedAt": "Printed",
@@ -357,8 +351,7 @@
     "batch": {
       "action": "Print the pending cards",
       "heading": "Print the batch of pending cards",
-      "allSites": "the whole installation",
-      "explanation": "All credentials waiting to be printed for {scope} will be laid out on a single A4 sheet. There are {count} right now.",
+      "explanation": "All credentials waiting to be printed in this installation will be laid out on a single A4 sheet. There are {count} right now.",
       "confirmAction": "Generate the A4 sheet",
       "warning": "Their QR codes are all minted now and there is no reprinting. If the PDF is lost, every card has to be revoked and issued again.",
       "bearerNotice": "The PDF is a bearer document: whoever holds it can make somebody else's card. It is not stored on the server and it is never emailed."

@@ -5,15 +5,16 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Application\UseCase;
 
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
 use App\Modules\Workforce\Application\Command\IssueEmployeePinCommand;
 use App\Modules\Workforce\Application\Command\RegisterEmployeeCommand;
-use App\Modules\Workforce\Application\Port\DepartmentRepository;
 use App\Modules\Workforce\Application\Port\EmployeeRepository;
+use App\Modules\Workforce\Application\Port\SiteRepository;
 use App\Modules\Workforce\Application\Port\WorkforceEventPublisher;
 use App\Modules\Workforce\Domain\Event\EmployeeHired;
-use App\Modules\Workforce\Domain\Exception\DepartmentNotInSite;
 use App\Modules\Workforce\Domain\Exception\EmployeeCodeAlreadyTaken;
 use App\Modules\Workforce\Domain\Model\Employee;
+use App\Modules\Workforce\Domain\Model\Site;
 use App\Modules\Workforce\Domain\ValueObject\EmployeeCode;
 use DateTimeImmutable;
 use Illuminate\Database\ConnectionInterface;
@@ -54,7 +55,7 @@ final readonly class RegisterEmployeeHandler
 
     public function __construct(
         private EmployeeRepository $employees,
-        private DepartmentRepository $departments,
+        private SiteRepository $sites,
         private WorkforceEventPublisher $events,
         private Clock $clock,
         private IssueEmployeePinHandler $pins,
@@ -62,15 +63,24 @@ final readonly class RegisterEmployeeHandler
     ) {}
 
     /**
-     * @throws DepartmentNotInSite cuando el departamento es de otro centro
+     * @throws InstallationSiteMissing antes de la puesta en marcha: sin centro no hay alta (ADR-040)
      * @throws RandomException si el sistema no puede dar aleatoriedad para el PIN
      */
     public function handle(RegisterEmployeeCommand $command): RegisteredEmployee
     {
-        $this->assertDepartmentBelongsToSite($command->departmentId, $command->siteId);
+        // El centro no viene en el comando: es el de la instalacion (ADR-040).
+        // Se resuelve fuera de la transaccion porque no cambia dentro de ella
+        // y porque sin el no hay nada que abrir.
+        $site = $this->sites->installationSite();
 
-        return $this->connection->transaction(function () use ($command): RegisteredEmployee {
-            $employee = $this->persistWithFreshCode($command);
+        if (! $site instanceof Site || $site->id === null) {
+            throw InstallationSiteMissing::make();
+        }
+
+        $siteId = $site->id;
+
+        return $this->connection->transaction(function () use ($command, $siteId): RegisteredEmployee {
+            $employee = $this->persistWithFreshCode($command, $siteId);
 
             $pin = $this->pins->handle(new IssueEmployeePinCommand(
                 employeeUuid: $employee->uuid,
@@ -100,12 +110,12 @@ final readonly class RegisterEmployeeHandler
         });
     }
 
-    private function persistWithFreshCode(RegisterEmployeeCommand $command): Employee
+    private function persistWithFreshCode(RegisterEmployeeCommand $command, int $siteId): Employee
     {
         $lastFailure = null;
 
         for ($attempt = 1; $attempt <= self::MAX_CODE_ATTEMPTS; $attempt++) {
-            $employee = $this->buildEmployee($command, EmployeeCode::generate());
+            $employee = $this->buildEmployee($command, $siteId, EmployeeCode::generate());
 
             try {
                 $this->employees->add($employee, $command->nationalId);
@@ -122,7 +132,7 @@ final readonly class RegisterEmployeeHandler
         );
     }
 
-    private function buildEmployee(RegisterEmployeeCommand $command, EmployeeCode $code): Employee
+    private function buildEmployee(RegisterEmployeeCommand $command, int $siteId, EmployeeCode $code): Employee
     {
         return Employee::hire(
             // UUID v7 y no v4: es ordenable temporalmente, lo que mantiene la
@@ -132,26 +142,10 @@ final readonly class RegisterEmployeeHandler
             firstName: $command->firstName,
             lastName: $command->lastName,
             email: $command->email,
-            siteId: $command->siteId,
+            siteId: $siteId,
             departmentId: $command->departmentId,
             hiredAt: new DateTimeImmutable($command->hiredAt),
             locale: $command->locale,
         );
-    }
-
-    /**
-     * @throws DepartmentNotInSite
-     */
-    private function assertDepartmentBelongsToSite(?int $departmentId, int $siteId): void
-    {
-        if ($departmentId === null) {
-            return;
-        }
-
-        $department = $this->departments->findById($departmentId);
-
-        if ($department === null || $department->siteId !== $siteId) {
-            throw DepartmentNotInSite::make($departmentId, $siteId);
-        }
     }
 }

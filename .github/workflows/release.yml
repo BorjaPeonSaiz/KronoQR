@@ -20,6 +20,26 @@
 # desde hoy. El §10.5 lo exige y el actualizador de la tarea 5.7 lo necesita para
 # decirle al cliente que cambia antes de tocar su servidor.
 #
+# Tambien listo y esperando: el SBOM. `make sbom` (doc 02 §9.2) ya genera
+# sbom/kronoqr-<version>.cdx.json en cada ejecucion del job `security` de
+# ci.yml y lo sube como artefacto de esa ejecucion. Lo que falta AQUI, para
+# cuando la tarea 5.x implemente esta etapa, es adjuntarlo a la release
+# publicada en lugar de dejarlo solo en el artefacto de la ejecucion:
+#
+#   - name: SBOM CycloneDX de la version publicada
+#     # Lee VERSION del repositorio, que en el momento de publicar ya tiene
+#     # que llevar la version etiquetada (lo comprueba `changelog-check`).
+#     run: make sbom
+#
+#   - name: Adjuntar el SBOM a la release de GitHub
+#     uses: softprops/action-gh-release@<sha-por-fijar> # vX.Y.Z
+#     with:
+#       files: sbom/kronoqr-*.cdx.json
+#
+# No se implementa aqui: la propia etapa ⑧ (instalacion limpia + actualizacion)
+# tiene que existir antes de que publicar nada tenga sentido, y ese es el
+# trabajo de la tarea 5.x, no de esta.
+#
 # Secretos: cuando esta etapa se implemente necesitara credenciales de registro
 # de imagenes. Iran en secretos del repositorio, nunca en el arbol ni en la
 # salida del pipeline, y el paso que las use llevara `mask` (doc 02 §7.7).

@@ -84,9 +84,12 @@ jobs:
       - name: Servidor PostgreSQL 17 con archivado de WAL
         # La imagen del producto, no la oficial: asi se prueba tambien el
         # archivado de WAL y el pg_hba declarativo que hacen posible el RPO de
-        # 15 min (RNF-D-02).
+        # 15 min (RNF-D-02). `make build-ci-images` (por defecto IMAGES=postgres,
+        # sin cache): la misma orden que usan ci.yml (jobs `unit` y `security`),
+        # en un solo objetivo (IMPORTANTE 10 de la auditoria) para que las tres
+        # invocaciones no puedan divergir sin que nadie lo note.
         run: |
-          docker build -f infra/docker/postgres/Dockerfile -t kronoqr/postgres:ci .
+          make build-ci-images
           docker run -d --name kronoqr-pg \
             -e POSTGRES_DB="$DB_DATABASE" \
             -e POSTGRES_USER="$DB_USERNAME" \

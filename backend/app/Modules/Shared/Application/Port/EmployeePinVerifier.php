@@ -28,16 +28,19 @@ use SensitiveParameter;
  * emitir, entregar y restablecer — y lo que hace que restablecer el PIN arregle
  * las dos puertas a la vez.
  *
- * ## Cinco obligaciones del adaptador que no son opcionales
+ * ## Seis obligaciones del adaptador que no son opcionales
  *
  * 1. **Comprobar el bloqueo ANTES de verificar** (RS-12). Verificar primero
  *    convierte el bloqueo en un oraculo: la diferencia de tiempo entre «bloqueado
  *    tras comparar» y «bloqueado sin comparar» dice si el PIN probado era el
  *    bueno.
  * 2. **Tiempo constante** (RS-03, regla dura 17). Un codigo inexistente no puede
- *    responder antes que un PIN incorrecto: comparar el hash cuesta milisegundos
- *    y saltarse esa comparacion es medible desde fuera. El adaptador paga el
- *    coste tambien cuando no hay contra que comparar.
+ *    responder antes que un PIN incorrecto. El adaptador paga el coste tambien
+ *    cuando no hay contra que comparar, y eso incluye **el contador**: la rama
+ *    sin empleado tiene que ejecutar la misma secuencia de llamadas a
+ *    {@see PinAttempts} que la rama con empleado, contra un sujeto señuelo
+ *    (ADR-039). Una lectura de cache que solo ocurre cuando el codigo existe es
+ *    un oraculo, igual que lo seria saltarse el bcrypt.
  * 3. **Anotar el fallo y limpiar en el acierto**, contra {@see PinAttempts} y con
  *    este mismo origen. Sin esto el escalado del §7.5 no existe.
  *    Que sea el adaptador y no quien llama es lo que hace que las dos puertas
@@ -46,6 +49,13 @@ use SensitiveParameter;
  *    mismo camino y con el mismo valor** que un codigo inexistente.
  * 5. **No devolver nunca el PIN ni su hash**, ni escribirlos en ningun sitio
  *    (regla dura 21). Lo unico que sale al acertar es el `employee_uuid`.
+ * 6. **Dejar rastro de cada rechazo y de cada bloqueo que se abra** contra
+ *    {@see AuthenticationJournal} (OWASP A09, ADR-039). Por la misma razon que la
+ *    obligacion 3: son dos puertas y una sola implementacion, asi que si el
+ *    rastro lo pusiera quien llama, cada puerta registraria la mitad. El apunte
+ *    del rechazo va **sin sujeto y con el mismo motivo** en los cuatro caminos
+ *    —bloqueo incluido—, para que el log del servidor no separe lo que la
+ *    respuesta no separa.
  */
 interface EmployeePinVerifier
 {

@@ -24,8 +24,7 @@ import { downloadDocument } from '@kronoqr/web-kit/downloadDocument'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
-import { useRoute } from 'vue-router'
-import { listSites } from '@/shared/api/organisation.api'
+import { getSite } from '@/shared/api/organisation.api'
 import type { CredentialLifecycleStatus } from '@/shared/api/types'
 import ConfirmDialog from '@/shared/ui/ConfirmDialog.vue'
 import PaginationBar from '@/shared/ui/PaginationBar.vue'
@@ -52,7 +51,7 @@ const CREDENTIAL_LIFECYCLE_STATUSES: readonly CredentialLifecycleStatus[] = [
  * Valor del `<select>` de estado que significa «solo quien todavia no tiene
  * la tarjeta en la mano». No es un `CredentialLifecycleStatus` de verdad: es
  * un filtro que va al SERVIDOR (acota tambien el lote de impresion y el
- * resumen por centro), a diferencia de un estado concreto, que se filtra en
+ * resumen), a diferencia de un estado concreto, que se filtra en
  * cliente sobre el lote ya cargado. Antes era un checkbox aparte, mutuamente
  * excluyente con el select mediante `disabled` — inaccesible por teclado,
  * lector de pantalla o tactil (hallazgo de revision). Ahora es una opcion mas
@@ -62,26 +61,24 @@ const PENDING_ONLY_OPTION = '__pending_only__'
 type StatusFilterValue = CredentialLifecycleStatus | typeof PENDING_ONLY_OPTION | ''
 
 const { t, locale } = useI18n()
-const route = useRoute()
 const queryClient = useQueryClient()
 
-const initialSite = Number.parseInt(String(route.query['site'] ?? ''), 10)
-const siteFilter = ref<number | ''>(Number.isFinite(initialSite) ? initialSite : '')
-
 // Filtros EN CLIENTE (RF-QR-08): el contrato no pagina ni filtra por
-// departamento o texto, y eso no se cambia aqui. `site` y la opcion
-// «pendiente de tarjeta» del select de estado, en cambio, van al servidor
-// porque tambien acotan el lote de impresion y el resumen por centro; un
-// estado concreto se filtra en cliente sobre el lote ya cargado.
+// departamento o texto, y eso no se cambia aqui. La opcion «pendiente de
+// tarjeta» del select de estado, en cambio, va al servidor porque tambien
+// acota el lote de impresion y el resumen; un estado concreto se filtra en
+// cliente sobre el lote ya cargado. No hay filtro por centro: hay exactamente
+// uno por instalacion (ADR-040).
 const searchFilter = ref('')
 const departmentFilter = ref('')
 const statusFilter = ref<StatusFilterValue>('')
 const clientPage = ref(1)
 
-const { data: sites } = useQuery({ queryKey: ['sites'], queryFn: listSites })
+// El centro de la instalacion: su zona horaria es la que da sentido a las
+// horas de impresion y entrega (regla dura 3, RN-05).
+const { data: site } = useQuery({ queryKey: ['site'], queryFn: getSite })
 
 const boardQuery = computed(() => ({
-  ...(siteFilter.value === '' ? {} : { siteId: siteFilter.value }),
   ...(statusFilter.value === PENDING_ONLY_OPTION ? { pendingOnly: true } : {}),
 }))
 
@@ -95,7 +92,7 @@ const {
 })
 
 const rows = computed(() => board.value?.data ?? [])
-const summary = computed(() => board.value?.summary ?? [])
+const summary = computed(() => board.value?.summary ?? null)
 
 const departmentOptions = computed(() => departmentOptionsFrom(rows.value))
 
@@ -114,13 +111,10 @@ const pageRows = computed(() => paged.value.data)
 
 const hasFilters = computed(
   () =>
-    siteFilter.value !== '' ||
-    searchFilter.value.trim() !== '' ||
-    departmentFilter.value !== '' ||
-    statusFilter.value !== '',
+    searchFilter.value.trim() !== '' || departmentFilter.value !== '' || statusFilter.value !== '',
 )
 
-watch([searchFilter, departmentFilter, statusFilter, siteFilter], () => {
+watch([searchFilter, departmentFilter, statusFilter], () => {
   clientPage.value = 1
 })
 
@@ -140,35 +134,18 @@ function clearFilters(): void {
   searchFilter.value = ''
   departmentFilter.value = ''
   statusFilter.value = ''
-  siteFilter.value = ''
 }
 
-const timezones = computed(
-  () => new Map((sites.value?.data ?? []).map((site) => [site.id, site.timezone])),
-)
+const timezone = computed(() => site.value?.timezone ?? FALLBACK_TIMEZONE)
 
-function zoneOf(siteId: number): string {
-  return timezones.value.get(siteId) ?? FALLBACK_TIMEZONE
-}
-
-function instant(value: string | null, siteId: number): string {
+function instant(value: string | null): string {
   return value === null
     ? t('common.empty')
-    : formatInstantWithZone(value, zoneOf(siteId), locale.value)
+    : formatInstantWithZone(value, timezone.value, locale.value)
 }
 
-/** Cuantas tarjetas entraran en el proximo lote del alcance elegido. */
-const pendingPrintInScope = computed(() =>
-  summary.value.reduce((total, site) => total + site.pending_print, 0),
-)
-
-const scopeName = computed(() => {
-  if (siteFilter.value === '') {
-    return t('credentials.batch.allSites')
-  }
-
-  return (sites.value?.data ?? []).find((site) => site.id === siteFilter.value)?.name ?? ''
-})
+/** Cuantas tarjetas entraran en el proximo lote. */
+const pendingPrintInScope = computed(() => summary.value?.pending_print ?? 0)
 
 // --- Acciones ------------------------------------------------------------
 //
@@ -190,9 +167,7 @@ async function runBatch(): Promise<void> {
   actionError.value = null
 
   try {
-    const document_ = await printCredentialBatch(
-      siteFilter.value === '' ? {} : { site_id: siteFilter.value },
-    )
+    const document_ = await printCredentialBatch({})
 
     if (document_ === null) {
       // 204: no habia nada pendiente. Es la idempotencia del lote, no un fallo.
@@ -271,18 +246,6 @@ const selectClass =
         </div>
 
         <div class="flex flex-col gap-1">
-          <label for="credentials-site-filter" class="font-medium">
-            {{ t('credentials.filters.site') }}
-          </label>
-          <select id="credentials-site-filter" v-model="siteFilter" :class="selectClass">
-            <option value="">{{ t('credentials.filters.siteAll') }}</option>
-            <option v-for="site of sites?.data ?? []" :key="site.id" :value="site.id">
-              {{ site.name }}
-            </option>
-          </select>
-        </div>
-
-        <div class="flex flex-col gap-1">
           <label for="credentials-department-filter" class="font-medium">
             {{ t('credentials.filters.department') }}
           </label>
@@ -324,28 +287,25 @@ const selectClass =
       </button>
     </form>
 
-    <!-- Recuento por centro. `summary` no se filtra: dice «faltan 3 de 60», no
-         «faltan 3 de 3» (contrato, SiteCredentialCoverage). -->
-    <ul v-if="summary.length > 0" class="mt-4 grid gap-3 sm:grid-cols-2">
-      <li
-        v-for="coverage of summary"
-        :key="coverage.site_id"
-        class="rounded-kq border border-kq-border bg-kq-surface-raised p-4 shadow-kq-soft"
-      >
-        <p class="font-semibold">{{ coverage.site_name }}</p>
-        <p class="mt-1">
-          {{
-            t('credentials.summary.withoutDelivered', {
-              missing: coverage.without_delivered_credential,
-              total: coverage.employees,
-            })
-          }}
-        </p>
-        <p class="text-kq-text-muted">
-          {{ t('credentials.summary.pendingPrint', { count: coverage.pending_print }) }}
-        </p>
-      </li>
-    </ul>
+    <!-- Recuento de la plantilla. `summary` no se filtra: dice «faltan 3 de 60»,
+         no «faltan 3 de 3» (contrato, CredentialCoverage). -->
+    <div
+      v-if="summary !== null"
+      class="mt-4 rounded-kq border border-kq-border bg-kq-surface-raised p-4 shadow-kq-soft"
+    >
+      <p class="font-semibold">{{ site?.name ?? t('credentials.summary.heading') }}</p>
+      <p class="mt-1">
+        {{
+          t('credentials.summary.withoutDelivered', {
+            missing: summary.without_delivered_credential,
+            total: summary.employees,
+          })
+        }}
+      </p>
+      <p class="text-kq-text-muted">
+        {{ t('credentials.summary.pendingPrint', { count: summary.pending_print }) }}
+      </p>
+    </div>
 
     <LoadingPanel v-if="isPending" :label="t('credentials.loading')" class="mt-4" />
     <ErrorNotice v-else-if="error !== null" :error="error" class="mt-4" />
@@ -379,7 +339,6 @@ const selectClass =
           <thead class="border-b border-kq-border bg-kq-surface-alt">
             <tr>
               <th scope="col" class="px-3 py-2">{{ t('credentials.table.employee') }}</th>
-              <th scope="col" class="px-3 py-2">{{ t('credentials.table.site') }}</th>
               <th scope="col" class="px-3 py-2">{{ t('credentials.table.department') }}</th>
               <th scope="col" class="px-3 py-2">{{ t('credentials.table.status') }}</th>
               <th scope="col" class="px-3 py-2">{{ t('credentials.table.printedAt') }}</th>
@@ -395,7 +354,6 @@ const selectClass =
                   {{ row.employee_code }}
                 </span>
               </th>
-              <td class="px-3 py-2">{{ row.site_name }}</td>
               <td class="px-3 py-2">
                 {{ row.department_name ?? t('credentials.table.noDepartment') }}
               </td>
@@ -408,10 +366,10 @@ const selectClass =
                 </span>
               </td>
               <td class="px-3 py-2">
-                {{ instant(row.credential?.printed_at ?? null, row.site_id) }}
+                {{ instant(row.credential?.printed_at ?? null) }}
               </td>
               <td class="px-3 py-2">
-                {{ instant(row.credential?.delivered_at ?? null, row.site_id) }}
+                {{ instant(row.credential?.delivered_at ?? null) }}
               </td>
               <td class="px-3 py-2">
                 <CredentialRowActions :row="row" :on-changed="refreshBoard" />
@@ -443,12 +401,7 @@ const selectClass =
       @confirm="runBatch"
     >
       <p>
-        {{
-          t('credentials.batch.explanation', {
-            count: pendingPrintInScope,
-            scope: scopeName,
-          })
-        }}
+        {{ t('credentials.batch.explanation', { count: pendingPrintInScope }) }}
       </p>
       <p class="mt-3 rounded-kq-sm border border-kq-warning bg-kq-warning-soft p-3 text-kq-warning">
         {{ t('credentials.batch.warning') }}

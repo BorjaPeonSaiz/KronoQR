@@ -26,7 +26,6 @@ export type IssuedPin = Schemas['IssuedPin']
 export type PinDeliveryReceipt = Schemas['PinDeliveryReceipt']
 
 export type Site = Schemas['Site']
-export type SiteCollection = Schemas['SiteCollection']
 export type Department = Schemas['Department']
 export type DepartmentCollection = Schemas['DepartmentCollection']
 
@@ -38,7 +37,7 @@ export type PrintCredentialBatchRequest = Schemas['PrintCredentialBatchRequest']
 export type CredentialLifecycleStatus = Schemas['CredentialLifecycleStatus']
 export type CredentialStatusRow = Schemas['CredentialStatusRow']
 export type CredentialStatusBoard = Schemas['CredentialStatusBoard']
-export type SiteCredentialCoverage = Schemas['SiteCredentialCoverage']
+export type CredentialCoverage = Schemas['CredentialCoverage']
 
 export type EmployeeWorkDays = Schemas['EmployeeWorkDays']
 export type WorkDayDetail = Schemas['WorkDayDetail']

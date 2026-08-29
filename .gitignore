@@ -26,6 +26,11 @@ coverage/
 .phpunit.cache/
 /load-tests/k6/results/
 
+# SBOM generado por `make sbom` (doc 02 §9.2). Se sube como artefacto de cada
+# ejecucion de la CI, no se versiona: es un derivado de composer.lock y
+# package-lock.json, que si estan versionados.
+/sbom/
+
 # Herramientas de desarrollo
 .idea/
 .vscode/

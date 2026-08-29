@@ -13,6 +13,31 @@ lo siga no aparece aqui, y el generador lo avisa por la salida de error.
 Ninguna version se publica sin su entrada: `make changelog-check VERSION=1.2.3`
 falla si no la encuentra, y la CI ejecuta esa comprobacion al etiquetar.
 
+## [2.0.0] - 2026-08-29
+
+### Cambios incompatibles
+
+- un centro de trabajo por instalacion y por licencia (ADR-040) (workforce)
+
+### Anadido
+
+- la autenticacion deja rastro consultable (OWASP A09) (compliance)
+
+### Corregido
+
+- Pest y Semgrep comunitario en verde en el runner, y Semgrep pasa a bloqueante (ci)
+
+### Interno
+
+- CI run 25 con dos jobs en rojo pendientes de leer (handoff)
+- [Unreleased] recoge el centro unico por instalacion (changelog)
+- [Unreleased] recoge RS-13 (changelog)
+- RS-13, la autenticacion deja rastro consultable, entra en doc 01 (requisitos)
+- [Unreleased] arranca en v1.2.0 (changelog)
+- sesion SSDLC — pipeline, rastro de autenticacion, ATT&CK y SAMM (handoff)
+- columna ATT&CK en el modelo de amenazas y autoevaluacion SAMM (seguridad)
+- SAST comunitario, Trivy, gitleaks, Dependabot y SBOM en el pipeline (security)
+
 ## [1.2.0] - 2026-08-28
 
 ### Anadido

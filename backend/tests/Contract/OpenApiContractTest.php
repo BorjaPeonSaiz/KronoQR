@@ -74,8 +74,7 @@ it('describe solo los endpoints cuya tarea existe, y todos bajo /api/v1', functi
         '/api/v1/employees/{uuid}/workdays',
         '/api/v1/departments',
         '/api/v1/departments/{id}',
-        '/api/v1/sites',
-        '/api/v1/sites/{id}',
+        '/api/v1/site',
         // Tarea 1.5: credenciales QR.
         '/api/v1/credentials',
         '/api/v1/credentials/{uuid}/revoke',
@@ -127,8 +126,7 @@ it('exige el ambito employees:* en todo endpoint de plantilla', function (): voi
         '/api/v1/employees/{uuid}/pin/deliver',
         '/api/v1/departments',
         '/api/v1/departments/{id}',
-        '/api/v1/sites',
-        '/api/v1/sites/{id}',
+        '/api/v1/site',
     ];
 
     foreach ($paths as $path) {
@@ -148,7 +146,7 @@ it('mantiene el correo del empleado opcional en el contrato', function (): void 
     // que nadie lo note: basta anadir `email` a `required` para que el cliente
     // generado lo exija y el alta deje de poder hacerse sin correo.
     expect(Contract::value('components', 'schemas', 'CreateEmployeeRequest', 'required'))
-        ->toBe(['site_id', 'first_name', 'last_name', 'hired_at'])
+        ->toBe(['first_name', 'last_name', 'hired_at'])
         ->and(Contract::value('components', 'schemas', 'Employee', 'properties', 'email', 'type'))
         ->toBe(['string', 'null']);
 })->group('RF-GP-01');

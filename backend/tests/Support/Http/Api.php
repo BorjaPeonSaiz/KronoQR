@@ -145,6 +145,18 @@ final readonly class Api
         /** @var Kernel $kernel */
         $kernel = app(Kernel::class);
 
-        return TestResponse::fromBaseResponse($kernel->handle($request));
+        $response = $kernel->handle($request);
+
+        // Una peticion real no termina al devolver la respuesta: el kernel la
+        // **termina** despues de enviarla, y es ahi donde corren los
+        // `terminating` del contenedor. Hoy vive ahi el asiento aplazado de
+        // `auth.lockout_started` (ADR-039), que se saca del camino de la
+        // respuesta para que el flanco del bloqueo no cueste distinto ni pueda
+        // convertir un rechazo en un `500`. Sin esta linea, este cliente dejaba
+        // fuera de cobertura todo lo que el producto hace despues de responder,
+        // y una prueba de asiento pasaria en verde con la escritura sin ejecutar.
+        $kernel->terminate($request, $response);
+
+        return TestResponse::fromBaseResponse($response);
     }
 }

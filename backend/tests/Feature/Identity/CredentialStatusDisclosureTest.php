@@ -85,7 +85,7 @@ it('registra el alcance del panel y jamas lo divulgado', function (): void {
     $contexto = credentialStatusContext();
 
     Api::as($contexto['token'])
-        ->get('/api/v1/credentials/status', ['site_id' => $contexto['site'], 'pending' => 1])
+        ->get('/api/v1/credentials/status', ['pending' => 1])
         ->assertValidResponse(200);
 
     $asiento = DB::table('audit_log')->orderBy('id')->first();
@@ -97,7 +97,6 @@ it('registra el alcance del panel y jamas lo divulgado', function (): void {
 
     expect($payload)->toMatchArray([
         'dataset' => 'credential_status',
-        'site_id' => $contexto['site'],
         'pending_only' => true,
     ])
         ->and($asiento->payload)->not->toContain('Persona')

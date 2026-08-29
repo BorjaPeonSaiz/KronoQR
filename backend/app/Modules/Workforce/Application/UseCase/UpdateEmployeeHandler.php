@@ -7,11 +7,9 @@ namespace App\Modules\Workforce\Application\UseCase;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Workforce\Application\Command\UpdateEmployeeCommand;
-use App\Modules\Workforce\Application\Port\DepartmentRepository;
 use App\Modules\Workforce\Application\Port\EmployeeRepository;
 use App\Modules\Workforce\Application\Port\WorkforceEventPublisher;
 use App\Modules\Workforce\Domain\Event\EmployeeProfileUpdated;
-use App\Modules\Workforce\Domain\Exception\DepartmentNotInSite;
 use App\Modules\Workforce\Domain\Model\Employee;
 
 /**
@@ -30,14 +28,10 @@ final readonly class UpdateEmployeeHandler
 {
     public function __construct(
         private EmployeeRepository $employees,
-        private DepartmentRepository $departments,
         private WorkforceEventPublisher $events,
         private Clock $clock,
     ) {}
 
-    /**
-     * @throws DepartmentNotInSite
-     */
     public function handle(UpdateEmployeeCommand $command): ?Employee
     {
         $current = $this->employees->findByUuid($command->uuid);
@@ -46,17 +40,11 @@ final readonly class UpdateEmployeeHandler
             return null;
         }
 
-        $siteId = $command->siteId ?? $current->siteId;
-        $departmentId = $command->departmentGiven ? $command->departmentId : $current->departmentId;
-
-        $this->assertDepartmentBelongsToSite($departmentId, $siteId);
-
         $updated = $current->updateProfile(
             firstName: $command->firstName,
             lastName: $command->lastName,
             email: $command->email,
             emailGiven: $command->emailGiven,
-            siteId: $command->siteId,
             departmentId: $command->departmentId,
             departmentGiven: $command->departmentGiven,
             locale: $command->locale,
@@ -95,7 +83,6 @@ final readonly class UpdateEmployeeHandler
             'first_name' => [$before->firstName, $after->firstName],
             'last_name' => [$before->lastName, $after->lastName],
             'email' => [$before->email, $after->email],
-            'site_id' => [$before->siteId, $after->siteId],
             'department_id' => [$before->departmentId, $after->departmentId],
             'status' => [$before->status->value, $after->status->value],
             'locale' => [$before->locale, $after->locale],
@@ -108,21 +95,5 @@ final readonly class UpdateEmployeeHandler
         }
 
         return $changed;
-    }
-
-    /**
-     * @throws DepartmentNotInSite
-     */
-    private function assertDepartmentBelongsToSite(?int $departmentId, int $siteId): void
-    {
-        if ($departmentId === null) {
-            return;
-        }
-
-        $department = $this->departments->findById($departmentId);
-
-        if ($department === null || $department->siteId !== $siteId) {
-            throw DepartmentNotInSite::make($departmentId, $siteId);
-        }
     }
 }

@@ -1,0 +1,162 @@
+# 07 — Seguridad: madurez (OWASP SAMM 2.0), mapa SDL y cobertura del modelo de amenazas
+## KronoQR — Sistema de Control de Presencia y Registro Horario por QR
+
+| Campo | Valor |
+|---|---|
+| **Producto** | **KronoQR** — fichaje de empleados mediante QR en quiosco (tablet) |
+| **Fecha** | 28 de agosto de 2026 |
+| **Clasificación** | Documentación técnica interna |
+| **Audiencia** | Arquitectura, Desarrollo, QA, DPO, revisor de seguridad externo (RS-11) |
+| **Documentos hermanos** | `01-especificaciones-proyecto.md` §7 y §8, `02-stack-tecnologico-y-plan-implementacion.md` §7, `03-agentes-y-skills-ia.md` §6.6 |
+| **Rama de origen** | `feat/ssdlc-pipeline` |
+
+> Este documento no es asesoramiento jurídico. Señala requisitos, controles y riesgos; la validación legal corresponde a la asesoría del cliente y a su DPO.
+
+## 1. Propósito y uso
+
+El proyecto tiene desde el principio requisitos de seguridad (doc 01 §8), un modelo de amenazas (§8.1) y un diseño de seguridad (doc 02 §7). Lo que no tenía era una **medida honesta de hasta dónde llega todo eso en la práctica**: qué está verificado por una herramienta, qué está escrito y nadie ejecuta, y qué no existe. Este documento es esa medida, con dos marcos externos para que la escala no sea propia: **OWASP SAMM 2.0** para la madurez del proceso (§2) y **Microsoft SDL** para comprobar que no falta ninguna práctica canónica (§3).
+
+Cómo se usa:
+
+- **Se revisa en cada cierre de fase** (doc 03 §6.6, paso 1) por `seguridad-cumplimiento`. El informe de cierre incluye la tabla resumen del §2.6 actualizada.
+- **Un nivel solo sube con evidencia** que exista en el repositorio: fichero, prueba, job de CI o ADR. Una intención, una tarea planificada o una frase en un documento no suben el nivel; lo que hacen es aparecer en la columna «siguiente nivel».
+- **Cada nivel cita su evidencia con ruta**. Quien revise puede comprobarla con `ls`/`grep`; si la ruta desaparece, el nivel baja.
+- Los riesgos que se aceptan a sabiendas se anotan en §6 con su dueño y su fecha límite. Un riesgo aceptado sin dueño es un riesgo olvidado.
+
+La escala SAMM va de 0 (nada) a 3 (práctica completa, medida y mejorada). Cuando los dos flujos (*streams*) de una práctica están en niveles distintos se indica «A/B»; el nivel de la práctica es el menor de los dos.
+
+## 2. Autoevaluación OWASP SAMM 2.0
+
+### 2.1 Gobierno
+
+| Práctica | Nivel | Evidencia verificada | Para el siguiente nivel | Tarea |
+|---|---|---|---|---|
+| Estrategia y métricas | **1** | RS-01..RS-12 en doc 01 §8 y objetivo ASVS 2 en doc 02 §7.6; `backend/tests/Architecture/QualityGatesTest.php` ata RS-08, RS-09, RS-10 y RS-12 a comprobaciones que fallan; matriz `docs/trazabilidad-pruebas.md` generada por `qa:traceability`. No hay métricas de seguridad seguidas en el tiempo ni hoja de ruta de seguridad distinta del plan. | **2**: la tabla del §2.6 revisada por fase con hallazgos por severidad y tiempo hasta corregir; objetivo de nivel por práctica y fecha. | Cierre de fase (doc 03 §6.6); 3.8 |
+| Política y cumplimiento | **2** | 21 reglas duras en `CLAUDE.md`, cada una atada a una herramienta (Deptrac en el job ② de `.github/workflows/ci.yml`, `backend/tests/Architecture/DomainPurityTest.php`, `.semgrep/kronoqr-php.yaml`); RL-* en doc 01 §7; skill `.claude/skills/revision-cumplimiento/SKILL.md`; `docs:consistency --check` y `qa:traceability --check` en el job ③; ADR-032 fija que la Fase 1 sea legalmente defendible. | **3**: la checklist ASVS del §7.6 **ejecutada y archivada por versión publicada** (hoy solo está enunciada); obligaciones legales del cliente documentadas y entregadas. | 5.11; 3.8 |
+| Educación y orientación | **1** | El conocimiento vive en los prompts (`.claude/agents/seguridad-cumplimiento.md`, `revisor-codigo.md`) y en doc 03; doc 02 §7 hace de guía de diseño. No hay formación para personas ni guía de codificación segura más allá de eso. | **2**: guía breve de codificación segura PHP/Vue enlazada desde la Definición de Terminado; lista de lectura obligatoria para quien se incorpora. | Sin tarea |
+
+### 2.2 Diseño
+
+| Práctica | Nivel | Evidencia verificada | Para el siguiente nivel | Tarea |
+|---|---|---|---|---|
+| Modelado de amenazas | **2** | Doc 01 §8.1: STRIDE con técnica ATT&CK por fila y nota de detección; decisiones nacidas de una amenaza: ADR-005 (firma HMAC), ADR-009 (sin biometría), ADR-014 y `docs/04` (tarjeta física), ADR-033 (tres roles de BD), ADR-038 (límite por dispositivo e IP, no por credencial); revisión por funcionalidad con la skill `revision-cumplimiento`. Sin diagrama de flujo de datos ni revisión sistemática del modelo por fase. | **3**: modelo revisado en cada cierre de fase, con la cobertura técnica → detección de §8.1 como lista de pendientes; DFD de los tres clientes y el quiosco físico. | Cierre de fase |
+| Requisitos de seguridad | **2** | RS-01..RS-13 (doc 01 §8) y RL-* (§7) etiquetados en pruebas: `QualityGatesTest.php`, `backend/tests/Feature/Identity/PortalPinLockoutTest.php` (RS-12), `backend/tests/Feature/Identity/AuthenticationTrailTest.php` (RS-13), `backend/tests/Feature/Identity/CredentialStatusDisclosureTest.php` (RS-03); `qa:traceability --check` falla en CI si un requisito implementado no tiene prueba (RQ-13). Requisitos hacia proveedores: no aplica (on-premise, sin subencargados de datos, ADR-016). | **3**: mapa requisito ↔ control ASVS por versión. | 2.1 (RS-06) |
+| Arquitectura segura | **2** | Hexagonal con frontera verificada: Deptrac (job ②), `DomainPurityTest.php`, `backend/tests/Architecture/CoreBoundariesTest.php`, ADR-025; tres roles de BD sin `UPDATE`/`DELETE` sobre `audit_log` (`infra/docker/postgres/initdb/02-application-roles.sh`, migración `2026_08_19_099000_provision_database_privileges.php`); firma en tiempo constante (`backend/app/Modules/Identity/Infrastructure/Adapter/HmacSignatureVerifier.php`, `hash_equals`); cadena de auditoría (`backend/app/Modules/Compliance/Domain/AuditChain.php`, ADR-010); acciones de CI fijadas por SHA con `persist-credentials: false`. **Hueco**: doc 02 §7.1 promete SRI en assets y no está implementado (§6). | **3**: inventario de componentes a partir del SBOM (§5) y lista de tecnologías aprobadas con criterio de entrada y salida. | Sin tarea |
+
+### 2.3 Implementación
+
+| Práctica | Nivel | Evidencia verificada | Para el siguiente nivel | Tarea |
+|---|---|---|---|---|
+| Build seguro | **1** (A 2 / B 1) | Job `security` («Dependencias y SAST») de `ci.yml`: `composer audit` con 0 avisos, `npm audit --audit-level=high` sobre el workspace y Semgrep sobre `.semgrep/` con `--error` (`make deps-audit-php`, `deps-audit-js`, `sast`); `QualityGatesTest.php` «analiza dependencias y codigo en cada integracion» (RS-10); *lockfiles* versionados. Sin SBOM, sin escaneo de imágenes, sin firma de artefactos; `.github/workflows/release.yml` es un marcador. | **2**: SBOM CycloneDX, Trivy y Dependabot en verde (§5). **3**: artefactos firmados y verificados al instalar. | 5.4; 5.7 |
+| Despliegue seguro | **1** | `infra/compose.prod.yaml`; secretos fuera del repositorio verificados por `QualityGatesTest.php` («mantiene los secretos fuera del control de versiones», «no deja ningun secreto real en el fichero de ejemplo», RS-08); ADR-029. Sin instalador que genere secretos en el servidor; `docs/runbooks/rotacion-secretos.md` prometido en doc 02 §7.7 y §12 y **no escrito**; `APP_DEBUG=true` en `.env.example`. | **2**: instalador que genera secretos (5.4), runbook de rotación, gitleaks en CI (§5), `APP_DEBUG=false` de serie. | 5.4; 5.7 |
+| Gestión de defectos | **1** | Escala de severidad y formato de hallazgo en `seguridad-cumplimiento.md`; auditoría de cierre de Fase 1 con correcciones en `fix/auditoria-fase-1` (inyección de fórmulas CSV, OWASP A03) y pendientes en `HANDOFF.md`. Sin registro de defectos de seguridad con plazo por severidad ni métricas. | **2**: plazo por severidad (crítico: antes de publicar; alto: en la versión siguiente) registrado donde vivan las incidencias; recuento por fase en §2.6. | Sin tarea |
+
+### 2.4 Verificación
+
+| Práctica | Nivel | Evidencia verificada | Para el siguiente nivel | Tarea |
+|---|---|---|---|---|
+| Evaluación de arquitectura | **1** | Revisión de `seguridad-cumplimiento` y `revisor-codigo` en cada cierre (doc 03 §6.6); auditoría independiente de la Fase 1 (27-08-2026, `HANDOFF.md`). Las pruebas de arquitectura comprueban que el código respeta la arquitectura, no que la arquitectura sea segura. | **2**: evaluación por fase contra el modelo de amenazas, con este documento como acta y una lista de controles ausentes por fila STRIDE. | 3.8 |
+| Pruebas dirigidas por requisitos | **2** | `backend/tests/Feature/AuthorizationNegativeTest.php` (parejas rol × endpoint, regla dura 18) y `*AuthorizationTest.php` en Attendance, Compliance, Kiosk y Reporting; `PortalPinLockoutTest.php` (RS-12); `CredentialStatusDisclosureTest.php` (RS-03); `QualityGatesTest.php` sobre cabeceras (RS-09), portal en red interna (RF-ID-08) y señuelo de tiempo constante del PIN (RS-03/RS-12); mutación sobre el dominio con MSI ≥ 80 % (job ③). | **3**: pruebas de abuso derivadas de cada fila STRIDE (saturación del borde, token con ámbito manipulado) y de propiedades sobre el parser del payload QR. | 3.6; 3.7 |
+| Pruebas de seguridad | **1** | SAST limitado a las dos reglas propias de `.semgrep/kronoqr-php.yaml` (reloj del sistema en el dominio, supresiones de PHPStan sin motivo) y auditoría de dependencias. Sin DAST, sin *fuzzing*, sin prueba de penetración. | **2**: Semgrep comunitario y Trivy (§5); DAST de referencia (ZAP *baseline* contra el entorno de Compose). **3**: pentest externo. | 3.8 (RS-11) |
+
+### 2.5 Operaciones
+
+| Práctica | Nivel | Evidencia verificada | Para el siguiente nivel | Tarea |
+|---|---|---|---|---|
+| Gestión de incidentes | **1** | `docs/runbooks/rotura-cadena-auditoria.md` (incidente de seguridad con preservación de evidencia); enrutado «Crítica (seguridad)» en doc 01 §9.3 y `infra/observability/alertmanager/alertmanager.yml`; `backend/tests/Architecture/BackupAndAlertingTest.php` exige runbook por alerta. Sin `brecha-de-seguridad.md` (72 h, RL-15), sin canal de notificación de vulnerabilidades (no hay `SECURITY.md`), sin simulacro. | **2**: runbook de brecha, canal de reporte y la auditoría de autenticación como fuente de detección (§5). | Fase 2 (RL-15); 3.10 |
+| Gestión del entorno | **2** | `infra/docker/nginx/snippets/security-headers.conf` (CSP sin `unsafe-inline`, `camera=(self)`) verificado por `QualityGatesTest.php` (RS-09); `ssl_protocols TLSv1.3` y cinco zonas `limit_req_zone` en `infra/docker/nginx/templates/kronoqr.conf.template`; roles de BD con `NOINHERIT` y `REVOKE CREATE ON SCHEMA`; portal restringido por CIDR; imágenes de observabilidad fijadas por versión en `compose.prod.yaml`. Sin proceso de parcheo de imágenes ni guía de endurecimiento para el cliente. | **3**: Trivy sobre imágenes (§5), guía de endurecimiento (5.11), `APP_DEBUG=false` de serie. | 5.11 |
+| Gestión operativa | **2** | Copias cifradas y verificadas: `infra/scripts/backup.sh`, `restore.sh`, `restore-drill.sh`; simulacro trimestral en `.github/workflows/backup-drill.yml`; alertas en `infra/observability/prometheus/rules/backup.yml`; `docs/runbooks/restaurar-backup.md`; clasificación y retención de datos en doc 01 §7; purga del padrón al desvincular el dispositivo. Sin purga de retención implementada ni exportación íntegra. | **3**: purga con confirmación (2.10) y exportación íntegra (5.10). Gestión de sistemas heredados: no aplica. | 2.10; 5.10 |
+
+### 2.6 Resumen y puntuación
+
+| Función | Práctica | Nivel | Evidencia principal |
+|---|---|---|---|
+| Gobierno | Estrategia y métricas | 1 | doc 01 §8 + `QualityGatesTest.php` |
+| Gobierno | Política y cumplimiento | 2 | `CLAUDE.md` reglas duras + `docs:consistency`/`qa:traceability` en CI |
+| Gobierno | Educación y orientación | 1 | Prompts de agentes, doc 03 |
+| Diseño | Modelado de amenazas | 2 | doc 01 §8.1 con ATT&CK; ADR-005/009/014/033/038 |
+| Diseño | Requisitos de seguridad | 2 | RS-* etiquetados en pruebas; RQ-13 en CI |
+| Diseño | Arquitectura segura | 2 | Deptrac + pruebas de arquitectura; roles de BD; `hash_equals` |
+| Implementación | Build seguro | 1 | Job `security` de `ci.yml` |
+| Implementación | Despliegue seguro | 1 | `compose.prod.yaml`; pruebas RS-08 |
+| Implementación | Gestión de defectos | 1 | Escala de severidad; auditoría de Fase 1 |
+| Verificación | Evaluación de arquitectura | 1 | Cierre de fase (doc 03 §6.6) |
+| Verificación | Pruebas dirigidas por requisitos | 2 | `AuthorizationNegativeTest.php`; `PortalPinLockoutTest.php` |
+| Verificación | Pruebas de seguridad | 1 | `.semgrep/kronoqr-php.yaml`; `composer`/`npm audit` |
+| Operaciones | Gestión de incidentes | 1 | `rotura-cadena-auditoria.md`; `BackupAndAlertingTest.php` |
+| Operaciones | Gestión del entorno | 2 | `security-headers.conf`; TLS 1.3; `limit_req_zone` |
+| Operaciones | Gestión operativa | 2 | `backup-drill.yml`; `restore-drill.sh` |
+
+| Función | Puntuación (media de sus 3 prácticas, sobre 3) |
+|---|---|
+| Gobierno | **1,33** |
+| Diseño | **2,00** |
+| Implementación | **1,00** |
+| Verificación | **1,33** |
+| Operaciones | **1,67** |
+| **Total** | **1,47** |
+
+Lectura: el diseño va por delante de la implementación. Lo que está escrito y verificado (fronteras, autorización, cabeceras, copias, cadena de auditoría) es sólido; lo que falta es lo que rodea al código: inventario de dependencias, escaneo de imágenes, secretos, detección de ataques a la autenticación y respuesta a incidentes. El §5 apunta exactamente ahí.
+
+## 3. Mapa a Microsoft SDL
+
+| Práctica SDL | Dónde vive en este proyecto | Estado |
+|---|---|---|
+| Formación en seguridad | Prompts de agentes y doc 03; nada para personas | **No cubierta** |
+| Requisitos de seguridad | Doc 01 §8 (RS-*) y §7 (RL-*); trazabilidad RQ-13 en CI | Cubierta |
+| Umbrales de calidad y *bug bars* | Severidad en `seguridad-cumplimiento.md`; RS-10 (0 críticas o altas en versión publicada); sin plazos de corrección | Parcial |
+| Diseño y modelado de amenazas | Doc 01 §8.1 (STRIDE + ATT&CK); ADR; skill `revision-cumplimiento` | Cubierta |
+| Criptografía | HMAC-SHA256 en el QR (ADR-005) verificado con `hash_equals`; bcrypt coste 12 para contraseñas y PIN (verificado por `QualityGatesTest.php`); TLS 1.3 en el borde; copias cifradas (`BackupAndAlertingTest.php`, «cifra las copias»). Sin rehash al iniciar sesión (§6) | Cubierta |
+| Gestión de riesgo de terceros | `composer audit` y `npm audit` en CI; sin SBOM ni política de proveedores (no hay subencargados de datos, ADR-016) | Parcial → §5 |
+| Herramientas aprobadas | Doc 02 §3.5 (una herramienta por convención, verificado por `QualityGatesTest.php`); versiones fijadas (`make tool-versions`, SHAs en `ci.yml`) | Cubierta |
+| Componentes inseguros u obsoletos | Auditoría de dependencias en CI; sin actualización automática | Parcial → §5 (Dependabot) |
+| SAST | Semgrep con reglas propias (`.semgrep/kronoqr-php.yaml`); PHPStan 9 | Parcial → §5 (Semgrep comunitario) |
+| DAST | — | **No cubierta** |
+| Pruebas de penetración | Tarea 3.8 (RS-11): ninguna versión comercial antes | Pendiente |
+| Respuesta a incidentes | `rotura-cadena-auditoria.md`; falta el runbook de brecha (RL-15) y el canal de reporte | Parcial |
+| Despliegue y configuración segura | Cabeceras, TLS, roles de BD, secretos fuera del repositorio; instalador y rotación pendientes (5.4) | Parcial |
+
+## 4. Shift-left y juicio humano
+
+El flujo de agentes (doc 03) desplaza la seguridad hacia el diseño de tres maneras concretas:
+
+1. **Hallazgo y corrección están separados por construcción.** `seguridad-cumplimiento` y `revisor-codigo` se declaran con `tools: Read, Grep, Glob, Bash`, sin `Write` ni `Edit`: pueden leer, ejecutar comprobaciones y escribir un informe, pero no tocar código. Quien corrige es el agente dueño de la capa (`backend-laravel`, `devops-observabilidad`, `frontend-*`), y vuelve a pasar por revisión. Este documento es la excepción explícita: se ha escrito con permiso de escritura **solo sobre documentación**, y lo dice.
+2. **Una convención sin herramienta es una sugerencia** (`CLAUDE.md`, doc 02 §3.5). Las reglas duras no dependen de que alguien las recuerde: Deptrac, PHPStan, Semgrep y las pruebas de arquitectura fallan la CI. El coste de una regla nueva incluye su comprobación.
+3. **La revisión llega antes del código.** La skill `revision-cumplimiento` y el paso 1 del cierre de fase (doc 03 §6.6) se aplican al diseño y al contrato OpenAPI, que se modifica antes que el código (ADR-013).
+
+Lo que **no** decide un agente, y exige a una persona con nombre:
+
+- **Contradecir un ADR.** Solo con otro ADR (`CLAUDE.md`, orden de autoridad). Un agente que lo necesite para y pregunta.
+- **Excepciones de análisis estático.** Una supresión de PHPStan sin motivo falla la CI (`.semgrep/kronoqr-php.yaml`); la misma regla debe aplicarse a cualquier `nosemgrep` o exclusión de Trivy cuando existan (§5): motivo escrito, autor y fecha.
+- **Aceptar un riesgo.** Se anota en §6 con dueño y fecha límite. Ejemplos ya tomados y registrados en `HANDOFF.md`: mantener sin rotular la zona horaria en el portal contra el hallazgo del revisor; no enviar la tarjeta por correo (ADR-014).
+- **Ampliar la finalidad de un tratamiento de datos personales**, exponer el portal fuera de la red interna, o conceder acceso de soporte al fabricante (RF-PD-11, ADR-020): decisión del cliente y su DPO, nunca por defecto.
+- **Descartar un hallazgo de severidad ALTO o CRÍTICO.** Se puede, pero queda escrito quién y por qué.
+
+## 5. Lo que se está añadiendo en esta rama (en curso)
+
+Nada de esta tabla cuenta como evidencia hasta que el job correspondiente esté en verde en `ci.yml` y el fichero exista en el repositorio. Los niveles de la última columna son los que alcanzaría la práctica **al quedar en verde**, no los actuales.
+
+| Elemento | Qué aporta | Práctica SAMM que mueve | Nivel al quedar en verde |
+|---|---|---|---|
+| Semgrep con reglas comunitarias (PHP, OWASP Top 10) además de `.semgrep/`, **bloqueante desde el 29-08-2026** (9 hallazgos triados: 4 corregidos, 5 justificados con `# nosemgrep`) | SAST real sobre inyección, deserialización, SSRF, criptografía débil | Pruebas de seguridad (A) | 1 → 2 |
+| Trivy sobre imágenes y sistema de ficheros | Vulnerabilidades del sistema operativo base y de dependencias empaquetadas | Build seguro (B); Gestión del entorno (parcheo) | 1 → 2; base para 3 |
+| Dependabot | Actualización automática de dependencias y acciones de CI, con PR | Build seguro (B); Gestión de defectos | 1 → 2 |
+| gitleaks | Secretos en el historial y en cada PR; complementa las pruebas RS-08 de `QualityGatesTest.php` | Despliegue seguro (B, gestión de secretos) | 1 → 2 |
+| SBOM CycloneDX (PHP y JS) | Inventario de componentes por versión publicada; entrada del ADR de componentes aprobados | Build seguro (B); Arquitectura segura (B) | 2 (3 exige firma y verificación al instalar) |
+| Auditoría de autenticación (ADR-039) —inicio de sesión y cierre en `audit_log` solo en el panel, **apertura de bloqueo** en los tres canales y escrita *después de responder*; cada **fallo** en el log técnico (`auth.login_failed`) y en `kronoqr_auth_attempts_total`— y alertas `KronoqrAuth*` en `infra/observability` | Señal observable para `T1110.001`; cierra OWASP A09 y es la evidencia de RS-13 (doc 01 §8) | Gestión de incidentes (A, detección); Requisitos de seguridad | 1 → 2 |
+
+Cuando todo quede en verde, la puntuación de Implementación pasaría de 1,00 a 1,67 y la de Operaciones a 2,00; Verificación a 1,67. El total quedaría en torno a 1,73. Se recalcula con la evidencia delante, no ahora.
+
+## 6. Riesgos aceptados y decisiones pendientes
+
+| Riesgo o decisión | Estado | Requisito | Qué se hace | Hasta |
+|---|---|---|---|---|
+| Sin 2FA para `admin`, `rrhh` y `auditor` | **Aceptado** (ADR-032: la Fase 1 es defendible con panel y portal en red interna y bloqueo por intentos) | RS-06 | Tarea 2.1 | Cierre de Fase 2 |
+| `APP_DEBUG=true` en `.env.example` | **Pendiente**: la línea avisa «false SIEMPRE en produccion», pero un `.env` copiado sin leer expone trazas | RS-08, OWASP A05 | `false` de serie y guarda que se niegue a arrancar en producción con `true` (pendiente en `HANDOFF.md`) | Antes de 5.4 |
+| Sin rehash de contraseñas ni PIN al iniciar sesión | **Aceptado temporalmente**: el coste (bcrypt 12) es fijo y verificado; sin rehash, subir el coste no migraría los hashes existentes | OWASP A07 | `needsRehash` en `AuthenticateUserHandler` y en el portal | 2.1 |
+| Sin DAST | **Aceptado**: la superficie es una API con contrato y tres SPA del mismo origen; el SAST y las pruebas de autorización cubren la mayor parte | RS-10 | ZAP *baseline* contra el entorno de Compose, sin tarea asignada | 3.8 |
+| Sin revisión de seguridad externa | **Pendiente**: ninguna versión comercial se publica sin ella | RS-11 | Tarea 3.8, con este documento y §8.1 como entrada del revisor | Primera versión comercial |
+| Sin requisito para OWASP A09 (registro y monitorización de fallos de seguridad) | **Resuelto (29-08-2026)**: **RS-13** en doc 01 §8 y Anexo A (Fase 1) con el reparto real que fija **ADR-039** —acceso y cierre de gestión y apertura de bloqueo en `audit_log`; cada fallo en el log técnico y en `kronoqr_auth_attempts_total`—, no con la redacción inicial de «asiento en los tres canales». La sesión del empleado (portal y PIN) queda fuera **por decisión, no por limitación**: ADR-037 excluye de la traza el ejercicio del derecho del art. 34.9 ET, y el fichaje que sigue al PIN ya deja constancia. El tipo de actor `employee` se creará con la primera acción de autoría del empleado con relevancia legal, no para sesiones | A09; `T1110.001` | Pruebas etiquetadas `RS-13`: `AuthenticationTrailTest`, `PortalAuthenticationTrailTest`, `PinScanAuthenticationTrailTest`, `AuthenticationMetricsTest`, `BackupAndAlertingTest` | Hecho |
+| SRI en assets prometido en doc 02 §7.1 y no implementado | **Decisión pendiente**: con CSP `script-src 'self'` y assets del mismo origen el valor es bajo; implementar o retirar la promesa | RS-09 | Doc 02 lo edita otro agente en esta rama: anotarlo allí, no aquí | Cierre de esta rama |
+| `rotacion-secretos.md` prometido (doc 02 §7.7 y §12) y no escrito | **Pendiente** | RS-08 | Se escribe con el instalador, que es quien genera los secretos | 5.4 |
+| Préstamo de tarjeta (*buddy punching*) | **Aceptado por diseño** (`docs/04`, ADR-014): fraude autolimitado sin técnica ATT&CK; se detecta, no se impide | RF-PR-06 | Detección de patrones anómalos | 3.11 |

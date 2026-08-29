@@ -11,10 +11,12 @@ use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
- * Centros y departamentos, validados contra el contrato.
+ * El centro de trabajo de la instalacion y sus departamentos (RF-GP-01, ADR-040).
  *
- * La zona horaria del centro no es un campo mas: es el dato del que depende
- * RN-05, y por eso tiene aqui sus propias pruebas.
+ * Hay exactamente un centro: el recurso es singular (`/api/v1/site`), no tiene
+ * alta por HTTP —la hace la puesta en marcha— y los departamentos nacen en el
+ * sin que nadie lo elija. La zona horaria del centro es el dato del que depende
+ * RN-05, y por eso su modificacion tiene pruebas propias.
  */
 
 uses(RefreshDatabase::class);
@@ -28,69 +30,36 @@ function hrToken(): string
     return ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RRHH));
 }
 
-it('crea un centro con la zona horaria de serie cuando no se indica', function (): void {
-    // `Europe/Madrid` es el valor del mercado inicial y es configuracion
-    // editable, no una constante (regla dura 13).
-    Api::as(hrToken())
-        ->post('/api/v1/sites', ['name' => 'Hotel Marina'])
-        ->assertValidRequest()
-        ->assertValidResponse(201)
-        ->assertJsonPath('timezone', 'Europe/Madrid');
-})->group('RN-05');
-
-it('crea un centro en otra zona horaria', function (): void {
-    Api::as(hrToken())
-        ->post('/api/v1/sites', ['name' => 'Hotel Atlantico', 'timezone' => 'Atlantic/Canary'])
-        ->assertValidResponse(201)
-        ->assertJsonPath('timezone', 'Atlantic/Canary');
-})->group('RN-05');
-
-it('rechaza una zona horaria que no existe', function (): void {
-    // Una errata aqui atribuye los turnos de noche al dia equivocado durante
-    // meses, sin dar ningun error (RN-05).
-    Api::as(hrToken())
-        ->post('/api/v1/sites', ['name' => 'Hotel Fantasma', 'timezone' => 'Europe/Madird'])
-        ->assertValidResponse(422)
-        ->assertJsonPath('type', 'urn:kronoqr:problem:validation-failed');
-})->group('RN-05');
-
-it('rechaza un desfase en horas como zona del centro', function (): void {
-    // RN-09: un desfase no sabe de cambios de hora.
-    Api::as(hrToken())
-        ->post('/api/v1/sites', ['name' => 'Hotel Desfase', 'timezone' => '+02:00'])
-        ->assertValidResponse(422);
-})->group('RN-09', 'RN-05');
-
-it('no admite dos centros con el mismo nombre', function (): void {
-    $token = hrToken();
-
-    Api::as($token)->post('/api/v1/sites', ['name' => 'Hotel Marina'])->assertStatus(201);
-
-    Api::as($token)
-        ->post('/api/v1/sites', ['name' => 'Hotel Marina'])
-        ->assertValidResponse(409)
-        ->assertJsonPath('type', 'urn:kronoqr:problem:conflict');
-})->group('RF-GP-01');
-
-it('lista y consulta los centros con su zona', function (): void {
-    $token = hrToken();
+it('devuelve el centro de la instalacion con su zona', function (): void {
     $site = WorkforceFixtures::site('Hotel Ribeira', 'Europe/Lisbon');
 
-    Api::as($token)->get('/api/v1/sites')
+    Api::as(hrToken())->get('/api/v1/site')
+        ->assertValidRequest()
         ->assertValidResponse(200)
-        ->assertJsonPath('data.0.timezone', 'Europe/Lisbon');
-
-    Api::as($token)->get('/api/v1/sites/'.$site)
-        ->assertValidResponse(200)
-        ->assertJsonPath('id', $site);
+        ->assertJsonPath('id', $site)
+        ->assertJsonPath('timezone', 'Europe/Lisbon');
 })->group('RF-GP-01', 'RN-05');
 
-it('cambia la zona horaria de un centro', function (): void {
+it('responde 404 antes de la puesta en marcha, cuando todavia no hay centro', function (): void {
+    Api::as(hrToken())->get('/api/v1/site')->assertValidResponse(404);
+})->group('RF-GP-01');
+
+it('no expone ninguna lista ni alta de centros', function (): void {
+    // ADR-040: una licencia es un centro. Las rutas antiguas no existen.
+    $token = hrToken();
+    WorkforceFixtures::site();
+
+    Api::as($token)->get('/api/v1/sites')->assertStatus(404);
+    Api::as($token)->post('/api/v1/sites', ['name' => 'Hotel Marina'])->assertStatus(404);
+    Api::as($token)->post('/api/v1/site', ['name' => 'Hotel Marina'])->assertStatus(405);
+})->group('RF-GP-01');
+
+it('cambia la zona horaria del centro', function (): void {
     $token = hrToken();
     $site = WorkforceFixtures::site();
 
     Api::as($token)
-        ->patch('/api/v1/sites/'.$site, ['timezone' => 'Atlantic/Canary'])
+        ->patch('/api/v1/site', ['timezone' => 'Atlantic/Canary'])
         ->assertValidRequest()
         ->assertValidResponse(200)
         ->assertJsonPath('timezone', 'Atlantic/Canary');
@@ -98,65 +67,113 @@ it('cambia la zona horaria de un centro', function (): void {
     expect(DB::table('sites')->where('id', $site)->value('timezone'))->toBe('Atlantic/Canary');
 })->group('RN-05');
 
-it('no expone ningun verbo que borre un centro o un departamento', function (): void {
-    // Regla dura 5. Un centro con empleados o con tramos no puede desaparecer
-    // sin llevarse por delante el registro horario que hay que conservar cuatro
-    // anos (RL-02). El 405 lo da el enrutador porque la ruta no existe.
+it('renombra el centro', function (): void {
+    WorkforceFixtures::site();
+
+    Api::as(hrToken())
+        ->patch('/api/v1/site', ['name' => 'Hotel Marina'])
+        ->assertValidResponse(200)
+        ->assertJsonPath('name', 'Hotel Marina');
+})->group('RF-GP-01');
+
+it('rechaza una zona horaria que no existe', function (): void {
+    WorkforceFixtures::site();
+
+    Api::as(hrToken())
+        ->patch('/api/v1/site', ['timezone' => 'Europe/Madird'])
+        ->assertValidResponse(422)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:validation-failed');
+})->group('RN-05');
+
+it('rechaza un desfase en horas como zona del centro', function (): void {
+    WorkforceFixtures::site();
+
+    Api::as(hrToken())
+        ->patch('/api/v1/site', ['timezone' => '+02:00'])
+        ->assertValidResponse(422);
+})->group('RN-09', 'RN-05');
+
+it('no expone ningun verbo que borre el centro o un departamento', function (): void {
     $token = hrToken();
     $site = WorkforceFixtures::site();
     $department = WorkforceFixtures::department($site);
 
-    Api::as($token)->delete('/api/v1/sites/'.$site)->assertStatus(405);
+    Api::as($token)->delete('/api/v1/site')->assertStatus(405);
     Api::as($token)->delete('/api/v1/departments/'.$department)->assertStatus(405);
 })->group('RF-GP-03');
 
-it('crea departamentos con nombre unico dentro de cada centro', function (): void {
-    // Dos hoteles del mismo cliente tienen los dos una «Recepcion», y eso no
-    // puede ser un error.
-    $token = hrToken();
-    $first = WorkforceFixtures::site('Hotel Uno');
-    $second = WorkforceFixtures::site('Hotel Dos');
+it('crea el departamento en el centro de la instalacion sin que nadie lo elija', function (): void {
+    $site = WorkforceFixtures::site();
 
-    Api::as($token)->post('/api/v1/departments', ['site_id' => $first, 'name' => 'Recepcion'])
+    $id = Api::as(hrToken())
+        ->post('/api/v1/departments', ['name' => 'Recepcion'])
         ->assertValidRequest()
-        ->assertValidResponse(201);
+        ->assertValidResponse(201)
+        ->assertJsonMissingPath('site_id')
+        ->json('id');
 
-    Api::as($token)->post('/api/v1/departments', ['site_id' => $second, 'name' => 'Recepcion'])
-        ->assertValidResponse(201);
+    expect(DB::table('departments')->where('id', $id)->value('site_id'))->toBe($site);
+})->group('RF-GP-01');
 
-    Api::as($token)->post('/api/v1/departments', ['site_id' => $first, 'name' => 'Recepcion'])
+it('rechaza un site_id en el alta de departamento en vez de ignorarlo', function (): void {
+    $site = WorkforceFixtures::site();
+
+    Api::as(hrToken())
+        ->post('/api/v1/departments', ['site_id' => $site, 'name' => 'Recepcion'])
+        ->assertValidResponse(422)
+        ->assertJsonStructure(['errors' => ['site_id']]);
+})->group('RF-GP-01');
+
+it('responde 409 al crear un departamento antes de la puesta en marcha', function (): void {
+    // Sin centro no hay donde colgarlo: es un estado de la instalacion, no un
+    // error del formulario.
+    Api::as(hrToken())
+        ->post('/api/v1/departments', ['name' => 'Recepcion'])
+        ->assertValidResponse(409)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:conflict');
+})->group('RF-GP-01');
+
+it('no admite dos departamentos con el mismo nombre', function (): void {
+    $token = hrToken();
+    WorkforceFixtures::site();
+
+    Api::as($token)->post('/api/v1/departments', ['name' => 'Recepcion'])
+        ->assertValidResponse(201);
+    Api::as($token)->post('/api/v1/departments', ['name' => 'Recepcion'])
         ->assertValidResponse(409);
 })->group('RF-GP-01');
 
-it('filtra los departamentos por centro', function (): void {
-    $token = hrToken();
-    $first = WorkforceFixtures::site('Hotel Uno');
-    $second = WorkforceFixtures::site('Hotel Dos');
-
-    WorkforceFixtures::department($first, 'Cocina');
-    WorkforceFixtures::department($second, 'Pisos');
-
-    Api::as($token)->get('/api/v1/departments', ['site_id' => $first])
-        ->assertValidResponse(200)
-        ->assertJsonCount(1, 'data')
-        ->assertJsonPath('data.0.site_id', $first);
-})->group('RF-GP-01');
-
-it('renombra un departamento sin poder moverlo de centro', function (): void {
-    // Moverlo arrastraria a sus empleados a otra zona horaria (RN-05). El
-    // contrato no admite `site_id` en este cuerpo y el FormRequest lo rechaza.
+it('lista los departamentos de la instalacion por nombre', function (): void {
     $token = hrToken();
     $site = WorkforceFixtures::site();
-    $other = WorkforceFixtures::site('Otro hotel');
+    WorkforceFixtures::department($site, 'Pisos');
+    WorkforceFixtures::department($site, 'Cocina');
+
+    Api::as($token)->get('/api/v1/departments')
+        ->assertValidResponse(200)
+        ->assertJsonCount(2, 'data')
+        ->assertJsonMissingPath('data.0.site_id');
+})->group('RF-GP-01');
+
+it('rechaza un site_id al listar departamentos en vez de ignorarlo', function (): void {
+    $site = WorkforceFixtures::site();
+
+    Api::as(hrToken())->get('/api/v1/departments', ['site_id' => $site])->assertStatus(422);
+})->group('RF-GP-01');
+
+it('renombra un departamento', function (): void {
+    $token = hrToken();
+    $site = WorkforceFixtures::site();
     $department = WorkforceFixtures::department($site);
 
     Api::as($token)
         ->patch('/api/v1/departments/'.$department, ['name' => 'Recepcion y conserjeria'])
         ->assertValidResponse(200)
-        ->assertJsonPath('name', 'Recepcion y conserjeria')
-        ->assertJsonPath('site_id', $site);
+        ->assertJsonPath('name', 'Recepcion y conserjeria');
 
+    // El contrato no admite `site_id` en este cuerpo y el FormRequest lo
+    // rechaza: no hay otro centro al que moverlo.
     Api::as($token)
-        ->patch('/api/v1/departments/'.$department, ['name' => 'Recepcion', 'site_id' => $other])
+        ->patch('/api/v1/departments/'.$department, ['name' => 'Recepcion', 'site_id' => $site])
         ->assertValidResponse(422);
 })->group('RF-GP-01', 'RN-05');

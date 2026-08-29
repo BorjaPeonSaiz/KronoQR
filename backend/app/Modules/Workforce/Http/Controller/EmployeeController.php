@@ -32,7 +32,6 @@ final class EmployeeController extends Controller
     public function index(IndexEmployeeRequest $request, EmployeeQueries $queries): JsonResponse
     {
         $page = $queries->page(
-            siteId: $request->siteFilter(),
             departmentId: $request->departmentFilter(),
             status: $request->statusFilter(),
             search: $request->searchTerm(),

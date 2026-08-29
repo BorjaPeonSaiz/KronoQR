@@ -12,17 +12,17 @@
 //
 // Los filtros viven en la query string de la ruta: un enlace copiado, o el
 // boton «volver» del navegador desde la ficha de un empleado, reproducen la
-// misma busqueda (mismo patron que ya usa el panel de credenciales con
-// `site`).
+// misma busqueda (mismo patron que el panel de credenciales).
 import { announce } from '@kronoqr/web-kit/announcer'
 import EmptyState from '@kronoqr/web-kit/components/EmptyState.vue'
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
+import { FALLBACK_TIMEZONE } from '@kronoqr/web-kit/datetime'
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { keepPreviousData, useQuery } from '@tanstack/vue-query'
-import { listDepartments, listSites } from '@/shared/api/organisation.api'
+import { getSite, listDepartments } from '@/shared/api/organisation.api'
 import type { EmployeeProvisioned, EmploymentStatus, PinStatus } from '@/shared/api/types'
 import PaginationBar from '@/shared/ui/PaginationBar.vue'
 import EmployeeCreateDialog from './EmployeeCreateDialog.vue'
@@ -66,7 +66,6 @@ const statusFilter = ref<EmploymentStatus | ''>(
     : '',
 )
 
-const siteFilter = ref<number | ''>(queryInt('site'))
 const departmentFilter = ref<number | ''>(queryInt('department'))
 
 const initialPinStatus = queryParam('pin_status')
@@ -83,25 +82,21 @@ const creating = ref(false)
 // (RF-ID-09).
 const provisioned = ref<EmployeeProvisioned | null>(null)
 
-const { data: sites } = useQuery({ queryKey: ['sites'], queryFn: listSites })
+// El centro de la instalacion (ADR-040): solo hace falta su zona horaria, para
+// proponer «hoy» como fecha de alta en la zona correcta.
+const { data: site } = useQuery({ queryKey: ['site'], queryFn: getSite })
 const { data: departments } = useQuery({
   queryKey: ['departments', 'all'],
   queryFn: () => listDepartments(),
 })
 
-const allDepartments = computed(() => departments.value?.data ?? [])
-const departmentOptions = computed(() =>
-  siteFilter.value === ''
-    ? allDepartments.value
-    : allDepartments.value.filter((department) => department.site_id === siteFilter.value),
-)
+const departmentOptions = computed(() => departments.value?.data ?? [])
 
 const query = computed(() => ({
   page: page.value,
   perPage: PER_PAGE,
   ...(qFilter.value === '' ? {} : { q: qFilter.value }),
   ...(statusFilter.value === '' ? {} : { status: statusFilter.value }),
-  ...(siteFilter.value === '' ? {} : { siteId: siteFilter.value }),
   ...(departmentFilter.value === '' ? {} : { departmentId: departmentFilter.value }),
   ...(pinStatusFilter.value === '' ? {} : { pinStatus: pinStatusFilter.value }),
 }))
@@ -134,9 +129,6 @@ watch(
   },
 )
 
-const siteNames = computed(
-  () => new Map((sites.value?.data ?? []).map((site) => [site.id, site.name])),
-)
 const departmentNames = computed(
   () => new Map((departments.value?.data ?? []).map((item) => [item.id, item.name])),
 )
@@ -144,7 +136,6 @@ const departmentNames = computed(
 const hasFilters = computed(
   () =>
     statusFilter.value !== '' ||
-    siteFilter.value !== '' ||
     departmentFilter.value !== '' ||
     pinStatusFilter.value !== '' ||
     qFilter.value !== '',
@@ -165,22 +156,6 @@ function resetToFirstPage(): void {
 
 function goToPage(next: number): void {
   page.value = next
-}
-
-function onSiteChange(): void {
-  // Un departamento de otro centro deja de tener sentido en cuanto se elige
-  // un centro que no es el suyo.
-  if (siteFilter.value !== '' && departmentFilter.value !== '') {
-    const chosen = allDepartments.value.find(
-      (department) => department.id === departmentFilter.value,
-    )
-
-    if (chosen === undefined || chosen.site_id !== siteFilter.value) {
-      departmentFilter.value = ''
-    }
-  }
-
-  resetToFirstPage()
 }
 
 let searchDebounce: ReturnType<typeof setTimeout> | undefined
@@ -215,7 +190,6 @@ function clearSearch(): void {
 function clearFilters(): void {
   clearSearch()
   statusFilter.value = ''
-  siteFilter.value = ''
   departmentFilter.value = ''
   pinStatusFilter.value = ''
 }
@@ -223,8 +197,8 @@ function clearFilters(): void {
 // La query string refleja el estado, para que un enlace copiado o el «volver»
 // del navegador reproduzcan la misma vista.
 watch(
-  [qFilter, statusFilter, siteFilter, departmentFilter, pinStatusFilter, page],
-  ([q, status, site, department, pinStatus, currentPage]) => {
+  [qFilter, statusFilter, departmentFilter, pinStatusFilter, page],
+  ([q, status, department, pinStatus, currentPage]) => {
     const nextQuery: Record<string, string> = {}
 
     if (q !== '') {
@@ -233,10 +207,6 @@ watch(
 
     if (status !== '') {
       nextQuery['status'] = status
-    }
-
-    if (site !== '') {
-      nextQuery['site'] = String(site)
     }
 
     if (department !== '') {
@@ -350,23 +320,6 @@ const selectClass =
         </div>
 
         <div class="flex flex-col gap-1">
-          <label for="employees-site-filter" class="font-medium">
-            {{ t('employees.filters.site') }}
-          </label>
-          <select
-            id="employees-site-filter"
-            v-model="siteFilter"
-            :class="selectClass"
-            @change="onSiteChange"
-          >
-            <option value="">{{ t('employees.filters.siteAll') }}</option>
-            <option v-for="site of sites?.data ?? []" :key="site.id" :value="site.id">
-              {{ site.name }}
-            </option>
-          </select>
-        </div>
-
-        <div class="flex flex-col gap-1">
           <label for="employees-department-filter" class="font-medium">
             {{ t('employees.filters.department') }}
           </label>
@@ -441,7 +394,6 @@ const selectClass =
             <tr>
               <th scope="col" class="px-3 py-2">{{ t('employees.table.name') }}</th>
               <th scope="col" class="px-3 py-2">{{ t('employees.table.code') }}</th>
-              <th scope="col" class="px-3 py-2">{{ t('employees.table.site') }}</th>
               <th scope="col" class="px-3 py-2">{{ t('employees.table.department') }}</th>
               <th scope="col" class="px-3 py-2">{{ t('employees.table.status') }}</th>
               <!-- Estado del PIN, nunca el PIN. El valor solo existe en el
@@ -460,7 +412,6 @@ const selectClass =
                 </RouterLink>
               </th>
               <td class="px-3 py-2 font-mono">{{ employee.employee_code }}</td>
-              <td class="px-3 py-2">{{ siteNames.get(employee.site_id) ?? '—' }}</td>
               <td class="px-3 py-2">
                 {{
                   employee.department_id === null
@@ -492,7 +443,7 @@ const selectClass =
 
     <EmployeeCreateDialog
       v-if="creating"
-      :sites="sites?.data ?? []"
+      :timezone="site?.timezone ?? FALLBACK_TIMEZONE"
       @close="creating = false"
       @created="onCreated"
     />

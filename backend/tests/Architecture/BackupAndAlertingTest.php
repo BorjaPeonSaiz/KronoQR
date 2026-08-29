@@ -198,6 +198,34 @@ it('deja la alerta de rotura de cadena sin umbral, dirigida a seguridad y con ru
     expect($rotura['labels']['destinatario'] ?? '')->toBe('seguridad');
 })->group('RS-07');
 
+it('dirige las alertas de ataque a credenciales a seguridad, con runbook y tecnica ATT&CK', function (): void {
+    // OWASP A09 y doc 07 §5: un ataque de fuerza bruta contra el panel, el
+    // portal o el PIN del quiosco tiene que sonar en el responsable de
+    // seguridad, no en el IT, y cada alerta tiene que decir que tecnica del
+    // adversario esta viendo (T1110) y donde esta el procedimiento. Sin esta
+    // prueba, la puerta «cada alerta con runbook que existe» no cubria
+    // `auth.yml`: solo escaneaba `backup.yml` y `audit.yml`.
+    $reglas = reglasDeAlerta('infra/observability/prometheus/rules/auth.yml');
+
+    exigeProcedimientoEnCadaAlerta($reglas);
+
+    $porNombre = [];
+    foreach ($reglas as $regla) {
+        $porNombre[$regla['alert'] ?? ''] = $regla;
+    }
+
+    expect($porNombre)->toHaveKeys(['KronoqrAuthFailureBurst', 'KronoqrAuthLockouts', 'KronoqrAuthFailureSpike']);
+
+    foreach ($porNombre as $nombre => $regla) {
+        expect($regla['expr'] ?? '')->toContain('kronoqr_auth_attempts_total');
+        expect($regla['labels']['destinatario'] ?? '')->toBe('seguridad');
+        expect(implode(' ', $regla['annotations'] ?? []))->toMatch('/T1110/');
+    }
+
+    expect($porNombre['KronoqrAuthFailureSpike']['labels']['severity'] ?? '')->toBe('critical');
+    expect($porNombre['KronoqrAuthLockouts']['expr'] ?? '')->toContain('outcome="lockout"');
+})->group('RS-13', 'RS-12');
+
 it('verifica la cadena de auditoria a diario, que es lo que RS-07 exige', function (): void {
     // «La cadena se verifica a diario y cualquier rotura dispara alerta critica
     // en menos de 24 h» (doc 01 §9.3). Sin la programacion, la alerta existe y

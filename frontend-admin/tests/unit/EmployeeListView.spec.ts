@@ -6,12 +6,12 @@ import { announcement, clearAnnouncement } from '@kronoqr/web-kit/announcer'
 import { EMPLOYEE_UUID, SITE, employee, employeeCollection } from './support/fixtures'
 import { createTestRouter, jsonResponse, mountView, settle, stubFetch } from './support/harness'
 
-const DEPARTMENTS = { data: [{ id: 3, site_id: 1, name: 'Recepcion' }] }
+const DEPARTMENTS = { data: [{ id: 3, name: 'Recepcion' }] }
 
 function routes(employees: unknown) {
   return (url: string) => {
-    if (url.startsWith('/api/v1/sites')) {
-      return jsonResponse({ data: [SITE] })
+    if (url.startsWith('/api/v1/site')) {
+      return jsonResponse(SITE)
     }
 
     if (url.startsWith('/api/v1/departments')) {
@@ -48,10 +48,9 @@ describe('EmployeeListView', () => {
     await settle()
 
     expect(wrapper.find('caption').exists()).toBe(true)
-    expect(wrapper.findAll('thead th[scope="col"]')).toHaveLength(6)
+    expect(wrapper.findAll('thead th[scope="col"]')).toHaveLength(5)
     expect(wrapper.find('tbody th[scope="row"]').text()).toContain('Youssef Amrani')
     expect(wrapper.text()).toContain('E7QK2MXPR')
-    expect(wrapper.text()).toContain('Hotel Marina')
     expect(wrapper.text()).toContain('Recepcion')
   })
 
@@ -215,8 +214,8 @@ describe('EmployeeListView', () => {
 
   it('la barra de paginacion sigue visible aunque el filtro de PIN no tenga resultados (RF-GP-01)', async () => {
     const spy = stubFetch((url: string) => {
-      if (url.startsWith('/api/v1/sites')) {
-        return jsonResponse({ data: [SITE] })
+      if (url.startsWith('/api/v1/site')) {
+        return jsonResponse(SITE)
       }
 
       if (url.startsWith('/api/v1/departments')) {
@@ -248,8 +247,8 @@ describe('EmployeeListView', () => {
   it('acota la pagina si un favorito guardado apunta mas alla del total real (RF-GP-01)', async () => {
     const rows = [employee()]
     const spy = stubFetch((url: string) => {
-      if (url.startsWith('/api/v1/sites')) {
-        return jsonResponse({ data: [SITE] })
+      if (url.startsWith('/api/v1/site')) {
+        return jsonResponse(SITE)
       }
 
       if (url.startsWith('/api/v1/departments')) {
@@ -312,8 +311,8 @@ describe('EmployeeListView', () => {
 
   it('tras el alta enseña el PIN una sola vez, en su dialogo', async () => {
     stubFetch((url, init) => {
-      if (url.startsWith('/api/v1/sites')) {
-        return jsonResponse({ data: [SITE] })
+      if (url.startsWith('/api/v1/site')) {
+        return jsonResponse(SITE)
       }
 
       if (url.startsWith('/api/v1/departments')) {

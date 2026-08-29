@@ -19,7 +19,6 @@ import type {
 } from '@/shared/api/types'
 
 export interface CredentialBoardQuery {
-  siteId?: number
   /** Solo quien todavia no tiene la tarjeta en la mano. */
   pendingOnly?: boolean
   /**
@@ -33,7 +32,7 @@ export interface CredentialBoardQuery {
 
 export function fetchCredentialBoard(query: CredentialBoardQuery): Promise<CredentialStatusBoard> {
   return requestJson<CredentialStatusBoard>('/api/v1/credentials/status', {
-    query: { site_id: query.siteId, pending: query.pendingOnly, employee_uuid: query.employeeUuid },
+    query: { pending: query.pendingOnly, employee_uuid: query.employeeUuid },
   })
 }
 
@@ -42,18 +41,15 @@ export function fetchCredentialBoard(query: CredentialBoardQuery): Promise<Crede
  * «Tarjeta QR» de la ficha de empleado. `null` cuando el servidor no devuelve
  * ninguna fila (caso raro: un empleado sin nada que mostrar todavia).
  *
- * `siteId` acota tambien la peticion, para que el servidor resuelva sobre el
- * centro de esta persona y no sobre la instalacion entera. Y aunque el
- * contrato garantiza como mucho una fila para un `employee_uuid` dado,
- * `find()` localiza esa fila por `employee_uuid` en vez de asumir la
+ * Aunque el contrato garantiza como mucho una fila para un `employee_uuid`
+ * dado, `find()` localiza esa fila por `employee_uuid` en vez de asumir la
  * posicion: `data[0]` seria la fila de otra persona el dia que el filtro del
  * servidor dejara de aplicarse.
  */
 export async function fetchCredentialStatusFor(
   employeeUuid: string,
-  siteId: number,
 ): Promise<CredentialStatusRow | null> {
-  const board = await fetchCredentialBoard({ employeeUuid, siteId })
+  const board = await fetchCredentialBoard({ employeeUuid })
 
   return board.data.find((row) => row.employee_uuid === employeeUuid) ?? null
 }
@@ -69,7 +65,7 @@ export function printCredential(uuid: string): Promise<BinaryDocument | null> {
   })
 }
 
-/** La hoja A4 con todas las pendientes del centro. `null` si no habia ninguna. */
+/** La hoja A4 con todas las pendientes de la instalacion. `null` si no habia ninguna. */
 export function printCredentialBatch(
   body: PrintCredentialBatchRequest,
 ): Promise<BinaryDocument | null> {

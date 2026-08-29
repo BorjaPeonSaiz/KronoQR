@@ -870,8 +870,8 @@ export interface paths {
         };
         /**
          * Listado de departamentos
-         * @description Departamentos de la instalacion, opcionalmente filtrados por centro. Es
-         *     la lista con la que el panel construye el selector del alta de empleado.
+         * @description Departamentos de la instalacion. Es la lista con la que el panel
+         *     construye el selector del alta de empleado.
          */
         get: operations["listDepartments"];
         put?: never;
@@ -924,7 +924,7 @@ export interface paths {
         patch: operations["updateDepartment"];
         trace?: never;
     };
-    "/api/v1/sites": {
+    "/api/v1/site": {
         parameters: {
             query?: never;
             header?: never;
@@ -932,47 +932,19 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Listado de centros
-         * @description Centros de trabajo de la instalacion, con su zona horaria.
+         * El centro de trabajo de la instalacion
+         * @description Nombre y zona horaria del centro. **Hay exactamente uno por instalacion**
+         *     ([ADR-040](../adr/ADR-040-un-centro-por-instalacion-y-por-licencia.md)):
+         *     una licencia es un hotel, y una cadena opera una instalacion por hotel.
+         *     Por eso el recurso es singular y no lleva identificador en la ruta.
          *
          *     **La zona horaria no es decorativa**: es el dato del que depende RN-05,
          *     que atribuye cada tramo a la jornada de su hora de inicio **en la zona
-         *     del centro**. Un hotel en Canarias y otro en la peninsula no comparten
-         *     fecha civil a las 00:30.
-         */
-        get: operations["listSites"];
-        put?: never;
-        /**
-         * Alta de centro
-         * @description Crea un centro de trabajo. `timezone` es un identificador IANA
-         *     (`Europe/Madrid`), nunca un desfase en horas: un desfase no sabe de
-         *     cambios de hora y rompe RN-09 dos veces al año.
-         */
-        post: operations["createSite"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/sites/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /**
-                 * @description Identificador del centro. Aqui si es el numerico: `sites` no tiene UUID
-                 *     publico (documento 01 §5.5) porque un centro no es un dato personal ni
-                 *     aparece impreso en ninguna tarjeta.
-                 * @example 1
-                 */
-                id: components["parameters"]["SiteId"];
-            };
-            cookie?: never;
-        };
-        /**
-         * Detalle de un centro
-         * @description Nombre y zona horaria del centro.
+         *     del centro**. El panel la lee de aqui para presentar cualquier instante,
+         *     y nunca usa la del navegador.
+         *
+         *     `404` solo antes de la puesta en marcha (RF-PD-03): una instalacion sin
+         *     centro todavia no puede fichar.
          */
         get: operations["getSite"];
         put?: never;
@@ -981,13 +953,15 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Modificacion de un centro
+         * Modificacion del centro
          * @description Cambia el nombre o la zona horaria del centro.
          *
          *     **Cambiar la zona horaria cambia el calculo de las jornadas
          *     siguientes** (RN-05): es configuracion con efecto sobre el registro
          *     legal, y por eso queda auditada. No reescribe el pasado — las jornadas
-         *     ya calculadas conservan su `work_date`.
+         *     ya calculadas conservan su `work_date`. `timezone` es un identificador
+         *     IANA (`Europe/Madrid`), nunca un desfase en horas: un desfase no sabe de
+         *     cambios de hora y rompe RN-09 dos veces al año.
          */
         patch: operations["updateSite"];
         trace?: never;
@@ -1120,9 +1094,9 @@ export interface paths {
          *
          *     **`employee_uuid` sirve a la ficha de empleado**, que muestra la fila de
          *     estado de la tarjeta de esa persona con sus acciones. Sin el, la unica
-         *     forma seria pedir el tablero del centro entero y quedarse con una fila,
-         *     lo que divulga —y audita como divulgada— toda la plantilla del centro
-         *     cada vez que alguien abre una ficha (ADR-037, RS-05).
+         *     forma seria pedir el tablero entero y quedarse con una fila, lo que
+         *     divulga —y audita como divulgada— toda la plantilla cada vez que
+         *     alguien abre una ficha (ADR-037, RS-05).
          *
          *     **Solo aparece la plantilla de alta.** Quien esta de baja o suspendido no
          *     sale de este panel, ni en el `summary` ni con `employee_uuid`: el panel
@@ -1135,7 +1109,7 @@ export interface paths {
          *     es la lectura de una sola persona y no deja asiento, igual que
          *     `GET /employees/{uuid}` ([ADR-037](../adr/ADR-037-que-lecturas-de-datos-personales-dejan-asiento.md)).
          *
-         *     Sin paginacion a proposito: la respuesta es la plantilla de un centro
+         *     Sin paginacion a proposito: la respuesta es la plantilla de la instalacion
          *     —decenas o pocos cientos de filas— y es una tabla que se ordena y se
          *     filtra entera en el panel. Paginar obligaria a pedir todas las paginas
          *     para poder contar, que es lo que este endpoint viene a evitar.
@@ -2252,11 +2226,6 @@ export interface components {
              *     correo.
              */
             email: string | null;
-            /**
-             * Format: int64
-             * @description Centro al que esta adscrito. De el sale la zona horaria de RN-05.
-             */
-            site_id: number;
             /** Format: int64 */
             department_id: number | null;
             status: components["schemas"]["EmploymentStatus"];
@@ -2381,13 +2350,10 @@ export interface components {
          *     quien da el alta.
          */
         CreateEmployeeRequest: {
-            /** Format: int64 */
-            site_id: number;
             /**
              * Format: int64
-             * @description Si se indica, **debe pertenecer al centro** de `site_id`. Un empleado
-             *     adscrito a un departamento de otro hotel es un dato imposible que
-             *     rompe los informes por centro.
+             * @description El centro no se indica: es el de la instalacion (ADR-040). El
+             *     departamento, si se indica, es uno de los suyos.
              */
             department_id?: number | null;
             first_name: string;
@@ -2416,8 +2382,6 @@ export interface components {
          *     nunca —hay tarjetas impresas con el (RF-QR-01)—.
          */
         UpdateEmployeeRequest: {
-            /** Format: int64 */
-            site_id?: number;
             /** Format: int64 */
             department_id?: number | null;
             first_name?: string;
@@ -2452,7 +2416,9 @@ export interface components {
         };
         /**
          * Site
-         * @description Centro de trabajo (documento 01 §5.5).
+         * @description El centro de trabajo de la instalacion (documento 01 §5.5). **Hay
+         *     exactamente uno** (ADR-040); `id` se conserva porque `shift_entries` y
+         *     el resto del esquema lo referencian.
          */
         Site: {
             /** Format: int64 */
@@ -2467,30 +2433,11 @@ export interface components {
             timezone: string;
         };
         /**
-         * SiteCollection
-         * @description Centros de la instalacion. Sin paginacion: un cliente tiene hoteles, no
-         *     miles de centros, y el limite real lo pone su licencia (`max_sites`).
-         */
-        SiteCollection: {
-            data: components["schemas"]["Site"][];
-        };
-        /**
-         * CreateSiteRequest
-         * @description Alta de centro de trabajo.
-         */
-        CreateSiteRequest: {
-            name: string;
-            /**
-             * @description Zona IANA del centro. El valor de serie es el del mercado inicial,
-             *     pero es un dato editable: nada especifico de un cliente vive en el
-             *     codigo (regla dura 13).
-             * @default Europe/Madrid
-             */
-            timezone: string;
-        };
-        /**
          * UpdateSiteRequest
-         * @description Modificacion parcial de un centro. Al menos un campo.
+         * @description Modificacion parcial del centro. Al menos un campo. `timezone` es una
+         *     zona IANA; el valor de serie es `Europe/Madrid`, el del mercado inicial,
+         *     y es un dato editable: nada especifico de un cliente vive en el codigo
+         *     (regla dura 13).
          */
         UpdateSiteRequest: {
             name?: string;
@@ -2498,7 +2445,7 @@ export interface components {
         };
         /**
          * Department
-         * @description Departamento de un centro (documento 01 §5.5).
+         * @description Departamento (documento 01 §5.5).
          *
          *     **No lleva responsable todavia.** `departments.manager_user_id` existe en
          *     el esquema, pero asignarlo solo tiene efecto con el ambito por
@@ -2508,31 +2455,26 @@ export interface components {
         Department: {
             /** Format: int64 */
             id: number;
-            /** Format: int64 */
-            site_id: number;
             name: string;
         };
         /**
          * DepartmentCollection
-         * @description Departamentos, opcionalmente de un solo centro. Sin paginacion.
+         * @description Departamentos de la instalacion. Sin paginacion.
          */
         DepartmentCollection: {
             data: components["schemas"]["Department"][];
         };
         /**
          * CreateDepartmentRequest
-         * @description Alta de departamento dentro de un centro.
+         * @description Alta de departamento. Queda en el centro de la instalacion (ADR-040).
          */
         CreateDepartmentRequest: {
-            /** Format: int64 */
-            site_id: number;
             name: string;
         };
         /**
          * UpdateDepartmentRequest
-         * @description Renombrado del departamento. `site_id` no aparece a proposito: mover un
-         *     departamento de centro arrastraria a sus empleados a otra zona horaria y
-         *     cambiaria el calculo de sus jornadas (RN-05).
+         * @description Renombrado del departamento. Es lo unico que cambia: no hay otro centro
+         *     al que moverlo (ADR-040).
          */
         UpdateDepartmentRequest: {
             name: string;
@@ -2747,15 +2689,7 @@ export interface components {
          *     `additionalProperties: false` hace que el contrato no ofrezca ningun sitio
          *     donde alojarlos el dia que alguien los eche de menos.
          */
-        PrintCredentialBatchRequest: {
-            /**
-             * Format: int64
-             * @description Centro cuyas credenciales pendientes se imprimen. Sin el, toda la
-             *     instalacion — que en un cliente con varios hoteles produce una hoja
-             *     que despues hay que repartir, y por eso lo normal es indicarlo.
-             */
-            site_id?: number;
-        };
+        PrintCredentialBatchRequest: Record<string, never>;
         /**
          * CredentialLifecycleStatus
          * @description Situacion de la tarjeta de una persona en el panel de RF-QR-08. **Se
@@ -2791,9 +2725,6 @@ export interface components {
             /** @description Opaco y aleatorio, nunca derivado de datos personales (doc 01 §5.5). */
             employee_code: string;
             full_name: string;
-            /** Format: int64 */
-            site_id: number;
-            site_name: string;
             /** @description `null` cuando la persona no esta adscrita a ninguno: su tarjeta se imprime igual. */
             department_name: string | null;
             status: components["schemas"]["CredentialLifecycleStatus"];
@@ -2804,8 +2735,8 @@ export interface components {
             credential: components["schemas"]["Credential"] | null;
         };
         /**
-         * SiteCredentialCoverage
-         * @description El recuento de un centro. Es lo mismo que publican
+         * CredentialCoverage
+         * @description El recuento de la plantilla. Es lo mismo que publican
          *     `employees_without_delivered_credential{site}` y
          *     `credentials_pending_print{site}` (doc 02 §8.2).
          *
@@ -2815,13 +2746,10 @@ export interface components {
          *     La excepcion es `employee_uuid`, que acota tambien el recuento porque
          *     acota la consulta: ahi `employees` vale 1 y no es una cobertura.
          */
-        SiteCredentialCoverage: {
-            /** Format: int64 */
-            site_id: number;
-            site_name: string;
+        CredentialCoverage: {
             /**
-             * @description Empleados de alta del centro — o solo la fila devuelta cuando se
-             *     consulta con `employee_uuid`.
+             * @description Empleados de alta de la instalacion — o solo la fila devuelta cuando
+             *     se consulta con `employee_uuid`.
              */
             employees: number;
             /** @description Credenciales activas emitidas y todavia sin imprimir. */
@@ -2836,27 +2764,27 @@ export interface components {
         };
         /**
          * CredentialStatusBoard
-         * @description El panel completo (RF-QR-08): las filas y el recuento por centro.
+         * @description El panel completo (RF-QR-08): las filas y el recuento.
          *
          *     Sin `meta` de paginacion porque no hay paginacion: ver la descripcion del
          *     endpoint.
          */
         CredentialStatusBoard: {
             /**
-             * @description Ordenadas por centro, departamento y apellido — el mismo orden en el
-             *     que salen las tarjetas de una hoja A4.
+             * @description Ordenadas por departamento y apellido — el mismo orden en el que
+             *     salen las tarjetas de una hoja A4.
              */
             data: components["schemas"]["CredentialStatusRow"][];
             /**
-             * @description **Todos los centros del alcance, tambien los que estan a cero.** Una
-             *     serie ausente y una serie en cero se ven igual en un panel, y solo la
-             *     segunda dice «ya esta todo entregado».
+             * @description **Siempre presente, tambien a cero.** Un recuento ausente y uno en
+             *     cero se ven igual en un panel, y solo el segundo dice «ya esta todo
+             *     entregado».
              *
-             *     `pending` no lo filtra; `employee_uuid` si — con el trae una sola
-             *     entrada, la del centro de esa persona y contando solo su fila, o
-             *     ninguna. Ver la descripcion del parametro.
+             *     `pending` no lo filtra; `employee_uuid` si — con el cuenta solo la
+             *     fila devuelta, o todo a cero si no hay fila. Ver la descripcion del
+             *     parametro.
              */
-            summary: components["schemas"]["SiteCredentialCoverage"][];
+            summary: components["schemas"]["CredentialCoverage"];
         };
         /**
          * CorrectionReasonCode
@@ -3037,9 +2965,8 @@ export interface components {
          * TimeZoneName
          * @description Zona horaria IANA del centro (`sites.timezone`). **Se muestra, no se
          *     adivina**: viaja en la respuesta para que ninguna pantalla use la del
-         *     navegador. Dos centros del mismo cliente pueden tener zonas distintas
-         *     —`Europe/Madrid` y `Atlantic/Canary` son el mismo pais y una hora de
-         *     diferencia—.
+         *     navegador. `Europe/Madrid` y `Atlantic/Canary` son el mismo pais y una
+         *     hora de diferencia: la zona es del centro, no del pais.
          * @example Europe/Madrid
          */
         TimeZoneName: string;
@@ -3152,13 +3079,6 @@ export interface components {
             uuid: string;
             version: number;
             status: components["schemas"]["ShiftEntryStatus"];
-            /**
-             * Format: int64
-             * @description Centro donde se ficho, que puede no ser el centro actual del
-             *     empleado: un traslado no reescribe donde ocurrieron las jornadas
-             *     anteriores.
-             */
-            site_id: number;
             time_zone: components["schemas"]["TimeZoneName"];
             clocked_in_at: components["schemas"]["UtcTimestamp"];
             clocked_in_at_local: components["schemas"]["LocalTimestamp"];
@@ -3462,22 +3382,10 @@ export interface components {
          */
         ShiftEntryUuid: string;
         /**
-         * @description Identificador del centro. Aqui si es el numerico: `sites` no tiene UUID
-         *     publico (documento 01 §5.5) porque un centro no es un dato personal ni
-         *     aparece impreso en ninguna tarjeta.
-         * @example 1
-         */
-        SiteId: number;
-        /**
          * @description Identificador del departamento (documento 01 §5.5).
          * @example 3
          */
         DepartmentId: number;
-        /**
-         * @description Limita el resultado al centro indicado.
-         * @example 1
-         */
-        SiteFilter: number;
         /**
          * @description Limita el resultado al departamento indicado.
          * @example 3
@@ -4106,11 +4014,6 @@ export interface operations {
                  */
                 q?: components["parameters"]["EmployeeSearch"];
                 /**
-                 * @description Limita el resultado al centro indicado.
-                 * @example 1
-                 */
-                site_id?: components["parameters"]["SiteFilter"];
-                /**
                  * @description Limita el resultado al departamento indicado.
                  * @example 3
                  */
@@ -4441,13 +4344,7 @@ export interface operations {
     };
     listDepartments: {
         parameters: {
-            query?: {
-                /**
-                 * @description Limita el resultado al centro indicado.
-                 * @example 1
-                 */
-                site_id?: components["parameters"]["SiteFilter"];
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
@@ -4564,76 +4461,16 @@ export interface operations {
             429: components["responses"]["TooManyRequests"];
         };
     };
-    listSites: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Centros. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SiteCollection"];
-                };
-            };
-            401: components["responses"]["Unauthenticated"];
-            403: components["responses"]["Forbidden"];
-            429: components["responses"]["TooManyRequests"];
-        };
-    };
-    createSite: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateSiteRequest"];
-            };
-        };
-        responses: {
-            /** @description Centro creado. */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Site"];
-                };
-            };
-            401: components["responses"]["Unauthenticated"];
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
-            422: components["responses"]["ValidationFailed"];
-            429: components["responses"]["TooManyRequests"];
-        };
-    };
     getSite: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                /**
-                 * @description Identificador del centro. Aqui si es el numerico: `sites` no tiene UUID
-                 *     publico (documento 01 §5.5) porque un centro no es un dato personal ni
-                 *     aparece impreso en ninguna tarjeta.
-                 * @example 1
-                 */
-                id: components["parameters"]["SiteId"];
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Centro. */
+            /** @description El centro. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4652,15 +4489,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                /**
-                 * @description Identificador del centro. Aqui si es el numerico: `sites` no tiene UUID
-                 *     publico (documento 01 §5.5) porque un centro no es un dato personal ni
-                 *     aparece impreso en ninguna tarjeta.
-                 * @example 1
-                 */
-                id: components["parameters"]["SiteId"];
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
@@ -4773,28 +4602,22 @@ export interface operations {
         parameters: {
             query?: {
                 /**
-                 * @description Acota a un centro. Sin el, toda la instalacion.
-                 * @example 1
-                 */
-                site_id?: number;
-                /**
                  * @description Acota el tablero a **una sola persona** —la ficha de empleado del
                  *     panel—, de modo que `data` traiga 0 o 1 filas.
                  *
-                 *     Se combina con `site_id` y con `pending` mediante **Y logico**: una
-                 *     persona de otro centro, o que ya tiene su tarjeta en la mano cuando
-                 *     se pide `pending=true`, devuelve `data: []`.
+                 *     Se combina con `pending` mediante **Y logico**: una persona que ya
+                 *     tiene su tarjeta en la mano cuando se pide `pending=true` devuelve
+                 *     `data: []`.
                  *
                  *     **`summary` se acota con la persona**, al contrario que con
-                 *     `pending`: trae **una sola entrada** —la del centro de esa persona,
-                 *     contando solo la fila devuelta— o **ninguna** si no hay fila. No es
-                 *     la cobertura del centro: calcularla obliga a recorrer su plantilla
-                 *     entera, que es justo lo que este filtro evita. Quien necesite «faltan
-                 *     3 de 60» pide el tablero sin `employee_uuid`.
+                 *     `pending`: cuenta **solo la fila devuelta** —`employees` vale 1, o 0
+                 *     si no hay fila—. No es la cobertura de la plantilla: calcularla
+                 *     obliga a recorrerla entera, que es justo lo que este filtro evita.
+                 *     Quien necesite «faltan 3 de 60» pide el tablero sin `employee_uuid`.
                  *
                  *     Un UUID con forma valida que no corresponde a ningun empleado **de
                  *     alta** —porque no existe, o porque esa persona esta de baja o
-                 *     suspendida— devuelve `data: []` y `summary: []` con `200`, **no
+                 *     suspendida— devuelve `data: []` y un `summary` a cero con `200`, **no
                  *     `404`**: este tablero no es un recurso por persona, es una consulta
                  *     acotada. Una forma invalida si es `422`. Se acepta en mayusculas o en
                  *     minusculas: la comparacion es sobre el tipo `uuid`, que no distingue.

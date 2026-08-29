@@ -209,7 +209,7 @@ Cada una se recoge en la ficha de la tarea afectada con la decisión que hay que
 
    > **La tabla no se crea aquí, y esto importa.** La decisión 1-4 la adelantó a la **tarea 1.3** junto con `compliance_profiles`, porque la regla dura 14 exige que los umbrales se lean de configuración desde el primer cálculo y no desde la Fase 5. Escribir aquí una migración de creación produciría **una migración duplicada que falla al desplegar**. Lo que esta tarea añade es lo caro —cascada por ámbito, resolución tipada, caché, edición y auditoría—, no la tabla. Como hay datos, **aquí sí aplica el patrón completo de `/migracion-segura`** (expand / migrate / contract), a diferencia de la 1.3, donde el esquema nacía vacío.
 3. **Definir el catálogo de claves y su valor por defecto en código**, no en base de datos: el valor por defecto **es** el producto, y una instalación sin ninguna fila en `installation_settings` debe arrancar y funcionar. Las claves cubren lo que enumera el doc 01 §5: marca, umbrales, idiomas y funcionalidades activas.
-4. **Resolución en cascada**, de lo más específico a lo más general: `scope = site` con `scope_id` del centro → `scope = installation` → valor por defecto del catálogo. Un solo punto de resolución, tipado, con la clave declarada; nada de acceso por cadena suelta desde cualquier módulo.
+4. **Resolución en cascada**, de lo más específico a lo más general: `scope = installation` → valor por defecto del catálogo. El ámbito `site` de la tabla queda sin uso desde ADR-040 (hay un centro por instalación); esta tarea decide si lo retira con una migración de contracción o lo deja documentado como reservado. Un solo punto de resolución, tipado, con la clave declarada; nada de acceso por cadena suelta desde cualquier módulo.
 5. **Puertos tipados, y cada uno en su módulo** ([ADR-025](../docs/adr/ADR-025-frontera-de-dependencias-del-nucleo.md)). `CompliancePolicyProvider` y `OperationalSettingsProvider` viven en **`Shared/Application/Port/`** y los declaró la tarea 1.1: aquí **no se redeclaran**, se implementan. `BrandingProvider` se declara ahora, también en `Shared/Application/Port/`, porque lo consumen los tres frontends vía `Reporting` y `Product`. El resolvedor genérico de configuración (`SettingsRepository`) sí es interno de `Product`. Es la contrapartida de la nota del doc 02 §1.6: *«los demás módulos no leen su configuración directamente: reciben los valores ya resueltos como parámetros, o mediante un puerto tipado […] El dominio nunca pregunta "¿qué dice la configuración?": recibe el umbral ya decidido»*. Verificar con Deptrac: ningún `Domain/` de otro módulo depende de `Product`, y **no existe más de una declaración de cada puerto** en todo el árbol.
 6. **Caché de la resolución** en Redis (`CACHE_STORE=redis`, Anexo B) con invalidación explícita en cada escritura. Una configuración que se lee en cada fichaje no puede costar una consulta por escaneo.
 7. **Endpoints y policy**: `SettingsController` con FormRequest de validación por clave y `Resource` de serialización (§3.5, Laravel idiomático). Sin lógica de negocio en el controlador.
@@ -242,7 +242,7 @@ docs/cliente/configuracion.md       # se completa en 5.11
 
 | Nivel | Qué se prueba | Etiquetas |
 |---|---|---|
-| Unitaria | Resolución en cascada: `site` gana a `installation`, `installation` gana al valor por defecto, y sin filas se devuelve el valor por defecto | `->group('RF-PD-01')` |
+| Unitaria | Resolución en cascada: `installation` gana al valor por defecto, y sin filas se devuelve el valor por defecto | `->group('RF-PD-01')` |
 | Integración | Esquema y unicidad de `(key, scope, scope_id)`; **auditoría del cambio**: un `PATCH` deja entrada en `audit_log` con valor antes y después | `->group('RF-PD-01', 'RL-04')` |
 | Feature + Contrato | `GET`/`PATCH /api/v1/settings` validan contra `openapi.yaml` (Spectator) | `->group('RF-PD-01')` |
 | Autorización negativa | **Por cada rol no autorizado** (`manager`, `rrhh`, `auditor`, quiosco con `scope: kiosk`, portal con `self:read`): 403 y registro del fallo | `->group('RF-PD-01', 'RS-05')` |
@@ -419,7 +419,7 @@ Dos reglas de esa lista que hay que implementar, no solo leer:
 4. **Migración de la tabla `license`** con los campos del doc 01 §5. Al no haber clave activada, la instalación **funciona igual**: sin licencia válida el sistema está en estado degradado, nunca detenido.
 5. **Comandos de consola** del Anexo C: `php artisan license:show` (estado legible: cliente, plan, límites, vigencia, días restantes y qué está degradado) y `php artisan license:activate {key}` (valida, persiste y audita). `license:show` **no imprime la clave completa ni ningún secreto** (§3.5, secretos).
 6. **Endpoints** del Anexo B: `GET /api/v1/license` y `POST /api/v1/license/activate`, ambos `[rol: admin]`, con el contrato actualizado antes del código.
-7. **Límites del plan** (`max_sites`, `max_employees`, `max_devices`): superarlos **no bloquea ninguna operación** ([ADR-028](../docs/adr/ADR-028-limites-del-plan-no-bloquean.md)). El exceso produce tres efectos, los tres verificables en una auditoría de licencia:
+7. **Límites del plan** (`max_employees`, `max_devices`; no hay `max_sites`, ADR-040): superarlos **no bloquea ninguna operación** ([ADR-028](../docs/adr/ADR-028-limites-del-plan-no-bloquean.md)). El exceso produce tres efectos, los tres verificables en una auditoría de licencia:
 
    1. **Aviso persistente en el panel** para los roles de administración, con la cifra contratada, la real y desde cuándo se supera. Persistente significa que no se descarta: desaparece cuando el exceso se corrige o la licencia se amplía.
    2. **Entrada en `audit_log`** al cruzar el umbral y en cada alta posterior en exceso, con la acción, el límite, el valor contratado y el alcanzado. Es la prueba que sostiene la reclamación comercial: la fecha exacta desde la que el cliente opera por encima del plan.
@@ -587,20 +587,20 @@ curl -fsS https://<APP_URL>/api/v1/health
 | **Precondiciones** | `5.4` (§11.3: `5.4→5.5→5.7`). Necesita también `5.1` (configuración) y, para el paso de licencia, `5.3` |
 | **Bloquea a** | `5.7` (§11.3) |
 
-**Objetivo.** Tras la instalación, quien abre el panel por primera vez es guiado por un asistente que deja el sistema **listo para fichar**: organización, centros, departamentos, zona horaria, perfil de convenio, primer administrador y primer quiosco vinculado.
+**Objetivo.** Tras la instalación, quien abre el panel por primera vez es guiado por un asistente que deja el sistema **listo para fichar**: organización, el centro y su zona horaria, departamentos, perfil de convenio, primer administrador y primer quiosco vinculado.
 
 **Reglas duras aplicables.**
 
 - **3 — UTC en almacenamiento.** El paso de zona horaria configura la **zona del centro** (`sites.timezone`, por defecto `Europe/Madrid`, doc 01 §5), no la de la aplicación.
 - **12 — El producto no depende del correo del empleado.** El asistente no puede exigir correo para crear el primer administrador de forma que dependa de entregabilidad; y desde luego no envía invitaciones a empleados (regla dura 11).
-- **6 — Auditoría.** La creación del primer administrador, de los centros y la activación de licencia se auditan.
+- **6 — Auditoría.** La creación del primer administrador, del centro y la activación de licencia se auditan.
 - **13 — Nada específico de un cliente.** Lo que el asistente recoge son **datos**; ninguna respuesta genera código ni una variante del producto.
 - **18 — Policy y autorización negativa** en los endpoints que use el asistente.
 
 **Pasos.**
 
-1. **Los siete pasos son los de RF-PD-03**, literalmente: datos de la organización, centros, departamentos, zona horaria, perfil de convenio, primer administrador y vinculación del primer quiosco. Ni uno más: cada paso extra es una barrera entre el cliente y su primer fichaje.
-2. **Detección de instalación no inicializada**: si no hay usuarios ni centros, el panel redirige al asistente; una vez completado, el asistente **no vuelve a estar accesible** (es de un solo uso, como el emparejamiento de 5.6).
+1. **Los siete pasos son los de RF-PD-03**, literalmente: datos de la organización, el centro y su zona horaria (`CreateSiteHandler`, que solo admite uno: ADR-040), departamentos, perfil de convenio, primer administrador y vinculación del primer quiosco. Ni uno más: cada paso extra es una barrera entre el cliente y su primer fichaje.
+2. **Detección de instalación no inicializada**: si no hay usuarios ni centro (`InstallationSiteProvider` devuelve `null`), el panel redirige al asistente; una vez completado, el asistente **no vuelve a estar accesible** (es de un solo uso, como el emparejamiento de 5.6).
 3. **Primer administrador con 2FA obligatorio** (RS-06, tarea 2.1): el asistente lo configura en el momento, mostrando el secreto TOTP una sola vez. No es una credencial de empleado (regla dura 11): es un usuario de gestión.
 4. **Paso de perfil de convenio**: se ofrece `ES-hosteleria` preseleccionado (5.2) con sus umbrales visibles y la advertencia de que hay que contrastarlos con el convenio aplicable (RL-21).
 5. **Paso de licencia**: activación de la clave (5.3), **omitible**. Un asistente que exija licencia para terminar convierte la licencia en requisito de arranque, y eso choca con la regla dura 15.
@@ -635,7 +635,7 @@ docs/cliente/instalacion.md                  # el asistente, paso a paso, con ca
 |---|---|---|
 | Feature + Contrato | Cada endpoint del asistente contra `openapi.yaml`; que deja de estar disponible una vez completado | `->group('RF-PD-03')` |
 | Autorización negativa | El asistente no es accesible con la instalación ya inicializada, y no permite crear un segundo administrador sin autenticación | `->group('RF-PD-03')` |
-| Integración | Creación de centros con `timezone` y `compliance_profile_id`; auditoría del primer administrador | `->group('RF-PD-03', 'RL-04')` |
+| Integración | Creación del centro con `timezone` y `compliance_profile_id`, y rechazo de un segundo (`sites_single_row_uidx`); auditoría del primer administrador | `->group('RF-PD-03', 'RL-04')` |
 | E2E (Playwright) | **Recorrido completo en instalación limpia**: desde el panel vacío hasta poder fichar, con el paso de licencia y el de quiosco omitidos y luego completados | `@RF-PD-03` |
 | Accesibilidad | `axe` sobre cada paso: 0 violaciones críticas o graves | `@RQ-04` |
 
@@ -654,7 +654,7 @@ Resultado esperado: en una instalación limpia, una persona que no conoce el sis
 - [ ] Pruebas de feature, contrato, autorización negativa y E2E.
 - [ ] Accesibilidad verificada en las pantallas nuevas.
 - [ ] Contrato OpenAPI actualizado.
-- [ ] Auditoría de la creación de administrador, centros y activación de licencia.
+- [ ] Auditoría de la creación de administrador, del centro y activación de licencia.
 - [ ] Textos en español e inglés.
 - [ ] Nada específico de un cliente en el código.
 - [ ] `docs/cliente/instalacion.md` incluye el asistente con **capturas de lo que debe verse** (5.11).
@@ -692,11 +692,11 @@ Resultado esperado: en una instalación limpia, una persona que no conoce el sis
    | 2 | Tablet | **Muestra el código en pantalla**, legible desde lejos (RF-PD-06) |
    | 3 | Administrador | Lo teclea en el panel, que llama a `POST /api/v1/kiosk/pair/confirm` —`[rol: admin]`— y **vincula el dispositivo al centro emitiendo su token** con los ámbitos del §7.3 (`scan:write`, `roster:read`, `heartbeat:write`) |
 
-   La tablet obtiene su token al confirmarse la solicitud. **`php artisan kiosk:pairing-code {site}` se conserva como vía alternativa de consola**, no como flujo principal: es coherente con el «el cliente no tiene por qué usar SSH» de RF-PD-06, que declara la consola opcional y no obligatoria. Registrado en las notas de contrato del Anexo B del [doc 01](../docs/01-especificaciones-proyecto.md).
+   La tablet obtiene su token al confirmarse la solicitud. **`php artisan kiosk:pairing-code` se conserva como vía alternativa de consola**, no como flujo principal: es coherente con el «el cliente no tiene por qué usar SSH» de RF-PD-06, que declara la consola opcional y no obligatoria. Registrado en las notas de contrato del Anexo B del [doc 01](../docs/01-especificaciones-proyecto.md).
 
 2. **Contrato**: `POST /api/v1/kiosk/pair` y `POST /api/v1/kiosk/pair/confirm` en `openapi.yaml` antes del código (ADR-013). El primero marcado público, con `throttle` de borde (§7.1) y **respuesta genérica en caso de fallo** — un código inválido, caducado o ya usado deben ser indistinguibles desde fuera, por la misma razón que los rechazos de escaneo (regla dura 17).
-3. **Modelo del código**: de un solo uso, con caducidad corta, ligado a un `site_id`, almacenado **hasheado** —igual que `devices.token_hash` y `credentials.secret_hash` del doc 01 §5—, y consumido en una transacción que impide el doble uso bajo concurrencia.
-4. **Emisión desde el panel y desde consola**: pantalla en `frontend-admin/src/features/devices/` y comando `php artisan kiosk:pairing-code {site}` (Anexo C), para el caso en el que el panel no esté accesible.
+3. **Modelo del código**: de un solo uso, con caducidad corta, ligado al centro de la instalación (`site_id`, que es siempre el mismo: ADR-040), almacenado **hasheado** —igual que `devices.token_hash` y `credentials.secret_hash` del doc 01 §5—, y consumido en una transacción que impide el doble uso bajo concurrencia.
+4. **Emisión desde el panel y desde consola**: pantalla en `frontend-admin/src/features/devices/` y comando `php artisan kiosk:pairing-code` (Anexo C), para el caso en el que el panel no esté accesible.
 5. **Resultado de la vinculación**: se crea o actualiza la fila de `devices` (`site_id`, `name`, `token_hash`, `app_version`, `status`) y el quiosco recibe su token con los ámbitos mínimos del §7.3 (`scan:write`, `roster:read`, `heartbeat:write`, 90 días, rotación automática al 80 % de vida). Un token de quiosco comprometido no da acceso a la plantilla completa (RS-04).
 6. **Pantalla de emparejamiento en la PWA** (`frontend-kiosk/src/features/pairing/`), legible desde lejos y usable con la tablet ya fijada en modo quiosco (§11.6.2). Accesible sin salir de la aplicación.
 7. **Desvinculación**: al desvincular, **purgar el padrón cacheado del dispositivo** (doc 01 §8.1, mitigación de «filtración del padrón cacheado»: «purga al desvincular el dispositivo»).

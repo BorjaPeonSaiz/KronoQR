@@ -419,14 +419,10 @@ Route::middleware(['auth:sanctum', 'ability:'.TokenAbility::EMPLOYEES_ALL->value
         ->whereNumber('id')
         ->name('departments.update');
 
-    Route::get('/sites', [SiteController::class, 'index'])->name('sites.index');
-    Route::post('/sites', [SiteController::class, 'store'])->name('sites.store');
-    Route::get('/sites/{id}', [SiteController::class, 'show'])
-        ->whereNumber('id')
-        ->name('sites.show');
-    Route::patch('/sites/{id}', [SiteController::class, 'update'])
-        ->whereNumber('id')
-        ->name('sites.update');
+    // El centro de trabajo es un recurso singular: hay exactamente uno por
+    // instalacion (ADR-040). Sin alta —la hace la puesta en marcha— ni baja.
+    Route::get('/site', [SiteController::class, 'show'])->name('site.show');
+    Route::patch('/site', [SiteController::class, 'update'])->name('site.update');
 });
 
 /*

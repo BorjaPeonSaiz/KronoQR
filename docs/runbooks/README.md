@@ -73,6 +73,8 @@ fallo*. Se escriben en la tarea que los introduce.
 | Runbook | Cuándo se usa | Lo escribió |
 |---|---|---|
 | [`fallo-de-ci.md`](fallo-de-ci.md) | Una etapa del pipeline está en rojo, o la puerta de versión bloquea una etiqueta | Fase 0 · tarea 0.4 |
+| [`ataque-a-credenciales.md`](ataque-a-credenciales.md) | Alertas `KronoqrAuthFailureBurst`/`KronoqrAuthLockouts`/`KronoqrAuthFailureSpike` (OWASP A09) | SSDLC · pipeline de seguridad |
+| [`triaje-hallazgos-seguridad.md`](triaje-hallazgos-seguridad.md) | Un hallazgo de Semgrep comunitario o Trivy en modo informe del job `security` | SSDLC · pipeline de seguridad |
 
 ## Qué debe contener un runbook
 

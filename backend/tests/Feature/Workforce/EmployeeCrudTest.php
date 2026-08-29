@@ -109,7 +109,6 @@ it('genera el codigo de empleado en el servidor y no lo acepta del cliente', fun
 
     Api::as($context['token'])
         ->post('/api/v1/employees', [
-            'site_id' => $context['site'],
             'first_name' => 'Lucia',
             'last_name' => 'Ferrer',
             'hired_at' => '2026-08-14',
@@ -126,7 +125,6 @@ it('no almacena el documento de identidad en claro', function (): void {
     $context = hrContext();
 
     $response = Api::as($context['token'])->post('/api/v1/employees', [
-        'site_id' => $context['site'],
         'first_name' => 'Lucia',
         'last_name' => 'Ferrer',
         'national_id' => '00000000T',
@@ -148,24 +146,40 @@ it('no almacena el documento de identidad en claro', function (): void {
     expect($row?->hash)->toBe(hash('sha256', '00000000T'));
 })->group('RL-08', 'RF-GP-01');
 
-it('no admite un departamento de otro centro', function (): void {
-    // Un empleado adscrito a un departamento de otro hotel deja ambiguo de que
-    // centro sale su zona horaria, que es de lo que depende RN-05.
+it('adscribe el alta al centro de la instalacion sin que nadie lo elija', function (): void {
+    // Hay exactamente un centro (ADR-040): el alta no lo pide y el servidor
+    // lo resuelve. Es el centro del que sale la zona horaria de RN-05.
     $context = hrContext();
-    $otherSite = WorkforceFixtures::site('Otro hotel', 'Atlantic/Canary');
-    $otherDepartment = WorkforceFixtures::department($otherSite);
+
+    $uuid = Api::as($context['token'])
+        ->post('/api/v1/employees', [
+            'first_name' => 'Lucia',
+            'last_name' => 'Ferrer',
+            'hired_at' => '2026-08-14',
+        ])
+        ->assertValidRequest()
+        ->assertValidResponse(201)
+        ->assertJsonMissingPath('employee.site_id')
+        ->json('employee.uuid');
+
+    expect(DB::table('employees')->where('uuid', $uuid)->value('site_id'))->toBe($context['site']);
+})->group('RF-GP-01', 'RN-05');
+
+it('rechaza un site_id en el alta en vez de ignorarlo', function (): void {
+    // `RejectsUnknownInput`: quien lo envia cree haber elegido un centro, y no
+    // hay eleccion posible. Ignorarlo le dejaria creer que existe otro.
+    $context = hrContext();
 
     Api::as($context['token'])
         ->post('/api/v1/employees', [
             'site_id' => $context['site'],
-            'department_id' => $otherDepartment,
             'first_name' => 'Lucia',
             'last_name' => 'Ferrer',
             'hired_at' => '2026-08-14',
         ])
         ->assertValidResponse(422)
-        ->assertJsonPath('errors.department_id.0', 'El departamento no pertenece al centro indicado.');
-})->group('RF-GP-01', 'RN-05');
+        ->assertJsonStructure(['errors' => ['site_id']]);
+})->group('RF-GP-01');
 
 it('modifica la ficha sin tocar lo que no se envia', function (): void {
     $context = hrContext();
@@ -228,7 +242,6 @@ it('publica los eventos de plantilla que otros modulos necesitan', function (): 
     $context = hrContext();
 
     $created = Api::as($context['token'])->post('/api/v1/employees', [
-        'site_id' => $context['site'],
         'first_name' => 'Lucia',
         'last_name' => 'Ferrer',
         'hired_at' => '2026-08-14',
@@ -264,18 +277,17 @@ it('publica los eventos de plantilla que otros modulos necesitan', function (): 
  * significar algo: con «Persona De Prueba» tres veces, cualquier consulta
  * «encuentra» a la persona correcta por accidente.
  *
- * @return array{token: string, site: int, department: int, otroSite: int}
+ * @return array{token: string, site: int, department: int}
  */
 function searchContext(): array
 {
     $context = hrContext();
-    $otroSite = WorkforceFixtures::site('Hotel Marina');
 
     WorkforceFixtures::employee($context['site'], $context['department'], 'active', 'Youssef', 'Amrani', 'EK7Q2MXPR');
     WorkforceFixtures::employee($context['site'], $context['department'], 'active', 'Lucia', 'Bermejo', 'EZ3T9WLDN');
-    WorkforceFixtures::employee($otroSite, null, 'active', 'Youssef', 'Cabrera', 'EM5H1VBQK');
+    WorkforceFixtures::employee($context['site'], null, 'active', 'Youssef', 'Cabrera', 'EM5H1VBQK');
 
-    return [...$context, 'otroSite' => $otroSite];
+    return $context;
 }
 
 it('encuentra por nombre, apellido, nombre completo o codigo', function (string $q, int $total): void {
@@ -355,13 +367,13 @@ it('recorta el termino antes de buscar', function (): void {
 })->group('RF-GP-01');
 
 it('combina la busqueda con el resto de filtros con AND', function (): void {
-    // Los dos «Youssef» estan en centros distintos. Si la busqueda se aplicara
-    // al mismo nivel que `site_id` en vez de en su propio grupo, el `OR` se
-    // comeria el filtro de centro y saldrian los dos.
+    // Solo uno de los dos «Youssef» tiene departamento. Si la busqueda se
+    // aplicara al mismo nivel que `department_id` en vez de en su propio grupo,
+    // el `OR` se comeria el filtro de departamento y saldrian los dos.
     $context = searchContext();
 
     Api::as($context['token'])
-        ->get('/api/v1/employees', ['q' => 'Youssef', 'site_id' => $context['site']])
+        ->get('/api/v1/employees', ['q' => 'Youssef', 'department_id' => $context['department']])
         ->assertValidRequest()
         ->assertValidResponse(200)
         ->assertJsonPath('meta.total', 1)
@@ -488,7 +500,6 @@ function pinStatusContext(): array
     $pending = WorkforceFixtures::employee($context['site'], $context['department'], 'active', 'Ana', 'Pendiente', 'EP0000001');
 
     $issued = Api::as($context['token'])->post('/api/v1/employees', [
-        'site_id' => $context['site'],
         'department_id' => $context['department'],
         'first_name' => 'Bruno',
         'last_name' => 'Emitido',
@@ -497,7 +508,6 @@ function pinStatusContext(): array
     $issued = is_string($issued) ? $issued : '';
 
     $delivered = Api::as($context['token'])->post('/api/v1/employees', [
-        'site_id' => $context['site'],
         'department_id' => $context['department'],
         'first_name' => 'Carla',
         'last_name' => 'Entregado',
@@ -547,7 +557,6 @@ it('combina el filtro de PIN con el resto con AND', function (): void {
     Api::as($context['token'])
         ->get('/api/v1/employees', [
             'pin_status' => 'issued',
-            'site_id' => $context['site'],
             'status' => 'active',
             'q' => 'Bruno',
         ])
@@ -571,7 +580,6 @@ it('pagina el filtro de PIN como cualquier otro', function (): void {
     $context = pinStatusContext();
 
     Api::as($context['token'])->post('/api/v1/employees', [
-        'site_id' => $context['site'],
         'first_name' => 'Diego',
         'last_name' => 'Emitido',
         'hired_at' => '2026-08-14',

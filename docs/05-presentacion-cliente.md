@@ -60,11 +60,11 @@ Desde el panel web, en su ordenador:
 
 ### 3.3 Para Recursos Humanos
 
-- Da de alta y de baja empleados, departamentos, centros y contratos.
+- Da de alta y de baja empleados, departamentos y contratos.
 - **Emite las tarjetas QR** y las imprime: en formato tarjeta de crédito, o en hojas A4 con varias por página para dar de alta a 40 personas de temporada en una tarde.
 - Registra la **entrega** de cada tarjeta (fecha y quién la entregó).
 - Consulta un **panel de estado de credenciales** que responde a la pregunta clave: *¿quién está de alta pero todavía no puede fichar?*
-- Saca los **informes**: horas por empleado, por departamento, por centro, y la comparación entre horas trabajadas y horas contratadas.
+- Saca los **informes**: horas por empleado, por departamento, y la comparación entre horas trabajadas y horas contratadas.
 - Genera la **exportación para Inspección de Trabajo** cuando hace falta.
 
 ### 3.4 Para el auditor o la Inspección
@@ -160,7 +160,7 @@ Bloquearlo dejaría al hotel incumpliendo la ley por una acción del proveedor, 
 | Funcionalidad | Qué hace |
 |---|---|
 | Presencia en vivo | Quién está dentro ahora mismo, desde qué hora y en qué quiosco fichó. Se actualiza solo |
-| Filtros y búsqueda | Por centro, departamento, estado y nombre |
+| Filtros y búsqueda | Por departamento, estado y nombre |
 | Detalle de jornada | Todos los tramos de un empleado y un día, con totales, incidencias y correcciones |
 | Correcciones trazadas | Crear, ajustar la hora, cerrar un turno abierto o anular, siempre con motivo de un catálogo más texto libre |
 | Bandeja de incidencias | Lista de situaciones pendientes, asignadas al responsable que corresponde, con flujo de resolución |
@@ -173,7 +173,7 @@ Bloquearlo dejaría al hotel incumpliendo la ley por una acción del proveedor, 
 | Funcionalidad | Qué hace |
 |---|---|
 | Horas por empleado | Diario, semanal, mensual o rango libre de fechas |
-| Agregados | Por departamento y por centro |
+| Agregados | Por departamento |
 | Trabajadas vs. contratadas | Con la desviación y el exceso de jornada |
 | Formatos | CSV, Excel y PDF. Los PDF llevan sello de tiempo, emisor y huella del contenido |
 | **Exportación para Inspección** | Registro diario por trabajador y periodo, en formato tabular legible, con las correcciones y sus motivos |
@@ -183,7 +183,7 @@ Bloquearlo dejaría al hotel incumpliendo la ley por una acción del proveedor, 
 
 ### 5.5 Gestión de personas
 
-Alta y baja de empleados con los datos mínimos necesarios; departamentos, centros y contratos (horas semanales y anuales, tipo de jornada, vigencia), con histórico. Registro de ausencias (vacaciones, baja, permiso) para que los informes no las cuenten como absentismo injustificado. Importación inicial de plantilla desde CSV o Excel, con validación previa y modo simulación antes de aplicar nada.
+Alta y baja de empleados con los datos mínimos necesarios; departamentos y contratos (horas semanales y anuales, tipo de jornada, vigencia), con histórico. Registro de ausencias (vacaciones, baja, permiso) para que los informes no las cuenten como absentismo injustificado. Importación inicial de plantilla desde CSV o Excel, con validación previa y modo simulación antes de aplicar nada.
 
 **El correo electrónico del empleado es un campo opcional.** El producto no depende de él en ningún punto.
 
@@ -193,7 +193,7 @@ Alta y baja de empleados con los datos mínimos necesarios; departamentos, centr
 
 Seis perfiles: administrador, RRHH, responsable de departamento, auditor, empleado y quiosco.
 
-- Un responsable **solo ve a la gente de su departamento y su centro**. Si intenta acceder a otro, el sistema lo impide y lo deja registrado.
+- Un responsable **solo ve a la gente de su departamento**. Si intenta acceder a otro, el sistema lo impide y lo deja registrado.
 - Los perfiles con acceso a toda la plantilla (administrador, RRHH y auditor) tienen **verificación en dos pasos obligatoria**.
 - La tablet tiene su propio acceso, limitado exclusivamente a fichar y sincronizar. Aunque alguien se llevara la tablet, **no obtendría el registro horario ni la ficha de nadie**: lo único que guarda es una lista cifrada con lo mínimo para saludar por su nombre a quien ficha —nombre de pila e inicial del apellido de la gente de ese centro—, y su acceso se revoca desde el panel en segundos.
 - La sesión del portal del empleado solo alcanza sus propios datos. Nunca los de un tercero.
@@ -380,7 +380,7 @@ Un servidor de estas características cubre 500 empleados y 10 tablets con holgu
 ### 10.2 Puesta en marcha
 
 1. **Instalación**: un script comprueba que el servidor cumple los requisitos, genera las claves de seguridad **en el propio servidor del hotel** (nunca se transmiten), arranca el sistema y verifica que todo funciona.
-2. **Asistente inicial**: datos de la organización, centros, departamentos, zona horaria, perfil de convenio, primer administrador y vinculación de la primera tablet.
+2. **Asistente inicial**: datos del hotel y su zona horaria, departamentos, perfil de convenio, primer administrador y vinculación de la primera tablet.
 3. **Vinculación de tablets**: la tablet muestra un código, se introduce en el panel, y queda emparejada. Sin comandos ni configuración manual.
 4. **Carga de plantilla**: importación desde CSV o Excel, con validación previa.
 5. **Emisión e impresión de tarjetas**, y entrega registrada.
@@ -408,7 +408,7 @@ Se admite el salto entre versiones no consecutivas: si el hotel lleva tiempo sin
 
 ### 10.5 Licencia
 
-Una clave firmada que codifica el cliente, el plan contratado, los límites (centros, empleados y tablets) y la vigencia del soporte. **Se verifica localmente, sin llamar a internet**, porque el servidor del hotel puede estar en una red aislada y la conectividad del fabricante no puede convertirse en un punto único de fallo del registro horario.
+Una clave firmada que codifica el cliente, el plan contratado, los límites (empleados y tablets) y la vigencia del soporte. **Una licencia es un hotel**: una cadena contrata una licencia por establecimiento y cada uno tiene su propia instalación. **Se verifica localmente, sin llamar a internet**, porque el servidor del hotel puede estar en una red aislada y la conectividad del fabricante no puede convertirse en un punto único de fallo del registro horario.
 
 Y, como se dijo en el punto 4.7: **al caducar, el fichaje y el acceso al registro legal siguen funcionando**.
 
@@ -446,9 +446,9 @@ El sistema entra en producción cubriendo todo lo anterior. Están contemplados 
 
 - Planificación de cuadrantes y comparación entre lo planificado y lo realmente trabajado.
 - Gestión de vacaciones y permisos con flujo de aprobación.
-- Informes avanzados y consolidación entre varios centros de una cadena.
+- Informes avanzados.
 
-El modelo de datos ya contempla varios centros desde el primer día, aunque se despliegue con uno solo.
+**Cada hotel es una instalación con su licencia.** Una cadena opera tantas instalaciones como hoteles; el producto no consolida datos entre ellas ni está previsto que lo haga.
 
 ---
 
@@ -479,7 +479,7 @@ El registro sigue funcionando y el hotel puede exportar la totalidad de sus dato
 Sí, son configuración: descanso mínimo, jornada máxima, pausas y retención se ajustan desde el panel, sin tocar el programa.
 
 **¿Cuántas tablets necesito?**
-Una por punto de acceso de personal. El sistema admite hasta 10 por centro en el dimensionado estándar.
+Una por punto de acceso de personal. El sistema admite hasta 10 por instalación en el dimensionado estándar.
 
 **¿Y si mi hotel tiene una infraestructura que exige otra base de datos?**
 Existe una variante documentada, pero conviene saber que con ella una garantía de integridad deja de estar en la base de datos y pasa a depender del programa. La recomendación es mantener PostgreSQL.

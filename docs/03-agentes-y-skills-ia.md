@@ -4,7 +4,7 @@
 | Campo | Valor |
 |---|---|
 | **Fecha** | 11 de agosto de 2026 |
-| **Documentos hermanos** | `01-especificaciones-proyecto.md`, `02-stack-tecnologico-y-plan-implementacion.md`, `04-decision-credencial.md`, `05-presentacion-cliente.md` |
+| **Documentos hermanos** | `01-especificaciones-proyecto.md`, `02-stack-tecnologico-y-plan-implementacion.md`, `04-decision-credencial.md`, `05-presentacion-cliente.md`, `06-guia-visual.md`, `07-seguridad-madurez-y-amenazas.md` |
 | **Estado** | Los agentes y skills descritos **están creados** en `.claude/` y son operativos |
 
 ---

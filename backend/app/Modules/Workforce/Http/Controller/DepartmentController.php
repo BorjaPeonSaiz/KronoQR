@@ -33,7 +33,7 @@ final class DepartmentController extends Controller
         return response()->json([
             'data' => array_map(
                 static fn (Department $department): array => (new DepartmentResource($department))->toArray($request),
-                $queries->all($request->siteFilter()),
+                $queries->all(),
             ),
         ]);
     }

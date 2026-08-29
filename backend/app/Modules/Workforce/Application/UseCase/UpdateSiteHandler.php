@@ -12,12 +12,12 @@ use App\Modules\Workforce\Domain\Model\Site;
 use App\Modules\Workforce\Domain\ValueObject\SiteTimezone;
 
 /**
- * Modificacion de un centro.
+ * Modifica el centro de la instalacion: nombre o zona horaria.
  *
- * **Cambiar la zona horaria es un cambio con efecto sobre el computo legal**
- * (RN-05) y por eso este caso de uso es el sitio donde se enganchara el asiento
- * de auditoria de la tarea 1.14: no reescribe el pasado, pero decide a que
- * jornada se atribuyen los tramos siguientes.
+ * **Cambiar la zona cambia el calculo de las jornadas siguientes** (RN-05) y
+ * por eso queda auditado por el oyente de `Compliance`. No reescribe el pasado.
+ *
+ * `null` solo antes de la puesta en marcha: no hay centro que modificar.
  */
 final readonly class UpdateSiteHandler
 {
@@ -29,7 +29,7 @@ final readonly class UpdateSiteHandler
      */
     public function handle(UpdateSiteCommand $command): ?Site
     {
-        $site = $this->sites->findById($command->id);
+        $site = $this->sites->installationSite();
 
         if ($site === null) {
             return null;

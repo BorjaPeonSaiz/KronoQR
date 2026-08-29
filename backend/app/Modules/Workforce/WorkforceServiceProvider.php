@@ -10,6 +10,7 @@ use App\Modules\Shared\Application\Port\ClockingEmployees;
 use App\Modules\Shared\Application\Port\EmployeeCardDirectory;
 use App\Modules\Shared\Application\Port\EmployeePinVerifier;
 use App\Modules\Shared\Application\Port\EmployeeRegistry;
+use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\PortalSessionIssuer;
 use App\Modules\Workforce\Application\Port\DepartmentRepository;
 use App\Modules\Workforce\Application\Port\EmployeePinRepository;
@@ -29,6 +30,7 @@ use App\Modules\Workforce\Infrastructure\Adapter\EloquentClockingEmployees;
 use App\Modules\Workforce\Infrastructure\Adapter\EloquentEmployeeCardDirectory;
 use App\Modules\Workforce\Infrastructure\Adapter\EloquentEmployeeDirectory;
 use App\Modules\Workforce\Infrastructure\Adapter\EloquentEmployeeRegistry;
+use App\Modules\Workforce\Infrastructure\Adapter\EloquentInstallationSiteProvider;
 use App\Modules\Workforce\Infrastructure\Adapter\EloquentSiteCalendar;
 use App\Modules\Workforce\Infrastructure\Adapter\HashedEmployeePinVerifier;
 use App\Modules\Workforce\Infrastructure\Adapter\LaravelWorkforceEventPublisher;
@@ -99,6 +101,10 @@ final class WorkforceServiceProvider extends ServiceProvider
         // implementa quien tiene el dato.
         $this->app->bind(EmployeeDirectory::class, EloquentEmployeeDirectory::class);
         $this->app->bind(SiteCalendar::class, EloquentSiteCalendar::class);
+        // El centro de la instalacion para quien no es este modulo (ADR-040):
+        // `Identity` etiqueta con el sus metricas de cobertura. Misma arista
+        // que `SiteCalendar`, sobre la misma tabla.
+        $this->app->bind(InstallationSiteProvider::class, EloquentInstallationSiteProvider::class);
 
         // Y el puerto de `Shared` que traduce entre el UUID publico de un
         // empleado y su clave interna. Lo declara `Shared` porque lo consume

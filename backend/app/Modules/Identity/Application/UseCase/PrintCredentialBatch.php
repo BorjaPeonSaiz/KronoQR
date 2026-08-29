@@ -13,8 +13,8 @@ use App\Modules\Shared\Application\Port\EmployeeCardDirectory;
 use App\Modules\Shared\Domain\ValueObject\EmployeeCardProfile;
 
 /**
- * Imprimir en **una sola hoja A4** todas las credenciales pendientes de un centro
- * (RF-QR-04).
+ * Imprimir en **una sola hoja A4** todas las credenciales pendientes de la
+ * instalacion (RF-QR-04, ADR-040).
  *
  * El doc 02 §5.5 explica por que existe: *«La hoja A4 con varias tarjetas por
  * pagina es lo que hace viable dar de alta a 40 personas de temporada en una
@@ -35,8 +35,8 @@ use App\Modules\Shared\Domain\ValueObject\EmployeeCardProfile;
  * ellas, la transaccion se deshace entera y no sale ninguna tarjeta. Un lote a
  * medias es peor que ninguno.
  *
- * **El orden de la hoja es el del directorio de empleados**: centro, departamento
- * y apellido. Quien recorta las tarjetas las reparte en ese orden, y dos
+ * **El orden de la hoja es el del directorio de empleados**: departamento y
+ * apellido. Quien recorta las tarjetas las reparte en ese orden, y dos
  * ejecuciones del mismo lote tienen que producir la misma hoja.
  */
 final readonly class PrintCredentialBatch
@@ -53,7 +53,7 @@ final readonly class PrintCredentialBatch
      */
     public function handle(PrintCredentialBatchCommand $command): PrintedCards
     {
-        $profiles = $this->directory->activeProfiles($command->siteId);
+        $profiles = $this->directory->activeProfiles();
 
         $byEmployeeId = [];
         $employeeIds = [];
@@ -70,7 +70,6 @@ final readonly class PrintCredentialBatch
         return $this->telemetry->measure(
             'identity.credential_print_batch',
             [
-                'site_id' => $command->siteId,
                 'cards' => \count($targets),
                 'batch' => true,
             ],
@@ -91,9 +90,9 @@ final readonly class PrintCredentialBatch
      *
      * @return list<EmployeeCardProfile> Los titulares de las credenciales pendientes.
      */
-    public function preview(?int $siteId): array
+    public function preview(): array
     {
-        $profiles = $this->directory->activeProfiles($siteId);
+        $profiles = $this->directory->activeProfiles();
 
         $byEmployeeId = [];
         $employeeIds = [];

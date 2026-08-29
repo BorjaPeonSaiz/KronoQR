@@ -9,8 +9,11 @@ use App\Modules\Attendance\Application\Command\RegisterScanCommand;
 use App\Modules\Attendance\Application\Port\EmployeeDirectory;
 use App\Modules\Attendance\Application\Port\ScanMetrics;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
+use App\Modules\Shared\Application\Port\AuthenticationJournal;
 use App\Modules\Shared\Application\Port\EmployeePinVerifier;
 use App\Modules\Shared\Application\Port\SealedPinOpener;
+use App\Modules\Shared\Domain\ValueObject\AuthChannel;
+use App\Modules\Shared\Domain\ValueObject\AuthFailureReason;
 use App\Modules\Shared\Domain\ValueObject\CredentialRejectionReason;
 use App\Modules\Shared\Domain\ValueObject\CredentialResolution;
 use App\Modules\Shared\Domain\ValueObject\EmployeeSnapshot;
@@ -64,6 +67,16 @@ use App\Modules\Shared\Domain\ValueObject\PinOrigin;
  * es el verificador, y solo cuando hubo un PIN de verdad contra un hash de
  * verdad.
  *
+ * ## El rastro de autenticacion, y por que el exito no deja asiento
+ *
+ * OWASP A09. Los tres desenlaces suman en
+ * `kronoqr_auth_attempts_total{channel="kiosk_pin"}` y cada rechazo escribe
+ * `auth.login_failed` en el log tecnico. **Ninguno escribe en `audit_log`** —solo
+ * lo hace el bloqueo, desde el verificador y despues de responder—, y el exito
+ * tampoco: el fichaje que viene detras ya deja `shift_entry.created` con el mismo
+ * empleado y el mismo instante. El reparto y su porque estan en
+ * `docs/adr/ADR-039-que-hechos-de-autenticacion-dejan-asiento.md`.
+ *
  * ## Marcado para revision, no rechazado
  *
  * RF-AT-11 y el §7.5: *«en el quiosco, el fichaje por PIN queda marcado para
@@ -87,6 +100,7 @@ final readonly class RegisterPinScanHandler
         private RegisterScanHandler $scans,
         private EmployeeDirectory $employees,
         private ScanMetrics $metrics,
+        private AuthenticationJournal $journal,
     ) {}
 
     public function handle(RegisterPinScanCommand $command): RegisterScanResult
@@ -128,6 +142,14 @@ final readonly class RegisterPinScanHandler
         $pin = $this->sealedPins->open($command->sealedPin);
 
         if ($pin === null) {
+            // El sobre que no abre es el unico rechazo de esta via que el
+            // verificador no llega a ver, asi que su apunte sale de aqui. Lleva
+            // motivo propio porque **no es un intento fallido de nadie**: un
+            // criptograma corrupto no dice nada del PIN que lleva dentro, y
+            // contarlo como fallo permitiria bloquear a cualquiera enviando
+            // basura con su codigo de empleado.
+            $this->journal->failed(AuthChannel::KIOSK_PIN, null, AuthFailureReason::SEALED_PIN_UNREADABLE);
+
             return CredentialResolution::rejected(CredentialRejectionReason::UNKNOWN);
         }
 
@@ -142,8 +164,14 @@ final readonly class RegisterPinScanHandler
         $employeeUuid = $verification->employeeUuid();
 
         if ($employeeUuid === null) {
+            // Sin apunte aqui: los dos desenlaces que caben en esta rama —PIN
+            // incorrecto y bloqueo activo— ya los ha registrado el verificador,
+            // que es el unico que sabe cual de los dos fue. Repetirlo daria dos
+            // incrementos por intento y una tasa de fallo del doble de la real.
             return CredentialResolution::rejected(CredentialRejectionReason::UNKNOWN);
         }
+
+        $this->journal->succeeded(AuthChannel::KIOSK_PIN, $employeeUuid);
 
         return CredentialResolution::resolved($employeeUuid);
     }

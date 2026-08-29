@@ -55,7 +55,6 @@ it('emite el PIN en el alta y lo devuelve una sola vez', function (): void {
     $context = pinContext();
 
     $created = Api::as($context['token'])->post('/api/v1/employees', [
-        'site_id' => $context['site'],
         'first_name' => 'Youssef',
         'last_name' => 'Amrani',
         'hired_at' => '2026-08-14',
@@ -92,7 +91,6 @@ it('no deja existir a un empleado sin PIN', function (): void {
 
     foreach ([['first_name' => 'Youssef', 'last_name' => 'Amrani'], ['first_name' => 'Lucia', 'last_name' => 'Ferrer', 'email' => 'lucia@hotel.example']] as $extra) {
         Api::as($context['token'])->post('/api/v1/employees', [
-            'site_id' => $context['site'],
             'hired_at' => '2026-08-14',
             ...$extra,
         ])->assertValidResponse(201);
@@ -106,7 +104,6 @@ it('restablece el PIN y devuelve uno distinto', function (): void {
     $context = pinContext();
 
     $created = Api::as($context['token'])->post('/api/v1/employees', [
-        'site_id' => $context['site'],
         'first_name' => 'Youssef',
         'last_name' => 'Amrani',
         'hired_at' => '2026-08-14',
@@ -155,7 +152,6 @@ it('restablecer desbloquea el PIN inmediatamente, y en las dos puertas', functio
     $context = pinContext();
 
     $uuid = Api::as($context['token'])->post('/api/v1/employees', [
-        'site_id' => $context['site'],
         'first_name' => 'Youssef',
         'last_name' => 'Amrani',
         'hired_at' => '2026-08-14',
@@ -189,7 +185,6 @@ it('cuenta los restablecimientos por centro', function (): void {
     $context = pinContext();
 
     $uuid = Api::as($context['token'])->post('/api/v1/employees', [
-        'site_id' => $context['site'],
         'first_name' => 'Youssef',
         'last_name' => 'Amrani',
         'hired_at' => '2026-08-14',
@@ -210,7 +205,6 @@ it('registra la entrega con quien, a quien y cuando', function (): void {
     $context = pinContext();
 
     $uuid = Api::as($context['token'])->post('/api/v1/employees', [
-        'site_id' => $context['site'],
         'first_name' => 'Youssef',
         'last_name' => 'Amrani',
         'hired_at' => '2026-08-14',
@@ -243,7 +237,6 @@ it('no registra dos veces la misma entrega', function (): void {
     $context = pinContext();
 
     $uuid = Api::as($context['token'])->post('/api/v1/employees', [
-        'site_id' => $context['site'],
         'first_name' => 'Youssef',
         'last_name' => 'Amrani',
         'hired_at' => '2026-08-14',
@@ -264,7 +257,6 @@ it('vuelve a dejar el PIN pendiente de entrega cuando se restablece', function (
     $context = pinContext();
 
     $uuid = Api::as($context['token'])->post('/api/v1/employees', [
-        'site_id' => $context['site'],
         'first_name' => 'Youssef',
         'last_name' => 'Amrani',
         'hired_at' => '2026-08-14',
@@ -304,7 +296,6 @@ it('no acepta que el cliente proponga un PIN', function (): void {
     $context = pinContext();
 
     $uuid = Api::as($context['token'])->post('/api/v1/employees', [
-        'site_id' => $context['site'],
         'first_name' => 'Youssef',
         'last_name' => 'Amrani',
         'hired_at' => '2026-08-14',
