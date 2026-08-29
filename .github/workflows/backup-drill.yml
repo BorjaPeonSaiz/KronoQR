@@ -59,7 +59,14 @@ jobs:
       DB_HOST: 127.0.0.1
       DB_PORT: "5432"
       DB_DATABASE: fichaje
-      DB_USERNAME: fichaje_app
+      # El rol de ARRANQUE del cluster (POSTGRES_USER, superusuario), que es el
+      # que necesita este job: crea tablas, fuerza `pg_switch_wal()` y vuelca.
+      # Tiene que llamarse como el rol de migracion y NO `fichaje_app`:
+      # initdb.d/02-application-roles.sh se niega a inicializar un cluster
+      # cuyo superusuario sea el rol de la aplicacion (regla dura 6, ADR-033)
+      # y el contenedor muere antes de escuchar por TCP. Fue la causa de que
+      # este workflow fallara en todas las ramas desde la tarea 1.14.
+      DB_USERNAME: fichaje_migrator
       DB_PASSWORD: simulacro_local_ci
 
     steps:
@@ -101,12 +108,23 @@ jobs:
               -c hba_file=/etc/kronoqr/pg_hba.conf \
               -c wal_level=replica -c archive_mode=on -c archive_timeout=60 \
               -c "archive_command=/usr/local/bin/kronoqr-archive-wal %p %f"
-          for i in $(seq 1 30); do
-            if docker exec kronoqr-pg pg_isready -U "$DB_USERNAME" -d "$DB_DATABASE" >/dev/null 2>&1; then
-              echo "Servidor listo en $((i * 2)) s"; break
+          # `-h 127.0.0.1` a proposito: sin `-h`, pg_isready habla por el socket
+          # Unix y responde "listo" durante el servidor TEMPORAL que initdb
+          # levanta para ejecutar initdb.d (solo escucha en el socket). El
+          # siguiente paso entra por TCP justo cuando ese servidor se apaga y
+          # recibe "server closed the connection unexpectedly". Por TCP solo
+          # contesta el servidor definitivo. Y si no arranca, los logs del
+          # contenedor son lo unico que explica por que: se vuelcan y se falla
+          # aqui, no dos pasos mas tarde con un "connection refused" mudo.
+          for i in $(seq 1 45); do
+            if docker exec kronoqr-pg pg_isready -h 127.0.0.1 -U "$DB_USERNAME" -d "$DB_DATABASE" >/dev/null 2>&1; then
+              echo "Servidor listo en $((i * 2)) s"; exit 0
             fi
             sleep 2
           done
+          echo "::error title=PostgreSQL no arranco::pg_isready por TCP sigue fallando tras 90 s."
+          docker logs kronoqr-pg | tail -80
+          exit 1
 
       - name: Datos con relaciones y casos limite
         # Turno nocturno que cruza medianoche y turno en el cambio de hora: si

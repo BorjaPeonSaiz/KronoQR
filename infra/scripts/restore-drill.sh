@@ -49,6 +49,13 @@
 set -euo pipefail
 IFS=$'\n\t'
 
+# En Git Bash (MSYS) sobre Windows, un argumento como `/tmp/copia.dump` se
+# reescribe a `C:/Users/.../Temp/copia.dump` ANTES de llegar a `docker exec`,
+# y pg_restore dentro del contenedor no lo encuentra. La variable desactiva
+# esa conversion y en Linux no hace nada: el simulacro es el mismo en el
+# servidor del cliente, en la CI y en una estacion de desarrollo Windows.
+export MSYS_NO_PATHCONV=1
+
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIR
 # La biblioteca comun SI se analiza: `make sh-lint` llama a ShellCheck con -x.

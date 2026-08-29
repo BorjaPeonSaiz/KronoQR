@@ -580,26 +580,22 @@ build-ci-images: ## Construye kronoqr/postgres:ci y/o kronoqr/app:ci (IMAGES=pos
 # no un hallazgo). --timeout 10m da margen de sobra en un disco Linux nativo
 # —donde la CI corre en segundos— y en el bind mount lento a la vez.
 #
-# Estado verificado: 1 hallazgo HIGH -- DS-0002 en infra/docker/postgres/
-# Dockerfile, "Image user should not be 'root'". La imagen NO añade un `USER`
-# propio porque hereda el entrypoint oficial de `postgres:17-alpine`, que
-# arranca como root a proposito para poder fijar los permisos del volumen de
-# datos y baja privilegios el con `gosu` antes de ejecutar el servidor: el
-# contenedor en marcha SI corre como `postgres`, algo que un analisis estatico
-# del Dockerfile no puede ver. Sigue siendo INFORMATIVO hasta que se confirme
-# la excepcion y se documente en infra/docker/.trivyignore.yaml con su motivo y
-# fecha de caducidad.
+# Estado verificado (2026-08-29): 0 hallazgos HIGH/CRITICAL, y BLOQUEANTE en
+# la CI. El unico que hubo, DS-0002 ("Image user should not be 'root'") en
+# infra/docker/postgres/Dockerfile, se corrigio en la imagen -- `USER postgres`
+# y sin `gosu` -- en vez de excepcionarlo en infra/docker/.trivyignore.yaml.
 #
-# TRIVY_EXIT_CODE=0 (que usa la CI en modo informe) hace que Trivy devuelva 0
-# tenga o no hallazgos: si el paso falla igualmente es porque la HERRAMIENTA no
-# pudo terminar, no porque encontrara algo (IMPORTANTE 5 de la auditoria: con
-# `continue-on-error: true` un Trivy que no arrancaba tambien quedaba en verde).
+# TRIVY_EXIT_CODE=1 por defecto: Trivy devuelve 1 con hallazgos. Con 0
+# devuelve 0 tenga o no hallazgos, y es lo que usa un paso en MODO INFORME
+# para distinguir «la herramienta no pudo terminar» de «encontro algo»
+# (IMPORTANTE 5 de la auditoria: con `continue-on-error: true` un Trivy que no
+# arrancaba tambien quedaba en verde). Hoy ningun paso de la CI lo necesita.
 # TRIVY_FORMAT=json es lo que usa la CI para contar hallazgos por severidad con
 # `jq` sin volver a escanear.
 TRIVY_EXIT_CODE ?= 1
 TRIVY_FORMAT    ?= table
 
-trivy-fs: ## Trivy sobre el repositorio: dependencias, Dockerfiles y secretos (informe, ver docs/runbooks/triaje-hallazgos-seguridad.md)
+trivy-fs: ## Trivy sobre el repositorio: dependencias, Dockerfiles y secretos (bloqueante, ver docs/runbooks/triaje-hallazgos-seguridad.md)
 	$(TRIVY) fs --scanners vuln,misconfig,secret --severity HIGH,CRITICAL --ignore-unfixed \
 	  --timeout 10m --exit-code $(TRIVY_EXIT_CODE) --format $(TRIVY_FORMAT) \
 	  --skip-dirs backend/vendor,node_modules,dist,storage,.git \
@@ -612,21 +608,14 @@ endif
 # hazlo antes con `make build-ci-images` (en la CI lo hace el propio job, con
 # o sin cache segun corresponda).
 #
-# Estado verificado:
-#   kronoqr/app:ci        0 hallazgos HIGH/CRITICAL.
-#   kronoqr/postgres:ci   21 hallazgos HIGH, los 21 en usr/local/bin/gosu: CVE
-#                         de la libreria estandar de Go 1.24.6 con la que esta
-#                         compilado el `gosu` de la imagen oficial
-#                         postgres:17-alpine. Misma categoria y mismo
-#                         razonamiento que la excepcion YA aceptada en
-#                         infra/docker/.trivyignore.yaml (CVE-2025-68121):
-#                         gosu no abre ninguna conexion de red, solo baja
-#                         privilegios al arrancar, asi que ninguna de las 21
-#                         es alcanzable en este uso. Ampliar la lista de
-#                         excepciones con esa misma justificacion es una
-#                         decision de seguridad, no de este objetivo: queda
-#                         para el triaje.
-trivy-image: ## Trivy sobre las imagenes ya construidas kronoqr/postgres:ci y kronoqr/app:ci (informe, ver docs/runbooks/triaje-hallazgos-seguridad.md)
+# Estado verificado (2026-08-29): 0 hallazgos HIGH/CRITICAL en las dos, y
+# BLOQUEANTE en la CI. kronoqr/postgres:ci llego a tener 21 HIGH, los 21 en
+# usr/local/bin/gosu (stdlib del Go con el que la imagen oficial compila
+# `gosu`); ese binario ya no esta en la imagen porque arranca como `postgres`
+# y no tiene privilegios que bajar (infra/docker/postgres/Dockerfile). Si al
+# subir el digest de la base aparece algo nuevo, el camino es el runbook, no
+# volver a poner este objetivo en informe.
+trivy-image: ## Trivy sobre las imagenes ya construidas kronoqr/postgres:ci y kronoqr/app:ci (bloqueante, ver docs/runbooks/triaje-hallazgos-seguridad.md)
 	@docker image inspect kronoqr/postgres:ci >/dev/null 2>&1 || { \
 	  echo "[make] Falta la imagen kronoqr/postgres:ci. Construyela con: make build-ci-images"; \
 	  exit 1; \

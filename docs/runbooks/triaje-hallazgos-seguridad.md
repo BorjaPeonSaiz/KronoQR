@@ -2,13 +2,14 @@
 
 **No es un incidente.** Este runbook no responde a una alerta de producción:
 responde a un hallazgo del job `security` de `ci.yml` — Semgrep comunitario,
-`trivy fs` o `trivy image`. Los dos Trivy corren hoy en **modo informe** porque,
-al añadirlos, no pasaban limpios (doc 02 §9.2); Semgrep comunitario **ya es
-bloqueante** desde el 29 de agosto de 2026, tras triar sus 9 hallazgos (4
-`dependabot-missing-cooldown` corregidos con `cooldown` de 7 días; 5 de Nginx
-justificados con `# nosemgrep` y motivo). Sirve para dos cosas: decidir qué
-hacer con un hallazgo concreto, y saber cuándo un control entero deja de ser
-informe y pasa a bloquear.
+`trivy fs` o `trivy image`. **Los cuatro controles del job son bloqueantes**
+desde el 29 de agosto de 2026: Semgrep comunitario tras triar sus 9 hallazgos
+(4 `dependabot-missing-cooldown` corregidos con `cooldown` de 7 días; 5 de
+Nginx justificados con `# nosemgrep` y motivo), y los dos Trivy tras corregir
+en la propia imagen de PostgreSQL lo que señalaban (`USER postgres` y sin
+`gosu`, §5). Sirve para dos cosas: decidir qué hacer con un hallazgo concreto,
+y saber cuándo un control nuevo puede entrar en modo informe y cuándo tiene
+que dejar de estarlo.
 
 **Modo informe no es `continue-on-error: true`.** Ese mecanismo se retiró
 (IMPORTANTE 5 de la auditoría del pipeline): ocultaba por igual un hallazgo
@@ -38,17 +39,20 @@ excepción de seguridad es exactamente eso).
 Ante cualquier hallazgo nuevo, en este orden:
 
 1. **¿Es un problema real?** Corrígelo. Es casi siempre la opción más barata:
-   un `no-cache`, una versión de paquete, una línea de configuración.
+   un `no-cache`, una versión de paquete, una línea de configuración. Y antes
+   de descartar esta vía, pregunta si el componente señalado **hace falta en
+   absoluto**: el caso de referencia es `gosu` en la imagen de PostgreSQL, que
+   parecía un falso positivo (punto 2) y una CVE no alcanzable (punto 3) a la
+   vez, y resultó que la imagen no lo ejecutaba nunca. Eliminarlo y añadir
+   `USER postgres` cerró 22 hallazgos sin una sola excepción.
 2. **¿Es un falso positivo verificable?** —la herramienta no puede ver algo
-   que sí es cierto en tiempo de ejecución (el ejemplo de referencia: Trivy
-   marca `postgres:17-alpine` como "no debería correr como root" sin poder ver
-   que el propio entrypoint oficial baja privilegios con `gosu` antes de
-   arrancar el servidor—. Documenta la excepción (§2) con fecha de caducidad.
+   que sí es cierto en tiempo de ejecución—. Documenta la excepción (§2) con
+   fecha de caducidad. Solo si el punto 1 no era posible: una excepción por
+   falso positivo hay que renovarla; una corrección, no.
 3. **¿Es cierto pero no alcanzable en este uso concreto?** —una CVE de una
-   biblioteca cuya función vulnerable el producto no invoca nunca, como los
-   CVE de la librería estándar de Go en `usr/local/bin/gosu`, que no abre
-   ninguna conexión de red—. Misma vía que el punto 2: excepción con
-   justificación y caducidad.
+   biblioteca cuya función vulnerable el producto no invoca nunca—. Misma vía
+   que el punto 2: excepción con justificación y caducidad, y la misma
+   pregunta previa: si la biblioteca entera sobra, se elimina.
 4. **¿Ninguna de las anteriores, pero corregirlo hoy no es proporcionado?**
    Dilo en el PR, dilo en el TODO fechado del workflow, y que quede en la lista
    de pendientes de la siguiente sesión (`HANDOFF.md`). **Esto no se resuelve
@@ -86,14 +90,16 @@ $now = new DateTimeImmutable();
 
 ### 2.2 Trivy — `.trivyignore.yaml`
 
-Formato ya en uso en
-[`infra/docker/.trivyignore.yaml`](../../infra/docker/.trivyignore.yaml):
+Formato de
+[`infra/docker/.trivyignore.yaml`](../../infra/docker/.trivyignore.yaml)
+(hoy sin entradas vigentes; la última fue `CVE-2025-68121` en `gosu`, retirada
+al eliminar el binario):
 
 ```yaml
 vulnerabilities:
   - id: CVE-2026-XXXXX
     paths:
-      - usr/local/bin/gosu
+      - usr/lib/<biblioteca-de-la-imagen-base>
     statement: >-
       Motivo completo: de donde viene, por que no es alcanzable en este uso,
       y que condicion hace que deje de aplicar (que se actualice la imagen
@@ -128,8 +134,11 @@ Cada control nuevo se añadió con el criterio *"si hoy pasa limpio, bloqueante
 desde el primer día; si tiene hallazgos, informe con fecha de caducidad"* (doc
 02 §9.2). La fecha vive en dos sitios que tienen que decir lo mismo: el
 comentario del paso correspondiente en `.github/workflows/ci.yml` y la entrada
-de ese control en la variable `PLAZOS` del último paso del job `security`
-("Los pasos en modo informe no han caducado"). Para promoverlo:
+de ese control en la variable `PLAZOS` de un último paso del job `security`
+("Los pasos en modo informe no han caducado"). **Ese paso hoy no existe**
+porque no queda ningún control en informe; si uno nuevo entra en ese modo, se
+recupera del historial (commit `ci(security)`) junto con el control, nunca
+el control solo. Para promoverlo:
 
 1. Todos los hallazgos de esa ejecución están en alguno de estos tres estados:
    corregidos, con excepción justificada (§2), o con un TODO propio en
@@ -153,17 +162,19 @@ de ese control en la variable `PLAZOS` del último paso del job `security`
    commit — la comprobación del paso 3 de este runbook fallará el job hasta
    que se haga.
 
-**Estado a fecha de esta entrega** (para la siguiente sesión que revise esto).
-Los tres controles caducan el **2026-11-30** (`PLAZOS` en `ci.yml`): pasada esa
-fecha sin promoción ni prórroga, el job `security` falla en el último paso
-aunque el resto pase limpio.
+**Estado a 29 de agosto de 2026** (para la siguiente sesión que revise esto).
+Ningún control del job `security` está en modo informe, y por eso el paso de
+caducidad (`PLAZOS`) ya no existe en `ci.yml`: si un control nuevo entra en
+informe, se recupera ese paso del historial (commit `ci(security)`) con su
+fecha, no se deja un TODO.
 
-| Control | Hallazgos verificados en local | Camino más corto a bloqueante |
-| --- | --- | --- |
-| `sast-community` | 5 WARNING, generic-nginx (dynamic-proxy-host ×3, request-host-used ×2) en `infra/docker/nginx/` | Revisar si son aplicables a este despliegue (el `Host` de los backends internos no lo controla quien ataca) y, si no, `# nosemgrep` con motivo |
-| `trivy-fs` | 1 HIGH: `DS-0002` en `infra/docker/postgres/Dockerfile` | Confirmar el razonamiento del §1.2 y añadirlo a `infra/docker/.trivyignore.yaml` con `misconfigurations` |
-| `trivy-image` | `kronoqr/app:ci` limpia hoy · `kronoqr/postgres:ci` con 21 HIGH, todas en `usr/local/bin/gosu` (Go stdlib de la imagen base) | Ampliar `infra/docker/.trivyignore.yaml` con la misma justificación que la entrada ya aceptada (`CVE-2025-68121`), o esperar a que `postgres:17-alpine` reconstruya con un Go más nuevo |
+| Control | Cómo pasó a bloqueante |
+| --- | --- |
+| `secrets-scan` | Desde el primer día: pasó limpio con la allowlist mínima de `.gitleaks.toml` |
+| `sast-community` | 4 `dependabot-missing-cooldown` corregidos con `cooldown`; 5 generic-nginx (dynamic-proxy-host ×3, request-host-used ×2) justificados con `# nosemgrep` y motivo: el `Host` de los backends internos no lo controla quien ataca |
+| `trivy-fs` | El único hallazgo, `DS-0002` en `infra/docker/postgres/Dockerfile`, se corrigió: la imagen lleva `USER postgres` y no arranca como root |
+| `trivy-image` | Los 21 HIGH de `kronoqr/postgres:ci` estaban todos en `usr/local/bin/gosu`; el binario se elimina de la imagen (no se ejecuta nunca sin root) y con él desaparecen los 21 y la excepción `CVE-2025-68121` de `infra/docker/.trivyignore.yaml`, que queda vacío. Se prefirió eso a ampliar la lista de excepciones: cada subida del digest de la base las habría reabierto |
 
-`secrets-scan` (gitleaks) **ya es bloqueante**: pasó limpio desde el primer
-día con la allowlist mínima de `.gitleaks.toml`, así que no hay nada que
-promover.
+Lo que enseña el caso de `gosu` para el próximo triaje: antes de excepcionar
+un binario de la imagen base, comprobar si hace falta en absoluto. Un
+componente que no se ejecuta en nuestro uso se elimina, no se justifica.

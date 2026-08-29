@@ -2,9 +2,11 @@
 #
 # PostgreSQL 17 — el registro legal y sus invariantes declarativas (doc 02 §3.2).
 #
-# La imagen oficial ya corre como el usuario postgres. Lo unico que anadimos es
-# el arranque de extensiones: btree_gist (RN-02, restriccion de exclusion),
-# pgcrypto (hash del DNI y cadena de auditoria) y citext (employee_code).
+# Lo que anadimos sobre la imagen oficial: el arranque de extensiones
+# (btree_gist para RN-02, pgcrypto para el hash del DNI y la cadena de
+# auditoria, citext para employee_code), el archivado de WAL y que la imagen
+# corra como `postgres` desde el principio, sin pasar por root (ver el `USER`
+# del final).
 
 FROM postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
 
@@ -38,9 +40,20 @@ ENV TZ=UTC \
 # .RepoDigests 0}}' postgres:17-alpine`.
 #
 # bash para el archivado de WAL: `set -o pipefail` no existe en el `sh` de
-# BusyBox, y el doc 02 §3.5 lo exige en todo script. Es lo unico que se añade
-# ademas de la actualizacion.
-RUN apk upgrade --no-cache libssl3 libcrypto3 && apk add --no-cache bash
+# BusyBox, y el doc 02 §3.5 lo exige en todo script.
+#
+# `gosu` se ELIMINA. El entrypoint oficial solo lo usa para bajar de root a
+# postgres cuando el contenedor arranca como root, y esta imagen no lo hace
+# nunca (`USER postgres` al final): el entrypoint comprueba `id -u` y, si no
+# es 0, sigue sin tocarlo. Un binario que no se ejecuta no tiene por que
+# estar: es un Go estatico con su propia copia de la libreria estandar, y
+# cada CVE de esa stdlib (21 HIGH en el momento de retirarlo) aparecia en
+# `trivy image` sin que nada de esta imagen lo alcanzara. Quitarlo cierra
+# esa clase entera de hallazgos en vez de ir excepcionandolos uno a uno en
+# infra/docker/.trivyignore.yaml.
+RUN apk upgrade --no-cache libssl3 libcrypto3 \
+  && apk add --no-cache bash \
+  && rm /usr/local/bin/gosu
 
 COPY infra/docker/postgres/initdb/ /docker-entrypoint-initdb.d/
 # El script de roles se EJECUTA, no se carga con `.`: el entrypoint oficial hace
@@ -72,3 +85,17 @@ RUN chown postgres:postgres /etc/kronoqr/pg_hba.conf && chmod 0600 /etc/kronoqr/
 
 # Los scripts de initdb SOLO se ejecutan la primera vez, sobre un volumen
 # vacio. Si cambias algo aqui, hay que recrear el volumen: make clean.
+
+# La imagen arranca como `postgres` (uid 70 en Alpine), no como root que baja
+# privilegios (Trivy DS-0002; doc 07, contencion del proceso de base de datos).
+# Consecuencia operativa: el entrypoint ya no puede corregir la propiedad de
+# un directorio que llegue mal del anfitrion. Con VOLUMENES CON NOMBRE
+# (postgres-data, y wal-archive en desarrollo) no hay nada que corregir:
+# Docker copia la propiedad del directorio de la imagen al crear el volumen.
+# Con el BIND MOUNT del archivo de WAL en produccion (compose.prod.yaml), el
+# directorio del anfitrion tiene que existir con uid/gid 70 ANTES del primer
+# arranque -- lo prepara install.sh (Fase 5) -- y, si no, PostgreSQL falla
+# al archivar el primer segmento y el runbook de copias lo explica. Antes
+# tampoco lo corregia nadie (el entrypoint solo ajusta PGDATA), asi que no
+# es un requisito nuevo: solo cambia que ahora el fallo es explicito.
+USER postgres
