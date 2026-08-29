@@ -27,6 +27,7 @@ use App\Modules\Identity\Domain\Exception\CredentialNotPrintedYet;
 use App\Modules\Identity\Domain\Exception\CredentialRevocationNeedsReason;
 use App\Modules\Identity\Domain\Exception\EmployeeAlreadyHasCredential;
 use App\Modules\Identity\Domain\Exception\InvalidSigningKey;
+use App\Modules\Identity\Domain\ValueObject\TokenAbility;
 use App\Modules\Identity\Http\Middleware\RejectPendingTwoFactorSession;
 use App\Modules\Reporting\Application\Exception\EmployeeNotFound;
 use App\Modules\Reporting\Domain\Exception\InvalidDateRange;
@@ -69,6 +70,36 @@ return Application::configure(basePath: dirname(__DIR__))
         // que consultara Redis para saber si puede responder haria que Docker
         // reiniciara PHP cuando el que se cae es Redis. Cada ruta declara su
         // zona de limite en routes/api_v1.php.
+    )
+    /*
+     * Autorizacion de los canales de WebSocket (ADR-011, tarea 2.4).
+     *
+     * BAJO /api/v1 Y NO EN LA RAIZ. El valor de serie de Laravel es
+     * `/broadcasting/auth` con el grupo `web`, y ninguna de las dos mitades vale
+     * aqui: la version va en la ruta (ADR-012) y este producto no tiene rutas
+     * `web` —las tres aplicaciones cliente son SPA que se autentican con un
+     * token Bearer de Sanctum, no con una cookie de sesion—.
+     *
+     * DOS COMPROBACIONES, COMO EN CUALQUIER OTRA RUTA (regla dura 18). Aqui esta
+     * la del AMBITO: `attendance:read`, el mismo que exige
+     * `GET /api/v1/attendance/live`, porque suscribirse al canal es otra forma
+     * de leer lo mismo. La otra mitad —el rol y el alcance por departamento— la
+     * comprueba cada canal en routes/channels.php.
+     *
+     * `throttle:management` porque esta ruta la llama el panel cada vez que
+     * reconecta, y un panel en bucle de reconexion no puede consumir el proceso
+     * que atiende al fichaje (RS-02, §7.1).
+     */
+    ->withBroadcasting(
+        __DIR__.'/../routes/channels.php',
+        attributes: [
+            'prefix' => 'api/v1',
+            'middleware' => [
+                'auth:sanctum',
+                'ability:'.TokenAbility::ATTENDANCE_READ->value,
+                'throttle:management',
+            ],
+        ],
     )
     ->withMiddleware(function (Middleware $middleware): void {
         /*

@@ -94,6 +94,17 @@ function managementEndpoints(): array
         // portal y de su fichaje sin tarjeta.
         'restablecer el PIN' => ['POST', '/api/v1/employees/0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90/pin/reset', []],
         'registrar la entrega del PIN' => ['POST', '/api/v1/employees/0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90/pin/deliver', []],
+
+        // Presencia en tiempo real (tarea 2.4, RF-PA-01). Ambito
+        // `attendance:read` y policy propia: es «manager+» del Anexo B, asi que
+        // el `auditor` recibe `403` **teniendo el ambito** —es la mitad que
+        // aporta la policy— y el quiosco ni siquiera lo tiene.
+        //
+        // La suscripcion al canal de WebSocket es el mismo recurso por otra
+        // puerta y se prueba en `Tests\Feature\Reporting\PresenceChannelAuthorizationTest`:
+        // aqui no cabe porque su cuerpo necesita un nombre de canal, y lo que
+        // esta matriz comprueba es el par rol x endpoint.
+        'ver la presencia en vivo' => ['GET', '/api/v1/attendance/live', []],
     ];
 }
 
@@ -128,7 +139,16 @@ function endpointsDeniedToDepartmentManager(): array
 {
     $endpoints = managementEndpoints();
 
-    unset($endpoints['listar empleados'], $endpoints['ver un empleado']);
+    unset(
+        $endpoints['listar empleados'],
+        $endpoints['ver un empleado'],
+        // Y la presencia en vivo desde la tarea 2.4: el Anexo B la sitúa en
+        // «manager+», asi que el responsable entra —**acotado a sus
+        // departamentos**, tambien en los recuentos—. Ese alcance y su ausencia
+        // de `403` se prueban en `Tests\Feature\Reporting\LivePresenceScopeTest`:
+        // aqui no caben, porque dependen de a quien se pida.
+        $endpoints['ver la presencia en vivo'],
+    );
 
     return $endpoints;
 }

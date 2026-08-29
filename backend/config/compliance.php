@@ -54,4 +54,34 @@ return [
      */
     'authorization_denial_window_seconds' => (int) env('COMPLIANCE_AUTHZ_DENIAL_WINDOW_SECONDS', 60),
 
+    /*
+     * Divulgaciones de datos personales que se AGRUPAN por ventana en lugar de
+     * dejar un asiento por lectura (RS-05, RL-15, ADR-037).
+     *
+     * LA LISTA ES CERRADA Y CORTA A PROPOSITO. Lo normal es que cada divulgacion
+     * deje su asiento: quien lista la plantilla o descarga el padron lo hace una
+     * vez y hay que poder decir despues que se llevo. Aqui solo entran los
+     * conjuntos que un cliente **sondea**, donde un asiento por peticion no
+     * responde mejor a RL-15 —dice lo mismo veinte mil veces— y ademas mete miles
+     * de escrituras diarias bajo el candado global de ADR-010, el mismo por el
+     * que pasa cada fichaje.
+     *
+     * Hoy hay uno: `live_presence`, la vista del panel que se pide cada 15 s
+     * cuando el WebSocket no llega (RNF-D-03, ADR-011). Añadir un conjunto aqui
+     * es una decision sobre el valor probatorio del trail, no un ajuste de
+     * rendimiento.
+     *
+     * EL HECHO NO SE PIERDE: el primer asiento de cada ventana se escribe siempre
+     * y las repeticiones se cuentan en `repeated_since_last_entry` del siguiente.
+     *
+     * QUINCE MINUTOS porque la pregunta que RL-15 hace es «¿tuvo esa cuenta la
+     * presencia de la plantilla delante?», y esa se responde igual de bien con un
+     * apunte cada cuarto de hora que con cuatro por minuto. `0` desactiva la
+     * agrupacion y devuelve un asiento por lectura.
+     */
+    'disclosure_grouping' => [
+        'datasets' => ['live_presence'],
+        'window_seconds' => (int) env('COMPLIANCE_DISCLOSURE_WINDOW_SECONDS', 900),
+    ],
+
 ];

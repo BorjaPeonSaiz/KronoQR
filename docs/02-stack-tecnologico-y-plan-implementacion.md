@@ -1450,6 +1450,7 @@ php artisan attendance:detect-incidents         # Turnos abiertos, duraciones an
 php artisan attendance:detect-patterns          # Patrones anómalos de uso de credencial (RF-PR-06)
 php artisan attendance:reconcile --from= --to=  # Recalcula proyecciones y alerta si divergen
 php artisan compliance:verify-audit-chain       # Verifica la cadena de hash
+php artisan reporting:presence-metrics          # Recalcula open_shifts_current y websocket_connections_active (§8.2)
 
 # Calidad y trazabilidad
 php artisan qa:traceability                     # Matriz requisito → pruebas (RQ-13)

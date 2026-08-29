@@ -25,6 +25,7 @@ use App\Modules\Identity\Http\Controller\TwoFactorController;
 use App\Modules\Kiosk\Http\Controller\HeartbeatController;
 use App\Modules\Kiosk\Http\Controller\RosterController;
 use App\Modules\Reporting\Http\Controller\EmployeeWorkDayController;
+use App\Modules\Reporting\Http\Controller\LivePresenceController;
 use App\Modules\Reporting\Http\Controller\MyWorkDayController;
 use App\Modules\Reporting\Http\Controller\MyWorkDayExportController;
 use App\Modules\Workforce\Http\Controller\DepartmentController;
@@ -195,6 +196,45 @@ Route::middleware([
         ->whereUuid('uuid')
         ->name('attendance.shift-entries.void');
 });
+
+/*
+ * GET /api/v1/attendance/live — presencia en tiempo real (RF-PA-01, RF-PA-02,
+ * tarea 2.4).
+ *
+ * `attendance:read`, EL MISMO AMBITO QUE EL REGISTRO HORARIO Y QUE EL CANAL DE
+ * WEBSOCKET. Los tres responden a la misma pregunta —«¿que horas ha hecho esta
+ * gente?»— con distinta frescura, y separarlos habria significado poder conceder
+ * la vista en vivo a quien no puede leer el registro, que es una distincion sin
+ * sentido: la presencia de ahora es el registro de dentro de un rato. El §7.3 ya
+ * describe este ambito como «consultar presencia, jornadas y tramos».
+ *
+ * LA OTRA MITAD ES `LivePresencePolicy`, que comprueba el ROL: `manager+` del
+ * Anexo B, que desde la tarea 2.1 es `{admin, rrhh, responsable_departamento}`
+ * (regla dura 18). Es la mitad que deja fuera al `auditor`, que lleva
+ * `attendance:read` en el token y aun asi recibe `403`: auditar es mirar lo que
+ * quedo escrito, no quien esta en la cocina ahora.
+ *
+ * EL ALCANCE POR DEPARTAMENTO NO SE COMPRUEBA AQUI: entra **en la consulta**
+ * (RF-ID-03), incluidos los recuentos. Es un listado, y un listado acota en vez
+ * de denegar.
+ *
+ * `throttle:management` PORQUE ESTE ENDPOINT SE SONDEA. Cuando el WebSocket no
+ * llega, el panel lo pide cada 15 s (RNF-D-03), y cada peticion deja ademas un
+ * asiento de divulgacion agrupado (RS-05). Sin techo por cuenta, una pestaña en
+ * bucle de reintento golpea la misma base de datos que atiende el fichaje
+ * (RNF-P-02).
+ *
+ * NO ADMITE `site_id` (ADR-040: hay un centro) NI PAGINACION: la respuesta es
+ * una fila por persona del alcance y el panel la virtualiza. El porque esta
+ * escrito en el contrato.
+ */
+Route::get('/attendance/live', LivePresenceController::class)
+    ->middleware([
+        'auth:sanctum',
+        'ability:'.TokenAbility::ATTENDANCE_READ->value,
+        'throttle:management',
+    ])
+    ->name('reporting.attendance.live');
 
 /*
  * GET /api/v1/employees/{uuid}/workdays — el registro horario de una persona

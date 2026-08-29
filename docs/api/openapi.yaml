@@ -116,7 +116,12 @@ tags:
   - name: Reporting
     description: |
       Consultas de lectura sobre el registro horario ya escrito **hacia dentro de
-      la organizacion**: el detalle de jornada del panel (RF-PA-03).
+      la organizacion**: el detalle de jornada del panel (RF-PA-03) y la
+      presencia en tiempo real (RF-PA-01, RF-PA-02).
+
+      Aqui vive tambien el unico mensaje que el servidor **origina** en vez de
+      responder: el `presence.updated` del WebSocket (ADR-011), descrito en
+      `webhooks`. Es una vista y nada del registro legal viaja por el.
 
       Se separa de `Attendance` porque **no escribe nada y no puede**. Aqui no
       hay ningun verbo que cambie el registro: corregirlo es `PATCH
@@ -1851,6 +1856,128 @@ paths:
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
+  /api/v1/attendance/live:
+    get:
+      operationId: listLivePresence
+      summary: Presencia en tiempo real
+      description: |
+        Quien esta fichado **ahora mismo** y quien no, con la hora de entrada, el
+        quiosco de origen y el departamento (RF-PA-01). Es la fotografia inicial
+        del panel de presencia; a partir de ahi la vista se mantiene al dia por
+        WebSocket, y si el canal no se establece, por sondeo (ADR-011).
+
+        **Es funcionalidad accesoria** en el sentido de ADR-023 y este endpoint
+        es su suelo: con la licencia caducada el tiempo real degrada a sondeo
+        —`meta.realtime.enabled` pasa a `false`— y esta consulta **sigue
+        respondiendo**. El registro legal no se degrada nunca (ADR-019, regla
+        dura 15), y esta vista es ademas la que permite que el panel no se quede
+        en blanco cuando el WebSocket no llega.
+
+        **Solo lee.** Nada de lo que devuelve cambia el registro horario:
+        rectificarlo es `PATCH /api/v1/shift-entries/{uuid}`, con el ambito
+        `attendance:correct`, que este endpoint no exige ni concede.
+
+        **Sin paginacion, y es una decision.** Una instalacion es un hotel
+        (ADR-040) con una decena de departamentos y hasta 500 empleados
+        (documento 02, Anexo A): la respuesta completa es una fila por persona
+        del alcance y el panel la virtualiza (RNF-P-04). Paginar obligaria al
+        panel a reconciliar cada mensaje del WebSocket contra una pagina que
+        quiza no contiene a esa persona, que es como una vista en vivo empieza a
+        mostrar a alguien dos veces. `status=present`, que es el valor por
+        omision, ademas se resuelve sobre el indice parcial de turnos abiertos y
+        devuelve como mucho tantas filas como gente haya dentro del hotel.
+
+        **El alcance por departamento se aplica en la consulta** (RF-ID-03), no
+        despues: un `responsable_departamento` recibe a la gente de los
+        departamentos que dirige, y los recuentos de `meta` describen **eso
+        mismo** y no la plantilla entera. Un responsable sin ningun departamento
+        asignado recibe `data` vacio y los recuentos a cero, no un `403`: el
+        listado no deniega, acota.
+
+        **`department_id` fuera del alcance no es un `403`, es un resultado
+        vacio.** Igual que en `GET /api/v1/employees`: un filtro es una peticion
+        de acotar, y responder `403` convertiria el desplegable de departamentos
+        del panel en un generador de errores. El `403` con asiento en `audit_log`
+        se reserva para cuando se pide un recurso concreto de otra persona.
+
+        **Todos los instantes salen en UTC** (regla dura 3) y la zona del centro
+        viaja en `meta.time_zone`: la conversion la hace el panel, no el
+        servidor. **El tiempo transcurrido se calcula contra
+        `meta.generated_at`**, no contra el reloj del navegador: una tablet o un
+        portatil con el reloj desfasado mostraria minutos trabajados que nadie ha
+        trabajado.
+
+        **`device` es el quiosco donde esa persona ficho la entrada**, resuelto
+        por el `scan_events` que abrio el tramo. Es `null` cuando no hay ninguno,
+        que es exactamente el caso de un tramo dado de alta o corregido a mano
+        desde el panel (`origin: manual_admin`) y el de una carga inicial
+        (`import`).
+
+        **Es un acceso a datos personales de terceros y queda registrado en
+        `audit_log`** (RS-05), con el alcance —cuantas filas, que filtros— y
+        nunca con lo divulgado (regla dura 21). Los asientos de esta vista se
+        **agrupan por cuenta en una ventana**: el panel sondea cada 15 s y un
+        asiento por sondeo llenaria la tabla de cuatro años de retencion con la
+        misma lectura repetida, ademas de meter miles de escrituras diarias bajo
+        el candado global de ADR-010 —el mismo por el que pasa cada fichaje—. El
+        primer asiento de cada ventana se escribe siempre y lleva cuantas
+        lecturas representa.
+      tags: [Reporting]
+      security:
+        - managementToken: ['attendance:read']
+      parameters:
+        - $ref: '#/components/parameters/DepartmentFilter'
+        - $ref: '#/components/parameters/PresenceStatusFilter'
+        - $ref: '#/components/parameters/EmployeeSearch'
+      responses:
+        '200':
+          description: |
+            La foto de la presencia en el instante `meta.generated_at`, ordenada
+            por apellidos y nombre. El orden es estable —el UUID desempata— para
+            que una fila no salte de sitio entre dos sondeos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LivePresenceBoard'
+              examples:
+                cambio-de-turno:
+                  value:
+                    data:
+                      - employee_uuid: 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                        full_name: Youssef Amrani
+                        department:
+                          id: 3
+                          name: Cocina
+                        status: present
+                        shift_entry_uuid: 0199f2c1-8a10-7b40-9c50-6d7e8f9a0b11
+                        clocked_in_at: '2026-03-14T05:00:00.000000Z'
+                        origin: qr_kiosk
+                        device:
+                          uuid: 0199f0d3-3c71-7e52-9a13-6f7a8b9c0d12
+                          name: Entrada de personal
+                    meta:
+                      generated_at: '2026-03-14T09:12:03.418000Z'
+                      time_zone: Europe/Madrid
+                      present_count: 1
+                      absent_count: 0
+                      total: 1
+                      realtime:
+                        enabled: true
+                        key: kronoqr
+                        path: /app
+                        auth_endpoint: /api/v1/broadcasting/auth
+                        event: presence.updated
+                        channels: ['presence.all']
+                        poll_interval_seconds: 15
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
   /api/v1/employees/{uuid}/workdays:
     parameters:
       - $ref: '#/components/parameters/EmployeeUuid'
@@ -3196,6 +3323,94 @@ paths:
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
+# Mensajes que ORIGINA el servidor, no peticiones que recibe.
+#
+# `webhooks` es el mecanismo de OpenAPI 3.1 para describir lo que sale de la API
+# sin que nadie lo pida. Aqui hay uno solo y no viaja por HTTP: viaja por el
+# WebSocket de Reverb (ADR-011). Se describe aqui —y no en un documento aparte—
+# porque el contrato es la fuente de verdad de la forma de todo lo que cruza la
+# frontera del servidor, y porque asi el cliente TypeScript del panel genera el
+# tipo del mensaje del mismo sitio del que genera el de la respuesta.
+#
+# El transporte real: canal privado del protocolo Pusher —`private-presence.all`
+# o `private-presence.department.{id}` en el cable—, evento `presence.updated`,
+# suscripcion firmada en `POST /api/v1/broadcasting/auth` con el token Bearer del
+# panel. Los detalles de conexion los da `meta.realtime` de
+# `GET /api/v1/attendance/live`, no una variable de compilacion.
+webhooks:
+  presenceUpdated:
+    post:
+      operationId: presenceUpdated
+      summary: Cambio de presencia difundido en vivo
+      description: |
+        Alguien ha entrado, ha salido, o una correccion o una anulacion han
+        cambiado un tramo abierto (RF-PA-01, RF-PA-04). El panel sustituye la
+        fila de esa persona con el contenido del mensaje.
+
+        **No es una llamada HTTP.** Se describe como webhook porque es la unica
+        forma que tiene OpenAPI 3.1 de declarar un mensaje que origina el
+        servidor; el transporte es el canal privado de WebSocket. Los codigos de
+        respuesta no aplican y por eso no hay ninguno documentado: nadie
+        responde a un mensaje difundido.
+
+        **Se difunde a dos canales y a ninguno mas**: el del departamento de la
+        persona —`presence.department.{id}`— y el global de la instalacion
+        —`presence.all`—. Un mensaje **nunca** llega al canal de otro
+        departamento, y el canal global solo lo alcanzan las cuentas sin
+        restriccion de alcance (RF-ID-03). Quien no tiene departamento solo
+        aparece en el canal global.
+
+        **La difusion no puede retrasar ni impedir un fichaje** (reglas duras 15
+        y 19, RNF-P-02): sale por cola despues de confirmar la transaccion, asi
+        que un Reverb caido deja la vista sin refrescar y el registro horario
+        intacto.
+      tags: [Reporting]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PresenceUpdatedMessage'
+            examples:
+              entrada:
+                summary: Una entrada fichada con la tarjeta en el quiosco
+                value:
+                  entry:
+                    employee_uuid: 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                    full_name: Youssef Amrani
+                    department:
+                      id: 3
+                      name: Cocina
+                    status: present
+                    shift_entry_uuid: 0199f2c1-8a10-7b40-9c50-6d7e8f9a0b11
+                    clocked_in_at: '2026-03-14T05:00:00.000000Z'
+                    origin: qr_kiosk
+                    device:
+                      uuid: 0199f0d3-3c71-7e52-9a13-6f7a8b9c0d12
+                      name: Entrada de personal
+                  occurred_at: '2026-03-14T05:00:00.000000Z'
+              salida:
+                summary: Una salida, que deja a la persona ausente
+                value:
+                  entry:
+                    employee_uuid: 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                    full_name: Youssef Amrani
+                    department:
+                      id: 3
+                      name: Cocina
+                    status: absent
+                    shift_entry_uuid: null
+                    clocked_in_at: null
+                    origin: null
+                    device: null
+                  occurred_at: '2026-03-14T13:05:00.000000Z'
+      responses:
+        '204':
+          description: |
+            No existe. Un mensaje difundido no se responde: el bloque esta aqui
+            porque OpenAPI exige al menos una respuesta por operacion.
+
 components:
   securitySchemes:
     # Los tres esquemas declaran los ambitos del documento 02 §7.3, TODOS, aunque
@@ -3415,6 +3630,34 @@ components:
       schema:
         $ref: '#/components/schemas/PinStatus'
       example: issued
+
+    PresenceStatusFilter:
+      name: status
+      in: query
+      required: false
+      description: |
+        Situacion de presencia (RF-PA-02). **`present` por omision**, que es la
+        pregunta que hace quien abre el panel en un cambio de turno: quien esta
+        dentro ahora mismo.
+
+        - `present`: tiene un tramo abierto —entrada fichada y salida pendiente—
+          que sigue siendo la version vigente. Se resuelve sobre el indice
+          parcial `one_open_shift_per_employee`, no escaneando el historico.
+        - `absent`: esta de alta y **no** tiene ningun tramo abierto. No dice que
+          no haya trabajado hoy: dice que ahora mismo no esta dentro.
+
+        **No hay valor «todos»**, y no es un olvido: la vista de presencia
+        enseña una de las dos listas y los dos recuentos, que ya vienen en
+        `meta`. Un tercer valor obligaria a que cada fila explicara a que grupo
+        pertenece en una tabla que no tiene esa columna.
+
+        **Quien esta de baja no aparece en ninguna de las dos.** Es lo contrario
+        que en `GET /api/v1/employees`, donde el historico se conserva a la
+        vista: aqui la pregunta es quien esta trabajando, y alguien que ya no
+        pertenece a la plantilla no es un ausente, es que no esta.
+      schema:
+        $ref: '#/components/schemas/LivePresenceStatus'
+      example: present
 
     EmployeeSearch:
       name: q
@@ -6125,3 +6368,334 @@ components:
           description: |
             Minutos que decia esta version. Van escritos y no se deducen al leer:
             el historico responde «cuanto decia antes» sin recalcular nada.
+
+    LivePresenceStatus:
+      type: string
+      title: LivePresenceStatus
+      enum: [present, absent]
+      description: |
+        Si esa persona tiene ahora mismo un tramo abierto (`present`) o no
+        (`absent`). Se deriva de `shift_entries`: hay tramo vigente sin
+        `clocked_out_at`, o no lo hay. No es un estado almacenado y no se puede
+        escribir por ninguna via.
+      examples:
+        - present
+
+    LivePresenceEntry:
+      type: object
+      title: LivePresenceEntry
+      description: |
+        Una persona del alcance, con su situacion de presencia en el instante de
+        la consulta (RF-PA-01).
+
+        **Es tambien el cuerpo del mensaje que llega por WebSocket** cuando esa
+        persona ficha: mismo esquema y misma forma, para que el panel pinte la
+        fila con el mismo codigo venga de donde venga (ver `PresenceUpdatedMessage`).
+
+        **Los cinco campos de tramo son nulos a la vez.** Con `status: absent` no
+        hay tramo abierto, asi que no hay identificador, ni hora de entrada, ni
+        origen, ni quiosco. No es informacion que falte: es que no existe.
+      additionalProperties: false
+      required:
+        - employee_uuid
+        - full_name
+        - department
+        - status
+        - shift_entry_uuid
+        - clocked_in_at
+        - origin
+        - device
+      properties:
+        employee_uuid:
+          type: string
+          format: uuid
+          description: |
+            Identificador **publico** del empleado. Es el unico identificador de
+            una persona que puede aparecer en un log tecnico (regla dura 21); el
+            nombre de al lado viaja a la pantalla del panel autorizado y no al
+            log.
+          examples:
+            - 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+        full_name:
+          type: string
+          minLength: 1
+          maxLength: 251
+          description: |
+            Nombre y apellidos, ya compuestos por el servidor. Se envia compuesto
+            y no en dos campos porque el panel lo pinta como una sola celda, y
+            componerlo en el cliente invita a que cada pantalla lo haga a su
+            manera.
+          examples:
+            - Youssef Amrani
+        department:
+          description: |
+            Departamento al que esta adscrita la persona. `null` cuando no tiene
+            ninguno, que es un estado legitimo de una ficha recien creada: a
+            quien no tiene departamento solo lo ve una cuenta sin restriccion de
+            alcance (RF-ID-03).
+          oneOf:
+            - $ref: '#/components/schemas/PresenceDepartment'
+            - type: 'null'
+        status:
+          $ref: '#/components/schemas/LivePresenceStatus'
+        shift_entry_uuid:
+          description: |
+            El tramo abierto (`shift_entries.uuid`). **Identifica una version**
+            (ADR-035): una correccion crea una fila nueva y este valor cambia.
+          oneOf:
+            - type: string
+              format: uuid
+            - type: 'null'
+        clocked_in_at:
+          description: |
+            Momento real de la entrada, en UTC (reglas duras 3 y 9). Es el
+            `occurred_at` del escaneo y no cuando el servidor lo recibio: un
+            fichaje que subio por la cola offline del quiosco muestra la hora a
+            la que la persona ficho.
+
+            El **tiempo transcurrido** se calcula contra `meta.generated_at`, no
+            contra el reloj del cliente.
+          oneOf:
+            - $ref: '#/components/schemas/UtcTimestamp'
+            - type: 'null'
+        origin:
+          description: |
+            De donde salio la marca de entrada
+            (`shift_entries.clock_in_source`). `manual_admin` significa que la
+            escribio una persona desde el panel y que hay una fila de correccion
+            que lo explica (RN-13).
+          oneOf:
+            - $ref: '#/components/schemas/ClockingSource'
+            - type: 'null'
+        device:
+          description: |
+            Quiosco donde se ficho la entrada. `null` cuando no hubo escaneo
+            —alta o correccion manual desde el panel, carga inicial— o cuando el
+            escaneo que abrio el tramo ya no apunta a esta version del tramo.
+          oneOf:
+            - $ref: '#/components/schemas/PresenceDevice'
+            - type: 'null'
+
+    PresenceDepartment:
+      type: object
+      title: PresenceDepartment
+      description: Departamento al que esta adscrita la persona.
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+
+    PresenceDevice:
+      type: object
+      title: PresenceDevice
+      description: |
+        El quiosco donde se ficho la entrada. Va el UUID **publico** del
+        dispositivo, nunca su clave interna ni nada de su token.
+      additionalProperties: false
+      required: [uuid, name]
+      properties:
+        uuid:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+
+    LivePresenceBoard:
+      type: object
+      title: LivePresenceBoard
+      description: |
+        La foto de la presencia mas lo que el panel necesita para mantenerla al
+        dia (RF-PA-01, ADR-011).
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/LivePresenceEntry'
+        meta:
+          $ref: '#/components/schemas/LivePresenceMeta'
+
+    LivePresenceMeta:
+      type: object
+      title: LivePresenceMeta
+      description: |
+        Cuando se saco la foto, en que zona se presenta y como seguir viendola en
+        vivo.
+      additionalProperties: false
+      required:
+        - generated_at
+        - time_zone
+        - present_count
+        - absent_count
+        - total
+        - realtime
+      properties:
+        generated_at:
+          allOf:
+            - $ref: '#/components/schemas/UtcTimestamp'
+          description: |
+            Instante del servidor en el que se resolvio la consulta. **Es la
+            referencia del tiempo transcurrido**: el panel resta `clocked_in_at`
+            de este valor y no del reloj del navegador, que en una tablet
+            compartida puede ir desfasado horas (RF-AT-10 lo mide para los
+            quioscos por este mismo motivo).
+        time_zone:
+          $ref: '#/components/schemas/TimeZoneName'
+        present_count:
+          type: integer
+          minimum: 0
+          description: |
+            Cuantas personas del alcance estan dentro ahora mismo.
+
+            **Los dos recuentos describen el mismo conjunto que `data` salvo por
+            el filtro `status`**: se calculan con el alcance, `department_id` y
+            `q` aplicados, de modo que el panel puede enseñar «12 presentes / 40
+            ausentes» sin pedir la otra lista. Un responsable nunca ve en ellos a
+            gente de otro departamento (RF-ID-03).
+        absent_count:
+          type: integer
+          minimum: 0
+          description: Personas de alta del alcance sin ningun tramo abierto.
+        total:
+          type: integer
+          minimum: 0
+          description: |
+            `present_count + absent_count`. Va escrito y no se deduce para que
+            una pantalla que solo pinte el total no tenga que sumar.
+        realtime:
+          $ref: '#/components/schemas/RealtimeSubscription'
+
+    RealtimeSubscription:
+      type: object
+      title: RealtimeSubscription
+      description: |
+        Como suscribirse al canal de presencia (ADR-011). **Viaja en la respuesta
+        y no se compila en el panel**: el producto se instala en el servidor de
+        cada cliente, y una clave o un puerto dentro de la build obligarian a
+        recompilar la SPA por instalacion, que es justo lo que ADR-017 y la regla
+        dura 13 prohiben.
+
+        **No lleva host ni puerto.** El WebSocket se atraviesa por el mismo
+        origen desde el que se sirvio el panel —Nginx proxifica `path` hacia
+        Reverb—, asi que el cliente los toma de su propia URL. Sin CORS y sin un
+        segundo nombre de dominio que configurar en cada hotel.
+
+        **`key` no es un secreto.** Es la clave publica de aplicacion del
+        protocolo Pusher, la que identifica la aplicacion en el saludo del
+        WebSocket. Lo que autoriza de verdad es la firma que devuelve
+        `auth_endpoint` para cada canal privado, y esa la calcula el servidor con
+        un secreto que nunca sale de el.
+      additionalProperties: false
+      required:
+        - enabled
+        - key
+        - path
+        - auth_endpoint
+        - event
+        - channels
+        - poll_interval_seconds
+      properties:
+        enabled:
+          type: boolean
+          description: |
+            Si el tiempo real esta disponible. `false` significa **sondear cada
+            `poll_interval_seconds`**, no que la vista deje de funcionar: es la
+            unica degradacion parcial de ADR-023 y ocurre con la licencia
+            caducada o con la difusion apagada en la instalacion. El panel lo
+            anuncia en pantalla (RNF-D-03): sin aviso, el operador cree que no
+            entra nadie.
+        key:
+          description: |
+            Clave publica de aplicacion con la que se abre el WebSocket.
+
+            **`null` cuando la instalacion no tiene Reverb configurado**, que es
+            el unico caso en el que falta y siempre viene acompañado de
+            `enabled: false`. Se declara nulable en vez de vacia porque una
+            cadena vacia obligaria al cliente a distinguir «no hay clave» de
+            «hay una clave que es la cadena vacia», y solo una de las dos existe.
+          oneOf:
+            - type: string
+              minLength: 1
+              maxLength: 128
+            - type: 'null'
+        path:
+          type: string
+          minLength: 1
+          description: |
+            Ruta del WebSocket en el mismo origen del panel. El cliente compone
+            `wss://<origen><path>/<key>`.
+        auth_endpoint:
+          type: string
+          minLength: 1
+          description: |
+            Donde se firma la suscripcion a un canal privado. Se llama con el
+            **mismo token Bearer** que el resto de la API: el panel es una SPA
+            con token, no una sesion de cookie.
+        event:
+          type: string
+          minLength: 1
+          description: Nombre del evento que transporta cada cambio de presencia.
+        channels:
+          type: array
+          description: |
+            Los canales a los que **esta cuenta** puede suscribirse, ya resueltos
+            por su alcance (RF-ID-03). `admin`, `rrhh` y `auditor` reciben
+            `presence.all`; un `responsable_departamento` recibe un
+            `presence.department.{id}` por cada departamento que dirige y **no**
+            recibe `presence.all`.
+
+            Va en la respuesta para que el panel no tenga que adivinar a que
+            puede suscribirse. **No sustituye a la autorizacion**: el servidor
+            firma cada suscripcion en `auth_endpoint` y rechaza la que no
+            corresponda, venga en esta lista o no (regla dura 18).
+          items:
+            type: string
+            minLength: 1
+            maxLength: 128
+        poll_interval_seconds:
+          type: integer
+          minimum: 1
+          description: |
+            Cada cuanto sondear este mismo endpoint cuando no hay WebSocket
+            (RNF-D-03). Lo fija el servidor y no el panel: es carga contra la
+            base de datos que atiende el camino de fichaje.
+
+    PresenceUpdatedMessage:
+      type: object
+      title: PresenceUpdatedMessage
+      description: |
+        El mensaje que viaja por el canal de presencia cuando alguien ficha, o
+        cuando una correccion o una anulacion cambian un tramo abierto (RF-PA-01,
+        RF-PA-04).
+
+        **Es una fila del listado y nada mas.** Lleva exactamente los campos de
+        `LivePresenceEntry` mas el instante del cambio, de modo que el panel
+        sustituye la fila de esa persona sin volver a consultar. Nada del
+        registro legal viaja por el WebSocket (ADR-011): esto es una vista.
+
+        **El nombre viaja al panel autorizado y jamas al log** (regla dura 21).
+        El canal es privado y su suscripcion la firma el servidor con el alcance
+        de quien pregunta.
+      additionalProperties: false
+      required: [entry, occurred_at]
+      properties:
+        entry:
+          $ref: '#/components/schemas/LivePresenceEntry'
+        occurred_at:
+          allOf:
+            - $ref: '#/components/schemas/UtcTimestamp'
+          description: |
+            Momento real del cambio (regla dura 9). En una entrada o una salida
+            es la marca del fichaje; en una correccion, el momento en que se
+            rectifico. Sirve para descartar un mensaje que llegue tarde y
+            reordenado detras de otro mas reciente de la misma persona.
