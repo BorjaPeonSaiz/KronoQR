@@ -138,7 +138,7 @@ Nada de esta tabla cuenta como evidencia hasta que el job correspondiente esté 
 
 | Elemento | Qué aporta | Práctica SAMM que mueve | Nivel al quedar en verde |
 |---|---|---|---|
-| Semgrep con reglas comunitarias (PHP, OWASP Top 10) además de `.semgrep/` | SAST real sobre inyección, deserialización, SSRF, criptografía débil | Pruebas de seguridad (A) | 1 → 2 |
+| Semgrep con reglas comunitarias (PHP, OWASP Top 10) además de `.semgrep/`, **bloqueante desde el 29-08-2026** (9 hallazgos triados: 4 corregidos, 5 justificados con `# nosemgrep`) | SAST real sobre inyección, deserialización, SSRF, criptografía débil | Pruebas de seguridad (A) | 1 → 2 |
 | Trivy sobre imágenes y sistema de ficheros | Vulnerabilidades del sistema operativo base y de dependencias empaquetadas | Build seguro (B); Gestión del entorno (parcheo) | 1 → 2; base para 3 |
 | Dependabot | Actualización automática de dependencias y acciones de CI, con PR | Build seguro (B); Gestión de defectos | 1 → 2 |
 | gitleaks | Secretos en el historial y en cada PR; complementa las pruebas RS-08 de `QualityGatesTest.php` | Despliegue seguro (B, gestión de secretos) | 1 → 2 |

@@ -163,6 +163,7 @@ server {
   }
 
   location / {
+    # nosemgrep: generic.nginx.security.request-host-used.request-host-used -- redirige al MISMO host que el cliente ya uso en claro (el `server` es catch-all, no hay nombre configurado); un Host manipulado solo puede redirigir a quien lo manipulo
     return 301 https://$host$request_uri;
   }
 }

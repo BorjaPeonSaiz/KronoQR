@@ -38,6 +38,12 @@ updates:
       interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 10
+    # Semgrep `dependabot-missing-cooldown`: sin enfriamiento, Dependabot
+    # propone una version el mismo dia que se publica, que es justo la ventana
+    # en la que un paquete comprometido todavia no ha sido retirado (cadena de
+    # suministro, T1195.002). Siete dias dejan que la comunidad lo vea antes.
+    cooldown:
+      default-days: 7
     labels: ["dependencies", "backend"]
     groups:
       composer-menores-y-parches:
@@ -49,6 +55,12 @@ updates:
       interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 10
+    # Semgrep `dependabot-missing-cooldown`: sin enfriamiento, Dependabot
+    # propone una version el mismo dia que se publica, que es justo la ventana
+    # en la que un paquete comprometido todavia no ha sido retirado (cadena de
+    # suministro, T1195.002). Siete dias dejan que la comunidad lo vea antes.
+    cooldown:
+      default-days: 7
     labels: ["dependencies", "frontend"]
     groups:
       npm-menores-y-parches:
@@ -60,6 +72,12 @@ updates:
       interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 10
+    # Semgrep `dependabot-missing-cooldown`: sin enfriamiento, Dependabot
+    # propone una version el mismo dia que se publica, que es justo la ventana
+    # en la que un paquete comprometido todavia no ha sido retirado (cadena de
+    # suministro, T1195.002). Siete dias dejan que la comunidad lo vea antes.
+    cooldown:
+      default-days: 7
     labels: ["dependencies", "ci"]
     groups:
       actions-menores-y-parches:
@@ -76,6 +94,12 @@ updates:
       interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 10
+    # Semgrep `dependabot-missing-cooldown`: sin enfriamiento, Dependabot
+    # propone una version el mismo dia que se publica, que es justo la ventana
+    # en la que un paquete comprometido todavia no ha sido retirado (cadena de
+    # suministro, T1195.002). Siete dias dejan que la comunidad lo vea antes.
+    cooldown:
+      default-days: 7
     labels: ["dependencies", "docker"]
     groups:
       docker-menores-y-parches:

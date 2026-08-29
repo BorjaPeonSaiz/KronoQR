@@ -47,6 +47,13 @@
             La base se crea sola si falta (Tests\Support\Database\TestDatabase).
         -->
         <env name="DB_DATABASE" value="fichaje_test" force="true"/>
+        <!-- Las metricas textfile (cadena de auditoria, credenciales, copias)
+             van a un directorio de la propia aplicacion, nunca al del colector
+             de node-exporter: en el runner de la CI ese directorio no es
+             escribible y tres pruebas de la Fase 1 morian con «mkdir(): Permission
+             denied» mientras en el contenedor local pasaban. force: ningun .env
+             puede devolverlas al directorio del producto. -->
+        <env name="METRICS_TEXTFILE_PATH" value="storage/framework/testing/metrics" force="true"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>
         <env name="CACHE_STORE" value="array"/>

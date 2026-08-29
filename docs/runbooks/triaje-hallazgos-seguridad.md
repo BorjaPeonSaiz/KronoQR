@@ -2,8 +2,11 @@
 
 **No es un incidente.** Este runbook no responde a una alerta de producción:
 responde a un hallazgo del job `security` de `ci.yml` — Semgrep comunitario,
-`trivy fs` o `trivy image` — que hoy corre en **modo informe** porque, al
-añadirlo, no pasaba limpio (doc 02 §9.2). Sirve para dos cosas: decidir qué
+`trivy fs` o `trivy image`. Los dos Trivy corren hoy en **modo informe** porque,
+al añadirlos, no pasaban limpios (doc 02 §9.2); Semgrep comunitario **ya es
+bloqueante** desde el 29 de agosto de 2026, tras triar sus 9 hallazgos (4
+`dependabot-missing-cooldown` corregidos con `cooldown` de 7 días; 5 de Nginx
+justificados con `# nosemgrep` y motivo). Sirve para dos cosas: decidir qué
 hacer con un hallazgo concreto, y saber cuándo un control entero deja de ser
 informe y pasa a bloquear.
 
@@ -12,12 +15,14 @@ informe y pasa a bloquear.
 real y que la herramienta ni siquiera hubiera podido ejecutarse. Hoy cada paso
 en modo informe fuerza a la herramienta a devolver 0 cuando el único motivo de
 un código distinto de cero serían los HALLAZGOS (`--exit-code 0` en Trivy;
-en Semgrep se interpreta el código de salida — 1 son hallazgos, no bloquea;
-2+ significa que la herramienta no pudo terminar, y **eso sí** rompe el paso).
+en Semgrep, el objetivo del Makefile absorbe el 1 «hay hallazgos» —`make` lo
+convertiría en 2, indistinguible de un fallo real— y la CI cuenta los
+hallazgos en el JSON; 2+ significa que la herramienta no pudo terminar, y
+**eso sí** rompe el paso).
 El recuento por severidad se imprime en el resumen de la ejecución (`jq` sobre
 la salida JSON). Y el modo informe **caduca**: el último paso del job
 `security` compara la fecha de hoy con una lista de plazos (`PLAZOS` en
-`ci.yml`) y **falla el job** si alguno de los tres controles sigue en informe
+`ci.yml`) y **falla el job** si alguno de los controles en informe sigue así
 después de su fecha — no es una nota que alguien tenga que acordarse de leer.
 
 **Destinatario:** quien introduce el cambio, con revisión de

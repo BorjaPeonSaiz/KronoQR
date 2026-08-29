@@ -601,17 +601,19 @@ jobs:
         # instante, y las supresiones de PHPStan sin motivo escrito.
         run: make sast
 
-      - name: Semgrep comunitario — PHP/JS/TS/OWASP (informe, no bloquea con hallazgos)
+      - name: Semgrep comunitario — PHP/JS/TS/OWASP (0 hallazgos, bloqueante)
         id: sast_community
-        # INFORME hasta la fecha de caducidad del ultimo paso de este job:
-        # verificado en local con 5 hallazgos WARNING (detalle en el objetivo
-        # del Makefile). Pendiente triar cada uno
-        # (docs/runbooks/triaje-hallazgos-seguridad.md) y pasarlo a
-        # bloqueante, o justificar cada uno con `# nosemgrep`.
+        # BLOQUEANTE desde el 29-08-2026: los 9 hallazgos que tenia estan
+        # triados (detalle en el objetivo del Makefile) y el umbral es 0. Un
+        # hallazgo nuevo se corrige o se justifica con `# nosemgrep` y motivo
+        # (docs/runbooks/triaje-hallazgos-seguridad.md); nunca se renueva un
+        # plazo.
         #
         # Semgrep con `--error`: 0 sin hallazgos, 1 CON hallazgos, 2+ si la
         # herramienta no pudo terminar (config invalida, fallo al resolver
-        # `p/php` y compania, etc.). El `||` de la primera linea CAPTURA el
+        # `p/php` y compania, etc.). El objetivo del Makefile absorbe el 1 (make
+        # lo convertiria en 2, indistinguible de un fallo real) y silencia el eco
+        # de la orden, que ensuciaba el JSON: aqui solo llega 0 o 2+. El `||` de la primera linea CAPTURA el
         # codigo sin que `-e` (activado por defecto en los pasos `run:` de
         # GitHub Actions) aborte el script -- si abortara ahi, jamas
         # llegariamos a distinguir 1 (informe) de 2+ (fallo real), que es
@@ -622,8 +624,9 @@ jobs:
           status=${status:-0}
           jq -r '(.results // []) | group_by(.extra.severity) | map("\(.[0].extra.severity): \(length)") | .[]' \
             sast-community.json | tee sast-community.log
+          total=$(jq -r '(.results // []) | length' sast-community.json 2>/dev/null || echo 0)
           {
-            echo "### Semgrep comunitario — hallazgos por severidad (informe, no bloquea)"
+            echo "### Semgrep comunitario — hallazgos por severidad (umbral: 0)"
             echo ""
             if [ -s sast-community.log ]; then
               echo '```'
@@ -633,9 +636,14 @@ jobs:
               echo "0 hallazgos."
             fi
           } >>"$GITHUB_STEP_SUMMARY"
-          [ "$status" -eq 0 ] || [ "$status" -eq 1 ] || {
+          [ "$status" -eq 0 ] || {
             echo "::error title=Semgrep comunitario ha fallado::codigo de salida ${status} (2+ significa que la herramienta no pudo terminar, no son hallazgos)."
             exit "$status"
+          }
+          [ "$total" -eq 0 ] || {
+            jq -r '.results[] | "::error file=\(.path),line=\(.start.line),title=Semgrep \(.extra.severity)::\(.check_id)"' sast-community.json
+            echo "::error title=Semgrep comunitario::${total} hallazgo(s). Corrige o justifica cada uno con '# nosemgrep' y su motivo (docs/runbooks/triaje-hallazgos-seguridad.md)."
+            exit 1
           }
 
       - name: gitleaks sobre el historico completo (0 hallazgos, bloqueante)
@@ -771,7 +779,6 @@ jobs:
           # meses de margen igual que la excepcion de CVE-2025-68121 en
           # infra/docker/.trivyignore.yaml).
           PLAZOS: |
-            Semgrep comunitario;2026-11-30
             Trivy fs;2026-11-30
             Trivy image;2026-11-30
         run: |

@@ -218,7 +218,7 @@ help: ## Muestra esta ayuda
 	@echo   make sh-lint          Solo ShellCheck y shfmt   (etapa 1 de la CI)
 	@echo   make api-lint         Contrato OpenAPI 3.1      (etapa 1 de la CI)
 	@echo   make sast             Semgrep: reglas propias de .semgrep (bloqueante)
-	@echo   make sast-community   Semgrep: reglas comunitarias PHP/JS/TS/OWASP (informe)
+	@echo   make sast-community   Semgrep: reglas comunitarias PHP/JS/TS/OWASP (bloqueante)
 	@echo   make trivy-fs         Trivy: dependencias, Dockerfiles y secretos del repo (informe)
 	@echo   make trivy-image      Trivy: postgres:ci y app:ci ya construidas (informe)
 	@echo   make secrets-scan     gitleaks sobre el historico completo (bloqueante)
@@ -501,15 +501,14 @@ sast: ## Semgrep sobre las reglas de .semgrep (umbral: 0 hallazgos ERROR)
 # ruido sin anadir cobertura -- gitleaks queda como la autoridad de secretos
 # porque ademas recorre el HISTORICO, que Semgrep no toca.
 #
-# Estado verificado en este repositorio (ver la entrega de la tarea que anadio
-# este objetivo): 5 hallazgos WARNING, los cinco en infra/docker/nginx/, del
-# paquete `p/owasp-top-ten`. Por eso es INFORMATIVO por ahora: la CI interpreta
-# el codigo de salida en vez de esconder el paso detras de
-# `continue-on-error: true` (1 = hay hallazgos, no bloquea; 2+ = Semgrep no
-# pudo terminar, eso SI rompe el job — IMPORTANTE 5 de la auditoria) y un TODO
-# fechado para revisarlo y, si procede, pasarlo a bloqueante o justificar cada
-# uno con `# nosemgrep` (ver el procedimiento de triaje en
-# docs/runbooks/triaje-hallazgos-seguridad.md).
+# Triado el 29-08-2026 (docs/runbooks/triaje-hallazgos-seguridad.md): los 9
+# hallazgos que daba —4 `dependabot-missing-cooldown` (corregidos con un
+# enfriamiento de 7 dias) y 5 en infra/docker/nginx (3 `dynamic-proxy-host`
+# de las rutas de desarrollo y 2 `request-host-used`, justificados uno a uno
+# con `# nosemgrep` y su motivo)— quedan a 0, y el paso es BLOQUEANTE en la CI:
+# un hallazgo nuevo rompe el job. La CI distingue «hay hallazgos» (el JSON los
+# trae) de «Semgrep no pudo terminar» (codigo 2+) — IMPORTANTE 5 de la
+# auditoria.
 #
 # --metrics=off: no se telemetria a Semgrep App lo que este repositorio analiza.
 # Excluye lo que .semgrep/kronoqr-php.yaml ya excluye de facto por su `paths`,
@@ -518,12 +517,17 @@ sast: ## Semgrep sobre las reglas de .semgrep (umbral: 0 hallazgos ERROR)
 # SEMGREP_FORMAT=json cambia la salida a JSON (para que la CI cuente hallazgos
 # por severidad con `jq` sin volver a escanear); vacio por defecto, que es la
 # salida legible que quiere quien lo ejecuta en su maquina.
-sast-community: ## Semgrep: reglas comunitarias PHP/JS/TS/OWASP (informe, ver docs/runbooks/triaje-hallazgos-seguridad.md)
-	$(SEMGREP) \
+# La receta va con `@` y traduce el codigo de salida: Semgrep devuelve 1 CON
+# hallazgos y make convertiria ese 1 en un 2 --el mismo codigo con el que
+# Semgrep dice "no pude terminar"--, y ademas haria eco de la orden al principio
+# del JSON que la CI parsea con `jq`. Asi, 0 = hallazgos o no (los cuenta el
+# JSON), 2+ = la herramienta fallo, que es lo unico que rompe el job.
+sast-community: ## Semgrep: reglas comunitarias PHP/JS/TS/OWASP (umbral: 0 hallazgos; ver docs/runbooks/triaje-hallazgos-seguridad.md)
+	@$(SEMGREP) \
 	  --config p/php --config p/owasp-top-ten --config p/javascript --config p/typescript \
 	  --error --metrics=off --quiet $(if $(filter json,$(SEMGREP_FORMAT)),--json,) \
 	  --exclude node_modules --exclude vendor --exclude dist --exclude storage \
-	  --exclude 'tests/fixtures' --exclude '*.fixture.*'
+	  --exclude 'tests/fixtures' --exclude '*.fixture.*'; code=$$?; [ $$code -le 1 ] || { echo "[make] Semgrep no pudo terminar (codigo $$code)." >&2; exit $$code; }
 
 # Las imagenes que la suite de pruebas y de seguridad necesitan CONTRA
 # SOFTWARE REAL: PostgreSQL del producto (roles, extensiones, archivado de
