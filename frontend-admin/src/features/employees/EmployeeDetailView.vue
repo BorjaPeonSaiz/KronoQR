@@ -21,7 +21,7 @@ import { useSessionStore } from '@/features/auth/session.store'
 import CredentialRowActions from '@/features/credentials/CredentialRowActions.vue'
 import { STATUS_PILL_CLASS as CREDENTIAL_STATUS_PILL_CLASS } from '@/features/credentials/credentialStatusPill'
 import { fetchCredentialStatusFor } from '@/features/credentials/credentials.api'
-import { listDepartments, listSites } from '@/shared/api/organisation.api'
+import { getSite, listDepartments } from '@/shared/api/organisation.api'
 import type { Employee, IssuedPin, UpdateEmployeeRequest } from '@/shared/api/types'
 import type { Change } from '@/shared/ui/change'
 import ChangePreview from '@/shared/ui/ChangePreview.vue'
@@ -57,22 +57,20 @@ const {
   queryFn: () => getEmployee(props.uuid),
 })
 
-const { data: sites } = useQuery({ queryKey: ['sites'], queryFn: listSites })
+// El centro de la instalacion (ADR-040): de el sale la zona horaria con la que
+// se presentan los instantes de esta ficha.
+const { data: site } = useQuery({ queryKey: ['site'], queryFn: getSite })
 const { data: departments } = useQuery({
   queryKey: ['departments', 'all'],
   queryFn: () => listDepartments(),
 })
 
-const site = computed(
-  () =>
-    (sites.value?.data ?? []).find((candidate) => candidate.id === employee.value?.site_id) ?? null,
-)
 const timezone = computed(() => site.value?.timezone ?? 'UTC')
 
 // --- Tarjeta QR (RF-QR-04, RF-QR-06, RF-QR-08) --------------------------------
 //
 // La misma fila que veria RRHH en el tablero de credenciales, pero de esta
-// persona sola: se pide con `employee_uuid` (y `site_id`) en vez de traer el
+// persona sola: se pide con `employee_uuid` en vez de traer el
 // tablero entero y filtrar en cliente. Leer el tablero audita como divulgado
 // TODO lo que devuelve; leer la ficha de una persona, como esta, no deja
 // asiento (ADR-037, condicion 3): se divulga lo minimo y se audita lo justo.
@@ -81,8 +79,8 @@ const timezone = computed(() => site.value?.timezone ?? 'UTC')
 // en suspension, `data` viene vacio. Pedirla igualmente dejaria a la ficha
 // esperando para siempre una fila que nunca llega, asi que aqui no se pide
 // —la peticion queda deshabilitada— y la plantilla explica por que, con un
-// enlace al tablero de credenciales del centro, que es donde de verdad se
-// gestiona la tarjeta de esa persona.
+// enlace al tablero de credenciales, que es donde de verdad se gestiona la
+// tarjeta de esa persona.
 const employeeIsActive = computed(() => employee.value?.status === 'active')
 
 const {
@@ -98,7 +96,7 @@ const {
       return Promise.resolve(null)
     }
 
-    return fetchCredentialStatusFor(props.uuid, current.site_id)
+    return fetchCredentialStatusFor(props.uuid)
   },
   enabled: employeeIsActive,
 })
@@ -121,14 +119,6 @@ function departmentName(id: number | null): string {
   return (departments.value?.data ?? []).find((item) => item.id === id)?.name ?? '—'
 }
 
-function siteName(id: number | undefined): string {
-  if (id === undefined) {
-    return '—'
-  }
-
-  return (sites.value?.data ?? []).find((candidate) => candidate.id === id)?.name ?? '—'
-}
-
 const fullName = computed(() =>
   employee.value === undefined ? '' : `${employee.value.first_name} ${employee.value.last_name}`,
 )
@@ -144,22 +134,15 @@ const form = reactive({
   firstName: '',
   lastName: '',
   email: '',
-  siteId: 0,
   departmentId: null as number | null,
   status: 'active' as 'active' | 'suspended',
   locale: 'es',
 })
 
-/** Solo los departamentos del centro elegido: uno de otro hotel es un dato imposible. */
-const departmentsOfSite = computed(() =>
-  (departments.value?.data ?? []).filter((item) => item.site_id === form.siteId),
-)
-
 function loadForm(source: Employee): void {
   form.firstName = source.first_name
   form.lastName = source.last_name
   form.email = source.email ?? ''
-  form.siteId = source.site_id
   form.departmentId = source.department_id
   form.status = source.status === 'suspended' ? 'suspended' : 'active'
   form.locale = source.locale
@@ -224,15 +207,6 @@ const pendingUpdate = computed<PendingUpdate>(() => {
       label: t('employees.fields.email'),
       from: current.email ?? t('common.empty'),
       to: email ?? t('common.empty'),
-    })
-  }
-
-  if (form.siteId !== current.site_id) {
-    body.site_id = form.siteId
-    changes.push({
-      label: t('employees.fields.site'),
-      from: siteName(current.site_id),
-      to: siteName(form.siteId),
     })
   }
 
@@ -477,10 +451,6 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
 
         <dl v-if="!editing" class="mt-4 grid gap-3 sm:grid-cols-2">
           <div>
-            <dt class="font-medium text-kq-text-muted">{{ t('employees.fields.site') }}</dt>
-            <dd>{{ siteName(employee.site_id) }}</dd>
-          </div>
-          <div>
             <dt class="font-medium text-kq-text-muted">{{ t('employees.fields.department') }}</dt>
             <dd>{{ departmentName(employee.department_id) }}</dd>
           </div>
@@ -540,21 +510,10 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
               :aria-describedby="field.describedBy"
             />
           </FormField>
-          <FormField v-slot="field" :label="t('employees.fields.site')">
-            <select :id="field.id" v-model.number="form.siteId" :class="inputClass">
-              <option
-                v-for="candidate of sites?.data ?? []"
-                :key="candidate.id"
-                :value="candidate.id"
-              >
-                {{ candidate.name }}
-              </option>
-            </select>
-          </FormField>
           <FormField v-slot="field" :label="t('employees.fields.department')">
             <select :id="field.id" v-model="form.departmentId" :class="inputClass">
               <option :value="null">{{ t('employees.fields.departmentNone') }}</option>
-              <option v-for="item of departmentsOfSite" :key="item.id" :value="item.id">
+              <option v-for="item of departments?.data ?? []" :key="item.id" :value="item.id">
                 {{ item.name }}
               </option>
             </select>
@@ -661,10 +620,7 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
           :title="t('employees.detail.credentialInactive.title')"
           :description="t('employees.detail.credentialInactive.description')"
         >
-          <RouterLink
-            :to="{ name: 'credentials', query: { site: employee.site_id } }"
-            class="text-kq-primary-strong underline"
-          >
+          <RouterLink :to="{ name: 'credentials' }" class="text-kq-primary-strong underline">
             {{ t('employees.detail.credentialInactive.link') }}
           </RouterLink>
         </EmptyState>
@@ -681,10 +637,6 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
 
           <div v-else class="mt-4 rounded-kq border border-kq-border bg-kq-surface-raised p-4">
             <dl class="grid gap-3 sm:grid-cols-2">
-              <div>
-                <dt class="font-medium text-kq-text-muted">{{ t('credentials.table.site') }}</dt>
-                <dd>{{ credentialRow.site_name }}</dd>
-              </div>
               <div>
                 <dt class="font-medium text-kq-text-muted">
                   {{ t('credentials.table.department') }}

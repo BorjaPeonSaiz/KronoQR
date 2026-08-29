@@ -46,7 +46,7 @@
 - { id: RF-AT-08,  fase: 1, titulo: "Un turno puede cruzar la medianoche sin ser dividido artificialmente" }
 - { id: RF-AT-09,  fase: 1, titulo: "El sistema registra siempre dos marcas de tiempo: occurred_at (momento real del escaneo, incluso offline) y recorded_at (momento de recepción en se..." }
 - { id: RF-AT-11,  fase: 1, titulo: "Entrada alternativa por PIN de 6 dígitos cuando el empleado no puede presentar su tarjeta" }
-- { id: RF-GP-01,  fase: 1, titulo: "CRUD de empleados: datos identificativos mínimos, departamento, centro, fecha de alta y baja" }
+- { id: RF-GP-01,  fase: 1, titulo: "CRUD de empleados: datos identificativos mínimos, departamento, fecha de alta y baja; el centro es el de la instalación (ADR-040)" }
 - { id: RF-GP-03,  fase: 1, titulo: "Baja de empleado: desactivación lógica, nunca borrado" }
 - { id: RF-ID-01,  fase: 1, titulo: "Autenticación de usuarios de gestión con contraseña, política de robustez, bloqueo por intentos y 2FA (TOTP) obligatorio para roles con acceso a da..." }
 - { id: RF-ID-02,  fase: 1, titulo: "Modelo RBAC con roles: admin, rrhh, responsable_departamento, auditor, empleado, kiosk" }
@@ -99,14 +99,14 @@
 
 # --- Fase 2 -------------------------------------------- (45 requisitos)
 - { id: RF-GP-02,  fase: 2, titulo: "Registro de contrato: horas semanales y anuales contratadas, tipo de jornada, vigencia" }
-- { id: RF-ID-03,  fase: 2, titulo: "Autorización a nivel de recurso: un responsable solo accede a los empleados de su departamento y centro" }
+- { id: RF-ID-03,  fase: 2, titulo: "Autorización a nivel de recurso: un responsable solo accede a los empleados de su departamento" }
 - { id: RF-IN-01,  fase: 2, titulo: "Informe de horas por empleado con granularidad diaria, semanal, mensual y rango libre" }
-- { id: RF-IN-02,  fase: 2, titulo: "Informe agregado por departamento y centro" }
+- { id: RF-IN-02,  fase: 2, titulo: "Informe agregado por departamento" }
 - { id: RF-IN-03,  fase: 2, titulo: "Comparativa horas trabajadas frente a horas contratadas, con desviación y exceso de jornada" }
 - { id: RF-IN-04,  fase: 2, titulo: "Exportación a CSV, XLSX y PDF. Los PDF incluyen sello temporal, identificación del emisor y hash del contenido" }
 - { id: RF-IN-05,  fase: 1, titulo: "Exportación normalizada para Inspección de Trabajo: registro diario por trabajador y periodo, en formato tabular legible, con las correcciones y su..." }
 - { id: RF-PA-01,  fase: 2, titulo: "Vista en tiempo real de empleados actualmente fichados: nombre, departamento, hora de entrada, tiempo transcurrido, quiosco de origen" }
-- { id: RF-PA-02,  fase: 2, titulo: "Filtrado por centro, departamento y estado" }
+- { id: RF-PA-02,  fase: 2, titulo: "Filtrado por departamento y estado" }
 - { id: RF-PA-03,  fase: 1, titulo: "Detalle de jornada por empleado y día: todos los tramos, totales, incidencias y correcciones" }
 - { id: RF-PA-04,  fase: 1, titulo: "Corrección manual de un fichaje (crear, modificar hora, cerrar turno abierto, anular) con motivo obligatorio de un catálogo más texto libre" }
 - { id: RF-PA-05,  fase: 2, titulo: "Bandeja de incidencias pendientes con flujo de resolución, asignada al responsable del departamento" }
@@ -169,8 +169,8 @@
 - { id: RF-GP-05,  fase: 5, titulo: "Importación masiva inicial de plantilla desde CSV o XLSX, con validación previa y modo simulación" }
 - { id: RF-PD-01,  fase: 5, titulo: "Cero configuración en código" }
 - { id: RF-PD-02,  fase: 5, titulo: "Instalación autónoma: el personal de IT del cliente despliega el sistema siguiendo una guía, sin intervención del fabricante" }
-- { id: RF-PD-03,  fase: 5, titulo: "Asistente de puesta en marcha: datos de la organización, centros, departamentos, zona horaria, perfil de convenio, primer administrador y vinculaci..." }
-- { id: RF-PD-04,  fase: 5, titulo: "Licencia con clave firmada que codifica cliente, plan, límites (centros, empleados, quioscos) y vigencia del soporte" }
+- { id: RF-PD-03,  fase: 5, titulo: "Asistente de puesta en marcha: datos de la organización, el centro y su zona horaria, departamentos, perfil de convenio, primer administrador y vinculaci..." }
+- { id: RF-PD-04,  fase: 5, titulo: "Licencia con clave firmada que codifica cliente, plan, límites (empleados, quioscos) y vigencia del soporte; una licencia es un centro (ADR-040)" }
 - { id: RF-PD-05,  fase: 5, titulo: "Degradación honesta al expirar la licencia" }
 - { id: RF-PD-06,  fase: 5, titulo: "Vinculación de quiosco por código de emparejamiento mostrado en la tablet e introducido en el panel" }
 - { id: RF-PD-07,  fase: 5, titulo: "Perfiles de cumplimiento configurables: jurisdicción, años de retención, descanso mínimo entre jornadas, jornada máxima diaria y semanal, pausas ob..." }

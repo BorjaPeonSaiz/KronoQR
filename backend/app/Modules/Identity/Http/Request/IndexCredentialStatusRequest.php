@@ -4,48 +4,33 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Http\Request;
 
+use App\Http\Requests\RejectsUnknownInput;
 use App\Modules\Identity\Application\Query\CredentialStatusQuery;
 use App\Modules\Identity\Domain\Model\Credential;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
 
 /**
- * `GET /api/v1/credentials/status` — el panel de RF-QR-08.
+ * `GET /api/v1/credentials/status` (RF-QR-08).
  *
- * **Sin `RejectsUnknownInput`.** Es el unico `FormRequest` de credenciales que no
- * lo usa, y a proposito: en una peticion `GET` los parametros desconocidos llegan
- * por la cadena de consulta, donde los añaden proxies, analiticas y el propio
- * navegador (`utm_*`, `_`, `fbclid`). Rechazarlos convertiria un enlace copiado y
- * pegado en un `422`. Lo que si se valida es que los que se reconocen tengan la
- * forma correcta.
+ * Sin `site_id` (ADR-040): el tablero es el de la instalacion, y `employee_uuid`
+ * lo acota a una persona. `RejectsUnknownInput` hace que un `site_id` heredado
+ * de un enlace antiguo falle en voz alta en vez de devolver el tablero entero
+ * como si hubiera acotado algo.
  */
 final class IndexCredentialStatusRequest extends FormRequest
 {
+    use RejectsUnknownInput;
+
     public function authorize(): bool
     {
         return Gate::allows('viewStatus', Credential::class);
     }
 
     /**
-     * Normaliza `pending` antes de validarlo.
-     *
-     * **Por que hace falta.** El contrato declara `pending` como
-     * `schema: {type: boolean}` en la cadena de consulta, y la serializacion
-     * estandar de OpenAPI para eso es el literal `pending=true`. La regla
-     * `boolean` de Laravel acepta `true`, `false`, `1`, `0`, `"1"` y `"0"`, pero
-     * **no** las cadenas `"true"` ni `"false"`, asi que el cliente generado del
-     * contrato recibia un `422` por enviar exactamente lo que el contrato pide.
-     *
-     * Es el unico booleano de consulta de la API: `reissue` de
-     * `POST /credentials` viaja en un cuerpo JSON, donde llega ya como booleano
-     * de verdad. Por eso esto vive aqui y no en un trait de `Shared`: un trait
-     * con un solo usuario es una abstraccion adivinada.
-     *
-     * **Lo que no hace: tragarse la basura.** `FILTER_NULL_ON_FAILURE` devuelve
-     * `null` ante cualquier cosa que no sea un booleano reconocible, y entonces
-     * el valor original se deja intacto para que la regla `boolean` siga
-     * respondiendo `422`. Un filtro mal escrito tiene que doler, no colarse como
-     * `false` y devolver la lista entera en silencio.
+     * El contrato declara `pending` como booleano en la cadena de consulta y la
+     * serializacion estandar es `pending=true`; la regla `boolean` de Laravel
+     * no acepta esa cadena, asi que se normaliza antes de validar.
      */
     protected function prepareForValidation(): void
     {
@@ -70,25 +55,22 @@ final class IndexCredentialStatusRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'site_id' => ['sometimes', 'integer', 'min:1', 'exists:sites,id'],
             'pending' => ['sometimes', 'boolean'],
-            // Solo la forma, **sin `exists`**: a diferencia de `site_id`, un
-            // UUID que no corresponde a nadie no es un error del cliente sino
-            // una consulta que no encuentra a nadie, y el contrato lo resuelve
-            // con `200` y `data: []`. Comprobarlo contra la tabla ademas
-            // convertiria este parametro en un oraculo de existencia de
-            // empleados para cualquiera que pueda leer el panel.
+            // Solo la forma, **sin `exists`**: un UUID que no corresponde a
+            // nadie no es un error del cliente sino una consulta que no
+            // encuentra a nadie, y el contrato lo resuelve con `200` y
+            // `data: []`. Comprobarlo contra la tabla ademas convertiria este
+            // parametro en un oraculo de existencia de empleados para
+            // cualquiera que pueda leer el panel.
             'employee_uuid' => ['sometimes', 'uuid'],
         ];
     }
 
     public function toQuery(): CredentialStatusQuery
     {
-        $siteId = $this->input('site_id');
         $employeeUuid = $this->input('employee_uuid');
 
         return new CredentialStatusQuery(
-            siteId: \is_numeric($siteId) ? (int) $siteId : null,
             pendingOnly: $this->boolean('pending'),
             employeeUuid: \is_string($employeeUuid) ? $employeeUuid : null,
         );

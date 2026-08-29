@@ -10,8 +10,9 @@ use App\Modules\Identity\Domain\Exception\IdentityDomainException;
 use Illuminate\Console\Command;
 
 /**
- * `php artisan credentials:print-batch --site= --pending` — **una sola hoja A4**
- * con todas las tarjetas pendientes de un centro (Anexo C del doc 02, RF-QR-04).
+ * `php artisan credentials:print-batch --pending` — **una sola hoja A4** con
+ * todas las tarjetas pendientes de la instalacion (Anexo C del doc 02, RF-QR-04,
+ * ADR-040).
  *
  * El doc 02 §5.5 dice para que sirve: *«La hoja A4 con varias tarjetas por pagina
  * es lo que hace viable dar de alta a 40 personas de temporada en una tarde.»*
@@ -40,11 +41,10 @@ use Illuminate\Console\Command;
 final class PrintCredentialBatchCommand extends Command
 {
     protected $signature = 'credentials:print-batch
-        {--site= : Identificador del centro. Sin el, toda la instalacion}
         {--pending : Imprime solo las pendientes. Es la unica seleccion posible y hay que declararla}
         {--out= : Ruta del fichero PDF que se va a escribir. Obligatoria}';
 
-    protected $description = 'Imprime en una hoja A4 todas las credenciales pendientes de un centro (RF-QR-04).';
+    protected $description = 'Imprime en una hoja A4 todas las credenciales pendientes de la instalacion (RF-QR-04).';
 
     public function handle(PrintBatchHandler $handler): int
     {
@@ -54,10 +54,8 @@ final class PrintCredentialBatchCommand extends Command
 
         $target = $this->option('out');
         $out = \is_string($target) ? trim($target) : '';
-        $siteId = $this->siteId();
-
         try {
-            $printed = $handler->handle(new PrintBatch(siteId: $siteId));
+            $printed = $handler->handle(new PrintBatch);
         } catch (IdentityDomainException $exception) {
             $this->error($exception->getMessage());
             $this->line('El lote es todo o nada: no se ha impreso ninguna tarjeta. Vuelve a ejecutarlo.');
@@ -69,7 +67,7 @@ final class PrintCredentialBatchCommand extends Command
             // No es un error: es la idempotencia del lote. Un codigo de salida
             // distinto de cero haria fallar el guion de alguien que lo ejecuta
             // por costumbre cada mañana.
-            $this->info('No hay ninguna credencial pendiente de imprimir'.($siteId === null ? '.' : ' en el centro '.$siteId.'.'));
+            $this->info('No hay ninguna credencial pendiente de imprimir.');
 
             return self::SUCCESS;
         }
@@ -113,12 +111,6 @@ final class PrintCredentialBatchCommand extends Command
             return $this->reject('Hace falta --out=/ruta/credenciales.pdf: este comando no elige donde dejar un PDF de tarjetas.');
         }
 
-        $site = $this->option('site');
-
-        if ($site !== null && (int) $site < 1) {
-            return $this->reject('--site tiene que ser el identificador de un centro.');
-        }
-
         return null;
     }
 
@@ -127,12 +119,5 @@ final class PrintCredentialBatchCommand extends Command
         $this->error($message);
 
         return $message;
-    }
-
-    private function siteId(): ?int
-    {
-        $site = $this->option('site');
-
-        return \is_string($site) && trim($site) !== '' ? (int) $site : null;
     }
 }

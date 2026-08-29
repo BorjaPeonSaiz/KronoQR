@@ -15,8 +15,6 @@ function row(overrides: Partial<CredentialStatusRow> = {}): CredentialStatusRow 
     employee_uuid: crypto.randomUUID(),
     employee_code: 'E7QK2MXPR',
     full_name: 'Lucia Martinez Prieto',
-    site_id: 1,
-    site_name: 'Hotel Marina',
     department_name: 'Recepcion',
     status: 'pending_print',
     credential: null,

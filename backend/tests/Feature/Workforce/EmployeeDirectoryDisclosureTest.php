@@ -77,7 +77,7 @@ it('cuenta lo que sale en la pagina, no lo que cumple el filtro', function (): v
     $contexto = directoryContext();
 
     Api::as($contexto['token'])
-        ->get('/api/v1/employees', ['per_page' => 2, 'site_id' => $contexto['site']])
+        ->get('/api/v1/employees', ['per_page' => 2])
         ->assertValidResponse(200);
 
     $asiento = DB::table('audit_log')->orderBy('id')->first();
@@ -89,7 +89,6 @@ it('cuenta lo que sale en la pagina, no lo que cumple el filtro', function (): v
 
     expect($payload)->toMatchArray([
         'record_count' => 2,
-        'site_id' => $contexto['site'],
         'per_page' => 2,
         'page' => 1,
     ])

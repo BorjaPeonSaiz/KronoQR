@@ -25,9 +25,9 @@ interface DepartmentRepository
     public function findById(int $id): ?Department;
 
     /**
-     * Departamentos del centro indicado, o todos si no se filtra.
+     * Los departamentos de la instalacion (ADR-040).
      *
      * @return list<Department>
      */
-    public function all(?int $siteId = null): array;
+    public function all(): array;
 }

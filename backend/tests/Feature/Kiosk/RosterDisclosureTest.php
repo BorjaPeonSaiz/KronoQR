@@ -99,23 +99,6 @@ it('registra el alcance del padron y jamas los nombres ni los hashes que reparte
         ->and($asiento->payload)->not->toContain(is_string($primerHash) ? $primerHash : '@');
 })->group('RS-05', 'RF-KI-03');
 
-it('sirve solo el padron del centro del quiosco, no el de otro hotel de la cadena', function (): void {
-    // El alcance del §7.3, comprobado sobre datos y no sobre la firma del metodo:
-    // la promesa es «solo el minimo necesario DEL CENTRO al que esta vinculado el
-    // dispositivo». El otro hotel existe y tiene tarjetas impresas; si el filtro
-    // se cayera, esta prueba veria tres entradas en vez de dos.
-    $hotel = hotelConDosTarjetas();
-
-    $otroHotel = WorkforceFixtures::site('Hotel de la otra punta');
-    $ajena = WorkforceFixtures::employee($otroHotel);
-    Credentials::issueFor(AttendanceFixtures::employeeIdOf($ajena));
-
-    Api::as($hotel['token'])
-        ->get('/api/v1/kiosk/roster')
-        ->assertStatus(200)
-        ->assertJsonCount(2, 'entries');
-})->group('RS-04', 'RF-KI-03');
-
 it('rechaza un site_id en la peticion en vez de ignorarlo en silencio', function (): void {
     // `RejectsUnknownInput`. Ignorarlo dejaria a quien lo envia convencido de
     // haber pedido el padron de otro centro y de haberlo recibido — cuando lo que

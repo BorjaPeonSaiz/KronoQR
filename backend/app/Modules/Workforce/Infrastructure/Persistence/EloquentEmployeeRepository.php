@@ -72,7 +72,6 @@ final readonly class EloquentEmployeeRepository implements EmployeeRepository
     }
 
     public function search(
-        ?int $siteId,
         ?int $departmentId,
         ?EmploymentStatus $status,
         ?string $search,
@@ -80,7 +79,7 @@ final readonly class EloquentEmployeeRepository implements EmployeeRepository
         int $limit,
         int $offset,
     ): array {
-        $rows = $this->filtered($siteId, $departmentId, $status, $search, $pinStatus)
+        $rows = $this->filtered($departmentId, $status, $search, $pinStatus)
             // Orden estable y previsible para quien pagina: dos personas con el
             // mismo apellido no pueden cambiar de sitio entre dos paginas.
             ->orderBy('last_name')
@@ -94,27 +93,24 @@ final readonly class EloquentEmployeeRepository implements EmployeeRepository
     }
 
     public function countMatching(
-        ?int $siteId,
         ?int $departmentId,
         ?EmploymentStatus $status,
         ?string $search,
         ?PinStatus $pinStatus,
     ): int {
-        return $this->filtered($siteId, $departmentId, $status, $search, $pinStatus)->count();
+        return $this->filtered($departmentId, $status, $search, $pinStatus)->count();
     }
 
     /**
      * @return Builder<Employee>
      */
     private function filtered(
-        ?int $siteId,
         ?int $departmentId,
         ?EmploymentStatus $status,
         ?string $search,
         ?PinStatus $pinStatus,
     ): Builder {
         $query = Employee::query()
-            ->when($siteId !== null, static fn (Builder $query): Builder => $query->where('site_id', $siteId))
             ->when($departmentId !== null, static fn (Builder $query): Builder => $query->where('department_id', $departmentId))
             ->when($status instanceof EmploymentStatus, static fn (Builder $query): Builder => $query->where('status', $status?->value))
             ->when($search !== null, fn (Builder $query): Builder => $this->matchingSearch($query, (string) $search));

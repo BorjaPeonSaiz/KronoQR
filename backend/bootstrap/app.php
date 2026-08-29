@@ -27,7 +27,7 @@ use App\Modules\Identity\Domain\Exception\EmployeeAlreadyHasCredential;
 use App\Modules\Identity\Domain\Exception\InvalidSigningKey;
 use App\Modules\Reporting\Application\Exception\EmployeeNotFound;
 use App\Modules\Reporting\Domain\Exception\InvalidDateRange;
-use App\Modules\Workforce\Domain\Exception\DepartmentNotInSite;
+use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
 use App\Modules\Workforce\Domain\Exception\EmployeeAlreadyTerminated;
 use App\Modules\Workforce\Domain\Exception\InvalidEmploymentPeriod;
 use App\Modules\Workforce\Domain\Exception\UnknownTimezone;
@@ -204,9 +204,10 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $exceptions->render(static fn (WorkforceConflict $exception): mixed => ProblemDetails::conflict($exception->getMessage()));
 
-        $exceptions->render(static fn (DepartmentNotInSite $exception): mixed => ProblemDetails::validationFailed([
-            'department_id' => ['El departamento no pertenece al centro indicado.'],
-        ]));
+        // Antes de la puesta en marcha no hay centro, y sin centro no hay alta
+        // posible (ADR-040). Es un estado de la instalacion, no un error del
+        // cliente: `409`.
+        $exceptions->render(static fn (InstallationSiteMissing $exception): mixed => ProblemDetails::conflict($exception->getMessage()));
 
         $exceptions->render(static fn (UnknownTimezone $exception): mixed => ProblemDetails::validationFailed([
             'timezone' => ['La zona horaria no existe. Usa un identificador IANA como Europe/Madrid.'],

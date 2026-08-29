@@ -117,8 +117,6 @@
       "searchPlaceholder": "Buscar por nombre o código…",
       "status": "Situación laboral",
       "statusAll": "Todas, incluidas las bajas",
-      "site": "Centro",
-      "siteAll": "Todos los centros",
       "department": "Departamento",
       "departmentAll": "Todos los departamentos",
       "pinStatus": "Estado del PIN",
@@ -138,7 +136,6 @@
       "caption": "Plantilla de la instalación, con su situación laboral y el estado de su PIN.",
       "name": "Nombre",
       "code": "Código de empleado",
-      "site": "Centro",
       "department": "Departamento",
       "status": "Situación",
       "pinStatus": "Estado del PIN"
@@ -147,9 +144,8 @@
       "label": "Paginación de la plantilla"
     },
     "fields": {
-      "site": "Centro",
       "department": "Departamento",
-      "departmentHint": "Solo departamentos del centro elegido.",
+      "departmentHint": "Opcional. La persona queda adscrita al centro de esta instalación.",
       "departmentNone": "Sin departamento",
       "firstName": "Nombre",
       "lastName": "Apellidos",
@@ -184,8 +180,8 @@
       },
       "credentialInactive": {
         "title": "La tarjeta no se gestiona desde esta ficha",
-        "description": "Esta persona no está de alta, así que el panel de credenciales no le asigna ninguna fila aquí. Su tarjeta se gestiona desde el tablero de credenciales del centro.",
-        "link": "Ir al tablero de credenciales del centro"
+        "description": "Esta persona no está de alta, así que el panel de credenciales no le asigna ninguna fila aquí. Su tarjeta se gestiona desde el tablero de credenciales.",
+        "link": "Ir al tablero de credenciales"
       }
     },
     "offboard": {
@@ -269,8 +265,6 @@
       "legend": "Filtros del panel de credenciales",
       "search": "Nombre o código de empleado",
       "searchPlaceholder": "Buscar por nombre o código…",
-      "site": "Centro",
-      "siteAll": "Todos los centros",
       "department": "Departamento",
       "departmentAll": "Todos los departamentos",
       "departmentNone": "Sin departamento",
@@ -279,6 +273,7 @@
       "pendingOnly": "Solo quien todavía no tiene la tarjeta en la mano"
     },
     "summary": {
+      "heading": "Plantilla de la instalación",
       "withoutDelivered": "Sin la tarjeta en la mano: {missing} de {total}.",
       "pendingPrint": "Pendientes de imprimir: {count}."
     },
@@ -292,9 +287,8 @@
       "label": "Paginación de credenciales"
     },
     "table": {
-      "caption": "Estado de la tarjeta de cada persona. Las horas se muestran en la zona horaria de su centro.",
+      "caption": "Estado de la tarjeta de cada persona. Las horas se muestran en la zona horaria del centro.",
       "employee": "Persona",
-      "site": "Centro",
       "department": "Departamento",
       "status": "Estado de la tarjeta",
       "printedAt": "Impresa",
@@ -357,8 +351,7 @@
     "batch": {
       "action": "Imprimir las pendientes",
       "heading": "Imprimir el lote de tarjetas pendientes",
-      "allSites": "toda la instalación",
-      "explanation": "Se imprimirán en una sola hoja A4 todas las credenciales pendientes de {scope}. Ahora mismo hay {count}.",
+      "explanation": "Se imprimirán en una sola hoja A4 todas las credenciales pendientes de la instalación. Ahora mismo hay {count}.",
       "confirmAction": "Generar la hoja A4",
       "warning": "Se acuñan los QR de todas ellas en este momento y no hay reimpresión. Si el PDF se pierde, cada tarjeta habrá que revocarla y volver a emitirla.",
       "bearerNotice": "El PDF es un documento al portador: quien lo tenga puede fabricar la tarjeta de otra persona. No se guarda en el servidor ni se envía por correo."

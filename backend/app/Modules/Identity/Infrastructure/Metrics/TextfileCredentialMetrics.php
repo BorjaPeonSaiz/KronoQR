@@ -32,6 +32,10 @@ use RuntimeException;
  * desapareciera, el panel no podria distinguir «ya esta todo entregado» de «el
  * comando dejo de ejecutarse».
  *
+ * **La etiqueta `site` describe el centro de la instalacion** (ADR-040): hay
+ * uno, y la etiqueta se conserva para que ningun panel ni alerta que ya la use
+ * cambie de forma.
+ *
  * **Los dos son `gauge` y no `counter`.** Suben y bajan: cada alta los sube y
  * cada entrega los baja. Un `counter` con `rate()` no diria nada util sobre
  * cuanta gente no puede fichar mañana.
@@ -47,30 +51,21 @@ final readonly class TextfileCredentialMetrics implements CredentialMetrics
 {
     private const string FILE = 'kronoqr_credentials.prom';
 
-    public function recordCoverage(array $coverage, DateTimeImmutable $at): void
+    public function recordCoverage(SiteCredentialCoverage $coverage, DateTimeImmutable $at): void
     {
+        $labels = $this->labels($coverage);
+
         $lines = [
             '# HELP employees_without_delivered_credential Empleados de alta que todavia no tienen su tarjeta entregada en la mano (RF-QR-08). Debe llegar a cero antes del primer dia de cada incorporacion.',
             '# TYPE employees_without_delivered_credential gauge',
+            'employees_without_delivered_credential'.$labels.' '.$coverage->withoutDeliveredCredential,
+            '# HELP credentials_pending_print Credenciales activas emitidas y todavia sin imprimir (RF-QR-08).',
+            '# TYPE credentials_pending_print gauge',
+            'credentials_pending_print'.$labels.' '.$coverage->pendingPrint,
+            '# HELP credentials_coverage_employees Empleados de alta de la instalacion. Es el denominador de las dos metricas anteriores.',
+            '# TYPE credentials_coverage_employees gauge',
+            'credentials_coverage_employees'.$labels.' '.$coverage->employees,
         ];
-
-        foreach ($coverage as $site) {
-            $lines[] = 'employees_without_delivered_credential'.$this->labels($site).' '.$site->withoutDeliveredCredential;
-        }
-
-        $lines[] = '# HELP credentials_pending_print Credenciales activas emitidas y todavia sin imprimir (RF-QR-08).';
-        $lines[] = '# TYPE credentials_pending_print gauge';
-
-        foreach ($coverage as $site) {
-            $lines[] = 'credentials_pending_print'.$this->labels($site).' '.$site->pendingPrint;
-        }
-
-        $lines[] = '# HELP credentials_coverage_employees Empleados de alta del centro. Es el denominador de las dos metricas anteriores.';
-        $lines[] = '# TYPE credentials_coverage_employees gauge';
-
-        foreach ($coverage as $site) {
-            $lines[] = 'credentials_coverage_employees'.$this->labels($site).' '.$site->employees;
-        }
 
         $lines[] = '# HELP credentials_coverage_check_timestamp_seconds Momento del ultimo recuento. Su ausencia delata que el comando programado dejo de ejecutarse.';
         $lines[] = '# TYPE credentials_coverage_check_timestamp_seconds gauge';

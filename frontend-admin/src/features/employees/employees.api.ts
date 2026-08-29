@@ -22,7 +22,6 @@ export interface EmployeeListQuery {
   page: number
   perPage: number
   status?: EmploymentStatus
-  siteId?: number
   departmentId?: number
   /**
    * Subcadena sobre nombre, apellidos, «nombre apellidos» y codigo de
@@ -40,7 +39,6 @@ export function listEmployees(query: EmployeeListQuery): Promise<EmployeeCollect
       page: query.page,
       per_page: query.perPage,
       status: query.status,
-      site_id: query.siteId,
       department_id: query.departmentId,
       q: query.q,
       pin_status: query.pinStatus,

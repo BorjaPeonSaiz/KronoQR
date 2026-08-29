@@ -188,7 +188,7 @@ Nótese el puerto `CompliancePolicyProvider`: el dominio **recibe** los umbrales
 |---|---|---|
 | `Attendance` | **Núcleo.** Fichajes, tramos, jornadas, correcciones | `Shared` |
 | `Compliance` | Auditoría, incidencias, retención, exportación legal | `Shared`, **eventos de dominio** de `Attendance` e `Identity` |
-| `Workforce` | Empleados, departamentos, centros, contratos, ausencias | `Shared`, `Attendance/Application/Port` (implementa `EmployeeDirectory` y `SiteCalendar`) |
+| `Workforce` | Empleados, departamentos, el centro de la instalación, contratos, ausencias | `Shared`, `Attendance/Application/Port` (implementa `EmployeeDirectory` y `SiteCalendar`) |
 | `Identity` | Usuarios, roles, permisos, credenciales QR, tokens de dispositivo | `Shared`, `Attendance/Application/Port` (implementa `CredentialResolver`) |
 | `Reporting` | Proyecciones y consultas de lectura, exportaciones | `Shared`, eventos de otros módulos |
 | `Kiosk` | Dispositivos, emparejamiento, sincronización de lotes, telemetría | `Shared`, `Attendance` (vía caso de uso) |
@@ -523,6 +523,7 @@ Los diez siguientes **no proceden de esta tabla**: nacieron al desarrollar el pl
 | **037** | **Las lecturas en volumen de datos de terceros dejan asiento; la ficha individual y lo propio, no** | RS-05 no tenía criterio operativo y cada tarea decidía por su cuenta: `/kiosk/roster` y `/employees/{uuid}/workdays` auditaban, `/credentials/status` y `/employees` no, pese a divulgar **más**. RL-15 exige poder acotar una brecha desde el trail, y para el conjunto de datos más completo de la API no se podía | Regla de tres condiciones (terceros · sale del proceso · es un conjunto o el registro horario de una persona). `credential_status` y `employee_directory` empiezan a auditar; `/me/*` queda confirmado sin asiento; la ficha individual tampoco, porque el asiento del índice ya la subsume. Se mantiene **un solo** candado de la cadena de hash: partirlo por dataset bifurcaría la cadena de ADR-010 |
 | **038** | **RS-02 se limita por dispositivo y por IP; el eje por sujeto vive en el PIN, no en el escaneo de tarjeta** | RS-02 enumeraba tres ejes y solo existían dos. Al revisarlo, el tercero no protege de lo que la propia frase dice proteger: contra la enumeración no sirve —quien enumera prueba credenciales *distintas*—, la repetición de una misma tarjeta ya la absorbe RF-AT-06 como desenlace aceptado (ADR-031), y un `429` por credencial sería la única forma en que este producto puede dejar a una persona concreta sin fichar (regla dura 19) | Se enmienda el enunciado de RS-02 en el doc 01 §8 y su fila en `docs/requisitos.yaml`. Los dos ejes existentes ganan prueba propia sobre `/scan`, que la matriz daba por cubiertos con pruebas de otros endpoints. El límite por sujeto se mantiene y se refuerza donde el secreto es adivinable: el PIN (RS-12) |
 | **039** | **Qué hechos de autenticación dejan asiento en `audit_log`** | `AuditAction` no tenía ningún caso de autenticación (hueco de OWASP A09), y al cerrarlo la decisión «el fallo no se audita» quedó repetida en diez docblocks y en ningún ADR. Auditar cada intento metería el tráfico que un atacante controla dentro del candado global de ADR-010, por el que pasa cada fichaje | Éxito y cierre en `audit_log` **solo** en el panel —el catálogo de actores no tiene tipo para un empleado (ADR-037)—; apertura de bloqueo en los tres canales y **escrita después de responder**, para que ni el flanco cueste distinto ni un fallo de auditoría convierta un rechazo en `500`; el fallo solo en el log técnico y en `kronoqr_auth_attempts_total`. El origen va en la columna `ip` como en los otros cinco escritores; `ip_hash` se queda en el log técnico, y por eso el paquete de diagnóstico no puede incluir `APP_KEY` |
+| **040** | **Un centro de trabajo por instalación y por licencia** | El producto se vende como una licencia por hotel y cada licencia es una instalación completa, pero el doc 01 vendía «multi-centro desde el día 1»: `site_id` en cada alta y cada filtro, selectores de centro con una sola opción, `max_sites` en la licencia y pruebas de una frontera entre centros que no existe | El centro sigue siendo una entidad —tiene zona horaria y convenio— pero hay exactamente uno: índice único `sites_single_row_uidx`, `GET/PATCH /api/v1/site` singular, ningún `site_id` en el contrato ni en el panel, `SiteRepository::installationSite()` y el puerto `InstallationSiteProvider` de `Shared`. `site_id` se conserva en las tablas y el registro legal no se toca. Se retiran `max_sites` (ADR-018/028) y el ámbito `site` de `installation_settings` queda sin uso (ADR-017). Se aplica en `/api/v1` pese a ADR-012 porque no hay instalación desplegada y la superficie del quiosco no cambia |
 
 ---
 
@@ -690,7 +691,7 @@ add_header Cross-Origin-Opener-Policy "same-origin" always;
 | Auditor | `attendance:read`, `audit:read`, `reports:legal` (solo lectura, ámbito completo) | Sesión + 2FA | — |
 | Administrador de instalación | + `settings:*`, `license:*`, `support:*`, `diagnostics:*` | Sesión + 2FA | — |
 
-Un token de quiosco comprometido **no da acceso a la plantilla completa**: `roster:read` devuelve solo el mínimo necesario (hash del token, nombre de pila e inicial del apellido) del centro al que está vinculado el dispositivo.
+Un token de quiosco comprometido **no da acceso a la plantilla completa**: `roster:read` devuelve solo el mínimo necesario (hash del token, nombre de pila e inicial del apellido) de la plantilla de la instalación.
 
 ### 7.4 Cadena de hash de la auditoría
 
@@ -997,7 +998,7 @@ Etapas 1–3 en cada *push* (retroalimentación en menos de 4 minutos). Etapas 4
 
 | Entorno | Propósito | Datos |
 |---|---|---|
-| Local | Desarrollo | Semilla sintética: 3 centros, 60 empleados, 90 días de fichajes **con casos límite incluidos** (turnos nocturnos, DST, olvidos, correcciones) |
+| Local | Desarrollo | Semilla sintética: un centro (ADR-040), 250 empleados, 90 días de fichajes **con casos límite incluidos** (turnos nocturnos, DST, olvidos, correcciones) |
 | CI | Verificación | Efímero, por ejecución |
 | Instalación de referencia | Validación previa a publicar y demostraciones comerciales | Datos de demostración |
 
@@ -1458,7 +1459,7 @@ php artisan credentials:rotate-key               # Rotación con solape
 php artisan credentials:status --pending         # Quién no puede fichar todavía
 
 # Quioscos
-php artisan kiosk:pairing-code {site}            # Genera código de emparejamiento
+php artisan kiosk:pairing-code                   # Genera código de emparejamiento (el centro es el de la instalación)
 php artisan kiosk:health                         # Estado de todos los quioscos
 
 # Producto y licencia

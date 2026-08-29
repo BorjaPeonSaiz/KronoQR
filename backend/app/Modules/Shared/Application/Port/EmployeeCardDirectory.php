@@ -34,8 +34,8 @@ use App\Modules\Shared\Domain\ValueObject\EmployeeCardProfile;
 interface EmployeeCardDirectory
 {
     /**
-     * Los empleados **de alta**, ordenados de forma estable, opcionalmente
-     * acotados a un centro y a una persona.
+     * Los empleados **de alta** de la instalacion, ordenados de forma estable,
+     * opcionalmente acotados a una persona.
      *
      * El orden lo fija el adaptador y tiene que ser deterministico: es el orden
      * en el que salen las tarjetas de una hoja A4, y quien las recorta necesita
@@ -50,14 +50,12 @@ interface EmployeeCardDirectory
      * UUID escrito en mayusculas no casaba con la forma canonica que devuelve la
      * base de datos.
      *
-     * Los dos filtros se combinan con **Y logico**: una persona que no esta en
-     * el centro pedido no sale.
+     * Sin filtro por centro: hay exactamente uno por instalacion (ADR-040).
      *
-     * @param  int|null  $siteId  `null` = toda la instalacion.
-     * @param  string|null  $employeeUuid  `null` = toda la plantilla del alcance.
+     * @param  string|null  $employeeUuid  `null` = toda la plantilla.
      * @return list<EmployeeCardProfile>
      */
-    public function activeProfiles(?int $siteId = null, ?string $employeeUuid = null): array;
+    public function activeProfiles(?string $employeeUuid = null): array;
 
     /**
      * El perfil de un empleado por su clave interna, o `null` si no existe.

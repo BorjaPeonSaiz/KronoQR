@@ -19,8 +19,21 @@ use Illuminate\Support\Str;
  */
 final class WorkforceFixtures
 {
+    /**
+     * El centro de la instalacion. **Hay exactamente uno** (ADR-040): la
+     * primera llamada de cada prueba lo crea y las siguientes devuelven el
+     * mismo, con el nombre y la zona de la primera. Un segundo `create()`
+     * chocaria con `sites_single_row_uidx`, que es justo lo que
+     * `SingleSiteSchemaTest` afirma.
+     */
     public static function site(string $name = 'Hotel de pruebas', string $timezone = 'Europe/Madrid'): int
     {
+        $existing = Site::query()->orderBy('id')->value('id');
+
+        if (\is_int($existing)) {
+            return $existing;
+        }
+
         $site = Site::query()->create([
             'name' => $name.' '.Str::random(4),
             'timezone' => $timezone,

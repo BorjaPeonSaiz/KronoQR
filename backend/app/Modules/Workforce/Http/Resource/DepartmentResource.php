@@ -27,7 +27,6 @@ final class DepartmentResource extends JsonResource
 
         return [
             'id' => $department->id,
-            'site_id' => $department->siteId,
             'name' => $department->name,
         ];
     }

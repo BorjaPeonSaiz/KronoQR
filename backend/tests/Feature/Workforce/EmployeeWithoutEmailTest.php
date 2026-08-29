@@ -33,7 +33,6 @@ it('completa el alta de un empleado sin direccion de correo', function (): void 
     $hr = ManagementUsers::withRole(UserRole::RRHH);
 
     $response = Api::as(ManagementUsers::tokenFor($hr))->post('/api/v1/employees', [
-        'site_id' => $site,
         'department_id' => $department,
         'first_name' => 'Youssef',
         'last_name' => 'Amrani',
@@ -61,7 +60,6 @@ it('no exige el correo en ninguna de las operaciones de plantilla', function ():
     $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RRHH));
 
     $uuid = Api::as($token)->post('/api/v1/employees', [
-        'site_id' => $site,
         'first_name' => 'Youssef',
         'last_name' => 'Amrani',
         'hired_at' => '2026-08-14',

@@ -8,23 +8,15 @@ use App\Modules\Workforce\Application\Port\SiteRepository;
 use App\Modules\Workforce\Domain\Model\Site;
 
 /**
- * Lecturas de centros. Sin paginacion: un cliente tiene hoteles, no miles de
- * centros, y el techo real lo pone su licencia (`max_sites`).
+ * Lectura del centro de la instalacion. Es uno (ADR-040): no hay lista ni
+ * busqueda por identificador.
  */
 final readonly class SiteQueries
 {
     public function __construct(private SiteRepository $sites) {}
 
-    /**
-     * @return list<Site>
-     */
-    public function all(): array
+    public function installationSite(): ?Site
     {
-        return $this->sites->all();
-    }
-
-    public function find(int $id): ?Site
-    {
-        return $this->sites->findById($id);
+        return $this->sites->installationSite();
     }
 }

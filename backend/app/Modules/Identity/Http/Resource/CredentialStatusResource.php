@@ -18,10 +18,14 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * hace imposible que `secret_hash` acabe en una respuesta el dia que alguien
  * anada un campo: no esta en el objeto que se serializa.
  *
- * **`summary` no se recalcula aqui.** Llega hecho del caso de uso, con **todos**
- * los centros del alcance aunque el filtro haya dejado la tabla vacia. Contarlo
- * en el `Resource` daria el recuento de las filas devueltas, que es justo el
- * numero que no sirve: «faltan 3 de 3».
+ * **`summary` no se recalcula aqui.** Llega hecho del caso de uso, aunque el
+ * filtro haya dejado la tabla vacia. Contarlo en el `Resource` daria el
+ * recuento de las filas devueltas, que es justo el numero que no sirve:
+ * «faltan 3 de 3».
+ *
+ * **El centro no sale** (ADR-040): es el de la instalacion y el cliente ya lo
+ * conoce por `GET /api/v1/site`. El recuento interno lo lleva para etiquetar
+ * las metricas, y se queda ahi.
  *
  * @property-read CredentialStatusReport $resource
  */
@@ -39,7 +43,7 @@ final class CredentialStatusResource extends JsonResource
 
         return [
             'data' => array_map(self::row(...), $report->rows),
-            'summary' => array_map(self::coverage(...), $report->coverage),
+            'summary' => self::coverage($report->coverage),
         ];
     }
 
@@ -52,8 +56,6 @@ final class CredentialStatusResource extends JsonResource
             'employee_uuid' => $row->employee->employeeUuid,
             'employee_code' => $row->employee->employeeCode,
             'full_name' => $row->employee->fullName,
-            'site_id' => $row->employee->siteId,
-            'site_name' => $row->employee->siteName,
             'department_name' => $row->employee->departmentName,
             'status' => $row->status->value,
             // Se reutiliza `CredentialResource` en lugar de repetir el mapeo:
@@ -67,16 +69,14 @@ final class CredentialStatusResource extends JsonResource
     }
 
     /**
-     * @return array<string, mixed>
+     * @return array<string, int>
      */
-    private static function coverage(SiteCredentialCoverage $site): array
+    private static function coverage(SiteCredentialCoverage $coverage): array
     {
         return [
-            'site_id' => $site->siteId,
-            'site_name' => $site->siteName,
-            'employees' => $site->employees,
-            'pending_print' => $site->pendingPrint,
-            'without_delivered_credential' => $site->withoutDeliveredCredential,
+            'employees' => $coverage->employees,
+            'pending_print' => $coverage->pendingPrint,
+            'without_delivered_credential' => $coverage->withoutDeliveredCredential,
         ];
     }
 }

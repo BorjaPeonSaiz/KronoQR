@@ -11,11 +11,7 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
 
 /**
- * Modificacion de un centro. Al menos uno de los dos campos.
- *
- * Cambiar la zona horaria no reescribe el pasado: las jornadas ya calculadas
- * conservan su `work_date` (RN-05). Afecta a las siguientes, y por eso es un
- * cambio con efecto sobre el computo legal que se audita.
+ * `PATCH /api/v1/site` (contrato `UpdateSiteRequest`).
  */
 final class UpdateSiteRequest extends FormRequest
 {
@@ -37,10 +33,9 @@ final class UpdateSiteRequest extends FormRequest
         ];
     }
 
-    public function toCommand(int $id): UpdateSiteCommand
+    public function toCommand(): UpdateSiteCommand
     {
         return new UpdateSiteCommand(
-            id: $id,
             name: $this->has('name') ? $this->string('name')->trim()->value() : null,
             timezone: $this->has('timezone') ? $this->string('timezone')->trim()->value() : null,
         );

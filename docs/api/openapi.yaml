@@ -16,7 +16,7 @@
 #
 #   Descritos      GET  /api/v1/health   ·  GET /api/v1/ready  ·  POST /api/v1/scan
 #                  POST /api/v1/auth/login · /logout · GET /api/v1/auth/me
-#                  CRUD /api/v1/employees · /departments · /sites  (tarea 1.6)
+#                  CRUD /api/v1/employees · /departments · GET/PATCH /api/v1/site  (tarea 1.6, ADR-040)
 #   Implementados  los de gestion de la tarea 1.6. El endpoint de fichaje y las
 #                  sondas llegan con la tarea 1.7.
 #
@@ -1212,7 +1212,6 @@ paths:
         - managementToken: ['employees:*']
       parameters:
         - $ref: '#/components/parameters/EmployeeSearch'
-        - $ref: '#/components/parameters/SiteFilter'
         - $ref: '#/components/parameters/DepartmentFilter'
         - $ref: '#/components/parameters/EmploymentStatusFilter'
         - $ref: '#/components/parameters/PinStatusFilter'
@@ -1234,7 +1233,6 @@ paths:
                         first_name: Youssef
                         last_name: Amrani
                         email: null
-                        site_id: 1
                         department_id: 3
                         status: active
                         hired_at: '2026-08-14'
@@ -1292,7 +1290,6 @@ paths:
               sin-correo:
                 summary: Alta sin direccion de correo, que es el caso normal
                 value:
-                  site_id: 1
                   department_id: 3
                   first_name: Youssef
                   last_name: Amrani
@@ -1300,7 +1297,6 @@ paths:
               con-correo-y-documento:
                 summary: Alta con correo y documento de identidad
                 value:
-                  site_id: 1
                   department_id: 3
                   first_name: Lucia
                   last_name: Ferrer
@@ -1326,7 +1322,6 @@ paths:
                       first_name: Youssef
                       last_name: Amrani
                       email: null
-                      site_id: 1
                       department_id: 3
                       status: active
                       hired_at: '2026-08-14'
@@ -1377,7 +1372,6 @@ paths:
                     first_name: Youssef
                     last_name: Amrani
                     email: null
-                    site_id: 1
                     department_id: 3
                     status: active
                     hired_at: '2026-08-14'
@@ -1435,7 +1429,6 @@ paths:
                     first_name: Youssef
                     last_name: Amrani
                     email: null
-                    site_id: 1
                     department_id: 5
                     status: active
                     hired_at: '2026-08-14'
@@ -1501,7 +1494,6 @@ paths:
                     first_name: Youssef
                     last_name: Amrani
                     email: null
-                    site_id: 1
                     department_id: 3
                     status: terminated
                     hired_at: '2026-08-14'
@@ -1710,7 +1702,6 @@ paths:
                           - uuid: 0199f2c1-8a10-7b40-9c50-6d7e8f9a0b11
                             version: 2
                             status: closed
-                            site_id: 1
                             time_zone: Europe/Madrid
                             clocked_in_at: '2026-03-14T05:00:00.000000Z'
                             clocked_in_at_local: '2026-03-14T06:00:00.000000+01:00'
@@ -1760,13 +1751,11 @@ paths:
       operationId: listDepartments
       summary: Listado de departamentos
       description: |
-        Departamentos de la instalacion, opcionalmente filtrados por centro. Es
-        la lista con la que el panel construye el selector del alta de empleado.
+        Departamentos de la instalacion. Es la lista con la que el panel
+        construye el selector del alta de empleado.
       tags: [Workforce]
       security:
         - managementToken: ['employees:*']
-      parameters:
-        - $ref: '#/components/parameters/SiteFilter'
       responses:
         '200':
           description: Departamentos.
@@ -1779,7 +1768,6 @@ paths:
                   value:
                     data:
                       - id: 3
-                        site_id: 1
                         name: Recepcion
         '401':
           $ref: '#/components/responses/Unauthenticated'
@@ -1808,7 +1796,6 @@ paths:
             examples:
               alta:
                 value:
-                  site_id: 1
                   name: Recepcion
       responses:
         '201':
@@ -1821,7 +1808,6 @@ paths:
                 creado:
                   value:
                     id: 3
-                    site_id: 1
                     name: Recepcion
         '401':
           $ref: '#/components/responses/Unauthenticated'
@@ -1855,7 +1841,6 @@ paths:
                 departamento:
                   value:
                     id: 3
-                    site_id: 1
                     name: Recepcion
         '401':
           $ref: '#/components/responses/Unauthenticated'
@@ -1900,7 +1885,6 @@ paths:
                 actualizado:
                   value:
                     id: 3
-                    site_id: 1
                     name: Recepcion y conserjeria
         '401':
           $ref: '#/components/responses/Unauthenticated'
@@ -1915,98 +1899,29 @@ paths:
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
-  /api/v1/sites:
+  /api/v1/site:
     get:
-      operationId: listSites
-      summary: Listado de centros
+      operationId: getSite
+      summary: El centro de trabajo de la instalacion
       description: |
-        Centros de trabajo de la instalacion, con su zona horaria.
+        Nombre y zona horaria del centro. **Hay exactamente uno por instalacion**
+        ([ADR-040](../adr/ADR-040-un-centro-por-instalacion-y-por-licencia.md)):
+        una licencia es un hotel, y una cadena opera una instalacion por hotel.
+        Por eso el recurso es singular y no lleva identificador en la ruta.
 
         **La zona horaria no es decorativa**: es el dato del que depende RN-05,
         que atribuye cada tramo a la jornada de su hora de inicio **en la zona
-        del centro**. Un hotel en Canarias y otro en la peninsula no comparten
-        fecha civil a las 00:30.
-      tags: [Workforce]
-      security:
-        - managementToken: ['employees:*']
-      responses:
-        '200':
-          description: Centros.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SiteCollection'
-              examples:
-                centros:
-                  value:
-                    data:
-                      - id: 1
-                        name: Hotel Marina
-                        timezone: Europe/Madrid
-        '401':
-          $ref: '#/components/responses/Unauthenticated'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '429':
-          $ref: '#/components/responses/TooManyRequests'
-    post:
-      operationId: createSite
-      summary: Alta de centro
-      description: |
-        Crea un centro de trabajo. `timezone` es un identificador IANA
-        (`Europe/Madrid`), nunca un desfase en horas: un desfase no sabe de
-        cambios de hora y rompe RN-09 dos veces al año.
-      tags: [Workforce]
-      security:
-        - managementToken: ['employees:*']
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateSiteRequest'
-            examples:
-              alta:
-                value:
-                  name: Hotel Marina
-                  timezone: Europe/Madrid
-      responses:
-        '201':
-          description: Centro creado.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Site'
-              examples:
-                creado:
-                  value:
-                    id: 1
-                    name: Hotel Marina
-                    timezone: Europe/Madrid
-        '401':
-          $ref: '#/components/responses/Unauthenticated'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '422':
-          $ref: '#/components/responses/ValidationFailed'
-        '429':
-          $ref: '#/components/responses/TooManyRequests'
+        del centro**. El panel la lee de aqui para presentar cualquier instante,
+        y nunca usa la del navegador.
 
-  /api/v1/sites/{id}:
-    parameters:
-      - $ref: '#/components/parameters/SiteId'
-    get:
-      operationId: getSite
-      summary: Detalle de un centro
-      description: Nombre y zona horaria del centro.
+        `404` solo antes de la puesta en marcha (RF-PD-03): una instalacion sin
+        centro todavia no puede fichar.
       tags: [Workforce]
       security:
         - managementToken: ['employees:*']
       responses:
         '200':
-          description: Centro.
+          description: El centro.
           content:
             application/json:
               schema:
@@ -2027,14 +1942,16 @@ paths:
           $ref: '#/components/responses/TooManyRequests'
     patch:
       operationId: updateSite
-      summary: Modificacion de un centro
+      summary: Modificacion del centro
       description: |
         Cambia el nombre o la zona horaria del centro.
 
         **Cambiar la zona horaria cambia el calculo de las jornadas
         siguientes** (RN-05): es configuracion con efecto sobre el registro
         legal, y por eso queda auditada. No reescribe el pasado — las jornadas
-        ya calculadas conservan su `work_date`.
+        ya calculadas conservan su `work_date`. `timezone` es un identificador
+        IANA (`Europe/Madrid`), nunca un desfase en horas: un desfase no sabe de
+        cambios de hora y rompe RN-09 dos veces al año.
       tags: [Workforce]
       security:
         - managementToken: ['employees:*']
@@ -2270,9 +2187,9 @@ paths:
 
         **`employee_uuid` sirve a la ficha de empleado**, que muestra la fila de
         estado de la tarjeta de esa persona con sus acciones. Sin el, la unica
-        forma seria pedir el tablero del centro entero y quedarse con una fila,
-        lo que divulga —y audita como divulgada— toda la plantilla del centro
-        cada vez que alguien abre una ficha (ADR-037, RS-05).
+        forma seria pedir el tablero entero y quedarse con una fila, lo que
+        divulga —y audita como divulgada— toda la plantilla cada vez que
+        alguien abre una ficha (ADR-037, RS-05).
 
         **Solo aparece la plantilla de alta.** Quien esta de baja o suspendido no
         sale de este panel, ni en el `summary` ni con `employee_uuid`: el panel
@@ -2285,7 +2202,7 @@ paths:
         es la lectura de una sola persona y no deja asiento, igual que
         `GET /employees/{uuid}` ([ADR-037](../adr/ADR-037-que-lecturas-de-datos-personales-dejan-asiento.md)).
 
-        Sin paginacion a proposito: la respuesta es la plantilla de un centro
+        Sin paginacion a proposito: la respuesta es la plantilla de la instalacion
         —decenas o pocos cientos de filas— y es una tabla que se ordena y se
         filtra entera en el panel. Paginar obligaria a pedir todas las paginas
         para poder contar, que es lo que este endpoint viene a evitar.
@@ -2293,15 +2210,6 @@ paths:
       security:
         - managementToken: ['credentials:*']
       parameters:
-        - name: site_id
-          in: query
-          required: false
-          description: Acota a un centro. Sin el, toda la instalacion.
-          schema:
-            type: integer
-            format: int64
-            minimum: 1
-          example: 1
         - name: employee_uuid
           in: query
           required: false
@@ -2309,20 +2217,19 @@ paths:
             Acota el tablero a **una sola persona** —la ficha de empleado del
             panel—, de modo que `data` traiga 0 o 1 filas.
 
-            Se combina con `site_id` y con `pending` mediante **Y logico**: una
-            persona de otro centro, o que ya tiene su tarjeta en la mano cuando
-            se pide `pending=true`, devuelve `data: []`.
+            Se combina con `pending` mediante **Y logico**: una persona que ya
+            tiene su tarjeta en la mano cuando se pide `pending=true` devuelve
+            `data: []`.
 
             **`summary` se acota con la persona**, al contrario que con
-            `pending`: trae **una sola entrada** —la del centro de esa persona,
-            contando solo la fila devuelta— o **ninguna** si no hay fila. No es
-            la cobertura del centro: calcularla obliga a recorrer su plantilla
-            entera, que es justo lo que este filtro evita. Quien necesite «faltan
-            3 de 60» pide el tablero sin `employee_uuid`.
+            `pending`: cuenta **solo la fila devuelta** —`employees` vale 1, o 0
+            si no hay fila—. No es la cobertura de la plantilla: calcularla
+            obliga a recorrerla entera, que es justo lo que este filtro evita.
+            Quien necesite «faltan 3 de 60» pide el tablero sin `employee_uuid`.
 
             Un UUID con forma valida que no corresponde a ningun empleado **de
             alta** —porque no existe, o porque esa persona esta de baja o
-            suspendida— devuelve `data: []` y `summary: []` con `200`, **no
+            suspendida— devuelve `data: []` y un `summary` a cero con `200`, **no
             `404`**: este tablero no es un recurso por persona, es una consulta
             acotada. Una forma invalida si es `422`. Se acepta en mayusculas o en
             minusculas: la comparacion es sobre el tipo `uuid`, que no distingue.
@@ -2362,14 +2269,12 @@ paths:
                 $ref: '#/components/schemas/CredentialStatusBoard'
               examples:
                 pendientes:
-                  summary: Dos personas del centro 1 todavia sin tarjeta
+                  summary: Dos personas todavia sin tarjeta
                   value:
                     data:
                       - employee_uuid: 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
                         employee_code: E7K2M9QX4B
                         full_name: Lucia Martinez Prieto
-                        site_id: 1
-                        site_name: Hotel Marina
                         department_name: Recepcion
                         status: pending_print
                         credential:
@@ -2385,17 +2290,13 @@ paths:
                       - employee_uuid: 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b91
                         employee_code: E3D8N1PZ7C
                         full_name: Youssef Amrani
-                        site_id: 1
-                        site_name: Hotel Marina
                         department_name: null
                         status: no_credential
                         credential: null
                     summary:
-                      - site_id: 1
-                        site_name: Hotel Marina
-                        employees: 60
-                        pending_print: 1
-                        without_delivered_credential: 2
+                      employees: 60
+                      pending_print: 1
+                      without_delivered_credential: 2
         '401':
           $ref: '#/components/responses/Unauthenticated'
         '403':
@@ -2457,12 +2358,8 @@ paths:
             schema:
               $ref: '#/components/schemas/PrintCredentialBatchRequest'
             examples:
-              un-centro:
-                summary: Las pendientes de un centro
-                value:
-                  site_id: 1
-              toda-la-instalacion:
-                summary: Todas las pendientes
+              todas-las-pendientes:
+                summary: Todas las pendientes de la instalacion
                 value: {}
       responses:
         '200':
@@ -3208,20 +3105,6 @@ components:
         format: uuid
       example: 0199f0c2-9b30-7a21-8d40-1e2f3a4b5c60
 
-    SiteId:
-      name: id
-      in: path
-      required: true
-      description: |
-        Identificador del centro. Aqui si es el numerico: `sites` no tiene UUID
-        publico (documento 01 §5.5) porque un centro no es un dato personal ni
-        aparece impreso en ninguna tarjeta.
-      schema:
-        type: integer
-        format: int64
-        minimum: 1
-      example: 1
-
     DepartmentId:
       name: id
       in: path
@@ -3233,16 +3116,6 @@ components:
         minimum: 1
       example: 3
 
-    SiteFilter:
-      name: site_id
-      in: query
-      required: false
-      description: Limita el resultado al centro indicado.
-      schema:
-        type: integer
-        format: int64
-        minimum: 1
-      example: 1
 
     DepartmentFilter:
       name: department_id
@@ -4470,7 +4343,6 @@ components:
         - first_name
         - last_name
         - email
-        - site_id
         - department_id
         - status
         - hired_at
@@ -4509,11 +4381,6 @@ components:
             ADR-015). El acceso al portal personal es con codigo de empleado y
             PIN precisamente para que la mayoria de la plantilla no necesite
             correo.
-        site_id:
-          type: integer
-          format: int64
-          minimum: 1
-          description: Centro al que esta adscrito. De el sale la zona horaria de RN-05.
         department_id:
           type: [integer, 'null']
           format: int64
@@ -4680,20 +4547,15 @@ components:
         servidor para que sea opaco de verdad y no dependa de lo que teclee
         quien da el alta.
       additionalProperties: false
-      required: [site_id, first_name, last_name, hired_at]
+      required: [first_name, last_name, hired_at]
       properties:
-        site_id:
-          type: integer
-          format: int64
-          minimum: 1
         department_id:
           type: [integer, 'null']
           format: int64
           minimum: 1
           description: |
-            Si se indica, **debe pertenecer al centro** de `site_id`. Un empleado
-            adscrito a un departamento de otro hotel es un dato imposible que
-            rompe los informes por centro.
+            El centro no se indica: es el de la instalacion (ADR-040). El
+            departamento, si se indica, es uno de los suyos.
         first_name:
           type: string
           minLength: 1
@@ -4736,10 +4598,6 @@ components:
       additionalProperties: false
       minProperties: 1
       properties:
-        site_id:
-          type: integer
-          format: int64
-          minimum: 1
         department_id:
           type: [integer, 'null']
           format: int64
@@ -4792,7 +4650,10 @@ components:
     Site:
       type: object
       title: Site
-      description: Centro de trabajo (documento 01 §5.5).
+      description: |
+        El centro de trabajo de la instalacion (documento 01 §5.5). **Hay
+        exactamente uno** (ADR-040); `id` se conserva porque `shift_entries` y
+        el resto del esquema lo referencian.
       additionalProperties: false
       required: [id, name, timezone]
       properties:
@@ -4815,45 +4676,14 @@ components:
           examples:
             - Europe/Madrid
 
-    SiteCollection:
-      type: object
-      title: SiteCollection
-      description: |
-        Centros de la instalacion. Sin paginacion: un cliente tiene hoteles, no
-        miles de centros, y el limite real lo pone su licencia (`max_sites`).
-      additionalProperties: false
-      required: [data]
-      properties:
-        data:
-          type: array
-          items:
-            $ref: '#/components/schemas/Site'
-
-    CreateSiteRequest:
-      type: object
-      title: CreateSiteRequest
-      additionalProperties: false
-      required: [name]
-      description: Alta de centro de trabajo.
-      properties:
-        name:
-          type: string
-          minLength: 1
-          maxLength: 120
-        timezone:
-          type: string
-          minLength: 1
-          maxLength: 64
-          default: Europe/Madrid
-          description: |
-            Zona IANA del centro. El valor de serie es el del mercado inicial,
-            pero es un dato editable: nada especifico de un cliente vive en el
-            codigo (regla dura 13).
-
     UpdateSiteRequest:
       type: object
       title: UpdateSiteRequest
-      description: Modificacion parcial de un centro. Al menos un campo.
+      description: |
+        Modificacion parcial del centro. Al menos un campo. `timezone` es una
+        zona IANA; el valor de serie es `Europe/Madrid`, el del mercado inicial,
+        y es un dato editable: nada especifico de un cliente vive en el codigo
+        (regla dura 13).
       additionalProperties: false
       minProperties: 1
       properties:
@@ -4870,20 +4700,16 @@ components:
       type: object
       title: Department
       description: |
-        Departamento de un centro (documento 01 §5.5).
+        Departamento (documento 01 §5.5).
 
         **No lleva responsable todavia.** `departments.manager_user_id` existe en
         el esquema, pero asignarlo solo tiene efecto con el ambito por
         departamento de RF-ID-03, que es de la tarea 2.1. Exponerlo antes seria
         prometer un control de acceso que aun no se aplica.
       additionalProperties: false
-      required: [id, site_id, name]
+      required: [id, name]
       properties:
         id:
-          type: integer
-          format: int64
-          minimum: 1
-        site_id:
           type: integer
           format: int64
           minimum: 1
@@ -4895,7 +4721,7 @@ components:
     DepartmentCollection:
       type: object
       title: DepartmentCollection
-      description: Departamentos, opcionalmente de un solo centro. Sin paginacion.
+      description: Departamentos de la instalacion. Sin paginacion.
       additionalProperties: false
       required: [data]
       properties:
@@ -4907,14 +4733,10 @@ components:
     CreateDepartmentRequest:
       type: object
       title: CreateDepartmentRequest
-      description: Alta de departamento dentro de un centro.
+      description: Alta de departamento. Queda en el centro de la instalacion (ADR-040).
       additionalProperties: false
-      required: [site_id, name]
+      required: [name]
       properties:
-        site_id:
-          type: integer
-          format: int64
-          minimum: 1
         name:
           type: string
           minLength: 1
@@ -4924,9 +4746,8 @@ components:
       type: object
       title: UpdateDepartmentRequest
       description: |
-        Renombrado del departamento. `site_id` no aparece a proposito: mover un
-        departamento de centro arrastraria a sus empleados a otra zona horaria y
-        cambiaria el calculo de sus jornadas (RN-05).
+        Renombrado del departamento. Es lo unico que cambia: no hay otro centro
+        al que moverlo (ADR-040).
       additionalProperties: false
       required: [name]
       properties:
@@ -5221,15 +5042,7 @@ components:
         `additionalProperties: false` hace que el contrato no ofrezca ningun sitio
         donde alojarlos el dia que alguien los eche de menos.
       additionalProperties: false
-      properties:
-        site_id:
-          type: integer
-          format: int64
-          minimum: 1
-          description: |
-            Centro cuyas credenciales pendientes se imprimen. Sin el, toda la
-            instalacion — que en un cliente con varios hoteles produce una hoja
-            que despues hay que repartir, y por eso lo normal es indicarlo.
+      properties: {}
 
     CredentialLifecycleStatus:
       type: string
@@ -5267,8 +5080,6 @@ components:
         - employee_uuid
         - employee_code
         - full_name
-        - site_id
-        - site_name
         - department_name
         - status
         - credential
@@ -5280,11 +5091,6 @@ components:
           type: string
           description: Opaco y aleatorio, nunca derivado de datos personales (doc 01 §5.5).
         full_name:
-          type: string
-        site_id:
-          type: integer
-          format: int64
-        site_name:
           type: string
         department_name:
           type: ['string', 'null']
@@ -5299,11 +5105,11 @@ components:
             La credencial **vigente** y, si no le queda ninguna activa, la ultima
             que tuvo. `null` solo cuando nunca hubo ninguna.
 
-    SiteCredentialCoverage:
+    CredentialCoverage:
       type: object
-      title: SiteCredentialCoverage
+      title: CredentialCoverage
       description: |
-        El recuento de un centro. Es lo mismo que publican
+        El recuento de la plantilla. Es lo mismo que publican
         `employees_without_delivered_credential{site}` y
         `credentials_pending_print{site}` (doc 02 §8.2).
 
@@ -5313,19 +5119,14 @@ components:
         La excepcion es `employee_uuid`, que acota tambien el recuento porque
         acota la consulta: ahi `employees` vale 1 y no es una cobertura.
       additionalProperties: false
-      required: [site_id, site_name, employees, pending_print, without_delivered_credential]
+      required: [employees, pending_print, without_delivered_credential]
       properties:
-        site_id:
-          type: integer
-          format: int64
-        site_name:
-          type: string
         employees:
           type: integer
           minimum: 0
           description: |
-            Empleados de alta del centro — o solo la fila devuelta cuando se
-            consulta con `employee_uuid`.
+            Empleados de alta de la instalacion — o solo la fila devuelta cuando
+            se consulta con `employee_uuid`.
         pending_print:
           type: integer
           minimum: 0
@@ -5343,7 +5144,7 @@ components:
       type: object
       title: CredentialStatusBoard
       description: |
-        El panel completo (RF-QR-08): las filas y el recuento por centro.
+        El panel completo (RF-QR-08): las filas y el recuento.
 
         Sin `meta` de paginacion porque no hay paginacion: ver la descripcion del
         endpoint.
@@ -5355,20 +5156,18 @@ components:
           items:
             $ref: '#/components/schemas/CredentialStatusRow'
           description: |
-            Ordenadas por centro, departamento y apellido — el mismo orden en el
-            que salen las tarjetas de una hoja A4.
+            Ordenadas por departamento y apellido — el mismo orden en el que
+            salen las tarjetas de una hoja A4.
         summary:
-          type: array
-          items:
-            $ref: '#/components/schemas/SiteCredentialCoverage'
+          $ref: '#/components/schemas/CredentialCoverage'
           description: |
-            **Todos los centros del alcance, tambien los que estan a cero.** Una
-            serie ausente y una serie en cero se ven igual en un panel, y solo la
-            segunda dice «ya esta todo entregado».
+            **Siempre presente, tambien a cero.** Un recuento ausente y uno en
+            cero se ven igual en un panel, y solo el segundo dice «ya esta todo
+            entregado».
 
-            `pending` no lo filtra; `employee_uuid` si — con el trae una sola
-            entrada, la del centro de esa persona y contando solo su fila, o
-            ninguna. Ver la descripcion del parametro.
+            `pending` no lo filtra; `employee_uuid` si — con el cuenta solo la
+            fila devuelta, o todo a cero si no hay fila. Ver la descripcion del
+            parametro.
 
     CorrectionReasonCode:
       type: string
@@ -5625,9 +5424,8 @@ components:
       description: |
         Zona horaria IANA del centro (`sites.timezone`). **Se muestra, no se
         adivina**: viaja en la respuesta para que ninguna pantalla use la del
-        navegador. Dos centros del mismo cliente pueden tener zonas distintas
-        —`Europe/Madrid` y `Atlantic/Canary` son el mismo pais y una hora de
-        diferencia—.
+        navegador. `Europe/Madrid` y `Atlantic/Canary` son el mismo pais y una
+        hora de diferencia: la zona es del centro, no del pais.
       examples:
         - Europe/Madrid
 
@@ -5769,7 +5567,6 @@ components:
         - uuid
         - version
         - status
-        - site_id
         - time_zone
         - clocked_in_at
         - clocked_in_at_local
@@ -5794,14 +5591,6 @@ components:
           minimum: 1
         status:
           $ref: '#/components/schemas/ShiftEntryStatus'
-        site_id:
-          type: integer
-          format: int64
-          minimum: 1
-          description: |
-            Centro donde se ficho, que puede no ser el centro actual del
-            empleado: un traslado no reescribe donde ocurrieron las jornadas
-            anteriores.
         time_zone:
           $ref: '#/components/schemas/TimeZoneName'
         clocked_in_at:

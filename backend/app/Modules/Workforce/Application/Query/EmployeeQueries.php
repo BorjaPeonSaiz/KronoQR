@@ -48,7 +48,6 @@ final readonly class EmployeeQueries
      * @return array{items: list<Employee>, total: int, page: int, per_page: int, total_pages: int}
      */
     public function page(
-        ?int $siteId,
         ?int $departmentId,
         ?EmploymentStatus $status,
         ?string $search,
@@ -56,10 +55,9 @@ final readonly class EmployeeQueries
         int $page,
         int $perPage,
     ): array {
-        $total = $this->employees->countMatching($siteId, $departmentId, $status, $search, $pinStatus);
+        $total = $this->employees->countMatching($departmentId, $status, $search, $pinStatus);
 
         $items = $this->employees->search(
-            $siteId,
             $departmentId,
             $status,
             $search,
@@ -73,7 +71,6 @@ final readonly class EmployeeQueries
         // filas de ESTA pagina, que es lo que de verdad sale por la respuesta;
         // `total` describe el filtro, no lo entregado.
         $this->disclosures->recordDisclosure(self::DATASET, \count($items), [
-            ...($siteId === null ? [] : ['site_id' => $siteId]),
             ...($departmentId === null ? [] : ['department_id' => $departmentId]),
             'status' => $status === null ? 'any' : $status->value,
             // El asiento describe el ALCANCE de lo divulgado, y un filtro por

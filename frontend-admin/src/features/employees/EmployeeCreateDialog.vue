@@ -1,12 +1,15 @@
 <script setup lang="ts">
 // Alta de empleado (RF-GP-01).
 //
-// Tres cosas que el formulario dice en voz alta porque son decisiones del
+// Cuatro cosas que el formulario dice en voz alta porque son decisiones del
 // producto y no descuidos:
 //  - El correo es opcional y ninguna funcionalidad lo exige (regla dura 12).
 //  - El documento de identidad NO se almacena: se convierte en huella en el
 //    servidor y el valor en claro no sobrevive a la peticion (RL-08).
 //  - El codigo de empleado lo genera el servidor. No hay campo para teclearlo.
+//  - El centro no se elige: hay exactamente uno por instalacion (ADR-040) y el
+//    servidor adscribe el alta a el. Su zona horaria solo sirve aqui para
+//    proponer «hoy» como fecha de alta.
 //
 // El alta emite el PIN en la misma transaccion, asi que al terminar hay un
 // secreto que enseñar una sola vez: por eso emite `created` con la respuesta
@@ -15,36 +18,32 @@ import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import FormField from '@kronoqr/web-kit/components/FormField.vue'
 import { todayInZone } from '@kronoqr/web-kit/datetime'
 import { isApiError } from '@kronoqr/web-kit/http'
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useQuery } from '@tanstack/vue-query'
 import { listDepartments } from '@/shared/api/organisation.api'
-import type { CreateEmployeeRequest, EmployeeProvisioned, Site } from '@/shared/api/types'
+import type { CreateEmployeeRequest, EmployeeProvisioned } from '@/shared/api/types'
 import BaseDialog from '@/shared/ui/BaseDialog.vue'
 import { createEmployee } from './employees.api'
 
-const props = defineProps<{ sites: readonly Site[] }>()
+const props = defineProps<{ timezone: string }>()
 const emit = defineEmits<{ close: []; created: [EmployeeProvisioned] }>()
 
 const { t } = useI18n()
 
-const siteId = ref<number>(props.sites[0]?.id ?? 0)
 const departmentId = ref<number | null>(null)
 const firstName = ref('')
 const lastName = ref('')
 const email = ref('')
 const nationalId = ref('')
 const locale = ref('es')
-
-const selectedSite = computed(() => props.sites.find((site) => site.id === siteId.value) ?? null)
-const hiredAt = ref(todayInZone(selectedSite.value?.timezone ?? 'UTC'))
+const hiredAt = ref(todayInZone(props.timezone))
 
 // `useQuery` devuelve refs sueltas: se desestructuran para que la plantilla las
 // desenvuelva sola. `departments.data` sin desestructurar seguiria siendo un Ref.
 const { data: departments } = useQuery({
-  queryKey: computed(() => ['departments', siteId.value] as const),
-  queryFn: () => listDepartments(siteId.value),
-  enabled: computed(() => siteId.value > 0),
+  queryKey: ['departments', 'all'],
+  queryFn: () => listDepartments(),
 })
 
 const submitting = ref(false)
@@ -54,18 +53,11 @@ function fieldErrors(field: string): readonly string[] {
   return isApiError(error.value) ? (error.value.fieldErrors[field] ?? []) : []
 }
 
-function onSiteChange(): void {
-  // Un departamento de otro centro es un dato imposible (contrato
-  // `CreateEmployeeRequest.department_id`): al cambiar de centro se olvida.
-  departmentId.value = null
-}
-
 async function submit(): Promise<void> {
   submitting.value = true
   error.value = null
 
   const body: CreateEmployeeRequest = {
-    site_id: siteId.value,
     department_id: departmentId.value,
     first_name: firstName.value.trim(),
     last_name: lastName.value.trim(),
@@ -97,18 +89,6 @@ const inputClass =
       @submit.prevent="submit"
     >
       <ErrorNotice v-if="error !== null" :error="error" class="sm:col-span-2" />
-
-      <FormField v-slot="field" :label="t('employees.fields.site')" required>
-        <select
-          :id="field.id"
-          v-model.number="siteId"
-          :class="inputClass"
-          required
-          @change="onSiteChange"
-        >
-          <option v-for="site of sites" :key="site.id" :value="site.id">{{ site.name }}</option>
-        </select>
-      </FormField>
 
       <FormField
         v-slot="field"

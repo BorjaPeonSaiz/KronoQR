@@ -60,7 +60,7 @@ Establecimientos hoteleros con plantilla en régimen de turnos rotatorios. Carac
 - **Jornada partida** habitual en restauración → varios tramos por día.
 - **Alta rotación y personal eventual** en temporada alta.
 - **Departamentos diferenciados** (Recepción, Pisos, Cocina, Sala, Mantenimiento, SPA) con responsables distintos.
-- **Multi-centro**: cadenas o establecimientos con anexos. El modelo lo soporta desde el día 1 aunque se despliegue con un único centro.
+- **Un centro por instalación** ([ADR-040](adr/ADR-040-un-centro-por-instalacion-y-por-licencia.md)): una licencia es un hotel. Una cadena opera una instalación —y una licencia— por hotel; el centro existe como entidad porque tiene zona horaria y convenio, pero nadie lo elige en ninguna operación.
 - **Plantilla multilingüe** → la interfaz del quiosco debe ser multiidioma.
 - **Convenio colectivo de hostelería** con cómputo anual de horas y pluses.
 
@@ -124,7 +124,7 @@ Estas métricas **no son una hoja de cálculo aparte**: el propio sistema las ca
 
 ### 2.3 Supuestos
 
-- Plantilla ≤ 500 empleados y ≤ 10 quioscos por centro. El diseño escala a 5.000 sin cambio arquitectónico.
+- Plantilla ≤ 500 empleados y ≤ 10 quioscos por instalación. El diseño escala a 5.000 sin cambio arquitectónico.
 - Existe red interna en el centro, con posibilidad de cortes intermitentes.
 - La tablet es propiedad de la empresa y está gestionada en **modo quiosco** (MDM o *device owner* de Android Enterprise): fijada a una sola aplicación, sin acceso al escritorio, a los ajustes ni a otras apps, con arranque automático de la PWA tras un reinicio o un corte de luz, y actualizaciones del sistema en ventana controlada. Es configuración del dispositivo, a cargo del cliente, no una funcionalidad del producto.
 - El cliente dispone de un servidor propio (físico o VPS) con Docker, y de personal de IT capaz de seguir una guía de instalación. No se asume experiencia en Laravel ni en PostgreSQL.
@@ -173,7 +173,7 @@ Nomenclatura: `RF-<módulo>-<nº>`. Prioridad MoSCoW: **M**ust / **S**hould / **
 | ID | Requisito | Prio |
 |---|---|---|
 | RF-PA-01 | Vista **en tiempo real** de empleados actualmente fichados: nombre, departamento, hora de entrada, tiempo transcurrido, quiosco de origen. Actualización push (WebSocket), no sondeo. | M |
-| RF-PA-02 | Filtrado por centro, departamento y estado. Búsqueda por nombre. | M |
+| RF-PA-02 | Filtrado por departamento y estado. Búsqueda por nombre. | M |
 | RF-PA-03 | Detalle de jornada por empleado y día: todos los tramos, totales, incidencias y correcciones. | M |
 | RF-PA-04 | **Corrección manual** de un fichaje (crear, modificar hora, cerrar turno abierto, anular) con **motivo obligatorio** de un catálogo más texto libre. Nunca sobrescribe: genera versión nueva y entrada de auditoría. | M |
 | RF-PA-05 | Bandeja de **incidencias** pendientes con flujo de resolución, asignada al responsable del departamento. | M |
@@ -185,7 +185,7 @@ Nomenclatura: `RF-<módulo>-<nº>`. Prioridad MoSCoW: **M**ust / **S**hould / **
 | ID | Requisito | Prio |
 |---|---|---|
 | RF-IN-01 | Informe de horas por empleado con granularidad diaria, semanal, mensual y rango libre. | M |
-| RF-IN-02 | Informe agregado por departamento y centro. | M |
+| RF-IN-02 | Informe agregado por departamento. | M |
 | RF-IN-03 | Comparativa **horas trabajadas frente a horas contratadas**, con desviación y exceso de jornada. | M |
 | RF-IN-04 | Exportación a **CSV, XLSX y PDF**. Los PDF incluyen sello temporal, identificación del emisor y hash del contenido. | M |
 | RF-IN-05 | **Exportación normalizada para Inspección de Trabajo**: registro diario por trabajador y periodo, en formato tabular legible, con las correcciones y sus motivos. | M |
@@ -197,7 +197,7 @@ Nomenclatura: `RF-<módulo>-<nº>`. Prioridad MoSCoW: **M**ust / **S**hould / **
 
 | ID | Requisito | Prio |
 |---|---|---|
-| RF-GP-01 | CRUD de empleados: datos identificativos mínimos, departamento, centro, fecha de alta y baja. **El correo electrónico es opcional**: el producto no depende de él. | M |
+| RF-GP-01 | CRUD de empleados: datos identificativos mínimos, departamento, fecha de alta y baja. El centro es el de la instalación y no se elige (ADR-040). **El correo electrónico es opcional**: el producto no depende de él. | M |
 | RF-GP-02 | Registro de **contrato**: horas semanales y anuales contratadas, tipo de jornada, vigencia. Historizado. | M |
 | RF-GP-03 | Baja de empleado: **desactivación lógica**, nunca borrado. El registro histórico debe conservarse 4 años. | M |
 | RF-GP-04 | Registro de **ausencias** (vacaciones, baja médica, permiso) para no contabilizar como absentismo no justificado. Carga manual o CSV. | S |
@@ -209,7 +209,7 @@ Nomenclatura: `RF-<módulo>-<nº>`. Prioridad MoSCoW: **M**ust / **S**hould / **
 |---|---|---|
 | RF-ID-01 | Autenticación de usuarios de gestión con contraseña, política de robustez, bloqueo por intentos y **2FA (TOTP) obligatorio para roles con acceso a datos de toda la plantilla**. | M |
 | RF-ID-02 | Modelo **RBAC** con roles: `admin`, `rrhh`, `responsable_departamento`, `auditor`, `empleado`, `kiosk`. | M |
-| RF-ID-03 | Autorización a nivel de recurso: un responsable solo accede a los empleados de su departamento y centro. | M |
+| RF-ID-03 | Autorización a nivel de recurso: un responsable solo accede a los empleados de su departamento. | M |
 | RF-ID-04 | El quiosco se autentica con **token de dispositivo** de ámbito restringido (solo endpoints de fichaje y sincronización), revocable individualmente y rotable. | M |
 | RF-ID-05 | **Portal personal del empleado**: consulta de su propio registro y descarga de su histórico. Es una **exigencia legal** (RL-05), no una funcionalidad opcional. | M |
 | RF-ID-06 | El empleado accede al portal con su **código de empleado y su PIN**, el mismo del respaldo del quiosco. No requiere correo electrónico. Rate limiting agresivo y bloqueo temporal por intentos fallidos. | M |
@@ -256,8 +256,8 @@ Nomenclatura: `RF-<módulo>-<nº>`. Prioridad MoSCoW: **M**ust / **S**hould / **
 |---|---|---|
 | RF-PD-01 | **Cero configuración en código.** Marca, textos, umbrales, reglas de convenio, idiomas y funcionalidades activas son datos. Vender a un cliente nuevo no puede requerir tocar el repositorio ni mantener una rama. | M |
 | RF-PD-02 | **Instalación autónoma**: el personal de IT del cliente despliega el sistema siguiendo una guía, sin intervención del fabricante. Instalador con comprobación previa de requisitos. | M |
-| RF-PD-03 | **Asistente de puesta en marcha**: datos de la organización, centros, departamentos, zona horaria, perfil de convenio, primer administrador y vinculación del primer quiosco. | M |
-| RF-PD-04 | **Licencia con clave firmada** que codifica cliente, plan, límites (centros, empleados, quioscos) y vigencia del soporte. Verificación **local, sin llamada a internet**. | M |
+| RF-PD-03 | **Asistente de puesta en marcha**: datos de la organización, el centro de trabajo y su zona horaria, departamentos, perfil de convenio, primer administrador y vinculación del primer quiosco. | M |
+| RF-PD-04 | **Licencia con clave firmada** que codifica cliente, plan, límites (empleados, quioscos) y vigencia del soporte. Una licencia es un centro (ADR-040). Verificación **local, sin llamada a internet**. | M |
 | RF-PD-05 | **Degradación honesta al expirar la licencia.** El sistema **sigue registrando fichajes y permitiendo el acceso a los registros legales**. Se muestran avisos y se bloquean funcionalidades accesorias, nunca el registro. | M |
 | RF-PD-06 | **Vinculación de quiosco por código de emparejamiento** mostrado en la tablet e introducido en el panel. El cliente no tiene por qué usar SSH. | M |
 | RF-PD-07 | **Perfiles de cumplimiento configurables**: jurisdicción, años de retención, descanso mínimo entre jornadas, jornada máxima diaria y semanal, pausas obligatorias, inicio de semana y calendario de festivos. Se entrega el perfil español de serie. | M |
@@ -375,8 +375,8 @@ Alimentan las proyecciones de lectura, el trail de auditoría, las notificacione
 
 Motor: **PostgreSQL 17**. Los tipos se expresan en su nomenclatura. El Anexo D del documento 02 recoge la equivalencia para MySQL 8 si la infraestructura de un cliente lo impusiera.
 
-**`sites`** — centros de trabajo
-`id`, `name`, `timezone` (por defecto `Europe/Madrid`), `compliance_profile_id`, `settings` (JSONB), `created_at`
+**`sites`** — el centro de trabajo de la instalación
+`id`, `name`, `timezone` (por defecto `Europe/Madrid`), `compliance_profile_id`, `settings` (JSONB), `created_at`. **Una sola fila** (índice único `sites_single_row_uidx`, ADR-040): `site_id` se conserva en las demás tablas y apunta siempre a ella.
 
 **`departments`** — `id`, `site_id`, `name`, `manager_user_id`
 
@@ -401,7 +401,7 @@ Motor: **PostgreSQL 17**. Los tipos se expresan en su nomenclatura. El Anexo D d
 `key`, `value` (JSONB), `scope` (`installation`|`site`), `scope_id`, `updated_by_user_id`, `updated_at`
 *Cubre marca, umbrales, idiomas y funcionalidades activas. Todo cambio queda auditado, porque algunos afectan al cálculo de horas.*
 
-**`license`** — `id`, `signed_key`, `customer_name`, `plan`, `max_sites`, `max_employees`, `max_devices`, `features` (JSONB), `valid_until`, `activated_at`, `last_verified_at`
+**`license`** — `id`, `signed_key`, `customer_name`, `plan`, `max_employees`, `max_devices`, `features` (JSONB), `valid_until`, `activated_at`, `last_verified_at`
 
 **`support_grants`** — `id`, `granted_by_user_id`, `reason`, `scope`, `granted_at`, `expires_at`, `revoked_at`, `accessed_at`
 
@@ -917,7 +917,7 @@ Orden de ejecución: **0 → 1 → 2 → 5 → 3 → 4**.
 | **Fase 2 — Gestión y cumplimiento** | RF-PA-01..02, RF-PA-05, RF-IN-01..04, RF-GP-02, RF-PR-01..03, RF-QR-07, RF-ID-01..03 (**completos: 2FA y ámbito por departamento**), RN-10..12, RN-14, RL-02, RL-07..08, RL-10..11, RL-13..15, RS-05..06, **RNF-P-04..05**, **RNF-D-03** |
 | **Fase 5 — Productización** | RF-PD-01..15, RL-16..21, RQ-11, **RF-GP-05** |
 | **Fase 3 — Operación y refuerzo** | RF-PA-06..07, RF-KI-07..08, RF-AT-10, RF-AT-12, RF-IN-06..08, RF-GP-04, RF-PR-05..06, **RN-16**, §9 completo, RS-11, **RNF-P-02**, **RNF-P-06**, **RNF-D-01**, **RQ-04**, **RQ-08** |
-| **Fase 4 — Evolución** | Cuadrantes, vacaciones con aprobación, integración de nómina, multi-centro avanzado |
+| **Fase 4 — Evolución** | Cuadrantes, vacaciones con aprobación, integración de nómina |
 
 > **Los 21 requisitos en negrita se añadieron el 14 de agosto de 2026, y no son requisitos nuevos.** Existían desde la primera redacción, con su enunciado en las secciones §6.1, §6.2 y §10, pero **este anexo no los repartía a ninguna fase**. Lo detectó `qa:traceability` al construirse en la tarea 0.7, y no como una curiosidad: el comando avisó de que había pruebas ya escritas citando `RNF-D-01` y `RQ-07` que el catálogo no reconocía.
 >
@@ -1005,9 +1005,10 @@ GET    /api/v1/diagnostics/errors          Histórico de errores         [rol: a
 POST   /api/v1/diagnostics/errors/{id}/resolve  Marcar error resuelto   [rol: admin]
 
 POST   /api/v1/employees/import            Importación de plantilla     [rol: rrhh, modo simulación]
-GET    /api/v1/employees, /departments, /sites, /contracts, /devices, /absences
+GET    /api/v1/employees, /departments, /site, /contracts, /devices, /absences
                                             Consulta y listado            [rol: manager+]
-POST/PATCH /api/v1/employees, /departments, /sites, /contracts, /devices, /absences
+POST/PATCH /api/v1/employees, /departments, /contracts, /devices, /absences
+PATCH  /api/v1/site                         El centro de la instalación (ADR-040): sin alta ni lista  [rol: rrhh+]
                                             Alta y modificación           [rol: rrhh+]
 POST   /api/v1/employees/{uuid}/offboard   Baja (RN-14)                  [rol: rrhh+]
 GET    /api/v1/health  /api/v1/ready       Sondas de salud
@@ -1021,7 +1022,7 @@ GET    /metrics                            Métricas Prometheus          [red in
 | `POST /api/v1/scan` y `/scan/batch` | **La petición** gana el campo `intent` (`auto` \| `break_start` \| `break_end`, opcional, `auto` por defecto), y **la respuesta** amplía `action` a `clock_in`, `clock_out`, `break_start`, `break_end` | RF-AT-12 se resuelve en el endpoint existente, sin ruta nueva. **Los dos sentidos son necesarios**: con la pausa como dos tramos (ADR-024), `break_start` y `clock_out` son idénticos para el servidor, que no puede deducir cuál es. Sin `intent` en la petición, `work_date` se atribuye mal cuando la pausa cruza medianoche. Ambos cambios son aditivos y no rompen la v1 (ADR-012) |
 | `POST /api/v1/scan` | **La respuesta `200` es un `oneOf` discriminado por `action`**: `ScanAccepted` para los cuatro que crean o cierran tramo, y **`ScanDebounced` con `action: debounced`** para el anti-rebote | RF-AT-06 es **Must** de la Fase 1 y no cabía en el contrato. Con `ScanAccepted` habría que devolver una acción que no ocurrió; con `ScanRejected` se confundiría con el rechazo de credencial, que es genérico por diseño (RS-03). Es `2xx` porque la cola offline reintenta ante fallo (RF-KI-04): un `4xx` la dejaría reintentando contra una ventana ya pasada ([ADR-031](adr/ADR-031-el-antirrebote-es-un-resultado-aceptado.md)) |
 | `POST /api/v1/employees/{uuid}/pin/reset` y `/pin/deliver` | **Endpoints nuevos** para generar, restablecer y registrar la entrega del PIN | RF-ID-09. El PIN sostiene RF-AT-11 y el acceso al portal (RL-05), y ninguna tarea lo proveía. Se muestra una sola vez y nunca se almacena en claro |
-| `POST /api/v1/kiosk/pair` + `/pair/confirm` | **Dos pasos.** La tablet sin vincular llama a `/pair` y recibe el código de un solo uso que muestra en pantalla; el administrador lo teclea en el panel, que llama a `/pair/confirm` para vincularla al centro y emitir su token | Reconcilia RF-PD-06 («código mostrado en la tablet e introducido en el panel») con el carácter público y de un solo uso de `/pair`. `kiosk:pairing-code {site}` se conserva como vía alternativa de consola, coherente con «el cliente no tiene por qué usar SSH» |
+| `POST /api/v1/kiosk/pair` + `/pair/confirm` | **Dos pasos.** La tablet sin vincular llama a `/pair` y recibe el código de un solo uso que muestra en pantalla; el administrador lo teclea en el panel, que llama a `/pair/confirm` para vincularla al centro y emitir su token | Reconcilia RF-PD-06 («código mostrado en la tablet e introducido en el panel») con el carácter público y de un solo uso de `/pair`. `kiosk:pairing-code` se conserva como vía alternativa de consola, coherente con «el cliente no tiene por qué usar SSH» |
 | `GET /api/v1/me/export` | **CSV y PDF**, seleccionables por `?format=`. CSV disponible desde la tarea 1.11; PDF se añade en la 2.9, cuando existe la maquinaria de exportación. **Sin XLSX** | CSV cubre la portabilidad del RGPD; el PDF es lo que una persona presenta. XLSX no aporta nada sobre CSV para un histórico personal |
 | `GET /api/v1/credentials/status` | Admite filtro `?key_id=` | Permite ver a quién le falta reimprimir durante una rotación de clave con solape (RF-QR-07, §5.3) sin añadir un endpoint |
 | `GET /api/v1/compliance/summary` | **Endpoint nuevo.** Sirve la vista de cumplimiento con filtros de periodo y ámbito | RF-PA-06 y RN-10..12 exigen la vista, y el contrato no tenía ruta para ella |

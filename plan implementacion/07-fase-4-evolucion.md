@@ -29,11 +29,11 @@ Las cinco del documento 02 §11, contrastadas con lo que el documento 05 §11 an
 | 4.b | **Vacaciones y permisos con flujo de aprobación** | Contemplada | §11 la anuncia. §8 acota el presente con precisión: «Se registran las ausencias para no falsear los informes, **pero sin flujo de aprobación**» |
 | 4.c | **Integración directa con sistemas de nómina concretos** | Contemplada | El doc 05 no la anuncia en §11. Lo que sí está comprometido y **es de la Fase 3** (tarea 3.9) es la *exportación configurable para nómina* (RF-IN-07) |
 | 4.d | **Informes avanzados** | Contemplada | §11: «Informes avanzados» |
-| 4.e | **Consolidación multi-centro para cadenas** | Contemplada | §11: «consolidación entre varios centros de una cadena», con la salvedad de que «el modelo de datos ya contempla varios centros desde el primer día, aunque se despliegue con uno solo» |
+| 4.e | **Consolidación multi-centro para cadenas** | **Retirada** (ADR-040, 29 de agosto de 2026) | Una licencia es un hotel y cada hotel es una instalación. El doc 05 §11 ya no la anuncia y no queda promesa estructural que mantener |
 
 ### Dos matices que conviene no perder
 
-**4.a y 4.e llevan una promesa estructural, no funcional.** Al cliente no se le ha prometido la funcionalidad, pero sí que *el modelo de datos deja la puerta abierta*. Eso no es una tarea de la Fase 4: es una **restricción sobre las Fases 1 y 2**. El diseño del dominio (tarea 1.1) y el esquema (tarea 1.3) deben admitir varios centros y no cerrar la puerta a un cuadrante planificado, porque esa afirmación ya está escrita en un documento comercial. Si al llegar aquí hay que rehacer el esquema, la promesa era falsa.
+**4.a lleva una promesa estructural, no funcional.** Al cliente no se le ha prometido la funcionalidad, pero sí que *el modelo de datos deja la puerta abierta*. Eso no es una tarea de la Fase 4: es una **restricción sobre las Fases 1 y 2**. El diseño del dominio (tarea 1.1) y el esquema (tarea 1.3) no deben cerrar la puerta a un cuadrante planificado, porque esa afirmación ya está escrita en un documento comercial. Si al llegar aquí hay que rehacer el esquema, la promesa era falsa.
 
 **4.b tiene una frontera explícita que hoy se cumple y hay que seguir cumpliendo.** El registro de ausencias existe desde la tarea 3.10 (RF-GP-04), pero **sin flujo de aprobación**. Esa distinción está escrita en el documento 05 §8 y es lo que separa esta fase de lo ya entregado. Añadir un botón de "aprobar" en cualquier momento anterior desdibuja la frontera y convierte en incierto lo que hoy es una expectativa acotada.
 
@@ -47,7 +47,6 @@ El documento 02 condiciona la fase a «datos de uso reales». Estos son los dato
 |---|---|---|
 | ¿Se usan los informes existentes lo suficiente como para que "avanzados" signifique algo? | Cuadro de impacto y adopción (RF-IN-08, tarea 3.13) | doc 02 §8.3 |
 | ¿Cuánto esfuerzo manual consume hoy la salida a nómina? | Uso real de `GET /api/v1/reports/payroll-export` (tarea 3.9) | doc 01 Anexo B |
-| ¿Cuántos clientes tienen de verdad más de un centro? | Configuración de instalación de la base instalada (RF-PD-01) | doc 02 §11.6 |
 | ¿El registro de ausencias sin aprobación genera fricción real? | Correcciones con motivo `AJUSTE_ACORDADO_CON_RRHH` y `ALTA_RETROACTIVA`, más `manual_corrections_total{reason_code}` | doc 01 Anexo C · doc 02 §8.2 |
 | ¿Qué pide de verdad el cliente frente a lo que suponemos? | La primera instalación en casa de un cliente. El doc 03 §7 lo pone entre lo que sigue necesitando una persona | doc 03 §7 |
 

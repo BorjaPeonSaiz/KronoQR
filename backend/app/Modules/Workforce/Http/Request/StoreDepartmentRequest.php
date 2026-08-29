@@ -11,11 +11,10 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
 
 /**
- * Alta de departamento.
+ * `POST /api/v1/departments` (contrato `CreateDepartmentRequest`).
  *
- * `manager_user_id` no se acepta: asignar responsable solo tiene efecto con el
- * ambito por departamento de RF-ID-03 (tarea 2.1), y aceptarlo antes seria
- * prometer un control de acceso que todavia no se aplica.
+ * Sin `site_id`: el departamento queda en el centro de la instalacion
+ * (ADR-040). `RejectsUnknownInput` lo rechaza si alguien lo envia.
  */
 final class StoreDepartmentRequest extends FormRequest
 {
@@ -32,7 +31,6 @@ final class StoreDepartmentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'site_id' => ['required', 'integer', 'min:1', 'exists:sites,id'],
             'name' => ['required', 'string', 'max:120'],
         ];
     }
@@ -40,7 +38,6 @@ final class StoreDepartmentRequest extends FormRequest
     public function toCommand(): CreateDepartmentCommand
     {
         return new CreateDepartmentCommand(
-            siteId: $this->integer('site_id'),
             name: $this->string('name')->trim()->value(),
         );
     }

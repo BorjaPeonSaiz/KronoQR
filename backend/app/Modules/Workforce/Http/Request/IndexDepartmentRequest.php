@@ -10,7 +10,10 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
 
 /**
- * Listado de departamentos, opcionalmente de un solo centro.
+ * `GET /api/v1/departments`. Sin parametros: son los del centro de la
+ * instalacion, que es el unico (ADR-040). `RejectsUnknownInput` sigue aqui
+ * para que un `?site_id=` heredado de un enlace antiguo falle en voz alta en
+ * vez de devolver la lista entera como si hubiera acotado algo.
  */
 final class IndexDepartmentRequest extends FormRequest
 {
@@ -26,13 +29,6 @@ final class IndexDepartmentRequest extends FormRequest
      */
     public function rules(): array
     {
-        return [
-            'site_id' => ['sometimes', 'integer', 'min:1', 'exists:sites,id'],
-        ];
-    }
-
-    public function siteFilter(): ?int
-    {
-        return $this->has('site_id') ? $this->integer('site_id') : null;
+        return [];
     }
 }

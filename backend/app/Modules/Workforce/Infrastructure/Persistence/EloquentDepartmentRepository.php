@@ -7,7 +7,6 @@ namespace App\Modules\Workforce\Infrastructure\Persistence;
 use App\Modules\Workforce\Application\Port\DepartmentRepository;
 use App\Modules\Workforce\Domain\Exception\DepartmentNameAlreadyTaken;
 use App\Modules\Workforce\Domain\Model\Department as DepartmentEntity;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\QueryException;
 use RuntimeException;
 
@@ -55,11 +54,9 @@ final readonly class EloquentDepartmentRepository implements DepartmentRepositor
         return $row instanceof Department ? $this->toEntity($row) : null;
     }
 
-    public function all(?int $siteId = null): array
+    public function all(): array
     {
         $rows = Department::query()
-            ->when($siteId !== null, static fn (Builder $query): Builder => $query->where('site_id', $siteId))
-            ->orderBy('site_id')
             ->orderBy('name')
             ->get();
 

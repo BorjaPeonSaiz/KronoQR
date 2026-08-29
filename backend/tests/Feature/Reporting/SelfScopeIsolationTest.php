@@ -145,7 +145,7 @@ it('no deja que una sesion de portal alcance ningun endpoint de gestion', functi
     'plantilla' => '/api/v1/employees',
     'ficha de otro' => '/api/v1/employees/00000000-0000-7000-8000-000000000000',
     'credenciales' => '/api/v1/credentials/status',
-    'centros' => '/api/v1/sites',
+    'centro' => '/api/v1/site',
     'exportacion legal' => '/api/v1/reports/legal-export?from=2026-03-01&to=2026-03-31',
 ])->group('RF-ID-07', 'RQ-07', 'RS-04');
 

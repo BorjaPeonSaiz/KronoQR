@@ -36,7 +36,6 @@ final class IndexEmployeeRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'site_id' => ['sometimes', 'integer', 'min:1', 'exists:sites,id'],
             'department_id' => ['sometimes', 'integer', 'min:1', 'exists:departments,id'],
             'status' => ['sometimes', 'string', 'in:'.implode(',', array_column(EmploymentStatus::cases(), 'value'))],
             // Los casos salen del enum, no de una lista escrita a mano: un
@@ -89,11 +88,6 @@ final class IndexEmployeeRequest extends FormRequest
         $status = $this->string('pin_status')->value();
 
         return $status === '' ? null : PinStatus::from($status);
-    }
-
-    public function siteFilter(): ?int
-    {
-        return $this->has('site_id') ? $this->integer('site_id') : null;
     }
 
     public function departmentFilter(): ?int

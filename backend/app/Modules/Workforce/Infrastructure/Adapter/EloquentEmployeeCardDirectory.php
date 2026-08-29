@@ -40,23 +40,18 @@ use Illuminate\Database\Eloquent\Builder;
  */
 final readonly class EloquentEmployeeCardDirectory implements EmployeeCardDirectory
 {
-    public function activeProfiles(?int $siteId = null, ?string $employeeUuid = null): array
+    public function activeProfiles(?string $employeeUuid = null): array
     {
         $query = $this->baseQuery()
             ->where('employees.status', EmploymentStatus::ACTIVE->value)
             // Orden estable y con sentido fisico: las tarjetas salen de la hoja
-            // A4 agrupadas por centro y por departamento, que es como se
-            // reparten. `employees.id` al final rompe empates para que dos
-            // ejecuciones produzcan la misma hoja.
-            ->orderBy('sites.name')
+            // A4 agrupadas por departamento, que es como se reparten.
+            // `employees.id` al final rompe empates para que dos ejecuciones
+            // produzcan la misma hoja.
             ->orderByRaw('departments.name NULLS LAST')
             ->orderBy('employees.last_name')
             ->orderBy('employees.first_name')
             ->orderBy('employees.id');
-
-        if ($siteId !== null) {
-            $query->where('employees.site_id', $siteId);
-        }
 
         if ($employeeUuid !== null) {
             // La comparacion la resuelve el tipo `uuid` nativo de PostgreSQL,

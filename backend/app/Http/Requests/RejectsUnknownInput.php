@@ -16,9 +16,9 @@ use Illuminate\Contracts\Validation\Validator;
  *
  *   - `POST /employees` con `employee_code`: quien lo envia se va convencido de
  *     haber fijado el codigo, y el servidor genero otro (RF-ID-06).
- *   - `PATCH /departments/{id}` con `site_id`: quien lo envia cree haber movido
- *     el departamento de centro, y no ha movido nada — pero con eso los
- *     empleados habrian cambiado de zona horaria y de jornada (RN-05).
+ *   - `POST /employees` con `site_id`: quien lo envia cree haber elegido un
+ *     centro, y no hay eleccion posible — hay exactamente uno por instalacion
+ *     (ADR-040)—; ignorarlo le dejaria creer que existe otro.
  *
  * En los dos, fallar en voz alta es mejor que acertar por casualidad.
  *
