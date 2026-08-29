@@ -1,14 +1,20 @@
-// Genera el QR de la politica de privacidad como un trazado SVG.
+// Codifica un texto como QR y lo devuelve como un trazado SVG.
+//
+// Compartido por el quiosco (QR de la politica de privacidad, RF-KI-09) y el
+// panel (QR del `otpauth://` del alta de segundo factor, RS-06): las dos
+// pantallas necesitan exactamente lo mismo —convertir un texto en un `<path>`
+// que Vue pueda enlazar—, y antes de esta migracion el panel habria tenido que
+// repetir el fichero o anadir su propia libreria de QR (ADR-036).
 //
 // POR QUE UN TRAZADO Y NO `v-html` CON EL SVG DE ZXing. La CSP del §7.2 no
 // admite `unsafe-inline`, y meter marcado generado en el DOM con `v-html` es
 // justo la puerta que esa CSP existe para cerrar. Un atributo `d` enlazado es
 // datos, no marcado: Vue lo escapa y no hay nada que inyectar.
 //
-// POR QUE CARGA DIFERIDA. El codificador de QR no hace ninguna falta para
-// escanear, que es lo unico que la pantalla tiene que hacer en los primeros dos
-// segundos. Se carga cuando alguien abre el aviso, y asi no gasta presupuesto
-// del Anexo A.
+// POR QUE CARGA DIFERIDA. Ninguna de las dos pantallas necesita el codificador
+// de QR para lo primero que hace —escanear en el quiosco, teclear la
+// contrasena en el panel—. Se carga cuando alguien abre el dialogo del QR, y
+// asi no gasta presupuesto de bundle critico de ninguna de las dos SPA.
 
 export interface QrPath {
   /** Lado del `viewBox`, en modulos (incluye la zona de silencio). */
@@ -18,10 +24,12 @@ export interface QrPath {
 }
 
 /**
- * @param contents texto a codificar. Aqui, siempre la URL de la politica.
+ * @param contents texto a codificar: la URL de la politica de privacidad en el
+ *        quiosco, la URI `otpauth://` del segundo factor en el panel.
  * @returns `null` si el codificador no se pudo cargar o el texto no cabe. Quien
- *          llama debe seguir mostrando el enlace en texto: el aviso legal no
- *          depende de que el QR se pinte.
+ *          llama debe seguir ofreciendo el texto sin codificar (el enlace de la
+ *          politica, el secreto en base32): ninguna de las dos pantallas depende
+ *          de que el QR se pinte.
  */
 export async function renderQrPath(contents: string): Promise<QrPath | null> {
   if (contents === '') return null
