@@ -43,7 +43,7 @@ Verificado ejecutando comandos en la máquina, no supuesto.
 | Git 2.54.0.windows.1 | ✅ instalado | — |
 | Docker 29.5.3 + Docker Compose v5.1.4 | ⚠️ instalado, daemon PARADO | `docker info` falla: `npipe:////./pipe/dockerDesktopLinuxEngine` no responde |
 | WSL 2 | ⚠️ presente | Única distro: `docker-desktop` (Stopped). Sin distro Linux de usuario |
-| Node 24.17.0 + npm 11.13.0 | ✅ instalado | Cubre Vite 6, Vitest, Playwright |
+| Node 24.17.0 + npm 11.13.0 | ✅ instalado | Cubre Vite 8, Vitest 4, Playwright; `vue-i18n` 11 exige Node ≥ 22 |
 | PHP 8.3.31 CLI (ZTS, VC++ 2019 x64, WinGet) | ⚠️ versión inferior | El doc 02 §3.1 pide 8.4 (mínimo 8.3). Extensiones presentes: bcmath, curl, gd, intl, mbstring, openssl, zip. **Faltan: pdo_pgsql, pgsql, redis, sodium** |
 | Composer | ❌ no instalado | — |
 | GNU Make | ❌ no instalado | **Bloquea los comandos `make up`, `make test`, `make quality`, `make mutate`, `make e2e` de `CLAUDE.md`** |
@@ -308,12 +308,12 @@ La tabla del §3.1 tiene 13 filas. **Once son paquetes de Composer**; PHP es el 
 |---|---|---|
 | Framework | Vue 3.5+ (Composition API, `<script setup>`) | Curva suave, buen rendimiento en hardware de tablet modesto |
 | Lenguaje | **TypeScript 5.6+ en modo estricto** | En clientes que manipulan horas, colas offline e idempotencia, el tipado no es opcional |
-| Build | Vite 6 | — |
+| Build | Vite 8 | — |
 | CSS | Tailwind CSS 4 | — |
-| Estado | Pinia 2 | — |
-| Rutas | Vue Router 4 | — |
+| Estado | Pinia 4 | — |
+| Rutas | Vue Router 5 | — |
 | HTTP | Cliente generado desde OpenAPI | Sin desviaciones entre backend y frontends. `npm run api:generate` (skill `endpoint-api`, paso 7) |
-| i18n | `vue-i18n` 10 | Español e inglés de serie, extensible (RF-KI-05, §6.6) |
+| i18n | `vue-i18n` 11 | Español e inglés de serie, extensible (RF-KI-05, §6.6) |
 
 **Exclusivo del quiosco** (`frontend-kiosk/`):
 

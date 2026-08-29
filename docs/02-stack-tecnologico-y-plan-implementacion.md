@@ -370,16 +370,16 @@ El **Anexo D** recoge la equivalencia para MySQL 8 si la infraestructura de un c
 |---|---|---|
 | Framework | Vue 3.5+ (Composition API, `<script setup>`) | Curva suave, buen rendimiento en hardware de tablet modesto. |
 | Lenguaje | **TypeScript 5.6+ en modo estricto** | En clientes que manipulan horas, colas offline e idempotencia, el tipado no es opcional. |
-| Build | Vite 6 | — |
+| Build | Vite 8 | — |
 | CSS | Tailwind CSS 4 | — |
-| Estado | Pinia 2 | — |
-| Rutas | Vue Router 4 | — |
+| Estado | Pinia 4 | — |
+| Rutas | Vue Router 5 | — |
 | HTTP | Cliente generado desde OpenAPI | Sin desviaciones entre backend y frontends. |
 | **Escaneo QR** | **`@zxing/browser` + `@zxing/library`** | Decodifica más rápido, da control sobre `MediaStream` (enfoque, torch, resolución) y tiene mejor mantenimiento que las alternativas. |
 | **PWA (solo quiosco)** | `vite-plugin-pwa` + Workbox | El quiosco necesita instalación y service worker. El panel y el portal son web normal. |
 | **Cola offline (solo quiosco)** | **Dexie 4 (IndexedDB)** | Transaccional. `localStorage` es síncrono, con 5 MB y sin transacciones: inadecuado para una cola con garantías. |
 | Wake lock | Screen Wake Lock API con *fallback* | Evita que la tablet se suspenda. |
-| i18n | `vue-i18n` 10 | Español e inglés de serie, extensible. |
+| i18n | `vue-i18n` 11 | Español e inglés de serie, extensible. |
 | Tablas y datos (panel) | TanStack Table + TanStack Query | Virtualización para 500 empleados y caché de consultas. |
 | Gráficos (panel) | ECharts | Informes y tendencias, con tabla de datos alternativa. |
 

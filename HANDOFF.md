@@ -1,5 +1,28 @@
 # HANDOFF
 
+## Sesión «cierre de la Fase 1 con reservas» (29-08-2026), en `main`
+
+**Pregunta del usuario:** ¿puede darse por cerrada la Fase 1 y pasar a la Fase 2? **Veredicto, verificado con instrumento y no con este fichero:** sí, cerrada en todo lo que el software puede demostrar, con tres reservas de hardware/estimación que no bloquean la Fase 2.
+
+**Evidencia comprobada hoy:** `docs/trazabilidad-pruebas.md` con **75/75 requisitos de Fase 1 con prueba** (`current_phase=1`, 1132 pruebas etiquetadas); CI de `main` **en verde en `db978b4`** (9 jobs + simulacro de restauración, leído en la API de Actions con la credencial de git); suite 1725/9183, MSI 84,04 %, cobertura 91,5/85,1 % y >90 % en las tres SPA, bundle 101/250 KiB, axe limpio; auditoría independiente del 27-08 con sus 7 correcciones mergeadas; `v1.0.0` → `v2.0.0`. Las 18 tareas y los cuatro pasos del cierre constan más abajo («Objetivo actual», «Completado»).
+
+**Reservas — las tres puertas que ninguna herramienta cierra** (plan 03 «Cierre de fase», doc 02 Anexo A). Dueño: el usuario (tablet e impresora). Resultado a este fichero cuando se haga:
+1. Prueba de resistencia de **12 h en la tablet real** (memoria ≤ 250 MB sin crecimiento, wake lock, IndexedDB bajo presión — la vía del bug de reenvío que 1.9 corrigió).
+2. **Tarjeta impresa y plastificada, escaneada** en el quiosco real (QR 34,4 mm; medir `HELD_GAP_MS`/visor de paso).
+3. **Recalibración R16**: 166–214 h estimadas contra lo real.
+
+**Contradicción documental corregida en el plan 03:** listaba «p95 < 150 ms» como umbral de cierre de la Fase 1, pero `RNF-P-02`/`RNF-P-06`/`RQ-08` son de **Fase 3** por el Anexo A y `docs/requisitos.yaml` (la propia tarea 1.7 lo decía). Ahora figura como medición informativa; la cifra válida sigue pendiente de una pasada k6 en Linux (en Docker Desktop/Windows ~450 ms, no evaluable). Añadido también un bloque «Estado del cierre» al final del plan 03.
+
+**Orden acordado para arrancar la Fase 2:**
+1. **Subida de toolchain del frontend** (ya planificada abajo, «Siguiente acción» de la sesión Trivy) — mejor antes de que 2.4/2.5 añadan pantallas.
+2. **Infraestructura Playwright para `frontend-admin`** (copiar la del quiosco; primer recorrido login → ficha → detalle de jornada con `@axe-core/playwright`): cierra el hueco de §9.5 de la Fase 1 (`tests/e2e` solo existe en el quiosco) y deja el carril para 2.4/2.5. Un PR propio.
+3. **Abrir la Fase 2 por 2.1** (2FA + RBAC por departamento; `backend-laravel` con revisión de `seguridad-cumplimiento`), raíz del camino crítico `2.1 → 2.4/2.6/2.8`. **Al empezar: `current_phase` → `2` en `backend/config/quality.php`** (lección del ALTO-1) — hoy la trazabilidad da 20 requisitos de Fase 2 sin prueba, que es lo esperado.
+4. Decisiones que caben en la Fase 2 sin tarea nueva: revocar la credencial en la baja (`EmployeeOffboarded`, junto a 2.1 o 2.12), `POST /me/logout`, la mitad de aplicación de RF-ID-08 (encaja en 2.1).
+
+**Ficheros tocados:** `plan implementacion/03-fase-1-mvp-fichaje.md` (umbral p95 + bloque «Estado del cierre»), `HANDOFF.md`. Sin commit.
+
+**Siguiente acción:** el punto 1 del orden de arriba (toolchain del frontend), en rama propia.
+
 ## Sesión «Trivy a bloqueante» (29-08-2026), en `fix/postgres-nonroot-image`
 
 **Rama `fix/postgres-nonroot-image`** sobre `main` (`f4f31d4`, merge de la PR #9 con la 2.0.0). Cierra el triaje de Trivy que quedaba pendiente con vencimiento 2026-11-30, sin ampliar excepciones.
@@ -159,7 +182,7 @@ Ejecutando la **Fase 1 (MVP de fichaje)** del plan de implementación, por instr
 3. `qa-testing` — cobertura, MSI, y que cada requisito del Anexo A de la fase tenga prueba (`qa:traceability --check`) ✅
 4. `devops-observabilidad` — instrumentación y runbook de cada alerta nueva ✅
 
-Instrucción del usuario: continuar hasta cerrar la fase y **no más**. Cumplida — **no se ha empezado la Fase 2**. Próxima sesión: decidir con el usuario si se arranca la Fase 2 o si antes hay que resolver alguno de los pendientes explícitos de abajo.
+Instrucción del usuario: continuar hasta cerrar la fase y **no más**. Cumplida — **no se ha empezado la Fase 2**. **Decidido el 29-08-2026** (ver la sesión «cierre de la Fase 1 con reservas» al principio): la fase queda cerrada con tres reservas de hardware/estimación y la Fase 2 arranca tras dos tareas previas (toolchain del frontend, Playwright del panel).
 
 **Cerrado además, a petición del usuario, un hueco real de la tarea 1.7**: `GET /api/v1/health` y `GET /api/v1/ready` estaban completos en el contrato desde la Fase 0 pero nunca se habían implementado (solo comentarios que daban por hecho que existían). Implementados por `backend-laravel`: `/health` no toca ninguna dependencia (BD/Redis/disco) y expone la versión SemVer desplegada, resuelta de `APP_VERSION`/`IMAGE_TAG` o, si no son SemVer válido (p. ej. `latest` en desarrollo), del fichero `VERSION` nuevo en la raíz del repositorio; `/ready` sí comprueba PostgreSQL y Redis, con `503 problem+json` genérico sin detallar qué componente falló. Verificado en vivo: `curl https://localhost/api/v1/health` → `{"status":"ok","version":"1.0.0"}`. `make test` **1585 pruebas / 8530 aserciones** en verde.
 
