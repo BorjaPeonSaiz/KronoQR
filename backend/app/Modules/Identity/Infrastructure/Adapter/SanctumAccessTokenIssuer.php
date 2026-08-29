@@ -38,6 +38,55 @@ final readonly class SanctumAccessTokenIssuer implements AccessTokenIssuer
     }
 
     /**
+     * Los retos abiertos de una cuenta: **como mucho uno, y el ultimo**.
+     *
+     * ## Por que se limpian y no se dejan caducar solos
+     *
+     * Un reto vale diez minutos, y en ese hueco cada intento de acceso con la
+     * contrasena correcta dejaba **un token vivo mas**. Tres consecuencias, todas
+     * reales:
+     *
+     * 1. **Media autenticacion acumulada.** Quien tiene la contrasena de alguien
+     *    —que es exactamente el escenario contra el que RS-06 pone el segundo
+     *    factor— podia sembrar tantos retos como quisiera y quedarse esperando a
+     *    que la victima cantara un codigo en voz alta, con varias oportunidades
+     *    abiertas en lugar de una.
+     * 2. **El «cancelar» del panel no cerraba nada.** Cerrar la pantalla del
+     *    codigo abandona el token; entrar otra vez abria otro y el anterior seguia
+     *    valiendo hasta caducar.
+     * 3. Filas de `personal_access_tokens` que nadie iba a canjear.
+     *
+     * Emitir un reto **invalida el anterior**, y emitir la sesion definitiva
+     * invalida los que queden: al terminar de entrar no puede sobrevivir ningun
+     * permiso de «presenta un codigo por esta cuenta». Es el mismo criterio con el
+     * que `VerifyTwoFactorHandler` consume el reto con el que se le llamo, extendido
+     * a los que ese handler no ve porque se abrieron en otra pestaña.
+     *
+     * **Solo los retos.** No toca ninguna sesion de verdad: entrar en el portatil
+     * no puede echar a nadie de la tablet donde estaba revisando incidencias, que
+     * es la razon por la que {@see self::revoke()} revoca uno y no todos.
+     */
+    private function revokePendingChallengesOf(User $account): void
+    {
+        $onlyPending = [TokenAbility::TWO_FACTOR_PENDING->value];
+
+        $tokens = Sanctum::personalAccessTokenModel()::query()
+            ->where('tokenable_type', $account->getMorphClass())
+            ->where('tokenable_id', $account->getKey())
+            ->get();
+
+        foreach ($tokens as $token) {
+            // Se compara la lista COMPLETA de ambitos y no se pregunta «¿puede
+            // presentar un codigo?»: lo segundo alcanzaria tambien a un token que
+            // llevara ese ambito entre otros, y borrar una sesion por parecerse a
+            // un reto es peor que dejar un reto vivo.
+            if ($token->abilities === $onlyPending) {
+                $token->delete();
+            }
+        }
+    }
+
+    /**
      * La sesion pendiente de segundo factor (RS-06).
      *
      * **Un solo ambito y minutos de vida.** Lo que hay abierto aqui es media
@@ -78,6 +127,10 @@ final readonly class SanctumAccessTokenIssuer implements AccessTokenIssuer
             throw new RuntimeException('La cuenta ha dejado de existir mientras se emitia su token.');
         }
 
+        // ANTES DE EMITIR, EN LOS DOS CAMINOS. Al abrir un reto nuevo se cierra el
+        // anterior; al emitir la sesion definitiva no puede quedar vivo ninguno.
+        $this->revokePendingChallengesOf($account);
+
         $token = $account->createToken($deviceName, $abilities, $expiresAt);
 
         return new IssuedAccessToken($token->plainTextToken, $expiresAt);
@@ -87,6 +140,24 @@ final readonly class SanctumAccessTokenIssuer implements AccessTokenIssuer
     {
         Sanctum::personalAccessTokenModel()::query()
             ->whereKey($tokenId)
+            ->delete();
+    }
+
+    public function revokeAllFor(string $userUuid): void
+    {
+        $account = User::query()->where('uuid', $userUuid)->first();
+
+        if (! $account instanceof User) {
+            // Sin cuenta no hay tokens que revocar. No se lanza: quien llama
+            // —`ResetTwoFactorHandler`— ya comprobo que existe, y convertir una
+            // carrera improbable en un `500` dejaria la retirada del segundo
+            // factor a medias.
+            return;
+        }
+
+        Sanctum::personalAccessTokenModel()::query()
+            ->where('tokenable_type', $account->getMorphClass())
+            ->where('tokenable_id', $account->getKey())
             ->delete();
     }
 

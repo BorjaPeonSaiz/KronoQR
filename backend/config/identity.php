@@ -110,6 +110,24 @@ return [
         'lockout_seconds' => (int) env('IDENTITY_2FA_LOCKOUT_SECONDS', 900),
 
         /*
+         * Limite de PETICIONES de la zona `2fa` (§7.1: 5 r/m, el mismo que la de
+         * acceso).
+         *
+         * ZONA PROPIA Y NO LA DE ACCESO, y no es reparto: aquella toma la cuenta
+         * del `email` del cuerpo, y en `/auth/2fa/*` no hay ningun correo —el
+         * sujeto viaja en el token pendiente—. Con la zona `auth`, la clave por
+         * cuenta era la cadena vacia y los cinco intentos por minuto los compartia
+         * la instalacion entera: cualquiera con un reto abierto dejaba a todos los
+         * demas sin poder completar su acceso.
+         *
+         * ES OTRO CONTROL QUE EL DE ARRIBA. `max_attempts` cuenta FALLOS de codigo
+         * por cuenta; esto cuenta PETICIONES por cuenta y por origen. Uno frena a
+         * quien acierta la contrasena y prueba codigos; el otro, a quien inunda
+         * los tres endpoints. Nginx pone el tercero en el borde.
+         */
+        'rate_limit_per_minute' => (int) env('IDENTITY_2FA_RATE_LIMIT', 5),
+
+        /*
          * VENTANA DE TOLERANCIA, en franjas de 30 s a cada lado del instante
          * actual.
          *
@@ -182,6 +200,35 @@ return [
          * trafico que nunca llega a PHP.
          */
         'rate_limit_per_minute' => (int) env('IDENTITY_PORTAL_RATE_LIMIT', 10),
+    ],
+
+    /*
+     * API de gestion — el panel de RRHH y de direccion.
+     */
+    'management' => [
+        /*
+         * Limite de peticiones de la zona `management`.
+         *
+         * MISMO TECHO QUE LA ZONA «RESTO» DE NGINX (§7.1: 120 r/m), no un numero
+         * nuevo. Lo que aporta respecto al del borde es el EJE POR CUENTA: Nginx
+         * no lee el token, asi que no puede distinguir dos sesiones que salen por
+         * la misma linea del hotel.
+         *
+         * POR QUE HAY TECHO DE APLICACION EN ESTAS RUTAS. El listado de
+         * plantilla, la ficha, el registro horario de una persona y las
+         * correcciones son los cuatro sitios donde una denegacion por alcance
+         * escribe `access.denied` en `audit_log` (RF-ID-03), y ese asiento pasa
+         * por el candado global de ADR-010, el mismo por el que pasa cada
+         * fichaje. Sin techo, un bucle sobre UUID ajenos mete escrituras
+         * ilimitadas en el camino critico del cambio de turno.
+         *
+         * 120 R/M NO ES UNA MEDICION: un panel abierto consulta unidades de
+         * peticiones por minuto, asi que deja margen de sobra para una persona
+         * con prisa y corta un bucle automatizado en el primer segundo. Como todo
+         * lo de este fichero, es configuracion y no una constante (regla dura
+         * 13).
+         */
+        'rate_limit_per_minute' => (int) env('IDENTITY_MANAGEMENT_RATE_LIMIT', 120),
     ],
 
     'password' => [

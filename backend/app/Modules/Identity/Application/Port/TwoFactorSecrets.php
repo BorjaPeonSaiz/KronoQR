@@ -6,6 +6,7 @@ namespace App\Modules\Identity\Application\Port;
 
 use App\Modules\Identity\Domain\ValueObject\AuthenticatedUser;
 use DateTimeImmutable;
+use SensitiveParameter;
 
 /**
  * Donde vive el secreto TOTP de una cuenta de gestion (**RS-06**, RF-ID-01).
@@ -54,7 +55,7 @@ interface TwoFactorSecrets
      * instalacion (`APP_KEY`), nunca en claro: quien pueda leer una copia de la
      * base de datos no debe poder generar los codigos de nadie.
      */
-    public function storeUnconfirmedSecret(string $uuid, string $secret): void;
+    public function storeUnconfirmedSecret(string $uuid, #[SensitiveParameter] string $secret): void;
 
     /**
      * Da por bueno el secreto sin confirmar de la cuenta y lo deja activo.

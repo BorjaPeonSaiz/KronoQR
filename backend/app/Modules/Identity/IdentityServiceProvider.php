@@ -25,6 +25,7 @@ use App\Modules\Identity\Application\UseCase\AuthenticatePortalEmployeeHandler;
 use App\Modules\Identity\Application\UseCase\AuthenticateUserHandler;
 use App\Modules\Identity\Application\UseCase\ConfirmTwoFactorHandler;
 use App\Modules\Identity\Application\UseCase\DeliverCredential;
+use App\Modules\Identity\Application\UseCase\EnrolTwoFactorHandler;
 use App\Modules\Identity\Application\UseCase\IssueDeviceToken;
 use App\Modules\Identity\Application\UseCase\MintCards;
 use App\Modules\Identity\Application\UseCase\RotateDeviceTokenIfDue;
@@ -64,6 +65,7 @@ use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CredentialFingerprints;
 use App\Modules\Shared\Application\Port\EmployeePinVerifier;
 use App\Modules\Shared\Application\Port\EmployeeRegistry;
+use App\Modules\Shared\Application\Port\ManagementActor;
 use App\Modules\Shared\Application\Port\PortalSessionIssuer;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
@@ -139,6 +141,8 @@ final class IdentityServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->registerAuthenticationRateLimiter();
+        $this->registerTwoFactorRateLimiter();
+        $this->registerManagementRateLimiter();
         $this->registerPortalRateLimiter();
         $this->rejectTokensOfDeactivatedAccounts();
 
@@ -223,7 +227,16 @@ final class IdentityServiceProvider extends ServiceProvider
             'identity.two_factor.lockout_seconds',
         );
 
-        $this->app->when([VerifyTwoFactorHandler::class, ConfirmTwoFactorHandler::class])
+        // LOS TRES CASOS DE USO DE `/auth/2fa/*`, no dos. El alta comparte el
+        // contador con la verificacion y la confirmacion porque los tres se
+        // alcanzan con el mismo token pendiente: si el alta tuviera contador
+        // propio —o ninguno—, pedir un secreto nuevo seria la forma de dejar atras
+        // el bloqueo por intentos de codigo.
+        $this->app->when([
+            VerifyTwoFactorHandler::class,
+            ConfirmTwoFactorHandler::class,
+            EnrolTwoFactorHandler::class,
+        ])
             ->needs(LoginAttempts::class)
             ->give($codeAttempts);
     }
@@ -516,6 +529,13 @@ final class IdentityServiceProvider extends ServiceProvider
      * Nginx aplica ademas su propio limite en el borde (§7.2). Los dos, porque
      * el del borde no distingue cuentas y este no ve el trafico que nunca llega
      * a PHP.
+     *
+     * **SOLO `/auth/login`.** Los tres endpoints de `/auth/2fa/*` tienen zona
+     * propia y no esta, y no es una preferencia de reparto: alli no hay ningun
+     * `email` en el cuerpo —`TwoFactorCodeRequest` solo admite `code`— asi que la
+     * clave por cuenta se componia siempre con la cadena vacia y degeneraba en
+     * **un unico cubo de 5 r/m para toda la instalacion**. Cualquiera con un reto
+     * abierto dejaba sin poder completar su acceso a todos los demas.
      */
     private function registerAuthenticationRateLimiter(): void
     {
@@ -527,6 +547,105 @@ final class IdentityServiceProvider extends ServiceProvider
                 Limit::perMinute(5)->by('auth-account:'.$email),
             ];
         });
+    }
+
+    /**
+     * Zona del segundo factor: **5 r/m**, por origen **y por cuenta**.
+     *
+     * **Existe porque la zona `auth` no sabe a quien contar aqui.** Aquella toma
+     * la cuenta del `email` del cuerpo, y en `/auth/2fa/{verify,enrol,confirm}` no
+     * hay cuerpo con correo: el sujeto viaja en el token pendiente, que es lo
+     * unico que el cliente no puede falsificar. Con la zona de acceso, la clave
+     * por cuenta era la constante `auth-account:` y los cinco intentos por minuto
+     * los compartia la instalacion entera.
+     *
+     * **La cuenta se toma del dueño del token**, mismo criterio que
+     * {@see self::portalSubjectOf()} en `/me/workdays`: donde no hay credencial
+     * que probar todavia se cuenta lo que se envia, y donde ya hay sesion se
+     * cuenta a quien la porta. El middleware va **detras** de `auth:sanctum` en la
+     * ruta precisamente para que aqui haya alguien resuelto.
+     *
+     * **Y no sustituye al bloqueo por intentos de codigo** (§7.5, contador propio
+     * de `identity.two_factor.max_attempts`): este cuenta peticiones y aquel
+     * cuenta fallos. Nginx pone el tercero en el borde, que no distingue cuentas.
+     */
+    private function registerTwoFactorRateLimiter(): void
+    {
+        RateLimiterFacade::for('2fa', static function (Request $request): array {
+            // Dentro del cierre por lo mismo que en la zona del portal: leerlo
+            // fuera lo congelaria en el valor que tuviera la configuracion al
+            // arrancar, y ni `config:cache` ni una prueba podrian moverlo.
+            $perMinute = max(1, Config::integer('identity.two_factor.rate_limit_per_minute', 5));
+
+            return [
+                Limit::perMinute($perMinute)->by('2fa-ip:'.(string) $request->ip()),
+                Limit::perMinute($perMinute)->by('2fa-account:'.self::pendingTwoFactorSubjectOf($request)),
+            ];
+        });
+    }
+
+    /**
+     * A quien se le cuenta una peticion de `/auth/2fa/*`, ademas de a su IP.
+     *
+     * El UUID publico de la cuenta que abrio el reto, **nunca su correo**: es el
+     * identificador con el que ya se lleva el contador de fallos de codigo, y asi
+     * las dos defensas hablan del mismo sujeto. Sin actor resuelto —que solo puede
+     * pasar si el guard cambia— se falla cerrado a una clave comun: preferible a
+     * dejar la zona sin eje por cuenta.
+     */
+    private static function pendingTwoFactorSubjectOf(Request $request): string
+    {
+        $actor = $request->user();
+
+        return $actor instanceof ManagementActor ? $actor->actorUuid() : 'desconocido';
+    }
+
+    /**
+     * Zona de la API de gestion: **120 r/m**, por cuenta y por origen.
+     *
+     * **Por que estas rutas necesitan techo de aplicacion y no les basta el del
+     * borde.** El listado de plantilla, la ficha, el registro horario de una
+     * persona y las correcciones son los cuatro sitios donde `ScopeGuard` escribe
+     * `access.denied` en `audit_log` (RF-ID-03), y ese asiento pasa por el
+     * `pg_advisory_xact_lock` **global** de ADR-010, el mismo por el que pasa cada
+     * fichaje. Sin techo, una cuenta de responsable con un bucle sobre UUID ajenos
+     * mete escrituras ilimitadas en el camino critico del cambio de turno. La
+     * segunda mitad de esa defensa es la agrupacion de denegaciones repetidas, que
+     * vive detras del puerto `AuthorizationJournal`.
+     *
+     * **120 r/m es el mismo techo que la zona «resto» de Nginx** (§7.1), no un
+     * numero nuevo: lo que aporta es el **eje por cuenta**, que el borde no puede
+     * aplicar porque no lee el token. Un panel abierto consulta unidades de
+     * peticiones por minuto; 120 deja margen de sobra para una persona con prisa y
+     * corta un bucle automatizado en el primer segundo.
+     */
+    private function registerManagementRateLimiter(): void
+    {
+        RateLimiterFacade::for('management', static function (Request $request): array {
+            // El techo se lee en cada peticion por lo mismo que en la zona del
+            // portal: fuera del cierre quedaria congelado en el valor que tuviera
+            // la configuracion al arrancar.
+            $perMinute = max(1, Config::integer('identity.management.rate_limit_per_minute', 120));
+
+            return [
+                Limit::perMinute($perMinute)->by('management-ip:'.(string) $request->ip()),
+                Limit::perMinute($perMinute)->by('management-account:'.self::managementSubjectOf($request)),
+            ];
+        });
+    }
+
+    /**
+     * A quien se le cuenta una peticion de gestion, ademas de a su IP.
+     *
+     * El UUID publico de la cuenta. Sin actor —imposible detras de
+     * `auth:sanctum`, pero el limitador no puede darlo por hecho— se cae a una
+     * clave comun, que es fallar cerrado.
+     */
+    private static function managementSubjectOf(Request $request): string
+    {
+        $actor = $request->user();
+
+        return $actor instanceof ManagementActor ? $actor->actorUuid() : 'desconocido';
     }
 
     /**

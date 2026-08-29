@@ -26,9 +26,9 @@ use Illuminate\Foundation\Http\FormRequest;
  * y esa diferencia si es un oraculo (regla dura 17).
  *
  * **La clave del contador y el sujeto no salen del cuerpo.** El sujeto es el
- * dueño del token pendiente y el contador se lleva por cuenta y origen: si
- * viajaran en la peticion, cualquiera podria gastar el cupo de otra persona o
- * presentar un codigo a nombre ajeno.
+ * dueño del token pendiente y el contador se lleva **por cuenta**: si viajaran en
+ * la peticion, cualquiera podria gastar el cupo de otra persona o presentar un
+ * codigo a nombre ajeno.
  */
 final class TwoFactorCodeRequest extends FormRequest
 {
@@ -76,10 +76,17 @@ final class TwoFactorCodeRequest extends FormRequest
             code: $this->string('code')->value(),
             deviceName: $session->deviceName,
             challengeTokenId: $session->tokenId,
-            // Por cuenta y por origen, igual que el contador de la contrasena:
-            // solo por cuenta bastaria con rotar origenes, y solo por origen
-            // dejaria a toda una oficina compartiendo cupo.
-            throttleKey: '2fa|'.$session->userUuid.'|'.(string) $this->ip(),
+            // POR CUENTA Y NADA MAS. Meter la IP en la clave convertia el bloqueo
+            // en un obstaculo de un solo salto: agotados los cinco intentos, basta
+            // con salir por otra direccion para estrenar contador, y quien esta
+            // barriendo un espacio de 10^6 codigos tiene tantas como quiera.
+            //
+            // Es el criterio que ya aplica `Shared\Application\Port\PinAttempts`:
+            // los fallos se cuentan POR PUERTA —por canal—, nunca por IP. La
+            // defensa por origen existe, pero es otra y esta en otro sitio: la
+            // zona `2fa` del limitador de peticiones y el limite del borde. Un
+            // contador de FALLOS que se reinicia con la red no cuenta fallos.
+            throttleKey: '2fa|'.$session->userUuid,
         );
     }
 }

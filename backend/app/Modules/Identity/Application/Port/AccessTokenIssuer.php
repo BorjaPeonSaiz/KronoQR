@@ -50,4 +50,27 @@ interface AccessTokenIssuer
      * persona de la tablet donde estaba revisando incidencias.
      */
     public function revoke(int|string $tokenId): void;
+
+    /**
+     * Revoca **todos** los tokens de una cuenta: sesiones abiertas y retos a
+     * medias.
+     *
+     * **La excepcion a la regla de arriba, y por eso es un metodo aparte.** Existe
+     * para retirar el segundo factor (`identity:2fa-reset`, RS-06), que es lo que
+     * se hace cuando alguien perdio el telefono — o cuando se sospecha que la
+     * cuenta esta en manos de otro. Dejar vivas las sesiones abiertas convertiria
+     * ese comando en una molestia para el legitimo dueño y en nada para quien
+     * ya estaba dentro: la credencial se retira y el acceso que produjo sigue
+     * funcionando hasta doce horas.
+     *
+     * No distingue por ambito ni por nombre a proposito: si hay que echar a
+     * alguien, se le echa de todas partes.
+     *
+     * **No devuelve cuantas cerro**, aunque el asiento de `audit_log` lo
+     * agradeceria: llevarlo hasta alli exigiria un campo nuevo en el evento de
+     * dominio `TwoFactorReset`, y el dominio no se toca desde aqui. Anotado como
+     * deuda; el hecho —que se retiro el segundo factor, con motivo y autor— ya
+     * queda escrito.
+     */
+    public function revokeAllFor(string $userUuid): void;
 }

@@ -81,6 +81,12 @@ final class User extends Authenticatable implements ManagementActor
     protected $hidden = [
         'password',
         'remember_token',
+        // El secreto TOTP (RS-06). El `cast` `encrypted` lo descifra al leerlo,
+        // asi que sin esta linea cualquier `toArray()`/`toJson()` sobre el modelo
+        // —un `dd()`, un `Log::info($user)`, un recurso que devolviera el modelo
+        // entero— lo saca EN CLARO. El producto no serializa este modelo hoy;
+        // esta aqui para que no dependa de que nadie lo haga manana.
+        'two_factor_secret',
     ];
 
     public function actorUuid(): string

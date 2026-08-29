@@ -7,6 +7,7 @@ namespace App\Modules\Identity\Infrastructure\Adapter;
 use App\Modules\Identity\Application\Port\TwoFactorAuthenticator;
 use PragmaRX\Google2FA\Exceptions\Google2FAException;
 use PragmaRX\Google2FA\Google2FA;
+use SensitiveParameter;
 
 /**
  * TOTP (RFC 6238) sobre `pragmarx/google2fa` (doc 02 §3.1, RS-06).
@@ -59,13 +60,16 @@ final readonly class Google2faAuthenticator implements TwoFactorAuthenticator
         }
     }
 
-    public function otpauthUriFor(string $account, string $secret): string
+    public function otpauthUriFor(string $account, #[SensitiveParameter] string $secret): string
     {
         return $this->google2fa->getQRCodeUrl($this->issuer, $account, $secret);
     }
 
-    public function verify(string $secret, string $code, ?int $notBeforeSlice): ?int
-    {
+    public function verify(
+        #[SensitiveParameter] string $secret,
+        #[SensitiveParameter] string $code,
+        ?int $notBeforeSlice,
+    ): ?int {
         try {
             // `verifyKeyNewer` es lo que hace que un codigo valga UNA vez: rechaza
             // el que caiga en la franja del ultimo aceptado o antes, aunque sea

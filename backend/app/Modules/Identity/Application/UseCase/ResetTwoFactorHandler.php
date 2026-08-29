@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Application\UseCase;
 
+use App\Modules\Identity\Application\Port\AccessTokenIssuer;
 use App\Modules\Identity\Application\Port\IdentityEventPublisher;
 use App\Modules\Identity\Application\Port\TwoFactorSecrets;
 use App\Modules\Identity\Application\Port\UserAccounts;
@@ -35,12 +36,28 @@ use Illuminate\Database\ConnectionInterface;
  * Retirar el secreto y publicar `auth.two_factor_reset` van juntos (ADR-027): si
  * el asiento falla, el segundo factor sigue en su sitio. Una credencial retirada
  * sin traza es justo el hecho que alguien querria que no constara.
+ *
+ * ## Y con el secreto se van las sesiones
+ *
+ * **Retirar el segundo factor sin cerrar lo que ya esta abierto no retira nada.**
+ * Los dos motivos por los que se ejecuta este comando son el telefono perdido y la
+ * sospecha de que la cuenta esta en manos de otro, y en el segundo —el que
+ * importa— quien esta dentro lleva una sesion de gestion viva de hasta doce horas:
+ * el comando le quitaria una credencial que ya no necesita y le dejaria el acceso
+ * intacto. Se revocan **todos** los tokens de la cuenta, sesiones y retos, y en la
+ * **misma transaccion** que el asiento: si la auditoria falla, ni se retira el
+ * secreto ni se echa a nadie.
+ *
+ * Es la excepcion a la regla de {@see AccessTokenIssuer::revoke()} —cerrar sesion
+ * en un sitio no echa a nadie de otro—, y por eso el puerto tiene dos metodos y no
+ * un parametro: aqui se echa a todo el mundo a proposito.
  */
 final readonly class ResetTwoFactorHandler
 {
     public function __construct(
         private UserAccounts $accounts,
         private TwoFactorSecrets $secrets,
+        private AccessTokenIssuer $tokens,
         private IdentityEventPublisher $events,
         private Clock $clock,
         private ConnectionInterface $connection,
@@ -63,6 +80,12 @@ final readonly class ResetTwoFactorHandler
 
         $this->connection->transaction(function () use ($userUuid, $reason, $actorUuid, $now): void {
             $this->secrets->forget($userUuid);
+
+            // Dentro de la transaccion, con el secreto y el asiento: las tres
+            // cosas ocurren o no ocurre ninguna. Una cuenta que perdio su segundo
+            // factor y conserva su sesion abierta es el peor de los tres estados
+            // intermedios posibles.
+            $this->tokens->revokeAllFor($userUuid);
 
             $this->events->publish(new TwoFactorReset($userUuid, $reason, $actorUuid, $now));
         });

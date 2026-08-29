@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Application\Port;
 
+use SensitiveParameter;
+
 /**
  * El algoritmo del segundo factor (TOTP, RFC 6238), visto por los casos de uso
  * que lo usan (**RS-06**, RF-ID-01).
@@ -47,7 +49,7 @@ interface TwoFactorAuthenticator
      *                           gestion—. Es lo que la persona vera en su telefono para
      *                           distinguir esta entrada de las demas.
      */
-    public function otpauthUriFor(string $account, string $secret): string;
+    public function otpauthUriFor(string $account, #[SensitiveParameter] string $secret): string;
 
     /**
      * Comprueba un codigo y devuelve **la franja temporal que lo valido**, o
@@ -63,5 +65,9 @@ interface TwoFactorAuthenticator
      * @return int|null La franja aceptada, que quien llama debe recordar, o `null` si el
      *                  codigo no vale, esta caducado o ya se uso.
      */
-    public function verify(string $secret, string $code, ?int $notBeforeSlice): ?int;
+    public function verify(
+        #[SensitiveParameter] string $secret,
+        #[SensitiveParameter] string $code,
+        ?int $notBeforeSlice,
+    ): ?int;
 }

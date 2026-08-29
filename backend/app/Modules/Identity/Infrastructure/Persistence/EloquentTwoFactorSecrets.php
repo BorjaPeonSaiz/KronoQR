@@ -7,6 +7,7 @@ namespace App\Modules\Identity\Infrastructure\Persistence;
 use App\Modules\Identity\Application\Port\TwoFactorSecrets;
 use DateTimeImmutable;
 use Illuminate\Support\Carbon;
+use SensitiveParameter;
 
 /**
  * El secreto TOTP sobre las columnas `users.two_factor_*` (RS-06).
@@ -26,6 +27,14 @@ use Illuminate\Support\Carbon;
  * indice de la ventana de TOTP, que es exactamente lo que la libreria compara; una
  * fecha obligaria a convertir en cada lectura y abriria la puerta a un error de
  * zona horaria en la unica proteccion contra reenvio que existe aqui.
+ *
+ * **El secreto entra marcado como parametro sensible.** Sin la marca, cualquier
+ * excepcion lanzada por debajo —un fallo del cifrado, un error del driver— dejaria
+ * el secreto en claro dentro de la traza que se escribe en el log, y ese log viaja
+ * al fabricante en el paquete de diagnostico (ADR-020, regla dura 21). La segunda
+ * defensa es `zend.exception_ignore_args=On` en el `php.ini` del producto, que
+ * quita **todos** los argumentos de las trazas; se ponen las dos porque la marca
+ * documenta y la directiva protege lo que nadie marco.
  */
 final readonly class EloquentTwoFactorSecrets implements TwoFactorSecrets
 {
@@ -51,7 +60,7 @@ final readonly class EloquentTwoFactorSecrets implements TwoFactorSecrets
         return $user->two_factor_secret;
     }
 
-    public function storeUnconfirmedSecret(string $uuid, string $secret): void
+    public function storeUnconfirmedSecret(string $uuid, #[SensitiveParameter] string $secret): void
     {
         $user = $this->find($uuid);
 

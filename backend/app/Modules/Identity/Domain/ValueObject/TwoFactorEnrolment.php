@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Identity\Domain\ValueObject;
 
 use InvalidArgumentException;
+use SensitiveParameter;
 
 /**
  * El secreto TOTP recien generado y su URI `otpauth://` (RS-06).
@@ -24,8 +25,12 @@ use InvalidArgumentException;
 final readonly class TwoFactorEnrolment
 {
     public function __construct(
-        public string $secret,
-        public string $otpauthUri,
+        #[SensitiveParameter] public string $secret,
+        // LA URI TAMBIEN VA MARCADA, y no es celo de mas: lleva el secreto dentro
+        // como parametro `?secret=`. Marcar solo el primero dejaria el mismo valor
+        // en la traza por el segundo argumento, que es exactamente el descuido que
+        // esta marca existe para evitar.
+        #[SensitiveParameter] public string $otpauthUri,
     ) {
         if ($secret === '') {
             throw new InvalidArgumentException('Un alta de segundo factor necesita su secreto.');

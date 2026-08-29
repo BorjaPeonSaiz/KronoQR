@@ -198,6 +198,26 @@ it('sirve las cabeceras de seguridad completas', function (): void {
     expect($headers)->toContain('camera=(self)');
 })->group('RS-09');
 
+it('no deja los argumentos de las funciones en las trazas de excepcion', function (): void {
+    // RS-08, ADR-020 y regla dura 21. El valor COMPILADO de PHP para
+    // `zend.exception_ignore_args` es `Off`: sin esta linea en el `php.ini` del
+    // producto, cada traza enumera lo que recibio cada marco —contrasena de
+    // gestion, PIN del empleado, secreto TOTP, codigo del autenticador, payload
+    // firmado del QR—, y esas trazas van a stderr, de ahi al stack de logs y de
+    // ahi al PAQUETE DE DIAGNOSTICO que se envia al fabricante.
+    //
+    // Es la mitad que no se ve de `#[SensitiveParameter]`, que
+    // `CredentialLeakGuardsTest` comprueba por reflexion: el atributo protege lo
+    // que alguien marco, la directiva protege lo que nadie marco.
+    //
+    // Se comprueba el FICHERO y no `ini_get()` a proposito: la suite corre en el
+    // contenedor de desarrollo, pero lo que se despliega en el servidor del
+    // cliente es este `.ini`. Una prueba contra el proceso pasaria en verde con la
+    // linea borrada del fichero si el runner tuviera otra configuracion.
+    expect(repoContents('infra/docker/php/conf.d/zz-kronoqr.ini'))
+        ->toMatch('/^\s*zend\.exception_ignore_args\s*=\s*On\s*$/mi');
+})->group('RS-08');
+
 it('comprueba el presupuesto de bundle del quiosco en el propio build', function (): void {
     // RNF-P-07 (Anexo A del doc 02): JS critico <= 250 KB gzip, CSS <= 40 KB.
     //

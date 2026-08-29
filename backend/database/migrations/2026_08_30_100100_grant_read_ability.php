@@ -61,6 +61,30 @@ use Illuminate\Support\Facades\DB;
  * encontrado la causa dentro de Larastan; queda anotado para que nadie lo
  * renombre «para que se lea mejor» y pierda media tarde averiguando por que la CI
  * se pone roja en pruebas que no ha tocado.
+ *
+ * ## Esto cambia el reparto de permisos y NO deja asiento — deuda anotada
+ *
+ * `AuditAction::PermissionChanged` (`permission.changed`) existe en el catalogo y
+ * este es, literalmente, un cambio de reparto de permisos: tres roles ganan un
+ * ambito. No se escribe aqui, y las razones son de sitio, no de criterio:
+ *
+ * - **El rol de base de datos no es el mismo.** Las migraciones corren con
+ *   `fichaje_migrator` (ADR-033); `audit_log` la escribe la aplicacion con
+ *   `fichaje_app`. Un asiento desde aqui exigiria cambiar de conexion a mitad de
+ *   una migracion.
+ * - **La cadena de hash no esta garantizada en este punto.** `audit_log` es una
+ *   tabla particionada (ADR-027) cuyas particiones crea un comando programado: en
+ *   una instalacion nueva, esta migracion puede correr antes de que exista la
+ *   particion del periodo.
+ * - **El actor seria `system` y la fecha, la del despliegue.** Que es cierto, pero
+ *   responde a «cuando se desplego esta version», que ya responde el registro de
+ *   migraciones y el `CHANGELOG`.
+ *
+ * **Donde encaja de verdad:** en el paso de puesta en marcha y actualizacion de la
+ * Fase 5 (`install.sh` / tarea 5.7), que si corre como aplicacion y despues de las
+ * migraciones. Anotado alli, no resuelto aqui: meter una escritura de auditoria
+ * dentro de una migracion es como se acaba con un despliegue que falla por una
+ * tabla que todavia no tiene particion.
  */
 return new class extends Migration
 {

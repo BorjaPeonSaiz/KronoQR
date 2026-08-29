@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Tests\Feature\Quality\Support\Commands;
 use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
 
 /*
@@ -61,6 +62,37 @@ it('retira el segundo factor y lo deja escrito en audit_log', function (): void 
         ->and($payload)->not->toContain($user->email)
         ->and($payload)->not->toContain(ManagementUsers::TOTP_SECRET);
 })->group('RS-06', 'RS-05', 'RF-ID-01');
+
+it('echa de todas partes a la cuenta a la que se le retira el segundo factor', function (): void {
+    // Los dos motivos por los que se ejecuta este comando son el telefono perdido
+    // y la sospecha de que la cuenta esta en manos de otro. En el segundo —el que
+    // importa— quien esta dentro lleva una sesion de gestion de hasta doce horas:
+    // retirarle una credencial que ya no necesita y dejarle el acceso intacto no
+    // retira nada.
+    $user = ManagementUsers::withRole(UserRole::ADMIN);
+    ManagementUsers::withActiveSecondFactor($user);
+
+    $sesion = ManagementUsers::tokenFor($user);
+    $reto = ManagementUsers::pendingTokenFor($user);
+
+    Api::as($sesion)->get('/api/v1/auth/me')->assertStatus(200);
+
+    [$exit] = Commands::run('identity:2fa-reset '.$user->uuid.' --reason="Cuenta comprometida"');
+
+    expect($exit)->toBe(0);
+
+    // La sesion abierta, muerta en la peticion siguiente.
+    Api::as($sesion)->get('/api/v1/auth/me')->assertStatus(401);
+
+    // Y el reto a medias tambien: media autenticacion sobrevive peor que una
+    // entera a una credencial retirada.
+    Api::as($reto)->post('/api/v1/auth/2fa/verify', ['code' => '000000'])->assertStatus(401);
+
+    expect(DB::table('personal_access_tokens')
+        ->where('tokenable_type', $user->getMorphClass())
+        ->where('tokenable_id', $user->id)
+        ->count())->toBe(0);
+})->group('RS-06', 'RS-04', 'RF-ID-01');
 
 it('anota un motivo por omision en lugar de dejar el asiento mudo', function (): void {
     $user = ManagementUsers::withRole(UserRole::RRHH);

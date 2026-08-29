@@ -21,6 +21,8 @@ use App\Modules\Compliance\Infrastructure\Adapter\AuditedAuthenticationJournal;
 use App\Modules\Compliance\Infrastructure\Adapter\AuditedAuthorizationJournal;
 use App\Modules\Compliance\Infrastructure\Adapter\AuditedLegalExportGeneration;
 use App\Modules\Compliance\Infrastructure\Adapter\AuditedPersonalDataAccessLog;
+use App\Modules\Compliance\Infrastructure\Adapter\GroupedAuthorizationJournal;
+use App\Modules\Compliance\Infrastructure\Audit\CurrentAuditContext;
 use App\Modules\Compliance\Infrastructure\Console\EnsureAuditPartitionsCommand;
 use App\Modules\Compliance\Infrastructure\Console\LegalExportCommand;
 use App\Modules\Compliance\Infrastructure\Console\PurgeOrphanedLegalExportTempFilesCommand;
@@ -50,6 +52,8 @@ use App\Modules\Shared\Application\Port\AuthorizationJournal;
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
 use App\Modules\Workforce\Domain\Event\EmployeePinDelivered;
 use App\Modules\Workforce\Domain\Event\EmployeePinIssued;
+use Illuminate\Contracts\Cache\Repository as CacheRepository;
+use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -137,7 +141,33 @@ final class ComplianceServiceProvider extends ServiceProvider
          * `record_count: 0` como «denegado», una convencion que nadie recuerda
          * seis meses despues.
          */
-        $this->app->bind(AuthorizationJournal::class, AuditedAuthorizationJournal::class);
+        /*
+         * ENVUELTO EN LA AGRUPACION POR VENTANA, y esta es la unica escritura de
+         * `audit_log` que la lleva.
+         *
+         * Todas las demas las provoca un acto de gestion; esta la provoca **quien
+         * esta siendo rechazado**, asi que un bucle de peticiones denegadas es un
+         * bucle de escrituras bajo el candado global de ADR-010 —el mismo del
+         * camino de fichaje—. La palanca es la que nombra ADR-037 para este
+         * problema: agrupar por frecuencia, entera detras del puerto, sin que
+         * `Workforce`, `Reporting` ni `Attendance` se enteren y **sin quitar el
+         * asiento** que exige el escenario «Aislamiento por departamento».
+         *
+         * El decorado sigue siendo `AuditedAuthorizationJournal`: la cadena de
+         * hash no se toca.
+         */
+        $this->app->bind(
+            AuthorizationJournal::class,
+            static fn (Application $app): AuthorizationJournal => new GroupedAuthorizationJournal(
+                journal: $app->make(AuditedAuthorizationJournal::class),
+                context: $app->make(CurrentAuditContext::class),
+                cache: $app->make(CacheRepository::class),
+                // Se lee aqui y no dentro del decorador porque el enlace se
+                // resuelve por peticion: `config:cache` y una prueba que cambie el
+                // valor surten efecto igual.
+                windowSeconds: Config::integer('compliance.authorization_denial_window_seconds', 60),
+            ),
+        );
 
         $this->registerLegalExport();
     }

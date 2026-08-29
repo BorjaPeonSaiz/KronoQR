@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Application\Command;
 
+use SensitiveParameter;
+
 /**
  * Presentacion de un codigo TOTP contra una sesion pendiente (RS-06).
  *
@@ -27,7 +29,11 @@ final readonly class VerifyTwoFactorCommand
 {
     public function __construct(
         public string $userUuid,
-        public string $code,
+        // El codigo es una credencial de un solo uso, y hasta que se gasta vale
+        // para entrar. Sin la marca, cualquier excepcion lanzada mientras esta
+        // orden viaja lo deja en la traza que acaba en el log tecnico y en el
+        // paquete de diagnostico (ADR-020, regla dura 21).
+        #[SensitiveParameter] public string $code,
         public string $deviceName,
         public int|string $challengeTokenId,
         public string $throttleKey,

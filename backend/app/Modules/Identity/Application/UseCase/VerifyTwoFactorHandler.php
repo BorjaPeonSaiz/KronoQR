@@ -35,6 +35,14 @@ use App\Modules\Shared\Domain\ValueObject\AuthFailureReason;
  * si merece la pena seguir probando —y eso es exactamente lo que un bloqueo por
  * intentos existe para negar.
  *
+ * **Y cuestan lo mismo, no solo lo parecen.** La rama «sin TOTP activo» verifica
+ * contra {@see self::DECOY_SECRET} en lugar de saltarse la comparacion: paga la
+ * misma consulta de la franja y los mismos HMAC de la ventana de tolerancia. Sin
+ * el señuelo, un `401` rapido distinguia una cuenta que todavia no ha dado de alta
+ * su segundo factor —la mas facil de atacar, porque cualquiera con la contrasena
+ * puede darselo— de una que ya lo tiene. `TwoFactorRejectionSymmetryTest` lo fija
+ * contando operaciones, no con un cronometro.
+ *
  * ## El contador es propio y no el de la contrasena
  *
  * Un espacio de un millon de codigos con ventana de treinta segundos se barre en
@@ -50,6 +58,22 @@ use App\Modules\Shared\Domain\ValueObject\AuthFailureReason;
  */
 final readonly class VerifyTwoFactorHandler
 {
+    /**
+     * Secreto señuelo contra el que se verifica cuando la cuenta no tiene ninguno
+     * activo.
+     *
+     * **No es una credencial y no vale en ninguna instalacion**: no esta asignado
+     * a ninguna cuenta y ningun autenticador lo tiene. Su unica funcion es que la
+     * comparacion se ejecute igual —las mismas franjas, los mismos HMAC— cuando no
+     * hay secreto real que comparar. Es lo mismo que `DECOY_HASH` es a la
+     * comparacion de bcrypt del PIN.
+     *
+     * Base32 valido y de la longitud que emite el producto, porque un secreto que
+     * la libreria rechazara por su forma volveria por el atajo de la excepcion y
+     * no costaria lo mismo.
+     */
+    private const string DECOY_SECRET = 'K5CVGRKUKZLE6TCPKZDVSVKGKZLE6TCP';
+
     public function __construct(
         private UserAccounts $accounts,
         private TwoFactorSecrets $secrets,
@@ -75,15 +99,22 @@ final readonly class VerifyTwoFactorHandler
         $user = $this->accounts->findByUuid($command->userUuid);
         $secret = $this->secrets->activeSecretFor($command->userUuid);
 
-        $slice = $user === null || $secret === null
-            ? null
-            : $this->authenticator->verify(
-                $secret,
-                $command->code,
-                $this->secrets->lastAcceptedSliceFor($command->userUuid),
-            );
+        // EL SEÑUELO, y es lo que hace que las cuatro causas de rechazo cuesten lo
+        // mismo. Sin el, la rama «esta cuenta no tiene TOTP activo» se ahorraba una
+        // consulta —la de la franja— y todos los HMAC de la ventana de tolerancia,
+        // asi que un `401` rapido significaba «aqui no hay segundo factor todavia»
+        // y uno lento «lo hay y has fallado». Eso es exactamente lo que el rechazo
+        // unico existe para no decir (RS-03, regla dura 17).
+        //
+        // Mismo criterio y misma forma que {@see HashedEmployeePinVerifier} con su
+        // hash señuelo: se paga el trabajo, se descarta el resultado.
+        $slice = $this->authenticator->verify(
+            $secret ?? self::DECOY_SECRET,
+            $command->code,
+            $this->secrets->lastAcceptedSliceFor($command->userUuid),
+        );
 
-        if ($user === null || $slice === null) {
+        if ($user === null || $secret === null || $slice === null) {
             $this->attempts->recordFailure($command->throttleKey);
             $this->journal->failed(
                 AuthChannel::MANAGEMENT,

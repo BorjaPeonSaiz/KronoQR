@@ -46,6 +46,18 @@ final class TwoFactorEnrolmentRequest extends FormRequest
 
     public function toCommand(): EnrolTwoFactorCommand
     {
-        return new EnrolTwoFactorCommand(PendingTwoFactorSession::of($this)->userUuid);
+        $session = PendingTwoFactorSession::of($this);
+
+        return new EnrolTwoFactorCommand(
+            userUuid: $session->userUuid,
+            // LA MISMA CLAVE QUE `/verify` Y `/confirm`, letra por letra: el alta
+            // comparte el bloqueo por intentos de codigo. Con una clave propia,
+            // pedir un secreto nuevo seria la forma de salir del bloqueo.
+            //
+            // Por cuenta y sin la IP, por lo mismo que en `TwoFactorCodeRequest`:
+            // un contador de fallos que se reinicia cambiando de origen no cuenta
+            // fallos.
+            throttleKey: '2fa|'.$session->userUuid,
+        );
     }
 }
