@@ -8,7 +8,8 @@
       "label": "Secciones del panel",
       "employees": "Plantilla",
       "credentials": "Credenciales",
-      "legalExport": "Inspección"
+      "legalExport": "Inspección",
+      "live": "Presencia"
     },
     "roles": {
       "admin": "Administración",
@@ -548,6 +549,66 @@
         "worked": "Tiempo trabajado",
         "version": "Versión"
       }
+    }
+  },
+  "live": {
+    "title": "Presencia en vivo",
+    "subtitle": "Quién está dentro ahora mismo, con su hora de entrada, el tiempo que lleva y el quiosco por el que fichó. Solo lectura: rectificar un tramo se hace desde el registro horario de la persona.",
+    "loading": "Cargando la presencia…",
+    "duration": "{hours} h {minutes} min",
+    "counts": {
+      "present": "Dentro ahora",
+      "absent": "Fuera ahora",
+      "snapshot": "Foto del servidor",
+      "snapshotAt": "{moment} ({zone})"
+    },
+    "status": {
+      "present": "Dentro ahora",
+      "absent": "Fuera ahora"
+    },
+    "filters": {
+      "legend": "Filtros de presencia",
+      "search": "Buscar por nombre",
+      "searchPlaceholder": "Nombre o apellidos",
+      "status": "Situación",
+      "department": "Departamento",
+      "departmentAll": "Todos los departamentos"
+    },
+    "table": {
+      "caption": "Presencia de la plantilla, horas en {zone}",
+      "name": "Nombre",
+      "department": "Departamento",
+      "since": "Entrada ({zone})",
+      "elapsed": "Tiempo dentro",
+      "origin": "Origen",
+      "notInside": "Fuera",
+      "noDepartment": "Sin departamento",
+      "previousDay": "{time} (día anterior)"
+    },
+    "origin": {
+      "qr_kiosk": "Tarjeta en el quiosco",
+      "pin_kiosk": "PIN en el quiosco",
+      "manual_admin": "Alta manual desde el panel",
+      "import": "Carga inicial"
+    },
+    "transport": {
+      "connecting": "Conectando con el tiempo real…",
+      "live": "En tiempo real",
+      "polling": "Tiempo real no disponible: la lista se actualiza cada {seconds} s",
+      "disabled": "Tiempo real desactivado en esta instalación: la lista se actualiza cada {seconds} s"
+    },
+    "empty": {
+      "present": {
+        "title": "Nadie dentro ahora mismo",
+        "description": "Ninguna persona del alcance tiene un turno abierto. No es un fallo: la lista se actualiza sola en cuanto alguien fiche."
+      },
+      "absent": {
+        "title": "Nadie fuera ahora mismo",
+        "description": "Toda la plantilla del alcance tiene un turno abierto."
+      }
+    },
+    "announce": {
+      "counts": "{present} personas dentro y {absent} fuera."
     }
   }
 }

@@ -59,3 +59,12 @@ export type ClockingSource = Schemas['ClockingSource']
 // base que los consumia vive en `@kronoqr/web-kit/http`, que declara su propia
 // forma estructural para no depender del `schema.d.ts` de ninguna SPA
 // (ADR-036).
+
+// Presencia en vivo (RF-PA-01, RF-PA-02, tarea 2.4). `PresenceUpdatedMessage`
+// es el cuerpo del mensaje del WebSocket, descrito como webhook en el contrato.
+export type LivePresenceBoard = Schemas['LivePresenceBoard']
+export type LivePresenceEntry = Schemas['LivePresenceEntry']
+export type LivePresenceMeta = Schemas['LivePresenceMeta']
+export type LivePresenceStatus = Schemas['LivePresenceStatus']
+export type RealtimeSubscription = Schemas['RealtimeSubscription']
+export type PresenceUpdatedMessage = Schemas['PresenceUpdatedMessage']

@@ -15,6 +15,8 @@ import type {
   Employee,
   EmployeeCollection,
   EmployeeWorkDays,
+  LivePresenceBoard,
+  LivePresenceEntry,
   ManagementUser,
   Session,
   Site,
@@ -163,11 +165,59 @@ export const WORKDAYS: EmployeeWorkDays = {
   meta: { total: 1 },
 }
 
+// --- Presencia en vivo (RF-PA-01, RF-PA-02) ----------------------------------
+
+export const LIVE_ENTRY: LivePresenceEntry = {
+  employee_uuid: EMPLOYEE_UUID,
+  full_name: 'Youssef Amrani',
+  department: { id: 3, name: 'Recepción' },
+  status: 'present',
+  shift_entry_uuid: '0199f2c1-8a10-7b40-9c50-6d7e8f9a0b11',
+  clocked_in_at: '2026-03-14T05:00:00.000000Z',
+  origin: 'qr_kiosk',
+  device: { uuid: '0199f0d3-3c71-7e52-9a13-6f7a8b9c0d12', name: 'Entrada de personal' },
+}
+
+/** La foto del servidor con Reverb disponible. `generated_at` a las 09:12 UTC del mismo dia. */
+export const LIVE_BOARD: LivePresenceBoard = {
+  data: [
+    LIVE_ENTRY,
+    {
+      ...LIVE_ENTRY,
+      employee_uuid: '0199f0c2-2222-7c3e-9b21-4d5e6f7a8b91',
+      full_name: 'Lucía Martínez Prieto',
+      department: { id: 4, name: 'Pisos' },
+      shift_entry_uuid: '0199f2c1-9b21-7b40-9c50-6d7e8f9a0b12',
+      clocked_in_at: '2026-03-14T06:30:00.000000Z',
+      origin: 'pin_kiosk',
+      device: null,
+    },
+  ],
+  meta: {
+    generated_at: '2026-03-14T09:12:03.418000Z',
+    time_zone: 'Europe/Madrid',
+    present_count: 2,
+    absent_count: 3,
+    total: 5,
+    realtime: {
+      enabled: true,
+      key: 'kronoqr',
+      path: '/app',
+      auth_endpoint: '/api/v1/broadcasting/auth',
+      event: 'presence.updated',
+      channels: ['presence.all'],
+      poll_interval_seconds: 15,
+    },
+  },
+}
+
 /** Una peticion a la API tal y como salio del panel. */
 export interface RecordedRequest {
   readonly method: string
   readonly path: string
   readonly authorization: string | undefined
+  /** La cadena de consulta, sin el «?». */
+  readonly query: string
 }
 
 export interface ManagementApiStub {
@@ -188,6 +238,8 @@ export interface ManagementApiOptions {
    * codigo valido es `TOTP_CODE`; cualquier otro se rechaza con `401`.
    */
   readonly twoFactor?: 'off' | 'verify' | 'enrol'
+  /** La foto de presencia que devuelve `GET /attendance/live`. Por omision, `LIVE_BOARD`. */
+  readonly liveBoard?: LivePresenceBoard
 }
 
 async function json(route: Route, status: number, body: unknown): Promise<void> {
@@ -236,6 +288,7 @@ export async function stubManagementApi(
         method,
         path: url.pathname,
         authorization: request.headers()['authorization'],
+        query: url.search.slice(1),
       })
 
       switch (`${method} ${url.pathname}`) {
@@ -313,6 +366,14 @@ export async function stubManagementApi(
           return
         case 'GET /api/v1/credentials/status':
           await json(route, 200, CREDENTIAL_BOARD)
+          return
+        case 'GET /api/v1/attendance/live':
+          await json(route, 200, options.liveBoard ?? LIVE_BOARD)
+          return
+        case 'POST /api/v1/broadcasting/auth':
+          // La firma real la calcula el servidor con su secreto; aqui basta con
+          // que el cliente reciba el campo con la forma del protocolo.
+          await json(route, 200, { auth: 'kronoqr:firma-de-prueba' })
           return
         default:
           await problem(route, 404, 'about:blank', 'Sin doble para esta ruta en el E2E')

@@ -11,6 +11,7 @@ import LoginView from '@/features/auth/LoginView.vue'
 import CredentialBoardView from '@/features/credentials/CredentialBoardView.vue'
 import EmployeeDetailView from '@/features/employees/EmployeeDetailView.vue'
 import EmployeeListView from '@/features/employees/EmployeeListView.vue'
+import LivePresenceView from '@/features/live/LivePresenceView.vue'
 import LegalExportView from '@/features/reports/LegalExportView.vue'
 import EmployeeWorkDaysView from '@/features/workdays/EmployeeWorkDaysView.vue'
 import AppShellView from '@/shared/ui/AppShellView.vue'
@@ -67,6 +68,15 @@ export const routes: RouteRecordRaw[] = [
         name: 'employee-workdays',
         component: EmployeeWorkDaysView,
         props: true,
+        meta: { ability: ATTENDANCE_READ },
+      },
+      {
+        // Presencia en tiempo real (RF-PA-01, RF-PA-02). Ambito `attendance:read`,
+        // el mismo que exige el contrato para `GET /attendance/live` y para la
+        // firma del canal: ver quien esta dentro es leer el registro, no tocarlo.
+        path: 'live',
+        name: 'live',
+        component: LivePresenceView,
         meta: { ability: ATTENDANCE_READ },
       },
       {

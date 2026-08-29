@@ -9,7 +9,12 @@ import { announcement } from '@kronoqr/web-kit/announcer'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, RouterView, useRouter } from 'vue-router'
-import { CREDENTIALS_MANAGE, EMPLOYEES_MANAGE, REPORTS_LEGAL } from '@/features/auth/abilities'
+import {
+  ATTENDANCE_READ,
+  CREDENTIALS_MANAGE,
+  EMPLOYEES_MANAGE,
+  REPORTS_LEGAL,
+} from '@/features/auth/abilities'
 import { useSessionStore } from '@/features/auth/session.store'
 
 const { t } = useI18n()
@@ -25,6 +30,7 @@ interface NavItem {
 const navigation = computed<NavItem[]>(() =>
   [
     { name: 'employees', label: t('app.nav.employees'), ability: EMPLOYEES_MANAGE },
+    { name: 'live', label: t('app.nav.live'), ability: ATTENDANCE_READ },
     { name: 'credentials', label: t('app.nav.credentials'), ability: CREDENTIALS_MANAGE },
     { name: 'legal-export', label: t('app.nav.legalExport'), ability: REPORTS_LEGAL },
   ].filter((item) => session.can(item.ability)),
