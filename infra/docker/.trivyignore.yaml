@@ -6,16 +6,8 @@
 # controlamos, (b) no es alcanzable en nuestro uso, y (c) tiene explicado por
 # que. Todo lo demas se arregla.
 
-vulnerabilities:
-  - id: CVE-2025-68121
-    paths:
-      - usr/local/bin/gosu
-    statement: >-
-      Viene de la imagen oficial postgres:17-alpine, que empaqueta gosu
-      compilado con Go 1.24.6. El fallo esta en crypto/tls (validacion de
-      certificado al reanudar sesion TLS) y gosu no abre ninguna conexion TLS:
-      el entrypoint de PostgreSQL solo lo usa para bajar privilegios de root a
-      postgres durante el arranque. No es alcanzable en este uso. Se retira en
-      cuanto la imagen base se reconstruya con Go 1.24.13 o superior; la
-      comprobacion la fuerza la fecha de caducidad de abajo.
-    expired_at: 2026-11-30
+#
+# Hoy no hay ninguna supresion vigente. La ultima (CVE-2025-68121 en
+# usr/local/bin/gosu, imagen base postgres:17-alpine) se retiro al eliminar el
+# propio binario de la imagen: infra/docker/postgres/Dockerfile.
+vulnerabilities: []

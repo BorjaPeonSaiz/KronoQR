@@ -685,28 +685,28 @@ jobs:
         # justo encima el paso de `ghaction-github-runtime`.
         run: make build-ci-images IMAGES="postgres app" BUILDX_CACHE=gha
 
-      - name: Trivy fs — dependencias, Dockerfiles y secretos del repo (informe, no bloquea con hallazgos)
+      - name: Trivy fs — dependencias, Dockerfiles y secretos del repo (bloqueante)
         id: trivy_fs
-        # INFORME hasta la fecha de caducidad del ultimo paso de este job:
-        # verificado en local con 1 hallazgo HIGH (misconfig del Dockerfile de
-        # PostgreSQL, detalle en el objetivo del Makefile). Pendiente
-        # confirmar si es una excepcion valida y anadirla a
-        # infra/docker/.trivyignore.yaml con motivo y fecha de caducidad, o
-        # corregirla.
-        #
-        # TRIVY_EXIT_CODE=0: Trivy devuelve 0 tenga o no hallazgos, asi que si
-        # ESTE comando falla (y con el `-e` por defecto de GitHub Actions,
-        # tumba el paso) es porque la herramienta no pudo terminar, no porque
-        # encontrara algo -- antes, `continue-on-error: true` ocultaba esa
-        # diferencia igual que en Semgrep (IMPORTANTE 5).
+        # BLOQUEANTE desde el 29 de agosto de 2026: el unico hallazgo que
+        # tenia (DS-0002, el Dockerfile de PostgreSQL sin `USER`) se corrigio
+        # en la propia imagen, no con una excepcion. El TRIVY_EXIT_CODE por
+        # defecto del Makefile (1) hace que Trivy devuelva 1 con hallazgos
+        # HIGH/CRITICAL. El codigo se captura ANTES de escribir el resumen
+        # para que el desglose por severidad llegue al resumen de la ejecucion
+        # tambien cuando el paso falla: el JSON se escribe igual con o sin
+        # hallazgos, y es lo primero que hay que leer al triar
+        # (docs/runbooks/triaje-hallazgos-seguridad.md).
         run: |
-          make trivy-fs TRIVY_EXIT_CODE=0 TRIVY_FORMAT=json >trivy-fs.json
+          set +e
+          make trivy-fs TRIVY_FORMAT=json >trivy-fs.json
+          estado=$?
+          set -e
           jq -r '
             [.Results[]? | (.Vulnerabilities // [])[], (.Misconfigurations // [])[], (.Secrets // [])[]]
             | group_by(.Severity) | map("\(.[0].Severity): \(length)") | .[]
           ' trivy-fs.json | tee trivy-fs.log
           {
-            echo "### Trivy fs — hallazgos HIGH/CRITICAL por severidad (informe, no bloquea)"
+            echo "### Trivy fs — hallazgos HIGH/CRITICAL por severidad (bloqueante)"
             echo ""
             if [ -s trivy-fs.log ]; then
               echo '```'
@@ -716,26 +716,28 @@ jobs:
               echo "0 hallazgos."
             fi
           } >>"$GITHUB_STEP_SUMMARY"
+          exit "$estado"
 
-      - name: Trivy image — postgres:ci y app:ci (informe, no bloquea con hallazgos)
+      - name: Trivy image — postgres:ci y app:ci (bloqueante)
         id: trivy_image
-        # INFORME hasta la fecha de caducidad del ultimo paso de este job:
-        # verificado en local. kronoqr/app:ci ya sale con 0 hallazgos
-        # HIGH/CRITICAL hoy; kronoqr/postgres:ci tiene 21 HIGH, los 21 en
-        # usr/local/bin/gosu (Go stdlib de la imagen oficial
-        # postgres:17-alpine, misma categoria que la excepcion ya aceptada en
-        # infra/docker/.trivyignore.yaml). Pendiente triar y ampliar el
-        # .trivyignore.yaml con la misma justificacion si se confirma, o
-        # esperar a que la imagen base la resuelva. Mismo razonamiento de
-        # TRIVY_EXIT_CODE=0 que en el paso anterior.
+        # BLOQUEANTE desde el 29 de agosto de 2026. Los 21 HIGH que tenia
+        # kronoqr/postgres:ci estaban todos en usr/local/bin/gosu (Go stdlib
+        # de la imagen oficial), y la imagen ya no lleva ese binario: arranca
+        # como `postgres` y no necesita bajar privilegios
+        # (infra/docker/postgres/Dockerfile). infra/docker/.trivyignore.yaml
+        # queda sin excepciones vigentes. Mismo tratamiento del codigo de
+        # salida que en el paso anterior.
         run: |
-          make trivy-image TRIVY_EXIT_CODE=0 TRIVY_FORMAT=json >trivy-image.json
+          set +e
+          make trivy-image TRIVY_FORMAT=json >trivy-image.json
+          estado=$?
+          set -e
           jq -s -r '
             [.[] | .Results[]? | (.Vulnerabilities // [])[], (.Misconfigurations // [])[], (.Secrets // [])[]]
             | group_by(.Severity) | map("\(.[0].Severity): \(length)") | .[]
           ' trivy-image.json | tee trivy-image.log
           {
-            echo "### Trivy image — hallazgos HIGH/CRITICAL por severidad (informe, no bloquea)"
+            echo "### Trivy image — hallazgos HIGH/CRITICAL por severidad (bloqueante)"
             echo ""
             if [ -s trivy-image.log ]; then
               echo '```'
@@ -745,11 +747,12 @@ jobs:
               echo "0 hallazgos."
             fi
           } >>"$GITHUB_STEP_SUMMARY"
+          exit "$estado"
 
       - name: SBOM CycloneDX
         run: make sbom
 
-      - name: Subir hallazgos en modo informe y el SBOM
+      - name: Subir los informes de seguridad y el SBOM
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -765,33 +768,16 @@ jobs:
           retention-days: 90
           if-no-files-found: warn
 
-      - name: Los pasos en modo informe no han caducado
-        # MENOR 13 de la auditoria: cada paso informativo de este job lleva la
-        # misma convencion que infra/docker/.trivyignore.yaml -- una fecha de
-        # caducidad. Pasada esa fecha, la ejecucion falla para forzar una
-        # decision (triar y pasar a bloqueante, o renovar con una
-        # justificacion nueva) en vez de dejar un TODO fechado que nadie
-        # vuelve a mirar. `if: always()` para que se evalue aunque un paso
-        # anterior haya fallado por otro motivo.
-        if: always()
-        env:
-          # nombre;fecha de caducidad AAAA-MM-DD (fechados 2026-08-28, tres
-          # meses de margen igual que la excepcion de CVE-2025-68121 en
-          # infra/docker/.trivyignore.yaml).
-          PLAZOS: |
-            Trivy fs;2026-11-30
-            Trivy image;2026-11-30
-        run: |
-          hoy=$(date -u +%Y-%m-%d)
-          fallo=0
-          while IFS=';' read -r nombre caduca; do
-            [ -n "$nombre" ] || continue
-            if [[ "$hoy" > "$caduca" ]]; then
-              echo "::error title=Paso informativo caducado::'${nombre}' lleva en modo informe desde antes de ${caduca} y hoy es ${hoy}. Triarlo (docs/runbooks/triaje-hallazgos-seguridad.md) y pasarlo a bloqueante, o renovar la fecha con una justificacion nueva."
-              fallo=1
-            fi
-          done <<<"$PLAZOS"
-          exit "$fallo"
+      # Desde el 29 de agosto de 2026 NINGUN paso de este job corre en modo
+      # informe: gitleaks, Semgrep comunitario, Trivy fs y Trivy image son
+      # bloqueantes. Si algun control tiene que volver a informe (una
+      # herramienta nueva que aun no pasa limpia), la convencion es la de
+      # infra/docker/.trivyignore.yaml -- fecha de caducidad obligatoria -- y
+      # el mecanismo que la hacia cumplir era un ultimo paso `if: always()`
+      # con una lista `nombre;AAAA-MM-DD` que fallaba pasada la fecha (MENOR
+      # 13 de la auditoria; en el historial de git, commit `ci(security)`).
+      # Recuperalo de ahi en vez de reinventarlo; el runbook
+      # docs/runbooks/triaje-hallazgos-seguridad.md explica cuando procede.
 
   changelog:
     name: "Puerta de version · CHANGELOG"

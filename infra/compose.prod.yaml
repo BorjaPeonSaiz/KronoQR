@@ -149,7 +149,11 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
       # install.sh crea este directorio y se lo asigna al uid de postgres antes
-      # del primer arranque (tarea 5.4). Si no puede escribir, el archivado
+      # del primer arranque (tarea 5.4): `install -d -o 70 -g 70 -m 0750`, que
+      # es el uid/gid de `postgres` en la imagen Alpine. Nadie mas lo va a
+      # corregir: la imagen arranca como `postgres`, no como root
+      # (infra/docker/postgres/Dockerfile), y el entrypoint oficial nunca
+      # ajusto otro directorio que PGDATA. Si no puede escribir, el archivado
       # falla, el WAL se acumula en el volumen de datos hasta llenar el disco y
       # PostgreSQL acaba parandose: por eso la alerta de archivado detenido
       # (infra/observability/prometheus/rules/backup.yml) es de las criticas.
