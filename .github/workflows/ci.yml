@@ -446,9 +446,13 @@ jobs:
         # Recien aqui y no al arrancarlo: el initdb (extensiones, roles,
         # fichaje_test) corre en paralelo con composer install y la suite
         # unitaria, que no toca base de datos.
+        #
+        # `-h 127.0.0.1`: por el socket Unix tambien contesta el servidor
+        # temporal de initdb (el que ejecuta initdb.d); por TCP solo el
+        # definitivo. Mismo motivo que en backup-drill.yml.
         run: |
           for i in $(seq 1 30); do
-            if docker exec kronoqr-pg pg_isready -U "$DB_MIGRATION_USERNAME" -d "$DB_DATABASE" >/dev/null 2>&1; then
+            if docker exec kronoqr-pg pg_isready -h 127.0.0.1 -U "$DB_MIGRATION_USERNAME" -d "$DB_DATABASE" >/dev/null 2>&1; then
               echo "PostgreSQL listo en $((i * 2)) s"; exit 0
             fi
             sleep 2
