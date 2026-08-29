@@ -783,11 +783,12 @@ else
 	$(RUN_APP_XDEBUG) sh -c 'PHP_INI_SCAN_DIR=":$$(pwd)/tools/mutation" $(PEST) --mutate --path=$(MUTATE_PATHS) --testsuite=Unit --covered-only --no-cache --except=StringConcatRemoveLeft,StringConcatRemoveRight,StringConcatSwitchSides --min=80'
 endif
 
-e2e: ## Playwright con camara simulada
+e2e: ## Playwright: quiosco con camara simulada y panel de gestion
 ifeq ($(wildcard frontend-kiosk/package.json),)
 	@echo [make] Los frontends llegan en la tarea 0.5: todavia no hay E2E que ejecutar.
 else
 	npm --prefix frontend-kiosk run test:e2e
+	npm --prefix frontend-admin run test:e2e
 endif
 
 #--- Versionado (doc 02 §10.5) ------------------------------------------------
