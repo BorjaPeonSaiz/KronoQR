@@ -1,5 +1,30 @@
 # HANDOFF
 
+## Sesión «tarea 2.1: 2FA obligatorio y ámbito por departamento» (29-08-2026), en `feat/2.1-auth-2fa-rbac`
+
+**Tarea 2.1 de la Fase 2 implementada, sin commitear** (el usuario revisa y commitea). Cubre RF-ID-01 completo, RF-ID-02, RF-ID-03, RS-04, RS-05, RS-06 y RS-13.
+
+**Verificación real, no supuesta:** `make quality` en verde (sh-lint 0, api-lint 0, PHPStan 9 **0 errores**, Deptrac **0 violaciones / 4581 permitidas**; Rector 129 ficheros en dry-run, umbral informativo). `make test` **1786 pruebas / 9396 aserciones** (216 s). `make traceability-check` y `make docs-consistency` sin divergencias. `type-check` en verde en las tres SPA con `schema.d.ts` regenerado; unitarias del panel 191/191. Las dos migraciones aplicadas y revertidas con el rol `fichaje_migrator`.
+
+**Decisiones tomadas que conviene conocer antes de revisar:**
+
+1. **`POST /auth/login` gana un `202`** con `TwoFactorChallenge` (`challenge_token`), en vez de un `oneOf` sobre el `200`: con una sola forma, un cliente que leyera `token` guardaría como sesión un token que no autoriza nada.
+2. **Dos endpoints que el Anexo B no listaba**, `POST /auth/2fa/enrol` y `/2fa/confirm`. Sin ellos RS-06 es inaplicable: una cuenta nueva de `rrhh` no tiene forma de obtener su TOTP. Documentado en la tabla de notas de contrato del Anexo B.
+3. **Ámbito nuevo `employees:read`** para reconciliar el Anexo B («`GET /employees` es manager+», incluye al responsable) con el §7.3 del doc 02, que no le daba ningún ámbito de plantilla. `GET /employees` y `GET /employees/{uuid}` pasan a exigirlo; escribir sigue siendo `employees:*`.
+4. **RS-06 obliga a tres roles y no a cuatro.** El doc 02 §7.3 escribía «Sesión + 2FA» también para el responsable; manda el doc 01. Resuelto como configuración (`IDENTITY_2FA_REQUIRED_ROLES`) y anotado en el §7.3.
+5. **Retirar un segundo factor es `identity:2fa-reset`** (consola, auditado) y no un endpoint. **Sin códigos de recuperación**: deuda anotada.
+6. **`current_phase` sigue en `1`** en `backend/config/quality.php`. Ponerlo a `2` ahora exigiría prueba a los 20 requisitos de la Fase 2 y dejaría la CI en rojo durante las 8 tareas restantes; se sube al **cerrar** la fase, como dice el propio comentario del fichero.
+
+**Anomalía reproducible que conviene no tocar:** el nombre del fichero `backend/database/migrations/2026_08_30_100100_grant_read_ability.php` es corto a propósito. Con el nombre largo original, PHPStan pasaba de 0 a 13 errores en ficheros que la rama no toca (Larastan dejaba de reconocer las propiedades de `PersonalAccessToken`). Aislado cambiando solo el nombre, con la caché borrada; causa no encontrada. Está anotado en el docblock de la migración.
+
+**Pendiente de esta tarea:**
+- **Pantalla del segundo factor en `frontend-admin`** (`frontend-panel`) y su **E2E** `tag: ['@RF-ID-01', '@RS-06']`, que el plan exige y no está.
+- **Revisión de `seguridad-cumplimiento`** sobre los bloques C y D de `/revision-cumplimiento` (paso 9 de la tarea, obligatorio).
+- Códigos de recuperación de 2FA (hash y un solo uso) — hoy la única salida ante un teléfono perdido es la consola.
+- `GET /credentials/status` **no** lleva filtro por departamento: el responsable no tiene `credentials:*` y no llega, así que el filtro sería una rama inalcanzable. Si algún día se le concede, hay que añadirlo.
+
+**Nginx:** la zona `auth` ya estaba a 5 r/m y `location ^~ /api/v1/auth/` cubre los tres endpoints nuevos. **No se ha tocado** (paso 6 de la tarea, ya satisfecho por la 1.7).
+
 ## Sesión «cierre de la Fase 1 con reservas» (29-08-2026), en `main`
 
 **Pregunta del usuario:** ¿puede darse por cerrada la Fase 1 y pasar a la Fase 2? **Veredicto, verificado con instrumento y no con este fichero:** sí, cerrada en todo lo que el software puede demostrar, con tres reservas de hardware/estimación que no bloquean la Fase 2.

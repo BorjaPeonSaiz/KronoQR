@@ -12,16 +12,23 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  *
  * **Dos conjuntos y no uno**, tal y como los nombra el Anexo B:
  *
- *   - `manager+` puede **leer**. En la Fase 1 resuelve a `{admin, rrhh}`, porque
- *     `responsable_departamento` no tiene ambito propio hasta la tarea 2.1
- *     (RF-ID-03): darle acceso hoy seria darle la plantilla entera, que es justo
- *     lo que ese requisito viene a impedir.
+ *   - `manager+` puede **leer**: `{admin, rrhh, responsable_departamento}` desde
+ *     la tarea 2.1. El responsable entra aqui porque el Anexo B lo mete en
+ *     «manager+», y **no le da la plantilla entera**: su alcance lo acota
+ *     `AccessScope` —en la consulta para el listado, y con `ScopeGuard` para la
+ *     ficha—, que es lo que RF-ID-03 exige.
  *   - `rrhh+` puede **escribir**: `{admin, rrhh}`.
  *
- * Que los dos conjuntos coincidan hoy es una coincidencia de fase, no un
- * descuido: estan escritos por separado porque en 2.1 dejan de coincidir, y una
- * sola lista obligaria a repartirla entonces, que es cuando se cometen los
- * errores.
+ * **Los dos conjuntos ya no coinciden**, que es exactamente lo que este docblock
+ * anticipaba en la Fase 1. Estaban escritos por separado desde el principio para
+ * que ampliar el de lectura no ampliara el de escritura por descuido.
+ *
+ * **La policy comprueba el ROL y no el alcance.** El alcance no es una pregunta de
+ * si/no sobre la clase de recurso —es un filtro sobre filas concretas— y por eso
+ * vive donde estan las filas: en la consulta del listado y en el `ScopeGuard` de
+ * la ficha. Una policy que intentara resolverlo tendria que cargar el empleado
+ * para poder decidir, que es como la autorizacion acaba ocurriendo despues del
+ * acceso a los datos.
  *
  * **La policy es la mitad de la autorizacion.** La otra es el ambito del token,
  * que comprueba el middleware `ability` antes de llegar aqui (doc 02 §7.3): un
@@ -38,7 +45,7 @@ final class EmployeePolicy
      */
     private static function readers(): array
     {
-        return [UserRole::ADMIN, UserRole::RRHH];
+        return [UserRole::ADMIN, UserRole::RRHH, UserRole::RESPONSABLE_DEPARTAMENTO];
     }
 
     /**

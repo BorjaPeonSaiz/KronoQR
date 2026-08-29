@@ -19,14 +19,24 @@ use Tests\Support\Identity\ManagementUsers;
  * campos sueltos deja pasar el caso que rompe a los tres frontends —un campo de
  * mas, un tipo cambiado—, porque el cliente TypeScript se genera del contrato.
  *
- * **Sin 2FA**: el segundo factor es de la tarea 2.1 y aqui no debe haber ningun
- * rastro suyo.
+ * **El segundo factor tiene su propio fichero** (`TwoFactorAuthenticationTest`).
+ * Aqui se prueba el acceso con contrasena de una cuenta que **no** esta obligada
+ * a llevarlo, y el unico caso de 2FA que pertenece a este flujo: que un rol
+ * obligado reciba `202` en lugar de sesion.
  */
 
 uses(RefreshDatabase::class);
 
 beforeEach(function (): void {
     Spectator::using('openapi.yaml');
+
+    // RS-06: el valor de serie obliga a `admin`, `rrhh` y `auditor`. Casi todo
+    // este fichero prueba el acceso **con contrasena y sin reto**, asi que se
+    // vacia la lista para no tener que resolver un TOTP en cada caso. Que la
+    // lista sea configuracion y no una constante es justo lo que lo permite
+    // (regla dura 13); el reto tiene sus propias pruebas mas abajo y en
+    // `TwoFactorAuthenticationTest`.
+    config()->set('identity.two_factor.required_roles', []);
 
     // El limitador de la ruta (5 r/m) cuenta por origen y su contador vive en la
     // cache: se limpia entre pruebas para que una no herede el cupo gastado por
@@ -218,9 +228,54 @@ it('cierra la sesion revocando solo el token con el que se llama', function (): 
     Api::as($tablet)->get('/api/v1/auth/me')->assertStatus(200);
 })->group('RF-ID-01');
 
-it('no ofrece ningun endpoint de segundo factor en esta version', function (): void {
-    // El 2FA es de la tarea 2.1 (Anexo A del doc 01). Que no exista es una
-    // decision, y esta prueba es la que la hace visible si alguien lo adelanta a
-    // medias.
-    Api::guest()->post('/api/v1/auth/2fa/verify')->assertStatus(404);
-})->group('RF-ID-01');
+it('devuelve el alcance de la cuenta junto al rol y al ambito', function (): void {
+    // RF-ID-03: `GET /auth/me` es lo que el panel usa para no ofrecer lo que
+    // despues seria un 403. RRHH alcanza la plantilla entera.
+    $user = ManagementUsers::withRole(UserRole::RRHH);
+
+    Api::as(ManagementUsers::tokenFor($user))->get('/api/v1/auth/me')
+        ->assertValidResponse(200)
+        ->assertJsonPath('scope.kind', 'all')
+        ->assertJsonPath('scope.department_ids', []);
+})->group('RF-ID-03', 'RF-ID-02');
+
+it('detiene el acceso de un rol obligado a segundo factor', function (): void {
+    // RS-06 en el flujo del acceso: la contrasena es correcta y aun asi no hay
+    // sesion. El `202` lleva un `challenge_token`, nunca un `token`: un cliente
+    // que los confundiera guardaria como sesion algo que no autoriza nada.
+    config()->set('identity.two_factor.required_roles', ['rrhh']);
+
+    $user = ManagementUsers::withRole(UserRole::RRHH);
+
+    $response = Api::guest()->post('/api/v1/auth/login', [
+        'email' => $user->email,
+        'password' => ManagementUsers::PASSWORD,
+    ]);
+
+    $response->assertValidRequest()
+        ->assertValidResponse(202)
+        ->assertJsonPath('token_type', 'Bearer')
+        // Sin TOTP configurado todavia: hay que darlo de alta antes de entrar.
+        ->assertJsonPath('enrolment_required', true)
+        ->assertJsonMissingPath('token')
+        ->assertJsonMissingPath('user');
+
+    expect($response->json('challenge_token'))->toBeString();
+
+    // Y no ha entrado nadie: `last_login_at` sigue vacio (ADR-039). Un asiento de
+    // acceso aqui diria en `audit_log` que alguien entro cuando lo que hizo fue
+    // quedarse a medias.
+    expect(DB::table('users')->where('uuid', $user->uuid)->value('last_login_at'))->toBeNull();
+})->group('RF-ID-01', 'RS-06');
+
+it('no deja que una sesion pendiente consulte nada, ni siquiera quien es', function (): void {
+    // El token del `202` lleva un unico ambito, `2fa:pending`. `GET /auth/me` es
+    // el unico endpoint que no puede exigir un ambito concreto —lo llaman los
+    // cuatro roles con ambitos distintos— y por eso lleva `session.complete`.
+    $user = ManagementUsers::withRole(UserRole::RRHH);
+    $pending = ManagementUsers::pendingTokenFor($user);
+
+    Api::as($pending)->get('/api/v1/auth/me')->assertStatus(401);
+
+    Api::as($pending)->get('/api/v1/employees')->assertStatus(403);
+})->group('RS-06', 'RF-ID-01');

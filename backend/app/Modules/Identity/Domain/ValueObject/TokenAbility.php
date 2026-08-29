@@ -35,10 +35,31 @@ enum TokenAbility: string
     // Portal del empleado (ADR-015, RF-ID-07). Solo lectura y solo lo propio.
     case SELF_READ = 'self:read';
 
+    /**
+     * Sesion **pendiente de segundo factor** (RS-06, tarea 2.1).
+     *
+     * No es un ambito del §7.3 y no concede nada del producto: solo abre los tres
+     * endpoints de `/auth/2fa/*`. Se modela como ambito y no como un estado del
+     * token para que cada ruta lo rechace con el mismo mecanismo con el que
+     * rechaza a un quiosco —el middleware `ability`— en lugar de con una
+     * comprobacion nueva que habria que acordarse de poner en cada sitio.
+     */
+    case TWO_FACTOR_PENDING = '2fa:pending';
+
     // Gestion.
     case ATTENDANCE_READ = 'attendance:read';
     case ATTENDANCE_CORRECT = 'attendance:correct';
     case INCIDENTS_ALL = 'incidents:*';
+    /**
+     * **Leer** plantilla y fichas, con el alcance del rol (RF-ID-03).
+     *
+     * Se separa de `employees:*` en la tarea 2.1 y no antes por un motivo
+     * concreto: el `responsable_departamento` tiene que poder ver a su gente
+     * —Anexo B del doc 01: `GET /employees` es `manager+`— y no debe poder
+     * modificarla. Con un unico ambito de familia, darle lo primero era darle lo
+     * segundo, y la unica defensa quedaba en la policy. Ahora son dos.
+     */
+    case EMPLOYEES_READ = 'employees:read';
     case EMPLOYEES_ALL = 'employees:*';
     case CREDENTIALS_ALL = 'credentials:*';
     case REPORTS_ALL = 'reports:*';

@@ -46,19 +46,23 @@ it('reparte los ambitos del documento 02 §7.3 rol por rol', function (string $r
 
     expect($granted)->toBe($abilities);
 })->with([
+    // RF-ID-03, tarea 2.1: el responsable gana `employees:read` y **solo** ese de
+    // la familia de plantilla. Es lo que reconcilia el Anexo B del doc 01 —donde
+    // `GET /employees` es «manager+»— con el ambito minimo del §7.3: ve a su
+    // gente, acotada por `AccessScope`, y no puede modificar a nadie.
     'responsable_departamento' => ['responsable_departamento', [
-        'attendance:read', 'attendance:correct', 'incidents:*',
+        'attendance:read', 'attendance:correct', 'incidents:*', 'employees:read',
     ]],
     'rrhh' => ['rrhh', [
         'attendance:read', 'attendance:correct', 'incidents:*',
-        'employees:*', 'credentials:*', 'reports:*',
+        'employees:read', 'employees:*', 'credentials:*', 'reports:*',
     ]],
     'auditor' => ['auditor', [
         'attendance:read', 'audit:read', 'reports:legal',
     ]],
     'admin' => ['admin', [
         'attendance:read', 'attendance:correct', 'incidents:*',
-        'employees:*', 'credentials:*', 'reports:*', 'reports:legal',
+        'employees:read', 'employees:*', 'credentials:*', 'reports:*', 'reports:legal',
         'audit:read', 'settings:*', 'license:*', 'support:*', 'diagnostics:*',
     ]],
     'empleado' => ['empleado', ['self:read']],
@@ -94,6 +98,19 @@ it('mantiene al quiosco lejos de los datos de plantilla', function (): void {
         ->all();
 
     expect($kiosk)->not->toContain('employees:*')
+        ->and($kiosk)->not->toContain('employees:read')
         ->and($kiosk)->not->toContain('reports:*')
         ->and($kiosk)->not->toContain('credentials:*');
 })->group('RS-04');
+
+it('no concede a nadie el ambito de la sesion pendiente de segundo factor', function (): void {
+    // RS-06: `2fa:pending` lo emite el propio acceso y **no cuelga de ningun
+    // rol**. Si un rol lo tuviera, cualquier sesion suya alcanzaria los endpoints
+    // de `/auth/2fa/*` y podria canjear un reto que nadie ha abierto.
+    $granted = DB::table('role_has_permissions')
+        ->join('permissions', 'permissions.id', '=', 'role_has_permissions.permission_id')
+        ->where('permissions.name', TokenAbility::TWO_FACTOR_PENDING->value)
+        ->count();
+
+    expect($granted)->toBe(0);
+})->group('RS-06', 'RF-ID-01');

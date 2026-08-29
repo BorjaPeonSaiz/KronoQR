@@ -10,6 +10,7 @@ use App\Modules\Shared\Application\Port\ClockingEmployees;
 use App\Modules\Shared\Application\Port\EmployeeCardDirectory;
 use App\Modules\Shared\Application\Port\EmployeePinVerifier;
 use App\Modules\Shared\Application\Port\EmployeeRegistry;
+use App\Modules\Shared\Application\Port\EmployeeScopeDirectory;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\PortalSessionIssuer;
 use App\Modules\Workforce\Application\Port\DepartmentRepository;
@@ -30,6 +31,7 @@ use App\Modules\Workforce\Infrastructure\Adapter\EloquentClockingEmployees;
 use App\Modules\Workforce\Infrastructure\Adapter\EloquentEmployeeCardDirectory;
 use App\Modules\Workforce\Infrastructure\Adapter\EloquentEmployeeDirectory;
 use App\Modules\Workforce\Infrastructure\Adapter\EloquentEmployeeRegistry;
+use App\Modules\Workforce\Infrastructure\Adapter\EloquentEmployeeScopeDirectory;
 use App\Modules\Workforce\Infrastructure\Adapter\EloquentInstallationSiteProvider;
 use App\Modules\Workforce\Infrastructure\Adapter\EloquentSiteCalendar;
 use App\Modules\Workforce\Infrastructure\Adapter\HashedEmployeePinVerifier;
@@ -113,6 +115,13 @@ final class WorkforceServiceProvider extends ServiceProvider
         // modulo por la misma razon que los dos de arriba: es donde esta la
         // tabla.
         $this->app->bind(EmployeeRegistry::class, EloquentEmployeeRegistry::class);
+
+        // Y el departamento de una persona, que es lo que `Reporting` y
+        // `Attendance` necesitan para decidir si queda dentro del alcance de quien
+        // pregunta (RF-ID-03). Puerto propio y no un metodo mas del anterior:
+        // aquel se invoca en el camino de fichaje y dice de si mismo que traduce
+        // identificadores «y nada mas».
+        $this->app->bind(EmployeeScopeDirectory::class, EloquentEmployeeScopeDirectory::class);
 
         // Y el padron minimo que consume el quiosco (RF-KI-03, tarea 1.7). Mismo
         // patron y misma razon: lo declara `Shared` porque lo necesita `Kiosk`,

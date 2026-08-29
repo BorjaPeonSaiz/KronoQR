@@ -17,14 +17,17 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  * El Anexo B lo escribe como `[rol: manager+ | self]`, y las dos mitades no se
  * resuelven en el mismo sitio:
  *
- *   - **`manager+`** es esta policy. En la Fase 1 resuelve a `{admin, rrhh}`,
+ *   - **`manager+`** es esta policy. Desde la tarea 2.1 resuelve a
+ *     `{admin, rrhh, responsable_departamento}`; en la Fase 1 era `{admin, rrhh}`,
  *     por lo mismo que en `Workforce\Http\Policy\EmployeePolicy` y en
  *     `Attendance\Http\Policy\ShiftEntryPolicy` —escritas asi y no como
  *     `{@see}` porque Pint resolveria la referencia a un `use`, y un `use` de
  *     otro modulo es la frontera del §1.6 que Deptrac rechaza—:
- *     `responsable_departamento` no tiene alcance propio hasta la tarea 2.1
- *     (RF-ID-03), y darselo hoy seria darle el registro horario de **toda** la
- *     instalacion, que es justo lo que ese requisito viene a impedir.
+ *     porque el `responsable_departamento` no tenia alcance propio y darle esta
+ *     ruta habria sido darle el registro horario de **toda** la instalacion. Ahora
+ *     lo tiene: el controlador comprueba con `ScopeGuard` que el empleado sea de
+ *     uno de sus departamentos y responde `403` con asiento en `audit_log` si no
+ *     lo es (RF-ID-03, RS-05).
  *   - **`self`** no entra por aqui. El propio empleado consulta lo suyo en
  *     `GET /api/v1/me/workdays`, con sesion de portal y ambito `self:read`
  *     (ADR-015, RF-ID-07, tarea 1.11), que es lo que el contrato dice en la
@@ -68,7 +71,7 @@ final class WorkDayJournalPolicy
      */
     private static function readers(): array
     {
-        return [UserRole::ADMIN, UserRole::RRHH];
+        return [UserRole::ADMIN, UserRole::RRHH, UserRole::RESPONSABLE_DEPARTAMENTO];
     }
 
     /**

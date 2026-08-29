@@ -55,6 +55,13 @@ it('describe solo los endpoints cuya tarea existe, y todos bajo /api/v1', functi
         '/api/v1/kiosk/heartbeat',
         // Tarea 1.6: acceso de gestion y plantilla.
         '/api/v1/auth/login',
+        // Tarea 2.1: segundo factor obligatorio (RS-06). `verify` esta en el
+        // Anexo B; `enrol` y `confirm` no, y se anaden porque sin ellos una
+        // cuenta nueva de un rol obligado no tiene forma de obtener su TOTP y
+        // por tanto ninguna de entrar.
+        '/api/v1/auth/2fa/verify',
+        '/api/v1/auth/2fa/enrol',
+        '/api/v1/auth/2fa/confirm',
         '/api/v1/auth/logout',
         '/api/v1/auth/me',
         // Tarea 1.11: portal del empleado (RF-ID-05..08, RL-05). Ninguna lleva
@@ -92,12 +99,58 @@ it('describe solo los endpoints cuya tarea existe, y todos bajo /api/v1', functi
     ]);
 })->group('RQ-06');
 
-it('no describe el segundo factor, que es de la Fase 2', function (): void {
-    // El Anexo A situa RF-ID-01 completo —2FA— en la tarea 2.1. Describir ahora
-    // `POST /api/v1/auth/2fa/verify` fijaria en v1 la forma de un flujo que
-    // nadie ha disenado, y en v1 lo escrito no se puede quitar (ADR-012).
-    expect(Contract::has('paths', '/api/v1/auth/2fa/verify'))->toBeFalse();
-})->group('RQ-06', 'RF-ID-01');
+it('describe el segundo factor con dos desenlaces de exito que no se confunden', function (): void {
+    // RS-06. `POST /auth/login` gana un `202` con la sesion PENDIENTE, con nombre
+    // de campo propio: si `200` y `202` compartieran forma, un cliente que leyera
+    // `token` sin mirar nada mas guardaria como sesion un token que no autoriza
+    // nada, y el sintoma —403 en cada pantalla— no se parece a la causa.
+    expect(Contract::value('paths', '/api/v1/auth/login', 'post', 'responses', '200', 'content', 'application/json', 'schema', '$ref'))
+        ->toBe('#/components/schemas/Session')
+        ->and(Contract::value('paths', '/api/v1/auth/login', 'post', 'responses', '202', 'content', 'application/json', 'schema', '$ref'))
+        ->toBe('#/components/schemas/TwoFactorChallenge');
+
+    expect(Contract::keys('components', 'schemas', 'TwoFactorChallenge', 'properties'))
+        ->toBe(['challenge_token', 'token_type', 'expires_at', 'enrolment_required'])
+        ->and(Contract::keys('components', 'schemas', 'Session', 'properties'))
+        ->toBe(['token', 'token_type', 'expires_at', 'user']);
+})->group('RQ-06', 'RF-ID-01', 'RS-06');
+
+it('acota los tres endpoints de segundo factor al ambito de la sesion pendiente', function (): void {
+    // El token del `202` lleva un unico ambito y no alcanza nada mas del
+    // producto. Que lo diga el contrato es la mitad que el cliente generado ve.
+    foreach (['verify', 'enrol', 'confirm'] as $paso) {
+        expect(Contract::value('paths', '/api/v1/auth/2fa/'.$paso, 'post', 'security'))
+            ->toBe([['managementToken' => ['2fa:pending']]], $paso);
+    }
+})->group('RQ-07', 'RS-06');
+
+it('no expone el secreto TOTP mas que en el alta', function (): void {
+    // RS-06 y regla dura 21: el secreto sale del servidor exactamente una vez.
+    // El contrato es donde esto se rompe sin que nadie lo note: basta anadirlo a
+    // `ManagementUser` para que empiece a viajar en cada `GET /auth/me`.
+    expect(Contract::keys('components', 'schemas', 'TwoFactorEnrolment', 'properties'))
+        ->toBe(['secret', 'otpauth_uri']);
+
+    foreach (['ManagementUser', 'Session', 'TwoFactorChallenge'] as $schema) {
+        $propiedades = Contract::keys('components', 'schemas', $schema, 'properties');
+
+        expect($propiedades)->not->toContain('secret', $schema)
+            ->and($propiedades)->not->toContain('two_factor_secret', $schema)
+            ->and($propiedades)->not->toContain('otpauth_uri', $schema);
+    }
+})->group('RS-06', 'RQ-06');
+
+it('declara el alcance por departamento en la sesion de gestion', function (): void {
+    // RF-ID-03: el panel necesita saber hasta donde alcanza la cuenta para no
+    // ofrecer lo que despues seria un 403. `departments` con lista vacia y `all`
+    // son dos cosas distintas, y por eso el discriminante es `kind`.
+    expect(Contract::value('components', 'schemas', 'ManagementUser', 'required'))
+        ->toBe(['uuid', 'name', 'email', 'locale', 'roles', 'abilities', 'scope'])
+        ->and(Contract::value('components', 'schemas', 'AccessScope', 'properties', 'kind', 'enum'))
+        ->toBe(['all', 'departments'])
+        ->and(Contract::value('components', 'schemas', 'AccessScope', 'required'))
+        ->toBe(['kind', 'department_ids']);
+})->group('RF-ID-03', 'RQ-06');
 
 it('no ofrece ningun verbo de borrado en toda la API', function (): void {
     // Regla dura 5: nada se borra. La baja de un empleado es un cambio de estado
@@ -116,11 +169,13 @@ it('no ofrece ningun verbo de borrado en toda la API', function (): void {
     expect($deletes)->toBe([]);
 })->group('RF-GP-03', 'RQ-06');
 
-it('exige el ambito employees:* en todo endpoint de plantilla', function (): void {
+it('exige el ambito employees:* en todo endpoint que ESCRIBE plantilla', function (): void {
     // §7.3, y la mitad de la autorizacion que no es la policy (regla dura 18).
+    //
+    // **La familia esta partida desde la tarea 2.1** (RF-ID-03): leer con el
+    // alcance del rol es `employees:read` y modificar es `employees:*`. Con un
+    // unico ambito de familia, dejar leer al responsable era dejarle escribir.
     $paths = [
-        '/api/v1/employees',
-        '/api/v1/employees/{uuid}',
         '/api/v1/employees/{uuid}/offboard',
         '/api/v1/employees/{uuid}/pin/reset',
         '/api/v1/employees/{uuid}/pin/deliver',
@@ -139,7 +194,24 @@ it('exige el ambito employees:* en todo endpoint de plantilla', function (): voi
                 ->toBe([['managementToken' => ['employees:*']]], $method.' '.$path);
         }
     }
+
+    // Alta y modificacion de una ficha siguen siendo escritura.
+    expect(Contract::value('paths', '/api/v1/employees', 'post', 'security'))
+        ->toBe([['managementToken' => ['employees:*']]])
+        ->and(Contract::value('paths', '/api/v1/employees/{uuid}', 'patch', 'security'))
+        ->toBe([['managementToken' => ['employees:*']]]);
 })->group('RS-04', 'RQ-07');
+
+it('exige el ambito estrecho employees:read en las dos rutas de lectura de plantilla', function (): void {
+    // RF-ID-03: es lo que reconcilia el Anexo B del doc 01 —donde `GET
+    // /employees` es «manager+», lo que incluye al responsable— con el ambito
+    // minimo del §7.3. Si estas dos volvieran a `employees:*`, el responsable
+    // perderia su plantilla o ganaria la escritura.
+    expect(Contract::value('paths', '/api/v1/employees', 'get', 'security'))
+        ->toBe([['managementToken' => ['employees:read']]])
+        ->and(Contract::value('paths', '/api/v1/employees/{uuid}', 'get', 'security'))
+        ->toBe([['managementToken' => ['employees:read']]]);
+})->group('RF-ID-03', 'RQ-07');
 
 it('mantiene el correo del empleado opcional en el contrato', function (): void {
     // Regla dura 12 y ADR-015. El contrato es el sitio donde esto se rompe sin
@@ -255,12 +327,17 @@ it('declara todos los ambitos de token del documento 02 §7.3', function (): voi
     sort($declarados);
 
     expect($declarados)->toBe([
+        // Tarea 2.1: la sesion pendiente de segundo factor (RS-06). No es un
+        // ambito del §7.3 y no concede nada del producto.
+        '2fa:pending',
         'attendance:correct',
         'attendance:read',
         'audit:read',
         'credentials:*',
         'diagnostics:*',
         'employees:*',
+        // Tarea 2.1: la mitad de lectura de la familia de plantilla (RF-ID-03).
+        'employees:read',
         'heartbeat:write',
         'incidents:*',
         'license:*',

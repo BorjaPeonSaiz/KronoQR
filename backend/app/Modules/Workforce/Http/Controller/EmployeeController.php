@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Http\Controller;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Shared\Application\Authorization\ScopeGuard;
 use App\Modules\Workforce\Application\Port\PinStatus;
 use App\Modules\Workforce\Application\Query\EmployeeQueries;
 use App\Modules\Workforce\Application\UseCase\RegisterEmployeeHandler;
@@ -26,12 +27,29 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  * El controlador no decide nada: valida y autoriza con el `FormRequest`, invoca
  * el caso de uso y serializa con el `Resource` (doc 02 §3.5). La baja tiene su
  * propio controlador porque no es una modificacion mas.
+ *
+ * **El alcance por departamento de RF-ID-03 se aplica de dos formas distintas, y
+ * la diferencia es deliberada:**
+ *
+ * - En el **listado**, filtrando en la consulta. No hay `403`: un responsable ve a
+ *   su gente y no se entera de que existe mas. Un `403` al listar convertiria la
+ *   pantalla de plantilla de un responsable en un error permanente.
+ * - En la **ficha**, comprobando el recurso ya cargado y respondiendo `403` con
+ *   asiento en `audit_log` (escenario «Aislamiento por departamento» del doc 01
+ *   §11). Aqui si hay un sujeto identificable al que apuntar en el trail.
  */
 final class EmployeeController extends Controller
 {
-    public function index(IndexEmployeeRequest $request, EmployeeQueries $queries): JsonResponse
-    {
+    public function index(
+        IndexEmployeeRequest $request,
+        EmployeeQueries $queries,
+        ScopeGuard $scope,
+    ): JsonResponse {
         $page = $queries->page(
+            // RF-ID-03: el alcance entra en la consulta, no filtra despues. Va
+            // primero por lo mismo que en el puerto: es la acotacion que quien
+            // llama no puede elegir.
+            scope: $scope->scopeOf($request->user()),
             departmentId: $request->departmentFilter(),
             status: $request->statusFilter(),
             search: $request->searchTerm(),
@@ -61,8 +79,12 @@ final class EmployeeController extends Controller
         ]);
     }
 
-    public function show(Request $request, string $uuid, EmployeeQueries $queries): JsonResponse
-    {
+    public function show(
+        Request $request,
+        string $uuid,
+        EmployeeQueries $queries,
+        ScopeGuard $scope,
+    ): JsonResponse {
         // Sin `FormRequest` porque no hay nada que validar, pero con policy: la
         // regla dura 18 no admite endpoints sin autorizacion comprobada.
         Gate::authorize('view', Employee::class);
@@ -72,6 +94,17 @@ final class EmployeeController extends Controller
         if ($employee === null) {
             throw new NotFoundHttpException;
         }
+
+        // RF-ID-03, y **despues** del 404 a proposito: un responsable que se
+        // equivoca de identificador tiene que recibir «eso no existe» y no un
+        // asiento de intento fuera de alcance a nombre de nadie. El orden inverso
+        // llenaria `audit_log` de erratas.
+        $scope->ensureReaches(
+            $scope->scopeOf($request->user()),
+            $employee->departmentId,
+            'employee_profile',
+            $employee->uuid,
+        );
 
         return (new EmployeeResource($employee, $queries->pinStatus($uuid)))->response();
     }

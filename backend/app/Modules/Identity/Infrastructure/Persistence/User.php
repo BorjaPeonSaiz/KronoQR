@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace App\Modules\Identity\Infrastructure\Persistence;
 
 use App\Modules\Shared\Application\Port\ManagementActor;
+use App\Modules\Shared\Domain\ValueObject\AccessScope;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
 
@@ -36,6 +38,9 @@ use Spatie\Permission\Traits\HasRoles;
  * @property string $locale
  * @property bool $is_active
  * @property Carbon|null $last_login_at
+ * @property string|null $two_factor_secret Cifrado en reposo por el cast `encrypted`.
+ * @property Carbon|null $two_factor_confirmed_at Nulo mientras el alta esta a medias.
+ * @property int|null $two_factor_last_slice Franja del ultimo codigo aceptado (antirreenvio).
  *
  * @method static \Illuminate\Database\Eloquent\Builder<static> query()
  */
@@ -91,6 +96,53 @@ final class User extends Authenticatable implements ManagementActor
     }
 
     /**
+     * Hasta donde alcanza esta cuenta (**RF-ID-03**).
+     *
+     * **La regla, en dos lineas:** quien tenga cualquiera de los roles de alcance
+     * global —`admin`, `rrhh`, `auditor`— ve la plantilla entera; el
+     * `responsable_departamento` ve los departamentos que dirige, que son los que
+     * le apuntan por `departments.manager_user_id`.
+     *
+     * **El orden importa.** Se comprueba primero el alcance global: una cuenta que
+     * fuera a la vez `rrhh` y responsable de un departamento no puede quedar
+     * acotada a ese departamento, porque su otro rol le da mas. Con la
+     * comprobacion al reves, ascender a alguien le quitaria acceso.
+     *
+     * **La lista se lee con el constructor de consultas y no con una relacion
+     * Eloquent** hacia `Department`, que vive en `Workforce`: este modulo no puede
+     * importarlo (doc 02 §1.6, verificado por Deptrac). La dependencia es sobre el
+     * nombre de la tabla y dos columnas, que es la misma licencia que ya se toma
+     * `Compliance` con `users`.
+     *
+     * **Sin departamentos no alcanza a nadie**, y eso es lo correcto: un
+     * responsable existe antes de que se le asigne el primero, y en ese hueco no
+     * puede ver la plantilla entera.
+     */
+    public function accessScope(): AccessScope
+    {
+        if ($this->actsAs(UserRole::ADMIN, UserRole::RRHH, UserRole::AUDITOR)) {
+            return AccessScope::unrestricted();
+        }
+
+        $departments = DB::table('departments')
+            ->where('manager_user_id', $this->getKey())
+            ->orderBy('id')
+            ->pluck('id')
+            ->all();
+
+        $ids = [];
+
+        /** @var mixed $id */
+        foreach ($departments as $id) {
+            if (is_numeric($id)) {
+                $ids[] = (int) $id;
+            }
+        }
+
+        return AccessScope::forDepartments(...$ids);
+    }
+
+    /**
      * @return array<string, string>
      */
     protected function casts(): array
@@ -99,6 +151,12 @@ final class User extends Authenticatable implements ManagementActor
             'password' => 'hashed',
             'is_active' => 'boolean',
             'last_login_at' => 'datetime',
+            // RS-06: el secreto del segundo factor no puede estar en claro en la
+            // base de datos del cliente. `encrypted` lo cifra con `APP_KEY`, que
+            // vive en el entorno y no en la copia de seguridad de la base.
+            'two_factor_secret' => 'encrypted',
+            'two_factor_confirmed_at' => 'datetime',
+            'two_factor_last_slice' => 'integer',
         ];
     }
 }

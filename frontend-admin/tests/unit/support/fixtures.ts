@@ -61,7 +61,12 @@ export function managementUser(overrides: Partial<ManagementUser> = {}): Managem
     email: 'rrhh@hotel.example',
     locale: 'es',
     roles: ['rrhh'],
-    abilities: ['attendance:read', 'employees:*', 'credentials:*'],
+    abilities: ['attendance:read', 'employees:read', 'employees:*', 'credentials:*'],
+    // Alcance por departamento (RF-ID-03). RRHH llega a toda la plantilla, y por
+    // eso `department_ids` va vacio: con `kind: all` la lista no acota nada. Un
+    // responsable seria `{ kind: 'departments', department_ids: [3] }`, y ahi la
+    // lista vacia significaria «nadie».
+    scope: { kind: 'all', department_ids: [] },
     ...overrides,
   }
 }

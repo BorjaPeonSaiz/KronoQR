@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Application\Port;
 
+use App\Modules\Shared\Domain\ValueObject\AccessScope;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Workforce\Domain\Exception\EmployeeEmailAlreadyTaken;
 use App\Modules\Workforce\Domain\Model\Employee;
@@ -65,9 +66,16 @@ interface EmployeeRepository
      *                                     las dos reglas divergieran, el panel
      *                                     filtraria por una cosa y pintaria
      *                                     otra.
+     * @param  AccessScope  $scope  Alcance de quien pregunta (**RF-ID-03**). Se aplica
+     *                              **en la consulta** y se combina con `AND` con
+     *                              `$departmentId`: pedir un departamento fuera del
+     *                              alcance devuelve cero filas, no las de otro. Un
+     *                              alcance que no llega a nadie devuelve una pagina
+     *                              vacia, nunca la plantilla entera.
      * @return list<Employee>
      */
     public function search(
+        AccessScope $scope,
         ?int $departmentId,
         ?EmploymentStatus $status,
         ?string $search,
@@ -84,6 +92,7 @@ interface EmployeeRepository
      * pediria paginas que no existen.
      */
     public function countMatching(
+        AccessScope $scope,
         ?int $departmentId,
         ?EmploymentStatus $status,
         ?string $search,

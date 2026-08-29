@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Domain\ValueObject;
 
+use App\Modules\Shared\Domain\ValueObject\AccessScope;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use InvalidArgumentException;
 
@@ -36,6 +37,22 @@ final readonly class AuthenticatedUser
         public string $locale,
         public array $roles,
         public array $abilities,
+        /**
+         * Hasta donde alcanza la cuenta (RF-ID-03). Se resuelve al leerla, no al
+         * emitir el token: `GET /auth/me` la relee en cada llamada para que
+         * quitarle un departamento a un responsable tenga efecto en la peticion
+         * siguiente.
+         */
+        public AccessScope $scope,
+        /**
+         * Si la cuenta tiene un segundo factor **confirmado** (RS-06).
+         *
+         * Es un booleano y no el secreto, ni un fragmento suyo: este objeto sale
+         * del puerto de cuentas hacia la capa de aplicacion, y lo unico que esa
+         * capa necesita decidir es si hay que retar. El secreto no tiene por que
+         * pasar por aqui, asi que no pasa.
+         */
+        public bool $secondFactorActive = false,
     ) {
         if ($uuid === '') {
             throw new InvalidArgumentException('AuthenticatedUser necesita el UUID publico de la cuenta.');

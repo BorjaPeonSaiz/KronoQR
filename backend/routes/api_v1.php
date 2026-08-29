@@ -21,6 +21,7 @@ use App\Modules\Identity\Http\Controller\PortalLoginController;
 use App\Modules\Identity\Http\Controller\PrintCredentialBatchController;
 use App\Modules\Identity\Http\Controller\PrintCredentialController;
 use App\Modules\Identity\Http\Controller\RevokeCredentialController;
+use App\Modules\Identity\Http\Controller\TwoFactorController;
 use App\Modules\Kiosk\Http\Controller\HeartbeatController;
 use App\Modules\Kiosk\Http\Controller\RosterController;
 use App\Modules\Reporting\Http\Controller\EmployeeWorkDayController;
@@ -286,19 +287,69 @@ Route::prefix('auth')->group(function (): void {
         ->middleware('throttle:auth')
         ->name('auth.login');
 
+    /*
+     * Segundo factor obligatorio (RF-ID-01 completo, RS-06, tarea 2.1).
+     *
+     * LOS TRES EXIGEN `2fa:pending` Y NADA MAS, que es el unico ambito que lleva
+     * el token del `202` de `/login`. Con eso, la sesion pendiente no alcanza
+     * ningun otro endpoint del producto: no es una sesion, es el permiso para
+     * presentar un codigo.
+     *
+     * LA OTRA MITAD ES `TwoFactorPolicy`, que comprueba QUIEN porta el token
+     * (regla dura 18): un token de quiosco o una sesion de portal a los que
+     * alguien añadiera este ambito seguirian sin poder canjearlos por una sesion
+     * de gestion. El empleado no tiene segundo factor y no puede tenerlo (reglas
+     * duras 11 y 12).
+     *
+     * ZONA `auth` COMO EL ACCESO, y no una propia: Nginx ya limita todo
+     * `^~ /api/v1/auth/` a 5 r/m (§7.1, tarea 1.7) y el bloqueo por intentos de
+     * codigo vive en el caso de uso, con contador propio distinto del de la
+     * contrasena. Tres controles, ninguno sustituye a los otros.
+     *
+     * `enrol` Y `confirm` NO ESTAN EN EL ANEXO B, y su ausencia era un hueco: sin
+     * ellos, una cuenta nueva de `rrhh` no tiene forma de obtener su segundo
+     * factor y por tanto ninguna forma de entrar. La alternativa era repartir
+     * secretos por consola, que obliga al cliente a usar SSH para dar de alta a
+     * una persona. Se describen en el contrato antes que aqui (ADR-013).
+     */
+    Route::prefix('2fa')
+        ->middleware([
+            'auth:sanctum',
+            'ability:'.TokenAbility::TWO_FACTOR_PENDING->value,
+            'throttle:auth',
+        ])
+        ->group(function (): void {
+            Route::post('/verify', [TwoFactorController::class, 'verify'])
+                ->name('auth.2fa.verify');
+
+            Route::post('/enrol', [TwoFactorController::class, 'enrol'])
+                ->name('auth.2fa.enrol');
+
+            Route::post('/confirm', [TwoFactorController::class, 'confirm'])
+                ->name('auth.2fa.confirm');
+        });
+
+    /*
+     * El cierre de sesion SI acepta un token pendiente, a proposito: abandonar un
+     * acceso a medias es lo que hace el panel cuando alguien cancela la pantalla
+     * del codigo, y negarselo dejaria el reto vivo hasta que caduque.
+     */
     Route::post('/logout', LogoutController::class)
         ->middleware('auth:sanctum')
         ->name('auth.logout');
 
-    Route::get('/me', CurrentUserController::class)
-        ->middleware('auth:sanctum')
-        ->name('auth.me');
-
     /*
-     * POST /api/v1/auth/2fa/verify NO existe todavia: el 2FA obligatorio es de
-     * la tarea 2.1 (Anexo A del doc 01). Se anota aqui para que su ausencia sea
-     * una decision visible y no un olvido.
+     * GET /api/v1/auth/me — EL UNICO ENDPOINT QUE NO PUEDE EXIGIR UN AMBITO.
+     *
+     * Lo llaman los cuatro roles de gestion y cada uno lleva los suyos, asi que
+     * aqui no hay ninguna lista que poner en `ability`. Sin `session.complete`,
+     * este seria el unico endpoint alcanzable con media autenticacion, y lo que
+     * adelantaria —rol y alcance por departamento— es justo lo que ayuda a decidir
+     * a que cuenta merece la pena seguir atacando (RS-06).
      */
+    Route::get('/me', CurrentUserController::class)
+        ->middleware(['auth:sanctum', 'session.complete'])
+        ->name('auth.me');
 });
 
 /*
@@ -373,12 +424,30 @@ Route::middleware([
      */
 });
 
-Route::middleware(['auth:sanctum', 'ability:'.TokenAbility::EMPLOYEES_ALL->value])->group(function (): void {
+/*
+ * LECTURA DE PLANTILLA: `employees:read`, no `employees:*` (RF-ID-03, tarea 2.1).
+ *
+ * La familia se parte en dos porque el Anexo B del doc 01 dice que `GET
+ * /employees` es «manager+» —lo que incluye al `responsable_departamento`— y el
+ * §7.3 no le daba ningun ambito de plantilla. Con un unico ambito de familia,
+ * dejarle leer era dejarle escribir, y la unica defensa quedaba en la policy.
+ *
+ * `admin` y `rrhh` llevan los dos ambitos, asi que no pierden nada.
+ *
+ * EL ALCANCE POR DEPARTAMENTO NO SE COMPRUEBA AQUI: se aplica **dentro de la
+ * consulta** (`EmployeeQueries`) para el listado, y con la policy contra la ficha
+ * cargada para el detalle. Un filtro posterior daria un `meta.total` que describe
+ * a personas que quien pregunta no puede ver.
+ */
+Route::middleware(['auth:sanctum', 'ability:'.TokenAbility::EMPLOYEES_READ->value])->group(function (): void {
     Route::get('/employees', [EmployeeController::class, 'index'])->name('employees.index');
-    Route::post('/employees', [EmployeeController::class, 'store'])->name('employees.store');
     Route::get('/employees/{uuid}', [EmployeeController::class, 'show'])
         ->whereUuid('uuid')
         ->name('employees.show');
+});
+
+Route::middleware(['auth:sanctum', 'ability:'.TokenAbility::EMPLOYEES_ALL->value])->group(function (): void {
+    Route::post('/employees', [EmployeeController::class, 'store'])->name('employees.store');
     Route::patch('/employees/{uuid}', [EmployeeController::class, 'update'])
         ->whereUuid('uuid')
         ->name('employees.update');

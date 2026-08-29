@@ -40,7 +40,10 @@ export const USER: ManagementUser = {
   email: 'rrhh@hotel.example',
   locale: 'es',
   roles: ['rrhh'],
-  abilities: ['attendance:read', 'employees:*', 'credentials:*'],
+  abilities: ['attendance:read', 'employees:read', 'employees:*', 'credentials:*'],
+  // Alcance por departamento (RF-ID-03). RRHH llega a toda la plantilla: con
+  // `kind: all` la lista no acota nada y por eso va vacía.
+  scope: { kind: 'all', department_ids: [] },
 }
 
 export const SESSION: Session = {

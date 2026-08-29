@@ -28,6 +28,22 @@ interface AccessTokenIssuer
     public function issueFor(AuthenticatedUser $user, string $deviceName): IssuedAccessToken;
 
     /**
+     * Emite la **sesion pendiente de segundo factor** (RS-06): un token con un
+     * unico ambito, `2fa:pending`, y una vida de minutos.
+     *
+     * **Metodo propio y no un parametro de {@see self::issueFor()}.** Lo que
+     * distingue a los dos tokens no es un detalle de configuracion: uno abre el
+     * producto entero y el otro no abre nada. Con un booleano por medio, un
+     * descuido en el sitio equivocado emite una sesion completa a quien todavia no
+     * ha presentado su segundo factor, y ese fallo no tiene sintoma visible: todo
+     * funciona, solo que sin 2FA.
+     *
+     * `$deviceName` se conserva para que la sesion definitiva herede el nombre con
+     * el que el cliente pidio entrar.
+     */
+    public function issuePendingFor(AuthenticatedUser $user, string $deviceName): IssuedAccessToken;
+
+    /**
      * Revoca **un** token por su identificador.
      *
      * Uno y no todos: cerrar sesion en el portatil no puede echar a la misma

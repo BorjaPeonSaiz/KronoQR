@@ -7,6 +7,7 @@ namespace App\Modules\Identity\Infrastructure\Adapter;
 use App\Modules\Identity\Application\Port\AccessTokenIssuer;
 use App\Modules\Identity\Domain\ValueObject\AuthenticatedUser;
 use App\Modules\Identity\Domain\ValueObject\IssuedAccessToken;
+use App\Modules\Identity\Domain\ValueObject\TokenAbility;
 use App\Modules\Identity\Infrastructure\Persistence\User;
 use App\Modules\Shared\Application\Port\Clock;
 use Laravel\Sanctum\Sanctum;
@@ -31,6 +32,43 @@ final readonly class SanctumAccessTokenIssuer implements AccessTokenIssuer
 
     public function issueFor(AuthenticatedUser $user, string $deviceName): IssuedAccessToken
     {
+        $expiresAt = $this->clock->now()->modify('+'.$this->sessionHours().' hours');
+
+        return $this->issue($user, $deviceName, $user->abilityNames(), $expiresAt);
+    }
+
+    /**
+     * La sesion pendiente de segundo factor (RS-06).
+     *
+     * **Un solo ambito y minutos de vida.** Lo que hay abierto aqui es media
+     * autenticacion: si durase las doce horas de una sesion, una contrasena robada
+     * se convertiria en un acceso pendiente de un unico codigo durante toda la
+     * jornada. Los minutos son configuracion (regla dura 13), no una constante.
+     *
+     * **El nombre se conserva** para que la sesion definitiva herede el
+     * `device_name` que puso el cliente al pedir entrar.
+     */
+    public function issuePendingFor(AuthenticatedUser $user, string $deviceName): IssuedAccessToken
+    {
+        $expiresAt = $this->clock->now()->modify('+'.$this->challengeMinutes().' minutes');
+
+        return $this->issue(
+            $user,
+            $deviceName,
+            [TokenAbility::TWO_FACTOR_PENDING->value],
+            $expiresAt,
+        );
+    }
+
+    /**
+     * @param  list<string>  $abilities
+     */
+    private function issue(
+        AuthenticatedUser $user,
+        string $deviceName,
+        array $abilities,
+        \DateTimeImmutable $expiresAt,
+    ): IssuedAccessToken {
         $account = User::query()->where('uuid', $user->uuid)->first();
 
         if (! $account instanceof User) {
@@ -40,9 +78,7 @@ final readonly class SanctumAccessTokenIssuer implements AccessTokenIssuer
             throw new RuntimeException('La cuenta ha dejado de existir mientras se emitia su token.');
         }
 
-        $expiresAt = $this->clock->now()->modify('+'.$this->sessionHours().' hours');
-
-        $token = $account->createToken($deviceName, $user->abilityNames(), $expiresAt);
+        $token = $account->createToken($deviceName, $abilities, $expiresAt);
 
         return new IssuedAccessToken($token->plainTextToken, $expiresAt);
     }
@@ -59,5 +95,12 @@ final readonly class SanctumAccessTokenIssuer implements AccessTokenIssuer
         $hours = config()->integer('identity.session.token_hours');
 
         return max(1, $hours);
+    }
+
+    private function challengeMinutes(): int
+    {
+        $minutes = config()->integer('identity.two_factor.challenge_minutes');
+
+        return max(1, $minutes);
     }
 }

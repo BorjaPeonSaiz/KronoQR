@@ -15,8 +15,8 @@ declare(strict_types=1);
  * `.env.example`: son razonables para un hotel y ninguno viene de un cliente
  * concreto.
  *
- * Sin nada de 2FA: el segundo factor obligatorio llega en la tarea 2.1
- * (Anexo A del doc 01). `pragmarx/google2fa` esta instalado y **no se usa**.
+ * El segundo factor obligatorio de RS-06 vive en el bloque `two_factor` de abajo
+ * y lo implementa `pragmarx/google2fa` (doc 02 §3.1).
  */
 
 return [
@@ -48,6 +48,96 @@ return [
          * caducidad global obligaria a elegir cual de los dos se rompe.
          */
         'token_hours' => (int) env('IDENTITY_SESSION_TOKEN_HOURS', 12),
+    ],
+
+    /*
+     * SEGUNDO FACTOR DE GESTION — RS-06, RF-ID-01, tarea 2.1.
+     *
+     * SOLO CUENTAS DE GESTION. Aqui no hay nada del empleado: su credencial es
+     * una tarjeta fisica (ADR-014, regla dura 11) y su acceso al portal es codigo
+     * y PIN (ADR-015, regla dura 12). Un TOTP para la plantilla contradiria las
+     * dos decisiones.
+     */
+    'two_factor' => [
+
+        /*
+         * ROLES OBLIGADOS A LLEVAR SEGUNDO FACTOR.
+         *
+         * De serie, los tres literales de RS-06: `admin`, `rrhh` y `auditor`, que
+         * son los que alcanzan datos de TODA la plantilla. El
+         * `responsable_departamento` no entra porque su alcance esta acotado a su
+         * departamento (RF-ID-03).
+         *
+         * CONTRADICCION DOCUMENTAL, RESUELTA POR CONFIGURACION. La tabla del doc
+         * 02 §7.3 escribe «Sesion + 2FA» tambien en la fila del responsable.
+         * Manda el doc 01 (orden de autoridad de `CLAUDE.md`), asi que el valor
+         * de serie son tres roles; y como esto es configuracion y no una
+         * constante (regla dura 13), un cliente con una politica mas dura anade
+         * `responsable_departamento` sin tocar el repositorio y sin una rama
+         * propia.
+         *
+         * QUIEN YA LO TIENE, LO USA, este o no en esta lista: quitar la
+         * obligatoriedad no desactiva el segundo factor de quien lo activo.
+         */
+        'required_roles' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) env('IDENTITY_2FA_REQUIRED_ROLES', 'admin,rrhh,auditor')),
+        ), static fn (string $role): bool => $role !== '')),
+
+        /*
+         * Vida de la SESION PENDIENTE, en minutos.
+         *
+         * MINUTOS Y NO HORAS, y no es simetria con la sesion de arriba: lo que
+         * esta abierto entre `/auth/login` y `/auth/2fa/verify` es media
+         * autenticacion. Con las doce horas del panel, una contrasena robada se
+         * convertiria en un acceso pendiente de un unico codigo durante toda la
+         * jornada. Diez minutos sobran para sacar el telefono y escribir seis
+         * digitos.
+         */
+        'challenge_minutes' => (int) env('IDENTITY_2FA_CHALLENGE_MINUTES', 10),
+
+        /*
+         * Fallos de CODIGO consecutivos antes de bloquear.
+         *
+         * CONTADOR PROPIO, DISTINTO DEL DE LA CONTRASENA. Compartirlo tendria dos
+         * efectos malos a la vez: gastar el cupo probando codigos dejaria a
+         * alguien sin poder reintentar su contrasena, y alternar las dos puertas
+         * duplicaria los intentos disponibles. Los umbrales de serie son los
+         * mismos porque la amenaza se parece; el contador no.
+         */
+        'max_attempts' => (int) env('IDENTITY_2FA_MAX_ATTEMPTS', 5),
+
+        'lockout_seconds' => (int) env('IDENTITY_2FA_LOCKOUT_SECONDS', 900),
+
+        /*
+         * VENTANA DE TOLERANCIA, en franjas de 30 s a cada lado del instante
+         * actual.
+         *
+         * Existe porque el reloj de un telefono se desvia. Sin ella, un movil
+         * treinta segundos adelantado no puede entrar nunca y el sintoma —«a
+         * veces me deja y a veces no»— es de los mas caros de diagnosticar. Con
+         * el valor de serie, un codigo vale unos noventa segundos, que es el
+         * compromiso estandar. Un cliente con relojes sincronizados por NTP puede
+         * bajarlo a cero.
+         */
+        'window' => (int) env('IDENTITY_2FA_WINDOW', 1),
+
+        /*
+         * Longitud del secreto en caracteres base32. Treinta y dos son 160 bits,
+         * el doble del minimo de la libreria: el coste es nulo y el secreto vive
+         * años.
+         */
+        'secret_length' => (int) env('IDENTITY_2FA_SECRET_LENGTH', 32),
+
+        /*
+         * EMISOR que aparece en el autenticador, junto al correo de la cuenta.
+         *
+         * Es lo que distingue esta entrada de las demas en el telefono de quien
+         * atiende varias instalaciones. Configurable porque la marca es
+         * configuracion (ADR-017, regla dura 13): el valor de serie es el del
+         * fabricante y un cliente con marca blanca (tarea 5.8) pone la suya.
+         */
+        'issuer' => (string) env('IDENTITY_2FA_ISSUER', 'KronoQR'),
     ],
 
     /*

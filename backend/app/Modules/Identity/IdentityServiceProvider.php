@@ -16,15 +16,21 @@ use App\Modules\Identity\Application\Port\DeviceTokenIssuer;
 use App\Modules\Identity\Application\Port\IdentityEventPublisher;
 use App\Modules\Identity\Application\Port\LoginAttempts;
 use App\Modules\Identity\Application\Port\QrKeyProvider;
+use App\Modules\Identity\Application\Port\TwoFactorAuthenticator;
+use App\Modules\Identity\Application\Port\TwoFactorSecrets;
 use App\Modules\Identity\Application\Port\UserAccounts;
 use App\Modules\Identity\Application\Support\CredentialTelemetry;
 use App\Modules\Identity\Application\Support\PortalAccessTelemetry;
 use App\Modules\Identity\Application\UseCase\AuthenticatePortalEmployeeHandler;
+use App\Modules\Identity\Application\UseCase\AuthenticateUserHandler;
+use App\Modules\Identity\Application\UseCase\ConfirmTwoFactorHandler;
 use App\Modules\Identity\Application\UseCase\DeliverCredential;
 use App\Modules\Identity\Application\UseCase\IssueDeviceToken;
 use App\Modules\Identity\Application\UseCase\MintCards;
 use App\Modules\Identity\Application\UseCase\RotateDeviceTokenIfDue;
+use App\Modules\Identity\Application\UseCase\VerifyTwoFactorHandler;
 use App\Modules\Identity\Domain\Model\Credential;
+use App\Modules\Identity\Domain\Policy\TwoFactorRequirement;
 use App\Modules\Identity\Domain\ValueObject\DeviceStatus;
 use App\Modules\Identity\Http\Policy\CredentialPolicy;
 use App\Modules\Identity\Infrastructure\Adapter\BrowsershotCardRenderer;
@@ -32,6 +38,7 @@ use App\Modules\Identity\Infrastructure\Adapter\CacheLoginAttempts;
 use App\Modules\Identity\Infrastructure\Adapter\ConfiguredQrKeyProvider;
 use App\Modules\Identity\Infrastructure\Adapter\EloquentCredentialFingerprints;
 use App\Modules\Identity\Infrastructure\Adapter\EndroidQrEncoder;
+use App\Modules\Identity\Infrastructure\Adapter\Google2faAuthenticator;
 use App\Modules\Identity\Infrastructure\Adapter\HmacSignatureVerifier;
 use App\Modules\Identity\Infrastructure\Adapter\LaravelIdentityEventPublisher;
 use App\Modules\Identity\Infrastructure\Adapter\RandomCredentialSecretFactory;
@@ -43,11 +50,13 @@ use App\Modules\Identity\Infrastructure\Console\DeliverCredentialCommand;
 use App\Modules\Identity\Infrastructure\Console\IssueCredentialCommand;
 use App\Modules\Identity\Infrastructure\Console\PrintCredentialBatchCommand;
 use App\Modules\Identity\Infrastructure\Console\PrintCredentialCommand;
+use App\Modules\Identity\Infrastructure\Console\ResetTwoFactorCommand;
 use App\Modules\Identity\Infrastructure\Console\RevokeCredentialCommand;
 use App\Modules\Identity\Infrastructure\Metrics\TextfileCredentialMetrics;
 use App\Modules\Identity\Infrastructure\Persistence\Device;
 use App\Modules\Identity\Infrastructure\Persistence\EloquentCredentialRepository;
 use App\Modules\Identity\Infrastructure\Persistence\EloquentDeviceRepository;
+use App\Modules\Identity\Infrastructure\Persistence\EloquentTwoFactorSecrets;
 use App\Modules\Identity\Infrastructure\Persistence\EloquentUserAccounts;
 use App\Modules\Identity\Infrastructure\Persistence\User;
 use App\Modules\Shared\Application\Port\AuthenticationJournal;
@@ -57,6 +66,7 @@ use App\Modules\Shared\Application\Port\EmployeePinVerifier;
 use App\Modules\Shared\Application\Port\EmployeeRegistry;
 use App\Modules\Shared\Application\Port\PortalSessionIssuer;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
+use App\Modules\Shared\Domain\ValueObject\UserRole;
 use DateTimeInterface;
 use Illuminate\Cache\RateLimiter;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -72,6 +82,7 @@ use Illuminate\Support\ServiceProvider;
 use Laravel\Sanctum\Contracts\HasAbilities;
 use Laravel\Sanctum\PersonalAccessToken;
 use Laravel\Sanctum\Sanctum;
+use PragmaRX\Google2FA\Google2FA;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -119,6 +130,7 @@ final class IdentityServiceProvider extends ServiceProvider
             static fn ($app): CacheLoginAttempts => new CacheLoginAttempts($app->make(RateLimiter::class)),
         );
 
+        $this->registerTwoFactor();
         $this->registerCredentials();
         $this->registerDevices();
         $this->registerPortal();
@@ -138,6 +150,12 @@ final class IdentityServiceProvider extends ServiceProvider
             // no se declara aqui para que su ausencia sea visible.
             $this->commands([
                 CreateManagementUserCommand::class,
+                // La unica via para retirar un segundo factor (RS-06). No hay
+                // endpoint: no existe ninguna ruta de gestion de usuarios en el
+                // Anexo B, y un «quitale el 2FA a esta persona» por API seria, en
+                // manos de un administrador comprometido, la forma mas comoda de
+                // preparar el acceso a la cuenta de otro.
+                ResetTwoFactorCommand::class,
                 IssueCredentialCommand::class,
                 PrintCredentialCommand::class,
                 PrintCredentialBatchCommand::class,
@@ -146,6 +164,95 @@ final class IdentityServiceProvider extends ServiceProvider
                 RevokeCredentialCommand::class,
             ]);
         }
+    }
+
+    /**
+     * Segundo factor de gestion (RS-06, RF-ID-01, tarea 2.1).
+     *
+     * **Los cuatro valores del algoritmo entran resueltos** desde la
+     * configuracion y no los consulta ni el adaptador ni el caso de uso, igual
+     * que el suelo de tiempo de los rechazos y que los umbrales legales (regla
+     * dura 14). Es lo que permite que una prueba fije una ventana de cero para
+     * comprobar que un codigo caducado se rechaza, sin tocar el `.env` de nadie.
+     *
+     * **El contador de intentos de codigo es OTRO**, y por eso se declara con un
+     * enlace contextual en lugar de reutilizar el de la contrasena. Compartirlo
+     * tendria dos efectos malos a la vez: gastar el cupo probando codigos dejaria
+     * a alguien sin poder reintentar su contrasena, y alternar `/login` con
+     * `/2fa/verify` duplicaria los intentos disponibles.
+     *
+     * **Los tres casos de uso se declaran explicitamente** en lugar de dejarlos al
+     * autowiring, porque los tres reciben ese contador contextual y la politica de
+     * roles obligados ya resuelta.
+     */
+    private function registerTwoFactor(): void
+    {
+        $this->app->bind(TwoFactorSecrets::class, EloquentTwoFactorSecrets::class);
+
+        $this->app->bind(
+            TwoFactorAuthenticator::class,
+            static fn (): Google2faAuthenticator => new Google2faAuthenticator(
+                new Google2FA,
+                Config::string('identity.two_factor.issuer', 'KronoQR'),
+                max(16, Config::integer('identity.two_factor.secret_length', 32)),
+                max(0, Config::integer('identity.two_factor.window', 1)),
+            ),
+        );
+
+        $this->app->bind(
+            TwoFactorRequirement::class,
+            static fn (): TwoFactorRequirement => new TwoFactorRequirement(self::rolesRequiringSecondFactor()),
+        );
+
+        $this->app->bind(
+            AuthenticateUserHandler::class,
+            static fn (Application $app): AuthenticateUserHandler => new AuthenticateUserHandler(
+                accounts: $app->make(UserAccounts::class),
+                tokens: $app->make(AccessTokenIssuer::class),
+                attempts: $app->make(LoginAttempts::class),
+                clock: $app->make(Clock::class),
+                journal: $app->make(AuthenticationJournal::class),
+                secondFactor: $app->make(TwoFactorRequirement::class),
+            ),
+        );
+
+        $codeAttempts = static fn (Application $app): CacheLoginAttempts => new CacheLoginAttempts(
+            $app->make(RateLimiter::class),
+            'identity:2fa-failures:',
+            'identity.two_factor.max_attempts',
+            'identity.two_factor.lockout_seconds',
+        );
+
+        $this->app->when([VerifyTwoFactorHandler::class, ConfirmTwoFactorHandler::class])
+            ->needs(LoginAttempts::class)
+            ->give($codeAttempts);
+    }
+
+    /**
+     * Los roles que RS-06 obliga a llevar segundo factor, leidos del catalogo.
+     *
+     * Un nombre de la configuracion que no este en {@see UserRole} se ignora en
+     * lugar de romper el arranque: el catalogo es identico en todas las
+     * instalaciones (regla dura 13), asi que si aparece uno ajeno es una errata en
+     * un `.env`, y lo correcto es que no obligue a nada en vez de dejar el panel
+     * sin puerta de entrada.
+     *
+     * @return list<UserRole>
+     */
+    private static function rolesRequiringSecondFactor(): array
+    {
+        $roles = [];
+
+        /** @var mixed $name */
+        foreach (Config::array('identity.two_factor.required_roles', []) as $name) {
+            $role = \is_string($name) ? UserRole::tryFrom($name) : null;
+
+            if ($role instanceof UserRole) {
+                $roles[] = $role;
+            }
+        }
+
+        return $roles;
     }
 
     /**

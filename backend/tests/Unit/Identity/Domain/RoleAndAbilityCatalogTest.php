@@ -47,12 +47,19 @@ it('declara los ambitos del documento 02 §7.3 y ninguno mas', function (): void
     // copias —enum, contrato y migracion del catalogo— y ninguna puede irse por
     // su cuenta.
     expect($abilities)->toBe([
+        // La sesion pendiente de segundo factor (RS-06, tarea 2.1). No es un
+        // ambito del §7.3 y no concede nada del producto: abre solo los tres
+        // endpoints de `/auth/2fa/*`.
+        '2fa:pending',
         'attendance:correct',
         'attendance:read',
         'audit:read',
         'credentials:*',
         'diagnostics:*',
+        // La familia de plantilla partida en dos (RF-ID-03, tarea 2.1): leer con
+        // el alcance del rol es una potestad distinta de modificar.
         'employees:*',
+        'employees:read',
         'heartbeat:write',
         'incidents:*',
         'license:*',
@@ -67,6 +74,20 @@ it('declara los ambitos del documento 02 §7.3 y ninguno mas', function (): void
 })->group('RS-04', 'RF-ID-02');
 
 it('no reconoce un ambito inventado', function (): void {
-    expect(TokenAbility::tryFromName('employees:read'))->toBeNull()
+    expect(TokenAbility::tryFromName('employees:write'))->toBeNull()
         ->and(TokenAbility::tryFromName('*'))->toBeNull();
 })->group('RS-04');
+
+it('mantiene el ambito de la sesion pendiente fuera de los del quiosco', function (): void {
+    // RS-04 y RS-06: los tres ambitos del quiosco estan escritos en un solo
+    // sitio, y el reto de segundo factor no puede colarse ahi. Un token de
+    // tablet con `2fa:pending` podria canjearse por una sesion de gestion.
+    $kiosk = array_map(
+        static fn (TokenAbility $ability): string => $ability->value,
+        TokenAbility::kioskAbilities(),
+    );
+
+    expect($kiosk)->toBe(['scan:write', 'roster:read', 'heartbeat:write'])
+        ->and($kiosk)->not->toContain(TokenAbility::TWO_FACTOR_PENDING->value)
+        ->and($kiosk)->not->toContain(TokenAbility::EMPLOYEES_READ->value);
+})->group('RS-04', 'RS-06');

@@ -47,6 +47,14 @@ beforeEach(function (): void {
     // El limitador de la ruta (5 r/m) cuenta por origen y su contador vive en la
     // cache: se limpia entre pruebas para que una no herede el cupo de otra.
     RateLimiter::clear('auth-ip:127.0.0.1');
+
+    // RS-06 obliga a `admin`, `rrhh` y `auditor` a llevar segundo factor, y
+    // entonces `/auth/login` responde `202` sin haber entrado nadie. Lo que este
+    // fichero fija es el rastro del acceso **completado**, asi que se prueba con
+    // una cuenta sin reto; el rastro del acceso en dos pasos lo cubre
+    // `TwoFactorAuthenticationTest`, que comprueba que `auth.login_succeeded` se
+    // escribe al verificar el codigo y no antes (ADR-039).
+    config()->set('identity.two_factor.required_roles', []);
 });
 
 it('deja asiento del acceso correcto al panel, con la cuenta y sin su correo', function (): void {

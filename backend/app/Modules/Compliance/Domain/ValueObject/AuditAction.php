@@ -41,6 +41,16 @@ use App\Modules\Compliance\Domain\Exception\AuditActionHasNoEvent;
  * los hechos de **bajo volumen** —entrar, salir y que se abra un bloqueo—; el
  * fallo suelto no, y el motivo esta en
  * `docs/adr/ADR-039-que-hechos-de-autenticacion-dejan-asiento.md`.
+ *
+ * Las tres que anadio la tarea 2.1 siguen ese mismo criterio de volumen.
+ * `auth.two_factor_enabled` y `auth.two_factor_reset` son el ciclo de vida de una
+ * credencial de acceso —la segunda mitad de la de RS-06— y ocurren una vez por
+ * persona y por telefono; **el codigo TOTP fallido no deja asiento**, por lo mismo
+ * que no lo deja una contrasena fallida. `access.denied` es el intento de salirse
+ * del alcance por departamento (RF-ID-03) de alguien que **ya esta autenticado y
+ * autorizado en el endpoint**: es raro por definicion —solo se produce por error
+ * de la interfaz o por manipulacion de una URL— y el escenario «Aislamiento por
+ * departamento» del doc 01 §11 exige por escrito que quede en el trail.
  */
 enum AuditAction: string
 {
@@ -70,6 +80,15 @@ enum AuditAction: string
     case LoginSucceeded = 'auth.login_succeeded';
     case Logout = 'auth.logout';
     case LockoutStarted = 'auth.lockout_started';
+
+    // --- Segundo factor de gestion (RF-ID-01, RS-06, tarea 2.1) --------------
+
+    case TwoFactorEnabled = 'auth.two_factor_enabled';
+    case TwoFactorReset = 'auth.two_factor_reset';
+
+    // --- Acceso denegado por alcance (RF-ID-03, RS-05, tarea 2.1) -----------
+
+    case AccessDenied = 'access.denied';
 
     // --- Dispositivos (RF-KI-*) ----------------------------------------------
 
@@ -122,6 +141,12 @@ enum AuditAction: string
         'auth' => AuditableEvent::CredentialLifecycle,
         'device' => AuditableEvent::DeviceLifecycle,
         'personal_data' => AuditableEvent::PersonalDataAccess,
+        // El intento de acceder a datos de terceros cae en la misma familia que
+        // el acceso consumado, y no en una nueva: el bloque D pregunta por el
+        // HECHO —alguien fue a por datos personales que no le corresponden—, no
+        // por su desenlace. Separarlos en dos familias obligaria a consultar dos
+        // veces para responder «que hizo esa cuenta con la plantilla».
+        'access' => AuditableEvent::PersonalDataAccess,
         'legal_export' => AuditableEvent::LegalExport,
         'role_assignment' => AuditableEvent::AuthorityOrCalculationChange,
         'permission' => AuditableEvent::AuthorityOrCalculationChange,
