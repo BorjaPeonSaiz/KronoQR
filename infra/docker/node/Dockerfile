@@ -5,7 +5,7 @@
 #
 # La imagen oficial trae el usuario "node" (uid 1000): no se corre como root.
 
-FROM node:24-alpine
+FROM node:26-alpine
 
 RUN apk add --no-cache bash
 
