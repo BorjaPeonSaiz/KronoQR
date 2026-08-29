@@ -15,6 +15,14 @@ falla si no la encuentra, y la CI ejecuta esa comprobacion al etiquetar.
 
 ## [Unreleased]
 
+### Cambios incompatibles
+
+- 2FA obligatorio y ambito por departamento en la autenticacion de gestion (tarea 2.1) (identity)
+
+### Anadido
+
+- pantalla del segundo factor TOTP en el acceso, con alta por QR y E2E (tarea 2.1) (admin)
+
 ### Corregido
 
 - tsc acepta la extension .ts en la importacion de vitest.config (deps)
@@ -22,8 +30,14 @@ falla si no la encuentra, y la CI ejecuta esa comprobacion al etiquetar.
 - el simulacro de copia espera a PostgreSQL por TCP y vuelca los logs si no arranca (ci)
 - PostgreSQL arranca como postgres sin gosu y Trivy pasa a bloqueante (security)
 
+### Seguridad
+
+- correcciones de la revision de seguridad de la tarea 2.1 (identity)
+
 ### Interno
 
+- PR #28 (toolchain) y #29 (E2E del panel) abiertas (handoff)
+- [Unreleased] recoge los E2E del panel (changelog)
 - matriz regenerada con los E2E del panel (trazabilidad)
 - E2E con Playwright y axe del panel de gestion (admin)
 - [Unreleased] recoge la toolchain nueva y el cierre de la Fase 1 (changelog)
