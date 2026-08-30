@@ -7,10 +7,9 @@ namespace App\Modules\Reporting\Http\Resource;
 use App\Modules\Reporting\Domain\ValueObject\PeriodReport;
 use App\Modules\Reporting\Domain\ValueObject\PeriodReportRow;
 use App\Modules\Reporting\Domain\ValueObject\ReportedDuration;
+use App\Modules\Reporting\Http\Support\PeriodReportLayout;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
-use Illuminate\Support\Facades\Lang;
-use RuntimeException;
 
 /**
  * Serializacion del esquema `PeriodReport` del contrato (RF-IN-01, RF-IN-02,
@@ -125,24 +124,13 @@ final class PeriodReportResource extends JsonResource
      */
     private static function criteria(PeriodReport $report): array
     {
-        return array_map(static fn (string $key): string => self::text($key), $report->criteria);
-    }
-
-    /**
-     * Un texto de `reports.php` del idioma en curso.
-     *
-     * Mismo criterio que en la exportacion legal: `Lang::get` devuelve la clave
-     * cuando no hay traduccion, y una clave suelta en la lista de criterios de un
-     * informe de horas es peor que un fallo, porque nadie la lee como un fallo.
-     */
-    private static function text(string $key): string
-    {
-        $line = Lang::get('reports.'.$key);
-
-        if (! \is_string($line) || $line === 'reports.'.$key) {
-            throw new RuntimeException('Falta el texto «reports.'.$key.'» en lang/'.Lang::getLocale().'.');
-        }
-
-        return $line;
+        // El rotulo lo resuelve `PeriodReportLayout`, que es quien decide como se
+        // escribe un informe de periodo en los tres formatos. Esta clase tenia su
+        // propia copia del mismo metodo: dos formas de fallar cuando falta un
+        // texto es una de mas, y la del layout es la que ya cubren sus pruebas.
+        return array_map(
+            static fn (string $key): string => PeriodReportLayout::text($key),
+            $report->criteria,
+        );
     }
 }

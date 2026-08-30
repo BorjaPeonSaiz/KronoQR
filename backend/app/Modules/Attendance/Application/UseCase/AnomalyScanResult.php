@@ -33,9 +33,10 @@ final readonly class AnomalyScanResult
          * escribirse y el resto de la pasada continuo.
          *
          * Se cuenta y no se traga: el comando termina con codigo distinto de
-         * cero, de modo que el planificador y la instalacion se enteran, pero lo
-         * que si se abrio queda abierto. Aqui viven recuentos, no personas: quien
-         * fallo esta en el log tecnico con su `employee_uuid` (regla dura 21).
+         * cero, pero lo que si se abrio queda abierto. Ese codigo de salida llega
+         * hoy al log del planificador y nada mas; la serie de fallos y su alerta
+         * son de la tarea 3.2. Aqui viven recuentos, no personas: quien fallo
+         * esta en el log tecnico con su `employee_uuid` (regla dura 21).
          */
         public int $failures,
     ) {}

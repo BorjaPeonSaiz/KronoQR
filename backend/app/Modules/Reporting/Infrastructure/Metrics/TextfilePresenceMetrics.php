@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Reporting\Infrastructure\Metrics;
 
 use App\Modules\Reporting\Application\Port\PresenceMetrics;
+use App\Modules\Shared\Infrastructure\Metrics\TextfileExposition;
 use DateTimeImmutable;
-use Illuminate\Support\Facades\Config;
-use RuntimeException;
 
 /**
  * Publica las dos metricas de la presencia en vivo para el colector *textfile*
@@ -42,8 +41,10 @@ use RuntimeException;
  * esta metrica existe para detectar (ADR-011). Escribir un cero convertiria esa
  * averia en una jornada tranquila.
  *
- * **Escritura atomica:** temporal en el mismo directorio y `rename()`.
- * `node-exporter` no puede leer media metrica.
+ * **La mecanica de escritura no vive aqui.** El guard del colector, la escritura
+ * atomica, el fallo ruidoso y el escapado de las etiquetas son de
+ * {@see TextfileExposition}, que es la misma para los siete adaptadores del
+ * producto. Aqui solo se componen las lineas.
  */
 final readonly class TextfilePresenceMetrics implements PresenceMetrics
 {
@@ -81,44 +82,17 @@ final readonly class TextfilePresenceMetrics implements PresenceMetrics
         $lines[] = '# TYPE presence_metrics_timestamp_seconds gauge';
         $lines[] = 'presence_metrics_timestamp_seconds '.$at->getTimestamp();
 
-        $this->write($lines);
+        TextfileExposition::write(self::FILE, $lines);
     }
 
     /**
-     * El formato de exposicion escapa `\`, `"` y el salto de linea dentro del
-     * valor de una etiqueta. Sin esto, un departamento llamado `Sala "El Faro"`
-     * produciria un fichero que `node-exporter` descarta entero, y con el las
-     * series de todos los demas departamentos.
+     * El escapado del formato de exposicion. El nombre de un departamento lo
+     * teclea una persona, asi que puede traer comillas: ver
+     * {@see TextfileExposition::escapeLabel()}, que explica por que una sola
+     * comilla sin escapar tira el fichero entero.
      */
     private function escape(string $value): string
     {
-        return str_replace(['\\', '"', "\n"], ['\\\\', '\"', '\n'], $value);
-    }
-
-    /**
-     * @param  list<string>  $lines
-     */
-    private function write(array $lines): void
-    {
-        if (! Config::boolean('observability.metrics.enabled', true)) {
-            return;
-        }
-
-        $directory = rtrim(Config::string('observability.metrics.textfile_path'), '/');
-
-        if (! is_dir($directory) && ! mkdir($directory, 0o750, true) && ! is_dir($directory)) {
-            throw new RuntimeException('No se ha podido crear el directorio de metricas «'.$directory.'».');
-        }
-
-        $target = $directory.'/'.self::FILE;
-        $temporary = $target.'.tmp';
-
-        if (file_put_contents($temporary, implode("\n", $lines)."\n") === false) {
-            throw new RuntimeException('No se ha podido escribir la metrica en «'.$temporary.'».');
-        }
-
-        if (! rename($temporary, $target)) {
-            throw new RuntimeException('No se ha podido publicar la metrica en «'.$target.'».');
-        }
+        return TextfileExposition::escapeLabel($value);
     }
 }

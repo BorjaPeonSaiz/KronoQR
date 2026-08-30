@@ -6,7 +6,8 @@ namespace App\Modules\Compliance\Infrastructure\Metrics;
 
 use App\Modules\Compliance\Application\Port\LegalExportMetrics;
 use App\Modules\Compliance\Domain\ValueObject\LegalExportScope;
-use Illuminate\Support\Facades\Config;
+use App\Modules\Shared\Infrastructure\Metrics\TextfileExposition;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
@@ -28,13 +29,21 @@ use Throwable;
  * es indistinguible de una que nunca ocurrio, y `legal_exports_total{scope="all"}`
  * a cero es informacion.
  *
- * ## Nunca rompe una exportacion
+ * ## Nunca rompe una exportacion, pero tampoco calla
  *
  * Se llega aqui con el fichero escrito y el asiento de auditoria confirmado. Un
  * disco lleno no puede convertir eso en un error, porque quien exporto lo
- * repetiria y duplicaria el asiento. Por eso todo va envuelto y el fallo se
- * traga: lo que no se traga nunca es la auditoria, que corre antes y dentro de
- * la transaccion.
+ * repetiria y duplicaria el asiento. Por eso todo va envuelto y el fallo no
+ * sube: lo que no se traga nunca es la auditoria, que corre antes y dentro de la
+ * transaccion.
+ *
+ * Lo que si hace es **dejar constancia**. Este adaptador era el unico de los
+ * siete que ni comprobaba el retorno de `rename()` ni miraba el interruptor del
+ * colector en su propio metodo de escritura, y las dos cosas se ven igual desde
+ * fuera: una serie que sigue publicando la cifra de ayer. Ahora la mecanica es
+ * la de {@see TextfileExposition} —comun a los siete— y el fallo que esta clase
+ * decide no propagar se escribe en el log con la clase de la excepcion y sin un
+ * solo dato personal (regla dura 21).
  *
  * ## La etiqueta es `all` o `employee`
  *
@@ -60,17 +69,19 @@ final readonly class TextfileLegalExportMetrics implements LegalExportMetrics
     {
         try {
             $this->publish($scope);
-        } catch (Throwable) {
-            // Ver el docblock: medir no puede romper una exportacion legal.
+        } catch (Throwable $exception) {
+            // Ver el docblock: medir no puede romper una exportacion legal, pero
+            // una metrica congelada tampoco puede pasar en silencio. El alcance
+            // es `all` o `employee`, nunca un identificador (regla dura 21).
+            Log::warning('compliance.legal_export_metric_not_published', [
+                'scope' => $scope,
+                'exception' => $exception::class,
+            ]);
         }
     }
 
     private function publish(string $scope): void
     {
-        if (! Config::boolean('observability.metrics.enabled', true)) {
-            return;
-        }
-
         $counters = $this->currentCounters();
 
         if (array_key_exists($scope, $counters)) {
@@ -86,7 +97,7 @@ final readonly class TextfileLegalExportMetrics implements LegalExportMetrics
             $lines[] = self::METRIC.'{scope="'.$label.'"} '.$counters[$label];
         }
 
-        $this->write($lines);
+        TextfileExposition::write(self::FILE, $lines);
     }
 
     /**
@@ -95,7 +106,7 @@ final readonly class TextfileLegalExportMetrics implements LegalExportMetrics
     private function currentCounters(): array
     {
         $counters = array_fill_keys(self::SCOPES, 0);
-        $target = $this->directory().'/'.self::FILE;
+        $target = TextfileExposition::path(self::FILE);
 
         if (! is_file($target)) {
             return $counters;
@@ -118,34 +129,5 @@ final readonly class TextfileLegalExportMetrics implements LegalExportMetrics
         }
 
         return $counters;
-    }
-
-    /**
-     * Escritura atomica: temporal en el mismo directorio y `rename()`.
-     * `node-exporter` no puede leer media metrica.
-     *
-     * @param  list<string>  $lines
-     */
-    private function write(array $lines): void
-    {
-        $directory = $this->directory();
-
-        if (! is_dir($directory) && ! mkdir($directory, 0o750, true) && ! is_dir($directory)) {
-            return;
-        }
-
-        $target = $directory.'/'.self::FILE;
-        $temporary = $target.'.tmp';
-
-        if (file_put_contents($temporary, implode("\n", $lines)."\n") === false) {
-            return;
-        }
-
-        rename($temporary, $target);
-    }
-
-    private function directory(): string
-    {
-        return rtrim(Config::string('observability.metrics.textfile_path'), '/');
     }
 }

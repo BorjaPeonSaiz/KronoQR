@@ -129,10 +129,14 @@ final readonly class DetectAttendanceAnomalies
      * resumen y el comando moria con una traza en vez de con un recuento.
      *
      * **Un fallo no se traga: se cuenta.** El comando termina con codigo distinto
-     * de cero (`DetectIncidentsCommand`), de modo que el planificador y la
-     * instalacion se enteran, pero lo que se pudo abrir queda abierto. Un proceso
-     * que aborta a la mitad es peor que uno que informa: deja la revision hecha a
-     * medias y sin decir por donde iba.
+     * de cero (`DetectIncidentsCommand`), pero lo que se pudo abrir queda abierto.
+     * Un proceso que aborta a la mitad es peor que uno que informa: deja la
+     * revision hecha a medias y sin decir por donde iba.
+     *
+     * **Hasta donde llega hoy ese codigo de salida:** al log del planificador y a
+     * quien encadene el comando en un script. No hay `onFailure()`, ni regla de
+     * Loki, ni serie `..._last_failures` que lo convierta en una alerta — eso es
+     * de la tarea 3.2 y esta anotado alli.
      *
      * El log lleva `employee_uuid` y la clase de la excepcion, **nunca nombres ni
      * la traza** (regla dura 21): esto viaja a Loki y de ahi al paquete de

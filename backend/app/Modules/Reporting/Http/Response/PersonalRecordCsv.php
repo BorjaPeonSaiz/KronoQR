@@ -7,6 +7,7 @@ namespace App\Modules\Reporting\Http\Response;
 use App\Modules\Reporting\Domain\ValueObject\JournalCorrection;
 use App\Modules\Reporting\Domain\ValueObject\JournalShiftEntry;
 use App\Modules\Reporting\Domain\ValueObject\JournalWorkDay;
+use App\Modules\Reporting\Domain\ValueObject\ReportedDuration;
 use App\Modules\Reporting\Domain\ValueObject\WorkDayJournal;
 use App\Modules\Shared\Infrastructure\Export\CsvDialect;
 use DateTimeImmutable;
@@ -277,10 +278,23 @@ final readonly class PersonalRecordCsv
 
     /**
      * Duracion en `HH:MM`, nunca decimal. Ver el docblock de la clase.
+     *
+     * Lo formatea {@see ReportedDuration}, que es el objeto de valor del modulo
+     * para esto: tener un `sprintf` propio aqui era el tercer sitio del producto
+     * donde se decidia como se escribe una duracion, y el que se quedara atras en
+     * el siguiente cambio.
+     *
+     * **El `max(0, ...)` se conserva a proposito.** `ReportedDuration` admite
+     * negativos porque en un informe de periodo la desviacion frente a lo
+     * contratado puede serlo; en el registro personal no hay desviacion, solo
+     * duraciones trabajadas, y un negativo aqui solo podria venir de un dato
+     * corrupto. Un `-00:15` en el historico que descarga un empleado es una
+     * pregunta que nadie sabe responder: se publica `00:00` y el dato roto se
+     * investiga por su lado.
      */
     private static function duration(int $minutes): string
     {
-        return \sprintf('%02d:%02d', intdiv(max(0, $minutes), 60), max(0, $minutes) % 60);
+        return ReportedDuration::ofMinutes(max(0, $minutes))->toClockText();
     }
 
     private static function local(DateTimeImmutable $instant, string $timeZone): string

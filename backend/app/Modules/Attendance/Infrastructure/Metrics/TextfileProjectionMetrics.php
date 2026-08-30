@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Attendance\Infrastructure\Metrics;
 
 use App\Modules\Attendance\Application\Port\ProjectionMetrics;
+use App\Modules\Shared\Infrastructure\Metrics\TextfileExposition;
 use DateTimeImmutable;
-use Illuminate\Support\Facades\Config;
-use RuntimeException;
 
 /**
  * Publica `projection_divergence_total` y el rastro de la reconciliacion para el
@@ -52,8 +51,9 @@ use RuntimeException;
  * sin el, apagar el planificador seria la forma mas comoda de que la alerta de
  * divergencia no volviera a sonar nunca.
  *
- * **Escritura atomica**: temporal en el mismo directorio y `rename()`.
- * `node-exporter` no puede leer media metrica.
+ * **La mecanica de escritura no vive aqui.** El guard del colector, la escritura
+ * atomica y el fallo ruidoso son de {@see TextfileExposition}, que es la misma
+ * para los siete adaptadores del producto. Aqui solo se componen las lineas.
  */
 final readonly class TextfileProjectionMetrics implements ProjectionMetrics
 {
@@ -69,7 +69,7 @@ final readonly class TextfileProjectionMetrics implements ProjectionMetrics
     ): void {
         $total = $this->previousCounter() + $divergences;
 
-        $this->write([
+        TextfileExposition::write(self::FILE, [
             '# HELP '.self::DIVERGENCE_METRIC.' Jornadas cuya proyeccion daily_totals no coincidia con sus eventos origen (RF-PR-02, ADR-007). Debe permanecer siempre en cero.',
             '# TYPE '.self::DIVERGENCE_METRIC.' counter',
             self::DIVERGENCE_METRIC.' '.$total,
@@ -86,33 +86,6 @@ final readonly class TextfileProjectionMetrics implements ProjectionMetrics
     }
 
     /**
-     * @param  list<string>  $lines
-     */
-    private function write(array $lines): void
-    {
-        if (! Config::boolean('observability.metrics.enabled', true)) {
-            return;
-        }
-
-        $directory = $this->directory();
-
-        if (! is_dir($directory) && ! mkdir($directory, 0o750, true) && ! is_dir($directory)) {
-            throw new RuntimeException('No se ha podido crear el directorio de metricas «'.$directory.'».');
-        }
-
-        $target = $directory.'/'.self::FILE;
-        $temporary = $target.'.tmp';
-
-        if (file_put_contents($temporary, implode("\n", $lines)."\n") === false) {
-            throw new RuntimeException('No se ha podido escribir la metrica en «'.$temporary.'».');
-        }
-
-        if (! rename($temporary, $target)) {
-            throw new RuntimeException('No se ha podido publicar la metrica en «'.$target.'».');
-        }
-    }
-
-    /**
      * Valor actual del contador en el fichero, o 0 si no lo hay.
      *
      * La expresion regular esta anclada al principio de linea para no
@@ -121,7 +94,7 @@ final readonly class TextfileProjectionMetrics implements ProjectionMetrics
      */
     private function previousCounter(): int
     {
-        $target = $this->directory().'/'.self::FILE;
+        $target = TextfileExposition::path(self::FILE);
 
         if (! is_file($target)) {
             return 0;
@@ -138,10 +111,5 @@ final readonly class TextfileProjectionMetrics implements ProjectionMetrics
         }
 
         return (int) $match[1];
-    }
-
-    private function directory(): string
-    {
-        return rtrim(Config::string('observability.metrics.textfile_path'), '/');
     }
 }

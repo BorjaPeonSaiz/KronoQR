@@ -7,9 +7,8 @@ namespace App\Modules\Compliance\Infrastructure\Metrics;
 use App\Modules\Compliance\Application\Port\IncidentMetrics;
 use App\Modules\Compliance\Application\Port\IncidentTally;
 use App\Modules\Compliance\Domain\ValueObject\IncidentType;
+use App\Modules\Shared\Infrastructure\Metrics\TextfileExposition;
 use DateTimeImmutable;
-use Illuminate\Support\Facades\Config;
-use RuntimeException;
 
 /**
  * Publica `incidents_open{type,severity}` para el colector *textfile* de
@@ -30,9 +29,9 @@ use RuntimeException;
  * con las tres: publicar `short_shift` con severidad alta seria una serie que no
  * puede existir, y en un panel se lee igual que una que sí.
  *
- * **Escritura atomica**: temporal en el mismo directorio y `rename()`.
- * `node-exporter` no puede leer media metrica. Es el mismo patron que
- * `TextfileAuditMetrics` y `TextfilePresenceMetrics`.
+ * **La mecanica de escritura no vive aqui.** El guard del colector, la escritura
+ * atomica y el fallo ruidoso son de {@see TextfileExposition}, que es la misma
+ * para los siete adaptadores del producto. Aqui solo se componen las lineas.
  */
 final readonly class TextfileIncidentMetrics implements IncidentMetrics
 {
@@ -53,7 +52,7 @@ final readonly class TextfileIncidentMetrics implements IncidentMetrics
         $lines[] = '# TYPE incidents_metrics_timestamp_seconds gauge';
         $lines[] = 'incidents_metrics_timestamp_seconds '.$at->getTimestamp();
 
-        $this->write($lines);
+        TextfileExposition::write(self::FILE, $lines);
     }
 
     /**
@@ -91,32 +90,5 @@ final readonly class TextfileIncidentMetrics implements IncidentMetrics
         // esta acotada por el catalogo, que es lo que impide que esta serie
         // explote.
         return '{type="'.$type.'",severity="'.$severity.'"}';
-    }
-
-    /**
-     * @param  list<string>  $lines
-     */
-    private function write(array $lines): void
-    {
-        if (! Config::boolean('observability.metrics.enabled', true)) {
-            return;
-        }
-
-        $directory = rtrim(Config::string('observability.metrics.textfile_path'), '/');
-
-        if (! is_dir($directory) && ! mkdir($directory, 0o750, true) && ! is_dir($directory)) {
-            throw new RuntimeException('No se ha podido crear el directorio de metricas «'.$directory.'».');
-        }
-
-        $target = $directory.'/'.self::FILE;
-        $temporary = $target.'.tmp';
-
-        if (file_put_contents($temporary, implode("\n", $lines)."\n") === false) {
-            throw new RuntimeException('No se ha podido escribir la metrica en «'.$temporary.'».');
-        }
-
-        if (! rename($temporary, $target)) {
-            throw new RuntimeException('No se ha podido publicar la metrica en «'.$target.'».');
-        }
     }
 }

@@ -6,9 +6,8 @@ namespace App\Modules\Identity\Infrastructure\Metrics;
 
 use App\Modules\Identity\Application\Port\CredentialMetrics;
 use App\Modules\Identity\Domain\ValueObject\SiteCredentialCoverage;
+use App\Modules\Shared\Infrastructure\Metrics\TextfileExposition;
 use DateTimeImmutable;
-use Illuminate\Support\Facades\Config;
-use RuntimeException;
 
 /**
  * Publica las dos metricas de credenciales para el colector *textfile* de
@@ -44,8 +43,10 @@ use RuntimeException;
  * 21). `site_name` es informacion de la instalacion, no un dato personal, y sin
  * el un panel de Grafana muestra `site="3"` y nadie sabe de que hotel habla.
  *
- * **Escritura atomica:** temporal en el mismo directorio y `rename()`.
- * `node-exporter` no puede leer media metrica.
+ * **La mecanica de escritura no vive aqui.** El guard del colector, la escritura
+ * atomica, el fallo ruidoso y el escapado de las etiquetas son de
+ * {@see TextfileExposition}, que es la misma para los siete adaptadores del
+ * producto. Aqui solo se componen las lineas.
  */
 final readonly class TextfileCredentialMetrics implements CredentialMetrics
 {
@@ -98,7 +99,7 @@ final readonly class TextfileCredentialMetrics implements CredentialMetrics
         $lines[] = '# TYPE credentials_coverage_check_timestamp_seconds gauge';
         $lines[] = 'credentials_coverage_check_timestamp_seconds '.$at->getTimestamp();
 
-        $this->write($lines);
+        TextfileExposition::write(self::FILE, $lines);
     }
 
     /**
@@ -127,40 +128,12 @@ final readonly class TextfileCredentialMetrics implements CredentialMetrics
     }
 
     /**
-     * El formato de exposicion de Prometheus escapa `\`, `"` y el salto de linea
-     * dentro del valor de una etiqueta. Sin esto, un centro llamado `Hotel "El
-     * Faro"` produciria un fichero que `node-exporter` descarta entero — y con el
-     * las dos metricas de todos los demas centros.
+     * El escapado del formato de exposicion. El nombre del centro lo teclea una
+     * persona, asi que puede traer comillas: ver {@see TextfileExposition::escapeLabel()},
+     * que explica por que una sola comilla sin escapar tira el fichero entero.
      */
     private function escape(string $value): string
     {
-        return str_replace(['\\', '"', "\n"], ['\\\\', '\"', '\n'], $value);
-    }
-
-    /**
-     * @param  list<string>  $lines
-     */
-    private function write(array $lines): void
-    {
-        if (! Config::boolean('observability.metrics.enabled', true)) {
-            return;
-        }
-
-        $directory = rtrim(Config::string('observability.metrics.textfile_path'), '/');
-
-        if (! is_dir($directory) && ! mkdir($directory, 0o750, true) && ! is_dir($directory)) {
-            throw new RuntimeException('No se ha podido crear el directorio de metricas «'.$directory.'».');
-        }
-
-        $target = $directory.'/'.self::FILE;
-        $temporary = $target.'.tmp';
-
-        if (file_put_contents($temporary, implode("\n", $lines)."\n") === false) {
-            throw new RuntimeException('No se ha podido escribir la metrica en «'.$temporary.'».');
-        }
-
-        if (! rename($temporary, $target)) {
-            throw new RuntimeException('No se ha podido publicar la metrica en «'.$target.'».');
-        }
+        return TextfileExposition::escapeLabel($value);
     }
 }

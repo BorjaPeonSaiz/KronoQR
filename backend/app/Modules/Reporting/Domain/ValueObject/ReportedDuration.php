@@ -37,6 +37,16 @@ namespace App\Modules\Reporting\Domain\ValueObject;
  * arista: los dos modulos resuelven el mismo problema de presentacion y ninguno
  * puede importar al otro. La alternativa —subirla a `Shared`— convertiria un
  * detalle de formato en vocabulario compartido de todo el producto.
+ *
+ * ## Quien la usa dentro del modulo
+ *
+ * El informe de periodo —`PeriodReportResource`, `PeriodReportLayout` y sus dos
+ * exportadores— y tambien `Http\Response\PersonalRecordCsv`, el historico que se
+ * descarga del portal, **que antes tenia su propio `sprintf`**. Aquel acotaba a
+ * cero con `max(0, ...)` porque en el registro personal no hay desviaciones y una
+ * duracion negativa solo puede ser un dato corrupto; ese recorte se quedo en la
+ * llamada, que es donde vale, y no aqui: quitarle el signo a esta clase romperia
+ * el `-12:30` del informe de periodo, que es la razon por la que lo tiene.
  */
 final readonly class ReportedDuration
 {
