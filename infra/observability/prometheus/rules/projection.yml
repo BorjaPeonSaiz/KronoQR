@@ -1,0 +1,99 @@
+# KronoQR — alertas de integridad de la proyeccion `daily_totals` (doc 01 §9.3,
+# RF-PR-02, ADR-007).
+#
+# Fila del catalogo del doc 01 §9.3 que implementa este fichero:
+#
+#   | Divergencia en reconciliacion nocturna | cualquiera | Critica | IT del cliente | divergencia-proyeccion.md |
+#
+# «Cualquiera» como umbral es literal y no hay margen que negociar.
+# `daily_totals` se **recalcula entero** en la misma transaccion que la escritura
+# que lo motiva (regla dura 7, RN-06, ADR-007): si esa garantia se cumple, la
+# reconciliacion nocturna no encuentra nada NUNCA. Una sola divergencia
+# significa que algo escribio la proyeccion por un camino que no es el recalculo
+# —una migracion, un UPDATE a mano, una restauracion a medias— y el doc 02 §8.2
+# lo dice sin matices: `projection_divergence_total` debe permanecer SIEMPRE en
+# cero; cualquier incremento es un incidente de integridad, no una tendencia.
+#
+# DESTINATARIO: IT del cliente. Lo fijan el doc 01 §9.3 y ADR-007 —«el
+# destinatario es el IT del cliente y tiene runbook»— y el criterio del §9.3 lo
+# sostiene: es quien opera la instalacion y el unico que puede mirar quien
+# escribio en la base. No es RRHH, porque no hay ninguna correccion de jornada
+# que firmar; y no es seguridad, salvo que el runbook concluya que la escritura
+# fue deliberada, momento en el que se escala.
+#
+# IMPACTO EN EL FICHAJE: NINGUNO. `daily_totals` es una proyeccion de lectura:
+# la fuente de verdad son `shift_entries` y `scan_events`, y el registro legal se
+# exporta de ellas (ADR-007). Nadie se queda sin poder fichar por esto. Lo que si
+# esta afectado es lo que la gente MIRA —el total del quiosco, el panel de
+# presencia y los informes—, y por eso es critica.
+#
+# Las metricas las escribe `php artisan attendance:reconcile` (diaria, 03:50 UTC)
+# en BACKUP_PATH/metrics, y las sirve node-exporter por el colector textfile.
+# `/metrics` de la aplicacion llega en la tarea 3.1; estas reglas no cambian.
+
+groups:
+  - name: kronoqr-projection
+    interval: 60s
+    rules:
+      #------------------------------------------------------------------------
+      # La proyeccion no coincidia con sus eventos origen. Critica y sin umbral.
+      #
+      # `increase(...[24h])` y no `> 0` a secas, que es la diferencia con
+      # `audit_chain_verification_failures_total`. Una rotura de la cadena de
+      # hash NO se puede reparar —la firma es la que es— y su alerta debe seguir
+      # sonando para siempre. Una divergencia de proyeccion SI se repara, y de
+      # hecho el propio comando la repara al detectarla: con un umbral absoluto,
+      # el contador se quedaria por encima de cero de por vida y la alerta
+      # quedaria clavada, que es la forma mas rapida de que nadie vuelva a
+      # creersela. Con la ventana de 24 h suena la noche que ocurre, se mantiene
+      # mientras alguien la investiga y se apaga sola cuando pasa un dia sin
+      # volver a ocurrir.
+      #
+      # `for: 5m` para que un scrape perdido durante el rename() atomico del
+      # fichero no cuente como divergencia.
+      #------------------------------------------------------------------------
+      - alert: DivergenciaEnReconciliacionNocturna
+        expr: increase(projection_divergence_total[24h]) > 0
+        for: 5m
+        labels:
+          severity: critical
+          destinatario: it-cliente
+          component: projection
+        annotations:
+          summary: "La reconciliacion ha encontrado {{ $value }} jornada(s) con la proyeccion desviada"
+          description: >-
+            daily_totals no coincidia con los tramos vigentes de esos dias. La
+            reconciliacion ya ha reescrito las filas y ha dejado el antes y el
+            despues en audit_log, asi que los numeros que se ven ahora son
+            correctos: lo que hay que averiguar es COMO se desviaron, porque la
+            proyeccion se recalcula entera en cada escritura y no deberia poder
+            hacerlo. El fichaje NO esta afectado y nadie se ha quedado sin poder
+            fichar: la fuente de verdad son shift_entries.
+          runbook_url: docs/runbooks/divergencia-proyeccion.md
+
+      #------------------------------------------------------------------------
+      # Nadie esta reconciliando. El silencio es el peor de los fallos: sin esta
+      # regla, apagar la tarea programada seria la forma mas comoda de que la
+      # alerta de arriba no volviera a sonar nunca.
+      #
+      # 26 h de umbral para que un retraso normal de la ventana nocturna no la
+      # dispare, igual que en la verificacion de la cadena de auditoria.
+      #------------------------------------------------------------------------
+      - alert: ReconciliacionDeProyeccionAusente
+        expr: >-
+          absent(projection_reconciliation_last_run_timestamp_seconds)
+          or (time() - projection_reconciliation_last_run_timestamp_seconds) > 93600
+        for: 30m
+        labels:
+          severity: warning
+          destinatario: it-cliente
+          component: projection
+        annotations:
+          summary: "Hace mas de 26 h que no se reconcilia daily_totals"
+          description: >-
+            La alerta de divergencia solo suena si el comando diario se ejecuta.
+            O el scheduler esta parado, o `attendance:reconcile` falla antes de
+            publicar la metrica, o el destino de metricas no esta montado.
+            Mientras dure, no se sabe si la proyeccion cuadra: no se sabe que
+            cuadra, que no es lo mismo que saber que no cuadra.
+          runbook_url: docs/runbooks/divergencia-proyeccion.md

@@ -153,6 +153,46 @@ Schedule::command('reporting:presence-metrics')
     ->withoutOverlapping();
 
 /*
+ * Reconciliacion de `daily_totals` con sus eventos origen (RF-PR-02, ADR-007,
+ * tarea 2.7).
+ *
+ *   attendance:reconcile        # sin fechas: la jornada de ayer
+ *
+ * DIARIA, a las 03:50 UTC, y el hueco esta elegido: despues de la copia (03:15),
+ * ANTES de la verificacion de la cadena de auditoria (04:05) y ANTES de la
+ * deteccion de incidencias (04:30). Las dos precedencias tienen motivo:
+ *
+ *   · Antes de la deteccion, porque si la reconciliacion corrige un dia, la
+ *     revision de esa noche trabaja ya sobre la version buena. Hoy la deteccion
+ *     lee `shift_entries` y no la proyeccion, asi que el orden no la cambia; el
+ *     dia que una regla mire un agregado diario, el orden sera lo unico que
+ *     impida abrir una incidencia sobre un total equivocado.
+ *   · Antes de la verificacion de la cadena, porque una correccion de proyeccion
+ *     escribe en `audit_log`: asi los asientos de esta noche se verifican esta
+ *     noche y no veinticuatro horas mas tarde (RS-07).
+ *
+ * AYER Y NO HOY. La jornada de ayer es la ultima que ya no va a cambiar por si
+ * sola; reconciliar el dia en curso compararia una y otra vez turnos todavia
+ * abiertos que siguen creciendo. Un rango mas ancho —tras una importacion, una
+ * restauracion o una migracion que toque la proyeccion— se lanza a mano con
+ * `--from` y `--to`, que es una decision consciente de quien la ejecuta.
+ *
+ * TERMINA EN ROJO SI ENCUENTRA ALGO, aunque lo haya corregido: la proyeccion se
+ * recalcula entera en la transaccion que la motiva (regla dura 7), asi que una
+ * divergencia no es trabajo rutinario, es un incidente de integridad
+ * (`projection_divergence_total` debe permanecer siempre en cero, doc 02 §8.2) y
+ * se responde con docs/runbooks/divergencia-proyeccion.md.
+ *
+ * `withoutOverlapping` porque una pasada sobre un rango ancho lanzada a mano
+ * puede seguir corriendo a la hora de la nocturna, y dos reconciliaciones
+ * simultaneas sobre la misma jornada solo duplican la lectura.
+ */
+Schedule::command('attendance:reconcile')
+    ->dailyAt('03:50')
+    ->withoutOverlapping()
+    ->runInBackground();
+
+/*
  * Deteccion automatica de incidencias (RF-PR-01, tarea 2.6).
  *
  *   attendance:detect-incidents

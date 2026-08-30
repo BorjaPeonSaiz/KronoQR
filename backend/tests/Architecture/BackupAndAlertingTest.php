@@ -80,6 +80,24 @@ function exigeProcedimientoEnCadaAlerta(array $reglas): void
     }
 }
 
+/**
+ * La hora `dailyAt` con la que esta programado un comando, o cadena vacia si no
+ * lo esta.
+ *
+ * Se lee del fichero del planificador y no de `schedule:list` a proposito: esta
+ * suite es de arquitectura y corre sin base de datos ni contenedor.
+ */
+function horaProgramada(string $scheduler, string $command): string
+{
+    $encontrado = preg_match(
+        '/'.preg_quote($command, '/')."'\)\s*\n\s*->dailyAt\('(\d{2}:\d{2})'\)/",
+        $scheduler,
+        $partes,
+    );
+
+    return $encontrado === 1 ? $partes[1] : '';
+}
+
 it('archiva el WAL con el intervalo del que depende el RPO de 15 minutos', function (): void {
     // RNF-D-02. `archive_timeout=900` obliga a cerrar y archivar un segmento
     // cada 15 min aunque no haya trafico. Sin el, un hotel tranquilo de
@@ -297,6 +315,64 @@ it('dirige la alerta de turnos abiertos a RRHH, con runbook y sin cierre automat
         ->toContain('OLVIDO_FICHAJE_SALIDA')
         ->toContain('NUNCA cierra un turno');
 })->group('RF-PR-01', 'RN-08');
+
+it('deja la alerta de divergencia de proyeccion sin umbral, dirigida al IT y con runbook', function (): void {
+    // Doc 01 §9.3, fila «Divergencia en reconciliacion nocturna | cualquiera |
+    // Critica | IT del cliente». Sin umbral —«cualquiera», no una tendencia:
+    // el doc 02 §8.2 dice de `projection_divergence_total` que debe permanecer
+    // SIEMPRE en cero— y al IT del cliente y no a seguridad, porque lo que hay
+    // que averiguar es quien escribio en la base, y eso lo mira quien opera la
+    // instalacion (ADR-007: «el destinatario es el IT del cliente»).
+    $reglas = reglasDeAlerta('infra/observability/prometheus/rules/projection.yml');
+
+    exigeProcedimientoEnCadaAlerta($reglas);
+
+    $porNombre = [];
+    foreach ($reglas as $regla) {
+        $porNombre[$regla['alert'] ?? ''] = $regla;
+    }
+
+    expect($porNombre)->toHaveKeys([
+        'DivergenciaEnReconciliacionNocturna',
+        // El silencio: sin esta, apagar la tarea nocturna seria la forma mas
+        // comoda de que la de arriba no volviera a sonar nunca.
+        'ReconciliacionDeProyeccionAusente',
+    ]);
+
+    $divergencia = $porNombre['DivergenciaEnReconciliacionNocturna'];
+    expect($divergencia['expr'] ?? '')->toContain('projection_divergence_total');
+    expect($divergencia['expr'] ?? '')->toContain('> 0');
+    expect($divergencia['labels']['severity'] ?? '')->toBe('critical');
+    expect($divergencia['labels']['destinatario'] ?? '')->toBe('it-cliente');
+    expect($porNombre['ReconciliacionDeProyeccionAusente']['labels']['destinatario'] ?? '')->toBe('it-cliente');
+
+    // Lo unico que impide que alguien «arregle» la divergencia a mano, que es
+    // con toda probabilidad lo que la causo (regla dura 7, ADR-007).
+    expect(backupFile('docs/runbooks/divergencia-proyeccion.md'))
+        ->toContain('attendance:reconcile')
+        ->toContain('No hagas `UPDATE daily_totals`');
+})->group('RF-PR-02', 'RN-06');
+
+it('programa la reconciliacion nocturna antes de la deteccion de incidencias', function (): void {
+    // Una alerta sobre una metrica que nadie publica no suena nunca. Y el orden
+    // es parte del requisito: si la reconciliacion corrige un dia, la revision
+    // de esa noche tiene que trabajar sobre la version buena, no sobre la que
+    // se acaba de descartar.
+    $scheduler = backupFile('backend/routes/console.php');
+
+    expect($scheduler)
+        ->toContain("Schedule::command('attendance:reconcile')")
+        ->toMatch('/attendance:reconcile\'\)\s*\n\s*->dailyAt\(/');
+
+    $reconcileAt = horaProgramada($scheduler, 'attendance:reconcile');
+    $detectAt = horaProgramada($scheduler, 'attendance:detect-incidents');
+
+    expect($reconcileAt)->not->toBe('');
+    expect($detectAt)->not->toBe('');
+    expect($reconcileAt < $detectAt)->toBeTrue(
+        'La reconciliacion ('.$reconcileAt.') tiene que correr antes que la deteccion ('.$detectAt.').'
+    );
+})->group('RF-PR-02');
 
 it('programa la deteccion de incidencias y su metrica, que es lo que las hace existir', function (): void {
     // Una alerta sobre una metrica que nadie publica no suena nunca, y una

@@ -44,7 +44,7 @@ Asignación literal del plan de implementación
 |---|---|---|---|
 | 1 | `quiosco-no-responde.md` | Alerta de latido perdido | Fase 3 · tarea 3.2 |
 | 2 | `cola-offline-atascada.md` | Cola de un dispositivo por encima del umbral | Fase 3 · tarea 3.2 |
-| 3 | `divergencia-proyeccion.md` | La reconciliación nocturna detecta discrepancia | Fase 2 · tarea 2.7 → completado en 3.2 |
+| 3 | [`divergencia-proyeccion.md`](divergencia-proyeccion.md) | La reconciliación nocturna detecta discrepancia | ✅ Fase 2 · tarea 2.7 → destinatarios reales en 3.2 |
 | 4 | [`rotura-cadena-auditoria.md`](rotura-cadena-auditoria.md) | **Incidente de seguridad.** Incluye preservación de evidencia | ✅ Fase 1 · tarea 1.14 (era 2.2, adelantada por ADR-032) |
 | 5 | [`restaurar-backup.md`](restaurar-backup.md) | Recuperación y simulacro trimestral | ✅ Fase 1 · tarea 1.18 (era 2.11, adelantada por ADR-032) → usado por 5.7 |
 | 6 | `rotacion-secretos.md` | Rotación programada o compromiso | §7.7 · ampliado en 5.4 |

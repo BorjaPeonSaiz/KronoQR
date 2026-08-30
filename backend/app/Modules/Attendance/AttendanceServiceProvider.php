@@ -6,8 +6,10 @@ namespace App\Modules\Attendance;
 
 use App\Http\RateLimiting\KioskRateLimit;
 use App\Modules\Attendance\Application\Port\CorrectionMetrics;
+use App\Modules\Attendance\Application\Port\DailyTotalsProjection;
 use App\Modules\Attendance\Application\Port\EventPublisher;
 use App\Modules\Attendance\Application\Port\FlaggedScans;
+use App\Modules\Attendance\Application\Port\ProjectionMetrics;
 use App\Modules\Attendance\Application\Port\ScanLog;
 use App\Modules\Attendance\Application\Port\ScanMetrics;
 use App\Modules\Attendance\Application\Port\ShiftCorrectionLedger;
@@ -20,8 +22,10 @@ use App\Modules\Attendance\Http\Policy\ScanPolicy;
 use App\Modules\Attendance\Http\Policy\ShiftEntryPolicy;
 use App\Modules\Attendance\Infrastructure\Adapter\LaravelEventBus;
 use App\Modules\Attendance\Infrastructure\Console\DetectIncidentsCommand;
+use App\Modules\Attendance\Infrastructure\Console\ReconcileProjectionsCommand;
 use App\Modules\Attendance\Infrastructure\Metrics\RedisCorrectionMetrics;
 use App\Modules\Attendance\Infrastructure\Metrics\RedisScanMetrics;
+use App\Modules\Attendance\Infrastructure\Metrics\TextfileProjectionMetrics;
 use App\Modules\Attendance\Infrastructure\Persistence\DatabaseShiftCorrectionLedger;
 use App\Modules\Attendance\Infrastructure\Persistence\EloquentFlaggedScans;
 use App\Modules\Attendance\Infrastructure\Persistence\EloquentScanLog;
@@ -31,6 +35,7 @@ use App\Modules\Attendance\Infrastructure\Persistence\EloquentWorkDayLedger;
 use App\Modules\Attendance\Infrastructure\Persistence\EloquentWorkDayRepository;
 use App\Modules\Attendance\Infrastructure\Persistence\ShiftEntry;
 use App\Modules\Attendance\Infrastructure\Projection\DailyTotalsProjector;
+use App\Modules\Attendance\Infrastructure\Projection\DatabaseDailyTotalsProjection;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Event;
@@ -97,10 +102,34 @@ final class AttendanceServiceProvider extends ServiceProvider
         // para elegir entre 404 y 409 y lo dice de si mismo.
         $this->app->bind(ShiftEntrySubject::class, EloquentShiftEntrySubject::class);
 
+        /*
+         * La reconciliacion nocturna (RF-PR-02, ADR-007, tarea 2.7).
+         *
+         * `DailyTotalsProjection` lee la proyeccion y **no la escribe**: la
+         * escritura sigue teniendo un solo camino, el listener
+         * `DailyTotalsProjector`. Que el puerto de lectura sea otro es lo que
+         * impide que la reconciliacion se invente una aritmetica propia con la
+         * que «arreglar» filas — compararia entonces dos calculos distintos.
+         */
+        $this->app->bind(DailyTotalsProjection::class, DatabaseDailyTotalsProjection::class);
+
         // Singleton: no tiene estado y se resuelve en cada peticion de escaneo.
         // En las pruebas se sustituye por un doble que cuenta.
         $this->app->singleton(ScanMetrics::class, RedisScanMetrics::class);
         $this->app->singleton(CorrectionMetrics::class, RedisCorrectionMetrics::class);
+
+        /*
+         * `projection_divergence_total` sobre el colector textfile y no sobre
+         * Redis, al contrario que las dos de arriba (doc 02 §8.2).
+         *
+         * El criterio es el mismo que separa a `TextfileAuditMetrics` de
+         * `RedisScanMetrics`: aquellas cuentan un hecho que ocurre cincuenta
+         * veces por segundo y esta cuenta uno que **no debe ocurrir nunca**. Un
+         * contador que tiene que permanecer en cero para siempre no puede vivir
+         * en una cache que un despliegue puede vaciar: un `FLUSHALL` devolveria
+         * la serie a cero, que es justo el valor que significa «todo esta bien».
+         */
+        $this->app->singleton(ProjectionMetrics::class, TextfileProjectionMetrics::class);
     }
 
     public function boot(): void
@@ -150,7 +179,15 @@ final class AttendanceServiceProvider extends ServiceProvider
              * RN-11, RN-12 y RN-15— son suyas. Las incidencias que salen de ahi
              * las abre `Compliance` reaccionando a sus eventos.
              */
-            $this->commands([DetectIncidentsCommand::class]);
+            /*
+             * `attendance:reconcile` (RF-PR-02, doc 02 Anexo C, ADR-007). Igual
+             * que el anterior: CUANDO se ejecuta lo dice `routes/console.php`.
+             *
+             * Vive en `Attendance` porque lo que contrasta es una jornada, y
+             * quien sabe sumarla es este modulo (RN-06). La traza de la
+             * correccion la escribe `Compliance` reaccionando a su evento.
+             */
+            $this->commands([DetectIncidentsCommand::class, ReconcileProjectionsCommand::class]);
         }
     }
 
