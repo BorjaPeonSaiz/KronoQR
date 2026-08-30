@@ -9,7 +9,9 @@
       "employees": "Workforce",
       "credentials": "Credentials",
       "legalExport": "Inspectorate",
-      "live": "Presence"
+      "live": "Presence",
+      "incidents": "Incidents",
+      "reports": "Reports"
     },
     "roles": {
       "admin": "Administration",
@@ -297,6 +299,19 @@
       "withoutDelivered": "Without their card in hand: {missing} of {total}.",
       "pendingPrint": "Waiting to be printed: {count}."
     },
+    "rotation": {
+      "heading": "Signing key rotation in progress",
+      "explanation": "Key {keyId}, which signs the old cards, is being replaced. While the handover lasts the old cards still clock in and out, so nobody is left out. Each old card is retired automatically as soon as its replacement is handed over.",
+      "progress": "Reprinting done: {done} of {total} ({percent}%).",
+      "showPending": "Show who is still waiting ({count})",
+      "showAll": "Show the whole workforce",
+      "complete": "Nobody clocks in with key {keyId} any more: it can be retired on the server."
+    },
+    "unknownKey": {
+      "heading": "Some cards no longer work for clocking in",
+      "explanation": "{count} card(s) in circulation are signed with a key the server no longer recognises. Anyone carrying one of them cannot clock in with their card: they will have to use their PIN until it is fixed.",
+      "action": "This is fixed by whoever administers the server: run «php artisan credentials:status» to find out which key it is and follow docs/runbooks/rotacion-clave-qr.md §6."
+    },
     "empty": {
       "title": "There are no rows to show",
       "description": "Nobody is active within the chosen scope.",
@@ -455,6 +470,71 @@
         "times": "Times are given in the time zone of the site and also in UTC, which is how they are stored.",
         "format": "CSV in UTF-8 with byte order mark, semicolon separated. Durations are written HH:MM, never as a decimal."
       }
+    },
+    "period": {
+      "title": "Hours by period",
+      "subtitle": "Hours worked over a period, with department or site aggregates and the comparison against contracted hours. The criteria used to calculate it are shown below the table.",
+      "generate": "Generate report",
+      "loading": "Generating the report…",
+      "contractCoverage": "There are {days} person-days in this period with no contract on record, affecting {employees} person(s). Those days add no contracted hours: the deviation on those rows is incomplete.",
+      "filters": {
+        "legend": "Report period and grouping",
+        "from": "From",
+        "to": "To",
+        "granularity": "Granularity",
+        "groupBy": "Group by",
+        "department": "Department",
+        "departmentAll": "All",
+        "openShifts": "Count days with an open shift"
+      },
+      "granularity": {
+        "day": "Day",
+        "week": "Week",
+        "month": "Month",
+        "range": "Whole period"
+      },
+      "grouping": {
+        "employee": "Employee",
+        "department": "Department",
+        "site": "Site"
+      },
+      "empty": {
+        "title": "Nothing to show for that period",
+        "description": "No one within your scope has shifts or a contract on the chosen dates. Try another period or clear the department filter."
+      },
+      "criteria": {
+        "title": "Criteria for this report",
+        "generated": "Generated at {at} · site time zone: {timeZone}"
+      },
+      "export": {
+        "label": "Download this report:",
+        "format": {
+          "csv": "CSV",
+          "xlsx": "Excel (XLSX)",
+          "pdf": "PDF"
+        },
+        "running": "Preparing the {format} download…",
+        "done": "{format} download ready.",
+        "failed": "The report could not be downloaded."
+      },
+      "announce": {
+        "results": "The report has {count} rows."
+      }
+    },
+    "table": {
+      "caption": "Hours by period. Dates are in the site time zone ({timeZone}).",
+      "subject": "Subject",
+      "period": "Period",
+      "worked": "Worked",
+      "contracted": "Contracted",
+      "deviation": "Deviation",
+      "overtime": "Overtime",
+      "shifts": "Shifts",
+      "daysWithActivity": "Days with activity",
+      "daysWithoutActivity": "Days without activity",
+      "openShiftDays": "Days with an open shift",
+      "incidentDays": "Days with an incident",
+      "withoutDepartment": "No department"
     }
   },
   "workdays": {
@@ -609,6 +689,122 @@
     },
     "announce": {
       "counts": "{present} people in and {absent} out."
+    }
+  },
+  "incidents": {
+    "title": "Incident inbox",
+    "subtitle": "What in the time record needs a person to look at it. Resolving an incident does not change any hour: if a shift entry needs correcting, that is done from the person's time record.",
+    "loading": "Loading the incident inbox…",
+    "duration": "{hours} h {minutes} min",
+    "status": {
+      "open": "Open",
+      "resolved": "Resolved",
+      "dismissed": "Dismissed"
+    },
+    "severities": {
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "types": {
+      "open_shift_expired": "Open shift not closed",
+      "short_shift": "Shift too short",
+      "long_shift": "Shift too long",
+      "missing_break": "No break registered",
+      "insufficient_rest": "Insufficient rest",
+      "clock_skew": "Clock skew",
+      "missing_clock_out": "Missing clock-out",
+      "anomalous_pattern": "Anomalous credential usage pattern"
+    },
+    "outcomes": {
+      "resolved": "Resolved",
+      "dismissed": "Dismissed"
+    },
+    "filters": {
+      "legend": "Inbox filters",
+      "status": "Status",
+      "type": "Type",
+      "typeAll": "All types",
+      "severity": "Severity",
+      "severityAll": "All severities",
+      "department": "Department",
+      "departmentAll": "All departments"
+    },
+    "table": {
+      "caption": "Incidents in the inbox, times in {zone}",
+      "severity": "Severity",
+      "type": "Type",
+      "employee": "Employee",
+      "workDate": "Work day",
+      "age": "Age",
+      "assignedTo": "Assigned to",
+      "actions": "Actions",
+      "unassigned": "Unassigned",
+      "noDepartment": "No department",
+      "resolve": "Resolve",
+      "detectedAt": "Detected on {moment}",
+      "ageValue": "{duration} ago",
+      "viewWorkday": "View time record"
+    },
+    "empty": {
+      "open": {
+        "title": "No open incidents",
+        "description": "There is no open incident with these filters. Not a fault: the inbox fills itself when detection finds something to review."
+      },
+      "resolved": {
+        "title": "No resolved incidents",
+        "description": "No incident with these filters has been marked resolved yet."
+      },
+      "dismissed": {
+        "title": "No dismissed incidents",
+        "description": "No incident with these filters has been dismissed yet."
+      }
+    },
+    "announce": {
+      "results": "{count} incidents in the inbox.",
+      "resolved": "Incident for {name} marked as {outcome}."
+    },
+    "context": {
+      "pair": "{metric} {value} of {threshold}",
+      "raw": "{key}: {value}",
+      "metrics": {
+        "rest_minutes": "rest",
+        "worked_minutes": "worked"
+      }
+    },
+    "employeeFilter": {
+      "active": "Showing only the incidents for {name}.",
+      "clear": "Clear this filter"
+    },
+    "pagination": {
+      "label": "Incident inbox pagination"
+    },
+    "dialog": {
+      "title": "Close incident",
+      "for": "{type}, for {name}, work day of {date}.",
+      "outcomeLegend": "What happened",
+      "outcome": {
+        "resolved": "It has been corrected",
+        "dismissed": "Reviewed: there was nothing to correct"
+      },
+      "note": "Note (required)",
+      "noteHint": "Explain what was done, or why nothing needed correcting. It stays in the incident's history.",
+      "noteCounter": "{count}/{max} characters",
+      "noteTooShort": "Write at least {min} characters.",
+      "noteTooLong": "The text cannot exceed {max} characters.",
+      "submit": "Confirm",
+      "conflict": {
+        "title": "Already resolved",
+        "resolvedBy": "{name} marked it as \"{outcome}\" on {moment}.",
+        "resolvedByUnknown": "Someone else has already resolved it in the meantime.",
+        "note": "Note: \"{note}\"",
+        "acknowledge": "Understood"
+      }
+    },
+    "workday": {
+      "heading": "Incidents in this work day",
+      "none": "No incidents in this work day.",
+      "linkToInbox": "View in the incident inbox"
     }
   }
 }

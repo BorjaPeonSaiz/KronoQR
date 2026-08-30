@@ -192,7 +192,7 @@ watch(data, (value) => {
     />
 
     <div v-else class="mt-4 flex flex-col gap-6">
-      <WorkDayCard v-for="day of days" :key="day.work_date" :day="day" />
+      <WorkDayCard v-for="day of days" :key="day.work_date" :day="day" :employee-uuid="uuid" />
     </div>
   </section>
 </template>

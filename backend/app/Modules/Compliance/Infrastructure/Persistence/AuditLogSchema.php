@@ -27,6 +27,13 @@ final class AuditLogSchema
     public const string ANCHORS_TABLE = 'audit_chain_anchors';
 
     /**
+     * La funcion que suelta una particion ya sellada (tarea 2.10). El nombre
+     * vive aqui porque lo nombran tres sitios: la migracion que la crea, el
+     * adaptador que la invoca y la prueba que comprueba quien puede ejecutarla.
+     */
+    public const string DROP_FUNCTION = 'audit_log_drop_sealed_partition';
+
+    /**
      * Primer año con particion. Es el año del primer despliegue del producto y
      * el literal de ADR-027 y del doc 01 §5.5.
      */
@@ -35,6 +42,86 @@ final class AuditLogSchema
     public static function partitionName(int $year): string
     {
         return self::TABLE.'_'.$year;
+    }
+
+    /**
+     * La funcion que suelta una particion ya sellada (tarea 2.10, ADR-027).
+     *
+     * Es `SECURITY DEFINER` y pertenece al **propietario** de `audit_log`, que
+     * es el rol de migracion. `ALTER TABLE … DETACH PARTITION` exige ser
+     * propietario, y hacer propietario al rol de mantenimiento le daria de paso
+     * poder retirar los `REVOKE` que sostienen la regla dura 6 -un propietario
+     * puede volver a otorgarse lo que se le revoque-. Con la funcion, el rol de
+     * mantenimiento puede hacer **exactamente una cosa** y ninguna otra.
+     *
+     * Y la funcion **exige el ancla desde dentro**: sin sello en
+     * `audit_chain_anchors` no suelta nada, aunque quien la llame se equivoque de
+     * orden. Es la ultima red antes de que un hueco quede sin explicar (RS-07).
+     *
+     * @return list<string>
+     */
+    public static function dropFunctionStatements(): array
+    {
+        $function = self::quoteIdentifier(self::DROP_FUNCTION);
+        $maintenance = self::quoteIdentifier(self::maintenanceRole());
+
+        // Se sustituyen marcas y no se usa `sprintf`: el cuerpo esta lleno de
+        // `%I` y `%` de `format()` y de `RAISE`, y duplicarlos todos para
+        // esquivar a `sprintf` convierte una funcion legible en un jeroglifico
+        // que nadie revisa. Las marcas salen de constantes de esta clase.
+        $body = strtr(<<<'SQL'
+            CREATE OR REPLACE FUNCTION :function:(p_year integer)
+            RETURNS void
+            LANGUAGE plpgsql
+            SECURITY DEFINER
+            SET search_path = pg_catalog, public
+            AS $kronoqr$
+            DECLARE
+                partition_name text := ':table:_' || p_year::text;
+            BEGIN
+                IF p_year < :first_year: OR p_year > 9999 THEN
+                    RAISE EXCEPTION 'Ano de particion fuera de rango: %', p_year;
+                END IF;
+
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM pg_inherits
+                    JOIN pg_class parent ON parent.oid = pg_inherits.inhparent
+                    JOIN pg_class child  ON child.oid  = pg_inherits.inhrelid
+                    JOIN pg_namespace ns ON ns.oid     = parent.relnamespace
+                    WHERE parent.relname = ':table:' AND ns.nspname = 'public'
+                      AND child.relname = partition_name
+                ) THEN
+                    RAISE EXCEPTION 'La particion % no esta adjunta a :table:', partition_name;
+                END IF;
+
+                IF NOT EXISTS (SELECT 1 FROM public.:anchors: WHERE partition_year = p_year) THEN
+                    RAISE EXCEPTION 'La particion % no tiene ancla sellada: no se suelta (ADR-027)', partition_name;
+                END IF;
+
+                EXECUTE format('ALTER TABLE public.:table: DETACH PARTITION public.%I', partition_name);
+                EXECUTE format('DROP TABLE public.%I', partition_name);
+            END;
+            $kronoqr$
+            SQL, [
+            ':function:' => $function,
+            ':table:' => self::TABLE,
+            ':anchors:' => self::ANCHORS_TABLE,
+            ':first_year:' => (string) self::FIRST_YEAR,
+        ]);
+
+        return [
+            $body,
+            // Nadie por defecto, ni siquiera el rol de la aplicacion: `PUBLIC`
+            // recibe `EXECUTE` sobre toda funcion nueva si no se le retira.
+            sprintf('REVOKE ALL ON FUNCTION %s(integer) FROM PUBLIC', $function),
+            sprintf('GRANT EXECUTE ON FUNCTION %s(integer) TO %s', $function, $maintenance),
+        ];
+    }
+
+    public static function dropFunctionRemovalStatement(): string
+    {
+        return sprintf('DROP FUNCTION IF EXISTS %s(integer)', self::quoteIdentifier(self::DROP_FUNCTION));
     }
 
     /**

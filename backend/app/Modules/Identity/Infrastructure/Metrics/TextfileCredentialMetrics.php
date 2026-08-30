@@ -67,11 +67,58 @@ final readonly class TextfileCredentialMetrics implements CredentialMetrics
             'credentials_coverage_employees'.$labels.' '.$coverage->employees,
         ];
 
+        // Avance de una rotacion de clave (RF-QR-07, §5.3). Se escribe SIEMPRE,
+        // tambien fuera de una rotacion: entonces vale cero y lleva
+        // `key_id=""`. Una serie que aparece y desaparece con la variable de
+        // entorno no se puede graficar ni alertar, y el cero es justo el valor
+        // que autoriza a retirar la clave anterior.
+        $lines[] = '# HELP credentials_pending_reprint Personas cuya tarjeta en uso sigue firmada con la clave saliente de una rotacion (RF-QR-07). Llega a cero cuando la clave anterior se puede retirar.';
+        $lines[] = '# TYPE credentials_pending_reprint gauge';
+        $lines[] = 'credentials_pending_reprint'.$this->reprintLabels($coverage).' '.$coverage->pendingReprint;
+
+        // **La serie que siempre deberia valer cero** (revision de seguridad de
+        // la 2.12): tarjetas vivas firmadas con una clave que la instalacion ya
+        // no reconoce. Quien lleve una de esas no puede fichar, y el panel no lo
+        // delata porque su fila se ve entregada. Se escribe una linea por clave
+        // huerfana y, cuando no hay ninguna, un cero con `key_id=""`: una serie
+        // que aparece y desaparece no se puede alertar.
+        $lines[] = '# HELP credentials_active_unknown_key Tarjetas activas firmadas con una clave que ya no esta configurada (RF-QR-07). DEBE ser cero: quien lleve una de esas tarjetas no puede fichar.';
+        $lines[] = '# TYPE credentials_active_unknown_key gauge';
+
+        if ($coverage->unknownKeyCards === []) {
+            $lines[] = 'credentials_active_unknown_key'.$this->unknownKeyLabels($coverage, '').' 0';
+        }
+
+        foreach ($coverage->unknownKeyIds() as $keyId) {
+            $lines[] = 'credentials_active_unknown_key'.$this->unknownKeyLabels($coverage, $keyId)
+                .' '.$coverage->unknownKeyCards[$keyId];
+        }
+
         $lines[] = '# HELP credentials_coverage_check_timestamp_seconds Momento del ultimo recuento. Su ausencia delata que el comando programado dejo de ejecutarse.';
         $lines[] = '# TYPE credentials_coverage_check_timestamp_seconds gauge';
         $lines[] = 'credentials_coverage_check_timestamp_seconds '.$at->getTimestamp();
 
         $this->write($lines);
+    }
+
+    /**
+     * Las mismas etiquetas del centro mas el `key_id` saliente.
+     *
+     * **El `key_id` es publico**: va impreso en cada tarjeta como primera parte
+     * del payload (ADR-005). Lo que no sale por aqui, ni por ningun sitio, es la
+     * clave.
+     */
+    private function reprintLabels(SiteCredentialCoverage $site): string
+    {
+        return '{site="'.$site->siteId.'",site_name="'.$this->escape($site->siteName).'"'
+            .',key_id="'.$this->escape($site->retiringKeyId ?? '').'"}';
+    }
+
+    /** Las del centro mas el `key_id` huerfano. Vacio cuando no hay ninguno. */
+    private function unknownKeyLabels(SiteCredentialCoverage $site, string $keyId): string
+    {
+        return '{site="'.$site->siteId.'",site_name="'.$this->escape($site->siteName).'"'
+            .',key_id="'.$this->escape($keyId).'"}';
     }
 
     private function labels(SiteCredentialCoverage $site): string

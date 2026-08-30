@@ -8,6 +8,7 @@ use App\Modules\Reporting\Application\Port\WorkDayJournalReader;
 use App\Modules\Reporting\Domain\ValueObject\CorrectionAuthor;
 use App\Modules\Reporting\Domain\ValueObject\DateRange;
 use App\Modules\Reporting\Domain\ValueObject\JournalCorrection;
+use App\Modules\Reporting\Domain\ValueObject\JournalIncident;
 use App\Modules\Reporting\Domain\ValueObject\JournalShiftEntry;
 use App\Modules\Reporting\Domain\ValueObject\JournalWorkDay;
 use App\Modules\Reporting\Domain\ValueObject\ShiftMarks;
@@ -27,6 +28,9 @@ use Psr\Log\LoggerInterface;
  * proyeccion. Se cruzan en PHP por `work_date`. La alternativa —recorrer las
  * jornadas y preguntar por cada una— es el problema N+1 en la pantalla que mas
  * abre quien lleva un turno.
+ *
+ * Con la tarea 2.5 hay una quinta, las incidencias, y **solo cuando se piden**:
+ * el panel las incrusta en el detalle (RF-PA-05) y el portal del empleado no.
  *
  * Los tres filtros por empleado y rango caen sobre
  * `shift_entries_employee_id_work_date_index` y sobre el UNIQUE de
@@ -76,8 +80,12 @@ final readonly class DatabaseWorkDayJournalReader implements WorkDayJournalReade
         return $rows === [] ? null : Row::of($rows[0])->string('timezone');
     }
 
-    public function journalFor(string $employeeUuid, string $timeZone, DateRange $range): WorkDayJournal
-    {
+    public function journalFor(
+        string $employeeUuid,
+        string $timeZone,
+        DateRange $range,
+        bool $withIncidents = false,
+    ): WorkDayJournal {
         $employeeId = $this->internalIdOf($employeeUuid);
 
         if ($employeeId === null) {
@@ -87,6 +95,9 @@ final readonly class DatabaseWorkDayJournalReader implements WorkDayJournalReade
         $entries = $this->currentEntries($employeeId, $range);
         $corrections = $this->corrections($employeeId, $range);
         $projection = $this->projection($employeeId, $range);
+        // La quinta consulta, y solo cuando se piden: quien no las va a enseñar
+        // no paga por traerlas.
+        $incidents = $withIncidents ? $this->incidents($employeeId, $range) : [];
 
         $days = [];
 
@@ -101,6 +112,7 @@ final readonly class DatabaseWorkDayJournalReader implements WorkDayJournalReade
                 recalculatedAt: $projection[$workDate]['recalculated_at'] ?? null,
                 shiftEntries: $dayEntries,
                 corrections: $corrections[$workDate] ?? [],
+                incidents: $incidents[$workDate] ?? [],
             );
 
             $this->warnIfProjectionDiverges($employeeUuid, $day, $projection[$workDate]['total_minutes'] ?? null);
@@ -278,6 +290,58 @@ final readonly class DatabaseWorkDayJournalReader implements WorkDayJournalReade
                 'total_minutes' => $row->int('total_minutes'),
                 'recalculated_at' => $row->nullableInstant('recalculated_at'),
             ];
+        }
+
+        return $byDate;
+    }
+
+    /**
+     * Las incidencias del rango, agrupadas por jornada (RF-PA-05, tarea 2.5).
+     *
+     * **Todas, no solo las abiertas.** Una jornada que dio problemas y ya se
+     * trabajo tiene que seguir diciendolo: quien mira el detalle seis meses
+     * despues necesita ver que aquello se reviso, no una pantalla limpia
+     * indistinguible de un dia sin nada.
+     *
+     * El orden es el mismo de la bandeja —lo urgente primero y dentro de eso lo
+     * mas reciente— para que la marca que el panel enseñe cuando no caben todas
+     * sea la que importa. El `id` desempata, por lo mismo que alli: dos
+     * incidencias de la misma pasada comparten `detected_at` al microsegundo.
+     *
+     * Cae sobre `incidents_employee_id_work_date_index`, que la migracion de la
+     * tarea 2.6 creo para esto.
+     *
+     * **Lee `incidents`, que es tabla de `Compliance`.** Es la misma excepcion
+     * acotada que esta clase ya se toma con `employees`, `sites`, `scan_events` y
+     * `shift_corrections`: se leen columnas, no se importa ningun modelo Eloquent
+     * ajeno ni ningun tipo de otro modulo — por eso el tipo, la severidad y la
+     * situacion viajan como cadenas y no como los enums de `Compliance`.
+     *
+     * @return array<string, list<JournalIncident>>
+     */
+    private function incidents(int $employeeId, DateRange $range): array
+    {
+        /** @var list<object> $rows */
+        $rows = $this->connection->select(<<<'SQL'
+            SELECT id, work_date, type, severity, status
+              FROM incidents
+             WHERE employee_id = ? AND work_date BETWEEN ?::date AND ?::date
+             ORDER BY CASE severity WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,
+                      detected_at DESC,
+                      id DESC
+        SQL, [$employeeId, $range->isoFrom(), $range->isoTo()]);
+
+        $byDate = [];
+
+        foreach ($rows as $raw) {
+            $row = Row::of($raw);
+
+            $byDate[$this->isoDate($row->string('work_date'))][] = new JournalIncident(
+                id: $row->int('id'),
+                type: $row->string('type'),
+                severity: $row->string('severity'),
+                status: $row->string('status'),
+            );
         }
 
         return $byDate;

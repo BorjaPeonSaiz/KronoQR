@@ -80,6 +80,8 @@ final readonly class IssueCredential
         ): IssuedCredential {
             $replaced = $this->revokePreviousIfAsked($command, $employeeId, $now);
 
+            $this->guardHasNoCardInHand($command, $employeeId);
+
             $credential = Credential::issue(
                 uuid: Str::uuid7()->toString(),
                 employeeId: $employeeId,
@@ -104,6 +106,40 @@ final readonly class IssueCredential
                 reissue: $replaced,
             );
         });
+    }
+
+    /**
+     * Una persona, una tarjeta: emitir sin `reissue` a quien ya tiene una activa
+     * es un `409` (doc 01 §5.2).
+     *
+     * **Por que hace falta esta comprobacion desde la tarea 2.12.** Antes la
+     * hacia sola la base de datos: el indice era unico por empleado entre las no
+     * revocadas. La rotacion con solape obliga a admitir exactamente dos
+     * —la tarjeta en la mano y su relevo pendiente de imprimir—, asi que el
+     * indice paso a ser por empleado **y clave**, y una emision suelta sobre
+     * alguien que ya tiene tarjeta ya no choca con nada: crearia una pendiente
+     * silenciosa que chocaria semanas despues, al imprimir.
+     *
+     * **No reintroduce la condicion de carrera que el repositorio evita.** Dos
+     * emisiones simultaneas siguen decidiendose en PostgreSQL, con
+     * `one_pending_credential_per_employee`: esto solo adelanta el `409` del caso
+     * normal para que el mensaje diga lo que pasa cuando pasa.
+     *
+     * La rotacion **no pasa por aqui** a proposito ({@see RotateSigningKey}):
+     * reemitir sin revocar es justo lo que tiene que hacer, y lo hace en su
+     * propio caso de uso en vez de con una bandera que ablande esta regla.
+     *
+     * @throws EmployeeAlreadyHasCredential
+     */
+    private function guardHasNoCardInHand(IssueCredentialCommand $command, int $employeeId): void
+    {
+        if ($command->reissue) {
+            return;
+        }
+
+        if ($this->credentials->activeForEmployee($employeeId) instanceof Credential) {
+            throw EmployeeAlreadyHasCredential::make();
+        }
     }
 
     /**

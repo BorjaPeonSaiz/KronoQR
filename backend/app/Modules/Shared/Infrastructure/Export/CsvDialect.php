@@ -68,6 +68,25 @@ final class CsvDialect
 
     public const string DELIMITER = ';';
 
+    /**
+     * El delimitador de los idiomas cuyo separador decimal es el punto.
+     *
+     * **La unica decision de esta clase que depende del idioma, y no es una
+     * grieta en su premisa.** El punto y coma no es una preferencia estetica: es
+     * lo que Excel espera **cuando la coma es el separador decimal**. En una
+     * instalacion en ingles la coma no lo es, y ahi un fichero con `;` se abre
+     * con todas las columnas metidas en la primera celda — exactamente el fallo
+     * que el `;` existe para evitar en español.
+     *
+     * Se elige por {@see self::delimiterFor()}, con el idioma de la instalacion
+     * (ADR-017, regla dura 13), y **no lo elige quien escribe el fichero**: sigue
+     * sin haber forma de pedir «otro dialecto». Los dos ficheros con efectos
+     * legales —la exportacion a la Inspeccion y el historico propio del portal—
+     * no lo usan y se quedan con el `;` de siempre: aquellos se entregan a un
+     * tercero español y su formato no puede depender del idioma de una pantalla.
+     */
+    public const string DELIMITER_DOT_DECIMAL = ',';
+
     public const string ENCLOSURE = '"';
 
     /** Ver el docblock de la clase: vacio a proposito, no por omision. */
@@ -99,6 +118,41 @@ final class CsvDialect
     }
 
     /**
+     * El delimitador que espera la hoja de calculo de quien habla ese idioma.
+     *
+     * Los idiomas de coma decimal —español, y con el la practica totalidad de
+     * Europa continental— llevan `;`; el resto, `,`. Se decide por el idioma de
+     * la instalacion y no por una cabecera `Accept-Language`, por dos razones: el
+     * producto no negocia idioma por peticion (no hay middleware que lo haga) y,
+     * sobre todo, **el idioma que importa es el del programa que abrira el
+     * fichero**, no el del navegador que lo descargo.
+     *
+     * La lista es de idiomas y no de paises a proposito: el producto se configura
+     * con `app.locale`, que es lo que hay.
+     */
+    public static function delimiterFor(string $locale): string
+    {
+        // El prefijo, para que `es_ES` y `es-ES` se comporten como `es`.
+        $language = strtolower(substr($locale, 0, 2));
+
+        return \in_array($language, self::COMMA_DECIMAL_LANGUAGES, true)
+            ? self::DELIMITER
+            : self::DELIMITER_DOT_DECIMAL;
+    }
+
+    /**
+     * Idiomas cuyo separador decimal es la coma y que por tanto necesitan `;`.
+     *
+     * Solo los que el producto declara en `config/app.php` mas los vecinos
+     * evidentes: una lista exhaustiva de locales seria una tabla de datos
+     * disfrazada de constante, y el criterio de admision es que alguien pueda
+     * instalar KronoQR en ese idioma.
+     *
+     * @var list<string>
+     */
+    private const array COMMA_DECIMAL_LANGUAGES = ['es', 'ca', 'gl', 'eu', 'pt', 'fr', 'de', 'it', 'nl'];
+
+    /**
      * Primer caracter con el que Excel decide que la celda es una formula.
      * `-` esta en la lista aunque tambien empiece numeros: la excepcion para el
      * numero puro vive en `neutralized()`, no aqui.
@@ -112,13 +166,18 @@ final class CsvDialect
      *
      * @param  resource  $handle
      * @param  array<array-key, string>  $cells
+     * @param  string  $delimiter  Solo para que la exportacion de conveniencia (RF-IN-04)
+     *                             pueda pedir el de {@see self::delimiterFor()}. Los ficheros
+     *                             con efectos legales no lo pasan y se quedan con el `;` de
+     *                             siempre. Entrecomillado, escapado y fin de linea siguen sin
+     *                             ser negociables.
      */
-    public static function writeRow($handle, array $cells): void
+    public static function writeRow($handle, array $cells, string $delimiter = self::DELIMITER): void
     {
         $written = fputcsv(
             $handle,
             array_map(self::neutralized(...), array_values($cells)),
-            self::DELIMITER,
+            $delimiter,
             self::ENCLOSURE,
             self::NO_ESCAPE,
             self::END_OF_LINE,
@@ -147,7 +206,21 @@ final class CsvDialect
         // comilla si lo estropearia (dejaria de sumar en la hoja de quien lo
         // recibe). Cualquier otra cosa que empiece por `-` —`-2+3+cmd|...`—
         // sigue siendo formula y se neutraliza.
-        if (preg_match('/^-\d+(?:[.,]\d+)?$/', $cell) === 1) {
+        //
+        // Y una DURACION NEGATIVA en `HH:MM` tampoco es una formula. Es la
+        // desviacion entre lo trabajado y lo contratado (RF-IN-03, RF-IN-04), y
+        // aparece en casi todas las filas de un informe de horas: con la comilla
+        // delante, quien abre el fichero lee literalmente «'-68:34» —el
+        // apostrofo de Excel solo es invisible al TECLEAR en una celda, no al
+        // importar un CSV— y una columna entera con basura delante de cada cifra
+        // se lee como un fallo de la exportacion.
+        //
+        // El patron es deliberadamente estrecho —signo, digitos, dos puntos y
+        // exactamente dos digitos— asi que no puede alojar ninguna carga: ni
+        // `cmd|`, ni una referencia DDE, ni un nombre de funcion. Se comprueba en
+        // `CsvDialectTest`.
+        if (preg_match('/^-\d+(?:[.,]\d+)?$/', $cell) === 1
+            || preg_match('/^-\d+:\d{2}$/', $cell) === 1) {
             return $cell;
         }
 

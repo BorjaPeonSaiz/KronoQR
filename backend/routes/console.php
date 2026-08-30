@@ -151,3 +151,115 @@ Schedule::command('compliance:purge-legal-export-temp')
 Schedule::command('reporting:presence-metrics')
     ->everyMinute()
     ->withoutOverlapping();
+
+/*
+ * Reconciliacion de `daily_totals` con sus eventos origen (RF-PR-02, ADR-007,
+ * tarea 2.7).
+ *
+ *   attendance:reconcile        # sin fechas: la jornada de ayer
+ *
+ * DIARIA, a las 03:50 UTC, y el hueco esta elegido: despues de la copia (03:15),
+ * ANTES de la verificacion de la cadena de auditoria (04:05) y ANTES de la
+ * deteccion de incidencias (04:30). Las dos precedencias tienen motivo:
+ *
+ *   · Antes de la deteccion, porque si la reconciliacion corrige un dia, la
+ *     revision de esa noche trabaja ya sobre la version buena. Hoy la deteccion
+ *     lee `shift_entries` y no la proyeccion, asi que el orden no la cambia; el
+ *     dia que una regla mire un agregado diario, el orden sera lo unico que
+ *     impida abrir una incidencia sobre un total equivocado.
+ *   · Antes de la verificacion de la cadena, porque una correccion de proyeccion
+ *     escribe en `audit_log`: asi los asientos de esta noche se verifican esta
+ *     noche y no veinticuatro horas mas tarde (RS-07).
+ *
+ * AYER Y NO HOY. La jornada de ayer es la ultima que ya no va a cambiar por si
+ * sola; reconciliar el dia en curso compararia una y otra vez turnos todavia
+ * abiertos que siguen creciendo. Un rango mas ancho —tras una importacion, una
+ * restauracion o una migracion que toque la proyeccion— se lanza a mano con
+ * `--from` y `--to`, que es una decision consciente de quien la ejecuta.
+ *
+ * TERMINA EN ROJO SI ENCUENTRA ALGO, aunque lo haya corregido: la proyeccion se
+ * recalcula entera en la transaccion que la motiva (regla dura 7), asi que una
+ * divergencia no es trabajo rutinario, es un incidente de integridad
+ * (`projection_divergence_total` debe permanecer siempre en cero, doc 02 §8.2) y
+ * se responde con docs/runbooks/divergencia-proyeccion.md.
+ *
+ * `withoutOverlapping` porque una pasada sobre un rango ancho lanzada a mano
+ * puede seguir corriendo a la hora de la nocturna, y dos reconciliaciones
+ * simultaneas sobre la misma jornada solo duplican la lectura.
+ */
+Schedule::command('attendance:reconcile')
+    ->dailyAt('03:50')
+    ->withoutOverlapping()
+    ->runInBackground();
+
+/*
+ * Deteccion automatica de incidencias (RF-PR-01, tarea 2.6).
+ *
+ *   attendance:detect-incidents
+ *
+ * DIARIA, a las 04:30 UTC. Despues de la copia (03:15) y de la verificacion de
+ * la cadena de auditoria (04:05), y lejos del cambio de turno de las 06:00: lee
+ * las jornadas de una semana y no debe competir con el minuto mas caro del dia.
+ *
+ * UNA VEZ AL DIA Y NO MAS. El unico hallazgo que gana algo con mas frecuencia es
+ * el turno abierto, y ese no urge: RN-08 prohibe cerrarlo, asi que lo que la
+ * deteccion produce es trabajo para una persona en horario de oficina. Correrla
+ * cada hora multiplicaria por veinticuatro el aviso al responsable sin adelantar
+ * ni una correccion.
+ *
+ * NO CIERRA NADA (RN-08, regla dura 19): abre incidencias y avisa. Repetirla es
+ * seguro —la idempotencia la garantiza la restriccion `one_incident_per_finding`—,
+ * asi que `withoutOverlapping` esta por no duplicar el trabajo, no por
+ * correccion.
+ */
+Schedule::command('attendance:detect-incidents')
+    ->dailyAt('04:30')
+    ->withoutOverlapping()
+    ->runInBackground();
+
+/*
+ * Metrica de incidencias abiertas (doc 02 §8.2, doc 01 §9.2, tarea 2.6).
+ *
+ *   incidents_open{type,severity}
+ *
+ * CADA CINCO MINUTOS, y APARTE de la deteccion. Si se publicara al final de
+ * aquella, la cifra solo cambiaria de madrugada: una incidencia resuelta desde la
+ * bandeja a las once de la manana seguiria contando —y la alerta de turnos
+ * abiertos seguiria sonando— hasta la noche siguiente. Es un gauge de «cuantas
+ * hay ahora», y se recalcula entero desde la base de datos (regla dura 7
+ * aplicada a la instrumentacion).
+ *
+ * Cinco minutos y no uno: a diferencia de la presencia en vivo, que se mira
+ * durante un cambio de turno, esto alimenta una alerta de severidad media cuyo
+ * destinatario es RRHH. Un minuto de resolucion no cambiaria ninguna decision y
+ * son doce consultas agregadas mas por hora.
+ */
+Schedule::command('compliance:incident-metrics')
+    ->everyFiveMinutes()
+    ->withoutOverlapping();
+
+/*
+ * Propuesta de purga por retencion (RL-02, RL-11, RF-PR-03, tarea 2.10).
+ *
+ * SOLO SIMULACION, y esto es el requisito, no una precaucion: RF-PR-03 dice que
+ * el sistema **propone** y exige confirmacion del responsable. La ejecucion
+ * destructiva no se programa nunca —no existe forma de que este planificador
+ * borre una jornada— y ademas no podria: la purga real necesita la frase que
+ * imprime cada informe y la credencial del rol de mantenimiento, que no vive en
+ * el `.env` de la aplicacion (ADR-033).
+ *
+ * SEMANAL Y NO DIARIA. Lo que esta pasada produce es un informe para que alguien
+ * decida, y esa decision se toma una o dos veces al ano. Un informe diario del
+ * mismo vencimiento entrena a no leerlo; uno semanal sigue siendo puntual y
+ * mantiene viva la metrica `retention_pending_rows`, que es la que descubre que
+ * hay cuatro anos vencidos que nadie ha purgado.
+ *
+ * Lunes a las 05:10 UTC: despues de la copia (03:15), de la verificacion de la
+ * cadena (04:05) y de la deteccion de incidencias (04:30), y antes de que entre
+ * nadie a trabajar. Recorre tablas grandes con `count(*)`, asi que no comparte
+ * ventana con el turno de las 06:00.
+ */
+Schedule::command('compliance:apply-retention', ['--dry-run'])
+    ->weeklyOn(1, '05:10')
+    ->withoutOverlapping()
+    ->runInBackground();

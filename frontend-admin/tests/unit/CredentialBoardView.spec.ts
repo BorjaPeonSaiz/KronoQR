@@ -429,6 +429,93 @@ describe('CredentialBoardView', () => {
     expect(wrapper.text()).toContain(es.credentials.empty.filtered)
   })
 
+  // --- Rotacion de la clave de firma (RF-QR-07, tarea 2.12) ------------------
+
+  it('no dice nada de rotaciones cuando no hay ninguna abierta', async () => {
+    // Es lo normal: el panel de credenciales no tiene por que hablar de claves.
+    const wrapper = await mountBoard([boardRow()])
+
+    expect(wrapper.text()).not.toContain(es.credentials.rotation.heading)
+  })
+
+  it('pinta el avance de la reimpresion cuando hay una rotacion abierta', async () => {
+    stubFetch((url) =>
+      url.startsWith('/api/v1/site')
+        ? jsonResponse(SITE)
+        : jsonResponse(
+            board([boardRow({ status: 'delivered' })], {
+              retiring_key_id: 'a2',
+              pending_reprint: 12,
+            }),
+          ),
+    )
+
+    const wrapper = await mountView(CredentialBoardView)
+    await settle()
+
+    expect(wrapper.text()).toContain(es.credentials.rotation.heading)
+    // 48 de 60, el 80 %: el avance se mide contra la plantilla entera.
+    expect(wrapper.text()).toContain('48 de 60')
+    expect(wrapper.find('[role="progressbar"]').attributes('aria-valuenow')).toBe('80')
+  })
+
+  it('pide al servidor solo a quien le falta reimprimir', async () => {
+    // El filtro va al SERVIDOR con el parametro `key_id`: es lo que permite
+    // confirmar que no queda nadie antes de retirar la clave (doc 02 §5.3).
+    const urls: string[] = []
+
+    stubFetch((url) => {
+      urls.push(url)
+
+      return url.startsWith('/api/v1/site')
+        ? jsonResponse(SITE)
+        : jsonResponse(
+            board([boardRow({ status: 'delivered' })], {
+              retiring_key_id: 'a2',
+              pending_reprint: 12,
+            }),
+          )
+    })
+
+    const wrapper = await mountView(CredentialBoardView)
+    await settle()
+
+    await buttonWith(wrapper, es.credentials.rotation.showPending.replace('{count}', '12')).trigger(
+      'click',
+    )
+    await settle()
+
+    expect(urls.some((url) => url.includes('key_id=a2'))).toBe(true)
+    expect(buttonWith(wrapper, es.credentials.rotation.showAll).attributes('aria-pressed')).toBe(
+      'true',
+    )
+  })
+
+  it('avisa de las tarjetas firmadas con una clave que el servidor ya no reconoce', async () => {
+    // Es el hallazgo de la revision de seguridad de la 2.12: esas filas se ven
+    // «Entregada» y correctas, y esas personas NO PUEDEN FICHAR. Sin este aviso
+    // el panel decia que todo estaba bien.
+    stubFetch((url) =>
+      url.startsWith('/api/v1/site')
+        ? jsonResponse(SITE)
+        : jsonResponse(board([boardRow({ status: 'delivered' })], { active_unknown_key: 12 })),
+    )
+
+    const wrapper = await mountView(CredentialBoardView)
+    await settle()
+
+    const alerta = wrapper.find('[role="alert"]')
+
+    expect(alerta.text()).toContain(es.credentials.unknownKey.heading)
+    expect(alerta.text()).toContain('12')
+  })
+
+  it('no avisa de claves desconocidas cuando no hay ninguna', async () => {
+    const wrapper = await mountBoard([boardRow({ status: 'delivered' })])
+
+    expect(wrapper.text()).not.toContain(es.credentials.unknownKey.heading)
+  })
+
   it('cuenta que ha pasado si el panel no se puede cargar', async () => {
     stubFetch(() => {
       throw new TypeError('Failed to fetch')

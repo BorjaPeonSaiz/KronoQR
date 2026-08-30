@@ -37,6 +37,7 @@ import {
   departmentOptionsFrom,
   filterRows,
   paginate,
+  reprintProgressOf,
 } from './useCredentialRows'
 
 const CREDENTIAL_LIFECYCLE_STATUSES: readonly CredentialLifecycleStatus[] = [
@@ -78,8 +79,19 @@ const clientPage = ref(1)
 // horas de impresion y entrega (regla dura 3, RN-05).
 const { data: site } = useQuery({ queryKey: ['site'], queryFn: getSite })
 
+// Rotacion de la clave de firma (RF-QR-07). Cuando esta activo, el servidor
+// devuelve solo a quien sigue fichando con la clave saliente: es la lista que
+// hay que vaciar antes de poder retirarla. La rotacion NO se dispara desde
+// aqui —no tiene endpoint, y no lo tendra: es un acto operativo con semanas de
+// logistica de reimpresion detras—; esta pantalla solo mira el avance.
+// Guarda el `key_id`, no un booleano: si guardara «filtrado si/no» tendria que
+// leer la clave de la respuesta que el propio filtro provoca, y en el hueco en
+// que esa respuesta no ha llegado el filtro se desactivaria solo.
+const reprintKeyFilter = ref<string | null>(null)
+
 const boardQuery = computed(() => ({
   ...(statusFilter.value === PENDING_ONLY_OPTION ? { pendingOnly: true } : {}),
+  ...(reprintKeyFilter.value === null ? {} : { keyId: reprintKeyFilter.value }),
 }))
 
 const {
@@ -111,10 +123,13 @@ const pageRows = computed(() => paged.value.data)
 
 const hasFilters = computed(
   () =>
-    searchFilter.value.trim() !== '' || departmentFilter.value !== '' || statusFilter.value !== '',
+    searchFilter.value.trim() !== '' ||
+    departmentFilter.value !== '' ||
+    statusFilter.value !== '' ||
+    reprintKeyFilter.value !== null,
 )
 
-watch([searchFilter, departmentFilter, statusFilter], () => {
+watch([searchFilter, departmentFilter, statusFilter, reprintKeyFilter], () => {
   clientPage.value = 1
 })
 
@@ -134,6 +149,36 @@ function clearFilters(): void {
   searchFilter.value = ''
   departmentFilter.value = ''
   statusFilter.value = ''
+  reprintKeyFilter.value = null
+}
+
+// El avance de la reimpresion sale del `summary` y no de las filas: las filas
+// pueden venir acotadas —por este mismo filtro, sin ir mas lejos— y el avance
+// se mide contra la plantilla entera.
+const reprintProgress = computed(() => reprintProgressOf(summary.value))
+
+/**
+ * Tarjetas vivas firmadas con una clave que el servidor ya no reconoce: esas
+ * personas NO PUEDEN FICHAR ahora mismo, y sus filas no lo delatan porque se
+ * ven entregadas y correctas. Tiene que ser cero siempre (RF-QR-07).
+ *
+ * El desglose por clave no llega hasta aqui a proposito: esto es la voz de
+ * alarma, y el diagnostico —que clave es y quienes son— esta en
+ * `php artisan credentials:status` y en el runbook.
+ */
+const unknownKeyCards = computed(() => summary.value?.active_unknown_key ?? 0)
+
+/**
+ * No anuncia nada por su cuenta: el `watch` del recuento de filas ya lo hace
+ * —«Resultados: 12»— y anunciar aqui tambien pisaria ese mensaje o quedaria
+ * pisado por el, que es el mismo problema que ya documenta ese `watch`. El
+ * estado del filtro lo dice el propio boton con `aria-pressed` y su etiqueta.
+ */
+function toggleReprintFilter(): void {
+  const progress = reprintProgress.value
+
+  reprintKeyFilter.value =
+    reprintKeyFilter.value === null && progress !== null ? progress.keyId : null
 }
 
 const timezone = computed(() => site.value?.timezone ?? FALLBACK_TIMEZONE)
@@ -306,6 +351,79 @@ const selectClass =
         {{ t('credentials.summary.pendingPrint', { count: summary.pending_print }) }}
       </p>
     </div>
+
+    <!-- La averia que el resto del panel no delata (RF-QR-07): tarjetas vivas
+         firmadas con una clave que el servidor ya no reconoce. Va ANTES del
+         avance de la reimpresion porque, si aparece, es lo unico que importa
+         de esta pantalla: hay gente que no puede fichar. -->
+    <div
+      v-if="unknownKeyCards > 0"
+      role="alert"
+      class="mt-4 rounded-kq border border-kq-danger bg-kq-surface-raised p-4 shadow-kq-soft"
+    >
+      <p class="font-semibold text-kq-danger">{{ t('credentials.unknownKey.heading') }}</p>
+      <p class="mt-1 max-w-prose">
+        {{ t('credentials.unknownKey.explanation', { count: unknownKeyCards }) }}
+      </p>
+      <p class="mt-1 text-kq-text-muted">{{ t('credentials.unknownKey.action') }}</p>
+    </div>
+
+    <!-- Avance de la reimpresion durante una rotacion de clave (RF-QR-07).
+         Solo aparece cuando hay una rotacion abierta, que es lo excepcional.
+         Aqui NO se rota nada: la rotacion se ejecuta en el servidor con
+         `php artisan credentials:rotate-key` y el panel solo mira el avance. -->
+    <section
+      v-if="reprintProgress !== null"
+      class="mt-4 rounded-kq border border-kq-border bg-kq-surface-raised p-4 shadow-kq-soft"
+      :aria-label="t('credentials.rotation.heading')"
+    >
+      <h2 class="font-semibold">{{ t('credentials.rotation.heading') }}</h2>
+      <p class="mt-1 max-w-prose text-kq-text-muted">
+        {{ t('credentials.rotation.explanation', { keyId: reprintProgress.keyId }) }}
+      </p>
+
+      <p class="mt-2">
+        {{
+          t('credentials.rotation.progress', {
+            done: reprintProgress.done,
+            total: reprintProgress.total,
+            percent: reprintProgress.percent,
+          })
+        }}
+      </p>
+
+      <div
+        class="mt-2 h-2 w-full overflow-hidden rounded-full bg-kq-surface-alt"
+        role="progressbar"
+        :aria-valuenow="reprintProgress.percent"
+        aria-valuemin="0"
+        aria-valuemax="100"
+        :aria-label="t('credentials.rotation.heading')"
+      >
+        <div
+          class="h-full bg-kq-primary-strong"
+          :style="{ width: `${reprintProgress.percent}%` }"
+        />
+      </div>
+
+      <p v-if="reprintProgress.pending === 0" class="mt-2 text-kq-text-muted">
+        {{ t('credentials.rotation.complete', { keyId: reprintProgress.keyId }) }}
+      </p>
+
+      <button
+        v-else
+        type="button"
+        class="mt-3 rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text hover:bg-kq-surface-alt"
+        :aria-pressed="reprintKeyFilter !== null"
+        @click="toggleReprintFilter"
+      >
+        {{
+          reprintKeyFilter === null
+            ? t('credentials.rotation.showPending', { count: reprintProgress.pending })
+            : t('credentials.rotation.showAll')
+        }}
+      </button>
+    </section>
 
     <LoadingPanel v-if="isPending" :label="t('credentials.loading')" class="mt-4" />
     <ErrorNotice v-else-if="error !== null" :error="error" class="mt-4" />

@@ -5,14 +5,18 @@ import {
   ATTENDANCE_READ,
   CREDENTIALS_MANAGE,
   EMPLOYEES_MANAGE,
+  INCIDENTS_MANAGE,
   REPORTS_LEGAL,
+  REPORTS_MANAGE,
 } from '@/features/auth/abilities'
 import LoginView from '@/features/auth/LoginView.vue'
 import CredentialBoardView from '@/features/credentials/CredentialBoardView.vue'
 import EmployeeDetailView from '@/features/employees/EmployeeDetailView.vue'
 import EmployeeListView from '@/features/employees/EmployeeListView.vue'
+import IncidentsView from '@/features/incidents/IncidentsView.vue'
 import LivePresenceView from '@/features/live/LivePresenceView.vue'
 import LegalExportView from '@/features/reports/LegalExportView.vue'
+import PeriodReportView from '@/features/reports/PeriodReportView.vue'
 import EmployeeWorkDaysView from '@/features/workdays/EmployeeWorkDaysView.vue'
 import AppShellView from '@/shared/ui/AppShellView.vue'
 import ForbiddenView from '@/shared/ui/ForbiddenView.vue'
@@ -84,6 +88,26 @@ export const routes: RouteRecordRaw[] = [
         name: 'credentials',
         component: CredentialBoardView,
         meta: { ability: CREDENTIALS_MANAGE },
+      },
+      {
+        // Bandeja de incidencias (RF-PA-05, RF-PR-01). Ambito `incidents:*`, el
+        // unico que declara el contrato para leerla y para resolverla: no hay
+        // un estrecho de solo lectura como en el registro horario.
+        path: 'incidents',
+        name: 'incidents',
+        component: IncidentsView,
+        meta: { ability: INCIDENTS_MANAGE },
+      },
+      {
+        // Informes de horas por periodo (RF-IN-01, RF-IN-02, RF-IN-03). Ambito
+        // `reports:*`, la familia: el `auditor` lleva el estrecho
+        // —`reports:legal`— y lo suyo es la exportacion de la Inspeccion, no el
+        // cuadro de horas trabajadas frente a contratadas. La policy del
+        // servidor es la que autoriza de verdad (regla dura 18).
+        path: 'reports',
+        name: 'reports',
+        component: PeriodReportView,
+        meta: { ability: REPORTS_MANAGE },
       },
       {
         // La exportacion para la Inspeccion (RF-IN-05). Ambito `reports:legal`:

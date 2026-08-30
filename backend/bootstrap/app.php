@@ -14,6 +14,8 @@ use App\Modules\Attendance\Domain\Exception\CorrectionWouldChangeWorkDate;
 use App\Modules\Attendance\Domain\Exception\InvalidCorrectionReason;
 use App\Modules\Attendance\Domain\Exception\OverlappingShiftEntry;
 use App\Modules\Attendance\Domain\Exception\ShiftAlreadyOpen;
+use App\Modules\Compliance\Application\Exception\IncidentNotFound;
+use App\Modules\Compliance\Domain\Exception\IncidentAlreadyClosed;
 use App\Modules\Compliance\Domain\Exception\InvalidLegalExportRequest;
 use App\Modules\Identity\Application\Exception\AccountTemporarilyLocked;
 use App\Modules\Identity\Application\Exception\AuthenticationFailed;
@@ -30,10 +32,13 @@ use App\Modules\Identity\Domain\Exception\InvalidSigningKey;
 use App\Modules\Identity\Domain\ValueObject\TokenAbility;
 use App\Modules\Identity\Http\Middleware\RejectPendingTwoFactorSession;
 use App\Modules\Reporting\Application\Exception\EmployeeNotFound;
+use App\Modules\Reporting\Application\Exception\ReportRenderingUnavailable;
 use App\Modules\Reporting\Domain\Exception\InvalidDateRange;
+use App\Modules\Reporting\Domain\Exception\ReportTooLargeForSynchronousDelivery;
 use App\Modules\Shared\Domain\Exception\AccessOutOfScope;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
 use App\Modules\Workforce\Domain\Exception\EmployeeAlreadyTerminated;
+use App\Modules\Workforce\Domain\Exception\InvalidEmploymentContract;
 use App\Modules\Workforce\Domain\Exception\InvalidEmploymentPeriod;
 use App\Modules\Workforce\Domain\Exception\UnknownTimezone;
 use App\Modules\Workforce\Domain\Exception\WorkforceConflict;
@@ -296,6 +301,27 @@ return Application::configure(basePath: dirname(__DIR__))
         ]));
 
         /*
+         * Contratos historizados (tarea 2.8, RF-GP-02).
+         *
+         * `422` PARA LO QUE ES UNA ERRATA —cero horas semanales, mas de 168, una
+         * vigencia invertida—: hay un campo que corregir y quien lo recibe puede
+         * hacerlo sin releer nada. El `FormRequest` atrapa casi todo antes con el
+         * campo señalado; esto cubre el camino que no pasa por el —la semilla, un
+         * comando— para que no salga como `500`.
+         *
+         * El SOLAPE no entra aqui: `OverlappingEmploymentContract` es un
+         * `WorkforceConflict` y sale `409` por la linea de arriba, que es lo
+         * correcto. El cuerpo es valido; lo que no encaja es el estado, y la
+         * accion siguiente es releer los contratos de esa persona.
+         *
+         * Se señala `weekly_hours` porque es el campo del que salen las tres
+         * afirmaciones mas probables. El mensaje del dominio dice cual fue.
+         */
+        $exceptions->render(static fn (InvalidEmploymentContract $exception): mixed => ProblemDetails::validationFailed([
+            'weekly_hours' => [$exception->getMessage()],
+        ]));
+
+        /*
          * Credenciales (tareas 1.5 y 1.10).
          *
          * TODOS LOS CONFLICTOS SON `409` porque todos obligan a releer el recurso
@@ -467,6 +493,76 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(static fn (InvalidDateRange $exception): mixed => ProblemDetails::validationFailed([
             'from' => [$exception->getMessage()],
         ]));
+
+        /*
+         * Informe por periodo que no cabe en una respuesta sincrona (tarea 2.8,
+         * RNF-P-05, `/informe-nuevo` paso 5).
+         *
+         * `422` Y NO `503`. El servicio esta perfectamente: lo que no se puede es
+         * atender ESA peticion en el acto. Quien lo recibe tiene algo que cambiar
+         * —reducir el rango, subir la granularidad, acotar el departamento— o
+         * esperar a la generacion en diferido de RF-IN-06 (tarea 3.9), y el
+         * `detail` se lo dice con las cifras concretas.
+         *
+         * TAMPOCO `500`, aunque una de las tres formas de llegar aqui sea que
+         * PostgreSQL cancelo la consulta: eso no es una averia, es el
+         * `statement_timeout` haciendo su trabajo. Un `500` mandaria a soporte a
+         * buscar un fallo que no existe.
+         *
+         * SE SEÑALA `to` porque el rango es lo unico que quien pregunta puede
+         * acortar siempre; la granularidad y el departamento no estan en todas
+         * las peticiones.
+         */
+        $exceptions->render(static fn (ReportTooLargeForSynchronousDelivery $exception): mixed => ProblemDetails::validationFailed([
+            'to' => [$exception->getMessage()],
+        ]));
+
+        /*
+         * El motor de PDF no esta disponible (tarea 2.9, RF-IN-04).
+         *
+         * `503` Y NO `500`. La peticion es correcta y el informe existe: lo que
+         * falta es un binario —Chromium— en el servidor de esta instalacion. Un
+         * `500` opaco mandaria a quien lo recibe a abrir una incidencia cuando lo
+         * que tiene que hacer es descargar el mismo informe en CSV o en XLSX, que
+         * no pasan por el navegador.
+         *
+         * ES LA MITAD DE UNA DECISION QUE EMPIEZA EN EL PUERTO. `ReportDocumentRenderer`
+         * existe para que el adaptador pueda traducir cualquier fallo del proceso
+         * externo a esta excepcion; sin el, aqui llegarian excepciones de una
+         * libreria de terceros y no habria forma de distinguirlas de un fallo del
+         * producto. Asi la ausencia de Chromium degrada UN FORMATO y no la
+         * exportacion, que es el mismo criterio de la regla dura 15.
+         *
+         * EL `detail` VA AL CLIENTE, y aqui si puede: es un estado de la
+         * instalacion que ve una cuenta de gestion ya autenticada, no un oraculo
+         * sobre credenciales ajenas (regla dura 17). Sin datos personales.
+         */
+        $exceptions->render(static fn (ReportRenderingUnavailable $exception): mixed => ProblemDetails::serviceUnavailable(
+            $exception->getMessage(),
+        ));
+
+        /*
+         * Bandeja de incidencias (tarea 2.5, RF-PA-05).
+         *
+         * `404` PARA LA QUE NO EXISTE, y no `403`. Quien se equivoca de
+         * identificador tiene que recibir «eso no existe»; el `403` —con su
+         * asiento en `audit_log`— se reserva para la que si existe y queda fuera
+         * del alcance de quien pregunta, que es lo que exige el escenario
+         * «Aislamiento por departamento» del doc 01 §11. Por eso el caso de uso
+         * comprueba en ese orden: al reves, el trail se llenaria de erratas.
+         *
+         * `409` PARA LA QUE YA ESTABA CERRADA, y no `422`: quien lo recibe no
+         * tiene ningun campo que corregir —el cuerpo es correcto—, lo que pasa es
+         * que otra persona llego antes. La accion siguiente es releer la bandeja
+         * para ver quien la trabajo y con que nota, no reescribir la suya.
+         *
+         * La misma excepcion cubre los dos caminos que llevan ahi —la segunda
+         * pestaña y la carrera que decide el `UPDATE ... WHERE status = 'open'`—
+         * porque para quien llama el desenlace es identico.
+         */
+        $exceptions->render(static fn (IncidentNotFound $exception): mixed => ProblemDetails::notFound());
+
+        $exceptions->render(static fn (IncidentAlreadyClosed $exception): mixed => ProblemDetails::conflict($exception->getMessage()));
 
         /*
          * RN-14 visto desde el alta manual: no se pueden escribir horas a nombre

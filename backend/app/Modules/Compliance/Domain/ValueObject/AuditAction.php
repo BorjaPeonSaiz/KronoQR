@@ -69,6 +69,36 @@ enum AuditAction: string
     case CredentialRevoked = 'credential.revoked';
     case CredentialReissued = 'credential.reissued';
 
+    // --- Clave de firma de las tarjetas (RF-QR-07, doc 02 §5.3, tarea 2.12) --
+
+    /**
+     * Se ha abierto una rotacion de la clave HMAC con solape: a partir de este
+     * asiento hay dos claves vigentes y una reemision pendiente de imprimir por
+     * cada tarjeta firmada con la saliente.
+     *
+     * **Sujeto propio y no `credential.*`**, porque no recae sobre ninguna
+     * credencial concreta: recae sobre el material criptografico con el que se
+     * firman todas. Colgarlo de una credencial cualquiera obligaria a elegir una
+     * al azar como `subject_id`, y la pregunta que este asiento responde
+     * —«cuando se roto la clave y quien lo hizo»— dejaria de contestarse con un
+     * filtro por `action`. La reemision de cada tarjeta si deja su
+     * `credential.reissued`, uno por persona.
+     *
+     * **Misma familia del bloque D que la tarjeta** (`CredentialLifecycle`): la
+     * clave es lo que hace valida a la tarjeta, y rotarla es un acto del ciclo de
+     * vida de todas ellas a la vez.
+     */
+    case SigningKeyRotated = 'signing_key.rotated';
+
+    /**
+     * Se ha cerrado el solape: la clave saliente ya no verifica ninguna tarjeta
+     * activa y el operador puede vaciar `QR_SIGNING_KEY_PREVIOUS`.
+     *
+     * Es el asiento que permite responder, meses despues, por que una tarjeta
+     * concreta dejo de funcionar: desde este momento su firma ya no se admite.
+     */
+    case SigningKeyRetired = 'signing_key.retired';
+
     // --- PIN del empleado (RF-ID-09, RL-05) ----------------------------------
 
     case PinIssued = 'pin.issued';
@@ -110,10 +140,66 @@ enum AuditAction: string
     case PermissionChanged = 'permission.changed';
     case CalculationSettingChanged = 'calculation_setting.changed';
 
+    /**
+     * Se ha registrado el contrato de una persona (RF-GP-02, tarea 2.8).
+     *
+     * **Sujeto propio en lugar de reutilizar `calculation_setting.changed`**, y
+     * la decision merece explicacion porque la familia es la misma. Lo que las
+     * separa es sobre **quien** actuan: un ajuste de calculo es de la
+     * instalacion —un umbral, un redondeo— y no tiene sujeto; un contrato es de
+     * una persona concreta y su `payload` lleva `employee_uuid`. Con un solo
+     * valor, la pregunta «¿quien cambio las horas contratadas de alguien?»
+     * obligaria a filtrar por el contenido del JSON en lugar de por la columna
+     * indexada, que es justo lo que el catalogo cerrado existe para evitar.
+     *
+     * **Y no es de la familia de la plantilla**: cambiar un apellido no mueve
+     * ninguna cifra, y `weekly_hours` es la cifra contra la que se mide la
+     * jornada de esa persona (RF-IN-03). Es un parametro del calculo, y ante la
+     * duda sobre si algo con efecto en horas de trabajo se audita, la respuesta
+     * es si.
+     */
+    case EmploymentContractRegistered = 'employment_contract.registered';
+
+    /**
+     * La reconciliacion nocturna ha corregido un agregado de `daily_totals`
+     * (RF-PR-02, tarea 2.7). Misma familia que un cambio de parametro del
+     * calculo: el agregado es el RESULTADO del calculo de la jornada, y lo que
+     * este asiento describe es que ese resultado cambio sin que nadie lo
+     * pidiera. El payload lleva `employee_uuid`, `work_date`, los campos
+     * divergentes y el antes y el despues completos.
+     */
+    case ProjectionReconciled = 'projection.reconciled';
+
+    // --- Incidencias del registro horario (RF-PR-01, tarea 2.6) --------------
+
+    /**
+     * La deteccion automatica ha abierto una incidencia y la ha asignado —o no ha
+     * podido asignarla—. **No cambia ningun fichaje** (RN-08).
+     */
+    case IncidentOpened = 'incident.opened';
+
+    /**
+     * Una persona la ha dado por trabajada (tarea 2.5, `POST /incidents/{id}/resolve`).
+     *
+     * Se declara aqui y no en aquella tarea porque el catalogo se decide en un
+     * solo sitio: el mismo criterio por el que las acciones de `pin.*` nacieron
+     * completas antes de que existiera quien las escribiera.
+     */
+    case IncidentResolved = 'incident.resolved';
+
     // --- Retencion (RL-02, ADR-027) ------------------------------------------
 
     case RetentionPartitionSealed = 'retention.partition_sealed';
     case RetentionPartitionDropped = 'retention.partition_dropped';
+
+    /**
+     * La purga por retencion del REGISTRO DE JORNADA (RL-02, RF-PR-03): filas
+     * vencidas borradas de `shift_entries` y de lo que cuelga de ellas. No es un
+     * `DROP PARTITION` -eso es `retention.partition_dropped`- y por eso no comparte
+     * accion: el payload lleva el alcance, la fecha de corte, el umbral aplicado y
+     * el recuento por tabla.
+     */
+    case RetentionPurgeExecuted = 'retention.purge_executed';
 
     /**
      * Sujeto de la accion —la parte anterior al punto— y familia del bloque D a
@@ -129,6 +215,10 @@ enum AuditAction: string
     private const array EVENT_BY_SUBJECT = [
         'shift_entry' => AuditableEvent::ShiftEntryLifecycle,
         'credential' => AuditableEvent::CredentialLifecycle,
+        // La clave de firma es lo que hace valida a la tarjeta: rotarla y
+        // retirarla son actos del ciclo de vida de TODAS las credenciales a la
+        // vez (tarea 2.12), no una familia nueva del bloque D.
+        'signing_key' => AuditableEvent::CredentialLifecycle,
         // El PIN es una credencial de acceso mas —la del portal (RL-05) y la
         // del fichaje de respaldo (RF-AT-11)—, con el mismo ciclo de emision y
         // entrega que la tarjeta. Cae en la misma familia del bloque D: no es
@@ -148,9 +238,20 @@ enum AuditAction: string
         // veces para responder «que hizo esa cuenta con la plantilla».
         'access' => AuditableEvent::PersonalDataAccess,
         'legal_export' => AuditableEvent::LegalExport,
+        // Abrir y resolver una incidencia son la misma familia porque son las dos
+        // mitades del mismo hecho: se detecto algo con relevancia legal y alguien
+        // respondio de ello. Separarlas obligaria a consultar dos veces para
+        // responder «que se detecto en marzo y que se hizo con ello».
+        'incident' => AuditableEvent::IncidentLifecycle,
         'role_assignment' => AuditableEvent::AuthorityOrCalculationChange,
         'permission' => AuditableEvent::AuthorityOrCalculationChange,
         'calculation_setting' => AuditableEvent::AuthorityOrCalculationChange,
+        // El contrato fija las horas contra las que se mide la jornada de una
+        // persona (RF-IN-03): es un parametro del calculo, con sujeto propio.
+        'employment_contract' => AuditableEvent::AuthorityOrCalculationChange,
+        // La proyeccion es el resultado del calculo; corregirla es un cambio
+        // del calculo que nadie pidio (RF-PR-02, tarea 2.7).
+        'projection' => AuditableEvent::AuthorityOrCalculationChange,
         'retention' => AuditableEvent::RetentionPurge,
     ];
 

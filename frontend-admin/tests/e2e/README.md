@@ -12,13 +12,14 @@ npx playwright test --ui                # para depurar
 
 ## Qué hay aquí
 
-| Fichero                    | Cubre                                                                                                                                       |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `login.spec.ts`            | `@RF-ID-01`, `@RF-ID-02` — acceso, redirección con `redirect`, rechazo, cierre de sesión                                                    |
-| `two-factor.spec.ts`       | `@RF-ID-01`, `@RS-06` — segundo factor obligatorio: reto → código → plantilla, y alta con QR y secreto                                      |
-| `workdays-journey.spec.ts` | `@RF-GP-01`, `@RF-PA-03`, `@RN-13` — plantilla → ficha → registro horario con su corrección                                                 |
-| `live-presence.spec.ts`    | `@RF-PA-01`, `@RF-PA-02`, `@RNF-P-04` — dos pestañas con Reverb simulado (`routeWebSocket`), degradación a sondeo, filtros, 500 filas y LCP |
-| `accessibility.spec.ts`    | `@RF-ID-01`, `@RF-GP-01`, `@RF-PA-03`, `@RS-06` con `@axe-core/playwright`, 0 violaciones críticas/graves                                   |
+| Fichero                    | Cubre                                                                                                                                                                                                                                                   |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `login.spec.ts`            | `@RF-ID-01`, `@RF-ID-02` — acceso, redirección con `redirect`, rechazo, cierre de sesión                                                                                                                                                                |
+| `two-factor.spec.ts`       | `@RF-ID-01`, `@RS-06` — segundo factor obligatorio: reto → código → plantilla, y alta con QR y secreto                                                                                                                                                  |
+| `workdays-journey.spec.ts` | `@RF-GP-01`, `@RF-PA-03`, `@RN-13` — plantilla → ficha → registro horario con su corrección                                                                                                                                                             |
+| `live-presence.spec.ts`    | `@RF-PA-01`, `@RF-PA-02`, `@RNF-P-04` — dos pestañas con Reverb simulado (`routeWebSocket`), degradación a sondeo, filtros, 500 filas y LCP                                                                                                             |
+| `incidents.spec.ts`        | `@RF-PA-05` — la bandeja lista y filtra al servidor, resolver retira la fila y deja nota, un `409` dice quien se adelanto sin reintentar, el responsable de departamento ve la seccion y la marca aparece en el detalle de jornada con enlace de vuelta |
+| `accessibility.spec.ts`    | `@RF-ID-01`, `@RF-GP-01`, `@RF-PA-03`, `@RF-PA-05`, `@RS-06` con `@axe-core/playwright`, 0 violaciones criticas/graves, incluida la bandeja y el dialogo de resolucion abierto                                                                          |
 
 ### El segundo factor (`two-factor.spec.ts`, RS-06)
 
@@ -35,6 +36,18 @@ El QR del alta se genera con `@kronoqr/web-kit/qr/renderQrPath` (carga diferida,
 codificador que usa el aviso de privacidad del quiosco): la prueba no decodifica el QR, solo
 comprueba que aparece con su `role="img"` y que el secreto en base32 sigue disponible en texto
 al lado, para quien no puede escanearlo.
+
+### La bandeja de incidencias (`incidents.spec.ts`, RF-PA-05)
+
+`stubManagementApi` gana tres opciones para esta tarea: `role: 'manager'` cambia la cuenta que
+entra por `logIn`/`logInAsManager` de `USER` (RRHH, alcance completo) a `MANAGER_USER` (un
+`responsable_departamento` con `incidents:*` y sin `employees:*` ni `credentials:*`, el ejemplo
+del contrato de `GET /auth/me`); `resolveOutcome: 'conflict'` hace que
+`POST /incidents/{id}/resolve` responda `409` en vez de cerrar la incidencia, y las relecturas
+posteriores devuelven `INCIDENT_CLOSED_BY_OTHER`; `workdays` sustituye la respuesta de
+`GET /employees/{uuid}/workdays` para el caso con una incidencia incrustada
+(`WORKDAYS_WITH_INCIDENT`). `RecordedRequest` ahora también guarda el `body` de cada petición,
+que es lo que permite comprobar que la nota de cierre llegó tal cual se escribió.
 
 ## Se prueba el BUILD, no `vite dev`
 

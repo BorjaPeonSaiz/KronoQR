@@ -13,10 +13,12 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Spectator\Spectator;
+use Tests\Support\Compliance\IncidentFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Factory\ClockingPolicyFactory;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Identity\PortalLogins;
 use Tests\Support\Time\FixedClock;
 use Tests\Support\Time\Instants;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -384,3 +386,85 @@ it('deja constancia del acceso en audit_log, con el alcance y sin nombres', func
         ->and($asiento->payload)->not->toContain('De Prueba')
         ->and($asiento->payload)->not->toContain('06:00');
 })->group('RF-PA-03', 'RS-05');
+
+it('incrusta las incidencias de cada jornada para que el panel no llame dos veces', function (): void {
+    // RF-PA-05, paso 4 de la tarea 2.5. Es un campo NUEVO en `/v1` y por tanto
+    // compatible: nada se quita, y `has_incident` sigue significando lo que
+    // significaba —algun tramo quedo clasificado como `anomalous`—, que es otra
+    // cosa.
+    $contexto = contextoDeJornadas();
+    jornadaRegistrada($contexto['site'], $contexto['employee'], '2026-03-14', '2026-03-14 06:00', '2026-03-14 14:00');
+
+    $urgente = IncidentFixtures::open($contexto['employee'], 'insufficient_rest', 'high', '2026-03-14');
+    $menor = IncidentFixtures::open($contexto['employee'], 'clock_skew', 'low', '2026-03-14', '2026-03-15 04:00:00+00');
+
+    $respuesta = Api::as($contexto['token'])
+        ->get('/api/v1/employees/'.$contexto['employee'].'/workdays', ['from' => '2026-03-14', 'to' => '2026-03-14']);
+
+    $respuesta->assertValidResponse(200);
+
+    expect($respuesta->json('data.0.incidents'))->toBe([
+        // El mismo orden de trabajo que la bandeja: lo urgente primero.
+        ['id' => $urgente, 'type' => 'insufficient_rest', 'severity' => 'high', 'status' => 'open'],
+        ['id' => $menor, 'type' => 'clock_skew', 'severity' => 'low', 'status' => 'open'],
+    ])
+        // Y no se confunde con la bandera de tramo anomalo, que sigue siendo
+        // falsa: RN-10 mira el descanso ENTRE jornadas y ningun tramo de este dia
+        // es raro.
+        ->and($respuesta->json('data.0.has_incident'))->toBeFalse();
+})->group('RF-PA-03', 'RF-PA-05');
+
+it('enseña tambien las ya trabajadas y no deja el campo fuera cuando no hay ninguna', function (): void {
+    // Una jornada que dio problemas y ya se reviso tiene que seguir diciendolo:
+    // una pantalla limpia es indistinguible de un dia sin nada. Y el campo esta
+    // siempre, aunque venga vacio: uno que aparece y desaparece obliga al cliente
+    // a adivinar.
+    $contexto = contextoDeJornadas();
+    jornadaRegistrada($contexto['site'], $contexto['employee'], '2026-03-10', '2026-03-10 06:00', '2026-03-10 14:00');
+    jornadaRegistrada($contexto['site'], $contexto['employee'], '2026-03-14', '2026-03-14 06:00', '2026-03-14 14:00');
+
+    $usuario = ManagementUsers::withRole(UserRole::RRHH);
+    $descartada = IncidentFixtures::closed(
+        $contexto['employee'],
+        $usuario->id,
+        'dismissed',
+        'short_shift',
+        'low',
+        '2026-03-10',
+    );
+
+    $respuesta = Api::as($contexto['token'])
+        ->get('/api/v1/employees/'.$contexto['employee'].'/workdays', ['from' => '2026-03-10', 'to' => '2026-03-14']);
+
+    $respuesta->assertValidResponse(200);
+
+    expect($respuesta->json('data.0.incidents'))->toBe([
+        ['id' => $descartada, 'type' => 'short_shift', 'severity' => 'low', 'status' => 'dismissed'],
+    ])
+        // La jornada del 14 no tiene ninguna, y aun asi trae el campo.
+        ->and($respuesta->json('data.1.incidents'))->toBe([]);
+})->group('RF-PA-03', 'RF-PA-05');
+
+it('no enseña al empleado en su portal las incidencias de sus jornadas', function (): void {
+    // Decision escrita en el contrato: RF-ID-05 y RL-05 le reconocen su REGISTRO
+    // HORARIO, y una incidencia no es el registro, es la revision interna de ese
+    // registro (RF-PA-05). El esquema es el mismo en las dos rutas —no se parte
+    // en dos— y lo que cambia es que aqui viene vacio.
+    $contexto = contextoDeJornadas();
+    jornadaRegistrada($contexto['site'], $contexto['employee'], '2026-03-14', '2026-03-14 06:00', '2026-03-14 14:00');
+    IncidentFixtures::open($contexto['employee'], 'insufficient_rest', 'high', '2026-03-14');
+
+    // Lo ve gestion...
+    Api::as($contexto['token'])
+        ->get('/api/v1/employees/'.$contexto['employee'].'/workdays', ['from' => '2026-03-14', 'to' => '2026-03-14'])
+        ->assertValidResponse(200)
+        ->assertJsonCount(1, 'data.0.incidents');
+
+    // ...y no lo ve la propia persona desde su portal.
+    $respuesta = Api::as(PortalLogins::open($contexto['employee']))
+        ->get('/api/v1/me/workdays', ['from' => '2026-03-14', 'to' => '2026-03-14']);
+
+    $respuesta->assertValidResponse(200);
+
+    expect($respuesta->json('data.0.incidents'))->toBe([]);
+})->group('RF-PA-03', 'RF-PA-05', 'RF-ID-05');

@@ -107,3 +107,24 @@ test('la presencia en vivo tampoco', { tag: ['@RF-PA-01'] }, async ({ page }) =>
 
   await expectNoBlockingViolations(page)
 })
+
+test('la bandeja de incidencias tampoco', { tag: ['@RF-PA-05'] }, async ({ page }) => {
+  await logIn(page)
+  await page.goto('/incidents')
+  await expect(page.getByTestId('incident-row').first()).toBeVisible()
+
+  await expectNoBlockingViolations(page)
+})
+
+test(
+  'el dialogo de resolver una incidencia tampoco, con el foco dentro',
+  { tag: ['@RF-PA-05'] },
+  async ({ page }) => {
+    await logIn(page)
+    await page.goto('/incidents')
+    await page.getByTestId('resolve-button').click()
+    await expect(page.getByRole('dialog')).toBeVisible()
+
+    await expectNoBlockingViolations(page)
+  },
+)

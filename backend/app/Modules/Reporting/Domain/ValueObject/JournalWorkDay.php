@@ -41,6 +41,7 @@ final readonly class JournalWorkDay
     /**
      * @param  list<JournalShiftEntry>  $shiftEntries  Solo las vigentes, por hora de entrada.
      * @param  list<JournalCorrection>  $corrections  Toda la cadena, de la mas antigua a la mas reciente.
+     * @param  list<JournalIncident>  $incidents  Lo que hay abierto o ya trabajado sobre esta jornada.
      */
     public function __construct(
         /** Fecha civil de la jornada, `YYYY-MM-DD` en la zona del centro (RN-05). */
@@ -50,6 +51,24 @@ final readonly class JournalWorkDay
         public ?DateTimeImmutable $recalculatedAt,
         public array $shiftEntries,
         public array $corrections,
+        /**
+         * Las incidencias de esta jornada (RF-PA-05, tarea 2.5).
+         *
+         * **Vacia por omision y vacia tambien en el portal**, y las dos ausencias
+         * significan cosas distintas: la primera es que quien construye la
+         * jornada no tenia que traerlas —una prueba de RN-06, una reconstruccion—
+         * y la segunda es una decision, escrita en el contrato, de que la
+         * revision interna de RF-PA-05 no forma parte de lo que el art. 34.9 ET
+         * reconoce al empleado sobre su propio registro.
+         *
+         * No entra en `hasIncident()`, que sigue significando lo que significaba:
+         * algun tramo quedo clasificado como `anomalous`. Son dos cosas
+         * distintas —una jornada puede tener incidencia sin ningun tramo anomalo,
+         * porque RN-10 mira el descanso ENTRE jornadas— y colapsarlas haria
+         * indistinguible «este turno es raro» de «alguien tiene que mirar este
+         * dia».
+         */
+        public array $incidents = [],
     ) {
         if ($workDate === '') {
             throw new InvalidArgumentException('Una jornada del detalle necesita su fecha.');

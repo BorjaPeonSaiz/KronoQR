@@ -9,6 +9,7 @@ use App\Modules\Attendance\Http\Controller\ScanBatchController;
 use App\Modules\Attendance\Http\Controller\ScanController;
 use App\Modules\Attendance\Http\Controller\ShiftEntryController;
 use App\Modules\Attendance\Http\Controller\VoidShiftEntryController;
+use App\Modules\Compliance\Http\Controller\IncidentController;
 use App\Modules\Compliance\Http\Controller\LegalExportController;
 use App\Modules\Identity\Domain\ValueObject\TokenAbility;
 use App\Modules\Identity\Http\Controller\CredentialController;
@@ -28,9 +29,12 @@ use App\Modules\Reporting\Http\Controller\EmployeeWorkDayController;
 use App\Modules\Reporting\Http\Controller\LivePresenceController;
 use App\Modules\Reporting\Http\Controller\MyWorkDayController;
 use App\Modules\Reporting\Http\Controller\MyWorkDayExportController;
+use App\Modules\Reporting\Http\Controller\PeriodReportController;
+use App\Modules\Reporting\Http\Controller\PeriodReportExportController;
 use App\Modules\Workforce\Http\Controller\DepartmentController;
 use App\Modules\Workforce\Http\Controller\EmployeeController;
 use App\Modules\Workforce\Http\Controller\EmployeePinController;
+use App\Modules\Workforce\Http\Controller\EmploymentContractController;
 use App\Modules\Workforce\Http\Controller\OffboardEmployeeController;
 use App\Modules\Workforce\Http\Controller\SiteController;
 use Illuminate\Support\Facades\Route;
@@ -299,12 +303,149 @@ Route::get('/employees/{uuid}/workdays', EmployeeWorkDayController::class)
  * son los dos alcances que el asiento de auditoria y la cabecera de criterios
  * del fichero saben describir, y los tres tienen que decir lo mismo.
  */
+/*
+ * GET /api/v1/reports/period — horas por periodo, agregados y comparativa con lo
+ * contratado (RF-IN-01, RF-IN-02, RF-IN-03, tarea 2.8).
+ *
+ * `reports:*` Y NO `reports:legal`. Son dos ambitos distintos del §7.3 y la
+ * diferencia es exactamente el `auditor`: lleva el estrecho —el unico informe que
+ * puede pedir es la exportacion normalizada para un requerimiento (RF-IN-05)— y
+ * no lleva la familia. Compartir ambito le habria dado el cuadro de horas
+ * trabajadas frente a contratadas, que es una herramienta de gestion de personal
+ * y no de auditoria.
+ *
+ * NO ES «O», al contrario que la exportacion legal de abajo, que si acepta
+ * cualquiera de los dos: aqui solo vale `reports:*`.
+ *
+ * EL `responsable_departamento` NO LLEGA, Y NO ES UN OLVIDO. El §7.3 no le da
+ * `reports:*` —tiene `attendance:read`, `attendance:correct`, `incidents:*` y
+ * `employees:read`—, asi que se queda en el middleware. `PeriodReportPolicy`, que
+ * es la otra mitad (regla dura 18), dice lo mismo: `{admin, rrhh}`. Que las dos
+ * comprobaciones coincidan es deliberado; si dijeran cosas distintas, una de las
+ * dos estaria de adorno.
+ *
+ * EL ALCANCE POR DEPARTAMENTO ENTRA IGUALMENTE EN LA CONSULTA (RF-ID-03),
+ * incluidos los agregados: un total por centro calculado sobre toda la plantilla
+ * y servido a quien alcanza un solo departamento seria una fuga por agregacion.
+ * Esta ahi para el dia en que el producto decida que un responsable ve las horas
+ * de su equipo — ese dia se le añade el ambito y el rol, y la consulta ya esta
+ * acotada.
+ *
+ * ES UN `GET` AUNQUE QUEDE AUDITADO. Solo lee; que sacar un informe con datos de
+ * terceros deje asiento en `audit_log` (RS-05) no lo convierte en una escritura.
+ * Mismo criterio que la exportacion legal.
+ *
+ * `throttle:management` POR LO QUE CUESTA Y POR LO QUE ESCRIBE. Cada peticion
+ * cruza la plantilla con el calendario y deja ademas su asiento de divulgacion,
+ * que toma el candado global de ADR-010 —el mismo por el que pasa cada fichaje—.
+ * Sin techo por cuenta, una pestaña en bucle de reintento golpea la misma base de
+ * datos que atiende el cambio de turno (RNF-P-02). El presupuesto de RNF-P-05 es
+ * la otra mitad de esa defensa y vive en `config/reporting.php`.
+ *
+ * NO ADMITE `site_id` (ADR-040: hay un centro) NI PAGINACION: un informe se lee
+ * entero o no significa nada, y paginarlo partiria una semana por la mitad. Lo
+ * que si tiene es un techo, y por encima de el responde `422` remitiendo a la
+ * generacion en diferido de RF-IN-06 (tarea 3.9).
+ */
+Route::get('/reports/period', PeriodReportController::class)
+    ->middleware([
+        'auth:sanctum',
+        'ability:'.TokenAbility::REPORTS_ALL->value,
+        'throttle:management',
+    ])
+    ->name('reporting.reports.period');
+
+/*
+ * GET /api/v1/reports/period/export — el MISMO informe, como fichero CSV, XLSX o
+ * PDF (RF-IN-04, tarea 2.9).
+ *
+ * MISMO AMBITO, MISMA POLICY Y MISMO LIMITADOR QUE LA CONSULTA DE ARRIBA, y
+ * tiene que ser asi: lo que sale es exactamente lo mismo, con el agravante de
+ * que un fichero se reenvia por correo y una tabla en pantalla no. Un endpoint de
+ * descarga con la autorizacion mas floja que su consulta es la forma habitual de
+ * que la autorizacion no sirva de nada.
+ *
+ * `throttle:management` POR EL MISMO MOTIVO Y UNO MAS: ademas de cruzar la
+ * plantilla con el calendario y dejar su asiento de divulgacion, con `format=pdf`
+ * arranca un Chromium. Sin techo por cuenta, una pestaña en bucle de reintento
+ * levanta un navegador por intento en el mismo servidor que atiende el fichaje
+ * (RNF-P-02, regla dura 19).
+ *
+ * NO ES LA EXPORTACION PARA LA INSPECCION, que es la ruta de abajo: aquella tiene
+ * ambito propio —`reports:legal`, el del auditor—, formato normalizado (RL-06),
+ * manifiesto y su propia accion de auditoria. Esta es la comodidad de descargar
+ * lo que ya se consulta en pantalla.
+ *
+ * ES UN `GET` AUNQUE QUEDE AUDITADO, por lo mismo que las otras dos.
+ */
+Route::get('/reports/period/export', PeriodReportExportController::class)
+    ->middleware([
+        'auth:sanctum',
+        'ability:'.TokenAbility::REPORTS_ALL->value,
+        'throttle:management',
+    ])
+    ->name('reporting.reports.period.export');
+
 Route::get('/reports/legal-export', LegalExportController::class)
     ->middleware([
         'auth:sanctum',
         'ability:'.TokenAbility::REPORTS_LEGAL->value.','.TokenAbility::REPORTS_ALL->value,
     ])
     ->name('compliance.reports.legal-export');
+
+/*
+ * La bandeja de incidencias y su resolucion (RF-PA-05, tarea 2.5).
+ *
+ * `incidents:*` PARA LAS DOS, Y ES UN SOLO AMBITO A PROPOSITO. El §7.3 lo
+ * describe como «consultar y resolver incidencias»: no hay un `incidents:read`, y
+ * no lo hay porque separarlo daria una frontera que solo existiria en PHP y que
+ * nadie podria conceder ni retirar desde la administracion. Lo que si son dos
+ * cosas distintas son los dos metodos de `IncidentPolicy`, para que la matriz de
+ * autorizacion negativa pruebe cada endpoint por separado (regla dura 18).
+ *
+ * Y NO `attendance:read`, aunque lo que se mira sean horas: leer el registro de
+ * alguien y decidir que se hace con lo que esta pendiente son dos potestades del
+ * §7.3, y el `auditor` es la prueba de que la distincion importa — lleva
+ * `attendance:read` y no lleva este, asi que ni siquiera pasa del middleware.
+ *
+ * LA OTRA MITAD ES `IncidentPolicy`, que comprueba el ROL: «manager+» del Anexo
+ * B, que desde la tarea 2.1 es `{admin, rrhh, responsable_departamento}`.
+ *
+ * EL ALCANCE POR DEPARTAMENTO SE APLICA DE DOS FORMAS (RF-ID-03): en el listado
+ * entra **en la consulta** —incluido `meta.total`— y no devuelve `403`, porque un
+ * listado acota en vez de denegar; al resolver, se comprueba el recurso ya
+ * cargado y se responde `403` **con asiento** en `audit_log`, porque ahi si hay
+ * un sujeto identificable al que apuntar.
+ *
+ * `throttle:management` POR LO QUE ESCRIBEN. Las dos rutas pasan por
+ * `ScopeGuard` y cada denegacion por alcance escribe `access.denied` bajo el
+ * candado global de ADR-010 —el mismo por el que pasa cada fichaje—; ademas el
+ * listado deja su asiento de divulgacion (RS-05) en cada peticion. Sin techo por
+ * cuenta, un bucle sobre identificadores ajenos mete escrituras ilimitadas en el
+ * camino critico del cambio de turno. La zona se declara en
+ * `IdentityServiceProvider`.
+ *
+ * NO HAY `PATCH` NI `DELETE` (regla dura 5): resolver es un `POST` con nombre
+ * propio, igual que anular un tramo o revocar una credencial. La fila se queda en
+ * la tabla con su nota y su firma, y no hay forma de reabrirla desde la API.
+ *
+ * `{id}` ES LA CLAVE INTERNA, y es la unica ruta del producto donde eso pasa. El
+ * motivo esta escrito en el contrato: una incidencia no es una persona ni una
+ * tarjeta, es una fila de trabajo interno que no viaja impresa ni se enseña a un
+ * tercero, y su numero no revela nada sobre la plantilla.
+ */
+Route::middleware([
+    'auth:sanctum',
+    'ability:'.TokenAbility::INCIDENTS_ALL->value,
+    'throttle:management',
+])->group(function (): void {
+    Route::get('/incidents', [IncidentController::class, 'index'])
+        ->name('compliance.incidents.index');
+
+    Route::post('/incidents/{id}/resolve', [IncidentController::class, 'resolve'])
+        ->whereNumber('id')
+        ->name('compliance.incidents.resolve');
+});
 
 /*
  * El resto de lo que necesita una tablet: padron y latido (tarea 1.7).
@@ -560,6 +701,37 @@ Route::middleware(['auth:sanctum', 'ability:'.TokenAbility::EMPLOYEES_ALL->value
     Route::post('/employees/{uuid}/pin/deliver', [EmployeePinController::class, 'deliver'])
         ->whereUuid('uuid')
         ->name('employees.pin.deliver');
+
+    /*
+     * Contratos historizados (RF-GP-02, tarea 2.8).
+     *
+     * AMBITO `employees:*` Y NO `reports:*`, aunque lo que se registra aqui sea
+     * lo que despues compara el informe de RF-IN-03. El contrato es una
+     * condicion laboral de la ficha de una persona —horas, tipo de jornada,
+     * computo anual—, no un informe: quien lo mantiene es quien mantiene la
+     * plantilla. Con `reports:*`, alguien que solo puede mirar cifras podria
+     * cambiar la cifra contra la que se miden.
+     *
+     * Y NO `employees:read` PARA EL LISTADO, aunque el grupo de lectura exista
+     * dos bloques mas arriba. El unico que hoy puede leer contratos es
+     * `rrhh+`, que lleva la familia entera: meterlo en el grupo estrecho se lo
+     * habria abierto al `responsable_departamento`, y las condiciones laborales
+     * pactadas no son suyas. `EmploymentContractPolicy` dice lo mismo (regla
+     * dura 18). El dia que el producto decida que un responsable las consulta,
+     * la ruta baja al otro grupo y la policy gana un rol.
+     *
+     * NO HAY `PATCH` NI `DELETE` (regla dura 5): un contrato no se edita. Se
+     * registra otro y el anterior queda cerrado con su fecha, en la misma
+     * transaccion. Corregir una errata todavia no tiene camino, y esta anotado
+     * como deuda en el controlador.
+     */
+    Route::get('/employees/{uuid}/contracts', [EmploymentContractController::class, 'index'])
+        ->whereUuid('uuid')
+        ->name('employees.contracts.index');
+
+    Route::post('/employees/{uuid}/contracts', [EmploymentContractController::class, 'store'])
+        ->whereUuid('uuid')
+        ->name('employees.contracts.store');
 
     Route::get('/departments', [DepartmentController::class, 'index'])->name('departments.index');
     Route::post('/departments', [DepartmentController::class, 'store'])->name('departments.store');

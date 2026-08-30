@@ -3,11 +3,14 @@
 import { EMPLOYEE_LIST_PER_PAGE } from '@/features/employees/employees.api'
 import type {
   Credential,
+  CredentialCoverage,
   CredentialStatusBoard,
   CredentialStatusRow,
   Employee,
   EmployeeCollection,
   EmployeeWorkDays,
+  Incident,
+  IncidentCollection,
   ManagementUser,
   Session,
   Site,
@@ -133,13 +136,24 @@ export function boardRow(overrides: Partial<CredentialStatusRow> = {}): Credenti
   }
 }
 
-export function board(rows: CredentialStatusRow[]): CredentialStatusBoard {
+export function board(
+  rows: CredentialStatusRow[],
+  // Rotacion de la clave de firma (RF-QR-07). Fuera de una rotacion —lo
+  // normal— no hay clave saliente y el avance vale cero.
+  rotation: Partial<
+    Pick<CredentialCoverage, 'retiring_key_id' | 'pending_reprint' | 'active_unknown_key'>
+  > = {},
+): CredentialStatusBoard {
   return {
     data: rows,
     summary: {
       employees: 60,
       pending_print: rows.filter((row) => row.status === 'pending_print').length,
       without_delivered_credential: rows.filter((row) => row.status !== 'delivered').length,
+      retiring_key_id: null,
+      pending_reprint: 0,
+      active_unknown_key: 0,
+      ...rotation,
     },
   }
 }
@@ -213,6 +227,9 @@ export function workDay(overrides: Partial<WorkDayDetail> = {}): WorkDayDetail {
     recalculated_at: '2026-03-14T15:22:41.900000Z',
     shift_entries: entries,
     corrections: [correction()],
+    // Sin incidencias por omision (RF-PA-05): que las haya es un caso de prueba,
+    // no el punto de partida. El campo va siempre porque el contrato lo exige.
+    incidents: [],
     ...overrides,
   }
 }
@@ -229,5 +246,54 @@ export function employeeWorkDays(
     data: days,
     meta: { total: days.length },
     ...overrides,
+  }
+}
+
+// --- Bandeja de incidencias (RF-PA-05, RF-PR-01) -----------------------------
+//
+// El mismo ejemplo del contrato para `GET /api/v1/incidents`: el descanso
+// insuficiente de Youssef Amrani, pendiente y asignado a la jefatura de cocina.
+
+export const INCIDENT_ID = 412
+
+export function incident(overrides: Partial<Incident> = {}): Incident {
+  return {
+    id: INCIDENT_ID,
+    type: 'insufficient_rest',
+    severity: 'high',
+    status: 'open',
+    employee: {
+      uuid: EMPLOYEE_UUID,
+      employee_code: 'E7QK2MXPR',
+      full_name: 'Youssef Amrani',
+      department: { id: 3, name: 'Cocina' },
+    },
+    work_date: '2026-03-14',
+    shift_entry_uuid: SHIFT_ENTRY_UUID,
+    detected_at: '2026-03-15T03:30:00.000000Z',
+    context: { rest_minutes: 420, threshold_minutes: 720 },
+    assigned_to: { uuid: '0199f0aa-1111-7000-8000-0123456789ab', name: 'Jefatura de cocina' },
+    resolved_at: null,
+    resolved_by: null,
+    resolution_note: null,
+    ...overrides,
+  }
+}
+
+export function incidentCollection(
+  data: Incident[] = [incident()],
+  overrides: Partial<IncidentCollection['meta']> = {},
+): IncidentCollection {
+  return {
+    data,
+    meta: {
+      page: 1,
+      per_page: 25,
+      total: data.length,
+      total_pages: 1,
+      time_zone: 'Europe/Madrid',
+      generated_at: '2026-03-15T08:00:00.000000Z',
+      ...overrides,
+    },
   }
 }

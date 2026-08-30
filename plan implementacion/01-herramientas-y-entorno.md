@@ -396,7 +396,7 @@ La regla que gobierna esta lista es el §7.7: **nada de secretos en el repositor
 | `CACHE_STORE` | `redis` | — |
 | `BROADCAST_CONNECTION` | `reverb` | — |
 | `QR_SIGNING_KEY_CURRENT_ID` | `a3` | Clave activa. 2 caracteres (§5.1) |
-| `QR_SIGNING_KEY_PREVIOUS_ID` | `a2` | Solape durante la rotación |
+| `QR_SIGNING_KEY_PREVIOUS_ID` | *(vacío)* | Solape durante la rotación: se rellena al abrirla y se vuelve a vaciar al cerrarla (§5.3, RF-QR-07) |
 | `QR_ERROR_CORRECTION` | `Q` | Tolerancia al desgaste de la tarjeta (RF-QR-05) |
 | `ATTENDANCE_DEBOUNCE_SECONDS` | `60` | RF-AT-06 |
 | `ATTENDANCE_MAX_SHIFT_HOURS` | `12` | RN-08 |

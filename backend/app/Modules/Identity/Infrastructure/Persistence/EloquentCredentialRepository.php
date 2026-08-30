@@ -21,8 +21,9 @@ use Illuminate\Database\QueryException;
  * **La unicidad de la credencial activa se detecta por la excepcion de
  * PostgreSQL, no por un `SELECT` previo.** Entre la consulta y la insercion cabe
  * otra emision —dos pestañas del panel, dos personas de RRHH— y esa comprobacion
- * solo daria una falsa sensacion de seguridad. Quien decide es el indice parcial
- * `one_active_credential_per_employee`.
+ * solo daria una falsa sensacion de seguridad. Quien decide son los indices
+ * parciales `one_pending_credential_per_employee` y
+ * `one_active_credential_per_key_and_employee`.
  *
  * **Las marcas de tiempo se escriben en UTC explicito** (regla dura 3). Las
  * columnas son `TIMESTAMPTZ(6)`: pasar una cadena sin desplazamiento dejaria que
@@ -154,6 +155,16 @@ final readonly class EloquentCredentialRepository implements CredentialRepositor
             ->whereIn('employee_id', $employeeIds)
             ->orderBy('employee_id')
             ->orderByRaw('(revoked_at IS NULL) DESC')
+            // Durante una rotacion con solape una persona tiene DOS activas: la
+            // que lleva encima y la reemision pendiente de imprimir. El panel
+            // responde a «quien no puede fichar todavia», asi que manda la que
+            // esta usando —entregada antes que impresa, impresa antes que
+            // pendiente— y no la mas nueva. Sin este orden, una rotacion pintaria
+            // a toda la plantilla como «pendiente de imprimir» y la metrica
+            // `employees_without_delivered_credential` se dispararia sin que
+            // nadie hubiera dejado de poder fichar.
+            ->orderByRaw('(delivered_at IS NOT NULL) DESC')
+            ->orderByRaw('(printed_at IS NOT NULL) DESC')
             ->orderByDesc('issued_at')
             ->orderByDesc('id')
             ->distinct('employee_id')
@@ -209,14 +220,79 @@ final readonly class EloquentCredentialRepository implements CredentialRepositor
         return $row instanceof Credential ? $this->toEntity($row) : null;
     }
 
+    /**
+     * El mismo orden que {@see latestForEmployees()} y por el mismo motivo: con
+     * un solape de claves hay dos activas, y la que interesa —la que se revoca
+     * al reemitir por perdida— es la que la persona lleva encima, no la que
+     * sigue en la cola de impresion.
+     */
     public function activeForEmployee(int $employeeId): ?CredentialEntity
     {
         $row = Credential::query()
             ->where('employee_id', $employeeId)
             ->whereNull('revoked_at')
+            ->orderByRaw('(delivered_at IS NOT NULL) DESC')
+            ->orderByRaw('(printed_at IS NOT NULL) DESC')
+            ->orderByDesc('issued_at')
+            ->orderByDesc('id')
             ->first();
 
         return $row instanceof Credential ? $this->toEntity($row) : null;
+    }
+
+    public function countSignedWith(string $keyId): int
+    {
+        return Credential::query()->where('key_id', $keyId)->count();
+    }
+
+    public function activeSignedWith(string $keyId): array
+    {
+        $rows = Credential::query()
+            ->where('key_id', $keyId)
+            ->whereNull('revoked_at')
+            ->whereNotNull('printed_at')
+            ->orderBy('employee_id')
+            ->orderBy('id')
+            ->get();
+
+        return array_values(array_map($this->toEntity(...), $rows->all()));
+    }
+
+    public function activeCountsByKeyId(): array
+    {
+        $counts = [];
+
+        // `pluck` sobre un `GROUP BY` y no un `count()` por clave: el llavero
+        // tiene dos claves hoy, pero la pregunta que este metodo responde es
+        // «que claves quedan vivas», y esa incluye las que ya no estan
+        // configuradas — que son justo las que delatan una rotacion sin cerrar.
+        $rows = Credential::query()
+            ->whereNull('revoked_at')
+            ->whereNotNull('key_id')
+            ->groupBy('key_id')
+            ->selectRaw('key_id, count(*) as total')
+            ->pluck('total', 'key_id');
+
+        foreach ($rows as $keyId => $total) {
+            if (\is_string($keyId) && is_numeric($total)) {
+                $counts[$keyId] = (int) $total;
+            }
+        }
+
+        return $counts;
+    }
+
+    public function otherActivePrintedForEmployee(int $employeeId, string $exceptUuid): array
+    {
+        $rows = Credential::query()
+            ->where('employee_id', $employeeId)
+            ->where('uuid', '!=', $exceptUuid)
+            ->whereNull('revoked_at')
+            ->whereNotNull('printed_at')
+            ->orderBy('id')
+            ->get();
+
+        return array_values(array_map($this->toEntity(...), $rows->all()));
     }
 
     public function findByKeyAndSecretHash(string $keyId, string $secretHash): ?CredentialEntity
@@ -284,7 +360,11 @@ final readonly class EloquentCredentialRepository implements CredentialRepositor
 
     private function translate(QueryException $exception): QueryException|EmployeeAlreadyHasCredential
     {
-        if (str_contains($exception->getMessage(), 'one_active_credential_per_employee')) {
+        // Las dos mitades de la invariante: una pendiente por empleado y una
+        // escaneable por empleado y clave. Las dos significan lo mismo hacia
+        // arriba —esa persona ya tiene esa tarjeta— y las dos son un 409.
+        if (str_contains($exception->getMessage(), 'credential_per_employee')
+            || str_contains($exception->getMessage(), 'credential_per_key_and_employee')) {
             return EmployeeAlreadyHasCredential::make();
         }
 

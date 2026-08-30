@@ -160,3 +160,28 @@ it('conserva el orden de las celdas aunque el array venga con claves', function 
     expect(csvBytes([['fecha' => '2026-03-29', 'minutos' => '480']]))
         ->toBe("2026-03-29;480\r\n");
 })->group('RL-06');
+
+it('deja intacta una duracion negativa en HH:MM', function (string $celda): void {
+    // La desviacion entre lo trabajado y lo contratado (RF-IN-03) es negativa en
+    // casi todas las filas de un informe de horas. Con la comilla delante, quien
+    // abre el fichero lee literalmente «'-68:34»: el apostrofo de Excel solo es
+    // invisible al TECLEAR en una celda, no al importar un CSV. Una columna
+    // entera con basura delante de cada cifra se lee como un fallo de la
+    // exportacion, y este fichero se lleva a una reunion de nomina.
+    expect(csvBytes([[$celda, 'x']]))->toBe($celda.';x'."\r\n");
+})->with([
+    'media hora de menos' => '-00:30',
+    'doce horas y media' => '-12:30',
+    'un mes entero' => '-168:00',
+])->group('RF-IN-04', 'RL-06');
+
+it('sigue neutralizando lo que solo se parece a una duracion negativa', function (string $celda): void {
+    // El patron de la excepcion es estrecho a proposito —signo, digitos, dos
+    // puntos y EXACTAMENTE dos digitos— para que no pueda alojar ninguna carga.
+    // Estos tres se parecen y no encajan, asi que siguen llevando la comilla.
+    expect(csvBytes([[$celda, 'x']]))->toStartWith("'");
+})->with([
+    'con un tercer digito y una carga detras' => '-12:305+cmd|/C_calc!A0',
+    'con una funcion detras' => '-1:00+SUM(A1)',
+    'sin digitos delante' => '-:30',
+])->group('RF-IN-04', 'RL-06');

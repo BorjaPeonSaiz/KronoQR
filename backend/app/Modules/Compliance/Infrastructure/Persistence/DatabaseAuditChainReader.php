@@ -5,15 +5,9 @@ declare(strict_types=1);
 namespace App\Modules\Compliance\Infrastructure\Persistence;
 
 use App\Modules\Compliance\Application\Port\AuditChainReader;
-use App\Modules\Compliance\Domain\ValueObject\AuditAction;
-use App\Modules\Compliance\Domain\ValueObject\AuditActor;
 use App\Modules\Compliance\Domain\ValueObject\AuditChainAnchor;
 use App\Modules\Compliance\Domain\ValueObject\AuditEntry;
-use App\Modules\Compliance\Domain\ValueObject\AuditEntryDraft;
-use App\Modules\Compliance\Domain\ValueObject\AuditPayload;
-use App\Modules\Compliance\Domain\ValueObject\AuditSubject;
 use DateTimeImmutable;
-use DateTimeZone;
 use Illuminate\Database\ConnectionInterface;
 
 /**
@@ -87,34 +81,14 @@ final readonly class DatabaseAuditChainReader implements AuditChainReader
      */
     private function toEntry(object $row): AuditEntry
     {
-        /** @var array<array-key, mixed> $payload */
-        $payload = json_decode($row->payload, true, 512, JSON_THROW_ON_ERROR);
-
-        $draft = new AuditEntryDraft(
-            occurredAt: $this->toUtc($row->occurred_at),
-            actor: AuditActor::fromStorage($row->actor_type, $row->actor_id === null ? null : (int) $row->actor_id),
-            action: AuditAction::from($row->action),
-            subject: AuditSubject::fromStorage(
-                $row->subject_type,
-                $row->subject_id === null ? null : (int) $row->subject_id,
-            ),
-            payload: AuditPayload::fromStorage($payload),
-            ip: $row->ip,
-            userAgent: $row->user_agent,
-        );
-
-        return new AuditEntry($draft, $row->prev_hash ?? '', $row->hash, (int) $row->id);
+        // La traduccion vive en AuditLogRow porque la comparte con la purga por
+        // retencion (ADR-027): dos copias que se separaran producirian hashes
+        // distintos para la misma fila.
+        return AuditLogRow::toEntry($row);
     }
 
-    /**
-     * PostgreSQL devuelve `TIMESTAMPTZ` en la zona de la sesion. La sesion es
-     * UTC (`APP_TIMEZONE=UTC` y el cluster arranca con `timezone=UTC`), pero se
-     * fuerza igualmente: si algun dia una conexion llegara con otra zona, el
-     * instante seria el mismo y su representacion distinta, y la representacion
-     * es lo que entra en el hash.
-     */
     private function toUtc(string $raw): DateTimeImmutable
     {
-        return (new DateTimeImmutable($raw))->setTimezone(new DateTimeZone('UTC'));
+        return AuditLogRow::toUtc($raw);
     }
 }

@@ -1,0 +1,98 @@
+# KronoQR — alertas de incidencias del registro horario (doc 01 §9.3, RF-PR-01).
+#
+# Fila del catalogo del doc 01 §9.3 que implementa este fichero:
+#
+#   | Turnos abiertos > 12 h | cualquiera | Media | RRHH | turno-abierto-prolongado.md |
+#
+# «Cualquiera» como umbral es literal: una sola persona con el turno sin cerrar
+# es una jornada que no se puede pagar ni defender tal como esta. No es una
+# tendencia que se vigile por percentiles.
+#
+# DESTINATARIO: RRHH, no el IT del cliente. Lo fija el criterio del doc 01 §9.3
+# —«Media → RRHH. No es un fallo tecnico: es trabajo de gestion sobre el
+# registro»— y la consecuencia practica es la que importa: el IT no puede
+# resolver esto. La correccion la firma una persona con el mecanismo trazado de
+# RF-PA-04, y el sistema NUNCA cierra el turno por su cuenta (RN-08).
+#
+# IMPACTO EN EL FICHAJE: NINGUNO. Quien tiene el turno abierto puede seguir
+# fichando; de hecho, su proximo escaneo lo cerrara. La alerta no describe una
+# averia, describe trabajo pendiente.
+#
+# Las metricas las escribe `php artisan compliance:incident-metrics` (cada cinco
+# minutos) en BACKUP_PATH/metrics, y las sirve node-exporter por el colector
+# textfile. `/metrics` de la aplicacion llega en la tarea 3.1; estas reglas no
+# cambian.
+
+groups:
+  - name: kronoqr-incidents
+    interval: 60s
+    rules:
+      #------------------------------------------------------------------------
+      # Hay al menos un turno abierto por encima del maximo configurado.
+      #
+      # `for: 15m` y no `0s`: el gauge se recalcula cada cinco minutos y una
+      # incidencia recien abierta se resuelve muchas veces sola —la persona
+      # ficha la salida y la correccion la cierra—. Quince minutos evitan
+      # despertar a RRHH por algo que ya no esta.
+      #------------------------------------------------------------------------
+      - alert: TurnoAbiertoProlongado
+        expr: incidents_open{type="open_shift_expired"} > 0
+        for: 15m
+        labels:
+          severity: warning
+          destinatario: rrhh
+          component: incidents
+        annotations:
+          summary: "Hay {{ $value }} turno(s) abierto(s) por encima del maximo configurado"
+          description: >-
+            La revision diaria ha encontrado tramos que siguen abiertos despues
+            de superar ATTENDANCE_MAX_SHIFT_HOURS. El sistema NO los cierra
+            (RN-08): la salida real la fija una persona con una correccion
+            trazada. El fichaje no esta afectado y nadie se ha quedado sin poder
+            fichar.
+          runbook_url: docs/runbooks/turno-abierto-prolongado.md
+
+      #------------------------------------------------------------------------
+      # Un incumplimiento del descanso minimo entre jornadas (RN-10, art. 34.3
+      # ET). Severidad mas alta que la anterior y por un motivo concreto: es la
+      # unica de las dos con consecuencia sancionadora, y ya ha ocurrido — no se
+      # puede evitar, solo documentar y corregir la planificacion.
+      #------------------------------------------------------------------------
+      - alert: DescansoEntreJornadasInsuficiente
+        expr: incidents_open{type="insufficient_rest"} > 0
+        for: 15m
+        labels:
+          severity: warning
+          destinatario: rrhh
+          component: incidents
+        annotations:
+          summary: "Hay {{ $value }} jornada(s) con el descanso minimo por debajo del perfil"
+          description: >-
+            Entre el fin de una jornada y el inicio de la siguiente han mediado
+            menos horas que el minimo del perfil de cumplimiento (RN-10). Es un
+            hecho ya ocurrido: lo que se hace con el es revisar el cuadrante y
+            dejar constancia, no cerrar la incidencia sin mirarla.
+          runbook_url: docs/runbooks/turno-abierto-prolongado.md
+
+      #------------------------------------------------------------------------
+      # El silencio. Sin esta regla, apagar la tarea programada seria la forma
+      # mas comoda de que las dos alertas de arriba no volvieran a sonar nunca.
+      #------------------------------------------------------------------------
+      - alert: MetricaDeIncidenciasAusente
+        expr: >-
+          absent(incidents_metrics_timestamp_seconds)
+          or (time() - incidents_metrics_timestamp_seconds) > 1800
+        for: 30m
+        labels:
+          severity: warning
+          destinatario: it-cliente
+          component: incidents
+        annotations:
+          summary: "El recuento de incidencias lleva mas de 30 minutos sin actualizarse"
+          description: >-
+            `compliance:incident-metrics` deberia reescribir el fichero del
+            colector textfile cada cinco minutos. Si no lo hace, las alertas de
+            incidencias estan ciegas: no distinguen «no hay ninguna» de «nadie
+            esta contando». Esta si es para el IT del cliente, porque lo que
+            falla es el planificador, no el registro.
+          runbook_url: docs/runbooks/turno-abierto-prolongado.md

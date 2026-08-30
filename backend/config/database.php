@@ -141,6 +141,40 @@ return [
             'sslmode' => env('DB_SSLMODE', 'prefer'),
         ],
 
+        /*
+         * Conexion de MANTENIMIENTO (ADR-027, ADR-033, tarea 2.10). Misma base,
+         * tercer rol.
+         *
+         * La usa **una sola cosa**: soltar una particion vencida de `audit_log`,
+         * despues de verificar su cadena y sellar su ancla. Ni la aplicacion en
+         * marcha ni las migraciones la resuelven nunca.
+         *
+         * SU CONTRASENA NO VIVE EN EL `.env` DE LA APLICACION, y esa es la mitad
+         * de la garantia: si la instalacion corriente pudiera autenticarse con
+         * este rol, el reparto de ADR-033 seria decorativo. Se aporta en el
+         * momento de ejecutar la purga, que es una operacion manual y anual:
+         *
+         *   docker compose run --rm -e DB_MAINTENANCE_PASSWORD=... app \
+         *     php artisan compliance:apply-retention --confirm=PURGAR-…
+         *
+         * Sin ella, `--dry-run` sigue funcionando -solo cuenta, y cuenta con el
+         * rol de la aplicacion- y la ejecucion real falla diciendo que falta.
+         */
+        'pgsql_maintenance' => [
+            'driver' => 'pgsql',
+            'url' => env('DB_MAINTENANCE_URL'),
+            'host' => env('DB_HOST', '127.0.0.1'),
+            'port' => env('DB_PORT', '5432'),
+            'database' => env('DB_DATABASE', 'laravel'),
+            'username' => env('DB_MAINTENANCE_USERNAME', 'fichaje_maintenance'),
+            'password' => env('DB_MAINTENANCE_PASSWORD', ''),
+            'charset' => env('DB_CHARSET', 'utf8'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'search_path' => 'public',
+            'sslmode' => env('DB_SSLMODE', 'prefer'),
+        ],
+
         'sqlsrv' => [
             'driver' => 'sqlsrv',
             'url' => env('DB_URL'),

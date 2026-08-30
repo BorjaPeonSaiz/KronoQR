@@ -28,7 +28,9 @@ use App\Modules\Identity\Application\UseCase\DeliverCredential;
 use App\Modules\Identity\Application\UseCase\EnrolTwoFactorHandler;
 use App\Modules\Identity\Application\UseCase\IssueDeviceToken;
 use App\Modules\Identity\Application\UseCase\MintCards;
+use App\Modules\Identity\Application\UseCase\RetireSigningKey;
 use App\Modules\Identity\Application\UseCase\RotateDeviceTokenIfDue;
+use App\Modules\Identity\Application\UseCase\RotateSigningKey;
 use App\Modules\Identity\Application\UseCase\VerifyTwoFactorHandler;
 use App\Modules\Identity\Domain\Model\Credential;
 use App\Modules\Identity\Domain\Policy\TwoFactorRequirement;
@@ -52,7 +54,9 @@ use App\Modules\Identity\Infrastructure\Console\IssueCredentialCommand;
 use App\Modules\Identity\Infrastructure\Console\PrintCredentialBatchCommand;
 use App\Modules\Identity\Infrastructure\Console\PrintCredentialCommand;
 use App\Modules\Identity\Infrastructure\Console\ResetTwoFactorCommand;
+use App\Modules\Identity\Infrastructure\Console\RetireSigningKeyCommand;
 use App\Modules\Identity\Infrastructure\Console\RevokeCredentialCommand;
+use App\Modules\Identity\Infrastructure\Console\RotateSigningKeyCommand;
 use App\Modules\Identity\Infrastructure\Metrics\TextfileCredentialMetrics;
 use App\Modules\Identity\Infrastructure\Persistence\Device;
 use App\Modules\Identity\Infrastructure\Persistence\EloquentCredentialRepository;
@@ -65,6 +69,7 @@ use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CredentialFingerprints;
 use App\Modules\Shared\Application\Port\EmployeePinVerifier;
 use App\Modules\Shared\Application\Port\EmployeeRegistry;
+use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\ManagementActor;
 use App\Modules\Shared\Application\Port\PortalSessionIssuer;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
@@ -149,9 +154,8 @@ final class IdentityServiceProvider extends ServiceProvider
         Gate::policy(Credential::class, CredentialPolicy::class);
 
         if ($this->app->runningInConsole()) {
-            // Los seis del Anexo C del doc 02 que ya existen. Falta
-            // `credentials:rotate-key`, que completa su flujo en la tarea 2.12 y
-            // no se declara aqui para que su ausencia sea visible.
+            // Los del Anexo C del doc 02, ya completos: la tarea 2.12 añadio
+            // `credentials:rotate-key` y su cierre, `credentials:retire-key`.
             $this->commands([
                 CreateManagementUserCommand::class,
                 // La unica via para retirar un segundo factor (RS-06). No hay
@@ -166,6 +170,11 @@ final class IdentityServiceProvider extends ServiceProvider
                 DeliverCredentialCommand::class,
                 CredentialStatusCommand::class,
                 RevokeCredentialCommand::class,
+                // Rotacion con solape (RF-QR-07). No tienen endpoint y no lo
+                // tendran: rotar la clave es un acto operativo con semanas de
+                // logistica de reimpresion detras, no un boton de panel.
+                RotateSigningKeyCommand::class,
+                RetireSigningKeyCommand::class,
             ]);
         }
     }
@@ -361,6 +370,35 @@ final class IdentityServiceProvider extends ServiceProvider
                 events: $app->make(IdentityEventPublisher::class),
                 clock: $app->make(Clock::class),
                 connection: DB::connection(),
+            ),
+        );
+
+        // Rotacion de la clave de firma con solape (RF-QR-07, §5.3, tarea 2.12).
+        // Se declaran a mano por lo mismo que los demas: `ConnectionInterface`
+        // no se resuelve sola, y la transaccion es parte del caso de uso.
+        $this->app->bind(
+            RotateSigningKey::class,
+            static fn (Application $app): RotateSigningKey => new RotateSigningKey(
+                keys: $app->make(QrKeyProvider::class),
+                credentials: $app->make(CredentialRepository::class),
+                employees: $app->make(EmployeeRegistry::class),
+                events: $app->make(IdentityEventPublisher::class),
+                clock: $app->make(Clock::class),
+                connection: DB::connection(),
+                telemetry: $app->make(CredentialTelemetry::class),
+            ),
+        );
+
+        $this->app->bind(
+            RetireSigningKey::class,
+            static fn (Application $app): RetireSigningKey => new RetireSigningKey(
+                keys: $app->make(QrKeyProvider::class),
+                credentials: $app->make(CredentialRepository::class),
+                events: $app->make(IdentityEventPublisher::class),
+                installation: $app->make(InstallationSiteProvider::class),
+                clock: $app->make(Clock::class),
+                connection: DB::connection(),
+                telemetry: $app->make(CredentialTelemetry::class),
             ),
         );
 

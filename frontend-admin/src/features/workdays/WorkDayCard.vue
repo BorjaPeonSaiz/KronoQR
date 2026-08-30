@@ -15,13 +15,26 @@ import { formatCivilDate, formatInstantWithZone, formatZoneLabel } from '@kronoq
 import { durationParts } from '@kronoqr/web-kit/workdayTotals'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { RouterLink } from 'vue-router'
+import { INCIDENTS_MANAGE } from '@/features/auth/abilities'
+import { useSessionStore } from '@/features/auth/session.store'
+import { severityBadgeClass } from '@/features/incidents/incidentPresentation'
 import type { WorkDayDetail } from '@/shared/api/types'
 import CorrectionHistory from './CorrectionHistory.vue'
 import ShiftEntryTable from './ShiftEntryTable.vue'
 
-const props = defineProps<{ day: WorkDayDetail }>()
+const props = defineProps<{
+  day: WorkDayDetail
+  /** Para el enlace a la bandeja filtrada por persona (RF-PA-05). */
+  employeeUuid: string
+}>()
 
 const { t, locale } = useI18n()
+const session = useSessionStore()
+
+// La bandeja exige `incidents:*`: sin el, el enlace llevaria a un 403 que la
+// interfaz puede evitar de antemano (regla dura 18, cortesia y no seguridad).
+const canOpenInbox = computed(() => session.can(INCIDENTS_MANAGE))
 
 const heading = computed(() => formatCivilDate(props.day.work_date, locale.value))
 
@@ -78,6 +91,43 @@ const recalculatedAt = computed(() =>
     <p v-if="day.has_incident" class="mt-1 text-kq-text-muted">
       {{ t('workdays.day.flags.incidentHint') }}
     </p>
+
+    <!-- La ficha minima de cada incidencia (RF-PA-05): distinta de la bandera
+         de arriba, que solo dice si algun tramo quedo `anomalous` (RN-07/08).
+         Una jornada puede tener incidencias sin ningun tramo anomalo -RN-10
+         mira el descanso ENTRE jornadas- y al reves. -->
+    <section class="mt-4" data-test="workday-incidents">
+      <h3 class="font-semibold">{{ t('incidents.workday.heading') }}</h3>
+
+      <p v-if="day.incidents.length === 0" class="mt-1 text-kq-text-muted">
+        {{ t('incidents.workday.none') }}
+      </p>
+
+      <ul v-else class="mt-2 flex flex-wrap gap-2">
+        <li v-for="incident of day.incidents" :key="incident.id">
+          <span
+            class="inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm font-semibold"
+            :class="severityBadgeClass(incident.severity)"
+            data-test="workday-incident-badge"
+          >
+            {{ t(`incidents.types.${incident.type}`) }}
+            <span class="font-normal">({{ t(`incidents.status.${incident.status}`) }})</span>
+          </span>
+        </li>
+      </ul>
+
+      <!-- `text-kq-text`, no `text-kq-primary-strong`: ese tono solo esta
+           medido en contraste de texto sobre `surface`/`surface-raised`
+           (doc 06 §6, `themePairs.ts`), y esta tarjeta es `surface-alt`. El
+           subrayado sigue distinguiendolo como enlace sin depender del color. -->
+      <RouterLink
+        v-if="canOpenInbox"
+        :to="{ name: 'incidents', query: { employee: employeeUuid } }"
+        class="mt-2 inline-block font-semibold text-kq-text underline"
+      >
+        {{ t('incidents.workday.linkToInbox') }}
+      </RouterLink>
+    </section>
 
     <ShiftEntryTable
       class="mt-4"

@@ -102,7 +102,18 @@ final readonly class ReadEmployeeWorkDays
 
         $range = $this->resolve($query, $timeZone);
 
-        $journal = $this->journal->journalFor($query->employeeUuid, $timeZone, $range);
+        $journal = $this->journal->journalFor(
+            $query->employeeUuid,
+            $timeZone,
+            $range,
+            // Las incidencias de RF-PA-05 solo para la vista de gestion. La misma
+            // bandera que decide si hay asiento decide esto, y por la misma razon:
+            // lo que cambia entre las dos rutas es **quien pregunta y sobre
+            // quien**. Al empleado se le devuelve la lista vacia, no un esquema
+            // distinto — el porque esta escrito en el contrato, y es una decision
+            // de producto que ningun requisito cubre todavia.
+            withIncidents: ! $query->selfService,
+        );
 
         if (! $query->selfService) {
             $this->disclosures->recordDisclosure(self::DATASET, $journal->dayCount(), [

@@ -47,6 +47,7 @@ final class CredentialStatusCommand extends Command
 {
     protected $signature = 'credentials:status
         {--pending : Solo quien todavia no tiene la tarjeta en la mano}
+        {--key-id= : Solo quien sigue fichando con una tarjeta firmada por esa clave (RF-QR-07)}
         {--no-metrics : No reescribe el fichero de metricas}
         {--quiet-table : Solo el resumen, sin la tabla. Para el planificador}';
 
@@ -59,6 +60,7 @@ final class CredentialStatusCommand extends Command
         // Derivarlas por separado de la misma opcion es como se acaba auditando
         // lo que no se ve o mostrando lo que no consta.
         $quiet = (bool) $this->option('quiet-table');
+        $keyId = trim((string) $this->option('key-id'));
 
         $query = new CredentialStatusQuery(
             pendingOnly: (bool) $this->option('pending'),
@@ -66,6 +68,9 @@ final class CredentialStatusCommand extends Command
             // asi que no hay divulgacion que registrar. Sin la opcion,
             // la tabla nominal sale por pantalla y el asiento se escribe.
             unattended: $quiet,
+            // «Quien sigue con la clave vieja» durante una rotacion (§5.3). Es
+            // la lista que hay que vaciar antes de `credentials:retire-key`.
+            keyId: $keyId === '' ? null : $keyId,
         );
 
         $publish = ! (bool) $this->option('no-metrics');
@@ -75,7 +80,7 @@ final class CredentialStatusCommand extends Command
             : $board->handle($query);
 
         if (! $quiet) {
-            $this->renderRows($report->rows);
+            $this->renderRows($report->rows, $keyId === '' ? null : $keyId);
         }
 
         $this->renderCoverage($report->coverage);
@@ -91,8 +96,16 @@ final class CredentialStatusCommand extends Command
     /**
      * @param  list<CredentialStatusRow>  $rows
      */
-    private function renderRows(array $rows): void
+    private function renderRows(array $rows, ?string $keyId): void
     {
+        if ($rows === [] && $keyId !== null) {
+            // La frase que autoriza el ultimo paso de una rotacion (§5.3).
+            $this->info('Nadie ficha ya con una tarjeta firmada por la clave '.$keyId.'.');
+            $this->line('Se puede retirar: php artisan credentials:retire-key '.$keyId);
+
+            return;
+        }
+
         if ($rows === []) {
             $this->info('Todo el mundo tiene su tarjeta entregada.');
 
@@ -120,6 +133,34 @@ final class CredentialStatusCommand extends Command
             $coverage->employees,
             $coverage->pendingPrint,
         ));
+
+        if ($coverage->unknownKeyCards !== []) {
+            // Primero y en rojo: es lo unico de esta salida que significa que
+            // hay gente que NO PUEDE FICHAR ahora mismo (revision de seguridad
+            // de la 2.12). Lo demas son procesos en marcha.
+            foreach ($coverage->unknownKeyIds() as $keyId) {
+                $this->error(sprintf(
+                    'AVISO: %d tarjeta(s) activa(s) firmada(s) con la clave %s, que ya no esta configurada. '
+                    .'Esas personas no pueden fichar con tarjeta.',
+                    $coverage->unknownKeyCards[$keyId],
+                    $keyId,
+                ));
+                $this->line('  Quienes son:   php artisan credentials:status --key-id='.$keyId);
+                $this->line('  Como se arregla: docs/runbooks/rotacion-clave-qr.md §6');
+            }
+        }
+
+        if ($coverage->retiringKeyId !== null) {
+            // El avance de la reimpresion, en una linea. Se pinta siempre que
+            // haya una rotacion abierta, aunque no se haya filtrado por clave:
+            // quien mira el estado tiene que enterarse de que hay una en curso.
+            $this->line(sprintf(
+                'Rotacion en curso: %d de %d siguen fichando con la clave %s',
+                $coverage->pendingReprint,
+                $coverage->employees,
+                $coverage->retiringKeyId,
+            ));
+        }
     }
 
     /**

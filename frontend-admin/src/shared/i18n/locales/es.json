@@ -9,7 +9,9 @@
       "employees": "Plantilla",
       "credentials": "Credenciales",
       "legalExport": "Inspección",
-      "live": "Presencia"
+      "live": "Presencia",
+      "incidents": "Incidencias",
+      "reports": "Informes"
     },
     "roles": {
       "admin": "Administración",
@@ -297,6 +299,19 @@
       "withoutDelivered": "Sin la tarjeta en la mano: {missing} de {total}.",
       "pendingPrint": "Pendientes de imprimir: {count}."
     },
+    "rotation": {
+      "heading": "Rotación de la clave de firma en curso",
+      "explanation": "Se está sustituyendo la clave {keyId} con la que están firmadas las tarjetas antiguas. Mientras dure el relevo, las tarjetas viejas siguen sirviendo para fichar: nadie se queda fuera. Cada tarjeta antigua se retira sola en cuanto se entrega la nueva.",
+      "progress": "Reimpresión completada: {done} de {total} ({percent} %).",
+      "showPending": "Ver a quién le falta ({count})",
+      "showAll": "Ver toda la plantilla",
+      "complete": "Ya nadie ficha con la clave {keyId}: se puede retirar en el servidor."
+    },
+    "unknownKey": {
+      "heading": "Hay tarjetas que ya no sirven para fichar",
+      "explanation": "{count} tarjeta(s) en circulación están firmadas con una clave que el servidor ya no reconoce. Quien lleve una de ellas no puede fichar con tarjeta: tendrá que usar su PIN mientras se resuelve.",
+      "action": "Lo arregla quien administra el servidor: ejecuta «php artisan credentials:status» para saber qué clave es y sigue docs/runbooks/rotacion-clave-qr.md §6."
+    },
     "empty": {
       "title": "No hay filas que mostrar",
       "description": "No hay personas de alta en el alcance elegido.",
@@ -455,6 +470,71 @@
         "times": "Las horas van en la zona horaria del centro y además en UTC, que es como están almacenadas.",
         "format": "CSV en UTF-8 con marca de orden de bytes, separado por punto y coma. Las duraciones se escriben HH:MM, nunca en decimal."
       }
+    },
+    "period": {
+      "title": "Informe de horas por periodo",
+      "subtitle": "Horas trabajadas en un periodo, con sus agregados por departamento o centro y su comparación con las horas contratadas. Los criterios con los que se ha calculado aparecen debajo de la tabla.",
+      "generate": "Generar informe",
+      "loading": "Generando el informe…",
+      "contractCoverage": "Hay {days} días-persona del periodo sin contrato registrado, que afectan a {employees} persona(s). Esos días no suman horas contratadas: la desviación de esas filas está incompleta.",
+      "filters": {
+        "legend": "Periodo y agrupación del informe",
+        "from": "Desde",
+        "to": "Hasta",
+        "granularity": "Granularidad",
+        "groupBy": "Agrupar por",
+        "department": "Departamento",
+        "departmentAll": "Todos",
+        "openShifts": "Contar los días con turno abierto"
+      },
+      "granularity": {
+        "day": "Día",
+        "week": "Semana",
+        "month": "Mes",
+        "range": "Todo el periodo"
+      },
+      "grouping": {
+        "employee": "Empleado",
+        "department": "Departamento",
+        "site": "Centro"
+      },
+      "empty": {
+        "title": "No hay nada que mostrar en ese periodo",
+        "description": "No hay ninguna persona dentro de tu alcance con jornadas o contrato en las fechas elegidas. Prueba con otro periodo o quita el filtro de departamento."
+      },
+      "criteria": {
+        "title": "Criterios de este informe",
+        "generated": "Generado el {at} · zona horaria del centro: {timeZone}"
+      },
+      "export": {
+        "label": "Descargar este informe:",
+        "format": {
+          "csv": "CSV",
+          "xlsx": "Excel (XLSX)",
+          "pdf": "PDF"
+        },
+        "running": "Preparando la descarga en {format}…",
+        "done": "Descarga en {format} lista.",
+        "failed": "No se ha podido descargar el informe."
+      },
+      "announce": {
+        "results": "El informe tiene {count} filas."
+      }
+    },
+    "table": {
+      "caption": "Horas por periodo. Las fechas están en la zona horaria del centro ({timeZone}).",
+      "subject": "Sujeto",
+      "period": "Periodo",
+      "worked": "Trabajadas",
+      "contracted": "Contratadas",
+      "deviation": "Desviación",
+      "overtime": "Exceso",
+      "shifts": "Tramos",
+      "daysWithActivity": "Días con actividad",
+      "daysWithoutActivity": "Días sin actividad",
+      "openShiftDays": "Días con turno abierto",
+      "incidentDays": "Días con incidencia",
+      "withoutDepartment": "Sin departamento"
     }
   },
   "workdays": {
@@ -609,6 +689,122 @@
     },
     "announce": {
       "counts": "{present} personas dentro y {absent} fuera."
+    }
+  },
+  "incidents": {
+    "title": "Bandeja de incidencias",
+    "subtitle": "Lo que del registro horario tiene que mirar una persona. Resolver una incidencia no cambia ninguna hora: si hay que rectificar un tramo, se hace desde el registro horario de la persona.",
+    "loading": "Cargando la bandeja de incidencias…",
+    "duration": "{hours} h {minutes} min",
+    "status": {
+      "open": "Pendiente",
+      "resolved": "Resuelta",
+      "dismissed": "Descartada"
+    },
+    "severities": {
+      "high": "Alta",
+      "medium": "Media",
+      "low": "Baja"
+    },
+    "types": {
+      "open_shift_expired": "Turno abierto sin cerrar",
+      "short_shift": "Jornada demasiado corta",
+      "long_shift": "Jornada demasiado larga",
+      "missing_break": "Sin pausa registrada",
+      "insufficient_rest": "Descanso insuficiente",
+      "clock_skew": "Desfase de reloj",
+      "missing_clock_out": "Salida sin fichar",
+      "anomalous_pattern": "Patrón anómalo de uso de la credencial"
+    },
+    "outcomes": {
+      "resolved": "Resuelta",
+      "dismissed": "Descartada"
+    },
+    "filters": {
+      "legend": "Filtros de la bandeja",
+      "status": "Estado",
+      "type": "Tipo",
+      "typeAll": "Todos los tipos",
+      "severity": "Severidad",
+      "severityAll": "Todas las severidades",
+      "department": "Departamento",
+      "departmentAll": "Todos los departamentos"
+    },
+    "table": {
+      "caption": "Incidencias de la bandeja, horas en {zone}",
+      "severity": "Severidad",
+      "type": "Tipo",
+      "employee": "Empleado",
+      "workDate": "Jornada",
+      "age": "Antigüedad",
+      "assignedTo": "Asignada a",
+      "actions": "Acciones",
+      "unassigned": "Sin asignar",
+      "noDepartment": "Sin departamento",
+      "resolve": "Resolver",
+      "detectedAt": "Detectada el {moment}",
+      "ageValue": "Hace {duration}",
+      "viewWorkday": "Ver registro horario"
+    },
+    "empty": {
+      "open": {
+        "title": "Sin incidencias pendientes",
+        "description": "No hay ninguna incidencia abierta con estos filtros. No es un fallo: la bandeja se llena sola cuando la detección encuentra algo que revisar."
+      },
+      "resolved": {
+        "title": "Sin incidencias resueltas",
+        "description": "Ninguna incidencia con estos filtros se ha dado por resuelta todavía."
+      },
+      "dismissed": {
+        "title": "Sin incidencias descartadas",
+        "description": "Ninguna incidencia con estos filtros se ha descartado todavía."
+      }
+    },
+    "announce": {
+      "results": "{count} incidencias en la bandeja.",
+      "resolved": "Incidencia de {name} marcada como {outcome}."
+    },
+    "context": {
+      "pair": "{metric} {value} de {threshold}",
+      "raw": "{key}: {value}",
+      "metrics": {
+        "rest_minutes": "descanso",
+        "worked_minutes": "trabajado"
+      }
+    },
+    "employeeFilter": {
+      "active": "Mostrando solo las incidencias de {name}.",
+      "clear": "Quitar este filtro"
+    },
+    "pagination": {
+      "label": "Paginación de la bandeja de incidencias"
+    },
+    "dialog": {
+      "title": "Cerrar incidencia",
+      "for": "{type}, de {name}, jornada del {date}.",
+      "outcomeLegend": "Qué ha pasado",
+      "outcome": {
+        "resolved": "Se ha corregido",
+        "dismissed": "Revisada: no había nada que corregir"
+      },
+      "note": "Nota (obligatoria)",
+      "noteHint": "Explica qué se hizo, o por qué no hacía falta corregir nada. Queda en el historial de la incidencia.",
+      "noteCounter": "{count}/{max} caracteres",
+      "noteTooShort": "Escribe al menos {min} caracteres.",
+      "noteTooLong": "El texto no puede superar los {max} caracteres.",
+      "submit": "Confirmar",
+      "conflict": {
+        "title": "Ya se ha resuelto",
+        "resolvedBy": "{name} la marcó como «{outcome}» el {moment}.",
+        "resolvedByUnknown": "Otra persona ya la ha resuelto mientras tanto.",
+        "note": "Nota: «{note}»",
+        "acknowledge": "Entendido"
+      }
+    },
+    "workday": {
+      "heading": "Incidencias de la jornada",
+      "none": "Sin incidencias en esta jornada.",
+      "linkToInbox": "Ver en la bandeja de incidencias"
     }
   }
 }

@@ -43,11 +43,16 @@ use InvalidArgumentException;
  * sigue en la tabla, con su momento y su motivo, porque es parte del registro de
  * por que alguien dejo de poder fichar.
  *
- * **Una credencial activa por empleado** (doc 01 §5.2). La invariante la declara
- * ademas el indice parcial `one_active_credential_per_employee`: reemitir obliga
- * a revocar la anterior, no a dejar dos vivas. Aqui no se puede comprobar
- * —haria falta ver las demas filas, que es justo lo que un agregado no hace— y
- * por eso la comprueba el caso de uso y, sobre todo, la base de datos.
+ * **Una credencial activa por empleado y por clave de firma** (doc 01 §5.2,
+ * RF-QR-07). La invariante la declaran dos indices parciales:
+ * `one_active_credential_per_key_and_employee` —no puede haber dos tarjetas
+ * escaneables de la misma persona firmadas con la misma clave— y
+ * `one_pending_credential_per_employee` —ni dos pendientes de imprimir a la
+ * vez—. Los dos juntos admiten exactamente la convivencia que la rotacion con
+ * solape necesita (§5.3): la tarjeta en uso y su relevo, nunca dos tarjetas
+ * vivas indistinguibles. Aqui no se puede comprobar —haria falta ver las demas
+ * filas, que es justo lo que un agregado no hace— y por eso la comprueba el caso
+ * de uso y, sobre todo, la base de datos.
  *
  * **`revoked_at` es la unica frontera entre activa y no activa.** No hay columna
  * `status`: un estado derivado y otro almacenado acaban discrepando, y aqui

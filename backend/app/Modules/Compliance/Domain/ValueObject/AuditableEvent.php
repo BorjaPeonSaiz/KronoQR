@@ -5,8 +5,13 @@ declare(strict_types=1);
 namespace App\Modules\Compliance\Domain\ValueObject;
 
 /**
- * Las siete familias de hechos que **obligan** a escribir en `audit_log`
+ * Las familias de hechos que **obligan** a escribir en `audit_log`
  * (`/revision-cumplimiento` bloque D, regla dura 6).
+ *
+ * Nacio con las **siete** del bloque D y hoy son ocho: la tarea 2.6 anadio el
+ * ciclo de vida de una incidencia, que cumple el mismo criterio —bajo volumen y
+ * relevancia legal— y no cabia en ninguna de las siete. Ampliar esta lista es
+ * una decision, no un tramite: cada familia nueva tiene que decir por que lo es.
  *
  * Es el enunciado del bloque D convertido en codigo, y esta aqui por una razon
  * concreta: la lista vivia solo en una skill en Markdown, asi que una accion
@@ -39,4 +44,24 @@ enum AuditableEvent: string
 
     /** Ejecuta una purga por retencion (RL-02, ADR-027). */
     case RetentionPurge = 'retention_purge';
+
+    /**
+     * Abre o cierra una **incidencia** del registro horario (RF-PR-01, tarea
+     * 2.6).
+     *
+     * **La octava familia, y la primera que no estaba en el bloque D.** Se anade
+     * porque cumple el criterio que ese bloque enuncia y que ADR-039 desarrolla:
+     * es un hecho de **bajo volumen** —unas decenas al dia, frente a los miles de
+     * escaneos— y con **relevancia legal directa**. Una incidencia
+     * `insufficient_rest` afirma que un descanso quedo por debajo del minimo del
+     * art. 34.3 ET; darla por resuelta afirma que alguien lo reviso. Las dos son
+     * exactamente el tipo de afirmacion que una inspeccion pide reconstruir, y sin
+     * asiento la unica prueba de que existieron seria una fila que la aplicacion
+     * puede actualizar.
+     *
+     * No cabe en `ShiftEntryLifecycle`: abrir una incidencia no crea, modifica,
+     * anula ni cierra ningun fichaje — precisamente lo que RN-08 prohibe hacer
+     * automaticamente.
+     */
+    case IncidentLifecycle = 'incident_lifecycle';
 }

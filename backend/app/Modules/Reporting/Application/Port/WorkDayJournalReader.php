@@ -66,6 +66,20 @@ interface WorkDayJournalReader
      *
      * @param  string  $timeZone  Zona del centro actual del empleado, la que
      *                            devolvio {@see timeZoneOf()}.
+     * @param  bool  $withIncidents  Si cada jornada trae ademas sus incidencias
+     *                               (RF-PA-05, tarea 2.5). **Es una consulta mas**,
+     *                               asi que quien no las va a enseñar no las pide:
+     *                               hoy el portal del empleado, que recibe el mismo
+     *                               esquema con la lista vacia por la decision escrita
+     *                               en el contrato. Por omision `false`, de modo que un
+     *                               camino nuevo tenga que pedirlas a proposito y no
+     *                               las arrastre sin querer hasta una pantalla que no
+     *                               debe enseñarlas.
      */
-    public function journalFor(string $employeeUuid, string $timeZone, DateRange $range): WorkDayJournal;
+    public function journalFor(
+        string $employeeUuid,
+        string $timeZone,
+        DateRange $range,
+        bool $withIncidents = false,
+    ): WorkDayJournal;
 }

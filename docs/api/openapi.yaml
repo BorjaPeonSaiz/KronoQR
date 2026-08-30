@@ -1856,6 +1856,142 @@ paths:
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
+  /api/v1/employees/{uuid}/contracts:
+    parameters:
+      - $ref: '#/components/parameters/EmployeeUuid'
+    get:
+      operationId: listEmploymentContracts
+      summary: Contratos de un empleado
+      description: |
+        La serie historica de contratos de una persona, del mas antiguo al mas
+        reciente (RF-GP-02, documento 01 §5.5).
+
+        **Es historico y no un campo de la ficha.** Las horas contratadas cambian
+        —de 20 h a 40 h en temporada alta, una reduccion de jornada— y el informe
+        de `GET /api/v1/reports/period` compara cada dia contra lo que estaba
+        pactado **ese dia**. Con las horas en la ficha, firmar un anexo en julio
+        cambiaria retroactivamente el informe de marzo.
+
+        **`valid_to` nulo significa vigente.** Como mucho hay un contrato abierto,
+        y en ningun caso dos vigencias se solapan: lo garantiza una restriccion de
+        exclusion en PostgreSQL, no una convencion. Registrar uno nuevo cierra el
+        anterior el dia anterior, de modo que la serie no tiene ni huecos ni
+        solapes.
+
+        **Sin paginacion**, a proposito: una persona tiene unos pocos contratos y
+        la serie solo se entiende entera. Paginarla partiria la cadena de
+        vigencias justo donde se ve si tiene huecos.
+
+        **`rrhh+`.** El `responsable_departamento` no llega: le falta el ambito
+        `employees:*` (documento 02 §7.3) y la policy tampoco lo admite. Las
+        condiciones laborales pactadas no son suyas.
+      tags: [Workforce]
+      security:
+        - managementToken: ['employees:*']
+      responses:
+        '200':
+          description: |
+            Los contratos de esa persona. Una sin ninguno devuelve `data` vacio,
+            no un `404`: no tener contrato registrado es una respuesta, y ademas
+            es la que explica los dias que el informe cuenta como «sin contrato».
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmploymentContractCollection'
+              examples:
+                cambio-de-jornada:
+                  summary: Un contrato cerrado y el vigente
+                  value:
+                    data:
+                      - id: 41
+                        employee_uuid: 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                        weekly_hours: 20
+                        annual_hours: 1040
+                        schedule_type: turnos
+                        valid_from: '2026-01-01'
+                        valid_to: '2026-03-15'
+                        is_current: false
+                      - id: 58
+                        employee_uuid: 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                        weekly_hours: 40
+                        annual_hours: 1780
+                        schedule_type: turnos
+                        valid_from: '2026-03-16'
+                        valid_to: null
+                        is_current: true
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      operationId: registerEmploymentContract
+      summary: Registrar el contrato de un empleado
+      description: |
+        Registra un contrato **abierto** y cierra el anterior el dia anterior a su
+        inicio, en la misma transaccion (RF-GP-02).
+
+        **No admite `valid_to`, y es deliberado.** Dejar escribir la fecha de fin
+        permitiria crear un hueco de dias sin contrato vigente sin que nada
+        avisara, y el informe de periodo los contaria como «sin contrato» sin que
+        nadie entienda por que. Cuando la relacion laboral termina, lo que hay es
+        una baja: `POST /api/v1/employees/{uuid}/offboard`.
+
+        **No hay `PATCH` ni `DELETE`.** Un contrato no se edita: se registra otro
+        y el anterior queda cerrado con su fecha (regla dura 5).
+
+        **Queda auditado** con la accion `employment_contract.registered`:
+        `weekly_hours` es la cifra contra la que se mide la jornada de una
+        persona, asi que cambiarla mueve su desviacion y sus horas de exceso sin
+        tocar un solo fichaje.
+      tags: [Workforce]
+      security:
+        - managementToken: ['employees:*']
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEmploymentContractRequest'
+            examples:
+              jornada-completa:
+                value:
+                  weekly_hours: 40
+                  annual_hours: 1780
+                  schedule_type: turnos
+                  valid_from: '2026-03-16'
+      responses:
+        '201':
+          description: |
+            El contrato registrado, ya vigente. Se devuelve entero para que el
+            panel sustituya la fila sin volver a pedir la lista.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmploymentContract'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: |
+            Ya hay un contrato vigente en esa fecha. El cuerpo es correcto; lo que
+            no encaja es el estado, asi que la accion siguiente es releer los
+            contratos de esa persona, no reescribir el formulario.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
   /api/v1/attendance/live:
     get:
       operationId: listLivePresence
@@ -2102,6 +2238,11 @@ paths:
                               clocked_in_at: '2026-03-14T05:00:00.000000Z'
                               clocked_out_at: '2026-03-14T13:05:00.000000Z'
                               worked_minutes: 485
+                        incidents:
+                          - id: 412
+                            type: missing_clock_out
+                            severity: medium
+                            status: resolved
                     meta:
                       total: 1
         '401':
@@ -2621,6 +2762,42 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: key_id
+          in: query
+          required: false
+          description: |
+            **A quien le falta reimprimir durante una rotacion de clave**
+            (RF-QR-07, doc 02 §5.3): solo las personas cuya tarjeta **en uso**
+            sigue firmada con ese `key_id`.
+
+            Es lo que hace practicable la reimpresion progresiva. Durante el
+            solape conviven dos claves: la tarjeta vieja sigue fichando y la
+            reemision espera turno de impresora. Este filtro dice cuantas quedan
+            por relevar, y **cuando devuelve `data: []` la clave anterior se
+            puede retirar** — que es literalmente el procedimiento del §5.3.
+
+            **Filtra las filas y no el `summary`**, igual que `pending`: el
+            denominador sigue siendo la plantilla. El propio `summary` ya trae
+            `retiring_key_id` y `pending_reprint`, asi que el panel sabe si hay
+            una rotacion abierta sin tener que preguntarlo.
+
+            Solo cuentan las credenciales **activas**: una revocada firmada con
+            esa clave ya no impide retirarla y no aparece.
+
+            Un `key_id` con forma valida que no conoce nadie devuelve `data: []`
+            con `200`, **no `404`** ni `422`: no es un error del cliente y
+            comprobarlo contra el llavero convertiria el parametro en un oraculo
+            de que claves tiene configuradas la instalacion. Una forma invalida
+            —mas de dos caracteres, o no alfanumerica— si es `422`.
+
+            La rotacion **no tiene endpoint** y no lo tendra: se ejecuta con
+            `php artisan credentials:rotate-key`. Rotar la clave es un acto
+            operativo con semanas de logistica de reimpresion detras, no un boton
+            de panel. Aqui solo se **lee**.
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9]{2}$'
+          example: a3
       responses:
         '200':
           description: Estado de las credenciales de la plantilla de alta.
@@ -2666,6 +2843,35 @@ paths:
                       employees: 60
                       pending_print: 1
                       without_delivered_credential: 2
+                      retiring_key_id: null
+                      pending_reprint: 0
+                      active_unknown_key: 0
+                rotacion:
+                  summary: Rotacion de clave a medias — a doce les falta la tarjeta nueva
+                  value:
+                    data:
+                      - employee_uuid: 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                        employee_code: E7K2M9QX4B
+                        full_name: Lucia Martinez Prieto
+                        department_name: Recepcion
+                        status: delivered
+                        credential:
+                          uuid: 0199f0d1-2a5b-7d4f-8c32-5e6f7a8b9c01
+                          employee_uuid: 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                          key_id: a3
+                          issued_at: '2026-08-19T06:02:31.000000Z'
+                          printed_at: '2026-08-20T09:11:02.000000Z'
+                          delivered_at: '2026-08-21T07:40:15.000000Z'
+                          revoked_at: null
+                          revoked_reason: null
+                          status: active
+                    summary:
+                      employees: 60
+                      pending_print: 12
+                      without_delivered_credential: 0
+                      retiring_key_id: a3
+                      pending_reprint: 12
+                      active_unknown_key: 0
         '401':
           $ref: '#/components/responses/Unauthenticated'
         '403':
@@ -3201,6 +3407,396 @@ paths:
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
+  /api/v1/reports/period:
+    get:
+      operationId: generatePeriodReport
+      summary: Informe de horas por periodo
+      description: |
+        Horas trabajadas por periodo, con granularidad diaria, semanal, mensual o
+        de rango libre; agregadas por empleado, departamento o centro; y
+        comparadas con las horas contratadas de cada dia (RF-IN-01, RF-IN-02,
+        RF-IN-03).
+
+        ## Los criterios de inclusion vienen **en la respuesta**
+
+        `meta.criteria` trae, en el idioma de la peticion, exactamente que se ha
+        contado y que no. Un informe de horas sin esa lista es una tabla de
+        numeros que cada persona interpreta a su manera, y esa interpretacion
+        acaba discutiendose en una reunion de nomina. En resumen:
+
+        - **Los totales salen de la proyeccion de jornadas ya consolidada**, no se
+          recalculan aqui (RN-06, ADR-007, regla dura 7).
+        - **Cada turno cuenta entero en la jornada en la que empezo** (RN-05,
+          regla dura 4): un 22:00 → 06:00 suma en el dia de entrada. La
+          agrupacion es por jornada, nunca por la hora de las marcas en UTC.
+        - **Los tramos anulados y las versiones sustituidas no cuentan**: solo la
+          version vigente de cada tramo (ADR-026).
+        - **Una incidencia sin resolver no descuenta horas**: se cuenta en
+          `incident_days` y se deja a la vista (RN-08: detectar no corrige).
+        - **Los dias sin actividad aparecen con cero y no se omiten.** Para un
+          informe de absentismo, omitirlos es un error.
+          `days_with_activity + days_without_activity` es siempre
+          `days_in_period`.
+        - **Los dias con un turno todavia abierto no aportan minutos** salvo que
+          se pida `include_open_shifts`; en los dos casos cuentan como dia con
+          actividad y salen en `open_shift_days`.
+
+        ## Las horas, dos veces
+
+        `*_minutes` es un entero para quien calcula y `worked`, `contracted`,
+        `deviation` y `overtime` son `HH:MM` para quien lee. **Nunca una hora
+        decimal**: «7,75 horas» obliga a interpretar y ademas cambia de sentido
+        segun el separador decimal del programa que abra el fichero.
+
+        ## Lo contratado (RF-IN-03)
+
+        Se prorratea por **dia natural** de vigencia del contrato:
+        `dias de vigencia × horas semanales ÷ 7`, redondeado una sola vez al
+        final. Se reparte por dia natural y no por dia laborable porque el
+        producto no modela el cuadrante teorico de nadie: repartir entre cinco
+        dias inventaria un descanso en fin de semana que en un hotel no existe.
+
+        Los dias sin contrato vigente **no suman y se informan**:
+        `meta.contract_coverage` dice cuantos son y a cuantas personas afectan. No
+        se supone ningun contrato por omision — seria inventar un dato de nomina.
+
+        ## Quien entra
+
+        Toda la plantilla del alcance, **incluida la que causo baja durante el
+        periodo** (RN-14, RF-GP-03): un informe de marzo que se olvidara de quien
+        se fue el dia 20 daria un total que no cuadra con ninguna nomina.
+
+        ## Alcance y auditoria
+
+        El alcance por departamento se aplica **dentro de la consulta**, agregados
+        incluidos (RF-ID-03): un total por centro servido a quien alcanza un solo
+        departamento seria una fuga por agregacion. `department_id` y
+        `employee_uuid` son **filtros**: uno fuera del alcance devuelve un informe
+        vacio, no un `403`.
+
+        Generarlo es un acceso a datos personales de terceros y **queda registrado
+        en `audit_log`** con su alcance —periodo, granularidad, cuantas personas—
+        y nunca con lo divulgado (RS-05).
+
+        ## Sincrono, con techo
+
+        Se entrega en el acto por debajo del presupuesto de RNF-P-05. Por encima
+        —mas de tres meses de rango, demasiadas filas o una consulta que agota su
+        tiempo— responde `422` remitiendo a la generacion en diferido de RF-IN-06,
+        en vez de intentarlo y acabar en un `504` con la base de datos del fichaje
+        ocupada.
+
+        **`reports:*`, no `reports:legal`.** El `auditor` lleva el estrecho y se
+        queda fuera: lo suyo es `GET /api/v1/reports/legal-export`. El
+        `responsable_departamento` tampoco llega: el documento 02 §7.3 no le da
+        ningun ambito de informes.
+      tags: [Reporting]
+      security:
+        - managementToken: ['reports:*']
+      parameters:
+        - $ref: '#/components/parameters/PeriodReportFrom'
+        - $ref: '#/components/parameters/PeriodReportTo'
+        - $ref: '#/components/parameters/ReportGranularityParam'
+        - $ref: '#/components/parameters/ReportGroupByParam'
+        - $ref: '#/components/parameters/ReportDepartmentId'
+        - $ref: '#/components/parameters/ReportEmployeeUuid'
+        - $ref: '#/components/parameters/ReportIncludeOpenShifts'
+      responses:
+        '200':
+          description: |
+            Las filas del informe, ordenadas por sujeto y despues por periodo, con
+            los criterios con los que se calcularon.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PeriodReport'
+              examples:
+                mes-por-empleado:
+                  summary: Marzo por empleado, con cambio de contrato a mitad de mes
+                  value:
+                    from: '2026-03-01'
+                    to: '2026-03-31'
+                    granularity: month
+                    group_by: employee
+                    data:
+                      - period:
+                          from: '2026-03-01'
+                          to: '2026-03-31'
+                        subject:
+                          kind: employee
+                          employee_uuid: 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                          employee_code: '739104'
+                          full_name: Lucía Amrani
+                          department_id: 3
+                          label: Lucía Amrani
+                        worked_minutes: 9720
+                        worked: '162:00'
+                        shift_count: 21
+                        days_in_period: 31
+                        days_with_activity: 21
+                        days_without_activity: 10
+                        open_shift_days: 0
+                        incident_days: 1
+                        contracted_minutes: 9257
+                        contracted: '154:17'
+                        deviation_minutes: 463
+                        deviation: '07:43'
+                        overtime_minutes: 463
+                        overtime: '07:43'
+                        days_without_contract: 0
+                    meta:
+                      time_zone: Europe/Madrid
+                      generated_at: '2026-04-01T07:12:03.114000Z'
+                      row_count: 1
+                      criteria:
+                        - Los totales salen del registro horario ya consolidado (proyección de jornadas), no se recalculan para este informe.
+                        - 'Cada turno se atribuye entero a la jornada en la que empezó, en la zona horaria del centro: un turno de 22:00 a 06:00 cuenta en el día de entrada y no se parte a medianoche.'
+                        - 'No se cuentan los tramos anulados ni las versiones sustituidas por una corrección: solo la versión vigente de cada tramo.'
+                        - Una incidencia sin resolver no descuenta horas. Los días con incidencia se cuentan aparte, en la columna correspondiente, para que se revisen.
+                        - Los días sin actividad aparecen con cero y no se omiten. En los agregados por departamento o centro, los contadores de días son días-persona.
+                        - 'Las horas contratadas del periodo se prorratean por día natural de vigencia del contrato: días de vigencia × horas semanales ÷ 7. Los días sin contrato vigente no suman y se informan aparte.'
+                        - El informe solo incluye a las personas que están dentro del alcance de quien lo pide, incluidas las que causaron baja durante el periodo.
+                        - Los días con un turno todavía abierto no aportan minutos, porque la jornada aún no ha terminado. Cuentan como día con actividad y se indican aparte.
+                      contract_coverage:
+                        days_without_contract: 0
+                        employees_without_contract: 0
+                        complete: true
+                departamento-vacio:
+                  summary: Un departamento sin actividad en el periodo
+                  value:
+                    from: '2026-03-01'
+                    to: '2026-03-07'
+                    granularity: range
+                    group_by: department
+                    data:
+                      - period:
+                          from: '2026-03-01'
+                          to: '2026-03-07'
+                        subject:
+                          kind: department
+                          employee_uuid: null
+                          employee_code: null
+                          full_name: null
+                          department_id: 7
+                          label: Mantenimiento
+                        worked_minutes: 0
+                        worked: '00:00'
+                        shift_count: 0
+                        days_in_period: 7
+                        days_with_activity: 0
+                        days_without_activity: 7
+                        open_shift_days: 0
+                        incident_days: 0
+                        contracted_minutes: 2400
+                        contracted: '40:00'
+                        deviation_minutes: -2400
+                        deviation: '-40:00'
+                        overtime_minutes: 0
+                        overtime: '00:00'
+                        days_without_contract: 0
+                    meta:
+                      time_zone: Europe/Madrid
+                      generated_at: '2026-03-08T06:00:00.000000Z'
+                      row_count: 1
+                      criteria:
+                        - Los totales salen del registro horario ya consolidado (proyección de jornadas), no se recalculan para este informe.
+                      contract_coverage:
+                        days_without_contract: 0
+                        employees_without_contract: 0
+                        complete: true
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: |
+            La instalacion todavia no tiene centro configurado, asi que no hay
+            zona horaria en la que expresar el informe (RF-PD-03, ADR-040). Es un
+            estado de la instalacion, no un error de quien pregunta.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: |
+            La peticion no es valida **o** el informe no cabe en una respuesta
+            sincrona (RNF-P-05).
+
+            Lo segundo tambien es `422` y no `503`: el servicio esta bien, lo que
+            no se puede es atender esa peticion en el acto. El `detail` dice con
+            cifras si sobra rango, si sobran filas o si la consulta agoto su
+            tiempo, y en los tres casos la salida es reducir el rango, subir la
+            granularidad o esperar a la generacion en diferido de RF-IN-06.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ValidationProblem'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/reports/period/export:
+    get:
+      operationId: exportPeriodReport
+      summary: Descarga del informe de horas por periodo
+      description: |
+        El **mismo** informe que devuelve `GET /api/v1/reports/period`, servido
+        como fichero descargable en CSV, XLSX o PDF (RF-IN-04).
+
+        ## Es el mismo informe, no otra consulta
+
+        Mismos parametros, mismo alcance, mismo ambito (`reports:*`), misma
+        policy y mismos techos sincronos. El fichero se construye sobre el
+        resultado de esa consulta y no sobre una SQL propia: si tuviera la suya,
+        el fichero que alguien adjunta a un correo y la tabla que estaba mirando
+        podrian discrepar, y el que se creeria seria el equivocado.
+
+        **No es la exportacion para la Inspeccion de Trabajo.** Esa es
+        `GET /api/v1/reports/legal-export` (RF-IN-05, RL-03, RL-06), tiene su
+        formato normalizado, su manifiesto y su propio ambito. Esta es la
+        comodidad de RRHH y de cada responsable: llevarse a una hoja de calculo
+        lo que ya se consulta en pantalla.
+
+        ## Las horas van como texto `HH:MM` en los tres formatos
+
+        Nunca un decimal, tampoco en el XLSX: «7,75» obliga a interpretar y
+        cambia de sentido segun el separador decimal del programa que lo abra.
+        Las celdas de duracion son **texto**, incluidas las negativas
+        (`-12:30`, desviacion por debajo de lo contratado) y las mayores de 24 h
+        (`168:00`, el total de un mes).
+
+        ## Los criterios de inclusion van dentro del fichero
+
+        Los mismos que `meta.criteria` de la consulta JSON, en el idioma de la
+        instalacion: bloque de cabecera en el CSV, hoja «Criterios» en el XLSX y
+        seccion propia en el PDF. Nunca ocultos en las propiedades del
+        documento: un informe de horas sin ellos es una tabla de numeros que
+        cada persona interpreta a su manera.
+
+        ## La huella del contenido (`X-Kronoqr-Report-Digest`)
+
+        SHA-256 **del contenido**, no del binario: se calcula sobre una
+        serializacion canonica de las filas, los criterios (sus claves, sin
+        traducir) y el periodo. Dos descargas del mismo informe —en dos formatos
+        distintos o en dos momentos distintos— dan la misma huella; si cambia una
+        hora, cambia la huella. Por eso es verificable y por eso no incluye el
+        instante de generacion ni quien lo pidio.
+
+        El PDF la imprime en el pie de cada pagina junto al sello temporal, la
+        cuenta emisora y el periodo; los tres formatos la publican en esta
+        cabecera y la escriben en su bloque de criterios.
+
+        ## Autorizacion y auditoria
+
+        Las mismas dos comprobaciones que la consulta JSON: ambito `reports:*`
+        —no `reports:legal`— y policy de rol `{admin, rrhh}`. El alcance por
+        departamento entra **dentro** de la consulta (RF-ID-03).
+
+        Descargar el informe es un acceso a datos personales de terceros y
+        **queda registrado en `audit_log`** con su alcance —periodo,
+        granularidad, cuantas personas, y `format` con el formato descargado—
+        y nunca con lo divulgado (RS-05, regla dura 6). El asiento es el mismo
+        de la consulta JSON, distinguido por ese campo: asi «quien se llevo estas
+        horas y en que» se responde con una sola consulta al trail.
+      tags: [Reporting]
+      security:
+        - managementToken: ['reports:*']
+      parameters:
+        - $ref: '#/components/parameters/PeriodReportExportFormat'
+        - $ref: '#/components/parameters/PeriodReportFrom'
+        - $ref: '#/components/parameters/PeriodReportTo'
+        - $ref: '#/components/parameters/ReportGranularityParam'
+        - $ref: '#/components/parameters/ReportGroupByParam'
+        - $ref: '#/components/parameters/ReportDepartmentId'
+        - $ref: '#/components/parameters/ReportEmployeeUuid'
+        - $ref: '#/components/parameters/ReportIncludeOpenShifts'
+      responses:
+        '200':
+          description: |
+            El fichero, transmitido en streaming. El tipo de contenido depende
+            de `format`.
+
+            Un informe sin filas es una respuesta valida y **tambien lleva sus
+            criterios**: «no hay nadie con horas en ese periodo» es una
+            afirmacion que hay que poder descargar.
+          headers:
+            Content-Disposition:
+              description: |
+                Adjunto, con un nombre de fichero que **no lleva ningun nombre de
+                persona** ni ningun identificador de empleado: solo el periodo
+                (regla dura 21).
+              schema:
+                type: string
+                examples: ['attachment; filename=kronoqr-horas-2026-03-01_2026-03-31.xlsx']
+            Cache-Control:
+              description: 'Siempre `no-store`: el cuerpo lleva horas de personas identificadas.'
+              schema:
+                type: string
+                examples: ['no-store, private']
+            X-Kronoqr-Report-Digest:
+              description: |
+                Huella SHA-256 del contenido, en hexadecimal minusculo. La misma
+                que imprime el pie del PDF y la misma para los tres formatos del
+                mismo informe.
+              schema:
+                type: string
+                pattern: '^[0-9a-f]{64}$'
+              example: 3d9c8f0a1b2c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6
+            X-Kronoqr-Report-Rows:
+              description: Filas de datos que lleva el fichero. Permite comprobar que la descarga esta completa.
+              schema:
+                type: integer
+                minimum: 0
+              example: 500
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: |
+            La instalacion todavia no tiene centro configurado, asi que no hay
+            zona horaria en la que expresar el informe (RF-PD-03, ADR-040).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: |
+            La peticion no es valida —formato desconocido, rango invertido— **o**
+            el informe no cabe en una respuesta sincrona (RNF-P-05), igual que en
+            la consulta JSON.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ValidationProblem'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          description: |
+            Solo con `format=pdf`: el motor de composicion de PDF no esta
+            disponible en esta instalacion (falta Chromium, o no arranca).
+
+            Se responde `503` con `problem+json` y **no un `500` opaco**: no hay
+            nada que corregir en la peticion, la salida es descargar el mismo
+            informe en CSV o en XLSX, y quien administra la instalacion tiene en
+            el `detail` el motivo. Los otros dos formatos no dependen de el.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
   /api/v1/reports/legal-export:
     get:
       operationId: generateLegalExport
@@ -3318,6 +3914,219 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/incidents:
+    get:
+      operationId: listIncidents
+      summary: Bandeja de incidencias
+      description: |
+        Lo que del registro horario tiene que mirar una persona, paginado
+        (RF-PA-05, RF-PR-01, documento 01 §5.5).
+
+        **Por omision solo las abiertas.** `status=open` es la pregunta que hace
+        quien abre la bandeja: que tengo pendiente. Las resueltas y las
+        descartadas no desaparecen —nada se borra (regla dura 5)— pero hay que
+        pedirlas.
+
+        **El orden es el de trabajo, no el de creacion**: primero la severidad
+        —`high`, `medium`, `low`— y dentro de ella la mas reciente primero. Se
+        resuelve sobre el indice parcial `incidents_open_by_assignee`, no
+        ordenando el historico entero.
+
+        **El alcance por departamento de RF-ID-03 entra en la consulta**, no
+        filtra despues: un `responsable_departamento` recibe una pagina que solo
+        contiene incidencias de la gente de los departamentos que dirige
+        —`meta.total` incluido— y `admin` y `rrhh` la ven entera. Un responsable
+        **sin ningun departamento asignado** recibe una pagina vacia, no la
+        bandeja completa. Filtrar despues de contar daria un `meta.total` que
+        describe a personas que quien pregunta no puede ver.
+
+        Los filtros **no** devuelven `403` cuando apuntan fuera del alcance:
+        devuelven una pagina vacia. Un filtro es una peticion de acotar y no la
+        peticion de un recurso ajeno, y responder `403` convertiria el
+        desplegable de departamentos del panel en un generador de errores (mismo
+        criterio que `GET /api/v1/employees` y que `GET /api/v1/attendance/live`).
+
+        **La severidad no la elige nadie**: la decide el tipo de incidencia, de
+        modo que el mismo hecho entra siempre en la bandeja con la misma
+        prioridad. Por eso no hay ningun endpoint para cambiarla.
+
+        **Es un acceso a datos personales de terceros** y queda registrado en
+        `audit_log` con su alcance —cuantas filas, que filtros— y nunca con lo
+        divulgado (RS-05, regla dura 21).
+      tags: [Compliance]
+      security:
+        - managementToken: ['incidents:*']
+      parameters:
+        - $ref: '#/components/parameters/IncidentStatusFilter'
+        - $ref: '#/components/parameters/IncidentTypeFilter'
+        - $ref: '#/components/parameters/IncidentSeverityFilter'
+        - $ref: '#/components/parameters/DepartmentFilter'
+        - $ref: '#/components/parameters/IncidentEmployeeFilter'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Pagina de la bandeja.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentCollection'
+              examples:
+                bandeja-abierta:
+                  summary: Lo pendiente del responsable de cocina
+                  value:
+                    data:
+                      - id: 412
+                        type: insufficient_rest
+                        severity: high
+                        status: open
+                        employee:
+                          uuid: 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                          employee_code: E7QK2MXPR
+                          full_name: Youssef Amrani
+                          department:
+                            id: 3
+                            name: Cocina
+                        work_date: '2026-03-14'
+                        shift_entry_uuid: 0199f2c1-8a10-7b40-9c50-6d7e8f9a0b11
+                        detected_at: '2026-03-15T03:30:00.000000Z'
+                        context:
+                          rest_minutes: 420
+                          threshold_minutes: 720
+                        assigned_to:
+                          uuid: 0199f0aa-1111-7000-8000-0123456789ab
+                          name: Jefa de cocina
+                        resolved_at: null
+                        resolved_by: null
+                        resolution_note: null
+                    meta:
+                      page: 1
+                      per_page: 25
+                      total: 1
+                      total_pages: 1
+                      time_zone: Europe/Madrid
+                      generated_at: '2026-03-15T08:00:00.000000Z'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/incidents/{id}/resolve:
+    parameters:
+      - $ref: '#/components/parameters/IncidentId'
+    post:
+      operationId: resolveIncident
+      summary: Resolver o descartar una incidencia
+      description: |
+        Da una incidencia por trabajada, con nota obligatoria (RF-PA-05).
+
+        **`outcome` distingue dos desenlaces que no son lo mismo.** `resolved`
+        dice «habia algo y se ha arreglado» —normalmente con una correccion
+        trazada de RF-PA-04, que se hace aparte— y `dismissed` dice «se ha
+        mirado y no habia nada que arreglar». Con un solo desenlace, el
+        indicador «tiempo medio hasta resolver» del documento 01 §9.2 mezclaria
+        trabajo real con falsos positivos y no serviria para ajustar los
+        umbrales.
+
+        **La nota es obligatoria en los dos casos.** Es la mitad de la traza que
+        RN-13 exige de cualquier intervencion humana sobre el registro: sin ella
+        la bandeja se vacia y seis meses despues nadie puede explicar por que.
+
+        **Esto no cambia ni una hora del registro horario.** Resolver una
+        incidencia no cierra ningun turno ni mueve ninguna marca (RN-08): si hay
+        que rectificar, se rectifica con `PATCH /api/v1/shift-entries/{uuid}`,
+        que exige el ambito `attendance:correct` y deja su propia traza. Esta
+        operacion solo dice que alguien la ha mirado.
+
+        **Se resuelve una sola vez.** Una incidencia que ya esta `resolved` o
+        `dismissed` devuelve `409`: la accion siguiente es releerla, no
+        reintentar. Dos peticiones simultaneas producen una resolucion y un
+        `409`, no dos notas encadenadas.
+
+        **Alcance por departamento** (RF-ID-03). Un `responsable_departamento`
+        que intenta resolver una incidencia de gente de otro departamento recibe
+        `403` —no `404`: la incidencia existe y el problema es de autorizacion—
+        y el intento queda en `audit_log` con el `employee_uuid` afectado y
+        nunca con su nombre (RS-05, regla dura 21).
+
+        Deja asiento `incident.resolved` en `audit_log` con el actor real de la
+        peticion, y observa el histograma `incident_resolution_seconds{type}`
+        entre `detected_at` y la resolucion (documento 02 §8.2).
+      tags: [Compliance]
+      security:
+        - managementToken: ['incidents:*']
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolveIncidentRequest'
+            examples:
+              resuelta:
+                summary: Habia algo y se ha corregido
+                value:
+                  outcome: resolved
+                  note: Corregida la salida olvidada del dia 14 con el parte de turno.
+              descartada:
+                summary: Se ha mirado y no habia nada
+                value:
+                  outcome: dismissed
+                  note: Doblo turno con autorizacion escrita del jefe de departamento.
+      responses:
+        '200':
+          description: |
+            La incidencia ya cerrada, con su desenlace, su nota y quien la firmo.
+            Se devuelve entera para que el panel sustituya la fila sin volver a
+            pedir la bandeja.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Incident'
+              examples:
+                resuelta:
+                  value:
+                    id: 412
+                    type: insufficient_rest
+                    severity: high
+                    status: resolved
+                    employee:
+                      uuid: 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                      employee_code: E7QK2MXPR
+                      full_name: Youssef Amrani
+                      department:
+                        id: 3
+                        name: Cocina
+                    work_date: '2026-03-14'
+                    shift_entry_uuid: 0199f2c1-8a10-7b40-9c50-6d7e8f9a0b11
+                    detected_at: '2026-03-15T03:30:00.000000Z'
+                    context:
+                      rest_minutes: 420
+                      threshold_minutes: 720
+                    assigned_to:
+                      uuid: 0199f0aa-1111-7000-8000-0123456789ab
+                      name: Jefa de cocina
+                    resolved_at: '2026-03-15T08:12:44.100000Z'
+                    resolved_by:
+                      uuid: 0199f0aa-1111-7000-8000-0123456789ab
+                      name: Jefa de cocina
+                    resolution_note: Corregida la salida olvidada del dia 14 con el parte de turno.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -3724,6 +4533,233 @@ components:
         type: string
         format: date
       example: '2026-03-31'
+
+    PeriodReportFrom:
+      name: from
+      in: query
+      required: true
+      description: |
+        Primera **jornada** del informe, inclusive. Es una fecha civil en la zona
+        del centro, no un instante: agrupar por jornada y no por la hora de las
+        marcas es lo que mantiene entero un turno que cruza la medianoche (RN-05,
+        regla dura 4).
+
+        **Obligatoria**, al contrario que en `GET /api/v1/employees/{uuid}/workdays`.
+        Alli tiene omision porque la pantalla se abre sola con el ultimo mes; aqui
+        quien pide un informe de horas ha elegido un periodo, y un informe sobre un
+        rango que nadie pidio es exactamente la cifra que despues alguien lleva a
+        una reunion de nomina creyendo que es otra.
+      schema:
+        type: string
+        format: date
+      example: '2026-03-01'
+
+    PeriodReportTo:
+      name: to
+      in: query
+      required: true
+      description: |
+        Ultima jornada del informe, inclusive. Obligatoria, por lo mismo que
+        `from`.
+
+        El rango no puede exceder **tres meses** en la respuesta sincrona: por
+        encima, el informe se pide en diferido (RF-IN-06). El techo es
+        configuracion de la instalacion, no una regla de negocio.
+      schema:
+        type: string
+        format: date
+      example: '2026-03-31'
+
+    ReportGranularityParam:
+      name: granularity
+      in: query
+      required: false
+      description: |
+        Grano de agrupacion. Por omision `day`, que es el de la fuente —una fila
+        por persona y jornada— y el unico que no agrega nada: suponer «mes» porque
+        es lo que mas se pide seria decidir por quien pregunta.
+
+        Las semanas empiezan en **lunes** (ISO 8601) y los cubos parciales se
+        **recortan al rango pedido**: una semana a caballo del 1 de marzo, en un
+        informe que empieza el 1, se devuelve como `2026-03-01 → 2026-03-01`. La
+        fila describe exactamente los dias que ha contado.
+      schema:
+        $ref: '#/components/schemas/ReportGranularity'
+
+    ReportGroupByParam:
+      name: group_by
+      in: query
+      required: false
+      description: |
+        Sobre que sujeto se agregan las horas. Por omision `employee`, que es la
+        pregunta de partida de RF-IN-01; los agregados de RF-IN-02 se piden.
+
+        Con `department` o `site`, los contadores de dias son **dias-persona**:
+        `days_in_period` es personas × dias naturales del cubo.
+      schema:
+        $ref: '#/components/schemas/ReportGrouping'
+
+    ReportDepartmentId:
+      name: department_id
+      in: query
+      required: false
+      description: |
+        Acota el informe a un departamento.
+
+        **Es un filtro, no una autorizacion.** Un departamento inexistente es un
+        `422` —hay una errata que corregir— y uno existente pero fuera del alcance
+        de quien pregunta devuelve un informe vacio, no un `403`: responder `403`
+        confirmaria que ese departamento existe y convertiria el desplegable del
+        panel en un generador de errores.
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+      example: 3
+
+    ReportEmployeeUuid:
+      name: employee_uuid
+      in: query
+      required: false
+      description: |
+        Acota el informe a una persona, por su identificador **publico**.
+
+        Filtro y no autorizacion, igual que `department_id`: alguien fuera del
+        alcance devuelve un informe vacio.
+      schema:
+        type: string
+        format: uuid
+      example: 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+
+    ReportIncludeOpenShifts:
+      name: include_open_shifts
+      in: query
+      required: false
+      description: |
+        Si los dias con un turno todavia abierto aportan los minutos que **ya
+        tienen cerrados**.
+
+        Por omision `false`. Un tramo sin cerrar vale cero en la proyeccion
+        —todavia no ha terminado—, asi que ese dia daria una cifra a medias justo
+        en la comparacion contra lo contratado. En los dos casos el dia cuenta
+        como dia con actividad y sale en `open_shift_days`, y el criterio aplicado
+        se escribe en `meta.criteria`.
+
+        Ni con `true` se estima nada del turno en curso: se suma lo que ya esta
+        cerrado y nada mas.
+      schema:
+        type: boolean
+        default: false
+      example: false
+
+    PeriodReportExportFormat:
+      name: format
+      in: query
+      required: true
+      description: |
+        Formato del fichero. **Parametro explicito y no negociacion por
+        `Accept`**, por tres motivos: sobrevive a un enlace y a un historial de
+        descargas, queda en el registro de acceso sin tener que reconstruirlo
+        desde una cabecera, y el cliente TypeScript que se genera de este
+        contrato no sabe elegir entre tres respuestas binarias distintas por
+        `Accept`.
+
+        - **`csv`** — UTF-8 **con BOM** y separador segun el idioma de la
+          instalacion (`;` en `es`, `,` en el resto), que es lo que espera la
+          hoja de calculo de quien lo abre. Lleva el bloque de criterios visible
+          antes de la tabla, nunca oculto.
+        - **`xlsx`** — hoja «Horas» con la cabecera congelada y anchos de
+          columna, y hoja «Criterios» con el periodo, los criterios y la huella.
+          **Las horas son texto `HH:MM`, nunca un decimal.**
+        - **`pdf`** — el mismo contenido con pie de pagina sellado en cada
+          pagina: instante de generacion en la zona del centro, cuenta que lo
+          emitio, periodo y huella SHA-256 del contenido.
+
+        No es la exportacion normalizada para la Inspeccion
+        (`GET /api/v1/reports/legal-export`, RF-IN-05): esto es la comodidad de
+        descargar lo que ya se esta mirando en pantalla.
+      schema:
+        type: string
+        enum: [csv, xlsx, pdf]
+      example: xlsx
+
+    IncidentId:
+      name: id
+      in: path
+      required: true
+      description: |
+        Identificador de la incidencia (`incidents.id`).
+
+        **Es la clave interna, y aqui si.** El resto de la API identifica por
+        UUID publico porque lo que hay al otro lado es una persona, una tarjeta
+        o un tramo de su jornada, y un identificador secuencial diria cuanta
+        gente hay y en que orden entro. Una incidencia no es nadie: es una fila
+        de trabajo interno que solo existe dentro del panel, no viaja impresa ni
+        se enseña a un tercero, y su numero no revela nada sobre la plantilla.
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+      example: 412
+
+    IncidentStatusFilter:
+      name: status
+      in: query
+      required: false
+      description: |
+        Situacion de la incidencia. **`open` por omision**, que es la pregunta
+        que hace quien abre la bandeja: que tengo pendiente.
+
+        No hay valor «todas»: las tres situaciones se piden una a una. Una
+        bandeja que mezclara lo pendiente con lo ya trabajado obligaria a
+        distinguirlo fila a fila justo en la pantalla que existe para no tener
+        que hacerlo.
+      schema:
+        $ref: '#/components/schemas/IncidentStatus'
+      example: open
+
+    IncidentTypeFilter:
+      name: type
+      in: query
+      required: false
+      description: |
+        Limita la bandeja a un tipo de incidencia (documento 01 §5.5).
+
+        Hace falta desde el primer dia: una instalacion con turnos continuados
+        puede tener cientos de `missing_break` a la vez, y sin este filtro
+        taparian a los `insufficient_rest`, que son los que tienen consecuencia
+        sancionadora.
+      schema:
+        $ref: '#/components/schemas/IncidentType'
+      example: insufficient_rest
+
+    IncidentSeverityFilter:
+      name: severity
+      in: query
+      required: false
+      description: |
+        Limita la bandeja a una severidad. **No se puede cambiar la de una
+        incidencia**: la decide su tipo, para que el mismo hecho no entre en la
+        bandeja con dos prioridades segun quien lo mire.
+      schema:
+        $ref: '#/components/schemas/IncidentSeverity'
+      example: high
+
+    IncidentEmployeeFilter:
+      name: employee_uuid
+      in: query
+      required: false
+      description: |
+        Limita la bandeja a las incidencias de una persona, por su identificador
+        **publico** (`employees.uuid`). Es lo que pide la ficha de empleado
+        cuando enseña «lo que hay abierto sobre esta persona».
+
+        Fuera del alcance de quien pregunta devuelve una pagina vacia, no `403`:
+        es un filtro, no la peticion de un recurso ajeno.
+      schema:
+        type: string
+        format: uuid
+      example: 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
 
     Page:
       name: page
@@ -5743,7 +6779,15 @@ components:
         La excepcion es `employee_uuid`, que acota tambien el recuento porque
         acota la consulta: ahi `employees` vale 1 y no es una cobertura.
       additionalProperties: false
-      required: [employees, pending_print, without_delivered_credential]
+      required:
+        [
+          employees,
+          pending_print,
+          without_delivered_credential,
+          retiring_key_id,
+          pending_reprint,
+          active_unknown_key,
+        ]
       properties:
         employees:
           type: integer
@@ -5763,6 +6807,64 @@ components:
             **Debe llegar a cero antes del primer dia de cada incorporacion**
             (doc 02 §8.2). Incluye a quien la tiene impresa pero sin entregar: un
             PDF impreso que sigue en una bandeja no sirve de nada a las 06:00.
+        retiring_key_id:
+          type: [string, 'null']
+          pattern: '^[A-Za-z0-9]{2}$'
+          description: |
+            La clave de firma **saliente** cuando hay una rotacion en curso
+            (RF-QR-07, doc 02 §5.3), o `null` fuera de una rotacion, que es el
+            estado normal.
+
+            Sale del llavero de la instalacion y no de la peticion. **No es un
+            secreto**: el `key_id` va impreso en el QR de cada tarjeta como
+            primera parte del payload (ADR-005). La clave, obviamente, no sale
+            por ninguna parte de esta API.
+
+            Es lo que permite al panel enterarse de que hay una rotacion abierta
+            sin que nadie tenga que teclear un identificador, y lo que se pasa
+            despues como `?key_id=` para ver a quien le falta.
+          examples: ['a3']
+        pending_reprint:
+          type: integer
+          minimum: 0
+          description: |
+            Cuantas personas siguen fichando con una tarjeta firmada por
+            `retiring_key_id`. **Es el avance de la reimpresion**: baja a medida
+            que se entregan las tarjetas nuevas y, cuando llega a cero, la clave
+            anterior se puede retirar (`php artisan credentials:retire-key`).
+
+            Vale `0` fuera de una rotacion. **No se solapa con
+            `without_delivered_credential`**: estas personas **si pueden fichar**
+            —el solape existe justo para eso—, asi que contarlas alli levantaria
+            una alerta que no corresponde a ningun problema.
+
+            Se publica tambien como `credentials_pending_reprint{site,key_id}`
+            (doc 02 §8.2).
+        active_unknown_key:
+          type: integer
+          minimum: 0
+          description: |
+            Tarjetas **activas** firmadas con una clave que la instalacion **ya
+            no reconoce**. Quien lleve una de ellas **no puede fichar ahora
+            mismo** (RF-QR-07).
+
+            **Tiene que ser cero.** Es el unico numero de este resumen que
+            describe una averia y no un proceso, y por eso existe: si
+            `QR_SIGNING_KEY_PREVIOUS` se vacia antes de terminar la reimpresion
+            —el escenario de clave comprometida—, esas personas se quedan sin
+            poder fichar y **el resto del panel no lo delata**: su fila se ve
+            entregada y correcta, y `pending_reprint` vale cero porque esa clave
+            ya no es la saliente de ninguna rotacion.
+
+            **No se acota con `employee_uuid`**, y es la unica excepcion a esa
+            regla en todo el resumen: es un recuento de la instalacion. Acotarlo
+            lo pondria a cero justo al abrir la ficha de la persona afectada,
+            que es cuando hace falta verlo.
+
+            Sin desglose por `key_id`: el panel da la voz de alarma y el
+            diagnostico esta en `php artisan credentials:status`, que dice que
+            claves son, y en `credentials_active_unknown_key{site,key_id}`.
+            Procedimiento en `docs/runbooks/rotacion-clave-qr.md` §6.
 
     CredentialStatusBoard:
       type: object
@@ -6127,6 +7229,7 @@ components:
         - recalculated_at
         - shift_entries
         - corrections
+        - incidents
       properties:
         work_date:
           type: string
@@ -6179,6 +7282,30 @@ components:
             sin volver a consultar nada.
           items:
             $ref: '#/components/schemas/WorkDayCorrection'
+        incidents:
+          type: array
+          description: |
+            Lo que hay abierto o ya trabajado sobre esta jornada (RF-PA-05,
+            RF-PR-01), para que el panel incruste la marca en el detalle sin una
+            segunda llamada. **Solo la ficha de cada una** —identificador, tipo,
+            severidad y situacion—: la nota de resolucion, el contexto y el
+            responsable estan en `GET /api/v1/incidents`.
+
+            Es distinto de `has_incident`, que sigue significando lo que
+            significaba: algun tramo de la jornada quedo clasificado como
+            `anomalous` (RN-07, RN-08). Una jornada puede tener incidencias sin
+            ningun tramo anomalo —RN-10 mira el descanso ENTRE jornadas— y al
+            reves.
+
+            **En `GET /api/v1/me/workdays` viene siempre vacio.** Si el propio
+            empleado debe ver las incidencias abiertas sobre su jornada es una
+            decision de producto que ningun requisito cubre hoy: RF-ID-05 y RL-05
+            le reconocen su registro horario, y una incidencia no es el registro,
+            es la revision interna de ese registro. Se deja el campo con la misma
+            forma en las dos rutas para no partir en dos el esquema
+            `EmployeeWorkDays`, que es compartido a proposito.
+          items:
+            $ref: '#/components/schemas/WorkDayIncident'
 
     WorkDayShiftEntry:
       type: object
@@ -6699,3 +7826,824 @@ components:
             es la marca del fichaje; en una correccion, el momento en que se
             rectifico. Sirve para descartar un mensaje que llegue tarde y
             reordenado detras de otro mas reciente de la misma persona.
+
+    # --- Incidencias del registro horario (RF-PA-05, RF-PR-01, tareas 2.5 y 2.6)
+
+    IncidentType:
+      type: string
+      title: IncidentType
+      description: |
+        Que se ha encontrado (`incidents.type`, documento 01 §5.5).
+
+        - `open_shift_expired`: un turno lleva abierto mas de lo admisible
+          (RN-08). **El sistema no lo cierra nunca**: escribe esto y espera a una
+          persona.
+        - `short_shift`: el tramo esta por debajo de la duracion minima
+          computable (RN-07).
+        - `long_shift`: el tramo cerrado, o la suma de la jornada, supera la
+          duracion maxima (RN-08, RN-11).
+        - `missing_break`: tramo continuado sin pausa registrada (RN-12).
+        - `insufficient_rest`: el descanso entre jornadas queda por debajo del
+          minimo legal (RN-10, art. 34.3 ET).
+        - `clock_skew`: el fichaje llego con el reloj del quiosco desviado
+          (RN-15). Se registro igual: el quiosco nunca bloquea al empleado.
+        - `missing_clock_out`: olvido de salida ya cerrado por correccion manual
+          (RF-PA-04). No tiene detector automatico.
+        - `anomalous_pattern`: patron anomalo de uso de credencial (RF-PR-06,
+          RN-16). Su detector llega en la Fase 3; el catalogo lo admite desde
+          ahora para que la bandeja no necesite una migracion cuando exista.
+      enum:
+        - open_shift_expired
+        - short_shift
+        - long_shift
+        - missing_break
+        - insufficient_rest
+        - clock_skew
+        - missing_clock_out
+        - anomalous_pattern
+      example: insufficient_rest
+
+    IncidentSeverity:
+      type: string
+      title: IncidentSeverity
+      description: |
+        Con que urgencia entra en la bandeja (`incidents.severity`).
+
+        **La decide el tipo y no quien la abre ni quien la mira**, que es lo que
+        impide que el mismo hecho se clasifique con dos prioridades distintas. No
+        hay ningun endpoint para cambiarla.
+
+        - `high`: se ha incumplido una norma con consecuencia sancionadora, o hay
+          un indicio sobre una persona que no puede quedarse sin revisar.
+        - `medium`: el registro esta incompleto o no cuadra y alguien tiene que
+          corregirlo con traza (RN-13).
+        - `low`: el registro es valido y el dato es raro.
+
+        Tres niveles y no cinco: la severidad solo sirve si cambia el orden en que
+        alguien mira la bandeja.
+      enum: [low, medium, high]
+      example: high
+
+    IncidentStatus:
+      type: string
+      title: IncidentStatus
+      description: |
+        En que punto esta (`incidents.status`). Dos de los tres son finales.
+
+        - `open`: pendiente de que alguien la trabaje.
+        - `resolved`: habia algo y se ha arreglado.
+        - `dismissed`: se ha mirado y no habia nada que arreglar.
+
+        **No hay `acknowledged`**: un estado intermedio de «visto» solo tiene
+        sentido con reparto de trabajo entre varias personas, y aqui la
+        incidencia nace asignada al responsable del departamento.
+      enum: [open, resolved, dismissed]
+      example: open
+
+    IncidentOutcome:
+      type: string
+      title: IncidentOutcome
+      description: |
+        Los dos desenlaces con los que una persona cierra una incidencia. Son
+        `IncidentStatus` menos `open`: no hay forma de reabrir desde la API, y no
+        es un olvido — cerrar es final.
+
+        **La deteccion tampoco la reabre.** La restriccion
+        `one_incident_per_finding` cubre todos los estados, asi que el mismo
+        hallazgo —mismo empleado, misma jornada, mismo tipo y mismo tramo— no
+        vuelve a entrar aunque la jornada siga dentro de la ventana de revision.
+        Lo que si abre fila nueva es un hecho realmente nuevo: una correccion
+        estrena identificador de tramo (ADR-035), asi que la cuadrupla es otra.
+      enum: [resolved, dismissed]
+      example: resolved
+
+    IncidentEmployee:
+      type: object
+      title: IncidentEmployee
+      description: |
+        A quien afecta la incidencia, con lo justo para que la bandeja se pueda
+        trabajar: su identificador publico, su codigo y su nombre.
+      additionalProperties: false
+      required: [uuid, employee_code, full_name, department]
+      properties:
+        uuid:
+          type: string
+          format: uuid
+          description: |
+            Identificador **publico** del empleado. Es el unico identificador de
+            una persona que aparece en un log o en `audit_log` (regla dura 21);
+            el nombre de al lado viaja a la pantalla del panel autorizado y nunca
+            al log.
+          examples:
+            - 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+        employee_code:
+          type: string
+          minLength: 1
+          maxLength: 32
+          description: |
+            Codigo opaco impreso en su tarjeta (RF-ID-06). Va en la bandeja
+            porque es lo que se lee en voz alta cuando hay dos personas con el
+            mismo apellido.
+          examples:
+            - E7QK2MXPR
+        full_name:
+          type: string
+          minLength: 1
+          maxLength: 251
+          description: Nombre y apellidos, ya compuestos por el servidor.
+          examples:
+            - Youssef Amrani
+        department:
+          description: |
+            Departamento al que esta adscrita la persona. `null` cuando no tiene
+            ninguno, que es un estado legitimo: a quien no tiene departamento
+            solo lo ve una cuenta sin restriccion de alcance (RF-ID-03).
+          oneOf:
+            - $ref: '#/components/schemas/PresenceDepartment'
+            - type: 'null'
+
+    IncidentUser:
+      type: object
+      title: IncidentUser
+      description: |
+        Una cuenta de gestion: la que responde de la incidencia o la que la
+        cerro. **Por UUID y no por la clave interna**, igual que el autor de una
+        correccion en `WorkDayCorrection.performed_by`.
+      additionalProperties: false
+      required: [uuid, name]
+      properties:
+        uuid:
+          type: string
+          format: uuid
+          examples:
+            - 0199f0aa-1111-7000-8000-0123456789ab
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          examples:
+            - Jefa de cocina
+
+    IncidentContext:
+      type: object
+      title: IncidentContext
+      description: |
+        Los numeros que sostienen la incidencia: minutos medidos y umbral
+        aplicado en el momento de detectarla (`incidents.context`).
+
+        Va en la respuesta porque **el umbral puede cambiar despues** (RF-PD-07)
+        y sin el la incidencia no se puede explicar seis meses mas tarde. Las
+        claves dependen del tipo —`rest_minutes`/`threshold_minutes`,
+        `worked_minutes`/`threshold_minutes`, `skew_seconds`...— y el panel las
+        pinta como pares.
+
+        **Nunca lleva datos personales** (regla dura 21): solo enteros.
+      additionalProperties:
+        type: integer
+      examples:
+        - rest_minutes: 420
+          threshold_minutes: 720
+
+    Incident:
+      type: object
+      title: Incident
+      description: |
+        Una incidencia del registro horario (RF-PA-05, RF-PR-01, documento 01
+        §5.5): algo que tiene que mirar una persona.
+
+        **Los tres campos de cierre son nulos a la vez.** Con `status: open` no
+        hay `resolved_at`, ni `resolved_by`, ni `resolution_note`. No es
+        informacion que falte: es que todavia no ha pasado.
+      additionalProperties: false
+      required:
+        - id
+        - type
+        - severity
+        - status
+        - employee
+        - work_date
+        - shift_entry_uuid
+        - detected_at
+        - context
+        - assigned_to
+        - resolved_at
+        - resolved_by
+        - resolution_note
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+          description: |
+            Identificador de la incidencia. Es el que va en la URL de
+            `POST /api/v1/incidents/{id}/resolve`; ver el parametro `IncidentId`
+            para por que aqui si es la clave interna.
+          examples:
+            - 412
+        type:
+          $ref: '#/components/schemas/IncidentType'
+        severity:
+          $ref: '#/components/schemas/IncidentSeverity'
+        status:
+          $ref: '#/components/schemas/IncidentStatus'
+        employee:
+          $ref: '#/components/schemas/IncidentEmployee'
+        work_date:
+          type: string
+          format: date
+          description: |
+            Jornada a la que se refiere, en la zona del centro. Un turno
+            22:00 -> 06:00 pertenece entero al dia en que **empezo** (RN-05,
+            ADR-006, regla dura 4).
+          examples:
+            - '2026-03-14'
+        shift_entry_uuid:
+          description: |
+            El tramo que la explica (`shift_entries.uuid`), o `null` cuando la
+            incidencia es de la jornada entera: RN-11 mira la suma del dia y
+            ningun tramo por si solo la explica.
+
+            **Identifica una version** (ADR-035). Si el tramo se corrigio y fue
+            sustituido despues de detectarse, este campo puede quedar en `null`:
+            el hecho detectado sigue siendo cierto y la jornada sigue
+            identificada por persona y fecha.
+          oneOf:
+            - type: string
+              format: uuid
+            - type: 'null'
+        detected_at:
+          allOf:
+            - $ref: '#/components/schemas/UtcTimestamp'
+          description: |
+            Cuando la vio el sistema, que no es cuando ocurrio: eso es
+            `work_date`. La **antiguedad** de la incidencia se calcula contra
+            `meta.generated_at` y se muestra en `meta.time_zone`, no con el reloj
+            del navegador (regla dura 3).
+        context:
+          $ref: '#/components/schemas/IncidentContext'
+        assigned_to:
+          description: |
+            Quien responde de ella: el responsable del departamento del empleado
+            (`departments.manager_user_id`). `null` es un estado legitimo y
+            visible —un departamento puede quedarse sin responsable— y **no hace
+            que la incidencia se descarte**: queda sin asignar hasta que alguien
+            lo nombre. Perder el hallazgo por un hueco de configuracion seria lo
+            contrario de para lo que la deteccion existe.
+          oneOf:
+            - $ref: '#/components/schemas/IncidentUser'
+            - type: 'null'
+        resolved_at:
+          description: Cuando se cerro. `null` mientras siga abierta.
+          oneOf:
+            - $ref: '#/components/schemas/UtcTimestamp'
+            - type: 'null'
+        resolved_by:
+          description: |
+            Quien la cerro. **Siempre una persona**: la deteccion abre
+            incidencias con actor `system`, pero ninguna se cierra sola.
+          oneOf:
+            - $ref: '#/components/schemas/IncidentUser'
+            - type: 'null'
+        resolution_note:
+          description: |
+            Por que se dio por trabajada. Obligatoria al cerrarla (RN-13): sin
+            ella la bandeja se vacia y nadie puede explicar despues que se hizo.
+          oneOf:
+            - type: string
+              minLength: 1
+              maxLength: 1000
+            - type: 'null'
+          examples:
+            - Corregida la salida olvidada del dia 14 con el parte de turno.
+
+    IncidentCollection:
+      type: object
+      title: IncidentCollection
+      description: Pagina de la bandeja de incidencias.
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Incident'
+        meta:
+          $ref: '#/components/schemas/IncidentPageMeta'
+
+    IncidentPageMeta:
+      type: object
+      title: IncidentPageMeta
+      description: |
+        Situacion de la pagina dentro del total, mas lo que el panel necesita
+        para pintar la antiguedad de cada fila **sin adivinar** (regla dura 3).
+      additionalProperties: false
+      required: [page, per_page, total, total_pages, time_zone, generated_at]
+      properties:
+        page:
+          type: integer
+          minimum: 1
+        per_page:
+          type: integer
+          minimum: 1
+          maximum: 100
+        total:
+          type: integer
+          minimum: 0
+          description: |
+            Total de incidencias que casan con los filtros **dentro del alcance
+            de quien pregunta** (RF-ID-03), no de la instalacion.
+        total_pages:
+          type: integer
+          minimum: 0
+        time_zone:
+          $ref: '#/components/schemas/TimeZoneName'
+        generated_at:
+          allOf:
+            - $ref: '#/components/schemas/UtcTimestamp'
+          description: |
+            Reloj del **servidor** en el momento de responder. La antiguedad de
+            cada incidencia se calcula contra este instante y no contra el del
+            navegador: una tablet o un portatil con la hora mal puesta pintaria
+            «hace 3 horas» sobre algo de anteayer.
+
+    ResolveIncidentRequest:
+      type: object
+      title: ResolveIncidentRequest
+      description: |
+        Cerrar una incidencia. Dos campos y los dos obligatorios.
+      additionalProperties: false
+      required: [outcome, note]
+      properties:
+        outcome:
+          $ref: '#/components/schemas/IncidentOutcome'
+        note:
+          type: string
+          minLength: 3
+          maxLength: 1000
+          description: |
+            Por que se cierra. **Obligatoria** (RF-PA-05, RN-13), tambien al
+            descartar: «no habia nada» tambien hay que poder explicarlo.
+
+            Se recorta antes de guardarla, asi que una nota de espacios en blanco
+            es un `422` y no una fila que dice que alguien explico algo.
+          examples:
+            - Corregida la salida olvidada del dia 14 con el parte de turno.
+
+    WorkDayIncident:
+      type: object
+      title: WorkDayIncident
+      description: |
+        La marca de incidencia que el detalle de jornada incrusta (RF-PA-03,
+        RF-PA-05). Es la ficha minima: para trabajarla se va a la bandeja.
+      additionalProperties: false
+      required: [id, type, severity, status]
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+        type:
+          $ref: '#/components/schemas/IncidentType'
+        severity:
+          $ref: '#/components/schemas/IncidentSeverity'
+        status:
+          $ref: '#/components/schemas/IncidentStatus'
+
+    ScheduleType:
+      type: string
+      title: ScheduleType
+      description: |
+        Tipo de jornada pactado (documento 01 §5.5, RF-GP-02).
+
+        Los tres valores estan en castellano porque son el **catalogo literal** que
+        el documento 01 fija para la columna, igual que los codigos de motivo de
+        correccion del Anexo C. Traducirlos obligaria a mantener un diccionario
+        entre el esquema, este contrato y el codigo.
+
+        **Hoy no cambia ningun calculo.** Lo contratado se prorratea por dia
+        natural a partir de `weekly_hours`, sin mirar el tipo de jornada:
+        distinguir «partida» de «continua» exigiria un horario teorico por dia de
+        la semana que este producto no modela. Se guarda porque el documento 01 lo
+        exige y porque es el dato que RRHH tiene en la mano al dar de alta el
+        contrato.
+      enum: [continua, partida, turnos]
+      example: turnos
+
+    EmploymentContract:
+      type: object
+      title: EmploymentContract
+      description: |
+        Un contrato con su tramo de vigencia (RF-GP-02, documento 01 §5.5).
+
+        **Las horas salen como numero**, al contrario que los totales trabajados
+        del informe por periodo, que van en `HH:MM`. La regla de «nunca decimal»
+        habla de duraciones acumuladas —nadie interpreta bien «has trabajado
+        7,75»—; «tienes un contrato de 37,5 horas» lo entiende todo el mundo y es
+        ademas como esta escrito en el papel que se firmo.
+      additionalProperties: false
+      required: [id, employee_uuid, weekly_hours, annual_hours, schedule_type, valid_from, valid_to, is_current]
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+          description: |
+            Identificador del contrato. **Es la clave interna, y aqui si**, por lo
+            mismo que en las incidencias: un contrato no es una persona ni una
+            tarjeta, no viaja impreso ni se enseña a un tercero, y su numero no
+            revela nada sobre la plantilla.
+        employee_uuid:
+          type: string
+          format: uuid
+          description: Identificador publico de la persona.
+        weekly_hours:
+          type: number
+          format: double
+          exclusiveMinimum: 0
+          maximum: 168
+          description: |
+            Horas pactadas por semana. Es la **unica** base del prorrateo de
+            RF-IN-03: lo contratado de un periodo es
+            `dias de vigencia × weekly_hours ÷ 7`.
+          example: 37.5
+        annual_hours:
+          type: [number, 'null']
+          format: double
+          exclusiveMinimum: 0
+          description: |
+            Computo anual del convenio, cuando lo fija. **No entra en ningun
+            calculo**: se guarda porque el documento 01 §5.5 lo declara y porque es
+            la cifra que RRHH contrasta a mano. Si algun dia el informe la usa,
+            sera con su propio requisito y su propia formula.
+          example: 1780
+        schedule_type:
+          $ref: '#/components/schemas/ScheduleType'
+        valid_from:
+          type: string
+          format: date
+          description: Primer dia de vigencia, inclusive.
+        valid_to:
+          type: [string, 'null']
+          format: date
+          description: |
+            Ultimo dia de vigencia, inclusive, o `null` si sigue vigente.
+
+            Lo escribe el sistema al registrar el contrato siguiente, nunca quien
+            da de alta uno: dejarlo escribir permitiria crear un hueco de dias sin
+            contrato sin que nada avisara.
+        is_current:
+          type: boolean
+          description: |
+            Si es el contrato vigente. Se deriva de `valid_to === null`, no se
+            guarda: una columna aparte podria quedarse desincronizada.
+
+    EmploymentContractCollection:
+      type: object
+      title: EmploymentContractCollection
+      description: |
+        La serie historica de contratos de una persona, del mas antiguo al mas
+        reciente. **Sin `meta` y sin paginacion**: una persona tiene unos pocos
+        contratos y la serie solo se entiende entera.
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmploymentContract'
+
+    CreateEmploymentContractRequest:
+      type: object
+      title: CreateEmploymentContractRequest
+      description: |
+        Alta de contrato (RF-GP-02).
+
+        **No admite `valid_to` ni `employee_uuid`.** El primero lo escribe el
+        sistema al registrar el siguiente contrato; el segundo va en la ruta, y dos
+        sitios para lo mismo es una discrepancia esperando a ocurrir.
+      additionalProperties: false
+      required: [weekly_hours, schedule_type, valid_from]
+      properties:
+        weekly_hours:
+          type: number
+          format: double
+          exclusiveMinimum: 0
+          maximum: 168
+          example: 40
+        annual_hours:
+          type: [number, 'null']
+          format: double
+          exclusiveMinimum: 0
+          maximum: 99999
+          example: 1780
+        schedule_type:
+          $ref: '#/components/schemas/ScheduleType'
+        valid_from:
+          type: string
+          format: date
+          description: |
+            Primer dia de vigencia. Tiene que ser **posterior** al inicio del
+            contrato vigente: el anterior se cierra el dia de antes, de modo que la
+            serie queda sin hueco y sin solape.
+          example: '2026-03-16'
+
+    ReportGranularity:
+      type: string
+      title: ReportGranularity
+      description: |
+        Grano de agrupacion del informe por periodo (RF-IN-01).
+
+        Los cuatro parten de la jornada (`work_date`), que es una fecha civil en la
+        zona del centro con RN-05 ya aplicada. **No hay ninguna conversion de zona
+        horaria en el calculo**, y esa ausencia es la garantia: no hay ningun
+        `AT TIME ZONE` que pueda estar mal puesto.
+
+        `range` no es «sin agrupar»: es **una sola fila por sujeto** con el rango
+        entero.
+      enum: [day, week, month, range]
+      example: month
+
+    ReportGrouping:
+      type: string
+      title: ReportGrouping
+      description: |
+        Sujeto sobre el que se agregan las horas (RF-IN-02).
+
+        `site` existe aunque haya un solo centro por instalacion (ADR-040): no
+        sirve para elegir cual, sirve para pedir el total sin desglosar.
+      enum: [employee, department, site]
+      example: employee
+
+    PeriodReportSubject:
+      type: object
+      title: PeriodReportSubject
+      description: |
+        De quien —o de que— habla una fila del informe.
+
+        **Una sola forma para los tres agrupamientos**, con campos que pueden ser
+        nulos, en lugar de tres variantes: el cliente pinta la misma tabla en los
+        tres casos y `kind` le dice que columnas tienen sentido. Tres esquemas
+        habrian obligado a tres tablas para la misma pantalla.
+      additionalProperties: false
+      required: [kind, employee_uuid, employee_code, full_name, department_id, label]
+      properties:
+        kind:
+          $ref: '#/components/schemas/ReportGrouping'
+        employee_uuid:
+          type: [string, 'null']
+          format: uuid
+          description: "Solo con `kind: employee`."
+        employee_code:
+          type: [string, 'null']
+          description: "Solo con `kind: employee`."
+        full_name:
+          type: [string, 'null']
+          description: "Solo con `kind: employee`."
+        department_id:
+          type: [integer, 'null']
+          format: int64
+          description: |
+            Departamento de la persona, o el propio departamento agregado. `null`
+            con `kind: site` y tambien en el cubo de quien no tiene departamento,
+            que existe a proposito: sin el, la suma de los departamentos no
+            cuadraria con el total del centro.
+        label:
+          type: [string, 'null']
+          description: |
+            Lo que se enseña: el nombre de la persona, el del departamento o el del
+            centro.
+
+            **Nulo en el cubo de quien no tiene departamento**, y lo traduce el
+            cliente: el servidor no inventa un «Sin departamento» en castellano
+            porque no sabe en que idioma se esta pintando.
+
+    PeriodReportRow:
+      type: object
+      title: PeriodReportRow
+      description: |
+        Una fila del informe: un sujeto, un tramo de calendario y lo que paso en
+        el.
+
+        **`days_with_activity + days_without_activity` es siempre
+        `days_in_period`.** Con agrupacion por departamento o centro, los tres son
+        dias-persona.
+
+        **Cada duracion sale dos veces**: los minutos enteros para quien calcula y
+        el `HH:MM` para quien lee. Nunca una hora decimal.
+      additionalProperties: false
+      required:
+        - period
+        - subject
+        - worked_minutes
+        - worked
+        - shift_count
+        - days_in_period
+        - days_with_activity
+        - days_without_activity
+        - open_shift_days
+        - incident_days
+        - contracted_minutes
+        - contracted
+        - deviation_minutes
+        - deviation
+        - overtime_minutes
+        - overtime
+        - days_without_contract
+      properties:
+        period:
+          type: object
+          additionalProperties: false
+          required: [from, to]
+          description: |
+            El tramo contado, **ya recortado al rango pedido**. Si dijera «semana
+            del 23 de febrero» con el total de un solo dia, quien la lee compararia
+            siete dias con uno.
+          properties:
+            from:
+              type: string
+              format: date
+            to:
+              type: string
+              format: date
+        subject:
+          $ref: '#/components/schemas/PeriodReportSubject'
+        worked_minutes:
+          type: integer
+          minimum: 0
+          description: |
+            Minutos trabajados, tomados de la proyeccion de jornadas. **No se
+            recalculan aqui** (RN-06, ADR-007, regla dura 7): si no cuadran, el
+            problema es la proyeccion y se corrige con la reconciliacion de
+            RF-PR-02.
+        worked:
+          type: string
+          pattern: '^-?\d{2,}:\d{2}$'
+          description: |
+            Lo mismo en `HH:MM`. **Las horas pasan de 24 y no es un error**: esto
+            no es una hora del reloj, es una cantidad de trabajo, y un mes son
+            `162:00`.
+        shift_count:
+          type: integer
+          minimum: 0
+          description: Tramos cerrados que han entrado en el total.
+        days_in_period:
+          type: integer
+          minimum: 1
+        days_with_activity:
+          type: integer
+          minimum: 0
+        days_without_activity:
+          type: integer
+          minimum: 0
+          description: |
+            Aparecen con cero y no se omiten: para un informe de absentismo,
+            omitirlos es un error.
+        open_shift_days:
+          type: integer
+          minimum: 0
+          description: |
+            Dias con un turno todavia abierto. Cuentan como dia con actividad y,
+            salvo `include_open_shifts`, no aportan minutos.
+        incident_days:
+          type: integer
+          minimum: 0
+          description: |
+            Dias con incidencia. **No descuentan horas** (RN-08): estan aqui para
+            que se revisen, no para decidir el resultado de una revision que no se
+            ha hecho.
+        contracted_minutes:
+          type: integer
+          minimum: 0
+          description: |
+            Horas contratadas del periodo, prorrateadas por dia natural de vigencia
+            (RF-IN-03). Cero si no habia contrato registrado — y entonces
+            `days_without_contract` dice cuantos dias fueron.
+        contracted:
+          type: string
+          pattern: '^-?\d{2,}:\d{2}$'
+        deviation_minutes:
+          type: integer
+          description: |
+            `worked_minutes - contracted_minutes`, **con signo**: negativa cuando
+            se ha trabajado por debajo de lo contratado.
+        deviation:
+          type: string
+          pattern: '^-?\d{2,}:\d{2}$'
+          description: Lo mismo en `HH:MM`, con el signo delante (`-40:00`).
+        overtime_minutes:
+          type: integer
+          minimum: 0
+          description: |
+            Solo la parte positiva de la desviacion. **No es «horas extra» en
+            sentido laboral** y el informe no lo llama asi: que lo sean lo decide el
+            convenio, con compensaciones y periodos de referencia que este producto
+            no modela.
+        overtime:
+          type: string
+          pattern: '^-?\d{2,}:\d{2}$'
+        days_without_contract:
+          type: integer
+          minimum: 0
+          description: |
+            Dias del tramo con la persona de alta y **sin** contrato vigente. Se
+            informan, no se suponen.
+
+    ContractCoverage:
+      type: object
+      title: ContractCoverage
+      description: |
+        Cuanto del informe se pudo comparar contra un contrato (RF-IN-03).
+
+        Sin esta cifra, un periodo en el que a media plantilla se le olvido
+        registrar el contrato saldria con una desviacion enorme y con aspecto de
+        dato bueno: cada fila diria «ha trabajado 160 horas por encima de lo
+        contratado» porque lo contratado era cero.
+
+        Solo cuenta dias de relacion laboral: un dia anterior al alta o posterior
+        al cese no es un dia «sin contrato», es un dia en el que esa persona no
+        trabajaba aqui.
+      additionalProperties: false
+      required: [days_without_contract, employees_without_contract, complete]
+      properties:
+        days_without_contract:
+          type: integer
+          minimum: 0
+          description: Dias-persona del informe sin contrato vigente.
+        employees_without_contract:
+          type: integer
+          minimum: 0
+        complete:
+          type: boolean
+          description: |
+            `true` cuando todo el informe se pudo comparar. Es lo que el panel mira
+            para decidir si enseña el aviso.
+
+    PeriodReportMeta:
+      type: object
+      title: PeriodReportMeta
+      description: Zona, instante, criterios y cobertura de contrato del informe.
+      additionalProperties: false
+      required: [time_zone, generated_at, row_count, criteria, contract_coverage]
+      properties:
+        time_zone:
+          type: string
+          description: |
+            Zona del centro (ADR-040). Viaja en la respuesta para que el cliente no
+            la adivine ni use la del navegador (regla dura 3): las jornadas ya
+            estan expresadas en ella.
+          example: Europe/Madrid
+        generated_at:
+          type: string
+          format: date-time
+          description: Instante de generacion, en UTC.
+        row_count:
+          type: integer
+          minimum: 0
+        criteria:
+          type: array
+          description: |
+            **Los criterios de inclusion, ya traducidos al idioma de la peticion.**
+            Van en la respuesta y no en un manual porque un informe de horas sin
+            ellos es una tabla de numeros que cada persona interpreta a su manera,
+            y esa interpretacion acaba discutiendose en una reunion de nomina.
+
+            El cliente los enseña tal cual, sin reordenarlos ni resumirlos.
+          items:
+            type: string
+        contract_coverage:
+          $ref: '#/components/schemas/ContractCoverage'
+
+    PeriodReport:
+      type: object
+      title: PeriodReport
+      description: |
+        El informe de horas por periodo completo (RF-IN-01, RF-IN-02, RF-IN-03).
+
+        **Es el mismo objeto del que saldran las exportaciones CSV, XLSX y PDF de
+        RF-IN-04** (tarea 2.9): el fichero que alguien adjunta a un correo y la
+        tabla que ve en pantalla se calculan una sola vez, para que no puedan
+        discrepar.
+      additionalProperties: false
+      required: [from, to, granularity, group_by, data, meta]
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        granularity:
+          $ref: '#/components/schemas/ReportGranularity'
+        group_by:
+          $ref: '#/components/schemas/ReportGrouping'
+        data:
+          type: array
+          description: |
+            Filas ordenadas por sujeto y despues por periodo. **Sin paginacion**:
+            un informe se lee entero o no significa nada, y paginarlo partiria una
+            semana por la mitad. El techo lo pone el presupuesto de RNF-P-05, que
+            responde `422` en lugar de recortar en silencio.
+          items:
+            $ref: '#/components/schemas/PeriodReportRow'
+        meta:
+          $ref: '#/components/schemas/PeriodReportMeta'

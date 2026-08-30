@@ -66,7 +66,8 @@ if ($employees->isEmpty()) {
     throw new RuntimeException('No hay empleados activos: ejecuta make seed antes de la prueba de carga.');
 }
 
-// El indice parcial one_active_credential_per_employee no admite dos activas:
+// El indice parcial one_active_credential_per_key_and_employee no admite dos
+// tarjetas vivas firmadas con la MISMA clave, y estas lo estarian:
 // las credenciales previas de estos empleados se revocan, que es ademas lo que
 // haria una reimpresion real (revocar -> reemitir -> imprimir, ADR-034).
 DB::table('credentials')

@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Modules\Compliance;
 
+use App\Modules\Attendance\Domain\Event\AttendanceAnomalyDetected;
+use App\Modules\Attendance\Domain\Event\AttendanceReviewCompleted;
+use App\Modules\Attendance\Domain\Event\DailyTotalsReconciled;
 use App\Modules\Attendance\Domain\Event\EmployeeClockedIn;
 use App\Modules\Attendance\Domain\Event\EmployeeClockedOut;
 use App\Modules\Attendance\Domain\Event\ShiftCorrected;
@@ -11,11 +14,20 @@ use App\Modules\Compliance\Application\Port\AuditChainReader;
 use App\Modules\Compliance\Application\Port\AuditLogPartitions;
 use App\Modules\Compliance\Application\Port\AuditMetrics;
 use App\Modules\Compliance\Application\Port\AuditTrail;
+use App\Modules\Compliance\Application\Port\IncidentAssignment;
+use App\Modules\Compliance\Application\Port\IncidentBoard;
+use App\Modules\Compliance\Application\Port\IncidentLedger;
+use App\Modules\Compliance\Application\Port\IncidentMetrics;
+use App\Modules\Compliance\Application\Port\IncidentNotices;
+use App\Modules\Compliance\Application\Port\IncidentNotifier;
+use App\Modules\Compliance\Application\Port\IncidentResolutionMetrics;
 use App\Modules\Compliance\Application\Port\LegalExportAudit;
 use App\Modules\Compliance\Application\Port\LegalExportMetrics;
 use App\Modules\Compliance\Application\Port\LegalExportSource;
 use App\Modules\Compliance\Application\Port\LegalExportWriter;
 use App\Modules\Compliance\Application\UseCase\LegalExport;
+use App\Modules\Compliance\Domain\Model\Incident;
+use App\Modules\Compliance\Http\Policy\IncidentPolicy;
 use App\Modules\Compliance\Http\Policy\LegalExportPolicy;
 use App\Modules\Compliance\Infrastructure\Adapter\AuditedAuthenticationJournal;
 use App\Modules\Compliance\Infrastructure\Adapter\AuditedAuthorizationJournal;
@@ -25,19 +37,31 @@ use App\Modules\Compliance\Infrastructure\Adapter\GroupedAuthorizationJournal;
 use App\Modules\Compliance\Infrastructure\Adapter\GroupedPersonalDataAccessLog;
 use App\Modules\Compliance\Infrastructure\Audit\CurrentAuditContext;
 use App\Modules\Compliance\Infrastructure\Console\EnsureAuditPartitionsCommand;
+use App\Modules\Compliance\Infrastructure\Console\IncidentMetricsCommand;
 use App\Modules\Compliance\Infrastructure\Console\LegalExportCommand;
 use App\Modules\Compliance\Infrastructure\Console\PurgeOrphanedLegalExportTempFilesCommand;
 use App\Modules\Compliance\Infrastructure\Console\VerifyAuditChainCommand;
 use App\Modules\Compliance\Infrastructure\Export\CsvLegalExportWriter;
+use App\Modules\Compliance\Infrastructure\Listener\NotifyIncidentAssignees;
+use App\Modules\Compliance\Infrastructure\Listener\OpenIncidentOnAnomalyDetected;
 use App\Modules\Compliance\Infrastructure\Listener\RecordCredentialLifecycle;
 use App\Modules\Compliance\Infrastructure\Listener\RecordEmployeePinLifecycle;
+use App\Modules\Compliance\Infrastructure\Listener\RecordEmploymentContractChange;
 use App\Modules\Compliance\Infrastructure\Listener\RecordManagementAccountLifecycle;
+use App\Modules\Compliance\Infrastructure\Listener\RecordProjectionReconciliationAudit;
 use App\Modules\Compliance\Infrastructure\Listener\RecordShiftEntryAudit;
+use App\Modules\Compliance\Infrastructure\Metrics\RedisIncidentResolutionMetrics;
 use App\Modules\Compliance\Infrastructure\Metrics\TextfileAuditMetrics;
+use App\Modules\Compliance\Infrastructure\Metrics\TextfileIncidentMetrics;
 use App\Modules\Compliance\Infrastructure\Metrics\TextfileLegalExportMetrics;
+use App\Modules\Compliance\Infrastructure\Notification\MailIncidentNotifier;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseAuditChainReader;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseAuditLogPartitions;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseAuditTrail;
+use App\Modules\Compliance\Infrastructure\Persistence\DatabaseIncidentAssignment;
+use App\Modules\Compliance\Infrastructure\Persistence\DatabaseIncidentBoard;
+use App\Modules\Compliance\Infrastructure\Persistence\DatabaseIncidentLedger;
+use App\Modules\Compliance\Infrastructure\Persistence\DatabaseIncidentNotices;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseLegalExportSource;
 use App\Modules\Identity\Domain\Event\CredentialDelivered;
 use App\Modules\Identity\Domain\Event\CredentialIssued;
@@ -46,13 +70,17 @@ use App\Modules\Identity\Domain\Event\CredentialRevoked;
 use App\Modules\Identity\Domain\Event\DeviceTokenIssued;
 use App\Modules\Identity\Domain\Event\DeviceTokenRevoked;
 use App\Modules\Identity\Domain\Event\ManagementRoleAssigned;
+use App\Modules\Identity\Domain\Event\SigningKeyRetired;
+use App\Modules\Identity\Domain\Event\SigningKeyRotated;
 use App\Modules\Identity\Domain\Event\TwoFactorEnabled;
 use App\Modules\Identity\Domain\Event\TwoFactorReset;
 use App\Modules\Shared\Application\Port\AuthenticationJournal;
 use App\Modules\Shared\Application\Port\AuthorizationJournal;
+use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
 use App\Modules\Workforce\Domain\Event\EmployeePinDelivered;
 use App\Modules\Workforce\Domain\Event\EmployeePinIssued;
+use App\Modules\Workforce\Domain\Event\EmploymentContractRegistered;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\Facades\Config;
@@ -203,6 +231,7 @@ final class ComplianceServiceProvider extends ServiceProvider
         );
 
         $this->registerLegalExport();
+        $this->registerIncidents();
     }
 
     public function boot(): void
@@ -210,7 +239,9 @@ final class ComplianceServiceProvider extends ServiceProvider
         $this->recordShiftEntryLifecycle();
         $this->recordCredentialAndDeviceLifecycle();
         $this->recordEmployeePinLifecycle();
+        $this->recordEmploymentContractChanges();
         $this->recordManagementAccountLifecycle();
+        $this->openAndNotifyIncidents();
 
         /*
          * La policy de la exportacion legal (RF-IN-05, regla dura 18).
@@ -224,6 +255,17 @@ final class ComplianceServiceProvider extends ServiceProvider
          * `FormRequest`.
          */
         Gate::policy(LegalExport::class, LegalExportPolicy::class);
+
+        /*
+         * La policy de la bandeja de incidencias (RF-PA-05, regla dura 18).
+         *
+         * Se registra contra {@see Incident} —el modelo de dominio— y no contra
+         * un modelo Eloquent, por lo mismo que la de arriba: asi la autorizacion
+         * se decide **antes** de tocar la base de datos. Declarada sobre una fila
+         * habria que cargarla para poder preguntar si se puede leer, que es
+         * exactamente lo que un `403` tiene que poder evitar.
+         */
+        Gate::policy(Incident::class, IncidentPolicy::class);
 
         if ($this->app->runningInConsole()) {
             $this->commands([
@@ -248,8 +290,98 @@ final class ComplianceServiceProvider extends ServiceProvider
                  * pida ni lo note.
                  */
                 PurgeOrphanedLegalExportTempFilesCommand::class,
+                /*
+                 * `compliance:incident-metrics` (doc 02 §8.2, tarea 2.6). SI se
+                 * programa, y aparte de la deteccion: el gauge de incidencias
+                 * abiertas tiene que BAJAR cuando alguien resuelve una desde la
+                 * bandeja, no solo subir cuando la revision nocturna encuentra
+                 * algo (regla dura 7 aplicada a la instrumentacion).
+                 */
+                IncidentMetricsCommand::class,
             ]);
         }
+    }
+
+    /**
+     * El mapa evento -> incidencia de la revision diaria (RF-PR-01, tarea 2.6).
+     *
+     * Misma via que la auditoria del fichaje: `Attendance` no puede importar este
+     * modulo, asi que emite y `Compliance` reacciona. Que la lista viva aqui es lo
+     * que permite ver de un vistazo todo lo que este modulo escucha.
+     *
+     * **Sincronos y sin transaccion envolvente.** Cada hallazgo abre su incidencia
+     * en la suya —la del caso de uso, con su asiento dentro—, de modo que uno que
+     * falle no se lleva por delante a los demas de la misma pasada. El aviso al
+     * responsable, que es lo unico con efecto fuera de la base de datos, va
+     * encolado dentro de su adaptador.
+     */
+    private function openAndNotifyIncidents(): void
+    {
+        Event::listen(AttendanceAnomalyDetected::class, [OpenIncidentOnAnomalyDetected::class, 'handle']);
+        Event::listen(AttendanceReviewCompleted::class, [NotifyIncidentAssignees::class, 'handle']);
+    }
+
+    /**
+     * Las incidencias del registro horario (RF-PR-01, tarea 2.6).
+     *
+     * Siete puertos, y ninguno lo conoce `Attendance`: el nucleo emite hallazgos
+     * y este modulo decide severidad, responsable, aviso y metrica (doc 01 §5.1,
+     * doc 02 §1.6). Los dos ultimos son de la bandeja de la tarea 2.5: el lado de
+     * **lectura**, separado del libro que escribe, y el histograma de resolucion,
+     * separado del gauge de abiertas porque uno se observa y el otro se
+     * recalcula.
+     *
+     * **El escritor no es un `singleton`**, igual que el resto de adaptadores que
+     * escriben: no tiene estado que compartir y una instancia viva entre
+     * peticiones —Octane, un worker de colas— es una fuente de sorpresas sin
+     * ninguna ventaja. La metrica si, porque no toca la base de datos y solo
+     * escribe un fichero.
+     */
+    private function registerIncidents(): void
+    {
+        $this->app->bind(
+            IncidentLedger::class,
+            static fn (Application $app): DatabaseIncidentLedger => new DatabaseIncidentLedger(
+                DB::connection(),
+                $app->make(Clock::class),
+            ),
+        );
+
+        $this->app->bind(
+            IncidentAssignment::class,
+            static fn (): DatabaseIncidentAssignment => new DatabaseIncidentAssignment(DB::connection()),
+        );
+
+        $this->app->bind(
+            IncidentNotices::class,
+            static fn (): DatabaseIncidentNotices => new DatabaseIncidentNotices(DB::connection()),
+        );
+
+        $this->app->bind(IncidentNotifier::class, MailIncidentNotifier::class);
+
+        /*
+         * El lado de LECTURA de la bandeja (tarea 2.5).
+         *
+         * Puerto propio y no un metodo mas de `IncidentLedger`: aquel escribe y
+         * habla en el agregado, este solo lee y lo que devuelve lleva ademas
+         * nombres de personas y de cuentas. Juntarlos habria dado una consulta de
+         * bandeja capaz de escribir.
+         */
+        $this->app->bind(
+            IncidentBoard::class,
+            static fn (): DatabaseIncidentBoard => new DatabaseIncidentBoard(DB::connection()),
+        );
+
+        $this->app->singleton(IncidentMetrics::class, TextfileIncidentMetrics::class);
+
+        /*
+         * `incident_resolution_seconds{type}` sobre Redis y no *textfile* (tarea
+         * 2.5). Es un histograma que se observa dentro de una peticion, no un
+         * gauge que una tarea programada recalcula: ver el docblock del
+         * adaptador. `singleton` por lo mismo que las demas metricas: no toca la
+         * base de datos y no arrastra estado de la peticion.
+         */
+        $this->app->singleton(IncidentResolutionMetrics::class, RedisIncidentResolutionMetrics::class);
     }
 
     /**
@@ -321,6 +453,11 @@ final class ComplianceServiceProvider extends ServiceProvider
          * la condicion para poder correr dentro de la transaccion.
          */
         Event::listen(ShiftCorrected::class, [RecordShiftEntryAudit::class, 'corrected']);
+
+        // La reconciliacion nocturna que corrige un agregado deja asiento con el
+        // antes y el despues (regla dura 6, RF-PR-02, tarea 2.7). Sincrono y
+        // dentro de la transaccion de la correccion, como el resto.
+        Event::listen(DailyTotalsReconciled::class, [RecordProjectionReconciliationAudit::class, 'reconciled']);
     }
 
     /**
@@ -345,6 +482,10 @@ final class ComplianceServiceProvider extends ServiceProvider
         Event::listen(CredentialPrinted::class, [RecordCredentialLifecycle::class, 'handleCredentialPrinted']);
         Event::listen(CredentialDelivered::class, [RecordCredentialLifecycle::class, 'handleCredentialDelivered']);
         Event::listen(CredentialRevoked::class, [RecordCredentialLifecycle::class, 'handleCredentialRevoked']);
+        // Rotar y retirar la clave de firma son de la tarea 2.12: el ciclo de
+        // vida de todas las tarjetas a la vez (RF-QR-07, §5.3).
+        Event::listen(SigningKeyRotated::class, [RecordCredentialLifecycle::class, 'handleSigningKeyRotated']);
+        Event::listen(SigningKeyRetired::class, [RecordCredentialLifecycle::class, 'handleSigningKeyRetired']);
         Event::listen(DeviceTokenIssued::class, [RecordCredentialLifecycle::class, 'handleDeviceTokenIssued']);
         Event::listen(DeviceTokenRevoked::class, [RecordCredentialLifecycle::class, 'handleDeviceTokenRevoked']);
     }
@@ -366,6 +507,22 @@ final class ComplianceServiceProvider extends ServiceProvider
     {
         Event::listen(EmployeePinIssued::class, [RecordEmployeePinLifecycle::class, 'handleIssued']);
         Event::listen(EmployeePinDelivered::class, [RecordEmployeePinLifecycle::class, 'handleDelivered']);
+    }
+
+    /**
+     * El mapa evento -> asiento del contrato (tarea 2.8, RF-GP-02).
+     *
+     * Familia «cambia roles, permisos o parametros del calculo» del bloque D, y
+     * no la del ciclo de vida de la plantilla: `weekly_hours` es la cifra contra
+     * la que el informe de RF-IN-03 mide la jornada de una persona, asi que
+     * tocarla mueve su desviacion y sus horas de exceso sin tocar un fichaje.
+     *
+     * Sincrono, sin `ShouldQueue` y sin `afterCommit`: si el asiento falla, el
+     * contrato no se registra (ADR-027).
+     */
+    private function recordEmploymentContractChanges(): void
+    {
+        Event::listen(EmploymentContractRegistered::class, [RecordEmploymentContractChange::class, 'handle']);
     }
 
     /**

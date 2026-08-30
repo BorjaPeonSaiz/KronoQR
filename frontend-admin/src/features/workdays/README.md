@@ -1,8 +1,14 @@
 # workdays
 
 Detalle de jornada de un empleado (RF-PA-03, tarea 1.16): tramos vigentes, total del día y el
-historial completo de correcciones con su «de → a» (RN-13, RL-04). La bandeja de incidencias
-(tarea 2.5) reutiliza `useEmployeeWorkDays`, `ShiftEntryTable` y `WorkDayCard`.
+historial completo de correcciones con su «de → a» (RN-13, RL-04).
+
+**La marca de incidencia (RF-PA-05, tarea 2.5) se incrusta aquí, no se duplica.**
+`WorkDayCard.vue` pinta la ficha mínima de cada `WorkDayDetail.incidents` (tipo, severidad,
+estado) con el mismo badge de `features/incidents/incidentPresentation.ts`, y enlaza a la
+bandeja filtrada por `employee_uuid` cuando el ámbito `incidents:*` alcanza. `ShiftEntryTable` y
+`useEmployeeWorkDays` no cambian: siguen siendo solo de tramos y totales. La fila de la bandeja,
+a su vez, enlaza de vuelta a esta pantalla (`employee-workdays`) en su columna de jornada.
 
 **Solo lee.** Ninguna pantalla de esta carpeta cambia el registro: rectificar es
 `PATCH /api/v1/shift-entries/{uuid}`, que exige el ámbito `attendance:correct` y no el

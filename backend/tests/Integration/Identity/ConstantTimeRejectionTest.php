@@ -11,7 +11,7 @@ use Tests\Support\Identity\Credentials;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
- * RS-03 y regla dura 17: **los cuatro rechazos son indistinguibles desde
+ * RS-03, RS-02 y regla dura 17: **los seis rechazos son indistinguibles desde
  * fuera**, en respuesta y en tiempo.
  *
  * `php artisan test --filter=ConstantTimeRejection` es una de las dos ordenes de
@@ -37,7 +37,8 @@ use Tests\Support\Workforce\WorkforceFixtures;
 uses(RefreshDatabase::class);
 
 /**
- * Los cuatro rechazos del §5.2, cada uno con su payload.
+ * Los rechazos del §5.2, cada uno con su payload. Son seis desde la tarea
+ * 2.12, que añadio el de la tarjeta cuya clave se retiro (RF-QR-07).
  *
  * @return array<string, string>
  */
@@ -63,9 +64,22 @@ function fourRejections(): array
     $bajaId = DB::table('employees')->where('uuid', $baja)->value('id');
     $deBaja = Credentials::issueFor($bajaId);
 
+    // 4. Tarjeta real de una rotacion que se cerro: la fila EXISTE y esta
+    //    activa, pero su clave ya no esta en el llavero (RF-QR-07). Es distinto
+    //    de «key_id desconocido»: alli no hay fila y el paso 4 falla el indice;
+    //    aqui la hay, y si el codigo se ahorrara la consulta cuando la clave no
+    //    resuelve, este caso costaria menos que los demas y se distinguiria
+    //    desde fuera quien lleva una tarjeta caducada de quien lleva una
+    //    falsificada.
+    $rotado = WorkforceFixtures::employee($site);
+    /** @var int $rotadoId */
+    $rotadoId = DB::table('employees')->where('uuid', $rotado)->value('id');
+    $claveRetirada = Credentials::issueFor($rotadoId, Credentials::retiredKey());
+
     return [
         'firma invalida' => $firmaInvalida->toString(),
         'key_id desconocido' => Credentials::signedWithUnknownKey()->toString(),
+        'clave retirada' => $claveRetirada->toString(),
         'credencial revocada' => $revocada->toString(),
         'empleado de baja' => $deBaja->toString(),
         // Y el que no tiene ni forma de payload: tiene que costar lo mismo.
@@ -73,7 +87,7 @@ function fourRejections(): array
     ];
 }
 
-it('devuelve exactamente el mismo desenlace en los cinco rechazos', function (): void {
+it('devuelve exactamente el mismo desenlace en los seis rechazos', function (): void {
     $resolver = app(CredentialResolver::class);
 
     foreach (fourRejections() as $caso => $payload) {
@@ -85,7 +99,7 @@ it('devuelve exactamente el mismo desenlace en los cinco rechazos', function ():
             // ni siquiera cuando el servidor sabe de quien era la tarjeta.
             ->and($resolution->employeeUuid())->toBeNull("El caso «{$caso}» ha filtrado el empleado.");
     }
-})->group('RS-03', 'RF-QR-02');
+})->group('RS-03', 'RS-02', 'RF-QR-02', 'RF-QR-07');
 
 it('ejecuta el mismo numero de consultas en todos los rechazos', function (): void {
     // La mitad estructural del tiempo constante. Un `return` temprano que
@@ -137,7 +151,7 @@ it('hace el mismo trabajo en un rechazo que en una aceptacion', function (): voi
     expect($rechazado)->toBe($aceptado);
 })->group('RS-03');
 
-it('consume el mismo tiempo en los cinco rechazos', function (): void {
+it('consume el mismo tiempo en los seis rechazos', function (): void {
     // La comprobacion que exige el §9.4: «medir que los cuatro rechazos consumen
     // el mismo tiempo». El suelo configurado —25 ms de serie— absorbe la
     // varianza de PostgreSQL, que es lo que sin el hace que un acierto de indice
@@ -185,7 +199,7 @@ it('consume el mismo tiempo en los cinco rechazos', function (): void {
             $medianas,
         ))
     );
-})->group('RS-03', 'RF-QR-02');
+})->group('RS-03', 'RS-02', 'RF-QR-02', 'RF-QR-07');
 
 /**
  * Mediana y no media: una sola muestra lenta —el planificador del contenedor, un

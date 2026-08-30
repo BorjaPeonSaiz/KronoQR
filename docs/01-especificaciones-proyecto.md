@@ -281,6 +281,10 @@ Estas reglas viven en el **núcleo de dominio** y deben estar cubiertas por prue
 > Los umbrales de RN-10, RN-11 y RN-12 provienen del Estatuto de los Trabajadores español, pero **son parámetros del perfil de cumplimiento** (RF-PD-07), no constantes. Lo invariable es la forma de la regla; configurable es el número. RN-01 a RN-09 y RN-13 a RN-15 son estructurales y no se configuran.
 >
 > **RN-08 y RN-16 son un caso intermedio:** su forma es estructural, pero llevan un umbral configurable que **no proviene del marco normativo** sino de la operación de cada instalación —la duración anómala de un tramo y el tiempo de tránsito entre dos quioscos—. Viven en `installation_settings` (RF-PD-01), no en el perfil de cumplimiento (RF-PD-07). La distinción importa: un umbral legal lo fija la jurisdicción, uno operativo lo fija el hotel.
+>
+> **Cuándo se evalúan estas reglas, y hasta dónde hacia atrás** (RF-PR-01, tarea 2.6). La detección automática las aplica a diario sobre una **ventana acotada** —`COMPLIANCE_INCIDENT_LOOKBACK_DAYS`, 7 días de serie— y **no reprocesa el histórico**. El motivo no es de rendimiento: recalcular el pasado abriría incidencias sobre jornadas ya entregadas a la plantilla o a la Inspección, y una incidencia abierta hoy sobre una jornada de hace dos años no describe nada que nadie pueda corregir. Ampliar la ventana en una ejecución concreta es una decisión consciente de quien la lanza (`--days`), nunca el comportamiento por defecto.
+>
+> **La única excepción son los tramos todavía abiertos.** RN-08 sobre un turno sin cerrar se evalúa **siempre**, sea cual sea su fecha: un turno abierto no es historia, es un hecho presente que sigue creciendo, y es justo el caso que la alerta «Turnos abiertos > 12 h» del §9.3 existe para ver. Ninguna de estas reglas cierra, corrige ni descarta nada: abren incidencia para revisión humana (regla dura 19).
 
 | ID | Regla |
 |---|---|
@@ -300,6 +304,12 @@ Estas reglas viven en el **núcleo de dominio** y deben estar cubiertas por prue
 | RN-14 | Un empleado dado de baja conserva su historial; su credencial queda revocada y sus escaneos son rechazados. |
 | RN-15 | El horario de un fichaje offline es el `occurred_at` del dispositivo, marcado con su retraso de sincronización. Si supera el umbral, requiere validación del responsable. |
 | RN-16 | **Secuencia imposible de credencial**: dos escaneos de la misma credencial en **dispositivos distintos** separados por menos del tiempo mínimo de tránsito entre ellos (configurable, `ATTENDANCE_MIN_TRANSIT_SECONDS`). Genera incidencia `anomalous_pattern` para revisión humana. **Nunca anula el fichaje ni concluye que ha habido fraude** (RF-PR-06). **No se evalúa** si alguno de los dos escaneos tiene incidencia `clock_skew` (RF-AT-10) o llegó en un lote cuyo retraso de sincronización supera el umbral (RN-15). |
+
+> **Sobre RN-10: qué se compara hoy y qué no.** La detección automática (RF-PR-01) evalúa el descanso **entre jornadas**: la última salida anterior contra la primera entrada de la jornada siguiente. El hueco entre dos tramos de la **misma** jornada no se evalúa todavía, y con RN-05 eso deja fuera un caso real —salir a las 15:00 y volver a entrar a las 23:00 del mismo día son dos tramos de la misma `work_date`, con 8 h de por medio, y no se alerta; si esa segunda entrada cayera a las 00:30 sería otra jornada y sí se alertaría—.
+>
+> No es un descuido: **hoy no se puede distinguir**. Sin la intención declarada del fichaje ([ADR-024](adr/ADR-024-la-pausa-son-dos-tramos.md), RF-AT-12, tarea 3.5), un hueco entre dos tramos puede ser una pausa para comer o el descanso entre dos turnos, y las dos cosas se ven igual en la tabla. Alertar de todos convertiría cada jornada partida —el turno típico de hostelería— en un incumplimiento del art. 34.3 ET, y una bandeja llena de falsos positivos es una bandeja que se deja de mirar. **Cuando exista la pausa declarada, RN-10 evaluará también el hueco intrajornada que no sea pausa.**
+
+> **Sobre RN-12: enunciada y probada, con la apertura de incidencia suspendida.** La regla se evalúa en el dominio con el umbral del perfil de cumplimiento (6 h en `ES-hosteleria`) y tiene su prueba unitaria en los límites 5:59 / 6:00 / 6:01, pero **la detección automática no abre todavía incidencias `missing_break`** (decisión del 30-08-2026). Con [ADR-024](adr/ADR-024-la-pausa-son-dos-tramos.md) la pausa son dos tramos y el quiosco aún no registra la intención de «salgo a descansar» (RF-AT-12, tarea 3.5): en una instalación donde la plantilla no ficha la pausa, cada turno de más de 6 h abriría una incidencia —cientos a la semana sobre la semilla de desarrollo— sin que nadie pueda distinguir «no descansó» de «descansó y no lo fichó», y esa avalancha taparía las incidencias que sí importan. La tarea 3.5 reactiva la apertura cuando exista la pausa declarada; el tipo `missing_break` permanece en el catálogo de `incidents.type`.
 
 > **Sobre RN-16.** RF-PR-06 enumera tres patrones anómalos y define dos por sus parámetros —fichajes consecutivos en el mismo quiosco (`ATTENDANCE_PATTERN_WINDOW_SECONDS`) y coincidencias sistemáticas entre dos empleados (`ATTENDANCE_PATTERN_MIN_REPEATS`)—, pero nombra el tercero, «secuencias imposibles», sin definirlo. Sin enunciado no hay umbral, no hay prueba y, sobre todo, **no hay forma de sostener el indicio ante la persona señalada**, que es precisamente lo que el runbook `patron-anomalo-credencial.md` existe para evitar. Es una regla estructural en su forma —dos escaneos, dos dispositivos, un umbral— y **configurable en su número**, porque la distancia entre dos quioscos depende del hotel.
 >
@@ -353,9 +363,13 @@ Estas reglas viven en el **núcleo de dominio** y deben estar cubiertas por prue
 |---|---|---|
 | **WorkDay** | Jornada de un empleado en una fecha | RN-01, RN-02, RN-06, RN-07, RN-08. Es la frontera transaccional del fichaje. |
 | **Employee** | Empleado | Unicidad de código, estado activo o baja, vigencia de contrato. |
-| **Credential** | Credencial QR | Una credencial activa por empleado; firma válida; revocación. |
+| **Credential** | Credencial QR | Una credencial activa por empleado **y por clave de firma**; firma válida; revocación. |
 | **Device** | Quiosco | Token válido, ámbito limitado, vinculación a centro. |
 | **AuditTrail** | Registro de auditoría | Solo-append, encadenamiento por hash. |
+
+> **Por qué la invariante de `Credential` es «por empleado *y por clave*» y no «una y basta»** (RF-QR-07, [ADR-034](adr/ADR-034-el-token-nace-al-imprimir-no-al-emitir.md), tarea 2.12). Nació como «una credencial activa por empleado», y así estuvo mientras no hubo que rotar la clave de firma. La rotación con solape del doc 02 §5.3 la rompe por un motivo que no es técnico: para reimprimir la plantilla sin dejar a nadie sin fichar, la tarjeta vieja tiene que seguir valiendo mientras la nueva se imprime y se entrega, y eso son días o semanas. Con la invariante anterior, reemitir obligaba a revocar antes, es decir, a dejar a esa persona sin poder fichar hasta que su tarjeta llegara a su mano.
+>
+> Lo que se protege ahora, declarado en dos índices parciales de PostgreSQL, es más preciso y no menos estricto: **no puede haber dos tarjetas escaneables del mismo empleado firmadas con la misma clave** (`one_active_credential_per_key_and_employee`) ni **dos credenciales pendientes de imprimir a la vez** (`one_pending_credential_per_employee`). Como el llavero admite como mucho dos claves —`current` y `previous`—, el máximo de tarjetas vivas de una persona pasa de una a **dos, y solo durante un solape**; la vieja se revoca automáticamente al entregarse la nueva, que es cuando su titular ya no la necesita. El caso que la invariante original impedía —dos tarjetas vivas indistinguibles, una de ellas perdida— sigue siendo imposible.
 
 > **`Device` es raíz de agregado en `Kiosk`, y `Identity` emite y revoca su token.** El agregado protege lo que es del dispositivo —identidad, centro al que está vinculado, estado y latido— y esas invariantes son propiedad de `Kiosk`, que es el módulo del punto de fichaje. **El token no lo es:** su emisión, su ámbito y su revocación son de `Identity`, igual que las credenciales, y se exponen a `Kiosk` **por caso de uso público explícito**, nunca por acceso directo a la tabla. `Device` no valida su propio token: recibe el resultado de esa validación. Queda escrito aquí, y no se decide al ejecutar la tarea que lo construye.
 
@@ -383,13 +397,23 @@ Motor: **PostgreSQL 17**. Los tipos se expresan en su nomenclatura. El Anexo D d
 **`employees`**
 `id` (BIGINT PK), `uuid` (UUID v7, identificador público), `site_id`, `department_id`, `first_name`, `last_name`, `employee_code` (CITEXT UNIQUE, **opaco y aleatorio**), `national_id_hash` (hash, no el DNI en claro), `email` (CITEXT NULL, **opcional**), `pin_hash` (RF-AT-11, RF-ID-06), `photo_path` (NULL; funcionalidad **desactivada por defecto**, RL-08), `status` (`active`|`suspended`|`terminated`), `hired_at`, `terminated_at`, `locale`, `created_at`, `updated_at`
 
-**`employment_contracts`** — `id`, `employee_id`, `weekly_hours`, `annual_hours`, `schedule_type` (`continua`|`partida`|`turnos`), `valid_from`, `valid_to`
+**`employment_contracts`** — `id`, `employee_id`, `weekly_hours`, `annual_hours`, `schedule_type` (`continua`|`partida`|`turnos`), `valid_from`, `valid_to`, `created_at`, `created_by_user_id`
+
+> **Historizado y sin solapes** (tarea 2.8). `valid_to` a `NULL` significa **vigente**, y una restricción de exclusión —`EXCLUDE USING gist (employee_id WITH =, daterange(valid_from, valid_to, '[]') WITH &&)`, la misma técnica que RN-02— impide que una persona tenga dos contratos vigentes el mismo día. Sin esa garantía, la pregunta «¿cuántas horas tenía contratadas el 14 de marzo?» tendría dos respuestas y la comparativa de RF-IN-03 tendría que elegir una por su cuenta.
+>
+> Registrar un contrato nuevo **cierra el anterior el día antes** de que empiece el nuevo, en la misma transacción: la serie queda sin huecos y sin solapes. Nada se sobrescribe (RN-13, RL-04): lo pactado —horas, tipo de jornada, fecha de inicio— no se toca, solo se declara hasta cuándo estuvo vigente.
+>
+> **`created_at` y `created_by_user_id` no estaban en la lista original.** Se añaden porque un cambio de contrato mueve la cifra contra la que se mide la jornada de una persona: es un parámetro del cálculo, y el bloque E de la revisión de cumplimiento exige saber quién lo cambió y cuándo. El asiento de `audit_log` lo cuenta con su cadena de hash (acción `employment_contract.registered`); estas dos columnas lo dejan legible en la propia tabla sin cruzar el trail para pintar la ficha. `created_by_user_id` es NULL en una semilla o una importación inicial, donde no hay nadie detrás.
+>
+> **La comparativa de RF-IN-03 prorratea por día natural de vigencia**: `días de vigencia dentro del periodo × weekly_hours ÷ 7`, redondeado una sola vez al final. Se reparte por día natural y no por día laborable porque el producto no modela el cuadrante teórico de nadie —sabe cuándo se fichó, no qué días libra cada persona—, y repartir entre cinco días inventaría un descanso en fin de semana que en un hotel no existe. `annual_hours` **no entra en ningún cálculo**: se guarda porque el convenio lo fija y porque es la cifra que RRHH contrasta a mano.
 
 **`credentials`** — `id`, `uuid`, `employee_id`, `key_id`, `secret_hash`, `issued_at`, `printed_at`, `delivered_at`, `delivered_by_user_id`, `revoked_at`, `revoked_reason`
 
 > `uuid` es el identificador **público** y se añadió en la tarea 1.5. Faltaba aquí, pero el Anexo B ya nombraba la credencial por UUID en la ruta (`POST /api/v1/credentials/{uuid}/revoke`): sin él, el contrato solo podía cumplirse exponiendo la clave interna, que revela cuántas tarjetas se han emitido y en qué orden. Es la misma decisión que ya tomaron `employees.uuid`, `users.uuid` y `devices.uuid`: el `BIGINT` no sale nunca de la base de datos.
 >
 > **`key_id` y `secret_hash` son NULL hasta que la tarjeta se imprime** ([ADR-034](adr/ADR-034-el-token-nace-al-imprimir-no-al-emitir.md)). El token en claro no se almacena nunca, así que se acuña en el mismo acto que dibuja el PDF: las tres columnas —`key_id`, `secret_hash` y `printed_at`— se escriben juntas o no se escribe ninguna. Una credencial pendiente de imprimir existe, cuenta en el panel de RF-QR-08 y **no puede fichar**, porque no hay hash por el que resolverla. La entrega, a su vez, lleva siempre `delivered_at` y `delivered_by_user_id`, y no puede preceder a la impresión.
+>
+> **La unicidad se declara en dos índices parciales** (tarea 2.12, RF-QR-07): `one_pending_credential_per_employee` —una sola pendiente de imprimir por persona— y `one_active_credential_per_key_and_employee` —una sola tarjeta escaneable por persona **y por clave**—. Los dos juntos permiten la única convivencia que la rotación con solape necesita, la de la tarjeta en uso con su relevo, y siguen impidiendo dos tarjetas vivas firmadas con la misma clave. Ver la nota de §5.2.
 
 **`devices`** — `id`, `site_id`, `name`, `token_hash`, `app_version`, `last_seen_at`, `pending_queue_size`, `status`
 
@@ -442,7 +466,17 @@ ALTER TABLE shift_entries ADD CONSTRAINT shift_entries_chk_order
 
 **`shift_corrections`** — `id`, `shift_entry_id`, `performed_by_user_id`, `action`, `before` (JSONB), `after` (JSONB), `reason_code`, `reason_text`, `created_at`
 
-**`incidents`** — `id`, `employee_id`, `work_date`, `type` (`open_shift_expired`|`short_shift`|`long_shift`|`insufficient_rest`|`clock_skew`|`missing_clock_out`|`anomalous_pattern`), `severity`, `status`, `assigned_to_user_id`, `resolved_at`, `resolution_note`
+**`incidents`** — `id`, `employee_id`, `work_date`, `shift_entry_id` (NULL cuando la incidencia describe la jornada entera y no un tramo), `type` (`open_shift_expired`|`short_shift`|`long_shift`|`missing_break`|`insufficient_rest`|`clock_skew`|`missing_clock_out`|`anomalous_pattern`), `severity` (`low`|`medium`|`high`), `status` (`open`|`resolved`|`dismissed`), `assigned_to_user_id`, `detected_at`, `context` (JSONB, **sin datos personales**: minutos y umbrales, nunca nombres), `notified_at`, `resolved_at`, `resolved_by_user_id`, `resolution_note`, `created_at`, `updated_at`. UNIQUE `one_incident_per_finding (employee_id, work_date, type, shift_entry_id) NULLS NOT DISTINCT`, sobre **todos** los estados.
+
+> **Las columnas que el enunciado original no tenía** las añade la tarea 2.6, que es la que crea la tabla, y cada una responde a una pregunta que si no está en el esquema hay que resolver a mano:
+>
+> - **`shift_entry_id`** es lo que hace **idempotente** la detección: sin referencia al tramo, dos tramos anómalos de la misma jornada producen dos incidencias indistinguibles y cada ejecución las duplica. Con él y con la restricción única `one_incident_per_finding`, repetir el comando no crea nada nuevo. `NULLS NOT DISTINCT` (PostgreSQL 15+) extiende esa garantía a las incidencias de jornada, que no apuntan a ningún tramo. **La restricción cubre todos los estados, no solo `open`:** una incidencia ya resuelta tiene que seguir impidiendo que el mismo hallazgo se vuelva a abrir, porque un tramo cerrado es una fila inmutable y el mismo hecho sobre él no es un hecho nuevo. Si de verdad lo fuera —una corrección— llegaría con otro `shift_entry_id`, porque corregir estrena identificador ([ADR-035](adr/ADR-035-la-correccion-estrena-identificador-y-no-cambia-de-jornada.md)). Sin esto, la incidencia que un responsable trabajó ayer volvía a abrirse y a avisarle cada noche mientras su jornada siguiera dentro de la ventana de detección.
+> - **`detected_at`** separa *cuándo ocurrió el hecho* (`work_date`) de *cuándo lo vio el sistema*, que es la misma distinción de la regla dura 9 y la que permite medir el «tiempo hasta resolver» del §9.2.
+> - **`context`** guarda los números que sostienen la incidencia —minutos trabajados, umbral aplicado, descanso real— para que la bandeja pueda explicarla sin recalcularla y para dejar constancia del umbral **vigente en el momento de la detección**, que puede cambiar después (RF-PD-07).
+> - **`notified_at`** evita que el aviso al responsable (RF-PR-01) se envíe dos veces, y que se pierda si el correo falla: se sella cuando el resumen sale, no cuando la incidencia se abre.
+> - **`resolved_by_user_id`** responde «quién dio esto por resuelto», que es la mitad de la traza que RN-13 exige para cualquier intervención humana sobre el registro.
+>
+> **`missing_break`** es el tipo que faltaba para RN-12. Con [ADR-024](adr/ADR-024-la-pausa-son-dos-tramos.md), «sin pausa registrada» significa exactamente «un solo tramo continuo por encima del umbral»; colapsarlo en `long_shift` haría indistinguible en la bandeja «ha trabajado 9 h y media hoy» de «lleva 6 h y media sin parar», y se resuelven de forma distinta. **`anomalous_pattern`** y **`missing_clock_out`** siguen en el catálogo sin detector: el primero es RF-PR-06 (Fase 3) y el segundo describe el olvido ya corregido a mano, no lo que la detección automática ve.
 
 **`absences`** — `id`, `employee_id`, `type`, `starts_on`, `ends_on`, `note`
 
@@ -811,6 +845,36 @@ Escenario: Turno olvidado
   Entonces el tramo NO se cierra automáticamente
   Y se crea una incidencia de tipo open_shift_expired
   Y se notifica al responsable del departamento
+
+Escenario: Descanso insuficiente entre dos jornadas
+  Dado un perfil de cumplimiento con 12 horas de descanso mínimo
+  Y un empleado que sale el lunes a las 22:00
+  Cuando entra el martes a las 09:59, once horas y cincuenta y nueve minutos después
+  Entonces se crea una incidencia de tipo insufficient_rest
+  Y con entrada a las 10:00, doce horas exactas, no se crea ninguna
+
+Escenario: Tramo demasiado corto para computar
+  Dado un tramo con entrada a las 08:00:00 y salida a las 08:00:59
+  Cuando se ejecuta el proceso de detección de anomalías
+  Entonces el tramo se conserva tal cual, con sus dos marcas
+  Y se crea una incidencia de tipo short_shift
+  Y con salida a las 08:01:00, un minuto exacto, no se crea ninguna
+
+Escenario: Jornada diaria por encima de la ordinaria
+  Dado un perfil de cumplimiento con 9 horas de jornada diaria ordinaria
+  Y una jornada con dos tramos que suman 8 horas y 59 minutos
+  Cuando se ejecuta el proceso de detección de anomalías
+  Entonces no se crea ninguna incidencia
+  Y con 9 horas exactas tampoco
+  Y con 9 horas y 1 minuto se crea una incidencia de tipo long_shift
+
+Escenario: Jornada continuada sin pausa
+  Dado un perfil de cumplimiento que exige pausa a partir de 6 horas
+  Y un tramo continuo de 6 horas y 1 minuto
+  Cuando se ejecuta el proceso de detección de anomalías
+  Entonces se crea una incidencia de tipo missing_break
+  Y con un tramo de 6 horas exactas no se crea ninguna
+  Y una jornada de 4 horas, pausa, y otras 4 horas tampoco genera ninguna
 
 Escenario: Corrección manual trazada
   Dado un tramo abierto de la empleada "Ana"
