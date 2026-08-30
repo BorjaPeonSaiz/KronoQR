@@ -13,6 +13,12 @@ namespace App\Modules\Compliance\Domain\ValueObject;
  * sin `default` en la politica obliga a decidir su plazo en el momento de
  * anadirlo.
  *
+ * **`employment_contracts` NO esta aqui, y no es un olvido** (cierre de Fase 2):
+ * su plazo —relacion laboral + 4 anos, art. 21 LISOS como referencia— lo tiene
+ * que confirmar la asesoria laboral en la tarea 5.2, y hasta entonces se
+ * conserva. Queda documentado como categoria en `docs/cliente/obligaciones-legales.md`
+ * §4 y en `docs/runbooks/solicitud-derechos-rgpd.md` §1.
+ *
  * **Por que `WorkRecords` y `AuditLog` van separados teniendo el mismo plazo.**
  * Porque se purgan de forma distinta y con roles distintos: el registro de
  * jornada se borra por lotes con el rol de la aplicacion, y `audit_log`

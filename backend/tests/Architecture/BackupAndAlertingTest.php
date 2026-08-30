@@ -385,3 +385,44 @@ it('programa la deteccion de incidencias y su metrica, que es lo que las hace ex
         ->toContain("Schedule::command('compliance:incident-metrics')")
         ->toMatch('/attendance:detect-incidents\'\)\s*\n\s*->dailyAt\(/');
 })->group('RF-PR-01');
+
+it('no deja ningun runbook enlazado desde otro que no exista', function (): void {
+    // El hallazgo que esta prueba existe para no repetir: `brecha-de-seguridad.md`
+    // estuvo citado por cuatro documentos —el indice de la carpeta y tres
+    // runbooks que remitian a el para el procedimiento de 72 h (RL-15)— sin que
+    // el fichero existiera. Un enlace roto en un runbook no se nota hasta que
+    // alguien lo sigue, y quien lo sigue lo hace el peor dia.
+    //
+    // La misma norma del §8.4 que exige runbook por alerta, aplicada un escalon
+    // mas arriba: un procedimiento que remite a otro procedimiento tiene que
+    // poder llegar a el.
+    $enlaces = [];
+
+    foreach (glob(Repo::file('docs/runbooks/*.md')) ?: [] as $runbook) {
+        $nombre = basename($runbook);
+        preg_match_all(
+            '/\]\(([^)#]+\.md)(?:#[^)]*)?\)/',
+            (string) file_get_contents($runbook),
+            $coincidencias,
+        );
+
+        foreach ($coincidencias[1] as $destino) {
+            // Solo enlaces relativos del repositorio: un `https://` no es
+            // asunto de esta comprobacion.
+            if (str_contains($destino, '://')) {
+                continue;
+            }
+
+            $enlaces[] = [$nombre, $destino, \dirname($runbook).'/'.$destino];
+        }
+    }
+
+    expect($enlaces)->not->toBeEmpty('No se ha leido ningun runbook: la ruta de busqueda esta mal.');
+
+    foreach ($enlaces as [$origen, $destino, $ruta]) {
+        expect(is_file($ruta))->toBeTrue(
+            $origen.' enlaza a "'.$destino.'", que no existe. Escribelo o corrige el enlace: '
+            .'quien sigue un runbook a las 06:30 no puede quedarse sin el siguiente.'
+        );
+    }
+})->group('RL-15');

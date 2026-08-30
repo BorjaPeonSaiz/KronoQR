@@ -27,8 +27,8 @@ use App\Modules\Workforce\Domain\Event\EmploymentContractRegistered;
  * ## Que lleva el asiento
  *
  * Lo suficiente para reconstruir el cambio: a quien —por su UUID publico—,
- * desde cuando, cuantas horas y hasta cuando quedo el contrato anterior.
- * **Ningun nombre** (regla dura 21). El actor lo resuelve
+ * desde cuando, cuantas horas quedan, y del contrato que se cierra cuantas horas
+ * tenia y hasta cuando quedo vigente. **Ningun nombre** (regla dura 21). El actor lo resuelve
  * {@see CurrentAuditContext} de la sesion en curso, no el evento: quien hace el
  * cambio no puede declarar quien es.
  *
@@ -73,6 +73,12 @@ final readonly class RecordEmploymentContractChange
                 // quien revisa por que las horas contratadas de alguien no
                 // cuadran con su nomina.
                 'previous_valid_to' => $event->previousValidTo,
+                // Y el ANTES de la cifra, no solo el despues. Con `weekly_hours`
+                // a secas, «¿quien le bajo las horas y cuanto?» solo se contesta
+                // reconstruyendo la serie de contratos desde el primero; con las
+                // dos cifras en el mismo asiento, se lee de una fila.
+                'previous_weekly_hours' => $event->previousWeeklyHours,
+                'previous_annual_hours' => $event->previousAnnualHours,
             ]),
             occurredAt: $event->occurredAt(),
             ip: $this->context->ip(),

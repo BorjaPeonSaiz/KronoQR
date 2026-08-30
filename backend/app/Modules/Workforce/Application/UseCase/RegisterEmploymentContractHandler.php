@@ -87,6 +87,12 @@ final readonly class RegisterEmploymentContractHandler
         ): EmploymentContract {
             $previous = $this->contracts->openContractFor($command->employeeUuid);
             $previousValidTo = null;
+            // El ANTES del cambio, para el asiento. Se lee del contrato que se
+            // cierra y no de la serie historica: aqui esta delante, y quien lea
+            // el trail no deberia tener que reconstruirla para saber de cuantas
+            // horas se venia.
+            $previousWeeklyHours = $previous?->weeklyHours;
+            $previousAnnualHours = $previous?->annualHours;
 
             if ($previous !== null) {
                 if ($previous->validFrom >= $validFrom) {
@@ -119,6 +125,8 @@ final readonly class RegisterEmploymentContractHandler
                 scheduleType: $contract->scheduleType->value,
                 validFrom: $contract->isoValidFrom(),
                 previousValidTo: $previousValidTo,
+                previousWeeklyHours: $previousWeeklyHours,
+                previousAnnualHours: $previousAnnualHours,
                 occurredAt: $this->clock->now(),
             ));
 
