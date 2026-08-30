@@ -1,5 +1,23 @@
 # HANDOFF
 
+## Sesión «cierre de la Fase 2» (31-08-2026), en `feat/2.6-incident-detection`
+
+**CIERRE DE FASE 2 EJECUTADO** (procedimiento del plan 04, l. 692-731). Puertas deterministas: cadena de auditoría íntegra (1338 asientos), reconciliación 14 729 jornadas / 0 divergencias, trazabilidad **Fase 2: 30/30** con `current_phase=2`, mutación global **MSI 84,21 %** (umbral 80). Cuatro revisores: `devops-observabilidad` (sin bloqueantes; correcciones en `61b0c78`), `revisor-codigo` (sin errores de corrección; refactors en `8d34133`), `qa-testing` (huecos de cobertura cerrados en `c90e33b`), `seguridad-cumplimiento` (2 bloqueantes resueltos en `d5f1f2e`: runbook de brecha 72 h y retención de `employment_contracts`). El commit de cierre sube `current_phase` 1→2 y regenera matriz y CHANGELOG.
+
+**Pendiente del usuario (decisiones abiertas):**
+- Vale de un solo uso para el alta del 2FA — prorrogado a la 5.4 en doc 07 §6, la decisión sigue abierta.
+- Prueba de campo de una tarjeta reimpresa (2.12).
+- Techo del formato PDF (`docs/verificacion-manual.md`; el aviso de trazabilidad sobre `PeriodReportPdfSealTest` saltada es este mismo asunto).
+- Plazo de purga de `employment_contracts` con la asesoría laboral (5.2); hasta entonces se conservan.
+- Versión para la etiqueta: propuesta **2.1.0** al integrar en `main`.
+
+**Deuda anotada en el cierre, no silenciada:**
+- **RNF-D-03, mitad de colas:** el fallback Redis→base de datos que prometía `.env.example:119` no está implementado; el comentario ya dice la verdad. El trabajo real (driver `failover` y quién consume la cola de respaldo conviviendo con Horizon) es diseño de la Fase 3.
+- **La puerta de cobertura (`make coverage`) no corre en CI**; solo mutación y trazabilidad.
+- Paso 9 de la tarea 3.2 (alerta de fallos de los comandos nocturnos), ya descrito más abajo.
+
+**Siguiente acción: PR de `feat/2.6-incident-detection` contra `main`.** Después, Fase 5 (orden real 0→1→2→5→3→4).
+
 ## Sesión «Fase 2 en cadena: 2.5 a 2.12» (30-08-2026), en `feat/2.6-incident-detection`
 
 **Orquestación de la fase completa sobre una sola rama, una tarea = un commit.** Estado al escribir esto: **2.6, 2.5, 2.7 y 2.8 commiteadas y con CI en verde** sobre `e3ed906` (los 9 jobs). Commits: `ae255bf` 2.6 · `c709a28` 2.5 backend · `4df701c` 2.5 panel · `a560e2d` correcciones de la revisión de la 2.6 (4 importantes + 7 menores de `revisor-codigo`) · `804316d` clientes TS · `1f02dc6` 2.7 · `b08e6c2` 2.8 · `4f23819` asiento `projection.reconciled` · `e3ed906` `AuditLogRow`. **2.10 terminada en el árbol sin commitear** (informe del agente verificado); **2.9 y 2.12 en verificación final** (las cortó el límite de sesión de la API a media tarde; reanudadas).

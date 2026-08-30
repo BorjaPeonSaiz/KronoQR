@@ -21,11 +21,27 @@ falla si no la encuentra, y la CI ejecuta esa comprobacion al etiquetar.
 
 ### Anadido
 
-- presencia en tiempo real: GET /attendance/live, difusion por Reverb en canales privados por departamento y metricas open_shifts_current y websocket_connections_active (tarea 2.4) (reporting)
+- rotacion de la clave de firma con solape y reimpresion progresiva (tarea 2.12) (identity)
+- exportaciones CSV, XLSX y PDF del informe por periodo en streaming (tarea 2.9) (reporting)
+- retencion con confirmacion, purga documentada y DROP PARTITION sellado (tarea 2.10) (compliance)
+- RN-12 queda suspendida hasta la pausa declarada de la 3.5 (attendance)
+- la reconciliacion de proyeccion deja asiento projection.reconciled registrado por el proveedor (tarea 2.7) (compliance)
+- informes por periodo con contratos historizados y comparativa trabajadas frente a contratadas (tarea 2.8) (reporting)
+- reconciliacion nocturna de daily_totals con alerta de divergencia (tarea 2.7) (attendance)
+- bandeja de incidencias con resolucion trazada y marca en el detalle de jornada (tarea 2.5) (admin)
+- bandeja de incidencias y resolucion con nota por la API (tarea 2.5, backend) (compliance)
+- deteccion automatica de incidencias con asignacion, aviso y metrica (tarea 2.6) (compliance)
+- presencia en vivo, difusion por Reverb y metricas de turnos abiertos (tarea 2.4) (reporting)
+- presencia en vivo con Reverb y respaldo por sondeo (tarea 2.4) (admin)
 - pantalla del segundo factor TOTP en el acceso, con alta por QR y E2E (tarea 2.1) (admin)
 
 ### Corregido
 
+- el escalado de integridad dispara y el runbook de divergencia usa un rol que existe (cierre F2) (observability)
+- los stubs viven en tools/PHPStan, la grafia que ya existia (phpstan)
+- AuditLogRow, la clase que DatabaseAuditChainReader ya referenciaba (compliance)
+- la deteccion no reabre incidencias resueltas ni sella avisos sin entregar (revision 2.6) (compliance)
+- el arranque no depende de las credenciales de Reverb (regla dura 19) (reporting)
 - tsc acepta la extension .ts en la importacion de vitest.config (deps)
 - el simulacro de copia arranca el cluster como fichaje_migrator, no como fichaje_app (ci)
 - el simulacro de copia espera a PostgreSQL por TCP y vuelca los logs si no arranca (ci)
@@ -33,10 +49,22 @@ falla si no la encuentra, y la CI ejecuta esa comprobacion al etiquetar.
 
 ### Seguridad
 
+- la tarjeta viva con clave fuera del llavero deja de ser invisible (revision 2.12) (identity)
 - correcciones de la revision de seguridad de la tarea 2.1 (identity)
 
 ### Interno
 
+- runbook de brecha 72h y hallazgos de la revision de cierre de fase 2 (seguridad)
+- exposicion textfile compartida y hallazgos de la revision de cierre (shared)
+- cierra los huecos de cobertura del cierre de fase 2 (trazabilidad)
+- retirados los .gitkeep de directorios que ya tienen ficheros (cierre F2)
+- fase 2 integrada con CI en verde en 94cafe5; siguiente accion, el cierre de fase (handoff)
+- stubs de Sanctum y Carbon para que el analisis local iguale a la CI (phpstan)
+- clientes TypeScript regenerados tras la descripcion nueva de IncidentOutcome (api)
+- tarea 2.4 completa en la rama; la CI de a1549d0 cayo en setup-php y se relanza (handoff)
+- gitleaks perdona el secreto señuelo del rechazo TOTP por valor exacto (security)
+- tarea 2.1 completa en la PR #30, revision de seguridad aplicada (handoff)
+- [Unreleased] y trazabilidad recogen la tarea 2.1 (changelog)
 - PR #28 (toolchain) y #29 (E2E del panel) abiertas (handoff)
 - [Unreleased] recoge los E2E del panel (changelog)
 - matriz regenerada con los E2E del panel (trazabilidad)
