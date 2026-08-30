@@ -160,6 +160,9 @@ export const WORKDAYS: EmployeeWorkDays = {
           },
         },
       ],
+      // Sin incidencias en el recorrido de la 1.16 (RF-PA-05). El campo va
+      // siempre porque el contrato lo exige.
+      incidents: [],
     },
   ],
   meta: { total: 1 },

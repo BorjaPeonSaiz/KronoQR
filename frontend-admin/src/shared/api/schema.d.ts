@@ -1723,6 +1723,125 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/incidents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Bandeja de incidencias
+         * @description Lo que del registro horario tiene que mirar una persona, paginado
+         *     (RF-PA-05, RF-PR-01, documento 01 §5.5).
+         *
+         *     **Por omision solo las abiertas.** `status=open` es la pregunta que hace
+         *     quien abre la bandeja: que tengo pendiente. Las resueltas y las
+         *     descartadas no desaparecen —nada se borra (regla dura 5)— pero hay que
+         *     pedirlas.
+         *
+         *     **El orden es el de trabajo, no el de creacion**: primero la severidad
+         *     —`high`, `medium`, `low`— y dentro de ella la mas reciente primero. Se
+         *     resuelve sobre el indice parcial `incidents_open_by_assignee`, no
+         *     ordenando el historico entero.
+         *
+         *     **El alcance por departamento de RF-ID-03 entra en la consulta**, no
+         *     filtra despues: un `responsable_departamento` recibe una pagina que solo
+         *     contiene incidencias de la gente de los departamentos que dirige
+         *     —`meta.total` incluido— y `admin` y `rrhh` la ven entera. Un responsable
+         *     **sin ningun departamento asignado** recibe una pagina vacia, no la
+         *     bandeja completa. Filtrar despues de contar daria un `meta.total` que
+         *     describe a personas que quien pregunta no puede ver.
+         *
+         *     Los filtros **no** devuelven `403` cuando apuntan fuera del alcance:
+         *     devuelven una pagina vacia. Un filtro es una peticion de acotar y no la
+         *     peticion de un recurso ajeno, y responder `403` convertiria el
+         *     desplegable de departamentos del panel en un generador de errores (mismo
+         *     criterio que `GET /api/v1/employees` y que `GET /api/v1/attendance/live`).
+         *
+         *     **La severidad no la elige nadie**: la decide el tipo de incidencia, de
+         *     modo que el mismo hecho entra siempre en la bandeja con la misma
+         *     prioridad. Por eso no hay ningun endpoint para cambiarla.
+         *
+         *     **Es un acceso a datos personales de terceros** y queda registrado en
+         *     `audit_log` con su alcance —cuantas filas, que filtros— y nunca con lo
+         *     divulgado (RS-05, regla dura 21).
+         */
+        get: operations["listIncidents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/incidents/{id}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador de la incidencia (`incidents.id`).
+                 *
+                 *     **Es la clave interna, y aqui si.** El resto de la API identifica por
+                 *     UUID publico porque lo que hay al otro lado es una persona, una tarjeta
+                 *     o un tramo de su jornada, y un identificador secuencial diria cuanta
+                 *     gente hay y en que orden entro. Una incidencia no es nadie: es una fila
+                 *     de trabajo interno que solo existe dentro del panel, no viaja impresa ni
+                 *     se enseña a un tercero, y su numero no revela nada sobre la plantilla.
+                 * @example 412
+                 */
+                id: components["parameters"]["IncidentId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolver o descartar una incidencia
+         * @description Da una incidencia por trabajada, con nota obligatoria (RF-PA-05).
+         *
+         *     **`outcome` distingue dos desenlaces que no son lo mismo.** `resolved`
+         *     dice «habia algo y se ha arreglado» —normalmente con una correccion
+         *     trazada de RF-PA-04, que se hace aparte— y `dismissed` dice «se ha
+         *     mirado y no habia nada que arreglar». Con un solo desenlace, el
+         *     indicador «tiempo medio hasta resolver» del documento 01 §9.2 mezclaria
+         *     trabajo real con falsos positivos y no serviria para ajustar los
+         *     umbrales.
+         *
+         *     **La nota es obligatoria en los dos casos.** Es la mitad de la traza que
+         *     RN-13 exige de cualquier intervencion humana sobre el registro: sin ella
+         *     la bandeja se vacia y seis meses despues nadie puede explicar por que.
+         *
+         *     **Esto no cambia ni una hora del registro horario.** Resolver una
+         *     incidencia no cierra ningun turno ni mueve ninguna marca (RN-08): si hay
+         *     que rectificar, se rectifica con `PATCH /api/v1/shift-entries/{uuid}`,
+         *     que exige el ambito `attendance:correct` y deja su propia traza. Esta
+         *     operacion solo dice que alguien la ha mirado.
+         *
+         *     **Se resuelve una sola vez.** Una incidencia que ya esta `resolved` o
+         *     `dismissed` devuelve `409`: la accion siguiente es releerla, no
+         *     reintentar. Dos peticiones simultaneas producen una resolucion y un
+         *     `409`, no dos notas encadenadas.
+         *
+         *     **Alcance por departamento** (RF-ID-03). Un `responsable_departamento`
+         *     que intenta resolver una incidencia de gente de otro departamento recibe
+         *     `403` —no `404`: la incidencia existe y el problema es de autorizacion—
+         *     y el intento queda en `audit_log` con el `employee_uuid` afectado y
+         *     nunca con su nombre (RS-05, regla dura 21).
+         *
+         *     Deja asiento `incident.resolved` en `audit_log` con el actor real de la
+         *     peticion, y observa el histograma `incident_resolution_seconds{type}`
+         *     entre `detected_at` y la resolucion (documento 02 §8.2).
+         */
+        post: operations["resolveIncident"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export interface webhooks {
     presenceUpdated: {
@@ -3439,6 +3558,28 @@ export interface components {
              *     sin volver a consultar nada.
              */
             corrections: components["schemas"]["WorkDayCorrection"][];
+            /**
+             * @description Lo que hay abierto o ya trabajado sobre esta jornada (RF-PA-05,
+             *     RF-PR-01), para que el panel incruste la marca en el detalle sin una
+             *     segunda llamada. **Solo la ficha de cada una** —identificador, tipo,
+             *     severidad y situacion—: la nota de resolucion, el contexto y el
+             *     responsable estan en `GET /api/v1/incidents`.
+             *
+             *     Es distinto de `has_incident`, que sigue significando lo que
+             *     significaba: algun tramo de la jornada quedo clasificado como
+             *     `anomalous` (RN-07, RN-08). Una jornada puede tener incidencias sin
+             *     ningun tramo anomalo —RN-10 mira el descanso ENTRE jornadas— y al
+             *     reves.
+             *
+             *     **En `GET /api/v1/me/workdays` viene siempre vacio.** Si el propio
+             *     empleado debe ver las incidencias abiertas sobre su jornada es una
+             *     decision de producto que ningun requisito cubre hoy: RF-ID-05 y RL-05
+             *     le reconocen su registro horario, y una incidencia no es el registro,
+             *     es la revision interna de ese registro. Se deja el campo con la misma
+             *     forma en las dos rutas para no partir en dos el esquema
+             *     `EmployeeWorkDays`, que es compartido a proposito.
+             */
+            incidents: components["schemas"]["WorkDayIncident"][];
         };
         /**
          * WorkDayShiftEntry
@@ -3785,6 +3926,276 @@ export interface components {
              */
             occurred_at: components["schemas"]["UtcTimestamp"];
         };
+        /**
+         * IncidentType
+         * @description Que se ha encontrado (`incidents.type`, documento 01 §5.5).
+         *
+         *     - `open_shift_expired`: un turno lleva abierto mas de lo admisible
+         *       (RN-08). **El sistema no lo cierra nunca**: escribe esto y espera a una
+         *       persona.
+         *     - `short_shift`: el tramo esta por debajo de la duracion minima
+         *       computable (RN-07).
+         *     - `long_shift`: el tramo cerrado, o la suma de la jornada, supera la
+         *       duracion maxima (RN-08, RN-11).
+         *     - `missing_break`: tramo continuado sin pausa registrada (RN-12).
+         *     - `insufficient_rest`: el descanso entre jornadas queda por debajo del
+         *       minimo legal (RN-10, art. 34.3 ET).
+         *     - `clock_skew`: el fichaje llego con el reloj del quiosco desviado
+         *       (RN-15). Se registro igual: el quiosco nunca bloquea al empleado.
+         *     - `missing_clock_out`: olvido de salida ya cerrado por correccion manual
+         *       (RF-PA-04). No tiene detector automatico.
+         *     - `anomalous_pattern`: patron anomalo de uso de credencial (RF-PR-06,
+         *       RN-16). Su detector llega en la Fase 3; el catalogo lo admite desde
+         *       ahora para que la bandeja no necesite una migracion cuando exista.
+         * @example insufficient_rest
+         * @enum {string}
+         */
+        IncidentType: "open_shift_expired" | "short_shift" | "long_shift" | "missing_break" | "insufficient_rest" | "clock_skew" | "missing_clock_out" | "anomalous_pattern";
+        /**
+         * IncidentSeverity
+         * @description Con que urgencia entra en la bandeja (`incidents.severity`).
+         *
+         *     **La decide el tipo y no quien la abre ni quien la mira**, que es lo que
+         *     impide que el mismo hecho se clasifique con dos prioridades distintas. No
+         *     hay ningun endpoint para cambiarla.
+         *
+         *     - `high`: se ha incumplido una norma con consecuencia sancionadora, o hay
+         *       un indicio sobre una persona que no puede quedarse sin revisar.
+         *     - `medium`: el registro esta incompleto o no cuadra y alguien tiene que
+         *       corregirlo con traza (RN-13).
+         *     - `low`: el registro es valido y el dato es raro.
+         *
+         *     Tres niveles y no cinco: la severidad solo sirve si cambia el orden en que
+         *     alguien mira la bandeja.
+         * @example high
+         * @enum {string}
+         */
+        IncidentSeverity: "low" | "medium" | "high";
+        /**
+         * IncidentStatus
+         * @description En que punto esta (`incidents.status`). Dos de los tres son finales.
+         *
+         *     - `open`: pendiente de que alguien la trabaje.
+         *     - `resolved`: habia algo y se ha arreglado.
+         *     - `dismissed`: se ha mirado y no habia nada que arreglar.
+         *
+         *     **No hay `acknowledged`**: un estado intermedio de «visto» solo tiene
+         *     sentido con reparto de trabajo entre varias personas, y aqui la
+         *     incidencia nace asignada al responsable del departamento.
+         * @example open
+         * @enum {string}
+         */
+        IncidentStatus: "open" | "resolved" | "dismissed";
+        /**
+         * IncidentOutcome
+         * @description Los dos desenlaces con los que una persona cierra una incidencia. Son
+         *     `IncidentStatus` menos `open`: no hay forma de reabrir desde la API, y no
+         *     es un olvido — una incidencia cerrada no impide que el mismo hecho vuelva
+         *     a detectarse, y entonces es un hecho nuevo con su fila nueva.
+         * @example resolved
+         * @enum {string}
+         */
+        IncidentOutcome: "resolved" | "dismissed";
+        /**
+         * IncidentEmployee
+         * @description A quien afecta la incidencia, con lo justo para que la bandeja se pueda
+         *     trabajar: su identificador publico, su codigo y su nombre.
+         */
+        IncidentEmployee: {
+            /**
+             * Format: uuid
+             * @description Identificador **publico** del empleado. Es el unico identificador de
+             *     una persona que aparece en un log o en `audit_log` (regla dura 21);
+             *     el nombre de al lado viaja a la pantalla del panel autorizado y nunca
+             *     al log.
+             * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+             */
+            uuid: string;
+            /**
+             * @description Codigo opaco impreso en su tarjeta (RF-ID-06). Va en la bandeja
+             *     porque es lo que se lee en voz alta cuando hay dos personas con el
+             *     mismo apellido.
+             * @example E7QK2MXPR
+             */
+            employee_code: string;
+            /**
+             * @description Nombre y apellidos, ya compuestos por el servidor.
+             * @example Youssef Amrani
+             */
+            full_name: string;
+            /**
+             * @description Departamento al que esta adscrita la persona. `null` cuando no tiene
+             *     ninguno, que es un estado legitimo: a quien no tiene departamento
+             *     solo lo ve una cuenta sin restriccion de alcance (RF-ID-03).
+             */
+            department: components["schemas"]["PresenceDepartment"] | null;
+        };
+        /**
+         * IncidentUser
+         * @description Una cuenta de gestion: la que responde de la incidencia o la que la
+         *     cerro. **Por UUID y no por la clave interna**, igual que el autor de una
+         *     correccion en `WorkDayCorrection.performed_by`.
+         */
+        IncidentUser: {
+            /**
+             * Format: uuid
+             * @example 0199f0aa-1111-7000-8000-0123456789ab
+             */
+            uuid: string;
+            /** @example Jefa de cocina */
+            name: string;
+        };
+        /**
+         * IncidentContext
+         * @description Los numeros que sostienen la incidencia: minutos medidos y umbral
+         *     aplicado en el momento de detectarla (`incidents.context`).
+         *
+         *     Va en la respuesta porque **el umbral puede cambiar despues** (RF-PD-07)
+         *     y sin el la incidencia no se puede explicar seis meses mas tarde. Las
+         *     claves dependen del tipo —`rest_minutes`/`threshold_minutes`,
+         *     `worked_minutes`/`threshold_minutes`, `skew_seconds`...— y el panel las
+         *     pinta como pares.
+         *
+         *     **Nunca lleva datos personales** (regla dura 21): solo enteros.
+         * @example {
+         *       "rest_minutes": 420,
+         *       "threshold_minutes": 720
+         *     }
+         */
+        IncidentContext: {
+            [key: string]: number;
+        };
+        /**
+         * Incident
+         * @description Una incidencia del registro horario (RF-PA-05, RF-PR-01, documento 01
+         *     §5.5): algo que tiene que mirar una persona.
+         *
+         *     **Los tres campos de cierre son nulos a la vez.** Con `status: open` no
+         *     hay `resolved_at`, ni `resolved_by`, ni `resolution_note`. No es
+         *     informacion que falte: es que todavia no ha pasado.
+         */
+        Incident: {
+            /**
+             * Format: int64
+             * @description Identificador de la incidencia. Es el que va en la URL de
+             *     `POST /api/v1/incidents/{id}/resolve`; ver el parametro `IncidentId`
+             *     para por que aqui si es la clave interna.
+             * @example 412
+             */
+            id: number;
+            type: components["schemas"]["IncidentType"];
+            severity: components["schemas"]["IncidentSeverity"];
+            status: components["schemas"]["IncidentStatus"];
+            employee: components["schemas"]["IncidentEmployee"];
+            /**
+             * Format: date
+             * @description Jornada a la que se refiere, en la zona del centro. Un turno
+             *     22:00 -> 06:00 pertenece entero al dia en que **empezo** (RN-05,
+             *     ADR-006, regla dura 4).
+             * @example 2026-03-14
+             */
+            work_date: string;
+            /**
+             * @description El tramo que la explica (`shift_entries.uuid`), o `null` cuando la
+             *     incidencia es de la jornada entera: RN-11 mira la suma del dia y
+             *     ningun tramo por si solo la explica.
+             *
+             *     **Identifica una version** (ADR-035). Si el tramo se corrigio y fue
+             *     sustituido despues de detectarse, este campo puede quedar en `null`:
+             *     el hecho detectado sigue siendo cierto y la jornada sigue
+             *     identificada por persona y fecha.
+             */
+            shift_entry_uuid: string | null;
+            /**
+             * @description Cuando la vio el sistema, que no es cuando ocurrio: eso es
+             *     `work_date`. La **antiguedad** de la incidencia se calcula contra
+             *     `meta.generated_at` y se muestra en `meta.time_zone`, no con el reloj
+             *     del navegador (regla dura 3).
+             */
+            detected_at: components["schemas"]["UtcTimestamp"];
+            context: components["schemas"]["IncidentContext"];
+            /**
+             * @description Quien responde de ella: el responsable del departamento del empleado
+             *     (`departments.manager_user_id`). `null` es un estado legitimo y
+             *     visible —un departamento puede quedarse sin responsable— y **no hace
+             *     que la incidencia se descarte**: queda sin asignar hasta que alguien
+             *     lo nombre. Perder el hallazgo por un hueco de configuracion seria lo
+             *     contrario de para lo que la deteccion existe.
+             */
+            assigned_to: components["schemas"]["IncidentUser"] | null;
+            /** @description Cuando se cerro. `null` mientras siga abierta. */
+            resolved_at: components["schemas"]["UtcTimestamp"] | null;
+            /**
+             * @description Quien la cerro. **Siempre una persona**: la deteccion abre
+             *     incidencias con actor `system`, pero ninguna se cierra sola.
+             */
+            resolved_by: components["schemas"]["IncidentUser"] | null;
+            /**
+             * @description Por que se dio por trabajada. Obligatoria al cerrarla (RN-13): sin
+             *     ella la bandeja se vacia y nadie puede explicar despues que se hizo.
+             * @example Corregida la salida olvidada del dia 14 con el parte de turno.
+             */
+            resolution_note: string | null;
+        };
+        /**
+         * IncidentCollection
+         * @description Pagina de la bandeja de incidencias.
+         */
+        IncidentCollection: {
+            data: components["schemas"]["Incident"][];
+            meta: components["schemas"]["IncidentPageMeta"];
+        };
+        /**
+         * IncidentPageMeta
+         * @description Situacion de la pagina dentro del total, mas lo que el panel necesita
+         *     para pintar la antiguedad de cada fila **sin adivinar** (regla dura 3).
+         */
+        IncidentPageMeta: {
+            page: number;
+            per_page: number;
+            /**
+             * @description Total de incidencias que casan con los filtros **dentro del alcance
+             *     de quien pregunta** (RF-ID-03), no de la instalacion.
+             */
+            total: number;
+            total_pages: number;
+            time_zone: components["schemas"]["TimeZoneName"];
+            /**
+             * @description Reloj del **servidor** en el momento de responder. La antiguedad de
+             *     cada incidencia se calcula contra este instante y no contra el del
+             *     navegador: una tablet o un portatil con la hora mal puesta pintaria
+             *     «hace 3 horas» sobre algo de anteayer.
+             */
+            generated_at: components["schemas"]["UtcTimestamp"];
+        };
+        /**
+         * ResolveIncidentRequest
+         * @description Cerrar una incidencia. Dos campos y los dos obligatorios.
+         */
+        ResolveIncidentRequest: {
+            outcome: components["schemas"]["IncidentOutcome"];
+            /**
+             * @description Por que se cierra. **Obligatoria** (RF-PA-05, RN-13), tambien al
+             *     descartar: «no habia nada» tambien hay que poder explicarlo.
+             *
+             *     Se recorta antes de guardarla, asi que una nota de espacios en blanco
+             *     es un `422` y no una fila que dice que alguien explico algo.
+             * @example Corregida la salida olvidada del dia 14 con el parte de turno.
+             */
+            note: string;
+        };
+        /**
+         * WorkDayIncident
+         * @description La marca de incidencia que el detalle de jornada incrusta (RF-PA-03,
+         *     RF-PA-05). Es la ficha minima: para trabajarla se va a la bandeja.
+         */
+        WorkDayIncident: {
+            /** Format: int64 */
+            id: number;
+            type: components["schemas"]["IncidentType"];
+            severity: components["schemas"]["IncidentSeverity"];
+            status: components["schemas"]["IncidentStatus"];
+        };
     };
     responses: {
         /**
@@ -4099,6 +4510,56 @@ export interface components {
          * @example 2026-03-31
          */
         WorkDateTo: string;
+        /**
+         * @description Identificador de la incidencia (`incidents.id`).
+         *
+         *     **Es la clave interna, y aqui si.** El resto de la API identifica por
+         *     UUID publico porque lo que hay al otro lado es una persona, una tarjeta
+         *     o un tramo de su jornada, y un identificador secuencial diria cuanta
+         *     gente hay y en que orden entro. Una incidencia no es nadie: es una fila
+         *     de trabajo interno que solo existe dentro del panel, no viaja impresa ni
+         *     se enseña a un tercero, y su numero no revela nada sobre la plantilla.
+         * @example 412
+         */
+        IncidentId: number;
+        /**
+         * @description Situacion de la incidencia. **`open` por omision**, que es la pregunta
+         *     que hace quien abre la bandeja: que tengo pendiente.
+         *
+         *     No hay valor «todas»: las tres situaciones se piden una a una. Una
+         *     bandeja que mezclara lo pendiente con lo ya trabajado obligaria a
+         *     distinguirlo fila a fila justo en la pantalla que existe para no tener
+         *     que hacerlo.
+         * @example open
+         */
+        IncidentStatusFilter: components["schemas"]["IncidentStatus"];
+        /**
+         * @description Limita la bandeja a un tipo de incidencia (documento 01 §5.5).
+         *
+         *     Hace falta desde el primer dia: una instalacion con turnos continuados
+         *     puede tener cientos de `missing_break` a la vez, y sin este filtro
+         *     taparian a los `insufficient_rest`, que son los que tienen consecuencia
+         *     sancionadora.
+         * @example insufficient_rest
+         */
+        IncidentTypeFilter: components["schemas"]["IncidentType"];
+        /**
+         * @description Limita la bandeja a una severidad. **No se puede cambiar la de una
+         *     incidencia**: la decide su tipo, para que el mismo hecho no entre en la
+         *     bandeja con dos prioridades segun quien lo mire.
+         * @example high
+         */
+        IncidentSeverityFilter: components["schemas"]["IncidentSeverity"];
+        /**
+         * @description Limita la bandeja a las incidencias de una persona, por su identificador
+         *     **publico** (`employees.uuid`). Es lo que pide la ficha de empleado
+         *     cuando enseña «lo que hay abierto sobre esta persona».
+         *
+         *     Fuera del alcance de quien pregunta devuelve una pagina vacia, no `403`:
+         *     es un filtro, no la peticion de un recurso ajeno.
+         * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+         */
+        IncidentEmployeeFilter: string;
         /**
          * @description Pagina solicitada, empezando en 1.
          * @example 1
@@ -5834,6 +6295,133 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listIncidents: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Situacion de la incidencia. **`open` por omision**, que es la pregunta
+                 *     que hace quien abre la bandeja: que tengo pendiente.
+                 *
+                 *     No hay valor «todas»: las tres situaciones se piden una a una. Una
+                 *     bandeja que mezclara lo pendiente con lo ya trabajado obligaria a
+                 *     distinguirlo fila a fila justo en la pantalla que existe para no tener
+                 *     que hacerlo.
+                 * @example open
+                 */
+                status?: components["parameters"]["IncidentStatusFilter"];
+                /**
+                 * @description Limita la bandeja a un tipo de incidencia (documento 01 §5.5).
+                 *
+                 *     Hace falta desde el primer dia: una instalacion con turnos continuados
+                 *     puede tener cientos de `missing_break` a la vez, y sin este filtro
+                 *     taparian a los `insufficient_rest`, que son los que tienen consecuencia
+                 *     sancionadora.
+                 * @example insufficient_rest
+                 */
+                type?: components["parameters"]["IncidentTypeFilter"];
+                /**
+                 * @description Limita la bandeja a una severidad. **No se puede cambiar la de una
+                 *     incidencia**: la decide su tipo, para que el mismo hecho no entre en la
+                 *     bandeja con dos prioridades segun quien lo mire.
+                 * @example high
+                 */
+                severity?: components["parameters"]["IncidentSeverityFilter"];
+                /**
+                 * @description Limita el resultado al departamento indicado.
+                 * @example 3
+                 */
+                department_id?: components["parameters"]["DepartmentFilter"];
+                /**
+                 * @description Limita la bandeja a las incidencias de una persona, por su identificador
+                 *     **publico** (`employees.uuid`). Es lo que pide la ficha de empleado
+                 *     cuando enseña «lo que hay abierto sobre esta persona».
+                 *
+                 *     Fuera del alcance de quien pregunta devuelve una pagina vacia, no `403`:
+                 *     es un filtro, no la peticion de un recurso ajeno.
+                 * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                 */
+                employee_uuid?: components["parameters"]["IncidentEmployeeFilter"];
+                /**
+                 * @description Pagina solicitada, empezando en 1.
+                 * @example 1
+                 */
+                page?: components["parameters"]["Page"];
+                /**
+                 * @description Elementos por pagina. El techo es deliberado: una plantilla de 600
+                 *     personas no se sirve entera en una respuesta, y el panel virtualiza la
+                 *     lista (documento 02, Anexo A).
+                 * @example 25
+                 */
+                per_page?: components["parameters"]["PerPage"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pagina de la bandeja. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IncidentCollection"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    resolveIncident: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador de la incidencia (`incidents.id`).
+                 *
+                 *     **Es la clave interna, y aqui si.** El resto de la API identifica por
+                 *     UUID publico porque lo que hay al otro lado es una persona, una tarjeta
+                 *     o un tramo de su jornada, y un identificador secuencial diria cuanta
+                 *     gente hay y en que orden entro. Una incidencia no es nadie: es una fila
+                 *     de trabajo interno que solo existe dentro del panel, no viaja impresa ni
+                 *     se enseña a un tercero, y su numero no revela nada sobre la plantilla.
+                 * @example 412
+                 */
+                id: components["parameters"]["IncidentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolveIncidentRequest"];
+            };
+        };
+        responses: {
+            /**
+             * @description La incidencia ya cerrada, con su desenlace, su nota y quien la firmo.
+             *     Se devuelve entera para que el panel sustituya la fila sin volver a
+             *     pedir la bandeja.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Incident"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
         };

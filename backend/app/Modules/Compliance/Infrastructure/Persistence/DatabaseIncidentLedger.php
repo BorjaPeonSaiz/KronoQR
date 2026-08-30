@@ -106,6 +106,49 @@ final readonly class DatabaseIncidentLedger implements IncidentLedger
         return $tallies;
     }
 
+    public function recordResolution(int $incidentId, Incident $resolved): bool
+    {
+        $resolvedAt = $resolved->resolvedAt;
+
+        if ($resolvedAt === null) {
+            // No puede pasar: solo `Incident::resolvedBy()` produce un agregado
+            // cerrado y siempre pone el instante. Se comprueba porque escribir
+            // `resolved_at = NULL` con `status <> 'open'` violaria el `CHECK`
+            // `incidents_chk_resolution_is_complete` a mitad de transaccion, y
+            // ahi el mensaje seria el de PostgreSQL y no el de nadie.
+            throw new RuntimeException('Se ha intentado registrar una resolucion sin instante de cierre.');
+        }
+
+        // `WHERE ... AND status = 'open'` ES la garantia, no el `SELECT` que hizo
+        // el caso de uso antes: entre leer y escribir cabe otra peticion, y dos
+        // responsables trabajando la misma bandeja es el caso normal. La segunda
+        // actualiza cero filas y su caso de uso responde `409`.
+        //
+        // **Cuatro columnas y ni una mas.** El tipo, la severidad, el
+        // responsable, el contexto y `detected_at` no se tocan: la incidencia
+        // sigue siendo la que se detecto y lo unico que ha pasado es que alguien
+        // la ha trabajado.
+        $affected = $this->connection->update(<<<'SQL'
+            UPDATE incidents
+               SET status = ?,
+                   resolved_at = ?,
+                   resolved_by_user_id = ?,
+                   resolution_note = ?,
+                   updated_at = ?
+             WHERE id = ?
+               AND status = 'open'
+        SQL, [
+            $resolved->status->value,
+            $resolvedAt->format('Y-m-d H:i:s.uP'),
+            $resolved->resolvedByUserId,
+            $resolved->resolutionNote,
+            $this->clock->now()->format('Y-m-d H:i:s.uP'),
+            $incidentId,
+        ]);
+
+        return $affected > 0;
+    }
+
     private function employeeIdOf(string $employeeUuid): ?int
     {
         $id = $this->connection->table('employees')->where('uuid', $employeeUuid)->value('id');

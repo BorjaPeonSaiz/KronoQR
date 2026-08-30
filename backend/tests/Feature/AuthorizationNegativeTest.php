@@ -105,6 +105,26 @@ function managementEndpoints(): array
         // aqui no cabe porque su cuerpo necesita un nombre de canal, y lo que
         // esta matriz comprueba es el par rol x endpoint.
         'ver la presencia en vivo' => ['GET', '/api/v1/attendance/live', []],
+
+        // Bandeja de incidencias (tarea 2.5, RF-PA-05). Ambito `incidents:*` y
+        // policy propia: es «manager+» del Anexo B. El `auditor` recibe `403`
+        // por partida doble —no lleva ese ambito y tampoco esta en el conjunto
+        // de roles—, y el quiosco ni siquiera lo tiene.
+        //
+        // **Los dos endpoints entran uno a uno** aunque compartan ambito, por lo
+        // mismo que los cuatro de credenciales: la policy se declara en el
+        // `FormRequest` de cada uno, asi que un `authorize()` que devolviera
+        // `true` en uno solo seria invisible desde el otro.
+        //
+        // El identificador `1` no existe en estas pruebas y da igual: lo que se
+        // comprueba es que la autorizacion corta **antes** de llegar a mirar si
+        // existe. Si alguna vez devolviera `404` en lugar de `403`, eso ya seria
+        // el fallo.
+        'ver la bandeja de incidencias' => ['GET', '/api/v1/incidents', []],
+        'resolver una incidencia' => ['POST', '/api/v1/incidents/1/resolve', [
+            'outcome' => 'resolved',
+            'note' => 'Revisado con el parte de turno.',
+        ]],
     ];
 }
 
@@ -148,6 +168,12 @@ function endpointsDeniedToDepartmentManager(): array
         // de `403` se prueban en `Tests\Feature\Reporting\LivePresenceScopeTest`:
         // aqui no caben, porque dependen de a quien se pida.
         $endpoints['ver la presencia en vivo'],
+        // Y la bandeja de incidencias desde la tarea 2.5, por la misma razon: es
+        // «manager+», el responsable entra **acotado a sus departamentos**, y su
+        // alcance —listado sin `403`, resolucion ajena con `403` y asiento— se
+        // prueba en `Tests\Feature\Compliance\IncidentScopeTest`.
+        $endpoints['ver la bandeja de incidencias'],
+        $endpoints['resolver una incidencia'],
     );
 
     return $endpoints;
@@ -170,6 +196,20 @@ it('deniega a una cuenta con rol de empleado el acceso al panel', function (stri
 
     Api::as($token)->call($method, $uri, $body)->assertStatus(403);
 })->with(managementEndpoints())->group('RQ-07', 'RF-ID-07');
+
+it('deniega a una sesion pendiente de segundo factor cualquier endpoint de gestion', function (string $method, string $uri, array $body): void {
+    // RS-06: el token del `202` de `/auth/login` lleva un unico ambito,
+    // `2fa:pending`, y no autoriza **nada** del producto — solo los tres
+    // endpoints de `/auth/2fa/*`. Es la mitad que convierte el segundo factor en
+    // obligatorio de verdad: sin esta comprobacion, «obligatorio» significaria
+    // «hay una pantalla mas» y bastaria no rellenarla.
+    //
+    // La cuenta es de `rrhh`, que si tiene todos los ambitos de gestion: asi lo
+    // que deniega es el estado de la sesion y no la falta de permisos.
+    $pending = ManagementUsers::pendingTokenFor(ManagementUsers::withRole(UserRole::RRHH));
+
+    Api::as($pending)->call($method, $uri, $body)->assertStatus(403);
+})->with(managementEndpoints())->group('RQ-07', 'RS-06', 'RF-ID-01');
 
 it('deniega el acceso sin token', function (string $method, string $uri, array $body): void {
     Api::guest()->call($method, $uri, $body)

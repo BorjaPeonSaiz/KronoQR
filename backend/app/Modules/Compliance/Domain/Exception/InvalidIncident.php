@@ -43,4 +43,40 @@ final class InvalidIncident extends ComplianceDomainException
     {
         return new self('El momento de deteccion se guarda en UTC (regla dura 3) y ha llegado «'.$detectedAt.'».');
     }
+
+    /**
+     * Las cuatro de abajo son de la resolucion (tarea 2.5, RF-PA-05). Comparten
+     * clase con las de arriba porque responden a la misma pregunta desde el otro
+     * extremo: **¿describiria esta fila algo que alguien trabajo de verdad?**
+     */
+    public static function withNonFinalOutcome(string $outcome): self
+    {
+        return new self(
+            'Una incidencia se cierra como resuelta o como descartada, y ha llegado «'.$outcome.'». '
+            .'Reabrir no es un desenlace: dejaria una incidencia abierta con nota de cierre.'
+        );
+    }
+
+    public static function withInvalidResolver(int $userId): self
+    {
+        return new self(
+            'Quien cierra una incidencia es un identificador positivo de `users`, y ha llegado '.$userId.'. '
+            .'RN-13 no admite una intervencion humana sin autor, y prefiere romper a escribir «lo hizo el sistema».'
+        );
+    }
+
+    public static function withoutResolutionNote(): self
+    {
+        return new self(
+            'Cerrar una incidencia exige una nota, tambien al descartarla: sin ella la bandeja se vacia '
+            .'y seis meses despues nadie puede explicar que se hizo (RF-PA-05, RN-13).'
+        );
+    }
+
+    public static function withResolutionBeforeDetection(string $resolvedAt, string $detectedAt): self
+    {
+        return new self(
+            'Una incidencia no se resuelve antes de detectarse: «'.$resolvedAt.'» es anterior a «'.$detectedAt.'».'
+        );
+    }
 }

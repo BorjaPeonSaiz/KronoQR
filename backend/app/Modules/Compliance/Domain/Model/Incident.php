@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Compliance\Domain\Model;
 
+use App\Modules\Compliance\Domain\Exception\IncidentAlreadyClosed;
 use App\Modules\Compliance\Domain\Exception\InvalidIncident;
 use App\Modules\Compliance\Domain\ValueObject\IncidentSeverity;
 use App\Modules\Compliance\Domain\ValueObject\IncidentStatus;
@@ -27,8 +28,15 @@ use DateTimeZone;
  * el resto del modulo.
  *
  * **Nace abierta y no se cierra sola.** La resolucion es un acto de una persona
- * con su motivo y su traza (tarea 2.5): aqui no hay ningun camino que lleve a
- * `resolved` sin que alguien lo pida.
+ * con su motivo y su traza (tarea 2.5): {@see self::resolvedBy()} exige quien,
+ * cuando y por que, y no hay ningun otro camino que lleve a `resolved`. El
+ * instante llega **de fuera** —del puerto `Clock` que inyecta el caso de uso—
+ * porque el dominio no lee el reloj (regla dura 2).
+ *
+ * **Y no se cierra dos veces.** Resolver una incidencia ya cerrada lanza
+ * {@see IncidentAlreadyClosed}, que la capa HTTP traduce a `409`. Es la
+ * invariante que impide que dos pestañas abiertas sobre la misma bandeja dejen
+ * dos notas encadenadas sobre el mismo hecho, cada una tapando a la anterior.
  *
  * **`workDate` es una cadena ISO y no un objeto de fecha**, porque el objeto que
  * la representa —`WorkDate`, con la zona del centro que RN-05 exige— pertenece al
@@ -51,6 +59,18 @@ final readonly class Incident
         public DateTimeImmutable $detectedAt,
         public ?int $assignedToUserId,
         public array $context,
+        /**
+         * Los tres campos del cierre viajan juntos o no viajan (tarea 2.5).
+         *
+         * No son opcionales por comodidad: el `CHECK`
+         * `incidents_chk_resolution_is_complete` del esquema afirma exactamente
+         * lo mismo —abierta sin resolutor, cerrada con instante—, y una fila que
+         * dijera «resuelta» sin decir quien ni cuando no se puede defender ante
+         * una inspeccion.
+         */
+        public ?DateTimeImmutable $resolvedAt = null,
+        public ?int $resolvedByUserId = null,
+        public ?string $resolutionNote = null,
     ) {}
 
     /**
@@ -120,17 +140,176 @@ final readonly class Incident
         }
 
         return new self(
-            $this->type,
-            $this->severity,
-            $this->status,
-            $this->employeeUuid,
-            $this->siteId,
-            $this->workDate,
-            $this->shiftEntryUuid,
-            $this->detectedAt,
-            $userId,
-            $this->context,
+            type: $this->type,
+            severity: $this->severity,
+            status: $this->status,
+            employeeUuid: $this->employeeUuid,
+            siteId: $this->siteId,
+            workDate: $this->workDate,
+            shiftEntryUuid: $this->shiftEntryUuid,
+            detectedAt: $this->detectedAt,
+            assignedToUserId: $userId,
+            context: $this->context,
+            resolvedAt: $this->resolvedAt,
+            resolvedByUserId: $this->resolvedByUserId,
+            resolutionNote: $this->resolutionNote,
         );
+    }
+
+    /**
+     * Reconstruye una incidencia **tal y como esta escrita** (tarea 2.5).
+     *
+     * Es la entrada del repositorio, no de la deteccion: `open()` decide cosas
+     * —la severidad la pone el tipo, el estado nace `open`— y aqui no se decide
+     * nada, se reproduce. Si esta entrada pasara por `open()`, una fila cerrada
+     * volveria a la vida como abierta y una severidad que el catalogo cambiara
+     * mañana reescribiria en silencio la que se aplico al detectarla.
+     *
+     * Las guardas de forma **si** se aplican: una fila con una fecha imposible o
+     * con un instante que no es UTC no es una incidencia que alguien pueda
+     * trabajar, venga de donde venga.
+     *
+     * @param  array<string, int>  $context
+     */
+    public static function restore(
+        IncidentType $type,
+        IncidentSeverity $severity,
+        IncidentStatus $status,
+        string $employeeUuid,
+        int $siteId,
+        string $workDate,
+        ?string $shiftEntryUuid,
+        DateTimeImmutable $detectedAt,
+        ?int $assignedToUserId,
+        array $context,
+        ?DateTimeImmutable $resolvedAt,
+        ?int $resolvedByUserId,
+        ?string $resolutionNote,
+    ): self {
+        if (trim($employeeUuid) === '') {
+            throw InvalidIncident::withoutEmployee();
+        }
+
+        if ($siteId < 1) {
+            throw InvalidIncident::withoutSite($siteId);
+        }
+
+        self::guardIsoDate($workDate);
+        self::guardUtc($detectedAt);
+
+        if ($resolvedAt instanceof DateTimeImmutable) {
+            self::guardUtc($resolvedAt);
+        }
+
+        return new self(
+            type: $type,
+            severity: $severity,
+            status: $status,
+            employeeUuid: $employeeUuid,
+            siteId: $siteId,
+            workDate: $workDate,
+            shiftEntryUuid: $shiftEntryUuid,
+            detectedAt: $detectedAt,
+            assignedToUserId: $assignedToUserId,
+            context: $context,
+            resolvedAt: $resolvedAt,
+            resolvedByUserId: $resolvedByUserId,
+            resolutionNote: $resolutionNote,
+        );
+    }
+
+    /**
+     * Una persona la da por trabajada (**RF-PA-05**, RN-13).
+     *
+     * Cuatro invariantes, y ninguna es de formulario:
+     *
+     * 1. **Solo se cierra lo que esta abierto.** Una segunda resolucion no es
+     *    una correccion de la primera: es otra afirmacion sobre el mismo hecho,
+     *    firmada por otra persona, que taparia a la anterior en una tabla donde
+     *    nada se sobrescribe (regla dura 5).
+     * 2. **El desenlace es final.** `resolved` y `dismissed` no significan lo
+     *    mismo —«habia algo y se arreglo» frente a «se miro y no habia nada»— y
+     *    `open` no es un desenlace: reabrir desde aqui dejaria una incidencia
+     *    abierta con nota de cierre.
+     * 3. **La nota es obligatoria**, tambien al descartar. Es la mitad de la
+     *    traza que RN-13 exige de cualquier intervencion humana sobre el
+     *    registro; sin ella la bandeja se vacia y seis meses despues nadie puede
+     *    explicar que se hizo.
+     * 4. **No se resuelve antes de detectarse.** Lo afirma tambien el `CHECK`
+     *    `incidents_chk_resolved_after_detected`, y aqui se comprueba para que
+     *    el fallo sea del dominio y no una violacion de restriccion a medio
+     *    camino de la transaccion.
+     *
+     * `$at` entra por parametro y no se lee de ningun reloj: el dominio no toca
+     * el del sistema (regla dura 2), y sin eso no habria forma de probar de
+     * manera determinista lo que mide `incident_resolution_seconds`.
+     */
+    public function resolvedBy(
+        IncidentStatus $outcome,
+        int $userId,
+        string $note,
+        DateTimeImmutable $at,
+    ): self {
+        if (! $this->status->isOpen()) {
+            throw IncidentAlreadyClosed::inStatus($this->status->value);
+        }
+
+        if ($outcome->isOpen()) {
+            throw InvalidIncident::withNonFinalOutcome($outcome->value);
+        }
+
+        if ($userId < 1) {
+            throw InvalidIncident::withInvalidResolver($userId);
+        }
+
+        $trimmed = trim($note);
+
+        if ($trimmed === '') {
+            throw InvalidIncident::withoutResolutionNote();
+        }
+
+        self::guardUtc($at);
+
+        if ($at < $this->detectedAt) {
+            throw InvalidIncident::withResolutionBeforeDetection(
+                $at->format(DATE_ATOM),
+                $this->detectedAt->format(DATE_ATOM),
+            );
+        }
+
+        return new self(
+            type: $this->type,
+            severity: $this->severity,
+            status: $outcome,
+            employeeUuid: $this->employeeUuid,
+            siteId: $this->siteId,
+            workDate: $this->workDate,
+            shiftEntryUuid: $this->shiftEntryUuid,
+            detectedAt: $this->detectedAt,
+            assignedToUserId: $this->assignedToUserId,
+            context: $this->context,
+            resolvedAt: $at,
+            resolvedByUserId: $userId,
+            resolutionNote: $trimmed,
+        );
+    }
+
+    /**
+     * Cuanto tardo en trabajarse, en segundos: lo que observa el histograma
+     * `incident_resolution_seconds{type}` (doc 02 §8.2) y lo que alimenta el
+     * objetivo «< 24 h» del doc 01 §1.3.
+     *
+     * `null` mientras siga abierta, que es distinto de cero: una incidencia sin
+     * resolver no ha tardado nada, es que todavia no ha terminado. Observar un
+     * cero en el histograma diria lo contrario.
+     */
+    public function resolutionSeconds(): ?int
+    {
+        if (! $this->resolvedAt instanceof DateTimeImmutable) {
+            return null;
+        }
+
+        return $this->resolvedAt->getTimestamp() - $this->detectedAt->getTimestamp();
     }
 
     /**

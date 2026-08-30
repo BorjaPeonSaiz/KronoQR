@@ -99,6 +99,17 @@ final class EmployeeWorkDaysResource extends JsonResource
             $corrections[] = self::correction($correction, $day->timeZone);
         }
 
+        $incidents = [];
+
+        foreach ($day->incidents as $incident) {
+            $incidents[] = [
+                'id' => $incident->id,
+                'type' => $incident->type,
+                'severity' => $incident->severity,
+                'status' => $incident->status,
+            ];
+        }
+
         return [
             'work_date' => $day->workDate,
             'time_zone' => $day->timeZone,
@@ -109,6 +120,12 @@ final class EmployeeWorkDaysResource extends JsonResource
             'recalculated_at' => self::utcOrNull($day->recalculatedAt),
             'shift_entries' => $entries,
             'corrections' => $corrections,
+            // RF-PA-05: la marca que el panel incrusta en el detalle. **Siempre
+            // presente, aunque venga vacia**: un campo que aparece y desaparece
+            // obliga al cliente a adivinar, y el esquema `EmployeeWorkDays` lo
+            // comparten el panel y el portal a proposito. En el portal viene
+            // vacia siempre, y el porque esta escrito en el contrato.
+            'incidents' => $incidents,
         ];
     }
 

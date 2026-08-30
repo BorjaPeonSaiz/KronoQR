@@ -100,6 +100,13 @@ it('describe solo los endpoints cuya tarea existe, y todos bajo /api/v1', functi
         '/api/v1/shift-entries/{uuid}/void',
         // Tarea 1.17: exportacion normalizada para la Inspeccion (RF-IN-05).
         '/api/v1/reports/legal-export',
+        // Tarea 2.5: bandeja de incidencias y su flujo de resolucion (RF-PA-05).
+        // Es la unica ruta del producto cuyo `{id}` es la clave interna: una
+        // incidencia no es una persona ni una tarjeta, y su numero no revela
+        // nada sobre la plantilla. El porque esta escrito en el parametro
+        // `IncidentId` del contrato.
+        '/api/v1/incidents',
+        '/api/v1/incidents/{id}/resolve',
     ]);
 })->group('RQ-06');
 

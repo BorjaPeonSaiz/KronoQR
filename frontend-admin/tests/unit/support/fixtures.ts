@@ -213,6 +213,9 @@ export function workDay(overrides: Partial<WorkDayDetail> = {}): WorkDayDetail {
     recalculated_at: '2026-03-14T15:22:41.900000Z',
     shift_entries: entries,
     corrections: [correction()],
+    // Sin incidencias por omision (RF-PA-05): que las haya es un caso de prueba,
+    // no el punto de partida. El campo va siempre porque el contrato lo exige.
+    incidents: [],
     ...overrides,
   }
 }

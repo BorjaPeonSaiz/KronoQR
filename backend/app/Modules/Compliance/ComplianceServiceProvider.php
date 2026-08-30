@@ -14,15 +14,19 @@ use App\Modules\Compliance\Application\Port\AuditLogPartitions;
 use App\Modules\Compliance\Application\Port\AuditMetrics;
 use App\Modules\Compliance\Application\Port\AuditTrail;
 use App\Modules\Compliance\Application\Port\IncidentAssignment;
+use App\Modules\Compliance\Application\Port\IncidentBoard;
 use App\Modules\Compliance\Application\Port\IncidentLedger;
 use App\Modules\Compliance\Application\Port\IncidentMetrics;
 use App\Modules\Compliance\Application\Port\IncidentNotices;
 use App\Modules\Compliance\Application\Port\IncidentNotifier;
+use App\Modules\Compliance\Application\Port\IncidentResolutionMetrics;
 use App\Modules\Compliance\Application\Port\LegalExportAudit;
 use App\Modules\Compliance\Application\Port\LegalExportMetrics;
 use App\Modules\Compliance\Application\Port\LegalExportSource;
 use App\Modules\Compliance\Application\Port\LegalExportWriter;
 use App\Modules\Compliance\Application\UseCase\LegalExport;
+use App\Modules\Compliance\Domain\Model\Incident;
+use App\Modules\Compliance\Http\Policy\IncidentPolicy;
 use App\Modules\Compliance\Http\Policy\LegalExportPolicy;
 use App\Modules\Compliance\Infrastructure\Adapter\AuditedAuthenticationJournal;
 use App\Modules\Compliance\Infrastructure\Adapter\AuditedAuthorizationJournal;
@@ -43,6 +47,7 @@ use App\Modules\Compliance\Infrastructure\Listener\RecordCredentialLifecycle;
 use App\Modules\Compliance\Infrastructure\Listener\RecordEmployeePinLifecycle;
 use App\Modules\Compliance\Infrastructure\Listener\RecordManagementAccountLifecycle;
 use App\Modules\Compliance\Infrastructure\Listener\RecordShiftEntryAudit;
+use App\Modules\Compliance\Infrastructure\Metrics\RedisIncidentResolutionMetrics;
 use App\Modules\Compliance\Infrastructure\Metrics\TextfileAuditMetrics;
 use App\Modules\Compliance\Infrastructure\Metrics\TextfileIncidentMetrics;
 use App\Modules\Compliance\Infrastructure\Metrics\TextfileLegalExportMetrics;
@@ -51,6 +56,7 @@ use App\Modules\Compliance\Infrastructure\Persistence\DatabaseAuditChainReader;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseAuditLogPartitions;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseAuditTrail;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseIncidentAssignment;
+use App\Modules\Compliance\Infrastructure\Persistence\DatabaseIncidentBoard;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseIncidentLedger;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseIncidentNotices;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseLegalExportSource;
@@ -243,6 +249,17 @@ final class ComplianceServiceProvider extends ServiceProvider
          */
         Gate::policy(LegalExport::class, LegalExportPolicy::class);
 
+        /*
+         * La policy de la bandeja de incidencias (RF-PA-05, regla dura 18).
+         *
+         * Se registra contra {@see Incident} —el modelo de dominio— y no contra
+         * un modelo Eloquent, por lo mismo que la de arriba: asi la autorizacion
+         * se decide **antes** de tocar la base de datos. Declarada sobre una fila
+         * habria que cargarla para poder preguntar si se puede leer, que es
+         * exactamente lo que un `403` tiene que poder evitar.
+         */
+        Gate::policy(Incident::class, IncidentPolicy::class);
+
         if ($this->app->runningInConsole()) {
             $this->commands([
                 VerifyAuditChainCommand::class,
@@ -300,9 +317,12 @@ final class ComplianceServiceProvider extends ServiceProvider
     /**
      * Las incidencias del registro horario (RF-PR-01, tarea 2.6).
      *
-     * Cinco puertos, y ninguno lo conoce `Attendance`: el nucleo emite hallazgos
+     * Siete puertos, y ninguno lo conoce `Attendance`: el nucleo emite hallazgos
      * y este modulo decide severidad, responsable, aviso y metrica (doc 01 §5.1,
-     * doc 02 §1.6).
+     * doc 02 §1.6). Los dos ultimos son de la bandeja de la tarea 2.5: el lado de
+     * **lectura**, separado del libro que escribe, y el histograma de resolucion,
+     * separado del gauge de abiertas porque uno se observa y el otro se
+     * recalcula.
      *
      * **El escritor no es un `singleton`**, igual que el resto de adaptadores que
      * escriben: no tiene estado que compartir y una instancia viva entre
@@ -332,7 +352,29 @@ final class ComplianceServiceProvider extends ServiceProvider
 
         $this->app->bind(IncidentNotifier::class, MailIncidentNotifier::class);
 
+        /*
+         * El lado de LECTURA de la bandeja (tarea 2.5).
+         *
+         * Puerto propio y no un metodo mas de `IncidentLedger`: aquel escribe y
+         * habla en el agregado, este solo lee y lo que devuelve lleva ademas
+         * nombres de personas y de cuentas. Juntarlos habria dado una consulta de
+         * bandeja capaz de escribir.
+         */
+        $this->app->bind(
+            IncidentBoard::class,
+            static fn (): DatabaseIncidentBoard => new DatabaseIncidentBoard(DB::connection()),
+        );
+
         $this->app->singleton(IncidentMetrics::class, TextfileIncidentMetrics::class);
+
+        /*
+         * `incident_resolution_seconds{type}` sobre Redis y no *textfile* (tarea
+         * 2.5). Es un histograma que se observa dentro de una peticion, no un
+         * gauge que una tarea programada recalcula: ver el docblock del
+         * adaptador. `singleton` por lo mismo que las demas metricas: no toca la
+         * base de datos y no arrastra estado de la peticion.
+         */
+        $this->app->singleton(IncidentResolutionMetrics::class, RedisIncidentResolutionMetrics::class);
     }
 
     /**

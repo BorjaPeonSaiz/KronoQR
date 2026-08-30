@@ -43,4 +43,24 @@ interface IncidentLedger
      * @return list<IncidentTally>
      */
     public function openTally(): array;
+
+    /**
+     * Escribe la **resolucion** de una incidencia y dice si de verdad la escribio
+     * (tarea 2.5, RF-PA-05).
+     *
+     * Devuelve `false` cuando la fila ya no estaba abierta. Lo decide un
+     * `UPDATE ... WHERE id = ? AND status = 'open'` y no un `SELECT` previo, por
+     * lo mismo que la apertura se decide con el indice unico parcial: entre leer
+     * el estado y escribirlo cabe otra peticion, y dos responsables mirando la
+     * misma bandeja es el caso normal, no el raro. Con la condicion dentro del
+     * `UPDATE`, la segunda no escribe nada y su caso de uso responde `409`.
+     *
+     * **Solo toca las cuatro columnas del cierre.** Ni el tipo, ni la severidad,
+     * ni el responsable, ni el contexto se reescriben: la incidencia es la que se
+     * detecto, y lo unico que ha pasado es que alguien la ha trabajado.
+     *
+     * @param  Incident  $resolved  El agregado **ya cerrado** por
+     *                              {@see Incident::resolvedBy()}, con su instante y su autor.
+     */
+    public function recordResolution(int $incidentId, Incident $resolved): bool;
 }

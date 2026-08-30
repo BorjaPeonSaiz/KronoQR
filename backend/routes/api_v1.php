@@ -9,6 +9,7 @@ use App\Modules\Attendance\Http\Controller\ScanBatchController;
 use App\Modules\Attendance\Http\Controller\ScanController;
 use App\Modules\Attendance\Http\Controller\ShiftEntryController;
 use App\Modules\Attendance\Http\Controller\VoidShiftEntryController;
+use App\Modules\Compliance\Http\Controller\IncidentController;
 use App\Modules\Compliance\Http\Controller\LegalExportController;
 use App\Modules\Identity\Domain\ValueObject\TokenAbility;
 use App\Modules\Identity\Http\Controller\CredentialController;
@@ -305,6 +306,60 @@ Route::get('/reports/legal-export', LegalExportController::class)
         'ability:'.TokenAbility::REPORTS_LEGAL->value.','.TokenAbility::REPORTS_ALL->value,
     ])
     ->name('compliance.reports.legal-export');
+
+/*
+ * La bandeja de incidencias y su resolucion (RF-PA-05, tarea 2.5).
+ *
+ * `incidents:*` PARA LAS DOS, Y ES UN SOLO AMBITO A PROPOSITO. El §7.3 lo
+ * describe como «consultar y resolver incidencias»: no hay un `incidents:read`, y
+ * no lo hay porque separarlo daria una frontera que solo existiria en PHP y que
+ * nadie podria conceder ni retirar desde la administracion. Lo que si son dos
+ * cosas distintas son los dos metodos de `IncidentPolicy`, para que la matriz de
+ * autorizacion negativa pruebe cada endpoint por separado (regla dura 18).
+ *
+ * Y NO `attendance:read`, aunque lo que se mira sean horas: leer el registro de
+ * alguien y decidir que se hace con lo que esta pendiente son dos potestades del
+ * §7.3, y el `auditor` es la prueba de que la distincion importa — lleva
+ * `attendance:read` y no lleva este, asi que ni siquiera pasa del middleware.
+ *
+ * LA OTRA MITAD ES `IncidentPolicy`, que comprueba el ROL: «manager+» del Anexo
+ * B, que desde la tarea 2.1 es `{admin, rrhh, responsable_departamento}`.
+ *
+ * EL ALCANCE POR DEPARTAMENTO SE APLICA DE DOS FORMAS (RF-ID-03): en el listado
+ * entra **en la consulta** —incluido `meta.total`— y no devuelve `403`, porque un
+ * listado acota en vez de denegar; al resolver, se comprueba el recurso ya
+ * cargado y se responde `403` **con asiento** en `audit_log`, porque ahi si hay
+ * un sujeto identificable al que apuntar.
+ *
+ * `throttle:management` POR LO QUE ESCRIBEN. Las dos rutas pasan por
+ * `ScopeGuard` y cada denegacion por alcance escribe `access.denied` bajo el
+ * candado global de ADR-010 —el mismo por el que pasa cada fichaje—; ademas el
+ * listado deja su asiento de divulgacion (RS-05) en cada peticion. Sin techo por
+ * cuenta, un bucle sobre identificadores ajenos mete escrituras ilimitadas en el
+ * camino critico del cambio de turno. La zona se declara en
+ * `IdentityServiceProvider`.
+ *
+ * NO HAY `PATCH` NI `DELETE` (regla dura 5): resolver es un `POST` con nombre
+ * propio, igual que anular un tramo o revocar una credencial. La fila se queda en
+ * la tabla con su nota y su firma, y no hay forma de reabrirla desde la API.
+ *
+ * `{id}` ES LA CLAVE INTERNA, y es la unica ruta del producto donde eso pasa. El
+ * motivo esta escrito en el contrato: una incidencia no es una persona ni una
+ * tarjeta, es una fila de trabajo interno que no viaja impresa ni se enseña a un
+ * tercero, y su numero no revela nada sobre la plantilla.
+ */
+Route::middleware([
+    'auth:sanctum',
+    'ability:'.TokenAbility::INCIDENTS_ALL->value,
+    'throttle:management',
+])->group(function (): void {
+    Route::get('/incidents', [IncidentController::class, 'index'])
+        ->name('compliance.incidents.index');
+
+    Route::post('/incidents/{id}/resolve', [IncidentController::class, 'resolve'])
+        ->whereNumber('id')
+        ->name('compliance.incidents.resolve');
+});
 
 /*
  * El resto de lo que necesita una tablet: padron y latido (tarea 1.7).

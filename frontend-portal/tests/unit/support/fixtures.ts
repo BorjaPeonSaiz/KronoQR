@@ -101,6 +101,10 @@ export function workDay(overrides: Partial<WorkDayDetail> = {}): WorkDayDetail {
     recalculated_at: '2026-03-14T15:22:41.900000Z',
     shift_entries: entries,
     corrections: [correction()],
+    // El portal recibe el campo siempre y siempre vacio: la revision interna de
+    // RF-PA-05 no forma parte del registro que el art. 34.9 ET reconoce al
+    // empleado. El porque esta escrito en el contrato.
+    incidents: [],
     ...overrides,
   }
 }

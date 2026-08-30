@@ -14,6 +14,8 @@ use App\Modules\Attendance\Domain\Exception\CorrectionWouldChangeWorkDate;
 use App\Modules\Attendance\Domain\Exception\InvalidCorrectionReason;
 use App\Modules\Attendance\Domain\Exception\OverlappingShiftEntry;
 use App\Modules\Attendance\Domain\Exception\ShiftAlreadyOpen;
+use App\Modules\Compliance\Application\Exception\IncidentNotFound;
+use App\Modules\Compliance\Domain\Exception\IncidentAlreadyClosed;
 use App\Modules\Compliance\Domain\Exception\InvalidLegalExportRequest;
 use App\Modules\Identity\Application\Exception\AccountTemporarilyLocked;
 use App\Modules\Identity\Application\Exception\AuthenticationFailed;
@@ -467,6 +469,29 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(static fn (InvalidDateRange $exception): mixed => ProblemDetails::validationFailed([
             'from' => [$exception->getMessage()],
         ]));
+
+        /*
+         * Bandeja de incidencias (tarea 2.5, RF-PA-05).
+         *
+         * `404` PARA LA QUE NO EXISTE, y no `403`. Quien se equivoca de
+         * identificador tiene que recibir «eso no existe»; el `403` —con su
+         * asiento en `audit_log`— se reserva para la que si existe y queda fuera
+         * del alcance de quien pregunta, que es lo que exige el escenario
+         * «Aislamiento por departamento» del doc 01 §11. Por eso el caso de uso
+         * comprueba en ese orden: al reves, el trail se llenaria de erratas.
+         *
+         * `409` PARA LA QUE YA ESTABA CERRADA, y no `422`: quien lo recibe no
+         * tiene ningun campo que corregir —el cuerpo es correcto—, lo que pasa es
+         * que otra persona llego antes. La accion siguiente es releer la bandeja
+         * para ver quien la trabajo y con que nota, no reescribir la suya.
+         *
+         * La misma excepcion cubre los dos caminos que llevan ahi —la segunda
+         * pestaña y la carrera que decide el `UPDATE ... WHERE status = 'open'`—
+         * porque para quien llama el desenlace es identico.
+         */
+        $exceptions->render(static fn (IncidentNotFound $exception): mixed => ProblemDetails::notFound());
+
+        $exceptions->render(static fn (IncidentAlreadyClosed $exception): mixed => ProblemDetails::conflict($exception->getMessage()));
 
         /*
          * RN-14 visto desde el alta manual: no se pueden escribir horas a nombre
