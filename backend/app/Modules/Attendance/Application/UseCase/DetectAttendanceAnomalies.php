@@ -208,6 +208,26 @@ final readonly class DetectAttendanceAnomalies
     }
 
     /**
+     * Hallazgos que la politica SI evalua pero que esta pasada no convierte en
+     * incidencia. Decision de producto del 30-08-2026 (doc 01 §4, nota sobre
+     * RN-12): con ADR-024 la pausa son dos tramos y el quiosco todavia no
+     * registra la intencion de «salgo a descansar» (RF-AT-12, tarea 3.5), asi
+     * que en una instalacion donde la plantilla no ficha la pausa cada turno
+     * de mas de seis horas abriria una incidencia `missing_break` —cientos a la
+     * semana— sin que nadie pueda distinguir «no descanso» de «descanso y no lo
+     * ficho». Una bandeja que no se puede vaciar es una bandeja que se deja de
+     * mirar, y con ella las incidencias que si importan.
+     *
+     * La regla sigue enunciada, implementada en `AnomalyDetectionPolicy` y
+     * cubierta por su prueba unitaria; lo que se suspende es SOLO la apertura de
+     * la incidencia. La tarea 3.5 la reactiva cuando exista la pausa declarada:
+     * basta con vaciar esta lista.
+     *
+     * @var list<AnomalyType>
+     */
+    private const array SUSPENDED_UNTIL_DECLARED_BREAK = [AnomalyType::MISSING_BREAK];
+
+    /**
      * @param  list<WorkDay>  $workDays
      * @return list<DetectedAnomaly>
      */
@@ -222,7 +242,10 @@ final readonly class DetectAttendanceAnomalies
             ];
         }
 
-        return $anomalies;
+        return array_values(array_filter(
+            $anomalies,
+            static fn (DetectedAnomaly $anomaly): bool => ! in_array($anomaly->type, self::SUSPENDED_UNTIL_DECLARED_BREAK, true),
+        ));
     }
 
     /**

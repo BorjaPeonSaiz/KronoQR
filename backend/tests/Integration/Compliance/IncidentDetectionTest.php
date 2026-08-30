@@ -235,6 +235,28 @@ it('no revisa las jornadas anteriores a la ventana, y si los tramos abiertos', f
     expect($types)->toBe([$forgotten => 'open_shift_expired']);
 })->group('RF-PR-01', 'RN-08');
 
+it('no abre missing_break aunque el tramo supere las seis horas: RN-12 queda suspendida hasta la pausa declarada', function (): void {
+    // Decision de producto del 30-08-2026 (doc 01 §4, nota sobre RN-12): la regla
+    // sigue evaluandose en `AnomalyDetectionPolicy` —su unitaria lo prueba— pero
+    // la pasada no abre la incidencia hasta que el quiosco registre la intencion
+    // de pausa (RF-AT-12, tarea 3.5). Siete horas seguidas, cerradas, dentro de
+    // la ventana: ni incidencia ni aviso.
+    Notification::fake();
+
+    $scenario = departmentWithManager();
+    shiftEntry(
+        $scenario['employee'],
+        $scenario['site'],
+        '2026-03-14',
+        '2026-03-14 06:00:00+00',
+        '2026-03-14 13:00:00+00',
+    );
+
+    expect(runDetection())->toBe(0)
+        ->and(DB::table('incidents')->count())->toBe(0);
+    Notification::assertNothingSent();
+})->group('RN-12', 'RF-PR-01');
+
 it('respeta el catalogo de tipos y severidades del esquema', function (): void {
     // La ultima linea de defensa (doc 02 §3.2): los CHECK de la migracion valen
     // tambien para una importacion o un script que no pase por el dominio.
