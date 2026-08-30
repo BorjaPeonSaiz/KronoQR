@@ -9,7 +9,8 @@
       "employees": "Workforce",
       "credentials": "Credentials",
       "legalExport": "Inspectorate",
-      "live": "Presence"
+      "live": "Presence",
+      "incidents": "Incidents"
     },
     "roles": {
       "admin": "Administration",
@@ -609,6 +610,122 @@
     },
     "announce": {
       "counts": "{present} people in and {absent} out."
+    }
+  },
+  "incidents": {
+    "title": "Incident inbox",
+    "subtitle": "What in the time record needs a person to look at it. Resolving an incident does not change any hour: if a shift entry needs correcting, that is done from the person's time record.",
+    "loading": "Loading the incident inbox…",
+    "duration": "{hours} h {minutes} min",
+    "status": {
+      "open": "Open",
+      "resolved": "Resolved",
+      "dismissed": "Dismissed"
+    },
+    "severities": {
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "types": {
+      "open_shift_expired": "Open shift not closed",
+      "short_shift": "Shift too short",
+      "long_shift": "Shift too long",
+      "missing_break": "No break registered",
+      "insufficient_rest": "Insufficient rest",
+      "clock_skew": "Clock skew",
+      "missing_clock_out": "Missing clock-out",
+      "anomalous_pattern": "Anomalous credential usage pattern"
+    },
+    "outcomes": {
+      "resolved": "Resolved",
+      "dismissed": "Dismissed"
+    },
+    "filters": {
+      "legend": "Inbox filters",
+      "status": "Status",
+      "type": "Type",
+      "typeAll": "All types",
+      "severity": "Severity",
+      "severityAll": "All severities",
+      "department": "Department",
+      "departmentAll": "All departments"
+    },
+    "table": {
+      "caption": "Incidents in the inbox, times in {zone}",
+      "severity": "Severity",
+      "type": "Type",
+      "employee": "Employee",
+      "workDate": "Work day",
+      "age": "Age",
+      "assignedTo": "Assigned to",
+      "actions": "Actions",
+      "unassigned": "Unassigned",
+      "noDepartment": "No department",
+      "resolve": "Resolve",
+      "detectedAt": "Detected on {moment}",
+      "ageValue": "{duration} ago",
+      "viewWorkday": "View time record"
+    },
+    "empty": {
+      "open": {
+        "title": "No open incidents",
+        "description": "There is no open incident with these filters. Not a fault: the inbox fills itself when detection finds something to review."
+      },
+      "resolved": {
+        "title": "No resolved incidents",
+        "description": "No incident with these filters has been marked resolved yet."
+      },
+      "dismissed": {
+        "title": "No dismissed incidents",
+        "description": "No incident with these filters has been dismissed yet."
+      }
+    },
+    "announce": {
+      "results": "{count} incidents in the inbox.",
+      "resolved": "Incident for {name} marked as {outcome}."
+    },
+    "context": {
+      "pair": "{metric} {value} of {threshold}",
+      "raw": "{key}: {value}",
+      "metrics": {
+        "rest_minutes": "rest",
+        "worked_minutes": "worked"
+      }
+    },
+    "employeeFilter": {
+      "active": "Showing only the incidents for {name}.",
+      "clear": "Clear this filter"
+    },
+    "pagination": {
+      "label": "Incident inbox pagination"
+    },
+    "dialog": {
+      "title": "Close incident",
+      "for": "{type}, for {name}, work day of {date}.",
+      "outcomeLegend": "What happened",
+      "outcome": {
+        "resolved": "It has been corrected",
+        "dismissed": "Reviewed: there was nothing to correct"
+      },
+      "note": "Note (required)",
+      "noteHint": "Explain what was done, or why nothing needed correcting. It stays in the incident's history.",
+      "noteCounter": "{count}/{max} characters",
+      "noteTooShort": "Write at least {min} characters.",
+      "noteTooLong": "The text cannot exceed {max} characters.",
+      "submit": "Confirm",
+      "conflict": {
+        "title": "Already resolved",
+        "resolvedBy": "{name} marked it as \"{outcome}\" on {moment}.",
+        "resolvedByUnknown": "Someone else has already resolved it in the meantime.",
+        "note": "Note: \"{note}\"",
+        "acknowledge": "Understood"
+      }
+    },
+    "workday": {
+      "heading": "Incidents in this work day",
+      "none": "No incidents in this work day.",
+      "linkToInbox": "View in the incident inbox"
     }
   }
 }

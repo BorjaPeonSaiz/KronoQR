@@ -8,11 +8,26 @@
 import type { DOMWrapper } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import EmployeeWorkDaysView from '@/features/workdays/EmployeeWorkDaysView.vue'
+import { useSessionStore } from '@/features/auth/session.store'
 import es from '@/shared/i18n/locales/es.json'
 import type { EmployeeWorkDays } from '@/shared/api/types'
 import { announcement, clearAnnouncement } from '@kronoqr/web-kit/announcer'
-import { EMPLOYEE_UUID, employee, employeeWorkDays, shiftEntry, workDay } from './support/fixtures'
-import { jsonResponse, mountView, problemResponse, settle, stubFetch } from './support/harness'
+import {
+  EMPLOYEE_UUID,
+  employee,
+  employeeWorkDays,
+  managementUser,
+  shiftEntry,
+  workDay,
+} from './support/fixtures'
+import {
+  createTestPinia,
+  jsonResponse,
+  mountView,
+  problemResponse,
+  settle,
+  stubFetch,
+} from './support/harness'
 
 type Wrapper = Awaited<ReturnType<typeof mountView>>
 
@@ -20,6 +35,8 @@ interface MountOptions {
   workdays?: EmployeeWorkDays
   /** Respuesta de la ficha. `false` = la ficha no esta al alcance de este rol. */
   employeeAccessible?: boolean
+  /** Ambitos del token. Por omision, ninguno: sin sesion no se enseña el enlace a la bandeja. */
+  abilities?: string[]
 }
 
 let requestedUrls: string[] = []
@@ -39,7 +56,17 @@ async function mountWorkDays(options: MountOptions = {}): Promise<Wrapper> {
       : jsonResponse(employee())
   })
 
-  const wrapper = await mountView(EmployeeWorkDaysView, { props: { uuid: EMPLOYEE_UUID } })
+  const pinia = createTestPinia()
+
+  if (options.abilities !== undefined) {
+    const session = useSessionStore(pinia)
+
+    session.token = 'token'
+    session.status = 'authenticated'
+    session.user = managementUser({ abilities: options.abilities })
+  }
+
+  const wrapper = await mountView(EmployeeWorkDaysView, { props: { uuid: EMPLOYEE_UUID }, pinia })
 
   await settle()
 
@@ -190,6 +217,56 @@ describe('EmployeeWorkDaysView', () => {
     )
     expect(wrapper.find('[data-test="flag-incident"]').text()).toBe(es.workdays.day.flags.incident)
     expect(wrapper.text()).toContain(es.workdays.day.flags.openShiftHint)
+  })
+
+  it('sin incidencias en la jornada, lo dice en vez de dejar el hueco en blanco', async () => {
+    const wrapper = await mountWorkDays()
+
+    expect(wrapper.find('[data-test="workday-incidents"]').text()).toContain(
+      es.incidents.workday.none,
+    )
+    expect(wrapper.find('[data-test="workday-incident-badge"]').exists()).toBe(false)
+  })
+
+  it('una incidencia de la jornada se marca con su tipo y su estado (RF-PA-05)', async () => {
+    const wrapper = await mountWorkDays({
+      workdays: employeeWorkDays([
+        workDay({
+          incidents: [{ id: 412, type: 'insufficient_rest', severity: 'high', status: 'open' }],
+        }),
+      ]),
+    })
+
+    const badge = wrapper.find('[data-test="workday-incident-badge"]')
+
+    expect(badge.text()).toContain(es.incidents.types.insufficient_rest)
+    expect(badge.text()).toContain(es.incidents.status.open)
+  })
+
+  it('el enlace a la bandeja solo aparece con el ambito de incidencias (regla dura 18)', async () => {
+    const withIncident = employeeWorkDays([
+      workDay({
+        incidents: [{ id: 412, type: 'insufficient_rest', severity: 'high', status: 'open' }],
+      }),
+    ])
+
+    const withoutAbility = await mountWorkDays({ workdays: withIncident })
+
+    expect(
+      withoutAbility.findAll('a').some((link) => link.text() === es.incidents.workday.linkToInbox),
+    ).toBe(false)
+
+    const withAbility = await mountWorkDays({
+      workdays: withIncident,
+      abilities: ['incidents:*'],
+    })
+
+    const link = withAbility
+      .findAll('a')
+      .find((candidate) => candidate.text() === es.incidents.workday.linkToInbox)
+
+    expect(link).toBeDefined()
+    expect(link?.attributes('href')).toContain(`employee=${EMPLOYEE_UUID}`)
   })
 
   it('anuncia cuantas jornadas se han encontrado, sin mover el foco', async () => {

@@ -5,12 +5,14 @@ import {
   ATTENDANCE_READ,
   CREDENTIALS_MANAGE,
   EMPLOYEES_MANAGE,
+  INCIDENTS_MANAGE,
   REPORTS_LEGAL,
 } from '@/features/auth/abilities'
 import LoginView from '@/features/auth/LoginView.vue'
 import CredentialBoardView from '@/features/credentials/CredentialBoardView.vue'
 import EmployeeDetailView from '@/features/employees/EmployeeDetailView.vue'
 import EmployeeListView from '@/features/employees/EmployeeListView.vue'
+import IncidentsView from '@/features/incidents/IncidentsView.vue'
 import LivePresenceView from '@/features/live/LivePresenceView.vue'
 import LegalExportView from '@/features/reports/LegalExportView.vue'
 import EmployeeWorkDaysView from '@/features/workdays/EmployeeWorkDaysView.vue'
@@ -84,6 +86,15 @@ export const routes: RouteRecordRaw[] = [
         name: 'credentials',
         component: CredentialBoardView,
         meta: { ability: CREDENTIALS_MANAGE },
+      },
+      {
+        // Bandeja de incidencias (RF-PA-05, RF-PR-01). Ambito `incidents:*`, el
+        // unico que declara el contrato para leerla y para resolverla: no hay
+        // un estrecho de solo lectura como en el registro horario.
+        path: 'incidents',
+        name: 'incidents',
+        component: IncidentsView,
+        meta: { ability: INCIDENTS_MANAGE },
       },
       {
         // La exportacion para la Inspeccion (RF-IN-05). Ambito `reports:legal`:

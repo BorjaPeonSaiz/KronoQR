@@ -30,6 +30,17 @@ export const ATTENDANCE_READ = 'attendance:read'
 export const REPORTS_LEGAL = 'reports:legal'
 
 /**
+ * Bandeja de incidencias: consultarla y resolverla (RF-PA-05, RF-PR-01).
+ *
+ * Un solo ambito para leer y para resolver porque el contrato solo declara
+ * `incidents:*` (doc 02 §7.3): no hay un estrecho de solo lectura como en
+ * `attendance:read`/`attendance:correct`. Lo lleva el `responsable_departamento`
+ * (el destinatario principal de la bandeja) y `rrhh`/`admin` por alcance
+ * completo.
+ */
+export const INCIDENTS_MANAGE = 'incidents:*'
+
+/**
  * Si los ambitos concedidos cubren el exigido.
  *
  * Reconoce el comodin de familia (`employees:*` cubre `employees:read`) porque

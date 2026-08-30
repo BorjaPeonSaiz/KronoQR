@@ -127,6 +127,22 @@ describe('idiomas de la aplicacion', () => {
       ...['open', 'closed', 'anomalous', 'voided', 'superseded'].map(
         (status) => `workdays.entryStatus.${status}`,
       ),
+      // La bandeja de incidencias (RF-PA-05): los cuatro enumerados del
+      // contrato viajan tal cual en la respuesta y se traducen dinamicamente
+      // (`t(`incidents.types.${type}`)`), asi que `usedKeys()` no los detecta.
+      ...[
+        'open_shift_expired',
+        'short_shift',
+        'long_shift',
+        'missing_break',
+        'insufficient_rest',
+        'clock_skew',
+        'missing_clock_out',
+        'anomalous_pattern',
+      ].map((type) => `incidents.types.${type}`),
+      ...['high', 'medium', 'low'].map((severity) => `incidents.severities.${severity}`),
+      ...['open', 'resolved', 'dismissed'].map((status) => `incidents.status.${status}`),
+      ...['resolved', 'dismissed'].map((outcome) => `incidents.outcomes.${outcome}`),
       ...[
         'network',
         'unauthenticated',

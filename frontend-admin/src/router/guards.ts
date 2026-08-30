@@ -12,6 +12,7 @@ import {
   ATTENDANCE_READ,
   CREDENTIALS_MANAGE,
   EMPLOYEES_MANAGE,
+  INCIDENTS_MANAGE,
   REPORTS_LEGAL,
 } from '@/features/auth/abilities'
 import { useSessionStore } from '@/features/auth/session.store'
@@ -29,6 +30,12 @@ const SECTIONS: readonly { name: string; ability: string }[] = [
   // primera seccion que alcanza un `responsable_departamento`, que no tiene
   // plantilla, ni credenciales, ni exportacion legal (RF-ID-03).
   { name: 'live', ability: ATTENDANCE_READ },
+  // Tambien alcanza a un `responsable_departamento` (RF-PA-05), pero despues de
+  // la presencia: ver quien esta dentro ahora mismo es la foto, trabajar la
+  // bandeja es la tarea, y quien entra sin la presencia a su alcance
+  // (`admin`/`rrhh` sin `attendance:read` en un despliegue que se lo quitara)
+  // sigue llegando aqui igualmente.
+  { name: 'incidents', ability: INCIDENTS_MANAGE },
 ]
 
 export function registerAuthGuard(router: Router): void {

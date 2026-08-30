@@ -9,7 +9,8 @@
       "employees": "Plantilla",
       "credentials": "Credenciales",
       "legalExport": "Inspección",
-      "live": "Presencia"
+      "live": "Presencia",
+      "incidents": "Incidencias"
     },
     "roles": {
       "admin": "Administración",
@@ -609,6 +610,122 @@
     },
     "announce": {
       "counts": "{present} personas dentro y {absent} fuera."
+    }
+  },
+  "incidents": {
+    "title": "Bandeja de incidencias",
+    "subtitle": "Lo que del registro horario tiene que mirar una persona. Resolver una incidencia no cambia ninguna hora: si hay que rectificar un tramo, se hace desde el registro horario de la persona.",
+    "loading": "Cargando la bandeja de incidencias…",
+    "duration": "{hours} h {minutes} min",
+    "status": {
+      "open": "Pendiente",
+      "resolved": "Resuelta",
+      "dismissed": "Descartada"
+    },
+    "severities": {
+      "high": "Alta",
+      "medium": "Media",
+      "low": "Baja"
+    },
+    "types": {
+      "open_shift_expired": "Turno abierto sin cerrar",
+      "short_shift": "Jornada demasiado corta",
+      "long_shift": "Jornada demasiado larga",
+      "missing_break": "Sin pausa registrada",
+      "insufficient_rest": "Descanso insuficiente",
+      "clock_skew": "Desfase de reloj",
+      "missing_clock_out": "Salida sin fichar",
+      "anomalous_pattern": "Patrón anómalo de uso de la credencial"
+    },
+    "outcomes": {
+      "resolved": "Resuelta",
+      "dismissed": "Descartada"
+    },
+    "filters": {
+      "legend": "Filtros de la bandeja",
+      "status": "Estado",
+      "type": "Tipo",
+      "typeAll": "Todos los tipos",
+      "severity": "Severidad",
+      "severityAll": "Todas las severidades",
+      "department": "Departamento",
+      "departmentAll": "Todos los departamentos"
+    },
+    "table": {
+      "caption": "Incidencias de la bandeja, horas en {zone}",
+      "severity": "Severidad",
+      "type": "Tipo",
+      "employee": "Empleado",
+      "workDate": "Jornada",
+      "age": "Antigüedad",
+      "assignedTo": "Asignada a",
+      "actions": "Acciones",
+      "unassigned": "Sin asignar",
+      "noDepartment": "Sin departamento",
+      "resolve": "Resolver",
+      "detectedAt": "Detectada el {moment}",
+      "ageValue": "Hace {duration}",
+      "viewWorkday": "Ver registro horario"
+    },
+    "empty": {
+      "open": {
+        "title": "Sin incidencias pendientes",
+        "description": "No hay ninguna incidencia abierta con estos filtros. No es un fallo: la bandeja se llena sola cuando la detección encuentra algo que revisar."
+      },
+      "resolved": {
+        "title": "Sin incidencias resueltas",
+        "description": "Ninguna incidencia con estos filtros se ha dado por resuelta todavía."
+      },
+      "dismissed": {
+        "title": "Sin incidencias descartadas",
+        "description": "Ninguna incidencia con estos filtros se ha descartado todavía."
+      }
+    },
+    "announce": {
+      "results": "{count} incidencias en la bandeja.",
+      "resolved": "Incidencia de {name} marcada como {outcome}."
+    },
+    "context": {
+      "pair": "{metric} {value} de {threshold}",
+      "raw": "{key}: {value}",
+      "metrics": {
+        "rest_minutes": "descanso",
+        "worked_minutes": "trabajado"
+      }
+    },
+    "employeeFilter": {
+      "active": "Mostrando solo las incidencias de {name}.",
+      "clear": "Quitar este filtro"
+    },
+    "pagination": {
+      "label": "Paginación de la bandeja de incidencias"
+    },
+    "dialog": {
+      "title": "Cerrar incidencia",
+      "for": "{type}, de {name}, jornada del {date}.",
+      "outcomeLegend": "Qué ha pasado",
+      "outcome": {
+        "resolved": "Se ha corregido",
+        "dismissed": "Revisada: no había nada que corregir"
+      },
+      "note": "Nota (obligatoria)",
+      "noteHint": "Explica qué se hizo, o por qué no hacía falta corregir nada. Queda en el historial de la incidencia.",
+      "noteCounter": "{count}/{max} caracteres",
+      "noteTooShort": "Escribe al menos {min} caracteres.",
+      "noteTooLong": "El texto no puede superar los {max} caracteres.",
+      "submit": "Confirmar",
+      "conflict": {
+        "title": "Ya se ha resuelto",
+        "resolvedBy": "{name} la marcó como «{outcome}» el {moment}.",
+        "resolvedByUnknown": "Otra persona ya la ha resuelto mientras tanto.",
+        "note": "Nota: «{note}»",
+        "acknowledge": "Entendido"
+      }
+    },
+    "workday": {
+      "heading": "Incidencias de la jornada",
+      "none": "Sin incidencias en esta jornada.",
+      "linkToInbox": "Ver en la bandeja de incidencias"
     }
   }
 }

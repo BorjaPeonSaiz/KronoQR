@@ -81,8 +81,11 @@ describe('rutas de la aplicacion', () => {
   it('enseña «sin permiso» cuando no hay ninguna seccion a su alcance', async () => {
     const session = useSessionStore()
 
-    // `attendance:read` ya no vale como ejemplo: desde la 2.4 alcanza la presencia.
-    session.user = managementUser({ abilities: ['incidents:*'] })
+    // `attendance:read` ya no vale como ejemplo: desde la 2.4 alcanza la
+    // presencia, e `incidents:*` tampoco: desde la 2.5 alcanza la bandeja.
+    // `audit:read` es el ambito del `auditor` que no abre ninguna seccion por
+    // si solo (necesita `reports:legal` para eso).
+    session.user = managementUser({ abilities: ['audit:read'] })
     session.token = 'un-token'
     session.status = 'authenticated'
 
@@ -164,6 +167,56 @@ describe('rutas de la aplicacion', () => {
 
     registerAuthGuard(router)
     await router.push('/employees/0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90/workdays')
+
+    expect(router.currentRoute.value.name).toBe('credentials')
+  })
+
+  it('abre la bandeja de incidencias con su ambito propio', async () => {
+    // El responsable de departamento (RF-ID-03): sin plantilla ni credenciales,
+    // pero con la presencia y la bandeja de incidencias (doc 02 §7.3).
+    const session = useSessionStore()
+
+    session.user = managementUser({
+      roles: ['responsable_departamento'],
+      abilities: ['attendance:read', 'attendance:correct', 'incidents:*'],
+    })
+    session.token = 'un-token'
+    session.status = 'authenticated'
+
+    const router = createTestRouter()
+
+    registerAuthGuard(router)
+    await router.push('/incidents')
+
+    expect(router.currentRoute.value.name).toBe('incidents')
+  })
+
+  it('lleva a la bandeja de incidencias cuando es la unica seccion a su alcance', async () => {
+    const session = useSessionStore()
+
+    session.user = managementUser({ abilities: ['incidents:*'] })
+    session.token = 'un-token'
+    session.status = 'authenticated'
+
+    const router = createTestRouter()
+
+    registerAuthGuard(router)
+    await router.push('/employees')
+
+    expect(router.currentRoute.value.name).toBe('incidents')
+  })
+
+  it('no deja entrar a la bandeja de incidencias a quien no tiene el ambito', async () => {
+    const session = useSessionStore()
+
+    session.user = managementUser({ abilities: ['credentials:*'] })
+    session.token = 'un-token'
+    session.status = 'authenticated'
+
+    const router = createTestRouter()
+
+    registerAuthGuard(router)
+    await router.push('/incidents')
 
     expect(router.currentRoute.value.name).toBe('credentials')
   })

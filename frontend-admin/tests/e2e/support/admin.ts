@@ -15,6 +15,8 @@ import type {
   Employee,
   EmployeeCollection,
   EmployeeWorkDays,
+  Incident,
+  IncidentCollection,
   LivePresenceBoard,
   LivePresenceEntry,
   ManagementUser,
@@ -48,10 +50,25 @@ export const USER: ManagementUser = {
   email: 'rrhh@hotel.example',
   locale: 'es',
   roles: ['rrhh'],
-  abilities: ['attendance:read', 'employees:read', 'employees:*', 'credentials:*'],
+  abilities: ['attendance:read', 'employees:read', 'employees:*', 'credentials:*', 'incidents:*'],
   // Alcance por departamento (RF-ID-03). RRHH llega a toda la plantilla: con
   // `kind: all` la lista no acota nada y por eso va vacía.
   scope: { kind: 'all', department_ids: [] },
+}
+
+/**
+ * Responsable de departamento (RF-ID-03, tarea 2.5): sin plantilla ni
+ * credenciales, pero con la presencia y la bandeja de incidencias de su
+ * departamento. El ejemplo del contrato para `GET /auth/me`.
+ */
+export const MANAGER_USER: ManagementUser = {
+  uuid: '0199f0aa-2222-7000-8000-0123456789ac',
+  name: 'Jefatura de Cocina',
+  email: 'cocina@hotel.example',
+  locale: 'es',
+  roles: ['responsable_departamento'],
+  abilities: ['attendance:read', 'attendance:correct', 'incidents:*'],
+  scope: { kind: 'departments', department_ids: [3] },
 }
 
 export const SESSION: Session = {
@@ -168,6 +185,26 @@ export const WORKDAYS: EmployeeWorkDays = {
   meta: { total: 1 },
 }
 
+/**
+ * La misma jornada, pero con la ficha minima de la incidencia 412 incrustada
+ * (RF-PA-05, tarea 2.5): lo que usa el E2E para comprobar que la marca aparece
+ * en el detalle de jornada sin una segunda llamada.
+ */
+const [FIRST_WORKDAY] = WORKDAYS.data
+
+export const WORKDAYS_WITH_INCIDENT: EmployeeWorkDays = {
+  ...WORKDAYS,
+  data:
+    FIRST_WORKDAY === undefined
+      ? []
+      : [
+          {
+            ...FIRST_WORKDAY,
+            incidents: [{ id: 412, type: 'insufficient_rest', severity: 'high', status: 'open' }],
+          },
+        ],
+}
+
 // --- Presencia en vivo (RF-PA-01, RF-PA-02) ----------------------------------
 
 export const LIVE_ENTRY: LivePresenceEntry = {
@@ -214,6 +251,59 @@ export const LIVE_BOARD: LivePresenceBoard = {
   },
 }
 
+// --- Bandeja de incidencias (RF-PA-05, RF-PR-01) -----------------------------
+
+export const INCIDENT_ID = 412
+
+/** El ejemplo del contrato: descanso insuficiente de Youssef, pendiente. */
+export const OPEN_INCIDENT: Incident = {
+  id: INCIDENT_ID,
+  type: 'insufficient_rest',
+  severity: 'high',
+  status: 'open',
+  employee: {
+    uuid: EMPLOYEE_UUID,
+    employee_code: 'E7QK2MXPR',
+    full_name: 'Youssef Amrani',
+    department: { id: 3, name: 'Recepción' },
+  },
+  work_date: '2026-03-14',
+  shift_entry_uuid: '0199f2c1-8a10-7b40-9c50-6d7e8f9a0b11',
+  detected_at: '2026-03-15T03:30:00.000000Z',
+  context: { rest_minutes: 420, threshold_minutes: 720 },
+  assigned_to: { uuid: MANAGER_USER.uuid, name: MANAGER_USER.name },
+  resolved_at: null,
+  resolved_by: null,
+  resolution_note: null,
+}
+
+/** La misma incidencia, ya cerrada por otra persona: lo que devuelve la relectura tras un `409`. */
+export const INCIDENT_CLOSED_BY_OTHER: Incident = {
+  ...OPEN_INCIDENT,
+  status: 'resolved',
+  resolved_at: '2026-03-15T08:45:00.000000Z',
+  resolved_by: { uuid: '0199f0aa-3333-7000-8000-0123456789ad', name: 'Segunda jefatura de turno' },
+  resolution_note: 'Ya se habia revisado en el cambio de turno.',
+}
+
+/** Una sola pagina, que es lo unico que necesita el E2E: nunca hay mas de 25 filas de mentira. */
+function incidentPage(data: Incident[]): IncidentCollection {
+  return {
+    data,
+    meta: {
+      page: 1,
+      per_page: 25,
+      total: data.length,
+      total_pages: 1,
+      time_zone: 'Europe/Madrid',
+      generated_at: '2026-03-15T09:00:00.000000Z',
+    },
+  }
+}
+
+export const INCIDENT_BOARD = incidentPage([OPEN_INCIDENT])
+export const EMPTY_INCIDENT_BOARD = incidentPage([])
+
 /** Una peticion a la API tal y como salio del panel. */
 export interface RecordedRequest {
   readonly method: string
@@ -221,6 +311,8 @@ export interface RecordedRequest {
   readonly authorization: string | undefined
   /** La cadena de consulta, sin el «?». */
   readonly query: string
+  /** El cuerpo JSON, o `null` cuando la peticion no traia uno legible (un `GET`, por ejemplo). */
+  readonly body: unknown
 }
 
 export interface ManagementApiStub {
@@ -243,6 +335,21 @@ export interface ManagementApiOptions {
   readonly twoFactor?: 'off' | 'verify' | 'enrol'
   /** La foto de presencia que devuelve `GET /attendance/live`. Por omision, `LIVE_BOARD`. */
   readonly liveBoard?: LivePresenceBoard
+  /**
+   * Que cuenta entra por `logIn()`. `rrhh` (por omision) es `USER`, con alcance
+   * completo; `manager` es `MANAGER_USER`, un `responsable_departamento` con
+   * `incidents:*` y sin plantilla ni credenciales (RF-ID-03).
+   */
+  readonly role?: 'rrhh' | 'manager'
+  /**
+   * Que responde `POST /incidents/{id}/resolve`. `ok` (por omision) cierra la
+   * incidencia y la devuelve entera. `conflict` simula que otra persona se
+   * adelanto: la peticion responde `409` y las relecturas posteriores devuelven
+   * la incidencia ya cerrada por `INCIDENT_CLOSED_BY_OTHER`.
+   */
+  readonly resolveOutcome?: 'ok' | 'conflict'
+  /** El registro horario que devuelve `GET /employees/{uuid}/workdays`. Por omision, `WORKDAYS`. */
+  readonly workdays?: EmployeeWorkDays
 }
 
 async function json(route: Route, status: number, body: unknown): Promise<void> {
@@ -270,6 +377,15 @@ export async function stubManagementApi(
   const requests: RecordedRequest[] = []
   const loginOutcome = options.loginOutcome ?? 'ok'
   const twoFactor = options.twoFactor ?? 'off'
+  const resolveOutcome = options.resolveOutcome ?? 'ok'
+  const currentUser = options.role === 'manager' ? MANAGER_USER : USER
+  const currentSession: Session = { ...SESSION, user: currentUser }
+
+  // Si `resolveOutcome` es `conflict`, la incidencia se da por cerrada -por
+  // otra persona- justo cuando llega el `POST /resolve`: antes de eso la
+  // bandeja la sigue enseñando abierta, que es lo que hace falta para que la
+  // prueba pueda pulsar «Resolver».
+  let incidentClosed = false
 
   /** El codigo del cuerpo, o cadena vacia si la peticion no llevaba uno legible. */
   function codeFrom(route: Route): string {
@@ -287,12 +403,66 @@ export async function stubManagementApi(
       const url = new URL(request.url())
       const method = request.method()
 
+      let body: unknown = null
+
+      try {
+        body = request.postDataJSON()
+      } catch {
+        body = null
+      }
+
       requests.push({
         method,
         path: url.pathname,
         authorization: request.headers()['authorization'],
         query: url.search.slice(1),
+        body,
       })
+
+      // La bandeja de incidencias tiene un identificador dinamico en la ruta de
+      // resolver (`/incidents/{id}/resolve`), asi que no encaja en el `switch`
+      // literal de abajo.
+      if (method === 'POST' && /^\/api\/v1\/incidents\/\d+\/resolve$/.test(url.pathname)) {
+        if (resolveOutcome === 'conflict') {
+          incidentClosed = true
+          await problem(
+            route,
+            409,
+            'urn:kronoqr:problem:incident-already-resolved',
+            'La incidencia ya se ha resuelto',
+          )
+
+          return
+        }
+
+        const payload = request.postDataJSON() as { outcome?: string; note?: string }
+        incidentClosed = true
+        await json(route, 200, {
+          ...OPEN_INCIDENT,
+          status: payload.outcome === 'dismissed' ? 'dismissed' : 'resolved',
+          resolved_at: '2026-03-15T09:05:00.000000Z',
+          resolved_by: { uuid: currentUser.uuid, name: currentUser.name },
+          resolution_note: payload.note ?? null,
+        })
+
+        return
+      }
+
+      if (method === 'GET' && url.pathname === '/api/v1/incidents') {
+        const status = url.searchParams.get('status') ?? 'open'
+
+        if (incidentClosed) {
+          await json(
+            route,
+            200,
+            status === 'resolved' ? incidentPage([INCIDENT_CLOSED_BY_OTHER]) : EMPTY_INCIDENT_BOARD,
+          )
+        } else {
+          await json(route, 200, status === 'open' ? INCIDENT_BOARD : EMPTY_INCIDENT_BOARD)
+        }
+
+        return
+      }
 
       switch (`${method} ${url.pathname}`) {
         case 'POST /api/v1/auth/login':
@@ -316,12 +486,12 @@ export async function stubManagementApi(
               body: JSON.stringify(TWO_FACTOR_ENROLMENT_CHALLENGE),
             })
           } else {
-            await json(route, 200, SESSION)
+            await json(route, 200, currentSession)
           }
           return
         case 'POST /api/v1/auth/2fa/verify':
           if (codeFrom(route) === TOTP_CODE) {
-            await json(route, 200, SESSION)
+            await json(route, 200, currentSession)
           } else {
             await problem(
               route,
@@ -336,7 +506,7 @@ export async function stubManagementApi(
           return
         case 'POST /api/v1/auth/2fa/confirm':
           if (codeFrom(route) === TOTP_CODE) {
-            await json(route, 200, SESSION)
+            await json(route, 200, currentSession)
           } else {
             await problem(
               route,
@@ -347,7 +517,7 @@ export async function stubManagementApi(
           }
           return
         case 'GET /api/v1/auth/me':
-          await json(route, 200, USER)
+          await json(route, 200, currentUser)
           return
         case 'POST /api/v1/auth/logout':
           await route.fulfill({ status: 204 })
@@ -365,7 +535,7 @@ export async function stubManagementApi(
           await json(route, 200, EMPLOYEE)
           return
         case `GET /api/v1/employees/${EMPLOYEE_UUID}/workdays`:
-          await json(route, 200, WORKDAYS)
+          await json(route, 200, options.workdays ?? WORKDAYS)
           return
         case 'GET /api/v1/credentials/status':
           await json(route, 200, CREDENTIAL_BOARD)
@@ -399,6 +569,20 @@ async function submitCredentials(page: Page): Promise<void> {
 export async function logIn(page: Page): Promise<void> {
   await submitCredentials(page)
   await page.waitForURL('**/employees')
+}
+
+/**
+ * Entra como el `responsable_departamento` de `MANAGER_USER` (RF-ID-03). Sin
+ * `employees:*`, la raiz no lo lleva a la plantilla: la primera seccion a su
+ * alcance es la presencia (doc 02 §7.3, `router/guards.ts`). Exige
+ * `stubManagementApi(page, { role: 'manager' })`.
+ */
+export async function logInAsManager(page: Page): Promise<void> {
+  await page.goto('/login')
+  await page.getByLabel(/Correo electrónico/).fill(MANAGER_USER.email)
+  await page.getByLabel(/Contraseña/).fill('una-contraseña-larga-y-valida')
+  await page.getByRole('button', { name: 'Entrar' }).click()
+  await page.waitForURL('**/live')
 }
 
 /**
