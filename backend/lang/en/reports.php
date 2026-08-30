@@ -35,4 +35,107 @@ return [
 
         'iso_week' => 'Weeks start on Monday (ISO 8601) and are clipped to the requested range.',
     ],
+
+    /*
+     * Exported file labels (RF-IN-04, task 2.9). See `lang/es/reports.php` for
+     * the reasoning: CSV, XLSX and PDF share these strings so that two downloads
+     * of the same report in different formats read the same.
+     */
+
+    'document' => [
+
+        'title' => 'Hours by period report',
+
+        'period' => 'Period',
+
+        'granularity' => 'Granularity',
+
+        'group_by' => 'Grouped by',
+
+        'time_zone' => 'Site time zone',
+
+        'generated_at' => 'Generated on',
+
+        'issuer' => 'Issued by',
+
+        'issuer_unknown' => 'Unidentifiable account',
+
+        'rows' => 'Rows',
+
+        'digest' => 'Content SHA-256 digest',
+
+        'criteria' => 'Criteria for this report',
+
+        'empty' => 'There are no rows in this period within the requester scope.',
+
+        'contract_coverage' => 'There are :days person-days in the period with no recorded contract, affecting :employees person(s). Those days add no contracted hours: the deviation of those rows is incomplete.',
+
+        'sheet_hours' => 'Hours',
+
+        'sheet_criteria' => 'Criteria',
+    ],
+
+    'subject_kind' => [
+
+        'employee' => 'Employee',
+
+        'department' => 'Department',
+
+        'site' => 'Site',
+    ],
+
+    'subject' => [
+
+        'unassigned' => 'No department',
+    ],
+
+    'granularity' => [
+
+        'day' => 'Day',
+
+        'week' => 'Week',
+
+        'month' => 'Month',
+
+        'range' => 'Whole period',
+    ],
+
+    'columns' => [
+
+        'subject_kind' => 'Type',
+
+        'subject' => 'Subject',
+
+        'employee_code' => 'Employee code',
+
+        'employee_uuid' => 'Identifier',
+
+        'department_id' => 'Department (id)',
+
+        'period_from' => 'From',
+
+        'period_to' => 'To',
+
+        'worked' => 'Worked',
+
+        'contracted' => 'Contracted',
+
+        'deviation' => 'Deviation',
+
+        'overtime' => 'Excess',
+
+        'shift_count' => 'Shift entries',
+
+        'days_in_period' => 'Days',
+
+        'days_with_activity' => 'Days with activity',
+
+        'days_without_activity' => 'Days without activity',
+
+        'open_shift_days' => 'Days with an open shift',
+
+        'incident_days' => 'Days with an incident',
+
+        'days_without_contract' => 'Days without contract',
+    ],
 ];

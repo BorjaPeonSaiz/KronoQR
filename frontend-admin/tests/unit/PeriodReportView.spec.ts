@@ -1,5 +1,5 @@
 import type { DOMWrapper } from '@vue/test-utils'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import PeriodReportView from '@/features/reports/PeriodReportView.vue'
 import type { PeriodReport, PeriodReportRow } from '@/shared/api/types'
 import es from '@/shared/i18n/locales/es.json'
@@ -283,5 +283,149 @@ describe('informe de horas por periodo', () => {
     await fillPeriod(wrapper, '2026-03-01', '2026-03-31')
 
     expect(button.element.disabled).toBe(false)
+  })
+})
+
+// Descarga del informe en CSV, XLSX y PDF (RF-IN-04).
+//
+// Lo que se comprueba aqui es lo que puede salir mal en el navegador:
+//
+//   - Que la descarga viaja **con el token** y no como un enlace suelto, que
+//     iria sin `Authorization`.
+//   - Que el fichero es el del informe **que esta en pantalla**, aunque despues
+//     alguien haya cambiado el formulario sin volver a generar.
+//   - Que el blob se suelta en el acto: es una lista nominal con las horas de la
+//     plantilla.
+//   - Que un `403` o un `422` se ven, y no dejan el boton bloqueado para siempre.
+describe('descarga del informe por periodo', () => {
+  let createObjectURL: ReturnType<typeof vi.fn>
+  let revokeObjectURL: ReturnType<typeof vi.fn>
+
+  /** Una respuesta binaria como la del endpoint de descarga. */
+  function fileResponse(contentType: string, digest = 'a'.repeat(64)): Response {
+    return new Response('contenido-del-fichero', {
+      status: 200,
+      headers: {
+        'Content-Type': contentType,
+        'Content-Disposition': 'attachment; filename=kronoqr-horas-2026-03-01_2026-03-31.csv',
+        'X-Kronoqr-Report-Digest': digest,
+        'X-Kronoqr-Report-Rows': '1',
+      },
+    })
+  }
+
+  /** Genera el informe y deja la pantalla lista para descargar. */
+  async function generated(
+    onExport: (url: string, init: RequestInit | undefined) => Response,
+  ): Promise<{ wrapper: Wrapper; fetchSpy: ReturnType<typeof vi.fn> }> {
+    const fetchSpy = stubFetch((input, init) => {
+      if (String(input).includes('/reports/period/export')) {
+        return onExport(String(input), init)
+      }
+
+      return String(input).includes('/reports/period')
+        ? jsonResponse(report())
+        : jsonResponse({ data: [] })
+    })
+
+    const wrapper = await mountView(PeriodReportView)
+
+    await fillPeriod(wrapper, '2026-03-01', '2026-03-31')
+    await wrapper.find('form').trigger('submit')
+    await settle()
+
+    return { wrapper, fetchSpy }
+  }
+
+  beforeEach(() => {
+    createObjectURL = vi.fn(() => 'blob:kronoqr')
+    revokeObjectURL = vi.fn()
+    vi.stubGlobal('URL', { ...URL, createObjectURL, revokeObjectURL })
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  it('no ofrece descargar hasta que hay un informe en pantalla', async () => {
+    // Un boton de descarga antes de generar no tiene nada que descargar: o pide
+    // otro informe por su cuenta —la consulta cara, sin que nadie la pida— o
+    // falla.
+    stubFetch(() => jsonResponse({ data: [] }))
+    const wrapper = await mountView(PeriodReportView)
+
+    expect(wrapper.find('[data-test="report-export"]').exists()).toBe(false)
+  })
+
+  it('descarga con el token de la sesion y suelta el fichero en el acto', async () => {
+    const { wrapper, fetchSpy } = await generated(() => fileResponse('text/csv; charset=utf-8'))
+
+    await wrapper.find('[data-test="export-csv"]').trigger('click')
+    await settle()
+
+    const call = fetchSpy.mock.calls.find((entry) => String(entry[0]).includes('/export')) as
+      [string, RequestInit] | undefined
+
+    expect(call).toBeDefined()
+
+    const [url, init] = call as [string, RequestInit]
+
+    expect(url).toContain('format=csv')
+    // Va por `fetch` —el cliente compartido que pone la cabecera de sesion— y no
+    // por un `<a href>`, que no lleva cabeceras: la unica forma de que un enlace
+    // funcionara seria poner el token en la URL, donde acabaria en el historial
+    // del navegador y en los logs del proxy. Que la peticion salga con
+    // `Authorization` cuando hay sesion se comprueba en el E2E, que si entra.
+    expect(new Headers(init.headers).get('Accept')).toContain('text/csv')
+    // Y el blob no se queda vivo en el navegador.
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:kronoqr')
+  })
+
+  it('pide el mismo periodo del informe que hay en pantalla, no el del formulario', async () => {
+    // Si alguien cambia el mes y pulsa «Descargar» sin volver a generar, el
+    // fichero tiene que ser el del informe que esta viendo. Si no, se lleva a una
+    // reunion un fichero de un periodo que nunca consulto.
+    const { wrapper, fetchSpy } = await generated(() => fileResponse('application/pdf'))
+
+    await fillPeriod(wrapper, '2026-09-01', '2026-09-30')
+    await wrapper.find('[data-test="export-pdf"]').trigger('click')
+    await settle()
+
+    const url = String(
+      fetchSpy.mock.calls.map((entry) => String(entry[0])).find((it) => it.includes('/export')),
+    )
+
+    expect(url).toContain('from=2026-03-01')
+    expect(url).toContain('to=2026-03-31')
+    expect(url).not.toContain('2026-09')
+  })
+
+  it('enseña el error cuando el servidor deniega la descarga, y vuelve a dejar pulsar', async () => {
+    // Un boton que se queda bloqueado despues de un fallo obliga a recargar la
+    // pantalla y a volver a generar el informe, que es la consulta cara.
+    const { wrapper } = await generated(() => problemResponse(403, 'urn:kronoqr:problem:forbidden'))
+
+    await wrapper.find('[data-test="export-xlsx"]').trigger('click')
+    await settle()
+
+    expect(wrapper.text()).toContain(es.errors.forbidden.title)
+    expect(wrapper.find<HTMLButtonElement>('[data-test="export-xlsx"]').element.disabled).toBe(
+      false,
+    )
+  })
+
+  it('avisa por el lector de pantalla de que la descarga esta lista', async () => {
+    const { wrapper } = await generated(() =>
+      fileResponse('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'),
+    )
+
+    clearAnnouncement()
+
+    await wrapper.find('[data-test="export-xlsx"]').trigger('click')
+    await settle()
+
+    expect(announcement.value).toContain('XLSX')
   })
 })

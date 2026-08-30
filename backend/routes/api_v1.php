@@ -30,6 +30,7 @@ use App\Modules\Reporting\Http\Controller\LivePresenceController;
 use App\Modules\Reporting\Http\Controller\MyWorkDayController;
 use App\Modules\Reporting\Http\Controller\MyWorkDayExportController;
 use App\Modules\Reporting\Http\Controller\PeriodReportController;
+use App\Modules\Reporting\Http\Controller\PeriodReportExportController;
 use App\Modules\Workforce\Http\Controller\DepartmentController;
 use App\Modules\Workforce\Http\Controller\EmployeeController;
 use App\Modules\Workforce\Http\Controller\EmployeePinController;
@@ -353,6 +354,37 @@ Route::get('/reports/period', PeriodReportController::class)
         'throttle:management',
     ])
     ->name('reporting.reports.period');
+
+/*
+ * GET /api/v1/reports/period/export — el MISMO informe, como fichero CSV, XLSX o
+ * PDF (RF-IN-04, tarea 2.9).
+ *
+ * MISMO AMBITO, MISMA POLICY Y MISMO LIMITADOR QUE LA CONSULTA DE ARRIBA, y
+ * tiene que ser asi: lo que sale es exactamente lo mismo, con el agravante de
+ * que un fichero se reenvia por correo y una tabla en pantalla no. Un endpoint de
+ * descarga con la autorizacion mas floja que su consulta es la forma habitual de
+ * que la autorizacion no sirva de nada.
+ *
+ * `throttle:management` POR EL MISMO MOTIVO Y UNO MAS: ademas de cruzar la
+ * plantilla con el calendario y dejar su asiento de divulgacion, con `format=pdf`
+ * arranca un Chromium. Sin techo por cuenta, una pestaña en bucle de reintento
+ * levanta un navegador por intento en el mismo servidor que atiende el fichaje
+ * (RNF-P-02, regla dura 19).
+ *
+ * NO ES LA EXPORTACION PARA LA INSPECCION, que es la ruta de abajo: aquella tiene
+ * ambito propio —`reports:legal`, el del auditor—, formato normalizado (RL-06),
+ * manifiesto y su propia accion de auditoria. Esta es la comodidad de descargar
+ * lo que ya se consulta en pantalla.
+ *
+ * ES UN `GET` AUNQUE QUEDE AUDITADO, por lo mismo que las otras dos.
+ */
+Route::get('/reports/period/export', PeriodReportExportController::class)
+    ->middleware([
+        'auth:sanctum',
+        'ability:'.TokenAbility::REPORTS_ALL->value,
+        'throttle:management',
+    ])
+    ->name('reporting.reports.period.export');
 
 Route::get('/reports/legal-export', LegalExportController::class)
     ->middleware([

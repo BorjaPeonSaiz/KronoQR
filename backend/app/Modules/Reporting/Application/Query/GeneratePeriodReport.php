@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Reporting\Application\Query;
 
 use App\Modules\Reporting\Application\Port\PeriodReportReader;
+use App\Modules\Reporting\Application\Support\ReportDelivery;
 use App\Modules\Reporting\Domain\Exception\ReportTooLargeForSynchronousDelivery;
 use App\Modules\Reporting\Domain\ValueObject\PeriodReport;
 use App\Modules\Reporting\Domain\ValueObject\PeriodReportQuery;
@@ -111,13 +112,20 @@ final readonly class GeneratePeriodReport
     /**
      * @param  int  $maxRangeDays  Techo del rango sincrono, de `config/reporting.php`.
      * @param  int  $maxRows  Techo de filas del resultado, de `config/reporting.php`.
+     * @param  ReportDelivery  $delivery  Como sale el informe de la instalacion. Solo afecta al
+     *                                    asiento de `audit_log`: el contenido es el mismo para los
+     *                                    cuatro. Ver {@see ReportDelivery} y {@see recordDisclosure()}.
      *
      * @throws InstallationSiteMissing antes de la puesta en marcha, cuando no hay centro
      *                                 del que tomar la zona horaria (RF-PD-03)
      * @throws ReportTooLargeForSynchronousDelivery cuando se sale del presupuesto de RNF-P-05
      */
-    public function handle(PeriodReportQuery $query, int $maxRangeDays, int $maxRows): PeriodReport
-    {
+    public function handle(
+        PeriodReportQuery $query,
+        int $maxRangeDays,
+        int $maxRows,
+        ReportDelivery $delivery = ReportDelivery::Json,
+    ): PeriodReport {
         $site = $this->installation->installationSite();
 
         if ($site === null) {
@@ -143,7 +151,7 @@ final readonly class GeneratePeriodReport
             contractCoverage: $coverage,
         );
 
-        $this->recordDisclosure($query, $report);
+        $this->recordDisclosure($query, $report, $delivery);
 
         return $report;
     }
@@ -190,11 +198,18 @@ final readonly class GeneratePeriodReport
         return $criteria;
     }
 
-    private function recordDisclosure(PeriodReportQuery $query, PeriodReport $report): void
+    private function recordDisclosure(PeriodReportQuery $query, PeriodReport $report, ReportDelivery $delivery): void
     {
         $uuids = $report->employeeUuids();
 
         $this->disclosures->recordDisclosure(self::DATASET, $report->rowCount(), [
+            // EN QUE se lo llevaron (RF-IN-04). Un asiento por divulgacion y no
+            // dos: la descarga y la consulta son el mismo acceso a los mismos
+            // datos, y separarlas obligaria a quien lee el trail a emparejar dos
+            // entradas para contestar una sola pregunta. Lo que cambia es la
+            // consecuencia —un XLSX se reenvia por correo, una tabla en pantalla
+            // no— y eso es justo lo que este campo distingue.
+            'format' => $delivery->value,
             'from' => $query->range->isoFrom(),
             'to' => $query->range->isoTo(),
             'granularity' => $query->granularity->value,

@@ -22,16 +22,19 @@ import { announce } from '@kronoqr/web-kit/announcer'
 import EmptyState from '@kronoqr/web-kit/components/EmptyState.vue'
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
+import { downloadDocument } from '@kronoqr/web-kit/downloadDocument'
 import { useQuery } from '@tanstack/vue-query'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { listDepartments } from '@/shared/api/organisation.api'
 import type { PeriodReport, ReportGranularity, ReportGrouping } from '@/shared/api/types'
 import PeriodReportTable from './PeriodReportTable.vue'
-import { generatePeriodReport } from './periodReport.api'
+import { generatePeriodReport, type PeriodReportQuery } from './periodReport.api'
+import { downloadPeriodReport, type PeriodReportFormat } from './periodReportExport.api'
 
 const GRANULARITIES: readonly ReportGranularity[] = ['day', 'week', 'month', 'range']
 const GROUPINGS: readonly ReportGrouping[] = ['employee', 'department', 'site']
+const FORMATS: readonly PeriodReportFormat[] = ['csv', 'xlsx', 'pdf']
 
 const { t } = useI18n()
 
@@ -52,26 +55,48 @@ const report = ref<PeriodReport | null>(null)
 const loading = ref(false)
 const error = ref<unknown>(null)
 
+/**
+ * La consulta **que produjo el informe que hay en pantalla**, no la del
+ * formulario.
+ *
+ * La diferencia importa: si alguien cambia el mes en el formulario y despues
+ * pulsa «Descargar», el fichero tiene que ser el del informe que esta viendo, no
+ * el de un periodo que todavia no ha consultado. Se congela al generar.
+ */
+const generatedQuery = ref<PeriodReportQuery | null>(null)
+
+/** Formato que se esta descargando ahora mismo, o `null` si ninguno. */
+const downloading = ref<PeriodReportFormat | null>(null)
+const downloadError = ref<unknown>(null)
+
 /** Sin las dos fechas no hay informe: el servidor las exige y el boton tambien. */
 const canSubmit = computed(() => from.value !== '' && to.value !== '' && !loading.value)
+
+function currentQuery(): PeriodReportQuery {
+  return {
+    from: from.value,
+    to: to.value,
+    granularity: granularity.value,
+    groupBy: grouping.value,
+    ...(departmentFilter.value === '' ? {} : { departmentId: departmentFilter.value }),
+    includeOpenShifts: includeOpenShifts.value,
+  }
+}
 
 async function submit(): Promise<void> {
   if (!canSubmit.value) {
     return
   }
 
+  const query = currentQuery()
+
   loading.value = true
   error.value = null
+  downloadError.value = null
 
   try {
-    report.value = await generatePeriodReport({
-      from: from.value,
-      to: to.value,
-      granularity: granularity.value,
-      groupBy: grouping.value,
-      ...(departmentFilter.value === '' ? {} : { departmentId: departmentFilter.value }),
-      includeOpenShifts: includeOpenShifts.value,
-    })
+    report.value = await generatePeriodReport(query)
+    generatedQuery.value = query
 
     announce(t('reports.period.announce.results', { count: report.value.meta.row_count }))
   } catch (caught) {
@@ -79,9 +104,41 @@ async function submit(): Promise<void> {
     // creer que las cifras siguen valiendo para el periodo que se acaba de
     // pedir, y no valen para ninguno.
     report.value = null
+    generatedQuery.value = null
     error.value = caught
   } finally {
     loading.value = false
+  }
+}
+
+/**
+ * Descarga el informe **que ya esta en pantalla** en el formato pedido.
+ *
+ * El fichero se pide con `fetch` y el token de la sesion —nunca con un enlace
+ * suelto, que iria sin `Authorization`— y se suelta en el mismo momento: es una
+ * lista nominal con las horas de la plantilla, y no tiene por que quedarse viva
+ * en el navegador.
+ */
+async function download(format: PeriodReportFormat): Promise<void> {
+  const query = generatedQuery.value
+
+  if (query === null || downloading.value !== null) {
+    return
+  }
+
+  downloading.value = format
+  downloadError.value = null
+
+  try {
+    const downloaded = await downloadPeriodReport(query, format)
+
+    downloadDocument(downloaded.document)
+    announce(t('reports.period.export.done', { format: format.toUpperCase() }))
+  } catch (caught) {
+    downloadError.value = caught
+    announce(t('reports.period.export.failed'))
+  } finally {
+    downloading.value = null
   }
 }
 
@@ -191,6 +248,30 @@ const fieldClass =
           })
         }}
       </p>
+
+      <!-- La descarga va SOBRE EL INFORME YA CONSULTADO y con su misma consulta
+           (RF-IN-04): no se ofrece antes de generarlo, porque no habria nada
+           que descargar, y no vuelve a leer el formulario, porque el fichero
+           tiene que ser el del informe que se esta viendo. -->
+      <section class="mt-4 flex flex-wrap items-center gap-3" data-test="report-export">
+        <span class="font-medium">{{ t('reports.period.export.label') }}</span>
+        <button
+          v-for="format of FORMATS"
+          :key="format"
+          type="button"
+          class="rounded-kq-sm border border-kq-border-strong px-3 py-1.5 text-kq-text hover:bg-kq-surface-alt disabled:opacity-50"
+          :disabled="downloading !== null"
+          :data-test="`export-${format}`"
+          @click="download(format)"
+        >
+          {{ t(`reports.period.export.format.${format}`) }}
+        </button>
+        <p v-if="downloading !== null" class="text-kq-text-muted" data-test="export-running">
+          {{ t('reports.period.export.running', { format: downloading.toUpperCase() }) }}
+        </p>
+      </section>
+
+      <ErrorNotice v-if="downloadError !== null" :error="downloadError" class="mt-3" />
 
       <EmptyState
         v-if="report.data.length === 0"

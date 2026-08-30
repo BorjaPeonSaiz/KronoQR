@@ -12,6 +12,9 @@ use App\Modules\Reporting\Application\Port\LivePresenceReader;
 use App\Modules\Reporting\Application\Port\PeriodReportReader;
 use App\Modules\Reporting\Application\Port\PresenceMetrics;
 use App\Modules\Reporting\Application\Port\RealtimeConnectionCounter;
+use App\Modules\Reporting\Application\Port\ReportDocumentRenderer;
+use App\Modules\Reporting\Application\Port\ReportExportMetrics;
+use App\Modules\Reporting\Application\Port\ReportIssuerDirectory;
 use App\Modules\Reporting\Application\Port\WorkDayJournalReader;
 use App\Modules\Reporting\Application\Port\WorkedTimeMetrics;
 use App\Modules\Reporting\Domain\ValueObject\PeriodReport;
@@ -20,15 +23,18 @@ use App\Modules\Reporting\Domain\ValueObject\WorkDayJournal;
 use App\Modules\Reporting\Http\Policy\LivePresencePolicy;
 use App\Modules\Reporting\Http\Policy\PeriodReportPolicy;
 use App\Modules\Reporting\Http\Policy\WorkDayJournalPolicy;
+use App\Modules\Reporting\Infrastructure\Adapter\BrowsershotReportRenderer;
 use App\Modules\Reporting\Infrastructure\Adapter\ReverbConnectionCounter;
 use App\Modules\Reporting\Infrastructure\Broadcasting\BroadcastPresenceChange;
 use App\Modules\Reporting\Infrastructure\Console\PresenceMetricsCommand;
 use App\Modules\Reporting\Infrastructure\Listener\RecordWorkedMinutes;
+use App\Modules\Reporting\Infrastructure\Metrics\RedisReportExportMetrics;
 use App\Modules\Reporting\Infrastructure\Metrics\RedisWorkedTimeMetrics;
 use App\Modules\Reporting\Infrastructure\Metrics\TextfilePresenceMetrics;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseEmployeeAttribution;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseLivePresenceReader;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabasePeriodReportReader;
+use App\Modules\Reporting\Infrastructure\Persistence\DatabaseReportIssuerDirectory;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseWorkDayJournalReader;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Database\ConnectionInterface;
@@ -143,6 +149,33 @@ final class ReportingServiceProvider extends ServiceProvider
         // El nombre del departamento para etiquetar esa serie. Puerto propio y de
         // una sola columna: ver su docblock.
         $this->app->bind(EmployeeAttribution::class, DatabaseEmployeeAttribution::class);
+
+        $this->registerPeriodReportExport();
+    }
+
+    /**
+     * La descarga del informe en CSV, XLSX y PDF (RF-IN-04, tarea 2.9).
+     *
+     * **Los tres puertos son de esta tarea y ninguno amplia una frontera.** El
+     * del motor de PDF existe para que la ausencia de Chromium degrade **un
+     * formato** y no la exportacion entera: su adaptador traduce cualquier fallo
+     * del proceso externo a una excepcion propia que el borde sirve como `503`
+     * con la salida escrita dentro, en vez de un `500` opaco.
+     *
+     * El del emisor lee `users.name` para sellar el pie del PDF. Es una consulta
+     * de una columna sobre la tabla, no un `use` del modelo de `Identity`: la
+     * frontera del §1.6 sigue cerrada y `Reporting` sigue siendo un modelo de
+     * lectura cuya fuente es la base de datos.
+     */
+    private function registerPeriodReportExport(): void
+    {
+        $this->app->bind(ReportDocumentRenderer::class, BrowsershotReportRenderer::class);
+        $this->app->bind(ReportIssuerDirectory::class, DatabaseReportIssuerDirectory::class);
+
+        // `report_exports_total{format}` (§8.2). Redis y no el colector
+        // *textfile*, como sus hermanas: `HINCRBY` es atomico y dos procesos PHP
+        // no pueden pisarse reescribiendo el mismo fichero.
+        $this->app->bind(ReportExportMetrics::class, RedisReportExportMetrics::class);
     }
 
     /**

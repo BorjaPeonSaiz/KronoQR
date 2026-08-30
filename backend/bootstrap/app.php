@@ -32,6 +32,7 @@ use App\Modules\Identity\Domain\Exception\InvalidSigningKey;
 use App\Modules\Identity\Domain\ValueObject\TokenAbility;
 use App\Modules\Identity\Http\Middleware\RejectPendingTwoFactorSession;
 use App\Modules\Reporting\Application\Exception\EmployeeNotFound;
+use App\Modules\Reporting\Application\Exception\ReportRenderingUnavailable;
 use App\Modules\Reporting\Domain\Exception\InvalidDateRange;
 use App\Modules\Reporting\Domain\Exception\ReportTooLargeForSynchronousDelivery;
 use App\Modules\Shared\Domain\Exception\AccessOutOfScope;
@@ -515,6 +516,30 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(static fn (ReportTooLargeForSynchronousDelivery $exception): mixed => ProblemDetails::validationFailed([
             'to' => [$exception->getMessage()],
         ]));
+
+        /*
+         * El motor de PDF no esta disponible (tarea 2.9, RF-IN-04).
+         *
+         * `503` Y NO `500`. La peticion es correcta y el informe existe: lo que
+         * falta es un binario —Chromium— en el servidor de esta instalacion. Un
+         * `500` opaco mandaria a quien lo recibe a abrir una incidencia cuando lo
+         * que tiene que hacer es descargar el mismo informe en CSV o en XLSX, que
+         * no pasan por el navegador.
+         *
+         * ES LA MITAD DE UNA DECISION QUE EMPIEZA EN EL PUERTO. `ReportDocumentRenderer`
+         * existe para que el adaptador pueda traducir cualquier fallo del proceso
+         * externo a esta excepcion; sin el, aqui llegarian excepciones de una
+         * libreria de terceros y no habria forma de distinguirlas de un fallo del
+         * producto. Asi la ausencia de Chromium degrada UN FORMATO y no la
+         * exportacion, que es el mismo criterio de la regla dura 15.
+         *
+         * EL `detail` VA AL CLIENTE, y aqui si puede: es un estado de la
+         * instalacion que ve una cuenta de gestion ya autenticada, no un oraculo
+         * sobre credenciales ajenas (regla dura 17). Sin datos personales.
+         */
+        $exceptions->render(static fn (ReportRenderingUnavailable $exception): mixed => ProblemDetails::serviceUnavailable(
+            $exception->getMessage(),
+        ));
 
         /*
          * Bandeja de incidencias (tarea 2.5, RF-PA-05).
