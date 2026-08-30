@@ -496,3 +496,112 @@ it('no revisa el descanso de una jornada sin tramos', function (): void {
     expect(typesOf(detectionPolicy()->inspect($day, Instants::utc('2026-03-17 23:00'), Instants::utc('2026-03-17 06:00'))))
         ->toBe([]);
 })->group('RN-10', 'RF-PD-07');
+
+it('no mide el descanso entre dos tramos de la misma jornada, y eso es una limitacion declarada', function (): void {
+    // Salir a las 15:00 y volver a entrar a las 23:00 del mismo dia son DOS
+    // tramos de la MISMA `work_date` (RN-05): ocho horas de por medio, por debajo
+    // de las doce del perfil, y aqui **no salta nada**.
+    //
+    // Es deliberado y esta escrito en el doc 01 §4: sin la intencion declarada
+    // del fichaje (ADR-024, RF-AT-12, tarea 3.5) ese hueco puede ser una pausa
+    // para comer o el descanso entre dos turnos, y alertar de todos convertiria
+    // cada jornada partida en un incumplimiento del art. 34.3 ET.
+    //
+    // Esta prueba fija el comportamiento de hoy para que el dia que la 3.5 lo
+    // cambie, lo cambie a proposito y no por descuido.
+    $day = WorkDayFactory::new()
+        ->onWorkDate('2026-03-17')
+        ->withClosedShift('2026-03-17 06:00', '2026-03-17 14:00')
+        ->withClosedShift('2026-03-17 22:00', '2026-03-17 23:00')
+        ->build();
+
+    $found = detectionPolicy()->inspect(
+        $day,
+        Instants::utc('2026-03-18 12:00'),
+        // La jornada anterior termino con descanso de sobra: lo unico corto es el
+        // hueco intrajornada.
+        Instants::utc('2026-03-16 12:00'),
+    );
+
+    expect(typesOf($found))->toBe(['missing_break'])
+        ->and($found[0]->context['worked_minutes'])->toBe(480);
+})->group('RN-10');
+
+it('cuelga el descanso insuficiente del tramo que abre, llegue en el orden que llegue', function (bool $openingFirst): void {
+    // `WorkDay::reconstitute()` no ordena los tramos: conserva el orden en que se
+    // los dieron. Si la incidencia se colgara de una posicion —la primera o la
+    // ultima—, bastaria con que otro consumidor cargara por `id` para que RN-10
+    // señalara el tramo equivocado: el de la tarde en vez del que empezo antes de
+    // tiempo. Por eso se prueban los dos ordenes: cualquier implementacion que
+    // mire la posicion falla en uno de los dos.
+    $opening = ShiftEntryFactory::new()->withUuid('el-que-abre')->worked('2026-03-17 09:59', '2026-03-17 13:00');
+    $afternoon = ShiftEntryFactory::new()->withUuid('el-de-la-tarde')->worked('2026-03-17 15:00', '2026-03-17 18:00');
+
+    $day = WorkDayFactory::new()
+        ->onWorkDate('2026-03-17')
+        ->withShift($openingFirst ? $opening : $afternoon)
+        ->withShift($openingFirst ? $afternoon : $opening)
+        ->build();
+
+    $found = detectionPolicy()->inspect(
+        $day,
+        Instants::utc('2026-03-17 23:00'),
+        Instants::utc('2026-03-16 22:00'),
+    );
+
+    expect(typesOf($found))->toBe(['insufficient_rest'])
+        ->and($found[0]->shiftEntryUuid)->toBe('el-que-abre')
+        ->and($found[0]->context['rest_minutes'])->toBe(719);
+})->with([
+    'el que abre llega primero' => [true],
+    'el que abre llega el ultimo' => [false],
+])->group('RN-10', 'RF-PD-07');
+
+it('no mide descanso cuando la jornada anterior invade a la siguiente por un segundo', function (): void {
+    // El limite exacto del solape: un segundo por debajo de cero sigue siendo un
+    // solape, no un descanso de cero minutos. Redondearlo a cero produciria la
+    // alerta mas grave posible sobre un problema de datos que responde RN-02.
+    $day = WorkDayFactory::new()
+        ->onWorkDate('2026-03-17')
+        ->withClosedShift('2026-03-17 09:59:59', '2026-03-17 13:00:00')
+        ->build();
+
+    $found = detectionPolicy()->inspect(
+        $day,
+        Instants::utc('2026-03-17 23:00'),
+        Instants::utc('2026-03-17 10:00:00'),
+    );
+
+    expect(typesOf($found))->toBe([]);
+})->group('RN-10', 'RF-PD-07');
+
+it('no cuenta el tramo abierto en la jornada de RN-11 hasta que se cierra', function (): void {
+    // `totalWorked()` cuenta cero por un tramo abierto: el registro legal suma lo
+    // fichado, no lo que va corriendo. Cuatro horas cerradas mas nueve abiertas
+    // **no** alertan hoy —alertaran la noche siguiente al cierre—, y lo que ese
+    // tramo abierto tiene de raro lo dice RN-08 con su propio umbral.
+    $day = WorkDayFactory::new()
+        ->onWorkDate('2026-03-14')
+        ->withClosedShift('2026-03-14 06:00', '2026-03-14 10:00')
+        ->withShift(ShiftEntryFactory::new()->openSince('2026-03-14 11:00'))
+        ->build();
+
+    // Nueve horas abiertas: por encima de las 9 h de jornada ordinaria y por
+    // debajo de las 12 h de tramo anomalo.
+    $found = detectionPolicy()->inspect($day, Instants::utc('2026-03-14 20:00'));
+
+    expect(typesOf($found))->toBe([])
+        ->and($day->totalWorked()->minutes)->toBe(240);
+})->group('RN-11', 'RF-PD-07');
+
+it('alerta de la jornada larga en cuanto ese mismo tramo se cierra', function (): void {
+    // La otra mitad de la prueba anterior: lo que cambia no es la regla, es que el
+    // dia ya es un hecho.
+    $day = WorkDayFactory::new()
+        ->onWorkDate('2026-03-14')
+        ->withClosedShift('2026-03-14 06:00', '2026-03-14 10:00')
+        ->withClosedShift('2026-03-14 11:00', '2026-03-14 16:01')
+        ->build();
+
+    expect(typesOf(detectionPolicy()->inspect($day, Instants::utc('2026-03-15 04:30'))))->toBe(['long_shift']);
+})->group('RN-11', 'RF-PD-07');

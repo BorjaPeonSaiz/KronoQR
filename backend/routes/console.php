@@ -168,7 +168,7 @@ Schedule::command('reporting:presence-metrics')
  * ni una correccion.
  *
  * NO CIERRA NADA (RN-08, regla dura 19): abre incidencias y avisa. Repetirla es
- * seguro —la idempotencia la garantiza el indice unico parcial de `incidents`—,
+ * seguro —la idempotencia la garantiza la restriccion `one_incident_per_finding`—,
  * asi que `withoutOverlapping` esta por no duplicar el trabajo, no por
  * correccion.
  */

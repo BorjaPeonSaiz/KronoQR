@@ -316,7 +316,7 @@ final readonly class Incident
      * Si la incidencia describe un tramo concreto o la jornada entera.
      *
      * Es la diferencia entre «este turno de trece horas» y «el dia suma mas de
-     * nueve», y lo que hace idempotente la deteccion: el indice unico parcial de
+     * nueve», y lo que hace idempotente la deteccion: la restriccion unica de
      * `incidents` incluye `shift_entry_id`.
      */
     public function isAboutASingleShiftEntry(): bool

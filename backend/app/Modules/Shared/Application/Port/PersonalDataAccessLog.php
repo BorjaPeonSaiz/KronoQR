@@ -38,10 +38,20 @@ namespace App\Modules\Shared\Application\Port;
  * ## Nunca los datos, solo la forma del acceso
  *
  * El `context` describe **el alcance** —que centro, cuantos registros, para que
- * dispositivo— y jamas lo divulgado (regla dura 21): ni un nombre, ni un
- * `employee_uuid` de cada afectado, ni un hash de tarjeta. Un `audit_log` que
- * copiara lo que se leyo seria una segunda copia del padron con cuatro años de
- * retencion.
+ * dispositivo— y jamas lo divulgado (regla dura 21): ni un nombre, ni un hash de
+ * tarjeta. Un `audit_log` que copiara lo que se leyo seria una segunda copia del
+ * padron con cuatro años de retencion.
+ *
+ * ## La excepcion: cuando los datos SALEN de la instalacion
+ *
+ * Enumerar los `employee_uuid` de los afectados esta descartado para los
+ * conjuntos grandes que se leen **dentro** del servidor —el padron, el
+ * directorio, la bandeja—: son cientos de personas por lectura y el trail
+ * acabaria siendo el propio padron. Cuando el conjunto es pequeño y **sale de la
+ * instalacion** —hoy solo `incident_digest`, el resumen que se envia por correo
+ * al responsable (RF-PR-01)— la lista si va, porque sin ella el asiento no
+ * responde a la pregunta que RL-15 obliga a contestar: de quien se fueron los
+ * datos. Siguen siendo identificadores, nunca nombres.
  */
 interface PersonalDataAccessLog
 {

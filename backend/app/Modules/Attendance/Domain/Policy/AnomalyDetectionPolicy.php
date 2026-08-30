@@ -206,8 +206,18 @@ final readonly class AnomalyDetectionPolicy
     }
 
     /**
-     * RN-11 sobre la **suma de los tramos vigentes** de la jornada, que es lo
-     * que la distingue de RN-08: aquella mira un tramo, esta mira el dia.
+     * RN-11 sobre la **suma de los tramos vigentes y cerrados** de la jornada,
+     * que es lo que la distingue de RN-08: aquella mira un tramo, esta mira el
+     * dia.
+     *
+     * **Cerrados, y esto hay que saberlo para leer la bandeja.** `totalWorked()`
+     * cuenta cero por un tramo abierto —el registro legal suma lo fichado, no lo
+     * que va corriendo—, asi que una jornada de cuatro horas cerradas mas nueve
+     * abiertas **no alerta hoy**: alertara la noche siguiente al cierre, cuando el
+     * dia sea un hecho. Mientras tanto, lo que ese tramo abierto tiene de raro lo
+     * dice RN-08, con su propio umbral y su propia incidencia. Es el mismo
+     * criterio que en RN-12: mientras un tramo sigue vivo, su duracion todavia no
+     * es una afirmacion sobre nada.
      *
      * **No se cuelga de ningun tramo** (`shiftEntryUuid` a nulo): ninguno por si
      * solo explica el exceso, y señalar uno arbitrario haria pensar que ese es
@@ -246,6 +256,24 @@ final readonly class AnomalyDetectionPolicy
      *
      * El umbral es estricto por abajo, como el resto: con 12 h, 11 h 59 alerta y
      * 12 h exactas no.
+     *
+     * ## Lo que esta regla NO mira todavia, y por que
+     *
+     * Solo compara **entre jornadas**: la ultima salida anterior contra la
+     * primera entrada de esta. El hueco entre dos tramos de la **misma** jornada
+     * no se evalua, y con RN-05 eso incluye un caso real —salir a las 15:00 y
+     * volver a entrar a las 23:00 el mismo dia son dos tramos de la misma
+     * `work_date`, con ocho horas de por medio, y aqui no salta nada; si esa
+     * segunda entrada cayera a las 00:30 seria otra jornada y si saltaria—.
+     *
+     * **No es un descuido: es que hoy no se puede distinguir.** Sin la intencion
+     * declarada del fichaje (ADR-024, RF-AT-12, tarea 3.5), un hueco entre dos
+     * tramos puede ser una pausa para comer o el descanso entre dos turnos, y las
+     * dos cosas se leen igual en la tabla. Alertar de todas convertiria cada
+     * jornada partida —el turno tipico de hosteleria— en un incumplimiento del
+     * art. 34.3 ET, y eso es peor que no alertar: una bandeja llena de falsos
+     * positivos es una bandeja que se deja de mirar. Cuando exista la pausa
+     * declarada, aqui se evaluara tambien el hueco intrajornada que no sea pausa.
      */
     private function insufficientRest(WorkDay $day, DateTimeImmutable $now, ?DateTimeImmutable $previousShiftEndedAt): ?DetectedAnomaly
     {
@@ -253,12 +281,13 @@ final readonly class AnomalyDetectionPolicy
             return null;
         }
 
-        $firstClockInAt = $day->firstClockInAt();
-        $entries = $day->entries();
+        $openingEntry = $this->openingEntryOf($day);
 
-        if (! $firstClockInAt instanceof DateTimeImmutable || $entries === []) {
+        if (! $openingEntry instanceof ShiftEntry) {
             return null;
         }
+
+        $firstClockInAt = $openingEntry->clockedInAt();
 
         // Una jornada que empieza ANTES de que termine la anterior no describe un
         // descanso corto: describe un solape, y de eso responde RN-02 en el
@@ -281,10 +310,32 @@ final readonly class AnomalyDetectionPolicy
             return null;
         }
 
-        return $this->anomaly(AnomalyType::INSUFFICIENT_REST, $day, $entries[0]->uuid(), $now, [
+        return $this->anomaly(AnomalyType::INSUFFICIENT_REST, $day, $openingEntry->uuid(), $now, [
             'rest_minutes' => $rest->minutes,
             'threshold_minutes' => $this->minimumRest->minutes,
         ]);
+    }
+
+    /**
+     * El tramo que **abre** la jornada: el de entrada mas temprana.
+     *
+     * Se busca y no se toma `entries()[0]`. El agregado conserva el orden en que
+     * el repositorio los cargo —hoy por `clocked_in_at`— y `reconstitute()` no
+     * ordena nada: colgar la incidencia de la posicion cero la ataria a una
+     * garantia que el dominio no da, y bastaria con que otro consumidor cargara
+     * los tramos por `id` para que RN-10 señalara el tramo equivocado.
+     */
+    private function openingEntryOf(WorkDay $day): ?ShiftEntry
+    {
+        $opening = null;
+
+        foreach ($day->entries() as $entry) {
+            if (! $opening instanceof ShiftEntry || $entry->clockedInAt() < $opening->clockedInAt()) {
+                $opening = $entry;
+            }
+        }
+
+        return $opening;
     }
 
     /**

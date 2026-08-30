@@ -25,6 +25,8 @@ use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
 use DateTimeImmutable;
 use DateTimeZone;
+use Psr\Log\LoggerInterface;
+use Throwable;
 
 /**
  * La revision diaria del registro horario (RF-PR-01, tarea 2.6).
@@ -68,6 +70,7 @@ final readonly class DetectAttendanceAnomalies
         private CompliancePolicyProvider $compliance,
         private EventPublisher $events,
         private Clock $clock,
+        private LoggerInterface $logger,
     ) {}
 
     public function handle(DetectAnomaliesCommand $command): AnomalyScanResult
@@ -89,14 +92,17 @@ final readonly class DetectAttendanceAnomalies
             ...$this->inspectFlaggedScans($command, $policy, $site->id, $timezone, $now),
         ];
 
-        foreach ($anomalies as $anomaly) {
-            $this->events->publish(new AttendanceAnomalyDetected($anomaly));
-        }
+        $failures = $this->publishEach($anomalies);
 
         // El aviso al responsable es **un resumen por ejecucion** y no un correo
         // por hallazgo (RF-PR-01): quien lo compone es `Compliance`, que es quien
         // tiene las incidencias y sus responsables. Este evento solo dice que la
         // pasada termino.
+        //
+        // **Se publica tambien cuando algun hallazgo fallo**, y a proposito: lo
+        // que se abrio hay que avisarlo. Callar el resumen por un fallo de otro
+        // hallazgo dejaria sin aviso a responsables cuyas incidencias si estan
+        // escritas.
         $this->events->publish(new AttendanceReviewCompleted(
             siteId: $site->id,
             completedAt: $now,
@@ -108,7 +114,53 @@ final readonly class DetectAttendanceAnomalies
             daysInspected: $command->lookbackDays,
             workDaysInspected: \count($workDays),
             byType: $this->tally($anomalies),
+            failures: $failures,
         );
+    }
+
+    /**
+     * Publica los hallazgos uno a uno, **aislando el fallo de cada uno**, y
+     * devuelve cuantos no se pudieron abrir.
+     *
+     * El aislamiento tiene que estar aqui y no en el listener que abre la
+     * incidencia: el despachador de Laravel es sincrono, asi que una excepcion en
+     * cualquier suscriptor vuelve por esta pila. Sin este `try`, el hallazgo
+     * numero tres de cuarenta abortaba los treinta y siete restantes, no salia el
+     * resumen y el comando moria con una traza en vez de con un recuento.
+     *
+     * **Un fallo no se traga: se cuenta.** El comando termina con codigo distinto
+     * de cero (`DetectIncidentsCommand`), de modo que el planificador y la
+     * instalacion se enteran, pero lo que se pudo abrir queda abierto. Un proceso
+     * que aborta a la mitad es peor que uno que informa: deja la revision hecha a
+     * medias y sin decir por donde iba.
+     *
+     * El log lleva `employee_uuid` y la clase de la excepcion, **nunca nombres ni
+     * la traza** (regla dura 21): esto viaja a Loki y de ahi al paquete de
+     * diagnostico (ADR-020).
+     *
+     * @param  list<DetectedAnomaly>  $anomalies
+     */
+    private function publishEach(array $anomalies): int
+    {
+        $failures = 0;
+
+        foreach ($anomalies as $anomaly) {
+            try {
+                $this->events->publish(new AttendanceAnomalyDetected($anomaly));
+            } catch (Throwable $failure) {
+                $failures++;
+
+                $this->logger->error('attendance.incident_not_opened', [
+                    'employee_uuid' => $anomaly->employeeUuid,
+                    'work_date' => $anomaly->workDate->isoDate,
+                    'type' => $anomaly->type->value,
+                    'shift_entry_uuid' => $anomaly->shiftEntryUuid,
+                    'exception' => $failure::class,
+                ]);
+            }
+        }
+
+        return $failures;
     }
 
     /**

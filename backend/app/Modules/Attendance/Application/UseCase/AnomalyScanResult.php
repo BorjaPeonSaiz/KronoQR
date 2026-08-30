@@ -14,7 +14,7 @@ namespace App\Modules\Attendance\Application\UseCase;
  *
  * `$byType` cuenta **hallazgos emitidos**, no incidencias creadas: la
  * deduplicacion contra lo que ya estaba abierto ocurre en `Compliance`, detras
- * del indice unico parcial de `incidents`. Un segundo pase el mismo dia vuelve a
+ * de la restriccion `one_incident_per_finding`. Un segundo pase el mismo dia vuelve a
  * contar los mismos hallazgos y **no** crea nada nuevo, que es justo lo que hace
  * idempotente al comando.
  */
@@ -28,14 +28,24 @@ final readonly class AnomalyScanResult
         public int $daysInspected,
         public int $workDaysInspected,
         public array $byType,
+        /**
+         * Hallazgos que **no se pudieron abrir**: la incidencia fallo al
+         * escribirse y el resto de la pasada continuo.
+         *
+         * Se cuenta y no se traga: el comando termina con codigo distinto de
+         * cero, de modo que el planificador y la instalacion se enteran, pero lo
+         * que si se abrio queda abierto. Aqui viven recuentos, no personas: quien
+         * fallo esta en el log tecnico con su `employee_uuid` (regla dura 21).
+         */
+        public int $failures,
     ) {}
 
     /**
      * @param  array<string, int>  $byType
      */
-    public static function of(int $daysInspected, int $workDaysInspected, array $byType): self
+    public static function of(int $daysInspected, int $workDaysInspected, array $byType, int $failures = 0): self
     {
-        return new self(true, $daysInspected, $workDaysInspected, $byType);
+        return new self(true, $daysInspected, $workDaysInspected, $byType, $failures);
     }
 
     /**
@@ -46,7 +56,7 @@ final readonly class AnomalyScanResult
      */
     public static function withoutSite(): self
     {
-        return new self(false, 0, 0, []);
+        return new self(false, 0, 0, [], 0);
     }
 
     public function total(): int

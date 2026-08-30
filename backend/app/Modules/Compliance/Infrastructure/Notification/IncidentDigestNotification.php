@@ -6,8 +6,7 @@ namespace App\Modules\Compliance\Infrastructure\Notification;
 
 use App\Modules\Compliance\Application\Port\IncidentDigest;
 use App\Modules\Compliance\Application\Port\IncidentNotice;
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
+use App\Modules\Compliance\Application\UseCase\NotifyPendingIncidents;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\Lang;
@@ -16,12 +15,26 @@ use Illuminate\Support\Facades\Lang;
  * El resumen de incidencias que recibe un responsable (RF-PR-01: «se notifica al
  * responsable del departamento»).
  *
- * ## Encolada, y esto no es un detalle de rendimiento
+ * ## Sincrona, y esto no es un descuido
  *
- * `ShouldQueue`. Enviar correo desde el proceso que corre la deteccion significa
- * esperar a un servidor SMTP que puede tardar treinta segundos o no contestar, y
- * la deteccion tiene que terminar aunque el correo no salga: las incidencias ya
- * estan abiertas y visibles en la bandeja, que es lo que el registro necesita.
+ * **No lleva `ShouldQueue`, y la lleve antes.** Encolada parecia mas prudente y
+ * era justo lo contrario: `notify()` sobre una notificacion encolada solo mete un
+ * trabajo en Redis, asi que el `try/catch` de {@see MailIncidentNotifier} veia un
+ * exito **siempre** —un SMTP mal configurado falla despues, en el worker— y
+ * {@see NotifyPendingIncidents}
+ * sellaba `notified_at` de incidencias que nadie llego a recibir. El aviso se
+ * perdia en silencio, que es el unico desenlace que RF-PR-01 no admite.
+ *
+ * Enviandola en linea, el fallo ocurre donde alguien lo puede ver: el adaptador
+ * lo atrapa, no sella nada y la incidencia entra en el resumen de la noche
+ * siguiente.
+ *
+ * **El coste es asumible y esta acotado**: esto corre en un comando programado de
+ * madrugada, fuera de cualquier peticion y fuera de la transaccion de la
+ * incidencia, y son unos pocos correos —uno por responsable de departamento, no
+ * uno por incidencia—. Si algun dia una instalacion tuviera cien departamentos y
+ * un SMTP lento, la respuesta seria encolar **el comando entero**, no la
+ * notificacion suelta: lo que no puede volver es un sello sin entrega.
  *
  * ## Por que aqui si van nombres
  *
@@ -39,10 +52,8 @@ use Illuminate\Support\Facades\Lang;
  * seria falsa. La ruta relativa la resuelve quien lo lee, que tiene el panel en
  * marcadores.
  */
-final class IncidentDigestNotification extends Notification implements ShouldQueue
+final class IncidentDigestNotification extends Notification
 {
-    use Queueable;
-
     /**
      * Cuantas incidencias se detallan en el cuerpo antes de resumir el resto.
      *

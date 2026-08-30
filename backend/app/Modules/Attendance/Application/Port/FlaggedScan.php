@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Application\Port;
 
-use DateTimeImmutable;
-
 /**
  * Un escaneo que quedo **marcado para revision** (`scan_events.flagged_for_review`),
  * tal y como lo devuelve {@see FlaggedScans}.
@@ -19,15 +17,21 @@ use DateTimeImmutable;
  * **Lleva el desfase, no la conclusion.** Quien decide si supera el umbral es el
  * dominio, con el valor vigente del centro (regla dura 14): si el adaptador
  * filtrara por umbral, la regla acabaria escrita en una consulta SQL.
+ *
+ * **Cuatro campos y ni uno mas.** Nacio con siete —`scan_id`, `site_id` y
+ * `occurred_at` ademas de estos— y ninguno de los tres lo leia nadie: el centro
+ * es uno por instalacion (ADR-040) y lo resuelve el caso de uso, y el momento y
+ * el identificador del escaneo no caben en `incidents.context`, que el contrato
+ * declara como **enteros y nada mas** —es una garantia de privacidad, no un
+ * detalle de tipos—. Quien revise un `clock_skew` llega al escaneo que lo
+ * origino por el tramo y la jornada, que si viajan: `scan_events` esta indexada
+ * por `(employee_id, occurred_at)`. Un campo que nadie lee es un campo que
+ * alguien acaba leyendo mal.
  */
 final readonly class FlaggedScan
 {
     public function __construct(
-        public string $scanId,
         public string $employeeUuid,
-        public int $siteId,
-        /** Momento real del escaneo, el del dispositivo (regla dura 9). */
-        public DateTimeImmutable $occurredAt,
         /**
          * Desfase medido, **con signo**: el reloj del quiosco puede ir adelantado
          * o atrasado. Nulo cuando no se midio —un fichaje manual desde el panel—,

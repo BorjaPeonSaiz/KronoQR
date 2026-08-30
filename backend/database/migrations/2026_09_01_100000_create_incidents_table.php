@@ -19,22 +19,38 @@ use Illuminate\Support\Facades\Schema;
  *
  * ## La idempotencia es del esquema, no del codigo
  *
- * `one_open_incident_per_finding` es un indice unico **parcial** sobre
- * `(employee_id, work_date, type, shift_entry_id)` limitado a `status = 'open'`.
- * Con el, ejecutar el comando dos veces la misma noche no duplica nada aunque
- * dos procesos coincidan: la segunda insercion choca con la restriccion y se
- * ignora. Un `SELECT` previo en PHP habria tenido condicion de carrera con la
- * ejecucion manual mientras el planificador corre — que es exactamente lo que
- * hace alguien cuando esta probando algo.
+ * `one_incident_per_finding` es una restriccion `UNIQUE` sobre
+ * `(employee_id, work_date, type, shift_entry_id)`. Con ella, ejecutar el
+ * comando dos veces la misma noche no duplica nada aunque dos procesos
+ * coincidan: la segunda insercion choca con la restriccion y se ignora. Un
+ * `SELECT` previo en PHP habria tenido condicion de carrera con la ejecucion
+ * manual mientras el planificador corre — que es exactamente lo que hace alguien
+ * cuando esta probando algo.
  *
  * `NULLS NOT DISTINCT` (PostgreSQL 15+) es la mitad que suele faltar: sin el,
  * PostgreSQL considera **distintas** dos filas con `shift_entry_id` nulo, y las
  * incidencias de jornada entera —RN-11— se duplicarian cada noche. Con el, dos
  * nulos son iguales y la garantia cubre tambien esas.
  *
- * Solo cubre las **abiertas** a proposito: una incidencia resuelta no puede
- * impedir que el mismo hecho vuelva a detectarse mas adelante, porque entonces es
- * un hecho nuevo.
+ * **Cubre TODOS los estados, y esto es lo que impide que una incidencia resuelta
+ * reviva.** Acotarla a `status = 'open'` —como nacio— dejaba pasar la insercion
+ * en cuanto alguien resolvia la fila: a la noche siguiente el mismo hallazgo
+ * sobre el mismo tramo volvia a abrirse y a avisar al responsable, que ya lo
+ * habia trabajado. Y no era un hecho nuevo: un tramo cerrado es una fila
+ * inmutable de `shift_entries` y la cuadrupla que lo identifica no cambia.
+ *
+ * Un hecho **realmente** nuevo si vuelve a entrar, y por el mismo mecanismo: una
+ * correccion estrena identificador de tramo (ADR-035), asi que la cuadrupla es
+ * otra y la insercion pasa. Lo unico que queda fuera es el hallazgo de jornada
+ * entera —`shift_entry_id` nulo, RN-11— sobre una jornada ya revisada: si tras
+ * la correccion el dia sigue pasando de nueve horas, la incidencia que se resolvio
+ * ya lo decia.
+ *
+ * Es una **restriccion** y no solo un indice porque el `INSERT` la nombra
+ * (`ON CONFLICT ON CONSTRAINT one_incident_per_finding`): con un `ON CONFLICT
+ * DO NOTHING` a secas, cualquier restriccion futura —una clave ajena, un
+ * `CHECK`— se tragaria filas en silencio y la deteccion diria que no encontro
+ * nada.
  *
  * ## El catalogo va en el esquema, no solo en PHP
  *
@@ -238,20 +254,26 @@ return new class extends Migration
     }
 
     /**
-     * Los tres indices que sostienen la operacion.
+     * La restriccion de idempotencia y los dos indices que sostienen la
+     * operacion.
      *
-     * Los tres son **parciales**: las incidencias abiertas son una minoria
-     * diminuta frente al historico de cuatro años (RL-02), y ninguna de las tres
-     * preguntas se hace nunca sobre una cerrada.
+     * Los dos indices son **parciales**: las incidencias abiertas son una
+     * minoria diminuta frente al historico de cuatro años (RL-02), y ninguna de
+     * las dos preguntas se hace nunca sobre una cerrada. La restriccion **no lo
+     * es**, y el porque esta en el docblock de la clase: una incidencia resuelta
+     * tiene que seguir impidiendo que el mismo hallazgo vuelva a abrirse.
      */
     private function addTrayIndexes(): void
     {
         // La garantia de idempotencia. Ver el docblock de la clase.
+        //
+        // Restriccion y no indice suelto para poder nombrarla en el `ON CONFLICT`
+        // del `INSERT`: `ON CONFLICT DO NOTHING` a secas silencia CUALQUIER
+        // conflicto, incluido el de una restriccion que se añada dentro de un año.
         DB::statement(<<<'SQL'
-            CREATE UNIQUE INDEX one_open_incident_per_finding
-                ON incidents (employee_id, work_date, type, shift_entry_id)
-                NULLS NOT DISTINCT
-                WHERE status = 'open'
+            ALTER TABLE incidents
+                ADD CONSTRAINT one_incident_per_finding
+                UNIQUE NULLS NOT DISTINCT (employee_id, work_date, type, shift_entry_id)
         SQL);
 
         // La bandeja de la tarea 2.5: «que tengo yo pendiente, lo mas grave y lo

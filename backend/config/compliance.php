@@ -79,6 +79,11 @@ return [
      * apunte cada cuarto de hora que con cuatro por minuto. `0` desactiva la
      * agrupacion y devuelve un asiento por lectura.
      */
+    'disclosure_grouping' => [
+        'datasets' => ['live_presence'],
+        'window_seconds' => (int) env('COMPLIANCE_DISCLOSURE_WINDOW_SECONDS', 900),
+    ],
+
     /*
      * Deteccion automatica de incidencias (RF-PR-01, tarea 2.6).
      *
@@ -105,11 +110,6 @@ return [
      */
     'incident_detection' => [
         'lookback_days' => (int) env('COMPLIANCE_INCIDENT_LOOKBACK_DAYS', 7),
-    ],
-
-    'disclosure_grouping' => [
-        'datasets' => ['live_presence'],
-        'window_seconds' => (int) env('COMPLIANCE_DISCLOSURE_WINDOW_SECONDS', 900),
     ],
 
 ];

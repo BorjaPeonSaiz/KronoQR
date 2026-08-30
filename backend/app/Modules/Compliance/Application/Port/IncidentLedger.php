@@ -18,14 +18,21 @@ use App\Modules\Compliance\Domain\Model\Incident;
 interface IncidentLedger
 {
     /**
-     * Abre la incidencia **si no hay ya una abierta igual**, y devuelve su
+     * Abre la incidencia **si ese hallazgo no esta ya escrito**, y devuelve su
      * identificador; `null` si ya existia.
      *
-     * «Igual» lo define el indice unico parcial de `incidents`: mismo empleado,
-     * misma jornada, mismo tipo y mismo tramo, y solo entre las que siguen
-     * abiertas. La deduplicacion se resuelve **con esa restriccion y no con un
-     * `SELECT` previo**, que tiene condicion de carrera con la ejecucion manual
-     * del comando mientras el planificador corre.
+     * «El mismo hallazgo» lo define la restriccion `one_incident_per_finding`:
+     * mismo empleado, misma jornada, mismo tipo y mismo tramo, **en cualquier
+     * estado**. La deduplicacion se resuelve con esa restriccion y no con un
+     * `SELECT` previo, que tiene condicion de carrera con la ejecucion manual del
+     * comando mientras el planificador corre.
+     *
+     * **Cuenta tambien lo ya resuelto**, y esa es la parte que importa: si solo
+     * mirase las abiertas, la incidencia que un responsable trabajo ayer volveria
+     * a abrirse y a avisarle esta noche mientras la jornada siguiera en la
+     * ventana. Un tramo cerrado es una fila inmutable y el mismo hallazgo sobre
+     * el no es un hecho nuevo; uno que si lo sea entra igual, porque una
+     * correccion estrena identificador de tramo (ADR-035).
      *
      * Que devuelva `null` en vez de fallar es lo que hace idempotente al
      * comando: repetir la pasada no crea nada y tampoco es un error.

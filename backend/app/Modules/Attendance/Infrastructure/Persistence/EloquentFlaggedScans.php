@@ -7,7 +7,6 @@ namespace App\Modules\Attendance\Infrastructure\Persistence;
 use App\Modules\Attendance\Application\Port\FlaggedScan;
 use App\Modules\Attendance\Application\Port\FlaggedScans;
 use DateTimeImmutable;
-use DateTimeZone;
 use Illuminate\Database\ConnectionInterface;
 
 /**
@@ -32,7 +31,7 @@ final readonly class EloquentFlaggedScans implements FlaggedScans
 
     public function flaggedBetween(DateTimeImmutable $from, DateTimeImmutable $to): array
     {
-        /** @var list<object{scan_id: string, employee_uuid: string, site_id: int|null, occurred_at: string, clock_skew_seconds: int|null, work_date: string|null, shift_entry_uuid: string|null}> $rows */
+        /** @var list<object{employee_uuid: string, clock_skew_seconds: int|null, work_date: string|null, shift_entry_uuid: string|null}> $rows */
         $rows = $this->connection->table('scan_events')
             ->join('employees', 'employees.id', '=', 'scan_events.employee_id')
             ->leftJoin('shift_entries', 'shift_entries.id', '=', 'scan_events.shift_entry_id')
@@ -42,11 +41,11 @@ final readonly class EloquentFlaggedScans implements FlaggedScans
                 $to->format('Y-m-d H:i:s.uP'),
             ])
             ->orderByDesc('scan_events.occurred_at')
+            // Cuatro columnas, las que alguien lee. El `scan_id`, el `site_id` y
+            // el `occurred_at` viajaban y no los usaba nadie: ver el porque en
+            // {@see FlaggedScan}.
             ->select([
-                'scan_events.scan_id',
                 'employees.uuid as employee_uuid',
-                'shift_entries.site_id',
-                'scan_events.occurred_at',
                 'scan_events.clock_skew_seconds',
                 'shift_entries.work_date',
                 'shift_entries.uuid as shift_entry_uuid',
@@ -58,19 +57,13 @@ final readonly class EloquentFlaggedScans implements FlaggedScans
 
         foreach ($rows as $row) {
             $scans[] = new FlaggedScan(
-                scanId: $row->scan_id,
                 employeeUuid: $row->employee_uuid,
-                // Sin tramo no hay centro en el que ocurriera, y sin centro no
-                // hay jornada: el caso de uso descarta esas filas. El cero es un
-                // marcador que nunca llega a construir nada.
-                siteId: $row->site_id ?? 0,
-                // `TIMESTAMPTZ` llega con el desplazamiento de la sesion; el
-                // dominio solo acepta UTC (regla dura 3).
-                occurredAt: (new DateTimeImmutable($row->occurred_at))->setTimezone(new DateTimeZone('UTC')),
                 clockSkewSeconds: $row->clock_skew_seconds,
                 // `work_date` es DATE: PostgreSQL la devuelve como `YYYY-MM-DD` y
                 // asi viaja, sin convertirla a instante. Es una fecha civil, no
-                // un momento (RN-05).
+                // un momento (RN-05). Nula cuando el escaneo no produjo tramo —un
+                // rechazo, un anti-rebote—, y entonces el caso de uso la descarta:
+                // sin jornada no hay nada que un responsable pueda revisar.
                 workDate: $row->work_date,
                 shiftEntryUuid: $row->shift_entry_uuid,
             );

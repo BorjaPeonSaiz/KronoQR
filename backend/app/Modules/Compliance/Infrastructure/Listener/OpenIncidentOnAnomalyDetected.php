@@ -26,11 +26,17 @@ use App\Modules\Compliance\Application\UseCase\OpenIncident;
  * aqui `AnomalyType` o `WorkDate` seria justo la frontera que este listener
  * existe para respetar. Es la misma tecnica de {@see RecordShiftEntryAudit}.
  *
- * ## Sincrono, y sin transaccion propia
+ * ## Sincrono, sin transaccion propia y sin `catch`
  *
- * La abre el caso de uso, que mete en ella la fila y su asiento. Este listener no
- * envuelve nada: un hallazgo que falla no puede impedir que se abran los demas de
- * la misma pasada.
+ * La transaccion la abre el caso de uso, que mete en ella la fila y su asiento.
+ * Este listener **no atrapa nada, y es deliberado**: el despachador de Laravel es
+ * sincrono, asi que lo que aqui se lance vuelve por la pila de quien publico. Es
+ * justo ahi —en `DetectAttendanceAnomalies::publishEach()`— donde vive el
+ * aislamiento por hallazgo, porque es quien puede contar los fallos, decidir el
+ * codigo de salida del comando y seguir con los demas.
+ *
+ * Atraparlo tambien aqui solo serviria para que ese contador viera siempre cero:
+ * la pasada terminaria «en verde» habiendo perdido incidencias.
  */
 final readonly class OpenIncidentOnAnomalyDetected
 {

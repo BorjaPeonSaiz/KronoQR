@@ -16,13 +16,26 @@ use RuntimeException;
 /**
  * La tabla `incidents` (RF-PR-01).
  *
- * **La deduplicacion es `ON CONFLICT DO NOTHING`, no un `SELECT` previo.** El
- * indice unico parcial `one_open_incident_per_finding` decide si el hallazgo ya
- * estaba abierto; preguntarlo antes en PHP tendria condicion de carrera con la
+ * **La deduplicacion la decide la restriccion, no un `SELECT` previo.**
+ * `one_incident_per_finding` —`(employee_id, work_date, type, shift_entry_id)`,
+ * `NULLS NOT DISTINCT` y **sobre todos los estados**— dice si ese hallazgo ya
+ * esta escrito; preguntarlo antes en PHP tendria condicion de carrera con la
  * ejecucion manual del comando mientras el planificador corre. `RETURNING id`
  * devuelve una fila cuando de verdad se inserto y ninguna cuando no, que es
  * exactamente la señal que el caso de uso necesita para decidir si hay algo que
  * auditar.
+ *
+ * **El `ON CONFLICT` nombra la restriccion.** `ON CONFLICT DO NOTHING` a secas
+ * silencia cualquier conflicto: el dia que alguien añada otra restriccion a esta
+ * tabla, las filas que choquen con ella desaparecerian sin ruido y la deteccion
+ * diria que no encontro nada. Nombrandola, un conflicto distinto **falla**, que
+ * es lo que se quiere de un error que nadie ha previsto.
+ *
+ * **Que la restriccion no sea parcial es lo que impide que una incidencia
+ * resuelta reviva** cada noche mientras su jornada siga en la ventana. Un tramo
+ * cerrado es una fila inmutable: el mismo hallazgo sobre la misma cuadrupla no
+ * es un hecho nuevo. Uno que si lo sea entra igual, porque una correccion
+ * estrena identificador de tramo (ADR-035).
  *
  * **Traduce identificadores publicos a claves internas**, que es su trabajo: el
  * dominio maneja `employee_uuid` y `shift_entry_uuid` porque son los que salen
@@ -64,7 +77,7 @@ final readonly class DatabaseIncidentLedger implements IncidentLedger
                 assigned_to_user_id, detected_at, context, created_at, updated_at
             )
             VALUES (?, ?, ?, ?, ?, 'open', ?, ?, ?::jsonb, ?, ?)
-            ON CONFLICT DO NOTHING
+            ON CONFLICT ON CONSTRAINT one_incident_per_finding DO NOTHING
             RETURNING id
         SQL, [
             $employeeId,

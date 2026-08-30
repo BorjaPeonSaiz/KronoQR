@@ -2,17 +2,25 @@
 
 declare(strict_types=1);
 
+use App\Modules\Compliance\Application\Command\ResolveIncidentCommand;
+use App\Modules\Compliance\Application\Port\IncidentLedger;
+use App\Modules\Compliance\Application\UseCase\ResolveIncident;
 use App\Modules\Compliance\Domain\ValueObject\AuditAction;
+use App\Modules\Compliance\Domain\ValueObject\IncidentStatus;
 use App\Modules\Compliance\Infrastructure\Notification\IncidentDigestNotification;
+use App\Modules\Compliance\Infrastructure\Persistence\DatabaseIncidentLedger;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Domain\ValueObject\AccessScope;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use App\Modules\Workforce\Infrastructure\Persistence\Department;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
 use Tests\Support\Attendance\AttendanceFixtures;
+use Tests\Support\Compliance\FailingIncidentLedger;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Time\FixedClock;
@@ -318,3 +326,145 @@ it('publica el gauge de incidencias abiertas con todos los tipos, tambien a cero
         ->toContain('incidents_open{type="insufficient_rest",severity="high"} 0')
         ->toContain('incidents_metrics_timestamp_seconds');
 })->group('RF-PR-01');
+
+it('no vuelve a abrir ni a avisar de una incidencia que ya se resolvio', function (): void {
+    // El fallo que esto impide: la restriccion de idempotencia era **parcial**
+    // —solo sobre `status = 'open'`—, asi que en cuanto un responsable resolvia la
+    // incidencia, la pasada de la noche siguiente volvia a abrirla y a avisarle
+    // mientras la jornada siguiera dentro de la ventana. Un tramo cerrado es una
+    // fila inmutable: el mismo hallazgo sobre el no es un hecho nuevo.
+    Notification::fake();
+
+    $scenario = departmentWithManager();
+    shiftEntry($scenario['employee'], $scenario['site'], '2026-03-14', '2026-03-14 06:00:00+00');
+
+    runDetection();
+
+    $incident = DB::table('incidents')->first();
+    expect($incident)->not->toBeNull();
+
+    // Se resuelve con el caso de uso real de la tarea 2.5, no con un UPDATE: lo
+    // que hay que comprobar es que la deteccion respeta lo que la bandeja
+    // escribe, no lo que esta prueba sepa escribir.
+    app(ResolveIncident::class)->handle(new ResolveIncidentCommand(
+        incidentId: (int) $incident?->id,
+        outcome: IncidentStatus::Resolved,
+        note: 'Hablado con la persona: salio a las 14:00 y se corrige el tramo.',
+        resolvedByUserId: $scenario['manager'],
+        scope: AccessScope::unrestricted(),
+    ));
+
+    runDetection();
+
+    expect(DB::table('incidents')->count())->toBe(1)
+        ->and(DB::table('incidents')->value('status'))->toBe('resolved');
+
+    // Y el aviso tampoco vuelve: solo salio el de la primera pasada.
+    Notification::assertSentOnDemandTimes(IncidentDigestNotification::class, 1);
+})->group('RF-PR-01', 'RF-PA-05');
+
+it('no sella el aviso cuando el correo no sale, y la deteccion termina igual', function (): void {
+    // El fallo que esto impide: la notificacion era `ShouldQueue`, asi que
+    // `notify()` solo encolaba, el `try/catch` del adaptador veia un exito siempre
+    // y `notified_at` se sellaba sobre avisos que nadie recibia. Con el envio
+    // sincrono, un SMTP mal configurado —lo mas comun de una instalacion recien
+    // puesta en marcha— deja la incidencia pendiente de avisar.
+    //
+    // Sin `Notification::fake()` a proposito: lo que se prueba es justo el camino
+    // real de envio.
+    Config::set('mail.default', 'un-transporte-que-no-existe');
+
+    $scenario = departmentWithManager();
+    shiftEntry($scenario['employee'], $scenario['site'], '2026-03-14', '2026-03-14 06:00:00+00');
+
+    // La deteccion NO falla por el correo: las incidencias ya estan abiertas y
+    // visibles en la bandeja, que es lo que el registro necesita.
+    expect(runDetection())->toBe(0);
+
+    $incident = DB::table('incidents')->first();
+
+    expect($incident)->not->toBeNull()
+        ->and($incident?->status)->toBe('open')
+        ->and($incident?->notified_at)->toBeNull();
+
+    // Y sin sello, la pasada siguiente lo vuelve a intentar.
+    Config::set('mail.default', 'array');
+
+    runDetection();
+
+    expect(DB::table('incidents')->value('notified_at'))->not->toBeNull();
+})->group('RF-PR-01');
+
+it('abre el resto de hallazgos cuando uno falla, y lo dice en el codigo de salida', function (): void {
+    // El listener corre en el despachador SINCRONO, asi que sin aislamiento por
+    // hallazgo una excepcion en el tercero de cuarenta abortaba los treinta y
+    // siete restantes, no salia el resumen y el comando moria con una traza.
+    Notification::fake();
+
+    $scenario = departmentWithManager();
+    $otro = WorkforceFixtures::employee($scenario['site'], $scenario['department']);
+
+    shiftEntry($scenario['employee'], $scenario['site'], '2026-03-14', '2026-03-14 06:00:00+00');
+    shiftEntry($otro, $scenario['site'], '2026-03-14', '2026-03-14 05:00:00+00');
+
+    // Un libro que se rompe con el primer hallazgo que le llega y funciona con el
+    // resto. El orden de los hallazgos lo decide la consulta, asi que se elige por
+    // empleado y no por posicion.
+    app()->bind(IncidentLedger::class, fn (): IncidentLedger => new FailingIncidentLedger(
+        app(DatabaseIncidentLedger::class),
+        $otro,
+    ));
+
+    expect(runDetection())->toBe(1);
+
+    $opened = DB::table('incidents')
+        ->join('employees', 'employees.id', '=', 'incidents.employee_id')
+        ->pluck('employees.uuid')
+        ->all();
+
+    // El que fallo no esta; el otro si, y su aviso ha salido.
+    expect($opened)->toBe([$scenario['employee']]);
+
+    Notification::assertSentOnDemand(IncidentDigestNotification::class);
+})->group('RF-PR-01');
+
+it('rechaza una ventana que no es un numero en vez de caer al valor configurado', function (): void {
+    // `--days=siete` caia en silencio a los siete dias de `config`. Quien escribio
+    // mal la opcion se quedaba creyendo que habia revisado tres meses.
+    departmentWithManager();
+
+    expect(Artisan::call('attendance:detect-incidents', ['--days' => 'siete']))->toBe(2)
+        ->and(DB::table('incidents')->count())->toBe(0);
+})->group('RF-PR-01');
+
+it('deja asiento de divulgacion por cada resumen que sale por correo', function (): void {
+    // RS-05 y RL-15: el aviso saca nombres de la plantilla de la instalacion por
+    // SMTP, que es el unico camino por el que esos datos salen del servidor del
+    // cliente. Sin asiento no se puede responder «que se fue, a quien y cuando».
+    Notification::fake();
+
+    $scenario = departmentWithManager();
+    shiftEntry($scenario['employee'], $scenario['site'], '2026-03-14', '2026-03-14 06:00:00+00');
+
+    runDetection();
+
+    $entry = DB::table('audit_log')
+        ->where('action', AuditAction::PersonalDataAccessed->value)
+        ->orderByDesc('id')
+        ->first();
+
+    expect($entry)->not->toBeNull()
+        // Lo abre el planificador: no hay persona detras (ADR-039).
+        ->and($entry?->actor_type)->toBe('system');
+
+    /** @var array<string, mixed> $payload */
+    $payload = json_decode((string) $entry?->payload, true, 512, JSON_THROW_ON_ERROR);
+
+    expect($payload['dataset'])->toBe('incident_digest')
+        ->and($payload['record_count'])->toBe(1)
+        ->and($payload['manager_user_id'])->toBe($scenario['manager'])
+        ->and($payload['incident_count'])->toBe(1)
+        // Identificadores, nunca nombres (regla dura 21).
+        ->and($payload['employee_uuids'])->toBe($scenario['employee'])
+        ->and(json_encode($payload, JSON_THROW_ON_ERROR))->not->toContain('Persona');
+})->group('RF-PR-01', 'RS-05');

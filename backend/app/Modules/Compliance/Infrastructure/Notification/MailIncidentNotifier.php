@@ -26,12 +26,18 @@ use Throwable;
  * modelo `User` de `Identity` (doc 02 §1.6, verificado por Deptrac) y tampoco lo
  * necesita. La direccion y el idioma vienen ya resueltos en el resumen.
  *
- * ## Un fallo de correo nunca rompe la deteccion
+ * ## Un fallo de correo nunca rompe la deteccion, y tampoco pasa desapercibido
  *
  * Atrapa `Throwable` y devuelve `false`, con lo que el caso de uso **no sella**
  * `notified_at` y el aviso vuelve a intentarse en la pasada siguiente. Un
  * servidor SMTP mal configurado es lo mas comun de una instalacion recien puesta
  * en marcha, y no puede convertirse en una deteccion que falla cada noche.
+ *
+ * **Para que ese `catch` signifique algo, el envio es SINCRONO.** La
+ * notificacion no lleva `ShouldQueue`: con ella, `notify()` solo encolaba un
+ * trabajo, este bloque veia un exito siempre y el sello se escribia sobre avisos
+ * que nadie llegaba a recibir. Un aviso perdido en silencio es peor que un aviso
+ * que falla, porque el segundo se reintenta solo.
  *
  * **El log no lleva nombres ni direcciones** (regla dura 21): dice a que cuenta
  * de gestion iba y cuantas incidencias llevaba. La direccion es dato personal de

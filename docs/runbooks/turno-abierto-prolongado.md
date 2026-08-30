@@ -112,6 +112,10 @@ haya hecho nada mal.
    permite ajustar el umbral con datos.
 
 El gauge baja en el siguiente ciclo de cinco minutos y la alerta se apaga sola.
+**Una incidencia cerrada no vuelve a abrirse**: la revisión de la noche siguiente
+no la repite aunque la jornada siga dentro de su ventana. Si te aparece otra
+sobre la misma persona y el mismo día, es porque el tramo se corrigió y hay un
+tramo nuevo que mirar (ADR-035).
 
 ### Lo que no hay que hacer
 

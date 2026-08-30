@@ -19,9 +19,12 @@ namespace App\Modules\Compliance\Domain\ValueObject;
  * asignada al responsable del departamento.
  *
  * Solo `open` cuenta para la metrica `incidents_open{type,severity}` (doc 02
- * §8.2) y solo `open` entra en el indice unico parcial que hace idempotente la
- * deteccion: una incidencia cerrada no impide que el mismo hecho vuelva a
- * detectarse mas adelante, porque entonces es un hecho nuevo.
+ * §8.2). La restriccion `one_incident_per_finding` que hace idempotente la
+ * deteccion, en cambio, **no mira el estado**: una incidencia cerrada sigue
+ * impidiendo que el mismo hallazgo —mismo empleado, misma jornada, mismo tipo y
+ * mismo tramo— vuelva a abrirse. Cerrar no es olvidar, y un tramo cerrado no
+ * produce hechos nuevos; los que si lo son llegan con otro `shift_entry_id`,
+ * porque una correccion estrena identificador (ADR-035).
  */
 enum IncidentStatus: string
 {
