@@ -69,6 +69,36 @@ enum AuditAction: string
     case CredentialRevoked = 'credential.revoked';
     case CredentialReissued = 'credential.reissued';
 
+    // --- Clave de firma de las tarjetas (RF-QR-07, doc 02 §5.3, tarea 2.12) --
+
+    /**
+     * Se ha abierto una rotacion de la clave HMAC con solape: a partir de este
+     * asiento hay dos claves vigentes y una reemision pendiente de imprimir por
+     * cada tarjeta firmada con la saliente.
+     *
+     * **Sujeto propio y no `credential.*`**, porque no recae sobre ninguna
+     * credencial concreta: recae sobre el material criptografico con el que se
+     * firman todas. Colgarlo de una credencial cualquiera obligaria a elegir una
+     * al azar como `subject_id`, y la pregunta que este asiento responde
+     * —«cuando se roto la clave y quien lo hizo»— dejaria de contestarse con un
+     * filtro por `action`. La reemision de cada tarjeta si deja su
+     * `credential.reissued`, uno por persona.
+     *
+     * **Misma familia del bloque D que la tarjeta** (`CredentialLifecycle`): la
+     * clave es lo que hace valida a la tarjeta, y rotarla es un acto del ciclo de
+     * vida de todas ellas a la vez.
+     */
+    case SigningKeyRotated = 'signing_key.rotated';
+
+    /**
+     * Se ha cerrado el solape: la clave saliente ya no verifica ninguna tarjeta
+     * activa y el operador puede vaciar `QR_SIGNING_KEY_PREVIOUS`.
+     *
+     * Es el asiento que permite responder, meses despues, por que una tarjeta
+     * concreta dejo de funcionar: desde este momento su firma ya no se admite.
+     */
+    case SigningKeyRetired = 'signing_key.retired';
+
     // --- PIN del empleado (RF-ID-09, RL-05) ----------------------------------
 
     case PinIssued = 'pin.issued';
@@ -163,6 +193,15 @@ enum AuditAction: string
     case RetentionPartitionDropped = 'retention.partition_dropped';
 
     /**
+     * La purga por retencion del REGISTRO DE JORNADA (RL-02, RF-PR-03): filas
+     * vencidas borradas de `shift_entries` y de lo que cuelga de ellas. No es un
+     * `DROP PARTITION` -eso es `retention.partition_dropped`- y por eso no comparte
+     * accion: el payload lleva el alcance, la fecha de corte, el umbral aplicado y
+     * el recuento por tabla.
+     */
+    case RetentionPurgeExecuted = 'retention.purge_executed';
+
+    /**
      * Sujeto de la accion —la parte anterior al punto— y familia del bloque D a
      * la que pertenece.
      *
@@ -176,6 +215,10 @@ enum AuditAction: string
     private const array EVENT_BY_SUBJECT = [
         'shift_entry' => AuditableEvent::ShiftEntryLifecycle,
         'credential' => AuditableEvent::CredentialLifecycle,
+        // La clave de firma es lo que hace valida a la tarjeta: rotarla y
+        // retirarla son actos del ciclo de vida de TODAS las credenciales a la
+        // vez (tarea 2.12), no una familia nueva del bloque D.
+        'signing_key' => AuditableEvent::CredentialLifecycle,
         // El PIN es una credencial de acceso mas —la del portal (RL-05) y la
         // del fichaje de respaldo (RF-AT-11)—, con el mismo ciclo de emision y
         // entrega que la tarjeta. Cae en la misma familia del bloque D: no es

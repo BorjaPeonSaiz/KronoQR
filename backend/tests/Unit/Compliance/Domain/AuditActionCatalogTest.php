@@ -50,6 +50,12 @@ it('nombra el ciclo completo de cada familia que el bloque D enumera', function 
     'credential.delivered',
     'credential.revoked',
     'credential.reissued',
+    // Rota y retira la clave con la que se firman todas las tarjetas (tarea
+    // 2.12). Es el ciclo de vida de la credencial visto desde el material
+    // criptografico: sin estos dos, no se puede explicar por que una tarjeta de
+    // hace dos años dejo de verificar.
+    'signing_key.rotated',
+    'signing_key.retired',
     // Entra, sale y se bloquea una credencial de acceso (OWASP A09). El fallo
     // suelto NO esta y no debe estar: se queda en el log tecnico y en
     // `kronoqr_auth_attempts_total`, porque un ataque de fuerza bruta no puede
@@ -79,6 +85,7 @@ it('nombra el ciclo completo de cada familia que el bloque D enumera', function 
     // Ejecuta una purga por retencion.
     'retention.partition_sealed',
     'retention.partition_dropped',
+    'retention.purge_executed',
 ])->group('RS-07');
 
 it('no abre familia nueva del bloque D al anadir la autenticacion', function (): void {
@@ -90,6 +97,15 @@ it('no abre familia nueva del bloque D al anadir la autenticacion', function ():
         ->and(AuditAction::Logout->event())->toBe(AuditableEvent::CredentialLifecycle)
         ->and(AuditAction::LockoutStarted->event())->toBe(AuditableEvent::CredentialLifecycle);
 })->group('RS-07', 'RS-12');
+
+it('no abre familia nueva del bloque D al anadir la rotacion de clave', function (): void {
+    // La clave HMAC es lo que hace valida a la tarjeta: rotarla y retirarla son
+    // actos del ciclo de vida de TODAS las credenciales a la vez (tarea 2.12,
+    // RF-QR-07). Si alguien les diera familia propia, el bloque D tendria una
+    // familia mas sin ningun hecho nuevo detras.
+    expect(AuditAction::SigningKeyRotated->event())->toBe(AuditableEvent::CredentialLifecycle)
+        ->and(AuditAction::SigningKeyRetired->event())->toBe(AuditableEvent::CredentialLifecycle);
+})->group('RS-07', 'RF-QR-07');
 
 it('no admite ninguna accion de fallo de autenticacion en el catalogo', function (): void {
     // El control que impide que alguien «complete» el catalogo. Un

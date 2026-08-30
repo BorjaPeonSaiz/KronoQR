@@ -237,3 +237,29 @@ Schedule::command('attendance:detect-incidents')
 Schedule::command('compliance:incident-metrics')
     ->everyFiveMinutes()
     ->withoutOverlapping();
+
+/*
+ * Propuesta de purga por retencion (RL-02, RL-11, RF-PR-03, tarea 2.10).
+ *
+ * SOLO SIMULACION, y esto es el requisito, no una precaucion: RF-PR-03 dice que
+ * el sistema **propone** y exige confirmacion del responsable. La ejecucion
+ * destructiva no se programa nunca —no existe forma de que este planificador
+ * borre una jornada— y ademas no podria: la purga real necesita la frase que
+ * imprime cada informe y la credencial del rol de mantenimiento, que no vive en
+ * el `.env` de la aplicacion (ADR-033).
+ *
+ * SEMANAL Y NO DIARIA. Lo que esta pasada produce es un informe para que alguien
+ * decida, y esa decision se toma una o dos veces al ano. Un informe diario del
+ * mismo vencimiento entrena a no leerlo; uno semanal sigue siendo puntual y
+ * mantiene viva la metrica `retention_pending_rows`, que es la que descubre que
+ * hay cuatro anos vencidos que nadie ha purgado.
+ *
+ * Lunes a las 05:10 UTC: despues de la copia (03:15), de la verificacion de la
+ * cadena (04:05) y de la deteccion de incidencias (04:30), y antes de que entre
+ * nadie a trabajar. Recorre tablas grandes con `count(*)`, asi que no comparte
+ * ventana con el turno de las 06:00.
+ */
+Schedule::command('compliance:apply-retention', ['--dry-run'])
+    ->weeklyOn(1, '05:10')
+    ->withoutOverlapping()
+    ->runInBackground();
