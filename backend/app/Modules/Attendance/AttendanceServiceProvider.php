@@ -7,22 +7,27 @@ namespace App\Modules\Attendance;
 use App\Http\RateLimiting\KioskRateLimit;
 use App\Modules\Attendance\Application\Port\CorrectionMetrics;
 use App\Modules\Attendance\Application\Port\EventPublisher;
+use App\Modules\Attendance\Application\Port\FlaggedScans;
 use App\Modules\Attendance\Application\Port\ScanLog;
 use App\Modules\Attendance\Application\Port\ScanMetrics;
 use App\Modules\Attendance\Application\Port\ShiftCorrectionLedger;
 use App\Modules\Attendance\Application\Port\ShiftEntryHistory;
 use App\Modules\Attendance\Application\Port\ShiftEntrySubject;
+use App\Modules\Attendance\Application\Port\WorkDayLedger;
 use App\Modules\Attendance\Application\Port\WorkDayRepository;
 use App\Modules\Attendance\Domain\Event\DailyTotalsRecalculated;
 use App\Modules\Attendance\Http\Policy\ScanPolicy;
 use App\Modules\Attendance\Http\Policy\ShiftEntryPolicy;
 use App\Modules\Attendance\Infrastructure\Adapter\LaravelEventBus;
+use App\Modules\Attendance\Infrastructure\Console\DetectIncidentsCommand;
 use App\Modules\Attendance\Infrastructure\Metrics\RedisCorrectionMetrics;
 use App\Modules\Attendance\Infrastructure\Metrics\RedisScanMetrics;
 use App\Modules\Attendance\Infrastructure\Persistence\DatabaseShiftCorrectionLedger;
+use App\Modules\Attendance\Infrastructure\Persistence\EloquentFlaggedScans;
 use App\Modules\Attendance\Infrastructure\Persistence\EloquentScanLog;
 use App\Modules\Attendance\Infrastructure\Persistence\EloquentShiftEntryHistory;
 use App\Modules\Attendance\Infrastructure\Persistence\EloquentShiftEntrySubject;
+use App\Modules\Attendance\Infrastructure\Persistence\EloquentWorkDayLedger;
 use App\Modules\Attendance\Infrastructure\Persistence\EloquentWorkDayRepository;
 use App\Modules\Attendance\Infrastructure\Persistence\ShiftEntry;
 use App\Modules\Attendance\Infrastructure\Projection\DailyTotalsProjector;
@@ -74,6 +79,19 @@ final class AttendanceServiceProvider extends ServiceProvider
         $this->app->bind(ShiftCorrectionLedger::class, DatabaseShiftCorrectionLedger::class);
         $this->app->bind(ShiftEntryHistory::class, EloquentShiftEntryHistory::class);
 
+        /*
+         * La revision diaria (RF-PR-01, tarea 2.6). Dos puertos de **solo
+         * lectura**, y que lo sean es la garantia estructural de RN-08: el
+         * detector no tiene por donde cerrar un tramo aunque alguien quisiera.
+         *
+         * `WorkDayLedger` es un puerto aparte de `WorkDayRepository` y no dos
+         * metodos mas dentro de el: aquel sirve al fichaje —carga una jornada, la
+         * guarda y traduce las violaciones de RN-01 y RN-02— y este recorre a
+         * toda la plantilla sin escribir nunca.
+         */
+        $this->app->bind(WorkDayLedger::class, EloquentWorkDayLedger::class);
+        $this->app->bind(FlaggedScans::class, EloquentFlaggedScans::class);
+
         // De quien es un tramo, para autorizar la correccion antes de ejecutarla
         // (RF-ID-03). Puerto propio y no un metodo mas del anterior: aquel existe
         // para elegir entre 404 y 409 y lo dice de si mismo.
@@ -121,6 +139,19 @@ final class AttendanceServiceProvider extends ServiceProvider
          * de ocurrir.
          */
         Event::listen(DailyTotalsRecalculated::class, [DailyTotalsProjector::class, 'handle']);
+
+        if ($this->app->runningInConsole()) {
+            /*
+             * `attendance:detect-incidents` (RF-PR-01, doc 02 Anexo C). CUANDO se
+             * ejecuta lo dice `routes/console.php`; que exista, esto.
+             *
+             * Vive en `Attendance` y no en `Compliance` porque quien sabe leer una
+             * jornada es este modulo: las reglas que evalua —RN-07, RN-08, RN-10,
+             * RN-11, RN-12 y RN-15— son suyas. Las incidencias que salen de ahi
+             * las abre `Compliance` reaccionando a sus eventos.
+             */
+            $this->commands([DetectIncidentsCommand::class]);
+        }
     }
 
     /**

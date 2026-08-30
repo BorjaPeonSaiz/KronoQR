@@ -110,6 +110,23 @@ enum AuditAction: string
     case PermissionChanged = 'permission.changed';
     case CalculationSettingChanged = 'calculation_setting.changed';
 
+    // --- Incidencias del registro horario (RF-PR-01, tarea 2.6) --------------
+
+    /**
+     * La deteccion automatica ha abierto una incidencia y la ha asignado —o no ha
+     * podido asignarla—. **No cambia ningun fichaje** (RN-08).
+     */
+    case IncidentOpened = 'incident.opened';
+
+    /**
+     * Una persona la ha dado por trabajada (tarea 2.5, `POST /incidents/{id}/resolve`).
+     *
+     * Se declara aqui y no en aquella tarea porque el catalogo se decide en un
+     * solo sitio: el mismo criterio por el que las acciones de `pin.*` nacieron
+     * completas antes de que existiera quien las escribiera.
+     */
+    case IncidentResolved = 'incident.resolved';
+
     // --- Retencion (RL-02, ADR-027) ------------------------------------------
 
     case RetentionPartitionSealed = 'retention.partition_sealed';
@@ -148,6 +165,11 @@ enum AuditAction: string
         // veces para responder «que hizo esa cuenta con la plantilla».
         'access' => AuditableEvent::PersonalDataAccess,
         'legal_export' => AuditableEvent::LegalExport,
+        // Abrir y resolver una incidencia son la misma familia porque son las dos
+        // mitades del mismo hecho: se detecto algo con relevancia legal y alguien
+        // respondio de ello. Separarlas obligaria a consultar dos veces para
+        // responder «que se detecto en marzo y que se hizo con ello».
+        'incident' => AuditableEvent::IncidentLifecycle,
         'role_assignment' => AuditableEvent::AuthorityOrCalculationChange,
         'permission' => AuditableEvent::AuthorityOrCalculationChange,
         'calculation_setting' => AuditableEvent::AuthorityOrCalculationChange,

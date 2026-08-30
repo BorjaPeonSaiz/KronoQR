@@ -96,9 +96,16 @@ it('mantiene los puertos de Attendance libres de tipos de satelites y del framew
 //    que evita el modo de fallo real: que Compliance acabe con su propio
 //    SystemClock en la tarea 2.2 y los dos relojes diverjan en silencio.
 //
-//    CompliancePolicyProvider y OperationalSettingsProvider los declara la
-//    tarea 1.1 y hoy no existen: la prueba admite 0 o 1, nunca 2. No finge que
-//    ya estan, y protege desde el momento en que aparezcan.
+//    Los cuatro puertos y adaptadores de configuracion existen ya: los dos
+//    puertos desde la tarea 1.1, `DbOperationalSettingsProvider` desde la 1.4
+//    —RN-08 y RF-AT-06 necesitaban sus umbrales— y `DbCompliancePolicyProvider`
+//    desde la 2.6, por el mismo motivo: RN-10, RN-11 y RN-12 no podian nacer
+//    leyendo constantes de PHP (regla dura 14). Las tareas 5.1 y 5.2 anaden
+//    encima la edicion desde el panel, no la lectura.
+//
+//    La prueba sigue exigiendo EXACTAMENTE UNA declaracion de cada uno: el modo
+//    de fallo que evita —que un modulo acabe con su propia copia y las dos
+//    diverjan en silencio— no desaparece porque el simbolo ya exista.
 it('no permite dos declaraciones del mismo puerto transversal ni de su adaptador', function (string $symbol, bool $mustExistToday): void {
     $declarations = ModuleTree::declarationsOf($symbol);
 
@@ -120,10 +127,10 @@ it('no permite dos declaraciones del mismo puerto transversal ni de su adaptador
     // [simbolo, debe existir ya hoy]
     'Clock (ADR-021)' => ['Clock', true],
     'SystemClock (ADR-021)' => ['SystemClock', true],
-    'CompliancePolicyProvider (ADR-025, tarea 1.1)' => ['CompliancePolicyProvider', false],
-    'OperationalSettingsProvider (ADR-025, tarea 1.1)' => ['OperationalSettingsProvider', false],
-    'DbCompliancePolicyProvider (ADR-025, tarea 5.2)' => ['DbCompliancePolicyProvider', false],
-    'DbOperationalSettingsProvider (ADR-025, tarea 5.1)' => ['DbOperationalSettingsProvider', false],
+    'CompliancePolicyProvider (ADR-025, tarea 1.1)' => ['CompliancePolicyProvider', true],
+    'OperationalSettingsProvider (ADR-025, tarea 1.1)' => ['OperationalSettingsProvider', true],
+    'DbCompliancePolicyProvider (ADR-025, tarea 2.6)' => ['DbCompliancePolicyProvider', true],
+    'DbOperationalSettingsProvider (ADR-025, tarea 1.4)' => ['DbOperationalSettingsProvider', true],
 ])->group('RNF-M-03');
 
 // El corolario de ADR-021 que da sentido a la prueba d: el puerto vive en

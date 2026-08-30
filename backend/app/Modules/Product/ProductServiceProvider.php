@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Modules\Product;
 
+use App\Modules\Product\Infrastructure\Adapter\DbCompliancePolicyProvider;
 use App\Modules\Product\Infrastructure\Adapter\DbOperationalSettingsProvider;
+use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\ServiceProvider;
@@ -24,10 +26,15 @@ use Illuminate\Support\ServiceProvider;
  * exactamente lo que la regla dura 14 prohibe. Lo que la 5.1 anade encima es la
  * **edicion desde el panel** y la auditoria de ese cambio; la lectura es esta.
  *
+ * **`CompliancePolicyProvider` se enlaza desde la tarea 2.6**, y por el mismo
+ * motivo: la deteccion de RN-10, RN-11 y RN-12 necesita el descanso minimo, la
+ * jornada ordinaria y el tramo continuo maximo, y la unica alternativa era
+ * escribir 12 h, 9 h y 6 h en PHP. La tarea 5.2 anade encima la edicion desde el
+ * panel y la auditoria del cambio; la lectura es esta.
+ *
  * Enlaces todavia pendientes (tarea 5.1, ADR-025):
- *   - Shared\Application\Port\CompliancePolicyProvider -> DbCompliancePolicyProvider
- *   - Shared\Application\Port\BrandingProvider         -> DbBrandingProvider
- * Los dos adaptadores viven en Product/Infrastructure/Adapter/, que es donde
+ *   - Shared\Application\Port\BrandingProvider -> DbBrandingProvider
+ * Su adaptador vivira tambien en Product/Infrastructure/Adapter/, que es donde
  * estan las tablas.
  */
 final class ProductServiceProvider extends ServiceProvider
@@ -41,6 +48,14 @@ final class ProductServiceProvider extends ServiceProvider
         $this->app->singleton(
             OperationalSettingsProvider::class,
             static fn (): DbOperationalSettingsProvider => new DbOperationalSettingsProvider(DB::connection()),
+        );
+
+        // Los umbrales legales (RF-PD-07). Singleton por la misma razon: la vista
+        // de cumplimiento los pedira una vez por jornada de un informe, y son una
+        // fila que cambia cuando cambia el convenio.
+        $this->app->singleton(
+            CompliancePolicyProvider::class,
+            static fn (): DbCompliancePolicyProvider => new DbCompliancePolicyProvider(DB::connection()),
         );
     }
 }

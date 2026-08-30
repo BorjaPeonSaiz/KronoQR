@@ -79,6 +79,34 @@ return [
      * apunte cada cuarto de hora que con cuatro por minuto. `0` desactiva la
      * agrupacion y devuelve un asiento por lectura.
      */
+    /*
+     * Deteccion automatica de incidencias (RF-PR-01, tarea 2.6).
+     *
+     * LA VENTANA ES LA DECISION DE RETROACTIVIDAD, y esta escrita en el doc 01 §4
+     * junto a RN-08: la revision diaria NO reprocesa el historico. Recalcular el
+     * pasado abriria incidencias sobre jornadas ya entregadas a la plantilla o a
+     * la Inspeccion, y una incidencia abierta hoy sobre una jornada de hace dos
+     * anos no describe nada que nadie pueda corregir.
+     *
+     * SIETE DIAS porque es lo que cubre la semana de una nomina y el tiempo real
+     * en el que una correccion sigue siendo util: mas atras, lo que hay que hacer
+     * no es abrir una incidencia sino corregir con motivo (RF-PA-04). Ampliarla
+     * para una ejecucion concreta es `--days`, una decision consciente de quien
+     * lanza el comando.
+     *
+     * LOS TRAMOS TODAVIA ABIERTOS NO ENTRAN EN ESTA VENTANA y se revisan siempre,
+     * sea cual sea su fecha: un turno sin cerrar no es historia, es un hecho que
+     * sigue creciendo, y es el que ve la alerta «Turnos abiertos > 12 h» del
+     * doc 01 §9.3.
+     *
+     * NO ES UN UMBRAL LEGAL NI OPERATIVO: no dice cuando algo es anomalo —eso lo
+     * dicen `compliance_profiles` e `installation_settings` (regla dura 14)— sino
+     * hasta donde mira el proceso. Por eso vive aqui y no en una tabla.
+     */
+    'incident_detection' => [
+        'lookback_days' => (int) env('COMPLIANCE_INCIDENT_LOOKBACK_DAYS', 7),
+    ],
+
     'disclosure_grouping' => [
         'datasets' => ['live_presence'],
         'window_seconds' => (int) env('COMPLIANCE_DISCLOSURE_WINDOW_SECONDS', 900),

@@ -1430,6 +1430,8 @@ KIOSK_VLAN_CIDR=10.0.20.0/24           # §7.1 · zona de fichaje elevada para e
                                        # Fuera de él, los quioscos caen al límite de 30 r/m
 
 COMPLIANCE_PROFILE=ES-hosteleria       # RF-PD-07
+COMPLIANCE_INCIDENT_LOOKBACK_DAYS=7    # RF-PR-01 · días que revisa la detección. NO reprocesa el
+                                       # histórico; los tramos abiertos se revisan siempre
 LICENSE_KEY=                           # Clave firmada, verificación local (ADR-018)
 TELEMETRY_ENABLED=false                # Desactivada por defecto (RF-PD-12)
 ERROR_HISTORY_RETENTION_DAYS=90        # RF-PD-15 · igual que el log técnico (RL-11)

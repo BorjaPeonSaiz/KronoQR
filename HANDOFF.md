@@ -1,5 +1,15 @@
 # HANDOFF
 
+## Sesión «tarea 2.6: detección automática de incidencias» (30-08-2026), en `feat/2.6-incident-detection`
+
+**Tarea 2.6 implementada, sin commit** (el usuario revisa y commitea). Cubre RF-PR-01 y estrena en dominio RN-10, RN-11 y RN-12; reutiliza RN-07/RN-08 (`ClockingPolicy`) y RN-15 (`ReviewPolicy`).
+
+**Construido.** `Attendance/Domain`: `AnomalyDetectionPolicy` (las seis reglas con el umbral recibido), `AnomalyType`, `DetectedAnomaly`, eventos `AttendanceAnomalyDetected` y `AttendanceReviewCompleted`, y `ReviewPolicy::exceedsSkewTolerance()` (extraído para no duplicar la comparación de RN-15). `Attendance/Application`: caso de uso `DetectAttendanceAnomalies` con puertos **de solo lectura** `WorkDayLedger` y `FlaggedScans` — que no expongan `save()` es la garantía estructural de RN-08. `Compliance`: modelo `Incident`, enums `IncidentType|Severity|Status`, casos de uso `OpenIncident` (transacción + asiento), `NotifyPendingIncidents` y `PublishIncidentMetrics`, adaptadores sobre `incidents`, notificación encolada por correo y métrica textfile. `Product/Infrastructure/Adapter/DbCompliancePolicyProvider` **nuevo** y enlazado (el plan lo daba por hecho y no existía). Comandos `attendance:detect-incidents` (04:30) y `compliance:incident-metrics` (cada 5 min).
+
+**Decisiones que conviene conocer:** tipo nuevo `missing_break` para RN-12 (colapsarlo en `long_shift` haría indistinguible «9 h y media hoy» de «6 h y media sin parar»); severidad por tipo, decidida en `Compliance`; **retroactividad acotada** a `COMPLIANCE_INCIDENT_LOOKBACK_DAYS=7` con los tramos abiertos siempre revisados; idempotencia por índice único parcial `one_open_incident_per_finding` con `NULLS NOT DISTINCT`, no por `SELECT` previo; `AuditableEvent::IncidentLifecycle` es la **octava** familia del bloque D; el aviso al responsable es un resumen por persona y por pasada, sellado con `incidents.notified_at`, y un fallo de correo nunca rompe la detección.
+
+**Pendiente / deuda:** sobre la semilla de desarrollo, RN-12 produce **545 incidencias `missing_break`** (el `VolumeSeeder` genera 90 días de turnos de 8 h continuas sin pausa). Es un verdadero positivo según la regla, pero conviene decidir con el cliente si el umbral de RN-12 debe evaluarse solo cuando exista la pausa declarada de RF-AT-12 (tarea 3.5). La bandeja de la 2.5 necesitará filtro por tipo desde el primer día. `missing_clock_out` y `anomalous_pattern` siguen en el catálogo sin detector, a propósito.
+
 ## Sesión «tarea 2.4, backend y cierre» (30-08-2026), en `feat/2.4-live-presence`
 
 **Tarea 2.4 completa en la rama.** Esta sesión hizo el backend, el contrato y los docs (agente `backend-laravel`); la sección de abajo es la del panel, hecha en paralelo por otra sesión. Verificado que encajan: `schema.d.ts` regenerado desde el contrato final **sin ningún cambio**, `type-check` 0 y 219/219 unitarias del panel, y 310 pruebas backend nuevas + contrato + autorización negativa en verde. `make quality` limpio (PhpStan 9 0 errores, Deptrac 0 violaciones) y `make test` **1881 / 9736** según el agente; trazabilidad 1224 Pest + 58 Playwright sin huecos.

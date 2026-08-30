@@ -259,3 +259,53 @@ it('mantiene el simulacro de restauracion automatizado y trimestral', function (
         ->toContain('restore-drill.sh')
         ->toContain('1,4,7,10');
 })->group('RNF-D-05', 'RQ-09');
+
+it('dirige la alerta de turnos abiertos a RRHH, con runbook y sin cierre automatico', function (): void {
+    // Doc 01 §9.3, fila «Turnos abiertos > 12 h | cualquiera | Media | RRHH».
+    // Las dos mitades importan y las dos son deliberadas: sin umbral —«cualquiera»,
+    // no una tendencia— y a RRHH y no al IT, porque no es una averia: el IT no
+    // puede decidir a que hora salio una persona. La tercera afirmacion es la que
+    // protege RN-08: el procedimiento tiene que decir que el sistema NUNCA cierra
+    // el turno solo.
+    $reglas = reglasDeAlerta('infra/observability/prometheus/rules/incidents.yml');
+
+    exigeProcedimientoEnCadaAlerta($reglas);
+
+    $porNombre = [];
+    foreach ($reglas as $regla) {
+        $porNombre[$regla['alert'] ?? ''] = $regla;
+    }
+
+    expect($porNombre)->toHaveKeys([
+        'TurnoAbiertoProlongado',
+        'DescansoEntreJornadasInsuficiente',
+        // El silencio: sin esta, apagar la tarea programada seria la forma mas
+        // comoda de que las dos de arriba no volvieran a sonar nunca.
+        'MetricaDeIncidenciasAusente',
+    ]);
+
+    $turnos = $porNombre['TurnoAbiertoProlongado'];
+    expect($turnos['expr'] ?? '')->toContain('incidents_open{type="open_shift_expired"} > 0');
+    expect($turnos['labels']['destinatario'] ?? '')->toBe('rrhh');
+    expect($porNombre['DescansoEntreJornadasInsuficiente']['labels']['destinatario'] ?? '')->toBe('rrhh');
+    // El silencio si es del IT: lo que falla ahi es el planificador, no el registro.
+    expect($porNombre['MetricaDeIncidenciasAusente']['labels']['destinatario'] ?? '')->toBe('it-cliente');
+
+    // RN-08 en el runbook, literal: es lo unico que impide que alguien «resuelva»
+    // la alerta cerrando el turno a la hora del umbral.
+    expect(backupFile('docs/runbooks/turno-abierto-prolongado.md'))
+        ->toContain('OLVIDO_FICHAJE_SALIDA')
+        ->toContain('NUNCA cierra un turno');
+})->group('RF-PR-01', 'RN-08');
+
+it('programa la deteccion de incidencias y su metrica, que es lo que las hace existir', function (): void {
+    // Una alerta sobre una metrica que nadie publica no suena nunca, y una
+    // deteccion que nadie ejecuta no encuentra nada. Las dos cadencias son parte
+    // del requisito, no una preferencia de operacion.
+    $scheduler = backupFile('backend/routes/console.php');
+
+    expect($scheduler)
+        ->toContain("Schedule::command('attendance:detect-incidents')")
+        ->toContain("Schedule::command('compliance:incident-metrics')")
+        ->toMatch('/attendance:detect-incidents\'\)\s*\n\s*->dailyAt\(/');
+})->group('RF-PR-01');

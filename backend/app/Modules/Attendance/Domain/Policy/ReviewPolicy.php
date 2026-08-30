@@ -79,6 +79,24 @@ final readonly class ReviewPolicy
     public function requiresReview(ScanOrigin $origin, ClockSkew $skew): bool
     {
         return $origin === ScanOrigin::PIN_KIOSK
-            || $skew->magnitudeSeconds() > $this->skewToleranceSeconds;
+            || $this->exceedsSkewTolerance($skew);
+    }
+
+    /**
+     * Solo la segunda razon: **el reloj**, sin mirar el origen.
+     *
+     * Existe porque la revision diaria de la tarea 2.6 abre incidencias
+     * `clock_skew`, y esas afirman una cosa muy concreta —«este fichaje llego
+     * con el reloj desviado»— que no es cierta de un fichaje por PIN con el
+     * reloj en hora. Que la comparacion viva en un solo sitio es lo que evita
+     * que el quiosco marque un escaneo que la deteccion no considera desviado, o
+     * al reves: `requiresReview()` la usa tal cual.
+     *
+     * Se mide sobre la **magnitud**: un quiosco atrasado falsea la hora igual
+     * que uno adelantado.
+     */
+    public function exceedsSkewTolerance(ClockSkew $skew): bool
+    {
+        return $skew->magnitudeSeconds() > $this->skewToleranceSeconds;
     }
 }

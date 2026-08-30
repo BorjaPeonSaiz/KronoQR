@@ -281,6 +281,10 @@ Estas reglas viven en el **núcleo de dominio** y deben estar cubiertas por prue
 > Los umbrales de RN-10, RN-11 y RN-12 provienen del Estatuto de los Trabajadores español, pero **son parámetros del perfil de cumplimiento** (RF-PD-07), no constantes. Lo invariable es la forma de la regla; configurable es el número. RN-01 a RN-09 y RN-13 a RN-15 son estructurales y no se configuran.
 >
 > **RN-08 y RN-16 son un caso intermedio:** su forma es estructural, pero llevan un umbral configurable que **no proviene del marco normativo** sino de la operación de cada instalación —la duración anómala de un tramo y el tiempo de tránsito entre dos quioscos—. Viven en `installation_settings` (RF-PD-01), no en el perfil de cumplimiento (RF-PD-07). La distinción importa: un umbral legal lo fija la jurisdicción, uno operativo lo fija el hotel.
+>
+> **Cuándo se evalúan estas reglas, y hasta dónde hacia atrás** (RF-PR-01, tarea 2.6). La detección automática las aplica a diario sobre una **ventana acotada** —`COMPLIANCE_INCIDENT_LOOKBACK_DAYS`, 7 días de serie— y **no reprocesa el histórico**. El motivo no es de rendimiento: recalcular el pasado abriría incidencias sobre jornadas ya entregadas a la plantilla o a la Inspección, y una incidencia abierta hoy sobre una jornada de hace dos años no describe nada que nadie pueda corregir. Ampliar la ventana en una ejecución concreta es una decisión consciente de quien la lanza (`--days`), nunca el comportamiento por defecto.
+>
+> **La única excepción son los tramos todavía abiertos.** RN-08 sobre un turno sin cerrar se evalúa **siempre**, sea cual sea su fecha: un turno abierto no es historia, es un hecho presente que sigue creciendo, y es justo el caso que la alerta «Turnos abiertos > 12 h» del §9.3 existe para ver. Ninguna de estas reglas cierra, corrige ni descarta nada: abren incidencia para revisión humana (regla dura 19).
 
 | ID | Regla |
 |---|---|
@@ -442,7 +446,17 @@ ALTER TABLE shift_entries ADD CONSTRAINT shift_entries_chk_order
 
 **`shift_corrections`** — `id`, `shift_entry_id`, `performed_by_user_id`, `action`, `before` (JSONB), `after` (JSONB), `reason_code`, `reason_text`, `created_at`
 
-**`incidents`** — `id`, `employee_id`, `work_date`, `type` (`open_shift_expired`|`short_shift`|`long_shift`|`insufficient_rest`|`clock_skew`|`missing_clock_out`|`anomalous_pattern`), `severity`, `status`, `assigned_to_user_id`, `resolved_at`, `resolution_note`
+**`incidents`** — `id`, `employee_id`, `work_date`, `shift_entry_id` (NULL cuando la incidencia describe la jornada entera y no un tramo), `type` (`open_shift_expired`|`short_shift`|`long_shift`|`missing_break`|`insufficient_rest`|`clock_skew`|`missing_clock_out`|`anomalous_pattern`), `severity` (`low`|`medium`|`high`), `status` (`open`|`resolved`|`dismissed`), `assigned_to_user_id`, `detected_at`, `context` (JSONB, **sin datos personales**: minutos y umbrales, nunca nombres), `notified_at`, `resolved_at`, `resolved_by_user_id`, `resolution_note`, `created_at`, `updated_at`. UNIQUE parcial `(employee_id, work_date, type, shift_entry_id) NULLS NOT DISTINCT WHERE status = 'open'`.
+
+> **Las columnas que el enunciado original no tenía** las añade la tarea 2.6, que es la que crea la tabla, y cada una responde a una pregunta que si no está en el esquema hay que resolver a mano:
+>
+> - **`shift_entry_id`** es lo que hace **idempotente** la detección: sin referencia al tramo, dos tramos anómalos de la misma jornada producen dos incidencias indistinguibles y cada ejecución las duplica. Con él y con el índice único parcial —solo sobre las abiertas—, repetir el comando no crea nada nuevo. `NULLS NOT DISTINCT` (PostgreSQL 15+) extiende esa garantía a las incidencias de jornada, que no apuntan a ningún tramo.
+> - **`detected_at`** separa *cuándo ocurrió el hecho* (`work_date`) de *cuándo lo vio el sistema*, que es la misma distinción de la regla dura 9 y la que permite medir el «tiempo hasta resolver» del §9.2.
+> - **`context`** guarda los números que sostienen la incidencia —minutos trabajados, umbral aplicado, descanso real— para que la bandeja pueda explicarla sin recalcularla y para dejar constancia del umbral **vigente en el momento de la detección**, que puede cambiar después (RF-PD-07).
+> - **`notified_at`** evita que el aviso al responsable (RF-PR-01) se envíe dos veces, y que se pierda si el correo falla: se sella cuando el resumen sale, no cuando la incidencia se abre.
+> - **`resolved_by_user_id`** responde «quién dio esto por resuelto», que es la mitad de la traza que RN-13 exige para cualquier intervención humana sobre el registro.
+>
+> **`missing_break`** es el tipo que faltaba para RN-12. Con [ADR-024](adr/ADR-024-la-pausa-son-dos-tramos.md), «sin pausa registrada» significa exactamente «un solo tramo continuo por encima del umbral»; colapsarlo en `long_shift` haría indistinguible en la bandeja «ha trabajado 9 h y media hoy» de «lleva 6 h y media sin parar», y se resuelven de forma distinta. **`anomalous_pattern`** y **`missing_clock_out`** siguen en el catálogo sin detector: el primero es RF-PR-06 (Fase 3) y el segundo describe el olvido ya corregido a mano, no lo que la detección automática ve.
 
 **`absences`** — `id`, `employee_id`, `type`, `starts_on`, `ends_on`, `note`
 
@@ -811,6 +825,36 @@ Escenario: Turno olvidado
   Entonces el tramo NO se cierra automáticamente
   Y se crea una incidencia de tipo open_shift_expired
   Y se notifica al responsable del departamento
+
+Escenario: Descanso insuficiente entre dos jornadas
+  Dado un perfil de cumplimiento con 12 horas de descanso mínimo
+  Y un empleado que sale el lunes a las 22:00
+  Cuando entra el martes a las 09:59, once horas y cincuenta y nueve minutos después
+  Entonces se crea una incidencia de tipo insufficient_rest
+  Y con entrada a las 10:00, doce horas exactas, no se crea ninguna
+
+Escenario: Tramo demasiado corto para computar
+  Dado un tramo con entrada a las 08:00:00 y salida a las 08:00:59
+  Cuando se ejecuta el proceso de detección de anomalías
+  Entonces el tramo se conserva tal cual, con sus dos marcas
+  Y se crea una incidencia de tipo short_shift
+  Y con salida a las 08:01:00, un minuto exacto, no se crea ninguna
+
+Escenario: Jornada diaria por encima de la ordinaria
+  Dado un perfil de cumplimiento con 9 horas de jornada diaria ordinaria
+  Y una jornada con dos tramos que suman 8 horas y 59 minutos
+  Cuando se ejecuta el proceso de detección de anomalías
+  Entonces no se crea ninguna incidencia
+  Y con 9 horas exactas tampoco
+  Y con 9 horas y 1 minuto se crea una incidencia de tipo long_shift
+
+Escenario: Jornada continuada sin pausa
+  Dado un perfil de cumplimiento que exige pausa a partir de 6 horas
+  Y un tramo continuo de 6 horas y 1 minuto
+  Cuando se ejecuta el proceso de detección de anomalías
+  Entonces se crea una incidencia de tipo missing_break
+  Y con un tramo de 6 horas exactas no se crea ninguna
+  Y una jornada de 4 horas, pausa, y otras 4 horas tampoco genera ninguna
 
 Escenario: Corrección manual trazada
   Dado un tramo abierto de la empleada "Ana"

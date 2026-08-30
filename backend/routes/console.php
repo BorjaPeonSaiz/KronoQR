@@ -151,3 +151,49 @@ Schedule::command('compliance:purge-legal-export-temp')
 Schedule::command('reporting:presence-metrics')
     ->everyMinute()
     ->withoutOverlapping();
+
+/*
+ * Deteccion automatica de incidencias (RF-PR-01, tarea 2.6).
+ *
+ *   attendance:detect-incidents
+ *
+ * DIARIA, a las 04:30 UTC. Despues de la copia (03:15) y de la verificacion de
+ * la cadena de auditoria (04:05), y lejos del cambio de turno de las 06:00: lee
+ * las jornadas de una semana y no debe competir con el minuto mas caro del dia.
+ *
+ * UNA VEZ AL DIA Y NO MAS. El unico hallazgo que gana algo con mas frecuencia es
+ * el turno abierto, y ese no urge: RN-08 prohibe cerrarlo, asi que lo que la
+ * deteccion produce es trabajo para una persona en horario de oficina. Correrla
+ * cada hora multiplicaria por veinticuatro el aviso al responsable sin adelantar
+ * ni una correccion.
+ *
+ * NO CIERRA NADA (RN-08, regla dura 19): abre incidencias y avisa. Repetirla es
+ * seguro —la idempotencia la garantiza el indice unico parcial de `incidents`—,
+ * asi que `withoutOverlapping` esta por no duplicar el trabajo, no por
+ * correccion.
+ */
+Schedule::command('attendance:detect-incidents')
+    ->dailyAt('04:30')
+    ->withoutOverlapping()
+    ->runInBackground();
+
+/*
+ * Metrica de incidencias abiertas (doc 02 §8.2, doc 01 §9.2, tarea 2.6).
+ *
+ *   incidents_open{type,severity}
+ *
+ * CADA CINCO MINUTOS, y APARTE de la deteccion. Si se publicara al final de
+ * aquella, la cifra solo cambiaria de madrugada: una incidencia resuelta desde la
+ * bandeja a las once de la manana seguiria contando —y la alerta de turnos
+ * abiertos seguiria sonando— hasta la noche siguiente. Es un gauge de «cuantas
+ * hay ahora», y se recalcula entero desde la base de datos (regla dura 7
+ * aplicada a la instrumentacion).
+ *
+ * Cinco minutos y no uno: a diferencia de la presencia en vivo, que se mira
+ * durante un cambio de turno, esto alimenta una alerta de severidad media cuyo
+ * destinatario es RRHH. Un minuto de resolucion no cambiaria ninguna decision y
+ * son doce consultas agregadas mas por hora.
+ */
+Schedule::command('compliance:incident-metrics')
+    ->everyFiveMinutes()
+    ->withoutOverlapping();

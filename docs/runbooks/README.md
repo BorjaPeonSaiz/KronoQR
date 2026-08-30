@@ -59,7 +59,7 @@ Asignación literal del plan de implementación
 | 15 | `actualizacion-cliente.md` | Procedimiento y vuelta atrás | Fase 5 · tarea 5.7 |
 | 16 | `incidencia-sin-acceso.md` | Diagnosticar con el paquete que envía el cliente | Fase 5 · tarea 5.9 |
 | 17 | `errores-en-el-panel.md` | Cómo lee el IT del cliente `error_events` y qué hacer con cada severidad | Fase 5 · tarea 5.12 |
-| 18 | `turno-abierto-prolongado.md` | Turno abierto más de 12 h. **El sistema nunca lo cierra solo** (RN-08). Destinatario RRHH: no es una avería | Fase 2 · tarea 2.6 |
+| 18 | [`turno-abierto-prolongado.md`](turno-abierto-prolongado.md) | Turno abierto más de 12 h. **El sistema nunca lo cierra solo** (RN-08). Destinatario RRHH: no es una avería | ✅ Fase 2 · tarea 2.6 |
 | 19 | `renovacion-certificado-tls.md` | Certificado a menos de 21 días de expirar | Fase 3 · tarea 3.2 |
 | 20 | `espacio-en-disco.md` | Espacio libre por debajo del 20 % | Fase 3 · tarea 3.2 |
 
