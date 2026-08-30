@@ -3990,8 +3990,14 @@ export interface components {
          * IncidentOutcome
          * @description Los dos desenlaces con los que una persona cierra una incidencia. Son
          *     `IncidentStatus` menos `open`: no hay forma de reabrir desde la API, y no
-         *     es un olvido — una incidencia cerrada no impide que el mismo hecho vuelva
-         *     a detectarse, y entonces es un hecho nuevo con su fila nueva.
+         *     es un olvido — cerrar es final.
+         *
+         *     **La deteccion tampoco la reabre.** La restriccion
+         *     `one_incident_per_finding` cubre todos los estados, asi que el mismo
+         *     hallazgo —mismo empleado, misma jornada, mismo tipo y mismo tramo— no
+         *     vuelve a entrar aunque la jornada siga dentro de la ventana de revision.
+         *     Lo que si abre fila nueva es un hecho realmente nuevo: una correccion
+         *     estrena identificador de tramo (ADR-035), asi que la cuadrupla es otra.
          * @example resolved
          * @enum {string}
          */
