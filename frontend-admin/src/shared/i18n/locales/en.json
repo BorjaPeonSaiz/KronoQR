@@ -8,7 +8,8 @@
       "label": "Console sections",
       "employees": "Workforce",
       "credentials": "Credentials",
-      "legalExport": "Inspectorate"
+      "legalExport": "Inspectorate",
+      "live": "Presence"
     },
     "roles": {
       "admin": "Administration",
@@ -548,6 +549,66 @@
         "worked": "Time worked",
         "version": "Version"
       }
+    }
+  },
+  "live": {
+    "title": "Live presence",
+    "subtitle": "Who is in right now, with their clock-in time, how long they have been in and the kiosk they used. Read-only: correcting a shift entry is done from the person’s time record.",
+    "loading": "Loading presence…",
+    "duration": "{hours} h {minutes} min",
+    "counts": {
+      "present": "In now",
+      "absent": "Out now",
+      "snapshot": "Server snapshot",
+      "snapshotAt": "{moment} ({zone})"
+    },
+    "status": {
+      "present": "In now",
+      "absent": "Out now"
+    },
+    "filters": {
+      "legend": "Presence filters",
+      "search": "Search by name",
+      "searchPlaceholder": "First or last name",
+      "status": "Status",
+      "department": "Department",
+      "departmentAll": "All departments"
+    },
+    "table": {
+      "caption": "Workforce presence, times in {zone}",
+      "name": "Name",
+      "department": "Department",
+      "since": "Clocked in ({zone})",
+      "elapsed": "Time in",
+      "origin": "Origin",
+      "notInside": "Out",
+      "noDepartment": "No department",
+      "previousDay": "{time} (previous day)"
+    },
+    "origin": {
+      "qr_kiosk": "Card at the kiosk",
+      "pin_kiosk": "PIN at the kiosk",
+      "manual_admin": "Manual entry from the console",
+      "import": "Initial import"
+    },
+    "transport": {
+      "connecting": "Connecting to live updates…",
+      "live": "Live",
+      "polling": "Live updates unavailable: the list refreshes every {seconds} s",
+      "disabled": "Live updates are disabled on this installation: the list refreshes every {seconds} s"
+    },
+    "empty": {
+      "present": {
+        "title": "Nobody is in right now",
+        "description": "No one in scope has an open shift. Not a fault: the list updates by itself as soon as someone clocks in."
+      },
+      "absent": {
+        "title": "Nobody is out right now",
+        "description": "Everyone in scope has an open shift."
+      }
+    },
+    "announce": {
+      "counts": "{present} people in and {absent} out."
     }
   }
 }

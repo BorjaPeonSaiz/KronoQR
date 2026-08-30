@@ -99,3 +99,11 @@ test(
     await expectNoBlockingViolations(page)
   },
 )
+
+test('la presencia en vivo tampoco', { tag: ['@RF-PA-01'] }, async ({ page }) => {
+  await logIn(page)
+  await page.goto('/live')
+  await expect(page.getByTestId('presence-entry').first()).toBeVisible()
+
+  await expectNoBlockingViolations(page)
+})

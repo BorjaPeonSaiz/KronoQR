@@ -12,12 +12,13 @@ npx playwright test --ui                # para depurar
 
 ## Qué hay aquí
 
-| Fichero                    | Cubre                                                                                                     |
-| -------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `login.spec.ts`            | `@RF-ID-01`, `@RF-ID-02` — acceso, redirección con `redirect`, rechazo, cierre de sesión                  |
-| `two-factor.spec.ts`       | `@RF-ID-01`, `@RS-06` — segundo factor obligatorio: reto → código → plantilla, y alta con QR y secreto    |
-| `workdays-journey.spec.ts` | `@RF-GP-01`, `@RF-PA-03`, `@RN-13` — plantilla → ficha → registro horario con su corrección               |
-| `accessibility.spec.ts`    | `@RF-ID-01`, `@RF-GP-01`, `@RF-PA-03`, `@RS-06` con `@axe-core/playwright`, 0 violaciones críticas/graves |
+| Fichero                    | Cubre                                                                                                                                       |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `login.spec.ts`            | `@RF-ID-01`, `@RF-ID-02` — acceso, redirección con `redirect`, rechazo, cierre de sesión                                                    |
+| `two-factor.spec.ts`       | `@RF-ID-01`, `@RS-06` — segundo factor obligatorio: reto → código → plantilla, y alta con QR y secreto                                      |
+| `workdays-journey.spec.ts` | `@RF-GP-01`, `@RF-PA-03`, `@RN-13` — plantilla → ficha → registro horario con su corrección                                                 |
+| `live-presence.spec.ts`    | `@RF-PA-01`, `@RF-PA-02`, `@RNF-P-04` — dos pestañas con Reverb simulado (`routeWebSocket`), degradación a sondeo, filtros, 500 filas y LCP |
+| `accessibility.spec.ts`    | `@RF-ID-01`, `@RF-GP-01`, `@RF-PA-03`, `@RS-06` con `@axe-core/playwright`, 0 violaciones críticas/graves                                   |
 
 ### El segundo factor (`two-factor.spec.ts`, RS-06)
 

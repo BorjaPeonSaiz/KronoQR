@@ -21,6 +21,7 @@ falla si no la encuentra, y la CI ejecuta esa comprobacion al etiquetar.
 
 ### Anadido
 
+- presencia en tiempo real: GET /attendance/live, difusion por Reverb en canales privados por departamento y metricas open_shifts_current y websocket_connections_active (tarea 2.4) (reporting)
 - pantalla del segundo factor TOTP en el acceso, con alta por QR y E2E (tarea 2.1) (admin)
 
 ### Corregido

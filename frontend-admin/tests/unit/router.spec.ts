@@ -81,7 +81,8 @@ describe('rutas de la aplicacion', () => {
   it('enseña «sin permiso» cuando no hay ninguna seccion a su alcance', async () => {
     const session = useSessionStore()
 
-    session.user = managementUser({ abilities: ['attendance:read'] })
+    // `attendance:read` ya no vale como ejemplo: desde la 2.4 alcanza la presencia.
+    session.user = managementUser({ abilities: ['incidents:*'] })
     session.token = 'un-token'
     session.status = 'authenticated'
 

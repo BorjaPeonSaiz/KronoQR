@@ -22,6 +22,7 @@ use App\Modules\Compliance\Infrastructure\Adapter\AuditedAuthorizationJournal;
 use App\Modules\Compliance\Infrastructure\Adapter\AuditedLegalExportGeneration;
 use App\Modules\Compliance\Infrastructure\Adapter\AuditedPersonalDataAccessLog;
 use App\Modules\Compliance\Infrastructure\Adapter\GroupedAuthorizationJournal;
+use App\Modules\Compliance\Infrastructure\Adapter\GroupedPersonalDataAccessLog;
 use App\Modules\Compliance\Infrastructure\Audit\CurrentAuditContext;
 use App\Modules\Compliance\Infrastructure\Console\EnsureAuditPartitionsCommand;
 use App\Modules\Compliance\Infrastructure\Console\LegalExportCommand;
@@ -115,7 +116,39 @@ final class ComplianceServiceProvider extends ServiceProvider
          * curso. Si aceptara cualquier accion, el catalogo cerrado de
          * `AuditAction` dejaria de estar cerrado.
          */
-        $this->app->bind(PersonalDataAccessLog::class, AuditedPersonalDataAccessLog::class);
+        /*
+         * ENVUELTO EN LA AGRUPACION POR VENTANA, y **solo para los conjuntos que
+         * se sondean** (tarea 2.4, ADR-037).
+         *
+         * Hoy hay uno: la presencia en vivo, que el panel pide cada 15 s cuando
+         * el WebSocket no llega (RNF-D-03). Un asiento por sondeo no responde
+         * mejor a RL-15 —dice lo mismo veinte mil veces al dia— y mete esas
+         * escrituras bajo el candado global de ADR-010, el mismo del fichaje.
+         * Todo lo demas —el directorio de plantilla, el padron del quiosco, la
+         * exportacion legal— sigue dejando un asiento por lectura, porque ahi
+         * cada lectura es un acto distinto de una persona y no el latido de una
+         * pantalla abierta.
+         *
+         * El decorado sigue siendo `AuditedPersonalDataAccessLog`: la cadena de
+         * hash no se toca, y el hecho tampoco se pierde —el primer asiento de
+         * cada ventana se escribe siempre—.
+         */
+        $this->app->bind(
+            PersonalDataAccessLog::class,
+            static fn (Application $app): PersonalDataAccessLog => new GroupedPersonalDataAccessLog(
+                disclosures: $app->make(AuditedPersonalDataAccessLog::class),
+                context: $app->make(CurrentAuditContext::class),
+                cache: $app->make(CacheRepository::class),
+                // Se leen aqui y no dentro del decorador porque el enlace se
+                // resuelve por peticion: `config:cache` y una prueba que cambie
+                // el valor surten efecto igual.
+                groupedDatasets: array_values(array_filter(
+                    Config::array('compliance.disclosure_grouping.datasets', []),
+                    static fn (mixed $dataset): bool => \is_string($dataset),
+                )),
+                windowSeconds: Config::integer('compliance.disclosure_grouping.window_seconds', 900),
+            ),
+        );
 
         /*
          * OWASP A09: la autenticacion deja rastro consultable.

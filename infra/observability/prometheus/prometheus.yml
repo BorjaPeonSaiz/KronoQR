@@ -52,6 +52,16 @@ scrape_configs:
   # el colector textfile de node-exporter. Se recogen cada minuto y no cada 15
   # segundos: son ficheros que cambian una vez al dia, y sondearlos mas a
   # menudo solo engorda la base de metricas.
+  #
+  # EL NOMBRE DEL TRABAJO SE HA QUEDADO CORTO Y ES DEUDA CONOCIDA. Desde la
+  # tarea 2.4, el mismo colector textfile sirve tambien open_shifts_current y
+  # websocket_connections_active (§8.2), que no tienen nada que ver con las
+  # copias y aun asi heredan la etiqueta service="backup". Es cosmetico —ninguna
+  # regla de alerta usa esa etiqueta, todas casan por nombre de metrica— pero
+  # confunde en Grafana. Renombrarlo aqui exige tocar tests/Architecture/
+  # BackupAndAlertingTest.php, que afirma `job_name: kronoqr-backup` como
+  # garantia de la Fase 1: lo hace devops-observabilidad al montar el catalogo
+  # de alertas de la tarea 3.2, no una tarea de panel.
   - job_name: kronoqr-backup
     scrape_interval: 60s
     static_configs:

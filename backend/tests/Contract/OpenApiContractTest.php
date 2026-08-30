@@ -75,6 +75,10 @@ it('describe solo los endpoints cuya tarea existe, y todos bajo /api/v1', functi
         // Tarea 1.13: provision, entrega y restablecimiento del PIN (RF-ID-09).
         '/api/v1/employees/{uuid}/pin/reset',
         '/api/v1/employees/{uuid}/pin/deliver',
+        // Tarea 2.4: presencia en tiempo real (RF-PA-01, RF-PA-02). Es la foto
+        // inicial del panel y el camino de sondeo al que degrada el WebSocket
+        // (ADR-011): por eso vive en la API y no solo en el canal.
+        '/api/v1/attendance/live',
         // Tarea 1.16: detalle de jornada del panel (RF-PA-03). Cuelga de
         // `/employees` pero no es plantilla: son las horas de una persona, y por
         // eso su ambito es `attendance:read` y no `employees:*`.
@@ -1013,3 +1017,74 @@ it('no admite mas situaciones de PIN que las tres del catalogo', function (): vo
     expect(Contract::value('components', 'schemas', 'PinStatus', 'enum'))
         ->toBe(['pending', 'issued', 'delivered']);
 })->group('RF-ID-09', 'RQ-06');
+
+it('sirve la presencia en vivo con el ambito de lectura de fichajes y sin paginar', function (): void {
+    // El mismo ambito que el registro horario y que el canal de WebSocket
+    // (§7.3): los tres responden a la misma pregunta con distinta frescura.
+    expect(Contract::value('paths', '/api/v1/attendance/live', 'get', 'security'))
+        ->toBe([['managementToken' => ['attendance:read']]]);
+
+    // Los tres filtros de RF-PA-02 y ninguno de paginacion: la respuesta es una
+    // fila por persona del alcance y el panel la virtualiza. Paginar obligaria a
+    // reconciliar cada mensaje del WebSocket contra una pagina que quiza no
+    // contiene a esa persona.
+    expect(Contract::value('paths', '/api/v1/attendance/live', 'get', 'parameters'))
+        ->toBe([
+            ['$ref' => '#/components/parameters/DepartmentFilter'],
+            ['$ref' => '#/components/parameters/PresenceStatusFilter'],
+            ['$ref' => '#/components/parameters/EmployeeSearch'],
+        ]);
+})->group('RF-PA-01', 'RF-PA-02', 'RQ-06');
+
+it('describe la fila de presencia una sola vez para el sondeo y para el WebSocket', function (): void {
+    // ADR-011: la vista degrada a sondeo y el panel tiene que pintar la fila con
+    // el mismo codigo venga de donde venga. Dos esquemas distintos para la misma
+    // fila serian dos formas de pintarla, y una de las dos se quedaria atras.
+    expect(Contract::value('components', 'schemas', 'PresenceUpdatedMessage', 'properties', 'entry', '$ref'))
+        ->toBe('#/components/schemas/LivePresenceEntry')
+        ->and(Contract::value('components', 'schemas', 'LivePresenceBoard', 'properties', 'data', 'items', '$ref'))
+        ->toBe('#/components/schemas/LivePresenceEntry');
+
+    // Y la fila lleva estos ocho campos y ni uno mas: `additionalProperties:
+    // false` es lo que impide que alguien añada al mensaje del canal un dato
+    // «solo para depurar» que acabe en el navegador de todo el hotel.
+    expect(Contract::keys('components', 'schemas', 'LivePresenceEntry', 'properties'))
+        ->toBe([
+            'employee_uuid',
+            'full_name',
+            'department',
+            'status',
+            'shift_entry_uuid',
+            'clocked_in_at',
+            'origin',
+            'device',
+        ])
+        ->and(Contract::value('components', 'schemas', 'LivePresenceEntry', 'additionalProperties'))->toBeFalse();
+})->group('RF-PA-01', 'RQ-06');
+
+it('no admite mas situaciones de presencia que las dos que se derivan del registro', function (): void {
+    // No hay un valor «todos»: la vista enseña una de las dos listas y los dos
+    // recuentos, que ya vienen en `meta`.
+    expect(Contract::value('components', 'schemas', 'LivePresenceStatus', 'enum'))
+        ->toBe(['present', 'absent']);
+})->group('RF-PA-02', 'RQ-06');
+
+it('entrega al panel los datos de conexion del WebSocket en la respuesta, no compilados', function (): void {
+    // ADR-017 y regla dura 13: el panel se compila una vez y se instala en el
+    // servidor de cada cliente. Una clave o un puerto dentro del paquete
+    // obligarian a recompilar la SPA por instalacion.
+    //
+    // Y NO HAY `host` NI `port`: el WebSocket se atraviesa por el mismo origen
+    // del panel. Si algun dia aparecen aqui, es que alguien ha puesto Reverb en
+    // otro dominio y hay que decidirlo, no descubrirlo.
+    expect(Contract::keys('components', 'schemas', 'RealtimeSubscription', 'properties'))
+        ->toBe([
+            'enabled',
+            'key',
+            'path',
+            'auth_endpoint',
+            'event',
+            'channels',
+            'poll_interval_seconds',
+        ]);
+})->group('RF-PA-01', 'RQ-06');

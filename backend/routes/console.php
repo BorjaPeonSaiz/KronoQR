@@ -120,3 +120,34 @@ Schedule::command('compliance:purge-legal-export-temp')
     ->hourly()
     ->withoutOverlapping()
     ->runInBackground();
+
+/*
+ * Metricas de la presencia en vivo (doc 02 §8.2, doc 01 §9.2, tarea 2.4).
+ *
+ *   open_shifts_current{site,site_name,department}
+ *   websocket_connections_active
+ *
+ * CADA MINUTO, y la cadencia sale de las dos metricas. La primera es «cuanta
+ * gente hay dentro ahora mismo»: una cifra que se refresca cada hora no sirve
+ * para mirar un cambio de turno, que es el unico momento en el que alguien la
+ * mira. La segunda distingue «el WebSocket esta caido» de «el sistema esta
+ * caido» (ADR-011), y esa diferencia hay que verla en minutos, no en horas.
+ *
+ * Un minuto es ademas la cadencia con la que Prometheus recoge el colector
+ * textfile de node-exporter: refrescar el fichero mas a menudo no llegaria a
+ * ninguna serie.
+ *
+ * SE RECALCULA ENTERA, NUNCA SE INCREMENTA (regla dura 7 aplicada a la
+ * instrumentacion). Por eso es una tarea programada y no un efecto del listener
+ * de difusion: asi la cifra recoge tambien lo que no pasa por un fichaje —una
+ * anulacion, una correccion que cierra un turno olvidado, una carga inicial— y
+ * un mensaje perdido no la desvia para siempre.
+ *
+ * `withoutOverlapping` porque son dos consultas agregadas mas una llamada HTTP a
+ * Reverb: dos a la vez solo duplican el trabajo. Sin `runInBackground` a
+ * proposito —dura milisegundos y encadenarla es mas barato que arrancar otro
+ * proceso cada minuto—.
+ */
+Schedule::command('reporting:presence-metrics')
+    ->everyMinute()
+    ->withoutOverlapping();
