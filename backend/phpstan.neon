@@ -27,6 +27,16 @@ parameters:
     # va con el. Con esto, un `make quality` repetido no vuelve a analizarlo todo.
     tmpDir: storage/framework/cache/phpstan
 
+    # Sanctum no anota @property en PersonalAccessToken y Larastan no infiere
+    # columnas de un modelo de vendor/: sin el stub, el analisis marca sus
+    # propiedades como inexistentes. El stub existe solo para PHPStan; el
+    # esquema real lo define la migracion 100500. El stub de Carbon existe
+    # porque el validador de stubs no dispara el autoloader y necesita que la
+    # clase de las fechas este declarada en otro stub.
+    stubFiles:
+        - tools/phpstan/stubs/SanctumPersonalAccessToken.stub
+        - tools/phpstan/stubs/Carbon.stub
+
     # Umbral del §9.2: 0 errores. Ni baseline ni excepciones globales.
     ignoreErrors: []
 
