@@ -31,6 +31,8 @@ groups:
         for: 1m
         labels:
           severity: critical
+          # Incidente de integridad: enruta al escalado inmediato de alertmanager.
+          integrity: "true"
           destinatario: seguridad
           component: audit
         annotations:

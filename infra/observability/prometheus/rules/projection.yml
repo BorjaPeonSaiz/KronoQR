@@ -57,6 +57,8 @@ groups:
         for: 5m
         labels:
           severity: critical
+          # Incidente de integridad: enruta al escalado inmediato de alertmanager.
+          integrity: "true"
           destinatario: it-cliente
           component: projection
         annotations:
