@@ -6,15 +6,12 @@ use App\Modules\Attendance\Application\Command\CorrectShiftCommand;
 use App\Modules\Attendance\Application\Command\VoidShiftCommand;
 use App\Modules\Attendance\Application\UseCase\CorrectShiftHandler;
 use App\Modules\Attendance\Application\UseCase\VoidShiftHandler;
-use App\Modules\Attendance\Domain\Event\DailyTotalsReconciled;
 use App\Modules\Attendance\Domain\ValueObject\CorrectionReason;
-use App\Modules\Compliance\Infrastructure\Listener\RecordProjectionReconciliationAudit;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use App\Modules\Shared\Infrastructure\Persistence\Row;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Str;
 use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
@@ -409,15 +406,8 @@ it('deja asiento en audit_log por cada fila corregida, con el antes y el despues
     // trazada. El asiento es la unica copia de lo que la proyeccion afirmaba que
     // no se puede tocar (ADR-027), y por eso lleva `before` y `after` completos.
     //
-    // EL LISTENER SE REGISTRA AQUI Y NO POR EL PROVEEDOR. La linea permanente va
-    // en `ComplianceServiceProvider::boot()`, junto a las de `RecordShiftEntryAudit`:
-    //
-    //   Event::listen(DailyTotalsReconciled::class, [RecordProjectionReconciliationAudit::class, 'reconciled']);
-    //
-    // y se aplica en cuanto el cambio en curso sobre ese fichero aterrice. Lo que
-    // esta prueba afirma —que el caso de uso publica el hecho y que el listener
-    // escribe el asiento correcto— no depende de donde se registre.
-    Event::listen(DailyTotalsReconciled::class, [RecordProjectionReconciliationAudit::class, 'reconciled']);
+    // El listener lo registra `ComplianceServiceProvider::boot()`, junto a los de
+    // `RecordShiftEntryAudit`: esta prueba lo ejercita tal como corre en produccion.
 
     $scenario = reconciliationScenario();
     reconciledShiftEntry($scenario['employee'], $scenario['site'], '2026-03-14', '2026-03-14 06:00:00+00', '2026-03-14 14:00:00+00');

@@ -69,6 +69,10 @@ it('nombra el ciclo completo de cada familia que el bloque D enumera', function 
     'role_assignment.changed',
     'permission.changed',
     'calculation_setting.changed',
+    // Tambien con efecto en el calculo: el contrato de una persona (tarea 2.8)
+    // y la correccion de un agregado por la reconciliacion nocturna (tarea 2.7).
+    'employment_contract.registered',
+    'projection.reconciled',
     // Abre o resuelve una incidencia del registro horario (tarea 2.6).
     'incident.opened',
     'incident.resolved',

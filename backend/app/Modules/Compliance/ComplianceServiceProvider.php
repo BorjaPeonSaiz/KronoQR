@@ -6,6 +6,7 @@ namespace App\Modules\Compliance;
 
 use App\Modules\Attendance\Domain\Event\AttendanceAnomalyDetected;
 use App\Modules\Attendance\Domain\Event\AttendanceReviewCompleted;
+use App\Modules\Attendance\Domain\Event\DailyTotalsReconciled;
 use App\Modules\Attendance\Domain\Event\EmployeeClockedIn;
 use App\Modules\Attendance\Domain\Event\EmployeeClockedOut;
 use App\Modules\Attendance\Domain\Event\ShiftCorrected;
@@ -47,6 +48,7 @@ use App\Modules\Compliance\Infrastructure\Listener\RecordCredentialLifecycle;
 use App\Modules\Compliance\Infrastructure\Listener\RecordEmployeePinLifecycle;
 use App\Modules\Compliance\Infrastructure\Listener\RecordEmploymentContractChange;
 use App\Modules\Compliance\Infrastructure\Listener\RecordManagementAccountLifecycle;
+use App\Modules\Compliance\Infrastructure\Listener\RecordProjectionReconciliationAudit;
 use App\Modules\Compliance\Infrastructure\Listener\RecordShiftEntryAudit;
 use App\Modules\Compliance\Infrastructure\Metrics\RedisIncidentResolutionMetrics;
 use App\Modules\Compliance\Infrastructure\Metrics\TextfileAuditMetrics;
@@ -449,6 +451,11 @@ final class ComplianceServiceProvider extends ServiceProvider
          * la condicion para poder correr dentro de la transaccion.
          */
         Event::listen(ShiftCorrected::class, [RecordShiftEntryAudit::class, 'corrected']);
+
+        // La reconciliacion nocturna que corrige un agregado deja asiento con el
+        // antes y el despues (regla dura 6, RF-PR-02, tarea 2.7). Sincrono y
+        // dentro de la transaccion de la correccion, como el resto.
+        Event::listen(DailyTotalsReconciled::class, [RecordProjectionReconciliationAudit::class, 'reconciled']);
     }
 
     /**

@@ -64,16 +64,11 @@ final readonly class RecordProjectionReconciliationAudit
      * es el enum. La propuesta es `projection.reconciled`, en la familia
      * `AuditableEvent::AuthorityOrCalculationChange` del bloque D —`daily_totals`
      * es el resultado del calculo de la jornada, y lo que este asiento describe
-     * es que ese resultado cambio sin que nadie lo pidiera—. Mientras no exista,
-     * se usa el valor mas cercano de esa misma familia,
-     * `calculation_setting.changed`, y el payload lleva `reconciliation: true`
-     * para que la consulta pueda distinguirlos.
-     *
-     * TODO(tarea 2.7): sustituir por `AuditAction::ProjectionReconciled` cuando
-     * el catalogo lo incorpore. Es un cambio de una linea aqui y una linea en el
-     * enum.
+     * es que ese resultado cambio sin que nadie lo pidiera—. El payload lleva
+     * ademas `reconciliation: true` para que una consulta por familia pueda
+     * separar estas correcciones de los cambios de parametro.
      */
-    private const AuditAction ACTION = AuditAction::CalculationSettingChanged;
+    private const AuditAction ACTION = AuditAction::ProjectionReconciled;
 
     public function __construct(
         private RecordAuditEntry $audit,

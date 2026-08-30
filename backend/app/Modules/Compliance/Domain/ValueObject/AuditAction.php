@@ -130,6 +130,16 @@ enum AuditAction: string
      */
     case EmploymentContractRegistered = 'employment_contract.registered';
 
+    /**
+     * La reconciliacion nocturna ha corregido un agregado de `daily_totals`
+     * (RF-PR-02, tarea 2.7). Misma familia que un cambio de parametro del
+     * calculo: el agregado es el RESULTADO del calculo de la jornada, y lo que
+     * este asiento describe es que ese resultado cambio sin que nadie lo
+     * pidiera. El payload lleva `employee_uuid`, `work_date`, los campos
+     * divergentes y el antes y el despues completos.
+     */
+    case ProjectionReconciled = 'projection.reconciled';
+
     // --- Incidencias del registro horario (RF-PR-01, tarea 2.6) --------------
 
     /**
@@ -196,6 +206,9 @@ enum AuditAction: string
         // El contrato fija las horas contra las que se mide la jornada de una
         // persona (RF-IN-03): es un parametro del calculo, con sujeto propio.
         'employment_contract' => AuditableEvent::AuthorityOrCalculationChange,
+        // La proyeccion es el resultado del calculo; corregirla es un cambio
+        // del calculo que nadie pidio (RF-PR-02, tarea 2.7).
+        'projection' => AuditableEvent::AuthorityOrCalculationChange,
         'retention' => AuditableEvent::RetentionPurge,
     ];
 
