@@ -50,9 +50,27 @@ return [
          */
         'reverb' => [
             'driver' => 'reverb',
-            'key' => env('REVERB_APP_KEY'),
-            'secret' => env('REVERB_APP_SECRET'),
-            'app_id' => env('REVERB_APP_ID'),
+            /*
+             * `(string)` EN LAS TRES, Y NO ES COSMETICO. `Broadcast::channel()`
+             * en `routes/channels.php` construye el cliente de Pusher en CADA
+             * arranque de la aplicacion —cualquier peticion HTTP, cualquier
+             * comando de consola, el `package:discover` que Composer ejecuta al
+             * instalar— y su constructor exige cadenas: con `REVERB_APP_KEY` sin
+             * declarar, `env()` devuelve `null` y el arranque entero muere con un
+             * `TypeError`, `POST /scan` incluido. Comprobado: es lo que tumbo la
+             * CI de la tarea 2.4, donde no hay `.env`, y es lo que le pasaria a
+             * una instalacion a la que le falte la variable (reglas duras 15 y
+             * 19: el registro horario no depende del tiempo real).
+             *
+             * Con la cadena vacia la aplicacion arranca y la degradacion es la
+             * de diseño: `RealtimeSubscription` anuncia `enabled: false` cuando
+             * la clave esta vacia, el panel sondea con aviso (RNF-D-03) y el
+             * listener de difusion atrapa el fallo de publicacion. La prueba
+             * `BootWithoutReverbCredentialsTest` falla si se quita el casting.
+             */
+            'key' => (string) env('REVERB_APP_KEY'),
+            'secret' => (string) env('REVERB_APP_SECRET'),
+            'app_id' => (string) env('REVERB_APP_ID'),
             'options' => [
                 'host' => env('REVERB_HOST', 'reverb'),
                 // `(int)` y no el valor crudo de `env()`, que llega como CADENA:
