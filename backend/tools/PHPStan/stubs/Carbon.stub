@@ -1,0 +1,33 @@
+<?php
+
+namespace Carbon;
+
+/**
+ * Stub minimo de Carbon para que el validador de stubs resuelva las fechas de
+ * SanctumPersonalAccessToken.stub: dentro de un stub PHPStan no dispara el
+ * autoloader y la clase real le resulta desconocida. Solo declara los metodos
+ * que el codigo analizado usa de verdad; si un uso nuevo aparece, PHPStan lo
+ * dira con un error concreto y se anade aqui.
+ */
+class Carbon extends \DateTime
+{
+    public static function instance(\DateTimeInterface $date): static
+    {
+    }
+
+    public static function now(\DateTimeZone|string|null $tz = null): static
+    {
+    }
+
+    public static function setTestNow(mixed $testNow = null): void
+    {
+    }
+
+    public function addMinutes(int $value): static
+    {
+    }
+
+    public function toDateTimeImmutable(): \DateTimeImmutable
+    {
+    }
+}

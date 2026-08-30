@@ -34,8 +34,8 @@ parameters:
     # porque el validador de stubs no dispara el autoloader y necesita que la
     # clase de las fechas este declarada en otro stub.
     stubFiles:
-        - tools/phpstan/stubs/SanctumPersonalAccessToken.stub
-        - tools/phpstan/stubs/Carbon.stub
+        - tools/PHPStan/stubs/SanctumPersonalAccessToken.stub
+        - tools/PHPStan/stubs/Carbon.stub
 
     # Umbral del §9.2: 0 errores. Ni baseline ni excepciones globales.
     ignoreErrors: []
