@@ -95,6 +95,31 @@ final readonly class QrKeyring
     }
 
     /**
+     * La clave **saliente** de un solape: la que verifica pero ya no firma nada.
+     *
+     * Es `null` fuera de una rotacion, que es el estado normal. Devuelve solo el
+     * identificador y nunca la clave: quien pregunta —el comando de rotacion, el
+     * panel de estado, la metrica de avance— necesita saber **cual** queda por
+     * reimprimir, no con que se firmo.
+     *
+     * Si las dos variables llevaran el mismo `key_id` por un error de
+     * configuracion, no hay solape que declarar y esto devuelve `null`: el
+     * llavero las habra colapsado en una sola entrada (ver {@see of()}).
+     */
+    public function previousId(): ?string
+    {
+        $currentId = $this->current?->id;
+
+        foreach (array_keys($this->keys) as $keyId) {
+            if ($keyId !== $currentId) {
+                return $keyId;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Identificadores de las claves vigentes, para el panel de estado y para el
      * diagnostico. **Nunca el material de clave.**
      *

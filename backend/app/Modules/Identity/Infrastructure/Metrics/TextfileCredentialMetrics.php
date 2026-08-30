@@ -67,11 +67,33 @@ final readonly class TextfileCredentialMetrics implements CredentialMetrics
             'credentials_coverage_employees'.$labels.' '.$coverage->employees,
         ];
 
+        // Avance de una rotacion de clave (RF-QR-07, §5.3). Se escribe SIEMPRE,
+        // tambien fuera de una rotacion: entonces vale cero y lleva
+        // `key_id=""`. Una serie que aparece y desaparece con la variable de
+        // entorno no se puede graficar ni alertar, y el cero es justo el valor
+        // que autoriza a retirar la clave anterior.
+        $lines[] = '# HELP credentials_pending_reprint Personas cuya tarjeta en uso sigue firmada con la clave saliente de una rotacion (RF-QR-07). Llega a cero cuando la clave anterior se puede retirar.';
+        $lines[] = '# TYPE credentials_pending_reprint gauge';
+        $lines[] = 'credentials_pending_reprint'.$this->reprintLabels($coverage).' '.$coverage->pendingReprint;
+
         $lines[] = '# HELP credentials_coverage_check_timestamp_seconds Momento del ultimo recuento. Su ausencia delata que el comando programado dejo de ejecutarse.';
         $lines[] = '# TYPE credentials_coverage_check_timestamp_seconds gauge';
         $lines[] = 'credentials_coverage_check_timestamp_seconds '.$at->getTimestamp();
 
         $this->write($lines);
+    }
+
+    /**
+     * Las mismas etiquetas del centro mas el `key_id` saliente.
+     *
+     * **El `key_id` es publico**: va impreso en cada tarjeta como primera parte
+     * del payload (ADR-005). Lo que no sale por aqui, ni por ningun sitio, es la
+     * clave.
+     */
+    private function reprintLabels(SiteCredentialCoverage $site): string
+    {
+        return '{site="'.$site->siteId.'",site_name="'.$this->escape($site->siteName).'"'
+            .',key_id="'.$this->escape($site->retiringKeyId ?? '').'"}';
     }
 
     private function labels(SiteCredentialCoverage $site): string

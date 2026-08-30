@@ -26,11 +26,14 @@ interface CredentialRepository
      * Devuelve el `id` porque es lo que `audit_log.subject_id` necesita: el
      * asiento de una emision tiene que apuntar a la fila concreta.
      *
-     * **No comprueba antes si el empleado ya tiene una credencial activa.** Lo
-     * intenta y deja hablar al indice parcial
-     * `one_active_credential_per_employee`: un `SELECT` previo seria una
+     * **No comprueba antes si el empleado ya tiene una credencial pendiente.**
+     * Lo intenta y deja hablar al indice parcial
+     * `one_pending_credential_per_employee`: un `SELECT` previo seria una
      * condicion de carrera con aspecto de comprobacion, exactamente igual que en
-     * el alta de empleado.
+     * el alta de empleado. La otra mitad de la invariante —dos tarjetas
+     * escaneables con la misma clave— la declara
+     * `one_active_credential_per_key_and_employee` y salta al imprimir, que es
+     * cuando la credencial estrena `key_id` (ADR-034).
      *
      * @throws EmployeeAlreadyHasCredential
      */
@@ -103,6 +106,13 @@ interface CredentialRepository
      * La credencial activa de un empleado, si la tiene.
      *
      * Es la que hay que revocar antes de reemitir (doc 01 §5.2).
+     *
+     * **Durante una rotacion con solape puede haber dos** —la que esta en la
+     * mano y la reemision pendiente de imprimir—, y entonces devuelve **la que
+     * la persona esta usando**: primero la entregada, luego la impresa, luego la
+     * mas reciente. Es la que hay que revocar al reemitir por perdida, y no la
+     * que todavia no ha salido de la impresora. Quien busque la pendiente tiene
+     * {@see pendingPrintForEmployees()}.
      */
     public function activeForEmployee(int $employeeId): ?Credential;
 
@@ -129,4 +139,50 @@ interface CredentialRepository
      * reimprimir.
      */
     public function countActiveSignedWith(string $keyId): int;
+
+    /**
+     * Cuantas credenciales llego a firmar esa clave, activas o no.
+     *
+     * Es un dato del asiento de retirada (`signing_key.retired`): dice el tamaño
+     * del lote de tarjetas que muere con la clave, para que dentro de dos años
+     * la pregunta «por que dejo de funcionar este QR» se conteste sin recorrer
+     * la tabla entera.
+     */
+    public function countSignedWith(string $keyId): int;
+
+    /**
+     * Las credenciales **activas y escaneables** firmadas con esa clave.
+     *
+     * Es la seleccion de `credentials:rotate-key`: por cada una de ellas hay que
+     * emitir una tarjeta nueva que la releve (RF-QR-07). Solo salen las
+     * impresas, porque una pendiente no esta firmada con ninguna clave todavia.
+     *
+     * @return list<Credential> Ordenadas por empleado, para que dos ejecuciones den el mismo orden.
+     */
+    public function activeSignedWith(string $keyId): array;
+
+    /**
+     * Cuantas credenciales activas hay por cada `key_id`.
+     *
+     * Sirve para dos cosas y las dos importan: la **comprobacion previa** de la
+     * rotacion —si quedan tarjetas firmadas con una clave que ya no esta en el
+     * llavero, esas personas no pueden fichar y hay una rotacion anterior sin
+     * cerrar— y la metrica de avance de la reimpresion (§8.2).
+     *
+     * @return array<string, int> Indexado por `key_id`. Las pendientes de imprimir no cuentan.
+     */
+    public function activeCountsByKeyId(): array;
+
+    /**
+     * Las demas credenciales **escaneables** del mismo empleado.
+     *
+     * Existe para el relevo de la rotacion: al **entregar** la tarjeta nueva se
+     * revoca la que esa persona tenia firmada con la clave saliente, que es lo
+     * que hace que el recuento de la clave anterior baje hasta cero y se pueda
+     * retirar (§5.3). Se excluye la propia credencial por UUID y no por
+     * `key_id`, para que quien llama decida el criterio.
+     *
+     * @return list<Credential>
+     */
+    public function otherActivePrintedForEmployee(int $employeeId, string $exceptUuid): array;
 }

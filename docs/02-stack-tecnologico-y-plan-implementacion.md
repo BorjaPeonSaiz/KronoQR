@@ -780,6 +780,7 @@ audit_chain_rows_verified                                gauge
 audit_log_partition_ready{horizon}                       gauge
 audit_log_partition_check_timestamp_seconds              gauge
 worked_minutes_total{site,department}                    counter
+report_exports_total{format}                             counter
 
 # Autenticación — OWASP A09
 kronoqr_auth_attempts_total{channel,outcome}             counter
@@ -787,6 +788,7 @@ kronoqr_auth_attempts_total{channel,outcome}             counter
 # Credenciales y respaldo
 employees_without_delivered_credential{site}             gauge
 credentials_pending_print{site}                          gauge
+credentials_pending_reprint{site,key_id}                 gauge
 pin_fallback_scans_total{site}                           counter
 kronoqr_backup_last_result{type}                         gauge
 kronoqr_backup_last_success_timestamp_seconds{type}      gauge
@@ -1452,12 +1454,13 @@ php artisan attendance:detect-incidents         # Turnos abiertos, duraciones an
 php artisan attendance:detect-patterns          # Patrones anómalos de uso de credencial (RF-PR-06)
 php artisan attendance:reconcile --from= --to=  # Recalcula proyecciones y alerta si divergen
 php artisan compliance:verify-audit-chain       # Verifica la cadena de hash
+php artisan compliance:apply-retention --dry-run   # PROPONE la purga por retención. No borra nada
+php artisan compliance:apply-retention --confirm=PURGAR-… --responsible=<id>   # La ejecuta. Exige la frase del informe y el rol de mantenimiento
 php artisan reporting:presence-metrics          # Recalcula open_shifts_current y websocket_connections_active (§8.2)
 
 # Calidad y trazabilidad
 php artisan qa:traceability                     # Matriz requisito → pruebas (RQ-13)
 php artisan qa:traceability --check             # Falla si un requisito implementado no tiene prueba
-php artisan compliance:apply-retention --dry-run
 php artisan compliance:legal-export --from= --to= --employee=
 
 # Credenciales
@@ -1466,8 +1469,10 @@ php artisan credentials:print {employee}         # PDF en formato tarjeta
 php artisan credentials:print-batch --site= --pending   # Impresión masiva en A4
 php artisan credentials:deliver {credential}     # Registra la entrega
 php artisan credentials:revoke {credential} --reason=
-php artisan credentials:rotate-key               # Rotación con solape
+php artisan credentials:rotate-key               # Rotación con solape (--dry-run para informar sin escribir)
+php artisan credentials:retire-key {key_id}      # Cierra el solape. Se niega si queda alguna tarjeta viva
 php artisan credentials:status --pending         # Quién no puede fichar todavía
+php artisan credentials:status --key-id=         # Quién sigue fichando con la clave saliente
 
 # Quioscos
 php artisan kiosk:pairing-code                   # Genera código de emparejamiento (el centro es el de la instalación)

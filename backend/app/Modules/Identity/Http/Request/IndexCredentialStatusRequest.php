@@ -63,16 +63,24 @@ final class IndexCredentialStatusRequest extends FormRequest
             // parametro en un oraculo de existencia de empleados para
             // cualquiera que pueda leer el panel.
             'employee_uuid' => ['sometimes', 'uuid'],
+            // Solo la forma —dos caracteres alfanumericos, la del §5.1—, por lo
+            // mismo que con `employee_uuid`: una clave que la instalacion no
+            // conoce no es un error del cliente sino una consulta que no
+            // encuentra a nadie. Validarla contra el llavero convertiria el
+            // parametro en un oraculo de que claves hay configuradas.
+            'key_id' => ['sometimes', 'string', 'regex:/^[A-Za-z0-9]{2}$/'],
         ];
     }
 
     public function toQuery(): CredentialStatusQuery
     {
         $employeeUuid = $this->input('employee_uuid');
+        $keyId = $this->input('key_id');
 
         return new CredentialStatusQuery(
             pendingOnly: $this->boolean('pending'),
             employeeUuid: \is_string($employeeUuid) ? $employeeUuid : null,
+            keyId: \is_string($keyId) && $keyId !== '' ? $keyId : null,
         );
     }
 }

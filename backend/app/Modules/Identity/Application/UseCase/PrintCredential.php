@@ -80,8 +80,17 @@ final readonly class PrintCredential
     }
 
     /**
-     * La credencial de la orden: por su UUID —la via del endpoint— o la **activa**
-     * del empleado —la via de la consola—.
+     * La credencial de la orden: por su UUID —la via del endpoint— o la del
+     * empleado —la via de la consola—.
+     *
+     * **Por la via de la consola manda la pendiente de imprimir.** Durante una
+     * rotacion con solape esa persona tiene dos activas: la tarjeta que lleva
+     * encima, que ya esta impresa y no se puede reimprimir (ADR-034), y el
+     * relevo que espera turno. `credentials:print {empleado}` se refiere
+     * evidentemente al segundo. Fuera de una rotacion no hay diferencia, y
+     * cuando no hay ninguna pendiente se devuelve la activa para que el error
+     * siga siendo «esa tarjeta ya se imprimio» y no un `404` que no explica
+     * nada.
      */
     private function resolve(PrintCredentialCommand $command): ?Credential
     {
@@ -91,6 +100,12 @@ final readonly class PrintCredential
 
         $employeeId = $this->employees->internalIdFor((string) $command->employeeUuid);
 
-        return $employeeId === null ? null : $this->credentials->activeForEmployee($employeeId);
+        if ($employeeId === null) {
+            return null;
+        }
+
+        $pending = $this->credentials->pendingPrintForEmployees([$employeeId]);
+
+        return $pending[0] ?? $this->credentials->activeForEmployee($employeeId);
     }
 }

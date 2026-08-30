@@ -47,14 +47,14 @@ Asignación literal del plan de implementación
 | 3 | [`divergencia-proyeccion.md`](divergencia-proyeccion.md) | La reconciliación nocturna detecta discrepancia | ✅ Fase 2 · tarea 2.7 → destinatarios reales en 3.2 |
 | 4 | [`rotura-cadena-auditoria.md`](rotura-cadena-auditoria.md) | **Incidente de seguridad.** Incluye preservación de evidencia | ✅ Fase 1 · tarea 1.14 (era 2.2, adelantada por ADR-032) |
 | 5 | [`restaurar-backup.md`](restaurar-backup.md) | Recuperación y simulacro trimestral | ✅ Fase 1 · tarea 1.18 (era 2.11, adelantada por ADR-032) → usado por 5.7 |
-| 6 | `rotacion-secretos.md` | Rotación programada o compromiso | §7.7 · ampliado en 5.4 |
+| 6 | [`rotacion-secretos.md`](rotacion-secretos.md) | Rotación programada o compromiso | ✅ §7.7 · escrito en la tarea 2.12 con la rotación del QR · ampliado en 5.4 |
 | 7 | `alta-nuevo-quiosco.md` | Emparejamiento por código y vinculación | Fase 5 · tarea 5.6 |
 | 8 | `alta-nuevo-empleado.md` | Alta, emisión, impresión y entrega con la antelación necesaria | Fase 1 · tarea 1.10 |
 | 9 | `tarjeta-perdida-o-rota.md` | Revocación, reemisión y reimpresión en el día | Fase 1 · tarea 1.10 |
-| 10 | `rotacion-clave-qr.md` | Reimpresión progresiva sin dejar a nadie sin fichar | Fase 2 · tarea 2.12 |
+| 10 | [`rotacion-clave-qr.md`](rotacion-clave-qr.md) | Reimpresión progresiva sin dejar a nadie sin fichar | ✅ Fase 2 · tarea 2.12 |
 | 11 | [`requerimiento-inspeccion.md`](requerimiento-inspeccion.md) | **Cómo generar la exportación legal en menos de 1 hora** | ✅ Fase 1 · tarea 1.17 (era 2.9, adelantada por ADR-032) |
 | 12 | `patron-anomalo-credencial.md` | Revisar una incidencia `anomalous_pattern` sin convertir un indicio en una acusación | Fase 3 · tarea 3.11 |
-| 13 | `solicitud-derechos-rgpd.md` | Acceso, rectificación, portabilidad | Fase 2 · tarea 2.10 |
+| 13 | [`solicitud-derechos-rgpd.md`](solicitud-derechos-rgpd.md) | Acceso, rectificación, portabilidad — y la supresión que **no procede** mientras dure el deber de conservación | ✅ Fase 2 · tarea 2.10 |
 | 14 | `brecha-de-seguridad.md` | Procedimiento de 72 h | Fase 2 (RL-15) · revisado en 3.10 |
 | 15 | `actualizacion-cliente.md` | Procedimiento y vuelta atrás | Fase 5 · tarea 5.7 |
 | 16 | `incidencia-sin-acceso.md` | Diagnosticar con el paquete que envía el cliente | Fase 5 · tarea 5.9 |

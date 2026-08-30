@@ -129,7 +129,57 @@ export const EMPLOYEES: EmployeeCollection = {
 
 export const CREDENTIAL_BOARD: CredentialStatusBoard = {
   data: [],
-  summary: { employees: 1, pending_print: 1, without_delivered_credential: 1 },
+  summary: {
+    employees: 1,
+    pending_print: 1,
+    without_delivered_credential: 1,
+    retiring_key_id: null,
+    pending_reprint: 0,
+  },
+}
+
+/** La clave saliente de la rotacion simulada (RF-QR-07). No es un secreto: va impresa en el QR. */
+export const RETIRING_KEY_ID = 'a2'
+
+/**
+ * El tablero durante una rotacion de clave: 60 personas, 12 de ellas todavia
+ * con la tarjeta firmada por la clave saliente. Todas pueden fichar —para eso
+ * existe el solape—, asi que `without_delivered_credential` es cero.
+ */
+export const CREDENTIAL_BOARD_IN_ROTATION: CredentialStatusBoard = {
+  data: [],
+  summary: {
+    employees: 60,
+    pending_print: 12,
+    without_delivered_credential: 0,
+    retiring_key_id: RETIRING_KEY_ID,
+    pending_reprint: 12,
+  },
+}
+
+/** Lo que devuelve el mismo tablero con `?key_id=`: solo a quien le falta reimprimir. */
+export const CREDENTIAL_BOARD_PENDING_REPRINT: CredentialStatusBoard = {
+  data: [
+    {
+      employee_uuid: EMPLOYEE_UUID,
+      employee_code: 'E7K2M9QX4B',
+      full_name: 'Lucia Martinez Prieto',
+      department_name: 'Recepción',
+      status: 'delivered',
+      credential: {
+        uuid: '0199f0d1-2a5b-7d4f-8c32-5e6f7a8b9c01',
+        employee_uuid: EMPLOYEE_UUID,
+        key_id: RETIRING_KEY_ID,
+        issued_at: '2026-08-19T06:02:31.000000Z',
+        printed_at: '2026-08-20T09:11:02.000000Z',
+        delivered_at: '2026-08-21T07:40:15.000000Z',
+        revoked_at: null,
+        revoked_reason: null,
+        status: 'active',
+      },
+    },
+  ],
+  summary: CREDENTIAL_BOARD_IN_ROTATION.summary,
 }
 
 export const WORKDAYS: EmployeeWorkDays = {
@@ -272,6 +322,14 @@ export const LIVE_BOARD: LivePresenceBoard = {
  * Las duraciones llegan **ya en `HH:MM`** ademas de en minutos: el panel no
  * formatea horas y no puede hacerlo (regla dura 7).
  */
+/**
+ * Huella del contenido que publica `GET /reports/period/export` (RF-IN-04).
+ *
+ * Es la misma para los tres formatos del mismo informe: el servidor la calcula
+ * sobre las filas, los criterios y el periodo, no sobre el binario.
+ */
+export const REPORT_DIGEST = '3d9c8f0a1b2c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6'
+
 export const PERIOD_REPORT: PeriodReport = {
   from: '2026-03-01',
   to: '2026-03-31',
@@ -421,6 +479,23 @@ export interface ManagementApiOptions {
   readonly resolveOutcome?: 'ok' | 'conflict'
   /** El registro horario que devuelve `GET /employees/{uuid}/workdays`. Por omision, `WORKDAYS`. */
   readonly workdays?: EmployeeWorkDays
+  /**
+   * Como responde `GET /reports/period/export` (RF-IN-04). `forbidden` sirve
+   * para el recorrido en el que la descarga se deniega **despues** de haber
+   * generado el informe: es lo que pasa si a alguien le retiran el ambito con la
+   * pantalla abierta, y el panel tiene que decirlo en vez de quedarse pensando.
+   */
+  readonly exportOutcome?: 'ok' | 'forbidden'
+  /**
+   * El tablero de credenciales. Por omision, `CREDENTIAL_BOARD`: sin ninguna
+   * rotacion de clave abierta, que es el estado normal (RF-QR-07).
+   */
+  readonly credentialBoard?: CredentialStatusBoard
+  /**
+   * Lo que devuelve el tablero cuando se pide con `?key_id=`: solo quien sigue
+   * fichando con la clave saliente. Por omision, el mismo que sin filtro.
+   */
+  readonly credentialBoardByKey?: CredentialStatusBoard
 }
 
 async function json(route: Route, status: number, body: unknown): Promise<void> {
@@ -449,6 +524,7 @@ export async function stubManagementApi(
   const loginOutcome = options.loginOutcome ?? 'ok'
   const twoFactor = options.twoFactor ?? 'off'
   const resolveOutcome = options.resolveOutcome ?? 'ok'
+  const exportOutcome = options.exportOutcome ?? 'ok'
   const currentUser = options.role === 'manager' ? MANAGER_USER : USER
   const currentSession: Session = { ...SESSION, user: currentUser }
 
@@ -608,9 +684,18 @@ export async function stubManagementApi(
         case `GET /api/v1/employees/${EMPLOYEE_UUID}/workdays`:
           await json(route, 200, options.workdays ?? WORKDAYS)
           return
-        case 'GET /api/v1/credentials/status':
-          await json(route, 200, CREDENTIAL_BOARD)
+        case 'GET /api/v1/credentials/status': {
+          // Con `?key_id=` el servidor devuelve solo a quien le falta
+          // reimprimir (RF-QR-07): el doble distingue las dos respuestas para
+          // que la prueba pueda comprobar que el filtro va al servidor y no se
+          // resuelve en cliente.
+          const board = new URL(route.request().url()).searchParams.has('key_id')
+            ? (options.credentialBoardByKey ?? options.credentialBoard ?? CREDENTIAL_BOARD)
+            : (options.credentialBoard ?? CREDENTIAL_BOARD)
+
+          await json(route, 200, board)
           return
+        }
         case 'GET /api/v1/attendance/live':
           await json(route, 200, options.liveBoard ?? LIVE_BOARD)
           return
@@ -620,6 +705,35 @@ export async function stubManagementApi(
           // en el que lo contratado NO es una regla de tres sobre el ultimo
           // contrato.
           await json(route, 200, PERIOD_REPORT)
+          return
+        case 'GET /api/v1/reports/period/export':
+          // La descarga del mismo informe (RF-IN-04, tarea 2.9). El cuerpo es un
+          // fichero y aqui da igual cual: lo que el E2E comprueba es el recorrido
+          // —que la peticion sale con el formato y el periodo correctos y que el
+          // panel dispara la descarga—, no el contenido del fichero, que se
+          // comprueba en el backend con la libreria que lo escribio.
+          //
+          // Las dos cabeceras son las que publica el servidor de verdad: sin
+          // `Content-Disposition`, el panel no sabria como llamar al fichero.
+          if (exportOutcome === 'forbidden') {
+            await problem(route, 403, 'urn:kronoqr:problem:forbidden', 'Sin permiso')
+
+            return
+          }
+
+          await route.fulfill({
+            status: 200,
+            contentType: 'text/csv; charset=utf-8',
+            headers: {
+              'Content-Disposition':
+                'attachment; filename=kronoqr-horas-2026-03-01_2026-03-31.' +
+                (url.searchParams.get('format') ?? 'csv'),
+              'X-Kronoqr-Report-Digest': REPORT_DIGEST,
+              'X-Kronoqr-Report-Rows': String(PERIOD_REPORT.meta.row_count),
+            },
+            body: 'contenido-de-prueba',
+          })
+
           return
         case 'POST /api/v1/broadcasting/auth':
           // La firma real la calcula el servidor con su secreto; aqui basta con

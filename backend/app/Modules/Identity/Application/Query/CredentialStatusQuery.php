@@ -18,5 +18,12 @@ final readonly class CredentialStatusQuery
         public bool $pendingOnly = false,
         public ?string $employeeUuid = null,
         public bool $unattended = false,
+        /**
+         * Solo quien sigue fichando con una tarjeta firmada por esa clave
+         * (RF-QR-07, §5.3). Es lo que responde «a quien le falta reimprimir»
+         * durante una rotacion, y lo que permite retirar la clave anterior
+         * cuando ya no devuelve a nadie.
+         */
+        public ?string $keyId = null,
     ) {}
 }

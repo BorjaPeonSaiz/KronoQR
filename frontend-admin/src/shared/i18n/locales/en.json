@@ -299,6 +299,14 @@
       "withoutDelivered": "Without their card in hand: {missing} of {total}.",
       "pendingPrint": "Waiting to be printed: {count}."
     },
+    "rotation": {
+      "heading": "Signing key rotation in progress",
+      "explanation": "Key {keyId}, which signs the old cards, is being replaced. While the handover lasts the old cards still clock in and out, so nobody is left out. Each old card is retired automatically as soon as its replacement is handed over.",
+      "progress": "Reprinting done: {done} of {total} ({percent}%).",
+      "showPending": "Show who is still waiting ({count})",
+      "showAll": "Show the whole workforce",
+      "complete": "Nobody clocks in with key {keyId} any more: it can be retired on the server."
+    },
     "empty": {
       "title": "There are no rows to show",
       "description": "Nobody is active within the chosen scope.",
@@ -492,6 +500,17 @@
       "criteria": {
         "title": "Criteria for this report",
         "generated": "Generated at {at} · site time zone: {timeZone}"
+      },
+      "export": {
+        "label": "Download this report:",
+        "format": {
+          "csv": "CSV",
+          "xlsx": "Excel (XLSX)",
+          "pdf": "PDF"
+        },
+        "running": "Preparing the {format} download…",
+        "done": "{format} download ready.",
+        "failed": "The report could not be downloaded."
       },
       "announce": {
         "results": "The report has {count} rows."

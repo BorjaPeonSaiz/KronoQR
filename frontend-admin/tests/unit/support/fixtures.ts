@@ -3,6 +3,7 @@
 import { EMPLOYEE_LIST_PER_PAGE } from '@/features/employees/employees.api'
 import type {
   Credential,
+  CredentialCoverage,
   CredentialStatusBoard,
   CredentialStatusRow,
   Employee,
@@ -135,13 +136,21 @@ export function boardRow(overrides: Partial<CredentialStatusRow> = {}): Credenti
   }
 }
 
-export function board(rows: CredentialStatusRow[]): CredentialStatusBoard {
+export function board(
+  rows: CredentialStatusRow[],
+  // Rotacion de la clave de firma (RF-QR-07). Fuera de una rotacion —lo
+  // normal— no hay clave saliente y el avance vale cero.
+  rotation: Partial<Pick<CredentialCoverage, 'retiring_key_id' | 'pending_reprint'>> = {},
+): CredentialStatusBoard {
   return {
     data: rows,
     summary: {
       employees: 60,
       pending_print: rows.filter((row) => row.status === 'pending_print').length,
       without_delivered_credential: rows.filter((row) => row.status !== 'delivered').length,
+      retiring_key_id: null,
+      pending_reprint: 0,
+      ...rotation,
     },
   }
 }

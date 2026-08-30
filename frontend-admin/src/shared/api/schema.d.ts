@@ -1834,6 +1834,83 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reports/period/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Descarga del informe de horas por periodo
+         * @description El **mismo** informe que devuelve `GET /api/v1/reports/period`, servido
+         *     como fichero descargable en CSV, XLSX o PDF (RF-IN-04).
+         *
+         *     ## Es el mismo informe, no otra consulta
+         *
+         *     Mismos parametros, mismo alcance, mismo ambito (`reports:*`), misma
+         *     policy y mismos techos sincronos. El fichero se construye sobre el
+         *     resultado de esa consulta y no sobre una SQL propia: si tuviera la suya,
+         *     el fichero que alguien adjunta a un correo y la tabla que estaba mirando
+         *     podrian discrepar, y el que se creeria seria el equivocado.
+         *
+         *     **No es la exportacion para la Inspeccion de Trabajo.** Esa es
+         *     `GET /api/v1/reports/legal-export` (RF-IN-05, RL-03, RL-06), tiene su
+         *     formato normalizado, su manifiesto y su propio ambito. Esta es la
+         *     comodidad de RRHH y de cada responsable: llevarse a una hoja de calculo
+         *     lo que ya se consulta en pantalla.
+         *
+         *     ## Las horas van como texto `HH:MM` en los tres formatos
+         *
+         *     Nunca un decimal, tampoco en el XLSX: «7,75» obliga a interpretar y
+         *     cambia de sentido segun el separador decimal del programa que lo abra.
+         *     Las celdas de duracion son **texto**, incluidas las negativas
+         *     (`-12:30`, desviacion por debajo de lo contratado) y las mayores de 24 h
+         *     (`168:00`, el total de un mes).
+         *
+         *     ## Los criterios de inclusion van dentro del fichero
+         *
+         *     Los mismos que `meta.criteria` de la consulta JSON, en el idioma de la
+         *     instalacion: bloque de cabecera en el CSV, hoja «Criterios» en el XLSX y
+         *     seccion propia en el PDF. Nunca ocultos en las propiedades del
+         *     documento: un informe de horas sin ellos es una tabla de numeros que
+         *     cada persona interpreta a su manera.
+         *
+         *     ## La huella del contenido (`X-Kronoqr-Report-Digest`)
+         *
+         *     SHA-256 **del contenido**, no del binario: se calcula sobre una
+         *     serializacion canonica de las filas, los criterios (sus claves, sin
+         *     traducir) y el periodo. Dos descargas del mismo informe —en dos formatos
+         *     distintos o en dos momentos distintos— dan la misma huella; si cambia una
+         *     hora, cambia la huella. Por eso es verificable y por eso no incluye el
+         *     instante de generacion ni quien lo pidio.
+         *
+         *     El PDF la imprime en el pie de cada pagina junto al sello temporal, la
+         *     cuenta emisora y el periodo; los tres formatos la publican en esta
+         *     cabecera y la escriben en su bloque de criterios.
+         *
+         *     ## Autorizacion y auditoria
+         *
+         *     Las mismas dos comprobaciones que la consulta JSON: ambito `reports:*`
+         *     —no `reports:legal`— y policy de rol `{admin, rrhh}`. El alcance por
+         *     departamento entra **dentro** de la consulta (RF-ID-03).
+         *
+         *     Descargar el informe es un acceso a datos personales de terceros y
+         *     **queda registrado en `audit_log`** con su alcance —periodo,
+         *     granularidad, cuantas personas, y `format` con el formato descargado—
+         *     y nunca con lo divulgado (RS-05, regla dura 6). El asiento es el mismo
+         *     de la consulta JSON, distinguido por ese campo: asi «quien se llevo estas
+         *     horas y en que» se responde con una sola consulta al trail.
+         */
+        get: operations["exportPeriodReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reports/legal-export": {
         parameters: {
             query?: never;
@@ -3421,6 +3498,37 @@ export interface components {
              *     PDF impreso que sigue en una bandeja no sirve de nada a las 06:00.
              */
             without_delivered_credential: number;
+            /**
+             * @description La clave de firma **saliente** cuando hay una rotacion en curso
+             *     (RF-QR-07, doc 02 §5.3), o `null` fuera de una rotacion, que es el
+             *     estado normal.
+             *
+             *     Sale del llavero de la instalacion y no de la peticion. **No es un
+             *     secreto**: el `key_id` va impreso en el QR de cada tarjeta como
+             *     primera parte del payload (ADR-005). La clave, obviamente, no sale
+             *     por ninguna parte de esta API.
+             *
+             *     Es lo que permite al panel enterarse de que hay una rotacion abierta
+             *     sin que nadie tenga que teclear un identificador, y lo que se pasa
+             *     despues como `?key_id=` para ver a quien le falta.
+             * @example a3
+             */
+            retiring_key_id: string | null;
+            /**
+             * @description Cuantas personas siguen fichando con una tarjeta firmada por
+             *     `retiring_key_id`. **Es el avance de la reimpresion**: baja a medida
+             *     que se entregan las tarjetas nuevas y, cuando llega a cero, la clave
+             *     anterior se puede retirar (`php artisan credentials:retire-key`).
+             *
+             *     Vale `0` fuera de una rotacion. **No se solapa con
+             *     `without_delivered_credential`**: estas personas **si pueden fichar**
+             *     —el solape existe justo para eso—, asi que contarlas alli levantaria
+             *     una alerta que no corresponde a ningun problema.
+             *
+             *     Se publica tambien como `credentials_pending_reprint{site,key_id}`
+             *     (doc 02 §8.2).
+             */
+            pending_reprint: number;
         };
         /**
          * CredentialStatusBoard
@@ -5104,6 +5212,31 @@ export interface components {
          */
         ReportIncludeOpenShifts: boolean;
         /**
+         * @description Formato del fichero. **Parametro explicito y no negociacion por
+         *     `Accept`**, por tres motivos: sobrevive a un enlace y a un historial de
+         *     descargas, queda en el registro de acceso sin tener que reconstruirlo
+         *     desde una cabecera, y el cliente TypeScript que se genera de este
+         *     contrato no sabe elegir entre tres respuestas binarias distintas por
+         *     `Accept`.
+         *
+         *     - **`csv`** — UTF-8 **con BOM** y separador segun el idioma de la
+         *       instalacion (`;` en `es`, `,` en el resto), que es lo que espera la
+         *       hoja de calculo de quien lo abre. Lleva el bloque de criterios visible
+         *       antes de la tabla, nunca oculto.
+         *     - **`xlsx`** — hoja «Horas» con la cabecera congelada y anchos de
+         *       columna, y hoja «Criterios» con el periodo, los criterios y la huella.
+         *       **Las horas son texto `HH:MM`, nunca un decimal.**
+         *     - **`pdf`** — el mismo contenido con pie de pagina sellado en cada
+         *       pagina: instante de generacion en la zona del centro, cuenta que lo
+         *       emitio, periodo y huella SHA-256 del contenido.
+         *
+         *     No es la exportacion normalizada para la Inspeccion
+         *     (`GET /api/v1/reports/legal-export`, RF-IN-05): esto es la comodidad de
+         *     descargar lo que ya se esta mirando en pantalla.
+         * @example xlsx
+         */
+        PeriodReportExportFormat: "csv" | "xlsx" | "pdf";
+        /**
          * @description Identificador de la incidencia (`incidents.id`).
          *
          *     **Es la clave interna, y aqui si.** El resto de la API identifica por
@@ -6593,6 +6726,38 @@ export interface operations {
                  *     las cuatro que faltan no se ven.
                  */
                 pending?: boolean;
+                /**
+                 * @description **A quien le falta reimprimir durante una rotacion de clave**
+                 *     (RF-QR-07, doc 02 §5.3): solo las personas cuya tarjeta **en uso**
+                 *     sigue firmada con ese `key_id`.
+                 *
+                 *     Es lo que hace practicable la reimpresion progresiva. Durante el
+                 *     solape conviven dos claves: la tarjeta vieja sigue fichando y la
+                 *     reemision espera turno de impresora. Este filtro dice cuantas quedan
+                 *     por relevar, y **cuando devuelve `data: []` la clave anterior se
+                 *     puede retirar** — que es literalmente el procedimiento del §5.3.
+                 *
+                 *     **Filtra las filas y no el `summary`**, igual que `pending`: el
+                 *     denominador sigue siendo la plantilla. El propio `summary` ya trae
+                 *     `retiring_key_id` y `pending_reprint`, asi que el panel sabe si hay
+                 *     una rotacion abierta sin tener que preguntarlo.
+                 *
+                 *     Solo cuentan las credenciales **activas**: una revocada firmada con
+                 *     esa clave ya no impide retirarla y no aparece.
+                 *
+                 *     Un `key_id` con forma valida que no conoce nadie devuelve `data: []`
+                 *     con `200`, **no `404`** ni `422`: no es un error del cliente y
+                 *     comprobarlo contra el llavero convertiria el parametro en un oraculo
+                 *     de que claves tiene configuradas la instalacion. Una forma invalida
+                 *     —mas de dos caracteres, o no alfanumerica— si es `422`.
+                 *
+                 *     La rotacion **no tiene endpoint** y no lo tendra: se ejecuta con
+                 *     `php artisan credentials:rotate-key`. Rotar la clave es un acto
+                 *     operativo con semanas de logistica de reimpresion detras, no un boton
+                 *     de panel. Aqui solo se **lee**.
+                 * @example a3
+                 */
+                key_id?: string;
             };
             header?: never;
             path?: never;
@@ -7051,6 +7216,203 @@ export interface operations {
                 };
             };
             429: components["responses"]["TooManyRequests"];
+        };
+    };
+    exportPeriodReport: {
+        parameters: {
+            query: {
+                /**
+                 * @description Formato del fichero. **Parametro explicito y no negociacion por
+                 *     `Accept`**, por tres motivos: sobrevive a un enlace y a un historial de
+                 *     descargas, queda en el registro de acceso sin tener que reconstruirlo
+                 *     desde una cabecera, y el cliente TypeScript que se genera de este
+                 *     contrato no sabe elegir entre tres respuestas binarias distintas por
+                 *     `Accept`.
+                 *
+                 *     - **`csv`** — UTF-8 **con BOM** y separador segun el idioma de la
+                 *       instalacion (`;` en `es`, `,` en el resto), que es lo que espera la
+                 *       hoja de calculo de quien lo abre. Lleva el bloque de criterios visible
+                 *       antes de la tabla, nunca oculto.
+                 *     - **`xlsx`** — hoja «Horas» con la cabecera congelada y anchos de
+                 *       columna, y hoja «Criterios» con el periodo, los criterios y la huella.
+                 *       **Las horas son texto `HH:MM`, nunca un decimal.**
+                 *     - **`pdf`** — el mismo contenido con pie de pagina sellado en cada
+                 *       pagina: instante de generacion en la zona del centro, cuenta que lo
+                 *       emitio, periodo y huella SHA-256 del contenido.
+                 *
+                 *     No es la exportacion normalizada para la Inspeccion
+                 *     (`GET /api/v1/reports/legal-export`, RF-IN-05): esto es la comodidad de
+                 *     descargar lo que ya se esta mirando en pantalla.
+                 * @example xlsx
+                 */
+                format: components["parameters"]["PeriodReportExportFormat"];
+                /**
+                 * @description Primera **jornada** del informe, inclusive. Es una fecha civil en la zona
+                 *     del centro, no un instante: agrupar por jornada y no por la hora de las
+                 *     marcas es lo que mantiene entero un turno que cruza la medianoche (RN-05,
+                 *     regla dura 4).
+                 *
+                 *     **Obligatoria**, al contrario que en `GET /api/v1/employees/{uuid}/workdays`.
+                 *     Alli tiene omision porque la pantalla se abre sola con el ultimo mes; aqui
+                 *     quien pide un informe de horas ha elegido un periodo, y un informe sobre un
+                 *     rango que nadie pidio es exactamente la cifra que despues alguien lleva a
+                 *     una reunion de nomina creyendo que es otra.
+                 * @example 2026-03-01
+                 */
+                from: components["parameters"]["PeriodReportFrom"];
+                /**
+                 * @description Ultima jornada del informe, inclusive. Obligatoria, por lo mismo que
+                 *     `from`.
+                 *
+                 *     El rango no puede exceder **tres meses** en la respuesta sincrona: por
+                 *     encima, el informe se pide en diferido (RF-IN-06). El techo es
+                 *     configuracion de la instalacion, no una regla de negocio.
+                 * @example 2026-03-31
+                 */
+                to: components["parameters"]["PeriodReportTo"];
+                /**
+                 * @description Grano de agrupacion. Por omision `day`, que es el de la fuente —una fila
+                 *     por persona y jornada— y el unico que no agrega nada: suponer «mes» porque
+                 *     es lo que mas se pide seria decidir por quien pregunta.
+                 *
+                 *     Las semanas empiezan en **lunes** (ISO 8601) y los cubos parciales se
+                 *     **recortan al rango pedido**: una semana a caballo del 1 de marzo, en un
+                 *     informe que empieza el 1, se devuelve como `2026-03-01 → 2026-03-01`. La
+                 *     fila describe exactamente los dias que ha contado.
+                 */
+                granularity?: components["parameters"]["ReportGranularityParam"];
+                /**
+                 * @description Sobre que sujeto se agregan las horas. Por omision `employee`, que es la
+                 *     pregunta de partida de RF-IN-01; los agregados de RF-IN-02 se piden.
+                 *
+                 *     Con `department` o `site`, los contadores de dias son **dias-persona**:
+                 *     `days_in_period` es personas × dias naturales del cubo.
+                 */
+                group_by?: components["parameters"]["ReportGroupByParam"];
+                /**
+                 * @description Acota el informe a un departamento.
+                 *
+                 *     **Es un filtro, no una autorizacion.** Un departamento inexistente es un
+                 *     `422` —hay una errata que corregir— y uno existente pero fuera del alcance
+                 *     de quien pregunta devuelve un informe vacio, no un `403`: responder `403`
+                 *     confirmaria que ese departamento existe y convertiria el desplegable del
+                 *     panel en un generador de errores.
+                 * @example 3
+                 */
+                department_id?: components["parameters"]["ReportDepartmentId"];
+                /**
+                 * @description Acota el informe a una persona, por su identificador **publico**.
+                 *
+                 *     Filtro y no autorizacion, igual que `department_id`: alguien fuera del
+                 *     alcance devuelve un informe vacio.
+                 * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                 */
+                employee_uuid?: components["parameters"]["ReportEmployeeUuid"];
+                /**
+                 * @description Si los dias con un turno todavia abierto aportan los minutos que **ya
+                 *     tienen cerrados**.
+                 *
+                 *     Por omision `false`. Un tramo sin cerrar vale cero en la proyeccion
+                 *     —todavia no ha terminado—, asi que ese dia daria una cifra a medias justo
+                 *     en la comparacion contra lo contratado. En los dos casos el dia cuenta
+                 *     como dia con actividad y sale en `open_shift_days`, y el criterio aplicado
+                 *     se escribe en `meta.criteria`.
+                 *
+                 *     Ni con `true` se estima nada del turno en curso: se suma lo que ya esta
+                 *     cerrado y nada mas.
+                 * @example false
+                 */
+                include_open_shifts?: components["parameters"]["ReportIncludeOpenShifts"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description El fichero, transmitido en streaming. El tipo de contenido depende
+             *     de `format`.
+             *
+             *     Un informe sin filas es una respuesta valida y **tambien lleva sus
+             *     criterios**: «no hay nadie con horas en ese periodo» es una
+             *     afirmacion que hay que poder descargar.
+             */
+            200: {
+                headers: {
+                    /**
+                     * @description Adjunto, con un nombre de fichero que **no lleva ningun nombre de
+                     *     persona** ni ningun identificador de empleado: solo el periodo
+                     *     (regla dura 21).
+                     */
+                    "Content-Disposition"?: string;
+                    /** @description Siempre `no-store`: el cuerpo lleva horas de personas identificadas. */
+                    "Cache-Control"?: string;
+                    /**
+                     * @description Huella SHA-256 del contenido, en hexadecimal minusculo. La misma
+                     *     que imprime el pie del PDF y la misma para los tres formatos del
+                     *     mismo informe.
+                     * @example 3d9c8f0a1b2c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6
+                     */
+                    "X-Kronoqr-Report-Digest"?: string;
+                    /**
+                     * @description Filas de datos que lleva el fichero. Permite comprobar que la descarga esta completa.
+                     * @example 500
+                     */
+                    "X-Kronoqr-Report-Rows"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                    "application/pdf": string;
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /**
+             * @description La instalacion todavia no tiene centro configurado, asi que no hay
+             *     zona horaria en la que expresar el informe (RF-PD-03, ADR-040).
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description La peticion no es valida —formato desconocido, rango invertido— **o**
+             *     el informe no cabe en una respuesta sincrona (RNF-P-05), igual que en
+             *     la consulta JSON.
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ValidationProblem"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+            /**
+             * @description Solo con `format=pdf`: el motor de composicion de PDF no esta
+             *     disponible en esta instalacion (falta Chromium, o no arranca).
+             *
+             *     Se responde `503` con `problem+json` y **no un `500` opaco**: no hay
+             *     nada que corregir en la peticion, la salida es descargar el mismo
+             *     informe en CSV o en XLSX, y quien administra la instalacion tiene en
+             *     el `detail` el motivo. Los otros dos formatos no dependen de el.
+             */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     generateLegalExport: {

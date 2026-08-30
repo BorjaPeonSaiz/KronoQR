@@ -141,6 +141,37 @@ it('no resuelve una clave retirada ni una desconocida', function (): void {
         ->and($keyring->keyIds())->toBe(['a3']);
 })->group('RF-QR-02', 'RF-QR-07');
 
+it('acepta la firma de la clave anterior y no la de una retirada', function (): void {
+    // Las dos mitades de RF-QR-07 en la misma prueba, porque son la misma
+    // decision vista desde los dos lados: durante el solape la tarjeta vieja
+    // ficha, y cuando la clave se retira deja de fichar **de forma generica**
+    // (RS-03) — indistinguible de «no existe» y de «revocada». Quien traduce
+    // ese `null` en un rechazo identico a los demas es `HmacSignatureVerifier`,
+    // y lo comprueba `ConstantTimeRejectionTest`.
+    $saliente = otherSigningKey('a2');
+    $tarjetaVieja = $saliente->sign('7QK2mXpR9vLdN4tZbYcF1w');
+
+    $duranteElSolape = QrKeyring::of(testSigningKey('a3'), $saliente);
+    $trasLaRetirada = QrKeyring::of(testSigningKey('a3'));
+
+    expect($duranteElSolape->find($tarjetaVieja->keyId)?->verifies($tarjetaVieja))->toBeTrue()
+        // Retirada: la clave ya no esta, y sin clave no hay nada que verificar.
+        ->and($trasLaRetirada->find($tarjetaVieja->keyId))->toBeNull();
+})->group('RF-QR-07', 'RS-03');
+
+it('sabe cual de las dos claves es la que esta saliendo', function (): void {
+    // Es lo que necesitan `credentials:rotate-key`, el filtro `?key_id=` del
+    // panel y la metrica de avance: **cual** queda por reimprimir. Nunca la
+    // clave, solo su identificador, que ademas va impreso en cada tarjeta.
+    expect(QrKeyring::of(testSigningKey('a3'), otherSigningKey('a2'))->previousId())->toBe('a2')
+        // Fuera de una rotacion no hay ninguna saliente.
+        ->and(QrKeyring::of(testSigningKey('a3'))->previousId())->toBeNull()
+        ->and(QrKeyring::empty()->previousId())->toBeNull()
+        // Y el descuido de repetir el key_id en las dos variables no es un
+        // solape: el llavero las colapsa y no hay nada que rotar.
+        ->and(QrKeyring::of(testSigningKey('a3'), otherSigningKey('a3'))->previousId())->toBeNull();
+})->group('RF-QR-07');
+
 it('se niega a emitir cuando la instalacion no tiene clave', function (): void {
     // Emitir sin clave produciria tarjetas que nadie puede verificar. Verificar
     // sin clave, en cambio, no revienta: rechaza de forma generica.

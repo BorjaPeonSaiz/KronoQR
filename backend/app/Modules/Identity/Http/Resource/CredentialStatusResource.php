@@ -69,7 +69,7 @@ final class CredentialStatusResource extends JsonResource
     }
 
     /**
-     * @return array<string, int>
+     * @return array<string, int|string|null>
      */
     private static function coverage(SiteCredentialCoverage $coverage): array
     {
@@ -77,6 +77,12 @@ final class CredentialStatusResource extends JsonResource
             'employees' => $coverage->employees,
             'pending_print' => $coverage->pendingPrint,
             'without_delivered_credential' => $coverage->withoutDeliveredCredential,
+            // El avance de una rotacion de clave (RF-QR-07). `retiring_key_id`
+            // sale del llavero y no de la peticion, y **no es un secreto**: va
+            // impreso en el QR de cada tarjeta (ADR-005). Lo que no sale por
+            // aqui —ni por ningun sitio— es la clave.
+            'retiring_key_id' => $coverage->retiringKeyId,
+            'pending_reprint' => $coverage->pendingReprint,
         ];
     }
 }

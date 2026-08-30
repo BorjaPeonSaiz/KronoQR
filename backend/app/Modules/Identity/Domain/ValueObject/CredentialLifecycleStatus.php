@@ -89,10 +89,15 @@ enum CredentialLifecycleStatus: string
     }
 
     /**
-     * Si esta credencial esta esperando a pasar por la impresora.
+     * Si la credencial **que gobierna esta fila** esta esperando a pasar por la
+     * impresora.
      *
-     * Es lo que cuenta `credentials_pending_print{site}` y lo que selecciona
-     * `credentials:print-batch --pending`.
+     * **No es lo que cuenta `credentials_pending_print{site}`**, y desde la
+     * tarea 2.12 la diferencia importa: durante una rotacion con solape una
+     * persona tiene dos credenciales activas, la fila muestra la que lleva
+     * encima —entregada— y la reemision espera turno de impresora sin aparecer
+     * aqui. La metrica y `credentials:print-batch --pending` se cuentan sobre
+     * las credenciales pendientes, no sobre el estado de la fila.
      */
     public function isPendingPrint(): bool
     {

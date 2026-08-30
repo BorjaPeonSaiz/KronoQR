@@ -299,6 +299,14 @@
       "withoutDelivered": "Sin la tarjeta en la mano: {missing} de {total}.",
       "pendingPrint": "Pendientes de imprimir: {count}."
     },
+    "rotation": {
+      "heading": "Rotación de la clave de firma en curso",
+      "explanation": "Se está sustituyendo la clave {keyId} con la que están firmadas las tarjetas antiguas. Mientras dure el relevo, las tarjetas viejas siguen sirviendo para fichar: nadie se queda fuera. Cada tarjeta antigua se retira sola en cuanto se entrega la nueva.",
+      "progress": "Reimpresión completada: {done} de {total} ({percent} %).",
+      "showPending": "Ver a quién le falta ({count})",
+      "showAll": "Ver toda la plantilla",
+      "complete": "Ya nadie ficha con la clave {keyId}: se puede retirar en el servidor."
+    },
     "empty": {
       "title": "No hay filas que mostrar",
       "description": "No hay personas de alta en el alcance elegido.",
@@ -492,6 +500,17 @@
       "criteria": {
         "title": "Criterios de este informe",
         "generated": "Generado el {at} · zona horaria del centro: {timeZone}"
+      },
+      "export": {
+        "label": "Descargar este informe:",
+        "format": {
+          "csv": "CSV",
+          "xlsx": "Excel (XLSX)",
+          "pdf": "PDF"
+        },
+        "running": "Preparando la descarga en {format}…",
+        "done": "Descarga en {format} lista.",
+        "failed": "No se ha podido descargar el informe."
       },
       "announce": {
         "results": "El informe tiene {count} filas."

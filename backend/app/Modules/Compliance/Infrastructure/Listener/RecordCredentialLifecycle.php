@@ -16,6 +16,8 @@ use App\Modules\Identity\Domain\Event\CredentialPrinted;
 use App\Modules\Identity\Domain\Event\CredentialRevoked;
 use App\Modules\Identity\Domain\Event\DeviceTokenIssued;
 use App\Modules\Identity\Domain\Event\DeviceTokenRevoked;
+use App\Modules\Identity\Domain\Event\SigningKeyRetired;
+use App\Modules\Identity\Domain\Event\SigningKeyRotated;
 
 /**
  * Sella en `audit_log` los hechos del ciclo de vida de credenciales y
@@ -141,6 +143,54 @@ final readonly class RecordCredentialLifecycle
                 // perdio antes de entregarla» de «el empleado la perdio». Es
                 // texto libre: quien lo redacta no debe poner nombres ahi.
                 'reason' => $event->reason,
+            ]),
+            occurredAt: $event->occurredAt(),
+        ));
+    }
+
+    /**
+     * **La apertura de una rotacion de clave** (RF-QR-07, tarea 2.12).
+     *
+     * Sujeto `signing_key` sin identificador: no recae sobre ninguna fila, recae
+     * sobre el material con el que se firman todas las tarjetas. La reemision de
+     * cada una deja ademas su propio `credential.reissued`.
+     *
+     * **Los `key_id` si van en el payload y las claves no.** El identificador va
+     * impreso en cada tarjeta (ADR-005): no es un secreto, y sin el este asiento
+     * no explicaria nada.
+     */
+    public function handleSigningKeyRotated(SigningKeyRotated $event): void
+    {
+        $this->audit->handle(new RecordAuditEntryCommand(
+            actor: $this->actor($event->actorUserId),
+            action: AuditAction::SigningKeyRotated,
+            subject: AuditSubject::of('signing_key'),
+            payload: AuditPayload::of([
+                'retiring_key_id' => $event->retiringKeyId,
+                'current_key_id' => $event->currentKeyId,
+                'reissued' => $event->reissued,
+                'already_pending' => $event->alreadyPending,
+            ]),
+            occurredAt: $event->occurredAt(),
+        ));
+    }
+
+    /**
+     * **El cierre del solape** (RF-QR-07).
+     *
+     * Es el asiento que fecha la muerte de un lote de tarjetas. Sin el, la unica
+     * explicacion de por que un QR de hace dos años dejo de verificar seria
+     * «alguien cambio una variable de entorno», y eso no consta en ninguna parte.
+     */
+    public function handleSigningKeyRetired(SigningKeyRetired $event): void
+    {
+        $this->audit->handle(new RecordAuditEntryCommand(
+            actor: $this->actor($event->actorUserId),
+            action: AuditAction::SigningKeyRetired,
+            subject: AuditSubject::of('signing_key'),
+            payload: AuditPayload::of([
+                'key_id' => $event->keyId,
+                'signed_credentials' => $event->signedCredentials,
             ]),
             occurredAt: $event->occurredAt(),
         ));

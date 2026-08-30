@@ -43,6 +43,24 @@ final class Credentials
     }
 
     /**
+     * Una clave **retirada**: bien formada, pero con un `key_id` que la
+     * instalacion ya no tiene configurado (RF-QR-07).
+     *
+     * Es el estado en el que queda una tarjeta a la que se le cerro la rotacion
+     * por encima: la fila sigue en `credentials`, activa, y su firma ya no
+     * verifica contra nada. Se distingue de {@see signedWithUnknownKey()} en que
+     * aqui **si hay fila**, que es lo que hace util el caso para las pruebas de
+     * tiempo constante.
+     *
+     * No es un secreto —esta en el repositorio— y por eso no vale para nada
+     * fuera de la suite, igual que las de `phpunit.xml`.
+     */
+    public static function retiredKey(): QrSigningKey
+    {
+        return QrSigningKey::fromBase64('a1', base64_encode('clave-retirada-de-pruebas-KrnQR0'));
+    }
+
+    /**
      * Un token aleatorio valido, firmado con la clave indicada.
      */
     public static function payloadFor(?QrSigningKey $key = null): QrPayload

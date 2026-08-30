@@ -108,6 +108,12 @@ it('describe solo los endpoints cuya tarea existe, y todos bajo /api/v1', functi
         // la familia, y no `reports:legal`: aquel es el ambito estrecho del
         // `auditor` y solo abre la exportacion de la linea siguiente.
         '/api/v1/reports/period',
+        // Tarea 2.9: el MISMO informe como fichero CSV, XLSX o PDF (RF-IN-04).
+        // Ruta propia y no un parametro de la de arriba: son dos respuestas de
+        // naturaleza distinta —JSON con esquema frente a tres binarios— y
+        // mezclarlas obligaria al cliente generado a elegir entre cuatro tipos de
+        // contenido en una sola operacion.
+        '/api/v1/reports/period/export',
         // Tarea 1.17: exportacion normalizada para la Inspeccion (RF-IN-05).
         '/api/v1/reports/legal-export',
         // Tarea 2.5: bandeja de incidencias y su flujo de resolucion (RF-PA-05).
@@ -1105,3 +1111,47 @@ it('entrega al panel los datos de conexion del WebSocket en la respuesta, no com
             'poll_interval_seconds',
         ]);
 })->group('RF-PA-01', 'RQ-06');
+
+it('sirve la descarga del informe como fichero, con el mismo ambito que la consulta', function (): void {
+    // RF-IN-04. La descarga y la consulta son el MISMO informe, y lo que sale es
+    // exactamente lo mismo con el agravante de que un fichero se reenvia por
+    // correo: si su ambito fuera mas ancho —o simplemente distinto— la
+    // autorizacion de la consulta no serviria de nada.
+    expect(Contract::value('paths', '/api/v1/reports/period/export', 'get', 'security'))
+        ->toBe(Contract::value('paths', '/api/v1/reports/period', 'get', 'security'))
+        // `reports:*`, la familia, y no `reports:legal`: aquel es el ambito
+        // estrecho del `auditor` y solo abre la exportacion para la Inspeccion.
+        ->and(Contract::value('paths', '/api/v1/reports/period/export', 'get', 'security'))
+        ->toBe([['managementToken' => ['reports:*']]]);
+
+    // Tres binarios y NINGUN `application/json`: quien quiera la tabla tiene el
+    // otro endpoint. Con JSON aqui habria dos URL para la misma respuesta.
+    expect(Contract::keys('paths', '/api/v1/reports/period/export', 'get', 'responses', '200', 'content'))
+        ->toBe([
+            'text/csv',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/pdf',
+        ]);
+})->group('RF-IN-04', 'RQ-06');
+
+it('acepta exactamente los mismos parametros en la descarga y en la consulta', function (): void {
+    // Es la mitad del requisito: el fichero que alguien adjunta a un correo tiene
+    // que describir el MISMO informe que estaba mirando en pantalla. Si la
+    // descarga aceptara un filtro de mas —o de menos—, las dos cosas dejarian de
+    // coincidir y la que se creeria seria la equivocada.
+    $consulta = Contract::value('paths', '/api/v1/reports/period', 'get', 'parameters');
+    $descarga = Contract::value('paths', '/api/v1/reports/period/export', 'get', 'parameters');
+
+    expect($descarga)->toBe([
+        // El unico de mas, y va primero porque es el que decide la respuesta.
+        ['$ref' => '#/components/parameters/PeriodReportExportFormat'],
+        ...(is_array($consulta) ? $consulta : []),
+    ]);
+})->group('RF-IN-04', 'RQ-06');
+
+it('no admite json como formato de descarga', function (): void {
+    // Esa forma la sirve `GET /api/v1/reports/period`. Aceptarla aqui daria dos
+    // URL para la misma respuesta y dos sitios donde mantener su esquema.
+    expect(Contract::value('components', 'parameters', 'PeriodReportExportFormat', 'schema', 'enum'))
+        ->toBe(['csv', 'xlsx', 'pdf']);
+})->group('RF-IN-04', 'RQ-06');

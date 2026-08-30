@@ -28,11 +28,20 @@ export interface CredentialBoardQuery {
    * (ADR-037), y aqui solo hace falta una fila.
    */
   employeeUuid?: string
+  /**
+   * A quien le falta reimprimir durante una rotacion de clave (RF-QR-07):
+   * solo las personas cuya tarjeta EN USO sigue firmada con ese `key_id`.
+   *
+   * No hace falta teclearlo: el propio `summary` trae `retiring_key_id`
+   * cuando hay una rotacion abierta. La rotacion en si **no tiene endpoint**
+   * y se ejecuta con `php artisan credentials:rotate-key`; aqui solo se lee.
+   */
+  keyId?: string
 }
 
 export function fetchCredentialBoard(query: CredentialBoardQuery): Promise<CredentialStatusBoard> {
   return requestJson<CredentialStatusBoard>('/api/v1/credentials/status', {
-    query: { pending: query.pendingOnly, employee_uuid: query.employeeUuid },
+    query: { pending: query.pendingOnly, employee_uuid: query.employeeUuid, key_id: query.keyId },
   })
 }
 

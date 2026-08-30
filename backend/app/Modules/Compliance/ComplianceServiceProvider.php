@@ -70,6 +70,8 @@ use App\Modules\Identity\Domain\Event\CredentialRevoked;
 use App\Modules\Identity\Domain\Event\DeviceTokenIssued;
 use App\Modules\Identity\Domain\Event\DeviceTokenRevoked;
 use App\Modules\Identity\Domain\Event\ManagementRoleAssigned;
+use App\Modules\Identity\Domain\Event\SigningKeyRetired;
+use App\Modules\Identity\Domain\Event\SigningKeyRotated;
 use App\Modules\Identity\Domain\Event\TwoFactorEnabled;
 use App\Modules\Identity\Domain\Event\TwoFactorReset;
 use App\Modules\Shared\Application\Port\AuthenticationJournal;
@@ -480,6 +482,10 @@ final class ComplianceServiceProvider extends ServiceProvider
         Event::listen(CredentialPrinted::class, [RecordCredentialLifecycle::class, 'handleCredentialPrinted']);
         Event::listen(CredentialDelivered::class, [RecordCredentialLifecycle::class, 'handleCredentialDelivered']);
         Event::listen(CredentialRevoked::class, [RecordCredentialLifecycle::class, 'handleCredentialRevoked']);
+        // Rotar y retirar la clave de firma son de la tarea 2.12: el ciclo de
+        // vida de todas las tarjetas a la vez (RF-QR-07, §5.3).
+        Event::listen(SigningKeyRotated::class, [RecordCredentialLifecycle::class, 'handleSigningKeyRotated']);
+        Event::listen(SigningKeyRetired::class, [RecordCredentialLifecycle::class, 'handleSigningKeyRetired']);
         Event::listen(DeviceTokenIssued::class, [RecordCredentialLifecycle::class, 'handleDeviceTokenIssued']);
         Event::listen(DeviceTokenRevoked::class, [RecordCredentialLifecycle::class, 'handleDeviceTokenRevoked']);
     }

@@ -85,6 +85,12 @@ function managementEndpoints(): array
         // codigo, centro y departamento de la plantilla entera— y hasta ahora era
         // el unico endpoint de gestion sin ninguna pareja rol x endpoint probada.
         'ver el panel de credenciales' => ['GET', '/api/v1/credentials/status', []],
+        // El mismo endpoint con el filtro de la tarea 2.12 (RF-QR-07). Entra
+        // aparte porque un parametro nuevo se valida en el `FormRequest`, y un
+        // `authorize()` que se saltara la policy cuando llega `key_id` seria
+        // invisible desde la fila de arriba. Ademas es la consulta que dice a
+        // quien le falta la tarjeta nueva: reparte la misma nomina.
+        'ver a quien le falta reimprimir' => ['GET', '/api/v1/credentials/status?key_id=a2', []],
         'imprimir el lote pendiente' => ['POST', '/api/v1/credentials/print-batch', []],
         'imprimir una credencial' => ['POST', '/api/v1/credentials/0199f0d1-2a5b-7d4f-8c32-5e6f7a8b9c01/print', []],
         'registrar la entrega' => ['POST', '/api/v1/credentials/0199f0d1-2a5b-7d4f-8c32-5e6f7a8b9c01/deliver', []],
@@ -138,6 +144,17 @@ function managementEndpoints(): array
         // esconderia si la autorizacion funciona. Lo que esta matriz comprueba es
         // que la denegacion ocurre **antes** de mirar los datos.
         'generar el informe por periodo' => ['GET', '/api/v1/reports/period?from=2026-03-01&to=2026-03-31', []],
+
+        // Y su descarga como fichero (tarea 2.9, RF-IN-04). ENTRA COMO PAREJA
+        // PROPIA y no se da por cubierta con la consulta de arriba: es otra ruta,
+        // otro `FormRequest` y otro `authorize()`, asi que una policy olvidada
+        // aqui seria invisible desde alli. Lo que sale es exactamente lo mismo,
+        // con el agravante de que un fichero se reenvia por correo.
+        //
+        // Con `format` en la URL a proposito, por lo mismo que `from` y `to`: es
+        // obligatorio, y sin el la peticion moriria en el `FormRequest` con un
+        // `422` que esconderia si la autorizacion funciona.
+        'descargar el informe por periodo' => ['GET', '/api/v1/reports/period/export?format=csv&from=2026-03-01&to=2026-03-31', []],
 
         // Contratos historizados (tarea 2.8, RF-GP-02). Ambito `employees:*` y
         // policy propia: las condiciones laborales pactadas son de `rrhh+`.
@@ -360,6 +377,17 @@ it('deja pasar a RRHH al informe por periodo y a los contratos, control positivo
         ->get('/api/v1/reports/period', ['from' => '2026-03-01', 'to' => '2026-03-31', 'granularity' => 'month'])
         ->assertStatus(200);
 
+    // Y la descarga de la 2.9, por lo mismo: sin este control, los `403` sobre
+    // `/reports/period/export` pasarian igual si esa ruta no existiera.
+    Api::as($token)
+        ->get('/api/v1/reports/period/export', [
+            'format' => 'csv',
+            'from' => '2026-03-01',
+            'to' => '2026-03-31',
+            'granularity' => 'month',
+        ])
+        ->assertStatus(200);
+
     Api::as($token)
         ->post('/api/v1/employees/'.$employee.'/contracts', [
             'weekly_hours' => 40,
@@ -369,7 +397,7 @@ it('deja pasar a RRHH al informe por periodo y a los contratos, control positivo
         ->assertStatus(201);
 
     Api::as($token)->get('/api/v1/employees/'.$employee.'/contracts')->assertStatus(200);
-})->group('RQ-07', 'RF-IN-01', 'RF-GP-02');
+})->group('RQ-07', 'RF-IN-01', 'RF-IN-04', 'RF-GP-02');
 
 it('deniega a un token de quiosco emitir o revocar credenciales', function (string $uri, array $body): void {
     // RS-04 con nombre y apellidos. El token del quiosco lleva `scan:write`,
