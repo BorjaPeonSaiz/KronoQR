@@ -3529,6 +3529,30 @@ export interface components {
              *     (doc 02 §8.2).
              */
             pending_reprint: number;
+            /**
+             * @description Tarjetas **activas** firmadas con una clave que la instalacion **ya
+             *     no reconoce**. Quien lleve una de ellas **no puede fichar ahora
+             *     mismo** (RF-QR-07).
+             *
+             *     **Tiene que ser cero.** Es el unico numero de este resumen que
+             *     describe una averia y no un proceso, y por eso existe: si
+             *     `QR_SIGNING_KEY_PREVIOUS` se vacia antes de terminar la reimpresion
+             *     —el escenario de clave comprometida—, esas personas se quedan sin
+             *     poder fichar y **el resto del panel no lo delata**: su fila se ve
+             *     entregada y correcta, y `pending_reprint` vale cero porque esa clave
+             *     ya no es la saliente de ninguna rotacion.
+             *
+             *     **No se acota con `employee_uuid`**, y es la unica excepcion a esa
+             *     regla en todo el resumen: es un recuento de la instalacion. Acotarlo
+             *     lo pondria a cero justo al abrir la ficha de la persona afectada,
+             *     que es cuando hace falta verlo.
+             *
+             *     Sin desglose por `key_id`: el panel da la voz de alarma y el
+             *     diagnostico esta en `php artisan credentials:status`, que dice que
+             *     claves son, y en `credentials_active_unknown_key{site,key_id}`.
+             *     Procedimiento en `docs/runbooks/rotacion-clave-qr.md` §6.
+             */
+            active_unknown_key: number;
         };
         /**
          * CredentialStatusBoard

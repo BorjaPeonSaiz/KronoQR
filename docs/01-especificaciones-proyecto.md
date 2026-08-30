@@ -363,9 +363,13 @@ Estas reglas viven en el **núcleo de dominio** y deben estar cubiertas por prue
 |---|---|---|
 | **WorkDay** | Jornada de un empleado en una fecha | RN-01, RN-02, RN-06, RN-07, RN-08. Es la frontera transaccional del fichaje. |
 | **Employee** | Empleado | Unicidad de código, estado activo o baja, vigencia de contrato. |
-| **Credential** | Credencial QR | Una credencial activa por empleado; firma válida; revocación. |
+| **Credential** | Credencial QR | Una credencial activa por empleado **y por clave de firma**; firma válida; revocación. |
 | **Device** | Quiosco | Token válido, ámbito limitado, vinculación a centro. |
 | **AuditTrail** | Registro de auditoría | Solo-append, encadenamiento por hash. |
+
+> **Por qué la invariante de `Credential` es «por empleado *y por clave*» y no «una y basta»** (RF-QR-07, [ADR-034](adr/ADR-034-el-token-nace-al-imprimir-no-al-emitir.md), tarea 2.12). Nació como «una credencial activa por empleado», y así estuvo mientras no hubo que rotar la clave de firma. La rotación con solape del doc 02 §5.3 la rompe por un motivo que no es técnico: para reimprimir la plantilla sin dejar a nadie sin fichar, la tarjeta vieja tiene que seguir valiendo mientras la nueva se imprime y se entrega, y eso son días o semanas. Con la invariante anterior, reemitir obligaba a revocar antes, es decir, a dejar a esa persona sin poder fichar hasta que su tarjeta llegara a su mano.
+>
+> Lo que se protege ahora, declarado en dos índices parciales de PostgreSQL, es más preciso y no menos estricto: **no puede haber dos tarjetas escaneables del mismo empleado firmadas con la misma clave** (`one_active_credential_per_key_and_employee`) ni **dos credenciales pendientes de imprimir a la vez** (`one_pending_credential_per_employee`). Como el llavero admite como mucho dos claves —`current` y `previous`—, el máximo de tarjetas vivas de una persona pasa de una a **dos, y solo durante un solape**; la vieja se revoca automáticamente al entregarse la nueva, que es cuando su titular ya no la necesita. El caso que la invariante original impedía —dos tarjetas vivas indistinguibles, una de ellas perdida— sigue siendo imposible.
 
 > **`Device` es raíz de agregado en `Kiosk`, y `Identity` emite y revoca su token.** El agregado protege lo que es del dispositivo —identidad, centro al que está vinculado, estado y latido— y esas invariantes son propiedad de `Kiosk`, que es el módulo del punto de fichaje. **El token no lo es:** su emisión, su ámbito y su revocación son de `Identity`, igual que las credenciales, y se exponen a `Kiosk` **por caso de uso público explícito**, nunca por acceso directo a la tabla. `Device` no valida su propio token: recibe el resultado de esa validación. Queda escrito aquí, y no se decide al ejecutar la tarea que lo construye.
 
@@ -408,6 +412,8 @@ Motor: **PostgreSQL 17**. Los tipos se expresan en su nomenclatura. El Anexo D d
 > `uuid` es el identificador **público** y se añadió en la tarea 1.5. Faltaba aquí, pero el Anexo B ya nombraba la credencial por UUID en la ruta (`POST /api/v1/credentials/{uuid}/revoke`): sin él, el contrato solo podía cumplirse exponiendo la clave interna, que revela cuántas tarjetas se han emitido y en qué orden. Es la misma decisión que ya tomaron `employees.uuid`, `users.uuid` y `devices.uuid`: el `BIGINT` no sale nunca de la base de datos.
 >
 > **`key_id` y `secret_hash` son NULL hasta que la tarjeta se imprime** ([ADR-034](adr/ADR-034-el-token-nace-al-imprimir-no-al-emitir.md)). El token en claro no se almacena nunca, así que se acuña en el mismo acto que dibuja el PDF: las tres columnas —`key_id`, `secret_hash` y `printed_at`— se escriben juntas o no se escribe ninguna. Una credencial pendiente de imprimir existe, cuenta en el panel de RF-QR-08 y **no puede fichar**, porque no hay hash por el que resolverla. La entrega, a su vez, lleva siempre `delivered_at` y `delivered_by_user_id`, y no puede preceder a la impresión.
+>
+> **La unicidad se declara en dos índices parciales** (tarea 2.12, RF-QR-07): `one_pending_credential_per_employee` —una sola pendiente de imprimir por persona— y `one_active_credential_per_key_and_employee` —una sola tarjeta escaneable por persona **y por clave**—. Los dos juntos permiten la única convivencia que la rotación con solape necesita, la de la tarjeta en uso con su relevo, y siguen impidiendo dos tarjetas vivas firmadas con la misma clave. Ver la nota de §5.2.
 
 **`devices`** — `id`, `site_id`, `name`, `token_hash`, `app_version`, `last_seen_at`, `pending_queue_size`, `status`
 

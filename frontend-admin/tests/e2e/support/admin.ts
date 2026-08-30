@@ -135,6 +135,7 @@ export const CREDENTIAL_BOARD: CredentialStatusBoard = {
     without_delivered_credential: 1,
     retiring_key_id: null,
     pending_reprint: 0,
+    active_unknown_key: 0,
   },
 }
 
@@ -154,6 +155,7 @@ export const CREDENTIAL_BOARD_IN_ROTATION: CredentialStatusBoard = {
     without_delivered_credential: 0,
     retiring_key_id: RETIRING_KEY_ID,
     pending_reprint: 12,
+    active_unknown_key: 0,
   },
 }
 

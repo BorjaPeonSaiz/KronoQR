@@ -26,6 +26,7 @@ retirada **se niega** mientras quede una sola tarjeta viva firmada con ella.
 | `credentials:status --key-id=` | **Quién sigue fichando con la clave vieja** | Contenedor `app` |
 | `credentials:retire-key` | Certifica que el solape se puede cerrar. Se niega si queda alguien | Contenedor `app` |
 | `credentials_pending_reprint{site,key_id}` | El avance, como métrica. Llega a cero cuando se puede retirar | `BACKUP_PATH/metrics/kronoqr_credentials.prom` |
+| `credentials_active_unknown_key{site,key_id}` | **Debe ser siempre cero.** Tarjetas vivas cuya clave ya no está configurada: esas personas no pueden fichar | Igual |
 
 **El payload impreso es `FH1.<key_id>.<token>.<sig>`** (ADR-005). El `key_id`
 va en la propia tarjeta: es lo que permite que el servidor sepa con cuál de las
@@ -63,10 +64,15 @@ docker compose --env-file .env -f infra/compose.dev.yaml exec -T app <comando>
 php artisan credentials:status --no-metrics
 ```
 
-Si la última línea dice `Rotacion en curso: N de M siguen fichando con la clave
-X` con `N > 0`, **hay una rotación sin cerrar**. Ciérrala primero (§5): abrir
-otra encima expulsaría del llavero a la clave `X` y dejaría a esas `N` personas
-sin poder fichar de un día para otro.
+Dos cosas que mirar, por orden de gravedad:
+
+1. Si la salida **empieza** con `AVISO: N tarjeta(s) activa(s) firmada(s) con la
+   clave X, que ya no esta configurada`, hay gente que **no puede fichar ahora
+   mismo**. Ve a la [§6](#6-si-alguien-ya-no-puede-fichar) antes de nada.
+2. Si la última línea dice `Rotacion en curso: N de M siguen fichando con la
+   clave X` con `N > 0`, **hay una rotación sin cerrar**. Ciérrala primero (§5):
+   abrir otra encima expulsaría del llavero a la clave `X` y dejaría a esas `N`
+   personas sin poder fichar de un día para otro.
 
 `credentials:rotate-key` también se niega por su cuenta si encuentra tarjetas
 activas firmadas con una clave que ya no está configurada. Ese mensaje significa
@@ -148,6 +154,13 @@ php artisan credentials:print-batch --pending --out=/tmp/credenciales.pdf
 php artisan credentials:deliver <uuid> --by=persona@ejemplo.es
 ```
 
+- **Imprime solo la tanda que vas a entregar ese día.** Una tarjeta impresa ficha
+  en nombre de su titular desde que sale de la impresora (ADR-034), y durante una
+  rotación la alternativa es dejar la plantilla entera —doscientas tarjetas
+  válidas— en una bandeja durante semanas. `print-batch --pending` no obliga a
+  vaciar la cola de golpe: lánzalo por tandas, entrega el mismo día y guarda bajo
+  llave lo que no se haya repartido. Es un riesgo aceptado y anotado
+  ([`docs/07`](../07-seguridad-madurez-y-amenazas.md) §6), no un descuido.
 - `print-batch --pending` es **idempotente**: la segunda pasada no encuentra
   nada y no imprime duplicados.
 - **La entrega es la que cierra el relevo**: al registrarla, la tarjeta antigua
@@ -227,7 +240,8 @@ php artisan credentials:status --no-metrics | head -20
 
 | Lo que ves | Qué pasó | Qué hacer |
 | --- | --- | --- |
-| El comando `rotate-key` se niega con «credencial(es) activa(s) firmada(s) con la clave X, que ya no está configurada» | Se retiró una clave con tarjetas vivas | Vuelve a poner esa clave en `QR_SIGNING_KEY_PREVIOUS_*`, reinicia y termina la reimpresión antes de retirarla |
+| `credentials:status` empieza con «AVISO: N tarjeta(s) activa(s) firmada(s) con la clave X, que ya no está configurada», o el panel muestra «Hay tarjetas que ya no sirven para fichar» | **Se retiró una clave con tarjetas vivas.** Es el escenario de la §7 mal cerrado, o un `.env` editado a medias. Esas N personas no pueden fichar con tarjeta y sus filas del panel **se ven correctas**: por eso existe este aviso | 1. `php artisan credentials:status --key-id=X` para saber quiénes son. 2. Vuelve a poner esa clave en `QR_SIGNING_KEY_PREVIOUS_*` y reinicia: vuelven a fichar de inmediato. 3. Termina la reimpresión y solo entonces retírala con `credentials:retire-key X` |
+| El comando `rotate-key` se niega con «credencial(es) activa(s) firmada(s) con la clave X, que ya no está configurada» | Lo mismo, detectado al intentar abrir otra rotación encima | Igual que la fila anterior. **No abras una segunda rotación** hasta cerrar la primera: expulsaría del llavero a la clave saliente actual y dejaría sin fichar a un segundo grupo |
 | Su fila dice «Pendiente de imprimir» | Su tarjeta nueva no ha salido de la impresora | `credentials:print <empleado>` y entrégala |
 | Su fila dice «Revocada» | Se revocó por error, o se entregó la nueva y no se la dieron | Reemitir e imprimir: son tres actos y los tres quedan en `audit_log` |
 

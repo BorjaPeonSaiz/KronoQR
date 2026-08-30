@@ -307,6 +307,11 @@
       "showAll": "Show the whole workforce",
       "complete": "Nobody clocks in with key {keyId} any more: it can be retired on the server."
     },
+    "unknownKey": {
+      "heading": "Some cards no longer work for clocking in",
+      "explanation": "{count} card(s) in circulation are signed with a key the server no longer recognises. Anyone carrying one of them cannot clock in with their card: they will have to use their PIN until it is fixed.",
+      "action": "This is fixed by whoever administers the server: run «php artisan credentials:status» to find out which key it is and follow docs/runbooks/rotacion-clave-qr.md §6."
+    },
     "empty": {
       "title": "There are no rows to show",
       "description": "Nobody is active within the chosen scope.",

@@ -154,6 +154,7 @@ describe('reprintProgressOf (RF-QR-07)', () => {
       without_delivered_credential: 0,
       retiring_key_id: null,
       pending_reprint: 0,
+      active_unknown_key: 0,
       ...overrides,
     }
   }

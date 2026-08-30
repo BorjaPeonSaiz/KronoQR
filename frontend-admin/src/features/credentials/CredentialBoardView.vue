@@ -158,6 +158,17 @@ function clearFilters(): void {
 const reprintProgress = computed(() => reprintProgressOf(summary.value))
 
 /**
+ * Tarjetas vivas firmadas con una clave que el servidor ya no reconoce: esas
+ * personas NO PUEDEN FICHAR ahora mismo, y sus filas no lo delatan porque se
+ * ven entregadas y correctas. Tiene que ser cero siempre (RF-QR-07).
+ *
+ * El desglose por clave no llega hasta aqui a proposito: esto es la voz de
+ * alarma, y el diagnostico —que clave es y quienes son— esta en
+ * `php artisan credentials:status` y en el runbook.
+ */
+const unknownKeyCards = computed(() => summary.value?.active_unknown_key ?? 0)
+
+/**
  * No anuncia nada por su cuenta: el `watch` del recuento de filas ya lo hace
  * —«Resultados: 12»— y anunciar aqui tambien pisaria ese mensaje o quedaria
  * pisado por el, que es el mismo problema que ya documenta ese `watch`. El
@@ -339,6 +350,22 @@ const selectClass =
       <p class="text-kq-text-muted">
         {{ t('credentials.summary.pendingPrint', { count: summary.pending_print }) }}
       </p>
+    </div>
+
+    <!-- La averia que el resto del panel no delata (RF-QR-07): tarjetas vivas
+         firmadas con una clave que el servidor ya no reconoce. Va ANTES del
+         avance de la reimpresion porque, si aparece, es lo unico que importa
+         de esta pantalla: hay gente que no puede fichar. -->
+    <div
+      v-if="unknownKeyCards > 0"
+      role="alert"
+      class="mt-4 rounded-kq border border-kq-danger bg-kq-surface-raised p-4 shadow-kq-soft"
+    >
+      <p class="font-semibold text-kq-danger">{{ t('credentials.unknownKey.heading') }}</p>
+      <p class="mt-1 max-w-prose">
+        {{ t('credentials.unknownKey.explanation', { count: unknownKeyCards }) }}
+      </p>
+      <p class="mt-1 text-kq-text-muted">{{ t('credentials.unknownKey.action') }}</p>
     </div>
 
     <!-- Avance de la reimpresion durante una rotacion de clave (RF-QR-07).

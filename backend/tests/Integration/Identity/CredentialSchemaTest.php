@@ -70,10 +70,11 @@ it('guarda el hash del token y nunca los 22 caracteres del token', function (): 
     }
 })->group('RF-QR-01', 'RS-01', 'RL-08');
 
-it('no admite dos credenciales activas del mismo empleado', function (): void {
+it('no admite dos tarjetas vivas del mismo empleado firmadas con la misma clave', function (): void {
     // Invariante del agregado del doc 01 §5.2, declarada como indice parcial
-    // `one_active_credential_per_employee`. Reemitir obliga a revocar la
-    // anterior, no a dejar dos vivas.
+    // `one_active_credential_per_key_and_employee` (tarea 2.12). Es la que
+    // impide el caso que importa: dos tarjetas escaneables **indistinguibles**,
+    // una de ellas perdida. Reemitir por perdida obliga a revocar la anterior.
     $context = credentialContext();
 
     Credentials::issueFor($context['employee']);
@@ -81,6 +82,37 @@ it('no admite dos credenciales activas del mismo empleado', function (): void {
     expect(static fn () => Credentials::issueFor($context['employee']))
         ->toThrow(QueryException::class);
 })->group('RF-QR-03', 'RN-13');
+
+it('si admite dos tarjetas vivas del mismo empleado con claves distintas', function (): void {
+    // **El caso positivo de la rotacion con solape** (RF-QR-07, §5.3): la
+    // tarjeta que se lleva encima y su relevo ya impreso conviven mientras la
+    // segunda no se entrega. Sin esto habria que reimprimir toda la plantilla en
+    // un solo dia, que es exactamente lo que el `key_id` existe para evitar.
+    $context = credentialContext();
+
+    Credentials::issueFor($context['employee'], Credentials::previousKey());
+    Credentials::issueFor($context['employee'], Credentials::currentKey());
+
+    $vivas = DB::table('credentials')
+        ->where('employee_id', $context['employee'])
+        ->whereNull('revoked_at');
+
+    expect($vivas->count())->toBe(2)
+        ->and($vivas->orderBy('key_id')->pluck('key_id')->all())->toBe(['a2', 'a3']);
+})->group('RF-QR-07', 'RF-QR-03');
+
+it('no admite dos credenciales pendientes de imprimir del mismo empleado', function (): void {
+    // La otra mitad de la invariante, `one_pending_credential_per_employee`: es
+    // lo que hace que `credentials:rotate-key` sea idempotente por construccion
+    // —la segunda pasada choca con la fila que dejo la primera— y lo que impide
+    // que una emision duplicada acabe en dos tarjetas impresas.
+    $context = credentialContext();
+
+    Credentials::pendingFor($context['employee']);
+
+    expect(static fn () => Credentials::pendingFor($context['employee']))
+        ->toThrow(QueryException::class);
+})->group('RF-QR-07', 'RF-QR-03');
 
 it('admite otra credencial activa cuando la anterior esta revocada', function (): void {
     // La otra mitad del indice parcial: la reemision tiene que ser posible.

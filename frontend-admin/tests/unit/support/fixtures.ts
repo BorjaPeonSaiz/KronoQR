@@ -140,7 +140,9 @@ export function board(
   rows: CredentialStatusRow[],
   // Rotacion de la clave de firma (RF-QR-07). Fuera de una rotacion —lo
   // normal— no hay clave saliente y el avance vale cero.
-  rotation: Partial<Pick<CredentialCoverage, 'retiring_key_id' | 'pending_reprint'>> = {},
+  rotation: Partial<
+    Pick<CredentialCoverage, 'retiring_key_id' | 'pending_reprint' | 'active_unknown_key'>
+  > = {},
 ): CredentialStatusBoard {
   return {
     data: rows,
@@ -150,6 +152,7 @@ export function board(
       without_delivered_credential: rows.filter((row) => row.status !== 'delivered').length,
       retiring_key_id: null,
       pending_reprint: 0,
+      active_unknown_key: 0,
       ...rotation,
     },
   }

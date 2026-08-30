@@ -134,6 +134,22 @@ final class CredentialStatusCommand extends Command
             $coverage->pendingPrint,
         ));
 
+        if ($coverage->unknownKeyCards !== []) {
+            // Primero y en rojo: es lo unico de esta salida que significa que
+            // hay gente que NO PUEDE FICHAR ahora mismo (revision de seguridad
+            // de la 2.12). Lo demas son procesos en marcha.
+            foreach ($coverage->unknownKeyIds() as $keyId) {
+                $this->error(sprintf(
+                    'AVISO: %d tarjeta(s) activa(s) firmada(s) con la clave %s, que ya no esta configurada. '
+                    .'Esas personas no pueden fichar con tarjeta.',
+                    $coverage->unknownKeyCards[$keyId],
+                    $keyId,
+                ));
+                $this->line('  Quienes son:   php artisan credentials:status --key-id='.$keyId);
+                $this->line('  Como se arregla: docs/runbooks/rotacion-clave-qr.md §6');
+            }
+        }
+
         if ($coverage->retiringKeyId !== null) {
             // El avance de la reimpresion, en una linea. Se pinta siempre que
             // haya una rotacion abierta, aunque no se haya filtrado por clave:

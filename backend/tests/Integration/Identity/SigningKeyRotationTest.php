@@ -9,6 +9,8 @@ use App\Modules\Identity\Application\Command\RotateSigningKeyCommand;
 use App\Modules\Identity\Application\Exception\SigningKeyRotationNotReady;
 use App\Modules\Identity\Application\Exception\SigningKeyStillInUse;
 use App\Modules\Identity\Application\Port\QrKeyProvider;
+use App\Modules\Identity\Application\Query\CredentialStatusQuery;
+use App\Modules\Identity\Application\UseCase\CredentialStatusBoard;
 use App\Modules\Identity\Application\UseCase\DeliverCredential;
 use App\Modules\Identity\Application\UseCase\RetireSigningKey;
 use App\Modules\Identity\Application\UseCase\RotateSigningKey;
@@ -217,6 +219,80 @@ it('al entregar la tarjeta nueva revoca la que releva', function (): void {
     expect($acciones['credential.delivered'] ?? 0)->toBe(1)
         ->and($acciones['credential.revoked'] ?? 0)->toBe(1);
 })->group('RF-QR-07', 'RF-QR-06', 'RL-04');
+
+it('delata las tarjetas vivas cuya clave ya no esta configurada', function (): void {
+    // **El hallazgo de la revision de seguridad de la 2.12.** Si alguien vacia
+    // `QR_SIGNING_KEY_PREVIOUS` sin terminar la reimpresion —el escenario de
+    // clave comprometida del §7 del runbook—, esas personas dejan de poder
+    // fichar y el panel no lo delataba: sus filas se ven entregadas y
+    // `pending_reprint` vale cero, porque esa clave ya no es la saliente de
+    // ninguna rotacion.
+    plantillaConTarjetaAntigua();
+    rotar();
+
+    // El operador retira la clave de la configuracion con las tres tarjetas
+    // todavia vivas.
+    Config::set('identity.credentials.signing_keys.previous.id', '');
+    Config::set('identity.credentials.signing_keys.previous.secret', '');
+    app()->forgetInstance(QrKeyProvider::class);
+
+    $informe = app(CredentialStatusBoard::class)->handle(new CredentialStatusQuery);
+
+    expect($informe->coverage->unknownKeyCards)->toBe(['a2' => 3])
+        ->and($informe->coverage->unknownKeyCardsTotal())->toBe(3)
+        ->and($informe->coverage->unknownKeyIds())->toBe(['a2'])
+        // Y lo que hacia invisible el problema: ningun otro recuento se mueve.
+        // Las tres filas siguen viendose con su tarjeta impresa y correcta.
+        ->and($informe->coverage->pendingReprint)->toBe(0)
+        ->and($informe->coverage->retiringKeyId)->toBeNull()
+        ->and($informe->countsByStatus()['pending_delivery'])->toBe(3)
+        ->and($informe->countsByStatus()['revoked'])->toBe(0);
+
+    // El comando lo dice en voz alta, con la clave y con donde mirar.
+    Artisan::call('credentials:status', ['--no-metrics' => true, '--quiet-table' => true]);
+    $salida = Artisan::output();
+
+    expect($salida)->toContain('3 tarjeta(s) activa(s) firmada(s) con la clave a2')
+        ->and($salida)->toContain('credentials:status --key-id=a2');
+
+    // Y `?key_id=` sigue sirviendo para listarlas aunque la clave ya no exista:
+    // el filtro mira la columna, no el llavero.
+    $listado = app(CredentialStatusBoard::class)->handle(new CredentialStatusQuery(keyId: 'a2'));
+
+    expect($listado->rows)->toHaveCount(3);
+})->group('RF-QR-07', 'RN-15');
+
+it('escribe la metrica de clave desconocida, tambien cuando vale cero', function (): void {
+    // La serie se escribe SIEMPRE: una que aparece y desaparece con una
+    // variable de entorno no se puede alertar (doc 02 §8.2).
+    plantillaConTarjetaAntigua();
+    rotar();
+
+    Config::set('identity.credentials.signing_keys.previous.id', '');
+    Config::set('identity.credentials.signing_keys.previous.secret', '');
+    app()->forgetInstance(QrKeyProvider::class);
+
+    app(CredentialStatusBoard::class)->handleAndPublishMetrics(new CredentialStatusQuery(unattended: true));
+
+    $fichero = rtrim(Config::string('observability.metrics.textfile_path'), '/').'/kronoqr_credentials.prom';
+
+    expect(file_get_contents($fichero))
+        // Sin el nombre del centro: lo genera la fixture y cambia en cada pasada.
+        ->toMatch('/credentials_active_unknown_key\{site="\d+",site_name="[^"]*",key_id="a2"\} 3/');
+
+    // Con el llavero completo no queda ninguna huerfana: la serie sigue ahi, a cero.
+    app()->forgetInstance(QrKeyProvider::class);
+    Config::set('identity.credentials.signing_keys.previous.id', 'a2');
+    Config::set(
+        'identity.credentials.signing_keys.previous.secret',
+        'Y2xhdmUtYW50ZXJpb3ItZGUtcHJ1ZWJhcy1Lcm5RUjI=',
+    );
+
+    app(CredentialStatusBoard::class)->handleAndPublishMetrics(new CredentialStatusQuery(unattended: true));
+
+    expect(file_get_contents($fichero))
+        ->toMatch('/credentials_active_unknown_key\{site="\d+",site_name="[^"]*",key_id=""\} 0/');
+})->group('RF-QR-07');
 
 it('rechaza retirar la clave mientras quede una tarjeta activa firmada con ella', function (): void {
     plantillaConTarjetaAntigua();

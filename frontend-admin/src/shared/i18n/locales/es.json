@@ -307,6 +307,11 @@
       "showAll": "Ver toda la plantilla",
       "complete": "Ya nadie ficha con la clave {keyId}: se puede retirar en el servidor."
     },
+    "unknownKey": {
+      "heading": "Hay tarjetas que ya no sirven para fichar",
+      "explanation": "{count} tarjeta(s) en circulación están firmadas con una clave que el servidor ya no reconoce. Quien lleve una de ellas no puede fichar con tarjeta: tendrá que usar su PIN mientras se resuelve.",
+      "action": "Lo arregla quien administra el servidor: ejecuta «php artisan credentials:status» para saber qué clave es y sigue docs/runbooks/rotacion-clave-qr.md §6."
+    },
     "empty": {
       "title": "No hay filas que mostrar",
       "description": "No hay personas de alta en el alcance elegido.",

@@ -17,7 +17,8 @@ use Illuminate\Support\Str;
  *
  * La credencial del empleado de baja nace **revocada**, que es lo que exige
  * RN-14: su historial se conserva y sus escaneos se rechazan. Es tambien lo que
- * hace que `one_active_credential_per_employee` tenga algo que demostrar.
+ * hace que `one_active_credential_per_key_and_employee` tenga algo que
+ * demostrar.
  *
  * `key_id` es el de la clave activa del Anexo B del doc 02 (`a3`). Existe para
  * poder rotar la firma sin reimprimir 600 tarjetas.

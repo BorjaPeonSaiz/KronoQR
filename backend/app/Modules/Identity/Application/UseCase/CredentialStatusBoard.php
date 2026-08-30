@@ -179,7 +179,20 @@ final readonly class CredentialStatusBoard
         // que se publica como metrica tiene que ser el mismo lo pida quien lo
         // pida, y ademas asi vale cero —serie escrita, sin rotacion en curso—
         // en vez de desaparecer.
-        $retiringKeyId = $this->keys->keyring()->previousId();
+        $keyring = $this->keys->keyring();
+        $retiringKeyId = $keyring->previousId();
+
+        // **Lo que el llavero NO reconoce.** Si una clave se retiro de la
+        // configuracion con tarjetas todavia vivas, esas personas no pueden
+        // fichar y hasta aqui no lo veia nadie: su fila se ve entregada y
+        // correcta, y `pending_reprint` vale cero porque esa clave ya no es la
+        // saliente de ninguna rotacion. Se cuenta sobre la tabla —incluye a
+        // quien ya no esta de alta— porque lo que se busca es la clave
+        // huerfana, no la persona.
+        $unknownKeyCards = array_diff_key(
+            $this->credentials->activeCountsByKeyId(),
+            array_flip($keyring->keyIds()),
+        );
 
         // **La cola de impresion se cuenta sobre las credenciales, no sobre el
         // estado de la fila.** Son dos preguntas distintas y en una rotacion se
@@ -215,6 +228,7 @@ final readonly class CredentialStatusBoard
             withoutDeliveredCredential: $without,
             retiringKeyId: $retiringKeyId,
             pendingReprint: $pendingReprint,
+            unknownKeyCards: $unknownKeyCards,
         );
     }
 }

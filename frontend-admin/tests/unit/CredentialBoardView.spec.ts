@@ -491,6 +491,31 @@ describe('CredentialBoardView', () => {
     )
   })
 
+  it('avisa de las tarjetas firmadas con una clave que el servidor ya no reconoce', async () => {
+    // Es el hallazgo de la revision de seguridad de la 2.12: esas filas se ven
+    // «Entregada» y correctas, y esas personas NO PUEDEN FICHAR. Sin este aviso
+    // el panel decia que todo estaba bien.
+    stubFetch((url) =>
+      url.startsWith('/api/v1/site')
+        ? jsonResponse(SITE)
+        : jsonResponse(board([boardRow({ status: 'delivered' })], { active_unknown_key: 12 })),
+    )
+
+    const wrapper = await mountView(CredentialBoardView)
+    await settle()
+
+    const alerta = wrapper.find('[role="alert"]')
+
+    expect(alerta.text()).toContain(es.credentials.unknownKey.heading)
+    expect(alerta.text()).toContain('12')
+  })
+
+  it('no avisa de claves desconocidas cuando no hay ninguna', async () => {
+    const wrapper = await mountBoard([boardRow({ status: 'delivered' })])
+
+    expect(wrapper.text()).not.toContain(es.credentials.unknownKey.heading)
+  })
+
   it('cuenta que ha pasado si el panel no se puede cargar', async () => {
     stubFetch(() => {
       throw new TypeError('Failed to fetch')

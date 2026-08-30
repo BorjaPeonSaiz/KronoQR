@@ -789,6 +789,7 @@ kronoqr_auth_attempts_total{channel,outcome}             counter
 employees_without_delivered_credential{site}             gauge
 credentials_pending_print{site}                          gauge
 credentials_pending_reprint{site,key_id}                 gauge
+credentials_active_unknown_key{site,key_id}              gauge
 pin_fallback_scans_total{site}                           counter
 kronoqr_backup_last_result{type}                         gauge
 kronoqr_backup_last_success_timestamp_seconds{type}      gauge
@@ -1403,8 +1404,8 @@ REVERB_APP_ID= / REVERB_APP_KEY= / REVERB_APP_SECRET=
 
 QR_SIGNING_KEY_CURRENT_ID=a3           # Clave activa
 QR_SIGNING_KEY_CURRENT=                # 32 bytes, base64
-QR_SIGNING_KEY_PREVIOUS_ID=a2          # Solape durante la rotación
-QR_SIGNING_KEY_PREVIOUS=
+QR_SIGNING_KEY_PREVIOUS_ID=            # Solape durante la rotación: las dos
+QR_SIGNING_KEY_PREVIOUS=               # vacías salvo mientras dura una (§5.3)
 QR_ERROR_CORRECTION=Q                  # Tolerancia al desgaste de la tarjeta
 
 ATTENDANCE_DEBOUNCE_SECONDS=60         # RF-AT-06

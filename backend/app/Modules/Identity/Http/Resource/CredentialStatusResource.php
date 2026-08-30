@@ -83,6 +83,14 @@ final class CredentialStatusResource extends JsonResource
             // aqui —ni por ningun sitio— es la clave.
             'retiring_key_id' => $coverage->retiringKeyId,
             'pending_reprint' => $coverage->pendingReprint,
+            // **El unico numero de este resumen que describe una averia** y el
+            // unico que NO se acota con `employee_uuid`: es de la instalacion
+            // entera, a proposito. Acotarlo lo pondria a cero justo cuando
+            // alguien abre la ficha de la persona que no puede fichar, que es
+            // el momento en el que hace falta verlo (revision de seguridad de
+            // la 2.12). El desglose por clave se queda en la metrica y en la
+            // consola: el panel solo tiene que dar la voz de alarma.
+            'active_unknown_key' => $coverage->unknownKeyCardsTotal(),
         ];
     }
 }
