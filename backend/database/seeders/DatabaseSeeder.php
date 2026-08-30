@@ -45,6 +45,15 @@ final class DatabaseSeeder extends Seeder
             // su migracion porque son dato de producto y no de desarrollo.
             RoleSeeder::class,
             EmployeeSeeder::class,
+
+            // Contratos historizados (RF-GP-02, tarea 2.8). Justo despues de la
+            // plantilla y antes de las jornadas: sin contrato, el informe de
+            // trabajadas frente a contratadas (RF-IN-03) saldria con lo
+            // contratado en cero para todo el mundo y con el aviso de cobertura
+            // cubriendo la plantilla entera, que es justo lo que no se quiere
+            // ver en un entorno de desarrollo.
+            EmploymentContractSeeder::class,
+
             CredentialSeeder::class,
             DeviceSeeder::class,
             VolumeSeeder::class,

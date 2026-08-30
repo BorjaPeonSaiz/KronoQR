@@ -75,6 +75,12 @@ it('describe solo los endpoints cuya tarea existe, y todos bajo /api/v1', functi
         // Tarea 1.13: provision, entrega y restablecimiento del PIN (RF-ID-09).
         '/api/v1/employees/{uuid}/pin/reset',
         '/api/v1/employees/{uuid}/pin/deliver',
+        // Tarea 2.8: contratos historizados (RF-GP-02). Cuelgan de `/employees`
+        // y llevan su ambito —`employees:*`— porque son condiciones laborales de
+        // la ficha de una persona, no un informe: quien las mantiene es quien
+        // mantiene la plantilla. Con `reports:*`, alguien que solo puede mirar
+        // cifras podria cambiar la cifra contra la que se miden.
+        '/api/v1/employees/{uuid}/contracts',
         // Tarea 2.4: presencia en tiempo real (RF-PA-01, RF-PA-02). Es la foto
         // inicial del panel y el camino de sondeo al que degrada el WebSocket
         // (ADR-011): por eso vive en la API y no solo en el canal.
@@ -98,6 +104,10 @@ it('describe solo los endpoints cuya tarea existe, y todos bajo /api/v1', functi
         '/api/v1/shift-entries',
         '/api/v1/shift-entries/{uuid}',
         '/api/v1/shift-entries/{uuid}/void',
+        // Tarea 2.8: informe de horas por periodo (RF-IN-01..03). `reports:*`,
+        // la familia, y no `reports:legal`: aquel es el ambito estrecho del
+        // `auditor` y solo abre la exportacion de la linea siguiente.
+        '/api/v1/reports/period',
         // Tarea 1.17: exportacion normalizada para la Inspeccion (RF-IN-05).
         '/api/v1/reports/legal-export',
         // Tarea 2.5: bandeja de incidencias y su flujo de resolucion (RF-PA-05).

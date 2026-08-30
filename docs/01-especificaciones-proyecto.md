@@ -391,7 +391,15 @@ Motor: **PostgreSQL 17**. Los tipos se expresan en su nomenclatura. El Anexo D d
 **`employees`**
 `id` (BIGINT PK), `uuid` (UUID v7, identificador público), `site_id`, `department_id`, `first_name`, `last_name`, `employee_code` (CITEXT UNIQUE, **opaco y aleatorio**), `national_id_hash` (hash, no el DNI en claro), `email` (CITEXT NULL, **opcional**), `pin_hash` (RF-AT-11, RF-ID-06), `photo_path` (NULL; funcionalidad **desactivada por defecto**, RL-08), `status` (`active`|`suspended`|`terminated`), `hired_at`, `terminated_at`, `locale`, `created_at`, `updated_at`
 
-**`employment_contracts`** — `id`, `employee_id`, `weekly_hours`, `annual_hours`, `schedule_type` (`continua`|`partida`|`turnos`), `valid_from`, `valid_to`
+**`employment_contracts`** — `id`, `employee_id`, `weekly_hours`, `annual_hours`, `schedule_type` (`continua`|`partida`|`turnos`), `valid_from`, `valid_to`, `created_at`, `created_by_user_id`
+
+> **Historizado y sin solapes** (tarea 2.8). `valid_to` a `NULL` significa **vigente**, y una restricción de exclusión —`EXCLUDE USING gist (employee_id WITH =, daterange(valid_from, valid_to, '[]') WITH &&)`, la misma técnica que RN-02— impide que una persona tenga dos contratos vigentes el mismo día. Sin esa garantía, la pregunta «¿cuántas horas tenía contratadas el 14 de marzo?» tendría dos respuestas y la comparativa de RF-IN-03 tendría que elegir una por su cuenta.
+>
+> Registrar un contrato nuevo **cierra el anterior el día antes** de que empiece el nuevo, en la misma transacción: la serie queda sin huecos y sin solapes. Nada se sobrescribe (RN-13, RL-04): lo pactado —horas, tipo de jornada, fecha de inicio— no se toca, solo se declara hasta cuándo estuvo vigente.
+>
+> **`created_at` y `created_by_user_id` no estaban en la lista original.** Se añaden porque un cambio de contrato mueve la cifra contra la que se mide la jornada de una persona: es un parámetro del cálculo, y el bloque E de la revisión de cumplimiento exige saber quién lo cambió y cuándo. El asiento de `audit_log` lo cuenta con su cadena de hash (acción `employment_contract.registered`); estas dos columnas lo dejan legible en la propia tabla sin cruzar el trail para pintar la ficha. `created_by_user_id` es NULL en una semilla o una importación inicial, donde no hay nadie detrás.
+>
+> **La comparativa de RF-IN-03 prorratea por día natural de vigencia**: `días de vigencia dentro del periodo × weekly_hours ÷ 7`, redondeado una sola vez al final. Se reparte por día natural y no por día laborable porque el producto no modela el cuadrante teórico de nadie —sabe cuándo se fichó, no qué días libra cada persona—, y repartir entre cinco días inventaría un descanso en fin de semana que en un hotel no existe. `annual_hours` **no entra en ningún cálculo**: se guarda porque el convenio lo fija y porque es la cifra que RRHH contrasta a mano.
 
 **`credentials`** — `id`, `uuid`, `employee_id`, `key_id`, `secret_hash`, `issued_at`, `printed_at`, `delivered_at`, `delivered_by_user_id`, `revoked_at`, `revoked_reason`
 

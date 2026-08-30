@@ -16,15 +16,18 @@ use App\Modules\Shared\Application\Port\PortalSessionIssuer;
 use App\Modules\Workforce\Application\Port\DepartmentRepository;
 use App\Modules\Workforce\Application\Port\EmployeePinRepository;
 use App\Modules\Workforce\Application\Port\EmployeeRepository;
+use App\Modules\Workforce\Application\Port\EmploymentContractRepository;
 use App\Modules\Workforce\Application\Port\PinMetrics;
 use App\Modules\Workforce\Application\Port\PinPolicyProvider;
 use App\Modules\Workforce\Application\Port\SiteRepository;
 use App\Modules\Workforce\Application\Port\WorkforceEventPublisher;
 use App\Modules\Workforce\Domain\Model\Department;
 use App\Modules\Workforce\Domain\Model\Employee;
+use App\Modules\Workforce\Domain\Model\EmploymentContract;
 use App\Modules\Workforce\Domain\Model\Site;
 use App\Modules\Workforce\Http\Policy\DepartmentPolicy;
 use App\Modules\Workforce\Http\Policy\EmployeePolicy;
+use App\Modules\Workforce\Http\Policy\EmploymentContractPolicy;
 use App\Modules\Workforce\Http\Policy\SitePolicy;
 use App\Modules\Workforce\Infrastructure\Adapter\ConfiguredPinPolicyProvider;
 use App\Modules\Workforce\Infrastructure\Adapter\EloquentClockingEmployees;
@@ -41,6 +44,7 @@ use App\Modules\Workforce\Infrastructure\Metrics\RedisPinMetrics;
 use App\Modules\Workforce\Infrastructure\Persistence\EloquentDepartmentRepository;
 use App\Modules\Workforce\Infrastructure\Persistence\EloquentEmployeePinRepository;
 use App\Modules\Workforce\Infrastructure\Persistence\EloquentEmployeeRepository;
+use App\Modules\Workforce\Infrastructure\Persistence\EloquentEmploymentContractRepository;
 use App\Modules\Workforce\Infrastructure\Persistence\EloquentSiteRepository;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
@@ -70,6 +74,11 @@ final class WorkforceServiceProvider extends ServiceProvider
         $this->app->bind(SiteRepository::class, EloquentSiteRepository::class);
         $this->app->bind(DepartmentRepository::class, EloquentDepartmentRepository::class);
         $this->app->bind(WorkforceEventPublisher::class, LaravelWorkforceEventPublisher::class);
+
+        // Contratos historizados (RF-GP-02, tarea 2.8). Es lo que permite al
+        // informe de RF-IN-03 comparar cada dia contra lo que estaba pactado
+        // **ese** dia; sin el, no hay «horas contratadas» que comparar.
+        $this->app->bind(EmploymentContractRepository::class, EloquentEmploymentContractRepository::class);
 
         // PIN del empleado (RF-ID-09). El repositorio es el unico que escribe
         // `pin_hash`, y ninguno de sus metodos lo devuelve; la politica de PIN
@@ -145,5 +154,6 @@ final class WorkforceServiceProvider extends ServiceProvider
         Gate::policy(Employee::class, EmployeePolicy::class);
         Gate::policy(Site::class, SitePolicy::class);
         Gate::policy(Department::class, DepartmentPolicy::class);
+        Gate::policy(EmploymentContract::class, EmploymentContractPolicy::class);
     }
 }

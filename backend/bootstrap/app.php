@@ -33,9 +33,11 @@ use App\Modules\Identity\Domain\ValueObject\TokenAbility;
 use App\Modules\Identity\Http\Middleware\RejectPendingTwoFactorSession;
 use App\Modules\Reporting\Application\Exception\EmployeeNotFound;
 use App\Modules\Reporting\Domain\Exception\InvalidDateRange;
+use App\Modules\Reporting\Domain\Exception\ReportTooLargeForSynchronousDelivery;
 use App\Modules\Shared\Domain\Exception\AccessOutOfScope;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
 use App\Modules\Workforce\Domain\Exception\EmployeeAlreadyTerminated;
+use App\Modules\Workforce\Domain\Exception\InvalidEmploymentContract;
 use App\Modules\Workforce\Domain\Exception\InvalidEmploymentPeriod;
 use App\Modules\Workforce\Domain\Exception\UnknownTimezone;
 use App\Modules\Workforce\Domain\Exception\WorkforceConflict;
@@ -298,6 +300,27 @@ return Application::configure(basePath: dirname(__DIR__))
         ]));
 
         /*
+         * Contratos historizados (tarea 2.8, RF-GP-02).
+         *
+         * `422` PARA LO QUE ES UNA ERRATA —cero horas semanales, mas de 168, una
+         * vigencia invertida—: hay un campo que corregir y quien lo recibe puede
+         * hacerlo sin releer nada. El `FormRequest` atrapa casi todo antes con el
+         * campo señalado; esto cubre el camino que no pasa por el —la semilla, un
+         * comando— para que no salga como `500`.
+         *
+         * El SOLAPE no entra aqui: `OverlappingEmploymentContract` es un
+         * `WorkforceConflict` y sale `409` por la linea de arriba, que es lo
+         * correcto. El cuerpo es valido; lo que no encaja es el estado, y la
+         * accion siguiente es releer los contratos de esa persona.
+         *
+         * Se señala `weekly_hours` porque es el campo del que salen las tres
+         * afirmaciones mas probables. El mensaje del dominio dice cual fue.
+         */
+        $exceptions->render(static fn (InvalidEmploymentContract $exception): mixed => ProblemDetails::validationFailed([
+            'weekly_hours' => [$exception->getMessage()],
+        ]));
+
+        /*
          * Credenciales (tareas 1.5 y 1.10).
          *
          * TODOS LOS CONFLICTOS SON `409` porque todos obligan a releer el recurso
@@ -468,6 +491,29 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $exceptions->render(static fn (InvalidDateRange $exception): mixed => ProblemDetails::validationFailed([
             'from' => [$exception->getMessage()],
+        ]));
+
+        /*
+         * Informe por periodo que no cabe en una respuesta sincrona (tarea 2.8,
+         * RNF-P-05, `/informe-nuevo` paso 5).
+         *
+         * `422` Y NO `503`. El servicio esta perfectamente: lo que no se puede es
+         * atender ESA peticion en el acto. Quien lo recibe tiene algo que cambiar
+         * —reducir el rango, subir la granularidad, acotar el departamento— o
+         * esperar a la generacion en diferido de RF-IN-06 (tarea 3.9), y el
+         * `detail` se lo dice con las cifras concretas.
+         *
+         * TAMPOCO `500`, aunque una de las tres formas de llegar aqui sea que
+         * PostgreSQL cancelo la consulta: eso no es una averia, es el
+         * `statement_timeout` haciendo su trabajo. Un `500` mandaria a soporte a
+         * buscar un fallo que no existe.
+         *
+         * SE SEÑALA `to` porque el rango es lo unico que quien pregunta puede
+         * acortar siempre; la granularidad y el departamento no estan en todas
+         * las peticiones.
+         */
+        $exceptions->render(static fn (ReportTooLargeForSynchronousDelivery $exception): mixed => ProblemDetails::validationFailed([
+            'to' => [$exception->getMessage()],
         ]));
 
         /*

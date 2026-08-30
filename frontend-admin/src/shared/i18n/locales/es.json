@@ -10,7 +10,8 @@
       "credentials": "Credenciales",
       "legalExport": "Inspección",
       "live": "Presencia",
-      "incidents": "Incidencias"
+      "incidents": "Incidencias",
+      "reports": "Informes"
     },
     "roles": {
       "admin": "Administración",
@@ -456,6 +457,60 @@
         "times": "Las horas van en la zona horaria del centro y además en UTC, que es como están almacenadas.",
         "format": "CSV en UTF-8 con marca de orden de bytes, separado por punto y coma. Las duraciones se escriben HH:MM, nunca en decimal."
       }
+    },
+    "period": {
+      "title": "Informe de horas por periodo",
+      "subtitle": "Horas trabajadas en un periodo, con sus agregados por departamento o centro y su comparación con las horas contratadas. Los criterios con los que se ha calculado aparecen debajo de la tabla.",
+      "generate": "Generar informe",
+      "loading": "Generando el informe…",
+      "contractCoverage": "Hay {days} días-persona del periodo sin contrato registrado, que afectan a {employees} persona(s). Esos días no suman horas contratadas: la desviación de esas filas está incompleta.",
+      "filters": {
+        "legend": "Periodo y agrupación del informe",
+        "from": "Desde",
+        "to": "Hasta",
+        "granularity": "Granularidad",
+        "groupBy": "Agrupar por",
+        "department": "Departamento",
+        "departmentAll": "Todos",
+        "openShifts": "Contar los días con turno abierto"
+      },
+      "granularity": {
+        "day": "Día",
+        "week": "Semana",
+        "month": "Mes",
+        "range": "Todo el periodo"
+      },
+      "grouping": {
+        "employee": "Empleado",
+        "department": "Departamento",
+        "site": "Centro"
+      },
+      "empty": {
+        "title": "No hay nada que mostrar en ese periodo",
+        "description": "No hay ninguna persona dentro de tu alcance con jornadas o contrato en las fechas elegidas. Prueba con otro periodo o quita el filtro de departamento."
+      },
+      "criteria": {
+        "title": "Criterios de este informe",
+        "generated": "Generado el {at} · zona horaria del centro: {timeZone}"
+      },
+      "announce": {
+        "results": "El informe tiene {count} filas."
+      }
+    },
+    "table": {
+      "caption": "Horas por periodo. Las fechas están en la zona horaria del centro ({timeZone}).",
+      "subject": "Sujeto",
+      "period": "Periodo",
+      "worked": "Trabajadas",
+      "contracted": "Contratadas",
+      "deviation": "Desviación",
+      "overtime": "Exceso",
+      "shifts": "Tramos",
+      "daysWithActivity": "Días con actividad",
+      "daysWithoutActivity": "Días sin actividad",
+      "openShiftDays": "Días con turno abierto",
+      "incidentDays": "Días con incidencia",
+      "withoutDepartment": "Sin departamento"
     }
   },
   "workdays": {

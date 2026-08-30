@@ -29,9 +29,11 @@ use App\Modules\Reporting\Http\Controller\EmployeeWorkDayController;
 use App\Modules\Reporting\Http\Controller\LivePresenceController;
 use App\Modules\Reporting\Http\Controller\MyWorkDayController;
 use App\Modules\Reporting\Http\Controller\MyWorkDayExportController;
+use App\Modules\Reporting\Http\Controller\PeriodReportController;
 use App\Modules\Workforce\Http\Controller\DepartmentController;
 use App\Modules\Workforce\Http\Controller\EmployeeController;
 use App\Modules\Workforce\Http\Controller\EmployeePinController;
+use App\Modules\Workforce\Http\Controller\EmploymentContractController;
 use App\Modules\Workforce\Http\Controller\OffboardEmployeeController;
 use App\Modules\Workforce\Http\Controller\SiteController;
 use Illuminate\Support\Facades\Route;
@@ -300,6 +302,58 @@ Route::get('/employees/{uuid}/workdays', EmployeeWorkDayController::class)
  * son los dos alcances que el asiento de auditoria y la cabecera de criterios
  * del fichero saben describir, y los tres tienen que decir lo mismo.
  */
+/*
+ * GET /api/v1/reports/period — horas por periodo, agregados y comparativa con lo
+ * contratado (RF-IN-01, RF-IN-02, RF-IN-03, tarea 2.8).
+ *
+ * `reports:*` Y NO `reports:legal`. Son dos ambitos distintos del §7.3 y la
+ * diferencia es exactamente el `auditor`: lleva el estrecho —el unico informe que
+ * puede pedir es la exportacion normalizada para un requerimiento (RF-IN-05)— y
+ * no lleva la familia. Compartir ambito le habria dado el cuadro de horas
+ * trabajadas frente a contratadas, que es una herramienta de gestion de personal
+ * y no de auditoria.
+ *
+ * NO ES «O», al contrario que la exportacion legal de abajo, que si acepta
+ * cualquiera de los dos: aqui solo vale `reports:*`.
+ *
+ * EL `responsable_departamento` NO LLEGA, Y NO ES UN OLVIDO. El §7.3 no le da
+ * `reports:*` —tiene `attendance:read`, `attendance:correct`, `incidents:*` y
+ * `employees:read`—, asi que se queda en el middleware. `PeriodReportPolicy`, que
+ * es la otra mitad (regla dura 18), dice lo mismo: `{admin, rrhh}`. Que las dos
+ * comprobaciones coincidan es deliberado; si dijeran cosas distintas, una de las
+ * dos estaria de adorno.
+ *
+ * EL ALCANCE POR DEPARTAMENTO ENTRA IGUALMENTE EN LA CONSULTA (RF-ID-03),
+ * incluidos los agregados: un total por centro calculado sobre toda la plantilla
+ * y servido a quien alcanza un solo departamento seria una fuga por agregacion.
+ * Esta ahi para el dia en que el producto decida que un responsable ve las horas
+ * de su equipo — ese dia se le añade el ambito y el rol, y la consulta ya esta
+ * acotada.
+ *
+ * ES UN `GET` AUNQUE QUEDE AUDITADO. Solo lee; que sacar un informe con datos de
+ * terceros deje asiento en `audit_log` (RS-05) no lo convierte en una escritura.
+ * Mismo criterio que la exportacion legal.
+ *
+ * `throttle:management` POR LO QUE CUESTA Y POR LO QUE ESCRIBE. Cada peticion
+ * cruza la plantilla con el calendario y deja ademas su asiento de divulgacion,
+ * que toma el candado global de ADR-010 —el mismo por el que pasa cada fichaje—.
+ * Sin techo por cuenta, una pestaña en bucle de reintento golpea la misma base de
+ * datos que atiende el cambio de turno (RNF-P-02). El presupuesto de RNF-P-05 es
+ * la otra mitad de esa defensa y vive en `config/reporting.php`.
+ *
+ * NO ADMITE `site_id` (ADR-040: hay un centro) NI PAGINACION: un informe se lee
+ * entero o no significa nada, y paginarlo partiria una semana por la mitad. Lo
+ * que si tiene es un techo, y por encima de el responde `422` remitiendo a la
+ * generacion en diferido de RF-IN-06 (tarea 3.9).
+ */
+Route::get('/reports/period', PeriodReportController::class)
+    ->middleware([
+        'auth:sanctum',
+        'ability:'.TokenAbility::REPORTS_ALL->value,
+        'throttle:management',
+    ])
+    ->name('reporting.reports.period');
+
 Route::get('/reports/legal-export', LegalExportController::class)
     ->middleware([
         'auth:sanctum',
@@ -615,6 +669,37 @@ Route::middleware(['auth:sanctum', 'ability:'.TokenAbility::EMPLOYEES_ALL->value
     Route::post('/employees/{uuid}/pin/deliver', [EmployeePinController::class, 'deliver'])
         ->whereUuid('uuid')
         ->name('employees.pin.deliver');
+
+    /*
+     * Contratos historizados (RF-GP-02, tarea 2.8).
+     *
+     * AMBITO `employees:*` Y NO `reports:*`, aunque lo que se registra aqui sea
+     * lo que despues compara el informe de RF-IN-03. El contrato es una
+     * condicion laboral de la ficha de una persona —horas, tipo de jornada,
+     * computo anual—, no un informe: quien lo mantiene es quien mantiene la
+     * plantilla. Con `reports:*`, alguien que solo puede mirar cifras podria
+     * cambiar la cifra contra la que se miden.
+     *
+     * Y NO `employees:read` PARA EL LISTADO, aunque el grupo de lectura exista
+     * dos bloques mas arriba. El unico que hoy puede leer contratos es
+     * `rrhh+`, que lleva la familia entera: meterlo en el grupo estrecho se lo
+     * habria abierto al `responsable_departamento`, y las condiciones laborales
+     * pactadas no son suyas. `EmploymentContractPolicy` dice lo mismo (regla
+     * dura 18). El dia que el producto decida que un responsable las consulta,
+     * la ruta baja al otro grupo y la policy gana un rol.
+     *
+     * NO HAY `PATCH` NI `DELETE` (regla dura 5): un contrato no se edita. Se
+     * registra otro y el anterior queda cerrado con su fecha, en la misma
+     * transaccion. Corregir una errata todavia no tiene camino, y esta anotado
+     * como deuda en el controlador.
+     */
+    Route::get('/employees/{uuid}/contracts', [EmploymentContractController::class, 'index'])
+        ->whereUuid('uuid')
+        ->name('employees.contracts.index');
+
+    Route::post('/employees/{uuid}/contracts', [EmploymentContractController::class, 'store'])
+        ->whereUuid('uuid')
+        ->name('employees.contracts.store');
 
     Route::get('/departments', [DepartmentController::class, 'index'])->name('departments.index');
     Route::post('/departments', [DepartmentController::class, 'store'])->name('departments.store');

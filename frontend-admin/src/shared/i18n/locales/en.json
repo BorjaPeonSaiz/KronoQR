@@ -10,7 +10,8 @@
       "credentials": "Credentials",
       "legalExport": "Inspectorate",
       "live": "Presence",
-      "incidents": "Incidents"
+      "incidents": "Incidents",
+      "reports": "Reports"
     },
     "roles": {
       "admin": "Administration",
@@ -456,6 +457,60 @@
         "times": "Times are given in the time zone of the site and also in UTC, which is how they are stored.",
         "format": "CSV in UTF-8 with byte order mark, semicolon separated. Durations are written HH:MM, never as a decimal."
       }
+    },
+    "period": {
+      "title": "Hours by period",
+      "subtitle": "Hours worked over a period, with department or site aggregates and the comparison against contracted hours. The criteria used to calculate it are shown below the table.",
+      "generate": "Generate report",
+      "loading": "Generating the report…",
+      "contractCoverage": "There are {days} person-days in this period with no contract on record, affecting {employees} person(s). Those days add no contracted hours: the deviation on those rows is incomplete.",
+      "filters": {
+        "legend": "Report period and grouping",
+        "from": "From",
+        "to": "To",
+        "granularity": "Granularity",
+        "groupBy": "Group by",
+        "department": "Department",
+        "departmentAll": "All",
+        "openShifts": "Count days with an open shift"
+      },
+      "granularity": {
+        "day": "Day",
+        "week": "Week",
+        "month": "Month",
+        "range": "Whole period"
+      },
+      "grouping": {
+        "employee": "Employee",
+        "department": "Department",
+        "site": "Site"
+      },
+      "empty": {
+        "title": "Nothing to show for that period",
+        "description": "No one within your scope has shifts or a contract on the chosen dates. Try another period or clear the department filter."
+      },
+      "criteria": {
+        "title": "Criteria for this report",
+        "generated": "Generated at {at} · site time zone: {timeZone}"
+      },
+      "announce": {
+        "results": "The report has {count} rows."
+      }
+    },
+    "table": {
+      "caption": "Hours by period. Dates are in the site time zone ({timeZone}).",
+      "subject": "Subject",
+      "period": "Period",
+      "worked": "Worked",
+      "contracted": "Contracted",
+      "deviation": "Deviation",
+      "overtime": "Overtime",
+      "shifts": "Shifts",
+      "daysWithActivity": "Days with activity",
+      "daysWithoutActivity": "Days without activity",
+      "openShiftDays": "Days with an open shift",
+      "incidentDays": "Days with an incident",
+      "withoutDepartment": "No department"
     }
   },
   "workdays": {

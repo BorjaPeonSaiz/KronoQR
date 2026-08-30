@@ -45,6 +45,7 @@ use App\Modules\Compliance\Infrastructure\Listener\NotifyIncidentAssignees;
 use App\Modules\Compliance\Infrastructure\Listener\OpenIncidentOnAnomalyDetected;
 use App\Modules\Compliance\Infrastructure\Listener\RecordCredentialLifecycle;
 use App\Modules\Compliance\Infrastructure\Listener\RecordEmployeePinLifecycle;
+use App\Modules\Compliance\Infrastructure\Listener\RecordEmploymentContractChange;
 use App\Modules\Compliance\Infrastructure\Listener\RecordManagementAccountLifecycle;
 use App\Modules\Compliance\Infrastructure\Listener\RecordShiftEntryAudit;
 use App\Modules\Compliance\Infrastructure\Metrics\RedisIncidentResolutionMetrics;
@@ -75,6 +76,7 @@ use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
 use App\Modules\Workforce\Domain\Event\EmployeePinDelivered;
 use App\Modules\Workforce\Domain\Event\EmployeePinIssued;
+use App\Modules\Workforce\Domain\Event\EmploymentContractRegistered;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\Facades\Config;
@@ -233,6 +235,7 @@ final class ComplianceServiceProvider extends ServiceProvider
         $this->recordShiftEntryLifecycle();
         $this->recordCredentialAndDeviceLifecycle();
         $this->recordEmployeePinLifecycle();
+        $this->recordEmploymentContractChanges();
         $this->recordManagementAccountLifecycle();
         $this->openAndNotifyIncidents();
 
@@ -491,6 +494,22 @@ final class ComplianceServiceProvider extends ServiceProvider
     {
         Event::listen(EmployeePinIssued::class, [RecordEmployeePinLifecycle::class, 'handleIssued']);
         Event::listen(EmployeePinDelivered::class, [RecordEmployeePinLifecycle::class, 'handleDelivered']);
+    }
+
+    /**
+     * El mapa evento -> asiento del contrato (tarea 2.8, RF-GP-02).
+     *
+     * Familia «cambia roles, permisos o parametros del calculo» del bloque D, y
+     * no la del ciclo de vida de la plantilla: `weekly_hours` es la cifra contra
+     * la que el informe de RF-IN-03 mide la jornada de una persona, asi que
+     * tocarla mueve su desviacion y sus horas de exceso sin tocar un fichaje.
+     *
+     * Sincrono, sin `ShouldQueue` y sin `afterCommit`: si el asiento falla, el
+     * contrato no se registra (ADR-027).
+     */
+    private function recordEmploymentContractChanges(): void
+    {
+        Event::listen(EmploymentContractRegistered::class, [RecordEmploymentContractChange::class, 'handle']);
     }
 
     /**

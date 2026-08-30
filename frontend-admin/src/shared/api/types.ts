@@ -82,3 +82,17 @@ export type IncidentStatus = Schemas['IncidentStatus']
 export type IncidentOutcome = Schemas['IncidentOutcome']
 export type ResolveIncidentRequest = Schemas['ResolveIncidentRequest']
 export type WorkDayIncident = Schemas['WorkDayIncident']
+
+// Informe de horas por periodo y contratos historizados (RF-IN-01..03,
+// RF-GP-02, tarea 2.8).
+export type PeriodReport = Schemas['PeriodReport']
+export type PeriodReportRow = Schemas['PeriodReportRow']
+export type PeriodReportSubject = Schemas['PeriodReportSubject']
+export type PeriodReportMeta = Schemas['PeriodReportMeta']
+export type ContractCoverage = Schemas['ContractCoverage']
+export type ReportGranularity = Schemas['ReportGranularity']
+export type ReportGrouping = Schemas['ReportGrouping']
+export type EmploymentContract = Schemas['EmploymentContract']
+export type EmploymentContractCollection = Schemas['EmploymentContractCollection']
+export type CreateEmploymentContractRequest = Schemas['CreateEmploymentContractRequest']
+export type ScheduleType = Schemas['ScheduleType']

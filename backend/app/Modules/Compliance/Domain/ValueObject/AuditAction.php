@@ -110,6 +110,26 @@ enum AuditAction: string
     case PermissionChanged = 'permission.changed';
     case CalculationSettingChanged = 'calculation_setting.changed';
 
+    /**
+     * Se ha registrado el contrato de una persona (RF-GP-02, tarea 2.8).
+     *
+     * **Sujeto propio en lugar de reutilizar `calculation_setting.changed`**, y
+     * la decision merece explicacion porque la familia es la misma. Lo que las
+     * separa es sobre **quien** actuan: un ajuste de calculo es de la
+     * instalacion —un umbral, un redondeo— y no tiene sujeto; un contrato es de
+     * una persona concreta y su `payload` lleva `employee_uuid`. Con un solo
+     * valor, la pregunta «¿quien cambio las horas contratadas de alguien?»
+     * obligaria a filtrar por el contenido del JSON en lugar de por la columna
+     * indexada, que es justo lo que el catalogo cerrado existe para evitar.
+     *
+     * **Y no es de la familia de la plantilla**: cambiar un apellido no mueve
+     * ninguna cifra, y `weekly_hours` es la cifra contra la que se mide la
+     * jornada de esa persona (RF-IN-03). Es un parametro del calculo, y ante la
+     * duda sobre si algo con efecto en horas de trabajo se audita, la respuesta
+     * es si.
+     */
+    case EmploymentContractRegistered = 'employment_contract.registered';
+
     // --- Incidencias del registro horario (RF-PR-01, tarea 2.6) --------------
 
     /**
@@ -173,6 +193,9 @@ enum AuditAction: string
         'role_assignment' => AuditableEvent::AuthorityOrCalculationChange,
         'permission' => AuditableEvent::AuthorityOrCalculationChange,
         'calculation_setting' => AuditableEvent::AuthorityOrCalculationChange,
+        // El contrato fija las horas contra las que se mide la jornada de una
+        // persona (RF-IN-03): es un parametro del calculo, con sujeto propio.
+        'employment_contract' => AuditableEvent::AuthorityOrCalculationChange,
         'retention' => AuditableEvent::RetentionPurge,
     ];
 

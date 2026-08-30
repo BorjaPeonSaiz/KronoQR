@@ -125,6 +125,33 @@ function managementEndpoints(): array
             'outcome' => 'resolved',
             'note' => 'Revisado con el parte de turno.',
         ]],
+
+        // Informe de horas por periodo (tarea 2.8, RF-IN-01..03). Ambito
+        // `reports:*` y policy propia, y aqui las dos comprobaciones dejan fuera
+        // a **cuatro** roles y no a tres: el `auditor` lleva `reports:legal` —el
+        // estrecho, que solo abre la exportacion para Inspeccion— y el
+        // `responsable_departamento` no lleva ningun ambito de informes (§7.3),
+        // asi que ninguno de los dos pasa siquiera del middleware.
+        //
+        // **Con `from` y `to` en la URL a proposito**: son obligatorias, y sin
+        // ellas la peticion moriria en el `FormRequest` con un `422` que
+        // esconderia si la autorizacion funciona. Lo que esta matriz comprueba es
+        // que la denegacion ocurre **antes** de mirar los datos.
+        'generar el informe por periodo' => ['GET', '/api/v1/reports/period?from=2026-03-01&to=2026-03-31', []],
+
+        // Contratos historizados (tarea 2.8, RF-GP-02). Ambito `employees:*` y
+        // policy propia: las condiciones laborales pactadas son de `rrhh+`.
+        //
+        // **Los dos entran uno a uno** aunque compartan ambito, por lo mismo que
+        // los cuatro de credenciales: la policy se declara en el `FormRequest` de
+        // cada uno, asi que un `authorize()` que devolviera `true` en uno solo
+        // seria invisible desde el otro.
+        'listar los contratos de un empleado' => ['GET', '/api/v1/employees/0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90/contracts', []],
+        'registrar un contrato' => ['POST', '/api/v1/employees/0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90/contracts', [
+            'weekly_hours' => 40,
+            'schedule_type' => 'turnos',
+            'valid_from' => '2026-03-01',
+        ]],
     ];
 }
 
@@ -318,6 +345,31 @@ it('deja pasar a RRHH a restablecer y entregar el PIN, control positivo de la 1.
     Api::as($token)->post('/api/v1/employees/'.$employee.'/pin/reset')->assertStatus(200);
     Api::as($token)->post('/api/v1/employees/'.$employee.'/pin/deliver')->assertStatus(200);
 })->group('RQ-07', 'RF-ID-09');
+
+it('deja pasar a RRHH al informe por periodo y a los contratos, control positivo de la 2.8', function (): void {
+    // El mismo papel que los controles positivos de arriba: sin el, los tres
+    // bloques de `403` sobre `/reports/period` y `/employees/{uuid}/contracts`
+    // pasarian identicos si esas rutas estuvieran rotas o no existieran. Un
+    // endpoint que revienta y uno que deniega se parecen mucho desde una prueba
+    // que solo mira que no sea 200.
+    $site = WorkforceFixtures::site();
+    $employee = WorkforceFixtures::employee($site);
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RRHH));
+
+    Api::as($token)
+        ->get('/api/v1/reports/period', ['from' => '2026-03-01', 'to' => '2026-03-31', 'granularity' => 'month'])
+        ->assertStatus(200);
+
+    Api::as($token)
+        ->post('/api/v1/employees/'.$employee.'/contracts', [
+            'weekly_hours' => 40,
+            'schedule_type' => 'turnos',
+            'valid_from' => '2026-03-01',
+        ])
+        ->assertStatus(201);
+
+    Api::as($token)->get('/api/v1/employees/'.$employee.'/contracts')->assertStatus(200);
+})->group('RQ-07', 'RF-IN-01', 'RF-GP-02');
 
 it('deniega a un token de quiosco emitir o revocar credenciales', function (string $uri, array $body): void {
     // RS-04 con nombre y apellidos. El token del quiosco lleva `scan:write`,

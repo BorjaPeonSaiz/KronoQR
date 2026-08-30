@@ -15,6 +15,7 @@ import {
   EMPLOYEES_MANAGE,
   INCIDENTS_MANAGE,
   REPORTS_LEGAL,
+  REPORTS_MANAGE,
 } from '@/features/auth/abilities'
 import { useSessionStore } from '@/features/auth/session.store'
 
@@ -34,6 +35,7 @@ const navigation = computed<NavItem[]>(() =>
     { name: 'live', label: t('app.nav.live'), ability: ATTENDANCE_READ },
     { name: 'incidents', label: t('app.nav.incidents'), ability: INCIDENTS_MANAGE },
     { name: 'credentials', label: t('app.nav.credentials'), ability: CREDENTIALS_MANAGE },
+    { name: 'reports', label: t('app.nav.reports'), ability: REPORTS_MANAGE },
     { name: 'legal-export', label: t('app.nav.legalExport'), ability: REPORTS_LEGAL },
   ].filter((item) => session.can(item.ability)),
 )

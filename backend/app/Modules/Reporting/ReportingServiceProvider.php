@@ -7,20 +7,32 @@ namespace App\Modules\Reporting;
 use App\Modules\Attendance\Domain\Event\EmployeeClockedIn;
 use App\Modules\Attendance\Domain\Event\EmployeeClockedOut;
 use App\Modules\Attendance\Domain\Event\ShiftCorrected;
+use App\Modules\Reporting\Application\Port\EmployeeAttribution;
 use App\Modules\Reporting\Application\Port\LivePresenceReader;
+use App\Modules\Reporting\Application\Port\PeriodReportReader;
 use App\Modules\Reporting\Application\Port\PresenceMetrics;
 use App\Modules\Reporting\Application\Port\RealtimeConnectionCounter;
 use App\Modules\Reporting\Application\Port\WorkDayJournalReader;
+use App\Modules\Reporting\Application\Port\WorkedTimeMetrics;
+use App\Modules\Reporting\Domain\ValueObject\PeriodReport;
 use App\Modules\Reporting\Domain\ValueObject\PresenceBoard;
 use App\Modules\Reporting\Domain\ValueObject\WorkDayJournal;
 use App\Modules\Reporting\Http\Policy\LivePresencePolicy;
+use App\Modules\Reporting\Http\Policy\PeriodReportPolicy;
 use App\Modules\Reporting\Http\Policy\WorkDayJournalPolicy;
 use App\Modules\Reporting\Infrastructure\Adapter\ReverbConnectionCounter;
 use App\Modules\Reporting\Infrastructure\Broadcasting\BroadcastPresenceChange;
 use App\Modules\Reporting\Infrastructure\Console\PresenceMetricsCommand;
+use App\Modules\Reporting\Infrastructure\Listener\RecordWorkedMinutes;
+use App\Modules\Reporting\Infrastructure\Metrics\RedisWorkedTimeMetrics;
 use App\Modules\Reporting\Infrastructure\Metrics\TextfilePresenceMetrics;
+use App\Modules\Reporting\Infrastructure\Persistence\DatabaseEmployeeAttribution;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseLivePresenceReader;
+use App\Modules\Reporting\Infrastructure\Persistence\DatabasePeriodReportReader;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseWorkDayJournalReader;
+use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Database\ConnectionInterface;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
@@ -69,6 +81,8 @@ final class ReportingServiceProvider extends ServiceProvider
         // Reverb corre en otro proceso y no expone Prometheus: las conexiones
         // vivas se le preguntan por su API HTTP compatible con Pusher.
         $this->app->bind(RealtimeConnectionCounter::class, ReverbConnectionCounter::class);
+
+        $this->registerPeriodReport();
     }
 
     public function boot(): void
@@ -83,11 +97,73 @@ final class ReportingServiceProvider extends ServiceProvider
          */
         Gate::policy(PresenceBoard::class, LivePresencePolicy::class);
 
+        /*
+         * El informe por periodo (RF-IN-01, tarea 2.8). `manager+` del Anexo B,
+         * que aqui es `{admin, rrhh}`: el `responsable_departamento` no lleva
+         * `reports:*` en su token (§7.3) y por tanto ni siquiera pasa del
+         * middleware. Las dos comprobaciones dicen lo mismo, que es como tienen
+         * que ser.
+         */
+        Gate::policy(PeriodReport::class, PeriodReportPolicy::class);
+
         $this->broadcastPresenceChanges();
+        $this->recordWorkedMinutes();
 
         if ($this->app->runningInConsole()) {
             $this->commands([PresenceMetricsCommand::class]);
         }
+    }
+
+    /**
+     * El informe por periodo y sus dos techos de recursos (RF-IN-01..03, tarea
+     * 2.8).
+     *
+     * **El `statement_timeout` se inyecta desde `config/reporting.php`** y no se
+     * lee dentro del adaptador: `Infrastructure` puede hablar con el framework,
+     * pero un adaptador que consulta la configuracion por su cuenta es un
+     * adaptador que no se puede construir en una prueba con otro techo. Los otros
+     * dos limites —rango y filas— los lee el controlador y los pasa al caso de
+     * uso, porque `Application` no lee configuracion (doc 02 §3.5).
+     */
+    private function registerPeriodReport(): void
+    {
+        $this->app->bind(
+            PeriodReportReader::class,
+            static fn (Application $app): DatabasePeriodReportReader => new DatabasePeriodReportReader(
+                $app->make(ConnectionInterface::class),
+                Config::integer('reporting.period.statement_timeout_seconds'),
+            ),
+        );
+
+        // `worked_minutes_total{site,department}` (§8.2). Redis y no el colector
+        // *textfile*: el hecho medido ocurre en cada cambio de turno, no una vez
+        // al dia como la metrica de presencia.
+        $this->app->bind(WorkedTimeMetrics::class, RedisWorkedTimeMetrics::class);
+
+        // El nombre del departamento para etiquetar esa serie. Puerto propio y de
+        // una sola columna: ver su docblock.
+        $this->app->bind(EmployeeAttribution::class, DatabaseEmployeeAttribution::class);
+    }
+
+    /**
+     * El contador de minutos trabajados, alimentado por el cierre de tramo
+     * (§8.2, tarea 2.8).
+     *
+     * **Encolado y despues del commit**, como la difusion de presencia y al
+     * contrario que los listeners de auditoria: este habla con Redis y consulta
+     * el departamento, asi que sincrono contaria minutos de un fichaje que
+     * todavia puede revertir y meteria dos viajes de red en el camino critico
+     * (RNF-P-02, reglas duras 15 y 19).
+     *
+     * **Solo `EmployeeClockedOut`.** `ShiftCorrected` no entra: un contador solo
+     * puede crecer, asi que una anulacion no se puede restar y una correccion
+     * sumaria las mismas horas dos veces. La consecuencia —que esta serie no
+     * refleja las correcciones— esta escrita en el docblock del puerto para que
+     * nadie la use para cuadrar horas: para eso esta `daily_totals`.
+     */
+    private function recordWorkedMinutes(): void
+    {
+        Event::listen(EmployeeClockedOut::class, [RecordWorkedMinutes::class, 'handle']);
     }
 
     /**

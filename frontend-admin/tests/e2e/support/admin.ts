@@ -20,6 +20,7 @@ import type {
   LivePresenceBoard,
   LivePresenceEntry,
   ManagementUser,
+  PeriodReport,
   Session,
   Site,
   TwoFactorChallenge,
@@ -50,7 +51,16 @@ export const USER: ManagementUser = {
   email: 'rrhh@hotel.example',
   locale: 'es',
   roles: ['rrhh'],
-  abilities: ['attendance:read', 'employees:read', 'employees:*', 'credentials:*', 'incidents:*'],
+  abilities: [
+    'attendance:read',
+    'employees:read',
+    'employees:*',
+    'credentials:*',
+    'incidents:*',
+    // Informes de gestion (RF-IN-01..03, tarea 2.8). La familia, no el estrecho:
+    // `reports:legal` es del `auditor` y solo abre la exportacion de Inspeccion.
+    'reports:*',
+  ],
   // Alcance por departamento (RF-ID-03). RRHH llega a toda la plantilla: con
   // `kind: all` la lista no acota nada y por eso va vacía.
   scope: { kind: 'all', department_ids: [] },
@@ -247,6 +257,67 @@ export const LIVE_BOARD: LivePresenceBoard = {
       event: 'presence.updated',
       channels: ['presence.all'],
       poll_interval_seconds: 15,
+    },
+  },
+}
+
+// --- Informe de horas por periodo (RF-IN-01, RF-IN-02, RF-IN-03) -------------
+
+/**
+ * Marzo de una persona con **cambio de contrato el dia 16**: quince dias a 20 h
+ * y dieciseis a 40 h. Las cifras son las mismas que comprueba la prueba de
+ * feature del backend, para que el recorrido del panel y el calculo del servidor
+ * cuenten la misma historia.
+ *
+ * Las duraciones llegan **ya en `HH:MM`** ademas de en minutos: el panel no
+ * formatea horas y no puede hacerlo (regla dura 7).
+ */
+export const PERIOD_REPORT: PeriodReport = {
+  from: '2026-03-01',
+  to: '2026-03-31',
+  granularity: 'month',
+  group_by: 'employee',
+  data: [
+    {
+      period: { from: '2026-03-01', to: '2026-03-31' },
+      subject: {
+        kind: 'employee',
+        employee_uuid: EMPLOYEE_UUID,
+        employee_code: 'E7QK2MXPR',
+        full_name: 'Youssef El Amrani',
+        department_id: 3,
+        label: 'Youssef El Amrani',
+      },
+      worked_minutes: 9720,
+      worked: '162:00',
+      shift_count: 21,
+      days_in_period: 31,
+      days_with_activity: 21,
+      days_without_activity: 10,
+      open_shift_days: 0,
+      incident_days: 1,
+      contracted_minutes: 8057,
+      contracted: '134:17',
+      deviation_minutes: 1663,
+      deviation: '27:43',
+      overtime_minutes: 1663,
+      overtime: '27:43',
+      days_without_contract: 0,
+    },
+  ],
+  meta: {
+    time_zone: 'Europe/Madrid',
+    generated_at: '2026-04-01T07:12:03.114000Z',
+    row_count: 1,
+    criteria: [
+      'Los totales salen del registro horario ya consolidado (proyección de jornadas), no se recalculan para este informe.',
+      'Cada turno se atribuye entero a la jornada en la que empezó, en la zona horaria del centro: un turno de 22:00 a 06:00 cuenta en el día de entrada y no se parte a medianoche.',
+      'Los días sin actividad aparecen con cero y no se omiten.',
+    ],
+    contract_coverage: {
+      days_without_contract: 0,
+      employees_without_contract: 0,
+      complete: true,
     },
   },
 }
@@ -542,6 +613,13 @@ export async function stubManagementApi(
           return
         case 'GET /api/v1/attendance/live':
           await json(route, 200, options.liveBoard ?? LIVE_BOARD)
+          return
+        case 'GET /api/v1/reports/period':
+          // Informe de horas por periodo (RF-IN-01..03, tarea 2.8). Un mes de
+          // una persona con un cambio de contrato a mitad de mes, que es el caso
+          // en el que lo contratado NO es una regla de tres sobre el ultimo
+          // contrato.
+          await json(route, 200, PERIOD_REPORT)
           return
         case 'POST /api/v1/broadcasting/auth':
           // La firma real la calcula el servidor con su secreto; aqui basta con

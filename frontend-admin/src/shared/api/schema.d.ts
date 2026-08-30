@@ -933,6 +933,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/employees/{uuid}/contracts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** del empleado (`employees.uuid`, UUID v7). En la
+                 *     API nunca viaja la clave interna: un identificador secuencial en una URL
+                 *     es un mapa de cuanta gente hay y en que orden entro.
+                 * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                 */
+                uuid: components["parameters"]["EmployeeUuid"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Contratos de un empleado
+         * @description La serie historica de contratos de una persona, del mas antiguo al mas
+         *     reciente (RF-GP-02, documento 01 §5.5).
+         *
+         *     **Es historico y no un campo de la ficha.** Las horas contratadas cambian
+         *     —de 20 h a 40 h en temporada alta, una reduccion de jornada— y el informe
+         *     de `GET /api/v1/reports/period` compara cada dia contra lo que estaba
+         *     pactado **ese dia**. Con las horas en la ficha, firmar un anexo en julio
+         *     cambiaria retroactivamente el informe de marzo.
+         *
+         *     **`valid_to` nulo significa vigente.** Como mucho hay un contrato abierto,
+         *     y en ningun caso dos vigencias se solapan: lo garantiza una restriccion de
+         *     exclusion en PostgreSQL, no una convencion. Registrar uno nuevo cierra el
+         *     anterior el dia anterior, de modo que la serie no tiene ni huecos ni
+         *     solapes.
+         *
+         *     **Sin paginacion**, a proposito: una persona tiene unos pocos contratos y
+         *     la serie solo se entiende entera. Paginarla partiria la cadena de
+         *     vigencias justo donde se ve si tiene huecos.
+         *
+         *     **`rrhh+`.** El `responsable_departamento` no llega: le falta el ambito
+         *     `employees:*` (documento 02 §7.3) y la policy tampoco lo admite. Las
+         *     condiciones laborales pactadas no son suyas.
+         */
+        get: operations["listEmploymentContracts"];
+        put?: never;
+        /**
+         * Registrar el contrato de un empleado
+         * @description Registra un contrato **abierto** y cierra el anterior el dia anterior a su
+         *     inicio, en la misma transaccion (RF-GP-02).
+         *
+         *     **No admite `valid_to`, y es deliberado.** Dejar escribir la fecha de fin
+         *     permitiria crear un hueco de dias sin contrato vigente sin que nada
+         *     avisara, y el informe de periodo los contaria como «sin contrato» sin que
+         *     nadie entienda por que. Cuando la relacion laboral termina, lo que hay es
+         *     una baja: `POST /api/v1/employees/{uuid}/offboard`.
+         *
+         *     **No hay `PATCH` ni `DELETE`.** Un contrato no se edita: se registra otro
+         *     y el anterior queda cerrado con su fecha (regla dura 5).
+         *
+         *     **Queda auditado** con la accion `employment_contract.registered`:
+         *     `weekly_hours` es la cifra contra la que se mide la jornada de una
+         *     persona, asi que cambiarla mueve su desviacion y sus horas de exceso sin
+         *     tocar un solo fichaje.
+         */
+        post: operations["registerEmploymentContract"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/attendance/live": {
         parameters: {
             query?: never;
@@ -1663,6 +1731,103 @@ export interface paths {
          *     responsabilidad que ajustar diez minutos.
          */
         post: operations["voidShiftEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/period": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Informe de horas por periodo
+         * @description Horas trabajadas por periodo, con granularidad diaria, semanal, mensual o
+         *     de rango libre; agregadas por empleado, departamento o centro; y
+         *     comparadas con las horas contratadas de cada dia (RF-IN-01, RF-IN-02,
+         *     RF-IN-03).
+         *
+         *     ## Los criterios de inclusion vienen **en la respuesta**
+         *
+         *     `meta.criteria` trae, en el idioma de la peticion, exactamente que se ha
+         *     contado y que no. Un informe de horas sin esa lista es una tabla de
+         *     numeros que cada persona interpreta a su manera, y esa interpretacion
+         *     acaba discutiendose en una reunion de nomina. En resumen:
+         *
+         *     - **Los totales salen de la proyeccion de jornadas ya consolidada**, no se
+         *       recalculan aqui (RN-06, ADR-007, regla dura 7).
+         *     - **Cada turno cuenta entero en la jornada en la que empezo** (RN-05,
+         *       regla dura 4): un 22:00 → 06:00 suma en el dia de entrada. La
+         *       agrupacion es por jornada, nunca por la hora de las marcas en UTC.
+         *     - **Los tramos anulados y las versiones sustituidas no cuentan**: solo la
+         *       version vigente de cada tramo (ADR-026).
+         *     - **Una incidencia sin resolver no descuenta horas**: se cuenta en
+         *       `incident_days` y se deja a la vista (RN-08: detectar no corrige).
+         *     - **Los dias sin actividad aparecen con cero y no se omiten.** Para un
+         *       informe de absentismo, omitirlos es un error.
+         *       `days_with_activity + days_without_activity` es siempre
+         *       `days_in_period`.
+         *     - **Los dias con un turno todavia abierto no aportan minutos** salvo que
+         *       se pida `include_open_shifts`; en los dos casos cuentan como dia con
+         *       actividad y salen en `open_shift_days`.
+         *
+         *     ## Las horas, dos veces
+         *
+         *     `*_minutes` es un entero para quien calcula y `worked`, `contracted`,
+         *     `deviation` y `overtime` son `HH:MM` para quien lee. **Nunca una hora
+         *     decimal**: «7,75 horas» obliga a interpretar y ademas cambia de sentido
+         *     segun el separador decimal del programa que abra el fichero.
+         *
+         *     ## Lo contratado (RF-IN-03)
+         *
+         *     Se prorratea por **dia natural** de vigencia del contrato:
+         *     `dias de vigencia × horas semanales ÷ 7`, redondeado una sola vez al
+         *     final. Se reparte por dia natural y no por dia laborable porque el
+         *     producto no modela el cuadrante teorico de nadie: repartir entre cinco
+         *     dias inventaria un descanso en fin de semana que en un hotel no existe.
+         *
+         *     Los dias sin contrato vigente **no suman y se informan**:
+         *     `meta.contract_coverage` dice cuantos son y a cuantas personas afectan. No
+         *     se supone ningun contrato por omision — seria inventar un dato de nomina.
+         *
+         *     ## Quien entra
+         *
+         *     Toda la plantilla del alcance, **incluida la que causo baja durante el
+         *     periodo** (RN-14, RF-GP-03): un informe de marzo que se olvidara de quien
+         *     se fue el dia 20 daria un total que no cuadra con ninguna nomina.
+         *
+         *     ## Alcance y auditoria
+         *
+         *     El alcance por departamento se aplica **dentro de la consulta**, agregados
+         *     incluidos (RF-ID-03): un total por centro servido a quien alcanza un solo
+         *     departamento seria una fuga por agregacion. `department_id` y
+         *     `employee_uuid` son **filtros**: uno fuera del alcance devuelve un informe
+         *     vacio, no un `403`.
+         *
+         *     Generarlo es un acceso a datos personales de terceros y **queda registrado
+         *     en `audit_log`** con su alcance —periodo, granularidad, cuantas personas—
+         *     y nunca con lo divulgado (RS-05).
+         *
+         *     ## Sincrono, con techo
+         *
+         *     Se entrega en el acto por debajo del presupuesto de RNF-P-05. Por encima
+         *     —mas de tres meses de rango, demasiadas filas o una consulta que agota su
+         *     tiempo— responde `422` remitiendo a la generacion en diferido de RF-IN-06,
+         *     en vez de intentarlo y acabar en un `504` con la base de datos del fichaje
+         *     ocupada.
+         *
+         *     **`reports:*`, no `reports:legal`.** El `auditor` lleva el estrecho y se
+         *     queda fuera: lo suyo es `GET /api/v1/reports/legal-export`. El
+         *     `responsable_departamento` tampoco llega: el documento 02 §7.3 no le da
+         *     ningun ambito de informes.
+         */
+        get: operations["generatePeriodReport"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4202,6 +4367,351 @@ export interface components {
             severity: components["schemas"]["IncidentSeverity"];
             status: components["schemas"]["IncidentStatus"];
         };
+        /**
+         * ScheduleType
+         * @description Tipo de jornada pactado (documento 01 §5.5, RF-GP-02).
+         *
+         *     Los tres valores estan en castellano porque son el **catalogo literal** que
+         *     el documento 01 fija para la columna, igual que los codigos de motivo de
+         *     correccion del Anexo C. Traducirlos obligaria a mantener un diccionario
+         *     entre el esquema, este contrato y el codigo.
+         *
+         *     **Hoy no cambia ningun calculo.** Lo contratado se prorratea por dia
+         *     natural a partir de `weekly_hours`, sin mirar el tipo de jornada:
+         *     distinguir «partida» de «continua» exigiria un horario teorico por dia de
+         *     la semana que este producto no modela. Se guarda porque el documento 01 lo
+         *     exige y porque es el dato que RRHH tiene en la mano al dar de alta el
+         *     contrato.
+         * @example turnos
+         * @enum {string}
+         */
+        ScheduleType: "continua" | "partida" | "turnos";
+        /**
+         * EmploymentContract
+         * @description Un contrato con su tramo de vigencia (RF-GP-02, documento 01 §5.5).
+         *
+         *     **Las horas salen como numero**, al contrario que los totales trabajados
+         *     del informe por periodo, que van en `HH:MM`. La regla de «nunca decimal»
+         *     habla de duraciones acumuladas —nadie interpreta bien «has trabajado
+         *     7,75»—; «tienes un contrato de 37,5 horas» lo entiende todo el mundo y es
+         *     ademas como esta escrito en el papel que se firmo.
+         */
+        EmploymentContract: {
+            /**
+             * Format: int64
+             * @description Identificador del contrato. **Es la clave interna, y aqui si**, por lo
+             *     mismo que en las incidencias: un contrato no es una persona ni una
+             *     tarjeta, no viaja impreso ni se enseña a un tercero, y su numero no
+             *     revela nada sobre la plantilla.
+             */
+            id: number;
+            /**
+             * Format: uuid
+             * @description Identificador publico de la persona.
+             */
+            employee_uuid: string;
+            /**
+             * Format: double
+             * @description Horas pactadas por semana. Es la **unica** base del prorrateo de
+             *     RF-IN-03: lo contratado de un periodo es
+             *     `dias de vigencia × weekly_hours ÷ 7`.
+             * @example 37.5
+             */
+            weekly_hours: number;
+            /**
+             * Format: double
+             * @description Computo anual del convenio, cuando lo fija. **No entra en ningun
+             *     calculo**: se guarda porque el documento 01 §5.5 lo declara y porque es
+             *     la cifra que RRHH contrasta a mano. Si algun dia el informe la usa,
+             *     sera con su propio requisito y su propia formula.
+             * @example 1780
+             */
+            annual_hours: number | null;
+            schedule_type: components["schemas"]["ScheduleType"];
+            /**
+             * Format: date
+             * @description Primer dia de vigencia, inclusive.
+             */
+            valid_from: string;
+            /**
+             * Format: date
+             * @description Ultimo dia de vigencia, inclusive, o `null` si sigue vigente.
+             *
+             *     Lo escribe el sistema al registrar el contrato siguiente, nunca quien
+             *     da de alta uno: dejarlo escribir permitiria crear un hueco de dias sin
+             *     contrato sin que nada avisara.
+             */
+            valid_to: string | null;
+            /**
+             * @description Si es el contrato vigente. Se deriva de `valid_to === null`, no se
+             *     guarda: una columna aparte podria quedarse desincronizada.
+             */
+            is_current: boolean;
+        };
+        /**
+         * EmploymentContractCollection
+         * @description La serie historica de contratos de una persona, del mas antiguo al mas
+         *     reciente. **Sin `meta` y sin paginacion**: una persona tiene unos pocos
+         *     contratos y la serie solo se entiende entera.
+         */
+        EmploymentContractCollection: {
+            data: components["schemas"]["EmploymentContract"][];
+        };
+        /**
+         * CreateEmploymentContractRequest
+         * @description Alta de contrato (RF-GP-02).
+         *
+         *     **No admite `valid_to` ni `employee_uuid`.** El primero lo escribe el
+         *     sistema al registrar el siguiente contrato; el segundo va en la ruta, y dos
+         *     sitios para lo mismo es una discrepancia esperando a ocurrir.
+         */
+        CreateEmploymentContractRequest: {
+            /**
+             * Format: double
+             * @example 40
+             */
+            weekly_hours: number;
+            /**
+             * Format: double
+             * @example 1780
+             */
+            annual_hours?: number | null;
+            schedule_type: components["schemas"]["ScheduleType"];
+            /**
+             * Format: date
+             * @description Primer dia de vigencia. Tiene que ser **posterior** al inicio del
+             *     contrato vigente: el anterior se cierra el dia de antes, de modo que la
+             *     serie queda sin hueco y sin solape.
+             * @example 2026-03-16
+             */
+            valid_from: string;
+        };
+        /**
+         * ReportGranularity
+         * @description Grano de agrupacion del informe por periodo (RF-IN-01).
+         *
+         *     Los cuatro parten de la jornada (`work_date`), que es una fecha civil en la
+         *     zona del centro con RN-05 ya aplicada. **No hay ninguna conversion de zona
+         *     horaria en el calculo**, y esa ausencia es la garantia: no hay ningun
+         *     `AT TIME ZONE` que pueda estar mal puesto.
+         *
+         *     `range` no es «sin agrupar»: es **una sola fila por sujeto** con el rango
+         *     entero.
+         * @example month
+         * @enum {string}
+         */
+        ReportGranularity: "day" | "week" | "month" | "range";
+        /**
+         * ReportGrouping
+         * @description Sujeto sobre el que se agregan las horas (RF-IN-02).
+         *
+         *     `site` existe aunque haya un solo centro por instalacion (ADR-040): no
+         *     sirve para elegir cual, sirve para pedir el total sin desglosar.
+         * @example employee
+         * @enum {string}
+         */
+        ReportGrouping: "employee" | "department" | "site";
+        /**
+         * PeriodReportSubject
+         * @description De quien —o de que— habla una fila del informe.
+         *
+         *     **Una sola forma para los tres agrupamientos**, con campos que pueden ser
+         *     nulos, en lugar de tres variantes: el cliente pinta la misma tabla en los
+         *     tres casos y `kind` le dice que columnas tienen sentido. Tres esquemas
+         *     habrian obligado a tres tablas para la misma pantalla.
+         */
+        PeriodReportSubject: {
+            kind: components["schemas"]["ReportGrouping"];
+            /**
+             * Format: uuid
+             * @description Solo con `kind: employee`.
+             */
+            employee_uuid: string | null;
+            /** @description Solo con `kind: employee`. */
+            employee_code: string | null;
+            /** @description Solo con `kind: employee`. */
+            full_name: string | null;
+            /**
+             * Format: int64
+             * @description Departamento de la persona, o el propio departamento agregado. `null`
+             *     con `kind: site` y tambien en el cubo de quien no tiene departamento,
+             *     que existe a proposito: sin el, la suma de los departamentos no
+             *     cuadraria con el total del centro.
+             */
+            department_id: number | null;
+            /**
+             * @description Lo que se enseña: el nombre de la persona, el del departamento o el del
+             *     centro.
+             *
+             *     **Nulo en el cubo de quien no tiene departamento**, y lo traduce el
+             *     cliente: el servidor no inventa un «Sin departamento» en castellano
+             *     porque no sabe en que idioma se esta pintando.
+             */
+            label: string | null;
+        };
+        /**
+         * PeriodReportRow
+         * @description Una fila del informe: un sujeto, un tramo de calendario y lo que paso en
+         *     el.
+         *
+         *     **`days_with_activity + days_without_activity` es siempre
+         *     `days_in_period`.** Con agrupacion por departamento o centro, los tres son
+         *     dias-persona.
+         *
+         *     **Cada duracion sale dos veces**: los minutos enteros para quien calcula y
+         *     el `HH:MM` para quien lee. Nunca una hora decimal.
+         */
+        PeriodReportRow: {
+            /**
+             * @description El tramo contado, **ya recortado al rango pedido**. Si dijera «semana
+             *     del 23 de febrero» con el total de un solo dia, quien la lee compararia
+             *     siete dias con uno.
+             */
+            period: {
+                /** Format: date */
+                from: string;
+                /** Format: date */
+                to: string;
+            };
+            subject: components["schemas"]["PeriodReportSubject"];
+            /**
+             * @description Minutos trabajados, tomados de la proyeccion de jornadas. **No se
+             *     recalculan aqui** (RN-06, ADR-007, regla dura 7): si no cuadran, el
+             *     problema es la proyeccion y se corrige con la reconciliacion de
+             *     RF-PR-02.
+             */
+            worked_minutes: number;
+            /**
+             * @description Lo mismo en `HH:MM`. **Las horas pasan de 24 y no es un error**: esto
+             *     no es una hora del reloj, es una cantidad de trabajo, y un mes son
+             *     `162:00`.
+             */
+            worked: string;
+            /** @description Tramos cerrados que han entrado en el total. */
+            shift_count: number;
+            days_in_period: number;
+            days_with_activity: number;
+            /**
+             * @description Aparecen con cero y no se omiten: para un informe de absentismo,
+             *     omitirlos es un error.
+             */
+            days_without_activity: number;
+            /**
+             * @description Dias con un turno todavia abierto. Cuentan como dia con actividad y,
+             *     salvo `include_open_shifts`, no aportan minutos.
+             */
+            open_shift_days: number;
+            /**
+             * @description Dias con incidencia. **No descuentan horas** (RN-08): estan aqui para
+             *     que se revisen, no para decidir el resultado de una revision que no se
+             *     ha hecho.
+             */
+            incident_days: number;
+            /**
+             * @description Horas contratadas del periodo, prorrateadas por dia natural de vigencia
+             *     (RF-IN-03). Cero si no habia contrato registrado — y entonces
+             *     `days_without_contract` dice cuantos dias fueron.
+             */
+            contracted_minutes: number;
+            contracted: string;
+            /**
+             * @description `worked_minutes - contracted_minutes`, **con signo**: negativa cuando
+             *     se ha trabajado por debajo de lo contratado.
+             */
+            deviation_minutes: number;
+            /** @description Lo mismo en `HH:MM`, con el signo delante (`-40:00`). */
+            deviation: string;
+            /**
+             * @description Solo la parte positiva de la desviacion. **No es «horas extra» en
+             *     sentido laboral** y el informe no lo llama asi: que lo sean lo decide el
+             *     convenio, con compensaciones y periodos de referencia que este producto
+             *     no modela.
+             */
+            overtime_minutes: number;
+            overtime: string;
+            /**
+             * @description Dias del tramo con la persona de alta y **sin** contrato vigente. Se
+             *     informan, no se suponen.
+             */
+            days_without_contract: number;
+        };
+        /**
+         * ContractCoverage
+         * @description Cuanto del informe se pudo comparar contra un contrato (RF-IN-03).
+         *
+         *     Sin esta cifra, un periodo en el que a media plantilla se le olvido
+         *     registrar el contrato saldria con una desviacion enorme y con aspecto de
+         *     dato bueno: cada fila diria «ha trabajado 160 horas por encima de lo
+         *     contratado» porque lo contratado era cero.
+         *
+         *     Solo cuenta dias de relacion laboral: un dia anterior al alta o posterior
+         *     al cese no es un dia «sin contrato», es un dia en el que esa persona no
+         *     trabajaba aqui.
+         */
+        ContractCoverage: {
+            /** @description Dias-persona del informe sin contrato vigente. */
+            days_without_contract: number;
+            employees_without_contract: number;
+            /**
+             * @description `true` cuando todo el informe se pudo comparar. Es lo que el panel mira
+             *     para decidir si enseña el aviso.
+             */
+            complete: boolean;
+        };
+        /**
+         * PeriodReportMeta
+         * @description Zona, instante, criterios y cobertura de contrato del informe.
+         */
+        PeriodReportMeta: {
+            /**
+             * @description Zona del centro (ADR-040). Viaja en la respuesta para que el cliente no
+             *     la adivine ni use la del navegador (regla dura 3): las jornadas ya
+             *     estan expresadas en ella.
+             * @example Europe/Madrid
+             */
+            time_zone: string;
+            /**
+             * Format: date-time
+             * @description Instante de generacion, en UTC.
+             */
+            generated_at: string;
+            row_count: number;
+            /**
+             * @description **Los criterios de inclusion, ya traducidos al idioma de la peticion.**
+             *     Van en la respuesta y no en un manual porque un informe de horas sin
+             *     ellos es una tabla de numeros que cada persona interpreta a su manera,
+             *     y esa interpretacion acaba discutiendose en una reunion de nomina.
+             *
+             *     El cliente los enseña tal cual, sin reordenarlos ni resumirlos.
+             */
+            criteria: string[];
+            contract_coverage: components["schemas"]["ContractCoverage"];
+        };
+        /**
+         * PeriodReport
+         * @description El informe de horas por periodo completo (RF-IN-01, RF-IN-02, RF-IN-03).
+         *
+         *     **Es el mismo objeto del que saldran las exportaciones CSV, XLSX y PDF de
+         *     RF-IN-04** (tarea 2.9): el fichero que alguien adjunta a un correo y la
+         *     tabla que ve en pantalla se calculan una sola vez, para que no puedan
+         *     discrepar.
+         */
+        PeriodReport: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            granularity: components["schemas"]["ReportGranularity"];
+            group_by: components["schemas"]["ReportGrouping"];
+            /**
+             * @description Filas ordenadas por sujeto y despues por periodo. **Sin paginacion**:
+             *     un informe se lee entero o no significa nada, y paginarlo partiria una
+             *     semana por la mitad. El techo lo pone el presupuesto de RNF-P-05, que
+             *     responde `422` en lugar de recortar en silencio.
+             */
+            data: components["schemas"]["PeriodReportRow"][];
+            meta: components["schemas"]["PeriodReportMeta"];
+        };
     };
     responses: {
         /**
@@ -4516,6 +5026,83 @@ export interface components {
          * @example 2026-03-31
          */
         WorkDateTo: string;
+        /**
+         * @description Primera **jornada** del informe, inclusive. Es una fecha civil en la zona
+         *     del centro, no un instante: agrupar por jornada y no por la hora de las
+         *     marcas es lo que mantiene entero un turno que cruza la medianoche (RN-05,
+         *     regla dura 4).
+         *
+         *     **Obligatoria**, al contrario que en `GET /api/v1/employees/{uuid}/workdays`.
+         *     Alli tiene omision porque la pantalla se abre sola con el ultimo mes; aqui
+         *     quien pide un informe de horas ha elegido un periodo, y un informe sobre un
+         *     rango que nadie pidio es exactamente la cifra que despues alguien lleva a
+         *     una reunion de nomina creyendo que es otra.
+         * @example 2026-03-01
+         */
+        PeriodReportFrom: string;
+        /**
+         * @description Ultima jornada del informe, inclusive. Obligatoria, por lo mismo que
+         *     `from`.
+         *
+         *     El rango no puede exceder **tres meses** en la respuesta sincrona: por
+         *     encima, el informe se pide en diferido (RF-IN-06). El techo es
+         *     configuracion de la instalacion, no una regla de negocio.
+         * @example 2026-03-31
+         */
+        PeriodReportTo: string;
+        /**
+         * @description Grano de agrupacion. Por omision `day`, que es el de la fuente —una fila
+         *     por persona y jornada— y el unico que no agrega nada: suponer «mes» porque
+         *     es lo que mas se pide seria decidir por quien pregunta.
+         *
+         *     Las semanas empiezan en **lunes** (ISO 8601) y los cubos parciales se
+         *     **recortan al rango pedido**: una semana a caballo del 1 de marzo, en un
+         *     informe que empieza el 1, se devuelve como `2026-03-01 → 2026-03-01`. La
+         *     fila describe exactamente los dias que ha contado.
+         */
+        ReportGranularityParam: components["schemas"]["ReportGranularity"];
+        /**
+         * @description Sobre que sujeto se agregan las horas. Por omision `employee`, que es la
+         *     pregunta de partida de RF-IN-01; los agregados de RF-IN-02 se piden.
+         *
+         *     Con `department` o `site`, los contadores de dias son **dias-persona**:
+         *     `days_in_period` es personas × dias naturales del cubo.
+         */
+        ReportGroupByParam: components["schemas"]["ReportGrouping"];
+        /**
+         * @description Acota el informe a un departamento.
+         *
+         *     **Es un filtro, no una autorizacion.** Un departamento inexistente es un
+         *     `422` —hay una errata que corregir— y uno existente pero fuera del alcance
+         *     de quien pregunta devuelve un informe vacio, no un `403`: responder `403`
+         *     confirmaria que ese departamento existe y convertiria el desplegable del
+         *     panel en un generador de errores.
+         * @example 3
+         */
+        ReportDepartmentId: number;
+        /**
+         * @description Acota el informe a una persona, por su identificador **publico**.
+         *
+         *     Filtro y no autorizacion, igual que `department_id`: alguien fuera del
+         *     alcance devuelve un informe vacio.
+         * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+         */
+        ReportEmployeeUuid: string;
+        /**
+         * @description Si los dias con un turno todavia abierto aportan los minutos que **ya
+         *     tienen cerrados**.
+         *
+         *     Por omision `false`. Un tramo sin cerrar vale cero en la proyeccion
+         *     —todavia no ha terminado—, asi que ese dia daria una cifra a medias justo
+         *     en la comparacion contra lo contratado. En los dos casos el dia cuenta
+         *     como dia con actividad y sale en `open_shift_days`, y el criterio aplicado
+         *     se escribe en `meta.criteria`.
+         *
+         *     Ni con `true` se estima nada del turno en curso: se suma lo que ya esta
+         *     cerrado y nada mas.
+         * @example false
+         */
+        ReportIncludeOpenShifts: boolean;
         /**
          * @description Identificador de la incidencia (`incidents.id`).
          *
@@ -5481,6 +6068,95 @@ export interface operations {
             429: components["responses"]["TooManyRequests"];
         };
     };
+    listEmploymentContracts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** del empleado (`employees.uuid`, UUID v7). En la
+                 *     API nunca viaja la clave interna: un identificador secuencial en una URL
+                 *     es un mapa de cuanta gente hay y en que orden entro.
+                 * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                 */
+                uuid: components["parameters"]["EmployeeUuid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description Los contratos de esa persona. Una sin ninguno devuelve `data` vacio,
+             *     no un `404`: no tener contrato registrado es una respuesta, y ademas
+             *     es la que explica los dias que el informe cuenta como «sin contrato».
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmploymentContractCollection"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    registerEmploymentContract: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** del empleado (`employees.uuid`, UUID v7). En la
+                 *     API nunca viaja la clave interna: un identificador secuencial en una URL
+                 *     es un mapa de cuanta gente hay y en que orden entro.
+                 * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                 */
+                uuid: components["parameters"]["EmployeeUuid"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateEmploymentContractRequest"];
+            };
+        };
+        responses: {
+            /**
+             * @description El contrato registrado, ya vigente. Se devuelve entero para que el
+             *     panel sustituya la fila sin volver a pedir la lista.
+             */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmploymentContract"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /**
+             * @description Ya hay un contrato vigente en esa fecha. El cuerpo es correcto; lo que
+             *     no encaja es el estado, asi que la accion siguiente es releer los
+             *     contratos de esa persona, no reescribir el formulario.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
     listLivePresence: {
         parameters: {
             query?: {
@@ -6239,6 +6915,141 @@ export interface operations {
                 };
             };
             422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    generatePeriodReport: {
+        parameters: {
+            query: {
+                /**
+                 * @description Primera **jornada** del informe, inclusive. Es una fecha civil en la zona
+                 *     del centro, no un instante: agrupar por jornada y no por la hora de las
+                 *     marcas es lo que mantiene entero un turno que cruza la medianoche (RN-05,
+                 *     regla dura 4).
+                 *
+                 *     **Obligatoria**, al contrario que en `GET /api/v1/employees/{uuid}/workdays`.
+                 *     Alli tiene omision porque la pantalla se abre sola con el ultimo mes; aqui
+                 *     quien pide un informe de horas ha elegido un periodo, y un informe sobre un
+                 *     rango que nadie pidio es exactamente la cifra que despues alguien lleva a
+                 *     una reunion de nomina creyendo que es otra.
+                 * @example 2026-03-01
+                 */
+                from: components["parameters"]["PeriodReportFrom"];
+                /**
+                 * @description Ultima jornada del informe, inclusive. Obligatoria, por lo mismo que
+                 *     `from`.
+                 *
+                 *     El rango no puede exceder **tres meses** en la respuesta sincrona: por
+                 *     encima, el informe se pide en diferido (RF-IN-06). El techo es
+                 *     configuracion de la instalacion, no una regla de negocio.
+                 * @example 2026-03-31
+                 */
+                to: components["parameters"]["PeriodReportTo"];
+                /**
+                 * @description Grano de agrupacion. Por omision `day`, que es el de la fuente —una fila
+                 *     por persona y jornada— y el unico que no agrega nada: suponer «mes» porque
+                 *     es lo que mas se pide seria decidir por quien pregunta.
+                 *
+                 *     Las semanas empiezan en **lunes** (ISO 8601) y los cubos parciales se
+                 *     **recortan al rango pedido**: una semana a caballo del 1 de marzo, en un
+                 *     informe que empieza el 1, se devuelve como `2026-03-01 → 2026-03-01`. La
+                 *     fila describe exactamente los dias que ha contado.
+                 */
+                granularity?: components["parameters"]["ReportGranularityParam"];
+                /**
+                 * @description Sobre que sujeto se agregan las horas. Por omision `employee`, que es la
+                 *     pregunta de partida de RF-IN-01; los agregados de RF-IN-02 se piden.
+                 *
+                 *     Con `department` o `site`, los contadores de dias son **dias-persona**:
+                 *     `days_in_period` es personas × dias naturales del cubo.
+                 */
+                group_by?: components["parameters"]["ReportGroupByParam"];
+                /**
+                 * @description Acota el informe a un departamento.
+                 *
+                 *     **Es un filtro, no una autorizacion.** Un departamento inexistente es un
+                 *     `422` —hay una errata que corregir— y uno existente pero fuera del alcance
+                 *     de quien pregunta devuelve un informe vacio, no un `403`: responder `403`
+                 *     confirmaria que ese departamento existe y convertiria el desplegable del
+                 *     panel en un generador de errores.
+                 * @example 3
+                 */
+                department_id?: components["parameters"]["ReportDepartmentId"];
+                /**
+                 * @description Acota el informe a una persona, por su identificador **publico**.
+                 *
+                 *     Filtro y no autorizacion, igual que `department_id`: alguien fuera del
+                 *     alcance devuelve un informe vacio.
+                 * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                 */
+                employee_uuid?: components["parameters"]["ReportEmployeeUuid"];
+                /**
+                 * @description Si los dias con un turno todavia abierto aportan los minutos que **ya
+                 *     tienen cerrados**.
+                 *
+                 *     Por omision `false`. Un tramo sin cerrar vale cero en la proyeccion
+                 *     —todavia no ha terminado—, asi que ese dia daria una cifra a medias justo
+                 *     en la comparacion contra lo contratado. En los dos casos el dia cuenta
+                 *     como dia con actividad y sale en `open_shift_days`, y el criterio aplicado
+                 *     se escribe en `meta.criteria`.
+                 *
+                 *     Ni con `true` se estima nada del turno en curso: se suma lo que ya esta
+                 *     cerrado y nada mas.
+                 * @example false
+                 */
+                include_open_shifts?: components["parameters"]["ReportIncludeOpenShifts"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description Las filas del informe, ordenadas por sujeto y despues por periodo, con
+             *     los criterios con los que se calcularon.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PeriodReport"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /**
+             * @description La instalacion todavia no tiene centro configurado, asi que no hay
+             *     zona horaria en la que expresar el informe (RF-PD-03, ADR-040). Es un
+             *     estado de la instalacion, no un error de quien pregunta.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description La peticion no es valida **o** el informe no cabe en una respuesta
+             *     sincrona (RNF-P-05).
+             *
+             *     Lo segundo tambien es `422` y no `503`: el servicio esta bien, lo que
+             *     no se puede es atender esa peticion en el acto. El `detail` dice con
+             *     cifras si sobra rango, si sobran filas o si la consulta agoto su
+             *     tiempo, y en los tres casos la salida es reducir el rango, subir la
+             *     granularidad o esperar a la generacion en diferido de RF-IN-06.
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ValidationProblem"];
+                };
+            };
             429: components["responses"]["TooManyRequests"];
         };
     };
