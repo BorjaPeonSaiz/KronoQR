@@ -494,7 +494,9 @@ it('rechaza campos que el endpoint no conoce en lugar de ignorarlos', function (
     $scanId = Str::uuid7()->toString();
 
     $respuesta = Api::as($escenario['token'])
-        ->withHeaders(['Idempotency-Key' => $scanId])
+        // El mensaje sale en el idioma negociado, como el resto de la
+        // validacion (`lang/es/validation.php`, clave `unknown_field`).
+        ->withHeaders(['Idempotency-Key' => $scanId, 'Accept-Language' => 'es'])
         ->post('/api/v1/scan', [
             'scan_id' => $scanId,
             'occurred_at' => '2026-03-14T07:02:31Z',
@@ -505,7 +507,7 @@ it('rechaza campos que el endpoint no conoce en lugar de ignorarlos', function (
     $respuesta->assertStatus(400);
 
     expect($respuesta->json('errors.device_id.0'))
-        ->toBe('El campo device_id no forma parte de esta peticion.');
+        ->toBe('El campo device_id no forma parte de esta petición.');
 })->group('RQ-06');
 
 it('acepta la intencion declarada y la registra sin interpretarla', function (): void {

@@ -52,6 +52,17 @@ info:
     **Idempotencia.** Las escrituras del quiosco llevan `Idempotency-Key` y son
     idempotentes por `scan_id` (regla dura 8): un reenvio devuelve la respuesta
     original, nunca un error ni un duplicado.
+
+    **Idioma.** Los textos escritos para una persona —los mensajes de `errors`
+    en un `422`, los criterios de un informe en `meta.criteria`— se negocian
+    con la cabecera estandar `Accept-Language`, acotada a los idiomas que la
+    instalacion tiene activos (`APP_SUPPORTED_LOCALES`; regla dura 13); sin
+    cabecera, o sin idioma en comun, se responde en el de la instalacion
+    (`APP_LOCALE`). Los **documentos** (CSV, XLSX, PDF) no se negocian: salen
+    siempre en el idioma de la instalacion, porque los abrira un programa cuyo
+    idioma no es el del navegador que los descargo. Los clientes interpretan
+    `type` y las claves de `errors`, nunca el texto: el texto es para la
+    persona.
   contact:
     name: Soporte de KronoQR
     url: https://example.invalid/kronoqr/soporte

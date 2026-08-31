@@ -135,6 +135,13 @@ final readonly class Api
         $server = [
             'HTTP_ACCEPT' => 'application/json',
             'CONTENT_TYPE' => 'application/json',
+            // `Request::create()` de Symfony finge un navegador en ingles
+            // (`Accept-Language: en-us,en;q=0.5`) si no se le dice otra cosa, y
+            // con la negociacion de idioma (`NegotiateLocale`) eso convertiria
+            // cada prueba en «un cliente que pide ingles». El caso neutro es
+            // SIN cabecera —la API responde en el idioma de la instalacion—, y
+            // la prueba que quiera un idioma lo dice con `withHeaders()`.
+            'HTTP_ACCEPT_LANGUAGE' => '',
         ];
 
         foreach ($this->headers as $name => $value) {

@@ -344,3 +344,101 @@ it('deja constancia en audit_log de que se ha generado el informe', function ():
         ->and(json_encode($payload, JSON_THROW_ON_ERROR))->not->toContain('Persona')
         ->and(json_encode($payload, JSON_THROW_ON_ERROR))->not->toContain('480');
 })->group('RF-IN-01', 'RS-05');
+
+/*
+ * `include_open_shifts` tal y como lo serializa el contrato.
+ *
+ * El contrato lo declara `schema: {type: boolean}` en la cadena de consulta y la
+ * serializacion estandar de OpenAPI es el literal `include_open_shifts=true`,
+ * que es lo que manda el panel (`@kronoqr/web-kit`, `String(true)`). La regla
+ * `boolean` de Laravel NO acepta esa cadena: marcar «Contar los dias con turno
+ * abierto» respondia `422` con «must be true or false». La prueba de arriba
+ * manda `'1'`, que si pasa, y por eso no lo veia nadie. Es el mismo fallo, y el
+ * mismo arreglo, que `pending` en el tablero de credenciales (RF-QR-08).
+ */
+
+it('acepta el `include_open_shifts=true` que serializa el contrato', function (string $sent): void {
+    $contexto = contextoDeInforme();
+
+    // Los criterios se comparan en castellano, como en la prueba de arriba.
+    App::setLocale('es');
+
+    $respuesta = Api::as($contexto['token'])
+        ->get('/api/v1/reports/period', [
+            'from' => '2026-03-01',
+            'to' => '2026-03-07',
+            'granularity' => 'range',
+            'include_open_shifts' => $sent,
+        ])
+        ->assertValidRequest()
+        ->assertValidResponse(200);
+
+    /** @var list<string> $criterios */
+    $criterios = $respuesta->json('meta.criteria');
+
+    // No basta con el 200: el criterio escrito en la respuesta tiene que decir
+    // que el parametro SE HA APLICADO, o el informe mentiria sobre si mismo.
+    expect(implode(' ', $criterios))->toContain('aportan los minutos que ya tienen cerrados');
+})->with([
+    // La forma que manda el panel: la que fallaba.
+    'literal de OpenAPI' => ['true'],
+    // Las que ya funcionaban. Entran para que el arreglo no las rompa.
+    'entero' => ['1'],
+    // Las que escribe una persona a mano en la barra de direcciones. Ninguna
+    // es ambigua.
+    'palabra' => ['yes'],
+    'interruptor' => ['on'],
+])->group('RF-IN-01', 'RF-IN-02');
+
+it('lee `include_open_shifts=false` como «sin turnos abiertos»', function (string $sent): void {
+    // Lo simetrico importa igual: si `false` se leyera como «activo», la casilla
+    // desmarcada contaria los turnos abiertos y la comparacion con lo
+    // contratado saldria a medias sin que nadie lo hubiera pedido.
+    $contexto = contextoDeInforme();
+
+    // Los criterios se comparan en castellano, como en la prueba de arriba.
+    App::setLocale('es');
+
+    $respuesta = Api::as($contexto['token'])
+        ->get('/api/v1/reports/period', [
+            'from' => '2026-03-01',
+            'to' => '2026-03-07',
+            'granularity' => 'range',
+            'include_open_shifts' => $sent,
+        ])
+        ->assertValidRequest()
+        ->assertValidResponse(200);
+
+    /** @var list<string> $criterios */
+    $criterios = $respuesta->json('meta.criteria');
+
+    expect(implode(' ', $criterios))->toContain('no aportan minutos');
+})->with([
+    'literal de OpenAPI' => ['false'],
+    'entero' => ['0'],
+    'palabra' => ['no'],
+])->group('RF-IN-01', 'RF-IN-02');
+
+it('sigue rechazando un `include_open_shifts` que no es un booleano', function (string $garbage): void {
+    // El arreglo normaliza lo que es reconociblemente booleano y NADA mas: un
+    // parametro mal escrito tiene que doler, no colarse como `false`.
+    $contexto = contextoDeInforme();
+
+    Api::as($contexto['token'])
+        ->get('/api/v1/reports/period', [
+            'from' => '2026-03-01',
+            'to' => '2026-03-07',
+            'include_open_shifts' => $garbage,
+        ])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['include_open_shifts']);
+})->with([
+    'palabra inventada' => ['maybe'],
+    'casi cierto' => ['truthy'],
+    'numero cualquiera' => ['2'],
+    // `?include_open_shifts=` tampoco: `ConvertEmptyStringsToNull` lo convierte
+    // en `null` antes de que el `FormRequest` lo vea y el contrato dice que la
+    // cadena vacia no es un booleano. Para no contar los abiertos se OMITE el
+    // parametro, no se manda vacio (el panel ya lo hace asi).
+    'vacio' => [''],
+])->group('RF-IN-01', 'RF-IN-02');

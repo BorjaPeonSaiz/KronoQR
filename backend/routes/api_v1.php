@@ -383,6 +383,9 @@ Route::get('/reports/period/export', PeriodReportExportController::class)
         'auth:sanctum',
         'ability:'.TokenAbility::REPORTS_ALL->value,
         'throttle:management',
+        // Es un documento: sale en el idioma de la instalacion, no en el del
+        // navegador (regla dura 13; UseInstallationLocale).
+        'locale.installation',
     ])
     ->name('reporting.reports.period.export');
 
@@ -390,6 +393,8 @@ Route::get('/reports/legal-export', LegalExportController::class)
     ->middleware([
         'auth:sanctum',
         'ability:'.TokenAbility::REPORTS_LEGAL->value.','.TokenAbility::REPORTS_ALL->value,
+        // Es un documento para la Inspeccion: idioma de la instalacion.
+        'locale.installation',
     ])
     ->name('compliance.reports.legal-export');
 
@@ -622,7 +627,11 @@ Route::middleware([
      * `?format=csv` es el unico valor de esta fase; el PDF llega en la tarea 2.9
      * como un valor mas del mismo enumerado (ADR-012).
      */
-    Route::get('/me/export', MyWorkDayExportController::class)->name('portal.export');
+    Route::get('/me/export', MyWorkDayExportController::class)
+        // Es un documento: sale en el idioma de la instalacion, no en el del
+        // navegador (regla dura 13; UseInstallationLocale).
+        ->middleware('locale.installation')
+        ->name('portal.export');
 
     /*
      * POST /api/v1/me/logout NO existe, y no es un olvido. El Anexo B del doc 01
@@ -778,11 +787,15 @@ Route::middleware(['auth:sanctum', 'ability:'.TokenAbility::CREDENTIALS_ALL->val
     Route::get('/credentials/status', CredentialStatusController::class)
         ->name('credentials.status');
 
+    // Los PDF de tarjetas son documentos: idioma de la instalacion, no del
+    // navegador (regla dura 13; UseInstallationLocale).
     Route::post('/credentials/print-batch', PrintCredentialBatchController::class)
+        ->middleware('locale.installation')
         ->name('credentials.print-batch');
 
     Route::post('/credentials/{uuid}/print', PrintCredentialController::class)
         ->whereUuid('uuid')
+        ->middleware('locale.installation')
         ->name('credentials.print');
 
     Route::post('/credentials/{uuid}/deliver', DeliverCredentialController::class)

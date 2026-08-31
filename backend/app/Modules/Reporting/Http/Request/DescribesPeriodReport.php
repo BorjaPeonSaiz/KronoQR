@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Reporting\Http\Request;
 
+use App\Http\Requests\NormalisesBooleanQuery;
 use App\Modules\Reporting\Domain\ValueObject\DateRange;
 use App\Modules\Reporting\Domain\ValueObject\PeriodReportQuery;
 use App\Modules\Reporting\Domain\ValueObject\ReportGranularity;
@@ -32,9 +33,17 @@ use App\Modules\Shared\Application\Authorization\ScopeGuard;
  * Lo resuelve `ScopeGuard` a partir del token y entra **dentro** de la consulta
  * (RF-ID-03). No hay ningun parametro con el que ampliarlo, en ninguna de las
  * dos peticiones.
+ *
+ * ## `include_open_shifts` llega como texto
+ *
+ * El contrato lo declara `type: boolean` en la cadena de consulta y el panel lo
+ * serializa como `include_open_shifts=true`, que la regla `boolean` de Laravel
+ * no acepta. {@see NormalisesBooleanQuery} lo convierte antes de validar, para
+ * las dos peticiones a la vez.
  */
 trait DescribesPeriodReport
 {
+    use NormalisesBooleanQuery;
     use ValidatesWorkDateRange;
 
     /**

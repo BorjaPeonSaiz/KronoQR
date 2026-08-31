@@ -3,8 +3,10 @@
 declare(strict_types=1);
 
 use App\Exceptions\ProblemDetails;
+use App\Http\Middleware\NegotiateLocale;
 use App\Http\Middleware\PropagateTraceContext;
 use App\Http\Middleware\RecordHttpMetrics;
+use App\Http\Middleware\UseInstallationLocale;
 use App\Modules\Attendance\Application\Exception\EmployeeCannotBeClocked;
 use App\Modules\Attendance\Application\Exception\ShiftEntryNotFound;
 use App\Modules\Attendance\Application\Port\ShiftEntryHistory;
@@ -135,6 +137,14 @@ return Application::configure(basePath: dirname(__DIR__))
              * que solo lleva `2fa:pending`.
              */
             'session.complete' => RejectPendingTwoFactorSession::class,
+            /*
+             * Las rutas que generan un DOCUMENTO (CSV, XLSX, PDF) lo declaran
+             * con este alias y responden en el idioma de la instalacion, no en
+             * el negociado con `Accept-Language`: el fichero lo abrira un
+             * programa cuyo idioma no es el del navegador que lo descargo
+             * (regla dura 13; ver UseInstallationLocale).
+             */
+            'locale.installation' => UseInstallationLocale::class,
         ]);
 
         /*
@@ -155,6 +165,17 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->api(prepend: [
             PropagateTraceContext::class,
             RecordHttpMetrics::class,
+        ]);
+
+        /*
+         * El idioma de la respuesta (regla dura 13, RF-PD-01). Al final del
+         * grupo, detras de la observabilidad: la traza y la metrica de una
+         * peticion no dependen del idioma en que se responda, y un fallo aqui
+         * —que no lo hay: una cabecera rara acaba en el idioma de la
+         * instalacion— no puede dejar una peticion sin medir.
+         */
+        $middleware->api(append: [
+            NegotiateLocale::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

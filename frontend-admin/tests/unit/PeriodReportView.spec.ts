@@ -267,6 +267,9 @@ describe('informe de horas por periodo', () => {
     await settle()
 
     expect(wrapper.text()).not.toContain('162:00')
+    // El campo se nombra como en el formulario, no por su clave en la API.
+    expect(wrapper.text()).toContain('Hasta: El informe abarca 181 dias')
+    expect(wrapper.text()).not.toContain('to: El informe')
   })
 
   it('no deja generar sin las dos fechas', async () => {
