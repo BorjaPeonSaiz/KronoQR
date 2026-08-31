@@ -101,6 +101,30 @@ final class ProblemDetails
     }
 
     /**
+     * El texto de un error de DOMINIO, en el idioma negociado por la peticion.
+     *
+     * **Por que hace falta.** Una excepcion de dominio no puede llevar texto de
+     * usuario dentro: `Domain/` no sabe en que idioma se va a leer, y meter
+     * castellano ahi le responde en castellano a un panel puesto en ingles.
+     * Asi que el dominio expone una CLAVE de traduccion y sus parametros, y este
+     * metodo la resuelve aqui, en el borde, donde `NegotiateLocale` ya ha
+     * decidido el idioma.
+     *
+     * **Y si falta la traduccion, se devuelve el mensaje tecnico** en vez de la
+     * clave: `settings.errors.out_of_range` no le dice nada a nadie, y el mensaje
+     * en ingles al menos explica el problema. Que falte es un defecto del
+     * producto, no del cliente, y lo caza la prueba de idioma del endpoint.
+     *
+     * @param  array<string, string|int>  $parameters
+     */
+    public static function translated(string $key, array $parameters, string $fallback): string
+    {
+        $message = trans($key, $parameters);
+
+        return is_string($message) && $message !== $key ? $message : $fallback;
+    }
+
+    /**
      * @param  array<string, list<string>>  $errors
      */
     public static function validationFailed(array $errors): JsonResponse

@@ -27,6 +27,18 @@ use Illuminate\Support\Facades\Schema;
  * dos edificios—. La **cascada** que resuelve cual gana es de la tarea 5.1;
  * aqui se establece la forma para que no haya que migrar la tabla entonces.
  *
+ * > **Enmienda 31-08-2026 (tarea 5.1).** El parrafo de arriba describe el
+ * > esquema tal como nacio y se conserva por eso, pero **ya no es cierto**:
+ * > ADR-040 fijo un centro por instalacion, asi que el ambito `site` nunca llego
+ * > a usarse y la migracion
+ * > `2026_09_05_100000_contract_installation_settings_scope` retira `scope`,
+ * > `scope_id`, su `CHECK`, su clave ajena y los dos indices parciales. La
+ * > cascada real es **fila de instalacion -> valor por defecto del catalogo en
+ * > codigo** (`SettingKey`), y la unicidad la garantiza `one_setting_per_key`.
+ * > Las cuatro filas que siembra `seedOperationalDefaults()` **conservan su
+ * > nombre de clave** y siguen siendo el valor visible y editable desde el
+ * > panel.
+ *
  * Los cuatro valores de serie del Anexo B del doc 02 se siembran en la
  * migracion y no en un seeder, por lo mismo que el perfil `ES-hosteleria`: un
  * seeder no se ejecuta en el servidor del cliente, y sin ellos el primer

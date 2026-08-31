@@ -422,8 +422,12 @@ Motor: **PostgreSQL 17**. Los tipos se expresan en su nomenclatura. El Anexo D d
 *Alimenta RN-10, RN-11 y RN-12. Se entrega el perfil `ES-hosteleria` de serie.*
 
 **`installation_settings`** — configuración de la instalación (RF-PD-01)
-`key`, `value` (JSONB), `scope` (`installation`|`site`), `scope_id`, `updated_by_user_id`, `updated_at`
-*Cubre marca, umbrales, idiomas y funcionalidades activas. Todo cambio queda auditado, porque algunos afectan al cálculo de horas.*
+`key`, `value` (JSONB), `updated_by_user_id`, `updated_at`
+*Cubre **marca, idiomas y umbrales operativos**. Una fila por clave (`one_setting_per_key`). Todo cambio queda auditado, porque algunos afectan al cálculo de horas.*
+
+> **Qué no está aquí.** Los umbrales **legales** —descanso mínimo, jornada máxima, pausas, retención— son de `compliance_profiles` (RF-PD-07): un umbral legal lo fija la jurisdicción y uno operativo lo fija el hotel. Y las **funcionalidades activas** las gobierna `features` de la licencia (ADR-018, ADR-023), no una clave editable desde el panel: si el cliente pudiera encenderlas, la licencia no limitaría nada.
+>
+> **Sin ámbito.** La tabla nació con `scope` (`installation`|`site`) y `scope_id`, pensando en que un centro pisara el valor de la instalación. ADR-040 dejó exactamente un centro por instalación, así que ese ámbito nunca se usó y la tarea 5.1 lo retiró con una migración de contracción. **La cascada tiene dos escalones: fila de instalación → valor por defecto del catálogo en código.** Una instalación sin ninguna fila arranca y funciona con los valores de serie del producto.
 
 **`license`** — `id`, `signed_key`, `customer_name`, `plan`, `max_employees`, `max_devices`, `features` (JSONB), `valid_until`, `activated_at`, `last_verified_at`
 

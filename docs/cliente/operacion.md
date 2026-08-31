@@ -149,3 +149,7 @@ Métricas publicadas para el colector de `node-exporter`
 Las obligaciones que van con todo esto —qué informar, qué archivar, quién
 autoriza— están en
 [`obligaciones-legales.md`](obligaciones-legales.md).
+
+Lo que se puede **cambiar** —umbrales operativos, marca e idiomas— y qué
+consecuencias tiene cada cambio está en
+[`configuracion.md`](configuracion.md).

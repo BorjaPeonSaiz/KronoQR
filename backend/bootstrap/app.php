@@ -33,6 +33,8 @@ use App\Modules\Identity\Domain\Exception\EmployeeAlreadyHasCredential;
 use App\Modules\Identity\Domain\Exception\InvalidSigningKey;
 use App\Modules\Identity\Domain\ValueObject\TokenAbility;
 use App\Modules\Identity\Http\Middleware\RejectPendingTwoFactorSession;
+use App\Modules\Product\Domain\Exception\InvalidSettingValue;
+use App\Modules\Product\Domain\Exception\UnknownSettingKey;
 use App\Modules\Reporting\Application\Exception\EmployeeNotFound;
 use App\Modules\Reporting\Application\Exception\ReportRenderingUnavailable;
 use App\Modules\Reporting\Domain\Exception\InvalidDateRange;
@@ -611,5 +613,41 @@ return Application::configure(basePath: dirname(__DIR__))
          */
         $exceptions->render(static fn (InvalidLegalExportRequest $exception): mixed => ProblemDetails::validationFailed([
             'from' => [$exception->getMessage()],
+        ]));
+
+        /*
+         * Configuracion de la instalacion (tarea 5.1, RF-PD-01, ADR-017).
+         *
+         * `422` PARA LAS DOS. Quien las recibe tiene algo que corregir en el
+         * cuerpo —una clave que no existe, un valor fuera de rango, un idioma por
+         * defecto que no esta entre los disponibles— y puede hacerlo sin releer
+         * nada.
+         *
+         * **El `FormRequest` atrapa antes casi todo, y con el campo señalado**
+         * (`settings.<CLAVE>`), porque conoce el catalogo. Lo que llega aqui es lo
+         * que el no puede ver: las invariantes ENTRE claves, que dependen de lo
+         * que ya hay guardado —cambiar `LOCALE_AVAILABLE` sin mandar
+         * `LOCALE_DEFAULT` puede dejarlo huerfano—, y los caminos que no pasan
+         * por HTTP: el instalador (5.4), el asistente (5.5) y la consola. Sin
+         * esto, cualquiera de ellos saldria como `500`.
+         *
+         * Se cuelgan de `settings` y no de una clave concreta a proposito: son
+         * afirmaciones sobre el CONJUNTO, y señalar una de las dos claves
+         * implicadas sugeriria que la culpable es esa.
+         */
+        $exceptions->render(static fn (UnknownSettingKey $exception): mixed => ProblemDetails::validationFailed([
+            'settings' => [ProblemDetails::translated(
+                $exception->translationKey,
+                $exception->parameters,
+                $exception->getMessage(),
+            )],
+        ]));
+
+        $exceptions->render(static fn (InvalidSettingValue $exception): mixed => ProblemDetails::validationFailed([
+            'settings' => [ProblemDetails::translated(
+                $exception->translationKey,
+                $exception->parameters,
+                $exception->getMessage(),
+            )],
         ]));
     })->create();

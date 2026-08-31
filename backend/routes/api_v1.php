@@ -25,6 +25,7 @@ use App\Modules\Identity\Http\Controller\RevokeCredentialController;
 use App\Modules\Identity\Http\Controller\TwoFactorController;
 use App\Modules\Kiosk\Http\Controller\HeartbeatController;
 use App\Modules\Kiosk\Http\Controller\RosterController;
+use App\Modules\Product\Http\Controller\SettingsController;
 use App\Modules\Reporting\Http\Controller\EmployeeWorkDayController;
 use App\Modules\Reporting\Http\Controller\LivePresenceController;
 use App\Modules\Reporting\Http\Controller\MyWorkDayController;
@@ -805,4 +806,49 @@ Route::middleware(['auth:sanctum', 'ability:'.TokenAbility::CREDENTIALS_ALL->val
     Route::post('/credentials/{uuid}/revoke', RevokeCredentialController::class)
         ->whereUuid('uuid')
         ->name('credentials.revoke');
+});
+
+/*
+ * La configuracion de la instalacion (tarea 5.1, RF-PD-01, ADR-017).
+ *
+ * ES LO QUE HACE QUE VENDER A UN CLIENTE NUEVO NO EXIJA TOCAR EL REPOSITORIO
+ * (regla dura 13). Marca, idiomas y umbrales operativos son datos editables desde
+ * el panel, no constantes de PHP ni una rama por cliente.
+ *
+ * `settings:*` Y SOLO `admin`, y las dos mitades dicen lo mismo. El Anexo B del
+ * doc 01 marca las dos rutas como `[rol: admin]` y el §7.3 concede el ambito
+ * unicamente al administrador de instalacion. El middleware comprueba el ambito
+ * y `SettingsPolicy` el rol (regla dura 18): sin la policy, bastaria un token
+ * emitido a mano con el ambito correcto para mover el umbral con el que se
+ * calculan las horas de todo el centro.
+ *
+ * **`rrhh` no entra**, aunque corrija fichajes: corregir un tramo deja traza
+ * sobre UNA jornada; mover el anti-rebote cambia el calculo de TODAS las
+ * siguientes. **El `auditor` tampoco**: lo que necesita —que umbral regia el 14
+ * de marzo y quien lo cambio— esta en `audit_log`, al que si llega con
+ * `audit:read`, y ahi es historico y encadenado en lugar de ser el valor de hoy.
+ *
+ * `throttle:management` POR LO QUE ESCRIBE EL `PATCH`. Cada clave cambiada deja
+ * un asiento en `audit_log` bajo el candado global de ADR-010 —el mismo por el
+ * que pasa cada fichaje—. Sin techo por cuenta, un bucle de escrituras de
+ * configuracion mete contencion en el camino critico del cambio de turno. Se
+ * aplica al grupo entero y no solo al `PATCH` porque las dos salen de la misma
+ * pantalla y con el mismo token.
+ *
+ * RECURSO SINGULAR Y SIN `DELETE`. La configuracion es una y es de la
+ * instalacion: no hay lista, no hay alta —el catalogo es codigo— y volver al
+ * valor de serie es escribirlo, no borrar la fila. Es el mismo criterio que
+ * `/site` (ADR-040) y la misma regla dura 5 que en el resto de la API.
+ *
+ * NO LO CIERRA UNA LICENCIA CADUCADA (ADR-019, regla dura 15). Estas dos rutas
+ * no se degradan: dejar a un cliente sin poder ver ni corregir sus propios
+ * umbrales por una fecha de vencimiento seria empujarle al incumplimiento.
+ */
+Route::middleware([
+    'auth:sanctum',
+    'ability:'.TokenAbility::SETTINGS_ALL->value,
+    'throttle:management',
+])->group(function (): void {
+    Route::get('/settings', [SettingsController::class, 'show'])->name('product.settings.show');
+    Route::patch('/settings', [SettingsController::class, 'update'])->name('product.settings.update');
 });

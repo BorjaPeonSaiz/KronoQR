@@ -2084,6 +2084,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Configuracion de la instalacion
+         * @description Devuelve **el catalogo entero** ya resuelto, no solo lo que este
+         *     guardado (RF-PD-01). Es deliberado: un panel que solo enseñara las filas
+         *     existentes ocultaria justo lo que el cliente todavia no ha configurado, y
+         *     el administrador no sabria que puede cambiar.
+         *
+         *     **La cascada tiene dos escalones**: la fila de `installation_settings` si
+         *     existe, y si no el valor de serie del producto. `source` dice cual de los
+         *     dos ha ganado. No hay un tercer escalon de centro
+         *     ([ADR-040](../adr/ADR-040-un-centro-por-instalacion-y-por-licencia.md):
+         *     hay uno por instalacion) ni de variable de entorno: la variable es el
+         *     valor con el que el instalador siembra la primera fila, no un escalon.
+         *     Si lo fuera, un cambio guardado desde el panel no surtiria efecto
+         *     mientras el `.env` dijera otra cosa.
+         *
+         *     **Una instalacion sin ninguna fila responde `200`** con todas las claves
+         *     en `source: product_default`. El valor por defecto **es** el producto.
+         *
+         *     `meta.unknown_keys` enumera las filas guardadas que **este binario no
+         *     reconoce**. Solo pueden venir de una version posterior o de una edicion a
+         *     mano; no las lee nadie y no cambian el comportamiento, pero se enseñan
+         *     porque son el sintoma de una actualizacion a medias.
+         */
+        get: operations["getInstallationSettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Modificacion de la configuracion
+         * @description Cambia una o varias claves a la vez y devuelve **el conjunto completo**,
+         *     con la misma forma que el `GET`: asi el panel no tiene que recomponer el
+         *     estado a partir de lo que envio.
+         *
+         *     **Todo cambio queda auditado** (regla dura 6, RL-04). Cada clave
+         *     modificada deja su propio asiento en `audit_log`
+         *     —`calculation_setting.changed`— con el actor, el valor anterior, el valor
+         *     nuevo y si esa clave **afecta al calculo de horas**. Quien lea ese asiento
+         *     dentro de dos años, con una discrepancia de nomina delante, necesita
+         *     separar «esto pudo cambiar las horas» de «esto cambio un color». El
+         *     asiento y la fila se escriben en la misma transaccion: si la auditoria
+         *     falla, el cambio no se guarda.
+         *
+         *     **Guardar el valor que ya regia no escribe nada**: ni fila ni asiento. Es
+         *     lo que hace que abrir la pantalla y pulsar «guardar» no ensucie el trail.
+         *
+         *     **Se validan las claves de una en una y el conjunto despues.** Una clave
+         *     fuera del catalogo o un valor fuera de rango son `422` con el error
+         *     colgado de `settings.<CLAVE>`; y hay invariantes que ninguna clave puede
+         *     comprobar sola —el idioma por defecto tiene que estar entre los
+         *     disponibles—, que se comprueban sobre el resultado para que el orden de
+         *     escritura no pueda dejar la instalacion en un estado imposible.
+         *
+         *     **Volver al valor de serie no es guardar una cadena vacia.** Hoy no hay
+         *     forma de retirar una clave desde la API; el valor de serie se restablece
+         *     escribiendolo explicitamente.
+         */
+        patch: operations["updateInstallationSettings"];
+        trace?: never;
+    };
 }
 export interface webhooks {
     presenceUpdated: {
@@ -3215,6 +3284,204 @@ export interface components {
          */
         UpdateDepartmentRequest: {
             name: string;
+        };
+        /**
+         * SettingKey
+         * @description Catalogo cerrado de claves de configuracion de la instalacion
+         *     (RF-PD-01). El nombre es identico al de la variable de entorno del
+         *     Anexo B cuando la propiedad tiene las dos caras: la variable es el valor
+         *     con el que el instalador siembra la primera fila, y la fila es la que
+         *     manda a partir de ahi.
+         *
+         *     Ampliar este enum es un cambio **aditivo** y cabe en `/api/v1`
+         *     ([ADR-012](../adr/ADR-012-api-versionada-en-la-ruta.md)): un cliente que
+         *     no conozca una clave nueva la ignora, y el servidor sigue devolviendo
+         *     todas.
+         *
+         *     **Que se aplica hoy y que no.** Las cuatro `ATTENDANCE_*` gobiernan ya el
+         *     fichaje: el nucleo las recibe resueltas por `OperationalSettingsProvider`
+         *     y un cambio surte efecto en la peticion siguiente. Las tres
+         *     `BRANDING_*` y las dos `LOCALE_*` **se guardan y se auditan, y todavia no
+         *     se pintan**: las tres aplicaciones cliente y la cabecera de los PDF siguen
+         *     leyendo la marca del entorno del servidor, y es la **tarea 5.8** la que
+         *     las pasa a estas claves. Se publican desde ya para que la puesta en marcha
+         *     pueda dejarlas escritas y para que el cambio de la 5.8 no altere el
+         *     contrato.
+         * @enum {string}
+         */
+        SettingKey: "ATTENDANCE_MAX_SHIFT_HOURS" | "ATTENDANCE_DEBOUNCE_SECONDS" | "ATTENDANCE_MAX_CLOCK_SKEW_MINUTES" | "ATTENDANCE_MIN_TRANSIT_SECONDS" | "BRANDING_APP_NAME" | "BRANDING_LOGO_PATH" | "BRANDING_ACCENT_COLOR" | "LOCALE_DEFAULT" | "LOCALE_AVAILABLE";
+        /**
+         * SettingValue
+         * @description El valor de una clave. `installation_settings.value` es `JSONB` porque el
+         *     tipo forma parte del dato: un umbral es numero, un idioma es cadena y los
+         *     idiomas activos son una lista. `type` dice cual de los tres es, para que
+         *     el panel sepa que control dibujar sin llevar el catalogo duplicado.
+         * @example 12
+         * @example Hotel Marina
+         * @example [
+         *       "es",
+         *       "en"
+         *     ]
+         */
+        SettingValue: number | string | string[];
+        /**
+         * SettingType
+         * @description De que tipo es el valor. No hay booleano porque ninguna clave del
+         *     catalogo lo necesita todavia; añadirlo cuando aparezca la primera es
+         *     aditivo.
+         * @enum {string}
+         */
+        SettingType: "integer" | "text" | "text_list";
+        /**
+         * SettingImpact
+         * @description Sobre que actua la clave cuando cambia.
+         *
+         *     - `worked_hours` — puede cambiar los **minutos** que quedan registrados.
+         *     - `compliance_review` — no mueve minutos, pero cambia **que incidencias
+         *       se abren** para revision humana (RN-08, RN-16, RF-AT-10).
+         *     - `presentation` — solo altera lo que se ve (RF-PD-08).
+         *
+         *     Son tres y no un booleano porque marcar los tres umbrales de revision
+         *     como «afecta a las horas» diluiria la señal justo donde importa, y
+         *     marcarlos como «no afecta» perderia que alteran el expediente de
+         *     cumplimiento. El booleano que el asiento de auditoria necesita sigue
+         *     existiendo, y es `affects_worked_hours`.
+         * @enum {string}
+         */
+        SettingImpact: "worked_hours" | "compliance_review" | "presentation";
+        /**
+         * SettingSource
+         * @description Que escalon de la cascada ha ganado: `installation` si hay fila guardada,
+         *     `product_default` si rige el valor de serie del producto. Son
+         *     indistinguibles en el numero y muy distintos en la conversacion: el panel
+         *     lo usa para enseñar que esta configurado de verdad.
+         * @enum {string}
+         */
+        SettingSource: "installation" | "product_default";
+        /**
+         * SettingConstraints
+         * @description Lo que la clave admite, para que el panel valide antes de enviar y para
+         *     que quien lee el contrato no tenga que deducirlo. Los campos presentes
+         *     dependen del `type`: rango en los enteros, longitud o forma en las
+         *     cadenas, y conjunto cerrado en las que lo tienen.
+         *
+         *     **No sustituye a la validacion del servidor**, que es la que manda: esto
+         *     es la misma regla publicada para que el formulario no tenga que
+         *     duplicarla a mano.
+         */
+        SettingConstraints: {
+            /** @description Valor minimo admitido, en las claves de tipo `integer`. */
+            minimum?: number;
+            /** @description Valor maximo admitido, en las claves de tipo `integer`. */
+            maximum?: number;
+            /** @description Longitud maxima en caracteres, en las claves de tipo `text`. */
+            maximum_length?: number;
+            /**
+             * @description Expresion regular que la cadena debe cumplir. Hoy solo la lleva el
+             *     color de acento, que es `#rrggbb`.
+             */
+            pattern?: string;
+            /**
+             * @description Conjunto cerrado de valores admitidos. En `text_list` acota cada
+             *     elemento de la lista, no la lista entera.
+             */
+            allowed?: string[];
+        };
+        /**
+         * InstallationSetting
+         * @description Una clave del catalogo, ya resuelta: cuanto vale, de donde sale ese valor
+         *     y que pasa cuando cambia (RF-PD-01).
+         */
+        InstallationSetting: {
+            key: components["schemas"]["SettingKey"];
+            value: components["schemas"]["SettingValue"];
+            type: components["schemas"]["SettingType"];
+            impact: components["schemas"]["SettingImpact"];
+            /**
+             * @description Si cambiar esta clave puede cambiar los minutos del registro legal.
+             *     Es el campo que viaja al asiento de `audit_log` del `PATCH`, y el que
+             *     separa «esto pudo cambiar las horas» de «esto cambio un color». Se
+             *     deriva de `impact`; se publica porque es la pregunta que se hace quien
+             *     mira la pantalla.
+             */
+            affects_worked_hours: boolean;
+            source: components["schemas"]["SettingSource"];
+            constraints?: components["schemas"]["SettingConstraints"];
+        };
+        /**
+         * InvalidSetting
+         * @description Una fila guardada que se ha **descartado** al leer, porque su valor no
+         *     cumple lo que su clave declara (RF-PD-01).
+         *
+         *     No es un error de la peticion: es un aviso sobre el estado de la
+         *     instalacion. Mientras exista, la clave se sirve con su valor de serie.
+         */
+        InvalidSetting: {
+            key: components["schemas"]["SettingKey"];
+            /**
+             * @description Por que se ha descartado, en el idioma negociado con
+             *     `Accept-Language`. Lo lee una persona.
+             * @example El valor de la clave «BRANDING_ACCENT_COLOR» no tiene la forma esperada (/^#[0-9a-fA-F]{6}$/).
+             */
+            reason: string;
+            /**
+             * @description Si la clave descartada puede cambiar los minutos del registro legal.
+             *     Es lo que separa «hay que arreglarlo cuando se pueda» de «hay que
+             *     arreglarlo hoy y revisar lo calculado desde que se rompio».
+             */
+            affects_worked_hours: boolean;
+        };
+        /**
+         * InstallationSettings
+         * @description El catalogo entero, en el orden en que lo declara el producto. **Siempre
+         *     todas las claves**, tambien las que no tienen fila guardada.
+         */
+        InstallationSettings: {
+            data: components["schemas"]["InstallationSetting"][];
+            meta: {
+                /**
+                 * @description Filas guardadas cuya clave este binario no reconoce. **Ni se leen
+                 *     ni cambian nada**: se enseñan porque son el sintoma de una
+                 *     actualizacion a medias o de una edicion a mano.
+                 * @example []
+                 */
+                unknown_keys: string[];
+                /**
+                 * @description Filas cuya clave **si** existe y cuyo valor su definicion no
+                 *     admite. Son un problema distinto de `unknown_keys` y mas serio:
+                 *     **se han descartado y rige el valor de serie**, asi que lo que se
+                 *     aplica no es lo que hay escrito en la tabla. Si la clave es de
+                 *     impacto `worked_hours`, eso mueve los minutos que se calculan.
+                 *
+                 *     Solo pueden venir de una edicion a mano de la base de datos o de
+                 *     una version distinta del producto: la API no deja guardar un valor
+                 *     que su clave no admita. La lectura las tolera para que una fila
+                 *     corrupta no impida fichar (regla dura 19), y las publica aqui para
+                 *     que el descarte no sea silencioso.
+                 * @example []
+                 */
+                invalid_keys: components["schemas"]["InvalidSetting"][];
+            };
+        };
+        /**
+         * UpdateSettingsRequest
+         * @description Las claves que se cambian, por su nombre. Al menos una.
+         *
+         *     **Una clave fuera del catalogo es `422`, no se ignora.** Aceptarla
+         *     produciria una fila que nadie lee: el cliente creeria haber configurado
+         *     un umbral y el sistema seguiria aplicando el valor de serie. Un ajuste que
+         *     se guarda y no hace nada es peor que un error.
+         */
+        UpdateSettingsRequest: {
+            /**
+             * @example {
+             *       "ATTENDANCE_MAX_SHIFT_HOURS": 10,
+             *       "BRANDING_APP_NAME": "Hotel Marina"
+             *     }
+             */
+            settings: {
+                [key: string]: components["schemas"]["SettingValue"];
+            };
         };
         /**
          * Problem
@@ -7625,6 +7892,57 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getInstallationSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description El catalogo completo, resuelto. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstallationSettings"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    updateInstallationSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description Configuracion guardada. Devuelve el catalogo completo. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstallationSettings"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
         };

@@ -47,6 +47,7 @@ use App\Modules\Compliance\Infrastructure\Listener\OpenIncidentOnAnomalyDetected
 use App\Modules\Compliance\Infrastructure\Listener\RecordCredentialLifecycle;
 use App\Modules\Compliance\Infrastructure\Listener\RecordEmployeePinLifecycle;
 use App\Modules\Compliance\Infrastructure\Listener\RecordEmploymentContractChange;
+use App\Modules\Compliance\Infrastructure\Listener\RecordInstallationSettingChange;
 use App\Modules\Compliance\Infrastructure\Listener\RecordManagementAccountLifecycle;
 use App\Modules\Compliance\Infrastructure\Listener\RecordProjectionReconciliationAudit;
 use App\Modules\Compliance\Infrastructure\Listener\RecordShiftEntryAudit;
@@ -74,6 +75,7 @@ use App\Modules\Identity\Domain\Event\SigningKeyRetired;
 use App\Modules\Identity\Domain\Event\SigningKeyRotated;
 use App\Modules\Identity\Domain\Event\TwoFactorEnabled;
 use App\Modules\Identity\Domain\Event\TwoFactorReset;
+use App\Modules\Product\Domain\Event\InstallationSettingChanged;
 use App\Modules\Shared\Application\Port\AuthenticationJournal;
 use App\Modules\Shared\Application\Port\AuthorizationJournal;
 use App\Modules\Shared\Application\Port\Clock;
@@ -240,6 +242,7 @@ final class ComplianceServiceProvider extends ServiceProvider
         $this->recordCredentialAndDeviceLifecycle();
         $this->recordEmployeePinLifecycle();
         $this->recordEmploymentContractChanges();
+        $this->recordInstallationSettingChanges();
         $this->recordManagementAccountLifecycle();
         $this->openAndNotifyIncidents();
 
@@ -523,6 +526,27 @@ final class ComplianceServiceProvider extends ServiceProvider
     private function recordEmploymentContractChanges(): void
     {
         Event::listen(EmploymentContractRegistered::class, [RecordEmploymentContractChange::class, 'handle']);
+    }
+
+    /**
+     * El asiento de cada cambio de la **configuracion de la instalacion**
+     * (tarea 5.1, RF-PD-01, RL-04).
+     *
+     * Misma familia del bloque D que el contrato y que el cambio de rol
+     * —`AuthorityOrCalculationChange`— y por la misma razon: mueve un parametro
+     * del calculo. La ventana anti-rebote de RF-AT-06 es el caso claro, porque
+     * cambia los minutos que quedan registrados sin que nadie toque un fichaje.
+     *
+     * **Un evento por clave, y por tanto un asiento por clave.** Un `PATCH` que
+     * cambia tres deja tres, cada uno con su antes, su despues y su
+     * `affects_worked_hours`.
+     *
+     * Sincrono, sin `ShouldQueue` y sin `afterCommit`: si el asiento falla, el
+     * cambio de configuracion no se guarda (ADR-027).
+     */
+    private function recordInstallationSettingChanges(): void
+    {
+        Event::listen(InstallationSettingChanged::class, [RecordInstallationSettingChange::class, 'handle']);
     }
 
     /**

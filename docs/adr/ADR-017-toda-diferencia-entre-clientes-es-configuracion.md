@@ -29,6 +29,21 @@ Hay además una razón de dominio, no solo de negocio: los umbrales de RN-10, RN
 Cuatro mecanismos, cada uno con su sitio:
 
 1. **`installation_settings`**, con ámbito (`installation` o `site`) y resolución en cascada (RF-PD-01): marca, idiomas, umbrales operativos y funcionalidades. Todo cambio queda auditado, porque algunos afectan al cálculo de horas.
+
+   > **Enmienda 31-08-2026 (tarea 5.1).** Dos correcciones sobre la redacción original, que se
+   > conserva porque es la decisión tal como se tomó:
+   >
+   > - **Un solo ámbito.** El ámbito `site` nunca llegó a usarse y [ADR-040](ADR-040-un-centro-por-instalacion-y-por-licencia.md)
+   >   lo dejó sin sentido: hay exactamente un centro por instalación. La migración de contracción
+   >   `2026_09_05_100000` retiró `scope` y `scope_id`, y la cascada quedó en **dos escalones: fila de
+   >   instalación → valor por defecto del catálogo en código** (`SettingKey`). Un escalón que siempre
+   >   resuelve al mismo sitio no es una cascada.
+   > - **Las funcionalidades activas NO son claves de `installation_settings`.** Las gobierna
+   >   `features` de la licencia, que es el mecanismo 3 de esta misma lista
+   >   ([ADR-018](ADR-018-licencia-firmada-con-verificacion-local.md),
+   >   [ADR-023](ADR-023-frontera-registro-legal-y-funcionalidad-accesoria.md)). Si el cliente pudiera
+   >   encenderlas desde el panel, la licencia no limitaría nada. `installation_settings` cubre
+   >   **marca, idiomas y umbrales operativos**, y nada más.
 2. **Perfiles de cumplimiento** (`compliance_profiles`, RF-PD-07): jurisdicción, años de retención, descanso mínimo, jornada máxima diaria y semanal, pausas obligatorias, inicio de semana y calendario de festivos. Se entrega el perfil `ES-hosteleria` de serie.
 3. **`features` de la licencia**: qué funcionalidad accesoria está habilitada ([ADR-023](ADR-023-frontera-registro-legal-y-funcionalidad-accesoria.md)).
 4. **Marca blanca** (RF-PD-08): logotipo, colores y nombre aplicados al quiosco, al panel, al portal y a los PDF.
@@ -60,7 +75,7 @@ Cuatro mecanismos, cada uno con su sitio:
 
 - Prueba de arquitectura: ninguna clase de `Domain/` lee configuración, `config()`, `env()` ni consulta `installation_settings`. El umbral llega como parámetro.
 - Prueba unitaria: la misma regla RN-10 evaluada con dos perfiles distintos produce resultados distintos, sin cambiar código.
-- Prueba de integración: la resolución en cascada devuelve el valor de centro cuando existe y el de instalación cuando no (RF-PD-01).
+- Prueba de integración: la resolución en cascada devuelve **la fila de instalación cuando existe y el valor de serie del catálogo cuando no** (RF-PD-01). *(Enmienda 31-08-2026, tarea 5.1: la redacción anterior hablaba del valor de centro, que ya no existe — ver la enmienda del punto 1 de «Decisión». La prueba vive en `tests/Feature/Product/InstallationSettingsTest.php`, y la unitaria de la cascada pura en `tests/Unit/Product/Domain/ResolvedSettingsTest.php`.)*
 - Prueba de integración: cambiar un valor del perfil de cumplimiento deja entrada en `audit_log` con autor y momento.
 - Búsqueda en el árbol: cero nombres de cliente, cero umbrales legales escritos como literal en el código, cero condicionales por cliente.
 - Prueba de *feature*: la marca configurada aparece en quiosco, panel, portal y PDF, y el valor por defecto es el del producto (RF-PD-08).

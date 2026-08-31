@@ -53,9 +53,14 @@ En concreto:
    `sites` (`sites_single_row_uidx`) hace que el segundo `INSERT` falle. Es una restricción
    declarativa, como las demás invariantes del esquema (doc 02 §3.2), y no un `if` en un caso de uso.
    `site_id` **se conserva en todas las tablas** (`departments`, `employees`, `devices`,
-   `shift_entries`, `installation_settings.scope_id`): apunta siempre al mismo centro, pero el registro
+   `shift_entries`): apunta siempre al mismo centro, pero el registro
    legal y la cadena de auditoría no se tocan, y `SiteCalendar`, `CompliancePolicyProvider` y
    `OperationalSettingsProvider` siguen resolviendo por él.
+
+   > **Enmienda 31-08-2026 (tarea 5.1).** La lista original incluía
+   > `installation_settings.scope_id`. Ya no: la tarea 5.1 lo retiró junto con `scope`, su `CHECK`, su
+   > clave ajena a `sites` y los dos índices parciales (ver la enmienda del punto 6). El resto de las
+   > tablas conserva `site_id`, que es lo que esta decisión protege: el registro legal no se toca.
 2. **El centro se crea una sola vez.** `CreateSiteHandler` se niega a crear un segundo
    (`SiteAlreadyConfigured`, `409`). No hay endpoint de alta: lo crea el asistente de puesta en marcha
    (RF-PD-03, tarea 5.5), y hasta entonces la semilla o la consola. `SiteRepository::installationSite()`
@@ -75,6 +80,23 @@ En concreto:
 6. **`installation_settings.scope = site` queda sin uso.** La cascada de RF-PD-01 (tarea 5.1) pasa a
    `installation → valor de serie`. La columna y su `CHECK` se conservan: retirarlos es una migración
    de contracción que decide la tarea 5.1 cuando implemente la cascada, no esta rama.
+
+   > **Enmienda 31-08-2026 (tarea 5.1): la contracción ya se ejecutó.** La migración
+   > `2026_09_05_100000_contract_installation_settings_scope` retira `scope`, `scope_id`, el `CHECK`
+   > `installation_settings_chk_scope`, la clave ajena a `sites` y los dos índices parciales
+   > (`one_installation_setting_per_key`, `one_site_setting_per_key`), y crea el único que queda,
+   > `one_setting_per_key`, sobre `key`.
+   >
+   > **La cascada real es de dos escalones: fila de instalación → valor por defecto del catálogo en
+   > código** (`Product/Domain/ValueObject/SettingKey`). La variable de entorno no es un escalón: es
+   > el valor de arranque con el que el instalador (tarea 5.4) siembra la primera fila. Si lo fuera,
+   > un cambio guardado desde el panel no surtiría efecto mientras el `.env` dijera otra cosa, y el
+   > cliente vería el valor nuevo guardado y el viejo aplicándose.
+   >
+   > La migración **se niega a ejecutarse si encuentra filas de ámbito `site`** en lugar de borrarlas
+   > (regla dura 5). No puede haberlas —ningún camino del producto las escribió nunca—, pero una
+   > edición a mano sí. `down()` reconstruye el esquema exacto de la tarea 1.3 y está probado en
+   > `tests/Integration/Product/ContractInstallationSettingsScopeMigrationTest.php`.
 7. **Lo que se le dice al cliente cambia.** Doc 05 deja de prometer «multi-centro» y «consolidación
    entre centros»: una cadena compra una licencia por hotel. El punto 4.e del plan de la Fase 4 se
    retira.

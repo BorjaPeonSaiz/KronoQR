@@ -123,6 +123,14 @@ trait CommittedDatabase
      * `DELETE` mira las **filas** y no las tablas: las de
      * `installation_settings` no apuntan a ningun centro, asi que no estorban.
      *
+     * > **Enmienda 31-08-2026 (tarea 5.1).** Esa clave ajena ya no existe: la
+     * > migracion de contraccion `2026_09_05_100000` retiro `scope` y `scope_id`
+     * > (ADR-040). El parrafo se conserva porque explica por que este metodo usa
+     * > `DELETE`, y la razon sigue valiendo para el resto del esquema. Lo que ya
+     * > no puede ocurrir es ese fallo concreto — y ademas, desde la 5.1, una
+     * > instalacion sin filas de configuracion arranca con los valores de serie
+     * > del catalogo en lugar de romper.
+     *
      * **El orden se resuelve reintentando y no con una lista.** Una lista
      * ordenada por claves foraneas es otra cosa que se queda vieja en cuanto
      * alguien anade una tabla. Cada pasada borra lo que puede y deja para la

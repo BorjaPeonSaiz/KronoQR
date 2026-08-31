@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Modules\Product\Domain\ValueObject\SettingKey;
 use Spectator\RequestFactory;
 use Spectator\Spectator;
 use Tests\Contract\Support\Contract;
@@ -123,8 +124,39 @@ it('describe solo los endpoints cuya tarea existe, y todos bajo /api/v1', functi
         // `IncidentId` del contrato.
         '/api/v1/incidents',
         '/api/v1/incidents/{id}/resolve',
+        // Tarea 5.1: configuracion de la instalacion (RF-PD-01, ADR-017). Es lo
+        // que hace que vender a un cliente nuevo no exija tocar el repositorio.
+        // Recurso SINGULAR y sin `{key}` en la ruta: el catalogo de claves es
+        // codigo y se sirve entero, asi que no hay nada que direccionar por
+        // separado — y un `PATCH` de varias claves a la vez es lo que permite
+        // comprobar las invariantes entre ellas antes de escribir ninguna.
+        '/api/v1/settings',
     ]);
 })->group('RQ-06');
+
+it('declara en el contrato exactamente el catalogo de claves de configuracion', function (): void {
+    // RF-PD-01. El catalogo vive en `SettingKey` y **se escribe otras dos veces**
+    // en el contrato: en el enum del esquema `SettingKey`, que tipa la respuesta,
+    // y en `propertyNames` de `UpdateSettingsRequest`, que acota lo que se puede
+    // enviar. Las tres copias tienen que decir lo mismo.
+    //
+    // Que se separen no rompe nada visible, y eso es justo el problema: una clave
+    // añadida al catalogo y olvidada en `propertyNames` la rechazaria el validador
+    // de contrato de un cliente que la envia legitimamente; olvidada en el enum de
+    // la respuesta, el cliente TypeScript no la conoceria y el panel no la
+    // pintaria. Los dos fallos aparecen lejos de su causa.
+    //
+    // Es el mismo criterio con el que los ambitos de token estan escritos en tres
+    // sitios y atados por una prueba, y no por la buena fe.
+    $catalogo = array_map(static fn (SettingKey $key): string => $key->value, SettingKey::cases());
+
+    expect(Contract::value('components', 'schemas', 'SettingKey', 'enum'))->toBe($catalogo);
+
+    expect(Contract::value(
+        'components', 'schemas', 'UpdateSettingsRequest',
+        'properties', 'settings', 'propertyNames', 'enum',
+    ))->toBe($catalogo);
+})->group('RQ-06', 'RF-PD-01');
 
 it('describe el segundo factor con dos desenlaces de exito que no se confunden', function (): void {
     // RS-06. `POST /auth/login` gana un `202` con la sesion PENDIENTE, con nombre

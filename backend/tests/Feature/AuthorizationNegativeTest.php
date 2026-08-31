@@ -169,6 +169,38 @@ function managementEndpoints(): array
             'schedule_type' => 'turnos',
             'valid_from' => '2026-03-01',
         ]],
+
+        ...installationSettingsEndpoints(),
+    ];
+}
+
+/**
+ * La configuracion de la instalacion (tarea 5.1, RF-PD-01). Ambito `settings:*`
+ * y rol `admin`, y **solo** `admin`.
+ *
+ * Entra como bloque propio porque ademas de la matriz general necesita algo que
+ * ningun otro endpoint necesita: que **`rrhh` reciba 403**. Es el unico rol que
+ * lleva todos los ambitos de gestion y aun asi no llega aqui, asi que sin una
+ * prueba suya el `403` de estas dos rutas quedaria sin comprobar justo para el
+ * rol que mas se le parece al autorizado.
+ *
+ * Los dos endpoints entran uno a uno aunque compartan ambito, por lo mismo que
+ * los cuatro de credenciales: la policy se declara en el `FormRequest` de cada
+ * uno —y en el `Gate::authorize` del `GET`—, asi que un `authorize()` que
+ * devolviera `true` en uno solo seria invisible desde el otro.
+ *
+ * El cuerpo del `PATCH` es valido a proposito, para que lo que falle sea la
+ * autorizacion y no la validacion: un `422` esconderia si la policy funciona.
+ *
+ * @return array<string, array{0: string, 1: string, 2: array<string, mixed>}>
+ */
+function installationSettingsEndpoints(): array
+{
+    return [
+        'ver la configuracion de la instalacion' => ['GET', '/api/v1/settings', []],
+        'cambiar la configuracion de la instalacion' => ['PATCH', '/api/v1/settings', [
+            'settings' => ['ATTENDANCE_MAX_SHIFT_HOURS' => 10],
+        ]],
     ];
 }
 
@@ -409,3 +441,29 @@ it('deniega a un token de quiosco emitir o revocar credenciales', function (stri
     'emitir' => ['/api/v1/credentials', ['employee_uuid' => '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90']],
     'revocar' => ['/api/v1/credentials/0199f0d1-2a5b-7d4f-8c32-5e6f7a8b9c01/revoke', ['reason' => 'Perdida']],
 ])->group('RS-04', 'RF-QR-01', 'RF-QR-03');
+
+it('deniega a RRHH la configuracion de la instalacion', function (string $method, string $uri, array $body): void {
+    // El caso que la matriz general no cubre: `rrhh` lleva todos los ambitos de
+    // gestion —corrige fichajes, emite credenciales, genera informes— y aun asi
+    // no llega aqui. Corregir un tramo deja traza sobre UNA jornada; mover el
+    // anti-rebote cambia el calculo de TODAS las siguientes (RF-PD-01, ADR-017).
+    //
+    // Falla por partida doble y las dos mitades cuentan: no lleva `settings:*`
+    // en el token (§7.3) y tampoco esta en `SettingsPolicy`.
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RRHH));
+
+    Api::as($token)->call($method, $uri, $body)->assertStatus(403);
+})->with(installationSettingsEndpoints())->group('RF-PD-01', 'RS-05', 'RQ-07');
+
+it('deja pasar al administrador a la configuracion, que es el control positivo de la 5.1', function (): void {
+    // Sin esto, los `403` de arriba pasarian identicos si las dos rutas
+    // estuvieran rotas o no existieran: un endpoint que revienta y uno que
+    // deniega se parecen mucho desde una prueba que solo mira que no sea 200.
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN));
+
+    Api::as($token)->get('/api/v1/settings')->assertStatus(200);
+
+    Api::as($token)
+        ->patch('/api/v1/settings', ['settings' => ['ATTENDANCE_MAX_SHIFT_HOURS' => 10]])
+        ->assertStatus(200);
+})->group('RF-PD-01', 'RQ-07');

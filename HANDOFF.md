@@ -1,5 +1,58 @@
 # HANDOFF
 
+## Sesión «tarea 5.1: módulo `Product`, configuración y auditoría» (31-08-2026), en `feat/fase-5-productizacion`
+
+**Tarea 5.1 implementada y verificada, sin commitear** (lo commitea el usuario tras la revisión). Cubre `RF-PD-01` y deja enlazado `BrandingProvider` para la 5.8.
+
+**Decisión ejecutada:** el ámbito `site` de `installation_settings` **se ha retirado** con la migración de contracción `2026_09_05_100000_contract_installation_settings_scope` (quita `scope`, `scope_id`, el `CHECK`, la FK a `sites` y los dos índices parciales; deja `one_setting_per_key`). `down()` reconstruye el esquema de la 1.3 y **está probado**. La cascada queda `fila de instalación → valor por defecto del catálogo en código`; la variable de entorno es solo el valor de arranque del instalador.
+
+**Construido.** `Product/Infrastructure/Persistence/{InstallationSetting,EloquentSettingsRepository}`; `Product/Infrastructure/Adapter/{CachedSettingsRepository,DbBrandingProvider,LaravelProductEventPublisher}` y reescritura de `DbOperationalSettingsProvider` sobre `ResolvedSettings` (ya **no** lanza si falta una fila: sin filas rige el valor de serie); `Product/Application/{Command/UpdateSettingsCommand,Port/ProductEventPublisher,UseCase/{GetSettingsHandler,UpdateSettingsHandler}}`; evento `Product/Domain/Event/InstallationSettingChanged` y listener `Compliance/Infrastructure/Listener/RecordInstallationSettingChange` (acción `calculation_setting.changed`, ya existente); HTTP completo en `Product/Http/` (controlador, `UpdateSettingsRequest` con reglas **derivadas del catálogo**, `SettingResource`/`SettingCollectionResource`, `SettingsPolicy` solo `admin`, `SettingsTelemetry`); rutas `GET|PATCH /api/v1/settings` con `ability:settings:*` + `throttle:management`; i18n `lang/{es,en}/settings.php`.
+
+**Decisiones que conviene conocer:**
+1. **Caché** en Redis del mapa de filas guardadas (no del objeto resuelto: un VO serializado sobrevive al despliegue que cambia su clase, y eso rompería el camino de fichaje en casa del cliente). Clave versionada `kronoqr:product:installation_settings:v1`, TTL de seguridad 300 s, invalidación **dos veces**: al escribir y en `afterCommit`.
+2. **Un asiento por clave cambiada**, no uno por petición: un `affects_worked_hours` único para un conjunto mixto perdería el matiz para el que existe. Un `PATCH` idempotente no escribe fila ni asiento.
+3. `MigrationSafetyTest` gana una segunda lista con trinquete propio, `declaredContractions()`: `DROP COLUMN` solo es legítimo en la fase *contract* y el detector no lo puede deducir del código. Entrar en la lista exige que la versión anterior ya no use la columna, plan de despliegue en el docblock y `down()` probado.
+4. `SettingsPolicy` deja fuera a `rrhh` y al `auditor`. El auditor obtiene lo que necesita —qué umbral regía y quién lo cambió— de `audit_log` con `audit:read`.
+
+**Enmiendas documentales hechas** (nota «Enmienda 31-08-2026 (tarea 5.1)», sin reescribir la historia): ADR-040 «Decisión» 1 y 6; ADR-017 «Decisión» 1 y «Verificación»; doc 01 §5 (fila `installation_settings` sin `scope`, y **las funcionalidades activas son de la licencia, no de esta tabla**); doc 02 §4 (filas ADR-017 y ADR-040) y Anexo B (`BRANDING_ACCENT_COLOR` añadido); docblocks de la migración 1.3, del puerto `OperationalSettingsProvider` y de `CommittedDatabase`.
+
+**Documentación de cliente nueva:** `docs/cliente/configuracion.md` (los tres sitios donde vive la configuración, las nueve claves con su valor de serie y su consecuencia, cómo se cambia, y «qué hacer si…» para cada fallo previsible). Enlazada desde `operacion.md`.
+
+**Verificado:** `make quality` en verde (Pint, PHPStan 9 **0 errores**, Deptrac **0 violaciones / 6937 permitidas**, api-lint 0, sh-lint 0; Rector informativo 180 ficheros, preexistente). `make test` **2370 / 11446** (394 s). `make test-unit` 1030 en 3,42 s. `--group=RF-PD-01` 103 pruebas. `qa:traceability --check` sin huecos, matriz regenerada. `docs:consistency` sin divergencias. `type-check` en verde en las tres SPA con `schema.d.ts` regenerado (cambio **solo aditivo**). Migración aplicada, revertida y reaplicada sobre la BD de desarrollo; `migrate:fresh --seed` deja la instalación arrancando con las cuatro filas `ATTENDANCE_*` y el resto en `product_default`; `compliance:verify-audit-chain` en verde tras cuatro `PATCH` (4 asientos, el idempotente no escribió).
+
+### Correcciones de la revisión de `revisor-codigo` (31-08-2026, sin commitear)
+
+**Bloqueante — una fila corrupta podía impedir fichar.** La lectura de configuración pasa a ser **tolerante** y la escritura sigue siendo **estricta**. `ResolvedSettings::resolve()` ya no lanza: un valor guardado que su clave no admite se descarta, rige el valor de serie del catálogo y la clave queda anotada en `ResolvedSettings::$invalidKeys` (VO nuevo `InvalidSetting`, con clave de traducción, motivo técnico y `affectsWorkedHours`); la incoherencia de idiomas se resuelve aplicando el **primer idioma disponible**. `with()` / `UpdateSettingsHandler` siguen lanzando. El descarte no es silencioso: viaja en `meta.invalid_keys` de `GET /settings` y deja un `warning` `product.settings_anomaly` agrupado por ventana (puerto `SettingsAnomalyReporter`). `GetSettingsHandler` es ahora el **único punto de resolución** y lo usan también los dos adaptadores.
+
+**Importante — carrera entre dos `PATCH`.** `UpdateSettingsHandler` lee dentro de la transacción, tras `pg_advisory_xact_lock(5010001)`, y por `storedValuesForWrite()` (método nuevo del puerto, sin caché). Medido: sin candado, seis escritores concurrentes dejan **cinco** asientos en vez de seis.
+
+**Importante — `source` mentía en cuatro claves.** La migración de contracción retira la siembra de la 1.3 **que nadie ha tocado** (`updated_by_user_id IS NULL` y valor idéntico al de serie); `down()` la repone, porque el adaptador anterior exige que exista. Una instalación limpia tiene la tabla vacía y las nueve claves en `product_default`.
+
+**Importante — mensajes de dominio en castellano dentro de `Domain/`.** Las excepciones llevan mensaje técnico en inglés más `translationKey` + `parameters`; el borde resuelve con `ProblemDetails::translated()` en el idioma negociado. Claves nuevas en `lang/{es,en}/settings.php` → `errors.*`.
+
+**Importante — documentación que prometía lo que llega en 5.8/5.9.** `docs/cliente/configuracion.md`, el catálogo `SettingKey` y el contrato dicen ahora que las claves `BRANDING_*` y `LOCALE_*` **se guardan y se auditan y todavía no se pintan**, y que el aviso de `doctor` llega después. `.env.example` queda con **un solo bloque** de marca, el que el código lee hoy (`BRANDING_NAME`, `BRANDING_LOGO_PATH`, `BRANDING_ACCENT_COLOR`); se retiró el bloque duplicado y muerto de `BRANDING_APP_NAME`. Sin renombrar nada.
+
+**Menores.** `scoped()` en lugar de `singleton()` para los cuatro servicios que memoizan por petición · prueba de contrato que ata `SettingKey::cases()` con el `enum` del esquema y con `propertyNames` · `Request` sin uso fuera de `SettingsController::show()` · «exactamente» suavizado en el `down()` (las columnas vuelven al final de la tabla) · contador `installation_setting_changes_total{affects_worked_hours}` (puerto `SettingsMetrics` + `RedisSettingsMetrics`), añadido al catálogo del doc 02 §8.2 · la etiqueta `RF-PD-08` retirada de la prueba del puerto de marca (ese requisito lo cumple la 5.8).
+
+**Configuración nueva:** `PRODUCT_SETTINGS_ANOMALY_WINDOW_SECONDS=300` (`config/product.php`) — cada cuánto se repite el aviso de configuración inaplicable. Se lee en cada fichaje: sin agrupar serían 50 avisos/s.
+
+**Verificación tras las correcciones:** `make quality` en verde (PHPStan 9 **0 errores**, Deptrac **0 / 6981**, api-lint 0, sh-lint 0) · `make test-unit` **1036 en 3,84 s** · `--group=RF-PD-01` **124** · `make test` **2391 / 11563** (402 s) · `qa:traceability --check` sin huecos · `docs:consistency` sin divergencias · `type-check` verde en las tres SPA con `schema.d.ts` regenerado (aditivo) · `migrate:fresh --seed` deja la tabla **vacía** y las nueve claves en `product_default` · `compliance:verify-audit-chain` íntegra tras cuatro `PATCH` · `migrate:rollback` repone la siembra y `migrate` la vuelve a retirar.
+
+**Pendiente / diferido:**
+- **5.8:** migrar `BrowsershotCardRenderer` y `CsvLegalExportWriter` de `config('branding.*')` al puerto `BrandingProvider` (hoy siguen leyendo el `.env`), decidir el renombrado `BRANDING_NAME` → `BRANDING_APP_NAME`, y llevar `APP_SUPPORTED_LOCALES` a `LOCALE_AVAILABLE`. Hasta entonces, la marca y los idiomas **se guardan y se auditan pero no se aplican**, y así lo dicen el contrato, el catálogo, `.env.example` y la guía de cliente.
+- **5.9 (`doctor`):** enseñar `meta.invalid_keys`, avisar si `.env` y base de datos difieren, y comprobar que `BRANDING_LOGO_PATH` existe. Los tres son promesas retiradas de la documentación hasta que existan.
+- **No hay pantalla de configuración en el panel**: la tarea 5.1 es solo backend y contrato. La UI llega con 5.8 (marca) y 5.5 (asistente).
+- Una fila editada con `psql` tarda hasta el TTL de la caché (300 s) en verse. Es el comportamiento documentado; la invalidación explícita solo cubre lo que pasa por la API.
+
+## Sesión «arranque de la Fase 5» (31-08-2026), en `feat/fase-5-productizacion`
+
+**PR #35 fusionada en `main` (`2918b4a`). Fase 5 iniciada** con el prompt del doc 03 §6.5 y el plan `plan implementacion/05-fase-5-productizacion.md`. **Método (decisión del usuario):** una rama para toda la fase, un commit por tarea con CI en cada push, PR al cierre (como la #34).
+
+**Decisiones del usuario para la 5.1 (31-08-2026):**
+1. **Precedencia entorno ↔ `installation_settings` (punto no cubierto n.º 1):** manda la base de datos. La variable de entorno (`BRANDING_*`, `COMPLIANCE_PROFILE`) es solo el valor de arranque con el que el instalador (5.4) siembra la primera fila; un `PATCH /settings` siempre surte efecto y queda auditado. `doctor` (5.9) avisa si entorno y base de datos difieren. Aplica también a la 5.8.
+2. **Ámbito `site` de `installation_settings`:** se **retira** con migración de contracción (expand/migrate/contract). La cascada queda `fila installation → valor por defecto del catálogo en código`. **Obliga a enmendar ADR-040** (§ «Decisión» punto 6 y la lista de tablas donde `site_id` «se conserva»): la enmienda forma parte de la 5.1.
+3. Pendientes de decisión que llegarán tarea a tarea (plan, «Puntos no cubiertos»): 5.2 (valores de serie de `max_weekly_hours`/`week_starts_on`/`holiday_calendar`; retroactividad al cambiar umbral; plazo de purga de `employment_contracts`), 5.3 (avisos de caducidad), 5.4 (códigos de salida; vale de un solo uso 2FA; `backup.sh`/`restore.sh`), 5.6 (formato/caducidad del código), 5.7 (punto de control), 5.9 (`scope` de `support_grants`; formato del paquete), 5.10 (telemetría), portal e incidencias (qué ve cada perfil), 5.8 (`supported_locales` → `installation_settings`).
+
 ## Sesión «arranque local y corrección del informe por periodo» (31-08-2026), en `main`
 
 **Entorno local levantado** con el procedimiento ya documentado (sesión del 27-08): `make up` para backend y servicios; las tres SPA desde el host con `npm run dev` (kiosk 5173, admin 5174, portal 5175), porque los contenedores `node-*` siguen estructuralmente rotos (ADR-036) y se dejan parados. La BD local se había resembrado: el dispositivo `quiosco-pruebas` ya no existe; se emitió llave (`IssueDeviceToken` por tinker) para «Entrada de personal» (id 1) y se pegó en `localStorage['kronoqr.kiosk.device_token']` del navegador del quiosco. Sin llave, el quiosco muestra «Sin conexión» permanente (401 → `reachability=false`, por diseño).
