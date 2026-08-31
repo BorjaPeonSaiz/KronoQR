@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Http\Request;
 
+use App\Http\Requests\NormalisesBooleanQuery;
 use App\Http\Requests\RejectsUnknownInput;
 use App\Modules\Identity\Application\Query\CredentialStatusQuery;
 use App\Modules\Identity\Domain\Model\Credential;
@@ -20,33 +21,14 @@ use Illuminate\Support\Facades\Gate;
  */
 final class IndexCredentialStatusRequest extends FormRequest
 {
+    // `pending` llega como `pending=true` (la serializacion del contrato) y la
+    // regla `boolean` no lo acepta: el trait lo convierte antes de validar.
+    use NormalisesBooleanQuery;
     use RejectsUnknownInput;
 
     public function authorize(): bool
     {
         return Gate::allows('viewStatus', Credential::class);
-    }
-
-    /**
-     * El contrato declara `pending` como booleano en la cadena de consulta y la
-     * serializacion estandar es `pending=true`; la regla `boolean` de Laravel
-     * no acepta esa cadena, asi que se normaliza antes de validar.
-     */
-    protected function prepareForValidation(): void
-    {
-        $pending = $this->input('pending');
-
-        if (! \is_string($pending)) {
-            return;
-        }
-
-        $normalised = filter_var($pending, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
-
-        if ($normalised === null) {
-            return;
-        }
-
-        $this->merge(['pending' => $normalised]);
     }
 
     /**

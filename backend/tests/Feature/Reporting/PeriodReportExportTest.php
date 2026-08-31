@@ -435,3 +435,17 @@ it('cuenta la descarga en report_exports_total con su formato', function (): voi
         // Ninguna etiqueta con datos de nadie (regla dura 21).
         ->and(array_keys($serie))->toBe(['format=csv', 'format=xlsx']);
 })->group('RF-IN-04');
+
+it('descarga con el `include_open_shifts=true` que serializa el contrato', function (): void {
+    // La descarga comparte las reglas con la consulta (`DescribesPeriodReport`),
+    // asi que el literal `true` del panel tiene que valer tambien aqui: si la
+    // pantalla lo aceptara y el fichero no, «Descargar» fallaria justo con la
+    // casilla marcada, y quien lo adjunta a un correo no sabria por que.
+    $contexto = contextoDeDescargaDeInforme();
+
+    Api::as($contexto['token'])
+        ->get('/api/v1/reports/period/export', [...descargaDeMarzo('csv'), 'include_open_shifts' => 'true'])
+        ->assertValidRequest()
+        ->assertOk()
+        ->assertHeader('Content-Type', 'text/csv; charset=utf-8');
+})->group('RF-IN-04');
