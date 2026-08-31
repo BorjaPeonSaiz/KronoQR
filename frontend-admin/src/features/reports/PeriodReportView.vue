@@ -38,6 +38,18 @@ const FORMATS: readonly PeriodReportFormat[] = ['csv', 'xlsx', 'pdf']
 
 const { t } = useI18n()
 
+// Como se llama cada campo de la consulta EN ESTA PANTALLA, para que un `422`
+// diga «Hasta: …» y no «to: …». El servidor ya manda el mensaje en el idioma de
+// la persona; el nombre del campo tal y como lo ve es cosa de la vista.
+const fieldLabels = computed<Readonly<Record<string, string>>>(() => ({
+  from: t('reports.period.filters.from'),
+  to: t('reports.period.filters.to'),
+  granularity: t('reports.period.filters.granularity'),
+  group_by: t('reports.period.filters.groupBy'),
+  department_id: t('reports.period.filters.department'),
+  include_open_shifts: t('reports.period.filters.openShifts'),
+}))
+
 const { data: departments } = useQuery({
   queryKey: ['departments'] as const,
   queryFn: listDepartments,
@@ -230,7 +242,12 @@ const fieldClass =
 
     <LoadingPanel v-if="loading" :label="t('reports.period.loading')" class="mt-4" />
 
-    <ErrorNotice v-else-if="error !== null" :error="error" class="mt-4" />
+    <ErrorNotice
+      v-else-if="error !== null"
+      :error="error"
+      :field-labels="fieldLabels"
+      class="mt-4"
+    />
 
     <template v-else-if="report !== null">
       <!-- El aviso de cobertura va ANTES de la tabla y no en una nota al pie:
@@ -271,7 +288,12 @@ const fieldClass =
         </p>
       </section>
 
-      <ErrorNotice v-if="downloadError !== null" :error="downloadError" class="mt-3" />
+      <ErrorNotice
+        v-if="downloadError !== null"
+        :error="downloadError"
+        :field-labels="fieldLabels"
+        class="mt-3"
+      />
 
       <EmptyState
         v-if="report.data.length === 0"

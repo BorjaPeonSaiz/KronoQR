@@ -9,6 +9,7 @@ import {
   requestBlob,
   requestJson,
   setAuthTokenProvider,
+  setLocaleProvider,
   setUnauthenticatedHandler,
 } from '../../src/http'
 import { jsonResponse, problemResponse, stubFetch } from './support/harness'
@@ -17,6 +18,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
   setAuthTokenProvider(() => null)
   setUnauthenticatedHandler(() => {})
+  setLocaleProvider(() => null)
 })
 
 describe('cliente HTTP', () => {
@@ -30,6 +32,38 @@ describe('cliente HTTP', () => {
     const headers = init.headers as Headers
 
     expect(headers.get('Authorization')).toBe('Bearer un-token')
+  })
+
+  it('pide al servidor el idioma activo de la SPA con Accept-Language', async () => {
+    // Sin la cabecera, un `422` llegaba en el idioma de la instalacion aunque
+    // el panel estuviera en otro. Se lee en cada peticion: el idioma cambia al
+    // entrar, cuando pasa a ser el de la persona.
+    let locale = 'es'
+
+    setLocaleProvider(() => locale)
+    const spy = stubFetch(() => jsonResponse({ ok: true }))
+
+    await request('/api/v1/auth/me')
+    locale = 'en'
+    await request('/api/v1/auth/me')
+
+    const first = (spy.mock.calls[0]?.[1] as RequestInit).headers as Headers
+    const second = (spy.mock.calls[1]?.[1] as RequestInit).headers as Headers
+
+    expect(first.get('Accept-Language')).toBe('es')
+    expect(second.get('Accept-Language')).toBe('en')
+  })
+
+  it('no manda Accept-Language mientras la SPA no ha dicho su idioma', async () => {
+    // Sin proveedor no se inventa nada: el servidor responde en el idioma de la
+    // instalacion, que es lo que hacia antes.
+    const spy = stubFetch(() => jsonResponse({ ok: true }))
+
+    await request('/api/v1/auth/me')
+
+    const headers = (spy.mock.calls[0]?.[1] as RequestInit).headers as Headers
+
+    expect(headers.get('Accept-Language')).toBeNull()
   })
 
   it('no manda el token en las peticiones anonimas, que son solo el acceso', async () => {

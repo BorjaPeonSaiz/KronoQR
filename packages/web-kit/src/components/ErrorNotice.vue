@@ -8,11 +8,22 @@
 // `errors.retryAfter`) las resuelve la aplicacion que lo consume: cada SPA
 // declara su propio `locales/{es,en}.json` con el mismo catalogo de causas que
 // exporta `ApiErrorKind`.
+//
+// Los errores por campo de un `422` llegan ya en el idioma de la persona (el
+// servidor los escribe en el que pide `Accept-Language`); lo que este
+// componente no puede saber es como se llama cada campo EN ESTA PANTALLA. Por
+// eso `fieldLabels`: la vista que conoce su formulario pasa las etiquetas y la
+// lista dice «Hasta: …» en vez de «to: …». Sin etiqueta se enseña la clave, que
+// es mejor que esconder el error.
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ApiError, isApiError } from '../http'
 
-const props = defineProps<{ error: unknown }>()
+const props = defineProps<{
+  error: unknown
+  /** Etiqueta visible de cada campo del formulario, por su nombre en la API. */
+  fieldLabels?: Readonly<Record<string, string>>
+}>()
 
 const { t } = useI18n()
 
@@ -20,7 +31,13 @@ const apiError = computed<ApiError>(() =>
   isApiError(props.error) ? props.error : new ApiError({ kind: 'unexpected', status: 0 }),
 )
 
-const fields = computed(() => Object.entries(apiError.value.fieldErrors))
+const fields = computed(() =>
+  Object.entries(apiError.value.fieldErrors).map(([field, messages]) => ({
+    field,
+    label: props.fieldLabels?.[field] ?? field,
+    messages,
+  })),
+)
 </script>
 
 <template>
@@ -31,8 +48,8 @@ const fields = computed(() => Object.entries(apiError.value.fieldErrors))
       {{ t('errors.retryAfter', { seconds: apiError.retryAfterSeconds }) }}
     </p>
     <ul v-if="fields.length > 0" class="mt-2 list-disc pl-5">
-      <li v-for="[field, messages] of fields" :key="field">
-        {{ field }}: {{ messages.join(' ') }}
+      <li v-for="{ field, label, messages } of fields" :key="field">
+        {{ label }}: {{ messages.join(' ') }}
       </li>
     </ul>
   </div>

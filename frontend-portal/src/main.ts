@@ -1,5 +1,9 @@
 import { createWebErrorReporter, installGlobalErrorCapture } from '@kronoqr/web-kit/clientErrors'
-import { setAuthTokenProvider, setUnauthenticatedHandler } from '@kronoqr/web-kit/http'
+import {
+  setAuthTokenProvider,
+  setLocaleProvider,
+  setUnauthenticatedHandler,
+} from '@kronoqr/web-kit/http'
 import { createPinia } from 'pinia'
 import { createApp, watch } from 'vue'
 import App from './App.vue'
@@ -35,6 +39,10 @@ setUnauthenticatedHandler(() => {
   session.clear()
   void router.push({ name: 'login' })
 })
+// El servidor escribe en este idioma lo que lee una persona (mensajes de un
+// 422). Se lee en cada peticion porque cambia al entrar: pasa a ser el de la
+// persona (ver el `watch` de abajo).
+setLocaleProvider(() => i18n.global.locale.value)
 
 // El idioma del portal es el de la persona que ha entrado (`employees.locale`),
 // no el del navegador desde el que mira ni el del dispositivo compartido del

@@ -135,6 +135,7 @@ export interface RequestOptions {
 
 let authTokenProvider: () => string | null = () => null
 let unauthenticatedHandler: () => void = () => {}
+let localeProvider: () => string | null = () => null
 
 /** Lo llama la tienda de sesion al arrancar. Evita el ciclo tienda ↔ cliente. */
 export function setAuthTokenProvider(provider: () => string | null): void {
@@ -144,6 +145,20 @@ export function setAuthTokenProvider(provider: () => string | null): void {
 /** Que hacer cuando el servidor dice que la sesion ya no vale. */
 export function setUnauthenticatedHandler(handler: () => void): void {
   unauthenticatedHandler = handler
+}
+
+/**
+ * El idioma activo de la SPA, para la cabecera `Accept-Language`.
+ *
+ * El servidor escribe en ese idioma lo que lee una persona —los mensajes de un
+ * `422`, los criterios de un informe— y sin la cabecera respondia en el idioma
+ * de la instalacion, fuera cual fuera el del panel. Se lee en cada peticion, no
+ * al arrancar, porque el idioma cambia al entrar (es el de la persona, no el
+ * del navegador). Los documentos que se descargan no lo siguen: salen en el
+ * idioma de la instalacion por decision del servidor.
+ */
+export function setLocaleProvider(provider: () => string | null): void {
+  localeProvider = provider
 }
 
 export function apiBaseUrl(): string {
@@ -257,6 +272,12 @@ async function send(path: string, options: RequestOptions, accept: string): Prom
 
   if (token !== null) {
     headers.set('Authorization', `Bearer ${token}`)
+  }
+
+  const locale = localeProvider()
+
+  if (locale !== null && locale !== '') {
+    headers.set('Accept-Language', locale)
   }
 
   if (options.body !== undefined) {

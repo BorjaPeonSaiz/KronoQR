@@ -121,6 +121,19 @@ return [
 
     'fallback_locale' => env('APP_FALLBACK_LOCALE', 'en'),
 
+    /*
+    | KronoQR: idiomas en los que la API responde a una persona (regla dura 13,
+    | RF-PD-01). `NegotiateLocale` elige entre estos con `Accept-Language`; fuera
+    | de la lista, o sin cabecera, responde en `locale`. Los documentos (CSV,
+    | XLSX, PDF) no negocian y salen siempre en `locale`. Que exista `lang/xx`
+    | no basta para ofrecer un idioma: lo decide esta lista. La tarea 5.8 la
+    | lleva a `installation_settings`.
+    */
+    'supported_locales' => array_values(array_filter(
+        array_map(trim(...), explode(',', (string) env('APP_SUPPORTED_LOCALES', 'es,en'))),
+        static fn (string $locale): bool => $locale !== '',
+    )),
+
     'faker_locale' => env('APP_FAKER_LOCALE', 'en_US'),
 
     /*

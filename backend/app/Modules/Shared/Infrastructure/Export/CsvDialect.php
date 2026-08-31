@@ -122,10 +122,12 @@ final class CsvDialect
      *
      * Los idiomas de coma decimal —español, y con el la practica totalidad de
      * Europa continental— llevan `;`; el resto, `,`. Se decide por el idioma de
-     * la instalacion y no por una cabecera `Accept-Language`, por dos razones: el
-     * producto no negocia idioma por peticion (no hay middleware que lo haga) y,
-     * sobre todo, **el idioma que importa es el del programa que abrira el
-     * fichero**, no el del navegador que lo descargo.
+     * la instalacion y no por la cabecera `Accept-Language` con la que la API si
+     * negocia el idioma del resto de respuestas (`NegotiateLocale`), porque **el
+     * idioma que importa es el del programa que abrira el fichero**, no el del
+     * navegador que lo descargo. Las rutas que generan documentos llevan el
+     * alias `locale.installation` (`UseInstallationLocale`), que es lo que hace
+     * que el idioma en vigor al llegar aqui sea el de la instalacion.
      *
      * La lista es de idiomas y no de paises a proposito: el producto se configura
      * con `app.locale`, que es lo que hay.

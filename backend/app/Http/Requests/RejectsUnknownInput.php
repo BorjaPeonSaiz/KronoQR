@@ -31,9 +31,13 @@ trait RejectsUnknownInput
     {
         $validator->after(function (Validator $validator): void {
             foreach ($this->unknownFields() as $field) {
+                // En el idioma negociado por la peticion, como el resto de los
+                // mensajes de validacion (`lang/*/validation.php`).
+                $message = __('validation.unknown_field', ['attribute' => $field]);
+
                 $validator->errors()->add(
                     $field,
-                    'El campo '.$field.' no forma parte de esta peticion.',
+                    \is_string($message) ? $message : 'The field '.$field.' is not part of this request.',
                 );
             }
         });
