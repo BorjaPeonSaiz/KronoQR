@@ -759,11 +759,12 @@ websocket_connections_active                             gauge
 # De negocio — las que de verdad importan aquí
 scans_total{device,result}                               counter
 scan_processing_duration_seconds                         histogram
-open_shifts_current{site,department}                     gauge
+open_shifts_current{site,site_name,department}           gauge
 kiosk_last_seen_seconds{device}                          gauge
 kiosk_offline_queue_size{device}                         gauge
 sync_delay_seconds{device}                               histogram
 incidents_open{type,severity}                            gauge
+incidents_metrics_timestamp_seconds                      gauge
 manual_corrections_total{reason_code}                    counter
 anomalous_patterns_detected_total{pattern}               counter
 
@@ -773,6 +774,7 @@ workdays_complete_ratio{site}                            gauge
 incident_resolution_seconds{type}                        histogram
 application_errors_total{source,level}                   counter
 projection_divergence_total                              counter
+projection_reconciliation_last_run_timestamp_seconds     gauge
 audit_chain_verification_failures_total                  counter
 audit_chain_last_verification_timestamp_seconds          gauge
 audit_chain_last_verification_result                     gauge
@@ -786,10 +788,10 @@ report_exports_total{format}                             counter
 kronoqr_auth_attempts_total{channel,outcome}             counter
 
 # Credenciales y respaldo
-employees_without_delivered_credential{site}             gauge
-credentials_pending_print{site}                          gauge
-credentials_pending_reprint{site,key_id}                 gauge
-credentials_active_unknown_key{site,key_id}              gauge
+employees_without_delivered_credential{site,site_name}   gauge
+credentials_pending_print{site,site_name}                gauge
+credentials_pending_reprint{site,site_name,key_id}       gauge
+credentials_active_unknown_key{site,site_name,key_id}    gauge
 pin_fallback_scans_total{site}                           counter
 kronoqr_backup_last_result{type}                         gauge
 kronoqr_backup_last_success_timestamp_seconds{type}      gauge

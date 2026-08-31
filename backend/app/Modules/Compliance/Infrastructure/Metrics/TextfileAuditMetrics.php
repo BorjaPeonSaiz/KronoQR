@@ -7,9 +7,8 @@ namespace App\Modules\Compliance\Infrastructure\Metrics;
 use App\Modules\Compliance\Application\Port\AuditMetrics;
 use App\Modules\Compliance\Domain\ValueObject\AuditChainVerification;
 use App\Modules\Compliance\Domain\ValueObject\AuditPartitionStatus;
+use App\Modules\Shared\Infrastructure\Metrics\TextfileExposition;
 use DateTimeImmutable;
-use Illuminate\Support\Facades\Config;
-use RuntimeException;
 
 /**
  * Publica las metricas de auditoria para el colector *textfile* de
@@ -26,8 +25,9 @@ use RuntimeException;
  * `infra/observability/prometheus/rules/audit.yml` es la que descubre que el
  * comando programado dejo de ejecutarse. El silencio es el peor de los fallos.
  *
- * **Escritura atomica:** fichero temporal en el mismo directorio y `rename()`.
- * `node-exporter` no puede leer media metrica.
+ * **La mecanica de escritura no vive aqui.** El guard del colector, la escritura
+ * atomica y el fallo ruidoso son de {@see TextfileExposition}, que es la misma
+ * para los siete adaptadores del producto. Aqui solo se componen las lineas.
  */
 final readonly class TextfileAuditMetrics implements AuditMetrics
 {
@@ -41,7 +41,7 @@ final readonly class TextfileAuditMetrics implements AuditMetrics
     {
         $total = $this->previousCounter(self::CHAIN_FILE, self::FAILURES_METRIC) + $result->failureCount();
 
-        $this->write(self::CHAIN_FILE, [
+        TextfileExposition::write(self::CHAIN_FILE, [
             '# HELP '.self::FAILURES_METRIC.' Roturas de la cadena de hash de audit_log detectadas (RS-07). Debe permanecer siempre en cero.',
             '# TYPE '.self::FAILURES_METRIC.' counter',
             self::FAILURES_METRIC.' '.$total,
@@ -59,7 +59,7 @@ final readonly class TextfileAuditMetrics implements AuditMetrics
 
     public function recordPartitionStatus(AuditPartitionStatus $status, DateTimeImmutable $at): void
     {
-        $this->write(self::PARTITIONS_FILE, [
+        TextfileExposition::write(self::PARTITIONS_FILE, [
             '# HELP audit_log_partition_ready 1 si existe la particion anual de audit_log indicada. A 0, toda accion auditable falla.',
             '# TYPE audit_log_partition_ready gauge',
             'audit_log_partition_ready{horizon="current"} '.($status->currentYearWasMissing ? '0' : '1'),
@@ -71,40 +71,13 @@ final readonly class TextfileAuditMetrics implements AuditMetrics
     }
 
     /**
-     * @param  list<string>  $lines
-     */
-    private function write(string $file, array $lines): void
-    {
-        if (! Config::boolean('observability.metrics.enabled', true)) {
-            return;
-        }
-
-        $directory = $this->directory();
-
-        if (! is_dir($directory) && ! mkdir($directory, 0o750, true) && ! is_dir($directory)) {
-            throw new RuntimeException('No se ha podido crear el directorio de metricas «'.$directory.'».');
-        }
-
-        $target = $directory.'/'.$file;
-        $temporary = $target.'.tmp';
-
-        if (file_put_contents($temporary, implode("\n", $lines)."\n") === false) {
-            throw new RuntimeException('No se ha podido escribir la metrica en «'.$temporary.'».');
-        }
-
-        if (! rename($temporary, $target)) {
-            throw new RuntimeException('No se ha podido publicar la metrica en «'.$target.'».');
-        }
-    }
-
-    /**
      * Valor actual del contador en el fichero, o 0 si no lo hay. Se lee con una
      * expresion regular anclada al principio de linea para no confundirse con
      * las lineas `# HELP` y `# TYPE`, que contienen el mismo nombre.
      */
     private function previousCounter(string $file, string $metric): int
     {
-        $target = $this->directory().'/'.$file;
+        $target = TextfileExposition::path($file);
 
         if (! is_file($target)) {
             return 0;
@@ -121,10 +94,5 @@ final readonly class TextfileAuditMetrics implements AuditMetrics
         }
 
         return (int) $match[1];
-    }
-
-    private function directory(): string
-    {
-        return rtrim(Config::string('observability.metrics.textfile_path'), '/');
     }
 }

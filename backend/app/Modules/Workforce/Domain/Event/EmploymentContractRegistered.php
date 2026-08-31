@@ -23,9 +23,9 @@ use DateTimeImmutable;
  * ## Que lleva y que no
  *
  * Lo que hace falta para reconstruir el cambio: a quien, desde cuando, cuantas
- * horas y hasta cuando quedo el anterior. **Ningun nombre** (regla dura 21): la
- * persona viaja por su UUID publico, que es el identificador con el que trabajan
- * la API, el registro legal y el trail.
+ * horas, y del contrato que se cierra cuantas horas tenia y hasta cuando quedo.
+ * **Ningun nombre** (regla dura 21): la persona viaja por su UUID publico, que es
+ * el identificador con el que trabajan la API, el registro legal y el trail.
  *
  * **Sin actor.** Quien lo registro lo resuelve el asiento de auditoria a partir
  * de la sesion en curso: es una propiedad de la peticion y no del hecho, igual
@@ -49,6 +49,20 @@ final readonly class EmploymentContractRegistered implements DomainEvent
          * cerro otra.
          */
         public ?string $previousValidTo,
+        /**
+         * Horas semanales que tenia el contrato que se cierra, o `null` si no
+         * habia ninguno.
+         *
+         * **El antes, no solo el despues.** El asiento ya decia a cuantas horas
+         * queda la persona; sin la cifra anterior, responder «¿quien le bajo las
+         * horas contratadas y cuanto?» obligaba a reconstruir la serie entera de
+         * contratos desde el primero. Es la misma razon por la que
+         * `previous_valid_to` esta aqui: un asiento que no permite reconstruir el
+         * cambio describe un estado, no un hecho.
+         */
+        public ?float $previousWeeklyHours,
+        /** Horas anuales del contrato que se cierra. `null` si no habia contrato o no las tenia. */
+        public ?float $previousAnnualHours,
         private DateTimeImmutable $occurredAt,
     ) {}
 

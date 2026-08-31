@@ -30,8 +30,15 @@ use Illuminate\Console\Command;
  * una sola cosa significa que la proyeccion se desvio de sus eventos origen, y
  * eso no deberia poder ocurrir nunca (regla dura 7, doc 02 §8.2:
  * `projection_divergence_total` debe permanecer siempre en cero). Un codigo cero
- * dejaria el suceso solo en la metrica; con este, el planificador lo registra y
- * cualquiera que encadene el comando en un script se entera.
+ * dejaria el suceso solo en la metrica; con este queda ademas en el log del
+ * planificador y lo ve cualquiera que encadene el comando en un script.
+ *
+ * **Lo que ese codigo de salida NO hace todavia:** despertar a nadie. No hay
+ * `onFailure()` en la programacion, ni regla de Loki sobre la salida del
+ * comando, ni una serie `projection_reconciliation_last_failures` que alertar
+ * con `> 0`. Quien vigila hoy la divergencia es
+ * `projection_divergence_total` mas la regla `absent()` sobre el sello de
+ * tiempo; lo demas es de la tarea 3.2 y esta anotado alli.
  *
  * ## Lo que este comando NO hace
  *

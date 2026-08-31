@@ -72,7 +72,7 @@ docker compose -f infra/compose.prod.yaml logs scheduler --since 48h \
 # 2. Los asientos de auditoría de la corrección. Esta tabla no se puede alterar,
 #    pero conviene tener el extracto a mano.
 docker compose -f infra/compose.prod.yaml exec -T postgres \
-  psql -U fichaje -d fichaje -c "\copy (
+  psql -U fichaje_app -d fichaje -c "\copy (
       SELECT occurred_at, actor_type, actor_id, action, payload
         FROM audit_log
        WHERE subject_type = 'daily_totals'
@@ -118,7 +118,7 @@ que ejecuta la reconciliación:
 
 ```bash
 docker compose -f infra/compose.prod.yaml exec -T postgres \
-  psql -U fichaje -d fichaje -c "
+  psql -U fichaje_app -d fichaje -c "
   SELECT COALESCE(t.employee_id, s.employee_id) AS employee_id,
          COALESCE(t.work_date,   s.work_date)   AS work_date,
          t.total_minutes AS proyectado, s.summed AS real
@@ -143,7 +143,7 @@ docker compose -f infra/compose.prod.yaml exec -T app php artisan migrate:status
 
 # ¿Hay sesiones conectadas a la base que no sean la aplicación?
 docker compose -f infra/compose.prod.yaml exec -T postgres \
-  psql -U fichaje -d fichaje -c \
+  psql -U fichaje_app -d fichaje -c \
   "SELECT usename, application_name, client_addr, backend_start, state
      FROM pg_stat_activity WHERE datname = 'fichaje';"
 

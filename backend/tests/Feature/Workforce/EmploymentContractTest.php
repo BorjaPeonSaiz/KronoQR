@@ -221,6 +221,21 @@ it('deja el cambio de contrato en audit_log con su accion propia', function (): 
         // anterior. Sin esto no se distingue «se le abrio el primero» de «se le
         // cambio el que tenia».
         ->and($payload['previous_valid_to'] ?? null)->toBe('2026-03-15')
+        // Y el ANTES de la cifra: «¿quien le subio las horas y desde cuantas?»
+        // se contesta con esta fila y no reconstruyendo la serie de contratos.
+        ->and($payload)->toHaveKeys(['previous_weekly_hours', 'previous_annual_hours'])
+        ->and($payload['previous_weekly_hours'])->toBe(20.0)
         // Y ningun nombre (regla dura 21).
         ->and(json_encode($payload, JSON_THROW_ON_ERROR))->not->toContain('Persona');
+
+    // El PRIMER contrato de la persona no tiene antes, y el asiento lo dice con
+    // nulos en lugar de callarse: un `null` explicito distingue «no habia
+    // contrato» de «el asiento es de una version que no lo guardaba».
+    /** @var array<string, mixed> $primero */
+    $primero = json_decode((string) ($asientos[0]->payload ?? '{}'), true, 512, JSON_THROW_ON_ERROR);
+
+    expect($primero)->toHaveKeys(['previous_valid_to', 'previous_weekly_hours', 'previous_annual_hours'])
+        ->and($primero['previous_valid_to'])->toBeNull()
+        ->and($primero['previous_weekly_hours'])->toBeNull()
+        ->and($primero['previous_annual_hours'])->toBeNull();
 })->group('RF-GP-02', 'RS-07');

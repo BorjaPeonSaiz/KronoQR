@@ -157,9 +157,20 @@ test(
   },
 )
 
+// RNF-D-03, la mitad del navegador: «si cae el WebSocket, el panel hace fallback
+// a sondeo». El socket se cierra con un 1006 —caida, no rechazo—, que es lo que
+// pasa cuando Reverb se para o el proxy corta, y se comprueba que el panel PIDE
+// la foto por su cuenta varias veces y que lo ANUNCIA: sin aviso, quien mira
+// cree que no ha entrado nadie en quince segundos.
+//
+// El intervalo se baja a 1 s desde la respuesta del servidor para no tener una
+// prueba de 45 s. No es una trampa: lo que se comprueba aqui es que el panel
+// obedece al intervalo que el servidor le dice, y que ese intervalo son 15 s lo
+// afirma `LivePresenceTest` en el backend, donde vive la cifra, mas la prueba de
+// aqui abajo que lee los 15 s en pantalla.
 test(
   'con Reverb caido, la vista lo dice y sigue actualizandose por sondeo',
-  { tag: ['@RF-PA-01'] },
+  { tag: ['@RF-PA-01', '@RNF-D-03'] },
   async ({ context, page }) => {
     await fakeReverb(context, 'down')
     const board: LivePresenceBoard = {
@@ -187,9 +198,11 @@ test(
   },
 )
 
+// La cifra de RNF-D-03 leida donde la lee una persona: «la lista se actualiza
+// cada 15 s», con el intervalo por omision del servidor y sin retocarlo.
 test(
   'con el tiempo real desactivado en la instalacion, lo anuncia como tal',
-  { tag: ['@RF-PA-01'] },
+  { tag: ['@RF-PA-01', '@RNF-D-03'] },
   async ({ page }) => {
     const board: LivePresenceBoard = {
       ...LIVE_BOARD,

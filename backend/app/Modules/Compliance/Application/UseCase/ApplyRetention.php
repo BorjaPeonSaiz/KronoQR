@@ -274,7 +274,12 @@ final readonly class ApplyRetention
 
             $this->audit->handle(new RecordAuditEntryCommand(
                 actor: $this->actorFor($command),
-                action: $this->purgeAction(),
+                // La accion con la que se apunta la purga del registro de
+                // jornada: filas vencidas borradas de las tablas del registro,
+                // que no es soltar una particion
+                // (`retention.partition_dropped`). El payload lleva el alcance,
+                // la fecha de corte, el umbral aplicado y el recuento por tabla.
+                action: AuditAction::RetentionPurgeExecuted,
                 subject: AuditSubject::of('retention'),
                 payload: AuditPayload::of([
                     'scope' => RetentionScope::WorkRecords->value,
@@ -400,16 +405,5 @@ final readonly class ApplyRetention
         return $command->responsibleUserId === null
             ? AuditActor::system()
             : AuditActor::user($command->responsibleUserId);
-    }
-
-    /**
-     * La accion con la que se apunta la purga del registro de jornada: filas
-     * vencidas borradas de las tablas del registro, que no es soltar una
-     * particion (`retention.partition_dropped`). El payload lleva el alcance,
-     * la fecha de corte, el umbral aplicado y el recuento por tabla.
-     */
-    private function purgeAction(): AuditAction
-    {
-        return AuditAction::RetentionPurgeExecuted;
     }
 }

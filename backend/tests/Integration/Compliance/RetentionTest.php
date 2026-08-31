@@ -402,7 +402,14 @@ it('purga lo vencido, respeta lo vigente y deja asiento con alcance y conteos', 
         ->and($payload['rows'])->toBe(6)
         ->and($payload['tables']['shift_entries'])->toBe(1)
         ->and($payload['tables']['scan_events'])->toBe(2);
-})->group('RL-04', 'RF-PR-03');
+    // RL-10 se apoya en la mitad de arriba, y no en la del asiento: «la
+    // supresion queda condicionada al deber legal de conservacion». Que el
+    // tramo vencido se vaya y el vigente siga —en la misma ejecucion, con el
+    // mismo corte— es la comprobacion de que el producto no puede borrar un
+    // registro horario todavia bajo el art. 34.9 ET aunque alguien lo pida. El
+    // procedimiento de los otros cinco derechos se comprueba en
+    // tests/Architecture/DataProtectionGuaranteesTest.php.
+})->group('RL-04', 'RF-PR-03', 'RL-10');
 
 it('purga el log tecnico y el historico de errores en su ciclo de 90 dias', function (): void {
     $directory = retentionPaths();

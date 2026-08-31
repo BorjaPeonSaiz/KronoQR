@@ -36,6 +36,7 @@ Lo que sí procede siempre: **acceso**, **portabilidad**, **rectificación** y l
 | Registro de jornada (tramos, totales, correcciones, escaneos, incidencias) | PostgreSQL | **4 años** | `compliance_profiles.retention_years` del centro (RF-PD-07) |
 | Auditoría (`audit_log`) | PostgreSQL, particionada por año | **4 años** | El mismo perfil de cumplimiento |
 | Ficha de la persona (`employees`), credenciales | PostgreSQL | Mientras haya relación laboral, y después lo que exija la normativa laboral y fiscal aplicable | Decisión del responsable del tratamiento |
+| Contratos (`employment_contracts`: horas pactadas, tipo de jornada, vigencia) | PostgreSQL | **Duración de la relación laboral + 4 años**, orientativo (art. 21 LISOS, a validar) | **Pendiente de la asesoría laboral (tarea 5.2).** Hoy **no hay purga automática**: se conserva |
 | Log técnico | `storage/logs` | **90 días** | `TECHNICAL_LOG_RETENTION_DAYS` |
 | Histórico de errores (`error_events`) | PostgreSQL | **90 días** | `ERROR_HISTORY_RETENTION_DAYS` |
 | Copias de seguridad | `BACKUP_PATH` | `BACKUP_RETENTION_DAYS` (30 de serie) | Configuración de la instalación |
@@ -193,10 +194,23 @@ purga.
 - **Oposición al registro horario: no procede.** No se trata sobre la base del
   interés legítimo, sino de una obligación legal; no hay nada a lo que oponerse
   (art. 21 RGPD, en relación con el 6.1.c).
-- **Limitación mientras se discute la exactitud** (art. 18.1.a): mientras se
-  resuelve una impugnación, marca la jornada como **incidencia** en el panel para
-  que quede constancia de que está en revisión. El dato no se borra ni se
-  modifica hasta que la corrección se decide.
+- **Limitación mientras se discute la exactitud** (art. 18.1.a): el mecanismo es
+  la **corrección trazada** del §4 (RF-PA-04), no una marca aparte. Panel →
+  detalle de la jornada → **Corregir**, con el motivo del catálogo que
+  corresponda; si ninguno encaja, `OTROS` con el texto que explique que la
+  exactitud está impugnada y por quién.
+
+  Eso deja **una versión nueva conservando la anterior** (`shift_corrections`,
+  con el antes y el después) y su asiento en `audit_log`
+  (`shift_entry.modified`), que es exactamente la constancia que el art. 18.1.a
+  pide: consta que el dato está en revisión, quién lo dijo, cuándo y por qué, y
+  el original **no se pierde** (RN-13, RL-04, regla dura 5).
+
+  **No hay apertura manual de incidencias en el panel** y este runbook no la
+  supone: las incidencias las abre la detección automática (RF-PR-01) y el
+  producto no ofrece crearlas a mano. Si al resolver la impugnación resulta que
+  el dato era correcto, se documenta en el registro interno de solicitudes; si
+  era incorrecto, la corrección que ya se hizo es la rectificación.
 
 ---
 

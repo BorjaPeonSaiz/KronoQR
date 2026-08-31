@@ -343,4 +343,12 @@ it('degrada a sondeo sin apagar la vista cuando el tiempo real esta desactivado'
         // Y la vista SIGUE: los datos estan y el panel sabe cada cuanto pedirlos.
         ->and($respuesta->json('data'))->toHaveCount(1)
         ->and($respuesta->json('meta.realtime.poll_interval_seconds'))->toBe(15);
-})->group('RF-PA-01', 'RF-PD-05');
+    // RNF-D-03 por la mitad del SERVIDOR: el intervalo de sondeo lo decide el
+    // servidor y llega en la respuesta (ADR-011, ADR-017), asi que aqui es donde
+    // se puede afirmar que son 15 s y no lo que a cada panel le parezca. Los 15
+    // como numero explicito y no `config('realtime.poll_interval_seconds')`: si
+    // se leyera de la misma configuracion que se esta comprobando, la prueba
+    // pasaria con cualquier valor. La mitad del NAVEGADOR —que con el canal
+    // caido el panel sondee de verdad y lo diga en pantalla— es del E2E
+    // `frontend-admin/tests/e2e/live-presence.spec.ts`.
+})->group('RF-PA-01', 'RF-PD-05', 'RNF-D-03');

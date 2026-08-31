@@ -1,0 +1,30 @@
+<?php
+
+namespace Laravel\Sanctum;
+
+use Illuminate\Database\Eloquent\Model;
+
+/**
+ * Anotaciones de columnas para el modelo de vendor/. Sanctum no declara sus
+ * propiedades y Larastan no infiere columnas de un modelo que no es del
+ * proyecto. Este fichero solo lo lee PHPStan (stubFiles): no se carga en
+ * ejecucion. Columnas de la migracion 2026_08_19_100500, el esquema real.
+ *
+ * Las fechas se tipan con \Carbon\Carbon del stub vecino (Carbon.stub) y no
+ * con la subclase del framework: el validador de stubs no dispara el
+ * autoloader y solo resuelve con seguridad lo declarado en otros stubs.
+ *
+ * @property int $id
+ * @property string $tokenable_type
+ * @property int $tokenable_id
+ * @property string $name
+ * @property string $token
+ * @property array<int, string>|null $abilities
+ * @property \Carbon\Carbon|null $last_used_at
+ * @property \Carbon\Carbon|null $expires_at
+ * @property \Carbon\Carbon|null $created_at
+ * @property \Carbon\Carbon|null $updated_at
+ */
+class PersonalAccessToken extends Model
+{
+}

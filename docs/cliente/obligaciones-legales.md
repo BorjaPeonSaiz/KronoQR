@@ -56,6 +56,75 @@ de actividades de tratamiento (art. 30 RGPD):
 esto importa: nadie puede negarse a fichar, y tampoco hace falta pedir permiso
 para registrar la jornada.
 
+### Lo único que sale del servidor por su cuenta: el correo de incidencias
+
+Todo lo demás se queda en tu instalación. El sistema envía **cada noche** un
+resumen de las incidencias pendientes al **responsable de cada departamento**, y
+ese correo lleva **la fecha, el nombre de la persona y el tipo de incidencia** de
+cada línea. Nada más: ni horas concretas, ni datos de contrato, ni el registro
+horario completo.
+
+Tres consecuencias que son tuyas, no del fabricante:
+
+1. **Si el correo lo entrega un servidor de un tercero** —Microsoft 365, Google
+   Workspace, el SMTP de tu proveedor de hosting—, ese tercero es un **encargado
+   del tratamiento** (art. 28 RGPD). Necesitas el contrato de encargo firmado y
+   debe aparecer en tu registro de actividades. Si usas tu propio servidor de
+   correo interno, no hay encargado nuevo.
+2. **Configura el canal cifrado.** En el fichero de configuración,
+   `MAIL_SCHEME=smtps` fuerza TLS y **falla** si el servidor de correo no lo
+   soporta, que es lo que quieres. Dejarlo vacío negocia el cifrado «si se
+   puede», y con un relevo que no lo ofrezca el correo viaja legible por la red.
+3. **Cada envío queda registrado** en el trail de auditoría, con quién lo recibió
+   y de qué personas iba. Es lo que te permite responder si un día hay que
+   reconstruir por dónde salieron unos datos.
+
+El aviso es una comodidad, no el registro: **ninguna incidencia se pierde ni
+cambia de estado porque el correo no salga**. Siguen todas en la bandeja del
+panel, que es donde se trabajan, y el resumen de la noche siguiente vuelve a
+incluirlas. Si decides no usar el canal de correo, coméntalo con quien te instale
+el sistema: es una decisión de configuración de tu instalación.
+
+### La evaluación de impacto (EIPD): recomendable, y la decisión hay que escribirla
+
+El art. 35 RGPD obliga a hacer una **evaluación de impacto** (EIPD) cuando el
+tratamiento entraña un riesgo alto para los derechos de las personas, y cita
+expresamente la **observación sistemática** de personas. Un registro de jornada
+observa a toda tu plantilla todos los días, así que la pregunta hay que
+hacérsela.
+
+**Con este producto, la respuesta habitual es que no es obligatoria, pero sí
+recomendable.** Los factores que disparan el riesgo alto no están: no hay
+biometría (ADR-009: no es una opción desactivada, no existe), no hay
+geolocalización por persona, no hay elaboración de perfiles ni decisiones
+automatizadas, y los datos no salen de tu infraestructura —con la única
+excepción del correo de incidencias descrito arriba—. Lo que queda es el dato
+mínimo —quién ficha, cuándo y en qué dispositivo— tratado con la base jurídica
+del art. 6.1.c.
+
+**Lo que sí tienes que hacer**, y es tuyo porque eres el responsable del
+tratamiento:
+
+- **Deja constancia escrita del análisis**, aunque concluyas que no procede. Una
+  EIPD que no se hizo y que nadie razonó es indistinguible de un olvido; media
+  hoja fechada con el motivo vale.
+- **Rehaz el análisis si combinas KronoQR con otra cosa**: videovigilancia,
+  control de accesos por puerta, geolocalización de flotas o cualquier sistema
+  que, cruzado con las marcas horarias, permita reconstruir el movimiento de una
+  persona por el centro. El riesgo no lo crea este producto, lo crea la
+  combinación, y entonces la EIPD sí suele ser exigible.
+- **Consulta a la representación legal** de las personas trabajadoras: el propio
+  art. 34.9 ET lo pide para la organización del registro, y su parecer forma
+  parte del análisis.
+- Si al hacerla te sale riesgo alto que no puedas mitigar, hay **consulta previa**
+  a la AEPD (art. 36 RGPD) antes de empezar a tratar.
+
+El fabricante **no puede hacer esta evaluación por ti**: depende de tu centro, de
+tu plantilla y de qué otros sistemas tengas (ADR-020). Lo que sí te entrega es el
+material para hacerla: qué datos trata el producto (arriba), cuánto los conserva
+(§4), quién accede y con qué registro (§5) y qué medidas de seguridad hay
+(`docs/07-seguridad-madurez-y-amenazas.md`).
+
 ---
 
 ## 3. Informar y dar acceso a las personas trabajadoras
@@ -88,6 +157,14 @@ Política por tipo de dato, que es la que aplica el sistema:
 | Log técnico | **90 días** | Tu instalación |
 | Histórico de errores | **90 días** | Tu instalación |
 | Copias de seguridad | 30 días de serie | Tu instalación (`BACKUP_RETENTION_DAYS`) |
+| Datos de contrato (horas pactadas, tipo de jornada, vigencia) | **Relación laboral + 4 años**, orientativo | **Pendiente de confirmar con tu asesoría laboral.** Hoy **se conservan**: el sistema no los purga |
+
+**Los datos de contrato todavía no tienen purga automática, y es deliberado.** El
+plazo orientativo —la duración de la relación laboral más cuatro años, por
+referencia al art. 21 de la LISOS— **no está validado**, y borrar por un plazo
+que luego resulte corto es peor que conservar de más un tiempo acotado.
+Confírmalo con tu asesoría laboral; hasta entonces esos datos permanecen y
+aparecen en cualquier respuesta a un derecho de acceso.
 
 **La purga nunca es automática** (RF-PR-03). El sistema **propone** cada semana y
 deja un informe; borrar exige una confirmación explícita del responsable y una

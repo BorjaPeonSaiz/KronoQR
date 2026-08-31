@@ -8,9 +8,8 @@ use App\Modules\Compliance\Application\Port\RetentionMetrics;
 use App\Modules\Compliance\Domain\ValueObject\RetentionMode;
 use App\Modules\Compliance\Domain\ValueObject\RetentionReport;
 use App\Modules\Compliance\Domain\ValueObject\RetentionScope;
+use App\Modules\Shared\Infrastructure\Metrics\TextfileExposition;
 use DateTimeImmutable;
-use Illuminate\Support\Facades\Config;
-use RuntimeException;
 
 /**
  * Publica el estado de la retencion para el colector *textfile* de
@@ -33,8 +32,9 @@ use RuntimeException;
  * Una serie que desaparece es indistinguible de una que esta a cero. Mismo
  * criterio que {@see TextfileAuditMetrics}.
  *
- * **Escritura atomica:** temporal en el mismo directorio y `rename()`.
- * `node-exporter` no puede leer media metrica.
+ * **La mecanica de escritura no vive aqui.** El guard del colector, la escritura
+ * atomica y el fallo ruidoso son de {@see TextfileExposition}, que es la misma
+ * para los siete adaptadores del producto. Aqui solo se componen las lineas.
  */
 final readonly class TextfileRetentionMetrics implements RetentionMetrics
 {
@@ -71,33 +71,6 @@ final readonly class TextfileRetentionMetrics implements RetentionMetrics
         $lines[] = '# TYPE retention_cutoff_timestamp_seconds gauge';
         $lines[] = 'retention_cutoff_timestamp_seconds '.$report->workRecordCutoff->getTimestamp();
 
-        $this->write($lines);
-    }
-
-    /**
-     * @param  list<string>  $lines
-     */
-    private function write(array $lines): void
-    {
-        if (! Config::boolean('observability.metrics.enabled', true)) {
-            return;
-        }
-
-        $directory = rtrim(Config::string('observability.metrics.textfile_path'), '/');
-
-        if (! is_dir($directory) && ! mkdir($directory, 0o750, true) && ! is_dir($directory)) {
-            throw new RuntimeException('No se ha podido crear el directorio de metricas «'.$directory.'».');
-        }
-
-        $target = $directory.'/'.self::FILE;
-        $temporary = $target.'.tmp';
-
-        if (file_put_contents($temporary, implode("\n", $lines)."\n") === false) {
-            throw new RuntimeException('No se ha podido escribir la metrica en «'.$temporary.'».');
-        }
-
-        if (! rename($temporary, $target)) {
-            throw new RuntimeException('No se ha podido publicar la metrica en «'.$target.'».');
-        }
+        TextfileExposition::write(self::FILE, $lines);
     }
 }
