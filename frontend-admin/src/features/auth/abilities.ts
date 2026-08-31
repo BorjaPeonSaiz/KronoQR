@@ -54,6 +54,17 @@ export const REPORTS_MANAGE = 'reports:*'
 export const INCIDENTS_MANAGE = 'incidents:*'
 
 /**
+ * Configuracion de la instalacion y perfil de cumplimiento (RF-PD-01,
+ * RF-PD-07).
+ *
+ * Lo lleva **solo** el administrador de instalacion (doc 02 §7.3). No se parte
+ * en un estrecho de lectura porque el contrato no lo declara: quien puede ver
+ * los umbrales legales del centro es quien puede cambiarlos, y `rrhh` no es
+ * ninguno de los dos.
+ */
+export const SETTINGS_MANAGE = 'settings:*'
+
+/**
  * Si los ambitos concedidos cubren el exigido.
  *
  * Reconoce el comodin de familia (`employees:*` cubre `employees:read`) porque

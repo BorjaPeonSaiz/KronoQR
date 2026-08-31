@@ -4163,6 +4163,142 @@ paths:
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
+
+  /api/v1/compliance-profile:
+    get:
+      operationId: getComplianceProfile
+      summary: Perfil de cumplimiento del centro
+      description: |
+        Los **umbrales legales** con los que se evalua el registro horario
+        (RF-PD-07): descanso minimo entre jornadas (RN-10), jornada diaria
+        ordinaria (RN-11), tramo continuo maximo sin pausa (RN-12), jornada
+        semanal, inicio de semana, festivos y años de retencion (RL-02).
+
+        **Recurso singular, como `/site`.** Se devuelve el perfil **vigente para
+        el centro de la instalacion**: el que tenga asignado, o el perfil por
+        defecto si no tiene ninguno. Hay exactamente un centro por instalacion
+        ([ADR-040](../adr/ADR-040-un-centro-por-instalacion-y-por-licencia.md)),
+        asi que hay exactamente un perfil vigente y no hay lista que paginar ni
+        identificador que elegir.
+
+        **Por que no vive en `/settings`.** Un umbral legal lo fija la
+        jurisdiccion y uno operativo lo fija el hotel (doc 01 §4). Son tablas
+        distintas, potestades distintas y consecuencias distintas: bajar el
+        anti-rebote cambia los minutos de mañana; bajar `retention_years` autoriza
+        borrar años de registro que hay obligacion de conservar. Mezclarlos en un
+        mapa de clave y valor haria indistinguibles las dos cosas en el contrato,
+        en la pantalla y en el asiento de auditoria.
+
+        **Los umbrales van en horas enteras**, que es como los enuncia el convenio.
+        El dominio los recibe en minutos; la conversion la hace el servidor.
+
+        `404` solo antes de la puesta en marcha (RF-PD-03): una instalacion sin
+        centro todavia no tiene perfil vigente.
+      tags: [Product]
+      security:
+        - managementToken: ['settings:*']
+      responses:
+        '200':
+          description: El perfil vigente para el centro.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceProfile'
+              examples:
+                de-serie:
+                  summary: El perfil ES-hosteleria tal y como se entrega
+                  value:
+                    data:
+                      id: 1
+                      name: ES-hosteleria
+                      jurisdiction: ES
+                      min_rest_hours: 12
+                      max_daily_hours: 9
+                      max_weekly_hours: 40
+                      break_required_after_hours: 6
+                      week_starts_on: 1
+                      holiday_calendar: []
+                      retention_years: 4
+                      is_default: true
+                      source: installation_default
+                      updated_at: null
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    patch:
+      operationId: updateComplianceProfile
+      summary: Modificacion del perfil de cumplimiento
+      description: |
+        Ajusta el perfil vigente al convenio aplicable. Al menos un campo.
+
+        **Cambiar un umbral cambia que jornadas se consideran anomalas** a partir
+        de la proxima revision diaria, y por eso **cada campo modificado deja su
+        propio asiento** en `audit_log` (`calculation_setting.changed`) con el
+        valor anterior, el nuevo y el actor. Sin ese asiento no se puede explicar
+        ante una inspeccion por que una jornada de hace tres meses no genero
+        alerta.
+
+        **No hay retroactividad.** El valor nuevo rige desde el cambio: la
+        revision diaria vuelve a evaluar su ventana de los ultimos dias con el
+        umbral vigente en ese momento, y **no reprocesa el historico, no cierra
+        incidencias ya abiertas y no reabre las resueltas** (doc 01 §4).
+
+        **`retention_years` es el campo peligroso**, y conviene decirlo aqui:
+        bajarlo amplia lo que la purga considera vencido, sobre datos con
+        obligacion legal de conservacion. No purga nada por si solo —
+        `compliance:apply-retention` propone en simulacion y exige una
+        confirmacion derivada del informe— pero es el unico campo cuyo error se
+        paga con datos que no vuelven.
+
+        **Guardar el valor que ya regia no escribe nada**: ni fila ni asiento.
+
+        **Lo que este endpoint no hace**: no crea perfiles, no los borra, no
+        cambia `jurisdiction` ni `is_default`. Con un centro por instalacion, un
+        segundo perfil no lo leeria nadie, y `is_default` es lo que hace que el
+        centro resuelva el suyo.
+      tags: [Product]
+      security:
+        - managementToken: ['settings:*']
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateComplianceProfileRequest'
+            examples:
+              convenio-propio:
+                summary: Un convenio con jornada de 8 h y pausa a las 5 h
+                value:
+                  max_daily_hours: 8
+                  break_required_after_hours: 5
+                  name: Convenio de hosteleria de Cantabria
+              festivos:
+                summary: Cargar el calendario de festivos del año
+                value:
+                  holiday_calendar: ['2026-01-01', '2026-01-06', '2026-08-15', '2026-12-25']
+      responses:
+        '200':
+          description: Perfil actualizado. Devuelve el perfil completo.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceProfile'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
   /api/v1/settings:
     get:
       operationId: getInstallationSettings
@@ -6817,6 +6953,194 @@ components:
             Si la clave descartada puede cambiar los minutos del registro legal.
             Es lo que separa «hay que arreglarlo cuando se pueda» de «hay que
             arreglarlo hoy y revisar lo calculado desde que se rompio».
+
+    ComplianceProfile:
+      type: object
+      title: ComplianceProfile
+      description: |
+        El perfil de cumplimiento vigente para el centro (doc 01 §5.5,
+        RF-PD-07), envuelto en `data` como el resto de recursos singulares.
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/ComplianceProfileBody'
+
+    ComplianceProfileBody:
+      type: object
+      title: ComplianceProfileBody
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - jurisdiction
+        - min_rest_hours
+        - max_daily_hours
+        - max_weekly_hours
+        - break_required_after_hours
+        - week_starts_on
+        - holiday_calendar
+        - retention_years
+        - is_default
+        - source
+        - updated_at
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: |
+            Como se llama el convenio que este perfil describe. Se entrega como
+            `ES-hosteleria` y **se puede cambiar**: un cliente que ajusta los
+            umbrales a su convenio provincial necesita que el perfil se llame
+            como ese convenio, porque es lo que aparece en el informe de
+            retencion y en el paquete de diagnostico.
+          examples:
+            - ES-hosteleria
+        jurisdiction:
+          type: string
+          minLength: 2
+          maxLength: 8
+          description: |
+            Codigo de la jurisdiccion cuyo marco legal describe el perfil.
+            **Solo lectura**: lo fija la instalacion y hoy no lo lee ninguna
+            regla, asi que dejarlo editable seria ofrecer un campo cuyo cambio no
+            tiene ningun efecto.
+          examples:
+            - ES
+        min_rest_hours:
+          type: integer
+          minimum: 1
+          maximum: 24
+          description: 'RN-10: horas de descanso entre el fin de un turno y el inicio del siguiente. 12 en `ES-hosteleria` (art. 34.3 ET).'
+        max_daily_hours:
+          type: integer
+          minimum: 1
+          maximum: 24
+          description: 'RN-11: jornada diaria ordinaria por encima de la cual se alerta. 9 en `ES-hosteleria`.'
+        max_weekly_hours:
+          type: integer
+          minimum: 1
+          maximum: 168
+          description: |
+            Jornada semanal ordinaria. 40 en `ES-hosteleria` (art. 34.1 ET); el
+            promedio en computo anual lo fija el convenio y lo ajusta el cliente.
+            **Todavia no lo lee ninguna regla**: lo estrena la vista de
+            cumplimiento. No puede ser menor que `max_daily_hours`.
+        break_required_after_hours:
+          type: integer
+          minimum: 1
+          maximum: 24
+          description: 'RN-12: tramo continuo maximo sin pausa registrada. 6 en `ES-hosteleria`.'
+        week_starts_on:
+          type: integer
+          minimum: 1
+          maximum: 7
+          description: |
+            Dia en que empieza la semana, en numeracion **ISO-8601**: 1 es lunes
+            y 7 domingo. 1 en `ES-hosteleria`, que es lo que ya usan los informes
+            por periodo. Todavia no lo lee ninguna regla.
+        holiday_calendar:
+          type: array
+          maxItems: 400
+          uniqueItems: true
+          description: |
+            Festivos del centro, en fechas ISO `AAAA-MM-DD`. **Vacio de serie, a
+            proposito**: los festivos dependen del municipio y del año, asi que un
+            calendario concreto dentro del producto caducaria el 31 de diciembre y
+            seria un dato de cliente en el codigo (regla dura 13). Lo carga el
+            cliente. Todavia no lo lee ninguna regla.
+          items:
+            type: string
+            format: date
+          examples:
+            - []
+        retention_years:
+          type: integer
+          minimum: 1
+          maximum: 50
+          description: |
+            RL-02: años que se conserva el registro horario antes de poder
+            purgarlo. **4 en España** (art. 34.9 ET). Bajarlo amplia lo que la
+            purga considera vencido, sobre datos con obligacion legal de
+            conservacion.
+        is_default:
+          type: boolean
+          description: |
+            Si es el perfil por defecto de la instalacion, que es el que rige en
+            un centro sin perfil asignado. **Solo lectura.**
+        source:
+          type: string
+          enum: [site, installation_default]
+          description: |
+            Como se ha resuelto: `site` si el centro tiene perfil asignado,
+            `installation_default` si se ha caido al perfil por defecto. Lo que
+            se edita es el perfil resuelto, sea cual sea el camino.
+        updated_at:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            Cuando se cambio por ultima vez, o **`null` si nadie lo ha tocado
+            desde la instalacion**. El `null` es una afirmacion, no un hueco: la
+            fila de serie la escribio el producto, no una persona, y distinguir
+            «tal como se instalo» de «revisado el 3 de marzo» es lo primero que
+            necesita ver quien abre la pantalla.
+
+            **Quien lo cambio no viaja aqui**: esta en `audit_log`, que es donde
+            tiene valor probatorio y donde hay control de acceso y retencion.
+          examples:
+            - null
+
+    UpdateComplianceProfileRequest:
+      type: object
+      title: UpdateComplianceProfileRequest
+      description: |
+        Modificacion parcial del perfil vigente. Al menos un campo. Los campos
+        ausentes no cambian.
+
+        `jurisdiction`, `is_default` e `id` no estan: no son editables.
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+        min_rest_hours:
+          type: integer
+          minimum: 1
+          maximum: 24
+        max_daily_hours:
+          type: integer
+          minimum: 1
+          maximum: 24
+        max_weekly_hours:
+          type: integer
+          minimum: 1
+          maximum: 168
+        break_required_after_hours:
+          type: integer
+          minimum: 1
+          maximum: 24
+        week_starts_on:
+          type: integer
+          minimum: 1
+          maximum: 7
+        holiday_calendar:
+          type: array
+          maxItems: 400
+          uniqueItems: true
+          items:
+            type: string
+            format: date
+        retention_years:
+          type: integer
+          minimum: 1
+          maximum: 50
 
     InstallationSettings:
       type: object

@@ -224,14 +224,19 @@ final readonly class DetectAttendanceAnomalies
      *
      * La regla sigue enunciada, implementada en `AnomalyDetectionPolicy` y
      * cubierta por su prueba unitaria; lo que se suspende es SOLO la apertura de
-     * la incidencia. La tarea 3.5 la reactiva cuando exista la pausa declarada:
-     * basta con vaciar esta lista.
+     * la incidencia. La tarea 3.5 la reactiva cuando exista la pausa declarada.
      *
-     * @var list<AnomalyType>
-     */
-    private const array SUSPENDED_UNTIL_DECLARED_BREAK = [AnomalyType::MISSING_BREAK];
-
-    /**
+     * **La lista ya no vive aqui** (tarea 5.2). Estaba escrita como una constante
+     * privada de este caso de uso, y funcionaba mientras la mirase solo quien
+     * filtra; dejo de funcionar en cuanto la pantalla del perfil de cumplimiento
+     * empezo a decirle al cliente que cambiar el umbral de RN-12 haria que se
+     * marcaran jornadas distintas —falso— y el asiento de `audit_log` empezo a
+     * afirmar `affects_incident_detection: true` sobre un registro con valor
+     * legal. `Product` no puede importar `Attendance` (doc 02 §1.6), asi que el
+     * hecho subio a `Shared\Domain\ValueObject\ComplianceRuleSuspension` y aqui
+     * se **consulta**. La 3.5 sigue reactivando la regla vaciando una sola
+     * lista, y ahora el panel y el asiento se enteran solos.
+     *
      * @param  list<WorkDay>  $workDays
      * @return list<DetectedAnomaly>
      */
@@ -248,7 +253,7 @@ final readonly class DetectAttendanceAnomalies
 
         return array_values(array_filter(
             $anomalies,
-            static fn (DetectedAnomaly $anomaly): bool => ! in_array($anomaly->type, self::SUSPENDED_UNTIL_DECLARED_BREAK, true),
+            static fn (DetectedAnomaly $anomaly): bool => ! $anomaly->type->openingIsSuspended(),
         ));
     }
 

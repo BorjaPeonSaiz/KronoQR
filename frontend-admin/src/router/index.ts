@@ -8,6 +8,7 @@ import {
   INCIDENTS_MANAGE,
   REPORTS_LEGAL,
   REPORTS_MANAGE,
+  SETTINGS_MANAGE,
 } from '@/features/auth/abilities'
 import LoginView from '@/features/auth/LoginView.vue'
 import CredentialBoardView from '@/features/credentials/CredentialBoardView.vue'
@@ -17,6 +18,7 @@ import IncidentsView from '@/features/incidents/IncidentsView.vue'
 import LivePresenceView from '@/features/live/LivePresenceView.vue'
 import LegalExportView from '@/features/reports/LegalExportView.vue'
 import PeriodReportView from '@/features/reports/PeriodReportView.vue'
+import ComplianceProfileView from '@/features/settings/ComplianceProfileView.vue'
 import EmployeeWorkDaysView from '@/features/workdays/EmployeeWorkDaysView.vue'
 import AppShellView from '@/shared/ui/AppShellView.vue'
 import ForbiddenView from '@/shared/ui/ForbiddenView.vue'
@@ -117,6 +119,17 @@ export const routes: RouteRecordRaw[] = [
         name: 'legal-export',
         component: LegalExportView,
         meta: { ability: REPORTS_LEGAL },
+      },
+      {
+        // El perfil de cumplimiento (RF-PD-07, tarea 5.2). Ambito `settings:*`,
+        // el del administrador de instalacion: aqui se cambian los umbrales con
+        // los que se decide si una jornada incumple el Estatuto y cuantos años
+        // hay que conservar el registro. La policy del servidor es la que
+        // autoriza de verdad (regla dura 18).
+        path: 'compliance-profile',
+        name: 'compliance-profile',
+        component: ComplianceProfileView,
+        meta: { ability: SETTINGS_MANAGE },
       },
       { path: 'forbidden', name: 'forbidden', component: ForbiddenView },
       {

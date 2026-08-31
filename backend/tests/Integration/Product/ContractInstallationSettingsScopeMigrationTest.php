@@ -50,7 +50,16 @@ it('revierte y vuelve a aplicar la contraccion dejando el esquema como estaba', 
     $migrator = DB::connection($name);
 
     try {
-        [$exitCode] = Commands::run('migrate:rollback --database='.$name.' --step=1');
+        // CUANTOS pasos, y no «uno»: cada migracion nueva que se añada despues
+        // desplaza a esta, y un `--step=1` fijo acabaria probando el `down()` de
+        // otra sin que nadie lo notara — la prueba seguiria en verde o fallaria
+        // por un motivo que no es el suyo. Se cuenta hasta llegar a la de la
+        // tarea 5.1, que es la que esta prueba existe para comprobar.
+        $steps = migrationTestStepsBackTo($migrator, '2026_09_05_100000_contract_installation_settings_scope');
+
+        expect($steps)->toBeGreaterThan(0);
+
+        [$exitCode] = Commands::run('migrate:rollback --database='.$name.' --step='.$steps);
 
         expect($exitCode)->toBe(0);
 
@@ -115,4 +124,34 @@ function migrationTestIndexes(ConnectionInterface $connection): array
         ->all();
 
     return $indexes;
+}
+
+/**
+ * Cuantos pasos de `migrate:rollback` hacen falta para deshacer la migracion
+ * indicada, contando desde la ultima aplicada.
+ *
+ * Existe para que esta prueba no dependa de cuantas migraciones se añadan
+ * despues. Con `--step=1` escrito a mano, la siguiente tarea que traiga una
+ * migracion haria que esto revirtiera la suya y diera por probado un `down()`
+ * que no es el que se quiere comprobar.
+ */
+function migrationTestStepsBackTo(ConnectionInterface $connection, string $migration): int
+{
+    /** @var list<string> $applied */
+    $applied = $connection->table('migrations')
+        ->orderByDesc('id')
+        ->pluck('migration')
+        ->all();
+
+    $steps = 0;
+
+    foreach ($applied as $name) {
+        $steps++;
+
+        if ($name === $migration) {
+            return $steps;
+        }
+    }
+
+    return 0;
 }

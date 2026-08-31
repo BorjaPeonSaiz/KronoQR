@@ -1,10 +1,10 @@
 # Configuración de KronoQR — qué se puede cambiar y qué consecuencias tiene
 
-> **Estado.** Redactado en la **tarea 5.1** con lo que ya existe: las **claves de
-> configuración de la instalación** (`GET`/`PATCH /api/v1/settings`). La **tarea
-> 5.2** añade el perfil de cumplimiento, la **5.8** la pantalla de marca del
-> panel y la **5.11** integra esta guía con el resto; ninguna de las tres
-> reescribe lo de aquí.
+> **Estado.** Redactado en la **tarea 5.1** con las **claves de configuración de
+> la instalación** (`GET`/`PATCH /api/v1/settings`) y ampliado en la **tarea 5.2**
+> con el **perfil de cumplimiento** (`GET`/`PATCH /api/v1/compliance-profile`,
+> sección 2.4). La **5.8** añade la pantalla de marca del panel y la **5.11**
+> integra esta guía con el resto; ninguna de las dos reescribe lo de aquí.
 
 ---
 
@@ -16,7 +16,7 @@ cambio no se aplica** y no hay ningún aviso que te lo diga.
 | Qué | Dónde | Cómo se cambia | ¿Hay que reiniciar? |
 | --- | --- | --- | --- |
 | **Marca, idiomas y umbrales operativos** | Tabla `installation_settings` | `PATCH /api/v1/settings` (panel, rol *administrador*) | No |
-| **Umbrales legales**: descanso mínimo, jornada máxima, pausas, años de retención | Tabla `compliance_profiles` | Perfil de convenio (tarea 5.2) | No |
+| **Umbrales legales**: descanso mínimo, jornada máxima, pausas, años de retención | Tabla `compliance_profiles` | `PATCH /api/v1/compliance-profile` (panel → «Cumplimiento», rol *administrador*) | No |
 | **Todo lo del despliegue**: rutas, credenciales, puertos, claves | Fichero `.env` del servidor | Editar y reiniciar los contenedores | **Sí** |
 
 La regla para no equivocarse: **si lo cambiarías sin avisar a nadie de
@@ -99,6 +99,82 @@ defecto—, la petición se rechaza entera y no se guarda nada.
 
 ---
 
+### 2.4 Umbrales legales: el perfil de cumplimiento
+
+Esto **no** está en la pantalla de configuración: tiene la suya, «Cumplimiento», y
+también es de administrador. Están aparte porque son otra cosa. Un umbral
+**operativo** lo decides tú según cómo funciona tu hotel; un umbral **legal** lo
+fija la norma o el convenio, y equivocarse tiene consecuencias distintas.
+
+Se entrega el perfil **`ES-hosteleria`**, con estos valores:
+
+| Campo | De serie | Qué hace | De dónde sale |
+| --- | --- | --- | --- |
+| `min_rest_hours` | `12` | Se abre incidencia si entre el fin de un turno y el inicio del siguiente median **menos** de esas horas | Art. 34.3 ET |
+| `max_daily_hours` | `9` | Se abre incidencia si la suma de los tramos de una jornada **supera** esas horas | Art. 34.3 ET |
+| `break_required_after_hours` | `6` | Umbral del tramo continuo sin pausa registrada. **Hoy la regla se evalúa pero no abre incidencia** (ver abajo) | Art. 34.4 ET |
+| `updated_at` | vacío | Solo lectura: cuándo se ajustó por última vez. **Vacío significa «tal como se instaló»** | — |
+| `max_weekly_hours` | `40` | Jornada semanal ordinaria. **Todavía no lo aplica ninguna regla** | Art. 34.1 ET |
+| `week_starts_on` | `1` (lunes) | Día en que empieza la semana. **Todavía no lo aplica ninguna regla** | ISO 8601 |
+| `holiday_calendar` | vacío | Festivos del centro, una fecha por línea. **Todavía no lo aplica ninguna regla** | Lo cargas tú |
+| `retention_years` | `4` | Años que hay que conservar el registro antes de poder purgarlo | Art. 34.9 ET |
+| `name` | `ES-hosteleria` | Cómo se llama el convenio que el perfil describe | Lo pones tú |
+
+**El calendario de festivos se entrega vacío a propósito.** Los festivos dependen
+del municipio y del año: un calendario metido dentro del producto caducaría cada
+31 de diciembre y sería incorrecto para la mitad de los clientes. Lo cargas tú,
+una vez al año, pegando las fechas.
+
+**Tres campos se guardan y todavía no se aplican** —jornada semanal, día de
+inicio de semana y festivos—. La pantalla lo dice al lado de los campos. Puedes
+dejarlos ya ajustados a tu convenio: los estrena la vista de cumplimiento de una
+versión posterior, y los cambios quedan auditados desde hoy.
+
+**`break_required_after_hours` está enunciado pero no abre incidencias todavía.**
+El sistema no puede distinguir «no descansó» de «descansó y no lo fichó» hasta que
+el quiosco registre la pausa como tal; abrir incidencias mientras tanto llenaría
+la bandeja de falsos positivos y taparía las que sí importan. El umbral se guarda
+y se aplicará cuando la detección se reactive.
+
+Consecuencia práctica, y conviene saberla antes de tocarlo: **cambiar ese umbral
+hoy no altera ni una incidencia**. La pantalla lo dice al lado del campo y el
+registro de auditoría lo deja escrito (`detection_suspended`), para que dentro
+de dos años se pueda distinguir «esto no movía alertas» de «las movía, pero
+entonces la regla estaba suspendida».
+
+#### Cambiar un umbral rige desde el cambio, no hacia atrás
+
+Es la decisión más importante de esta pantalla y conviene que la conozcas antes
+de tocar nada:
+
+- El valor nuevo se aplica **en la siguiente revisión diaria**, que mira los
+  últimos siete días. Ojo con esto: **endurecer un umbral puede abrir incidencias
+  de jornadas ya pasadas** que caigan dentro de esa ventana. No es un error, es la
+  ventana haciendo su trabajo.
+- **No se recalcula el histórico.** Una jornada de hace tres meses no se vuelve a
+  evaluar.
+- **No se cierra ninguna incidencia ya abierta** ni se reabre ninguna resuelta.
+  Cerrarlas automáticamente borraría el rastro de una decisión que tomó una
+  persona.
+- **El cambio queda auditado** con el valor anterior, el nuevo, quién lo hizo y
+  cuándo. Es lo que permite explicar dentro de dos años por qué una jornada de
+  marzo no generó alerta y una de abril sí.
+
+Consecuencia práctica: **si bajas un umbral, las incidencias que ya estaban
+abiertas siguen ahí y hay que cerrarlas a mano** indicando el motivo. No es un
+fallo: es la única forma de que el registro conserve lo que ocurrió.
+
+#### `retention_years` es el único campo peligroso
+
+Bajarlo amplía lo que la purga considera vencido, sobre datos que **estás
+obligado a conservar cuatro años**. Nada se borra por cambiarlo: la purga se
+ejecuta a mano, propone primero en simulación y exige una confirmación derivada
+de ese informe. Aun así, es el único campo del perfil cuyo error se paga con
+datos que no vuelven. Si tu asesoría te dice que tu plazo es otro, cámbialo; si
+no, no lo toques.
+
+---
+
 ## 3. Cómo se cambia
 
 Desde el panel, con una cuenta de **administrador de instalación**. RRHH,
@@ -130,6 +206,25 @@ lleva un campo `source`:
 
 - `installation` — lo has configurado tú.
 - `product_default` — nadie lo ha tocado y rige el valor de serie.
+
+El perfil de cumplimiento tiene su propia dirección, con la misma cuenta:
+
+```bash
+curl -sS https://TU-SERVIDOR/api/v1/compliance-profile \
+  -H 'Authorization: Bearer TU-TOKEN' \
+  -H 'Accept: application/json'
+```
+
+```bash
+curl -sS -X PATCH https://TU-SERVIDOR/api/v1/compliance-profile \
+  -H 'Authorization: Bearer TU-TOKEN' \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json' \
+  -d '{"max_daily_hours":8,"break_required_after_hours":5,"name":"Convenio de hostelería de Cantabria"}'
+```
+
+Manda solo los campos que quieras cambiar: los que no viajen se quedan como
+están. Los números van **sin comillas** (`8`, no `"8"`).
 
 ---
 
@@ -200,6 +295,38 @@ Guardar una cadena vacía **no** es volver al valor de serie: en la mayoría de 
 claves se rechaza, y en `BRANDING_LOGO_PATH` significa exactamente «usa el
 logotipo del producto», que es lo que quieres.
 
+### …cambio un umbral legal y la bandeja de incidencias no cambia
+
+Es lo esperado durante las primeras horas. La revisión que abre incidencias corre
+**una vez al día, de madrugada**: hasta la siguiente pasada, la bandeja sigue
+mostrando lo que se detectó con el umbral anterior. Y aunque pase la revisión,
+**las incidencias ya abiertas no se cierran solas**: si has subido el umbral y
+alguna dejó de ser un incumplimiento, hay que cerrarla a mano indicando el
+motivo.
+
+Si quieres comprobar el efecto sin esperar a la madrugada, alguien con acceso al
+servidor puede lanzar la revisión a mano:
+
+```bash
+docker compose exec -T app php artisan attendance:detect-incidents
+```
+
+Imprime cuántas jornadas ha revisado y cuántos hallazgos de cada tipo ha abierto.
+Repetirlo es seguro: no duplica nada y no cierra ningún turno.
+
+### …he bajado los años de conservación por error
+
+**No se ha borrado nada.** Cambiar `retention_years` no purga: la purga es un
+comando aparte que se lanza a mano, propone primero en simulación y exige una
+confirmación derivada de ese informe. Vuelve a poner el valor correcto en la
+pantalla y comprueba la simulación antes de ejecutar ninguna purga:
+
+```bash
+docker compose exec -T app php artisan compliance:apply-retention --dry-run
+```
+
+La primera línea del informe dice el corte que se aplicaría y de qué perfil sale.
+
 ### …necesito saber quién cambió un umbral y cuándo
 
 Cada clave modificada deja una entrada propia en el registro de auditoría, con la
@@ -207,14 +334,20 @@ cuenta que lo hizo, el momento, el valor anterior, el nuevo y si esa clave afect
 al cálculo de horas. Es información que se conserva cuatro años y que se puede
 enseñar a la Inspección. La pide una cuenta con permiso de auditoría.
 
+Lo mismo vale para el perfil de cumplimiento: **un apunte por cada umbral
+cambiado**, con el valor anterior, el nuevo, si ese cambio mueve la detección de
+incidencias y si mueve el plazo de conservación. Es lo que permite contestar a
+«¿por qué esta jornada de marzo no generó alerta?».
+
 ---
 
 ## 5. Lo que NO se configura aquí, y dónde está
 
 - **Los umbrales legales** —descanso mínimo entre jornadas, jornada ordinaria
   máxima, pausa obligatoria, años de retención— son del **perfil de
-  cumplimiento**, no de esta pantalla. Un umbral legal lo fija la norma o el
-  convenio; uno operativo lo fijas tú.
+  cumplimiento** (sección 2.4), que tiene su propia pantalla y su propia
+  dirección. Un umbral legal lo fija la norma o el convenio; uno operativo lo
+  fijas tú.
 - **Las funcionalidades activas** las decide **la licencia**, no una casilla del
   panel. Una licencia caducada recorta funcionalidades accesorias y muestra
   avisos, pero **nunca impide fichar ni consultar el registro**.

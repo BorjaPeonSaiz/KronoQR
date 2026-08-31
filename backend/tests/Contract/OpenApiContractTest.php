@@ -124,6 +124,13 @@ it('describe solo los endpoints cuya tarea existe, y todos bajo /api/v1', functi
         // `IncidentId` del contrato.
         '/api/v1/incidents',
         '/api/v1/incidents/{id}/resolve',
+        // Tarea 5.2: el perfil de cumplimiento (RF-PD-07, regla dura 14). Recurso
+        // propio y no una clave mas de `/settings`: un umbral LEGAL lo fija la
+        // jurisdiccion y uno OPERATIVO lo fija el hotel, y en un mapa de clave y
+        // valor serian indistinguibles «he bajado el anti-rebote» de «he bajado
+        // los años que hay que conservar el registro». SINGULAR como `/site`
+        // (ADR-040): con un centro por instalacion hay un perfil vigente.
+        '/api/v1/compliance-profile',
         // Tarea 5.1: configuracion de la instalacion (RF-PD-01, ADR-017). Es lo
         // que hace que vender a un cliente nuevo no exija tocar el repositorio.
         // Recurso SINGULAR y sin `{key}` en la ruta: el catalogo de claves es

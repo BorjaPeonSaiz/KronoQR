@@ -25,6 +25,7 @@ use App\Modules\Identity\Http\Controller\RevokeCredentialController;
 use App\Modules\Identity\Http\Controller\TwoFactorController;
 use App\Modules\Kiosk\Http\Controller\HeartbeatController;
 use App\Modules\Kiosk\Http\Controller\RosterController;
+use App\Modules\Product\Http\Controller\ComplianceProfileController;
 use App\Modules\Product\Http\Controller\SettingsController;
 use App\Modules\Reporting\Http\Controller\EmployeeWorkDayController;
 use App\Modules\Reporting\Http\Controller\LivePresenceController;
@@ -851,4 +852,29 @@ Route::middleware([
 ])->group(function (): void {
     Route::get('/settings', [SettingsController::class, 'show'])->name('product.settings.show');
     Route::patch('/settings', [SettingsController::class, 'update'])->name('product.settings.update');
+
+    /*
+     * El perfil de cumplimiento (tarea 5.2, RF-PD-07, regla dura 14).
+     *
+     * MISMO AMBITO Y MISMA POLICY QUE `/settings`, Y RECURSO DISTINTO. Un umbral
+     * legal lo fija la jurisdiccion y uno operativo lo fija el hotel (doc 01 §4):
+     * son dos tablas y dos consecuencias distintas, y meterlos en el mismo mapa
+     * de clave y valor haria indistinguible «he bajado el anti-rebote» de «he
+     * bajado los años que hay que conservar el registro». Comparten `settings:*`
+     * porque el §7.3 no declara un ambito para el perfil y crear uno solo para
+     * esto seria un ambito que ningun rol usa por separado.
+     *
+     * RECURSO SINGULAR Y SIN `DELETE`, como `/site` (ADR-040): hay un centro por
+     * instalacion y por tanto un perfil vigente. No hay alta —un segundo perfil no
+     * lo leeria nadie— y volver al perfil de serie es escribir sus valores.
+     *
+     * NO LO CIERRA UNA LICENCIA CADUCADA (ADR-019, regla dura 15). Dejar a un
+     * cliente sin poder ver ni ajustar los umbrales con los que se evalua su
+     * cumplimiento por una fecha de vencimiento seria empujarle al
+     * incumplimiento.
+     */
+    Route::get('/compliance-profile', [ComplianceProfileController::class, 'show'])
+        ->name('product.compliance-profile.show');
+    Route::patch('/compliance-profile', [ComplianceProfileController::class, 'update'])
+        ->name('product.compliance-profile.update');
 });

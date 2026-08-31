@@ -11,7 +11,8 @@
       "legalExport": "Inspectorate",
       "live": "Presence",
       "incidents": "Incidents",
-      "reports": "Reports"
+      "reports": "Reports",
+      "compliance": "Compliance"
     },
     "roles": {
       "admin": "Administration",
@@ -805,6 +806,58 @@
       "heading": "Incidents in this work day",
       "none": "No incidents in this work day.",
       "linkToInbox": "View in the incident inbox"
+    }
+  },
+  "compliance": {
+    "heading": "Compliance profile",
+    "intro": "The legal thresholds used to review this site's time records. They ship with the Spanish hospitality profile; adjust them to the collective agreement that applies to you.",
+    "loading": "Loading the profile…",
+    "detectionWarning": "These thresholds decide which working days are flagged for review. A change applies from the moment it is saved: history is not recalculated and no already-recorded issue is closed or reopened. Note that the daily review looks back over the last 7 days, so tightening a threshold can raise issues for past working days that fall inside that window.",
+    "pendingDetectionWarning": "You are about to change an incident detection threshold. From the next daily review, different working days will be flagged than are flagged today.",
+    "retentionWarning": "You are about to change how many years records are kept. Lowering it widens what the purge treats as expired, over data you are legally required to keep. No purge runs on its own: the retention command proposes in simulation first and requires an explicit confirmation.",
+    "notAppliedYet": "Weekly working hours, the first day of the week and the holiday calendar are stored and audited, but no rule applies them yet: the compliance view will be the first to use them.",
+    "save": "Save profile",
+    "saving": "Saving…",
+    "saved": "Profile saved. The change is recorded in the audit trail.",
+    "failed": "The profile could not be saved.",
+    "audited": "Every threshold changed leaves an audit trail entry with the previous value, the new one, who changed it and when.",
+    "source": {
+      "site": "Profile “{name}” ({jurisdiction}), assigned to this site.",
+      "installation": "Profile “{name}” ({jurisdiction}), the installation default: this site has none assigned and inherits its changes."
+    },
+    "fields": {
+      "name": "Collective agreement name",
+      "minRestHours": "Minimum rest between working days (h)",
+      "maxDailyHours": "Ordinary daily working hours (h)",
+      "maxWeeklyHours": "Ordinary weekly working hours (h)",
+      "breakRequiredAfterHours": "Maximum continuous stretch without a break (h)",
+      "weekStartsOn": "The week starts on",
+      "holidayCalendar": "Public holiday calendar",
+      "retentionYears": "Years records are kept"
+    },
+    "hints": {
+      "name": "The name of the agreement this profile describes. It appears in the retention report.",
+      "minRestHours": "An issue is opened if fewer hours pass between the end of one shift and the start of the next. 12 in the Spanish profile (art. 34.3 ET).",
+      "maxDailyHours": "An issue is opened if the sum of a day's shifts exceeds these hours. 9 in the Spanish profile.",
+      "maxWeeklyHours": "40 in the Spanish profile (art. 34.1 ET). Annual averaging is set by the collective agreement.",
+      "breakRequiredAfterHours": "Threshold for a continuous stretch with no break recorded. 6 in the Spanish profile. It is stored and evaluated; it does not raise issues today (see the note below).",
+      "weekStartsOn": "Used to group by week. Monday in the Spanish profile (ISO 8601).",
+      "holidayCalendar": "One date per line, in YYYY-MM-DD format. Ships empty: holidays depend on the town and the year, so each installation loads its own.",
+      "retentionYears": "Four years in Spain (art. 34.9 ET). Nothing can be purged before that."
+    },
+    "weekDays": {
+      "1": "Monday",
+      "2": "Tuesday",
+      "3": "Wednesday",
+      "4": "Thursday",
+      "5": "Friday",
+      "6": "Saturday",
+      "7": "Sunday"
+    },
+    "breakSuspended": "The continuous stretch without a break is evaluated, but it does not raise issues yet: until the kiosk records the break as such, the system cannot tell \"did not rest\" from \"rested and did not clock it\". The threshold is stored and will apply once detection is switched back on.",
+    "errors": {
+      "notAWholeNumber": "Enter a whole number, with no decimals or letters.",
+      "required": "This field cannot be left empty."
     }
   }
 }

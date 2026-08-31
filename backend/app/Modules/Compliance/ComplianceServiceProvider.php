@@ -44,6 +44,7 @@ use App\Modules\Compliance\Infrastructure\Console\VerifyAuditChainCommand;
 use App\Modules\Compliance\Infrastructure\Export\CsvLegalExportWriter;
 use App\Modules\Compliance\Infrastructure\Listener\NotifyIncidentAssignees;
 use App\Modules\Compliance\Infrastructure\Listener\OpenIncidentOnAnomalyDetected;
+use App\Modules\Compliance\Infrastructure\Listener\RecordComplianceProfileChange;
 use App\Modules\Compliance\Infrastructure\Listener\RecordCredentialLifecycle;
 use App\Modules\Compliance\Infrastructure\Listener\RecordEmployeePinLifecycle;
 use App\Modules\Compliance\Infrastructure\Listener\RecordEmploymentContractChange;
@@ -75,6 +76,7 @@ use App\Modules\Identity\Domain\Event\SigningKeyRetired;
 use App\Modules\Identity\Domain\Event\SigningKeyRotated;
 use App\Modules\Identity\Domain\Event\TwoFactorEnabled;
 use App\Modules\Identity\Domain\Event\TwoFactorReset;
+use App\Modules\Product\Domain\Event\ComplianceThresholdChanged;
 use App\Modules\Product\Domain\Event\InstallationSettingChanged;
 use App\Modules\Shared\Application\Port\AuthenticationJournal;
 use App\Modules\Shared\Application\Port\AuthorizationJournal;
@@ -243,6 +245,7 @@ final class ComplianceServiceProvider extends ServiceProvider
         $this->recordEmployeePinLifecycle();
         $this->recordEmploymentContractChanges();
         $this->recordInstallationSettingChanges();
+        $this->recordComplianceProfileChanges();
         $this->recordManagementAccountLifecycle();
         $this->openAndNotifyIncidents();
 
@@ -547,6 +550,27 @@ final class ComplianceServiceProvider extends ServiceProvider
     private function recordInstallationSettingChanges(): void
     {
         Event::listen(InstallationSettingChanged::class, [RecordInstallationSettingChange::class, 'handle']);
+    }
+
+    /**
+     * El mapa evento -> asiento del **perfil de cumplimiento** (tarea 5.2,
+     * RF-PD-07, RL-04).
+     *
+     * Misma familia del bloque D que la configuracion de instalacion
+     * —`AuthorityOrCalculationChange`— porque la pregunta que responde es la
+     * misma: «¿quien movio las reglas?». Lo que cambia es el sujeto: aqui es una
+     * fila con identificador, el perfil, y no una clave de texto.
+     *
+     * **Un evento por campo, y por tanto un asiento por campo**, con su antes, su
+     * despues y sus dos consecuencias: si mueve la deteccion de incidencias y si
+     * mueve el plazo de retencion.
+     *
+     * Sincrono, sin `ShouldQueue` y sin `afterCommit`: si el asiento falla, el
+     * cambio de umbral legal no se guarda (ADR-027).
+     */
+    private function recordComplianceProfileChanges(): void
+    {
+        Event::listen(ComplianceThresholdChanged::class, [RecordComplianceProfileChange::class, 'handle']);
     }
 
     /**

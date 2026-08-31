@@ -33,6 +33,7 @@ use App\Modules\Identity\Domain\Exception\EmployeeAlreadyHasCredential;
 use App\Modules\Identity\Domain\Exception\InvalidSigningKey;
 use App\Modules\Identity\Domain\ValueObject\TokenAbility;
 use App\Modules\Identity\Http\Middleware\RejectPendingTwoFactorSession;
+use App\Modules\Product\Domain\Exception\InvalidComplianceProfileValue;
 use App\Modules\Product\Domain\Exception\InvalidSettingValue;
 use App\Modules\Product\Domain\Exception\UnknownSettingKey;
 use App\Modules\Reporting\Application\Exception\EmployeeNotFound;
@@ -645,6 +646,27 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $exceptions->render(static fn (InvalidSettingValue $exception): mixed => ProblemDetails::validationFailed([
             'settings' => [ProblemDetails::translated(
+                $exception->translationKey,
+                $exception->parameters,
+                $exception->getMessage(),
+            )],
+        ]));
+
+        /*
+         * El perfil de cumplimiento (tarea 5.2, RF-PD-07).
+         *
+         * Mismo motivo que las dos de arriba: el `FormRequest` ya valida cada
+         * campo, pero hay una invariante ENTRE campos —la jornada semanal no
+         * puede quedar por debajo de la diaria— que depende de lo que ya hay
+         * guardado, y ademas hay caminos que no pasan por HTTP (el asistente de
+         * la 5.5 y la consola). Sin esto, cualquiera de ellos saldria como `500`.
+         *
+         * Se cuelga del campo cuando la excepcion sabe cual es, para que el panel
+         * pueda señalar el que hay que corregir; y del recurso entero cuando la
+         * afirmacion es sobre la coherencia de dos campos.
+         */
+        $exceptions->render(static fn (InvalidComplianceProfileValue $exception): mixed => ProblemDetails::validationFailed([
+            $exception->field?->value ?? 'compliance_profile' => [ProblemDetails::translated(
                 $exception->translationKey,
                 $exception->parameters,
                 $exception->getMessage(),

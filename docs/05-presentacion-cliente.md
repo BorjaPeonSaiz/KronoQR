@@ -392,7 +392,7 @@ Un servidor de estas características cubre 500 empleados y 10 tablets con holgu
 Todo lo que puede variar entre hoteles es **configuración**, no programación:
 
 - **Marca blanca**: logotipo, colores y nombre de la aplicación, aplicados a la tablet, al panel, al portal y a las tarjetas y documentos PDF.
-- **Perfil de cumplimiento**: años de retención, descanso mínimo entre jornadas, jornada máxima diaria y semanal, pausas obligatorias, inicio de semana y calendario de festivos. **Se entrega el perfil español de hostelería ya configurado**, y se puede ajustar si el convenio aplicable difiere.
+- **Perfil de cumplimiento**: años de retención, descanso mínimo entre jornadas, jornada máxima diaria y semanal, pausas obligatorias, inicio de semana y calendario de festivos. **Se entrega el perfil español de hostelería ya configurado**, y se puede ajustar si el convenio aplicable difiere. Los tres últimos —jornada semanal, inicio de semana y festivos— **se guardan y se auditan desde ya, y los aplica la vista de cumplimiento** cuando entra en servicio; la pantalla lo indica al lado de cada campo para no dar por hecho un efecto que aún no existe.
 - **Umbrales operativos**: margen anti-doble-escaneo, horas a partir de las cuales un turno se considera anómalo, tolerancia de desviación de reloj, intentos de PIN antes del bloqueo.
 - **Idiomas** activos y funcionalidades habilitadas.
 

@@ -700,6 +700,8 @@ Un token de quiosco comprometido **no da acceso a la plantilla completa**: `rost
 > **2. La familia `employees:*` se parte en dos.** El Anexo B del documento 01 sitúa `GET /employees` en «manager+», que incluye al responsable; esta tabla no le daba ningún ámbito de plantilla, así que RF-ID-03 —«un responsable solo accede a los empleados de su departamento»— era inaplicable: no accedía a **ninguno**. Se resuelve con un ámbito de lectura propio, `employees:read`, que llevan también `rrhh` y `admin`, en lugar de concederle la familia entera: con un solo ámbito, dejarle leer era dejarle escribir y la única defensa quedaba en la policy, cuando este mismo apartado exige que sean dos controles.
 >
 > **3. Hay un ámbito que no es de ningún rol: `2fa:pending`.** Lo emite el propio acceso —el `202` de `POST /api/v1/auth/login`— y solo abre los tres endpoints de `/auth/2fa/*`. No cuelga de ningún rol y no debe colgar: si lo tuviera, cualquier sesión de ese rol podría canjear un reto que nadie ha abierto.
+>
+> **4. `settings:*` cubre tambien el perfil de cumplimiento** (tarea 5.2). `GET`/`PATCH /api/v1/compliance-profile` viajan bajo ese mismo ambito y bajo una policy propia de solo `admin`. No se crea un ambito nuevo porque ningun rol lo usaria por separado: quien puede ver los umbrales legales del centro es exactamente quien puede cambiarlos, y `rrhh` no es ninguno de los dos. Los dos recursos siguen siendo distintos —un umbral **legal** lo fija la jurisdiccion y uno **operativo** lo fija el hotel— y cada uno tiene su policy y su prueba de autorizacion negativa.
 
 ### 7.4 Cadena de hash de la auditoría
 
@@ -784,6 +786,7 @@ audit_log_partition_check_timestamp_seconds              gauge
 worked_minutes_total{site,department}                    counter
 report_exports_total{format}                             counter
 installation_setting_changes_total{affects_worked_hours} counter
+compliance_profile_changes_total{effect}                 counter
 
 # Autenticación — OWASP A09
 kronoqr_auth_attempts_total{channel,outcome}             counter
@@ -1435,6 +1438,14 @@ PORTAL_INTERNAL_CIDR=172.28.0.0/16     # RF-ID-08 · lo aplica Nginx (geo + 403)
 KIOSK_VLAN_CIDR=10.0.20.0/24           # §7.1 · zona de fichaje elevada para este rango.
                                        # Fuera de él, los quioscos caen al límite de 30 r/m
 
+# COMPLIANCE_PROFILE es el NOMBRE del perfil de cumplimiento con el que el
+# instalador (tarea 5.4) marcara el perfil por defecto de la instalacion. NO se
+# lee en ejecucion y no puede leerse: los umbrales legales salen de la fila de
+# `compliance_profiles` que resuelve el centro —el asignado, o el de
+# `is_default`— y un `.env` que ganara a esa fila dejaria sin efecto lo que el
+# cliente guarda en el panel (regla dura 14, decision de la tarea 5.1: manda la
+# base de datos). Hoy la migracion siembra `ES-hosteleria` con `is_default`, asi
+# que cambiar esto sin cambiar la fila no hace nada.
 COMPLIANCE_PROFILE=ES-hosteleria       # RF-PD-07
 COMPLIANCE_INCIDENT_LOOKBACK_DAYS=7    # RF-PR-01 · días que revisa la detección. NO reprocesa el
                                        # histórico; los tramos abiertos se revisan siempre

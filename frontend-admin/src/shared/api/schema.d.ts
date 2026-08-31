@@ -2084,6 +2084,80 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/compliance-profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Perfil de cumplimiento del centro
+         * @description Los **umbrales legales** con los que se evalua el registro horario
+         *     (RF-PD-07): descanso minimo entre jornadas (RN-10), jornada diaria
+         *     ordinaria (RN-11), tramo continuo maximo sin pausa (RN-12), jornada
+         *     semanal, inicio de semana, festivos y años de retencion (RL-02).
+         *
+         *     **Recurso singular, como `/site`.** Se devuelve el perfil **vigente para
+         *     el centro de la instalacion**: el que tenga asignado, o el perfil por
+         *     defecto si no tiene ninguno. Hay exactamente un centro por instalacion
+         *     ([ADR-040](../adr/ADR-040-un-centro-por-instalacion-y-por-licencia.md)),
+         *     asi que hay exactamente un perfil vigente y no hay lista que paginar ni
+         *     identificador que elegir.
+         *
+         *     **Por que no vive en `/settings`.** Un umbral legal lo fija la
+         *     jurisdiccion y uno operativo lo fija el hotel (doc 01 §4). Son tablas
+         *     distintas, potestades distintas y consecuencias distintas: bajar el
+         *     anti-rebote cambia los minutos de mañana; bajar `retention_years` autoriza
+         *     borrar años de registro que hay obligacion de conservar. Mezclarlos en un
+         *     mapa de clave y valor haria indistinguibles las dos cosas en el contrato,
+         *     en la pantalla y en el asiento de auditoria.
+         *
+         *     **Los umbrales van en horas enteras**, que es como los enuncia el convenio.
+         *     El dominio los recibe en minutos; la conversion la hace el servidor.
+         *
+         *     `404` solo antes de la puesta en marcha (RF-PD-03): una instalacion sin
+         *     centro todavia no tiene perfil vigente.
+         */
+        get: operations["getComplianceProfile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Modificacion del perfil de cumplimiento
+         * @description Ajusta el perfil vigente al convenio aplicable. Al menos un campo.
+         *
+         *     **Cambiar un umbral cambia que jornadas se consideran anomalas** a partir
+         *     de la proxima revision diaria, y por eso **cada campo modificado deja su
+         *     propio asiento** en `audit_log` (`calculation_setting.changed`) con el
+         *     valor anterior, el nuevo y el actor. Sin ese asiento no se puede explicar
+         *     ante una inspeccion por que una jornada de hace tres meses no genero
+         *     alerta.
+         *
+         *     **No hay retroactividad.** El valor nuevo rige desde el cambio: la
+         *     revision diaria vuelve a evaluar su ventana de los ultimos dias con el
+         *     umbral vigente en ese momento, y **no reprocesa el historico, no cierra
+         *     incidencias ya abiertas y no reabre las resueltas** (doc 01 §4).
+         *
+         *     **`retention_years` es el campo peligroso**, y conviene decirlo aqui:
+         *     bajarlo amplia lo que la purga considera vencido, sobre datos con
+         *     obligacion legal de conservacion. No purga nada por si solo —
+         *     `compliance:apply-retention` propone en simulacion y exige una
+         *     confirmacion derivada del informe— pero es el unico campo cuyo error se
+         *     paga con datos que no vuelven.
+         *
+         *     **Guardar el valor que ya regia no escribe nada**: ni fila ni asiento.
+         *
+         *     **Lo que este endpoint no hace**: no crea perfiles, no los borra, no
+         *     cambia `jurisdiction` ni `is_default`. Con un centro por instalacion, un
+         *     segundo perfil no lo leeria nadie, y `is_default` es lo que hace que el
+         *     centro resuelva el suyo.
+         */
+        patch: operations["updateComplianceProfile"];
+        trace?: never;
+    };
     "/api/v1/settings": {
         parameters: {
             query?: never;
@@ -3430,6 +3504,113 @@ export interface components {
              *     arreglarlo hoy y revisar lo calculado desde que se rompio».
              */
             affects_worked_hours: boolean;
+        };
+        /**
+         * ComplianceProfile
+         * @description El perfil de cumplimiento vigente para el centro (doc 01 §5.5,
+         *     RF-PD-07), envuelto en `data` como el resto de recursos singulares.
+         */
+        ComplianceProfile: {
+            data: components["schemas"]["ComplianceProfileBody"];
+        };
+        /** ComplianceProfileBody */
+        ComplianceProfileBody: {
+            /** Format: int64 */
+            id: number;
+            /**
+             * @description Como se llama el convenio que este perfil describe. Se entrega como
+             *     `ES-hosteleria` y **se puede cambiar**: un cliente que ajusta los
+             *     umbrales a su convenio provincial necesita que el perfil se llame
+             *     como ese convenio, porque es lo que aparece en el informe de
+             *     retencion y en el paquete de diagnostico.
+             * @example ES-hosteleria
+             */
+            name: string;
+            /**
+             * @description Codigo de la jurisdiccion cuyo marco legal describe el perfil.
+             *     **Solo lectura**: lo fija la instalacion y hoy no lo lee ninguna
+             *     regla, asi que dejarlo editable seria ofrecer un campo cuyo cambio no
+             *     tiene ningun efecto.
+             * @example ES
+             */
+            jurisdiction: string;
+            /** @description RN-10: horas de descanso entre el fin de un turno y el inicio del siguiente. 12 en `ES-hosteleria` (art. 34.3 ET). */
+            min_rest_hours: number;
+            /** @description RN-11: jornada diaria ordinaria por encima de la cual se alerta. 9 en `ES-hosteleria`. */
+            max_daily_hours: number;
+            /**
+             * @description Jornada semanal ordinaria. 40 en `ES-hosteleria` (art. 34.1 ET); el
+             *     promedio en computo anual lo fija el convenio y lo ajusta el cliente.
+             *     **Todavia no lo lee ninguna regla**: lo estrena la vista de
+             *     cumplimiento. No puede ser menor que `max_daily_hours`.
+             */
+            max_weekly_hours: number;
+            /** @description RN-12: tramo continuo maximo sin pausa registrada. 6 en `ES-hosteleria`. */
+            break_required_after_hours: number;
+            /**
+             * @description Dia en que empieza la semana, en numeracion **ISO-8601**: 1 es lunes
+             *     y 7 domingo. 1 en `ES-hosteleria`, que es lo que ya usan los informes
+             *     por periodo. Todavia no lo lee ninguna regla.
+             */
+            week_starts_on: number;
+            /**
+             * @description Festivos del centro, en fechas ISO `AAAA-MM-DD`. **Vacio de serie, a
+             *     proposito**: los festivos dependen del municipio y del año, asi que un
+             *     calendario concreto dentro del producto caducaria el 31 de diciembre y
+             *     seria un dato de cliente en el codigo (regla dura 13). Lo carga el
+             *     cliente. Todavia no lo lee ninguna regla.
+             * @example []
+             */
+            holiday_calendar: string[];
+            /**
+             * @description RL-02: años que se conserva el registro horario antes de poder
+             *     purgarlo. **4 en España** (art. 34.9 ET). Bajarlo amplia lo que la
+             *     purga considera vencido, sobre datos con obligacion legal de
+             *     conservacion.
+             */
+            retention_years: number;
+            /**
+             * @description Si es el perfil por defecto de la instalacion, que es el que rige en
+             *     un centro sin perfil asignado. **Solo lectura.**
+             */
+            is_default: boolean;
+            /**
+             * @description Como se ha resuelto: `site` si el centro tiene perfil asignado,
+             *     `installation_default` si se ha caido al perfil por defecto. Lo que
+             *     se edita es el perfil resuelto, sea cual sea el camino.
+             * @enum {string}
+             */
+            source: "site" | "installation_default";
+            /**
+             * Format: date-time
+             * @description Cuando se cambio por ultima vez, o **`null` si nadie lo ha tocado
+             *     desde la instalacion**. El `null` es una afirmacion, no un hueco: la
+             *     fila de serie la escribio el producto, no una persona, y distinguir
+             *     «tal como se instalo» de «revisado el 3 de marzo» es lo primero que
+             *     necesita ver quien abre la pantalla.
+             *
+             *     **Quien lo cambio no viaja aqui**: esta en `audit_log`, que es donde
+             *     tiene valor probatorio y donde hay control de acceso y retencion.
+             * @example null
+             */
+            updated_at: string | null;
+        };
+        /**
+         * UpdateComplianceProfileRequest
+         * @description Modificacion parcial del perfil vigente. Al menos un campo. Los campos
+         *     ausentes no cambian.
+         *
+         *     `jurisdiction`, `is_default` e `id` no estan: no son editables.
+         */
+        UpdateComplianceProfileRequest: {
+            name?: string;
+            min_rest_hours?: number;
+            max_daily_hours?: number;
+            max_weekly_hours?: number;
+            break_required_after_hours?: number;
+            week_starts_on?: number;
+            holiday_calendar?: string[];
+            retention_years?: number;
         };
         /**
          * InstallationSettings
@@ -7892,6 +8073,59 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getComplianceProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description El perfil vigente para el centro. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComplianceProfile"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    updateComplianceProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateComplianceProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description Perfil actualizado. Devuelve el perfil completo. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComplianceProfile"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
         };

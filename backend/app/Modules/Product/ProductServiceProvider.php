@@ -4,12 +4,16 @@ declare(strict_types=1);
 
 namespace App\Modules\Product;
 
+use App\Modules\Product\Application\Port\ComplianceProfileMetrics;
+use App\Modules\Product\Application\Port\ComplianceProfileRepository;
 use App\Modules\Product\Application\Port\ProductEventPublisher;
 use App\Modules\Product\Application\Port\SettingsAnomalyReporter;
 use App\Modules\Product\Application\Port\SettingsMetrics;
 use App\Modules\Product\Application\Port\SettingsRepository;
 use App\Modules\Product\Application\UseCase\GetSettingsHandler;
+use App\Modules\Product\Domain\ValueObject\ComplianceProfileSnapshot;
 use App\Modules\Product\Domain\ValueObject\ResolvedSettings;
+use App\Modules\Product\Http\Policy\ComplianceProfilePolicy;
 use App\Modules\Product\Http\Policy\SettingsPolicy;
 use App\Modules\Product\Infrastructure\Adapter\CachedSettingsRepository;
 use App\Modules\Product\Infrastructure\Adapter\DbBrandingProvider;
@@ -17,7 +21,9 @@ use App\Modules\Product\Infrastructure\Adapter\DbCompliancePolicyProvider;
 use App\Modules\Product\Infrastructure\Adapter\DbOperationalSettingsProvider;
 use App\Modules\Product\Infrastructure\Adapter\LaravelProductEventPublisher;
 use App\Modules\Product\Infrastructure\Adapter\LoggingSettingsAnomalyReporter;
+use App\Modules\Product\Infrastructure\Metrics\RedisComplianceProfileMetrics;
 use App\Modules\Product\Infrastructure\Metrics\RedisSettingsMetrics;
+use App\Modules\Product\Infrastructure\Persistence\DatabaseComplianceProfileRepository;
 use App\Modules\Product\Infrastructure\Persistence\EloquentSettingsRepository;
 use App\Modules\Shared\Application\Port\BrandingProvider;
 use App\Modules\Shared\Application\Port\Clock;
@@ -149,7 +155,28 @@ final class ProductServiceProvider extends ServiceProvider
         // informe, y son una fila que cambia cuando cambia el convenio.
         $this->app->scoped(
             CompliancePolicyProvider::class,
-            static fn (): DbCompliancePolicyProvider => new DbCompliancePolicyProvider(DB::connection()),
+            static fn (): DbCompliancePolicyProvider => new DbCompliancePolicyProvider(DB::connection(), Log::channel()),
+        );
+
+        /*
+         * El mismo perfil, pero para EDITARLO (tarea 5.2).
+         *
+         * Dos objetos y no uno: el de arriba esta en el camino de fichaje y
+         * devuelve minutos sin nombre ni identificador; este devuelve lo que el
+         * panel edita y lo que hace falta para escribir un asiento con el valor
+         * anterior. `scoped()` por lo mismo que el resto —memoria por peticion,
+         * nunca entre peticiones— y ademas porque el repositorio invalida su
+         * propia memoria al guardar.
+         */
+        $this->app->scoped(
+            ComplianceProfileRepository::class,
+            static fn (): DatabaseComplianceProfileRepository => new DatabaseComplianceProfileRepository(DB::connection(), Log::channel()),
+        );
+
+        // `compliance_profile_changes_total{effect}` (doc 02 §8.2).
+        $this->app->bind(
+            ComplianceProfileMetrics::class,
+            static fn (Application $app): RedisComplianceProfileMetrics => new RedisComplianceProfileMetrics($app->make(Redis::class)),
         );
 
         $this->app->bind(
@@ -175,5 +202,17 @@ final class ProductServiceProvider extends ServiceProvider
          * operacion por fila que pudiera necesitar la otra.
          */
         Gate::policy(ResolvedSettings::class, SettingsPolicy::class);
+
+        /*
+         * `GET` y `PATCH /api/v1/compliance-profile` son de `admin` y de nadie
+         * mas, con el mismo reparto que la configuracion (§7.3 del doc 02: el
+         * ambito `settings:*` es del administrador de instalacion).
+         *
+         * El sujeto es {@see ComplianceProfileSnapshot} —«el perfil vigente del
+         * centro»— y no una fila: la policy no autoriza sobre un perfil concreto,
+         * porque solo hay uno vigente y no hay ninguna operacion por fila que
+         * pudiera necesitar la otra.
+         */
+        Gate::policy(ComplianceProfileSnapshot::class, ComplianceProfilePolicy::class);
     }
 }

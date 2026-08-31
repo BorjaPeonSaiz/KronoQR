@@ -171,6 +171,32 @@ function managementEndpoints(): array
         ]],
 
         ...installationSettingsEndpoints(),
+        ...complianceProfileEndpoints(),
+    ];
+}
+
+/**
+ * El perfil de cumplimiento (tarea 5.2, RF-PD-07). Ambito `settings:*` y rol
+ * `admin`, y **solo** `admin`.
+ *
+ * Bloque propio por lo mismo que la configuracion, y con un motivo aun mas
+ * fuerte: lo que hay detras de estas dos rutas es el umbral con el que se decide
+ * si una jornada incumple el Estatuto de los Trabajadores y cuantos años hay que
+ * conservar el registro. Quien llegue aqui sin ser el administrador de la
+ * instalacion puede apagar una alerta legal o autorizar una purga.
+ *
+ * El cuerpo del `PATCH` es valido a proposito, para que lo que falle sea la
+ * autorizacion y no la validacion.
+ *
+ * @return array<string, array{0: string, 1: string, 2: array<string, mixed>}>
+ */
+function complianceProfileEndpoints(): array
+{
+    return [
+        'ver el perfil de cumplimiento' => ['GET', '/api/v1/compliance-profile', []],
+        'cambiar el perfil de cumplimiento' => ['PATCH', '/api/v1/compliance-profile', [
+            'min_rest_hours' => 11,
+        ]],
     ];
 }
 
@@ -455,6 +481,17 @@ it('deniega a RRHH la configuracion de la instalacion', function (string $method
     Api::as($token)->call($method, $uri, $body)->assertStatus(403);
 })->with(installationSettingsEndpoints())->group('RF-PD-01', 'RS-05', 'RQ-07');
 
+it('deniega a RRHH el perfil de cumplimiento', function (string $method, string $uri, array $body): void {
+    // Mismo caso y mismo motivo que el de arriba, sobre los umbrales LEGALES.
+    // `rrhh` corrige fichajes con motivo y traza sobre una jornada; bajar
+    // `min_rest_hours` hace que dejen de saltar las alertas de descanso
+    // insuficiente de toda la plantilla, hacia delante, sin que ninguna jornada
+    // cambie de aspecto (RF-PD-07, regla dura 14).
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RRHH));
+
+    Api::as($token)->call($method, $uri, $body)->assertStatus(403);
+})->with(complianceProfileEndpoints())->group('RF-PD-07', 'RS-05', 'RQ-07');
+
 it('deja pasar al administrador a la configuracion, que es el control positivo de la 5.1', function (): void {
     // Sin esto, los `403` de arriba pasarian identicos si las dos rutas
     // estuvieran rotas o no existieran: un endpoint que revienta y uno que
@@ -467,3 +504,20 @@ it('deja pasar al administrador a la configuracion, que es el control positivo d
         ->patch('/api/v1/settings', ['settings' => ['ATTENDANCE_MAX_SHIFT_HOURS' => 10]])
         ->assertStatus(200);
 })->group('RF-PD-01', 'RQ-07');
+
+it('deja pasar al administrador al perfil de cumplimiento, que es el control positivo de la 5.2', function (): void {
+    // Sin esto, los `403` de arriba pasarian identicos si las dos rutas
+    // estuvieran rotas o no existieran.
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN));
+
+    // Con centro: sin el, las dos rutas responden `404` —el estado de antes de
+    // la puesta en marcha— y este control no distinguiria una policy correcta de
+    // una ruta rota.
+    WorkforceFixtures::site();
+
+    Api::as($token)->get('/api/v1/compliance-profile')->assertStatus(200);
+
+    Api::as($token)
+        ->patch('/api/v1/compliance-profile', ['min_rest_hours' => 11])
+        ->assertStatus(200);
+})->group('RF-PD-07', 'RQ-07');

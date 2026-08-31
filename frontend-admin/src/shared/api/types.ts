@@ -31,6 +31,11 @@ export type IssuedPin = Schemas['IssuedPin']
 export type PinDeliveryReceipt = Schemas['PinDeliveryReceipt']
 
 export type Site = Schemas['Site']
+
+// Perfil de cumplimiento: los umbrales LEGALES del centro (RF-PD-07, tarea 5.2).
+export type ComplianceProfile = Schemas['ComplianceProfile']
+export type ComplianceProfileBody = Schemas['ComplianceProfileBody']
+export type UpdateComplianceProfileRequest = Schemas['UpdateComplianceProfileRequest']
 export type Department = Schemas['Department']
 export type DepartmentCollection = Schemas['DepartmentCollection']
 

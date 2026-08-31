@@ -1,8 +1,10 @@
 # Obligaciones legales del hotel al usar KronoQR
 
 > **Estado.** Redactado en la **tarea 2.10**, que es la que decide la política de
-> retención por tipo de dato. La **tarea 5.11** lo revisa e integra en el paquete
-> de documentación final; no lo reescribe.
+> retención por tipo de dato, y ampliado en la **5.2** con la sección 7 (el
+> perfil de cumplimiento es responsabilidad del cliente, RL-16 y RL-21). La
+> **tarea 5.11** lo revisa e integra en el paquete de documentación final; no lo
+> reescribe.
 
 **Quién responde de qué, dicho en una línea:** el hotel es el **responsable del
 tratamiento** y del registro horario; el fabricante entrega un producto que hace
@@ -222,7 +224,39 @@ copia diaria y semanal y verifica que se pueden restaurar, pero:
 
 ---
 
-## 7. Lo que el fabricante no puede hacer por ti
+## 7. Ajustar el perfil de cumplimiento a tu convenio es tuyo
+
+El sistema se entrega con el perfil **`ES-hosteleria`**, cuyos umbrales salen del
+Estatuto de los Trabajadores: **12 h** de descanso entre jornadas (art. 34.3),
+**9 h** de jornada diaria ordinaria, **6 h** de tramo continuo antes de exigir
+pausa (art. 34.4), **40 h** de jornada semanal (art. 34.1) y **4 años** de
+conservación (art. 34.9).
+
+**Ese perfil es un punto de partida legal, no tu convenio.** Los convenios
+provinciales y de empresa fijan a menudo jornadas, descansos y cómputos distintos
+—y más favorables— que el mínimo legal. Comprobar cuáles te aplican y dejarlos
+escritos en el perfil es **responsabilidad tuya**, no del fabricante: es quien
+tiene el convenio delante y quien responde ante la Inspección y ante su plantilla.
+
+| Obligación | Lo que hace el sistema | Lo que tienes que hacer tú |
+| --- | --- | --- |
+| Aplicar los umbrales de tu convenio | Los lee de una fila editable, nunca de código, y los aplica desde el cambio | **Contrastar el perfil con tu convenio** al poner en marcha el sistema y cada vez que se renueve |
+| Cargar los festivos del centro | Guarda el calendario y lo audita | Cargarlo cada año: los festivos son del municipio y del año, y el producto se entrega **sin ninguno** |
+| Justificar por qué una jornada no generó alerta | Guarda cada cambio de umbral con su valor anterior, su autor y su momento | Saber dónde está ese registro y poder enseñarlo |
+| Conservar el plazo correcto | Toma los años del perfil y nunca purga sin confirmación explícita | **No bajar `retention_years` sin que lo diga tu asesoría**: por debajo del plazo legal estarías destruyendo prueba |
+
+**Qué NO hace el fabricante, y conviene que quede escrito:** no valida tu
+convenio, no te avisa de que un umbral es más laxo de lo que te corresponde y no
+puede saber qué convenio te aplica. El producto hace posible cumplir; la decisión
+de qué número poner es del hotel, con su asesoría laboral (RL-16, RL-21).
+
+> **Si cambias un umbral, el cambio rige desde ese momento.** No se recalcula el
+> histórico ni se cierran las incidencias ya abiertas. El procedimiento y el
+> porqué están en [Configuración](configuracion.md), sección 2.4.
+
+---
+
+## 8. Lo que el fabricante no puede hacer por ti
 
 | No puede | Por qué |
 | --- | --- |
@@ -230,6 +264,7 @@ copia diaria y semanal y verifica que se pueden restaurar, pero:
 | Atender una solicitud de derechos | Eres el responsable del tratamiento |
 | Responder un requerimiento de la Inspección | Lo firma el hotel |
 | Recuperar un dato ya purgado | La purga es irreversible; para eso está la confirmación |
+| Decirte qué umbrales fija tu convenio | No lo conoce; el perfil de cumplimiento es tuyo (§7) |
 
 Si necesitas soporte sobre una incidencia, el paquete de diagnóstico va
 **anonimizado por defecto** y cualquier acceso ampliado es expreso, temporal y

@@ -11,7 +11,8 @@
       "legalExport": "Inspección",
       "live": "Presencia",
       "incidents": "Incidencias",
-      "reports": "Informes"
+      "reports": "Informes",
+      "compliance": "Cumplimiento"
     },
     "roles": {
       "admin": "Administración",
@@ -805,6 +806,58 @@
       "heading": "Incidencias de la jornada",
       "none": "Sin incidencias en esta jornada.",
       "linkToInbox": "Ver en la bandeja de incidencias"
+    }
+  },
+  "compliance": {
+    "heading": "Perfil de cumplimiento",
+    "intro": "Los umbrales legales con los que se revisa el registro horario de este centro. Se entregan con el perfil español de hostelería; ajústalos al convenio que os aplique.",
+    "loading": "Cargando el perfil…",
+    "detectionWarning": "Estos umbrales deciden qué jornadas se marcan para revisión. Un cambio rige desde el momento en que se guarda: no se recalcula el histórico y no se cierra ni se reabre ninguna incidencia ya registrada. Ten en cuenta que la revisión diaria vuelve a mirar los últimos 7 días, así que endurecer un umbral puede abrir incidencias de jornadas ya pasadas que caigan dentro de esa ventana.",
+    "pendingDetectionWarning": "Vas a cambiar un umbral de detección de incidencias. A partir de la próxima revisión diaria se marcarán jornadas distintas de las que se marcan hoy.",
+    "retentionWarning": "Vas a cambiar los años de conservación del registro. Bajarlo amplía lo que la purga considera vencido, sobre datos que hay obligación legal de conservar. Ninguna purga se ejecuta sola: la orden de retención propone primero en simulación y exige una confirmación explícita.",
+    "notAppliedYet": "La jornada semanal, el día de inicio de semana y el calendario de festivos se guardan y se auditan, pero todavía no los aplica ninguna regla: los estrenará la vista de cumplimiento.",
+    "save": "Guardar el perfil",
+    "saving": "Guardando…",
+    "saved": "Perfil guardado. El cambio queda registrado en el trail de auditoría.",
+    "failed": "No se ha podido guardar el perfil.",
+    "audited": "Cada umbral modificado deja un apunte en el trail de auditoría con el valor anterior, el nuevo, quién lo cambió y cuándo.",
+    "source": {
+      "site": "Perfil «{name}» ({jurisdiction}), asignado a este centro.",
+      "installation": "Perfil «{name}» ({jurisdiction}), el perfil por defecto de la instalación: este centro no tiene ninguno asignado y hereda sus cambios."
+    },
+    "fields": {
+      "name": "Nombre del convenio",
+      "minRestHours": "Descanso mínimo entre jornadas (h)",
+      "maxDailyHours": "Jornada diaria ordinaria (h)",
+      "maxWeeklyHours": "Jornada semanal ordinaria (h)",
+      "breakRequiredAfterHours": "Tramo continuo máximo sin pausa (h)",
+      "weekStartsOn": "La semana empieza en",
+      "holidayCalendar": "Calendario de festivos",
+      "retentionYears": "Años de conservación del registro"
+    },
+    "hints": {
+      "name": "Cómo se llama el convenio que describe este perfil. Aparece en el informe de retención.",
+      "minRestHours": "Se abre incidencia si entre el fin de un turno y el inicio del siguiente median menos horas. 12 en el perfil español (art. 34.3 ET).",
+      "maxDailyHours": "Se abre incidencia si la suma de los tramos de una jornada supera estas horas. 9 en el perfil español.",
+      "maxWeeklyHours": "40 en el perfil español (art. 34.1 ET). El promedio en cómputo anual lo fija el convenio.",
+      "breakRequiredAfterHours": "Umbral del tramo continuo sin pausa registrada. 6 en el perfil español. Se guarda y se evalúa; hoy no abre incidencias (ver la nota de debajo).",
+      "weekStartsOn": "Se usa para agrupar por semanas. Lunes en el perfil español (ISO 8601).",
+      "holidayCalendar": "Una fecha por línea, en formato AAAA-MM-DD. Se entrega vacío: los festivos dependen del municipio y del año, así que los carga cada instalación.",
+      "retentionYears": "Cuatro años en España (art. 34.9 ET). Antes de ese plazo nada puede purgarse."
+    },
+    "weekDays": {
+      "1": "Lunes",
+      "2": "Martes",
+      "3": "Miércoles",
+      "4": "Jueves",
+      "5": "Viernes",
+      "6": "Sábado",
+      "7": "Domingo"
+    },
+    "breakSuspended": "El tramo continuo sin pausa se evalúa, pero hoy no abre incidencias: hasta que el quiosco registre la pausa como tal, el sistema no puede distinguir «no descansó» de «descansó y no lo fichó». El umbral se guarda y se aplicará cuando la detección se reactive.",
+    "errors": {
+      "notAWholeNumber": "Escribe un número entero, sin decimales ni letras.",
+      "required": "Este campo no puede quedarse vacío."
     }
   }
 }
