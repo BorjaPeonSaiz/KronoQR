@@ -79,6 +79,12 @@ final class LivePresenceResource extends JsonResource
                     'event' => $this->realtime->event,
                     'channels' => $this->realtime->channels,
                     'poll_interval_seconds' => $this->realtime->pollIntervalSeconds,
+                    // Por que no hay tiempo real, cuando la causa es la licencia
+                    // (ADR-019: la degradacion dice que, desde cuando y que
+                    // hacer). `null` si lo hay, y tambien si lo que falta es
+                    // configuracion de Reverb: eso lo arregla quien despliega.
+                    'unavailable_reason' => $this->realtime->unavailableReason,
+                    'unavailable_since' => $this->realtime->unavailableSince,
                 ],
             ],
         ];

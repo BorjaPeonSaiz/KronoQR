@@ -787,6 +787,7 @@ worked_minutes_total{site,department}                    counter
 report_exports_total{format}                             counter
 installation_setting_changes_total{affects_worked_hours} counter
 compliance_profile_changes_total{effect}                 counter
+license_limit_exceeded_total{limit}                      counter
 
 # Autenticación — OWASP A09
 kronoqr_auth_attempts_total{channel,outcome}             counter
@@ -1449,7 +1450,20 @@ KIOSK_VLAN_CIDR=10.0.20.0/24           # §7.1 · zona de fichaje elevada para e
 COMPLIANCE_PROFILE=ES-hosteleria       # RF-PD-07
 COMPLIANCE_INCIDENT_LOOKBACK_DAYS=7    # RF-PR-01 · días que revisa la detección. NO reprocesa el
                                        # histórico; los tramos abiertos se revisan siempre
-LICENSE_KEY=                           # Clave firmada, verificación local (ADR-018)
+LICENSE_KEY=                           # Clave firmada, verificación local (ADR-018). SOLO la lee el
+                                       # instalador al llamar a `license:activate` sin argumento; en
+                                       # ejecución manda la fila de `license` (decisión de la 5.1)
+LICENSE_PUBLIC_KEY=                    # RF-PD-04 · clave PÚBLICA ed25519 del fabricante, 64 hex. Va
+                                       # compilada en el producto (`config/license.php`) y NO la toca un
+                                       # cliente: esta variable existe para la suite —que genera su par en
+                                       # cada ejecución— y para una rotación de urgencia. Vacía = esta
+                                       # compilación no puede verificar ninguna clave, y `license:show` lo
+                                       # dice; el registro horario funciona igual (regla dura 15)
+LICENSE_EXPIRY_WARNING_DAYS=30         # RF-PD-05 · días de antelación del aviso de caducidad. Durante
+                                       # ellos NO se degrada nada: la licencia sigue vigente
+LICENSE_HEALTH_PROBE_TTL_SECONDS=600   # §10.5 · vida de la copia del estado que lee `GET /health`. NO es
+                                       # una caché de la licencia: el estado se recalcula siempre desde la
+                                       # clave firmada. Si expira, la sonda responde `unknown`
 TELEMETRY_ENABLED=false                # Desactivada por defecto (RF-PD-12)
 ERROR_HISTORY_RETENTION_DAYS=90        # RF-PD-15 · igual que el log técnico (RL-11)
 BRANDING_NAME=                         # RF-PD-08 · nombre impreso en la tarjeta. Vacío = el del centro

@@ -2158,6 +2158,92 @@ export interface paths {
         patch: operations["updateComplianceProfile"];
         trace?: never;
     };
+    "/api/v1/license": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Estado de la licencia
+         * @description Que se contrato, hasta cuando, cuanto se esta usando y **que esta
+         *     degradado** (RF-PD-04, RF-PD-05,
+         *     [ADR-018](../adr/ADR-018-licencia-firmada-con-verificacion-local.md),
+         *     [ADR-028](../adr/ADR-028-limites-del-plan-no-bloquean.md)).
+         *
+         *     **La verificacion es local y sin red.** Se comprueba la firma ed25519 de
+         *     la clave guardada con la clave publica del fabricante, que viaja dentro
+         *     del producto, y se compara la vigencia con el reloj del servidor. No hay
+         *     ninguna llamada saliente en este camino, ni la puede haber: el §11.6
+         *     declara la salida a internet **opcional** y una activacion en linea
+         *     convertiria la conectividad del fabricante en punto unico de fallo del
+         *     registro horario de todos sus clientes.
+         *
+         *     **Nunca devuelve `404`.** «Sin licencia» es un **estado** del recurso
+         *     (`absent`), no la ausencia del recurso: la instalacion existe y su
+         *     licencia esta sin activar, que es el caso mas comun de una puesta en
+         *     marcha.
+         *
+         *     **Este endpoint no se degrada jamas**, ni con la licencia caducada, ni
+         *     sin ella, ni con una clave ilegible. Es la pantalla desde la que se
+         *     arregla el problema: cerrarla al caducar dejaria al cliente sin poder
+         *     activar la renovacion que acaba de comprar (ADR-019).
+         *
+         *     Cada lectura anota `last_verified_at`, que es la marca de la ultima
+         *     verificacion correcta.
+         */
+        get: operations["getLicense"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/license/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Activacion de una clave de licencia
+         * @description Verifica la clave, la guarda y **deja constancia en `audit_log`**
+         *     (`license.activated`) con actor, momento, plan, limites y vigencia
+         *     (RF-PD-04, RL-04). Es la unica fuente que responde «¿desde cuando tiene
+         *     este cliente este plan y quien lo metio?»: la tabla guarda la clave de
+         *     hoy, no su historia.
+         *
+         *     **Formato de la clave**: `KQL1.<carga util>.<firma>`, en base64url sin
+         *     relleno. Se puede pegar con espacios y saltos de linea —se normalizan
+         *     antes de verificar—, porque copiarla de un correo es lo que hace todo el
+         *     mundo.
+         *
+         *     **Se puede activar una clave ya caducada**, y es deliberado: un hotel que
+         *     renueva con dos semanas de retraso recibe una clave cuya vigencia empezo
+         *     el dia 1, y rechazarla le obligaria a pedir otra. La respuesta devuelve
+         *     `state: expired` y el asiento deja constancia de que se activo asi.
+         *
+         *     **Una clave rechazada no toca nada**: la licencia anterior sigue como
+         *     estaba y el sistema entero sigue funcionando. El `422` dice cual de los
+         *     cuatro motivos es —clave a medias, firma que no cuadra, emision
+         *     defectuosa o despliegue sin clave publica— porque la accion siguiente es
+         *     distinta en cada uno.
+         *
+         *     **Sin red**, igual que la consulta.
+         */
+        post: operations["activateLicense"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/settings": {
         parameters: {
             query?: never;
@@ -2274,7 +2360,7 @@ export interface components {
     schemas: {
         /**
          * Health
-         * @description Estado de vida del proceso y version desplegada.
+         * @description Estado de vida del proceso, version desplegada y estado de la licencia.
          */
         Health: {
             /**
@@ -2282,6 +2368,28 @@ export interface components {
              * @enum {string}
              */
             status: "ok";
+            /**
+             * @description Estado de la licencia (§10.5, tarea 5.3), para que `doctor` y el
+             *     paquete de diagnostico puedan informarlo (RF-PD-09).
+             *
+             *     **Una palabra y nada mas.** Ni el nombre del cliente, ni el plan, ni
+             *     los limites, ni las fechas: esta sonda es publica y esos datos son
+             *     informacion comercial del cliente (ADR-020, regla dura 21). El
+             *     detalle completo esta en `GET /api/v1/license`, que es de `admin`.
+             *
+             *     **`unknown` no es un fallo.** Significa que la sonda no ha podido
+             *     saberlo **sin tocar dependencias**, que es su regla desde la tarea
+             *     1.7: el estado se lee de una copia en cache que escribe el punto
+             *     unico de decision, y si Redis no responde —o nadie ha resuelto el
+             *     estado desde el arranque— la respuesta honesta es esta. Nunca se
+             *     confunde con `absent`, que significa «no hay licencia activada».
+             *
+             *     **No cambia el codigo de respuesta.** Una licencia caducada devuelve
+             *     `200` igual que una vigente: esta sonda dice si el proceso vive, y la
+             *     licencia no tiene nada que ver con eso (regla dura 15, ADR-019).
+             * @enum {string}
+             */
+            license: "absent" | "unverifiable" | "not_yet_valid" | "valid" | "expiring_soon" | "expired" | "unknown";
             /**
              * @description Version SemVer desplegada (§10.5). Es lo que permite correlacionar una
              *     incidencia con una version concreta sin entrar por SSH al servidor del
@@ -3506,6 +3614,181 @@ export interface components {
             affects_worked_hours: boolean;
         };
         /**
+         * License
+         * @description Estado de la licencia de la instalacion (RF-PD-04, RF-PD-05, ADR-018,
+         *     ADR-023, ADR-028).
+         *
+         *     **Nada de lo que hay aqui puede detener el registro horario.** El estado
+         *     y las cifras gobiernan unicamente las funcionalidades **accesorias** de
+         *     ADR-023; el fichaje, la consulta de jornadas, el portal, la exportacion
+         *     para la Inspeccion, la auditoria, las correcciones y las copias no son
+         *     licenciables y no aparecen en ningun campo de este esquema (regla dura
+         *     15).
+         */
+        License: {
+            data: {
+                state: components["schemas"]["LicenseState"];
+                /**
+                 * @description Con que tono se enseña el aviso. `critical` **no** significa que
+                 *     el sistema este parado: significa que ya se ha perdido algo
+                 *     accesorio. Un exceso de plan nunca pasa de `warning`, porque
+                 *     ocurre con contrato vigente y pagado (ADR-028).
+                 * @enum {string}
+                 */
+                severity: "none" | "warning" | "critical";
+                /**
+                 * @description Solo con `state: unverifiable`. Distingue «vuelve a copiar la
+                 *     clave» de «pide una nueva» de «es un fallo de emision» de
+                 *     «revisa el despliegue», que son cuatro acciones distintas.
+                 * @enum {string|null}
+                 */
+                rejection_reason: "malformed" | "bad_signature" | "invalid_payload" | "no_public_key" | null;
+                /**
+                 * @description Razon social del cliente, tal y como viaja firmada dentro de la clave.
+                 * @example Hotel Ejemplo, S.L.
+                 */
+                customer_name: string | null;
+                /** @description Nombre comercial del plan. No gobierna nada: lo que limita son las cifras. */
+                plan: string | null;
+                /** @description Identificador que puso el fabricante al emitir. Aparece en el asiento de auditoria. */
+                license_id: string | null;
+                valid_from: components["schemas"]["UtcTimestamp"] | null;
+                valid_until: components["schemas"]["UtcTimestamp"] | null;
+                issued_at: components["schemas"]["UtcTimestamp"] | null;
+                /**
+                 * @description Dias completos que faltan. `0` el ultimo dia y tambien una vez
+                 *     caducada. **Nunca negativo**: lo posterior a la caducidad se
+                 *     cuenta en `days_since_expiry`, porque un entero con signo produce
+                 *     inevitablemente un mensaje que dice «caduca en -3 dias».
+                 */
+                days_until_expiry: number | null;
+                /** @description Dias completos desde la caducidad. Nulo si no ha caducado. */
+                days_since_expiry: number | null;
+                /** @description Funcionalidades **accesorias** que habilita el plan contratado. */
+                features: components["schemas"]["LicenseFeature"][];
+                /**
+                 * @description Lo que hoy **no** esta disponible, con su motivo y su fecha. Es
+                 *     lo que hace honesta a la degradacion (ADR-019): que esta
+                 *     degradado, desde cuando y —con el texto del panel— que hacer.
+                 */
+                degraded_features: {
+                    feature: components["schemas"]["LicenseFeature"];
+                    /**
+                     * @description `not_in_plan` no es una degradacion: es algo que el cliente
+                     *     no contrato, y renovar no lo arregla. Los otros cuatro si
+                     *     se recuperan al activar o renovar.
+                     * @enum {string|null}
+                     */
+                    restriction: "license_absent" | "license_unverifiable" | "license_not_yet_valid" | "license_expired" | "not_in_plan" | null;
+                    /** @description Desde cuando, si hay una fecha que dar. Nulo si no la hay: no se inventa un dia. */
+                    since: components["schemas"]["UtcTimestamp"] | null;
+                    /**
+                     * @description Si la funcionalidad existe ya en esta version. Distingue lo
+                     *     que el cliente pierde hoy de lo que perdera cuando exista,
+                     *     para no anunciarle la perdida de algo que no ha visto nunca.
+                     */
+                    implemented: boolean;
+                }[];
+                /**
+                 * @description Contratado frente a real (ADR-028). **Superarlo no bloquea
+                 *     nada**: `POST /api/v1/employees` y la emision del token de un
+                 *     quiosco responden 2xx igual, porque bloquear el alta deja a una
+                 *     persona trabajando sin registro horario y bloquear el
+                 *     emparejamiento deja un centro sin punto de fichaje.
+                 */
+                limits: {
+                    /**
+                     * @description Dos magnitudes y no tres: **no hay `max_sites`**, porque
+                     *     hay un centro por instalacion y por licencia (ADR-040).
+                     * @enum {string}
+                     */
+                    limit: "max_employees" | "max_devices";
+                    /** @description Nulo sin licencia verificada: no hay plan contra el que comparar, y no se inventa uno. */
+                    contracted: number | null;
+                    /**
+                     * @description Personas de plantilla **activa** o dispositivos **no
+                     *     revocados**. Quien esta de baja no ocupa plaza, aunque su
+                     *     registro se conserve cuatro años.
+                     */
+                    actual: number;
+                    exceeded: boolean;
+                    excess: number;
+                }[];
+                activated_at: components["schemas"]["UtcTimestamp"] | null;
+                /** @description Ultima verificacion **correcta** de la firma (ADR-018). */
+                last_verified_at: components["schemas"]["UtcTimestamp"] | null;
+                /**
+                 * @description Huella corta de la clave activada. **La clave completa no sale
+                 *     nunca** de ninguna respuesta ni de `license:show`: la huella es
+                 *     lo que sirve para confirmar por telefono que la clave activada es
+                 *     la que se envio.
+                 */
+                key_fingerprint: string | null;
+            };
+            meta: {
+                /**
+                 * @description Con cuantos dias de antelacion avisa esta instalacion (30 de
+                 *     serie). Viaja en la respuesta para que el panel no lleve el
+                 *     numero compilado dentro (regla dura 13, ADR-017).
+                 */
+                expiry_warning_days: number;
+                /**
+                 * @description Si hay que enseñar el banner persistente: la licencia no esta en
+                 *     su estado normal, o alguna cifra del plan se ha superado. Los dos
+                 *     avisos son **persistentes**, es decir, no se descartan: dejan de
+                 *     verse cuando el hecho deja de ser cierto (ADR-028).
+                 */
+                needs_notice: boolean;
+                /** @description Instante del **servidor** con el que se calculo el estado, nunca el del navegador. */
+                evaluated_at: components["schemas"]["UtcTimestamp"];
+            };
+        };
+        /**
+         * LicenseState
+         * @description En que situacion esta la licencia. **Ninguno de estos valores detiene
+         *     nada** (regla dura 15, ADR-019): gobiernan que funcionalidades accesorias
+         *     estan disponibles y que aviso se enseña, y eso es todo.
+         *
+         *     Son seis y no dos porque la accion siguiente del cliente es distinta en
+         *     cada uno, y una degradacion honesta tiene que decir que hacer.
+         * @enum {string}
+         */
+        LicenseState: "absent" | "unverifiable" | "not_yet_valid" | "valid" | "expiring_soon" | "expired";
+        /**
+         * LicenseFeature
+         * @description Una funcionalidad **accesoria**, de las que ADR-023 declara degradables.
+         *
+         *     **El registro legal no esta en esta lista y no puede estarlo.** El
+         *     fichaje, la sincronizacion de la cola offline, la consulta de jornadas,
+         *     el portal del empleado, la exportacion para la Inspeccion, la auditoria,
+         *     las correcciones, las copias y las sondas de salud **no son
+         *     licenciables**: no tienen valor en este enum, asi que no existe forma de
+         *     expresar su desactivacion — ni en una clave, ni por error. Es mas fuerte
+         *     que confiar en que nadie lo haga.
+         * @enum {string}
+         */
+        LicenseFeature: "advanced_reports" | "impact_dashboard" | "payroll_export" | "weekly_email_summary" | "realtime_presence" | "white_label" | "telemetry";
+        /**
+         * ActivateLicenseRequest
+         * @description La clave firmada que entrega el fabricante. Un solo campo: todo lo que
+         *     el cliente ha contratado viaja **dentro** de la clave, no en parametros
+         *     (regla dura 13, ADR-017).
+         */
+        ActivateLicenseRequest: {
+            /**
+             * @description Formato `KQL1.<carga util>.<firma>`, en base64url sin relleno. Los
+             *     espacios y los saltos de linea se normalizan antes de verificar,
+             *     porque copiarla de un correo es lo que hace todo el mundo.
+             *
+             *     **No se valida su forma con una expresion regular** en esta capa: lo
+             *     haria una segunda fuente de verdad que se desincronizaria el dia que
+             *     naciera `KQL2`, y ademas daria un mensaje peor que el que ya sabe dar
+             *     el verificador.
+             * @example KQL1.eyJsaWNlbnNlX2lkIjoiOWYyYzRhMWI3ZTBkM2Y2NSJ9.Zm9vYmFy
+             */
+            signed_key: string;
+        };
+        /**
          * ComplianceProfile
          * @description El perfil de cumplimiento vigente para el centro (doc 01 §5.5,
          *     RF-PD-07), envuelto en `data` como el resto de recursos singulares.
@@ -4606,11 +4889,19 @@ export interface components {
             /**
              * @description Clave publica de aplicacion con la que se abre el WebSocket.
              *
-             *     **`null` cuando la instalacion no tiene Reverb configurado**, que es
-             *     el unico caso en el que falta y siempre viene acompañado de
-             *     `enabled: false`. Se declara nulable en vez de vacia porque una
-             *     cadena vacia obligaria al cliente a distinguir «no hay clave» de
-             *     «hay una clave que es la cadena vacia», y solo una de las dos existe.
+             *     **`null` siempre que `enabled` es `false`**, sea cual sea el motivo:
+             *     sin Reverb configurado, con el tiempo real apagado en la instalacion
+             *     o sin licencia que lo conceda. Sin clave no se abre el socket, y es
+             *     incoherente entregarle a un cliente lo que necesita para conectarse
+             *     justo despues de decirle que no hay tiempo real.
+             *
+             *     **No es el control**, es coherencia: quien deniega de verdad es la
+             *     firma de la suscripcion en `auth_endpoint`, que no se concede cuando
+             *     la licencia no da tiempo real (tarea 5.3, ADR-023).
+             *
+             *     Se declara nulable en vez de vacia porque una cadena vacia obligaria
+             *     al cliente a distinguir «no hay clave» de «hay una clave que es la
+             *     cadena vacia», y solo una de las dos existe.
              */
             key: string | null;
             /**
@@ -4628,7 +4919,8 @@ export interface components {
             event: string;
             /**
              * @description Los canales a los que **esta cuenta** puede suscribirse, ya resueltos
-             *     por su alcance (RF-ID-03). `admin`, `rrhh` y `auditor` reciben
+             *     por su alcance (RF-ID-03). **Lista vacia cuando `enabled` es
+             *     `false`**, por lo mismo que `key` va nula. `admin`, `rrhh` y `auditor` reciben
              *     `presence.all`; un `responsable_departamento` recibe un
              *     `presence.department.{id}` por cada departamento que dirige y **no**
              *     recibe `presence.all`.
@@ -4645,6 +4937,21 @@ export interface components {
              *     base de datos que atiende el camino de fichaje.
              */
             poll_interval_seconds: number;
+            /**
+             * @description Por que no hay tiempo real **cuando la causa es la licencia** (tarea
+             *     5.3, ADR-023). Permite al panel decir «la licencia caduco el X» en
+             *     vez de «no disponible».
+             *
+             *     **`null` tambien cuando `enabled` es `false`** y la causa es otra:
+             *     la instalacion lo ha apagado, o no hay Reverb configurado. Eso lo
+             *     arregla quien despliega, no quien renueva, y anunciar «licencia»
+             *     ahi mandaria a quien lee a hablar con el comercial en lugar de con
+             *     quien administra el servidor.
+             * @enum {string|null}
+             */
+            unavailable_reason: "license_absent" | "license_unverifiable" | "license_not_yet_valid" | "license_expired" | "not_in_plan" | null;
+            /** @description Desde cuando, si la causa es una vigencia con fecha. Nulo si no la hay. */
+            unavailable_since: components["schemas"]["UtcTimestamp"] | null;
         };
         /**
          * PresenceUpdatedMessage
@@ -5425,6 +5732,38 @@ export interface components {
             };
             content: {
                 "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
+         * @description La funcionalidad **accesoria** que se pide no esta disponible con la
+         *     licencia activada (RF-PD-05, ADR-019, ADR-023).
+         *
+         *     **`402` y no `403`.** Un `403` mezclaria «no tienes permiso» con «tu
+         *     empresa no ha renovado», que son dos problemas de dos personas
+         *     distintas: el primero lo arregla quien administra los roles y el segundo
+         *     quien firma el contrato. En un log, ademas, serian indistinguibles.
+         *
+         *     **Este codigo NUNCA acompaña al registro legal.** El fichaje, la
+         *     sincronizacion de la cola offline, la consulta de jornadas, el portal del
+         *     empleado, la exportacion para la Inspeccion, la auditoria, las
+         *     correcciones, las copias y las sondas de salud **no son licenciables** y
+         *     no tienen forma de producir esta respuesta (regla dura 15).
+         *
+         *     `feature` y `restriction` viajan en el cuerpo para que el cliente decida
+         *     que enseñar sin analizar el texto; `detail` es el texto para personas, ya
+         *     traducido, y **dice que sigue disponible y que hacer**.
+         */
+        FeatureNotLicensed: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"] & {
+                    feature?: components["schemas"]["LicenseFeature"];
+                    /** @enum {string|null} */
+                    restriction?: "license_absent" | "license_unverifiable" | "license_not_yet_valid" | "license_expired" | "not_in_plan" | null;
+                    since?: components["schemas"]["UtcTimestamp"] | null;
+                };
             };
         };
         /**
@@ -7655,6 +7994,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            402: components["responses"]["FeatureNotLicensed"];
             403: components["responses"]["Forbidden"];
             /**
              * @description La instalacion todavia no tiene centro configurado, asi que no hay
@@ -7841,6 +8181,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            402: components["responses"]["FeatureNotLicensed"];
             403: components["responses"]["Forbidden"];
             /**
              * @description La instalacion todavia no tiene centro configurado, asi que no hay
@@ -8126,6 +8467,60 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getLicense: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description El estado de la licencia de esta instalacion. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["License"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    activateLicense: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ActivateLicenseRequest"];
+            };
+        };
+        responses: {
+            /**
+             * @description Clave activada. Devuelve el estado completo resultante, con las
+             *     mismas cifras que `GET /api/v1/license`.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["License"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
         };

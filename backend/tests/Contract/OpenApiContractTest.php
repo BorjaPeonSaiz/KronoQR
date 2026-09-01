@@ -131,6 +131,12 @@ it('describe solo los endpoints cuya tarea existe, y todos bajo /api/v1', functi
         // los años que hay que conservar el registro». SINGULAR como `/site`
         // (ADR-040): con un centro por instalacion hay un perfil vigente.
         '/api/v1/compliance-profile',
+        // Tarea 5.3: la licencia (RF-PD-04). Ambito propio `license:*` y no
+        // `settings:*`, porque un ajuste operativo y un hecho comercial no son
+        // lo mismo. `GET` NUNCA devuelve 404 —«sin licencia» es un estado— y no
+        // hay `DELETE`: no se desactiva una licencia, se activa otra.
+        '/api/v1/license',
+        '/api/v1/license/activate',
         // Tarea 5.1: configuracion de la instalacion (RF-PD-01, ADR-017). Es lo
         // que hace que vender a un cliente nuevo no exija tocar el repositorio.
         // Recurso SINGULAR y sin `{key}` en la ruta: el catalogo de claves es
@@ -421,11 +427,27 @@ it('publica la version desplegada en la sonda de vida', function (): void {
     // Doc 02 §10.5: la version es visible en /api/v1/health para poder
     // correlacionar una incidencia con una version concreta sin entrar por SSH
     // al servidor del cliente.
+    //
+    // La tarea 5.3 le añade el estado de la LICENCIA, por lo mismo: `doctor` y
+    // el paquete de diagnostico tienen que poder informarlo (RF-PD-09). Una
+    // palabra y nada mas —ni cliente, ni plan, ni fechas—, porque la sonda es
+    // publica y el resto es informacion comercial del cliente (ADR-020).
     expect(Contract::value('components', 'schemas', 'Health', 'required'))
-        ->toBe(['status', 'version'])
+        ->toBe(['status', 'version', 'license'])
         ->and(Contract::text('components', 'schemas', 'Health', 'properties', 'version', 'pattern'))
-        ->toBe('^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$');
+        ->toBe('^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$')
+        // `unknown` esta y tiene que estar: significa «esta sonda no ha podido
+        // saberlo sin tocar dependencias», que NO es lo mismo que `absent`.
+        ->and(Contract::value('components', 'schemas', 'Health', 'properties', 'license', 'enum'))
+        ->toContain('unknown');
 })->group('RNF-D-01');
+
+it('la sonda de vida no cambia de codigo por una licencia caducada', function (): void {
+    // Regla dura 15 y ADR-019. Devolver 503 por una licencia haria que el
+    // orquestador retirara del balanceo un contenedor que ficha perfectamente,
+    // que es la forma mas cara de convertir un problema comercial en una caida.
+    expect(Contract::keys('paths', '/api/v1/health', 'get', 'responses'))->toBe(['200']);
+})->group('RF-PD-05');
 
 it('separa la sonda de vida de la de disponibilidad', function (): void {
     // La de vida no puede fallar por una dependencia caida: si lo hiciera, el
@@ -1148,6 +1170,14 @@ it('entrega al panel los datos de conexion del WebSocket en la respuesta, no com
             'event',
             'channels',
             'poll_interval_seconds',
+            // Tarea 5.3: POR QUE no hay tiempo real, cuando la causa es la
+            // licencia (ADR-023). Sin el motivo, el panel solo podria decir «no
+            // disponible», y ADR-019 exige que la degradacion diga que esta
+            // degradado, desde cuando y que hacer. Van nulos cuando la causa es
+            // otra —la instalacion lo apago, o falta Reverb—: eso lo arregla
+            // quien despliega, no quien renueva.
+            'unavailable_reason',
+            'unavailable_since',
         ]);
 })->group('RF-PA-01', 'RQ-06');
 

@@ -412,6 +412,12 @@ Una clave firmada que codifica el cliente, el plan contratado, los límites (emp
 
 Y, como se dijo en el punto 4.7: **al caducar, el fichaje y el acceso al registro legal siguen funcionando**.
 
+**Qué se pierde exactamente al caducar**, para que no haya que preguntarlo: los **informes por periodo** —el cuadro de horas trabajadas frente a contratadas— y la **actualización en tiempo real** de la pantalla de presencia, que pasa a refrescarse por sondeo cada pocos segundos en lugar de al instante. Nada más. El fichaje, la sincronización de las tablets, la consulta de jornadas, el portal del empleado, la exportación para la Inspección, las correcciones, el registro de auditoría y las copias de seguridad **no se tocan**.
+
+**Y los límites del plan no bloquean nada.** Si el hotel contrata 80 personas y da de alta la 81, esa persona queda dada de alta y ficha desde el primer día; si se avería una tablet y se empareja otra, se empareja aunque la averiada siga contando. Lo que ocurre es un aviso en el panel y un apunte con la fecha desde la que se opera por encima de lo contratado, que es lo que se habla en la siguiente revisión. **Impedir dar de alta a un camarero en plena temporada dejaría a esa persona trabajando sin registro horario, y la infracción sería del hotel por una decisión que no controla.** Es una decisión de producto, no una concesión.
+
+El aviso de caducidad aparece **30 días antes**, con la fecha y con lo que se degradará. Durante esos 30 días no se pierde nada.
+
 ### 10.6 Soporte y diagnóstico
 
 Cuando hay una incidencia, el administrador del hotel genera con un clic un **paquete de diagnóstico**: versión, configuración sin contraseñas, estado de los servicios, últimos errores, salud de las tablets y comprobaciones internas. **Sin datos personales, sin nombres, sin registros de jornada.** Se envía al soporte y este lo analiza.

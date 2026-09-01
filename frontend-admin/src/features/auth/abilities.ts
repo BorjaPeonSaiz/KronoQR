@@ -65,6 +65,20 @@ export const INCIDENTS_MANAGE = 'incidents:*'
 export const SETTINGS_MANAGE = 'settings:*'
 
 /**
+ * Licencia de la instalacion: consultarla y activar una clave (RF-PD-04).
+ *
+ * **Ambito propio y no `settings:*`**, porque el §7.3 lo declara aparte y hay
+ * motivo: la configuracion y los umbrales legales los ajusta el hotel para su
+ * operativa; la licencia dice **que se contrato**, y eso no es un ajuste. Lo
+ * lleva solo el administrador de instalacion.
+ *
+ * Gobierna ademas quien ve el **aviso persistente** del marco: a un responsable
+ * de departamento un aviso de licencia caducada solo le da ruido, porque no
+ * puede renovar nada.
+ */
+export const LICENSE_MANAGE = 'license:*'
+
+/**
  * Si los ambitos concedidos cubren el exigido.
  *
  * Reconoce el comodin de familia (`employees:*` cubre `employees:read`) porque

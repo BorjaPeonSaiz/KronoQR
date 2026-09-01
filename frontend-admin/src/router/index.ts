@@ -6,6 +6,7 @@ import {
   CREDENTIALS_MANAGE,
   EMPLOYEES_MANAGE,
   INCIDENTS_MANAGE,
+  LICENSE_MANAGE,
   REPORTS_LEGAL,
   REPORTS_MANAGE,
   SETTINGS_MANAGE,
@@ -19,6 +20,7 @@ import LivePresenceView from '@/features/live/LivePresenceView.vue'
 import LegalExportView from '@/features/reports/LegalExportView.vue'
 import PeriodReportView from '@/features/reports/PeriodReportView.vue'
 import ComplianceProfileView from '@/features/settings/ComplianceProfileView.vue'
+import LicenseView from '@/features/settings/LicenseView.vue'
 import EmployeeWorkDaysView from '@/features/workdays/EmployeeWorkDaysView.vue'
 import AppShellView from '@/shared/ui/AppShellView.vue'
 import ForbiddenView from '@/shared/ui/ForbiddenView.vue'
@@ -130,6 +132,19 @@ export const routes: RouteRecordRaw[] = [
         name: 'compliance-profile',
         component: ComplianceProfileView,
         meta: { ability: SETTINGS_MANAGE },
+      },
+      {
+        // La licencia (RF-PD-04, tarea 5.3). Ambito propio `license:*`, el del
+        // administrador de instalacion: el §7.3 lo declara aparte de
+        // `settings:*` porque lo que se contrato no es un ajuste operativo.
+        //
+        // **Esta pantalla no se degrada nunca** (ADR-019): es desde donde se
+        // arregla el problema, y cerrarla al caducar dejaria al cliente sin
+        // poder activar la renovacion que acaba de comprar.
+        path: 'license',
+        name: 'license',
+        component: LicenseView,
+        meta: { ability: LICENSE_MANAGE },
       },
       { path: 'forbidden', name: 'forbidden', component: ForbiddenView },
       {

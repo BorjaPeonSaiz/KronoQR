@@ -34,13 +34,16 @@ use App\Modules\Identity\Domain\Exception\InvalidSigningKey;
 use App\Modules\Identity\Domain\ValueObject\TokenAbility;
 use App\Modules\Identity\Http\Middleware\RejectPendingTwoFactorSession;
 use App\Modules\Product\Domain\Exception\InvalidComplianceProfileValue;
+use App\Modules\Product\Domain\Exception\InvalidLicenseKey;
 use App\Modules\Product\Domain\Exception\InvalidSettingValue;
+use App\Modules\Product\Domain\Exception\LicenseKeyRejected;
 use App\Modules\Product\Domain\Exception\UnknownSettingKey;
 use App\Modules\Reporting\Application\Exception\EmployeeNotFound;
 use App\Modules\Reporting\Application\Exception\ReportRenderingUnavailable;
 use App\Modules\Reporting\Domain\Exception\InvalidDateRange;
 use App\Modules\Reporting\Domain\Exception\ReportTooLargeForSynchronousDelivery;
 use App\Modules\Shared\Domain\Exception\AccessOutOfScope;
+use App\Modules\Shared\Domain\Exception\FeatureNotLicensed;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
 use App\Modules\Workforce\Domain\Exception\EmployeeAlreadyTerminated;
 use App\Modules\Workforce\Domain\Exception\InvalidEmploymentContract;
@@ -672,4 +675,83 @@ return Application::configure(basePath: dirname(__DIR__))
                 $exception->getMessage(),
             )],
         ]));
+
+        /*
+         * La licencia (tarea 5.3, RF-PD-04, RF-PD-05, ADR-018, ADR-019).
+         *
+         * `LicenseKeyRejected` es `422` colgado de `signed_key`: quien acaba de
+         * pegar una clave que no verifica tiene un campo concreto que corregir,
+         * y el mensaje le dice cual de los cuatro motivos es —clave a medias,
+         * firma que no cuadra, emision defectuosa, o un despliegue sin clave
+         * publica—, porque la accion siguiente es distinta en cada uno.
+         *
+         * `InvalidLicenseKey` es tambien `422` y por el mismo camino: la firma
+         * cuadraba y la carga util no sirve. Es un fallo de EMISION y el mensaje
+         * lo dice, para que nadie se pase la mañana buscando el error en su
+         * copiado.
+         *
+         * **Ninguna de las dos detiene nada.** Rechazar una clave deja la
+         * licencia anterior intacta y el sistema entero funcionando (regla dura
+         * 15).
+         */
+        $exceptions->render(static fn (LicenseKeyRejected $exception): mixed => ProblemDetails::validationFailed([
+            'signed_key' => [ProblemDetails::translated(
+                $exception->translationKey,
+                [],
+                $exception->getMessage(),
+            )],
+        ]));
+
+        $exceptions->render(static fn (InvalidLicenseKey $exception): mixed => ProblemDetails::validationFailed([
+            'signed_key' => [ProblemDetails::translated(
+                $exception->translationKey,
+                $exception->parameters,
+                $exception->getMessage(),
+            )],
+        ]));
+
+        /*
+         * Y la degradacion honesta de una funcionalidad ACCESORIA (ADR-019,
+         * ADR-023).
+         *
+         * `402` con tipo propio, para que el panel la distinga de un `403` sin
+         * leer el texto y enseñe el aviso de licencia con el enlace al estado en
+         * vez de una pantalla de error.
+         *
+         * **Este `render` no puede alcanzar jamas al registro legal**, y no por
+         * disciplina: `FeatureNotLicensed` solo se construye a partir de un
+         * `Feature`, y ese catalogo no tiene ningun caso del conjunto legal
+         * (regla dura 15, ADR-023). El fichaje, la consulta de jornadas, el
+         * portal, la exportacion para la Inspeccion, la auditoria, las
+         * correcciones y las copias no tienen forma de llegar aqui.
+         */
+        $exceptions->render(static function (FeatureNotLicensed $exception): mixed {
+            /*
+             * LA FECHA SE FORMATEA AQUI, EN EL BORDE, y en el idioma negociado.
+             *
+             * El dominio no sabe en que idioma se va a leer: si la formateara el,
+             * el mensaje ingles saldria con la fecha en formato español. Es el
+             * mismo motivo por el que el texto vive en `lang/` y no en `Domain/`.
+             *
+             * Y **una sola conversion a UTC**, la de `sinceUtc()`: la fecha que
+             * viaja en el cuerpo y la que se lee en el texto describen el mismo
+             * instante y no pueden separarse un dia.
+             */
+            $since = $exception->sinceUtc();
+
+            $legible = $since === null
+                ? ''
+                : (new DateTimeImmutable($since))->format(__('license.since_format'));
+
+            return ProblemDetails::featureNotLicensed(
+                ProblemDetails::translated(
+                    $exception->translationKey(),
+                    $exception->parameters(is_string($legible) ? $legible : ''),
+                    $exception->getMessage(),
+                ),
+                $exception->feature->value,
+                $exception->restriction?->value,
+                $since,
+            );
+        });
     })->create();

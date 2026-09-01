@@ -187,6 +187,30 @@ enum AuditAction: string
      */
     case IncidentResolved = 'incident.resolved';
 
+    // --- Licencia (RF-PD-04, ADR-018, ADR-028, tarea 5.3) --------------------
+
+    /**
+     * Se ha activado una clave de licencia.
+     *
+     * Cambia **que ha contratado el cliente** a ojos del producto: plan, limites
+     * y funcionalidades accesorias. Es la unica forma de responder «¿desde
+     * cuando tiene este hotel el plan grande?» y «¿quien metio esta clave?».
+     * El payload lleva la huella corta de la clave, nunca la clave entera.
+     */
+    case LicenseActivated = 'license.activated';
+
+    /**
+     * Un alta ha dejado la instalacion por encima de una cifra del plan
+     * (**ADR-028**).
+     *
+     * **El alta se hizo igual.** Este asiento no describe un rechazo: describe
+     * la fecha exacta desde la que el cliente opera por encima de lo contratado,
+     * que es *la prueba que sostiene la reclamacion comercial* — literalmente lo
+     * que dice ADR-028. Lleva el limite, el valor contratado, el alcanzado y si
+     * es el cruce del umbral o un alta posterior en exceso.
+     */
+    case LicensePlanExceeded = 'license.plan_exceeded';
+
     // --- Retencion (RL-02, ADR-027) ------------------------------------------
 
     case RetentionPartitionSealed = 'retention.partition_sealed';
@@ -253,6 +277,14 @@ enum AuditAction: string
         // del calculo que nadie pidio (RF-PR-02, tarea 2.7).
         'projection' => AuditableEvent::AuthorityOrCalculationChange,
         'retention' => AuditableEvent::RetentionPurge,
+        // Activar una clave y superar una cifra del plan son las dos mitades
+        // del mismo hecho —que ha contratado el cliente y que esta usando— y
+        // por eso comparten familia. No caben en
+        // `AuthorityOrCalculationChange`: ninguna de las dos mueve un minuto
+        // trabajado ni concede una potestad a nadie, y meterlas ahi ensuciaria
+        // la consulta con la que una inspeccion pregunta quien movio las reglas
+        // del calculo. Ver `AuditableEvent::LicenseLifecycle`.
+        'license' => AuditableEvent::LicenseLifecycle,
     ];
 
     /**

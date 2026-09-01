@@ -25,6 +25,8 @@ Aquí es inviable y además peligrosa:
 **La clave de licencia va firmada asimétricamente (ed25519, con `sodium` nativo de PHP) y se verifica en local. Nunca hay llamada a internet.**
 
 - La clave codifica cliente, plan, límites (`max_sites`, `max_employees`, `max_devices`), `features` y vigencia, y se guarda en la tabla `license`.
+
+  > **Enmienda 01-09-2026 (tarea 5.3): `max_sites` no existe.** [ADR-040](ADR-040-un-centro-por-instalacion-y-por-licencia.md), punto 5, lo retiró: una licencia es un centro, y una cadena de tres hoteles compra tres licencias. Los límites implementados son **dos**, `max_employees` y `max_devices`. Una clave que traiga `max_sites` **verifica igual y el campo se ignora**: la lectura tolera campos desconocidos —es lo que permite que una instalación en la 1.2 active la renovación emitida con la 1.6— y ese límite no llega al dominio ni se puede consultar. Modelarlo «por compatibilidad» lo dejaría a la vista de la primera persona que quisiera comprobarlo.
 - **La verificación es local y no requiere red**: solo la clave pública del fabricante, incluida en el producto.
 - **La licencia no se puede revocar a distancia**, y se asume. La palanca es la caducidad de la clave y el contrato.
 - **La verificación no está en el camino del fichaje.** Un fallo al verificar la licencia no puede impedir que se registre una jornada ([ADR-019](ADR-019-la-licencia-nunca-bloquea-el-registro.md)), ni que se dé de alta a una persona o se empareje un quiosco ([ADR-028](ADR-028-limites-del-plan-no-bloquean.md)).
@@ -58,3 +60,44 @@ Se elige **asimétrica** y no HMAC porque aquí sí hay dos partes: el fabricant
 - Prueba de *feature*: con licencia caducada, ausente o corrupta, `POST /api/v1/scan` sigue respondiendo 200 y el tramo se registra (ADR-019, regla dura 15).
 - Prueba de consola: `license:show` muestra cliente, plan, límites contratados frente a reales y vigencia (ADR-028).
 - Prueba de arquitectura: ninguna comprobación de licencia fuera del punto único de decisión (compartida con ADR-023 y ADR-028).
+
+## Enmienda 01-09-2026 (tarea 5.3): cómo quedó implementado
+
+La decisión no cambia. Se registra lo que fijó la implementación, para que quien
+lo lea dentro de dos años no tenga que deducirlo del código.
+
+- **Formato de la clave: `KQL1.<carga útil>.<firma>`**, las dos partes en
+  base64url sin relleno. `KQL1` es la versión del **formato**, no del producto:
+  permite cambiar de formato algún día sin reemitir las licencias vivas. Se
+  firma sobre **el texto codificado tal y como viaja**, no sobre el JSON
+  reserializado, porque dos codificadores JSON ordenan las claves distinto y eso
+  produciría firmas que verifican en la máquina del fabricante y no en la del
+  cliente.
+- **Campos de la carga útil**: `license_id`, `customer_name`, `plan`,
+  `max_employees`, `max_devices`, `features`, `valid_from`, `valid_until` e
+  `issued_at`. Los instantes van en UTC canónico con sufijo `Z` (regla dura 3).
+- **La lectura tolera lo desconocido.** Un campo o una funcionalidad que esta
+  versión no conozca se ignoran y la clave verifica igual. Rechazar lo
+  desconocido significaría que un hotel que sigue en la 1.2 no puede activar la
+  renovación emitida con la 1.6, y el efecto sería una instalación degradada por
+  un cambio aditivo del emisor. No hay riesgo de inyección: el contenido ya pasó
+  la firma, y lo que no se lee no se aplica.
+- **La emisión vive fuera del producto**, en `tools/license-issuer/` de la raíz
+  del repositorio, que **no se copia a ninguna imagen** (`COPY backend/ ./`). La
+  clave privada llega por variable de entorno y no aparece en el repositorio en
+  ninguna forma. `tests/Integration/Product/LicenseIssuerRoundTripTest.php`
+  ejecuta ese CLI como subproceso y verifica su salida con el verificador del
+  producto: es lo único que ata las dos piezas, que no se despliegan juntas.
+- **La clave pública viaja vacía de serie** y la rellena el fabricante antes de
+  construir la primera imagen de *release*. Vacía significa «esta compilación no
+  puede verificar ninguna clave»: se traduce al motivo `no_public_key`, el
+  producto entero sigue funcionando y `license:show` lo dice con esas palabras,
+  remitiendo a revisar el despliegue y no a pedir otra clave.
+- **`last_verified_at` solo lo escriben los caminos que verifican a propósito**:
+  la activación, `GET /api/v1/license` y `license:show`. El punto único de
+  decisión no lo escribe: si lo hiciera, cada pantalla del panel sería una
+  escritura sobre la tabla de licencia.
+- **Se puede activar una clave ya caducada**, y queda constancia del estado
+  resultante en `audit_log`. Un hotel que renueva con retraso recibe una clave
+  cuya vigencia empezó el día 1; rechazarla le obligaría a pedir otra por una
+  diferencia de calendario.

@@ -11,6 +11,7 @@ use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Reporting\PresenceFixtures;
 use Tests\Support\Time\FixedClock;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -29,6 +30,31 @@ use Tests\Support\Workforce\WorkforceFixtures;
  */
 
 uses(RefreshDatabase::class);
+
+beforeEach(function (): void {
+    // El informe por periodo y la presencia en tiempo real son funcionalidad
+    // ACCESORIA (ADR-023, tarea 5.3): sin una licencia que las conceda, el
+    // primero responde `402` con el aviso de licencia y la segunda degrada a
+    // sondeo. Aqui se prueba la funcionalidad; su degradacion tiene fichero
+    // propio, `tests/Feature/Product/LicenseDegradesAccessoriesTest.php`.
+    //
+    // **Nada del registro legal necesita esta llamada**: el fichaje, la consulta
+    // de jornadas, el portal y la exportacion para la Inspeccion funcionan sin
+    // licencia por diseño, y que sus pruebas no la hagan es la comprobacion
+    // silenciosa de eso (regla dura 15).
+    LicenseKeys::grantAll();
+
+    /*
+     * Y Reverb en pie, porque desde la 5.3 `meta.realtime.channels` va VACIO
+     * cuando no hay tiempo real —sea cual sea el motivo—, por lo mismo que
+     * `key` va nula: sin canales no hay nada que pedir.
+     *
+     * Las pruebas que miran la DEGRADACION la apagan a proposito; aqui se
+     * mira la forma de produccion de la respuesta.
+     */
+    config()->set('broadcasting.default', 'reverb');
+    config()->set('broadcasting.connections.reverb.key', 'kronoqr-test-key');
+});
 
 const PRESENCIA_AHORA = '2026-03-14 09:12:03';
 
@@ -202,9 +228,12 @@ it('dice al panel a que canal suscribirse y cada cuanto sondear si no puede', fu
         ->and($respuesta->json('meta.realtime.event'))->toBe('presence.updated')
         ->and($respuesta->json('meta.realtime.auth_endpoint'))->toBe('/api/v1/broadcasting/auth')
         ->and($respuesta->json('meta.realtime.poll_interval_seconds'))->toBe(15)
-        // En la suite el difusor es `null`: la degradacion honesta se anuncia en
-        // vez de dejar al panel reintentando contra un socket que no abre.
-        ->and($respuesta->json('meta.realtime.enabled'))->toBeFalse();
+        // Con Reverb en pie y licencia que lo concede, el bloque `realtime` viaja
+        // en su forma de produccion. La degradacion —`enabled: false` y sin
+        // canales— tiene fichero propio y se prueba con las dos causas por
+        // separado: `LicenseDegradesAccessoriesTest`.
+        ->and($respuesta->json('meta.realtime.enabled'))->toBeTrue()
+        ->and($respuesta->json('meta.realtime.key'))->toBe('kronoqr-test-key');
 })->group('RF-PA-01');
 
 it('rechaza un filtro mal escrito en lugar de ignorarlo', function (): void {

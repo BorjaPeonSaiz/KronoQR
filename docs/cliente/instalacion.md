@@ -160,3 +160,26 @@ recuperarlos. Lo que hay que custodiar:
 
 El `.env.example` del repositorio no contiene ni un solo secreto real: son
 plantillas comentadas.
+
+**La clave de licencia no es un secreto y no está en esa tabla.** Es una
+afirmación firmada sobre lo que has contratado, no abre nada, y perderla no
+tiene consecuencia alguna: se pide otra al proveedor y se vuelve a activar.
+
+## La licencia, al instalar
+
+Pega la clave que te entregó tu proveedor en `LICENSE_KEY` del `.env` **antes**
+de ejecutar el instalador, o actívala después con:
+
+```bash
+docker compose exec app php artisan license:activate "KQL1...."
+```
+
+> **Si no la tienes a mano, instala igualmente.** Sin licencia activada, el
+> sistema se instala, arranca y **registra jornada con normalidad**: lo único
+> que no estará disponible son las funcionalidades accesorias —informes por
+> periodo y actualización en tiempo real de la presencia—. La activas cuando la
+> tengas y aparecen solas, sin reiniciar nada.
+
+Comprueba en cualquier momento cómo está con
+`docker compose exec app php artisan license:show`. Todo lo demás sobre la
+licencia está en [`configuracion.md`](configuracion.md), sección 3 bis.

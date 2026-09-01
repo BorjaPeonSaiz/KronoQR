@@ -146,6 +146,57 @@ Métricas publicadas para el colector de `node-exporter`
 | `DB_MAINTENANCE_USERNAME` | `fichaje_maintenance` | Rol que ejecuta la purga de auditoría |
 | `DB_MAINTENANCE_PASSWORD` | *(vacía)* | **No se pone en el `.env`.** Se aporta al ejecutar la purga |
 
+---
+
+## 7. La licencia, en dos comandos
+
+No hay nada programado que revise la licencia: se mira cuando se quiere mirar.
+
+```bash
+docker compose exec app php artisan license:show
+```
+
+**Códigos de salida**, por si quieres vigilarlo desde tu propio sistema:
+
+| Código | Significa |
+| --- | --- |
+| `0` | Licencia vigente y sin exceso de plan. Nada que hacer |
+| `1` | **Hay algo que mirar**: no hay licencia, caducó, caduca pronto, no se puede verificar, o se ha superado una cifra del plan |
+
+> **`1` no significa que el sistema esté parado**, y el propio comando lo dice.
+> Se sigue fichando, consultando el registro, exportando para la Inspección y
+> haciendo copias exactamente igual.
+
+Para activar una clave nueva:
+
+```bash
+docker compose exec app php artisan license:activate "KQL1...."
+```
+
+| Código | Significa |
+| --- | --- |
+| `0` | Activada y vigente |
+| `1` | Activada, pero **no vigente** todavía: caducada, o su vigencia empieza más adelante. Se guardó igual |
+| `2` | **No se activó nada.** La clave no verifica, o no indicaste ninguna. La licencia anterior sigue como estaba |
+
+El estado también sale en la sonda de salud, para vigilarlo sin entrar por SSH:
+
+```bash
+curl -sS https://TU-SERVIDOR/api/v1/health
+# {"status":"ok","version":"1.4.2","license":"valid"}
+```
+
+Ese campo puede decir `unknown`: significa que la sonda no ha podido saberlo
+**sin tocar la base de datos**, que es su regla —una sonda de vida que consulta
+PostgreSQL hace reiniciar el servicio cuando lo caído es PostgreSQL—. El dato
+autoritativo es `license:show`.
+
+Todo lo demás sobre la licencia —qué se degrada al caducar, qué no se degrada
+nunca, los límites del plan y qué hacer si una clave no se activa— está en
+[`configuracion.md`](configuracion.md), sección 3 bis.
+
+---
+
 Las obligaciones que van con todo esto —qué informar, qué archivar, quién
 autoriza— están en
 [`obligaciones-legales.md`](obligaciones-legales.md).

@@ -36,6 +36,14 @@ export type Site = Schemas['Site']
 export type ComplianceProfile = Schemas['ComplianceProfile']
 export type ComplianceProfileBody = Schemas['ComplianceProfileBody']
 export type UpdateComplianceProfileRequest = Schemas['UpdateComplianceProfileRequest']
+
+// Licencia (RF-PD-04, RF-PD-05, tarea 5.3). `LicenseFeature` son las
+// funcionalidades ACCESORIAS de ADR-023 y ninguna otra: el registro legal no es
+// licenciable y no tiene valor en ese enum.
+export type License = Schemas['License']
+export type LicenseState = Schemas['LicenseState']
+export type LicenseFeature = Schemas['LicenseFeature']
+export type ActivateLicenseRequest = Schemas['ActivateLicenseRequest']
 export type Department = Schemas['Department']
 export type DepartmentCollection = Schemas['DepartmentCollection']
 

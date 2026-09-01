@@ -10,6 +10,9 @@ use App\Modules\Reporting\Http\Request\GeneratePeriodReportRequest;
 use App\Modules\Reporting\Http\Resource\PeriodReportResource;
 use App\Modules\Reporting\Http\Support\PeriodReportTelemetry;
 use App\Modules\Shared\Application\Authorization\ScopeGuard;
+use App\Modules\Shared\Application\Port\FeatureGate;
+use App\Modules\Shared\Domain\Exception\FeatureNotLicensed;
+use App\Modules\Shared\Domain\ValueObject\Feature;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Config;
 
@@ -51,6 +54,27 @@ use Illuminate\Support\Facades\Config;
  *
  * Ninguna respuesta de este endpoint cambia el registro. Que quede auditado
  * (RS-05) no lo convierte en una escritura, igual que en la exportacion legal.
+ *
+ * ## Es funcionalidad ACCESORIA, y se degrada (tarea 5.3)
+ *
+ * [ADR-023](../../../../../../docs/adr/ADR-023-frontera-registro-legal-y-funcionalidad-accesoria.md)
+ * lo clasifica como degradable: *«informes avanzados y comparacion entre
+ * periodos: se desactivan; el registro y su exportacion legal siguen
+ * disponibles»*. Con la licencia caducada, ausente o ilegible, este endpoint
+ * responde `402` con el aviso de licencia —que **dice cual es la alternativa**—
+ * y no un error generico, que es lo que exige la verificacion de ADR-019.
+ *
+ * **Y lo que NO se degrada, que es la mitad importante:**
+ * `GET /employees/{uuid}/workdays` (la consulta del registro),
+ * `GET /reports/legal-export` (la Inspeccion, RL-06), `GET /me/workdays` y
+ * `GET /me/export` (el portal, RL-05) siguen respondiendo con normalidad. El
+ * texto del `402` los nombra uno a uno, porque quien se encuentra el aviso
+ * necesita saber por donde sacar las horas de este mes mientras se renueva.
+ *
+ * La comprobacion se hace **aqui, en el borde**, con el resultado ya resuelto
+ * por el `FeatureGate`: el caso de uso no consulta la licencia, igual que no
+ * consulta la configuracion. Y va **antes** de generar nada, porque generar un
+ * informe cuesta cruzar la plantilla con el calendario.
  */
 final class PeriodReportController extends Controller
 {
@@ -59,7 +83,14 @@ final class PeriodReportController extends Controller
         GeneratePeriodReport $reports,
         PeriodReportTelemetry $telemetry,
         ScopeGuard $scope,
+        FeatureGate $features,
     ): JsonResponse {
+        $availability = $features->statusOf(Feature::AdvancedReports);
+
+        if (! $availability->enabled) {
+            throw FeatureNotLicensed::from($availability);
+        }
+
         $query = $request->toQuery($scope);
 
         $report = $telemetry->measure($query, static fn () => $reports->handle(

@@ -3,8 +3,9 @@
 > **Estado.** Redactado en la **tarea 5.1** con las **claves de configuración de
 > la instalación** (`GET`/`PATCH /api/v1/settings`) y ampliado en la **tarea 5.2**
 > con el **perfil de cumplimiento** (`GET`/`PATCH /api/v1/compliance-profile`,
-> sección 2.4). La **5.8** añade la pantalla de marca del panel y la **5.11**
-> integra esta guía con el resto; ninguna de las dos reescribe lo de aquí.
+> sección 2.4) y en la **5.3** con la **licencia** (sección 3 bis). La **5.8**
+> añade la pantalla de marca del panel y la **5.11** integra esta guía con el
+> resto; ninguna de las dos reescribe lo de aquí.
 
 ---
 
@@ -228,6 +229,142 @@ están. Los números van **sin comillas** (`8`, no `"8"`).
 
 ---
 
+## 3 bis. La licencia
+
+> **Lo primero, porque es lo que más se pregunta: la licencia NO puede impedir
+> fichar.** Con la licencia caducada, ausente o ilegible, tu instalación sigue
+> registrando fichajes, sigue dejando consultar el registro de cualquier persona,
+> sigue exportando para la Inspección de Trabajo, sigue sirviendo el portal del
+> empleado, sigue permitiendo corregir jornadas y sigue haciendo copias de
+> seguridad. **Eso no es una casualidad de esta versión: es una promesa del
+> producto**, y está escrita en su documentación de diseño.
+>
+> Lo único que una licencia gobierna son las **funcionalidades accesorias**, y
+> están enumeradas más abajo.
+
+### 3 bis.1 Qué es la clave de licencia
+
+Una cadena de texto que te entrega tu proveedor. Tiene esta forma:
+
+```text
+KQL1.eyJsaWNlbnNlX2lkIjoiOWYyYzRhMWI3ZTBk....Zm9vYmFyYmF6cXV1eA
+```
+
+Dentro lleva, **firmados**, el nombre de tu empresa, tu plan, los límites
+contratados, las funcionalidades incluidas y las fechas de vigencia. La firma es
+lo que impide que se modifique: si alguien cambia un solo carácter, la clave deja
+de valer.
+
+**Se verifica en tu propio servidor y sin conexión a internet.** El sistema no
+llama a ningún servidor del fabricante, ni al activarla ni después. Es
+deliberado: tu instalación tiene que poder funcionar en una red aislada, y una
+comprobación en línea convertiría la conectividad de otra empresa en un punto de
+fallo de tu registro horario.
+
+### 3 bis.2 Cómo se activa
+
+**Desde el panel** (lo normal): entra como *administrador*, ve a **Licencia**,
+pega la clave en el recuadro y pulsa «Activar una clave». Puedes pegarla con
+espacios o saltos de línea: se limpian solos.
+
+**Desde la consola del servidor**, si prefieres:
+
+```bash
+docker compose exec app php artisan license:activate "KQL1...."
+```
+
+Y para ver cómo está en cualquier momento:
+
+```bash
+docker compose exec app php artisan license:show
+```
+
+Ese comando imprime, en este orden: el estado, tu plan frente a lo que estás
+usando de verdad, qué está degradado, **qué sigue funcionando pase lo que pase**
+y qué hacer. Es el que te pedirá soporte si llamas.
+
+> **La clave completa no aparece nunca** en la salida del comando ni en el panel:
+> se enseña su *huella*, doce caracteres, que es lo que sirve para confirmar por
+> teléfono que la clave activada es la que te enviaron.
+
+### 3 bis.3 Qué pasa cuando caduca
+
+**Treinta días antes** aparece un aviso permanente en el panel, para los roles de
+administración, diciendo cuándo caduca y qué se degradará. **Durante esos treinta
+días no se pierde nada**: la licencia sigue vigente.
+
+**El día que caduca**, el aviso cambia de tono y de texto, y estas
+funcionalidades dejan de estar disponibles:
+
+| Deja de funcionar | Sigue funcionando en su lugar |
+| --- | --- |
+| **Informes por periodo** y su comparativa con las horas contratadas | La consulta del registro de cada persona, la exportación para la Inspección y el portal del empleado |
+| **Presencia en tiempo real**: pasa a **actualizarse por sondeo**, no se apaga. La pantalla sigue enseñando quién está dentro, con unos segundos de retraso, y lo dice | — |
+
+Y estas **nunca** se ven afectadas, con la licencia como esté:
+
+- Fichaje por QR y por PIN de respaldo.
+- Sincronización de la cola del quiosco cuando recupera la red.
+- Consulta de jornadas y tramos de cualquier persona.
+- Portal del empleado.
+- Exportación normalizada para la Inspección de Trabajo.
+- Correcciones de jornada con su motivo.
+- Registro de auditoría.
+- Copias de seguridad y su restauración.
+- Sondas de salud.
+
+El aviso **no se puede cerrar** mientras la situación siga siendo cierta. Es a
+propósito: un aviso que se descarta el primer día deja de avisar justo el día que
+importa.
+
+### 3 bis.4 Los límites del plan
+
+Tu clave lleva dos cifras: **cuántas personas** y **cuántos quioscos** has
+contratado. `license:show` y la pantalla de licencia enseñan las dos frente a lo
+que estás usando de verdad.
+
+> **Superarlas no bloquea nada, y no lo hará nunca.** Puedes dar de alta a la
+> persona número 81 con un plan de 80, y puede fichar desde el primer día.
+> Puedes emparejar un quiosco de sustitución aunque el averiado siga contando.
+>
+> El motivo es simple: si el producto te impidiera dar de alta a un camarero en
+> plena temporada, esa persona trabajaría **sin registro horario**, y la
+> infracción del art. 34.9 ET sería tuya por una decisión comercial que no
+> controlas. Y si te impidiera emparejar un quiosco, te quedarías sin punto de
+> fichaje justo el día que se rompe uno.
+
+Lo que sí ocurre al superar una cifra:
+
+1. Aparece un aviso permanente en el panel con lo contratado, lo real y desde
+   cuándo.
+2. Queda una entrada en el **registro de auditoría** con la fecha exacta. Es el
+   apunte con el que tu proveedor te planteará ampliar el plan, y también el que
+   te permite comprobar tú mismo desde cuándo estás por encima.
+3. Las cifras salen en `license:show`.
+
+**Las personas dadas de baja no cuentan**, aunque su registro se conserve los
+cuatro años obligatorios. Un quiosco revocado libera su plaza en el acto.
+
+### 3 bis.5 Consultarla por API
+
+```bash
+curl -sS https://TU-SERVIDOR/api/v1/license \
+  -H "Authorization: Bearer $TOKEN" | jq
+```
+
+```bash
+curl -sS -X POST https://TU-SERVIDOR/api/v1/license/activate \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"signed_key":"KQL1...."}' | jq
+```
+
+Las dos exigen el rol *administrador*. **Ninguna de las dos se cierra por una
+licencia caducada**: son justamente la pantalla desde la que se arregla el
+problema.
+
+---
+
 ## 4. Qué hacer si…
 
 ### …guardo un cambio y responde «no válido» (código 422)
@@ -339,6 +476,57 @@ cambiado**, con el valor anterior, el nuevo, si ese cambio mueve la detección d
 incidencias y si mueve el plazo de conservación. Es lo que permite contestar a
 «¿por qué esta jornada de marzo no generó alerta?».
 
+### …la clave de licencia no se activa
+
+**Nada se ha roto y la licencia anterior sigue intacta.** El mensaje te dice cuál
+de los cuatro motivos es, porque lo que hay que hacer es distinto en cada uno:
+
+| Lo que dice | Qué ha pasado | Qué hacer |
+| --- | --- | --- |
+| «La clave está incompleta o cortada» | Es, con diferencia, el caso más frecuente: la clave se copió a medias de un correo, o se partió en dos líneas | Cópiala entera. Empieza por `KQL1.` y no lleva espacios. Puedes pegarla con saltos de línea: se limpian solos |
+| «Esta clave no la emitió el fabricante de esta versión» | La clave se modificó por el camino, o es de otro emisor | Pide una clave nueva a tu proveedor |
+| «La clave está firmada pero le falta información» | Es un **fallo de emisión**, no tuyo | Avisa a tu proveedor con la huella que sale en la pantalla y pide otra clave. No pierdas tiempo revisando tu copiado |
+| «Esta instalación no lleva la clave pública del fabricante» | Es un problema **del despliegue**, no de tu clave: falta un dato en la imagen instalada | Avisa a tu proveedor indicando la versión que devuelve `GET /api/v1/health`. Mientras tanto se sigue fichando con normalidad |
+
+### …veo un aviso de licencia y quiero saber qué he perdido exactamente
+
+```bash
+docker compose exec app php artisan license:show
+```
+
+La sección «Funcionalidades accesorias» lista lo que está degradado **con la
+fecha desde la que lo está**, y la sección siguiente, «Lo que NUNCA depende de la
+licencia», lista lo que sigue funcionando. La misma información está en el panel,
+en **Licencia**.
+
+Si lo que necesitas hoy son las horas de tus empleados y el informe por periodo
+está degradado, tienes dos vías que **no** dependen de la licencia: el registro
+de cada persona (ficha del empleado → «Registro horario») y la **exportación para
+la Inspección de Trabajo**, que trae el registro diario de toda la plantilla en un
+fichero.
+
+### …la presencia en vivo dice que no está en tiempo real
+
+Mira el motivo que aparece en la propia pantalla:
+
+- Si dice que es **por la licencia**, la vista está sondeando cada pocos segundos
+  y no ha perdido información: sigue enseñando quién está dentro. Se recupera al
+  renovar.
+- Si **no** dice nada de la licencia, lo que falta es la configuración del
+  servicio de tiempo real (`REVERB_*` en el `.env`) o el proxy no permite
+  WebSocket. Eso lo arregla quien administra el servidor, no una renovación.
+
+### …quiero comprobar que la licencia no está bloqueando nada
+
+Ficha con una tarjeta y descarga la exportación legal con la licencia como esté.
+Las dos tienen que funcionar. Si alguna no lo hace, **no es la licencia**: es una
+avería, y conviene avisar a soporte con la salida de:
+
+```bash
+docker compose exec app php artisan license:show
+curl -sS https://TU-SERVIDOR/api/v1/health
+```
+
 ---
 
 ## 5. Lo que NO se configura aquí, y dónde está
@@ -349,8 +537,10 @@ incidencias y si mueve el plazo de conservación. Es lo que permite contestar a
   dirección. Un umbral legal lo fija la norma o el convenio; uno operativo lo
   fijas tú.
 - **Las funcionalidades activas** las decide **la licencia**, no una casilla del
-  panel. Una licencia caducada recorta funcionalidades accesorias y muestra
-  avisos, pero **nunca impide fichar ni consultar el registro**.
+  panel: si pudieras encenderlas desde aquí, la licencia no limitaría nada. Una
+  licencia caducada recorta funcionalidades accesorias y muestra avisos, pero
+  **nunca impide fichar ni consultar el registro**. Todo lo que hay que saber
+  sobre ella está en la **sección 3 bis**.
 - **Rutas, credenciales, puertos y claves de firma** son del `.env` del servidor
   y exigen reiniciar. Están documentados en la guía de instalación.
 

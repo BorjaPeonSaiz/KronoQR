@@ -192,7 +192,7 @@ endif
 .DEFAULT_GOAL := help
 .PHONY: help up down restart build ps logs shell seed test test-unit test-integration \
         test-arch test-contract quality tools-ready php-lint deptrac rector sh-lint api-lint sast \
-        sast-community trivy-fs trivy-image secrets-scan sbom build-ci-images \
+        sast-community trivy-fs trivy-image secrets-scan sbom build-ci-images release-gate \
         traceability traceability-check docs-consistency deps-audit-php deps-audit-js coverage coverage-now mutate e2e clean changelog changelog-check tool-versions \
         backup backup-verify restore-drill
 
@@ -224,6 +224,7 @@ help: ## Muestra esta ayuda
 	@echo   make secrets-scan     gitleaks sobre el historico completo (bloqueante)
 	@echo   make sbom             SBOM CycloneDX en sbom/kronoqr-VERSION.cdx.json
 	@echo   make build-ci-images  Construye kronoqr/postgres:ci y/o kronoqr/app:ci (IMAGES=postgres|app)
+	@echo   make release-gate     Falla si la entrega saldria sin clave publica del fabricante
 	@echo   make traceability     Matriz requisito - prueba (RQ-13)
 	@echo   make traceability-check  Falla si un requisito no tiene prueba
 	@echo   make docs-consistency  Coherencia documental (RQ-12, RNF-M-04)
@@ -320,7 +321,17 @@ endif
 # ejecuta: el contenedor sobre Docker Desktop/NTFS paga arranque y E/S que un
 # runner Linux no paga. Se puede apretar por entorno: make test-unit
 # UNIT_SUITE_MAX_SECONDS=2
-UNIT_SUITE_MAX_SECONDS ?= 4
+#
+# 01-09-2026 (tarea 5.3): de 4 a 5 s. La suite paso de 1136 a 1240 pruebas —el
+# dominio de licencia y la frontera de ADR-023— y midio 4,2 s. La subida NO es
+# para acallar la puerta: el proposito del presupuesto es que la suite siga
+# siendo lo bastante rapida como para ejecutarse en cada cambio, y a 4,2 s lo
+# es. Lo que hay que vigilar es la PENDIENTE, no el numero: el coste marginal de
+# esas 104 pruebas fue de 0,3 s (medido fichero a fichero, ~0,05 s cada uno
+# sobre el arranque). Si una tarea futura vuelve a rozarlo, la pregunta correcta
+# es si esas pruebas deberian ser unitarias, no si el techo puede subir otra
+# vez.
+UNIT_SUITE_MAX_SECONDS ?= 5
 
 # La duracion se lee de la linea "Duration:" de Pest —el tiempo de la suite, no
 # el del arranque de artisan ni el de docker exec— y se compara con awk porque
@@ -549,6 +560,42 @@ sast-community: ## Semgrep: reglas comunitarias PHP/JS/TS/OWASP (umbral: 0 halla
 # buildx ahi cuesta mas de lo que ahorra.
 IMAGES        ?= postgres
 BUILDX_CACHE  ?=
+
+# ---------------------------------------------------------------------------
+# Puerta de RELEASE: una imagen de entrega no puede salir sin clave publica
+# ---------------------------------------------------------------------------
+#
+# POR QUE EXISTE. `config/license.php` trae la clave publica del fabricante
+# VACIA de serie, y eso es correcto en desarrollo: significa "esta compilacion no
+# puede verificar ninguna clave", el producto arranca, se ficha y `license:show`
+# lo dice con esas palabras (ADR-018, ADR-019). Lo que NO puede ocurrir es que
+# esa compilacion se entregue a un cliente: le entregariamos un producto que
+# rechaza su licencia recien pagada con el motivo `no_public_key`, y el sintoma
+# -"mi licencia no se activa"- apunta al sitio equivocado.
+#
+# El fabricante genera el par UNA VEZ con
+# `php tools/license-issuer/generate-keypair.php` y pega la publica en el valor
+# por defecto de `env('LICENSE_PUBLIC_KEY', '')` de `backend/config/license.php`.
+#
+# ESTA COMPROBACION ES DEL EMPAQUETADO, NO DE LA CI. La CI construye imagenes de
+# PRUEBA (`build-ci-images`), que deben poder llevarla vacia: la suite genera su
+# propio par en cada ejecucion y jamas usa uno fijo del repositorio (§7.7, RS-08).
+# Por eso es un objetivo aparte, y la tarea 5.4 lo invocara desde el paso que
+# construye la imagen de entrega.
+release-gate: ## Falla si la imagen de entrega saldria sin clave publica del fabricante
+	@if grep -qE "env\('LICENSE_PUBLIC_KEY', '[0-9a-fA-F]{64}'\)" backend/config/license.php; then \
+	  echo "[make] Clave publica del fabricante presente. Puerta de release en verde."; \
+	else \
+	  echo "[make] La clave publica del fabricante NO esta puesta en backend/config/license.php."; \
+	  echo "[make] Una imagen de entrega construida asi RECHAZA la licencia del cliente con"; \
+	  echo "[make] motivo no_public_key, y el sintoma apunta al sitio equivocado."; \
+	  echo "[make]"; \
+	  echo "[make] Genera el par UNA VEZ:  php tools/license-issuer/generate-keypair.php"; \
+	  echo "[make] y pega la PUBLICA (64 caracteres hexadecimales) como valor por defecto de"; \
+	  echo "[make] env('LICENSE_PUBLIC_KEY', '') en backend/config/license.php."; \
+	  echo "[make] La PRIVADA va al gestor de secretos del fabricante, nunca al repositorio."; \
+	  exit 1; \
+	fi
 
 build-ci-images: ## Construye kronoqr/postgres:ci y/o kronoqr/app:ci (IMAGES=postgres|app|"postgres app", BUILDX_CACHE=gha)
 	@for imagen in $(IMAGES); do \

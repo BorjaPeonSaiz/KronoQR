@@ -77,3 +77,62 @@ Se desactiva con aviso explícito en la interfaz, indicando que se recupera al r
 - Prueba que, con una licencia caducada, la exportación legal para Inspección y el portal del empleado siguen respondiendo.
 - Prueba que cada funcionalidad de la lista de accesorias responde con el aviso de licencia y no con un error genérico.
 - Prueba de arquitectura: no existe ninguna comprobación de estado de licencia fuera del punto único de decisión.
+
+## Enmienda 01-09-2026 (tarea 5.3): la lista, implementada
+
+La lista no cambia. Se registra cómo quedó atada al código y dónde cae el borde
+de una funcionalidad que estaba a caballo entre las dos columnas.
+
+### El catálogo es un `enum` y lo manda este documento
+
+`Shared\Domain\ValueObject\Feature` tiene **exactamente los siete casos** de la
+tabla «Degradable», y `tests/Architecture/LicenseBoundaryTest.php` **lee este
+fichero** y falla si alguien añade un caso que el ADR no lista o retira uno que
+sí. La lista sigue siendo contractual antes que técnica: ampliarla o restringirla
+exige un ADR nuevo, no un caso nuevo.
+
+El conjunto legal no tiene caso, y esa es la implementación literal de «no existe
+forma de expresar su desactivación»: el puerto solo acepta ese tipo, así que no
+hay ninguna cadena que alguien pueda pasar para preguntar si el fichaje está
+habilitado.
+
+### Dónde cae el borde del informe por periodo
+
+`GET /api/v1/reports/period` estaba a caballo: la tabla «Degradable» lo nombra
+—«informes avanzados y comparación entre periodos»— y la tabla del registro legal
+dice que la «consulta de jornadas y tramos» nunca se degrada, y ese informe
+enseña horas trabajadas.
+
+**Se resuelve como degradable, y la regla de desempate de este ADR es la que lo
+decide del otro lado**: la consulta del registro que nunca se degrada es la de
+`GET /api/v1/employees/{uuid}/workdays`, la de `GET /api/v1/me/workdays` y la
+exportación de `GET /api/v1/reports/legal-export`, que son las tres vías por las
+que el cliente cumple RL-03, RL-05 y RL-06. Ninguna de ellas se toca. El informe
+por periodo es la **herramienta de gestión** que cruza esas horas con lo
+contratado, y su ausencia no impide a nadie acceder a su registro ni atender un
+requerimiento.
+
+El texto del `402` lo dice: nombra la exportación para la Inspección, la consulta
+de jornadas y el portal, para que quien se lo encuentre sepa por dónde sacar las
+horas de este mes mientras se renueva. Sin esa frase, la degradación sería
+técnicamente correcta y prácticamente inútil.
+
+### La degradación parcial del tiempo real, comprobada
+
+`GET /api/v1/attendance/live` **sigue devolviendo el listado completo** con la
+licencia caducada: lo único que cambia es `meta.realtime.enabled`, que pasa a
+`false` con un motivo y una fecha, y el panel sondea (ADR-011). Recortar el
+listado sería degradar una vista de lectura sobre el registro.
+
+El motivo solo viaja **cuando la causa es la licencia**. Si además falta la
+configuración de Reverb, lo que hay que arreglar primero es eso, y anunciar
+«licencia caducada» mandaría a quien lo lee a hablar con el comercial en lugar de
+con quien administra el servidor.
+
+### Lo que todavía no existe no se anuncia como pérdida
+
+Cuatro de los siete casos —cuadro de impacto, exportación para nómina, resumen
+semanal y marca blanca— llegan en tareas posteriores. El estado de licencia los
+marca como no implementados y ni el panel ni `license:show` los presentan como
+algo que el cliente acaba de perder: anunciar la pérdida de algo que nunca ha
+visto es una llamada de soporte garantizada.

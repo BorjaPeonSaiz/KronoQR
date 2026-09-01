@@ -256,6 +256,39 @@ de qué número poner es del hotel, con su asesoría laboral (RL-16, RL-21).
 
 ---
 
+## 7 bis. Tu obligación de registrar no depende de la licencia
+
+Conviene que lo sepas antes de que te haga falta, porque es lo primero que se
+teme cuando llega un aviso de caducidad.
+
+**El art. 34.9 ET te obliga a llevar el registro diario de jornada de toda tu
+plantilla, y ese registro es tuyo, no del proveedor.** Este producto está
+construido para que ninguna decisión comercial pueda dejarte incumpliendo:
+
+- Con la licencia **caducada, ausente o ilegible**, se sigue fichando, se sigue
+  consultando el registro, se sigue exportando para la Inspección de Trabajo, el
+  portal del empleado sigue abierto (RL-05) y las copias siguen haciéndose.
+- **Superar los límites del plan tampoco bloquea nada.** Puedes dar de alta a la
+  persona que entra hoy aunque estés por encima de lo contratado, y puede fichar
+  desde el primer día. Si el producto te lo impidiera, esa persona trabajaría sin
+  registro y la infracción sería **tuya**.
+- Lo que sí ocurre son avisos, un recorte de funcionalidades **accesorias** —los
+  informes por periodo y la actualización en tiempo real de la presencia— y un
+  apunte en el registro de auditoría con la fecha desde la que estás fuera de
+  contrato.
+
+**Nada de esto te exime de la parte que sigue siendo tuya**: pagar la licencia si
+la has contratado, y conservar el registro cuatro años aunque termine la relación
+comercial. Para lo segundo, el producto incluye una exportación íntegra que
+puedes ejecutar en cualquier momento y llevarte.
+
+> Si alguna vez encuentras que **no puedes fichar o no puedes acceder al
+> registro** y la causa es la licencia, **no es lo previsto**: es una avería.
+> Avisa al proveedor adjuntando la salida de `php artisan license:show` y de
+> `GET /api/v1/health`.
+
+---
+
 ## 8. Lo que el fabricante no puede hacer por ti
 
 | No puede | Por qué |
@@ -265,6 +298,8 @@ de qué número poner es del hotel, con su asesoría laboral (RL-16, RL-21).
 | Responder un requerimiento de la Inspección | Lo firma el hotel |
 | Recuperar un dato ya purgado | La purga es irreversible; para eso está la confirmación |
 | Decirte qué umbrales fija tu convenio | No lo conoce; el perfil de cumplimiento es tuyo (§7) |
+| Apagarte el fichaje por una licencia impagada | No existe el mecanismo: no hay forma de expresar la desactivación del registro legal, ni por error ni a propósito (§7 bis) |
+| Revocar tu licencia a distancia | La verificación es local y sin internet: tu instalación no consulta a nadie. La palanca es la caducidad de la clave y el contrato |
 
 Si necesitas soporte sobre una incidencia, el paquete de diagnóstico va
 **anonimizado por defecto** y cualquier acceso ampliado es expreso, temporal y

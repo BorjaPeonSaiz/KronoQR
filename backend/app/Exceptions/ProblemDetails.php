@@ -44,6 +44,17 @@ final class ProblemDetails
     public const string TYPE_SERVICE_UNAVAILABLE = 'urn:kronoqr:problem:service-unavailable';
 
     /**
+     * Una funcionalidad **accesoria** no esta disponible con la licencia
+     * activada (ADR-019, ADR-023).
+     *
+     * Tipo propio y no `TYPE_FORBIDDEN`, aunque los dos denieguen, porque a
+     * quien lo recibe le cambia por completo la accion siguiente: aquel dice
+     * «pide permiso a quien administra» y este dice «tu empresa tiene que
+     * renovar». **Nunca acompaña al registro legal**, que no es licenciable.
+     */
+    public const string TYPE_FEATURE_NOT_LICENSED = 'urn:kronoqr:problem:feature-not-licensed';
+
+    /**
      * La instancia todavia no acepta trafico: `GET /api/v1/ready`.
      *
      * **Tipo propio y no `TYPE_SERVICE_UNAVAILABLE`**, aunque los dos sean
@@ -166,6 +177,54 @@ final class ProblemDetails
             JsonResponse::HTTP_CONFLICT,
             $detail,
         );
+    }
+
+    /**
+     * Una funcionalidad **accesoria** no esta disponible con esta licencia
+     * (ADR-019, ADR-023, RF-PD-05, tarea 5.3).
+     *
+     * ## `402` y no `403`
+     *
+     * ADR-019 exige que cada funcionalidad accesoria *«responda con el aviso de
+     * licencia y no con un error generico»*. Un `403` mezclaria «no tienes
+     * permiso» con «tu empresa no ha renovado», que son dos problemas de dos
+     * personas distintas —lo primero lo arregla quien administra los roles, lo
+     * segundo quien firma el contrato— y en un log serian indistinguibles. `402
+     * Payment Required` es el unico codigo cuyo significado es exactamente este.
+     *
+     * ## Lo que este codigo NUNCA puede acompañar
+     *
+     * El fichaje, la consulta de jornadas, el portal, la exportacion para la
+     * Inspeccion, la auditoria, las correcciones, las copias ni las sondas. No
+     * por disciplina: la excepcion que llega hasta aqui solo se puede construir
+     * a partir de un `Feature`, y ese catalogo no tiene ningun caso del conjunto
+     * legal (regla dura 15).
+     *
+     * `feature` y `restriction` viajan en el cuerpo para que el panel pueda
+     * decidir que enseñar sin analizar el texto.
+     */
+    public static function featureNotLicensed(
+        string $detail,
+        string $feature,
+        ?string $restriction,
+        ?string $since,
+    ): JsonResponse {
+        $response = self::response(
+            self::TYPE_FEATURE_NOT_LICENSED,
+            'Funcionalidad no disponible con esta licencia',
+            JsonResponse::HTTP_PAYMENT_REQUIRED,
+            $detail,
+        );
+
+        /** @var array<string, mixed> $body */
+        $body = $response->getData(true);
+
+        return $response->setData([
+            ...$body,
+            'feature' => $feature,
+            'restriction' => $restriction,
+            'since' => $since,
+        ]);
     }
 
     public static function notFound(): JsonResponse

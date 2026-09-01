@@ -7,7 +7,9 @@ namespace Tests\Support\Workforce;
 use App\Modules\Workforce\Infrastructure\Persistence\Department;
 use App\Modules\Workforce\Infrastructure\Persistence\Employee;
 use App\Modules\Workforce\Infrastructure\Persistence\Site;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use RuntimeException;
 
 /**
  * Centros, departamentos y empleados para las pruebas de plantilla.
@@ -106,5 +108,24 @@ final class WorkforceFixtures
                 'status' => 'terminated',
                 'terminated_at' => '2026-06-30',
             ]);
+    }
+
+    /**
+     * El identificador del **unico** centro de la instalacion (ADR-040).
+     *
+     * Existe para que las pruebas que crearon el centro en un `beforeEach` no
+     * tengan que guardarlo en una propiedad dinamica del caso —PHPStan 9 no
+     * conoce las de Pest y el analisis corre tambien sobre `tests/`— ni repetir
+     * un `(int) DB::table('sites')->value('id')` que el analizador rechaza por
+     * castear `mixed`.
+     */
+    public static function onlySiteId(): int
+    {
+        /** @var int|string|null $id */
+        $id = DB::table('sites')->orderBy('id')->value('id');
+
+        return \is_numeric($id)
+            ? (int) $id
+            : throw new RuntimeException('La instalacion no tiene ningun centro configurado.');
     }
 }

@@ -26,6 +26,7 @@ use App\Modules\Identity\Http\Controller\TwoFactorController;
 use App\Modules\Kiosk\Http\Controller\HeartbeatController;
 use App\Modules\Kiosk\Http\Controller\RosterController;
 use App\Modules\Product\Http\Controller\ComplianceProfileController;
+use App\Modules\Product\Http\Controller\LicenseController;
 use App\Modules\Product\Http\Controller\SettingsController;
 use App\Modules\Reporting\Http\Controller\EmployeeWorkDayController;
 use App\Modules\Reporting\Http\Controller\LivePresenceController;
@@ -877,4 +878,48 @@ Route::middleware([
         ->name('product.compliance-profile.show');
     Route::patch('/compliance-profile', [ComplianceProfileController::class, 'update'])
         ->name('product.compliance-profile.update');
+});
+
+/*
+ * GET /api/v1/license y POST /api/v1/license/activate — la licencia de la
+ * instalacion (tarea 5.3, RF-PD-04, RF-PD-05, ADR-018, ADR-028).
+ *
+ * AMBITO PROPIO, `license:*`, y no `settings:*`. El §7.3 lo declara aparte y hay
+ * motivo: la configuracion y los umbrales legales los ajusta el hotel para su
+ * operativa; la licencia dice **que se contrato**, y eso no es un ajuste, es un
+ * hecho comercial. Que sean dos ambitos permite ademas que el asistente de
+ * puesta en marcha (5.5) reciba un token que activa la clave sin poder tocar los
+ * umbrales con los que se calculan las horas.
+ *
+ * SOLO `admin`, y `LicensePolicy` es la otra mitad (regla dura 18). **`rrhh` no
+ * entra** aunque sea quien mas usa los informes que la licencia gobierna: lo que
+ * se contrato lo decide quien firma el contrato. **El `auditor` tampoco**: su
+ * trabajo es el registro horario, y la promesa del producto es justamente que el
+ * registro no depende de la licencia (ADR-019). **El quiosco menos que nadie**:
+ * su token lleva tres ambitos y ninguno es este, que es la segunda mitad de la
+ * regla dura 19 — el quiosco no se entera de la licencia por ningun camino.
+ *
+ * `throttle:management` POR LO QUE ESCRIBE EL `POST`: cada activacion deja un
+ * asiento en `audit_log` bajo el candado global de ADR-010, el mismo por el que
+ * pasa cada fichaje. Se aplica al grupo entero porque las dos salen de la misma
+ * pantalla y con el mismo token. El `GET` ademas escribe `last_verified_at`, que
+ * es una sola fila y sin candado.
+ *
+ * ESTAS DOS RUTAS NO SE DEGRADAN NUNCA, y es la mas importante de todas las
+ * excepciones: **es la pantalla desde la que se arregla el problema**. Cerrarla
+ * al caducar dejaria al cliente sin poder activar la renovacion que acaba de
+ * comprar, que es la definicion de un producto que se pega un tiro en el pie
+ * (ADR-019, regla dura 15).
+ *
+ * SIN `DELETE`. No se «desactiva» una licencia: se activa otra. Un endpoint para
+ * dejar la instalacion sin licencia solo serviria para equivocarse.
+ */
+Route::middleware([
+    'auth:sanctum',
+    'ability:'.TokenAbility::LICENSE_ALL->value,
+    'throttle:management',
+])->group(function (): void {
+    Route::get('/license', [LicenseController::class, 'show'])->name('product.license.show');
+    Route::post('/license/activate', [LicenseController::class, 'activate'])
+        ->name('product.license.activate');
 });

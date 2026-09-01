@@ -4,37 +4,60 @@ declare(strict_types=1);
 
 namespace App\Modules\Product;
 
+use App\Modules\Identity\Domain\Event\DeviceTokenIssued;
 use App\Modules\Product\Application\Port\ComplianceProfileMetrics;
 use App\Modules\Product\Application\Port\ComplianceProfileRepository;
+use App\Modules\Product\Application\Port\LicenseMetrics;
+use App\Modules\Product\Application\Port\LicenseRepository;
+use App\Modules\Product\Application\Port\LicenseStatePublisher;
+use App\Modules\Product\Application\Port\LicenseVerifier;
+use App\Modules\Product\Application\Port\PlanUsageCounter;
 use App\Modules\Product\Application\Port\ProductEventPublisher;
 use App\Modules\Product\Application\Port\SettingsAnomalyReporter;
 use App\Modules\Product\Application\Port\SettingsMetrics;
 use App\Modules\Product\Application\Port\SettingsRepository;
+use App\Modules\Product\Application\UseCase\ActivateLicenseHandler;
+use App\Modules\Product\Application\UseCase\GetLicenseStatusHandler;
 use App\Modules\Product\Application\UseCase\GetSettingsHandler;
+use App\Modules\Product\Application\UseCase\RecordPlanUsageHandler;
 use App\Modules\Product\Domain\ValueObject\ComplianceProfileSnapshot;
+use App\Modules\Product\Domain\ValueObject\LicenseStatus;
 use App\Modules\Product\Domain\ValueObject\ResolvedSettings;
 use App\Modules\Product\Http\Policy\ComplianceProfilePolicy;
+use App\Modules\Product\Http\Policy\LicensePolicy;
 use App\Modules\Product\Http\Policy\SettingsPolicy;
+use App\Modules\Product\Infrastructure\Adapter\CachedLicenseStatePublisher;
 use App\Modules\Product\Infrastructure\Adapter\CachedSettingsRepository;
 use App\Modules\Product\Infrastructure\Adapter\DbBrandingProvider;
 use App\Modules\Product\Infrastructure\Adapter\DbCompliancePolicyProvider;
 use App\Modules\Product\Infrastructure\Adapter\DbOperationalSettingsProvider;
+use App\Modules\Product\Infrastructure\Adapter\Ed25519LicenseVerifier;
 use App\Modules\Product\Infrastructure\Adapter\LaravelProductEventPublisher;
+use App\Modules\Product\Infrastructure\Adapter\LicensedFeatureGate;
 use App\Modules\Product\Infrastructure\Adapter\LoggingSettingsAnomalyReporter;
+use App\Modules\Product\Infrastructure\Console\LicenseActivateCommand;
+use App\Modules\Product\Infrastructure\Console\LicenseShowCommand;
+use App\Modules\Product\Infrastructure\Listener\ObservePlanLimits;
 use App\Modules\Product\Infrastructure\Metrics\RedisComplianceProfileMetrics;
+use App\Modules\Product\Infrastructure\Metrics\RedisLicenseMetrics;
 use App\Modules\Product\Infrastructure\Metrics\RedisSettingsMetrics;
 use App\Modules\Product\Infrastructure\Persistence\DatabaseComplianceProfileRepository;
+use App\Modules\Product\Infrastructure\Persistence\DatabaseLicenseRepository;
+use App\Modules\Product\Infrastructure\Persistence\DatabasePlanUsageCounter;
 use App\Modules\Product\Infrastructure\Persistence\EloquentSettingsRepository;
 use App\Modules\Shared\Application\Port\BrandingProvider;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
+use App\Modules\Shared\Application\Port\FeatureGate;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
+use App\Modules\Workforce\Domain\Event\EmployeeHired;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\Redis\Factory as Redis;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\ServiceProvider;
@@ -185,6 +208,135 @@ final class ProductServiceProvider extends ServiceProvider
                 $app->make(Dispatcher::class),
             ),
         );
+
+        $this->registerLicense();
+    }
+
+    /**
+     * La licencia (tarea 5.3, RF-PD-04, ADR-018, ADR-023, ADR-028).
+     *
+     * ## El verificador recibe la clave publica ya resuelta
+     *
+     * `config/license.php` se lee **aqui**, en el borde, y no dentro del
+     * adaptador: es la misma regla que con los umbrales legales (regla dura 14)
+     * y con los topes de los informes. Una clase que consulta la configuracion
+     * global no se puede probar con dos claves publicas distintas sin tocar el
+     * estado de todo el proceso, y esta suite necesita justamente eso — genera
+     * un par ed25519 nuevo en cada ejecucion y jamas usa uno fijo del
+     * repositorio.
+     *
+     * ## `scoped()` para el `FeatureGate`
+     *
+     * Memoria **por peticion**: el estado se resuelve una vez y lo comparten el
+     * informe, la presencia y lo que venga. `singleton()` sobrevive a la
+     * peticion en un trabajador de cola o en Octane, y ahi dejaria de ser
+     * memoria para ser una cache sin invalidacion: una clave recien activada no
+     * surtiria efecto hasta reiniciar el proceso. Es el mismo criterio de los
+     * cuatro proveedores de la tarea 5.1.
+     *
+     * ## `bind()` para todo lo demas
+     *
+     * Los dos casos de uso y los adaptadores de persistencia no memorizan nada:
+     * el repositorio consulta una fila por un indice unico y el contador dos
+     * agregados que solo se piden en la pantalla de licencia y en la consola.
+     */
+    private function registerLicense(): void
+    {
+        $this->app->bind(
+            LicenseVerifier::class,
+            static fn (): Ed25519LicenseVerifier => new Ed25519LicenseVerifier(
+                Config::string('license.public_key'),
+            ),
+        );
+
+        $this->app->bind(
+            LicenseRepository::class,
+            static fn (): DatabaseLicenseRepository => new DatabaseLicenseRepository(DB::connection(), Log::channel()),
+        );
+
+        $this->app->bind(
+            PlanUsageCounter::class,
+            static fn (): DatabasePlanUsageCounter => new DatabasePlanUsageCounter(DB::connection(), Log::channel()),
+        );
+
+        // `license_limit_exceeded_total{limit}` (doc 02 §8.2).
+        $this->app->bind(
+            LicenseMetrics::class,
+            static fn (Application $app): RedisLicenseMetrics => new RedisLicenseMetrics($app->make(Redis::class)),
+        );
+
+        /*
+         * La copia del estado que lee `GET /api/v1/health` SIN TOCAR NADA.
+         *
+         * La escribe el punto unico de resolucion y no el `FeatureGate`: si solo
+         * publicara el gate, la sonda seguiria diciendo `unknown` justo despues
+         * de activar una clave —que es cuando alguien la mira— hasta que una
+         * pantalla pidiera una funcionalidad accesoria.
+         */
+        $this->app->bind(
+            LicenseStatePublisher::class,
+            static fn (Application $app): CachedLicenseStatePublisher => new CachedLicenseStatePublisher(
+                cache: $app->make(CacheRepository::class),
+                ttlSeconds: Config::integer('license.health_probe_ttl_seconds', 600),
+            ),
+        );
+
+        $this->app->bind(
+            GetLicenseStatusHandler::class,
+            static fn (Application $app): GetLicenseStatusHandler => new GetLicenseStatusHandler(
+                licenses: $app->make(LicenseRepository::class),
+                verifier: $app->make(LicenseVerifier::class),
+                probe: $app->make(LicenseStatePublisher::class),
+                clock: $app->make(Clock::class),
+                expiryWarningDays: Config::integer('license.expiry_warning_days', 30),
+            ),
+        );
+
+        $this->app->bind(
+            ActivateLicenseHandler::class,
+            static fn (Application $app): ActivateLicenseHandler => new ActivateLicenseHandler(
+                licenses: $app->make(LicenseRepository::class),
+                verifier: $app->make(LicenseVerifier::class),
+                events: $app->make(ProductEventPublisher::class),
+                clock: $app->make(Clock::class),
+                connection: DB::connection(),
+                expiryWarningDays: Config::integer('license.expiry_warning_days', 30),
+            ),
+        );
+
+        /*
+         * EL PUNTO UNICO DE DECISION de ADR-023.
+         *
+         * Todo el que quiera saber si una funcionalidad accesoria esta
+         * disponible pide este puerto y nada mas.
+         * `tests/Architecture/LicenseBoundaryTest.php` comprueba que no hay otra
+         * via: ningun fichero fuera de `Product` nombra la tabla `license` ni el
+         * estado de la licencia.
+         */
+        $this->app->scoped(
+            FeatureGate::class,
+            static fn (Application $app): LicensedFeatureGate => new LicensedFeatureGate(
+                licenses: $app->make(GetLicenseStatusHandler::class),
+                logger: Log::channel(),
+            ),
+        );
+
+        /*
+         * El observador de los limites (ADR-028).
+         *
+         * Se compone a mano por `DB::connection()`: el contenedor no resuelve
+         * `Illuminate\Database\Connection` por autowiring, y hace falta la clase
+         * concreta porque `afterCommit()` no esta en la interfaz. Es lo que
+         * mantiene el conteo fuera de la transaccion del alta.
+         */
+        $this->app->bind(
+            ObservePlanLimits::class,
+            static fn (Application $app): ObservePlanLimits => new ObservePlanLimits(
+                usage: $app->make(RecordPlanUsageHandler::class),
+                logger: Log::channel(),
+                connection: DB::connection(),
+            ),
+        );
     }
 
     public function boot(): void
@@ -214,5 +366,80 @@ final class ProductServiceProvider extends ServiceProvider
          * pudiera necesitar la otra.
          */
         Gate::policy(ComplianceProfileSnapshot::class, ComplianceProfilePolicy::class);
+
+        /*
+         * `GET /api/v1/license` y `POST /api/v1/license/activate` son de `admin`
+         * y de nadie mas (Anexo B del doc 01, §7.3: `license:*` es del
+         * administrador de instalacion). El middleware comprueba el ambito y
+         * esta policy el rol (regla dura 18).
+         *
+         * El sujeto es {@see LicenseStatus} —«la licencia de esta
+         * instalacion»— y no una fila: **la fila puede no existir**, y una
+         * policy que autorizara sobre un modelo dejaria sin respuesta el caso
+         * mas comun de una puesta en marcha.
+         */
+        Gate::policy(LicenseStatus::class, LicensePolicy::class);
+
+        $this->observePlanLimits();
+
+        if ($this->app->runningInConsole()) {
+            /*
+             * Los dos comandos del Anexo C (RF-PD-04).
+             *
+             * **NO van en `routes/console.php`**: ahi vive cuando se ejecuta
+             * cada comando programado, y ninguno de estos dos se programa.
+             * `license:show` lo ejecuta una persona que quiere saber como esta
+             * su licencia —o `doctor` en la 5.9—, y `license:activate` lo
+             * ejecuta quien acaba de recibir una clave, o el instalador de la
+             * 5.4 la primera vez.
+             *
+             * Y sobre todo: **una comprobacion de licencia programada no existe
+             * en este producto**. No hay tarea nocturna que revise la licencia
+             * y cambie nada, porque el estado se calcula al preguntarlo y
+             * porque una tarea asi es el primer paso hacia un producto que se
+             * apaga solo una madrugada (ADR-019).
+             */
+            $this->commands([
+                LicenseShowCommand::class,
+                LicenseActivateCommand::class,
+            ]);
+        }
+    }
+
+    /**
+     * El observador de los limites del plan (**ADR-028**, tarea 5.3).
+     *
+     * ## Escucha altas, no las intercepta
+     *
+     * `EmployeeHired` y `DeviceTokenIssued` se publican cuando el alta **ya
+     * ocurrio**: la persona esta en plantilla y el quiosco tiene su token. Este
+     * listener no participa en esas decisiones y no puede impedirlas, que es
+     * exactamente lo que ADR-028 exige. Bloquear el alta dejaria a alguien
+     * trabajando sin registro horario y bloquear el emparejamiento dejaria un
+     * centro sin punto de fichaje.
+     *
+     * ## `afterCommit` y sin `ShouldQueue`
+     *
+     * `afterCommit` porque contar antes de que el alta confirme daria una cifra
+     * que todavia no es cierta —y, si la transaccion se revirtiera, un asiento
+     * de exceso por un alta que nunca existio—. **Sin `ShouldQueue`** porque el
+     * asiento que produce es la evidencia comercial de ADR-028 y no puede
+     * depender de que la cola este viva.
+     *
+     * La contrapartida —que el trabajo ocurra en la peticion del alta— esta
+     * acotada: son dos `count(*)` y, si algo falla, `ObservePlanLimits` lo
+     * atrapa y el alta sigue su camino.
+     *
+     * ## Ni `Workforce` ni `Identity` conocen la licencia
+     *
+     * Y es la otra mitad de la promesa. Ninguno de los dos modulos importa nada
+     * de `Product`: publican su evento como ya hacian para la auditoria, y quien
+     * cuenta es este modulo. Sin aristas nuevas en el §1.6 mas alla de los dos
+     * eventos, que es la misma concesion por la que `Compliance` sella el alta.
+     */
+    private function observePlanLimits(): void
+    {
+        Event::listen(EmployeeHired::class, [ObservePlanLimits::class, 'onEmployeeHired']);
+        Event::listen(DeviceTokenIssued::class, [ObservePlanLimits::class, 'onDeviceTokenIssued']);
     }
 }

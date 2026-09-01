@@ -5,6 +5,8 @@ declare(strict_types=1);
 use App\Modules\Reporting\Application\Support\PresenceChannels;
 use App\Modules\Reporting\Domain\ValueObject\PresenceBoard;
 use App\Modules\Shared\Application\Authorization\ScopeGuard;
+use App\Modules\Shared\Application\Port\FeatureGate;
+use App\Modules\Shared\Domain\ValueObject\Feature;
 use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\Gate;
 
@@ -32,6 +34,20 @@ use Illuminate\Support\Facades\Gate;
  * empleados**, y quien mira el panel no se anuncia a nadie. Los callbacks
  * devuelven `bool` y no un array de datos de usuario, que es justo la diferencia.
  *
+ * LA DEGRADACION POR LICENCIA SE APLICA AQUI, Y NO SOLO EN LA RESPUESTA
+ * (tarea 5.3, ADR-011, ADR-023). `GET /api/v1/attendance/live` anuncia
+ * `meta.realtime.enabled: false` cuando la licencia no concede el tiempo real, y
+ * el panel sondea; pero **eso es cooperativo**: un cliente escrito a mano que
+ * ignorara ese campo conservaria el tiempo real intacto, porque el canal seguia
+ * autorizando. La comprobacion vive donde de verdad se decide —la firma de la
+ * suscripcion— y sigue saliendo del **puerto unico**, nunca de una condicion
+ * propia sobre la licencia.
+ *
+ * **Sigue siendo una degradacion, no un apagado.** Lo que se pierde es el empuje
+ * por WebSocket; la vista sigue enseñando quien esta dentro por sondeo. Y **no
+ * alcanza al fichaje**: lo que difunde el evento es una estela de un fichaje que
+ * ya se registro, y esa emision no se toca (regla dura 19).
+ *
  * QUIEN NO ES UNA CUENTA DE GESTION NO ENTRA. Un token de quiosco, una sesion de
  * portal o una sesion pendiente de segundo factor no pasan el `ability` de la
  * ruta; y si llegaran, `ScopeGuard::scopeOf()` **falla cerrado** —alcance que no
@@ -50,6 +66,10 @@ use Illuminate\Support\Facades\Gate;
 Broadcast::channel(
     PresenceChannels::ALL,
     static function (mixed $user): bool {
+        if (! app(FeatureGate::class)->isEnabled(Feature::RealtimePresence)) {
+            return false;
+        }
+
         if (! Gate::forUser($user)->allows('view', PresenceBoard::class)) {
             return false;
         }
@@ -70,6 +90,10 @@ Broadcast::channel(
 Broadcast::channel(
     PresenceChannels::DEPARTMENT_PREFIX.'{departmentId}',
     static function (mixed $user, string $departmentId): bool {
+        if (! app(FeatureGate::class)->isEnabled(Feature::RealtimePresence)) {
+            return false;
+        }
+
         if (! Gate::forUser($user)->allows('view', PresenceBoard::class)) {
             return false;
         }

@@ -12,7 +12,8 @@
       "live": "Presencia",
       "incidents": "Incidencias",
       "reports": "Informes",
-      "compliance": "Cumplimiento"
+      "compliance": "Cumplimiento",
+      "license": "Licencia"
     },
     "roles": {
       "admin": "Administración",
@@ -858,6 +859,89 @@
     "errors": {
       "notAWholeNumber": "Escribe un número entero, sin decimales ni letras.",
       "required": "Este campo no puede quedarse vacío."
+    }
+  },
+  "license": {
+    "heading": "Licencia",
+    "intro": "Qué se ha contratado, hasta cuándo, cuánto se está usando y qué funcionalidades accesorias están disponibles.",
+    "neverDegraded": "El fichaje, la consulta de jornadas, el portal del empleado, la exportación para la Inspección de Trabajo, las correcciones, el registro de auditoría y las copias de seguridad NO dependen de la licencia: funcionan igual esté como esté. Lo que aquí se gobierna son las funcionalidades accesorias.",
+    "loading": "Cargando el estado de la licencia…",
+    "contract": "Qué se ha contratado",
+    "usage": "Plan contratado frente a uso real",
+    "usageColumns": {
+      "limit": "Magnitud",
+      "contracted": "Contratado",
+      "actual": "Real"
+    },
+    "over": "{excess} por encima",
+    "excessNote": "Superar una cifra del plan no ha impedido ningún alta ni ningún emparejamiento, y no lo hará. Queda constancia en el registro de auditoría con la fecha exacta; habla con tu proveedor cuando te venga bien para ampliar el plan.",
+    "degraded": "Qué está degradado",
+    "degradedNone": "Todo lo contratado está disponible.",
+    "activate": "Activar una clave",
+    "activating": "Activando…",
+    "activated": "Licencia activada.",
+    "fields": {
+      "customer": "Cliente",
+      "plan": "Plan",
+      "validity": "Vigencia",
+      "fingerprint": "Huella de la clave",
+      "signedKey": "Clave de licencia"
+    },
+    "hints": {
+      "signedKey": "La cadena que te entregó tu proveedor. Empieza por «KQL1.». Puedes pegarla con espacios o saltos de línea: se limpian solos."
+    },
+    "states": {
+      "valid": "Licencia vigente",
+      "expiring_soon": "Licencia vigente, caduca pronto",
+      "expired": "Licencia caducada",
+      "absent": "Sin licencia activada",
+      "not_yet_valid": "Licencia todavía no vigente",
+      "unverifiable": "La licencia no se puede verificar"
+    },
+    "detail": {
+      "valid": "Caduca el {until}. Te avisaremos {warningDays} días antes.",
+      "expiring_soon": "Caduca el {until}: quedan {days} días. Todavía no se ha degradado nada. Pide la renovación a tu proveedor y actívala aquí cuando te llegue.",
+      "expired": "Caducó el {until}, hace {elapsed} días. Desde entonces, las funcionalidades accesorias de abajo no están disponibles. El registro horario sigue funcionando por completo.",
+      "absent": "Todavía no se ha activado ninguna clave. Actívala abajo; te la entrega tu proveedor. Mientras tanto se ficha y se consulta el registro con normalidad.",
+      "not_yet_valid": "La clave activada empieza a valer el {from}. No hay que hacer nada: las funcionalidades accesorias se activan solas ese día.",
+      "unverifiable": "La clave guardada no se puede verificar. El registro horario sigue funcionando por completo; lo que no están disponibles son las funcionalidades accesorias."
+    },
+    "rejections": {
+      "malformed": "La clave está incompleta o cortada, que es lo que suele pasar al copiarla de un correo. Vuelve a pegarla entera.",
+      "bad_signature": "Esta clave no la emitió el fabricante de esta versión, o se modificó por el camino. Pide una clave nueva a tu proveedor.",
+      "invalid_payload": "La clave está firmada pero le falta información. Es un fallo de emisión: avisa a tu proveedor y pide una clave nueva.",
+      "no_public_key": "Esta instalación no lleva la clave pública del fabricante, así que no puede verificar ninguna licencia. No es un problema de tu clave, es del despliegue: avisa a tu proveedor indicando la versión que devuelve GET /api/v1/health."
+    },
+    "limits": {
+      "max_employees": "Personas en plantilla",
+      "max_devices": "Quioscos activos"
+    },
+    "features": {
+      "advanced_reports": "Informes por periodo y comparativa con lo contratado",
+      "impact_dashboard": "Cuadro de impacto y adopción",
+      "payroll_export": "Exportación para nómina",
+      "weekly_email_summary": "Resumen semanal por correo",
+      "realtime_presence": "Presencia en tiempo real (pasa a actualizarse por sondeo)",
+      "white_label": "Marca propia",
+      "telemetry": "Telemetría opcional"
+    },
+    "restrictions": {
+      "license_expired": "no disponible por licencia caducada, desde el {since}",
+      "license_absent": "no disponible: no hay licencia activada",
+      "license_unverifiable": "no disponible: la licencia no se puede verificar",
+      "license_not_yet_valid": "disponible a partir del {since}",
+      "not_in_plan": "no incluida en el plan contratado",
+      "unknown": "no disponible"
+    },
+    "notice": {
+      "action": "Ver la licencia",
+      "valid": "La licencia está vigente. El aviso aparece por otro motivo, indicado a continuación.",
+      "expiring_soon": "La licencia caduca el {until}, dentro de {days} días. Todavía no se ha degradado nada: renuévala para que los informes por periodo y la presencia en tiempo real sigan disponibles.",
+      "expired": "La licencia caducó el {until}, hace {elapsed} días. Los informes por periodo y la presencia en tiempo real están degradados desde entonces. El fichaje y el acceso al registro siguen funcionando con normalidad.",
+      "absent": "Esta instalación no tiene licencia activada. El fichaje y el acceso al registro funcionan con normalidad; las funcionalidades accesorias, no. Activa la clave que te entregó tu proveedor.",
+      "not_yet_valid": "La licencia activada empieza a valer el {from}. Hasta entonces, las funcionalidades accesorias no están disponibles. No hay que hacer nada más.",
+      "unverifiable": "La licencia guardada no se puede verificar. El fichaje y el acceso al registro funcionan con normalidad; las funcionalidades accesorias, no.",
+      "exceeded": "Además, se ha superado el plan contratado en: {limits}. No bloquea nada; habla con tu proveedor para ampliarlo."
     }
   }
 }

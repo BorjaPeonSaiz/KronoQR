@@ -39,6 +39,32 @@ title = "KronoQR"
 [extend]
 useDefault = true
 
+# ---------------------------------------------------------------------------
+# Regla propia: la clave PRIVADA de emision de licencias (tarea 5.3, RS-08)
+# ---------------------------------------------------------------------------
+#
+# POR QUE HACE FALTA UNA REGLA PROPIA. Una clave privada ed25519 en hexadecimal
+# son 128 caracteres de [0-9a-f] y nada mas: no lleva cabecera PEM, ni prefijo,
+# ni nombre de proveedor, asi que **ninguna regla por defecto de gitleaks la
+# reconoce**. Es exactamente la forma que tendria si alguien la pegara "solo
+# para probar" en un fichero de configuracion, en una prueba o en un README.
+#
+# Y es la peor fuga posible de este producto: quien tenga esa clave puede emitir
+# licencias validas para CUALQUIER cliente, con cualquier plan y cualquier
+# vigencia (ADR-018). El emisor vive fuera del arbol desplegable
+# (`tools/license-issuer/`) y la recibe por variable de entorno; esta regla es la
+# red que impide que acabe versionada de todos modos.
+#
+# Las pruebas no la disparan: generan su par en cada ejecucion con
+# `sodium_crypto_sign_keypair()` y no escriben ninguno en disco.
+# `LicenseIssuerRoundTripTest` comprueba lo mismo desde el otro lado, sobre los
+# ficheros concretos donde alguien tendria la tentacion de pegarla.
+[[rules]]
+  id = "kronoqr-license-signing-key"
+  description = "Clave privada ed25519 de emision de licencias (128 hex). Nunca en el repositorio (§7.7, RS-08)"
+  regex = '''\b[0-9a-fA-F]{128}\b'''
+  keywords = []
+
 [allowlist]
   description = "Falsos positivos confirmados uno a uno (ver cabecera): valor EXACTO del secreto, nunca una ruta entera"
   regexTarget = "secret"

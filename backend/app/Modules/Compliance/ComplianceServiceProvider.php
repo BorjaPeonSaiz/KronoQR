@@ -49,7 +49,9 @@ use App\Modules\Compliance\Infrastructure\Listener\RecordCredentialLifecycle;
 use App\Modules\Compliance\Infrastructure\Listener\RecordEmployeePinLifecycle;
 use App\Modules\Compliance\Infrastructure\Listener\RecordEmploymentContractChange;
 use App\Modules\Compliance\Infrastructure\Listener\RecordInstallationSettingChange;
+use App\Modules\Compliance\Infrastructure\Listener\RecordLicenseActivation;
 use App\Modules\Compliance\Infrastructure\Listener\RecordManagementAccountLifecycle;
+use App\Modules\Compliance\Infrastructure\Listener\RecordPlanLimitExcess;
 use App\Modules\Compliance\Infrastructure\Listener\RecordProjectionReconciliationAudit;
 use App\Modules\Compliance\Infrastructure\Listener\RecordShiftEntryAudit;
 use App\Modules\Compliance\Infrastructure\Metrics\RedisIncidentResolutionMetrics;
@@ -78,6 +80,8 @@ use App\Modules\Identity\Domain\Event\TwoFactorEnabled;
 use App\Modules\Identity\Domain\Event\TwoFactorReset;
 use App\Modules\Product\Domain\Event\ComplianceThresholdChanged;
 use App\Modules\Product\Domain\Event\InstallationSettingChanged;
+use App\Modules\Product\Domain\Event\LicenseActivated;
+use App\Modules\Product\Domain\Event\PlanLimitExceeded;
 use App\Modules\Shared\Application\Port\AuthenticationJournal;
 use App\Modules\Shared\Application\Port\AuthorizationJournal;
 use App\Modules\Shared\Application\Port\Clock;
@@ -246,6 +250,7 @@ final class ComplianceServiceProvider extends ServiceProvider
         $this->recordEmploymentContractChanges();
         $this->recordInstallationSettingChanges();
         $this->recordComplianceProfileChanges();
+        $this->recordLicenseLifecycle();
         $this->recordManagementAccountLifecycle();
         $this->openAndNotifyIncidents();
 
@@ -571,6 +576,36 @@ final class ComplianceServiceProvider extends ServiceProvider
     private function recordComplianceProfileChanges(): void
     {
         Event::listen(ComplianceThresholdChanged::class, [RecordComplianceProfileChange::class, 'handle']);
+    }
+
+    /**
+     * El mapa evento -> asiento de la **licencia** (tarea 5.3, RF-PD-04,
+     * ADR-018, ADR-028).
+     *
+     * Familia propia del bloque D —`LicenseLifecycle`, la novena— y no la de
+     * «cambia roles, permisos o configuracion»: ni activar una clave ni superar
+     * una cifra del plan mueven un minuto trabajado ni conceden potestad a
+     * nadie, y meterlas ahi ensuciaria la consulta con la que una inspeccion
+     * pregunta quien movio las reglas del calculo. El razonamiento completo esta
+     * en el propio caso del enum.
+     *
+     * **Ninguno de los dos asientos describe un rechazo.** `license.activated`
+     * dice que se activo una clave —incluida una ya caducada, que se puede
+     * activar— y `license.plan_exceeded` dice que un alta que **si se hizo** ha
+     * dejado la instalacion por encima del plan (ADR-028). El segundo lleva
+     * `operation_blocked: false` dentro del payload para que quien lo lea dentro
+     * de dos años no tenga que deducirlo.
+     *
+     * Sincronos, sin `ShouldQueue` y sin `afterCommit`: si el asiento falla, la
+     * activacion no se guarda (ADR-027). El de exceso tambien es sincrono, pero
+     * quien lo publica lo hace **fuera** de la transaccion del alta y bajo
+     * `try`, de modo que un fallo aqui pierde el asiento y nunca el alta — la
+     * unica combinacion compatible con ADR-028.
+     */
+    private function recordLicenseLifecycle(): void
+    {
+        Event::listen(LicenseActivated::class, [RecordLicenseActivation::class, 'handle']);
+        Event::listen(PlanLimitExceeded::class, [RecordPlanLimitExcess::class, 'handle']);
     }
 
     /**

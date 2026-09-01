@@ -10,6 +10,7 @@ use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -63,6 +64,20 @@ beforeEach(function (): void {
      * produccion, no dobles.
      */
     require base_path('routes/channels.php');
+
+    /*
+     * Y una licencia que conceda el tiempo real (tarea 5.3, ADR-023).
+     *
+     * Desde la 5.3, el callback del canal comprueba el FeatureGate antes que
+     * nada: sin licencia que lo conceda, **ningun canal se firma**. Sin esta
+     * linea, todas las pruebas de aqui —incluidos los controles positivos—
+     * responderian 403 por el motivo equivocado.
+     *
+     * Que la degradacion llegue hasta aqui es lo que la hace real y no
+     * cooperativa: un cliente que ignorase meta.realtime.enabled conservaria
+     * el tiempo real intacto si la unica comprobacion viviera en la respuesta.
+     */
+    LicenseKeys::grantAll();
 });
 
 /**

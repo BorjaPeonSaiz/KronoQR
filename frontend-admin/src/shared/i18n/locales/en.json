@@ -12,7 +12,8 @@
       "live": "Presence",
       "incidents": "Incidents",
       "reports": "Reports",
-      "compliance": "Compliance"
+      "compliance": "Compliance",
+      "license": "Licence"
     },
     "roles": {
       "admin": "Administration",
@@ -858,6 +859,89 @@
     "errors": {
       "notAWholeNumber": "Enter a whole number, with no decimals or letters.",
       "required": "This field cannot be left empty."
+    }
+  },
+  "license": {
+    "heading": "Licence",
+    "intro": "What was contracted, until when, how much is in use, and which accessory features are available.",
+    "neverDegraded": "Clocking in and out, work day lookups, the employee portal, the labour inspection export, corrections, the audit trail and backups do NOT depend on the licence: they work the same whatever its state. What is governed here are the accessory features.",
+    "loading": "Loading licence status…",
+    "contract": "What was contracted",
+    "usage": "Contracted plan versus actual use",
+    "usageColumns": {
+      "limit": "Metric",
+      "contracted": "Contracted",
+      "actual": "Actual"
+    },
+    "over": "{excess} over",
+    "excessNote": "Exceeding a plan figure has not prevented any hiring or any pairing, and it will not. It is recorded in the audit trail with the exact date; talk to your provider whenever it suits you to extend the plan.",
+    "degraded": "What is degraded",
+    "degradedNone": "Everything contracted is available.",
+    "activate": "Activate a key",
+    "activating": "Activating…",
+    "activated": "Licence activated.",
+    "fields": {
+      "customer": "Customer",
+      "plan": "Plan",
+      "validity": "Validity",
+      "fingerprint": "Key fingerprint",
+      "signedKey": "Licence key"
+    },
+    "hints": {
+      "signedKey": "The string your provider gave you. It starts with \"KQL1.\". You can paste it with spaces or line breaks: they are cleaned up automatically."
+    },
+    "states": {
+      "valid": "Licence valid",
+      "expiring_soon": "Licence valid, expiring soon",
+      "expired": "Licence expired",
+      "absent": "No licence activated",
+      "not_yet_valid": "Licence not valid yet",
+      "unverifiable": "The licence cannot be verified"
+    },
+    "detail": {
+      "valid": "Expires on {until}. We will warn you {warningDays} days in advance.",
+      "expiring_soon": "Expires on {until}: {days} days left. Nothing has been degraded yet. Ask your provider for the renewal and activate it here when it arrives.",
+      "expired": "Expired on {until}, {elapsed} days ago. Since then, the accessory features below are unavailable. The time record keeps working in full.",
+      "absent": "No key has been activated yet. Activate it below; your provider gives it to you. In the meantime clocking and record lookups work normally.",
+      "not_yet_valid": "The activated key starts on {from}. Nothing to do: the accessory features switch on by themselves that day.",
+      "unverifiable": "The stored key cannot be verified. The time record keeps working in full; what is unavailable are the accessory features."
+    },
+    "rejections": {
+      "malformed": "The key is incomplete or truncated, which usually happens when copying it from an email. Paste the whole key again.",
+      "bad_signature": "This key was not issued by the vendor of this version, or it was modified in transit. Ask your provider for a new key.",
+      "invalid_payload": "The key is signed but incomplete. This is an issuing fault: tell your provider and ask for a new key.",
+      "no_public_key": "This installation does not carry the vendor public key, so it cannot verify any licence. This is not a problem with your key, it is a deployment problem: tell your provider, quoting the version returned by GET /api/v1/health."
+    },
+    "limits": {
+      "max_employees": "People on the payroll",
+      "max_devices": "Active kiosks"
+    },
+    "features": {
+      "advanced_reports": "Period reports and contracted-hours comparison",
+      "impact_dashboard": "Impact and adoption dashboard",
+      "payroll_export": "Payroll export",
+      "weekly_email_summary": "Weekly email summary",
+      "realtime_presence": "Real-time presence (falls back to polling)",
+      "white_label": "Own branding",
+      "telemetry": "Optional telemetry"
+    },
+    "restrictions": {
+      "license_expired": "unavailable because the licence expired on {since}",
+      "license_absent": "unavailable: no licence activated",
+      "license_unverifiable": "unavailable: the licence cannot be verified",
+      "license_not_yet_valid": "available from {since}",
+      "not_in_plan": "not included in the contracted plan",
+      "unknown": "unavailable"
+    },
+    "notice": {
+      "action": "View the licence",
+      "valid": "The licence is valid. This notice is shown for another reason, stated below.",
+      "expiring_soon": "The licence expires on {until}, in {days} days. Nothing has been degraded yet: renew it so that period reports and real-time presence stay available.",
+      "expired": "The licence expired on {until}, {elapsed} days ago. Period reports and real-time presence have been degraded since then. Clocking and record access keep working normally.",
+      "absent": "This installation has no activated licence. Clocking and record access work normally; accessory features do not. Activate the key your provider gave you.",
+      "not_yet_valid": "The activated licence starts on {from}. Until then the accessory features are unavailable. Nothing else to do.",
+      "unverifiable": "The stored licence cannot be verified. Clocking and record access work normally; accessory features do not.",
+      "exceeded": "Also, the contracted plan has been exceeded in: {limits}. It blocks nothing; talk to your provider to extend it."
     }
   }
 }

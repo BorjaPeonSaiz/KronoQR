@@ -16,6 +16,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Reporting\FakeReportDocumentRenderer;
 use Tests\Support\Reporting\PeriodReportFixtures;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -52,6 +53,19 @@ use Tests\Support\Workforce\WorkforceFixtures;
 uses(RefreshDatabase::class);
 
 beforeEach(function (): void {
+
+    // El informe por periodo y la presencia en tiempo real son funcionalidad
+    // ACCESORIA (ADR-023, tarea 5.3): sin una licencia que las conceda, el
+    // primero responde `402` con el aviso de licencia y la segunda degrada a
+    // sondeo. Aqui se prueba la funcionalidad; su degradacion tiene fichero
+    // propio, `tests/Feature/Product/LicenseDegradesAccessoriesTest.php`.
+    //
+    // **Nada del registro legal necesita esta llamada**: el fichaje, la consulta
+    // de jornadas, el portal y la exportacion para la Inspeccion funcionan sin
+    // licencia por diseño, y que sus pruebas no la hagan es la comprobacion
+    // silenciosa de eso (regla dura 15).
+    LicenseKeys::grantAll();
+
     Spectator::using('openapi.yaml');
 
     // El idioma del documento es configuracion de la instalacion (regla dura 13).
