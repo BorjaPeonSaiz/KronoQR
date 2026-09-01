@@ -615,8 +615,8 @@ build-ci-images: ## Construye kronoqr/postgres:ci y/o kronoqr/app:ci (IMAGES=pos
 	    echo "[make] docker buildx build --cache type=gha -f $$dockerfile -t $$tag . (APK_INDEX_STAMP=$(APK_INDEX_STAMP))"; \
 	    docker buildx build --load \
 	      --cache-from "type=gha,scope=$$scope" --cache-to "type=gha,mode=max,scope=$$scope" \
-	      -f "$$dockerfile" $$target -t "$$tag" . || exit $$?; \
 	      --build-arg APK_INDEX_STAMP="$(APK_INDEX_STAMP)" \
+	      -f "$$dockerfile" $$target -t "$$tag" . || exit $$?; \
 	  else \
 	    echo "[make] docker build -f $$dockerfile -t $$tag . (APK_INDEX_STAMP=$(APK_INDEX_STAMP))"; \
 	    docker build --build-arg APK_INDEX_STAMP="$(APK_INDEX_STAMP)" \
