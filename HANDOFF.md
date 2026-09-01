@@ -109,6 +109,25 @@
 
 **Nota de entorno:** estas pruebas solo son válidas **dentro del contenedor**. En Git Bash sobre NTFS `chmod` no tiene efecto y `stat -c %a` devuelve `644` para todo; comprobado antes de escribirlas.
 
+### Corrección del fallo de la tercera ejecución de la etapa ⑧ (run 33558947114) — 01-09-2026, sin commitear
+
+**El escenario C instala y verifica por primera vez.** Lo que falló fue la comprobación posterior: `/api/v1/health` informaba `"version":"0.0.0-dev"` en una instalación de la 2.0.0. Causa: `build-ci-images` no fijaba `APP_VERSION` y el Dockerfile caía a su respaldo `ARG APP_VERSION=0.0.0-dev`. **En una entrega real eso rompe justo lo que ese campo sostiene** —correlacionar un incidente con la versión que lo produjo (doc 02 §10.5)— y con él la matriz de versiones soportadas.
+
+**Criterio elegido, y por qué.** `APP_VERSION ?= $(shell cat VERSION)` en el `Makefile` (`Makefile:598`) y `--build-arg` **solo a la imagen de `app`** (`Makefile:640`), que es la única que declara el ARG:
+- `build-ci-images` sigue siendo la **única** orden de construcción del repositorio (IMPORTANTE 10): `unit`, `security`, `backup-drill` y la etapa ⑧ no pueden divergir, y no hay dos comportamientos según quién llame.
+- Las imágenes `:ci` llevan también la versión real. **Es más veraz**: una imagen de prueba que dice su versión vale más que una que miente. El ARG vive al final de la etapa `prod`, así que el coste en caché es una capa trivial.
+- Solo a `app` porque solo ella lo consume: pasárselo a postgres y nginx haría que BuildKit avisara de un *build-arg* sin usar en cada construcción, **y un aviso que sale siempre es un aviso que nadie lee**.
+
+Verificado: `make -n` muestra `--build-arg APP_VERSION=2.0.0` únicamente en `app`, y `docker run --rm --entrypoint php kronoqr/app:ci -r 'echo getenv("APP_VERSION");'` → **2.0.0**.
+
+**Y una trampa del escenario D, encontrada leyendo antes de que la encontrara la CI.** Con C instalado, los puertos 80 y 443 los ocupa **nuestro propio nginx**, así que la fase 1 fallaba con **2** («el puerto 443 ya lo usa otro proceso») en vez de llegar a la fase 2 y dar **3** («hay una instalación previa, usa update.sh»). No era solo un escenario roto: el mensaje mandaba al IT del hotel **a parar el proceso que ocupa el 443, que es su propio KronoQR sirviendo fichajes**. Ahora `port_held_by_our_project` (`install.sh:520`) distingue el caso y la fase 2 responde lo que toca. **Reproducido y verificado contra el entorno de desarrollo real**, que publica 80/443 bajo el mismo nombre de proyecto: antes fallaba, ahora dice «lo ocupa esta misma instalación de KronoQR».
+
+**Repaso de las otras dos trampas posibles en F, hecho:**
+- `sudo -E` con variables en línea puede rechazarse por política de sudoers (`env_reset`) y perderlas en silencio. Cambiado a `sudo env COMPOSE_PROFILES=… docker compose …` (`ci.yml:1224`). El `sudo` sí hace falta: el `.env` es 0600 de root.
+- `docker compose exec node-exporter ls` **sí funciona**: la imagen es busybox, comprobado ejecutándolo. Y el `psql` del escenario C tampoco necesita contraseña: `pg_hba.conf` da `trust` a las conexiones por socket local.
+
+**Verificado:** `make sh-lint` 0 hallazgos · `tests/Integration/Install` **20/20** · imagen `app` reconstruida y su `APP_VERSION` leída de dentro · catálogo **133 × 2** completo.
+
 ## Sesión «tarea 5.3: licencia firmada, verificación local y degradación honesta» (01-09-2026), en `feat/fase-5-productizacion`
 
 **Tarea 5.3 implementada y verificada, sin commitear** (lo commitea el usuario tras las revisiones de `seguridad-cumplimiento` y `revisor-codigo`). Cubre `RF-PD-04` y `RF-PD-05`.

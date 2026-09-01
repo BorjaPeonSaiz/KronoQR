@@ -1231,8 +1231,11 @@ jobs:
         run: |
           set -euo pipefail
           cd paquete
-          imagenes="$(IMAGE_TAG="$(cat VERSION)" COMPOSE_PROFILES=observability \
-            sudo -E docker compose -f docker-compose.yml --env-file .env config --images |
+          # `sudo env` y no `VAR=x sudo -E`: con env_reset en sudoers -lo normal-
+          # `-E` puede rechazarse por politica y las variables se perderian en
+          # silencio. El .env es 0600 de root, asi que el sudo si hace falta.
+          imagenes="$(sudo env COMPOSE_PROFILES=observability \
+            docker compose -f docker-compose.yml --env-file .env config --images |
             grep -Ev '^kronoqr/')"
           echo "${imagenes}"
           for imagen in ${imagenes}; do

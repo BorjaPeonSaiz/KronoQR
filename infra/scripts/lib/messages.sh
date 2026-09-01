@@ -236,6 +236,8 @@ KQ_MSG_ES[f_tls_key_world_readable]="el borde puede leerla, asi que la instalaci
 KQ_MSG_ES[c_tls_unknown]="No se ha podido comprobar quien puede leer %s"
 KQ_MSG_ES[f_tls_unknown]="este servidor no tiene 'stat', asi que no se sabe si el borde podra leer %s. Compruebalo a mano: el fichero tiene que ser legible por el uid %s. Si al levantar los servicios nginx reinicia con 'Permission denied', es esto."
 
+KQ_MSG_ES[c_port_ours]="Puerto %s: lo ocupa esta misma instalacion de KronoQR"
+
 #------------------------------------------------------------------------------
 # English
 #------------------------------------------------------------------------------
@@ -439,6 +441,8 @@ KQ_MSG_EN[c_tls_key_world_readable]="%s is readable by every user of this server
 KQ_MSG_EN[f_tls_key_world_readable]="the edge can read it, so the installation will work, but a TLS private key with world read permission can be copied by anyone with a session on this machine. Leave it to the edge only: sudo chown %s:%s %s && sudo chmod 0400 %s"
 KQ_MSG_EN[c_tls_unknown]="Could not check who can read %s"
 KQ_MSG_EN[f_tls_unknown]="this server has no 'stat', so whether the edge can read %s is unknown. Check it by hand: the file must be readable by uid %s. If nginx restarts with 'Permission denied' when the services come up, this is it."
+
+KQ_MSG_EN[c_port_ours]="Port %s: held by this very KronoQR installation"
 
 #------------------------------------------------------------------------------
 # Resolucion

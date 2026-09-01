@@ -573,6 +573,30 @@ BUILDX_CACHE  ?=
 # fuera de ciclo: `make build-ci-images APK_INDEX_STAMP=$$(date -u +%s)`.
 APK_INDEX_STAMP ?= $(shell date -u +%G-W%V)
 
+# La version que viaja DENTRO de la imagen de la aplicacion, y que publica
+# `GET /api/v1/health` y la pantalla de diagnostico del quiosco (doc 02 §10.5).
+#
+# Sale del fichero VERSION, que es la fuente de verdad versionada y la que se
+# etiqueta al publicar. Sin esto, el Dockerfile cae a su respaldo
+# `ARG APP_VERSION=0.0.0-dev` y la instalacion informa una version FALSA: pasó
+# en la tercera ejecucion de la etapa ⑧, donde /health decia `0.0.0-dev` en una
+# instalacion de la 2.0.0. En una entrega real eso rompe justo lo que ese campo
+# existe para sostener —correlacionar un incidente con la version que lo
+# produjo— y de paso la matriz de versiones soportadas (§11.6.5).
+#
+# SE PASA TAMBIEN A LAS IMAGENES :ci de `unit` y `security`, no solo a la etapa
+# ⑧, y es deliberado: `build-ci-images` es la UNICA orden de construccion del
+# repositorio y no puede haber dos comportamientos segun quien la llame. Ademas
+# es mas veraz —una imagen de prueba que dice su version real vale mas que una
+# que miente— y el coste en cache es una capa trivial, porque el ARG vive al
+# final de la etapa `prod`.
+#
+# Solo la consume la imagen de PHP, asi que solo a ella se le pasa: dárselo
+# tambien a postgres y a nginx haria que BuildKit avisara de un build-arg sin
+# usar en cada construccion, y un aviso que siempre sale es un aviso que nadie
+# lee.
+APP_VERSION ?= $(shell cat VERSION 2>/dev/null || echo 0.0.0-dev)
+
 # ---------------------------------------------------------------------------
 # Puerta de RELEASE: una imagen de entrega no puede salir sin clave publica
 # ---------------------------------------------------------------------------
@@ -612,20 +636,20 @@ release-gate: ## Falla si la imagen de entrega saldria sin clave publica del fab
 build-ci-images: ## Construye kronoqr/{postgres,app,nginx}:ci (IMAGES=postgres|app|nginx|"postgres app nginx", BUILDX_CACHE=gha)
 	@for imagen in $(IMAGES); do \
 	  case "$$imagen" in \
-	    postgres) dockerfile=infra/docker/postgres/Dockerfile; tag=kronoqr/postgres:ci; target=; scope=postgres-ci ;; \
-	    app) dockerfile=infra/docker/php/Dockerfile; tag=kronoqr/app:ci; target="--target prod"; scope=app-ci ;; \
-	    nginx) dockerfile=infra/docker/nginx/Dockerfile; tag=kronoqr/nginx:ci; target=; scope=nginx-ci ;; \
+	    postgres) dockerfile=infra/docker/postgres/Dockerfile; tag=kronoqr/postgres:ci; target=; scope=postgres-ci; propios= ;; \
+	    app) dockerfile=infra/docker/php/Dockerfile; tag=kronoqr/app:ci; target="--target prod"; scope=app-ci; propios="--build-arg APP_VERSION=$(APP_VERSION)" ;; \
+	    nginx) dockerfile=infra/docker/nginx/Dockerfile; tag=kronoqr/nginx:ci; target=; scope=nginx-ci; propios= ;; \
 	    *) echo "[make] IMAGES desconocido: '$$imagen' (valores validos: postgres, app, nginx)"; exit 1 ;; \
 	  esac; \
 	  if [ "$(BUILDX_CACHE)" = "gha" ]; then \
 	    echo "[make] docker buildx build --cache type=gha -f $$dockerfile -t $$tag . (APK_INDEX_STAMP=$(APK_INDEX_STAMP))"; \
 	    docker buildx build --load \
 	      --cache-from "type=gha,scope=$$scope" --cache-to "type=gha,mode=max,scope=$$scope" \
-	      --build-arg APK_INDEX_STAMP="$(APK_INDEX_STAMP)" \
+	      --build-arg APK_INDEX_STAMP="$(APK_INDEX_STAMP)" $$propios \
 	      -f "$$dockerfile" $$target -t "$$tag" . || exit $$?; \
 	  else \
 	    echo "[make] docker build -f $$dockerfile -t $$tag . (APK_INDEX_STAMP=$(APK_INDEX_STAMP))"; \
-	    docker build --build-arg APK_INDEX_STAMP="$(APK_INDEX_STAMP)" \
+	    docker build --build-arg APK_INDEX_STAMP="$(APK_INDEX_STAMP)" $$propios \
 	      -f "$$dockerfile" $$target -t "$$tag" . || exit $$?; \
 	  fi; \
 	done

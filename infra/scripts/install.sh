@@ -556,6 +556,30 @@ check_resources() {
   fi
 }
 
+# El puerto lo esta publicando un contenedor de ESTA instalacion?
+#
+# Sin esto, re-ejecutar el instalador sobre una instalacion que funciona daba
+# «el puerto 443 ya lo usa otro proceso» y salida 2, cuando la respuesta
+# correcta es la de la fase 2: «hay una instalacion previa, usa update.sh»,
+# salida 3. El mensaje no solo era el equivocado: mandaba al IT del hotel a
+# parar el proceso que ocupa el 443, que es su propio KronoQR sirviendo
+# fichajes.
+#
+# La fase 2 llega dos segundos despues y lo dice bien, asi que aqui basta con
+# no estorbar.
+port_held_by_our_project() {
+  local port="$1" puertos
+
+  puertos="$(docker ps --filter "label=com.docker.compose.project=${KQ_COMPOSE_PROJECT}" \
+    --format '{{.Ports}}' 2>/dev/null || true)"
+
+  case "${puertos}" in
+  *":${port}->"*) return 0 ;;
+  esac
+
+  return 1
+}
+
 check_ports() {
   local port status
   for port in "${CFG_HTTP_PORT}" "${CFG_HTTPS_PORT}"; do
@@ -564,8 +588,13 @@ check_ports() {
 
     case "${status}" in
     0)
-      check_fail "$(kq_format c_port_busy "${port}")" \
-        "$(kq_format f_port "${port}" "${port}")"
+      if port_held_by_our_project "${port}"; then
+        # No es un fallo: es la instalacion que ya hay. La fase 2 se ocupa.
+        check_pass "$(kq_format c_port_ours "${port}")"
+      else
+        check_fail "$(kq_format c_port_busy "${port}")" \
+          "$(kq_format f_port "${port}" "${port}")"
+      fi
       ;;
     1) check_pass "$(kq_format c_port "${port}")" ;;
     *)
