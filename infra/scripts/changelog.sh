@@ -246,7 +246,10 @@ check() {
     die 1 "no existe ${CHANGELOG_PATH}. Generalo con: make changelog"
   fi
 
-  if ! head -n 1 "$CHANGELOG_PATH" | grep -qxF "$HEADER_TITLE"; then
+  # Sin tuberia: `head | grep -q` deja a `grep` cerrando el descriptor en
+  # cuanto decide, y bajo `pipefail` un SIGPIPE de `head` se leeria como
+  # "falta la cabecera". Misma clase de fallo que el de install.sh.
+  if [ "$(head -n 1 "$CHANGELOG_PATH")" != "$HEADER_TITLE" ]; then
     die 1 "${CHANGELOG_PATH} no empieza por '${HEADER_TITLE}'. Regeneralo con: make changelog"
   fi
 

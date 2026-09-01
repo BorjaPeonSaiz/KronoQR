@@ -66,6 +66,29 @@
 
 **Desviación consciente, dicha por escrito.** El escenario E prueba que el código es **4** y que la máquina queda limpia; **no fuerza que `${BACKUP_PATH}/wal` tenga segmentos dentro** en el momento del fallo, porque el archivado de PostgreSQL depende de `archive_timeout` (900 s) y no es determinista en una ventana de CI. El mecanismo exacto —`rm -rf` y no `rmdir`— lo fija la prueba de integración sobre el texto del script. Las dos juntas cubren el bloqueante; ninguna de las dos sola.
 
+### Corrección del fallo de la primera ejecución de la etapa ⑧ (run 33547769303, salida 5) — 01-09-2026, sin commitear
+
+**EL PATRÓN QUE EL PROYECTO TIENE QUE RECORDAR: `set -E` + `trap ERR` + `pipefail` + sustitución de orden.** Es la causa raíz, y no se parece en nada al síntoma.
+
+**Cadena completa, reproducida con `set -x`.** `random_password` era `tr -dc … </dev/urandom | head -c 32`. `head` cierra el descriptor al llegar a 32 bytes, `tr` —que lee un flujo infinito— muere por **SIGPIPE**, y con `pipefail` la tubería «falla». Con `set -E`, el `trap ERR` que arma `phase_secrets` **se hereda dentro de la subshell** de `"$(random_password)"`, así que la **vuelta atrás se ejecutaba ahí**: restauraba el `.env` —borrando `APP_KEY` y las claves QR ya escritas—, consumía `.env.kronoqr-pre-install` y hacía `exit 4` **de la subshell**. El padre no se entera, porque el estado de una sustitución en posición de argumento se descarta: seguía escribiendo secretos sobre un fichero ya restaurado. Tres invocaciones de `rollback_and_die` en una sola ejecución. El `.env` final **no tenía `APP_KEY`** (el escenario C habría fallado al arrancar la aplicación aunque E hubiera pasado), y cuando la fase 4 falló de verdad, la copia previa ya no existía: **salida 5**.
+
+**Las dos capas del arreglo, las dos necesarias.**
+
+1. **`rollback_and_die` solo actúa en el proceso principal.** Primera línea: `if [ "${BASHPID}" != "$$" ]; then return 1; fi`. Deshacer tiene efectos sobre disco y solo tiene sentido **una vez y desde `main`**; en una subshell se vuelve sin tocar nada y decide el padre, con lo que de verdad sabe: la longitud del secreto recibido (`set_generated_secret`). Esto convierte el SIGPIPE benigno en inocuo.
+2. **`random_password` sin SIGPIPE.** Entrada finita (`openssl rand -base64 48`, que ya es requisito de la fase 1), `tr` la consume entera y **el recorte a 32 lo hace la expansión de parámetros de bash**, que no es un proceso. Bucle para el caso remoto de que el filtrado deje menos de 32.
+
+**La clase entera, barrida, no solo la instancia.** Otras dos tuberías cortaban a su productor: `manifest_field` en `lib/backup-common.sh` (`sed … | head -n 1` → ahora `sed …;T;q`, sin tubería: bajo `pipefail` devolvía 141 aunque encontrara el campo) y la comprobación de cabecera de `changelog.sh` (`head -n 1 | grep -q`). Las dos corregidas con su porqué escrito.
+
+**Y que un fallo de deshacer diga por qué.** `rollback_and_die` capturaba el stderr de cada acción en `/dev/null`: el mensaje decía «NO se ha podido deshacer: X» y obligaba a reproducir a ciegas. Ahora se captura y se imprime bajo la línea. Son órdenes sobre rutas y contenedores, sin un solo secreto.
+
+**Prueba nueva: `tests/Integration/Install/InstallSecretsPhaseTest.php`, 6 pruebas, sin Docker.** Es la reproducción exacta con la que se diagnosticó: carga `install.sh` por la guarda `BASH_SOURCE` y ejecuta `phase_secrets` sobre un `.env` temporal. Afirma que la copia previa **sobrevive**, que las 13 variables quedan escritas con su longitud, que ningún secreto sale por pantalla (valor a valor, contra el `.env` recién escrito), que la vuelta atrás legítima restaura **byte a byte** (MD5) y sale 4, que un trap disparado en una subshell **no deshace nada**, y que `random_password` da 32 caracteres veinte veces seguidas sin disparar un trap centinela. Más una que prohíbe que vuelva a aparecer una tubería sobre `/dev/urandom` en los cinco scripts.
+
+**Medido que la prueba caza el fallo, que es lo único que hace válida una prueba de regresión:** con el generador antiguo restaurado, **2 de 6 fallan**; retirando además la guarda `BASHPID`, **fallan las 6**. Con el árbol arreglado, **16/16** en los dos ficheros de `tests/Integration/Install/`.
+
+**Etapa ⑧:** el artefacto ahora recoge las salidas de **B, C, D, E y el reintento de E** (antes solo `salida-b.log`, y por eso hubo que diagnosticar a ciegas), y el paso de diagnóstico mira los **dos** paquetes (`paquete/` y `paquete-e/`) más el estado global de contenedores y volúmenes.
+
+**Sigue pendiente:** relanzar la etapa ⑧. Los escenarios C, D, E y F y los códigos 4 y 5 **siguen sin ejecutarse nunca de extremo a extremo**; lo que sí está ejercitado en local, y con la prueba que lo demuestra, es la fase 3 completa y las dos mitades de la vuelta atrás.
+
 ## Sesión «tarea 5.3: licencia firmada, verificación local y degradación honesta» (01-09-2026), en `feat/fase-5-productizacion`
 
 **Tarea 5.3 implementada y verificada, sin commitear** (lo commitea el usuario tras las revisiones de `seguridad-cumplimiento` y `revisor-codigo`). Cubre `RF-PD-04` y `RF-PD-05`.

@@ -190,7 +190,28 @@ discard_undo() {
 # copia que la fase 3 hizo de el.
 rollback_and_die() {
   local reason="$1"
-  local index label command incomplete=0
+  local index label command incomplete=0 detalle
+
+  # LA VUELTA ATRAS SOLO OCURRE EN EL PROCESO PRINCIPAL. Nunca en una subshell.
+  #
+  # Esto no es defensa preventiva: es el fallo que rompio la etapa ⑧ en su
+  # primera ejecucion. Con `set -E`, el `trap ERR` de la fase 3 se HEREDA en las
+  # subshells, incluidas las de una sustitucion `$(...)`. Cuando una tuberia de
+  # dentro fallaba —`tr` muerto por SIGPIPE al cerrarle `head` el descriptor—,
+  # el trap disparaba la vuelta atras AHI DENTRO: restauraba el .env, consumia
+  # la copia previa y hacia `exit 4`... de la subshell. El proceso padre no se
+  # entera, porque el estado de una sustitucion en posicion de argumento se
+  # descarta, y seguia escribiendo secretos sobre un fichero ya restaurado. El
+  # sintoma llegaba tres fases despues: la vuelta atras legitima no encontraba
+  # la copia y salia 5.
+  #
+  # Deshacer es una accion con efectos sobre disco que solo tiene sentido UNA
+  # vez y desde main. En una subshell se sale sin tocar nada y se deja que el
+  # padre decida con lo que de verdad sabe: la longitud del secreto que ha
+  # recibido (`set_generated_secret`).
+  if [ "${BASHPID}" != "$$" ]; then
+    return 1
+  fi
 
   err ""
   err "ERROR: ${reason}"
@@ -201,10 +222,15 @@ rollback_and_die() {
     label="${ROLLBACK_STACK[index]%%|*}"
     command="${ROLLBACK_STACK[index]#*|}"
 
-    if eval "${command}" >/dev/null 2>&1; then
+    # El error de la orden que no se pudo deshacer SE ENSENA. Antes iba a
+    # /dev/null y el mensaje decia «NO se ha podido deshacer: X» sin decir por
+    # que: quien lo recibia tenia que reproducirlo a ciegas. Son ordenes sobre
+    # rutas y contenedores, sin un solo secreto.
+    if detalle="$(eval "${command}" 2>&1 >/dev/null)"; then
       err "$(kq_format rollback_item "${label}")"
     else
       err "$(kq_format rollback_failed_item "${label}")"
+      [ -n "${detalle}" ] && err "            ${detalle}"
       incomplete=1
     fi
   done
@@ -818,8 +844,32 @@ random_base64_32() {
 # de entorno, y ahi cada capa los escapa a su manera; el sintoma seria un
 # "password authentication failed" que no se parece a su causa. 32 caracteres
 # alfanumericos son ~190 bits: de sobra.
+#
+# NI `/dev/urandom` NI `head` EN UNA TUBERIA, y las dos cosas por el mismo
+# motivo. Esta funcion era:
+#
+#     LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32
+#
+# y rompio la etapa ⑧ de la CI en su primera ejecucion. `head` cierra la
+# tuberia al llegar a 32 bytes, `tr` —que lee un flujo infinito— muere por
+# SIGPIPE, y con `pipefail` la tuberia entera «falla». Con el `trap ERR` de la
+# fase 3 armado y `set -E`, ese fallo dispara la VUELTA ATRAS dentro de la
+# subshell de `$(random_password)`: deshacia media instalacion y el proceso
+# padre ni se enteraba, porque el estado de una sustitucion en posicion de
+# argumento se descarta.
+#
+# Aqui `openssl` produce una entrada FINITA, `tr` la consume entera y nadie le
+# cierra la tuberia en las narices; el recorte a 32 lo hace la expansion de
+# parametros de bash, que no es un proceso. El bucle cubre el caso —remoto—
+# de que el filtrado deje menos de 32 caracteres alfanumericos.
 random_password() {
-  LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32
+  local pool=""
+
+  while [ "${#pool}" -lt 32 ]; do
+    pool="${pool}$(openssl rand -base64 48 | LC_ALL=C tr -dc 'A-Za-z0-9')"
+  done
+
+  printf '%s' "${pool:0:32}"
 }
 
 random_hex() {

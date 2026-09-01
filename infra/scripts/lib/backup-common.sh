@@ -294,11 +294,17 @@ latest_dump_file() {
 # Lee un campo de texto del manifiesto sin depender de jq, que no esta en
 # ningun servidor por defecto. El manifiesto lo escribe backup.sh con un
 # formato fijo, de una clave por linea.
+#
+# `{p;q;}` y NO `| head -n 1`, y no es cosmetico: con la tuberia, `head` cierra
+# el descriptor tras la primera linea, `sed` sigue leyendo el manifiesto y muere
+# por SIGPIPE, y con `pipefail` esta funcion devolveria 141 aunque hubiera
+# encontrado el campo. Es la misma clase de fallo que rompio la primera
+# ejecucion de la etapa ⑧ en `random_password` (ver install.sh). Aqui `sed` para
+# solo y no hay tuberia que cortar.
 manifest_field() {
   local manifest="$1" campo="$2"
   [ -f "$manifest" ] || return 1
-  sed -n "s/^[[:space:]]*\"${campo}\"[[:space:]]*:[[:space:]]*\"\{0,1\}\([^\",]*\)\"\{0,1\},\{0,1\}$/\1/p" "$manifest" |
-    head -n 1
+  sed -n "s/^[[:space:]]*\"${campo}\"[[:space:]]*:[[:space:]]*\"\{0,1\}\([^\",]*\)\"\{0,1\},\{0,1\}$/\1/p;T;q" "$manifest"
 }
 
 # Como se habla con la base que se esta comprobando.
