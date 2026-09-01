@@ -10,7 +10,13 @@ FROM nginxinc/nginx-unprivileged:1.31-alpine
 
 USER root
 
+# Mismo sello semanal que infra/docker/php/Dockerfile, y por el mismo motivo:
+# con cache de Actions, esta capa se reutilizaria para siempre con los paquetes
+# del dia en que se construyo por primera vez. Lo pone `make build-ci-images`.
+ARG APK_INDEX_STAMP=local
 RUN set -eux; \
+  echo "apk index stamp: ${APK_INDEX_STAMP}"; \
+  apk upgrade --no-cache; \
   apk add --no-cache bash openssl; \
   # La imagen trae un default.conf de ejemplo que serviria el "Welcome to
   # nginx" en el puerto 8080. Fuera: nuestra configuracion llega por plantilla.

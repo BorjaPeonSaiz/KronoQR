@@ -560,6 +560,13 @@ sast-community: ## Semgrep: reglas comunitarias PHP/JS/TS/OWASP (umbral: 0 halla
 # buildx ahi cuesta mas de lo que ahorra.
 IMAGES        ?= postgres
 BUILDX_CACHE  ?=
+# APK_INDEX_STAMP invalida una vez por semana (semana ISO) la capa de paquetes
+# de las tres imagenes. Sin el, la cache de Actions reutilizaba la capa del
+# `apk add` de forma indefinida y `trivy image` acababa marcando CVE con el
+# parche ya publicado en Alpine (libexpat 2.8.3-r0 → 2.8.4-r0, septiembre de
+# 2026). Explicado en infra/docker/php/Dockerfile. Para forzar un refresco
+# fuera de ciclo: `make build-ci-images APK_INDEX_STAMP=$$(date -u +%s)`.
+APK_INDEX_STAMP ?= $(shell date -u +%G-W%V)
 
 # ---------------------------------------------------------------------------
 # Puerta de RELEASE: una imagen de entrega no puede salir sin clave publica
@@ -605,13 +612,15 @@ build-ci-images: ## Construye kronoqr/postgres:ci y/o kronoqr/app:ci (IMAGES=pos
 	    *) echo "[make] IMAGES desconocido: '$$imagen' (valores validos: postgres, app)"; exit 1 ;; \
 	  esac; \
 	  if [ "$(BUILDX_CACHE)" = "gha" ]; then \
-	    echo "[make] docker buildx build --cache type=gha -f $$dockerfile -t $$tag ."; \
+	    echo "[make] docker buildx build --cache type=gha -f $$dockerfile -t $$tag . (APK_INDEX_STAMP=$(APK_INDEX_STAMP))"; \
 	    docker buildx build --load \
 	      --cache-from "type=gha,scope=$$scope" --cache-to "type=gha,mode=max,scope=$$scope" \
 	      -f "$$dockerfile" $$target -t "$$tag" . || exit $$?; \
+	      --build-arg APK_INDEX_STAMP="$(APK_INDEX_STAMP)" \
 	  else \
-	    echo "[make] docker build -f $$dockerfile -t $$tag ."; \
-	    docker build -f "$$dockerfile" $$target -t "$$tag" . || exit $$?; \
+	    echo "[make] docker build -f $$dockerfile -t $$tag . (APK_INDEX_STAMP=$(APK_INDEX_STAMP))"; \
+	    docker build --build-arg APK_INDEX_STAMP="$(APK_INDEX_STAMP)" \
+	      -f "$$dockerfile" $$target -t "$$tag" . || exit $$?; \
 	  fi; \
 	done
 
