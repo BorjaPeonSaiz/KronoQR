@@ -143,6 +143,27 @@ Verificado: `make -n` muestra `--build-arg APP_VERSION=2.0.0` únicamente en `ap
 
 **Verificado en local, con la imagen reconstruida:** `/healthz` **200** · `/admin/` **200** con `<!doctype html` · `/kiosk/` **200** con `<!doctype html` · `/portal/` **403**. Y el 403 del portal es el candado de RF-ID-08, no el mismo fallo del índice: **con `PORTAL_INTERNAL_CIDR=0.0.0.0/0` da 200 y sirve su HTML**. `make sh-lint` 0 hallazgos.
 
+### Cierre de la etapa ⑧: los dos remates de Trivy (run 33565272648) — 02-09-2026, sin commitear
+
+**Los seis escenarios en verde por primera vez.** Quedaban los dos hallazgos de Trivy.
+
+**1. El paso de la etapa ⑧ invocaba `trivy` a pelo** y el runner no lo tiene (`command not found`, 127). Era **el único sitio del árbol** que se saltaba la regla de «una sola vía por herramienta», y por eso fue el único que se rompió.
+
+**Criterio elegido: extender `trivy-image`, no crear un objetivo nuevo.** Un `trivy-nginx` habría sido un cuarto sitio donde repetir severidad, `--ignore-unfixed`, el fichero de exclusiones y el código de salida; el día que cambie el umbral habría que acordarse de tres. Ahora `TRIVY_IMAGES` decide qué se escanea (`Makefile:747`), con las **tres** de entrega por defecto, y cada job pasa las que ha construido: `security` las dos suyas (`ci.yml:744`), la etapa ⑧ la de borde (`ci.yml:1299`). En local, `make trivy-image` tras `build-ci-images IMAGES="postgres app nginx"` cubre las tres sin argumentos. El `--ignorefile` pasa a aplicarse a las tres, que es una excepción menos que recordar.
+
+**2. DS-0031 CRITICAL sobre el Dockerfile de nginx.** Reproducido en local y acotado: **quien dispara la regla es `TLS_KEY_FILE`**, por el nombre —contiene «KEY»—, no `TLS_CERT_FILE` ni `NGINX_CLIENT_MAX_BODY_SIZE`. No hay secreto: son **rutas**, y la clave que vive en ellas la monta el cliente desde su disco. Pero el runbook manda corregir antes que excepcionar y **la corrección es la buena de verdad**, no un rodeo para callar a la herramienta: el valor por defecto queda pegado a la lógica que lo usa en vez de repetido en dos capas.
+
+Las dos rutas salen del `ENV` del Dockerfile y pasan a `infra/docker/nginx/docker-entrypoint.d/03-kronoqr-tls-paths.envsh`. **Tiene que ser un `.envsh` y no un `.sh`**: el punto de entrada de la imagen *carga con source* los primeros y *ejecuta* los segundos, y solo lo cargado deja variables en el entorno — que aquí hacen falta en dos consumidores distintos: `05-kronoqr-tls.sh`, que decide si genera un autofirmado, y el `20-envsubst-on-templates.sh` de la imagen base, que rinde `ssl_certificate ${TLS_CERT_FILE}`. Por eso se **exportan**. `NGINX_CLIENT_MAX_BODY_SIZE` se queda como `ENV`: Trivy no lo señala y su defecto sí es cómodo ahí.
+
+**Verificado, y las dos ramas:** con la imagen reconstruida y sin pasar las variables, la conf rendida trae `ssl_certificate /etc/nginx/certs/tls.crt` —el defecto llega por el `.envsh`— y `make nginx-smoke` sigue en verde (4/4), que es la prueba de que también `05-kronoqr-tls.sh` los ve. Pasando `TLS_CERT_FILE=/tmp/propio.crt`, la conf trae esa ruta: **el `.env` del cliente sigue mandando**. Trivy sobre el Dockerfile: de **1 CRITICAL a 0**.
+
+**Un `.envsh` sin analizar habría sido un hueco**, así que `SH_FILES` los incluye ahora (`Makefile:71`) y ShellCheck y shfmt entran en él. Lo que **no** se le exige es `set -euo pipefail` ni `IFS` (`Makefile:466`), con el porqué escrito: un fichero que se **carga con source** no puede fijar `pipefail` sin imponérselo al shell que lo carga, que aquí es el punto de entrada de la imagen base y no es código nuestro. Es lo mismo que hace el `15-local-resolvers.envsh` oficial, y por el mismo motivo.
+
+
+**Lo que NO he podido ejecutar entero en local, dicho así:** `make trivy-fs` **agota su `--timeout` de 10 min** sobre el bind mount NTFS y muere con `context deadline exceeded` recorriendo `.claude/`. No es un hallazgo ni una regresión: es el límite que el propio Makefile ya documenta para esta máquina, y en el disco Linux de la CI el mismo objetivo tarda segundos. Lo que sí he verificado es exactamente lo que estaba rojo, con el mismo motor de reglas acotado: `trivy config` sobre el Dockerfile de nginx, **de 1 CRITICAL a 0**, y sobre **los cuatro** Dockerfiles de `infra/`, **0 en los cuatro**.
+
+**Detalle menor, arreglado:** `make trivy-fs TRIVY_FORMAT=json >fichero` metía en el JSON **el eco de la propia receta que hace make**, y `jq` moría con «parse error» justo cuando hay hallazgos, que es cuando el resumen del job hace falta. Ahora la orden va con `@` y su eco se escribe a mano **en stderr** (`Makefile:713`): se sigue viendo en el log y no ensucia lo que se va a parsear. Comprobado: el stdout de `trivy-image … TRIVY_FORMAT=json` empieza por `{` y acaba en `}`.
+
 ## Sesión «tarea 5.3: licencia firmada, verificación local y degradación honesta» (01-09-2026), en `feat/fase-5-productizacion`
 
 **Tarea 5.3 implementada y verificada, sin commitear** (lo commitea el usuario tras las revisiones de `seguridad-cumplimiento` y `revisor-codigo`). Cubre `RF-PD-04` y `RF-PD-05`.

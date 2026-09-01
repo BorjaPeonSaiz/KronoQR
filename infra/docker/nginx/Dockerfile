@@ -119,24 +119,27 @@ COPY infra/docker/nginx/docker-entrypoint.d/ /docker-entrypoint.d/
 RUN chmod +x /docker-entrypoint.d/*.sh
 
 USER 101
-
-# VALORES POR DEFECTO DE LO QUE SI PUEDE TENERLOS.
+# VALOR POR DEFECTO DE LO QUE SI PUEDE TENERLO.
 #
 # `envsubst` sustituye una variable ausente por la cadena vacia y sigue: el
 # resultado es una directiva rota y un arranque que muere con
 # «"client_max_body_size" directive invalid value», un mensaje que no nombra la
-# variable que falta ni dice de donde sale. Con estos ENV la variable siempre
-# esta definida, y el .env de la instalacion los sobreescribe sin esfuerzo: el
+# variable que falta ni dice de donde sale. Con este ENV la variable siempre
+# esta definida, y el .env de la instalacion lo sobreescribe sin esfuerzo: el
 # entorno del contenedor gana sobre el ENV de la imagen.
 #
-# Las TRES REDES no estan aqui a proposito: un valor por defecto para
+# LAS RUTAS DEL CERTIFICADO NO ESTAN AQUI, y estuvieron: Trivy las marcaba con
+# DS-0031 CRITICAL porque la regla mira el NOMBRE y ve «KEY» en TLS_KEY_FILE.
+# No son secretos —son rutas— pero la correccion es limpia y esta hecha, no
+# excepcionada: viven en docker-entrypoint.d/03-kronoqr-tls-paths.envsh, junto
+# a la logica que las usa.
+#
+# LAS TRES REDES tampoco, y por un motivo distinto: un valor por defecto para
 # PORTAL_INTERNAL_CIDR publicaria el portal a internet o dejaria a la plantilla
 # sin consultar su jornada, y para KIOSK_VLAN_CIDR frenaria el fichaje en el
 # cambio de turno. Esas se EXIGEN, y quien las comprueba es
 # docker-entrypoint.d/04-kronoqr-required-env.sh.
-ENV NGINX_CLIENT_MAX_BODY_SIZE=8m \
-    TLS_CERT_FILE=/etc/nginx/certs/tls.crt \
-    TLS_KEY_FILE=/etc/nginx/certs/tls.key
+ENV NGINX_CLIENT_MAX_BODY_SIZE=8m
 
 EXPOSE 8080 8443
 

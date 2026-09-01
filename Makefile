@@ -63,10 +63,17 @@ endif
 
 # Ficheros de shell del repositorio. Umbral del doc 02 §9.2: 0 hallazgos.
 # Incluye los scripts de la propia CI: tambien son codigo (doc 02 §3.5).
+#
+# Y los `*.envsh`: el punto de entrada de la imagen de Nginx los CARGA con
+# source en vez de ejecutarlos, pero son shell igual y un nombre de variable
+# mal escrito ahi produce un valor por defecto vacio en silencio. Dejarlos
+# fuera del analisis por como se invocan seria dejar sin comprobar justo el
+# fichero que decide donde esta el certificado.
 SH_FILES := $(wildcard infra/scripts/*.sh) \
             $(wildcard infra/scripts/lib/*.sh) \
             $(wildcard infra/docker/*/*.sh) \
             $(wildcard infra/docker/*/*/*.sh) \
+            $(wildcard infra/docker/*/*/*.envsh) \
             $(wildcard .github/scripts/*.sh) \
             $(wildcard load-tests/k6/*.sh)
 
@@ -452,14 +459,26 @@ else
 	# cifrado de las copias.
 	$(SHELLCHECK) -x $(SH_FILES)
 	$(SHFMT) -i 2 -d $(SH_FILES)
+	# Los `*.envsh` quedan fuera de ESTA comprobacion, no del analisis:
+	# ShellCheck y shfmt si entran en ellos. Un fichero que se CARGA con source
+	# no puede fijar `pipefail` ni `IFS`, porque se los estaria imponiendo al
+	# shell que lo carga -aqui, el punto de entrada de la imagen de Nginx, que
+	# no es codigo nuestro-. Por eso el `.envsh` oficial de la imagen base usa
+	# `set -eu` a secas, y el nuestro hace lo mismo.
 	@fallos=0; \
 	for f in $(SH_FILES); do \
-	  grep -qE '^[[:space:]]*set -E?euo pipefail[[:space:]]*$$' "$$f" || { \
-	    echo "$$f: falta 'set -euo pipefail' o 'set -Eeuo pipefail'. Anadelo tras la cabecera del script (doc 02 seccion 3.5)."; \
-	    fallos=1; }; \
-	  grep -qE "^[[:space:]]*IFS=" "$$f" || { \
-	    echo "$$f: falta IFS. Anade IFS=\$$'\\\\n\\\\t' junto al set -euo pipefail (doc 02 seccion 3.5)."; \
-	    fallos=1; }; \
+	  case "$$f" in \
+	    *.envsh) \
+	      : ;; \
+	    *) \
+	      grep -qE '^[[:space:]]*set -E?euo pipefail[[:space:]]*$$' "$$f" || { \
+	        echo "$$f: falta 'set -euo pipefail' o 'set -Eeuo pipefail'. Anadelo tras la cabecera del script (doc 02 seccion 3.5)."; \
+	        fallos=1; }; \
+	      grep -qE "^[[:space:]]*IFS=" "$$f" || { \
+	        echo "$$f: falta IFS. Anade IFS=\$$'\\n\\t' junto al set -euo pipefail (doc 02 seccion 3.5)."; \
+	        fallos=1; }; \
+	      ;; \
+	  esac; \
 	done; \
 	if [ "$$fallos" -ne 0 ]; then \
 	  echo "[make] Robustez de scripts: hallazgos. Umbral del doc 02 seccion 9.2: 0."; \
@@ -693,13 +712,23 @@ nginx-smoke: ## Arranca kronoqr/nginx:ci sola y comprueba /admin/, /kiosk/, /por
 TRIVY_EXIT_CODE ?= 1
 TRIVY_FORMAT    ?= table
 
+# LA SALIDA ESTANDAR DE ESTE OBJETIVO ES SOLO LA DE TRIVY.
+#
+# La CI hace `make trivy-fs TRIVY_FORMAT=json >trivy-fs.json` y despues pasa el
+# fichero por `jq`. Make ECHOA la linea de la receta por stdout, asi que el
+# JSON salia con esa linea delante y `jq` moria con «parse error» — justo
+# cuando hay hallazgos, que es cuando el resumen del job hace falta. Por eso la
+# orden va con `@` y su eco se escribe a mano en stderr: se sigue viendo en el
+# log del job, pero no ensucia lo que se va a parsear. El aviso final, por lo
+# mismo.
 trivy-fs: ## Trivy sobre el repositorio: dependencias, Dockerfiles y secretos (bloqueante, ver docs/runbooks/triaje-hallazgos-seguridad.md)
-	$(TRIVY) fs --scanners vuln,misconfig,secret --severity HIGH,CRITICAL --ignore-unfixed \
+	@echo "[make] trivy fs --scanners vuln,misconfig,secret --severity HIGH,CRITICAL (formato: $(TRIVY_FORMAT))" >&2
+	@$(TRIVY) fs --scanners vuln,misconfig,secret --severity HIGH,CRITICAL --ignore-unfixed \
 	  --timeout 10m --exit-code $(TRIVY_EXIT_CODE) --format $(TRIVY_FORMAT) \
 	  --skip-dirs backend/vendor,node_modules,dist,storage,.git \
 	  .
 ifeq ($(TRIVY_EXIT_CODE),1)
-	@echo "[make] Trivy fs: 0 hallazgos HIGH/CRITICAL."
+	@echo "[make] Trivy fs: 0 hallazgos HIGH/CRITICAL." >&2
 endif
 
 # Trivy sobre las imagenes YA CONSTRUIDAS. No las construye este objetivo:
@@ -713,20 +742,34 @@ endif
 # y no tiene privilegios que bajar (infra/docker/postgres/Dockerfile). Si al
 # subir el digest de la base aparece algo nuevo, el camino es el runbook, no
 # volver a poner este objetivo en informe.
-trivy-image: ## Trivy sobre las imagenes ya construidas kronoqr/postgres:ci y kronoqr/app:ci (bloqueante, ver docs/runbooks/triaje-hallazgos-seguridad.md)
-	@docker image inspect kronoqr/postgres:ci >/dev/null 2>&1 || { \
-	  echo "[make] Falta la imagen kronoqr/postgres:ci. Construyela con: make build-ci-images"; \
-	  exit 1; \
-	}
-	@docker image inspect kronoqr/app:ci >/dev/null 2>&1 || { \
-	  echo "[make] Falta la imagen kronoqr/app:ci. Construyela con: make build-ci-images IMAGES=\"postgres app\""; \
-	  exit 1; \
-	}
-	$(TRIVY_IMAGE_CMD) image --severity HIGH,CRITICAL --ignore-unfixed --exit-code $(TRIVY_EXIT_CODE) --format $(TRIVY_FORMAT) \
-	  --ignorefile infra/docker/.trivyignore.yaml kronoqr/postgres:ci
-	$(TRIVY_IMAGE_CMD) image --severity HIGH,CRITICAL --ignore-unfixed --exit-code $(TRIVY_EXIT_CODE) --format $(TRIVY_FORMAT) kronoqr/app:ci
+# QUE IMAGENES ESCANEA. Se declara aqui y no en el workflow: `make` es la unica
+# via de invocacion de cada herramienta del repositorio, para que la orden y el
+# umbral vivan en un sitio (cabecera de este fichero). El paso de la etapa ⑧
+# llamaba a `trivy` a pelo y el runner no lo tiene: `command not found`, exit
+# 127. Era el unico sitio del arbol que se saltaba esta regla, y por eso fue el
+# unico que se rompio.
+#
+# Por defecto, las TRES de entrega. Cada job pasa las que ha construido:
+#   security   TRIVY_IMAGES="kronoqr/postgres:ci kronoqr/app:ci"
+#   etapa ⑧    TRIVY_IMAGES="kronoqr/nginx:ci"
+# En local, `make build-ci-images IMAGES="postgres app nginx" && make trivy-image`
+# las cubre las tres sin argumentos.
+TRIVY_IMAGES ?= kronoqr/postgres:ci kronoqr/app:ci kronoqr/nginx:ci
+
+trivy-image: ## Trivy sobre las imagenes ya construidas (TRIVY_IMAGES=...; bloqueante, ver docs/runbooks/triaje-hallazgos-seguridad.md)
+	@for imagen in $(TRIVY_IMAGES); do \
+	  docker image inspect "$$imagen" >/dev/null 2>&1 || { \
+	    echo "[make] Falta la imagen $$imagen. Construyela con: make build-ci-images IMAGES=\"postgres app nginx\""; \
+	    exit 1; \
+	  }; \
+	done
+	@for imagen in $(TRIVY_IMAGES); do \
+	  $(TRIVY_IMAGE_CMD) image --severity HIGH,CRITICAL --ignore-unfixed \
+	    --exit-code $(TRIVY_EXIT_CODE) --format $(TRIVY_FORMAT) \
+	    --ignorefile infra/docker/.trivyignore.yaml "$$imagen" || exit $$?; \
+	done
 ifeq ($(TRIVY_EXIT_CODE),1)
-	@echo "[make] Trivy image: 0 hallazgos HIGH/CRITICAL en las dos imagenes."
+	@echo "[make] Trivy image: 0 hallazgos HIGH/CRITICAL en $(TRIVY_IMAGES)." >&2
 endif
 
 # gitleaks sobre el HISTORICO COMPLETO, no solo el arbol de trabajo: un secreto

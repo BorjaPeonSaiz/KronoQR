@@ -741,7 +741,7 @@ jobs:
         # salida que en el paso anterior.
         run: |
           set +e
-          make trivy-image TRIVY_FORMAT=json >trivy-image.json
+          make trivy-image TRIVY_IMAGES="kronoqr/postgres:ci kronoqr/app:ci" TRIVY_FORMAT=json >trivy-image.json
           estado=$?
           set -e
           jq -s -r '
@@ -1292,10 +1292,12 @@ jobs:
 
 
       - name: Trivy sobre la imagen de borde recien construida (bloqueante)
-        run: |
-          set -euo pipefail
-          trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
-            --format table kronoqr/nginx:ci
+        # Por `make`, como TODAS las demas invocaciones de Trivy del
+        # repositorio. Este paso llamaba al binario `trivy` a pelo y el runner
+        # no lo tiene: `command not found`, exit 127. Era el unico sitio del
+        # arbol que se saltaba la regla de «una sola via por herramienta», y
+        # fue el unico que se rompio por eso.
+        run: make trivy-image TRIVY_IMAGES="kronoqr/nginx:ci"
 
       - name: Diagnostico si algo ha fallado
         if: failure()
