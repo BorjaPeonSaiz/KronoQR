@@ -77,14 +77,32 @@ geo $kronoqr_metrics_allowed {
 # decision EXPLICITA (RF-ID-08) y se toma poniendo aqui 0.0.0.0/0, nunca por
 # omision ni por un valor por defecto demasiado abierto.
 #
-# Cubre hoy /api/v1/me/*, que es el unico punto de acceso a datos del portal
-# que existe en produccion. La entrega de frontend-portal/dist/ como ficheros
-# estaticos llega en la tarea 5.4 (paquete de entrega); cuando exista esa
-# location, tiene que comprobar tambien $kronoqr_portal_allowed, o el HTML se
-# serviria sin restriccion aunque la API detras si la tenga.
+# Cubre /api/v1/me/* —los datos— y, desde la tarea 5.4, tambien los ficheros
+# estaticos del portal: la `location ^~ /portal/` de extra/spa.conf comprueba
+# esta misma variable. Si solo se protegiera la API, la pantalla de acceso con
+# codigo y PIN seguiria sirviendose a cualquier origen.
 geo $kronoqr_portal_allowed {
   default 0;
   ${PORTAL_INTERNAL_CIDR} 1;
+}
+
+#------------------------------------------------------------------------------
+# Caducidad de la cache de las tres SPA
+#------------------------------------------------------------------------------
+# Dos politicas, y la frontera la marca Vite: todo lo de `assets/` lleva el
+# hash del contenido en el nombre, asi que un fichero con ese nombre nunca
+# cambia y se puede cachear un ano. El resto —index.html, el manifiesto y el
+# service worker— NO se cachea, y esa es la linea de la que depende que una
+# actualizacion llegue a las tablets: con un index.html cacheado, un quiosco
+# puede quedarse semanas cargando los `assets` de la version anterior mientras
+# el servidor ya sirve otra, y el sintoma seria un error de contrato contra una
+# API que ya cambio.
+#
+# `map` tiene que declararse a nivel http, por eso vive aqui y no junto a las
+# `location` que lo usan.
+map $uri $kronoqr_spa_cache {
+  default                              "no-cache";
+  "~^/(admin|kiosk|portal)/assets/"    "public, max-age=31536000, immutable";
 }
 
 #------------------------------------------------------------------------------
@@ -263,9 +281,11 @@ server {
     include /etc/nginx/snippets/proxy-websocket.conf;
   }
 
-  # Aqui entran las locations de desarrollo (servidores de Vite de los tres
-  # frontends). En produccion el directorio esta vacio y se sirven los ficheros
-  # construidos. El glob no falla si no hay nada.
+  # Las tres SPA. En PRODUCCION este directorio trae `spa.conf` desde la propia
+  # imagen y sirve los ficheros construidos de /var/www/spa. En DESARROLLO,
+  # compose.dev.yaml monta `dev-extra/` encima y lo sustituye por los proxys a
+  # los servidores de Vite. Es el mismo conjunto de rutas por los dos caminos:
+  # /admin/, /kiosk/ y /portal/. El glob no falla si no hay nada.
   include /etc/nginx/extra/*.conf;
 
   location / {

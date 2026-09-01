@@ -17,7 +17,14 @@ const appVersion =
     ? packageJson.version
     : '0.0.0'
 
+// Ruta bajo la que se sirve esta SPA. En produccion Nginx la publica en
+// `/portal/` —detras del mismo candado por CIDR que su API (RF-ID-08)— y la
+// imagen de entrega construye con KRONOQR_BASE=/portal/. En desarrollo el
+// valor es `/` y no cambia nada.
+const base = process.env['KRONOQR_BASE'] ?? '/'
+
 export default defineConfig({
+  base,
   plugins: [vue(), tailwindcss()],
   resolve: {
     alias: {

@@ -34,9 +34,25 @@
 # niega a intercambiar las bases si quedan conexiones abiertas, y dice como
 # cerrarlas.
 #
-# Codigos de salida: 0 correcto · 1 la restauracion ha fallado · 2 error de uso
-# · 3 falta una herramienta o precondicion (nada tocado) · 4 sin espacio (nada
-# tocado) · 5 clave ausente o incorrecta.
+# CODIGOS DE SALIDA. La tabla es la MISMA de los cinco scripts de operacion y
+# vive en lib/exit-codes.sh. Aqui significan:
+#
+#   0  Restaurado y verificado. La base anterior se conserva con su marca.
+#   1  Uso incorrecto, o falta --yes. Nada tocado.
+#   2  Requisitos no cumplidos: no hay copia, no conecta con PostgreSQL, la
+#      huella no coincide, no hay espacio, la clave no descifra o el volcado no
+#      es legible. NADA se ha tocado.
+#   3  Estado previo incompatible: quedan conexiones abiertas contra la base de
+#      destino. NADA se ha tocado; el mensaje dice como cerrarlas.
+#   4  La restauracion ha fallado y se ha deshecho: la base de trabajo se ha
+#      eliminado y la base de destino sigue exactamente como estaba.
+#   5  Ha quedado algo a medias —tipicamente una base de trabajo con la copia
+#      ya restaurada— y hay que terminar el intercambio a mano. El mensaje dice
+#      que base es y que ordenes la activan.
+#   6  Verificacion posterior fallida.
+#
+# Si tenias un cron escrito contra la tabla anterior, la equivalencia esta en
+# lib/backup-common.sh y en docs/cliente/operacion.md.
 #
 # NINGUN SECRETO EN LA SALIDA NI EN EL INFORME.
 
@@ -67,7 +83,12 @@ al_salir() {
 trap al_salir EXIT
 
 uso() {
-  sed -n '2,42p' "${BASH_SOURCE[0]}" | sed 's/^#\{1,2\} \{0,1\}//'
+  # La cabecera entera, sin numeros de linea que mantener sincronizados: se
+  # imprime desde la segunda linea hasta la primera que no sea un comentario.
+  # Un rango fijo se desajusta en cuanto alguien anade un parrafo -- paso de
+  # verdad al reescribir las cabeceras en la tarea 5.4 -- y el sintoma es una
+  # ayuda cortada a la mitad.
+  awk 'NR > 1 && !/^#/ { exit } NR > 1' "${BASH_SOURCE[0]}" | sed 's/^#\{1,2\} \{0,1\}//'
 }
 
 informar() {
@@ -91,15 +112,15 @@ comprobar_precondiciones() {
   ensure_backup_tree
 
   [ -n "$FICHERO" ] || FICHERO="$(latest_dump_file)"
-  [ -n "$FICHERO" ] && [ -f "$FICHERO" ] || die 1 \
+  [ -n "$FICHERO" ] && [ -f "$FICHERO" ] || die "${KQ_EXIT_REQUIREMENTS}" \
     "no hay ninguna copia que restaurar en '${BACKUP_DIR_DUMP}'. Comprueba BACKUP_PATH en el .env y que el almacenamiento de copias esta montado. Si el destino es un recurso de red, montalo antes. Ver docs/runbooks/restaurar-backup.md."
 
-  psql -Atqc 'SELECT 1' >/dev/null 2>&1 || die 3 \
+  psql -Atqc 'SELECT 1' >/dev/null 2>&1 || die "${KQ_EXIT_REQUIREMENTS}" \
     "no se puede conectar a PostgreSQL en ${PGHOST}:${PGPORT} como ${PGUSER}. Levanta el servicio ('docker compose up -d postgres') y vuelve a lanzar esto. No se ha tocado nada."
 
   # Huella: si no coincide, la copia esta corrupta y no se toca la instalacion.
   if [ -f "${FICHERO}.sha256" ]; then
-    [ "$(cut -d' ' -f1 <"${FICHERO}.sha256")" = "$(sha256_of "$FICHERO")" ] || die 1 \
+    [ "$(cut -d' ' -f1 <"${FICHERO}.sha256")" = "$(sha256_of "$FICHERO")" ] || die "${KQ_EXIT_REQUIREMENTS}" \
       "la huella SHA-256 de '${FICHERO}' no coincide con la registrada: esta corrupta. Prueba con la copia anterior ('restore.sh --list') y avisa al responsable de seguridad. No se ha tocado nada."
   fi
 
@@ -108,7 +129,7 @@ comprobar_precondiciones() {
   # comprimido cabe holgado.
   tamano_copia="$(wc -c <"$FICHERO")"
   libre="$(free_bytes_at "$BACKUP_PATH")"
-  [ "$libre" -ge "$((tamano_copia * 5))" ] || die 4 \
+  [ "$libre" -ge "$((tamano_copia * 5))" ] || die "${KQ_EXIT_REQUIREMENTS}" \
     "quedan $((libre / 1024 / 1024)) MiB libres y la restauracion necesita al menos $((tamano_copia * 5 / 1024 / 1024)) MiB de margen. Libera espacio antes de empezar. No se ha tocado nada."
 
   [ -n "$BASE_DESTINO" ] || BASE_DESTINO="$PGDATABASE"
@@ -120,10 +141,10 @@ preparar_volcado() {
   TRABAJO="$(mktemp -d "${TMPDIR:-/tmp}/kronoqr-restore.XXXXXX")"
   chmod 0700 "$TRABAJO"
 
-  decrypt_stream <"$FICHERO" >"${TRABAJO}/copia.dump" 2>/dev/null || die 5 \
+  decrypt_stream <"$FICHERO" >"${TRABAJO}/copia.dump" 2>/dev/null || die "${KQ_EXIT_REQUIREMENTS}" \
     "no se puede descifrar '${FICHERO}' con la BACKUP_ENCRYPTION_KEY actual. Si la clave se roto, usa la anterior: una copia solo se abre con la clave con la que se hizo. No se ha tocado nada."
 
-  pg_restore --list "${TRABAJO}/copia.dump" >"${TRABAJO}/indice.txt" 2>/dev/null || die 1 \
+  pg_restore --list "${TRABAJO}/copia.dump" >"${TRABAJO}/indice.txt" 2>/dev/null || die "${KQ_EXIT_REQUIREMENTS}" \
     "'${FICHERO}' se descifra pero no es un volcado legible. Usa la copia anterior ('restore.sh --list'). No se ha tocado nada."
 
   informar "Copia legible: $(grep -cE '^[0-9]+;' "${TRABAJO}/indice.txt" || true) objetos."
@@ -144,34 +165,34 @@ restaurar() {
 
   abiertas="$(conexiones_abiertas)"
   if [ "$abiertas" -gt 0 ]; then
-    die 1 "hay ${abiertas} conexiones abiertas contra '${BASE_DESTINO}'. Para primero lo que escribe: 'docker compose stop app horizon scheduler reverb'. El fichaje sigue funcionando en los quioscos, que encolan en local (regla dura 19). No se ha tocado nada."
+    die "${KQ_EXIT_STATE_CONFLICT}" "hay ${abiertas} conexiones abiertas contra '${BASE_DESTINO}'. Para primero lo que escribe: 'docker compose stop app horizon scheduler reverb'. El fichaje sigue funcionando en los quioscos, que encolan en local (regla dura 19). No se ha tocado nada."
   fi
 
   informar "Creando base de trabajo ${base_nueva}"
-  psql -d postgres -Atqc "CREATE DATABASE \"${base_nueva}\"" >/dev/null || die 1 \
+  psql -d postgres -Atqc "CREATE DATABASE \"${base_nueva}\"" >/dev/null || die "${KQ_EXIT_REQUIREMENTS}" \
     "no se ha podido crear la base de trabajo. El usuario ${PGUSER} necesita el permiso CREATEDB. Nada se ha tocado."
 
   informar "Restaurando el volcado (esto es lo que mas tarda)"
   if ! pg_restore --dbname="$base_nueva" --no-owner --no-privileges --exit-on-error \
     "${TRABAJO}/copia.dump" >>"${INFORME:-/dev/null}" 2>&1; then
     psql -d postgres -Atqc "DROP DATABASE IF EXISTS \"${base_nueva}\"" >/dev/null || true
-    die 1 "la restauracion ha fallado; la base de trabajo se ha eliminado y '${BASE_DESTINO}' sigue como estaba. Revisa el informe '${INFORME}' y prueba con la copia anterior."
+    die "${KQ_EXIT_ROLLED_BACK}" "la restauracion ha fallado; la base de trabajo se ha eliminado y '${BASE_DESTINO}' sigue como estaba. Revisa el informe '${INFORME}' y prueba con la copia anterior."
   fi
 
   informar "Comprobando la copia restaurada antes de darla por buena"
   comprobar_restauracion "$base_nueva" || {
     psql -d postgres -Atqc "DROP DATABASE IF EXISTS \"${base_nueva}\"" >/dev/null || true
-    die 1 "la copia restaurada no supera las comprobaciones de integridad. NO se ha sustituido '${BASE_DESTINO}'. Prueba con la copia anterior y avisa al responsable del sistema."
+    die "${KQ_EXIT_ROLLED_BACK}" "la copia restaurada no supera las comprobaciones de integridad. NO se ha sustituido '${BASE_DESTINO}'. Prueba con la copia anterior y avisa al responsable del sistema."
   }
 
   # Intercambio de nombres. Es el unico momento en que la instalacion cambia, y
   # dura lo que dos ALTER DATABASE.
   informar "Intercambiando ${BASE_DESTINO} -> ${base_anterior} y ${base_nueva} -> ${BASE_DESTINO}"
-  psql -d postgres -Atqc "ALTER DATABASE \"${BASE_DESTINO}\" RENAME TO \"${base_anterior}\"" >/dev/null || die 1 \
+  psql -d postgres -Atqc "ALTER DATABASE \"${BASE_DESTINO}\" RENAME TO \"${base_anterior}\"" >/dev/null || die "${KQ_EXIT_ROLLBACK_INCOMPLETE}" \
     "no se ha podido apartar la base actual: probablemente ha vuelto a haber conexiones. Para los servicios y repite. La base restaurada esta en '${base_nueva}' y no se ha perdido nada."
   if ! psql -d postgres -Atqc "ALTER DATABASE \"${base_nueva}\" RENAME TO \"${BASE_DESTINO}\"" >/dev/null; then
     psql -d postgres -Atqc "ALTER DATABASE \"${base_anterior}\" RENAME TO \"${BASE_DESTINO}\"" >/dev/null || true
-    die 1 "no se ha podido activar la base restaurada; se ha devuelto la anterior a su nombre. La instalacion queda como estaba."
+    die "${KQ_EXIT_ROLLED_BACK}" "no se ha podido activar la base restaurada; se ha devuelto la anterior a su nombre. La instalacion queda como estaba."
   fi
 
   informar "Restauracion completada. Base anterior conservada como '${base_anterior}'."
@@ -286,7 +307,7 @@ main() {
       uso
       return 0
       ;;
-    *) die 2 "argumento desconocido '$1'. Ejecuta 'restore.sh --help'." ;;
+    *) die "${KQ_EXIT_USAGE}" "argumento desconocido '$1'. Ejecuta 'restore.sh --help'." ;;
     esac
   done
 
@@ -307,7 +328,7 @@ main() {
   fi
 
   if [ "$CONFIRMADO" -ne 1 ]; then
-    die 2 "esto sustituye la base de datos de produccion. Repite la orden con --yes cuando hayas leido docs/runbooks/restaurar-backup.md y parado los servicios que escriben."
+    die "${KQ_EXIT_USAGE}" "esto sustituye la base de datos de produccion. Repite la orden con --yes cuando hayas leido docs/runbooks/restaurar-backup.md y parado los servicios que escriben."
   fi
 
   # El informe se abre ANTES de tocar nada y se conserva aunque la

@@ -98,21 +98,34 @@ it('cifra la copia de forma que no se puede leer sin la clave', function (): voi
 it('se niega a empezar sin clave de cifrado, y lo dice', function (): void {
     // RL-12: sin clave no hay copia. El mensaje tiene que decir que hacer y no
     // puede contener ningun secreto.
+    //
+    // CODIGO 2 desde la tarea 5.4, antes 5. La clave ausente o demasiado corta
+    // es un REQUISITO no cumplido comprobado antes de tocar nada, que es lo que
+    // significa el 2 en la tabla comun de los cinco scripts
+    // (infra/scripts/lib/exit-codes.sh). El 5 pasa a significar otra cosa muy
+    // distinta —vuelta atras incompleta, con alguien teniendo que intervenir— y
+    // dejarlo aqui haria que un cron no pudiera distinguir «te falta la clave»
+    // de «he dejado la copia a medias».
     $sinClave = bashConLaBiblioteca('require_encryption_key', ['BACKUP_ENCRYPTION_KEY' => '']);
 
-    expect($sinClave->getExitCode())->toBe(5)
+    expect($sinClave->getExitCode())->toBe(2)
         ->and($sinClave->getErrorOutput())
         ->toContain('BACKUP_ENCRYPTION_KEY')
         ->toContain('install.sh');
 
     $claveCorta = bashConLaBiblioteca('require_encryption_key', ['BACKUP_ENCRYPTION_KEY' => 'corta']);
-    expect($claveCorta->getExitCode())->toBe(5)
+    expect($claveCorta->getExitCode())->toBe(2)
         ->and($claveCorta->getErrorOutput())->toContain('openssl rand');
 })->group('RL-12');
 
 it('no escribe nada si el destino de copias no existe o no es escribible', function (): void {
     // Fallo seguro (doc 02 §3.5): los requisitos se comprueban ANTES de tocar
-    // nada. El codigo 4 esta documentado en la cabecera de los tres scripts.
+    // nada.
+    //
+    // CODIGO 2 desde la tarea 5.4, antes 4. «Nada escrito» es exactamente lo
+    // que afirma el 2 de la tabla comun; el 4 pasa a significar «fallo con
+    // vuelta atras completada», que es un caso distinto: alli SI se llego a
+    // escribir algo y se deshizo.
     $inexistente = sys_get_temp_dir().'/kronoqr-destino-que-no-existe-'.bin2hex(random_bytes(4));
 
     $resultado = bashConLaBiblioteca(
@@ -120,7 +133,7 @@ it('no escribe nada si el destino de copias no existe o no es escribible', funct
         ['BACKUP_PATH' => $inexistente]
     );
 
-    expect($resultado->getExitCode())->toBe(4)
+    expect($resultado->getExitCode())->toBe(2)
         ->and($resultado->getErrorOutput())->toContain($inexistente)
         ->and(is_dir($inexistente))->toBeFalse('Ha creado el destino en vez de avisar.');
 })->group('RF-PR-04');
@@ -128,12 +141,16 @@ it('no escribe nada si el destino de copias no existe o no es escribible', funct
 it('devuelve los codigos de salida documentados ante un uso incorrecto', function (): void {
     // Los ejecuta gente que no conoce el sistema, con un problema delante: un
     // argumento mal escrito no puede parecerse a un fallo de la copia.
+    //
+    // CODIGO 1 desde la tarea 5.4, antes 2. Es el mismo numero que usan
+    // install.sh, update.sh, doctor.sh y restore.sh para «uso incorrecto», y
+    // esa es toda la razon: los cinco los teclea la misma persona.
     $ordenDesconocida = ejecutarScript('backup.sh', ['naoquesea']);
-    expect($ordenDesconocida->getExitCode())->toBe(2)
+    expect($ordenDesconocida->getExitCode())->toBe(1)
         ->and($ordenDesconocida->getErrorOutput())->toContain('run, verify, prune o list');
 
     $modoInvalido = ejecutarScript('backup.sh', ['run', '--mode', 'naoquesea']);
-    expect($modoInvalido->getExitCode())->toBe(2);
+    expect($modoInvalido->getExitCode())->toBe(1);
 
     $ayuda = ejecutarScript('backup.sh', ['--help']);
     expect($ayuda->getExitCode())->toBe(0)

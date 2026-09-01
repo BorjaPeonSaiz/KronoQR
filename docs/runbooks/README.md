@@ -56,7 +56,7 @@ Asignación literal del plan de implementación
 | 12 | `patron-anomalo-credencial.md` | Revisar una incidencia `anomalous_pattern` sin convertir un indicio en una acusación | Fase 3 · tarea 3.11 |
 | 13 | [`solicitud-derechos-rgpd.md`](solicitud-derechos-rgpd.md) | Acceso, rectificación, portabilidad — y la supresión que **no procede** mientras dure el deber de conservación | ✅ Fase 2 · tarea 2.10 |
 | 14 | [`brecha-de-seguridad.md`](brecha-de-seguridad.md) | **Incidente de seguridad.** Procedimiento de 72 h del art. 33 RGPD, con el alcance acotado desde `audit_log` | ✅ Fase 2 · cierre (RL-15) · revisado en 3.10 |
-| 15 | `actualizacion-cliente.md` | Procedimiento y vuelta atrás | Fase 5 · tarea 5.7 |
+| 15 | [`actualizacion-cliente.md`](actualizacion-cliente.md) | Procedimiento y vuelta atrás | 🚧 **Esqueleto** escrito en la 5.4 porque `install.sh` remite aquí al salir con código `3`; lo completa la tarea 5.7 con las salidas reales de `update.sh` |
 | 16 | `incidencia-sin-acceso.md` | Diagnosticar con el paquete que envía el cliente | Fase 5 · tarea 5.9 |
 | 17 | `errores-en-el-panel.md` | Cómo lee el IT del cliente `error_events` y qué hacer con cada severidad | Fase 5 · tarea 5.12 |
 | 18 | [`turno-abierto-prolongado.md`](turno-abierto-prolongado.md) | Turno abierto más de 12 h. **El sistema nunca lo cierra solo** (RN-08). Destinatario RRHH: no es una avería | ✅ Fase 2 · tarea 2.6 |

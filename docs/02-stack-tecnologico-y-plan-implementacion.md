@@ -1012,6 +1012,8 @@ graph LR
 
 Etapas 1–3 en cada *push* (retroalimentación en menos de 4 minutos). Etapas 4–7 en cada PR. Etapa 8 antes de publicar una versión.
 
+> **La etapa ⑧ existe desde la tarea 5.4**: job `clean-install` de `.github/workflows/ci.yml`. En un runner limpio construye las tres imágenes de entrega, **arma el paquete del §11.6.1** y ejecuta el instalador **desde ese paquete**, no desde el árbol del repositorio —si el instalador dependiera de algo que solo existe aquí, es la única forma de verlo—. Cuatro escenarios: `--check-only` sin escribir; **fallo seguro** con un puerto ocupado a propósito (salida `2` y máquina intacta, comprobada contenedor a contenedor); instalación completa verificada con `/health`, `/ready`, las tres SPA y **cero datos de demostración** en la base; y **segunda ejecución** (salida `3` y el sistema respondiendo después). Comprueba además que **ningún secreto aparece en la salida del instalador**, extrayendo cada valor del `.env` recién escrito. Se ejecuta en `main`, en cada etiqueta `vX.Y.Z` y a mano; no en cada *push*, porque cuesta entre 6 y 18 minutos y una CI que nadie espera acaba ignorándose entera. La parte de **actualización desde la versión anterior** llega con la tarea 5.7.
+
 ### 10.2 Entornos
 
 | Entorno | Propósito | Datos |
@@ -1267,13 +1269,17 @@ Cuadrantes y comparación entre planificado y realmente trabajado, vacaciones y 
 ### 11.6.1 Qué se entrega al cliente
 
 ```
-fichaje-hotel-v1.4.2/
+kronoqr-2.0.0/
 ├── docker-compose.yml          # Producción, autocontenido, sin dependencias externas
-├── .env.example                # Comentado, con los valores que el cliente debe rellenar
+├── .env.example                # Comentado, con las tres categorías marcadas (5.4)
+├── VERSION                     # Fija la etiqueta de imagen. Sin esto no se instala
 ├── install.sh                  # Comprueba requisitos, genera secretos, arranca, verifica
 ├── update.sh                   # Copia previa, migra, verifica, vuelve atrás si falla
 ├── backup.sh / restore.sh      # Copia local cifrada y restauración
 ├── doctor.sh                   # Comprobación de salud (RF-PD-13)
+├── lib/                        # exit-codes.sh, messages.sh, backup-common.sh
+├── observability/              # Configuración de Prometheus, Alertmanager, Grafana y Loki
+├── certs/                      # Donde el cliente coloca tls.crt y tls.key
 ├── LICENCIA.txt
 └── docs/
     ├── instalacion.md          # Para el IT del cliente
@@ -1282,7 +1288,15 @@ fichaje-hotel-v1.4.2/
     └── obligaciones-legales.md # Qué le corresponde al cliente (RL-21)
 ```
 
-Las imágenes se distribuyen desde un registro privado del fabricante, con etiquetas de versión inmutables. **Nada de `latest` en producción.**
+**`tools/` NO entra en el paquete** y no entra en ninguna imagen (`.dockerignore`): el emisor de licencias es del fabricante, firma claves con la clave privada del par y no tiene nada que hacer en el servidor de un hotel (§7.7, RS-08). La etapa ⑧ de la CI lo comprueba con un `test ! -e paquete/tools` al armar el paquete.
+
+Las imágenes se distribuyen desde un registro privado del fabricante, con etiquetas de versión inmutables. **Nada de `latest` en producción**, y desde la tarea 5.4 eso no es una recomendación: `compose.prod.yaml` declara `${IMAGE_TAG:?…}` **sin valor por defecto** en las tres imágenes del producto, así que sin una etiqueta explícita Compose se para antes de crear nada. La fija `install.sh` desde el fichero `VERSION` del paquete.
+
+Antes de construir las imagenes de una version publicada, la etapa ⑧ ejecuta **`make release-gate`**, que falla si `backend/config/license.php` sigue con la clave publica del fabricante vacia. Una imagen de entrega construida asi rechaza la licencia recien pagada del cliente con motivo `no_public_key`, y el sintoma apunta al sitio equivocado. Solo corre en etiquetas `vX.Y.Z`: en `main` esas imagenes son de prueba y deben poder llevarla vacia (§7.7, RS-08).
+
+**Los tres frontends viajan dentro de la imagen de Nginx**, construidos en una etapa del propio `Dockerfile` y servidos en `/admin/`, `/kiosk/` y `/portal/`. No van en un volumen compartido: Docker copia el contenido de la imagen a un volumen **vacío** y no vuelve a tocarlo, así que la primera actualización dejaría un panel de la versión anterior hablando con la API de la nueva. Al vivir en la imagen, la etiqueta inmutable fija a la vez el backend y las tres SPA.
+
+**Los cinco scripts comparten una sola tabla de códigos de salida** (`lib/exit-codes.sh`, publicada en `docs/cliente/operacion.md` §8): `0` correcto · `1` uso incorrecto · `2` requisitos no cumplidos, nada escrito · `3` estado previo incompatible, nada escrito · `4` fallo con vuelta atrás completada · `5` fallo con vuelta atrás incompleta, requiere intervención · `6` verificación posterior fallida, sin deshacer nada. Los ejecuta la misma persona, a veces encadenados en un cron: un `3` con dos significados sería una trampa.
 
 > **No se entrega instalador de PowerShell** (ADR-022). Los requisitos publicados del §11.6.2 exigen Linux con Docker, el §3.5 no define convenciones para `.ps1` y ni ShellCheck ni `shfmt` lo analizan, así que el umbral bloqueante del §9.2 no podría aplicársele. Un entregable que ninguna herramienta revisa y ninguna etapa de CI prueba, en manos de un IT que no conoce el producto, es peor que no tenerlo. Un cliente con solo infraestructura Windows instala sobre una máquina virtual Linux, y eso se dice en la documentación en lugar de descubrirse a mitad de la instalación.
 
@@ -1485,7 +1499,36 @@ MAIL_MAILER=smtp                       # Lo configura el cliente
 OTEL_EXPORTER_OTLP_ENDPOINT=
 BACKUP_PATH=/var/backups/fichaje
 BACKUP_ENCRYPTION_KEY=
+
+# Despliegue (solo compose.prod.yaml)
+IMAGE_REGISTRY=ghcr.io/kronoqr        # Registro privado del fabricante
+IMAGE_TAG=                             # RF-PD-02 · VACÍA en la plantilla y SIN valor por defecto en
+                                       # compose.prod.yaml (`${IMAGE_TAG:?…}`). La fija install.sh desde
+                                       # el fichero VERSION del paquete. `latest` está prohibido: una
+                                       # instalación que no sabe qué versión corre rompe el diagnóstico
+                                       # (RF-PD-15), la matriz de versiones soportadas (§11.6.5) y la
+                                       # vuelta atrás de update.sh, que necesita nombrar la anterior
+COMPOSE_PROFILES=observability         # Perfil de Compose, no una variable del producto. Enciende
+                                       # Prometheus, node-exporter, Alertmanager, Grafana y Loki, que son
+                                       # quienes avisan de que la copia de anoche falló o de que el
+                                       # archivado de WAL se ha parado. ENCENDIDO de serie. Vaciarlo los
+                                       # apaga: libera ~700 MiB en un servidor justo en el mínimo de 4 GB
+                                       # y convierte la verificación de la copia en tarea manual semanal
+                                       # del cliente (docs/cliente/operacion.md §10)
+HTTP_PORT=80
+HTTPS_PORT=443
+TLS_CERT_DIR=./certs                   # Con tls.crt y tls.key. Sin ellos el borde no arranca
 ```
+
+**Las tres categorías de `.env.example`** (§11.6.1, tarea 5.4). Cada variable de la plantilla lleva una marca, y la que no la lleva es porque tiene un valor por defecto pensado que la mayoría de las instalaciones no cambia:
+
+| Marca | Significa | Ejemplos |
+|---|---|---|
+| `[CLIENTE]` | Lo rellena el cliente antes de instalar. `install.sh` comprueba en su fase 1 que están y **no instala si falta alguna** | `APP_URL`, `KIOSK_VLAN_CIDR`, `PORTAL_INTERNAL_CIDR`, `BACKUP_PATH`, `TLS_CERT_DIR`, `MAIL_*`, `LICENSE_KEY` |
+| `[INSTALADOR]` | Lo genera `install.sh` con `openssl` **en el servidor del cliente** y no se transmite (§7.7, RS-08). Se entrega vacío | `APP_KEY`, `QR_SIGNING_KEY_CURRENT`, `DB_PASSWORD`, `REVERB_APP_*`, `BACKUP_ENCRYPTION_KEY`, `IMAGE_TAG` |
+| `[FIJO]` | No se toca. Cambiarlo rompe algo que no se parece a este fichero | `APP_TIMEZONE=UTC` (regla dura 3) |
+
+`DB_MAINTENANCE_PASSWORD` **no la genera el instalador** y no aparece en el `.env`: ADR-027. El rol nace sin credencial utilizable y se le asigna una en el momento de la purga anual (`docs/cliente/operacion.md` §9).
 
 ## Anexo C — Comandos de consola
 

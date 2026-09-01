@@ -24,6 +24,14 @@
 #   2  error de uso (argumento desconocido, version que no es SemVer)
 #   3  falta una herramienta o el repositorio git no esta disponible
 #
+# ESTA TABLA ES PROPIA Y NO LA COMUN de lib/exit-codes.sh, a proposito. Este
+# script NO es un entregable del producto (§11.6.1): es una herramienta del
+# repositorio, no viaja a ningun servidor de cliente, y lo ejecuta la CI, donde
+# la convencion es «1 = la comprobacion ha fallado». Alinearlo con la tabla de
+# los cinco scripts de operacion cambiaria el significado de su `1` sin que
+# nadie lo necesitara. Este comentario existe para que la proxima persona no
+# lea la diferencia como un descuido.
+#
 # No imprime nada del entorno: ninguna variable, ningun token. Se ejecuta en la
 # CI y su salida es publica (doc 02 §7.7).
 

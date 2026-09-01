@@ -452,3 +452,210 @@ it('mantiene el alcance de la trazabilidad versionado y no en el entorno', funct
         'quality.current_phase ha vuelto a leerse de una variable de entorno.'
     );
 })->group('RQ-13');
+
+it('no deja ninguna imagen de produccion apuntando a una etiqueta movil', function (): void {
+    // RF-PD-02, doc 02 §11.6.1: «nada de `latest` en produccion».
+    //
+    // Con una etiqueta movil, dos `docker compose up -d` con el mismo fichero,
+    // el mismo .env y un mes de diferencia levantan codigo distinto, y la
+    // instalacion no sabe decir que version corre. Eso rompe el diagnostico
+    // (RF-PD-15 correlaciona un error con una version), la matriz de versiones
+    // soportadas (§11.6.5) y la vuelta atras de update.sh, que necesita nombrar
+    // la version anterior.
+    $compose = repoContents('infra/compose.prod.yaml');
+
+    // `toContain()` es VARIADICO: un segundo argumento no es un mensaje, es
+    // otra aguja que se busca. Escrito como estaba, esta prueba comprobaba
+    // ademas que el fichero no contuviera la frase explicativa entera —cosa que
+    // nunca contendra— y por tanto la mitad util de la asercion no aportaba
+    // nada. El mensaje va donde de verdad se lee, en `toBeFalse()`.
+    expect(str_contains($compose, 'IMAGE_TAG:-'))->toBeFalse(
+        'compose.prod.yaml ha recuperado un valor por defecto para IMAGE_TAG. '
+        .'En produccion no puede haberlo: la etiqueta la fija install.sh desde el fichero VERSION.'
+    );
+
+    // Y que sea obligatoria de verdad, con `:?` y un mensaje que diga que hacer.
+    preg_match_all('/\$\{IMAGE_TAG[^}]*\}/', $compose, $uses);
+
+    expect($uses[0])->not->toBeEmpty();
+
+    foreach ($uses[0] as $use) {
+        expect($use)->toStartWith('${IMAGE_TAG:?');
+    }
+
+    // El .env.example que se entrega al cliente no puede traerla rellena con
+    // `latest`: install.sh la sobreescribe, pero un IT que ejecute Compose a
+    // mano se llevaria la etiqueta movil sin que nada se lo dijera.
+    expect(repoContents('.env.example'))->toMatch('/^IMAGE_TAG=$/m');
+})->group('RF-PD-02');
+
+it('entrega el .env de ejemplo con las trazas apagadas y las tres categorias marcadas', function (): void {
+    // RS-08 y RF-PD-02. El fichero se copia tal cual en el servidor del hotel
+    // (§11.6.1): su valor por defecto ES el producto.
+    //
+    // `APP_DEBUG=true` estuvo anotado como hueco abierto en docs/07 §6 hasta
+    // esta tarea. La guarda que lo hace efectivo es
+    // App\Support\Environment\ProductionSafetyGuard, con sus propias pruebas.
+    $example = repoContents('.env.example');
+
+    expect($example)->toMatch('/^APP_DEBUG=false$/m');
+
+    // Las tres categorias del §11.6.1, paso 2: lo que rellena el cliente, lo
+    // que genera el instalador y lo que no se toca.
+    foreach (['[CLIENTE]', '[INSTALADOR]', '[FIJO]'] as $marker) {
+        expect($example)->toContain($marker);
+    }
+
+    // APP_TIMEZONE es la que hay que marcar como intocable si solo se marcara
+    // una: cambiarla invalida el calculo de jornada (regla dura 3).
+    expect($example)->toMatch('/\[FIJO\][^\n]*\n(#[^\n]*\n)*APP_TIMEZONE=UTC$/m');
+})->group('RS-08', 'RF-PD-02');
+
+it('mantiene una sola tabla de codigos de salida para los cinco scripts de operacion', function (): void {
+    // RF-PD-02. Los cinco los ejecuta la misma persona, a veces encadenados en
+    // un cron. Un `3` que significa «hay instalacion previa» en uno y «falta
+    // una herramienta» en otro es una trampa, y la unica forma de que no
+    // diverjan es que la tabla viva en un sitio.
+    $table = repoContents('infra/scripts/lib/exit-codes.sh');
+
+    foreach ([
+        'KQ_EXIT_OK=0',
+        'KQ_EXIT_USAGE=1',
+        'KQ_EXIT_REQUIREMENTS=2',
+        'KQ_EXIT_STATE_CONFLICT=3',
+        'KQ_EXIT_ROLLED_BACK=4',
+        'KQ_EXIT_ROLLBACK_INCOMPLETE=5',
+        'KQ_EXIT_VERIFY_FAILED=6',
+    ] as $constant) {
+        expect($table)->toContain($constant);
+    }
+
+    // Los scripts la CARGAN —directamente o a traves de backup-common.sh— en
+    // vez de repetirla. Si alguno vuelve a escribir su propia tabla, esto cae.
+    foreach ([
+        'infra/scripts/install.sh',
+        'infra/scripts/backup.sh',
+        'infra/scripts/restore.sh',
+        'infra/scripts/lib/backup-common.sh',
+    ] as $script) {
+        expect(repoContents($script))->toContain('exit-codes.sh');
+    }
+
+    // Y ninguno conserva un `die` con el numero escrito a mano: ahi es donde
+    // las tablas vuelven a divergir sin que nadie lo note.
+    foreach (['infra/scripts/install.sh', 'infra/scripts/backup.sh', 'infra/scripts/restore.sh'] as $script) {
+        expect(repoContents($script))->not->toMatch('/\bdie [0-9]\b/');
+    }
+
+    // Y esta publicada para el cliente: es contrato, no detalle interno. Un
+    // cron del hotel se escribe contra estos numeros, asi que cambiarlos sin
+    // cambiar la guia rompe algo que no vive en este repositorio.
+    $guia = repoContents('docs/cliente/operacion.md');
+
+    expect($guia)->toContain('tabla de códigos de salida')
+        ->and($guia)->toContain('NADA escrito')
+        ->and($guia)->toContain('Estado previo incompatible')
+        ->and($guia)->toContain('Hay que intervenir a mano');
+})->group('RF-PD-02');
+
+it('sirve las tres SPA construidas y deja el portal detras del mismo candado que su API', function (): void {
+    // RF-PD-02 y RF-ID-08. Hasta esta tarea, la entrega de los `dist/` estaba
+    // diferida y la unica `location ^~ /portal/` que existia era la de
+    // desarrollo. Si el HTML del portal se sirviera sin candado, la pantalla de
+    // acceso con codigo y PIN quedaria expuesta aunque los datos de detras no.
+    $spa = repoContents('infra/docker/nginx/extra/spa.conf');
+
+    foreach (['/admin/', '/kiosk/', '/portal/'] as $path) {
+        expect($spa)->toContain('location ^~ '.$path);
+    }
+
+    if (preg_match('/location \^~ \/portal\/ \{(.*?)\n\}/s', $spa, $match) !== 1) {
+        throw new RuntimeException('No se encuentra la location de /portal/ en infra/docker/nginx/extra/spa.conf.');
+    }
+
+    expect($match[1])->toContain('$kronoqr_portal_allowed');
+
+    // Nginx deja de heredar las cabeceras del `server` en cuanto una location
+    // anade su propio add_header, y las tres anaden Cache-Control. Sin este
+    // include, el HTML del quiosco se serviria sin `Permissions-Policy:
+    // camera=(self)` y la camara dejaria de abrirse (RS-09, §7.2).
+    expect(substr_count($spa, 'include /etc/nginx/snippets/security-headers.conf;'))->toBe(3);
+
+    // Las tres se construyen con su prefijo: si el build y la location se
+    // desalinean, la SPA pide sus ficheros a una ruta que no existe.
+    $dockerfile = repoContents('infra/docker/nginx/Dockerfile');
+
+    foreach (['KRONOQR_BASE=/admin/', 'KRONOQR_BASE=/kiosk/', 'KRONOQR_BASE=/portal/'] as $base) {
+        expect($dockerfile)->toContain($base);
+    }
+})->group('RF-PD-02', 'RF-ID-08');
+
+it('prueba la instalacion limpia en un runner virgen antes de publicar version', function (): void {
+    // RQ-11 (doc 02 §10.1, etapa ⑧). Los scripts de shell no entran en
+    // `qa:traceability` —cuenta etiquetas de Pest— asi que RQ-11 quedaria como
+    // requisito implementado sin cobertura visible. Lo que se comprueba aqui es
+    // la CONFIGURACION de la etapa: que existe, que instala desde el paquete de
+    // entrega y que afirma los cuatro escenarios. Que la instalacion funcione lo
+    // dice la propia etapa cuando se ejecuta; que nadie la haya vaciado en un
+    // momento de prisa lo dice esta prueba.
+    $workflow = repoContents('.github/workflows/ci.yml');
+
+    expect($workflow)->toContain('clean-install');
+    expect($workflow)->toContain('⑧ Instalacion limpia');
+
+    // Los cuatro escenarios de la etapa, cada uno con su afirmacion.
+    foreach ([
+        // A: comprobacion sin escribir.
+        '--check-only',
+        // B: fallo seguro con la maquina intacta.
+        'Se esperaba salida 2 y fue',
+        // C: instalacion completa verificada.
+        'instalado y verificado',
+        // D: segunda ejecucion, idempotencia.
+        'Se esperaba salida 3 y fue',
+    ] as $assertion) {
+        expect($workflow)->toContain($assertion);
+    }
+
+    // Instala DESDE EL PAQUETE DE ENTREGA, no desde el arbol del repositorio:
+    // si el instalador dependiera de algo que solo existe aqui, la etapa no lo
+    // veria y el cliente si.
+    expect($workflow)->toContain('paquete/install.sh');
+
+    // Y el emisor de licencias no entra en el paquete (§7.7, RS-08): firma
+    // claves con la privada del fabricante y no tiene nada que hacer en el
+    // servidor de un hotel.
+    expect($workflow)->toContain('test ! -e paquete/tools');
+})->group('RQ-11', 'RF-PD-02');
+
+it('mantiene en el lock los binarios nativos de la plataforma en la que se construye la imagen', function (): void {
+    // RF-PD-02. La imagen de entrega de Nginx construye las tres SPA sobre
+    // node:24-alpine, es decir linux-x64-musl. Los paquetes con binario nativo
+    // se publican uno por plataforma y se declaran `optionalDependencies`: si
+    // el lock solo trae la plataforma de quien lo escribio, `npm ci` en Linux
+    // instala el paquete padre sin su binario y el build muere con «Cannot find
+    // module '@tailwindcss/oxide-linux-x64-musl'».
+    //
+    // PASO DE VERDAD (01-09-2026): un `npm install` ejecutado en Windows con
+    // node_modules/ presente reescribio el lock y dejo a `@tailwindcss/oxide`
+    // con UNA sola plataforma, win32-x64-msvc, anidado ademas bajo los tres
+    // workspaces. En Windows no se notaba nada. La receta de reparacion, que no
+    // mueve ninguna version, esta en la cabecera de
+    // infra/docker/nginx/Dockerfile, junto al `npm ci` que fallaba.
+    //
+    // Se comprueban DOS familias, no una: rolldown nunca perdio sus plataformas
+    // y oxide si, asi que afirmar solo la rota no distinguiria «esta arreglado»
+    // de «el lock ya no tiene binarios nativos en absoluto».
+    $lock = repoContents('package-lock.json');
+
+    foreach ([
+        '@tailwindcss/oxide-linux-x64-musl',
+        '@rolldown/binding-linux-x64-musl',
+    ] as $binario) {
+        expect($lock)->toContain('"node_modules/'.$binario.'"');
+    }
+
+    // Y que sigan izados a la raiz. Anidados bajo un workspace volverian a ser
+    // la copia de una sola plataforma que produjo el fallo.
+    expect($lock)->not->toMatch('/"frontend-[a-z]+\/node_modules\/@tailwindcss\/oxide/');
+})->group('RF-PD-02');

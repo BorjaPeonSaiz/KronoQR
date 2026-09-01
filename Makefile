@@ -223,7 +223,7 @@ help: ## Muestra esta ayuda
 	@echo   make trivy-image      Trivy: postgres:ci y app:ci ya construidas (informe)
 	@echo   make secrets-scan     gitleaks sobre el historico completo (bloqueante)
 	@echo   make sbom             SBOM CycloneDX en sbom/kronoqr-VERSION.cdx.json
-	@echo   make build-ci-images  Construye kronoqr/postgres:ci y/o kronoqr/app:ci (IMAGES=postgres|app)
+	@echo   make build-ci-images  Construye kronoqr/{postgres,app,nginx}:ci (IMAGES=postgres|app|nginx)
 	@echo   make release-gate     Falla si la entrega saldria sin clave publica del fabricante
 	@echo   make traceability     Matriz requisito - prueba (RQ-13)
 	@echo   make traceability-check  Falla si un requisito no tiene prueba
@@ -435,6 +435,11 @@ rector: tools-ready ## Modernizacion: informativo, NO bloquea (doc 02 §9.2)
 # de "Robustez" seria una sugerencia con aspecto de regla. Y la diferencia es
 # real: un backup.sh sin `set -e` sigue adelante despues de fallar y termina
 # anunciando una copia que no existe.
+#
+# `set -Eeuo pipefail` tambien vale, y es lo que usa install.sh: la `-E` hace
+# que un `trap ... ERR` se herede en funciones y subshells, sin la cual el
+# manejador de vuelta atras no se dispararia desde dentro de una fase. Es
+# estrictamente mas estricto que `-euo`, no una excepcion.
 sh-lint: ## ShellCheck y shfmt sobre los scripts (umbral: 0 hallazgos)
 ifeq ($(SH_FILES),)
 	@echo [make] No hay scripts de shell que analizar.
@@ -448,8 +453,8 @@ else
 	$(SHFMT) -i 2 -d $(SH_FILES)
 	@fallos=0; \
 	for f in $(SH_FILES); do \
-	  grep -qE '^[[:space:]]*set -euo pipefail[[:space:]]*$$' "$$f" || { \
-	    echo "$$f: falta 'set -euo pipefail'. Anadelo tras la cabecera del script (doc 02 seccion 3.5)."; \
+	  grep -qE '^[[:space:]]*set -E?euo pipefail[[:space:]]*$$' "$$f" || { \
+	    echo "$$f: falta 'set -euo pipefail' o 'set -Eeuo pipefail'. Anadelo tras la cabecera del script (doc 02 seccion 3.5)."; \
 	    fallos=1; }; \
 	  grep -qE "^[[:space:]]*IFS=" "$$f" || { \
 	    echo "$$f: falta IFS. Anade IFS=\$$'\\\\n\\\\t' junto al set -euo pipefail (doc 02 seccion 3.5)."; \
@@ -604,12 +609,13 @@ release-gate: ## Falla si la imagen de entrega saldria sin clave publica del fab
 	  exit 1; \
 	fi
 
-build-ci-images: ## Construye kronoqr/postgres:ci y/o kronoqr/app:ci (IMAGES=postgres|app|"postgres app", BUILDX_CACHE=gha)
+build-ci-images: ## Construye kronoqr/{postgres,app,nginx}:ci (IMAGES=postgres|app|nginx|"postgres app nginx", BUILDX_CACHE=gha)
 	@for imagen in $(IMAGES); do \
 	  case "$$imagen" in \
 	    postgres) dockerfile=infra/docker/postgres/Dockerfile; tag=kronoqr/postgres:ci; target=; scope=postgres-ci ;; \
 	    app) dockerfile=infra/docker/php/Dockerfile; tag=kronoqr/app:ci; target="--target prod"; scope=app-ci ;; \
-	    *) echo "[make] IMAGES desconocido: '$$imagen' (valores validos: postgres, app)"; exit 1 ;; \
+	    nginx) dockerfile=infra/docker/nginx/Dockerfile; tag=kronoqr/nginx:ci; target=; scope=nginx-ci ;; \
+	    *) echo "[make] IMAGES desconocido: '$$imagen' (valores validos: postgres, app, nginx)"; exit 1 ;; \
 	  esac; \
 	  if [ "$(BUILDX_CACHE)" = "gha" ]; then \
 	    echo "[make] docker buildx build --cache type=gha -f $$dockerfile -t $$tag . (APK_INDEX_STAMP=$(APK_INDEX_STAMP))"; \

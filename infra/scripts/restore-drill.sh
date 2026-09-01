@@ -42,9 +42,16 @@
 # un cliente se usa el modo por defecto: no se crean bases en la instancia que
 # sostiene el registro legal.
 #
-# Codigos de salida: 0 el simulacro pasa · 1 el simulacro falla (la copia no
-# sirve) · 2 error de uso · 3 falta una herramienta o precondicion · 5 clave
-# ausente o incorrecta.
+# CODIGOS DE SALIDA. Tabla comun de lib/exit-codes.sh. Aqui significan:
+#
+#   0  El simulacro pasa: la copia se restaura y supera las comprobaciones.
+#   1  Uso incorrecto. Nada tocado.
+#   2  Requisitos no cumplidos: falta Docker, la imagen, el contenedor no
+#      arranca, o falta una herramienta. NADA de la instalacion se ha tocado.
+#   3  No hay ninguna copia sobre la que ensayar.
+#   6  EL SIMULACRO FALLA: la copia no se descifra, su huella no coincide o no
+#      se puede restaurar. Es el resultado que importa: significa que hoy no se
+#      podria recuperar el registro horario. Ver docs/runbooks/restaurar-backup.md.
 
 set -euo pipefail
 IFS=$'\n\t'
@@ -87,7 +94,12 @@ al_salir() {
 trap al_salir EXIT
 
 uso() {
-  sed -n '2,48p' "${BASH_SOURCE[0]}" | sed 's/^#\{1,2\} \{0,1\}//'
+  # La cabecera entera, sin numeros de linea que mantener sincronizados: se
+  # imprime desde la segunda linea hasta la primera que no sea un comentario.
+  # Un rango fijo se desajusta en cuanto alguien anade un parrafo -- paso de
+  # verdad al reescribir las cabeceras en la tarea 5.4 -- y el sintoma es una
+  # ayuda cortada a la mitad.
+  awk 'NR > 1 && !/^#/ { exit } NR > 1' "${BASH_SOURCE[0]}" | sed 's/^#\{1,2\} \{0,1\}//'
 }
 
 informar() {
@@ -132,7 +144,7 @@ levantar_contenedor_limpio() {
   local esperado=0 clave
 
   require_cmd docker docker
-  docker info >/dev/null 2>&1 || die 3 \
+  docker info >/dev/null 2>&1 || die "${KQ_EXIT_REQUIREMENTS}" \
     "Docker no responde. El simulacro necesita levantar un contenedor limpio. Si este equipo no tiene Docker, usa '--mode database' contra una instancia de pruebas. No se ha tocado nada."
 
   # Contraseña de usar y tirar para un contenedor que vive minutos y no publica
@@ -148,7 +160,7 @@ levantar_contenedor_limpio() {
     --env POSTGRES_INITDB_ARGS=--encoding=UTF8 \
     --env TZ=UTC --env PGTZ=UTC \
     --network none \
-    "$IMAGEN" >/dev/null || die 3 \
+    "$IMAGEN" >/dev/null || die "${KQ_EXIT_REQUIREMENTS}" \
     "no se ha podido crear el contenedor del simulacro con la imagen '${IMAGEN}'. Descargala antes ('docker pull ${IMAGEN}') si el servidor no tiene salida a internet."
 
   # `--network none`: el contenedor del simulacro no habla con nadie. Todo
@@ -164,18 +176,18 @@ levantar_contenedor_limpio() {
     esperado=$((esperado + 2))
   done
 
-  die 3 "el contenedor del simulacro no ha arrancado en ${ESPERA} s. Mira 'docker logs ${CONTENEDOR}'. No se ha tocado la instalacion."
+  die "${KQ_EXIT_REQUIREMENTS}" "el contenedor del simulacro no ha arrancado en ${ESPERA} s. Mira 'docker logs ${CONTENEDOR}'. No se ha tocado la instalacion."
 }
 
 crear_base_de_simulacro() {
   require_cmd psql postgresql17-client
   require_cmd pg_restore postgresql17-client
-  psql -Atqc 'SELECT 1' >/dev/null 2>&1 || die 3 \
+  psql -Atqc 'SELECT 1' >/dev/null 2>&1 || die "${KQ_EXIT_REQUIREMENTS}" \
     "no se puede conectar a PostgreSQL en ${PGHOST}:${PGPORT}. El modo 'database' necesita una instancia de pruebas donde crear la base del simulacro."
 
   BASE_SIMULACRO="kronoqr_drill_$(timestamp_utc)"
   informar "Creando base limpia ${BASE_SIMULACRO}"
-  psql -d postgres -Atqc "CREATE DATABASE \"${BASE_SIMULACRO}\"" >/dev/null || die 3 \
+  psql -d postgres -Atqc "CREATE DATABASE \"${BASE_SIMULACRO}\"" >/dev/null || die "${KQ_EXIT_REQUIREMENTS}" \
     "no se ha podido crear la base del simulacro. El usuario ${PGUSER} necesita CREATEDB."
 }
 
@@ -184,12 +196,12 @@ restaurar_en_destino() {
     # El volcado descifrado entra por la entrada estandar del contenedor y
     # muere con el: el texto en claro no toca el disco del servidor.
     decrypt_stream <"$FICHERO" |
-      docker exec -i "$CONTENEDOR" sh -c 'cat > /tmp/copia.dump' || die 5 \
+      docker exec -i "$CONTENEDOR" sh -c 'cat > /tmp/copia.dump' || die "${KQ_EXIT_VERIFY_FAILED}" \
       "no se ha podido descifrar '${FICHERO}' con la clave actual. Si la clave se roto, el simulacro debe usar la que corresponda a esta copia."
     docker exec "$CONTENEDOR" pg_restore --username=postgres --dbname="$BASE_SIMULACRO" \
       --no-owner --no-privileges --exit-on-error /tmp/copia.dump >>"${INFORME:-/dev/null}" 2>&1 || return 1
   else
-    decrypt_stream <"$FICHERO" >"${TMPDIR:-/tmp}/kronoqr-drill.dump" || die 5 \
+    decrypt_stream <"$FICHERO" >"${TMPDIR:-/tmp}/kronoqr-drill.dump" || die "${KQ_EXIT_VERIFY_FAILED}" \
       "no se ha podido descifrar '${FICHERO}' con la clave actual."
     pg_restore --dbname="$BASE_SIMULACRO" --no-owner --no-privileges --exit-on-error \
       "${TMPDIR:-/tmp}/kronoqr-drill.dump" >>"${INFORME:-/dev/null}" 2>&1 || {
@@ -314,13 +326,13 @@ main() {
       uso
       return 0
       ;;
-    *) die 2 "argumento desconocido '$1'. Ejecuta 'restore-drill.sh --help'." ;;
+    *) die "${KQ_EXIT_USAGE}" "argumento desconocido '$1'. Ejecuta 'restore-drill.sh --help'." ;;
     esac
   done
 
   case "$MODO" in
   container | database) ;;
-  *) die 2 "modo '${MODO}' desconocido. Usa --mode container (por defecto) o --mode database." ;;
+  *) die "${KQ_EXIT_USAGE}" "modo '${MODO}' desconocido. Usa --mode container (por defecto) o --mode database." ;;
   esac
 
   load_backup_config
@@ -329,11 +341,11 @@ main() {
   ensure_backup_tree
 
   [ -n "$FICHERO" ] || FICHERO="$(latest_dump_file)"
-  [ -n "$FICHERO" ] && [ -f "$FICHERO" ] || die 1 \
+  [ -n "$FICHERO" ] && [ -f "$FICHERO" ] || die "${KQ_EXIT_STATE_CONFLICT}" \
     "no hay ninguna copia sobre la que hacer el simulacro. Lanza 'backup.sh run' primero."
 
   if [ -f "${FICHERO}.sha256" ]; then
-    [ "$(cut -d' ' -f1 <"${FICHERO}.sha256")" = "$(sha256_of "$FICHERO")" ] || die 1 \
+    [ "$(cut -d' ' -f1 <"${FICHERO}.sha256")" = "$(sha256_of "$FICHERO")" ] || die "${KQ_EXIT_VERIFY_FAILED}" \
       "la copia '${FICHERO}' esta corrupta (su huella no coincide). El simulacro se detiene aqui: eso ya es el hallazgo."
   fi
 
@@ -373,7 +385,7 @@ main() {
 
   metricas_del_simulacro 0 "$duracion" "$DRILL_TABLAS" "$DRILL_FILAS"
   informar "SIMULACRO FALLIDO en ${duracion} s."
-  die 1 "el simulacro ha fallado: la ultima copia NO se puede dar por buena. Revisa '${INFORME}', repitelo con la copia anterior ('--file') y sigue docs/runbooks/restaurar-backup.md."
+  die "${KQ_EXIT_VERIFY_FAILED}" "el simulacro ha fallado: la ultima copia NO se puede dar por buena. Revisa '${INFORME}', repitelo con la copia anterior ('--file') y sigue docs/runbooks/restaurar-backup.md."
 }
 
 main "$@"

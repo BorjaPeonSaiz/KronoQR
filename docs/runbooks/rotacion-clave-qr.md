@@ -160,7 +160,7 @@ php artisan credentials:deliver <uuid> --by=persona@ejemplo.es
   válidas— en una bandeja durante semanas. `print-batch --pending` no obliga a
   vaciar la cola de golpe: lánzalo por tandas, entrega el mismo día y guarda bajo
   llave lo que no se haya repartido. Es un riesgo aceptado y anotado
-  ([`docs/07`](../07-seguridad-madurez-y-amenazas.md) §6), no un descuido.
+  (documento interno de seguridad del fabricante, §6), no un descuido.
 - `print-batch --pending` es **idempotente**: la segunda pasada no encuentra
   nada y no imprime duplicados.
 - **La entrega es la que cierra el relevo**: al registrarla, la tarjeta antigua
