@@ -115,4 +115,26 @@ useDefault = true
     #    equivocado». Publico por diseño, como `DECOY_HASH` en el PIN; quien lo
     #    conozca no obtiene nada. Fijado por TwoFactorRejectionSymmetryTest.
     '''^K5CVGRKUKZLE6TCPKZDVSVKGKZLE6TCP$''',
+
+    # 19) backend/tests/Integration/Product/LicenseActivationTest.php: la
+    #    cadena `KQL1.manipulada.aqui` que la prueba escribe en `license.signed_key`
+    #    para comprobar que una fila corrompida a mano deja la licencia en
+    #    `unverifiable` sin tumbar nada (tarea 5.3). No es una clave: ni la
+    #    carga ni la firma son base64url validos y ninguna clave publica la
+    #    verificaria.
+    '''^KQL1\.manipulada\.aqui$''',
+
+    # 20) docs/api/openapi.yaml: `key_fingerprint` de los ejemplos de
+    #    `GET /api/v1/license`. Es una huella (SHA-256 truncado a 12 hex) de una
+    #    clave de EJEMPLO, y aunque fuera la de una clave real no permitiria
+    #    reconstruirla: existe para confirmar por telefono que la clave activada
+    #    es la enviada (tarea 5.3).
+    '''^4b1e9c07a2d8$''',
+
+    # 21) docs/api/openapi.yaml: `signed_key` del ejemplo de
+    #    `POST /api/v1/license/activate`. Carga `{"license_id":"9f2c4a1b7e0d3f65"}`
+    #    y firma `foobar` en base64url: no lleva cliente, plan ni vigencia, no
+    #    esta firmada por ninguna clave y el verificador la rechaza como
+    #    `Malformed`. Esta ahi para que el ejemplo tenga la forma `KQL1.<carga>.<firma>`.
+    '''^KQL1\.eyJsaWNlbnNlX2lkIjoiOWYyYzRhMWI3ZTBkM2Y2NSJ9\.Zm9vYmFy$''',
   ]
