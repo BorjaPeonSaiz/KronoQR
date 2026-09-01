@@ -219,6 +219,23 @@ KQ_MSG_ES[prefix_warning]="AVISO"
 
 KQ_MSG_ES[c_appurl_dns_unknown]="No se ha podido comprobar si %s resuelve desde este servidor"
 
+KQ_MSG_ES[c_tls_readable]="El borde (uid %s) puede leer %s"
+KQ_MSG_ES[c_tls_unreadable]="El borde (uid %s) NO puede leer %s"
+KQ_MSG_ES[f_tls_unreadable]="el servidor web corre SIN PRIVILEGIOS dentro de su contenedor, con el uid %s, y no puede abrir un fichero de root. Si no lo arreglas, nginx entra en bucle de reinicio con 'Permission denied' y no se sirve nada. Dos caminos, segun de quien sea el directorio:
+
+  · Si %s es del paquete de KronoQR (lo normal):
+      sudo chown %s:%s %s
+      sudo chmod 0400 %s          # 0444 si es el .crt
+
+  · Si ese directorio lo comparte otro servicio del hotel (por ejemplo el de
+    Let's Encrypt), NO le cambies el propietario: romperias ese otro servicio.
+    Copia el certificado a un directorio propio, apunta ahi TLS_CERT_DIR y
+    aplica alli las ordenes de arriba."
+KQ_MSG_ES[c_tls_key_world_readable]="%s es legible por cualquier usuario del servidor"
+KQ_MSG_ES[f_tls_key_world_readable]="el borde puede leerla, asi que la instalacion funcionara, pero una clave privada de TLS con permiso de lectura universal la puede copiar cualquiera con una sesion en esta maquina. Dejala solo para el borde: sudo chown %s:%s %s && sudo chmod 0400 %s"
+KQ_MSG_ES[c_tls_unknown]="No se ha podido comprobar quien puede leer %s"
+KQ_MSG_ES[f_tls_unknown]="este servidor no tiene 'stat', asi que no se sabe si el borde podra leer %s. Compruebalo a mano: el fichero tiene que ser legible por el uid %s. Si al levantar los servicios nginx reinicia con 'Permission denied', es esto."
+
 #------------------------------------------------------------------------------
 # English
 #------------------------------------------------------------------------------
@@ -405,6 +422,23 @@ KQ_MSG_EN[empty_value]="(empty)"
 KQ_MSG_EN[prefix_warning]="WARNING"
 
 KQ_MSG_EN[c_appurl_dns_unknown]="Could not check whether %s resolves from this server"
+
+KQ_MSG_EN[c_tls_readable]="The edge (uid %s) can read %s"
+KQ_MSG_EN[c_tls_unreadable]="The edge (uid %s) CANNOT read %s"
+KQ_MSG_EN[f_tls_unreadable]="the web server runs UNPRIVILEGED inside its container, as uid %s, and cannot open a root-owned file. If you do not fix this, nginx restarts in a loop with 'Permission denied' and nothing is served. Two paths, depending on who owns the directory:
+
+  · If %s belongs to the KronoQR package (the usual case):
+      sudo chown %s:%s %s
+      sudo chmod 0400 %s          # 0444 for the .crt
+
+  · If that directory is shared with another service of the hotel (the Let's
+    Encrypt one, for instance), do NOT change its owner: you would break that
+    other service. Copy the certificate into a directory of your own, point
+    TLS_CERT_DIR there and apply the commands above there."
+KQ_MSG_EN[c_tls_key_world_readable]="%s is readable by every user of this server"
+KQ_MSG_EN[f_tls_key_world_readable]="the edge can read it, so the installation will work, but a TLS private key with world read permission can be copied by anyone with a session on this machine. Leave it to the edge only: sudo chown %s:%s %s && sudo chmod 0400 %s"
+KQ_MSG_EN[c_tls_unknown]="Could not check who can read %s"
+KQ_MSG_EN[f_tls_unknown]="this server has no 'stat', so whether the edge can read %s is unknown. Check it by hand: the file must be readable by uid %s. If nginx restarts with 'Permission denied' when the services come up, this is it."
 
 #------------------------------------------------------------------------------
 # Resolucion

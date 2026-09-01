@@ -90,6 +90,13 @@ readonly KQ_POLL_SECONDS=2
 readonly KQ_WAIT_DEPENDENCIES=180
 readonly KQ_WAIT_APPLICATION=180
 
+# El uid con el que corre el borde HTTP dentro del contenedor
+# (nginx-unprivileged, infra/docker/nginx/Dockerfile). Lo necesita la fase 1
+# para saber si podra LEER el certificado del cliente: el instalador corre
+# como root y `[ -r fichero ]` le dice que si a todo, asi que la pregunta hay
+# que hacerla sobre el propietario y los permisos, no sobre el proceso actual.
+readonly KQ_NGINX_UID=101
+
 readonly KQ_COMPOSE_PROJECT="kronoqr"
 
 #------------------------------------------------------------------------------
@@ -627,8 +634,57 @@ check_app_url() {
   fi
 }
 
+# Puede el uid indicado LEER este fichero?
+#
+# Se responde sobre propietario, grupo y bits de modo, y NO con `[ -r ]`: el
+# instalador corre como root y a root `[ -r ]` le dice que si sobre cualquier
+# cosa. La pregunta real es si podra leerlo otro proceso, el del borde HTTP,
+# que corre sin privilegios dentro de su contenedor.
+#
+# Devuelve: 0 puede leerlo · 1 no puede · 2 no se ha podido averiguar.
+# Y por la salida estandar, como puede: "owner", "group", "other" o "".
+#
+# LIMITACION CONOCIDA, y por eso la respuesta 1 lleva un mensaje que ofrece dos
+# caminos: solo se mira si el GID del fichero es exactamente el del borde. Un
+# grupo secundario del que el uid 101 fuera miembro dentro del contenedor no se
+# ve desde aqui. En la imagen que entregamos ese caso no existe -el usuario 101
+# tiene un solo grupo, el 101-, pero si alguien construye otra, esto diria "no
+# puede" cuando si podria. Es el lado seguro del error: molesta, no rompe.
+file_readable_by_uid() {
+  local file="$1" uid="$2" info owner group mode resto
+
+  info="$(stat -c '%u %g %a' "${file}" 2>/dev/null)" || return 2
+  [ -n "${info}" ] || return 2
+
+  owner="${info%% *}"
+  resto="${info#* }"
+  group="${resto%% *}"
+  mode="${resto##* }"
+
+  # `stat -c %a` da 3 o 4 digitos (el cuarto son setuid/setgid/sticky). Se
+  # toman los tres ultimos, que son los de usuario, grupo y otros.
+  mode="${mode: -3}"
+
+  if [ "${owner}" = "${uid}" ] && (((${mode:0:1} & 4) != 0)); then
+    printf 'owner'
+    return 0
+  fi
+
+  if [ "${group}" = "${uid}" ] && (((${mode:1:1} & 4) != 0)); then
+    printf 'group'
+    return 0
+  fi
+
+  if (((${mode:2:1} & 4) != 0)); then
+    printf 'other'
+    return 0
+  fi
+
+  return 1
+}
+
 check_tls() {
-  local dir="${CFG_TLS_CERT_DIR}"
+  local dir="${CFG_TLS_CERT_DIR}" fichero via estado
 
   if [ "${CFG_TLS_ALLOW_SELF_SIGNED}" = "true" ]; then
     # En PRODUCCION es un fallo, no un aviso, y es el valor por defecto de la
@@ -645,11 +701,47 @@ check_tls() {
     return 0
   fi
 
-  if [ -f "${dir}/tls.crt" ] && [ -f "${dir}/tls.key" ]; then
-    check_pass "$(kq_format c_tls "${dir}")"
-  else
+  if [ ! -f "${dir}/tls.crt" ] || [ ! -f "${dir}/tls.key" ]; then
     check_fail "$(kq_format c_tls_missing "${dir}")" "$(kq_format f_tls "${dir}")"
+    return 0
   fi
+
+  check_pass "$(kq_format c_tls "${dir}")"
+
+  # QUE EL FICHERO ESTE NO BASTA: el borde tiene que poder LEERLO.
+  #
+  # Esto rompio el escenario C de la etapa ⑧ y no es un caso artificial de CI:
+  # es exactamente lo que hace un IT que copia su clave como root. `openssl`
+  # las escribe 0600 y `cp` conserva el modo, asi que la clave queda root:root
+  # 0600 y el contenedor -uid 101- no puede abrirla. Nginx entra en bucle de
+  # reinicio con "cannot load certificate key ... Permission denied", y sin
+  # esta comprobacion el fallo no aparece hasta la fase 5, que ademas informa
+  # de que "los servicios estan en pie".
+  for fichero in tls.crt tls.key; do
+    estado=0
+    via="$(file_readable_by_uid "${dir}/${fichero}" "${KQ_NGINX_UID}")" || estado=$?
+
+    case "${estado}" in
+    0)
+      # La clave privada legible por CUALQUIER usuario del servidor funciona,
+      # pero es un problema distinto y hay que decirlo.
+      if [ "${fichero}" = "tls.key" ] && [ "${via}" = "other" ]; then
+        check_warn "$(kq_format c_tls_key_world_readable "${dir}/${fichero}")" \
+          "$(kq_format f_tls_key_world_readable "${KQ_NGINX_UID}" "${KQ_NGINX_UID}" "${dir}/${fichero}" "${dir}/${fichero}")"
+      else
+        check_pass "$(kq_format c_tls_readable "${KQ_NGINX_UID}" "${fichero}")"
+      fi
+      ;;
+    1)
+      check_fail "$(kq_format c_tls_unreadable "${KQ_NGINX_UID}" "${fichero}")" \
+        "$(kq_format f_tls_unreadable "${KQ_NGINX_UID}" "${dir}" "${KQ_NGINX_UID}" "${KQ_NGINX_UID}" "${dir}/${fichero}" "${dir}/${fichero}")"
+      ;;
+    *)
+      check_warn "$(kq_format c_tls_unknown "${fichero}")" \
+        "$(kq_format f_tls_unknown "${dir}/${fichero}" "${KQ_NGINX_UID}")"
+      ;;
+    esac
+  done
 }
 
 # Los valores que rellena el cliente.
@@ -1161,6 +1253,25 @@ phase_bootstrap() {
   if ! wait_for_healthy app "${KQ_WAIT_APPLICATION}"; then
     rollback_and_die "$(kq_format f_waiting \
       "app" "${KQ_WAIT_APPLICATION}" "${COMPOSE_FILE}" "app")"
+  fi
+
+  # EL BORDE TAMBIEN, y no es simetria: es donde se descubre el error de
+  # configuracion mas probable de todos.
+  #
+  # Hasta que la etapa ⑧ lo enseno, esta espera cubria postgres, redis y la
+  # aplicacion, pero no nginx. Con un certificado que el borde no puede leer,
+  # nginx entra en bucle de reinicio y NADA de la fase 4 se entera: el fallo
+  # aparecia tres pasos despues, en la sonda de la fase 5, con el codigo 6 —que
+  # dice «los servicios estan en pie»— mientras el borde reiniciaba cada dos
+  # segundos. Esperandolo aqui, el mismo fallo cae en la fase 4: vuelta atras y
+  # salida 4, que es la que se puede reintentar.
+  #
+  # Un contenedor en bucle de reinicio nunca llega a `healthy`, asi que esta
+  # espera agota su plazo y termina igual en 4. Es el resultado correcto por
+  # los dos caminos.
+  if ! wait_for_healthy nginx "${KQ_WAIT_APPLICATION}"; then
+    rollback_and_die "$(kq_format f_waiting \
+      "nginx" "${KQ_WAIT_APPLICATION}" "${COMPOSE_FILE}" "nginx")"
   fi
 
   say ""

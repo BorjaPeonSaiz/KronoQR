@@ -89,6 +89,26 @@
 
 **Sigue pendiente:** relanzar la etapa ⑧. Los escenarios C, D, E y F y los códigos 4 y 5 **siguen sin ejecutarse nunca de extremo a extremo**; lo que sí está ejercitado en local, y con la prueba que lo demuestra, es la fase 3 completa y las dos mitades de la vuelta atrás.
 
+### Corrección del fallo de la segunda ejecución de la etapa ⑧ (run 33553818282, salida 6) — 01-09-2026, sin commitear
+
+**Qué pasó.** El arreglo del SIGPIPE funcionó: B y E en verde, y C llegó hasta la fase 5. Allí cayó con **6** porque **nginx estaba en bucle de reinicio**: `cannot load certificate key /etc/nginx/certs/tls.key: Permission denied`. La CI generaba la clave con `openssl` sin `sudo` —propiedad del runner, y openssl escribe las claves `0600`— y el contenedor `nginx-unprivileged` corre como **uid 101**. **No es un artefacto de CI**: es exactamente lo que hará un IT que copie su `tls.key` como root, y la guía decía `cp … certs/tls.key` sin una palabra sobre propietario ni permisos.
+
+**Decisión del punto 1: la fase 1 FALLA; el instalador NO corrige el certificado por su cuenta.** Se valoró que lo arreglara él —ya corre como root y ya hace `install -d -o 70 -g 70` para el WAL— y se descartó por una razón concreta: **`TLS_CERT_DIR` puede apuntar a un directorio compartido con otro servicio del hotel**, típicamente `/etc/letsencrypt/live/…`. Un `chown 101:101` nuestro rompería ese otro servicio, y la vuelta atrás no siempre podría repararlo (si el instalador muere entre medias, el otro nginx del hotel se queda sin poder leer su propio certificado). El WAL es distinto: es un directorio **del producto**, creado por él. Así que el instalador **detecta y explica**, y el mensaje ofrece **dos caminos**: el `chown` si el directorio es del paquete, y «cópialo a un directorio propio» si lo comparte otro servicio.
+
+**Lo construido.**
+- `file_readable_by_uid` (`install.sh:695`): responde sobre **propietario, grupo y bits de modo**, no con `[ -r ]` —el instalador corre como root y a root `[ -r ]` le dice que sí sobre cualquier cosa—. Tres respuestas: puede / no puede / no se ha podido averiguar (sin `stat` → aviso, no fallo).
+- `check_tls` (`install.sh:744`) comprueba los dos ficheros. **La clave privada legible por todo el servidor no bloquea** —funciona, y bloquearla sería decidir por el cliente sobre su propia clave— pero **avisa**, porque cualquiera con sesión en la máquina puede copiarla. El camino del certificado **ausente** (lo genera `05-kronoqr-tls.sh` dentro del contenedor con `TLS_ALLOW_SELF_SIGNED=true`) no se toca y sigue funcionando.
+- **La fase 4 espera también a nginx** (`install.sh:1272`), después de `app` y antes de las migraciones. Sin eso, un borde roto no se descubría hasta la sonda de la fase 5, que además informa de que «los servicios están en pie» con nginx reiniciándose cada dos segundos. Ahora el mismo fallo cae en la fase 4 → vuelta atrás → **salida 4**, que es la que se puede reintentar. Un contenedor en bucle de reinicio nunca llega a `healthy`, así que la espera agota su plazo y termina igual en 4: correcto por los dos caminos.
+- **Seis claves de mensaje nuevas** en los dos idiomas (**132 × 2**). Aviso para quien venga detrás: **el `printf` de bash NO admite especificadores posicionales** (`%1$s`); los mensajes con un valor repetido pasan el argumento tantas veces como aparece.
+
+**CI (`ci.yml:966`):** tras generar el certificado, `sudo chown 101:101` + `chmod 0400/0444`, que es el camino **documentado**. El escenario E pasa a copiar el paquete con `sudo cp -a` y a restituir el propietario de `certs/`: con la clave en `0400` del uid 101, un `cp -r` del runner no puede leerla.
+
+**Documentación:** `instalacion.md` §1.2 (las tres órdenes junto al `cp`, con el porqué y el caso del directorio compartido), §6/TLS (incluida la trampa de la **renovación**: `certbot` reescribe los ficheros con su propio propietario y el borde deja de poder leerlos en el siguiente reinicio) y **dos «qué hacer si…» nuevos**: el mensaje de la fase 1 y el bucle de reinicio en una instalación ya existente.
+
+**Pruebas (4 nuevas, `InstallScriptTest`, sin Docker):** la fase 1 rechaza una `tls.key` que el uid 101 no puede leer y el mensaje trae la orden **y** la advertencia del directorio compartido; una clave de lectura universal **avisa sin bloquear**; `file_readable_by_uid` sobre cuatro modos reales (0600, 0640, 0644, 0444); y que la espera de nginx está en la fase 4, entre `app` y las migraciones. **Medido que cazan el fallo**: vaciando el bucle de comprobación, **2 de 14 fallan**.
+
+**Nota de entorno:** estas pruebas solo son válidas **dentro del contenedor**. En Git Bash sobre NTFS `chmod` no tiene efecto y `stat -c %a` devuelve `644` para todo; comprobado antes de escribirlas.
+
 ## Sesión «tarea 5.3: licencia firmada, verificación local y degradación honesta» (01-09-2026), en `feat/fase-5-productizacion`
 
 **Tarea 5.3 implementada y verificada, sin commitear** (lo commitea el usuario tras las revisiones de `seguridad-cumplimiento` y `revisor-codigo`). Cubre `RF-PD-04` y `RF-PD-05`.

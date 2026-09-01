@@ -110,8 +110,34 @@ docs/runbooks/           Procedimientos: restaurar, rotar secretos, alta de
 ```bash
 cp /ruta/de/tu/certificado.crt certs/tls.crt
 cp /ruta/de/tu/clave.key       certs/tls.key
+
+# IMPRESCINDIBLE: el servidor web corre SIN PRIVILEGIOS, con el uid 101,
+# y no puede abrir un fichero de root.
+sudo chown 101:101 certs/tls.crt certs/tls.key
+sudo chmod 0444 certs/tls.crt
+sudo chmod 0400 certs/tls.key
+
 cp .env.example .env
 ```
+
+> **Por qué esas tres órdenes, y qué pasa si te las saltas.** `cp` conserva los
+> permisos del original, y las claves privadas se escriben `0600` para el
+> usuario que las creó —normalmente `root`—. El borde HTTP de KronoQR corre
+> dentro de su contenedor **sin privilegios**, como el uid `101`, así que no
+> puede abrir esa clave: nginx entra en **bucle de reinicio** con
+> `cannot load certificate key ... Permission denied` y no se sirve nada.
+>
+> **El instalador lo comprueba en la fase 1 y no instala si no puede leerlos**,
+> así que no vas a descubrirlo con el sistema a medias.
+>
+> **Si `TLS_CERT_DIR` apunta a un directorio compartido con otro servicio** —el
+> de Let's Encrypt, por ejemplo—, **no le cambies el propietario**: romperías
+> ese otro servicio. Copia el certificado a un directorio propio, apunta ahí
+> `TLS_CERT_DIR` y aplica allí esas órdenes.
+>
+> Si `tls.key` queda legible por todo el servidor (`0444`, `0644`), el sistema
+> **funciona** y el instalador solo avisa: es tu clave privada y la decisión es
+> tuya, pero cualquiera con una sesión en esa máquina puede copiarla.
 
 Abre `.env` con tu editor. **Cada variable lleva una marca. Solo tienes que
 tocar las marcadas `[CLIENTE]`:**
@@ -229,13 +255,15 @@ Fase 1 de 5 — comprobando requisitos. Todavia no se escribe nada.
   [ok]    APP_URL: https://fichaje.tuhotel.local
   [ok]    El nombre fichaje.tuhotel.local resuelve desde este servidor
   [ok]    Certificado TLS en /opt/kronoqr-2.0.0/certs
+  [ok]    El borde (uid 101) puede leer tls.crt
+  [ok]    El borde (uid 101) puede leer tls.key
   [ok]    Puerto 80 libre
   [ok]    Puerto 443 libre
   [ok]    Se puede escribir en /var/backups/fichaje
   [ok]    Se puede escribir en /opt/kronoqr-2.0.0
   [ok]    Privilegios para asignar el propietario del archivo de WAL
 
-Requisitos cumplidos: 27 comprobaciones, 0 avisos.
+Requisitos cumplidos: 29 comprobaciones, 0 avisos.
 
 Solo comprobacion (--check-only): no se ha tocado nada. Vuelve a ejecutar sin la opcion para instalar.
 ```
@@ -414,6 +442,39 @@ horario. Si querías **actualizar**, usa `./update.sh`. Si de verdad quieres
 empezar de cero, retira la instalación anterior a conciencia —**con copia de
 seguridad primero**— y vuelve a ejecutar.
 
+### …dice «El borde (uid 101) NO puede leer tls.key»
+
+El servidor web corre **sin privilegios** dentro de su contenedor y no puede
+abrir un fichero de `root`. Es lo que pasa si copiaste la clave como `root`:
+`openssl` las escribe `0600` y `cp` conserva el modo.
+
+```bash
+sudo chown 101:101 certs/tls.crt certs/tls.key
+sudo chmod 0444 certs/tls.crt
+sudo chmod 0400 certs/tls.key
+```
+
+**Si ese directorio lo comparte otro servicio del hotel**, no le cambies el
+propietario: copia el certificado a un directorio propio, apunta ahí
+`TLS_CERT_DIR` y aplica allí las órdenes.
+
+El instalador lo detecta en la **fase 1**, antes de escribir nada, así que no
+hay nada que limpiar: corrígelo y vuelve a ejecutar.
+
+### …nginx reinicia una y otra vez con «Permission denied»
+
+Es el mismo problema del punto anterior en una instalación que ya existe —por
+ejemplo, después de renovar el certificado con `certbot`, que lo reescribe con
+su propio propietario—. Compruébalo y corrígelo:
+
+```bash
+ls -l certs/                       # tls.key tiene que ser legible por el uid 101
+docker compose logs --tail 20 nginx
+sudo chown 101:101 certs/tls.crt certs/tls.key
+sudo chmod 0400 certs/tls.key
+docker compose up -d nginx
+```
+
 ### …el certificado no lo acepta el navegador de la tablet
 
 El nombre del certificado tiene que ser **el mismo** que el de `APP_URL`, y la
@@ -550,7 +611,28 @@ dice qué hacer.** Es intencionado: un certificado autofirmado haría que los
 quioscos avisaran de sitio no seguro cada mañana, y alguien acabaría
 desactivando la comprobación.
 
-`TLS_ALLOW_SELF_SIGNED=true` es exclusivo de entornos de prueba.
+`TLS_ALLOW_SELF_SIGNED=true` es exclusivo de entornos de prueba. En producción
+el instalador **se niega a continuar** si lo encuentra a `true`.
+
+**Y el propietario importa tanto como el contenido.** El borde HTTP corre sin
+privilegios, con el uid `101`, y tiene que poder **leer** los dos ficheros:
+
+```bash
+sudo chown 101:101 "$TLS_CERT_DIR"/tls.crt "$TLS_CERT_DIR"/tls.key
+sudo chmod 0444 "$TLS_CERT_DIR"/tls.crt
+sudo chmod 0400 "$TLS_CERT_DIR"/tls.key
+```
+
+La fase 1 del instalador lo comprueba y no escribe nada si falla. Si
+`TLS_CERT_DIR` apunta a un directorio compartido con otro servicio (el de
+Let's Encrypt, por ejemplo), **no le cambies el propietario**: copia el
+certificado a un directorio propio y apunta ahí `TLS_CERT_DIR`. Eso también
+evita que una renovación automática vuelva a dejarlo con el propietario de
+antes.
+
+**Al renovar el certificado**, repite esas órdenes: `certbot` y equivalentes
+reescriben los ficheros con su propio propietario, y el borde deja de poder
+leerlos en el siguiente reinicio.
 
 ### `BACKUP_PATH` — dónde se guardan las copias
 

@@ -963,6 +963,21 @@ jobs:
             -subj "/C=ES/O=KronoQR CI/CN=kronoqr.ci.local" \
             -addext "subjectAltName=DNS:kronoqr.ci.local,DNS:localhost,IP:127.0.0.1" \
             -keyout certs/tls.key -out certs/tls.crt 2>/dev/null
+          # Y con el propietario que exige el producto, que es el camino que
+          # DOCUMENTA la guia (instalacion.md §1.2). El borde HTTP corre sin
+          # privilegios como uid 101 y no puede abrir un fichero de root:
+          # `openssl` escribe las claves 0600, asi que sin esto nginx entra en
+          # bucle de reinicio con «cannot load certificate key ... Permission
+          # denied». Fue el fallo del escenario C en la segunda ejecucion de
+          # esta etapa.
+          #
+          # El instalador NO lo corrige solo, a proposito: TLS_CERT_DIR puede
+          # apuntar a un directorio compartido con otro servicio del hotel —el
+          # de Let's Encrypt, por ejemplo— y un `chown` nuestro romperia ese
+          # otro servicio. La fase 1 lo detecta y dice las dos salidas posibles.
+          sudo chown 101:101 certs/tls.key certs/tls.crt
+          sudo chmod 0400 certs/tls.key
+          sudo chmod 0444 certs/tls.crt
           cp .env.example .env
           sed -i \
             -e 's|^APP_ENV=.*|APP_ENV=production|' \
@@ -1053,7 +1068,14 @@ jobs:
         # la maquina quede LIMPIA y el codigo sea 4.
         run: |
           set -euo pipefail
-          rm -rf paquete-e && cp -r paquete paquete-e
+          # `sudo cp -a`: los certificados son del uid 101 y la clave es 0400,
+          # asi que el usuario del runner no puede copiarlos ni conservar su
+          # propietario. Se copia con privilegios y se devuelve el resto del
+          # arbol al runner, dejando `certs/` como estaba: es el estado que la
+          # fase 1 exige y el que este escenario tiene que ejercitar.
+          sudo rm -rf paquete-e && sudo cp -a paquete paquete-e
+          sudo chown -R "$(id -u):$(id -g)" paquete-e
+          sudo chown 101:101 paquete-e/certs/tls.key paquete-e/certs/tls.crt
           cd paquete-e
           cp .env.example .env
           sed -i \

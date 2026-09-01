@@ -79,6 +79,13 @@ function paqueteDePrueba(): array
     copy(Repo::file('VERSION'), $dir.'/VERSION');
     touch($dir.'/certs/tls.crt');
     touch($dir.'/certs/tls.key');
+    // Legibles por «otros» a proposito. La fase 1 comprueba que el uid 101 —el
+    // del borde, que corre sin privilegios— podra leerlos, y dentro del
+    // contenedor de pruebas se corre como uid 1000 y no se puede hacer `chown`
+    // a 101. El unico estado alcanzable aqui que el borde SI podria leer es el
+    // de lectura universal, que el instalador acepta avisando.
+    chmod($dir.'/certs/tls.crt', 0o444);
+    chmod($dir.'/certs/tls.key', 0o444);
 
     // Lo que rellenaria el IT del hotel. Los cuatro valores de red se cambian a
     // proposito: la fase 1 los compara con la plantilla y rechaza los de ejemplo.
@@ -317,4 +324,115 @@ it('deshace con rm -rf y no con rmdir, porque el archivo de WAL nunca esta vacio
 
     expect($script)->not->toMatch("/register_undo[^\n]*\n?[^\n]*rmdir/")
         ->and($script)->toContain("rm -rf '\${wal}'");
+})->group('RF-PD-02');
+
+it('se niega a instalar si el borde no podra leer la clave privada del certificado', function (): void {
+    // EL FALLO DE LA SEGUNDA EJECUCION DE LA ETAPA ⑧, reproducido sin Docker.
+    //
+    // El borde HTTP corre SIN PRIVILEGIOS dentro de su contenedor, con el uid
+    // 101. Un IT que copie su `tls.key` como root la deja root:root 0600
+    // —`openssl` escribe las claves asi y `cp` conserva el modo— y nginx entra
+    // en bucle de reinicio con «cannot load certificate key … Permission
+    // denied». Sin esta comprobacion, el sintoma no aparecia hasta la sonda de
+    // la fase 5, que ademas informaba de que «los servicios estan en pie».
+    //
+    // Aqui se reproduce con los permisos, que es lo que de verdad decide: dentro
+    // del contenedor de pruebas no se puede hacer `chown` a 101, pero una clave
+    // sin bit de lectura para «otros» y de un propietario que no es el 101 es
+    // exactamente el caso que rompia.
+    $paquete = paqueteDePrueba();
+    chmod($paquete['dir'].'/certs/tls.key', 0o600);
+
+    $resultado = ejecutarInstalador(['--compose-file', $paquete['compose']]);
+    $salida = $resultado->getOutput();
+
+    expect($resultado->getExitCode())->toBe(2)
+        ->and($salida)->toContain('NO puede leer tls.key')
+        // El mensaje tiene que traer la orden, no solo el diagnostico.
+        ->and($salida)->toContain('chown 101:101')
+        // Y advertir del caso en el que esa orden seria dañina.
+        ->and($salida)->toContain('Let\'s Encrypt')
+        // Nada escrito: sigue siendo la fase 1.
+        ->and(file_exists($paquete['env'].'.kronoqr-pre-install'))->toBeFalse();
+
+    borrarPaquete($paquete['dir']);
+})->group('RF-PD-02', 'RS-09');
+
+it('avisa, sin bloquear, de una clave privada legible por todo el servidor', function (): void {
+    // 0444 es legible por el borde, asi que la instalacion FUNCIONA: no puede
+    // ser un fallo. Pero una clave privada de TLS que puede copiar cualquiera
+    // con una sesion en la maquina es un problema distinto, y callarlo seria
+    // peor que avisarlo.
+    $paquete = paqueteDePrueba();
+
+    $resultado = ejecutarInstalador(['--check-only', '--compose-file', $paquete['compose']]);
+    $salida = $resultado->getOutput();
+
+    expect($salida)->toContain('legible por cualquier usuario del servidor')
+        ->and($salida)->toContain('[aviso]');
+
+    borrarPaquete($paquete['dir']);
+})->group('RF-PD-02', 'RS-09');
+
+it('responde quien puede leer un fichero mirando propietario y modo, no el proceso actual', function (): void {
+    // `[ -r fichero ]` no sirve: el instalador corre como root y a root le dice
+    // que si sobre cualquier cosa. La pregunta es si podra leerlo OTRO proceso.
+    $dir = sys_get_temp_dir().'/kronoqr-perm-'.bin2hex(random_bytes(6));
+    mkdir($dir, 0o755, true);
+
+    $casos = [
+        // modo => si el uid 101 puede leerlo, y por que via
+        0o600 => ['esperado' => 1, 'via' => ''],
+        0o640 => ['esperado' => 1, 'via' => ''],
+        0o644 => ['esperado' => 0, 'via' => 'other'],
+        0o444 => ['esperado' => 0, 'via' => 'other'],
+    ];
+
+    foreach ($casos as $modo => $caso) {
+        $fichero = $dir.'/f'.decoct($modo);
+        touch($fichero);
+        chmod($fichero, $modo);
+
+        $proceso = bashConElInstalador(
+            'file_readable_by_uid '.escapeshellarg($fichero).' 101 || exit $?'
+        );
+
+        expect($proceso->getExitCode())->toBe(
+            $caso['esperado'],
+            'Modo 0'.decoct($modo).': se esperaba '.$caso['esperado'].'.'
+        );
+
+        if ($caso['via'] !== '') {
+            expect($proceso->getOutput())->toBe($caso['via']);
+        }
+
+        unlink($fichero);
+    }
+
+    rmdir($dir);
+})->group('RF-PD-02');
+
+it('espera tambien al borde antes de dar la fase 4 por buena', function (): void {
+    // Un nginx en bucle de reinicio no llega nunca a `healthy`. Si la fase 4 no
+    // lo esperara, el fallo caeria en la sonda de la fase 5 con el codigo 6
+    // —«los servicios estan en pie»— en vez de en la 4, que es la que deshace y
+    // se puede reintentar. Se comprueba sobre el texto porque ejercitarlo exige
+    // Docker; la etapa ⑧ lo cubre de verdad.
+    $script = (string) file_get_contents(Repo::file('infra/scripts/install.sh'));
+
+    expect($script)->toContain('wait_for_healthy nginx');
+    // Y que el orden sea el correcto: el borde DESPUES de la aplicacion a la
+    // que proxya, y antes de las migraciones.
+    $posicion = function (string $aguja) use ($script): int {
+        $indice = strpos($script, $aguja);
+
+        if ($indice === false) {
+            throw new RuntimeException('install.sh ya no contiene "'.$aguja.'".');
+        }
+
+        return $indice;
+    };
+
+    expect($posicion('wait_for_healthy app'))->toBeLessThan($posicion('wait_for_healthy nginx'))
+        ->and($posicion('wait_for_healthy nginx'))->toBeLessThan($posicion('artisan migrate'));
 })->group('RF-PD-02');
