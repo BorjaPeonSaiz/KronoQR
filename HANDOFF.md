@@ -128,6 +128,21 @@ Verificado: `make -n` muestra `--build-arg APP_VERSION=2.0.0` únicamente en `ap
 
 **Verificado:** `make sh-lint` 0 hallazgos · `tests/Integration/Install` **20/20** · imagen `app` reconstruida y su `APP_VERSION` leída de dentro · catálogo **133 × 2** completo.
 
+### Corrección del fallo de la cuarta ejecución de la etapa ⑧ (run 33562263079) — 02-09-2026, sin commitear
+
+**`APP_VERSION` y las sondas en verde; C cayó un paso más allá:** `curl https://127.0.0.1/admin/` devolvía **403**, con `directory index of "/var/www/spa/admin/" is forbidden` en el registro de nginx. El `server` de HTTPS declara `index index.php` —correcto para las rutas de la API— y la imagen borra el `default.conf` que traía `index index.html` de fábrica. Para un `GET /admin/`, `try_files` casa `$uri/` con el directorio, nginx busca allí su índice, no encuentra `index.php` y responde 403 **antes** de llegar al respaldo `/admin/index.html`. Afectaba igual a las tres SPA. En desarrollo no se veía porque `dev-extra/` sustituye esas `location` por proxys a Vite.
+
+**Arreglo:** `index index.html;` en las tres `location` de `infra/docker/nginx/extra/spa.conf` (`:39`, `:50`, `:66`), no en el `server` —cuyo `index index.php` es correcto para el resto—, con el porqué escrito arriba del bloque: es exactamente el tipo de 403 cuyo síntoma no apunta a su causa. **No falta un permiso, falta una directiva.**
+
+**Guarda nueva, y sí merece la pena** (encargo 1). `infra/scripts/nginx-smoke.sh` + `make nginx-smoke` arrancan la imagen **sola** —sin base de datos, sin aplicación— y piden las cuatro rutas. **30 segundos.** No duplica la etapa ⑧: **adelanta el hallazgo**, y sobre todo se puede ejecutar **en el portátil**, cosa que la etapa ⑧ no. También se invoca en la etapa ⑧ justo tras construir la imagen (`ci.yml:880`), para que este fallo salga a los 3 minutos y no a los 25. **Medido que caza el fallo:** retirando las tres líneas `index`, el smoke da `[FALLA] /admin/ devolvio 403` y reproduce literalmente el `directory index ... is forbidden` de la CI.
+
+**Encargo 2: `envsubst` y las variables ausentes. Lo encontró el propio smoke** en su primera ejecución, con el `[emerg] "client_max_body_size" directive invalid value` — un mensaje que no nombra la variable que falta ni dice de dónde sale. Resuelto en dos mitades, según si un valor por defecto es seguro o no:
+
+- **Las que sí pueden tenerlo**, como `ENV` en el Dockerfile (`infra/docker/nginx/Dockerfile:124`): `NGINX_CLIENT_MAX_BODY_SIZE=8m`, `TLS_CERT_FILE`, `TLS_KEY_FILE`. Siempre definidas, y el `.env` de la instalación las sobreescribe sin esfuerzo porque el entorno del contenedor gana sobre el `ENV` de la imagen.
+- **Las tres redes, NO**, y se **exigen**: `infra/docker/nginx/docker-entrypoint.d/04-kronoqr-required-env.sh` para el arranque nombrando **todas** las que faltan y diciendo qué hacer. Un valor por defecto para `PORTAL_INTERNAL_CIDR` publicaría el portal a internet o dejaría a la plantilla sin consultar su jornada; uno para `KIOSK_VLAN_CIDR` frenaría el fichaje en el cambio de turno con el síntoma «el quiosco va lento a las 06:00». **Adivinar ahí es peor que parar.** Comprobado: sin las tres, el contenedor muere nombrándolas.
+
+**Verificado en local, con la imagen reconstruida:** `/healthz` **200** · `/admin/` **200** con `<!doctype html` · `/kiosk/` **200** con `<!doctype html` · `/portal/` **403**. Y el 403 del portal es el candado de RF-ID-08, no el mismo fallo del índice: **con `PORTAL_INTERNAL_CIDR=0.0.0.0/0` da 200 y sirve su HTML**. `make sh-lint` 0 hallazgos.
+
 ## Sesión «tarea 5.3: licencia firmada, verificación local y degradación honesta» (01-09-2026), en `feat/fase-5-productizacion`
 
 **Tarea 5.3 implementada y verificada, sin commitear** (lo commitea el usuario tras las revisiones de `seguridad-cumplimiento` y `revisor-codigo`). Cubre `RF-PD-04` y `RF-PD-05`.

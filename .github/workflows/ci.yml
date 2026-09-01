@@ -894,6 +894,18 @@ jobs:
       - name: Construir las tres imagenes de entrega
         run: make build-ci-images IMAGES="postgres app nginx" BUILDX_CACHE=gha
 
+      - name: El borde sirve las tres SPA (comprobacion de 30 s, antes de instalar nada)
+        # ADELANTA EL HALLAZGO, no lo duplica. Los escenarios C y siguientes ya
+        # piden estas rutas, pero tardan entre 20 y 30 minutos en llegar ahi: un
+        # 403 por una directiva `index` que falta -lo que rompio la cuarta
+        # ejecucion de esta etapa- no merece esperar todo el ciclo. Arranca la
+        # imagen sola, sin base de datos y sin aplicacion, y pide las cuatro
+        # rutas que definen si el borde sirve lo que tiene que servir.
+        #
+        # Es la misma orden que se ejecuta en local con `make nginx-smoke`, que
+        # es lo que esta etapa no puede ofrecer: aqui no se puede depurar.
+        run: make nginx-smoke
+
       - name: Etiquetarlas como las nombra compose.prod.yaml
         # El instalador fija IMAGE_TAG desde el fichero VERSION, y el fichero de
         # compose compone <IMAGE_REGISTRY>/<php|nginx|postgres>:<IMAGE_TAG>. Se

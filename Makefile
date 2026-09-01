@@ -192,7 +192,7 @@ endif
 .DEFAULT_GOAL := help
 .PHONY: help up down restart build ps logs shell seed test test-unit test-integration \
         test-arch test-contract quality tools-ready php-lint deptrac rector sh-lint api-lint sast \
-        sast-community trivy-fs trivy-image secrets-scan sbom build-ci-images release-gate \
+        sast-community trivy-fs trivy-image secrets-scan sbom build-ci-images release-gate nginx-smoke \
         traceability traceability-check docs-consistency deps-audit-php deps-audit-js coverage coverage-now mutate e2e clean changelog changelog-check tool-versions \
         backup backup-verify restore-drill
 
@@ -225,6 +225,7 @@ help: ## Muestra esta ayuda
 	@echo   make sbom             SBOM CycloneDX en sbom/kronoqr-VERSION.cdx.json
 	@echo   make build-ci-images  Construye kronoqr/{postgres,app,nginx}:ci (IMAGES=postgres|app|nginx)
 	@echo   make release-gate     Falla si la entrega saldria sin clave publica del fabricante
+	@echo   make nginx-smoke      Arranca la imagen del borde sola y pide las cuatro rutas
 	@echo   make traceability     Matriz requisito - prueba (RQ-13)
 	@echo   make traceability-check  Falla si un requisito no tiene prueba
 	@echo   make docs-consistency  Coherencia documental (RQ-12, RNF-M-04)
@@ -653,6 +654,17 @@ build-ci-images: ## Construye kronoqr/{postgres,app,nginx}:ci (IMAGES=postgres|a
 	      -f "$$dockerfile" $$target -t "$$tag" . || exit $$?; \
 	  fi; \
 	done
+
+
+# Comprobacion rapida del borde: arranca la imagen sola y pide las cuatro rutas
+# que definen si sirve lo que tiene que servir. 30 segundos.
+#
+# NO duplica la etapa ⑧ de la CI: adelanta el hallazgo. Esa etapa tarda entre
+# 20 y 30 minutos en llegar a la misma comprobacion, y ADEMAS no se puede
+# ejecutar en el portatil de quien programa. Las tres SPA devolviendo 403 por
+# una directiva `index` que faltaba se detecta aqui antes de empujar.
+nginx-smoke: ## Arranca kronoqr/nginx:ci sola y comprueba /admin/, /kiosk/, /portal/ y /healthz
+	bash infra/scripts/nginx-smoke.sh
 
 # Trivy sobre el arbol de fuentes: dependencias de composer.lock y
 # package-lock.json, misconfig de los Dockerfiles y secretos residuales (el
