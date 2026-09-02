@@ -1,5 +1,26 @@
 # HANDOFF
 
+## Sesión «merge de origin/main y conflicto del package-lock» (02-09-2026), en `feat/fase-5-productizacion`
+
+**Merge `36d5f38` de `origin/main` (Dependabot #36–#40) completado.** El conflicto del `package-lock.json`
+no se resolvió eligiendo lado: se partió del lock de main y, desde `node:24-alpine` sin `node_modules`,
+se aplicaron solo la receta oxide del Dockerfile de nginx y `npm update fast-uri --package-lock-only`.
+Diferencia verificada contra main: solo `fast-uri` 3.1.7, las plataformas de oxide y sus deps wasm.
+`npm audit` 0, `npm ci` en verde. Detalle completo en el mensaje del commit de merge.
+
+**Hallazgos:**
+
+- **El lock de `origin/main` está roto**: los merges de Dependabot perdieron TODOS los paquetes de
+  plataforma de `@tailwindcss/oxide` (la regresión que vigila `QualityGatesTest` → «mantiene en el lock
+  los binarios nativos…»). El build Docker de nginx falla en main hasta que este branch se integre.
+- **Confirmado en carne propia npm/cli#4828**: un `npm install` en Windows con `node_modules/` presente
+  reescribió el lock quitando plataformas de rollup, rolldown, lightningcss y fsevents; se descartó y se
+  rehízo en contenedor. Cualquier operación sobre el lock, siempre desde Linux y sin `node_modules`.
+- Los tres servidores Vite de desarrollo (admin, kiosk, portal) se detuvieron para el `npm ci`; hay que
+  relanzarlos (`npm run dev --prefix frontend-…`).
+
+**Pendiente de esta sesión:** push del merge (no se ha hecho).
+
 ## Sesión «tarea 5.5: fallo intermitente de la etapa ③ tras el commit `3e587cc`» (02-09-2026), en `feat/fase-5-productizacion`
 
 **La CI cayó en `make test-contract` con un fallo intermitente y víctima variable** (`EmployeeWorkDaysTest`
