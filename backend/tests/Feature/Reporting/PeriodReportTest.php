@@ -9,6 +9,7 @@ use Spectator\Spectator;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Reporting\PeriodReportFixtures;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -38,6 +39,17 @@ uses(RefreshDatabase::class);
 
 beforeEach(function (): void {
     Spectator::using('openapi.yaml');
+
+    // El informe por periodo es funcionalidad ACCESORIA (ADR-023, tarea 5.3):
+    // sin una licencia que lo conceda, el endpoint responde `402` con el aviso
+    // de licencia. Aqui se prueba la funcionalidad; su degradacion tiene fichero
+    // propio, `tests/Feature/Product/LicenseDegradesAccessoriesTest.php`.
+    //
+    // **Nada del registro legal necesita esta llamada**: el fichaje, la consulta
+    // de jornadas, el portal y la exportacion para la Inspeccion funcionan sin
+    // licencia por diseño, y que sus pruebas no la hagan es la comprobacion
+    // silenciosa de eso (regla dura 15).
+    LicenseKeys::grantAll();
 });
 
 /**

@@ -39,6 +39,32 @@ title = "KronoQR"
 [extend]
 useDefault = true
 
+# ---------------------------------------------------------------------------
+# Regla propia: la clave PRIVADA de emision de licencias (tarea 5.3, RS-08)
+# ---------------------------------------------------------------------------
+#
+# POR QUE HACE FALTA UNA REGLA PROPIA. Una clave privada ed25519 en hexadecimal
+# son 128 caracteres de [0-9a-f] y nada mas: no lleva cabecera PEM, ni prefijo,
+# ni nombre de proveedor, asi que **ninguna regla por defecto de gitleaks la
+# reconoce**. Es exactamente la forma que tendria si alguien la pegara "solo
+# para probar" en un fichero de configuracion, en una prueba o en un README.
+#
+# Y es la peor fuga posible de este producto: quien tenga esa clave puede emitir
+# licencias validas para CUALQUIER cliente, con cualquier plan y cualquier
+# vigencia (ADR-018). El emisor vive fuera del arbol desplegable
+# (`tools/license-issuer/`) y la recibe por variable de entorno; esta regla es la
+# red que impide que acabe versionada de todos modos.
+#
+# Las pruebas no la disparan: generan su par en cada ejecucion con
+# `sodium_crypto_sign_keypair()` y no escriben ninguno en disco.
+# `LicenseIssuerRoundTripTest` comprueba lo mismo desde el otro lado, sobre los
+# ficheros concretos donde alguien tendria la tentacion de pegarla.
+[[rules]]
+  id = "kronoqr-license-signing-key"
+  description = "Clave privada ed25519 de emision de licencias (128 hex). Nunca en el repositorio (§7.7, RS-08)"
+  regex = '''\b[0-9a-fA-F]{128}\b'''
+  keywords = []
+
 [allowlist]
   description = "Falsos positivos confirmados uno a uno (ver cabecera): valor EXACTO del secreto, nunca una ruta entera"
   regexTarget = "secret"
@@ -89,4 +115,26 @@ useDefault = true
     #    equivocado». Publico por diseño, como `DECOY_HASH` en el PIN; quien lo
     #    conozca no obtiene nada. Fijado por TwoFactorRejectionSymmetryTest.
     '''^K5CVGRKUKZLE6TCPKZDVSVKGKZLE6TCP$''',
+
+    # 19) backend/tests/Integration/Product/LicenseActivationTest.php: la
+    #    cadena `KQL1.manipulada.aqui` que la prueba escribe en `license.signed_key`
+    #    para comprobar que una fila corrompida a mano deja la licencia en
+    #    `unverifiable` sin tumbar nada (tarea 5.3). No es una clave: ni la
+    #    carga ni la firma son base64url validos y ninguna clave publica la
+    #    verificaria.
+    '''^KQL1\.manipulada\.aqui$''',
+
+    # 20) docs/api/openapi.yaml: `key_fingerprint` de los ejemplos de
+    #    `GET /api/v1/license`. Es una huella (SHA-256 truncado a 12 hex) de una
+    #    clave de EJEMPLO, y aunque fuera la de una clave real no permitiria
+    #    reconstruirla: existe para confirmar por telefono que la clave activada
+    #    es la enviada (tarea 5.3).
+    '''^4b1e9c07a2d8$''',
+
+    # 21) docs/api/openapi.yaml: `signed_key` del ejemplo de
+    #    `POST /api/v1/license/activate`. Carga `{"license_id":"9f2c4a1b7e0d3f65"}`
+    #    y firma `foobar` en base64url: no lleva cliente, plan ni vigencia, no
+    #    esta firmada por ninguna clave y el verificador la rechaza como
+    #    `Malformed`. Esta ahi para que el ejemplo tenga la forma `KQL1.<carga>.<firma>`.
+    '''^KQL1\.eyJsaWNlbnNlX2lkIjoiOWYyYzRhMWI3ZTBkM2Y2NSJ9\.Zm9vYmFy$''',
   ]

@@ -126,3 +126,74 @@ informe y comprobar que se está hablando de los mismos datos.
 - **La verificación es manual y por tanto puntual.** Lo que sí está automatizado
   —y es lo que evita la regresión silenciosa— son los bytes: BOM, separador, fin
   de línea, neutralización de fórmulas y celdas de texto del XLSX.
+
+---
+
+## VM-02 — El día que caduca una licencia, el hotel sigue fichando
+
+### Qué requisito cubre
+
+`RF-PD-05`, [ADR-019](adr/ADR-019-la-licencia-nunca-bloquea-el-registro.md) y la
+**regla dura 15**. Es la promesa central del producto: *el registro de jornada
+nunca es rehén de la relación comercial*.
+
+### Por qué se verifica también a mano
+
+Porque está automatizada —`tests/Feature/Product/LicenseDoesNotBlockTest.php` la
+comprueba endpoint por endpoint, y `tests/Architecture/LicenseBoundaryTest.php`
+comprueba que no existe forma de expresar lo contrario— y aun así **hay una parte
+que ninguna prueba puede afirmar**: que una persona con una tarjeta en la mano,
+delante de una tablet real, ficha y ve su confirmación. Es la diferencia entre
+«el endpoint responde 200» y «el hotel funciona».
+
+Y hay una segunda razón, menos técnica: esta es la afirmación que se le hace al
+cliente en la venta (doc 05 §4.7 y §10.5). Conviene haberla visto con los ojos al
+menos una vez por versión mayor.
+
+### Cómo se prepara
+
+1. Sobre una instalación de prueba con datos de semilla, emitir una clave **ya
+   caducada** con la herramienta del fabricante:
+
+   ```bash
+   KRONOQR_LICENSE_SECRET_KEY="$(pass kronoqr/license-secret)" \
+   php tools/license-issuer/issue.php \
+       --customer="Hotel de Verificación, S.L." \
+       --plan=estandar --max-employees=10 --max-devices=1 \
+       --valid-from=2024-01-01 --valid-until=2024-12-31 \
+       --features=advanced_reports,realtime_presence
+   ```
+
+2. Activarla: `php artisan license:activate "KQL1...."`. Debe responder con el
+   aviso «YA ESTA CADUCADA» y **salir con código 1**, no con un error.
+3. Dar de alta **más personas que `max_employees`**, para verificar los dos ejes
+   a la vez.
+
+### Qué hay que mirar exactamente
+
+| Acción | Resultado esperado |
+| --- | --- |
+| Escanear una tarjeta en la tablet | Ficha y muestra el saludo con el nombre. **Ninguna mención a la licencia en el quiosco** |
+| Cortar la red del quiosco, fichar y devolverla | El fichaje se encola y sincroniza al volver |
+| Panel → registro de una persona | Se ve su jornada |
+| Panel → exportación para la Inspección | Descarga el fichero |
+| Portal del empleado | Entra con código y PIN y ve su registro |
+| Corregir una jornada con su motivo | Se guarda y deja traza |
+| Panel → Informes por periodo | **Aviso de licencia**, y el aviso nombra por dónde sacar las horas |
+| Panel → Presencia | Sigue mostrando quién está dentro, indicando que se actualiza por sondeo |
+| Banner del panel | Presente en todas las pantallas, **sin botón de cerrar** |
+| Dar de alta a la persona que supera el plan | Se da de alta y **ficha ese mismo día** |
+| `php artisan license:show` | Dice qué está degradado, desde cuándo, qué sigue funcionando y qué hacer |
+
+### Qué se registra
+
+En el acta de cierre de fase: fecha, versión del producto, huella de la clave
+usada (no la clave), y **confirmación explícita de que se fichó con una tarjeta
+física con la licencia caducada**. Si alguna casilla de la tabla falla, no es una
+incidencia menor: es un defecto que contradice lo que se le ha prometido al
+cliente por escrito.
+
+### Deuda conocida
+
+- **Requiere una tablet y una tarjeta impresa reales.** Sobre el navegador con
+  cámara simulada se comprueba el camino, pero no la experiencia.

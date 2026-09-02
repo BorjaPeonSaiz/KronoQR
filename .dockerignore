@@ -42,3 +42,16 @@ CLAUDE.md
 *.log
 .DS_Store
 Thumbs.db
+
+# LA HERRAMIENTA DE EMISION DE LICENCIAS NO ENTRA EN NINGUNA IMAGEN.
+#
+# Es del FABRICANTE, no del producto (§7.7, RS-08): firma claves con la privada
+# del par y no tiene nada que hacer en el servidor de un cliente. Hoy tampoco
+# entraria por el `COPY backend/ ./` del Dockerfile —vive en la raiz—, y esta
+# linea es la segunda cerradura: el dia que alguien añada un `COPY . .` o cambie
+# el contexto, la clave privada del fabricante no tendria donde acabar
+# desplegada. `LicenseIssuerRoundTripTest` comprueba lo mismo desde el otro lado.
+#
+# El empaquetado de entrega de la tarea 5.4 tiene que excluir `tools/`
+# explicitamente por el mismo motivo.
+tools/

@@ -112,6 +112,30 @@ export function stubFetch(handler: FetchHandler): ReturnType<typeof vi.fn> {
   return spy as unknown as ReturnType<typeof vi.fn>
 }
 
+/**
+ * Igual que `stubFetch`, pero enruta cada peticion al doble que le corresponde
+ * por el FINAL de la ruta (`endsWith`). Pensado para recorridos con varios
+ * endpoints en juego —el asistente de puesta en marcha, el acceso con segundo
+ * factor— donde un unico manejador tendria que reimplementar el enrutado en
+ * cada fichero de pruebas.
+ *
+ * **El orden de las claves importa**: se usa la PRIMERA que encaje. Una ruta
+ * anidada como `/setup/steps/departments` tambien termina en `/departments`,
+ * asi que la mas especifica va primero.
+ */
+export function stubRoutes(handlers: Record<string, FetchHandler>): ReturnType<typeof vi.fn> {
+  return stubFetch((url, init) => {
+    const path = new URL(url, 'http://localhost').pathname
+    const handler = Object.entries(handlers).find(([suffix]) => path.endsWith(suffix))?.[1]
+
+    if (handler === undefined) {
+      throw new Error(`Sin doble para ${path} en esta prueba`)
+    }
+
+    return handler(url, init)
+  })
+}
+
 /** Espera a que se resuelvan las consultas pendientes y se repinte el DOM. */
 export async function settle(times = 4): Promise<void> {
   for (let index = 0; index < times; index += 1) {

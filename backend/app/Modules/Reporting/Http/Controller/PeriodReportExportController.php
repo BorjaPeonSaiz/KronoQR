@@ -10,7 +10,10 @@ use App\Modules\Reporting\Http\Request\ExportPeriodReportRequest;
 use App\Modules\Reporting\Http\Response\PeriodReportDocument;
 use App\Modules\Reporting\Http\Support\PeriodReportExportTelemetry;
 use App\Modules\Shared\Application\Authorization\ScopeGuard;
+use App\Modules\Shared\Application\Port\FeatureGate;
 use App\Modules\Shared\Application\Port\ManagementActor;
+use App\Modules\Shared\Domain\Exception\FeatureNotLicensed;
+use App\Modules\Shared\Domain\ValueObject\Feature;
 use Illuminate\Support\Facades\Config;
 use LogicException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -58,7 +61,26 @@ final class PeriodReportExportController extends Controller
         PeriodReportExportTelemetry $telemetry,
         ScopeGuard $scope,
         PeriodReportDocument $documents,
+        FeatureGate $features,
     ): StreamedResponse {
+        /*
+         * MISMA COMPROBACION DE LICENCIA QUE LA CONSULTA, y tiene que serlo: lo
+         * que sale es exactamente lo mismo (ADR-023, tarea 5.3). Un endpoint de
+         * descarga con la degradacion mas floja que su consulta es la forma
+         * habitual de que la degradacion no sirva de nada — el mismo argumento
+         * por el que comparte ambito, policy y limitador.
+         *
+         * **Esto NO es la exportacion para la Inspeccion.** Aquella es
+         * `GET /reports/legal-export`, es registro legal y no se degrada jamas
+         * (RL-06, regla dura 15). El texto del `402` la nombra para que quien se
+         * encuentre el aviso sepa por donde seguir.
+         */
+        $availability = $features->statusOf(Feature::AdvancedReports);
+
+        if (! $availability->enabled) {
+            throw FeatureNotLicensed::from($availability);
+        }
+
         $query = $request->toQuery($scope);
         $format = $request->exportFormat();
 

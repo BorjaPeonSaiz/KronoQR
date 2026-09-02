@@ -11,7 +11,9 @@
       "legalExport": "Inspección",
       "live": "Presencia",
       "incidents": "Incidencias",
-      "reports": "Informes"
+      "reports": "Informes",
+      "compliance": "Cumplimiento",
+      "license": "Licencia"
     },
     "roles": {
       "admin": "Administración",
@@ -805,6 +807,296 @@
       "heading": "Incidencias de la jornada",
       "none": "Sin incidencias en esta jornada.",
       "linkToInbox": "Ver en la bandeja de incidencias"
+    }
+  },
+  "compliance": {
+    "heading": "Perfil de cumplimiento",
+    "intro": "Los umbrales legales con los que se revisa el registro horario de este centro. Se entregan con el perfil español de hostelería; ajústalos al convenio que os aplique.",
+    "loading": "Cargando el perfil…",
+    "detectionWarning": "Estos umbrales deciden qué jornadas se marcan para revisión. Un cambio rige desde el momento en que se guarda: no se recalcula el histórico y no se cierra ni se reabre ninguna incidencia ya registrada. Ten en cuenta que la revisión diaria vuelve a mirar los últimos 7 días, así que endurecer un umbral puede abrir incidencias de jornadas ya pasadas que caigan dentro de esa ventana.",
+    "pendingDetectionWarning": "Vas a cambiar un umbral de detección de incidencias. A partir de la próxima revisión diaria se marcarán jornadas distintas de las que se marcan hoy.",
+    "retentionWarning": "Vas a cambiar los años de conservación del registro. Bajarlo amplía lo que la purga considera vencido, sobre datos que hay obligación legal de conservar. Ninguna purga se ejecuta sola: la orden de retención propone primero en simulación y exige una confirmación explícita.",
+    "notAppliedYet": "La jornada semanal, el día de inicio de semana y el calendario de festivos se guardan y se auditan, pero todavía no los aplica ninguna regla: los estrenará la vista de cumplimiento.",
+    "save": "Guardar el perfil",
+    "saving": "Guardando…",
+    "saved": "Perfil guardado. El cambio queda registrado en el trail de auditoría.",
+    "failed": "No se ha podido guardar el perfil.",
+    "audited": "Cada umbral modificado deja un apunte en el trail de auditoría con el valor anterior, el nuevo, quién lo cambió y cuándo.",
+    "source": {
+      "site": "Perfil «{name}» ({jurisdiction}), asignado a este centro.",
+      "installation": "Perfil «{name}» ({jurisdiction}), el perfil por defecto de la instalación: este centro no tiene ninguno asignado y hereda sus cambios."
+    },
+    "fields": {
+      "name": "Nombre del convenio",
+      "minRestHours": "Descanso mínimo entre jornadas (h)",
+      "maxDailyHours": "Jornada diaria ordinaria (h)",
+      "maxWeeklyHours": "Jornada semanal ordinaria (h)",
+      "breakRequiredAfterHours": "Tramo continuo máximo sin pausa (h)",
+      "weekStartsOn": "La semana empieza en",
+      "holidayCalendar": "Calendario de festivos",
+      "retentionYears": "Años de conservación del registro"
+    },
+    "hints": {
+      "name": "Cómo se llama el convenio que describe este perfil. Aparece en el informe de retención.",
+      "minRestHours": "Se abre incidencia si entre el fin de un turno y el inicio del siguiente median menos horas. 12 en el perfil español (art. 34.3 ET).",
+      "maxDailyHours": "Se abre incidencia si la suma de los tramos de una jornada supera estas horas. 9 en el perfil español.",
+      "maxWeeklyHours": "40 en el perfil español (art. 34.1 ET). El promedio en cómputo anual lo fija el convenio.",
+      "breakRequiredAfterHours": "Umbral del tramo continuo sin pausa registrada. 6 en el perfil español. Se guarda y se evalúa; hoy no abre incidencias (ver la nota de debajo).",
+      "weekStartsOn": "Se usa para agrupar por semanas. Lunes en el perfil español (ISO 8601).",
+      "holidayCalendar": "Una fecha por línea, en formato AAAA-MM-DD. Se entrega vacío: los festivos dependen del municipio y del año, así que los carga cada instalación.",
+      "retentionYears": "Cuatro años en España (art. 34.9 ET). Antes de ese plazo nada puede purgarse."
+    },
+    "weekDays": {
+      "1": "Lunes",
+      "2": "Martes",
+      "3": "Miércoles",
+      "4": "Jueves",
+      "5": "Viernes",
+      "6": "Sábado",
+      "7": "Domingo"
+    },
+    "breakSuspended": "El tramo continuo sin pausa se evalúa, pero hoy no abre incidencias: hasta que el quiosco registre la pausa como tal, el sistema no puede distinguir «no descansó» de «descansó y no lo fichó». El umbral se guarda y se aplicará cuando la detección se reactive.",
+    "errors": {
+      "notAWholeNumber": "Escribe un número entero, sin decimales ni letras.",
+      "required": "Este campo no puede quedarse vacío."
+    }
+  },
+  "license": {
+    "heading": "Licencia",
+    "intro": "Qué se ha contratado, hasta cuándo, cuánto se está usando y qué funcionalidades accesorias están disponibles.",
+    "neverDegraded": "El fichaje, la consulta de jornadas, el portal del empleado, la exportación para la Inspección de Trabajo, las correcciones, el registro de auditoría y las copias de seguridad NO dependen de la licencia: funcionan igual esté como esté. Lo que aquí se gobierna son las funcionalidades accesorias.",
+    "loading": "Cargando el estado de la licencia…",
+    "contract": "Qué se ha contratado",
+    "usage": "Plan contratado frente a uso real",
+    "usageColumns": {
+      "limit": "Magnitud",
+      "contracted": "Contratado",
+      "actual": "Real"
+    },
+    "over": "{excess} por encima",
+    "excessNote": "Superar una cifra del plan no ha impedido ningún alta ni ningún emparejamiento, y no lo hará. Queda constancia en el registro de auditoría con la fecha exacta; habla con tu proveedor cuando te venga bien para ampliar el plan.",
+    "degraded": "Qué está degradado",
+    "degradedNone": "Todo lo contratado está disponible.",
+    "activate": "Activar una clave",
+    "activating": "Activando…",
+    "activated": "Licencia activada.",
+    "fields": {
+      "customer": "Cliente",
+      "plan": "Plan",
+      "validity": "Vigencia",
+      "fingerprint": "Huella de la clave",
+      "signedKey": "Clave de licencia"
+    },
+    "hints": {
+      "signedKey": "La cadena que te entregó tu proveedor. Empieza por «KQL1.». Puedes pegarla con espacios o saltos de línea: se limpian solos."
+    },
+    "states": {
+      "valid": "Licencia vigente",
+      "expiring_soon": "Licencia vigente, caduca pronto",
+      "expired": "Licencia caducada",
+      "absent": "Sin licencia activada",
+      "not_yet_valid": "Licencia todavía no vigente",
+      "unverifiable": "La licencia no se puede verificar"
+    },
+    "detail": {
+      "valid": "Caduca el {until}. Te avisaremos {warningDays} días antes.",
+      "expiring_soon": "Caduca el {until}: quedan {days} días. Todavía no se ha degradado nada. Pide la renovación a tu proveedor y actívala aquí cuando te llegue.",
+      "expired": "Caducó el {until}, hace {elapsed} días. Desde entonces, las funcionalidades accesorias de abajo no están disponibles. El registro horario sigue funcionando por completo.",
+      "absent": "Todavía no se ha activado ninguna clave. Actívala abajo; te la entrega tu proveedor. Mientras tanto se ficha y se consulta el registro con normalidad.",
+      "not_yet_valid": "La clave activada empieza a valer el {from}. No hay que hacer nada: las funcionalidades accesorias se activan solas ese día.",
+      "unverifiable": "La clave guardada no se puede verificar. El registro horario sigue funcionando por completo; lo que no están disponibles son las funcionalidades accesorias."
+    },
+    "rejections": {
+      "malformed": "La clave está incompleta o cortada, que es lo que suele pasar al copiarla de un correo. Vuelve a pegarla entera.",
+      "bad_signature": "Esta clave no la emitió el fabricante de esta versión, o se modificó por el camino. Pide una clave nueva a tu proveedor.",
+      "invalid_payload": "La clave está firmada pero le falta información. Es un fallo de emisión: avisa a tu proveedor y pide una clave nueva.",
+      "no_public_key": "Esta instalación no lleva la clave pública del fabricante, así que no puede verificar ninguna licencia. No es un problema de tu clave, es del despliegue: avisa a tu proveedor indicando la versión que devuelve GET /api/v1/health."
+    },
+    "limits": {
+      "max_employees": "Personas en plantilla",
+      "max_devices": "Quioscos activos"
+    },
+    "features": {
+      "advanced_reports": "Informes por periodo y comparativa con lo contratado",
+      "impact_dashboard": "Cuadro de impacto y adopción",
+      "payroll_export": "Exportación para nómina",
+      "weekly_email_summary": "Resumen semanal por correo",
+      "realtime_presence": "Presencia en tiempo real (pasa a actualizarse por sondeo)",
+      "white_label": "Marca propia",
+      "telemetry": "Telemetría opcional"
+    },
+    "restrictions": {
+      "license_expired": "no disponible por licencia caducada, desde el {since}",
+      "license_absent": "no disponible: no hay licencia activada",
+      "license_unverifiable": "no disponible: la licencia no se puede verificar",
+      "license_not_yet_valid": "disponible a partir del {since}",
+      "not_in_plan": "no incluida en el plan contratado",
+      "unknown": "no disponible"
+    },
+    "notice": {
+      "action": "Ver la licencia",
+      "valid": "La licencia está vigente. El aviso aparece por otro motivo, indicado a continuación.",
+      "expiring_soon": "La licencia caduca el {until}, dentro de {days} días. Todavía no se ha degradado nada: renuévala para que los informes por periodo y la presencia en tiempo real sigan disponibles.",
+      "expired": "La licencia caducó el {until}, hace {elapsed} días. Los informes por periodo y la presencia en tiempo real están degradados desde entonces. El fichaje y el acceso al registro siguen funcionando con normalidad.",
+      "absent": "Esta instalación no tiene licencia activada. El fichaje y el acceso al registro funcionan con normalidad; las funcionalidades accesorias, no. Activa la clave que te entregó tu proveedor.",
+      "not_yet_valid": "La licencia activada empieza a valer el {from}. Hasta entonces, las funcionalidades accesorias no están disponibles. No hay que hacer nada más.",
+      "unverifiable": "La licencia guardada no se puede verificar. El fichaje y el acceso al registro funcionan con normalidad; las funcionalidades accesorias, no.",
+      "exceeded": "Además, se ha superado el plan contratado en: {limits}. No bloquea nada; habla con tu proveedor para ampliarlo."
+    }
+  },
+  "onboarding": {
+    "heading": "Puesta en marcha",
+    "intro": "Ocho pasos para dejar el sistema listo para fichar. Puedes cerrar esta pantalla en cualquier momento y retomarla donde la dejaste: nada se pierde.",
+    "loading": "Cargando el estado de la puesta en marcha…",
+    "stepAnnouncement": "{label}",
+    "progress": {
+      "label": "Progreso de la puesta en marcha"
+    },
+    "actions": {
+      "continue": "Continuar",
+      "skip": "Omitir por ahora",
+      "saving": "Guardando…"
+    },
+    "locales": {
+      "es": "Español",
+      "en": "Inglés"
+    },
+    "alreadyDone": {
+      "heading": "Esta instalación ya está en marcha",
+      "intro": "El asistente de puesta en marcha ya se completó y no vuelve a abrirse. Los cambios posteriores se hacen desde el panel, ya autenticado.",
+      "goToLogin": "Ir al acceso del panel"
+    },
+    "review": {
+      "heading": "Revisa antes de terminar",
+      "intro": "Estos son los ocho pasos y cómo han quedado. El asistente no se cierra solo: hazlo explícitamente cuando lo hayas revisado, porque después no vuelve a estar accesible.",
+      "states": {
+        "completed": "Hecho",
+        "skipped": "Omitido"
+      },
+      "complete": "Finalizar la puesta en marcha",
+      "completing": "Finalizando…"
+    },
+    "completion": {
+      "heading": "Puesta en marcha completada",
+      "intro": "El sistema ya tiene organización, centro, primer administrador y perfil de convenio. Esto es lo que queda antes del primer día.",
+      "credentialsPending": "Aún faltan {count} tarjetas por emitir e imprimir.",
+      "credentialsNone": "No hay tarjetas pendientes de emitir.",
+      "credentialsAdvice": "Sin tarjeta impresa y entregada, nadie puede fichar el primer día. Emitirlas e imprimirlas lleva días de logística: hazlo con antelación.",
+      "credentialsLink": "Ir al panel de estado de credenciales",
+      "credentialsCommand": "También puedes consultarlo desde la consola del servidor con: credentials:status --pending",
+      "fields": {
+        "employees": "Personas en plantilla",
+        "departments": "Departamentos",
+        "license": "Licencia",
+        "kiosks": "Quioscos vinculados"
+      },
+      "goToPanel": "Ir al panel de gestión"
+    },
+    "steps": {
+      "administrator": {
+        "heading": "Primer administrador",
+        "intro": "La primera cuenta de gestión, con segundo factor obligatorio. Todo lo que hagas a partir de aquí —el centro, la licencia, cada paso— queda auditado con esta cuenta como autora.",
+        "fields": {
+          "name": "Nombre",
+          "email": "Correo electrónico",
+          "password": "Contraseña"
+        },
+        "hints": {
+          "name": "El nombre con el que aparecerás en el panel y en el registro de auditoría.",
+          "email": "Es tu identificador de acceso. No se envía ninguna invitación: la contraseña se fija aquí mismo.",
+          "password": "Al menos 12 caracteres, con mayúsculas, minúsculas, dígitos y símbolos."
+        },
+        "submit": "Crear la cuenta",
+        "submitting": "Creando…",
+        "alreadyExists": "Ya hay una cuenta de gestión creada en esta instalación.",
+        "goToLogin": "Entra en /auth/login con tu correo y tu contraseña"
+      },
+      "organisation": {
+        "heading": "Organización",
+        "intro": "El nombre con el que se identifica el hotel y los idiomas del panel.",
+        "loading": "Cargando la configuración…",
+        "fields": {
+          "appName": "Nombre del establecimiento",
+          "defaultLocale": "Idioma por defecto",
+          "availableLocales": "Idiomas disponibles"
+        },
+        "hints": {
+          "appName": "Aparecerá en el panel y, más adelante, en los informes.",
+          "defaultLocale": "El idioma con el que arranca una cuenta nueva.",
+          "availableLocales": "El idioma por defecto no se puede desmarcar."
+        }
+      },
+      "site": {
+        "heading": "Centro de trabajo",
+        "intro": "El nombre y la zona horaria del centro. La zona horaria decide en qué jornada cuenta cada turno: nunca es la zona del navegador ni la de la aplicación, que es siempre UTC.",
+        "fields": {
+          "name": "Nombre del centro",
+          "timezone": "Zona horaria"
+        },
+        "hints": {
+          "name": "Por ejemplo, el nombre del hotel.",
+          "timezone": "Una zona IANA como «Europe/Madrid», nunca un desfase fijo como «+02:00»: un desfase no sabe de cambios de hora."
+        }
+      },
+      "departments": {
+        "heading": "Departamentos",
+        "intro": "Cocina, recepción, pisos… Puedes omitir este paso y crearlos más tarde desde la gestión normal.",
+        "loading": "Cargando los departamentos…",
+        "none": "Todavía no hay ningún departamento.",
+        "fields": {
+          "name": "Nombre del departamento"
+        },
+        "add": "Añadir",
+        "adding": "Añadiendo…"
+      },
+      "complianceProfile": {
+        "heading": "Perfil de convenio",
+        "intro": "Los umbrales legales con los que se detectan los incumplimientos: descanso mínimo, jornada máxima, pausa obligatoria y años de conservación. Empiezan en «ES-hostelería», el convenio de hostelería español, pero tienes que contrastarlos con el convenio que de verdad aplique a tu centro antes de continuar: este paso no se puede omitir.",
+        "confirm": "He revisado los umbrales, continuar",
+        "confirmHint": "Márcalo cuando hayas contrastado estos valores con el convenio aplicable, aunque no cambies ninguno."
+      },
+      "employees": {
+        "heading": "Plantilla",
+        "intro": "Importa la plantilla desde un CSV o un XLSX. Primero se valida sin escribir nada, con un informe línea a línea; solo se aplica lo que confirmes. Puedes omitir este paso y dar de alta a las personas una a una más tarde.",
+        "fields": {
+          "file": "Fichero de plantilla"
+        },
+        "hints": {
+          "file": "CSV o XLSX. El delimitador y la codificación se detectan solos."
+        },
+        "validate": "Validar",
+        "validating": "Validando…",
+        "apply": "Aplicar",
+        "applying": "Aplicando…",
+        "truncated": "El fichero trae más líneas de las que se pueden aplicar de una vez. Divídelo en partes más pequeñas y vuelve a intentarlo: con el fichero así, no se aplica nada.",
+        "fileWarnings": "Avisos del fichero entero, revísalos antes de continuar:",
+        "validatedSummary": "Simulación, nada se ha guardado todavía: {create} altas, {update} actualizaciones, {unchanged} sin cambios, {reject} rechazadas.",
+        "appliedSummary": "Aplicado: {create} altas creadas, {update} actualizadas, {unchanged} sin cambios, {reject} rechazadas y no aplicadas.",
+        "tableCaption": "Resultado línea a línea de la importación",
+        "columns": {
+          "line": "Línea",
+          "label": "Nombre",
+          "outcome": "Resultado",
+          "messages": "Detalle"
+        },
+        "outcomes": {
+          "create": "Alta",
+          "update": "Actualización",
+          "unchanged": "Sin cambios",
+          "reject": "Rechazada"
+        }
+      },
+      "license": {
+        "heading": "Licencia",
+        "intro": "Activa la clave si ya la tienes. Es opcional: el fichaje y el registro legal nunca dependen de la licencia, así que puedes omitir este paso y activarla más tarde desde el panel.",
+        "skip": "Omitir por ahora"
+      },
+      "kiosk": {
+        "heading": "Primer quiosco",
+        "intro": "El emparejamiento de la tablet del quiosco todavía no está disponible en esta versión.",
+        "notYetAvailable": "Vincular un quiosco llegará en una versión posterior. Por ahora, omite este paso: el procedimiento manual queda documentado en el runbook de alta de un nuevo quiosco, y podrás vincularlo en cuanto esté disponible sin tener que repetir la puesta en marcha.",
+        "skip": "Omitir por ahora"
+      }
     }
   }
 }

@@ -1,0 +1,33 @@
+#!/bin/sh
+#
+# KronoQR — donde estan el certificado y su clave, por defecto.
+#
+# ES UN `.envsh`, NO UN `.sh`: el punto de entrada de la imagen de Nginx CARGA
+# con `source` los ficheros `.envsh` y EJECUTA los `.sh`. Solo lo cargado deja
+# variables en el entorno del proceso, y aqui hacen falta en dos sitios
+# distintos: en `05-kronoqr-tls.sh`, que decide si hay que generar un
+# autofirmado, y en el `20-envsubst-on-templates.sh` de la imagen base, que
+# rinde `ssl_certificate ${TLS_CERT_FILE}` en la plantilla. Por eso se exportan.
+#
+# POR QUE NO SON UN `ENV` DEL DOCKERFILE, que era lo obvio y es donde estaban.
+# Trivy las marcaba con DS-0031 CRITICAL —«possible exposure of secret env
+# TLS_KEY_FILE in ENV»— porque la regla mira el NOMBRE de la variable y ve
+# «KEY». Aqui no hay ningun secreto: son RUTAS, y la clave que vive en ellas la
+# monta el cliente desde su propio disco. Pero el runbook de triaje manda
+# corregir antes que excepcionar, y esta correccion no es un rodeo para callar
+# a la herramienta: deja el valor por defecto pegado a la logica que lo usa
+# —`05-kronoqr-tls.sh` ya hacia `${TLS_CERT_FILE:-...}`— en vez de repetido en
+# dos capas.
+#
+# El `.env` de la instalacion sigue mandando: si define estas variables, el
+# `:-` no llega a aplicarse.
+#
+# `set -eu` y NO `set -euo pipefail`: este fichero se carga DENTRO del shell del
+# punto de entrada, y `pipefail` cambiaria el comportamiento de todo lo que
+# venga despues, incluido codigo de la imagen base que no es nuestro. Es lo
+# mismo que hace el `15-local-resolvers.envsh` oficial, y por el mismo motivo.
+
+set -eu
+
+export TLS_CERT_FILE="${TLS_CERT_FILE:-/etc/nginx/certs/tls.crt}"
+export TLS_KEY_FILE="${TLS_KEY_FILE:-/etc/nginx/certs/tls.key}"

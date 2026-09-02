@@ -11,10 +11,10 @@ use DateTimeImmutable;
 /**
  * El PIN de cada empleado, visto por los casos de uso (RF-ID-09).
  *
- * **El PIN entra por aqui y no vuelve a salir.** `issue()` lo recibe en claro y
- * lo convierte en hash con el algoritmo de contrasenas de la instalacion; no hay
- * ningun metodo que lo devuelva, ni que devuelva su hash, porque no existe
- * ninguna razon legitima para leerlos. Es el mismo trato que
+ * **El PIN no entra por aqui: entra ya hasheado.** `issue()` recibe el hash que
+ * calculo {@see PinHasher} y lo escribe; no hay ningun metodo que devuelva el
+ * PIN, ni su hash, porque no existe ninguna razon legitima para leerlos. El PIN
+ * en claro no llega a cruzar esta frontera. Es el mismo trato que
  * {@see EmployeeRepository} da al documento de identidad (RL-08): lo que no se
  * puede leer no se puede filtrar.
  *
@@ -32,10 +32,11 @@ interface EmployeePinRepository
      * PIN nuevo no esta entregado por el hecho de que lo estuviera el que
      * sustituye.
      *
-     * @param  string  $pin  El PIN en claro. Se hashea aqui y no se almacena (RF-ID-09).
+     * @param  string  $pinHash  El hash ya calculado por {@see PinHasher}. El PIN en claro
+     *                           no se almacena ni pasa por este puerto (RF-ID-09).
      * @return bool `false` si el empleado no existe. Quien llama lo traduce a 404.
      */
-    public function issue(string $employeeUuid, string $pin, DateTimeImmutable $issuedAt): bool;
+    public function issue(string $employeeUuid, string $pinHash, DateTimeImmutable $issuedAt): bool;
 
     /**
      * Anota la entrega presencial: cuando y quien la hizo.

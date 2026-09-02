@@ -44,6 +44,17 @@ final class ProblemDetails
     public const string TYPE_SERVICE_UNAVAILABLE = 'urn:kronoqr:problem:service-unavailable';
 
     /**
+     * Una funcionalidad **accesoria** no esta disponible con la licencia
+     * activada (ADR-019, ADR-023).
+     *
+     * Tipo propio y no `TYPE_FORBIDDEN`, aunque los dos denieguen, porque a
+     * quien lo recibe le cambia por completo la accion siguiente: aquel dice
+     * «pide permiso a quien administra» y este dice «tu empresa tiene que
+     * renovar». **Nunca acompaña al registro legal**, que no es licenciable.
+     */
+    public const string TYPE_FEATURE_NOT_LICENSED = 'urn:kronoqr:problem:feature-not-licensed';
+
+    /**
      * La instancia todavia no acepta trafico: `GET /api/v1/ready`.
      *
      * **Tipo propio y no `TYPE_SERVICE_UNAVAILABLE`**, aunque los dos sean
@@ -101,6 +112,30 @@ final class ProblemDetails
     }
 
     /**
+     * El texto de un error de DOMINIO, en el idioma negociado por la peticion.
+     *
+     * **Por que hace falta.** Una excepcion de dominio no puede llevar texto de
+     * usuario dentro: `Domain/` no sabe en que idioma se va a leer, y meter
+     * castellano ahi le responde en castellano a un panel puesto en ingles.
+     * Asi que el dominio expone una CLAVE de traduccion y sus parametros, y este
+     * metodo la resuelve aqui, en el borde, donde `NegotiateLocale` ya ha
+     * decidido el idioma.
+     *
+     * **Y si falta la traduccion, se devuelve el mensaje tecnico** en vez de la
+     * clave: `settings.errors.out_of_range` no le dice nada a nadie, y el mensaje
+     * en ingles al menos explica el problema. Que falte es un defecto del
+     * producto, no del cliente, y lo caza la prueba de idioma del endpoint.
+     *
+     * @param  array<string, string|int>  $parameters
+     */
+    public static function translated(string $key, array $parameters, string $fallback): string
+    {
+        $message = trans($key, $parameters);
+
+        return is_string($message) && $message !== $key ? $message : $fallback;
+    }
+
+    /**
      * @param  array<string, list<string>>  $errors
      */
     public static function validationFailed(array $errors): JsonResponse
@@ -144,13 +179,75 @@ final class ProblemDetails
         );
     }
 
-    public static function notFound(): JsonResponse
+    /**
+     * Una funcionalidad **accesoria** no esta disponible con esta licencia
+     * (ADR-019, ADR-023, RF-PD-05, tarea 5.3).
+     *
+     * ## `402` y no `403`
+     *
+     * ADR-019 exige que cada funcionalidad accesoria *«responda con el aviso de
+     * licencia y no con un error generico»*. Un `403` mezclaria «no tienes
+     * permiso» con «tu empresa no ha renovado», que son dos problemas de dos
+     * personas distintas —lo primero lo arregla quien administra los roles, lo
+     * segundo quien firma el contrato— y en un log serian indistinguibles. `402
+     * Payment Required` es el unico codigo cuyo significado es exactamente este.
+     *
+     * ## Lo que este codigo NUNCA puede acompañar
+     *
+     * El fichaje, la consulta de jornadas, el portal, la exportacion para la
+     * Inspeccion, la auditoria, las correcciones, las copias ni las sondas. No
+     * por disciplina: la excepcion que llega hasta aqui solo se puede construir
+     * a partir de un `Feature`, y ese catalogo no tiene ningun caso del conjunto
+     * legal (regla dura 15).
+     *
+     * `feature` y `restriction` viajan en el cuerpo para que el panel pueda
+     * decidir que enseñar sin analizar el texto.
+     */
+    public static function featureNotLicensed(
+        string $detail,
+        string $feature,
+        ?string $restriction,
+        ?string $since,
+    ): JsonResponse {
+        $response = self::response(
+            self::TYPE_FEATURE_NOT_LICENSED,
+            'Funcionalidad no disponible con esta licencia',
+            JsonResponse::HTTP_PAYMENT_REQUIRED,
+            $detail,
+        );
+
+        /** @var array<string, mixed> $body */
+        $body = $response->getData(true);
+
+        return $response->setData([
+            ...$body,
+            'feature' => $feature,
+            'restriction' => $restriction,
+            'since' => $since,
+        ]);
+    }
+
+    /**
+     * `404`, con la posibilidad de decir **cual** era el recurso.
+     *
+     * El detalle es opcional y por defecto sigue siendo el generico, que es lo
+     * correcto para la mayoria: enumerar que identificadores existen y cuales no
+     * convierte un `404` en un oraculo sobre la plantilla, las credenciales o las
+     * incidencias (RS-03, regla dura 17).
+     *
+     * **Lo usa el asistente de puesta en marcha**, donde no hay nada que
+     * proteger: el catalogo de pasos es el mismo en todas las instalaciones
+     * (regla dura 13), esta publicado en el contrato y no dice nada de los datos
+     * del cliente. Ahi, un `404` mudo obliga a quien pone en marcha el sistema a
+     * adivinar si se equivoco de nombre o de version.
+     */
+    public static function notFound(?string $detail = null): JsonResponse
     {
         return self::response(
             self::TYPE_NOT_FOUND,
             'Recurso no encontrado',
             JsonResponse::HTTP_NOT_FOUND,
-            'No existe el recurso solicitado.',
+            $detail ?? 'No existe el recurso solicitado.',
         );
     }
 

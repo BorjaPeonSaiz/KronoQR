@@ -611,6 +611,13 @@ parameters:
       # no puede importar `Compliance`. Sigue siendo de solo lectura y solo sobre
       # EVENTOS.
       - WorkforceDomainEvent
+      # `ProductDomainEvent` entra con la tarea 5.1, cuarta vez por la misma via
+      # y el mismo motivo: doc 01 §5 exige que todo cambio de
+      # `installation_settings` quede en `audit_log` —algunos afectan al calculo
+      # de horas— y `Product` no puede importar `Compliance` (§1.6). El listener
+      # `RecordInstallationSettingChange` lee el evento y nada mas: sigue siendo
+      # de solo lectura y solo sobre EVENTOS.
+      - ProductDomainEvent
 
     # Http entra por Application. Alcanza Persistence solo por los idiomas de
     # Laravel que lo necesitan (route-model binding y Resources), nunca
@@ -656,6 +663,9 @@ parameters:
       - IdentityDomainEvent
       # Tarea 1.13: el mapa evento -> listener del PIN nombra sus dos eventos.
       - WorkforceDomainEvent
+      # Tarea 5.1: el mapa evento -> asiento del cambio de configuracion de la
+      # instalacion nombra `InstallationSettingChanged` (RF-PD-01, RL-04).
+      - ProductDomainEvent
 
     # --------------------------------------------------------------- Workforce
 
@@ -1197,6 +1207,31 @@ parameters:
       - Eloquent
       - ExternalCode
       - ProductPersistence
+      # ADR-028, tarea 5.3. `ObservePlanLimits` escucha el alta de una persona y
+      # la emision del token de un quiosco para CONTAR, nunca para decidir: el
+      # ADR exige por escrito que el conteo sea «un observador, no un guardian»,
+      # y que ningun caso de uso de Workforce, Identity o Kiosk consulte la
+      # licencia. Estas dos aristas son la unica forma de conseguir las dos
+      # cosas a la vez, y son de solo lectura y solo sobre EVENTOS —dos objetos
+      # de valor inmutables sin comportamiento—, como las que ya tienen
+      # Compliance y Reporting por el mismo motivo.
+      - WorkforceDomainEvent
+      - IdentityDomainEvent
+      # `CachedLicenseStatePublisher` deja el estado de licencia en la clave de
+      # cache que lee `App\Support\Health\LicenseStateProbe`, para que
+      # `GET /health` pueda informarlo SIN TOCAR la base de datos (doc 02 §10.5,
+      # tarea 5.3).
+      #
+      # Quien lo publica es el PUNTO UNICO DE RESOLUCION —`GetLicenseStatusHandler`,
+      # a traves de ese adaptador— y no el `FeatureGate`: si solo publicara el
+      # gate, la sonda seguiria diciendo `unknown` justo despues de activar una
+      # clave, que es exactamente cuando alguien la mira.
+      #
+      # La constante vive alli y no aqui porque su consumidor, `HealthController`,
+      # esta fuera de los modulos y NO puede depender de ninguno: esa frontera
+      # sigue intacta. La direccion admitida es esta, la de un modulo que alcanza
+      # el armazon, que es la misma que ya usa todo `ProductHttp`.
+      - AppFramework
 
     # Http entra por Application. Alcanza Persistence solo por los idiomas de
     # Laravel que lo necesitan (route-model binding y Resources), nunca
@@ -1227,6 +1262,12 @@ parameters:
       - ProductPersistence
       - ProductInfrastructure
       - ProductHttp
+      # Los dos eventos que el proveedor NOMBRA al registrar el observador de
+      # limites del plan (`Event::listen`). Misma concesion y mismo motivo que
+      # en `ProductInfrastructure`: ADR-028 exige contar sin que el alta conozca
+      # la licencia.
+      - WorkforceDomainEvent
+      - IdentityDomainEvent
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication

@@ -495,7 +495,7 @@ Formato resumido. Cada uno vive completo en `docs/adr/`.
 | **014** | **La credencial es una tarjeta física impresa**, única modalidad del producto | Es la única opción que cubre al 100 % de la plantilla. En hostelería el móvil excluye a demasiada gente: temporada sin correo corporativo, cocinas y pisos donde está prohibido, uniformes sin bolsillos. Análisis completo en el documento 04 | Logística de impresión y distribución a cargo del cliente. Rotación de clave con reimpresión progresiva. El QR en móvil sería un desarrollo a medida |
 | **015** | **El portal del empleado usa código y PIN, y es web sencilla** | El producto no puede exigir correo electrónico a toda la plantilla, y sin credencial que mostrar sin conexión no hace falta una PWA | Exige bloqueo por intentos y acceso restringido a red interna por defecto. Elimina la gestión de invitaciones, la entregabilidad de correo y el service worker del portal |
 | **016** | **Producto licenciado on-premise, sin multi-tenencia** | Se vende y se despliega en el servidor de cada cliente | Aislamiento físico gratuito. A cambio, el fabricante no puede intervenir en producción y hay que soportar N instalaciones en M versiones |
-| **017** | **Toda diferencia entre clientes es configuración, nunca código** | Vender a un cliente nuevo no puede exigir tocar el repositorio. Una rama por cliente destruye la economía del producto en el tercer cliente | Tabla `installation_settings` con ámbito, perfiles de cumplimiento, marca y funcionalidades por licencia. Los umbrales legales dejan de ser constantes |
+| **017** | **Toda diferencia entre clientes es configuración, nunca código** | Vender a un cliente nuevo no puede exigir tocar el repositorio. Una rama por cliente destruye la economía del producto en el tercer cliente | Tabla `installation_settings` (marca, idiomas y umbrales operativos), perfiles de cumplimiento y funcionalidades por licencia. Los umbrales legales dejan de ser constantes. **Enmienda 31-08-2026 (tarea 5.1):** la tabla queda sin ámbito —una fila por clave, cascada de dos escalones `instalación → valor de serie del catálogo`— y las funcionalidades activas las gobierna `features` de la licencia, no una clave editable |
 | **018** | **Licencia firmada con verificación local, sin llamada a internet** | El servidor del cliente puede estar en una red aislada. Una verificación en línea convertiría la conectividad del fabricante en punto único de fallo del registro horario de sus clientes | Clave firmada asimétricamente. No se puede revocar a distancia, lo cual es aceptable: es un control comercial, no de seguridad |
 | **019** | **La caducidad de la licencia nunca bloquea el registro ni su consulta** | Bloquear el fichaje dejaría al cliente incumpliendo la ley por acción del fabricante, e impediría el acceso a datos que debe conservar 4 años | La palanca comercial son los avisos y las funcionalidades accesorias. Exige separar en el código lo que es "registro legal" de lo que es "producto" |
 | **020** | **El soporte se presta con paquete de diagnóstico, no con acceso permanente** | El fabricante no debe tener acceso continuado a los datos personales de la plantilla de sus clientes | Exportación anonimizada por defecto, y acceso puntual solo con concesión expresa, temporal, limitada y auditada. Obliga a que los errores sean autoexplicativos |
@@ -523,7 +523,7 @@ Los diez siguientes **no proceden de esta tabla**: nacieron al desarrollar el pl
 | **037** | **Las lecturas en volumen de datos de terceros dejan asiento; la ficha individual y lo propio, no** | RS-05 no tenía criterio operativo y cada tarea decidía por su cuenta: `/kiosk/roster` y `/employees/{uuid}/workdays` auditaban, `/credentials/status` y `/employees` no, pese a divulgar **más**. RL-15 exige poder acotar una brecha desde el trail, y para el conjunto de datos más completo de la API no se podía | Regla de tres condiciones (terceros · sale del proceso · es un conjunto o el registro horario de una persona). `credential_status` y `employee_directory` empiezan a auditar; `/me/*` queda confirmado sin asiento; la ficha individual tampoco, porque el asiento del índice ya la subsume. Se mantiene **un solo** candado de la cadena de hash: partirlo por dataset bifurcaría la cadena de ADR-010 |
 | **038** | **RS-02 se limita por dispositivo y por IP; el eje por sujeto vive en el PIN, no en el escaneo de tarjeta** | RS-02 enumeraba tres ejes y solo existían dos. Al revisarlo, el tercero no protege de lo que la propia frase dice proteger: contra la enumeración no sirve —quien enumera prueba credenciales *distintas*—, la repetición de una misma tarjeta ya la absorbe RF-AT-06 como desenlace aceptado (ADR-031), y un `429` por credencial sería la única forma en que este producto puede dejar a una persona concreta sin fichar (regla dura 19) | Se enmienda el enunciado de RS-02 en el doc 01 §8 y su fila en `docs/requisitos.yaml`. Los dos ejes existentes ganan prueba propia sobre `/scan`, que la matriz daba por cubiertos con pruebas de otros endpoints. El límite por sujeto se mantiene y se refuerza donde el secreto es adivinable: el PIN (RS-12) |
 | **039** | **Qué hechos de autenticación dejan asiento en `audit_log`** | `AuditAction` no tenía ningún caso de autenticación (hueco de OWASP A09), y al cerrarlo la decisión «el fallo no se audita» quedó repetida en diez docblocks y en ningún ADR. Auditar cada intento metería el tráfico que un atacante controla dentro del candado global de ADR-010, por el que pasa cada fichaje | Éxito y cierre en `audit_log` **solo** en el panel —el catálogo de actores no tiene tipo para un empleado (ADR-037)—; apertura de bloqueo en los tres canales y **escrita después de responder**, para que ni el flanco cueste distinto ni un fallo de auditoría convierta un rechazo en `500`; el fallo solo en el log técnico y en `kronoqr_auth_attempts_total`. El origen va en la columna `ip` como en los otros cinco escritores; `ip_hash` se queda en el log técnico, y por eso el paquete de diagnóstico no puede incluir `APP_KEY` |
-| **040** | **Un centro de trabajo por instalación y por licencia** | El producto se vende como una licencia por hotel y cada licencia es una instalación completa, pero el doc 01 vendía «multi-centro desde el día 1»: `site_id` en cada alta y cada filtro, selectores de centro con una sola opción, `max_sites` en la licencia y pruebas de una frontera entre centros que no existe | El centro sigue siendo una entidad —tiene zona horaria y convenio— pero hay exactamente uno: índice único `sites_single_row_uidx`, `GET/PATCH /api/v1/site` singular, ningún `site_id` en el contrato ni en el panel, `SiteRepository::installationSite()` y el puerto `InstallationSiteProvider` de `Shared`. `site_id` se conserva en las tablas y el registro legal no se toca. Se retiran `max_sites` (ADR-018/028) y el ámbito `site` de `installation_settings` queda sin uso (ADR-017). Se aplica en `/api/v1` pese a ADR-012 porque no hay instalación desplegada y la superficie del quiosco no cambia |
+| **040** | **Un centro de trabajo por instalación y por licencia** | El producto se vende como una licencia por hotel y cada licencia es una instalación completa, pero el doc 01 vendía «multi-centro desde el día 1»: `site_id` en cada alta y cada filtro, selectores de centro con una sola opción, `max_sites` en la licencia y pruebas de una frontera entre centros que no existe | El centro sigue siendo una entidad —tiene zona horaria y convenio— pero hay exactamente uno: índice único `sites_single_row_uidx`, `GET/PATCH /api/v1/site` singular, ningún `site_id` en el contrato ni en el panel, `SiteRepository::installationSite()` y el puerto `InstallationSiteProvider` de `Shared`. `site_id` se conserva en las tablas y el registro legal no se toca. Se retiran `max_sites` (ADR-018/028) y el ámbito `site` de `installation_settings` queda sin uso (ADR-017) — **la tarea 5.1 lo retira con una migración de contracción**. Se aplica en `/api/v1` pese a ADR-012 porque no hay instalación desplegada y la superficie del quiosco no cambia |
 
 ---
 
@@ -700,6 +700,8 @@ Un token de quiosco comprometido **no da acceso a la plantilla completa**: `rost
 > **2. La familia `employees:*` se parte en dos.** El Anexo B del documento 01 sitúa `GET /employees` en «manager+», que incluye al responsable; esta tabla no le daba ningún ámbito de plantilla, así que RF-ID-03 —«un responsable solo accede a los empleados de su departamento»— era inaplicable: no accedía a **ninguno**. Se resuelve con un ámbito de lectura propio, `employees:read`, que llevan también `rrhh` y `admin`, en lugar de concederle la familia entera: con un solo ámbito, dejarle leer era dejarle escribir y la única defensa quedaba en la policy, cuando este mismo apartado exige que sean dos controles.
 >
 > **3. Hay un ámbito que no es de ningún rol: `2fa:pending`.** Lo emite el propio acceso —el `202` de `POST /api/v1/auth/login`— y solo abre los tres endpoints de `/auth/2fa/*`. No cuelga de ningún rol y no debe colgar: si lo tuviera, cualquier sesión de ese rol podría canjear un reto que nadie ha abierto.
+>
+> **4. `settings:*` cubre tambien el perfil de cumplimiento** (tarea 5.2). `GET`/`PATCH /api/v1/compliance-profile` viajan bajo ese mismo ambito y bajo una policy propia de solo `admin`. No se crea un ambito nuevo porque ningun rol lo usaria por separado: quien puede ver los umbrales legales del centro es exactamente quien puede cambiarlos, y `rrhh` no es ninguno de los dos. Los dos recursos siguen siendo distintos —un umbral **legal** lo fija la jurisdiccion y uno **operativo** lo fija el hotel— y cada uno tiene su policy y su prueba de autorizacion negativa.
 
 ### 7.4 Cadena de hash de la auditoría
 
@@ -783,6 +785,9 @@ audit_log_partition_ready{horizon}                       gauge
 audit_log_partition_check_timestamp_seconds              gauge
 worked_minutes_total{site,department}                    counter
 report_exports_total{format}                             counter
+installation_setting_changes_total{affects_worked_hours} counter
+compliance_profile_changes_total{effect}                 counter
+license_limit_exceeded_total{limit}                      counter
 
 # Autenticación — OWASP A09
 kronoqr_auth_attempts_total{channel,outcome}             counter
@@ -908,7 +913,7 @@ Reglas anti-fatiga: agrupación por dispositivo, silenciamiento durante ventanas
 | SAST — reglas comunitarias | Semgrep con `p/php`, `p/owasp-top-ten`, `p/javascript`, `p/typescript` (`make sast-community`). `p/secrets` queda fuera a propósito: solapa con gitleaks, que además cubre el histórico y ese es el único de los dos con autoridad sobre secretos | **Bloqueante desde 2026-08-29**, tras triar los 9 hallazgos con los que se introdujo (4 corregidos, 5 justificados con `# nosemgrep` y motivo). La CI interpreta el código de salida de Semgrep — 1 son hallazgos; 2+ significa que la herramienta no pudo terminar — e imprime el recuento por severidad en el resumen de la ejecución (procedimiento de triaje en `docs/runbooks/triaje-hallazgos-seguridad.md`) |
 | Secretos | gitleaks sobre el **historial completo** (`.gitleaks.toml`, `make secrets-scan`) | **Bloqueante desde el primer día**: pasó limpio (0 hallazgos) con una *allowlist* mínima y justificada uno a uno, por el VALOR exacto de cada falso positivo y nunca por una ruta entera |
 | Contenedores — repositorio | `trivy fs` (dependencias de los lockfiles, *misconfig* de Dockerfiles, secretos residuales; `make trivy-fs`) | **Bloqueante desde 2026-08-29.** 0 hallazgos HIGH/CRITICAL: el único que hubo (`DS-0002`, `infra/docker/postgres/Dockerfile` sin `USER`) se corrigió en la imagen, no con una excepción |
-| Contenedores — imagen final | `trivy image` sobre `kronoqr/postgres:ci` y `kronoqr/app:ci`, construidas en el job `security` con `make build-ci-images IMAGES="postgres app" BUILDX_CACHE=gha` (`make trivy-image`) | 0 CVE críticos en la imagen final. **Bloqueante desde 2026-08-29**: las dos imágenes pasan con 0 HIGH/CRITICAL. Los 21 HIGH que `postgres:ci` heredaba de `gosu` desaparecieron al eliminar ese binario de la imagen (arranca como `postgres`, no tiene privilegios que bajar); `infra/docker/.trivyignore.yaml` queda sin excepciones vigentes |
+| Contenedores — imagen final | `trivy image` sobre `kronoqr/postgres:ci` y `kronoqr/app:ci`, construidas en el job `security` con `make build-ci-images IMAGES="postgres app" BUILDX_CACHE=gha` (`make trivy-image`) | 0 CVE críticos en la imagen final. **Bloqueante desde 2026-08-29**: las dos imágenes pasan con 0 HIGH/CRITICAL. Los 21 HIGH que `postgres:ci` heredaba de `gosu` desaparecieron al eliminar ese binario de la imagen (arranca como `postgres`, no tiene privilegios que bajar); `infra/docker/.trivyignore.yaml` queda sin excepciones vigentes. La capa de paquetes de las tres imágenes se refresca una vez por semana (`APK_INDEX_STAMP`, semana ISO) para que la caché de Actions no la congele con CVE cuyo parche Alpine ya sirve (caso `libexpat`, 2026-09) |
 | SBOM | CycloneDX vía `trivy fs --format cyclonedx` (`make sbom`), `sbom/kronoqr-<versión>.cdx.json` | No es una puerta de calidad: es un artefacto que se sube en cada ejecución del job `security` y, cuando exista la etapa ⑧, se adjunta a la *release* (marcador preparado en `release.yml`) |
 | **Trazabilidad** | `qa:traceability --check` (§9.6) | 0 requisitos implementados sin prueba que los referencie (RQ-13) |
 | **Instalación** | Script en CI: instalación limpia + actualización desde versión anterior | Verde antes de publicar (RQ-11) |
@@ -1006,6 +1011,8 @@ graph LR
 ```
 
 Etapas 1–3 en cada *push* (retroalimentación en menos de 4 minutos). Etapas 4–7 en cada PR. Etapa 8 antes de publicar una versión.
+
+> **La etapa ⑧ existe desde la tarea 5.4**: job `clean-install` de `.github/workflows/ci.yml`. En un runner limpio construye las tres imágenes de entrega, **arma el paquete del §11.6.1** y ejecuta el instalador **desde ese paquete**, no desde el árbol del repositorio —si el instalador dependiera de algo que solo existe aquí, es la única forma de verlo—. Cuatro escenarios: `--check-only` sin escribir; **fallo seguro** con un puerto ocupado a propósito (salida `2` y máquina intacta, comprobada contenedor a contenedor); instalación completa verificada con `/health`, `/ready`, las tres SPA y **cero datos de demostración** en la base; y **segunda ejecución** (salida `3` y el sistema respondiendo después). Comprueba además que **ningún secreto aparece en la salida del instalador**, extrayendo cada valor del `.env` recién escrito. Se ejecuta en `main`, en cada etiqueta `vX.Y.Z` y a mano; no en cada *push*, porque cuesta entre 6 y 18 minutos y una CI que nadie espera acaba ignorándose entera. La parte de **actualización desde la versión anterior** llega con la tarea 5.7.
 
 ### 10.2 Entornos
 
@@ -1262,13 +1269,17 @@ Cuadrantes y comparación entre planificado y realmente trabajado, vacaciones y 
 ### 11.6.1 Qué se entrega al cliente
 
 ```
-fichaje-hotel-v1.4.2/
+kronoqr-2.0.0/
 ├── docker-compose.yml          # Producción, autocontenido, sin dependencias externas
-├── .env.example                # Comentado, con los valores que el cliente debe rellenar
+├── .env.example                # Comentado, con las tres categorías marcadas (5.4)
+├── VERSION                     # Fija la etiqueta de imagen. Sin esto no se instala
 ├── install.sh                  # Comprueba requisitos, genera secretos, arranca, verifica
 ├── update.sh                   # Copia previa, migra, verifica, vuelve atrás si falla
 ├── backup.sh / restore.sh      # Copia local cifrada y restauración
 ├── doctor.sh                   # Comprobación de salud (RF-PD-13)
+├── lib/                        # exit-codes.sh, messages.sh, backup-common.sh
+├── observability/              # Configuración de Prometheus, Alertmanager, Grafana y Loki
+├── certs/                      # Donde el cliente coloca tls.crt y tls.key
 ├── LICENCIA.txt
 └── docs/
     ├── instalacion.md          # Para el IT del cliente
@@ -1277,7 +1288,15 @@ fichaje-hotel-v1.4.2/
     └── obligaciones-legales.md # Qué le corresponde al cliente (RL-21)
 ```
 
-Las imágenes se distribuyen desde un registro privado del fabricante, con etiquetas de versión inmutables. **Nada de `latest` en producción.**
+**`tools/` NO entra en el paquete** y no entra en ninguna imagen (`.dockerignore`): el emisor de licencias es del fabricante, firma claves con la clave privada del par y no tiene nada que hacer en el servidor de un hotel (§7.7, RS-08). La etapa ⑧ de la CI lo comprueba con un `test ! -e paquete/tools` al armar el paquete.
+
+Las imágenes se distribuyen desde un registro privado del fabricante, con etiquetas de versión inmutables. **Nada de `latest` en producción**, y desde la tarea 5.4 eso no es una recomendación: `compose.prod.yaml` declara `${IMAGE_TAG:?…}` **sin valor por defecto** en las tres imágenes del producto, así que sin una etiqueta explícita Compose se para antes de crear nada. La fija `install.sh` desde el fichero `VERSION` del paquete.
+
+Antes de construir las imagenes de una version publicada, la etapa ⑧ ejecuta **`make release-gate`**, que falla si `backend/config/license.php` sigue con la clave publica del fabricante vacia. Una imagen de entrega construida asi rechaza la licencia recien pagada del cliente con motivo `no_public_key`, y el sintoma apunta al sitio equivocado. Solo corre en etiquetas `vX.Y.Z`: en `main` esas imagenes son de prueba y deben poder llevarla vacia (§7.7, RS-08).
+
+**Los tres frontends viajan dentro de la imagen de Nginx**, construidos en una etapa del propio `Dockerfile` y servidos en `/admin/`, `/kiosk/` y `/portal/`. No van en un volumen compartido: Docker copia el contenido de la imagen a un volumen **vacío** y no vuelve a tocarlo, así que la primera actualización dejaría un panel de la versión anterior hablando con la API de la nueva. Al vivir en la imagen, la etiqueta inmutable fija a la vez el backend y las tres SPA.
+
+**Los cinco scripts comparten una sola tabla de códigos de salida** (`lib/exit-codes.sh`, publicada en `docs/cliente/operacion.md` §8): `0` correcto · `1` uso incorrecto · `2` requisitos no cumplidos, nada escrito · `3` estado previo incompatible, nada escrito · `4` fallo con vuelta atrás completada · `5` fallo con vuelta atrás incompleta, requiere intervención · `6` verificación posterior fallida, sin deshacer nada. Los ejecuta la misma persona, a veces encadenados en un cron: un `3` con dos significados sería una trampa.
 
 > **No se entrega instalador de PowerShell** (ADR-022). Los requisitos publicados del §11.6.2 exigen Linux con Docker, el §3.5 no define convenciones para `.ps1` y ni ShellCheck ni `shfmt` lo analizan, así que el umbral bloqueante del §9.2 no podría aplicársele. Un entregable que ninguna herramienta revisa y ninguna etapa de CI prueba, en manos de un IT que no conoce el producto, es peor que no tenerlo. Un cliente con solo infraestructura Windows instala sobre una máquina virtual Linux, y eso se dice en la documentación en lugar de descubrirse a mitad de la instalación.
 
@@ -1434,20 +1453,82 @@ PORTAL_INTERNAL_CIDR=172.28.0.0/16     # RF-ID-08 · lo aplica Nginx (geo + 403)
 KIOSK_VLAN_CIDR=10.0.20.0/24           # §7.1 · zona de fichaje elevada para este rango.
                                        # Fuera de él, los quioscos caen al límite de 30 r/m
 
+# COMPLIANCE_PROFILE es el NOMBRE del perfil de cumplimiento con el que el
+# instalador (tarea 5.4) marcara el perfil por defecto de la instalacion. NO se
+# lee en ejecucion y no puede leerse: los umbrales legales salen de la fila de
+# `compliance_profiles` que resuelve el centro —el asignado, o el de
+# `is_default`— y un `.env` que ganara a esa fila dejaria sin efecto lo que el
+# cliente guarda en el panel (regla dura 14, decision de la tarea 5.1: manda la
+# base de datos). Hoy la migracion siembra `ES-hosteleria` con `is_default`, asi
+# que cambiar esto sin cambiar la fila no hace nada.
 COMPLIANCE_PROFILE=ES-hosteleria       # RF-PD-07
 COMPLIANCE_INCIDENT_LOOKBACK_DAYS=7    # RF-PR-01 · días que revisa la detección. NO reprocesa el
                                        # histórico; los tramos abiertos se revisan siempre
-LICENSE_KEY=                           # Clave firmada, verificación local (ADR-018)
+LICENSE_KEY=                           # Clave firmada, verificación local (ADR-018). SOLO la lee el
+                                       # instalador al llamar a `license:activate` sin argumento; en
+                                       # ejecución manda la fila de `license` (decisión de la 5.1)
+LICENSE_PUBLIC_KEY=                    # RF-PD-04 · clave PÚBLICA ed25519 del fabricante, 64 hex. Va
+                                       # compilada en el producto (`config/license.php`) y NO la toca un
+                                       # cliente: esta variable existe para la suite —que genera su par en
+                                       # cada ejecución— y para una rotación de urgencia. Vacía = esta
+                                       # compilación no puede verificar ninguna clave, y `license:show` lo
+                                       # dice; el registro horario funciona igual (regla dura 15)
+LICENSE_EXPIRY_WARNING_DAYS=30         # RF-PD-05 · días de antelación del aviso de caducidad. Durante
+                                       # ellos NO se degrada nada: la licencia sigue vigente
+LICENSE_HEALTH_PROBE_TTL_SECONDS=600   # §10.5 · vida de la copia del estado que lee `GET /health`. NO es
+                                       # una caché de la licencia: el estado se recalcula siempre desde la
+                                       # clave firmada. Si expira, la sonda responde `unknown`
 TELEMETRY_ENABLED=false                # Desactivada por defecto (RF-PD-12)
 ERROR_HISTORY_RETENTION_DAYS=90        # RF-PD-15 · igual que el log técnico (RL-11)
-BRANDING_APP_NAME=
-BRANDING_LOGO_PATH=
+BRANDING_NAME=                         # RF-PD-08 · nombre impreso en la tarjeta. Vacío = el del centro
+BRANDING_LOGO_PATH=                    # RF-PD-08 · ruta ABSOLUTA en el servidor a un PNG o SVG
+BRANDING_ACCENT_COLOR=#111827          # RF-PD-08 · color de acento en notación CSS #rrggbb
+                                       # Estas TRES son las que el código lee hoy
+                                       # (config/branding.php). La marca editable desde
+                                       # el panel vive desde la tarea 5.1 en
+                                       # installation_settings (BRANDING_APP_NAME,
+                                       # BRANDING_LOGO_PATH, BRANDING_ACCENT_COLOR) y
+                                       # todavía no la pinta nadie: la 5.8 migra los dos
+                                       # consumidores y decide si se renombran
+PRODUCT_SETTINGS_ANOMALY_WINDOW_SECONDS=300  # RF-PD-01 · cada cuánto se repite el aviso de
+                                       # que hay configuración guardada que no se puede
+                                       # aplicar. Se lee en cada fichaje: sin agrupar
+                                       # serían 50 avisos/s. 0 = un aviso por lectura
 
 MAIL_MAILER=smtp                       # Lo configura el cliente
 OTEL_EXPORTER_OTLP_ENDPOINT=
 BACKUP_PATH=/var/backups/fichaje
 BACKUP_ENCRYPTION_KEY=
+
+# Despliegue (solo compose.prod.yaml)
+IMAGE_REGISTRY=ghcr.io/kronoqr        # Registro privado del fabricante
+IMAGE_TAG=                             # RF-PD-02 · VACÍA en la plantilla y SIN valor por defecto en
+                                       # compose.prod.yaml (`${IMAGE_TAG:?…}`). La fija install.sh desde
+                                       # el fichero VERSION del paquete. `latest` está prohibido: una
+                                       # instalación que no sabe qué versión corre rompe el diagnóstico
+                                       # (RF-PD-15), la matriz de versiones soportadas (§11.6.5) y la
+                                       # vuelta atrás de update.sh, que necesita nombrar la anterior
+COMPOSE_PROFILES=observability         # Perfil de Compose, no una variable del producto. Enciende
+                                       # Prometheus, node-exporter, Alertmanager, Grafana y Loki, que son
+                                       # quienes avisan de que la copia de anoche falló o de que el
+                                       # archivado de WAL se ha parado. ENCENDIDO de serie. Vaciarlo los
+                                       # apaga: libera ~700 MiB en un servidor justo en el mínimo de 4 GB
+                                       # y convierte la verificación de la copia en tarea manual semanal
+                                       # del cliente (docs/cliente/operacion.md §10)
+HTTP_PORT=80
+HTTPS_PORT=443
+TLS_CERT_DIR=./certs                   # Con tls.crt y tls.key. Sin ellos el borde no arranca
 ```
+
+**Las tres categorías de `.env.example`** (§11.6.1, tarea 5.4). Cada variable de la plantilla lleva una marca, y la que no la lleva es porque tiene un valor por defecto pensado que la mayoría de las instalaciones no cambia:
+
+| Marca | Significa | Ejemplos |
+|---|---|---|
+| `[CLIENTE]` | Lo rellena el cliente antes de instalar. `install.sh` comprueba en su fase 1 que están y **no instala si falta alguna** | `APP_URL`, `KIOSK_VLAN_CIDR`, `PORTAL_INTERNAL_CIDR`, `BACKUP_PATH`, `TLS_CERT_DIR`, `MAIL_*`, `LICENSE_KEY` |
+| `[INSTALADOR]` | Lo genera `install.sh` con `openssl` **en el servidor del cliente** y no se transmite (§7.7, RS-08). Se entrega vacío | `APP_KEY`, `QR_SIGNING_KEY_CURRENT`, `DB_PASSWORD`, `REVERB_APP_*`, `BACKUP_ENCRYPTION_KEY`, `IMAGE_TAG` |
+| `[FIJO]` | No se toca. Cambiarlo rompe algo que no se parece a este fichero | `APP_TIMEZONE=UTC` (regla dura 3) |
+
+`DB_MAINTENANCE_PASSWORD` **no la genera el instalador** y no aparece en el `.env`: ADR-027. El rol nace sin credencial utilizable y se le asigna una en el momento de la purga anual (`docs/cliente/operacion.md` §9).
 
 ## Anexo C — Comandos de consola
 

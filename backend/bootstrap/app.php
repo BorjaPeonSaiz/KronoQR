@@ -21,6 +21,7 @@ use App\Modules\Compliance\Domain\Exception\IncidentAlreadyClosed;
 use App\Modules\Compliance\Domain\Exception\InvalidLegalExportRequest;
 use App\Modules\Identity\Application\Exception\AccountTemporarilyLocked;
 use App\Modules\Identity\Application\Exception\AuthenticationFailed;
+use App\Modules\Identity\Application\Exception\ManagementAccountAlreadyExists;
 use App\Modules\Identity\Application\Exception\PortalAccessDenied;
 use App\Modules\Identity\Application\Exception\TwoFactorAlreadyEnabled;
 use App\Modules\Identity\Application\Exception\TwoFactorNotEnrolled;
@@ -33,16 +34,27 @@ use App\Modules\Identity\Domain\Exception\EmployeeAlreadyHasCredential;
 use App\Modules\Identity\Domain\Exception\InvalidSigningKey;
 use App\Modules\Identity\Domain\ValueObject\TokenAbility;
 use App\Modules\Identity\Http\Middleware\RejectPendingTwoFactorSession;
+use App\Modules\Product\Domain\Exception\InvalidComplianceProfileValue;
+use App\Modules\Product\Domain\Exception\InvalidLicenseKey;
+use App\Modules\Product\Domain\Exception\InvalidSettingValue;
+use App\Modules\Product\Domain\Exception\LicenseKeyRejected;
+use App\Modules\Product\Domain\Exception\SetupNotCompletable;
+use App\Modules\Product\Domain\Exception\SetupStepNotRecordable;
+use App\Modules\Product\Domain\Exception\UnknownSettingKey;
+use App\Modules\Product\Domain\Exception\UnknownSetupStep;
 use App\Modules\Reporting\Application\Exception\EmployeeNotFound;
 use App\Modules\Reporting\Application\Exception\ReportRenderingUnavailable;
 use App\Modules\Reporting\Domain\Exception\InvalidDateRange;
 use App\Modules\Reporting\Domain\Exception\ReportTooLargeForSynchronousDelivery;
 use App\Modules\Shared\Domain\Exception\AccessOutOfScope;
+use App\Modules\Shared\Domain\Exception\FeatureNotLicensed;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
 use App\Modules\Workforce\Domain\Exception\EmployeeAlreadyTerminated;
+use App\Modules\Workforce\Domain\Exception\ImportTooLarge;
 use App\Modules\Workforce\Domain\Exception\InvalidEmploymentContract;
 use App\Modules\Workforce\Domain\Exception\InvalidEmploymentPeriod;
 use App\Modules\Workforce\Domain\Exception\UnknownTimezone;
+use App\Modules\Workforce\Domain\Exception\UnreadableImportFile;
 use App\Modules\Workforce\Domain\Exception\WorkforceConflict;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
@@ -288,6 +300,20 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(static fn (TwoFactorNotEnrolled $exception): mixed => ProblemDetails::conflict($exception->getMessage()));
 
         /*
+         * El primer administrador (tarea 5.5, RF-PD-03).
+         *
+         * `409` y no `403`: nadie esta autenticado ni tiene por que estarlo, y lo
+         * que ha cambiado es el estado del sistema. **El texto dice a donde ir**,
+         * porque el caso que ocurre de verdad es que alguien cerro la pestaña
+         * antes de escanear el QR del autenticador y vuelve a empezar: sin esa
+         * frase, esa persona se queda fuera de su propia instalacion con la
+         * cuenta ya creada.
+         */
+        $exceptions->render(static fn (ManagementAccountAlreadyExists $exception): mixed => ProblemDetails::conflict(
+            ProblemDetails::translated($exception->translationKey, [], $exception->getMessage()),
+        ));
+
+        /*
          * Portal del empleado (tarea 1.11, RF-ID-06, RS-03, RS-12).
          *
          * `401` PARA LAS CINCO CAUSAS, y sin `Retry-After` ni cuando el bloqueo
@@ -307,6 +333,35 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(static fn (EmployeeAlreadyTerminated $exception): mixed => ProblemDetails::conflict($exception->getMessage()));
 
         $exceptions->render(static fn (WorkforceConflict $exception): mixed => ProblemDetails::conflict($exception->getMessage()));
+
+        /*
+         * Importacion masiva de plantilla (tarea 5.5, RF-GP-05).
+         *
+         * LAS DOS SON `422` COLGADAS DE `file`, y no `500`, porque quien las
+         * recibe tiene algo concreto que hacer con el fichero que acaba de subir:
+         * volver a exportarlo, o partirlo. Un `500` le diria que el problema es
+         * nuestro y que espere.
+         *
+         * **Ninguna de las dos escribe nada.** `UnreadableImportFile` se lanza
+         * antes de leer una sola linea; `ImportTooLarge` se lanza antes de abrir
+         * la transaccion de aplicacion, porque aplicar media plantilla es el
+         * fallo que nadie detecta hasta que falta gente a las 06:00.
+         *
+         * La confirmacion que no cuadra NO esta aqui: es `ImportFileChanged`, un
+         * `WorkforceConflict`, y sale `409` por la linea de arriba — la peticion
+         * es valida y lo que no encaja es el estado.
+         */
+        $exceptions->render(static fn (UnreadableImportFile $exception): mixed => ProblemDetails::validationFailed([
+            'file' => [ProblemDetails::translated($exception->translationKey, [], $exception->getMessage())],
+        ]));
+
+        $exceptions->render(static fn (ImportTooLarge $exception): mixed => ProblemDetails::validationFailed([
+            'file' => [ProblemDetails::translated(
+                $exception->translationKey,
+                $exception->parameters,
+                $exception->getMessage(),
+            )],
+        ]));
 
         // Antes de la puesta en marcha no hay centro, y sin centro no hay alta
         // posible (ADR-040). Es un estado de la instalacion, no un error del
@@ -612,4 +667,190 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(static fn (InvalidLegalExportRequest $exception): mixed => ProblemDetails::validationFailed([
             'from' => [$exception->getMessage()],
         ]));
+
+        /*
+         * Configuracion de la instalacion (tarea 5.1, RF-PD-01, ADR-017).
+         *
+         * `422` PARA LAS DOS. Quien las recibe tiene algo que corregir en el
+         * cuerpo —una clave que no existe, un valor fuera de rango, un idioma por
+         * defecto que no esta entre los disponibles— y puede hacerlo sin releer
+         * nada.
+         *
+         * **El `FormRequest` atrapa antes casi todo, y con el campo señalado**
+         * (`settings.<CLAVE>`), porque conoce el catalogo. Lo que llega aqui es lo
+         * que el no puede ver: las invariantes ENTRE claves, que dependen de lo
+         * que ya hay guardado —cambiar `LOCALE_AVAILABLE` sin mandar
+         * `LOCALE_DEFAULT` puede dejarlo huerfano—, y los caminos que no pasan
+         * por HTTP: el instalador (5.4), el asistente (5.5) y la consola. Sin
+         * esto, cualquiera de ellos saldria como `500`.
+         *
+         * Se cuelgan de `settings` y no de una clave concreta a proposito: son
+         * afirmaciones sobre el CONJUNTO, y señalar una de las dos claves
+         * implicadas sugeriria que la culpable es esa.
+         */
+        $exceptions->render(static fn (UnknownSettingKey $exception): mixed => ProblemDetails::validationFailed([
+            'settings' => [ProblemDetails::translated(
+                $exception->translationKey,
+                $exception->parameters,
+                $exception->getMessage(),
+            )],
+        ]));
+
+        $exceptions->render(static fn (InvalidSettingValue $exception): mixed => ProblemDetails::validationFailed([
+            'settings' => [ProblemDetails::translated(
+                $exception->translationKey,
+                $exception->parameters,
+                $exception->getMessage(),
+            )],
+        ]));
+
+        /*
+         * El perfil de cumplimiento (tarea 5.2, RF-PD-07).
+         *
+         * Mismo motivo que las dos de arriba: el `FormRequest` ya valida cada
+         * campo, pero hay una invariante ENTRE campos —la jornada semanal no
+         * puede quedar por debajo de la diaria— que depende de lo que ya hay
+         * guardado, y ademas hay caminos que no pasan por HTTP (el asistente de
+         * la 5.5 y la consola). Sin esto, cualquiera de ellos saldria como `500`.
+         *
+         * Se cuelga del campo cuando la excepcion sabe cual es, para que el panel
+         * pueda señalar el que hay que corregir; y del recurso entero cuando la
+         * afirmacion es sobre la coherencia de dos campos.
+         */
+        $exceptions->render(static fn (InvalidComplianceProfileValue $exception): mixed => ProblemDetails::validationFailed([
+            $exception->field?->value ?? 'compliance_profile' => [ProblemDetails::translated(
+                $exception->translationKey,
+                $exception->parameters,
+                $exception->getMessage(),
+            )],
+        ]));
+
+        /*
+         * La licencia (tarea 5.3, RF-PD-04, RF-PD-05, ADR-018, ADR-019).
+         *
+         * `LicenseKeyRejected` es `422` colgado de `signed_key`: quien acaba de
+         * pegar una clave que no verifica tiene un campo concreto que corregir,
+         * y el mensaje le dice cual de los cuatro motivos es —clave a medias,
+         * firma que no cuadra, emision defectuosa, o un despliegue sin clave
+         * publica—, porque la accion siguiente es distinta en cada uno.
+         *
+         * `InvalidLicenseKey` es tambien `422` y por el mismo camino: la firma
+         * cuadraba y la carga util no sirve. Es un fallo de EMISION y el mensaje
+         * lo dice, para que nadie se pase la mañana buscando el error en su
+         * copiado.
+         *
+         * **Ninguna de las dos detiene nada.** Rechazar una clave deja la
+         * licencia anterior intacta y el sistema entero funcionando (regla dura
+         * 15).
+         */
+        $exceptions->render(static fn (LicenseKeyRejected $exception): mixed => ProblemDetails::validationFailed([
+            'signed_key' => [ProblemDetails::translated(
+                $exception->translationKey,
+                [],
+                $exception->getMessage(),
+            )],
+        ]));
+
+        $exceptions->render(static fn (InvalidLicenseKey $exception): mixed => ProblemDetails::validationFailed([
+            'signed_key' => [ProblemDetails::translated(
+                $exception->translationKey,
+                $exception->parameters,
+                $exception->getMessage(),
+            )],
+        ]));
+
+        /*
+         * Y la degradacion honesta de una funcionalidad ACCESORIA (ADR-019,
+         * ADR-023).
+         *
+         * `402` con tipo propio, para que el panel la distinga de un `403` sin
+         * leer el texto y enseñe el aviso de licencia con el enlace al estado en
+         * vez de una pantalla de error.
+         *
+         * **Este `render` no puede alcanzar jamas al registro legal**, y no por
+         * disciplina: `FeatureNotLicensed` solo se construye a partir de un
+         * `Feature`, y ese catalogo no tiene ningun caso del conjunto legal
+         * (regla dura 15, ADR-023). El fichaje, la consulta de jornadas, el
+         * portal, la exportacion para la Inspeccion, la auditoria, las
+         * correcciones y las copias no tienen forma de llegar aqui.
+         */
+        $exceptions->render(static function (FeatureNotLicensed $exception): mixed {
+            /*
+             * LA FECHA SE FORMATEA AQUI, EN EL BORDE, y en el idioma negociado.
+             *
+             * El dominio no sabe en que idioma se va a leer: si la formateara el,
+             * el mensaje ingles saldria con la fecha en formato español. Es el
+             * mismo motivo por el que el texto vive en `lang/` y no en `Domain/`.
+             *
+             * Y **una sola conversion a UTC**, la de `sinceUtc()`: la fecha que
+             * viaja en el cuerpo y la que se lee en el texto describen el mismo
+             * instante y no pueden separarse un dia.
+             */
+            $since = $exception->sinceUtc();
+
+            $legible = $since === null
+                ? ''
+                : (new DateTimeImmutable($since))->format(__('license.since_format'));
+
+            return ProblemDetails::featureNotLicensed(
+                ProblemDetails::translated(
+                    $exception->translationKey(),
+                    $exception->parameters(is_string($legible) ? $legible : ''),
+                    $exception->getMessage(),
+                ),
+                $exception->feature->value,
+                $exception->restriction?->value,
+                $since,
+            );
+        });
+
+        /*
+         * El asistente de puesta en marcha (tarea 5.5, RF-PD-03).
+         *
+         * TRES EXCEPCIONES Y TRES CODIGOS DISTINTOS, porque son tres cosas
+         * distintas y la accion siguiente de quien las recibe tambien:
+         *
+         * - `UnknownSetupStep` es **404**: la ruta nombra un paso que no existe,
+         *   asi que el recurso direccionado tampoco. Un `422` sugeriria que hay
+         *   algo que corregir en el cuerpo, y el cuerpo esta bien.
+         * - `SetupStepNotRecordable` es **422**: el paso existe y lo que no cabe
+         *   es la marca —declarar hecho a mano uno que se deduce del dato, o
+         *   aparcar el perfil de convenio, que RL-21 no deja aparcar—. Se cuelga
+         *   de `state`, que es el campo que hay que cambiar.
+         * - `SetupNotCompletable` es **409**: la peticion es valida y lo que no
+         *   encaja es el estado del sistema. **El `detail` nombra los pasos que
+         *   faltan**, porque quien esta poniendo en marcha la instalacion no
+         *   tiene forma de averiguarlo por su cuenta.
+         *
+         * Ninguna de las tres detiene nada del registro legal: el asistente
+         * configura, no ficha.
+         */
+        $exceptions->render(static fn (UnknownSetupStep $exception): mixed => ProblemDetails::notFound(
+            // CON DETALLE, al contrario que el resto de los `404` del producto.
+            // Aqui no hay nada que un oraculo pudiera revelar: el catalogo de
+            // pasos es identico en todas las instalaciones (regla dura 13) y esta
+            // publicado en el contrato. Un `404` mudo obligaria a quien pone en
+            // marcha el sistema a adivinar si se equivoco de nombre o de version.
+            ProblemDetails::translated(
+                $exception->translationKey,
+                $exception->parameters,
+                $exception->getMessage(),
+            ),
+        ));
+
+        $exceptions->render(static fn (SetupStepNotRecordable $exception): mixed => ProblemDetails::validationFailed([
+            'state' => [ProblemDetails::translated(
+                $exception->translationKey,
+                $exception->parameters,
+                $exception->getMessage(),
+            )],
+        ]));
+
+        $exceptions->render(static fn (SetupNotCompletable $exception): mixed => ProblemDetails::conflict(
+            ProblemDetails::translated(
+                $exception->translationKey,
+                $exception->parameters,
+                $exception->getMessage(),
+            ),
+        ));
     })->create();

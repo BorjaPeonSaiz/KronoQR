@@ -20,7 +20,20 @@ const appVersion =
     ? packageJson.version
     : '0.0.0'
 
+// Ruta bajo la que se sirve el quiosco. En produccion Nginx lo publica en
+// `/kiosk/` y la imagen de entrega construye con KRONOQR_BASE=/kiosk/
+// (infra/docker/nginx/Dockerfile). En desarrollo y en las pruebas E2E vale `/`.
+//
+// AQUI IMPORTA MAS QUE EN LAS OTRAS DOS SPA porque es una PWA: `start_url`,
+// `scope` y el respaldo de navegacion del service worker tienen que salir de
+// ESTE mismo valor. Si se dejaran fijos en `/`, la tablet instalada abriria la
+// aplicacion en la raiz —que sirve la API, no el quiosco— y el respaldo sin red
+// no encontraria su index.html precacheado: el fallo aparecería el primer dia
+// que se cayera el wifi, que es exactamente cuando el modo offline existe.
+const base = process.env['KRONOQR_BASE'] ?? '/'
+
 export default defineConfig({
+  base,
   plugins: [
     vue(),
     tailwindcss(),
@@ -38,7 +51,8 @@ export default defineConfig({
         name: 'KronoQR',
         short_name: 'KronoQR',
         description: 'Registro horario por QR',
-        start_url: '/',
+        start_url: base,
+        scope: base,
         // 'fullscreen' y no 'standalone': el quiosco ocupa la pantalla entera,
         // sin barra de estado ni de navegacion (RF-KI-01). Un empleado con prisa
         // no debe poder salirse de la aplicacion por rozar la barra de arriba.
@@ -71,7 +85,10 @@ export default defineConfig({
         // el quiosco arrancaria sin poder escanear precisamente cuando no hay
         // red, que es cuando el precacheo importa.
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
-        navigateFallback: 'index.html',
+        // Con el prefijo delante: el manifiesto de precacheo guarda las rutas
+        // ya prefijadas por `base`, y un 'index.html' pelado no casaria con
+        // '/kiosk/index.html' en produccion.
+        navigateFallback: `${base}index.html`,
         // La API NUNCA se cachea: un fichaje servido desde la cache seria un
         // registro legal inventado.
         navigateFallbackDenylist: [/^\/api\//],

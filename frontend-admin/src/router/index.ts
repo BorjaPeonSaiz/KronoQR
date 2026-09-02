@@ -6,8 +6,10 @@ import {
   CREDENTIALS_MANAGE,
   EMPLOYEES_MANAGE,
   INCIDENTS_MANAGE,
+  LICENSE_MANAGE,
   REPORTS_LEGAL,
   REPORTS_MANAGE,
+  SETTINGS_MANAGE,
 } from '@/features/auth/abilities'
 import LoginView from '@/features/auth/LoginView.vue'
 import CredentialBoardView from '@/features/credentials/CredentialBoardView.vue'
@@ -15,8 +17,11 @@ import EmployeeDetailView from '@/features/employees/EmployeeDetailView.vue'
 import EmployeeListView from '@/features/employees/EmployeeListView.vue'
 import IncidentsView from '@/features/incidents/IncidentsView.vue'
 import LivePresenceView from '@/features/live/LivePresenceView.vue'
+import OnboardingView from '@/features/onboarding/OnboardingView.vue'
 import LegalExportView from '@/features/reports/LegalExportView.vue'
 import PeriodReportView from '@/features/reports/PeriodReportView.vue'
+import ComplianceProfileView from '@/features/settings/ComplianceProfileView.vue'
+import LicenseView from '@/features/settings/LicenseView.vue'
 import EmployeeWorkDaysView from '@/features/workdays/EmployeeWorkDaysView.vue'
 import AppShellView from '@/shared/ui/AppShellView.vue'
 import ForbiddenView from '@/shared/ui/ForbiddenView.vue'
@@ -38,6 +43,19 @@ export const routes: RouteRecordRaw[] = [
     path: '/login',
     name: 'login',
     component: LoginView,
+    meta: { public: true },
+  },
+  {
+    // Asistente de puesta en marcha (RF-PD-03, tarea 5.5). Publico como
+    // `GET /setup/status` que lo abre: el primer paso crea la primera cuenta
+    // de gestion, asi que todavia no hay sesion con la que exigirla. La
+    // guarda (`router/guards.ts`) es quien decide de verdad si se puede
+    // llegar aqui o si hay que salir: mientras la instalacion siga sin
+    // terminar de configurarse, CUALQUIER otra ruta redirige a esta; en
+    // cuanto se cierra, esta deja de ser accesible (es de un solo uso).
+    path: '/setup',
+    name: 'setup',
+    component: OnboardingView,
     meta: { public: true },
   },
   {
@@ -117,6 +135,30 @@ export const routes: RouteRecordRaw[] = [
         name: 'legal-export',
         component: LegalExportView,
         meta: { ability: REPORTS_LEGAL },
+      },
+      {
+        // El perfil de cumplimiento (RF-PD-07, tarea 5.2). Ambito `settings:*`,
+        // el del administrador de instalacion: aqui se cambian los umbrales con
+        // los que se decide si una jornada incumple el Estatuto y cuantos años
+        // hay que conservar el registro. La policy del servidor es la que
+        // autoriza de verdad (regla dura 18).
+        path: 'compliance-profile',
+        name: 'compliance-profile',
+        component: ComplianceProfileView,
+        meta: { ability: SETTINGS_MANAGE },
+      },
+      {
+        // La licencia (RF-PD-04, tarea 5.3). Ambito propio `license:*`, el del
+        // administrador de instalacion: el §7.3 lo declara aparte de
+        // `settings:*` porque lo que se contrato no es un ajuste operativo.
+        //
+        // **Esta pantalla no se degrada nunca** (ADR-019): es desde donde se
+        // arregla el problema, y cerrarla al caducar dejaria al cliente sin
+        // poder activar la renovacion que acaba de comprar.
+        path: 'license',
+        name: 'license',
+        component: LicenseView,
+        meta: { ability: LICENSE_MANAGE },
       },
       { path: 'forbidden', name: 'forbidden', component: ForbiddenView },
       {

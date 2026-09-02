@@ -9,6 +9,7 @@ use Spectator\Spectator;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Reporting\PresenceFixtures;
 use Tests\Support\Time\FixedClock;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -38,6 +39,22 @@ beforeEach(function (): void {
     config()->set('identity.two_factor.required_roles', []);
 
     app()->instance(Clock::class, FixedClock::at('2026-03-14 09:12:03'));
+
+    /*
+     * Reverb en pie y una licencia que conceda el tiempo real (tarea 5.3).
+     *
+     * Desde la 5.3, `meta.realtime.channels` va VACIO cuando no hay tiempo
+     * real —sea cual sea el motivo—, por lo mismo que `key` va nula: sin
+     * canales no hay nada que pedir, y es incoherente entregarle a un cliente
+     * lo que necesita para conectarse justo despues de decirle que no.
+     *
+     * Estas pruebas miran el ALCANCE (RF-ID-03), no la degradacion, asi que
+     * necesitan la respuesta en su forma de produccion. La degradacion tiene
+     * fichero propio: `tests/Feature/Product/LicenseDegradesAccessoriesTest.php`.
+     */
+    config()->set('broadcasting.default', 'reverb');
+    config()->set('broadcasting.connections.reverb.key', 'kronoqr-test-key');
+    LicenseKeys::grantAll();
 });
 
 /**

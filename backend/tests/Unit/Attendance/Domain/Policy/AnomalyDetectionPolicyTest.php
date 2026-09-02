@@ -43,6 +43,13 @@ function spanishProfile(int $restHours = 12, int $dailyHours = 9, int $breakAfte
         maximumDailyMinutes: $dailyHours * 60,
         breakRequiredAfterMinutes: $breakAfterHours * 60,
         retentionYears: 4,
+        // Los tres del perfil que ninguna de estas seis reglas lee todavia (los
+        // estrena la tarea 3.4). Se escriben con el valor de serie del perfil
+        // espanol para que la politica se construya con el mismo dato que en
+        // produccion, no con uno inventado para la prueba.
+        maximumWeeklyMinutes: 40 * 60,
+        weekStartsOn: 1,
+        holidayCalendar: [],
     );
 }
 
@@ -605,3 +612,114 @@ it('alerta de la jornada larga en cuanto ese mismo tramo se cierra', function ()
 
     expect(typesOf(detectionPolicy()->inspect($day, Instants::utc('2026-03-15 04:30'))))->toBe(['long_shift']);
 })->group('RN-11', 'RF-PD-07');
+
+// --- El umbral es el del perfil, y solo el del perfil (RF-PD-07, tarea 5.2) ---
+
+it('cambia el veredicto de la jornada larga con el perfil, sin tocar el codigo', function (int $dailyHours, array $expected): void {
+    // Ocho horas y media trabajadas. Con la jornada ordinaria de 9 h del perfil
+    // espanol no pasa nada; con un convenio de 8 h, si. Es la regla dura 14 hecha
+    // prueba sobre RN-11: si el 9 viviera dentro de la regla, esta prueba no
+    // podria existir.
+    $day = WorkDayFactory::new()
+        ->onWorkDate('2026-03-14')
+        ->withClosedShift('2026-03-14 06:00', '2026-03-14 10:00')
+        ->withClosedShift('2026-03-14 11:00', '2026-03-14 15:30')
+        ->build();
+
+    $found = detectionPolicy(spanishProfile(dailyHours: $dailyHours))->inspect($day, Instants::utc('2026-03-14 23:00'));
+
+    expect(typesOf($found))->toBe($expected);
+})->with([
+    'convenio de 8 horas' => [8, ['long_shift']],
+    'perfil espanol de 9 horas' => [9, []],
+])->group('RN-11', 'RF-PD-07');
+
+it('cambia el veredicto de la pausa obligatoria con el perfil, sin tocar el codigo', function (int $breakAfterHours, array $expected): void {
+    // Cinco horas y media de tramo continuo. Con las 6 h del perfil espanol no
+    // hay hallazgo; con un convenio que exija pausa a las 5 h, si. Lo mismo sobre
+    // RN-12.
+    $day = WorkDayFactory::new()
+        ->onWorkDate('2026-03-14')
+        ->withClosedShift('2026-03-14 06:00', '2026-03-14 11:30')
+        ->build();
+
+    $found = detectionPolicy(spanishProfile(breakAfterHours: $breakAfterHours))->inspect($day, Instants::utc('2026-03-14 23:00'));
+
+    expect(typesOf($found))->toBe($expected);
+})->with([
+    'convenio que exige pausa a las 5 horas' => [5, ['missing_break']],
+    'perfil espanol de 6 horas' => [6, []],
+])->group('RN-12', 'RF-PD-07');
+
+it('mide el descanso entre jornadas en instantes UTC la noche del adelanto de hora', function (int $restHours, array $expected): void {
+    // Noche del 29 de marzo de 2026 en Madrid: a las 02:00 los relojes saltan a
+    // las 03:00 y esa noche tiene 23 horas.
+    //
+    // La persona sale el sabado a las 22:00 de Madrid (21:00 UTC) y vuelve a
+    // entrar el domingo a las 10:00 de Madrid (08:00 UTC). El reloj de pared dice
+    // «doce horas»; el descanso REAL son once (RN-09, regla dura 3).
+    //
+    // Con las 12 h del perfil espanol hay que alertar, porque no descanso doce.
+    // Con un perfil de 11 h, no. Si el calculo se hiciera sobre horas locales, el
+    // primer caso no alertaria y nadie lo notaria hasta el domingo siguiente de
+    // octubre, cuando el error cambia de signo.
+    $day = WorkDayFactory::new()
+        ->onWorkDate('2026-03-29')
+        ->withClosedShift('2026-03-29 08:00', '2026-03-29 14:00')
+        ->build();
+
+    $found = detectionPolicy(spanishProfile(restHours: $restHours))->inspect(
+        $day,
+        Instants::utc('2026-03-29 23:00'),
+        Instants::inMadrid('2026-03-28 22:00'),
+    );
+
+    expect(typesOf($found))->toBe($expected)
+        // El descanso son 660 minutos y no 720: once horas reales.
+        ->and($found === [] ? 660 : $found[0]->context['rest_minutes'])->toBe(660);
+})->with([
+    'perfil espanol de 12 horas' => [12, ['insufficient_rest']],
+    'perfil de 11 horas' => [11, []],
+])->group('RN-09', 'RF-PD-07');
+
+it('mide el descanso entre jornadas en instantes UTC la noche del atraso de hora', function (int $restHours, array $expected): void {
+    // La otra mitad, el 25 de octubre de 2026: esa noche tiene 25 horas.
+    //
+    // Sale el sabado a las 22:00 de Madrid (20:00 UTC) y entra el domingo a las
+    // 09:00 de Madrid (08:00 UTC). El reloj de pared dice «once horas»; descanso
+    // doce. Con las 12 h del perfil espanol NO hay que alertar, y una regla que
+    // restara horas locales alertaria sobre alguien que descanso lo que debia.
+    $day = WorkDayFactory::new()
+        ->onWorkDate('2026-10-25')
+        ->withClosedShift('2026-10-25 08:00', '2026-10-25 14:00')
+        ->build();
+
+    $found = detectionPolicy(spanishProfile(restHours: $restHours))->inspect(
+        $day,
+        Instants::utc('2026-10-25 23:00'),
+        Instants::inMadrid('2026-10-24 22:00'),
+    );
+
+    expect(typesOf($found))->toBe($expected);
+})->with([
+    'perfil espanol de 12 horas' => [12, []],
+    'perfil de 13 horas' => [13, ['insufficient_rest']],
+])->group('RN-09', 'RF-PD-07');
+
+it('aplica el umbral de pausa al turno de noche entero, que no se parte a medianoche', function (int $breakAfterHours, array $expected): void {
+    // Regla dura 4 y RN-05: un turno 22:00 -> 06:00 es UN tramo de ocho horas
+    // atribuido al dia de su entrada, no dos de cuatro. Si se partiera, ninguna
+    // de las dos mitades superaria las 6 h del perfil y RN-12 no veria nunca el
+    // turno de noche, que es justo donde la pausa importa mas.
+    $day = WorkDayFactory::new()
+        ->onWorkDate('2026-03-14')
+        ->withClosedShift('2026-03-14 21:00', '2026-03-15 05:00')
+        ->build();
+
+    $found = detectionPolicy(spanishProfile(breakAfterHours: $breakAfterHours))->inspect($day, Instants::utc('2026-03-15 12:00'));
+
+    expect(typesOf($found))->toBe($expected);
+})->with([
+    'perfil espanol de 6 horas' => [6, ['missing_break']],
+    'convenio que exige pausa a las 9 horas' => [9, []],
+])->group('RN-05', 'RN-09', 'RF-PD-07');

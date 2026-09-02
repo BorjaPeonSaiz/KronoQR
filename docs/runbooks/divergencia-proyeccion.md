@@ -2,7 +2,7 @@
 
 **Esto no debería poder pasar.** `daily_totals` se recalcula entero en la misma
 transacción que la escritura que lo motiva (regla dura 7, RN-06,
-[ADR-007](../adr/ADR-007-daily-totals-proyeccion-reconstruible.md)): si esa
+ADR-007, «daily_totals es una proyeccion reconstruible»): si esa
 garantía se cumple, la reconciliación no encuentra nada nunca. Que haya
 encontrado algo significa que **alguien o algo escribió la proyección por un
 camino que no es el recálculo**. El objetivo de este procedimiento no es arreglar

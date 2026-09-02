@@ -42,6 +42,8 @@ const BOARD: LivePresenceBoard = {
       event: 'presence.updated',
       channels: ['presence.all'],
       poll_interval_seconds: 15,
+      unavailable_reason: null,
+      unavailable_since: null,
     },
   },
 }

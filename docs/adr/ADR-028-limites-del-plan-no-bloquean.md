@@ -64,6 +64,8 @@ La palanca comercial es el contrato, no el software. Un producto que se vende a 
 - **Prueba de *feature*:** con `max_employees` alcanzado, `POST /api/v1/employees` responde 2xx y el empleado queda dado de alta y capaz de fichar.
 - **Prueba de *feature*:** con `max_devices` alcanzado, `/kiosk/pair/confirm` vincula el dispositivo y el quiosco queda operativo.
 - **Prueba de *feature*:** con `max_sites` alcanzado, el alta de centro responde 2xx.
+
+  > **Enmienda 01-09-2026 (tarea 5.3): esta prueba no existe porque `max_sites` no existe.** [ADR-040](ADR-040-un-centro-por-instalacion-y-por-licencia.md), punto 5, retiró ese límite: hay un centro por instalación y por licencia. Quedan las dos primeras, que son las que este ADR llama «pruebas negativas explícitas». La de `max_devices` se hace hoy sobre la vía real de emisión de tokens de dispositivo, porque `/kiosk/pair/confirm` llega con la tarea 5.6; **esa tarea debe extenderla** al emparejamiento por código.
 - **Prueba de integración:** cruzar cada umbral escribe una entrada en `audit_log` con límite, valor contratado y valor alcanzado.
 - **Prueba de *feature*:** el aviso de exceso aparece en el panel para el rol de administración y no es descartable mientras el exceso persista.
 - **Prueba de consola:** `license:show` imprime contratado y real para las tres magnitudes.

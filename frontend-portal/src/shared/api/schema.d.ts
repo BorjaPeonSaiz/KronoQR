@@ -2084,6 +2084,575 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/compliance-profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Perfil de cumplimiento del centro
+         * @description Los **umbrales legales** con los que se evalua el registro horario
+         *     (RF-PD-07): descanso minimo entre jornadas (RN-10), jornada diaria
+         *     ordinaria (RN-11), tramo continuo maximo sin pausa (RN-12), jornada
+         *     semanal, inicio de semana, festivos y años de retencion (RL-02).
+         *
+         *     **Recurso singular, como `/site`.** Se devuelve el perfil **vigente para
+         *     el centro de la instalacion**: el que tenga asignado, o el perfil por
+         *     defecto si no tiene ninguno. Hay exactamente un centro por instalacion
+         *     ([ADR-040](../adr/ADR-040-un-centro-por-instalacion-y-por-licencia.md)),
+         *     asi que hay exactamente un perfil vigente y no hay lista que paginar ni
+         *     identificador que elegir.
+         *
+         *     **Por que no vive en `/settings`.** Un umbral legal lo fija la
+         *     jurisdiccion y uno operativo lo fija el hotel (doc 01 §4). Son tablas
+         *     distintas, potestades distintas y consecuencias distintas: bajar el
+         *     anti-rebote cambia los minutos de mañana; bajar `retention_years` autoriza
+         *     borrar años de registro que hay obligacion de conservar. Mezclarlos en un
+         *     mapa de clave y valor haria indistinguibles las dos cosas en el contrato,
+         *     en la pantalla y en el asiento de auditoria.
+         *
+         *     **Los umbrales van en horas enteras**, que es como los enuncia el convenio.
+         *     El dominio los recibe en minutos; la conversion la hace el servidor.
+         *
+         *     `404` solo antes de la puesta en marcha (RF-PD-03): una instalacion sin
+         *     centro todavia no tiene perfil vigente.
+         */
+        get: operations["getComplianceProfile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Modificacion del perfil de cumplimiento
+         * @description Ajusta el perfil vigente al convenio aplicable. Al menos un campo.
+         *
+         *     **Cambiar un umbral cambia que jornadas se consideran anomalas** a partir
+         *     de la proxima revision diaria, y por eso **cada campo modificado deja su
+         *     propio asiento** en `audit_log` (`calculation_setting.changed`) con el
+         *     valor anterior, el nuevo y el actor. Sin ese asiento no se puede explicar
+         *     ante una inspeccion por que una jornada de hace tres meses no genero
+         *     alerta.
+         *
+         *     **No hay retroactividad.** El valor nuevo rige desde el cambio: la
+         *     revision diaria vuelve a evaluar su ventana de los ultimos dias con el
+         *     umbral vigente en ese momento, y **no reprocesa el historico, no cierra
+         *     incidencias ya abiertas y no reabre las resueltas** (doc 01 §4).
+         *
+         *     **`retention_years` es el campo peligroso**, y conviene decirlo aqui:
+         *     bajarlo amplia lo que la purga considera vencido, sobre datos con
+         *     obligacion legal de conservacion. No purga nada por si solo —
+         *     `compliance:apply-retention` propone en simulacion y exige una
+         *     confirmacion derivada del informe— pero es el unico campo cuyo error se
+         *     paga con datos que no vuelven.
+         *
+         *     **Guardar el valor que ya regia no escribe nada**: ni fila ni asiento.
+         *
+         *     **Lo que este endpoint no hace**: no crea perfiles, no los borra, no
+         *     cambia `jurisdiction` ni `is_default`. Con un centro por instalacion, un
+         *     segundo perfil no lo leeria nadie, y `is_default` es lo que hace que el
+         *     centro resuelva el suyo.
+         */
+        patch: operations["updateComplianceProfile"];
+        trace?: never;
+    };
+    "/api/v1/license": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Estado de la licencia
+         * @description Que se contrato, hasta cuando, cuanto se esta usando y **que esta
+         *     degradado** (RF-PD-04, RF-PD-05,
+         *     [ADR-018](../adr/ADR-018-licencia-firmada-con-verificacion-local.md),
+         *     [ADR-028](../adr/ADR-028-limites-del-plan-no-bloquean.md)).
+         *
+         *     **La verificacion es local y sin red.** Se comprueba la firma ed25519 de
+         *     la clave guardada con la clave publica del fabricante, que viaja dentro
+         *     del producto, y se compara la vigencia con el reloj del servidor. No hay
+         *     ninguna llamada saliente en este camino, ni la puede haber: el §11.6
+         *     declara la salida a internet **opcional** y una activacion en linea
+         *     convertiria la conectividad del fabricante en punto unico de fallo del
+         *     registro horario de todos sus clientes.
+         *
+         *     **Nunca devuelve `404`.** «Sin licencia» es un **estado** del recurso
+         *     (`absent`), no la ausencia del recurso: la instalacion existe y su
+         *     licencia esta sin activar, que es el caso mas comun de una puesta en
+         *     marcha.
+         *
+         *     **Este endpoint no se degrada jamas**, ni con la licencia caducada, ni
+         *     sin ella, ni con una clave ilegible. Es la pantalla desde la que se
+         *     arregla el problema: cerrarla al caducar dejaria al cliente sin poder
+         *     activar la renovacion que acaba de comprar (ADR-019).
+         *
+         *     Cada lectura anota `last_verified_at`, que es la marca de la ultima
+         *     verificacion correcta.
+         */
+        get: operations["getLicense"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/license/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Activacion de una clave de licencia
+         * @description Verifica la clave, la guarda y **deja constancia en `audit_log`**
+         *     (`license.activated`) con actor, momento, plan, limites y vigencia
+         *     (RF-PD-04, RL-04). Es la unica fuente que responde «¿desde cuando tiene
+         *     este cliente este plan y quien lo metio?»: la tabla guarda la clave de
+         *     hoy, no su historia.
+         *
+         *     **Formato de la clave**: `KQL1.<carga util>.<firma>`, en base64url sin
+         *     relleno. Se puede pegar con espacios y saltos de linea —se normalizan
+         *     antes de verificar—, porque copiarla de un correo es lo que hace todo el
+         *     mundo.
+         *
+         *     **Se puede activar una clave ya caducada**, y es deliberado: un hotel que
+         *     renueva con dos semanas de retraso recibe una clave cuya vigencia empezo
+         *     el dia 1, y rechazarla le obligaria a pedir otra. La respuesta devuelve
+         *     `state: expired` y el asiento deja constancia de que se activo asi.
+         *
+         *     **Una clave rechazada no toca nada**: la licencia anterior sigue como
+         *     estaba y el sistema entero sigue funcionando. El `422` dice cual de los
+         *     cuatro motivos es —clave a medias, firma que no cuadra, emision
+         *     defectuosa o despliegue sin clave publica— porque la accion siguiente es
+         *     distinta en cada uno.
+         *
+         *     **Sin red**, igual que la consulta.
+         */
+        post: operations["activateLicense"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Configuracion de la instalacion
+         * @description Devuelve **el catalogo entero** ya resuelto, no solo lo que este
+         *     guardado (RF-PD-01). Es deliberado: un panel que solo enseñara las filas
+         *     existentes ocultaria justo lo que el cliente todavia no ha configurado, y
+         *     el administrador no sabria que puede cambiar.
+         *
+         *     **La cascada tiene dos escalones**: la fila de `installation_settings` si
+         *     existe, y si no el valor de serie del producto. `source` dice cual de los
+         *     dos ha ganado. No hay un tercer escalon de centro
+         *     ([ADR-040](../adr/ADR-040-un-centro-por-instalacion-y-por-licencia.md):
+         *     hay uno por instalacion) ni de variable de entorno: la variable es el
+         *     valor con el que el instalador siembra la primera fila, no un escalon.
+         *     Si lo fuera, un cambio guardado desde el panel no surtiria efecto
+         *     mientras el `.env` dijera otra cosa.
+         *
+         *     **Una instalacion sin ninguna fila responde `200`** con todas las claves
+         *     en `source: product_default`. El valor por defecto **es** el producto.
+         *
+         *     `meta.unknown_keys` enumera las filas guardadas que **este binario no
+         *     reconoce**. Solo pueden venir de una version posterior o de una edicion a
+         *     mano; no las lee nadie y no cambian el comportamiento, pero se enseñan
+         *     porque son el sintoma de una actualizacion a medias.
+         */
+        get: operations["getInstallationSettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Modificacion de la configuracion
+         * @description Cambia una o varias claves a la vez y devuelve **el conjunto completo**,
+         *     con la misma forma que el `GET`: asi el panel no tiene que recomponer el
+         *     estado a partir de lo que envio.
+         *
+         *     **Todo cambio queda auditado** (regla dura 6, RL-04). Cada clave
+         *     modificada deja su propio asiento en `audit_log`
+         *     —`calculation_setting.changed`— con el actor, el valor anterior, el valor
+         *     nuevo y si esa clave **afecta al calculo de horas**. Quien lea ese asiento
+         *     dentro de dos años, con una discrepancia de nomina delante, necesita
+         *     separar «esto pudo cambiar las horas» de «esto cambio un color». El
+         *     asiento y la fila se escriben en la misma transaccion: si la auditoria
+         *     falla, el cambio no se guarda.
+         *
+         *     **Guardar el valor que ya regia no escribe nada**: ni fila ni asiento. Es
+         *     lo que hace que abrir la pantalla y pulsar «guardar» no ensucie el trail.
+         *
+         *     **Se validan las claves de una en una y el conjunto despues.** Una clave
+         *     fuera del catalogo o un valor fuera de rango son `422` con el error
+         *     colgado de `settings.<CLAVE>`; y hay invariantes que ninguna clave puede
+         *     comprobar sola —el idioma por defecto tiene que estar entre los
+         *     disponibles—, que se comprueban sobre el resultado para que el orden de
+         *     escritura no pueda dejar la instalacion en un estado imposible.
+         *
+         *     **Volver al valor de serie no es guardar una cadena vacia.** Hoy no hay
+         *     forma de retirar una clave desde la API; el valor de serie se restablece
+         *     escribiendolo explicitamente.
+         */
+        patch: operations["updateInstallationSettings"];
+        trace?: never;
+    };
+    "/api/v1/setup/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Si la instalacion esta puesta en marcha
+         * @description Dice si el asistente sigue abierto (RF-PD-03). Es lo primero que consulta
+         *     el panel al cargar: con `available: true` lleva al asistente, con
+         *     `available: false` lleva a la pantalla de acceso.
+         *
+         *     **Es publico, y tiene que serlo.** Se llama antes de que exista ninguna
+         *     cuenta con la que autenticarse — ese es literalmente el estado que
+         *     describe. Lo unico que revela es que esta instalacion aun no se ha
+         *     configurado, que es tambien lo que revela un panel vacio.
+         *
+         *     **Y no revela nada mas.** El detalle —que pasos estan hechos y cuales no—
+         *     vive en `GET /api/v1/setup/steps`, que exige sesion de administrador. Esa
+         *     lista dice si hay un administrador **sin segundo factor**, si no se ha
+         *     activado licencia y si no hay ningun quiosco vinculado: informacion util
+         *     para quien mira si merece la pena insistir, e innecesaria para redirigir
+         *     un navegador.
+         *
+         *     **El asistente es de un solo uso.** Se cierra con
+         *     `POST /api/v1/setup/complete` y no vuelve a abrirse: lo que despues se
+         *     cambia se cambia por su recurso —`/site`, `/departments`,
+         *     `/compliance-profile`, `/license`—, que es donde el cambio queda
+         *     auditado con su motivo.
+         */
+        get: operations["getSetupStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/setup/administrator": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Primer administrador de la instalacion
+         * @description Crea la **primera** cuenta de gestion, con rol `admin` (RF-PD-03, primer
+         *     paso del asistente).
+         *
+         *     **Es la unica escritura publica del producto**, y solo mientras no exista
+         *     ninguna cuenta de gestion. En cuanto hay una, responde `409` para
+         *     siempre: la segunda cuenta se crea desde el panel, autenticado. El
+         *     instalador **no** crea cuentas y no debe crearlas, asi que este endpoint
+         *     es la unica puerta de entrada de una instalacion recien montada.
+         *
+         *     **No devuelve sesion: devuelve un reto de segundo factor** (RS-06), con
+         *     `enrolment_required: true`. Es exactamente el `202` de
+         *     `POST /api/v1/auth/login`, y a proposito: el TOTP se da de alta y se
+         *     confirma con `POST /api/v1/auth/2fa/enrol` y
+         *     `POST /api/v1/auth/2fa/confirm`, que son los endpoints que ya existen
+         *     para eso. **No hay ninguna otra via por la que salga un secreto TOTP**, y
+         *     el paso del asistente no se da por completado hasta que esta confirmado:
+         *     un administrador sin segundo factor no es un administrador (RS-06).
+         *
+         *     **Si alguien abandona entre crear la cuenta y confirmar el TOTP, no hay
+         *     callejon sin salida:** entra por `POST /api/v1/auth/login` con su correo
+         *     y su contrasena y recibe el mismo reto, con `enrolment_required: true`.
+         *
+         *     **La politica de robustez de la contrasena se aplica aqui** (RF-ID-01),
+         *     que es donde se fija. Un `422` dice que regla falta.
+         */
+        post: operations["createFirstAdministrator"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/setup/site": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Alta del centro de trabajo de la instalacion
+         * @description Crea **el** centro (ADR-040): una licencia es un hotel, y una instalacion
+         *     tiene exactamente un centro. Solo se puede ejecutar una vez; la garantia
+         *     no es esta comprobacion sino el indice `sites_single_row_uidx`.
+         *
+         *     **Vive bajo `/setup` y no como `POST /api/v1/site` a proposito.** El
+         *     recurso `/site` es singular y **no tiene alta ni lista** (Anexo B del
+         *     documento 01, ADR-040). Un alta abierta ahi seria la primera pieza de un
+         *     multicentro que ese ADR cerro; aqui es lo que es, un acto irrepetible de
+         *     puesta en marcha.
+         *
+         *     **`timezone` es el dato del que depende RN-05.** Es la zona con la que se
+         *     atribuye cada tramo a una jornada, no la zona de la aplicacion, que es
+         *     siempre UTC (regla dura 3). El valor de serie es `Europe/Madrid` por el
+         *     mercado inicial, y es un dato: nada especifico de un cliente vive en el
+         *     codigo (regla dura 13).
+         *
+         *     **El perfil de cumplimiento no se elige aqui, y no es un olvido.** El
+         *     centro nace **sin perfil asignado**, que es como se dice «usa el de la
+         *     instalacion»: `GET /api/v1/compliance-profile` lo resuelve al vigente
+         *     —`ES-hosteleria`, que siembra la migracion— y lo devuelve con `source:
+         *     default`. Con un centro por instalacion (ADR-040) hay exactamente un
+         *     perfil en juego, asi que un campo para elegirlo seria un parametro que
+         *     nadie necesita distinto y una segunda forma de decir lo mismo. Los
+         *     umbrales se revisan en su propio paso del asistente (RL-21).
+         *
+         *     El alta queda en `audit_log` como `site.created` (regla dura 6).
+         */
+        post: operations["createInstallationSite"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/setup/steps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Pasos del asistente y su estado
+         * @description Los ocho pasos del asistente con su estado, lo que hace que la puesta en
+         *     marcha sea **reanudable**: se abandona a la mitad —falta un dato, hay que
+         *     llamar a alguien, la tablet llega mañana— se vuelve, y el panel sabe donde
+         *     estaba.
+         *
+         *     **Autenticada, al contrario que `GET /api/v1/setup/status`.** La lista de
+         *     pasos es un inventario de la postura de la instalacion: dice si hay un
+         *     administrador **sin segundo factor confirmado**, si no se ha activado
+         *     licencia y si no hay ningun quiosco vinculado. Ninguna de las tres hace
+         *     falta para decidir a donde lleva el panel, y las tres son utiles para
+         *     quien esta mirando si merece la pena insistir.
+         *
+         *     **Dos rutas y no una que cambie de forma segun quien pregunte.** Una
+         *     respuesta cuyo cuerpo depende de las credenciales es un contrato que un
+         *     cliente generado no sabe expresar, y dejaria la mitad «ambito» de la
+         *     autorizacion escrita a mano en lugar de en el middleware.
+         *
+         *     Con el asistente ya cerrado, `steps` viaja **vacio**: terminada la puesta
+         *     en marcha, el inventario de lo que se omitio no tiene ningun consumidor.
+         */
+        get: operations["getSetupSteps"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/setup/steps/{step}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Paso del asistente de puesta en marcha cuyo estado se marca (RF-PD-03).
+                 *
+                 *     **No admite `administrator` ni `site`**, aunque los dos sean pasos: su
+                 *     estado se deduce del dato —una cuenta de gestion con segundo factor
+                 *     confirmado, un centro creado— y no de una marca. Enviarlos devuelve
+                 *     `422`, no `404`: el paso existe, lo que no existe es la potestad de
+                 *     declararlo hecho a mano.
+                 * @example license
+                 */
+                step: components["parameters"]["SetupStepName"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Marcar un paso del asistente como hecho u omitido
+         * @description Deja constancia de que un paso del asistente se termino o se omitio, para
+         *     que el asistente sea **reanudable**: se puede abandonar a media puesta en
+         *     marcha y retomarlo donde estaba (RF-PD-03).
+         *
+         *     **Solo se marcan los pasos que no se pueden deducir del dato.** Los pasos
+         *     `administrator` y `site` no se marcan nunca: su estado se calcula de lo
+         *     que hay —una cuenta de gestion con segundo factor confirmado, y un centro
+         *     creado—, asi que ni una marca perdida ni una marca de mas pueden mentir
+         *     sobre ellos. Marcarlos devuelve `422`.
+         *
+         *     **`skipped` solo vale para los pasos omitibles.** El paso de licencia lo
+         *     es por la regla dura 15 —un asistente que exigiera licencia convertiria
+         *     la licencia en requisito para fichar— y el de quiosco lo es porque puede
+         *     que la tablet aun no haya llegado. El perfil de convenio **no** lo es:
+         *     RL-21 obliga a contrastar los umbrales con el convenio aplicable, y eso
+         *     es un acto de alguien, no un valor por defecto que nadie miro.
+         *
+         *     Es `PUT` y no `POST` porque es idempotente: repetirlo deja el mismo
+         *     estado.
+         */
+        put: operations["recordSetupStep"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/setup/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cerrar el asistente de puesta en marcha
+         * @description Cierra el asistente **para siempre** y devuelve el resumen accionable de
+         *     lo que queda por hacer antes del primer dia (RF-PD-03).
+         *
+         *     **Exige que ningun paso quede en el aire.** Los obligatorios tienen que
+         *     estar hechos y los omitibles, hechos u omitidos explicitamente. Con un
+         *     paso en `pending` responde `409` diciendo cual: terminar el asistente con
+         *     pasos sin mirar es como no haberlo tenido.
+         *
+         *     **El resumen son cifras, nunca personas.** Cuantas altas hay, cuantas
+         *     tarjetas estan pendientes de emitir e imprimir, si hay licencia y si hay
+         *     algun quiosco vinculado. La cifra que de verdad importa es
+         *     `credentials_pending`: **quien no tiene su tarjeta impresa y entregada no
+         *     puede fichar el primer dia**, y ese es el problema que el panel de estado
+         *     de credenciales (RF-QR-08) existe para que nadie descubra delante de la
+         *     tablet a las 06:00.
+         */
+        post: operations["completeSetup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/employees/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Importacion masiva de plantilla
+         * @description Carga la plantilla desde un CSV o un XLSX (**RF-GP-05**). Es el paso de
+         *     importacion del asistente de puesta en marcha y tambien la via por la que
+         *     se incorpora un grupo grande despues.
+         *
+         *     ## Dos fases, y la segunda no ocurre sin confirmar la primera
+         *
+         *     Con `mode: validate` **no se escribe nada**: se devuelve el informe linea
+         *     a linea de lo que se crearia, lo que se actualizaria y lo que se rechaza,
+         *     con el motivo de cada rechazo. Es el modo simulacion que exige RF-GP-05.
+         *
+         *     Con `mode: apply` se aplica, y hace falta `confirm_checksum` con el
+         *     `file.sha256` que devolvio la validacion. **El fichero se vuelve a subir**
+         *     y el servidor comprueba que es el mismo: asi lo que se aplica es
+         *     exactamente lo que se reviso, y el producto no guarda en disco un fichero
+         *     con los nombres y los documentos de identidad de la plantilla esperando a
+         *     que alguien confirme.
+         *
+         *     ## Que identifica a una persona entre dos importaciones
+         *
+         *     **El documento manda, y cuando hay documento el correo NO empareja.** Una
+         *     fila con `national_id` se busca **solo** por su documento: si no aparece
+         *     nadie, es un alta, aunque su correo ya exista en la plantilla. Es la
+         *     regla que impide el peor desenlace posible de este endpoint —que la ficha
+         *     y el registro horario de una persona pasen a nombre de otra (RL-04, regla
+         *     dura 5)— cuando dos personas comparten un correo de departamento o hay
+         *     una errata en una celda.
+         *
+         *     Ese correo repetido **no se ignora en silencio**: la fila se rechaza con
+         *     `email_taken`, porque el indice unico parcial de `employees.email` no
+         *     dejaria escribirla y es mejor decirlo con su numero de linea que dejar
+         *     reventar el lote entero.
+         *
+         *     Solo cuando la fila **no trae documento** se empareja por correo. Con una
+         *     de las dos, **reimportar el mismo fichero no duplica a nadie ni pisa el
+         *     historial**: las lineas que ya existen salen como `update` o `unchanged`.
+         *     Una linea sin ninguna de las dos se rechaza con `missing_identity`, porque
+         *     no habria forma de reconocerla la segunda vez.
+         *
+         *     **El documento se normaliza antes de comparar** —mayusculas, sin espacios
+         *     ni guiones— en los dos lados. Sin eso, un `12345678z` guardado y un
+         *     `12345678Z` en el fichero serian dos personas distintas y la
+         *     reimportacion duplicaria.
+         *
+         *     **El correo sigue siendo opcional** (regla dura 12, ADR-015): el fichero
+         *     puede no traer columna de correo y la importacion funciona igual. Lo que
+         *     no puede es no traer **ninguna** de las dos columnas de identidad.
+         *     **`employee_code` no se lee del fichero.** Es opaco y lo genera el
+         *     servidor (documento 01 §5.5): un codigo tomado del sistema anterior seria
+         *     un dato con significado impreso en una tarjeta. El duplicado lo impide el
+         *     `CITEXT UNIQUE` del esquema, no una consulta previa.
+         *
+         *     **El documento de identidad no se almacena** (RL-08): se guarda su digest
+         *     (`national_id_hash`) y el valor en claro no llega a existir como columna,
+         *     ni como atributo, ni en ningun registro.
+         *
+         *     **`hired_at` de quien ya existe no se toca.** Si el fichero trae otra
+         *     fecha, la linea lo dice como aviso y **no se aplica**: cambiar la fecha de
+         *     alta de alguien mueve el punto desde el que corre su conservacion (RL-02)
+         *     y eso no se hace de pasada en una importacion (regla dura 5).
+         *
+         *     ## Lo que la importacion NO hace
+         *
+         *     **No manda nada por correo** (regla dura 11, ADR-014). La credencial es
+         *     una tarjeta fisica: importar cuarenta personas deja cuarenta tarjetas
+         *     **pendientes de emitir, imprimir y entregar**, y quien lo dice es el panel
+         *     de estado de credenciales (RF-QR-08) y `credentials:status --pending`.
+         *     Importar sin emitir tarjetas reproduce exactamente el problema que ese
+         *     panel existe para evitar.
+         *
+         *     El alta masiva queda en `audit_log` como `employee.imported`, con las
+         *     cifras y la huella del fichero — nunca con nombres.
+         */
+        post: operations["importEmployees"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export interface webhooks {
     presenceUpdated: {
@@ -2131,7 +2700,7 @@ export interface components {
     schemas: {
         /**
          * Health
-         * @description Estado de vida del proceso y version desplegada.
+         * @description Estado de vida del proceso, version desplegada y estado de la licencia.
          */
         Health: {
             /**
@@ -2139,6 +2708,28 @@ export interface components {
              * @enum {string}
              */
             status: "ok";
+            /**
+             * @description Estado de la licencia (§10.5, tarea 5.3), para que `doctor` y el
+             *     paquete de diagnostico puedan informarlo (RF-PD-09).
+             *
+             *     **Una palabra y nada mas.** Ni el nombre del cliente, ni el plan, ni
+             *     los limites, ni las fechas: esta sonda es publica y esos datos son
+             *     informacion comercial del cliente (ADR-020, regla dura 21). El
+             *     detalle completo esta en `GET /api/v1/license`, que es de `admin`.
+             *
+             *     **`unknown` no es un fallo.** Significa que la sonda no ha podido
+             *     saberlo **sin tocar dependencias**, que es su regla desde la tarea
+             *     1.7: el estado se lee de una copia en cache que escribe el punto
+             *     unico de decision, y si Redis no responde —o nadie ha resuelto el
+             *     estado desde el arranque— la respuesta honesta es esta. Nunca se
+             *     confunde con `absent`, que significa «no hay licencia activada».
+             *
+             *     **No cambia el codigo de respuesta.** Una licencia caducada devuelve
+             *     `200` igual que una vigente: esta sonda dice si el proceso vive, y la
+             *     licencia no tiene nada que ver con eso (regla dura 15, ADR-019).
+             * @enum {string}
+             */
+            license: "absent" | "unverifiable" | "not_yet_valid" | "valid" | "expiring_soon" | "expired" | "unknown";
             /**
              * @description Version SemVer desplegada (§10.5). Es lo que permite correlacionar una
              *     incidencia con una version concreta sin entrar por SSH al servidor del
@@ -3217,6 +3808,486 @@ export interface components {
             name: string;
         };
         /**
+         * SettingKey
+         * @description Catalogo cerrado de claves de configuracion de la instalacion
+         *     (RF-PD-01). El nombre es identico al de la variable de entorno del
+         *     Anexo B cuando la propiedad tiene las dos caras: la variable es el valor
+         *     con el que el instalador siembra la primera fila, y la fila es la que
+         *     manda a partir de ahi.
+         *
+         *     Ampliar este enum es un cambio **aditivo** y cabe en `/api/v1`
+         *     ([ADR-012](../adr/ADR-012-api-versionada-en-la-ruta.md)): un cliente que
+         *     no conozca una clave nueva la ignora, y el servidor sigue devolviendo
+         *     todas.
+         *
+         *     **Que se aplica hoy y que no.** Las cuatro `ATTENDANCE_*` gobiernan ya el
+         *     fichaje: el nucleo las recibe resueltas por `OperationalSettingsProvider`
+         *     y un cambio surte efecto en la peticion siguiente. Las tres
+         *     `BRANDING_*` y las dos `LOCALE_*` **se guardan y se auditan, y todavia no
+         *     se pintan**: las tres aplicaciones cliente y la cabecera de los PDF siguen
+         *     leyendo la marca del entorno del servidor, y es la **tarea 5.8** la que
+         *     las pasa a estas claves. Se publican desde ya para que la puesta en marcha
+         *     pueda dejarlas escritas y para que el cambio de la 5.8 no altere el
+         *     contrato.
+         * @enum {string}
+         */
+        SettingKey: "ATTENDANCE_MAX_SHIFT_HOURS" | "ATTENDANCE_DEBOUNCE_SECONDS" | "ATTENDANCE_MAX_CLOCK_SKEW_MINUTES" | "ATTENDANCE_MIN_TRANSIT_SECONDS" | "BRANDING_APP_NAME" | "BRANDING_LOGO_PATH" | "BRANDING_ACCENT_COLOR" | "LOCALE_DEFAULT" | "LOCALE_AVAILABLE";
+        /**
+         * SettingValue
+         * @description El valor de una clave. `installation_settings.value` es `JSONB` porque el
+         *     tipo forma parte del dato: un umbral es numero, un idioma es cadena y los
+         *     idiomas activos son una lista. `type` dice cual de los tres es, para que
+         *     el panel sepa que control dibujar sin llevar el catalogo duplicado.
+         * @example 12
+         * @example Hotel Marina
+         * @example [
+         *       "es",
+         *       "en"
+         *     ]
+         */
+        SettingValue: number | string | string[];
+        /**
+         * SettingType
+         * @description De que tipo es el valor. No hay booleano porque ninguna clave del
+         *     catalogo lo necesita todavia; añadirlo cuando aparezca la primera es
+         *     aditivo.
+         * @enum {string}
+         */
+        SettingType: "integer" | "text" | "text_list";
+        /**
+         * SettingImpact
+         * @description Sobre que actua la clave cuando cambia.
+         *
+         *     - `worked_hours` — puede cambiar los **minutos** que quedan registrados.
+         *     - `compliance_review` — no mueve minutos, pero cambia **que incidencias
+         *       se abren** para revision humana (RN-08, RN-16, RF-AT-10).
+         *     - `presentation` — solo altera lo que se ve (RF-PD-08).
+         *
+         *     Son tres y no un booleano porque marcar los tres umbrales de revision
+         *     como «afecta a las horas» diluiria la señal justo donde importa, y
+         *     marcarlos como «no afecta» perderia que alteran el expediente de
+         *     cumplimiento. El booleano que el asiento de auditoria necesita sigue
+         *     existiendo, y es `affects_worked_hours`.
+         * @enum {string}
+         */
+        SettingImpact: "worked_hours" | "compliance_review" | "presentation";
+        /**
+         * SettingSource
+         * @description Que escalon de la cascada ha ganado: `installation` si hay fila guardada,
+         *     `product_default` si rige el valor de serie del producto. Son
+         *     indistinguibles en el numero y muy distintos en la conversacion: el panel
+         *     lo usa para enseñar que esta configurado de verdad.
+         * @enum {string}
+         */
+        SettingSource: "installation" | "product_default";
+        /**
+         * SettingConstraints
+         * @description Lo que la clave admite, para que el panel valide antes de enviar y para
+         *     que quien lee el contrato no tenga que deducirlo. Los campos presentes
+         *     dependen del `type`: rango en los enteros, longitud o forma en las
+         *     cadenas, y conjunto cerrado en las que lo tienen.
+         *
+         *     **No sustituye a la validacion del servidor**, que es la que manda: esto
+         *     es la misma regla publicada para que el formulario no tenga que
+         *     duplicarla a mano.
+         */
+        SettingConstraints: {
+            /** @description Valor minimo admitido, en las claves de tipo `integer`. */
+            minimum?: number;
+            /** @description Valor maximo admitido, en las claves de tipo `integer`. */
+            maximum?: number;
+            /** @description Longitud maxima en caracteres, en las claves de tipo `text`. */
+            maximum_length?: number;
+            /**
+             * @description Expresion regular que la cadena debe cumplir. Hoy solo la lleva el
+             *     color de acento, que es `#rrggbb`.
+             */
+            pattern?: string;
+            /**
+             * @description Conjunto cerrado de valores admitidos. En `text_list` acota cada
+             *     elemento de la lista, no la lista entera.
+             */
+            allowed?: string[];
+        };
+        /**
+         * InstallationSetting
+         * @description Una clave del catalogo, ya resuelta: cuanto vale, de donde sale ese valor
+         *     y que pasa cuando cambia (RF-PD-01).
+         */
+        InstallationSetting: {
+            key: components["schemas"]["SettingKey"];
+            value: components["schemas"]["SettingValue"];
+            type: components["schemas"]["SettingType"];
+            impact: components["schemas"]["SettingImpact"];
+            /**
+             * @description Si cambiar esta clave puede cambiar los minutos del registro legal.
+             *     Es el campo que viaja al asiento de `audit_log` del `PATCH`, y el que
+             *     separa «esto pudo cambiar las horas» de «esto cambio un color». Se
+             *     deriva de `impact`; se publica porque es la pregunta que se hace quien
+             *     mira la pantalla.
+             */
+            affects_worked_hours: boolean;
+            source: components["schemas"]["SettingSource"];
+            constraints?: components["schemas"]["SettingConstraints"];
+        };
+        /**
+         * InvalidSetting
+         * @description Una fila guardada que se ha **descartado** al leer, porque su valor no
+         *     cumple lo que su clave declara (RF-PD-01).
+         *
+         *     No es un error de la peticion: es un aviso sobre el estado de la
+         *     instalacion. Mientras exista, la clave se sirve con su valor de serie.
+         */
+        InvalidSetting: {
+            key: components["schemas"]["SettingKey"];
+            /**
+             * @description Por que se ha descartado, en el idioma negociado con
+             *     `Accept-Language`. Lo lee una persona.
+             * @example El valor de la clave «BRANDING_ACCENT_COLOR» no tiene la forma esperada (/^#[0-9a-fA-F]{6}$/).
+             */
+            reason: string;
+            /**
+             * @description Si la clave descartada puede cambiar los minutos del registro legal.
+             *     Es lo que separa «hay que arreglarlo cuando se pueda» de «hay que
+             *     arreglarlo hoy y revisar lo calculado desde que se rompio».
+             */
+            affects_worked_hours: boolean;
+        };
+        /**
+         * License
+         * @description Estado de la licencia de la instalacion (RF-PD-04, RF-PD-05, ADR-018,
+         *     ADR-023, ADR-028).
+         *
+         *     **Nada de lo que hay aqui puede detener el registro horario.** El estado
+         *     y las cifras gobiernan unicamente las funcionalidades **accesorias** de
+         *     ADR-023; el fichaje, la consulta de jornadas, el portal, la exportacion
+         *     para la Inspeccion, la auditoria, las correcciones y las copias no son
+         *     licenciables y no aparecen en ningun campo de este esquema (regla dura
+         *     15).
+         */
+        License: {
+            data: {
+                state: components["schemas"]["LicenseState"];
+                /**
+                 * @description Con que tono se enseña el aviso. `critical` **no** significa que
+                 *     el sistema este parado: significa que ya se ha perdido algo
+                 *     accesorio. Un exceso de plan nunca pasa de `warning`, porque
+                 *     ocurre con contrato vigente y pagado (ADR-028).
+                 * @enum {string}
+                 */
+                severity: "none" | "warning" | "critical";
+                /**
+                 * @description Solo con `state: unverifiable`. Distingue «vuelve a copiar la
+                 *     clave» de «pide una nueva» de «es un fallo de emision» de
+                 *     «revisa el despliegue», que son cuatro acciones distintas.
+                 * @enum {string|null}
+                 */
+                rejection_reason: "malformed" | "bad_signature" | "invalid_payload" | "no_public_key" | null;
+                /**
+                 * @description Razon social del cliente, tal y como viaja firmada dentro de la clave.
+                 * @example Hotel Ejemplo, S.L.
+                 */
+                customer_name: string | null;
+                /** @description Nombre comercial del plan. No gobierna nada: lo que limita son las cifras. */
+                plan: string | null;
+                /** @description Identificador que puso el fabricante al emitir. Aparece en el asiento de auditoria. */
+                license_id: string | null;
+                valid_from: components["schemas"]["UtcTimestamp"] | null;
+                valid_until: components["schemas"]["UtcTimestamp"] | null;
+                issued_at: components["schemas"]["UtcTimestamp"] | null;
+                /**
+                 * @description Dias completos que faltan. `0` el ultimo dia y tambien una vez
+                 *     caducada. **Nunca negativo**: lo posterior a la caducidad se
+                 *     cuenta en `days_since_expiry`, porque un entero con signo produce
+                 *     inevitablemente un mensaje que dice «caduca en -3 dias».
+                 */
+                days_until_expiry: number | null;
+                /** @description Dias completos desde la caducidad. Nulo si no ha caducado. */
+                days_since_expiry: number | null;
+                /** @description Funcionalidades **accesorias** que habilita el plan contratado. */
+                features: components["schemas"]["LicenseFeature"][];
+                /**
+                 * @description Lo que hoy **no** esta disponible, con su motivo y su fecha. Es
+                 *     lo que hace honesta a la degradacion (ADR-019): que esta
+                 *     degradado, desde cuando y —con el texto del panel— que hacer.
+                 */
+                degraded_features: {
+                    feature: components["schemas"]["LicenseFeature"];
+                    /**
+                     * @description `not_in_plan` no es una degradacion: es algo que el cliente
+                     *     no contrato, y renovar no lo arregla. Los otros cuatro si
+                     *     se recuperan al activar o renovar.
+                     * @enum {string|null}
+                     */
+                    restriction: "license_absent" | "license_unverifiable" | "license_not_yet_valid" | "license_expired" | "not_in_plan" | null;
+                    /** @description Desde cuando, si hay una fecha que dar. Nulo si no la hay: no se inventa un dia. */
+                    since: components["schemas"]["UtcTimestamp"] | null;
+                    /**
+                     * @description Si la funcionalidad existe ya en esta version. Distingue lo
+                     *     que el cliente pierde hoy de lo que perdera cuando exista,
+                     *     para no anunciarle la perdida de algo que no ha visto nunca.
+                     */
+                    implemented: boolean;
+                }[];
+                /**
+                 * @description Contratado frente a real (ADR-028). **Superarlo no bloquea
+                 *     nada**: `POST /api/v1/employees` y la emision del token de un
+                 *     quiosco responden 2xx igual, porque bloquear el alta deja a una
+                 *     persona trabajando sin registro horario y bloquear el
+                 *     emparejamiento deja un centro sin punto de fichaje.
+                 */
+                limits: {
+                    /**
+                     * @description Dos magnitudes y no tres: **no hay `max_sites`**, porque
+                     *     hay un centro por instalacion y por licencia (ADR-040).
+                     * @enum {string}
+                     */
+                    limit: "max_employees" | "max_devices";
+                    /** @description Nulo sin licencia verificada: no hay plan contra el que comparar, y no se inventa uno. */
+                    contracted: number | null;
+                    /**
+                     * @description Personas de plantilla **activa** o dispositivos **no
+                     *     revocados**. Quien esta de baja no ocupa plaza, aunque su
+                     *     registro se conserve cuatro años.
+                     */
+                    actual: number;
+                    exceeded: boolean;
+                    excess: number;
+                }[];
+                activated_at: components["schemas"]["UtcTimestamp"] | null;
+                /** @description Ultima verificacion **correcta** de la firma (ADR-018). */
+                last_verified_at: components["schemas"]["UtcTimestamp"] | null;
+                /**
+                 * @description Huella corta de la clave activada. **La clave completa no sale
+                 *     nunca** de ninguna respuesta ni de `license:show`: la huella es
+                 *     lo que sirve para confirmar por telefono que la clave activada es
+                 *     la que se envio.
+                 */
+                key_fingerprint: string | null;
+            };
+            meta: {
+                /**
+                 * @description Con cuantos dias de antelacion avisa esta instalacion (30 de
+                 *     serie). Viaja en la respuesta para que el panel no lleve el
+                 *     numero compilado dentro (regla dura 13, ADR-017).
+                 */
+                expiry_warning_days: number;
+                /**
+                 * @description Si hay que enseñar el banner persistente: la licencia no esta en
+                 *     su estado normal, o alguna cifra del plan se ha superado. Los dos
+                 *     avisos son **persistentes**, es decir, no se descartan: dejan de
+                 *     verse cuando el hecho deja de ser cierto (ADR-028).
+                 */
+                needs_notice: boolean;
+                /** @description Instante del **servidor** con el que se calculo el estado, nunca el del navegador. */
+                evaluated_at: components["schemas"]["UtcTimestamp"];
+            };
+        };
+        /**
+         * LicenseState
+         * @description En que situacion esta la licencia. **Ninguno de estos valores detiene
+         *     nada** (regla dura 15, ADR-019): gobiernan que funcionalidades accesorias
+         *     estan disponibles y que aviso se enseña, y eso es todo.
+         *
+         *     Son seis y no dos porque la accion siguiente del cliente es distinta en
+         *     cada uno, y una degradacion honesta tiene que decir que hacer.
+         * @enum {string}
+         */
+        LicenseState: "absent" | "unverifiable" | "not_yet_valid" | "valid" | "expiring_soon" | "expired";
+        /**
+         * LicenseFeature
+         * @description Una funcionalidad **accesoria**, de las que ADR-023 declara degradables.
+         *
+         *     **El registro legal no esta en esta lista y no puede estarlo.** El
+         *     fichaje, la sincronizacion de la cola offline, la consulta de jornadas,
+         *     el portal del empleado, la exportacion para la Inspeccion, la auditoria,
+         *     las correcciones, las copias y las sondas de salud **no son
+         *     licenciables**: no tienen valor en este enum, asi que no existe forma de
+         *     expresar su desactivacion — ni en una clave, ni por error. Es mas fuerte
+         *     que confiar en que nadie lo haga.
+         * @enum {string}
+         */
+        LicenseFeature: "advanced_reports" | "impact_dashboard" | "payroll_export" | "weekly_email_summary" | "realtime_presence" | "white_label" | "telemetry";
+        /**
+         * ActivateLicenseRequest
+         * @description La clave firmada que entrega el fabricante. Un solo campo: todo lo que
+         *     el cliente ha contratado viaja **dentro** de la clave, no en parametros
+         *     (regla dura 13, ADR-017).
+         */
+        ActivateLicenseRequest: {
+            /**
+             * @description Formato `KQL1.<carga util>.<firma>`, en base64url sin relleno. Los
+             *     espacios y los saltos de linea se normalizan antes de verificar,
+             *     porque copiarla de un correo es lo que hace todo el mundo.
+             *
+             *     **No se valida su forma con una expresion regular** en esta capa: lo
+             *     haria una segunda fuente de verdad que se desincronizaria el dia que
+             *     naciera `KQL2`, y ademas daria un mensaje peor que el que ya sabe dar
+             *     el verificador.
+             * @example KQL1.eyJsaWNlbnNlX2lkIjoiOWYyYzRhMWI3ZTBkM2Y2NSJ9.Zm9vYmFy
+             */
+            signed_key: string;
+        };
+        /**
+         * ComplianceProfile
+         * @description El perfil de cumplimiento vigente para el centro (doc 01 §5.5,
+         *     RF-PD-07), envuelto en `data` como el resto de recursos singulares.
+         */
+        ComplianceProfile: {
+            data: components["schemas"]["ComplianceProfileBody"];
+        };
+        /** ComplianceProfileBody */
+        ComplianceProfileBody: {
+            /** Format: int64 */
+            id: number;
+            /**
+             * @description Como se llama el convenio que este perfil describe. Se entrega como
+             *     `ES-hosteleria` y **se puede cambiar**: un cliente que ajusta los
+             *     umbrales a su convenio provincial necesita que el perfil se llame
+             *     como ese convenio, porque es lo que aparece en el informe de
+             *     retencion y en el paquete de diagnostico.
+             * @example ES-hosteleria
+             */
+            name: string;
+            /**
+             * @description Codigo de la jurisdiccion cuyo marco legal describe el perfil.
+             *     **Solo lectura**: lo fija la instalacion y hoy no lo lee ninguna
+             *     regla, asi que dejarlo editable seria ofrecer un campo cuyo cambio no
+             *     tiene ningun efecto.
+             * @example ES
+             */
+            jurisdiction: string;
+            /** @description RN-10: horas de descanso entre el fin de un turno y el inicio del siguiente. 12 en `ES-hosteleria` (art. 34.3 ET). */
+            min_rest_hours: number;
+            /** @description RN-11: jornada diaria ordinaria por encima de la cual se alerta. 9 en `ES-hosteleria`. */
+            max_daily_hours: number;
+            /**
+             * @description Jornada semanal ordinaria. 40 en `ES-hosteleria` (art. 34.1 ET); el
+             *     promedio en computo anual lo fija el convenio y lo ajusta el cliente.
+             *     **Todavia no lo lee ninguna regla**: lo estrena la vista de
+             *     cumplimiento. No puede ser menor que `max_daily_hours`.
+             */
+            max_weekly_hours: number;
+            /** @description RN-12: tramo continuo maximo sin pausa registrada. 6 en `ES-hosteleria`. */
+            break_required_after_hours: number;
+            /**
+             * @description Dia en que empieza la semana, en numeracion **ISO-8601**: 1 es lunes
+             *     y 7 domingo. 1 en `ES-hosteleria`, que es lo que ya usan los informes
+             *     por periodo. Todavia no lo lee ninguna regla.
+             */
+            week_starts_on: number;
+            /**
+             * @description Festivos del centro, en fechas ISO `AAAA-MM-DD`. **Vacio de serie, a
+             *     proposito**: los festivos dependen del municipio y del año, asi que un
+             *     calendario concreto dentro del producto caducaria el 31 de diciembre y
+             *     seria un dato de cliente en el codigo (regla dura 13). Lo carga el
+             *     cliente. Todavia no lo lee ninguna regla.
+             * @example []
+             */
+            holiday_calendar: string[];
+            /**
+             * @description RL-02: años que se conserva el registro horario antes de poder
+             *     purgarlo. **4 en España** (art. 34.9 ET). Bajarlo amplia lo que la
+             *     purga considera vencido, sobre datos con obligacion legal de
+             *     conservacion.
+             */
+            retention_years: number;
+            /**
+             * @description Si es el perfil por defecto de la instalacion, que es el que rige en
+             *     un centro sin perfil asignado. **Solo lectura.**
+             */
+            is_default: boolean;
+            /**
+             * @description Como se ha resuelto: `site` si el centro tiene perfil asignado,
+             *     `installation_default` si se ha caido al perfil por defecto. Lo que
+             *     se edita es el perfil resuelto, sea cual sea el camino.
+             * @enum {string}
+             */
+            source: "site" | "installation_default";
+            /**
+             * Format: date-time
+             * @description Cuando se cambio por ultima vez, o **`null` si nadie lo ha tocado
+             *     desde la instalacion**. El `null` es una afirmacion, no un hueco: la
+             *     fila de serie la escribio el producto, no una persona, y distinguir
+             *     «tal como se instalo» de «revisado el 3 de marzo» es lo primero que
+             *     necesita ver quien abre la pantalla.
+             *
+             *     **Quien lo cambio no viaja aqui**: esta en `audit_log`, que es donde
+             *     tiene valor probatorio y donde hay control de acceso y retencion.
+             * @example null
+             */
+            updated_at: string | null;
+        };
+        /**
+         * UpdateComplianceProfileRequest
+         * @description Modificacion parcial del perfil vigente. Al menos un campo. Los campos
+         *     ausentes no cambian.
+         *
+         *     `jurisdiction`, `is_default` e `id` no estan: no son editables.
+         */
+        UpdateComplianceProfileRequest: {
+            name?: string;
+            min_rest_hours?: number;
+            max_daily_hours?: number;
+            max_weekly_hours?: number;
+            break_required_after_hours?: number;
+            week_starts_on?: number;
+            holiday_calendar?: string[];
+            retention_years?: number;
+        };
+        /**
+         * InstallationSettings
+         * @description El catalogo entero, en el orden en que lo declara el producto. **Siempre
+         *     todas las claves**, tambien las que no tienen fila guardada.
+         */
+        InstallationSettings: {
+            data: components["schemas"]["InstallationSetting"][];
+            meta: {
+                /**
+                 * @description Filas guardadas cuya clave este binario no reconoce. **Ni se leen
+                 *     ni cambian nada**: se enseñan porque son el sintoma de una
+                 *     actualizacion a medias o de una edicion a mano.
+                 * @example []
+                 */
+                unknown_keys: string[];
+                /**
+                 * @description Filas cuya clave **si** existe y cuyo valor su definicion no
+                 *     admite. Son un problema distinto de `unknown_keys` y mas serio:
+                 *     **se han descartado y rige el valor de serie**, asi que lo que se
+                 *     aplica no es lo que hay escrito en la tabla. Si la clave es de
+                 *     impacto `worked_hours`, eso mueve los minutos que se calculan.
+                 *
+                 *     Solo pueden venir de una edicion a mano de la base de datos o de
+                 *     una version distinta del producto: la API no deja guardar un valor
+                 *     que su clave no admita. La lectura las tolera para que una fila
+                 *     corrupta no impida fichar (regla dura 19), y las publica aqui para
+                 *     que el descarte no sea silencioso.
+                 * @example []
+                 */
+                invalid_keys: components["schemas"]["InvalidSetting"][];
+            };
+        };
+        /**
+         * UpdateSettingsRequest
+         * @description Las claves que se cambian, por su nombre. Al menos una.
+         *
+         *     **Una clave fuera del catalogo es `422`, no se ignora.** Aceptarla
+         *     produciria una fila que nadie lee: el cliente creeria haber configurado
+         *     un umbral y el sistema seguiria aplicando el valor de serie. Un ajuste que
+         *     se guarda y no hace nada es peor que un error.
+         */
+        UpdateSettingsRequest: {
+            /**
+             * @example {
+             *       "ATTENDANCE_MAX_SHIFT_HOURS": 10,
+             *       "BRANDING_APP_NAME": "Hotel Marina"
+             *     }
+             */
+            settings: {
+                [key: string]: components["schemas"]["SettingValue"];
+            };
+        };
+        /**
          * Problem
          * @description Error en el formato `application/problem+json` (RFC 9457). El cliente
          *     interpreta `type`, que es un URN estable; `title` y `detail` son texto para
@@ -4158,11 +5229,19 @@ export interface components {
             /**
              * @description Clave publica de aplicacion con la que se abre el WebSocket.
              *
-             *     **`null` cuando la instalacion no tiene Reverb configurado**, que es
-             *     el unico caso en el que falta y siempre viene acompañado de
-             *     `enabled: false`. Se declara nulable en vez de vacia porque una
-             *     cadena vacia obligaria al cliente a distinguir «no hay clave» de
-             *     «hay una clave que es la cadena vacia», y solo una de las dos existe.
+             *     **`null` siempre que `enabled` es `false`**, sea cual sea el motivo:
+             *     sin Reverb configurado, con el tiempo real apagado en la instalacion
+             *     o sin licencia que lo conceda. Sin clave no se abre el socket, y es
+             *     incoherente entregarle a un cliente lo que necesita para conectarse
+             *     justo despues de decirle que no hay tiempo real.
+             *
+             *     **No es el control**, es coherencia: quien deniega de verdad es la
+             *     firma de la suscripcion en `auth_endpoint`, que no se concede cuando
+             *     la licencia no da tiempo real (tarea 5.3, ADR-023).
+             *
+             *     Se declara nulable en vez de vacia porque una cadena vacia obligaria
+             *     al cliente a distinguir «no hay clave» de «hay una clave que es la
+             *     cadena vacia», y solo una de las dos existe.
              */
             key: string | null;
             /**
@@ -4180,7 +5259,8 @@ export interface components {
             event: string;
             /**
              * @description Los canales a los que **esta cuenta** puede suscribirse, ya resueltos
-             *     por su alcance (RF-ID-03). `admin`, `rrhh` y `auditor` reciben
+             *     por su alcance (RF-ID-03). **Lista vacia cuando `enabled` es
+             *     `false`**, por lo mismo que `key` va nula. `admin`, `rrhh` y `auditor` reciben
              *     `presence.all`; un `responsable_departamento` recibe un
              *     `presence.department.{id}` por cada departamento que dirige y **no**
              *     recibe `presence.all`.
@@ -4197,6 +5277,21 @@ export interface components {
              *     base de datos que atiende el camino de fichaje.
              */
             poll_interval_seconds: number;
+            /**
+             * @description Por que no hay tiempo real **cuando la causa es la licencia** (tarea
+             *     5.3, ADR-023). Permite al panel decir «la licencia caduco el X» en
+             *     vez de «no disponible».
+             *
+             *     **`null` tambien cuando `enabled` es `false`** y la causa es otra:
+             *     la instalacion lo ha apagado, o no hay Reverb configurado. Eso lo
+             *     arregla quien despliega, no quien renueva, y anunciar «licencia»
+             *     ahi mandaria a quien lee a hablar con el comercial en lugar de con
+             *     quien administra el servidor.
+             * @enum {string|null}
+             */
+            unavailable_reason: "license_absent" | "license_unverifiable" | "license_not_yet_valid" | "license_expired" | "not_in_plan" | null;
+            /** @description Desde cuando, si la causa es una vigencia con fecha. Nulo si no la hay. */
+            unavailable_since: components["schemas"]["UtcTimestamp"] | null;
         };
         /**
          * PresenceUpdatedMessage
@@ -4844,6 +5939,362 @@ export interface components {
             data: components["schemas"]["PeriodReportRow"][];
             meta: components["schemas"]["PeriodReportMeta"];
         };
+        /**
+         * SetupStep
+         * @description Los pasos del asistente de puesta en marcha (RF-PD-03), **en el orden en
+         *     que se presentan**.
+         *
+         *     `administrator` va primero y no quinto, aunque el requisito lo enumere en
+         *     quinto lugar: la creacion del centro, la activacion de la licencia y todo
+         *     lo demas quedan en `audit_log` (regla dura 6), y un asiento **sin actor**
+         *     —que es lo que saldria si el centro se creara antes de que exista una
+         *     cuenta— no responde a la pregunta para la que existe el trail.
+         *
+         *     `employees` y `license` no estan en la enumeracion literal de RF-PD-03:
+         *     el primero es RF-GP-05, que se movio a esta tarea, y el segundo lo
+         *     introduce la propia ficha de la 5.5. Ninguno de los dos es obligatorio.
+         * @enum {string}
+         */
+        SetupStep: "administrator" | "organisation" | "site" | "departments" | "compliance_profile" | "employees" | "license" | "kiosk";
+        /**
+         * SetupStepState
+         * @description `pending` es «todavia no», `completed` es «hecho» y `skipped` es «lo he
+         *     mirado y lo dejo para despues».
+         *
+         *     **`skipped` no es lo mismo que `pending`**, y por eso son dos valores: el
+         *     asistente no se puede cerrar con un paso en `pending` —seria terminar sin
+         *     haber mirado— pero si con uno en `skipped`, que es una decision tomada.
+         * @enum {string}
+         */
+        SetupStepState: "pending" | "completed" | "skipped";
+        /**
+         * SetupStepStatus
+         * @description Un paso del asistente y su estado.
+         */
+        SetupStepStatus: {
+            step: components["schemas"]["SetupStep"];
+            state: components["schemas"]["SetupStepState"];
+            /** @description Si el asistente no se puede cerrar sin este paso hecho. */
+            required: boolean;
+            /**
+             * @description Si admite `skipped`. **La licencia lo admite** (regla dura 15: un
+             *     asistente que exigiera licencia convertiria la licencia en requisito
+             *     para poder fichar) y **el perfil de convenio no** (RL-21: los
+             *     umbrales hay que contrastarlos con el convenio aplicable, y eso es un
+             *     acto de alguien).
+             */
+            skippable: boolean;
+        };
+        /**
+         * SetupStatus
+         * @description Estado del asistente de puesta en marcha (RF-PD-03).
+         *
+         *     **Un solo booleano y no dos.** `available` decide entero lo que el panel
+         *     hace: `true` lleva al asistente y `false` a la pantalla de acceso. Un
+         *     segundo booleano de «ya inicializado» seria el mismo dato dicho dos veces,
+         *     con la posibilidad de que se contradigan.
+         *
+         *     ## `steps` solo viaja con sesion de administrador
+         *
+         *     Y es la razon por la que **no esta en `required`**. `GET
+         *     /api/v1/setup/status` es publico —tiene que serlo: se llama antes de que
+         *     exista ninguna cuenta— y la lista de pasos es un **inventario de la
+         *     postura de la instalacion**: dice si hay un administrador sin segundo
+         *     factor, si no se ha activado licencia y si no hay ningun quiosco
+         *     vinculado. Eso no se regala sin autenticar, ni antes ni despues de
+         *     terminar la puesta en marcha.
+         *
+         *     Sin credenciales, la respuesta trae **solo `available` y
+         *     `completed_at`**, que es exactamente lo que el panel necesita para
+         *     decidir a donde lleva. Con una sesion de administrador, trae ademas los
+         *     pasos y su estado, que es lo que hace el asistente reanudable.
+         *
+         *     **El panel debe tratar `steps` como opcional** y no asumir su presencia:
+         *     en la primera llamada, antes de crear la cuenta, no estara.
+         */
+        SetupStatus: {
+            /**
+             * @description Si el asistente sigue abierto. Pasa a `false` con
+             *     `POST /api/v1/setup/complete` y **no vuelve a `true`**: es de un solo
+             *     uso.
+             */
+            available: boolean;
+            /**
+             * Format: date-time
+             * @description Cuando se cerro, en UTC con sufijo `Z`, o `null` si sigue abierto.
+             * @example 2026-09-02T09:14:00Z
+             */
+            completed_at: string | null;
+            /**
+             * @description Los pasos y su estado. **Solo con sesion de administrador**; ausente
+             *     en la respuesta publica. Viaja vacio cuando el asistente ya se cerro:
+             *     terminada la puesta en marcha, el inventario de lo que el cliente
+             *     omitio no tiene ningun consumidor.
+             */
+            steps?: components["schemas"]["SetupStepStatus"][];
+        };
+        /**
+         * SetupSummary
+         * @description Lo que hay al cerrar el asistente, en cifras. **Ninguna persona, ningun
+         *     nombre, ningun correo**: son los numeros con los que la pantalla final
+         *     dice que queda por hacer antes del primer dia.
+         */
+        SetupSummary: {
+            /** @description Altas activas en la plantilla. */
+            employees: number;
+            departments: number;
+            /**
+             * @description Personas activas **sin tarjeta emitida, impresa y entregada**. Es la
+             *     cifra que decide si el primer dia sale bien: sin tarjeta no se ficha
+             *     (ADR-014), y emitirlas e imprimirlas lleva dias de logistica. El
+             *     detalle persona a persona esta en `GET /api/v1/credentials/status`
+             *     (RF-QR-08) y en `credentials:status --pending`.
+             */
+            credentials_pending: number;
+            /**
+             * @description Estado de la licencia al cerrar. **El mismo enum que `GET
+             *     /api/v1/license`**, y no un resumen de cuatro palabras propio de esta
+             *     pantalla: dos vocabularios para el mismo hecho acaban divergiendo, y
+             *     el panel ya sabe pintar este.
+             *
+             *     `absent` es lo normal en una puesta en marcha y **no impide nada del
+             *     registro legal**
+             *     ([ADR-019](../adr/ADR-019-la-licencia-nunca-bloquea-el-registro.md),
+             *     regla dura 15).
+             */
+            license: components["schemas"]["LicenseState"];
+            /** @description Dispositivos de quiosco vinculados y activos. */
+            kiosks: number;
+        };
+        /**
+         * SetupCompletion
+         * @description Resultado de cerrar el asistente.
+         */
+        SetupCompletion: {
+            status: components["schemas"]["SetupStatus"];
+            summary: components["schemas"]["SetupSummary"];
+        };
+        /**
+         * CreateFirstAdministratorRequest
+         * @description La primera cuenta de gestion de la instalacion. Rol `admin`, y no viaja en
+         *     el cuerpo: no hay eleccion que hacer, el primero es siempre administrador.
+         */
+        CreateFirstAdministratorRequest: {
+            /**
+             * @description Nombre visible de la persona en el panel.
+             * @example Direccion del hotel
+             */
+            name: string;
+            /**
+             * Format: email
+             * @description Correo de la cuenta, que es su identificador de acceso. **Esto no
+             *     contradice la regla dura 12**: aquella dice que el producto no
+             *     depende del correo del **empleado**, que entra a su portal con codigo
+             *     y PIN (ADR-015). Una cuenta de gestion si se identifica por correo, y
+             *     no se le manda ninguna invitacion: la contrasena se fija aqui mismo.
+             */
+            email: string;
+            /**
+             * @description Contrasena en claro sobre TLS. **Aqui si se declara longitud minima**,
+             *     al contrario que en `/auth/login`: este es el sitio donde la
+             *     contrasena se FIJA, y es donde se aplica la politica de robustez de
+             *     RF-ID-01 (mayusculas y minusculas, digitos y simbolos). El minimo real
+             *     lo fija la instalacion y puede ser mayor que 12.
+             */
+            password: string;
+            /**
+             * @description Idioma del panel para esta cuenta.
+             * @default es
+             */
+            locale: string;
+            /**
+             * @description Nombre con el que se guarda la sesion, igual que en `/auth/login`. Sin
+             *     PII: es «Panel de gestion», no el nombre de una persona.
+             */
+            device_name?: string;
+        };
+        /**
+         * CreateInstallationSiteRequest
+         * @description Alta del **unico** centro de la instalacion (ADR-040). No hay `id` que
+         *     elegir ni lista a la que anadir.
+         */
+        CreateInstallationSiteRequest: {
+            /** @example Hotel Marina */
+            name: string;
+            /**
+             * @description Zona IANA del centro. **Es el dato del que depende RN-05**: la jornada
+             *     de un tramo es la fecha civil de su hora de inicio **en esta zona**,
+             *     no en UTC ni en la del navegador. Nunca un desfase (`+02:00`): un
+             *     desfase no sabe de cambios de hora y rompe RN-09 dos veces al ano.
+             * @default Europe/Madrid
+             * @example Europe/Madrid
+             */
+            timezone: string;
+        };
+        /**
+         * RecordSetupStepRequest
+         * @description Marca de un paso del asistente.
+         */
+        RecordSetupStepRequest: {
+            /**
+             * @description `pending` no se puede enviar: no se declara que algo esta sin hacer,
+             *     simplemente no se marca.
+             * @enum {string}
+             */
+            state: "completed" | "skipped";
+        };
+        /**
+         * EmployeeImportMode
+         * @description `validate` es el **modo simulacion** de RF-GP-05: lee el fichero entero,
+         *     devuelve el informe y **no escribe una sola fila**. `apply` es el que
+         *     escribe, y exige `confirm_checksum`.
+         * @enum {string}
+         */
+        EmployeeImportMode: "validate" | "apply";
+        /**
+         * EmployeeImportOutcome
+         * @description Que se hace —o que se haria, en simulacion— con la linea.
+         *
+         *     **Un solo enum para los dos modos, en presente y no en pasado.** Con
+         *     `create`/`created` el panel tendria que pintar dos tablas distintas para
+         *     el mismo informe; lo que dice si ocurrio o no es `mode`.
+         * @enum {string}
+         */
+        EmployeeImportOutcome: "create" | "update" | "unchanged" | "reject";
+        /**
+         * EmployeeImportMessage
+         * @description Por que se rechaza una linea, o que conviene saber de ella.
+         *
+         *     **`code` es lo estable y `detail` es lo legible.** El panel decide por el
+         *     codigo; el texto viaja ya traducido al idioma negociado y puede cambiar.
+         */
+        EmployeeImportMessage: {
+            /**
+             * @description **`unknown_column` viaja en `file.warnings`, no en una fila**: es del
+             *     fichero entero. `hired_at_not_updated` es un aviso de fila y no la
+             *     impide. Los demas rechazan la fila que los lleva.
+             *
+             *     **`email_taken` se emite en dos situaciones**, y las dos protegen lo
+             *     mismo —que el registro horario de alguien no acabe a nombre de otro—:
+             *     cuando la fila trae documento y su correo pertenece **a otra persona**
+             *     ya dada de alta, y cuando dos filas del mismo fichero comparten correo
+             *     con documentos distintos. En ambas se rechaza la fila en la fase de
+             *     comprobacion, antes de escribir nada.
+             * @enum {string}
+             */
+            code: "missing_identity" | "missing_first_name" | "missing_last_name" | "missing_hired_at" | "invalid_email" | "invalid_hired_at" | "invalid_national_id" | "unknown_department" | "duplicate_in_file" | "email_taken" | "hired_at_not_updated" | "unknown_column";
+            /** @enum {string} */
+            severity: "error" | "warning";
+            /** @description Columna del fichero a la que se refiere, si es a una. */
+            column: string | null;
+            /**
+             * @description Texto para la persona que esta importando, **que dice que hacer** y no
+             *     solo que fallo.
+             */
+            detail: string;
+        };
+        /**
+         * EmployeeImportRow
+         * @description Una linea del fichero y su desenlace.
+         *
+         *     **Lleva el nombre tal y como viene en el fichero** (`label`), y tiene que
+         *     llevarlo: «la linea 14 se rechaza» no sirve para arreglar nada. Este dato
+         *     viaja **solo aqui**, en una respuesta autenticada de RRHH; no entra en
+         *     `error_events` ni en ningun registro tecnico (regla dura 21).
+         */
+        EmployeeImportRow: {
+            /**
+             * @description Numero de linea **del fichero**, contando la cabecera. Es lo que la
+             *     persona ve al abrirlo en su hoja de calculo.
+             */
+            line: number;
+            /** @description Nombre y apellidos leidos de la linea, para poder localizarla. */
+            label: string;
+            outcome: components["schemas"]["EmployeeImportOutcome"];
+            /**
+             * Format: uuid
+             * @description UUID publico de la persona: el existente cuando la linea es `update` o
+             *     `unchanged`, y el recien creado cuando `mode` es `apply` y la linea es
+             *     `create`. `null` en simulacion, porque todavia no existe.
+             */
+            employee_uuid: string | null;
+            /**
+             * @description Campos que cambian respecto de lo guardado. Vacio en `create` y en
+             *     `unchanged`. **`hired_at` no aparece nunca**: una importacion no
+             *     reescribe la fecha de alta de nadie.
+             */
+            changes: ("first_name" | "last_name" | "email" | "department_id" | "locale")[];
+            messages: components["schemas"]["EmployeeImportMessage"][];
+        };
+        /**
+         * EmployeeImportRequest
+         * @description El fichero y el modo. **Multipart y no JSON con el contenido dentro**: el
+         *     fichero se lee en streaming desde disco y nunca se carga entero en
+         *     memoria, y un base64 en un cuerpo JSON obliga justo a lo contrario.
+         */
+        EmployeeImportRequest: {
+            /**
+             * Format: binary
+             * @description CSV o XLSX. El **delimitador y la codificacion se detectan**, no se
+             *     configuran: un CSV exportado por un Excel espanol viene con `;` y en
+             *     Windows-1252, y pedirle eso a quien importa seria pedirle que acierte
+             *     a ciegas.
+             */
+            file: string;
+            mode: components["schemas"]["EmployeeImportMode"];
+            /**
+             * @description **Obligatorio con `mode: apply`**: el `file.sha256` que devolvio la
+             *     validacion. Si no coincide con el fichero enviado, se responde `409`
+             *     sin escribir nada. Es lo que garantiza que se aplica exactamente lo
+             *     que se reviso, sin guardar el fichero en el servidor entre las dos
+             *     fases.
+             */
+            confirm_checksum?: string;
+        };
+        /**
+         * EmployeeImportReport
+         * @description El informe linea a linea que exige RF-GP-05, en los dos modos.
+         */
+        EmployeeImportReport: {
+            mode: components["schemas"]["EmployeeImportMode"];
+            file: {
+                /**
+                 * @description Huella del fichero recibido. Se devuelve para confirmarlo en la
+                 *     fase de aplicacion y queda en el asiento de `audit_log`. **El
+                 *     nombre del fichero no se devuelve ni se audita**: lo pone quien
+                 *     sube y puede llevar dentro el nombre de una persona.
+                 */
+                sha256: string;
+                /** @description Lineas de datos leidas, sin contar la cabecera. */
+                rows: number;
+                /**
+                 * @description Avisos que son **del fichero entero**, no de una linea: hoy, las
+                 *     columnas que el importador no reconoce (`unknown_column`).
+                 *
+                 *     **Aqui y no repetidos en cada fila**, que es donde estaban antes
+                 *     de la revision de la 5.5. Una cabecera con tres columnas
+                 *     desconocidas y cuarenta filas producia **ciento veinte mensajes
+                 *     identicos** que sepultaban los rechazos de verdad — justo el
+                 *     ruido que el aviso existe para evitar. La columna afectada viaja
+                 *     en `column`.
+                 */
+                warnings: components["schemas"]["EmployeeImportMessage"][];
+            };
+            summary: {
+                create: number;
+                update: number;
+                unchanged: number;
+                reject: number;
+            };
+            rows: components["schemas"]["EmployeeImportRow"][];
+            /**
+             * @description `true` si el fichero traia mas lineas que el maximo admitido y se
+             *     dejaron de leer. **Con `truncated: true` no se aplica nada**: se parte
+             *     el fichero y se importa por trozos. Se dice en lugar de recortar en
+             *     silencio, que es como se pierde media plantilla sin que nadie lo note.
+             */
+            truncated: boolean;
+        };
     };
     responses: {
         /**
@@ -4977,6 +6428,38 @@ export interface components {
             };
             content: {
                 "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
+         * @description La funcionalidad **accesoria** que se pide no esta disponible con la
+         *     licencia activada (RF-PD-05, ADR-019, ADR-023).
+         *
+         *     **`402` y no `403`.** Un `403` mezclaria «no tienes permiso» con «tu
+         *     empresa no ha renovado», que son dos problemas de dos personas
+         *     distintas: el primero lo arregla quien administra los roles y el segundo
+         *     quien firma el contrato. En un log, ademas, serian indistinguibles.
+         *
+         *     **Este codigo NUNCA acompaña al registro legal.** El fichaje, la
+         *     sincronizacion de la cola offline, la consulta de jornadas, el portal del
+         *     empleado, la exportacion para la Inspeccion, la auditoria, las
+         *     correcciones, las copias y las sondas de salud **no son licenciables** y
+         *     no tienen forma de producir esta respuesta (regla dura 15).
+         *
+         *     `feature` y `restriction` viajan en el cuerpo para que el cliente decida
+         *     que enseñar sin analizar el texto; `detail` es el texto para personas, ya
+         *     traducido, y **dice que sigue disponible y que hacer**.
+         */
+        FeatureNotLicensed: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"] & {
+                    feature?: components["schemas"]["LicenseFeature"];
+                    /** @enum {string|null} */
+                    restriction?: "license_absent" | "license_unverifiable" | "license_not_yet_valid" | "license_expired" | "not_in_plan" | null;
+                    since?: components["schemas"]["UtcTimestamp"] | null;
+                };
             };
         };
         /**
@@ -5322,6 +6805,17 @@ export interface components {
          * @example 25
          */
         PerPage: number;
+        /**
+         * @description Paso del asistente de puesta en marcha cuyo estado se marca (RF-PD-03).
+         *
+         *     **No admite `administrator` ni `site`**, aunque los dos sean pasos: su
+         *     estado se deduce del dato —una cuenta de gestion con segundo factor
+         *     confirmado, un centro creado— y no de una marca. Enviarlos devuelve
+         *     `422`, no `404`: el paso existe, lo que no existe es la potestad de
+         *     declararlo hecho a mano.
+         * @example license
+         */
+        SetupStepName: components["schemas"]["SetupStep"];
     };
     requestBodies: never;
     headers: never;
@@ -7207,6 +8701,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            402: components["responses"]["FeatureNotLicensed"];
             403: components["responses"]["Forbidden"];
             /**
              * @description La instalacion todavia no tiene centro configurado, asi que no hay
@@ -7393,6 +8888,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            402: components["responses"]["FeatureNotLicensed"];
             403: components["responses"]["Forbidden"];
             /**
              * @description La instalacion todavia no tiene centro configurado, asi que no hay
@@ -7625,6 +9121,420 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getComplianceProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description El perfil vigente para el centro. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComplianceProfile"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    updateComplianceProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateComplianceProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description Perfil actualizado. Devuelve el perfil completo. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComplianceProfile"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getLicense: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description El estado de la licencia de esta instalacion. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["License"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    activateLicense: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ActivateLicenseRequest"];
+            };
+        };
+        responses: {
+            /**
+             * @description Clave activada. Devuelve el estado completo resultante, con las
+             *     mismas cifras que `GET /api/v1/license`.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["License"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getInstallationSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description El catalogo completo, resuelto. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstallationSettings"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    updateInstallationSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description Configuracion guardada. Devuelve el catalogo completo. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstallationSettings"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getSetupStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Estado del asistente. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupStatus"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    createFirstAdministrator: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateFirstAdministratorRequest"];
+            };
+        };
+        responses: {
+            /**
+             * @description Cuenta creada. Falta activar su segundo factor: el `challenge_token`
+             *     solo sirve para `/api/v1/auth/2fa/*`.
+             */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TwoFactorChallenge"];
+                };
+            };
+            /**
+             * @description Ya existe una cuenta de gestion. **No es un error que haya que
+             *     reintentar**: la puesta en marcha de cuentas ya paso, y el `detail`
+             *     remite a `POST /api/v1/auth/login`.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    createInstallationSite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateInstallationSiteRequest"];
+            };
+        };
+        responses: {
+            /** @description Centro creado. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Site"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /**
+             * @description Ya hay un centro, o el asistente ya se cerro. Se relee `/api/v1/site`
+             *     y se modifica con su `PATCH`, que deja asiento del cambio.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getSetupSteps: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Los pasos y su estado. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupStatus"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    recordSetupStep: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Paso del asistente de puesta en marcha cuyo estado se marca (RF-PD-03).
+                 *
+                 *     **No admite `administrator` ni `site`**, aunque los dos sean pasos: su
+                 *     estado se deduce del dato —una cuenta de gestion con segundo factor
+                 *     confirmado, un centro creado— y no de una marca. Enviarlos devuelve
+                 *     `422`, no `404`: el paso existe, lo que no existe es la potestad de
+                 *     declararlo hecho a mano.
+                 * @example license
+                 */
+                step: components["parameters"]["SetupStepName"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecordSetupStepRequest"];
+            };
+        };
+        responses: {
+            /** @description Estado del asistente despues de la marca. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupStatus"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description El asistente ya se completo y no admite mas cambios. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    completeSetup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Asistente cerrado, con el resumen de lo que queda. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupCompletion"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /**
+             * @description Queda algun paso sin resolver, o el asistente ya estaba cerrado. El
+             *     `detail` nombra los pasos que faltan.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    importEmployees: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["EmployeeImportRequest"];
+            };
+        };
+        responses: {
+            /**
+             * @description Informe de la importacion. **`200` tambien cuando hay lineas
+             *     rechazadas**: el informe es el resultado esperado del endpoint, no un
+             *     error de la peticion. Lo que no es `200` es un fichero que no se puede
+             *     leer.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmployeeImportReport"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /**
+             * @description `confirm_checksum` no coincide con el fichero enviado: **no es el que
+             *     se valido**. Se vuelve a validar y se aplica con el resumen nuevo.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
         };

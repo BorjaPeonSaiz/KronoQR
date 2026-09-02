@@ -63,10 +63,17 @@ endif
 
 # Ficheros de shell del repositorio. Umbral del doc 02 §9.2: 0 hallazgos.
 # Incluye los scripts de la propia CI: tambien son codigo (doc 02 §3.5).
+#
+# Y los `*.envsh`: el punto de entrada de la imagen de Nginx los CARGA con
+# source en vez de ejecutarlos, pero son shell igual y un nombre de variable
+# mal escrito ahi produce un valor por defecto vacio en silencio. Dejarlos
+# fuera del analisis por como se invocan seria dejar sin comprobar justo el
+# fichero que decide donde esta el certificado.
 SH_FILES := $(wildcard infra/scripts/*.sh) \
             $(wildcard infra/scripts/lib/*.sh) \
             $(wildcard infra/docker/*/*.sh) \
             $(wildcard infra/docker/*/*/*.sh) \
+            $(wildcard infra/docker/*/*/*.envsh) \
             $(wildcard .github/scripts/*.sh) \
             $(wildcard load-tests/k6/*.sh)
 
@@ -192,7 +199,7 @@ endif
 .DEFAULT_GOAL := help
 .PHONY: help up down restart build ps logs shell seed test test-unit test-integration \
         test-arch test-contract quality tools-ready php-lint deptrac rector sh-lint api-lint sast \
-        sast-community trivy-fs trivy-image secrets-scan sbom build-ci-images \
+        sast-community trivy-fs trivy-image secrets-scan sbom build-ci-images release-gate nginx-smoke \
         traceability traceability-check docs-consistency deps-audit-php deps-audit-js coverage coverage-now mutate e2e clean changelog changelog-check tool-versions \
         backup backup-verify restore-drill
 
@@ -223,7 +230,9 @@ help: ## Muestra esta ayuda
 	@echo   make trivy-image      Trivy: postgres:ci y app:ci ya construidas (informe)
 	@echo   make secrets-scan     gitleaks sobre el historico completo (bloqueante)
 	@echo   make sbom             SBOM CycloneDX en sbom/kronoqr-VERSION.cdx.json
-	@echo   make build-ci-images  Construye kronoqr/postgres:ci y/o kronoqr/app:ci (IMAGES=postgres|app)
+	@echo   make build-ci-images  Construye kronoqr/{postgres,app,nginx}:ci (IMAGES=postgres|app|nginx)
+	@echo   make release-gate     Falla si la entrega saldria sin clave publica del fabricante
+	@echo   make nginx-smoke      Arranca la imagen del borde sola y pide las cuatro rutas
 	@echo   make traceability     Matriz requisito - prueba (RQ-13)
 	@echo   make traceability-check  Falla si un requisito no tiene prueba
 	@echo   make docs-consistency  Coherencia documental (RQ-12, RNF-M-04)
@@ -320,7 +329,17 @@ endif
 # ejecuta: el contenedor sobre Docker Desktop/NTFS paga arranque y E/S que un
 # runner Linux no paga. Se puede apretar por entorno: make test-unit
 # UNIT_SUITE_MAX_SECONDS=2
-UNIT_SUITE_MAX_SECONDS ?= 4
+#
+# 01-09-2026 (tarea 5.3): de 4 a 5 s. La suite paso de 1136 a 1240 pruebas —el
+# dominio de licencia y la frontera de ADR-023— y midio 4,2 s. La subida NO es
+# para acallar la puerta: el proposito del presupuesto es que la suite siga
+# siendo lo bastante rapida como para ejecutarse en cada cambio, y a 4,2 s lo
+# es. Lo que hay que vigilar es la PENDIENTE, no el numero: el coste marginal de
+# esas 104 pruebas fue de 0,3 s (medido fichero a fichero, ~0,05 s cada uno
+# sobre el arranque). Si una tarea futura vuelve a rozarlo, la pregunta correcta
+# es si esas pruebas deberian ser unitarias, no si el techo puede subir otra
+# vez.
+UNIT_SUITE_MAX_SECONDS ?= 5
 
 # La duracion se lee de la linea "Duration:" de Pest —el tiempo de la suite, no
 # el del arranque de artisan ni el de docker exec— y se compara con awk porque
@@ -424,6 +443,11 @@ rector: tools-ready ## Modernizacion: informativo, NO bloquea (doc 02 §9.2)
 # de "Robustez" seria una sugerencia con aspecto de regla. Y la diferencia es
 # real: un backup.sh sin `set -e` sigue adelante despues de fallar y termina
 # anunciando una copia que no existe.
+#
+# `set -Eeuo pipefail` tambien vale, y es lo que usa install.sh: la `-E` hace
+# que un `trap ... ERR` se herede en funciones y subshells, sin la cual el
+# manejador de vuelta atras no se dispararia desde dentro de una fase. Es
+# estrictamente mas estricto que `-euo`, no una excepcion.
 sh-lint: ## ShellCheck y shfmt sobre los scripts (umbral: 0 hallazgos)
 ifeq ($(SH_FILES),)
 	@echo [make] No hay scripts de shell que analizar.
@@ -435,14 +459,26 @@ else
 	# cifrado de las copias.
 	$(SHELLCHECK) -x $(SH_FILES)
 	$(SHFMT) -i 2 -d $(SH_FILES)
+	# Los `*.envsh` quedan fuera de ESTA comprobacion, no del analisis:
+	# ShellCheck y shfmt si entran en ellos. Un fichero que se CARGA con source
+	# no puede fijar `pipefail` ni `IFS`, porque se los estaria imponiendo al
+	# shell que lo carga -aqui, el punto de entrada de la imagen de Nginx, que
+	# no es codigo nuestro-. Por eso el `.envsh` oficial de la imagen base usa
+	# `set -eu` a secas, y el nuestro hace lo mismo.
 	@fallos=0; \
 	for f in $(SH_FILES); do \
-	  grep -qE '^[[:space:]]*set -euo pipefail[[:space:]]*$$' "$$f" || { \
-	    echo "$$f: falta 'set -euo pipefail'. Anadelo tras la cabecera del script (doc 02 seccion 3.5)."; \
-	    fallos=1; }; \
-	  grep -qE "^[[:space:]]*IFS=" "$$f" || { \
-	    echo "$$f: falta IFS. Anade IFS=\$$'\\\\n\\\\t' junto al set -euo pipefail (doc 02 seccion 3.5)."; \
-	    fallos=1; }; \
+	  case "$$f" in \
+	    *.envsh) \
+	      : ;; \
+	    *) \
+	      grep -qE '^[[:space:]]*set -E?euo pipefail[[:space:]]*$$' "$$f" || { \
+	        echo "$$f: falta 'set -euo pipefail' o 'set -Eeuo pipefail'. Anadelo tras la cabecera del script (doc 02 seccion 3.5)."; \
+	        fallos=1; }; \
+	      grep -qE "^[[:space:]]*IFS=" "$$f" || { \
+	        echo "$$f: falta IFS. Anade IFS=\$$'\\n\\t' junto al set -euo pipefail (doc 02 seccion 3.5)."; \
+	        fallos=1; }; \
+	      ;; \
+	  esac; \
 	done; \
 	if [ "$$fallos" -ne 0 ]; then \
 	  echo "[make] Robustez de scripts: hallazgos. Umbral del doc 02 seccion 9.2: 0."; \
@@ -549,24 +585,105 @@ sast-community: ## Semgrep: reglas comunitarias PHP/JS/TS/OWASP (umbral: 0 halla
 # buildx ahi cuesta mas de lo que ahorra.
 IMAGES        ?= postgres
 BUILDX_CACHE  ?=
+# APK_INDEX_STAMP invalida una vez por semana (semana ISO) la capa de paquetes
+# de las tres imagenes. Sin el, la cache de Actions reutilizaba la capa del
+# `apk add` de forma indefinida y `trivy image` acababa marcando CVE con el
+# parche ya publicado en Alpine (libexpat 2.8.3-r0 → 2.8.4-r0, septiembre de
+# 2026). Explicado en infra/docker/php/Dockerfile. Para forzar un refresco
+# fuera de ciclo: `make build-ci-images APK_INDEX_STAMP=$$(date -u +%s)`.
+APK_INDEX_STAMP ?= $(shell date -u +%G-W%V)
 
-build-ci-images: ## Construye kronoqr/postgres:ci y/o kronoqr/app:ci (IMAGES=postgres|app|"postgres app", BUILDX_CACHE=gha)
+# La version que viaja DENTRO de la imagen de la aplicacion, y que publica
+# `GET /api/v1/health` y la pantalla de diagnostico del quiosco (doc 02 §10.5).
+#
+# Sale del fichero VERSION, que es la fuente de verdad versionada y la que se
+# etiqueta al publicar. Sin esto, el Dockerfile cae a su respaldo
+# `ARG APP_VERSION=0.0.0-dev` y la instalacion informa una version FALSA: pasó
+# en la tercera ejecucion de la etapa ⑧, donde /health decia `0.0.0-dev` en una
+# instalacion de la 2.0.0. En una entrega real eso rompe justo lo que ese campo
+# existe para sostener —correlacionar un incidente con la version que lo
+# produjo— y de paso la matriz de versiones soportadas (§11.6.5).
+#
+# SE PASA TAMBIEN A LAS IMAGENES :ci de `unit` y `security`, no solo a la etapa
+# ⑧, y es deliberado: `build-ci-images` es la UNICA orden de construccion del
+# repositorio y no puede haber dos comportamientos segun quien la llame. Ademas
+# es mas veraz —una imagen de prueba que dice su version real vale mas que una
+# que miente— y el coste en cache es una capa trivial, porque el ARG vive al
+# final de la etapa `prod`.
+#
+# Solo la consume la imagen de PHP, asi que solo a ella se le pasa: dárselo
+# tambien a postgres y a nginx haria que BuildKit avisara de un build-arg sin
+# usar en cada construccion, y un aviso que siempre sale es un aviso que nadie
+# lee.
+APP_VERSION ?= $(shell cat VERSION 2>/dev/null || echo 0.0.0-dev)
+
+# ---------------------------------------------------------------------------
+# Puerta de RELEASE: una imagen de entrega no puede salir sin clave publica
+# ---------------------------------------------------------------------------
+#
+# POR QUE EXISTE. `config/license.php` trae la clave publica del fabricante
+# VACIA de serie, y eso es correcto en desarrollo: significa "esta compilacion no
+# puede verificar ninguna clave", el producto arranca, se ficha y `license:show`
+# lo dice con esas palabras (ADR-018, ADR-019). Lo que NO puede ocurrir es que
+# esa compilacion se entregue a un cliente: le entregariamos un producto que
+# rechaza su licencia recien pagada con el motivo `no_public_key`, y el sintoma
+# -"mi licencia no se activa"- apunta al sitio equivocado.
+#
+# El fabricante genera el par UNA VEZ con
+# `php tools/license-issuer/generate-keypair.php` y pega la publica en el valor
+# por defecto de `env('LICENSE_PUBLIC_KEY', '')` de `backend/config/license.php`.
+#
+# ESTA COMPROBACION ES DEL EMPAQUETADO, NO DE LA CI. La CI construye imagenes de
+# PRUEBA (`build-ci-images`), que deben poder llevarla vacia: la suite genera su
+# propio par en cada ejecucion y jamas usa uno fijo del repositorio (§7.7, RS-08).
+# Por eso es un objetivo aparte, y la tarea 5.4 lo invocara desde el paso que
+# construye la imagen de entrega.
+release-gate: ## Falla si la imagen de entrega saldria sin clave publica del fabricante
+	@if grep -qE "env\('LICENSE_PUBLIC_KEY', '[0-9a-fA-F]{64}'\)" backend/config/license.php; then \
+	  echo "[make] Clave publica del fabricante presente. Puerta de release en verde."; \
+	else \
+	  echo "[make] La clave publica del fabricante NO esta puesta en backend/config/license.php."; \
+	  echo "[make] Una imagen de entrega construida asi RECHAZA la licencia del cliente con"; \
+	  echo "[make] motivo no_public_key, y el sintoma apunta al sitio equivocado."; \
+	  echo "[make]"; \
+	  echo "[make] Genera el par UNA VEZ:  php tools/license-issuer/generate-keypair.php"; \
+	  echo "[make] y pega la PUBLICA (64 caracteres hexadecimales) como valor por defecto de"; \
+	  echo "[make] env('LICENSE_PUBLIC_KEY', '') en backend/config/license.php."; \
+	  echo "[make] La PRIVADA va al gestor de secretos del fabricante, nunca al repositorio."; \
+	  exit 1; \
+	fi
+
+build-ci-images: ## Construye kronoqr/{postgres,app,nginx}:ci (IMAGES=postgres|app|nginx|"postgres app nginx", BUILDX_CACHE=gha)
 	@for imagen in $(IMAGES); do \
 	  case "$$imagen" in \
-	    postgres) dockerfile=infra/docker/postgres/Dockerfile; tag=kronoqr/postgres:ci; target=; scope=postgres-ci ;; \
-	    app) dockerfile=infra/docker/php/Dockerfile; tag=kronoqr/app:ci; target="--target prod"; scope=app-ci ;; \
-	    *) echo "[make] IMAGES desconocido: '$$imagen' (valores validos: postgres, app)"; exit 1 ;; \
+	    postgres) dockerfile=infra/docker/postgres/Dockerfile; tag=kronoqr/postgres:ci; target=; scope=postgres-ci; propios= ;; \
+	    app) dockerfile=infra/docker/php/Dockerfile; tag=kronoqr/app:ci; target="--target prod"; scope=app-ci; propios="--build-arg APP_VERSION=$(APP_VERSION)" ;; \
+	    nginx) dockerfile=infra/docker/nginx/Dockerfile; tag=kronoqr/nginx:ci; target=; scope=nginx-ci; propios= ;; \
+	    *) echo "[make] IMAGES desconocido: '$$imagen' (valores validos: postgres, app, nginx)"; exit 1 ;; \
 	  esac; \
 	  if [ "$(BUILDX_CACHE)" = "gha" ]; then \
-	    echo "[make] docker buildx build --cache type=gha -f $$dockerfile -t $$tag ."; \
+	    echo "[make] docker buildx build --cache type=gha -f $$dockerfile -t $$tag . (APK_INDEX_STAMP=$(APK_INDEX_STAMP))"; \
 	    docker buildx build --load \
 	      --cache-from "type=gha,scope=$$scope" --cache-to "type=gha,mode=max,scope=$$scope" \
+	      --build-arg APK_INDEX_STAMP="$(APK_INDEX_STAMP)" $$propios \
 	      -f "$$dockerfile" $$target -t "$$tag" . || exit $$?; \
 	  else \
-	    echo "[make] docker build -f $$dockerfile -t $$tag ."; \
-	    docker build -f "$$dockerfile" $$target -t "$$tag" . || exit $$?; \
+	    echo "[make] docker build -f $$dockerfile -t $$tag . (APK_INDEX_STAMP=$(APK_INDEX_STAMP))"; \
+	    docker build --build-arg APK_INDEX_STAMP="$(APK_INDEX_STAMP)" $$propios \
+	      -f "$$dockerfile" $$target -t "$$tag" . || exit $$?; \
 	  fi; \
 	done
+
+
+# Comprobacion rapida del borde: arranca la imagen sola y pide las cuatro rutas
+# que definen si sirve lo que tiene que servir. 30 segundos.
+#
+# NO duplica la etapa ⑧ de la CI: adelanta el hallazgo. Esa etapa tarda entre
+# 20 y 30 minutos en llegar a la misma comprobacion, y ADEMAS no se puede
+# ejecutar en el portatil de quien programa. Las tres SPA devolviendo 403 por
+# una directiva `index` que faltaba se detecta aqui antes de empujar.
+nginx-smoke: ## Arranca kronoqr/nginx:ci sola y comprueba /admin/, /kiosk/, /portal/ y /healthz
+	bash infra/scripts/nginx-smoke.sh
 
 # Trivy sobre el arbol de fuentes: dependencias de composer.lock y
 # package-lock.json, misconfig de los Dockerfiles y secretos residuales (el
@@ -595,13 +712,23 @@ build-ci-images: ## Construye kronoqr/postgres:ci y/o kronoqr/app:ci (IMAGES=pos
 TRIVY_EXIT_CODE ?= 1
 TRIVY_FORMAT    ?= table
 
+# LA SALIDA ESTANDAR DE ESTE OBJETIVO ES SOLO LA DE TRIVY.
+#
+# La CI hace `make trivy-fs TRIVY_FORMAT=json >trivy-fs.json` y despues pasa el
+# fichero por `jq`. Make ECHOA la linea de la receta por stdout, asi que el
+# JSON salia con esa linea delante y `jq` moria con «parse error» — justo
+# cuando hay hallazgos, que es cuando el resumen del job hace falta. Por eso la
+# orden va con `@` y su eco se escribe a mano en stderr: se sigue viendo en el
+# log del job, pero no ensucia lo que se va a parsear. El aviso final, por lo
+# mismo.
 trivy-fs: ## Trivy sobre el repositorio: dependencias, Dockerfiles y secretos (bloqueante, ver docs/runbooks/triaje-hallazgos-seguridad.md)
-	$(TRIVY) fs --scanners vuln,misconfig,secret --severity HIGH,CRITICAL --ignore-unfixed \
+	@echo "[make] trivy fs --scanners vuln,misconfig,secret --severity HIGH,CRITICAL (formato: $(TRIVY_FORMAT))" >&2
+	@$(TRIVY) fs --scanners vuln,misconfig,secret --severity HIGH,CRITICAL --ignore-unfixed \
 	  --timeout 10m --exit-code $(TRIVY_EXIT_CODE) --format $(TRIVY_FORMAT) \
 	  --skip-dirs backend/vendor,node_modules,dist,storage,.git \
 	  .
 ifeq ($(TRIVY_EXIT_CODE),1)
-	@echo "[make] Trivy fs: 0 hallazgos HIGH/CRITICAL."
+	@echo "[make] Trivy fs: 0 hallazgos HIGH/CRITICAL." >&2
 endif
 
 # Trivy sobre las imagenes YA CONSTRUIDAS. No las construye este objetivo:
@@ -615,20 +742,34 @@ endif
 # y no tiene privilegios que bajar (infra/docker/postgres/Dockerfile). Si al
 # subir el digest de la base aparece algo nuevo, el camino es el runbook, no
 # volver a poner este objetivo en informe.
-trivy-image: ## Trivy sobre las imagenes ya construidas kronoqr/postgres:ci y kronoqr/app:ci (bloqueante, ver docs/runbooks/triaje-hallazgos-seguridad.md)
-	@docker image inspect kronoqr/postgres:ci >/dev/null 2>&1 || { \
-	  echo "[make] Falta la imagen kronoqr/postgres:ci. Construyela con: make build-ci-images"; \
-	  exit 1; \
-	}
-	@docker image inspect kronoqr/app:ci >/dev/null 2>&1 || { \
-	  echo "[make] Falta la imagen kronoqr/app:ci. Construyela con: make build-ci-images IMAGES=\"postgres app\""; \
-	  exit 1; \
-	}
-	$(TRIVY_IMAGE_CMD) image --severity HIGH,CRITICAL --ignore-unfixed --exit-code $(TRIVY_EXIT_CODE) --format $(TRIVY_FORMAT) \
-	  --ignorefile infra/docker/.trivyignore.yaml kronoqr/postgres:ci
-	$(TRIVY_IMAGE_CMD) image --severity HIGH,CRITICAL --ignore-unfixed --exit-code $(TRIVY_EXIT_CODE) --format $(TRIVY_FORMAT) kronoqr/app:ci
+# QUE IMAGENES ESCANEA. Se declara aqui y no en el workflow: `make` es la unica
+# via de invocacion de cada herramienta del repositorio, para que la orden y el
+# umbral vivan en un sitio (cabecera de este fichero). El paso de la etapa ⑧
+# llamaba a `trivy` a pelo y el runner no lo tiene: `command not found`, exit
+# 127. Era el unico sitio del arbol que se saltaba esta regla, y por eso fue el
+# unico que se rompio.
+#
+# Por defecto, las TRES de entrega. Cada job pasa las que ha construido:
+#   security   TRIVY_IMAGES="kronoqr/postgres:ci kronoqr/app:ci"
+#   etapa ⑧    TRIVY_IMAGES="kronoqr/nginx:ci"
+# En local, `make build-ci-images IMAGES="postgres app nginx" && make trivy-image`
+# las cubre las tres sin argumentos.
+TRIVY_IMAGES ?= kronoqr/postgres:ci kronoqr/app:ci kronoqr/nginx:ci
+
+trivy-image: ## Trivy sobre las imagenes ya construidas (TRIVY_IMAGES=...; bloqueante, ver docs/runbooks/triaje-hallazgos-seguridad.md)
+	@for imagen in $(TRIVY_IMAGES); do \
+	  docker image inspect "$$imagen" >/dev/null 2>&1 || { \
+	    echo "[make] Falta la imagen $$imagen. Construyela con: make build-ci-images IMAGES=\"postgres app nginx\""; \
+	    exit 1; \
+	  }; \
+	done
+	@for imagen in $(TRIVY_IMAGES); do \
+	  $(TRIVY_IMAGE_CMD) image --severity HIGH,CRITICAL --ignore-unfixed \
+	    --exit-code $(TRIVY_EXIT_CODE) --format $(TRIVY_FORMAT) \
+	    --ignorefile infra/docker/.trivyignore.yaml "$$imagen" || exit $$?; \
+	done
 ifeq ($(TRIVY_EXIT_CODE),1)
-	@echo "[make] Trivy image: 0 hallazgos HIGH/CRITICAL en las dos imagenes."
+	@echo "[make] Trivy image: 0 hallazgos HIGH/CRITICAL en $(TRIVY_IMAGES)." >&2
 endif
 
 # gitleaks sobre el HISTORICO COMPLETO, no solo el arbol de trabajo: un secreto

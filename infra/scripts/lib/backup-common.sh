@@ -17,16 +17,39 @@
 #   · Regla dura 21: aqui no se imprime ni un nombre de empleado. Lo que sale
 #     por pantalla son rutas, tamanos, conteos por tabla y codigos de error.
 #
-# Codigos de salida comunes (los tres scripts los respetan):
-#   0  correcto
-#   1  la operacion ha fallado (copia no creada, verificacion en rojo)
-#   2  error de uso (argumento desconocido, combinacion imposible)
-#   3  falta una herramienta o una precondicion del entorno; NADA se ha tocado
-#   4  destino no escribible o sin espacio suficiente; NADA se ha tocado
-#   5  clave de cifrado ausente o incorrecta
+# CODIGOS DE SALIDA: la tabla es UNICA para los cinco scripts de operacion y
+# vive en lib/exit-codes.sh, que se carga aqui abajo. Hasta la tarea 5.4 estos
+# tres scripts tenian una tabla propia y el instalador iba a traer otra: el
+# mismo `3` habria significado "falta una herramienta" en la copia y "hay una
+# instalacion previa" en el instalador, para la misma persona y a veces en el
+# mismo cron.
+#
+# La equivalencia con la tabla anterior, para quien tuviera un cron escrito
+# contra ella (documentada tambien en docs/cliente/operacion.md):
+#
+#   antes                                    ahora
+#   1 la operacion ha fallado          -->   4 si se deshizo lo hecho
+#                                            5 si algo quedo a medias
+#                                            6 si fallo la verificacion
+#                                            3 si no habia nada sobre lo que operar
+#   2 error de uso                     -->   1
+#   3 falta herramienta o precondicion -->   2
+#   4 destino no escribible o sin espacio -> 2
+#   5 clave ausente o incorrecta       -->   2 al comprobar la precondicion
+#                                            6 al fallar el descifrado de una copia
 
 set -euo pipefail
 IFS=$'\n\t'
+
+BACKUP_COMMON_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+readonly BACKUP_COMMON_DIR
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=exit-codes.sh disable=SC1091
+. "${BACKUP_COMMON_DIR}/exit-codes.sh"
+# shellcheck source=env-file.sh disable=SC1091
+. "${BACKUP_COMMON_DIR}/env-file.sh"
+# shellcheck source=fs.sh disable=SC1091
+. "${BACKUP_COMMON_DIR}/fs.sh"
 
 # Cifrado en reposo de las copias (RL-12).
 #
@@ -65,37 +88,18 @@ die() {
 
 require_cmd() {
   local cmd="$1" paquete="$2"
-  command -v "$cmd" >/dev/null 2>&1 || die 3 \
+  command -v "$cmd" >/dev/null 2>&1 || die "${KQ_EXIT_REQUIREMENTS}" \
     "falta la orden '${cmd}'. Instala el paquete '${paquete}' en el servidor, o ejecuta este script dentro del contenedor 'app' (docker compose exec app ...)."
 }
 
 # Lee un fichero .env sin ejecutarlo.
 #
-# `source .env` es la forma habitual y es una ejecucion de codigo arbitrario
-# con los permisos de quien lanza la copia. Aqui se parsea linea a linea y solo
-# se define lo que todavia no venga del entorno, que es lo que permite que el
-# comando de artisan pase la configuracion por variables sin que el fichero la
-# pise.
+# Delega en lib/env-file.sh, que es el UNICO lector del arbol desde la tarea
+# 5.4. Se conserva el nombre porque lo llaman `load_backup_config` y las
+# pruebas de integracion; lo que ya no hay es una segunda interpretacion de lo
+# que significa una comilla o una almohadilla (ver el porque en env-file.sh).
 load_env_file() {
-  local file="$1" line key value
-  [ -f "$file" ] || return 0
-
-  while IFS= read -r line || [ -n "$line" ]; do
-    case "$line" in
-    '' | '#'*) continue ;;
-    esac
-    [[ "$line" =~ ^[[:space:]]*(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]] || continue
-    key="${BASH_REMATCH[2]}"
-    value="${BASH_REMATCH[3]}"
-    # Comillas envolventes y comentario final sin comillas.
-    if [[ "$value" =~ ^\"(.*)\"[[:space:]]*$ ]] || [[ "$value" =~ ^\'(.*)\'[[:space:]]*$ ]]; then
-      value="${BASH_REMATCH[1]}"
-    else
-      value="${value%%[[:space:]]#*}"
-      value="${value%"${value##*[![:space:]]}"}"
-    fi
-    [ -n "${!key-}" ] || printf -v "$key" '%s' "$value"
-  done <"$file"
+  kq_env_load "$1"
 }
 
 # Configuracion: entorno > fichero .env > valor por defecto.
@@ -135,9 +139,9 @@ load_backup_config() {
 }
 
 require_encryption_key() {
-  [ -n "${BACKUP_ENCRYPTION_KEY:-}" ] || die 5 \
+  [ -n "${BACKUP_ENCRYPTION_KEY:-}" ] || die "${KQ_EXIT_REQUIREMENTS}" \
     "BACKUP_ENCRYPTION_KEY no esta definida. Sin ella no se puede cifrar ni descifrar ninguna copia (RL-12). Definela en el .env de la instalacion; install.sh la genera y NO se puede recuperar si se pierde."
-  [ "${#BACKUP_ENCRYPTION_KEY}" -ge 16 ] || die 5 \
+  [ "${#BACKUP_ENCRYPTION_KEY}" -ge 16 ] || die "${KQ_EXIT_REQUIREMENTS}" \
     "BACKUP_ENCRYPTION_KEY tiene menos de 16 caracteres. Genera una nueva con 'openssl rand -base64 48' y guardala en el gestor de secretos del cliente antes de sustituirla: las copias anteriores solo se descifran con la clave con la que se hicieron."
   # Necesario para el respaldo `-pass env:` de openssl_pass_spec cuando la
   # clave se ha leido de un fichero .env en vez de heredarla del entorno.
@@ -196,12 +200,14 @@ sha256_of() {
   fi
 }
 
+# Espacio en disco. La implementacion vive en lib/fs.sh, compartida con el
+# instalador.
 free_bytes_at() {
-  df -Pk "$1" | awk 'NR==2 {print $4 * 1024}'
+  kq_free_bytes "$1"
 }
 
 total_bytes_at() {
-  df -Pk "$1" | awk 'NR==2 {print $2 * 1024}'
+  kq_total_bytes "$1"
 }
 
 timestamp_utc() {
@@ -216,20 +222,22 @@ now_epoch() {
 # de un directorio que el cliente pueda haber ajustado a su almacenamiento.
 ensure_backup_tree() {
   local dir
-  [ -d "$BACKUP_PATH" ] || die 4 \
+  [ -d "$BACKUP_PATH" ] || die "${KQ_EXIT_REQUIREMENTS}" \
     "el destino de copias '${BACKUP_PATH}' no existe. Creala y dale permiso de escritura al usuario que ejecuta la copia (uid 1000 dentro del contenedor 'app'), o corrige BACKUP_PATH en el .env."
-  [ -w "$BACKUP_PATH" ] || die 4 \
+  [ -w "$BACKUP_PATH" ] || die "${KQ_EXIT_REQUIREMENTS}" \
     "no se puede escribir en '${BACKUP_PATH}'. Comprueba el propietario del directorio: dentro del contenedor la copia corre como uid 1000. Ver docs/runbooks/restaurar-backup.md."
 
   for dir in "$BACKUP_DIR_DUMP" "$BACKUP_DIR_BASE" "$BACKUP_DIR_METRICS" "$BACKUP_DIR_REPORTS"; do
     if [ ! -d "$dir" ]; then
       mkdir -p "$dir"
       # Las copias son datos personales cifrados: el directorio no es de
-      # lectura publica. El de metricas si, que lo lee node-exporter.
+      # lectura publica. El de metricas TAMPOCO desde la tarea 5.4: node-exporter
+      # corre con el uid 1000, el mismo que escribe las copias
+      # (infra/compose.prod.yaml), asi que lo lee sin necesidad de que el
+      # directorio sea legible para todo el mundo.
       chmod 0750 "$dir"
     fi
   done
-  chmod 0755 "$BACKUP_DIR_METRICS" 2>/dev/null || true
 }
 
 # Escritura ATOMICA de un fichero de metricas para el colector textfile de
@@ -286,11 +294,17 @@ latest_dump_file() {
 # Lee un campo de texto del manifiesto sin depender de jq, que no esta en
 # ningun servidor por defecto. El manifiesto lo escribe backup.sh con un
 # formato fijo, de una clave por linea.
+#
+# `{p;q;}` y NO `| head -n 1`, y no es cosmetico: con la tuberia, `head` cierra
+# el descriptor tras la primera linea, `sed` sigue leyendo el manifiesto y muere
+# por SIGPIPE, y con `pipefail` esta funcion devolveria 141 aunque hubiera
+# encontrado el campo. Es la misma clase de fallo que rompio la primera
+# ejecucion de la etapa ⑧ en `random_password` (ver install.sh). Aqui `sed` para
+# solo y no hay tuberia que cortar.
 manifest_field() {
   local manifest="$1" campo="$2"
   [ -f "$manifest" ] || return 1
-  sed -n "s/^[[:space:]]*\"${campo}\"[[:space:]]*:[[:space:]]*\"\{0,1\}\([^\",]*\)\"\{0,1\},\{0,1\}$/\1/p" "$manifest" |
-    head -n 1
+  sed -n "s/^[[:space:]]*\"${campo}\"[[:space:]]*:[[:space:]]*\"\{0,1\}\([^\",]*\)\"\{0,1\},\{0,1\}$/\1/p;T;q" "$manifest"
 }
 
 # Como se habla con la base que se esta comprobando.

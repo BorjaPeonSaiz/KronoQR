@@ -1,5 +1,920 @@
 # HANDOFF
 
+## Sesión «merge de origin/main y conflicto del package-lock» (02-09-2026), en `feat/fase-5-productizacion`
+
+**Merge `36d5f38` de `origin/main` (Dependabot #36–#40) completado.** El conflicto del `package-lock.json`
+no se resolvió eligiendo lado: se partió del lock de main y, desde `node:24-alpine` sin `node_modules`,
+se aplicaron solo la receta oxide del Dockerfile de nginx y `npm update fast-uri --package-lock-only`.
+Diferencia verificada contra main: solo `fast-uri` 3.1.7, las plataformas de oxide y sus deps wasm.
+`npm audit` 0, `npm ci` en verde. Detalle completo en el mensaje del commit de merge.
+
+**Hallazgos:**
+
+- **El lock de `origin/main` está roto**: los merges de Dependabot perdieron TODOS los paquetes de
+  plataforma de `@tailwindcss/oxide` (la regresión que vigila `QualityGatesTest` → «mantiene en el lock
+  los binarios nativos…»). El build Docker de nginx falla en main hasta que este branch se integre.
+- **Confirmado en carne propia npm/cli#4828**: un `npm install` en Windows con `node_modules/` presente
+  reescribió el lock quitando plataformas de rollup, rolldown, lightningcss y fsevents; se descartó y se
+  rehízo en contenedor. Cualquier operación sobre el lock, siempre desde Linux y sin `node_modules`.
+- Los tres servidores Vite de desarrollo (admin, kiosk, portal) se detuvieron para el `npm ci`; hay que
+  relanzarlos (`npm run dev --prefix frontend-…`).
+
+**Pendiente de esta sesión:** push del merge (no se ha hecho).
+
+## Sesión «tarea 5.5: fallo intermitente de la etapa ③ tras el commit `3e587cc`» (02-09-2026), en `feat/fase-5-productizacion`
+
+**La CI cayó en `make test-contract` con un fallo intermitente y víctima variable** (`EmployeeWorkDaysTest`
+en la CI, `SettingsConcurrencyTest` en local; las dos pasaban en solitario). Dos raíces, ninguna en producción:
+
+1. **Conservar no es restaurar.** `CommittedDatabase` excluía los catálogos de producto del vaciado, pero
+   `SettingsConcurrencyTest` los MUTA y confirma: `ATTENDANCE_MAX_SHIFT_HOURS` quedaba en 8..13 para todo
+   el resto del proceso, y con el umbral en 8 la corrección de nueve horas de `EmployeeWorkDaysTest` sale
+   `anomalous` en vez de `closed` (RN-08). Fallaba 1 de cada 6, solo cuando el último escritor dejaba un 8.
+   Arreglo: `ProductCatalogBaseline` (nuevo) fotografía los catálogos una vez por proceso con la base recién
+   migrada y los devuelve a esa foto en cada vaciado — se lee, no se escribe: si una migración siembra otra
+   fila, la línea base cambia con ella. Regresión: `ProductCatalogIsolationTest` (2 pruebas, verificado que
+   falla sin el arreglo). Retirado además el `afterEach` a mano de `ComplianceProfileConcurrencyTest`, que
+   era la versión «convención sin herramienta» de lo mismo.
+2. **El dato de la prueba colisionaba con el valor de serie.** Los seis escritores pedían 8..13 y 12 ES el
+   valor de serie: un `PATCH` al valor vigente responde `200` sin asiento (correcto, la regla dura 6 apunta
+   cambios), así que según el orden del candado había 6 respuestas y 5 asientos (~1/6). Ahora piden 13..18
+   y la premisa se comprueba en el arrange (`expect($valores)->not->toContain(...)`).
+
+Hipótesis descartada con sonda: los contadores de throttle NO se arrastran entre pruebas (`ArrayStore`
+renace con el contenedor en cada prueba).
+
+**Verificado:** `make test-contract` **dos veces** en verde (1151 pruebas), `make test` completo **2952 /
+13 423 / 0 fallos**, la pareja antes intermitente 6/6 en verde, PHPStan 0, Pint PASS, trazabilidad verde
+(1885 etiquetadas). Solo `backend/tests/`; ni una línea de `backend/app/`.
+
+**Deuda anotada:** la suite Feature sigue dependiendo del orden alfabético de directorios para EXPONER
+acoplamientos latentes (la defensa real es no arrastrar estado, que esto garantiza para los catálogos);
+nada detecta hoy una prueba que dependa del vaciado de tablas de trabajo confirmadas.
+
+## Sesión «tarea 5.5 (backend), corrección tras revisión de `revisor-codigo` y `seguridad-cumplimiento`» (02-09-2026), en `feat/fase-5-productizacion`
+
+**Corrección aplicada y verificada, sin commitear.** La tercera tanda de cambios de la 5.5 («la revisión
+de la 5.5»: `PinHasher`/`PinMaterial`, `GET /setup/steps`, `steps` fuera de la respuesta pública,
+`email_taken`, normalización de `national_id`, `max_rows` 500) había entrado **sin volver a pasar las
+herramientas**: 20 errores de PHPStan, 4 violaciones de Deptrac, 3 ficheros de Pint y 67 pruebas en rojo.
+
+### Lo bloqueante
+
+1. **Faltaban cuatro `use` del refactor del PIN** (`PinMaterial`, `PinHasher`, `LaravelPinHasher`):
+   `IssueEmployeePinCommand`, `IssueEmployeePinHandler`, `ApplyEmployeeImport` y
+   `WorkforceServiceProvider`. Era un fatal en producción en el alta de cualquier empleado.
+2. **`PinMaterial` movido de `Application\Pin\` a `Application\Port\`.** Un puerto no puede depender del
+   resto de `Application` (Deptrac): el tipo de retorno de un puerto vive junto a él, como `PinStatus` y
+   `PinDeliveryRecord`.
+3. **El cierre del asistente no se auditaba** (regla dura 6, RL-04): `CompleteSetupHandler` no publicaba
+   `SetupCompleted` y el oyente `RecordSetupCompletion` no estaba registrado — código muerto. Ahora la
+   marca de `setup_progress` y el asiento van en la **misma transacción**, con `pg_advisory_xact_lock`
+   (`5_050_002`) para que un doble clic no escriba dos asientos.
+   **Decisión: una sola fuente para el actor, y es `CurrentAuditContext`.** `SetupCompleted` **pierde**
+   `actorUuid`: quien hace el cambio no puede declarar quién es, y es la convención de todos los oyentes
+   de `Compliance`. El `$actorUuid` del caso de uso sigue siendo otra cosa —la columna
+   `setup_progress.recorded_by_user_id`—.
+4. **`GET /setup/steps` sin prueba de autorización** (regla dura 18) y con `SetupPolicy::record()`, el
+   verbo de escritura. Tiene ya `SetupPolicy::view()` propio y 401/403 por rol, por quiosco y por
+   `2fa:pending`.
+
+### Lo importante
+
+5. **Normalización asimétrica del documento, que duplicaba fichas** (regla dura 5). El importador
+   normalizaba `national_id` y `POST /employees` hasheaba lo que se tecleara: dar de alta a alguien con
+   `12345678-Z` y después importarlo como `12345678Z` creaba **dos fichas** de la misma persona, con dos
+   códigos, dos PIN y dos tarjetas. `EloquentEmployeeRepository::storeNationalIdDigest()` llama ahora a
+   `ImportedEmployee::normaliseNationalId()`, que es la **única** definición de la forma canónica.
+6. **`POST /employees/import` sin `throttle:management`.** Es la petición más cara del producto y su
+   transacción toma el candado global de `audit_log`, detrás del cual se serializa cada fichaje. Se aplica
+   **solo a esa ruta**, no al grupo entero.
+7. **`WORKFORCE_IMPORT_MAX_ROWS` alineado en 500** en los tres sitios (config, `.env.example`,
+   `configuracion.md`). 1000 prometía un tamaño que el endpoint no podía cumplir.
+8. **`site.updated` sin valor anterior** (RL-04). `SiteConfigured::updated()` lleva `previousName` y
+   `previousTimezone`, el asiento usa `previous_value`/`new_value` como el de un umbral de cálculo, y un
+   PATCH que no cambia nada **ya no publica evento**.
+
+### Deuda saldada y decisiones menores
+
+- **`EmployeeImportPerformanceTest` existe** (lo citaba un docblock y no existía). No fuerza el coste de
+  bcrypt —el tiempo no se reproduce con `BCRYPT_ROUNDS=4` y subirlo solo alargaría la suite—: afirma la
+  propiedad **estructural** de la que dependen las dos consecuencias, que el hash se calcula con la
+  transacción del lote **todavía cerrada**, y que el PIN se escribe dentro.
+- Corregida la afirmación de `ApplyEmployeeImport` sobre «el asiento de `EmployeeHired`», que no existe:
+  ese evento solo lo escucha `ObservePlanLimits`. El asiento del alta es el `pin.issued`.
+- Complejidad 13 en `PlanEmployeeImport::errorsOf()` → extraído `emailErrors()`.
+- Bucle Pint↔Deptrac en `CreateFirstAdministratorHandler`: el `{@see}` con nombre completo hacia `Product`
+  quitado y nombrado en prosa, con el porqué.
+- `EmployeePinRepository::issue()` documentaba que recibía el PIN en claro; recibe el hash.
+- `ApplyEmployeeImport::$pins` → `$pinGenerator`; `$updated = $site` fuera de `UpdateSiteHandler`;
+  comentario del `PUT` recolocado en `routes/api_v1.php`; `releaseCatalogReferences()` documenta que solo
+  cubre FK de una columna y por qué basta hoy.
+- **Prueba ajena que la tercera tanda dejó en rojo y nadie vio:** «avisa de las columnas que no reconoce»
+  seguía leyendo el aviso de `rows.0.messages` cuando ya vive en `file.warnings`.
+
+### Documentación
+
+- `docs/01` Anexo B: `GET /setup/steps` en la lista (**seis** rutas, no cinco) y su fila de notas; el
+  cierre del asistente deja asiento.
+- `docs/07` §6: la fila de la ventana de auto-alta del 2FA pasa de «prórroga: 5.5» a **implementado con
+  riesgo residual**, escrito sin rodeos —quien alcance el panel antes que el cliente se convierte en el
+  administrador— con los tres controles compensatorios y la instrucción operativa.
+- `docs/cliente/instalacion.md` §1.7: advertencia de completar el paso 1 inmediatamente y no publicar el
+  panel antes, más un «qué hacer si…» nuevo para el `409` que nadie ha provocado. Corregido el ejemplo de
+  `GET /setup/status`, que ya no trae `steps`.
+
+### Verificado
+
+`make quality` verde (api-lint **0 problemas**, Pint **1316 PASS**, PHPStan 9 **0 errores**, Deptrac
+**0 violaciones / 0 sin cubrir**, ShellCheck 0) · `make test-unit` **1273 en 4,29 s** (presupuesto 5 s) ·
+**`make test` 2950 pruebas, 13 411 aserciones, 0 fallos** (484 s) · `qa:traceability --check` sin huecos y
+matriz regenerada con `make traceability` · `docs:consistency` sin divergencias.
+
+**No tocado a propósito:** `docs/api/openapi.yaml` (ya correcto), `frontend-*/` y `packages/`.
+
+### Lo que las revisiones señalaron y queda ANOTADO, no aplicado
+
+- **DECISIÓN DEL USUARIO — los PIN de la importación se emiten y nadie los conoce.** El alta masiva
+  escribe `pin_hash` y `pin_issued_at`, deja el asiento `pin.issued`… y descarta el PIN en claro: es el
+  único camino del producto que emite una credencial sin enseñarla ni una vez. Importadas 40 personas,
+  ninguna puede entrar al portal (RL-05) ni fichar por respaldo (RF-AT-11) hasta un
+  `POST /employees/{uuid}/pin/reset` una a una, y nada lo señala (el panel de credenciales mira tarjetas,
+  no PINes). Tres salidas posibles, ninguna tomada porque cambia semántica de credenciales: (a) devolver
+  los PIN en el informe de aplicación (respuesta autenticada, mismo tratamiento que `label`), (b) no
+  emitir PIN al importar y dejarlo pendiente y visible, (c) restablecimiento masivo. Elegir una en la
+  próxima sesión y documentarla en `configuracion.md` §3 ter junto a las tarjetas.
+- **Un intento de crear un segundo administrador (409 de `POST /setup/administrator`) no deja señal**:
+  ni asiento ni log. Un barrido contra esa ruta solo se ve en el contador de `throttle:setup`. Registrar
+  el intento sin PII (origen y momento) — menor, de la revisión de seguridad.
+- **XLSX es un ZIP y se lee sin cota de descompresión** más allá de `max_rows` y los 4 MB del fichero.
+  Riesgo bajo (endpoint autenticado, lectura en streaming); anotado para que la decisión sea consciente.
+- **El dry-run de Rector lleva 227 ficheros en rojo y marcado `(ignored)` en el Makefile** desde antes de
+  esta tarea. Decidir si esas reglas se aplican o se retiran del conjunto: un paso que siempre sale en
+  rojo y siempre se ignora acaba no leyéndose.
+
+## Sesión «tarea 5.5 (interfaz), corrección tras revisión: `frontend-admin` sincronizado con el `GET /setup/steps` autenticado» (02-09-2026), en `feat/fase-5-productizacion`
+
+**Corrección aplicada y verificada, sin commitear.** La revisión de backend de la sesión de arriba movió
+`steps` fuera de `GET /setup/status` (público: solo `available`/`completed_at`) a `GET /setup/steps`
+(nuevo, autenticado, `settings:*`). La interfaz de la 5.5 nunca se adaptó: `setup.store.ts` seguía
+leyendo `steps` de la respuesta pública, que ya no los trae — en instalación limpia el asistente se
+pintaba vacío y la guarda dejaba el panel inservible. Backend y `docs/` NO se tocaron en esta sesión
+(otro agente trabajaba ahí en paralelo); `docs/api/openapi.yaml` fue la fuente de verdad, sin modificar.
+
+**Lo bloqueante.**
+
+1. **`setup.store.ts` ahora elige el endpoint según haya sesión.** `fetchSetupSteps()` nuevo en
+   `setup.api.ts` (`GET /setup/steps`). `load()` pide `fetchSetupSteps()` si `session.isAuthenticated`,
+   si no `fetchSetupStatus()` (público). Nuevo computed `stepsKnown` (`status.steps !== undefined`).
+   **El caso «instalación limpia, sin sesión»** se resolvió pintando el primer paso
+   (`AdministratorStep`) como **caso especial** en `OnboardingView.vue`: es el único paso derivado que
+   no depende de `steps` (no hay `PUT` que lo marque), así que `currentStepComponent` lo devuelve
+   directamente mientras `!setup.stepsKnown`, sin fingir una lista de pasos que el servidor no ha dado.
+   La barra de progreso (`data-test="progress"`) solo se pinta con `stepsKnown` verdadero. En cuanto
+   `AdministratorStep` confirma el 2FA (`session.applySession` ya ejecutado) y llama a `setup.refresh()`,
+   `load(true)` pasa sola a pedir `/setup/steps` y el resto del asistente sigue el flujo normal.
+2. **Guarda sin callejón sin salida:** `router/guards.ts` mandaba **todo**, incluido `/login`, a
+   `/setup` mientras `available` — así que el `409` de `POST /setup/administrator` (que remite a
+   `/auth/login`) señalaba una puerta cerrada por la propia guarda: quien recarga sin sesión (cuenta ya
+   creada, 2FA sin confirmar o token caducado) quedaba atrapado en el paso del administrador para
+   siempre. Una línea de excepción (`to.name !== 'login'`) deja pasar el acceso; la siguiente navegación
+   ya autenticada vuelve a mandar a `/setup` con normalidad (no reabre nada). Cubierto en
+   `router.spec.ts` con una prueba dedicada.
+3. **Dobles corregidos para reflejar el contrato real**, no lo que era cómodo probar:
+   `tests/unit/support/fixtures.ts` (`setupStatus()` ya no trae `steps` por defecto — hay que pasarlos
+   explícitos, como los devolvería `GET /setup/steps` de verdad) y `tests/e2e/support/setupWizard.ts`
+   (`publicStatus()`/`fullStatus()` separados; `GET /setup/steps` nuevo, con `401` sin `Authorization`
+   igual que el backend). El doble E2E siembra `sessionStorage` cuando `administratorAlreadyDone: true`
+   (las pruebas de accesibilidad aterrizan directo en un paso sin pasar por el alta real; sin un token
+   sembrado, `GET /setup/steps` nunca se pediría). Todos los ficheros de prueba que construían un
+   `SetupStatus` con `steps` a mano (`AdministratorStep.spec.ts`, `SiteStep.spec.ts`,
+   `OnboardingView.spec.ts`, etc.) se revisaron uno a uno para pedir el endpoint correcto y, donde el
+   paso exige sesión real (`SiteStep`, derivado, solo se puede crear el centro autenticado), sembrar una
+   sesión antes de montar el componente en vez de fingirla en la respuesta.
+
+**`schema.d.ts` desincronizado en las TRES SPA — hallazgo aparte, no de esta corrección puntual.** El
+fichero llevaba sin regenerar desde antes de la tarea 5.1 (0 apariciones de «Setup», «License» o
+«ComplianceProfile»): la sesión de la 5.5 debió regenerarlo y verificarlo, pero el cambio nunca llegó a
+guardarse. Regenerado en `frontend-admin`, `frontend-kiosk` y `frontend-portal` con
+`npm run api:generate` — **+963 líneas, 0 borradas en cada una**, puramente aditivo. Cambios relevantes:
+aparece `GET /api/v1/setup/steps`; `SetupStatus.steps` pasa a opcional; aparece
+`EmployeeImportReport.file.warnings` (**requerido**, no opcional) — el doble E2E de importación
+(`setupWizard.ts`) no lo traía y rompía dos pruebas en cuanto `EmployeesImportStep.vue` empezó a leerlo.
+
+**`file.warnings` ahora se pinta.** `EmployeesImportStep.vue` mostraba el informe línea a línea pero
+nunca los avisos del FICHERO ENTERO (`unknown_column`: «e-mail» en la cabecera en vez de «email» deja
+creer que se cargaron los correos cuando no se cargó ninguno). Nuevo bloque `role="alert"` con
+`data-test="file-warnings"`, textos en `onboarding.steps.employees.fileWarnings` (es/en). Los avisos
+viajan solo en la respuesta autenticada y en el `ref` local del componente — nunca al reportador de
+errores ni a almacenamiento (regla dura 21). Cubierto en `EmployeesImportStep.spec.ts`.
+
+**Ficheros.** `frontend-admin/src/features/onboarding/{setup.api.ts,setup.store.ts,OnboardingView.vue,
+steps/EmployeesImportStep.vue}` · `frontend-admin/src/router/guards.ts` ·
+`frontend-admin/src/shared/i18n/locales/{es,en}.json` (`onboarding.steps.employees.fileWarnings`) ·
+`frontend-admin/src/shared/api/schema.d.ts` (regenerado) · `frontend-kiosk/src/shared/api/schema.d.ts` y
+`frontend-portal/src/shared/api/schema.d.ts` (regenerados, sin más cambios en esas dos SPA) ·
+`frontend-admin/tests/unit/{router,setup.store,OnboardingView,AdministratorStep,ComplianceProfileStep,
+DepartmentsStep,EmployeesImportStep,KioskStep,LicenseStep,OrganisationStep,SiteStep}.spec.ts` ·
+`frontend-admin/tests/unit/support/fixtures.ts` ·
+`frontend-admin/tests/e2e/support/{setupWizard.ts,admin.ts}`.
+
+**Verificado.** `frontend-admin`: `type-check`, `lint`, `build` en verde · `test:unit` **340 pruebas**,
+cobertura 87,5 % líneas / 78,5 % ramas / 83,0 % funciones (umbral 70 %) · `test:e2e` **52 pruebas, 0
+fallos** (incluidas las 4 `@RF-PD-03` y las 11 `@RQ-04`). `packages/web-kit`: `type-check`, `lint`,
+`test:unit` (146 pruebas) en verde, sin cambios de esta sesión. `frontend-kiosk`: `type-check`, `lint`,
+`test:unit` (309 pruebas) en verde. `frontend-portal`: `type-check`, `lint`, `test:unit` (69 pruebas) en
+verde — confirmado que la regeneración de tipos es aditiva en las tres SPA.
+
+## Sesión «tarea 5.5: asistente de puesta en marcha e importación masiva de plantilla» (02-09-2026), en `feat/fase-5-productizacion`
+
+**Backend y contrato implementados y verificados, sin commitear.** Cubre `RF-PD-03` y `RF-GP-05`.
+La interfaz (`frontend-admin`) NO es de esta sesión: la hace `frontend-panel` contra este contrato.
+
+### El contrato, que es lo que `frontend-panel` necesita
+
+Seis rutas nuevas, **escritas y validadas antes que el código** (ADR-013). `schema.d.ts` regenerado en
+las tres SPA: **+846 líneas, 0 borradas** — puramente aditivo, ningún cliente existente se rompe.
+
+| Ruta | Auth | Éxito | Negativas |
+|---|---|---|---|
+| `GET /api/v1/setup/status` | **público**, `throttle:setup` | `200 SetupStatus` | `429` |
+| `POST /api/v1/setup/administrator` | **público**, solo sin cuentas de gestión | `201 TwoFactorChallenge` | `409` `422` `429` |
+| `POST /api/v1/setup/site` | `admin` + `employees:*` | `201 Site` | `401` `403` `409` `422` |
+| `PUT /api/v1/setup/steps/{step}` | `admin` + `settings:*` | `200 SetupStatus` | `401` `403` `404` `409` `422` |
+| `POST /api/v1/setup/complete` | `admin` + `settings:*` | `200 SetupCompletion` | `401` `403` `409` |
+| `POST /api/v1/employees/import` | `rrhh`\|`admin` + `employees:*`, **multipart** | `200 EmployeeImportReport` | `401` `403` `409` `422` |
+
+Esquemas: `SetupStep` (8 valores), `SetupStepState`, `SetupStepStatus`, `SetupStatus`, `SetupSummary`,
+`SetupCompletion`, `CreateFirstAdministratorRequest`, `CreateInstallationSiteRequest`,
+`RecordSetupStepRequest`, `EmployeeImportMode`, `EmployeeImportOutcome`, `EmployeeImportMessage`,
+`EmployeeImportRow`, `EmployeeImportRequest`, `EmployeeImportReport`. Parámetro `SetupStepName`. Tag `Setup`.
+
+**El flujo que el panel tiene que orquestar:**
+`GET /setup/status` → si `available` → `POST /setup/administrator` (201, `challenge_token`) →
+`POST /auth/2fa/enrol` (secreto + QR, **una sola vez**) → `POST /auth/2fa/confirm` (sesión real) →
+`POST /setup/site` → `PATCH /settings` (organización) → `POST /departments` →
+`GET`/`PATCH /compliance-profile` → `POST /employees/import` (validate → apply) →
+`POST /license/activate` → emparejamiento de quiosco (5.6) → `PUT /setup/steps/{step}` tras cada uno →
+`POST /setup/complete`.
+
+### Decisiones tomadas (y por qué)
+
+1. **El primer administrador es el PRIMER paso, no el quinto.** RF-PD-03 enumera «organización, centro,
+   departamentos, perfil, primer administrador, quiosco» y esa es la lista de *qué* recoge, no un orden
+   de ejecución. Se invierte por la regla dura 6: crear el centro antes dejaría `site.created` **sin
+   actor**. Con el administrador primero, **todo asiento del asistente tiene una persona detrás**.
+   Comprobado en `SetupWizardTest`: el asiento del centro trae `actor_id`.
+2. **Una sola escritura pública en todo el producto**, `POST /setup/administrator`, y solo mientras no
+   exista **ninguna** cuenta de gestión —activa **o desactivada**—. Contar solo las activas convertiría
+   «dar de baja a la única persona con acceso» en «reabrir la creación pública de un admin».
+3. **El 2FA no se duplica.** El endpoint devuelve el mismo `TwoFactorChallenge` que el `202` de
+   `/auth/login`; el TOTP se da de alta y confirma con `/auth/2fa/enrol` y `/auth/2fa/confirm`, que ya
+   traen el bloqueo por intentos, la sustitución del secreto sin confirmar y el asiento.
+4. **Sin callejones sin salida.** Quien cierra la pestaña antes de escanear el QR entra por
+   `/auth/login` y recibe el mismo reto. El `409` **lo dice en el `detail`**, con la ruta.
+5. **El alta del centro NO se abre en `/site`.** ADR-040 y el Anexo B dicen «sin alta ni lista»; el
+   `405` de `POST /api/v1/site` sigue probado. El alta vive en `/setup/site` y es irrepetible.
+6. **Tabla propia `setup_progress`**, no una clave de `installation_settings` (aquel es el catálogo
+   documentado del cliente). Los pasos derivables —`administrator`, `site`— **no se marcan**: se
+   calculan del dato, así que ni una fila perdida ni un `PUT` pueden mentir sobre ellos. El cierre es
+   una fila con la clave `completion`, que **no** es un paso del enum ni viaja en el contrato.
+7. **No se cierra solo.** Si `available` pasara a `false` al resolver el último paso, el panel saltaría
+   a la pantalla de acceso **justo antes** del resumen final — la única oportunidad de decir cuántas
+   tarjetas faltan. Y **no se reabre**: sería reconfigurar la instalación sin el asiento de RL-04.
+8. **La licencia y el quiosco son omitibles; el perfil de convenio no.** Lo primero es la regla dura 15
+   llevada al asistente; lo segundo es RL-21 — los umbrales hay que contrastarlos, y eso es un acto.
+9. **Importación en dos fases SIN fichero en el servidor.** La confirmación viaja como
+   `confirm_checksum` (el sha256 de la validación) y el fichero se resube. Un almacén temporal con
+   nombres y DNI de la plantilla es superficie de datos personales en reposo; además así se garantiza
+   que **se aplica exactamente lo que se revisó**.
+10. **Clave natural del importador: `national_id` y, si no hay, `email`.** Sin una de las dos,
+    reimportar duplicaría (regla dura 5). No rompe la regla dura 12: el fichero puede no traer correo,
+    lo que no puede es no traer **ninguna**. `employee_code` **no se lee del fichero**.
+11. **`hired_at` de quien ya existe no se toca** (regla dura 5): se avisa y no se aplica.
+12. **Delimitador y codificación se DETECTAN**, no se configuran. El mapa de columnas sí es
+    configuración (`WORKFORCE_IMPORT_COLUMN_ALIASES`, formato `campo=cabecera` separado por `;`, se
+    **suma** a los alias de serie es/en).
+13. **`admin` además de `rrhh` en la importación**, al contrario de lo que sugiere el Anexo B: es el
+    paso de plantilla del asistente y en ese momento la única cuenta que existe es el primer
+    administrador. Con `rrhh` a secas, ese paso sería inalcanzable el día de la instalación. Anotado en
+    el Anexo B y en la policy.
+14. **`POST /setup/site` sin `compliance_profile_id`**, aunque la ficha lo nombrara: con un centro por
+    instalación hay exactamente un perfil vigente, que `GET /compliance-profile` resuelve por
+    `is_default` con su `source`. Un campo para elegirlo sería un parámetro que nadie necesita distinto
+    y contradiría la decisión de la 5.2. La prueba de integración comprueba que el centro nace con
+    `compliance_profile_id` nulo y que el perfil vigente sigue siendo `ES-hosteleria`.
+
+### Dos defectos ajenos encontrados y saldados
+
+- **`UpdateSiteHandler` prometía en su docblock que el cambio de zona horaria «queda auditado por el
+  oyente de Compliance» y NO publicaba ningún evento**: no había oyente ni asiento, desde la 1.6.
+  Cambiar `sites.timezone` mueve las horas de toda la plantilla de un día a otro sin tocar un fichaje.
+  Añadidas `AuditAction::SiteCreated` y `SiteUpdated` (familia autoridad/cálculo) + `SiteConfigured` +
+  `RecordSiteConfiguration`, con prueba unitaria que caza la regresión.
+- **`CommittedDatabase` dejaba 2 usuarios en la base de pruebas.** `installation_settings` es catálogo
+  (no se vacía) y su FK `updated_by_user_id` bloqueaba `DELETE FROM users` en todas las pasadas del
+  bucle. Latente desde la 5.1 porque ninguna prueba dependía de que `users` estuviera vacía; las del
+  asistente sí —«no hay ningún administrador» es literalmente el estado que describen— y por eso lo
+  destaparon: **en solitario pasaban y en la suite completa fallaban cuatro, a dos ficheros de
+  distancia de la causa**. Arreglado con `releaseCatalogReferences()`, que **descubre** en
+  `pg_constraint` las FK nullable de catálogo → tabla vaciable y las anula antes de borrar.
+
+### Dos fallos propios que cazaron las pruebas (y que habrían llegado al cliente)
+
+- **`SimpleExcelReader::create()` elige el lector por la extensión, y el fichero subido no tiene
+  ninguna** (`/tmp/phpA1B2C3`). En producción, toda importación habría muerto con
+  `UnsupportedTypeException`. Ahora el tipo se pasa explícito y se decide por los **bytes mágicos**
+  (`PK\x03\x04` = XLSX), que además cubre el `.csv` que en realidad es un libro.
+- **La detección de codificación miraba solo la cabecera**, que casi siempre es ASCII: un fichero
+  Windows-1252 con la primera «ñ» en la línea 300 se daba por UTF-8 y la respuesta JSON **no se podía
+  serializar** («Malformed UTF-8»). Un intento de arreglo por bloques con arrastre de 3 bytes también
+  estaba mal —una secuencia de 4 bytes justo antes del corte deja su byte inicial en el bloque
+  comprobado— y lo cazó una prueba con «RECEPCIÓN». Ahora se lee entero (acotado por
+  `max_file_kilobytes`, que se valida antes) y hay red de seguridad por valor en el adaptador.
+
+### Configuración nueva
+
+| Clave | De serie | Por qué es configurable |
+|---|---|---|
+| `PRODUCT_SETUP_RATE_LIMIT` | `10` | Zona propia del asistente: la de acceso cuenta por `email` del cuerpo y aquí no hay cuenta a la que contar. Subible si hay NAT delante. |
+| `WORKFORCE_IMPORT_MAX_ROWS` | `500` | El informe es línea a línea y vive en memoria. **Es el techo documentado de una instalación y el que el endpoint puede cumplir**: 1000 altas × 160 ms de bcrypt pasarían del `max_execution_time` de 60 s. Pasarse **no recorta**: lo dice y no aplica nada. |
+| `WORKFORCE_IMPORT_MAX_FILE_KILOBYTES` | `4096` | Nginx corta en 8 MB con un `413` sin cuerpo; esto da un `422` que dice qué hacer. |
+| `WORKFORCE_IMPORT_COLUMN_ALIASES` | vacío | Regla dura 13: el fichero del sistema anterior trae las columnas que trae. Se **suma** a los alias es/en de serie. |
+
+Ningún parámetro para el delimitador ni la codificación: se detectan.
+
+### Ficheros
+
+- **Contrato:** `docs/api/openapi.yaml` (tag `Setup`, 6 rutas, 15 esquemas, 1 parámetro) ·
+  `backend/tests/Contract/OpenApiContractTest.php`.
+- **Migración:** `2026_09_09_100000_create_setup_progress_table.php` (PK por paso, 3 `CHECK`, FK
+  `nullOnDelete`). Reversible; los `GRANT` los da `ALTER DEFAULT PRIVILEGES` ya existente.
+- **Product:** `Domain/ValueObject/Setup{Step,StepState,State,Summary}` ·
+  `Domain/Exception/{UnknownSetupStep,SetupStepNotRecordable,SetupNotCompletable}` ·
+  `Application/Port/{SetupProgressRepository,SetupFacts}` · `Application/Command/RecordSetupStepCommand`
+  · `Application/UseCase/{GetSetupState,RecordSetupStep,CompleteSetup}Handler` + `CompletedSetup` ·
+  `Infrastructure/Persistence/{DatabaseSetupProgressRepository,DatabaseSetupFacts}` ·
+  `Http/{Controller/SetupController,Policy/SetupPolicy,Request/RecordSetupStepRequest,Resource/Setup{Status,Completion}Resource}`
+  · `ProductServiceProvider` · `config/product.php`.
+- **Identity:** `Application/Command/CreateFirstAdministratorCommand` ·
+  `Application/Port/ManagementAccountRegistry` · `Application/Exception/ManagementAccountAlreadyExists` ·
+  `Application/UseCase/CreateFirstAdministratorHandler` ·
+  `Infrastructure/Persistence/EloquentManagementAccountRegistry` ·
+  `Http/{Controller/FirstAdministratorController,Request/CreateFirstAdministratorRequest}` ·
+  `IdentityServiceProvider`.
+- **Workforce:** `Domain/Event/{SiteConfigured,EmployeesImported}` ·
+  `Domain/Exception/{UnreadableImportFile,ImportFileChanged,ImportTooLarge,SiteAlreadyConfigured}` ·
+  `Domain/ValueObject/{ImportOutcome,ImportMessageCode,ImportMessage,ImportedEmployee,ImportRow,ImportReport,ImportColumnMap}`
+  · `Application/Port/{EmployeeImportSource,EmployeeImportDirectory}` ·
+  `Application/Command/ImportEmployeesCommand` ·
+  `Application/UseCase/{PlanEmployeeImport,ApplyEmployeeImport,ImportEmployeesHandler,CreateSiteHandler,UpdateSiteHandler}`
+  · `Infrastructure/Adapter/SimpleExcelImportSource` ·
+  `Infrastructure/Persistence/EloquentEmployeeImportDirectory` ·
+  `Http/{Controller/{EmployeeImportController,SiteController},Policy/{EmployeePolicy,SitePolicy},Request/{ImportEmployeesRequest,CreateInstallationSiteRequest},Resource/EmployeeImportResource}`
+  · `WorkforceServiceProvider` · `config/workforce.php` (nuevo).
+- **Compliance:** `AuditAction` (+3 acciones, +2 sujetos) ·
+  `Infrastructure/Listener/{RecordSiteConfiguration,RecordEmployeeImport}` · `ComplianceServiceProvider`.
+- **Transversal:** `routes/api_v1.php` · `bootstrap/app.php` (6 renderizadores) ·
+  `lang/{es,en}/{setup,import}.php` · `.env.example`.
+- **Pruebas:** `Feature/Product/{SetupWizardTest (24),SetupAuthorizationTest (14)}` ·
+  `Feature/Workforce/{EmployeeImportTest (24),EmployeeImportAuthorizationTest (8)}` ·
+  `Integration/Product/SetupProgressSchemaTest (7)` · `Unit/Product/Domain/SetupStateTest (7)` ·
+  `Unit/Workforce/Domain/ImportColumnMapTest (6)` · `Unit/Workforce/Application/SiteConfigurationTest`
+  (ampliado a 6) · soporte: `Tests/Support/Http/Api::upload()`,
+  `Tests/Support/Workforce/ImportFiles`, `Tests/Support/Database/ImmediateTransactions`,
+  `Tests/Support/Database/CommittedDatabase` (arreglo de la fuga).
+- **Documentación de cliente:** `docs/cliente/instalacion.md` §1.7 reescrita (los ocho pasos, qué tener
+  a mano, por qué el TOTP se enseña una vez, por qué la zona horaria no es cosmética, por qué el perfil
+  no se omite) + 3 «qué hacer si…» nuevos · `docs/cliente/configuracion.md` §3 ter completa (dos fases,
+  tabla de columnas, formatos, reimportación, tarjetas pendientes, alias, los dos límites) + 9 «qué
+  hacer si…» nuevos · `docs/cliente/obligaciones-legales.md` §7 ter y el apartado del perfil en el
+  asistente · `docs/01` Anexo B (5 rutas + 7 notas de contrato).
+
+### Verificado
+
+`make quality` verde (ShellCheck 0, api-lint **0 problemas**, Pint **1309 PASS**, PHPStan 9 **0
+errores**, Deptrac **0 violaciones / 0 sin cubrir**) · `make test-unit` **1272 en 3,92 s** (dentro del
+presupuesto de 5 s) · **`make test` 2939 pruebas, 13 345 aserciones, 0 fallos** (469 s) ·
+`qa:traceability --check` sin huecos y matriz regenerada · `docs:consistency` sin divergencias ·
+`type-check` verde en las **tres** SPA con `schema.d.ts` regenerado (**+846 líneas, 0 borradas**) ·
+migración aplicada con `fichaje_migrator` y `\dp` comprobado (`fichaje_app` = `arwd`) ·
+`route:list` con las 6 rutas · verificación manual de `GET /setup/status` contra la base de desarrollo.
+
+**Medido que las pruebas cazan los fallos** (que es lo único que hace válida una prueba de regresión):
+con el lector sin tipo explícito, 22 de 24 de importación fallan; con la detección de codificación
+mirando solo la cabecera, falla la de Windows-1252; con la fuga de `CommittedDatabase` sin arreglar,
+fallan 5 en la suite completa y 0 en solitario.
+
+### Lo que queda, y para quién
+
+- ~~`frontend-panel` (interfaz de la 5.5): las pantallas del asistente...~~ **HECHO (02-09-2026, ver la
+  sesión de arriba «tarea 5.5 (interfaz)»)**: las ocho pantallas, el store, el E2E `@RF-PD-03` (4
+  pruebas) y `axe` `@RQ-04` (11 pruebas, 0 violaciones críticas o graves).
+- **5.6 (emparejamiento de quiosco):** el paso 8 del asistente está definido como omitible y su marca
+  ya funciona (`PUT /setup/steps/kiosk`). El punto de integración en la interfaz también queda listo:
+  `frontend-admin/src/features/onboarding/steps/KioskStep.vue` documenta en un comentario exactamente
+  qué añadir (el formulario del código de emparejamiento + `setup.recordStep('kiosk', 'completed')`)
+  cuando existan `/kiosk/pair` y `/kiosk/pair/confirm`, que **siguen sin existir**.
+- **5.11:** capturas de pantalla del asistente en `instalacion.md` §1.7 (el texto ya las anticipa).
+- **Pendiente del usuario, sin cambios:** generar el par ed25519 y pegar la pública en
+  `config/license.php`.
+- ~~Sigue pendiente de la 5.4: relanzar la etapa ⑧ de la CI~~ **HECHO (02-09-2026, run 33573780721, verde — ver el cierre de la 5.4 más abajo).**
+
+## Sesión «tarea 5.5 (interfaz): asistente de puesta en marcha, `frontend-admin`» (02-09-2026), en `feat/fase-5-productizacion`
+
+**Interfaz de la tarea 5.5 implementada y verificada, sin commitear.** Cubre `RF-PD-03`, `RF-GP-05` y
+`RQ-04` en `frontend-admin`, contra el contrato y el backend de la sesión anterior (ver arriba). El
+backend no se ha tocado.
+
+**Las ocho pantallas**, en `frontend-admin/src/features/onboarding/`: `OnboardingView.vue` (el marco:
+progreso, foco y anuncio al cambiar de paso, y qué pantalla toca), un componente por paso en `steps/`,
+`ReviewStep.vue` (revisión final antes de `POST /setup/complete`: el asistente no se cierra solo) y
+`CompletionSummary.vue` (el resumen accionable de RF-PD-03, con la cifra de tarjetas pendientes por
+delante de todo). Dos pasos **reutilizan pantallas ya existentes** en vez de duplicarlas —instrucción
+explícita del encargo—: `ComplianceProfileStep` incrusta `ComplianceProfileView.vue` (tarea 5.2) y
+`LicenseStep` incrusta `LicenseView.vue` (tarea 5.3), las dos con un `heading-level` nuevo (`h1|h2|h3`)
+para no competir con el título de la página cuando van incrustadas. El alta del segundo factor del
+primer administrador reutiliza el mismo QR y el mismo secreto que el acceso normal: se extrajo
+`TwoFactorEnrolPanel.vue` de `LoginView.vue` (que ahora lo consume también) para que exista un único
+sitio que enseña un secreto TOTP, en vez de una segunda copia que algún día divergiera.
+
+**Decisiones que conviene conocer.**
+
+1. **Estado compartido entre la guarda de rutas y el asistente, en `setup.store.ts`.** La guarda
+   (`router/guards.ts`) pide `GET /setup/status` UNA vez por carga de la aplicación (como
+   `session.restore`), no en cada navegación: repetirlo en cada clic agotaría
+   `PRODUCT_SETUP_RATE_LIMIT` (10/min de serie). Mientras la instalación sigue sin configurar, CUALQUIER
+   ruta redirige a `/setup`; cerrado el asistente, `/setup` redirige al acceso — es de un solo uso,
+   igual que el emparejamiento de la 5.6. Un fallo de red al consultar el estado no bloquea el panel:
+   `loaded` se queda en `false` y se reintenta en la siguiente navegación.
+2. **`setup.completion` vive en el store, no en un `ref` local de `OnboardingView`.** Encontrado en las
+   pruebas, no a propósito: `ReviewStep` emitía el resultado de `POST /setup/complete` a
+   `OnboardingView`, que lo guardaba en un `ref` propio. Como la escritura de `status` (dentro de
+   `setup.complete()`) y la del `ref` local (en el manejador del evento) ocurrían en dos ticks de Vue
+   distintos —separados por el `await` de la promesa—, Vue repintaba una vez en medio con
+   `available: false` y el resumen todavía sin llegar, así que la pantalla enseñaba «esta instalación ya
+   está en marcha» un instante antes de mostrar el cierre de verdad. Arreglado moviendo `completion` al
+   store, escrito en la MISMA función y el mismo tick que `status`: las pruebas de `ReviewStep.spec.ts`
+   y `OnboardingView.spec.ts` cazan la regresión si alguien lo separa otra vez.
+3. **El cliente HTTP compartido (`packages/web-kit/src/http.ts`) no admitía `FormData` ni `PUT`.** Las
+   tres SPA lo comparten (ADR-036), así que se ha ampliado ahí y no con un cliente propio del panel:
+   `PUT` para `PUT /setup/steps/{step}` (idempotente, lo dice el contrato) y detección de `FormData` en
+   el cuerpo para no fijar `Content-Type` a mano —lo pone el navegador con el `boundary`— y no
+   serializarlo con `JSON.stringify`. Cubierto con dos pruebas nuevas en
+   `packages/web-kit/tests/unit/http.spec.ts`; `frontend-kiosk` y `frontend-portal` revalidados
+   (`type-check` + `test:unit`) para confirmar que el cambio es aditivo.
+4. **Organización (paso 2) escribe en el catálogo genérico de `PATCH /settings`** (`BRANDING_APP_NAME`,
+   `LOCALE_DEFAULT`, `LOCALE_AVAILABLE`), no en un endpoint propio: no existe otro en el contrato. Nuevo
+   `frontend-admin/src/features/settings/settings.api.ts` (no en `onboarding/`, a propósito: es el mismo
+   catálogo que leerá y escribirá la marca de la tarea 5.8, y las dos pantallas tienen que leer y
+   escribir por el mismo sitio para no divergir). El `422` de ese endpoint cuelga el error de
+   `settings.<CLAVE>`, no de `<CLAVE>` a secas — otro fallo que cazó su propia prueba antes de llegar a
+   nadie.
+5. **Departamentos (paso 4) y el diálogo de alta de empleado ya no comparten forma de pedir la lista.**
+   `createDepartment` se añadió a `frontend-admin/src/shared/api/organisation.api.ts` (donde ya vivía
+   `listDepartments`), y el paso del asistente lo usa; `EmployeeCreateDialog.vue` sigue con su
+   `useQuery` propio sin tocar, no había motivo para migrarlo en esta tarea.
+6. **El paso de plantilla (`EmployeesImportStep.vue`) es RF-GP-05 completo**: dos fases,
+   `POST /employees/import` multipart, informe línea a línea con el `label` (nombre) de cada fila —viaja
+   solo aquí, en una respuesta autenticada; nunca al reportador de errores del cliente (regla dura
+   21)—, `truncated: true` deshabilita «Aplicar», y «Aplicar» reenvía el `confirm_checksum` de la
+   validación sobre el MISMO fichero seleccionado (no hace falta volver a elegirlo).
+7. **El paso de quiosco (`KioskStep.vue`) solo ofrece omitir**, con la explicación de que el
+   emparejamiento llega en otra versión y el punto de enganche para la 5.6 documentado en el propio
+   fichero (ver arriba).
+8. **Accesibilidad**: cada paso mueve el foco a su propio encabezado al activarse y lo anuncia por la
+   región viva del asistente (`onboarding.stepAnnouncement`), igual que hace `LoginView` con sus tres
+   pasos. Encontrado y corregido en las pruebas: `getByLabel('Nombre', { exact: true })` no encontraba
+   el campo porque el asterisco de obligatoriedad (`<span aria-hidden="true">*</span>`) queda dentro del
+   `<label>` y su texto entra en el nombre accesible con Playwright pese al `aria-hidden`; los E2E usan
+   coincidencia por subcadena para esas etiquetas, como ya hacía el resto del panel.
+
+**Configuración nueva:** ninguna. Todo lo que necesitaba esta interfaz ya estaba declarado en la sesión
+anterior.
+
+**Ficheros.**
+
+- **`packages/web-kit`:** `src/http.ts` (`PUT`, `FormData`) · `tests/unit/http.spec.ts` (+2 pruebas).
+- **`frontend-admin/src/features/onboarding/`** (nueva *feature*): `OnboardingView.vue`,
+  `ReviewStep.vue`, `CompletionSummary.vue`, `setup.api.ts`, `setup.store.ts`, `steps.ts`,
+  `employeeImport.api.ts`, `README.md` ·
+  `steps/{AdministratorStep,OrganisationStep,SiteStep,DepartmentsStep,ComplianceProfileStep,EmployeesImportStep,LicenseStep,KioskStep}.vue`.
+- **`frontend-admin/src/features/auth/`:** `TwoFactorEnrolPanel.vue` (nuevo, extraído de `LoginView.vue`,
+  que se refactorizó para consumirlo).
+- **`frontend-admin/src/features/settings/`:** `settings.api.ts` (nuevo) ·
+  `{LicenseView,ComplianceProfileView}.vue` (prop `heading-level`).
+- **`frontend-admin/src/shared/api/`:** `organisation.api.ts` (`createDepartment`) · `types.ts` (alias de
+  los esquemas `Setup*`, `EmployeeImport*`, `InstallationSettings*`, `CreateDepartmentRequest`).
+- **`frontend-admin/src/router/`:** `index.ts` (ruta `/setup`) · `guards.ts` (guarda del asistente).
+- **`frontend-admin/src/shared/i18n/locales/{es,en}.json`:** sección `onboarding` completa.
+- **Pruebas unitarias** (`frontend-admin/tests/unit/`): `setup.store.spec.ts`, `OnboardingView.spec.ts`,
+  `AdministratorStep.spec.ts`, `OrganisationStep.spec.ts`, `SiteStep.spec.ts`,
+  `DepartmentsStep.spec.ts`, `ComplianceProfileStep.spec.ts`, `EmployeesImportStep.spec.ts`,
+  `LicenseStep.spec.ts`, `KioskStep.spec.ts`, `ReviewStep.spec.ts`, `CompletionSummary.spec.ts` · más
+  añadidos a `router.spec.ts` (guarda) y `LoginView.spec.ts` (sin cambios de comportamiento, solo el
+  refactor a `TwoFactorEnrolPanel`, ya probado ahí) · `support/{fixtures,harness}.ts` ampliados
+  (`setupStatus`, `setupCompletion`, `employeeImportReport`, `department`, `stubRoutes`).
+- **Pruebas E2E** (`frontend-admin/tests/e2e/`): `setup-wizard.spec.ts` (4 pruebas `@RF-PD-03`) ·
+  `support/setupWizard.ts` (doble propio del asistente, con estado mutable — el asistente real mantiene
+  su progreso en el servidor, así que el doble tiene que avanzar igual) · `accessibility.spec.ts` (+11
+  pruebas `@RQ-04`, una por paso más 2FA/revisión/cierre) · `support/admin.ts` (`GET /setup/status`
+  ahora tiene doble por defecto —instalación ya configurada— para no romper los recorridos que no son
+  el asistente) · `login.spec.ts` (ajustada la prueba que comprueba la cabecera `Authorization` en
+  todas las peticiones: `GET /setup/status` es pública a propósito y queda excluida).
+
+**Verificado.** `frontend-admin`: `type-check`, `lint` (ESLint + Prettier) y `build` en verde ·
+`test:unit` **336 pruebas**, cobertura 87,4 % líneas / 78,3 % ramas / 82,9 % funciones (umbral 70 % en
+las cuatro) · `test:e2e` **52 pruebas, 0 fallos** (las 4 de `@RF-PD-03` + las 11 nuevas de `@RQ-04` +
+las 37 preexistentes, todas revalidadas). `packages/web-kit`: `type-check`, `lint` y `test:unit` (146
+pruebas) en verde. `frontend-kiosk` y `frontend-portal`: `type-check`, `lint` y `test:unit` (309 y 69
+pruebas) en verde, para confirmar que el cambio en `http.ts` es aditivo.
+
+**Desviación consciente sobre la letra del encargo.** «Con licencia y quiosco omitidos y luego
+completados» se cubre así: **licencia** tiene las dos pruebas E2E (omitida en el recorrido principal,
+activada de verdad —con clave y todo— en una segunda prueba dedicada, que además salda la deuda anotada
+de la 5.3 de un E2E propio de esa pantalla). **Quiosco solo tiene la prueba de omitir**: los endpoints
+de emparejamiento son de la 5.6 y no existen todavía en el árbol, así que «completarlo» no es
+alcanzable en esta versión — completarlo de verdad es justo lo que queda para esa tarea, con el punto de
+enganche ya documentado en `KioskStep.vue`.
+
+**Deuda menor conocida, sin bloquear.** `LicenseStep` y `ComplianceProfileStep` incrustan pantallas que
+llevan sus propios subtítulos en `<h2>` (p. ej. «Qué se ha contratado», «Plan contratado frente a uso
+real»); al incrustarlas bajo el `<h2>`/`<h3>` propio del paso del asistente, esos subtítulos quedan un
+nivel por debajo de donde «deberían» en una jerarquía perfecta (axe lo marca como `heading-order`,
+impacto **moderado**, no crítico ni grave, así que no bloquea el criterio de `@RQ-04` de esta tarea).
+Arreglarlo del todo exigiría parametrizar también los subtítulos internos de `LicenseView`/
+`ComplianceProfileView`, que se ha dejado fuera a propósito para no tocar más superficie de esas dos
+pantallas de lo que pedía el encargo.
+
+## Sesión «tarea 5.4: instalador, Compose de producción, requisitos y secretos» (01-09-2026), en `feat/fase-5-productizacion`
+
+**Tarea 5.4 implementada y verificada, sin commitear.** Cubre `RF-PD-02`, contribuye a `RQ-11` (etapa ⑧ de la CI) y a `RS-08`/§7.7.
+
+> **CIERRE (02-09-2026):** tarea 5.4 commiteada (`624b148`) y rematada con seis correcciones nacidas de la propia etapa ⑧ (`241625b`…`a16d7c5`). La ejecución manual `33573780721` dejó **la CI entera en verde, etapa ⑧ incluida**: A, B, E con reintento, C completo, D, F y Trivy de las tres imágenes. Los códigos 4 y 5 y las fases 4–5 quedan por fin ejercitados en Linux real. Las menciones de más abajo a «la etapa ⑧ todavía no se ha ejecutado» son anteriores a este cierre y se conservan como historia.
+
+**Construido.**
+- `infra/scripts/install.sh` — cinco fases estrictas (requisitos sin escribir → instalación previa → secretos → arranque y esquema → verificación), vuelta atrás por pila de acciones, `--check-only`, `--lang es|en`, `--env-file`, `--compose-file`.
+- `infra/scripts/lib/exit-codes.sh` — **tabla única** de códigos para los cinco scripts. La cargan `install.sh` y `backup-common.sh` (y por él `backup.sh`, `restore.sh`, `restore-drill.sh`).
+- `infra/scripts/lib/env-file.sh` — **el unico lector de `.env`** del arbol, con la regla de comentario de Docker Compose. `infra/scripts/lib/fs.sh` — espacio en disco, antes tres invocaciones de `df`.
+- `infra/scripts/check-package-links.sh` — comprueba que la documentacion entregada no enlaza fuera del paquete. Herramienta del repositorio, no entregable.
+- `infra/scripts/lib/messages.sh` — catálogo es/en (**124 claves ×2**) con `kq_msg`/`kq_format`/`kq_msg_check_catalog`. Es el **único sitio del árbol** con `printf` de formato variable: la supresión de SC2059 está escrita una vez.
+- `infra/compose.prod.yaml` — `${IMAGE_TAG:?…}` **sin valor por defecto** en las tres imágenes; observabilidad en perfil `observability` **encendido de serie** vía `COMPOSE_PROFILES` del `.env`; `nginx` depende de `app` por `service_healthy`.
+- `infra/docker/nginx/Dockerfile` — etapa `frontends` que construye las tres SPA con `KRONOQR_BASE=/admin/|/kiosk/|/portal/` y las copia a `/var/www/spa`. `infra/docker/nginx/extra/spa.conf` sirve las tres; el portal reusa `$kronoqr_portal_allowed`.
+- `backend/app/Support/Environment/{ProductionSafetyGuard,UnsafeProductionConfiguration}` + `AppServiceProvider::boot()`: se niega a arrancar con `APP_ENV=production` y `APP_DEBUG=true`, mensaje bilingüe.
+- Etapa ⑧ `clean-install` en `.github/workflows/ci.yml` (19 pasos, cuatro escenarios A/B/C/D) + `make release-gate` en etiquetas `vX.Y.Z` + `IMAGES=nginx` en `build-ci-images`.
+
+**Tabla de códigos, idéntica en los cinco scripts** (`lib/exit-codes.sh`, publicada en `docs/cliente/operacion.md` §8): `0` correcto · `1` uso incorrecto · `2` requisitos no cumplidos, **nada escrito** · `3` estado previo incompatible, **nada escrito** · `4` fallo con vuelta atrás **completada** · `5` fallo con vuelta atrás **incompleta**, requiere intervención · `6` verificación posterior fallida, **sin deshacer nada**. `backup.sh`/`restore.sh`/`restore-drill.sh` remapeados; la equivalencia con su tabla anterior está en `lib/backup-common.sh` y en la guía. `changelog.sh` **conserva la suya** y lleva escrito por qué (no es entregable del producto).
+
+**Decisiones que conviene conocer.**
+1. **La señal de «instalación previa» es triple**: contenedores del proyecto, volúmenes `kronoqr_*` y **un `.env` con `APP_KEY` ya puesta**. La tercera salva el caso peligroso: contenedores borrados pero volúmenes con el registro dentro; reinstalar rotaría `APP_KEY` y dejaría esos datos ilegibles.
+2. **El cliente edita `.env`, no `.env.example`.** Por eso la presencia del `.env` no es señal de instalación previa; lo es que ya tenga secretos.
+3. **Los tres `dist/` viajan DENTRO de la imagen de Nginx**, no en un volumen: Docker copia a un volumen *vacío* y no vuelve a tocarlo, así que la primera actualización dejaría un panel viejo contra una API nueva.
+4. **`KRONOQR_BASE`** (variable de *build*, no de despliegue) en los tres `vite.config.ts`, por defecto `/`: dev y E2E no cambian. En el quiosco gobierna además `start_url`, `scope` y `navigateFallback` del service worker.
+5. **Observabilidad en perfil, encendida de serie.** Va en el `.env` y no en `--profile` a propósito: si el instalador pasara la bandera, el siguiente `docker compose up -d` que teclee el IT apagaría la observabilidad en silencio.
+6. **`DB_MAINTENANCE_PASSWORD` NO la genera el instalador** (ADR-027). Procedimiento manual de asignación temporal en `operacion.md` §9.
+7. **`--insecure` en las sondas de la fase 5**: se comprueba por loopback contra el propio contenedor; que el certificado sea el correcto se comprueba desde un quiosco, y la guía lo dice así.
+8. **`pull` imagen a imagen**, no `compose pull`: una instalación sin internet con las imágenes ya cargadas (`docker load`) no puede quedarse esperando a un registro que no alcanza.
+9. **Resolución DNS de `APP_URL` = aviso, no bloqueo**: el DNS partido es habitual y bloquear impediría instalaciones correctas.
+10. **`port_in_use` tiene tres respuestas** (ocupado / libre / no se ha podido averiguar): sin `ss` ni `netstat`, un «libre» falso dejaría el fallo para la fase 4 con el `.env` ya escrito.
+11. **El vale de un solo uso del 2FA NO va aquí.** Doc 07 §6 corregido: la prórroga a la 5.4 partía de una premisa falsa (que el instalador crearía la primera cuenta). **El instalador no crea usuarios y no debe crearlos.** Decisión del usuario (01-09-2026): se implementa en la **5.5**, con la primera cuenta del asistente.
+
+**Configuración nueva.** `COMPOSE_PROFILES=observability` (perfil de Compose, no parámetro del producto) e `IMAGE_TAG` **vacía** en la plantilla. Ninguna variable nueva de aplicación.
+
+**Verificado en local, tras las tres revisiones:** `make sh-lint` 0 hallazgos (16 scripts) · `make quality` verde (api-lint 0, Pint **1239 PASS**, PHPStan 9 **0 errores**, Deptrac **0 violaciones / 0 sin cubrir**) · `make secrets-scan` **0 hallazgos en 142 commits** · `make test-unit` **1257 en 3,92 s** · `make test` **2836 / 12833** (442 s) · `qa:traceability --check` sin huecos, matriz regenerada · `docs:consistency` sin divergencias · `type-check` verde en las tres SPA · `make restore-drill` **CORRECTO** · **`make build-ci-images IMAGES=nginx` construye la imagen de entrega**, con `nginx -t` en verde dentro de ella, las tres SPA en `/var/www/spa/` y el manifiesto del quiosco con `scope=/kiosk/` · `compose config` **falla con el mensaje de `IMAGE_TAG`** y resuelve 12 servicios con el perfil / 7 sin él · `check-package-links.sh` **71 enlaces, 0 rotos** · `bash -n` en los nueve scripts.
+
+**Fases del instalador ejercitadas DE VERDAD en local (Git Bash sobre Windows):** fase 1 completa en **los dos idiomas** (salida **0** con `--check-only`; salida **2** retirando el certificado, con el valor de plantilla en `APP_URL`, con `TLS_ALLOW_SELF_SIGNED=true` y sin privilegios de root, siempre con el `.env` **idéntico por MD5**), fase 2 (salida **3** contra el entorno de desarrollo real) y el tratamiento del `.env` de la fase 3 en aislamiento, cargando el script gracias a la guarda `BASH_SOURCE`. Códigos **1, 2, 3 y 6** de `backup.sh` comprobados en vivo. **Las fases 4 y 5 completas y los códigos 4 y 5 siguen SIN ejecutarse en local**: exigen Linux con Docker. Su evidencia son los escenarios **C, D, E y F** de la etapa ⑧, **que todavía no se ha ejecutado ni una vez**.
+
+**Pendiente.**
+- ~~Lanzar la etapa ⑧ a mano sobre esta rama~~ **HECHO (02-09-2026, run 33573780721, verde)** — era: es la única evidencia de las fases 4 y 5 y del fallo seguro con puerto ocupado. Duración estimada 12–18 min sin caché, 6–9 con ella.
+- **5.7:** completar `docs/runbooks/actualizacion-cliente.md` (hoy esqueleto, escrito porque `install.sh` remite ahí al salir con `3`) y añadir a la etapa ⑧ la mitad de «actualización desde la versión anterior» que RQ-11 también pide.
+- **5.9:** `phase_verify` de `install.sh` tiene el punto de enganche documentado para `product:doctor`; hoy verifica con `/health`, `/ready` y `license:show`.
+- **5.11:** capturas de pantalla y guía de endurecimiento en `instalacion.md`.
+- **Usuario:** sigue pendiente generar el par ed25519 y pegar la pública en `config/license.php`. Ahora `make release-gate` lo exige **en cada etiqueta `vX.Y.Z`** desde la etapa ⑧: sin ello no se puede publicar versión.
+- **Vigilar el `package-lock.json`**: cualquier `npm install` ejecutado en Windows con `node_modules/` presente puede volver a dejar a `@tailwindcss/oxide` con una sola plataforma y romper la imagen de Nginx. La guarda de `QualityGatesTest` lo caza en la CI; la receta de reparacion esta en la cabecera de `infra/docker/nginx/Dockerfile`.
+- **Cierre de fase:** `seguridad-cumplimiento` decide si la fila «Despliegue seguro» de doc 07 §3 sube de 1 a 2. La evidencia ya está escrita; **el nivel no lo he subido yo**.
+
+
+### Correcciones de las revisiones de `devops-observabilidad` y `revisor-codigo`, y del coordinador (01-09-2026, sin commitear)
+
+**DEFECTO DEL COORDINADOR — la imagen de entrega de Nginx no se construía en Linux.** `npm ci` moría con `Cannot find module '@tailwindcss/oxide-linux-x64-musl'`. Causa: un `npm install` ejecutado **en Windows con `node_modules/` presente** reescribió `package-lock.json` y dejó a `@tailwindcss/oxide` con **una sola plataforma** (`win32-x64-msvc`), anidado además bajo los tres workspaces (npm/cli#4828). En Windows no se notaba nada. Reparado con la receta de tres pasos, **ejecutada en un contenedor Linux sobre un árbol con solo los `package.json` y el lock**: `npm install --package-lock-only ... -w frontend-{admin,kiosk,portal} @tailwindcss/oxide@4.3.3` → restaurar los cuatro manifiestos → `npm install --package-lock-only`. **Medido: 0 paquetes cambian de versión** (comparación por ruta completa), 19 entradas nuevas (oxide izado a la raíz con sus 12 plataformas y sus dependencias `wasm32-wasi`), 6 duplicados por workspace retirados. Verificado con `npm ci` + `require('@tailwindcss/oxide')` en `node:24-alpine`, y después con **`make build-ci-images IMAGES=nginx` en local: imagen construida**, las tres SPA dentro (`/var/www/spa/{admin,kiosk,portal}`), assets con su prefijo (`/admin/assets/…`) y el manifiesto del quiosco con `start_url` y `scope` = `/kiosk/`. Guarda contra la regresión: `QualityGatesTest` («mantiene en el lock los binarios nativos…»), que exige `oxide-linux-x64-musl` **y** `rolldown-…-musl` como entradas de raíz y prohíbe que oxide vuelva a anidarse bajo un workspace. La receta está escrita en la cabecera de `infra/docker/nginx/Dockerfile`, junto al `npm ci` que fallaba.
+
+**BLOQUEANTES.**
+
+- **B1 (devops) — un fallo después de empezar a escribir no deshacía nada.** Sin `trap ... ERR`, un `cp`, un `chmod` o uno de los catorce `set_env_value` que fallara mataba el script con `set -e` y su código crudo: sin vuelta atrás, `.env` a medias y `.env.kronoqr-pre-install` huérfano; y el reintento salía **3** («ya hay secretos») sin un solo contenedor: callejón sin salida. Ahora `set -Eeuo pipefail` y `trap 'rollback_and_die …' ERR` **armado al entrar en `phase_secrets`** —nunca antes: la fase 1 tiene que seguir saliendo 2— y `trap - ERR` tras `phase_verify`, porque a partir de ahí la instalación existe y deshacerla por un fallo al imprimir el informe sería el fallo que el manejador evita. `make sh-lint` acepta ahora `set -Eeuo pipefail` (estrictamente más estricto), con el porqué escrito en el Makefile.
+- **B2 (devops) — el paquete entregaba enlaces rotos.** No copiaba `restore-drill.sh` ni `docs/runbooks/`, y `instalacion.md` invocaba `/opt/kronoqr/scripts/restore-drill.sh`, que no existe en el paquete. Ahora se copian los dos, la ruta es `./restore-drill.sh`, y **la documentación conserva el layout del repositorio** (`docs/cliente/` + `docs/runbooks/`) en vez de aplanarse: aplanarla obligaría a reescribir enlaces al empaquetar, un paso que nadie prueba. Guarda nueva: `infra/scripts/check-package-links.sh`, invocado por la etapa ⑧. **Medido: 13 enlaces rotos con el layout plano, 0 con el actual, 71 comprobados.** Dos enlaces se retiraron porque apuntaban a documentos que **no deben** viajar al cliente (doc 07 interno, ADR-007) y uno a un runbook que aún no existe (`alta-nuevo-quiosco.md`, 5.6): ahora se nombran sin enlazar.
+- **B1 (revisor) — `rmdir` convertía todo fallo de la fase 4 en un código 5.** `${BACKUP_PATH}/wal` es bind mount y PostgreSQL archiva desde el primer segundo; `down -v` no lo vacía y `rmdir` falla sobre un directorio con segmentos. El propio mensaje `f_migrating` prometía lo contrario. Ahora `rm -rf`, seguro porque la acción **solo se registra dentro del `if [ ! -d … ]`**: nunca toca un destino que ya existía.
+- **B2 (revisor) — los valores de ejemplo de la plantilla pasaban la fase 1.** `APP_URL=https://localhost` y las tres redes de ejemplo son cadenas no vacías: instalaban, la fase 5 los daba por buenos (sondea `127.0.0.1` con `--insecure`) y **ningún quiosco podía llegar**. Ahora `APP_URL`, `KIOSK_VLAN_CIDR`, `PORTAL_INTERNAL_CIDR` y `METRICS_ALLOW_CIDR` se **comparan con `.env.example`** y fallan si no han cambiado. `BACKUP_PATH` y `TLS_CERT_DIR` no: sus valores de plantilla son legítimos en producción. La etapa ⑧ los rellena ahora como lo haría el IT (`kronoqr.ci.local` en `/etc/hosts`, cert con ese CN).
+- **B3 (revisor) — `--lang en` mezclaba idiomas.** 15 literales españoles fuera del catálogo y `kq_exit_name` solo en español (afectaba a los cinco scripts). Todo al catálogo: **124 claves × 2**, `kq_msg_check_catalog` en verde. `kq_exit_name` resuelve idioma **dentro de `exit-codes.sh`**, no vía `messages.sh`: los tres scripts de copia cargan el primero y no el segundo. Prueba nueva que barre la salida inglesa buscando diez palabras españolas.
+
+**IMPORTANTES y menores, uno a uno.** I1 self-signed → `check_fail` con `APP_ENV=production` y en la lista mínima de `instalacion.md` §1.2 · I2 cada secreto se valida (no vacío y longitud) antes de escribirse, con `set_generated_secret`; antes un openssl roto escribía `APP_KEY=base64:` sin quejarse · I3 el `register_undo` de `metrics/` solo se registra si la creación fue bien, y si no se pudo crear se avisa · I4 rutas de producción en `operacion.md` y `rotacion-secretos.md` (`-f docker-compose.yml`, no `infra/compose.dev.yaml`) más una nota de dónde se ejecutan · I5 **escenario F nuevo**: enciende el perfil `observability` sobre la instalación de C y exige los cinco servicios en marcha, `/ready` respondiendo después y que node-exporter lea el árbol de copias · I6 `instalacion.md` §1.1 dice qué **no** viene en la 2.0.0 (`update.sh`, `doctor.sh`, asistente) y cuándo llega · I6 (revisor) **un solo lector de `.env`** en `lib/env-file.sh`, con la regla de comentario de Docker Compose, más `lib/fs.sh` para las tres invocaciones de `df` · I8 `.env.kronoqr-pre-install` a `0600` inmediato y borrado al final de `main()`, retirándolo antes de la pila con `discard_undo` · I9 `check_privileges`: la fase 1 exige root (salvo que `wal` ya exista con propietario 70) y el mensaje ya no ofrece el grupo `docker` como equivalente · I10 `toContain()` es variádico y el «mensaje» se evaluaba como segunda aguja: ahora `str_contains(...)->toBeFalse('…')` · 11 etiquetas propias para los estados negativos (`c_port_busy`, `c_not_writable`, `c_appurl_dns_no`, `c_tls_missing`, `c_env_missing`, `c_template_missing`) · 12 retirado el `chmod 0755` de `metrics/` y su comentario falso · 13 typo `App\Support\Environment\ProductionSafetyGuard` en doc 07 §3 · 14 `existing_stop` y `done_next` dicen «se entrega a partir de la 2.1» · 15 `exec 3<&-` muerto retirado.
+
+**Prueba nueva:** `tests/Integration/Install/InstallScriptTest.php`, **10 pruebas**, que EJECUTAN el instalador (antes RF-PD-02 y RQ-11 se apoyaban solo en greps): salida 1 con opción desconocida; salida 2 con requisito roto y **`.env` idéntico por MD5**; rechazo de los valores de plantilla; rechazo del autofirmado en producción; `--check-only` sin escribir; `--lang en` sin una palabra española; catálogo completo; lectura de `.env` con los dos casos que separaban a los dos lectores (`"…"   ` y `…#1`); escritura de un secreto **sin perder ni un comentario ni duplicar la clave**; y que las acciones de deshacer usan `rm -rf`. Posible gracias a la guarda `[ "${BASH_SOURCE[0]}" = "$0" ]` al final de `install.sh`.
+
+**Etapa ⑧, ahora seis escenarios** (A `--check-only` · B fallo seguro con el 443 ocupado · **E fallo dentro de la fase 4** → salida 4, vuelta atrás completa comprobada contenedor a contenedor y `.env` byte a byte, más reintento posible · C instalación completa · D segunda ejecución · **F el perfil por defecto encendido de verdad**). Estimación revisada: **20–30 min en frío, 10–15 con caché**; `timeout-minutes: 50`. La rotura de E es `DB_HOST` a un nombre que no resuelve: postgres y redis arrancan sanos y el fallo cae en las migraciones, que es donde ya hay contenedores, volúmenes y directorios que deshacer.
+
+**Desviación consciente, dicha por escrito.** El escenario E prueba que el código es **4** y que la máquina queda limpia; **no fuerza que `${BACKUP_PATH}/wal` tenga segmentos dentro** en el momento del fallo, porque el archivado de PostgreSQL depende de `archive_timeout` (900 s) y no es determinista en una ventana de CI. El mecanismo exacto —`rm -rf` y no `rmdir`— lo fija la prueba de integración sobre el texto del script. Las dos juntas cubren el bloqueante; ninguna de las dos sola.
+
+### Corrección del fallo de la primera ejecución de la etapa ⑧ (run 33547769303, salida 5) — 01-09-2026, sin commitear
+
+**EL PATRÓN QUE EL PROYECTO TIENE QUE RECORDAR: `set -E` + `trap ERR` + `pipefail` + sustitución de orden.** Es la causa raíz, y no se parece en nada al síntoma.
+
+**Cadena completa, reproducida con `set -x`.** `random_password` era `tr -dc … </dev/urandom | head -c 32`. `head` cierra el descriptor al llegar a 32 bytes, `tr` —que lee un flujo infinito— muere por **SIGPIPE**, y con `pipefail` la tubería «falla». Con `set -E`, el `trap ERR` que arma `phase_secrets` **se hereda dentro de la subshell** de `"$(random_password)"`, así que la **vuelta atrás se ejecutaba ahí**: restauraba el `.env` —borrando `APP_KEY` y las claves QR ya escritas—, consumía `.env.kronoqr-pre-install` y hacía `exit 4` **de la subshell**. El padre no se entera, porque el estado de una sustitución en posición de argumento se descarta: seguía escribiendo secretos sobre un fichero ya restaurado. Tres invocaciones de `rollback_and_die` en una sola ejecución. El `.env` final **no tenía `APP_KEY`** (el escenario C habría fallado al arrancar la aplicación aunque E hubiera pasado), y cuando la fase 4 falló de verdad, la copia previa ya no existía: **salida 5**.
+
+**Las dos capas del arreglo, las dos necesarias.**
+
+1. **`rollback_and_die` solo actúa en el proceso principal.** Primera línea: `if [ "${BASHPID}" != "$$" ]; then return 1; fi`. Deshacer tiene efectos sobre disco y solo tiene sentido **una vez y desde `main`**; en una subshell se vuelve sin tocar nada y decide el padre, con lo que de verdad sabe: la longitud del secreto recibido (`set_generated_secret`). Esto convierte el SIGPIPE benigno en inocuo.
+2. **`random_password` sin SIGPIPE.** Entrada finita (`openssl rand -base64 48`, que ya es requisito de la fase 1), `tr` la consume entera y **el recorte a 32 lo hace la expansión de parámetros de bash**, que no es un proceso. Bucle para el caso remoto de que el filtrado deje menos de 32.
+
+**La clase entera, barrida, no solo la instancia.** Otras dos tuberías cortaban a su productor: `manifest_field` en `lib/backup-common.sh` (`sed … | head -n 1` → ahora `sed …;T;q`, sin tubería: bajo `pipefail` devolvía 141 aunque encontrara el campo) y la comprobación de cabecera de `changelog.sh` (`head -n 1 | grep -q`). Las dos corregidas con su porqué escrito.
+
+**Y que un fallo de deshacer diga por qué.** `rollback_and_die` capturaba el stderr de cada acción en `/dev/null`: el mensaje decía «NO se ha podido deshacer: X» y obligaba a reproducir a ciegas. Ahora se captura y se imprime bajo la línea. Son órdenes sobre rutas y contenedores, sin un solo secreto.
+
+**Prueba nueva: `tests/Integration/Install/InstallSecretsPhaseTest.php`, 6 pruebas, sin Docker.** Es la reproducción exacta con la que se diagnosticó: carga `install.sh` por la guarda `BASH_SOURCE` y ejecuta `phase_secrets` sobre un `.env` temporal. Afirma que la copia previa **sobrevive**, que las 13 variables quedan escritas con su longitud, que ningún secreto sale por pantalla (valor a valor, contra el `.env` recién escrito), que la vuelta atrás legítima restaura **byte a byte** (MD5) y sale 4, que un trap disparado en una subshell **no deshace nada**, y que `random_password` da 32 caracteres veinte veces seguidas sin disparar un trap centinela. Más una que prohíbe que vuelva a aparecer una tubería sobre `/dev/urandom` en los cinco scripts.
+
+**Medido que la prueba caza el fallo, que es lo único que hace válida una prueba de regresión:** con el generador antiguo restaurado, **2 de 6 fallan**; retirando además la guarda `BASHPID`, **fallan las 6**. Con el árbol arreglado, **16/16** en los dos ficheros de `tests/Integration/Install/`.
+
+**Etapa ⑧:** el artefacto ahora recoge las salidas de **B, C, D, E y el reintento de E** (antes solo `salida-b.log`, y por eso hubo que diagnosticar a ciegas), y el paso de diagnóstico mira los **dos** paquetes (`paquete/` y `paquete-e/`) más el estado global de contenedores y volúmenes.
+
+**Sigue pendiente:** relanzar la etapa ⑧. Los escenarios C, D, E y F y los códigos 4 y 5 **siguen sin ejecutarse nunca de extremo a extremo**; lo que sí está ejercitado en local, y con la prueba que lo demuestra, es la fase 3 completa y las dos mitades de la vuelta atrás.
+
+### Corrección del fallo de la segunda ejecución de la etapa ⑧ (run 33553818282, salida 6) — 01-09-2026, sin commitear
+
+**Qué pasó.** El arreglo del SIGPIPE funcionó: B y E en verde, y C llegó hasta la fase 5. Allí cayó con **6** porque **nginx estaba en bucle de reinicio**: `cannot load certificate key /etc/nginx/certs/tls.key: Permission denied`. La CI generaba la clave con `openssl` sin `sudo` —propiedad del runner, y openssl escribe las claves `0600`— y el contenedor `nginx-unprivileged` corre como **uid 101**. **No es un artefacto de CI**: es exactamente lo que hará un IT que copie su `tls.key` como root, y la guía decía `cp … certs/tls.key` sin una palabra sobre propietario ni permisos.
+
+**Decisión del punto 1: la fase 1 FALLA; el instalador NO corrige el certificado por su cuenta.** Se valoró que lo arreglara él —ya corre como root y ya hace `install -d -o 70 -g 70` para el WAL— y se descartó por una razón concreta: **`TLS_CERT_DIR` puede apuntar a un directorio compartido con otro servicio del hotel**, típicamente `/etc/letsencrypt/live/…`. Un `chown 101:101` nuestro rompería ese otro servicio, y la vuelta atrás no siempre podría repararlo (si el instalador muere entre medias, el otro nginx del hotel se queda sin poder leer su propio certificado). El WAL es distinto: es un directorio **del producto**, creado por él. Así que el instalador **detecta y explica**, y el mensaje ofrece **dos caminos**: el `chown` si el directorio es del paquete, y «cópialo a un directorio propio» si lo comparte otro servicio.
+
+**Lo construido.**
+- `file_readable_by_uid` (`install.sh:695`): responde sobre **propietario, grupo y bits de modo**, no con `[ -r ]` —el instalador corre como root y a root `[ -r ]` le dice que sí sobre cualquier cosa—. Tres respuestas: puede / no puede / no se ha podido averiguar (sin `stat` → aviso, no fallo).
+- `check_tls` (`install.sh:744`) comprueba los dos ficheros. **La clave privada legible por todo el servidor no bloquea** —funciona, y bloquearla sería decidir por el cliente sobre su propia clave— pero **avisa**, porque cualquiera con sesión en la máquina puede copiarla. El camino del certificado **ausente** (lo genera `05-kronoqr-tls.sh` dentro del contenedor con `TLS_ALLOW_SELF_SIGNED=true`) no se toca y sigue funcionando.
+- **La fase 4 espera también a nginx** (`install.sh:1272`), después de `app` y antes de las migraciones. Sin eso, un borde roto no se descubría hasta la sonda de la fase 5, que además informa de que «los servicios están en pie» con nginx reiniciándose cada dos segundos. Ahora el mismo fallo cae en la fase 4 → vuelta atrás → **salida 4**, que es la que se puede reintentar. Un contenedor en bucle de reinicio nunca llega a `healthy`, así que la espera agota su plazo y termina igual en 4: correcto por los dos caminos.
+- **Seis claves de mensaje nuevas** en los dos idiomas (**132 × 2**). Aviso para quien venga detrás: **el `printf` de bash NO admite especificadores posicionales** (`%1$s`); los mensajes con un valor repetido pasan el argumento tantas veces como aparece.
+
+**CI (`ci.yml:966`):** tras generar el certificado, `sudo chown 101:101` + `chmod 0400/0444`, que es el camino **documentado**. El escenario E pasa a copiar el paquete con `sudo cp -a` y a restituir el propietario de `certs/`: con la clave en `0400` del uid 101, un `cp -r` del runner no puede leerla.
+
+**Documentación:** `instalacion.md` §1.2 (las tres órdenes junto al `cp`, con el porqué y el caso del directorio compartido), §6/TLS (incluida la trampa de la **renovación**: `certbot` reescribe los ficheros con su propio propietario y el borde deja de poder leerlos en el siguiente reinicio) y **dos «qué hacer si…» nuevos**: el mensaje de la fase 1 y el bucle de reinicio en una instalación ya existente.
+
+**Pruebas (4 nuevas, `InstallScriptTest`, sin Docker):** la fase 1 rechaza una `tls.key` que el uid 101 no puede leer y el mensaje trae la orden **y** la advertencia del directorio compartido; una clave de lectura universal **avisa sin bloquear**; `file_readable_by_uid` sobre cuatro modos reales (0600, 0640, 0644, 0444); y que la espera de nginx está en la fase 4, entre `app` y las migraciones. **Medido que cazan el fallo**: vaciando el bucle de comprobación, **2 de 14 fallan**.
+
+**Nota de entorno:** estas pruebas solo son válidas **dentro del contenedor**. En Git Bash sobre NTFS `chmod` no tiene efecto y `stat -c %a` devuelve `644` para todo; comprobado antes de escribirlas.
+
+### Corrección del fallo de la tercera ejecución de la etapa ⑧ (run 33558947114) — 01-09-2026, sin commitear
+
+**El escenario C instala y verifica por primera vez.** Lo que falló fue la comprobación posterior: `/api/v1/health` informaba `"version":"0.0.0-dev"` en una instalación de la 2.0.0. Causa: `build-ci-images` no fijaba `APP_VERSION` y el Dockerfile caía a su respaldo `ARG APP_VERSION=0.0.0-dev`. **En una entrega real eso rompe justo lo que ese campo sostiene** —correlacionar un incidente con la versión que lo produjo (doc 02 §10.5)— y con él la matriz de versiones soportadas.
+
+**Criterio elegido, y por qué.** `APP_VERSION ?= $(shell cat VERSION)` en el `Makefile` (`Makefile:598`) y `--build-arg` **solo a la imagen de `app`** (`Makefile:640`), que es la única que declara el ARG:
+- `build-ci-images` sigue siendo la **única** orden de construcción del repositorio (IMPORTANTE 10): `unit`, `security`, `backup-drill` y la etapa ⑧ no pueden divergir, y no hay dos comportamientos según quién llame.
+- Las imágenes `:ci` llevan también la versión real. **Es más veraz**: una imagen de prueba que dice su versión vale más que una que miente. El ARG vive al final de la etapa `prod`, así que el coste en caché es una capa trivial.
+- Solo a `app` porque solo ella lo consume: pasárselo a postgres y nginx haría que BuildKit avisara de un *build-arg* sin usar en cada construcción, **y un aviso que sale siempre es un aviso que nadie lee**.
+
+Verificado: `make -n` muestra `--build-arg APP_VERSION=2.0.0` únicamente en `app`, y `docker run --rm --entrypoint php kronoqr/app:ci -r 'echo getenv("APP_VERSION");'` → **2.0.0**.
+
+**Y una trampa del escenario D, encontrada leyendo antes de que la encontrara la CI.** Con C instalado, los puertos 80 y 443 los ocupa **nuestro propio nginx**, así que la fase 1 fallaba con **2** («el puerto 443 ya lo usa otro proceso») en vez de llegar a la fase 2 y dar **3** («hay una instalación previa, usa update.sh»). No era solo un escenario roto: el mensaje mandaba al IT del hotel **a parar el proceso que ocupa el 443, que es su propio KronoQR sirviendo fichajes**. Ahora `port_held_by_our_project` (`install.sh:520`) distingue el caso y la fase 2 responde lo que toca. **Reproducido y verificado contra el entorno de desarrollo real**, que publica 80/443 bajo el mismo nombre de proyecto: antes fallaba, ahora dice «lo ocupa esta misma instalación de KronoQR».
+
+**Repaso de las otras dos trampas posibles en F, hecho:**
+- `sudo -E` con variables en línea puede rechazarse por política de sudoers (`env_reset`) y perderlas en silencio. Cambiado a `sudo env COMPOSE_PROFILES=… docker compose …` (`ci.yml:1224`). El `sudo` sí hace falta: el `.env` es 0600 de root.
+- `docker compose exec node-exporter ls` **sí funciona**: la imagen es busybox, comprobado ejecutándolo. Y el `psql` del escenario C tampoco necesita contraseña: `pg_hba.conf` da `trust` a las conexiones por socket local.
+
+**Verificado:** `make sh-lint` 0 hallazgos · `tests/Integration/Install` **20/20** · imagen `app` reconstruida y su `APP_VERSION` leída de dentro · catálogo **133 × 2** completo.
+
+### Corrección del fallo de la cuarta ejecución de la etapa ⑧ (run 33562263079) — 02-09-2026, sin commitear
+
+**`APP_VERSION` y las sondas en verde; C cayó un paso más allá:** `curl https://127.0.0.1/admin/` devolvía **403**, con `directory index of "/var/www/spa/admin/" is forbidden` en el registro de nginx. El `server` de HTTPS declara `index index.php` —correcto para las rutas de la API— y la imagen borra el `default.conf` que traía `index index.html` de fábrica. Para un `GET /admin/`, `try_files` casa `$uri/` con el directorio, nginx busca allí su índice, no encuentra `index.php` y responde 403 **antes** de llegar al respaldo `/admin/index.html`. Afectaba igual a las tres SPA. En desarrollo no se veía porque `dev-extra/` sustituye esas `location` por proxys a Vite.
+
+**Arreglo:** `index index.html;` en las tres `location` de `infra/docker/nginx/extra/spa.conf` (`:39`, `:50`, `:66`), no en el `server` —cuyo `index index.php` es correcto para el resto—, con el porqué escrito arriba del bloque: es exactamente el tipo de 403 cuyo síntoma no apunta a su causa. **No falta un permiso, falta una directiva.**
+
+**Guarda nueva, y sí merece la pena** (encargo 1). `infra/scripts/nginx-smoke.sh` + `make nginx-smoke` arrancan la imagen **sola** —sin base de datos, sin aplicación— y piden las cuatro rutas. **30 segundos.** No duplica la etapa ⑧: **adelanta el hallazgo**, y sobre todo se puede ejecutar **en el portátil**, cosa que la etapa ⑧ no. También se invoca en la etapa ⑧ justo tras construir la imagen (`ci.yml:880`), para que este fallo salga a los 3 minutos y no a los 25. **Medido que caza el fallo:** retirando las tres líneas `index`, el smoke da `[FALLA] /admin/ devolvio 403` y reproduce literalmente el `directory index ... is forbidden` de la CI.
+
+**Encargo 2: `envsubst` y las variables ausentes. Lo encontró el propio smoke** en su primera ejecución, con el `[emerg] "client_max_body_size" directive invalid value` — un mensaje que no nombra la variable que falta ni dice de dónde sale. Resuelto en dos mitades, según si un valor por defecto es seguro o no:
+
+- **Las que sí pueden tenerlo**, como `ENV` en el Dockerfile (`infra/docker/nginx/Dockerfile:124`): `NGINX_CLIENT_MAX_BODY_SIZE=8m`, `TLS_CERT_FILE`, `TLS_KEY_FILE`. Siempre definidas, y el `.env` de la instalación las sobreescribe sin esfuerzo porque el entorno del contenedor gana sobre el `ENV` de la imagen.
+- **Las tres redes, NO**, y se **exigen**: `infra/docker/nginx/docker-entrypoint.d/04-kronoqr-required-env.sh` para el arranque nombrando **todas** las que faltan y diciendo qué hacer. Un valor por defecto para `PORTAL_INTERNAL_CIDR` publicaría el portal a internet o dejaría a la plantilla sin consultar su jornada; uno para `KIOSK_VLAN_CIDR` frenaría el fichaje en el cambio de turno con el síntoma «el quiosco va lento a las 06:00». **Adivinar ahí es peor que parar.** Comprobado: sin las tres, el contenedor muere nombrándolas.
+
+**Verificado en local, con la imagen reconstruida:** `/healthz` **200** · `/admin/` **200** con `<!doctype html` · `/kiosk/` **200** con `<!doctype html` · `/portal/` **403**. Y el 403 del portal es el candado de RF-ID-08, no el mismo fallo del índice: **con `PORTAL_INTERNAL_CIDR=0.0.0.0/0` da 200 y sirve su HTML**. `make sh-lint` 0 hallazgos.
+
+### Cierre de la etapa ⑧: los dos remates de Trivy (run 33565272648) — 02-09-2026, sin commitear
+
+**Los seis escenarios en verde por primera vez.** Quedaban los dos hallazgos de Trivy.
+
+**1. El paso de la etapa ⑧ invocaba `trivy` a pelo** y el runner no lo tiene (`command not found`, 127). Era **el único sitio del árbol** que se saltaba la regla de «una sola vía por herramienta», y por eso fue el único que se rompió.
+
+**Criterio elegido: extender `trivy-image`, no crear un objetivo nuevo.** Un `trivy-nginx` habría sido un cuarto sitio donde repetir severidad, `--ignore-unfixed`, el fichero de exclusiones y el código de salida; el día que cambie el umbral habría que acordarse de tres. Ahora `TRIVY_IMAGES` decide qué se escanea (`Makefile:747`), con las **tres** de entrega por defecto, y cada job pasa las que ha construido: `security` las dos suyas (`ci.yml:744`), la etapa ⑧ la de borde (`ci.yml:1299`). En local, `make trivy-image` tras `build-ci-images IMAGES="postgres app nginx"` cubre las tres sin argumentos. El `--ignorefile` pasa a aplicarse a las tres, que es una excepción menos que recordar.
+
+**2. DS-0031 CRITICAL sobre el Dockerfile de nginx.** Reproducido en local y acotado: **quien dispara la regla es `TLS_KEY_FILE`**, por el nombre —contiene «KEY»—, no `TLS_CERT_FILE` ni `NGINX_CLIENT_MAX_BODY_SIZE`. No hay secreto: son **rutas**, y la clave que vive en ellas la monta el cliente desde su disco. Pero el runbook manda corregir antes que excepcionar y **la corrección es la buena de verdad**, no un rodeo para callar a la herramienta: el valor por defecto queda pegado a la lógica que lo usa en vez de repetido en dos capas.
+
+Las dos rutas salen del `ENV` del Dockerfile y pasan a `infra/docker/nginx/docker-entrypoint.d/03-kronoqr-tls-paths.envsh`. **Tiene que ser un `.envsh` y no un `.sh`**: el punto de entrada de la imagen *carga con source* los primeros y *ejecuta* los segundos, y solo lo cargado deja variables en el entorno — que aquí hacen falta en dos consumidores distintos: `05-kronoqr-tls.sh`, que decide si genera un autofirmado, y el `20-envsubst-on-templates.sh` de la imagen base, que rinde `ssl_certificate ${TLS_CERT_FILE}`. Por eso se **exportan**. `NGINX_CLIENT_MAX_BODY_SIZE` se queda como `ENV`: Trivy no lo señala y su defecto sí es cómodo ahí.
+
+**Verificado, y las dos ramas:** con la imagen reconstruida y sin pasar las variables, la conf rendida trae `ssl_certificate /etc/nginx/certs/tls.crt` —el defecto llega por el `.envsh`— y `make nginx-smoke` sigue en verde (4/4), que es la prueba de que también `05-kronoqr-tls.sh` los ve. Pasando `TLS_CERT_FILE=/tmp/propio.crt`, la conf trae esa ruta: **el `.env` del cliente sigue mandando**. Trivy sobre el Dockerfile: de **1 CRITICAL a 0**.
+
+**Un `.envsh` sin analizar habría sido un hueco**, así que `SH_FILES` los incluye ahora (`Makefile:71`) y ShellCheck y shfmt entran en él. Lo que **no** se le exige es `set -euo pipefail` ni `IFS` (`Makefile:466`), con el porqué escrito: un fichero que se **carga con source** no puede fijar `pipefail` sin imponérselo al shell que lo carga, que aquí es el punto de entrada de la imagen base y no es código nuestro. Es lo mismo que hace el `15-local-resolvers.envsh` oficial, y por el mismo motivo.
+
+
+**Lo que NO he podido ejecutar entero en local, dicho así:** `make trivy-fs` **agota su `--timeout` de 10 min** sobre el bind mount NTFS y muere con `context deadline exceeded` recorriendo `.claude/`. No es un hallazgo ni una regresión: es el límite que el propio Makefile ya documenta para esta máquina, y en el disco Linux de la CI el mismo objetivo tarda segundos. Lo que sí he verificado es exactamente lo que estaba rojo, con el mismo motor de reglas acotado: `trivy config` sobre el Dockerfile de nginx, **de 1 CRITICAL a 0**, y sobre **los cuatro** Dockerfiles de `infra/`, **0 en los cuatro**.
+
+**Detalle menor, arreglado:** `make trivy-fs TRIVY_FORMAT=json >fichero` metía en el JSON **el eco de la propia receta que hace make**, y `jq` moría con «parse error» justo cuando hay hallazgos, que es cuando el resumen del job hace falta. Ahora la orden va con `@` y su eco se escribe a mano **en stderr** (`Makefile:713`): se sigue viendo en el log y no ensucia lo que se va a parsear. Comprobado: el stdout de `trivy-image … TRIVY_FORMAT=json` empieza por `{` y acaba en `}`.
+
+## Sesión «tarea 5.3: licencia firmada, verificación local y degradación honesta» (01-09-2026), en `feat/fase-5-productizacion`
+
+**Tarea 5.3 implementada y verificada, sin commitear** (lo commitea el usuario tras las revisiones de `seguridad-cumplimiento` y `revisor-codigo`). Cubre `RF-PD-04` y `RF-PD-05`.
+
+**Las tres respuestas del paso 11, con la prueba que las sostiene:**
+1. **¿Algún camino en el que la licencia impida fichar o consultar el registro?** No. `tests/Feature/Product/LicenseDoesNotBlockTest.php` (11 pruebas) lo comprueba con una licencia **caducada de verdad** —clave firmada con un par generado al vuelo y reloj adelantado—: `POST /scan` 200 y crea tramo, padrón y latido del quiosco, `reports/legal-export` 200, `employees/{uuid}/workdays` 200, `me/workdays` y `me/export` 200, corrección trazada 200, cadena de auditoría íntegra, `/health` y `/ready` 200. Más los casos «sin ninguna licencia» y «licencia ilegible». Y por construcción: el `FeatureGate` **solo acepta un `Feature`**, y en ese enum el conjunto legal no tiene caso, así que la pregunta no se puede ni formular.
+2. **¿Alguno en el que impida dar de alta o emparejar?** No. `tests/Feature/Product/PlanLimitsDoNotBlockTest.php`: con `max_employees` superado, `POST /employees` 2xx y la persona ficha; con `max_devices` superado, la emisión de token vincula y el quiosco ficha. El conteo es un **observador** en `afterCommit` y bajo `try`: un fallo suyo pierde el asiento, nunca el alta.
+3. **¿La verificación es realmente local?** Sí. `tests/Feature/Product/LicenseVerificationIsLocalTest.php` con `Http::preventStrayRequests()` + `Http::assertNothingSent()` sobre los cinco caminos (activar, consultar, decidir, endpoint, consola) y también con la licencia caducada.
+
+**Formato de la clave y dónde vive cada pieza.** `KQL1.<carga base64url>.<firma base64url>`, firma ed25519 **sobre el texto codificado tal y como viaja**. **Verificación** en el producto (`Product/Infrastructure/Adapter/Ed25519LicenseVerifier`, sodium nativo) con la clave **pública** de `config/license.php`. **Emisión fuera del producto**, en `tools/license-issuer/` de la raíz —que no entra en ninguna imagen: el `Dockerfile` hace `COPY backend/ ./`—, con la privada por variable de entorno. `LicenseIssuerRoundTripTest` ejecuta ese CLI **como subproceso** y verifica su salida con el verificador del producto.
+
+**La frontera de ADR-023, materializada.** `Shared/Domain/ValueObject/Feature` (7 casos accesorios) **es** la lista; el conjunto legal no tiene caso, así que no existe forma de expresar su desactivación. `tests/Architecture/LicenseBoundaryTest.php` **lee ADR-023** y falla si el enum y la tabla divergen, comprueba que solo `Product/Infrastructure/Persistence` nombra la tabla `license`, que el estado de licencia no sale de `Product`, que nadie escribe su propia condición sobre la caducidad, y que el camino de fichaje no menciona la licencia por ninguna vía.
+
+**Retrofit (paso 10).** 2.8: `GET /reports/period` y su exportación responden **`402` con `problem+json` y tipo propio** (`urn:kronoqr:problem:feature-not-licensed`), con `feature`, `restriction`, `since` y un `detail` que **nombra lo que sigue disponible**. 2.4: la presencia **degrada a sondeo** —`meta.realtime.enabled: false` con `unavailable_reason`/`unavailable_since`— y el listado se sirve entero. Los dos con prueba en `LicenseDegradesAccessoriesTest`.
+
+**Decisiones que conviene conocer:**
+1. **`max_sites` no se modela.** ADR-040 lo retiró; una clave que lo traiga verifica igual y el campo se ignora, porque la lectura tolera lo desconocido (compatibilidad hacia delante: una instalación en la 1.2 debe poder activar una clave emitida con la 1.6). Modelarlo «por compatibilidad» lo dejaría a la vista de quien quisiera comprobarlo.
+2. **`LICENSE_KEY` no se lee en ejecución.** Solo la mira `license:activate` sin argumento, que es como la llamará el instalador de la 5.4. Manda la fila (decisión de la 5.1).
+3. **`config/license.public_key` va vacía de serie**, y eso significa «esta compilación no puede verificar ninguna clave»: motivo `no_public_key`, producto entero funcionando y mensaje que manda a revisar el **despliegue**, no a pedir otra clave. **El fabricante tiene que generar el par una vez** (`tools/license-issuer/generate-keypair.php`) y pegar la pública antes de la primera imagen de release. **Pendiente del usuario.**
+4. **Novena familia del bloque D: `LicenseLifecycle`**, con dos acciones (`license.activated`, `license.plan_exceeded`). Es la única de relevancia **comercial** y su caso lo explica: no cabe en `AuthorityOrCalculationChange`, que responde «¿quién movió las reglas del cálculo?» y es una pregunta de inspección.
+5. **`/health` gana `license`**, una palabra, leída **solo de caché** y `unknown` si no está: la sonda de vida no puede tocar la base de datos. La escribe el punto único de resolución (no el `FeatureGate`), para que tras activar una clave la sonda no siga diciendo `unknown`.
+6. **Se puede activar una clave ya caducada** y consta el estado resultante en el asiento. Rechazarla obligaría a un cliente que renueva tarde a pedir otra.
+7. **Aviso de caducidad a 30 días** (decisión del usuario), umbral en `config/license.php`. Banner persistente y no descartable, que cambia de tono al caducar. Sin correos.
+
+**Configuración nueva** (`config/license.php`): `LICENSE_PUBLIC_KEY` (vacía), `LICENSE_EXPIRY_WARNING_DAYS=30`, `LICENSE_HEALTH_PROBE_TTL_SECONDS=600` y `LICENSE_KEY` (solo arranque). Métrica nueva: `license_limit_exceeded_total{limit}`.
+
+**Verificado:** `make quality` en verde (api-lint 0, Pint **1233 PASS**, PHPStan 9 **0 errores**, Deptrac **0 violaciones / 0 sin cubrir**; Rector informativo) · `make secrets-scan` **0 hallazgos en 140 commits** · `make sast` **0 hallazgos** · `make test-unit` **1240 en 4,04 s** · `--group=RF-PD-04` **146** · `--group=RF-PD-05` **78** · `make test` **2784 / 12628** (447 s) · `qa:traceability --check` sin huecos y matriz regenerada · `docs:consistency` sin divergencias · `type-check` verde en las **tres** SPA con `schema.d.ts` regenerado (cambio **aditivo salvo una línea de descripción**) · panel **293 unitarias**, `lint` y `prettier` limpios · migración aplicada con `fichaje_migrator`, con prueba de ida y vuelta propia · **verificación manual completa sobre la BD de desarrollo**: `license:show` sin clave (degradado, salida 1, nunca error fatal), clave **caducada emitida con el emisor real** y un par generado al vuelo, activada (salida 1, aviso «YA ESTA CADUCADA»), `license:show` mostrando caducidad, exceso de plan 236/200, degradación con fecha y la sección «Lo que NUNCA depende de la licencia»; asiento `license.activated` con huella y sin la clave; cadena de auditoría íntegra; sonda devolviendo `expired`.
+
+**Cambio de comportamiento que conviene conocer.** El informe por periodo y la presencia en vivo **exigen ahora una licencia que los conceda**. Siete ficheros de prueba existentes llaman a `LicenseKeys::grantAll()` en su `beforeEach`; **no se activa licencia en la suite entera a propósito**, porque entonces la degradación no la vería nadie hasta casa del cliente. En una instalación recién puesta en marcha y sin clave, RRHH no tiene informes por periodo hasta activarla: es lo que dice ADR-023 y lo que documenta la guía de cliente.
+
+**Presupuesto de la suite unitaria subido de 4 a 5 s** (`Makefile`), con el porqué escrito allí: la suite pasó de 1136 a 1240 pruebas y midió 4,2 s. El coste marginal de las 104 nuevas fue de 0,3 s, medido fichero a fichero. **Es una decisión revisable**; si molesta, lo que hay que discutir es si esas pruebas deben ser unitarias.
+
+**Documentación:** `docs/cliente/configuracion.md` §3 bis completa (qué es la clave, cómo se activa, qué pasa al caducar con las dos tablas de «deja de funcionar / sigue funcionando», los límites del plan y `curl` de las dos rutas) y cuatro «qué hacer si…» nuevos · `docs/cliente/operacion.md` §7 (los dos comandos con sus códigos de salida y el campo de la sonda) · `docs/cliente/obligaciones-legales.md` §7 bis («tu obligación de registrar no depende de la licencia») y dos filas nuevas en §8 · enmiendas fechadas en **ADR-018, ADR-019, ADR-023 y ADR-028** · doc 01 §5 (tabla `license`) y Anexo B (tres filas nuevas de notas de contrato) · doc 02 §8.2 · doc 05 §10.5 (qué se pierde exactamente y que los límites no bloquean) · `.env.example`.
+
+**Pendiente / diferido:**
+- **El fabricante debe generar el par ed25519 una vez** y pegar la pública en `config/license.php` antes de la primera imagen de release. Hasta entonces ninguna clave verifica y el producto funciona degradado, diciéndolo con esas palabras.
+- **La 5.6 debe extender `PlanLimitsDoNotBlockTest`** al emparejamiento por código cuando exista `/kiosk/pair/confirm`.
+- **La 5.9 (`doctor`)** puede leer el estado con `license:show` (código de salida 0/1) o con el campo `license` de `/health`.
+- **La 5.5 (asistente)** activa la clave llamando a `POST /license/activate` o a `license:activate`.
+- **Sin E2E de la pantalla de licencia**: la sesión de las pruebas E2E del panel no lleva `license:*`. Encaja mejor con la 5.5.
+- Las cuatro funcionalidades accesorias que aún no existen (cuadro de impacto, exportación de nómina, resumen semanal, marca blanca) están en el catálogo y marcadas como no implementadas: ni el panel ni `license:show` las presentan como pérdida.
+
+### Correcciones de las revisiones de `seguridad-cumplimiento` y `revisor-codigo` (01-09-2026, sin commitear)
+
+**BLOQUEANTES del panel, los dos con la prueba que los habría cazado.**
+
+**B1 — todas las fechas de licencia salían vacías.** `formatDay()` usaba el `d()` de vue-i18n y `createAppI18n()` no declara `datetimeFormats`: devolvía cadena vacía. El banner decía «La licencia caducó el , hace 12 días» y la pantalla «Vigencia: – ». Ahora hay un solo sitio que formatea, `frontend-admin/src/features/settings/license.dates.ts`, sobre `formatCivilDate` de `web-kit` y **en UTC a propósito**: la vigencia la fija el fabricante al emitir y es la que aparece en la factura; convertirla a la zona del centro haría que un hotel de Canarias viera un día distinto del de su contrato. Pruebas nuevas en `LicenseView.spec.ts` («enseña el día concreto de la vigencia, no un hueco») y en `LicenseNotice.spec.ts`, que afirman `1 ene 2026`, `31 dic 2026` y que el texto no contiene la fecha vacía.
+
+**B2 — el banner imprimía la clave de traducción en crudo.** Con licencia **vigente** y plan superado, `needs_notice` es `true`, el estado es `valid` y `license.notice.valid` no existía —la había quitado la prueba de i18n que prohíbe textos vacíos—. Añadida en `es.json` y `en.json` con texto real. `LicenseNotice.spec.ts` afirma ahora el **texto principal** (`data-test="license-notice-text"`), no solo el sufijo del exceso, y que el banner no contiene ninguna clave sin traducir.
+
+**IMPORTANTES.**
+
+**I1 — escritura desnuda en el camino de una lectura.** `DatabaseLicenseRepository::markVerified()` es una escritura en el camino de `GET /license` y `license:show`, que son las dos superficies desde las que alguien diagnostica un problema de licencia: con la base en solo lectura o el disco lleno daba `500` con traza, contra la invariante «nunca lanza» escrita tres veces. Ahora va bajo `try/catch (Throwable)` con `warning` `product.license_touch_failed`, sin clave ni cliente. `tests/Feature/Product/LicenseTouchFailureTest.php` lo fija con `ReadOnlyLicenseConnection`, un doble de **conexión** (no de repositorio: un repositorio postizo probaría lo contrario) que lanza antes de tocar la base — un `UPDATE` que falla de verdad dejaría abortada la transacción de la prueba, cosa que en producción no pasa. **Medido**: las dos pruebas caen al retirar el `try`.
+
+**I2 — la degradación del tiempo real era cooperativa.** Un cliente que ignorase `meta.realtime.enabled` conservaba el tiempo real íntegro. Tres cambios:
+
+- **(a)** los dos `Broadcast::channel` de `routes/channels.php` consultan el `FeatureGate` **antes que nada** y no firman la suscripción; y la respuesta deja de servir `key` y `channels` cuando no hay tiempo real. `path` y `auth_endpoint` **sí** se sirven: son rutas estáticas del propio origen, no dan acceso a nada, y quitarlas obligaría a hacer nulable en el contrato un campo que nunca lo fue. `BroadcastPresenceChange` **no se toca** (estela del fichaje, regla dura 19).
+- **(b)** `isAvailable()` pasa a ser `blocker()` y devuelve **qué** condición falla (`installation`, `deployment`, `license`). Antes, una instalación sin Reverb y con la licencia caducada anunciaba `license_expired` y mandaba a quien lo leyera a hablar con el comercial cuando lo que hay que arreglar es el despliegue.
+- **(c)** las pruebas anteriores pasaban sin mirar la licencia, porque en la suite `BROADCAST_CONNECTION=null` ya apagaba el tiempo real. Cuatro pruebas nuevas con **Reverb configurado de verdad**: `enabled:false` + `license_expired` + `key` nula + `channels` vacío, suscripción **rechazada con 403**, control positivo que la firma, y Reverb apagado + licencia caducada → motivo nulo. **Medido**: retirando el último `return` de `blocker()` cae una; retirando las dos guardas de `channels.php` cae la de la suscripción.
+
+**I3 — puerta de release.** `make release-gate` falla si `backend/config/license.php` sigue con la clave pública vacía: una imagen de entrega construida así rechaza la licencia recién pagada del cliente con motivo `no_public_key`, y el síntoma apunta al sitio equivocado. **No entra en `build-ci-images`** a propósito: la CI construye imágenes de prueba, que deben poder llevarla vacía. **La 5.4 tiene que invocarlo desde el paso que construye la imagen de entrega.** Corregida además la redacción: no hay «constante» que pegar, es el segundo argumento de `env('LICENSE_PUBLIC_KEY', '')` — dicho así en el config y en el README del emisor.
+
+**I4 — la huella estaba duplicada.** Un solo punto, `StoredLicense::fingerprintOf()`, usado por la activación (antes de que exista la fila) y por el recurso. Es el número por el que el fabricante y el hotel se entienden por teléfono. Prueba en `LicenseActivationTest` de que asiento y recurso coinciden, y en `LicenseIssuerRoundTripTest` de que **la que imprime el emisor es la misma**. Verificado a mano de punta a punta: emisor `ba7c6e41fe70` → `license:show` `ba7c6e41fe70`.
+
+**I5 — el emisor no validaba lo que firmaba.** Un `--max-employees=ochenta` daba `0` y producía una clave **firmada** que el cliente activa y su producto rechaza como `invalid_payload`, descubierta en casa del hotel con la factura ya mandada. Ahora valida antes de firmar: enteros positivos (`ctype_digit`), rango de vigencia, y nombres de `--features` contra el catálogo de ADR-023 —una errata como `advanced_report` produce una clave que verifica y **no concede nada**—. `--force` emite una funcionalidad que la herramienta aún no conoce, para cuando el producto vaya por delante. Seis casos en el round-trip, más el de `--force`.
+
+**MENORES.** **M1** `/scan/batch` (207, lote entero, dos `scan_events`) y `/scan/pin` (200, origen `pin_kiosk`) con licencia caducada. · **M2** la rama `catch` de `ObservePlanLimits` ejercitada de verdad con un `PlanUsageCounter` que lanza —la prueba anterior no la tocaba, porque sin licencia verificada el caso de uso se da la vuelta antes de contar—. · **M3** seis filas nuevas en doc 07 §6 (abajo). · **M4** `tools/` en `.dockerignore`, con la nota de que el empaquetado de la 5.4 debe excluirlo. · **M5** `generate-keypair.php`: pública por **stdout**, privada por **stderr** o a fichero `0600` con `--secret-out`, y `sodium_memzero` al salir. · **M6** regla propia de gitleaks `kronoqr-license-signing-key` para una privada ed25519 en hexadecimal —ninguna regla por defecto la reconoce—; **comprobada plantando una clave falsa: 1 hallazgo; retirada: 0**. · **M7** las tres variables en doc 02 Anexo B y `LICENSE_HEALTH_PROBE_TTL_SECONDS` en `.env.example`. · **M8** comentario de `deptrac.yaml` corregido: publica `GetLicenseStatusHandler` vía `CachedLicenseStatePublisher`, no el gate. · **M9** la fecha del `402` se formatea en el **borde** y en el idioma negociado (`license.since_format`), con una sola conversión a UTC: antes el mensaje inglés salía con fecha española. Prueba que compara `es` y `en` y que el instante del cuerpo es el mismo. · **M11** `LicenseVerifierTest` movido a `tests/Unit/Product/Infrastructure/`. · **M12** `severity` y `state` del store tipados con las uniones de `schema.d.ts`.
+
+**Lo que queda cooperativo tras I2, dicho por escrito** (y anotado en doc 07 §6): el servidor **sigue publicando** el evento de presencia en el canal aunque la licencia no lo conceda —esa emisión es la estela de un fichaje ya registrado y meterle una condición la acercaría al camino crítico, regla dura 19—, y **una suscripción firmada antes de que la licencia caduque sobrevive** hasta que ese socket se reconecte, porque el protocolo autoriza al suscribirse y no en cada mensaje. Ninguna de las dos es una fuga: lo que viajaría es lo que esa misma cuenta puede pedir por sondeo, que no se degrada.
+
+**Consecuencia de I2 que conviene conocer.** `meta.realtime.channels` va **vacío** siempre que `enabled` es `false`, sea cual sea la causa. Tres pruebas de presencia (`LivePresenceScopeTest` ×2, `LivePresenceTest` ×1) miran el **alcance** y no la degradación: ahora piden Reverb y licencia para ver la respuesta en su forma de producción.
+
+**Verificación tras las correcciones:** `make quality` en verde (sh-lint 0, api-lint 0, Pint **1235 PASS**, PHPStan 9 **0 errores**, Deptrac **0 violaciones / 0 sin cubrir**; Rector informativo) · `make secrets-scan` **0 hallazgos en 140 commits** · `make sast` **0 hallazgos** · `make test-unit` **1252 en 4,07 s** (presupuesto 5) · `--group=RF-PD-04` **169** · `--group=RF-PD-05` **90** · `make test` **2815 / 12719** (467 s) · `qa:traceability --check` sin huecos y matriz regenerada · `docs:consistency` sin divergencias · `type-check` verde en las **tres** SPA · panel **294 unitarias**, `lint` y `prettier` limpios · `license:show` sin clave (salida 0, «SIN LICENCIA (el sistema sigue funcionando)») y con clave **caducada emitida con el emisor real** y un par generado al vuelo (activación con salida 1 y aviso de clave caducada; `license:show` con caducidad, exceso 236/200 y degradación fechada) · `make mutate` **MSI 83,10 %** (293 sin probar, 1 timeout, 1440 probados; umbral 80), medido tras las correcciones y **idéntico** al de antes de ellas: las pruebas nuevas cubren caminos que la mutación del dominio no toca —HTTP, canales, consola y el emisor— y los 11 supervivientes del dominio de licencia siguen siendo los mismos. **Los 11 son equivalentes**, comprobados uno a uno: cuatro en `License` (dos banderas de comparación estricta de `in_array` sobre *enums*, que comparan igual en modo laxo; un `=== false` defensivo tras un `preg_match` que ya garantiza el formato; y un `instanceof` cuyo `null` el filtro posterior descarta igual) y siete en `LicenseStatus` (un `>` frente a `>=` que en el instante exacto de la caducidad da el mismo cero; cuatro guardas sobre estados que solo produce `of()`, donde la licencia no puede ser nula; y dos enteros dentro de un `max(0, …)` que `intdiv` entre 86 400 devuelve a cero de todos modos). Matarlos exigiría afirmar estados inalcanzables o la prosa literal de un mensaje. `LicenseLimits`, `LicenseState` y `LicenseVerification`: **cero supervivientes** · BD dejada **sin clave activada** y con la semilla intacta (257 empleados, 19 680 tramos).
+
+**Pendiente del usuario (lo más importante):** **generar el par ed25519 una vez** con `php tools/license-issuer/generate-keypair.php`, guardar la privada en el gestor de secretos y **pegar la pública** como valor por defecto de `env('LICENSE_PUBLIC_KEY', '')` en `backend/config/license.php` **antes de la primera imagen de release**. `make release-gate` lo comprueba. Hasta entonces ninguna clave verifica y el producto funciona degradado, diciéndolo con esas palabras.
+
+**Pendiente anotado para otras tareas:**
+
+- **5.4:** invocar `make release-gate` en el paso que construya la imagen de entrega, y excluir `tools/` del empaquetado.
+- **5.5:** la importación masiva debe agrupar el exceso de plan en **un solo asiento** con el recuento, no uno por fila —bajo el candado global de ADR-010—; y `first_crossing` se deduce con un exceso de exactamente uno en `afterCommit`, así que **no es fiable en altas masivas ni concurrentes**. Además, extender `PlanLimitsDoNotBlockTest` al emparejamiento por código cuando exista `/kiosk/pair/confirm` (5.6).
+- **5.9:** el asiento `license.activated` lleva `customer_name`; si el paquete de diagnóstico incluye asientos de `audit_log`, debe **redactar** ese campo en la familia `license_lifecycle` o excluirla (ADR-020).
+- **Deuda anotada, fuera de alcance (M10):** cuarta implementación de base64url en el árbol (`Ed25519LicenseVerifier::decode()`, el emisor, `QrSigningKey`, `CredentialSecret`). Candidata a `Shared\Domain\ValueObject\Base64Url`; **no se unifica ahora** porque toca material criptográfico de tres tareas distintas y el riesgo supera al beneficio dentro de esta.
+
+## Sesión «tarea 5.2: perfiles de cumplimiento y umbrales legales parametrizados» (31-08-2026), en `feat/fase-5-productizacion`
+
+**Tarea 5.2 implementada y verificada, sin commitear** (lo commitea el usuario tras la revisión). Cubre `RF-PD-07` y toca `RN-10`, `RN-11`, `RN-12` y `RL-02`.
+
+**Criterio de aceptación demostrado sobre la BD de desarrollo:** con `min_rest_hours = 12`, `attendance:detect-incidents` da `open_shift_expired: 1`; tras `UPDATE compliance_profiles SET min_rest_hours = 20`, la misma orden sobre las mismas 983 jornadas da `insufficient_rest: 786` + `open_shift_expired: 1`. **Ni una línea de código tocada.**
+
+**Lo que ya estaba hecho y no había que rehacer** (verificado antes de escribir nada):
+- `compliance_profiles` **ya tenía los once campos** del doc 01 §5 desde la 1.3, y la semilla `ES-hosteleria` ya traía `max_weekly_hours = 40`, `week_starts_on = 1` y `holiday_calendar = []` — exactamente los valores de la decisión del usuario. **No hacía falta migración de ampliación.**
+- RN-10/11/12 **ya recibían su umbral por el puerto** desde la 2.6 (`AnomalyDetectionPolicy`); no quedaba ninguna constante que extraer en `Attendance/Domain`.
+- La retención **ya salía de `compliance_profiles.retention_years`** desde la 2.10 (`ConfiguredRetentionPolicyProvider`). `compliance:apply-retention --dry-run` antes y después es **literalmente idéntico** (corte 2022-08-31, 4 años, perfil del centro 1, 0 filas en los cinco almacenes).
+
+**Construido.** `Product/Domain/ValueObject/{ComplianceProfileField,ComplianceProfileFieldType,ComplianceProfileSnapshot,ComplianceProfileSource}`; `Product/Domain/Exception/InvalidComplianceProfileValue`; evento `Product/Domain/Event/ComplianceThresholdChanged` y listener `Compliance/Infrastructure/Listener/RecordComplianceProfileChange` (acción `calculation_setting.changed`, `subject_type = compliance_profile` **con `subject_id`**); `Product/Application/{Port/{ComplianceProfileRepository,ComplianceProfileMetrics},Command/UpdateComplianceProfileCommand,UseCase/{GetComplianceProfileHandler,UpdateComplianceProfileHandler}}`; `Product/Infrastructure/{Persistence/DatabaseComplianceProfileRepository,Metrics/RedisComplianceProfileMetrics}`; HTTP completo en `Product/Http/` (controlador, `UpdateComplianceProfileRequest` con reglas **derivadas del catálogo de campos**, resource, policy solo `admin`, telemetría); rutas `GET|PATCH /api/v1/compliance-profile` con `ability:settings:*` + `throttle:management`; i18n `lang/{es,en}/compliance-profile.php`; pantalla `frontend-admin/src/features/settings/ComplianceProfileView.vue` con su cliente tipado, su ruta (`SETTINGS_MANAGE`), su entrada de navegación y 9 pruebas de componente.
+
+**Decisiones que conviene conocer:**
+1. **Recurso propio y singular, `GET|PATCH /api/v1/compliance-profile`**, no una clave más de `PATCH /settings`. Un umbral legal lo fija la jurisdicción y uno operativo lo fija el hotel: en un mapa clave-valor serían indistinguibles «he bajado el anti-rebote» y «he bajado los años de conservación», y el asiento perdería el matiz. Singular como `/site` (ADR-040). Comparte `settings:*` porque el §7.3 no declara ámbito propio y ningún rol lo usaría por separado.
+2. **Sin retroactividad** (decisión del usuario): el valor nuevo rige desde el cambio, la revisión diaria lo aplica en su siguiente pasada sobre su ventana de 7 días, no se recalcula el histórico y no se cierra ni se reabre ninguna incidencia. Va escrita en doc 01 §4, en `docs/cliente/configuracion.md` §2.4 y **dentro del propio asiento** (`applies_from: change_forward_only`). **No se ha escrito ADR:** es la decisión por defecto que ya exige la skill y la ventana de la 2.6 ya la sostiene. Elevarla a ADR es decisión del usuario.
+3. **Migración nueva, la única del árbol:** `2026_09_06_100000_bound_compliance_profile_thresholds`. **Paso expand puro** (dos `CHECK` con `NOT VALID` y su `VALIDATE`). No amplía columnas —no faltaba ninguna— sino que pone **topes superiores** y la coherencia `max_weekly_hours >= max_daily_hours`. Existe porque esta tarea abre por primera vez un camino de escritura **humano** a estos umbrales, y el error peligroso es el silencioso: `max_daily_hours = 90` no rompe nada y apaga RN-11 hasta que alguien compara una nómina con el convenio. `down()` probado en la BD de desarrollo y con prueba de integración propia.
+4. **Dos booleanos en el asiento**, no el `affects_worked_hours` de la 5.1: ningún campo del perfil mueve los **minutos** —las reglas de cumplimiento clasifican, no corrigen (doc 01 §4, regla dura 19)—, así que se separan `affects_incident_detection` y `affects_retention`, que son las dos preguntas que trae quien lee el trail.
+5. **Campos no editables:** `jurisdiction` (ninguna regla la lee: un campo cuyo cambio no tiene efecto es peor que no ofrecerlo), `is_default` (apagarlo dejaría la instalación sin umbrales resolubles) e `id`. Enviarlos es `422`, no se ignoran en silencio.
+6. **`name` sí es editable:** un cliente que ajusta los umbrales a su convenio provincial necesita que el perfil se llame como ese convenio, porque es lo que sale en el informe de retención y en el diagnóstico.
+7. `maximumWeeklyMinutes`, `weekStartsOn` y `holidayCalendar` **amplían `CompliancePolicy`** aunque no los lea ninguna regla (los estrena la 3.4). Se declara en el docblock, en el contrato y **en la propia pantalla**, para no prometer un efecto que hoy no existe.
+8. **Un `PATCH` que no cambia nada no escribe fila ni asiento**, y el panel manda solo los campos modificados. Las dos mitades se refuerzan: sin ellas, abrir la pantalla y pulsar «guardar» llenaría el trail de asientos que solo dicen «alguien miró el perfil».
+
+**Enmiendas documentales:** doc 01 §4 (RN-10/11/12 enunciados en términos de parámetro, conservando las notas de RN-10 y de RN-12; nota nueva sobre la no retroactividad), doc 01 Anexo B (dos rutas nuevas y fila en la tabla de notas de contrato), doc 02 §7.3 (precisión 4) y §8.2 (`compliance_profile_changes_total{effect}`), doc 02 Anexo B y `.env.example` (`COMPLIANCE_PROFILE` **no se lee en ejecución**: es el nombre con el que el instalador de la 5.4 marcará el perfil por defecto; manda la fila, decisión de la 5.1).
+
+**Documentación de cliente:** `docs/cliente/configuracion.md` §2.4 nueva y completa (los ocho campos con su origen normativo, la no retroactividad y sus tres consecuencias, el peligro de `retention_years`, y `curl` de lectura y de escritura) más dos «qué hacer si…» («cambio un umbral legal y la bandeja no cambia», «he bajado los años de conservación por error»). `docs/cliente/obligaciones-legales.md` §7 nueva: **ajustar el perfil al convenio aplicable es responsabilidad del cliente** (RL-16, RL-21), con la tabla de qué hace el sistema y qué tiene que hacer el hotel, y lo que el fabricante explícitamente no puede hacer.
+
+
+**Verificado (todo con instrumento, no supuesto):** `make quality` en verde (Pint **1157 ficheros PASS**, PHPStan 9 **0 errores**, Deptrac **0 violaciones / 7148 permitidas / 0 sin cubrir**, api-lint 0, sh-lint 0; Rector informativo) · `make test-unit` **1107 pruebas en 3,69 s** · `php artisan test --group=RF-PD-07` **143** · `make test` **2520 / 11862** (375 s) · `qa:traceability --check` sin huecos y matriz regenerada · `docs:consistency` sin divergencias · `type-check` verde en las **tres** SPA con `schema.d.ts` regenerado (cambio **solo aditivo**, 222 líneas) · `frontend-admin`: **271 unitarias**, `lint` y `prettier` limpios · migración aplicada, revertida y reaplicada con el rol `fichaje_migrator` y con prueba de integración propia · `compliance:apply-retention --dry-run` **idéntico** antes y después · `make mutate` global **MSI 82,76 %** (276 sin probar, 1324 probados; umbral 80). Sobre el dominio nuevo, medido aparte: `ComplianceProfileField` **100 %** y `ComplianceProfileSnapshot` + `CompliancePolicy` **97,75 %** — los dos mutantes que sobreviven ahí son equivalentes (un `positive()` que la invariante semanal/diaria ya cubre y un `array_values()` que `sort()` reindexa igual).
+
+**Estado de la BD de desarrollo:** recreada y sembrada al terminar (`make migrate-fresh` + `make seed`): perfil `ES-hosteleria` con sus valores de serie, 14 729 jornadas, 0 incidencias.
+
+**Defecto propio encontrado y corregido durante la verificación:** `ComplianceProfileField::maximum()` devolvía 24 para `week_starts_on`, así que un `8` pasaba la validación y moría en el `CHECK` del esquema — un error del cliente presentado como `500`. Ahora devuelve 7 y hay prueba (feature y unitaria).
+
+**Trampa que conviene recordar:** `ContractInstallationSettingsScopeMigrationTest` hacía `migrate:rollback --step=1` y la migración nueva lo desplazó. Ahora cuenta los pasos hasta la migración concreta (`migrationTestStepsBackTo`), así que la siguiente tarea que traiga una migración no lo rompe.
+
+**Pendiente / diferido:**
+- **El panel no ofrece «volver a revisar los últimos N días»** después de cambiar un umbral. Es coherente con la no retroactividad, pero hoy la guía manda ejecutar `attendance:detect-incidents` a mano por consola. Candidato para la 5.5 o la 3.5.
+- **`jurisdiction` no la lee ninguna regla** y por eso es de solo lectura. Cuando exista un segundo perfil de país habrá que decidir si se vuelve editable o si la fija el instalador (5.4).
+- **Editar la fila con `psql` no deja asiento**, por diseño: solo audita el camino de la API. Está dicho en la guía de cliente; si algún día importa, sería un *trigger*, no código de aplicación.
+- **Un cliente con dos convenios** exigiría más de un centro, que ADR-040 cierra. El esquema y el adaptador ya resuelven por centro y hay prueba; la decisión es del ADR, no del código.
+- **`make e2e` no se ha ejecutado.** La sesión de las pruebas E2E del panel no lleva `settings:*`, así que la pantalla nueva no aparece en su navegación y ninguna de las 10 pruebas la toca. Un E2E propio del perfil encaja mejor con la 5.5.
+
+### Correcciones de la revisión de `revisor-codigo` (31-08-2026, sin commitear)
+
+**IMPORTANTE 1 — el asiento de auditoría afirmaba algo falso.** `break_required_after_hours` gobierna RN-12, y RN-12 se evalúa pero **no abre incidencias** (suspensión de la 2.6). Aun así el asiento escribía `affects_incident_detection: true`, la métrica contaba `effect=incident_detection` y el panel prometía «se marcarán jornadas distintas». Las tres eran mentira, y la primera dentro de un registro con valor legal.
+
+**Cómo se resolvió sin romper capas.** La lista de suspensión era una constante **privada** de `DetectAttendanceAnomalies`, y `Product` no puede importar `Attendance` (doc 02 §1.6). Se invirtió: el hecho sube a `Shared/Domain/ValueObject/ComplianceRuleSuspension` (con el enum `ComplianceRule`, que nombra RN-10/RN-11/RN-12), que es la única capa que los dos alcanzan —Deptrac ya concedía `AttendanceDomain → SharedDomain` y `ProductDomain → SharedDomain`—. `AnomalyType::complianceRule()` y `ComplianceProfileField::complianceRule()` son los dos puentes; el caso de uso filtra por `AnomalyType::openingIsSuspended()` y el perfil deriva `affectsIncidentDetection()`. **La 3.5 sigue reactivando la regla vaciando una sola lista**, y ahora el asiento, la métrica y la pantalla se enteran solos: hay una prueba que lo ata comparando las dos fuentes.
+
+**Desviación consciente sobre la letra del hallazgo.** Se pidió meter `BreakRequiredAfterHours` en `hasNoConsumerYet()`. No se hizo: ese método significa «no lo lee **ninguna** regla» —jornada semanal, inicio de semana y festivos— y RN-12 sí se evalúa y tiene sus pruebas en 5:59/6:00/6:01. Colapsarlos mentiría en la otra dirección. En su lugar hay `governsSuspendedRule()`, que es lo que distingue «no mueve alertas porque no gobierna nada» de «gobierna RN-12 y RN-12 está suspendida», y el asiento lleva **las dos cosas**: `affects_incident_detection: false` (la verdad de hoy) y `detection_suspended: true` (lo que explica ese `false` a quien lo lea dentro de dos años). El panel tiene un aviso propio junto al campo en vez del genérico.
+
+**IMPORTANTE 2 — un festivo mal escrito apagaba dos reglas legales.** Reproducido: `holiday_calendar = '["navidad"]'` pasaba el filtro del adaptador y hacía estallar el objeto de valor **dentro de `DetectAttendanceAnomalies::handle()`**, que resuelve la política una vez, antes del bucle y sin `try`. La pasada nocturna moría entera —ni RN-10 ni RN-11 en toda la instalación— y `apply-retention` caía por lo mismo. Ahora la lectura descarta lo que no tiene forma de fecha, deja `warning` `product.compliance_profile_calendar_discarded` con `profile_id` y **cuántas** entradas se cayeron (ni fechas ni nombres: ese log sale en el paquete de diagnóstico), y hay prueba de integración que ejecuta **la pasada completa** con el calendario roto y exige que las incidencias RN-10/RN-11 se abran igual.
+
+**IMPORTANTE 3 — concurrencia probada, y da señal.** `ComplianceProfileConcurrencyTest` con `ParallelRequests` + `CommittedDatabase`. **Medido retirando el candado**: la primera falla con «se esperaba 8 y hay 9» —el último escritor devuelve la jornada diaria al valor que leyó, borrando el cambio de otro— y la segunda con «cinco asientos en vez de seis». El riesgo era mayor que en `/settings` porque aquí se escribe la **fila entera**.
+
+**IMPORTANTE 4 — cuatro copias del parseo, una sola ahora.** `Shared/Domain/ValueObject/HolidayCalendar` sustituye a los dos `decodeCalendar()` y a los dos `isRealDate()`. Política elegida y escrita: **al leer se normaliza sin lanzar nunca** (descarta y deduplica, y dice qué descartó) y **al escribir se rechaza con 422** (fecha imposible o repetida). Es la que pidió la revisión y es coherente con «lectura tolerante» de la 5.1.
+
+**Menores.** **5**: `actorUserId` era campo muerto; en vez de borrarlo se hizo real con la migración expand `2026_09_07_100000_track_compliance_profile_updates` (`updated_at` + `updated_by_user_id`, **nullable y sin valor por defecto**: `NULL` significa «tal como se instaló», y rellenarlas diría que alguien revisó el convenio el día de la actualización). `updated_at` se expone en el contrato y en la pantalla; el «quién» se queda en `audit_log`. · **6**: `observe()` sale de la transacción —un contador incrementado dentro de una transacción que se revierte no se deshace— y el docblock ya coincide con el código. · **7**: `409` retirado del `PATCH`. · **8**: `min`/`max` copiados fuera de la plantilla. · **9**: el campo numérico vacío o con decimal se **marca con error visible** y bloquea el guardado en vez de descartarse en silencio (los dos casos que un `<input type="number">` deja llegar de verdad; con letras el navegador ni las acepta). · **10**: `detectionWarning` (es/en) dice ya que la revisión mira los últimos 7 días y que endurecer un umbral puede abrir incidencias de jornadas pasadas dentro de esa ventana. · **11**: renombrar a un nombre existente es `422` traducido, comprobado **bajo el candado** para que no haya ventana entre comprobar y escribir.
+
+**Defecto propio que encontró la verificación por grupos.** `ComplianceProfileConcurrencyTest` usa `CommittedDatabase`, y `compliance_profiles` está en su lista de catálogos de producto: sobrevive al vaciado. Al mutar esa fila y no restaurarla, dejaba un perfil de 11 h/8 h para todo lo que viniera después **en otros ficheros**. Corregido con un `afterEach` que devuelve la fila a los valores de la migración. Es exactamente el fallo contra el que advierte el docblock de `CommittedDatabase`.
+
+**Cambio de comportamiento que conviene conocer:** `CompliancePolicy` ya **no lanza** ante un festivo mal formado —descarta—, y su prueba unitaria lo dice ahora al revés que antes, con el porqué escrito. La comprobación estricta no desapareció: vive en el camino de escritura.
+
+**Ficheros nuevos de esta revisión:** `Shared/Domain/ValueObject/{HolidayCalendar,ComplianceRule,ComplianceRuleSuspension}`, migración `2026_09_07_100000_track_compliance_profile_updates`, `tests/Unit/Shared/Domain/HolidayCalendarTest`, `tests/Feature/Product/ComplianceProfileConcurrencyTest`, `tests/Integration/Product/{CorruptHolidayCalendarDoesNotBlockDetectionTest,TrackComplianceProfileUpdatesMigrationTest}`.
+
+**Verificación tras las correcciones:** `make quality` en verde (Pint **1165 ficheros PASS**, PHPStan 9 **0 errores**, Deptrac **0 violaciones / 0 sin cubrir**, api-lint 0, sh-lint 0) · `make test-unit` **1136 en 3,67 s** · `--group=RF-PD-07` **190** · `make test` **2568 / 11997** (403 s) · `qa:traceability --check` sin huecos y matriz regenerada · `docs:consistency` sin divergencias · `type-check` verde en las tres SPA · panel **277 unitarias**, `lint` y `prettier` limpios · las dos migraciones aplicadas, revertidas y reaplicadas con `fichaje_migrator`, cada una con su prueba · `compliance:apply-retention --dry-run` **idéntico** al de antes de la tarea · criterio de aceptación revalidado sobre el árbol final (0 → 786 `insufficient_rest`, y **sin** `missing_break`: la suspensión sigue en pie tras moverla a `Shared`). · `make mutate` global **MSI 83,08 %** (273 sin probar, 1339 probados; umbral 80, sube desde el 82,76 % previo a la revisión); sobre los tres ficheros de dominio nuevos o reescritos —`HolidayCalendar`, `ComplianceProfileSnapshot` y `ComplianceProfileField`— medido aparte: **100 % (94/94)**. Sobrevive un mutante en `CompliancePolicy` (`RemoveMethodCall` sobre el `positive()` de la jornada semanal) que es **equivalente**: la invariante «semanal ≥ diaria» ya lo cubre y ninguna prueba puede distinguirlo sin afirmar el texto del mensaje. Los otros 12 supervivientes de código nuevo están todos en `InvalidComplianceProfileValue`, sobre los **arrays de parámetros de los mensajes traducidos** — la misma familia que el proyecto ya acepta en `InvalidSettingValue` (18) y por el mismo motivo: matarlos exigiría afirmar la prosa literal de cada mensaje.
+
+## Sesión «tarea 5.1: módulo `Product`, configuración y auditoría» (31-08-2026), en `feat/fase-5-productizacion`
+
+**Tarea 5.1 implementada y verificada, sin commitear** (lo commitea el usuario tras la revisión). Cubre `RF-PD-01` y deja enlazado `BrandingProvider` para la 5.8.
+
+**Decisión ejecutada:** el ámbito `site` de `installation_settings` **se ha retirado** con la migración de contracción `2026_09_05_100000_contract_installation_settings_scope` (quita `scope`, `scope_id`, el `CHECK`, la FK a `sites` y los dos índices parciales; deja `one_setting_per_key`). `down()` reconstruye el esquema de la 1.3 y **está probado**. La cascada queda `fila de instalación → valor por defecto del catálogo en código`; la variable de entorno es solo el valor de arranque del instalador.
+
+**Construido.** `Product/Infrastructure/Persistence/{InstallationSetting,EloquentSettingsRepository}`; `Product/Infrastructure/Adapter/{CachedSettingsRepository,DbBrandingProvider,LaravelProductEventPublisher}` y reescritura de `DbOperationalSettingsProvider` sobre `ResolvedSettings` (ya **no** lanza si falta una fila: sin filas rige el valor de serie); `Product/Application/{Command/UpdateSettingsCommand,Port/ProductEventPublisher,UseCase/{GetSettingsHandler,UpdateSettingsHandler}}`; evento `Product/Domain/Event/InstallationSettingChanged` y listener `Compliance/Infrastructure/Listener/RecordInstallationSettingChange` (acción `calculation_setting.changed`, ya existente); HTTP completo en `Product/Http/` (controlador, `UpdateSettingsRequest` con reglas **derivadas del catálogo**, `SettingResource`/`SettingCollectionResource`, `SettingsPolicy` solo `admin`, `SettingsTelemetry`); rutas `GET|PATCH /api/v1/settings` con `ability:settings:*` + `throttle:management`; i18n `lang/{es,en}/settings.php`.
+
+**Decisiones que conviene conocer:**
+1. **Caché** en Redis del mapa de filas guardadas (no del objeto resuelto: un VO serializado sobrevive al despliegue que cambia su clase, y eso rompería el camino de fichaje en casa del cliente). Clave versionada `kronoqr:product:installation_settings:v1`, TTL de seguridad 300 s, invalidación **dos veces**: al escribir y en `afterCommit`.
+2. **Un asiento por clave cambiada**, no uno por petición: un `affects_worked_hours` único para un conjunto mixto perdería el matiz para el que existe. Un `PATCH` idempotente no escribe fila ni asiento.
+3. `MigrationSafetyTest` gana una segunda lista con trinquete propio, `declaredContractions()`: `DROP COLUMN` solo es legítimo en la fase *contract* y el detector no lo puede deducir del código. Entrar en la lista exige que la versión anterior ya no use la columna, plan de despliegue en el docblock y `down()` probado.
+4. `SettingsPolicy` deja fuera a `rrhh` y al `auditor`. El auditor obtiene lo que necesita —qué umbral regía y quién lo cambió— de `audit_log` con `audit:read`.
+
+**Enmiendas documentales hechas** (nota «Enmienda 31-08-2026 (tarea 5.1)», sin reescribir la historia): ADR-040 «Decisión» 1 y 6; ADR-017 «Decisión» 1 y «Verificación»; doc 01 §5 (fila `installation_settings` sin `scope`, y **las funcionalidades activas son de la licencia, no de esta tabla**); doc 02 §4 (filas ADR-017 y ADR-040) y Anexo B (`BRANDING_ACCENT_COLOR` añadido); docblocks de la migración 1.3, del puerto `OperationalSettingsProvider` y de `CommittedDatabase`.
+
+**Documentación de cliente nueva:** `docs/cliente/configuracion.md` (los tres sitios donde vive la configuración, las nueve claves con su valor de serie y su consecuencia, cómo se cambia, y «qué hacer si…» para cada fallo previsible). Enlazada desde `operacion.md`.
+
+**Verificado:** `make quality` en verde (Pint, PHPStan 9 **0 errores**, Deptrac **0 violaciones / 6937 permitidas**, api-lint 0, sh-lint 0; Rector informativo 180 ficheros, preexistente). `make test` **2370 / 11446** (394 s). `make test-unit` 1030 en 3,42 s. `--group=RF-PD-01` 103 pruebas. `qa:traceability --check` sin huecos, matriz regenerada. `docs:consistency` sin divergencias. `type-check` en verde en las tres SPA con `schema.d.ts` regenerado (cambio **solo aditivo**). Migración aplicada, revertida y reaplicada sobre la BD de desarrollo; `migrate:fresh --seed` deja la instalación arrancando con las cuatro filas `ATTENDANCE_*` y el resto en `product_default`; `compliance:verify-audit-chain` en verde tras cuatro `PATCH` (4 asientos, el idempotente no escribió).
+
+### Correcciones de la revisión de `revisor-codigo` (31-08-2026, sin commitear)
+
+**Bloqueante — una fila corrupta podía impedir fichar.** La lectura de configuración pasa a ser **tolerante** y la escritura sigue siendo **estricta**. `ResolvedSettings::resolve()` ya no lanza: un valor guardado que su clave no admite se descarta, rige el valor de serie del catálogo y la clave queda anotada en `ResolvedSettings::$invalidKeys` (VO nuevo `InvalidSetting`, con clave de traducción, motivo técnico y `affectsWorkedHours`); la incoherencia de idiomas se resuelve aplicando el **primer idioma disponible**. `with()` / `UpdateSettingsHandler` siguen lanzando. El descarte no es silencioso: viaja en `meta.invalid_keys` de `GET /settings` y deja un `warning` `product.settings_anomaly` agrupado por ventana (puerto `SettingsAnomalyReporter`). `GetSettingsHandler` es ahora el **único punto de resolución** y lo usan también los dos adaptadores.
+
+**Importante — carrera entre dos `PATCH`.** `UpdateSettingsHandler` lee dentro de la transacción, tras `pg_advisory_xact_lock(5010001)`, y por `storedValuesForWrite()` (método nuevo del puerto, sin caché). Medido: sin candado, seis escritores concurrentes dejan **cinco** asientos en vez de seis.
+
+**Importante — `source` mentía en cuatro claves.** La migración de contracción retira la siembra de la 1.3 **que nadie ha tocado** (`updated_by_user_id IS NULL` y valor idéntico al de serie); `down()` la repone, porque el adaptador anterior exige que exista. Una instalación limpia tiene la tabla vacía y las nueve claves en `product_default`.
+
+**Importante — mensajes de dominio en castellano dentro de `Domain/`.** Las excepciones llevan mensaje técnico en inglés más `translationKey` + `parameters`; el borde resuelve con `ProblemDetails::translated()` en el idioma negociado. Claves nuevas en `lang/{es,en}/settings.php` → `errors.*`.
+
+**Importante — documentación que prometía lo que llega en 5.8/5.9.** `docs/cliente/configuracion.md`, el catálogo `SettingKey` y el contrato dicen ahora que las claves `BRANDING_*` y `LOCALE_*` **se guardan y se auditan y todavía no se pintan**, y que el aviso de `doctor` llega después. `.env.example` queda con **un solo bloque** de marca, el que el código lee hoy (`BRANDING_NAME`, `BRANDING_LOGO_PATH`, `BRANDING_ACCENT_COLOR`); se retiró el bloque duplicado y muerto de `BRANDING_APP_NAME`. Sin renombrar nada.
+
+**Menores.** `scoped()` en lugar de `singleton()` para los cuatro servicios que memoizan por petición · prueba de contrato que ata `SettingKey::cases()` con el `enum` del esquema y con `propertyNames` · `Request` sin uso fuera de `SettingsController::show()` · «exactamente» suavizado en el `down()` (las columnas vuelven al final de la tabla) · contador `installation_setting_changes_total{affects_worked_hours}` (puerto `SettingsMetrics` + `RedisSettingsMetrics`), añadido al catálogo del doc 02 §8.2 · la etiqueta `RF-PD-08` retirada de la prueba del puerto de marca (ese requisito lo cumple la 5.8).
+
+**Configuración nueva:** `PRODUCT_SETTINGS_ANOMALY_WINDOW_SECONDS=300` (`config/product.php`) — cada cuánto se repite el aviso de configuración inaplicable. Se lee en cada fichaje: sin agrupar serían 50 avisos/s.
+
+**Verificación tras las correcciones:** `make quality` en verde (PHPStan 9 **0 errores**, Deptrac **0 / 6981**, api-lint 0, sh-lint 0) · `make test-unit` **1036 en 3,84 s** · `--group=RF-PD-01` **124** · `make test` **2391 / 11563** (402 s) · `qa:traceability --check` sin huecos · `docs:consistency` sin divergencias · `type-check` verde en las tres SPA con `schema.d.ts` regenerado (aditivo) · `migrate:fresh --seed` deja la tabla **vacía** y las nueve claves en `product_default` · `compliance:verify-audit-chain` íntegra tras cuatro `PATCH` · `migrate:rollback` repone la siembra y `migrate` la vuelve a retirar.
+
+**Pendiente / diferido:**
+- **5.8:** migrar `BrowsershotCardRenderer` y `CsvLegalExportWriter` de `config('branding.*')` al puerto `BrandingProvider` (hoy siguen leyendo el `.env`), decidir el renombrado `BRANDING_NAME` → `BRANDING_APP_NAME`, y llevar `APP_SUPPORTED_LOCALES` a `LOCALE_AVAILABLE`. Hasta entonces, la marca y los idiomas **se guardan y se auditan pero no se aplican**, y así lo dicen el contrato, el catálogo, `.env.example` y la guía de cliente.
+- **5.9 (`doctor`):** enseñar `meta.invalid_keys`, avisar si `.env` y base de datos difieren, y comprobar que `BRANDING_LOGO_PATH` existe. Los tres son promesas retiradas de la documentación hasta que existan.
+- **No hay pantalla de configuración en el panel**: la tarea 5.1 es solo backend y contrato. La UI llega con 5.8 (marca) y 5.5 (asistente).
+- Una fila editada con `psql` tarda hasta el TTL de la caché (300 s) en verse. Es el comportamiento documentado; la invalidación explícita solo cubre lo que pasa por la API.
+
+## Sesión «arranque de la Fase 5» (31-08-2026), en `feat/fase-5-productizacion`
+
+**PR #35 fusionada en `main` (`2918b4a`). Fase 5 iniciada** con el prompt del doc 03 §6.5 y el plan `plan implementacion/05-fase-5-productizacion.md`. **Método (decisión del usuario):** una rama para toda la fase, un commit por tarea con CI en cada push, PR al cierre (como la #34).
+
+**Decisiones del usuario para la 5.1 (31-08-2026):**
+1. **Precedencia entorno ↔ `installation_settings` (punto no cubierto n.º 1):** manda la base de datos. La variable de entorno (`BRANDING_*`, `COMPLIANCE_PROFILE`) es solo el valor de arranque con el que el instalador (5.4) siembra la primera fila; un `PATCH /settings` siempre surte efecto y queda auditado. `doctor` (5.9) avisa si entorno y base de datos difieren. Aplica también a la 5.8.
+2. **Ámbito `site` de `installation_settings`:** se **retira** con migración de contracción (expand/migrate/contract). La cascada queda `fila installation → valor por defecto del catálogo en código`. **Obliga a enmendar ADR-040** (§ «Decisión» punto 6 y la lista de tablas donde `site_id` «se conserva»): la enmienda forma parte de la 5.1.
+3. Pendientes de decisión que llegarán tarea a tarea (plan, «Puntos no cubiertos»): 5.2 (valores de serie de `max_weekly_hours`/`week_starts_on`/`holiday_calendar`; retroactividad al cambiar umbral; plazo de purga de `employment_contracts`), 5.3 (avisos de caducidad), 5.4 (códigos de salida; vale de un solo uso 2FA; `backup.sh`/`restore.sh`), 5.6 (formato/caducidad del código), 5.7 (punto de control), 5.9 (`scope` de `support_grants`; formato del paquete), 5.10 (telemetría), portal e incidencias (qué ve cada perfil), 5.8 (`supported_locales` → `installation_settings`).
+
 ## Sesión «arranque local y corrección del informe por periodo» (31-08-2026), en `main`
 
 **Entorno local levantado** con el procedimiento ya documentado (sesión del 27-08): `make up` para backend y servicios; las tres SPA desde el host con `npm run dev` (kiosk 5173, admin 5174, portal 5175), porque los contenedores `node-*` siguen estructuralmente rotos (ADR-036) y se dejan parados. La BD local se había resembrado: el dispositivo `quiosco-pruebas` ya no existe; se emitió llave (`IssueDeviceToken` por tinker) para «Entrada de personal» (id 1) y se pegó en `localStorage['kronoqr.kiosk.device_token']` del navegador del quiosco. Sin llave, el quiosco muestra «Sin conexión» permanente (401 → `reachability=false`, por diseño).

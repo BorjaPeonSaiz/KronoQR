@@ -11,6 +11,7 @@ import AxeBuilder from '@axe-core/playwright'
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { EMPLOYEE_UUID, logIn, stubManagementApi, USER } from './support/admin'
+import { stubOnboardingApi } from './support/setupWizard'
 
 /** Etiquetas WCAG que se comprueban: A y AA hasta la 2.2 (doc 01 §6.5). */
 const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
@@ -128,3 +129,190 @@ test(
     await expectNoBlockingViolations(page)
   },
 )
+
+// --- Asistente de puesta en marcha (RF-PD-03, RQ-04, tarea 5.5) -------------
+//
+// Es la PRIMERA pantalla del producto: cero violaciones criticas o graves en
+// CADA paso, no solo en el asistente en general. Cada prueba aterriza
+// directamente en el paso que comprueba —con el estado de los pasos previos
+// ya resuelto en el doble— para no repetir el recorrido completo ocho veces.
+
+test(
+  'el paso del primer administrador no tiene violaciones',
+  { tag: ['@RQ-04'] },
+  async ({ page }) => {
+    await stubOnboardingApi(page)
+    await page.goto('/setup')
+    await expect(page.getByRole('heading', { name: 'Primer administrador' })).toBeVisible()
+
+    await expectNoBlockingViolations(page)
+  },
+)
+
+test(
+  'el alta del segundo factor del primer administrador tampoco, con el QR',
+  { tag: ['@RQ-04'] },
+  async ({ page }) => {
+    await stubOnboardingApi(page)
+    await page.goto('/setup')
+    await page.getByLabel('Nombre').fill('Dirección del hotel')
+    await page.getByLabel('Correo electrónico').fill('direccion@hotel.example')
+    await page.getByLabel('Contraseña').fill('una-contrasena-larga-y-propia-1!')
+    await page.getByRole('button', { name: 'Crear la cuenta' }).click()
+    await expect(page.getByTestId('two-factor-secret')).toBeVisible()
+
+    await expectNoBlockingViolations(page)
+  },
+)
+
+test('el paso de organizacion no tiene violaciones', { tag: ['@RQ-04'] }, async ({ page }) => {
+  await stubOnboardingApi(page, { administratorAlreadyDone: true })
+  await page.goto('/setup')
+  await expect(page.getByRole('heading', { name: 'Organización' })).toBeVisible()
+
+  await expectNoBlockingViolations(page)
+})
+
+test('el paso del centro de trabajo tampoco', { tag: ['@RQ-04'] }, async ({ page }) => {
+  await stubOnboardingApi(page, {
+    administratorAlreadyDone: true,
+    stepsDone: { organisation: 'completed' },
+  })
+  await page.goto('/setup')
+  await expect(page.getByRole('heading', { name: 'Centro de trabajo' })).toBeVisible()
+
+  await expectNoBlockingViolations(page)
+})
+
+test('el paso de departamentos tampoco', { tag: ['@RQ-04'] }, async ({ page }) => {
+  await stubOnboardingApi(page, {
+    administratorAlreadyDone: true,
+    siteDone: true,
+    stepsDone: { organisation: 'completed' },
+  })
+  await page.goto('/setup')
+  await expect(page.getByRole('heading', { name: 'Departamentos' })).toBeVisible()
+
+  await expectNoBlockingViolations(page)
+})
+
+test(
+  'el paso del perfil de convenio tampoco, con el aviso de RL-21',
+  { tag: ['@RQ-04'] },
+  async ({ page }) => {
+    await stubOnboardingApi(page, {
+      administratorAlreadyDone: true,
+      siteDone: true,
+      stepsDone: { organisation: 'completed', departments: 'skipped' },
+    })
+    await page.goto('/setup')
+    await expect(page.getByRole('heading', { name: 'Perfil de convenio' })).toBeVisible()
+
+    await expectNoBlockingViolations(page)
+  },
+)
+
+test(
+  'el paso de plantilla tampoco, con el informe de importacion',
+  { tag: ['@RQ-04'] },
+  async ({ page }) => {
+    await stubOnboardingApi(page, {
+      administratorAlreadyDone: true,
+      siteDone: true,
+      stepsDone: {
+        organisation: 'completed',
+        departments: 'skipped',
+        compliance_profile: 'completed',
+      },
+    })
+    await page.goto('/setup')
+    await expect(page.getByRole('heading', { name: 'Plantilla' })).toBeVisible()
+    await page.getByTestId('import-file').setInputFiles({
+      name: 'plantilla.csv',
+      mimeType: 'text/csv',
+      buffer: Buffer.from('first_name,last_name\nYoussef,Amrani\n'),
+    })
+    await page.getByTestId('validate').click()
+    await expect(page.getByTestId('import-row-2')).toBeVisible()
+
+    await expectNoBlockingViolations(page)
+  },
+)
+
+test(
+  'el paso de licencia tampoco, con la pantalla de activacion incrustada',
+  { tag: ['@RQ-04'] },
+  async ({ page }) => {
+    await stubOnboardingApi(page, {
+      administratorAlreadyDone: true,
+      siteDone: true,
+      stepsDone: {
+        organisation: 'completed',
+        departments: 'skipped',
+        compliance_profile: 'completed',
+        employees: 'skipped',
+      },
+    })
+    await page.goto('/setup')
+    await expect(page.getByRole('heading', { name: 'Licencia', level: 2 })).toBeVisible()
+
+    await expectNoBlockingViolations(page)
+  },
+)
+
+test('el paso del primer quiosco tampoco', { tag: ['@RQ-04'] }, async ({ page }) => {
+  await stubOnboardingApi(page, {
+    administratorAlreadyDone: true,
+    siteDone: true,
+    stepsDone: {
+      organisation: 'completed',
+      departments: 'skipped',
+      compliance_profile: 'completed',
+      employees: 'skipped',
+      license: 'skipped',
+    },
+  })
+  await page.goto('/setup')
+  await expect(page.getByRole('heading', { name: 'Primer quiosco' })).toBeVisible()
+
+  await expectNoBlockingViolations(page)
+})
+
+test('la revision final tampoco', { tag: ['@RQ-04'] }, async ({ page }) => {
+  await stubOnboardingApi(page, {
+    administratorAlreadyDone: true,
+    siteDone: true,
+    stepsDone: {
+      organisation: 'completed',
+      departments: 'skipped',
+      compliance_profile: 'completed',
+      employees: 'skipped',
+      license: 'skipped',
+      kiosk: 'skipped',
+    },
+  })
+  await page.goto('/setup')
+  await expect(page.getByRole('heading', { name: 'Revisa antes de terminar' })).toBeVisible()
+
+  await expectNoBlockingViolations(page)
+})
+
+test('el resumen final de cierre tampoco', { tag: ['@RQ-04'] }, async ({ page }) => {
+  await stubOnboardingApi(page, {
+    administratorAlreadyDone: true,
+    siteDone: true,
+    stepsDone: {
+      organisation: 'completed',
+      departments: 'skipped',
+      compliance_profile: 'completed',
+      employees: 'skipped',
+      license: 'skipped',
+      kiosk: 'skipped',
+    },
+  })
+  await page.goto('/setup')
+  await page.getByTestId('complete-setup').click()
+  await expect(page.getByRole('heading', { name: 'Puesta en marcha completada' })).toBeVisible()
+
+  await expectNoBlockingViolations(page)
+})

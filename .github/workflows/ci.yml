@@ -13,9 +13,17 @@
 #   ③b Trazabilidad   `qa:traceability --check`. Su comando lo crea la tarea 0.7.
 #                     Su sitio es entre la etapa ③ y la ④; hay un hueco marcado
 #                     al final de la etapa ③.
-#   ④-⑧              Integracion, seguridad, frontend, E2E e instalacion limpia.
-#                     Se ejecutan en pull request y antes de publicar version
-#                     (§10.1), y quedan fuera de la tarea 0.4.
+#   ④, ⑥, ⑦          Integracion, frontend y E2E. Se ejecutan en pull request
+#                     (§10.1) y quedan fuera de la tarea 0.4.
+#   ⑧ Instalacion limpia  SI existe, desde la tarea 5.4: `clean-install`, al
+#                     final de este fichero. Levanta el producto entero en un
+#                     runner virgen con el instalador y comprueba los cuatro
+#                     escenarios de RQ-11. No corre en cada push -cuesta entre 6
+#                     y 18 minutos-: corre en `main`, en cada etiqueta `vX.Y.Z`
+#                     y a mano con «Run workflow».
+#
+# La etapa ⑤ (seguridad) tampoco esta donde el §10.1 la situa: se ejecuta en
+# cada push desde el cierre de la Fase 0, que es mas estricto, no menos.
 #
 # Contract y Feature SI se ejecutan en cada push desde el cierre de la Fase 0,
 # aunque el §10.1 las situe en la ④. Mientras la ④ no existiera, no las ejecutaba
@@ -733,7 +741,7 @@ jobs:
         # salida que en el paso anterior.
         run: |
           set +e
-          make trivy-image TRIVY_FORMAT=json >trivy-image.json
+          make trivy-image TRIVY_IMAGES="kronoqr/postgres:ci kronoqr/app:ci" TRIVY_FORMAT=json >trivy-image.json
           estado=$?
           set -e
           jq -s -r '
@@ -802,3 +810,531 @@ jobs:
       - name: La version etiquetada tiene entrada
         if: startsWith(github.ref, 'refs/tags/v')
         run: make changelog-check VERSION="${GITHUB_REF_NAME#v}"
+
+  #-----------------------------------------------------------------------------
+  # ⑧ Instalacion limpia (doc 02 §10.1, RQ-11 · RF-PD-02)
+  #-----------------------------------------------------------------------------
+  # LO QUE ESTA ETAPA COMPRUEBA, Y POR QUE NO LO PUEDE COMPROBAR NADA MAS.
+  #
+  # El instalador es el unico artefacto del producto que se ejecuta UNA vez, en
+  # una maquina a la que el fabricante no tiene acceso, delante de alguien que no
+  # conoce el sistema. No hay segunda oportunidad ni forma de entrar a
+  # arreglarlo. Una prueba unitaria puede afirmar que el script llama a Docker;
+  # solo una maquina virgen puede afirmar que el sistema queda EN MARCHA.
+  #
+  # Cuatro escenarios, y el orden importa:
+  #
+  #   A  --check-only sobre la maquina virgen: fase 1 en verde, sin escribir.
+  #   B  Fallo seguro: puerto ocupado a proposito -> salida 2 y NADA escrito. Va
+  #      ANTES de instalar, que es cuando de verdad se puede comprobar que no ha
+  #      escrito nada: despues, cualquier resto seria ambiguo.
+  #   C  Instalacion completa siguiendo SOLO la guia -> salida 0, /health y
+  #      /ready respondiendo, las tres SPA servidas y el esquema aplicado sin un
+  #      solo dato de demostracion.
+  #   D  Segunda ejecucion sobre la instalacion buena -> salida 3, y la
+  #      instalacion SIGUE EN PIE despues (idempotencia: re-ejecutar no rompe).
+  #   E  Fallo DENTRO de la fase 4 -> salida 4, vuelta atras COMPLETA (sin
+  #      contenedores, sin volumenes, sin directorios, .env byte a byte igual) y
+  #      reintento posible. Va entre B y C porque deja la maquina limpia.
+  #   F  El camino POR DEFECTO: la observabilidad encendida, levantada de verdad
+  #      sobre la instalacion de C.
+  #
+  # LOS ESCENARIOS A-E INSTALAN CON LA OBSERVABILIDAD APAGADA y el F la
+  # enciende sobre la instalacion ya en pie. Se hace en dos tiempos porque los
+  # cinco servicios del perfil son imagenes publicas de terceros (~690 MiB) sin
+  # una linea de codigo de KronoQR: repetir su descarga en cada instalacion de
+  # la etapa anadiria minutos y el limite de descargas anonimas de Docker Hub a
+  # una puerta que tiene que ser fiable. Encenderlo UNA vez, al final, cubre lo
+  # que de verdad faltaba —que el camino por defecto del cliente arranca— sin
+  # pagarlo tres veces.
+  #
+  # CUANDO SE EJECUTA. El §10.1 la situa «antes de publicar una version», no en
+  # cada push, y cuesta entre 6 y 18 minutos: ponerla en cada push convertiria
+  # una CI de 4 minutos en una que nadie espera, que es como se acaba ignorando
+  # una cadena de calidad entera.
+  #
+  #   · etiqueta `vX.Y.Z`  -> la publicacion de una version no sale sin esto
+  #   · push a `main`      -> lo que se fusiona queda comprobado el mismo dia
+  #   · «Run workflow»     -> a mano, sobre cualquier rama, que es como se pide
+  #                           evidencia mientras se trabaja una rama de fase
+  clean-install:
+    name: "⑧ Instalacion limpia"
+    runs-on: ubuntu-24.04
+    # Generoso a proposito: construye tres imagenes -una de ellas compila las
+    # tres SPA con `npm ci`-, levanta la pila DOS veces (el escenario E la tira
+    # entera) y descarga las cinco imagenes de observabilidad. Estimacion en
+    # frio, sin cache de Actions: 20-30 min. Con cache: 10-15.
+    timeout-minutes: 50
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || startsWith(github.ref, 'refs/tags/v')
+      || github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
+
+      - name: "Puerta de release: la clave publica del fabricante esta puesta"
+        # Solo cuando se publica una version de verdad. Una imagen de ENTREGA
+        # construida sin la clave publica rechaza la licencia recien pagada del
+        # cliente con motivo `no_public_key`, y el sintoma apunta al sitio
+        # equivocado: el hotel llamaria pidiendo otra clave cuando lo que hay
+        # que rehacer es la imagen (tarea 5.3, hallazgo I3).
+        #
+        # NO se ejecuta en `main` ni a mano: ahi estas imagenes son de PRUEBA y
+        # deben poder llevarla vacia, porque la suite genera su propio par en
+        # cada ejecucion y jamas usa uno fijo del repositorio (§7.7, RS-08).
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: make release-gate
+
+      - name: Construir las tres imagenes de entrega
+        run: make build-ci-images IMAGES="postgres app nginx" BUILDX_CACHE=gha
+
+      - name: El borde sirve las tres SPA (comprobacion de 30 s, antes de instalar nada)
+        # ADELANTA EL HALLAZGO, no lo duplica. Los escenarios C y siguientes ya
+        # piden estas rutas, pero tardan entre 20 y 30 minutos en llegar ahi: un
+        # 403 por una directiva `index` que falta -lo que rompio la cuarta
+        # ejecucion de esta etapa- no merece esperar todo el ciclo. Arranca la
+        # imagen sola, sin base de datos y sin aplicacion, y pide las cuatro
+        # rutas que definen si el borde sirve lo que tiene que servir.
+        #
+        # Es la misma orden que se ejecuta en local con `make nginx-smoke`, que
+        # es lo que esta etapa no puede ofrecer: aqui no se puede depurar.
+        run: make nginx-smoke
+
+      - name: Etiquetarlas como las nombra compose.prod.yaml
+        # El instalador fija IMAGE_TAG desde el fichero VERSION, y el fichero de
+        # compose compone <IMAGE_REGISTRY>/<php|nginx|postgres>:<IMAGE_TAG>. Se
+        # reetiquetan aqui, en el runner, para que el escenario C ejercite el
+        # camino REAL del instalador -incluida su rama de "las imagenes ya estan
+        # en el disco, no hay nada que descargar", que es la que usa un cliente
+        # sin salida a internet- sin publicar nada en ningun registro.
+        run: |
+          version="$(cat VERSION)"
+          docker tag kronoqr/app:ci      "kronoqr/php:${version}"
+          docker tag kronoqr/postgres:ci "kronoqr/postgres:${version}"
+          docker tag kronoqr/nginx:ci    "kronoqr/nginx:${version}"
+
+      - name: Armar el paquete de entrega con lo mismo que recibe el cliente
+        # §11.6.1. Se copia a un directorio aparte y se instala DESDE AHI: si el
+        # instalador dependiera de algo que solo existe en el repositorio, aqui
+        # se veria. `tools/` NO entra: es del fabricante y firma licencias
+        # (§7.7, RS-08).
+        run: |
+          set -euo pipefail
+          mkdir -p paquete/certs paquete/docs
+          cp infra/compose.prod.yaml  paquete/docker-compose.yml
+          cp .env.example             paquete/.env.example
+          cp VERSION                  paquete/VERSION
+          cp infra/scripts/install.sh paquete/install.sh
+          cp infra/scripts/backup.sh infra/scripts/restore.sh infra/scripts/restore-drill.sh paquete/
+          cp -r infra/scripts/lib     paquete/lib
+          cp -r infra/observability   paquete/observability
+          # LA DOCUMENTACION MANTIENE EL LAYOUT DEL REPOSITORIO —docs/cliente/ y
+          # docs/runbooks/— y no se aplana. Las cuatro guias enlazan a los
+          # runbooks con rutas `../runbooks/...`, y aplanarlas obligaria a
+          # reescribir enlaces al empaquetar: un paso que nadie prueba y que se
+          # rompe en cuanto alguien anade un enlace. Con el mismo layout, los
+          # ficheros viajan tal cual y el paso siguiente lo comprueba.
+          cp -r docs/cliente          paquete/docs/cliente
+          cp -r docs/runbooks         paquete/docs/runbooks
+          chmod +x paquete/install.sh paquete/backup.sh paquete/restore.sh paquete/restore-drill.sh
+          # El emisor de licencias es del FABRICANTE: firma claves con la clave
+          # privada del par y no tiene nada que hacer en el servidor de un hotel
+          # (§7.7, RS-08).
+          test ! -e paquete/tools
+          ls -la paquete
+
+      - name: Ningun enlace de la documentacion entregada apunta fuera del paquete
+        # El cliente no tiene el repositorio: un enlace relativo a algo que no
+        # viaja en el paquete es un 404 en el peor momento, que es cuando
+        # alguien sigue la guia con una incidencia delante.
+        run: bash infra/scripts/check-package-links.sh paquete
+
+
+      - name: Rellenar lo marcado [CLIENTE], como haria el IT del hotel
+        # Un certificado de verdad en el directorio de certificados: el borde se
+        # niega a arrancar sin el y ese camino tiene que quedar ejercitado.
+        #
+        # Y con VALORES PROPIOS, no los de la plantilla. Desde la revision de la
+        # 5.4, la fase 1 compara `APP_URL` y las tres redes contra `.env.example`
+        # y se niega a instalar si siguen con el ejemplo: con
+        # `APP_URL=https://localhost` el sistema arranca, todo pasa —la
+        # verificacion sondea 127.0.0.1— y ningun quiosco puede llegar a el.
+        # Si la etapa se rellenara con la plantilla, probaria justo el camino
+        # que el producto rechaza.
+        run: |
+          set -euo pipefail
+          echo "127.0.0.1 kronoqr.ci.local" | sudo tee -a /etc/hosts >/dev/null
+          cd paquete
+          openssl req -x509 -nodes -newkey rsa:2048 -days 2 \
+            -subj "/C=ES/O=KronoQR CI/CN=kronoqr.ci.local" \
+            -addext "subjectAltName=DNS:kronoqr.ci.local,DNS:localhost,IP:127.0.0.1" \
+            -keyout certs/tls.key -out certs/tls.crt 2>/dev/null
+          # Y con el propietario que exige el producto, que es el camino que
+          # DOCUMENTA la guia (instalacion.md §1.2). El borde HTTP corre sin
+          # privilegios como uid 101 y no puede abrir un fichero de root:
+          # `openssl` escribe las claves 0600, asi que sin esto nginx entra en
+          # bucle de reinicio con «cannot load certificate key ... Permission
+          # denied». Fue el fallo del escenario C en la segunda ejecucion de
+          # esta etapa.
+          #
+          # El instalador NO lo corrige solo, a proposito: TLS_CERT_DIR puede
+          # apuntar a un directorio compartido con otro servicio del hotel —el
+          # de Let's Encrypt, por ejemplo— y un `chown` nuestro romperia ese
+          # otro servicio. La fase 1 lo detecta y dice las dos salidas posibles.
+          sudo chown 101:101 certs/tls.key certs/tls.crt
+          sudo chmod 0400 certs/tls.key
+          sudo chmod 0444 certs/tls.crt
+          cp .env.example .env
+          sed -i \
+            -e 's|^APP_ENV=.*|APP_ENV=production|' \
+            -e 's|^APP_URL=.*|APP_URL=https://kronoqr.ci.local|' \
+            -e 's|^IMAGE_REGISTRY=.*|IMAGE_REGISTRY=kronoqr|' \
+            -e 's|^KIOSK_VLAN_CIDR=.*|KIOSK_VLAN_CIDR=10.92.0.0/24|' \
+            -e 's|^METRICS_ALLOW_CIDR=.*|METRICS_ALLOW_CIDR=10.91.0.5/32|' \
+            -e 's|^TLS_ALLOW_SELF_SIGNED=.*|TLS_ALLOW_SELF_SIGNED=false|' \
+            -e 's|^COMPOSE_PROFILES=.*|COMPOSE_PROFILES=|' \
+            .env
+          # El portal, a una red en la que el anfitrion NO esta: es lo que hace
+          # que la comprobacion de RF-ID-08 mas abajo espere un 403 y no un 200.
+          sed -i -e 's|^PORTAL_INTERNAL_CIDR=.*|PORTAL_INTERNAL_CIDR=10.90.0.0/24|' .env
+          # Lo que NO se toca queda como lo entrega el fabricante: APP_DEBUG,
+          # APP_TIMEZONE, IMAGE_TAG y los secretos. Si el instalador no los
+          # resolviera, esta etapa fallaria mas abajo.
+          grep -q '^APP_DEBUG=false$'  .env
+          grep -q '^APP_TIMEZONE=UTC$' .env
+          grep -q '^IMAGE_TAG=$'       .env
+          grep -q '^APP_KEY=$'         .env
+
+
+      - name: El compose es valido tambien con la observabilidad encendida
+        run: |
+          set -euo pipefail
+          cd paquete
+          servicios="$(IMAGE_TAG="$(cat VERSION)" DB_PASSWORD=x DB_MIGRATION_PASSWORD=x \
+            GRAFANA_ADMIN_PASSWORD=x COMPOSE_PROFILES=observability \
+            docker compose -f docker-compose.yml config --services | sort | tr '\n' ' ')"
+          echo "servicios: ${servicios}"
+          test "${servicios}" = "alertmanager app grafana horizon loki nginx node-exporter postgres prometheus redis reverb scheduler "
+
+      - name: "A · --check-only en la maquina virgen: fase 1 verde y nada escrito"
+        run: |
+          set -euo pipefail
+          cd paquete
+          sudo ./install.sh --check-only
+          test -z "$(docker ps -aq --filter label=com.docker.compose.project=kronoqr)"
+          grep -q '^APP_KEY=$' .env
+
+      - name: "B · Fallo seguro: puerto 443 ocupado, salida 2 y maquina intacta"
+        run: |
+          set -euo pipefail
+          cd paquete
+          # Un proceso cualquiera escuchando donde el producto quiere publicar.
+          sudo python3 -m http.server 443 --bind 0.0.0.0 >/dev/null 2>&1 &
+          ocupante=$!
+          for _ in $(seq 1 20); do
+            ss -ltnH 'sport = :443' | grep -q . && break
+            sleep 0.5
+          done
+
+          set +e
+          sudo ./install.sh >salida-b.log 2>&1
+          codigo=$?
+          set -e
+          sudo kill "${ocupante}" || true
+
+          cat salida-b.log
+          test "${codigo}" -eq 2 || { echo "Se esperaba salida 2 y fue ${codigo}"; exit 1; }
+          # El mensaje tiene que decir QUE HACER, no solo que falla (§3.5).
+          grep -q 'Que hacer' salida-b.log
+          grep -q 'sport = :443' salida-b.log
+          # Y NADA escrito: ni contenedores, ni volumenes, ni secretos, ni
+          # directorios de datos.
+          test -z "$(docker ps -aq --filter label=com.docker.compose.project=kronoqr)"
+          test -z "$(docker volume ls -q --filter name=^kronoqr_)"
+          grep -q '^APP_KEY=$'   .env
+          grep -q '^IMAGE_TAG=$' .env
+          test ! -d /var/backups/fichaje
+      - name: "E · Fallo dentro de la fase 4: vuelta atras COMPLETA, salida 4"
+        # LOS DOS BLOQUEANTES DE LA REVISION, EN UN SOLO ESCENARIO.
+        #
+        # (1) Sin `trap ... ERR`, un fallo no capturado despues de empezar a
+        #     escribir mataba el script con su codigo crudo: sin vuelta atras,
+        #     con el .env a medias y con `.env.kronoqr-pre-install` huerfano. El
+        #     reintento salia 3 —«ya hay secretos generados»— sin un solo
+        #     contenedor levantado: un callejon sin salida.
+        # (2) Las acciones de deshacer usaban `rmdir`, y `${BACKUP_PATH}/wal` es
+        #     un bind mount donde PostgreSQL archiva desde el primer segundo:
+        #     `rmdir` fallaba sobre un directorio no vacio y CUALQUIER fallo de
+        #     la fase 4 acababa en 5 («intervencion manual») en vez de 4,
+        #     contradiciendo al propio mensaje del instalador.
+        #
+        # Como se fuerza el fallo sin tocar el instalador: se rompe la migracion
+        # con una credencial de migracion que la base no conoce. El esquema no
+        # se aplica, la fase 4 llama a la vuelta atras, y lo que se exige es que
+        # la maquina quede LIMPIA y el codigo sea 4.
+        run: |
+          set -euo pipefail
+          # `sudo cp -a`: los certificados son del uid 101 y la clave es 0400,
+          # asi que el usuario del runner no puede copiarlos ni conservar su
+          # propietario. Se copia con privilegios y se devuelve el resto del
+          # arbol al runner, dejando `certs/` como estaba: es el estado que la
+          # fase 1 exige y el que este escenario tiene que ejercitar.
+          sudo rm -rf paquete-e && sudo cp -a paquete paquete-e
+          sudo chown -R "$(id -u):$(id -g)" paquete-e
+          sudo chown 101:101 paquete-e/certs/tls.key paquete-e/certs/tls.crt
+          cd paquete-e
+          cp .env.example .env
+          sed -i \
+            -e 's|^APP_ENV=.*|APP_ENV=production|' \
+            -e 's|^APP_URL=.*|APP_URL=https://kronoqr.ci.local|' \
+            -e 's|^IMAGE_REGISTRY=.*|IMAGE_REGISTRY=kronoqr|' \
+            -e 's|^KIOSK_VLAN_CIDR=.*|KIOSK_VLAN_CIDR=10.92.0.0/24|' \
+            -e 's|^PORTAL_INTERNAL_CIDR=.*|PORTAL_INTERNAL_CIDR=10.90.0.0/24|' \
+            -e 's|^METRICS_ALLOW_CIDR=.*|METRICS_ALLOW_CIDR=10.91.0.5/32|' \
+            -e 's|^TLS_ALLOW_SELF_SIGNED=.*|TLS_ALLOW_SELF_SIGNED=false|' \
+            -e 's|^COMPOSE_PROFILES=.*|COMPOSE_PROFILES=|' \
+            -e 's|^BACKUP_PATH=.*|BACKUP_PATH=/var/backups/fichaje-e|' \
+            -e 's|^HTTP_PORT=.*|HTTP_PORT=8081|' \
+            -e 's|^HTTPS_PORT=.*|HTTPS_PORT=8444|' \
+            .env
+          # LA ROTURA: la aplicacion no encuentra la base. postgres y redis
+          # arrancan sanos —la fase 4 los espera y los da por buenos— y el fallo
+          # ocurre en las MIGRACIONES, que es el punto donde ya hay
+          # contenedores, volumenes y directorios creados por esta ejecucion.
+          # Es justo el estado en el que la vuelta atras tiene algo que deshacer.
+          sed -i -e 's@^DB_HOST=.*@DB_HOST=una-base-que-no-existe@' .env
+          cp .env .env.antes
+
+          set +e
+          sudo ./install.sh >salida-e.log 2>&1
+          codigo=$?
+          set -e
+          tail -40 salida-e.log
+
+          test "${codigo}" -eq 4 || { echo "Se esperaba salida 4 (vuelta atras completada) y fue ${codigo}"; exit 1; }
+          grep -q 'Deshaciendo' salida-e.log
+          grep -q 'Vuelta atras completada' salida-e.log
+
+          # Vuelta atras COMPLETA quiere decir esto, no una frase:
+          test -z "$(docker ps -aq --filter label=com.docker.compose.project=kronoqr)"
+          test -z "$(docker volume ls -q --filter name=^kronoqr_)"
+          test ! -d /var/backups/fichaje-e
+          # El .env vuelve a ser BYTE A BYTE el del cliente, y la copia previa
+          # no queda huerfana.
+          sudo cmp .env.antes .env
+          test ! -e .env.kronoqr-pre-install
+
+      - name: "E · Y despues del fallo se puede reintentar sin callejon sin salida"
+        # Es la mitad que faltaba: que la vuelta atras deje el servidor en un
+        # estado desde el que el IT del hotel PUEDE volver a ejecutar. Con el
+        # .env a medias, el reintento salia 3 y no habia forma de avanzar.
+        run: |
+          set -euo pipefail
+          cd paquete-e
+          sed -i -e 's@^DB_HOST=.*@DB_HOST=postgres@' .env
+          set +e
+          sudo ./install.sh --check-only >reintento-e.log 2>&1
+          codigo=$?
+          set -e
+          tail -10 reintento-e.log
+          test "${codigo}" -eq 0 || { echo "El reintento deberia salir 0 y salio ${codigo}"; exit 1; }
+
+
+      - name: "C · Instalacion limpia siguiendo solo la guia"
+        run: |
+          set -euo pipefail
+          cd paquete
+          sudo ./install.sh | tee salida-c.log
+          # Lo que la guia promete que se ve al terminar.
+          grep -q 'instalado y verificado' salida-c.log
+          grep -q 'SIGUIENTE PASO'         salida-c.log
+          # NINGUN SECRETO EN LA SALIDA (§3.5, RS-08). Se comprueba contra los
+          # valores que el instalador acaba de escribir en el .env, que es la
+          # unica forma honesta de hacerlo: buscar "algo que parezca una clave"
+          # daria verde con cualquier fuga real.
+          for clave in APP_KEY QR_SIGNING_KEY_CURRENT BACKUP_ENCRYPTION_KEY \
+                       REVERB_APP_SECRET DB_PASSWORD DB_MIGRATION_PASSWORD \
+                       IDENTITY_PIN_SEALING_SECRET_KEY GRAFANA_ADMIN_PASSWORD; do
+            valor="$(sudo sed -n "s/^${clave}=//p" .env | head -1)"
+            test -n "${valor}"
+            if grep -qF -- "${valor}" salida-c.log; then
+              echo "FUGA: el valor de ${clave} aparece en la salida del instalador."
+              exit 1
+            fi
+          done
+          # Permisos del .env (§7.7) y del archivo de WAL (uid de PostgreSQL).
+          test "$(sudo stat -c '%a' .env)" = "600"
+          test "$(sudo stat -c '%u:%g:%a' /var/backups/fichaje/wal)" = "70:70:750"
+
+      - name: "C · Las dos sondas responden lo que dice el contrato"
+        run: |
+          set -euo pipefail
+          curl -fsS -k https://127.0.0.1/api/v1/health | tee health.json
+          curl -fsS -k https://127.0.0.1/api/v1/ready  | tee ready.json
+          # La version que informa la sonda es la que se instalo, no `latest`.
+          grep -qF "$(cat VERSION)" health.json
+
+      - name: "C · Las tres SPA se sirven, y el portal solo desde su red"
+        run: |
+          set -euo pipefail
+          curl -fsS -k https://127.0.0.1/admin/ | grep -qi '<!doctype html'
+          curl -fsS -k https://127.0.0.1/kiosk/ | grep -qi '<!doctype html'
+          # El portal, NO: la peticion llega desde el anfitrion, fuera de
+          # PORTAL_INTERNAL_CIDR (RF-ID-08). Un 403 aqui es el resultado bueno.
+          codigo="$(curl -s -k -o /dev/null -w '%{http_code}' https://127.0.0.1/portal/)"
+          test "${codigo}" = "403" || { echo "El portal respondio ${codigo}, se esperaba 403"; exit 1; }
+
+      - name: "C · Cero datos de demostracion, y los catalogos de producto puestos"
+        run: |
+          set -euo pipefail
+          cd paquete
+          consulta() {
+            sudo docker compose --env-file .env -f docker-compose.yml exec -T postgres \
+              psql -U fichaje_migrator -d fichaje -Atqc "$1"
+          }
+          # El perfil de convenio y los catalogos SI: los siembran las
+          # migraciones, son dato de producto (regla dura 14).
+          test "$(consulta 'SELECT count(*) FROM compliance_profiles')" -ge 1
+          test "$(consulta 'SELECT count(*) FROM roles')" -ge 1
+          # Personas, fichajes y cuentas: NI UNO. El instalador no crea usuarios
+          # y no siembra demostracion.
+          test "$(consulta 'SELECT count(*) FROM employees')"     -eq 0
+          test "$(consulta 'SELECT count(*) FROM shift_entries')" -eq 0
+          test "$(consulta 'SELECT count(*) FROM users')"         -eq 0
+
+      - name: "D · Segunda ejecucion: salida 3, y la instalacion sigue en pie"
+        run: |
+          set -euo pipefail
+          cd paquete
+          set +e
+          sudo ./install.sh >salida-d.log 2>&1
+          codigo=$?
+          set -e
+          cat salida-d.log
+          test "${codigo}" -eq 3 || { echo "Se esperaba salida 3 y fue ${codigo}"; exit 1; }
+          grep -q 'update.sh'            salida-d.log
+          grep -q 'No se ha tocado nada' salida-d.log
+          # Idempotencia de verdad: despues de la segunda ejecucion el sistema
+          # sigue respondiendo. Un instalador que "no rompe nada" pero deja el
+          # servicio caido no es idempotente.
+          curl -fsS -k https://127.0.0.1/api/v1/ready >/dev/null
+      - name: "F · El camino de serie: la observabilidad encendida, de verdad"
+        # POR QUE ESTE PASO EXISTE. Los escenarios anteriores instalan con
+        # `COMPOSE_PROFILES=` vacio, y el cliente recibe `observability`: el
+        # camino POR DEFECTO —el que van a tener veinte instalaciones de veinte
+        # hoteles— no se levantaba nunca de extremo a extremo. Comprobar el
+        # fichero de compose con `config` demuestra que el perfil existe, no que
+        # arranque.
+        #
+        # No se hace una TERCERA instalacion completa: se enciende el perfil
+        # sobre la que ya esta en pie, que es ademas la operacion real que hara
+        # un cliente que lo apago y se arrepiente. Cuesta la descarga de las
+        # cinco imagenes publicas (~690 MiB, medido) y no otra migracion.
+        #
+        # La descarga va aparte y con reintento a proposito: asi un limite de
+        # Docker Hub se distingue de un perfil mal escrito, en vez de aparecer
+        # como «la observabilidad no arranca».
+        run: |
+          set -euo pipefail
+          cd paquete
+          # `sudo env` y no `VAR=x sudo -E`: con env_reset en sudoers -lo normal-
+          # `-E` puede rechazarse por politica y las variables se perderian en
+          # silencio. El .env es 0600 de root, asi que el sudo si hace falta.
+          imagenes="$(sudo env COMPOSE_PROFILES=observability \
+            docker compose -f docker-compose.yml --env-file .env config --images |
+            grep -Ev '^kronoqr/')"
+          echo "${imagenes}"
+          for imagen in ${imagenes}; do
+            for intento in 1 2 3; do
+              docker pull --quiet "${imagen}" >/dev/null && break
+              if [ "${intento}" -eq 3 ]; then
+                echo "No se ha podido descargar ${imagen} tras 3 intentos."
+                echo "Esto es un problema de acceso al registro publico, NO del perfil."
+                exit 1
+              fi
+              sleep 10
+            done
+          done
+
+      - name: "F · Los cinco servicios del perfil quedan en pie"
+        run: |
+          set -euo pipefail
+          cd paquete
+          sudo sed -i 's|^COMPOSE_PROFILES=.*|COMPOSE_PROFILES=observability|' .env
+          sudo docker compose --env-file .env -f docker-compose.yml up -d
+          for servicio in prometheus node-exporter alertmanager grafana loki; do
+            for _ in $(seq 1 30); do
+              estado="$(sudo docker compose --env-file .env -f docker-compose.yml ps \
+                --format '{{.Service}} {{.State}}' | awk -v s="${servicio}" '$1 == s {print $2}')"
+              [ "${estado}" = "running" ] && break
+              sleep 2
+            done
+            test "${estado}" = "running" || {
+              echo "${servicio} no esta en marcha (${estado:-ausente})"
+              sudo docker compose --env-file .env -f docker-compose.yml logs --tail 40 "${servicio}"
+              exit 1
+            }
+            echo "${servicio}: ${estado}"
+          done
+          # Y el fichaje sigue en pie despues de encender el perfil: es lo que
+          # de verdad importa de esta operacion.
+          curl -fsS -k https://127.0.0.1/api/v1/ready >/dev/null
+          # node-exporter tiene que poder LEER el arbol de copias: es de donde
+          # salen las metricas que avisan de que la copia de anoche fallo.
+          sudo docker compose --env-file .env -f docker-compose.yml exec -T node-exporter \
+            ls /var/backups/metrics >/dev/null
+
+
+      - name: Trivy sobre la imagen de borde recien construida (bloqueante)
+        # Por `make`, como TODAS las demas invocaciones de Trivy del
+        # repositorio. Este paso llamaba al binario `trivy` a pelo y el runner
+        # no lo tiene: `command not found`, exit 127. Era el unico sitio del
+        # arbol que se saltaba la regla de «una sola via por herramienta», y
+        # fue el unico que se rompio por eso.
+        run: make trivy-image TRIVY_IMAGES="kronoqr/nginx:ci"
+
+      - name: Diagnostico si algo ha fallado
+        if: failure()
+        # Los dos paquetes: el de la instalacion buena y el del escenario de
+        # fallo seguro. Cual de los dos existe depende de donde se haya roto.
+        run: |
+          for dir in paquete paquete-e; do
+            [ -d "${dir}" ] || continue
+            echo "=============== ${dir} ==============="
+            [ -f "${dir}/.env" ] || continue
+            sudo docker compose --env-file "${dir}/.env" -f "${dir}/docker-compose.yml" ps || true
+            sudo docker compose --env-file "${dir}/.env" -f "${dir}/docker-compose.yml" logs --tail 80 || true
+          done
+          echo "=============== estado global ==============="
+          docker ps -a --filter label=com.docker.compose.project=kronoqr || true
+          docker volume ls --filter name=^kronoqr_ || true
+
+
+      - name: Subir las salidas del instalador
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: instalacion-limpia
+          # TODAS las salidas, no solo la del escenario B. La primera ejecucion
+          # de esta etapa fallo en E y el artefacto solo traia `salida-b.log`:
+          # hubo que reproducir el fallo a ciegas en local. Un diagnostico que
+          # necesita una segunda ronda de informacion es exactamente lo que este
+          # producto no se puede permitir.
+          #
+          # El .env NO se sube: lleva los secretos que el instalador acaba de
+          # generar. Solo las salidas, que el escenario C comprueba libres de
+          # secretos valor a valor.
+          path: |
+            paquete/salida-b.log
+            paquete/salida-c.log
+            paquete/salida-d.log
+            paquete-e/salida-e.log
+            paquete-e/reintento-e.log
+          retention-days: 14
+          if-no-files-found: warn

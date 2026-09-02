@@ -1,12 +1,17 @@
 # Operación de KronoQR — lo que hay que atender, y cada cuánto
 
-> **Estado.** Redactado en la **tarea 2.10** con la parte que ya existe y no
-> puede esperar: **la retención y la purga**, que es la única operación del
-> producto que borra datos. La **tarea 5.11** completa el resto de la guía de
-> operación (arranque, actualización, quioscos, licencia) e integra este
-> documento; no lo reescribe.
+> **Estado.** Las secciones 1 a 6 son de la **tarea 2.10**: la retención y la
+> purga, que es la única operación del producto que borra datos. La 7 es de la
+> **5.3** (licencia). Las **8, 9 y 10** son de la **5.4**: los códigos de
+> salida de los cinco scripts, la custodia de secretos y qué pierdes si apagas
+> la observabilidad. La **tarea 5.11** añadirá la actualización y los quioscos;
+> no reescribirá nada de lo que ya está aquí.
 
 ---
+> **Los comandos de esta guía se ejecutan desde el directorio del paquete**, que
+> es donde están `docker-compose.yml` y el `.env`. Si los lanzas desde otro
+> sitio, añade `-f /ruta/al/paquete/docker-compose.yml`.
+
 
 ## 1. El calendario, en una tabla
 
@@ -37,7 +42,7 @@ Se puede pedir a mano en cualquier momento, y **es seguro**: no modifica ni una
 fila.
 
 ```bash
-docker compose --env-file .env -f infra/compose.dev.yaml exec app \
+docker compose -f docker-compose.yml exec app \
   php artisan compliance:apply-retention --dry-run
 ```
 
@@ -78,7 +83,7 @@ lo autorice. Es una operación de una o dos veces al año.
 **La orden**, con la frase exacta que imprimió el informe:
 
 ```bash
-docker compose --env-file .env -f infra/compose.dev.yaml run --rm \
+docker compose -f docker-compose.yml run --rm \
   -e DB_MAINTENANCE_PASSWORD='<contraseña de fichaje_maintenance>' app \
   php artisan compliance:apply-retention \
     --confirm=PURGAR-AAAA-MM-DD-xxxxxx \
@@ -146,6 +151,202 @@ Métricas publicadas para el colector de `node-exporter`
 | `DB_MAINTENANCE_USERNAME` | `fichaje_maintenance` | Rol que ejecuta la purga de auditoría |
 | `DB_MAINTENANCE_PASSWORD` | *(vacía)* | **No se pone en el `.env`.** Se aporta al ejecutar la purga |
 
+---
+
+## 7. La licencia, en dos comandos
+
+No hay nada programado que revise la licencia: se mira cuando se quiere mirar.
+
+```bash
+docker compose exec app php artisan license:show
+```
+
+**Códigos de salida**, por si quieres vigilarlo desde tu propio sistema:
+
+| Código | Significa |
+| --- | --- |
+| `0` | Licencia vigente y sin exceso de plan. Nada que hacer |
+| `1` | **Hay algo que mirar**: no hay licencia, caducó, caduca pronto, no se puede verificar, o se ha superado una cifra del plan |
+
+> **`1` no significa que el sistema esté parado**, y el propio comando lo dice.
+> Se sigue fichando, consultando el registro, exportando para la Inspección y
+> haciendo copias exactamente igual.
+
+Para activar una clave nueva:
+
+```bash
+docker compose exec app php artisan license:activate "KQL1...."
+```
+
+| Código | Significa |
+| --- | --- |
+| `0` | Activada y vigente |
+| `1` | Activada, pero **no vigente** todavía: caducada, o su vigencia empieza más adelante. Se guardó igual |
+| `2` | **No se activó nada.** La clave no verifica, o no indicaste ninguna. La licencia anterior sigue como estaba |
+
+El estado también sale en la sonda de salud, para vigilarlo sin entrar por SSH:
+
+```bash
+curl -sS https://TU-SERVIDOR/api/v1/health
+# {"status":"ok","version":"1.4.2","license":"valid"}
+```
+
+Ese campo puede decir `unknown`: significa que la sonda no ha podido saberlo
+**sin tocar la base de datos**, que es su regla —una sonda de vida que consulta
+PostgreSQL hace reiniciar el servicio cuando lo caído es PostgreSQL—. El dato
+autoritativo es `license:show`.
+
+Todo lo demás sobre la licencia —qué se degrada al caducar, qué no se degrada
+nunca, los límites del plan y qué hacer si una clave no se activa— está en
+[`configuracion.md`](configuracion.md), sección 3 bis.
+
+---
+
+## 8. Los cinco scripts y su tabla de códigos de salida
+
+`install.sh`, `update.sh`, `doctor.sh`, `backup.sh` y `restore.sh` **comparten
+una sola tabla**. Los ejecuta la misma persona, a veces encadenados en un cron,
+y un `3` que significara una cosa en uno y otra en otro sería una trampa.
+
+**El código dice en qué fase se paró y qué quedó escrito. El detalle va en el
+mensaje, que es lo que hay que leer.**
+
+| Código | Significa siempre | En cada script |
+| --- | --- | --- |
+| `0` | Correcto | — |
+| `1` | **Uso incorrecto.** Nada tocado | Un argumento que no existe, o falta un valor |
+| `2` | **Requisitos no cumplidos. NADA escrito.** La máquina está como estaba | `install.sh`: falta Docker, disco, puerto ocupado. `backup.sh`/`restore.sh`: falta `pg_dump`, el destino no es escribible, no hay espacio, o falta `BACKUP_ENCRYPTION_KEY` |
+| `3` | **Estado previo incompatible. NADA escrito** | `install.sh`: ya hay una instalación (usa `update.sh`). `backup.sh`: no hay copia que verificar, o el destino ya existe. `restore.sh`: quedan conexiones abiertas contra la base |
+| `4` | **Falló y se deshizo todo lo hecho** en esa ejecución. Se puede reintentar | `install.sh`: contenedores, volúmenes y `.env` devueltos a su estado. `backup.sh`: los ficheros a medias barridos, la copia anterior intacta. `restore.sh`: base de trabajo eliminada, la de producción sin tocar |
+| `5` | **Falló y NO se pudo deshacer todo. Hay que intervenir a mano.** El mensaje dice exactamente qué queda y qué orden lo retira | Es el único código que exige a una persona delante |
+| `6` | **El trabajo se hizo pero la verificación posterior falló.** No se deshace nada | `install.sh`: los servicios están en pie, revisa certificado y logs. `backup.sh`: la copia existe pero **no verifica: trátala como inexistente**. `restore-drill.sh`: hoy no se podría recuperar el registro |
+
+### Si tenías un cron escrito contra la tabla anterior de `backup.sh`
+
+Hasta la versión 2.0.0, `backup.sh` y `restore.sh` usaban una tabla propia.
+Equivalencia:
+
+| Antes | Ahora |
+| --- | --- |
+| `1` la operación ha fallado | `4` si se deshizo lo hecho · `5` si quedó algo a medias · `6` si falló la verificación · `3` si no había nada sobre lo que operar |
+| `2` error de uso | `1` |
+| `3` falta una herramienta o precondición | `2` |
+| `4` destino no escribible o sin espacio | `2` |
+| `5` clave ausente o incorrecta | `2` al comprobar la precondición · `6` al fallar el descifrado de una copia |
+
+**Lo que un cron necesita saber sigue siendo lo mismo: `0` es bien, cualquier
+otra cosa es mal.** La diferencia es que ahora el número te dice si puedes
+reintentar sin mirar (`2`, `3`, `4`) o si tienes que mirar (`5`, `6`).
+
+---
+
+## 9. Custodia de secretos
+
+El instalador genera todos los secretos **en tu servidor** y no los transmite a
+nadie. **El fabricante no los conoce y no puede recuperarlos.** La lista
+completa, con la consecuencia de perder cada uno, está en
+[`instalacion.md`](instalacion.md), sección 3.
+
+### `BACKUP_ENCRYPTION_KEY`: esta sale del servidor
+
+Es la única que hay que custodiar **fuera** de la máquina, y el motivo es
+directo: si se pierde el servidor y la clave estaba solo ahí, las copias
+cifradas son bytes sin valor y el registro horario —que hay que conservar
+cuatro años— se ha perdido.
+
+**Hazlo el día de la instalación, antes de cerrar la sesión:**
+
+```bash
+cd /opt/kronoqr-2.0.0
+sudo sed -n 's/^BACKUP_ENCRYPTION_KEY=//p' .env
+```
+
+Copia ese valor al gestor de contraseñas de la empresa, o a un sobre cerrado en
+la caja fuerte junto al resto de credenciales críticas del hotel. Anota **la
+fecha** y **la instalación** a la que corresponde.
+
+Tres cosas que no hay que hacer:
+
+- **No la mandes por correo ni por mensajería.** El fabricante no la necesita y
+  no la quiere.
+- **No la dejes en un fichero del mismo servidor.** Si se pierde el servidor,
+  se pierden los dos.
+- **No la rotes sin leer antes** [`../runbooks/rotacion-secretos.md`](../runbooks/rotacion-secretos.md):
+  las copias anteriores **solo se descifran con la clave con la que se hicieron**.
+
+Limpia el historial del intérprete de órdenes cuando termines:
+
+```bash
+history -c
+```
+
+### `fichaje_maintenance`: el rol que nace sin contraseña
+
+Es el único rol de base de datos que puede soltar una partición vencida del
+registro de auditoría, y por eso **su contraseña no vive en el `.env`**: si la
+aplicación corriente pudiera autenticarse con él, el reparto de tres roles
+sería decorativo.
+
+Nace sin credencial —existe y no se puede usar por red— y se le asigna una **en
+el momento** de la purga anual, con el rol de migración, que sí está en el
+`.env`:
+
+```bash
+# 1. Genera una contraseña y asígnala al rol, solo para esta operación
+clave="$(openssl rand -base64 24)"
+docker compose exec -T postgres psql -U fichaje_migrator -d fichaje \
+  -c "ALTER ROLE fichaje_maintenance PASSWORD '${clave}'"
+
+# 2. Ejecuta la purga aportando la credencial, sin escribirla en ningún fichero
+docker compose run --rm -e DB_MAINTENANCE_PASSWORD="${clave}" app \
+  php artisan compliance:apply-retention --confirm=PURGAR-...
+
+# 3. Retírasela en cuanto termines
+docker compose exec -T postgres psql -U fichaje_migrator -d fichaje \
+  -c "ALTER ROLE fichaje_maintenance PASSWORD NULL"
+
+unset clave
+history -c
+```
+
+La **simulación** (`--dry-run`), que es la que corre sola cada lunes, **no
+necesita nada de esto**: solo cuenta, y cuenta con el rol de la aplicación.
+
+---
+
+## 10. La observabilidad, y qué pierdes si la apagas
+
+El `.env` trae `COMPOSE_PROFILES=observability`. Levanta cinco servicios más
+—Prometheus, node-exporter, Alertmanager, Grafana y Loki— y ocupa unos 700 MiB.
+
+**Está encendida de serie porque es lo que avisa de los dos fallos que
+convierten una instalación sana en una pérdida de datos sin que nadie lo note
+mirando la pantalla:**
+
+1. **La copia de anoche falló.** El resultado de cada copia se publica como
+   métrica y hay una alerta sobre ella. Sin el perfil, nadie te lo dice.
+2. **El archivado del WAL se ha parado.** PostgreSQL sigue funcionando y el WAL
+   se acumula en su propio volumen hasta llenar el disco; entonces se para
+   entero. La alerta correspondiente es de las críticas.
+
+Puedes apagarla dejando `COMPOSE_PROFILES=` vacío y reiniciando los servicios.
+Es una configuración soportada, pero **asume esta tarea manual**:
+
+| Cada | Qué comprobar |
+| --- | --- |
+| Semanal | `docker compose exec app php artisan backup:verify` — que la última copia existe y verifica |
+| Semanal | `df -h` sobre el disco de Docker y sobre `BACKUP_PATH` |
+| Trimestral | El simulacro de restauración (sección 1), que no cambia |
+
+Grafana escucha **solo en `127.0.0.1:3000`**: se llega por túnel SSH o desde el
+propio servidor, **nunca desde internet**.
+
+---
+
 Las obligaciones que van con todo esto —qué informar, qué archivar, quién
 autoriza— están en
 [`obligaciones-legales.md`](obligaciones-legales.md).
+
+Lo que se puede **cambiar** —umbrales operativos, marca e idiomas— y qué
+consecuencias tiene cada cambio está en
+[`configuracion.md`](configuracion.md).

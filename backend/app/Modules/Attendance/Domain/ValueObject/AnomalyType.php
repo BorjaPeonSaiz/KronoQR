@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Domain\ValueObject;
 
+use App\Modules\Shared\Domain\ValueObject\ComplianceRule;
+use App\Modules\Shared\Domain\ValueObject\ComplianceRuleSuspension;
+
 /**
  * Lo que la revision diaria del registro horario encuentra raro (RF-PR-01).
  *
@@ -59,4 +62,42 @@ enum AnomalyType: string
      * fichaje (RF-AT-10, regla dura 19).
      */
     case CLOCK_SKEW = 'clock_skew';
+
+    /**
+     * La regla del **perfil de cumplimiento** cuyo umbral gobierna este hallazgo,
+     * o `null` si el umbral que lo decide es operativo y no legal.
+     *
+     * Es el puente entre el vocabulario de este modulo —«que encontro raro la
+     * revision»— y el de `Shared`, que es el unico que `Product` alcanza para
+     * saber si esa regla abre incidencias hoy (doc 02 §1.6). Sin el, la pantalla
+     * del perfil y el asiento de auditoria tendrian que repetir la lista de
+     * reglas suspendidas, y una lista repetida es una lista que se queda vieja.
+     *
+     * `OPEN_SHIFT_EXPIRED`, `SHORT_SHIFT` y `CLOCK_SKEW` devuelven `null` a
+     * proposito: sus umbrales los fija el hotel (`installation_settings`), no la
+     * jurisdiccion. `LONG_SHIFT` devuelve RN-11 porque es el unico de sus dos
+     * origenes que sale del perfil.
+     */
+    public function complianceRule(): ?ComplianceRule
+    {
+        return match ($this) {
+            self::INSUFFICIENT_REST => ComplianceRule::MinimumRestBetweenWorkDays,
+            self::LONG_SHIFT => ComplianceRule::MaximumDailyWorkingTime,
+            self::MISSING_BREAK => ComplianceRule::BreakInContinuousShift,
+            self::OPEN_SHIFT_EXPIRED, self::SHORT_SHIFT, self::CLOCK_SKEW => null,
+        };
+    }
+
+    /**
+     * Si la apertura de incidencia de este hallazgo esta suspendida hoy.
+     *
+     * Deriva de {@see ComplianceRuleSuspension}, que es donde la decision vive:
+     * vaciar aquella lista reactiva esto y todo lo que cuelga de ello.
+     */
+    public function openingIsSuspended(): bool
+    {
+        $rule = $this->complianceRule();
+
+        return $rule instanceof ComplianceRule && ComplianceRuleSuspension::isSuspended($rule);
+    }
 }

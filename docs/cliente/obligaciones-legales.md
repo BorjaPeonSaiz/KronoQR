@@ -1,8 +1,10 @@
 # Obligaciones legales del hotel al usar KronoQR
 
 > **Estado.** Redactado en la **tarea 2.10**, que es la que decide la política de
-> retención por tipo de dato. La **tarea 5.11** lo revisa e integra en el paquete
-> de documentación final; no lo reescribe.
+> retención por tipo de dato, y ampliado en la **5.2** con la sección 7 (el
+> perfil de cumplimiento es responsabilidad del cliente, RL-16 y RL-21). La
+> **tarea 5.11** lo revisa e integra en el paquete de documentación final; no lo
+> reescribe.
 
 **Quién responde de qué, dicho en una línea:** el hotel es el **responsable del
 tratamiento** y del registro horario; el fabricante entrega un producto que hace
@@ -222,7 +224,107 @@ copia diaria y semanal y verifica que se pueden restaurar, pero:
 
 ---
 
-## 7. Lo que el fabricante no puede hacer por ti
+## 7. Ajustar el perfil de cumplimiento a tu convenio es tuyo
+
+El sistema se entrega con el perfil **`ES-hosteleria`**, cuyos umbrales salen del
+Estatuto de los Trabajadores: **12 h** de descanso entre jornadas (art. 34.3),
+**9 h** de jornada diaria ordinaria, **6 h** de tramo continuo antes de exigir
+pausa (art. 34.4), **40 h** de jornada semanal (art. 34.1) y **4 años** de
+conservación (art. 34.9).
+
+**Ese perfil es un punto de partida legal, no tu convenio.** Los convenios
+provinciales y de empresa fijan a menudo jornadas, descansos y cómputos distintos
+—y más favorables— que el mínimo legal. Comprobar cuáles te aplican y dejarlos
+escritos en el perfil es **responsabilidad tuya**, no del fabricante: es quien
+tiene el convenio delante y quien responde ante la Inspección y ante su plantilla.
+
+| Obligación | Lo que hace el sistema | Lo que tienes que hacer tú |
+| --- | --- | --- |
+| Aplicar los umbrales de tu convenio | Los lee de una fila editable, nunca de código, y los aplica desde el cambio | **Contrastar el perfil con tu convenio** al poner en marcha el sistema y cada vez que se renueve |
+| Cargar los festivos del centro | Guarda el calendario y lo audita | Cargarlo cada año: los festivos son del municipio y del año, y el producto se entrega **sin ninguno** |
+| Justificar por qué una jornada no generó alerta | Guarda cada cambio de umbral con su valor anterior, su autor y su momento | Saber dónde está ese registro y poder enseñarlo |
+| Conservar el plazo correcto | Toma los años del perfil y nunca purga sin confirmación explícita | **No bajar `retention_years` sin que lo diga tu asesoría**: por debajo del plazo legal estarías destruyendo prueba |
+
+**Qué NO hace el fabricante, y conviene que quede escrito:** no valida tu
+convenio, no te avisa de que un umbral es más laxo de lo que te corresponde y no
+puede saber qué convenio te aplica. El producto hace posible cumplir; la decisión
+de qué número poner es del hotel, con su asesoría laboral (RL-16, RL-21).
+
+> **Si cambias un umbral, el cambio rige desde ese momento.** No se recalcula el
+> histórico ni se cierran las incidencias ya abiertas. El procedimiento y el
+> porqué están en [Configuración](configuracion.md), sección 2.4.
+
+### El asistente de puesta en marcha te obliga a mirarlo, y ese es el único paso que no se puede omitir
+
+De los ocho pasos del asistente, la licencia se puede omitir, el quiosco se puede
+omitir y la carga de plantilla se puede omitir. **El perfil de convenio no.**
+
+No es rigidez: es que ese paso es el único momento garantizado en el que alguien
+de tu organización tiene esos cinco números delante antes de que el sistema
+empiece a calcular horas con ellos. Confirmarlo no significa «los he validado con
+mi asesoría» —eso sigue siendo tuyo— sino «los he visto y sé que existen».
+
+Queda registrado quién lo confirmó y cuándo, igual que cualquier cambio posterior.
+
+---
+
+## 7 ter. Cargar la plantilla desde un fichero no es publicar datos
+
+Si usas la carga masiva (CSV o Excel), tres cosas que conviene tener claras
+porque afectan a lo que puedes afirmar ante una auditoría de protección de datos:
+
+- **El documento de identidad no se almacena.** Se guarda su huella criptográfica,
+  que sirve para reconocer a la misma persona entre dos importaciones y para
+  cruzar con la nómina, y **no se puede volver a leer el número**. Si una copia de
+  seguridad acaba donde no debe, ahí no hay documentos de identidad (RL-08).
+- **El fichero no se queda en el servidor.** Se lee durante la petición y
+  desaparece con ella. Por eso hay que volver a subirlo para confirmar: el
+  producto no guarda un fichero con los nombres y los documentos de tu plantilla
+  esperando a que alguien pulse un botón.
+- **Nadie recibe ningún correo.** Ni las personas importadas, ni sus
+  responsables. La credencial es una tarjeta física que hay que imprimir y
+  entregar en mano, y el producto no envía invitaciones a nadie.
+
+**Lo que sigue siendo tuyo:** informar a la plantilla del tratamiento antes de
+empezar (sección 3) y borrar de tus propios equipos el fichero desde el que
+importaste, que sí lleva los documentos en claro.
+
+---
+
+## 7 bis. Tu obligación de registrar no depende de la licencia
+
+Conviene que lo sepas antes de que te haga falta, porque es lo primero que se
+teme cuando llega un aviso de caducidad.
+
+**El art. 34.9 ET te obliga a llevar el registro diario de jornada de toda tu
+plantilla, y ese registro es tuyo, no del proveedor.** Este producto está
+construido para que ninguna decisión comercial pueda dejarte incumpliendo:
+
+- Con la licencia **caducada, ausente o ilegible**, se sigue fichando, se sigue
+  consultando el registro, se sigue exportando para la Inspección de Trabajo, el
+  portal del empleado sigue abierto (RL-05) y las copias siguen haciéndose.
+- **Superar los límites del plan tampoco bloquea nada.** Puedes dar de alta a la
+  persona que entra hoy aunque estés por encima de lo contratado, y puede fichar
+  desde el primer día. Si el producto te lo impidiera, esa persona trabajaría sin
+  registro y la infracción sería **tuya**.
+- Lo que sí ocurre son avisos, un recorte de funcionalidades **accesorias** —los
+  informes por periodo y la actualización en tiempo real de la presencia— y un
+  apunte en el registro de auditoría con la fecha desde la que estás fuera de
+  contrato.
+
+**Nada de esto te exime de la parte que sigue siendo tuya**: pagar la licencia si
+la has contratado, y conservar el registro cuatro años aunque termine la relación
+comercial. Para lo segundo, el producto incluye una exportación íntegra que
+puedes ejecutar en cualquier momento y llevarte.
+
+> Si alguna vez encuentras que **no puedes fichar o no puedes acceder al
+> registro** y la causa es la licencia, **no es lo previsto**: es una avería.
+> Avisa al proveedor adjuntando la salida de `php artisan license:show` y de
+> `GET /api/v1/health`.
+
+---
+
+## 8. Lo que el fabricante no puede hacer por ti
 
 | No puede | Por qué |
 | --- | --- |
@@ -230,6 +332,9 @@ copia diaria y semanal y verifica que se pueden restaurar, pero:
 | Atender una solicitud de derechos | Eres el responsable del tratamiento |
 | Responder un requerimiento de la Inspección | Lo firma el hotel |
 | Recuperar un dato ya purgado | La purga es irreversible; para eso está la confirmación |
+| Decirte qué umbrales fija tu convenio | No lo conoce; el perfil de cumplimiento es tuyo (§7) |
+| Apagarte el fichaje por una licencia impagada | No existe el mecanismo: no hay forma de expresar la desactivación del registro legal, ni por error ni a propósito (§7 bis) |
+| Revocar tu licencia a distancia | La verificación es local y sin internet: tu instalación no consulta a nadie. La palanca es la caducidad de la clave y el contrato |
 
 Si necesitas soporte sobre una incidencia, el paquete de diagnóstico va
 **anonimizado por defecto** y cualquier acceso ampliado es expreso, temporal y

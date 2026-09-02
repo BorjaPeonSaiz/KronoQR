@@ -59,3 +59,40 @@ Lo que **nunca** se degrada: fichaje por QR y por PIN, sincronización de la col
 - Prueba de *feature*: con licencia caducada, la corrección trazada de una jornada sigue siendo posible (RN-13).
 - Prueba de *feature*: cada funcionalidad accesoria responde con el aviso de licencia y no con un error genérico (ADR-023).
 - Prueba de arquitectura: ninguna comprobación de estado de licencia fuera del punto único de decisión; en particular, ninguna en el camino de `/scan` ni en los casos de uso de alta (ADR-028).
+
+## Enmienda 01-09-2026 (tarea 5.3): dónde vive cada verificación
+
+La decisión no cambia. Se registra qué la sostiene en el código, para que quien
+la revise pueda comprobarla sin leerlo entero.
+
+- **La separación que este ADR anticipaba es un `enum`.** El punto único de
+  decisión —`Shared\Application\Port\FeatureGate`— **solo acepta un
+  `Shared\Domain\ValueObject\Feature`**, cuyo catálogo son las siete
+  funcionalidades accesorias de [ADR-023](ADR-023-frontera-registro-legal-y-funcionalidad-accesoria.md).
+  El conjunto legal no tiene caso en ese enum, así que **no existe forma de
+  preguntar si el fichaje está habilitado**: la pregunta no se puede ni formular.
+  Es más fuerte que una lista que alguien tenga que respetar.
+- **Ningún estado de licencia significa «parado».** `LicenseState` tiene seis
+  casos —`absent`, `unverifiable`, `not_yet_valid`, `valid`, `expiring_soon`,
+  `expired`— y ninguno se puede interpretar como bloqueo. Una prueba lo fija.
+- **La degradación de una funcionalidad accesoria responde `402` con un `type`
+  propio** (`urn:kronoqr:problem:feature-not-licensed`) y no `403`. Un `403`
+  mezclaría «no tienes permiso» con «tu empresa no ha renovado», que son dos
+  problemas de dos personas distintas —lo arregla quien administra los roles
+  frente a quien firma el contrato— y en un log serían indistinguibles. El
+  cuerpo lleva la funcionalidad, el motivo y la fecha desde la que ocurre; el
+  texto **nombra lo que sigue disponible**.
+- **Avisos de caducidad** (decisión del responsable de producto, 01-09-2026):
+  banner persistente para los roles de administración **desde 30 días antes** de
+  `valid_until`, con el umbral en `config/license.php` y no como literal. Durante
+  esos días no se degrada nada. Al caducar **cambia de tono y de texto, no de
+  sitio**. No es descartable mientras la condición persista, por lo mismo que el
+  aviso de exceso de plan de [ADR-028](ADR-028-limites-del-plan-no-bloquean.md).
+  Sin correos.
+- **La pantalla de licencia no se degrada jamás**, ni con la licencia caducada,
+  ni ausente, ni ilegible. Es la pantalla desde la que se arregla el problema:
+  cerrarla al caducar dejaría al cliente sin poder activar la renovación que
+  acaba de comprar. Lo mismo vale para `/settings` y `/compliance-profile`.
+- **La sonda de vida sigue devolviendo `200` con la licencia caducada** y publica
+  el estado como una palabra. Devolver `503` haría que el orquestador retirara
+  del balanceo un contenedor que ficha perfectamente.

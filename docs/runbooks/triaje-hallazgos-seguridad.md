@@ -45,6 +45,19 @@ Ante cualquier hallazgo nuevo, en este orden:
    parecía un falso positivo (punto 2) y una CVE no alcanzable (punto 3) a la
    vez, y resultó que la imagen no lo ejecutaba nunca. Eliminarlo y añadir
    `USER postgres` cerró 22 hallazgos sin una sola excepción.
+
+   **Caso frecuente en `trivy image`: el parche ya está publicado.** Si la
+   columna *Fixed Version* trae una versión que Alpine ya sirve y el paquete
+   lo instala un `apk add` de nuestro Dockerfile, el hallazgo no es del código:
+   es la **caché de Actions**, que reutiliza la capa de paquetes mientras el
+   texto de la instrucción no cambie. Las tres imágenes llevan el sello semanal
+   `APK_INDEX_STAMP` (`make build-ci-images`, semana ISO) precisamente para
+   eso; si el hallazgo aparece a mitad de semana, basta con relanzar el job la
+   semana siguiente o forzar el refresco con
+   `make build-ci-images APK_INDEX_STAMP=$(date -u +%s)`. **Nunca se resuelve
+   con una excepción**: el CVE es real, solo que la imagen reconstruida ya no
+   lo tiene. Caso de referencia: `libexpat` 2.8.3-r0 → 2.8.4-r0 en
+   `kronoqr/app:ci`, septiembre de 2026.
 2. **¿Es un falso positivo verificable?** —la herramienta no puede ver algo
    que sí es cierto en tiempo de ejecución—. Documenta la excepción (§2) con
    fecha de caducidad. Solo si el punto 1 no era posible: una excepción por

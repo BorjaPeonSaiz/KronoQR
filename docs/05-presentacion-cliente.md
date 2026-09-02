@@ -392,7 +392,7 @@ Un servidor de estas características cubre 500 empleados y 10 tablets con holgu
 Todo lo que puede variar entre hoteles es **configuración**, no programación:
 
 - **Marca blanca**: logotipo, colores y nombre de la aplicación, aplicados a la tablet, al panel, al portal y a las tarjetas y documentos PDF.
-- **Perfil de cumplimiento**: años de retención, descanso mínimo entre jornadas, jornada máxima diaria y semanal, pausas obligatorias, inicio de semana y calendario de festivos. **Se entrega el perfil español de hostelería ya configurado**, y se puede ajustar si el convenio aplicable difiere.
+- **Perfil de cumplimiento**: años de retención, descanso mínimo entre jornadas, jornada máxima diaria y semanal, pausas obligatorias, inicio de semana y calendario de festivos. **Se entrega el perfil español de hostelería ya configurado**, y se puede ajustar si el convenio aplicable difiere. Los tres últimos —jornada semanal, inicio de semana y festivos— **se guardan y se auditan desde ya, y los aplica la vista de cumplimiento** cuando entra en servicio; la pantalla lo indica al lado de cada campo para no dar por hecho un efecto que aún no existe.
 - **Umbrales operativos**: margen anti-doble-escaneo, horas a partir de las cuales un turno se considera anómalo, tolerancia de desviación de reloj, intentos de PIN antes del bloqueo.
 - **Idiomas** activos y funcionalidades habilitadas.
 
@@ -411,6 +411,12 @@ Se admite el salto entre versiones no consecutivas: si el hotel lleva tiempo sin
 Una clave firmada que codifica el cliente, el plan contratado, los límites (empleados y tablets) y la vigencia del soporte. **Una licencia es un hotel**: una cadena contrata una licencia por establecimiento y cada uno tiene su propia instalación. **Se verifica localmente, sin llamar a internet**, porque el servidor del hotel puede estar en una red aislada y la conectividad del fabricante no puede convertirse en un punto único de fallo del registro horario.
 
 Y, como se dijo en el punto 4.7: **al caducar, el fichaje y el acceso al registro legal siguen funcionando**.
+
+**Qué se pierde exactamente al caducar**, para que no haya que preguntarlo: los **informes por periodo** —el cuadro de horas trabajadas frente a contratadas— y la **actualización en tiempo real** de la pantalla de presencia, que pasa a refrescarse por sondeo cada pocos segundos en lugar de al instante. Nada más. El fichaje, la sincronización de las tablets, la consulta de jornadas, el portal del empleado, la exportación para la Inspección, las correcciones, el registro de auditoría y las copias de seguridad **no se tocan**.
+
+**Y los límites del plan no bloquean nada.** Si el hotel contrata 80 personas y da de alta la 81, esa persona queda dada de alta y ficha desde el primer día; si se avería una tablet y se empareja otra, se empareja aunque la averiada siga contando. Lo que ocurre es un aviso en el panel y un apunte con la fecha desde la que se opera por encima de lo contratado, que es lo que se habla en la siguiente revisión. **Impedir dar de alta a un camarero en plena temporada dejaría a esa persona trabajando sin registro horario, y la infracción sería del hotel por una decisión que no controla.** Es una decisión de producto, no una concesión.
+
+El aviso de caducidad aparece **30 días antes**, con la fecha y con lo que se degradará. Durante esos 30 días no se pierde nada.
 
 ### 10.6 Soporte y diagnóstico
 

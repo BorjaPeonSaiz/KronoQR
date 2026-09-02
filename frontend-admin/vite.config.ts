@@ -17,7 +17,18 @@ const appVersion =
     ? packageJson.version
     : '0.0.0'
 
+// Ruta bajo la que se sirve esta SPA. En produccion Nginx la publica en
+// `/admin/` y la imagen de entrega construye con KRONOQR_BASE=/admin/
+// (infra/docker/nginx/Dockerfile). En desarrollo y en las pruebas E2E el valor
+// es `/`, que es lo que espera `vite preview` y lo que ya usaba el proxy del
+// Nginx de desarrollo: por eso el valor por defecto no cambia nada.
+//
+// El router lo lee via `import.meta.env.BASE_URL`, asi que con esto basta para
+// que las rutas internas cuelguen del prefijo correcto.
+const base = process.env['KRONOQR_BASE'] ?? '/'
+
 export default defineConfig({
+  base,
   plugins: [vue(), tailwindcss()],
   resolve: {
     alias: {

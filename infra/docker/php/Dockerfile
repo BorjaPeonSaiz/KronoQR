@@ -18,10 +18,7 @@ ARG PHP_VERSION=8.4
 # el digest dos `docker build` el mismo dia en maquinas distintas podrian
 # partir de una base de Alpine distinta. Con el digest, quien decide CUANDO se
 # sube de base es un PR de Dependabot (.github/dependabot.yml, ecosistema
-# `docker`), no una reconstruccion silenciosa del tag. Esta imagen no lleva un
-# `apk upgrade` propio -- a diferencia de la de PostgreSQL, no hay aqui una
-# libreria concreta con un CVE conocido que justifique acotarlo -- asi que
-# fijar el digest es la unica pieza de este cambio que le toca. Actualizar con
+# `docker`), no una reconstruccion silenciosa del tag. Actualizar con
 # `docker pull php:8.4-fpm-alpine && docker inspect --format='{{index
 # .RepoDigests 0}}' php:8.4-fpm-alpine`.
 ARG PHP_IMAGE_DIGEST=sha256:6cb5e4ffa03a7c1b01bb5b120ab3684ef76b75aa5ca417e343936db3f71f419f
@@ -34,7 +31,31 @@ FROM php:${PHP_VERSION}-fpm-alpine@${PHP_IMAGE_DIGEST} AS base
 # imagen pequena sin dejar toolchain dentro (Trivy lo agradece).
 COPY --from=mlocati/php-extension-installer:2 /usr/bin/install-php-extensions /usr/local/bin/
 
+# APK_INDEX_STAMP: sello que INVALIDA LA CACHE de la capa de paquetes una vez
+# por semana. Lo pone `make build-ci-images` (semana ISO, `AAAA-Wnn`) y no hace
+# falta tocarlo a mano.
+#
+# POR QUE. La CI construye con cache de Actions (`BUILDX_CACHE=gha`) y BuildKit
+# reutiliza una capa `RUN` mientras su TEXTO no cambie: el `apk add` de abajo
+# se ejecuto una vez, instalo las versiones que habia ese dia en el indice de
+# Alpine, y desde entonces la capa se copiaba tal cual en cada push aunque
+# Alpine ya hubiera publicado el parche. Asi aparecio en `trivy image`
+# CVE-2026-66046 y CVE-2026-76641 (libexpat 2.8.3-r0, que instala
+# `chromium`/`fontconfig`, no la imagen base) con el 2.8.4-r0 disponible desde
+# hacia dias: la unica forma de arreglarlo era un cambio cosmetico en la
+# instruccion para que la capa se reconstruyera. El sello hace eso de forma
+# previsible: la capa de paquetes se refresca el primer build de cada semana y
+# el resto de la semana la cache sigue ahorrando los ~6 minutos que ahorra.
+#
+# El `apk upgrade --no-cache` que abre la capa sube tambien los paquetes que
+# la imagen base trae ya instalados (libssl, musl, zlib...). Aqui SI puede ir
+# sin acotar, a diferencia de infra/docker/postgres/Dockerfile: PHP no es un
+# paquete de Alpine en esta imagen (la oficial lo compila de fuente), asi que
+# nada de lo que `apk` pueda subir cambia la version del producto.
+ARG APK_INDEX_STAMP=local
 RUN set -eux; \
+  echo "apk index stamp: ${APK_INDEX_STAMP}"; \
+  apk upgrade --no-cache; \
   install-php-extensions \
   pdo_pgsql \
   pgsql \

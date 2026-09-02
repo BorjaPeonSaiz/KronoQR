@@ -246,4 +246,31 @@ describe('cliente HTTP', () => {
       requestBlob('/api/v1/credentials/print-batch', 'x.pdf', { method: 'POST' }),
     ).resolves.toBeNull()
   })
+
+  it('manda un FormData tal cual, sin Content-Type propio y sin serializarlo a JSON', async () => {
+    // La importacion de plantilla (multipart/form-data) necesita que el
+    // navegador ponga su propio `boundary`: fijar `Content-Type` a mano aqui
+    // lo dejaria sin el, y `JSON.stringify` de un `FormData` no produce el
+    // fichero que el servidor espera leer en streaming.
+    const spy = stubFetch(() => jsonResponse({ ok: true }))
+    const form = new FormData()
+
+    form.set('mode', 'validate')
+
+    await request('/api/v1/employees/import', { method: 'POST', body: form })
+
+    const init = spy.mock.calls[0]?.[1] as RequestInit
+    const headers = init.headers as Headers
+
+    expect(headers.get('Content-Type')).toBeNull()
+    expect(init.body).toBe(form)
+  })
+
+  it('acepta PUT, que usa la marca de un paso del asistente como idempotente', async () => {
+    const spy = stubFetch(() => jsonResponse({ ok: true }))
+
+    await request('/api/v1/setup/steps/license', { method: 'PUT', body: { state: 'skipped' } })
+
+    expect((spy.mock.calls[0]?.[1] as RequestInit).method).toBe('PUT')
+  })
 })

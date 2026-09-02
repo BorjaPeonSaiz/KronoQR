@@ -10,6 +10,8 @@ use App\Modules\Reporting\Http\Request\ListLivePresenceRequest;
 use App\Modules\Reporting\Http\Resource\LivePresenceResource;
 use App\Modules\Reporting\Http\Support\RealtimeSubscription;
 use App\Modules\Shared\Application\Authorization\ScopeGuard;
+use App\Modules\Shared\Application\Port\FeatureGate;
+use App\Modules\Shared\Domain\ValueObject\Feature;
 use Illuminate\Http\JsonResponse;
 
 /**
@@ -49,6 +51,7 @@ final class LivePresenceController extends Controller
         ListLivePresenceRequest $request,
         ReadLivePresence $presence,
         ScopeGuard $scope,
+        FeatureGate $features,
     ): JsonResponse {
         $query = $request->toQuery($scope);
 
@@ -57,7 +60,19 @@ final class LivePresenceController extends Controller
             // Los canales que puede pedir esta cuenta salen del MISMO alcance con
             // el que se resolvio la consulta: si se dedujeran por separado, el
             // panel podria acabar suscrito a algo que el listado no le enseña.
-            RealtimeSubscription::forScope($query->scope),
+            RealtimeSubscription::forScope(
+                $query->scope,
+                // La licencia se pregunta AQUI, en el borde, y llega resuelta
+                // (ADR-023: punto unico de decision; ADR-025: el puerto vive en
+                // `Shared` porque `Reporting` no puede importar `Product`).
+                //
+                // **La respuesta no cambia de forma ni de codigo.** El listado
+                // de quien esta dentro se sirve igual: lo unico que cambia es
+                // que `meta.realtime.enabled` viene a `false` y el panel sondea
+                // (ADR-011). La presencia es una vista de LECTURA sobre el
+                // registro, y recortarla seria degradar el registro.
+                $features->statusOf(Feature::RealtimePresence),
+            ),
         ))->response();
     }
 }

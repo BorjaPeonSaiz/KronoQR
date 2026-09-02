@@ -48,7 +48,13 @@ test(
     // Y cada peticion posterior al acceso lleva la cabecera. Es la clase de
     // fallo que las pruebas de componente no ven: el cliente HTTP se crea con
     // el token y nadie lo comprueba en el recorrido completo.
-    const afterLogin = api.requests.filter((request) => request.path !== '/api/v1/auth/login')
+    //
+    // `GET /setup/status` queda fuera a proposito: es publica (RF-PD-03), la
+    // guarda de rutas la consulta ANTES de saber si hay sesion, y por eso
+    // nunca lleva `Authorization`.
+    const afterLogin = api.requests.filter(
+      (request) => request.path !== '/api/v1/auth/login' && request.path !== '/api/v1/setup/status',
+    )
     expect(afterLogin.length).toBeGreaterThan(0)
     for (const request of afterLogin) {
       expect(request.authorization, `${request.method} ${request.path}`).toBe(

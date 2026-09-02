@@ -14,10 +14,13 @@ import {
   CREDENTIALS_MANAGE,
   EMPLOYEES_MANAGE,
   INCIDENTS_MANAGE,
+  LICENSE_MANAGE,
   REPORTS_LEGAL,
   REPORTS_MANAGE,
+  SETTINGS_MANAGE,
 } from '@/features/auth/abilities'
 import { useSessionStore } from '@/features/auth/session.store'
+import LicenseNotice from '@/features/settings/LicenseNotice.vue'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -37,6 +40,12 @@ const navigation = computed<NavItem[]>(() =>
     { name: 'credentials', label: t('app.nav.credentials'), ability: CREDENTIALS_MANAGE },
     { name: 'reports', label: t('app.nav.reports'), ability: REPORTS_MANAGE },
     { name: 'legal-export', label: t('app.nav.legalExport'), ability: REPORTS_LEGAL },
+    {
+      name: 'compliance-profile',
+      label: t('app.nav.compliance'),
+      ability: SETTINGS_MANAGE,
+    },
+    { name: 'license', label: t('app.nav.license'), ability: LICENSE_MANAGE },
   ].filter((item) => session.can(item.ability)),
 )
 
@@ -87,6 +96,12 @@ async function signOut(): Promise<void> {
         </div>
       </div>
     </header>
+
+    <!-- El aviso PERSISTENTE de licencia (RF-PD-05, ADR-019, ADR-028).
+         Debajo de la cabecera y encima de todo lo demas: se ve en cualquier
+         pantalla y no se puede descartar mientras la condicion siga siendo
+         cierta. Solo lo ve quien puede hacer algo con el. -->
+    <LicenseNotice />
 
     <!-- Region viva unica del panel: aqui se anuncia todo lo que cambia sin
          mover el foco (WCAG 2.2 AA, 4.1.3). -->

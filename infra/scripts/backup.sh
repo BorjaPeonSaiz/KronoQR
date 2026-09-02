@@ -49,10 +49,27 @@
 #   BACKUP_DUMP_COMMAND       orden que produce el volcado. Solo la cambian el
 #                             simulacro y las pruebas; por defecto `pg_dump`
 #
-# Codigos de salida: 0 correcto · 1 la copia o su verificacion han fallado ·
-# 2 error de uso · 3 falta una herramienta o precondicion (nada tocado) ·
-# 4 destino no escribible o sin espacio (nada tocado) · 5 clave ausente o
-# incorrecta.
+# CODIGOS DE SALIDA. La tabla es la MISMA de los cinco scripts de operacion
+# (install.sh, update.sh, doctor.sh, backup.sh y restore.sh) y vive en
+# lib/exit-codes.sh. Aqui significan:
+#
+#   0  La copia se ha creado y ha superado su verificacion.
+#   1  Uso incorrecto: argumento u orden desconocidos. Nada tocado.
+#   2  Requisitos no cumplidos: falta pg_dump u openssl, el destino no existe o
+#      no es escribible, no hay espacio, o falta BACKUP_ENCRYPTION_KEY. NADA se
+#      ha escrito.
+#   3  Estado previo incompatible: el fichero de destino ya existe, o no hay
+#      ninguna copia que verificar. NADA se ha escrito.
+#   4  La copia ha fallado y se ha limpiado lo que habia empezado a escribir.
+#      El destino queda como estaba y la copia ANTERIOR sigue siendo la buena.
+#   5  La copia ha fallado y ha quedado algo a medias que hay que retirar a
+#      mano. El mensaje dice que fichero.
+#   6  La copia se ha escrito pero NO ha superado la verificacion, o una copia
+#      existente no verifica (huella distinta, no se descifra, o no es un
+#      volcado legible). TRATALA COMO INEXISTENTE.
+#
+# Si tenias un cron escrito contra la tabla anterior, la equivalencia esta en
+# lib/backup-common.sh y en docs/cliente/operacion.md.
 #
 # NINGUN SECRETO EN LA SALIDA: la clave no se imprime, no viaja por argv y no
 # aparece en los informes ni en las metricas.
@@ -94,7 +111,12 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 uso() {
-  sed -n '2,60p' "${BASH_SOURCE[0]}" | sed 's/^#\{1,2\} \{0,1\}//'
+  # La cabecera entera, sin numeros de linea que mantener sincronizados: se
+  # imprime desde la segunda linea hasta la primera que no sea un comentario.
+  # Un rango fijo se desajusta en cuanto alguien anade un parrafo -- paso de
+  # verdad al reescribir las cabeceras en la tarea 5.4 -- y el sintoma es una
+  # ayuda cortada a la mitad.
+  awk 'NR > 1 && !/^#/ { exit } NR > 1' "${BASH_SOURCE[0]}" | sed 's/^#\{1,2\} \{0,1\}//'
 }
 
 #------------------------------------------------------------------------------
@@ -115,7 +137,7 @@ comprobar_cliente_postgres() {
 }
 
 comprobar_conexion() {
-  psql -Atqc 'SELECT 1' >/dev/null 2>&1 || die 3 \
+  psql -Atqc 'SELECT 1' >/dev/null 2>&1 || die "${KQ_EXIT_REQUIREMENTS}" \
     "no se puede conectar a la base de datos ${PGDATABASE} en ${PGHOST}:${PGPORT} como ${PGUSER}. Comprueba que el servicio 'postgres' esta levantado (docker compose ps) y que DB_* del .env son correctos. No se ha tocado ninguna copia."
 }
 
@@ -126,7 +148,7 @@ comprobar_espacio() {
   necesario="${1:-0}"
   libre="$(free_bytes_at "$BACKUP_PATH")"
   if [ "$libre" -lt "$necesario" ]; then
-    die 4 "quedan $((libre / 1024 / 1024)) MiB libres en '${BACKUP_PATH}' y la copia necesita al menos $((necesario / 1024 / 1024)) MiB. Libera espacio o baja BACKUP_RETENTION_DAYS. Sigue en pie la ultima copia: no se ha borrado ni sobrescrito nada. Ver docs/runbooks/restaurar-backup.md."
+    die "${KQ_EXIT_REQUIREMENTS}" "quedan $((libre / 1024 / 1024)) MiB libres en '${BACKUP_PATH}' y la copia necesita al menos $((necesario / 1024 / 1024)) MiB. Libera espacio o baja BACKUP_RETENTION_DAYS. Sigue en pie la ultima copia: no se ha borrado ni sobrescrito nada. Ver docs/runbooks/restaurar-backup.md."
   fi
 }
 
@@ -329,7 +351,7 @@ copia_logica() {
   local inicio fin lsn_antes lsn_despues huella tamano duracion
   local conteos_antes conteos estables
 
-  [ -e "$destino" ] && die 1 \
+  [ -e "$destino" ] && die "${KQ_EXIT_STATE_CONFLICT}" \
     "ya existe '${destino}'. No se sobrescribe ninguna copia: espera un segundo y vuelve a lanzarla, o borra esa copia a mano si sabes que sobra."
 
   inicio="$(now_epoch)"
@@ -344,12 +366,12 @@ copia_logica() {
   if ! { "${BACKUP_DUMP_COMMAND:-pg_dump}" --format=custom --compress=6 --no-password |
     encrypt_stream; } >"$tmp"; then
     rm -f "$tmp"
-    die 1 "ha fallado el volcado o el cifrado. No se ha escrito ninguna copia nueva y la anterior sigue intacta. Revisa el espacio libre en '${BACKUP_PATH}' y los permisos del usuario ${PGUSER} sobre la base ${PGDATABASE}. Ver docs/runbooks/restaurar-backup.md."
+    die "${KQ_EXIT_ROLLED_BACK}" "ha fallado el volcado o el cifrado. No se ha escrito ninguna copia nueva y la anterior sigue intacta. Revisa el espacio libre en '${BACKUP_PATH}' y los permisos del usuario ${PGUSER} sobre la base ${PGDATABASE}. Ver docs/runbooks/restaurar-backup.md."
   fi
 
   [ -s "$tmp" ] || {
     rm -f "$tmp"
-    die 1 "el volcado ha salido vacio. No se ha tocado la copia anterior. Comprueba que ${PGUSER} puede leer las tablas de ${PGDATABASE}."
+    die "${KQ_EXIT_ROLLED_BACK}" "el volcado ha salido vacio. No se ha tocado la copia anterior. Comprueba que ${PGUSER} puede leer las tablas de ${PGDATABASE}."
   }
 
   lsn_despues="$(psql -Atqc 'SELECT pg_current_wal_lsn()' 2>/dev/null || echo desconocido)"
@@ -396,7 +418,7 @@ copia_fisica() {
   if ! { pg_basebackup --format=tar --gzip --compress=6 --wal-method=fetch \
     --checkpoint=fast --no-password --pgdata=- | encrypt_stream; } >"$tmp"; then
     rm -f "$tmp"
-    die 1 "ha fallado pg_basebackup. Comprueba que el usuario ${PGUSER} tiene el atributo REPLICATION o es superusuario y que pg_hba.conf admite conexiones de replicacion (infra/docker/postgres/conf/pg_hba.conf). El volcado logico de esta ejecucion, si lo hubo, sigue siendo valido."
+    die "${KQ_EXIT_ROLLED_BACK}" "ha fallado pg_basebackup. Comprueba que el usuario ${PGUSER} tiene el atributo REPLICATION o es superusuario y que pg_hba.conf admite conexiones de replicacion (infra/docker/postgres/conf/pg_hba.conf). El volcado logico de esta ejecucion, si lo hubo, sigue siendo valido."
   fi
 
   sync
@@ -430,13 +452,13 @@ cmd_run() {
       uso
       return 0
       ;;
-    *) die 2 "argumento desconocido '$1'. Ejecuta 'backup.sh --help' para ver las opciones." ;;
+    *) die "${KQ_EXIT_USAGE}" "argumento desconocido '$1'. Ejecuta 'backup.sh --help' para ver las opciones." ;;
     esac
   done
 
   case "$modo" in
   dump | base | full) ;;
-  *) die 2 "modo '${modo}' desconocido. Usa --mode dump (diaria), --mode base (fisica) o --mode full (las dos)." ;;
+  *) die "${KQ_EXIT_USAGE}" "modo '${modo}' desconocido. Usa --mode dump (diaria), --mode base (fisica) o --mode full (las dos)." ;;
   esac
 
   # A partir de aqui, cualquier salida distinta de cero publica la copia como
@@ -479,7 +501,7 @@ cmd_run() {
     if [ "$resultado" -ne 0 ]; then
       metricas_de_copia 0 "$(now_epoch)" "$COPIA_DURACION" "$COPIA_TAMANO" "$modo"
       COPIA_EN_CURSO=0
-      die 1 "la copia se ha escrito pero NO ha superado la verificacion. Tratala como inexistente: la anterior sigue siendo la buena. Ver docs/runbooks/restaurar-backup.md."
+      die "${KQ_EXIT_VERIFY_FAILED}" "la copia se ha escrito pero NO ha superado la verificacion. Tratala como inexistente: la anterior sigue siendo la buena. Ver docs/runbooks/restaurar-backup.md."
     fi
   fi
 
@@ -509,7 +531,7 @@ cmd_verify() {
       uso
       return 0
       ;;
-    *) die 2 "argumento desconocido '$1'. Uso: backup.sh verify [--file RUTA]." ;;
+    *) die "${KQ_EXIT_USAGE}" "argumento desconocido '$1'. Uso: backup.sh verify [--file RUTA]." ;;
     esac
   done
 
@@ -521,7 +543,7 @@ cmd_verify() {
   [ -n "$fichero" ] || fichero="$(latest_dump_file)"
   if [ -z "$fichero" ] || [ ! -f "$fichero" ]; then
     metricas_de_verificacion 0 "$(now_epoch)" -1
-    die 1 "no hay ninguna copia que verificar en '${BACKUP_DIR_DUMP}'. Lanza 'backup.sh run' o revisa BACKUP_PATH. Ver docs/runbooks/restaurar-backup.md."
+    die "${KQ_EXIT_STATE_CONFLICT}" "no hay ninguna copia que verificar en '${BACKUP_DIR_DUMP}'. Lanza 'backup.sh run' o revisa BACKUP_PATH. Ver docs/runbooks/restaurar-backup.md."
   fi
 
   log "Verificando ${fichero}"
@@ -533,7 +555,7 @@ cmd_verify() {
     huella_actual="$(sha256_of "$fichero")"
     if [ "$huella_guardada" != "$huella_actual" ]; then
       metricas_de_verificacion 0 "$(now_epoch)" -1
-      die 1 "la huella SHA-256 de '${fichero}' no coincide con la registrada al crearla: el fichero esta corrupto o alguien lo ha modificado. NO lo uses para restaurar. Usa la copia anterior ('backup.sh list') y avisa al responsable de seguridad."
+      die "${KQ_EXIT_VERIFY_FAILED}" "la huella SHA-256 de '${fichero}' no coincide con la registrada al crearla: el fichero esta corrupto o alguien lo ha modificado. NO lo uses para restaurar. Usa la copia anterior ('backup.sh list') y avisa al responsable de seguridad."
     fi
   else
     err "AVISO: '${fichero}' no tiene fichero .sha256. Se verifica igualmente descifrando, pero no se puede descartar corrupcion silenciosa."
@@ -554,7 +576,7 @@ cmd_verify() {
   if ! decrypt_stream <"$fichero" >"$claro" 2>/dev/null; then
     rm -rf "$temporal_dir"
     metricas_de_verificacion 0 "$(now_epoch)" -1
-    die 5 "no se ha podido descifrar '${fichero}'. O BACKUP_ENCRYPTION_KEY no es la clave con la que se creo, o el fichero esta dañado. Comprueba la clave del .env; si se roto, la copia solo se abre con la clave anterior. Ver docs/runbooks/restaurar-backup.md."
+    die "${KQ_EXIT_VERIFY_FAILED}" "no se ha podido descifrar '${fichero}'. O BACKUP_ENCRYPTION_KEY no es la clave con la que se creo, o el fichero esta dañado. Comprueba la clave del .env; si se roto, la copia solo se abre con la clave anterior. Ver docs/runbooks/restaurar-backup.md."
   fi
 
   if ! entradas="$(pg_restore --list "$claro" 2>/dev/null | grep -cE '^[0-9]+;' || true)"; then
@@ -563,7 +585,7 @@ cmd_verify() {
   if ! pg_restore --list "$claro" >/dev/null 2>&1; then
     rm -rf "$temporal_dir"
     metricas_de_verificacion 0 "$(now_epoch)" -1
-    die 1 "'${fichero}' se descifra pero no es un volcado que pg_restore pueda leer. La copia NO sirve para restaurar: usa la anterior ('backup.sh list') y lanza 'backup.sh run' en cuanto puedas. Ver docs/runbooks/restaurar-backup.md."
+    die "${KQ_EXIT_VERIFY_FAILED}" "'${fichero}' se descifra pero no es un volcado que pg_restore pueda leer. La copia NO sirve para restaurar: usa la anterior ('backup.sh list') y lanza 'backup.sh run' en cuanto puedas. Ver docs/runbooks/restaurar-backup.md."
   fi
   rm -rf "$temporal_dir"
 
@@ -640,7 +662,7 @@ main() {
   prune) cmd_prune "$@" ;;
   list) cmd_list "$@" ;;
   -h | --help | help) uso ;;
-  *) die 2 "orden desconocida '${orden}'. Usa run, verify, prune o list. 'backup.sh --help' las explica." ;;
+  *) die "${KQ_EXIT_USAGE}" "orden desconocida '${orden}'. Usa run, verify, prune o list. 'backup.sh --help' las explica." ;;
   esac
 }
 

@@ -102,7 +102,7 @@ export function isApiError(value: unknown): value is ApiError {
 /** Valor admitido en una cadena de consulta. `undefined` no se serializa. */
 export type QueryValue = string | number | boolean | undefined
 
-type Method = 'GET' | 'POST' | 'PATCH'
+type Method = 'GET' | 'POST' | 'PATCH' | 'PUT'
 
 export interface RequestOptions {
   method?: Method
@@ -280,7 +280,13 @@ async function send(path: string, options: RequestOptions, accept: string): Prom
     headers.set('Accept-Language', locale)
   }
 
-  if (options.body !== undefined) {
+  // `FormData` (la importacion de plantilla, multipart) NO lleva
+  // `Content-Type` explicito: el navegador fija `multipart/form-data` con el
+  // `boundary` que genera al construir el cuerpo, y ponerlo a mano aqui lo
+  // dejaria sin el, con un cuerpo que el servidor no sabe partir en campos.
+  const isMultipart = options.body instanceof FormData
+
+  if (options.body !== undefined && !isMultipart) {
     headers.set('Content-Type', 'application/json')
   }
 
@@ -294,7 +300,9 @@ async function send(path: string, options: RequestOptions, accept: string): Prom
       // quedarse en la cache del navegador.
       cache: 'no-store',
       credentials: 'omit',
-      ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
+      ...(options.body === undefined
+        ? {}
+        : { body: isMultipart ? (options.body as FormData) : JSON.stringify(options.body) }),
       ...(options.signal === undefined ? {} : { signal: options.signal }),
     })
   } catch {

@@ -9,6 +9,7 @@ use App\Modules\Shared\Application\Port\PinAttempts;
 use App\Modules\Workforce\Application\Command\IssueEmployeePinCommand;
 use App\Modules\Workforce\Application\Pin\PinGenerator;
 use App\Modules\Workforce\Application\Port\EmployeePinRepository;
+use App\Modules\Workforce\Application\Port\PinHasher;
 use App\Modules\Workforce\Application\Port\WorkforceEventPublisher;
 use App\Modules\Workforce\Domain\Event\EmployeePinIssued;
 use Random\RandomException;
@@ -39,6 +40,7 @@ final readonly class IssueEmployeePinHandler
     public function __construct(
         private EmployeePinRepository $pins,
         private PinGenerator $generator,
+        private PinHasher $hasher,
         private PinAttempts $attempts,
         private WorkforceEventPublisher $events,
         private Clock $clock,
@@ -51,10 +53,16 @@ final readonly class IssueEmployeePinHandler
      */
     public function handle(IssueEmployeePinCommand $command): ?IssuedPin
     {
-        $pin = $this->generator->generate();
+        // EL HASH SE CALCULA AQUI SALVO QUE YA VENGA HECHO. La importacion
+        // masiva lo trae precalculado porque bcrypt cuesta unos 160 ms y 500 de
+        // ellos dentro de una transaccion monopolizan el candado global de
+        // `audit_log` —y con el, los fichajes del hotel—. El resto de llamantes
+        // no pasan nada y se comportan como siempre.
+        $material = $command->material ?? $this->hasher->hash($this->generator->generate());
+
         $issuedAt = $this->clock->now();
 
-        if (! $this->pins->issue($command->employeeUuid, $pin, $issuedAt)) {
+        if (! $this->pins->issue($command->employeeUuid, $material->hash, $issuedAt)) {
             return null;
         }
 
@@ -73,7 +81,7 @@ final readonly class IssueEmployeePinHandler
 
         return new IssuedPin(
             employeeUuid: $command->employeeUuid,
-            pin: $pin,
+            pin: $material->pin,
             issuedAt: $issuedAt,
         );
     }

@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -369,19 +370,23 @@ it('entrega el perfil de cumplimiento ES-hosteleria con sus cuatro umbrales', fu
         ->and($profile?->is_default)->toBeTrue();
 })->group('RF-PD-07');
 
-it('entrega los cuatro umbrales operativos del Anexo B', function (): void {
-    // Regla dura 14 y RF-PD-01: ningun valor por defecto vive en el codigo.
-    // `OperationalSettings` no tiene constantes; los valores de serie estan
-    // aqui, donde el cliente puede cambiarlos sin desplegar nada.
-    $settings = DB::table('installation_settings')
-        ->where('scope', 'installation')
-        ->pluck('value', 'key')
-        ->all();
+it('entrega los cuatro umbrales operativos del Anexo B sin ninguna fila en la tabla', function (): void {
+    // Regla dura 14 y RF-PD-01: `OperationalSettings` no tiene constantes y el
+    // dominio recibe el umbral ya resuelto.
+    //
+    // **DONDE ESTA EL VALOR DE SERIE CAMBIO CON LA TAREA 5.1.** La tarea 1.3 lo
+    // sembraba como filas porque el adaptador de entonces lanzaba si faltaba una
+    // clave. Desde la 5.1 vive en el catalogo en codigo (`SettingKey`) y la
+    // migracion de contraccion retira aquella siembra: una instalacion limpia
+    // tiene la tabla **vacia** y ficha igual, que es el resultado esperado
+    // literal de la tarea. Que siga siendo configurable no depende de que exista
+    // la fila: depende de que el `PATCH` la cree.
+    expect(DB::table('installation_settings')->count())->toBe(0);
 
-    expect($settings)->toMatchArray([
-        'ATTENDANCE_MAX_SHIFT_HOURS' => '12',          // RN-08
-        'ATTENDANCE_DEBOUNCE_SECONDS' => '60',         // RF-AT-06
-        'ATTENDANCE_MAX_CLOCK_SKEW_MINUTES' => '15',   // RF-AT-10
-        'ATTENDANCE_MIN_TRANSIT_SECONDS' => '120',     // RN-16
-    ]);
+    $settings = app(OperationalSettingsProvider::class)->forSite(1);
+
+    expect($settings->anomalousShiftMinutes)->toBe(12 * 60)   // RN-08
+        ->and($settings->debounceSeconds)->toBe(60)            // RF-AT-06
+        ->and($settings->maximumClockSkewMinutes)->toBe(15)    // RF-AT-10
+        ->and($settings->minimumTransitSeconds)->toBe(120);    // RN-16
 })->group('RF-PD-01');

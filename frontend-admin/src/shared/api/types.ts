@@ -31,8 +31,54 @@ export type IssuedPin = Schemas['IssuedPin']
 export type PinDeliveryReceipt = Schemas['PinDeliveryReceipt']
 
 export type Site = Schemas['Site']
+
+// Perfil de cumplimiento: los umbrales LEGALES del centro (RF-PD-07, tarea 5.2).
+export type ComplianceProfile = Schemas['ComplianceProfile']
+export type ComplianceProfileBody = Schemas['ComplianceProfileBody']
+export type UpdateComplianceProfileRequest = Schemas['UpdateComplianceProfileRequest']
+
+// Licencia (RF-PD-04, RF-PD-05, tarea 5.3). `LicenseFeature` son las
+// funcionalidades ACCESORIAS de ADR-023 y ninguna otra: el registro legal no es
+// licenciable y no tiene valor en ese enum.
+export type License = Schemas['License']
+export type LicenseState = Schemas['LicenseState']
+export type LicenseFeature = Schemas['LicenseFeature']
+export type ActivateLicenseRequest = Schemas['ActivateLicenseRequest']
 export type Department = Schemas['Department']
 export type DepartmentCollection = Schemas['DepartmentCollection']
+export type CreateDepartmentRequest = Schemas['CreateDepartmentRequest']
+
+// Configuracion de la instalacion (RF-PD-01, tarea 5.1). El paso de
+// organizacion del asistente (tarea 5.5) escribe `BRANDING_APP_NAME` y las
+// claves `LOCALE_*`; la tarea 5.8 leera y escribira el resto del catalogo por
+// el mismo sitio.
+export type SettingKey = Schemas['SettingKey']
+export type SettingValue = Schemas['SettingValue']
+export type SettingType = Schemas['SettingType']
+export type SettingImpact = Schemas['SettingImpact']
+export type SettingSource = Schemas['SettingSource']
+export type SettingConstraints = Schemas['SettingConstraints']
+export type InstallationSetting = Schemas['InstallationSetting']
+export type InstallationSettings = Schemas['InstallationSettings']
+export type UpdateSettingsRequest = Schemas['UpdateSettingsRequest']
+
+// Asistente de puesta en marcha (RF-PD-03, RF-GP-05, tarea 5.5).
+export type SetupStep = Schemas['SetupStep']
+export type SetupStepState = Schemas['SetupStepState']
+export type SetupStepStatus = Schemas['SetupStepStatus']
+export type SetupStatus = Schemas['SetupStatus']
+export type SetupSummary = Schemas['SetupSummary']
+export type SetupCompletion = Schemas['SetupCompletion']
+export type CreateFirstAdministratorRequest = Schemas['CreateFirstAdministratorRequest']
+export type CreateInstallationSiteRequest = Schemas['CreateInstallationSiteRequest']
+export type RecordSetupStepRequest = Schemas['RecordSetupStepRequest']
+
+// Importacion masiva de plantilla (RF-GP-05, paso «employees» del asistente).
+export type EmployeeImportMode = Schemas['EmployeeImportMode']
+export type EmployeeImportOutcome = Schemas['EmployeeImportOutcome']
+export type EmployeeImportMessage = Schemas['EmployeeImportMessage']
+export type EmployeeImportRow = Schemas['EmployeeImportRow']
+export type EmployeeImportReport = Schemas['EmployeeImportReport']
 
 export type Credential = Schemas['Credential']
 export type IssuedCredential = Schemas['IssuedCredential']

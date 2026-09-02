@@ -21,12 +21,46 @@
 #   · Grafana escuchando solo en loopback: se llega por tunel o por el propio
 #     servidor, jamas expuesto a internet
 #   · reinicio automatico y rotacion de logs
+#
+#------------------------------------------------------------------------------
+# NADA DE `latest` EN PRODUCCION (doc 02 §11.6.1)
+#------------------------------------------------------------------------------
+# IMAGE_TAG no tiene valor por defecto y no lo tendra. `latest` es una etiqueta
+# MOVIL: dos `docker compose up -d` con el mismo fichero, el mismo .env y un mes
+# de diferencia levantarian codigo distinto, y la instalacion no sabria decir
+# que version corre. Eso rompe tres cosas a la vez: el diagnostico (RF-PD-15
+# correlaciona un error con una version), la matriz de versiones soportadas
+# (§11.6.5) y la vuelta atras de update.sh, que necesita nombrar la version
+# anterior.
+#
+# Quien la fija es install.sh, desde el fichero VERSION del paquete de entrega.
+# Si falta, Compose se para con el mensaje de abajo antes de crear nada.
+#
+#------------------------------------------------------------------------------
+# PERFIL `observability` (prometheus, node-exporter, alertmanager, grafana, loki)
+#------------------------------------------------------------------------------
+# Van en un perfil, y el perfil viene ENCENDIDO de serie: .env.example trae
+# COMPOSE_PROFILES=observability. El valor por defecto es el producto, y el
+# producto incluye que alguien avise de que la copia de anoche fallo o de que
+# el archivado de WAL se ha parado — que son los dos fallos que convierten una
+# instalacion sana en una perdida de datos, y ninguno de los dos se nota
+# mirando la pantalla.
+#
+# Se puede apagar (COMPOSE_PROFILES= vacio) y es una configuracion soportada:
+# libera unos 700 MiB en un servidor que este justo en el minimo publicado de
+# 4 GB. Lo que se pierde esta escrito en docs/cliente/operacion.md, y es
+# concreto: sin este perfil NADIE avisa de una copia fallida, y verificarla
+# pasa a ser una tarea manual semanal del IT.
+#
+# Va en el .env y no en la linea de ordenes a proposito: si install.sh pasara
+# `--profile`, el siguiente `docker compose up -d` que teclee el IT del hotel
+# apagaria la observabilidad sin decir nada.
 #==============================================================================
 
 name: kronoqr
 
 x-app-image: &app-image
-  image: ${IMAGE_REGISTRY:-ghcr.io/kronoqr}/php:${IMAGE_TAG:-latest}
+  image: ${IMAGE_REGISTRY:-ghcr.io/kronoqr}/php:${IMAGE_TAG:?falta IMAGE_TAG. En produccion no hay etiqueta por defecto y `latest` esta prohibido (doc 02 §11.6.1). install.sh la fija desde el fichero VERSION del paquete; si ejecutas Compose a mano, pon IMAGE_TAG=<version> en el .env}
   env_file:
     - .env
   volumes:
@@ -65,7 +99,7 @@ services:
       start_period: 30s
 
   nginx:
-    image: ${IMAGE_REGISTRY:-ghcr.io/kronoqr}/nginx:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-ghcr.io/kronoqr}/nginx:${IMAGE_TAG:?falta IMAGE_TAG. En produccion no hay etiqueta por defecto y `latest` esta prohibido (doc 02 §11.6.1). install.sh la fija desde el fichero VERSION del paquete; si ejecutas Compose a mano, pon IMAGE_TAG=<version> en el .env}
     env_file:
       - .env
     ports:
@@ -76,12 +110,18 @@ services:
       # donde colocarlo: un autofirmado en produccion acaba con alguien
       # desactivando la comprobacion en los quioscos.
       - ${TLS_CERT_DIR:-./certs}:/etc/nginx/certs:ro
-      # Nginx sirve la API y proxya el WebSocket. La entrega de los ficheros
-      # construidos de los tres frontends se define en el paquete de entrega
-      # (tarea 5.4): hasta entonces no se inventa aqui un volumen compartido
-      # que quedaria congelado en la primera version instalada.
+      #
+      # LOS TRES FRONTENDS VAN DENTRO DE ESTA IMAGEN, no en un volumen.
+      #
+      # Un volumen compartido con los ficheros construidos se queda congelado en
+      # la version que lo inicializo: Docker copia el contenido de la imagen a un
+      # volumen VACIO y no vuelve a tocarlo nunca mas. La primera actualizacion
+      # dejaria un panel de la 1.2 hablando con una API de la 1.6, con errores de
+      # contrato que no se parecen a su causa. Al vivir en la imagen, la etiqueta
+      # inmutable de arriba fija a la vez el backend y las tres SPA.
     depends_on:
-      - app
+      app:
+        condition: service_healthy
     networks:
       - app
       - observability
@@ -93,7 +133,7 @@ services:
         max-file: "5"
 
   postgres:
-    image: ${IMAGE_REGISTRY:-ghcr.io/kronoqr}/postgres:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-ghcr.io/kronoqr}/postgres:${IMAGE_TAG:?falta IMAGE_TAG. En produccion no hay etiqueta por defecto y `latest` esta prohibido (doc 02 §11.6.1). install.sh la fija desde el fichero VERSION del paquete; si ejecutas Compose a mano, pon IMAGE_TAG=<version> en el .env}
     environment:
       POSTGRES_DB: ${DB_DATABASE:-fichaje}
       # El rol de ARRANQUE es el de MIGRACION, no el de la aplicacion (tarea
@@ -208,6 +248,7 @@ services:
         condition: service_healthy
 
   prometheus:
+    profiles: [observability]
     image: prom/prometheus:v3.1.0
     command:
       - --config.file=/etc/prometheus/prometheus.yml
@@ -226,6 +267,7 @@ services:
   # ficheros .prom en BACKUP_PATH/metrics y este servicio los sirve. Es lo que
   # convierte "el cron fallo" en una alerta y no en un hallazgo de fin de mes.
   node-exporter:
+    profiles: [observability]
     image: prom/node-exporter:v1.9.1
     # El uid que escribe las copias (el mismo del contenedor de aplicacion).
     # El arbol de copias es 0750 y contiene datos personales cifrados: se le da
@@ -254,6 +296,7 @@ services:
         max-file: "5"
 
   alertmanager:
+    profiles: [observability]
     image: prom/alertmanager:v0.28.0
     command:
       - --config.file=/etc/alertmanager/alertmanager.yml
@@ -268,6 +311,7 @@ services:
     restart: unless-stopped
 
   grafana:
+    profiles: [observability]
     image: grafana/grafana:11.5.1
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
@@ -289,6 +333,7 @@ services:
     restart: unless-stopped
 
   loki:
+    profiles: [observability]
     image: grafana/loki:3.3.2
     command: ["-config.file=/etc/loki/loki.yaml"]
     volumes:

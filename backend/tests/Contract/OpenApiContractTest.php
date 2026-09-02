@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Modules\Product\Domain\ValueObject\SettingKey;
 use Spectator\RequestFactory;
 use Spectator\Spectator;
 use Tests\Contract\Support\Contract;
@@ -123,8 +124,79 @@ it('describe solo los endpoints cuya tarea existe, y todos bajo /api/v1', functi
         // `IncidentId` del contrato.
         '/api/v1/incidents',
         '/api/v1/incidents/{id}/resolve',
+        // Tarea 5.2: el perfil de cumplimiento (RF-PD-07, regla dura 14). Recurso
+        // propio y no una clave mas de `/settings`: un umbral LEGAL lo fija la
+        // jurisdiccion y uno OPERATIVO lo fija el hotel, y en un mapa de clave y
+        // valor serian indistinguibles «he bajado el anti-rebote» de «he bajado
+        // los años que hay que conservar el registro». SINGULAR como `/site`
+        // (ADR-040): con un centro por instalacion hay un perfil vigente.
+        '/api/v1/compliance-profile',
+        // Tarea 5.3: la licencia (RF-PD-04). Ambito propio `license:*` y no
+        // `settings:*`, porque un ajuste operativo y un hecho comercial no son
+        // lo mismo. `GET` NUNCA devuelve 404 —«sin licencia» es un estado— y no
+        // hay `DELETE`: no se desactiva una licencia, se activa otra.
+        '/api/v1/license',
+        '/api/v1/license/activate',
+        // Tarea 5.1: configuracion de la instalacion (RF-PD-01, ADR-017). Es lo
+        // que hace que vender a un cliente nuevo no exija tocar el repositorio.
+        // Recurso SINGULAR y sin `{key}` en la ruta: el catalogo de claves es
+        // codigo y se sirve entero, asi que no hay nada que direccionar por
+        // separado — y un `PATCH` de varias claves a la vez es lo que permite
+        // comprobar las invariantes entre ellas antes de escribir ninguna.
+        '/api/v1/settings',
+        // Tarea 5.5: el asistente de puesta en marcha (RF-PD-03). Prefijo propio
+        // y no rutas repartidas por los recursos que toca, por una razon
+        // concreta: son de UN SOLO USO y se cierran a la vez. Con `POST
+        // /api/v1/site` habria un alta de centros permanente —que ADR-040 cierra
+        // y el Anexo B niega por escrito— en lugar de un acto irrepetible de
+        // puesta en marcha.
+        //
+        // `status` y `administrator` son las UNICAS rutas publicas de escritura y
+        // lectura del asistente, y la segunda solo mientras no exista ninguna
+        // cuenta de gestion: el instalador no crea cuentas, asi que sin ella una
+        // instalacion recien montada no tendria puerta de entrada a su panel.
+        '/api/v1/setup/status',
+        '/api/v1/setup/administrator',
+        '/api/v1/setup/site',
+        // El DETALLE de los pasos va autenticado y aparte de `status`, que es
+        // publica: la lista dice si hay un administrador sin segundo factor, si
+        // no hay licencia y si no hay ningun quiosco. Es un inventario de la
+        // postura de la instalacion y no hace falta para redirigir un navegador.
+        '/api/v1/setup/steps',
+        '/api/v1/setup/steps/{step}',
+        '/api/v1/setup/complete',
+        // Tarea 5.5: importacion masiva de plantilla (RF-GP-05, movido aqui desde
+        // la 3.10). Cuelga de `/employees` y lleva su ambito porque es un alta de
+        // plantilla, no un informe. Es el unico endpoint del producto con cuerpo
+        // `multipart/form-data`: el fichero se lee en streaming desde disco y no
+        // se carga entero en memoria.
+        '/api/v1/employees/import',
     ]);
 })->group('RQ-06');
+
+it('declara en el contrato exactamente el catalogo de claves de configuracion', function (): void {
+    // RF-PD-01. El catalogo vive en `SettingKey` y **se escribe otras dos veces**
+    // en el contrato: en el enum del esquema `SettingKey`, que tipa la respuesta,
+    // y en `propertyNames` de `UpdateSettingsRequest`, que acota lo que se puede
+    // enviar. Las tres copias tienen que decir lo mismo.
+    //
+    // Que se separen no rompe nada visible, y eso es justo el problema: una clave
+    // añadida al catalogo y olvidada en `propertyNames` la rechazaria el validador
+    // de contrato de un cliente que la envia legitimamente; olvidada en el enum de
+    // la respuesta, el cliente TypeScript no la conoceria y el panel no la
+    // pintaria. Los dos fallos aparecen lejos de su causa.
+    //
+    // Es el mismo criterio con el que los ambitos de token estan escritos en tres
+    // sitios y atados por una prueba, y no por la buena fe.
+    $catalogo = array_map(static fn (SettingKey $key): string => $key->value, SettingKey::cases());
+
+    expect(Contract::value('components', 'schemas', 'SettingKey', 'enum'))->toBe($catalogo);
+
+    expect(Contract::value(
+        'components', 'schemas', 'UpdateSettingsRequest',
+        'properties', 'settings', 'propertyNames', 'enum',
+    ))->toBe($catalogo);
+})->group('RQ-06', 'RF-PD-01');
 
 it('describe el segundo factor con dos desenlaces de exito que no se confunden', function (): void {
     // RS-06. `POST /auth/login` gana un `202` con la sesion PENDIENTE, con nombre
@@ -382,11 +454,27 @@ it('publica la version desplegada en la sonda de vida', function (): void {
     // Doc 02 §10.5: la version es visible en /api/v1/health para poder
     // correlacionar una incidencia con una version concreta sin entrar por SSH
     // al servidor del cliente.
+    //
+    // La tarea 5.3 le añade el estado de la LICENCIA, por lo mismo: `doctor` y
+    // el paquete de diagnostico tienen que poder informarlo (RF-PD-09). Una
+    // palabra y nada mas —ni cliente, ni plan, ni fechas—, porque la sonda es
+    // publica y el resto es informacion comercial del cliente (ADR-020).
     expect(Contract::value('components', 'schemas', 'Health', 'required'))
-        ->toBe(['status', 'version'])
+        ->toBe(['status', 'version', 'license'])
         ->and(Contract::text('components', 'schemas', 'Health', 'properties', 'version', 'pattern'))
-        ->toBe('^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$');
+        ->toBe('^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$')
+        // `unknown` esta y tiene que estar: significa «esta sonda no ha podido
+        // saberlo sin tocar dependencias», que NO es lo mismo que `absent`.
+        ->and(Contract::value('components', 'schemas', 'Health', 'properties', 'license', 'enum'))
+        ->toContain('unknown');
 })->group('RNF-D-01');
+
+it('la sonda de vida no cambia de codigo por una licencia caducada', function (): void {
+    // Regla dura 15 y ADR-019. Devolver 503 por una licencia haria que el
+    // orquestador retirara del balanceo un contenedor que ficha perfectamente,
+    // que es la forma mas cara de convertir un problema comercial en una caida.
+    expect(Contract::keys('paths', '/api/v1/health', 'get', 'responses'))->toBe(['200']);
+})->group('RF-PD-05');
 
 it('separa la sonda de vida de la de disponibilidad', function (): void {
     // La de vida no puede fallar por una dependencia caida: si lo hiciera, el
@@ -1109,6 +1197,14 @@ it('entrega al panel los datos de conexion del WebSocket en la respuesta, no com
             'event',
             'channels',
             'poll_interval_seconds',
+            // Tarea 5.3: POR QUE no hay tiempo real, cuando la causa es la
+            // licencia (ADR-023). Sin el motivo, el panel solo podria decir «no
+            // disponible», y ADR-019 exige que la degradacion diga que esta
+            // degradado, desde cuando y que hacer. Van nulos cuando la causa es
+            // otra —la instalacion lo apago, o falta Reverb—: eso lo arregla
+            // quien despliega, no quien renueva.
+            'unavailable_reason',
+            'unavailable_since',
         ]);
 })->group('RF-PA-01', 'RQ-06');
 

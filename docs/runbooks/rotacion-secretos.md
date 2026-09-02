@@ -31,8 +31,44 @@ llame.
 Todos los comandos se ejecutan dentro del contenedor:
 
 ```bash
-docker compose --env-file .env -f infra/compose.dev.yaml exec -T app <comando>
+docker compose -f docker-compose.yml exec -T app <comando>
 ```
+
+---
+
+## 0. Qué genera el instalador, y cuál de estos secretos es cuál
+
+Desde la tarea 5.4, `install.sh` genera **todos** los secretos de una
+instalación nueva con `openssl`, en el servidor del cliente, y los escribe en un
+`.env` con permisos `0600`. Ninguno se imprime por pantalla ni queda en el log
+del instalador, y eso se comprueba en cada publicación de versión.
+
+| Variable que escribe `install.sh` | Cómo se genera | Se rota en |
+| --- | --- | --- |
+| `APP_KEY` | `base64:` + 32 bytes aleatorios | §2 |
+| `QR_SIGNING_KEY_CURRENT` | 32 bytes aleatorios en base64 | §1 (runbook propio) |
+| `QR_SIGNING_KEY_CURRENT_ID` | 2 caracteres hexadecimales | §1 |
+| `DB_PASSWORD` | 32 caracteres alfanuméricos | §3 |
+| `DB_MIGRATION_PASSWORD` | Íd. | §3 |
+| `BACKUP_DB_PASSWORD` | **Copia de `DB_MIGRATION_PASSWORD`**: el volcado lo hace el rol de migración, porque `pg_basebackup` exige `REPLICATION` | §3 |
+| `REVERB_APP_ID` / `_KEY` | 8 y 16 bytes en hexadecimal | §6 bis |
+| `REVERB_APP_SECRET` | 32 bytes aleatorios en base64 | §6 bis |
+| `BACKUP_ENCRYPTION_KEY` | 32 bytes aleatorios en base64 | §5 |
+| `IDENTITY_PIN_SEALING_SECRET_KEY` | 32 bytes aleatorios en base64 (es exactamente lo que hace libsodium al crear una privada X25519; la pública se deriva de ella) | §6 bis |
+| `GRAFANA_ADMIN_PASSWORD` | 32 caracteres alfanuméricos | §6 bis |
+
+**Las contraseñas de base de datos son alfanuméricas a propósito.** Viajan por
+una cadena de conexión y por un fichero de entorno, y ahí cada capa escapa los
+caracteres especiales a su manera; el síntoma sería un `password authentication
+failed` que no se parece a su causa. 32 caracteres alfanuméricos son unos 190
+bits: de sobra.
+
+**`DB_MAINTENANCE_PASSWORD` NO la genera el instalador**, y no es un descuido:
+ADR-027 exige que ese rol —el único que puede soltar una partición vencida de
+`audit_log`— no tenga credencial en el `.env` de la aplicación. Nace sin
+contraseña, existe y no se puede usar por red, y se le asigna una en el momento
+de la purga anual. Procedimiento en
+[`../cliente/operacion.md`](../cliente/operacion.md), sección 9.
 
 ---
 
@@ -108,7 +144,7 @@ ALTER ROLE fichaje_app WITH PASSWORD '<nueva>';
 ```bash
 # 2. Actualizar DB_PASSWORD en el .env
 # 3. Reiniciar la aplicación y las colas
-docker compose --env-file .env -f infra/compose.dev.yaml up -d app horizon scheduler
+docker compose -f docker-compose.yml up -d app horizon scheduler
 # 4. Comprobar de verdad, no solo que el contenedor arranca
 php artisan credentials:status --no-metrics --quiet-table
 ```
@@ -162,6 +198,23 @@ Rotarla **no vuelve a cifrar las copias antiguas**, y ese es el punto delicado:
    [`restaurar-backup.md`](restaurar-backup.md).
 5. **No destruyas la clave anterior** hasta que caduque la última copia cifrada
    con ella. Anota la fecha.
+
+---
+
+## 5 bis. Los tres secretos restantes del instalador
+
+Ninguno de los tres tiene un procedimiento delicado: se genera un valor nuevo,
+se sustituye en el `.env` y se reinician los servicios. Se documentan porque el
+instalador los genera y alguien tiene que saber qué pasa al cambiarlos.
+
+| Secreto | Efecto de rotarlo | Procedimiento |
+| --- | --- | --- |
+| `REVERB_APP_ID` / `_KEY` / `_SECRET` | Los paneles abiertos pierden la conexión de presencia en vivo y **caen a sondeo**; nadie deja de fichar ni pierde datos | Genera los tres, sustitúyelos y reinicia `reverb`, `app` y `horizon` |
+| `IDENTITY_PIN_SEALING_SECRET_KEY` | **Los PIN que un quiosco tenga sellados en su cola sin red dejan de poder abrirse.** No se pierde el fichaje: entra como incidencia para revisión humana (regla dura 19) | Vacía las colas de los quioscos antes: comprueba en el panel que ninguno tiene pendientes, y solo entonces rota |
+| `GRAFANA_ADMIN_PASSWORD` | Solo afecta al acceso al cuadro de mandos | Sustitúyelo y recrea el contenedor `grafana` |
+
+**El único de los tres con un momento malo es el del sobre del PIN**, y por eso
+la comprobación previa no es opcional.
 
 ---
 

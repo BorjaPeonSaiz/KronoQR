@@ -6,7 +6,9 @@ namespace App\Modules\Product\Infrastructure\Adapter;
 
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Domain\ValueObject\CompliancePolicy;
+use App\Modules\Shared\Domain\ValueObject\HolidayCalendar;
 use Illuminate\Database\ConnectionInterface;
+use Psr\Log\LoggerInterface;
 use RuntimeException;
 
 /**
@@ -19,9 +21,9 @@ use RuntimeException;
  * umbrales, y la unica alternativa seria escribir 12 h, 9 h y 6 h como
  * constantes en PHP — que es exactamente lo que la regla dura 14 y ADR-017
  * prohiben. Lo que la 5.2 anade encima es la **edicion desde el panel**, la
- * resolucion en cascada por ambito y la auditoria de ese cambio
- * (`calculation_setting.changed`); la lectura, que es lo que el nucleo necesita,
- * es esto y no cambiara de forma.
+ * auditoria de ese cambio (`calculation_setting.changed`) y los tres campos que
+ * faltaban del perfil —jornada semanal, inicio de semana y festivos—; la lectura,
+ * que es lo que el nucleo necesita, es esto y no cambia de forma.
  *
  * ## La cascada, que aqui son dos escalones y no tres
  *
@@ -63,7 +65,10 @@ final class DbCompliancePolicyProvider implements CompliancePolicyProvider
      */
     private array $resolved = [];
 
-    public function __construct(private readonly ConnectionInterface $connection) {}
+    public function __construct(
+        private readonly ConnectionInterface $connection,
+        private readonly LoggerInterface $logger,
+    ) {}
 
     public function forSite(int $siteId): CompliancePolicy
     {
@@ -86,17 +91,20 @@ final class DbCompliancePolicyProvider implements CompliancePolicyProvider
             maximumDailyMinutes: $profile->max_daily_hours * 60,
             breakRequiredAfterMinutes: $profile->break_required_after_hours * 60,
             retentionYears: $profile->retention_years,
+            maximumWeeklyMinutes: $profile->max_weekly_hours * 60,
+            weekStartsOn: $profile->week_starts_on,
+            holidayCalendar: $this->decodeCalendar($profile->id, $profile->holiday_calendar),
         );
     }
 
     /**
      * El perfil asignado al centro, si tiene uno.
      *
-     * @return object{min_rest_hours: int, max_daily_hours: int, break_required_after_hours: int, retention_years: int}|null
+     * @return object{id: int, min_rest_hours: int, max_daily_hours: int, break_required_after_hours: int, retention_years: int, max_weekly_hours: int, week_starts_on: int, holiday_calendar: string}|null
      */
     private function profileFor(int $siteId): ?object
     {
-        /** @var object{min_rest_hours: int, max_daily_hours: int, break_required_after_hours: int, retention_years: int}|null $profile */
+        /** @var object{id: int, min_rest_hours: int, max_daily_hours: int, break_required_after_hours: int, retention_years: int, max_weekly_hours: int, week_starts_on: int, holiday_calendar: string}|null $profile */
         $profile = $this->connection->table('compliance_profiles')
             ->join('sites', 'sites.compliance_profile_id', '=', 'compliance_profiles.id')
             ->where('sites.id', $siteId)
@@ -110,11 +118,11 @@ final class DbCompliancePolicyProvider implements CompliancePolicyProvider
      * El perfil por defecto de la instalacion, que es lo que significa un centro
      * sin perfil asignado.
      *
-     * @return object{min_rest_hours: int, max_daily_hours: int, break_required_after_hours: int, retention_years: int}|null
+     * @return object{id: int, min_rest_hours: int, max_daily_hours: int, break_required_after_hours: int, retention_years: int, max_weekly_hours: int, week_starts_on: int, holiday_calendar: string}|null
      */
     private function defaultProfile(): ?object
     {
-        /** @var object{min_rest_hours: int, max_daily_hours: int, break_required_after_hours: int, retention_years: int}|null $profile */
+        /** @var object{id: int, min_rest_hours: int, max_daily_hours: int, break_required_after_hours: int, retention_years: int, max_weekly_hours: int, week_starts_on: int, holiday_calendar: string}|null $profile */
         $profile = $this->connection->table('compliance_profiles')
             ->where('is_default', true)
             ->select($this->columns())
@@ -129,10 +137,49 @@ final class DbCompliancePolicyProvider implements CompliancePolicyProvider
     private function columns(): array
     {
         return [
+            'compliance_profiles.id',
             'compliance_profiles.min_rest_hours',
             'compliance_profiles.max_daily_hours',
             'compliance_profiles.break_required_after_hours',
             'compliance_profiles.retention_years',
+            'compliance_profiles.max_weekly_hours',
+            'compliance_profiles.week_starts_on',
+            'compliance_profiles.holiday_calendar',
         ];
+    }
+
+    /**
+     * El calendario de festivos, que PostgreSQL entrega como el texto del JSONB.
+     *
+     * **Tolerante, y esto no es una comodidad: es lo que impide que un festivo
+     * mal escrito apague dos reglas legales.** Este metodo esta en el camino de
+     * la pasada nocturna de deteccion, que resuelve la politica una sola vez
+     * antes del bucle y sin `try`. Antes de la revision de la 5.2, un
+     * `'["navidad"]'` escrito a mano pasaba el filtro de aqui —que solo miraba
+     * que fueran cadenas— y estallaba dentro del objeto de valor: la pasada moria
+     * entera y RN-10 y RN-11 dejaban de evaluarse en toda la instalacion, y la
+     * purga por retencion caia con ella. Lo que se pierde ahora es la fecha mala,
+     * que hoy no la lee ninguna regla; lo que no se pierde es el resto del perfil.
+     *
+     * **El descarte no es silencioso**: deja un `warning` con el identificador
+     * del perfil y cuantas entradas se descartaron. Ni las fechas ni el nombre
+     * viajan al log —viaja a Loki y al paquete de diagnostico (ADR-020)— porque
+     * el habito de la regla dura 21 vale tambien para lo que no es dato personal.
+     *
+     * @return list<string>
+     */
+    private function decodeCalendar(int $profileId, string $raw): array
+    {
+        $calendar = HolidayCalendar::fromStoredJson($raw);
+
+        if (! $calendar->isClean()) {
+            $this->logger->warning('product.compliance_profile_calendar_discarded', [
+                'profile_id' => $profileId,
+                'rejected' => count($calendar->rejected),
+                'had_duplicates' => $calendar->hadDuplicates,
+            ]);
+        }
+
+        return $calendar->days;
     }
 }

@@ -6,6 +6,7 @@ namespace Tests\Support\Http;
 
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Testing\TestResponse;
 use Symfony\Component\HttpFoundation\Response;
@@ -127,10 +128,42 @@ final readonly class Api
     }
 
     /**
+     * Subida `multipart/form-data`.
+     *
+     * **Existe por `POST /api/v1/employees/import`** (RF-GP-05), que es el unico
+     * endpoint del producto con cuerpo multipart: el fichero de plantilla se lee
+     * en streaming desde disco y no se puede transportar en un JSON sin cargarlo
+     * entero en memoria, que es justo lo que ese endpoint evita.
+     *
+     * Va por separado de {@see self::call()} y no como un caso mas suyo porque
+     * las dos cosas que cambian —el `CONTENT_TYPE` y el hueco de `$files` de
+     * `Request::create()`— no son un parametro mas: mezclarlas obligaria a que
+     * cada peticion JSON pasara por una rama que no usa.
+     *
+     * @param  array<string, mixed>  $fields
+     * @param  array<string, UploadedFile>  $files
+     * @return TestResponse<Response>
+     */
+    public function upload(string $uri, array $fields, array $files): TestResponse
+    {
+        return $this->send('POST', $uri, $fields, $files, multipart: true);
+    }
+
+    /**
      * @param  array<string, mixed>  $body
      * @return TestResponse<Response>
      */
     public function call(string $method, string $uri, array $body = []): TestResponse
+    {
+        return $this->send($method, $uri, $body, [], multipart: false);
+    }
+
+    /**
+     * @param  array<string, mixed>  $body
+     * @param  array<string, UploadedFile>  $files
+     * @return TestResponse<Response>
+     */
+    private function send(string $method, string $uri, array $body, array $files, bool $multipart): TestResponse
     {
         $server = [
             'HTTP_ACCEPT' => 'application/json',
@@ -158,11 +191,23 @@ final readonly class Api
             $server['REMOTE_ADDR'] = $this->ip;
         }
 
+        if ($multipart) {
+            // El tipo de contenido lo compone Symfony a partir de `$files`, asi
+            // que aqui se retira el `application/json` por defecto: dejarlo haria
+            // que Laravel intentara deserializar el cuerpo como JSON y no viera
+            // ni los campos ni el fichero.
+            unset($server['CONTENT_TYPE']);
+        }
+
         $request = Request::create(
             uri: $uri,
             method: $method,
+            // En multipart los campos viajan como parametros de formulario, que
+            // es como llegarian de un navegador de verdad.
+            parameters: $multipart ? $body : [],
+            files: $files,
             server: $server,
-            content: $body === [] ? null : json_encode($body, JSON_THROW_ON_ERROR),
+            content: $multipart || $body === [] ? null : json_encode($body, JSON_THROW_ON_ERROR),
         );
 
         // Cada llamada de este cliente simula una peticion HTTP NUEVA, y en una

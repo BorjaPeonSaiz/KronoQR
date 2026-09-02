@@ -11,7 +11,9 @@
       "legalExport": "Inspectorate",
       "live": "Presence",
       "incidents": "Incidents",
-      "reports": "Reports"
+      "reports": "Reports",
+      "compliance": "Compliance",
+      "license": "Licence"
     },
     "roles": {
       "admin": "Administration",
@@ -805,6 +807,296 @@
       "heading": "Incidents in this work day",
       "none": "No incidents in this work day.",
       "linkToInbox": "View in the incident inbox"
+    }
+  },
+  "compliance": {
+    "heading": "Compliance profile",
+    "intro": "The legal thresholds used to review this site's time records. They ship with the Spanish hospitality profile; adjust them to the collective agreement that applies to you.",
+    "loading": "Loading the profile…",
+    "detectionWarning": "These thresholds decide which working days are flagged for review. A change applies from the moment it is saved: history is not recalculated and no already-recorded issue is closed or reopened. Note that the daily review looks back over the last 7 days, so tightening a threshold can raise issues for past working days that fall inside that window.",
+    "pendingDetectionWarning": "You are about to change an incident detection threshold. From the next daily review, different working days will be flagged than are flagged today.",
+    "retentionWarning": "You are about to change how many years records are kept. Lowering it widens what the purge treats as expired, over data you are legally required to keep. No purge runs on its own: the retention command proposes in simulation first and requires an explicit confirmation.",
+    "notAppliedYet": "Weekly working hours, the first day of the week and the holiday calendar are stored and audited, but no rule applies them yet: the compliance view will be the first to use them.",
+    "save": "Save profile",
+    "saving": "Saving…",
+    "saved": "Profile saved. The change is recorded in the audit trail.",
+    "failed": "The profile could not be saved.",
+    "audited": "Every threshold changed leaves an audit trail entry with the previous value, the new one, who changed it and when.",
+    "source": {
+      "site": "Profile “{name}” ({jurisdiction}), assigned to this site.",
+      "installation": "Profile “{name}” ({jurisdiction}), the installation default: this site has none assigned and inherits its changes."
+    },
+    "fields": {
+      "name": "Collective agreement name",
+      "minRestHours": "Minimum rest between working days (h)",
+      "maxDailyHours": "Ordinary daily working hours (h)",
+      "maxWeeklyHours": "Ordinary weekly working hours (h)",
+      "breakRequiredAfterHours": "Maximum continuous stretch without a break (h)",
+      "weekStartsOn": "The week starts on",
+      "holidayCalendar": "Public holiday calendar",
+      "retentionYears": "Years records are kept"
+    },
+    "hints": {
+      "name": "The name of the agreement this profile describes. It appears in the retention report.",
+      "minRestHours": "An issue is opened if fewer hours pass between the end of one shift and the start of the next. 12 in the Spanish profile (art. 34.3 ET).",
+      "maxDailyHours": "An issue is opened if the sum of a day's shifts exceeds these hours. 9 in the Spanish profile.",
+      "maxWeeklyHours": "40 in the Spanish profile (art. 34.1 ET). Annual averaging is set by the collective agreement.",
+      "breakRequiredAfterHours": "Threshold for a continuous stretch with no break recorded. 6 in the Spanish profile. It is stored and evaluated; it does not raise issues today (see the note below).",
+      "weekStartsOn": "Used to group by week. Monday in the Spanish profile (ISO 8601).",
+      "holidayCalendar": "One date per line, in YYYY-MM-DD format. Ships empty: holidays depend on the town and the year, so each installation loads its own.",
+      "retentionYears": "Four years in Spain (art. 34.9 ET). Nothing can be purged before that."
+    },
+    "weekDays": {
+      "1": "Monday",
+      "2": "Tuesday",
+      "3": "Wednesday",
+      "4": "Thursday",
+      "5": "Friday",
+      "6": "Saturday",
+      "7": "Sunday"
+    },
+    "breakSuspended": "The continuous stretch without a break is evaluated, but it does not raise issues yet: until the kiosk records the break as such, the system cannot tell \"did not rest\" from \"rested and did not clock it\". The threshold is stored and will apply once detection is switched back on.",
+    "errors": {
+      "notAWholeNumber": "Enter a whole number, with no decimals or letters.",
+      "required": "This field cannot be left empty."
+    }
+  },
+  "license": {
+    "heading": "Licence",
+    "intro": "What was contracted, until when, how much is in use, and which accessory features are available.",
+    "neverDegraded": "Clocking in and out, work day lookups, the employee portal, the labour inspection export, corrections, the audit trail and backups do NOT depend on the licence: they work the same whatever its state. What is governed here are the accessory features.",
+    "loading": "Loading licence status…",
+    "contract": "What was contracted",
+    "usage": "Contracted plan versus actual use",
+    "usageColumns": {
+      "limit": "Metric",
+      "contracted": "Contracted",
+      "actual": "Actual"
+    },
+    "over": "{excess} over",
+    "excessNote": "Exceeding a plan figure has not prevented any hiring or any pairing, and it will not. It is recorded in the audit trail with the exact date; talk to your provider whenever it suits you to extend the plan.",
+    "degraded": "What is degraded",
+    "degradedNone": "Everything contracted is available.",
+    "activate": "Activate a key",
+    "activating": "Activating…",
+    "activated": "Licence activated.",
+    "fields": {
+      "customer": "Customer",
+      "plan": "Plan",
+      "validity": "Validity",
+      "fingerprint": "Key fingerprint",
+      "signedKey": "Licence key"
+    },
+    "hints": {
+      "signedKey": "The string your provider gave you. It starts with \"KQL1.\". You can paste it with spaces or line breaks: they are cleaned up automatically."
+    },
+    "states": {
+      "valid": "Licence valid",
+      "expiring_soon": "Licence valid, expiring soon",
+      "expired": "Licence expired",
+      "absent": "No licence activated",
+      "not_yet_valid": "Licence not valid yet",
+      "unverifiable": "The licence cannot be verified"
+    },
+    "detail": {
+      "valid": "Expires on {until}. We will warn you {warningDays} days in advance.",
+      "expiring_soon": "Expires on {until}: {days} days left. Nothing has been degraded yet. Ask your provider for the renewal and activate it here when it arrives.",
+      "expired": "Expired on {until}, {elapsed} days ago. Since then, the accessory features below are unavailable. The time record keeps working in full.",
+      "absent": "No key has been activated yet. Activate it below; your provider gives it to you. In the meantime clocking and record lookups work normally.",
+      "not_yet_valid": "The activated key starts on {from}. Nothing to do: the accessory features switch on by themselves that day.",
+      "unverifiable": "The stored key cannot be verified. The time record keeps working in full; what is unavailable are the accessory features."
+    },
+    "rejections": {
+      "malformed": "The key is incomplete or truncated, which usually happens when copying it from an email. Paste the whole key again.",
+      "bad_signature": "This key was not issued by the vendor of this version, or it was modified in transit. Ask your provider for a new key.",
+      "invalid_payload": "The key is signed but incomplete. This is an issuing fault: tell your provider and ask for a new key.",
+      "no_public_key": "This installation does not carry the vendor public key, so it cannot verify any licence. This is not a problem with your key, it is a deployment problem: tell your provider, quoting the version returned by GET /api/v1/health."
+    },
+    "limits": {
+      "max_employees": "People on the payroll",
+      "max_devices": "Active kiosks"
+    },
+    "features": {
+      "advanced_reports": "Period reports and contracted-hours comparison",
+      "impact_dashboard": "Impact and adoption dashboard",
+      "payroll_export": "Payroll export",
+      "weekly_email_summary": "Weekly email summary",
+      "realtime_presence": "Real-time presence (falls back to polling)",
+      "white_label": "Own branding",
+      "telemetry": "Optional telemetry"
+    },
+    "restrictions": {
+      "license_expired": "unavailable because the licence expired on {since}",
+      "license_absent": "unavailable: no licence activated",
+      "license_unverifiable": "unavailable: the licence cannot be verified",
+      "license_not_yet_valid": "available from {since}",
+      "not_in_plan": "not included in the contracted plan",
+      "unknown": "unavailable"
+    },
+    "notice": {
+      "action": "View the licence",
+      "valid": "The licence is valid. This notice is shown for another reason, stated below.",
+      "expiring_soon": "The licence expires on {until}, in {days} days. Nothing has been degraded yet: renew it so that period reports and real-time presence stay available.",
+      "expired": "The licence expired on {until}, {elapsed} days ago. Period reports and real-time presence have been degraded since then. Clocking and record access keep working normally.",
+      "absent": "This installation has no activated licence. Clocking and record access work normally; accessory features do not. Activate the key your provider gave you.",
+      "not_yet_valid": "The activated licence starts on {from}. Until then the accessory features are unavailable. Nothing else to do.",
+      "unverifiable": "The stored licence cannot be verified. Clocking and record access work normally; accessory features do not.",
+      "exceeded": "Also, the contracted plan has been exceeded in: {limits}. It blocks nothing; talk to your provider to extend it."
+    }
+  },
+  "onboarding": {
+    "heading": "Setup",
+    "intro": "Eight steps to leave the system ready for clocking. You can close this screen at any time and pick it back up where you left it: nothing is lost.",
+    "loading": "Loading the setup status…",
+    "stepAnnouncement": "{label}",
+    "progress": {
+      "label": "Setup progress"
+    },
+    "actions": {
+      "continue": "Continue",
+      "skip": "Skip for now",
+      "saving": "Saving…"
+    },
+    "locales": {
+      "es": "Spanish",
+      "en": "English"
+    },
+    "alreadyDone": {
+      "heading": "This installation is already running",
+      "intro": "The setup wizard has already been completed and does not open again. Further changes are made from the panel, once signed in.",
+      "goToLogin": "Go to the panel sign-in"
+    },
+    "review": {
+      "heading": "Review before finishing",
+      "intro": "These are the eight steps and how they were left. The wizard does not close on its own: do it explicitly once you have reviewed it, because it will not be reachable again afterwards.",
+      "states": {
+        "completed": "Done",
+        "skipped": "Skipped"
+      },
+      "complete": "Finish setup",
+      "completing": "Finishing…"
+    },
+    "completion": {
+      "heading": "Setup completed",
+      "intro": "The system already has an organisation, a site, a first administrator and a compliance profile. This is what is left before the first day.",
+      "credentialsPending": "There are still {count} cards to issue and print.",
+      "credentialsNone": "No cards are pending issue.",
+      "credentialsAdvice": "Without a printed, handed-over card, nobody can clock in on the first day. Issuing and printing takes days of logistics: do it in advance.",
+      "credentialsLink": "Go to the credential status board",
+      "credentialsCommand": "You can also check it from the server console with: credentials:status --pending",
+      "fields": {
+        "employees": "People on staff",
+        "departments": "Departments",
+        "license": "Licence",
+        "kiosks": "Linked kiosks"
+      },
+      "goToPanel": "Go to the management panel"
+    },
+    "steps": {
+      "administrator": {
+        "heading": "First administrator",
+        "intro": "The first management account, with mandatory second factor. Everything you do from here on —the site, the licence, every step— is audited with this account as its author.",
+        "fields": {
+          "name": "Name",
+          "email": "Email",
+          "password": "Password"
+        },
+        "hints": {
+          "name": "The name you will appear as in the panel and in the audit log.",
+          "email": "This is your sign-in identifier. No invitation is sent: the password is set right here.",
+          "password": "At least 12 characters, with uppercase, lowercase, digits and symbols."
+        },
+        "submit": "Create the account",
+        "submitting": "Creating…",
+        "alreadyExists": "A management account already exists for this installation.",
+        "goToLogin": "Sign in at /auth/login with your email and password"
+      },
+      "organisation": {
+        "heading": "Organisation",
+        "intro": "The name the hotel is identified by, and the panel's languages.",
+        "loading": "Loading the settings…",
+        "fields": {
+          "appName": "Establishment name",
+          "defaultLocale": "Default language",
+          "availableLocales": "Available languages"
+        },
+        "hints": {
+          "appName": "Shown in the panel and, later on, in reports.",
+          "defaultLocale": "The language a new account starts with.",
+          "availableLocales": "The default language cannot be unchecked."
+        }
+      },
+      "site": {
+        "heading": "Site",
+        "intro": "The site's name and time zone. The time zone decides which work day each shift counts towards: it is never the browser's zone nor the application's, which is always UTC.",
+        "fields": {
+          "name": "Site name",
+          "timezone": "Time zone"
+        },
+        "hints": {
+          "name": "For example, the hotel's name.",
+          "timezone": "An IANA zone such as «Europe/Madrid», never a fixed offset such as «+02:00»: an offset does not know about clock changes."
+        }
+      },
+      "departments": {
+        "heading": "Departments",
+        "intro": "Kitchen, front desk, housekeeping… You can skip this step and create them later from regular management.",
+        "loading": "Loading the departments…",
+        "none": "There are no departments yet.",
+        "fields": {
+          "name": "Department name"
+        },
+        "add": "Add",
+        "adding": "Adding…"
+      },
+      "complianceProfile": {
+        "heading": "Compliance profile",
+        "intro": "The legal thresholds used to detect breaches: minimum rest, maximum working day, mandatory break and retention years. They start out as «ES-hostelería», the Spanish hospitality collective agreement, but you must check them against the agreement that actually applies to your site before continuing: this step cannot be skipped.",
+        "confirm": "I have reviewed the thresholds, continue",
+        "confirmHint": "Mark it once you have checked these values against the applicable agreement, even if you do not change any of them."
+      },
+      "employees": {
+        "heading": "Staff",
+        "intro": "Import the staff list from a CSV or an XLSX. It is first validated without writing anything, with a line-by-line report; only what you confirm gets applied. You can skip this step and add people one by one later.",
+        "fields": {
+          "file": "Staff file"
+        },
+        "hints": {
+          "file": "CSV or XLSX. The delimiter and the encoding are detected automatically."
+        },
+        "validate": "Validate",
+        "validating": "Validating…",
+        "apply": "Apply",
+        "applying": "Applying…",
+        "truncated": "The file has more rows than can be applied at once. Split it into smaller parts and try again: with the file as it is, nothing gets applied.",
+        "fileWarnings": "Warnings about the whole file, review them before continuing:",
+        "validatedSummary": "Simulation, nothing has been saved yet: {create} to create, {update} to update, {unchanged} unchanged, {reject} rejected.",
+        "appliedSummary": "Applied: {create} created, {update} updated, {unchanged} unchanged, {reject} rejected and not applied.",
+        "tableCaption": "Line-by-line result of the import",
+        "columns": {
+          "line": "Line",
+          "label": "Name",
+          "outcome": "Outcome",
+          "messages": "Detail"
+        },
+        "outcomes": {
+          "create": "Create",
+          "update": "Update",
+          "unchanged": "Unchanged",
+          "reject": "Rejected"
+        }
+      },
+      "license": {
+        "heading": "Licence",
+        "intro": "Activate the key if you already have it. This is optional: clocking and the legal record never depend on the licence, so you can skip this step and activate it later from the panel.",
+        "skip": "Skip for now"
+      },
+      "kiosk": {
+        "heading": "First kiosk",
+        "intro": "Pairing the kiosk tablet is not yet available in this version.",
+        "notYetAvailable": "Linking a kiosk arrives in a later version. For now, skip this step: the manual procedure is documented in the new-kiosk runbook, and you will be able to link it as soon as it is available without repeating setup.",
+        "skip": "Skip for now"
+      }
     }
   }
 }

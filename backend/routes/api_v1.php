@@ -16,6 +16,7 @@ use App\Modules\Identity\Http\Controller\CredentialController;
 use App\Modules\Identity\Http\Controller\CredentialStatusController;
 use App\Modules\Identity\Http\Controller\CurrentUserController;
 use App\Modules\Identity\Http\Controller\DeliverCredentialController;
+use App\Modules\Identity\Http\Controller\FirstAdministratorController;
 use App\Modules\Identity\Http\Controller\LoginController;
 use App\Modules\Identity\Http\Controller\LogoutController;
 use App\Modules\Identity\Http\Controller\PortalLoginController;
@@ -25,6 +26,10 @@ use App\Modules\Identity\Http\Controller\RevokeCredentialController;
 use App\Modules\Identity\Http\Controller\TwoFactorController;
 use App\Modules\Kiosk\Http\Controller\HeartbeatController;
 use App\Modules\Kiosk\Http\Controller\RosterController;
+use App\Modules\Product\Http\Controller\ComplianceProfileController;
+use App\Modules\Product\Http\Controller\LicenseController;
+use App\Modules\Product\Http\Controller\SettingsController;
+use App\Modules\Product\Http\Controller\SetupController;
 use App\Modules\Reporting\Http\Controller\EmployeeWorkDayController;
 use App\Modules\Reporting\Http\Controller\LivePresenceController;
 use App\Modules\Reporting\Http\Controller\MyWorkDayController;
@@ -33,6 +38,7 @@ use App\Modules\Reporting\Http\Controller\PeriodReportController;
 use App\Modules\Reporting\Http\Controller\PeriodReportExportController;
 use App\Modules\Workforce\Http\Controller\DepartmentController;
 use App\Modules\Workforce\Http\Controller\EmployeeController;
+use App\Modules\Workforce\Http\Controller\EmployeeImportController;
 use App\Modules\Workforce\Http\Controller\EmployeePinController;
 use App\Modules\Workforce\Http\Controller\EmploymentContractController;
 use App\Modules\Workforce\Http\Controller\OffboardEmployeeController;
@@ -680,6 +686,38 @@ Route::middleware([
 
 Route::middleware(['auth:sanctum', 'ability:'.TokenAbility::EMPLOYEES_ALL->value])->group(function (): void {
     Route::post('/employees', [EmployeeController::class, 'store'])->name('employees.store');
+
+    /*
+     * Importacion masiva de plantilla (tarea 5.5, RF-GP-05, movido aqui desde la
+     * 3.10). Es el paso de plantilla del asistente de puesta en marcha y tambien
+     * la via por la que se incorpora un grupo grande despues.
+     *
+     * ANTES DE `/employees/{uuid}` NO HACE FALTA: `{uuid}` lleva `whereUuid()`,
+     * asi que `import` no puede casar con esa ruta. Se declara aqui, junto al
+     * alta individual, porque hace lo mismo y comparte ambito, policy y roles.
+     *
+     * AMBITO `employees:*` Y NO UNO PROPIO: es un alta de plantilla, no un
+     * informe. `EmployeePolicy::import()` comprueba ademas el rol (regla dura
+     * 18), con el mismo conjunto que el alta individual.
+     *
+     * UNICO ENDPOINT DEL PRODUCTO CON CUERPO `multipart/form-data`. El fichero se
+     * lee en streaming desde el temporal de la peticion y no se guarda: la
+     * confirmacion de la segunda fase viaja como `confirm_checksum` para no
+     * dejar en disco un fichero con los nombres y los documentos de identidad de
+     * la plantilla esperando a que alguien confirme.
+     *
+     * `throttle:management` SOLO EN ESTA RUTA del grupo, y no en el grupo entero
+     * —que escribe fichas de una en una y ya esta acotado por Nginx—: una
+     * importacion es la peticion mas cara del producto. Lee un fichero de hasta
+     * 4 MB, calcula 500 hashes de bcrypt y abre una transaccion que toma el
+     * candado global de `audit_log` (ADR-010), **detras del cual se serializa
+     * cada fichaje del hotel**. Sin techo, un bucle de reintentos del navegador
+     * —o un doble clic con un fichero grande— deja la tablet de la entrada
+     * esperando. El `429` ya esta declarado en el contrato para esta ruta.
+     */
+    Route::post('/employees/import', EmployeeImportController::class)
+        ->middleware('throttle:management')
+        ->name('employees.import');
     Route::patch('/employees/{uuid}', [EmployeeController::class, 'update'])
         ->whereUuid('uuid')
         ->name('employees.update');
@@ -805,4 +843,210 @@ Route::middleware(['auth:sanctum', 'ability:'.TokenAbility::CREDENTIALS_ALL->val
     Route::post('/credentials/{uuid}/revoke', RevokeCredentialController::class)
         ->whereUuid('uuid')
         ->name('credentials.revoke');
+});
+
+/*
+ * La configuracion de la instalacion (tarea 5.1, RF-PD-01, ADR-017).
+ *
+ * ES LO QUE HACE QUE VENDER A UN CLIENTE NUEVO NO EXIJA TOCAR EL REPOSITORIO
+ * (regla dura 13). Marca, idiomas y umbrales operativos son datos editables desde
+ * el panel, no constantes de PHP ni una rama por cliente.
+ *
+ * `settings:*` Y SOLO `admin`, y las dos mitades dicen lo mismo. El Anexo B del
+ * doc 01 marca las dos rutas como `[rol: admin]` y el §7.3 concede el ambito
+ * unicamente al administrador de instalacion. El middleware comprueba el ambito
+ * y `SettingsPolicy` el rol (regla dura 18): sin la policy, bastaria un token
+ * emitido a mano con el ambito correcto para mover el umbral con el que se
+ * calculan las horas de todo el centro.
+ *
+ * **`rrhh` no entra**, aunque corrija fichajes: corregir un tramo deja traza
+ * sobre UNA jornada; mover el anti-rebote cambia el calculo de TODAS las
+ * siguientes. **El `auditor` tampoco**: lo que necesita —que umbral regia el 14
+ * de marzo y quien lo cambio— esta en `audit_log`, al que si llega con
+ * `audit:read`, y ahi es historico y encadenado en lugar de ser el valor de hoy.
+ *
+ * `throttle:management` POR LO QUE ESCRIBE EL `PATCH`. Cada clave cambiada deja
+ * un asiento en `audit_log` bajo el candado global de ADR-010 —el mismo por el
+ * que pasa cada fichaje—. Sin techo por cuenta, un bucle de escrituras de
+ * configuracion mete contencion en el camino critico del cambio de turno. Se
+ * aplica al grupo entero y no solo al `PATCH` porque las dos salen de la misma
+ * pantalla y con el mismo token.
+ *
+ * RECURSO SINGULAR Y SIN `DELETE`. La configuracion es una y es de la
+ * instalacion: no hay lista, no hay alta —el catalogo es codigo— y volver al
+ * valor de serie es escribirlo, no borrar la fila. Es el mismo criterio que
+ * `/site` (ADR-040) y la misma regla dura 5 que en el resto de la API.
+ *
+ * NO LO CIERRA UNA LICENCIA CADUCADA (ADR-019, regla dura 15). Estas dos rutas
+ * no se degradan: dejar a un cliente sin poder ver ni corregir sus propios
+ * umbrales por una fecha de vencimiento seria empujarle al incumplimiento.
+ */
+Route::middleware([
+    'auth:sanctum',
+    'ability:'.TokenAbility::SETTINGS_ALL->value,
+    'throttle:management',
+])->group(function (): void {
+    Route::get('/settings', [SettingsController::class, 'show'])->name('product.settings.show');
+    Route::patch('/settings', [SettingsController::class, 'update'])->name('product.settings.update');
+
+    /*
+     * El perfil de cumplimiento (tarea 5.2, RF-PD-07, regla dura 14).
+     *
+     * MISMO AMBITO Y MISMA POLICY QUE `/settings`, Y RECURSO DISTINTO. Un umbral
+     * legal lo fija la jurisdiccion y uno operativo lo fija el hotel (doc 01 §4):
+     * son dos tablas y dos consecuencias distintas, y meterlos en el mismo mapa
+     * de clave y valor haria indistinguible «he bajado el anti-rebote» de «he
+     * bajado los años que hay que conservar el registro». Comparten `settings:*`
+     * porque el §7.3 no declara un ambito para el perfil y crear uno solo para
+     * esto seria un ambito que ningun rol usa por separado.
+     *
+     * RECURSO SINGULAR Y SIN `DELETE`, como `/site` (ADR-040): hay un centro por
+     * instalacion y por tanto un perfil vigente. No hay alta —un segundo perfil no
+     * lo leeria nadie— y volver al perfil de serie es escribir sus valores.
+     *
+     * NO LO CIERRA UNA LICENCIA CADUCADA (ADR-019, regla dura 15). Dejar a un
+     * cliente sin poder ver ni ajustar los umbrales con los que se evalua su
+     * cumplimiento por una fecha de vencimiento seria empujarle al
+     * incumplimiento.
+     */
+    Route::get('/compliance-profile', [ComplianceProfileController::class, 'show'])
+        ->name('product.compliance-profile.show');
+    Route::patch('/compliance-profile', [ComplianceProfileController::class, 'update'])
+        ->name('product.compliance-profile.update');
+});
+
+/*
+ * GET /api/v1/license y POST /api/v1/license/activate — la licencia de la
+ * instalacion (tarea 5.3, RF-PD-04, RF-PD-05, ADR-018, ADR-028).
+ *
+ * AMBITO PROPIO, `license:*`, y no `settings:*`. El §7.3 lo declara aparte y hay
+ * motivo: la configuracion y los umbrales legales los ajusta el hotel para su
+ * operativa; la licencia dice **que se contrato**, y eso no es un ajuste, es un
+ * hecho comercial. Que sean dos ambitos permite ademas que el asistente de
+ * puesta en marcha (5.5) reciba un token que activa la clave sin poder tocar los
+ * umbrales con los que se calculan las horas.
+ *
+ * SOLO `admin`, y `LicensePolicy` es la otra mitad (regla dura 18). **`rrhh` no
+ * entra** aunque sea quien mas usa los informes que la licencia gobierna: lo que
+ * se contrato lo decide quien firma el contrato. **El `auditor` tampoco**: su
+ * trabajo es el registro horario, y la promesa del producto es justamente que el
+ * registro no depende de la licencia (ADR-019). **El quiosco menos que nadie**:
+ * su token lleva tres ambitos y ninguno es este, que es la segunda mitad de la
+ * regla dura 19 — el quiosco no se entera de la licencia por ningun camino.
+ *
+ * `throttle:management` POR LO QUE ESCRIBE EL `POST`: cada activacion deja un
+ * asiento en `audit_log` bajo el candado global de ADR-010, el mismo por el que
+ * pasa cada fichaje. Se aplica al grupo entero porque las dos salen de la misma
+ * pantalla y con el mismo token. El `GET` ademas escribe `last_verified_at`, que
+ * es una sola fila y sin candado.
+ *
+ * ESTAS DOS RUTAS NO SE DEGRADAN NUNCA, y es la mas importante de todas las
+ * excepciones: **es la pantalla desde la que se arregla el problema**. Cerrarla
+ * al caducar dejaria al cliente sin poder activar la renovacion que acaba de
+ * comprar, que es la definicion de un producto que se pega un tiro en el pie
+ * (ADR-019, regla dura 15).
+ *
+ * SIN `DELETE`. No se «desactiva» una licencia: se activa otra. Un endpoint para
+ * dejar la instalacion sin licencia solo serviria para equivocarse.
+ */
+Route::middleware([
+    'auth:sanctum',
+    'ability:'.TokenAbility::LICENSE_ALL->value,
+    'throttle:management',
+])->group(function (): void {
+    Route::get('/license', [LicenseController::class, 'show'])->name('product.license.show');
+    Route::post('/license/activate', [LicenseController::class, 'activate'])
+        ->name('product.license.activate');
+});
+
+/*
+ * ---------------------------------------------------------------------------
+ * ASISTENTE DE PUESTA EN MARCHA (tarea 5.5, RF-PD-03)
+ * ---------------------------------------------------------------------------
+ *
+ * PREFIJO PROPIO Y NO RUTAS REPARTIDAS por los recursos que toca. La razon no es
+ * de orden: estas rutas son de **un solo uso** y se cierran a la vez, mientras
+ * que los recursos que configuran viven para siempre. Con `POST /api/v1/site`
+ * habria un alta de centros PERMANENTE —la primera pieza del multicentro que
+ * ADR-040 cerro, y algo que el Anexo B del doc 01 niega por escrito— en lugar de
+ * un acto irrepetible de puesta en marcha.
+ *
+ * LOS CONTROLADORES SIGUEN EN EL MODULO DUEÑO DEL RECURSO: el primer
+ * administrador en `Identity` y el centro en `Workforce`. El prefijo agrupa el
+ * asistente en el CONTRATO, no mueve la logica de modulo — y ademas `Product` no
+ * podria importar a ninguno de los dos (doc 02 §1.6).
+ *
+ * DOS RUTAS PUBLICAS, Y SOLO DOS:
+ *
+ *   - `GET /setup/status` devuelve booleanos y nada mas. Se llama antes de que
+ *     exista ninguna cuenta con la que autenticarse, que es literalmente el
+ *     estado que describe.
+ *   - `POST /setup/administrator` es **la unica escritura publica del
+ *     producto**, y solo mientras no exista ninguna cuenta de gestion. Existe
+ *     porque el instalador NO crea cuentas y no debe crearlas (tarea 5.4, doc 07
+ *     §6): sin ella, una instalacion recien montada no tendria puerta de entrada
+ *     a su propio panel y el cliente necesitaria SSH, que es justo lo que el
+ *     §11.6 dice que no puede hacer falta.
+ *
+ * `throttle:setup` PARA LAS DOS, y no `throttle:auth`: aquella zona compone su
+ * clave por cuenta con el `email` del cuerpo, y aqui el correo de una cuenta que
+ * todavia no existe no identifica a nadie. La zona propia cuenta por origen, que
+ * es lo unico que hay.
+ *
+ * EL RESTO VA AUTENTICADO con la sesion del administrador recien creado. No hay
+ * «token de instalacion» ni secreto en el `.env`: el unico momento sin
+ * autenticacion es el que no puede tenerla.
+ */
+Route::prefix('setup')->group(function (): void {
+    Route::get('/status', [SetupController::class, 'show'])
+        ->middleware('throttle:setup')
+        ->name('setup.status');
+
+    Route::post('/administrator', FirstAdministratorController::class)
+        ->middleware('throttle:setup')
+        ->name('setup.administrator');
+
+    /*
+     * El alta del centro lleva `employees:*` —el ambito de la plantilla, que es
+     * de donde cuelgan centros y departamentos— y no `settings:*`, para que sea
+     * el mismo ambito con el que despues se lee y se modifica en `/site`. Quien
+     * puede crearlo lo decide `SitePolicy::create()`, que exige `admin`
+     * (regla dura 18: ambito y policy son dos controles distintos).
+     */
+    Route::post('/site', [SiteController::class, 'store'])
+        ->middleware([
+            'auth:sanctum',
+            'ability:'.TokenAbility::EMPLOYEES_ALL->value,
+            'throttle:management',
+        ])
+        ->name('setup.site.store');
+
+    Route::middleware([
+        'auth:sanctum',
+        'ability:'.TokenAbility::SETTINGS_ALL->value,
+        'throttle:management',
+    ])->group(function (): void {
+        /*
+         * EL DETALLE DEL ASISTENTE VA AUTENTICADO, y la ruta publica de arriba
+         * solo dice si sigue abierto. La lista de pasos es un inventario de la
+         * postura de la instalacion —dice si hay un administrador SIN segundo
+         * factor, si no hay licencia y si no hay ningun quiosco— y nada de eso
+         * hace falta para redirigir un navegador.
+         */
+        Route::get('/steps', [SetupController::class, 'steps'])->name('setup.steps.index');
+
+        /*
+         * `PUT` y no `POST`: marcar un paso es idempotente, y repetirlo tiene que
+         * dejar el mismo estado. Es lo que permite que el panel reintente sin
+         * pensar cuando se le cae la red a mitad del asistente.
+         *
+         * El `{step}` no lleva `where`: el catalogo lo comprueba
+         * `SetupStep::fromString()`, que devuelve `404` con un mensaje que
+         * enumera los que si existen. Una expresion regular en la ruta daria un
+         * `404` mudo.
+         */
+        Route::put('/steps/{step}', [SetupController::class, 'record'])->name('setup.steps.record');
+
+        Route::post('/complete', [SetupController::class, 'complete'])->name('setup.complete');
+    });
 });

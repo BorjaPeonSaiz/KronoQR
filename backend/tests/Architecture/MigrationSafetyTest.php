@@ -90,6 +90,42 @@ function knownMigrationDebt(): array
     ];
 }
 
+/**
+ * **Las migraciones de CONTRACCION declaradas.**
+ *
+ * `DROP COLUMN` es infractor en general y correcto exactamente en un caso: la
+ * tercera fase del patron expand / migrate / contract, cuando **ninguna version
+ * desplegada nombra ya la columna**. El detector no puede distinguir los dos casos
+ * mirando el codigo —la diferencia esta en lo que hizo la version anterior—, asi
+ * que la distincion se **declara aqui**, con el mismo trinquete que la deuda: la
+ * lista se compara valor a valor y su tamaño se afirma abajo, de modo que añadir
+ * una entrada es un cambio visible que alguien tiene que revisar.
+ *
+ * Para entrar en esta lista, una migracion tiene que cumplir las tres cosas que
+ * exige la skill `/migracion-segura`, y quien revise el PR tiene que
+ * comprobarlas:
+ *
+ * 1. La version **anterior** ya dejo de leer y escribir la columna.
+ * 2. El docblock lleva el **plan de despliegue** por pasos, diciendo que va en
+ *    cada uno y en que orden respecto al codigo.
+ * 3. `down()` reconstruye el esquema y **esta probado**.
+ *
+ * @return array<string, list<string>>
+ */
+function declaredContractions(): array
+{
+    return [
+        // Tarea 5.1. Retira `scope` y `scope_id` de `installation_settings`: el
+        // ambito por centro nunca llego a usarse y ADR-040 lo dejo sin sentido
+        // —hay un centro por instalacion—. La version que se despliega antes ya
+        // resuelve la cascada sin nombrar esas columnas
+        // (`DbOperationalSettingsProvider`), el plan de despliegue esta en el
+        // docblock de la migracion y su `down()` se prueba en
+        // `tests/Integration/Product/ContractInstallationSettingsScopeMigrationTest.php`.
+        '2026_09_05_100000_contract_installation_settings_scope.php' => ['dropColumn de Blueprint en up()'],
+    ];
+}
+
 it('no aplica en up() ningun patron que exija parada de servicio', function (string $file): void {
     $up = MigrationSafety::upCodeOf((string) file_get_contents($file));
 
@@ -101,9 +137,12 @@ it('no aplica en up() ningun patron que exija parada de servicio', function (str
         $explicacion[] = $nombre.' → '.MigrationSafety::blockingPatterns()[$nombre]['why'];
     }
 
-    // La deuda registrada se compara valor a valor, no se ignora: una migracion
-    // de la lista que empeore —que añada un patron mas— falla igual.
-    $esperado = knownMigrationDebt()[basename($file)] ?? [];
+    // La deuda registrada y las contracciones declaradas se comparan valor a
+    // valor, no se ignoran: una migracion de cualquiera de las dos listas que
+    // empeore —que añada un patron mas— falla igual.
+    $esperado = knownMigrationDebt()[basename($file)]
+        ?? declaredContractions()[basename($file)]
+        ?? [];
 
     expect($violaciones)->toBe($esperado, basename($file)."\n".implode("\n", $explicacion));
 })->with(migrationFiles())->group('RNF-D-04');
@@ -114,6 +153,30 @@ it('mantiene la deuda de migraciones acotada a las dos conocidas', function (): 
     // Aqui se afirma cuantas son, asi que ampliarla exige tocar esta cifra y
     // explicarlo.
     expect(knownMigrationDebt())->toHaveCount(2);
+})->group('RNF-D-04');
+
+it('mantiene acotadas las contracciones declaradas', function (): void {
+    // El mismo trinquete para la otra lista, y hace mas falta aqui: la deuda es
+    // algo que nadie quiere ampliar, pero «esto es una contraccion» es una
+    // etiqueta comoda que serviria para colar cualquier `DROP COLUMN`. Ampliar la
+    // lista exige tocar esta cifra, y esa linea del diff es la que hace que
+    // alguien pregunte si la version anterior de verdad dejo de usar la columna.
+    expect(declaredContractions())->toHaveCount(1);
+})->group('RNF-D-04');
+
+it('no declara como contraccion ninguna migracion que no exista', function (): void {
+    // Una entrada que sobrevive al borrado de su migracion es una excepcion
+    // permanente y silenciosa: nadie la ve, y el dia que alguien cree un fichero
+    // con ese nombre heredaria el permiso sin pedirlo.
+    $existentes = array_keys(migrationFiles());
+
+    foreach (array_keys(declaredContractions()) as $declarada) {
+        expect($existentes)->toContain($declarada);
+    }
+
+    foreach (array_keys(knownMigrationDebt()) as $conocida) {
+        expect($existentes)->toContain($conocida);
+    }
 })->group('RNF-D-04');
 
 it('señala cada error clasico cuando alguien lo comete', function (string $expected, string $up): void {
