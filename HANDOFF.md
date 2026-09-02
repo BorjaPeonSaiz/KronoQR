@@ -1,5 +1,19 @@
 # HANDOFF
 
+## Sesión «hook de Pint y rama para la 5.6» (02-09-2026), en `feat/tarea-5.6-emparejamiento-quiosco`
+
+**Rama nueva `feat/tarea-5.6-emparejamiento-quiosco` creada desde `main` (`3990524`) con un único
+commit (`384aa33`):** `.claude/settings.json` con un hook PostToolUse de Claude Code que pasa Pint
+sobre cada `.php` de `backend/` editado (dentro del contenedor `app`, misma orden que `make php-lint`;
+excluye `vendor/`, calla si el entorno está caído). Verificado en vivo: el hook corrige el fichero al
+instante. `make quality` y la CI siguen siendo la puerta real.
+
+**Objetivo actual:** tarea 5.6, «Vinculación de quiosco por código de emparejamiento» (RF-PD-06),
+`frontend-quiosco` + `backend-laravel`, detalle en `plan implementacion/05-fase-5-productizacion.md`.
+**NO está empezada**: la rama solo contiene el hook.
+
+**Siguiente acción:** arrancar la 5.6 con su prompt del doc 03 y el detalle del plan.
+
 ## Sesión «merge de origin/main y conflicto del package-lock» (02-09-2026), en `feat/fase-5-productizacion`
 
 **Merge `36d5f38` de `origin/main` (Dependabot #36–#40) completado.** El conflicto del `package-lock.json`
