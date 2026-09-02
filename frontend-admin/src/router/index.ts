@@ -17,6 +17,7 @@ import EmployeeDetailView from '@/features/employees/EmployeeDetailView.vue'
 import EmployeeListView from '@/features/employees/EmployeeListView.vue'
 import IncidentsView from '@/features/incidents/IncidentsView.vue'
 import LivePresenceView from '@/features/live/LivePresenceView.vue'
+import OnboardingView from '@/features/onboarding/OnboardingView.vue'
 import LegalExportView from '@/features/reports/LegalExportView.vue'
 import PeriodReportView from '@/features/reports/PeriodReportView.vue'
 import ComplianceProfileView from '@/features/settings/ComplianceProfileView.vue'
@@ -42,6 +43,19 @@ export const routes: RouteRecordRaw[] = [
     path: '/login',
     name: 'login',
     component: LoginView,
+    meta: { public: true },
+  },
+  {
+    // Asistente de puesta en marcha (RF-PD-03, tarea 5.5). Publico como
+    // `GET /setup/status` que lo abre: el primer paso crea la primera cuenta
+    // de gestion, asi que todavia no hay sesion con la que exigirla. La
+    // guarda (`router/guards.ts`) es quien decide de verdad si se puede
+    // llegar aqui o si hay que salir: mientras la instalacion siga sin
+    // terminar de configurarse, CUALQUIER otra ruta redirige a esta; en
+    // cuanto se cierra, esta deja de ser accesible (es de un solo uso).
+    path: '/setup',
+    name: 'setup',
+    component: OnboardingView,
     meta: { public: true },
   },
   {

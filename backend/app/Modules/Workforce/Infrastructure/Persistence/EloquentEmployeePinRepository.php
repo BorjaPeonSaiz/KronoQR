@@ -15,9 +15,10 @@ use Illuminate\Support\Facades\Hash;
 use RuntimeException;
 
 /**
- * El PIN sobre Eloquent y el hasher de la instalacion (RF-ID-09).
+ * El PIN sobre Eloquent (RF-ID-09).
  *
- * **Hash y nunca el PIN.** `Hash::make()` usa el algoritmo configurado en el
+ * **Hash y nunca el PIN, y desde la revision de la 5.5 el PIN en claro ni
+ * siquiera entra aqui.** El hash lo calcula el caso de uso con el algoritmo
  * `.env` —bcrypt o argon2id—, el mismo de las contrasenas de gestion: no hay una
  * segunda decision criptografica que mantener. Ninguna consulta de esta clase
  * devuelve `pin_hash`, y el modelo lo tiene en `$hidden` para que no salga por
@@ -44,12 +45,25 @@ use RuntimeException;
  */
 final readonly class EloquentEmployeePinRepository implements EmployeePinRepository
 {
-    public function issue(string $employeeUuid, string $pin, DateTimeImmutable $issuedAt): bool
+    /**
+     * Escribe el hash **ya calculado**.
+     *
+     * Al contrario que hasta la revision de la 5.5, aqui ya no se llama a
+     * `Hash::make()`: el calculo lo decide el caso de uso, porque tiene que poder
+     * ocurrir FUERA de una transaccion larga. bcrypt cuesta unos 160 ms por PIN
+     * y 500 de ellos dentro de la transaccion de una importacion monopolizaban el
+     * candado global de `audit_log`, y con el los fichajes del hotel.
+     *
+     * **El PIN en claro ya no entra en este metodo**, que es una garantia mas
+     * fuerte que la anterior: no hay ninguna via por la que pueda acabar en el
+     * texto de una consulta.
+     */
+    public function issue(string $employeeUuid, string $pinHash, DateTimeImmutable $issuedAt): bool
     {
         $affected = Employee::query()
             ->where('uuid', $employeeUuid)
             ->update([
-                'pin_hash' => Hash::make($pin),
+                'pin_hash' => $pinHash,
                 'pin_issued_at' => $issuedAt,
                 'pin_delivered_at' => null,
                 'pin_delivered_by_user_id' => null,

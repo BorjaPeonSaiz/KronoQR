@@ -363,6 +363,155 @@ Las dos exigen el rol *administrador*. **Ninguna de las dos se cierra por una
 licencia caducada**: son justamente la pantalla desde la que se arregla el
 problema.
 
+
+## 3 ter. La carga de plantilla desde un fichero
+
+Es el paso del asistente que evita teclear a mano la plantilla entera, y también
+la vía para incorporar un grupo grande más adelante. Funciona con **CSV y con
+XLSX**.
+
+### 3 ter.1 Cómo se hace: dos pasos, y el segundo no ocurre sin que lo confirmes
+
+1. **Subes el fichero en modo comprobación.** No se escribe nada. Recibes un
+   informe **línea a línea**: qué se daría de alta, qué se actualizaría, qué se
+   rechaza y **por qué**.
+2. **Revisas el informe y confirmas.** Solo entonces se escribe, y se escribe
+   **exactamente lo que revisaste**: el sistema comprueba que el fichero es el
+   mismo antes de tocar nada.
+
+> **Por qué hay que volver a subir el fichero al confirmar.** Porque el sistema
+> **no lo guarda** entre los dos pasos. Ese fichero lleva nombres y documentos de
+> identidad de toda tu plantilla, y dejarlo en el disco del servidor esperando a
+> que alguien confirme sería un montón de datos personales sin dueño. Son unos
+> pocos kilobytes: se vuelve a subir y ya está.
+
+Desde consola, si prefieres:
+
+```bash
+# 1. Comprobar (no escribe nada). Guarda el sha256 que devuelve.
+curl -sS -X POST https://TU-SERVIDOR/api/v1/employees/import \
+  -H "Authorization: Bearer TU-TOKEN" \
+  -F "mode=validate" \
+  -F "file=@plantilla.csv"
+
+# 2. Aplicar, confirmando con esa huella.
+curl -sS -X POST https://TU-SERVIDOR/api/v1/employees/import \
+  -H "Authorization: Bearer TU-TOKEN" \
+  -F "mode=apply" \
+  -F "confirm_checksum=EL-SHA256-DEL-PASO-1" \
+  -F "file=@plantilla.csv"
+```
+
+### 3 ter.2 Qué columnas tiene que traer el fichero
+
+La primera fila son los **nombres de las columnas**. El orden da igual y sobrar
+columnas no molesta: las que no se usan se avisan y se ignoran.
+
+| Campo | Obligatorio | Nombres que se reconocen de serie |
+| --- | --- | --- |
+| Nombre | **Sí** | `nombre`, `first_name`, `firstname`, `given_name` |
+| Apellidos | **Sí** | `apellidos`, `apellido`, `last_name`, `lastname`, `surname`, `family_name` |
+| Fecha de alta | **Sí** | `fecha_alta`, `fecha_de_alta`, `alta`, `hired_at`, `start_date`, `hire_date` |
+| Documento de identidad | **Uno de los dos** | `dni`, `nif`, `nie`, `documento`, `national_id`, `id_number` |
+| Correo | **Uno de los dos** | `email`, `correo`, `correo_electronico`, `e_mail` |
+| Departamento | No | `departamento`, `department`, `seccion`, `section` |
+| Idioma | No | `idioma`, `locale`, `language` |
+
+**Los nombres se comparan sin distinguir mayúsculas, tildes ni separadores**:
+`Fecha de alta`, `FECHA_ALTA` y `fecha alta` son la misma columna.
+
+> **Documento o correo, al menos uno.** No es un capricho: es lo que permite
+> **volver a importar el mismo fichero sin duplicar a nadie**. Si una línea no
+> trae ninguno de los dos, el sistema no tendría forma de reconocer a esa persona
+> la segunda vez y acabarías con dos fichas suyas. El **correo sigue siendo
+> opcional** —el fichero puede no traer esa columna y funciona igual—; lo que no
+> puede faltar son **los dos a la vez**.
+
+> **El código de empleado NO se lee del fichero**, aunque lo incluyas. Lo genera
+> el sistema y es un código opaco a propósito: va impreso en la tarjeta y en el
+> QR, así que no puede ser el número de nómina ni nada que tenga significado.
+
+### 3 ter.3 El formato del fichero: no hay nada que configurar
+
+- **El separador se detecta.** Un Excel en español exporta con `;` y uno en
+  inglés con `,`. Los dos funcionan, y el tabulador también.
+- **La codificación se detecta.** «Guardar como CSV» en un Windows en español
+  produce `Windows-1252`, no UTF-8. Los dos funcionan, y las **ñ** y las tildes
+  llegan bien.
+- **Las fechas** se aceptan como `2026-03-15` o como `15/03/2026`. **No se acepta
+  mes/día/año**: `03/04/2026` se lee siempre como **3 de abril**, que es lo que
+  quiso escribir quien lo escribió. Una fecha de alta leída con un mes de
+  diferencia es un mes de jornadas que no deberían existir.
+
+### 3 ter.4 Volver a importar el mismo fichero es seguro
+
+Es lo que pasa siempre: se corrige una línea y se vuelve a subir el fichero
+entero. El sistema reconoce a cada persona por su documento (y si no lo hay, por
+su correo) y:
+
+- **no la duplica**;
+- **actualiza** nombre, apellidos, correo, departamento e idioma si cambiaron;
+- **no toca su fecha de alta**, aunque el fichero traiga otra. Lo dice como aviso
+  en la línea. Cambiar la fecha de alta de alguien mueve el punto desde el que
+  cuenta la conservación legal de su registro y desde el que se le pueden imputar
+  jornadas: eso se cambia en su ficha, a conciencia, no de pasada en una
+  importación de cuarenta líneas.
+- **no da de alta ni de baja a nadie por cambiar de estado**. La baja tiene su
+  propio procedimiento, con fecha de cese y revocación de la tarjeta.
+
+### 3 ter.5 Después de importar quedan las tarjetas
+
+**Importar cuarenta personas no emite ni una tarjeta.** La credencial es una
+tarjeta física impresa: hay que emitirla, imprimirla y entregarla, y eso lleva
+días. **Nadie recibe nada por correo electrónico**, ni hace falta que tenga
+correo.
+
+Lo que hay que hacer después está en el **panel de estado de credenciales**, y
+desde consola:
+
+```bash
+docker compose exec app php artisan credentials:status --pending
+```
+
+> **Hazlo con días de antelación al primer día de trabajo.** El panel de estado
+> de credenciales existe precisamente para que nadie descubra el problema delante
+> de la tablet a las 06:00.
+
+### 3 ter.6 Si tu fichero usa otros nombres de columna
+
+No hace falta tocar el programa: se añaden alias en el `.env` del servidor, en
+formato `campo=cabecera`, separados por `;`.
+
+```bash
+# .env — la exportación de tu sistema anterior llama "documento_id" al DNI
+# y "seccion_hotel" al departamento.
+WORKFORCE_IMPORT_COLUMN_ALIASES="national_id=documento_id;department=seccion_hotel"
+```
+
+**Se suman a los de serie, no los sustituyen**: el fichero de la semana que viene
+puede venir del otro sistema y seguirá funcionando. Los campos que admiten alias
+son `first_name`, `last_name`, `email`, `national_id`, `department`, `hired_at` y
+`locale`. Una entrada mal escrita se ignora y su columna sale como «no
+reconocida» en el informe; no rompe la importación.
+
+Requiere **reiniciar los contenedores**, como todo lo del `.env`.
+
+### 3 ter.7 Los otros dos parámetros del `.env`
+
+| Variable | De serie | Para qué |
+| --- | --- | --- |
+| `WORKFORCE_IMPORT_MAX_ROWS` | `500` | Líneas de datos como máximo por fichero. Es la plantilla más grande que soporta una instalación. Si te pasas, el informe lo dice y **no se importa nada**: se parte el fichero en dos y se importan uno detrás de otro. |
+| `WORKFORCE_IMPORT_MAX_FILE_KILOBYTES` | `4096` | Tamaño máximo del fichero. Un XLSX de 500 personas ronda los 60 KB, así que sobra de largo. |
+
+**Por qué 500 y no más.** Cada alta calcula la huella criptográfica del PIN de esa
+persona, que cuesta del orden de 0,16 s. Con 500 personas son unos 80 s de
+cálculo, que el sistema hace **antes** de tocar la base de datos precisamente para
+que no bloquee los fichajes del quiosco mientras tanto. Por encima de esa cifra la
+petición se acercaría al minuto de límite del servidor web y se cortaría a medias.
+Puedes subirlo si tu plantilla es mayor, pero **parte el fichero antes de
+hacerlo**: es más rápido y no depende de ningún límite.
+
+---
 ---
 
 ## 4. Qué hacer si…
@@ -525,6 +674,96 @@ avería, y conviene avisar a soporte con la salida de:
 ```bash
 docker compose exec app php artisan license:show
 curl -sS https://TU-SERVIDOR/api/v1/health
+```
+
+### …la importación rechaza líneas por «no trae documento ni correo»
+
+La línea no tiene con qué identificarse. Añade al fichero la columna del
+documento (`dni`, `nif`, `nie` o `documento`) **o** la del correo, y vuelve a
+comprobarlo. El correo sigue siendo opcional: lo que no puede faltar son los dos
+a la vez.
+
+**Por qué se rechaza en lugar de importarla igual:** sin uno de los dos, el
+sistema no podría reconocer a esa persona si vuelves a subir el fichero, y
+acabarías con dos fichas suyas.
+
+### …la importación no encuentra una columna que sí está en el fichero
+
+Míralo en el informe: las columnas que no reconoce salen como aviso con su nombre
+exacto. Las causas habituales, por frecuencia:
+
+1. **El nombre no está en la lista.** Consulta la tabla de la sección 3 ter.2. Si
+   tu sistema la llama de otra forma, añade el alias en el `.env` (sección
+   3 ter.6) — no hace falta tocar el programa.
+2. **Un carácter invisible.** Un espacio de más o un guion en lugar de un guion
+   bajo **no** son problema: la comparación los ignora. Un carácter raro pegado
+   al principio de la primera columna sí: es la marca de orden de bytes que
+   añaden algunos editores. Vuelve a exportar el fichero desde el programa
+   original.
+
+### …importé y las tildes o las eñes salen mal
+
+No debería pasar: la codificación se detecta sola. Si ocurre, el fichero
+probablemente no es ni UTF-8 ni Windows-1252 —los dos que se reconocen— sino algo
+más raro. Ábrelo en tu hoja de cálculo y vuelve a guardarlo como **CSV UTF-8**.
+Corrige después los nombres en las fichas: la importación no borra nada, así que
+puedes volver a importar el fichero corregido y se actualizarán solos.
+
+### …importé el fichero equivocado
+
+**Nada se borra.** Las personas importadas por error se dan de baja una a una
+desde su ficha, con su fecha de cese; el registro que hubieran generado se
+conserva, porque la ley obliga a conservarlo cuatro años.
+
+Si aún **no habías confirmado** —solo hiciste la comprobación— no se escribió
+nada: sube el fichero correcto y vuelve a empezar.
+
+### …dice que el fichero no es el que se validó
+
+Has cambiado el fichero entre la comprobación y la confirmación, aunque sea un
+espacio. Es deliberado: así lo que se escribe es exactamente lo que revisaste.
+Vuelve a hacer la comprobación con el fichero nuevo y confirma con la huella que
+te devuelva.
+
+### …dice que el fichero tiene demasiadas líneas
+
+No se ha importado nada. Pártelo en varios ficheros más pequeños e impórtalos uno
+a uno; el sistema reconoce a cada persona, así que el orden no importa y las
+repeticiones entre ficheros no duplican a nadie.
+
+Si tu plantilla es realmente mayor que el límite, súbelo con
+`WORKFORCE_IMPORT_MAX_ROWS` en el `.env` y reinicia.
+
+### …he importado a toda la plantilla y nadie puede fichar
+
+Es lo esperado, y es el error más caro de esta guía si se descubre tarde:
+**importar no emite ninguna tarjeta**. Comprueba cuántas faltan y empieza ya, que
+imprimir y entregar lleva días:
+
+```bash
+docker compose exec app php artisan credentials:status --pending
+```
+
+### …el asistente de puesta en marcha ya no aparece
+
+Es lo esperado: **es de un solo uso**. Todo lo que configuró se cambia después
+desde el panel —el centro, los departamentos, el perfil de convenio, la
+licencia—, y cada cambio queda registrado con su autor y su fecha, que es
+precisamente lo que un asistente reabrible no podría garantizar.
+
+### …no puedo entrar y el asistente dice que ya hay una cuenta
+
+Te pasó lo más común: creaste el primer administrador y se cerró la pantalla
+antes de escanear el código QR del autenticador. **La cuenta existe.** Entra con
+tu correo y tu contraseña por la pantalla de acceso normal: como todavía no
+tienes segundo factor, la propia respuesta te ofrecerá darlo de alta y te
+enseñará el QR otra vez.
+
+Si además has perdido la contraseña, se restablece desde el servidor:
+
+```bash
+docker compose exec app php artisan identity:create-user   # crea otra cuenta de gestión
+docker compose exec app php artisan identity:2fa-reset     # retira un segundo factor
 ```
 
 ---

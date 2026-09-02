@@ -943,5 +943,160 @@
       "unverifiable": "The stored licence cannot be verified. Clocking and record access work normally; accessory features do not.",
       "exceeded": "Also, the contracted plan has been exceeded in: {limits}. It blocks nothing; talk to your provider to extend it."
     }
+  },
+  "onboarding": {
+    "heading": "Setup",
+    "intro": "Eight steps to leave the system ready for clocking. You can close this screen at any time and pick it back up where you left it: nothing is lost.",
+    "loading": "Loading the setup status…",
+    "stepAnnouncement": "{label}",
+    "progress": {
+      "label": "Setup progress"
+    },
+    "actions": {
+      "continue": "Continue",
+      "skip": "Skip for now",
+      "saving": "Saving…"
+    },
+    "locales": {
+      "es": "Spanish",
+      "en": "English"
+    },
+    "alreadyDone": {
+      "heading": "This installation is already running",
+      "intro": "The setup wizard has already been completed and does not open again. Further changes are made from the panel, once signed in.",
+      "goToLogin": "Go to the panel sign-in"
+    },
+    "review": {
+      "heading": "Review before finishing",
+      "intro": "These are the eight steps and how they were left. The wizard does not close on its own: do it explicitly once you have reviewed it, because it will not be reachable again afterwards.",
+      "states": {
+        "completed": "Done",
+        "skipped": "Skipped"
+      },
+      "complete": "Finish setup",
+      "completing": "Finishing…"
+    },
+    "completion": {
+      "heading": "Setup completed",
+      "intro": "The system already has an organisation, a site, a first administrator and a compliance profile. This is what is left before the first day.",
+      "credentialsPending": "There are still {count} cards to issue and print.",
+      "credentialsNone": "No cards are pending issue.",
+      "credentialsAdvice": "Without a printed, handed-over card, nobody can clock in on the first day. Issuing and printing takes days of logistics: do it in advance.",
+      "credentialsLink": "Go to the credential status board",
+      "credentialsCommand": "You can also check it from the server console with: credentials:status --pending",
+      "fields": {
+        "employees": "People on staff",
+        "departments": "Departments",
+        "license": "Licence",
+        "kiosks": "Linked kiosks"
+      },
+      "goToPanel": "Go to the management panel"
+    },
+    "steps": {
+      "administrator": {
+        "heading": "First administrator",
+        "intro": "The first management account, with mandatory second factor. Everything you do from here on —the site, the licence, every step— is audited with this account as its author.",
+        "fields": {
+          "name": "Name",
+          "email": "Email",
+          "password": "Password"
+        },
+        "hints": {
+          "name": "The name you will appear as in the panel and in the audit log.",
+          "email": "This is your sign-in identifier. No invitation is sent: the password is set right here.",
+          "password": "At least 12 characters, with uppercase, lowercase, digits and symbols."
+        },
+        "submit": "Create the account",
+        "submitting": "Creating…",
+        "alreadyExists": "A management account already exists for this installation.",
+        "goToLogin": "Sign in at /auth/login with your email and password"
+      },
+      "organisation": {
+        "heading": "Organisation",
+        "intro": "The name the hotel is identified by, and the panel's languages.",
+        "loading": "Loading the settings…",
+        "fields": {
+          "appName": "Establishment name",
+          "defaultLocale": "Default language",
+          "availableLocales": "Available languages"
+        },
+        "hints": {
+          "appName": "Shown in the panel and, later on, in reports.",
+          "defaultLocale": "The language a new account starts with.",
+          "availableLocales": "The default language cannot be unchecked."
+        }
+      },
+      "site": {
+        "heading": "Site",
+        "intro": "The site's name and time zone. The time zone decides which work day each shift counts towards: it is never the browser's zone nor the application's, which is always UTC.",
+        "fields": {
+          "name": "Site name",
+          "timezone": "Time zone"
+        },
+        "hints": {
+          "name": "For example, the hotel's name.",
+          "timezone": "An IANA zone such as «Europe/Madrid», never a fixed offset such as «+02:00»: an offset does not know about clock changes."
+        }
+      },
+      "departments": {
+        "heading": "Departments",
+        "intro": "Kitchen, front desk, housekeeping… You can skip this step and create them later from regular management.",
+        "loading": "Loading the departments…",
+        "none": "There are no departments yet.",
+        "fields": {
+          "name": "Department name"
+        },
+        "add": "Add",
+        "adding": "Adding…"
+      },
+      "complianceProfile": {
+        "heading": "Compliance profile",
+        "intro": "The legal thresholds used to detect breaches: minimum rest, maximum working day, mandatory break and retention years. They start out as «ES-hostelería», the Spanish hospitality collective agreement, but you must check them against the agreement that actually applies to your site before continuing: this step cannot be skipped.",
+        "confirm": "I have reviewed the thresholds, continue",
+        "confirmHint": "Mark it once you have checked these values against the applicable agreement, even if you do not change any of them."
+      },
+      "employees": {
+        "heading": "Staff",
+        "intro": "Import the staff list from a CSV or an XLSX. It is first validated without writing anything, with a line-by-line report; only what you confirm gets applied. You can skip this step and add people one by one later.",
+        "fields": {
+          "file": "Staff file"
+        },
+        "hints": {
+          "file": "CSV or XLSX. The delimiter and the encoding are detected automatically."
+        },
+        "validate": "Validate",
+        "validating": "Validating…",
+        "apply": "Apply",
+        "applying": "Applying…",
+        "truncated": "The file has more rows than can be applied at once. Split it into smaller parts and try again: with the file as it is, nothing gets applied.",
+        "fileWarnings": "Warnings about the whole file, review them before continuing:",
+        "validatedSummary": "Simulation, nothing has been saved yet: {create} to create, {update} to update, {unchanged} unchanged, {reject} rejected.",
+        "appliedSummary": "Applied: {create} created, {update} updated, {unchanged} unchanged, {reject} rejected and not applied.",
+        "tableCaption": "Line-by-line result of the import",
+        "columns": {
+          "line": "Line",
+          "label": "Name",
+          "outcome": "Outcome",
+          "messages": "Detail"
+        },
+        "outcomes": {
+          "create": "Create",
+          "update": "Update",
+          "unchanged": "Unchanged",
+          "reject": "Rejected"
+        }
+      },
+      "license": {
+        "heading": "Licence",
+        "intro": "Activate the key if you already have it. This is optional: clocking and the legal record never depend on the licence, so you can skip this step and activate it later from the panel.",
+        "skip": "Skip for now"
+      },
+      "kiosk": {
+        "heading": "First kiosk",
+        "intro": "Pairing the kiosk tablet is not yet available in this version.",
+        "notYetAvailable": "Linking a kiosk arrives in a later version. For now, skip this step: the manual procedure is documented in the new-kiosk runbook, and you will be able to link it as soon as it is available without repeating setup.",
+        "skip": "Skip for now"
+      }
+    }
   }
 }

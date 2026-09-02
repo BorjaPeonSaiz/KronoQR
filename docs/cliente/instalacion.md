@@ -322,9 +322,155 @@ horario hay que conservarlo cuatro años por ley.
 
 ### 1.7 Abre el panel y termina el asistente
 
-`https://fichaje.tuhotel.local/admin/`. El asistente crea la organización, el
-centro con su zona horaria, los departamentos, el perfil de convenio, **el
-primer administrador** y el primer quiosco.
+`https://fichaje.tuhotel.local/admin/`.
+
+Si la instalación está recién hecha, el panel te lleva solo al **asistente de
+puesta en marcha**. No hay nada que buscar en ningún menú.
+
+> **No hay ningún usuario y es lo correcto.** El instalador **no crea cuentas**:
+> una contraseña generada por un script acaba en el historial del shell o en un
+> fichero de despliegue, y ahí se queda. La primera cuenta la creas tú, aquí, y
+> es la única vez que el sistema deja crear una sin estar dentro.
+>
+> ---
+>
+> ⚠️ **Haz el paso 1 ahora, antes que nada, y no publiques el panel hasta
+> haberlo hecho.**
+>
+> La pantalla de «primer administrador» es la **única página de todo el producto
+> que escribe sin pedir credenciales**, y tiene que serlo: en ese momento no
+> existe ninguna cuenta con la que autenticarse. Se cierra **sola y para
+> siempre** en cuanto hay una cuenta de gestión — pero **la crea quien llegue
+> primero**, no quien tenga derecho.
+>
+> En la práctica eso significa dos cosas:
+>
+> 1. **No abras el puerto al exterior ni le pongas nombre DNS** hasta que el paso
+>    1 esté terminado. Entra desde la red interna del hotel o por túnel SSH. Si
+>    la instalación tiene que ser accesible desde fuera, hazlo **después**.
+> 2. **Termina el paso 1 en la misma sesión** en la que instalas. No es un paso
+>    que se deje para mañana: entre hoy y mañana la puerta sigue abierta.
+>
+> **Si al abrir el panel te encuentras un error 409 que dice que ya existe una
+> cuenta de gestión y tú no has creado ninguna, para.** No es un fallo de la
+> instalación: alguien se te ha adelantado. Trátalo como incidente de seguridad,
+> avisa a quien corresponda y reinstala con el panel cerrado al exterior; el
+> apartado «qué hacer si…» de esta guía lo explica paso a paso.
+
+**Ten a mano antes de empezar**, porque el asistente te lo va a pedir:
+
+- El **nombre del hotel** y su **zona horaria**.
+- Los **departamentos** que quieras usar (recepción, pisos, cocina, sala…).
+- Un **teléfono con una aplicación de autenticación** (Google Authenticator,
+  Microsoft Authenticator, Aegis, 1Password… cualquiera que lea códigos TOTP).
+- La **clave de licencia**, si ya la tienes. Si no, se omite: **no hace falta
+  para fichar**.
+- El **fichero de plantilla**, si vas a cargarla desde CSV o Excel.
+
+#### Los ocho pasos
+
+| # | Paso | ¿Obligatorio? | Qué hace |
+| --- | --- | --- | --- |
+| 1 | **Primer administrador** | Sí | Crea tu cuenta y activa su segundo factor. |
+| 2 | **Datos de la organización** | Sí | Nombre visible del sistema e idiomas. |
+| 3 | **Centro y zona horaria** | Sí | El hotel. **La zona horaria decide a qué día va cada turno.** |
+| 4 | **Departamentos** | Se puede omitir | Los que uses. Se pueden crear después. |
+| 5 | **Perfil de convenio** | Sí | Los umbrales legales, a la vista, para que los contrastes. |
+| 6 | **Carga de plantilla** | Se puede omitir | Desde CSV o Excel, con comprobación previa. |
+| 7 | **Licencia** | Se puede omitir | Activa la clave si la tienes. |
+| 8 | **Primer quiosco** | Se puede omitir | Vincula la primera tablet con un código. |
+
+**Se puede abandonar y retomar.** Lo hecho queda guardado: si te falta un dato o
+la tablet llega mañana, cierras el navegador y vuelves cuando puedas. Ningún paso
+deja el sistema en un estado del que solo se salga con una consola.
+
+#### Paso 1 — tu cuenta, con segundo factor
+
+Es el primer paso y no el último a propósito: **todo lo que configures después
+queda registrado con tu nombre**, y sin una cuenta detrás esos registros dirían
+«el sistema», que no responde a nada.
+
+1. Escribe tu nombre, tu correo y una contraseña. La contraseña necesita **al
+   menos 12 caracteres, con mayúsculas, minúsculas, números y símbolos**.
+2. La pantalla siguiente enseña un **código QR y un texto**. Escanéalo con tu
+   aplicación de autenticación.
+3. Escribe el código de seis dígitos que te muestre el teléfono.
+
+> **El código QR se enseña una sola vez.** No hay forma de volver a verlo, y es a
+> propósito. Si cierras la pantalla antes de escanearlo, **no has perdido la
+> cuenta**: entra por la pantalla de acceso normal con tu correo y tu contraseña
+> y te lo volverá a ofrecer. Si además pierdes la contraseña, hay salida por
+> consola — está en «qué hacer si…».
+>
+> **El segundo factor es obligatorio y no se puede desactivar** para las cuentas
+> con acceso a toda la plantilla. Es la única credencial que protege el registro
+> horario de todo el hotel.
+
+#### Paso 3 — la zona horaria no es un detalle de presentación
+
+Es el dato con el que el sistema decide **a qué día pertenece cada turno**. Un
+turno de 22:00 a 06:00 cuenta entero en el día en que empezó, y «el día» se mide
+en la zona del centro.
+
+Ponla bien a la primera. Se puede cambiar después —queda registrado— pero
+**cambiarla no reescribe las jornadas ya calculadas**: a partir de ese momento se
+calculan con la nueva y antes se calcularon con la anterior.
+
+Si el hotel está en Canarias, es `Atlantic/Canary`, no `Europe/Madrid`.
+
+#### Paso 5 — el perfil de convenio: léelo, no lo pases
+
+El asistente propone el perfil **`ES-hosteleria`** con estos valores, tomados del
+Estatuto de los Trabajadores:
+
+| Umbral | De serie |
+| --- | --- |
+| Descanso mínimo entre jornadas | 12 h |
+| Jornada diaria ordinaria máxima | 9 h |
+| Jornada semanal máxima | 40 h |
+| Tramo continuo antes de exigir pausa | 6 h |
+| Años de conservación del registro | 4 |
+
+**Este paso no se puede omitir**, y es el único obligatorio que no crea nada. La
+razón: **tu convenio colectivo puede ser más estricto que la ley**, y estos son
+los números con los que el sistema va a avisar de incumplimientos. Contrástalos
+con el convenio que os aplica y confírmalos, aunque los dejes tal cual.
+
+Se cambian después en Configuración › Cumplimiento, y cada cambio queda
+registrado.
+
+#### Paso 7 — la licencia se puede omitir, y a propósito
+
+Sin licencia el sistema **ficha, guarda, calcula y exporta para la Inspección de
+Trabajo exactamente igual**. Lo que no tendrás son los informes por periodo y
+algunas funciones accesorias, con un aviso que dice cuáles.
+
+Un asistente que exigiera la clave para terminar convertiría la licencia en un
+requisito para cumplir la ley, y eso no puede ser. Actívala cuando la tengas,
+desde Configuración › Licencia.
+
+#### Paso 8 — el primer quiosco
+
+La tablet muestra un código y tú lo escribes en el panel. Si aún no ha llegado,
+**omite el paso**: el procedimiento completo para vincular una tablet está en el
+runbook `alta-nuevo-quiosco.md`, que viene en el paquete.
+
+#### Y al terminar: las tarjetas
+
+La última pantalla es un resumen con **lo que queda por hacer**. La cifra que
+importa es **«tarjetas pendientes»**.
+
+**Sin tarjeta impresa y entregada, esa persona no puede fichar.** Emitirlas,
+imprimirlas y repartirlas lleva días, así que empieza en cuanto termines el
+asistente:
+
+```bash
+docker compose exec app php artisan credentials:status --pending
+```
+
+> El asistente **no vuelve a aparecer**: es de un solo uso. Todo lo que configuró
+> se cambia después desde el panel, y allí cada cambio queda registrado con su
+> autor y su fecha.
 
 ---
 
@@ -504,7 +650,96 @@ protecciones es que no sea alcanzable desde cualquier IP. Ver §6.
 
 Es lo esperado. **El instalador no crea usuarios.** Abre
 `https://tu-servidor/admin/` y el asistente de puesta en marcha crea el primer
-administrador, con su alta registrada en la auditoría.
+administrador, con su alta registrada en la auditoría (sección 1.7).
+
+### …cerré la pantalla del código QR antes de escanearlo
+
+**No has perdido la cuenta.** Está creada, solo le falta el segundo factor. Entra
+por la pantalla de acceso normal con tu correo y tu contraseña: como todavía no
+lo tienes activado, la respuesta te ofrecerá darlo de alta y te enseñará el
+código otra vez.
+
+Lo que **no** funciona es volver a crear el primer administrador: esa puerta se
+cierra en cuanto existe una cuenta de gestión, y no se reabre ni siquiera si
+desactivas esa cuenta. Es deliberado — si se reabriera, dar de baja a una persona
+sería una forma de crear un administrador nuevo sin credenciales.
+
+Si además has perdido la contraseña:
+
+```bash
+# Crea otra cuenta de gestión (pide la contraseña por consola, sin eco)
+docker compose exec app php artisan identity:create-user --role=admin
+
+# O retira el segundo factor de la cuenta que ya existe, para volver a darlo de alta
+docker compose exec app php artisan identity:2fa-reset
+```
+
+### …el asistente no aparece y el panel me pide credenciales
+
+La puesta en marcha ya se completó. Es de un solo uso y no se reabre: todo lo que
+configuró —el centro, los departamentos, el perfil de convenio, la licencia— se
+cambia después desde el panel, y allí cada cambio queda registrado con su autor y
+su fecha, que es justo lo que un asistente reabrible no podría garantizar.
+
+Para comprobarlo sin entrar:
+
+```bash
+curl -sS https://TU-SERVIDOR/api/v1/setup/status
+# {"available":false,"completed_at":"2026-09-02T09:14:00Z"}
+```
+
+Esta consulta **no necesita credenciales y por eso no dice nada más**: solo si el
+asistente sigue abierto y cuándo se cerró. El detalle de los pasos está en el
+panel, con sesión iniciada.
+
+### …el panel dice que ya hay una cuenta de gestión y yo no he creado ninguna
+
+**Para y trátalo como incidente de seguridad.** No es un fallo de la instalación.
+
+La pantalla de «primer administrador» escribe sin pedir credenciales —tiene que
+hacerlo: en ese momento no existe ninguna cuenta— y se cierra sola en cuanto hay
+una. Si tú no la has creado, **la ha creado otro**, y esa cuenta es hoy la
+administradora de la instalación.
+
+Qué hacer, en este orden:
+
+1. **Corta el acceso al panel desde fuera** (regla de cortafuegos o del proxy
+   de entrada). El fichaje del quiosco no depende del panel y sigue funcionando.
+2. **Mira cuándo y desde dónde.** El alta de la cuenta y la activación de su
+   segundo factor quedan registradas en la auditoría, que es solo-añadir y no se
+   puede reescribir:
+
+   ```bash
+   cd /opt/kronoqr-2.0.0
+   sudo docker compose --env-file .env -f docker-compose.yml \
+     exec -T postgres psql -U fichaje_migrator -d fichaje -c \
+     "SELECT occurred_at, action, ip, payload
+        FROM audit_log
+       WHERE action IN ('role_assignment.changed','auth.two_factor_enabled')
+       ORDER BY occurred_at
+       LIMIT 10"
+   ```
+
+   El primer asiento sale **sin actor**: es correcto y es la firma de esta
+   pantalla —no había ninguna sesión detrás—. Lo que te interesa es la **hora** y
+   la **IP**: si no son las tuyas, es la confirmación.
+
+3. **Avisa al responsable** del hotel y a soporte, con esa salida.
+4. **Reinstala desde cero** si la instalación es nueva y no hay datos que
+   conservar (ver el apartado siguiente), esta vez **con el panel cerrado al
+   exterior** hasta terminar el paso 1.
+
+Prevenirlo es la advertencia de la sección 1.7: el paso 1 se hace
+inmediatamente después de instalar, y el panel no se publica antes.
+
+### …el asistente no me deja terminar
+
+Dice qué falta, con el nombre del paso. Los pasos **obligatorios** hay que
+completarlos; los **omitibles** —departamentos, plantilla, licencia y quiosco—
+basta con omitirlos explícitamente, y esa decisión queda guardada.
+
+El que más se atasca es el **perfil de convenio**: no se puede omitir, hay que
+confirmarlo aunque lo dejes como viene. La razón está en la sección 1.7.
 
 ### …quiero volver a empezar la instalación desde cero
 

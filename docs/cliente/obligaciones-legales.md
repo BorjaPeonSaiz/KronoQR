@@ -254,6 +254,41 @@ de qué número poner es del hotel, con su asesoría laboral (RL-16, RL-21).
 > histórico ni se cierran las incidencias ya abiertas. El procedimiento y el
 > porqué están en [Configuración](configuracion.md), sección 2.4.
 
+### El asistente de puesta en marcha te obliga a mirarlo, y ese es el único paso que no se puede omitir
+
+De los ocho pasos del asistente, la licencia se puede omitir, el quiosco se puede
+omitir y la carga de plantilla se puede omitir. **El perfil de convenio no.**
+
+No es rigidez: es que ese paso es el único momento garantizado en el que alguien
+de tu organización tiene esos cinco números delante antes de que el sistema
+empiece a calcular horas con ellos. Confirmarlo no significa «los he validado con
+mi asesoría» —eso sigue siendo tuyo— sino «los he visto y sé que existen».
+
+Queda registrado quién lo confirmó y cuándo, igual que cualquier cambio posterior.
+
+---
+
+## 7 ter. Cargar la plantilla desde un fichero no es publicar datos
+
+Si usas la carga masiva (CSV o Excel), tres cosas que conviene tener claras
+porque afectan a lo que puedes afirmar ante una auditoría de protección de datos:
+
+- **El documento de identidad no se almacena.** Se guarda su huella criptográfica,
+  que sirve para reconocer a la misma persona entre dos importaciones y para
+  cruzar con la nómina, y **no se puede volver a leer el número**. Si una copia de
+  seguridad acaba donde no debe, ahí no hay documentos de identidad (RL-08).
+- **El fichero no se queda en el servidor.** Se lee durante la petición y
+  desaparece con ella. Por eso hay que volver a subirlo para confirmar: el
+  producto no guarda un fichero con los nombres y los documentos de tu plantilla
+  esperando a que alguien pulse un botón.
+- **Nadie recibe ningún correo.** Ni las personas importadas, ni sus
+  responsables. La credencial es una tarjeta física que hay que imprimir y
+  entregar en mano, y el producto no envía invitaciones a nadie.
+
+**Lo que sigue siendo tuyo:** informar a la plantilla del tratamiento antes de
+empezar (sección 3) y borrar de tus propios equipos el fichero desde el que
+importaste, que sí lleva los documentos en claro.
+
 ---
 
 ## 7 bis. Tu obligación de registrar no depende de la licencia

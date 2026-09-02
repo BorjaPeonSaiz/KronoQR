@@ -21,6 +21,7 @@ use App\Modules\Compliance\Domain\Exception\IncidentAlreadyClosed;
 use App\Modules\Compliance\Domain\Exception\InvalidLegalExportRequest;
 use App\Modules\Identity\Application\Exception\AccountTemporarilyLocked;
 use App\Modules\Identity\Application\Exception\AuthenticationFailed;
+use App\Modules\Identity\Application\Exception\ManagementAccountAlreadyExists;
 use App\Modules\Identity\Application\Exception\PortalAccessDenied;
 use App\Modules\Identity\Application\Exception\TwoFactorAlreadyEnabled;
 use App\Modules\Identity\Application\Exception\TwoFactorNotEnrolled;
@@ -37,7 +38,10 @@ use App\Modules\Product\Domain\Exception\InvalidComplianceProfileValue;
 use App\Modules\Product\Domain\Exception\InvalidLicenseKey;
 use App\Modules\Product\Domain\Exception\InvalidSettingValue;
 use App\Modules\Product\Domain\Exception\LicenseKeyRejected;
+use App\Modules\Product\Domain\Exception\SetupNotCompletable;
+use App\Modules\Product\Domain\Exception\SetupStepNotRecordable;
 use App\Modules\Product\Domain\Exception\UnknownSettingKey;
+use App\Modules\Product\Domain\Exception\UnknownSetupStep;
 use App\Modules\Reporting\Application\Exception\EmployeeNotFound;
 use App\Modules\Reporting\Application\Exception\ReportRenderingUnavailable;
 use App\Modules\Reporting\Domain\Exception\InvalidDateRange;
@@ -46,9 +50,11 @@ use App\Modules\Shared\Domain\Exception\AccessOutOfScope;
 use App\Modules\Shared\Domain\Exception\FeatureNotLicensed;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
 use App\Modules\Workforce\Domain\Exception\EmployeeAlreadyTerminated;
+use App\Modules\Workforce\Domain\Exception\ImportTooLarge;
 use App\Modules\Workforce\Domain\Exception\InvalidEmploymentContract;
 use App\Modules\Workforce\Domain\Exception\InvalidEmploymentPeriod;
 use App\Modules\Workforce\Domain\Exception\UnknownTimezone;
+use App\Modules\Workforce\Domain\Exception\UnreadableImportFile;
 use App\Modules\Workforce\Domain\Exception\WorkforceConflict;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
@@ -294,6 +300,20 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(static fn (TwoFactorNotEnrolled $exception): mixed => ProblemDetails::conflict($exception->getMessage()));
 
         /*
+         * El primer administrador (tarea 5.5, RF-PD-03).
+         *
+         * `409` y no `403`: nadie esta autenticado ni tiene por que estarlo, y lo
+         * que ha cambiado es el estado del sistema. **El texto dice a donde ir**,
+         * porque el caso que ocurre de verdad es que alguien cerro la pestaña
+         * antes de escanear el QR del autenticador y vuelve a empezar: sin esa
+         * frase, esa persona se queda fuera de su propia instalacion con la
+         * cuenta ya creada.
+         */
+        $exceptions->render(static fn (ManagementAccountAlreadyExists $exception): mixed => ProblemDetails::conflict(
+            ProblemDetails::translated($exception->translationKey, [], $exception->getMessage()),
+        ));
+
+        /*
          * Portal del empleado (tarea 1.11, RF-ID-06, RS-03, RS-12).
          *
          * `401` PARA LAS CINCO CAUSAS, y sin `Retry-After` ni cuando el bloqueo
@@ -313,6 +333,35 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(static fn (EmployeeAlreadyTerminated $exception): mixed => ProblemDetails::conflict($exception->getMessage()));
 
         $exceptions->render(static fn (WorkforceConflict $exception): mixed => ProblemDetails::conflict($exception->getMessage()));
+
+        /*
+         * Importacion masiva de plantilla (tarea 5.5, RF-GP-05).
+         *
+         * LAS DOS SON `422` COLGADAS DE `file`, y no `500`, porque quien las
+         * recibe tiene algo concreto que hacer con el fichero que acaba de subir:
+         * volver a exportarlo, o partirlo. Un `500` le diria que el problema es
+         * nuestro y que espere.
+         *
+         * **Ninguna de las dos escribe nada.** `UnreadableImportFile` se lanza
+         * antes de leer una sola linea; `ImportTooLarge` se lanza antes de abrir
+         * la transaccion de aplicacion, porque aplicar media plantilla es el
+         * fallo que nadie detecta hasta que falta gente a las 06:00.
+         *
+         * La confirmacion que no cuadra NO esta aqui: es `ImportFileChanged`, un
+         * `WorkforceConflict`, y sale `409` por la linea de arriba — la peticion
+         * es valida y lo que no encaja es el estado.
+         */
+        $exceptions->render(static fn (UnreadableImportFile $exception): mixed => ProblemDetails::validationFailed([
+            'file' => [ProblemDetails::translated($exception->translationKey, [], $exception->getMessage())],
+        ]));
+
+        $exceptions->render(static fn (ImportTooLarge $exception): mixed => ProblemDetails::validationFailed([
+            'file' => [ProblemDetails::translated(
+                $exception->translationKey,
+                $exception->parameters,
+                $exception->getMessage(),
+            )],
+        ]));
 
         // Antes de la puesta en marcha no hay centro, y sin centro no hay alta
         // posible (ADR-040). Es un estado de la instalacion, no un error del
@@ -754,4 +803,54 @@ return Application::configure(basePath: dirname(__DIR__))
                 $since,
             );
         });
+
+        /*
+         * El asistente de puesta en marcha (tarea 5.5, RF-PD-03).
+         *
+         * TRES EXCEPCIONES Y TRES CODIGOS DISTINTOS, porque son tres cosas
+         * distintas y la accion siguiente de quien las recibe tambien:
+         *
+         * - `UnknownSetupStep` es **404**: la ruta nombra un paso que no existe,
+         *   asi que el recurso direccionado tampoco. Un `422` sugeriria que hay
+         *   algo que corregir en el cuerpo, y el cuerpo esta bien.
+         * - `SetupStepNotRecordable` es **422**: el paso existe y lo que no cabe
+         *   es la marca —declarar hecho a mano uno que se deduce del dato, o
+         *   aparcar el perfil de convenio, que RL-21 no deja aparcar—. Se cuelga
+         *   de `state`, que es el campo que hay que cambiar.
+         * - `SetupNotCompletable` es **409**: la peticion es valida y lo que no
+         *   encaja es el estado del sistema. **El `detail` nombra los pasos que
+         *   faltan**, porque quien esta poniendo en marcha la instalacion no
+         *   tiene forma de averiguarlo por su cuenta.
+         *
+         * Ninguna de las tres detiene nada del registro legal: el asistente
+         * configura, no ficha.
+         */
+        $exceptions->render(static fn (UnknownSetupStep $exception): mixed => ProblemDetails::notFound(
+            // CON DETALLE, al contrario que el resto de los `404` del producto.
+            // Aqui no hay nada que un oraculo pudiera revelar: el catalogo de
+            // pasos es identico en todas las instalaciones (regla dura 13) y esta
+            // publicado en el contrato. Un `404` mudo obligaria a quien pone en
+            // marcha el sistema a adivinar si se equivoco de nombre o de version.
+            ProblemDetails::translated(
+                $exception->translationKey,
+                $exception->parameters,
+                $exception->getMessage(),
+            ),
+        ));
+
+        $exceptions->render(static fn (SetupStepNotRecordable $exception): mixed => ProblemDetails::validationFailed([
+            'state' => [ProblemDetails::translated(
+                $exception->translationKey,
+                $exception->parameters,
+                $exception->getMessage(),
+            )],
+        ]));
+
+        $exceptions->render(static fn (SetupNotCompletable $exception): mixed => ProblemDetails::conflict(
+            ProblemDetails::translated(
+                $exception->translationKey,
+                $exception->parameters,
+                $exception->getMessage(),
+            ),
+        ));
     })->create();

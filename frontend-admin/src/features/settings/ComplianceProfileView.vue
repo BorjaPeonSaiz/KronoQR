@@ -29,6 +29,14 @@ import { useI18n } from 'vue-i18n'
 import type { ComplianceProfileBody, UpdateComplianceProfileRequest } from '@/shared/api/types'
 import { fetchComplianceProfile, updateComplianceProfile } from './complianceProfile.api'
 
+/**
+ * `headingLevel` existe por el asistente de puesta en marcha (tarea 5.5), que
+ * incrusta esta MISMA pantalla como su paso de perfil de convenio bajo su
+ * propio `h1`: un segundo `h1` competiria por el titulo de la pagina. La ruta
+ * independiente `/compliance-profile` sigue siendo `h1`, que es lo que ya tenia.
+ */
+withDefaults(defineProps<{ headingLevel?: 'h1' | 'h2' | 'h3' }>(), { headingLevel: 'h1' })
+
 const { t } = useI18n()
 
 const profile = ref<ComplianceProfileBody | null>(null)
@@ -283,7 +291,9 @@ async function save(): Promise<void> {
 <template>
   <section class="flex flex-col gap-6">
     <header class="flex flex-col gap-2">
-      <h1 class="text-2xl font-semibold">{{ t('compliance.heading') }}</h1>
+      <component :is="headingLevel" class="text-2xl font-semibold">{{
+        t('compliance.heading')
+      }}</component>
       <p class="max-w-3xl text-kq-text-muted">{{ t('compliance.intro') }}</p>
     </header>
 

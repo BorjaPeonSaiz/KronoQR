@@ -37,4 +37,23 @@ return [
      */
     'settings_anomaly_window_seconds' => (int) env('PRODUCT_SETTINGS_ANOMALY_WINDOW_SECONDS', 300),
 
+    /*
+     * Peticiones por minuto y por origen de las DOS rutas publicas del asistente
+     * de puesta en marcha (RF-PD-03): `GET /api/v1/setup/status` y
+     * `POST /api/v1/setup/administrator`.
+     *
+     * ZONA PROPIA Y NO `throttle:auth`, porque aquella compone su clave por
+     * cuenta con el `email` del cuerpo y aqui no hay ninguna cuenta a la que
+     * contar: la que se va a crear todavia no existe. Con la zona de acceso,
+     * todo el trafico del asistente compartiria el cubo de la cadena vacia —el
+     * mismo fallo que la tarea 2.1 corrigio en `/auth/2fa/*`— y ademas gastaria
+     * el cupo de acceso de la persona que esta a punto de entrar.
+     *
+     * 10 NO ES UNA MEDICION: la puesta en marcha la hace una persona, una vez, y
+     * consulta el estado entre paso y paso. Deja margen de sobra para eso y
+     * corta un bucle en el primer segundo. Se puede subir si una instalacion con
+     * NAT delante deja al panel compartiendo IP con media oficina.
+     */
+    'setup_rate_limit_per_minute' => (int) env('PRODUCT_SETUP_RATE_LIMIT', 10),
+
 ];

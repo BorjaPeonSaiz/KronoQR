@@ -6,13 +6,19 @@ import type {
   CredentialCoverage,
   CredentialStatusBoard,
   CredentialStatusRow,
+  Department,
   Employee,
   EmployeeCollection,
+  EmployeeImportReport,
   EmployeeWorkDays,
   Incident,
   IncidentCollection,
   ManagementUser,
   Session,
+  SetupCompletion,
+  SetupStatus,
+  SetupStep,
+  SetupStepStatus,
   Site,
   TwoFactorChallenge,
   TwoFactorEnrolment,
@@ -295,5 +301,91 @@ export function incidentCollection(
       generated_at: '2026-03-15T08:00:00.000000Z',
       ...overrides,
     },
+  }
+}
+
+// --- Asistente de puesta en marcha (RF-PD-03, RF-GP-05, tarea 5.5) ----------
+
+export function department(overrides: Partial<Department> = {}): Department {
+  return { id: 3, name: 'Recepción', ...overrides }
+}
+
+/** Los ocho pasos del contrato, en su orden, todos `pending` salvo lo que se pida. */
+export function setupSteps(
+  overrides: Partial<Record<SetupStep, Pick<SetupStepStatus, 'state'>>> = {},
+): SetupStepStatus[] {
+  const base: Record<SetupStep, Omit<SetupStepStatus, 'state'>> = {
+    administrator: { step: 'administrator', required: true, skippable: false },
+    organisation: { step: 'organisation', required: true, skippable: false },
+    site: { step: 'site', required: true, skippable: false },
+    departments: { step: 'departments', required: false, skippable: true },
+    compliance_profile: { step: 'compliance_profile', required: true, skippable: false },
+    employees: { step: 'employees', required: false, skippable: true },
+    license: { step: 'license', required: false, skippable: true },
+    kiosk: { step: 'kiosk', required: false, skippable: true },
+  }
+
+  return (Object.keys(base) as SetupStep[]).map((step) => ({
+    ...base[step],
+    state: overrides[step]?.state ?? 'pending',
+  }))
+}
+
+/**
+ * `available`/`completed_at`, tal y como responde `GET /setup/status`
+ * (PUBLICA, revision de la 5.5): **nunca trae `steps`**, que solo viaja en
+ * `GET /setup/steps` (autenticada). Para un doble de esa segunda respuesta,
+ * pasa `steps: setupSteps(...)` explicito — no hay un valor de serie aqui a
+ * proposito, para que ningun doble finja tener `steps` sin pedirlo.
+ */
+export function setupStatus(overrides: Partial<SetupStatus> = {}): SetupStatus {
+  return { available: true, completed_at: null, ...overrides }
+}
+
+export function setupCompletion(overrides: Partial<SetupCompletion> = {}): SetupCompletion {
+  return {
+    status: setupStatus({ available: false, completed_at: '2026-09-02T09:14:00Z', steps: [] }),
+    summary: {
+      employees: 42,
+      departments: 5,
+      credentials_pending: 42,
+      license: 'absent',
+      kiosks: 0,
+    },
+    ...overrides,
+  }
+}
+
+export function employeeImportReport(
+  overrides: Partial<EmployeeImportReport> = {},
+): EmployeeImportReport {
+  return {
+    mode: 'validate',
+    file: {
+      sha256: '3f786850e387550fdab836ed7e6dc881de23001b4f4a1f9d5a2b0a1c2f3e4d5a',
+      rows: 2,
+      warnings: [],
+    },
+    summary: { create: 1, update: 1, unchanged: 0, reject: 0 },
+    truncated: false,
+    rows: [
+      {
+        line: 2,
+        label: 'Youssef Amrani',
+        outcome: 'create',
+        employee_uuid: null,
+        changes: [],
+        messages: [],
+      },
+      {
+        line: 3,
+        label: 'Marta Vidal',
+        outcome: 'update',
+        employee_uuid: EMPLOYEE_UUID,
+        changes: ['department_id'],
+        messages: [],
+      },
+    ],
+    ...overrides,
   }
 }

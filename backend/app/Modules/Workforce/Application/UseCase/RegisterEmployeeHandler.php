@@ -86,6 +86,10 @@ final readonly class RegisterEmployeeHandler
                 employeeUuid: $employee->uuid,
                 siteId: $employee->siteId,
                 reset: false,
+                // Precalculado por la importacion masiva y nulo en el alta
+                // individual, que lo genera dentro: es lo que saca los 160 ms de
+                // bcrypt de la transaccion sin cambiar ninguna garantia.
+                material: $command->pinMaterial,
             ));
 
             if (! $pin instanceof IssuedPin) {

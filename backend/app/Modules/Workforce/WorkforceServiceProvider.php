@@ -14,9 +14,12 @@ use App\Modules\Shared\Application\Port\EmployeeScopeDirectory;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\PortalSessionIssuer;
 use App\Modules\Workforce\Application\Port\DepartmentRepository;
+use App\Modules\Workforce\Application\Port\EmployeeImportDirectory;
+use App\Modules\Workforce\Application\Port\EmployeeImportSource;
 use App\Modules\Workforce\Application\Port\EmployeePinRepository;
 use App\Modules\Workforce\Application\Port\EmployeeRepository;
 use App\Modules\Workforce\Application\Port\EmploymentContractRepository;
+use App\Modules\Workforce\Application\Port\PinHasher;
 use App\Modules\Workforce\Application\Port\PinMetrics;
 use App\Modules\Workforce\Application\Port\PinPolicyProvider;
 use App\Modules\Workforce\Application\Port\SiteRepository;
@@ -38,14 +41,18 @@ use App\Modules\Workforce\Infrastructure\Adapter\EloquentEmployeeScopeDirectory;
 use App\Modules\Workforce\Infrastructure\Adapter\EloquentInstallationSiteProvider;
 use App\Modules\Workforce\Infrastructure\Adapter\EloquentSiteCalendar;
 use App\Modules\Workforce\Infrastructure\Adapter\HashedEmployeePinVerifier;
+use App\Modules\Workforce\Infrastructure\Adapter\LaravelPinHasher;
 use App\Modules\Workforce\Infrastructure\Adapter\LaravelWorkforceEventPublisher;
 use App\Modules\Workforce\Infrastructure\Adapter\SanctumPortalSessionIssuer;
+use App\Modules\Workforce\Infrastructure\Adapter\SimpleExcelImportSource;
 use App\Modules\Workforce\Infrastructure\Metrics\RedisPinMetrics;
 use App\Modules\Workforce\Infrastructure\Persistence\EloquentDepartmentRepository;
+use App\Modules\Workforce\Infrastructure\Persistence\EloquentEmployeeImportDirectory;
 use App\Modules\Workforce\Infrastructure\Persistence\EloquentEmployeePinRepository;
 use App\Modules\Workforce\Infrastructure\Persistence\EloquentEmployeeRepository;
 use App\Modules\Workforce\Infrastructure\Persistence\EloquentEmploymentContractRepository;
 use App\Modules\Workforce\Infrastructure\Persistence\EloquentSiteRepository;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
@@ -73,6 +80,28 @@ final class WorkforceServiceProvider extends ServiceProvider
         $this->app->bind(EmployeeRepository::class, EloquentEmployeeRepository::class);
         $this->app->bind(SiteRepository::class, EloquentSiteRepository::class);
         $this->app->bind(DepartmentRepository::class, EloquentDepartmentRepository::class);
+
+        /*
+         * Importacion masiva de plantilla (tarea 5.5, RF-GP-05).
+         *
+         * El lector va sobre `spatie/simple-excel` (doc 02 §3.1) y **no es
+         * `singleton`**: guarda si la ultima lectura se trunco, y compartirlo
+         * entre dos importaciones de la misma peticion —el planificador lee una
+         * vez y la aplicacion vuelve a leer— arrastraria el estado de la
+         * primera.
+         *
+         * El directorio consulta `employees` y `departments` con el constructor
+         * de consultas: compara el documento **hasheado en la propia sentencia**
+         * (`digest(?, 'sha256')`, RL-08), que es la misma expresion con la que el
+         * alta lo escribe. Si las dos se separaran, la busqueda no encontraria a
+         * nadie y cada reimportacion crearia la plantilla de nuevo.
+         */
+        $this->app->bind(EmployeeImportSource::class, SimpleExcelImportSource::class);
+
+        $this->app->bind(
+            EmployeeImportDirectory::class,
+            static fn (): EloquentEmployeeImportDirectory => new EloquentEmployeeImportDirectory(DB::connection()),
+        );
         $this->app->bind(WorkforceEventPublisher::class, LaravelWorkforceEventPublisher::class);
 
         // Contratos historizados (RF-GP-02, tarea 2.8). Es lo que permite al
@@ -86,6 +115,17 @@ final class WorkforceServiceProvider extends ServiceProvider
         $this->app->bind(EmployeePinRepository::class, EloquentEmployeePinRepository::class);
         $this->app->bind(PinPolicyProvider::class, ConfiguredPinPolicyProvider::class);
         $this->app->bind(PinMetrics::class, RedisPinMetrics::class);
+
+        /*
+         * El hasher del PIN, detras de un puerto (revision de la 5.5).
+         *
+         * Existe para que el CALCULO pueda ocurrir donde decide el caso de uso y
+         * no donde ocurre la escritura: la importacion masiva lo hace fuera de su
+         * transaccion, porque bcrypt cuesta unos 160 ms por PIN y 500 de ellos
+         * dentro monopolizaban el candado global de `audit_log` —y con el, los
+         * fichajes del hotel— durante minuto y medio.
+         */
+        $this->app->bind(PinHasher::class, LaravelPinHasher::class);
 
         // Y el que COMPRUEBA ese mismo PIN (RF-AT-11, RF-ID-06, RS-12). El
         // puerto lo declara `Shared` porque lo necesitan dos satelites que no

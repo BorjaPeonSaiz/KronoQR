@@ -46,6 +46,7 @@ use App\Modules\Compliance\Infrastructure\Listener\NotifyIncidentAssignees;
 use App\Modules\Compliance\Infrastructure\Listener\OpenIncidentOnAnomalyDetected;
 use App\Modules\Compliance\Infrastructure\Listener\RecordComplianceProfileChange;
 use App\Modules\Compliance\Infrastructure\Listener\RecordCredentialLifecycle;
+use App\Modules\Compliance\Infrastructure\Listener\RecordEmployeeImport;
 use App\Modules\Compliance\Infrastructure\Listener\RecordEmployeePinLifecycle;
 use App\Modules\Compliance\Infrastructure\Listener\RecordEmploymentContractChange;
 use App\Modules\Compliance\Infrastructure\Listener\RecordInstallationSettingChange;
@@ -53,7 +54,9 @@ use App\Modules\Compliance\Infrastructure\Listener\RecordLicenseActivation;
 use App\Modules\Compliance\Infrastructure\Listener\RecordManagementAccountLifecycle;
 use App\Modules\Compliance\Infrastructure\Listener\RecordPlanLimitExcess;
 use App\Modules\Compliance\Infrastructure\Listener\RecordProjectionReconciliationAudit;
+use App\Modules\Compliance\Infrastructure\Listener\RecordSetupCompletion;
 use App\Modules\Compliance\Infrastructure\Listener\RecordShiftEntryAudit;
+use App\Modules\Compliance\Infrastructure\Listener\RecordSiteConfiguration;
 use App\Modules\Compliance\Infrastructure\Metrics\RedisIncidentResolutionMetrics;
 use App\Modules\Compliance\Infrastructure\Metrics\TextfileAuditMetrics;
 use App\Modules\Compliance\Infrastructure\Metrics\TextfileIncidentMetrics;
@@ -82,13 +85,16 @@ use App\Modules\Product\Domain\Event\ComplianceThresholdChanged;
 use App\Modules\Product\Domain\Event\InstallationSettingChanged;
 use App\Modules\Product\Domain\Event\LicenseActivated;
 use App\Modules\Product\Domain\Event\PlanLimitExceeded;
+use App\Modules\Product\Domain\Event\SetupCompleted;
 use App\Modules\Shared\Application\Port\AuthenticationJournal;
 use App\Modules\Shared\Application\Port\AuthorizationJournal;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
 use App\Modules\Workforce\Domain\Event\EmployeePinDelivered;
 use App\Modules\Workforce\Domain\Event\EmployeePinIssued;
+use App\Modules\Workforce\Domain\Event\EmployeesImported;
 use App\Modules\Workforce\Domain\Event\EmploymentContractRegistered;
+use App\Modules\Workforce\Domain\Event\SiteConfigured;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\Facades\Config;
@@ -248,6 +254,9 @@ final class ComplianceServiceProvider extends ServiceProvider
         $this->recordCredentialAndDeviceLifecycle();
         $this->recordEmployeePinLifecycle();
         $this->recordEmploymentContractChanges();
+        $this->recordSiteConfiguration();
+        $this->recordEmployeeImports();
+        $this->recordSetupCompletion();
         $this->recordInstallationSettingChanges();
         $this->recordComplianceProfileChanges();
         $this->recordLicenseLifecycle();
@@ -534,6 +543,62 @@ final class ComplianceServiceProvider extends ServiceProvider
     private function recordEmploymentContractChanges(): void
     {
         Event::listen(EmploymentContractRegistered::class, [RecordEmploymentContractChange::class, 'handle']);
+    }
+
+    /**
+     * El asiento del **centro de la instalacion** (tarea 5.5, RF-PD-03, RN-05).
+     *
+     * Misma familia del bloque D que el contrato y que un umbral de calculo, y
+     * por el mismo motivo: `sites.timezone` es el parametro con el que se decide
+     * a que jornada va cada tramo, asi que crearlo o cambiarlo mueve horas de un
+     * dia a otro sin tocar un fichaje.
+     *
+     * **Cierra una deuda de la tarea 1.6**: `UpdateSiteHandler` decia por escrito
+     * que su cambio quedaba auditado «por el oyente de `Compliance`», y ese
+     * oyente no existia.
+     *
+     * Sincrono, sin `ShouldQueue` y sin `afterCommit` (ADR-027): si el asiento
+     * falla, el centro no se crea ni se modifica.
+     */
+    private function recordSiteConfiguration(): void
+    {
+        Event::listen(SiteConfigured::class, [RecordSiteConfiguration::class, 'handle']);
+    }
+
+    /**
+     * El asiento de la **carga masiva de plantilla** (tarea 5.5, RF-GP-05).
+     *
+     * Familia de datos personales del bloque D, la misma que responde «¿que hizo
+     * esa cuenta con la plantilla?». Es el asiento del LOTE: cada alta deja
+     * ademas el suyo por el camino de siempre.
+     *
+     * A diferencia del centro y del contrato, aqui el evento llega **despues** de
+     * confirmar la transaccion de la importacion, que es cuando esas cuarenta
+     * altas ya existen. Su fallo no puede deshacer nada, y no debe: lo que
+     * quedaria sin escribir es el resumen de un hecho que si ocurrio.
+     */
+    private function recordEmployeeImports(): void
+    {
+        Event::listen(EmployeesImported::class, [RecordEmployeeImport::class, 'handle']);
+    }
+
+    /**
+     * El asiento del **cierre del asistente de puesta en marcha** (tarea 5.5,
+     * RF-PD-03, RL-04).
+     *
+     * El asistente **no se reabre**, y esa irreversibilidad se justifica con
+     * RL-04: reabrirlo seria una via para reconfigurar la instalacion —empezando
+     * por la zona horaria del centro— sin dejar rastro. Un acto que se justifica
+     * por el trail tiene que estar en el trail.
+     *
+     * Sincrono, sin `ShouldQueue` y sin `afterCommit` (ADR-027): si el asiento
+     * falla, el asistente no se cierra y se puede reintentar. El asiento lleva
+     * los pasos **omitidos**, que es lo unico que no se puede reconstruir
+     * despues, porque `setup_progress` es una tabla normal y editable.
+     */
+    private function recordSetupCompletion(): void
+    {
+        Event::listen(SetupCompleted::class, [RecordSetupCompletion::class, 'handle']);
     }
 
     /**

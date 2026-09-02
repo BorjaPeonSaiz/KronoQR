@@ -16,6 +16,8 @@ use App\Modules\Product\Application\Port\ProductEventPublisher;
 use App\Modules\Product\Application\Port\SettingsAnomalyReporter;
 use App\Modules\Product\Application\Port\SettingsMetrics;
 use App\Modules\Product\Application\Port\SettingsRepository;
+use App\Modules\Product\Application\Port\SetupFacts;
+use App\Modules\Product\Application\Port\SetupProgressRepository;
 use App\Modules\Product\Application\UseCase\ActivateLicenseHandler;
 use App\Modules\Product\Application\UseCase\GetLicenseStatusHandler;
 use App\Modules\Product\Application\UseCase\GetSettingsHandler;
@@ -23,9 +25,11 @@ use App\Modules\Product\Application\UseCase\RecordPlanUsageHandler;
 use App\Modules\Product\Domain\ValueObject\ComplianceProfileSnapshot;
 use App\Modules\Product\Domain\ValueObject\LicenseStatus;
 use App\Modules\Product\Domain\ValueObject\ResolvedSettings;
+use App\Modules\Product\Domain\ValueObject\SetupState;
 use App\Modules\Product\Http\Policy\ComplianceProfilePolicy;
 use App\Modules\Product\Http\Policy\LicensePolicy;
 use App\Modules\Product\Http\Policy\SettingsPolicy;
+use App\Modules\Product\Http\Policy\SetupPolicy;
 use App\Modules\Product\Infrastructure\Adapter\CachedLicenseStatePublisher;
 use App\Modules\Product\Infrastructure\Adapter\CachedSettingsRepository;
 use App\Modules\Product\Infrastructure\Adapter\DbBrandingProvider;
@@ -44,6 +48,8 @@ use App\Modules\Product\Infrastructure\Metrics\RedisSettingsMetrics;
 use App\Modules\Product\Infrastructure\Persistence\DatabaseComplianceProfileRepository;
 use App\Modules\Product\Infrastructure\Persistence\DatabaseLicenseRepository;
 use App\Modules\Product\Infrastructure\Persistence\DatabasePlanUsageCounter;
+use App\Modules\Product\Infrastructure\Persistence\DatabaseSetupFacts;
+use App\Modules\Product\Infrastructure\Persistence\DatabaseSetupProgressRepository;
 use App\Modules\Product\Infrastructure\Persistence\EloquentSettingsRepository;
 use App\Modules\Shared\Application\Port\BrandingProvider;
 use App\Modules\Shared\Application\Port\Clock;
@@ -51,15 +57,18 @@ use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\FeatureGate;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
 use App\Modules\Workforce\Domain\Event\EmployeeHired;
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\Redis\Factory as Redis;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
 /**
@@ -337,10 +346,79 @@ final class ProductServiceProvider extends ServiceProvider
                 connection: DB::connection(),
             ),
         );
+
+        $this->registerSetupWizard();
+    }
+
+    /**
+     * El asistente de puesta en marcha (tarea 5.5, RF-PD-03).
+     *
+     * Los dos adaptadores van sobre `DB::connection()` y no sobre un modelo
+     * Eloquent: `setup_progress` es una tabla de nueve filas como mucho, y
+     * {@see DatabaseSetupFacts} consulta el ESQUEMA de otros modulos —`users`,
+     * `employees`, `credentials`, `devices`— sin nombrar ni una clase suya, que
+     * es el criterio con el que ya vive {@see DatabasePlanUsageCounter}
+     * (doc 02 §1.6).
+     */
+    private function registerSetupWizard(): void
+    {
+        $this->app->bind(
+            SetupProgressRepository::class,
+            static fn (): DatabaseSetupProgressRepository => new DatabaseSetupProgressRepository(DB::connection()),
+        );
+
+        $this->app->bind(
+            SetupFacts::class,
+            static fn (): DatabaseSetupFacts => new DatabaseSetupFacts(DB::connection()),
+        );
     }
 
     public function boot(): void
     {
+        /*
+         * Zona del asistente de puesta en marcha: **10 r/m por origen**
+         * (`GET /setup/status` y `POST /setup/administrator`).
+         *
+         * POR QUE UNA ZONA PROPIA Y NO `throttle:auth`. Aquella compone su clave
+         * por cuenta con el `email` del cuerpo, y aqui no hay ninguna cuenta a la
+         * que contar: la de `/setup/administrator` todavia no existe y la de
+         * `/setup/status` no la hay. Con la zona de acceso, todo el trafico del
+         * asistente compartiria el cubo de la cadena vacia —el mismo fallo que la
+         * tarea 2.1 encontro en `/auth/2fa/*`—, y ademas gastaria el cupo de
+         * acceso de la persona que esta a punto de entrar.
+         *
+         * SOLO POR ORIGEN, que es lo unico que hay. No hace falta mas: la unica
+         * escritura publica deja de existir en cuanto se ejecuta con exito una
+         * vez, asi que el techo no protege un recurso que se pueda agotar sino
+         * el ruido de un escaner contra una instalacion recien montada.
+         *
+         * 10 R/M NO ES UNA MEDICION: la puesta en marcha la hace una persona,
+         * una vez, y consulta el estado entre paso y paso. Deja margen de sobra
+         * para eso y corta un bucle en el primer segundo. Es configuracion y no
+         * una constante (regla dura 13).
+         */
+        RateLimiter::for('setup', static function (Request $request): array {
+            $perMinute = max(1, Config::integer('product.setup_rate_limit_per_minute', 10));
+
+            return [Limit::perMinute($perMinute)->by('setup-ip:'.(string) $request->ip())];
+        });
+
+        /*
+         * `PUT /api/v1/setup/steps/{step}` y `POST /api/v1/setup/complete` son de
+         * `admin` y de nadie mas: el asistente decide la zona horaria con la que
+         * se atribuyen las jornadas (RN-05) y el perfil con el que se calcula el
+         * cumplimiento (RL-21), que es la misma potestad que `/settings`.
+         *
+         * El sujeto es {@see SetupState} —«el asistente de esta instalacion»— y
+         * no una fila de `setup_progress`: la policy no autoriza sobre una marca
+         * concreta, y ademas puede no haber ninguna.
+         *
+         * **La creacion del primer administrador no pasa por ninguna policy**, y
+         * no puede: ocurre cuando no hay ninguna cuenta a la que autorizar. Su
+         * unica guarda es que no exista ninguna, y vive en `Identity`.
+         */
+        Gate::policy(SetupState::class, SetupPolicy::class);
+
         /*
          * `GET` y `PATCH /api/v1/settings` son de `admin` y de nadie mas (Anexo B
          * del doc 01, §7.3 del doc 02). El ambito `settings:*` lo comprueba el

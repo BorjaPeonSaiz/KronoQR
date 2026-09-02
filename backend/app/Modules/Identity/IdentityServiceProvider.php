@@ -15,6 +15,7 @@ use App\Modules\Identity\Application\Port\DeviceRepository;
 use App\Modules\Identity\Application\Port\DeviceTokenIssuer;
 use App\Modules\Identity\Application\Port\IdentityEventPublisher;
 use App\Modules\Identity\Application\Port\LoginAttempts;
+use App\Modules\Identity\Application\Port\ManagementAccountRegistry;
 use App\Modules\Identity\Application\Port\QrKeyProvider;
 use App\Modules\Identity\Application\Port\TwoFactorAuthenticator;
 use App\Modules\Identity\Application\Port\TwoFactorSecrets;
@@ -61,6 +62,7 @@ use App\Modules\Identity\Infrastructure\Metrics\TextfileCredentialMetrics;
 use App\Modules\Identity\Infrastructure\Persistence\Device;
 use App\Modules\Identity\Infrastructure\Persistence\EloquentCredentialRepository;
 use App\Modules\Identity\Infrastructure\Persistence\EloquentDeviceRepository;
+use App\Modules\Identity\Infrastructure\Persistence\EloquentManagementAccountRegistry;
 use App\Modules\Identity\Infrastructure\Persistence\EloquentTwoFactorSecrets;
 use App\Modules\Identity\Infrastructure\Persistence\EloquentUserAccounts;
 use App\Modules\Identity\Infrastructure\Persistence\User;
@@ -130,6 +132,17 @@ final class IdentityServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->bind(UserAccounts::class, EloquentUserAccounts::class);
+
+        /*
+         * Alta de cuentas de gestion (tarea 5.5, RF-PD-03).
+         *
+         * Puerto SEPARADO de `UserAccounts`, que es «las cuentas vistas por quien
+         * autentica» y no tiene ninguna escritura: darle un `create()`
+         * significaria que el caso de uso que comprueba una contrasena tambien
+         * puede crear cuentas.
+         */
+        $this->app->bind(ManagementAccountRegistry::class, EloquentManagementAccountRegistry::class);
+
         $this->app->bind(AccessTokenIssuer::class, SanctumAccessTokenIssuer::class);
 
         $this->app->bind(

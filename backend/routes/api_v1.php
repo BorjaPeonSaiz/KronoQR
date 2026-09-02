@@ -16,6 +16,7 @@ use App\Modules\Identity\Http\Controller\CredentialController;
 use App\Modules\Identity\Http\Controller\CredentialStatusController;
 use App\Modules\Identity\Http\Controller\CurrentUserController;
 use App\Modules\Identity\Http\Controller\DeliverCredentialController;
+use App\Modules\Identity\Http\Controller\FirstAdministratorController;
 use App\Modules\Identity\Http\Controller\LoginController;
 use App\Modules\Identity\Http\Controller\LogoutController;
 use App\Modules\Identity\Http\Controller\PortalLoginController;
@@ -28,6 +29,7 @@ use App\Modules\Kiosk\Http\Controller\RosterController;
 use App\Modules\Product\Http\Controller\ComplianceProfileController;
 use App\Modules\Product\Http\Controller\LicenseController;
 use App\Modules\Product\Http\Controller\SettingsController;
+use App\Modules\Product\Http\Controller\SetupController;
 use App\Modules\Reporting\Http\Controller\EmployeeWorkDayController;
 use App\Modules\Reporting\Http\Controller\LivePresenceController;
 use App\Modules\Reporting\Http\Controller\MyWorkDayController;
@@ -36,6 +38,7 @@ use App\Modules\Reporting\Http\Controller\PeriodReportController;
 use App\Modules\Reporting\Http\Controller\PeriodReportExportController;
 use App\Modules\Workforce\Http\Controller\DepartmentController;
 use App\Modules\Workforce\Http\Controller\EmployeeController;
+use App\Modules\Workforce\Http\Controller\EmployeeImportController;
 use App\Modules\Workforce\Http\Controller\EmployeePinController;
 use App\Modules\Workforce\Http\Controller\EmploymentContractController;
 use App\Modules\Workforce\Http\Controller\OffboardEmployeeController;
@@ -683,6 +686,38 @@ Route::middleware([
 
 Route::middleware(['auth:sanctum', 'ability:'.TokenAbility::EMPLOYEES_ALL->value])->group(function (): void {
     Route::post('/employees', [EmployeeController::class, 'store'])->name('employees.store');
+
+    /*
+     * Importacion masiva de plantilla (tarea 5.5, RF-GP-05, movido aqui desde la
+     * 3.10). Es el paso de plantilla del asistente de puesta en marcha y tambien
+     * la via por la que se incorpora un grupo grande despues.
+     *
+     * ANTES DE `/employees/{uuid}` NO HACE FALTA: `{uuid}` lleva `whereUuid()`,
+     * asi que `import` no puede casar con esa ruta. Se declara aqui, junto al
+     * alta individual, porque hace lo mismo y comparte ambito, policy y roles.
+     *
+     * AMBITO `employees:*` Y NO UNO PROPIO: es un alta de plantilla, no un
+     * informe. `EmployeePolicy::import()` comprueba ademas el rol (regla dura
+     * 18), con el mismo conjunto que el alta individual.
+     *
+     * UNICO ENDPOINT DEL PRODUCTO CON CUERPO `multipart/form-data`. El fichero se
+     * lee en streaming desde el temporal de la peticion y no se guarda: la
+     * confirmacion de la segunda fase viaja como `confirm_checksum` para no
+     * dejar en disco un fichero con los nombres y los documentos de identidad de
+     * la plantilla esperando a que alguien confirme.
+     *
+     * `throttle:management` SOLO EN ESTA RUTA del grupo, y no en el grupo entero
+     * —que escribe fichas de una en una y ya esta acotado por Nginx—: una
+     * importacion es la peticion mas cara del producto. Lee un fichero de hasta
+     * 4 MB, calcula 500 hashes de bcrypt y abre una transaccion que toma el
+     * candado global de `audit_log` (ADR-010), **detras del cual se serializa
+     * cada fichaje del hotel**. Sin techo, un bucle de reintentos del navegador
+     * —o un doble clic con un fichero grande— deja la tablet de la entrada
+     * esperando. El `429` ya esta declarado en el contrato para esta ruta.
+     */
+    Route::post('/employees/import', EmployeeImportController::class)
+        ->middleware('throttle:management')
+        ->name('employees.import');
     Route::patch('/employees/{uuid}', [EmployeeController::class, 'update'])
         ->whereUuid('uuid')
         ->name('employees.update');
@@ -922,4 +957,96 @@ Route::middleware([
     Route::get('/license', [LicenseController::class, 'show'])->name('product.license.show');
     Route::post('/license/activate', [LicenseController::class, 'activate'])
         ->name('product.license.activate');
+});
+
+/*
+ * ---------------------------------------------------------------------------
+ * ASISTENTE DE PUESTA EN MARCHA (tarea 5.5, RF-PD-03)
+ * ---------------------------------------------------------------------------
+ *
+ * PREFIJO PROPIO Y NO RUTAS REPARTIDAS por los recursos que toca. La razon no es
+ * de orden: estas rutas son de **un solo uso** y se cierran a la vez, mientras
+ * que los recursos que configuran viven para siempre. Con `POST /api/v1/site`
+ * habria un alta de centros PERMANENTE —la primera pieza del multicentro que
+ * ADR-040 cerro, y algo que el Anexo B del doc 01 niega por escrito— en lugar de
+ * un acto irrepetible de puesta en marcha.
+ *
+ * LOS CONTROLADORES SIGUEN EN EL MODULO DUEÑO DEL RECURSO: el primer
+ * administrador en `Identity` y el centro en `Workforce`. El prefijo agrupa el
+ * asistente en el CONTRATO, no mueve la logica de modulo — y ademas `Product` no
+ * podria importar a ninguno de los dos (doc 02 §1.6).
+ *
+ * DOS RUTAS PUBLICAS, Y SOLO DOS:
+ *
+ *   - `GET /setup/status` devuelve booleanos y nada mas. Se llama antes de que
+ *     exista ninguna cuenta con la que autenticarse, que es literalmente el
+ *     estado que describe.
+ *   - `POST /setup/administrator` es **la unica escritura publica del
+ *     producto**, y solo mientras no exista ninguna cuenta de gestion. Existe
+ *     porque el instalador NO crea cuentas y no debe crearlas (tarea 5.4, doc 07
+ *     §6): sin ella, una instalacion recien montada no tendria puerta de entrada
+ *     a su propio panel y el cliente necesitaria SSH, que es justo lo que el
+ *     §11.6 dice que no puede hacer falta.
+ *
+ * `throttle:setup` PARA LAS DOS, y no `throttle:auth`: aquella zona compone su
+ * clave por cuenta con el `email` del cuerpo, y aqui el correo de una cuenta que
+ * todavia no existe no identifica a nadie. La zona propia cuenta por origen, que
+ * es lo unico que hay.
+ *
+ * EL RESTO VA AUTENTICADO con la sesion del administrador recien creado. No hay
+ * «token de instalacion» ni secreto en el `.env`: el unico momento sin
+ * autenticacion es el que no puede tenerla.
+ */
+Route::prefix('setup')->group(function (): void {
+    Route::get('/status', [SetupController::class, 'show'])
+        ->middleware('throttle:setup')
+        ->name('setup.status');
+
+    Route::post('/administrator', FirstAdministratorController::class)
+        ->middleware('throttle:setup')
+        ->name('setup.administrator');
+
+    /*
+     * El alta del centro lleva `employees:*` —el ambito de la plantilla, que es
+     * de donde cuelgan centros y departamentos— y no `settings:*`, para que sea
+     * el mismo ambito con el que despues se lee y se modifica en `/site`. Quien
+     * puede crearlo lo decide `SitePolicy::create()`, que exige `admin`
+     * (regla dura 18: ambito y policy son dos controles distintos).
+     */
+    Route::post('/site', [SiteController::class, 'store'])
+        ->middleware([
+            'auth:sanctum',
+            'ability:'.TokenAbility::EMPLOYEES_ALL->value,
+            'throttle:management',
+        ])
+        ->name('setup.site.store');
+
+    Route::middleware([
+        'auth:sanctum',
+        'ability:'.TokenAbility::SETTINGS_ALL->value,
+        'throttle:management',
+    ])->group(function (): void {
+        /*
+         * EL DETALLE DEL ASISTENTE VA AUTENTICADO, y la ruta publica de arriba
+         * solo dice si sigue abierto. La lista de pasos es un inventario de la
+         * postura de la instalacion —dice si hay un administrador SIN segundo
+         * factor, si no hay licencia y si no hay ningun quiosco— y nada de eso
+         * hace falta para redirigir un navegador.
+         */
+        Route::get('/steps', [SetupController::class, 'steps'])->name('setup.steps.index');
+
+        /*
+         * `PUT` y no `POST`: marcar un paso es idempotente, y repetirlo tiene que
+         * dejar el mismo estado. Es lo que permite que el panel reintente sin
+         * pensar cuando se le cae la red a mitad del asistente.
+         *
+         * El `{step}` no lleva `where`: el catalogo lo comprueba
+         * `SetupStep::fromString()`, que devuelve `404` con un mensaje que
+         * enumera los que si existen. Una expresion regular en la ruta daria un
+         * `404` mudo.
+         */
+        Route::put('/steps/{step}', [SetupController::class, 'record'])->name('setup.steps.record');
+
+        Route::post('/complete', [SetupController::class, 'complete'])->name('setup.complete');
+    });
 });

@@ -130,6 +130,28 @@ enum AuditAction: string
 
     case PersonalDataAccessed = 'personal_data.accessed';
 
+    /**
+     * Se ha cargado la plantilla desde un fichero (**RF-GP-05**, tarea 5.5).
+     *
+     * **Familia de datos personales y no de plantilla**, porque el bloque D no
+     * tiene una familia de plantilla: la pregunta a la que responde esta accion
+     * es la misma que ya justifica que `access.denied` viva aqui —«¿que hizo esa
+     * cuenta con la plantilla?»—, y una carga masiva es la mayor escritura de
+     * datos personales que hace el producto. Meterla en
+     * `AuthorityOrCalculationChange` ensuciaria la consulta con la que una
+     * inspeccion pregunta quien movio las reglas del calculo, que es una
+     * pregunta distinta.
+     *
+     * **Asiento del LOTE, no de cada alta.** Cada persona creada deja ademas su
+     * propio rastro por el camino de siempre; lo que este responde es «¿quien
+     * cargo la plantilla, cuando y con que fichero?», que es lo que se pregunta
+     * cuando aparecen doce altas que nadie recuerda haber hecho.
+     *
+     * El payload lleva **cifras y la huella del fichero**: ni un nombre, ni un
+     * correo, ni un documento, ni el nombre del fichero (regla dura 21).
+     */
+    case EmployeesImported = 'employee.imported';
+
     // --- Exportacion legal (RL-03, RL-06, RF-IN-05) --------------------------
 
     case LegalExportGenerated = 'legal_export.generated';
@@ -139,6 +161,51 @@ enum AuditAction: string
     case RoleAssignmentChanged = 'role_assignment.changed';
     case PermissionChanged = 'permission.changed';
     case CalculationSettingChanged = 'calculation_setting.changed';
+
+    /**
+     * El centro de la instalacion se ha creado (puesta en marcha, RF-PD-03) o se
+     * ha modificado (tarea 5.5).
+     *
+     * **Se audita por `timezone`.** RN-05 atribuye cada tramo a la jornada de su
+     * hora de inicio **en la zona del centro**: ese campo es el parametro con el
+     * que se decide a que dia van las horas de todo el mundo, y cambiarlo mueve
+     * horas de un dia a otro sin tocar un solo fichaje. Misma familia que
+     * `calculation_setting.changed` y por el mismo motivo.
+     *
+     * **Sujeto propio en lugar de reutilizar `calculation_setting.changed`**, con
+     * el mismo criterio que {@see self::EmploymentContractRegistered}: aquella
+     * describe una clave de `installation_settings` y esta un centro, y unirlas
+     * obligaria a filtrar por el contenido del JSON en lugar de por la columna
+     * indexada para responder «¿quien cambio la zona horaria del hotel?».
+     *
+     * **Dos verbos y no uno**: crear el centro ocurre una vez en la vida de la
+     * instalacion y modificarlo puede ocurrir siempre. Con un solo valor, la
+     * consulta que busca «¿desde cuando esta instalacion existe?» no se podria
+     * distinguir de la que busca «¿quien la reconfiguro?».
+     */
+    case SiteCreated = 'site.created';
+
+    case SiteUpdated = 'site.updated';
+
+    /**
+     * Se ha cerrado el asistente de puesta en marcha (RF-PD-03, tarea 5.5).
+     *
+     * **Se audita porque es irreversible.** El asistente no se reabre, y la razon
+     * escrita es RL-04: reabrirlo seria una via para reconfigurar la instalacion
+     * —zona horaria del centro incluida— sin el asiento que ese requisito exige.
+     * Un acto que se justifica por el trail tiene que estar EN el trail; si no,
+     * la justificacion es una promesa sin conducta.
+     *
+     * Misma familia que `site.updated` y que `calculation_setting.changed`: el
+     * cierre fija el momento a partir del cual la configuracion de la instalacion
+     * solo se cambia por sus recursos, cada uno con su propio asiento.
+     *
+     * El payload lleva **los pasos que se omitieron**, que es lo unico que no se
+     * puede reconstruir despues: `setup_progress` conserva la marca, pero el
+     * asiento es lo que la ata a una persona y a un instante en una cadena
+     * encadenada por hash.
+     */
+    case SetupCompleted = 'setup.completed';
 
     /**
      * Se ha registrado el contrato de una persona (RF-GP-02, tarea 2.8).
@@ -261,6 +328,12 @@ enum AuditAction: string
         // por su desenlace. Separarlos en dos familias obligaria a consultar dos
         // veces para responder «que hizo esa cuenta con la plantilla».
         'access' => AuditableEvent::PersonalDataAccess,
+        // La carga masiva de plantilla es la mayor escritura de datos personales
+        // que hace el producto, y responde a la misma pregunta que las dos de
+        // arriba: «que hizo esa cuenta con la plantilla». El bloque D no tiene
+        // familia de plantilla, y abrirla para una sola accion partiria en dos
+        // la consulta que hoy responde esa pregunta.
+        'employee' => AuditableEvent::PersonalDataAccess,
         'legal_export' => AuditableEvent::LegalExport,
         // Abrir y resolver una incidencia son la misma familia porque son las dos
         // mitades del mismo hecho: se detecto algo con relevancia legal y alguien
@@ -270,6 +343,14 @@ enum AuditAction: string
         'role_assignment' => AuditableEvent::AuthorityOrCalculationChange,
         'permission' => AuditableEvent::AuthorityOrCalculationChange,
         'calculation_setting' => AuditableEvent::AuthorityOrCalculationChange,
+        // La zona horaria del centro es el parametro con el que RN-05 decide a
+        // que jornada va cada tramo: crear el centro y cambiarle la zona son
+        // cambios del calculo, no altas de plantilla.
+        'site' => AuditableEvent::AuthorityOrCalculationChange,
+        // Cerrar el asistente fija el momento a partir del cual la configuracion
+        // de la instalacion solo se cambia por sus recursos, cada uno con su
+        // asiento. Es un hecho sobre las reglas, no sobre una persona.
+        'setup' => AuditableEvent::AuthorityOrCalculationChange,
         // El contrato fija las horas contra las que se mide la jornada de una
         // persona (RF-IN-03): es un parametro del calculo, con sujeto propio.
         'employment_contract' => AuditableEvent::AuthorityOrCalculationChange,

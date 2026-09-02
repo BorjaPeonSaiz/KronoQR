@@ -22,6 +22,7 @@ import type {
   ManagementUser,
   PeriodReport,
   Session,
+  SetupStatus,
   Site,
   TwoFactorChallenge,
   TwoFactorEnrolment,
@@ -37,6 +38,20 @@ export const TOTP_CODE = '492013'
 export const SESSION_STORAGE_KEY = 'kronoqr.admin.session'
 
 export const SITE: Site = { id: 1, name: 'Hotel Marina', timezone: 'Europe/Madrid' }
+
+/**
+ * El estado del asistente de puesta en marcha (RF-PD-03) para el resto de
+ * recorridos del panel, que NO son ese asistente: `available: false` es lo
+ * que ve una instalacion normal, ya configurada. Sin `steps`: es exactamente
+ * lo que responde `GET /setup/status`, que es PUBLICA y nunca los trae
+ * (revision de la 5.5) — este doble sirve esa misma ruta. El recorrido propio
+ * del asistente (`setup-wizard.spec.ts`) construye su propio `SetupStatus`
+ * con pasos pendientes, servido por `GET /setup/steps`.
+ */
+export const SETUP_STATUS_DONE: SetupStatus = {
+  available: false,
+  completed_at: '2026-01-01T00:00:00Z',
+}
 
 export const DEPARTMENTS: DepartmentCollection = {
   data: [
@@ -500,6 +515,13 @@ export interface ManagementApiOptions {
    * fichando con la clave saliente. Por omision, el mismo que sin filtro.
    */
   readonly credentialBoardByKey?: CredentialStatusBoard
+  /**
+   * Lo que devuelve `GET /api/v1/setup/status` (RF-PD-03). Por omision,
+   * `SETUP_STATUS_DONE`: los recorridos que no son el propio asistente
+   * suceden en una instalacion ya configurada, y sin este doble la guarda de
+   * rutas nueva mandaria cualquier prueba existente a `/setup`.
+   */
+  readonly setupStatus?: SetupStatus
 }
 
 async function json(route: Route, status: number, body: unknown): Promise<void> {
@@ -672,6 +694,11 @@ export async function stubManagementApi(
           return
         case 'POST /api/v1/auth/logout':
           await route.fulfill({ status: 204 })
+          return
+        case 'GET /api/v1/setup/status':
+          // Publico, sin token: la guarda de rutas lo consulta antes de
+          // decidir si hay que mandar al asistente (RF-PD-03).
+          await json(route, 200, options.setupStatus ?? SETUP_STATUS_DONE)
           return
         case 'GET /api/v1/site':
           await json(route, 200, SITE)

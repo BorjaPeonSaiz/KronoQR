@@ -144,6 +144,33 @@ it('describe solo los endpoints cuya tarea existe, y todos bajo /api/v1', functi
         // separado — y un `PATCH` de varias claves a la vez es lo que permite
         // comprobar las invariantes entre ellas antes de escribir ninguna.
         '/api/v1/settings',
+        // Tarea 5.5: el asistente de puesta en marcha (RF-PD-03). Prefijo propio
+        // y no rutas repartidas por los recursos que toca, por una razon
+        // concreta: son de UN SOLO USO y se cierran a la vez. Con `POST
+        // /api/v1/site` habria un alta de centros permanente —que ADR-040 cierra
+        // y el Anexo B niega por escrito— en lugar de un acto irrepetible de
+        // puesta en marcha.
+        //
+        // `status` y `administrator` son las UNICAS rutas publicas de escritura y
+        // lectura del asistente, y la segunda solo mientras no exista ninguna
+        // cuenta de gestion: el instalador no crea cuentas, asi que sin ella una
+        // instalacion recien montada no tendria puerta de entrada a su panel.
+        '/api/v1/setup/status',
+        '/api/v1/setup/administrator',
+        '/api/v1/setup/site',
+        // El DETALLE de los pasos va autenticado y aparte de `status`, que es
+        // publica: la lista dice si hay un administrador sin segundo factor, si
+        // no hay licencia y si no hay ningun quiosco. Es un inventario de la
+        // postura de la instalacion y no hace falta para redirigir un navegador.
+        '/api/v1/setup/steps',
+        '/api/v1/setup/steps/{step}',
+        '/api/v1/setup/complete',
+        // Tarea 5.5: importacion masiva de plantilla (RF-GP-05, movido aqui desde
+        // la 3.10). Cuelga de `/employees` y lleva su ambito porque es un alta de
+        // plantilla, no un informe. Es el unico endpoint del producto con cuerpo
+        // `multipart/form-data`: el fichero se lee en streaming desde disco y no
+        // se carga entero en memoria.
+        '/api/v1/employees/import',
     ]);
 })->group('RQ-06');
 

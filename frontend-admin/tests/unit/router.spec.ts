@@ -3,8 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useSessionStore } from '@/features/auth/session.store'
 import { routes } from '@/router'
 import { registerAuthGuard } from '@/router/guards'
-import { managementUser } from './support/fixtures'
-import { createTestPinia, createTestRouter } from './support/harness'
+import { managementUser, setupStatus } from './support/fixtures'
+import { createTestPinia, createTestRouter, jsonResponse, stubFetch } from './support/harness'
 
 function leafNames(records: readonly RouteRecordRaw[]): (string | symbol | undefined)[] {
   return records.flatMap((record) =>
@@ -234,5 +234,92 @@ describe('rutas de la aplicacion', () => {
     await router.push('/no-existe')
 
     expect(router.currentRoute.value.name).toBe('not-found')
+  })
+})
+
+describe('guarda del asistente de puesta en marcha (RF-PD-03)', () => {
+  it('con la instalacion sin configurar, manda al asistente sea cual sea la ruta pedida', async () => {
+    stubFetch(() => jsonResponse(setupStatus()))
+
+    const router = createTestRouter()
+
+    registerAuthGuard(router)
+    await router.push('/employees')
+
+    expect(router.currentRoute.value.name).toBe('setup')
+  })
+
+  it('deja llegar al acceso aunque el asistente siga abierto: es la via de escape de quien recarga sin sesion a mitad', async () => {
+    // Sin esta excepcion, el 409 de `POST /setup/administrator` («entra en
+    // /auth/login») señalaria una puerta que la guarda mantiene cerrada:
+    // quien recargo sin el token de la sesion (administrador ya creado, pero
+    // el segundo factor no se confirmo o el token de la pestaña caduco) se
+    // quedaria atrapado en el paso del administrador para siempre.
+    stubFetch(() => jsonResponse(setupStatus()))
+
+    const router = createTestRouter()
+
+    registerAuthGuard(router)
+    await router.push('/login')
+
+    expect(router.currentRoute.value.name).toBe('login')
+  })
+
+  it('deja entrar al asistente mientras la instalacion sigue sin configurar', async () => {
+    stubFetch(() => jsonResponse(setupStatus()))
+
+    const router = createTestRouter()
+
+    registerAuthGuard(router)
+    await router.push('/setup')
+
+    expect(router.currentRoute.value.name).toBe('setup')
+  })
+
+  it('una vez cerrado el asistente, ya no se puede volver a el', async () => {
+    stubFetch(() => jsonResponse(setupStatus({ available: false })))
+
+    const router = createTestRouter()
+
+    registerAuthGuard(router)
+    await router.push('/setup')
+
+    expect(router.currentRoute.value.name).toBe('login')
+  })
+
+  it('con la instalacion ya configurada, el resto de rutas funciona con normalidad', async () => {
+    stubFetch(() => jsonResponse(setupStatus({ available: false })))
+
+    const session = useSessionStore()
+
+    session.user = managementUser()
+    session.token = 'un-token'
+    session.status = 'authenticated'
+
+    const router = createTestRouter()
+
+    registerAuthGuard(router)
+    await router.push('/')
+
+    expect(router.currentRoute.value.name).toBe('employees')
+  })
+
+  it('un corte de red al consultar el estado no deja el panel inalcanzable', async () => {
+    stubFetch(() => {
+      throw new TypeError('Failed to fetch')
+    })
+
+    const session = useSessionStore()
+
+    session.user = managementUser()
+    session.token = 'un-token'
+    session.status = 'authenticated'
+
+    const router = createTestRouter()
+
+    registerAuthGuard(router)
+    await router.push('/')
+
+    expect(router.currentRoute.value.name).toBe('employees')
   })
 })

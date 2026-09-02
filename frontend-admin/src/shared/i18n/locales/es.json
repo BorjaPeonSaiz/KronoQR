@@ -943,5 +943,160 @@
       "unverifiable": "La licencia guardada no se puede verificar. El fichaje y el acceso al registro funcionan con normalidad; las funcionalidades accesorias, no.",
       "exceeded": "Además, se ha superado el plan contratado en: {limits}. No bloquea nada; habla con tu proveedor para ampliarlo."
     }
+  },
+  "onboarding": {
+    "heading": "Puesta en marcha",
+    "intro": "Ocho pasos para dejar el sistema listo para fichar. Puedes cerrar esta pantalla en cualquier momento y retomarla donde la dejaste: nada se pierde.",
+    "loading": "Cargando el estado de la puesta en marcha…",
+    "stepAnnouncement": "{label}",
+    "progress": {
+      "label": "Progreso de la puesta en marcha"
+    },
+    "actions": {
+      "continue": "Continuar",
+      "skip": "Omitir por ahora",
+      "saving": "Guardando…"
+    },
+    "locales": {
+      "es": "Español",
+      "en": "Inglés"
+    },
+    "alreadyDone": {
+      "heading": "Esta instalación ya está en marcha",
+      "intro": "El asistente de puesta en marcha ya se completó y no vuelve a abrirse. Los cambios posteriores se hacen desde el panel, ya autenticado.",
+      "goToLogin": "Ir al acceso del panel"
+    },
+    "review": {
+      "heading": "Revisa antes de terminar",
+      "intro": "Estos son los ocho pasos y cómo han quedado. El asistente no se cierra solo: hazlo explícitamente cuando lo hayas revisado, porque después no vuelve a estar accesible.",
+      "states": {
+        "completed": "Hecho",
+        "skipped": "Omitido"
+      },
+      "complete": "Finalizar la puesta en marcha",
+      "completing": "Finalizando…"
+    },
+    "completion": {
+      "heading": "Puesta en marcha completada",
+      "intro": "El sistema ya tiene organización, centro, primer administrador y perfil de convenio. Esto es lo que queda antes del primer día.",
+      "credentialsPending": "Aún faltan {count} tarjetas por emitir e imprimir.",
+      "credentialsNone": "No hay tarjetas pendientes de emitir.",
+      "credentialsAdvice": "Sin tarjeta impresa y entregada, nadie puede fichar el primer día. Emitirlas e imprimirlas lleva días de logística: hazlo con antelación.",
+      "credentialsLink": "Ir al panel de estado de credenciales",
+      "credentialsCommand": "También puedes consultarlo desde la consola del servidor con: credentials:status --pending",
+      "fields": {
+        "employees": "Personas en plantilla",
+        "departments": "Departamentos",
+        "license": "Licencia",
+        "kiosks": "Quioscos vinculados"
+      },
+      "goToPanel": "Ir al panel de gestión"
+    },
+    "steps": {
+      "administrator": {
+        "heading": "Primer administrador",
+        "intro": "La primera cuenta de gestión, con segundo factor obligatorio. Todo lo que hagas a partir de aquí —el centro, la licencia, cada paso— queda auditado con esta cuenta como autora.",
+        "fields": {
+          "name": "Nombre",
+          "email": "Correo electrónico",
+          "password": "Contraseña"
+        },
+        "hints": {
+          "name": "El nombre con el que aparecerás en el panel y en el registro de auditoría.",
+          "email": "Es tu identificador de acceso. No se envía ninguna invitación: la contraseña se fija aquí mismo.",
+          "password": "Al menos 12 caracteres, con mayúsculas, minúsculas, dígitos y símbolos."
+        },
+        "submit": "Crear la cuenta",
+        "submitting": "Creando…",
+        "alreadyExists": "Ya hay una cuenta de gestión creada en esta instalación.",
+        "goToLogin": "Entra en /auth/login con tu correo y tu contraseña"
+      },
+      "organisation": {
+        "heading": "Organización",
+        "intro": "El nombre con el que se identifica el hotel y los idiomas del panel.",
+        "loading": "Cargando la configuración…",
+        "fields": {
+          "appName": "Nombre del establecimiento",
+          "defaultLocale": "Idioma por defecto",
+          "availableLocales": "Idiomas disponibles"
+        },
+        "hints": {
+          "appName": "Aparecerá en el panel y, más adelante, en los informes.",
+          "defaultLocale": "El idioma con el que arranca una cuenta nueva.",
+          "availableLocales": "El idioma por defecto no se puede desmarcar."
+        }
+      },
+      "site": {
+        "heading": "Centro de trabajo",
+        "intro": "El nombre y la zona horaria del centro. La zona horaria decide en qué jornada cuenta cada turno: nunca es la zona del navegador ni la de la aplicación, que es siempre UTC.",
+        "fields": {
+          "name": "Nombre del centro",
+          "timezone": "Zona horaria"
+        },
+        "hints": {
+          "name": "Por ejemplo, el nombre del hotel.",
+          "timezone": "Una zona IANA como «Europe/Madrid», nunca un desfase fijo como «+02:00»: un desfase no sabe de cambios de hora."
+        }
+      },
+      "departments": {
+        "heading": "Departamentos",
+        "intro": "Cocina, recepción, pisos… Puedes omitir este paso y crearlos más tarde desde la gestión normal.",
+        "loading": "Cargando los departamentos…",
+        "none": "Todavía no hay ningún departamento.",
+        "fields": {
+          "name": "Nombre del departamento"
+        },
+        "add": "Añadir",
+        "adding": "Añadiendo…"
+      },
+      "complianceProfile": {
+        "heading": "Perfil de convenio",
+        "intro": "Los umbrales legales con los que se detectan los incumplimientos: descanso mínimo, jornada máxima, pausa obligatoria y años de conservación. Empiezan en «ES-hostelería», el convenio de hostelería español, pero tienes que contrastarlos con el convenio que de verdad aplique a tu centro antes de continuar: este paso no se puede omitir.",
+        "confirm": "He revisado los umbrales, continuar",
+        "confirmHint": "Márcalo cuando hayas contrastado estos valores con el convenio aplicable, aunque no cambies ninguno."
+      },
+      "employees": {
+        "heading": "Plantilla",
+        "intro": "Importa la plantilla desde un CSV o un XLSX. Primero se valida sin escribir nada, con un informe línea a línea; solo se aplica lo que confirmes. Puedes omitir este paso y dar de alta a las personas una a una más tarde.",
+        "fields": {
+          "file": "Fichero de plantilla"
+        },
+        "hints": {
+          "file": "CSV o XLSX. El delimitador y la codificación se detectan solos."
+        },
+        "validate": "Validar",
+        "validating": "Validando…",
+        "apply": "Aplicar",
+        "applying": "Aplicando…",
+        "truncated": "El fichero trae más líneas de las que se pueden aplicar de una vez. Divídelo en partes más pequeñas y vuelve a intentarlo: con el fichero así, no se aplica nada.",
+        "fileWarnings": "Avisos del fichero entero, revísalos antes de continuar:",
+        "validatedSummary": "Simulación, nada se ha guardado todavía: {create} altas, {update} actualizaciones, {unchanged} sin cambios, {reject} rechazadas.",
+        "appliedSummary": "Aplicado: {create} altas creadas, {update} actualizadas, {unchanged} sin cambios, {reject} rechazadas y no aplicadas.",
+        "tableCaption": "Resultado línea a línea de la importación",
+        "columns": {
+          "line": "Línea",
+          "label": "Nombre",
+          "outcome": "Resultado",
+          "messages": "Detalle"
+        },
+        "outcomes": {
+          "create": "Alta",
+          "update": "Actualización",
+          "unchanged": "Sin cambios",
+          "reject": "Rechazada"
+        }
+      },
+      "license": {
+        "heading": "Licencia",
+        "intro": "Activa la clave si ya la tienes. Es opcional: el fichaje y el registro legal nunca dependen de la licencia, así que puedes omitir este paso y activarla más tarde desde el panel.",
+        "skip": "Omitir por ahora"
+      },
+      "kiosk": {
+        "heading": "Primer quiosco",
+        "intro": "El emparejamiento de la tablet del quiosco todavía no está disponible en esta versión.",
+        "notYetAvailable": "Vincular un quiosco llegará en una versión posterior. Por ahora, omite este paso: el procedimiento manual queda documentado en el runbook de alta de un nuevo quiosco, y podrás vincularlo en cuanto esté disponible sin tener que repetir la puesta en marcha.",
+        "skip": "Omitir por ahora"
+      }
+    }
   }
 }

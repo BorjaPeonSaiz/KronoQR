@@ -25,6 +25,14 @@ import type { License } from '@/shared/api/types'
 import { formatLicenseDay } from './license.dates'
 import { useLicenseStore } from './license.store'
 
+/**
+ * `headingLevel` existe por el asistente de puesta en marcha (tarea 5.5), que
+ * incrusta esta MISMA pantalla como paso de licencia bajo su propio `h1`: un
+ * segundo `h1` competiria por el titulo de la pagina. La ruta independiente
+ * `/license` sigue siendo `h1`, que es lo que ya tenia.
+ */
+withDefaults(defineProps<{ headingLevel?: 'h1' | 'h2' | 'h3' }>(), { headingLevel: 'h1' })
+
 const { t, locale } = useI18n()
 const store = useLicenseStore()
 
@@ -88,7 +96,9 @@ onMounted(() => {
 <template>
   <section class="flex flex-col gap-6">
     <header class="flex flex-col gap-2">
-      <h1 class="text-2xl font-semibold">{{ t('license.heading') }}</h1>
+      <component :is="headingLevel" class="text-2xl font-semibold">{{
+        t('license.heading')
+      }}</component>
       <p class="max-w-3xl text-kq-text-muted">{{ t('license.intro') }}</p>
     </header>
 

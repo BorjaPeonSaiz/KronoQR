@@ -73,6 +73,32 @@ final class EmployeePolicy
         return $actor->actsAs(...self::writers());
     }
 
+    /**
+     * Importacion masiva de plantilla (**RF-GP-05**,
+     * `POST /api/v1/employees/import`).
+     *
+     * **El mismo conjunto que `create` y `update`, porque hace exactamente eso**:
+     * dar de alta y modificar fichas, solo que cuarenta a la vez. Un conjunto mas
+     * estrecho no protegeria nada —quien puede dar de alta una por una puede dar
+     * de alta cuarenta— y uno mas ancho daria la plantilla entera a quien solo
+     * puede leerla.
+     *
+     * **El Anexo B marca este endpoint como `[rol: rrhh]` y aqui entra tambien
+     * `admin`**, igual que en el alta individual. No es una ampliacion: es que la
+     * importacion es el paso de plantilla del asistente de puesta en marcha
+     * (RF-PD-03), y en ese momento **la unica cuenta que existe es el primer
+     * administrador**. Con `rrhh` a secas, el paso del asistente seria
+     * inalcanzable el dia de la instalacion.
+     *
+     * Metodo propio y no reutilizar `create` para que la autorizacion negativa
+     * pruebe este endpoint por separado: son dos rutas y las dos tienen que tener
+     * su prueba de `403` por cada rol (regla dura 18).
+     */
+    public function import(ManagementActor $actor): bool
+    {
+        return $actor->actsAs(...self::writers());
+    }
+
     public function update(ManagementActor $actor): bool
     {
         return $actor->actsAs(...self::writers());

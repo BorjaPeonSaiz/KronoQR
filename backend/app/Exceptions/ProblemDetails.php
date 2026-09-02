@@ -227,13 +227,27 @@ final class ProblemDetails
         ]);
     }
 
-    public static function notFound(): JsonResponse
+    /**
+     * `404`, con la posibilidad de decir **cual** era el recurso.
+     *
+     * El detalle es opcional y por defecto sigue siendo el generico, que es lo
+     * correcto para la mayoria: enumerar que identificadores existen y cuales no
+     * convierte un `404` en un oraculo sobre la plantilla, las credenciales o las
+     * incidencias (RS-03, regla dura 17).
+     *
+     * **Lo usa el asistente de puesta en marcha**, donde no hay nada que
+     * proteger: el catalogo de pasos es el mismo en todas las instalaciones
+     * (regla dura 13), esta publicado en el contrato y no dice nada de los datos
+     * del cliente. Ahi, un `404` mudo obliga a quien pone en marcha el sistema a
+     * adivinar si se equivoco de nombre o de version.
+     */
+    public static function notFound(?string $detail = null): JsonResponse
     {
         return self::response(
             self::TYPE_NOT_FOUND,
             'Recurso no encontrado',
             JsonResponse::HTTP_NOT_FOUND,
-            'No existe el recurso solicitado.',
+            $detail ?? 'No existe el recurso solicitado.',
         );
     }
 

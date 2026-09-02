@@ -1,5 +1,500 @@
 # HANDOFF
 
+## Sesión «tarea 5.5 (backend), corrección tras revisión de `revisor-codigo` y `seguridad-cumplimiento`» (02-09-2026), en `feat/fase-5-productizacion`
+
+**Corrección aplicada y verificada, sin commitear.** La tercera tanda de cambios de la 5.5 («la revisión
+de la 5.5»: `PinHasher`/`PinMaterial`, `GET /setup/steps`, `steps` fuera de la respuesta pública,
+`email_taken`, normalización de `national_id`, `max_rows` 500) había entrado **sin volver a pasar las
+herramientas**: 20 errores de PHPStan, 4 violaciones de Deptrac, 3 ficheros de Pint y 67 pruebas en rojo.
+
+### Lo bloqueante
+
+1. **Faltaban cuatro `use` del refactor del PIN** (`PinMaterial`, `PinHasher`, `LaravelPinHasher`):
+   `IssueEmployeePinCommand`, `IssueEmployeePinHandler`, `ApplyEmployeeImport` y
+   `WorkforceServiceProvider`. Era un fatal en producción en el alta de cualquier empleado.
+2. **`PinMaterial` movido de `Application\Pin\` a `Application\Port\`.** Un puerto no puede depender del
+   resto de `Application` (Deptrac): el tipo de retorno de un puerto vive junto a él, como `PinStatus` y
+   `PinDeliveryRecord`.
+3. **El cierre del asistente no se auditaba** (regla dura 6, RL-04): `CompleteSetupHandler` no publicaba
+   `SetupCompleted` y el oyente `RecordSetupCompletion` no estaba registrado — código muerto. Ahora la
+   marca de `setup_progress` y el asiento van en la **misma transacción**, con `pg_advisory_xact_lock`
+   (`5_050_002`) para que un doble clic no escriba dos asientos.
+   **Decisión: una sola fuente para el actor, y es `CurrentAuditContext`.** `SetupCompleted` **pierde**
+   `actorUuid`: quien hace el cambio no puede declarar quién es, y es la convención de todos los oyentes
+   de `Compliance`. El `$actorUuid` del caso de uso sigue siendo otra cosa —la columna
+   `setup_progress.recorded_by_user_id`—.
+4. **`GET /setup/steps` sin prueba de autorización** (regla dura 18) y con `SetupPolicy::record()`, el
+   verbo de escritura. Tiene ya `SetupPolicy::view()` propio y 401/403 por rol, por quiosco y por
+   `2fa:pending`.
+
+### Lo importante
+
+5. **Normalización asimétrica del documento, que duplicaba fichas** (regla dura 5). El importador
+   normalizaba `national_id` y `POST /employees` hasheaba lo que se tecleara: dar de alta a alguien con
+   `12345678-Z` y después importarlo como `12345678Z` creaba **dos fichas** de la misma persona, con dos
+   códigos, dos PIN y dos tarjetas. `EloquentEmployeeRepository::storeNationalIdDigest()` llama ahora a
+   `ImportedEmployee::normaliseNationalId()`, que es la **única** definición de la forma canónica.
+6. **`POST /employees/import` sin `throttle:management`.** Es la petición más cara del producto y su
+   transacción toma el candado global de `audit_log`, detrás del cual se serializa cada fichaje. Se aplica
+   **solo a esa ruta**, no al grupo entero.
+7. **`WORKFORCE_IMPORT_MAX_ROWS` alineado en 500** en los tres sitios (config, `.env.example`,
+   `configuracion.md`). 1000 prometía un tamaño que el endpoint no podía cumplir.
+8. **`site.updated` sin valor anterior** (RL-04). `SiteConfigured::updated()` lleva `previousName` y
+   `previousTimezone`, el asiento usa `previous_value`/`new_value` como el de un umbral de cálculo, y un
+   PATCH que no cambia nada **ya no publica evento**.
+
+### Deuda saldada y decisiones menores
+
+- **`EmployeeImportPerformanceTest` existe** (lo citaba un docblock y no existía). No fuerza el coste de
+  bcrypt —el tiempo no se reproduce con `BCRYPT_ROUNDS=4` y subirlo solo alargaría la suite—: afirma la
+  propiedad **estructural** de la que dependen las dos consecuencias, que el hash se calcula con la
+  transacción del lote **todavía cerrada**, y que el PIN se escribe dentro.
+- Corregida la afirmación de `ApplyEmployeeImport` sobre «el asiento de `EmployeeHired`», que no existe:
+  ese evento solo lo escucha `ObservePlanLimits`. El asiento del alta es el `pin.issued`.
+- Complejidad 13 en `PlanEmployeeImport::errorsOf()` → extraído `emailErrors()`.
+- Bucle Pint↔Deptrac en `CreateFirstAdministratorHandler`: el `{@see}` con nombre completo hacia `Product`
+  quitado y nombrado en prosa, con el porqué.
+- `EmployeePinRepository::issue()` documentaba que recibía el PIN en claro; recibe el hash.
+- `ApplyEmployeeImport::$pins` → `$pinGenerator`; `$updated = $site` fuera de `UpdateSiteHandler`;
+  comentario del `PUT` recolocado en `routes/api_v1.php`; `releaseCatalogReferences()` documenta que solo
+  cubre FK de una columna y por qué basta hoy.
+- **Prueba ajena que la tercera tanda dejó en rojo y nadie vio:** «avisa de las columnas que no reconoce»
+  seguía leyendo el aviso de `rows.0.messages` cuando ya vive en `file.warnings`.
+
+### Documentación
+
+- `docs/01` Anexo B: `GET /setup/steps` en la lista (**seis** rutas, no cinco) y su fila de notas; el
+  cierre del asistente deja asiento.
+- `docs/07` §6: la fila de la ventana de auto-alta del 2FA pasa de «prórroga: 5.5» a **implementado con
+  riesgo residual**, escrito sin rodeos —quien alcance el panel antes que el cliente se convierte en el
+  administrador— con los tres controles compensatorios y la instrucción operativa.
+- `docs/cliente/instalacion.md` §1.7: advertencia de completar el paso 1 inmediatamente y no publicar el
+  panel antes, más un «qué hacer si…» nuevo para el `409` que nadie ha provocado. Corregido el ejemplo de
+  `GET /setup/status`, que ya no trae `steps`.
+
+### Verificado
+
+`make quality` verde (api-lint **0 problemas**, Pint **1316 PASS**, PHPStan 9 **0 errores**, Deptrac
+**0 violaciones / 0 sin cubrir**, ShellCheck 0) · `make test-unit` **1273 en 4,29 s** (presupuesto 5 s) ·
+**`make test` 2950 pruebas, 13 411 aserciones, 0 fallos** (484 s) · `qa:traceability --check` sin huecos y
+matriz regenerada con `make traceability` · `docs:consistency` sin divergencias.
+
+**No tocado a propósito:** `docs/api/openapi.yaml` (ya correcto), `frontend-*/` y `packages/`.
+
+### Lo que las revisiones señalaron y queda ANOTADO, no aplicado
+
+- **DECISIÓN DEL USUARIO — los PIN de la importación se emiten y nadie los conoce.** El alta masiva
+  escribe `pin_hash` y `pin_issued_at`, deja el asiento `pin.issued`… y descarta el PIN en claro: es el
+  único camino del producto que emite una credencial sin enseñarla ni una vez. Importadas 40 personas,
+  ninguna puede entrar al portal (RL-05) ni fichar por respaldo (RF-AT-11) hasta un
+  `POST /employees/{uuid}/pin/reset` una a una, y nada lo señala (el panel de credenciales mira tarjetas,
+  no PINes). Tres salidas posibles, ninguna tomada porque cambia semántica de credenciales: (a) devolver
+  los PIN en el informe de aplicación (respuesta autenticada, mismo tratamiento que `label`), (b) no
+  emitir PIN al importar y dejarlo pendiente y visible, (c) restablecimiento masivo. Elegir una en la
+  próxima sesión y documentarla en `configuracion.md` §3 ter junto a las tarjetas.
+- **Un intento de crear un segundo administrador (409 de `POST /setup/administrator`) no deja señal**:
+  ni asiento ni log. Un barrido contra esa ruta solo se ve en el contador de `throttle:setup`. Registrar
+  el intento sin PII (origen y momento) — menor, de la revisión de seguridad.
+- **XLSX es un ZIP y se lee sin cota de descompresión** más allá de `max_rows` y los 4 MB del fichero.
+  Riesgo bajo (endpoint autenticado, lectura en streaming); anotado para que la decisión sea consciente.
+- **El dry-run de Rector lleva 227 ficheros en rojo y marcado `(ignored)` en el Makefile** desde antes de
+  esta tarea. Decidir si esas reglas se aplican o se retiran del conjunto: un paso que siempre sale en
+  rojo y siempre se ignora acaba no leyéndose.
+
+## Sesión «tarea 5.5 (interfaz), corrección tras revisión: `frontend-admin` sincronizado con el `GET /setup/steps` autenticado» (02-09-2026), en `feat/fase-5-productizacion`
+
+**Corrección aplicada y verificada, sin commitear.** La revisión de backend de la sesión de arriba movió
+`steps` fuera de `GET /setup/status` (público: solo `available`/`completed_at`) a `GET /setup/steps`
+(nuevo, autenticado, `settings:*`). La interfaz de la 5.5 nunca se adaptó: `setup.store.ts` seguía
+leyendo `steps` de la respuesta pública, que ya no los trae — en instalación limpia el asistente se
+pintaba vacío y la guarda dejaba el panel inservible. Backend y `docs/` NO se tocaron en esta sesión
+(otro agente trabajaba ahí en paralelo); `docs/api/openapi.yaml` fue la fuente de verdad, sin modificar.
+
+**Lo bloqueante.**
+
+1. **`setup.store.ts` ahora elige el endpoint según haya sesión.** `fetchSetupSteps()` nuevo en
+   `setup.api.ts` (`GET /setup/steps`). `load()` pide `fetchSetupSteps()` si `session.isAuthenticated`,
+   si no `fetchSetupStatus()` (público). Nuevo computed `stepsKnown` (`status.steps !== undefined`).
+   **El caso «instalación limpia, sin sesión»** se resolvió pintando el primer paso
+   (`AdministratorStep`) como **caso especial** en `OnboardingView.vue`: es el único paso derivado que
+   no depende de `steps` (no hay `PUT` que lo marque), así que `currentStepComponent` lo devuelve
+   directamente mientras `!setup.stepsKnown`, sin fingir una lista de pasos que el servidor no ha dado.
+   La barra de progreso (`data-test="progress"`) solo se pinta con `stepsKnown` verdadero. En cuanto
+   `AdministratorStep` confirma el 2FA (`session.applySession` ya ejecutado) y llama a `setup.refresh()`,
+   `load(true)` pasa sola a pedir `/setup/steps` y el resto del asistente sigue el flujo normal.
+2. **Guarda sin callejón sin salida:** `router/guards.ts` mandaba **todo**, incluido `/login`, a
+   `/setup` mientras `available` — así que el `409` de `POST /setup/administrator` (que remite a
+   `/auth/login`) señalaba una puerta cerrada por la propia guarda: quien recarga sin sesión (cuenta ya
+   creada, 2FA sin confirmar o token caducado) quedaba atrapado en el paso del administrador para
+   siempre. Una línea de excepción (`to.name !== 'login'`) deja pasar el acceso; la siguiente navegación
+   ya autenticada vuelve a mandar a `/setup` con normalidad (no reabre nada). Cubierto en
+   `router.spec.ts` con una prueba dedicada.
+3. **Dobles corregidos para reflejar el contrato real**, no lo que era cómodo probar:
+   `tests/unit/support/fixtures.ts` (`setupStatus()` ya no trae `steps` por defecto — hay que pasarlos
+   explícitos, como los devolvería `GET /setup/steps` de verdad) y `tests/e2e/support/setupWizard.ts`
+   (`publicStatus()`/`fullStatus()` separados; `GET /setup/steps` nuevo, con `401` sin `Authorization`
+   igual que el backend). El doble E2E siembra `sessionStorage` cuando `administratorAlreadyDone: true`
+   (las pruebas de accesibilidad aterrizan directo en un paso sin pasar por el alta real; sin un token
+   sembrado, `GET /setup/steps` nunca se pediría). Todos los ficheros de prueba que construían un
+   `SetupStatus` con `steps` a mano (`AdministratorStep.spec.ts`, `SiteStep.spec.ts`,
+   `OnboardingView.spec.ts`, etc.) se revisaron uno a uno para pedir el endpoint correcto y, donde el
+   paso exige sesión real (`SiteStep`, derivado, solo se puede crear el centro autenticado), sembrar una
+   sesión antes de montar el componente en vez de fingirla en la respuesta.
+
+**`schema.d.ts` desincronizado en las TRES SPA — hallazgo aparte, no de esta corrección puntual.** El
+fichero llevaba sin regenerar desde antes de la tarea 5.1 (0 apariciones de «Setup», «License» o
+«ComplianceProfile»): la sesión de la 5.5 debió regenerarlo y verificarlo, pero el cambio nunca llegó a
+guardarse. Regenerado en `frontend-admin`, `frontend-kiosk` y `frontend-portal` con
+`npm run api:generate` — **+963 líneas, 0 borradas en cada una**, puramente aditivo. Cambios relevantes:
+aparece `GET /api/v1/setup/steps`; `SetupStatus.steps` pasa a opcional; aparece
+`EmployeeImportReport.file.warnings` (**requerido**, no opcional) — el doble E2E de importación
+(`setupWizard.ts`) no lo traía y rompía dos pruebas en cuanto `EmployeesImportStep.vue` empezó a leerlo.
+
+**`file.warnings` ahora se pinta.** `EmployeesImportStep.vue` mostraba el informe línea a línea pero
+nunca los avisos del FICHERO ENTERO (`unknown_column`: «e-mail» en la cabecera en vez de «email» deja
+creer que se cargaron los correos cuando no se cargó ninguno). Nuevo bloque `role="alert"` con
+`data-test="file-warnings"`, textos en `onboarding.steps.employees.fileWarnings` (es/en). Los avisos
+viajan solo en la respuesta autenticada y en el `ref` local del componente — nunca al reportador de
+errores ni a almacenamiento (regla dura 21). Cubierto en `EmployeesImportStep.spec.ts`.
+
+**Ficheros.** `frontend-admin/src/features/onboarding/{setup.api.ts,setup.store.ts,OnboardingView.vue,
+steps/EmployeesImportStep.vue}` · `frontend-admin/src/router/guards.ts` ·
+`frontend-admin/src/shared/i18n/locales/{es,en}.json` (`onboarding.steps.employees.fileWarnings`) ·
+`frontend-admin/src/shared/api/schema.d.ts` (regenerado) · `frontend-kiosk/src/shared/api/schema.d.ts` y
+`frontend-portal/src/shared/api/schema.d.ts` (regenerados, sin más cambios en esas dos SPA) ·
+`frontend-admin/tests/unit/{router,setup.store,OnboardingView,AdministratorStep,ComplianceProfileStep,
+DepartmentsStep,EmployeesImportStep,KioskStep,LicenseStep,OrganisationStep,SiteStep}.spec.ts` ·
+`frontend-admin/tests/unit/support/fixtures.ts` ·
+`frontend-admin/tests/e2e/support/{setupWizard.ts,admin.ts}`.
+
+**Verificado.** `frontend-admin`: `type-check`, `lint`, `build` en verde · `test:unit` **340 pruebas**,
+cobertura 87,5 % líneas / 78,5 % ramas / 83,0 % funciones (umbral 70 %) · `test:e2e` **52 pruebas, 0
+fallos** (incluidas las 4 `@RF-PD-03` y las 11 `@RQ-04`). `packages/web-kit`: `type-check`, `lint`,
+`test:unit` (146 pruebas) en verde, sin cambios de esta sesión. `frontend-kiosk`: `type-check`, `lint`,
+`test:unit` (309 pruebas) en verde. `frontend-portal`: `type-check`, `lint`, `test:unit` (69 pruebas) en
+verde — confirmado que la regeneración de tipos es aditiva en las tres SPA.
+
+## Sesión «tarea 5.5: asistente de puesta en marcha e importación masiva de plantilla» (02-09-2026), en `feat/fase-5-productizacion`
+
+**Backend y contrato implementados y verificados, sin commitear.** Cubre `RF-PD-03` y `RF-GP-05`.
+La interfaz (`frontend-admin`) NO es de esta sesión: la hace `frontend-panel` contra este contrato.
+
+### El contrato, que es lo que `frontend-panel` necesita
+
+Seis rutas nuevas, **escritas y validadas antes que el código** (ADR-013). `schema.d.ts` regenerado en
+las tres SPA: **+846 líneas, 0 borradas** — puramente aditivo, ningún cliente existente se rompe.
+
+| Ruta | Auth | Éxito | Negativas |
+|---|---|---|---|
+| `GET /api/v1/setup/status` | **público**, `throttle:setup` | `200 SetupStatus` | `429` |
+| `POST /api/v1/setup/administrator` | **público**, solo sin cuentas de gestión | `201 TwoFactorChallenge` | `409` `422` `429` |
+| `POST /api/v1/setup/site` | `admin` + `employees:*` | `201 Site` | `401` `403` `409` `422` |
+| `PUT /api/v1/setup/steps/{step}` | `admin` + `settings:*` | `200 SetupStatus` | `401` `403` `404` `409` `422` |
+| `POST /api/v1/setup/complete` | `admin` + `settings:*` | `200 SetupCompletion` | `401` `403` `409` |
+| `POST /api/v1/employees/import` | `rrhh`\|`admin` + `employees:*`, **multipart** | `200 EmployeeImportReport` | `401` `403` `409` `422` |
+
+Esquemas: `SetupStep` (8 valores), `SetupStepState`, `SetupStepStatus`, `SetupStatus`, `SetupSummary`,
+`SetupCompletion`, `CreateFirstAdministratorRequest`, `CreateInstallationSiteRequest`,
+`RecordSetupStepRequest`, `EmployeeImportMode`, `EmployeeImportOutcome`, `EmployeeImportMessage`,
+`EmployeeImportRow`, `EmployeeImportRequest`, `EmployeeImportReport`. Parámetro `SetupStepName`. Tag `Setup`.
+
+**El flujo que el panel tiene que orquestar:**
+`GET /setup/status` → si `available` → `POST /setup/administrator` (201, `challenge_token`) →
+`POST /auth/2fa/enrol` (secreto + QR, **una sola vez**) → `POST /auth/2fa/confirm` (sesión real) →
+`POST /setup/site` → `PATCH /settings` (organización) → `POST /departments` →
+`GET`/`PATCH /compliance-profile` → `POST /employees/import` (validate → apply) →
+`POST /license/activate` → emparejamiento de quiosco (5.6) → `PUT /setup/steps/{step}` tras cada uno →
+`POST /setup/complete`.
+
+### Decisiones tomadas (y por qué)
+
+1. **El primer administrador es el PRIMER paso, no el quinto.** RF-PD-03 enumera «organización, centro,
+   departamentos, perfil, primer administrador, quiosco» y esa es la lista de *qué* recoge, no un orden
+   de ejecución. Se invierte por la regla dura 6: crear el centro antes dejaría `site.created` **sin
+   actor**. Con el administrador primero, **todo asiento del asistente tiene una persona detrás**.
+   Comprobado en `SetupWizardTest`: el asiento del centro trae `actor_id`.
+2. **Una sola escritura pública en todo el producto**, `POST /setup/administrator`, y solo mientras no
+   exista **ninguna** cuenta de gestión —activa **o desactivada**—. Contar solo las activas convertiría
+   «dar de baja a la única persona con acceso» en «reabrir la creación pública de un admin».
+3. **El 2FA no se duplica.** El endpoint devuelve el mismo `TwoFactorChallenge` que el `202` de
+   `/auth/login`; el TOTP se da de alta y confirma con `/auth/2fa/enrol` y `/auth/2fa/confirm`, que ya
+   traen el bloqueo por intentos, la sustitución del secreto sin confirmar y el asiento.
+4. **Sin callejones sin salida.** Quien cierra la pestaña antes de escanear el QR entra por
+   `/auth/login` y recibe el mismo reto. El `409` **lo dice en el `detail`**, con la ruta.
+5. **El alta del centro NO se abre en `/site`.** ADR-040 y el Anexo B dicen «sin alta ni lista»; el
+   `405` de `POST /api/v1/site` sigue probado. El alta vive en `/setup/site` y es irrepetible.
+6. **Tabla propia `setup_progress`**, no una clave de `installation_settings` (aquel es el catálogo
+   documentado del cliente). Los pasos derivables —`administrator`, `site`— **no se marcan**: se
+   calculan del dato, así que ni una fila perdida ni un `PUT` pueden mentir sobre ellos. El cierre es
+   una fila con la clave `completion`, que **no** es un paso del enum ni viaja en el contrato.
+7. **No se cierra solo.** Si `available` pasara a `false` al resolver el último paso, el panel saltaría
+   a la pantalla de acceso **justo antes** del resumen final — la única oportunidad de decir cuántas
+   tarjetas faltan. Y **no se reabre**: sería reconfigurar la instalación sin el asiento de RL-04.
+8. **La licencia y el quiosco son omitibles; el perfil de convenio no.** Lo primero es la regla dura 15
+   llevada al asistente; lo segundo es RL-21 — los umbrales hay que contrastarlos, y eso es un acto.
+9. **Importación en dos fases SIN fichero en el servidor.** La confirmación viaja como
+   `confirm_checksum` (el sha256 de la validación) y el fichero se resube. Un almacén temporal con
+   nombres y DNI de la plantilla es superficie de datos personales en reposo; además así se garantiza
+   que **se aplica exactamente lo que se revisó**.
+10. **Clave natural del importador: `national_id` y, si no hay, `email`.** Sin una de las dos,
+    reimportar duplicaría (regla dura 5). No rompe la regla dura 12: el fichero puede no traer correo,
+    lo que no puede es no traer **ninguna**. `employee_code` **no se lee del fichero**.
+11. **`hired_at` de quien ya existe no se toca** (regla dura 5): se avisa y no se aplica.
+12. **Delimitador y codificación se DETECTAN**, no se configuran. El mapa de columnas sí es
+    configuración (`WORKFORCE_IMPORT_COLUMN_ALIASES`, formato `campo=cabecera` separado por `;`, se
+    **suma** a los alias de serie es/en).
+13. **`admin` además de `rrhh` en la importación**, al contrario de lo que sugiere el Anexo B: es el
+    paso de plantilla del asistente y en ese momento la única cuenta que existe es el primer
+    administrador. Con `rrhh` a secas, ese paso sería inalcanzable el día de la instalación. Anotado en
+    el Anexo B y en la policy.
+14. **`POST /setup/site` sin `compliance_profile_id`**, aunque la ficha lo nombrara: con un centro por
+    instalación hay exactamente un perfil vigente, que `GET /compliance-profile` resuelve por
+    `is_default` con su `source`. Un campo para elegirlo sería un parámetro que nadie necesita distinto
+    y contradiría la decisión de la 5.2. La prueba de integración comprueba que el centro nace con
+    `compliance_profile_id` nulo y que el perfil vigente sigue siendo `ES-hosteleria`.
+
+### Dos defectos ajenos encontrados y saldados
+
+- **`UpdateSiteHandler` prometía en su docblock que el cambio de zona horaria «queda auditado por el
+  oyente de Compliance» y NO publicaba ningún evento**: no había oyente ni asiento, desde la 1.6.
+  Cambiar `sites.timezone` mueve las horas de toda la plantilla de un día a otro sin tocar un fichaje.
+  Añadidas `AuditAction::SiteCreated` y `SiteUpdated` (familia autoridad/cálculo) + `SiteConfigured` +
+  `RecordSiteConfiguration`, con prueba unitaria que caza la regresión.
+- **`CommittedDatabase` dejaba 2 usuarios en la base de pruebas.** `installation_settings` es catálogo
+  (no se vacía) y su FK `updated_by_user_id` bloqueaba `DELETE FROM users` en todas las pasadas del
+  bucle. Latente desde la 5.1 porque ninguna prueba dependía de que `users` estuviera vacía; las del
+  asistente sí —«no hay ningún administrador» es literalmente el estado que describen— y por eso lo
+  destaparon: **en solitario pasaban y en la suite completa fallaban cuatro, a dos ficheros de
+  distancia de la causa**. Arreglado con `releaseCatalogReferences()`, que **descubre** en
+  `pg_constraint` las FK nullable de catálogo → tabla vaciable y las anula antes de borrar.
+
+### Dos fallos propios que cazaron las pruebas (y que habrían llegado al cliente)
+
+- **`SimpleExcelReader::create()` elige el lector por la extensión, y el fichero subido no tiene
+  ninguna** (`/tmp/phpA1B2C3`). En producción, toda importación habría muerto con
+  `UnsupportedTypeException`. Ahora el tipo se pasa explícito y se decide por los **bytes mágicos**
+  (`PK\x03\x04` = XLSX), que además cubre el `.csv` que en realidad es un libro.
+- **La detección de codificación miraba solo la cabecera**, que casi siempre es ASCII: un fichero
+  Windows-1252 con la primera «ñ» en la línea 300 se daba por UTF-8 y la respuesta JSON **no se podía
+  serializar** («Malformed UTF-8»). Un intento de arreglo por bloques con arrastre de 3 bytes también
+  estaba mal —una secuencia de 4 bytes justo antes del corte deja su byte inicial en el bloque
+  comprobado— y lo cazó una prueba con «RECEPCIÓN». Ahora se lee entero (acotado por
+  `max_file_kilobytes`, que se valida antes) y hay red de seguridad por valor en el adaptador.
+
+### Configuración nueva
+
+| Clave | De serie | Por qué es configurable |
+|---|---|---|
+| `PRODUCT_SETUP_RATE_LIMIT` | `10` | Zona propia del asistente: la de acceso cuenta por `email` del cuerpo y aquí no hay cuenta a la que contar. Subible si hay NAT delante. |
+| `WORKFORCE_IMPORT_MAX_ROWS` | `500` | El informe es línea a línea y vive en memoria. **Es el techo documentado de una instalación y el que el endpoint puede cumplir**: 1000 altas × 160 ms de bcrypt pasarían del `max_execution_time` de 60 s. Pasarse **no recorta**: lo dice y no aplica nada. |
+| `WORKFORCE_IMPORT_MAX_FILE_KILOBYTES` | `4096` | Nginx corta en 8 MB con un `413` sin cuerpo; esto da un `422` que dice qué hacer. |
+| `WORKFORCE_IMPORT_COLUMN_ALIASES` | vacío | Regla dura 13: el fichero del sistema anterior trae las columnas que trae. Se **suma** a los alias es/en de serie. |
+
+Ningún parámetro para el delimitador ni la codificación: se detectan.
+
+### Ficheros
+
+- **Contrato:** `docs/api/openapi.yaml` (tag `Setup`, 6 rutas, 15 esquemas, 1 parámetro) ·
+  `backend/tests/Contract/OpenApiContractTest.php`.
+- **Migración:** `2026_09_09_100000_create_setup_progress_table.php` (PK por paso, 3 `CHECK`, FK
+  `nullOnDelete`). Reversible; los `GRANT` los da `ALTER DEFAULT PRIVILEGES` ya existente.
+- **Product:** `Domain/ValueObject/Setup{Step,StepState,State,Summary}` ·
+  `Domain/Exception/{UnknownSetupStep,SetupStepNotRecordable,SetupNotCompletable}` ·
+  `Application/Port/{SetupProgressRepository,SetupFacts}` · `Application/Command/RecordSetupStepCommand`
+  · `Application/UseCase/{GetSetupState,RecordSetupStep,CompleteSetup}Handler` + `CompletedSetup` ·
+  `Infrastructure/Persistence/{DatabaseSetupProgressRepository,DatabaseSetupFacts}` ·
+  `Http/{Controller/SetupController,Policy/SetupPolicy,Request/RecordSetupStepRequest,Resource/Setup{Status,Completion}Resource}`
+  · `ProductServiceProvider` · `config/product.php`.
+- **Identity:** `Application/Command/CreateFirstAdministratorCommand` ·
+  `Application/Port/ManagementAccountRegistry` · `Application/Exception/ManagementAccountAlreadyExists` ·
+  `Application/UseCase/CreateFirstAdministratorHandler` ·
+  `Infrastructure/Persistence/EloquentManagementAccountRegistry` ·
+  `Http/{Controller/FirstAdministratorController,Request/CreateFirstAdministratorRequest}` ·
+  `IdentityServiceProvider`.
+- **Workforce:** `Domain/Event/{SiteConfigured,EmployeesImported}` ·
+  `Domain/Exception/{UnreadableImportFile,ImportFileChanged,ImportTooLarge,SiteAlreadyConfigured}` ·
+  `Domain/ValueObject/{ImportOutcome,ImportMessageCode,ImportMessage,ImportedEmployee,ImportRow,ImportReport,ImportColumnMap}`
+  · `Application/Port/{EmployeeImportSource,EmployeeImportDirectory}` ·
+  `Application/Command/ImportEmployeesCommand` ·
+  `Application/UseCase/{PlanEmployeeImport,ApplyEmployeeImport,ImportEmployeesHandler,CreateSiteHandler,UpdateSiteHandler}`
+  · `Infrastructure/Adapter/SimpleExcelImportSource` ·
+  `Infrastructure/Persistence/EloquentEmployeeImportDirectory` ·
+  `Http/{Controller/{EmployeeImportController,SiteController},Policy/{EmployeePolicy,SitePolicy},Request/{ImportEmployeesRequest,CreateInstallationSiteRequest},Resource/EmployeeImportResource}`
+  · `WorkforceServiceProvider` · `config/workforce.php` (nuevo).
+- **Compliance:** `AuditAction` (+3 acciones, +2 sujetos) ·
+  `Infrastructure/Listener/{RecordSiteConfiguration,RecordEmployeeImport}` · `ComplianceServiceProvider`.
+- **Transversal:** `routes/api_v1.php` · `bootstrap/app.php` (6 renderizadores) ·
+  `lang/{es,en}/{setup,import}.php` · `.env.example`.
+- **Pruebas:** `Feature/Product/{SetupWizardTest (24),SetupAuthorizationTest (14)}` ·
+  `Feature/Workforce/{EmployeeImportTest (24),EmployeeImportAuthorizationTest (8)}` ·
+  `Integration/Product/SetupProgressSchemaTest (7)` · `Unit/Product/Domain/SetupStateTest (7)` ·
+  `Unit/Workforce/Domain/ImportColumnMapTest (6)` · `Unit/Workforce/Application/SiteConfigurationTest`
+  (ampliado a 6) · soporte: `Tests/Support/Http/Api::upload()`,
+  `Tests/Support/Workforce/ImportFiles`, `Tests/Support/Database/ImmediateTransactions`,
+  `Tests/Support/Database/CommittedDatabase` (arreglo de la fuga).
+- **Documentación de cliente:** `docs/cliente/instalacion.md` §1.7 reescrita (los ocho pasos, qué tener
+  a mano, por qué el TOTP se enseña una vez, por qué la zona horaria no es cosmética, por qué el perfil
+  no se omite) + 3 «qué hacer si…» nuevos · `docs/cliente/configuracion.md` §3 ter completa (dos fases,
+  tabla de columnas, formatos, reimportación, tarjetas pendientes, alias, los dos límites) + 9 «qué
+  hacer si…» nuevos · `docs/cliente/obligaciones-legales.md` §7 ter y el apartado del perfil en el
+  asistente · `docs/01` Anexo B (5 rutas + 7 notas de contrato).
+
+### Verificado
+
+`make quality` verde (ShellCheck 0, api-lint **0 problemas**, Pint **1309 PASS**, PHPStan 9 **0
+errores**, Deptrac **0 violaciones / 0 sin cubrir**) · `make test-unit` **1272 en 3,92 s** (dentro del
+presupuesto de 5 s) · **`make test` 2939 pruebas, 13 345 aserciones, 0 fallos** (469 s) ·
+`qa:traceability --check` sin huecos y matriz regenerada · `docs:consistency` sin divergencias ·
+`type-check` verde en las **tres** SPA con `schema.d.ts` regenerado (**+846 líneas, 0 borradas**) ·
+migración aplicada con `fichaje_migrator` y `\dp` comprobado (`fichaje_app` = `arwd`) ·
+`route:list` con las 6 rutas · verificación manual de `GET /setup/status` contra la base de desarrollo.
+
+**Medido que las pruebas cazan los fallos** (que es lo único que hace válida una prueba de regresión):
+con el lector sin tipo explícito, 22 de 24 de importación fallan; con la detección de codificación
+mirando solo la cabecera, falla la de Windows-1252; con la fuga de `CommittedDatabase` sin arreglar,
+fallan 5 en la suite completa y 0 en solitario.
+
+### Lo que queda, y para quién
+
+- ~~`frontend-panel` (interfaz de la 5.5): las pantallas del asistente...~~ **HECHO (02-09-2026, ver la
+  sesión de arriba «tarea 5.5 (interfaz)»)**: las ocho pantallas, el store, el E2E `@RF-PD-03` (4
+  pruebas) y `axe` `@RQ-04` (11 pruebas, 0 violaciones críticas o graves).
+- **5.6 (emparejamiento de quiosco):** el paso 8 del asistente está definido como omitible y su marca
+  ya funciona (`PUT /setup/steps/kiosk`). El punto de integración en la interfaz también queda listo:
+  `frontend-admin/src/features/onboarding/steps/KioskStep.vue` documenta en un comentario exactamente
+  qué añadir (el formulario del código de emparejamiento + `setup.recordStep('kiosk', 'completed')`)
+  cuando existan `/kiosk/pair` y `/kiosk/pair/confirm`, que **siguen sin existir**.
+- **5.11:** capturas de pantalla del asistente en `instalacion.md` §1.7 (el texto ya las anticipa).
+- **Pendiente del usuario, sin cambios:** generar el par ed25519 y pegar la pública en
+  `config/license.php`.
+- ~~Sigue pendiente de la 5.4: relanzar la etapa ⑧ de la CI~~ **HECHO (02-09-2026, run 33573780721, verde — ver el cierre de la 5.4 más abajo).**
+
+## Sesión «tarea 5.5 (interfaz): asistente de puesta en marcha, `frontend-admin`» (02-09-2026), en `feat/fase-5-productizacion`
+
+**Interfaz de la tarea 5.5 implementada y verificada, sin commitear.** Cubre `RF-PD-03`, `RF-GP-05` y
+`RQ-04` en `frontend-admin`, contra el contrato y el backend de la sesión anterior (ver arriba). El
+backend no se ha tocado.
+
+**Las ocho pantallas**, en `frontend-admin/src/features/onboarding/`: `OnboardingView.vue` (el marco:
+progreso, foco y anuncio al cambiar de paso, y qué pantalla toca), un componente por paso en `steps/`,
+`ReviewStep.vue` (revisión final antes de `POST /setup/complete`: el asistente no se cierra solo) y
+`CompletionSummary.vue` (el resumen accionable de RF-PD-03, con la cifra de tarjetas pendientes por
+delante de todo). Dos pasos **reutilizan pantallas ya existentes** en vez de duplicarlas —instrucción
+explícita del encargo—: `ComplianceProfileStep` incrusta `ComplianceProfileView.vue` (tarea 5.2) y
+`LicenseStep` incrusta `LicenseView.vue` (tarea 5.3), las dos con un `heading-level` nuevo (`h1|h2|h3`)
+para no competir con el título de la página cuando van incrustadas. El alta del segundo factor del
+primer administrador reutiliza el mismo QR y el mismo secreto que el acceso normal: se extrajo
+`TwoFactorEnrolPanel.vue` de `LoginView.vue` (que ahora lo consume también) para que exista un único
+sitio que enseña un secreto TOTP, en vez de una segunda copia que algún día divergiera.
+
+**Decisiones que conviene conocer.**
+
+1. **Estado compartido entre la guarda de rutas y el asistente, en `setup.store.ts`.** La guarda
+   (`router/guards.ts`) pide `GET /setup/status` UNA vez por carga de la aplicación (como
+   `session.restore`), no en cada navegación: repetirlo en cada clic agotaría
+   `PRODUCT_SETUP_RATE_LIMIT` (10/min de serie). Mientras la instalación sigue sin configurar, CUALQUIER
+   ruta redirige a `/setup`; cerrado el asistente, `/setup` redirige al acceso — es de un solo uso,
+   igual que el emparejamiento de la 5.6. Un fallo de red al consultar el estado no bloquea el panel:
+   `loaded` se queda en `false` y se reintenta en la siguiente navegación.
+2. **`setup.completion` vive en el store, no en un `ref` local de `OnboardingView`.** Encontrado en las
+   pruebas, no a propósito: `ReviewStep` emitía el resultado de `POST /setup/complete` a
+   `OnboardingView`, que lo guardaba en un `ref` propio. Como la escritura de `status` (dentro de
+   `setup.complete()`) y la del `ref` local (en el manejador del evento) ocurrían en dos ticks de Vue
+   distintos —separados por el `await` de la promesa—, Vue repintaba una vez en medio con
+   `available: false` y el resumen todavía sin llegar, así que la pantalla enseñaba «esta instalación ya
+   está en marcha» un instante antes de mostrar el cierre de verdad. Arreglado moviendo `completion` al
+   store, escrito en la MISMA función y el mismo tick que `status`: las pruebas de `ReviewStep.spec.ts`
+   y `OnboardingView.spec.ts` cazan la regresión si alguien lo separa otra vez.
+3. **El cliente HTTP compartido (`packages/web-kit/src/http.ts`) no admitía `FormData` ni `PUT`.** Las
+   tres SPA lo comparten (ADR-036), así que se ha ampliado ahí y no con un cliente propio del panel:
+   `PUT` para `PUT /setup/steps/{step}` (idempotente, lo dice el contrato) y detección de `FormData` en
+   el cuerpo para no fijar `Content-Type` a mano —lo pone el navegador con el `boundary`— y no
+   serializarlo con `JSON.stringify`. Cubierto con dos pruebas nuevas en
+   `packages/web-kit/tests/unit/http.spec.ts`; `frontend-kiosk` y `frontend-portal` revalidados
+   (`type-check` + `test:unit`) para confirmar que el cambio es aditivo.
+4. **Organización (paso 2) escribe en el catálogo genérico de `PATCH /settings`** (`BRANDING_APP_NAME`,
+   `LOCALE_DEFAULT`, `LOCALE_AVAILABLE`), no en un endpoint propio: no existe otro en el contrato. Nuevo
+   `frontend-admin/src/features/settings/settings.api.ts` (no en `onboarding/`, a propósito: es el mismo
+   catálogo que leerá y escribirá la marca de la tarea 5.8, y las dos pantallas tienen que leer y
+   escribir por el mismo sitio para no divergir). El `422` de ese endpoint cuelga el error de
+   `settings.<CLAVE>`, no de `<CLAVE>` a secas — otro fallo que cazó su propia prueba antes de llegar a
+   nadie.
+5. **Departamentos (paso 4) y el diálogo de alta de empleado ya no comparten forma de pedir la lista.**
+   `createDepartment` se añadió a `frontend-admin/src/shared/api/organisation.api.ts` (donde ya vivía
+   `listDepartments`), y el paso del asistente lo usa; `EmployeeCreateDialog.vue` sigue con su
+   `useQuery` propio sin tocar, no había motivo para migrarlo en esta tarea.
+6. **El paso de plantilla (`EmployeesImportStep.vue`) es RF-GP-05 completo**: dos fases,
+   `POST /employees/import` multipart, informe línea a línea con el `label` (nombre) de cada fila —viaja
+   solo aquí, en una respuesta autenticada; nunca al reportador de errores del cliente (regla dura
+   21)—, `truncated: true` deshabilita «Aplicar», y «Aplicar» reenvía el `confirm_checksum` de la
+   validación sobre el MISMO fichero seleccionado (no hace falta volver a elegirlo).
+7. **El paso de quiosco (`KioskStep.vue`) solo ofrece omitir**, con la explicación de que el
+   emparejamiento llega en otra versión y el punto de enganche para la 5.6 documentado en el propio
+   fichero (ver arriba).
+8. **Accesibilidad**: cada paso mueve el foco a su propio encabezado al activarse y lo anuncia por la
+   región viva del asistente (`onboarding.stepAnnouncement`), igual que hace `LoginView` con sus tres
+   pasos. Encontrado y corregido en las pruebas: `getByLabel('Nombre', { exact: true })` no encontraba
+   el campo porque el asterisco de obligatoriedad (`<span aria-hidden="true">*</span>`) queda dentro del
+   `<label>` y su texto entra en el nombre accesible con Playwright pese al `aria-hidden`; los E2E usan
+   coincidencia por subcadena para esas etiquetas, como ya hacía el resto del panel.
+
+**Configuración nueva:** ninguna. Todo lo que necesitaba esta interfaz ya estaba declarado en la sesión
+anterior.
+
+**Ficheros.**
+
+- **`packages/web-kit`:** `src/http.ts` (`PUT`, `FormData`) · `tests/unit/http.spec.ts` (+2 pruebas).
+- **`frontend-admin/src/features/onboarding/`** (nueva *feature*): `OnboardingView.vue`,
+  `ReviewStep.vue`, `CompletionSummary.vue`, `setup.api.ts`, `setup.store.ts`, `steps.ts`,
+  `employeeImport.api.ts`, `README.md` ·
+  `steps/{AdministratorStep,OrganisationStep,SiteStep,DepartmentsStep,ComplianceProfileStep,EmployeesImportStep,LicenseStep,KioskStep}.vue`.
+- **`frontend-admin/src/features/auth/`:** `TwoFactorEnrolPanel.vue` (nuevo, extraído de `LoginView.vue`,
+  que se refactorizó para consumirlo).
+- **`frontend-admin/src/features/settings/`:** `settings.api.ts` (nuevo) ·
+  `{LicenseView,ComplianceProfileView}.vue` (prop `heading-level`).
+- **`frontend-admin/src/shared/api/`:** `organisation.api.ts` (`createDepartment`) · `types.ts` (alias de
+  los esquemas `Setup*`, `EmployeeImport*`, `InstallationSettings*`, `CreateDepartmentRequest`).
+- **`frontend-admin/src/router/`:** `index.ts` (ruta `/setup`) · `guards.ts` (guarda del asistente).
+- **`frontend-admin/src/shared/i18n/locales/{es,en}.json`:** sección `onboarding` completa.
+- **Pruebas unitarias** (`frontend-admin/tests/unit/`): `setup.store.spec.ts`, `OnboardingView.spec.ts`,
+  `AdministratorStep.spec.ts`, `OrganisationStep.spec.ts`, `SiteStep.spec.ts`,
+  `DepartmentsStep.spec.ts`, `ComplianceProfileStep.spec.ts`, `EmployeesImportStep.spec.ts`,
+  `LicenseStep.spec.ts`, `KioskStep.spec.ts`, `ReviewStep.spec.ts`, `CompletionSummary.spec.ts` · más
+  añadidos a `router.spec.ts` (guarda) y `LoginView.spec.ts` (sin cambios de comportamiento, solo el
+  refactor a `TwoFactorEnrolPanel`, ya probado ahí) · `support/{fixtures,harness}.ts` ampliados
+  (`setupStatus`, `setupCompletion`, `employeeImportReport`, `department`, `stubRoutes`).
+- **Pruebas E2E** (`frontend-admin/tests/e2e/`): `setup-wizard.spec.ts` (4 pruebas `@RF-PD-03`) ·
+  `support/setupWizard.ts` (doble propio del asistente, con estado mutable — el asistente real mantiene
+  su progreso en el servidor, así que el doble tiene que avanzar igual) · `accessibility.spec.ts` (+11
+  pruebas `@RQ-04`, una por paso más 2FA/revisión/cierre) · `support/admin.ts` (`GET /setup/status`
+  ahora tiene doble por defecto —instalación ya configurada— para no romper los recorridos que no son
+  el asistente) · `login.spec.ts` (ajustada la prueba que comprueba la cabecera `Authorization` en
+  todas las peticiones: `GET /setup/status` es pública a propósito y queda excluida).
+
+**Verificado.** `frontend-admin`: `type-check`, `lint` (ESLint + Prettier) y `build` en verde ·
+`test:unit` **336 pruebas**, cobertura 87,4 % líneas / 78,3 % ramas / 82,9 % funciones (umbral 70 % en
+las cuatro) · `test:e2e` **52 pruebas, 0 fallos** (las 4 de `@RF-PD-03` + las 11 nuevas de `@RQ-04` +
+las 37 preexistentes, todas revalidadas). `packages/web-kit`: `type-check`, `lint` y `test:unit` (146
+pruebas) en verde. `frontend-kiosk` y `frontend-portal`: `type-check`, `lint` y `test:unit` (309 y 69
+pruebas) en verde, para confirmar que el cambio en `http.ts` es aditivo.
+
+**Desviación consciente sobre la letra del encargo.** «Con licencia y quiosco omitidos y luego
+completados» se cubre así: **licencia** tiene las dos pruebas E2E (omitida en el recorrido principal,
+activada de verdad —con clave y todo— en una segunda prueba dedicada, que además salda la deuda anotada
+de la 5.3 de un E2E propio de esa pantalla). **Quiosco solo tiene la prueba de omitir**: los endpoints
+de emparejamiento son de la 5.6 y no existen todavía en el árbol, así que «completarlo» no es
+alcanzable en esta versión — completarlo de verdad es justo lo que queda para esa tarea, con el punto de
+enganche ya documentado en `KioskStep.vue`.
+
+**Deuda menor conocida, sin bloquear.** `LicenseStep` y `ComplianceProfileStep` incrustan pantallas que
+llevan sus propios subtítulos en `<h2>` (p. ej. «Qué se ha contratado», «Plan contratado frente a uso
+real»); al incrustarlas bajo el `<h2>`/`<h3>` propio del paso del asistente, esos subtítulos quedan un
+nivel por debajo de donde «deberían» en una jerarquía perfecta (axe lo marca como `heading-order`,
+impacto **moderado**, no crítico ni grave, así que no bloquea el criterio de `@RQ-04` de esta tarea).
+Arreglarlo del todo exigiría parametrizar también los subtítulos internos de `LicenseView`/
+`ComplianceProfileView`, que se ha dejado fuera a propósito para no tocar más superficie de esas dos
+pantallas de lo que pedía el encargo.
+
 ## Sesión «tarea 5.4: instalador, Compose de producción, requisitos y secretos» (01-09-2026), en `feat/fase-5-productizacion`
 
 **Tarea 5.4 implementada y verificada, sin commitear.** Cubre `RF-PD-02`, contribuye a `RQ-11` (etapa ⑧ de la CI) y a `RS-08`/§7.7.

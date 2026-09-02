@@ -140,6 +140,9 @@ trait CommittedDatabase
     private function emptyDatabase(): void
     {
         $connection = DB::connection(config()->string('database.migrations.connection'));
+
+        $this->releaseCatalogReferences($connection);
+
         $pending = $this->emptiableTables($connection);
 
         // Cada `DELETE` va en su propia transaccion implicita, de modo que uno
@@ -156,6 +159,74 @@ trait CommittedDatabase
             }
 
             $pending = $blocked;
+        }
+    }
+
+    /**
+     * Suelta las referencias que los **catalogos de producto** guardan hacia
+     * tablas de trabajo, antes de vaciarlas.
+     *
+     * ## El fallo que esto arregla, y por que tardo en salir
+     *
+     * Los catalogos no se vacian —son dato de producto— pero **si guardan quien
+     * los toco por ultima vez**: `installation_settings.updated_by_user_id`
+     * apunta a `users`, que si se vacia. Resultado: `DELETE FROM users` fallaba
+     * en todas las pasadas del bucle y **dos cuentas sobrevivian a la limpieza**,
+     * quedando visibles para todas las pruebas posteriores del mismo proceso.
+     *
+     * Estuvo latente desde la tarea 5.1 porque ninguna prueba dependia de que
+     * `users` estuviera vacia. Las del asistente de puesta en marcha (5.5) si
+     * —«no hay ningun administrador todavia» es literalmente el estado que
+     * describen— y por eso lo destaparon: en solitario pasaban y en la suite
+     * completa fallaban cuatro, a dos ficheros de distancia de la causa.
+     *
+     * ## Se descubre, no se escribe
+     *
+     * Mismo criterio que {@see self::emptiableTables()}: se preguntan a
+     * `pg_constraint` las claves ajenas cuyo ORIGEN es un catalogo y cuyo DESTINO
+     * es una tabla que se vacia, y se anulan esas columnas. Una lista a mano se
+     * quedaria vieja en cuanto otra tarea anadiera una columna de autoria a un
+     * catalogo, y el sintoma volveria a ser una prueba ajena que solo falla en la
+     * suite entera.
+     *
+     * **Se anulan y no se borran las filas**: son columnas de atribucion,
+     * nullables por diseño, y el catalogo tiene que sobrevivir. La atribucion
+     * real de quien cambio que vive en `audit_log`, que no se toca aqui.
+     *
+     * ## Solo cubre claves ajenas de UNA columna
+     *
+     * `conkey[1]` es la primera columna de la clave: una FK compuesta se veria
+     * con una sola de sus columnas y anularla no soltaria la referencia.
+     *
+     * Basta hoy porque **ningun catalogo de producto tiene una FK compuesta**
+     * —las columnas de autoria son siempre `..._by_user_id`, una y nullable— y
+     * porque una FK compuesta hacia una tabla vaciable seria un dato de trabajo
+     * dentro de un catalogo, que es justo lo que la lista `PRODUCT_CATALOGS`
+     * niega. Si algun dia aparece, el sintoma es el conocido: una tabla que no se
+     * vacia y una prueba ajena que solo falla en la suite completa. La consulta
+     * tendria que recorrer `conkey` entero y anular todas sus columnas.
+     */
+    private function releaseCatalogReferences(ConnectionInterface $connection): void
+    {
+        $emptiable = $this->emptiableTables($connection);
+
+        /** @var list<object{source: string, column: string}> $references */
+        $references = $connection->select(<<<'SQL'
+            SELECT source.relname AS source, attribute.attname AS column
+              FROM pg_constraint constraint_
+              JOIN pg_class source ON source.oid = constraint_.conrelid
+              JOIN pg_class target ON target.oid = constraint_.confrelid
+              JOIN pg_attribute attribute
+                ON attribute.attrelid = constraint_.conrelid
+               AND attribute.attnum = constraint_.conkey[1]
+             WHERE constraint_.contype = 'f'
+               AND source.relname = ANY(?)
+               AND target.relname = ANY(?)
+               AND NOT attribute.attnotnull
+        SQL, ['{'.implode(',', self::PRODUCT_CATALOGS).'}', '{'.implode(',', $emptiable).'}']);
+
+        foreach ($references as $reference) {
+            $connection->table($reference->source)->update([$reference->column => null]);
         }
     }
 
