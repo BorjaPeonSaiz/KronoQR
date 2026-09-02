@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "@kronoqr/web-kit": "*",
-    "@tanstack/vue-query": "^5.101.4",
+    "@tanstack/vue-query": "^5.102.3",
     "@tanstack/vue-table": "^9.1.2",
     "@tanstack/vue-virtual": "^3.13.36",
     "echarts": "^6.1.0",
@@ -32,7 +32,7 @@
     "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.62.1",
     "@tailwindcss/vite": "^4.3.3",
-    "@types/node": "^24.10.1",
+    "@types/node": "^25.9.5",
     "@vitejs/plugin-vue": "^6.0.8",
     "@vitest/coverage-v8": "^4.1.11",
     "@vue/eslint-config-prettier": "^10.2.0",
