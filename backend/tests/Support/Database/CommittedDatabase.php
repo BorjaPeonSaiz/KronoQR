@@ -50,6 +50,13 @@ use Illuminate\Support\Facades\DB;
  * umbrales operativos y los roles no son dato de prueba, son dato de producto
  * (regla dura 14), y vaciarlos dejaria la instalacion sin con que calcular.
  *
+ * **Conservar no es restaurar, y esa diferencia costo un fallo intermitente.**
+ * Los catalogos no se vacian, pero estas pruebas **si los mutan** —cambiar
+ * configuracion es justo lo que hacen— y lo confirman. Sin devolverlos a como los
+ * dejo la migracion, el producto queda configurado de otra manera para todo lo que
+ * venga despues en el proceso. Lo hace {@see ProductCatalogBaseline}; el fallo
+ * concreto que evita esta contado alli.
+ *
  * **No se vuelve a migrar.** `migrate:fresh` dos veces en el mismo proceso PHP
  * deja al migrador con estado obsoleto y produce fallos intermitentes en
  * pruebas posteriores; el esquema se crea una vez, como para todas las demas.
@@ -141,6 +148,12 @@ trait CommittedDatabase
     {
         $connection = DB::connection(config()->string('database.migrations.connection'));
 
+        // La foto se toma AQUI y no en `refreshTestDatabase()`: este es el primer
+        // punto del ciclo de vida en el que la base esta migrada y todavia no ha
+        // confirmado nadie, y ademas es el unico por el que pasan por igual el
+        // primer vaciado y el de despues de cada prueba.
+        ProductCatalogBaseline::captureOnce($connection, $this->restorableCatalogs());
+
         $this->releaseCatalogReferences($connection);
 
         $pending = $this->emptiableTables($connection);
@@ -160,6 +173,28 @@ trait CommittedDatabase
 
             $pending = $blocked;
         }
+
+        // Lo ultimo, ya con las tablas de trabajo vacias: asi ninguna fila de
+        // trabajo puede retener a un catalogo por una clave ajena mientras se
+        // restaura.
+        ProductCatalogBaseline::restore($connection);
+    }
+
+    /**
+     * Los catalogos que se devuelven a su estado migrado.
+     *
+     * Todos menos `migrations`, que no es dato de producto sino el registro de lo
+     * ya aplicado: ninguna prueba lo toca y borrarlo y reinsertarlo en cada
+     * vaciado seria arriesgar el esquema entero a cambio de nada.
+     *
+     * @return list<string>
+     */
+    private function restorableCatalogs(): array
+    {
+        return array_values(array_filter(
+            self::PRODUCT_CATALOGS,
+            static fn (string $table): bool => $table !== 'migrations',
+        ));
     }
 
     /**

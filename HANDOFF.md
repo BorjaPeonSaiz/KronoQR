@@ -1,5 +1,35 @@
 # HANDOFF
 
+## Sesión «tarea 5.5: fallo intermitente de la etapa ③ tras el commit `3e587cc`» (02-09-2026), en `feat/fase-5-productizacion`
+
+**La CI cayó en `make test-contract` con un fallo intermitente y víctima variable** (`EmployeeWorkDaysTest`
+en la CI, `SettingsConcurrencyTest` en local; las dos pasaban en solitario). Dos raíces, ninguna en producción:
+
+1. **Conservar no es restaurar.** `CommittedDatabase` excluía los catálogos de producto del vaciado, pero
+   `SettingsConcurrencyTest` los MUTA y confirma: `ATTENDANCE_MAX_SHIFT_HOURS` quedaba en 8..13 para todo
+   el resto del proceso, y con el umbral en 8 la corrección de nueve horas de `EmployeeWorkDaysTest` sale
+   `anomalous` en vez de `closed` (RN-08). Fallaba 1 de cada 6, solo cuando el último escritor dejaba un 8.
+   Arreglo: `ProductCatalogBaseline` (nuevo) fotografía los catálogos una vez por proceso con la base recién
+   migrada y los devuelve a esa foto en cada vaciado — se lee, no se escribe: si una migración siembra otra
+   fila, la línea base cambia con ella. Regresión: `ProductCatalogIsolationTest` (2 pruebas, verificado que
+   falla sin el arreglo). Retirado además el `afterEach` a mano de `ComplianceProfileConcurrencyTest`, que
+   era la versión «convención sin herramienta» de lo mismo.
+2. **El dato de la prueba colisionaba con el valor de serie.** Los seis escritores pedían 8..13 y 12 ES el
+   valor de serie: un `PATCH` al valor vigente responde `200` sin asiento (correcto, la regla dura 6 apunta
+   cambios), así que según el orden del candado había 6 respuestas y 5 asientos (~1/6). Ahora piden 13..18
+   y la premisa se comprueba en el arrange (`expect($valores)->not->toContain(...)`).
+
+Hipótesis descartada con sonda: los contadores de throttle NO se arrastran entre pruebas (`ArrayStore`
+renace con el contenedor en cada prueba).
+
+**Verificado:** `make test-contract` **dos veces** en verde (1151 pruebas), `make test` completo **2952 /
+13 423 / 0 fallos**, la pareja antes intermitente 6/6 en verde, PHPStan 0, Pint PASS, trazabilidad verde
+(1885 etiquetadas). Solo `backend/tests/`; ni una línea de `backend/app/`.
+
+**Deuda anotada:** la suite Feature sigue dependiendo del orden alfabético de directorios para EXPONER
+acoplamientos latentes (la defensa real es no arrastrar estado, que esto garantiza para los catálogos);
+nada detecta hoy una prueba que dependa del vaciado de tablas de trabajo confirmadas.
+
 ## Sesión «tarea 5.5 (backend), corrección tras revisión de `revisor-codigo` y `seguridad-cumplimiento`» (02-09-2026), en `feat/fase-5-productizacion`
 
 **Corrección aplicada y verificada, sin commitear.** La tercera tanda de cambios de la 5.5 («la revisión

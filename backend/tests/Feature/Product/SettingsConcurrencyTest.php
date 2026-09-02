@@ -62,6 +62,22 @@ uses(CommittedDatabase::class);
 /** Seis escritores alternando dos cuerpos incompatibles entre si. */
 const ESCRITORES_DE_CONFIGURACION = 6;
 
+/**
+ * El primer valor de `ATTENDANCE_MAX_SHIFT_HOURS` que escriben los seis, cada
+ * uno el suyo: 13, 14, ... 18.
+ *
+ * **Trece y no ocho, y no es un numero cualquiera.** El valor de serie del
+ * catalogo es 12 (RN-08), y un `PATCH` que pide el valor que ya rige responde
+ * `200` sin dejar asiento —no ha cambiado nada que apuntar—. Con la serie
+ * anterior, 8..13, uno de los seis escritores pedia exactamente 12: si el
+ * planificador le daba el candado el primero, no cambiaba nada, y la prueba
+ * contaba cinco asientos de seis. Un fallo de uno de cada seis ejecuciones que
+ * no dependia del codigo bajo prueba sino de su propio dato.
+ *
+ * El maximo del catalogo es 24, asi que los seis caben con holgura.
+ */
+const PRIMER_MAXIMO_DE_TRAMO = 13;
+
 it('nunca deja el idioma por defecto fuera de los idiomas disponibles', function (): void {
     $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN));
 
@@ -102,11 +118,18 @@ it('no pierde ni duplica asientos cuando varios cambian el mismo umbral a la vez
     // valor deja su asiento, y ninguno queda sin el. Un asiento perdido seria un
     // cambio del calculo que nadie puede explicar (regla dura 6).
     $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN));
+    $valores = range(PRIMER_MAXIMO_DE_TRAMO, PRIMER_MAXIMO_DE_TRAMO + ESCRITORES_DE_CONFIGURACION - 1);
+
+    // La premisa, comprobada y no supuesta: ninguno de los seis pide el valor
+    // que ya rige, porque ese no cambiaria nada y no dejaria asiento. Si un dia
+    // cambia el valor de serie del catalogo, esto lo dice aqui y con su motivo,
+    // en vez de convertirse en «esperaba 6, hubo 5».
+    expect($valores)->not->toContain(storedSetting('ATTENDANCE_MAX_SHIFT_HOURS') ?? 12);
 
     $respuestas = ParallelRequests::run(
         ESCRITORES_DE_CONFIGURACION,
         static fn (int $indice): mixed => Api::as($token)->patch('/api/v1/settings', [
-            'settings' => ['ATTENDANCE_MAX_SHIFT_HOURS' => 8 + $indice],
+            'settings' => ['ATTENDANCE_MAX_SHIFT_HOURS' => PRIMER_MAXIMO_DE_TRAMO + $indice],
         ]),
     );
 
@@ -122,8 +145,8 @@ it('no pierde ni duplica asientos cuando varios cambian el mismo umbral a la vez
     $final = storedSetting('ATTENDANCE_MAX_SHIFT_HOURS');
 
     expect($final)->toBeInt()
-        ->toBeGreaterThanOrEqual(8)
-        ->toBeLessThanOrEqual(8 + ESCRITORES_DE_CONFIGURACION - 1);
+        ->toBeGreaterThanOrEqual(PRIMER_MAXIMO_DE_TRAMO)
+        ->toBeLessThanOrEqual(PRIMER_MAXIMO_DE_TRAMO + ESCRITORES_DE_CONFIGURACION - 1);
 })->group('RF-PD-01', 'RL-04');
 
 /**

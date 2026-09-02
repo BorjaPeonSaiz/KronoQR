@@ -58,32 +58,21 @@ beforeEach(function (): void {
     WorkforceFixtures::site();
 });
 
-/**
- * Devuelve el perfil a como lo dejo la migracion.
+/*
+ * Aqui habia un `afterEach` que devolvia el perfil a mano, reescribiendo los diez
+ * valores que siembra la migracion. Hacia falta —estas dos pruebas confirman y
+ * mutan esa fila, que `CommittedDatabase` conserva como dato de producto— pero
+ * era la clase de defensa que solo protege al que se acuerda de escribirla:
+ * `SettingsConcurrencyTest` no lo hizo, dejo `ATTENDANCE_MAX_SHIFT_HOURS`
+ * cambiado para el resto del proceso y el fallo salio en `Reporting`, a dos
+ * modulos de distancia. Y ademas envejecia: eran una copia de los valores de una
+ * migracion, asi que al cambiar aquella este `afterEach` restauraria el perfil
+ * equivocado sin decir nada.
  *
- * **Hace falta y no es celo.** `compliance_profiles` esta en la lista de
- * catalogos de producto de `CommittedDatabase`: sobrevive al vaciado entre
- * pruebas, porque es dato del producto y no de la prueba. Estas dos escriben de
- * verdad —confirman— y **mutan esa fila**, asi que sin restaurarla dejan un
- * perfil con 11 h de descanso y 8 h de jornada para todo lo que venga despues en
- * el mismo proceso. El sintoma aparece en otro fichero y no dice de donde viene,
- * que es justo el fallo contra el que el docblock de `CommittedDatabase`
- * advierte.
+ * Lo hace ahora `Tests\Support\Database\ProductCatalogBaseline`, que fotografia
+ * los catalogos recien migrados y los devuelve a esa foto tras cada prueba que
+ * confirma. Sin lista de valores que mantener y sin nada que recordar.
  */
-afterEach(function (): void {
-    DB::table('compliance_profiles')->where('is_default', true)->update([
-        'name' => 'ES-hosteleria',
-        'min_rest_hours' => 12,
-        'max_daily_hours' => 9,
-        'max_weekly_hours' => 40,
-        'break_required_after_hours' => 6,
-        'week_starts_on' => 1,
-        'holiday_calendar' => '[]',
-        'retention_years' => 4,
-        'updated_at' => null,
-        'updated_by_user_id' => null,
-    ]);
-});
 
 it('no pierde el cambio de nadie aunque seis toquen campos distintos a la vez', function (): void {
     $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN));
@@ -126,6 +115,14 @@ it('no pierde ni duplica asientos cuando varios cambian el mismo umbral a la vez
     // valor deja su asiento, y ninguno queda sin el. Un umbral legal cambiado sin
     // traza es un cambio que nadie puede explicar (regla dura 6).
     $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN));
+    $valores = range(6, 6 + ESCRITORES_DE_PERFIL - 1);
+
+    // La premisa, comprobada y no supuesta: ninguno de los seis pide el descanso
+    // que ya rige. Un `PATCH` que no cambia nada responde `200` y no deja
+    // asiento, y la prueba contaria cinco de seis sin que nada estuviera roto.
+    expect($valores)->not->toContain(
+        DB::table('compliance_profiles')->where('is_default', true)->value('min_rest_hours'),
+    );
 
     $respuestas = ParallelRequests::run(
         ESCRITORES_DE_PERFIL,
