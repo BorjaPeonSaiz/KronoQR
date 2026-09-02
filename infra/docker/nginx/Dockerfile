@@ -116,7 +116,13 @@ COPY infra/docker/nginx/snippets/ /etc/nginx/snippets/
 COPY infra/docker/nginx/extra/ /etc/nginx/extra/
 COPY infra/docker/nginx/docker-entrypoint.d/ /docker-entrypoint.d/
 
-RUN chmod +x /docker-entrypoint.d/*.sh
+# Tambien los .envsh: el entrypoint oficial IGNORA («Ignoring ..., not executable»)
+# todo fichero de /docker-entrypoint.d sin bit de ejecucion, incluidos los que
+# carga con source. En un checkout de Windows ese bit va y viene, asi que la
+# imagen no puede depender de el: se fija aqui. (Sexta ejecucion de la etapa 8:
+# 03-kronoqr-tls-paths.envsh llego 644 y nginx murio con «unknown tls_cert_file
+# variable» porque envsubst nunca vio la variable.)
+RUN chmod +x /docker-entrypoint.d/*.sh /docker-entrypoint.d/*.envsh
 
 USER 101
 # VALOR POR DEFECTO DE LO QUE SI PUEDE TENERLO.
