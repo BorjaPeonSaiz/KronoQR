@@ -4,6 +4,8 @@
 
 **Tarea 5.4 implementada y verificada, sin commitear.** Cubre `RF-PD-02`, contribuye a `RQ-11` (etapa ⑧ de la CI) y a `RS-08`/§7.7.
 
+> **CIERRE (02-09-2026):** tarea 5.4 commiteada (`624b148`) y rematada con seis correcciones nacidas de la propia etapa ⑧ (`241625b`…`a16d7c5`). La ejecución manual `33573780721` dejó **la CI entera en verde, etapa ⑧ incluida**: A, B, E con reintento, C completo, D, F y Trivy de las tres imágenes. Los códigos 4 y 5 y las fases 4–5 quedan por fin ejercitados en Linux real. Las menciones de más abajo a «la etapa ⑧ todavía no se ha ejecutado» son anteriores a este cierre y se conservan como historia.
+
 **Construido.**
 - `infra/scripts/install.sh` — cinco fases estrictas (requisitos sin escribir → instalación previa → secretos → arranque y esquema → verificación), vuelta atrás por pila de acciones, `--check-only`, `--lang es|en`, `--env-file`, `--compose-file`.
 - `infra/scripts/lib/exit-codes.sh` — **tabla única** de códigos para los cinco scripts. La cargan `install.sh` y `backup-common.sh` (y por él `backup.sh`, `restore.sh`, `restore-drill.sh`).
@@ -37,7 +39,7 @@
 **Fases del instalador ejercitadas DE VERDAD en local (Git Bash sobre Windows):** fase 1 completa en **los dos idiomas** (salida **0** con `--check-only`; salida **2** retirando el certificado, con el valor de plantilla en `APP_URL`, con `TLS_ALLOW_SELF_SIGNED=true` y sin privilegios de root, siempre con el `.env` **idéntico por MD5**), fase 2 (salida **3** contra el entorno de desarrollo real) y el tratamiento del `.env` de la fase 3 en aislamiento, cargando el script gracias a la guarda `BASH_SOURCE`. Códigos **1, 2, 3 y 6** de `backup.sh` comprobados en vivo. **Las fases 4 y 5 completas y los códigos 4 y 5 siguen SIN ejecutarse en local**: exigen Linux con Docker. Su evidencia son los escenarios **C, D, E y F** de la etapa ⑧, **que todavía no se ha ejecutado ni una vez**.
 
 **Pendiente.**
-- **Lanzar la etapa ⑧ a mano («Run workflow») sobre esta rama** antes de dar la tarea por cerrada: es la única evidencia de las fases 4 y 5 y del fallo seguro con puerto ocupado. Duración estimada 12–18 min sin caché, 6–9 con ella.
+- ~~Lanzar la etapa ⑧ a mano sobre esta rama~~ **HECHO (02-09-2026, run 33573780721, verde)** — era: es la única evidencia de las fases 4 y 5 y del fallo seguro con puerto ocupado. Duración estimada 12–18 min sin caché, 6–9 con ella.
 - **5.7:** completar `docs/runbooks/actualizacion-cliente.md` (hoy esqueleto, escrito porque `install.sh` remite ahí al salir con `3`) y añadir a la etapa ⑧ la mitad de «actualización desde la versión anterior» que RQ-11 también pide.
 - **5.9:** `phase_verify` de `install.sh` tiene el punto de enganche documentado para `product:doctor`; hoy verifica con `/health`, `/ready` y `license:show`.
 - **5.11:** capturas de pantalla y guía de endurecimiento en `instalacion.md`.
