@@ -272,8 +272,12 @@ it('no exige licencia para actualizar', function (): void {
     // en tiempo de ejecucion ("cannot index slice/array with type string"): la
     // etapa 8b lo encontro con la instalacion en marcha y un `2>/dev/null`
     // convirtiendolo en "no hay instalacion". Se lee con `.Label "clave"`.
+    // Y solo por el contenedor `app`: los servicios cuya configuracion no
+    // cambia entre versiones (redis, imagen fija) no se recrean y conservan el
+    // directorio que los creo; tras actualizar habria dos y ninguno seria un error.
     expect($script)->not->toContain('index .Labels')
-        ->and($script)->toContain('{{.Label "com.docker.compose.project.config_files"}}');
+        ->and($script)->toContain('{{.Label "com.docker.compose.project.config_files"}}')
+        ->and($script)->toContain('label=com.docker.compose.service=app');
 })->group('RF-PD-05', 'RF-PD-10');
 
 it('sale con 2 sin escribir nada en el paquete cuando falla una precondicion', function (): void {

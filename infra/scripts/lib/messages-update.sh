@@ -85,8 +85,8 @@ KQ_MSG_ES[u_f_target_unlisted]="la version de este paquete, %s, no figura en %s.
 KQ_MSG_ES[u_c_docker_root]="Directorio de datos de Docker %s"
 
 KQ_MSG_ES[u_c_installation]="Instalacion actual en %s"
-KQ_MSG_ES[u_f_installation_missing]="no se ha encontrado ninguna instalacion de KronoQR en este servidor: Docker no conoce el proyecto '%s'. Si es un servidor nuevo, lo que quieres es install.sh. Si la instalacion existe pero sus contenedores fueron eliminados, indica su directorio con --current RUTA."
-KQ_MSG_ES[u_f_installation_ambiguous]="Docker tiene contenedores del proyecto '%s' creados desde MAS DE UN directorio: %s. Solo puede haber una instalacion. Retira los contenedores que sobren o indica el directorio correcto con --current RUTA."
+KQ_MSG_ES[u_f_installation_missing]="no se ha encontrado ninguna instalacion de KronoQR en este servidor: Docker no tiene ningun contenedor 'app' del proyecto '%s'. Si es un servidor nuevo, lo que quieres es install.sh. Si la instalacion existe pero sus contenedores fueron eliminados, indica su directorio con --current RUTA."
+KQ_MSG_ES[u_f_installation_ambiguous]="Docker tiene contenedores 'app' del proyecto '%s' creados desde MAS DE UN directorio: %s. Solo puede haber una instalacion. Retira los contenedores que sobren o indica el directorio correcto con --current RUTA."
 KQ_MSG_ES[u_f_installation_files]="en %s no estan los ficheros de una instalacion: falta %s. Indica el directorio correcto con --current RUTA."
 KQ_MSG_ES[u_c_in_place]="El paquete se ha descomprimido ENCIMA de la instalacion actual (%s)"
 KQ_MSG_ES[u_f_in_place]="funciona, pero el docker-compose.yml de la version anterior ya no existe y una vuelta atras tendria que usar el nuevo con las imagenes antiguas. La proxima vez descomprime el paquete en un directorio nuevo, al lado del actual."
@@ -314,8 +314,8 @@ KQ_MSG_EN[u_f_target_unlisted]="this package's version, %s, is not listed in %s.
 KQ_MSG_EN[u_c_docker_root]="Docker data directory %s"
 
 KQ_MSG_EN[u_c_installation]="Current installation at %s"
-KQ_MSG_EN[u_f_installation_missing]="no KronoQR installation was found on this server: Docker does not know project '%s'. On a new server what you want is install.sh. If the installation exists but its containers were removed, point to its directory with --current PATH."
-KQ_MSG_EN[u_f_installation_ambiguous]="Docker has containers of project '%s' created from MORE THAN ONE directory: %s. There can only be one installation. Remove the extra containers or point to the right directory with --current PATH."
+KQ_MSG_EN[u_f_installation_missing]="no KronoQR installation was found on this server: Docker has no 'app' container of project '%s'. On a new server what you want is install.sh. If the installation exists but its containers were removed, point to its directory with --current PATH."
+KQ_MSG_EN[u_f_installation_ambiguous]="Docker has 'app' containers of project '%s' created from MORE THAN ONE directory: %s. There can only be one installation. Remove the extra containers or point to the right directory with --current PATH."
 KQ_MSG_EN[u_f_installation_files]="%s does not hold the files of an installation: %s is missing. Point to the right directory with --current PATH."
 KQ_MSG_EN[u_c_in_place]="The package was unpacked ON TOP of the current installation (%s)"
 KQ_MSG_EN[u_f_in_place]="it works, but the previous version's docker-compose.yml is gone and a rollback would have to use the new one with the old images. Next time unpack the package into a new directory next to the current one."

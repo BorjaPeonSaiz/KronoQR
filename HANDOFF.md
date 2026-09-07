@@ -83,7 +83,10 @@ versiones, así que la sonda del paso 5 disparaba la vuelta atrás y la vuelta a
 (salida 5 con la 2.0.0 sana). Tres arreglos: `redirectGuestsTo(null)` en `bootstrap/app.php` con prueba
 en `AuthenticationTest`; las sondas de `update.sh` y la comprobación de la CI mandan `Accept:
 application/json`; y la ruta de gestión se exige en las **precondiciones** (`u_c_probe_management`), de
-modo que la vuelta atrás solo pide lo que ya era verdad antes de tocar nada.
+modo que la vuelta atrás solo pide lo que ya era verdad antes de tocar nada; (3) tras actualizar, `redis`
+(imagen fija) **no se recrea** y conserva el `config_files` del directorio antiguo → la instalación se
+localiza solo por el contenedor `app`, que cambia de imagen en cada versión; (4) el directorio de
+informes es 0750 del uid 1000 y la shell del runner no expande `update-*.log` → `sudo sh -c` en la CI.
 
 **Siguiente acción:** (1) un solo commit convencional
 (`feat(product): actualizador con copia previa, cadena de versiones y vuelta atras (tarea 5.7)`), push y

@@ -983,7 +983,14 @@ check_installation() {
       [ -f "${candidate}" ] && CURRENT_COMPOSE="${candidate}" && break
     done
   elif [ "${DOCKER_OK}" -eq 1 ]; then
+    # SOLO el contenedor del servicio `app`. Compose no recrea un contenedor
+    # cuya configuracion no cambia entre versiones (redis lleva imagen fija),
+    # y ese conserva el `config_files` del directorio que lo creo: tras una
+    # actualizacion habria dos directorios y ninguno seria un error. La imagen
+    # de `app` lleva la version, asi que se recrea siempre y su etiqueta dice
+    # de donde se levanto la instalacion que esta sirviendo.
     configs="$(docker ps -a --filter "label=com.docker.compose.project=${KQ_COMPOSE_PROJECT}" \
+      --filter "label=com.docker.compose.service=app" \
       --filter "label=com.docker.compose.oneoff=False" \
       --format '{{.Label "com.docker.compose.project.config_files"}}' |
       awk -F, 'NF { print $1 }' | sort -u || true)"
