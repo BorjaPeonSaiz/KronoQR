@@ -96,7 +96,7 @@ Lo que verás, y lo que significa cada paso:
 
 | Paso | Qué hace | Qué ve la plantilla |
 | --- | --- | --- |
-| 1 · Precondiciones | Lo mismo que `--check-only`. Si algo falla, sale `2` y no ha tocado nada | Nada |
+| 1 · Precondiciones | Lo mismo que `--check-only`, incluida la ruta de gestión que debe responder `401` sin sesión: es lo que el paso 5 y la vuelta atrás exigirán, y tiene que ser verdad ya. Si algo falla, sale `2` y no ha tocado nada | Nada |
 | 2 · Mantenimiento | El panel, el portal y la API de gestión responden «en mantenimiento» (503). `horizon` y `scheduler` se paran para que nada escriba | **Los quioscos siguen fichando**: confirman en local y encolan. Es invisible para quien ficha |
 | 3 · Copia previa | Copia lógica cifrada **y verificada** con la versión actual. **Bloqueante**: si falla, sale `2`, retira el mantenimiento y no ha tocado nada. No hay bandera para saltárselo | Igual |
 | 4 · Migraciones | Relanza PostgreSQL y Redis con las imágenes nuevas y aplica las migraciones **versión a versión**, con un punto de control entre cada una: `PUNTO DE CONTROL 2.2.0 alcanzado: 3 migraciones aplicadas en 4 s` | Igual |

@@ -210,6 +210,18 @@ return Application::configure(basePath: dirname(__DIR__))
             'api/v1/health',
             'api/v1/ready',
         ]);
+
+        /*
+         * NO HAY RUTA DE LOGIN A LA QUE REDIRIGIR. Por defecto Laravel manda a
+         * `route('login')` a quien pide una ruta protegida sin sesion y sin
+         * `Accept: application/json`, y esa ruta no existe en una API sin
+         * vistas: el resultado era un 500 «Route [login] not defined» en vez
+         * del 401 `problem+json` (lo encontro la sonda del actualizador, que
+         * exige 401 para dar el mantenimiento por retirado). Sin redireccion, la
+         * peticion cae en `AuthenticationException` y en su traduccion de mas
+         * abajo, con o sin cabecera `Accept`.
+         */
+        $middleware->redirectGuestsTo(static fn (): ?string => null);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         /*

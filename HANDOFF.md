@@ -75,6 +75,16 @@ tres riesgos aceptados y uno pendiente (asiento de auditoría). (r) la prueba de
 versiones lee las migraciones con `dirname(__DIR__, 2)`, no con `base_path()`: las pruebas de arquitectura no
 arrancan Laravel y solo pasaba cuando otra prueba lo había arrancado antes.
 
+**Lo que encontró la primera ejecución real de la ⑧b (07-09, PR #43):** (1) `docker ps --format` con
+`index .Labels` falla porque `.Labels` es una cadena, y el `2>/dev/null` lo convertía en «no hay
+instalación» → `.Label "clave"` y sin silenciar; (2) **`/api/v1/auth/me` sin `Accept: application/json`
+respondía 500** («Route [login] not defined»: Laravel redirige a un login que no existe) en **todas** las
+versiones, así que la sonda del paso 5 disparaba la vuelta atrás y la vuelta atrás no podía verificarse
+(salida 5 con la 2.0.0 sana). Tres arreglos: `redirectGuestsTo(null)` en `bootstrap/app.php` con prueba
+en `AuthenticationTest`; las sondas de `update.sh` y la comprobación de la CI mandan `Accept:
+application/json`; y la ruta de gestión se exige en las **precondiciones** (`u_c_probe_management`), de
+modo que la vuelta atrás solo pide lo que ya era verdad antes de tocar nada.
+
 **Siguiente acción:** (1) un solo commit convencional
 (`feat(product): actualizador con copia previa, cadena de versiones y vuelta atras (tarea 5.7)`), push y
 PR contra `main`; (2) **la etapa ⑧b solo corre en `main`, etiquetas o a mano**: lanzarla con «Run workflow»

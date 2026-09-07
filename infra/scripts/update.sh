@@ -772,9 +772,12 @@ wait_for_healthy() {
 # Sonda por loopback a traves del borde. `--insecure` por el mismo motivo que
 # en install.sh: se comprueba que la aplicacion responde, no que el nombre del
 # certificado resuelva desde este servidor.
+# `Accept: application/json` porque es lo que mandan las tres SPA y porque asi
+# la respuesta a una ruta protegida sin sesion es 401 en cualquier version.
 edge_probe() {
   local path="$1"
   curl --fail --silent --show-error --insecure --max-time 15 \
+    --header 'Accept: application/json' \
     "https://127.0.0.1:${CFG_HTTPS_PORT}${path}" 2>/dev/null
 }
 
@@ -782,6 +785,7 @@ edge_probe() {
 edge_status() {
   local path="$1"
   curl --silent --insecure --max-time 15 --output /dev/null --write-out '%{http_code}' \
+    --header 'Accept: application/json' \
     "https://127.0.0.1:${CFG_HTTPS_PORT}${path}" 2>/dev/null || printf '000'
 }
 
@@ -1278,6 +1282,17 @@ check_services() {
         "$(kq_format u_f_probe "${path}" "${CFG_HTTPS_PORT}" "${CURRENT_COMPOSE}")"
     fi
   done
+
+  # La ruta de gestion que el paso 5 y la vuelta atras exigen que responda 401
+  # tiene que responder 401 YA: si no, la vuelta atras no podria verificarse
+  # nunca y un fallo de la version instalada se confundiria con uno de la nueva.
+  state="$(edge_status "${KQ_MANAGEMENT_PROBE}")"
+  if [ "${state}" = "401" ]; then
+    check_pass "$(kq_format u_c_probe_management "${KQ_MANAGEMENT_PROBE}")"
+  else
+    check_fail "$(kq_format u_c_probe_management "${KQ_MANAGEMENT_PROBE}")" \
+      "$(kq_format u_f_probe_management "${KQ_MANAGEMENT_PROBE}" "${state}" "${CURRENT_COMPOSE}")"
+  fi
 }
 
 # Cadena de auditoria integra ANTES de tocar nada (doc 02 §7.4, regla dura 6).
@@ -1836,7 +1851,7 @@ rollback_and_die() {
     rollback_incomplete "${reason}"
   }
   [ "$(edge_status "${KQ_MANAGEMENT_PROBE}")" = "401" ] || {
-    err "$(kq_format u_f_verify_lifted "${KQ_MANAGEMENT_PROBE}" "$(edge_status "${KQ_MANAGEMENT_PROBE}")")"
+    err "$(kq_format u_f_rollback_management "${SOURCE_VERSION}" "${KQ_MANAGEMENT_PROBE}" "$(edge_status "${KQ_MANAGEMENT_PROBE}")")"
     rollback_incomplete "${reason}"
   }
   say "$(kq_format u_rollback_verify_ok "${SOURCE_VERSION}" "/api/v1/health /api/v1/ready ${KQ_MANAGEMENT_PROBE}")"

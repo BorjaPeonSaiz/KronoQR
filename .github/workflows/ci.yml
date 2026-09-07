@@ -1488,7 +1488,7 @@ jobs:
           curl -fsS -k https://127.0.0.1/api/v1/ready >/dev/null
           # El mantenimiento se ha retirado: una ruta de gestion responde 401
           # (sin sesion), no 503.
-          codigo="$(curl -s -k -o /dev/null -w '%{http_code}' https://127.0.0.1/api/v1/auth/me)"
+          codigo="$(curl -s -k -o /dev/null -w '%{http_code}' -H 'Accept: application/json' https://127.0.0.1/api/v1/auth/me)"
           test "${codigo}" = "401" || { echo "Se esperaba 401 tras actualizar y fue ${codigo}"; exit 1; }
           consulta() { sudo docker compose --env-file paquete-nuevo/.env -f paquete-nuevo/docker-compose.yml exec -T postgres psql -U fichaje_migrator -d fichaje -Atqc "$1"; }
           {
