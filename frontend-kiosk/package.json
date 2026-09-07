@@ -25,7 +25,7 @@
     "dexie": "^4.4.5",
     "libsodium-wrappers": "^0.8.4",
     "pinia": "^4.0.3",
-    "vue": "^3.5.41",
+    "vue": "^3.5.42",
     "vue-i18n": "^11.4.10",
     "vue-router": "^5.3.0",
     "workbox-window": "^7.4.1"
@@ -39,7 +39,7 @@
     "@vitest/coverage-v8": "^4.1.11",
     "@vue/eslint-config-prettier": "^10.2.0",
     "@vue/eslint-config-typescript": "^14.9.0",
-    "@vue/test-utils": "^2.4.11",
+    "@vue/test-utils": "^2.5.0",
     "eslint": "^10.9.1",
     "eslint-plugin-vue": "^10.10.0",
     "fake-indexeddb": "^6.2.5",
