@@ -68,8 +68,8 @@ sin internet, ver §7.
 ### 1.1 Descomprime el paquete
 
 ```bash
-tar xzf kronoqr-2.0.0.tar.gz
-cd kronoqr-2.0.0
+tar xzf kronoqr-2.1.0.tar.gz
+cd kronoqr-2.1.0
 ls
 ```
 
@@ -79,31 +79,33 @@ Deberías ver exactamente esto:
 docker-compose.yml       Definición de los servicios. No se toca.
 .env.example             Plantilla de configuración. La copias en el paso 1.2.
 install.sh               El instalador.
+update.sh                El actualizador: a una versión posterior, con vuelta atrás.
 backup.sh restore.sh     Copias de seguridad y restauración.
 restore-drill.sh         Simulacro trimestral de restauración.
 lib/                     Bibliotecas de los scripts. No se tocan.
 observability/           Configuración de las alertas. No se toca.
 certs/                   Aquí colocas tu certificado (paso 1.2).
 VERSION                  La versión que se va a instalar.
+versions.txt             Versiones publicadas y desde cuáles se actualiza. No se toca.
 LICENCIA.txt
 docs/                    Esta guía y las otras tres.
 docs/runbooks/           Procedimientos: restaurar, rotar secretos, alta de
                          quiosco, requerimiento de Inspección, RGPD…
 ```
 
-> **Lo que todavía NO viene en la 2.0.0, y cuándo llega.** Se dice aquí y no se
+> **Lo que todavía NO viene en la 2.1.0, y cuándo llega.** Se dice aquí y no se
 > descubre a mitad de una incidencia:
 >
 > | Pieza | Para qué | Llega en |
 > | --- | --- | --- |
-> | `update.sh` | Actualizar a una versión posterior con vuelta atrás | 2.1 |
-> | `doctor.sh` | Comprobación de salud en un comando | 2.1 |
-> | Asistente de puesta en marcha | Crear la organización y la primera cuenta desde el panel | 2.1 |
+> | `doctor.sh` | Comprobación de salud en un comando | Una versión posterior de la serie 2.x |
 >
-> Mientras tanto: la instalación se verifica con las dos sondas del paso 1.5, el
-> estado se mira con `docker compose ps` y con los dos comandos de
-> [`operacion.md`](operacion.md), y **no hay actualización desde una versión
-> anterior porque la 2.0.0 es la primera**.
+> Mientras tanto, el estado se mira con las dos sondas del paso 1.5, con
+> `docker compose ps` y con los comandos de [`operacion.md`](operacion.md).
+> **Actualizar a una versión posterior ya es `update.sh`**
+> ([`operacion.md`](operacion.md) §11 y
+> [`../runbooks/actualizacion-cliente.md`](../runbooks/actualizacion-cliente.md)):
+> la 2.1.0 es la primera versión con instalador y actualizador.
 
 ### 1.2 Coloca el certificado y rellena la configuración
 
@@ -180,9 +182,9 @@ mantenimiento sabiendo que va a salir bien. Salida esperada:
 
 ```
 Fase 1 de 5 — comprobando requisitos. Todavia no se escribe nada.
-  [ok]    Fichero de compose /opt/kronoqr-2.0.0/docker-compose.yml
-  [ok]    Version que se instala: 2.0.0
-  [ok]    Plantilla de configuracion /opt/kronoqr-2.0.0/.env
+  [ok]    Fichero de compose /opt/kronoqr-2.1.0/docker-compose.yml
+  [ok]    Version que se instala: 2.1.0
+  [ok]    Plantilla de configuracion /opt/kronoqr-2.1.0/.env
   [ok]    Permiso para hablar con Docker
   [ok]    Docker 27.3.1 (se exige 24 o superior)
   [ok]    Docker Compose v2 (2.29.7)
@@ -193,7 +195,7 @@ Fase 1 de 5 — comprobando requisitos. Todavia no se escribe nada.
   [ok]    Disco libre en /var/lib/docker: 92 GiB (minimo publicado: 40 GiB)
   [ok]    APP_URL relleno en la plantilla
   ...
-  [ok]    Certificado TLS en /opt/kronoqr-2.0.0/certs
+  [ok]    Certificado TLS en /opt/kronoqr-2.1.0/certs
   [ok]    Puerto 80 libre
   [ok]    Puerto 443 libre
   [ok]    Se puede escribir en /var/backups/fichaje
@@ -233,9 +235,9 @@ Salida esperada:
 
 ```
 Fase 1 de 5 — comprobando requisitos. Todavia no se escribe nada.
-  [ok]    Fichero de compose /opt/kronoqr-2.0.0/docker-compose.yml
-  [ok]    Version que se instala: 2.0.0
-  [ok]    Plantilla de configuracion /opt/kronoqr-2.0.0/.env
+  [ok]    Fichero de compose /opt/kronoqr-2.1.0/docker-compose.yml
+  [ok]    Version que se instala: 2.1.0
+  [ok]    Plantilla de configuracion /opt/kronoqr-2.1.0/.env
   [ok]    Permiso para hablar con Docker
   [ok]    Docker 27.3.1 (se exige 24 o superior)
   [ok]    Docker Compose v2 (2.29.7)
@@ -254,13 +256,13 @@ Fase 1 de 5 — comprobando requisitos. Todavia no se escribe nada.
   [ok]    APP_DEBUG=false
   [ok]    APP_URL: https://fichaje.tuhotel.local
   [ok]    El nombre fichaje.tuhotel.local resuelve desde este servidor
-  [ok]    Certificado TLS en /opt/kronoqr-2.0.0/certs
+  [ok]    Certificado TLS en /opt/kronoqr-2.1.0/certs
   [ok]    El borde (uid 101) puede leer tls.crt
   [ok]    El borde (uid 101) puede leer tls.key
   [ok]    Puerto 80 libre
   [ok]    Puerto 443 libre
   [ok]    Se puede escribir en /var/backups/fichaje
-  [ok]    Se puede escribir en /opt/kronoqr-2.0.0
+  [ok]    Se puede escribir en /opt/kronoqr-2.1.0
   [ok]    Privilegios para asignar el propietario del archivo de WAL
 
 Requisitos cumplidos: 29 comprobaciones, 0 avisos.
@@ -284,7 +286,7 @@ Tarda entre tres y quince minutos, según lo que tarde en descargar las
 imágenes. Verás las cinco fases. Al terminar:
 
 ```
-KronoQR 2.0.0 instalado y verificado.
+KronoQR 2.1.0 instalado y verificado.
 
   Panel de gestion:    https://fichaje.tuhotel.local/admin/
   Quiosco (tablet):    https://fichaje.tuhotel.local/kiosk/
@@ -295,7 +297,7 @@ que crea la organizacion, el centro, el primer administrador y el primer
 quiosco. Hasta que lo termines no hay ninguna cuenta: el instalador no crea
 usuarios.
 
-DOCUMENTACION, en /opt/kronoqr-2.0.0/docs
+DOCUMENTACION, en /opt/kronoqr-2.1.0/docs
   ...
 
 ANTES DE CERRAR LA SESION: custodia BACKUP_ENCRYPTION_KEY fuera de este
@@ -710,7 +712,7 @@ Qué hacer, en este orden:
    puede reescribir:
 
    ```bash
-   cd /opt/kronoqr-2.0.0
+   cd /opt/kronoqr-2.1.0
    sudo docker compose --env-file .env -f docker-compose.yml \
      exec -T postgres psql -U fichaje_migrator -d fichaje -c \
      "SELECT occurred_at, action, ip, payload
@@ -746,7 +748,7 @@ confirmarlo aunque lo dejes como viene. La razón está en la sección 1.7.
 Solo si estás seguro de que **no hay datos que conservar**:
 
 ```bash
-cd /opt/kronoqr-2.0.0
+cd /opt/kronoqr-2.1.0
 sudo docker compose --env-file .env -f docker-compose.yml down -v --remove-orphans
 sudo rm -f .env
 sudo rm -rf /var/backups/fichaje
@@ -942,7 +944,7 @@ docker save -o "imagenes-${version}.tar" \
 Copia ese fichero al servidor del hotel (USB, recurso interno) y allí:
 
 ```bash
-docker load -i imagenes-2.0.0.tar
+docker load -i imagenes-2.1.0.tar
 sudo ./install.sh
 ```
 

@@ -1271,7 +1271,7 @@ Cuadrantes y comparación entre planificado y realmente trabajado, vacaciones y 
 ### 11.6.1 Qué se entrega al cliente
 
 ```
-kronoqr-2.0.0/
+kronoqr-2.1.0/
 ├── docker-compose.yml          # Producción, autocontenido, sin dependencias externas
 ├── .env.example                # Comentado, con las tres categorías marcadas (5.4)
 ├── VERSION                     # Fija la etiqueta de imagen. Sin esto no se instala
@@ -1349,6 +1349,8 @@ Un cliente puede estar en la 1.2.0 cuando ya va la 1.6.0. El actualizador debe e
 ```
 
 **El quiosco sigue funcionando durante la actualización** gracias a la cola offline. Es la ventaja inesperada de haber hecho el modo offline obligatorio: convierte una parada de mantenimiento en algo invisible para la plantilla.
+
+> **Ejecutado en la tarea 5.7 (07-09-2026):** `update.sh` aplica el paso 3 **antes** del 2 —mantenimiento y parada de `horizon`/`scheduler`, y después la copia— para que ningún fichaje aceptado por el servidor quede fuera de la copia que restauraría la vuelta atrás. La matriz del §11.6.5 es un dato del paquete (`versions.txt`), el punto de control entre versiones es una marca persistida en el informe con un lote de `migrations` por versión, y la vuelta atrás es siempre restaurar la copia y relanzar la versión anterior. El detalle está en `plan implementacion/08` §2.2 y en la ficha 5.7.
 
 ### 11.6.5 Matriz de versiones soportadas
 

@@ -68,6 +68,7 @@ use Illuminate\Validation\ValidationException;
 use Laravel\Sanctum\Http\Middleware\CheckAbilities;
 use Laravel\Sanctum\Http\Middleware\CheckForAnyAbility;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -189,6 +190,38 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->api(append: [
             NegotiateLocale::class,
         ]);
+
+        /*
+         * Modo mantenimiento (RF-PD-10, tarea 5.7). Lo activa update.sh con
+         * `php artisan down` mientras hace la copia previa y migra: el panel, el
+         * portal y el quiosco reciben un 503 con `Retry-After` y el quiosco
+         * conserva el fichaje en su cola (regla dura 19; syncRunner trata el 503
+         * como «no decidido»).
+         *
+         * LAS DOS SONDAS QUEDAN FUERA a proposito. `/health` dice si el proceso
+         * vive y con que version, y `/ready` si puede atender: son lo que miran
+         * Docker, Prometheus y el propio actualizador para saber que la version
+         * anterior sigue en pie durante la ventana. Un 503 de mantenimiento en
+         * la sonda de vida haria que el orquestador reiniciara un contenedor
+         * que esta perfectamente, y que la alerta de «aplicacion caida» sonara
+         * por una operacion planificada.
+         */
+        $middleware->preventRequestsDuringMaintenance(except: [
+            'api/v1/health',
+            'api/v1/ready',
+        ]);
+
+        /*
+         * NO HAY RUTA DE LOGIN A LA QUE REDIRIGIR. Por defecto Laravel manda a
+         * `route('login')` a quien pide una ruta protegida sin sesion y sin
+         * `Accept: application/json`, y esa ruta no existe en una API sin
+         * vistas: el resultado era un 500 «Route [login] not defined» en vez
+         * del 401 `problem+json` (lo encontro la sonda del actualizador, que
+         * exige 401 para dar el mantenimiento por retirado). Sin redireccion, la
+         * peticion cae en `AuthenticationException` y en su traduccion de mas
+         * abajo, con o sin cabecera `Accept`.
+         */
+        $middleware->redirectGuestsTo(static fn (): ?string => null);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         /*
@@ -254,6 +287,29 @@ return Application::configure(basePath: dirname(__DIR__))
             $retryAfter = $exception->getHeaders()['Retry-After'] ?? '60';
 
             return ProblemDetails::tooManyRequests((int) $retryAfter);
+        });
+
+        /*
+         * El 503 del modo mantenimiento (tarea 5.7). Lo lanza el middleware del
+         * framework como `HttpException` generica con codigo 503; sin esta
+         * linea saldria como el JSON por defecto de Laravel y no como
+         * `problem+json`, que es lo que el contrato promete para TODA respuesta
+         * de error. Atrapa CUALQUIER `HttpException` 503 —el framework no
+         * distingue la de mantenimiento—, y hoy no hay otro emisor: ningun
+         * `abort(503)` en `app/`, y los 503 de dominio (emparejamiento,
+         * informes) se devuelven como `JsonResponse` sin pasar por aqui. Quien
+         * anada un `abort(503)` que no sea mantenimiento tiene que darle su
+         * propio tipo antes, o el cliente leera «se esta actualizando» durante
+         * una averia. Las demas `HttpException` siguen su camino.
+         */
+        $exceptions->render(static function (HttpException $exception): mixed {
+            if ($exception->getStatusCode() !== 503) {
+                return null;
+            }
+
+            $retryAfter = $exception->getHeaders()['Retry-After'] ?? '60';
+
+            return ProblemDetails::maintenance((int) $retryAfter);
         });
 
         /*

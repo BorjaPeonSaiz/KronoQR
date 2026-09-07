@@ -195,6 +195,17 @@ it('no deja consultar la sesion sin token', function (): void {
         ->assertJsonPath('type', 'urn:kronoqr:problem:unauthenticated');
 })->group('RF-ID-01');
 
+it('responde 401 y no 500 a quien no pide JSON', function (): void {
+    // `Api::guest()` manda `Accept: application/json`; un navegador, un curl
+    // a mano o la sonda del actualizador no, y Laravel intentaba redirigirlos
+    // a una ruta de login que no existe (500 "Route [login] not defined"). La
+    // API no tiene vistas: es 401 problem+json pida lo que pida el cliente.
+    Api::guest()->withHeaders(['Accept' => 'text/html'])->get('/api/v1/auth/me')
+        ->assertStatus(401)
+        ->assertHeader('Content-Type', 'application/problem+json')
+        ->assertJsonPath('type', 'urn:kronoqr:problem:unauthenticated');
+})->group('RF-ID-01', 'RF-PD-10');
+
 it('deja de valer el token de una cuenta desactivada sin esperar a que caduque', function (): void {
     $user = ManagementUsers::withRole(UserRole::RRHH);
     $token = ManagementUsers::tokenFor($user);

@@ -69,12 +69,15 @@ Salida esperada de una instalación sana: `kronoqr_backup_last_result{type="dump
 
 ### Códigos de salida y qué significa cada uno
 
+Es la tabla común de los cinco scripts ([`../cliente/operacion.md`](../cliente/operacion.md) §8; hasta la 2.0.0 `backup.sh` tenía una propia, la equivalencia está allí):
+
 | Código | Significa | Qué hacer |
 | --- | --- | --- |
-| `1` | La copia o su verificación fallaron | Sigue el mensaje: dice qué falló y dónde |
-| `3` | Falta una herramienta o no se llega a la base de datos. **Nada se ha tocado** | `docker compose ps`; levanta `postgres` |
-| `4` | Destino no escribible o sin espacio. **Nada se ha tocado** | [§5](#5-disco-de-copias-casi-lleno) |
-| `5` | Clave de cifrado ausente o incorrecta | Comprueba `BACKUP_ENCRYPTION_KEY` en el `.env` |
+| `2` | Falta una herramienta, no se llega a la base, el destino no es escribible o sin espacio, o falta `BACKUP_ENCRYPTION_KEY`. **Nada se ha escrito** | El mensaje dice cuál. `docker compose ps`; [§5](#5-disco-de-copias-casi-lleno); el `.env` |
+| `3` | Ya existe el fichero de destino, o no hay copia que verificar. **Nada se ha escrito** | Espera un segundo y repite, o mira `backup.sh list` |
+| `4` | La copia falló y lo escrito a medias se retiró; **la anterior sigue siendo la buena** | Sigue el mensaje: dice qué falló y dónde |
+| `5` | Quedó algo a medias que hay que retirar a mano | El mensaje dice qué fichero |
+| `6` | La copia se escribió pero **no verifica**, o una existente no verifica. **Trátala como inexistente** | Prueba la anterior; si la clave rotó, hace falta la anterior |
 
 ### Resolución
 
@@ -269,6 +272,23 @@ se reproduce todo el WAL disponible, que es lo que se quiere tras una pérdida d
 disco.
 
 ---
+
+### 6.5 La vuelta atrás automática de `update.sh` pasa por aquí
+
+El actualizador (tarea 5.7) no tiene un camino de restauración propio: cuando
+una migración o la verificación de la versión nueva fallan, **para lo que
+escribe y ejecuta este mismo `restore.sh --yes`** con la copia que hizo en su
+paso 3, y después relanza la versión anterior desde su directorio. Lo que eso
+deja en el servidor es exactamente lo de §6.2 y §6.3: la base fallida
+conservada como `<base>_pre_restore_<marca>` durante 7 días, un informe en
+`BACKUP_PATH/reports/restore-<marca>.log` **y otro en
+`BACKUP_PATH/reports/update-<marca>.log`** con el paso en que se paró y por
+qué. Ese segundo informe es el que se adjunta al caso.
+
+Si el actualizador sale con `5`, la restauración quedó a medias y hay que
+terminarla a mano: las órdenes exactas están en su mensaje y en
+[`actualizacion-cliente.md`](actualizacion-cliente.md) §5. Son las de §6.2 con
+las rutas de los dos paquetes.
 
 ## 7. Simulacro trimestral (RNF-D-05, RQ-09)
 
