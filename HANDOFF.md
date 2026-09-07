@@ -9,9 +9,8 @@
 
 **Rama `feat/tarea-5.6-emparejamiento-quiosco`**, creada desde `main` (`3990524`, PR #41). **Tarea 5.6
 «Vinculación de quiosco por código de emparejamiento» (RF-PD-06) IMPLEMENTADA y revisada el 07-09-2026,
-SIN COMMIT**: todo el trabajo está en el árbol de trabajo (61 ficheros modificados, 77 nuevos).
-Siguiente acción: `git add -A && git commit` (mensaje convencional `feat(kiosk): emparejamiento de quiosco
-por código (tarea 5.6, RF-PD-06)`), push, CI, PR con *merge commit*.
+en `origin`** (commit `a1836cf`, PR #42 contra `main`).
+Siguiente acción: esperar la CI de la PR; si pasa, *merge commit* (nunca squash) y arrancar la 5.7.
 
 **Lo decidido (C-3 cerrada, escrito en doc 01 Anexo B, ficha 5.6 del plan y doc 02 §7.3 nota 5):** flujo
 iniciado por la tablet en tres rutas — `POST /kiosk/pair` (público, crea la solicitud y devuelve código de
@@ -156,4 +155,4 @@ Detalle de cada hito: mensajes de commit, PRs y `git show 9b1593d:HANDOFF.md`.
   asistente de puesta en marcha + importación masiva (backend, contrato, `frontend-admin`, revisiones y
   arreglo del fallo intermitente de la suite). Todo en `main` vía PR #41 (`3990524`).
 - **02-09** — Rama `feat/tarea-5.6-emparejamiento-quiosco` con el hook de Pint.
-- **07-09** — **Tarea 5.6** implementada (contrato, backend Kiosk, PWA, panel, runbook, 4 revisiones), sin commit.
+- **07-09** — **Tarea 5.6** implementada (contrato, backend Kiosk, PWA, panel, runbook, 4 revisiones); commit `a1836cf` y PR #42.
