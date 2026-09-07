@@ -93,3 +93,53 @@ kq_env_load() {
     [ -n "${!key-}" ] || printf -v "${key}" '%s' "$(kq_env_unquote "${BASH_REMATCH[3]}")"
   done <"${file}"
 }
+
+# Escribe (o sustituye) UNA clave en un fichero .env conservando todo lo demas:
+# comentarios, orden y las claves que no se tocan. Si la clave aparece varias
+# veces se deja una sola; si no aparece, se anade al final.
+#
+#   kq_env_set RUTA CLAVE VALOR
+#
+# El valor viaja por el ENTORNO de awk y no por su linea de ordenes: los
+# secretos del instalador pasan por aqui y `ps` no debe verlos.
+#
+# ATOMICO Y EN EL MISMO DIRECTORIO. El temporal nace junto al destino, con su
+# mismo propietario y modo, y lo sustituye con `mv`: un corte de luz a mitad
+# deja el fichero anterior entero o el nuevo entero, nunca uno truncado sin
+# APP_KEY. Hasta la tarea 5.7 se hacia con `cat >` sobre el original y el
+# temporal iba a /tmp: sobre el .env de una instalacion en produccion, el
+# truncado era una perdida de secretos irrecuperable, y el temporal en /tmp una
+# copia integra de todos ellos que un `kill` dejaba huerfana en un directorio
+# que nadie audita. Si algo falla, el temporal se retira antes de volver.
+kq_env_set() {
+  local file="$1" key="$2" value="$3" temp
+
+  temp="$(mktemp "${file}.XXXXXX")" || return 1
+  chmod 0600 "${temp}" 2>/dev/null || true
+
+  if ! KQ_VALUE="${value}" awk -v key="${key}" '
+    BEGIN { written = 0 }
+    {
+      if ($0 ~ "^[[:space:]]*(export[[:space:]]+)?" key "=") {
+        if (!written) { printf "%s=%s\n", key, ENVIRON["KQ_VALUE"]; written = 1 }
+      } else {
+        print
+      }
+    }
+    END { if (!written) printf "%s=%s\n", key, ENVIRON["KQ_VALUE"] }
+  ' "${file}" >"${temp}"; then
+    rm -f "${temp}"
+    return 1
+  fi
+
+  # Mismo propietario y modo que el original; si no se puede (sin privilegios
+  # sobre un fichero ajeno), el temporal queda 0600 del que escribe, que es lo
+  # mas restrictivo y no lo menos.
+  chown --reference="${file}" "${temp}" 2>/dev/null || true
+  chmod --reference="${file}" "${temp}" 2>/dev/null || true
+
+  mv -f "${temp}" "${file}" || {
+    rm -f "${temp}"
+    return 1
+  }
+}

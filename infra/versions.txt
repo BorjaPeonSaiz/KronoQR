@@ -1,0 +1,42 @@
+# KronoQR — versiones PUBLICADAS, de la mas antigua a la mas reciente.
+#
+# Es el dato del que salen tres cosas de update.sh (doc 02 §11.6.4 y §11.6.5):
+#
+#   1. LA MATRIZ DE VERSIONES SOPORTADAS. Recibe correcciones y puede
+#      actualizarse directamente a la version de destino toda version de la
+#      misma mayor cuya menor sea la vigente o una de las DOS anteriores. Con
+#      2.4.0 publicada: 2.4.x, 2.3.x y 2.2.x. Una instalacion en 2.1.0 no
+#      salta: el script le dice a que version intermedia ir primero.
+#   2. LA CADENA DE VERSIONES INTERMEDIAS que se aplican EN ORDEN, con un punto
+#      de control entre cada una: de 2.2.0 a 2.5.0 se pasa por 2.3.0 y 2.4.0.
+#   3. QUE MIGRACIONES PERTENECEN A CADA VERSION. La segunda columna es el
+#      nombre de la ULTIMA migracion incluida en esa version (sin `.php`):
+#      todas las posteriores a la frontera de la version anterior y hasta
+#      esta, inclusive, son de esta version.
+#        -   la version no anadio migraciones
+#        *   SOLO en la ultima linea: la version en desarrollo (la del fichero
+#            VERSION), a la que pertenece toda migracion posterior a la
+#            frontera anterior. Al publicar, se sustituye por el nombre real.
+#
+# FORMATO: una version por linea, `<semver> <frontera>`, separadas por
+# espacios; `#` abre comentario. El orden del fichero es el orden de las
+# versiones y la prueba de arquitectura lo verifica: fronteras ascendentes,
+# ficheros que existen, `*` solo al final y la version de VERSION presente.
+#
+# QUIEN LO EDITA Y CUANDO: quien publica una version, en el mismo commit
+# `chore(release)` que sube VERSION y cierra el CHANGELOG. Es un dato del
+# producto: si falta la linea, update.sh se niega a actualizar hacia esa
+# version, y esa negativa es preferible a adivinar la frontera.
+#
+# NOTA SOBRE 2.0.0. La etiqueta v2.0.0 (29-08-2026) es anterior al instalador
+# (tarea 5.4, 01-09-2026): ninguna instalacion real esta en esa version, y NO
+# se cortara ninguna etiqueta 2.0.x con instalador (decidido el 07-09-2026: la
+# primera version instalable y publicada es la 2.1.0). La linea existe solo
+# como frontera de migraciones de la que parte la 2.1.0, y porque una
+# instalacion hecha desde `main` entre ambas fechas dice 2.0.0 en su
+# IMAGE_TAG: sus migraciones de mas se detectan como ya aplicadas y no se
+# repiten. No es una promesa de soporte a la 2.0.0.
+
+
+2.0.0 2026_08_29_120000_enforce_single_site
+2.1.0 *

@@ -659,3 +659,118 @@ it('mantiene en el lock los binarios nativos de la plataforma en la que se const
     // la copia de una sola plataforma que produjo el fallo.
     expect($lock)->not->toMatch('/"frontend-[a-z]+\/node_modules\/@tailwindcss\/oxide/');
 })->group('RF-PD-02');
+
+it('entrega el actualizador con la matriz de versiones y prueba la actualizacion en la etapa 8', function (): void {
+    // RF-PD-10 y RQ-11 (tarea 5.7). Igual que la instalacion limpia, los scripts
+    // no entran en `qa:traceability`: lo que se fija aqui es que el paquete lleva
+    // update.sh y versions.txt, que el job `update` existe con sus escenarios y
+    // que la lista del paquete vive en un solo sitio.
+    $package = repoContents('infra/scripts/package.sh');
+    $workflow = repoContents('.github/workflows/ci.yml');
+
+    foreach (['update.sh', 'versions.txt', 'CHANGELOG.md'] as $file) {
+        expect($package)->toContain($file);
+    }
+    expect($package)->toContain('[ ! -e "${DEST}/tools" ]');
+
+    // Los dos jobs de la etapa ⑧ arman el paquete con el mismo script.
+    expect(substr_count($workflow, 'bash infra/scripts/package.sh'))->toBeGreaterThanOrEqual(2);
+
+    expect($workflow)->toContain('⑧b Actualizacion desde la version anterior');
+    foreach ([
+        // U1: actualizacion verificada con datos intactos e informe.
+        'cmp conteos-antes.txt conteos-despues.txt',
+        // U2: idempotencia.
+        'Se esperaba salida 3 y fue',
+        // U3: vuelta atras con fallo inyectado y reintento.
+        'Se esperaba salida 4 (vuelta atras completada) y fue',
+        'VUELTA ATRAS COMPLETADA',
+        // Con licencia invalida, la actualizacion se completa igual (RF-PD-05).
+        // Sin el nombre de la variable delante: gitleaks lo leeria como una
+        // clave de verdad, y no lo es ni por forma.
+        'no-es-una-licencia.firma-invalida',
+        // U4: la copia previa se restaura en limpio (RF-PR-04, RQ-09).
+        'restore-drill.sh --mode database',
+        // Ningun secreto en la salida ni en los informes, en los dos caminos.
+        'assert-no-secrets.sh paquete-nuevo/.env paquete-nuevo/salida-u1.log',
+        'assert-no-secrets.sh paquete-anterior/.env paquete-nuevo/salida-u3.log',
+    ] as $assertion) {
+        expect($workflow)->toContain($assertion);
+    }
+})->group('RQ-11', 'RF-PD-10', 'RF-PD-05', 'RF-PR-04');
+
+it('mantiene la matriz de versiones coherente con las migraciones y con VERSION', function (): void {
+    // infra/versions.txt es el dato del que update.sh saca la ventana soportada
+    // y que migraciones trae cada version (doc 02 §11.6.4 y §11.6.5). Su
+    // contrato se afirma aqui, en el repositorio, para que un `chore(release)`
+    // que olvide la linea nueva falle antes de publicar.
+    $lines = array_values(array_filter(
+        array_map(static fn (string $line): string => trim(preg_replace('/#.*/', '', $line) ?? ''), explode("\n", repoContents('infra/versions.txt'))),
+        static fn (string $line): bool => $line !== '',
+    ));
+
+    expect($lines)->not->toBeEmpty();
+
+    $migrations = array_map(
+        static fn (string $path): string => basename($path, '.php'),
+        glob(dirname(__DIR__, 2).'/database/migrations/*_*.php') ?: [],
+    );
+    sort($migrations);
+
+    $previousVersion = null;
+    $previousBoundary = '';
+    $starAt = null;
+    $versions = [];
+
+    foreach ($lines as $line) {
+        [$version, $boundary] = array_pad(preg_split('/\s+/', $line) ?: [], 2, '');
+
+        expect($version)->toMatch('/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/', "Linea '{$line}': la version no es SemVer.");
+        if ($previousVersion !== null) {
+            expect(version_compare($version, $previousVersion, '>'))->toBeTrue("'{$version}' no es posterior a '{$previousVersion}'.");
+        }
+        expect($starAt)->toBeNull("'*' solo puede ir en la ultima linea y esta en '{$starAt}'.");
+
+        if ($boundary === '*') {
+            $starAt = $version;
+        } elseif ($boundary !== '-') {
+            expect(in_array($boundary, $migrations, true))->toBeTrue("La frontera '{$boundary}' de la {$version} no es una migracion del repositorio.");
+            expect(strcmp($boundary, $previousBoundary) > 0)->toBeTrue("La frontera de la {$version} no es posterior a la anterior.");
+            $previousBoundary = $boundary;
+        }
+
+        $versions[] = $version;
+        $previousVersion = $version;
+    }
+
+    // La version en desarrollo (VERSION) esta en la matriz, y si no hay linea
+    // `*` es que se ha publicado: entonces NINGUNA migracion puede quedar fuera
+    // de la ultima frontera, o update.sh se negaria a aplicarla.
+    $current = trim(repoContents('VERSION'));
+
+    expect(in_array($current, $versions, true))->toBeTrue("VERSION dice {$current} y infra/versions.txt no la lista.");
+
+    if ($starAt === null) {
+        $last = end($migrations);
+
+        expect($last === false || strcmp((string) $last, $previousBoundary) <= 0)->toBeTrue(
+            "Hay migraciones posteriores a la ultima frontera ({$previousBoundary}) y ninguna version las reclama.",
+        );
+    }
+})->group('RF-PD-10');
+
+it('documenta la actualizacion para el cliente con sus codigos de salida', function (): void {
+    // DoD de la 5.7: operacion.md explica el procedimiento y que hacer si falla
+    // cada paso; el runbook deja de ser un esqueleto; y la tabla comun sigue
+    // diciendo que el 6 no lo usa el actualizador.
+    $runbook = repoContents('docs/runbooks/actualizacion-cliente.md');
+    $operacion = repoContents('docs/cliente/operacion.md');
+
+    expect($runbook)->not->toContain('Estado: esqueleto')
+        ->and($runbook)->toContain('update.sh')
+        ->and($runbook)->toContain('restore.sh')
+        ->and($runbook)->toContain('versions.txt');
+
+    expect($operacion)->toContain('update.sh')
+        ->and($operacion)->toContain('actualizacion-cliente.md');
+})->group('RF-PD-10');

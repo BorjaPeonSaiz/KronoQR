@@ -66,6 +66,8 @@ readonly SCRIPT_DIR
 . "${SCRIPT_DIR}/lib/exit-codes.sh"
 # shellcheck source=lib/messages.sh disable=SC1091
 . "${SCRIPT_DIR}/lib/messages.sh"
+# shellcheck source=lib/checks.sh disable=SC1091
+. "${SCRIPT_DIR}/lib/checks.sh"
 # shellcheck source=lib/env-file.sh disable=SC1091
 . "${SCRIPT_DIR}/lib/env-file.sh"
 # shellcheck source=lib/fs.sh disable=SC1091
@@ -82,7 +84,6 @@ readonly KQ_MIN_CPU_CORES=2
 # docs/cliente/instalacion.md junto a esta explicacion.
 readonly KQ_MIN_RAM_MIB=3700
 readonly KQ_MIN_DISK_GIB=40
-readonly KQ_MIN_DOCKER_MAJOR=24
 
 # Esperas por condicion. No son `sleep` a ciegas: se consulta el estado cada
 # KQ_POLL_SECONDS y se abandona al llegar al techo, diciendo donde mirar.
@@ -393,25 +394,6 @@ env_value() {
 #------------------------------------------------------------------------------
 # Fase 1 — requisitos. NO SE ESCRIBE NADA.
 #------------------------------------------------------------------------------
-check_pass() {
-  CHECKS_RUN=$((CHECKS_RUN + 1))
-  kq_msg check_ok "$1"
-}
-
-check_warn() {
-  CHECKS_RUN=$((CHECKS_RUN + 1))
-  CHECKS_WARNED=$((CHECKS_WARNED + 1))
-  kq_msg check_warn "$1"
-  kq_msg fix "$2"
-}
-
-check_fail() {
-  CHECKS_RUN=$((CHECKS_RUN + 1))
-  CHECKS_FAILED=$((CHECKS_FAILED + 1))
-  kq_msg check_fail "$1"
-  kq_msg fix "$2"
-}
-
 # Tres respuestas, no dos: 0 ocupado · 1 libre · 2 NO SE HA PODIDO AVERIGUAR.
 #
 # El tercer caso existe porque la alternativa es peor. Con solo «ocupado» y
@@ -474,51 +456,6 @@ check_package_files() {
       "$(kq_format f_template_copy "${ENV_TEMPLATE}" "${ENV_FILE}")"
   else
     check_fail "$(kq_format c_template_missing "${ENV_FILE}")" "$(kq_text f_template)"
-  fi
-}
-
-check_docker() {
-  local version major compose_version
-
-  if ! command -v docker >/dev/null 2>&1; then
-    check_fail "$(kq_format c_docker "$(kq_text absent)")" "$(kq_text f_docker_missing)"
-    return 0
-  fi
-
-  version="$(docker version --format '{{.Server.Version}}' 2>/dev/null || true)"
-  if [ -z "${version}" ]; then
-    check_fail "$(kq_text c_docker_access)" "$(kq_text f_docker_access)"
-    return 0
-  fi
-  check_pass "$(kq_text c_docker_access)"
-
-  major="${version%%.*}"
-  if [ -n "${major}" ] && [ "${major}" -ge "${KQ_MIN_DOCKER_MAJOR}" ] 2>/dev/null; then
-    check_pass "$(kq_format c_docker "${version}")"
-  else
-    check_fail "$(kq_format c_docker "${version}")" \
-      "$(kq_format f_docker_old "${version}")"
-  fi
-
-  compose_version="$(docker compose version --short 2>/dev/null || true)"
-  if [ -n "${compose_version}" ]; then
-    check_pass "$(kq_format c_compose "${compose_version}")"
-  else
-    check_fail "$(kq_format c_compose "$(kq_text absent)")" "$(kq_text f_compose)"
-  fi
-}
-
-check_tools() {
-  if command -v openssl >/dev/null 2>&1; then
-    check_pass "$(kq_text c_openssl)"
-  else
-    check_fail "$(kq_text c_openssl)" "$(kq_text f_openssl)"
-  fi
-
-  if command -v curl >/dev/null 2>&1; then
-    check_pass "$(kq_text c_curl)"
-  else
-    check_fail "$(kq_text c_curl)" "$(kq_text f_curl)"
   fi
 }
 
@@ -1003,27 +940,12 @@ random_hex() {
 #
 # El valor se pasa por variable de entorno a awk, NUNCA por la linea de ordenes:
 # argv es legible en `ps` para cualquier usuario de la maquina (§7.7).
+# Un solo escritor para todo el arbol, en lib/env-file.sh (tarea 5.7): el
+# actualizador escribe IMAGE_TAG con la misma funcion con la que el instalador
+# escribe los secretos. El nombre local se conserva porque la prueba de
+# integracion de la fase 3 lo carga por este nombre.
 set_env_value() {
-  local file="$1" key="$2" value="$3" temp
-
-  temp="$(mktemp)"
-  TEMP_FILES+=("${temp}")
-  chmod 0600 "${temp}"
-
-  KQ_VALUE="${value}" awk -v key="${key}" '
-    BEGIN { written = 0 }
-    {
-      if ($0 ~ "^[[:space:]]*(export[[:space:]]+)?" key "=") {
-        if (!written) { printf "%s=%s\n", key, ENVIRON["KQ_VALUE"]; written = 1 }
-      } else {
-        print
-      }
-    }
-    END { if (!written) printf "%s=%s\n", key, ENVIRON["KQ_VALUE"] }
-  ' "${file}" >"${temp}"
-
-  cat "${temp}" >"${file}"
-  rm -f "${temp}"
+  kq_env_set "$1" "$2" "$3"
 }
 
 # Escribe un secreto RECIEN GENERADO, comprobando antes que existe y que tiene
@@ -1141,9 +1063,10 @@ wait_for_healthy() {
     state="$(compose ps --format '{{.Service}} {{.Health}} {{.State}}' 2>/dev/null |
       awk -v s="${service}" '$1 == s { print $2 " " $3 }' || true)"
 
+    # awk colapsa los blancos: un servicio sin sonda sale como "running" a
+    # secas, no como " running" (tarea 5.7: el patron anterior nunca casaba).
     case "${state}" in
-    "healthy "*) kq_msg waiting_ok "${service}" && return 0 ;;
-    *" running") [ -z "${state%% *}" ] && kq_msg waiting_ok "${service}" && return 0 ;;
+    "healthy "* | "running" | "running ") kq_msg waiting_ok "${service}" && return 0 ;;
     esac
 
     sleep "${KQ_POLL_SECONDS}"

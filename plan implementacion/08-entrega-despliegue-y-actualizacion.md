@@ -250,6 +250,8 @@ Esa última no está en la lista del §11.6.4, pero se deriva de la regla dura 6
 | 6 | **Vuelta atrás automática** a la copia previa | Si la propia vuelta atrás falla: para, **no toca nada más**, y emite instrucciones explícitas de restauración manual con `restore.sh` y remisión a `restaurar-backup.md`. Es el único escenario que exige intervención humana y tiene que estar escrito |
 | 7 | Informe del resultado, guardado en el servidor del cliente | Se escribe **siempre**, también cuando hubo vuelta atrás |
 
+> **Ejecutado (tarea 5.7, 07-09-2026): el 3 va antes que el 2.** `update.sh` pone el mantenimiento y para `horizon` y `scheduler` **antes** de hacer la copia. Con la copia primero, un fichaje aceptado entre la copia y el mantenimiento existiría en la base pero no en la copia, y el quiosco ya lo habría sacado de su cola: la vuelta atrás lo perdería. Con el mantenimiento primero, todo lo de la ventana sigue en las colas y entra después. Además la versión nueva arranca **sin borde** y se sonda por FastCGI desde dentro: no recibe tráfico hasta estar verificada. Los códigos de salida son los de la tabla común de la 5.4; el `6` no se usa aquí.
+
 **Códigos de salida — clases que hay que distinguir.** (Valores: ⚠️ ver 2.0.)
 
 | Clase | Significado | Qué debe hacer el cliente |
@@ -453,7 +455,7 @@ Y el cierre de la skill `/migracion-segura`, que aquí no es una frase bonita si
 
 **El punto de control** cumple tres funciones: saber **exactamente** en qué versión se detuvo el proceso, permitir que la vuelta atrás no tenga que deshacer las cuatro versiones cuando falló la última, y dejar en el informe del paso 7 la traza de qué se aplicó.
 
-⚠️ No cubierto por los documentos — decidir: **cómo se materializa el punto de control** —copia incremental, `savepoint`, marca de versión persistida, volcado por versión— y cuánto espacio adicional exige. El §11.6.4 exige el punto de control, no su mecanismo.
+✅ **Decidido (tarea 5.7, 07-09-2026): marca de versión persistida.** Cada versión intermedia aplica sus migraciones en un lote propio de la tabla `migrations` (`migrate --path` con la lista que le atribuye `versions.txt`) y deja una línea de punto de control en pantalla y en el informe: dice exactamente dónde se paró. No exige espacio adicional porque **no** es una copia por versión: la vuelta atrás es siempre restaurar la copia verificada del paso 2 y relanzar la versión anterior, que es lo único que se ensaya cada trimestre; el `down()` de una contracción no devuelve datos.
 
 ### Paso 5 — Arrancar y ejecutar la comprobación de salud
 

@@ -172,14 +172,34 @@ restaurar() {
   psql -d postgres -Atqc "CREATE DATABASE \"${base_nueva}\"" >/dev/null || die "${KQ_EXIT_REQUIREMENTS}" \
     "no se ha podido crear la base de trabajo. El usuario ${PGUSER} necesita el permiso CREATEDB. Nada se ha tocado."
 
+  # LOS PRIVILEGIOS DEL VOLCADO SE CONSERVAN si los roles del producto existen
+  # en el cluster, que es el caso de toda instalacion. Son ellos los que
+  # sostienen la regla dura 6: los GRANT al rol de la aplicacion y los REVOKE
+  # sobre audit_log viven en las migraciones y pg_dump los incluye. Con
+  # `--no-privileges` la base restaurada nacia sin ninguno: las sondas decian
+  # «operativo» y ningun fichaje se podia escribir (hallazgo de la tarea 5.7,
+  # en la vuelta atras automatica). Solo se descartan cuando el rol no existe
+  # —un contenedor limpio de simulacro—, donde un GRANT a un rol ausente
+  # aborta la restauracion entera.
+  local privilegios=(--no-privileges)
+  if [ "$(psql -Atqc "SELECT count(*) FROM pg_roles WHERE rolname = '${DB_USERNAME:-fichaje_app}'" 2>/dev/null | tr -d '[:space:]')" = "1" ]; then
+    privilegios=()
+  fi
+
   informar "Restaurando el volcado (esto es lo que mas tarda)"
-  if ! pg_restore --dbname="$base_nueva" --no-owner --no-privileges --exit-on-error \
+  if ! pg_restore --dbname="$base_nueva" --no-owner "${privilegios[@]}" --exit-on-error \
     "${TRABAJO}/copia.dump" >>"${INFORME:-/dev/null}" 2>&1; then
     psql -d postgres -Atqc "DROP DATABASE IF EXISTS \"${base_nueva}\"" >/dev/null || true
     die "${KQ_EXIT_ROLLED_BACK}" "la restauracion ha fallado; la base de trabajo se ha eliminado y '${BASE_DESTINO}' sigue como estaba. Revisa el informe '${INFORME}' y prueba con la copia anterior."
   fi
 
   informar "Comprobando la copia restaurada antes de darla por buena"
+  if [ "${#privilegios[@]}" -eq 0 ]; then
+    comprobar_privilegios "$base_nueva" || {
+      psql -d postgres -Atqc "DROP DATABASE IF EXISTS \"${base_nueva}\"" >/dev/null || true
+      die "${KQ_EXIT_ROLLED_BACK}" "la base restaurada no conserva los privilegios del rol de la aplicacion (${DB_USERNAME:-fichaje_app}): o no puede escribir fichajes, o puede alterar audit_log. NO se ha sustituido '${BASE_DESTINO}'. La copia es de una version que no volcaba privilegios: avisa al fabricante."
+    }
+  fi
   comprobar_restauracion "$base_nueva" || {
     psql -d postgres -Atqc "DROP DATABASE IF EXISTS \"${base_nueva}\"" >/dev/null || true
     die "${KQ_EXIT_ROLLED_BACK}" "la copia restaurada no supera las comprobaciones de integridad. NO se ha sustituido '${BASE_DESTINO}'. Prueba con la copia anterior y avisa al responsable del sistema."
@@ -223,6 +243,15 @@ comprobar_restauracion() {
   fi
 
   compare_table_counts "$base" "$manifiesto"
+}
+
+# El rol de la aplicacion escribe fichajes y NO toca audit_log (regla dura 6).
+# Es lo que demuestra que los privilegios del volcado han llegado enteros.
+comprobar_privilegios() {
+  local base="$1" rol="${DB_USERNAME:-fichaje_app}" escribe altera
+  escribe="$(psql -d "$base" -Atqc "SELECT has_table_privilege('${rol}', 'shift_entries', 'INSERT')" 2>/dev/null | tr -d '[:space:]')"
+  altera="$(psql -d "$base" -Atqc "SELECT has_table_privilege('${rol}', 'audit_log', 'UPDATE') OR has_table_privilege('${rol}', 'audit_log', 'DELETE')" 2>/dev/null | tr -d '[:space:]')"
+  [ "$escribe" = "t" ] && [ "$altera" = "f" ]
 }
 
 # Las bases apartadas por restauraciones anteriores no se acumulan para

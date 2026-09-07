@@ -44,6 +44,14 @@ final class ProblemDetails
     public const string TYPE_SERVICE_UNAVAILABLE = 'urn:kronoqr:problem:service-unavailable';
 
     /**
+     * Tipo propio y no `TYPE_SERVICE_UNAVAILABLE`: el cliente que lo recibe no
+     * tiene que avisar a nadie, tiene que ESPERAR y reintentar pasado
+     * `Retry-After`. Es lo que hace el quiosco con su cola (regla dura 19) y lo
+     * que el panel muestra como «actualizacion en curso» (RF-PD-10).
+     */
+    public const string TYPE_MAINTENANCE = 'urn:kronoqr:problem:maintenance';
+
+    /**
      * Una funcionalidad **accesoria** no esta disponible con la licencia
      * activada (ADR-019, ADR-023).
      *
@@ -349,6 +357,24 @@ final class ProblemDetails
             'Demasiadas peticiones',
             JsonResponse::HTTP_TOO_MANY_REQUESTS,
             'Reintenta pasados unos segundos.',
+            headers: ['Retry-After' => (string) max(1, $retryAfterSeconds)],
+        );
+    }
+
+    /**
+     * La instalacion esta en mantenimiento: update.sh esta haciendo la copia
+     * previa o migrando (RF-PD-10). Nada de lo que se pide se ha perdido: hay
+     * que reintentar pasado `Retry-After`. **No dice de que version a cual ni
+     * cuanto falta**: eso esta en el informe del servidor, no en una respuesta
+     * publica.
+     */
+    public static function maintenance(int $retryAfterSeconds): JsonResponse
+    {
+        return self::response(
+            self::TYPE_MAINTENANCE,
+            'En mantenimiento',
+            JsonResponse::HTTP_SERVICE_UNAVAILABLE,
+            'La instalacion se esta actualizando. Reintenta pasados unos segundos; nada se ha perdido.',
             headers: ['Retry-After' => (string) max(1, $retryAfterSeconds)],
         );
     }

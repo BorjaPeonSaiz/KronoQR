@@ -517,6 +517,54 @@ docs/runbooks/alta-nuevo-quiosco.md con la parte que es del cliente
 (modo quiosco).
 ```
 
+#### 6.5.2 Actualizador con copia previa, cadena de versiones y vuelta atrás (tarea 5.7)
+
+```text
+Ejecuta la tarea 5.7 del plan («Actualizador: copia previa, migraciones
+encadenadas, verificación, vuelta atrás», RF-PD-10, RQ-11). La ficha
+ejecutable está en plan implementacion/05-fase-5-productizacion.md →
+«Tarea 5.7», y el desarrollo de los siete pasos en
+plan implementacion/08-entrega-despliegue-y-actualizacion.md §2.2 y §3.
+
+Agente: producto-licencia. Skill: /migracion-segura para revisar cada
+migración contra expand/contract y para la prueba de ida y vuelta.
+devops-observabilidad para la etapa ⑧b de la CI; qa-testing para las
+pruebas del script sin Docker; seguridad-cumplimiento antes de cerrar
+(el script toca copias cifradas, la cadena de auditoría y el .env).
+
+Es el script con más riesgo de pérdida de datos del producto. Los
+innegociables:
+- La copia previa verificada es BLOQUEANTE y no tiene bandera para
+  omitirse. Ni --skip-backup, ni --force, ni variable de entorno
+- El mantenimiento va ANTES de la copia: nada aceptado por el servidor
+  durante la ventana puede quedar fuera de la copia que restauraría la
+  vuelta atrás. Los quioscos encolan (regla dura 19)
+- La versión nueva no recibe tráfico hasta estar verificada (sin borde,
+  sonda por FastCGI desde dentro); solo después arranca Nginx
+- La vuelta atrás es restaurar la copia y relanzar la versión anterior,
+  nunca migrate:rollback en un servidor de cliente; el punto de control
+  entre versiones es una marca persistida en el informe
+- La matriz de versiones soportadas es un dato del paquete
+  (versions.txt), no una suposición: vigente y dos anteriores; desde una
+  más antigua, decir a qué versión ir primero
+- La cadena de auditoría se verifica ANTES de tocar nada y DESPUÉS de
+  migrar; las restricciones de RN-01 y RN-02 se comprueban presentes y
+  válidas tras migrar
+- La licencia no es una precondición (regla dura 15): con licencia
+  inválida la actualización se completa igual
+- Cero secretos en la salida y en el informe; informe siempre, también
+  tras una vuelta atrás, en el servidor del cliente
+- Tabla común de códigos de salida; el 6 no se usa: toda verificación
+  fallida deshace
+
+Criterio de terminado: la DoD de la ficha, más la etapa ⑧b en verde
+(instalación de la versión anterior, actualización con datos intactos,
+idempotencia, vuelta atrás con fallo inyectado y conteos intactos,
+reintento, restauración de la copia previa en limpio) y el runbook
+docs/runbooks/actualizacion-cliente.md completo, con la vuelta atrás a
+mano para la salida 5.
+```
+
 ### 6.6 Cierre de fase
 
 ```

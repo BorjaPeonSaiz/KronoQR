@@ -4,7 +4,7 @@
 > purga, que es la única operación del producto que borra datos. La 7 es de la
 > **5.3** (licencia). Las **8, 9 y 10** son de la **5.4**: los códigos de
 > salida de los cinco scripts, la custodia de secretos y qué pierdes si apagas
-> la observabilidad. La **tarea 5.11** añadirá la actualización y los quioscos;
+> la observabilidad. La **11** es de la **5.7**: actualizar. La **tarea 5.11** añadirá los quioscos;
 > no reescribirá nada de lo que ya está aquí.
 
 ---
@@ -215,11 +215,11 @@ mensaje, que es lo que hay que leer.**
 | --- | --- | --- |
 | `0` | Correcto | — |
 | `1` | **Uso incorrecto.** Nada tocado | Un argumento que no existe, o falta un valor |
-| `2` | **Requisitos no cumplidos. NADA escrito.** La máquina está como estaba | `install.sh`: falta Docker, disco, puerto ocupado. `backup.sh`/`restore.sh`: falta `pg_dump`, el destino no es escribible, no hay espacio, o falta `BACKUP_ENCRYPTION_KEY` |
-| `3` | **Estado previo incompatible. NADA escrito** | `install.sh`: ya hay una instalación (usa `update.sh`). `backup.sh`: no hay copia que verificar, o el destino ya existe. `restore.sh`: quedan conexiones abiertas contra la base |
-| `4` | **Falló y se deshizo todo lo hecho** en esa ejecución. Se puede reintentar | `install.sh`: contenedores, volúmenes y `.env` devueltos a su estado. `backup.sh`: los ficheros a medias barridos, la copia anterior intacta. `restore.sh`: base de trabajo eliminada, la de producción sin tocar |
+| `2` | **Requisitos no cumplidos. NADA escrito.** La máquina está como estaba | `install.sh`: falta Docker, disco, puerto ocupado. `backup.sh`/`restore.sh`: falta `pg_dump`, el destino no es escribible, no hay espacio, o falta `BACKUP_ENCRYPTION_KEY`. `update.sh`: una precondición no se cumple, o **la copia previa ha fallado**; la instalación sigue en su versión |
+| `3` | **Estado previo incompatible. NADA escrito** | `install.sh`: ya hay una instalación (usa `update.sh`). `backup.sh`: no hay copia que verificar, o el destino ya existe. `restore.sh`: quedan conexiones abiertas contra la base. `update.sh`: ya está en la versión de destino, o no hay instalación que actualizar |
+| `4` | **Falló y se deshizo todo lo hecho** en esa ejecución. Se puede reintentar | `install.sh`: contenedores, volúmenes y `.env` devueltos a su estado. `backup.sh`: los ficheros a medias barridos, la copia anterior intacta. `restore.sh`: base de trabajo eliminada, la de producción sin tocar. `update.sh`: copia previa restaurada y **versión anterior en marcha y verificada** |
 | `5` | **Falló y NO se pudo deshacer todo. Hay que intervenir a mano.** El mensaje dice exactamente qué queda y qué orden lo retira | Es el único código que exige a una persona delante |
-| `6` | **El trabajo se hizo pero la verificación posterior falló.** No se deshace nada | `install.sh`: los servicios están en pie, revisa certificado y logs. `backup.sh`: la copia existe pero **no verifica: trátala como inexistente**. `restore-drill.sh`: hoy no se podría recuperar el registro |
+| `6` | **El trabajo se hizo pero la verificación posterior falló.** No se deshace nada | `install.sh`: los servicios están en pie, revisa certificado y logs. `backup.sh`: la copia existe pero **no verifica: trátala como inexistente**. `restore-drill.sh`: hoy no se podría recuperar el registro. `update.sh`: **no lo usa**, toda verificación fallida deshace |
 
 ### Si tenías un cron escrito contra la tabla anterior de `backup.sh`
 
@@ -257,7 +257,7 @@ cuatro años— se ha perdido.
 **Hazlo el día de la instalación, antes de cerrar la sesión:**
 
 ```bash
-cd /opt/kronoqr-2.0.0
+cd /opt/kronoqr-2.1.0
 sudo sed -n 's/^BACKUP_ENCRYPTION_KEY=//p' .env
 ```
 
@@ -350,3 +350,50 @@ autoriza— están en
 Lo que se puede **cambiar** —umbrales operativos, marca e idiomas— y qué
 consecuencias tiene cada cambio está en
 [`configuracion.md`](configuracion.md).
+
+---
+
+## 11. Actualizar a una versión nueva
+
+> **Tarea 5.7.** El procedimiento completo, con la vuelta atrás a mano, está en
+> [`../runbooks/actualizacion-cliente.md`](../runbooks/actualizacion-cliente.md).
+> Aquí, lo que hay que saber cada vez.
+
+**El fichaje no se detiene.** Durante la actualización el panel, el portal y la
+API de gestión responden «en mantenimiento» (503), pero los quioscos siguen
+confirmando en local y encolando; al terminar sincronizan con la hora real de
+cada fichaje. Si la ventana fue larga, la bandeja mostrará incidencias de
+sincronización: no son un fallo.
+
+```bash
+cd /opt                                   # el paquete nuevo, AL LADO del actual
+tar xzf kronoqr-<version>.tar.gz
+cd kronoqr-<version>
+sudo ./update.sh --check-only             # sin tocar nada: qué falta, si falta algo
+sudo ./update.sh                          # actualiza, verifica y vuelve atrás sola si falla
+```
+
+Los siete pasos y lo que pasa si falla cada uno:
+
+| Paso | Si falla | Estado en que queda | Qué hacer |
+| --- | --- | --- | --- |
+| 1 · Precondiciones | Sale `2` | **Nada tocado.** Sigue en su versión | La línea «Que hacer» de cada `[FALLA]`. Si dice que la versión instalada está fuera de la matriz, actualiza primero a la intermedia que indica |
+| 2 · Mantenimiento | Sale `4` | Mantenimiento retirado; nada tocado | Reintentar. Si se repite, `docker compose logs app` |
+| 3 · Copia previa | Sale `2` | Mantenimiento retirado; nada tocado. **Sin copia no hay actualización** | [`../runbooks/restaurar-backup.md`](../runbooks/restaurar-backup.md) §2 y volver a ejecutar |
+| 4 · Migraciones | Vuelta atrás automática → `4` | Copia restaurada, versión anterior en marcha y verificada | Enviar el informe al fabricante antes de reintentar: dice en qué versión intermedia se paró |
+| 5 · Arranque y verificación | Vuelta atrás automática → `4` | Igual que arriba. **La versión nueva nunca recibió tráfico**: se verifica sin borde | Igual que arriba |
+| 6 · Vuelta atrás | Sale `5` | **Requiere una persona.** El mensaje distingue dos casos: solo quedó el mantenimiento puesto (retirarlo con `artisan up`, **sin restaurar nada**) o la restauración quedó a medias (tres órdenes y la ruta de la copia) | Runbook §5. Los quioscos siguen encolando mientras tanto |
+| 7 · Informe | — | `BACKUP_PATH/reports/update-<fecha>.log`, siempre; al lado, `update-<fecha>.detalle.log` (solo root, salida cruda, **puede llevar datos personales**) | Adjuntar el informe al paquete de diagnóstico si se abre un caso; el detalle, solo tras revisarlo y si lo piden |
+
+**Lo que no cambia:** tus secretos (el `.env` se copia tal cual y solo cambia
+`IMAGE_TAG`), los datos, la licencia (una licencia caducada **no impide
+actualizar**), y el fichaje. **Lo que sí hace falta:** `BACKUP_ENCRYPTION_KEY`
+en el `.env` y espacio para la copia y para la migración; el paso 1 lo dice con
+cifras.
+
+**Desde qué versiones se puede saltar** a la del paquete, sin tocar nada:
+`./update.sh --supported-sources`. La regla es la versión menor vigente y las
+dos anteriores; desde una más antigua, el script te dice a cuál ir primero.
+
+**Segunda ejecución** sobre una instalación ya actualizada: sale `3`, «ya está
+en la versión», y no toca nada.

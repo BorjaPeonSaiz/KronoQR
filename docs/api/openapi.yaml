@@ -49,6 +49,14 @@ info:
     (RFC 9457). El miembro `type` es un URN estable de KronoQR: es lo que el
     cliente debe interpretar, no el texto de `title` ni el de `detail`.
 
+    **Mantenimiento (RF-PD-10).** Mientras `update.sh` actualiza la instalacion,
+    TODA ruta salvo `/health` y `/ready` responde `503` como `problem+json` con
+    `type: urn:kronoqr:problem:maintenance` y cabecera `Retry-After`. No es un
+    error del cliente ni una averia: hay que esperar y reintentar. El quiosco
+    conserva el fichaje en su cola (regla dura 19); el panel y el portal
+    muestran «actualizacion en curso». Las dos sondas quedan fuera a proposito:
+    son lo que mira la infraestructura para saber que el proceso vive.
+
     **Idempotencia.** Las escrituras del quiosco llevan `Idempotency-Key` y son
     idempotentes por `scan_id` (regla dura 8): un reenvio devuelve la respuesta
     original, nunca un error ni un duplicado.
