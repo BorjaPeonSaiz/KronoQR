@@ -10,7 +10,7 @@
 import AxeBuilder from '@axe-core/playwright'
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
-import { EMPLOYEE_UUID, logIn, stubManagementApi, USER } from './support/admin'
+import { EMPLOYEE_UUID, logIn, logInAsAdmin, stubManagementApi, USER } from './support/admin'
 import { stubOnboardingApi } from './support/setupWizard'
 
 /** Etiquetas WCAG que se comprueban: A y AA hasta la 2.2 (doc 01 §6.5). */
@@ -124,6 +124,29 @@ test(
     await logIn(page)
     await page.goto('/incidents')
     await page.getByTestId('resolve-button').click()
+    await expect(page.getByRole('dialog')).toBeVisible()
+
+    await expectNoBlockingViolations(page)
+  },
+)
+
+test('la pantalla de quioscos tampoco', { tag: ['@RF-PD-06'] }, async ({ page }) => {
+  await stubManagementApi(page, { role: 'admin' })
+  await logInAsAdmin(page)
+  await page.goto('/devices')
+  await expect(page.getByRole('table')).toBeVisible()
+
+  await expectNoBlockingViolations(page)
+})
+
+test(
+  'el dialogo de vincular un quiosco tampoco, con el foco dentro',
+  { tag: ['@RF-PD-06'] },
+  async ({ page }) => {
+    await stubManagementApi(page, { role: 'admin' })
+    await logInAsAdmin(page)
+    await page.goto('/devices')
+    await page.getByRole('button', { name: 'Vincular quiosco' }).click()
     await expect(page.getByRole('dialog')).toBeVisible()
 
     await expectNoBlockingViolations(page)

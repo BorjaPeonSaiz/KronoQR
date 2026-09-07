@@ -1,13 +1,11 @@
-// El asistente de puesta en marcha (RF-PD-03, RF-GP-05, tarea 5.5).
+// El asistente de puesta en marcha (RF-PD-03, RF-GP-05, RF-PD-06, tarea 5.5 y
+// 5.6).
 //
 // EL RECORRIDO QUE IMPORTA: una instalacion recien montada, sin ninguna
-// cuenta ni ningun centro, hasta un panel operativo desde el que se podria
-// emitir la primera tarjeta. El emparejamiento de quiosco (5.6) todavia no
-// existe: el paso solo se puede omitir, y asi lo comprueba esta prueba —el
-// alcance real de «hasta poder fichar» en esta version es «hasta un panel
-// listo para emitir credenciales», que es lo que RF-QR-08 hace despues.
+// cuenta ni ningun centro, hasta un panel operativo con su primer quiosco
+// vinculado y listo para emitir la primera tarjeta.
 import { expect, type Page, test } from '@playwright/test'
-import { SITE, stubOnboardingApi, TOTP_CODE } from './support/setupWizard'
+import { PAIRING_CODE, SITE, stubOnboardingApi, TOTP_CODE } from './support/setupWizard'
 
 async function createAdministrator(page: Page): Promise<void> {
   await page.getByLabel('Nombre').fill('Dirección del hotel')
@@ -89,20 +87,25 @@ test(
     await expect(page.getByText(/NO dependen de la licencia/)).toBeVisible()
     await page.getByTestId('skip').click()
 
-    // Paso 8: primer quiosco. El emparejamiento es de la 5.6: solo se puede
-    // omitir, con el procedimiento manual explicado.
+    // Paso 8: primer quiosco (RF-PD-06). Se vincula con el codigo que muestra
+    // la tablet, en vez de omitirlo.
     await expect(page.getByRole('heading', { name: 'Primer quiosco' })).toBeVisible()
-    await expect(
-      page.getByText(/Vincular un quiosco llegará en una versión posterior/),
-    ).toBeVisible()
-    await page.getByTestId('skip').click()
+    await page.getByLabel('Código de emparejamiento').fill(PAIRING_CODE)
+    await page.getByLabel('Nombre del quiosco').fill('Recepción')
+    await page.getByRole('button', { name: 'Vincular' }).click()
+    // El paso NO avanza solo al vincular: primero enseña el resumen (version,
+    // hora de la solicitud) para contrastarlo con la tablet, y solo entonces
+    // se continua de forma explicita.
+    await expect(page.getByText('Se ha vinculado el quiosco «Recepción».')).toBeVisible()
+    await page.getByTestId('continue').click()
+    await expect(page.getByRole('heading', { name: 'Revisa antes de terminar' })).toBeVisible()
 
     // Revision final: los ocho pasos, con sus estados, y el cierre explicito.
-    await expect(page.getByRole('heading', { name: 'Revisa antes de terminar' })).toBeVisible()
     const reviewItems = page.getByTestId('review-list').locator('li')
     await expect(reviewItems).toHaveCount(8)
     await expect(page.getByTestId('review-license')).toContainText('Omitido')
     await expect(page.getByTestId('review-compliance_profile')).toContainText('Hecho')
+    await expect(page.getByTestId('review-kiosk')).toContainText('Hecho')
     await page.getByTestId('complete-setup').click()
 
     // Resumen final accionable: la cifra de tarjetas pendientes, arriba, con

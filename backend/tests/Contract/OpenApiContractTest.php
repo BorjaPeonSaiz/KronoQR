@@ -54,6 +54,31 @@ it('describe solo los endpoints cuya tarea existe, y todos bajo /api/v1', functi
         '/api/v1/scan/pin',
         '/api/v1/kiosk/roster',
         '/api/v1/kiosk/heartbeat',
+        // Tarea 5.6: alta de un quiosco por codigo de emparejamiento (RF-PD-06).
+        // Tres rutas y no dos porque el acto tiene tres actores en dos sentidos:
+        // la tablet PIDE (`/pair`), el administrador CONFIRMA (`/pair/confirm`) y
+        // la tablet RECOGE su token (`/pair/claim`). Sin la tercera, el token
+        // tendria que salir por la respuesta del administrador y llegar a la
+        // tablet por algun otro medio, que es exactamente el paso manual que
+        // RF-PD-06 existe para eliminar.
+        //
+        // Las dos de la tablet son PUBLICAS —quien las llama todavia no tiene
+        // token— y por eso `/pair/claim` rechaza con la misma tecnica que
+        // `/scan`: respuesta unica, sin sitio para la causa (regla dura 17).
+        '/api/v1/kiosk/pair',
+        '/api/v1/kiosk/pair/claim',
+        '/api/v1/kiosk/pair/confirm',
+        // Tarea 5.6: la flota de quioscos del panel. El Anexo B del doc 01 las
+        // situaba en «manager+» junto al resto del CRUD; se restringen a `admin`
+        // con ambito `settings:*` porque gestionar dispositivos es la misma
+        // potestad que configurar la instalacion — quien puede ver la flota es
+        // quien puede desvincularla y dejar un hotel sin quiosco.
+        //
+        // Sin `POST /devices` ni `PATCH /devices/{uuid}`: un dispositivo no se da
+        // de alta a mano, nace de un emparejamiento. Y `unpair` es `POST` y no
+        // `DELETE` porque nada se borra (regla dura 5).
+        '/api/v1/devices',
+        '/api/v1/devices/{uuid}/unpair',
         // Tarea 1.6: acceso de gestion y plantilla.
         '/api/v1/auth/login',
         // Tarea 2.1: segundo factor obligatorio (RS-06). `verify` esta en el

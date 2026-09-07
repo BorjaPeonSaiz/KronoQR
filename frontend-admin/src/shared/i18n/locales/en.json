@@ -13,6 +13,7 @@
       "incidents": "Incidents",
       "reports": "Reports",
       "compliance": "Compliance",
+      "devices": "Kiosks",
       "license": "Licence"
     },
     "roles": {
@@ -52,6 +53,7 @@
   },
   "common": {
     "cancel": "Cancel",
+    "close": "Close",
     "saving": "Saving…",
     "edit": "Edit",
     "updating": "Updating…",
@@ -944,6 +946,70 @@
       "exceeded": "Also, the contracted plan has been exceeded in: {limits}. It blocks nothing; talk to your provider to extend it."
     }
   },
+  "devices": {
+    "title": "Kiosks",
+    "subtitle": "The kiosks linked to the installation, active and revoked, with what it takes to tell whether they are healthy.",
+    "loading": "Loading kiosks…",
+    "empty": {
+      "title": "No kiosk has been linked yet",
+      "description": "Link the first tablet with the six-digit code it shows on screen."
+    },
+    "table": {
+      "caption": "Kiosks of the installation",
+      "name": "Name",
+      "status": "Status",
+      "appVersion": "Version",
+      "lastSeen": "Last heartbeat",
+      "pendingQueue": "Unsynced clockings",
+      "pairedAt": "Linked",
+      "actions": "Actions"
+    },
+    "status": {
+      "active": "Active",
+      "revoked": "Revoked"
+    },
+    "list": {
+      "lastUpdatedAt": "Updated: {moment}",
+      "lastSeenAgo": "{hours} h {minutes} min ago",
+      "neverSeen": "No heartbeat yet"
+    },
+    "pair": {
+      "action": "Link kiosk",
+      "heading": "Link kiosk",
+      "explanation": "Type the six-digit code the tablet is showing and give the kiosk a name.",
+      "fields": {
+        "code": "Pairing code",
+        "name": "Kiosk name"
+      },
+      "hints": {
+        "code": "The six digits the tablet is showing, with or without the space: \"483 921\".",
+        "name": "Unique among active kiosks, for example \"Reception\" or \"Kitchen\". Reusing the name of a revoked one reactivates it."
+      },
+      "codeRejected": "The code is not valid or has expired: ask the tablet to generate another one.",
+      "reactivationNotice": "This name belongs to an unlinked kiosk: it will be reactivated with the same identifier.",
+      "submit": "Link",
+      "submitting": "Linking…",
+      "announceCreated": "Kiosk {name} has been linked.",
+      "announceReactivated": "Kiosk {name} has been reactivated.",
+      "pairAnother": "Link another kiosk",
+      "confirmed": {
+        "createdHeading": "Kiosk \"{name}\" has been linked.",
+        "reactivatedHeading": "Kiosk \"{name}\" has been reactivated.",
+        "appVersionLabel": "App version",
+        "appVersionUnknown": "Unknown",
+        "requestedAtLabel": "Requested the code",
+        "advice": "Check this against the tablet in front of you: if anything does not match, unlink this kiosk from \"Kiosks\" and try again."
+      }
+    },
+    "unpair": {
+      "action": "Unlink",
+      "heading": "Unlink kiosk",
+      "explanation": "Kiosk \"{name}\" will no longer be able to clock in immediately. Its clocking history is not deleted.",
+      "pendingQueueWarning": "This kiosk has {count} unsynced clockings. If you unlink it now, they will only reach the timekeeping record if this same tablet is paired again (art. 34.9 of the Spanish Workers' Statute). Before unlinking, check that the tablet has been able to sync its queue (new-kiosk runbook, §5.1).",
+      "notice": "You will be able to link a new tablet with the same name later: it will reactivate this same kiosk.",
+      "announce": "Kiosk {name} has been unlinked."
+    }
+  },
   "onboarding": {
     "heading": "Setup",
     "intro": "Eight steps to leave the system ready for clocking. You can close this screen at any time and pick it back up where you left it: nothing is lost.",
@@ -1093,8 +1159,7 @@
       },
       "kiosk": {
         "heading": "First kiosk",
-        "intro": "Pairing the kiosk tablet is not yet available in this version.",
-        "notYetAvailable": "Linking a kiosk arrives in a later version. For now, skip this step: the manual procedure is documented in the new-kiosk runbook, and you will be able to link it as soon as it is available without repeating setup.",
+        "intro": "Type the six-digit code the tablet is showing and give the kiosk a name. If it has not arrived at the hotel yet, you can skip this step and link it later from \"Kiosks\", without repeating setup.",
         "skip": "Skip for now"
       }
     }

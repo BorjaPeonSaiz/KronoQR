@@ -13,6 +13,11 @@ import type {
   KioskHeartbeat,
   KioskHeartbeatRequest,
   KioskRoster,
+  PairingClaim,
+  PairingClaimRequest,
+  PairingRejected,
+  PairingRequestBody,
+  PairingRequested,
   PinScanRequest,
   ScanBatchRequest,
   ScanBatchResponse,
@@ -31,9 +36,16 @@ export type ApiFailureCause =
   | 'server' // 5xx u otro codigo inesperado
   | 'malformed' // 2xx con un cuerpo que no encaja con el contrato
 
-export type ApiResult<TOk> =
+/**
+ * `TProblem` por defecto es `ScanRejected` porque es, con diferencia, el caso
+ * mas comun: casi todos los metodos de este cliente no tienen una forma de
+ * rechazo propia y jamas construyen la rama `rejected` (igual que
+ * `sendHeartbeat` o `fetchRoster` hoy). El emparejamiento SI tiene la suya
+ * (`PairingRejected`, regla dura 17) y por eso `claimPairing` la sobrescribe.
+ */
+export type ApiResult<TOk, TProblem = ScanRejected> =
   | { readonly outcome: 'ok'; readonly data: TOk }
-  | { readonly outcome: 'rejected'; readonly problem: ScanRejected }
+  | { readonly outcome: 'rejected'; readonly problem: TProblem }
   | { readonly outcome: 'failed'; readonly cause: ApiFailureCause; readonly httpStatus?: number }
 
 export interface ApiClientOptions {
@@ -63,6 +75,20 @@ export interface ApiClient {
   syncScanBatch(request: ScanBatchRequest, batchKey: string): Promise<ApiResult<ScanBatchResponse>>
   fetchRoster(): Promise<ApiResult<KioskRoster>>
   sendHeartbeat(body: KioskHeartbeatRequest): Promise<ApiResult<KioskHeartbeat>>
+  /**
+   * Paso 1 de RF-PD-06 (tarea 5.6): la tablet pide emparejarse. **Publica**,
+   * nunca lleva `Authorization` (quien la llama todavia no tiene token) y no
+   * tiene forma de rechazo propia: solo puede fallar por transporte, limite de
+   * borde o cuerpo mal formado, igual que `sendHeartbeat`.
+   */
+  requestPairing(body: PairingRequestBody): Promise<ApiResult<PairingRequested>>
+  /**
+   * Paso 2: el sondeo de la tablet. Tambien publica. El rechazo SI tiene forma
+   * propia (`PairingRejected`, regla dura 17): las tres causas —solicitud
+   * desconocida, secreto incorrecto, caducada o consumida— son indistinguibles
+   * desde aqui a proposito.
+   */
+  claimPairing(body: PairingClaimRequest): Promise<ApiResult<PairingClaim, PairingRejected>>
 }
 
 const DEFAULT_TIMEOUT_MS = 8_000
@@ -96,6 +122,24 @@ function isKioskHeartbeat(value: unknown): value is KioskHeartbeat {
   return isRecord(value) && typeof value['server_time'] === 'string'
 }
 
+function isPairingRequested(value: unknown): value is PairingRequested {
+  if (!isRecord(value)) return false
+  const { pairing_id: pairingId, pairing_secret: pairingSecret, code } = value
+  return (
+    typeof pairingId === 'string' && typeof pairingSecret === 'string' && typeof code === 'string'
+  )
+}
+
+/** Las dos ramas de `PairingClaim` comparten `status`; basta con comprobar ese campo. */
+function isPairingClaim(value: unknown): value is PairingClaim {
+  if (!isRecord(value)) return false
+  return value['status'] === 'pending' || value['status'] === 'paired'
+}
+
+function isPairingRejected(value: unknown): value is PairingRejected {
+  return isRecord(value) && value['type'] === 'urn:kronoqr:problem:pairing-rejected'
+}
+
 function causeForStatus(status: number): ApiFailureCause {
   if (status === 401 || status === 403) return 'unauthorized'
   if (status === 429) return 'throttled'
@@ -110,7 +154,20 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
 
   async function send(
     path: string,
-    init: { method: 'GET' | 'POST'; body?: unknown; idempotencyKey?: string },
+    init: {
+      method: 'GET' | 'POST'
+      body?: unknown
+      idempotencyKey?: string
+      /**
+       * `false` en las dos rutas publicas de emparejamiento (`requestPairing`,
+       * `claimPairing`, RF-PD-06): quien las llama todavia no tiene token, y
+       * adjuntar uno viejo de `localStorage` -el caso real de una tablet
+       * recien revocada que vuelve a `/pair`- filtraria una credencial muerta
+       * a un endpoint publico. Por defecto `true`: todo lo demas SI va
+       * autenticado.
+       */
+      authenticated?: boolean
+    },
   ): Promise<{ status: number; body: unknown } | { failure: ApiFailureCause }> {
     // `navigator.onLine` en `false` es informacion fiable (en `true` no lo es):
     // ahorra un fetch condenado y deja claro por que no se ha enviado.
@@ -119,8 +176,10 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     }
 
     const headers: Record<string, string> = { Accept: 'application/json' }
-    const token = deviceToken()
-    if (token !== null && token !== '') headers['Authorization'] = `Bearer ${token}`
+    if (init.authenticated !== false) {
+      const token = deviceToken()
+      if (token !== null && token !== '') headers['Authorization'] = `Bearer ${token}`
+    }
     if (init.body !== undefined) headers['Content-Type'] = 'application/json'
     if (init.idempotencyKey !== undefined) headers['Idempotency-Key'] = init.idempotencyKey
 
@@ -231,6 +290,39 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
         return isKioskHeartbeat(result.body)
           ? { outcome: 'ok', data: result.body }
           : { outcome: 'failed', cause: 'malformed', httpStatus: 200 }
+      }
+      return { outcome: 'failed', cause: causeForStatus(result.status), httpStatus: result.status }
+    },
+
+    async requestPairing(body) {
+      const result = await send('/api/v1/kiosk/pair', {
+        method: 'POST',
+        body,
+        authenticated: false,
+      })
+      if ('failure' in result) return { outcome: 'failed', cause: result.failure }
+      if (result.status === 201) {
+        return isPairingRequested(result.body)
+          ? { outcome: 'ok', data: result.body }
+          : { outcome: 'failed', cause: 'malformed', httpStatus: 201 }
+      }
+      return { outcome: 'failed', cause: causeForStatus(result.status), httpStatus: result.status }
+    },
+
+    async claimPairing(body) {
+      const result = await send('/api/v1/kiosk/pair/claim', {
+        method: 'POST',
+        body,
+        authenticated: false,
+      })
+      if ('failure' in result) return { outcome: 'failed', cause: result.failure }
+      if (result.status === 200) {
+        return isPairingClaim(result.body)
+          ? { outcome: 'ok', data: result.body }
+          : { outcome: 'failed', cause: 'malformed', httpStatus: 200 }
+      }
+      if (result.status === 422 && isPairingRejected(result.body)) {
+        return { outcome: 'rejected', problem: result.body }
       }
       return { outcome: 'failed', cause: causeForStatus(result.status), httpStatus: result.status }
     },

@@ -45,6 +45,7 @@ const navigation = computed<NavItem[]>(() =>
       label: t('app.nav.compliance'),
       ability: SETTINGS_MANAGE,
     },
+    { name: 'devices', label: t('app.nav.devices'), ability: SETTINGS_MANAGE },
     { name: 'license', label: t('app.nav.license'), ability: LICENSE_MANAGE },
   ].filter((item) => session.can(item.ability)),
 )

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Identity\Domain\ValueObject;
 
 use App\Modules\Identity\Domain\Exception\MalformedQrPayload;
+use App\Modules\Shared\Domain\ValueObject\Base64Url;
 use SensitiveParameter;
 
 /**
@@ -65,7 +66,7 @@ final readonly class CredentialSecret
      */
     public static function fromBytes(#[SensitiveParameter] string $bytes): self
     {
-        return self::fromString(rtrim(strtr(base64_encode($bytes), '+/', '-_'), '='));
+        return self::fromString(Base64Url::encode($bytes));
     }
 
     /**

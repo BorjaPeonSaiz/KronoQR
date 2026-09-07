@@ -11,6 +11,7 @@ use App\Modules\Product\Application\UseCase\ActivateLicenseHandler;
 use App\Modules\Product\Domain\ValueObject\PlanLimit;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -39,10 +40,10 @@ use Tests\Support\Workforce\WorkforceFixtures;
  *
  * ## Sobre `/kiosk/pair/confirm`
  *
- * Ese endpoint **no existe todavia**: llega con la tarea 5.6. La prueba se hace
- * hoy sobre la via real de emision de tokens de dispositivo, que es la que usa
- * la consola y la que `/pair/confirm` invocara por dentro. **La 5.6 debe
- * extender este fichero** con el emparejamiento por codigo.
+ * Ya existe (tarea 5.6) y tiene su propio caso al final de este fichero: el
+ * emparejamiento **por codigo**, de punta a punta y con el fichaje detras. El
+ * caso de la emision directa de token se conserva porque sigue siendo la via de
+ * la consola, y son dos caminos distintos hasta el mismo limite.
  *
  * ## `max_sites` no se prueba porque no existe
  *
@@ -259,3 +260,66 @@ it('el alta se completa aunque el contador comercial LANCE al contar', function 
         // Lo unico que se pierde es la evidencia comercial de ESTE exceso.
         ->and(DB::table('audit_log')->where('action', 'license.plan_exceeded')->count())->toBe(0);
 })->group('RF-PD-04', 'RF-PD-05', 'RL-01');
+
+it('CON max_devices SUPERADO empareja por CODIGO y el quiosco queda operativo', function (): void {
+    // **La prueba que la tarea 5.6 debia añadir a este fichero**, y que el
+    // docblock de arriba anunciaba: hasta ahora `/kiosk/pair/confirm` no existia
+    // y el limite se probaba sobre la via de consola.
+    //
+    // El escenario de ADR-028 tal y como ocurre de verdad: se avería el quiosco
+    // de recepcion un sabado por la tarde, alguien cuelga la tablet de repuesto y
+    // la vincula desde el panel. **Si el emparejamiento se rechazara por el plan,
+    // el centro se quedaria sin punto de fichaje en el peor momento posible** —el
+    // del incidente— y la infraccion del art. 34.9 ET la causaria el producto.
+    $siteId = WorkforceFixtures::site();
+    $department = WorkforceFixtures::department($siteId);
+    $employee = WorkforceFixtures::employee($siteId, $department);
+
+    AttendanceFixtures::device($siteId, 'Recepcion');
+    conLimites(employees: 50, devices: 1);
+
+    // El plan esta en su tope: ya hay un dispositivo.
+    expect(DB::table('devices')->count())->toBe(1);
+
+    /** @var array{code: string, pairing_id: string, pairing_secret: string} $ticket */
+    $ticket = Api::guest()->post('/api/v1/kiosk/pair', ['app_version' => '1.4.2'])->json();
+
+    // 2xx. No 402, no 403, no 409, no 422: ninguna ruta del producto puede
+    // devolver un error de licencia al dar de alta un quiosco.
+    Api::as(ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN)))
+        ->post('/api/v1/kiosk/pair/confirm', ['code' => $ticket['code'], 'name' => 'Recepcion nueva'])
+        ->assertSuccessful();
+
+    // Y la tablet recoge su token.
+    $recogida = Api::guest()->post('/api/v1/kiosk/pair/claim', [
+        'pairing_id' => $ticket['pairing_id'],
+        'pairing_secret' => $ticket['pairing_secret'],
+    ])->assertOk();
+
+    /** @var string $token */
+    $token = $recogida->json('token.value');
+
+    // Artefacto de la suite: el guard de Sanctum cachea lo que ya resolvio.
+    Auth::forgetGuards();
+
+    // **El quiosco esta operativo de verdad: ficha con ese token.** Es la mitad
+    // que importa — un alta que no permite fichar no sirve de nada.
+    app()->instance(
+        CredentialResolver::class,
+        FakeCredentialResolver::new()->resolving('FH1.a3.7QK2mXpR9vLdN4tZbYcF1w.k9Xm2pQrT5vN8wLa', $employee),
+    );
+
+    $scanId = Str::uuid7()->toString();
+
+    Api::as($token)
+        ->withHeaders(['Idempotency-Key' => $scanId])
+        ->post('/api/v1/scan', [
+            'scan_id' => $scanId,
+            'occurred_at' => '2026-06-15T07:02:31Z',
+            'qr_payload' => 'FH1.a3.7QK2mXpR9vLdN4tZbYcF1w.k9Xm2pQrT5vN8wLa',
+        ])
+        ->assertOk();
+
+    expect(DB::table('shift_entries')->count())->toBe(1)
+        ->and(DB::table('devices')->count())->toBe(2);
+})->group('RF-PD-04', 'RF-PD-05', 'RF-PD-06', 'RL-01');

@@ -86,6 +86,22 @@
       "backspace": "Delete last digit"
     }
   },
+  "pairing": {
+    "title": "Pair this kiosk",
+    "requesting": {
+      "initial": "Generating code…",
+      "afterExpiry": "The code has expired. Generating a new one…",
+      "afterRejection": "That code is no longer valid. Generating a new one…"
+    },
+    "waiting": {
+      "status": "Waiting for an administrator to confirm it in the panel",
+      "expiresIn": "Expires in {time}",
+      "newCode": "Generate another code"
+    },
+    "paired": {
+      "status": "Kiosk paired. Entering…"
+    }
+  },
   "privacy": {
     "heading": "Data protection notice",
     "controllerKnown": "Controller: {controller}.",

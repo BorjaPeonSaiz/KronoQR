@@ -478,6 +478,45 @@ solo la guía escrita, y actualización desde la versión anterior con
 vuelta atrás probada. Ambas en CI.
 ```
 
+#### 6.5.1 Emparejamiento de quiosco por código (tarea 5.6)
+
+```text
+Ejecuta la tarea 5.6 del plan («Vinculación de quiosco por código de
+emparejamiento», RF-PD-06). La ficha ejecutable está en
+plan implementacion/05-fase-5-productizacion.md → «Tarea 5.6».
+
+Agentes: frontend-quiosco (pantalla de emparejamiento en la PWA) y
+backend-laravel (solicitud, confirmación y recogida del token en el
+módulo Kiosk), con arquitecto-dominio antes de escribir el agregado y
+qa-testing para la concurrencia y el tiempo constante. Skill:
+/endpoint-api para cada ruta nueva.
+
+El flujo es el que cierra la contradicción C-3: la tablet pide el código
+(POST /api/v1/kiosk/pair, público), lo muestra en pantalla, el
+administrador lo teclea en el panel (POST /api/v1/kiosk/pair/confirm,
+solo admin) y la tablet recoge su token una sola vez
+(POST /api/v1/kiosk/pair/claim). kiosk:pairing-code queda como vía de
+consola para confirmar un código cuando el panel no esté accesible.
+
+Requisitos innegociables:
+- Contrato OpenAPI antes que el código (ADR-013)
+- Código de un solo uso, hasheado en reposo, consumido en transacción:
+  dos peticiones simultáneas → un solo dispositivo
+- Rechazos genéricos y de tiempo constante en las rutas públicas
+  (regla dura 17)
+- La tablet nunca queda atrapada: un código caducado se sustituye solo,
+  y un fallo de red no desvincula (regla dura 19)
+- Vinculación y desvinculación en audit_log con la persona que las
+  autorizó; desvincular purga el padrón cacheado del dispositivo
+- max_devices superado no bloquea el emparejamiento (ADR-028)
+- Policy y autorización negativa por rol; un token de quiosco no puede
+  confirmar códigos ni leer devices
+
+Criterio de terminado: la DoD de la ficha, más el runbook
+docs/runbooks/alta-nuevo-quiosco.md con la parte que es del cliente
+(modo quiosco).
+```
+
 ### 6.6 Cierre de fase
 
 ```

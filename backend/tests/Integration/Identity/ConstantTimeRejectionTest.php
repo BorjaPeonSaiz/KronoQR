@@ -158,7 +158,7 @@ it('consume el mismo tiempo en los seis rechazos', function (): void {
     // y un fallo de indice se distingan con suficientes muestras.
     $resolver = app(CredentialResolver::class);
     $casos = fourRejections();
-    $suelo = Config::integer('identity.credentials.rejection_floor_ms');
+    $suelo = Config::integer('security.rejection_floor_ms');
 
     expect($suelo)->toBeGreaterThan(0, 'La suite tiene el suelo de RS-03 desactivado.');
 

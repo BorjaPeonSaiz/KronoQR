@@ -33,6 +33,8 @@ function rosterApi(roster: KioskRoster, calls: { count: number }): ApiClient {
       return { outcome: 'ok' as const, data: roster }
     }),
     sendHeartbeat: vi.fn(),
+    requestPairing: vi.fn(),
+    claimPairing: vi.fn(),
   }
 }
 
@@ -223,6 +225,8 @@ describe('padron cacheado en uso', () => {
       syncScanBatch: vi.fn(),
       fetchRoster: vi.fn(async () => ({ outcome: 'failed' as const, cause: 'offline' as const })),
       sendHeartbeat: vi.fn(),
+      requestPairing: vi.fn(),
+      claimPairing: vi.fn(),
     }
     const roster = createCachedRoster({
       api: offlineApi,
@@ -253,6 +257,8 @@ describe('padron cacheado en uso', () => {
       syncScanBatch: vi.fn(),
       fetchRoster: vi.fn(async () => ({ outcome: 'failed' as const, cause: 'offline' as const })),
       sendHeartbeat: vi.fn(),
+      requestPairing: vi.fn(),
+      claimPairing: vi.fn(),
     }
     const roster = createCachedRoster({
       api: offlineApi,

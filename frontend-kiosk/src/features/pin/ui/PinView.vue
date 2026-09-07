@@ -25,7 +25,12 @@ import { RouterLink, useRouter } from 'vue-router'
 import { createApiClient } from '@/shared/api/client'
 import { readPrivacyNoticeConfig } from '@/shared/config/privacy'
 import { useConnectivity } from '@/shared/connectivity/useConnectivity'
-import { APP_VERSION, readDeviceToken, resolveDeviceId } from '@/shared/telemetry/deviceIdentity'
+import {
+  APP_VERSION,
+  clearDeviceToken,
+  readDeviceToken,
+  resolveDeviceId,
+} from '@/shared/telemetry/deviceIdentity'
 import { createErrorReporter } from '@/shared/telemetry/errorReporter'
 import { createHeartbeatScheduler } from '@/shared/telemetry/heartbeat'
 import ConnectionStatusBadge from '@/shared/ui/ConnectionStatusBadge.vue'
@@ -62,7 +67,18 @@ const api = createApiClient({
 
 // Mismo controlador de cola UNICO que la pantalla de escaneo (tarea 1.9): el
 // fichaje por PIN se encola exactamente igual, con el mismo drenaje.
-const offline = useOfflineQueue({ api, reporter, connectivity })
+// `onDeviceRevoked` es el mismo listener que `ScanView.vue` (RF-PD-06, tarea
+// 5.6): el controlador es un singleton por tablet, asi que solo la primera
+// pantalla que lo crea gana la opcion, pero da igual cual sea, hacen lo mismo.
+const offline = useOfflineQueue({
+  api,
+  reporter,
+  connectivity,
+  onDeviceRevoked: () => {
+    clearDeviceToken()
+    void router.replace({ name: 'pair' })
+  },
+})
 
 // Si esta instalacion no ofrece PIN, esta pantalla no tiene nada que hacer:
 // se vuelve a la de tarjeta. No es un error (ADR-017). `pinSealingKnown`

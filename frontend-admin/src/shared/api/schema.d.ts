@@ -324,6 +324,329 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/kiosk/pair": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pedir un codigo de emparejamiento desde la tablet
+         * @description Primer paso de los tres con los que una tablet nueva se convierte en un
+         *     quiosco (RF-PD-06). La tablet **pide emparejarse**, recibe un codigo de
+         *     seis digitos y lo muestra en pantalla; una persona con rol `admin` lo
+         *     teclea en el panel —`POST /api/v1/kiosk/pair/confirm`— y la tablet recoge
+         *     su token en el sondeo siguiente —`POST /api/v1/kiosk/pair/claim`—.
+         *
+         *     **Publica, porque quien la llama todavia no tiene token.** Es lo que hace
+         *     que el cliente **no tenga que usar SSH** para dar de alta un quiosco
+         *     (RF-PD-06). Lo que se puede hacer sin credenciales es exactamente esto:
+         *     crear una solicitud pendiente que **no vincula nada**, que no lee nada y
+         *     que solo sirve si alguien autenticado la confirma.
+         *
+         *     **Esta respuesta no es un token ni acerca a obtenerlo.** `pairing_secret`
+         *     es un secreto de recogida —32 bytes aleatorios en base64url, almacenado
+         *     hasheado— y no autoriza ninguna ruta del producto: sin el `confirm` de un
+         *     administrador, sondear `claim` con el hasta que caduque no produce nada.
+         *     Es lo que separa las dos mitades del acto: el **codigo** dice *que*
+         *     solicitud se confirma y lo lee cualquiera que mire la pantalla; el
+         *     **secreto** dice *quien* la pidio y no sale de la tablet.
+         *
+         *     **Caducidad corta y un solo uso.** `expires_at` y `poll_interval_seconds`
+         *     viajan en la respuesta —10 minutos y 5 segundos de serie— y son
+         *     configuracion de la instalacion (`config/kiosk.php`, regla dura 13), no
+         *     constantes del contrato: la tablet no tiene que saberlos de antemano, ni
+         *     una instalacion que los ajuste obliga a reinstalar la PWA.
+         *
+         *     **El centro no es un parametro** ([ADR-040](../adr/ADR-040-un-centro-por-instalacion-y-por-licencia.md)):
+         *     la instalacion tiene uno solo y lo resuelve el servidor. Un `site_id` en
+         *     el cuerpo seria la primera pieza de un multicentro que no existe, y ademas
+         *     un dato que un extraño podria enumerar desde una ruta publica.
+         *
+         *     **Nunca deja la tablet atrapada** (regla dura 19). Si el codigo caduca, si
+         *     el servidor se reinicia o si un `claim` se rechaza, la PWA vuelve aqui y
+         *     pide otro codigo sin que nadie la toque. Y a la inversa: una tablet **ya
+         *     vinculada** no se desvincula por un fallo de red; solo un `401`
+         *     persistente la devuelve a esta pantalla.
+         *
+         *     **Sin datos personales en ninguna direccion** (reglas duras 10 y 21). Ni
+         *     la peticion los envia ni la respuesta los devuelve, y los registros de
+         *     esta operacion se identifican por `pairing_id`, nunca por una persona.
+         *
+         *     **Limitada por IP** (`throttle:pairing-request`, 10 r/m; documento 02
+         *     §7.1). Es una escritura publica: sin techo, cualquiera podria llenar la
+         *     tabla de solicitudes pendientes y agotar el espacio de codigos de seis
+         *     digitos, que es la unica forma de negar el alta de un quiosco desde fuera.
+         *
+         *     **Puede responder `503`** cuando la instalacion tiene mas solicitudes
+         *     vivas que `kiosk.pairing.max_live_pending` (alguien inunda la ruta: los
+         *     codigos de una instalacion son unos pocos quioscos, no cientos) o cuando
+         *     el sorteo de un codigo libre falla ocho veces seguidas. Desde fuera son
+         *     el mismo sintoma y la misma respuesta. **Nunca deja a la tablet en un
+         *     callejon sin salida** (regla dura 19): la PWA reintenta cada
+         *     `poll_interval_seconds` y las solicitudes caducadas se purgan en cada
+         *     peticion, asi que el hueco aparece solo.
+         */
+        post: operations["requestKioskPairing"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kiosk/pair/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Recoger el resultado del emparejamiento (sondeo de la tablet)
+         * @description Segundo paso de RF-PD-06 y **el unico sitio por el que sale el token de un
+         *     quiosco**. La tablet sondea aqui cada `poll_interval_seconds` con el
+         *     `pairing_id` y el `pairing_secret` que recibio en
+         *     `POST /api/v1/kiosk/pair`, y recibe una de dos cosas: `pending` mientras
+         *     nadie haya confirmado el codigo, o `paired` con el dispositivo y su token
+         *     en cuanto un `admin` lo confirma.
+         *
+         *     **Publica por la misma razon que `/kiosk/pair`**: quien sondea todavia no
+         *     tiene token, porque es justo el que viene a recoger. Lo que la protege no
+         *     es la autenticacion sino el secreto: sin `pairing_secret` no hay respuesta
+         *     util, y con el —pero sin que nadie haya confirmado— tampoco.
+         *
+         *     **Un solo uso.** El token se emite en ese instante y una sola vez: la
+         *     solicitud queda consumida, y un `claim` posterior con las mismas
+         *     credenciales se rechaza como cualquier otro. Dos sondeos simultaneos sobre
+         *     la misma solicitud confirmada producen **un solo token**, porque el cambio
+         *     de estado es una escritura condicional atomica y no un `SELECT` previo.
+         *
+         *     **La caducidad deja de aplicar una vez confirmada.** `expires_at` acota lo
+         *     que puede esperar un codigo **sin confirmar**; despues del `confirm` la
+         *     fila de `devices` ya existe, y negar la recogida solo dejaria un
+         *     dispositivo dado de alta que ninguna tablet puede usar —exactamente el
+         *     callejon sin salida que prohibe la regla dura 19—. El unico limite es la
+         *     purga de las solicitudes consumidas a las 24 horas.
+         *
+         *     **Rechazos indistinguibles y de tiempo constante** (regla dura 17, RS-03).
+         *     `pairing_id` desconocido, `pairing_secret` incorrecto y solicitud caducada
+         *     o ya consumida devuelven **exactamente la misma respuesta** —`422` con
+         *     `urn:kronoqr:problem:pairing-rejected`, sin ningun campo donde alojar la
+         *     causa— y consumen el mismo tiempo **entre si**. El secreto se comprueba
+         *     siempre y primero, incluso cuando la solicitud no existe: si no, la
+         *     diferencia entre «pendiente» y «rechazado» seria un oraculo que dice que
+         *     `pairing_id` existen.
+         *
+         *     **Lo que este contrato NO promete** es que `pending` y `paired` tarden lo
+         *     mismo que un rechazo, y prometerlo seria mentir: confirmar un
+         *     emparejamiento emite un token y escribe en `audit_log`. La garantia es
+         *     entre los tres rechazos, que es donde estaria la fuga.
+         *
+         *     **Limitada por `pairing_id`** (`throttle:pairing-claim`), no solo por IP:
+         *     un limite por IP no acota nada cuando todos los quioscos de un hotel salen
+         *     por la misma direccion, y este es ademas el endpoint donde se adivinaria
+         *     un secreto. El techo por solicitud es al menos el doble de la cadencia de
+         *     sondeo, para que un reintento honesto nunca choque con el, y se mantiene
+         *     ademas el techo por IP del borde (documento 02 §7.1).
+         *
+         *     **Sin datos personales** (reglas duras 10 y 21): los registros de esta
+         *     operacion no llevan mas que `pairing_id` y, si acaba en vinculacion,
+         *     `device_uuid`.
+         */
+        post: operations["claimKioskPairing"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kiosk/pair/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirmar un codigo de emparejamiento y vincular la tablet
+         * @description Tercer paso de RF-PD-06 y **el unico acto con actor** de los tres: una
+         *     persona con rol `admin` teclea en el panel el codigo que ve en la pantalla
+         *     de la tablet, le pone nombre al quiosco y lo da de alta. La tablet recoge
+         *     su token en el sondeo siguiente.
+         *
+         *     **`admin` y solo `admin`, con ambito `settings:*`** (documento 02 §7.3,
+         *     nota 5, y regla dura 18). Dar de alta un quiosco es crear un origen de
+         *     fichajes: quien puede hacerlo es quien puede configurar la instalacion, no
+         *     quien gestiona la plantilla. Un token de quiosco no puede confirmar
+         *     emparejamientos —ni siquiera el suyo—, y `rrhh`,
+         *     `responsable_departamento` y `auditor` reciben `403`.
+         *
+         *     **El nombre es obligatorio y unico por centro.** Es lo que despues
+         *     identifica al quiosco en el panel de salud, en la alerta de «sin latido» y
+         *     en el runbook: «Recepcion» y «Cocina» son la diferencia entre saber a que
+         *     tablet hay que ir a mirar y tener que recorrer el hotel.
+         *
+         *     **Reutilizar el nombre de un quiosco revocado lo REACTIVA**, misma fila y
+         *     mismo `uuid` ([ADR-028](../adr/ADR-028-limites-del-plan-no-bloquean.md), y
+         *     regla dura 5: nada se borra). Es el escenario real de sustituir una tablet
+         *     averiada: el quiosco de Recepcion sigue siendo el quiosco de Recepcion
+         *     aunque el aparato sea otro, y su historial no se parte en dos. La
+         *     respuesta lo dice con `reactivated`, para que el panel muestre «Se ha
+         *     reactivado» en lugar de «Creado». Si el nombre lo tiene un quiosco
+         *     **activo**, es un `422` de validacion sobre `name`: dos quioscos con el
+         *     mismo nombre convierten cualquier diagnostico en una adivinanza.
+         *
+         *     **Los limites del plan no bloquean**
+         *     ([ADR-028](../adr/ADR-028-limites-del-plan-no-bloquean.md), regla dura 15).
+         *     Superar el `max_devices` de la licencia **no impide vincular**: se registra
+         *     y se avisa en el panel, pero un hotel que compra una tablet de mas no se
+         *     queda sin poder fichar en ella.
+         *
+         *     **El centro no viaja en el cuerpo**
+         *     ([ADR-040](../adr/ADR-040-un-centro-por-instalacion-y-por-licencia.md)): la
+         *     instalacion tiene uno solo y lo resuelve el servidor.
+         *
+         *     **Auditada** (regla dura 6). El alta o la reactivacion del dispositivo deja
+         *     asiento en `audit_log` con el administrador que la hizo, el momento y el
+         *     `uuid` del dispositivo. La emision del token queda registrada aparte,
+         *     cuando la tablet lo recoge.
+         *
+         *     **Vale tambien desde consola**: `php artisan kiosk:pairing-code {code}
+         *     --name="Recepcion"` hace exactamente esto, para el caso en el que el panel
+         *     no este accesible. No es el flujo principal, y por eso RF-PD-06 puede
+         *     seguir diciendo que el cliente no tiene por que usar SSH.
+         */
+        post: operations["confirmKioskPairing"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Quioscos vinculados de la instalacion
+         * @description La lista de quioscos con lo que hace falta para saber si estan sanos
+         *     (RF-PA-07 y la pantalla «Quioscos» del panel, RF-PD-06): nombre, estado,
+         *     version de la PWA, ultimo latido y cuantos fichajes lleva sin sincronizar
+         *     cada uno.
+         *
+         *     **Es la pantalla desde la que se descubre un quiosco averiado antes de que
+         *     alguien reclame una jornada.** `last_seen_at` y `pending_queue_size` los
+         *     alimenta `POST /api/v1/kiosk/heartbeat` y son informacion de operacion: el
+         *     dispositivo los declara y nadie los comprueba. Un quiosco que mienta sobre
+         *     su cola no cambia ni un fichaje.
+         *
+         *     **`admin` y solo `admin`, con ambito `settings:*`** (documento 02 §7.3,
+         *     nota 5). Gestionar dispositivos es la misma potestad que configurar la
+         *     instalacion: quien puede ver la flota es quien puede desvincularla. Un
+         *     token de quiosco **no puede leer esta lista** —conoceria a sus vecinos y el
+         *     estado de la instalacion— y los demas roles de gestion reciben `403`.
+         *
+         *     **No se pagina.** Una instalacion es un hotel
+         *     ([ADR-040](../adr/ADR-040-un-centro-por-instalacion-y-por-licencia.md)) con
+         *     unos pocos quioscos; paginar una lista que cabe entera en la pantalla solo
+         *     añadiria un `meta` que nadie leeria.
+         *
+         *     **Sin token ni hash de token.** Ni aparecen aqui ni apareceran: `Device`
+         *     describe el aparato, no su credencial.
+         *
+         *     **La lista viene ordenada: los activos primero y, dentro de cada grupo,
+         *     por nombre.** Es parte del contrato y no un detalle de la consulta,
+         *     porque el cliente se apoya en ello y no reordena. Quien abre esta
+         *     pantalla busca el quiosco que no responde, no el que se dio de baja el
+         *     año pasado; y el nombre es lo unico por lo que se busca un quiosco —«el
+         *     de Recepcion»—, asi que ordenar por el es ordenar como se lee. Ordenarlo
+         *     en el servidor y no en el panel evita ademas que las tres SPA tengan que
+         *     coincidir en el criterio, y que una lista larga cambie de orden segun
+         *     quien la pinte.
+         */
+        get: operations["listDevices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/devices/{uuid}/unpair": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** del dispositivo de quiosco (`devices.uuid`). Por
+                 *     lo mismo que el del empleado y el de la credencial: la clave interna no
+                 *     sale de la base de datos, y un identificador secuencial en una URL diria
+                 *     cuantas tablets tiene el hotel.
+                 *
+                 *     **Identifica el puesto, no el aparato** ([ADR-028](../adr/ADR-028-limites-del-plan-no-bloquean.md)):
+                 *     sustituir la tablet de Recepcion reactiva la misma fila y conserva este
+                 *     `uuid`, para que los fichajes de antes y los de despues sigan hablando del
+                 *     mismo quiosco.
+                 * @example 0199f3c9-1b7d-7a44-8e02-3c4d5e6f7a81
+                 */
+                uuid: components["parameters"]["DeviceUuid"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Desvincular un quiosco
+         * @description Retira un quiosco de servicio: revoca su token y deja la fila en `revoked`
+         *     (RF-PD-06). A partir de ese momento sus llamadas a `/scan`,
+         *     `/kiosk/roster` y `/kiosk/heartbeat` responden `401`.
+         *
+         *     **Nada se borra** (regla dura 5). La fila se conserva con su nombre y su
+         *     historial, porque los fichajes que ese quiosco registro siguen existiendo y
+         *     tienen que poder atribuirse a algo. Vincular despues una tablet nueva **con
+         *     el mismo nombre** reactiva esta misma fila y este mismo `uuid`
+         *     ([ADR-028](../adr/ADR-028-limites-del-plan-no-bloquean.md)), que es como se
+         *     sustituye un aparato averiado sin partir en dos la historia del puesto.
+         *
+         *     **La tablet purga el padron cacheado** (documento 01 §8.1, RL-12). Al
+         *     recibir el `401` persistente, la PWA borra el padron y el token y vuelve a
+         *     la pantalla de emparejamiento; lo que **no** borra nunca es la cola offline
+         *     pendiente de sincronizar, porque ahi hay jornadas de personas (regla dura
+         *     19).
+         *
+         *     **Idempotente.** Desvincular un quiosco ya revocado devuelve `200` con el
+         *     mismo cuerpo y no vuelve a auditar: la segunda pulsacion de un boton no es
+         *     un hecho nuevo.
+         *
+         *     **`admin` y solo `admin`, con ambito `settings:*`** (documento 02 §7.3,
+         *     nota 5, regla dura 18). Es la operacion que puede dejar un hotel sin
+         *     quiosco en pleno cambio de turno.
+         *
+         *     **Auditada** (regla dura 6): la revocacion deja asiento en `audit_log` con
+         *     el actor, el momento, el `uuid` del dispositivo y el motivo `unpaired`.
+         *
+         *     **Es `POST` y no `DELETE`** porque no borra nada: es un cambio de estado
+         *     con consecuencias, como `POST /api/v1/credentials/{uuid}/revoke` y
+         *     `POST /api/v1/employees/{uuid}/offboard`.
+         */
+        post: operations["unpairDevice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/login": {
         parameters: {
             query?: never;
@@ -3208,6 +3531,455 @@ export interface components {
              *     tiene la culpa de que una tablet pierda la hora (regla dura 19).
              */
             server_time: components["schemas"]["UtcTimestamp"];
+        };
+        /**
+         * PairingRequestBody
+         * @description Lo unico que una tablet sin vincular le cuenta al servidor: con que version
+         *     de la PWA corre. Nada mas cabe aqui —ni centro, ni nombre, ni identificador
+         *     de aparato—: es una peticion publica y todo lo que aceptase seria algo que
+         *     un extraño puede escribir.
+         */
+        PairingRequestBody: {
+            /**
+             * @description Version de la PWA que pide emparejarse. Se guarda con la solicitud y
+             *     pasa a `devices.app_version` al vincular, para que el panel sepa desde
+             *     el primer momento si la tablet llego actualizada (RF-KI-07, §10.5).
+             * @example 1.4.2
+             */
+            app_version: string;
+        };
+        /**
+         * PairingRequested
+         * @description Solicitud de emparejamiento recien creada (RF-PD-06). Contiene las **dos
+         *     mitades** del acto, que viajan juntas una sola vez y no vuelven a salir del
+         *     servidor: el `code`, que la tablet enseña para que lo lea una persona, y el
+         *     `pairing_secret`, que la tablet guarda y no enseña a nadie.
+         *
+         *     **Ninguno de los dos autoriza nada.** No son un token: no abren ninguna
+         *     ruta del producto y no valen sin que un `admin` confirme la solicitud.
+         */
+        PairingRequested: {
+            /**
+             * Format: uuid
+             * @description Identificador **publico** de la solicitud (UUID v7), con el que la
+             *     tablet sondea `POST /api/v1/kiosk/pair/claim`. Nunca la clave interna:
+             *     un identificador secuencial en una ruta publica diria cuantas tablets
+             *     se han dado de alta y en que orden (regla dura 10).
+             * @example 0199f3c1-4a2b-7e55-9c10-8d7e6f5a4b32
+             */
+            pairing_id: string;
+            /**
+             * @description Secreto de recogida: 32 bytes de un CSPRNG en base64url. **Se almacena
+             *     hasheado** —como `devices.token_hash` y `credentials.secret_hash`— y
+             *     este es el unico momento en que existe en claro.
+             *
+             *     Es lo que impide que quien lea el codigo por encima del hombro se lleve
+             *     el quiosco: el codigo dice *que* solicitud se confirma, el secreto dice
+             *     *quien* la pidio. La tablet lo guarda en su almacenamiento local hasta
+             *     que recoge el token o hasta que la solicitud caduca.
+             * @example 9x2Kd4pQ7vLmN8tZbYcF1wQ8sE3rT6uI0oP5aS7dXyZ
+             */
+            pairing_secret: string;
+            /**
+             * @description Codigo de emparejamiento: **seis digitos decimales**, generados con un
+             *     CSPRNG y unicos entre las solicitudes pendientes. La tablet lo muestra
+             *     agrupado —«483 921»— y una persona lo teclea en el panel.
+             *
+             *     **Seis digitos y no una cadena larga** porque se lee de lejos y se
+             *     teclea a mano: lo que protege el emparejamiento es el secreto de
+             *     recogida y la caducidad de diez minutos, no la entropia de lo que se
+             *     enseña en una pantalla colgada de una pared. Solo digitos, ademas,
+             *     porque un alfabeto mixto en una tablet a dos metros convierte la O en
+             *     un cero.
+             *
+             *     **Se almacena hasheado** (SHA-256). Ni el codigo ni el secreto vuelven
+             *     a aparecer en ninguna respuesta.
+             * @example 483921
+             */
+            code: string;
+            /**
+             * @description Cuando deja de valer el codigo: diez minutos de serie, configurable en
+             *     la instalacion (regla dura 13). La tablet pinta la cuenta atras y pide
+             *     otro codigo al llegar a cero, sin que nadie la toque (regla dura 19).
+             *
+             *     **Acota la espera de la confirmacion, no la recogida.** Una vez
+             *     confirmada la solicitud, `claim` entrega el token aunque este instante
+             *     ya haya pasado: la fila de `devices` existe y negarlo dejaria un
+             *     quiosco dado de alta que ninguna tablet puede usar.
+             */
+            expires_at: components["schemas"]["UtcTimestamp"];
+            /**
+             * @description Cada cuantos segundos debe sondear la tablet
+             *     `POST /api/v1/kiosk/pair/claim`. Cinco de serie.
+             *
+             *     **Viaja en la respuesta y no compilado en la PWA** (regla dura 13,
+             *     ADR-017): el limitador del `claim` se dimensiona a partir de esta
+             *     cadencia, y si el valor viviera en el cliente, ajustarlo obligaria a
+             *     reinstalar la aplicacion en cada tablet del hotel.
+             * @example 5
+             */
+            poll_interval_seconds: number;
+        };
+        /**
+         * PairingClaimRequest
+         * @description Las dos credenciales de la solicitud, tal como las devolvio
+         *     `POST /api/v1/kiosk/pair`. El servidor **comprueba el secreto siempre y
+         *     primero**, exista o no la solicitud, para que la respuesta no delate que
+         *     `pairing_id` son reales (regla dura 17).
+         */
+        PairingClaimRequest: {
+            /**
+             * Format: uuid
+             * @description Identificador publico de la solicitud.
+             * @example 0199f3c1-4a2b-7e55-9c10-8d7e6f5a4b32
+             */
+            pairing_id: string;
+            /**
+             * @description Secreto de recogida. Se compara por su hash y con `hash_equals`, y el
+             *     mismo trabajo se ejecuta aunque la fila no exista: una comparacion que
+             *     termina antes es una via para saber que hay al otro lado.
+             * @example 9x2Kd4pQ7vLmN8tZbYcF1wQ8sE3rT6uI0oP5aS7dXyZ
+             */
+            pairing_secret: string;
+        };
+        /**
+         * PairingPending
+         * @description Nadie ha confirmado todavia el codigo. La tablet sigue mostrandolo y vuelve
+         *     a sondear pasados `poll_interval_seconds`.
+         *
+         *     **No dice nada mas, y es deliberado.** Ni cuanto queda, ni cuantos intentos
+         *     se han hecho, ni si alguien tecleo un codigo equivocado: la tablet ya sabe
+         *     cuando caduca su solicitud, y todo lo demas seria informacion sobre lo que
+         *     ocurre en el panel entregada por una ruta publica.
+         */
+        PairingPending: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            status: "pending";
+        };
+        /**
+         * PairingCompleted
+         * @description La solicitud se confirmo y el dispositivo esta vinculado. **La unica vez que
+         *     el token de un quiosco viaja por la red**: no hay forma de volver a
+         *     pedirlo, y si la tablet lo pierde el camino es desvincular y volver a
+         *     emparejar.
+         */
+        PairingCompleted: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            status: "paired";
+            /**
+             * @description Lo minimo que la tablet necesita saber de si misma: su identificador
+             *     publico —que guarda como `device_id` y usa en sus registros— y el
+             *     nombre que le puso el administrador, para poder mostrarlo en su
+             *     pantalla de ajustes.
+             */
+            device: {
+                /**
+                 * Format: uuid
+                 * @description Identificador publico del dispositivo (`devices.uuid`).
+                 * @example 0199f3c9-1b7d-7a44-8e02-3c4d5e6f7a81
+                 */
+                uuid: string;
+                /**
+                 * @description Nombre del quiosco, tal como lo veran quienes operan el hotel.
+                 * @example Recepcion
+                 */
+                name: string;
+            };
+            /**
+             * @description El token de dispositivo, con los tres ambitos del documento 02 §7.3
+             *     —`scan:write`, `roster:read` y `heartbeat:write`— y 90 dias de vida,
+             *     con rotacion automatica al 80 %.
+             *
+             *     **No lleva los ambitos escritos.** Los del quiosco son siempre los
+             *     mismos y estan declarados en `kioskToken`; enumerarlos aqui seria una
+             *     segunda copia que puede discrepar de la primera.
+             */
+            token: {
+                /**
+                 * @description Token `Bearer` con el que la tablet firma `/scan`, `/kiosk/roster`
+                 *     y `/kiosk/heartbeat`. Se guarda en el almacenamiento local del
+                 *     dispositivo y **nunca vuelve a salir del servidor**.
+                 * @example 92|Kd2pQ9vLmN4tZbYcF1wQ8sE3rT6uI0oP5aS7dXyZ
+                 */
+                value: string;
+                /**
+                 * @description Caducidad del token. La tablet no tiene que vigilarla: la rotacion
+                 *     automatica al 80 % de vida le entrega el relevo antes de que
+                 *     llegue, y un token caducado no impide fichar porque el quiosco
+                 *     encola en local (regla dura 19).
+                 */
+                expires_at: components["schemas"]["UtcTimestamp"];
+            };
+        };
+        /**
+         * PairingClaim
+         * @description Resultado del sondeo de la tablet: **union discriminada por `status`**, con
+         *     exactamente dos ramas.
+         *
+         *     Dos formas y no una con campos opcionales: con `device` y `token` marcados
+         *     como opcionales, un cliente podria leerlos sin comprobar `status` y guardar
+         *     un `undefined` como token. Asi el cliente generado obliga a ramificar y
+         *     `vue-tsc` no deja olvidarlo, igual que con `ScanAccepted` y `ScanDebounced`.
+         *
+         *     **El rechazo no es una tercera rama**: viaja como `422` con
+         *     `PairingRejected`, porque mezclarlo aqui daria un sitio donde escribir la
+         *     causa (regla dura 17).
+         */
+        PairingClaim: components["schemas"]["PairingPending"] | components["schemas"]["PairingCompleted"];
+        /**
+         * PairingRejected
+         * @description **La unica respuesta de rechazo de un `claim`.** Todos los campos estan
+         *     fijados a un valor unico y no se admiten miembros adicionales, de modo que
+         *     el contrato no ofrece ningun sitio donde alojar la causa: ni un codigo, ni
+         *     un motivo, ni un matiz en el texto (regla dura 17, RS-03).
+         *
+         *     Cubre las tres causas —solicitud desconocida, secreto que no coincide y
+         *     solicitud caducada o ya consumida— y las tres consumen el mismo tiempo.
+         *     Distinguirlas convertiria esta ruta publica en un comprobador de
+         *     `pairing_id` y, peor, en un oraculo con el que afinar la busqueda de un
+         *     secreto.
+         *
+         *     **Ni siquiera devuelve el `pairing_id` que le enviaron.** Devolverlo no
+         *     filtraria nada por si mismo, pero abriria la puerta a que alguien lo
+         *     acompañase algun dia de un `reason`; que sea imposible es el punto, igual
+         *     que en `ScanRejected`.
+         */
+        PairingRejected: {
+            /**
+             * Format: uri
+             * @enum {string}
+             */
+            type: "urn:kronoqr:problem:pairing-rejected";
+            /** @enum {string} */
+            title: "Emparejamiento no valido";
+            /** @enum {integer} */
+            status: 422;
+            /**
+             * @description Texto fijo. No se traduce ni se detalla: la tablet muestra su propio
+             *     texto de i18n a partir de `type`, y cualquier variacion aqui seria un
+             *     canal por el que distinguir causas.
+             * @enum {string}
+             */
+            detail: "La solicitud de emparejamiento no se ha podido completar.";
+        };
+        /**
+         * PairingConfirmRequest
+         * @description Lo que teclea el administrador: el codigo que ve en la pantalla de la
+         *     tablet y el nombre que quiere darle al quiosco.
+         *
+         *     **El centro no esta aqui** ([ADR-040](../adr/ADR-040-un-centro-por-instalacion-y-por-licencia.md)):
+         *     la instalacion tiene uno solo y lo resuelve el servidor.
+         */
+        PairingConfirmRequest: {
+            /**
+             * @description Los seis digitos que muestra la tablet, **sin espacios ni separadores**:
+             *     el panel los quita antes de enviar. La solicitud se busca por el hash
+             *     del codigo entre las pendientes, donde es unico.
+             * @example 483921
+             */
+            code: string;
+            /**
+             * @description Nombre del quiosco, **unico entre los dispositivos activos del centro**.
+             *     Es lo que despues identifica a la tablet en el panel de salud, en la
+             *     alerta de «sin latido» y en el runbook de alta.
+             *
+             *     **Reutilizar el nombre de un quiosco revocado lo reactiva** —misma fila,
+             *     mismo `uuid`— porque es asi como se sustituye un aparato averiado sin
+             *     partir en dos la historia del puesto
+             *     ([ADR-028](../adr/ADR-028-limites-del-plan-no-bloquean.md)). Si lo tiene
+             *     un quiosco **activo**, la peticion se rechaza con un `422` de
+             *     validacion.
+             *
+             *     **Nunca el nombre de una persona** (regla dura 21): es el sitio, no
+             *     quien lo atiende.
+             * @example Recepcion
+             */
+            name: string;
+        };
+        /**
+         * PairingConfirmed
+         * @description Resultado de la confirmacion, tal como lo necesita el panel. **No lleva el
+         *     token**: quien lo necesita es la tablet, que lo recoge en su siguiente
+         *     sondeo de `POST /api/v1/kiosk/pair/claim`.
+         */
+        PairingConfirmed: {
+            device: {
+                /**
+                 * Format: uuid
+                 * @description Identificador publico del dispositivo. En una reactivacion es **el
+                 *     mismo de antes**: la fila es «el quiosco de Recepcion», no la
+                 *     tablet concreta que lo atiende (ADR-028).
+                 * @example 0199f3c9-1b7d-7a44-8e02-3c4d5e6f7a81
+                 */
+                uuid: string;
+                /** @example Recepcion */
+                name: string;
+                /**
+                 * @description Situacion del dispositivo tras la confirmacion. Siempre `active`:
+                 *     el `claim` posterior solo emite token para un dispositivo activo, y
+                 *     dejarlo de otro modo produciria una tablet vinculada que no puede
+                 *     fichar.
+                 * @enum {string}
+                 */
+                status: "active" | "revoked";
+                /**
+                 * @description `true` cuando la confirmacion ha reactivado un quiosco revocado con
+                 *     ese mismo nombre, en lugar de crear uno nuevo (ADR-028).
+                 *
+                 *     **Existe para el texto del panel**, que dice «Se ha reactivado el
+                 *     quiosco Recepcion» en vez de «Creado»: quien sustituye una tablet
+                 *     averiada tiene que ver que el sistema entendio lo que estaba
+                 *     haciendo, y no descubrirlo tres dias despues en un informe con dos
+                 *     quioscos donde hay uno.
+                 */
+                reactivated: boolean;
+            };
+            /**
+             * @description **Lo que se acaba de vincular, para que el administrador lo contraste
+             *     con la tablet que tiene delante.** Un codigo de seis digitos se teclea
+             *     mal con facilidad, y si hay mas de una solicitud viva en la
+             *     instalacion, un digito cambiado confirma OTRA tablet. Ver la version
+             *     de la PWA y la hora en que esa tablet pidio el codigo es lo que
+             *     permite darse cuenta en el acto, y desvincular, en vez de descubrirlo
+             *     en el registro horario.
+             */
+            request: {
+                /**
+                 * @description Version de la PWA que declaro la tablet al pedir el codigo.
+                 * @example 1.4.2
+                 */
+                app_version: string | null;
+                /** @description Instante en que la tablet pidio el codigo. */
+                requested_at: components["schemas"]["UtcTimestamp"];
+            };
+        };
+        /**
+         * Device
+         * @description Un quiosco tal y como lo ve el panel (doc 01 §5.5, RF-PA-07).
+         *
+         *     **Nunca lleva el token ni su hash.** `token_hash` no aparece en este
+         *     esquema y no aparecera: quien lo viera tendria la mitad del trabajo hecho
+         *     para suplantar a un dispositivo. Ni lleva el `site_id`, que con un centro
+         *     por instalacion (ADR-040) es siempre el mismo.
+         *
+         *     **Ni un dato personal** (regla dura 21). Un dispositivo es un aparato en una
+         *     pared: no tiene titular, y su nombre es el del sitio.
+         */
+        Device: {
+            /**
+             * Format: uuid
+             * @description Identificador **publico** del dispositivo (`devices.uuid`). La clave
+             *     interna no sale de la base de datos: un identificador secuencial en una
+             *     URL diria cuantas tablets se han dado de alta.
+             * @example 0199f3c9-1b7d-7a44-8e02-3c4d5e6f7a81
+             */
+            uuid: string;
+            /**
+             * @description Nombre del quiosco, unico entre los activos del centro.
+             * @example Recepcion
+             */
+            name: string;
+            /**
+             * @description `active` mientras su token sirva; `revoked` en cuanto se desvincula.
+             *
+             *     **Un quiosco revocado no se borra** (regla dura 5): sus fichajes siguen
+             *     existiendo y tienen que poder atribuirse a algo, y su nombre queda
+             *     reservado para la tablet que lo sustituya (ADR-028).
+             * @enum {string}
+             */
+            status: "active" | "revoked";
+            /**
+             * @description Version de la PWA que declaro el ultimo latido. `null` mientras no haya
+             *     latido alguno —una tablet recien vinculada que aun no ha arrancado— o
+             *     en un quiosco revocado que nunca llego a usarse.
+             * @example 1.4.2
+             */
+            app_version: string | null;
+            /**
+             * @description Ultimo latido recibido (`POST /api/v1/kiosk/heartbeat`). Es la cifra
+             *     sobre la que se construye la alerta «quiosco sin latido > 10 min» y la
+             *     metrica `kiosk_last_seen_seconds` (§8.2).
+             *
+             *     `null` significa que ese dispositivo no ha hablado nunca, que en una
+             *     puesta en marcha es lo normal y en un hotel en funcionamiento es una
+             *     tablet que no se llego a colgar de la pared.
+             */
+            last_seen_at: components["schemas"]["UtcTimestamp"] | null;
+            /**
+             * @description Fichajes que el dispositivo declaro tener sin sincronizar en su ultimo
+             *     latido. **Lo dice el dispositivo y nadie lo comprueba**: sirve para
+             *     operar, no para decidir nada sobre el registro horario.
+             *
+             *     Es `0` cuando nunca ha latido, que no es lo mismo que «esta al dia»:
+             *     eso lo dice `last_seen_at`.
+             */
+            pending_queue_size: number;
+            /**
+             * @description Cuando se vinculo, o cuando se **re**vinculo por ultima vez si la fila
+             *     se reactivo (ADR-028). Es lo que permite distinguir «este quiosco lleva
+             *     aqui desde la apertura» de «este se cambio el martes», que es la
+             *     primera pregunta cuando algo dejo de funcionar.
+             *
+             *     `null` en los dispositivos dados de alta antes de que existiera el
+             *     emparejamiento por codigo: no se inventa una fecha para ellos.
+             */
+            paired_at: components["schemas"]["UtcTimestamp"] | null;
+        };
+        /**
+         * DeviceList
+         * @description Los quioscos de la instalacion, activos y revocados, en una sola respuesta.
+         *
+         *     **Sin paginacion y sin `meta`.** Una instalacion es un hotel
+         *     ([ADR-040](../adr/ADR-040-un-centro-por-instalacion-y-por-licencia.md)) con
+         *     unos pocos quioscos: paginar una lista que cabe entera en la pantalla solo
+         *     añadiria un contrato que nadie usaria. Si algun dia hiciera falta, añadir
+         *     `meta` es aditivo sobre la v1 (ADR-012).
+         *
+         *     **Se envuelve en un objeto y no es un array desnudo**, por lo mismo: una
+         *     respuesta que ya es un array no admite crecer sin romper a quien la lee.
+         */
+        DeviceList: {
+            devices: components["schemas"]["Device"][];
+        };
+        /**
+         * PairingCodeRejected
+         * @description **La unica respuesta de rechazo de un `confirm`.** Misma tecnica que
+         *     `ScanRejected` y `PairingRejected`: todos los campos fijados a un valor
+         *     unico y sin miembros adicionales, de modo que el contrato no ofrece donde
+         *     escribir si el codigo no existe, si ha caducado o si ya se uso.
+         *
+         *     **Y aqui la ruta esta autenticada, asi que la razon es otra**: no es
+         *     proteger un secreto —a un `admin` no hay que ocultarle nada—, sino que las
+         *     tres causas tienen exactamente la misma accion siguiente, que es pedirle a
+         *     la tablet que muestre otro codigo. Distinguirlas seria un mensaje mas que
+         *     traducir, mantener y probar sin que nadie hiciera nada distinto al leerlo.
+         *     Quien si necesita ver la caducidad es la tablet, y la tiene en su cuenta
+         *     atras.
+         *
+         *     **Un `confirm` rechazado no consume ni caduca la solicitud**: un codigo mal
+         *     tecleado no obliga a empezar de cero.
+         */
+        PairingCodeRejected: {
+            /**
+             * Format: uri
+             * @enum {string}
+             */
+            type: "urn:kronoqr:problem:pairing-code-rejected";
+            /** @enum {string} */
+            title: "Codigo de emparejamiento no valido";
+            /** @enum {integer} */
+            status: 422;
+            /**
+             * @description Texto fijo. El panel muestra su propio texto de i18n a partir de `type`.
+             * @enum {string}
+             */
+            detail: "El codigo no se ha podido confirmar.";
         };
         /**
          * UserRole
@@ -6537,6 +7309,19 @@ export interface components {
          */
         ShiftEntryUuid: string;
         /**
+         * @description Identificador **publico** del dispositivo de quiosco (`devices.uuid`). Por
+         *     lo mismo que el del empleado y el de la credencial: la clave interna no
+         *     sale de la base de datos, y un identificador secuencial en una URL diria
+         *     cuantas tablets tiene el hotel.
+         *
+         *     **Identifica el puesto, no el aparato** ([ADR-028](../adr/ADR-028-limites-del-plan-no-bloquean.md)):
+         *     sustituir la tablet de Recepcion reactiva la misma fila y conserva este
+         *     `uuid`, para que los fichajes de antes y los de despues sigan hablando del
+         *     mismo quiosco.
+         * @example 0199f3c9-1b7d-7a44-8e02-3c4d5e6f7a81
+         */
+        DeviceUuid: string;
+        /**
          * @description Identificador del departamento (documento 01 §5.5).
          * @example 3
          */
@@ -7114,6 +7899,230 @@ export interface operations {
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    requestKioskPairing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PairingRequestBody"];
+            };
+        };
+        responses: {
+            /**
+             * @description Solicitud de emparejamiento creada. Es `201` porque nace un recurso
+             *     —la solicitud— aunque no tenga URL propia: exponer
+             *     `GET /kiosk/pair/{id}` daria una via publica para preguntar por
+             *     solicitudes ajenas.
+             *
+             *     La tablet muestra `code` en pantalla, grande y legible desde lejos, y
+             *     sondea `POST /api/v1/kiosk/pair/claim` cada `poll_interval_seconds`
+             *     con `pairing_id` y `pairing_secret`.
+             */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PairingRequested"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    claimKioskPairing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PairingClaimRequest"];
+            };
+        };
+        responses: {
+            /**
+             * @description **Dos desenlaces**, discriminados por `status`:
+             *
+             *     - `pending` → nadie ha confirmado todavia el codigo. La tablet sigue
+             *       mostrandolo y vuelve a sondear.
+             *     - `paired` → el dispositivo esta vinculado. La respuesta trae su
+             *       `uuid`, su nombre y el token con los ambitos del documento 02 §7.3
+             *       (`scan:write`, `roster:read`, `heartbeat:write`). **Es la unica vez
+             *       que ese token viaja**: la tablet lo guarda y no vuelve a haber forma
+             *       de recuperarlo.
+             *
+             *     Es `200` en los dos casos a proposito. Un `202` para la espera
+             *     obligaria a la PWA a ramificar por codigo de estado ademas de por
+             *     `status`, y un `4xx` la mandaria a la rama de error de su cliente HTTP
+             *     cuando no ha pasado nada malo.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PairingClaim"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            /**
+             * @description **Emparejamiento rechazado.** Respuesta unica, generica y de tiempo
+             *     constante para las tres causas —solicitud desconocida, secreto que no
+             *     coincide, y solicitud caducada o ya consumida— (regla dura 17, RS-03).
+             *     El cuerpo esta fijado campo a campo en el esquema y no admite miembros
+             *     adicionales: el contrato hace **imposible** describir cual de las tres
+             *     fue.
+             *
+             *     La tablet no necesita saberlo. Su reaccion es siempre la misma y no
+             *     deja a nadie fuera: descarta la solicitud, pide otro codigo en
+             *     `POST /api/v1/kiosk/pair` y lo muestra (regla dura 19). El texto que
+             *     enseña sale de su i18n a partir de `type`, nunca de `title` ni de
+             *     `detail`.
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["PairingRejected"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    confirmKioskPairing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PairingConfirmRequest"];
+            };
+        };
+        responses: {
+            /**
+             * @description Dispositivo vinculado. La tablet lo recogera en su siguiente sondeo de
+             *     `POST /api/v1/kiosk/pair/claim`; **esta respuesta no lleva el token**,
+             *     porque quien lo necesita es la tablet y no el navegador del
+             *     administrador.
+             *
+             *     Es `200` y no `201` porque el resultado puede ser un alta o la
+             *     reactivacion de una fila que ya existia, y `reactivated` es lo que lo
+             *     distingue.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PairingConfirmed"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /**
+             * @description **Dos cuerpos distintos, y la diferencia importa.**
+             *
+             *     - `urn:kronoqr:problem:pairing-code-rejected` → el codigo no sirve.
+             *       **Una sola respuesta para las tres causas** —no existe, ha caducado
+             *       o ya se uso— por el mismo criterio que aplica al `claim` publico
+             *       (regla dura 17): al administrador no le cambia la accion siguiente,
+             *       que es pedirle a la tablet que muestre otro codigo, y quien si
+             *       necesita ver la caducidad es la tablet, que la tiene en su cuenta
+             *       atras. Un `confirm` fallido **no consume ni caduca** la solicitud:
+             *       un dedo torpe no obliga a empezar de nuevo.
+             *     - `urn:kronoqr:problem:validation-failed` → el problema esta en el
+             *       formulario: falta el nombre, es demasiado largo o lo tiene ya un
+             *       quiosco **activo**. Lleva `errors` por campo para pintarlo junto al
+             *       formulario, y no dice nada del codigo.
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["PairingCodeRejected"] | components["schemas"]["ValidationProblem"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listDevices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Quioscos de la instalacion, activos y revocados. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceList"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    unpairDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** del dispositivo de quiosco (`devices.uuid`). Por
+                 *     lo mismo que el del empleado y el de la credencial: la clave interna no
+                 *     sale de la base de datos, y un identificador secuencial en una URL diria
+                 *     cuantas tablets tiene el hotel.
+                 *
+                 *     **Identifica el puesto, no el aparato** ([ADR-028](../adr/ADR-028-limites-del-plan-no-bloquean.md)):
+                 *     sustituir la tablet de Recepcion reactiva la misma fila y conserva este
+                 *     `uuid`, para que los fichajes de antes y los de despues sigan hablando del
+                 *     mismo quiosco.
+                 * @example 0199f3c9-1b7d-7a44-8e02-3c4d5e6f7a81
+                 */
+                uuid: components["parameters"]["DeviceUuid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description Quiosco desvinculado. El cuerpo es el dispositivo **ya revocado**, para
+             *     que el panel repinte la fila sin volver a pedir la lista.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Device"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
         };
     };

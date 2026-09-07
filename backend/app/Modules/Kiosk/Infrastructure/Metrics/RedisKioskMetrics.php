@@ -44,6 +44,15 @@ final readonly class RedisKioskMetrics implements KioskMetrics
 
     public const string QUEUE_SIZE = self::KEY_PREFIX.'kiosk_offline_queue_size';
 
+    /**
+     * `kiosk_pairing_total{result,reason}` (RF-PD-06, doc 02 §8.2).
+     *
+     * Un solo contador con etiquetas y no cuatro metricas: las cuatro responden
+     * a la misma pregunta —«que esta pasando con los emparejamientos»— y
+     * separadas obligarian a sumarlas para saber cuantos intentos hubo.
+     */
+    public const string PAIRING_TOTAL = self::KEY_PREFIX.'kiosk_pairing_total';
+
     public function __construct(private Redis $redis) {}
 
     public function heartbeat(string $deviceUuid, int $seenAtUnixSeconds, int $pendingQueueSize): void
@@ -56,6 +65,44 @@ final readonly class RedisKioskMetrics implements KioskMetrics
             $connection->command('HSET', [self::QUEUE_SIZE, $label, $pendingQueueSize]);
         } catch (Throwable) {
             // Silencio deliberado y acotado a este metodo: ver el docblock.
+        }
+    }
+
+    public function pairingRequested(): void
+    {
+        $this->increment(self::PAIRING_TOTAL, 'result=requested');
+    }
+
+    public function pairingConfirmed(): void
+    {
+        $this->increment(self::PAIRING_TOTAL, 'result=confirmed');
+    }
+
+    public function pairingClaimed(): void
+    {
+        $this->increment(self::PAIRING_TOTAL, 'result=claimed');
+    }
+
+    public function pairingRejected(string $reason): void
+    {
+        $this->increment(self::PAIRING_TOTAL, 'result=rejected,reason='.$reason);
+    }
+
+    /**
+     * `HINCRBY` y no `HSET`: **estos si son contadores**, al contrario que los
+     * dos gauges del latido. Lo que interesa de un emparejamiento es cuantos ha
+     * habido y en que proporcion se rechazan, no cual fue el ultimo.
+     *
+     * Medir tampoco puede romper aqui: si Redis no responde, el emparejamiento
+     * sigue su camino. Un `500` porque el sistema de metricas esta caido dejaria
+     * una tablet sin poder darse de alta.
+     */
+    private function increment(string $key, string $label): void
+    {
+        try {
+            $this->redis->connection()->command('HINCRBY', [$key, $label, 1]);
+        } catch (Throwable) {
+            // Silencio deliberado y acotado: ver el docblock.
         }
     }
 }

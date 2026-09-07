@@ -693,7 +693,7 @@ add_header Cross-Origin-Opener-Policy "same-origin" always;
 
 Un token de quiosco comprometido **no da acceso a la plantilla completa**: `roster:read` devuelve solo el mínimo necesario (hash del token, nombre de pila e inicial del apellido) de la plantilla de la instalación.
 
-> **Tres precisiones que introdujo la tarea 2.1, y por qué esta tabla las necesitaba.**
+> **Cinco precisiones, y por qué esta tabla las necesitaba.** Las tres primeras las introdujo la tarea 2.1; la cuarta, la 5.2; la quinta, la 5.6.
 >
 > **1. La fila del responsable ya no dice «+ 2FA», y no es un descuido.** RS-06 obliga a segundo factor a `admin`, `rrhh` y `auditor` —los tres roles que alcanzan datos de **toda** la plantilla— y no al responsable de departamento, cuyo alcance está acotado por RF-ID-03. Cuando este documento y el 01 discrepan manda el 01 (orden de autoridad de `CLAUDE.md`). La lectura anterior sigue siendo alcanzable sin tocar el repositorio: la lista de roles obligados es configuración (`IDENTITY_2FA_REQUIRED_ROLES`, regla dura 13), y un cliente con una política más dura añade ahí a sus responsables. Y quien active su TOTP por su cuenta lo presentará siempre, esté o no su rol en la lista.
 >
@@ -702,6 +702,8 @@ Un token de quiosco comprometido **no da acceso a la plantilla completa**: `rost
 > **3. Hay un ámbito que no es de ningún rol: `2fa:pending`.** Lo emite el propio acceso —el `202` de `POST /api/v1/auth/login`— y solo abre los tres endpoints de `/auth/2fa/*`. No cuelga de ningún rol y no debe colgar: si lo tuviera, cualquier sesión de ese rol podría canjear un reto que nadie ha abierto.
 >
 > **4. `settings:*` cubre tambien el perfil de cumplimiento** (tarea 5.2). `GET`/`PATCH /api/v1/compliance-profile` viajan bajo ese mismo ambito y bajo una policy propia de solo `admin`. No se crea un ambito nuevo porque ningun rol lo usaria por separado: quien puede ver los umbrales legales del centro es exactamente quien puede cambiarlos, y `rrhh` no es ninguno de los dos. Los dos recursos siguen siendo distintos —un umbral **legal** lo fija la jurisdiccion y uno **operativo** lo fija el hotel— y cada uno tiene su policy y su prueba de autorizacion negativa.
+>
+> **5. `settings:*` cubre tambien el emparejamiento y la gestion de dispositivos** (tarea 5.6). `POST /api/v1/kiosk/pair/confirm`, `GET /api/v1/devices` y `POST /api/v1/devices/{uuid}/unpair` viajan bajo ese mismo ambito y bajo una policy propia de solo `admin`, y el Anexo B del documento 01 se corrige en consecuencia: `/devices` deja de ser «manager+». Por lo mismo que el perfil de cumplimiento: **dar de alta un quiosco es crear un origen de fichajes** y desvincularlo puede dejar un hotel sin poder fichar en pleno cambio de turno, asi que es la misma potestad que configurar la instalacion y no la de gestionar la plantilla. Un ambito propio —`devices:*`— no lo usaria ningun rol por separado: quien puede ver la flota es exactamente quien puede desvincularla. **Las otras dos rutas del emparejamiento, `POST /kiosk/pair` y `POST /kiosk/pair/claim`, no llevan ambito porque son publicas**: quien las llama todavia no tiene token, porque es justo el que viene a recoger. Lo que las protege no es la autenticacion sino el secreto de recogida, la caducidad corta, dos limitadores propios (`pairing-request` por IP y `pairing-claim` por `pairing_id`) y el hecho de que **nada se vincula sin el `confirm` de un `admin`**. Y el token que sale del `claim` es el de quiosco de la primera fila de esta tabla, con sus tres ambitos y ni uno mas.
 
 ### 7.4 Cadena de hash de la auditoría
 
@@ -1559,7 +1561,7 @@ php artisan credentials:status --pending         # Quién no puede fichar todav�
 php artisan credentials:status --key-id=         # Quién sigue fichando con la clave saliente
 
 # Quioscos
-php artisan kiosk:pairing-code                   # Genera código de emparejamiento (el centro es el de la instalación)
+php artisan kiosk:pairing-code {code} --name=    # CONFIRMA el código que muestra la tablet y la vincula (vía alternativa al panel)
 php artisan kiosk:health                         # Estado de todos los quioscos
 
 # Producto y licencia

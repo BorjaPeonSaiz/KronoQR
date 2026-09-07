@@ -142,3 +142,12 @@ export type EmploymentContract = Schemas['EmploymentContract']
 export type EmploymentContractCollection = Schemas['EmploymentContractCollection']
 export type CreateEmploymentContractRequest = Schemas['CreateEmploymentContractRequest']
 export type ScheduleType = Schemas['ScheduleType']
+
+// Emparejamiento de quiosco por codigo (RF-PD-06, tarea 5.6). El panel solo
+// confirma: `PairingRequested`/`PairingClaim*` son cosa de la tablet
+// (frontend-kiosk) y no se alias aqui.
+export type PairingConfirmRequest = Schemas['PairingConfirmRequest']
+export type PairingConfirmed = Schemas['PairingConfirmed']
+export type PairingCodeRejected = Schemas['PairingCodeRejected']
+export type Device = Schemas['Device']
+export type DeviceList = Schemas['DeviceList']

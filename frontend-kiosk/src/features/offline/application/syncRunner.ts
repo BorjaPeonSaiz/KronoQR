@@ -82,6 +82,14 @@ export interface SyncRunnerOptions {
   readonly onReachability?: (reachable: boolean) => void
   readonly onSyncing?: (syncing: boolean) => void
   readonly onDiagnostic?: (code: SyncDiagnostic, context: Record<string, string | number>) => void
+  /**
+   * Alimenta `deviceRevocation.ts` (RF-PD-06, tarea 5.6): `true` en cada
+   * respuesta `401`/`403`, `false` en cada envio que SI llega a decidirse
+   * (`ok` o `rejected`, ambos autenticados). Nunca se llama por un fallo de
+   * red, tiempo agotado o `429`: son ambiguos y no deben ni sumar ni resetear
+   * el conteo de rechazos consecutivos.
+   */
+  readonly onAuthOutcome?: (unauthorized: boolean) => void
   /** Inyectable para pruebas: por defecto, `navigator.onLine`. */
   readonly isOnline?: () => boolean
   readonly setTimer?: (handler: () => void, delayMs: number) => number
@@ -178,6 +186,7 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
           // toca: cuando se vuelva a emparejar, los fichajes siguen ahi. Un
           // quiosco desautorizado no es motivo para perder una jornada.
           options.onDiagnostic?.('sync.unauthorized', { http_status: result.httpStatus ?? 0 })
+          options.onAuthOutcome?.(true)
         } else if (result.cause === 'throttled') {
           options.onDiagnostic?.('sync.throttled', { http_status: result.httpStatus ?? 0 })
         } else if (result.cause !== 'offline') {
@@ -193,6 +202,7 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
     }
 
     options.onReachability?.(true)
+    options.onAuthOutcome?.(false)
 
     const byId = new Map(result.data.results.map((entry) => [entry.scan_id, entry]))
     const confirmed: string[] = []
@@ -247,6 +257,7 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
         options.onReachability?.(false)
         if (result.cause === 'unauthorized') {
           options.onDiagnostic?.('sync.unauthorized', { http_status: result.httpStatus ?? 0 })
+          options.onAuthOutcome?.(true)
         } else if (result.cause === 'throttled') {
           options.onDiagnostic?.('sync.throttled', { http_status: result.httpStatus ?? 0 })
         } else if (result.cause !== 'offline') {
@@ -263,6 +274,7 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
       }
 
       options.onReachability?.(true)
+      options.onAuthOutcome?.(false)
       // `ok` y `rejected` son ambos un desenlace: el servidor ya ha decidido
       // (regla dura 17, RS-03. La causa concreta no sale de `scan_events`).
       const removed = await queue.confirm([record.scan_id])
@@ -377,12 +389,17 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
             })
       if (rescue.outcome === 'ok') {
         options.onReachability?.(true)
+        options.onAuthOutcome?.(false)
         return rescue.data.action === 'debounced'
           ? { kind: 'debounced', response: rescue.data }
           : { kind: 'accepted', response: rescue.data }
       }
-      if (rescue.outcome === 'rejected') return { kind: 'rejected' }
+      if (rescue.outcome === 'rejected') {
+        options.onAuthOutcome?.(false)
+        return { kind: 'rejected' }
+      }
       options.onReachability?.(false)
+      if (rescue.cause === 'unauthorized') options.onAuthOutcome?.(true)
       return { kind: 'deferred' }
     }
 
@@ -413,6 +430,7 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
 
     if (result.outcome === 'ok') {
       options.onReachability?.(true)
+      options.onAuthOutcome?.(false)
       await queue.confirm([scan.scan_id])
       return result.data.action === 'debounced'
         ? { kind: 'debounced', response: result.data }
@@ -421,12 +439,14 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
 
     if (result.outcome === 'rejected') {
       options.onReachability?.(true)
+      options.onAuthOutcome?.(false)
       // Decidido por el servidor: reintentarlo daria `422` para siempre.
       await queue.confirm([scan.scan_id])
       return { kind: 'rejected' }
     }
 
     options.onReachability?.(false)
+    if (result.cause === 'unauthorized') options.onAuthOutcome?.(true)
     if (result.cause !== 'offline') {
       options.onDiagnostic?.('sync.transport_failed', { cause: result.cause })
     }

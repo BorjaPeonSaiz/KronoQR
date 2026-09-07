@@ -12,6 +12,7 @@ import type { Page, Route } from '@playwright/test'
 import type {
   Department,
   License,
+  PairingConfirmed,
   SetupStep,
   SetupStepState,
   SetupStepStatus,
@@ -19,6 +20,9 @@ import type {
   TwoFactorChallenge,
   TwoFactorEnrolment,
 } from '@/shared/api/types'
+
+/** El codigo que el doble acepta en `POST /kiosk/pair/confirm` (RF-PD-06). */
+export const PAIRING_CODE = '483921'
 
 export const CHALLENGE_TOKEN = '41|Kd2pQ9vLmN4tZbYcF1wQ8sE3rT6uI0oP5aS7dXyZ'
 export const TOTP_CODE = '492013'
@@ -162,6 +166,8 @@ export async function stubOnboardingApi(
   const departments: Department[] = []
   let appName = ''
   let credentialsPending = 0
+  /** Cuantos quioscos se han vinculado durante el asistente (RF-PD-06). */
+  let kiosksLinked = 0
   let licenseActivated = false
 
   // `administratorAlreadyDone` es exactamente el caso «el administrador ya se
@@ -459,6 +465,33 @@ export async function stubOnboardingApi(
           licenseActivated = true
           await json(route, 200, VALID_LICENSE)
           return
+        case 'POST /api/v1/kiosk/pair/confirm': {
+          const payload = request.postDataJSON() as { code?: string; name?: string }
+
+          if (payload.code !== PAIRING_CODE) {
+            await problem(
+              route,
+              422,
+              'urn:kronoqr:problem:pairing-code-rejected',
+              'Codigo de emparejamiento no valido',
+            )
+
+            return
+          }
+
+          kiosksLinked += 1
+          const confirmed: PairingConfirmed = {
+            device: {
+              uuid: '0199f3c9-1b7d-7a44-8e02-3c4d5e6f7a81',
+              name: payload.name ?? '',
+              status: 'active',
+              reactivated: false,
+            },
+            request: { app_version: '1.4.3', requested_at: '2026-09-07T09:55:00.000000Z' },
+          }
+          await json(route, 200, confirmed)
+          return
+        }
         case 'POST /api/v1/setup/complete': {
           const pending = STEP_ORDER.filter((step) => {
             const status = stepStatusOf(step)
@@ -487,7 +520,7 @@ export async function stubOnboardingApi(
               departments: departments.length,
               credentials_pending: credentialsPending,
               license: licenseActivated ? 'valid' : 'absent',
-              kiosks: 0,
+              kiosks: kiosksLinked,
             },
           })
           return

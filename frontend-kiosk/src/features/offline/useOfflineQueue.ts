@@ -14,6 +14,7 @@
 
 import type { Ref } from 'vue'
 import { onUnmounted, ref } from 'vue'
+import { createDeviceRevocationWatcher } from '@/features/pairing/application/deviceRevocation'
 import type { RosterLookupPort, ScanSubmissionPort } from '@/features/scan/application/ports'
 import type { ApiClient } from '@/shared/api/client'
 import type { ConnectivityController } from '@/shared/connectivity/useConnectivity'
@@ -46,6 +47,14 @@ export interface OfflineQueueController {
    * instalacion ofrece fichaje por PIN, sin que nadie tenga que sondear.
    */
   onRosterUpdated(listener: () => void): () => void
+  /**
+   * Lo que el LATIDO ha averiguado sobre su propia autenticacion, para que
+   * alimente el mismo contador que ya llevan la sincronizacion y el padron
+   * (RF-PD-06, tarea 5.6). El latido no vive en este controlador —es un
+   * `setInterval` propio de cada pantalla, ver `ScanView.vue`— pero la
+   * revocacion es una sola decision por tablet, no una por canal.
+   */
+  reportAuthOutcome(unauthorized: boolean): void
   /** Lo que el latido declara de la cola: `pending_queue_size` y `oldest_pending_at`. */
   telemetry(appVersion: string): KioskTelemetrySnapshot
   /** Puerta del paso 11: una version nueva no se aplica en un cambio de turno. */
@@ -59,6 +68,14 @@ export interface OfflineQueueOptions {
   readonly reporter: ErrorReporter
   readonly deviceToken?: () => string | null
   readonly databaseName?: string
+  /**
+   * Dos `401`/`403` seguidos, sin exito de por medio, en el latido, el padron
+   * o la sincronizacion (RF-PD-06, tarea 5.6, `deviceRevocation.ts`). Cuando
+   * dispara, el padron YA esta purgado (`cachedRoster.purge()`, doc 01 §8.1);
+   * quien escucha solo tiene que limpiar el token y navegar a `/pair`. La cola
+   * offline de fichajes NUNCA se toca aqui.
+   */
+  readonly onDeviceRevoked?: () => void
 }
 
 const SYNC_DIAGNOSTIC_CODES = {
@@ -91,6 +108,26 @@ export function createOfflineQueueController(options: OfflineQueueOptions): Offl
       reporter.report('kiosk.offline.storage_unavailable', { reason, durable: false }),
   })
 
+  const roster: CachedRoster = createCachedRoster({
+    api: options.api,
+    storage: () => queue.storage(),
+    deviceToken: options.deviceToken ?? readDeviceToken,
+    onDiagnostic: (code, context) => reporter.report(ROSTER_DIAGNOSTIC_CODES[code], context),
+    onAuthOutcome: (unauthorized) =>
+      unauthorized ? revocation.reportUnauthorized() : revocation.reportAuthenticated(),
+  })
+
+  // Un solo contador de `401` consecutivos para toda la tablet: la
+  // revocacion es una decision por dispositivo, no una por canal (heartbeat,
+  // padron, sincronizacion). Purga el padron ANTES de avisar: quien escucha
+  // `onDeviceRevoked` (la pantalla) solo tiene que limpiar el token y navegar.
+  const revocation = createDeviceRevocationWatcher({
+    onRevoked: () => {
+      void roster.purge()
+      options.onDeviceRevoked?.()
+    },
+  })
+
   const runner: SyncRunner = createSyncRunner({
     api: options.api,
     queue,
@@ -101,13 +138,8 @@ export function createOfflineQueueController(options: OfflineQueueOptions): Offl
       for (const listener of reachabilityListeners) listener(reachable)
     },
     onDiagnostic: (code, context) => reporter.report(SYNC_DIAGNOSTIC_CODES[code], context),
-  })
-
-  const roster: CachedRoster = createCachedRoster({
-    api: options.api,
-    storage: () => queue.storage(),
-    deviceToken: options.deviceToken ?? readDeviceToken,
-    onDiagnostic: (code, context) => reporter.report(ROSTER_DIAGNOSTIC_CODES[code], context),
+    onAuthOutcome: (unauthorized) =>
+      unauthorized ? revocation.reportUnauthorized() : revocation.reportAuthenticated(),
   })
 
   const wake = (): void => runner.wakeNow()
@@ -160,6 +192,11 @@ export function createOfflineQueueController(options: OfflineQueueOptions): Offl
       return () => {
         rosterUpdateListeners.delete(listener)
       }
+    },
+
+    reportAuthOutcome(unauthorized) {
+      if (unauthorized) revocation.reportUnauthorized()
+      else revocation.reportAuthenticated()
     },
 
     telemetry(appVersion) {
@@ -229,6 +266,8 @@ export interface UseOfflineQueue {
   readonly roster: RosterLookupPort
   readonly pendingCount: Readonly<Ref<number>>
   readonly syncing: Readonly<Ref<boolean>>
+  /** Ver `OfflineQueueController.reportAuthOutcome`. Lo usa el latido de la pantalla. */
+  reportAuthOutcome(unauthorized: boolean): void
   telemetry(appVersion: string): KioskTelemetrySnapshot
   /**
    * Reactivo, no un metodo: la pantalla principal decide si ofrece «¿Sin
@@ -296,6 +335,7 @@ export function useOfflineQueue(options: UseOfflineQueueOptions): UseOfflineQueu
     roster: controller.roster,
     pendingCount,
     syncing,
+    reportAuthOutcome: (unauthorized) => controller.reportAuthOutcome(unauthorized),
     telemetry: (appVersion) => controller.telemetry(appVersion),
     pinSealingPublicKey,
     pinSealingKnown,

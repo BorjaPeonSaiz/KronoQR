@@ -32,6 +32,35 @@ use Throwable;
  * eso el padre **se desconecta antes de bifurcar** y cada hijo abre la suya al
  * primer consulta. Laravel reconecta solo, tambien en el padre.
  *
+ * ## `disconnect()` y **no** `purge()`, y la diferencia costo un dia
+ *
+ * Las dos cierran el socket, que es lo unico que hace falta antes de bifurcar.
+ * Pero `purge()` ademas **saca el objeto `Connection` del `DatabaseManager`**, y
+ * ahi empieza el problema: todo servicio que el padre ya hubiera resuelto —el
+ * registro de auditoria es un `singleton` y lo resuelve cualquier peticion de
+ * preparacion— se queda con una referencia a ese objeto **huerfano y con el PDO a
+ * `null`**.
+ *
+ * En el hijo, la primera consulta sobre el huerfano dispara
+ * `Connection::reconnect()`, cuyo reconector no reconecta ese objeto sino que
+ * llama a `DatabaseManager::reconnect($nombre)` — y eso empieza por
+ * `disconnect($nombre)`, que **cierra el PDO de la conexion viva del hijo**. Si
+ * en ese instante hay una transaccion abierta, PostgreSQL la revierte al cerrarse
+ * el socket y Laravel confirma despues sobre un PDO nuevo que nunca abrio nada:
+ * ni excepcion, ni 500, ni rastro. La peticion responde 200 y las escrituras de
+ * esa transaccion no existen.
+ *
+ * Se midio en la 5.6: `POST /kiosk/pair/claim` devolvia su token y ni
+ * `personal_access_tokens` ni `devices.token_hash` conservaban nada, mientras que
+ * lo escrito fuera de la transaccion —la solicitud consumida— y el asiento de
+ * auditoria —escrito sobre la conexion ya resucitada— si sobrevivian. Es el peor
+ * modo de fallo posible: una prueba de concurrencia que no puede afirmar sobre lo
+ * que persiste.
+ *
+ * Con `disconnect()` el objeto sigue siendo el del gestor, de modo que **todos
+ * los que lo tienen son el mismo**: el hijo lo reconecta en su sitio y no hay a
+ * quien atropellar.
+ *
  * ## Como vuelve el resultado
  *
  * Por fichero, uno por hijo, y no por memoria compartida ni por tuberia: un
@@ -64,13 +93,15 @@ final class ParallelRequests
         // Ver el docblock: nadie puede heredar un socket a PostgreSQL.
         //
         // **Todas** las conexiones abiertas, no solo la de por defecto:
-        // `DB::purge()` sin argumento cierra unicamente esa, y la de
+        // `DB::disconnect()` sin argumento cierra unicamente esa, y la de
         // **migracion** —que la suite abre para `migrate:fresh`— se quedaria
         // viva y duplicada en los diez hijos. El sintoma de olvidarla es una
         // prueba posterior que falla con «relation "migrations" does not
         // exist», a varios ficheros de distancia de la causa.
+        //
+        // Y `disconnect()` y no `purge()`: ver el docblock, no es lo mismo.
         foreach (array_keys(DB::getConnections()) as $name) {
-            DB::purge((string) $name);
+            DB::disconnect((string) $name);
         }
 
         $children = self::spawn($count, $request, $directory);

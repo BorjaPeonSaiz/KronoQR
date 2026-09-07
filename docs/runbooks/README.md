@@ -48,7 +48,7 @@ Asignación literal del plan de implementación
 | 4 | [`rotura-cadena-auditoria.md`](rotura-cadena-auditoria.md) | **Incidente de seguridad.** Incluye preservación de evidencia | ✅ Fase 1 · tarea 1.14 (era 2.2, adelantada por ADR-032) |
 | 5 | [`restaurar-backup.md`](restaurar-backup.md) | Recuperación y simulacro trimestral | ✅ Fase 1 · tarea 1.18 (era 2.11, adelantada por ADR-032) → usado por 5.7 |
 | 6 | [`rotacion-secretos.md`](rotacion-secretos.md) | Rotación programada o compromiso | ✅ §7.7 · escrito en la tarea 2.12 con la rotación del QR · ampliado en 5.4 |
-| 7 | `alta-nuevo-quiosco.md` | Emparejamiento por código y vinculación | Fase 5 · tarea 5.6 |
+| 7 | [`alta-nuevo-quiosco.md`](alta-nuevo-quiosco.md) | Emparejamiento por código y vinculación. Incluye **lo que no es del producto**: fijar la tablet en modo quiosco | ✅ Fase 5 · tarea 5.6 |
 | 8 | `alta-nuevo-empleado.md` | Alta, emisión, impresión y entrega con la antelación necesaria | Fase 1 · tarea 1.10 |
 | 9 | `tarjeta-perdida-o-rota.md` | Revocación, reemisión y reimpresión en el día | Fase 1 · tarea 1.10 |
 | 10 | [`rotacion-clave-qr.md`](rotacion-clave-qr.md) | Reimpresión progresiva sin dejar a nadie sin fichar | ✅ Fase 2 · tarea 2.12 |

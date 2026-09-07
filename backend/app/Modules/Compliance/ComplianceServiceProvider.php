@@ -46,6 +46,7 @@ use App\Modules\Compliance\Infrastructure\Listener\NotifyIncidentAssignees;
 use App\Modules\Compliance\Infrastructure\Listener\OpenIncidentOnAnomalyDetected;
 use App\Modules\Compliance\Infrastructure\Listener\RecordComplianceProfileChange;
 use App\Modules\Compliance\Infrastructure\Listener\RecordCredentialLifecycle;
+use App\Modules\Compliance\Infrastructure\Listener\RecordDeviceProvisioning;
 use App\Modules\Compliance\Infrastructure\Listener\RecordEmployeeImport;
 use App\Modules\Compliance\Infrastructure\Listener\RecordEmployeePinLifecycle;
 use App\Modules\Compliance\Infrastructure\Listener\RecordEmploymentContractChange;
@@ -81,6 +82,7 @@ use App\Modules\Identity\Domain\Event\SigningKeyRetired;
 use App\Modules\Identity\Domain\Event\SigningKeyRotated;
 use App\Modules\Identity\Domain\Event\TwoFactorEnabled;
 use App\Modules\Identity\Domain\Event\TwoFactorReset;
+use App\Modules\Kiosk\Domain\Event\DeviceProvisioned;
 use App\Modules\Product\Domain\Event\ComplianceThresholdChanged;
 use App\Modules\Product\Domain\Event\InstallationSettingChanged;
 use App\Modules\Product\Domain\Event\LicenseActivated;
@@ -252,6 +254,7 @@ final class ComplianceServiceProvider extends ServiceProvider
     {
         $this->recordShiftEntryLifecycle();
         $this->recordCredentialAndDeviceLifecycle();
+        $this->recordDeviceProvisioning();
         $this->recordEmployeePinLifecycle();
         $this->recordEmploymentContractChanges();
         $this->recordSiteConfiguration();
@@ -508,6 +511,35 @@ final class ComplianceServiceProvider extends ServiceProvider
         Event::listen(SigningKeyRetired::class, [RecordCredentialLifecycle::class, 'handleSigningKeyRetired']);
         Event::listen(DeviceTokenIssued::class, [RecordCredentialLifecycle::class, 'handleDeviceTokenIssued']);
         Event::listen(DeviceTokenRevoked::class, [RecordCredentialLifecycle::class, 'handleDeviceTokenRevoked']);
+    }
+
+    /**
+     * El asiento del **alta de un quiosco por codigo de emparejamiento**
+     * (tarea 5.6, RF-PD-06, regla dura 6, RL-04).
+     *
+     * ## Listener propio, y no un metodo mas del de arriba
+     *
+     * Aquel traduce eventos de `Identity` —credenciales y tokens—; este traduce
+     * uno de `Kiosk`. Meterlo alli habria hecho que una clase importara los
+     * eventos de dos modulos por dos motivos distintos, y la frontera de Deptrac
+     * lo habria concedido sin que nadie volviera a mirar por que.
+     *
+     * ## `device.provisioned` y `device.paired` son DOS hechos
+     *
+     * El primero lo firma una persona cuando teclea el codigo en el panel —es el
+     * unico acto con actor de los tres pasos— y el segundo ocurre despues, cuando
+     * la tablet recoge su token, y es anonimo por construccion. Separarlos es lo
+     * que permite ver que entre uno y otro pasaron ocho minutos, o que nunca llego
+     * a pasar nada. La accion ya estaba en el catalogo y hasta ahora nadie la
+     * escribia.
+     *
+     * Sincrono, sin `ShouldQueue` y sin `afterCommit`: si el asiento falla, el
+     * quiosco no queda dado de alta (ADR-027). Un origen de fichajes creado sin
+     * traza es peor que un alta que no llega a producirse.
+     */
+    private function recordDeviceProvisioning(): void
+    {
+        Event::listen(DeviceProvisioned::class, [RecordDeviceProvisioning::class, 'handle']);
     }
 
     /**

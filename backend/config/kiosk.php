@@ -114,6 +114,128 @@ return [
     ],
 
     /*
+     * Emparejamiento de una tablet (RF-PD-06, tarea 5.6).
+     *
+     * TODO ESTO ES CONFIGURACION Y NO CONSTANTES (regla dura 13, ADR-017). Un
+     * hotel que da de alta sus quioscos con el IT delante y otro que lo hace por
+     * telefono con la recepcionista no necesitan la misma ventana, y cambiarla no
+     * puede exigir tocar el repositorio.
+     *
+     * LO QUE PROTEGE EL EMPAREJAMIENTO NO ES LA ENTROPIA DEL CODIGO. Seis digitos
+     * se leen de lejos y se teclean a mano, que es para lo que existen; quien
+     * impide que un tercero se lleve el quiosco es el SECRETO DE RECOGIDA —32
+     * bytes que no salen de la tablet—, la caducidad corta y el hecho de que nada
+     * se vincula sin el `confirm` de un `admin`. Subir el codigo a diez digitos
+     * no añadiria seguridad y si haria que alguien lo tecleara mal.
+     */
+    'pairing' => [
+
+        /*
+         * Cuanto vive un codigo sin confirmar, en segundos.
+         *
+         * Diez minutos es lo que tarda una persona en ir del armario de la tablet
+         * al ordenador del panel. Mas seria dejar codigos vivos por el hotel;
+         * menos convertiria cada alta en una carrera, y la tablet tendria que
+         * pedir otro codigo mientras alguien lo esta tecleando.
+         *
+         * **Acota la espera de la CONFIRMACION, no la recogida.** Una vez
+         * confirmada la solicitud, `/kiosk/pair/claim` entrega el token aunque
+         * este plazo haya pasado: la fila de `devices` ya existe y negarlo
+         * dejaria un quiosco dado de alta que ninguna tablet puede usar — el
+         * callejon sin salida que prohibe la regla dura 19.
+         */
+        'code_ttl_seconds' => (int) env('KIOSK_PAIRING_CODE_TTL_SECONDS', 600),
+
+        /*
+         * Cada cuantos segundos sondea la tablet `POST /api/v1/kiosk/pair/claim`.
+         *
+         * Viaja en la respuesta de `/kiosk/pair` y no compilado en la PWA: el
+         * limitador del `claim` se dimensiona a partir de esta cadencia, y si el
+         * valor viviera en el cliente, ajustarlo obligaria a reinstalar la
+         * aplicacion en cada tablet del hotel.
+         *
+         * Cinco segundos son 120 sondeos en los diez minutos de vida del codigo:
+         * suficiente para que el alta se sienta inmediata y lejos de cualquier
+         * techo.
+         */
+        'poll_interval_seconds' => (int) env('KIOSK_PAIRING_POLL_INTERVAL_SECONDS', 5),
+
+        /*
+         * `POST /api/v1/kiosk/pair`, por IP y por minuto (zona
+         * `pairing-request`).
+         *
+         * ES UNA ESCRITURA PUBLICA, asi que el techo no es celo: sin el,
+         * cualquiera puede llenar la tabla de solicitudes pendientes y agotar el
+         * espacio de codigos de seis digitos, que es la unica forma de negar el
+         * alta de un quiosco desde fuera.
+         *
+         * Diez por minuto y por IP cubren de sobra a un hotel que da de alta
+         * varias tablets la misma mañana desde la misma red.
+         */
+        'request_rate_per_ip' => (int) env('KIOSK_PAIRING_REQUEST_RATE_PER_IP', 10),
+
+        /*
+         * `POST /api/v1/kiosk/pair/claim`, por `pairing_id` y por minuto (zona
+         * `pairing-claim`).
+         *
+         * POR SOLICITUD Y NO SOLO POR IP, al contrario que la zona de arriba: un
+         * limite por IP no acota nada cuando todos los quioscos de un hotel salen
+         * por la misma direccion, y este es ademas el endpoint donde se intentaria
+         * adivinar un secreto.
+         *
+         * Treinta es **el sextuple** de la cadencia de sondeo —doce por minuto—
+         * para que un reintento honesto tras un corte de red nunca choque con el
+         * techo: la regla dura 19 dice que la tablet no puede quedarse atrapada, y
+         * un `429` en el ultimo sondeo de un emparejamiento ya confirmado seria
+         * exactamente eso. El techo por IP de esta zona es el general del quiosco
+         * (`rate_limits.per_ip`), igual que el del borde.
+         */
+        'claim_rate_per_pairing' => (int) env('KIOSK_PAIRING_CLAIM_RATE_PER_PAIRING', 30),
+
+        /*
+         * Cuantas solicitudes **vivas** —pendientes y sin caducar— admite la
+         * instalacion a la vez.
+         *
+         * ES UN CONTROL DE RECURSOS, NO DE NEGOCIO, y complementa al limitador
+         * por IP en lo que aquel no puede hacer: el techo por origen frena a UNO,
+         * y quien reparta el trafico entre direcciones lo esquiva. Esta cota mira
+         * el conjunto, que es lo que de verdad protege el espacio de codigos de
+         * seis digitos y la tabla.
+         *
+         * Veinte es un orden de magnitud por encima del uso real: una instalacion
+         * es un hotel (ADR-040) y se dan de alta unos pocos quioscos, casi
+         * siempre de uno en uno. Superarla responde `503`, no `429`: no es «vas
+         * demasiado rapido» sino «ahora mismo no puedo atenderte», y la tablet
+         * reintenta sola (regla dura 19). El hueco aparece solo, porque cada
+         * peticion purga antes las pendientes ya caducadas.
+         */
+        'max_live_pending' => (int) env('KIOSK_PAIRING_MAX_LIVE_PENDING', 20),
+
+        /*
+         * Cuantas horas se conservan las solicitudes ya consumidas o caducadas.
+         *
+         * NO ES RETENCION LEGAL: aqui no hay ni un dato personal —dos hashes, una
+         * version de la PWA y unos instantes— asi que no hay nada que retener. Es
+         * higiene: la tabla no crece sin limite y el espacio de codigos no se
+         * agota. La purga es PEREZOSA y ocurre al crear una solicitud nueva, no en
+         * el scheduler: un barrido programado que no corra dejaria de purgar en
+         * silencio, y este barrido solo hace falta cuando alguien empareja.
+         *
+         * Veinticuatro horas son el margen que hace falta para diagnosticar un
+         * emparejamiento que salio mal el dia anterior.
+         */
+        'purge_after_hours' => (int) env('KIOSK_PAIRING_PURGE_AFTER_HOURS', 24),
+
+        /*
+         * EL SUELO DE TIEMPO DEL RECHAZO NO ESTA AQUI: es
+         * `security.rejection_floor_ms`, compartido con la resolucion de
+         * credenciales del fichaje. Los dos caminos tienen la misma obligacion
+         * (RS-03) y dos numeros para el mismo control acaban con uno de ellos a
+         * cero por descuido.
+         */
+    ],
+
+    /*
      * Tamano maximo de un lote de sincronizacion (doc 02 §6: «lotes de 50»).
      *
      * Se declara aqui **y** en el contrato OpenAPI (`ScanBatchRequest.maxItems`)

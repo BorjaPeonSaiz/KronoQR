@@ -44,6 +44,12 @@ export interface CachedRosterOptions {
   readonly deviceToken: () => string | null
   readonly crypto?: RosterCryptoDeps
   readonly onDiagnostic?: (code: RosterDiagnostic, context: Record<string, string | number>) => void
+  /**
+   * Alimenta `deviceRevocation.ts` (RF-PD-06, tarea 5.6). Ver el mismo campo en
+   * `SyncRunnerOptions`: `true` solo en un `401`/`403` real, `false` en un
+   * `refresh()` que sí llega a traer padrón, nunca por un fallo de red.
+   */
+  readonly onAuthOutcome?: (unauthorized: boolean) => void
 }
 
 export interface CachedRoster {
@@ -147,12 +153,16 @@ export function createCachedRoster(options: CachedRosterOptions): CachedRoster {
 
         const result = await options.api.fetchRoster()
         if (result.outcome !== 'ok') {
-          if (result.outcome === 'failed' && result.cause !== 'offline') {
-            options.onDiagnostic?.('roster.fetch_failed', { cause: result.cause })
+          if (result.outcome === 'failed') {
+            if (result.cause === 'unauthorized') options.onAuthOutcome?.(true)
+            if (result.cause !== 'offline') {
+              options.onDiagnostic?.('roster.fetch_failed', { cause: result.cause })
+            }
           }
           return false
         }
 
+        options.onAuthOutcome?.(false)
         // Se actualiza YA, aunque el sellado para disco falle despues: no es un
         // dato personal (RL-12 no lo alcanza) y el teclado de PIN de esta sesion
         // no tiene por que esperar a que la copia cifrada se pueda escribir.

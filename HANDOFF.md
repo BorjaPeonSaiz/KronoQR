@@ -7,28 +7,44 @@
 
 ## Estado y objetivo actual
 
-**Rama `feat/tarea-5.6-emparejamiento-quiosco`** (en `origin`, sincronizada), creada desde `main`
-(`3990524`, merge de la PR #41: Fase 5 tareas 5.1–5.5 + Dependabot #36–40 con el lock reparado).
-Contiene el hook de Pint (`.claude/settings.json`: PostToolUse que pasa Pint sobre cada `.php` de
-`backend/` editado, dentro del contenedor `app`) y este resumen.
+**Rama `feat/tarea-5.6-emparejamiento-quiosco`**, creada desde `main` (`3990524`, PR #41). **Tarea 5.6
+«Vinculación de quiosco por código de emparejamiento» (RF-PD-06) IMPLEMENTADA y revisada el 07-09-2026,
+SIN COMMIT**: todo el trabajo está en el árbol de trabajo (61 ficheros modificados, 77 nuevos).
+Siguiente acción: `git add -A && git commit` (mensaje convencional `feat(kiosk): emparejamiento de quiosco
+por código (tarea 5.6, RF-PD-06)`), push, CI, PR con *merge commit*.
 
-**Objetivo: tarea 5.6, «Vinculación de quiosco por código de emparejamiento»** (RF-PD-06,
-`frontend-quiosco` + `backend-laravel`, detalle en `plan implementacion/05-fase-5-productizacion.md`).
-**NO está empezada.** Siguiente acción: arrancarla con su prompt del doc 03.
+**Lo decidido (C-3 cerrada, escrito en doc 01 Anexo B, ficha 5.6 del plan y doc 02 §7.3 nota 5):** flujo
+iniciado por la tablet en tres rutas — `POST /kiosk/pair` (público, crea la solicitud y devuelve código de
+**6 dígitos**, `pairing_id` y `pairing_secret`), `POST /kiosk/pair/confirm` (solo `admin`, ámbito
+`settings:*`, teclea código + nombre) y `POST /kiosk/pair/claim` (público, la tablet sondea cada 5 s y
+recibe el token **una sola vez**). Código **caduca a los 10 min**, hash SHA-256 en reposo, único entre
+pendientes (índice parcial), consumido con `UPDATE … WHERE status`. Rechazos genéricos y de tiempo
+constante (`ConstantTimeFloor` compartido, `security.rejection_floor_ms`). Reactivación de un quiosco
+revocado con el mismo nombre = misma fila y mismo `uuid`. Auditoría: `device.provisioned` (con actor, en
+el `confirm`) + `device.paired`/`device.revoked` de Identity. `GET /devices` y `POST /devices/{uuid}/unpair`
+(admin). Consola: `kiosk:pairing-code {code} --name=` **confirma**. Cota `kiosk.pairing.max_live_pending`
+(20) y agotamiento de códigos → 503; dos limitadores (`pairing-request` por IP, `pairing-claim` por
+`pairing_id`). Sin puerto invertido: Kiosk llama a `IssueDeviceToken`/`RevokeDeviceToken` (arista Deptrac
+`KioskApplication → IdentityApplication`). Nuevos compartidos: `Shared\Domain\ValueObject\Base64Url`
+(sustituye las cuatro copias) y `Shared\Application\Support\ConstantTimeFloor`.
 
-Contexto ya preparado para la 5.6 por tareas anteriores:
+**Verificado el 07-09:** `make quality` verde (Pint, PHPStan 9, Deptrac 0/0; Rector preexistente e
+ignorado), `make test` **3050 pasadas**, `qa:traceability --check` OK; quiosco 344 unitarias + 35 E2E
+(bundle 98 KiB/250), panel 359 unitarias + 60 E2E. Revisado por `arquitecto-dominio` (antes de codificar),
+`revisor-codigo`, `seguridad-cumplimiento` y `qa-testing`; todos los hallazgos aplicados. Runbook
+`docs/runbooks/alta-nuevo-quiosco.md` escrito (fila 7 del README). Doc 07 §5/§6 actualizados (riesgo
+aceptado: token de dispositivo en `localStorage`). Doc 03 §6.5.1: prompt de arranque de la 5.6.
 
-- `POST /kiosk/pair` y `/kiosk/pair/confirm` **no existen** aún en contrato ni código.
-- El paso 8 del asistente ya funciona como omitible (`PUT /setup/steps/kiosk`); el punto de enganche de
-  la interfaz está documentado en un comentario de
-  `frontend-admin/src/features/onboarding/steps/KioskStep.vue` (formulario del código +
-  `setup.recordStep('kiosk', 'completed')`).
-- Extender `PlanLimitsDoNotBlockTest` al emparejamiento por código (deuda anotada por la 5.3).
-- Escribir `docs/runbooks/alta-nuevo-quiosco.md` (fila 7 del README de runbooks; el paquete de cliente
-  lo nombra sin enlazar hasta que exista).
-- `kiosk:pairing-code` sin argumento de centro (ADR-040: un centro por instalación).
-- **Decisión abierta del usuario:** formato y caducidad del código de emparejamiento.
+**Hallazgo de QA en el arnés:** `ParallelRequests` usaba `DB::purge()` antes del `fork`, lo que dejaba
+huérfanas las conexiones capturadas por singletons y **revertía en silencio** la transacción de
+`IssueDeviceToken` en el hijo. Corregido a `DB::disconnect()`; docblock con el mecanismo.
 
+**Pendiente de la 5.6 (no bloquea el cierre):** `make e2e` del quiosco contra el backend real no se ha
+ejecutado (los E2E interceptan la API); cobertura y MSI del dominio de Kiosk sin medir; en tablet real
+verificar que el modo quiosco/MDM conserva `localStorage` (sin él la tablet no sale de `/pair`) y que el
+sondeo no se suspende en segundo plano; la cuenta atrás usa el reloj de la tablet; el runbook deja cinco
+dudas marcadas (tabla de requisitos de tablet en `instalacion.md` §0, salida exacta de `kiosk:health`,
+alerta de latido de la 3.2, TTL/cadencia no expuestos en `.env`, no se puede **renombrar** un quiosco activo).
 ## Pendiente
 
 ### Del usuario
@@ -79,8 +95,6 @@ Contexto ya preparado para la 5.6 por tareas anteriores:
   conjunto; un paso siempre rojo y siempre ignorado acaba sin leerse.
 - XLSX se lee sin cota de descompresión más allá de `max_rows` y los 4 MB (riesgo bajo, consciente).
 - El 409 de `POST /setup/administrator` (intento de segundo admin) no deja señal; registrar sin PII.
-- Cuarta implementación de base64url en el árbol — candidata a `Shared\Domain\ValueObject\Base64Url`;
-  no unificada porque toca material criptográfico de tres tareas.
 - La suite Feature depende del orden alfabético de directorios para EXPONER acoplamientos de estado;
   nada detecta una prueba que dependa del vaciado de tablas de trabajo confirmadas.
 - `heading-order` (axe, impacto moderado) en `LicenseStep`/`ComplianceProfileStep` al incrustar
@@ -141,4 +155,5 @@ Detalle de cada hito: mensajes de commit, PRs y `git show 9b1593d:HANDOFF.md`.
   atrás, Compose de producción, etapa ⑧ de la CI (6 escenarios, verde en el run 33573780721); 5.5
   asistente de puesta en marcha + importación masiva (backend, contrato, `frontend-admin`, revisiones y
   arreglo del fallo intermitente de la suite). Todo en `main` vía PR #41 (`3990524`).
-- **02-09** — Rama `feat/tarea-5.6-emparejamiento-quiosco` con el hook de Pint; la 5.6 sin empezar.
+- **02-09** — Rama `feat/tarea-5.6-emparejamiento-quiosco` con el hook de Pint.
+- **07-09** — **Tarea 5.6** implementada (contrato, backend Kiosk, PWA, panel, runbook, 4 revisiones), sin commit.

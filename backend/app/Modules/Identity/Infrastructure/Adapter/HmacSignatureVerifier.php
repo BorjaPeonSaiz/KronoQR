@@ -13,6 +13,7 @@ use App\Modules\Identity\Domain\ValueObject\CredentialSecret;
 use App\Modules\Identity\Domain\ValueObject\QrPayload;
 use App\Modules\Identity\Domain\ValueObject\QrSigningKey;
 use App\Modules\Shared\Application\Port\EmployeeRegistry;
+use App\Modules\Shared\Application\Support\ConstantTimeFloor;
 use App\Modules\Shared\Domain\ValueObject\CredentialRejectionReason;
 use App\Modules\Shared\Domain\ValueObject\CredentialResolution;
 use App\Modules\Shared\Domain\ValueObject\EmployeeSnapshot;
@@ -110,13 +111,18 @@ final readonly class HmacSignatureVerifier implements CredentialResolver
         private CredentialRepository $credentials,
         private EmployeeRegistry $employees,
         private EmployeeDirectory $directory,
-        /** Suelo de tiempo de todo rechazo, en milisegundos (RS-03). */
-        private int $rejectionFloorMs,
+        /**
+         * El suelo de tiempo de todo rechazo (RS-03), compartido con la
+         * recogida de un emparejamiento: los dos caminos tienen la misma
+         * obligacion y desde la tarea 5.6 tambien el mismo umbral y el mismo
+         * codigo, en lugar de dos copias que podian divergir.
+         */
+        private ConstantTimeFloor $floor,
     ) {}
 
     public function resolve(#[SensitiveParameter] string $qrPayload): CredentialResolution
     {
-        $startedAt = hrtime(true);
+        $startedAt = $this->floor->startedAt();
 
         // --- Paso 1: forma y prefijo -----------------------------------------
         $parsed = QrPayload::tryParse($qrPayload);
@@ -160,7 +166,7 @@ final readonly class HmacSignatureVerifier implements CredentialResolver
         // --- Paso 6: mismo desenlace y mismo tiempo para todo rechazo --------
         if ($reason instanceof CredentialRejectionReason) {
             $this->recordRejection($reason, $employeeUuid);
-            $this->padTo($startedAt);
+            $this->floor->padTo($startedAt);
 
             return CredentialResolution::rejected($reason);
         }
@@ -241,26 +247,6 @@ final readonly class HmacSignatureVerifier implements CredentialResolver
             // rechazos por firma no se sabe, y es correcto que no se sepa.
             'employee_uuid' => $employeeUuid,
         ]);
-    }
-
-    /**
-     * Consume el tiempo que falte hasta el suelo de rechazo (RS-03).
-     *
-     * `hrtime()` es monotono: no lo mueve un ajuste de reloj ni un cambio de
-     * hora, que es exactamente lo que no puede permitirse una medida usada para
-     * decidir cuanto dormir. Si el trabajo ya tardo mas que el suelo, no se
-     * duerme nada.
-     */
-    private function padTo(float|int $startedAt): void
-    {
-        $floorNs = $this->rejectionFloorMs * 1_000_000;
-        $elapsedNs = hrtime(true) - $startedAt;
-
-        if ($elapsedNs >= $floorNs) {
-            return;
-        }
-
-        usleep((int) (($floorNs - $elapsedNs) / 1_000));
     }
 
     private function sentinelPayload(): QrPayload

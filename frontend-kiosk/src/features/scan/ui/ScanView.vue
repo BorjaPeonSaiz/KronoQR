@@ -20,11 +20,16 @@
 // en continuo (RF-KI-02). Los botones son accesorios.
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import { createApiClient } from '@/shared/api/client'
 import { readPrivacyNoticeConfig } from '@/shared/config/privacy'
 import { useConnectivity } from '@/shared/connectivity/useConnectivity'
-import { APP_VERSION, readDeviceToken, resolveDeviceId } from '@/shared/telemetry/deviceIdentity'
+import {
+  APP_VERSION,
+  clearDeviceToken,
+  readDeviceToken,
+  resolveDeviceId,
+} from '@/shared/telemetry/deviceIdentity'
 import { createErrorReporter } from '@/shared/telemetry/errorReporter'
 import { createHeartbeatScheduler } from '@/shared/telemetry/heartbeat'
 import ConnectionStatusBadge from '@/shared/ui/ConnectionStatusBadge.vue'
@@ -39,6 +44,7 @@ import { useWakeLock } from '../composables/useWakeLock'
 import ScanConfirmationPanel from './ScanConfirmationPanel.vue'
 
 const { t } = useI18n()
+const router = useRouter()
 
 const video = ref<HTMLVideoElement | null>(null)
 
@@ -60,7 +66,19 @@ const api = createApiClient({
 // La cola de IndexedDB (tarea 1.9). El escaneo se encola ANTES de confirmar y
 // el contador de pendientes del indicador sale del tamano real de la cola, no
 // de una cuenta en memoria que un reinicio se llevaria por delante.
-const offline = useOfflineQueue({ api, reporter, connectivity })
+const offline = useOfflineQueue({
+  api,
+  reporter,
+  connectivity,
+  // Dispositivo desvinculado desde el panel (RF-PD-06, tarea 5.6): el padron
+  // ya esta purgado cuando esto se llama (`deviceRevocation.ts`). Aqui solo
+  // queda limpiar el token y volver a la pantalla de emparejamiento. La cola
+  // offline de fichajes NO se toca (regla dura 19).
+  onDeviceRevoked: () => {
+    clearDeviceToken()
+    void router.replace({ name: 'pair' })
+  },
+})
 
 const sound = useScanSound({
   onBlocked: (context) => reporter.report('kiosk.audio.blocked', context),
@@ -115,6 +133,10 @@ const heartbeat = createHeartbeatScheduler({
   // que es la diferencia entre una sincronizacion en curso y un quiosco que
   // lleva media jornada incomunicado.
   snapshot: () => offline.telemetry(APP_VERSION),
+  // El latido alimenta el MISMO contador de `401` consecutivos que la cola
+  // (RF-PD-06, tarea 5.6): la revocacion es una decision por tablet, no una
+  // por canal.
+  onAuthOutcome: (unauthorized) => offline.reportAuthOutcome(unauthorized),
 })
 
 const cameraFailed = computed(

@@ -101,8 +101,23 @@ export async function stubScanApi(page: Page, options: ScanStubOptions = {}): Pr
   return { recorded }
 }
 
+/**
+ * Sin token de dispositivo el guard del router (RF-PD-06, tarea 5.6) manda
+ * cualquier navegacion a `/pair`: es la pantalla correcta para una tablet sin
+ * vincular, pero ninguno de los E2E de fichaje quiere probar ESO. Se «empareja»
+ * la tablet de pruebas con `addInitScript`, que la deja en `localStorage`
+ * ANTES de que arranque cualquier script de la pagina — incluida la primera
+ * navegacion, que es cuando el guard mira.
+ */
+export async function pairDevice(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('kronoqr.kiosk.device_token', 'device-token-e2e')
+  })
+}
+
 /** El latido no debe ensuciar las trazas ni fallar por no haber servidor. */
 export async function stubKioskApi(page: Page): Promise<void> {
+  await pairDevice(page)
   await page.route('**/api/v1/kiosk/heartbeat', async (route: Route) => {
     await route.fulfill({
       status: 200,

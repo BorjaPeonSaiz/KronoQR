@@ -1,7 +1,7 @@
 // Soporte del E2E del fichaje por PIN (tarea 1.12, RF-AT-11).
 
 import type { Page, Route } from '@playwright/test'
-import { stubScanApi } from './kiosk'
+import { pairDevice, stubScanApi } from './kiosk'
 import { stubBatchApi } from './offlineQueue'
 
 /**
@@ -14,19 +14,6 @@ import { stubBatchApi } from './offlineQueue'
 async function stubBackgroundQrTraffic(page: Page): Promise<void> {
   await stubScanApi(page)
   await stubBatchApi(page)
-}
-
-/**
- * Sin token de dispositivo el padron NUNCA se pide (RL-12, regla dura del
- * propio quiosco): `pin_sealing_public_key` viaja con el padron, asi que sin
- * «emparejar» la tablet de pruebas la clave del PIN no llega ni aunque el
- * servidor la sirva. `addInitScript` la deja en `localStorage` ANTES de que
- * arranque cualquier script de la pagina, que es cuando el quiosco la lee.
- */
-async function pairDevice(page: Page): Promise<void> {
-  await page.addInitScript(() => {
-    window.localStorage.setItem('kronoqr.kiosk.device_token', 'device-token-e2e-pin')
-  })
 }
 
 /**

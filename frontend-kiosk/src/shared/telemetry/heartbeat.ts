@@ -71,6 +71,14 @@ export interface HeartbeatSchedulerOptions {
   readonly clock?: Clock
   readonly intervalMs?: number
   readonly onSkew?: (seconds: number) => void
+  /**
+   * Alimenta `features/pairing/application/deviceRevocation.ts` (RF-PD-06,
+   * tarea 5.6). Mismo contrato que en `syncRunner.ts` y `cachedRoster.ts`:
+   * `true` solo en un `401`/`403` real, `false` en un latido que SI llega a
+   * contestar, nunca por un fallo de red (el hotel sin ADSL no es una
+   * desvinculacion).
+   */
+  readonly onAuthOutcome?: (unauthorized: boolean) => void
 }
 
 export interface HeartbeatScheduler {
@@ -93,15 +101,19 @@ export function createHeartbeatScheduler(options: HeartbeatSchedulerOptions): He
     if (result.outcome !== 'ok') {
       // Un latido perdido no es una averia: puede ser el hotel sin ADSL. Se
       // anota y se sigue. Nunca se reintenta agresivamente ni se bloquea nada.
-      if (result.outcome === 'failed' && result.cause !== 'offline') {
-        options.reporter.report('kiosk.heartbeat.failed', {
-          cause: result.cause,
-          http_status: result.httpStatus ?? 0,
-        })
+      if (result.outcome === 'failed') {
+        if (result.cause === 'unauthorized') options.onAuthOutcome?.(true)
+        if (result.cause !== 'offline') {
+          options.reporter.report('kiosk.heartbeat.failed', {
+            cause: result.cause,
+            http_status: result.httpStatus ?? 0,
+          })
+        }
       }
       return null
     }
 
+    options.onAuthOutcome?.(false)
     const skew = clockSkewSeconds(clock.now(), result.data.server_time)
     if (skew === null) return null
 
