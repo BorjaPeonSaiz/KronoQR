@@ -1,12 +1,23 @@
 // Identidad tecnica del dispositivo para telemetria.
 //
-// OJO CON EL ALCANCE: el `device_id` DEFINITIVO lo emite el servidor al
-// emparejar la tablet (`/api/v1/kiosk/pair`), que es otra tarea y otro modulo
-// (`features/pairing/`). Lo de aqui es un identificador local, estable entre
-// recargas, para que un error reportado antes del emparejamiento —o en una
-// tablet que se ha desemparejado— siga siendo atribuible a un aparato concreto.
-// Cuando exista el emparejamiento, `resolveDeviceId` leera de el y esto quedara
-// como respaldo.
+// EL `device_id` DEFINITIVO lo emite el servidor al confirmar el
+// emparejamiento (`POST /api/v1/kiosk/pair/confirm`, recogido por la tablet en
+// `POST /api/v1/kiosk/pair/claim`, tarea 5.6, `features/pairing/`).
+// `persistPairedDevice()` (aqui abajo) escribe ese `device.uuid` en la MISMA
+// clave que este fichero ya sabia leer; `resolveDeviceId()` no necesita
+// distinguir entre los dos origenes, porque devuelve lo que haya en la clave,
+// sea el identificador local generado aqui o el del servidor. Antes de
+// emparejar, o tras una desvinculacion (token revocado, ver
+// `features/pairing/application/deviceRevocation.ts`), lo que queda es un
+// identificador local estable entre recargas: sirve para que un error
+// reportado en ese hueco siga siendo atribuible a un aparato concreto.
+//
+// TODO LO DE EMPAREJAMIENTO SE ESCRIBE Y SE LEE DESDE AQUI, y a proposito: las
+// claves de `localStorage` viven en un solo sitio para que no exista una
+// segunda copia del nombre por la que un lector y un escritor puedan
+// desincronizarse. `ScanView.vue`, `PinView.vue` y `PairingView.vue` importan
+// estas funciones directamente; no hay ningun modulo intermedio en
+// `features/pairing/` que las envuelva.
 //
 // `localStorage` aqui SI es adecuado, y no contradice la prohibicion de usarlo
 // para la cola: esto es una preferencia tecnica de 36 bytes que se puede perder
@@ -17,8 +28,9 @@ import { uuidV7 } from '@/shared/ids/uuidV7'
 const DEVICE_ID_KEY = 'kronoqr.kiosk.device_id'
 
 /**
- * Token de dispositivo emitido al emparejar. **Lo escribe la tarea 1.11**
- * (`features/pairing/`); aqui solo se lee.
+ * Token de dispositivo emitido al emparejar. Lo escribe `persistPairedDevice`
+ * y lo borra `clearDeviceToken` cuando el servidor revoca el dispositivo
+ * (`deviceRevocation.ts`).
  *
  * Se lee y no se inventa: de este token se DERIVA la clave del padron cacheado
  * (RL-12, doc 02 §7.1). Sin token no hay clave, y sin clave no se cachea nada
@@ -65,5 +77,73 @@ export function resolveDeviceId(): string {
     return fresh
   } catch {
     return 'unpaired'
+  }
+}
+
+/**
+ * Guarda el token emitido en `PairingCompleted` (tarea 5.6). Interno: quien
+ * empareja llama a `persistPairedDevice`, no a esto directamente.
+ */
+function storeDeviceToken(token: string): void {
+  const storage = safeStorage()
+  if (storage === null) return
+  try {
+    storage.setItem(DEVICE_TOKEN_KEY, token)
+  } catch {
+    // NO es un «sigue funcionando en memoria»: sin almacenamiento persistente
+    // este `catch` deja `readDeviceToken()` devolviendo `null` para siempre, y
+    // el guard del router (`router/index.ts`) manda cualquier navegacion de
+    // vuelta a `/pair` en cuanto se recargue la pagina — la tablet NO puede
+    // fichar hasta que el almacenamiento funcione. Es exactamente el motivo
+    // por el que el runbook `alta-nuevo-quiosco.md` exige comprobar que el
+    // modo quiosco elegido por el IT del cliente conserva `localStorage` entre
+    // reinicios, antes de dar la instalacion por terminada.
+  }
+}
+
+/**
+ * Sobrescribe el identificador local con el `device.uuid` que confirma el
+ * servidor (tarea 5.6). Es la misma clave que `resolveDeviceId` ya sabia leer:
+ * no hay una segunda clave para «el id de verdad» frente a «el id local».
+ * Interno: quien empareja llama a `persistPairedDevice`, no a esto directamente.
+ */
+function storeDeviceId(deviceId: string): void {
+  const storage = safeStorage()
+  if (storage === null) return
+  try {
+    storage.setItem(DEVICE_ID_KEY, deviceId)
+  } catch {
+    // Igual que en `storeDeviceToken`: sin almacenamiento persistente el
+    // identificador de servidor no sobrevive a una recarga, y la telemetria
+    // de esta sesion vuelve a usar el local generado por `resolveDeviceId`.
+  }
+}
+
+/**
+ * Resultado de `PairingCompleted` (RF-PD-06, tarea 5.6): el token con el que
+ * la tablet firma `/scan`, `/kiosk/roster` y `/kiosk/heartbeat`, y el
+ * `device.uuid` que la identifica de aqui en adelante. Se escribe el TOKEN
+ * primero: si el `device_id` fallara al guardarse justo despues (almacenamiento
+ * lleno a mitad de escritura, caso extremo), es preferible quedarse con un
+ * token sin id de servidor —el quiosco sigue pudiendo fichar con el— que con
+ * un id nuevo y sin token, que el guard del router manda directo a `/pair`.
+ */
+export function persistPairedDevice(token: string, deviceId: string): void {
+  storeDeviceToken(token)
+  storeDeviceId(deviceId)
+}
+
+/**
+ * Token revocado (RL-12, doc 01 §8.1: «purga al desvincular el dispositivo»).
+ * Solo la tablet vuelve a la pantalla de emparejamiento; la cola offline NO se
+ * toca aqui — eso lo decide `deviceRevocation.ts`, nunca esta funcion.
+ */
+export function clearDeviceToken(): void {
+  const storage = safeStorage()
+  if (storage === null) return
+  try {
+    storage.removeItem(DEVICE_TOKEN_KEY)
+  } catch {
+    // Nada que hacer: sin almacenamiento no habia token que borrar de verdad.
   }
 }

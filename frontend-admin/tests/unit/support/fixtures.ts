@@ -7,6 +7,8 @@ import type {
   CredentialStatusBoard,
   CredentialStatusRow,
   Department,
+  Device,
+  DeviceList,
   Employee,
   EmployeeCollection,
   EmployeeImportReport,
@@ -14,6 +16,7 @@ import type {
   Incident,
   IncidentCollection,
   ManagementUser,
+  PairingConfirmed,
   Session,
   SetupCompletion,
   SetupStatus,
@@ -160,6 +163,50 @@ export function board(
       pending_reprint: 0,
       active_unknown_key: 0,
       ...rotation,
+    },
+  }
+}
+
+// --- Quioscos y emparejamiento por codigo (RF-PA-07, RF-PD-06, tarea 5.6) ---
+
+export const DEVICE_UUID = '0199f3c9-1b7d-7a44-8e02-3c4d5e6f7a81'
+
+export function device(overrides: Partial<Device> = {}): Device {
+  return {
+    uuid: DEVICE_UUID,
+    name: 'Recepción',
+    status: 'active',
+    app_version: '1.4.2',
+    last_seen_at: '2026-09-07T09:59:41.000000Z',
+    pending_queue_size: 0,
+    paired_at: '2026-09-01T08:12:00.000000Z',
+    ...overrides,
+  }
+}
+
+export function deviceList(devices: Device[] = [device()]): DeviceList {
+  return { devices }
+}
+
+export function pairingConfirmed(
+  overrides: Partial<PairingConfirmed['device']> = {},
+  requestOverrides: Partial<PairingConfirmed['request']> = {},
+): PairingConfirmed {
+  return {
+    device: {
+      uuid: DEVICE_UUID,
+      name: 'Recepción',
+      status: 'active',
+      reactivated: false,
+      ...overrides,
+    },
+    // Lo que se acaba de vincular, para contrastarlo con la tablet delante
+    // (revision post-lanzamiento): version de la app y cuando pidio el
+    // codigo.
+    request: {
+      app_version: '1.4.2',
+      requested_at: '2026-09-07T09:55:00.000000Z',
+      ...requestOverrides,
     },
   }
 }

@@ -618,6 +618,14 @@ parameters:
       # `RecordInstallationSettingChange` lee el evento y nada mas: sigue siendo
       # de solo lectura y solo sobre EVENTOS.
       - ProductDomainEvent
+      # `KioskDomainEvent` entra con la tarea 5.6, **quinta vez por la misma via
+      # y el mismo motivo**: RF-PD-06 y la regla dura 6 exigen que el alta de un
+      # quiosco quede en `audit_log` con actor y momento —dar de alta un
+      # dispositivo es crear un origen de fichajes— y `Kiosk` no puede importar
+      # `Compliance` (§1.6). El listener `RecordDeviceProvisioning` lee
+      # `DeviceProvisioned` y nada mas: sigue siendo de solo lectura y solo sobre
+      # EVENTOS.
+      - KioskDomainEvent
 
     # Http entra por Application. Alcanza Persistence solo por los idiomas de
     # Laravel que lo necesitan (route-model binding y Resources), nunca
@@ -666,6 +674,9 @@ parameters:
       # Tarea 5.1: el mapa evento -> asiento del cambio de configuracion de la
       # instalacion nombra `InstallationSettingChanged` (RF-PD-01, RL-04).
       - ProductDomainEvent
+      # Tarea 5.6: el mapa evento -> listener del alta de un quiosco nombra
+      # `DeviceProvisioned` (RF-PD-06, regla dura 6).
+      - KioskDomainEvent
 
     # --------------------------------------------------------------- Workforce
 
@@ -1065,6 +1076,19 @@ parameters:
       - Laravel
       - ExternalCode
       - AttendanceApplication
+      # `IdentityApplication` entra con la tarea 5.6 (RF-PD-06) y por la misma
+      # via y con la misma restriccion que `AttendanceApplication`: *via caso de
+      # uso publico*. El emparejamiento termina emitiendo un token de dispositivo
+      # y la desvinculacion revocandolo, y el doc 01 §5.5 dice que esa capacidad
+      # «se expone a Kiosk por caso de uso publico explicito».
+      #
+      # No hay puerto invertido y no es un olvido: un `PairedDeviceTokens`
+      # declarado en Kiosk e implementado en Identity añadiria una interfaz, un
+      # adaptador y un `bind` para envolver una llamada que el §1.6 ya autoriza,
+      # y ADR-025 no pide invertir lo que el mapa de modulos permite directo.
+      # Alcanza Identity/Application y nada mas: ni Domain, ni Persistence, ni
+      # Infrastructure.
+      - IdentityApplication
 
     KioskPersistence:
       - KioskDomain
@@ -1137,6 +1161,13 @@ parameters:
       - Eloquent
       - ExternalCode
       - AppFramework
+      # `IdentityApplication` entra con la tarea 5.6 y **solo por el `bind`**:
+      # `ClaimPairing` recibe `IssueDeviceToken` por constructor, y la raiz de
+      # composicion tiene que nombrarlo para construirlo con la configuracion ya
+      # resuelta. Es la misma arista que se le concede a `KioskApplication`, con
+      # el mismo alcance —casos de uso publicos de `Identity` y nada mas— y por
+      # el mismo motivo (doc 01 §5.5, doc 02 §1.6).
+      - IdentityApplication
 
     # --------------------------------------------------------------- Product
 

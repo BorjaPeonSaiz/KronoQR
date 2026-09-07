@@ -116,6 +116,8 @@ function harness(options: HarnessOptions = {}): Harness {
     }),
     fetchRoster: vi.fn(),
     sendHeartbeat: vi.fn(),
+    requestPairing: vi.fn(),
+    claimPairing: vi.fn(),
   }
 
   const queue = createScanQueue({ openStorage: createMemoryQueueStorage, clock: CLOCK })

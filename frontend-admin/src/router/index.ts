@@ -13,6 +13,7 @@ import {
 } from '@/features/auth/abilities'
 import LoginView from '@/features/auth/LoginView.vue'
 import CredentialBoardView from '@/features/credentials/CredentialBoardView.vue'
+import DevicesView from '@/features/devices/DevicesView.vue'
 import EmployeeDetailView from '@/features/employees/EmployeeDetailView.vue'
 import EmployeeListView from '@/features/employees/EmployeeListView.vue'
 import IncidentsView from '@/features/incidents/IncidentsView.vue'
@@ -145,6 +146,18 @@ export const routes: RouteRecordRaw[] = [
         path: 'compliance-profile',
         name: 'compliance-profile',
         component: ComplianceProfileView,
+        meta: { ability: SETTINGS_MANAGE },
+      },
+      {
+        // Vinculacion y flota de quioscos (RF-PA-07, RF-PD-06, tarea 5.6).
+        // Ambito `settings:*`, el mismo del perfil de cumplimiento: dar de
+        // alta un quiosco es crear un origen de fichajes, la misma potestad
+        // que configurar la instalacion. La policy del servidor
+        // (`KioskPairingPolicy`, solo `admin`) es la que autoriza de verdad
+        // (regla dura 18).
+        path: 'devices',
+        name: 'devices',
+        component: DevicesView,
         meta: { ability: SETTINGS_MANAGE },
       },
       {

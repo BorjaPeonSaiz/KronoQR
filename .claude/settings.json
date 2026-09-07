@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "p=$(sed -n 's/.*\"file_path\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p' | head -1 | tr '\\\\' '/' | tr -s '/'); case \"$p\" in */backend/vendor/*) : ;; */backend/*.php) docker compose --env-file .env -f infra/compose.dev.yaml exec -T app vendor/bin/pint \"${p#*/backend/}\" 2>/dev/null || true ;; esac",
+            "timeout": 60,
+            "statusMessage": "Pint sobre el fichero editado"
+          }
+        ]
+      }
+    ]
+  }
+}

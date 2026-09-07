@@ -60,6 +60,11 @@
   --text-confirm-sm: 1.5rem; /* 24 px */
   --text-confirm-md: 2.25rem; /* 36 px */
   --text-confirm-lg: 3.5rem; /* 56 px */
+  /* Codigo de emparejamiento (RF-PD-06, tarea 5.6): minimo 96 px, se lee desde
+     el otro lado de un mostrador de recepcion mientras alguien lo teclea en
+     el panel. No es un mensaje de confirmacion del escaneo, pero es la misma
+     familia de tamanos y no un valor suelto en la plantilla. */
+  --text-confirm-xl: 6rem; /* 96 px */
 
   --kiosk-touch-target: 3rem; /* 48 px */
 }

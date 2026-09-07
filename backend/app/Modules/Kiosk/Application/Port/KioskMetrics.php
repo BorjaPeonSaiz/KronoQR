@@ -46,4 +46,40 @@ interface KioskMetrics
      * @param  int  $pendingQueueSize  Lo que el dispositivo declara tener sin sincronizar.
      */
     public function heartbeat(string $deviceUuid, int $seenAtUnixSeconds, int $pendingQueueSize): void;
+
+    /**
+     * Una tablet ha pedido un codigo (`POST /api/v1/kiosk/pair`).
+     *
+     * **Contador y sin etiqueta de dispositivo**, al contrario que el latido: aqui
+     * todavia no hay dispositivo —es lo que se viene a crear— y la pregunta que
+     * responde es «¿cuanta gente esta intentando emparejar?». Una etiqueta por
+     * `pairing_id` daria cardinalidad ilimitada desde una ruta publica, que es la
+     * forma clasica de tumbar un Prometheus desde fuera.
+     */
+    public function pairingRequested(): void;
+
+    /** Un `admin` ha confirmado un codigo y el quiosco ha quedado dado de alta. */
+    public function pairingConfirmed(): void;
+
+    /** Una tablet ha recogido su token: el emparejamiento se completo. */
+    public function pairingClaimed(): void;
+
+    /**
+     * Un intento de emparejamiento no ha prosperado.
+     *
+     * **`reason` es la unica etiqueta, y es lo contrario de lo que la respuesta
+     * hace** (regla dura 17): al cliente no se le dice nunca por que, y aqui si,
+     * porque `/metrics` solo se sirve a la red interna (§8.2). Sin este dato, un
+     * pico de rechazos no se distingue de un pico de tablets nuevas, y «alguien
+     * esta probando secretos» se parece demasiado a «hoy se dan de alta cuatro
+     * quioscos».
+     *
+     * **Cardinalidad acotada por construccion**: los motivos son un puñado de
+     * literales del codigo —`unknown`, `secret`, `expired`, `consumed`, `race`,
+     * `token_null`, `code`, `name_taken`, `capacity`, `code_space`— y nunca
+     * entrada del cliente.
+     *
+     * @param  string  $reason  Motivo interno. **Nunca sale en una respuesta.**
+     */
+    public function pairingRejected(string $reason): void;
 }

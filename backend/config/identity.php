@@ -412,22 +412,11 @@ return [
         ],
 
         /*
-         * Suelo de tiempo, en milisegundos, que consume TODO rechazo de
-         * credencial (RS-03, regla dura 17).
-         *
-         * No es paranoia: los cuatro rechazos —prefijo, clave, firma, credencial
-         * desconocida o revocada— recorren pasos distintos y, sin suelo, la
-         * diferencia de microsegundos entre «no hay fila» y «hay fila revocada»
-         * es medible desde fuera y convierte el quiosco en un oraculo de que
-         * tarjetas existen. El verificador hace ademas el mismo trabajo en los
-         * cuatro caminos; el suelo absorbe la varianza que queda —cache de
-         * PostgreSQL, planificador— y es lo que hace que la prueba de tiempo
-         * constante signifique algo en vez de ser intermitente.
-         *
-         * Se aplica SOLO al rechazo. Igualar tambien la aceptacion no aporta
-         * nada: la respuesta ya dice si el escaneo se acepto.
+         * EL SUELO DE TIEMPO DE RS-03 YA NO ESTA AQUI: es `security.rejection_floor_ms`
+         * (tarea 5.6). El mismo control lo aplican dos modulos —este resolutor y la
+         * recogida de un emparejamiento— y tenerlo escrito dos veces significaba que
+         * uno de los dos podia quedarse a cero sin que nada del otro lo notara.
          */
-        'rejection_floor_ms' => (int) env('IDENTITY_CREDENTIAL_REJECTION_FLOOR_MS', 25),
 
         /*
          * La tarjeta impresa (RF-QR-04, RF-QR-05, tarea 1.10).

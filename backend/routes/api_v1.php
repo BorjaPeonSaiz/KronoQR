@@ -24,7 +24,9 @@ use App\Modules\Identity\Http\Controller\PrintCredentialBatchController;
 use App\Modules\Identity\Http\Controller\PrintCredentialController;
 use App\Modules\Identity\Http\Controller\RevokeCredentialController;
 use App\Modules\Identity\Http\Controller\TwoFactorController;
+use App\Modules\Kiosk\Http\Controller\DeviceController;
 use App\Modules\Kiosk\Http\Controller\HeartbeatController;
+use App\Modules\Kiosk\Http\Controller\PairingController;
 use App\Modules\Kiosk\Http\Controller\RosterController;
 use App\Modules\Product\Http\Controller\ComplianceProfileController;
 use App\Modules\Product\Http\Controller\LicenseController;
@@ -482,12 +484,86 @@ Route::prefix('kiosk')->middleware(['auth:sanctum', 'throttle:kiosk'])->group(fu
         ->middleware('ability:'.TokenAbility::HEARTBEAT_WRITE->value)
         ->name('kiosk.heartbeat');
 
-    /*
-     * POST /api/v1/kiosk/pair y /pair/confirm NO existen todavia: el
-     * emparejamiento por codigo es RF-PD-06, tarea 5.6. Se anota aqui para que su
-     * ausencia sea una decision visible y no un olvido; hasta entonces los tokens
-     * de dispositivo se emiten por consola (tarea 1.5).
-     */
+});
+
+/*
+ * El emparejamiento de una tablet, en tres pasos (RF-PD-06, tarea 5.6).
+ *
+ * LAS DOS PRIMERAS SON PUBLICAS, Y ES LA CUARTA ESCRITURA PUBLICA DEL PRODUCTO
+ * —con `/setup/administrator`— y la unica del camino del quiosco. No es una
+ * excepcion a la regla dura 18: quien las llama TODAVIA NO TIENE TOKEN, porque es
+ * justo el que viene a buscar, asi que no hay actor al que autorizar. Lo que las
+ * protege es lo que NO pueden hacer:
+ *
+ *   - `/kiosk/pair` crea una solicitud pendiente que no vincula, no lee y no
+ *     autoriza nada, y que solo sirve si un `admin` la confirma.
+ *   - `/kiosk/pair/claim` no entrega nada sin el secreto de recogida —32 bytes
+ *     que no salieron de la tablet— y sin esa confirmacion previa.
+ *
+ * MAS DOS LIMITADORES PROPIOS, con claves distintas y a proposito (§7.1): la
+ * peticion de codigo cuenta por IP —es lo unico que hay— y el sondeo cuenta por
+ * `pairing_id`, porque un limite por IP no acota nada cuando todos los quioscos
+ * de un hotel salen por la misma direccion. Se declaran en
+ * `KioskServiceProvider`, con el razonamiento completo.
+ *
+ * VAN FUERA DEL GRUPO DE ARRIBA porque aquel lleva `auth:sanctum` y estas dos no
+ * pueden llevarlo. Comparten prefijo en la URL y no en el fichero, que es lo
+ * correcto: el agrupamiento de rutas es por middleware, no por parecido de ruta.
+ *
+ * NO ACEPTAN `site_id`, como el resto del modulo: hay un centro por instalacion y
+ * lo resuelve el servidor (ADR-040). Un `site_id` en una ruta publica seria ademas
+ * un dato que un extraño podria enumerar.
+ */
+Route::prefix('kiosk')->group(function (): void {
+    Route::post('/pair', [PairingController::class, 'request'])
+        ->middleware('throttle:pairing-request')
+        ->name('kiosk.pair.request');
+
+    Route::post('/pair/claim', [PairingController::class, 'claim'])
+        ->middleware('throttle:pairing-claim')
+        ->name('kiosk.pair.claim');
+});
+
+/*
+ * El paso del administrador (RF-PD-06) y la gestion de la flota.
+ *
+ * `settings:*` Y SOLO `admin`, y las dos mitades dicen lo mismo (§7.3 nota 5). El
+ * Anexo B del doc 01 situaba `/devices` en «manager+» junto al resto del CRUD; se
+ * restringe aqui porque **dar de alta un quiosco es crear un origen de fichajes** y
+ * desvincularlo puede dejar un hotel sin poder fichar en pleno cambio de turno:
+ * es la misma potestad que configurar la instalacion, no la de gestionar la
+ * plantilla. Un ambito propio —`devices:*`— no lo usaria ningun rol por separado.
+ *
+ * LA OTRA MITAD ES `KioskPairingPolicy`, declarada en el `FormRequest` de cada una
+ * de las tres rutas. Un `authorize()` que devolviera `true` en una sola seria
+ * invisible desde las otras dos, y por eso la matriz de autorizacion negativa las
+ * prueba una a una.
+ *
+ * `throttle:management` POR LO QUE ESCRIBEN: el `confirm` da de alta un dispositivo
+ * y escribe en `audit_log` bajo el candado global de ADR-010 —el mismo por el que
+ * pasa cada fichaje—, y `unpair` revoca un token. Sin techo por cuenta, un bucle
+ * mete escrituras ilimitadas en el camino critico del cambio de turno.
+ *
+ * NO HAY `POST /devices` NI `PATCH /devices/{uuid}` (Anexo B corregido): un
+ * dispositivo no se da de alta a mano, nace de un emparejamiento. Y un `PATCH` que
+ * renombrara un quiosco romperia la reactivacion por nombre de ADR-028, que es
+ * como se sustituye una tablet averiada. `unpair` es `POST` y no `DELETE` porque
+ * nada se borra (regla dura 5).
+ */
+Route::middleware([
+    'auth:sanctum',
+    'ability:'.TokenAbility::SETTINGS_ALL->value,
+    'throttle:management',
+])->group(function (): void {
+    Route::post('/kiosk/pair/confirm', [PairingController::class, 'confirm'])
+        ->name('kiosk.pair.confirm');
+
+    Route::get('/devices', [DeviceController::class, 'index'])
+        ->name('kiosk.devices.index');
+
+    Route::post('/devices/{uuid}/unpair', [DeviceController::class, 'unpair'])
+        ->whereUuid('uuid')
+        ->name('kiosk.devices.unpair');
 });
 
 Route::prefix('auth')->group(function (): void {

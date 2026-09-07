@@ -13,7 +13,7 @@
 # donde esconder el proximo secreto de verdad. Por el mismo motivo, esta
 # allowlist NO perdona rutas (`backend/tests/.*`, `docs/api/openapi.yaml`, ...)
 # sino el VALOR EXACTO de cada uno de los falsos positivos (17 de la auditoria
-# mas el señuelo TOTP de la tarea 2.1): un secreto real
+# mas el señuelo TOTP de la tarea 2.1 y el `pairing_secret` de ejemplo de la 5.6): un secreto real
 # que alguien pegara por error en cualquiera de esos ficheros seguiria
 # detectandose, porque su valor no coincidiria con ninguno de los de abajo
 # (hallazgo IMPORTANTE 4 de la auditoria; la version anterior de este fichero
@@ -137,4 +137,14 @@ useDefault = true
     #    esta firmada por ninguna clave y el verificador la rechaza como
     #    `Malformed`. Esta ahi para que el ejemplo tenga la forma `KQL1.<carga>.<firma>`.
     '''^KQL1\.eyJsaWNlbnNlX2lkIjoiOWYyYzRhMWI3ZTBkM2Y2NSJ9\.Zm9vYmFy$''',
+
+    # 22) docs/api/openapi.yaml (ejemplos de `POST /kiosk/pair` y de
+    #    `POST /kiosk/pair/claim`) y frontend-kiosk/tests/{unit,e2e}/*: el
+    #    `pairing_secret` de EJEMPLO del emparejamiento de quiosco (tarea 5.6,
+    #    RF-PD-06). Es una cadena base64url escrita a mano con la longitud del
+    #    secreto real (32 bytes) para que el ejemplo y los dobles de prueba
+    #    tengan la forma correcta; ningun servidor la ha emitido ni la reconoce:
+    #    el secreto real sale de `random_bytes()` en cada solicitud y solo se
+    #    guarda su hash. Quien la conozca no recoge ningun token.
+    '''^9x2Kd4pQ7vLmN8tZbYcF1wQ8sE3rT6uI0oP5aS7dXyZ$''',
   ]

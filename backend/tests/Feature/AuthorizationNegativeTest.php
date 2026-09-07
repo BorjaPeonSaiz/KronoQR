@@ -187,6 +187,51 @@ function managementEndpoints(): array
 
         ...installationSettingsEndpoints(),
         ...complianceProfileEndpoints(),
+        ...kioskPairingEndpoints(),
+    ];
+}
+
+/**
+ * El emparejamiento y la flota de quioscos (tarea 5.6, RF-PD-06). Ambito
+ * `settings:*` y rol `admin`, y **solo** `admin`.
+ *
+ * Bloque propio por lo mismo que la configuracion y el perfil de cumplimiento, y
+ * con un motivo que no tienen aquellos: **dar de alta un quiosco es crear un
+ * origen de fichajes**. Todo lo que despues entre por esa tablet acaba en el
+ * registro horario de alguien, y desvincularla puede dejar un hotel sin poder
+ * fichar en pleno cambio de turno. El Anexo B del doc 01 situaba `/devices` en
+ * «manager+»; la tarea 5.6 lo corrige a `admin` y esta matriz es lo que lo hace
+ * cierto.
+ *
+ * **Las dos rutas publicas del emparejamiento —`/kiosk/pair` y
+ * `/kiosk/pair/claim`— NO estan aqui, y no es un olvido**: son publicas por
+ * necesidad —quien las llama todavia no tiene token, porque es el que viene a
+ * buscar— asi que no hay rol al que denegar. Lo que las protege se prueba en
+ * `Tests\Feature\Kiosk\PairingRejectionTest` (rechazos genericos y de tiempo
+ * constante) y en `PairingTest` (nada se vincula sin el `confirm` de un `admin`).
+ *
+ * Los tres endpoints entran uno a uno aunque compartan ambito, por lo mismo que
+ * los cuatro de credenciales: la policy se declara en el `FormRequest` de cada
+ * uno, asi que un `authorize()` que devolviera `true` en uno solo seria invisible
+ * desde los otros dos.
+ *
+ * El cuerpo del `confirm` es valido a proposito, para que lo que falle sea la
+ * autorizacion y no la validacion: un `422` esconderia si la policy funciona.
+ *
+ * @return array<string, array{0: string, 1: string, 2: array<string, mixed>}>
+ */
+function kioskPairingEndpoints(): array
+{
+    return [
+        'confirmar un emparejamiento' => ['POST', '/api/v1/kiosk/pair/confirm', [
+            'code' => '483921',
+            'name' => 'Recepcion',
+        ]],
+        'listar los quioscos' => ['GET', '/api/v1/devices', []],
+        // El `uuid` no existe en estas pruebas y da igual: lo que se comprueba es
+        // que la autorizacion corta **antes** de llegar a mirar si existe. Si
+        // alguna vez devolviera `404` en lugar de `403`, eso ya seria el fallo.
+        'desvincular un quiosco' => ['POST', '/api/v1/devices/0199f3c9-1b7d-7a44-8e02-3c4d5e6f7a81/unpair', []],
     ];
 }
 
@@ -519,6 +564,40 @@ it('deja pasar al administrador a la configuracion, que es el control positivo d
         ->patch('/api/v1/settings', ['settings' => ['ATTENDANCE_MAX_SHIFT_HOURS' => 10]])
         ->assertStatus(200);
 })->group('RF-PD-01', 'RQ-07');
+
+it('deniega a RRHH el emparejamiento y la flota de quioscos', function (string $method, string $uri, array $body): void {
+    // Mismo caso y mismo motivo que los dos de arriba, sobre los quioscos. `rrhh`
+    // emite credenciales y corrige fichajes, y aun asi no llega aqui: dar de alta
+    // una tablet es crear un ORIGEN de fichajes, y desvincularla puede dejar un
+    // hotel sin poder fichar en pleno cambio de turno (RF-PD-06, §7.3 nota 5).
+    //
+    // Falla por partida doble y las dos mitades cuentan: no lleva `settings:*` en
+    // el token y tampoco esta en `KioskPairingPolicy`.
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RRHH));
+
+    Api::as($token)->call($method, $uri, $body)->assertStatus(403);
+})->with(kioskPairingEndpoints())->group('RF-PD-06', 'RS-04', 'RQ-07');
+
+it('deja pasar al administrador a vincular y gestionar quioscos, control positivo de la 5.6', function (): void {
+    // Sin esto, los `403` de arriba pasarian identicos si las tres rutas
+    // estuvieran rotas o no existieran: un endpoint que revienta y uno que
+    // deniega se parecen mucho desde una prueba que solo mira que no sea 200.
+    WorkforceFixtures::site();
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN));
+
+    // La tablet pide su codigo sin autenticarse: es la ruta publica.
+    /** @var array{code: string} $ticket */
+    $ticket = Api::guest()->post('/api/v1/kiosk/pair', ['app_version' => '1.4.2'])->json();
+
+    /** @var string $uuid */
+    $uuid = Api::as($token)
+        ->post('/api/v1/kiosk/pair/confirm', ['code' => $ticket['code'], 'name' => 'Recepcion'])
+        ->assertStatus(200)
+        ->json('device.uuid');
+
+    Api::as($token)->get('/api/v1/devices')->assertStatus(200);
+    Api::as($token)->post('/api/v1/devices/'.$uuid.'/unpair')->assertStatus(200);
+})->group('RF-PD-06', 'RQ-07');
 
 it('deja pasar al administrador al perfil de cumplimiento, que es el control positivo de la 5.2', function (): void {
     // Sin esto, los `403` de arriba pasarian identicos si las dos rutas

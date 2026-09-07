@@ -13,6 +13,7 @@
       "incidents": "Incidencias",
       "reports": "Informes",
       "compliance": "Cumplimiento",
+      "devices": "Quioscos",
       "license": "Licencia"
     },
     "roles": {
@@ -52,6 +53,7 @@
   },
   "common": {
     "cancel": "Cancelar",
+    "close": "Cerrar",
     "saving": "Guardando…",
     "edit": "Editar",
     "updating": "Actualizando…",
@@ -944,6 +946,70 @@
       "exceeded": "Además, se ha superado el plan contratado en: {limits}. No bloquea nada; habla con tu proveedor para ampliarlo."
     }
   },
+  "devices": {
+    "title": "Quioscos",
+    "subtitle": "Los quioscos vinculados a la instalación, activos y revocados, con lo que hace falta para saber si están sanos.",
+    "loading": "Cargando los quioscos…",
+    "empty": {
+      "title": "Todavía no hay ningún quiosco vinculado",
+      "description": "Vincula la primera tablet con el código de seis dígitos que muestra en pantalla."
+    },
+    "table": {
+      "caption": "Quioscos de la instalación",
+      "name": "Nombre",
+      "status": "Estado",
+      "appVersion": "Versión",
+      "lastSeen": "Último latido",
+      "pendingQueue": "Fichajes sin sincronizar",
+      "pairedAt": "Vinculado",
+      "actions": "Acciones"
+    },
+    "status": {
+      "active": "Activo",
+      "revoked": "Revocado"
+    },
+    "list": {
+      "lastUpdatedAt": "Actualizado: {moment}",
+      "lastSeenAgo": "Hace {hours} h {minutes} min",
+      "neverSeen": "Todavía no ha latido"
+    },
+    "pair": {
+      "action": "Vincular quiosco",
+      "heading": "Vincular quiosco",
+      "explanation": "Teclea el código de seis dígitos que muestra la tablet y ponle un nombre al quiosco.",
+      "fields": {
+        "code": "Código de emparejamiento",
+        "name": "Nombre del quiosco"
+      },
+      "hints": {
+        "code": "Los seis dígitos que muestra la tablet, con o sin el espacio: «483 921».",
+        "name": "Único entre los quioscos activos, por ejemplo «Recepción» o «Cocina». Reutilizar el nombre de uno revocado lo reactiva."
+      },
+      "codeRejected": "El código no es válido o ha caducado: pide a la tablet que genere otro.",
+      "reactivationNotice": "Este nombre corresponde a un quiosco desvinculado: se reactivará con el mismo identificador.",
+      "submit": "Vincular",
+      "submitting": "Vinculando…",
+      "announceCreated": "Se ha vinculado el quiosco {name}.",
+      "announceReactivated": "Se ha reactivado el quiosco {name}.",
+      "pairAnother": "Vincular otro quiosco",
+      "confirmed": {
+        "createdHeading": "Se ha vinculado el quiosco «{name}».",
+        "reactivatedHeading": "Se ha reactivado el quiosco «{name}».",
+        "appVersionLabel": "Versión de la app",
+        "appVersionUnknown": "Desconocida",
+        "requestedAtLabel": "Pidió el código",
+        "advice": "Contrasta estos datos con la tablet que tienes delante: si algo no coincide, desvincula este quiosco desde «Quioscos» y vuelve a intentarlo."
+      }
+    },
+    "unpair": {
+      "action": "Desvincular",
+      "heading": "Desvincular quiosco",
+      "explanation": "El quiosco «{name}» dejará de poder fichar de inmediato. Su historial de fichajes no se borra.",
+      "pendingQueueWarning": "Este quiosco tiene {count} fichajes sin sincronizar. Si se desvincula ahora, esos fichajes solo llegarán al registro horario si se vuelve a emparejar esta misma tablet (art. 34.9 ET). Antes de desvincular, comprueba que la tablet ha podido sincronizar su cola (runbook de alta de un nuevo quiosco, §5.1).",
+      "notice": "Podrás vincular una tablet nueva con el mismo nombre más adelante: reactivará este mismo quiosco.",
+      "announce": "Se ha desvinculado el quiosco {name}."
+    }
+  },
   "onboarding": {
     "heading": "Puesta en marcha",
     "intro": "Ocho pasos para dejar el sistema listo para fichar. Puedes cerrar esta pantalla en cualquier momento y retomarla donde la dejaste: nada se pierde.",
@@ -1093,8 +1159,7 @@
       },
       "kiosk": {
         "heading": "Primer quiosco",
-        "intro": "El emparejamiento de la tablet del quiosco todavía no está disponible en esta versión.",
-        "notYetAvailable": "Vincular un quiosco llegará en una versión posterior. Por ahora, omite este paso: el procedimiento manual queda documentado en el runbook de alta de un nuevo quiosco, y podrás vincularlo en cuanto esté disponible sin tener que repetir la puesta en marcha.",
+        "intro": "Teclea el código de seis dígitos que muestra la tablet y ponle un nombre al quiosco. Si todavía no ha llegado al hotel, puedes omitir este paso y vincularlo más tarde desde «Quioscos», sin repetir la puesta en marcha.",
         "skip": "Omitir por ahora"
       }
     }

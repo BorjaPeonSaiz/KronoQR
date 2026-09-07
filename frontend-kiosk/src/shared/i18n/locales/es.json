@@ -86,6 +86,22 @@
       "backspace": "Borrar último dígito"
     }
   },
+  "pairing": {
+    "title": "Vincular este quiosco",
+    "requesting": {
+      "initial": "Generando código…",
+      "afterExpiry": "El código ha caducado. Generando uno nuevo…",
+      "afterRejection": "Ese código ya no es válido. Generando uno nuevo…"
+    },
+    "waiting": {
+      "status": "Esperando a que el administrador lo confirme en el panel",
+      "expiresIn": "Caduca en {time}",
+      "newCode": "Generar otro código"
+    },
+    "paired": {
+      "status": "Quiosco vinculado. Entrando…"
+    }
+  },
   "privacy": {
     "heading": "Aviso de protección de datos",
     "controllerKnown": "Responsable: {controller}.",

@@ -12,6 +12,8 @@ import type { Page, Route } from '@playwright/test'
 import type {
   CredentialStatusBoard,
   DepartmentCollection,
+  Device,
+  DeviceList,
   Employee,
   EmployeeCollection,
   EmployeeWorkDays,
@@ -20,6 +22,7 @@ import type {
   LivePresenceBoard,
   LivePresenceEntry,
   ManagementUser,
+  PairingConfirmed,
   PeriodReport,
   Session,
   SetupStatus,
@@ -94,6 +97,21 @@ export const MANAGER_USER: ManagementUser = {
   roles: ['responsable_departamento'],
   abilities: ['attendance:read', 'attendance:correct', 'incidents:*'],
   scope: { kind: 'departments', department_ids: [3] },
+}
+
+/**
+ * Administrador de instalacion (RF-ID-02): el unico rol que lleva
+ * `settings:*` (doc 02 §7.3, nota 5) y por tanto el unico que ve «Quioscos»
+ * (RF-PD-06, tarea 5.6). Abilities `['*']`, como el que crea el asistente.
+ */
+export const ADMIN_USER: ManagementUser = {
+  uuid: '0199f0aa-4444-7000-8000-0123456789ae',
+  name: 'Dirección del hotel',
+  email: 'direccion@hotel.example',
+  locale: 'es',
+  roles: ['admin'],
+  abilities: ['*'],
+  scope: { kind: 'all', department_ids: [] },
 }
 
 export const SESSION: Session = {
@@ -452,6 +470,31 @@ function incidentPage(data: Incident[]): IncidentCollection {
 export const INCIDENT_BOARD = incidentPage([OPEN_INCIDENT])
 export const EMPTY_INCIDENT_BOARD = incidentPage([])
 
+// --- Quioscos y emparejamiento por codigo (RF-PA-07, RF-PD-06, tarea 5.6) ---
+
+export const DEVICE_UUID = '0199f3c9-1b7d-7a44-8e02-3c4d5e6f7a81'
+
+export const DEVICE: Device = {
+  uuid: DEVICE_UUID,
+  name: 'Recepción',
+  status: 'active',
+  app_version: '1.4.2',
+  last_seen_at: '2026-09-07T09:59:41.000000Z',
+  pending_queue_size: 0,
+  paired_at: '2026-09-01T08:12:00.000000Z',
+}
+
+export const DEVICES: DeviceList = { devices: [DEVICE] }
+
+/** El codigo que el doble acepta en `POST /kiosk/pair/confirm`. Cualquier otro se rechaza. */
+export const PAIRING_CODE = '483921'
+
+/** Lo que declaro la tablet al pedir el codigo (`PairingConfirmed.request`), para contrastar. */
+const PAIRING_REQUEST = {
+  app_version: '1.4.3',
+  requested_at: '2026-09-07T09:55:00.000000Z',
+}
+
 /** Una peticion a la API tal y como salio del panel. */
 export interface RecordedRequest {
   readonly method: string
@@ -486,9 +529,16 @@ export interface ManagementApiOptions {
   /**
    * Que cuenta entra por `logIn()`. `rrhh` (por omision) es `USER`, con alcance
    * completo; `manager` es `MANAGER_USER`, un `responsable_departamento` con
-   * `incidents:*` y sin plantilla ni credenciales (RF-ID-03).
+   * `incidents:*` y sin plantilla ni credenciales (RF-ID-03); `admin` es
+   * `ADMIN_USER`, el unico que ve «Quioscos» (RF-PD-06, tarea 5.6).
    */
-  readonly role?: 'rrhh' | 'manager'
+  readonly role?: 'rrhh' | 'manager' | 'admin'
+  /**
+   * La flota de quioscos que devuelve `GET /devices` de partida (RF-PA-07). Por
+   * omision, `DEVICES`: un unico quiosco activo, «Recepción». El doble la
+   * mantiene mutable: `confirm` añade o reactiva, `unpair` revoca.
+   */
+  readonly devices?: DeviceList
   /**
    * Que responde `POST /incidents/{id}/resolve`. `ok` (por omision) cierra la
    * incidencia y la devuelve entera. `conflict` simula que otra persona se
@@ -551,7 +601,8 @@ export async function stubManagementApi(
   const twoFactor = options.twoFactor ?? 'off'
   const resolveOutcome = options.resolveOutcome ?? 'ok'
   const exportOutcome = options.exportOutcome ?? 'ok'
-  const currentUser = options.role === 'manager' ? MANAGER_USER : USER
+  const currentUser =
+    options.role === 'manager' ? MANAGER_USER : options.role === 'admin' ? ADMIN_USER : USER
   const currentSession: Session = { ...SESSION, user: currentUser }
 
   // Si `resolveOutcome` es `conflict`, la incidencia se da por cerrada -por
@@ -559,6 +610,16 @@ export async function stubManagementApi(
   // bandeja la sigue enseñando abierta, que es lo que hace falta para que la
   // prueba pueda pulsar «Resolver».
   let incidentClosed = false
+
+  // La flota de quioscos (RF-PA-07, RF-PD-06): mutable, para que `confirm` y
+  // `unpair` la vayan cambiando exactamente como lo haria el servidor.
+  // Copia PROFUNDA de cada fila, no solo del array: `confirmUnpair` muta
+  // `target.status` en sitio, y sin esto esa mutacion se colaria en el
+  // objeto compartido `DEVICE`/`DEVICES` y contaminaria el resto de pruebas
+  // de este fichero (un solo proceso, `DEVICE` es el mismo modulo para todas).
+  const devices: Device[] = (options.devices?.devices ?? DEVICES.devices).map((candidate) => ({
+    ...candidate,
+  }))
 
   /** El codigo del cuerpo, o cadena vacia si la peticion no llevaba uno legible. */
   function codeFrom(route: Route): string {
@@ -637,7 +698,103 @@ export async function stubManagementApi(
         return
       }
 
+      // La desvinculacion tambien lleva un `uuid` dinamico en la ruta
+      // (`/devices/{uuid}/unpair`, RF-PD-06).
+      const unpairMatch = /^\/api\/v1\/devices\/([0-9a-f-]+)\/unpair$/.exec(url.pathname)
+
+      if (method === 'POST' && unpairMatch !== null) {
+        const target = devices.find((candidate) => candidate.uuid === unpairMatch[1])
+
+        if (target === undefined) {
+          await problem(route, 404, 'urn:kronoqr:problem:not-found', 'Quiosco no encontrado')
+
+          return
+        }
+
+        target.status = 'revoked'
+        await json(route, 200, target)
+        return
+      }
+
       switch (`${method} ${url.pathname}`) {
+        case 'GET /api/v1/devices':
+          await json(route, 200, { devices })
+          return
+        case 'POST /api/v1/kiosk/pair/confirm': {
+          const payload = request.postDataJSON() as { code?: string; name?: string }
+
+          if (payload.code !== PAIRING_CODE) {
+            await problem(
+              route,
+              422,
+              'urn:kronoqr:problem:pairing-code-rejected',
+              'Codigo de emparejamiento no valido',
+            )
+
+            return
+          }
+
+          const name = payload.name ?? ''
+          const revokedByName = devices.find(
+            (candidate) => candidate.name === name && candidate.status === 'revoked',
+          )
+          const activeByName = devices.find(
+            (candidate) => candidate.name === name && candidate.status === 'active',
+          )
+
+          if (activeByName !== undefined) {
+            await route.fulfill({
+              status: 422,
+              contentType: 'application/problem+json',
+              body: JSON.stringify({
+                type: 'urn:kronoqr:problem:validation-failed',
+                title: 'Peticion no valida',
+                status: 422,
+                errors: { name: ['Ya hay un quiosco activo con ese nombre.'] },
+              }),
+            })
+
+            return
+          }
+
+          if (revokedByName !== undefined) {
+            revokedByName.status = 'active'
+            const confirmed: PairingConfirmed = {
+              device: {
+                uuid: revokedByName.uuid,
+                name: revokedByName.name,
+                status: 'active',
+                reactivated: true,
+              },
+              request: PAIRING_REQUEST,
+            }
+            await json(route, 200, confirmed)
+            return
+          }
+
+          const created: Device = {
+            uuid: `0199f3c9-${String(devices.length).padStart(4, '0')}-7a44-8e02-3c4d5e6f7a81`,
+            name,
+            status: 'active',
+            app_version: null,
+            last_seen_at: null,
+            pending_queue_size: 0,
+            paired_at: '2026-09-07T10:00:00.000000Z',
+          }
+          devices.push(created)
+
+          const confirmed: PairingConfirmed = {
+            device: {
+              uuid: created.uuid,
+              name: created.name,
+              status: 'active',
+              reactivated: false,
+            },
+            request: PAIRING_REQUEST,
+          }
+          await json(route, 200, confirmed)
+          return
+        }
         case 'POST /api/v1/auth/login':
           if (loginOutcome === 'invalid') {
             await problem(
@@ -806,6 +963,18 @@ export async function logInAsManager(page: Page): Promise<void> {
   await page.getByLabel(/Contraseña/).fill('una-contraseña-larga-y-valida')
   await page.getByRole('button', { name: 'Entrar' }).click()
   await page.waitForURL('**/live')
+}
+
+/**
+ * Entra como `ADMIN_USER` (RF-ID-02): abilities `['*']`, asi que llega a la
+ * plantilla igual que RRHH. Exige `stubManagementApi(page, { role: 'admin' })`.
+ */
+export async function logInAsAdmin(page: Page): Promise<void> {
+  await page.goto('/login')
+  await page.getByLabel(/Correo electrónico/).fill(ADMIN_USER.email)
+  await page.getByLabel(/Contraseña/).fill('una-contraseña-larga-y-valida')
+  await page.getByRole('button', { name: 'Entrar' }).click()
+  await page.waitForURL('**/employees')
 }
 
 /**

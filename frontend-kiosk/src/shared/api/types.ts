@@ -34,3 +34,14 @@ export type KioskRoster = components['schemas']['KioskRoster']
 export type KioskRosterEntry = components['schemas']['KioskRosterEntry']
 export type KioskHeartbeatRequest = components['schemas']['KioskHeartbeatRequest']
 export type KioskHeartbeat = components['schemas']['KioskHeartbeat']
+
+/** Emparejamiento de quiosco (RF-PD-06, tarea 5.6). Las tres rutas son publicas. */
+export type PairingRequestBody = components['schemas']['PairingRequestBody']
+export type PairingRequested = components['schemas']['PairingRequested']
+export type PairingClaimRequest = components['schemas']['PairingClaimRequest']
+export type PairingPending = components['schemas']['PairingPending']
+export type PairingCompleted = components['schemas']['PairingCompleted']
+/** Union discriminada por `status`, tal como la declara el contrato. */
+export type PairingClaim = components['schemas']['PairingClaim']
+/** Unica respuesta de rechazo, generica y de tiempo constante (regla dura 17). */
+export type PairingRejected = components['schemas']['PairingRejected']

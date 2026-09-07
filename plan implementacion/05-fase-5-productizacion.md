@@ -166,7 +166,7 @@ El [doc 05](../docs/05-presentacion-cliente.md) «no manda, pero obliga» (`CLAU
 |---|---|---|
 | **C-1** | **RF-GP-05 se mueve a la tarea 5.5.** La importación de plantilla estaba en la tarea 3.10 de una fase posterior, y el doc 05 la promete en la puesta en marcha. Un asistente que obliga a teclear a mano la plantilla de un hotel no es un producto instalable. Son 3–4 h que cambian de fase, no que se suman; el documento comercial no se toca porque decía la verdad | Anexo A del [doc 01](../docs/01-especificaciones-proyecto.md) · §11 del [doc 02](../docs/02-stack-tecnologico-y-plan-implementacion.md) |
 | **C-2** | **`install.ps1` se retira del paquete.** Los requisitos publicados exigen Linux, el §3.5 no define convenciones para PowerShell y ni ShellCheck ni `shfmt` lo analizan, así que el umbral bloqueante del §9.2 no podría aplicársele. Un entregable que ninguna herramienta revisa es peor que no tenerlo | [ADR-022](../docs/adr/ADR-022-sin-instalador-de-windows.md) · §11.6.1 del doc 02 |
-| **C-3** | **No era una contradicción: faltaba escribir el flujo.** `POST /api/v1/kiosk/pair` es *la tablet pide emparejarse y recibe el código que muestra*; el administrador lo teclea en el panel, que llama a `/pair/confirm` para vincularla y emitir su token. Los tres documentos quedan intactos, y `kiosk:pairing-code {site}` se conserva como vía alternativa de consola | Notas de contrato del Anexo B del doc 01 · ficha de 5.6 |
+| **C-3** | **No era una contradicción: faltaba escribir el flujo.** Son **tres pasos**: `POST /api/v1/kiosk/pair` es *la tablet pide emparejarse y recibe el código que muestra*; el administrador lo teclea en el panel, que llama a `/pair/confirm` para crear o reactivar el dispositivo; y la tablet recoge su token en `/pair/claim`. Los tres documentos quedan intactos, y `kiosk:pairing-code {code} --name=` se conserva como vía alternativa de consola, que **confirma** un código mostrado en la tablet. Formato y caducidad fijados el 07-09-2026: seis dígitos, 10 minutos, todo en hash | Notas de contrato del Anexo B del doc 01 · ficha de 5.6 |
 
 Lo que sigue es el análisis original que las detectó, conservado porque explica de dónde venía cada una:
 
@@ -702,11 +702,25 @@ Resultado esperado: en una instalación limpia, una persona que no conoce el sis
 7. **Desvinculación**: al desvincular, **purgar el padrón cacheado del dispositivo** (doc 01 §8.1, mitigación de «filtración del padrón cacheado»: «purga al desvincular el dispositivo»).
 8. **Runbook `alta-nuevo-quiosco.md`** (§12): el procedimiento completo, incluida la parte que **no es del producto** —fijar el dispositivo en modo quiosco, que es responsabilidad del IT del cliente (§11.6.2, glosario del doc 01 §13)—, arranque automático de la PWA, brillo y suspensión, y ventana de actualizaciones del sistema.
 
+**Decisión C-3 y formato del código (07-09-2026).** Lo que quedaba abierto de la contradicción 10 —longitud, formato y caducidad— queda fijado aquí, y con ello C-3 se cierra entera.
+
+- **Tres pasos, no dos.** `POST /kiosk/pair` (la tablet pide y recibe el código) → `POST /kiosk/pair/confirm` (`admin` teclea `{ code, name }`, se crea o **reactiva** la fila de `devices`) → `POST /kiosk/pair/claim` (la tablet sondea y recoge `{ device, token }`, y la solicitud queda consumida). El tercero hace falta porque **el token es de la tablet**: sin él tendría que salir por la respuesta del administrador y llegar allí por algún medio manual, que es justo el paso que RF-PD-06 existe para eliminar.
+- **Código: seis dígitos decimales** (`^[0-9]{6}$`), CSPRNG, únicos entre las solicitudes pendientes (índice único parcial sobre `code_hash` `WHERE status = 'pending'`; se reintenta ante colisión). Se muestra agrupado, «483 921». **Seis y solo dígitos** porque se lee de lejos y se teclea a mano: lo que protege el emparejamiento no es la entropía de lo que se enseña en una pantalla colgada de una pared, sino el secreto de recogida y la caducidad; y un alfabeto mixto a dos metros convierte la O en un cero.
+- **Secreto de recogida `pairing_secret`**: 32 bytes de CSPRNG en base64url, entregado una sola vez y **almacenado hasheado** (SHA-256), como `devices.token_hash`. Es lo que impide que quien lea el código por encima del hombro se lleve el quiosco: el código dice *qué* solicitud se confirma, el secreto dice *quién* la pidió.
+- **Caducidad: 10 minutos**; **cadencia de sondeo: 5 s**. Las dos, y los dos limitadores, en `config/kiosk.php` → `pairing` (regla dura 13): no son constantes del contrato y viajan en la respuesta de `/pair` para que la PWA no tenga que saberlas.
+- **La caducidad no aplica al `claim` una vez confirmada.** Después del `confirm`, la fila de `devices` ya existe: negar la recogida dejaría un quiosco dado de alta que ninguna tablet puede usar, que es el callejón sin salida de la regla dura 19. El único límite es la purga de solicitudes consumidas a las 24 h.
+- **Rechazos.** En `claim` —público— las tres causas (solicitud desconocida, secreto incorrecto, caducada o consumida) devuelven `PairingRejected` (`422`, `urn:kronoqr:problem:pairing-rejected`), sin sitio para la causa y en tiempo constante **entre sí**; el secreto se comprueba siempre y primero, aunque la fila no exista. En `confirm` —de `admin`— las tres causas del código comparten `PairingCodeRejected` (`422`, `urn:kronoqr:problem:pairing-code-rejected`), y un `confirm` fallido **no consume ni caduca** la solicitud.
+- **Dos limitadores**: `pairing-request` por IP y `pairing-claim` por `pairing_id`. Uno solo por IP no acota nada cuando todos los quioscos del hotel salen por la misma dirección.
+- **Reactivación por nombre** (ADR-028): confirmar con el nombre de un quiosco **revocado** reactiva la misma fila y el mismo `uuid` —es el escenario de sustituir una tablet averiada—; con el de uno **activo**, `422` de validación sobre `name`. Nada se borra (regla dura 5).
+- **Consola**: `php artisan kiosk:pairing-code {code} --name=` **confirma** un código mostrado en la tablet; no lo genera. Es la vía alternativa cuando el panel no está accesible, y por eso RF-PD-06 puede seguir diciendo que el cliente no tiene por qué usar SSH. Vive en `Kiosk/Infrastructure/Console/`.
+- **Auditoría**: el acto con actor es el `confirm` → evento `DeviceProvisioned` → `AuditAction::DeviceProvisioned` (`device.provisioned`, ya en el catálogo). La emisión del token (`device.paired`) y la revocación (`device.revoked`, motivo `unpaired`) ya las escribe `Identity`.
+- **Sin ADR nuevo**: ninguna de estas decisiones contradice uno existente.
+
 **Artefactos.**
 
 ```
 backend/app/Modules/Kiosk/{Domain,Application,Infrastructure,Http}/
-backend/app/Modules/Kiosk/Console/          # kiosk:pairing-code
+backend/app/Modules/Kiosk/Infrastructure/Console/   # kiosk:pairing-code (bajo Infrastructure/: Deptrac no clasifica Kiosk/Console/)
 frontend-kiosk/src/features/pairing/
 frontend-admin/src/features/devices/
 docs/api/openapi.yaml
@@ -728,7 +742,7 @@ docs/cliente/instalacion.md                  # el procedimiento con capturas (5.
 **Verificación.**
 
 ```bash
-php artisan kiosk:pairing-code 1
+php artisan kiosk:pairing-code 483921 --name="Recepción"
 php artisan test --group=RF-PD-06
 make e2e -- --grep @RF-PD-06
 php artisan kiosk:health
@@ -1564,7 +1578,7 @@ Cada uno de estos puntos es una decisión que hay que tomar **antes o durante** 
 | 7 | 5.4, 5.11 | ✅ **RESUELTO** — `install.ps1` se retira del paquete ([ADR-022](../docs/adr/ADR-022-sin-instalador-de-windows.md)). El §11.6.1 del doc 02 ya no lo lista, y la documentación de instalación enuncia el requisito de Linux con Docker sin ambigüedad en lugar de dejar que se deduzca de la ausencia de un fichero |
 | 8 | 5.4 | **A qué tarea se imputa el endurecimiento de `backup.sh` y `restore.sh` a las convenciones del §3.5.** Son entregables del §11.6.1 y su contenido funcional viene de la tarea 2.11 (Fase 2), pero ninguna tarea de la Fase 5 los menciona, y `update.sh` depende de ellos. ⚠️ No cubierto por los documentos — decidir |
 | 9 | 5.5, 5.11 | ✅ **RESUELTO** — RF-GP-05 se movió de la tarea 3.10 a esta 5.5 (Anexo A del doc 01, §11 del doc 02). **El documento comercial no se corrige porque decía la verdad**: era el plan el que tenía el requisito en la fase equivocada. Son 3–4 h que cambian de fase, no que se suman |
-| 10 | 5.6 | ✅ **RESUELTO en lo esencial** — No había contradicción: faltaba escribir el flujo. `/kiosk/pair` es *la tablet pide emparejarse y recibe el código que muestra*; el administrador lo teclea en el panel, que llama a `/kiosk/pair/confirm` y emite el token. `kiosk:pairing-code {site}` queda como vía alternativa de consola, y los tres documentos permanecen intactos. ⚠️ Siguen sin fijar la **longitud, el formato y la caducidad** del código — decidir |
+| 10 | 5.6 | ✅ **RESUELTO** (07-09-2026) — No había contradicción: faltaba escribir el flujo, y ahora está en la ficha de 5.6 («Decisión C-3 y formato del código»). Son **tres pasos**: `/kiosk/pair` es *la tablet pide emparejarse y recibe el código que muestra*, el administrador lo teclea en el panel (`/kiosk/pair/confirm`, que crea o reactiva la fila de `devices`) y la tablet recoge su token en `/kiosk/pair/claim`. **Longitud, formato y caducidad quedan fijados**: seis dígitos decimales (`^[0-9]{6}$`) generados con CSPRNG y únicos entre las pendientes, secreto de recogida de 32 bytes, ambos almacenados solo en hash (SHA-256), caducidad de 10 minutos y sondeo cada 5 s, todo configurable en `config/kiosk.php` (regla dura 13). `kiosk:pairing-code {code} --name=` queda como vía alternativa de consola y **confirma**, no genera |
 | 11 | 5.7 | **Cómo se materializa el «punto de control entre cada migración»** del §11.6.4: si es una copia incremental, un `savepoint`, una marca de versión o un volcado por versión. El §11.6.4 exige el punto de control, no su mecanismo. ⚠️ No cubierto por los documentos — decidir |
 | 12 | 5.9 | **Valores admitidos del campo `scope` de `support_grants`.** El doc 01 §5 lo declara y RF-PD-11 exige «alcance limitado», pero ningún documento enumera los alcances posibles. ⚠️ No cubierto por los documentos — decidir |
 | 13 | 5.9 | **Formato, cifrado y canal de entrega del paquete de diagnóstico.** El §11.6.6 y el doc 05 §10.6 describen el contenido y que «se envía al soporte», pero no el formato del fichero, si va cifrado ni por qué canal viaja. Relevante porque atraviesa la frontera de datos del cliente. ⚠️ No cubierto por los documentos — decidir |

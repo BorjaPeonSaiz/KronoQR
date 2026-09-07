@@ -74,6 +74,7 @@ use App\Modules\Shared\Application\Port\EmployeeRegistry;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\ManagementActor;
 use App\Modules\Shared\Application\Port\PortalSessionIssuer;
+use App\Modules\Shared\Application\Support\ConstantTimeFloor;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use DateTimeInterface;
@@ -332,7 +333,7 @@ final class IdentityServiceProvider extends ServiceProvider
                 credentials: $app->make(CredentialRepository::class),
                 employees: $app->make(EmployeeRegistry::class),
                 directory: $app->make(EmployeeDirectory::class),
-                rejectionFloorMs: max(0, Config::integer('identity.credentials.rejection_floor_ms', 25)),
+                floor: $app->make(ConstantTimeFloor::class),
             ),
         );
 

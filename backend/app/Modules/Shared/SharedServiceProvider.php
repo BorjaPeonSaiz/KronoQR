@@ -8,10 +8,12 @@ use App\Modules\Shared\Application\Port\AuthenticationMetrics;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\PinAttempts;
 use App\Modules\Shared\Application\Port\SealedPinOpener;
+use App\Modules\Shared\Application\Support\ConstantTimeFloor;
 use App\Modules\Shared\Infrastructure\Adapter\CachePinAttempts;
 use App\Modules\Shared\Infrastructure\Adapter\SodiumSealedPinOpener;
 use App\Modules\Shared\Infrastructure\Adapter\SystemClock;
 use App\Modules\Shared\Infrastructure\Metrics\RedisAuthenticationMetrics;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\ServiceProvider;
 
 /**
@@ -54,5 +56,21 @@ final class SharedServiceProvider extends ServiceProvider
         // importarse entre si, y una metrica contada por tres adaptadores
         // distintos serian tres series con el mismo nombre y distinto criterio.
         $this->app->singleton(AuthenticationMetrics::class, RedisAuthenticationMetrics::class);
+
+        // El suelo de tiempo de todo camino de rechazo (RS-03, tarea 5.6).
+        // Vive aqui por el mismo motivo que el contador de intentos: lo aplican
+        // dos modulos que no pueden importarse entre si —la resolucion de una
+        // credencial en `Identity` y la recogida de un emparejamiento en
+        // `Kiosk`— y con una copia en cada uno las dos habrian divergido en la
+        // primera correccion. **Un solo umbral**, `security.rejection_floor_ms`:
+        // dos numeros para el mismo control acaban con uno de ellos a cero por
+        // descuido, y el sintoma es un camino que deja de estar protegido sin que
+        // ninguna prueba del otro lo note.
+        $this->app->singleton(
+            ConstantTimeFloor::class,
+            static fn (): ConstantTimeFloor => new ConstantTimeFloor(
+                max(0, Config::integer('security.rejection_floor_ms', 25)),
+            ),
+        );
     }
 }

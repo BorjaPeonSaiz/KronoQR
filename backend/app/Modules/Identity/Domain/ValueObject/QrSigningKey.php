@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Identity\Domain\ValueObject;
 
 use App\Modules\Identity\Domain\Exception\InvalidSigningKey;
+use App\Modules\Shared\Domain\ValueObject\Base64Url;
 use SensitiveParameter;
 
 /**
@@ -113,7 +114,7 @@ final readonly class QrSigningKey
     {
         $mac = hash_hmac('sha256', $signingInput, $this->secret, true);
 
-        $encoded = rtrim(strtr(base64_encode($mac), '+/', '-_'), '=');
+        $encoded = Base64Url::encode($mac);
 
         return substr($encoded, 0, QrPayload::SIGNATURE_LENGTH);
     }

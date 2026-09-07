@@ -9,6 +9,7 @@ use App\Modules\Product\Domain\Exception\InvalidLicenseKey;
 use App\Modules\Product\Domain\ValueObject\License;
 use App\Modules\Product\Domain\ValueObject\LicenseRejection;
 use App\Modules\Product\Domain\ValueObject\LicenseVerification;
+use App\Modules\Shared\Domain\ValueObject\Base64Url;
 use SodiumException;
 
 /**
@@ -177,8 +178,6 @@ final readonly class Ed25519LicenseVerifier implements LicenseVerifier
             return null;
         }
 
-        $decoded = base64_decode(strtr($value, '-_', '+/'), strict: true);
-
-        return \is_string($decoded) ? $decoded : null;
+        return Base64Url::decode($value);
     }
 }

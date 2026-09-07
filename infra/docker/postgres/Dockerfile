@@ -30,6 +30,14 @@ ENV TZ=UTC \
 # `apk` el dia del build. Acotar a los dos paquetes cierra el CVE sin abrir
 # esa puerta.
 #
+# `libuuid` entra en la misma lista el 07-09-2026 y por el mismo mecanismo:
+# util-linux 2.42.1-r0 en la imagen base con siete CVE HIGH (CVE-2026-53612,
+# -53613, -53614, -76642, -78408, -78409, -78410) ya parcheadas en 2.42.3 en
+# el indice de Alpine 3.24 antes de que la imagen base se reconstruyera.
+# Ninguna es alcanzable —son del programa `mount`, que esta imagen no trae—,
+# pero el parche existe y el runbook de triaje (§1, punto 1) dice que un
+# arreglo publicado se aplica, no se excepciona.
+#
 # La imagen base esta fijada por DIGEST y no solo por tag (mismo motivo):
 # `postgres:17-alpine` es un tag movil que Docker y Alpine reconstruyen sin
 # avisar, y dos `docker build` el mismo dia en maquinas distintas podrian
@@ -59,7 +67,7 @@ ENV TZ=UTC \
 # esas dos librerias se vuelven a resolver contra el indice cada semana.
 ARG APK_INDEX_STAMP=local
 RUN echo "apk index stamp: ${APK_INDEX_STAMP}" \
-  && apk upgrade --no-cache libssl3 libcrypto3 \
+  && apk upgrade --no-cache libssl3 libcrypto3 libuuid \
   && apk add --no-cache bash \
   && rm /usr/local/bin/gosu
 
