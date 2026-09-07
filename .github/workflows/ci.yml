@@ -1499,8 +1499,10 @@ jobs:
           # Ninguna migracion pendiente, y el informe donde dice la guia.
           sudo docker compose --env-file paquete-nuevo/.env -f paquete-nuevo/docker-compose.yml \
             exec -T app php artisan migrate:status --database=pgsql_migrator --pending=1
+          # El directorio de informes es 0750 del uid de la aplicacion: el comodin
+          # lo expande root, no la shell del runner (que no puede listarlo).
           sudo ls -la /var/backups/fichaje/reports/
-          sudo test -n "$(sudo ls /var/backups/fichaje/reports/update-*.log)"
+          sudo sh -c 'ls /var/backups/fichaje/reports/update-*.log'
           # El .env viajo al paquete nuevo con sus permisos y la etiqueta nueva;
           # el certificado, con su propietario.
           test "$(sudo stat -c '%a' paquete-nuevo/.env)" = "600"
@@ -1513,13 +1515,15 @@ jobs:
         # El detalle tecnico es solo de root y el informe del uid de la aplicacion.
         run: |
           set -euo pipefail
-          bash .github/scripts/assert-no-secrets.sh paquete-nuevo/.env paquete-nuevo/salida-u1.log \
-            /var/backups/fichaje/reports/update-*.log /var/backups/fichaje/reports/update-*.detalle.log
-          for detalle in /var/backups/fichaje/reports/update-*.detalle.log; do
-            test "$(sudo stat -c '%u:%a' "${detalle}")" = "0:600"
-          done
-          for informe in /var/backups/fichaje/reports/update-*[0-9Z].log; do
-            test "$(sudo stat -c '%u:%a' "${informe}")" = "1000:640"
+          # `update-*.log` cubre el informe y el detalle; el comodin lo expande root.
+          mapfile -t informes < <(sudo sh -c 'ls /var/backups/fichaje/reports/update-*.log')
+          test "${#informes[@]}" -ge 2
+          bash .github/scripts/assert-no-secrets.sh paquete-nuevo/.env paquete-nuevo/salida-u1.log "${informes[@]}"
+          for fichero in "${informes[@]}"; do
+            case "${fichero}" in
+            *.detalle.log) test "$(sudo stat -c '%u:%a' "${fichero}")" = "0:600" ;;
+            *) test "$(sudo stat -c '%u:%a' "${fichero}")" = "1000:640" ;;
+            esac
           done
 
       - name: "U2 · Segunda ejecucion: salida 3 y el sistema sigue en pie"
@@ -1586,7 +1590,7 @@ jobs:
           } | tee conteos-despues-u3.txt
           cmp conteos-antes-u3.txt conteos-despues-u3.txt
           compose exec -T app php artisan compliance:verify-audit-chain
-          sudo grep -l 'Vuelta atras' /var/backups/fichaje/reports/update-*.log
+          sudo sh -c "grep -l 'Vuelta atras' /var/backups/fichaje/reports/update-*.log"
 
       - name: "U3 · Ningun secreto en la salida ni en los informes de la vuelta atras"
         if: steps.anterior.outputs.skip != 'true'
@@ -1594,8 +1598,8 @@ jobs:
         # este, no el de exito: es el que hay que revisar.
         run: |
           set -euo pipefail
-          bash .github/scripts/assert-no-secrets.sh paquete-anterior/.env paquete-nuevo/salida-u3.log \
-            /var/backups/fichaje/reports/update-*.log /var/backups/fichaje/reports/update-*.detalle.log
+          mapfile -t informes < <(sudo sh -c 'ls /var/backups/fichaje/reports/update-*.log')
+          bash .github/scripts/assert-no-secrets.sh paquete-anterior/.env paquete-nuevo/salida-u3.log "${informes[@]}"
 
       - name: "U3 · Y tras la vuelta atras se puede reintentar: salida 0"
         if: steps.anterior.outputs.skip != 'true'
