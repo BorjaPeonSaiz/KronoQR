@@ -59,7 +59,7 @@ ENV TZ=UTC \
 # esas dos librerias se vuelven a resolver contra el indice cada semana.
 ARG APK_INDEX_STAMP=local
 RUN echo "apk index stamp: ${APK_INDEX_STAMP}" \
-  && apk upgrade --no-cache libssl3 libcrypto3 \
+  && apk upgrade --no-cache libssl3 libcrypto3 libuuid \
   && apk add --no-cache bash \
   && rm /usr/local/bin/gosu
 
