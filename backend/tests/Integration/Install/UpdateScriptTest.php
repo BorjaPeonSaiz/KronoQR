@@ -266,6 +266,14 @@ it('no exige licencia para actualizar', function (): void {
 
     expect($script)->not->toMatch('/^\s*--skip-backup\)/m')
         ->and($script)->not->toMatch('/^\s*--force\)/m');
+
+    // La instalacion actual se localiza por las etiquetas de los contenedores.
+    // En `docker ps --format`, `.Labels` es una CADENA y `index .Labels` falla
+    // en tiempo de ejecucion ("cannot index slice/array with type string"): la
+    // etapa 8b lo encontro con la instalacion en marcha y un `2>/dev/null`
+    // convirtiendolo en "no hay instalacion". Se lee con `.Label "clave"`.
+    expect($script)->not->toContain('index .Labels')
+        ->and($script)->toContain('{{.Label "com.docker.compose.project.config_files"}}');
 })->group('RF-PD-05', 'RF-PD-10');
 
 it('sale con 2 sin escribir nada en el paquete cuando falla una precondicion', function (): void {

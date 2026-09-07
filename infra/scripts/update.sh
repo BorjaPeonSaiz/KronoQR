@@ -981,7 +981,7 @@ check_installation() {
   elif [ "${DOCKER_OK}" -eq 1 ]; then
     configs="$(docker ps -a --filter "label=com.docker.compose.project=${KQ_COMPOSE_PROJECT}" \
       --filter "label=com.docker.compose.oneoff=False" \
-      --format '{{index .Labels "com.docker.compose.project.config_files"}}' 2>/dev/null |
+      --format '{{.Label "com.docker.compose.project.config_files"}}' |
       awk -F, 'NF { print $1 }' | sort -u || true)"
     case "$(printf '%s\n' "${configs}" | grep -c . || true)" in
     0)
