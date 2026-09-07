@@ -9,8 +9,11 @@
 
 **Rama `feat/tarea-5.6-emparejamiento-quiosco`**, creada desde `main` (`3990524`, PR #41). **Tarea 5.6
 «Vinculación de quiosco por código de emparejamiento» (RF-PD-06) IMPLEMENTADA y revisada el 07-09-2026,
-en `origin`** (commit `a1836cf`, PR #42 contra `main`).
-Siguiente acción: esperar la CI de la PR; si pasa, *merge commit* (nunca squash) y arrancar la 5.7.
+en `origin`** (commits `a1836cf` → `9366b91`, PR #42 contra `main`, **CI en verde**).
+Siguiente acción: integrar la PR #42 con *merge commit* (nunca squash) y arrancar la 5.7. La CI
+necesitó tres arreglos ajenos al código de la tarea: cliente del portal regenerado, `pairing_secret`
+de ejemplo en la allowlist de gitleaks (entrada 22) y `libuuid` en el `apk upgrade` acotado de la
+imagen de PostgreSQL (siete CVE HIGH de util-linux con parche publicado).
 
 **Lo decidido (C-3 cerrada, escrito en doc 01 Anexo B, ficha 5.6 del plan y doc 02 §7.3 nota 5):** flujo
 iniciado por la tablet en tres rutas — `POST /kiosk/pair` (público, crea la solicitud y devuelve código de
