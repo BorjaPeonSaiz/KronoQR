@@ -9,8 +9,11 @@
 
 **Rama `feat/tarea-5.7-actualizador`**, creada desde `main` (`d9a9a91`, PR #42 integrada con *merge
 commit*). **Tarea 5.7 «Actualizador: copia previa, migraciones encadenadas, verificación, vuelta atrás»
-(RF-PD-10, RQ-11) IMPLEMENTADA y REVISADA el 07-09-2026, sin commit todavía**: el árbol de trabajo
-tiene todo el cambio (`git status`). Pasó por `revisor-codigo` y `seguridad-cumplimiento`; **todos los
+(RF-PD-10, RQ-11) IMPLEMENTADA, REVISADA y PROBADA EN LA CI REAL el 07-09-2026**: **PR #43** abierta
+contra `main` (cinco commits: el de la tarea y cuatro arreglos que destapó la etapa ⑧b, ver más abajo).
+**La ⑧b está en verde** en la ejecución manual 34152296162: instalación de la 2.0.0, U1 (0), U2 (3), U3
+(vuelta atrás 4 + reintento 0), U4 (restauración en limpio) y las dos comprobaciones de secretos, en 5 min
+de job. Pasó por `revisor-codigo` y `seguridad-cumplimiento`; **todos los
 bloqueantes e importantes están aplicados** (ver «Lo que corrigieron las revisiones»), salvo el asiento de
 auditoría de la actualización, que es un cambio del dominio de Compliance y queda en «Pendiente».
 
@@ -88,13 +91,11 @@ modo que la vuelta atrás solo pide lo que ya era verdad antes de tocar nada; (3
 localiza solo por el contenedor `app`, que cambia de imagen en cada versión; (4) el directorio de
 informes es 0750 del uid 1000 y la shell del runner no expande `update-*.log` → `sudo sh -c` en la CI.
 
-**Siguiente acción:** (1) un solo commit convencional
-(`feat(product): actualizador con copia previa, cadena de versiones y vuelta atras (tarea 5.7)`), push y
-PR contra `main`; (2) **la etapa ⑧b solo corre en `main`, etiquetas o a mano**: lanzarla con «Run workflow»
-sobre la rama antes de integrar, porque es la única prueba real de `update.sh` con Docker (en local no hay
-Linux con root); esperar fallos de primera ejecución en `app_probe` (parseo FastCGI), en `docker compose up
---scale`, en el 401 de `/api/v1/auth/me` tras `artisan up`, o en el U3 (la espera de 180 s a un nginx que
-nunca arranca).
+**Siguiente acción:** integrar la **PR #43 con *merge commit*** (nunca squash) cuando la ejecución
+34152296162 termine en verde en todas las etapas (⑧ y ⑧b ya lo están), y arrancar la 5.8 (marca blanca)
+en rama nueva. Recordatorio: **la ⑧b solo corre en `main`, etiquetas o a mano** (`gh workflow run ci.yml
+--ref <rama>`); cada tarea que toque `update.sh`, `install.sh`, `restore.sh` o el compose de producción
+debe lanzarla sobre su rama antes de integrar, porque es la única prueba real con Docker y root.
 
 ## Pendiente
 
