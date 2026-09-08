@@ -1386,7 +1386,7 @@ Generado por el administrador del cliente con un clic o un comando. Contiene ver
 | `solicitud-derechos-rgpd.md` | Acceso, rectificación, portabilidad |
 | `brecha-de-seguridad.md` | Procedimiento de 72 h |
 | `actualizacion-cliente.md` | Procedimiento y vuelta atrás |
-| `incidencia-sin-acceso.md` | Cómo diagnosticar con el paquete que envía el cliente |
+| [`incidencia-sin-acceso.md`](runbooks/incidencia-sin-acceso.md) | Cómo diagnosticar con el paquete que envía el cliente. **Escrito** en la tarea 5.9, junto con el paquete y `product:doctor` en los que se apoya |
 | `errores-en-el-panel.md` | Cómo lee el IT del cliente el histórico de `error_events` y qué hacer con cada severidad |
 
 ---

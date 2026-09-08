@@ -339,3 +339,20 @@ puedes ejecutar en cualquier momento y llevarte.
 Si necesitas soporte sobre una incidencia, el paquete de diagnóstico va
 **anonimizado por defecto** y cualquier acceso ampliado es expreso, temporal y
 queda auditado.
+
+### Quién es qué cuando hay soporte (RL-16, RL-17, RL-18)
+
+| Situación | El hotel | El fabricante |
+| --- | --- | --- |
+| Operación ordinaria | **Responsable del tratamiento** y operador: aloja los datos, controla los accesos, responde ante la Inspección y ante la plantilla (RL-16) | **No es encargado**: no aloja ni accede a los datos (RL-17). No hay contrato de encargo que firmar para usar el producto |
+| Envías un paquete de diagnóstico **anonimizado** | Sigues siendo el responsable; no has comunicado datos personales | Recibe versión, configuración sin secretos, estado de servicios, salud de las tablets y recuentos. **Ningún dato personal**, y una prueba automática del producto lo garantiza |
+| Envías un paquete **con datos personales** (casilla «Incluir datos personales», o `--with-personal-data`) | Decides comunicar datos a un tercero para un fin concreto: queda en tu auditoría (`diagnostics.personal_data_included`) y debes poder justificarlo | **Encargado del tratamiento para ese supuesto concreto** (RL-18): solo puede usarlos para esa incidencia, con confidencialidad, y debe borrarlos al terminar |
+| Concedes un **acceso de soporte** (panel → «Soporte», o `support:grant`) | Fijas el motivo, el alcance y la duración; puedes revocarlo en cualquier momento; ves cada uso en tu auditoría | **Encargado para ese supuesto concreto** (RL-18), con las mismas obligaciones; el acceso caduca solo y no puede ampliarse a sí mismo |
+
+Para los dos últimos casos hace falta un **contrato de encargo del tratamiento**
+(art. 28 RGPD) limitado a soporte, con instrucciones documentadas,
+confidencialidad y prohibición de conservar datos al terminar. El fabricante lo
+entrega con el contrato del producto; si no lo tienes firmado, pídelo **antes**
+de marcar la casilla o de conceder el acceso, no después. El paquete
+anonimizado no lo necesita: es la vía normal de soporte, y por eso es la que
+sale por defecto.
