@@ -12,14 +12,17 @@ use App\Modules\Kiosk\Application\Port\KioskEventPublisher;
 use App\Modules\Kiosk\Application\Port\KioskMetrics;
 use App\Modules\Kiosk\Application\Port\PairingRequests;
 use App\Modules\Kiosk\Application\Port\PairingSecrets;
+use App\Modules\Kiosk\Application\UseCase\CheckKioskHealth;
 use App\Modules\Kiosk\Application\UseCase\ClaimPairing;
 use App\Modules\Kiosk\Application\UseCase\RequestPairing;
 use App\Modules\Kiosk\Domain\Model\PairingRequest;
 use App\Modules\Kiosk\Domain\ValueObject\DeviceSummary;
+use App\Modules\Kiosk\Domain\ValueObject\KioskHealthThresholds;
 use App\Modules\Kiosk\Http\Policy\KioskPairingPolicy;
 use App\Modules\Kiosk\Http\Policy\KioskPolicy;
 use App\Modules\Kiosk\Infrastructure\Adapter\LaravelKioskEventPublisher;
 use App\Modules\Kiosk\Infrastructure\Adapter\RandomPairingSecrets;
+use App\Modules\Kiosk\Infrastructure\Console\KioskHealthCommand;
 use App\Modules\Kiosk\Infrastructure\Console\PairingCodeCommand;
 use App\Modules\Kiosk\Infrastructure\Metrics\RedisKioskMetrics;
 use App\Modules\Kiosk\Infrastructure\Persistence\DbDeviceFleet;
@@ -86,6 +89,7 @@ final class KioskServiceProvider extends ServiceProvider
         $this->app->singleton(KioskMetrics::class, RedisKioskMetrics::class);
 
         $this->registerPairingUseCases();
+        $this->registerHealthUseCase();
     }
 
     public function boot(): void
@@ -103,7 +107,13 @@ final class KioskServiceProvider extends ServiceProvider
              * cuando el panel no esta accesible, que es el unico motivo por el que
              * existe.
              */
-            $this->commands([PairingCodeCommand::class]);
+            /*
+             * `kiosk:health` va por la misma puerta y por el mismo motivo: lo
+             * ejecuta una persona cuando quiere ver sus quioscos sin abrir el
+             * panel —o cuando no puede abrirlo— y no se programa. Es de solo
+             * lectura (RF-PA-07, doc 02 Anexo C).
+             */
+            $this->commands([PairingCodeCommand::class, KioskHealthCommand::class]);
         }
     }
 
@@ -142,6 +152,35 @@ final class KioskServiceProvider extends ServiceProvider
             // obligacion de RS-03 y ya no pueden divergir.
             $app->make(ConstantTimeFloor::class),
         ));
+    }
+
+    /**
+     * `kiosk:health` con sus dos plazos **ya resueltos** (RF-PA-07, tarea 5.11).
+     *
+     * Misma regla que los dos casos de uso del emparejamiento: la configuracion
+     * se resuelve en la raiz de composicion y no dentro del caso de uso, que asi
+     * se prueba con dos valores sin tocar la configuracion global y no necesita
+     * facades (§3.5, verificado por Deptrac).
+     *
+     * **Los ordena antes de construir el objeto de valor**, y no es celo: los dos
+     * numeros salen del `.env` de un cliente. {@see KioskHealthThresholds} exige
+     * que el plazo de silencio vaya despues del de latido fresco —si no, no
+     * habria zona de aviso—, y un `.env` con los dos cruzados dejaria sin
+     * diagnostico justo a quien lo ejecuta porque algo va mal. Se ordena, se
+     * diagnostica, y el numero raro se ve en el `--json`.
+     */
+    private function registerHealthUseCase(): void
+    {
+        $this->app->bind(CheckKioskHealth::class, static function ($app): CheckKioskHealth {
+            $fresh = max(1, Config::integer('kiosk.health.fresh_within_seconds', 120));
+            $silent = max($fresh + 1, Config::integer('kiosk.health.silent_after_seconds', 600));
+
+            return new CheckKioskHealth(
+                $app->make(DeviceRegistry::class),
+                $app->make(Clock::class),
+                new KioskHealthThresholds($fresh, $silent),
+            );
+        });
     }
 
     /**

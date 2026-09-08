@@ -4,6 +4,7 @@ dev-dist/
 *.local
 .vite/
 test-results/
+test-results-screenshots/
 playwright-report/
 
 # Videos de camara simulada para el E2E. Se GENERAN con

@@ -710,6 +710,45 @@ recogiendo RL-20 y operacion.md explicando cómo generar, descargar, sacar
 del contenedor y cuándo caduca.
 ```
 
+#### 6.5.6 Documentación de cliente: cierre (tarea 5.11)
+
+```text
+Cierra la tarea 5.11 del plan («Documentación de instalación, operación,
+configuración y obligaciones legales», RL-16..RL-21, RF-PD-02). La ficha
+ejecutable está en plan implementacion/05-fase-5-productizacion.md
+→ «Tarea 5.11». Los cuatro documentos ya existen: se escribieron en
+paralelo a cada tarea (5.1–5.10). Lo que cierra es lo que solo se puede
+hacer al final.
+
+Orquesta: las decisiones ESCRITAS en la ficha antes de lanzar nada, y
+CINCO agentes en paralelo con ficheros disjuntos: producto-licencia
+(endurecimiento.md y los «qué hacer si…» que faltaban: Docker ausente,
+disco, cámara, tablet sin servidor), producto-licencia (referencia
+completa del .env en configuracion.md, variable a variable, con marca y
+«¿afecta al cálculo de horas?»), qa-testing (ClientDocumentationTest y
+check-package-links.sh con imágenes), frontend-panel (generador de
+capturas del asistente sobre el doble del contrato, es/en) y
+frontend-quiosco (capturas del emparejamiento). Después, las cinco
+traducciones al inglés en paralelo (una por documento) sobre los textos
+ya cerrados, y revisor-codigo + seguridad-cumplimiento
+(/revision-cumplimiento) antes de integrar.
+
+Los innegociables:
+- Comandos completos y copiables, idénticos en las dos lenguas (prueba)
+- Ninguna captura con datos reales: se generan sobre el doble del E2E,
+  nunca sobre una instalación; sello img/VERSION atado a VERSION
+- Cada variable de .env.example y cada clave de installation_settings
+  documentada (prueba en las dos direcciones)
+- Sin secretos ni claves de aspecto real; sin enlaces fuera del paquete
+- La guía no promete lo que ADR-019 prohíbe ni sugiere credencial en
+  móvil ni biometría
+- Referencia cruzada única: cada fallo se explica en un solo sitio
+
+Criterio de terminado: la DoD de la ficha. La instalación limpia por una
+persona ajena siguiendo solo la guía no la sustituye ningún script y
+queda pendiente del usuario.
+```
+
 ### 6.6 Cierre de fase
 
 ```

@@ -1092,8 +1092,449 @@ docker compose exec app php artisan identity:2fa-reset     # retira un segundo f
   licencia caducada recorta funcionalidades accesorias y muestra avisos, pero
   **nunca impide fichar ni consultar el registro**. Todo lo que hay que saber
   sobre ella está en la **sección 3 bis**.
-- **Rutas, credenciales, puertos y claves de firma** son del `.env` del servidor
-  y exigen reiniciar. Están documentados en la guía de instalación.
+- **Rutas, credenciales, puertos, redes y claves de firma** son del `.env` del
+  servidor y exigen reiniciar los contenedores. **Están todas en la sección 6**,
+  una por una, con lo que hace cada una y cuándo conviene tocarla; los
+  parámetros de red y el certificado se explican además con detalle en
+  [`instalacion.md`](instalacion.md) §6.
+
+---
+
+## 6. Referencia completa del `.env`, variable a variable
+
+Esta es la lista **completa** de lo que se puede escribir en el `.env` del
+servidor: **161 variables**, todas las que trae `.env.example`. Está aquí para
+que no tengas que leer el fichero entero cuando buscas una sola cosa, y para
+que sepas de un vistazo si tocarla mueve horas de trabajo o no.
+
+**Antes de cambiar nada, tres cosas:**
+
+1. **Todo lo del `.env` exige reiniciar.** Se edita el fichero y se recrean los
+   contenedores. Lo del panel, no (sección 1).
+2. **Mira la marca.** Es la misma que lleva `.env.example` en la línea de
+   encima de cada variable:
+
+   | Marca | Qué significa |
+   | --- | --- |
+   | `[CLIENTE]` | La rellenas tú antes de instalar. `install.sh` comprueba en su fase 1 que están y **se niega a instalar** si falta alguna |
+   | `[INSTALADOR]` | La genera `install.sh` **en tu servidor** y no la transmite a nadie. Déjala vacía: si escribes algo, el instalador lo sustituye. El fabricante no conoce estos valores y **no puede recuperarlos** |
+   | `[FIJO]` | No se toca. Cambiarla rompe algo que no se parece a esta variable |
+   | `—` | Tiene un valor por defecto pensado y **la mayoría de las instalaciones no lo cambia nunca**. Si dudas, déjalo como está |
+
+3. **La columna «¿Afecta al cálculo de horas?»** dice `Sí` cuando cambiarla
+   mueve minutos del registro legal o abre y cierra incidencias. Son unas
+   pocas, y son las únicas que conviene documentar por escrito cuando las
+   toques: el cambio no queda auditado como los del panel, porque el `.env` es
+   un fichero de tu servidor.
+
+Para aplicar un cambio:
+
+```bash
+sudo nano /opt/kronoqr-<version>/.env
+cd /opt/kronoqr-<version>
+sudo docker compose up -d
+sudo docker compose exec app php artisan product:doctor
+```
+
+> **Nunca pegues aquí un valor de otra instalación**, y muy especialmente
+> ninguno de los `[INSTALADOR]`. Cada servidor genera los suyos; compartirlos
+> significa que quien tenga uno puede leer las copias, firmar tarjetas o abrir
+> los PIN sellados del otro.
+
+### 6.0 Las nueve claves que NO son variables de entorno
+
+Nueve propiedades de la instalación no viven en el `.env` sino en la tabla
+`installation_settings`, se editan **desde el panel** y surten efecto en la
+petición siguiente sin reiniciar nada:
+
+| Clave | Dónde se explica |
+| --- | --- |
+| `ATTENDANCE_MAX_SHIFT_HOURS` | Sección 2.1 |
+| `ATTENDANCE_DEBOUNCE_SECONDS` | Sección 2.1 |
+| `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES` | Sección 2.1 |
+| `ATTENDANCE_MIN_TRANSIT_SECONDS` | Sección 2.1 |
+| `BRANDING_APP_NAME` | Sección 2.2 |
+| `BRANDING_LOGO_PATH` | Sección 2.2 |
+| `BRANDING_ACCENT_COLOR` | Sección 2.2 |
+| `LOCALE_DEFAULT` | Sección 2.3 |
+| `LOCALE_AVAILABLE` | Sección 2.3 |
+
+**Manda la base de datos** (sección 1). Cinco de las nueve —las de marca y las
+de idioma— ya no existen como variable de entorno: se retiraron para que no
+hubiera dos sitios donde escribir el mismo dato.
+
+**Las cuatro `ATTENDANCE_*` sí siguen apareciendo en `.env.example`, y conviene
+saber exactamente qué son:** una copia del valor de serie, escrita ahí para que
+quien lea el fichero sepa con qué números trabaja el sistema. **La aplicación no
+las lee.** Los cuatro umbrales salen siempre de `installation_settings`, que la
+migración sembró con esos mismos valores (12, 60, 15 y 120). Consecuencia
+práctica, y es la causa de la mitad de los *«pues yo lo tengo puesto a otra
+cosa»*:
+
+> **Editar `ATTENDANCE_DEBOUNCE_SECONDS` en el `.env` no cambia nada.** Ni
+> reiniciando. Se cambia en el panel, sección 2.1.
+
+`product:doctor` lo detecta: si el `.env` y la base de datos dicen cosas
+distintas en una de esas cuatro claves, la comprobación
+`settings.env_differs_from_db` sale en **aviso** y te dice cuál. No es un fallo
+—no hay nada roto— pero significa que el fichero está engañando a quien lo lea.
+Lo correcto es dejar el `.env` con el mismo valor que el panel, o borrar esas
+cuatro líneas.
+
+### 6.1 Aplicación
+
+| Variable | Marca | Qué hace | De serie | Cuándo cambiarla | ¿Afecta al cálculo de horas? |
+| --- | --- | --- | --- | --- | --- |
+| `APP_NAME` | — | Nombre **técnico** del proceso. No es la marca que se ve: esa es `BRANDING_APP_NAME` (sección 2.2) | `KronoQR` | Nunca. Se usa para derivar los prefijos de la caché y de las sesiones en Redis; cambiarlo cierra todas las sesiones abiertas | No |
+| `APP_ENV` | `[CLIENTE]` | Entorno de ejecución | `local` en la plantilla; **`production` en tu servidor** | La pone el instalador. Si la ves en `local` en un hotel, es un error de instalación: corrígela y reinicia | No |
+| `APP_DEBUG` | `[CLIENTE]` | Muestra la traza y la configuración completa ante cualquier error | `false` | **Nunca en producción.** Con `true`, cualquiera que provoque un error ve las claves incluidas. La aplicación **se niega a arrancar** con `APP_ENV=production` y esto en `true`, y dice cómo corregirlo | No |
+| `APP_KEY` | `[INSTALADOR]` | Cifra sesiones y los datos cifrados en base de datos | (vacía; la genera `install.sh`) | Nunca a mano. Cambiarla deja ilegibles las sesiones y los datos ya cifrados | No |
+| `APP_URL` | `[CLIENTE]` | La URL `https` por la que llegan los quioscos, el panel y el portal | `https://localhost` en la plantilla | Al instalar, y si cambias el nombre del servidor. **Tiene que coincidir con el nombre del certificado TLS.** Ejemplo: `https://fichaje.tuhotel.local` | No |
+| `APP_TIMEZONE` | `[FIJO]` | Zona horaria del proceso | `UTC` | **Nunca.** Todo instante se almacena en UTC y la conversión a hora local ocurre al presentarlo. La zona horaria **se configura por centro** en el panel. Cambiar esto invalida el cálculo de jornada y deja el registro horario sin valor legal; el instalador ni siquiera ofrece tocarlo | **Sí** — cambiarla invalida el registro |
+| `APP_LOCALE` | — | Idioma de respaldo de la API y de los documentos si la base de datos no responde | `es` | Casi nunca: manda `LOCALE_DEFAULT` del panel (sección 2.3) | No |
+| `APP_FALLBACK_LOCALE` | — | Idioma al que se recurre si falta una traducción | `es` | Casi nunca | No |
+| `APP_SUPPORTED_LOCALES` | — | Idiomas que la API acepta negociar, como respaldo | `es,en` | Casi nunca: manda `LOCALE_AVAILABLE` del panel (sección 2.3) | No |
+
+### 6.2 Base de datos
+
+Son **tres roles distintos de PostgreSQL**, y no es burocracia: el rol de la
+aplicación no puede modificar ni borrar el registro de auditoría, y solo el de
+mantenimiento puede soltar una partición vencida.
+
+| Variable | Marca | Qué hace | De serie | Cuándo cambiarla | ¿Afecta al cálculo de horas? |
+| --- | --- | --- | --- | --- | --- |
+| `DB_CONNECTION` | — | Motor de base de datos | `pgsql` | Nunca. El producto es PostgreSQL 17 | No |
+| `DB_HOST` | — | Nombre del contenedor de PostgreSQL | `postgres` | Solo si mueves la base de datos a un servidor aparte | No |
+| `DB_PORT` | — | Puerto | `5432` | Íd. | No |
+| `DB_DATABASE` | — | Nombre de la base de datos | `fichaje` | Nunca después de instalar | No |
+| `DB_USERNAME` | — | Rol de ejecución. **Sin DDL y sin `UPDATE` ni `DELETE` sobre la auditoría** | `fichaje_app` | Nunca | No |
+| `DB_PASSWORD` | `[INSTALADOR]` | Contraseña de ese rol | (vacía; la genera `install.sh`) | Solo en una rotación de secretos; hay runbook | No |
+| `DB_MIGRATION_USERNAME` | — | Rol propietario, el único con DDL. Ejecuta las migraciones | `fichaje_migrator` | Nunca | No |
+| `DB_MIGRATION_PASSWORD` | `[INSTALADOR]` | Contraseña de ese rol | (vacía; la genera `install.sh`) | Íd. que la anterior | No |
+| `DB_MAINTENANCE_USERNAME` | — | Rol de la purga por retención, el único que suelta particiones vencidas | `fichaje_maintenance` | Nunca | No |
+| `DB_MAINTENANCE_PASSWORD` | — | Contraseña de ese rol | **Vacía a propósito** | **Nunca se escribe aquí.** Se aporta en el momento de ejecutar la purga anual: ver [`operacion.md`](operacion.md) §6 y §9 | No |
+| `BACKUP_DB_USERNAME` | — | Usuario con el que se hacen las copias. Es el de migración porque copiar y restaurar exigen atributos que el de la aplicación no tiene | `fichaje_migrator` | Nunca | No |
+| `BACKUP_DB_PASSWORD` | `[INSTALADOR]` | Su contraseña, la misma que la de migración | (vacía; la genera `install.sh`) | Nunca por separado: con otro valor, la copia diaria falla desde el primer día | No |
+
+### 6.3 Redis, colas, caché y sesiones
+
+| Variable | Marca | Qué hace | De serie | Cuándo cambiarla | ¿Afecta al cálculo de horas? |
+| --- | --- | --- | --- | --- | --- |
+| `REDIS_HOST` | — | Nombre del contenedor de Redis | `redis` | Solo si mueves Redis a un servidor aparte | No |
+| `REDIS_PORT` | — | Puerto | `6379` | Íd. | No |
+| `REDIS_PASSWORD` | — | Contraseña de Redis | *(vacía)* | Vacía es lo correcto en la instalación estándar: Redis **no publica ningún puerto** y solo es alcanzable desde la red interna de Docker. Rellénala solo si sacas Redis a otra máquina, y configúralo también en él | No |
+| `QUEUE_CONNECTION` | — | Dónde viven los trabajos en segundo plano | `redis` | Nunca. Si Redis cae, esos trabajos esperan a que vuelva; **el fichaje no depende de ellos** | No |
+| `CACHE_STORE` | — | Dónde vive la caché | `redis` | Nunca | No |
+| `SESSION_DRIVER` | — | Dónde viven las sesiones | `redis` | Nunca | No |
+
+### 6.4 Presencia en tiempo real
+
+La presencia en vivo es una **funcionalidad accesoria**. Si esto está mal
+configurado, la pantalla pasa a actualizarse por sondeo y lo dice. Nadie se
+queda sin fichar.
+
+| Variable | Marca | Qué hace | De serie | Cuándo cambiarla | ¿Afecta al cálculo de horas? |
+| --- | --- | --- | --- | --- | --- |
+| `BROADCAST_CONNECTION` | — | Motor de difusión de eventos | `reverb` | Nunca | No |
+| `REVERB_APP_ID` | `[INSTALADOR]` | Identificador de la aplicación en el servicio de tiempo real | (lo genera `install.sh`) | Nunca a mano | No |
+| `REVERB_APP_KEY` | `[INSTALADOR]` | Clave **pública** que identifica la aplicación en el saludo del WebSocket. No autoriza nada por sí sola | (la genera `install.sh`) | Nunca a mano | No |
+| `REVERB_APP_SECRET` | `[INSTALADOR]` | **El secreto.** Firma la autorización de cada canal privado | (vacía; la genera `install.sh`) | Nunca a mano. Sin él el servicio no arranca, que es el fallo ruidoso que se prefiere a uno silencioso con una clave conocida | No |
+| `REVERB_HOST` | — | Cómo llega el servidor al servicio por la red interna. **El navegador no usa este valor**: entra por el mismo origen del panel | `reverb` | Nunca | No |
+| `REVERB_PORT` | — | Puerto interno | `8080` | Nunca | No |
+| `REVERB_SCHEME` | — | Esquema interno, dentro de la red de Docker | `http` | Nunca. El tráfico del navegador va cifrado por el borde | No |
+| `REVERB_ALLOWED_ORIGINS` | — | Orígenes autorizados a abrir el WebSocket | *(vacía: todos)* | Solo si quieres cerrarlo a tu dominio, por ejemplo `fichaje.tuhotel.local`. Abierto de serie porque el dominio lo pone cada cliente, y la defensa real es que todos los canales son privados y el servidor firma cada suscripción | No |
+| `REALTIME_ENABLED` | — | Si la vista de presencia usa WebSocket | `true` | Ponla a `false` si el proxy corporativo del hotel rompe los WebSockets. **No apaga la vista**: la deja en sondeo, con aviso en pantalla | No |
+| `REALTIME_POLL_INTERVAL_SECONDS` | — | Cada cuántos segundos sondea la vista cuando no hay WebSocket | `15` | Bájalo si quieres la presencia más fresca a costa de más peticiones | No |
+| `REALTIME_PATH` | — | Ruta del WebSocket en el origen del panel | `/app` | Nunca, salvo que un proxy tuyo ya use esa ruta | No |
+| `REALTIME_AUTH_ENDPOINT` | — | Dirección que autoriza la suscripción a un canal privado | `/api/v1/broadcasting/auth` | Nunca | No |
+| `REALTIME_EVENT` | — | Nombre del evento de presencia que escucha el panel | `presence.updated` | Nunca | No |
+
+### 6.5 Credencial QR y ubicación del logotipo
+
+| Variable | Marca | Qué hace | De serie | Cuándo cambiarla | ¿Afecta al cálculo de horas? |
+| --- | --- | --- | --- | --- | --- |
+| `QR_SIGNING_KEY_CURRENT_ID` | `[INSTALADOR]` | Identificador de dos caracteres de la clave con la que se firman las tarjetas nuevas | (lo genera `install.sh`) | Solo al rotar la clave, siguiendo el runbook `rotacion-clave-qr.md` | No |
+| `QR_SIGNING_KEY_CURRENT` | `[INSTALADOR]` | La clave de firma activa | (vacía; la genera `install.sh`) | Íd. **Si se pierde, hay que reimprimir todas las tarjetas** | No |
+| `QR_SIGNING_KEY_PREVIOUS_ID` | — | Identificador de la clave **saliente** durante una rotación | *(vacía)* | Solo durante una rotación. Vacía es el estado normal | No |
+| `QR_SIGNING_KEY_PREVIOUS` | — | La clave saliente. Ya no firma, pero sigue **verificando** las tarjetas impresas con ella, y por eso la reimpresión se reparte en semanas | *(vacía)* | Íd. Un identificador sin su clave no crea ningún solape: o van las dos, o ninguna | No |
+| `QR_ERROR_CORRECTION` | — | Cuánto desgaste aguanta una tarjeta antes de dejar de leerse | `Q` | Nunca. Bajarlo produce tarjetas que fallan a los meses de estar en un bolsillo | No |
+| `QR_SIZE_MM` | — | Lado del QR impreso, en milímetros | `26` | Solo si cambias de formato de tarjeta. Es el tamaño mínimo con el que se garantiza la lectura | No |
+| `IDENTITY_CREDENTIAL_REJECTION_FLOOR_MS` | — | Suelo de tiempo que consume **todo** rechazo de credencial, para que desde fuera no se distinga «no existe» de «revocada» ni de «mala firma» | `25` | Casi nunca. Subirlo endurece el control y añade latencia **solo al rechazo**; a `0` se desactiva y no debe hacerse en producción | No |
+| `BRANDING_LOGO_ROOT` | — | Directorio **dentro del contenedor** en el que tiene que estar el logotipo. Es lo que impide que la dirección pública del logotipo se convierta en una lectura de cualquier fichero del servidor | `/var/kronoqr/branding` | Nunca, salvo que cambies también el montaje del `docker-compose`. Ver **sección 2.2** | No |
+| `BRANDING_PATH` | — | Carpeta **de tu servidor** que se monta ahí, de solo lectura. Es donde dejas el PNG o el SVG | *(vacía: `./branding` junto al `docker-compose.yml`)* | Al colocar el logotipo del hotel. Ver **sección 2.2** | No |
+
+### 6.6 Generación de PDF
+
+Las tres son rutas **de dentro de la imagen del producto**: el navegador que
+dibuja los PDF viaja incluido, no se descarga nada al arrancar y no hace falta
+salida a internet.
+
+| Variable | Marca | Qué hace | De serie | Cuándo cambiarla | ¿Afecta al cálculo de horas? |
+| --- | --- | --- | --- | --- | --- |
+| `LARAVEL_PDF_CHROME_PATH` | — | Ruta del navegador que dibuja los PDF | `/usr/bin/chromium-browser` | Nunca | No |
+| `LARAVEL_PDF_NODE_MODULES_PATH` | — | Ruta de las librerías que lo controlan | `/usr/local/lib/node_modules` | Nunca | No |
+| `LARAVEL_PDF_NO_SANDBOX` | — | Desactiva el aislamiento propio del navegador, que el contenedor no puede concederle | `true` | Nunca. El contenedor ya corre sin privilegios y el HTML que se le entrega lo genera la propia aplicación, sin ninguna URL remota | No |
+
+### 6.7 Reglas de fichaje
+
+**Las cuatro primeras se cambian en el panel, no aquí** (sección 6.0). La línea
+del `.env` es una copia del valor de serie y **editarla no hace nada**.
+
+| Variable | Marca | Qué hace | De serie | Cuándo cambiarla | ¿Afecta al cálculo de horas? |
+| --- | --- | --- | --- | --- | --- |
+| `ATTENDANCE_DEBOUNCE_SECONDS` | — | Ventana anti-rebote entre dos escaneos de la misma persona. Ver **sección 2.1** | `60` | En el panel. Aquí, nunca | **Sí** |
+| `ATTENDANCE_MAX_SHIFT_HOURS` | — | Duración a partir de la cual un tramo cerrado es anómalo. Ver **sección 2.1** | `12` | En el panel. Aquí, nunca | **Sí** (abre incidencias) |
+| `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES` | — | Desfase tolerado entre el reloj de la tablet y el del servidor. **Genera incidencia, nunca rechaza el fichaje** (RF-AT-10). Ver **sección 2.1** | `15` | En el panel. Aquí, nunca | **Sí** (abre incidencias) |
+| `ATTENDANCE_MIN_TRANSIT_SECONDS` | — | Tránsito mínimo creíble entre dos quioscos. Ver **sección 2.1** | `120` | En el panel. Aquí, nunca | **Sí** (abre incidencias) |
+| `ATTENDANCE_PATTERN_WINDOW_SECONDS` | — | Segundos por debajo de los cuales dos fichajes consecutivos en el mismo quiosco se considerarán un patrón anómalo | `10` | **Todavía no la lee nada**: ese detector llega en una versión posterior. La variable está reservada para no tener que cambiar el fichero entonces | No, todavía |
+| `ATTENDANCE_PATTERN_MIN_REPEATS` | — | Coincidencias sistemáticas entre dos personas antes de abrir una incidencia | `3` | Íd. que la anterior | No, todavía |
+
+### 6.8 Acceso al panel de gestión
+
+| Variable | Marca | Qué hace | De serie | Cuándo cambiarla | ¿Afecta al cálculo de horas? |
+| --- | --- | --- | --- | --- | --- |
+| `IDENTITY_LOGIN_MAX_ATTEMPTS` | — | Contraseñas falladas **por cuenta** antes de bloquearla | `5` | Súbelo si tu gente se queja de bloqueos; bájalo si tu política es más dura | No |
+| `IDENTITY_LOGIN_LOCKOUT_SECONDS` | — | Cuánto dura ese bloqueo | `900` (15 min) | Íd. | No |
+| `IDENTITY_SESSION_TOKEN_HOURS` | — | Vida de la sesión del panel | `12` | Bájalo si los ordenadores de gestión son compartidos. **No afecta al token del quiosco**, que dura 90 días | No |
+| `IDENTITY_PASSWORD_MIN_LENGTH` | — | Longitud mínima de la contraseña de gestión | `12` | Súbelo si tu política lo pide. **Hay un suelo de 8 en el código**: por debajo no se puede bajar | No |
+| `IDENTITY_MANAGEMENT_RATE_LIMIT` | — | Peticiones por minuto, por cuenta y por origen, de las rutas de gestión que leen o corrigen datos de terceros | `120` | Solo si un hotel grande ve errores `429` con uso normal | No |
+
+### 6.9 Segundo factor de las cuentas de gestión
+
+**Solo cuentas de gestión.** El empleado no tiene ni puede tener segundo factor:
+su credencial es una tarjeta física y su acceso al portal es código y PIN.
+
+| Variable | Marca | Qué hace | De serie | Cuándo cambiarla | ¿Afecta al cálculo de horas? |
+| --- | --- | --- | --- | --- | --- |
+| `IDENTITY_2FA_REQUIRED_ROLES` | — | Roles obligados a llevar segundo factor | `admin,rrhh,auditor` | Añade `responsable_departamento` si tu política es más dura. Quitar un rol de la lista **no desactiva el segundo factor de quien ya lo activó** | No |
+| `IDENTITY_2FA_CHALLENGE_MINUTES` | — | Minutos que vive la media autenticación entre la contraseña y el código | `10` | Casi nunca. En minutos y no en horas a propósito | No |
+| `IDENTITY_2FA_MAX_ATTEMPTS` | — | Códigos fallados antes de bloquear | `5` | Casi nunca | No |
+| `IDENTITY_2FA_LOCKOUT_SECONDS` | — | Cuánto dura ese bloqueo | `900` (15 min) | Casi nunca | No |
+| `IDENTITY_2FA_WINDOW` | — | Tolerancia al desvío del reloj del teléfono, en franjas de 30 s a cada lado | `1` (un código vale unos 90 s) | Ponla a `0` si tus relojes están sincronizados por NTP y quieres apretar | No |
+| `IDENTITY_2FA_SECRET_LENGTH` | — | Longitud del secreto del autenticador | `32` (160 bits) | Nunca | No |
+| `IDENTITY_2FA_ISSUER` | — | Nombre que aparece en la aplicación de autenticación junto al correo de la cuenta | `KronoQR` | Cámbialo por el de tu hotel si prefieres verlo así en el móvil | No |
+| `IDENTITY_2FA_RATE_LIMIT` | — | Peticiones por minuto a las rutas del segundo factor, por cuenta | `5` | Casi nunca. **Tiene que ser mayor o igual que `IDENTITY_2FA_MAX_ATTEMPTS`**, para que bloquee el contador de la cuenta y no el limitador | No |
+
+### 6.10 PIN del empleado y token del quiosco
+
+El PIN es de **seis dígitos** y esa longitud **no es configurable**: la fija el
+contrato de la API. Lo que sí se ajusta es qué PIN nunca se emiten y cómo se
+frena a quien los prueba. Los contadores son **por empleado y por origen**: el
+del quiosco y el del portal son distintos, para que sondear una puerta no deje
+a nadie sin poder fichar por la otra.
+
+| Variable | Marca | Qué hace | De serie | Cuándo cambiarla | ¿Afecta al cálculo de horas? |
+| --- | --- | --- | --- | --- | --- |
+| `IDENTITY_PIN_FORBIDDEN` | — | PIN que el generador nunca emite, separados por comas | *(la lista de serie: repetidos y secuencias)* | Casi nunca. **Escribirla sustituye a la lista de serie entera**; dejarla vacía significa «no excluir ninguno», que es mala idea | No |
+| `IDENTITY_PIN_MAX_ATTEMPTS` | — | Fallos del primer escalón de bloqueo | `3` | Casi nunca | No |
+| `IDENTITY_PIN_LOCKOUT_SECONDS` | — | Duración del primer bloqueo | `300` (5 min) | Casi nunca | No |
+| `IDENTITY_PIN_LOCKOUT_TIER2_ATTEMPTS` | — | Fallos del segundo escalón | `5` | Casi nunca | No |
+| `IDENTITY_PIN_LOCKOUT_TIER2_SECONDS` | — | Duración del segundo bloqueo | `900` (15 min) | Casi nunca | No |
+| `IDENTITY_PIN_LOCKOUT_TIER3_ATTEMPTS` | — | Fallos del tercer escalón | `10` | Casi nunca | No |
+| `IDENTITY_PIN_LOCKOUT_TIER3_SECONDS` | — | Duración del tercer bloqueo | `3600` (60 min) | Casi nunca | No |
+| `IDENTITY_PIN_LOCKOUT_RESET_HOURS` | — | Sin fallos durante estas horas, el contador vuelve a cero | `24` | Casi nunca. Restablecer el PIN de alguien también limpia su contador en el acto | No |
+| `IDENTITY_PIN_SEALING_SECRET_KEY` | `[INSTALADOR]` | Clave privada con la que el servidor abre los PIN que la tablet sella. Es lo que permite fichar por PIN **sin red** sin dejar el PIN en claro en la tablet | (vacía; la genera `install.sh`) | Nunca la copies de otro servidor. **Vacía es un caso legítimo**: significa que esta instalación no ofrece fichaje por PIN y el quiosco oculta el teclado numérico | No |
+| `IDENTITY_DEVICE_TOKEN_DAYS` | — | Días que vive el token de una tablet emparejada | `90` | Casi nunca | No |
+| `IDENTITY_DEVICE_TOKEN_ROTATION_THRESHOLD` | — | Fracción de esa vida a partir de la cual el token se renueva solo | `0.8` | Casi nunca. Renovarlo el último día dejaría sin fichar a una tablet que hubiera pasado una semana desconectada | No |
+
+### 6.11 Asistente de puesta en marcha y marca pública
+
+Las dos rutas que gobiernan son **públicas**, porque hacen falta antes de que
+nadie se haya identificado.
+
+| Variable | Marca | Qué hace | De serie | Cuándo cambiarla | ¿Afecta al cálculo de horas? |
+| --- | --- | --- | --- | --- | --- |
+| `PRODUCT_SETUP_RATE_LIMIT` | — | Peticiones por minuto y por origen de las dos rutas públicas del asistente de puesta en marcha | `10` | Súbelo si el panel comparte una sola IP con media oficina por NAT. Una puesta en marcha la hace una persona, una vez | No |
+| `PRODUCT_BRANDING_RATE_LIMIT` | — | Peticiones por minuto y por origen de la marca y del logotipo, que piden las tres aplicaciones al arrancar | `120` | Súbelo si un hotel grande ve errores `429` al arrancar por la mañana. **Subirlo mucho tiene coste en disco**: cada petición lee el fichero del logotipo. Si necesitaras varios miles, lo correcto es poner una caché delante, no subir este número | No |
+
+### 6.12 Importación de plantilla desde un fichero
+
+Todo el procedimiento está en la **sección 3 ter**. El delimitador y la
+codificación **no se configuran**: se detectan.
+
+| Variable | Marca | Qué hace | De serie | Cuándo cambiarla | ¿Afecta al cálculo de horas? |
+| --- | --- | --- | --- | --- | --- |
+| `WORKFORCE_IMPORT_MAX_ROWS` | — | Líneas de datos como máximo por fichero. Ver **sección 3 ter.7** | `500` | Solo si tu plantilla es mayor, y antes prueba a partir el fichero: es más rápido | No |
+| `WORKFORCE_IMPORT_MAX_FILE_KILOBYTES` | — | Tamaño máximo del fichero. Ver **sección 3 ter.7** | `4096` | Casi nunca: un fichero de 500 personas ronda los 60 KB | No |
+| `WORKFORCE_IMPORT_COLUMN_ALIASES` | — | Nombres de columna adicionales, en formato `campo=cabecera` separados por `;`. Ver **sección 3 ter.6** | *(vacía)* | Cuando la exportación de tu sistema anterior llama a las columnas de otra forma. **Se suman a los de serie, no los sustituyen** | No |
+
+### 6.13 Portal del empleado
+
+Desde dónde se puede entrar al portal **no se decide aquí**: es
+`PORTAL_INTERNAL_CIDR`, en la sección 6.15.
+
+| Variable | Marca | Qué hace | De serie | Cuándo cambiarla | ¿Afecta al cálculo de horas? |
+| --- | --- | --- | --- | --- | --- |
+| `IDENTITY_PORTAL_SESSION_HOURS` | — | Vida de la sesión del portal | `2` | Casi nunca. Más corta que la del panel a propósito: el portal se abre desde un móvil personal. Restablecer el PIN de alguien **invalida sus sesiones en el acto**, así que este número no es lo que responde a un móvil perdido | No |
+| `IDENTITY_PORTAL_RATE_LIMIT` | — | Peticiones por minuto del portal, por IP **y** por código de empleado a la vez | `10` | Casi nunca. Se aplica por los dos ejes porque en un hotel toda la plantilla sale por la misma línea | No |
+
+### 6.14 Límites del camino del quiosco
+
+Son los límites de la **aplicación**, y no sustituyen a los del servidor web
+(sección 6.15): aquellos limitan por origen y estos **por tablet**, que es lo
+que impide que una tablet averiada consuma la cuota de las demás cuando todas
+salen por la misma IP.
+
+| Variable | Marca | Qué hace | De serie | Cuándo cambiarla | ¿Afecta al cálculo de horas? |
+| --- | --- | --- | --- | --- | --- |
+| `KIOSK_SCAN_RATE_PER_DEVICE` | — | Fichajes por minuto y por tablet | `120` | Casi nunca | No |
+| `KIOSK_BATCH_RATE_PER_DEVICE` | — | Envíos de lote por minuto y por tablet, que es como la tablet vacía su cola al recuperar la red | `60` | Casi nunca | No |
+| `KIOSK_TELEMETRY_RATE_PER_DEVICE` | — | Peticiones por minuto y por tablet del padrón y del latido | `60` | Casi nunca | No |
+| `KIOSK_RATE_PER_IP` | — | Todo el camino del quiosco, por origen | `600` | Casi nunca. Se fija al mismo valor que la zona interna del servidor web: más bajo, el techo real lo pondría la aplicación | No |
+| `KIOSK_PIN_SCAN_RATE_PER_DEVICE` | — | Fichajes por PIN por minuto y por tablet | `10` | Casi nunca. Dos órdenes de magnitud por debajo del resto a propósito: ahí no se frena un ritmo de fichaje, se frena la fuerza bruta sobre seis dígitos | No |
+| `KIOSK_PIN_SCAN_RATE_PER_IP` | — | Fichajes por PIN por minuto y por origen | `60` | Casi nunca, y por el mismo motivo | No |
+| `KIOSK_BATCH_MAX_SIZE` | — | Escaneos como máximo en un lote de sincronización | `50` | Nunca: también está en el contrato de la API, así que cambiarlo aquí no lo cambia en la tablet. **Bajarlo por debajo de 50 hace que el servidor rechace todos los lotes de las tablets (422) y su cola sin red no se vacíe nunca**: no cambia minutos, pierde fichajes enteros | No |
+| `KIOSK_HEALTH_FRESH_WITHIN_SECONDS` | — | Segundos de margen antes de que `php artisan kiosk:health` deje de dar por «al día» el último contacto de un quiosco | `120` | Casi nunca. El latido va cada 60 s, así que dos minutos son dos latidos perdidos: uno suelto puede ser un wifi que parpadea | No |
+| `KIOSK_HEALTH_SILENT_AFTER_SECONDS` | — | Segundos a partir de los cuales `php artisan kiosk:health` da un quiosco por callado y sale con código 2 | `600` | Casi nunca. Es el mismo umbral que la alerta «Quiosco sin latido > 10 min»: si los separas, la consola y la alerta dirán cosas distintas del mismo quiosco | No |
+
+### 6.15 Red, TLS y borde
+
+Los tres rangos están explicados con detalle, con síntomas y comprobaciones, en
+[`instalacion.md`](instalacion.md) **§6**.
+
+| Variable | Marca | Qué hace | De serie | Cuándo cambiarla | ¿Afecta al cálculo de horas? |
+| --- | --- | --- | --- | --- | --- |
+| `KIOSK_VLAN_CIDR` | `[CLIENTE]` | Rango de la VLAN de quioscos, al que se le eleva el límite de fichaje. Ver [`instalacion.md`](instalacion.md) §6 | `10.0.20.0/24` | **Al instalar, siempre.** Si los quioscos quedan fuera, el fallo es silencioso y se manifiesta como «el quiosco va lento a las 06:00» | No |
+| `PORTAL_INTERNAL_CIDR` | `[CLIENTE]` | Red desde la que se permite el portal del empleado. Fuera de ella se responde `403` antes de llegar a la aplicación. Ver [`instalacion.md`](instalacion.md) §6 | `172.28.0.0/16` (una red de desarrollo) | **Al instalar, siempre**, por la LAN real del hotel o la VPN. Exponerlo a internet es una decisión explícita que se toma poniendo `0.0.0.0/0`, nunca dejando el valor de serie; documéntala en el acta de entrega | No |
+| `METRICS_ALLOW_CIDR` | `[CLIENTE]` | Único origen autorizado a leer las métricas. Todo lo demás recibe `403`, incluido el propio servidor. Ver [`instalacion.md`](instalacion.md) §6 | `172.29.0.20/32` | Al instalar, si mueves el recolector de métricas. Es una `/32` a propósito | No |
+| `NGINX_CLIENT_MAX_BODY_SIZE` | — | Tamaño máximo de cuerpo que acepta el servidor web | `8m` | Casi nunca. Súbelo solo si subes también `WORKFORCE_IMPORT_MAX_FILE_KILOBYTES` por encima de eso | No |
+| `TLS_ALLOW_SELF_SIGNED` | `[CLIENTE]` | Permite arrancar con un certificado autofirmado | `true` en la plantilla | **A `false` en producción.** Con `false` y sin certificado, el servidor web no arranca y dice que hay que colocarlo. Es intencionado. Ver [`instalacion.md`](instalacion.md) §6 | No |
+| `TLS_CERT_FILE` | — | Ruta del certificado **dentro del contenedor** | `/etc/nginx/certs/tls.crt` | Nunca. Lo que se cambia es la carpeta del servidor, `TLS_CERT_DIR` | No |
+| `TLS_KEY_FILE` | — | Ruta de la clave privada dentro del contenedor | `/etc/nginx/certs/tls.key` | Íd. | No |
+
+### 6.16 Cumplimiento y retención
+
+> **Los años de conservación del registro horario NO están aquí.** Son un
+> umbral legal y salen del perfil de cumplimiento del centro
+> (`retention_years`, cuatro años en el perfil que se entrega): **sección 2.4**
+> de este documento y [`operacion.md`](operacion.md) §6 y §9.
+
+| Variable | Marca | Qué hace | De serie | Cuándo cambiarla | ¿Afecta al cálculo de horas? |
+| --- | --- | --- | --- | --- | --- |
+| `COMPLIANCE_PROFILE` | `[CLIENTE]` | Nombre del perfil de cumplimiento con el que el instalador marca el perfil por defecto | `ES-hosteleria` | Al instalar, si tu convenio es otro. **No se lee en ejecución**: los umbrales salen de la fila del perfil, que se edita en el panel (sección 2.4). Cambiar esto sin cambiar la fila no hace nada | No |
+| `ERROR_HISTORY_RETENTION_DAYS` | — | Días que se conserva el histórico de errores. Ver [`operacion.md`](operacion.md) §6 | `90` | Casi nunca | No |
+| `TECHNICAL_LOG_RETENTION_DAYS` | — | Días que se conserva el registro técnico, en un almacén distinto del anterior. Ver [`operacion.md`](operacion.md) §6 | `90` | Casi nunca | No |
+| `COMPLIANCE_RETENTION_BATCH_SIZE` | — | Filas por sentencia de borrado en la purga. Ver [`operacion.md`](operacion.md) §6 | `1000` | Solo si la purga anual tarda demasiado | No |
+| `COMPLIANCE_RETENTION_REPORT_PATH` | — | Dónde queda el informe de cada propuesta y de cada purga. **No se limpia solo**: es la constancia de que la purga fue regular. Ver [`operacion.md`](operacion.md) §6 | `storage/app/retention-reports` (en el contenedor) | Casi nunca | No |
+| `COMPLIANCE_LEGAL_EXPORT_TEMP_RETENTION_HOURS` | — | Horas que puede vivir un temporal huérfano de la descarga de la exportación legal antes de que se borre solo. **No afecta** a la copia deliberada que genera el comando de exportación: esa la custodia quien la generó | `6` | Casi nunca | No |
+| `COMPLIANCE_AUTHZ_DENIAL_WINDOW_SECONDS` | — | Ventana en la que las denegaciones repetidas de un mismo actor se agrupan en un solo asiento de auditoría. Protege la cadena de auditoría de una enumeración | `60` | Ponla a `0` si estás investigando un incidente y quieres un asiento por denegación | No |
+| `COMPLIANCE_INCIDENT_LOOKBACK_DAYS` | — | Días hacia atrás que revisa la detección diaria de incidencias. Los tramos **todavía abiertos** se revisan siempre, sea cual sea su fecha | `7` | Casi nunca. **Subirlo puede abrir incidencias de jornadas ya entregadas a la plantilla o a la Inspección**, que es justo lo que la ventana evita | **Sí** (abre incidencias) |
+
+### 6.17 Licencia
+
+Todo lo demás sobre la licencia está en la **sección 3 bis**. Y lo primero,
+porque es lo que más se pregunta: **dejar `LICENSE_KEY` vacía no impide fichar**.
+
+| Variable | Marca | Qué hace | De serie | Cuándo cambiarla | ¿Afecta al cálculo de horas? |
+| --- | --- | --- | --- | --- | --- |
+| `LICENSE_KEY` | `[CLIENTE]` | La clave firmada que te entrega tu proveedor. Ver **sección 3 bis** | *(vacía)* | Al instalar, si la tienes a mano. **No se lee en ejecución**: solo la mira el instalador la primera vez. A partir de ahí manda lo activado desde el panel | No |
+| `LICENSE_PUBLIC_KEY` | — | Clave pública del fabricante con la que se verifica la firma. **No la toca un cliente**: va compilada en el producto y es la misma en todas las instalaciones | *(vacía; la trae el producto)* | Nunca, salvo que soporte te lo pida por una rotación de urgencia | No |
+| `LICENSE_EXPIRY_WARNING_DAYS` | — | Con cuánta antelación avisa el panel de que la licencia caduca. **Durante esos días no se degrada nada** | `30` | Súbelo si tu proceso de compras es lento. `0` deja el aviso para el último día, que no es lo recomendable | No |
+| `LICENSE_HEALTH_PROBE_TTL_SECONDS` | — | Segundos que vive la copia del estado de licencia que lee la sonda de salud. **No es una caché de la licencia**: una clave recién activada surte efecto en el acto | `600` | Casi nunca. Existe para que la sonda de vida no consulte PostgreSQL, porque entonces una caída de la base de datos reiniciaría el contenedor de la aplicación | No |
+
+### 6.18 Diagnóstico, soporte y exportación íntegra
+
+Están explicadas una a una en la **sección 3 quater**; el procedimiento está en
+[`operacion.md`](operacion.md) §12 y §13. **El paquete de diagnóstico va
+anonimizado por defecto y no hay ninguna variable que lo cambie.**
+
+| Variable | Marca | Qué hace | De serie | Cuándo cambiarla | ¿Afecta al cálculo de horas? |
+| --- | --- | --- | --- | --- | --- |
+| `PRODUCT_DIAGNOSTICS_MAX_BYTES` | — | Tamaño máximo del paquete de diagnóstico. Ver **sección 3 quater** | `8388608` (8 MiB) | Si tu canal de soporte corta antes | No |
+| `PRODUCT_DIAGNOSTICS_RATE_LIMIT` | — | Paquetes por minuto y por cuenta. Ver **sección 3 quater** | `3` | Casi nunca | No |
+| `PRODUCT_DIAGNOSTICS_PERSONAL_DATA_MAX_PERIOD_DAYS` | — | Días de fichajes como máximo en un paquete **con datos personales**. Ver **sección 3 quater** | `31` | **Subirlo es una decisión legal, no de rendimiento** | No |
+| `PRODUCT_DIAGNOSTICS_RETENTION_DAYS` | — | Días que un paquete se queda en el disco antes de que el comando lo borre al generar el siguiente. Ver **sección 3 quater** | `7` | Casi nunca | No |
+| `PRODUCT_DIAGNOSTICS_PATH` | — | Dónde se escribe el paquete. Directorio a `0700` y fichero a `0600` | `storage/app/diagnostics` (en el contenedor) | Casi nunca. **No lo pongas dentro de `BACKUP_PATH`**: un paquete es material desechable que además puede llevar datos personales | No |
+| `PRODUCT_DATA_EXPORT_PATH` | — | Dónde se escribe el ZIP de la exportación íntegra. Ver **sección 3 quater** | `storage/app/exports` (en el contenedor) | Casi nunca, y **nunca dentro de `BACKUP_PATH`** | No |
+| `PRODUCT_DATA_EXPORT_RETENTION_DAYS` | — | Días que se puede descargar ese ZIP antes de purgarse. La anotación de que existió se conserva siempre. Ver **sección 3 quater** | `7` | Si lo necesitas más tiempo, mejor sácalo del servidor | No |
+| `PRODUCT_DATA_EXPORT_RATE_LIMIT` | — | Peticiones por minuto y por cuenta a la lista y a la descarga de exportaciones. Ver **sección 3 quater** | `30` | No lo bajes: el panel sondea cada cinco segundos mientras hay una en curso | No |
+| `PRODUCT_DATA_EXPORT_STALE_AFTER` | — | Segundos tras los que una exportación interrumpida se da por fallida y deja pedir otra. Ver **sección 3 quater** | `3600` | **Nunca por debajo de lo que tarda tu exportación más grande**: darías por muerta una que sigue escribiendo | No |
+| `PRODUCT_SUPPORT_GRANT_DEFAULT_HOURS` | — | Duración de un acceso de soporte si no se indica otra. Ver **sección 3 quater** | `24` | Si tu política es más estricta | No |
+| `PRODUCT_SUPPORT_GRANT_MAX_HOURS` | — | Duración máxima que se puede pedir. Más se rechaza. Ver **sección 3 quater** | `72` | Bájalo si tu política es más estricta; el panel y la API se ajustan solos. **No está en el panel a propósito**: si estuviera, quien concede el acceso podría subirlo antes de concederlo | No |
+| `PRODUCT_SUPPORT_USE_AUDIT_WINDOW_SECONDS` | — | Cada cuánto se anota en auditoría un nuevo uso del mismo acceso de soporte. La fecha de «último uso» del panel se actualiza en cada petición igualmente. Ver **sección 3 quater** | `900` | Ponlo a `0` si estás investigando un incidente y quieres un asiento por petición | No |
+
+### 6.19 Telemetría
+
+Viene apagada y así se queda si no haces nada. Está explicada entera en la
+**sección 3 quinquies**, incluida la lista cerrada de lo que se envía.
+
+| Variable | Marca | Qué hace | De serie | Cuándo cambiarla | ¿Afecta al cálculo de horas? |
+| --- | --- | --- | --- | --- | --- |
+| `TELEMETRY_ENABLED` | — | Si la telemetría está activada. Ver **sección 3 quinquies** | `false` | Solo si decides activarla. Hacen falta las tres condiciones de esa sección | No |
+| `TELEMETRY_ENDPOINT` | — | A dónde se envía. Ver **sección 3 quinquies** | *(vacía)* | Íd. **Tiene que empezar por `https://`**; vacía, o sin eso, no se envía nada | No |
+| `TELEMETRY_STATE_PATH` | — | Dónde viven el identificador aleatorio de la instalación y el historial de envíos. Ver **sección 3 quinquies** | `storage/app/telemetry/state.json` | Casi nunca | No |
+| `TELEMETRY_RETRY_DELAY_SECONDS` | — | Segundos entre el intento y su único reintento. Ver **sección 3 quinquies** | `5` | Casi nunca | No |
+
+### 6.20 Observabilidad
+
+Qué se pierde exactamente si apagas los servicios de observabilidad está en
+[`operacion.md`](operacion.md) §10.
+
+| Variable | Marca | Qué hace | De serie | Cuándo cambiarla | ¿Afecta al cálculo de horas? |
+| --- | --- | --- | --- | --- | --- |
+| `LOG_CHANNEL` | — | A dónde escribe la aplicación su registro técnico | `stderr` | Nunca. Es lo que permite que el recolector de registros lo lea | No |
+| `LOG_LEVEL` | — | Cuánto detalle escribe | `debug` en la plantilla | **A `info` o `warning` en producción.** Con `debug` el registro crece mucho y se llena el disco antes de que nadie lo mire | No |
+| `LOG_STDERR_FORMATTER` | — | Formato del registro: una línea JSON por evento, que es lo que se puede buscar y filtrar | `Monolog\Formatter\JsonFormatter` | Nunca | No |
+| `LOKI_URL` | — | Dirección del almacén de registros | `http://loki:3100` | Casi nunca. **Por sí sola no cambia el destino de nada**: la aplicación escribe en `stderr` y el cuadro de mandos ya viene apuntado. Se conserva porque viaja en el paquete de diagnóstico y le dice a soporte a dónde miras | No |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | — | A dónde se exportan las trazas | *(vacía: desactivado)* | Solo si tienes un sistema de trazas propio al que enviarlas | No |
+| `OTEL_SERVICE_NAME` | — | Nombre con el que aparece el servicio en esas trazas | `kronoqr-api` | Solo si el anterior está configurado y necesitas distinguir instalaciones | No |
+| `GRAFANA_ADMIN_USER` | — | Cuenta de administración del cuadro de mandos | `admin` | Cámbiala si tu política lo pide | No |
+| `GRAFANA_ADMIN_PASSWORD` | `[INSTALADOR]` | Su contraseña | (vacía; la genera `install.sh`) | Se rota desde el propio cuadro de mandos. **Nunca se expone sin autenticación** | No |
+
+### 6.21 Correo
+
+> **Por este canal salen nombres de la plantilla, a diario.** El resumen
+> nocturno de incidencias va al responsable de cada departamento con la fecha,
+> el nombre y el tipo de cada hallazgo. Es el único camino por el que datos
+> personales salen del servidor sin que nadie pulse nada, y por eso deja
+> asiento en el registro de auditoría. **Si tu relevo de correo es de un
+> tercero, ese tercero es un encargado del tratamiento y tienes que tenerlo
+> contratado**: ver [`obligaciones-legales.md`](obligaciones-legales.md).
+>
+> Un fallo de envío **no rompe nada del registro**: la incidencia sigue abierta
+> en la bandeja y entra en el resumen de la noche siguiente.
+
+| Variable | Marca | Qué hace | De serie | Cuándo cambiarla | ¿Afecta al cálculo de horas? |
+| --- | --- | --- | --- | --- | --- |
+| `MAIL_MAILER` | `[CLIENTE]` | Cómo se envía el correo | `smtp` | Al instalar, si usas otro método | No |
+| `MAIL_HOST` | `[CLIENTE]` | Servidor de correo saliente | `mailpit` (el de desarrollo) | **Al instalar, siempre**, por el de tu hotel | No |
+| `MAIL_PORT` | `[CLIENTE]` | Su puerto | `1025` (el de desarrollo) | **Al instalar, siempre.** Con TLS implícito suele ser el 465 | No |
+| `MAIL_USERNAME` | `[CLIENTE]` | Usuario de esa cuenta | *(vacía)* | Al instalar, si tu servidor lo exige | No |
+| `MAIL_PASSWORD` | `[CLIENTE]` | Su contraseña | *(vacía)* | Íd. Es un secreto tuyo: no sale en ningún registro ni en el paquete de diagnóstico | No |
+| `MAIL_SCHEME` | — | Cifrado del transporte | *(vacía: TLS oportunista)* | **Ponla en `smtps` en producción.** Vacía, si el servidor no anuncia cifrado la sesión sigue en claro y el correo, con nombres dentro, viaja legible. Con `smtps` el envío **falla** en vez de degradarse en silencio | No |
+| `MAIL_FROM_ADDRESS` | `[CLIENTE]` | Dirección desde la que se envía | `no-reply@kronoqr.local` | Al instalar, por una de tu dominio: `no-reply@tuhotel.local` | No |
+| `MAIL_FROM_NAME` | — | Nombre que se ve como remitente | `KronoQR` | Cámbialo por el de tu hotel si prefieres verlo así | No |
+
+### 6.22 Copias de seguridad
+
+La copia se queda en **tu** infraestructura: el fabricante no la recibe ni la
+custodia. El procedimiento y la restauración están en
+[`operacion.md`](operacion.md) §6 y §9, y el destino, en
+[`instalacion.md`](instalacion.md) §6.
+
+| Variable | Marca | Qué hace | De serie | Cuándo cambiarla | ¿Afecta al cálculo de horas? |
+| --- | --- | --- | --- | --- | --- |
+| `BACKUP_PATH` | `[CLIENTE]` | Destino de las copias, montado en la misma ruta dentro de los contenedores. Ver [`instalacion.md`](instalacion.md) §6 | `/var/backups/fichaje` | **Al instalar, siempre**, por un destino que no esté en el mismo disco que la base de datos. Si es un recurso de red, **tiene que estar montado antes** de levantar los servicios | No |
+| `BACKUP_ENCRYPTION_KEY` | `[INSTALADOR]` | Cifra las copias. **Sin ella no hay copia**: el script se niega a empezar | (vacía; la genera `install.sh`) | Nunca a mano. **Es la única que hay que custodiar fuera del servidor**: sin ella no se restaura nada. Ver [`operacion.md`](operacion.md) §9 | No |
+| `BACKUP_RETENTION_DAYS` | — | Días que se conservan las copias diarias. Ver [`operacion.md`](operacion.md) §6 | `30` | Si tu política de copias es otra. **Ojo con el espacio en disco** antes de subirlo | No |
+| `BACKUP_MIN_COPIES` | — | Copias que nunca se borran, aunque hayan caducado todas | `3` | Casi nunca. Es la red de seguridad que evita quedarse sin ninguna copia | No |
+| `BACKUP_WAL_RETENTION_DAYS` | — | Días de registro de transacciones archivado que se conservan, que es lo que permite restaurar a un punto en el tiempo | `8` | **Tiene que ser mayor que el intervalo entre copias completas** (semanal de serie): sin la copia completa anterior, ese archivo no reconstruye nada | No |
+| `BACKUP_DAILY_AT` | — | Hora de la copia diaria, **en UTC** | `03:15` | Si choca con otra tarea tuya. Nunca cerca de un cambio de turno. Recuerda que es UTC, no la hora del hotel | No |
+| `BACKUP_WEEKLY_AT` | — | Hora de la copia semanal completa, **en UTC** | `02:15` | Íd. | No |
+| `BACKUP_WEEKLY_ON` | — | Día de la semana de esa copia completa (`0` es domingo) | `0` | Si prefieres otro día tranquilo | No |
+
+### 6.23 Solo producción
+
+Las lee el `docker-compose` de producción. En desarrollo se ignoran.
+
+| Variable | Marca | Qué hace | De serie | Cuándo cambiarla | ¿Afecta al cálculo de horas? |
+| --- | --- | --- | --- | --- | --- |
+| `IMAGE_REGISTRY` | `[CLIENTE]` | Registro del que se descargan las imágenes | `ghcr.io/kronoqr` | Si tienes un registro interno propio, o si instalas sin salida a internet. Ver [`instalacion.md`](instalacion.md) §7 | No |
+| `IMAGE_TAG` | `[INSTALADOR]` | La versión desplegada: la etiqueta de las imágenes y lo que publica la sonda de salud | (la escribe `install.sh` desde el fichero `VERSION` del paquete) | Nunca a mano. **`latest` está prohibido en producción** y no hay valor por defecto: si esto está vacío, Compose se para antes de crear nada y dice qué poner. Una instalación que no sabe decir qué versión corre hace imposible la vuelta atrás de `update.sh` | No |
+| `COMPOSE_PROFILES` | — | Enciende los servicios de observabilidad | `observability` | Déjalo puesto. Son los que avisan de que la copia de anoche falló o de que el archivado de transacciones se ha parado, los dos fallos que convierten una instalación sana en una pérdida de datos sin que nadie lo note. **Dejarlo vacío los apaga**, es una configuración soportada que libera unos 700 MiB, y entonces verificar la copia pasa a ser una tarea manual semanal tuya | No |
+| `HTTP_PORT` | `[CLIENTE]` | Puerto en el que el servidor escucha peticiones sin cifrar, para redirigirlas | `80` | Solo si ese puerto ya está ocupado en la máquina | No |
+| `HTTPS_PORT` | `[CLIENTE]` | Puerto cifrado por el que entran el panel, el portal y las tablets | `443` | Íd. Si lo cambias, tiene que aparecer también en `APP_URL` | No |
+| `TLS_CERT_DIR` | `[CLIENTE]` | Carpeta **de tu servidor** con el certificado y su clave privada, montada de solo lectura. Ver [`instalacion.md`](instalacion.md) §6 | `./certs` | Al instalar, si guardas los certificados en otro sitio del servidor | No |
 
 ---
 

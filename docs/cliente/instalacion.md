@@ -5,8 +5,10 @@ Vue.** Hace falta un servidor Linux con Docker y treinta minutos.
 
 > **Estado.** El procedimiento de esta guía es el real y está probado en cada
 > publicación de versión (etapa de instalación limpia de la integración
-> continua del fabricante). La **tarea 5.11** añadirá capturas de pantalla y la
-> guía de endurecimiento; el procedimiento no cambiará.
+> continua del fabricante). Las capturas son de la versión 2.1 y se regeneran
+> en cada versión menor. Cuando el sistema esté instalado, sigue con
+> [`endurecimiento.md`](endurecimiento.md): el servidor, la red y las tablets.
+> This guide is also available in English: [`en/installation.md`](en/installation.md).
 
 ---
 
@@ -37,6 +39,28 @@ sin internet, ver §7.
 > rebaja: una máquina virtual de 4 GB declara entre 3800 y 3950 MiB porque el
 > propio núcleo se reserva una parte. Exigir 4096 haría fallar a toda máquina
 > que cumple el mínimo publicado.
+
+### El punto de fichaje
+
+Un punto de fichaje es **una tablet fijada a la pared o a un mostrador**:
+Android 10 o superior, cámara trasera con autoenfoque, corriente permanente,
+wifi estable dentro de la VLAN de quioscos (§6) y modo quiosco. La tabla
+completa de lo que hay que comprar —y conviene leerla antes de comprar veinte—
+está en el runbook [`../runbooks/alta-nuevo-quiosco.md`](../runbooks/alta-nuevo-quiosco.md)
+§1, que es donde se compra y se monta; aquí no se repite para que no haya dos
+versiones.
+
+**El modo quiosco lo configuras tú y no es una funcionalidad del producto.**
+Ninguna aplicación web puede impedir que alguien deslice y salga al escritorio:
+fijar la tablet a una sola aplicación es configuración del dispositivo —*device
+owner* de Android Enterprise, tu MDM o el modo de aplicación fijada del
+fabricante—. Sin ella, un roce accidental deja la tablet fuera de la aplicación
+y el siguiente empleado no encuentra dónde fichar.
+
+El procedimiento completo —modo quiosco, arranque automático tras un corte de
+luz, brillo, ventana de actualizaciones de Android y red— está en el runbook
+[`../runbooks/alta-nuevo-quiosco.md`](../runbooks/alta-nuevo-quiosco.md) §2,
+que también cubre el emparejamiento de la primera tablet.
 
 ### Lo que tienes que traer decidido
 
@@ -180,37 +204,6 @@ sistema arranca, todas las comprobaciones pasan —la verificación final sondea
 avisarían de sitio no seguro cada mañana y alguien acabaría desactivando la
 comprobación de certificado en ellas. Desde ese día, el canal por el que viajan
 los fichajes no lo protege nadie.
-
-Esto **no escribe absolutamente nada**. Sirve para reservar la ventana de
-mantenimiento sabiendo que va a salir bien. Salida esperada:
-
-```
-Fase 1 de 5 — comprobando requisitos. Todavia no se escribe nada.
-  [ok]    Fichero de compose /opt/kronoqr-2.1.0/docker-compose.yml
-  [ok]    Version que se instala: 2.1.0
-  [ok]    Plantilla de configuracion /opt/kronoqr-2.1.0/.env
-  [ok]    Permiso para hablar con Docker
-  [ok]    Docker 27.3.1 (se exige 24 o superior)
-  [ok]    Docker Compose v2 (2.29.7)
-  [ok]    openssl disponible para generar los secretos
-  [ok]    curl disponible para verificar la instalacion
-  [ok]    CPU: 4 nucleos (minimo publicado: 2)
-  [ok]    Memoria: 7936 MiB (minimo publicado: 3700 MiB)
-  [ok]    Disco libre en /var/lib/docker: 92 GiB (minimo publicado: 40 GiB)
-  [ok]    APP_URL relleno en la plantilla
-  ...
-  [ok]    Certificado TLS en /opt/kronoqr-2.1.0/certs
-  [ok]    Puerto 80 libre
-  [ok]    Puerto 443 libre
-  [ok]    Se puede escribir en /var/backups/fichaje
-
-Requisitos cumplidos: 25 comprobaciones, 0 avisos.
-
-Solo comprobacion (--check-only): no se ha tocado nada. Vuelve a ejecutar sin la opcion para instalar.
-```
-
-Si algo sale en `[FALLA]`, debajo tienes una línea **«Que hacer»** con la orden
-concreta. Los avisos (`[aviso]`) no impiden instalar.
 
 **`APP_TIMEZONE=UTC` no se toca nunca.** Las horas se guardan siempre en UTC y
 se muestran en la zona horaria de cada centro, que se configura después, en el
@@ -398,9 +391,14 @@ queda registrado con tu nombre**, y sin una cuenta detrás esos registros diría
 
 1. Escribe tu nombre, tu correo y una contraseña. La contraseña necesita **al
    menos 12 caracteres, con mayúsculas, minúsculas, números y símbolos**.
+
+   ![Paso 1: formulario del primer administrador, con nombre, correo y contraseña](img/es/asistente-01-administrador.png)
+
 2. La pantalla siguiente enseña un **código QR y un texto**. Escanéalo con tu
    aplicación de autenticación.
 3. Escribe el código de seis dígitos que te muestre el teléfono.
+
+   ![Segundo factor: el código QR, el secreto en texto para quien no puede escanearlo y el campo del código de seis dígitos](img/es/asistente-01-segundo-factor.png)
 
 > **El código QR se enseña una sola vez.** No hay forma de volver a verlo, y es a
 > propósito. Si cierras la pantalla antes de escanearlo, **no has perdido la
@@ -411,6 +409,14 @@ queda registrado con tu nombre**, y sin una cuenta detrás esos registros diría
 > **El segundo factor es obligatorio y no se puede desactivar** para las cuentas
 > con acceso a toda la plantilla. Es la única credencial que protege el registro
 > horario de todo el hotel.
+
+#### Paso 2 — el nombre que verá todo el mundo
+
+El nombre del establecimiento aparece en el panel, en el portal del empleado y
+en la tablet. Se cambia después desde Configuración › Marca, junto con el
+logotipo y el color (ver [`configuracion.md`](configuracion.md) §2.2).
+
+![Paso 2: datos de la organización, con el nombre del establecimiento escrito](img/es/asistente-02-organizacion.png)
 
 #### Paso 3 — la zona horaria no es un detalle de presentación
 
@@ -423,6 +429,15 @@ Ponla bien a la primera. Se puede cambiar después —queda registrado— pero
 calculan con la nueva y antes se calcularon con la anterior.
 
 Si el hotel está en Canarias, es `Atlantic/Canary`, no `Europe/Madrid`.
+
+![Paso 3: centro de trabajo, con su nombre y la zona horaria](img/es/asistente-03-centro.png)
+
+#### Paso 4 — departamentos, los que uses
+
+Sirven para que un responsable vea solo a su gente. Añade los que tengas claros
+y omite el resto: se crean después desde el panel, sin ningún coste.
+
+![Paso 4: departamentos, con «Recepción» ya añadido](img/es/asistente-04-departamentos.png)
 
 #### Paso 5 — el perfil de convenio: léelo, no lo pases
 
@@ -437,6 +452,8 @@ Estatuto de los Trabajadores:
 | Tramo continuo antes de exigir pausa | 6 h |
 | Años de conservación del registro | 4 |
 
+![Paso 5: perfil de convenio ES-hosteleria con los cinco umbrales a la vista y el botón de confirmar](img/es/asistente-05-convenio.png)
+
 **Este paso no se puede omitir**, y es el único obligatorio que no crea nada. La
 razón: **tu convenio colectivo puede ser más estricto que la ley**, y estos son
 los números con los que el sistema va a avisar de incumplimientos. Contrástalos
@@ -444,6 +461,15 @@ con el convenio que os aplica y confírmalos, aunque los dejes tal cual.
 
 Se cambian después en Configuración › Cumplimiento, y cada cambio queda
 registrado.
+
+#### Paso 6 — la plantilla, si la traes en un fichero
+
+Dos botones y un orden: **Validar** primero, que no escribe nada y te enseña
+línea a línea qué haría; **Aplicar** después, solo si el informe cuadra. Si la
+plantilla la vas a dar de alta a mano, omite el paso. El formato del fichero y
+las columnas están en [`configuracion.md`](configuracion.md) §3 ter.
+
+![Paso 6: plantilla validada, con el informe línea a línea y el botón de aplicar](img/es/asistente-06-plantilla.png)
 
 #### Paso 7 — la licencia se puede omitir, y a propósito
 
@@ -455,16 +481,40 @@ Un asistente que exigiera la clave para terminar convertiría la licencia en un
 requisito para cumplir la ley, y eso no puede ser. Actívala cuando la tengas,
 desde Configuración › Licencia.
 
+![Paso 7: licencia sin activar, con el aviso de que el fichaje y el registro no dependen de ella](img/es/asistente-07-licencia.png)
+
 #### Paso 8 — el primer quiosco
 
 La tablet muestra un código y tú lo escribes en el panel. Si aún no ha llegado,
 **omite el paso**: el procedimiento completo para vincular una tablet está en el
-runbook `alta-nuevo-quiosco.md`, que viene en el paquete.
+runbook [`alta-nuevo-quiosco.md`](../runbooks/alta-nuevo-quiosco.md), que viene
+en el paquete.
+
+En la tablet, al abrir `https://fichaje.tuhotel.local/kiosk/` sin haberla
+vinculado nunca, se ve esto:
+
+![La tablet muestra el código de emparejamiento en grande, su caducidad y «Esperando a que el administrador lo confirme en el panel»](img/es/quiosco-emparejamiento-codigo.png)
+
+En el panel escribes ese código y el nombre con el que quieres ver el quiosco:
+
+![Paso 8: código de emparejamiento y nombre del quiosco escritos, antes de vincular](img/es/asistente-08-quiosco.png)
+
+Al vincular, el asistente enseña la versión y la hora de la solicitud para que
+las contrastes con la tablet, y la tablet pasa sola a la pantalla de fichaje:
+
+![Paso 8: «Se ha vinculado el quiosco Recepción», con la versión y la hora de la solicitud](img/es/asistente-08-quiosco-vinculado.png)
 
 #### Y al terminar: las tarjetas
 
+Antes de cerrar, el asistente enseña los ocho pasos con su estado —hecho,
+omitido o pendiente— para que repases lo que dejaste sin hacer:
+
+![Revisa antes de terminar: los ocho pasos con su estado y el botón de completar](img/es/asistente-09-revision.png)
+
 La última pantalla es un resumen con **lo que queda por hacer**. La cifra que
 importa es **«tarjetas pendientes»**.
+
+![Puesta en marcha completada: el aviso de tarjetas pendientes de emitir e imprimir, con el enlace al tablero de credenciales](img/es/asistente-10-completado.png)
 
 **Sin tarjeta impresa y entregada, esa persona no puede fichar.** Emitirlas,
 imprimirlas y repartirlas lleva días, así que empieza en cuanto termines el
@@ -596,6 +646,62 @@ licencia está en [`configuracion.md`](configuracion.md), sección 3 bis.
 
 ## 5. Qué hacer si…
 
+### …dice que Docker no está o es demasiado antiguo
+
+Sale con código `2` y **no ha escrito nada**: el servidor está como estaba.
+
+KronoQR necesita **Docker Engine 24 o superior** y el plugin **Compose v2** (el
+que se invoca como `docker compose`, sin guion). Comprueba qué tienes:
+
+```bash
+docker version --format '{{.Server.Version}}'
+docker compose version --short
+```
+
+- Si el primero **no imprime nada**, Docker no está instalado o su servicio no
+  está en marcha (`sudo systemctl status docker`).
+- Si imprime una versión **menor que 24**, hay que actualizar el motor.
+- Si el segundo no imprime nada, tienes Docker pero **no el plugin de Compose**.
+  El `docker-compose` antiguo, con guion, **no sirve**.
+
+Instálalo o actualízalo siguiendo las instrucciones oficiales de tu
+distribución, en <https://docs.docker.com/engine/install/>, y vuelve a ejecutar
+el instalador. No damos aquí los comandos de una distribución concreta a
+propósito: cambian, y una receta desactualizada en una guía hace más daño que
+un enlace.
+
+### …dice que no hay disco suficiente
+
+Sale con código `2` y **no ha escrito nada**.
+
+El instalador exige **40 GiB libres**, y no en el directorio desde el que lo
+ejecutas: en **el directorio donde Docker guarda imágenes y volúmenes**, que es
+el que se llena. El mensaje te dice cuál es y cuánto hay. Para verlo tú:
+
+```bash
+docker info --format '{{.DockerRootDir}}'
+df -h "$(docker info --format '{{.DockerRootDir}}')"
+```
+
+Si vas justo, mira qué ocupa antes de comprar disco:
+
+```bash
+docker system df
+sudo du -xh --max-depth=1 /var/lib/docker | sort -h | tail -10
+```
+
+Imágenes y contenedores de otros proyectos que ya no uses se retiran con
+`docker image prune -a`. **Hazlo solo si sabes qué hay ahí**: en un servidor
+compartido, ese comando borra imágenes de otras aplicaciones.
+
+Dos cosas más que conviene saber ahora y no dentro de un año:
+
+- **Las copias de seguridad no van a ese disco**, sino a `BACKUP_PATH` (§6), y
+  necesitan su propio espacio: crecen con la plantilla y se conservan 30 días
+  de serie.
+- El registro horario **se conserva cuatro años por ley**. El almacenamiento
+  tiene que dar para eso, no para el primer mes.
+
 ### …`install.sh` dice «Permiso para hablar con Docker: FALLA»
 
 Ejecútalo con `sudo`, o añade tu usuario al grupo `docker` y vuelve a entrar en
@@ -616,7 +722,10 @@ sudo systemctl stop nginx      # o lo que aparezca
 ```
 
 Si necesitas conservar ese servicio, publica KronoQR en otros puertos con
-`HTTP_PORT` y `HTTPS_PORT` en el `.env`, y ponlo detrás de tu proxy.
+`HTTP_PORT` y `HTTPS_PORT` en el `.env`, y ponlo detrás de tu proxy. Antes,
+lee [`endurecimiento.md`](endurecimiento.md) §1.6: detrás de un proxy inverso
+el servidor ve la IP del proxy y no la del quiosco, y `KIOSK_VLAN_CIDR`,
+`PORTAL_INTERNAL_CIDR` y `METRICS_ALLOW_CIDR` dejan de distinguir orígenes.
 
 ### …dice «no se han podido descargar las imagenes»
 
@@ -674,6 +783,18 @@ El nombre del certificado tiene que ser **el mismo** que el de `APP_URL`, y la
 cadena completa (certificado + intermedios) tiene que estar en `certs/tls.crt`.
 Un autofirmado hace que las tablets avisen cada mañana hasta que alguien
 desactive la comprobación, y ese día el quiosco deja de ser fiable.
+
+### …la tablet no accede a la cámara, no encuentra el servidor o el código no funciona
+
+Los tres fallos del punto de fichaje están explicados **en un solo sitio**, con
+sus causas por orden de frecuencia y cómo se comprueba cada una: el runbook
+[`../runbooks/alta-nuevo-quiosco.md`](../runbooks/alta-nuevo-quiosco.md),
+apartado §6 «Qué hacer si…». No los repetimos aquí para que no acaben
+divergiendo.
+
+Ahí está también qué hacer si el código de emparejamiento ha caducado (la
+tablet genera otro sola), si la PWA no arranca sola tras un reinicio y si el
+quiosco va lento en el cambio de turno.
 
 ### …instalé bien pero `/api/v1/ready` devuelve 503
 
@@ -1030,12 +1151,15 @@ propio servidor, nunca desde internet.
 - **[`operacion.md`](operacion.md)** — el calendario de lo que ocurre solo, lo
   que tienes que atender, las copias, la custodia de secretos y los códigos de
   salida de los cinco scripts.
+- **[`endurecimiento.md`](endurecimiento.md)** — el anexo de esta guía: qué
+  debe llegar desde dónde, TLS, el anfitrión, los secretos, las tablets, el
+  correo y las cuentas, con una lista de comprobación trimestral. Léelo antes
+  de dar el sistema por publicado.
 - **[`configuracion.md`](configuracion.md)** — cada parámetro y qué hace.
 - **[`obligaciones-legales.md`](obligaciones-legales.md)** — lo que le
   corresponde al hotel como responsable del tratamiento, y lo que no puede
   hacer el fabricante por ti.
-- **`runbooks/alta-nuevo-quiosco.md`** (se entrega con la versión 2.1, junto
-  al emparejamiento de quioscos por código) —
+- **[`../runbooks/alta-nuevo-quiosco.md`](../runbooks/alta-nuevo-quiosco.md)** —
   cómo se fija una tablet en modo quiosco. **No es una funcionalidad del
   producto**: es configuración del dispositivo y la ejecutas tú. Sin ella, un
   deslizamiento accidental deja la tablet fuera de la aplicación y el siguiente

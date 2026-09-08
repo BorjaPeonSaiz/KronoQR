@@ -11,73 +11,7 @@
 
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
-
-const PAIRING_ID = '0199f3c1-4a2b-7e55-9c10-8d7e6f5a4b32'
-const PAIRING_SECRET = '9x2Kd4pQ7vLmN8tZbYcF1wQ8sE3rT6uI0oP5aS7dXyZ'
-const DEVICE_UUID = '0199f3c9-1b7d-7a44-8e02-3c4d5e6f7a81'
-const TOKEN_VALUE = '92|Kd2pQ9vLmN4tZbYcF1wQ8sE3rT6uI0oP5aS7dXyZ'
-
-/** Cuantos sondeos hacen falta antes de que el mock «confirme» el codigo. */
-const PENDING_POLLS = 1
-
-async function stubPairing(page: import('@playwright/test').Page): Promise<void> {
-  let claimCalls = 0
-
-  await page.route('**/api/v1/kiosk/pair', async (route) => {
-    await route.fulfill({
-      status: 201,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        pairing_id: PAIRING_ID,
-        pairing_secret: PAIRING_SECRET,
-        code: '483921',
-        expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
-        // Cadencia rapida: esta prueba no tiene por que esperar los 5 s de serie.
-        poll_interval_seconds: 1,
-      }),
-    })
-  })
-
-  await page.route('**/api/v1/kiosk/pair/claim', async (route) => {
-    claimCalls += 1
-    if (claimCalls <= PENDING_POLLS) {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ status: 'pending' }),
-      })
-      return
-    }
-
-    // El administrador ya ha tecleado el codigo en el panel: el siguiente
-    // sondeo recoge el dispositivo vinculado y su token.
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        status: 'paired',
-        device: { uuid: DEVICE_UUID, name: 'Recepcion' },
-        token: { value: TOKEN_VALUE, expires_at: '2026-12-06T10:07:00Z' },
-      }),
-    })
-  })
-
-  // Canales del quiosco YA emparejado: hacen falta en cuanto `ScanView` monta.
-  await page.route('**/api/v1/kiosk/heartbeat', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ server_time: new Date().toISOString() }),
-    })
-  })
-  await page.route('**/api/v1/kiosk/roster', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ generated_at: new Date().toISOString(), entries: [] }),
-    })
-  })
-}
+import { DEVICE_UUID, stubPairing, TOKEN_VALUE } from './support/pairing'
 
 test.beforeEach(async ({ page }) => {
   await stubPairing(page)

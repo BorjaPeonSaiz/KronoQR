@@ -29,6 +29,7 @@ Todo esto corre solo en el contenedor `scheduler`. Lo que aparece en la columna
 | Cada hora | Se purgan las exportaciones íntegras caducadas: se borra el ZIP, la anotación queda (§13) | Nada |
 | Lunes 05:40 UTC | **Telemetría**, solo si la has activado (§13.4): se envía el informe semanal al destino que fijaste | Nada |
 | Trimestral | — | **Simulacro de restauración** de la copia |
+| Trimestral | — | **Repasar la lista de comprobación de endurecimiento** ([`endurecimiento.md`](endurecimiento.md), último apartado): red, certificado, cuentas, tablets, copias fuera del servidor |
 
 ---
 
@@ -672,3 +673,19 @@ el log técnico y se vuelve a intentar la semana siguiente.
 | `PRODUCT_DATA_EXPORT_STALE_AFTER` | `3600` | Segundos tras los que una exportación que se quedó a medias (contenedor parado, cola reiniciada) se da por fallida con motivo `stale`, liberando la siguiente. No lo bajes por debajo de lo que tarda tu exportación más grande |
 | `TELEMETRY_ENABLED` | `false` | Si se envía telemetría. Hace falta además `TELEMETRY_ENDPOINT` y que la licencia la incluya |
 | `TELEMETRY_ENDPOINT` | vacío | A dónde se envía. Vacío de serie: lo fijas tú |
+
+---
+
+## 14. Lo que no se toca nunca
+
+Cinco cosas que un administrador de sistemas hace a diario en otros productos y
+que aquí destruyen el valor legal del registro o dejan la instalación sin
+poder recuperarse:
+
+| Nunca | Por qué | Lo que sí |
+| --- | --- | --- |
+| **Modificar datos por SQL directo** (`UPDATE`, `DELETE` o `INSERT` en las tablas de la aplicación) | Toda corrección conserva la versión anterior con autor, momento y motivo. Un cambio por SQL no deja rastro y convierte el registro en no fiable ante la Inspección | Las correcciones se hacen desde el panel, y quedan trazadas |
+| **Borrar o alterar filas de `audit_log`** | Es solo-añadir y cada asiento va encadenado por hash al anterior. El usuario de base de datos de la aplicación **no tiene** `UPDATE` ni `DELETE` sobre esa tabla, a propósito; solo el rol de mantenimiento puede soltar particiones ya vencidas, y solo en la purga confirmada (§3) | Si la cadena no verifica: [`../runbooks/rotura-cadena-auditoria.md`](../runbooks/rotura-cadena-auditoria.md) |
+| **Tocar `daily_totals` a mano** | Es una proyección reconstruible: se recalcula entera cada vez que cambia un tramo. Un total corregido a mano vuelve a su valor en el siguiente recálculo, sin que nadie entienda por qué | Si un total no cuadra, recalcúlalo: `docker compose exec app php artisan attendance:reconcile --from=2026-09-01 --to=2026-09-30` |
+| **Editar en el `.env` un secreto generado** (`APP_KEY`, `QR_SIGNING_KEY_*`, `BACKUP_ENCRYPTION_KEY`) | Cambiar `APP_KEY` deja ilegible lo cifrado; cambiar la clave QR invalida todas las tarjetas; cambiar la de copias deja las copias anteriores sin poder restaurar | Rotar con su procedimiento: [`../runbooks/rotacion-secretos.md`](../runbooks/rotacion-secretos.md) y [`../runbooks/rotacion-clave-qr.md`](../runbooks/rotacion-clave-qr.md) |
+| **`migrate:rollback`, borrar volúmenes o reinstalar encima** | Una vuelta atrás es siempre restaurar la copia verificada previa; el instalador se niega a reinstalar sobre una instalación existente | `update.sh` (§11) y [`../runbooks/restaurar-backup.md`](../runbooks/restaurar-backup.md) |

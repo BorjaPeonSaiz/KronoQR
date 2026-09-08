@@ -7,9 +7,88 @@
 
 ## Estado y objetivo actual
 
+**Rama `feat/tarea-5.11-documentacion-cliente`** (desde `main` `e2860be`). **Tarea 5.11 «Documentación de instalación,
+operación, configuración y obligaciones legales» (RL-16..RL-21, RF-PD-02) IMPLEMENTADA, REVISADA y PROBADA el
+08-09-2026**; ver «Siguiente acción» para el estado del commit, la CI y la PR.
+
+**Cómo se hizo (receta de la 5.10):** siete decisiones escritas en la ficha ANTES de nada, y cinco agentes en paralelo con
+ficheros disjuntos: `producto-licencia` ×2 (guía de endurecimiento + huecos de «qué hacer si…»; referencia completa del
+`.env` en `configuracion.md`), `qa-testing` (`ClientDocumentationTest` + `check-package-links.sh` con imágenes),
+`frontend-panel` y `frontend-quiosco` (generadores de capturas sobre los dobles del E2E). Después el orquestador insertó
+las capturas en `instalacion.md` §1.7 y en el runbook del quiosco, y lanzó **cinco traducciones al inglés en paralelo**
+(`general-purpose`, una por documento) sobre los textos ya cerrados; por último `revisor-codigo` y
+`seguridad-cumplimiento` (con `/revision-cumplimiento`, que además actualiza el doc 07). Prompt en doc 03 §6.5.6.
+
+**Lo construido.** `docs/cliente/endurecimiento.md` (645 líneas: exposición de red por ruta, TLS, anfitrión, secretos,
+copias, tablets, correo, cuentas, observabilidad, qué revela el borde, lista de comprobación trimestral de 22 filas; cada
+control con «Cierra/Dueño»); `configuracion.md` §6 (las 162 variables de `.env.example` por familia, con marca, valor de
+serie, cuándo cambiarla y «¿afecta al cálculo de horas?», más las 9 claves de `installation_settings`); `instalacion.md`
+(§0 «El punto de fichaje», §1.7 con 13 capturas, §5 con Docker ausente/antiguo, disco insuficiente y remisión al
+runbook para cámara/servidor/código, §9 enlaza el endurecimiento, cabecera sin promesas); runbook `alta-nuevo-quiosco.md`
+§6 (cámara: `Permissions-Policy: camera=(self)`, origen `https`; la tablet no encuentra el servidor) y captura de la
+tablet; `obligaciones-legales.md` cita RL-19; `operacion.md` fila trimestral de endurecimiento. **Inglés:**
+`docs/cliente/en/{installation,operation,configuration,legal-obligations,hardening}.md` (los runbooks siguen solo en
+español, enlazados con «(in Spanish)»). **Capturas:** `docs/cliente/img/{es,en}/` (12 del asistente + 2 de la tablet por
+idioma, 2,3 MB, sin PII: «Hotel Marina», «Youssef Amrani») y sello `img/VERSION`; se regeneran con
+`npm run docs:screenshots` en `frontend-admin` y `frontend-kiosk` (`playwright.screenshots.config.ts`, `tests/screenshots/`;
+el E2E normal no los recoge; `stubOnboardingApi` gana `locale`, `stubPairing` vive en `support/pairing.ts`).
+**Pruebas:** `tests/Architecture/ClientDocumentationTest.php` + `Support/ClientDocs.php` (27 casos: `.env.example` ↔
+`configuracion.md` en las dos lenguas y en las dos direcciones, `SettingKey` ↔ guía, RL-16..21, pares ES/EN con los mismos
+comandos `bash` sin comentarios y el mismo número de apartados, imágenes que existen y ≥ 8 por guía, sello `img/VERSION`
+= `VERSION` mayor.menor, endurecimiento enlazado, enlaces de la guía inglesa, sin secretos de aspecto real);
+`check-package-links.sh` comprueba también imágenes. **Docs:** ficha 5.11 (siete decisiones), doc 02 §11.6.1 (árbol con
+`cliente/`, `en/`, `img/`), doc 03 §6.5.6, doc 07 (por `seguridad-cumplimiento`).
+
+**Defectos de producto encontrados al documentar (los dos primeros corregidos):** (1) `config/security.php` leía
+`SECURITY_REJECTION_FLOOR_MS` y `.env.example` documentaba `IDENTITY_CREDENTIAL_REJECTION_FLOOR_MS` → el suelo de
+tiempo constante (RS-03) no era configurable; alineado al nombre publicado. (2) El texto del panel del alcance de
+soporte `configuration` (`locales/es,en.json`) prometía cambiar el perfil de cumplimiento cuando
+`ComplianceProfilePolicy` lo prohíbe; corregido. (3) **No hay baja de cuentas de gestión** (`users.is_active` existe y
+nada lo pone a `false`; tampoco cambio de contraseña por consola): la lista de comprobación de endurecimiento lo declara
+y remite al fabricante — decisión de producto pendiente (abajo). (4) `ATTENDANCE_PATTERN_WINDOW_SECONDS` y
+`ATTENDANCE_PATTERN_MIN_REPEATS` no las lee nada hasta la 3.11 (documentadas como reservadas); `LOKI_URL` es informativa
+(el origen de Grafana está fijo en el aprovisionamiento).
+
+**Lo que corrigieron las revisiones (aplicado):** `revisor-codigo`: `kiosk:health` citado en tres runbooks, en la lista de
+endurecimiento y en el Anexo C **sin existir** → implementado (`KioskInfrastructureConsoleKioskHealthCommand`, caso de
+uso `CheckKioskHealth`, veredicto por quiosco con umbrales de latido) y prueba nueva que contrasta todo `artisan x:y` citado
+en `docs/cliente` y `docs/runbooks` con las `$signature` del árbol; `cd /opt/kronoqr` → `/opt/kronoqr-2.1.0` (ocho bloques);
+`operacion.md` §14 «Lo que no se toca nunca» (SQL directo, `audit_log`, `daily_totals` → `attendance:reconcile`, secretos
+generados, `migrate:rollback`); tabla de la tablet solo en el runbook (referencia única); `quiosco-emparejado.png` enlazada;
+`vite build` antes de las capturas del quiosco; `history -c` retirado; gravedad en el resumen nocturno; regex de claves del
+`.env.example` que ya no toma prosa por declaración (`PORTAL_INTERNAL_ONLY` fantasma fuera, 161 variables); comprobación
+directa contra la tabla del §6 y en las dos lenguas; identificadores en inglés en las pruebas; `check-package-links.sh` cuenta
+`.Png`. `seguridad-cumplimiento`: fila 13 de la lista → `backup:verify` (`doctor` no mira la copia); fila 8 y §3 →
+`doctor.sh` solo comprueba el `.env` con la aplicación parada; fila 17 → `psql` con `fichaje_app`, nunca `fichaje_migrator`;
+`obligaciones-legales.md` sin cabecera de proceso interno, con descargo global y sin remitir al doc 07 (no viaja);
+`KIOSK_BATCH_MAX_SIZE` con su consecuencia (422 y cola que no drena); doc 07 actualizado (cuatro riesgos siguen aceptados
+con la guía como control, «Gestión del entorno» se queda en 2 con el motivo escrito, riesgo nuevo de baja de cuentas,
+defecto RS-03 cerrado).
+
+**Verificado el 08-09:** suite `Architecture` 63 en verde (27 de documentación), `docs:consistency --check`,
+`qa:traceability --check`, Pint y PHPStan 9 sobre las pruebas nuevas, `make sh-lint` 0, paquete armado con `package.sh` y
+`check-package-links.sh` (267 enlaces, 27 imágenes, todos dentro), gitleaks sobre los ficheros de la tarea (0), panel y
+quiosco `lint`/`type-check`, E2E `pairing` 3/3, `--list` del E2E sin los generadores. **suite completa del backend 3639 en verde** (16 454 aserciones, 600 s; `--parallel` no vale: una prueba antigua
+redefine la constante `AHORA`).
+
+**`kiosk:health` (nuevo, por el hallazgo):** `KioskDomainValueObjectKioskHealth*` + `CheckKioskHealth` + `KioskHealthCommand`
+(`--json`, `--lang`; exit 0/1/2 como `product:doctor`); umbrales `KIOSK_HEALTH_FRESH_WITHIN_SECONDS=120` (lo que el runbook
+prometía) y `KIOSK_HEALTH_SILENT_AFTER_SECONDS=600` (el «quiosco sin latido > 10 min» del doc 01 §9.3, para que consola y
+observabilidad digan lo mismo); sin ningún quiosco activo sale 1; recién emparejado sin latido = aviso; revocado no cuenta.
+21 unitarias + 11 feature. **La regla de Prometheus «quiosco sin latido» sigue sin escribir (3.2)**: hoy este comando es la
+única detección.
+
+**Siguiente acción (5.11):** commit hecho en la rama; empujar, lanzar la CI manual completa (`gh workflow run ci.yml --ref
+feat/tarea-5.11-documentacion-cliente`, con ⑧ y ⑧b; **no empujar nada mientras corra: el grupo de concurrencia la
+cancelaría**), abrir la PR contra `main` e integrar con *merge commit* cuando esté en verde; después `make up` en `main`
+(sin migraciones nuevas).
+
 **Rama `feat/tarea-5.10-exportacion-telemetria`** (desde `main` `2f7f2cc`). **Tarea 5.10 «Exportación íntegra de
-datos y telemetría opcional desactivada por defecto» (RF-PD-12, RF-PD-14, RL-20) IMPLEMENTADA, REVISADA y
-PROBADA el 08-09-2026**; commit `e559e5d` empujado, **CI manual completa con ⑧ y ⑧b lanzada (ejecución 34268124784)** y PR abierta contra `main` (ver «Siguiente acción»).
+datos y telemetría opcional desactivada por defecto» (RF-PD-12, RF-PD-14, RL-20) IMPLEMENTADA, REVISADA, PROBADA e
+**INTEGRADA en `main` el 08-09-2026** (PR #48, *merge commit* `e2860be`; CI manual completa con ⑧ y ⑧b en verde
+antes de integrar, ejecución 34268942894 —la primera, 34268124784, falló en ① porque solo se había regenerado el
+`schema.d.ts` del panel—; CI de `main` tras el merge, ejecución 34271875959). Rama borrada; `make up` hecho sobre `main`
+(migración `data_exports` aplicada).
 
 **Cómo se hizo (receta de la 5.9):** diez decisiones escritas en la ficha ANTES de nada (punto 14 de «no
 cubiertos» resuelto), contrato (`/api/v1/data-export` GET/POST, `/api/v1/data-export/{uuid}/download`), tipos
@@ -59,7 +138,7 @@ completa 80/80 (más 32 tras la segunda vuelta). A mano en el contenedor: `produ
 dev (ZIP inspeccionado, permisos 0600/0700), fila `running` de 3 h liberada por `--purge`, `product:telemetry`
 con destino `http://` rechazado y `storage/app/telemetry` vacío.
 
-**Siguiente acción:** vigilar la ejecución manual 34268124784 (⑧ y ⑧b) —**no empujar nada a la rama mientras corra: el grupo de concurrencia la cancelaría**—, integrar la PR con *merge commit* (nunca squash) cuando esté en verde, `make up` en `main` (migración `data_exports`). Después la **5.11** (documentación de
+**Siguiente acción:** la CI de `main` tras el merge (34271875959, con ⑧ y ⑧b) terminó en verde. Arrancar la **5.11** (documentación de
 instalación, operación, configuración y obligaciones; capturas del asistente; guía de endurecimiento). Recordatorio: **la ⑧b solo corre en `main`, etiquetas o a mano**.
 
 **Rama `feat/tarea-5.9-diagnostico-doctor-soporte`**, creada desde `main` (`d2fe595`: PR #44, #45 y #46
@@ -177,18 +256,23 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   `LoadingPanel` como ya hace `BrandingView`; cada `GET /branding` lee y hashea el logotipo (≤ 512 KiB,
   aceptado con aviso en `.env.example`). (la 5.9 ya lo comprueba: `permissions.branding_logo` y `license.white_label_without_plan`).
 - **5.9 (restos):** `updated_by_user_id` queda `null` cuando escribe un actor de soporte (el actor consta en `audit_log`; si hace falta, `updated_by_support_grant_id`); los `Redis*Metrics` de otros módulos podrían exponer sus claves para que `MetricsCollector` no adivine la forma; ampliar `error_events` en el paquete llega con la 5.12; si el paquete incluyera algún día asientos de `audit_log`, redactar `customer_name` (hoy solo recuentos).
-- **5.11:** capturas del asistente en `instalacion.md` §1.7 (el texto ya las anticipa), guía de
-  endurecimiento, y **`doctor.sh`** (la nota de `instalacion.md` §1.1 lo promete «en una versión posterior
-  de la serie 2.x»).
+- **5.11 (restos):** **instalación limpia por una persona ajena siguiendo solo la guía** (criterio del doc 03 §6.5;
+  ningún script la sustituye); regenerar las capturas (`npm run docs:screenshots` en los dos frontends) en cada
+  versión menor —la prueba del sello `img/VERSION` lo recuerda—; los runbooks siguen solo en español; la salida de
+  `compliance:apply-retention` y `verify-audit-chain` está cableada en español (la guía inglesa la glosa); la
+  cabecera de `instalacion.md` §1.2 y §1.3 quedó sin el bloque duplicado de `--check-only`.
 - **5.12:** transporte del buffer de errores del cliente (`errorReporter` ya saneado en las tres SPA).
 - **Fase 3:** 3.2 paso 9 (alertas de los comandos nocturnos: `onFailure()`, series
-  `*_last_failures`, reglas Loki) **y declarar la ventana de mantenimiento de `update.sh` en la
+  `*_last_failures`, reglas Loki) **y la regla «quiosco sin latido > 10 min» del doc 01 §9.3 (hoy solo la
+  detecta `kiosk:health`; atar `KIOSK_HEALTH_SILENT_AFTER_SECONDS` a la regla por prueba)** **y declarar la ventana de mantenimiento de `update.sh` en la
   observabilidad** (§8.4: silenciar «quiosco sin latido» mientras dura); 3.4 estrena
   `maximumWeeklyMinutes`/`weekStartsOn`/`holidayCalendar` de `CompliancePolicy`; 3.5 reactiva RN-12 (vaciar
   `DetectAttendanceAnomalies::SUSPENDED_UNTIL_DECLARED_BREAK`) y el descanso intra-día de RN-10 con la
   pausa declarada (RF-AT-12); RNF-D-03 fallback de colas Redis→BD; pasada k6 en Linux para el p95
   (RNF-P-02/06); la puerta de cobertura (`make coverage`) no corre en CI.
-- **Decisiones de producto abiertas:** si el portal muestra incidencias (hoy `incidents: []` siempre; si
+- **Decisiones de producto abiertas:** **baja de cuentas de gestión** (no existe ni pantalla ni comando; `users.is_active` nunca pasa a
+  `false`; la guía de endurecimiento lo declara como límite de la 2.1 y remite al fabricante — hace falta
+  `identity:deactivate-user` o una pantalla, y el cambio de contraseña por consola); si el portal muestra incidencias (hoy `incidents: []` siempre; si
   se activa, solo resueltas); si el `responsable_departamento` ve credenciales de su gente; códigos de
   recuperación de 2FA (hoy solo `identity:2fa-reset` por consola); si la baja revoca la credencial
   automáticamente; `POST /me/logout` (hoy el token del portal vive hasta caducar, máx. 2 h); la mitad de

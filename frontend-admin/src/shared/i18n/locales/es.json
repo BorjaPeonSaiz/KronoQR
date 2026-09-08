@@ -1327,7 +1327,7 @@
         },
         "configuration": {
           "label": "Configuración",
-          "description": "Además de lo anterior, puede cambiar la configuración de la instalación, el perfil de cumplimiento y los quioscos."
+          "description": "Además de lo anterior, puede cambiar la configuración de la instalación y los quioscos. Nunca el perfil de cumplimiento: los umbrales legales y la retención los fija el hotel."
         }
       },
       "scopeNeverNote": "Ningún alcance permite activar licencias, conceder o revocar accesos de soporte, emitir o revocar credenciales, corregir fichajes, gestionar la plantilla, ni generar informes de nómina o la exportación para la Inspección.",

@@ -4,5 +4,10 @@
     "types": ["node"],
     "lib": ["ES2022", "DOM", "DOM.Iterable"]
   },
-  "include": ["playwright.config.ts", "tests/e2e/**/*.ts"]
+  "include": [
+    "playwright.config.ts",
+    "playwright.screenshots.config.ts",
+    "tests/e2e/**/*.ts",
+    "tests/screenshots/**/*.ts"
+  ]
 }

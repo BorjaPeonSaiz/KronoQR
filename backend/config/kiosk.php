@@ -245,4 +245,37 @@ return [
      */
     'batch_max_size' => (int) env('KIOSK_BATCH_MAX_SIZE', 50),
 
+    /*
+     * Los dos plazos con los que `php artisan kiosk:health` juzga un latido
+     * (RF-PA-07, doc 02 Anexo C).
+     *
+     * SON DOS, Y NINGUNO ES NUEVO. Los dos estaban ya escritos en documentacion
+     * que el cliente tiene en la mano, y este bloque solo los pone donde el
+     * codigo puede leerlos:
+     *
+     *   - `fresh_within_seconds` = 120 s. El runbook `alta-nuevo-quiosco.md`
+     *     §4.2 manda comprobar que «su ultimo contacto es de hace menos de dos
+     *     minutos», y el §4.3 avisa de que «si pasa de dos o tres minutos, la
+     *     tablet no esta hablando con el servidor». Con el latido cada 60 s
+     *     (§6), dos minutos son DOS latidos perdidos: uno suelto puede ser un
+     *     wifi que parpadea, y avisar por eso seria enseñar a ignorar el aviso.
+     *
+     *   - `silent_after_seconds` = 600 s. Es el umbral de la alerta «Quiosco sin
+     *     latido > 10 min, Critica (operaciones)» del doc 01 §9.3, con su
+     *     runbook `quiosco-no-responde.md`. EL MISMO NUMERO Y NO OTRO: un
+     *     comando que dijera «aviso» de un quiosco por el que la observabilidad
+     *     esta paginando a las 06:00 obligaria a decidir cual de los dos tiene
+     *     razon, y eso se decide mal a esa hora.
+     *
+     * Configuracion y no constantes (regla dura 13, ADR-017): un hotel con la
+     * wifi justa y otro con red cableada no tienen la misma paciencia razonable.
+     * La raiz de composicion los ordena antes de construir el objeto de valor,
+     * asi que un `.env` con los dos numeros cruzados da un diagnostico raro pero
+     * nunca deja a nadie sin diagnostico.
+     */
+    'health' => [
+        'fresh_within_seconds' => (int) env('KIOSK_HEALTH_FRESH_WITHIN_SECONDS', 120),
+        'silent_after_seconds' => (int) env('KIOSK_HEALTH_SILENT_AFTER_SECONDS', 600),
+    ],
+
 ];

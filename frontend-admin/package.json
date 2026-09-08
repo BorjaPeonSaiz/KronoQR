@@ -15,7 +15,8 @@
     "format": "prettier --write .",
     "test:unit": "vitest run --coverage",
     "api:generate": "node scripts/generate-api-client.mjs",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "docs:screenshots": "playwright test --config playwright.screenshots.config.ts"
   },
   "dependencies": {
     "@kronoqr/web-kit": "*",

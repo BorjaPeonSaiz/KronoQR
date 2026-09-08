@@ -1327,7 +1327,7 @@
         },
         "configuration": {
           "label": "Configuration",
-          "description": "In addition to the above, can change the installation's configuration, the compliance profile and the kiosks."
+          "description": "In addition to the above, can change the installation's configuration and the kiosks. Never the compliance profile: legal thresholds and retention are set by the hotel."
         }
       },
       "scopeNeverNote": "No scope allows activating licences, granting or revoking support access, issuing or revoking credentials, correcting clock records, managing the workforce, or generating payroll reports or the Labour Inspectorate export.",
