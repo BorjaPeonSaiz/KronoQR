@@ -330,6 +330,11 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 - **Al tocar `docs/api/openapi.yaml`, regenerar los TRES clientes** (`npm run api:generate` en `frontend-admin`, `frontend-kiosk` y `frontend-portal`): la etapa ① de la CI compara cada `schema.d.ts` versionado con el contrato y falla si uno no se regeneró, aunque esa SPA no use las rutas nuevas (pasó en la primera CI de la 5.10).
 - gitleaks (job `security`) marca como clave cualquier literal `NOMBRE_KEY=valor` aunque sea un ejemplo
   de prueba: en las aserciones, comprobar el valor sin el nombre de la variable delante.
+- **`npm audit` de la CI (job `security`) cae por avisos nuevos ajenos al cambio** (08-09-2026: `js-yaml` 4.3.1, fijado
+  en exacto por `@redocly/openapi-core` ← `openapi-typescript`). Se resuelve con `overrides` en el `package.json` raíz y
+  regenerando el lock **desde un contenedor Linux con solo los manifiestos** (`node:24-alpine`, `npm audit fix
+  --package-lock-only --ignore-scripts`); nunca `npm install` en Windows. Comprobar después el guarda de `QualityGatesTest`
+  («mantiene en el lock los binarios nativos»).
 
 - **`packages/web-kit` no compila `.vue` en Vitest** (sin `@vitejs/plugin-vue`, a propósito: los componentes
   los prueban las SPA). Añadir el plugin exigiría `npm install` en Windows, que es la trampa del lock de
