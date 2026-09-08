@@ -1065,15 +1065,15 @@ php artisan test --group=RF-PD-09 --group=RF-PD-11
 
 **Terminado cuando.** Subconjunto aplicable de la DoD del §10.3:
 
-- [ ] Pruebas en los niveles de la tabla, incluida la de volumen.
-- [ ] **Inspección manual de un paquete generado sobre datos realistas, sin una sola PII.**
-- [ ] Autorización negativa por rol.
-- [ ] Concesión, uso, revocación e inclusión explícita de datos personales en `audit_log`.
-- [ ] ShellCheck y `shfmt` sobre `doctor.sh`; códigos de salida documentados.
-- [ ] Textos e informe de `doctor` en español e inglés, **redactados para quien no conoce el sistema**.
-- [ ] Revisión de `seguridad-cumplimiento` cerrada sin hallazgos bloqueantes.
-- [ ] Runbook `incidencia-sin-acceso.md` escrito y probado contra un paquete real.
-- [ ] ADR-020 coherente con lo implementado.
+- [x] Pruebas en los niveles de la tabla, incluida la de volumen.
+- [x] **Inspección manual de un paquete generado sobre datos realistas, sin una sola PII.**
+- [x] Autorización negativa por rol.
+- [x] Concesión, uso, revocación e inclusión explícita de datos personales en `audit_log`.
+- [x] ShellCheck y `shfmt` sobre `doctor.sh`; códigos de salida documentados.
+- [x] Textos e informe de `doctor` en español e inglés, **redactados para quien no conoce el sistema**.
+- [x] Revisión de `seguridad-cumplimiento` cerrada sin hallazgos bloqueantes.
+- [x] Runbook `incidencia-sin-acceso.md` escrito y probado contra un paquete real.
+- [x] ADR-020 coherente con lo implementado.
 
 ---
 
