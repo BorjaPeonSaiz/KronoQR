@@ -256,6 +256,10 @@ final class ProductServiceProvider extends ServiceProvider
         );
 
         $this->registerLicense();
+
+        // --- 5.9 diagnostics (agente A): enlaces de doctor y paquete ---
+
+        // --- 5.9 support grants (agente B): enlaces de las concesiones ---
     }
 
     /**
