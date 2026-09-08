@@ -623,12 +623,161 @@ antes de concederlo y el límite dejaría de serlo.
 | `PRODUCT_SUPPORT_GRANT_DEFAULT_HOURS` | `24` | Duración de un acceso de soporte si no se indica |
 | `PRODUCT_SUPPORT_GRANT_MAX_HOURS` | `72` | Duración máxima admitida |
 | `PRODUCT_SUPPORT_USE_AUDIT_WINDOW_SECONDS` | `900` | Cada cuánto, como máximo, se anota un nuevo uso de un acceso de soporte en la auditoría |
+| `PRODUCT_DATA_EXPORT_PATH` | `storage/app/exports` (en el contenedor) | Dónde deja el ZIP la exportación íntegra ([`operacion.md`](operacion.md) §13). Fuera de `BACKUP_PATH` a propósito: es material que caduca |
+| `PRODUCT_DATA_EXPORT_RETENTION_DAYS` | `7` | Días que el ZIP de una exportación íntegra se puede descargar antes de que se purgue. La anotación de que existió se conserva siempre |
+| `PRODUCT_DATA_EXPORT_RATE_LIMIT` | `30` | Peticiones por minuto **por cuenta** a la lista y a la descarga de exportaciones (por dirección IP, cuatro veces más); el panel sondea cada 5 s mientras hay una en curso |
+| `PRODUCT_DATA_EXPORT_STALE_AFTER` | `3600` | Segundos tras los que una exportación interrumpida a medias se da por fallida (`stale`) y deja pedir otra. Nunca por debajo de lo que tarda tu exportación más grande |
 
 Lo que **sí** decides cada vez, y no en el `.env`: si el paquete lleva datos
 personales (nunca por defecto), y el motivo, el alcance y las horas de cada
 acceso.
 
 ---
+
+## 3 quinquies. Telemetría
+
+### Qué es, y por qué probablemente no te haga falta
+
+La telemetría es un documento JSON con datos **técnicos y agregados** de tu
+instalación —qué versión corre, cómo está la licencia, de qué tamaño es la
+plantilla por tramos, unos contadores de uso y el resultado de la revisión de
+salud— que tu servidor envía al fabricante una vez por semana.
+
+**Viene apagada, y así se queda si no haces nada.** El producto funciona
+**exactamente igual** con ella apagada: no se degrada ninguna función, no
+aparece ningún aviso, no hay banner y nadie te lo va a recordar. Si esta sección
+te parece innecesaria, no hagas nada: no estás perdiéndote nada.
+
+Sirve para una sola cosa: que quien mantiene el producto sepa qué versiones
+están en uso de verdad y con qué tamaños de instalación, para no romperlas en
+una actualización. No sirve para facturarte, ni para vigilar a nadie, ni para
+saber quién ficha.
+
+### Hacen falta tres cosas a la vez
+
+Con que falte una, no se construye ni se envía nada —ni siquiera se lee un
+contador—, y `product:telemetry` te dice cuál falta:
+
+1. `TELEMETRY_ENABLED=true` en tu `.env`. De serie está en `false`.
+2. `TELEMETRY_ENDPOINT` con una dirección **que empiece por `https://`**. De
+   serie está **vacío**: el producto no trae ningún destino escrito, ni siquiera
+   uno del fabricante. Con esto vacío, activar lo anterior no hace absolutamente
+   nada. Un destino en `http://` —o sin `https://` delante— **se rechaza como si
+   no hubiera ninguno**: no se construye ni se envía nada, y `product:telemetry`
+   te dice que la dirección tiene que empezar por `https://`.
+3. Que tu licencia incluya `telemetry`. Es una función accesoria: si tu licencia
+   caduca, se apaga sola y no pasa nada más.
+
+### Cada cuánto, y a dónde
+
+Los **lunes a las 05:40 UTC**, un `POST` con `Content-Type: application/json`
+sobre HTTPS con el certificado verificado, sin seguir redirecciones, con 3
+segundos para conectar y 10 en total. Si falla, se reintenta **una vez** a los 5
+segundos y se deja para la semana siguiente: no hay reintentos en bucle, no
+aparece ningún error en pantalla y en el registro técnico queda como aviso, no
+como fallo. **Nunca ocurre durante un fichaje**: solo lo dispara la tarea
+programada.
+
+El destino lo eliges tú. Si no quieres enviar nada al fabricante pero sí quieres
+llevar el dato a tu propio sistema de supervisión, apunta `TELEMETRY_ENDPOINT` a
+donde quieras: al producto le da igual quién esté al otro lado.
+
+**Y ahí está el reparto de responsabilidades**, dicho sin rodeos: el producto
+garantiza el **canal** —TLS verificado, sin seguir redirecciones, tiempos de
+espera acotados— y el **contenido**, que es exactamente el de la tabla de abajo.
+De **quién está al otro lado del destino respondes tú**, porque la dirección la
+escribes tú: si apuntas a un servidor que no controlas, el documento llega a
+quien tenga ese servidor. Está anotado como riesgo aceptado en el documento de
+seguridad del producto (doc 07 §6).
+
+### Míralo antes de decidir
+
+Este comando **no envía nada**. Imprime el documento exacto que se enviaría,
+con los valores reales de tu instalación:
+
+```bash
+docker compose exec app php artisan product:telemetry
+```
+
+Con `--send` lo envía, si se cumplen las tres condiciones. Con `--json` sale en
+un formato que puede leer otro programa.
+
+**Mirar no deja rastro.** Sin `--send`, el comando no envía nada y tampoco
+escribe nada en el disco: el identificador que enseña es provisional y lo dice.
+El definitivo se acuña en el primer envío.
+
+### Variables
+
+| Variable | De serie | Qué gobierna |
+| --- | --- | --- |
+| `TELEMETRY_ENABLED` | `false` | Si la telemetría está activada |
+| `TELEMETRY_ENDPOINT` | *(vacío)* | A dónde se envía. Tiene que empezar por `https://`; vacío, o sin `https://`, significa que no se envía |
+| `TELEMETRY_STATE_PATH` | `storage/app/telemetry/state.json` | Dónde vive el identificador de la instalación y el historial de envíos |
+| `TELEMETRY_RETRY_DELAY_SECONDS` | `5` | Segundos entre el intento y su único reintento |
+
+### Todo lo que se envía, campo a campo
+
+Esta es la lista **completa y cerrada**. Lo que no está en esta tabla no sale de
+tu instalación, y una prueba automática compara esta tabla con el código: si
+alguien añadiera un campo sin escribirlo aquí, la comprobación falla y el cambio
+no entra.
+
+| Campo | Ejemplo | Qué es |
+| --- | --- | --- |
+| `schema_version` | `1` | Versión del formato del documento. Sube si algún día cambia la lista de campos |
+| `installation_id` | `9f2c7b41-0f6a-4a1e-9d54-6b0f3a2c81de` | Identificador **aleatorio** que genera tu propia instalación la primera vez. No sale de tu licencia, ni de tu nombre, ni de tu dirección. Si borras el fichero de estado, se estrena otro |
+| `sent_at` | `2026-09-08T05:40:12.004311Z` | Momento del envío, en UTC |
+| `product.version` | `2.1.0` | Versión de KronoQR que corre en tu servidor |
+| `product.php_version` | `8.4.24` | Versión de PHP |
+| `product.database_version` | `17.11` | Versión de PostgreSQL, solo el número. Sin la distribución, sin el compilador y sin ninguna ruta de tu servidor |
+| `license.state` | `active` | Estado de la licencia: `active`, `expiring`, `expired`, `absent`, `not_yet_valid` o `unverifiable` |
+| `license.plan` | `estandar` | Nombre del plan contratado |
+| `license.features` | `["advanced_reports","telemetry"]` | Funciones accesorias incluidas en el plan |
+| `license.days_until_expiry` | `114` | Días que faltan para que caduque |
+| `scale.employees_active` | `101-250` | Tamaño de la plantilla activa **por tramos**: `0`, `1-25`, `26-100`, `101-250`, `251-500` o `501+`. **Nunca la cifra exacta** |
+| `scale.devices_active` | `3` | Cuántas tablets hay dadas de alta |
+| `scale.departments` | `6` | Cuántos departamentos hay creados |
+| `usage_7d.scans_accepted` | `4812` | Fichajes aceptados desde el envío anterior (normalmente, una semana). Solo el número: sin quién, sin cuándo y sin en qué tablet |
+| `usage_7d.scans_rejected` | `37` | Escaneos rechazados en ese mismo periodo. Solo el número, y **sin el motivo del rechazo** |
+| `usage_7d.batches_synced` | `1204` | Lotes que las tablets sincronizaron al recuperar la red, en ese periodo |
+| `usage_7d.incidents_open` | `2` | Incidencias abiertas **ahora mismo**. Es la única cifra de este bloque que no es del periodo, porque es un nivel y no un recuento |
+| `usage_7d.reports_generated` | `9` | Informes exportados en el periodo |
+| `doctor` | `{"database.connection":"ok","license.state":"warning"}` | El veredicto de cada comprobación de `product:doctor`: `ok`, `warning` o `failure`. **Solo el veredicto**: sin el texto, sin la explicación y sin los detalles, que sí pueden llevar rutas de tu servidor y van únicamente en el paquete de diagnóstico que tú decides enviar |
+
+En el primer envío, y en cualquiera que siga a una semana fallida sin
+comparación posible, los cuatro contadores del bloque `usage_7d` van vacíos
+(`null`). Es a propósito: un `0` afirmaría que no hubo ni un fichaje en toda la
+semana, y eso sería falso.
+
+### Lo que NUNCA se envía
+
+Ni activando la telemetría, ni con ninguna combinación de opciones:
+
+- Nombres, apellidos ni ningún dato de una persona de la plantilla.
+- Direcciones de correo, códigos de empleado, PIN, DNI ni sus huellas.
+- Horas de fichaje, jornadas, tramos, totales diarios ni correcciones.
+- El identificador (`uuid`) de ninguna persona, tablet, tramo ni usuario.
+- La razón social de tu licencia, su `license_id` ni la huella de tu clave.
+- La URL de tu instalación (`APP_URL`), el nombre de tu hotel, el de tus
+  centros, el de tus departamentos ni el de tus tablets.
+- Rutas de tu servidor, nombres de fichero, contraseñas ni ninguna clave.
+- Cualquier cosa que no esté en la tabla de arriba.
+
+### Cómo apagarla, y cómo estrenar identidad
+
+Para apagarla, `TELEMETRY_ENABLED=false` y reiniciar la aplicación. No hace
+falta nada más y no hay que avisar a nadie.
+
+Si quieres que el fabricante deje de poder relacionar los envíos anteriores con
+los siguientes, borra el fichero de estado:
+
+```bash
+docker compose exec app rm -f storage/app/telemetry/state.json
+```
+
+El siguiente envío estrena un identificador nuevo y sin relación con el
+anterior, y los contadores vuelven a empezar.
+
 ---
 
 ## 4. Qué hacer si…

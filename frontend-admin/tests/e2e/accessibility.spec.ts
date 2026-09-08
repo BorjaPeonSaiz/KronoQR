@@ -11,6 +11,8 @@ import AxeBuilder from '@axe-core/playwright'
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import {
+  DATA_EXPORT_RUNNING,
+  DATA_EXPORT_UUID,
   EMPLOYEE_UUID,
   HOTEL_BRANDING,
   logIn,
@@ -250,6 +252,36 @@ test(
     await page.getByLabel('Motivo').fill('Incidencia #123: la cola no vacía')
     await page.getByRole('button', { name: 'Conceder acceso' }).click()
     await expect(page.getByTestId('issued-token')).toBeVisible()
+
+    await expectNoBlockingViolations(page)
+  },
+)
+
+// --- Exportación íntegra de datos (RF-PD-14, RL-20, tarea 5.10) -------------
+
+test(
+  'la pantalla de licencia con «Tus datos son tuyos» visible tampoco',
+  { tag: ['@RF-PD-14', '@RL-20'] },
+  async ({ page }) => {
+    await stubManagementApi(page, { role: 'admin', dataExports: [DATA_EXPORT_RUNNING] })
+    await logInAsAdmin(page)
+    await page.goto('/license')
+    await expect(page.getByRole('heading', { level: 2, name: 'Tus datos son tuyos' })).toBeVisible()
+    await expect(page.getByTestId(`status-${DATA_EXPORT_UUID}`)).toBeVisible()
+
+    await expectNoBlockingViolations(page)
+  },
+)
+
+test(
+  'el diálogo de generar la exportación tampoco, con el foco dentro y el aviso legible',
+  { tag: ['@RF-PD-14', '@RL-20'] },
+  async ({ page }) => {
+    await stubManagementApi(page, { role: 'admin' })
+    await logInAsAdmin(page)
+    await page.goto('/license')
+    await page.getByTestId('open-generate').click()
+    await expect(page.getByRole('dialog')).toBeVisible()
 
     await expectNoBlockingViolations(page)
   },

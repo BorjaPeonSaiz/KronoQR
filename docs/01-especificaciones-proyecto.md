@@ -455,6 +455,10 @@ Motor: **PostgreSQL 17**. Los tipos se expresan en su nomenclatura. El Anexo D d
 
 **`support_grants`** — `id`, `uuid`, `granted_by_user_id`, `reason`, `scope` (`diagnostics`|`read_only`|`configuration`, tarea 5.9), `granted_at`, `expires_at`, `revoked_at`, `revoked_by_user_id`, `accessed_at`, `token_hash` (solo el hash del token de API ligado a la concesión; el token en claro no se guarda nunca)
 
+**`data_exports`** — exportación íntegra de los datos del cliente (RF-PD-14, RL-20, tarea 5.10)
+`id`, `uuid`, `requested_by_user_id` (NULL desde la consola), `requested_via` (`panel`|`console`), `status` (`pending`|`running`|`completed`|`failed`|`purged`), `requested_at`, `started_at`, `completed_at`, `failed_at`, `failure_reason` (solo la clase del fallo, nunca su mensaje), `file_path`, `file_name`, `size_bytes`, `sha256`, `row_counts` (JSONB, filas por fichero), `expires_at`, `purged_at`, `downloaded_at`, `download_count`
+*Una sola fila `pending`/`running` a la vez (índice único parcial). El fichero —un ZIP con un CSV por tabla, JSON para lo estructurado, `manifest.json` y `README.md`— caduca a los `PRODUCT_DATA_EXPORT_RETENTION_DAYS` y se purga; **la fila no se borra nunca** (regla dura 5): queda como `purged` con sus recuentos y su huella. Pedir, generar y descargar dejan asiento (`data_export.requested|generated|downloaded`, familia `legal_export`).*
+
 **`scan_events`** — log inmutable de todo escaneo, aceptado o no
 `id`, `scan_id` (UUID v7 generado en cliente, UNIQUE → idempotencia), `device_id`, `employee_id` (nullable si no resuelve), `occurred_at` (TIMESTAMPTZ), `recorded_at` (TIMESTAMPTZ), `origin`, `intent` (`auto`|`break_start`|`break_end`; **lo declara el cliente**, `auto` por defecto), `result` (`clock_in`|`clock_out`|`break_start`|`break_end`|`rejected_unknown`|`rejected_revoked`|`rejected_debounce`|`rejected_signature`), `shift_entry_id`, `payload_fingerprint`, `client_meta` (JSONB)
 

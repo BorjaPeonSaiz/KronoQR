@@ -12,6 +12,7 @@ import type { Page, Route } from '@playwright/test'
 import type {
   Branding,
   CredentialStatusBoard,
+  DataExport,
   DepartmentCollection,
   Device,
   DeviceList,
@@ -608,6 +609,51 @@ export const ISSUED_SUPPORT_GRANT: IssuedSupportGrant = {
 /** El nombre de fichero que trae `Content-Disposition` de `POST /diagnostics/bundle`. */
 export const DIAGNOSTICS_BUNDLE_FILENAME = 'kronoqr-diagnostics-2.2.0-20260908T101500Z.json'
 
+// --- Exportacion integra de datos (RF-PD-14, RL-20, tarea 5.10) -------------
+
+/** El `uuid` que el doble asigna a la exportacion que crea `POST /api/v1/data-export`. */
+export const DATA_EXPORT_UUID = '0199f6a2-4c1e-7d3b-8a90-1b2c3d4e5f61'
+
+/** El nombre de fichero que trae `Content-Disposition` de la descarga, ya completada. */
+export const DATA_EXPORT_FILENAME = 'kronoqr-export-2.2.0-20260908T101500Z.zip'
+
+/** Una exportacion ya `completed`, lista para descargar. Para las pruebas que no pasan por «pedir». */
+export const DATA_EXPORT_COMPLETED: DataExport = {
+  uuid: DATA_EXPORT_UUID,
+  status: 'completed',
+  requested_via: 'panel',
+  requested_by: { uuid: ADMIN_USER.uuid, name: ADMIN_USER.name },
+  requested_at: '2026-09-08T10:15:00.000000Z',
+  started_at: '2026-09-08T10:15:02.000000Z',
+  completed_at: '2026-09-08T10:16:40.000000Z',
+  failed_at: null,
+  failure_reason: null,
+  file_name: DATA_EXPORT_FILENAME,
+  size_bytes: 15_728_640,
+  sha256: '0'.repeat(64),
+  row_counts: { employees: 62, shift_entries: 48210, audit_log: 12045 },
+  expires_at: '2026-09-15T10:16:40.000000Z',
+  purged_at: null,
+  downloaded_at: null,
+  download_count: 0,
+}
+
+/**
+ * La misma exportacion, pero todavia `running`: para la prueba que comprueba
+ * que, con una ya en curso, el boton de generar aparece deshabilitado y con
+ * su explicacion, sin tener que pasar por el recorrido completo.
+ */
+export const DATA_EXPORT_RUNNING: DataExport = {
+  ...DATA_EXPORT_COMPLETED,
+  status: 'running',
+  completed_at: null,
+  file_name: null,
+  size_bytes: null,
+  sha256: null,
+  row_counts: {},
+  expires_at: null,
+}
+
 /** Una peticion a la API tal y como salio del panel. */
 export interface RecordedRequest {
   readonly method: string
@@ -711,6 +757,15 @@ export interface ManagementApiOptions {
    * lo haria el servidor.
    */
   readonly supportGrants?: SupportGrant[]
+  /**
+   * Las exportaciones integras que devuelve `GET /api/v1/data-export` de
+   * partida (RF-PD-14, RL-20, tarea 5.10). Por omision, ninguna. El doble la
+   * mantiene mutable: `POST` crea una fila `pending` que el propio doble hace
+   * progresar sola a `running` y luego a `completed` pasados unos segundos
+   * reales, para que el sondeo de 5 s del panel tenga algo que enseñar sin
+   * depender de un backend.
+   */
+  readonly dataExports?: DataExport[]
 }
 
 async function json(route: Route, status: number, body: unknown): Promise<void> {
@@ -766,6 +821,50 @@ export async function stubManagementApi(
   const supportGrants: SupportGrant[] = (options.supportGrants ?? []).map((candidate) => ({
     ...candidate,
   }))
+
+  // La exportacion integra (RF-PD-14, RL-20, tarea 5.10): mutable, y con una
+  // progresion de estado atada al reloj de VERDAD (no al de Playwright), para
+  // que el sondeo de 5 s del panel encuentre algo que cambie sin que este
+  // doble tenga que saber cuantas veces se le ha preguntado.
+  const dataExports: DataExport[] = (options.dataExports ?? []).map((candidate) => ({
+    ...candidate,
+  }))
+  const dataExportCreatedAt = new Map<string, number>()
+
+  /** El estado de cada fila EN ESTE INSTANTE: pending -> running -> completed. */
+  function currentDataExports(): DataExport[] {
+    const now = Date.now()
+
+    return dataExports.map((row) => {
+      const createdAt = dataExportCreatedAt.get(row.uuid)
+
+      if (createdAt === undefined) {
+        return row
+      }
+
+      const elapsedMs = now - createdAt
+
+      if (elapsedMs < 1_500) {
+        return { ...row, status: 'pending' }
+      }
+
+      if (elapsedMs < 5_500) {
+        return { ...row, status: 'running', started_at: '2026-09-08T10:15:02.000000Z' }
+      }
+
+      return {
+        ...row,
+        status: 'completed',
+        started_at: '2026-09-08T10:15:02.000000Z',
+        completed_at: '2026-09-08T10:16:40.000000Z',
+        file_name: DATA_EXPORT_FILENAME,
+        size_bytes: 15_728_640,
+        sha256: '0'.repeat(64),
+        row_counts: { employees: 62, shift_entries: 48210, audit_log: 12045 },
+        expires_at: '2026-09-15T10:16:40.000000Z',
+      }
+    })
+  }
 
   // La marca de la instalacion (RF-PD-08, tarea 5.8): mutable, para que
   // `PATCH /api/v1/settings` la actualice exactamente como lo haria el
@@ -928,6 +1027,59 @@ export async function stubManagementApi(
         }
 
         await route.fulfill({ status: 204 })
+        return
+      }
+
+      // La descarga tambien lleva un `uuid` dinamico en la ruta
+      // (`GET /data-export/{uuid}/download`, RF-PD-14, RL-20).
+      const dataExportDownloadMatch = /^\/api\/v1\/data-export\/([0-9a-f-]+)\/download$/.exec(
+        url.pathname,
+      )
+
+      if (method === 'GET' && dataExportDownloadMatch !== null) {
+        const target = currentDataExports().find(
+          (candidate) => candidate.uuid === dataExportDownloadMatch[1],
+        )
+
+        if (target === undefined) {
+          await problem(route, 404, 'urn:kronoqr:problem:not-found', 'Exportación no encontrada')
+
+          return
+        }
+
+        if (target.status !== 'completed') {
+          await route.fulfill({
+            status: 409,
+            contentType: 'application/problem+json',
+            body: JSON.stringify({
+              type: 'urn:kronoqr:problem:data-export-not-ready',
+              title: 'La exportación todavía no ha terminado',
+              status: 409,
+              detail: 'Sigue en curso. Vuelve a consultarla dentro de unos segundos.',
+            }),
+          })
+
+          return
+        }
+
+        const stored = dataExports.find((candidate) => candidate.uuid === target.uuid)
+
+        if (stored !== undefined) {
+          stored.downloaded_at = '2026-09-08T10:20:00.000000Z'
+          stored.download_count += 1
+        }
+
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/zip',
+          headers: {
+            'Content-Disposition': `attachment; filename=${target.file_name ?? DATA_EXPORT_FILENAME}`,
+            'X-Kronoqr-Export-Sha256': target.sha256 ?? '0'.repeat(64),
+            'X-Kronoqr-Export-Rows': '60317',
+          },
+          body: Buffer.from('contenido-de-prueba-del-zip-de-exportacion'),
+        })
+
         return
       }
 
@@ -1256,6 +1408,57 @@ export async function stubManagementApi(
           // fila que queda en `supportGrants` -y que devuelve el `GET`
           // siguiente- no lo lleva.
           await json(route, 201, { data: { ...created, token: ISSUED_SUPPORT_TOKEN } })
+          return
+        }
+        case 'GET /api/v1/data-export':
+          // Las 20 mas recientes, de la mas nueva a la mas antigua (RF-PD-14,
+          // RL-20): el doble ya inserta la que crea `POST` al principio.
+          await json(route, 200, { data: currentDataExports() })
+          return
+        case 'POST /api/v1/data-export': {
+          const inProgress = currentDataExports().find(
+            (row) => row.status === 'pending' || row.status === 'running',
+          )
+
+          if (inProgress !== undefined) {
+            await route.fulfill({
+              status: 409,
+              contentType: 'application/problem+json',
+              body: JSON.stringify({
+                type: 'urn:kronoqr:problem:data-export-in-progress',
+                title: 'Ya hay una exportación en curso',
+                status: 409,
+                detail: `Espera a que termine la exportación pedida a las ${inProgress.requested_at}.`,
+                export: inProgress,
+              }),
+            })
+
+            return
+          }
+
+          const created: DataExport = {
+            uuid: DATA_EXPORT_UUID,
+            status: 'pending',
+            requested_via: 'panel',
+            requested_by: { uuid: currentUser.uuid, name: currentUser.name },
+            requested_at: '2026-09-08T10:15:00.000000Z',
+            started_at: null,
+            completed_at: null,
+            failed_at: null,
+            failure_reason: null,
+            file_name: null,
+            size_bytes: null,
+            sha256: null,
+            row_counts: {},
+            expires_at: null,
+            purged_at: null,
+            downloaded_at: null,
+            download_count: 0,
+          }
+
+          dataExports.push(created)
+          dataExportCreatedAt.set(created.uuid, Date.now())
+          await json(route, 202, { data: created })
           return
         }
         default:

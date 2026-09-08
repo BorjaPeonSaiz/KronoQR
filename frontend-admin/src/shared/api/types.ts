@@ -173,3 +173,10 @@ export type SupportGrant = Schemas['SupportGrant']
 export type SupportGrantCollection = Schemas['SupportGrantCollection']
 export type GrantSupportAccessRequest = Schemas['GrantSupportAccessRequest']
 export type IssuedSupportGrant = Schemas['IssuedSupportGrant']
+
+// Exportacion integra de los datos de la instalacion (RF-PD-14, RL-20, tarea
+// 5.10). Nunca se interpreta su contenido en el panel: el ZIP se descarga tal
+// cual llega, igual que el paquete de diagnostico (`DiagnosticsBundle`).
+export type DataExport = Schemas['DataExport']
+export type DataExportResource = Schemas['DataExportResource']
+export type DataExportCollection = Schemas['DataExportCollection']

@@ -87,6 +87,18 @@ panel, que es donde se trabajan, y el resumen de la noche siguiente vuelve a
 incluirlas. Si decides no usar el canal de correo, coméntalo con quien te instale
 el sistema: es una decisión de configuración de tu instalación.
 
+
+**Y un segundo canal, que viene apagado: la telemetría.** El producto puede
+enviar al destino que tú fijes un informe **semanal** con versiones, estado de
+la licencia, tamaño de la instalación por tramos y contadores agregados;
+**nunca** datos de personas ni de jornada, ni nombres, ni correos, ni la razón
+social. Viene desactivado de serie y solo se activa si tú lo decides en el
+`.env` con la lista exacta de campos delante
+([`configuracion.md`](configuracion.md) §3 quinquies); `php artisan
+product:telemetry` te enseña el documento que se enviaría antes de activar
+nada. Si lo activas, anótalo en tu registro de actividades como lo que es: un
+envío de datos técnicos, sin datos personales, a un destino que eliges tú.
+
 ### La evaluación de impacto (EIPD): recomendable, y la decisión hay que escribirla
 
 El art. 35 RGPD obliga a hacer una **evaluación de impacto** (EIPD) cuando el
@@ -315,12 +327,51 @@ construido para que ninguna decisión comercial pueda dejarte incumpliendo:
 **Nada de esto te exime de la parte que sigue siendo tuya**: pagar la licencia si
 la has contratado, y conservar el registro cuatro años aunque termine la relación
 comercial. Para lo segundo, el producto incluye una exportación íntegra que
-puedes ejecutar en cualquier momento y llevarte.
+puedes ejecutar en cualquier momento y llevarte (§7 quater).
 
 > Si alguna vez encuentras que **no puedes fichar o no puedes acceder al
 > registro** y la causa es la licencia, **no es lo previsto**: es una avería.
 > Avisa al proveedor adjuntando la salida de `php artisan license:show` y de
 > `GET /api/v1/health`.
+
+---
+
+## 7 quater. Llevarte todos tus datos (RL-20)
+
+Tu obligación de conservar el registro cuatro años no termina cuando termina
+el contrato con el proveedor, ni cuando cambias de producto. Para que eso no
+dependa de nadie, KronoQR incluye una **exportación íntegra**: un único fichero
+ZIP con **todo** lo que hay en tu instalación, en formatos abiertos (un CSV por
+tabla, JSON para la configuración) y con un `README` que explica cada fichero y
+cada columna. Lo puedes generar cuando quieras, sin pedir permiso a nadie, y
+**funciona igual con la licencia caducada, ausente o ilegible** (§7 bis).
+
+**Qué lleva.** Todo lo que es tuyo: plantilla y contratos, tarjetas y quioscos,
+los tramos con **todas sus versiones** —cada corrección conserva la anterior,
+con quién la hizo y por qué (§5)—, los totales diarios, las incidencias, todos
+los escaneos, el registro de auditoría completo **con su cadena de hash**
+(puedes verificar fuera del producto que nadie lo ha alterado), las cuentas de
+gestión, los accesos de soporte, la configuración, el perfil de cumplimiento y
+los datos de la licencia. **Ningún secreto**: ni contraseñas, ni PIN, ni hashes,
+ni la clave de licencia. Ningún número interno: las referencias entre ficheros
+van por identificadores públicos (`uuid`), los mismos de la API.
+
+**Qué implica.** Es una copia completa de los datos personales de toda tu
+plantilla, así que la tratas como tal:
+
+- Solo el **administrador de la instalación** puede pedirla; RRHH no, el
+  auditor no, y **soporte del fabricante nunca**, con ningún alcance.
+- Pedirla, generarla y **cada descarga** quedan en tu registro de auditoría
+  (`data_export.requested`, `data_export.generated`, `data_export.downloaded`):
+  ante una brecha puedes responder quién se llevó qué y cuándo (§2).
+- El fichero **caduca**: a los siete días (configurable) el sistema lo borra
+  del servidor; la anotación de que existió se conserva.
+- Una vez fuera del sistema, el fichero es tuyo y con él tus obligaciones:
+  cifrado, custodia y borrado cuando venza la conservación (§4). No lo envíes
+  a nadie sin base para hacerlo.
+
+Cómo se genera, cómo se saca del servidor y cuándo conviene hacerlo desde la
+consola en lugar del panel: [`operacion.md`](operacion.md) §13.
 
 ---
 
@@ -335,6 +386,8 @@ puedes ejecutar en cualquier momento y llevarte.
 | Decirte qué umbrales fija tu convenio | No lo conoce; el perfil de cumplimiento es tuyo (§7) |
 | Apagarte el fichaje por una licencia impagada | No existe el mecanismo: no hay forma de expresar la desactivación del registro legal, ni por error ni a propósito (§7 bis) |
 | Revocar tu licencia a distancia | La verificación es local y sin internet: tu instalación no consulta a nadie. La palanca es la caducidad de la clave y el contrato |
+| Quedarse con tus datos o dificultar que te los lleves | La exportación íntegra es tuya: no depende de la licencia, la pides tú y soporte no puede generarla con ningún alcance (§7 quater) |
+
 
 Si necesitas soporte sobre una incidencia, el paquete de diagnóstico va
 **anonimizado por defecto** y cualquier acceso ampliado es expreso, temporal y

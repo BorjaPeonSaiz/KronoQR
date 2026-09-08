@@ -263,3 +263,70 @@ Schedule::command('compliance:apply-retention', ['--dry-run'])
     ->weeklyOn(1, '05:10')
     ->withoutOverlapping()
     ->runInBackground();
+
+/*
+ * Purga de las exportaciones integras caducadas (RF-PD-14, RL-20, tarea 5.10).
+ *
+ * SOLO PURGA, NUNCA GENERA, y esto es lo primero que hay que entender de esta
+ * linea: `--purge` borra los ZIP cuyo `expires_at` ya paso y marca sus filas.
+ * **Generar no se programa jamas.** Una copia completa de la plantilla y de
+ * cuatro años de fichajes que apareciera sola en el disco cada noche seria lo
+ * contrario de lo que RL-20 quiere: la exportacion es un acto deliberado del
+ * cliente, con su aviso y sus tres asientos de auditoria.
+ *
+ * CADA HORA Y NO UNA VEZ AL DIA. Lo que se borra es el fichero mas peligroso que
+ * hay en el disco de la instalacion —la plantilla entera, sus fichajes, las
+ * cuentas de gestion—, y con una pasada diaria un fichero podria vivir hasta
+ * veinticuatro horas mas alla del plazo que el cliente configuro. La pasada es
+ * barata: una consulta sobre un indice parcial que casi siempre no devuelve
+ * nada.
+ *
+ * NADA SE BORRA DE LA BASE DE DATOS (regla dura 5). La fila pasa a `purged` y
+ * sigue en la lista con sus fechas, su huella y sus recuentos: «¿salio de aqui
+ * una copia completa de mis datos, y cuando?» hay que poder contestarlo años
+ * despues.
+ *
+ * `withoutOverlapping` por si una purga de muchos ficheros grandes se solapara
+ * con la siguiente hora; repetirla es seguro —marcar una fila ya purgada no
+ * cambia nada— asi que es higiene, no correccion.
+ */
+Schedule::command('product:export-all', ['--purge'])
+    ->hourly()
+    ->withoutOverlapping()
+    ->runInBackground();
+
+/*
+ * Telemetria opcional (RF-PD-12, ADR-020, ADR-023, tarea 5.10).
+ *
+ * SEMANAL, Y NO DIARIA NI HORARIA. Lo que este documento contiene -version,
+ * tramo de plantilla, estado de licencia y contadores agregados- no cambia de un
+ * dia para otro, y cada envio es una salida a internet desde la red del hotel.
+ * Una cadencia mayor no responderia ninguna pregunta nueva y multiplicaria por
+ * siete la superficie del unico canal saliente del producto.
+ *
+ * DECIDE EL COMANDO, NO EL PLANIFICADOR. Aqui no hay ningun `when()` que mire
+ * `TELEMETRY_ENABLED`: la tarea se programa siempre y `product:telemetry --send`
+ * comprueba las tres condiciones -variable, destino y licencia- y no construye
+ * ni envia nada si falta alguna. Es deliberado. Con la condicion en el
+ * planificador, la respuesta a «¿por que no se envia?» habria que buscarla en
+ * dos sitios, y `php artisan schedule:list` mentiria segun el `.env` cargado.
+ * Ademas el comando SALE 0 siempre: un fallo de red no es un fallo de la tarea,
+ * y el escenario normal de este producto es una instalacion sin salida a
+ * internet (doc 02 seccion 11.6.2).
+ *
+ * JAMAS EN EL CAMINO DE UNA PETICION (paso 7 de la ficha, regla dura 19). No hay
+ * controlador, middleware ni listener que dispare un envio: un fichaje no puede
+ * esperar a un `POST` contra internet, y una tablet en la puerta de personal
+ * tampoco. Este bloque es el unico disparador que existe.
+ *
+ * Lunes a las 05:40 UTC: despues de la copia (03:15), de la verificacion de la
+ * cadena (04:05), de la deteccion de incidencias (04:30) y de la propuesta de
+ * purga (05:10). Va la ultima a proposito -es lo unico accesorio de la lista- y
+ * queda holgura hasta el turno de las 06:00. `runInBackground()` porque puede
+ * tardar hasta los diez segundos del tiempo de espera y no debe retener al
+ * planificador.
+ */
+Schedule::command('product:telemetry', ['--send'])
+    ->weeklyOn(1, '05:40')
+    ->withoutOverlapping()
+    ->runInBackground();

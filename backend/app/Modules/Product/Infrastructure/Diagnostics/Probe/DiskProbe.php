@@ -6,6 +6,7 @@ namespace App\Modules\Product\Infrastructure\Diagnostics\Probe;
 
 use App\Modules\Product\Application\Port\DoctorProbe;
 use App\Modules\Product\Domain\ValueObject\DoctorFinding;
+use App\Modules\Shared\Infrastructure\Format\ByteSize;
 
 /**
  * Sondas `disk.*` de `product:doctor` (RF-PD-13).
@@ -74,7 +75,7 @@ final readonly class DiskProbe implements DoctorProbe
 
         $params = [
             'path' => $path,
-            'free' => self::human((int) $free),
+            'free' => ByteSize::human((int) $free),
             'percent' => round($ratio * 100, 1),
         ];
 
@@ -87,22 +88,5 @@ final readonly class DiskProbe implements DoctorProbe
         }
 
         return DoctorFinding::ok($id, $details, $params);
-    }
-
-    /**
-     * Bytes en algo que se lee de un vistazo. Quien mira esto tiene prisa.
-     */
-    private static function human(int $bytes): string
-    {
-        $units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
-        $value = (float) $bytes;
-        $unit = 0;
-
-        while ($value >= 1024.0 && $unit < \count($units) - 1) {
-            $value /= 1024.0;
-            $unit++;
-        }
-
-        return round($value, 1).' '.$units[$unit];
     }
 }

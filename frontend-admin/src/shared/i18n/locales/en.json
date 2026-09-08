@@ -1022,6 +1022,57 @@
       "exceeded": "Also, the contracted plan has been exceeded in: {limits}. It blocks nothing; talk to your provider to extend it."
     }
   },
+  "dataExport": {
+    "heading": "Your data is yours",
+    "intro": "You can take all the data of this installation, in an open format, whenever you want and without asking anyone's permission, even if the licence has expired. It is your guarantee that you can keep meeting the four-year retention obligation for the time record, even if the relationship with your provider ends.",
+    "generate": "Generate a full export",
+    "generateDisabledHint": "You cannot request another one while the previous one is still in progress; you can download it from this same list once it finishes.",
+    "activeNotice": "An export is in progress, requested on {requestedAt}. This screen refreshes itself every few seconds.",
+    "requestedByConsole": "Console",
+    "announceRequested": "The full export has been requested.",
+    "announceDownloaded": "The export {filename} has been downloaded.",
+    "confirm": {
+      "heading": "Generate the full export",
+      "warning": "The file will contain all the personal data of the workforce: names, clockings and shift entries with their whole history, contracts, credentials without secrets, incidents and the entire audit trail. Requesting it is recorded in that same trail, with who requested it and when.",
+      "action": "Generate export"
+    },
+    "list": {
+      "loading": "Loading the exports…",
+      "caption": "Full exports of the installation's data",
+      "lastUpdatedAt": "Last updated: {moment}",
+      "empty": {
+        "title": "No export has been requested yet",
+        "description": "Once you request one, it will appear here with its status, who requested it, how much it weighs, and until when it can be downloaded."
+      },
+      "columns": {
+        "status": "Status",
+        "requestedBy": "Requested by",
+        "requestedAt": "Requested",
+        "size": "Size",
+        "rows": "Rows",
+        "expiresAt": "Expires",
+        "actions": "Actions"
+      },
+      "rows": "{count} rows",
+      "download": "Download",
+      "downloading": "Downloading…",
+      "failedReason": "Could not be generated: {reason}",
+      "failureReasons": {
+        "write_failed": "The file could not be written on the server: check the space and permissions of the export directory.",
+        "database_error": "The database failed partway through generation: check the installation's diagnostics (product:doctor).",
+        "stale": "It was interrupted and the system marked it as failed after an hour without finishing. You can request another one.",
+        "unexpected": "Unexpected failure. The technical detail is in the server log, next to this export's identifier."
+      },
+      "purgedNotice": "The file expired and is no longer available. Request a new export if you need it."
+    },
+    "status": {
+      "pending": "Queued",
+      "running": "Generating",
+      "completed": "Ready to download",
+      "failed": "Could not be generated",
+      "purged": "Expired"
+    }
+  },
   "devices": {
     "title": "Kiosks",
     "subtitle": "The kiosks linked to the installation, active and revoked, with what it takes to tell whether they are healthy.",

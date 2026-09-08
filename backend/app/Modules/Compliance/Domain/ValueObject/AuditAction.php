@@ -353,6 +353,56 @@ enum AuditAction: string
      */
     case DiagnosticsPersonalDataIncluded = 'diagnostics.personal_data_included';
 
+    /**
+     * Se ha pedido la exportacion **integra** de todos los datos de la
+     * instalacion (**RF-PD-14**, RL-20, RS-05, tarea 5.10).
+     *
+     * **Se audita el acto de pedirla y no solo el de generarla** porque son dos
+     * hechos distintos que pueden no coincidir: entre uno y otro esta la cola, y
+     * una generacion puede fallar. Con un solo asiento al final, un intento de
+     * llevarse una copia completa de la plantilla que revienta al minuto no
+     * dejaria ningun rastro — y la intencion es justo lo que busca quien revisa
+     * accesos masivos a datos personales.
+     *
+     * El payload lleva el `uuid` de la exportacion y por donde se pidio
+     * (`panel` o `console`). Sin sesion detras, el actor es `system`.
+     */
+    case DataExportRequested = 'data_export.requested';
+
+    /**
+     * El ZIP con todos los datos de la instalacion existe en el disco
+     * (**RF-PD-14**, RL-20).
+     *
+     * **El actor es quien la PIDIO, aunque el asiento lo escriba el trabajador
+     * de cola.** Sin eso saldria firmado como `system` —en la cola no hay
+     * sesion— y responder «¿quien se llevo los datos?» exigiria emparejar a mano
+     * este asiento con el `data_export.requested` de unos segundos antes. El
+     * evento transporta el identificador de la cuenta para poder hacerlo.
+     *
+     * El payload lleva los recuentos por fichero, la huella y el tamaño: lo
+     * justo para reconocer ese fichero si vuelve a aparecer en una
+     * conversacion. El contenido no, que el trail se exporta —dentro de esta
+     * misma exportacion, de hecho—.
+     */
+    case DataExportGenerated = 'data_export.generated';
+
+    /**
+     * Alguien se ha llevado el ZIP (**RF-PD-14**, RL-20, RS-05).
+     *
+     * **Es el mas importante de los tres.** Generar el fichero lo deja en un
+     * directorio del servidor con permisos `0600`; descargarlo lo saca de ahi. El
+     * fichero lleva la plantilla entera, sus fichajes y las cuentas de gestion, y
+     * el cliente tiene que poder responder quien se lo llevo y cuando, sobre todo
+     * ante una brecha (RL-15).
+     *
+     * **Se escribe antes de entregar el fichero.** Al reves, una descarga cortada
+     * a la mitad sacaria el ZIP del servidor sin dejar rastro. Uno por descarga,
+     * sin agrupar por ventana: aqui no hay cientos de peticiones seguidas como en
+     * una sesion de soporte, hay un acto deliberado sobre un fichero de
+     * gigabytes.
+     */
+    case DataExportDownloaded = 'data_export.downloaded';
+
     // --- Retencion (RL-02, ADR-027) ------------------------------------------
 
     case RetentionPartitionSealed = 'retention.partition_sealed';
@@ -460,6 +510,20 @@ enum AuditAction: string
         // anonimizado por defecto y describe una SALIDA de informacion, no una
         // consulta de la ficha de alguien.
         'diagnostics' => AuditableEvent::SupportAccess,
+        // La exportacion integra comparte familia con `legal_export` porque
+        // responde la misma pregunta: «¿que ha salido del registro y quien se lo
+        // llevo?». RL-20 es la garantia de continuidad del MISMO registro que
+        // RL-06 pone a disposicion de la Inspeccion —uno se entrega a un tercero
+        // y el otro se lo queda el cliente, pero los dos son «una copia del
+        // registro sale de aqui»—, y separarlos obligaria a consultar dos veces
+        // para responderla.
+        //
+        // No cabe en `PersonalDataAccess`: eso describe la consulta de la ficha
+        // de una persona concreta, y esto es una copia integra que no va contra
+        // nadie en particular. Ni en `SupportAccess`: no sale hacia el
+        // fabricante, sale hacia el propio cliente, que es el responsable del
+        // tratamiento (RL-16, regla dura 16).
+        'data_export' => AuditableEvent::LegalExport,
     ];
 
     /**

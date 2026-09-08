@@ -705,6 +705,8 @@ Un token de quiosco comprometido **no da acceso a la plantilla completa**: `rost
 >
 > **5. `settings:*` cubre tambien el emparejamiento y la gestion de dispositivos** (tarea 5.6). `POST /api/v1/kiosk/pair/confirm`, `GET /api/v1/devices` y `POST /api/v1/devices/{uuid}/unpair` viajan bajo ese mismo ambito y bajo una policy propia de solo `admin`, y el Anexo B del documento 01 se corrige en consecuencia: `/devices` deja de ser «manager+». Por lo mismo que el perfil de cumplimiento: **dar de alta un quiosco es crear un origen de fichajes** y desvincularlo puede dejar un hotel sin poder fichar en pleno cambio de turno, asi que es la misma potestad que configurar la instalacion y no la de gestionar la plantilla. Un ambito propio —`devices:*`— no lo usaria ningun rol por separado: quien puede ver la flota es exactamente quien puede desvincularla. **Las otras dos rutas del emparejamiento, `POST /kiosk/pair` y `POST /kiosk/pair/claim`, no llevan ambito porque son publicas**: quien las llama todavia no tiene token, porque es justo el que viene a recoger. Lo que las protege no es la autenticacion sino el secreto de recogida, la caducidad corta, dos limitadores propios (`pairing-request` por IP y `pairing-claim` por `pairing_id`) y el hecho de que **nada se vincula sin el `confirm` de un `admin`**. Y el token que sale del `claim` es el de quiosco de la primera fila de esta tabla, con sus tres ambitos y ni uno mas.
 
+> **6. `settings:*` cubre tambien la exportacion integra de los datos** (tarea 5.10, RF-PD-14, RL-20). `GET`/`POST /api/v1/data-export` y `GET /api/v1/data-export/{uuid}/download` viajan bajo ese ambito y bajo `DataExportPolicy`, de solo `admin`, **que ademas rechaza a todo actor de soporte**: un token de soporte con alcance `configuration` lleva `settings:*` y pasa el middleware, y la policy lo cierra con `403`, porque llevarse todos los datos del cliente es justo lo que el fabricante no hace nunca (regla dura 16, ADR-020). Por lo mismo que el perfil de cumplimiento y los quioscos: es la potestad de quien responde de la instalacion y ningun rol la usaria por separado —`rrhh` gestiona la plantilla, no se la lleva; el `auditor` tiene la exportacion legal—. Y por ADR-019 **ninguna de las tres rutas se degrada** con la licencia: RL-20 existe precisamente para cuando la relacion comercial termina.
+
 ### 7.4 Cadena de hash de la auditoría
 
 ```
@@ -1364,6 +1366,14 @@ Generado por el administrador del cliente con un clic o un comando. Contiene ver
 
 ---
 
+### 11.6.7 Exportación íntegra y telemetría (tarea 5.10)
+
+**Exportación íntegra (RF-PD-14, RL-20).** Un ZIP `kronoqr-export-<version>-<UTC>.zip` con un CSV por tabla (el dialecto común de `CsvDialect`, instantes en UTC), JSON para lo estructurado, `manifest.json` con recuentos y `sha256` por fichero y un `README.md` en el idioma de la instalación que explica cada fichero y cada columna. Alcance por lista de permitidos: todo lo que es del cliente —tramos con todas sus versiones, correcciones con autor y motivo, escaneos, auditoría completa con su cadena de hash— y **ningún secreto ni hash**; referencias entre ficheros por `uuid`. Se genera desde la consola en el acto (`product:export-all`) o desde el panel de forma asíncrona (`POST /api/v1/data-export`, una sola en curso por instalación), con cada paso auditado en la familia `legal_export`. El fichero caduca a los `PRODUCT_DATA_EXPORT_RETENTION_DAYS` y se purga; la fila de `data_exports` queda. **No depende de la licencia** (ADR-019) y **nunca la hace un actor de soporte** (§7.3, nota 6).
+
+**Telemetría (RF-PD-12).** Un documento JSON semanal por HTTPS a `TELEMETRY_ENDPOINT`, solo si `TELEMETRY_ENABLED=true`, hay destino y la licencia lista `telemetry`. Contenido cerrado y documentado campo a campo en `docs/cliente/configuracion.md` §3 quinquies: versiones, estado de la licencia, escala por tramos, contadores agregados de siete días y el resultado de `doctor` sin mensajes; nunca datos personales ni de jornada, ni rutas del servidor, ni la razón social. `installation_id` aleatorio, acuñado en el cliente. Un reintento y silencio hasta la semana siguiente; el fallo no pasa de `notice` y no produce ningún aviso en la interfaz. `product:telemetry` imprime lo que se enviaría. Una prueba de arquitectura fija que es el único cliente HTTP saliente del backend (verificación de ADR-020).
+
+---
+
 ## 12. Runbooks a redactar
 
 | Runbook | Cuándo se usa |
@@ -1482,7 +1492,20 @@ LICENSE_EXPIRY_WARNING_DAYS=30         # RF-PD-05 · días de antelación del av
 LICENSE_HEALTH_PROBE_TTL_SECONDS=600   # §10.5 · vida de la copia del estado que lee `GET /health`. NO es
                                        # una caché de la licencia: el estado se recalcula siempre desde la
                                        # clave firmada. Si expira, la sonda responde `unknown`
-TELEMETRY_ENABLED=false                # Desactivada por defecto (RF-PD-12)
+TELEMETRY_ENABLED=false                # RF-PD-12 · desactivada por defecto. Con `true` hace falta ADEMÁS
+                                       # un destino y que la licencia liste `telemetry` (ADR-023); si falta
+                                       # cualquiera de los tres, no se construye ni se envía nada
+TELEMETRY_ENDPOINT=                    # RF-PD-12 · URL HTTPS a la que va el informe semanal. Vacía de
+                                       # serie: la fija el cliente con la lista de campos delante
+                                       # (`docs/cliente/configuracion.md` §3 quinquies)
+PRODUCT_DATA_EXPORT_PATH=              # RF-PD-14 · dónde se escriben las exportaciones íntegras; por
+                                       # defecto storage/app/exports DENTRO del contenedor (0700/0600)
+PRODUCT_DATA_EXPORT_RETENTION_DAYS=7   # RF-PD-14 · días que el ZIP se puede descargar antes de purgarse;
+                                       # la fila de `data_exports` se conserva siempre
+PRODUCT_DATA_EXPORT_RATE_LIMIT=30      # RF-PD-14 · peticiones por minuto POR CUENTA a /api/v1/data-export
+                                       # (por IP, ×4); el panel sondea cada 5 s mientras una está en curso
+PRODUCT_DATA_EXPORT_STALE_AFTER=3600   # RF-PD-14 · segundos tras los que una exportación interrumpida a
+                                       # medias pasa a `failed`/`stale` y libera la siguiente (RL-20)
 ERROR_HISTORY_RETENTION_DAYS=90        # RF-PD-15 · igual que el log técnico (RL-11)
 BRANDING_LOGO_ROOT=/var/kronoqr/branding # RF-PD-08 · directorio DENTRO del contenedor donde tiene que
                                        # estar el logotipo: `BRANDING_LOGO_PATH` (clave de
@@ -1581,7 +1604,9 @@ php artisan product:errors:prune                 # Purga a 90 días, en el sched
 php artisan product:diagnostics [--anonymized]   # Paquete de diagnóstico (RF-PD-09); anonimizado por defecto
 php artisan product:diagnostics --with-personal-data --period-days=7   # Acción distinta y auditada (RL-19)
 php artisan product:diagnostics --verify=RUTA    # Recalcula la huella de un paquete recibido
-php artisan product:export-all                   # Exportación íntegra del cliente (RF-PD-14)
+php artisan product:export-all                   # Exportación íntegra (RF-PD-14, RL-20): ZIP con CSV por tabla, JSON, manifest y README. Registra su fila; funciona sin licencia
+php artisan product:export-all --purge           # Borra los ZIP caducados y marca sus filas (nunca las borra). En el planificador, cada hora
+php artisan product:telemetry [--send] [--json]  # Imprime el informe de telemetría que SE ENVIARÍA (RF-PD-12); --send lo envía si está activada. Semanal en el planificador
 php artisan license:show / license:activate {key}
 php artisan support:grant --hours=24 --reason= [--scope=diagnostics|read_only|configuration]   # Acceso de soporte auditado (RF-PD-11); el token sale UNA vez
 php artisan support:revoke {uuid} | --all        # Revoca en el acto; la fila se conserva

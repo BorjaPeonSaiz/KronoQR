@@ -5720,6 +5720,239 @@ paths:
           $ref: '#/components/responses/TooManyRequests'
 
   # ---------------------------------------------------------------------------
+  # Exportacion integra de los datos del cliente (RF-PD-14, RL-20, tarea 5.10).
+  # ---------------------------------------------------------------------------
+
+  /api/v1/data-export:
+    get:
+      operationId: listDataExports
+      summary: Exportaciones integras recientes
+      description: |
+        Las 20 exportaciones integras mas recientes de la instalacion, de la
+        mas nueva a la mas antigua, con su estado, tamano, recuentos por
+        fichero y caducidad (RF-PD-14, RL-20). Es lo que el panel sondea
+        mientras una esta en curso, y donde aparece tambien la que se genero
+        desde la consola con `product:export-all`.
+
+        Las filas **no se borran nunca** (regla dura 5): una exportacion cuyo
+        fichero ya se purgo sigue en la lista como `purged`, con sus fechas y
+        sus recuentos. El historico completo esta en `audit_log`
+        (`data_export.requested`, `data_export.generated`,
+        `data_export.downloaded`).
+
+        **`admin` y solo `admin`, con ambito `settings:*`** (documento 02 §7.3,
+        nota 6; regla dura 18). Un token de soporte, aunque su alcance lleve
+        `settings:*`, recibe `403`: el fabricante no accede a los datos del
+        cliente (regla dura 16). **Nunca se degrada** con la licencia (ADR-019,
+        regla dura 15): es la garantia de continuidad del cliente.
+      tags: [Product]
+      security:
+        - managementToken: ['settings:*']
+      responses:
+        '200':
+          description: Las exportaciones, de la mas reciente a la mas antigua.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataExportCollection'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      operationId: requestDataExport
+      summary: Pedir la exportacion integra de todos los datos
+      description: |
+        Pide la exportacion **integra** de los datos de la instalacion en
+        formato abierto (RF-PD-14, RL-20): un ZIP con un CSV por tabla, JSON
+        para lo estructurado, `manifest.json` con recuentos y `sha256` por
+        fichero y un `README.md` que explica cada fichero y cada columna. Es la
+        garantia del cliente de no quedar atrapado: se ejecuta cuando quiere,
+        sin pedir permiso a nadie y **sin depender de la licencia**.
+
+        **Asincrona.** La generacion recorre todas las tablas —cuatro años de
+        fichajes de una plantilla entera no caben en una peticion HTTP—, asi
+        que esta ruta **encola** el trabajo y responde `202` con la fila recien
+        creada, en estado `pending`. El panel sondea `GET /api/v1/data-export`
+        hasta verla `completed` y entonces descarga el fichero con
+        `GET /api/v1/data-export/{uuid}/download`.
+
+        **Una sola en curso por instalacion.** Si ya hay una `pending` o
+        `running`, responde `409` con
+        `urn:kronoqr:problem:data-export-in-progress` y esa fila en `export`:
+        no hay ninguna razon para generar dos copias completas a la vez, y dos
+        recorridos simultaneos de la base de datos por la que pasa cada fichaje
+        si tendrian coste.
+
+        **Que lleva.** Todo lo que es del cliente, por lista de permitidos
+        tabla a tabla: centro, departamentos, plantilla, contratos,
+        credenciales, quioscos, tramos con **todas sus versiones** (RL-04),
+        correcciones con autor y motivo, totales diarios, incidencias, todos
+        los escaneos, la auditoria completa con su cadena de hash, las cuentas
+        de gestion, los accesos de soporte, la configuracion, los perfiles de
+        cumplimiento y la licencia. **Ningun secreto ni hash**: ni `pin_hash`,
+        ni `secret_hash`, ni `token_hash`, ni contraseñas, ni secretos de 2FA,
+        ni `signed_key`. Ningun identificador interno: las referencias entre
+        ficheros son por `uuid`. Los instantes van en UTC ISO-8601 (regla dura
+        3) y el README dice como convertirlos a la zona del centro.
+
+        **El fichero contiene todos los datos personales de la plantilla**, y
+        por eso la accion esta auditada de principio a fin (regla dura 6,
+        RS-05): `data_export.requested` al pedirla, `data_export.generated` al
+        terminar y `data_export.downloaded` en cada descarga. El fichero caduca
+        a los `PRODUCT_DATA_EXPORT_RETENTION_DAYS` (7 de serie) y se purga
+        solo; la fila queda.
+
+        **`admin` y solo `admin`, con ambito `settings:*`** (documento 02 §7.3,
+        nota 6; regla dura 18), y **nunca un token de soporte** aunque su
+        alcance lleve ese ambito (regla dura 16). **Nunca se degrada** con la
+        licencia caducada, ausente o ilegible (ADR-019, regla dura 15): es
+        exactamente la situacion para la que existe.
+
+        Desde la consola, `php artisan product:export-all` hace lo mismo en el
+        acto y en primer plano, y registra tambien su fila.
+      tags: [Product]
+      security:
+        - managementToken: ['settings:*']
+      responses:
+        '202':
+          description: |
+            Exportacion encolada. La fila viene en `pending`; su `uuid` es el
+            que se sondea y el que se descarga.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataExportResource'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: |
+            Ya hay una exportacion `pending` o `running`. El cuerpo lleva esa
+            fila en `export` para que el panel la enseñe en lugar de pedir
+            otra.
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Problem'
+                  - type: object
+                    required: [export]
+                    properties:
+                      export:
+                        $ref: '#/components/schemas/DataExport'
+              examples:
+                en-curso:
+                  value:
+                    type: 'urn:kronoqr:problem:data-export-in-progress'
+                    title: Ya hay una exportacion en curso
+                    status: 409
+                    detail: Espera a que termine la exportacion pedida a las 10:15 UTC. Podras descargarla desde esta misma pantalla.
+                    export:
+                      uuid: 0199f6a2-4c1e-7d3b-8a90-1b2c3d4e5f61
+                      status: running
+                      requested_via: panel
+                      requested_by:
+                        uuid: 0199f6a2-4c1e-7d3b-8a90-1b2c3d4e5f10
+                        name: Administracion
+                      requested_at: '2026-09-08T10:15:00Z'
+                      started_at: '2026-09-08T10:15:02Z'
+                      completed_at: null
+                      failed_at: null
+                      failure_reason: null
+                      file_name: null
+                      size_bytes: null
+                      sha256: null
+                      row_counts: {}
+                      expires_at: null
+                      purged_at: null
+                      downloaded_at: null
+                      download_count: 0
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/data-export/{uuid}/download:
+    parameters:
+      - $ref: '#/components/parameters/DataExportUuid'
+    get:
+      operationId: downloadDataExport
+      summary: Descargar una exportacion integra terminada
+      description: |
+        Entrega el ZIP de una exportacion `completed` (RF-PD-14, RL-20). El
+        nombre del fichero va en `Content-Disposition`
+        (`kronoqr-export-<version>-<UTC>.zip`), y dos cabeceras permiten
+        comprobar que llego entero sin abrirlo: `X-Kronoqr-Export-Sha256`, la
+        huella del ZIP tal como consta en la fila y en `audit_log`, y
+        `X-Kronoqr-Export-Rows`, el total de filas de datos que contiene.
+
+        **Cada descarga se audita** (`data_export.downloaded`, RS-05): el
+        fichero contiene todos los datos personales de la plantilla y el
+        cliente tiene que poder responder quien se lo llevo y cuando.
+
+        `409` con `urn:kronoqr:problem:data-export-not-ready` si todavia esta
+        `pending` o `running`; `404` si el `uuid` no existe, si fallo o si el
+        fichero ya se purgo por caducidad (la fila sigue en la lista, con
+        `status: purged`, para que se sepa que existio).
+
+        El panel recibe el cuerpo entero en memoria antes de guardarlo: por
+        encima de ~1 GB conviene generar desde la consola y sacar el fichero
+        con `docker compose cp` (`docs/cliente/operacion.md`).
+
+        **`admin` y solo `admin`, con ambito `settings:*`**; nunca un token de
+        soporte (regla dura 16). Nunca se degrada con la licencia (regla dura
+        15).
+      tags: [Product]
+      security:
+        - managementToken: ['settings:*']
+      responses:
+        '200':
+          description: El ZIP, como fichero descargable.
+          headers:
+            Content-Disposition:
+              description: '`attachment; filename=kronoqr-export-2.1.0-20260908T101500Z.zip`'
+              schema:
+                type: string
+            X-Kronoqr-Export-Sha256:
+              description: Huella SHA-256 del ZIP, en hexadecimal.
+              schema:
+                type: string
+                pattern: '^[0-9a-f]{64}$'
+            X-Kronoqr-Export-Rows:
+              description: Total de filas de datos en todos los ficheros.
+              schema:
+                type: integer
+                minimum: 0
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: La exportacion todavia no ha terminado.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                no-lista:
+                  value:
+                    type: 'urn:kronoqr:problem:data-export-not-ready'
+                    title: La exportacion todavia no ha terminado
+                    status: 409
+                    detail: Sigue en curso. Vuelve a consultarla dentro de unos segundos.
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  # ---------------------------------------------------------------------------
   # Puesta en marcha (RF-PD-03, tarea 5.5). Ver el tag `Setup`.
   # ---------------------------------------------------------------------------
 
@@ -6612,6 +6845,19 @@ components:
         type: string
         format: uuid
       example: 0199f6a2-4c1e-7d3b-8a90-1b2c3d4e5f60
+
+    DataExportUuid:
+      name: uuid
+      in: path
+      required: true
+      description: |
+        Identificador **publico** de la exportacion integra (`data_exports.uuid`).
+        La clave interna no sale de la base de datos, como en el resto de la
+        API.
+      schema:
+        type: string
+        format: uuid
+      example: 0199f6a2-4c1e-7d3b-8a90-1b2c3d4e5f61
 
     DeviceUuid:
       name: uuid
@@ -12837,6 +13083,162 @@ components:
                   examples: ['23|Kd2pQ9vLmN4tZbYcF1wQ8sE3rT6uI0oP5aS7dXyZ']
           unevaluatedProperties: false
 
+
+    DataExport:
+      type: object
+      title: DataExport
+      description: |
+        Una exportacion integra de los datos de la instalacion (RF-PD-14,
+        RL-20): quien la pidio y por donde, en que estado esta, cuanto ocupa,
+        cuantas filas lleva cada fichero, su huella y hasta cuando se puede
+        descargar. La fila se conserva para siempre (regla dura 5): cuando el
+        fichero caduca pasa a `purged` y sigue apareciendo.
+
+        `row_counts` es un objeto con una clave por fichero del ZIP
+        (`employees`, `shift_entries`, `audit_log`, …) y el numero de filas de
+        datos que contiene. Las tablas que no existen en esta version
+        (`absences`, `error_events`) no aparecen aqui y constan como
+        `not_installed` en el `manifest.json` del propio ZIP.
+      additionalProperties: false
+      required:
+        - uuid
+        - status
+        - requested_via
+        - requested_by
+        - requested_at
+        - started_at
+        - completed_at
+        - failed_at
+        - failure_reason
+        - file_name
+        - size_bytes
+        - sha256
+        - row_counts
+        - expires_at
+        - purged_at
+        - downloaded_at
+        - download_count
+      properties:
+        uuid:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, running, completed, failed, purged]
+          description: |
+            `pending` espera al trabajador de cola; `running` esta escribiendo;
+            `completed` se puede descargar; `failed` no se genero (la causa,
+            sin datos personales, en `failure_reason`); `purged` existio y su
+            fichero se borro por caducidad.
+        requested_via:
+          type: string
+          enum: [panel, console]
+        requested_by:
+          oneOf:
+            - type: object
+              additionalProperties: false
+              required: [uuid, name]
+              properties:
+                uuid:
+                  type: string
+                  format: uuid
+                name:
+                  type: string
+            - type: 'null'
+          description: La cuenta de gestion que la pidio. Nulo si se pidio desde la consola.
+        requested_at:
+          $ref: '#/components/schemas/UtcTimestamp'
+        started_at:
+          oneOf:
+            - $ref: '#/components/schemas/UtcTimestamp'
+            - type: 'null'
+        completed_at:
+          oneOf:
+            - $ref: '#/components/schemas/UtcTimestamp'
+            - type: 'null'
+        failed_at:
+          oneOf:
+            - $ref: '#/components/schemas/UtcTimestamp'
+            - type: 'null'
+        failure_reason:
+          type: [string, 'null']
+          enum: [write_failed, database_error, stale, unexpected, null]
+          description: |
+            Por que no se genero, como **codigo estable**. Nulo mientras no haya
+            fallado.
+
+            Ni el mensaje del error —un mensaje de base de datos puede llevar
+            dentro el valor de una fila (regla dura 21)— ni el nombre de la clase
+            de la excepcion, que no le dice nada a quien lee el panel y cambiaria
+            con cualquier refactor. La clase real se queda en el log tecnico del
+            servidor, junto al `uuid`.
+
+            Cada codigo lleva a una accion distinta, y el panel los traduce:
+
+            - `write_failed` — no se pudo escribir el fichero. Casi siempre disco
+              lleno o permisos de `PRODUCT_DATA_EXPORT_PATH`.
+            - `database_error` — fallo al recorrer la base de datos.
+            - `stale` — se quedo a medias y nadie la termino: el trabajador de
+              cola murio o el servidor se paro durante la generacion. Nada esta
+              roto; se vuelve a pedir.
+            - `unexpected` — cualquier otra cosa. Es la unica que justifica
+              generar un paquete de diagnostico.
+        file_name:
+          type: [string, 'null']
+          description: '`kronoqr-export-<version>-<UTC>.zip`. Nulo hasta que termina.'
+          examples: ['kronoqr-export-2.1.0-20260908T101500Z.zip']
+        size_bytes:
+          type: [integer, 'null']
+          minimum: 0
+        sha256:
+          type: [string, 'null']
+          pattern: '^[0-9a-f]{64}$'
+        row_counts:
+          type: object
+          additionalProperties:
+            type: integer
+            minimum: 0
+          description: Filas de datos por fichero. Vacio hasta que termina.
+        expires_at:
+          oneOf:
+            - $ref: '#/components/schemas/UtcTimestamp'
+            - type: 'null'
+          description: |
+            Hasta cuando se puede descargar. Pasada, el fichero se purga y la
+            fila pasa a `purged`.
+        purged_at:
+          oneOf:
+            - $ref: '#/components/schemas/UtcTimestamp'
+            - type: 'null'
+        downloaded_at:
+          oneOf:
+            - $ref: '#/components/schemas/UtcTimestamp'
+            - type: 'null'
+          description: Ultima descarga. Cada una deja `data_export.downloaded` en `audit_log`.
+        download_count:
+          type: integer
+          minimum: 0
+
+    DataExportResource:
+      type: object
+      title: DataExportResource
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/DataExport'
+
+    DataExportCollection:
+      type: object
+      title: DataExportCollection
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/DataExport'
 
     SetupStatus:
       type: object

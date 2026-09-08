@@ -88,6 +88,30 @@ final class ProblemDetails
     public const string TYPE_INVALID_REQUEST = 'urn:kronoqr:problem:invalid-request';
 
     /**
+     * Ya hay una exportacion integra `pending` o `running` (**RF-PD-14**, tarea
+     * 5.10).
+     *
+     * **Tipo propio y no `TYPE_CONFLICT`**, aunque los dos sean `409`, porque a
+     * quien lo recibe le cambia por completo lo que tiene que hacer: el generico
+     * dice «tu peticion choca con el estado actual, mira que ha pasado» y este
+     * dice «ya se esta haciendo lo que pides, espera y mira la que hay». El panel
+     * enseña esa exportacion en lugar de pedir otra, y para eso la fila viaja en
+     * el cuerpo.
+     */
+    public const string TYPE_DATA_EXPORT_IN_PROGRESS = 'urn:kronoqr:problem:data-export-in-progress';
+
+    /**
+     * Se ha pedido descargar una exportacion integra que todavia no ha terminado
+     * (**RF-PD-14**).
+     *
+     * **`409` y no `404`**: `404` diria «esto no existe, deja de intentarlo» y el
+     * panel dejaria de sondear justo cuando la generacion esta a medias. Una que
+     * fallo, o cuyo fichero ya se purgo, si es `404`, porque ahi de verdad no hay
+     * nada que esperar.
+     */
+    public const string TYPE_DATA_EXPORT_NOT_READY = 'urn:kronoqr:problem:data-export-not-ready';
+
+    /**
      * @param  array<string, list<string>>  $errors  Detalle por campo. Solo en errores de validacion.
      * @param  array<string, string>  $headers
      */
@@ -174,6 +198,47 @@ final class ProblemDetails
             JsonResponse::HTTP_BAD_REQUEST,
             'La peticion no cumple el contrato.',
             $errors,
+        );
+    }
+
+    /**
+     * `409` de la exportacion integra, **con la que ya esta en curso dentro**
+     * (RF-PD-14, tarea 5.10).
+     *
+     * El cuerpo lleva `export` porque es lo unico util que el panel puede hacer
+     * con este error: enseñar la exportacion que hay, con su estado y su hora,
+     * en lugar de un mensaje que invita a volver a pulsar el boton.
+     *
+     * **Recibe un array y no el modelo de dominio**, y no es pereza: esta clase
+     * vive fuera de los modulos a proposito —tiene que poder usarse desde
+     * `bootstrap/app.php`— y Deptrac le prohibe nombrar un tipo de
+     * `App\Modules\*`. Quien la llama es el controlador, que si puede serializar.
+     *
+     * @param  array<string, mixed>  $export  La fila ya serializada con la forma del contrato.
+     */
+    public static function dataExportInProgress(string $detail, array $export): JsonResponse
+    {
+        $response = self::response(
+            self::TYPE_DATA_EXPORT_IN_PROGRESS,
+            'Ya hay una exportacion en curso',
+            JsonResponse::HTTP_CONFLICT,
+            $detail,
+        );
+
+        /** @var array<string, mixed> $body */
+        $body = $response->getData(true);
+
+        return $response->setData([...$body, 'export' => $export]);
+    }
+
+    /** `409` al descargar una exportacion integra que aun no ha terminado (RF-PD-14). */
+    public static function dataExportNotReady(): JsonResponse
+    {
+        return self::response(
+            self::TYPE_DATA_EXPORT_NOT_READY,
+            'La exportacion todavia no ha terminado',
+            JsonResponse::HTTP_CONFLICT,
+            'Sigue en curso. Vuelve a consultarla dentro de unos segundos.',
         );
     }
 

@@ -220,4 +220,156 @@ return [
      */
     'support_use_audit_window_seconds' => (int) env('PRODUCT_SUPPORT_USE_AUDIT_WINDOW_SECONDS', 900),
 
+    /*
+     * EXPORTACION INTEGRA DE LOS DATOS DEL CLIENTE (RF-PD-14, RL-20, tarea 5.10).
+     *
+     * Los tres caben aqui y no en `installation_settings` por el criterio de la
+     * cabecera de este fichero: **no se editan desde el panel**. Son parametros
+     * del servidor —donde vive el fichero, cuanto dura y cuantas veces por minuto
+     * se puede pulsar el boton—, y quien los cambia es quien administra la
+     * maquina, no quien usa el producto.
+     */
+
+    /*
+     * Directorio donde se escribe el ZIP de la exportacion integra.
+     *
+     * Dentro de `storage/app` por lo mismo que el paquete de diagnostico: es el
+     * unico sitio escribible por la aplicacion que existe con seguridad en toda
+     * instalacion. El escritor crea el directorio con `0700` y el fichero con
+     * `0600`.
+     *
+     * **NO SE PONE DENTRO DE `BACKUP_PATH`**, y aqui el motivo es aun mas fuerte
+     * que en el diagnostico: una exportacion integra es una copia completa de la
+     * plantilla y de cuatro años de fichajes que **caduca a los siete dias a
+     * proposito**. Metida en el directorio de copias, la retencion de copias la
+     * conservaria durante meses — justo lo contrario de lo que se quiere—, y
+     * ademas se cifraria con la clave de copias, cuando el punto entero de esta
+     * exportacion es que el cliente pueda abrirla sin depender de nada.
+     *
+     * Si el cliente quiere quedarse el fichero mas tiempo, lo saca del servidor
+     * con `docker compose cp`, que es exactamente lo que se espera que haga.
+     */
+    'data_export_path' => env('PRODUCT_DATA_EXPORT_PATH', storage_path('app/exports')),
+
+    /*
+     * Dias que vive el ZIP antes de que la purga horaria lo borre.
+     *
+     * 7 NO ES UNA MEDICION: es el plazo en el que alguien que pide una
+     * exportacion se la lleva. Quien la pide un viernes por la tarde la tiene el
+     * lunes; quien no se la lleva en una semana es que ya no la necesitaba.
+     *
+     * **El plazo existe porque el fichero es lo mas peligroso que hay en el
+     * disco de la instalacion**: la plantilla entera, sus fichajes, las cuentas
+     * de gestion. Sin caducidad, cada exportacion pedida se quedaria ahi para
+     * siempre y bastaria un acceso al servidor para llevarse todas las copias de
+     * golpe. Un cliente con una politica mas dura lo baja a 1 sin tocar el
+     * repositorio (regla dura 13).
+     *
+     * **La fila NUNCA se borra** (regla dura 5): purgar borra el fichero y marca
+     * la fila como `purged`, que sigue apareciendo en la lista con sus fechas y
+     * sus recuentos.
+     */
+    'data_export_retention_days' => (int) env('PRODUCT_DATA_EXPORT_RETENTION_DAYS', 7),
+
+    /*
+     * Segundos tras los cuales una exportacion sin terminar se declara ATASCADA
+     * y pasa a `failed` con motivo `stale`.
+     *
+     * **Existe porque una fila atascada bloquea RL-20 entero.** Solo puede haber
+     * una exportacion `pending|running` a la vez —lo impone un indice unico—, asi
+     * que si el trabajador de cola muere, o alguien para los contenedores a mitad
+     * (el paso 1 de cualquier actualizacion), la instalacion se queda sin poder
+     * exportar: `409` eterno en el panel y salida `2` en la consola. Sin este
+     * umbral, salir de ahi exigiria entrar por `psql`.
+     *
+     * 3600 NO ES UNA MEDICION: es exactamente el `timeout` del trabajo de cola
+     * (`GenerateDataExportJob::TIMEOUT_SECONDS`), y las dos cifras estan atadas
+     * por una prueba. El umbral **no puede ser menor** que el tiempo que la
+     * generacion puede tardar legitimamente, o una exportacion grande se
+     * declararia muerta mientras sigue escribiendo, y la siguiente peticion
+     * empezaria una segunda copia completa sobre la misma base de datos.
+     *
+     * Se barre en dos sitios: al pedir una nueva —para que quien pulsa el boton
+     * no espere a la hora en punto— y en la purga horaria.
+     */
+    'data_export_stale_after_seconds' => (int) env('PRODUCT_DATA_EXPORT_STALE_AFTER', 3600),
+
+    /*
+     * Peticiones por minuto a `/api/v1/data-export` **por cuenta**.
+     *
+     * 30 y no 3 como el diagnostico, y la diferencia no es un descuido: el
+     * limitador cubre las TRES rutas, y **el panel sondea la lista cada cinco
+     * segundos mientras dura la generacion** (doce peticiones por minuto). Con el
+     * techo del diagnostico, la pantalla se bloquearia sola a los quince
+     * segundos de pulsar el boton.
+     *
+     * El cubo **por IP** es cuatro veces este ({@see self::…} no aplica: lo
+     * compone `ProductServiceProvider`), y ese factor existe por un caso real:
+     * en un hotel, recepcion, direccion y el despacho de RRHH salen por la misma
+     * IP publica. Con el mismo techo para los dos ejes, tres administradores
+     * mirando la pantalla a la vez agotarian el cubo compartido y se cortarian
+     * entre si — un `429` que el cliente leeria como «el producto esta roto».
+     *
+     * Lo que de verdad protege a la base de datos no es ninguno de los dos
+     * numeros: es el indice unico parcial que impide dos exportaciones en curso a
+     * la vez. Estos limites estan para que un cliente HTTP mal escrito no
+     * convierta el sondeo en un bucle cerrado.
+     */
+    'data_export_rate_limit_per_minute' => (int) env('PRODUCT_DATA_EXPORT_RATE_LIMIT', 30),
+
+    /*
+     * TELEMETRIA OPCIONAL (RF-PD-12, ADR-020, ADR-023, tarea 5.10)
+     * ------------------------------------------------------------------
+     *
+     * VIENE APAGADA Y NO HAY NINGUN CAMINO POR EL QUE SE ENCIENDA SOLA. Hacen
+     * falta TRES cosas a la vez: esta variable en `true`, un destino en
+     * `telemetry_endpoint` y `telemetry` entre las funcionalidades de la
+     * licencia. Sin las tres, `product:telemetry --send` no construye ni envia
+     * nada -ni siquiera lee un contador- y lo dice.
+     *
+     * Tres y no una porque cada una responde a una pregunta distinta: la
+     * primera es la voluntad del cliente, la segunda es su configuracion y la
+     * tercera es lo contratado. Un producto que enviara con solo la tercera
+     * estaria decidiendo por el cliente.
+     */
+    'telemetry_enabled' => (bool) env('TELEMETRY_ENABLED', false),
+
+    /*
+     * A donde se envia. Vacio de serie: el producto no trae ningun destino
+     * escrito, ni siquiera uno del fabricante.
+     *
+     * Es deliberado y es la mitad de la garantia. Con un destino de serie,
+     * activar la variable enviaria a un sitio que el cliente no eligio; con el
+     * vacio, activar la variable no hace nada hasta que alguien escribe a donde.
+     * `docs/cliente/configuracion.md` seccion «3 quinquies. Telemetria» lleva la
+     * tabla campo a campo de lo que sale.
+     *
+     * **Tiene que ser `https`**, y un destino que no lo sea se trata como si no
+     * hubiera ninguno: el documento no lleva datos personales, pero si el tramo
+     * de plantilla, el estado de licencia y el veredicto de cada comprobacion de
+     * `doctor`, y en claro eso es un mapa util para quien mire la red. De quien
+     * este al otro lado responde el cliente (riesgo aceptado, doc 07 §6).
+     */
+    'telemetry_endpoint' => (string) env('TELEMETRY_ENDPOINT', ''),
+
+    /*
+     * Donde vive `installation_id` y el historial de los envios.
+     *
+     * Un fichero y no una tabla: borrarlo tiene que ser un `rm`, porque estrenar
+     * identidad ante el fabricante es algo que el cliente debe poder hacer solo
+     * (ADR-020). Directorio `0700`, fichero `0600`.
+     */
+    'telemetry_state_path' => (string) env('TELEMETRY_STATE_PATH', storage_path('app/telemetry/state.json')),
+
+    /*
+     * Segundos entre el intento y su UNICO reintento.
+     *
+     * Cubre el fallo que de verdad se da: la ventana en la que el enlace del
+     * hotel se esta renegociando. Insistir mas convertiria una tarea de fondo en
+     * algo que ocupa un proceso, y el dato de esta semana no vale tanto. `0`
+     * reintenta en el acto y es lo que usan las pruebas: una suite que duerme
+     * cinco segundos por caso es una suite que nadie ejecuta.
+     */
+    'telemetry_retry_delay_seconds' => (int) env('TELEMETRY_RETRY_DELAY_SECONDS', 5),
+
 ];

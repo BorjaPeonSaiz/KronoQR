@@ -26,6 +26,8 @@ Todo esto corre solo en el contenedor `scheduler`. Lo que aparece en la columna
 | 04:30 UTC, a diario | Revisión del registro: turnos abiertos, descansos, jornadas anómalas | Resolver las incidencias en el panel |
 | Lunes 05:10 UTC | **Propuesta de retención**: informe de lo que se purgaría | Leerlo cuando haya algo vencido |
 | Cada hora | Métricas de credenciales y limpieza de temporales | Nada |
+| Cada hora | Se purgan las exportaciones íntegras caducadas: se borra el ZIP, la anotación queda (§13) | Nada |
+| Lunes 05:40 UTC | **Telemetría**, solo si la has activado (§13.4): se envía el informe semanal al destino que fijaste | Nada |
 | Trimestral | — | **Simulacro de restauración** de la copia |
 
 ---
@@ -558,3 +560,115 @@ administra el servidor.
 | `PRODUCT_SUPPORT_GRANT_DEFAULT_HOURS` | `24` | Duración de una concesión si no se indica |
 | `PRODUCT_SUPPORT_GRANT_MAX_HOURS` | `72` | Duración máxima admitida; más, se rechaza |
 | `PRODUCT_SUPPORT_USE_AUDIT_WINDOW_SECONDS` | `900` | Cada cuánto, como máximo, se anota un nuevo `support_grant.used` por concesión, para que una sesión de soporte no llene tu auditoría |
+
+
+---
+
+## 13. Llevarte todos tus datos: la exportación íntegra
+
+### 13.1 Qué es
+
+Un único fichero ZIP, `kronoqr-export-<versión>-<fecha UTC>.zip`, con **todo**
+lo que hay en tu instalación en formatos abiertos: un CSV por tabla (plantilla,
+contratos, tarjetas, quioscos, tramos con todas sus versiones, correcciones con
+autor y motivo, totales, incidencias, escaneos, auditoría completa con su
+cadena de hash, cuentas de gestión, accesos de soporte), JSON para la
+configuración, el perfil de cumplimiento y la licencia, un `manifest.json` con
+el número de filas y la huella `sha256` de cada fichero, y un `README.md` que
+explica cada fichero y cada columna en el idioma de la instalación. Las fechas
+y horas van en **UTC**; el `README` indica la zona horaria del centro y cómo
+convertirlas.
+
+**Ningún secreto sale**: ni contraseñas, ni PIN, ni hashes, ni la clave de
+licencia. Ningún número interno: las referencias entre ficheros van por `uuid`.
+
+Es tu garantía de continuidad (RL-20): **funciona con la licencia caducada,
+ausente o ilegible**, la genera solo el administrador de la instalación, y
+**soporte del fabricante no puede generarla nunca**, con ningún alcance. Lo que
+implica tener ese fichero en la mano está en
+[`obligaciones-legales.md`](obligaciones-legales.md) §7 quater.
+
+### 13.2 Cómo se genera
+
+**Desde el panel:** Licencia → «Tus datos son tuyos» → «Generar exportación
+completa». Confirmas el aviso, la exportación se encola y la pantalla la va
+siguiendo (`pendiente` → `en curso` → `completada`); cuando termina aparece
+«Descargar». Solo puede haber **una en curso** a la vez: si alguien ya la ha
+pedido, el panel te enseña esa en lugar de empezar otra.
+
+**Desde la consola**, en el acto y en primer plano:
+
+```
+docker compose --env-file .env -f compose.prod.yaml exec app php artisan product:export-all
+```
+
+Deja el fichero en `storage/app/exports/` dentro del contenedor, imprime la ruta,
+el tamaño, la huella y el número de filas de cada fichero, y registra la
+exportación igual que si la hubieras pedido desde el panel (aparece en la misma
+lista y se puede descargar desde allí). Para sacarlo del contenedor:
+
+```
+docker compose --env-file .env -f compose.prod.yaml cp app:/var/www/html/storage/app/exports/<fichero> .
+```
+
+**Cuándo conviene la consola.** El panel descarga el ZIP entero en la memoria
+del navegador antes de guardarlo. Por encima de ~1 GB —varios años de una
+plantilla grande— genera desde la consola y saca el fichero con `cp`. La
+cabecera `X-Kronoqr-Export-Sha256` de la descarga y la huella que imprime el
+comando son la misma: sirven para comprobar que el fichero llegó entero.
+
+### 13.3 Cuánto dura y qué queda anotado
+
+El ZIP **caduca** a los `PRODUCT_DATA_EXPORT_RETENTION_DAYS` días (7 de serie):
+cada hora se borran los caducados y la exportación pasa a `caducada` en la
+lista; la anotación de que existió, con sus recuentos y su huella, no se borra
+nunca. Si necesitas el fichero más tarde, genera otro.
+
+En tu auditoría quedan `data_export.requested` (quién la pidió y por dónde),
+`data_export.generated` (recuentos, huella y tamaño) y **`data_export.downloaded`
+por cada descarga**: ante una brecha puedes responder quién se llevó qué y
+cuándo.
+
+
+**Si se queda en «Generando».** Una exportación que se interrumpe a mitad
+—porque paraste los contenedores para actualizar, o porque el trabajador de
+cola se reinició— no bloquea nada: pasado el tiempo máximo de generación (una
+hora) el sistema la da por **fallida** con el motivo `stale` en cuanto alguien
+pide otra o en la purga de la hora siguiente, y puedes generar de nuevo. No
+hace falta tocar la base de datos; si de verdad ves una en curso más de una
+hora sin que pase a fallida, ejecuta `php artisan product:export-all --purge`
+y vuelve a pedirla.
+
+**Si aparece como «fallida».** El motivo que enseña el panel es un código, no
+un texto libre, para no sacar nunca un dato de una fila a la pantalla ni al
+log: `write_failed` (no se pudo escribir en `PRODUCT_DATA_EXPORT_PATH`: revisa
+espacio y permisos del directorio), `database_error` (la base de datos falló a
+mitad: mira `product:doctor`), `stale` (interrumpida, ver arriba) o
+`unexpected` (cualquier otro: el detalle técnico está en el log de la
+aplicación con el `uuid` de la exportación). Corrige la causa y genera otra.
+
+### 13.4 La telemetría, si la activas
+
+Viene **desactivada** y el sistema funciona exactamente igual sin ella. Solo
+se envía si se cumplen **tres** condiciones a la vez: `TELEMETRY_ENABLED=true`,
+un destino `https://` en `TELEMETRY_ENDPOINT` y una licencia que incluya la
+funcionalidad `telemetry` (`php artisan license:show` lo enseña). Si falta
+cualquiera de las tres, `product:telemetry` lo dice y no se envía nada. Cuando
+se cumplen, los lunes a las 05:40 UTC se envía un informe con
+versiones, estado de la licencia, tamaño de la instalación por tramos y
+contadores agregados; **nunca** datos de personas ni de jornada. La lista
+exacta de campos, y el comando que te enseña el documento que se enviaría
+antes de activar nada, están en [`configuracion.md`](configuracion.md)
+§3 quinquies. Si el destino no responde, no verás ningún aviso: se anota en
+el log técnico y se vuelve a intentar la semana siguiente.
+
+### 13.5 Los parámetros
+
+| Variable | De serie | Qué gobierna |
+| --- | --- | --- |
+| `PRODUCT_DATA_EXPORT_PATH` | `storage/app/exports` (en el contenedor) | Dónde se escriben los ZIP. Fuera de `BACKUP_PATH` a propósito: es material que caduca |
+| `PRODUCT_DATA_EXPORT_RETENTION_DAYS` | `7` | Días que el ZIP se puede descargar antes de purgarse. La anotación se conserva |
+| `PRODUCT_DATA_EXPORT_RATE_LIMIT` | `30` | Peticiones por minuto **por cuenta** a la lista y a la descarga; el cubo por dirección IP es cuatro veces mayor (120), para que varios administradores tras la misma salida a internet no se bloqueen entre sí. El panel sondea cada 5 s mientras hay una en curso |
+| `PRODUCT_DATA_EXPORT_STALE_AFTER` | `3600` | Segundos tras los que una exportación que se quedó a medias (contenedor parado, cola reiniciada) se da por fallida con motivo `stale`, liberando la siguiente. No lo bajes por debajo de lo que tarda tu exportación más grande |
+| `TELEMETRY_ENABLED` | `false` | Si se envía telemetría. Hace falta además `TELEMETRY_ENDPOINT` y que la licencia la incluya |
+| `TELEMETRY_ENDPOINT` | vacío | A dónde se envía. Vacío de serie: lo fijas tú |
