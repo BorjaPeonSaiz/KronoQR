@@ -2860,13 +2860,14 @@ export interface paths {
          *     | --- | --- | --- |
          *     | `diagnostics` | Generar el paquete de diagnostico **anonimizado** y consultar el historico de errores | `admin` solo ante las policies de diagnostico |
          *     | `read_only` | Lo anterior y **leer** jornadas, tramos, plantilla y auditoria | `admin`, con ambitos de solo lectura (`attendance:read`, `employees:read`, `audit:read`): lo que impide escribir es el ambito, no el rol. No actua como `auditor` porque ese rol, a proposito, no lee el diario de jornadas (lo suyo es la exportacion legal, que ningun alcance concede) |
-         *     | `configuration` | Lo de `diagnostics` y **cambiar** la configuracion de la instalacion, el perfil de cumplimiento y los quioscos | `admin` |
+         *     | `configuration` | Lo de `diagnostics` y **cambiar** la configuracion operativa de la instalacion y los quioscos (emparejar y desvincular) | `admin`. **No** el perfil de cumplimiento: los umbrales legales y los años de conservacion los fija el cliente con su asesoria (RL-01, RL-02, regla dura 14), y `ComplianceProfilePolicy` cierra el `PATCH` a todo actor de soporte aunque el ambito lo alcance |
          *
          *     **Lo que ningun alcance concede nunca**: activar licencias, conceder o
          *     revocar accesos de soporte, emitir o revocar credenciales, corregir
          *     fichajes, gestionar la plantilla, generar informes de nomina o la
-         *     exportacion para la Inspeccion, ni **incluir datos personales en un
-         *     paquete de diagnostico** (RL-19). Cada una de esas puertas tiene su
+         *     exportacion para la Inspeccion, modificar el perfil de cumplimiento,
+         *     completar el asistente de puesta en marcha, ni **incluir datos
+         *     personales en un paquete de diagnostico** (RL-19). Cada una de esas puertas tiene su
          *     prueba de que el token de soporte recibe `403`.
          *
          *     **`reason` es obligatorio** y va al asiento de auditoria: la concesion
@@ -7283,8 +7284,12 @@ export interface components {
             };
             /**
              * @description El informe de la ultima actualizacion (`BACKUP_PATH/reports/update-*.log`)
-             *     y la lista de informes existentes. **Nunca el `.detalle.log`**, que
-             *     puede llevar datos personales y es `0600` de root (doc 07 §6).
+             *     y la lista de informes existentes. Del informe entran solo las
+             *     **lineas del formato que escribe `update.sh`** (cabeceras, versiones,
+             *     puntos de control, comprobaciones y codigos); cualquier otra linea
+             *     se sustituye por un recuento `omitted_lines`. **Nunca el
+             *     `.detalle.log`**, que puede llevar datos personales y es `0600` de
+             *     root (doc 07 §6).
              */
             updates: {
                 [key: string]: unknown;
@@ -7300,9 +7305,10 @@ export interface components {
             };
             /**
              * @description **Solo con `include_personal_data: true`.** Plantilla (`uuid`,
-             *     `employee_code`, `full_name`, `status`, `department_id`), tramos y
-             *     fichajes de los ultimos `period_days` referidos por `employee_uuid`
-             *     y sin `client_meta`, e incidencias abiertas.
+             *     `employee_code`, `full_name`, `status`, `department_id`) **solo de
+             *     quienes tienen actividad en el periodo o una incidencia abierta**,
+             *     tramos y fichajes de los ultimos `period_days` referidos por
+             *     `employee_uuid` y sin `client_meta`, e incidencias abiertas.
              */
             personal_data?: {
                 [key: string]: unknown;

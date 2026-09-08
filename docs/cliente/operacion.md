@@ -436,9 +436,11 @@ sistema.
 | `1` | **Solo avisos.** Nada está roto; conviene leerlos cuando puedas. El estado de la licencia nunca pasa de aquí |
 | `2` | **Al menos un fallo** que hay que corregir. La instalación sigue en pie y se sigue fichando |
 
-`install.sh` y `update.sh` lo ejecutan al final. Solo el `2` los detiene
-(el instalador sale con `6`; el actualizador deshace la actualización); el `1`
-se muestra y no bloquea.
+`install.sh` lo ejecuta al final y solo el `2` lo detiene (sale con `6`, con
+la instalación en pie); el `1` se muestra y no bloquea. `update.sh` también lo
+ejecuta, pero **solo informa**: su resultado va al informe de la actualización
+y a pantalla, y un fallo ambiental —disco, certificado caducado— no deshace
+una actualización que ya ha verificado por otros medios.
 
 Si la aplicación **no arranca** y no puedes ejecutar `artisan`, está
 `./doctor.sh` (§8): hace desde fuera lo que puede —Docker, estado de cada
@@ -462,6 +464,8 @@ de tu contrato. **Soporte no entra en tu servidor** (ADR-020).
   dice la ruta, el tamaño y la huella. Cópialo fuera con
   `docker compose cp app:/var/www/html/storage/app/diagnostics/<fichero> .`
   y **bórralo del servidor cuando lo hayas enviado**: es material desechable.
+  Por si se olvida, el propio comando borra al arrancar los paquetes de más
+  de `PRODUCT_DIAGNOSTICS_RETENTION_DAYS` días (7 de serie) y lo dice.
 
 Es **un único fichero JSON legible**, `kronoqr-diagnostics-<versión>-<fecha>.json`,
 sin cifrar a propósito: **ábrelo antes de enviarlo** y comprueba que no lleva
@@ -475,8 +479,9 @@ copias, de Reverb, ni credenciales de base de datos o de correo), estado de
 los servicios y de las colas, el informe de `doctor`, el estado de la licencia
 **sin tu razón social**, la salud de cada tablet **sin su nombre**, el
 histórico de errores agrupado (a partir de la versión que lo incorpore),
-contadores agregados, el informe de la última actualización (nunca su
-`.detalle.log`) y **solo recuentos** del registro de auditoría.
+contadores agregados, el informe de la última actualización (solo las líneas
+del formato del informe, y nunca su `.detalle.log`) y **solo recuentos** del
+registro de auditoría.
 
 **Qué no lleva, por defecto:** nombres, correos, documentos, fichajes ni
 jornadas de nadie. Los empleados aparecen solo como identificador. Una prueba
@@ -494,8 +499,9 @@ y auditada**, nunca el valor por defecto:
 - Consola: `php artisan product:diagnostics --with-personal-data --period-days=7`
   (máximo 31 días).
 
-Añade la plantilla (código, nombre, estado, departamento), los fichajes y tramos
-del periodo, y las incidencias abiertas. El paquete queda marcado como **no
+Añade la plantilla —**solo las personas con actividad en el periodo o con una
+incidencia abierta**, nunca la plantilla entera— con código, nombre, estado y
+departamento, los fichajes y tramos del periodo, y las incidencias abiertas. El paquete queda marcado como **no
 anonimizado** y en tu auditoría aparece `diagnostics.personal_data_included`.
 Al enviarlo comunicas datos personales a un tercero: mira
 [`obligaciones-legales.md`](obligaciones-legales.md) §8 antes, y ten firmado
@@ -522,7 +528,7 @@ con motivo, alcance y duración, y lo puedes revocar en cualquier momento.
 | --- | --- | --- |
 | `diagnostics` (por defecto) | Generar el paquete **anonimizado** y consultar errores | Ver a nadie |
 | `read_only` | Además, **leer** jornadas, plantilla y auditoría | Cambiar nada |
-| `configuration` | Además, **cambiar** ajustes, perfil de cumplimiento y quioscos | Ver jornadas ni plantilla |
+| `configuration` | Además, **cambiar** los ajustes operativos y emparejar o desvincular quioscos | Ver jornadas ni plantilla, ni tocar el perfil de cumplimiento (umbrales legales y años de conservación son tuyos) |
 
 Con ningún alcance puede activar licencias, conceder o revocar accesos,
 emitir o revocar tarjetas, corregir fichajes, generar informes de nómina o la
@@ -548,6 +554,7 @@ administra el servidor.
 | `PRODUCT_DIAGNOSTICS_MAX_BYTES` | `8388608` (8 MiB) | Tamaño máximo del paquete. Por encima se recortan secciones, empezando por los datos personales, y el recorte queda anotado |
 | `PRODUCT_DIAGNOSTICS_RATE_LIMIT` | `3` | Paquetes por minuto y por cuenta desde el panel. Generar recorre la instalación entera |
 | `PRODUCT_DIAGNOSTICS_PERSONAL_DATA_MAX_PERIOD_DAYS` | `31` | Máximo de días de fichajes que caben con «Incluir datos personales». Subirlo amplía lo que sale de tu servidor en un fichero |
+| `PRODUCT_DIAGNOSTICS_RETENTION_DAYS` | `7` | Días que un paquete generado por consola permanece en `storage/app/diagnostics` antes de que el siguiente `product:diagnostics` lo borre |
 | `PRODUCT_SUPPORT_GRANT_DEFAULT_HOURS` | `24` | Duración de una concesión si no se indica |
 | `PRODUCT_SUPPORT_GRANT_MAX_HOURS` | `72` | Duración máxima admitida; más, se rechaza |
 | `PRODUCT_SUPPORT_USE_AUDIT_WINDOW_SECONDS` | `900` | Cada cuánto, como máximo, se anota un nuevo `support_grant.used` por concesión, para que una sesión de soporte no llene tu auditoría |

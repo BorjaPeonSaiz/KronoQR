@@ -165,7 +165,8 @@ bastan, y se pide con:
 - **Alcance mínimo** (RF-PD-11): `diagnostics` casi siempre (generar paquetes
   y leer errores); `read_only` si hay que ver jornadas o auditoría;
   `configuration` solo si el cliente prefiere que soporte haga el cambio en
-  lugar de hacerlo él.
+  lugar de hacerlo él (ajustes operativos y quioscos; nunca el perfil de
+  cumplimiento, la licencia ni el asistente).
 - **Duración**: la de la intervención, no «por si acaso». 24 h de serie,
   72 h como máximo.
 

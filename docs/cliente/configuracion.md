@@ -619,6 +619,7 @@ antes de concederlo y el límite dejaría de serlo.
 | `PRODUCT_DIAGNOSTICS_MAX_BYTES` | `8388608` | Tamaño máximo del paquete de diagnóstico (8 MiB). Es un límite de canal —correo, portal de tickets—, no de memoria |
 | `PRODUCT_DIAGNOSTICS_RATE_LIMIT` | `3` | Paquetes por minuto y por cuenta desde el panel |
 | `PRODUCT_DIAGNOSTICS_PERSONAL_DATA_MAX_PERIOD_DAYS` | `31` | Máximo de días de fichajes que caben en un paquete **con datos personales**. Subirlo es una decisión legal, no de rendimiento |
+| `PRODUCT_DIAGNOSTICS_RETENTION_DAYS` | `7` | Días que un paquete generado por consola se conserva en el servidor antes de que el siguiente `product:diagnostics` lo borre |
 | `PRODUCT_SUPPORT_GRANT_DEFAULT_HOURS` | `24` | Duración de un acceso de soporte si no se indica |
 | `PRODUCT_SUPPORT_GRANT_MAX_HOURS` | `72` | Duración máxima admitida |
 | `PRODUCT_SUPPORT_USE_AUDIT_WINDOW_SECONDS` | `900` | Cada cuánto, como máximo, se anota un nuevo uso de un acceso de soporte en la auditoría |

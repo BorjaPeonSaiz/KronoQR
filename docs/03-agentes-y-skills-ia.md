@@ -647,10 +647,11 @@ Los innegociables:
   ámbitos Y por rol, caducidad efectiva y revocación en el acto; cada uso
   efectivo deja support_grant.used con ventana; el token sale UNA vez
 - Ningún alcance activa licencias, concede accesos, toca credenciales,
-  corrige fichajes ni incluye datos personales
+  corrige fichajes, modifica el perfil de cumplimiento, completa el
+  asistente ni incluye datos personales
 - doctor: 0 / 1 (solo avisos) / 2 (fallos); solo el 2 detiene al
-  instalador (6) y al actualizador (vuelta atrás); la licencia nunca pasa
-  de aviso; todo funciona con licencia caducada
+  instalador (6); en el actualizador es informativo y va al informe; la
+  licencia nunca pasa de aviso; todo funciona con licencia caducada
 - Un único JSON legible sin cifrar con manifest.sha256, para que el cliente
   lo inspeccione antes de enviarlo
 
