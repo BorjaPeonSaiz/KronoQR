@@ -9,6 +9,7 @@ use App\Modules\Product\Domain\ValueObject\LicenseOverview;
 use App\Modules\Product\Domain\ValueObject\PlanUsage;
 use App\Modules\Product\Domain\ValueObject\StoredLicense;
 use App\Modules\Shared\Domain\ValueObject\Feature;
+use App\Modules\Shared\Domain\ValueObject\UtcInstant;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -121,6 +122,6 @@ final class LicenseResource extends JsonResource
 
     private static function instant(?\DateTimeImmutable $instant): ?string
     {
-        return $instant?->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d\TH:i:s.u\Z');
+        return UtcInstant::format($instant);
     }
 }

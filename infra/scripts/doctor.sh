@@ -65,13 +65,21 @@ readonly SCRIPT_DIR
 . "${SCRIPT_DIR}/lib/fs.sh"
 
 #------------------------------------------------------------------------------
-# Umbrales. El de disco es EL MISMO que el del instalador (lib/checks.sh no lo
-# trae: solo install.sh lo declaraba hasta ahora). Duplicarlo aqui, en vez de
-# inventar uno propio, es lo que evita que "espacio suficiente para instalar"
-# y "espacio suficiente para seguir funcionando" acaben siendo dos numeros
-# distintos sin que nadie lo decidiera.
+# Umbrales.
 #------------------------------------------------------------------------------
-readonly KQ_MIN_DISK_GIB=40
+# El disco NO usa los 40 GiB absolutos de install.sh a proposito (revision de
+# codigo, segunda vuelta): esos 40 GiB son un REQUISITO DE ENTRADA —hay
+# espacio de sobra para EMPEZAR una instalacion nueva—, no un criterio de
+# diagnostico continuo. Una instalacion con anos de fichajes y de copias
+# puede estar perfectamente sana con menos de 40 GiB libres, y una maquina
+# enorme puede estar a un dia de llenarse aunque el numero absoluto siga
+# pareciendo grande. El criterio de aqui es el MISMO que el de la sonda
+# `DiskProbe` de `product:doctor` (decision 7 del brief de la tarea 5.9, doc
+# 02 §11.6.1): proporcion de espacio libre, con un suelo absoluto para que un
+# disco minusculo no pase por "10% libre" cuando ese 10% son unos pocos MiB.
+readonly KQ_DISK_WARN_PCT=10
+readonly KQ_DISK_FAIL_PCT=5
+readonly KQ_DISK_FAIL_FLOOR_BYTES=1073741824
 
 # Dias de margen antes de la caducidad de un certificado a partir de los
 # cuales este script empieza a avisar. Mismo umbral que la comprobacion
@@ -348,27 +356,44 @@ check_env_permissions() {
   fi
 }
 
-# Mismo umbral que el instalador (KQ_MIN_DISK_GIB de arriba): el disco de la
-# instalacion y el destino de copias, que casi nunca son el mismo sistema de
-# ficheros.
+# Proporcion de espacio libre, no GiB absolutos (ver el comentario de los
+# umbrales, arriba): el disco de la instalacion y el destino de copias, que
+# casi nunca son el mismo sistema de ficheros.
 check_disk_space() {
-  local gib backup_path
+  check_disk_threshold "${CURRENT_DIR}"
 
-  gib="$(kq_free_gib "${CURRENT_DIR}")"
-  if [ -n "${gib}" ] && [ "${gib}" -ge "${KQ_MIN_DISK_GIB}" ] 2>/dev/null; then
-    check_pass "$(kq_format c_disk "${CURRENT_DIR}" "${gib}" "${KQ_MIN_DISK_GIB}")"
-  else
-    check_fail "$(kq_format c_disk "${CURRENT_DIR}" "${gib:-0}" "${KQ_MIN_DISK_GIB}")" "$(kq_format f_disk "${CURRENT_DIR}")"
-  fi
-
+  local backup_path
   backup_path="$(env_value "${CURRENT_ENV}" "BACKUP_PATH")"
   [ -n "${backup_path}" ] || backup_path="/var/backups/fichaje"
 
-  gib="$(kq_free_gib "${backup_path}")"
-  if [ -n "${gib}" ] && [ "${gib}" -ge "${KQ_MIN_DISK_GIB}" ] 2>/dev/null; then
-    check_pass "$(kq_format c_disk "${backup_path}" "${gib}" "${KQ_MIN_DISK_GIB}")"
+  check_disk_threshold "${backup_path}"
+}
+
+# Mismo criterio que `DiskProbe` de `product:doctor`: aviso por debajo de
+# KQ_DISK_WARN_PCT libre, fallo por debajo de KQ_DISK_FAIL_PCT O por debajo
+# del suelo absoluto KQ_DISK_FAIL_FLOOR_BYTES (1 GiB) — lo que salte antes.
+# El suelo existe para que un disco diminuto no pase por "con margen" solo
+# porque el porcentaje todavia no ha bajado del umbral.
+check_disk_threshold() {
+  local path="$1" free_bytes total_bytes pct gib
+
+  free_bytes="$(kq_free_bytes "${path}")"
+  total_bytes="$(kq_total_bytes "${path}")"
+
+  if [ -z "${free_bytes}" ] || [ -z "${total_bytes}" ] || [ "${total_bytes}" -le 0 ] 2>/dev/null; then
+    check_warn "$(kq_format d_c_disk_unknown "${path}")" "$(kq_format d_w_disk_unknown "${path}" "${path}")"
+    return 0
+  fi
+
+  pct=$((free_bytes * 100 / total_bytes))
+  gib="$(kq_free_gib "${path}")"
+
+  if [ "${pct}" -lt "${KQ_DISK_FAIL_PCT}" ] || [ "${free_bytes}" -lt "${KQ_DISK_FAIL_FLOOR_BYTES}" ]; then
+    check_fail "$(kq_format d_c_disk "${path}" "${pct}" "${gib:-0}")" "$(kq_format d_f_disk_critical "${path}")"
+  elif [ "${pct}" -lt "${KQ_DISK_WARN_PCT}" ]; then
+    check_warn "$(kq_format d_c_disk "${path}" "${pct}" "${gib:-0}")" "$(kq_format d_f_disk_low "${path}")"
   else
-    check_fail "$(kq_format c_disk "${backup_path}" "${gib:-0}" "${KQ_MIN_DISK_GIB}")" "$(kq_format f_disk "${backup_path}")"
+    check_pass "$(kq_format d_c_disk "${path}" "${pct}" "${gib:-0}")"
   fi
 }
 

@@ -79,6 +79,12 @@ KQ_MSG_ES[d_f_app_down]="arrancalo con: docker compose -f %s up -d. Si no llega 
 KQ_MSG_ES[d_c_service_state]="Servicio %s: %s"
 KQ_MSG_ES[d_f_service_down]="arrancalo con: docker compose -f %s up -d %s. Si no arranca, revisa su registro: docker compose -f %s logs %s."
 
+KQ_MSG_ES[d_c_disk]="Espacio libre en %s: %s%% (%s GiB)"
+KQ_MSG_ES[d_c_disk_unknown]="Espacio libre en %s"
+KQ_MSG_ES[d_w_disk_unknown]="no se ha podido determinar el espacio total ni libre en %s. Compruebalo a mano con 'df -h %s'."
+KQ_MSG_ES[d_f_disk_low]="el disco de %s tiene menos del diez por ciento libre. Amplialo o libera espacio: si se llena, las copias y el registro horario dejan de escribir."
+KQ_MSG_ES[d_f_disk_critical]="el disco de %s tiene menos del cinco por ciento libre, o menos de 1 GiB: al borde de quedarse sin espacio. Amplialo o libera espacio YA: si se llena, las copias y el registro horario dejan de escribir."
+
 KQ_MSG_ES[d_c_env_present]=".env presente en %s"
 KQ_MSG_ES[d_c_env_mode]="%s con permisos 0600"
 KQ_MSG_ES[d_f_env_mode]="%s tiene permisos %s. Contiene secretos: corrigelo con 'chmod 0600 %s'."
@@ -154,6 +160,12 @@ KQ_MSG_EN[d_f_app_down]="start it with: docker compose -f %s up -d. If it does n
 
 KQ_MSG_EN[d_c_service_state]="Service %s: %s"
 KQ_MSG_EN[d_f_service_down]="start it with: docker compose -f %s up -d %s. If it does not start, check its log: docker compose -f %s logs %s."
+
+KQ_MSG_EN[d_c_disk]="Free disk on %s: %s%% (%s GiB)"
+KQ_MSG_EN[d_c_disk_unknown]="Free disk on %s"
+KQ_MSG_EN[d_w_disk_unknown]="could not determine the total or free space on %s. Check it by hand with 'df -h %s'."
+KQ_MSG_EN[d_f_disk_low]="the disk holding %s has less than ten percent free. Grow it or free up space: if it fills up, backups and the time record stop being written."
+KQ_MSG_EN[d_f_disk_critical]="the disk holding %s has less than five percent free, or less than 1 GiB: on the edge of running out of space. Grow it or free up space NOW: if it fills up, backups and the time record stop being written."
 
 KQ_MSG_EN[d_c_env_present]=".env present at %s"
 KQ_MSG_EN[d_c_env_mode]="%s with mode 0600"

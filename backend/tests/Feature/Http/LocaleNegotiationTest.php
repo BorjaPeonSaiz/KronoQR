@@ -273,7 +273,7 @@ it('responde en el idioma del .env, y no con un 500, si la configuracion es ileg
             throw new RuntimeException('installation_settings ilegible');
         }
 
-        public function save(array $values, int $actorUserId): void
+        public function save(array $values, ?int $actorUserId): void
         {
             throw new RuntimeException('installation_settings ilegible');
         }
@@ -306,7 +306,7 @@ it('la marca sigue respondiendo 200 con la configuracion ilegible', function ():
             throw new RuntimeException('installation_settings ilegible');
         }
 
-        public function save(array $values, int $actorUserId): void
+        public function save(array $values, ?int $actorUserId): void
         {
             throw new RuntimeException('installation_settings ilegible');
         }

@@ -95,7 +95,7 @@ final readonly class EloquentSettingsRepository implements SettingsRepository
     /**
      * @param  list<SettingValue>  $values
      */
-    public function save(array $values, int $actorUserId): void
+    public function save(array $values, ?int $actorUserId): void
     {
         if ($values === []) {
             return;

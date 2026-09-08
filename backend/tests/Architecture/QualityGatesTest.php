@@ -598,15 +598,31 @@ it('trae doctor.sh, carga la tabla comun de codigos y lo invocan install.sh y up
         expect(repoContents($script))->toContain('product:doctor');
     }
 
-    // install.sh muestra el 1 como aviso y solo el 2 bloquea con el 6 comun;
-    // update.sh, en cambio, NO usa el 6 (RF-PD-10: toda verificacion fallida
-    // deshace), asi que un fallo de product:doctor ahi tiene que acabar en
-    // rollback_and_die, no en un exit directo.
+    // install.sh muestra el 1 como aviso y solo el 2 bloquea con el 6 comun.
     $install = repoContents('infra/scripts/install.sh');
     expect($install)->toContain('KQ_EXIT_VERIFY_FAILED');
 
+    // update.sh, en cambio, trata el doctor como INFORMATIVO (revision de
+    // codigo, segunda vuelta): la version nueva ya esta verificada por las
+    // sondas, la cadena de auditoria, las restricciones RN-01/RN-02 y los
+    // privilegios de base de datos, y un fallo AMBIENTAL de product:doctor
+    // (disco, certificado, APP_DEBUG) no debe deshacer una actualizacion que
+    // en todo lo demas es correcta. Un fallo del PROPIO doctor (codigo 2, o
+    // cualquier otro fuera de 0/1) NO llama a rollback_and_die: se muestra
+    // con check_warn y se resume en el informe como "con fallos". La UNICA
+    // razon para deshacer sigue siendo que el comando no exista en la
+    // imagen (eso si es un paquete roto, no un hallazgo ambiental).
     $update = repoContents('infra/scripts/update.sh');
-    expect($update)->toContain('rollback_and_die "$(kq_text u_f_verify_doctor)"');
+
+    expect($update)->toContain('rollback_and_die "$(kq_text u_f_verify_doctor_missing_command)"')
+        ->and($update)->toContain('remember_check "doctor" "$(kq_text u_report_doctor_failed)"');
+
+    if (preg_match('/case "\$\{doctor_status\}" in(.*?)esac/s', $update, $match) !== 1) {
+        throw new RuntimeException('No se encuentra el case de doctor_status en update.sh.');
+    }
+
+    expect($match[1])->toContain('check_warn')
+        ->and($match[1])->not->toContain('rollback_and_die');
 })->group('RF-PD-13');
 
 it('sirve las tres SPA construidas y deja el portal detras del mismo candado que su API', function (): void {

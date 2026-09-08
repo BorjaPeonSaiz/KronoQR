@@ -132,6 +132,17 @@ final class IdentityServiceProvider extends ServiceProvider
      */
     private const string EMPLOYEES_TABLE = 'employees';
 
+    /**
+     * La tabla del `tokenable` de un acceso de soporte (RF-PD-11, ADR-020, tarea
+     * 5.9).
+     *
+     * Mismo criterio que la de arriba: `Identity` no puede importar el modelo de
+     * `Product`. Y mismo motivo por el que el token cuelga de esa tabla y no de
+     * `users` — el fabricante no tiene cuenta en la instalacion del cliente
+     * (regla dura 16).
+     */
+    private const string SUPPORT_GRANTS_TABLE = 'support_grants';
+
     public function register(): void
     {
         $this->app->bind(UserAccounts::class, EloquentUserAccounts::class);
@@ -765,6 +776,20 @@ final class IdentityServiceProvider extends ServiceProvider
                     return self::portalSessionIsStillValid($accessToken, $owner);
                 }
 
+                // El CUARTO tokenable, que llega con la tarea 5.9: la concesion
+                // de acceso de soporte (RF-PD-11, ADR-020, regla dura 16). No
+                // cuelga de `users` y no puede colgar — el fabricante no tiene
+                // cuenta en la instalacion, que es literalmente la alternativa
+                // que ADR-020 descarta.
+                //
+                // SE RECONOCE POR LA TABLA Y NO POR LA CLASE, igual que la
+                // sesion de portal: `Identity` no puede importar el modelo de
+                // `Product` (doc 02 §1.6, verificado por Deptrac), y la tabla es
+                // lo estable.
+                if ($owner instanceof Model && $owner->getTable() === self::SUPPORT_GRANTS_TABLE) {
+                    return self::supportGrantIsStillValid($owner);
+                }
+
                 // Falla cerrado, no abierto (revision de seguridad de la tarea
                 // 1.5). Un tokenable que este metodo no reconoce es uno cuyo
                 // estado no se ha comprobado: aceptarlo por defecto reintroduce
@@ -772,6 +797,49 @@ final class IdentityServiceProvider extends ServiceProvider
                 return false;
             }
         );
+    }
+
+    /**
+     * Si un acceso de soporte sigue valiendo (**RF-PD-11**, ADR-020, tarea 5.9).
+     *
+     * Dos condiciones, y las dos se comprueban **en cada peticion**:
+     *
+     * 1. **No esta revocada.** Tiene que valer YA y no cuando caduque el token:
+     *    revocar es la accion de seguridad de esta funcionalidad, y un acceso que
+     *    siguiera funcionando media hora despues de retirarlo no seria una
+     *    revocacion, seria un aviso. Mismo criterio que la tablet robada (RS-04).
+     * 2. **No ha caducado.** El token de Sanctum caduca solo con la concesion,
+     *    asi que esta comprobacion es redundante en el camino feliz — y esa
+     *    redundancia es el punto: si alguien emitiera un token a mano, o si la
+     *    fecha del token y la de la fila discreparan por una restauracion
+     *    parcial, **manda la fila**. La caducidad efectiva de RF-PD-11 no puede
+     *    depender de una sola de las dos.
+     *
+     * **`>` y no `>=`**, igual que el dominio: en el instante exacto de
+     * `expires_at` ya no vale. Si las dos lecturas no coincidieran habria un
+     * segundo en el que el panel diria «activa» y el token respondería `401`.
+     *
+     * **Sin fecha de caducidad legible, no vale.** Una fila asi no puede existir
+     * —la columna es `NOT NULL`— y si aparece, el estado es incoherente y la
+     * respuesta correcta es cerrar.
+     */
+    private static function supportGrantIsStillValid(Model $grant): bool
+    {
+        if ($grant->getAttribute('revoked_at') !== null) {
+            return false;
+        }
+
+        $expiresAt = $grant->getAttribute('expires_at');
+
+        if (! $expiresAt instanceof DateTimeInterface) {
+            return false;
+        }
+
+        // El reloj del sistema, no un `Clock` inyectado: esto es infraestructura
+        // de sesion, no dominio (regla dura 2). La caducidad que SI se prueba con
+        // reloj fijo es la del modelo de dominio, y una prueba de integracion
+        // comprueba que las dos dicen lo mismo.
+        return $expiresAt->getTimestamp() > time();
     }
 
     /**

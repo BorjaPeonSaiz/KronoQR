@@ -47,17 +47,22 @@ use App\Modules\Compliance\Infrastructure\Listener\OpenIncidentOnAnomalyDetected
 use App\Modules\Compliance\Infrastructure\Listener\RecordComplianceProfileChange;
 use App\Modules\Compliance\Infrastructure\Listener\RecordCredentialLifecycle;
 use App\Modules\Compliance\Infrastructure\Listener\RecordDeviceProvisioning;
+use App\Modules\Compliance\Infrastructure\Listener\RecordDiagnosticsBundleGenerated;
 use App\Modules\Compliance\Infrastructure\Listener\RecordEmployeeImport;
 use App\Modules\Compliance\Infrastructure\Listener\RecordEmployeePinLifecycle;
 use App\Modules\Compliance\Infrastructure\Listener\RecordEmploymentContractChange;
 use App\Modules\Compliance\Infrastructure\Listener\RecordInstallationSettingChange;
 use App\Modules\Compliance\Infrastructure\Listener\RecordLicenseActivation;
 use App\Modules\Compliance\Infrastructure\Listener\RecordManagementAccountLifecycle;
+use App\Modules\Compliance\Infrastructure\Listener\RecordPersonalDataIncludedInDiagnostics;
 use App\Modules\Compliance\Infrastructure\Listener\RecordPlanLimitExcess;
 use App\Modules\Compliance\Infrastructure\Listener\RecordProjectionReconciliationAudit;
 use App\Modules\Compliance\Infrastructure\Listener\RecordSetupCompletion;
 use App\Modules\Compliance\Infrastructure\Listener\RecordShiftEntryAudit;
 use App\Modules\Compliance\Infrastructure\Listener\RecordSiteConfiguration;
+use App\Modules\Compliance\Infrastructure\Listener\RecordSupportGrantGranted;
+use App\Modules\Compliance\Infrastructure\Listener\RecordSupportGrantRevoked;
+use App\Modules\Compliance\Infrastructure\Listener\RecordSupportGrantUsed;
 use App\Modules\Compliance\Infrastructure\Metrics\RedisIncidentResolutionMetrics;
 use App\Modules\Compliance\Infrastructure\Metrics\TextfileAuditMetrics;
 use App\Modules\Compliance\Infrastructure\Metrics\TextfileIncidentMetrics;
@@ -84,10 +89,15 @@ use App\Modules\Identity\Domain\Event\TwoFactorEnabled;
 use App\Modules\Identity\Domain\Event\TwoFactorReset;
 use App\Modules\Kiosk\Domain\Event\DeviceProvisioned;
 use App\Modules\Product\Domain\Event\ComplianceThresholdChanged;
+use App\Modules\Product\Domain\Event\DiagnosticsBundleGenerated;
 use App\Modules\Product\Domain\Event\InstallationSettingChanged;
 use App\Modules\Product\Domain\Event\LicenseActivated;
+use App\Modules\Product\Domain\Event\PersonalDataIncludedInDiagnostics;
 use App\Modules\Product\Domain\Event\PlanLimitExceeded;
 use App\Modules\Product\Domain\Event\SetupCompleted;
+use App\Modules\Product\Domain\Event\SupportAccessGranted;
+use App\Modules\Product\Domain\Event\SupportAccessRevoked;
+use App\Modules\Product\Domain\Event\SupportAccessUsed;
 use App\Modules\Shared\Application\Port\AuthenticationJournal;
 use App\Modules\Shared\Application\Port\AuthorizationJournal;
 use App\Modules\Shared\Application\Port\Clock;
@@ -263,6 +273,8 @@ final class ComplianceServiceProvider extends ServiceProvider
         $this->recordInstallationSettingChanges();
         $this->recordComplianceProfileChanges();
         $this->recordLicenseLifecycle();
+        $this->recordDiagnosticsBundles();
+        $this->recordSupportAccess();
         $this->recordManagementAccountLifecycle();
         $this->openAndNotifyIncidents();
 
@@ -703,6 +715,70 @@ final class ComplianceServiceProvider extends ServiceProvider
     {
         Event::listen(LicenseActivated::class, [RecordLicenseActivation::class, 'handle']);
         Event::listen(PlanLimitExceeded::class, [RecordPlanLimitExcess::class, 'handle']);
+    }
+
+    /**
+     * El mapa evento -> asiento del **paquete de diagnostico** (tarea 5.9,
+     * RF-PD-09, RL-19, ADR-020).
+     *
+     * Familia `SupportAccess`, la misma que las concesiones de soporte, porque
+     * las dos responden a la misma pregunta: «¿que ha salido de esta instalacion
+     * hacia el fabricante?». ADR-020 las trata como las dos vias de un mismo
+     * canal.
+     *
+     * **Dos listeners y no uno con un `if`.** Generar el paquete y meterle datos
+     * personales dentro son dos hechos distintos (RL-19), con acciones distintas
+     * en el catalogo, y cuando ocurren a la vez se escriben los dos asientos. Un
+     * solo asiento con un booleano dejaria la pregunta «¿cuando han salido de
+     * aqui datos de mi plantilla?» sin respuesta directa, que es justo la que un
+     * cliente tiene que poder hacer de un vistazo ante una brecha (RL-15).
+     *
+     * Sincronos, sin `ShouldQueue` y sin `afterCommit`: si el asiento falla, el
+     * paquete no se entrega (ADR-027). Un paquete que sale sin dejar rastro
+     * rompe la unica promesa que hace ADR-020.
+     */
+    private function recordDiagnosticsBundles(): void
+    {
+        Event::listen(DiagnosticsBundleGenerated::class, [RecordDiagnosticsBundleGenerated::class, 'handle']);
+        Event::listen(
+            PersonalDataIncludedInDiagnostics::class,
+            [RecordPersonalDataIncludedInDiagnostics::class, 'handle'],
+        );
+    }
+
+    /**
+     * El mapa evento -> asiento de los **accesos de soporte** (tarea 5.9,
+     * RF-PD-11, RL-18, ADR-020, regla dura 16).
+     *
+     * Familia `SupportAccess`, la misma que el paquete de diagnostico: las dos
+     * responden a «¿que ha salido de esta instalacion hacia el fabricante, y con
+     * permiso de quien?».
+     *
+     * **Tres listeners y no uno con tres metodos**, al contrario que las
+     * credenciales. Los tres hechos tienen actores distintos —conceder y revocar
+     * los hace una cuenta del cliente, usar lo hace la propia concesion— y
+     * frecuencias distintas: los dos primeros ocurren una vez por concesion y el
+     * tercero puede ocurrir cada quince minutos durante una sesion. Juntarlos
+     * escondería que solo uno de los tres esta agrupado por ventana.
+     *
+     * ## Sincronos y transaccionales los tres, con un matiz
+     *
+     * Conceder y revocar: sin `ShouldQueue` y sin `afterCommit`, dentro de la
+     * transaccion del caso de uso. Si el asiento falla, **no se concede y no se
+     * revoca** (ADR-027, regla dura 6): un acceso del fabricante sin traza es
+     * exactamente lo que ADR-020 existe para impedir.
+     *
+     * El de uso es igual de sincrono, pero quien lo publica —el middleware— lo
+     * hace **fuera** de la peticion util y bajo `try`, de modo que un fallo aqui
+     * pierde el asiento y nunca la respuesta. Es la misma combinacion que ADR-028
+     * impone al exceso de plan, y por el mismo motivo: la prueba de la potestad
+     * es la concesion, no cada una de sus llamadas.
+     */
+    private function recordSupportAccess(): void
+    {
+        Event::listen(SupportAccessGranted::class, [RecordSupportGrantGranted::class, 'handle']);
+        Event::listen(SupportAccessUsed::class, [RecordSupportGrantUsed::class, 'handle']);
+        Event::listen(SupportAccessRevoked::class, [RecordSupportGrantRevoked::class, 'handle']);
     }
 
     /**

@@ -185,6 +185,33 @@ it('describe solo los endpoints cuya tarea existe, y todos bajo /api/v1', functi
         // gracias a la huella del contenido que lleva su URL.
         '/api/v1/branding',
         '/api/v1/branding/logo',
+        // Tarea 5.9: el paquete de diagnostico (RF-PD-09, RL-19, ADR-020). Es
+        // el UNICO canal por el que informacion del cliente llega al fabricante,
+        // y por eso tiene ambito propio `diagnostics:*`: es lo que se le concede
+        // a un acceso de soporte para que pueda diagnosticar SIN poder tocar
+        // nada. Con `settings:*`, dejar mirar un problema daria de paso la
+        // potestad de cambiar los umbrales con los que se calculan las horas.
+        //
+        // `POST` y no `GET` aunque no cree nada duradero: recorre la instalacion
+        // entera, deja asiento en `audit_log` y —con datos personales— es una
+        // accion con consecuencias legales. Y sin `GET` de descarga posterior:
+        // el paquete se entrega en la respuesta y no se guarda, porque un
+        // fichero por cada clic acumularia datos del cliente en el servidor sin
+        // que nadie los borre.
+        '/api/v1/diagnostics/bundle',
+        // Tarea 5.9: los accesos temporales de soporte (RF-PD-11, RL-18,
+        // ADR-020). Ambito propio `support:*` y no `settings:*`, porque
+        // configurar la instalacion y dejar entrar a alguien de fuera a los datos
+        // de jornada no son la misma potestad. El `GET` es la mitad VISIBLE PARA
+        // EL CLIENTE del requisito: sin el, saber si el fabricante entro exigiria
+        // leer `audit_log`.
+        //
+        // `DELETE` y no `POST /revoke` —al contrario que el desemparejado de un
+        // quiosco— porque lo que se retira, el acceso, si deja de existir; la
+        // concesion se conserva como historial (regla dura 5). Es idempotente:
+        // revocar dos veces es `204` y `404` solo si el UUID no existe.
+        '/api/v1/support/grants',
+        '/api/v1/support/grants/{uuid}',
         // Tarea 5.5: el asistente de puesta en marcha (RF-PD-03). Prefijo propio
         // y no rutas repartidas por los recursos que toca, por una razon
         // concreta: son de UN SOLO USO y se cierran a la vez. Con `POST
@@ -292,12 +319,27 @@ it('declara el alcance por departamento en la sesion de gestion', function (): v
         ->toBe(['kind', 'department_ids']);
 })->group('RF-ID-03', 'RQ-06');
 
-it('no ofrece ningun verbo de borrado en toda la API', function (): void {
+it('no ofrece ningun verbo de borrado en toda la API salvo el declarado', function (): void {
     // Regla dura 5: nada se borra. La baja de un empleado es un cambio de estado
     // con fecha (RF-GP-03) y los centros y departamentos no se eliminan porque
     // se llevarian por delante el registro horario que hay que conservar cuatro
     // anos (RL-02). Que no exista un DELETE en el contrato es lo que impide que
     // aparezca uno «solo para el panel de administracion».
+    //
+    // LA UNICA EXCEPCION, Y ES UNA LISTA CERRADA, NO UNA PUERTA. La tarea 5.9
+    // abre `DELETE /api/v1/support/grants/{uuid}`, y la regla dura 5 sigue
+    // intacta: lo que se retira ahi es **el acceso**, que si deja de existir, y
+    // la concesion que lo concedio se conserva entera con su `revoked_at` —de
+    // hecho, sigue apareciendo en `GET /support/grants` con estado `revoked`—.
+    // El Anexo B del doc 01 lo declara asi y el contrato lo razona en la propia
+    // operacion.
+    //
+    // Se compara valor a valor y ademas se afirma cuantos son: ampliar la lista
+    // exige tocar las dos lineas, y esa segunda linea del diff es la que hace
+    // que alguien pregunte si de verdad ahi no se borra nada que haya que
+    // conservar.
+    $permitidos = ['/api/v1/support/grants/{uuid}'];
+
     $deletes = [];
 
     foreach (Contract::operations() as $operation) {
@@ -306,8 +348,9 @@ it('no ofrece ningun verbo de borrado en toda la API', function (): void {
         }
     }
 
-    expect($deletes)->toBe([]);
-})->group('RF-GP-03', 'RQ-06');
+    expect($deletes)->toBe($permitidos)
+        ->and($permitidos)->toHaveCount(1);
+})->group('RF-GP-03', 'RF-PD-11', 'RQ-06');
 
 it('exige el ambito employees:* en todo endpoint que ESCRIBE plantilla', function (): void {
     // §7.3, y la mitad de la autorizacion que no es la policy (regla dura 18).

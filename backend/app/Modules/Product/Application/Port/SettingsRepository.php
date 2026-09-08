@@ -67,6 +67,15 @@ interface SettingsRepository
      * conjunto: escribir la mitad dejaria la instalacion en el estado que
      * {@see ResolvedSettings::with()} acaba de declarar imposible.
      *
+     * **`$actorUserId` puede ser `null`, y desde la tarea 5.9 ocurre de verdad**:
+     * un acceso de soporte con alcance `configuration` cambia ajustes y **no es
+     * una cuenta de `users`** (RF-PD-11, ADR-020). Escribir ahi su identificador
+     * de concesion apuntaria una clave ajena de `users` a una fila que no existe;
+     * escribir `null` dice la verdad —no hay ninguna persona de la organizacion
+     * detras de este cambio— y quien lo hizo consta en `audit_log`, que es donde
+     * tiene valor. Mismo criterio, y la misma columna nullable, que
+     * `compliance_profile.updated_by_user_id`.
+     *
      * `$actorUserId` es `users.id` —el mismo criterio que
      * `shift_corrections.performed_by_user_id`— y alimenta
      * `installation_settings.updated_by_user_id`. El asiento de `audit_log` lo
@@ -75,5 +84,5 @@ interface SettingsRepository
      *
      * @param  list<SettingValue>  $values
      */
-    public function save(array $values, int $actorUserId): void;
+    public function save(array $values, ?int $actorUserId): void;
 }

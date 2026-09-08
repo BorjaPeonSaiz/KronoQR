@@ -47,13 +47,51 @@ final class LicensePolicy
         return [UserRole::ADMIN];
     }
 
-    public function view(ManagementActor $actor): bool
+    /**
+     * Administrador **del cliente**, no un acceso de soporte que actua como tal
+     * (**RF-PD-11**, ADR-020, tarea 5.9).
+     *
+     * Los tres alcances de una concesion de soporte se presentan como `admin`
+     * ante las policies —es lo que les permite llegar a las pantallas que si les
+     * corresponden—, asi que sin esta segunda comprobacion serian
+     * indistinguibles del administrador del hotel justo aqui.
+     *
+     * **Ninguno de los tres lleva `license:*`**, asi que el middleware ya los
+     * deja fuera. Esto es la segunda puerta, y existe por lo mismo que existen
+     * siempre las dos (regla dura 18): un token emitido a mano, un ambito
+     * añadido por error o un refactor de la lista de alcances no pueden bastar
+     * para cruzarla.
+     */
+    private static function isInstallationAdministrator(ManagementActor $actor): bool
     {
+        if ($actor->isSupportActor()) {
+            return false;
+        }
+
         return $actor->actsAs(...self::administrators());
     }
 
+    /**
+     * **La lectura tambien se le cierra al fabricante**, y no es celo: la
+     * respuesta lleva la **razon social del cliente**, su plan y sus cifras de
+     * plantilla. Es informacion comercial del cliente sobre su propio contrato,
+     * y el fabricante ya la tiene por otro lado — no la saca de la instalacion
+     * de nadie. Es ademas el mismo criterio con el que el paquete de diagnostico
+     * excluye `customer_name` (doc 07 §6).
+     */
+    public function view(ManagementActor $actor): bool
+    {
+        return self::isInstallationAdministrator($actor);
+    }
+
+    /**
+     * Activar una licencia es un acto del CLIENTE. Lo que se contrato lo decide
+     * quien firma el contrato, y el fabricante no se activa a si mismo un plan
+     * en la instalacion de otro (contrato: «lo que ningun alcance concede
+     * nunca»).
+     */
     public function activate(ManagementActor $actor): bool
     {
-        return $actor->actsAs(...self::administrators());
+        return self::isInstallationAdministrator($actor);
     }
 }

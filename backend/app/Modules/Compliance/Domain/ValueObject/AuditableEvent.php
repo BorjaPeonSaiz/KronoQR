@@ -8,18 +8,20 @@ namespace App\Modules\Compliance\Domain\ValueObject;
  * Las familias de hechos que **obligan** a escribir en `audit_log`
  * (`/revision-cumplimiento` bloque D, regla dura 6).
  *
- * Nacio con las **siete** del bloque D y hoy son nueve. La tarea 2.6 anadio el
+ * Nacio con las **siete** del bloque D y hoy son diez. La tarea 2.6 anadio el
  * ciclo de vida de una incidencia, que cumple el mismo criterio —bajo volumen y
  * relevancia legal— y no cabia en ninguna de las siete; la 5.3 anadio el de la
  * licencia, que es la unica de relevancia **comercial** y explica en su propio
- * caso por que se audita igual. Ampliar esta lista es una decision, no un
- * tramite: cada familia nueva tiene que decir por que lo es.
+ * caso por que se audita igual; la 5.9 anadio el acceso de soporte, que es el
+ * unico hecho del producto en el que alguien **ajeno a la organizacion del
+ * cliente** recibe una potestad sobre su instalacion. Ampliar esta lista es una
+ * decision, no un tramite: cada familia nueva tiene que decir por que lo es.
  *
  * Es el enunciado del bloque D convertido en codigo, y esta aqui por una razon
  * concreta: la lista vivia solo en una skill en Markdown, asi que una accion
  * nueva podia nacer sin auditoria y nada fallaba. Con el catalogo declarado,
  * cada `AuditAction` tiene que decir a que familia pertenece, y una prueba
- * comprueba que las nueve siguen cubiertas.
+ * comprueba que las diez siguen cubiertas.
  *
  * *Ante la duda, si.* El coste de auditar de mas es despreciable; el de auditar
  * de menos es una inspeccion que no puede reconstruir quien hizo que.
@@ -96,4 +98,44 @@ enum AuditableEvent: string
      * regla dura 15).
      */
     case LicenseLifecycle = 'license_lifecycle';
+
+    /**
+     * Se concede, se usa o se revoca un **acceso de soporte** del fabricante, o
+     * se genera un paquete de diagnostico (**RF-PD-11**, RF-PD-09, RL-18, RL-19,
+     * ADR-020, tarea 5.9).
+     *
+     * **La decima familia, y la tercera que no estaba en el bloque D.** Entra
+     * por el mismo criterio que la octava y la novena, y con la relevancia legal
+     * mas directa de las tres: durante una intervencion de soporte **el
+     * fabricante es encargado del tratamiento para ese supuesto concreto**
+     * (RL-18), lo que exige el contrato de encargo del art. 28 RGPD. Lo que
+     * acredita que ese encargo existio, con que alcance y durante cuanto, es
+     * este trail y nada mas. Y es de bajo volumen por diseño: unas pocas
+     * concesiones al año, con sus usos agrupados por ventana para que una sesion
+     * de soporte no inunde la cadena por la que pasa cada fichaje.
+     *
+     * **No cabe en `PersonalDataAccess`, y la distincion no es sutil.** Aquella
+     * familia responde a «¿que datos de terceros consulto esta cuenta?»: describe
+     * un **dato mirado**. Esta describe una **potestad concedida** —quien puede
+     * entrar, hasta cuando y para hacer que— que existe aunque no se use ni una
+     * vez, y que en su alcance mas comun (`diagnostics`) no alcanza ni un solo
+     * dato personal. Meterlas juntas dejaria sin respuesta la pregunta que hace
+     * el cliente y que hace una inspeccion: «¿ha entrado el fabricante en mi
+     * instalacion?», que no se contesta enumerando lecturas.
+     *
+     * **Tampoco en `AuthorityOrCalculationChange`.** Conceder soporte no mueve
+     * un minuto trabajado ni cambia el rol de nadie de la organizacion: crea un
+     * acceso temporal para alguien de fuera. Y sobre todo, quien consulta esa
+     * familia pregunta «¿quien movio las reglas del calculo?»; mezclar ahi los
+     * accesos del fabricante ensuciaria justo la consulta en la que eso mas
+     * duele.
+     *
+     * **Y no en `LicenseLifecycle`**, aunque las dos hablen del fabricante: la
+     * licencia es un hecho **comercial** que no da acceso a nada, y esta familia
+     * es lo contrario — no tiene nada que ver con lo contratado y si con quien
+     * puede leer datos de jornada. La regla dura 15 las separa ademas por
+     * comportamiento: una concesion se emite y se revoca igual con la licencia
+     * caducada, porque es cuando mas falta hace.
+     */
+    case SupportAccess = 'support_access';
 }

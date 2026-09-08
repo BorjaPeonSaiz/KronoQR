@@ -12,6 +12,7 @@ use App\Modules\Product\Domain\ValueObject\SettingDefinition;
 use App\Modules\Product\Domain\ValueObject\SettingKey;
 use App\Modules\Product\Domain\ValueObject\SettingType;
 use App\Modules\Product\Domain\ValueObject\SettingValue;
+use App\Modules\Shared\Application\Port\ManagementActor;
 use Closure;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
@@ -353,16 +354,33 @@ final class UpdateSettingsRequest extends FormRequest
     }
 
     /**
-     * `users.id` de quien firma, tomado de la sesion autenticada.
+     * `users.id` de quien firma, tomado de la sesion autenticada, o `null` si no
+     * hay ninguna persona de la organizacion detras.
      *
-     * Cero es imposible en la practica —esta ruta va tras `auth:sanctum`— y si
-     * ocurriera, la clave ajena de `installation_settings.updated_by_user_id`
-     * rechazaria la escritura antes que escribir un cambio sin autor.
+     * ## `null` es un caso real desde la tarea 5.9
+     *
+     * Un **acceso de soporte** con alcance `configuration` cambia ajustes y no
+     * es una cuenta de `users`: el fabricante no tiene cuenta en la instalacion
+     * y no puede tenerla (ADR-020, regla dura 16). Su identificador es el de la
+     * concesion, y escribirlo en `installation_settings.updated_by_user_id`
+     * apuntaria una clave ajena de `users` a una fila que no existe — que es
+     * exactamente el `23503` con el que se descubrio.
+     *
+     * Se escribe `null`, que es la verdad. **Quien lo hizo no se pierde**: el
+     * asiento de `audit_log` lleva `actor_type = support_grant` con el
+     * identificador de la concesion, y ahi es donde tiene valor probatorio.
+     * Mismo criterio que `UpdateComplianceProfileRequest` y que la consola.
      */
-    private function actorUserId(): int
+    private function actorUserId(): ?int
     {
-        $identifier = $this->user()?->getAuthIdentifier();
+        $actor = $this->user();
 
-        return is_numeric($identifier) ? (int) $identifier : 0;
+        if ($actor instanceof ManagementActor && $actor->isSupportActor()) {
+            return null;
+        }
+
+        $identifier = $actor?->getAuthIdentifier();
+
+        return is_numeric($identifier) ? (int) $identifier : null;
     }
 }

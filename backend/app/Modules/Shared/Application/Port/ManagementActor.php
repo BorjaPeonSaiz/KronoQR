@@ -22,9 +22,10 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  * consumen varios modulos, no es una regla de negocio de ninguno, y el modulo
  * que **tiene** el dato —`Identity`— es quien lo implementa (ADR-025).
  *
- * **Tres metodos y ni uno mas.** Lo que una policy necesita preguntar es quien
- * es, que rol tiene y hasta donde alcanza. El tercero lo añadio la tarea 2.1
- * (RF-ID-03) como cambio aditivo, tal y como este mismo docblock anticipaba.
+ * **Cuatro metodos y ni uno mas.** Lo que una policy necesita preguntar es quien
+ * es, que rol tiene, hasta donde alcanza y si es de la casa. El tercero lo añadio
+ * la tarea 2.1 (RF-ID-03) y el cuarto la 5.9 (RF-PD-11), los dos como cambio
+ * aditivo, tal y como este mismo docblock anticipaba.
  *
  * **El ambito del token no se pregunta aqui.** Se comprueba antes, en el
  * middleware `ability` de Sanctum (doc 02 §7.3), y son dos controles distintos a
@@ -68,4 +69,29 @@ interface ManagementActor
      * desactivacion de una cuenta.
      */
     public function accessScope(): AccessScope;
+
+    /**
+     * Si quien actua es un **acceso temporal del fabricante** y no una cuenta de
+     * la organizacion del cliente (**RF-PD-11**, ADR-020, tarea 5.9).
+     *
+     * ## Por que no basta con mirar el rol
+     *
+     * Porque una concesion de soporte **actua como un rol de gestion** —`admin`
+     * o `auditor`, segun su alcance— y tiene que hacerlo: es lo que permite que
+     * las policies que ya existen la autoricen sin reescribirlas una a una. El
+     * precio es que, mirando solo `actsAs()`, un token de soporte con alcance
+     * `configuration` seria indistinguible de un administrador del hotel.
+     *
+     * Y hay un puñado de puertas en las que esa distincion **es** la
+     * autorizacion: conceder y revocar accesos de soporte —quien recibe el
+     * acceso no decide si se le amplia—, activar licencias e incluir datos
+     * personales en un paquete de diagnostico (RL-19). Ninguna de las tres se
+     * puede expresar con roles ni con ambitos: son «esto lo hace el cliente, no
+     * el fabricante», que es una pregunta sobre **quien es** el actor.
+     *
+     * **Cuarto metodo y ni uno mas**, con el mismo criterio con el que se añadio
+     * el tercero: es aditivo, lo responde quien tiene el dato, y no obliga a
+     * tocar ninguna policy que no lo necesite.
+     */
+    public function isSupportActor(): bool;
 }

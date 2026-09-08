@@ -9,6 +9,7 @@ use App\Modules\Product\Application\Command\UpdateComplianceProfileCommand;
 use App\Modules\Product\Domain\ValueObject\ComplianceProfileField;
 use App\Modules\Product\Domain\ValueObject\ComplianceProfileFieldType;
 use App\Modules\Product\Domain\ValueObject\ComplianceProfileSnapshot;
+use App\Modules\Shared\Application\Port\ManagementActor;
 use Closure;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
@@ -189,9 +190,26 @@ final class UpdateComplianceProfileRequest extends FormRequest
         };
     }
 
+    /**
+     * `users.id` de quien firma, o `null` si no hay ninguna persona de la
+     * organizacion detras.
+     *
+     * **Un acceso de soporte con alcance `configuration` llega hasta aqui** —el
+     * perfil de cumplimiento viaja bajo `settings:*` (§7.3, precision 4)— y no es
+     * una cuenta de `users`: escribir su identificador de concesion en
+     * `compliance_profile.updated_by_user_id` apuntaria una clave ajena de
+     * `users` a una fila que no existe. Quien lo hizo consta en `audit_log` con
+     * `actor_type = support_grant` (RF-PD-11, ADR-020).
+     */
     private function actorUserId(): ?int
     {
-        $identifier = $this->user()?->getAuthIdentifier();
+        $actor = $this->user();
+
+        if ($actor instanceof ManagementActor && $actor->isSupportActor()) {
+            return null;
+        }
+
+        $identifier = $actor?->getAuthIdentifier();
 
         return is_numeric($identifier) ? (int) $identifier : null;
     }

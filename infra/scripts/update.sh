@@ -43,8 +43,10 @@
 #   3  Copia logica cifrada y verificada, bloqueante, DE ESTA EJECUCION.
 #   4  Migraciones version a version, con un punto de control entre cada una.
 #   5  Arranque de la version nueva SIN borde, verificacion desde dentro
-#      —incluido `product:doctor`, tarea 5.9—, mantenimiento, borde,
-#      verificacion por loopback, y solo despues el resto de servicios.
+#      —incluido `product:doctor`, tarea 5.9, INFORMATIVO aqui: se muestra y se
+#      resume, pero solo deshace si el comando falta en la imagen—,
+#      mantenimiento, borde, verificacion por loopback, y solo despues el
+#      resto de servicios.
 #   6  Si algo falla en el 4 o en el 5: restauracion de la copia y relanzamiento
 #      de la version anterior, sin intervencion humana.
 #   7  Informe en BACKUP_PATH/reports/, siempre, tambien tras una vuelta atras.
@@ -75,7 +77,12 @@
 #   5  Fallo con VUELTA ATRAS INCOMPLETA. Hace falta una persona; el mensaje
 #      imprime las ordenes exactas (y distingue si solo queda retirar el
 #      mantenimiento de si hay que restaurar la copia).
-#   6  NO LO USA ESTE SCRIPT: toda verificacion fallida deshace (RF-PD-10).
+#   6  NO LO USA ESTE SCRIPT: toda verificacion fallida deshace (RF-PD-10),
+#      con UNA excepcion documentada: un `product:doctor` con fallos o
+#      avisos (tarea 5.9, segunda vuelta) es informativo y NO deshace, porque
+#      la version nueva ya esta verificada por las sondas, la cadena y los
+#      privilegios; solo deshace si el comando falta en la imagen, que es un
+#      paquete roto.
 #
 # Que NO hace, a proposito:
 #   · No exige licencia. Una licencia caducada no puede dejar a un cliente sin
@@ -1672,13 +1679,21 @@ phase_start_and_verify() {
     rollback_and_die "$(kq_format u_f_verify_privileges "${CFG_DB_USERNAME}")"
   fi
 
-  # `product:doctor` (tarea 5.9) es el diagnostico oficial del producto. Aqui,
-  # a diferencia de install.sh, TODA verificacion fallida deshace (RF-PD-10:
-  # este script no usa el codigo 6): un fallo de product:doctor en la version
-  # NUEVA se trata igual que cualquier otro fallo del paso 5. Su informe
-  # completo va al DETALLE (puede llevar rutas y datos internos que no
-  # corresponden al resumen del paquete de diagnostico); aqui solo una linea.
+  # `product:doctor` (tarea 5.9) es el diagnostico oficial del producto, pero
+  # AQUI ES INFORMATIVO (revision de codigo, segunda vuelta): la version nueva
+  # ya esta verificada por las sondas, la cadena de auditoria, las
+  # restricciones RN-01/RN-02 y los privilegios de base de datos, y buena
+  # parte de los fallos de product:doctor son AMBIENTALES —disco por debajo
+  # del umbral, certificado a punto de caducar, APP_DEBUG— y no dicen nada
+  # del esquema ni del codigo que se acaba de desplegar. Deshacer una
+  # actualizacion correcta por eso seria desproporcionado. Por eso, a partir
+  # de aqui, NINGUN codigo de `product:doctor` deshace: se muestra completo
+  # en el detalle, se resume en el informe (correcto / con avisos / con
+  # fallos) y en pantalla se avisa de que hacer si sale 1 o 2, pero la
+  # actualizacion sigue.
   #
+  # La UNICA razon para deshacer aqui es que el comando NO EXISTA en la
+  # imagen: eso es un paquete roto, no un hallazgo ambiental del servidor.
   # Comprobacion de PRESENCIA, no de texto: `list --raw` enumera los comandos
   # tal cual los conoce la aplicacion, uno por linea. El mensaje de error de
   # Symfony Console ante un comando que no existe depende del idioma y de la
@@ -1703,13 +1718,9 @@ phase_start_and_verify() {
     kq_msg check_warn "$(kq_text u_verify_doctor_warn)" "$(kq_text u_verify_doctor_warn_fix)"
     remember_check "doctor" "$(kq_text u_report_warned)"
     ;;
-  2)
-    remember_check "doctor" "$(kq_text u_report_failed)"
-    rollback_and_die "$(kq_text u_f_verify_doctor)"
-    ;;
   *)
-    remember_check "doctor" "$(kq_text u_report_failed)"
-    rollback_and_die "$(kq_format u_f_verify_doctor_unexpected "${doctor_status}")"
+    kq_msg check_warn "$(kq_format u_verify_doctor_failed_warn "${doctor_status}")" "$(kq_text u_verify_doctor_failed_fix)"
+    remember_check "doctor" "$(kq_text u_report_doctor_failed)"
     ;;
   esac
 

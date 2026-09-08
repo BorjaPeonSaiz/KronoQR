@@ -45,4 +45,20 @@ return [
      */
     'rejection_floor_ms' => (int) env('SECURITY_REJECTION_FLOOR_MS', 25),
 
+    /*
+     * Si esta instalacion admite un certificado TLS autofirmado
+     * (`TLS_ALLOW_SELF_SIGNED`, tarea 5.9).
+     *
+     * QUIEN DECIDE DE VERDAD ES NGINX, no esto: la variable la lee su punto de
+     * entrada, que genera un certificado autofirmado cuando no encuentra el del
+     * hotel. Esta clave existe para que la aplicacion pueda **decirlo**: la sonda
+     * `tls.certificate` de `product:doctor` avisa cuando encuentra un
+     * certificado autofirmado en una instalacion que declara no aceptarlos, que
+     * es la señal de que el certificado del hotel no llego a copiarse y nadie se
+     * dio cuenta.
+     *
+     * `false` de serie, que es lo correcto en el servidor de un cliente.
+     */
+    'tls_allow_self_signed' => filter_var(env('TLS_ALLOW_SELF_SIGNED', false), FILTER_VALIDATE_BOOL),
+
 ];
