@@ -10,8 +10,8 @@
 **Rama `feat/tarea-5.9-diagnostico-doctor-soporte`**, creada desde `main` (`d2fe595`: PR #44, #45 y #46
 integradas el 08-09-2026 con la CI de `main` completa en verde, ⑧ y ⑧b incluidas, y Node 25 en la imagen de
 nginx). **Tarea 5.9 «Paquete de diagnóstico anonimizado, `product:doctor`, accesos de soporte auditados»
-(RF-PD-09, RF-PD-11, RF-PD-13, RL-18, RL-19) IMPLEMENTADA, REVISADA y PROBADA el 08-09-2026**: PR contra
-`main` pendiente de abrir/vigilar (ver «Siguiente acción»).
+(RF-PD-09, RF-PD-11, RF-PD-13, RL-18, RL-19) IMPLEMENTADA, REVISADA y PROBADA el 08-09-2026**: **PR #47**
+contra `main`, con la CI completa y ⑧b lanzada a mano (ejecución 34230888161; ver «Siguiente acción»).
 
 **Cómo se hizo (misma receta que la 5.8, con una diferencia):** contrato primero (cuatro rutas y ocho esquemas),
 tipos regenerados, **bloques reservados con comentario** en `ProductServiceProvider` y `routes/api_v1.php`
@@ -79,10 +79,9 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 (exit 1, tres avisos coherentes), `product:diagnostics` (71 KB, `grep -c "hotel\|@"` = 0), `--verify`
 íntegro/alterado, `support:grant`/`support:revoke`, `doctor.sh` con `app` en pie y parado.
 
-**Siguiente acción:** abrir la PR contra `main` con *merge commit* (nunca squash), lanzar a mano la CI
-completa con ⑧b sobre la rama (`gh workflow run ci.yml --ref feat/tarea-5.9-diagnostico-doctor-soporte`;
-**cuidado: el grupo de concurrencia cancela la ejecución en curso de la misma rama, así que hacerlo cuando no
-haya un push reciente corriendo**), integrar cuando esté todo en verde, ejecutar `make up` (migraciones
+**Siguiente acción:** vigilar la ejecución manual 34230888161 (⑧ y ⑧b) y la PR #47; integrar con *merge
+commit* (nunca squash) cuando esté todo en verde —**cuidado: el grupo de concurrencia cancela la ejecución en
+curso de la misma rama en cada push, así que no empujar nada mientras corra la manual**—, ejecutar `make up` (migraciones
 nuevas de `support_grants`), y arrancar la **5.10** (exportación íntegra y telemetría desactivada) en rama
 nueva. Recordatorio: **la ⑧b solo corre en `main`, etiquetas o a mano**.
 
