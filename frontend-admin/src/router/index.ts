@@ -4,12 +4,14 @@ import { createRouter, createWebHistory } from 'vue-router'
 import {
   ATTENDANCE_READ,
   CREDENTIALS_MANAGE,
+  DIAGNOSTICS_MANAGE,
   EMPLOYEES_MANAGE,
   INCIDENTS_MANAGE,
   LICENSE_MANAGE,
   REPORTS_LEGAL,
   REPORTS_MANAGE,
   SETTINGS_MANAGE,
+  SUPPORT_MANAGE,
 } from '@/features/auth/abilities'
 import LoginView from '@/features/auth/LoginView.vue'
 import CredentialBoardView from '@/features/credentials/CredentialBoardView.vue'
@@ -24,6 +26,7 @@ import PeriodReportView from '@/features/reports/PeriodReportView.vue'
 import BrandingView from '@/features/settings/BrandingView.vue'
 import ComplianceProfileView from '@/features/settings/ComplianceProfileView.vue'
 import LicenseView from '@/features/settings/LicenseView.vue'
+import SupportView from '@/features/support/SupportView.vue'
 import EmployeeWorkDaysView from '@/features/workdays/EmployeeWorkDaysView.vue'
 import AppShellView from '@/shared/ui/AppShellView.vue'
 import ForbiddenView from '@/shared/ui/ForbiddenView.vue'
@@ -37,6 +40,14 @@ declare module 'vue-router' {
     public?: boolean
     /** Ambito del token que exige la pantalla (doc 02 §7.3). */
     ability?: string
+    /**
+     * Varios ambitos posibles, en `O` (basta con uno). Existe por «Soporte»
+     * (tarea 5.9): la pantalla la alcanza quien lleva `support:*` **o**
+     * `diagnostics:*`, y una sola clave `ability` no puede expresar esa
+     * disyuncion. Con `ability` a secas se exige exactamente ese; con esta
+     * lista, cualquiera de los que contiene.
+     */
+    abilities?: readonly string[]
   }
 }
 
@@ -184,6 +195,18 @@ export const routes: RouteRecordRaw[] = [
         name: 'license',
         component: LicenseView,
         meta: { ability: LICENSE_MANAGE },
+      },
+      {
+        // El paquete de diagnostico y los accesos de soporte (RF-PD-09,
+        // RF-PD-11, tarea 5.9, ADR-020). `abilities` en `O`: la alcanza quien
+        // lleva `support:*` **o** `diagnostics:*` -las dos abren la pantalla,
+        // aunque el bloque de accesos exija ademas `support:*` para su propio
+        // formulario-. La policy del servidor de cada endpoint es la que
+        // autoriza de verdad (regla dura 18).
+        path: 'support',
+        name: 'support',
+        component: SupportView,
+        meta: { abilities: [SUPPORT_MANAGE, DIAGNOSTICS_MANAGE] },
       },
       { path: 'forbidden', name: 'forbidden', component: ForbiddenView },
       {

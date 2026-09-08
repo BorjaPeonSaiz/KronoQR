@@ -79,6 +79,29 @@ export const SETTINGS_MANAGE = 'settings:*'
 export const LICENSE_MANAGE = 'license:*'
 
 /**
+ * Concesion y revocacion de accesos temporales de soporte (RF-PD-11,
+ * ADR-020).
+ *
+ * Ambito propio y no `settings:*`: el §7.3 lo declara aparte porque decidir
+ * que el fabricante entre en la instalacion no es un ajuste de la instalacion,
+ * es una cesion puntual y auditada. Lo lleva solo el administrador; **el
+ * propio token de soporte no lo lleva nunca** (regla dura 16): quien recibe el
+ * acceso no puede verse a si mismo en la lista ni concederse mas tiempo.
+ */
+export const SUPPORT_MANAGE = 'support:*'
+
+/**
+ * Generacion del paquete de diagnostico (RF-PD-09, ADR-020).
+ *
+ * Ambito propio, distinto de `support:*`: un token de soporte con alcance
+ * `diagnostics` SI lo lleva —puede generar el paquete anonimizado de la
+ * instalacion en la que esta interviniendo—, pero nunca `support:*`. Por eso
+ * la pantalla «Soporte» se ofrece con este ambito **o** con `support:*`: el
+ * bloque de accesos exige `support:*` y el bloque del paquete, solo este.
+ */
+export const DIAGNOSTICS_MANAGE = 'diagnostics:*'
+
+/**
  * Si los ambitos concedidos cubren el exigido.
  *
  * Reconoce el comodin de familia (`employees:*` cubre `employees:read`) porque

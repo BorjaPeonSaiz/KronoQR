@@ -15,7 +15,8 @@
       "compliance": "Compliance",
       "devices": "Kiosks",
       "branding": "Brand",
-      "license": "Licence"
+      "license": "Licence",
+      "support": "Support"
     },
     "roles": {
       "admin": "Administration",
@@ -1236,6 +1237,86 @@
         "heading": "First kiosk",
         "intro": "Type the six-digit code the tablet is showing and give the kiosk a name. If it has not arrived at the hotel yet, you can skip this step and link it later from \"Kiosks\", without repeating setup.",
         "skip": "Skip for now"
+      }
+    }
+  },
+  "support": {
+    "heading": "Support",
+    "intro": "Generate the package the manufacturer needs to diagnose an incident and, if needed, grant it a temporary and revocable access to this installation.",
+    "diagnostics": {
+      "heading": "Diagnostics package",
+      "intro": "A single JSON file with the version, configuration without secrets, service health and the \"doctor\" result, which you can send to support through your contract's channel. It leaves anonymised by default: no names, no emails and no attendance records.",
+      "generate": "Generate and download",
+      "generating": "Generating…",
+      "includePersonalData": "Include personal data",
+      "personalDataWarning": "If you tick this box, the package will stop being anonymised: it will add the workforce roster (each person's name and code), the clock-ins and shifts of the chosen period, and open incidents. It is logged in the audit trail, visible to any installation administrator.",
+      "periodDays": "Days",
+      "periodDaysHint": "How many days back to include in the package's clock-ins and shifts. Without ticking \"Include personal data\" it has no effect.",
+      "success": "Downloaded {filename}; review it before sending it.",
+      "announceDownloaded": "The diagnostics package {filename} has been downloaded."
+    },
+    "grant": {
+      "heading": "Support access grants",
+      "intro": "Grant the manufacturer a temporary, limited and revocable access when you need help with an incident. It is logged here from the moment it is granted until it is used or revoked.",
+      "fields": {
+        "reason": "Reason",
+        "reasonHint": "The incident that motivates the access, between 3 and 200 characters. It goes as written into the audit log.",
+        "scope": "Scope",
+        "hours": "Hours",
+        "hoursHint": "How long the access will stay active: between 1 and 72 hours."
+      },
+      "scope": {
+        "diagnostics": {
+          "label": "Diagnostics",
+          "description": "Generates the anonymised diagnostics package and reads the error history. Enough for most incidents."
+        },
+        "read_only": {
+          "label": "Read only",
+          "description": "In addition to the above, can read work days, shifts, workforce and audit, without being able to change anything."
+        },
+        "configuration": {
+          "label": "Configuration",
+          "description": "In addition to the above, can change the installation's configuration, the compliance profile and the kiosks."
+        }
+      },
+      "scopeNeverNote": "No scope allows activating licences, granting or revoking support access, issuing or revoking credentials, correcting clock records, managing the workforce, or generating payroll reports or the Labour Inspectorate export.",
+      "submit": "Grant access",
+      "submitting": "Granting…",
+      "announceGranted": "The support access has been granted.",
+      "announceRevoked": "The support access has been revoked.",
+      "tokenIssued": "Token for the granted access",
+      "tokenWarning": "It will not be shown again. If it is lost, revoke this grant and create another one.",
+      "copy": "Copy",
+      "copied": "Copied",
+      "status": {
+        "active": "Active",
+        "expired": "Expired",
+        "revoked": "Revoked"
+      },
+      "list": {
+        "loading": "Loading the support access grants…",
+        "caption": "Support access grants",
+        "empty": {
+          "title": "No support access has been granted yet",
+          "description": "Once you grant one, it will appear here with who granted it, why, and until when."
+        },
+        "columns": {
+          "reason": "Reason",
+          "scope": "Scope",
+          "grantedBy": "Granted by",
+          "grantedAt": "Granted",
+          "expiresAt": "Expires",
+          "status": "Status",
+          "usedAt": "Last used",
+          "actions": "Actions"
+        },
+        "usedAgo": "{hours} h {minutes} min ago",
+        "neverUsed": "Never"
+      },
+      "revoke": {
+        "action": "Revoke",
+        "heading": "Revoke support access",
+        "explanation": "This access, granted for \"{reason}\", will stop working immediately. The grant is not deleted: it will be marked as revoked, with who did it and when."
       }
     }
   }

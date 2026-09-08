@@ -215,11 +215,18 @@ mensaje, que es lo que hay que leer.**
 | --- | --- | --- |
 | `0` | Correcto | — |
 | `1` | **Uso incorrecto.** Nada tocado | Un argumento que no existe, o falta un valor |
-| `2` | **Requisitos no cumplidos. NADA escrito.** La máquina está como estaba | `install.sh`: falta Docker, disco, puerto ocupado. `backup.sh`/`restore.sh`: falta `pg_dump`, el destino no es escribible, no hay espacio, o falta `BACKUP_ENCRYPTION_KEY`. `update.sh`: una precondición no se cumple, o **la copia previa ha fallado**; la instalación sigue en su versión |
-| `3` | **Estado previo incompatible. NADA escrito** | `install.sh`: ya hay una instalación (usa `update.sh`). `backup.sh`: no hay copia que verificar, o el destino ya existe. `restore.sh`: quedan conexiones abiertas contra la base. `update.sh`: ya está en la versión de destino, o no hay instalación que actualizar |
-| `4` | **Falló y se deshizo todo lo hecho** en esa ejecución. Se puede reintentar | `install.sh`: contenedores, volúmenes y `.env` devueltos a su estado. `backup.sh`: los ficheros a medias barridos, la copia anterior intacta. `restore.sh`: base de trabajo eliminada, la de producción sin tocar. `update.sh`: copia previa restaurada y **versión anterior en marcha y verificada** |
-| `5` | **Falló y NO se pudo deshacer todo. Hay que intervenir a mano.** El mensaje dice exactamente qué queda y qué orden lo retira | Es el único código que exige a una persona delante |
-| `6` | **El trabajo se hizo pero la verificación posterior falló.** No se deshace nada | `install.sh`: los servicios están en pie, revisa certificado y logs. `backup.sh`: la copia existe pero **no verifica: trátala como inexistente**. `restore-drill.sh`: hoy no se podría recuperar el registro. `update.sh`: **no lo usa**, toda verificación fallida deshace |
+| `2` | **Requisitos no cumplidos. NADA escrito.** La máquina está como estaba | `install.sh`: falta Docker, disco, puerto ocupado. `backup.sh`/`restore.sh`: falta `pg_dump`, el destino no es escribible, no hay espacio, o falta `BACKUP_ENCRYPTION_KEY`. `update.sh`: una precondición no se cumple, o **la copia previa ha fallado**; la instalación sigue en su versión. `doctor.sh`: **Docker no responde**, o la versión de Compose no es la soportada; no se ha podido comprobar nada más |
+| `3` | **Estado previo incompatible. NADA escrito** | `install.sh`: ya hay una instalación (usa `update.sh`). `backup.sh`: no hay copia que verificar, o el destino ya existe. `restore.sh`: quedan conexiones abiertas contra la base. `update.sh`: ya está en la versión de destino, o no hay instalación que actualizar. `doctor.sh`: **no hay ninguna instalación que diagnosticar** en este servidor — si es uno nuevo, lo que hace falta es `install.sh` |
+| `4` | **Falló y se deshizo todo lo hecho** en esa ejecución. Se puede reintentar | `install.sh`: contenedores, volúmenes y `.env` devueltos a su estado. `backup.sh`: los ficheros a medias barridos, la copia anterior intacta. `restore.sh`: base de trabajo eliminada, la de producción sin tocar. `update.sh`: copia previa restaurada y **versión anterior en marcha y verificada**. `doctor.sh`: **no lo usa**, no escribe ni deshace nada |
+| `5` | **Falló y NO se pudo deshacer todo. Hay que intervenir a mano.** El mensaje dice exactamente qué queda y qué orden lo retira | Es el único código que exige a una persona delante. `doctor.sh`: **no lo usa**, no escribe ni deshace nada |
+| `6` | **El trabajo se hizo pero la verificación posterior falló.** No se deshace nada | `install.sh`: los servicios están en pie, revisa certificado y logs. `backup.sh`: la copia existe pero **no verifica: trátala como inexistente**. `restore-drill.sh`: hoy no se podría recuperar el registro. `update.sh`: **no lo usa**, toda verificación fallida deshace. `doctor.sh`: **el diagnóstico ha encontrado al menos un fallo** — con la aplicación en marcha, en su propio informe (`product:doctor`); con la aplicación parada, en una de las comprobaciones externas. El mensaje dice qué leer |
+
+`install.sh` y `update.sh` invocan `product:doctor` en su fase de verificación
+(RF-PD-13): en `install.sh` un aviso (código `1` de `product:doctor`) se
+muestra y no bloquea, y solo un fallo (`2`) se traduce al `6` de la tabla de
+arriba. En `update.sh` no hay traducción a `6`: la verificación fallida
+siempre deshace, así que un fallo de `product:doctor` en la versión nueva
+provoca la vuelta atrás igual que cualquier otro fallo del paso 5.
 
 ### Si tenías un cron escrito contra la tabla anterior de `backup.sh`
 
@@ -397,3 +404,150 @@ dos anteriores; desde una más antigua, el script te dice a cuál ir primero.
 
 **Segunda ejecución** sobre una instalación ya actualizada: sale `3`, «ya está
 en la versión», y no toca nada.
+
+---
+
+## 12. Diagnóstico y soporte: `doctor`, el paquete y los accesos
+
+Tres herramientas, y las tres funcionan con la licencia caducada o sin
+activar: son justamente lo que hace falta cuando algo va mal.
+
+### 12.1 `doctor`: la revisión de salud en un comando
+
+```bash
+docker compose exec app php artisan product:doctor          # informe legible
+docker compose exec app php artisan product:doctor --json   # el mismo informe, para máquinas
+docker compose exec app php artisan product:doctor --lang=en
+```
+
+Comprueba base de datos (conexión, migraciones pendientes, que el usuario de la
+aplicación **no** pueda modificar el registro de auditoría, cadena de
+auditoría), colas (Redis, atraso, que haya un trabajador vivo), correo
+(transporte configurado y servidor alcanzable), certificado TLS (caducidad y
+autofirmado), permisos (directorios de trabajo, copias, logotipo), espacio en
+disco (aplicación y copias) y ajustes (zona horaria en UTC, modo depuración,
+claves no válidas, diferencias entre el `.env` y lo guardado, licencia y marca).
+**Cada línea en rojo dice qué hacer**, redactado para quien no conoce el
+sistema.
+
+| Código | Significa |
+| --- | --- |
+| `0` | Todo correcto |
+| `1` | **Solo avisos.** Nada está roto; conviene leerlos cuando puedas. El estado de la licencia nunca pasa de aquí |
+| `2` | **Al menos un fallo** que hay que corregir. La instalación sigue en pie y se sigue fichando |
+
+`install.sh` y `update.sh` lo ejecutan al final. Solo el `2` los detiene
+(el instalador sale con `6`; el actualizador deshace la actualización); el `1`
+se muestra y no bloquea.
+
+Si la aplicación **no arranca** y no puedes ejecutar `artisan`, está
+`./doctor.sh` (§8): hace desde fuera lo que puede —Docker, estado de cada
+servicio, `.env`, disco, certificados, puertos— y te dice cómo arrancarla.
+
+### 12.2 El paquete de diagnóstico: qué es y cómo se genera
+
+Cuando abras una incidencia con soporte, lo primero que te pedirán es el
+paquete. Lo generas tú, con un clic o con un comando, y lo envías por el canal
+de tu contrato. **Soporte no entra en tu servidor** (ADR-020).
+
+- **Desde el panel:** «Soporte» → «Paquete de diagnóstico» → «Generar y
+  descargar». Solo lo ve la cuenta de administración.
+- **Desde la consola:**
+
+  ```bash
+  docker compose exec app php artisan product:diagnostics
+  ```
+
+  Deja el fichero en `storage/app/diagnostics/` dentro del contenedor y te
+  dice la ruta, el tamaño y la huella. Cópialo fuera con
+  `docker compose cp app:/var/www/html/storage/app/diagnostics/<fichero> .`
+  y **bórralo del servidor cuando lo hayas enviado**: es material desechable.
+
+Es **un único fichero JSON legible**, `kronoqr-diagnostics-<versión>-<fecha>.json`,
+sin cifrar a propósito: **ábrelo antes de enviarlo** y comprueba que no lleva
+nada que no quieras enviar. Su cabecera (`manifest`) lleva la huella del resto
+del documento; quien lo reciba puede comprobar que no se alteró por el camino
+con `php artisan product:diagnostics --verify=<fichero>`.
+
+**Qué lleva:** versión y entorno, configuración **solo de una lista de claves
+permitidas** (nunca `LICENSE_KEY`, claves de firma del QR, de cifrado de
+copias, de Reverb, ni credenciales de base de datos o de correo), estado de
+los servicios y de las colas, el informe de `doctor`, el estado de la licencia
+**sin tu razón social**, la salud de cada tablet **sin su nombre**, el
+histórico de errores agrupado (a partir de la versión que lo incorpore),
+contadores agregados, el informe de la última actualización (nunca su
+`.detalle.log`) y **solo recuentos** del registro de auditoría.
+
+**Qué no lleva, por defecto:** nombres, correos, documentos, fichajes ni
+jornadas de nadie. Los empleados aparecen solo como identificador. Una prueba
+automática del producto lo comprueba sobre un paquete generado con 500
+empleados y 90 días de fichajes.
+
+### 12.3 Incluir datos personales es otra acción
+
+Si la incidencia exige ver fichajes concretos —una discrepancia de nómina de
+una persona, por ejemplo—, puedes incluirlos. **Es una decisión tuya, explícita
+y auditada**, nunca el valor por defecto:
+
+- Panel: marca «Incluir datos personales»; la pantalla te dice qué se va a
+  incluir y que queda registrado, y solo entonces te deja generar.
+- Consola: `php artisan product:diagnostics --with-personal-data --period-days=7`
+  (máximo 31 días).
+
+Añade la plantilla (código, nombre, estado, departamento), los fichajes y tramos
+del periodo, y las incidencias abiertas. El paquete queda marcado como **no
+anonimizado** y en tu auditoría aparece `diagnostics.personal_data_included`.
+Al enviarlo comunicas datos personales a un tercero: mira
+[`obligaciones-legales.md`](obligaciones-legales.md) §8 antes, y ten firmado
+el contrato de encargo.
+
+### 12.4 Conceder a soporte un acceso temporal
+
+Es la excepción, no la norma: solo cuando el paquete no basta. Lo concedes tú,
+con motivo, alcance y duración, y lo puedes revocar en cualquier momento.
+
+- **Panel:** «Soporte» → «Accesos de soporte» → motivo, alcance, horas →
+  «Conceder». El token se muestra **una sola vez**: cópialo y entrégalo a
+  soporte por el canal del contrato. Si se pierde, revoca y crea otro.
+- **Consola:**
+
+  ```bash
+  docker compose exec app php artisan support:grant --hours=24 --reason="Incidencia #123"
+  docker compose exec app php artisan support:grant --hours=8 --reason="Incidencia #124" --scope=read_only
+  docker compose exec app php artisan support:revoke <uuid>     # una concesión
+  docker compose exec app php artisan support:revoke --all      # todas las activas
+  ```
+
+| Alcance | Soporte puede | No puede |
+| --- | --- | --- |
+| `diagnostics` (por defecto) | Generar el paquete **anonimizado** y consultar errores | Ver a nadie |
+| `read_only` | Además, **leer** jornadas, plantilla y auditoría | Cambiar nada |
+| `configuration` | Además, **cambiar** ajustes, perfil de cumplimiento y quioscos | Ver jornadas ni plantilla |
+
+Con ningún alcance puede activar licencias, conceder o revocar accesos,
+emitir o revocar tarjetas, corregir fichajes, generar informes de nómina o la
+exportación para la Inspección, ni incluir datos personales en un paquete.
+
+**Lo que queda registrado**, y lo ves en la misma pantalla y en tu auditoría:
+quién concedió, por qué, con qué alcance, hasta cuándo, **cuándo se usó por
+última vez** y cuándo se revocó (`support_grant.granted`, `support_grant.used`,
+`support_grant.revoked`). El acceso **caduca solo**: cuando llega la hora, el
+token deja de funcionar sin que nadie haga nada. Máximo 72 horas por concesión
+(`PRODUCT_SUPPORT_GRANT_MAX_HOURS`).
+
+Durante esa intervención el fabricante es encargado del tratamiento para ese
+caso concreto: [`obligaciones-legales.md`](obligaciones-legales.md) §8.
+
+### 12.5 Los parámetros
+
+Ninguno se edita desde el panel: viven en el `.env` y los cambia quien
+administra el servidor.
+
+| Variable | De serie | Qué gobierna |
+| --- | --- | --- |
+| `PRODUCT_DIAGNOSTICS_MAX_BYTES` | `8388608` (8 MiB) | Tamaño máximo del paquete. Por encima se recortan secciones, empezando por los datos personales, y el recorte queda anotado |
+| `PRODUCT_DIAGNOSTICS_RATE_LIMIT` | `3` | Paquetes por minuto y por cuenta desde el panel. Generar recorre la instalación entera |
+| `PRODUCT_DIAGNOSTICS_PERSONAL_DATA_MAX_PERIOD_DAYS` | `31` | Máximo de días de fichajes que caben con «Incluir datos personales». Subirlo amplía lo que sale de tu servidor en un fichero |
+| `PRODUCT_SUPPORT_GRANT_DEFAULT_HOURS` | `24` | Duración de una concesión si no se indica |
+| `PRODUCT_SUPPORT_GRANT_MAX_HOURS` | `72` | Duración máxima admitida; más, se rechaza |
+| `PRODUCT_SUPPORT_USE_AUDIT_WINDOW_SECONDS` | `900` | Cada cuánto, como máximo, se anota un nuevo `support_grant.used` por concesión, para que una sesión de soporte no llene tu auditoría |

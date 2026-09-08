@@ -13,12 +13,14 @@ import { RouterLink, RouterView, useRouter } from 'vue-router'
 import {
   ATTENDANCE_READ,
   CREDENTIALS_MANAGE,
+  DIAGNOSTICS_MANAGE,
   EMPLOYEES_MANAGE,
   INCIDENTS_MANAGE,
   LICENSE_MANAGE,
   REPORTS_LEGAL,
   REPORTS_MANAGE,
   SETTINGS_MANAGE,
+  SUPPORT_MANAGE,
 } from '@/features/auth/abilities'
 import { useSessionStore } from '@/features/auth/session.store'
 import LicenseNotice from '@/features/settings/LicenseNotice.vue'
@@ -32,26 +34,37 @@ const branding = useBrandingStore()
 interface NavItem {
   name: string
   label: string
-  ability: string
+  /** En O: basta con que la sesion lleve uno de los ambitos listados. */
+  abilities: readonly string[]
 }
 
 const navigation = computed<NavItem[]>(() =>
   [
-    { name: 'employees', label: t('app.nav.employees'), ability: EMPLOYEES_MANAGE },
-    { name: 'live', label: t('app.nav.live'), ability: ATTENDANCE_READ },
-    { name: 'incidents', label: t('app.nav.incidents'), ability: INCIDENTS_MANAGE },
-    { name: 'credentials', label: t('app.nav.credentials'), ability: CREDENTIALS_MANAGE },
-    { name: 'reports', label: t('app.nav.reports'), ability: REPORTS_MANAGE },
-    { name: 'legal-export', label: t('app.nav.legalExport'), ability: REPORTS_LEGAL },
+    { name: 'employees', label: t('app.nav.employees'), abilities: [EMPLOYEES_MANAGE] },
+    { name: 'live', label: t('app.nav.live'), abilities: [ATTENDANCE_READ] },
+    { name: 'incidents', label: t('app.nav.incidents'), abilities: [INCIDENTS_MANAGE] },
+    { name: 'credentials', label: t('app.nav.credentials'), abilities: [CREDENTIALS_MANAGE] },
+    { name: 'reports', label: t('app.nav.reports'), abilities: [REPORTS_MANAGE] },
+    { name: 'legal-export', label: t('app.nav.legalExport'), abilities: [REPORTS_LEGAL] },
     {
       name: 'compliance-profile',
       label: t('app.nav.compliance'),
-      ability: SETTINGS_MANAGE,
+      abilities: [SETTINGS_MANAGE],
     },
-    { name: 'devices', label: t('app.nav.devices'), ability: SETTINGS_MANAGE },
-    { name: 'branding', label: t('app.nav.branding'), ability: SETTINGS_MANAGE },
-    { name: 'license', label: t('app.nav.license'), ability: LICENSE_MANAGE },
-  ].filter((item) => session.can(item.ability)),
+    { name: 'devices', label: t('app.nav.devices'), abilities: [SETTINGS_MANAGE] },
+    { name: 'branding', label: t('app.nav.branding'), abilities: [SETTINGS_MANAGE] },
+    { name: 'license', label: t('app.nav.license'), abilities: [LICENSE_MANAGE] },
+    {
+      // Soporte (RF-PD-09, RF-PD-11, tarea 5.9): la alcanza quien lleva
+      // `support:*` -para conceder y revocar accesos- **o** `diagnostics:*`
+      // -un token de soporte con ese alcance tambien puede generar el
+      // paquete anonimizado de su propia intervencion-. Ninguno de los dos lo
+      // lleva un rol distinto de `admin` (doc 02 §7.3).
+      name: 'support',
+      label: t('app.nav.support'),
+      abilities: [SUPPORT_MANAGE, DIAGNOSTICS_MANAGE],
+    },
+  ].filter((item) => item.abilities.some((ability) => session.can(ability))),
 )
 
 const roleLabels = computed(() => session.roles.map((role) => t(`app.roles.${role}`)).join(', '))

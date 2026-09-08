@@ -610,6 +610,59 @@ presupuesto del Anexo A— y configuracion.md explicando cómo cambiar la
 marca con los límites del logotipo.
 ```
 
+#### 6.5.4 Paquete de diagnóstico, `doctor` y accesos de soporte (tarea 5.9)
+
+```text
+Ejecuta la tarea 5.9 del plan («Paquete de diagnóstico anonimizado,
+comando doctor, accesos de soporte auditados», RF-PD-09, RF-PD-11,
+RF-PD-13, RL-18, RL-19). La ficha ejecutable está en
+plan implementacion/05-fase-5-productizacion.md → «Tarea 5.9»; ADR-020
+gobierna.
+
+Orquesta: el contrato primero (POST /api/v1/diagnostics/bundle,
+GET/POST /api/v1/support/grants, DELETE /api/v1/support/grants/{uuid},
+esquemas DiagnosticsBundle, DoctorReport, SupportGrant, IssuedSupportGrant),
+tipos regenerados, y CUATRO agentes en paralelo con fronteras disjuntas y
+bloques reservados en ProductServiceProvider y en routes/api_v1.php:
+producto-licencia (doctor y paquete), backend-laravel (support_grants,
+tokenable en Identity, familia de auditoría support_access),
+devops-observabilidad (doctor.sh y enganches en install.sh/update.sh) y
+frontend-panel (pantalla «Soporte»). Documentación y runbook
+incidencia-sin-acceso.md por el orquestador; seguridad-cumplimiento con
+/revision-cumplimiento y revisor-codigo antes de cerrar.
+
+Los innegociables:
+- Anonimizado por defecto y VERIFICADO: cada sección del paquete es una
+  lista de permitidos; una prueba con volumen (500 empleados, 90 días)
+  busca nombres, correos, DNI, horas y la razón social en el paquete
+  completo. Empleados como employee_uuid, quioscos sin name, licencia sin
+  customer_name, auditoría solo en recuentos, nunca el .detalle.log
+- Configuración por lista blanca de claves; los secretos no aparecen ni
+  «redactados»
+- Incluir datos personales es acción distinta: bandera explícita, aviso en
+  el panel con role="alert", solo admin con cuenta de gestión, asiento
+  propio diagnostics.personal_data_included
+- La concesión de soporte es un token ligado a la fila de support_grants,
+  con scope (diagnostics | read_only | configuration) que limita por
+  ámbitos Y por rol, caducidad efectiva y revocación en el acto; cada uso
+  efectivo deja support_grant.used con ventana; el token sale UNA vez
+- Ningún alcance activa licencias, concede accesos, toca credenciales,
+  corrige fichajes ni incluye datos personales
+- doctor: 0 / 1 (solo avisos) / 2 (fallos); solo el 2 detiene al
+  instalador (6) y al actualizador (vuelta atrás); la licencia nunca pasa
+  de aviso; todo funciona con licencia caducada
+- Un único JSON legible sin cifrar con manifest.sha256, para que el cliente
+  lo inspeccione antes de enviarlo
+
+Criterio de terminado: la DoD de la ficha —autorización negativa por rol,
+por quiosco, por portal y por token de soporte de los tres alcances;
+conceder, usar, revocar e incluir datos personales en audit_log; ShellCheck
+y shfmt sobre doctor.sh; textos del doctor en español e inglés para quien
+no conoce el sistema; runbook probado contra un paquete real— y
+operacion.md §12 explicando doctor, paquete y accesos.
+```
+
+
 ### 6.6 Cierre de fase
 
 ```

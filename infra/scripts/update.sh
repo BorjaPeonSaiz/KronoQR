@@ -42,9 +42,9 @@
 #      parados. Los quioscos encolan (regla dura 19).
 #   3  Copia logica cifrada y verificada, bloqueante, DE ESTA EJECUCION.
 #   4  Migraciones version a version, con un punto de control entre cada una.
-#   5  Arranque de la version nueva SIN borde, verificacion desde dentro,
-#      mantenimiento, borde, verificacion por loopback, y solo despues el
-#      resto de servicios.
+#   5  Arranque de la version nueva SIN borde, verificacion desde dentro
+#      —incluido `product:doctor`, tarea 5.9—, mantenimiento, borde,
+#      verificacion por loopback, y solo despues el resto de servicios.
 #   6  Si algo falla en el 4 o en el 5: restauracion de la copia y relanzamiento
 #      de la version anterior, sin intervencion humana.
 #   7  Informe en BACKUP_PATH/reports/, siempre, tambien tras una vuelta atras.
@@ -1613,7 +1613,7 @@ verify_privileges() {
 }
 
 phase_start_and_verify() {
-  local reported failed path body status service
+  local reported failed path body status service doctor_status doctor_output
 
   STEP="5"
   heading "$(kq_format u_phase_5 "${TARGET_VERSION}")"
@@ -1671,6 +1671,47 @@ phase_start_and_verify() {
     remember_check "privileges" "$(kq_text u_report_failed)"
     rollback_and_die "$(kq_format u_f_verify_privileges "${CFG_DB_USERNAME}")"
   fi
+
+  # `product:doctor` (tarea 5.9) es el diagnostico oficial del producto. Aqui,
+  # a diferencia de install.sh, TODA verificacion fallida deshace (RF-PD-10:
+  # este script no usa el codigo 6): un fallo de product:doctor en la version
+  # NUEVA se trata igual que cualquier otro fallo del paso 5. Su informe
+  # completo va al DETALLE (puede llevar rutas y datos internos que no
+  # corresponden al resumen del paquete de diagnostico); aqui solo una linea.
+  #
+  # Comprobacion de PRESENCIA, no de texto: `list --raw` enumera los comandos
+  # tal cual los conoce la aplicacion, uno por linea. El mensaje de error de
+  # Symfony Console ante un comando que no existe depende del idioma y de la
+  # version del framework; preguntarle que comandos tiene no depende de
+  # ninguno de los dos (mismo razonamiento que doctor.sh).
+  if ! compose_new exec -T app php artisan list --raw 2>/dev/null | grep -q '^product:doctor'; then
+    remember_check "doctor" "$(kq_text u_report_failed)"
+    rollback_and_die "$(kq_text u_f_verify_doctor_missing_command)"
+  fi
+
+  detail_note "--- product:doctor (${TARGET_VERSION}) ---"
+  doctor_status=0
+  doctor_output="$(compose_new exec -T app php artisan product:doctor --lang="${KQ_LANG}" 2>&1)" || doctor_status=$?
+  detail_note "${doctor_output}"
+
+  case "${doctor_status}" in
+  0)
+    kq_msg check_ok "$(kq_text u_verify_doctor_ok)"
+    remember_check "doctor" "$(kq_text u_report_ok)"
+    ;;
+  1)
+    kq_msg check_warn "$(kq_text u_verify_doctor_warn)" "$(kq_text u_verify_doctor_warn_fix)"
+    remember_check "doctor" "$(kq_text u_report_warned)"
+    ;;
+  2)
+    remember_check "doctor" "$(kq_text u_report_failed)"
+    rollback_and_die "$(kq_text u_f_verify_doctor)"
+    ;;
+  *)
+    remember_check "doctor" "$(kq_text u_report_failed)"
+    rollback_and_die "$(kq_format u_f_verify_doctor_unexpected "${doctor_status}")"
+    ;;
+  esac
 
   # La licencia NO bloquea (regla dura 15): se consulta para el informe, y solo
   # su resultado. Su salida lleva el nombre del cliente y no va a ningun

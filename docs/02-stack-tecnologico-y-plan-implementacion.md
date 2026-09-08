@@ -1575,14 +1575,16 @@ php artisan kiosk:pairing-code {code} --name=    # CONFIRMA el código que muest
 php artisan kiosk:health                         # Estado de todos los quioscos
 
 # Producto y licencia
-php artisan product:doctor                       # Comprobación de salud (RF-PD-13)
+php artisan product:doctor [--json] [--lang=]     # Comprobación de salud (RF-PD-13). Sale 0 / 1 (solo avisos) / 2 (fallos)
 php artisan product:errors --since=24h --level=  # Histórico de errores agrupado (RF-PD-15)
 php artisan product:errors:prune                 # Purga a 90 días, en el scheduler
-php artisan product:diagnostics --anonymized     # Paquete de diagnóstico (RF-PD-09)
+php artisan product:diagnostics [--anonymized]   # Paquete de diagnóstico (RF-PD-09); anonimizado por defecto
+php artisan product:diagnostics --with-personal-data --period-days=7   # Acción distinta y auditada (RL-19)
+php artisan product:diagnostics --verify=RUTA    # Recalcula la huella de un paquete recibido
 php artisan product:export-all                   # Exportación íntegra del cliente (RF-PD-14)
 php artisan license:show / license:activate {key}
-php artisan support:grant --hours=24 --reason=   # Acceso de soporte auditado (RF-PD-11)
-php artisan support:revoke
+php artisan support:grant --hours=24 --reason= [--scope=diagnostics|read_only|configuration]   # Acceso de soporte auditado (RF-PD-11); el token sale UNA vez
+php artisan support:revoke {uuid} | --all        # Revoca en el acto; la fila se conserva
 
 # Copias
 php artisan backup:run && php artisan backup:verify

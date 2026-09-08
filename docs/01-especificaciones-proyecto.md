@@ -453,7 +453,7 @@ Motor: **PostgreSQL 17**. Los tipos se expresan en su nomenclatura. El Anexo D d
 >
 > **No hay `max_sites`** (ADR-040): una licencia es un centro.
 
-**`support_grants`** — `id`, `granted_by_user_id`, `reason`, `scope`, `granted_at`, `expires_at`, `revoked_at`, `accessed_at`
+**`support_grants`** — `id`, `uuid`, `granted_by_user_id`, `reason`, `scope` (`diagnostics`|`read_only`|`configuration`, tarea 5.9), `granted_at`, `expires_at`, `revoked_at`, `revoked_by_user_id`, `accessed_at`, `token_hash` (solo el hash del token de API ligado a la concesión; el token en claro no se guarda nunca)
 
 **`scan_events`** — log inmutable de todo escaneo, aceptado o no
 `id`, `scan_id` (UUID v7 generado en cliente, UNIQUE → idempotencia), `device_id`, `employee_id` (nullable si no resuelve), `occurred_at` (TIMESTAMPTZ), `recorded_at` (TIMESTAMPTZ), `origin`, `intent` (`auto`|`break_start`|`break_end`; **lo declara el cliente**, `auto` por defecto), `result` (`clock_in`|`clock_out`|`break_start`|`break_end`|`rejected_unknown`|`rejected_revoked`|`rejected_debounce`|`rejected_signature`), `shift_entry_id`, `payload_fingerprint`, `client_meta` (JSONB)

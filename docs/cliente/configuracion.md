@@ -603,6 +603,31 @@ Puedes subirlo si tu plantilla es mayor, pero **parte el fichero antes de
 hacerlo**: es más rápido y no depende de ningún límite.
 
 ---
+
+## 3 quater. Diagnóstico y soporte
+
+Lo que hay que saber para abrir una incidencia con soporte —la revisión de
+salud `product:doctor`, el paquete de diagnóstico anonimizado y los accesos
+temporales al fabricante— está en [`operacion.md`](operacion.md) §12, porque
+es operación, no configuración. Aquí solo van sus **parámetros**, que viven en
+el `.env` y **no** se editan desde el panel a propósito: si el máximo de horas
+de un acceso fuera una clave del panel, quien concede el acceso podría subirlo
+antes de concederlo y el límite dejaría de serlo.
+
+| Variable | De serie | Qué gobierna |
+| --- | --- | --- |
+| `PRODUCT_DIAGNOSTICS_MAX_BYTES` | `8388608` | Tamaño máximo del paquete de diagnóstico (8 MiB). Es un límite de canal —correo, portal de tickets—, no de memoria |
+| `PRODUCT_DIAGNOSTICS_RATE_LIMIT` | `3` | Paquetes por minuto y por cuenta desde el panel |
+| `PRODUCT_DIAGNOSTICS_PERSONAL_DATA_MAX_PERIOD_DAYS` | `31` | Máximo de días de fichajes que caben en un paquete **con datos personales**. Subirlo es una decisión legal, no de rendimiento |
+| `PRODUCT_SUPPORT_GRANT_DEFAULT_HOURS` | `24` | Duración de un acceso de soporte si no se indica |
+| `PRODUCT_SUPPORT_GRANT_MAX_HOURS` | `72` | Duración máxima admitida |
+| `PRODUCT_SUPPORT_USE_AUDIT_WINDOW_SECONDS` | `900` | Cada cuánto, como máximo, se anota un nuevo uso de un acceso de soporte en la auditoría |
+
+Lo que **sí** decides cada vez, y no en el `.env`: si el paquete lleva datos
+personales (nunca por defecto), y el motivo, el alcance y las horas de cada
+acceso.
+
+---
 ---
 
 ## 4. Qué hacer si…
