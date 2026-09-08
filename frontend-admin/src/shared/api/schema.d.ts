@@ -2859,7 +2859,7 @@ export interface paths {
          *     | `scope` | Puede | Actua como |
          *     | --- | --- | --- |
          *     | `diagnostics` | Generar el paquete de diagnostico **anonimizado** y consultar el historico de errores | `admin` solo ante las policies de diagnostico |
-         *     | `read_only` | Lo anterior y **leer** jornadas, tramos, plantilla y auditoria | `auditor` |
+         *     | `read_only` | Lo anterior y **leer** jornadas, tramos, plantilla y auditoria | `admin`, con ambitos de solo lectura (`attendance:read`, `employees:read`, `audit:read`): lo que impide escribir es el ambito, no el rol. No actua como `auditor` porque ese rol, a proposito, no lee el diario de jornadas (lo suyo es la exportacion legal, que ningun alcance concede) |
          *     | `configuration` | Lo de `diagnostics` y **cambiar** la configuracion de la instalacion, el perfil de cumplimiento y los quioscos | `admin` |
          *
          *     **Lo que ningun alcance concede nunca**: activar licencias, conceder o
@@ -7317,12 +7317,14 @@ export interface components {
          */
         SupportScope: "diagnostics" | "read_only" | "configuration";
         /**
-         * SupportGrant
-         * @description Una concesion de acceso de soporte (RF-PD-11, ADR-020): quien la
-         *     concedio, por que, con que alcance, hasta cuando, si se revoco y cuando
-         *     se uso por ultima vez. Se conserva para siempre (regla dura 5).
+         * SupportGrantAttributes
+         * @description Los campos de una concesion, sin cierre: es la pieza que comparten
+         *     `SupportGrant` (la lectura) e `IssuedSupportGrant` (la creacion, que
+         *     anade el token). El cierre —`unevaluatedProperties: false`— lo pone
+         *     cada uno de los dos, porque con `additionalProperties: false` aqui la
+         *     composicion rechazaria el `token` que existe para describir.
          */
-        SupportGrant: {
+        SupportGrantAttributes: {
             /** Format: uuid */
             uuid: string;
             /**
@@ -7347,6 +7349,13 @@ export interface components {
             /** @description Ultimo uso efectivo del token. Nulo si nunca se uso. */
             accessed_at: components["schemas"]["UtcTimestamp"] | null;
         };
+        /**
+         * SupportGrant
+         * @description Una concesion de acceso de soporte (RF-PD-11, ADR-020): quien la
+         *     concedio, por que, con que alcance, hasta cuando, si se revoco y cuando
+         *     se uso por ultima vez. Se conserva para siempre (regla dura 5).
+         */
+        SupportGrant: components["schemas"]["SupportGrantAttributes"];
         /** SupportGrantCollection */
         SupportGrantCollection: {
             data: components["schemas"]["SupportGrant"][];
@@ -7373,7 +7382,7 @@ export interface components {
          *     volver a pedir.
          */
         IssuedSupportGrant: {
-            data: components["schemas"]["SupportGrant"] & {
+            data: components["schemas"]["SupportGrantAttributes"] & {
                 /**
                  * @description Token de API con la caducidad de la concesion. Entregar a soporte por el canal del contrato.
                  * @example 23|Kd2pQ9vLmN4tZbYcF1wQ8sE3rT6uI0oP5aS7dXyZ

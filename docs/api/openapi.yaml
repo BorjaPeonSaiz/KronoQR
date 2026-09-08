@@ -5627,7 +5627,7 @@ paths:
         | `scope` | Puede | Actua como |
         | --- | --- | --- |
         | `diagnostics` | Generar el paquete de diagnostico **anonimizado** y consultar el historico de errores | `admin` solo ante las policies de diagnostico |
-        | `read_only` | Lo anterior y **leer** jornadas, tramos, plantilla y auditoria | `auditor` |
+        | `read_only` | Lo anterior y **leer** jornadas, tramos, plantilla y auditoria | `admin`, con ambitos de solo lectura (`attendance:read`, `employees:read`, `audit:read`): lo que impide escribir es el ambito, no el rol. No actua como `auditor` porque ese rol, a proposito, no lee el diario de jornadas (lo suyo es la exportacion legal, que ningun alcance concede) |
         | `configuration` | Lo de `diagnostics` y **cambiar** la configuracion de la instalacion, el perfil de cumplimiento y los quioscos | `admin` |
 
         **Lo que ningun alcance concede nunca**: activar licencias, conceder o
@@ -12704,14 +12704,15 @@ components:
         `POST /api/v1/support/grants`. `diagnostics` es el valor por defecto y
         el que basta para la mayoria de las incidencias.
 
-    SupportGrant:
+    SupportGrantAttributes:
       type: object
-      title: SupportGrant
+      title: SupportGrantAttributes
       description: |
-        Una concesion de acceso de soporte (RF-PD-11, ADR-020): quien la
-        concedio, por que, con que alcance, hasta cuando, si se revoco y cuando
-        se uso por ultima vez. Se conserva para siempre (regla dura 5).
-      additionalProperties: false
+        Los campos de una concesion, sin cierre: es la pieza que comparten
+        `SupportGrant` (la lectura) e `IssuedSupportGrant` (la creacion, que
+        anade el token). El cierre —`unevaluatedProperties: false`— lo pone
+        cada uno de los dos, porque con `additionalProperties: false` aqui la
+        composicion rechazaria el `token` que existe para describir.
       required:
         - uuid
         - status
@@ -12763,6 +12764,16 @@ components:
             - type: 'null'
           description: Ultimo uso efectivo del token. Nulo si nunca se uso.
 
+    SupportGrant:
+      title: SupportGrant
+      description: |
+        Una concesion de acceso de soporte (RF-PD-11, ADR-020): quien la
+        concedio, por que, con que alcance, hasta cuando, si se revoco y cuando
+        se uso por ultima vez. Se conserva para siempre (regla dura 5).
+      allOf:
+        - $ref: '#/components/schemas/SupportGrantAttributes'
+      unevaluatedProperties: false
+
     SupportGrantCollection:
       type: object
       title: SupportGrantCollection
@@ -12810,7 +12821,7 @@ components:
       properties:
         data:
           allOf:
-            - $ref: '#/components/schemas/SupportGrant'
+            - $ref: '#/components/schemas/SupportGrantAttributes'
             - type: object
               required: [token]
               properties:
@@ -12818,6 +12829,7 @@ components:
                   type: string
                   description: Token de API con la caducidad de la concesion. Entregar a soporte por el canal del contrato.
                   examples: ['23|Kd2pQ9vLmN4tZbYcF1wQ8sE3rT6uI0oP5aS7dXyZ']
+          unevaluatedProperties: false
 
 
     SetupStatus:
