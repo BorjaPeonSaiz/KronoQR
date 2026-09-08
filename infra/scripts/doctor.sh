@@ -260,7 +260,12 @@ run_delegated_doctor() {
   # Console si CONOCE el comando no depende de en que idioma ni con que
   # redaccion diria "no existe" si se le pidiera ejecutarlo: el mensaje de
   # error es del framework, y cambia entre versiones e idiomas sin avisar.
-  if ! compose_current exec -T app php artisan list --raw 2>/dev/null | grep -q '^product:doctor'; then
+  # Sin tuberia: con `pipefail`, `grep -q` cierra el tubo en cuanto encuentra la
+  # linea, PHP recibe SIGPIPE y la tuberia falla AUNQUE el comando exista (paso
+  # en la 8b de la 5.9: U1 en verde y U3 «sin product:doctor» con la misma imagen).
+  available_commands="$(compose_current exec -T app php artisan list --raw 2>/dev/null || true)"
+  if ! printf '%s
+' "${available_commands}" | grep -q '^product:doctor'; then
     die "${KQ_EXIT_VERIFY_FAILED}" "$(kq_text d_f_doctor_missing_command)"
   fi
 

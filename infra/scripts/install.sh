@@ -1288,7 +1288,12 @@ phase_verify() {
   # Symfony Console si se le pide ejecutar un comando que no existe depende
   # del idioma y de la version del framework; preguntarle que comandos tiene
   # no depende de ninguno de los dos.
-  if ! compose exec -T app php artisan list --raw 2>/dev/null | grep -q '^product:doctor'; then
+  # Sin tuberia: con `pipefail`, `grep -q` cierra el tubo en cuanto encuentra la
+  # linea, PHP recibe SIGPIPE y la tuberia falla AUNQUE el comando exista (paso
+  # en la 8b de la 5.9: U1 en verde y U3 «sin product:doctor» con la misma imagen).
+  available_commands="$(compose exec -T app php artisan list --raw 2>/dev/null || true)"
+  if ! printf '%s
+' "${available_commands}" | grep -q '^product:doctor'; then
     err ""
     err "ERROR: $(kq_format f_verify_doctor_missing_command "${COMPOSE_FILE}")"
     err "$(kq_format exit_line "${KQ_EXIT_VERIFY_FAILED}" "$(kq_exit_name "${KQ_EXIT_VERIFY_FAILED}")")"
