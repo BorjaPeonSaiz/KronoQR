@@ -9,8 +9,8 @@
 > si para diagnosticar hay que pedir «¿puedes mirar los datos?», el paquete ha
 > fallado y hay que corregir el paquete, no pedir acceso. El acceso directo es
 > la excepción del paso 6 y se pide **como concesión expresa, temporal, con
-> alcance y motivo**, nunca como atajo ([ADR-020](../adr/ADR-020-soporte-con-paquete-de-diagnostico.md),
-> regla dura 16).
+> alcance y motivo**, nunca como atajo (ADR-020, regla dura 16; el ADR no viaja en el paquete: vive en el
+> repositorio del fabricante).
 
 ---
 
