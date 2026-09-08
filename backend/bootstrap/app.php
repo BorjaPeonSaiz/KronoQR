@@ -42,6 +42,7 @@ use App\Modules\Product\Domain\Exception\SetupNotCompletable;
 use App\Modules\Product\Domain\Exception\SetupStepNotRecordable;
 use App\Modules\Product\Domain\Exception\UnknownSettingKey;
 use App\Modules\Product\Domain\Exception\UnknownSetupStep;
+use App\Modules\Product\Http\Middleware\RecordSupportAccess;
 use App\Modules\Reporting\Application\Exception\EmployeeNotFound;
 use App\Modules\Reporting\Application\Exception\ReportRenderingUnavailable;
 use App\Modules\Reporting\Domain\Exception\InvalidDateRange;
@@ -189,6 +190,33 @@ return Application::configure(basePath: dirname(__DIR__))
          */
         $middleware->api(append: [
             NegotiateLocale::class,
+            /*
+             * El rastro de uso de un acceso de soporte (tarea 5.9, RF-PD-11,
+             * ADR-020, regla dura 6).
+             *
+             * EN EL GRUPO ENTERO Y SIN FILTRAR POR RUTA, porque **el uso es la
+             * peticion y no el endpoint**: un token de soporte con alcance
+             * `read_only` alcanza rutas de tres modulos distintos, y la promesa
+             * de RF-PD-11 es que *cada acceso efectivo* queda registrado. Con la
+             * llamada repartida por cada controlador, la promesa se cumpliria
+             * hasta que alguien añadiera un endpoint y se olvidara — y ese olvido
+             * no rompe ninguna prueba de ese endpoint: simplemente deja de haber
+             * rastro.
+             *
+             * ANOTA A LA VUELTA, NO A LA IDA. Este grupo corre antes que el
+             * `auth:sanctum` de cada ruta, asi que en el camino de ida todavia no
+             * hay actor; el middleware deja pasar y anota con la respuesta ya
+             * hecha. Consecuencia deliberada: una peticion rechazada por una
+             * policy TAMBIEN cuenta como uso, y tiene que contar — que alguien
+             * con acceso de soporte intente entrar donde no le corresponde es
+             * exactamente el hecho que el cliente quiere ver en su trail.
+             *
+             * NO PUEDE TUMBAR NADA. Envuelve su trabajo y sigue, como los dos de
+             * observabilidad de arriba: para quien no es un actor de soporte
+             * —es decir, para el 99,99 % del trafico— es una comprobacion de tipo
+             * y nada mas.
+             */
+            RecordSupportAccess::class,
         ]);
 
         /*

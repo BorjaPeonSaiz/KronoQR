@@ -43,6 +43,23 @@ final readonly class CurrentAuditContext
 
     private const string USERS_TABLE = 'users';
 
+    /**
+     * La concesion de acceso de soporte que esta autenticada (RF-PD-11, RL-18,
+     * ADR-020, tarea 5.9).
+     *
+     * **Es un `tokenable` mas, y por eso entra por el mismo sitio.** Sin esta
+     * rama, todo lo que hiciera una sesion de soporte quedaria firmado como
+     * `system()` —«no hay nadie detras»— y el trail perderia exactamente la
+     * distincion que ADR-020 existe para dar: si lo hizo el cliente o si lo hizo
+     * el fabricante con un permiso temporal.
+     *
+     * Se reconoce por la TABLA, como el dispositivo y como la sesion de portal:
+     * `Compliance` no puede importar el modelo de `Product` (doc 02 §1.6,
+     * verificado por Deptrac), y `audit_log.actor_id` es una clave ajena logica
+     * hacia esta tabla.
+     */
+    private const string SUPPORT_GRANTS_TABLE = 'support_grants';
+
     public function actor(): AuditActor
     {
         $tokenable = Auth::user();
@@ -60,6 +77,7 @@ final readonly class CurrentAuditContext
         return match ($tokenable->getTable()) {
             self::DEVICES_TABLE => AuditActor::device((int) $key),
             self::USERS_TABLE => AuditActor::user((int) $key),
+            self::SUPPORT_GRANTS_TABLE => AuditActor::supportGrant((int) $key),
             default => AuditActor::system(),
         };
     }

@@ -7,96 +7,85 @@
 
 ## Estado y objetivo actual
 
-**Rama `feat/tarea-5.8-marca-blanca`**, creada desde `main` (`d83e55b`, PR #43 integrada con *merge commit*).
-**Tarea 5.8 «Marca blanca en las tres aplicaciones y en los PDF» (RF-PD-08) IMPLEMENTADA, REVISADA y PROBADA
-el 07/08-09-2026**: commit `067f04e`, **PR #46** contra `main` y la CI completa con ⑧b lanzada a mano (ejecución 34197180554) (toca
-`compose.prod.yaml`; ver «Siguiente acción»).
+**Rama `feat/tarea-5.9-diagnostico-doctor-soporte`**, creada desde `main` (`d2fe595`: PR #44, #45 y #46
+integradas el 08-09-2026 con la CI de `main` completa en verde, ⑧ y ⑧b incluidas, y Node 25 en la imagen de
+nginx). **Tarea 5.9 «Paquete de diagnóstico anonimizado, `product:doctor`, accesos de soporte auditados»
+(RF-PD-09, RF-PD-11, RF-PD-13, RL-18, RL-19) IMPLEMENTADA, REVISADA y PROBADA el 08-09-2026**: **PR #47**
+contra `main`, con la CI completa y ⑧b lanzada a mano (ejecución 34232924735; ver «Siguiente acción»).
 
-**Cómo se hizo (vale como receta para la 5.9 y siguientes):** contrato primero (`GET /api/v1/branding`
-público y `GET /api/v1/branding/logo`, esquema `Branding`, validación del logotipo en el `PATCH` de ajustes),
-tipos regenerados en las tres SPA, módulo compartido `packages/web-kit/src/branding.ts` con su prueba, y
-**cuatro agentes en paralelo con fronteras de ficheros disjuntas** (`producto-licencia`: backend, compose,
-`.env.example`, docs de cliente; `frontend-quiosco`; `frontend-panel`; `frontend-portal-empleado`) sobre un
-brief único; después tres revisores (`revisor-codigo`, `seguridad-cumplimiento`, `ui-ux`) y una segunda
-vuelta de los mismos agentes con los hallazgos. Prompt en doc 03 §6.5.3. **No es TDD estricto**: contrato y
-pruebas obligatorias por nivel, escritas junto al código (el usuario preguntó; si quiere TDD puro para la
-5.9, imponerlo en el brief).
+**Cómo se hizo (misma receta que la 5.8, con una diferencia):** contrato primero (cuatro rutas y ocho esquemas),
+tipos regenerados, **bloques reservados con comentario** en `ProductServiceProvider` y `routes/api_v1.php`
+para que dos agentes de backend editaran los mismos ficheros sin pisarse, y cuatro agentes en paralelo
+(`producto-licencia`: doctor y paquete; `backend-laravel`: `support_grants`, tokenable en Identity, familia
+de auditoría; `devops-observabilidad`: `doctor.sh` y enganches; `frontend-panel`: pantalla «Soporte»). Después
+`revisor-codigo` y `seguridad-cumplimiento` (con `/revision-cumplimiento`), y segunda vuelta de A, B y C con
+los hallazgos. Prompt en doc 03 §6.5.4. **Dos agentes se cortaron por el límite de sesión a media
+verificación y se reanudaron con `SendMessage` sin perder contexto.** La BD de pruebas compartida entre
+agentes produce fallos esporádicos (`relation does not exist`, deadlocks de `migrate:fresh`): no son defectos,
+se repite el filtro.
 
-**Lo construido.** Backend: puertos `BrandingLogoReader` y `LocalePolicyProvider` en `Shared` (`LogoImage`,
-`LogoFormat`, `LocalePolicy`), `LogoFileInspector` tras el puerto `Product/Application/Port/LogoInspector`
-(Deptrac: `ProductHttp` no alcanza `ProductInfrastructure`), `BrandingController` + `BrandingResource` +
-`GetBrandingHandler` (nunca 500: con la configuración ilegible devuelve el producto), `LicensedBrandingProvider`
-(decorador único del gating por licencia, ADR-023), `DbLocalePolicyProvider` + `App\Support\Locale\NegotiableLocales`
-(mismo precedente que `LicenseStateProbe`: `AppFramework` no alcanza `SharedApplicationPort`),
-`throttle:branding`, `ETag` con `304`, los tres consumidores migrados (`BrowsershotCardRenderer`,
-`CsvLegalExportWriter`, `PeriodReportPdf` con cabecera de marca), `NegotiateLocale` leyendo `LOCALE_*` con
-respaldo a config y sin tocar nada en `/health` y `/ready`, `config/branding.php` reescrito (`logo_root`,
-límites sin variable de entorno), excepción acotada a `ConvertEmptyStringsToNull` en el `PATCH /settings`
-(defecto de la 5.1: no se podía quitar un logotipo), `Feature::WhiteLabel` en `implemented()`. Compose de
-producción: volumen `${BRANDING_PATH:-./branding}:/var/kronoqr/branding:ro` en los cuatro servicios de la app;
-el de desarrollo monta `backend/storage/app/branding` en la misma ruta (**exige recrear los contenedores con
-`make up`** para probar la marca a mano). `web-kit`: `branding.ts` (`parseBranding` —solo acepta `logo_url`
-del propio contrato—, `accentOverrides` claro y quiosco —en el quiosco el acento se aclara; el anillo de foco
-se oscurece hasta 3:1—, `applyBranding`, `contrastWarnings`, `offeredLocales`, `PRODUCT_ACCENT_COLOR`),
-`brandingState.ts` (`createBrandingState`, el estado que envuelven las stores del panel y del portal) y
-`components/BrandMark.vue` (logotipo-o-nombre con `alt`, tope de ancho y truncado). Quiosco: `useBranding`
-(localStorage + reintento al volver la red), cabecera y confirmación con marca, `LanguageSelector` filtrado y
-oculto con un solo idioma, `runtimeCaching` del SW para las dos rutas de marca (única excepción a «la API no
-se cachea»). Panel: pantalla **«Marca»** (`/branding`, `settings:*`) con previsualización, avisos de contraste
-en lenguaje llano (el del botón principal con `role="alert"`), 422 del logotipo y aviso de plan sin
-`white_label`; dobles E2E de `/settings`, `/branding`, `/branding/logo` y `/license`. Portal: `BrandMark` en
-cabecera y acceso; idioma inicial anónimo desde `locales.default`. Docs: contrato, doc 02 Anexo B, doc 03
-§6.5.3, doc 06 §7, doc 07 §5/§6 (dos riesgos aceptados), ficha 5.8 (nueve «Decisiones tomadas», punto 1 de
-«no cubiertos» resuelto), `configuracion.md` §1/§2.2/§2.3/§4, `instalacion.md` §1.8.
+**Lo construido.** Backend: `product:doctor` (22 comprobaciones en 8 familias, `--json`, `--lang`, códigos
+0/1/2, idioma único resuelto `--lang` → `LOCALE_DEFAULT` → `APP_LOCALE`; la licencia nunca pasa de aviso;
+con la BD caída informa y sigue), `product:diagnostics` (`--with-personal-data`, `--period-days`, `--output`,
+`--verify=RUTA`; purga los paquetes de más de `PRODUCT_DIAGNOSTICS_RETENTION_DAYS` al arrancar), `POST
+/api/v1/diagnostics/bundle` (`diagnostics:*`, `throttle:diagnostics` 3/min, descarga como fichero), paquete
+en un único JSON por **lista de permitidos** sección a sección (`FieldAllowlist`,
+`DiagnosticsConfigurationAllowlist` con guarda de forma de secreto, `UpdateReportAllowlist` por líneas del
+formato de `update.sh`, `SettingsDrift` compartido por sonda y recolector, `MetricsCollector` con `SCAN`),
+`manifest.sha256` sobre JSON canónico (`CanonicalJson`), `UtcInstant` en `Shared/Domain` como único formato
+de instante. Accesos de soporte: `support_grants` (migración + expand del CHECK `actor_type`),
+`SupportGrant` como cuarto *tokenable* (implementa `ManagementActor`, `Authenticatable`, `Authorizable` y
+**no** `HasRoles`), `SupportScope` (`diagnostics` | `read_only` | `configuration`, todos actúan como
+`admin`; los ámbitos limitan la escritura y las policies cierran lo que el ámbito alcanza: `LicensePolicy`,
+`SetupPolicy`, `ComplianceProfilePolicy::update`, `SupportGrantPolicy`, `DiagnosticsPolicy::includePersonalData`
+rechazan `isSupportActor()`), `SanctumSupportTokenIssuer` en Product, middleware global `RecordSupportAccess`
+(resuelve el caso de uso **tarde** para que `/health` no dependa de la BD; ventana de 900 s), `support:grant
+--as=` y `support:revoke {uuid}|--all`, `GET/POST /support/grants`, `DELETE /support/grants/{uuid}`
+(idempotente, un solo asiento en carrera), `LogoutController` ignora tokens de soporte. Compliance: familia
+`support_access` (décima), actor `support_grant`, acciones `support_grant.granted|used|revoked`,
+`diagnostics.bundle_generated`, `diagnostics.personal_data_included`. Scripts: `doctor.sh` (0/2/3/6; delega en
+`product:doctor` si `app` está en pie —presencia por `artisan list --raw`—; desde fuera: Docker, `compose ps`,
+`.env` 0600, disco por proporción como `DiskProbe`, certificados, puertos), `install.sh` (2 → 6, 1 aviso) y
+`update.sh` (doctor **informativo**: va al informe, nunca deshace; solo aborta si el comando no existe).
+Panel: `features/support` (`/support`, nav «Soporte», `SUPPORT_MANAGE`/`DIAGNOSTICS_MANAGE`), descarga del
+paquete con casilla de datos personales y `role="alert"`, concesión con token mostrado una vez y copia,
+lista y revocación con confirmación; `web-kit/http` admite `DELETE`. Docs: contrato, ficha 5.9 (diez
+decisiones; puntos no cubiertos 12 y 13 resueltos), doc 01 §5, doc 02 Anexo C y §12, doc 03 §6.5.4, doc 07
+§5 y §6 (dos riesgos cerrados, cuatro nuevos), runbook `incidencia-sin-acceso.md`, `operacion.md` §12,
+`configuracion.md` 3 quater, `instalacion.md`, `obligaciones-legales.md` §8.
 
-**Decisiones que hay que conocer** (todas en la ficha 5.8): (1) manda la BD; `BRANDING_NAME` y
-`BRANDING_ACCENT_COLOR` **retiradas** del `.env`; (2) el acento de serie pasa de `#111827` a **`#b8542a`**
-(tarjeta e informe con el filete del producto); (3) **`accent_color` público es `null`** cuando rige el valor
-de serie —también si el cliente escribe `#b8542a` en cualquier caja— y las SPA no tocan ningún token; (4) el
-logotipo es un fichero dentro de `BRANDING_LOGO_ROOT` (solo lectura) validado **al guardar** (`realpath`,
-`..` por segmento, PNG/SVG por contenido, 512 KiB, 2048 px, sin `<script`/`on*=`/`<foreignObject`/`<!ENTITY`),
-lectura tolerante; (5) `LOCALE_*` gobiernan la negociación de idioma y el selector del quiosco,
-`APP_LOCALE`/`APP_SUPPORTED_LOCALES` solo de respaldo; (6) la marca propia es funcionalidad del plan
-(`white_label`): sin ella se degradan **color y logotipo, nunca el nombre** (la exportación legal y el sello
-del informe identifican al obligado, RL-03/RL-06), las filas se conservan y se siguen editando; (7)
-`manifest.name` del quiosco sigue siendo el del producto (compilación). **Nota de versión obligatoria**:
-quien tuviera `BRANDING_NAME`/`BRANDING_ACCENT_COLOR` solo en el `.env` verá el valor del catálogo al
-actualizar.
+**Decisiones que hay que conocer** (todas en la ficha 5.9): (1) tres alcances, todos como `admin` ante las
+policies; **ninguno** activa licencias, concede accesos, toca credenciales, corrige fichajes, modifica el
+perfil de cumplimiento, completa el asistente ni incluye datos personales; (2) el token de soporte se enseña
+**una vez** y solo se guarda su hash; caducidad efectiva por `expires_at` del token; (3) `support_grant.used`
+como máximo uno por concesión cada 900 s; (4) paquete **sin cifrar** para que el cliente lo inspeccione;
+`--verify` recalcula la huella; (5) `personal_data.employees` solo con actividad en el periodo o incidencia
+abierta; (6) `error_events` → `not_installed` hasta la 5.12; (7) las rutas del cliente (`BACKUP_PATH`,
+`BRANDING_LOGO_ROOT`) sí viajan: identifican a la organización, no a una persona (doc 07 §6).
 
-**Lo que corrigieron las revisiones (todo aplicado y re-verificado):** (a) *bloqueante ui-ux*: los avisos de
-contraste del panel enseñaban los nombres en inglés de `themePairs.ts` → diccionario de tokens a textos
-llanos; (b) *bloqueante código*: `ScanView` no pasaba la marca a `ScanConfirmationPanel` → la confirmación
-salía siempre con «KronoQR» (prueba unitaria y E2E añadidas); (c) *importante seguridad*: el gating por
-licencia degradaba también el nombre en el CSV de la Inspección y en el informe sellado → el nombre no se
-degrada nunca; (d) `parseBranding` aceptaba cualquier `logo_url` (la copia del quiosco vive en localStorage)
-→ solo `/api/v1/branding/logo[?v=…]`; (e) foco derivado hasta 3:1 (un acento casi blanco dejaba sin anillo
-de foco al panel entero); (f) panel y portal duplicaban el módulo de marca y ya divergían → `brandingState.ts`
-+ `BrandMark.vue` en `web-kit` (ADR-036); (g) `.env.example` fijaba `BRANDING_LOGO_ROOT=/var/kronoqr/branding`
-y en desarrollo nada lo montaba (todo logotipo daba 422) → montaje en `compose.dev.yaml`; (h) `GET /branding`
-podía dar 500 con la configuración ilegible; (i) `ETag` prometido y no honrado → `304`; (j) SVG: filtro
-ampliado y `<!DOCTYPE svg` reconocido (antes se rechazaba con un mensaje falso); (k) `..` por segmento;
-(l) etiqueta `RL-15` mal puesta en dos pruebas (era la regla dura 15); (m) comparación del acento en
-minúsculas; (n) pruebas reales de los `catch (Throwable)` del respaldo de idiomas; (o) selector de idioma
-oculto con un solo idioma; (p) truncado de nombres de 60 caracteres y tope de ancho de logotipos en las tres
-SPA; (q) comentario de rutas y docblock de `SettingKey` alineados; (r) declinada la caché de la huella del
-logotipo (una huella obsoleta con `immutable` dejaría tablets con el logotipo viejo para siempre; aviso en
-`.env.example` en su lugar).
+**Lo que corrigieron las revisiones (todo aplicado y re-verificado):** `KEYS` → `SCAN` en Redis; drift
+`.env`/BD unificado; informe de actualización filtrado por líneas; purga de paquetes en disco; guarda de
+secretos por forma (cazó cuatro magnitudes `IDENTITY_*_TOKEN_*`, excepcionadas una a una); plantilla
+minimizada; `LicensePolicy` y `ComplianceProfilePolicy` cierran al actor de soporte; `SupportScopeTest`
+ata el catálogo de ámbitos; revocación en carrera con un solo asiento; `/auth/logout` con token de soporte
+→ 204 sin efecto; `whereUuid`; CHECK de `scope` atado a `SupportScope::names()`; doctor informativo en
+`update.sh`; disco de `doctor.sh` por proporción; `/health` sin BD (el middleware resolvía el caso de uso por
+constructor: 3 fallos de la suite completa, corregido).
 
-**Verificado el 08-09:** `make quality` en verde (Rector ignorado como siempre); gitleaks sobre los ficheros
-cambiados sin hallazgos; backend dentro del contenedor: Pint, PHPStan 9, Deptrac 0 violaciones, Feature
-Product 217 / Compliance 47 / Reporting 176 / Identity 173, Contract 59, Unit 1351, Http+Health+Architecture
-181, Integration 419, `qa:traceability --check` y `docs:consistency` OK; `web-kit` 187; quiosco 369
-unitarias + 46 E2E + bundle 99,9/250 KiB JS y 4,9/40 KiB CSS; panel 384 unitarias + 68 E2E; portal 79
-unitarias. Pruebas nuevas: `BrandingEndpointTest` (público, sin filtrar otras claves, logo por contenido,
-404/304/429, autorización negativa con tokens de quiosco y portal, gating por licencia, degradación sin 500),
-`LogoFileInspectorTest`, `LogoImageTest`, `LocalePolicyTest`, `branding.spec.ts` y `brandingState.spec.ts`
-(web-kit), `useBranding.spec.ts`, `BrandingView.spec.ts`, `branding.store.spec.ts` (panel y portal), E2E
-`branding.spec.ts` del quiosco y del panel, casos con marca en los dos `accessibility.spec.ts`.
+**Dos fallos de la primera CI manual, corregidos:** (a) la ⑧ exige que ninguna guía entregada enlace fuera del paquete y el runbook nuevo enlazaba al ADR-020 (los ADR no viajan): ahora lo cita en texto; (b) la ⑧b **falló de verdad** en «U1 · Actualizar»: en el escenario sintético `ci.yml` congelaba la frontera de la versión anterior con la última migración del árbol **nuevo**, así que las dos migraciones de la 5.9 quedaban atribuidas a la 2.1.0 ya instalada y `update.sh` se negaba —bien— a adivinar. Había pasado desapercibido porque 5.7 y 5.8 no traían migraciones. La frontera sale ahora del árbol `anterior/`. Trampa aprendida: un `perl -i` sobre `ci.yml` dejó un comentario a columna 0 dentro de un bloque `run: |` y el YAML entero dejó de parsear (GitHub responde «Workflow does not have workflow_dispatch trigger»): validar el YAML antes de empujar. (c) Segunda CI manual: U1 en verde y U3 deshaciendo «sin `product:doctor`» con la misma imagen: la comprobación de presencia era `artisan list --raw | grep -q` y, con `pipefail`, `grep -q` cierra el tubo al encontrar la línea, PHP recibe SIGPIPE y la tubería falla aunque el comando exista. Ahora la salida se captura en una variable antes de buscar, en los tres scripts.
 
-**Siguiente acción:** vigilar la ejecución manual de la ⑧b sobre la rama y las etapas normales de la PR;
-integrar la PR con *merge commit* (nunca squash) cuando todo esté en verde; recrear los contenedores de
-desarrollo (`make up`) por el montaje nuevo; y arrancar la **5.9** (`product:doctor` y paquete de
-diagnóstico) en rama nueva. Recordatorio: **la ⑧b solo corre en `main`, etiquetas o a mano**.
+**Verificado el 08-09:** Pint, PHPStan 9, Deptrac 0 violaciones, **suite completa del backend 3458 en
+verde**, mutación sobre las cuatro clases de dominio nuevas (`SupportGrant`, `SupportScope`, `FieldAllowlist`, `SettingsDrift`) **MSI 90,16 %** (61 mutantes, 6 sin cubrir), prueba de la ventana de auditoría con ocho procesos concurrentes contra Redis (un solo registro; los hijos mueren con SIGKILL para no cerrar el socket de PDO del padre), `qa:traceability --check`, `docs:consistency --check`, gitleaks (186 commits, 0), contrato Redocly 0
+problemas, `make sh-lint` 0, panel 397 unitarias + 76 E2E (5 nuevas de `support.spec.ts` y 3 de
+accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el contenedor: `product:doctor`
+(exit 1, tres avisos coherentes), `product:diagnostics` (71 KB, `grep -c "hotel\|@"` = 0), `--verify`
+íntegro/alterado, `support:grant`/`support:revoke`, `doctor.sh` con `app` en pie y parado.
+
+**Siguiente acción:** vigilar la ejecución manual 34232924735 (⑧ y ⑧b) y la PR #47; integrar con *merge
+commit* (nunca squash) cuando esté todo en verde —**cuidado: el grupo de concurrencia cancela la ejecución en
+curso de la misma rama en cada push, así que no empujar nada mientras corra la manual**—, ejecutar `make up` (migraciones
+nuevas de `support_grants`), y arrancar la **5.10** (exportación íntegra y telemetría desactivada) en rama
+nueva. Recordatorio: **la ⑧b solo corre en `main`, etiquetas o a mano**.
 
 ## Pendiente
 
@@ -134,15 +123,8 @@ diagnóstico) en rama nueva. Recordatorio: **la ⑧b solo corre en `main`, etiqu
   la PWA es de compilación; regla de ESLint/Pest Arch que prohíba `v-html`/`{!! !!}` con `logoUrl`/`dataUri`
   (riesgo aceptado en doc 07 §6); unificar el estado de carga de `ComplianceProfileView`/`LicenseView` con
   `LoadingPanel` como ya hace `BrandingView`; cada `GET /branding` lee y hashea el logotipo (≤ 512 KiB,
-  aceptado con aviso en `.env.example`). Para la 5.9: `doctor` debe comprobar `BRANDING_LOGO_PATH` con el
-  mismo `LogoInspector` y avisar si `white_label` no está en el plan pero hay marca configurada.
-- **5.9 (`product:doctor`):** puntos de enganche documentados en `phase_verify` de `install.sh` **y en
-  `phase_start_and_verify` de `update.sh`** (sustituir/añadir a las sondas por FastCGI); enseñar
-  `meta.invalid_keys` de `GET /settings`; avisar si `.env` y BD difieren; comprobar que
-  `BRANDING_LOGO_PATH` existe; estado de licencia vía `license:show` (salida 0/1) o campo `license` de
-  `/health`; si el paquete de diagnóstico incluye asientos `license_lifecycle`, **redactar
-  `customer_name`** (ADR-020); decidir el `scope` de `support_grants`; **incluir el último
-  `BACKUP_PATH/reports/update-*.log`** en el paquete de diagnóstico (§11.6.6 lo pide).
+  aceptado con aviso en `.env.example`). (la 5.9 ya lo comprueba: `permissions.branding_logo` y `license.white_label_without_plan`).
+- **5.9 (restos):** `updated_by_user_id` queda `null` cuando escribe un actor de soporte (el actor consta en `audit_log`; si hace falta, `updated_by_support_grant_id`); los `Redis*Metrics` de otros módulos podrían exponer sus claves para que `MetricsCollector` no adivine la forma; ampliar `error_events` en el paquete llega con la 5.12; si el paquete incluyera algún día asientos de `audit_log`, redactar `customer_name` (hoy solo recuentos).
 - **5.11:** capturas del asistente en `instalacion.md` §1.7 (el texto ya las anticipa), guía de
   endurecimiento, y **`doctor.sh`** (la nota de `instalacion.md` §1.1 lo promete «en una versión posterior
   de la serie 2.x»).

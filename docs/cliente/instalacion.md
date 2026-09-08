@@ -80,6 +80,7 @@ docker-compose.yml       Definición de los servicios. No se toca.
 .env.example             Plantilla de configuración. La copias en el paso 1.2.
 install.sh               El instalador.
 update.sh                El actualizador: a una versión posterior, con vuelta atrás.
+doctor.sh                Diagnóstico en un comando, sin entrar al contenedor.
 backup.sh restore.sh     Copias de seguridad y restauración.
 restore-drill.sh         Simulacro trimestral de restauración.
 lib/                     Bibliotecas de los scripts. No se tocan.
@@ -93,19 +94,22 @@ docs/runbooks/           Procedimientos: restaurar, rotar secretos, alta de
                          quiosco, requerimiento de Inspección, RGPD…
 ```
 
-> **Lo que todavía NO viene en la 2.1.0, y cuándo llega.** Se dice aquí y no se
-> descubre a mitad de una incidencia:
+> **`./doctor.sh`, para cuando algo no va bien.** Localiza la instalación solo
+> (igual que `update.sh`; `--current RUTA` la fija a mano si hace falta) y:
 >
-> | Pieza | Para qué | Llega en |
-> | --- | --- | --- |
-> | `doctor.sh` | Comprobación de salud en un comando | Una versión posterior de la serie 2.x |
+> - **Si la aplicación está en marcha**, delega en el diagnóstico real del
+>   producto (`php artisan product:doctor`) y muestra su informe completo:
+>   base de datos, colas, correo, certificado, permisos, disco y licencia,
+>   cada comprobación con qué hacer si está en rojo.
+> - **Si la aplicación está parada** —el caso para el que este script existe:
+>   sin ella, `docker compose exec` no sirve de nada—, comprueba desde fuera
+>   lo que se puede: que Docker responde, el estado de cada servicio, que el
+>   `.env` está y con permisos `0600`, el espacio libre, el certificado y su
+>   caducidad, y si algo escucha en los puertos configurados. Y dice cómo
+>   arrancarla.
 >
-> Mientras tanto, el estado se mira con las dos sondas del paso 1.5, con
-> `docker compose ps` y con los comandos de [`operacion.md`](operacion.md).
-> **Actualizar a una versión posterior ya es `update.sh`**
-> ([`operacion.md`](operacion.md) §11 y
-> [`../runbooks/actualizacion-cliente.md`](../runbooks/actualizacion-cliente.md)):
-> la 2.1.0 es la primera versión con instalador y actualizador.
+> Nunca imprime un secreto: del `.env` solo lee rutas, puertos y nombres de
+> fichero. Sus códigos de salida están en la sección 2, más abajo.
 
 ### 1.2 Coloca el certificado y rellena la configuración
 

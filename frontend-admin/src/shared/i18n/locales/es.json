@@ -15,7 +15,8 @@
       "compliance": "Cumplimiento",
       "devices": "Quioscos",
       "branding": "Marca",
-      "license": "Licencia"
+      "license": "Licencia",
+      "support": "Soporte"
     },
     "roles": {
       "admin": "Administración",
@@ -1236,6 +1237,86 @@
         "heading": "Primer quiosco",
         "intro": "Teclea el código de seis dígitos que muestra la tablet y ponle un nombre al quiosco. Si todavía no ha llegado al hotel, puedes omitir este paso y vincularlo más tarde desde «Quioscos», sin repetir la puesta en marcha.",
         "skip": "Omitir por ahora"
+      }
+    }
+  },
+  "support": {
+    "heading": "Soporte",
+    "intro": "Genera el paquete que necesita el fabricante para diagnosticar una incidencia y, si hace falta, concédele un acceso temporal y revocable a esta instalación.",
+    "diagnostics": {
+      "heading": "Paquete de diagnóstico",
+      "intro": "Un único fichero JSON con la versión, la configuración sin secretos, la salud de los servicios y el resultado de «doctor», que puedes enviar a soporte por el canal de tu contrato. Va anonimizado por defecto: sin nombres, sin correos y sin registros de jornada.",
+      "generate": "Generar y descargar",
+      "generating": "Generando…",
+      "includePersonalData": "Incluir datos personales",
+      "personalDataWarning": "Si marcas esta casilla, el paquete dejará de ir anonimizado: añadirá la plantilla (nombre y código de cada persona), los fichajes y tramos del periodo elegido, y las incidencias abiertas. Queda registrado en el histórico de auditoría, visible para cualquier administrador de la instalación.",
+      "periodDays": "Días",
+      "periodDaysHint": "Cuántos días hacia atrás incluir en los fichajes y tramos del paquete. Sin marcar «Incluir datos personales» no tiene efecto.",
+      "success": "Descargado {filename}; revísalo antes de enviarlo.",
+      "announceDownloaded": "Se ha descargado el paquete de diagnóstico {filename}."
+    },
+    "grant": {
+      "heading": "Accesos de soporte",
+      "intro": "Concede al fabricante un acceso temporal, limitado y revocable cuando necesites ayuda con una incidencia. Queda registrado aquí desde que se concede hasta que se usa o se revoca.",
+      "fields": {
+        "reason": "Motivo",
+        "reasonHint": "El número o la referencia de la incidencia, entre 3 y 200 caracteres. Va tal cual al registro de auditoría: sin nombres de personas ni datos de salud.",
+        "scope": "Alcance",
+        "hours": "Horas",
+        "hoursHint": "Cuánto tiempo estará activo el acceso: entre 1 y 72 horas."
+      },
+      "scope": {
+        "diagnostics": {
+          "label": "Diagnóstico",
+          "description": "Genera el paquete de diagnóstico anonimizado y consulta el histórico de errores. Basta para la mayoría de las incidencias."
+        },
+        "read_only": {
+          "label": "Solo lectura",
+          "description": "Además de lo anterior, puede leer jornadas, tramos, plantilla y auditoría, sin poder cambiar nada."
+        },
+        "configuration": {
+          "label": "Configuración",
+          "description": "Además de lo anterior, puede cambiar la configuración de la instalación, el perfil de cumplimiento y los quioscos."
+        }
+      },
+      "scopeNeverNote": "Ningún alcance permite activar licencias, conceder o revocar accesos de soporte, emitir o revocar credenciales, corregir fichajes, gestionar la plantilla, ni generar informes de nómina o la exportación para la Inspección.",
+      "submit": "Conceder acceso",
+      "submitting": "Concediendo…",
+      "announceGranted": "Se ha concedido el acceso de soporte.",
+      "announceRevoked": "Se ha revocado el acceso de soporte.",
+      "tokenIssued": "Token del acceso concedido",
+      "tokenWarning": "No se volverá a mostrar. Si se pierde, revoca esta concesión y crea otra.",
+      "copy": "Copiar",
+      "copied": "Copiado",
+      "status": {
+        "active": "Activa",
+        "expired": "Caducada",
+        "revoked": "Revocada"
+      },
+      "list": {
+        "loading": "Cargando los accesos de soporte…",
+        "caption": "Accesos de soporte concedidos",
+        "empty": {
+          "title": "Todavía no se ha concedido ningún acceso de soporte",
+          "description": "Cuando concedas uno, aparecerá aquí con quién lo concedió, para qué y hasta cuándo."
+        },
+        "columns": {
+          "reason": "Motivo",
+          "scope": "Alcance",
+          "grantedBy": "Concedido por",
+          "grantedAt": "Concedido",
+          "expiresAt": "Caduca",
+          "status": "Estado",
+          "usedAt": "Último uso",
+          "actions": "Acciones"
+        },
+        "usedAgo": "Hace {hours} h {minutes} min",
+        "neverUsed": "Nunca"
+      },
+      "revoke": {
+        "action": "Revocar",
+        "heading": "Revocar acceso de soporte",
+        "explanation": "Este acceso, concedido para «{reason}», dejará de valer de inmediato. La concesión no se borra: quedará marcada como revocada, con quién lo hizo y cuándo."
       }
     }
   }

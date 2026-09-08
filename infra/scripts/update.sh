@@ -42,7 +42,9 @@
 #      parados. Los quioscos encolan (regla dura 19).
 #   3  Copia logica cifrada y verificada, bloqueante, DE ESTA EJECUCION.
 #   4  Migraciones version a version, con un punto de control entre cada una.
-#   5  Arranque de la version nueva SIN borde, verificacion desde dentro,
+#   5  Arranque de la version nueva SIN borde, verificacion desde dentro
+#      —incluido `product:doctor`, tarea 5.9, INFORMATIVO aqui: se muestra y se
+#      resume, pero solo deshace si el comando falta en la imagen—,
 #      mantenimiento, borde, verificacion por loopback, y solo despues el
 #      resto de servicios.
 #   6  Si algo falla en el 4 o en el 5: restauracion de la copia y relanzamiento
@@ -75,7 +77,12 @@
 #   5  Fallo con VUELTA ATRAS INCOMPLETA. Hace falta una persona; el mensaje
 #      imprime las ordenes exactas (y distingue si solo queda retirar el
 #      mantenimiento de si hay que restaurar la copia).
-#   6  NO LO USA ESTE SCRIPT: toda verificacion fallida deshace (RF-PD-10).
+#   6  NO LO USA ESTE SCRIPT: toda verificacion fallida deshace (RF-PD-10),
+#      con UNA excepcion documentada: un `product:doctor` con fallos o
+#      avisos (tarea 5.9, segunda vuelta) es informativo y NO deshace, porque
+#      la version nueva ya esta verificada por las sondas, la cadena y los
+#      privilegios; solo deshace si el comando falta en la imagen, que es un
+#      paquete roto.
 #
 # Que NO hace, a proposito:
 #   · No exige licencia. Una licencia caducada no puede dejar a un cliente sin
@@ -1613,7 +1620,7 @@ verify_privileges() {
 }
 
 phase_start_and_verify() {
-  local reported failed path body status service
+  local reported failed path body status service doctor_status doctor_output
 
   STEP="5"
   heading "$(kq_format u_phase_5 "${TARGET_VERSION}")"
@@ -1671,6 +1678,56 @@ phase_start_and_verify() {
     remember_check "privileges" "$(kq_text u_report_failed)"
     rollback_and_die "$(kq_format u_f_verify_privileges "${CFG_DB_USERNAME}")"
   fi
+
+  # `product:doctor` (tarea 5.9) es el diagnostico oficial del producto, pero
+  # AQUI ES INFORMATIVO (revision de codigo, segunda vuelta): la version nueva
+  # ya esta verificada por las sondas, la cadena de auditoria, las
+  # restricciones RN-01/RN-02 y los privilegios de base de datos, y buena
+  # parte de los fallos de product:doctor son AMBIENTALES —disco por debajo
+  # del umbral, certificado a punto de caducar, APP_DEBUG— y no dicen nada
+  # del esquema ni del codigo que se acaba de desplegar. Deshacer una
+  # actualizacion correcta por eso seria desproporcionado. Por eso, a partir
+  # de aqui, NINGUN codigo de `product:doctor` deshace: se muestra completo
+  # en el detalle, se resume en el informe (correcto / con avisos / con
+  # fallos) y en pantalla se avisa de que hacer si sale 1 o 2, pero la
+  # actualizacion sigue.
+  #
+  # La UNICA razon para deshacer aqui es que el comando NO EXISTA en la
+  # imagen: eso es un paquete roto, no un hallazgo ambiental del servidor.
+  # Comprobacion de PRESENCIA, no de texto: `list --raw` enumera los comandos
+  # tal cual los conoce la aplicacion, uno por linea. El mensaje de error de
+  # Symfony Console ante un comando que no existe depende del idioma y de la
+  # version del framework; preguntarle que comandos tiene no depende de
+  # ninguno de los dos (mismo razonamiento que doctor.sh).
+  # Sin tuberia: con `pipefail`, `grep -q` cierra el tubo en cuanto encuentra la
+  # linea, PHP recibe SIGPIPE y la tuberia falla AUNQUE el comando exista (paso
+  # en la 8b de la 5.9: U1 en verde y U3 «sin product:doctor» con la misma imagen).
+  available_commands="$(compose_new exec -T app php artisan list --raw 2>/dev/null || true)"
+  if ! printf '%s
+' "${available_commands}" | grep -q '^product:doctor'; then
+    remember_check "doctor" "$(kq_text u_report_failed)"
+    rollback_and_die "$(kq_text u_f_verify_doctor_missing_command)"
+  fi
+
+  detail_note "--- product:doctor (${TARGET_VERSION}) ---"
+  doctor_status=0
+  doctor_output="$(compose_new exec -T app php artisan product:doctor --lang="${KQ_LANG}" 2>&1)" || doctor_status=$?
+  detail_note "${doctor_output}"
+
+  case "${doctor_status}" in
+  0)
+    kq_msg check_ok "$(kq_text u_verify_doctor_ok)"
+    remember_check "doctor" "$(kq_text u_report_ok)"
+    ;;
+  1)
+    kq_msg check_warn "$(kq_text u_verify_doctor_warn)" "$(kq_text u_verify_doctor_warn_fix)"
+    remember_check "doctor" "$(kq_text u_report_warned)"
+    ;;
+  *)
+    kq_msg check_warn "$(kq_format u_verify_doctor_failed_warn "${doctor_status}")" "$(kq_text u_verify_doctor_failed_fix)"
+    remember_check "doctor" "$(kq_text u_report_doctor_failed)"
+    ;;
+  esac
 
   # La licencia NO bloquea (regla dura 15): se consulta para el informe, y solo
   # su resultado. Su salida lleva el nombre del cliente y no va a ningun

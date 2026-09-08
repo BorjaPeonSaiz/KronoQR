@@ -1413,7 +1413,14 @@ jobs:
           bash infra/scripts/package.sh paquete-nuevo
           if [ "${{ steps.anterior.outputs.synthetic }}" = "true" ]; then
             printf '%s\n' "${new}" >paquete-nuevo/VERSION
-            ultima="$(ls backend/database/migrations | sed -n 's/\.php$//p' | sort | tail -n 1)"
+            # LA FRONTERA ES LA ULTIMA MIGRACION DEL ARBOL ANTERIOR, no del nuevo:
+            # es lo que esa version instalada tiene, y lo que un `chore(release)`
+            # real habria congelado. Con la del arbol nuevo, toda migracion
+            # añadida desde la etiqueta quedaria atribuida a la version ya
+            # instalada y update.sh se negaria —bien— a adivinar (primera vez que
+            # se vio: tarea 5.9, con dos migraciones nuevas; 5.7 y 5.8 no traian
+            # ninguna).
+            ultima="$(ls anterior/backend/database/migrations | sed -n 's/\.php$//p' | sort | tail -n 1)"
             sed -i "s/^\([0-9][^ ]*\) \*$/\1 ${ultima}/" paquete-nuevo/versions.txt
             printf '%s *\n' "${new}" >>paquete-nuevo/versions.txt
           fi

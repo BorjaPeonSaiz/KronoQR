@@ -28,4 +28,32 @@ enum AuditActorType: string
      * hallazgo, no un dato.
      */
     case Maintenance = 'maintenance';
+
+    /**
+     * Una **concesion de acceso de soporte** (RF-PD-11, RL-18, ADR-020, tarea
+     * 5.9). `actor_id` es `support_grants.id`.
+     *
+     * **El quinto actor, y el unico que no vive en la instalacion.** Detras hay
+     * una persona del fabricante, pero **no tiene cuenta aqui y no puede
+     * tenerla**: ADR-020 existe justo para eso, y la regla dura 16 lo dice sin
+     * matices. Lo que si existe es la concesion que el cliente firmo, con su
+     * motivo, su alcance y su caducidad, y es ella la que actua.
+     *
+     * **Por que no se reutiliza `User`.** Porque entonces habria que fabricar
+     * una cuenta del fabricante para poder auditarla, que es exactamente la
+     * «cuenta de soporte permanente» que ADR-020 descarta en su tabla de
+     * alternativas. Y porque `actor_id` apuntando a la concesion es lo que
+     * permite responder «¿que hizo el acceso que concedi el martes por la
+     * incidencia #123?» con un filtro por columna indexada, en lugar de cruzar
+     * el trail con las fechas de una tabla aparte.
+     *
+     * **Por que no `System`.** Ese actor significa «no hay nadie detras»
+     * —scheduler, colas, consola—, y aqui hay alguien detras: alguien ajeno a la
+     * organizacion del cliente. Confundir los dos borraria la unica distincion
+     * que importa en este trail.
+     *
+     * El `CHECK` `audit_log_chk_actor_type` lo admite desde la migracion
+     * `2026_09_11_100100_allow_support_grant_audit_actor`.
+     */
+    case SupportGrant = 'support_grant';
 }

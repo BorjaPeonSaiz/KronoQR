@@ -102,7 +102,7 @@ export function isApiError(value: unknown): value is ApiError {
 /** Valor admitido en una cadena de consulta. `undefined` no se serializa. */
 export type QueryValue = string | number | boolean | undefined
 
-type Method = 'GET' | 'POST' | 'PATCH' | 'PUT'
+type Method = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
 
 export interface RequestOptions {
   method?: Method

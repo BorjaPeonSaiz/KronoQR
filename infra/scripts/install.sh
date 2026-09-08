@@ -23,8 +23,8 @@
 #   4  Arranque y esquema. Espera por CONDICION, nunca por `sleep`. Migraciones
 #      con el rol de migracion. Cero datos de demostracion: el perfil de
 #      convenio y los catalogos los siembran las propias migraciones.
-#   5  Verificacion. /api/v1/health, /api/v1/ready y `license:show`. Sin
-#      verificar, la instalacion NO se declara correcta.
+#   5  Verificacion. /api/v1/health, /api/v1/ready, `product:doctor` (tarea 5.9)
+#      y `license:show`. Sin verificar, la instalacion NO se declara correcta.
 #
 # USO
 #   ./install.sh                 instala
@@ -1253,21 +1253,18 @@ probe() {
     "https://127.0.0.1:${CFG_HTTPS_PORT}${path}" >/dev/null 2>&1
 }
 
-# PUNTO DE ENGANCHE PARA `doctor` (tarea 5.9).
-#
-# La ficha de esta tarea pedia verificar con `php artisan product:doctor`. Ese
-# comando NO EXISTE todavia: llega en la 5.9. Escribir aqui media comprobacion
-# de salud propia habria producido dos diagnosticos distintos en el mismo
-# producto, y el dia que difirieran nadie sabria cual creer.
-#
-# Mientras tanto se verifica con lo que SI existe y ya esta bajo contrato: las
-# dos sondas del §10.5 y el estado de la licencia. Cuando la 5.9 aterrice, la
-# fase 5 gana una linea —`compose exec -T app php artisan product:doctor`— y su
-# codigo de salida se traduce al 6 de la tabla comun. No hay nada mas que
-# cambiar aqui.
+# `product:doctor` (tarea 5.9) es el diagnostico oficial del producto: dos
+# comprobaciones de salud distintas en el mismo sistema es la forma segura de
+# que un dia digan cosas distintas, asi que la fase 5 delega en el en vez de
+# reimplementar media comprobacion propia. Su salida se muestra COMPLETA —cada
+# linea en rojo dice que hacer, y es justo lo que hay que leer si algo no
+# cuadra—. Solo su fallo (2) bloquea la verificacion; su aviso (1) se muestra y
+# NO impide declarar la instalacion correcta (decision 7 del brief de la tarea
+# 5.9). `doctor.sh`, para quien no quiera entrar al contenedor, delega en el
+# mismo comando.
 
 phase_verify() {
-  local path
+  local path doctor_status doctor_output
 
   heading "$(kq_text phase_5)"
 
@@ -1282,6 +1279,42 @@ phase_verify() {
       exit "${KQ_EXIT_VERIFY_FAILED}"
     fi
   done
+
+  say ""
+  say "$(kq_text verify_doctor_running)"
+
+  # Comprobacion de PRESENCIA, no de texto: `list --raw` enumera los comandos
+  # tal cual los conoce la aplicacion, uno por linea. El mensaje de error de
+  # Symfony Console si se le pide ejecutar un comando que no existe depende
+  # del idioma y de la version del framework; preguntarle que comandos tiene
+  # no depende de ninguno de los dos.
+  # Sin tuberia: con `pipefail`, `grep -q` cierra el tubo en cuanto encuentra la
+  # linea, PHP recibe SIGPIPE y la tuberia falla AUNQUE el comando exista (paso
+  # en la 8b de la 5.9: U1 en verde y U3 «sin product:doctor» con la misma imagen).
+  available_commands="$(compose exec -T app php artisan list --raw 2>/dev/null || true)"
+  if ! printf '%s
+' "${available_commands}" | grep -q '^product:doctor'; then
+    err ""
+    err "ERROR: $(kq_format f_verify_doctor_missing_command "${COMPOSE_FILE}")"
+    err "$(kq_format exit_line "${KQ_EXIT_VERIFY_FAILED}" "$(kq_exit_name "${KQ_EXIT_VERIFY_FAILED}")")"
+    exit "${KQ_EXIT_VERIFY_FAILED}"
+  fi
+
+  doctor_status=0
+  doctor_output="$(compose exec -T app php artisan product:doctor --lang="${KQ_LANG}" 2>&1)" || doctor_status=$?
+  printf '%s\n' "${doctor_output}"
+  say ""
+
+  case "${doctor_status}" in
+  0) kq_msg check_ok "$(kq_text verify_doctor_ok)" ;;
+  1) kq_msg check_warn "$(kq_text verify_doctor_warn)" "$(kq_format f_verify_doctor_warn "${COMPOSE_FILE}")" ;;
+  *)
+    err ""
+    err "ERROR: $(kq_format f_verify_doctor "${COMPOSE_FILE}")"
+    err "$(kq_format exit_line "${KQ_EXIT_VERIFY_FAILED}" "$(kq_exit_name "${KQ_EXIT_VERIFY_FAILED}")")"
+    exit "${KQ_EXIT_VERIFY_FAILED}"
+    ;;
+  esac
 
   # `license:show` termina con 0 tanto con licencia como sin ella: sin licencia
   # el producto funciona y lo dice. Un codigo distinto de 0 significa que la

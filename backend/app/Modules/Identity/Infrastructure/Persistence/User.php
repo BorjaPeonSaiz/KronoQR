@@ -149,6 +149,21 @@ final class User extends Authenticatable implements ManagementActor
     }
 
     /**
+     * Nunca (**RF-PD-11**, ADR-020, tarea 5.9).
+     *
+     * Una fila de `users` es **siempre** una cuenta de la organizacion del
+     * cliente. El fabricante no tiene cuenta en la instalacion y no puede
+     * tenerla: eso es literalmente la alternativa que ADR-020 descarta en su
+     * tabla, y la regla dura 16 lo dice sin matices. Quien responde `true` a esto
+     * es la fila de `support_grants`, que es un `tokenable` distinto y con
+     * caducidad.
+     */
+    public function isSupportActor(): bool
+    {
+        return false;
+    }
+
+    /**
      * @return array<string, string>
      */
     protected function casts(): array

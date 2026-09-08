@@ -278,6 +278,81 @@ enum AuditAction: string
      */
     case LicensePlanExceeded = 'license.plan_exceeded';
 
+    // --- Acceso de soporte (RF-PD-11, RL-18, ADR-020, tarea 5.9) -------------
+
+    /**
+     * El cliente ha concedido al fabricante un acceso temporal a su
+     * instalacion.
+     *
+     * **Es el asiento que acredita el encargo de tratamiento** del art. 28 RGPD
+     * para ese supuesto concreto (RL-18): quien lo autorizo, para que incidente,
+     * con que alcance y hasta cuando. Sin el, la unica prueba de que el cliente
+     * dio su permiso seria una fila que la aplicacion puede actualizar.
+     *
+     * El payload lleva `grant_id`, `scope`, `hours`, `expires_at` y `reason`.
+     * **`reason` va tal cual**, y es lo que convierte «alguien entro el martes»
+     * en «entro por esto»: sin el no se puede ver el abuso que ADR-020 describe
+     * —usar la sesion abierta para un incidente distinto del que la motivo—.
+     */
+    case SupportGrantGranted = 'support_grant.granted';
+
+    /**
+     * Se ha usado un acceso de soporte: una peticion autenticada con su token.
+     *
+     * **Agrupado por ventana**, como maximo uno por concesion cada
+     * `PRODUCT_SUPPORT_USE_AUDIT_WINDOW_SECONDS` (900 de serie). Es la misma
+     * palanca que ADR-037 aplica a las lecturas de datos personales: agrupar por
+     * frecuencia sin quitar el aviso. Un asiento por peticion convertiria una
+     * sesion de soporte de veinte minutos en cientos de escrituras bajo el
+     * candado global de ADR-010, es decir, en una degradacion del camino por el
+     * que pasa cada fichaje.
+     *
+     * El payload lleva `grant_id`, `scope`, y el metodo y la ruta de la peticion
+     * que **abrio** la ventana —no las de todas—, para que quien lo lea sepa que
+     * esta viendo el principio de una sesion y no un acto aislado.
+     */
+    case SupportGrantUsed = 'support_grant.used';
+
+    /**
+     * Se ha revocado un acceso de soporte, desde el panel o desde la consola.
+     *
+     * **La fila no se borra** (regla dura 5): queda con `revoked_at` y con quien
+     * la revoco. Revocar dos veces **no** vuelve a auditar: la segunda pulsacion
+     * de un boton no es un hecho nuevo, y el trail describe hechos.
+     */
+    case SupportGrantRevoked = 'support_grant.revoked';
+
+    /**
+     * Se ha generado un paquete de diagnostico (**RF-PD-09**, ADR-020).
+     *
+     * Se audita porque **saca informacion de la instalacion**: es el unico canal
+     * por el que algo del cliente llega al fabricante, y el cliente tiene que
+     * poder responder «¿que ha salido de aqui y cuando?» sin depender de la
+     * palabra de nadie. Misma razon por la que se audita `legal_export.generated`.
+     *
+     * El payload lleva si iba anonimizado, que secciones llevaba, su `sha256` y
+     * su tamaño: lo justo para reconocer **ese** paquete si vuelve mas adelante
+     * en una conversacion. El contenido no, que el trail se exporta.
+     */
+    case DiagnosticsBundleGenerated = 'diagnostics.bundle_generated';
+
+    /**
+     * Un paquete de diagnostico ha salido **con datos personales dentro**
+     * (**RL-19**, ADR-020).
+     *
+     * **Accion propia y no un campo del asiento anterior**, y ahi esta el punto
+     * entero de RL-19: incluir datos personales es una accion distinta. Con un
+     * booleano dentro de `diagnostics.bundle_generated`, responder «¿cuando han
+     * salido de aqui datos de mi plantilla?» obligaria a recorrer todos los
+     * asientos de generacion filtrando por un campo — y esa es justo la consulta
+     * que un cliente tiene que poder hacer de un vistazo ante una brecha (RL-15).
+     *
+     * Se escribe **ademas** del de generacion, nunca en su lugar: son dos hechos
+     * que ocurrieron a la vez, no dos versiones del mismo. El payload lleva
+     * `period_days` y que colecciones se incluyeron.
+     */
+    case DiagnosticsPersonalDataIncluded = 'diagnostics.personal_data_included';
+
     // --- Retencion (RL-02, ADR-027) ------------------------------------------
 
     case RetentionPartitionSealed = 'retention.partition_sealed';
@@ -366,6 +441,25 @@ enum AuditAction: string
         // la consulta con la que una inspeccion pregunta quien movio las reglas
         // del calculo. Ver `AuditableEvent::LicenseLifecycle`.
         'license' => AuditableEvent::LicenseLifecycle,
+        // Conceder, usar y revocar un acceso del fabricante son las tres mitades
+        // —conceder, ejercer, retirar— del mismo hecho: alguien de fuera de la
+        // organizacion tuvo una potestad sobre esta instalacion. Separarlas
+        // obligaria a consultar tres veces para responder «¿ha entrado el
+        // fabricante en mi instalacion?», que es la pregunta entera.
+        //
+        // No caben en `PersonalDataAccess` —describen una POTESTAD concedida y
+        // no un dato consultado— ni en `AuthorityOrCalculationChange` —no mueven
+        // un minuto trabajado ni cambian el rol de nadie de la organizacion—.
+        // Ver `AuditableEvent::SupportAccess`.
+        'support_grant' => AuditableEvent::SupportAccess,
+        // El paquete de diagnostico es la OTRA mitad del mismo hecho que las
+        // concesiones: «que ha salido de esta instalacion hacia el fabricante».
+        // Comparten familia porque comparten la pregunta —ADR-020 las trata como
+        // las dos vias de un mismo canal— y separarlas obligaria a consultar dos
+        // veces para responderla. No caben en `PersonalDataAccess`: el paquete va
+        // anonimizado por defecto y describe una SALIDA de informacion, no una
+        // consulta de la ficha de alguien.
+        'diagnostics' => AuditableEvent::SupportAccess,
     ];
 
     /**

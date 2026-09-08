@@ -121,7 +121,7 @@ final readonly class CachedSettingsRepository implements SettingsRepository
     /**
      * @param  list<SettingValue>  $values
      */
-    public function save(array $values, int $actorUserId): void
+    public function save(array $values, ?int $actorUserId): void
     {
         $this->settings->save($values, $actorUserId);
 

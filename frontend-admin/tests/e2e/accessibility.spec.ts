@@ -214,6 +214,47 @@ test(
   },
 )
 
+// --- Soporte: paquete de diagnostico y accesos temporales (RF-PD-09,
+// RF-PD-11, tarea 5.9) --------------------------------------------------------
+
+test('la pantalla de soporte tampoco', { tag: ['@RF-PD-09', '@RF-PD-11'] }, async ({ page }) => {
+  await stubManagementApi(page, { role: 'admin' })
+  await logInAsAdmin(page)
+  await page.goto('/support')
+  await expect(page.getByRole('heading', { level: 1, name: 'Soporte' })).toBeVisible()
+
+  await expectNoBlockingViolations(page)
+})
+
+test(
+  'con el aviso de datos personales desplegado tampoco',
+  { tag: ['@RF-PD-09', '@RL-19'] },
+  async ({ page }) => {
+    await stubManagementApi(page, { role: 'admin' })
+    await logInAsAdmin(page)
+    await page.goto('/support')
+    await page.getByTestId('include-personal-data').check()
+    await expect(page.getByTestId('personal-data-warning')).toBeVisible()
+
+    await expectNoBlockingViolations(page)
+  },
+)
+
+test(
+  'con el token del acceso concedido mostrado tampoco',
+  { tag: ['@RF-PD-11'] },
+  async ({ page }) => {
+    await stubManagementApi(page, { role: 'admin' })
+    await logInAsAdmin(page)
+    await page.goto('/support')
+    await page.getByLabel('Motivo').fill('Incidencia #123: la cola no vacía')
+    await page.getByRole('button', { name: 'Conceder acceso' }).click()
+    await expect(page.getByTestId('issued-token')).toBeVisible()
+
+    await expectNoBlockingViolations(page)
+  },
+)
+
 // --- Asistente de puesta en marcha (RF-PD-03, RQ-04, tarea 5.5) -------------
 //
 // Es la PRIMERA pantalla del producto: cero violaciones criticas o graves en

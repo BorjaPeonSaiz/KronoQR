@@ -15,6 +15,7 @@ import type {
   EmployeeWorkDays,
   Incident,
   IncidentCollection,
+  IssuedSupportGrant,
   ManagementUser,
   PairingConfirmed,
   Session,
@@ -23,6 +24,8 @@ import type {
   SetupStep,
   SetupStepStatus,
   Site,
+  SupportGrant,
+  SupportGrantCollection,
   TwoFactorChallenge,
   TwoFactorEnrolment,
   WorkDayCorrection,
@@ -401,6 +404,40 @@ export function setupCompletion(overrides: Partial<SetupCompletion> = {}): Setup
     },
     ...overrides,
   }
+}
+
+// --- Soporte: paquete de diagnostico y accesos temporales (RF-PD-09,
+// RF-PD-11, tarea 5.9, ADR-020) ----------------------------------------------
+
+export const SUPPORT_GRANT_UUID = '0199f4d0-1a2b-7c3d-9e4f-5a6b7c8d9e01'
+export const ADMIN_UUID = '0199f0aa-4444-7000-8000-0123456789ae'
+
+export function supportGrant(overrides: Partial<SupportGrant> = {}): SupportGrant {
+  return {
+    uuid: SUPPORT_GRANT_UUID,
+    status: 'active',
+    scope: 'diagnostics',
+    reason: 'Incidencia #123: la cola del quiosco de recepción no vacía',
+    granted_by: { uuid: ADMIN_UUID, name: 'Dirección del hotel' },
+    granted_at: '2026-09-08T09:00:00.000000Z',
+    expires_at: '2026-09-09T09:00:00.000000Z',
+    revoked_at: null,
+    accessed_at: null,
+    ...overrides,
+  }
+}
+
+export function supportGrantCollection(
+  data: SupportGrant[] = [supportGrant()],
+): SupportGrantCollection {
+  return { data }
+}
+
+export function issuedSupportGrant(
+  overrides: Partial<SupportGrant> = {},
+  token = '23|Kd2pQ9vLmN4tZbYcF1wQ8sE3rT6uI0oP5aS7dXyZ',
+): IssuedSupportGrant {
+  return { data: { ...supportGrant(overrides), token } }
 }
 
 export function employeeImportReport(

@@ -1386,7 +1386,7 @@ Generado por el administrador del cliente con un clic o un comando. Contiene ver
 | `solicitud-derechos-rgpd.md` | Acceso, rectificación, portabilidad |
 | `brecha-de-seguridad.md` | Procedimiento de 72 h |
 | `actualizacion-cliente.md` | Procedimiento y vuelta atrás |
-| `incidencia-sin-acceso.md` | Cómo diagnosticar con el paquete que envía el cliente |
+| [`incidencia-sin-acceso.md`](runbooks/incidencia-sin-acceso.md) | Cómo diagnosticar con el paquete que envía el cliente. **Escrito** en la tarea 5.9, junto con el paquete y `product:doctor` en los que se apoya |
 | `errores-en-el-panel.md` | Cómo lee el IT del cliente el histórico de `error_events` y qué hacer con cada severidad |
 
 ---
@@ -1575,14 +1575,16 @@ php artisan kiosk:pairing-code {code} --name=    # CONFIRMA el código que muest
 php artisan kiosk:health                         # Estado de todos los quioscos
 
 # Producto y licencia
-php artisan product:doctor                       # Comprobación de salud (RF-PD-13)
+php artisan product:doctor [--json] [--lang=]     # Comprobación de salud (RF-PD-13). Sale 0 / 1 (solo avisos) / 2 (fallos)
 php artisan product:errors --since=24h --level=  # Histórico de errores agrupado (RF-PD-15)
 php artisan product:errors:prune                 # Purga a 90 días, en el scheduler
-php artisan product:diagnostics --anonymized     # Paquete de diagnóstico (RF-PD-09)
+php artisan product:diagnostics [--anonymized]   # Paquete de diagnóstico (RF-PD-09); anonimizado por defecto
+php artisan product:diagnostics --with-personal-data --period-days=7   # Acción distinta y auditada (RL-19)
+php artisan product:diagnostics --verify=RUTA    # Recalcula la huella de un paquete recibido
 php artisan product:export-all                   # Exportación íntegra del cliente (RF-PD-14)
 php artisan license:show / license:activate {key}
-php artisan support:grant --hours=24 --reason=   # Acceso de soporte auditado (RF-PD-11)
-php artisan support:revoke
+php artisan support:grant --hours=24 --reason= [--scope=diagnostics|read_only|configuration]   # Acceso de soporte auditado (RF-PD-11); el token sale UNA vez
+php artisan support:revoke {uuid} | --all        # Revoca en el acto; la fila se conserva
 
 # Copias
 php artisan backup:run && php artisan backup:verify

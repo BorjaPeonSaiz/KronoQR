@@ -7,6 +7,8 @@ namespace App\Modules\Product;
 use App\Modules\Identity\Domain\Event\DeviceTokenIssued;
 use App\Modules\Product\Application\Port\ComplianceProfileMetrics;
 use App\Modules\Product\Application\Port\ComplianceProfileRepository;
+use App\Modules\Product\Application\Port\DiagnosticsBundleWriter;
+use App\Modules\Product\Application\Port\DoctorTranslator;
 use App\Modules\Product\Application\Port\LicenseMetrics;
 use App\Modules\Product\Application\Port\LicenseRepository;
 use App\Modules\Product\Application\Port\LicenseStatePublisher;
@@ -19,20 +21,32 @@ use App\Modules\Product\Application\Port\SettingsMetrics;
 use App\Modules\Product\Application\Port\SettingsRepository;
 use App\Modules\Product\Application\Port\SetupFacts;
 use App\Modules\Product\Application\Port\SetupProgressRepository;
+use App\Modules\Product\Application\Port\SupportAccessRecorder;
+use App\Modules\Product\Application\Port\SupportGrantRepository;
+use App\Modules\Product\Application\Port\SupportTokenIssuer;
 use App\Modules\Product\Application\UseCase\ActivateLicenseHandler;
+use App\Modules\Product\Application\UseCase\GenerateDiagnosticsBundleHandler;
 use App\Modules\Product\Application\UseCase\GetLicenseStatusHandler;
 use App\Modules\Product\Application\UseCase\GetSettingsHandler;
+use App\Modules\Product\Application\UseCase\GrantSupportAccessHandler;
 use App\Modules\Product\Application\UseCase\RecordPlanUsageHandler;
+use App\Modules\Product\Application\UseCase\RecordSupportAccessUseHandler;
+use App\Modules\Product\Application\UseCase\RunDoctorHandler;
+use App\Modules\Product\Domain\Model\SupportGrant as SupportGrantModel;
 use App\Modules\Product\Domain\ValueObject\ComplianceProfileSnapshot;
+use App\Modules\Product\Domain\ValueObject\DiagnosticsBundle;
 use App\Modules\Product\Domain\ValueObject\LicenseStatus;
 use App\Modules\Product\Domain\ValueObject\ResolvedSettings;
 use App\Modules\Product\Domain\ValueObject\SetupState;
 use App\Modules\Product\Http\Policy\ComplianceProfilePolicy;
+use App\Modules\Product\Http\Policy\DiagnosticsPolicy;
 use App\Modules\Product\Http\Policy\LicensePolicy;
 use App\Modules\Product\Http\Policy\SettingsPolicy;
 use App\Modules\Product\Http\Policy\SetupPolicy;
+use App\Modules\Product\Http\Policy\SupportGrantPolicy;
 use App\Modules\Product\Infrastructure\Adapter\CachedLicenseStatePublisher;
 use App\Modules\Product\Infrastructure\Adapter\CachedSettingsRepository;
+use App\Modules\Product\Infrastructure\Adapter\CacheSupportAccessRecorder;
 use App\Modules\Product\Infrastructure\Adapter\DbBrandingProvider;
 use App\Modules\Product\Infrastructure\Adapter\DbCompliancePolicyProvider;
 use App\Modules\Product\Infrastructure\Adapter\DbLocalePolicyProvider;
@@ -43,9 +57,37 @@ use App\Modules\Product\Infrastructure\Adapter\LicensedBrandingProvider;
 use App\Modules\Product\Infrastructure\Adapter\LicensedFeatureGate;
 use App\Modules\Product\Infrastructure\Adapter\LocalBrandingLogoReader;
 use App\Modules\Product\Infrastructure\Adapter\LoggingSettingsAnomalyReporter;
+use App\Modules\Product\Infrastructure\Adapter\SanctumSupportTokenIssuer;
 use App\Modules\Product\Infrastructure\Branding\LogoFileInspector;
 use App\Modules\Product\Infrastructure\Console\LicenseActivateCommand;
 use App\Modules\Product\Infrastructure\Console\LicenseShowCommand;
+use App\Modules\Product\Infrastructure\Console\ProductDiagnosticsCommand;
+use App\Modules\Product\Infrastructure\Console\ProductDoctorCommand;
+use App\Modules\Product\Infrastructure\Console\SupportGrantCommand;
+use App\Modules\Product\Infrastructure\Console\SupportRevokeCommand;
+use App\Modules\Product\Infrastructure\Diagnostics\Collector\AuditCollector;
+use App\Modules\Product\Infrastructure\Diagnostics\Collector\ConfigurationCollector;
+use App\Modules\Product\Infrastructure\Diagnostics\Collector\DoctorCollector;
+use App\Modules\Product\Infrastructure\Diagnostics\Collector\ErrorEventsCollector;
+use App\Modules\Product\Infrastructure\Diagnostics\Collector\InstallationCollector;
+use App\Modules\Product\Infrastructure\Diagnostics\Collector\KioskCollector;
+use App\Modules\Product\Infrastructure\Diagnostics\Collector\LicenseCollector;
+use App\Modules\Product\Infrastructure\Diagnostics\Collector\MetricsCollector;
+use App\Modules\Product\Infrastructure\Diagnostics\Collector\PersonalDataCollector;
+use App\Modules\Product\Infrastructure\Diagnostics\Collector\ServicesCollector;
+use App\Modules\Product\Infrastructure\Diagnostics\Collector\UpdatesCollector;
+use App\Modules\Product\Infrastructure\Diagnostics\JsonDiagnosticsBundleWriter;
+use App\Modules\Product\Infrastructure\Diagnostics\LaravelDoctorTranslator;
+use App\Modules\Product\Infrastructure\Diagnostics\Probe\ApplicationProbe;
+use App\Modules\Product\Infrastructure\Diagnostics\Probe\DatabaseProbe;
+use App\Modules\Product\Infrastructure\Diagnostics\Probe\DiskProbe;
+use App\Modules\Product\Infrastructure\Diagnostics\Probe\LicenseProbe;
+use App\Modules\Product\Infrastructure\Diagnostics\Probe\MailProbe;
+use App\Modules\Product\Infrastructure\Diagnostics\Probe\PermissionsProbe;
+use App\Modules\Product\Infrastructure\Diagnostics\Probe\QueueProbe;
+use App\Modules\Product\Infrastructure\Diagnostics\Probe\SettingsProbe;
+use App\Modules\Product\Infrastructure\Diagnostics\Probe\TlsProbe;
+use App\Modules\Product\Infrastructure\Diagnostics\ServiceInspector;
 use App\Modules\Product\Infrastructure\Listener\ObservePlanLimits;
 use App\Modules\Product\Infrastructure\Metrics\RedisComplianceProfileMetrics;
 use App\Modules\Product\Infrastructure\Metrics\RedisLicenseMetrics;
@@ -55,6 +97,7 @@ use App\Modules\Product\Infrastructure\Persistence\DatabaseLicenseRepository;
 use App\Modules\Product\Infrastructure\Persistence\DatabasePlanUsageCounter;
 use App\Modules\Product\Infrastructure\Persistence\DatabaseSetupFacts;
 use App\Modules\Product\Infrastructure\Persistence\DatabaseSetupProgressRepository;
+use App\Modules\Product\Infrastructure\Persistence\DatabaseSupportGrantRepository;
 use App\Modules\Product\Infrastructure\Persistence\EloquentSettingsRepository;
 use App\Modules\Shared\Application\Port\BrandingLogoReader;
 use App\Modules\Shared\Application\Port\BrandingProvider;
@@ -62,6 +105,7 @@ use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\FeatureGate;
 use App\Modules\Shared\Application\Port\LocalePolicyProvider;
+use App\Modules\Shared\Application\Port\ManagementActor;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
 use App\Modules\Workforce\Domain\Event\EmployeeHired;
 use App\Support\Locale\NegotiableLocales;
@@ -71,6 +115,7 @@ use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\Redis\Factory as Redis;
+use Illuminate\Contracts\Translation\Translator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
@@ -256,6 +301,94 @@ final class ProductServiceProvider extends ServiceProvider
         );
 
         $this->registerLicense();
+
+        $this->registerDiagnostics();
+
+        $this->registerSupportGrants();
+    }
+
+    /**
+     * Los accesos temporales de soporte (tarea 5.9, **RF-PD-11**, RL-18,
+     * ADR-020).
+     *
+     * ## Los tres umbrales se leen AQUI, en el borde
+     *
+     * El tope de horas, la duracion de serie y la ventana de auditoria salen de
+     * la configuracion y entran ya resueltos en el caso de uso (regla dura 14,
+     * mismo criterio que el aviso de caducidad de la licencia y que los limites
+     * del logotipo). Es lo que permite que una prueba fije un tope de una hora o
+     * una ventana de cero sin tocar el estado global del proceso, y que un
+     * cliente con una politica mas dura los baje sin tocar el repositorio (regla
+     * dura 13).
+     *
+     * ## `scoped()` para el repositorio, `bind()` para lo demas
+     *
+     * El repositorio no memoriza nada, pero `scoped()` mantiene la coherencia
+     * con el resto del modulo y evita que en un trabajador de cola una instancia
+     * viva entre peticiones. Los casos de uso se declaran explicitamente porque
+     * los tres reciben algo que el autowiring no puede resolver: un entero.
+     *
+     * ## El emisor del token vive en ESTE modulo, y no en `Identity`
+     *
+     * Aunque toda la maquinaria de sesion sea de aquel. El motivo es la frontera
+     * del §1.6: el `tokenable` de una concesion es una fila de `support_grants`,
+     * que es una tabla de `Product`, y un adaptador en `Identity` tendria que
+     * tocar el modelo Eloquent de otro modulo —lo unico que ese apartado prohibe
+     * sin matices—. Asi que aqui no hay inversion de ADR-025 que hacer: no son
+     * dos modulos, es uno que necesita el token y que ademas tiene la tabla de la
+     * que cuelga.
+     *
+     * Lo que si cruza la frontera es el **catalogo de ambitos**, y lo hace sin
+     * dependencia: `SupportScope::abilities()` escribe las cadenas y una prueba
+     * unitaria comprueba que todas existen en `Identity\Domain\ValueObject\TokenAbility`,
+     * igual que las otras dos copias del catalogo —el contrato OpenAPI y la
+     * migracion del catalogo de roles— estan atadas por pruebas y no por la buena
+     * fe.
+     */
+    private function registerSupportGrants(): void
+    {
+        $this->app->scoped(
+            SupportGrantRepository::class,
+            static fn (): DatabaseSupportGrantRepository => new DatabaseSupportGrantRepository(DB::connection()),
+        );
+
+        $this->app->bind(
+            SupportTokenIssuer::class,
+            static fn (Application $app): SanctumSupportTokenIssuer => new SanctumSupportTokenIssuer(
+                $app->make(SupportGrantRepository::class),
+            ),
+        );
+
+        $this->app->bind(
+            SupportAccessRecorder::class,
+            static fn (Application $app): CacheSupportAccessRecorder => new CacheSupportAccessRecorder(
+                $app->make(CacheRepository::class),
+            ),
+        );
+
+        $this->app->bind(
+            GrantSupportAccessHandler::class,
+            static fn (Application $app): GrantSupportAccessHandler => new GrantSupportAccessHandler(
+                grants: $app->make(SupportGrantRepository::class),
+                tokens: $app->make(SupportTokenIssuer::class),
+                events: $app->make(ProductEventPublisher::class),
+                clock: $app->make(Clock::class),
+                connection: DB::connection(),
+                maximumHours: max(1, Config::integer('product.support_grant_max_hours', 72)),
+            ),
+        );
+
+        $this->app->bind(
+            RecordSupportAccessUseHandler::class,
+            static fn (Application $app): RecordSupportAccessUseHandler => new RecordSupportAccessUseHandler(
+                grants: $app->make(SupportGrantRepository::class),
+                recorder: $app->make(SupportAccessRecorder::class),
+                events: $app->make(ProductEventPublisher::class),
+                clock: $app->make(Clock::class),
+                connection: DB::connection(),
+                windowSeconds: max(0, Config::integer('product.support_use_audit_window_seconds', 900)),
+            ),
+        );
     }
 
     /**
@@ -612,6 +745,72 @@ final class ProductServiceProvider extends ServiceProvider
 
         $this->observePlanLimits();
 
+        /*
+         * Zona del paquete de diagnostico: **3 r/m por cuenta y por origen**
+         * (`POST /api/v1/diagnostics/bundle`, RF-PD-09).
+         *
+         * ZONA PROPIA Y MUCHO MAS ESTRECHA QUE `throttle:management`, que tiene
+         * 120. La diferencia no es de criterio, es de coste: **generar el
+         * paquete recorre la instalacion entera**. Lee la plantilla, cuenta el
+         * `audit_log`, abre un socket TLS contra el borde, mide dos sistemas de
+         * ficheros y ejecuta las ocho familias de `doctor`. Con el techo de
+         * gestion, un boton pulsado con impaciencia —o un panel con un reintento
+         * mal puesto— pondria ciento veinte de esos recorridos por minuto sobre
+         * la misma base de datos por la que pasa cada fichaje (ADR-010).
+         *
+         * POR CUENTA Y POR ORIGEN, como la zona de gestion. La cuenta es el eje
+         * que importa aqui —un token de soporte y un administrador no deben
+         * compartir cubo— y el origen es la red de seguridad para el caso en el
+         * que el actor no se pueda resolver.
+         *
+         * 3 NO ES UNA MEDICION: generar el paquete es un acto deliberado que una
+         * persona hace una vez, mira el fichero y envia. Tres deja margen para
+         * equivocarse de opcion y repetir. Es configuracion y no una constante
+         * (regla dura 13).
+         */
+        RateLimiter::for('diagnostics', static function (Request $request): array {
+            $perMinute = max(1, Config::integer('product.diagnostics_rate_limit_per_minute', 3));
+            $actor = $request->user();
+
+            return [
+                Limit::perMinute($perMinute)->by('diagnostics-ip:'.(string) $request->ip()),
+                Limit::perMinute($perMinute)->by('diagnostics-account:'.(
+                    $actor instanceof ManagementActor ? $actor->actorUuid() : 'desconocido'
+                )),
+            ];
+        });
+
+        /*
+         * `POST /api/v1/diagnostics/bundle` es de `admin` y de nadie mas (Anexo
+         * B del doc 01, §7.3: `diagnostics:*` es del administrador de
+         * instalacion). El middleware comprueba el ambito y esta policy el rol
+         * (regla dura 18).
+         *
+         * El sujeto es {@see DiagnosticsBundle} —«el paquete de diagnostico de
+         * esta instalacion»— y no una fila: el paquete no se guarda en ningun
+         * sitio, se genera y se entrega. Una policy sobre un modelo no tendria
+         * nada que recibir.
+         *
+         * La policy tiene **dos** metodos y el segundo es el que convierte RL-19
+         * en codigo: un token de soporte genera el paquete anonimizado y recibe
+         * `403` si pide el que lleva datos de la plantilla.
+         */
+        Gate::policy(DiagnosticsBundle::class, DiagnosticsPolicy::class);
+
+        /*
+         * Las tres rutas de `/api/v1/support/grants` son de `admin` **del
+         * cliente** y de nadie mas (Anexo B del doc 01, §7.3: `support:*` es del
+         * administrador de instalacion). El middleware comprueba el ambito y esta
+         * policy comprueba el rol **y que quien pregunta no sea el propio
+         * fabricante** (regla dura 18 y ADR-020).
+         *
+         * El sujeto es el modelo de dominio {@see SupportGrantModel} —«los
+         * accesos de soporte de esta instalacion»— y no una fila: la policy no
+         * autoriza sobre una concesion concreta, porque todas son iguales ante
+         * ella, y las tres operaciones existen antes de que haya ninguna.
+         */
+        Gate::policy(SupportGrantModel::class, SupportGrantPolicy::class);
+
         if ($this->app->runningInConsole()) {
             /*
              * Los dos comandos del Anexo C (RF-PD-04).
@@ -632,6 +831,39 @@ final class ProductServiceProvider extends ServiceProvider
             $this->commands([
                 LicenseShowCommand::class,
                 LicenseActivateCommand::class,
+                /*
+                 * Los dos del acceso de soporte (Anexo C, RF-PD-11, tarea 5.9).
+                 *
+                 * **Tampoco se programan**, y aqui importa mas: una tarea
+                 * nocturna que concediera o revocara accesos por su cuenta seria
+                 * lo contrario de «expreso» (ADR-020). Las concesiones caducan
+                 * solas por su `expires_at`, sin que nada tenga que correr.
+                 *
+                 * Existen en consola porque el panel puede no estar disponible
+                 * justo cuando hace falta soporte, y porque `support:revoke
+                 * --all` es el boton de panico: cortar todo acceso del fabricante
+                 * no puede depender de que la aplicacion web responda.
+                 */
+                SupportGrantCommand::class,
+                SupportRevokeCommand::class,
+                /*
+                 * Los dos del diagnostico (Anexo C, RF-PD-09, RF-PD-13, tarea
+                 * 5.9).
+                 *
+                 * **`product:doctor` es el unico comando del producto que
+                 * ejecutan OTROS PROGRAMAS**: `install.sh` en su fase de
+                 * verificacion y `update.sh` tras arrancar. De ahi que sus
+                 * codigos de salida esten documentados en la cabecera de la
+                 * clase y no se puedan cambiar sin tocar los dos scripts.
+                 *
+                 * Tampoco se programan. Un `doctor` nocturno que avisara por su
+                 * cuenta necesitaria un destinatario, y el fabricante **no es
+                 * destinatario de ninguna alerta** (ADR-020, doc 02 §9.3): no
+                 * tiene acceso y no puede intervenir. Las alertas del cliente
+                 * salen de Prometheus, que es de quien las mira.
+                 */
+                ProductDoctorCommand::class,
+                ProductDiagnosticsCommand::class,
             ]);
         }
     }
@@ -671,5 +903,181 @@ final class ProductServiceProvider extends ServiceProvider
     {
         Event::listen(EmployeeHired::class, [ObservePlanLimits::class, 'onEmployeeHired']);
         Event::listen(DeviceTokenIssued::class, [ObservePlanLimits::class, 'onDeviceTokenIssued']);
+    }
+
+    /**
+     * `product:doctor` y el paquete de diagnostico (tarea 5.9, **RF-PD-09**,
+     * **RF-PD-13**, ADR-020).
+     *
+     * ## Todo lo del entorno se resuelve AQUI, en el borde
+     *
+     * Rutas, umbrales, version, idioma y **el entorno del proceso entero** entran
+     * ya resueltos en las sondas y en los recolectores. Es el mismo criterio que
+     * el resto del modulo (regla dura 14), y aqui tiene un motivo extra: la
+     * prueba que exige la ficha 5.9 —«ninguna clave secreta del `.env.example`
+     * aparece en el paquete»— necesita poder pasarle al recolector un entorno
+     * inventado. Con `env()` dentro del recolector, esa prueba no se podria
+     * escribir sin ensuciar el proceso entero.
+     *
+     * `$_ENV` y no `getenv()`: el segundo devuelve tambien lo que herede el
+     * proceso del sistema operativo, y el paquete solo debe describir **la
+     * configuracion de esta aplicacion**.
+     *
+     * ## El orden de las sondas y de los recolectores es el del informe
+     *
+     * Y por eso es una lista literal y no un descubrimiento por reflexion. Una
+     * persona con prisa lee el informe de arriba abajo: base de datos, colas,
+     * correo, certificado, permisos, disco, aplicacion, configuracion y
+     * licencia, de lo que impide fichar a lo que no impide nada. Que ese orden
+     * dependiera del orden en que el sistema de ficheros devuelve unas clases
+     * seria dejarlo al azar.
+     *
+     * El orden de las secciones del paquete es el del contrato, por lo mismo:
+     * una respuesta que las devolviera en otro orden seguiria siendo valida,
+     * pero dos paquetes del mismo cliente dejarian de poder compararse con
+     * `diff`.
+     *
+     * ## `bind()` y no `singleton()`
+     *
+     * Nada de esto guarda estado y todo mide el mundo en el instante en que se
+     * le pregunta. Un `singleton()` en un trabajador de cola congelaria el
+     * espacio libre en disco de la primera vez que alguien ejecuto `doctor`.
+     */
+    private function registerDiagnostics(): void
+    {
+        $this->app->bind(
+            DoctorTranslator::class,
+            static fn (Application $app): LaravelDoctorTranslator => new LaravelDoctorTranslator(
+                $app->make(Translator::class),
+            ),
+        );
+
+        $this->app->bind(
+            ServiceInspector::class,
+            static fn (Application $app): ServiceInspector => new ServiceInspector(
+                database: DB::connection(),
+                redis: $app->make(Redis::class),
+                migrationsPath: database_path('migrations'),
+                // Los cuatro con la lectura tolerante y no con `Config::string()`
+                // por lo mismo que el correo: esas ayudas **lanzan** si el tipo
+                // no es exacto, y `broadcasting.default` puede estar sin definir
+                // en una instalacion que no use tiempo real. Un diagnostico que
+                // reventara por eso seria inutil justo cuando hace falta.
+                queueConnection: self::text(Config::get('queue.default')) ?? 'sync',
+                queueName: self::text(Config::get('queue.connections.redis.queue')) ?? 'default',
+                realtimeEnabled: (bool) Config::get('realtime.enabled', true),
+                broadcastConnection: self::text(Config::get('broadcasting.default')) ?? 'null',
+            ),
+        );
+
+        $this->app->bind(
+            RunDoctorHandler::class,
+            static fn (Application $app): RunDoctorHandler => new RunDoctorHandler(
+                probes: [
+                    $app->make(DatabaseProbe::class),
+                    $app->make(QueueProbe::class),
+                    new MailProbe(
+                        mailer: Config::string('mail.default'),
+                        // `Config::string()` y `Config::integer()` no valen aqui:
+                        // el `.env` entrega el puerto como texto y las dos
+                        // lanzan si el tipo no es exacto. Un `doctor` que
+                        // reventara por eso seria inutil justo cuando hace
+                        // falta.
+                        host: self::text(Config::get('mail.mailers.smtp.host')),
+                        port: self::number(Config::get('mail.mailers.smtp.port')),
+                        environment: Config::string('app.env'),
+                    ),
+                    new TlsProbe(
+                        applicationUrl: Config::string('app.url'),
+                        allowSelfSigned: Config::boolean('security.tls_allow_self_signed'),
+                        clock: $app->make(Clock::class),
+                    ),
+                    new PermissionsProbe(
+                        writablePaths: [storage_path(), base_path('bootstrap/cache')],
+                        backupPath: Config::string('backup.path'),
+                        brandingLogoRoot: Config::string('branding.logo_root'),
+                        settings: $app->make(GetSettingsHandler::class),
+                        logos: $app->make(LogoInspector::class),
+                    ),
+                    new DiskProbe(
+                        storagePath: storage_path(),
+                        backupPath: Config::string('backup.path'),
+                    ),
+                    new ApplicationProbe(
+                        timezone: Config::string('app.timezone'),
+                        debug: Config::boolean('app.debug'),
+                        environment: Config::string('app.env'),
+                    ),
+                    new SettingsProbe(
+                        settings: $app->make(GetSettingsHandler::class),
+                        environment: $_ENV,
+                    ),
+                    $app->make(LicenseProbe::class),
+                ],
+                translator: $app->make(DoctorTranslator::class),
+                clock: $app->make(Clock::class),
+                productVersion: Config::string('app.version'),
+            ),
+        );
+
+        $this->app->bind(
+            DiagnosticsBundleWriter::class,
+            static fn (): JsonDiagnosticsBundleWriter => new JsonDiagnosticsBundleWriter(
+                Config::string('product.diagnostics_storage_path'),
+            ),
+        );
+
+        $this->app->bind(
+            GenerateDiagnosticsBundleHandler::class,
+            static fn (Application $app): GenerateDiagnosticsBundleHandler => new GenerateDiagnosticsBundleHandler(
+                collectors: [
+                    new InstallationCollector(
+                        database: DB::connection(),
+                        settings: $app->make(GetSettingsHandler::class),
+                        profiles: $app->make(ComplianceProfileRepository::class),
+                        productVersion: Config::string('app.version'),
+                        environment: Config::string('app.env'),
+                        applicationTimezone: Config::string('app.timezone'),
+                    ),
+                    new ConfigurationCollector(
+                        settings: $app->make(GetSettingsHandler::class),
+                        environment: $_ENV,
+                    ),
+                    $app->make(ServicesCollector::class),
+                    $app->make(DoctorCollector::class),
+                    $app->make(LicenseCollector::class),
+                    new KioskCollector(DB::connection()),
+                    new ErrorEventsCollector,
+                    $app->make(MetricsCollector::class),
+                    new UpdatesCollector(Config::string('backup.path')),
+                    $app->make(AuditCollector::class),
+                    new PersonalDataCollector(DB::connection(), $app->make(Clock::class)),
+                ],
+                events: $app->make(ProductEventPublisher::class),
+                clock: $app->make(Clock::class),
+                productVersion: Config::string('app.version'),
+                maxBytes: Config::integer('product.diagnostics_max_bytes'),
+            ),
+        );
+    }
+
+    /**
+     * Un valor de configuracion como texto, o nulo si no lo hay.
+     *
+     * Existe porque `Config::string()` **lanza** si el tipo no es exacto, y la
+     * configuracion de correo llega del `.env` con lo que el cliente haya
+     * escrito. `doctor` es lo que se ejecuta cuando algo esta mal configurado:
+     * un comando que reventara al leer una configuracion rara seria inutil
+     * justo en el momento en el que hace falta.
+     */
+    private static function text(mixed $value): ?string
+    {
+        return is_scalar($value) && (string) $value !== '' ? (string) $value : null;
+    }
+
+    /** Lo mismo para un entero. Ver {@see self::text()}. */
+    private static function number(mixed $value): ?int
+    {
+        return is_numeric($value) ? (int) $value : null;
     }
 }

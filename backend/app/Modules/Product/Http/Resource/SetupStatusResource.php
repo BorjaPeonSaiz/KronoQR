@@ -6,7 +6,7 @@ namespace App\Modules\Product\Http\Resource;
 
 use App\Modules\Product\Domain\ValueObject\SetupState;
 use App\Modules\Product\Domain\ValueObject\SetupStep;
-use DateTimeImmutable;
+use App\Modules\Shared\Domain\ValueObject\UtcInstant;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -65,9 +65,11 @@ final class SetupStatusResource extends JsonResource
         $body = [
             'available' => $state->isAvailable(),
             // Regla dura 3: en UTC con sufijo Z, como todo instante del contrato.
-            'completed_at' => $state->completedAt instanceof DateTimeImmutable
-                ? $state->completedAt->format('Y-m-d\TH:i:s\Z')
-                : null,
+            // Por `UtcInstant` y no a mano: convierte a UTC ANTES de escribir la
+            // `Z`, asi que la invariante no depende de la zona de la sesion de
+            // base de datos ni del proceso (tarea 5.9, el mismo helper que el
+            // resto de recursos del modulo).
+            'completed_at' => UtcInstant::format($state->completedAt),
         ];
 
         if (! $this->detailed) {

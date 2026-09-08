@@ -55,20 +55,34 @@ final class SetupPolicy
     }
 
     /** Consultar los pasos y su estado (`GET /setup/steps`). */
+    /**
+     * El asistente es un acto del cliente, no de soporte (tarea 5.9).
+     *
+     * Un token de soporte con alcance `configuration` lleva `settings:*`, que
+     * es el ambito bajo el que viajan estas rutas desde la 5.5; sin esta linea
+     * podria completar el asistente —irreversible y con asiento— como efecto
+     * lateral del ambito. Poner en marcha la instalacion lo decide quien la
+     * contrata, aunque quien la configure sea el fabricante.
+     */
+    private static function isClientAdministrator(ManagementActor $actor): bool
+    {
+        return $actor->actsAs(...self::administrators()) && ! $actor->isSupportActor();
+    }
+
     public function view(ManagementActor $actor): bool
     {
-        return $actor->actsAs(...self::administrators());
+        return self::isClientAdministrator($actor);
     }
 
     /** Marcar un paso como hecho u omitido. */
     public function record(ManagementActor $actor): bool
     {
-        return $actor->actsAs(...self::administrators());
+        return self::isClientAdministrator($actor);
     }
 
     /** Cerrar el asistente, que no se reabre. */
     public function complete(ManagementActor $actor): bool
     {
-        return $actor->actsAs(...self::administrators());
+        return self::isClientAdministrator($actor);
     }
 }

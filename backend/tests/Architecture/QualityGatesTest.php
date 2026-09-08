@@ -558,6 +558,73 @@ it('mantiene una sola tabla de codigos de salida para los cinco scripts de opera
         ->and($guia)->toContain('Hay que intervenir a mano');
 })->group('RF-PD-02');
 
+it('trae doctor.sh, carga la tabla comun de codigos y lo invocan install.sh y update.sh', function (): void {
+    // RF-PD-13, tarea 5.9. `doctor.sh` es el envoltorio ejecutable de
+    // `product:doctor` para cuando la aplicacion no arranca y `artisan` no
+    // esta disponible (doc 02 §11.6.1, paso 2 de la ficha 5.9). Esta prueba
+    // no sustituye a ShellCheck/shfmt (los cubre `make sh-lint`, invocado
+    // desde la etapa ① del pipeline): comprueba la CONFIGURACION —que el
+    // fichero existe, que carga la tabla unica en vez de inventar una propia,
+    // que documenta los codigos que le corresponden, y que install.sh y
+    // update.sh delegan en `product:doctor` en vez de reimplementar media
+    // comprobacion de salud— no que ShellCheck pase hoy en el portatil de
+    // quien lo escribio.
+    $doctor = repoContents('infra/scripts/doctor.sh');
+
+    expect($doctor)->toContain('lib/exit-codes.sh')
+        ->and($doctor)->toContain('lib/messages-doctor.sh');
+
+    // Los cuatro codigos que le tocan a doctor.sh en la tabla comun (RF-PD-13,
+    // decision 8 del brief de la tarea 5.9): 0 correcto, 2 sin Docker, 3 sin
+    // instalacion, 6 diagnostico con al menos un fallo. El 4 y el 5 los
+    // documenta explicitamente como "no los usa": no escribe ni deshace nada.
+    foreach ([
+        '0  Correcto',
+        '2  Docker no responde',
+        '3  No hay instalacion',
+        '6  El diagnostico ha encontrado',
+    ] as $documented) {
+        expect($doctor)->toContain($documented);
+    }
+
+    // Delega en el diagnostico real cuando la aplicacion esta en pie, y hace
+    // lo que puede desde fuera cuando no lo esta: las dos ramas de la ficha.
+    expect($doctor)->toContain('product:doctor');
+
+    // install.sh (fase 5) y update.sh (paso 5) invocan el mismo comando: dos
+    // diagnosticos distintos del mismo producto es la forma segura de que un
+    // dia digan cosas distintas (regla que gobierna la tarea, doc 02 §11.6.1).
+    foreach (['infra/scripts/install.sh', 'infra/scripts/update.sh'] as $script) {
+        expect(repoContents($script))->toContain('product:doctor');
+    }
+
+    // install.sh muestra el 1 como aviso y solo el 2 bloquea con el 6 comun.
+    $install = repoContents('infra/scripts/install.sh');
+    expect($install)->toContain('KQ_EXIT_VERIFY_FAILED');
+
+    // update.sh, en cambio, trata el doctor como INFORMATIVO (revision de
+    // codigo, segunda vuelta): la version nueva ya esta verificada por las
+    // sondas, la cadena de auditoria, las restricciones RN-01/RN-02 y los
+    // privilegios de base de datos, y un fallo AMBIENTAL de product:doctor
+    // (disco, certificado, APP_DEBUG) no debe deshacer una actualizacion que
+    // en todo lo demas es correcta. Un fallo del PROPIO doctor (codigo 2, o
+    // cualquier otro fuera de 0/1) NO llama a rollback_and_die: se muestra
+    // con check_warn y se resume en el informe como "con fallos". La UNICA
+    // razon para deshacer sigue siendo que el comando no exista en la
+    // imagen (eso si es un paquete roto, no un hallazgo ambiental).
+    $update = repoContents('infra/scripts/update.sh');
+
+    expect($update)->toContain('rollback_and_die "$(kq_text u_f_verify_doctor_missing_command)"')
+        ->and($update)->toContain('remember_check "doctor" "$(kq_text u_report_doctor_failed)"');
+
+    if (preg_match('/case "\$\{doctor_status\}" in(.*?)esac/s', $update, $match) !== 1) {
+        throw new RuntimeException('No se encuentra el case de doctor_status en update.sh.');
+    }
+
+    expect($match[1])->toContain('check_warn')
+        ->and($match[1])->not->toContain('rollback_and_die');
+})->group('RF-PD-13');
+
 it('sirve las tres SPA construidas y deja el portal detras del mismo candado que su API', function (): void {
     // RF-PD-02 y RF-ID-08. Hasta esta tarea, la entrega de los `dist/` estaba
     // diferida y la unica `location ^~ /portal/` que existia era la de

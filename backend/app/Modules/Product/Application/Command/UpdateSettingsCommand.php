@@ -22,10 +22,10 @@ final readonly class UpdateSettingsCommand
 {
     /**
      * @param  array<string, mixed>  $values  clave del catalogo => valor sin validar
-     * @param  int  $actorUserId  `users.id` de quien firma el cambio
+     * @param  ?int  $actorUserId  `users.id` de quien firma, o `null` si no hay ninguna persona detras
      */
     public function __construct(
         public array $values,
-        public int $actorUserId,
+        public ?int $actorUserId,
     ) {}
 }

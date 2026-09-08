@@ -30,9 +30,11 @@ use App\Modules\Kiosk\Http\Controller\PairingController;
 use App\Modules\Kiosk\Http\Controller\RosterController;
 use App\Modules\Product\Http\Controller\BrandingController;
 use App\Modules\Product\Http\Controller\ComplianceProfileController;
+use App\Modules\Product\Http\Controller\DiagnosticsController;
 use App\Modules\Product\Http\Controller\LicenseController;
 use App\Modules\Product\Http\Controller\SettingsController;
 use App\Modules\Product\Http\Controller\SetupController;
+use App\Modules\Product\Http\Controller\SupportGrantController;
 use App\Modules\Reporting\Http\Controller\EmployeeWorkDayController;
 use App\Modules\Reporting\Http\Controller\LivePresenceController;
 use App\Modules\Reporting\Http\Controller\MyWorkDayController;
@@ -1090,6 +1092,115 @@ Route::middleware([
     Route::get('/license', [LicenseController::class, 'show'])->name('product.license.show');
     Route::post('/license/activate', [LicenseController::class, 'activate'])
         ->name('product.license.activate');
+});
+
+/*
+ * ---------------------------------------------------------------------------
+ * DIAGNOSTICO (tarea 5.9, RF-PD-09, RF-PD-13)
+ * ---------------------------------------------------------------------------
+ *
+ * POST /api/v1/diagnostics/bundle — el paquete que el cliente genera y envia a
+ * soporte (ADR-020, regla dura 16).
+ *
+ * AMBITO PROPIO, `diagnostics:*`, y no `settings:*`. El §7.3 lo declara aparte y
+ * hay motivo: es el ambito que se le concede a un acceso de soporte del
+ * fabricante (RF-PD-11) para que pueda diagnosticar **sin poder tocar nada**.
+ * Con `settings:*`, conceder soporte para mirar un problema daria de paso la
+ * potestad de cambiar los umbrales con los que se calculan las horas.
+ *
+ * SOLO `admin`, y `DiagnosticsPolicy` es la otra mitad (regla dura 18). **`rrhh`
+ * no entra** aunque suela ser quien detecta el problema: el paquete SACA
+ * informacion del servidor hacia fuera, y esa es una decision del administrador.
+ * **El `auditor` tampoco**: su ambito es el registro horario y este fichero no
+ * forma parte de el. **El quiosco y el portal, menos**: sus tokens no llevan
+ * este ambito y se quedan en el middleware.
+ *
+ * `throttle:diagnostics` Y NO `throttle:management`: 3 r/m frente a 120, porque
+ * generar el paquete recorre la instalacion entera —lee la plantilla, cuenta el
+ * `audit_log`, abre un socket TLS contra el borde, mide dos discos y ejecuta las
+ * ocho familias de `doctor`—. Con el techo de gestion, un boton pulsado con
+ * impaciencia pondria ciento veinte de esos recorridos por minuto sobre la misma
+ * base de datos por la que pasa cada fichaje (ADR-010).
+ *
+ * ESTA RUTA NO SE DEGRADA NUNCA con la licencia caducada o ausente (regla dura
+ * 15): es justamente lo que se necesita cuando algo va mal. Degradarla seria
+ * quitarle al cliente la herramienta con la que arreglaria el problema.
+ *
+ * SIN `GET`. El paquete no se guarda en ningun sitio del que descargarlo
+ * despues: se genera y se entrega en la respuesta del `POST`. Un fichero por
+ * cada clic acumularia informacion del cliente en `storage/` sin que nadie la
+ * borre, y con `include_personal_data` serian copias de la plantilla criando
+ * polvo.
+ */
+Route::middleware([
+    'auth:sanctum',
+    'ability:'.TokenAbility::DIAGNOSTICS_ALL->value,
+    'throttle:diagnostics',
+])->group(function (): void {
+    Route::post('/diagnostics/bundle', [DiagnosticsController::class, 'generate'])
+        ->name('product.diagnostics.bundle');
+});
+
+/*
+ * ---------------------------------------------------------------------------
+ * ACCESOS DE SOPORTE (tarea 5.9, RF-PD-11)
+ * ---------------------------------------------------------------------------
+ *
+ * GET, POST /api/v1/support/grants y DELETE /api/v1/support/grants/{uuid}: los
+ * accesos temporales que el cliente concede al fabricante (RF-PD-11, RL-18,
+ * ADR-020, regla dura 16).
+ *
+ * AMBITO PROPIO, `support:*`, Y NO `settings:*`. El §7.3 lo declara aparte y hay
+ * motivo: configurar la instalacion es una decision operativa del hotel, y dejar
+ * entrar a alguien de fuera a sus datos de jornada es otra cosa completamente
+ * distinta —es la firma del encargo de tratamiento del art. 28 RGPD (RL-18)—.
+ * Que sean dos ambitos es ademas lo que permite que una concesion con alcance
+ * `configuration` lleve `settings:*` y NO pueda ampliarse a si misma.
+ *
+ * SOLO `admin`, Y ADEMAS SOLO EL CLIENTE. `SupportGrantPolicy` es la otra mitad
+ * (regla dura 18) y comprueba dos cosas, no una: el rol y que quien pregunta no
+ * sea el propio fabricante. Un token de soporte con alcance `configuration`
+ * actua como `admin` ante las policies —tiene que hacerlo—, asi que sin esa
+ * segunda comprobacion seria indistinguible del administrador del hotel justo en
+ * el endpoint que decide cuanto acceso tiene. **`rrhh` no entra** aunque gestione
+ * los datos que el acceso podria leer: quien autoriza es quien responde de la
+ * instalacion. **El `auditor` tampoco**: quien vigila no autoriza, y lo que
+ * necesite lo tiene en `audit_log` con `audit:read`. **El quiosco y el portal**
+ * se quedan en el middleware.
+ *
+ * EL `GET` ES DEL CLIENTE Y ES LA MITAD VISIBLE DEL REQUISITO. RF-PD-11 no pide
+ * solo que el acceso sea temporal y revocable: pide que el cliente lo vea. Sin
+ * esta lista, saber si el fabricante entro exigiria leer `audit_log`, que es una
+ * tabla tecnica con cuatro años de asientos de todo el producto.
+ *
+ * `throttle:management` POR LO QUE ESCRIBEN LAS OTRAS DOS: cada concesion y cada
+ * revocacion dejan un asiento en `audit_log` bajo el candado global de ADR-010,
+ * el mismo por el que pasa cada fichaje. Se aplica al grupo entero porque las
+ * tres salen de la misma pantalla y con el mismo token.
+ *
+ * `DELETE` Y NO `POST /revoke`, al contrario que el desemparejado de un quiosco.
+ * Lo dice el Anexo B del doc 01, y encaja: lo que se retira —el acceso— SI deja
+ * de existir, aunque la concesion que lo concedio se conserve como historial
+ * (regla dura 5). Es idempotente: revocar dos veces devuelve `204` sin volver a
+ * auditar, y `404` solo si el UUID no existe.
+ *
+ * ESTAS TRES RUTAS NO SE DEGRADAN NUNCA (ADR-019, regla dura 15), y por el mismo
+ * motivo que las de licencia pero mas fuerte: la incidencia que hay que resolver
+ * puede ser justamente que la renovacion no se activa. Cerrar la puerta por la
+ * que entra quien la va a arreglar seria un producto que se apaga solo.
+ */
+Route::middleware([
+    'auth:sanctum',
+    'ability:'.TokenAbility::SUPPORT_ALL->value,
+    'throttle:management',
+])->group(function (): void {
+    Route::get('/support/grants', [SupportGrantController::class, 'index'])
+        ->name('product.support.grants.index');
+    Route::post('/support/grants', [SupportGrantController::class, 'store'])
+        ->name('product.support.grants.store');
+    Route::delete('/support/grants/{uuid}', [SupportGrantController::class, 'destroy'])
+        ->whereUuid('uuid')
+        ->name('product.support.grants.destroy');
 });
 
 /*

@@ -92,9 +92,13 @@ export function registerAuthGuard(router: Router): void {
       return { name: 'login', query: { redirect: to.fullPath } }
     }
 
-    const ability = to.meta.ability
+    // `abilities` (en O) cubre pantallas como «Soporte» (tarea 5.9), que
+    // alcanza quien lleva `support:*` **o** `diagnostics:*`: una unica clave
+    // `ability` no puede expresar una disyuncion. Sin ninguna de las dos
+    // claves, la pantalla es publica para cualquier sesion (como hasta ahora).
+    const required = to.meta.abilities ?? (to.meta.ability === undefined ? [] : [to.meta.ability])
 
-    if (ability === undefined || session.can(ability)) {
+    if (required.length === 0 || required.some((ability) => session.can(ability))) {
       return true
     }
 

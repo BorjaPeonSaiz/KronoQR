@@ -592,7 +592,7 @@ it('responde 200 con la marca del producto aunque la configuracion sea ilegible'
             throw new RuntimeException('installation_settings ilegible');
         }
 
-        public function save(array $values, int $actorUserId): void
+        public function save(array $values, ?int $actorUserId): void
         {
             throw new RuntimeException('installation_settings ilegible');
         }

@@ -5469,6 +5469,257 @@ paths:
           $ref: '#/components/responses/TooManyRequests'
 
   # ---------------------------------------------------------------------------
+  # Diagnostico y soporte (RF-PD-09, RF-PD-11, tarea 5.9). Ver el tag `Product`
+  # y ADR-020: el soporte se presta con un paquete que genera el cliente; el
+  # acceso a sus datos es excepcional, expreso, temporal, limitado y auditado.
+  # ---------------------------------------------------------------------------
+
+  /api/v1/diagnostics/bundle:
+    post:
+      operationId: generateDiagnosticsBundle
+      summary: Generar el paquete de diagnostico
+      description: |
+        Genera y devuelve **en la misma respuesta** el paquete de diagnostico de
+        la instalacion (RF-PD-09, documento 02 §11.6.6,
+        [ADR-020](../adr/ADR-020-soporte-con-paquete-de-diagnostico.md)): un
+        unico fichero JSON legible que el administrador descarga con un clic y
+        envia a soporte por el canal de su contrato.
+
+        **Anonimizado por defecto, y verificado, no confiado** (RL-19, regla
+        dura 21). Cada seccion se construye con una **lista de permitidos**: lo
+        que no esta explicitamente permitido no entra. No hay nombres, ni
+        correos, ni registros de jornada; los empleados aparecen solo como
+        `employee_uuid` y los quioscos como `uuid`, sin su nombre. La
+        configuracion entra por lista blanca de claves —nunca `LICENSE_KEY`,
+        `QR_SIGNING_KEY_*`, `BACKUP_ENCRYPTION_KEY`, `REVERB_APP_SECRET`,
+        `APP_KEY` ni credenciales de base de datos o de correo— y el estado de
+        la licencia entra **sin la razon social del cliente**.
+
+        **Incluir datos personales es una accion distinta** (RL-19):
+        `include_personal_data: true`. Anade la seccion `personal_data` —plantilla
+        con nombre y codigo, fichajes y tramos de los ultimos `period_days`,
+        incidencias abiertas—, pone `manifest.anonymized` a `false` y deja un
+        asiento propio en `audit_log` (`diagnostics.personal_data_included`),
+        ademas del asiento de generacion. Nunca es el valor por defecto ni el
+        efecto secundario de otra opcion, y **solo puede pedirlo una cuenta de
+        gestion con rol `admin`**: un token de soporte (RF-PD-11) que lo intente
+        recibe `403`, porque decidir que sus datos salen es del cliente y de
+        nadie mas.
+
+        **Sin cifrado, a proposito.** El cliente tiene que poder abrir el
+        fichero y comprobar que no lleva nada que no quiera enviar antes de
+        enviarlo; un paquete cifrado se lo impediria. El `manifest` lleva el
+        `sha256` del resto del documento para que soporte detecte una copia
+        alterada o truncada.
+
+        **Funciona con la licencia caducada o ausente** (regla dura 15): es
+        justamente lo que se necesita cuando algo va mal.
+
+        **`admin` y solo `admin`, con ambito `diagnostics:*`** (documento 02
+        §7.3, regla dura 18). La generacion recorre toda la instalacion y por
+        eso lleva su propio limitador, `throttle:diagnostics`, mas estricto que
+        el de gestion.
+
+        **Auditada** (regla dura 6): cada generacion deja
+        `diagnostics.bundle_generated` con si iba anonimizado, que secciones
+        lleva, su `sha256` y su tamano.
+
+        Hasta que exista la tabla `error_events` (RF-PD-15, tarea 5.12) la
+        seccion `error_events` dice `{"status": "not_installed"}` y no `[]`: un
+        paquete que afirmase «cero errores» sobre una tabla que no existe seria
+        falso.
+      tags: [Product]
+      security:
+        - managementToken: ['diagnostics:*']
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DiagnosticsBundleRequest'
+      responses:
+        '200':
+          description: |
+            El paquete, como documento JSON descargable. `Content-Disposition`
+            lleva el nombre de fichero `kronoqr-diagnostics-<version>-<UTC>.json`
+            para que el navegador lo guarde sin que el panel tenga que inventar
+            uno.
+          headers:
+            Content-Disposition:
+              description: '`attachment; filename="kronoqr-diagnostics-2.2.0-20260908T101500Z.json"`'
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagnosticsBundle'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/support/grants:
+    get:
+      operationId: listSupportGrants
+      summary: Accesos de soporte concedidos
+      description: |
+        Todas las concesiones de acceso de soporte de la instalacion —activas,
+        caducadas y revocadas— con quien las concedio, por que, con que alcance,
+        hasta cuando y **cuando se uso por ultima vez** (RF-PD-11,
+        [ADR-020](../adr/ADR-020-soporte-con-paquete-de-diagnostico.md)).
+
+        Es la mitad «visible para el cliente» del requisito: el cliente no
+        tiene que leer `audit_log` para saber si el fabricante entro y cuando.
+        Las concesiones **no se borran nunca** (regla dura 5): una revocada o
+        caducada sigue en la lista con sus fechas.
+
+        Se devuelven las 100 mas recientes, de la mas nueva a la mas antigua.
+        El historico completo esta en `audit_log`.
+
+        **`admin` y solo `admin`, con ambito `support:*`** (documento 02 §7.3,
+        regla dura 18). El propio token de soporte no lleva ese ambito: quien
+        recibe el acceso no puede ver ni conceder ni revocar accesos.
+      tags: [Product]
+      security:
+        - managementToken: ['support:*']
+      responses:
+        '200':
+          description: Las concesiones, de la mas reciente a la mas antigua.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportGrantCollection'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      operationId: grantSupportAccess
+      summary: Conceder un acceso temporal de soporte
+      description: |
+        Concede al fabricante un acceso **expreso, temporal, limitado, revocable
+        y auditado** a esta instalacion (RF-PD-11, RL-18,
+        [ADR-020](../adr/ADR-020-soporte-con-paquete-de-diagnostico.md), regla
+        dura 16).
+
+        **Lo que se emite es un token de API con caducidad**, ligado a la
+        concesion y no a ninguna cuenta: no existe una cuenta del fabricante en
+        la instalacion, ni permanente ni dormida. El token se devuelve **una sola
+        vez, en esta respuesta**, y no se guarda en claro en ningun sitio (solo
+        su hash, como el token de un quiosco). El administrador se lo hace
+        llegar a soporte por el canal de su contrato. Si se pierde, se revoca
+        esta concesion y se crea otra.
+
+        **Caducidad efectiva**: cuando llega `expires_at`, el token deja de
+        autenticar (`401`) sin que nadie haga nada. Revocar tiene el mismo
+        efecto en el acto.
+
+        **`scope` limita lo que ese token puede hacer**, y lo limita por los dos
+        controles que aplica el producto a cualquier sesion: los ambitos del
+        token y el rol con el que actua ante las policies (documento 02 §7.3).
+
+        | `scope` | Puede | Actua como |
+        | --- | --- | --- |
+        | `diagnostics` | Generar el paquete de diagnostico **anonimizado** y consultar el historico de errores | `admin` solo ante las policies de diagnostico |
+        | `read_only` | Lo anterior y **leer** jornadas, tramos, plantilla y auditoria | `admin`, con ambitos de solo lectura (`attendance:read`, `employees:read`, `audit:read`): lo que impide escribir es el ambito, no el rol. No actua como `auditor` porque ese rol, a proposito, no lee el diario de jornadas (lo suyo es la exportacion legal, que ningun alcance concede) |
+        | `configuration` | Lo de `diagnostics` y **cambiar** la configuracion operativa de la instalacion y los quioscos (emparejar y desvincular) | `admin`. **No** el perfil de cumplimiento: los umbrales legales y los años de conservacion los fija el cliente con su asesoria (RL-01, RL-02, regla dura 14), y `ComplianceProfilePolicy` cierra el `PATCH` a todo actor de soporte aunque el ambito lo alcance |
+
+        **Lo que ningun alcance concede nunca**: activar licencias, conceder o
+        revocar accesos de soporte, emitir o revocar credenciales, corregir
+        fichajes, gestionar la plantilla, generar informes de nomina o la
+        exportacion para la Inspeccion, modificar el perfil de cumplimiento,
+        completar el asistente de puesta en marcha, ni **incluir datos
+        personales en un paquete de diagnostico** (RL-19). Cada una de esas puertas tiene su
+        prueba de que el token de soporte recibe `403`.
+
+        **`reason` es obligatorio** y va al asiento de auditoria: la concesion
+        existe para un incidente concreto, y usar el acceso para otro es el
+        abuso que este mecanismo existe para hacer visible (§8.1, `T1199`).
+
+        **Auditado** (regla dura 6): conceder deja `support_grant.granted`; cada
+        uso efectivo actualiza `accessed_at` y deja `support_grant.used` —como
+        maximo uno por concesion cada `PRODUCT_SUPPORT_USE_AUDIT_WINDOW_SECONDS`,
+        para que una sesion de soporte no inunde la cadena—; revocar deja
+        `support_grant.revoked`. Los tres son visibles para el cliente en
+        `audit_log` y en `GET /api/v1/support/grants`.
+
+        **Durante esa intervencion el fabricante es encargado del tratamiento
+        para ese supuesto concreto** (RL-18): exige el contrato de encargo del
+        art. 28 RGPD que la documentacion del cliente describe.
+
+        **`admin` y solo `admin`, con ambito `support:*`** (regla dura 18).
+        Funciona con la licencia caducada (regla dura 15): es cuando mas falta
+        hace.
+      tags: [Product]
+      security:
+        - managementToken: ['support:*']
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GrantSupportAccessRequest'
+      responses:
+        '201':
+          description: |
+            Concesion creada. **Es la unica vez que el token viaja en claro.**
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IssuedSupportGrant'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/support/grants/{uuid}:
+    parameters:
+      - $ref: '#/components/parameters/SupportGrantUuid'
+    delete:
+      operationId: revokeSupportAccess
+      summary: Revocar un acceso de soporte
+      description: |
+        Revoca la concesion **en el acto**: su token deja de autenticar en la
+        peticion siguiente, y la fila queda con `revoked_at` y quien la revoco
+        (RF-PD-11, regla dura 5: nada se borra).
+
+        **Idempotente.** Revocar una concesion ya revocada o ya caducada
+        devuelve `204` y no vuelve a auditar: la segunda pulsacion de un boton
+        no es un hecho nuevo. `404` solo si el `uuid` no existe.
+
+        **Es `DELETE`** porque es lo que dice el Anexo B del documento 01, y
+        porque lo que se retira —el acceso— si deja de existir, aunque la
+        concesion que lo concedio se conserve como historial.
+
+        **Auditado** (regla dura 6): `support_grant.revoked`, con la concesion y
+        el actor. **`admin` y solo `admin`, con ambito `support:*`** (regla dura
+        18). El token de soporte no puede revocarse a si mismo.
+      tags: [Product]
+      security:
+        - managementToken: ['support:*']
+      responses:
+        '204':
+          description: Acceso revocado, o ya lo estaba.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  # ---------------------------------------------------------------------------
   # Puesta en marcha (RF-PD-03, tarea 5.5). Ver el tag `Setup`.
   # ---------------------------------------------------------------------------
 
@@ -6347,6 +6598,20 @@ components:
         type: string
         format: uuid
       example: 0199f0c2-9b30-7a21-8d40-1e2f3a4b5c60
+
+    SupportGrantUuid:
+      name: uuid
+      in: path
+      required: true
+      description: |
+        Identificador **publico** de la concesion de soporte (`support_grants.uuid`).
+        Por lo mismo que el del quiosco: la clave interna no sale de la base de
+        datos, y un numero secuencial en la URL diria cuantas veces ha entrado
+        soporte en este hotel.
+      schema:
+        type: string
+        format: uuid
+      example: 0199f6a2-4c1e-7d3b-8a90-1b2c3d4e5f60
 
     DeviceUuid:
       name: uuid
@@ -12173,6 +12438,405 @@ components:
             para poder fichar) y **el perfil de convenio no** (RL-21: los
             umbrales hay que contrastarlos con el convenio aplicable, y eso es un
             acto de alguien).
+
+    # -------------------------------------------------------------------------
+    # Diagnostico y soporte (RF-PD-09, RF-PD-11, RF-PD-13, tarea 5.9, ADR-020)
+    # -------------------------------------------------------------------------
+
+    DiagnosticsBundleRequest:
+      type: object
+      title: DiagnosticsBundleRequest
+      description: |
+        Opciones del paquete de diagnostico. Sin cuerpo, o con el cuerpo vacio,
+        el paquete sale **anonimizado** (RL-19).
+      additionalProperties: false
+      properties:
+        include_personal_data:
+          type: boolean
+          default: false
+          description: |
+            **Accion distinta y explicita** (RL-19): anade la seccion
+            `personal_data`, marca el paquete como no anonimizado y deja el
+            asiento `diagnostics.personal_data_included`. Solo `admin`; un
+            token de soporte recibe `403`.
+        period_days:
+          type: integer
+          minimum: 1
+          maximum: 31
+          default: 7
+          description: |
+            Dias hacia atras que abarcan los fichajes y tramos de
+            `personal_data`. Sin `include_personal_data` no tiene efecto: el
+            paquete anonimizado no lleva registros de jornada de ningun periodo.
+
+    DiagnosticsManifest:
+      type: object
+      title: DiagnosticsManifest
+      description: |
+        Cabecera del paquete: que version lo genero, cuando, si va anonimizado
+        y la huella del resto del documento.
+      additionalProperties: false
+      required:
+        - schema_version
+        - product_version
+        - generated_at
+        - anonymized
+        - generated_by
+        - sections
+        - sha256
+      properties:
+        schema_version:
+          type: integer
+          const: 1
+          description: Version de la forma del paquete. Cambia solo si cambia lo que significa una seccion.
+        product_version:
+          type: string
+          examples: ['2.2.0']
+        generated_at:
+          $ref: '#/components/schemas/UtcTimestamp'
+        anonymized:
+          type: boolean
+          description: '`false` solo si se pidio `include_personal_data`.'
+        generated_by:
+          type: string
+          enum: [user, support_grant, console]
+          description: |
+            Quien lo genero, sin identificarlo: una cuenta de gestion, un token
+            de soporte o la consola. El actor concreto esta en `audit_log`.
+        sections:
+          type: array
+          description: Nombres de las secciones presentes, en el orden en que aparecen.
+          items:
+            type: string
+        sha256:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: |
+            SHA-256 del documento sin este `manifest`, serializado en JSON
+            canonico (claves ordenadas, sin espacios). Soporte lo recalcula al
+            recibirlo para detectar una copia alterada o truncada.
+
+    DoctorCheck:
+      type: object
+      title: DoctorCheck
+      description: Una comprobacion de `product:doctor` (RF-PD-13), con que hacer si esta en rojo.
+      additionalProperties: false
+      required: [id, status, summary, fix]
+      properties:
+        id:
+          type: string
+          description: Identificador estable, `familia.comprobacion`.
+          examples: [database.audit_log_privileges, tls.certificate, disk.backup]
+        status:
+          type: string
+          enum: [ok, warning, failure]
+          description: |
+            `failure` es algo que hay que corregir; `warning`, algo que conviene
+            mirar. **El estado de la licencia nunca pasa de `warning`** (regla
+            dura 15).
+        summary:
+          type: string
+          description: Que se ha comprobado y que se ha encontrado, en el idioma pedido.
+        fix:
+          type: [string, 'null']
+          description: |
+            **Que hacer**, redactado para quien no conoce el sistema. Nulo solo
+            con `status: ok`.
+        details:
+          type: object
+          description: Cifras y rutas que apoyan el veredicto. Nunca secretos ni datos personales.
+          additionalProperties: true
+
+    DoctorReport:
+      type: object
+      title: DoctorReport
+      description: |
+        Resultado completo de `php artisan product:doctor --json` (RF-PD-13).
+        Es la misma estructura que imprime el comando y la que va dentro del
+        paquete de diagnostico, para que las tres superficies no puedan
+        discrepar.
+      additionalProperties: false
+      required: [status, exit_code, checked_at, product_version, checks]
+      properties:
+        status:
+          type: string
+          enum: [ok, warning, failure]
+          description: El peor estado de todas las comprobaciones.
+        exit_code:
+          type: integer
+          enum: [0, 1, 2]
+          description: |
+            `0` todo correcto; `1` solo avisos; `2` al menos un fallo. Es lo que
+            devuelve el comando, y lo que `install.sh` y `update.sh` traducen a
+            su tabla comun: solo el `2` se convierte en el `6` de esa tabla.
+        checked_at:
+          $ref: '#/components/schemas/UtcTimestamp'
+        product_version:
+          type: string
+        checks:
+          type: array
+          items:
+            $ref: '#/components/schemas/DoctorCheck'
+
+    DiagnosticsBundle:
+      type: object
+      title: DiagnosticsBundle
+      description: |
+        El paquete de diagnostico (RF-PD-09, documento 02 §11.6.6, ADR-020).
+
+        **Cada seccion es una lista de permitidos.** Lo que no esta descrito
+        aqui no puede aparecer; una prueba automatica sobre un paquete generado
+        con volumen real (500 empleados, 90 dias) afirma que no contiene
+        nombres, correos, DNI ni horas de fichaje, y otra que no contiene
+        ninguna clave secreta del `.env`.
+
+        Las secciones que dependen de una tabla o de un fichero que no existe en
+        esta instalacion no desaparecen: dicen `{"status": "not_installed"}` o
+        `{"status": "unavailable", "reason": "..."}`.
+      additionalProperties: false
+      required:
+        - manifest
+        - installation
+        - configuration
+        - services
+        - doctor
+        - license
+        - kiosks
+        - error_events
+        - metrics
+        - updates
+        - audit
+      properties:
+        manifest:
+          $ref: '#/components/schemas/DiagnosticsManifest'
+        installation:
+          type: object
+          description: |
+            Version, entorno, zona horaria de la aplicacion (siempre `UTC`,
+            regla dura 3) y del centro, idiomas y el perfil de cumplimiento con
+            sus umbrales. **Sin el nombre del centro ni del cliente.**
+          additionalProperties: true
+        configuration:
+          type: object
+          description: |
+            Solo las claves de la **lista blanca** de configuracion, con su
+            valor; las diferencias entre `.env` y base de datos (clave y
+            `differs: true`, sin valores); y `invalid_keys` tal y como las
+            devuelve `GET /api/v1/settings`. Ninguna clave secreta, ni
+            «redactada»: las que no estan en la lista no aparecen.
+          additionalProperties: true
+        services:
+          type: object
+          description: |
+            Base de datos (alcanzable, version, migraciones pendientes), Redis,
+            colas con su tamano, Reverb (configurado o no), tamano y ultimo
+            asiento de `audit_log`.
+          additionalProperties: true
+        doctor:
+          $ref: '#/components/schemas/DoctorReport'
+        license:
+          type: object
+          description: |
+            Estado, plan, limites, dias hasta la caducidad, funcionalidades y
+            huella corta de la clave. **Nunca `customer_name`** ni la clave.
+          additionalProperties: true
+        kiosks:
+          type: array
+          description: Un elemento por quiosco. **Sin `name`**, que puede llevar el nombre de una persona.
+          items:
+            type: object
+            additionalProperties: false
+            required: [uuid, status, app_version, last_seen_at, pending_queue_size]
+            properties:
+              uuid:
+                type: string
+                format: uuid
+              status:
+                type: string
+              app_version:
+                type: [string, 'null']
+              last_seen_at:
+                oneOf:
+                  - $ref: '#/components/schemas/UtcTimestamp'
+                  - type: 'null'
+              pending_queue_size:
+                type: integer
+                minimum: 0
+        error_events:
+          type: object
+          description: |
+            Historico de errores agrupado por huella con su `trace_id`
+            (RF-PD-15). Hasta la tarea 5.12, `{"status": "not_installed"}`.
+          additionalProperties: true
+        metrics:
+          type: object
+          description: Contadores agregados de los puertos de metricas. Sin etiquetas de empleado.
+          additionalProperties: true
+        updates:
+          type: object
+          description: |
+            El informe de la ultima actualizacion (`BACKUP_PATH/reports/update-*.log`)
+            y la lista de informes existentes. Del informe entran solo las
+            **lineas del formato que escribe `update.sh`** (cabeceras, versiones,
+            puntos de control, comprobaciones y codigos); cualquier otra linea
+            se sustituye por un recuento `omitted_lines`. **Nunca el
+            `.detalle.log`**, que puede llevar datos personales y es `0600` de
+            root (doc 07 §6).
+          additionalProperties: true
+        audit:
+          type: object
+          description: |
+            Solo **recuentos** por familia y por dia de los ultimos 30 dias, y
+            el resultado de verificar la cadena. Ningun payload: los asientos de
+            `license_lifecycle` llevan la razon social y los de
+            `personal_data_access`, a quien se consulto.
+          additionalProperties: true
+        personal_data:
+          type: object
+          description: |
+            **Solo con `include_personal_data: true`.** Plantilla (`uuid`,
+            `employee_code`, `full_name`, `status`, `department_id`) **solo de
+            quienes tienen actividad en el periodo o una incidencia abierta**,
+            tramos y fichajes de los ultimos `period_days` referidos por
+            `employee_uuid` y sin `client_meta`, e incidencias abiertas.
+          additionalProperties: true
+
+    SupportScope:
+      type: string
+      title: SupportScope
+      enum: [diagnostics, read_only, configuration]
+      description: |
+        Alcance de una concesion de soporte (RF-PD-11). Ver la tabla de
+        `POST /api/v1/support/grants`. `diagnostics` es el valor por defecto y
+        el que basta para la mayoria de las incidencias.
+
+    SupportGrantAttributes:
+      type: object
+      title: SupportGrantAttributes
+      description: |
+        Los campos de una concesion, sin cierre: es la pieza que comparten
+        `SupportGrant` (la lectura) e `IssuedSupportGrant` (la creacion, que
+        anade el token). El cierre —`unevaluatedProperties: false`— lo pone
+        cada uno de los dos, porque con `additionalProperties: false` aqui la
+        composicion rechazaria el `token` que existe para describir.
+      required:
+        - uuid
+        - status
+        - scope
+        - reason
+        - granted_by
+        - granted_at
+        - expires_at
+        - revoked_at
+        - accessed_at
+      properties:
+        uuid:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [active, expired, revoked]
+          description: |
+            Calculado con el reloj del servidor en el momento de la lectura.
+            `revoked` gana a `expired`: una concesion revocada antes de caducar
+            consta como revocada.
+        scope:
+          $ref: '#/components/schemas/SupportScope'
+        reason:
+          type: string
+          description: Para que incidente se concedio. Va tal cual al asiento de auditoria.
+        granted_by:
+          type: object
+          description: La cuenta de gestion que la concedio.
+          additionalProperties: false
+          required: [uuid, name]
+          properties:
+            uuid:
+              type: string
+              format: uuid
+            name:
+              type: string
+        granted_at:
+          $ref: '#/components/schemas/UtcTimestamp'
+        expires_at:
+          $ref: '#/components/schemas/UtcTimestamp'
+        revoked_at:
+          oneOf:
+            - $ref: '#/components/schemas/UtcTimestamp'
+            - type: 'null'
+        accessed_at:
+          oneOf:
+            - $ref: '#/components/schemas/UtcTimestamp'
+            - type: 'null'
+          description: Ultimo uso efectivo del token. Nulo si nunca se uso.
+
+    SupportGrant:
+      title: SupportGrant
+      description: |
+        Una concesion de acceso de soporte (RF-PD-11, ADR-020): quien la
+        concedio, por que, con que alcance, hasta cuando, si se revoco y cuando
+        se uso por ultima vez. Se conserva para siempre (regla dura 5).
+      allOf:
+        - $ref: '#/components/schemas/SupportGrantAttributes'
+      unevaluatedProperties: false
+
+    SupportGrantCollection:
+      type: object
+      title: SupportGrantCollection
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/SupportGrant'
+
+    GrantSupportAccessRequest:
+      type: object
+      title: GrantSupportAccessRequest
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 3
+          maxLength: 200
+          description: Obligatorio. El incidente que motiva el acceso.
+          examples: ['Incidencia #123: la cola del quiosco de recepcion no vacia']
+        scope:
+          $ref: '#/components/schemas/SupportScope'
+        hours:
+          type: integer
+          minimum: 1
+          maximum: 72
+          default: 24
+          description: |
+            Duracion. El maximo lo fija `PRODUCT_SUPPORT_GRANT_MAX_HOURS` (72
+            de serie); un valor mayor es `422`.
+
+    IssuedSupportGrant:
+      type: object
+      title: IssuedSupportGrant
+      description: |
+        La concesion recien creada **con su token en claro**. Es la unica vez
+        que el token sale del servidor: no se guarda en claro y no se puede
+        volver a pedir.
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          allOf:
+            - $ref: '#/components/schemas/SupportGrantAttributes'
+            - type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+                  description: Token de API con la caducidad de la concesion. Entregar a soporte por el canal del contrato.
+                  examples: ['23|Kd2pQ9vLmN4tZbYcF1wQ8sE3rT6uI0oP5aS7dXyZ']
+          unevaluatedProperties: false
+
 
     SetupStatus:
       type: object

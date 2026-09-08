@@ -145,6 +145,12 @@ KQ_MSG_ES[seed_note]="Datos de arranque: el perfil de convenio y los catalogos l
 
 KQ_MSG_ES[verify_probe]="Sonda %s"
 KQ_MSG_ES[f_verify_probe]="la sonda %s no responde correctamente (%s). Los servicios estan en pie: revisa \"docker compose -f %s logs nginx app\" y el certificado de %s. NO se deshace nada, porque la instalacion y sus datos existen."
+KQ_MSG_ES[verify_doctor_running]="Ejecutando el diagnostico completo (\"product:doctor\"). Su salida se muestra entera a continuacion."
+KQ_MSG_ES[verify_doctor_ok]="Diagnostico completo sin fallos ni avisos"
+KQ_MSG_ES[verify_doctor_warn]="Diagnostico completo con avisos"
+KQ_MSG_ES[f_verify_doctor_warn]="ningun aviso impide declarar la instalacion correcta, pero conviene leerlos: son la primera senal de un problema que hoy no bloquea y manana si. Repite cuando quieras con \"docker compose -f %s exec app php artisan product:doctor\"."
+KQ_MSG_ES[f_verify_doctor]="\"product:doctor\" ha encontrado al menos un fallo. Los servicios estan en pie y la instalacion existe: revisa el informe de arriba —cada linea en [FALLA] dice que hacer— y, cuando lo hayas corregido, repite con \"docker compose -f %s exec app php artisan product:doctor\". NO se deshace nada."
+KQ_MSG_ES[f_verify_doctor_missing_command]="la imagen que se acaba de instalar no incluye \"product:doctor\". Es un defecto de esta version del paquete, no de tu servidor: los servicios estan en pie pero la instalacion no se declara verificada. Avisa al fabricante con la salida completa de este instalador. Mientras tanto, comprueba con \"docker compose -f %s logs\" y las sondas de la seccion 1.5 de instalacion.md."
 KQ_MSG_ES[verify_license]="Estado de la licencia consultado sin errores"
 KQ_MSG_ES[f_verify_license]="\"license:show\" ha terminado con error. No impide fichar ni consultar el registro —la licencia nunca bloquea el registro legal—. Ejecuta \"docker compose -f %s exec app php artisan license:show\" y sigue lo que diga."
 
@@ -351,6 +357,12 @@ KQ_MSG_EN[seed_note]="Bootstrap data: the collective-agreement profile and the c
 
 KQ_MSG_EN[verify_probe]="Probe %s"
 KQ_MSG_EN[f_verify_probe]="probe %s does not answer correctly (%s). The services are up: check \"docker compose -f %s logs nginx app\" and the certificate for %s. NOTHING is rolled back, because the installation and its data exist."
+KQ_MSG_EN[verify_doctor_running]="Running the full diagnostic (\"product:doctor\"). Its output is shown in full below."
+KQ_MSG_EN[verify_doctor_ok]="Full diagnostic with no failures nor warnings"
+KQ_MSG_EN[verify_doctor_warn]="Full diagnostic with warnings"
+KQ_MSG_EN[f_verify_doctor_warn]="no warning stops the installation from being declared correct, but they are worth reading: they are the first sign of a problem that does not block today and will tomorrow. Run it again any time with \"docker compose -f %s exec app php artisan product:doctor\"."
+KQ_MSG_EN[f_verify_doctor]="\"product:doctor\" found at least one failure. The services are up and the installation exists: check the report above —every [FAIL] line says what to do— and, once fixed, run \"docker compose -f %s exec app php artisan product:doctor\" again. NOTHING is rolled back."
+KQ_MSG_EN[f_verify_doctor_missing_command]="the image that was just installed does not include \"product:doctor\". It is a defect of this package version, not of your server: the services are up but the installation is not declared verified. Tell the manufacturer, attaching this installer's full output. Meanwhile, check with \"docker compose -f %s logs\" and the probes in section 1.5 of instalacion.md."
 KQ_MSG_EN[verify_license]="License status read without errors"
 KQ_MSG_EN[f_verify_license]="\"license:show\" ended with an error. It does not stop clock-in nor access to the record —the licence never blocks the legal record—. Run \"docker compose -f %s exec app php artisan license:show\" and follow what it says."
 

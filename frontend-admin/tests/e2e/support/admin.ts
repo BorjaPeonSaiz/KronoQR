@@ -20,6 +20,7 @@ import type {
   EmployeeWorkDays,
   Incident,
   IncidentCollection,
+  IssuedSupportGrant,
   License,
   LivePresenceBoard,
   LivePresenceEntry,
@@ -29,6 +30,7 @@ import type {
   Session,
   SetupStatus,
   Site,
+  SupportGrant,
   TwoFactorChallenge,
   TwoFactorEnrolment,
 } from '@/shared/api/types'
@@ -561,6 +563,51 @@ const PAIRING_REQUEST = {
   requested_at: '2026-09-07T09:55:00.000000Z',
 }
 
+// --- Soporte: paquete de diagnostico y accesos temporales (RF-PD-09,
+// RF-PD-11, tarea 5.9, ADR-020) ----------------------------------------------
+
+export const SUPPORT_GRANT_UUID = '0199f4d0-1a2b-7c3d-9e4f-5a6b7c8d9e01'
+export const SUPPORT_GRANT_REVOKED_UUID = '0199f4d0-2b3c-7d4e-9f5a-6b7c8d9e0a12'
+
+/** El token que el doble emite al conceder (`POST /support/grants`). Solo viaja una vez. */
+export const ISSUED_SUPPORT_TOKEN = '23|Kd2pQ9vLmN4tZbYcF1wQ8sE3rT6uI0oP5aS7dXyZ'
+
+/** Una concesion activa, con alcance `diagnostics` y sin usar todavia. */
+export const SUPPORT_GRANT_ACTIVE: SupportGrant = {
+  uuid: SUPPORT_GRANT_UUID,
+  status: 'active',
+  scope: 'diagnostics',
+  reason: 'Incidencia #123: la cola del quiosco de recepción no vacía',
+  granted_by: { uuid: ADMIN_USER.uuid, name: ADMIN_USER.name },
+  granted_at: '2026-09-08T09:00:00.000000Z',
+  expires_at: '2026-09-09T09:00:00.000000Z',
+  revoked_at: null,
+  accessed_at: null,
+}
+
+/** La misma concesion, ya revocada: no desaparece de la lista (regla dura 5). */
+export const SUPPORT_GRANT_REVOKED: SupportGrant = {
+  ...SUPPORT_GRANT_ACTIVE,
+  uuid: SUPPORT_GRANT_REVOKED_UUID,
+  status: 'revoked',
+  reason: 'Incidencia #98: revision del informe de horas de febrero',
+  revoked_at: '2026-09-08T10:00:00.000000Z',
+}
+
+/**
+ * Lo que devuelve `POST /api/v1/support/grants` (RF-PD-11): la concesion recien
+ * creada, **con el token en claro**. Es la unica vez que sale del servidor; el
+ * doble de `stubManagementApi` construye una copia con un `uuid` nuevo por cada
+ * llamada real, y esta constante sirve para las pruebas que solo necesitan un
+ * ejemplo suelto (sin pasar por el flujo completo de conceder).
+ */
+export const ISSUED_SUPPORT_GRANT: IssuedSupportGrant = {
+  data: { ...SUPPORT_GRANT_ACTIVE, token: ISSUED_SUPPORT_TOKEN },
+}
+
+/** El nombre de fichero que trae `Content-Disposition` de `POST /diagnostics/bundle`. */
+export const DIAGNOSTICS_BUNDLE_FILENAME = 'kronoqr-diagnostics-2.2.0-20260908T101500Z.json'
+
 /** Una peticion a la API tal y como salio del panel. */
 export interface RecordedRequest {
   readonly method: string
@@ -656,6 +703,14 @@ export interface ManagementApiOptions {
    * o la licencia ha caducado (tarea 5.8).
    */
   readonly license?: License
+  /**
+   * Las concesiones de soporte que devuelve `GET /api/v1/support/grants`
+   * (RF-PD-11, tarea 5.9) al arrancar. Por omision, ninguna: la mayoria de
+   * los recorridos del panel no pasan por «Soporte». El doble la mantiene
+   * mutable, para que conceder y revocar la vayan cambiando exactamente como
+   * lo haria el servidor.
+   */
+  readonly supportGrants?: SupportGrant[]
 }
 
 async function json(route: Route, status: number, body: unknown): Promise<void> {
@@ -702,6 +757,13 @@ export async function stubManagementApi(
   // objeto compartido `DEVICE`/`DEVICES` y contaminaria el resto de pruebas
   // de este fichero (un solo proceso, `DEVICE` es el mismo modulo para todas).
   const devices: Device[] = (options.devices?.devices ?? DEVICES.devices).map((candidate) => ({
+    ...candidate,
+  }))
+
+  // Los accesos de soporte (RF-PD-11, tarea 5.9): mutable, para que conceder y
+  // revocar la vayan cambiando exactamente como lo haria el servidor. Vacia
+  // por omision: la mayoria de los recorridos no pasan por «Soporte».
+  const supportGrants: SupportGrant[] = (options.supportGrants ?? []).map((candidate) => ({
     ...candidate,
   }))
 
@@ -842,6 +904,30 @@ export async function stubManagementApi(
 
         target.status = 'revoked'
         await json(route, 200, target)
+        return
+      }
+
+      // Revocar tambien lleva un `uuid` dinamico en la ruta
+      // (`DELETE /support/grants/{uuid}`, RF-PD-11).
+      const revokeGrantMatch = /^\/api\/v1\/support\/grants\/([0-9a-f-]+)$/.exec(url.pathname)
+
+      if (method === 'DELETE' && revokeGrantMatch !== null) {
+        const target = supportGrants.find((candidate) => candidate.uuid === revokeGrantMatch[1])
+
+        if (target === undefined) {
+          await problem(route, 404, 'urn:kronoqr:problem:not-found', 'Concesión no encontrada')
+
+          return
+        }
+
+        // Idempotente (el contrato lo garantiza): revocar una ya revocada
+        // vuelve a responder 204 sin cambiar la fecha de revocacion.
+        if (target.revoked_at === null) {
+          target.status = 'revoked'
+          target.revoked_at = '2026-09-08T10:30:00.000000Z'
+        }
+
+        await route.fulfill({ status: 204 })
         return
       }
 
@@ -1109,6 +1195,69 @@ export async function stubManagementApi(
           // que el cliente reciba el campo con la forma del protocolo.
           await json(route, 200, { auth: 'kronoqr:firma-de-prueba' })
           return
+        case 'POST /api/v1/diagnostics/bundle': {
+          // El paquete de diagnostico (RF-PD-09, ADR-020). El contenido de
+          // verdad lo prueba el backend; aqui basta con que el panel reciba
+          // un documento descargable con el nombre que trae
+          // `Content-Disposition`, y que la peticion lleve lo que se marco en
+          // pantalla.
+          const payload = request.postDataJSON() as {
+            include_personal_data?: boolean
+            period_days?: number
+          } | null
+
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            headers: {
+              'Content-Disposition': `attachment; filename=${DIAGNOSTICS_BUNDLE_FILENAME}`,
+            },
+            body: JSON.stringify({
+              manifest: {
+                schema_version: 1,
+                product_version: '2.2.0',
+                generated_at: '2026-09-08T10:15:00.000000Z',
+                anonymized: !(payload?.include_personal_data ?? false),
+                generated_by: 'user',
+                sections: ['manifest', 'installation', 'doctor'],
+                sha256: '0'.repeat(64),
+              },
+            }),
+          })
+
+          return
+        }
+        case 'GET /api/v1/support/grants':
+          // Las 100 mas recientes, de la mas nueva a la mas antigua (RF-PD-11):
+          // el doble ya inserta las concesiones nuevas al principio.
+          await json(route, 200, { data: supportGrants })
+          return
+        case 'POST /api/v1/support/grants': {
+          const payload = request.postDataJSON() as {
+            reason?: string
+            scope?: SupportGrant['scope']
+            hours?: number
+          }
+
+          const created: SupportGrant = {
+            uuid: `0199f4d0-${String(supportGrants.length).padStart(4, '0')}-7000-8000-0123456789ff`,
+            status: 'active',
+            scope: payload.scope ?? 'diagnostics',
+            reason: payload.reason ?? '',
+            granted_by: { uuid: currentUser.uuid, name: currentUser.name },
+            granted_at: '2026-09-08T09:30:00.000000Z',
+            expires_at: '2026-09-09T09:30:00.000000Z',
+            revoked_at: null,
+            accessed_at: null,
+          }
+
+          supportGrants.unshift(created)
+          // El token viaja **una sola vez**, en esta respuesta (RF-PD-11): la
+          // fila que queda en `supportGrants` -y que devuelve el `GET`
+          // siguiente- no lo lleva.
+          await json(route, 201, { data: { ...created, token: ISSUED_SUPPORT_TOKEN } })
+          return
+        }
         default:
           await problem(route, 404, 'about:blank', 'Sin doble para esta ruta en el E2E')
       }

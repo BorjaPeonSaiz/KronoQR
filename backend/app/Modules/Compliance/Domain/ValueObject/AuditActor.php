@@ -42,6 +42,18 @@ final readonly class AuditActor
     }
 
     /**
+     * Una concesion de acceso de soporte (RF-PD-11, RL-18, ADR-020, tarea 5.9).
+     *
+     * El identificador es el de `support_grants`, no el de ninguna cuenta: el
+     * fabricante no tiene cuenta en la instalacion. Ver
+     * {@see AuditActorType::SupportGrant}.
+     */
+    public static function supportGrant(int $grantId): self
+    {
+        return new self(AuditActorType::SupportGrant, $grantId);
+    }
+
+    /**
      * Reconstruccion desde la fila persistida, para el verificador. No valida
      * nada que la base de datos no valide ya: su trabajo es reproducir el valor
      * exacto que se encadeno.

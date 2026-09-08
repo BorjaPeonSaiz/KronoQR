@@ -159,3 +159,17 @@ export type PairingConfirmed = Schemas['PairingConfirmed']
 export type PairingCodeRejected = Schemas['PairingCodeRejected']
 export type Device = Schemas['Device']
 export type DeviceList = Schemas['DeviceList']
+
+// Diagnostico y accesos de soporte (RF-PD-09, RF-PD-11, RF-PD-13, tarea 5.9,
+// ADR-020). El paquete se descarga tal cual llega: el panel no lo interpreta,
+// solo lo guarda, y por eso el unico tipo que lee de el es el `manifest`.
+export type DiagnosticsBundleRequest = Schemas['DiagnosticsBundleRequest']
+export type DiagnosticsBundle = Schemas['DiagnosticsBundle']
+export type DiagnosticsManifest = Schemas['DiagnosticsManifest']
+export type DoctorReport = Schemas['DoctorReport']
+export type DoctorCheck = Schemas['DoctorCheck']
+export type SupportScope = Schemas['SupportScope']
+export type SupportGrant = Schemas['SupportGrant']
+export type SupportGrantCollection = Schemas['SupportGrantCollection']
+export type GrantSupportAccessRequest = Schemas['GrantSupportAccessRequest']
+export type IssuedSupportGrant = Schemas['IssuedSupportGrant']
