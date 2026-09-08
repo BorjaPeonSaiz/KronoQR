@@ -6,6 +6,12 @@ use App\Modules\Attendance\Application\Port\WorkDayRepository;
 use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
+use App\Modules\Product\Application\Command\ActivateLicenseCommand;
+use App\Modules\Product\Application\UseCase\ActivateLicenseHandler;
+use App\Modules\Product\Infrastructure\Adapter\DbBrandingProvider;
+use App\Modules\Shared\Application\Port\BrandingProvider;
+use App\Modules\Shared\Application\Port\FeatureGate;
+use App\Modules\Shared\Domain\ValueObject\Branding;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\DB;
@@ -19,6 +25,8 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Factory\ClockingPolicyFactory;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\FixedBranding;
+use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Time\Instants;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -122,8 +130,37 @@ it('descarga el registro horario del periodo como CSV', function (): void {
         ->and($csv)->toContain('Criterios de inclusion')
         ->and($csv)->toContain('TRAMO;')
         ->and($csv)->toContain('08:00')
-        ->and($csv)->toContain('2026-03-14 07:00');
-})->group('RF-IN-05', 'RL-06', 'RL-03');
+        ->and($csv)->toContain('2026-03-14 07:00')
+        // La cabecera declara de QUE instalacion es el documento (RF-PD-08). Sale
+        // de `installation_settings` desde la tarea 5.8, asi que dice lo mismo que
+        // el cliente ve en su panel; sin configurar es el nombre del producto, y
+        // nunca esta en blanco — un documento legal cuya primera linea dice
+        // «Instalacion:» y nada mas no le sirve a nadie dos años despues.
+        ->and($csv)->toContain('Instalacion;KronoQR');
+})->group('RF-IN-05', 'RL-06', 'RL-03', 'RF-PD-08');
+
+it('encabeza el documento de la Inspeccion con el nombre que el cliente configuro', function (): void {
+    // Y sigue saliendo aunque la licencia no cubra la marca blanca: lo que se
+    // degrada es el ROTULO, nunca el contenido. La exportacion para la Inspeccion
+    // es registro legal y no se apaga jamas (regla dura 15, ADR-019).
+    $contexto = contextoDeDescargaLegal();
+
+    app()->instance(BrandingProvider::class, new FixedBranding(new Branding(
+        applicationName: 'Hotel Marina',
+        logoPath: null,
+        accentColor: '#0f5c8c',
+    )));
+
+    $csv = cuerpoDescargado(
+        Api::as($contexto['token'])
+            ->get('/api/v1/reports/legal-export', ['from' => '2026-03-01', 'to' => '2026-03-31'])
+            ->assertOk(),
+    );
+
+    // Entrecomillado porque lleva un espacio: es el RFC 4180 que aplica
+    // `CsvDialect`, no un detalle de la marca.
+    expect($csv)->toContain('Instalacion;"Hotel Marina"');
+})->group('RF-IN-05', 'RL-06', 'RF-PD-08');
 
 it('acota la descarga a una sola persona cuando se le pide', function (): void {
     $contexto = contextoDeDescargaLegal();
@@ -204,3 +241,41 @@ it('no ignora en silencio un filtro que no existe', function (): void {
         ->assertStatus(422)
         ->assertJsonStructure(['errors' => ['site_id']]);
 })->group('RF-IN-05', 'RQ-06');
+
+it('encabeza el documento con el nombre del cliente aunque su plan no cubra la marca blanca', function (): void {
+    // ESTA ES LA RAZON DE QUE EL NOMBRE NO SE DEGRADE (ADR-023, regla dura 15,
+    // RL-06). Esta linea dice DE QUIEN es el registro horario que un inspector
+    // tiene delante. Si dependiera del estado comercial de la licencia, dos
+    // exportaciones del mismo mes podrian salir con encabezados distintos sin que
+    // hubiera cambiado ningun dato — y un fallo transitorio de verificacion
+    // (`LicenseUnverifiable`, es decir, un Redis caido) bastaria para provocarlo.
+    //
+    // POR LA CADENA REAL, no con un doble: lo que se comprueba es que el
+    // decorador de licencia deja pasar el nombre.
+    $contexto = contextoDeDescargaLegal();
+
+    LicenseKeys::install();
+
+    // Una licencia vigente cuyo plan NO incluye `white_label`.
+    app(ActivateLicenseHandler::class)->handle(new ActivateLicenseCommand(
+        LicenseKeys::current()->issue(['features' => ['advanced_reports']]),
+    ));
+
+    foreach ([FeatureGate::class, BrandingProvider::class, DbBrandingProvider::class] as $abstract) {
+        app()->forgetInstance($abstract);
+    }
+
+    DB::table('installation_settings')->updateOrInsert(
+        ['key' => 'BRANDING_APP_NAME'],
+        ['value' => '"Hotel Marina"', 'updated_at' => '2026-01-01 00:00:00+00'],
+    );
+
+    $csv = cuerpoDescargado(
+        Api::as($contexto['token'])
+            ->get('/api/v1/reports/legal-export', ['from' => '2026-03-01', 'to' => '2026-03-31'])
+            ->assertOk(),
+    );
+
+    expect($csv)->toContain('Instalacion;"Hotel Marina"')
+        ->and($csv)->not->toContain('Instalacion;KronoQR');
+})->group('RF-IN-05', 'RL-06', 'RF-PD-08', 'RF-PD-05');

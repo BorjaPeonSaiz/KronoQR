@@ -7,6 +7,9 @@ namespace App\Modules\Identity\Infrastructure\Adapter;
 use App\Modules\Identity\Application\Port\CardRenderer;
 use App\Modules\Identity\Domain\ValueObject\CardFormat;
 use App\Modules\Identity\Domain\ValueObject\PrintableCard;
+use App\Modules\Shared\Application\Port\BrandingLogoReader;
+use App\Modules\Shared\Application\Port\BrandingProvider;
+use App\Modules\Shared\Domain\ValueObject\LogoImage;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\View;
@@ -67,12 +70,21 @@ use Spatie\LaravelPdf\PdfBuilder;
  * remota convertiria la impresion de tarjetas en algo que depende de la red del
  * cliente.
  *
- * ## La marca es configuracion
+ * ## La marca es configuracion, y desde la 5.8 sale de la instalacion
  *
- * Nombre, logotipo y color de acento llegan de `config/branding.php` (RF-PD-08,
- * regla dura 13). Ninguno tiene valor de fabricante y todos pueden faltar: una
- * tarjeta sin logotipo se imprime igual. La tarea 5.8 sustituye la fuente por la
- * configuracion de la instalacion sin tocar esta clase ni la plantilla.
+ * Nombre, logotipo y color de acento llegan por los puertos
+ * {@see BrandingProvider} y {@see BrandingLogoReader} (RF-PD-08, regla dura 13):
+ * son filas de `installation_settings` que el cliente edita desde el panel, con
+ * auditoria y sin reiniciar nada. **Ya no se lee `config('branding.*')`**, que
+ * era una variable de entorno y obligaba a reiniciar para cambiar un color.
+ *
+ * La plantilla no se entero del cambio, y ese era el objetivo desde la fase 1:
+ * nacio recibiendo la marca desde fuera precisamente para que la fuente pudiera
+ * cambiar sin reescribirla.
+ *
+ * **El logotipo puede faltar y no pasa nada**: una tarjeta sin logotipo se
+ * imprime igual. Lo que no puede es faltar el color, y por eso el catalogo
+ * siempre da uno — de serie, el terracota del producto.
  */
 final readonly class BrowsershotCardRenderer implements CardRenderer
 {
@@ -108,7 +120,11 @@ final readonly class BrowsershotCardRenderer implements CardRenderer
      */
     private const float ACCENT_HEIGHT_MM = 2.5;
 
-    public function __construct(private EndroidQrEncoder $qr) {}
+    public function __construct(
+        private EndroidQrEncoder $qr,
+        private BrandingProvider $branding,
+        private BrandingLogoReader $logos,
+    ) {}
 
     /**
      * Lado del simbolo impreso, en milimetros.
@@ -269,6 +285,12 @@ final readonly class BrowsershotCardRenderer implements CardRenderer
     {
         $this->warnIfMinimumDoesNotFit();
 
+        $brand = $this->branding->current();
+
+        // Una sola lectura del disco por documento, no una por tarjeta: una hoja
+        // A4 lleva diez y el logotipo es el mismo en todas.
+        $logo = $this->logos->current();
+
         $view = match ($format) {
             CardFormat::CARD => 'pdf.credential-card',
             CardFormat::SHEET => 'pdf.credential-sheet',
@@ -299,37 +321,10 @@ final readonly class BrowsershotCardRenderer implements CardRenderer
             'qrSizeMm' => self::qrSideMm(),
             'accentMm' => self::ACCENT_HEIGHT_MM,
             'brand' => [
-                'name' => Config::get('branding.name'),
-                'logo' => $this->logoDataUri(),
-                'accent' => Config::string('branding.accent_color', '#111827'),
+                'name' => $brand->applicationName,
+                'logo' => $logo instanceof LogoImage ? $logo->dataUri() : null,
+                'accent' => $brand->accentColor,
             ],
         ])->render();
-    }
-
-    /**
-     * El logotipo del cliente incrustado en base64, o `null` si no hay ninguno
-     * configurado o el fichero no esta.
-     *
-     * **Falla en silencio a proposito.** Un logotipo que falta no puede impedir
-     * que se impriman las tarjetas de una temporada: el resultado seria que nadie
-     * puede fichar el primer dia por culpa de una ruta mal escrita en un `.env`.
-     */
-    private function logoDataUri(): ?string
-    {
-        $path = Config::get('branding.logo_path');
-
-        if (! \is_string($path) || $path === '' || ! is_file($path)) {
-            return null;
-        }
-
-        $bytes = file_get_contents($path);
-
-        if ($bytes === false) {
-            return null;
-        }
-
-        $mime = str_ends_with(strtolower($path), '.svg') ? 'image/svg+xml' : 'image/png';
-
-        return 'data:'.$mime.';base64,'.base64_encode($bytes);
     }
 }

@@ -10,6 +10,7 @@
 // que RRHH cerro a las 14:05.
 import type { Page, Route } from '@playwright/test'
 import type {
+  Branding,
   CredentialStatusBoard,
   DepartmentCollection,
   Device,
@@ -19,6 +20,7 @@ import type {
   EmployeeWorkDays,
   Incident,
   IncidentCollection,
+  License,
   LivePresenceBoard,
   LivePresenceEntry,
   ManagementUser,
@@ -61,6 +63,70 @@ export const DEPARTMENTS: DepartmentCollection = {
     { id: 3, name: 'Recepción' },
     { id: 4, name: 'Pisos' },
   ],
+}
+
+// --- Marca de la instalacion (RF-PD-08, tarea 5.8) --------------------------
+
+/** Lo que responde `GET /api/v1/branding` sin nada configurado: el producto. */
+export const PRODUCT_BRANDING: Branding = {
+  application_name: 'KronoQR',
+  accent_color: null,
+  logo_url: null,
+  locales: { default: 'es', available: ['es', 'en'] },
+}
+
+/** La huella que lleva la URL del logotipo de ejemplo (`?v=`, contrato). */
+export const LOGO_DIGEST = '3f9a1c2b7e4d'
+
+/** Un hotel con nombre, color y logotipo propios (el ejemplo del contrato). */
+export const HOTEL_BRANDING: Branding = {
+  application_name: 'Hotel Marina',
+  accent_color: '#0f5c8c',
+  logo_url: `/api/v1/branding/logo?v=${LOGO_DIGEST}`,
+  locales: { default: 'es', available: ['es'] },
+}
+
+/**
+ * Un PNG de 1x1 transparente, de verdad: lo que sirve el doble de
+ * `GET /api/v1/branding/logo`. No hace falta que se vea nada, solo que el
+ * `<img>` cargue con el `Content-Type` correcto (RF-PD-08).
+ */
+const ONE_PIXEL_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+  'base64',
+)
+
+// --- Licencia (RF-PD-04, RF-PD-05, tarea 5.3) --------------------------------
+
+/**
+ * Un plan sin la funcionalidad de marca propia (`white_label`, ADR-023): lo
+ * que devuelve `GET /api/v1/license` cuando no esta contratada. Se usa en
+ * `branding.spec.ts` para comprobar el aviso —persistente, no bloqueante— de
+ * `BrandingView` (tarea 5.8).
+ */
+export const LICENSE_WITHOUT_WHITE_LABEL: License = {
+  data: {
+    state: 'valid',
+    severity: 'none',
+    rejection_reason: null,
+    customer_name: 'Hotel Marina, S.L.',
+    plan: 'estandar',
+    license_id: 'lic-1',
+    valid_from: '2026-01-01T00:00:00.000000Z',
+    valid_until: '2027-01-01T00:00:00.000000Z',
+    issued_at: '2025-12-15T10:00:00.000000Z',
+    days_until_expiry: 90,
+    days_since_expiry: null,
+    features: [],
+    degraded_features: [
+      { feature: 'white_label', restriction: 'not_in_plan', since: null, implemented: true },
+    ],
+    limits: [],
+    activated_at: '2026-01-01T09:00:00.000000Z',
+    last_verified_at: '2026-01-01T09:00:00.000000Z',
+    key_fingerprint: '4b1e9c07a2d8',
+  },
+  meta: { expiry_warning_days: 30, needs_notice: false, evaluated_at: '2026-01-01T09:00:00Z' },
 }
 
 export const USER: ManagementUser = {
@@ -572,6 +638,24 @@ export interface ManagementApiOptions {
    * rutas nueva mandaria cualquier prueba existente a `/setup`.
    */
   readonly setupStatus?: SetupStatus
+  /**
+   * Lo que devuelve `GET /api/v1/branding` (RF-PD-08, tarea 5.8), publica y
+   * sin sesion. Por omision, `PRODUCT_BRANDING`: la instalacion recien
+   * instalada, sin nada configurado. `PATCH /api/v1/settings` la actualiza en
+   * el acto cuando cambia alguna de las tres claves `BRANDING_*`, para que
+   * `BrandingView` pueda comprobar que la cabecera se refresca tras guardar.
+   */
+  readonly branding?: Branding
+  /**
+   * Lo que devuelve `GET /api/v1/license` (RF-PD-04, RF-PD-05, tarea 5.3).
+   * Sin este campo, la ruta responde `404` -tal y como hacia antes de que
+   * existiera este doble-: `LicenseNotice`/`BrandingView` lo tratan como «sin
+   * datos de licencia» y no enseñan nada, que es el estado por omision de
+   * casi todos los recorridos del panel. Se usa, por ejemplo, para que
+   * `BrandingView` avise cuando `white_label` (ADR-023) esta fuera del plan
+   * o la licencia ha caducado (tarea 5.8).
+   */
+  readonly license?: License
 }
 
 async function json(route: Route, status: number, body: unknown): Promise<void> {
@@ -620,6 +704,51 @@ export async function stubManagementApi(
   const devices: Device[] = (options.devices?.devices ?? DEVICES.devices).map((candidate) => ({
     ...candidate,
   }))
+
+  // La marca de la instalacion (RF-PD-08, tarea 5.8): mutable, para que
+  // `PATCH /api/v1/settings` la actualice exactamente como lo haria el
+  // servidor y `GET /api/v1/branding` -que `branding.store.load()` vuelve a
+  // pedir tras guardar- devuelva el cambio en el acto.
+  let branding: Branding = { ...(options.branding ?? PRODUCT_BRANDING) }
+  let logoPath = branding.logo_url === null ? '' : '/var/kronoqr/branding/logo.png'
+
+  /** El catalogo de las tres claves `BRANDING_*`, con la forma de `GET/PATCH /settings`. */
+  function settingsCatalog(): unknown {
+    return {
+      data: [
+        {
+          key: 'BRANDING_APP_NAME',
+          value: branding.application_name,
+          type: 'text',
+          impact: 'presentation',
+          affects_worked_hours: false,
+          source:
+            branding.application_name === PRODUCT_BRANDING.application_name
+              ? 'product_default'
+              : 'installation',
+          constraints: { maximum_length: 60 },
+        },
+        {
+          key: 'BRANDING_ACCENT_COLOR',
+          value: branding.accent_color ?? '#b8542a',
+          type: 'text',
+          impact: 'presentation',
+          affects_worked_hours: false,
+          source: branding.accent_color === null ? 'product_default' : 'installation',
+          constraints: { pattern: '^#[0-9a-fA-F]{6}$' },
+        },
+        {
+          key: 'BRANDING_LOGO_PATH',
+          value: logoPath,
+          type: 'text',
+          impact: 'presentation',
+          affects_worked_hours: false,
+          source: logoPath === '' ? 'product_default' : 'installation',
+        },
+      ],
+      meta: { unknown_keys: [], invalid_keys: [] },
+    }
+  }
 
   /** El codigo del cuerpo, o cadena vacia si la peticion no llevaba uno legible. */
   function codeFrom(route: Route): string {
@@ -857,6 +986,58 @@ export async function stubManagementApi(
           // decidir si hay que mandar al asistente (RF-PD-03).
           await json(route, 200, options.setupStatus ?? SETUP_STATUS_DONE)
           return
+        case 'GET /api/v1/branding':
+          // Publica, sin token (RF-PD-08, tarea 5.8): la cabecera y el acceso
+          // la piden antes de que exista ninguna sesion, y `BrandingView` la
+          // vuelve a pedir tras guardar.
+          await json(route, 200, branding)
+          return
+        case 'GET /api/v1/branding/logo':
+          // Publica tambien. Un PNG de verdad, no un doble vacio: lo que
+          // comprueba el E2E es que el `<img>` carga con el tipo correcto.
+          await route.fulfill({
+            status: 200,
+            contentType: 'image/png',
+            headers: { 'Cache-Control': 'public, max-age=31536000, immutable' },
+            body: ONE_PIXEL_PNG,
+          })
+          return
+        case 'GET /api/v1/license':
+          // Sin `options.license`, sigue respondiendo `404` como hacia antes
+          // de que existiera este caso: los recorridos que no pasan el
+          // campo no ven ni el banner ni el aviso de marca de la licencia.
+          if (options.license === undefined) {
+            await problem(route, 404, 'urn:kronoqr:problem:not-found', 'Sin licencia en este doble')
+
+            return
+          }
+
+          await json(route, 200, options.license)
+          return
+        case 'GET /api/v1/settings':
+          await json(route, 200, settingsCatalog())
+          return
+        case 'PATCH /api/v1/settings': {
+          const patch = request.postDataJSON() as { settings: Record<string, unknown> }
+          const appName = patch.settings['BRANDING_APP_NAME']
+          const accentColor = patch.settings['BRANDING_ACCENT_COLOR']
+          const brandingLogoPath = patch.settings['BRANDING_LOGO_PATH']
+
+          if (typeof appName === 'string') {
+            branding = { ...branding, application_name: appName }
+          }
+
+          if (typeof accentColor === 'string') {
+            branding = { ...branding, accent_color: accentColor }
+          }
+
+          if (typeof brandingLogoPath === 'string') {
+            logoPath = brandingLogoPath
+          }
+
+          await json(route, 200, settingsCatalog())
+          return
+        }
         case 'GET /api/v1/site':
           await json(route, 200, SITE)
           return

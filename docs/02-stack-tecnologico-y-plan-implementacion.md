@@ -1484,16 +1484,24 @@ LICENSE_HEALTH_PROBE_TTL_SECONDS=600   # §10.5 · vida de la copia del estado q
                                        # clave firmada. Si expira, la sonda responde `unknown`
 TELEMETRY_ENABLED=false                # Desactivada por defecto (RF-PD-12)
 ERROR_HISTORY_RETENTION_DAYS=90        # RF-PD-15 · igual que el log técnico (RL-11)
-BRANDING_NAME=                         # RF-PD-08 · nombre impreso en la tarjeta. Vacío = el del centro
-BRANDING_LOGO_PATH=                    # RF-PD-08 · ruta ABSOLUTA en el servidor a un PNG o SVG
-BRANDING_ACCENT_COLOR=#111827          # RF-PD-08 · color de acento en notación CSS #rrggbb
-                                       # Estas TRES son las que el código lee hoy
-                                       # (config/branding.php). La marca editable desde
-                                       # el panel vive desde la tarea 5.1 en
-                                       # installation_settings (BRANDING_APP_NAME,
-                                       # BRANDING_LOGO_PATH, BRANDING_ACCENT_COLOR) y
-                                       # todavía no la pinta nadie: la 5.8 migra los dos
-                                       # consumidores y decide si se renombran
+BRANDING_LOGO_ROOT=/var/kronoqr/branding # RF-PD-08 · directorio DENTRO del contenedor donde tiene que
+                                       # estar el logotipo: `BRANDING_LOGO_PATH` (clave de
+                                       # installation_settings) se valida contra él al guardar. Sin
+                                       # este cerco, GET /api/v1/branding/logo —público— serviría
+                                       # cualquier fichero del servidor
+BRANDING_PATH=./branding               # RF-PD-08 · directorio del servidor del cliente con sus
+                                       # ficheros de marca; Compose lo monta en BRANDING_LOGO_ROOT
+                                       # en solo lectura. Relativo al directorio de instalación,
+                                       # como TLS_CERT_DIR
+PRODUCT_BRANDING_RATE_LIMIT=120        # RF-PD-08 · peticiones por minuto y por IP a las dos rutas
+                                       # públicas de marca; las piden navegadores al arrancar
+                                       # Las tres claves de marca (BRANDING_APP_NAME,
+                                       # BRANDING_LOGO_PATH, BRANDING_ACCENT_COLOR) viven en
+                                       # installation_settings desde la 5.1 y las pintan las tres
+                                       # aplicaciones y los PDF desde la 5.8. Las variables
+                                       # BRANDING_NAME y BRANDING_ACCENT_COLOR se RETIRARON en la
+                                       # 5.8: manda la base de datos y no hay siembra desde el .env
+                                       # (la marca la siembra el asistente de puesta en marcha)
 PRODUCT_SETTINGS_ANOMALY_WINDOW_SECONDS=300  # RF-PD-01 · cada cuánto se repite el aviso de
                                        # que hay configuración guardada que no se puede
                                        # aplicar. Se lee en cada fichaje: sin agrupar

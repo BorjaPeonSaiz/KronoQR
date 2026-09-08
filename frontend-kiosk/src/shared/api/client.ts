@@ -9,7 +9,9 @@
 // un `ApiResult` y quien llama decide. Un `reject` sin capturar en el camino del
 // escaneo es una pantalla en blanco delante de una cola de gente.
 
+import { parseBranding } from '@kronoqr/web-kit/branding'
 import type {
+  Branding,
   KioskHeartbeat,
   KioskHeartbeatRequest,
   KioskRoster,
@@ -89,6 +91,15 @@ export interface ApiClient {
    * desde aqui a proposito.
    */
   claimPairing(body: PairingClaimRequest): Promise<ApiResult<PairingClaim, PairingRejected>>
+  /**
+   * Marca de la instalacion (RF-PD-08, tarea 5.8). **Publica** (`authenticated:
+   * false`): la pantalla de espera la necesita antes de que nadie se
+   * identifique, igual que `fetchRoster` no necesitaria token si no fuera
+   * ademas el padron. Nunca puede impedir fichar (regla dura 19): quien la
+   * llama la trata siempre en segundo plano, sin `await` en el camino del
+   * escaneo (ver `useBranding.ts`).
+   */
+  fetchBranding(): Promise<ApiResult<Branding>>
 }
 
 const DEFAULT_TIMEOUT_MS = 8_000
@@ -120,6 +131,14 @@ function isKioskRoster(value: unknown): value is KioskRoster {
 
 function isKioskHeartbeat(value: unknown): value is KioskHeartbeat {
   return isRecord(value) && typeof value['server_time'] === 'string'
+}
+
+/**
+ * Reutiliza el validador de `web-kit` en vez de duplicar sus reglas aqui: si
+ * `parseBranding` lo acepta, la forma es la del contrato (RF-PD-08).
+ */
+function isBranding(value: unknown): value is Branding {
+  return parseBranding(value) !== null
 }
 
 function isPairingRequested(value: unknown): value is PairingRequested {
@@ -323,6 +342,20 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
       }
       if (result.status === 422 && isPairingRejected(result.body)) {
         return { outcome: 'rejected', problem: result.body }
+      }
+      return { outcome: 'failed', cause: causeForStatus(result.status), httpStatus: result.status }
+    },
+
+    async fetchBranding() {
+      // Publica a proposito: se pide antes de identificar a nadie, y un token
+      // viejo de una tablet revocada no tiene nada que hacer aqui (mismo
+      // motivo que `requestPairing`/`claimPairing`).
+      const result = await send('/api/v1/branding', { method: 'GET', authenticated: false })
+      if ('failure' in result) return { outcome: 'failed', cause: result.failure }
+      if (result.status === 200) {
+        return isBranding(result.body)
+          ? { outcome: 'ok', data: result.body }
+          : { outcome: 'failed', cause: 'malformed', httpStatus: 200 }
       }
       return { outcome: 'failed', cause: causeForStatus(result.status), httpStatus: result.status }
     },

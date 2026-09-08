@@ -5,7 +5,7 @@
 fuente de verdad de la API (CLAUDE.md, orden de autoridad 2; ADR-013).
 
 - `schema.d.ts` — tipos generados. Excluido de Prettier: nadie edita este fichero.
-- `types.ts` — alias cortos de `components['schemas'][...]` para los esquemas que usa el portal (`PortalSession`, `EmployeeWorkDays`, ...). No declara ninguna forma nueva.
+- `types.ts` — alias cortos de `components['schemas'][...]` para los esquemas que usa el portal (`PortalSession`, `EmployeeWorkDays`, `Branding`, ...). No declara ninguna forma nueva.
 
 **`http.ts` ya no vive aqui.** La puerta de salida base hacia la API —token de sesion en un solo
 sitio, errores traducidos a un tipo cerrado (`ApiErrorKind`), descarga de documentos sin dejar

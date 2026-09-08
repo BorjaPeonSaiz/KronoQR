@@ -224,7 +224,7 @@ Fichero: [`.claude/agents/ui-ux.md`](../.claude/agents/ui-ux.md)
 
 Añadido el 28 de agosto de 2026, cuando hizo falta aplicar un mismo sistema visual a las tres SPA y ninguno de los tres agentes de frontend tenía criterio transversal para decidirlo. Decide **cómo se ve y cómo se usa**, no qué hace el producto ni cómo se construye el backend.
 
-Sus principios: el sistema visual vive en un solo sitio (`packages/web-kit`, como tokens CSS que las tres aplicaciones consumen por el `@theme` de Tailwind); la marca por defecto es del fabricante y nunca de un cliente (regla dura 13, y lo que la tarea 5.8 hará configurable); **el contraste se mide, no se estima**, y esa medición queda como prueba automatizada; las fuentes se sirven desde la instalación, nunca desde un CDN; y cada aplicación conserva su contexto de uso —el quiosco oscuro y grande, el panel denso, el portal legible de un vistazo desde el móvil.
+Sus principios: el sistema visual vive en un solo sitio (`packages/web-kit`, como tokens CSS que las tres aplicaciones consumen por el `@theme` de Tailwind); la marca por defecto es del fabricante y nunca de un cliente (regla dura 13; la tarea 5.8 la hizo configurable en tiempo de ejecución sin tocar `theme.css`, doc 06 §7); **el contraste se mide, no se estima**, y esa medición queda como prueba automatizada; las fuentes se sirven desde la instalación, nunca desde un CDN; y cada aplicación conserva su contexto de uso —el quiosco oscuro y grande, el panel denso, el portal legible de un vistazo desde el móvil.
 
 Se usa para definir o aplicar tokens, revisar contraste y accesibilidad, reorganizar una pantalla o unificar el aspecto entre aplicaciones. Va **después** del agente de frontend que implementa el comportamiento, sobre ficheros distintos o en una oleada posterior, para no pisarse.
 
@@ -563,6 +563,51 @@ idempotencia, vuelta atrás con fallo inyectado y conteos intactos,
 reintento, restauración de la copia previa en limpio) y el runbook
 docs/runbooks/actualizacion-cliente.md completo, con la vuelta atrás a
 mano para la salida 5.
+```
+
+#### 6.5.3 Marca blanca en las tres aplicaciones y en los PDF (tarea 5.8)
+
+```text
+Ejecuta la tarea 5.8 del plan («Marca blanca en las tres aplicaciones y
+en los PDF», RF-PD-08). La ficha ejecutable está en
+plan implementacion/05-fase-5-productizacion.md → «Tarea 5.8», y el
+sistema visual que se hace configurable en docs/06-guia-visual.md §7.
+
+Orquesta: el contrato primero (docs/api/openapi.yaml: GET /api/v1/branding
+público y GET /api/v1/branding/logo), luego el módulo compartido
+packages/web-kit/src/branding.ts con su prueba, y después CUATRO agentes en
+paralelo con fronteras de ficheros que no se solapan: producto-licencia
+(backend, compose, .env.example, docs/cliente), frontend-quiosco,
+frontend-panel y frontend-portal-empleado. Ninguno toca el contrato ni
+web-kit. ui-ux revisa la pantalla «Marca» del panel; seguridad-cumplimiento
+y revisor-codigo antes de cerrar.
+
+Los innegociables:
+- Lo que se personaliza es lo que se ve; NINGÚN identificador técnico se
+  renombra: FH1, tablas, rutas, comandos, el name del manifiesto PWA
+- Nada específico de un cliente en el código: ni un asset, ni un color,
+  ni un nombre. El valor por defecto ES el producto, también en color
+- Manda la base de datos: la variable de entorno no es un escalón de la
+  cascada (BRANDING_NAME y BRANDING_ACCENT_COLOR se retiran)
+- Un solo color de acento; los tonos derivados se calculan hasta alcanzar
+  el mínimo AA y el contraste que no llega se AVISA, nunca se impone
+- accent_color público es null mientras nadie haya elegido color: las
+  SPA no tocan ningún token del doc 06
+- El logotipo es un fichero del servidor del cliente dentro de un
+  directorio de marca en solo lectura; se valida AL GUARDAR (dentro del
+  directorio, PNG/SVG por contenido, 512 KiB, 2048 px, sin script en SVG)
+  y la lectura posterior es tolerante: sin logotipo, nunca sin fichar
+- El endpoint público no filtra nada más que las cinco claves de
+  presentación, y la escritura sigue exigiendo admin con settings:*
+- El quiosco cachea la marca y el logotipo en el service worker: única
+  excepción a «la API nunca se cachea», acotada a esas dos lecturas
+- La marca no desplaza ni encoge el QR de la tarjeta
+
+Criterio de terminado: la DoD de la ficha —vue-tsc sin errores, pruebas
+en todos los niveles incluida la autorización negativa con tokens de
+quiosco y de portal, axe sin críticas ni graves con la marca aplicada,
+presupuesto del Anexo A— y configuracion.md explicando cómo cambiar la
+marca con los límites del logotipo.
 ```
 
 ### 6.6 Cierre de fase

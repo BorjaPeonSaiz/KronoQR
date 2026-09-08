@@ -21,9 +21,9 @@ use App\Modules\Shared\Domain\ValueObject\Branding;
  * ## Nunca falla y nunca devuelve nada vacio
  *
  * Sin ninguna fila, el catalogo entrega la marca del **producto**: `KronoQR`,
- * sin logotipo y con el gris del sistema visual del doc 06. Una instalacion
- * recien puesta en marcha tiene que poder imprimir tarjetas, y el valor por
- * defecto **es** el producto — nunca la marca de otro cliente (regla dura 13).
+ * sin logotipo y con el terracota de marca del doc 06. Una instalacion recien
+ * puesta en marcha tiene que poder imprimir tarjetas, y el valor por defecto
+ * **es** el producto — nunca la marca de otro cliente (regla dura 13).
  *
  * ## La ruta vacia significa «el logotipo del producto», y por eso se traduce
  *
@@ -33,9 +33,12 @@ use App\Modules\Shared\Domain\ValueObject\Branding;
  * el directorio actual. La traduccion entre las dos formas ocurre aqui, en el
  * borde, y no en los cuatro sitios que dibujan algo.
  *
- * **Que el fichero exista no se comprueba**: nadie se queda sin poder fichar
- * porque falte una imagen, y quien dibuja ya sabe seguir sin ella. Quien si lo
- * comprueba es `doctor` (tarea 5.9), que es donde un aviso sirve para algo.
+ * **Que el fichero exista no se comprueba aqui, y es deliberado**: nadie se
+ * queda sin poder fichar porque falte una imagen, y quien dibuja ya sabe seguir
+ * sin ella. Quien si lo comprueba es `LogoFileInspector`, en los dos momentos en
+ * los que hace falta: al GUARDAR la ruta —un `422` con una persona delante— y al
+ * LEER el fichero para dibujarlo, donde un rechazo solo significa «sigue sin
+ * logotipo». `doctor` (tarea 5.9) usara el mismo inspector para avisar.
  *
  * ## Tolerante, como todo lo que lee configuracion
  *

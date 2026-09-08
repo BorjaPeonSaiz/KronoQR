@@ -14,6 +14,7 @@
       "reports": "Reports",
       "compliance": "Compliance",
       "devices": "Kiosks",
+      "branding": "Brand",
       "license": "Licence"
     },
     "roles": {
@@ -862,6 +863,80 @@
       "notAWholeNumber": "Enter a whole number, with no decimals or letters.",
       "required": "This field cannot be left empty."
     }
+  },
+  "branding": {
+    "heading": "Brand",
+    "intro": "The name, accent colour and logo the console, the portal and the kiosk are presented with. The rest of the product's visual system —surfaces, text, borders, and the success, warning and danger states— stays unchanged.",
+    "loading": "Loading the brand…",
+    "fields": {
+      "appName": "Application name",
+      "accentColor": "Accent colour",
+      "accentColorPicker": "Accent colour picker",
+      "logoPath": "Logo path"
+    },
+    "hints": {
+      "appName": "Shown in the header of the three applications, in the browser tab title, and in the header of PDF reports and the Labour Inspectorate export.",
+      "accentColor": "The colour of primary buttons, links and selected items. The rest of the product's palette is untouched.",
+      "logoPath": "Absolute path inside the server's brand directory. Must be a PNG or an SVG up to 512 KiB and, if PNG, up to 2048 pixels on a side. Leave it blank to use the product's own logo."
+    },
+    "resetAccent": "Reset to the product colour",
+    "preview": {
+      "lightHeading": "Console and portal",
+      "kioskHeading": "Kiosk",
+      "solidButton": "Primary button",
+      "link": "Brand link",
+      "chip": "Selected item",
+      "kioskButton": "Confirm clock-in"
+    },
+    "contrastWarningsHeading": "Contrasts below the WCAG 2.2 AA minimum",
+    "contrastRatioExplainer": "The first number is the measured contrast and the second the minimum required: the higher the first, the more legible. WCAG 2.2 AA requires 4.5:1 for normal text.",
+    "contrastCriticalHeading": "The primary button becomes invisible",
+    "contrastWarning": "{what} {where}: it reads at {ratio}:1 and needs {minimum}:1.",
+    "contrastPreviewLink": "See the preview",
+    "contrastWarningsHint": "The colour can still be saved: this is a warning, not a block. Pick a darker or lighter shade to fix it.",
+    "contrastLabels": {
+      "genericForeground": "the text",
+      "genericBackground": "on this background",
+      "foreground": {
+        "primary": "the accent colour as a large element",
+        "primaryStrong": "primary buttons, links and brand text",
+        "focus": "the keyboard focus ring",
+        "onPrimary": "the text on primary buttons",
+        "onPrimarySoft": "the text on tinted backgrounds",
+        "kioskPrimary": "the kiosk's large accent",
+        "kioskPrimaryStrong": "the kiosk button",
+        "kioskOnPrimary": "the kiosk button's text"
+      },
+      "background": {
+        "surface": "on the page background",
+        "surfaceRaised": "on cards and dialogs",
+        "surfaceAlt": "on alternate rows",
+        "primaryStrong": "on the primary button",
+        "primarySoft": "on the tinted background",
+        "kioskSurface": "on the kiosk screen",
+        "kioskSurfaceRaised": "on kiosk panels",
+        "kioskPrimaryStrong": "on the kiosk button"
+      }
+    },
+    "errors": {
+      "notAHexColor": "Enter a colour as #rrggbb, or use the picker."
+    },
+    "license": {
+      "notice": "Custom branding {reason}. What you save here is kept and will apply once the licence covers it; until then, the applications and the documents carry the product's own brand.",
+      "reasons": {
+        "not_in_plan": "is not included in the contracted plan",
+        "license_expired": "is not available: the licence has expired",
+        "license_absent": "is not available: no licence has been activated",
+        "license_unverifiable": "is not available: the licence cannot be verified",
+        "license_not_yet_valid": "is not available yet: the activated licence has not started to apply",
+        "unknown": "is not available"
+      }
+    },
+    "save": "Save the brand",
+
+    "saving": "Saving…",
+    "saved": "Brand saved. The change is recorded in the audit trail and applied immediately.",
+    "failed": "The brand could not be saved."
   },
   "license": {
     "heading": "Licence",

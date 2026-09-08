@@ -2629,11 +2629,112 @@ export interface paths {
          *     disponibles—, que se comprueban sobre el resultado para que el orden de
          *     escritura no pueda dejar la instalacion en un estado imposible.
          *
+         *     **`BRANDING_LOGO_PATH` se comprueba contra el disco al guardar** (RF-PD-08,
+         *     tarea 5.8): la ruta tiene que ser absoluta y estar dentro del directorio
+         *     de marca montado en el contenedor, el fichero tiene que existir y ser PNG
+         *     o SVG **por su contenido**, y no superar los 512 KiB ni, si es PNG, los
+         *     2048 pixeles de lado. Un logotipo de 8 MB en la pantalla del quiosco
+         *     rompe el presupuesto de rendimiento, y una ruta fuera del directorio de
+         *     marca convertiria `GET /api/v1/branding/logo`, que es publico, en una
+         *     lectura de cualquier fichero del servidor. Lo que **no** se comprueba es
+         *     la lectura posterior: si el fichero desaparece despues de guardarlo, los
+         *     documentos salen sin logotipo y nadie se queda sin fichar. Una cadena
+         *     vacia sigue significando «el logotipo del producto» y no se comprueba
+         *     contra nada.
+         *
          *     **Volver al valor de serie no es guardar una cadena vacia.** Hoy no hay
          *     forma de retirar una clave desde la API; el valor de serie se restablece
          *     escribiendolo explicitamente.
          */
         patch: operations["updateInstallationSettings"];
+        trace?: never;
+    };
+    "/api/v1/branding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Marca de la instalacion
+         * @description Lo que las tres aplicaciones necesitan para pintarse con la marca del
+         *     cliente (RF-PD-08, regla dura 13): el nombre de la aplicacion, el color
+         *     de acento, donde esta el logotipo y que idiomas ofrece la instalacion.
+         *
+         *     **Es publica, y tiene que serlo.** El quiosco y el portal la piden antes
+         *     de identificar a nadie: la pantalla de espera de la tablet y la de acceso
+         *     del portal ya llevan la marca. Y **no filtra nada mas**: de las claves de
+         *     `installation_settings` solo salen las tres `BRANDING_*` y las dos
+         *     `LOCALE_*`, ya resueltas por la cascada de RF-PD-01; ningun umbral
+         *     operativo viaja por aqui. Lo que revela —el nombre del hotel y su color—
+         *     es lo mismo que revela la tarjeta impresa que cada empleado lleva en el
+         *     bolsillo.
+         *
+         *     **`accent_color` es `null` mientras el cliente no haya elegido uno.** Con
+         *     `null` las aplicaciones conservan el sistema visual del producto tal cual
+         *     ([doc 06](../06-guia-visual.md) §7); con un color, lo aplican en tiempo
+         *     de ejecucion sobre los tokens `--kq-*` y derivan los tonos que hacen falta
+         *     para que el texto sobre el acento siga leyendose. No se recompila nada
+         *     por cliente ([ADR-017](../adr/ADR-017-toda-diferencia-entre-clientes-es-configuracion.md)).
+         *
+         *     **`logo_url` es `null` cuando no hay logotipo valido**, y valido quiere
+         *     decir lo mismo que comprueba `PATCH /api/v1/settings` al guardar
+         *     `BRANDING_LOGO_PATH`: dentro del directorio de marca, PNG o SVG por su
+         *     contenido y dentro de los limites de tamaño. Cuando lo hay, la URL es
+         *     relativa y lleva `?v=<huella>`, que cambia con el contenido del fichero:
+         *     el quiosco la guarda en la cache del *service worker* para seguir
+         *     enseñando la marca sin red (RF-KI-03), y una huella nueva es lo que le
+         *     dice que hay otro logotipo.
+         *
+         *     Sin ninguna fila guardada responde `200` con la marca del **producto**: el
+         *     valor por defecto **es** el producto, nunca la marca de otro cliente.
+         *
+         *     Limitada por IP (`429`): la piden navegadores al arrancar, no personas.
+         */
+        get: operations["getBranding"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/branding/logo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Logotipo de la instalacion
+         * @description El fichero al que apunta `BRANDING_LOGO_PATH`, servido tal cual y con el
+         *     tipo que le corresponde **por su contenido** (`image/png` o
+         *     `image/svg+xml`), nunca por su extension.
+         *
+         *     **Solo sirve lo que pasa la comprobacion de `PATCH /api/v1/settings`**:
+         *     un fichero fuera del directorio de marca, que ya no existe, que no es PNG
+         *     ni SVG o que supera los limites responde `404`, exactamente igual que si
+         *     no hubiera ninguno configurado. La ruta configurada nunca se revela.
+         *
+         *     Un SVG viaja con `Content-Security-Policy: default-src 'none'; style-src
+         *     'unsafe-inline'; sandbox` y `X-Content-Type-Options: nosniff`: incrustado
+         *     con `<img>` no ejecuta nada, y abierto en una pestaña tampoco.
+         *
+         *     `Cache-Control: public, max-age=31536000, immutable`, porque la URL que
+         *     publica `GET /api/v1/branding` lleva la huella del contenido en `v`:
+         *     cambiar el logotipo cambia la URL, y la anterior puede quedarse cacheada
+         *     para siempre sin que nadie vea la vieja.
+         */
+        get: operations["getBrandingLogo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/setup/status": {
@@ -4580,6 +4681,49 @@ export interface components {
             name: string;
         };
         /**
+         * Branding
+         * @description La marca de la instalacion tal como la reciben las tres aplicaciones
+         *     (RF-PD-08, tarea 5.8). Es la proyeccion **publica** de cinco claves de
+         *     `installation_settings` —las tres `BRANDING_*` y las dos `LOCALE_*`—, ya
+         *     resueltas por la cascada de RF-PD-01. Se edita por
+         *     `PATCH /api/v1/settings`, nunca por aqui.
+         *
+         *     **Lo que se personaliza es lo que se ve en pantalla.** Los identificadores
+         *     tecnicos —el prefijo `FH1` del payload QR, los nombres de tablas, comandos
+         *     y rutas— no forman parte de la marca y no se renombran: hacerlo dejaria
+         *     sin poder fichar a quien lleva una tarjeta ya impresa.
+         */
+        Branding: {
+            /**
+             * @description Lo que se lee en la cabecera de las aplicaciones, en el titulo de la
+             *     pestaña y en la cabecera de los PDF. Nunca vacio: sin marca
+             *     configurada es el nombre del producto.
+             */
+            application_name: string;
+            /**
+             * @description El color de acento elegido por el cliente en notacion `#rrggbb`, o
+             *     `null` si no ha elegido ninguno. Con `null` las aplicaciones no tocan
+             *     ningun token: el sistema visual del producto se queda como esta.
+             */
+            accent_color: string | null;
+            /**
+             * @description URL relativa de `GET /api/v1/branding/logo`, con la huella del
+             *     contenido en `v`, o `null` si no hay logotipo valido. Sin logotipo
+             *     las aplicaciones enseñan solo el nombre.
+             */
+            logo_url: string | null;
+            locales: {
+                /** @description Idioma con el que se sirven las aplicaciones cuando nadie elige otro (`LOCALE_DEFAULT`). */
+                default: string;
+                /**
+                 * @description Idiomas que la instalacion ofrece (`LOCALE_AVAILABLE`). El
+                 *     selector del quiosco no enseña ninguno fuera de esta lista, y
+                 *     el idioma por defecto esta siempre dentro de ella.
+                 */
+                available: string[];
+            };
+        };
+        /**
          * SettingKey
          * @description Catalogo cerrado de claves de configuracion de la instalacion
          *     (RF-PD-01). El nombre es identico al de la variable de entorno del
@@ -4592,15 +4736,16 @@ export interface components {
          *     no conozca una clave nueva la ignora, y el servidor sigue devolviendo
          *     todas.
          *
-         *     **Que se aplica hoy y que no.** Las cuatro `ATTENDANCE_*` gobiernan ya el
-         *     fichaje: el nucleo las recibe resueltas por `OperationalSettingsProvider`
-         *     y un cambio surte efecto en la peticion siguiente. Las tres
-         *     `BRANDING_*` y las dos `LOCALE_*` **se guardan y se auditan, y todavia no
-         *     se pintan**: las tres aplicaciones cliente y la cabecera de los PDF siguen
-         *     leyendo la marca del entorno del servidor, y es la **tarea 5.8** la que
-         *     las pasa a estas claves. Se publican desde ya para que la puesta en marcha
-         *     pueda dejarlas escritas y para que el cambio de la 5.8 no altere el
-         *     contrato.
+         *     **Todas se aplican.** Las cuatro `ATTENDANCE_*` gobiernan el fichaje: el
+         *     nucleo las recibe resueltas por `OperationalSettingsProvider`. Las tres
+         *     `BRANDING_*` las pintan las tres aplicaciones —las reciben por
+         *     `GET /api/v1/branding`— y las llevan la tarjeta de credencial, el informe
+         *     sellado y la exportacion legal (RF-PD-08, tarea 5.8). Las dos `LOCALE_*`
+         *     deciden en que idioma se negocia cada respuesta y que idiomas ofrece el
+         *     selector del quiosco. Un cambio surte efecto en la peticion siguiente;
+         *     una tarjeta ya impresa, naturalmente, no cambia. Ninguna de las nueve
+         *     tiene ya una variable de entorno que la sustituya: `BRANDING_NAME` y
+         *     `BRANDING_ACCENT_COLOR` del Anexo B se retiraron en la 5.8.
          * @enum {string}
          */
         SettingKey: "ATTENDANCE_MAX_SHIFT_HOURS" | "ATTENDANCE_DEBOUNCE_SECONDS" | "ATTENDANCE_MAX_CLOCK_SKEW_MINUTES" | "ATTENDANCE_MIN_TRANSIT_SECONDS" | "BRANDING_APP_NAME" | "BRANDING_LOGO_PATH" | "BRANDING_ACCENT_COLOR" | "LOCALE_DEFAULT" | "LOCALE_AVAILABLE";
@@ -10289,6 +10434,61 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getBranding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description La marca vigente, resuelta. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Branding"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getBrandingLogo: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Huella del contenido que publica `GET /api/v1/branding`. El servidor
+                 *     la ignora: existe para que la cache del navegador y la del *service
+                 *     worker* distingan un logotipo de otro.
+                 */
+                v?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description El logotipo, tal cual esta en el servidor del cliente. */
+            200: {
+                headers: {
+                    /** @description Cacheable sin limite; la URL cambia con el contenido. */
+                    "Cache-Control"?: string;
+                    /** @description Huella SHA-256 del contenido, entre comillas. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": string;
+                    "image/svg+xml": string;
+                };
+            };
+            404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
         };
     };

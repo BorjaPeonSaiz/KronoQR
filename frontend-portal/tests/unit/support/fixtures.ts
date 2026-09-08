@@ -1,6 +1,7 @@
 // Datos de ejemplo, calcados de los del contrato. Si el contrato cambia de
 // forma, estas pruebas dejan de compilar antes que la aplicacion falle.
 import type {
+  Branding,
   EmployeeWorkDays,
   PortalEmployee,
   PortalSession,
@@ -105,6 +106,20 @@ export function workDay(overrides: Partial<WorkDayDetail> = {}): WorkDayDetail {
     // RF-PA-05 no forma parte del registro que el art. 34.9 ET reconoce al
     // empleado. El porque esta escrito en el contrato.
     incidents: [],
+    ...overrides,
+  }
+}
+
+// --- Marca de la instalacion (RF-PD-08, tarea 5.8) --------------------------
+//
+// La forma del contrato tal cual, en snake_case (`GET /api/v1/branding`).
+
+export function brandingPayload(overrides: Partial<Branding> = {}): Branding {
+  return {
+    application_name: 'Hotel Marina',
+    accent_color: '#0f5c8c',
+    logo_url: '/api/v1/branding/logo?v=3f9a1c2b7e4d',
+    locales: { default: 'es', available: ['es'] },
     ...overrides,
   }
 }

@@ -14,6 +14,7 @@
       "reports": "Informes",
       "compliance": "Cumplimiento",
       "devices": "Quioscos",
+      "branding": "Marca",
       "license": "Licencia"
     },
     "roles": {
@@ -862,6 +863,80 @@
       "notAWholeNumber": "Escribe un número entero, sin decimales ni letras.",
       "required": "Este campo no puede quedarse vacío."
     }
+  },
+  "branding": {
+    "heading": "Marca",
+    "intro": "El nombre, el color de acento y el logotipo con los que se presentan el panel, el portal y el quiosco. El resto del sistema visual del producto —superficies, texto, bordes, y los estados de éxito, aviso y peligro— no cambia.",
+    "loading": "Cargando la marca…",
+    "fields": {
+      "appName": "Nombre de la aplicación",
+      "accentColor": "Color de acento",
+      "accentColorPicker": "Selector de color de acento",
+      "logoPath": "Ruta del logotipo"
+    },
+    "hints": {
+      "appName": "Aparece en la cabecera de las tres aplicaciones, en el título de la pestaña y en la cabecera de los informes en PDF y de la exportación para la Inspección.",
+      "accentColor": "El color de los botones principales, los enlaces y los elementos seleccionados. El resto de la paleta del producto no se toca.",
+      "logoPath": "Ruta absoluta dentro del directorio de marca del servidor. Tiene que ser un PNG o un SVG de hasta 512 KiB y, si es PNG, de hasta 2048 píxeles de lado. Déjalo en blanco para usar el logotipo del producto."
+    },
+    "resetAccent": "Volver al color del producto",
+    "preview": {
+      "lightHeading": "Panel y portal",
+      "kioskHeading": "Quiosco",
+      "solidButton": "Botón principal",
+      "link": "Enlace de marca",
+      "chip": "Elemento seleccionado",
+      "kioskButton": "Confirmar fichaje"
+    },
+    "contrastWarningsHeading": "Contrastes por debajo del mínimo de WCAG 2.2 AA",
+    "contrastRatioExplainer": "El primer número es el contraste medido y el segundo el mínimo exigido: cuanto más alto el primero, más legible. Para texto normal, WCAG 2.2 AA exige 4,5:1.",
+    "contrastCriticalHeading": "El botón principal deja de verse",
+    "contrastWarning": "{what} {where}: se lee a {ratio}:1 y hace falta {minimum}:1.",
+    "contrastPreviewLink": "Ver la previsualización",
+    "contrastWarningsHint": "El color se puede guardar igualmente: es un aviso, no un bloqueo. Elige un tono más oscuro o más claro si quieres corregirlo.",
+    "contrastLabels": {
+      "genericForeground": "el texto",
+      "genericBackground": "sobre este fondo",
+      "foreground": {
+        "primary": "el color de acento como elemento grande",
+        "primaryStrong": "los botones principales, los enlaces y el texto de marca",
+        "focus": "el anillo de foco del teclado",
+        "onPrimary": "el texto sobre los botones principales",
+        "onPrimarySoft": "el texto sobre los fondos tintados",
+        "kioskPrimary": "el acento grande del quiosco",
+        "kioskPrimaryStrong": "el botón del quiosco",
+        "kioskOnPrimary": "el texto del botón del quiosco"
+      },
+      "background": {
+        "surface": "sobre el fondo de la página",
+        "surfaceRaised": "sobre tarjetas y diálogos",
+        "surfaceAlt": "sobre filas alternas",
+        "primaryStrong": "sobre el botón principal",
+        "primarySoft": "sobre el fondo tintado",
+        "kioskSurface": "sobre la pantalla del quiosco",
+        "kioskSurfaceRaised": "sobre los paneles del quiosco",
+        "kioskPrimaryStrong": "sobre el botón del quiosco"
+      }
+    },
+    "errors": {
+      "notAHexColor": "Escribe un color en formato #rrggbb, o usa el selector."
+    },
+    "license": {
+      "notice": "La marca propia {reason}. Lo que guardes aquí se conserva y se aplicará cuando la licencia lo cubra; mientras tanto las aplicaciones y los documentos llevan la marca del producto.",
+      "reasons": {
+        "not_in_plan": "no está incluida en el plan contratado",
+        "license_expired": "no está disponible: la licencia ha caducado",
+        "license_absent": "no está disponible: no hay licencia activada",
+        "license_unverifiable": "no está disponible: la licencia no se puede verificar",
+        "license_not_yet_valid": "no está disponible todavía: la licencia activada aún no ha empezado a valer",
+        "unknown": "no está disponible"
+      }
+    },
+    "save": "Guardar la marca",
+
+    "saving": "Guardando…",
+    "saved": "Marca guardada. El cambio queda registrado en el trail de auditoría y se aplica en el acto.",
+    "failed": "No se ha podido guardar la marca."
   },
   "license": {
     "heading": "Licencia",

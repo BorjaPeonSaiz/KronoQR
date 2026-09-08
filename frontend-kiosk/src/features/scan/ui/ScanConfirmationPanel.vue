@@ -22,6 +22,7 @@
 //     (`bg-kq-kiosk-surface-raised`, `text-kq-kiosk-text`), no un color de
 //     desenlace. Nunca suena a exito: seria mentir mientras el servidor
 //     todavia no ha contestado.
+import { PRODUCT_BRANDING, type Branding } from '@kronoqr/web-kit/branding'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { formatClockTime } from '../domain/clockTime'
@@ -30,7 +31,13 @@ import type { ConfirmationVariant, ScanConfirmation } from '../domain/scanOutcom
 import { isArrival, variantFor } from '../domain/scanOutcome'
 import { splitWorkedMinutes } from '../domain/workedTime'
 
-const props = defineProps<{ confirmation: ScanConfirmation }>()
+const props = withDefaults(
+  defineProps<{ confirmation: ScanConfirmation; branding?: Branding }>(),
+  // El producto por defecto: esta pantalla se prueba y se usa mucho antes de
+  // que exista ninguna respuesta del servidor (regla dura 19: el fichaje
+  // nunca espera a la marca).
+  { branding: () => PRODUCT_BRANDING },
+)
 
 const { t, locale } = useI18n()
 
@@ -170,6 +177,25 @@ const total = computed(() => {
       data-testid="confirmation-pending-badge"
     >
       {{ t('scan.pending.badge') }}
+    </p>
+
+    <!-- Linea discreta de marca (RF-PD-08): NO compite con el veredicto, ni
+         visual (tamano pequeno, al final) ni para quien usa lector de
+         pantalla (`aria-hidden`: lo que hay que anunciar es el resultado del
+         fichaje, no de que instalacion es la tablet). Nunca los cinco colores
+         de confirmacion, solo el color de texto que ya lleva la variante. Un
+         `<p>`, no un `<span>`: hay una prueba que comprueba que el desenlace
+         `debounced` no lleva NINGUN `span[aria-hidden]` (el glifo grande de
+         alarma que aqui no aplica), y esta linea no es ese glifo. -->
+    <p aria-hidden="true" class="mt-2 flex items-center gap-2 text-base font-medium">
+      <img
+        v-if="props.branding.logoUrl !== null"
+        :src="props.branding.logoUrl"
+        alt=""
+        class="h-5 max-w-24 object-contain"
+        data-testid="confirmation-brand-logo"
+      />
+      <span v-else data-testid="confirmation-brand-name">{{ props.branding.applicationName }}</span>
     </p>
   </div>
 </template>

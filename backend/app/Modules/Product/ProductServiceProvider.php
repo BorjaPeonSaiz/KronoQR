@@ -11,6 +11,7 @@ use App\Modules\Product\Application\Port\LicenseMetrics;
 use App\Modules\Product\Application\Port\LicenseRepository;
 use App\Modules\Product\Application\Port\LicenseStatePublisher;
 use App\Modules\Product\Application\Port\LicenseVerifier;
+use App\Modules\Product\Application\Port\LogoInspector;
 use App\Modules\Product\Application\Port\PlanUsageCounter;
 use App\Modules\Product\Application\Port\ProductEventPublisher;
 use App\Modules\Product\Application\Port\SettingsAnomalyReporter;
@@ -34,11 +35,15 @@ use App\Modules\Product\Infrastructure\Adapter\CachedLicenseStatePublisher;
 use App\Modules\Product\Infrastructure\Adapter\CachedSettingsRepository;
 use App\Modules\Product\Infrastructure\Adapter\DbBrandingProvider;
 use App\Modules\Product\Infrastructure\Adapter\DbCompliancePolicyProvider;
+use App\Modules\Product\Infrastructure\Adapter\DbLocalePolicyProvider;
 use App\Modules\Product\Infrastructure\Adapter\DbOperationalSettingsProvider;
 use App\Modules\Product\Infrastructure\Adapter\Ed25519LicenseVerifier;
 use App\Modules\Product\Infrastructure\Adapter\LaravelProductEventPublisher;
+use App\Modules\Product\Infrastructure\Adapter\LicensedBrandingProvider;
 use App\Modules\Product\Infrastructure\Adapter\LicensedFeatureGate;
+use App\Modules\Product\Infrastructure\Adapter\LocalBrandingLogoReader;
 use App\Modules\Product\Infrastructure\Adapter\LoggingSettingsAnomalyReporter;
+use App\Modules\Product\Infrastructure\Branding\LogoFileInspector;
 use App\Modules\Product\Infrastructure\Console\LicenseActivateCommand;
 use App\Modules\Product\Infrastructure\Console\LicenseShowCommand;
 use App\Modules\Product\Infrastructure\Listener\ObservePlanLimits;
@@ -51,14 +56,18 @@ use App\Modules\Product\Infrastructure\Persistence\DatabasePlanUsageCounter;
 use App\Modules\Product\Infrastructure\Persistence\DatabaseSetupFacts;
 use App\Modules\Product\Infrastructure\Persistence\DatabaseSetupProgressRepository;
 use App\Modules\Product\Infrastructure\Persistence\EloquentSettingsRepository;
+use App\Modules\Shared\Application\Port\BrandingLogoReader;
 use App\Modules\Shared\Application\Port\BrandingProvider;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\FeatureGate;
+use App\Modules\Shared\Application\Port\LocalePolicyProvider;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
 use App\Modules\Workforce\Domain\Event\EmployeeHired;
+use App\Support\Locale\NegotiableLocales;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
+use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\Redis\Factory as Redis;
@@ -91,9 +100,12 @@ use Illuminate\Support\ServiceProvider;
  *   desde el panel; la forma que ve el nucleo no cambia.
  * - **`CompliancePolicyProvider`** se enlaza desde la tarea 2.6 y por el mismo
  *   motivo. La 5.2 le añade la edicion y la auditoria del cambio.
- * - **`BrandingProvider`** lo enlaza esta tarea (RF-PD-08). La 5.8 migra a el los
- *   dos consumidores que hoy leen `config('branding.*')` —`BrowsershotCardRenderer`
- *   y `CsvLegalExportWriter`— y añade la pantalla del panel.
+ * - **`BrandingProvider`** lo enlaza la tarea 5.1 (RF-PD-08). La 5.8 le suma
+ *   `BrandingLogoReader` —el logotipo, ya leido y ya comprobado— y
+ *   `LocalePolicyProvider`, y pasa a los tres a sus consumidores:
+ *   `BrowsershotCardRenderer`, `CsvLegalExportWriter`, `PeriodReportPdf` y las
+ *   tres SPA a traves de `GET /api/v1/branding`. Ninguno lee ya
+ *   `config('branding.*')`.
  *
  * ## `scoped()` y no `singleton()`
  *
@@ -173,14 +185,39 @@ final class ProductServiceProvider extends ServiceProvider
             ),
         );
 
-        // La marca (RF-PD-08). Memoria por peticion por lo mismo: se pide una vez
-        // por documento y varias veces por pantalla.
+        /*
+         * La marca (RF-PD-08), CON EL PLAN DELANTE (ADR-023).
+         *
+         * Dos objetos y no uno: `DbBrandingProvider` resuelve la cascada de
+         * configuracion y `LicensedBrandingProvider` decide si esa marca se
+         * aplica o se vuelve a la del fabricante. Separarlos es lo que permite
+         * que el gating se retire quitando un enlace, y no editando una consulta.
+         *
+         * **El decorador va fuera**, asi que todo el que pida el puerto —los
+         * cuatro consumidores de hoy y los que vengan— recibe ya la marca que
+         * corresponde y no se entera de que existe una licencia. Es la defensa
+         * literal que pide ADR-023 contra el `if (license.expired)` repartido.
+         *
+         * Memoria por peticion en los dos: la marca se pide una vez por documento
+         * y varias veces por pantalla.
+         */
         $this->app->scoped(
-            BrandingProvider::class,
+            DbBrandingProvider::class,
             static fn (Application $app): DbBrandingProvider => new DbBrandingProvider(
                 $app->make(GetSettingsHandler::class),
             ),
         );
+
+        $this->app->scoped(
+            BrandingProvider::class,
+            static fn (Application $app): LicensedBrandingProvider => new LicensedBrandingProvider(
+                configured: $app->make(DbBrandingProvider::class),
+                features: $app->make(FeatureGate::class),
+            ),
+        );
+
+        $this->registerBranding();
+        $this->registerLocales();
 
         // Los umbrales legales (RF-PD-07). Memoria por peticion por la misma
         // razon: la vista de cumplimiento los pedira una vez por jornada de un
@@ -219,6 +256,96 @@ final class ProductServiceProvider extends ServiceProvider
         );
 
         $this->registerLicense();
+    }
+
+    /**
+     * El logotipo del cliente (tarea 5.8, RF-PD-08).
+     *
+     * ## Los tres limites se leen AQUI, en el borde
+     *
+     * Y no dentro del inspector. Es el mismo criterio con el que el verificador
+     * de licencia recibe la clave publica ya resuelta y con el que el dominio
+     * recibe los umbrales legales ya resueltos (regla dura 14): una clase que
+     * consulta la configuracion global no se puede probar con dos directorios de
+     * marca distintos sin tocar el estado de todo el proceso, y la suite de esta
+     * tarea necesita justamente eso — cada prueba deja su fichero en un
+     * directorio temporal propio.
+     *
+     * ## `bind()` para el inspector y `scoped()` para el lector
+     *
+     * El inspector no guarda nada: mira el disco cada vez que se le pregunta, y
+     * debe hacerlo, porque uno de sus dos consumidores es la validacion del
+     * `PATCH` y ahi la respuesta tiene que ser la del disco en ese instante.
+     *
+     * El lector si memoriza, y memoriza tambien el `null`: es lo que evita
+     * volver a golpear el disco en cada intento cuando el fichero **no** esta.
+     * `scoped()` y no `singleton()` por lo mismo que el resto del modulo — en un
+     * trabajador de cola o en Octane, `singleton()` dejaria de ser memoria por
+     * peticion para convertirse en una cache sin invalidacion, y un logotipo
+     * recien cambiado no se veria hasta reiniciar el proceso.
+     */
+    private function registerBranding(): void
+    {
+        $this->app->bind(
+            LogoInspector::class,
+            static fn (): LogoFileInspector => new LogoFileInspector(
+                logoRoot: Config::string('branding.logo_root'),
+                maximumBytes: Config::integer('branding.logo_max_bytes'),
+                maximumDimension: Config::integer('branding.logo_max_dimension'),
+            ),
+        );
+
+        $this->app->scoped(
+            BrandingLogoReader::class,
+            static fn (Application $app): LocalBrandingLogoReader => new LocalBrandingLogoReader(
+                branding: $app->make(BrandingProvider::class),
+                inspector: $app->make(LogoInspector::class),
+            ),
+        );
+    }
+
+    /**
+     * Los idiomas de la instalacion (tarea 5.8, RF-PD-01).
+     *
+     * ## Un objeto y DOS enlaces, a proposito
+     *
+     * `LocalePolicyProvider` es el puerto de `Shared` que usan los modulos —hoy,
+     * el endpoint publico de la marca—. `NegotiableLocales` es el contrato de
+     * `App\Support` que usa el middleware que negocia el idioma de cada
+     * respuesta, y existe porque ese middleware esta **fuera de los modulos y no
+     * puede nombrar un tipo de `Shared`** (Deptrac: `AppFramework` no alcanza
+     * `App\Modules\*`, frontera intacta desde la tarea 0.2). Es la misma solucion
+     * que ya usa `LicenseStateProbe` para el estado de licencia de `/health`.
+     *
+     * El segundo enlace apunta a la MISMA instancia. Dos adaptadores duplicarian
+     * la consulta, la memoria y el respaldo, y el dia que divergieran la API
+     * diria que ofrece un idioma y las respuestas saldrian en otro.
+     *
+     * `scoped()` como el resto: un cambio guardado en el panel rige en la
+     * peticion siguiente y nunca hace falta reiniciar.
+     */
+    private function registerLocales(): void
+    {
+        // El adaptador se enlaza por su clase concreta y los dos contratos
+        // apuntan a el: asi `scoped()` guarda UNA instancia y los dos lados
+        // —el modulo y el armazon— comparten memoria y respaldo.
+        $this->app->scoped(
+            DbLocalePolicyProvider::class,
+            static fn (Application $app): DbLocalePolicyProvider => new DbLocalePolicyProvider(
+                $app->make(GetSettingsHandler::class),
+                $app->make(ConfigRepository::class),
+            ),
+        );
+
+        $this->app->scoped(
+            LocalePolicyProvider::class,
+            static fn (Application $app): DbLocalePolicyProvider => $app->make(DbLocalePolicyProvider::class),
+        );
+
+        $this->app->scoped(
+            NegotiableLocales::class,
+            static fn (Application $app): DbLocalePolicyProvider => $app->make(DbLocalePolicyProvider::class),
+        );
     }
 
     /**
@@ -401,6 +528,31 @@ final class ProductServiceProvider extends ServiceProvider
             $perMinute = max(1, Config::integer('product.setup_rate_limit_per_minute', 10));
 
             return [Limit::perMinute($perMinute)->by('setup-ip:'.(string) $request->ip())];
+        });
+
+        /*
+         * Zona de la marca: **120 r/m por origen** (`GET /branding` y
+         * `GET /branding/logo`, RF-PD-08).
+         *
+         * ZONA PROPIA Y NO `throttle:setup`. Aquella tiene 10 r/m porque protege
+         * un acto que ocurre una vez en la vida de la instalacion; estas dos las
+         * piden NAVEGADORES AL ARRANCAR —veinte tablets, el panel de recepcion y
+         * los moviles de la plantilla entrando al portal, casi siempre detras de
+         * una sola IP con NAT—, y diez por minuto se agotarian solos. Compartir
+         * cubo ademas dejaria una puesta en marcha sin cupo por culpa del trafico
+         * normal.
+         *
+         * 120 NO ES UNA MEDICION: es margen de sobra para el arranque simultaneo
+         * de la plantilla de un hotel y sigue cortando un bucle en el primer
+         * segundo. Y lo que protege no es un secreto —el nombre del hotel y su
+         * color es lo mismo que lleva impreso cada tarjeta—: es un techo de
+         * ruido, no un control de acceso. Es configuracion y no una constante
+         * (regla dura 13).
+         */
+        RateLimiter::for('branding', static function (Request $request): array {
+            $perMinute = max(1, Config::integer('product.branding_rate_limit_per_minute', 120));
+
+            return [Limit::perMinute($perMinute)->by('branding-ip:'.(string) $request->ip())];
         });
 
         /*

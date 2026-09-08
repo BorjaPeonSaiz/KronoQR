@@ -292,3 +292,74 @@ describe('emparejamiento (RF-PD-06)', () => {
     })
   })
 })
+
+describe('marca de la instalacion (RF-PD-08)', () => {
+  const PRODUCT_BODY = {
+    application_name: 'KronoQR',
+    accent_color: null,
+    logo_url: null,
+    locales: { default: 'es', available: ['es', 'en'] },
+  }
+
+  it('pide la marca sin Authorization, aunque haya un token de dispositivo', async () => {
+    const fetchImpl = vi.fn<FetchLike>(async () => jsonResponse(200, PRODUCT_BODY))
+    const client = createApiClient({
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      deviceToken: () => 'tok-123',
+    })
+
+    const result = await client.fetchBranding()
+
+    expect(result).toEqual({ outcome: 'ok', data: PRODUCT_BODY })
+    const init = fetchImpl.mock.calls[0]?.[1]
+    expect((init?.headers as Record<string, string>)['Authorization']).toBeUndefined()
+  })
+
+  it('devuelve la marca de un cliente con acento y logotipo', async () => {
+    const hotel = {
+      application_name: 'Hotel Marina',
+      accent_color: '#0f5c8c',
+      logo_url: '/api/v1/branding/logo?v=3f9a1c2b7e4d',
+      locales: { default: 'es', available: ['es'] },
+    }
+    const client = createApiClient({
+      fetchImpl: (async () => jsonResponse(200, hotel)) as unknown as typeof fetch,
+    })
+
+    expect(await client.fetchBranding()).toEqual({ outcome: 'ok', data: hotel })
+  })
+
+  it('trata un cuerpo que no encaja con el contrato como fallo, nunca como marca vacia', async () => {
+    const client = createApiClient({
+      fetchImpl: (async () => jsonResponse(200, { nombre: 'algo' })) as unknown as typeof fetch,
+    })
+
+    expect(await client.fetchBranding()).toEqual({
+      outcome: 'failed',
+      cause: 'malformed',
+      httpStatus: 200,
+    })
+  })
+
+  it('un 429 (limitada por IP) es un fallo de transporte, no una marca', async () => {
+    const client = createApiClient({
+      fetchImpl: (async () => jsonResponse(429, {})) as unknown as typeof fetch,
+    })
+
+    expect(await client.fetchBranding()).toEqual({
+      outcome: 'failed',
+      cause: 'throttled',
+      httpStatus: 429,
+    })
+  })
+
+  it('un fallo de red no lanza: se ignora en silencio (regla dura 19)', async () => {
+    const client = createApiClient({
+      fetchImpl: (async () => {
+        throw new TypeError('Failed to fetch')
+      }) as unknown as typeof fetch,
+    })
+
+    expect(await client.fetchBranding()).toEqual({ outcome: 'failed', cause: 'network' })
+  })
+})

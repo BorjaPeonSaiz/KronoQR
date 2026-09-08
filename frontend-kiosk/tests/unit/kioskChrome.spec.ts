@@ -121,6 +121,47 @@ describe('selector de idioma', () => {
     expect(buttons[0]?.attributes('aria-pressed')).toBe('true')
     expect(buttons[1]?.attributes('aria-pressed')).toBe('false')
   })
+
+  it('filtra los idiomas por la marca de la instalacion (RF-PD-08)', () => {
+    const wrapper = mount(LanguageSelector, {
+      props: { policy: { default: 'es', available: ['es', 'en'] } },
+      global: { plugins: [createAppI18n('es')] },
+    })
+
+    expect(wrapper.findAll('button')).toHaveLength(2)
+    expect(wrapper.text()).toContain('English')
+  })
+
+  it('con un solo idioma ofrecido, NO PINTA el selector (doc 06 regla 8: un control sin nada que elegir no se muestra)', () => {
+    const wrapper = mount(LanguageSelector, {
+      props: { policy: { default: 'es', available: ['es'] } },
+      global: { plugins: [createAppI18n('es')] },
+    })
+
+    expect(wrapper.find('[role="group"]').exists()).toBe(false)
+    expect(wrapper.findAll('button')).toHaveLength(0)
+  })
+
+  it('con un solo idioma ofrecido, el idioma activo cambia igual aunque no se pinte nada', async () => {
+    const i18n = createAppI18n('en')
+    const wrapper = mount(LanguageSelector, {
+      props: { policy: { default: 'es', available: ['es', 'en'] } },
+      global: { plugins: [i18n] },
+    })
+    expect(i18n.global.locale.value).toBe('en')
+
+    await wrapper.setProps({ policy: { default: 'es', available: ['es'] } })
+
+    expect(i18n.global.locale.value).toBe('es')
+    expect(readStoredLocale()).toBe('es')
+    expect(wrapper.find('[role="group"]').exists()).toBe(false)
+  })
+
+  it('sin `policy`, ofrece los dos idiomas de siempre (pantallas sin marca todavia)', () => {
+    const wrapper = mount(LanguageSelector, { global: { plugins: [createAppI18n('es')] } })
+
+    expect(wrapper.findAll('button')).toHaveLength(2)
+  })
 })
 
 describe('aviso de privacidad (RF-KI-09, RL-09)', () => {

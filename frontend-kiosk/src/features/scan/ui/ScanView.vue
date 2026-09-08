@@ -22,6 +22,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, useRouter } from 'vue-router'
 import { createApiClient } from '@/shared/api/client'
+import { useBranding } from '@/shared/branding/useBranding'
 import { readPrivacyNoticeConfig } from '@/shared/config/privacy'
 import { useConnectivity } from '@/shared/connectivity/useConnectivity'
 import {
@@ -79,6 +80,12 @@ const offline = useOfflineQueue({
     void router.replace({ name: 'pair' })
   },
 })
+
+// Marca blanca (RF-PD-08, tarea 5.8): pide la marca al servidor en segundo
+// plano y se vuelve a pedir al recuperar la red. Nunca bloquea el fichaje
+// (regla dura 19): `useBranding` ya aplico la copia guardada -o el producto-
+// de forma sincrona antes de este punto.
+const branding = useBranding({ api, connectivity })
 
 const sound = useScanSound({
   onBlocked: (context) => reporter.report('kiosk.audio.blocked', context),
@@ -160,15 +167,38 @@ onUnmounted(() => {
 
 <template>
   <main class="flex h-dvh w-full flex-col bg-kq-kiosk-surface text-kq-kiosk-text">
-    <h1 class="kiosk-sr-only">{{ t('app.title') }}</h1>
+    <!-- El nombre accesible de la pantalla ES el de la instalacion (RF-PD-08):
+         sustituye al literal fijo "Quiosco de fichaje" que habia antes de la
+         marca blanca. Visualmente vive en la cabecera (logotipo o texto,
+         abajo); aqui solo para quien navega con lector de pantalla. -->
+    <h1 class="kiosk-sr-only">{{ branding.current.value.applicationName }}</h1>
 
     <header class="flex items-center justify-between gap-4 px-6 py-4">
-      <ConnectionStatusBadge
-        :status="connectivity.status.value"
-        :pending-count="connectivity.pendingCount.value"
-        :syncing="offline.syncing.value"
-      />
-      <LanguageSelector />
+      <div class="flex min-w-0 items-center gap-3">
+        <!-- Logotipo O nombre, `v-if`/`v-else`: nunca los dos con el mismo
+             significado a la vez para el lector de pantalla. Con logotipo, su
+             `alt` YA dice el nombre; sin el, el texto lo dice por si solo. -->
+        <img
+          v-if="branding.current.value.logoUrl !== null"
+          :src="branding.current.value.logoUrl"
+          :alt="branding.current.value.applicationName"
+          class="h-10 max-w-36 shrink-0 object-contain"
+          data-testid="brand-logo"
+        />
+        <p
+          v-else
+          class="font-heading truncate text-2xl font-bold text-kq-kiosk-primary-strong"
+          data-testid="brand-name"
+        >
+          {{ branding.current.value.applicationName }}
+        </p>
+        <ConnectionStatusBadge
+          :status="connectivity.status.value"
+          :pending-count="connectivity.pendingCount.value"
+          :syncing="offline.syncing.value"
+        />
+      </div>
+      <LanguageSelector :policy="branding.current.value.locales" />
     </header>
 
     <section class="relative min-h-0 flex-1 overflow-hidden" data-testid="scan-camera-section">
@@ -314,6 +344,7 @@ onUnmounted(() => {
         v-if="session.confirmation.value !== null"
         class="absolute inset-0"
         :confirmation="session.confirmation.value"
+        :branding="branding.current.value"
       />
     </section>
 

@@ -93,6 +93,39 @@ export default defineConfig({
         // registro legal inventado.
         navigateFallbackDenylist: [/^\/api\//],
         cleanupOutdatedCaches: true,
+        // UNICA EXCEPCION a "la API nunca se cachea", y con motivo (RF-PD-08,
+        // tarea 5.8): la marca no es un fichaje, es cosmetica. Sin cachearla,
+        // un quiosco sin red arrancaria con el nombre y el logotipo del
+        // producto en vez de los del cliente (RF-KI-03) hasta que volviera a
+        // haber conexion. El nombre y el color de acento ya persisten en
+        // `localStorage` (ver `shared/branding/useBranding.ts`); lo unico que
+        // depende de esta cache es el LOGOTIPO, porque sus bytes no caben ahi.
+        runtimeCaching: [
+          {
+            // NetworkFirst con techo corto: si hay red, la marca vigente; si
+            // no contesta en 3 s, la ultima que se pudo guardar. Nunca un
+            // fichaje, asi que un dato de unos minutos de retraso no importa.
+            urlPattern: /\/api\/v1\/branding$/,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'kronoqr-branding',
+              networkTimeoutSeconds: 3,
+              cacheableResponse: { statuses: [200] },
+            },
+          },
+          {
+            // CacheFirst es seguro aqui PORQUE la URL lleva la huella del
+            // contenido en `v` (ver el contrato): un logotipo nuevo es una URL
+            // nueva, nunca sirve uno viejo bajo un nombre nuevo.
+            urlPattern: /\/api\/v1\/branding\/logo(\?.*)?$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'kronoqr-branding-logo',
+              cacheableResponse: { statuses: [200] },
+              expiration: { maxEntries: 4, maxAgeSeconds: 30 * 24 * 60 * 60 },
+            },
+          },
+        ],
       },
       devOptions: { enabled: false },
     }),

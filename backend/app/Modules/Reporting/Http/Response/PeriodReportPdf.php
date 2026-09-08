@@ -8,6 +8,9 @@ use App\Modules\Reporting\Application\Port\ReportDocumentRenderer;
 use App\Modules\Reporting\Domain\ValueObject\PeriodReport;
 use App\Modules\Reporting\Domain\ValueObject\PeriodReportRow;
 use App\Modules\Reporting\Http\Support\PeriodReportLayout;
+use App\Modules\Shared\Application\Port\BrandingLogoReader;
+use App\Modules\Shared\Application\Port\BrandingProvider;
+use App\Modules\Shared\Domain\ValueObject\LogoImage;
 use Illuminate\Support\Facades\View;
 
 /**
@@ -44,10 +47,34 @@ use Illuminate\Support\Facades\View;
  * y por eso aquella es CSV y no PDF. Este documento es de gestion: se imprime,
  * se firma a mano y se archiva en una carpeta de nomina. Un PDF ahi no estorba;
  * en un requerimiento, si.
+ *
+ * ## La marca va en la CABECERA, y el sello no se toca (tarea 5.8, RF-PD-08)
+ *
+ * El nombre de la instalacion y su logotipo encabezan la primera pagina, con el
+ * nombre en el color de acento. **El pie sellado se queda exactamente igual**:
+ * fecha, emisor, periodo y huella son lo que hace comprobable el documento, y
+ * meter ahi una imagen solo le quitaria sitio.
+ *
+ * **Ni el titulo ni los metadatos del PDF cambian** (regla dura 21): el titulo
+ * viaja al historial de descargas del navegador y no lleva nombres — ni el de una
+ * persona ni, ya puestos, el del hotel.
+ *
+ * ## El logotipo llega por un PUERTO, y eso no es ceremonia
+ *
+ * `Reporting/Http` **no puede alcanzar `Shared/Infrastructure`** (Deptrac): en
+ * esa capa viven adaptadores que ninguna capa Http debe poder tocar. Asi que
+ * quien lee el fichero es el adaptador de `Product` y aqui llega
+ * {@see LogoImage}, ya leido y ya comprobado. Sin logotipo utilizable, `null`, y
+ * el informe sale con el nombre solo — nadie se queda sin su informe por una
+ * imagen que falta.
  */
 final readonly class PeriodReportPdf
 {
-    public function __construct(private ReportDocumentRenderer $renderer) {}
+    public function __construct(
+        private ReportDocumentRenderer $renderer,
+        private BrandingProvider $branding,
+        private BrandingLogoReader $logos,
+    ) {}
 
     public function respond(PeriodReport $report, ?string $issuer, string $digest): StreamedExport
     {
@@ -72,8 +99,16 @@ final readonly class PeriodReportPdf
 
     private function body(PeriodReport $report, ?string $issuer, string $digest): string
     {
+        $brand = $this->branding->current();
+        $logo = $this->logos->current();
+
         return View::make('pdf.period-report', [
             'title' => PeriodReportLayout::text('document.title'),
+            // La marca de la instalacion, para la cabecera. El `title` de arriba
+            // es el nombre del DOCUMENTO y no cambia: son dos cosas distintas.
+            'brandName' => $brand->applicationName,
+            'brandAccent' => $brand->accentColor,
+            'brandLogo' => $logo instanceof LogoImage ? $logo->dataUri() : null,
             'metadata' => PeriodReportLayout::metadata($report, $issuer, $digest),
             'criteriaLabel' => PeriodReportLayout::text('document.criteria'),
             'criteria' => PeriodReportLayout::criteria($report),

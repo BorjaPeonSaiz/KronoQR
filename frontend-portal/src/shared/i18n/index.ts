@@ -31,6 +31,21 @@ export function resolveLocale(candidates: readonly string[]): AppLocale {
   return DEFAULT_LOCALE
 }
 
+/**
+ * Si el navegador pide alguno de los idiomas que trae esta aplicacion.
+ *
+ * Sirve para decidir quien elige el idioma inicial de una visita anonima
+ * (nadie ha entrado todavia, `session.employee` es `null`): si el navegador
+ * ya pedia un idioma soportado, esa es una preferencia real de la persona y
+ * gana siempre. Si no pedia ninguno, `main.ts` puede ofrecer el
+ * `locales.default` de la marca de la instalacion (RF-PD-08) en cuanto
+ * llega: la instalacion sabe mejor que un idioma por omision fijo cual es el
+ * idioma habitual de su plantilla.
+ */
+export function browserHasSupportedLocale(candidates: readonly string[]): boolean {
+  return candidates.some((candidate) => isSupportedLocale(candidate.split('-')[0]?.toLowerCase()))
+}
+
 export const messages = { es, en }
 
 export function createAppI18n(locale: AppLocale = DEFAULT_LOCALE) {

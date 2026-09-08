@@ -6,6 +6,7 @@ namespace App\Modules\Product\Http\Request;
 
 use App\Http\Requests\RejectsUnknownInput;
 use App\Modules\Product\Application\Command\UpdateSettingsCommand;
+use App\Modules\Product\Application\Port\LogoInspector;
 use App\Modules\Product\Domain\ValueObject\ResolvedSettings;
 use App\Modules\Product\Domain\ValueObject\SettingDefinition;
 use App\Modules\Product\Domain\ValueObject\SettingKey;
@@ -14,6 +15,7 @@ use App\Modules\Product\Domain\ValueObject\SettingValue;
 use Closure;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 
@@ -53,6 +55,27 @@ use Illuminate\Validation\Rule;
  * `LOCALE_DEFAULT` que no viaja en la peticion. Las comprueba
  * {@see ResolvedSettings::with()} sobre el conjunto resuelto, antes de tocar la
  * base de datos, y salen tambien como `422`.
+ *
+ * ## La UNICA comprobacion que mira fuera del catalogo: el fichero del logotipo
+ *
+ * `BRANDING_LOGO_PATH` es la excepcion, y esta razonada (tarea 5.8, RF-PD-08).
+ * El catalogo puede decir que es texto de hasta 512 caracteres, y nada mas: si
+ * ese texto apunta a un fichero que existe, que es una imagen y que esta dentro
+ * del directorio de marca es una pregunta sobre el DISCO, y el dominio no tiene
+ * —ni debe tener— forma de responderla.
+ *
+ * Se comprueba **al guardar** y no al leer por dos motivos que apuntan en la
+ * misma direccion. El primero es de producto: aqui hay una persona delante del
+ * panel a la que se le puede decir que arreglar, mientras que al imprimir una
+ * tarjeta lo unico que cabe es seguir sin logotipo. El segundo es de seguridad:
+ * `GET /api/v1/branding/logo` es **publico**, asi que sin esta guarda una ruta
+ * guardada desde el panel convertiria ese endpoint en una lectura de cualquier
+ * fichero del servidor.
+ *
+ * Quien decide es {@see LogoInspector}, el mismo puerto —y la misma
+ * implementacion— que usa el lector del logotipo: si fueran dos comprobaciones
+ * distintas, el panel aceptaria un fichero que el endpoint publico no sirve y
+ * nadie sabria por que la cabecera sale vacia.
  *
  * ## El autor no se declara, se toma de la sesion
  *
@@ -98,7 +121,66 @@ final class UpdateSettingsRequest extends FormRequest
 
         $validator->after(function (Validator $validator): void {
             $this->rejectUnknownSettingKeys($validator);
+            $this->rejectUnusableLogo($validator);
         });
+    }
+
+    /**
+     * Comprueba contra el disco la ruta del logotipo, si es que viene una.
+     *
+     * **La cadena vacia no se comprueba**: significa «el logotipo del producto»
+     * y es la forma de volver al valor de serie. Comprobarla daria un `422` a
+     * quien esta quitando su logotipo, que es justo lo contrario de lo que
+     * quiere.
+     *
+     * Va en un `after` y no en una regla de la clave porque necesita el valor ya
+     * validado como texto: sin eso, un `BRANDING_LOGO_PATH` numerico llegaria al
+     * inspector antes de que nadie hubiera dicho que ni siquiera es una cadena, y
+     * el `422` hablaria del fichero en vez de hablar del tipo.
+     */
+    private function rejectUnusableLogo(Validator $validator): void
+    {
+        if ($validator->errors()->has('settings.'.SettingKey::BRANDING_LOGO_PATH->value)) {
+            // Ya hay un error de forma sobre esta clave. Añadir el del fichero
+            // encima solo enseña dos mensajes para un unico problema.
+            return;
+        }
+
+        $path = $this->input('settings.'.SettingKey::BRANDING_LOGO_PATH->value);
+
+        if (! is_string($path) || trim($path) === '') {
+            return;
+        }
+
+        $inspection = $this->logoInspector()->inspect($path);
+
+        if ($inspection->isAccepted()) {
+            return;
+        }
+
+        $message = __('settings.logo.'.$inspection->rejection()->value, [
+            'root' => Config::string('branding.logo_root'),
+            'max_kib' => (int) round(Config::integer('branding.logo_max_bytes') / 1024),
+            'max_pixels' => Config::integer('branding.logo_max_dimension'),
+        ]);
+
+        $validator->errors()->add(
+            'settings.'.SettingKey::BRANDING_LOGO_PATH->value,
+            is_string($message) ? $message : 'The configured logo file cannot be used.',
+        );
+    }
+
+    /**
+     * El inspector, resuelto por el contenedor.
+     *
+     * Se pide aqui y no por el constructor porque un `FormRequest` se construye
+     * en cada peticion —incluidas las que no tocan la marca— y su firma la fija
+     * Laravel. Los tres limites los inyecta el proveedor del modulo, que es donde
+     * se lee la configuracion.
+     */
+    private function logoInspector(): LogoInspector
+    {
+        return app(LogoInspector::class);
     }
 
     /**

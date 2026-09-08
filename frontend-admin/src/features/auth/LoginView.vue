@@ -13,6 +13,7 @@
 // `sessionStorage` — asi que recargar la pagina a mitad del reto no deja nada
 // a medias: se vuelve al primer paso y hay que teclear la contraseña otra vez.
 import { announcement, announce } from '@kronoqr/web-kit/announcer'
+import BrandMark from '@kronoqr/web-kit/components/BrandMark.vue'
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import FormField from '@kronoqr/web-kit/components/FormField.vue'
 import { isApiError } from '@kronoqr/web-kit/http'
@@ -20,6 +21,7 @@ import { computed, nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import type { Session, TwoFactorChallenge } from '@/shared/api/types'
+import { useBrandingStore } from '@/shared/branding/branding.store'
 import { isTwoFactorChallenge, verifyTwoFactor } from './auth.api'
 import { useSessionStore } from './session.store'
 import TwoFactorEnrolPanel from './TwoFactorEnrolPanel.vue'
@@ -33,6 +35,7 @@ const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const session = useSessionStore()
+const branding = useBrandingStore()
 
 // --- Paso 1: contrasena --------------------------------------------------
 const email = ref('')
@@ -177,6 +180,13 @@ function onChallengeInvalid(caught: unknown): void {
     <div
       class="w-full max-w-md rounded-kq border border-kq-border bg-kq-surface-raised p-6 shadow-kq-soft"
     >
+      <!-- Marca de la instalacion (RF-PD-08, tarea 5.8; ADR-036): logotipo o
+           nombre, resueltos por `BrandMark` (compartido con el portal,
+           `@kronoqr/web-kit`). -->
+      <div class="mb-4 flex flex-col items-center gap-2 text-center">
+        <BrandMark :branding="branding.current" size="lg" />
+      </div>
+
       <h1 class="text-2xl font-bold text-kq-text">{{ t('auth.heading') }}</h1>
 
       <!-- Region viva propia: esta pantalla vive fuera de `AppShellView`, que es

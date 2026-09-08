@@ -1,8 +1,4 @@
 {
-  "app": {
-    "title": "Clock-in kiosk",
-    "name": "KronoQR"
-  },
   "language": {
     "label": "Language",
     "es": "Español",

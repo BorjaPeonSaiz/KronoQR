@@ -2,14 +2,19 @@
 
 declare(strict_types=1);
 
+use App\Modules\Product\Infrastructure\Adapter\DbBrandingProvider;
 use App\Modules\Shared\Application\Port\BrandingProvider;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Testing\TestResponse;
 use Spectator\Spectator;
+use Symfony\Component\HttpFoundation\Response;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\FixedLogo;
+use Tests\Support\Product\LicenseKeys;
 
 /*
  * `GET` y `PATCH /api/v1/settings` — la configuracion de la instalacion
@@ -280,34 +285,173 @@ it('aplica el umbral nuevo sin reiniciar nada', function (): void {
 })->group('RF-PD-01', 'RN-08');
 
 it('sirve la marca del producto mientras nadie la configure, y la del cliente en cuanto la configure', function (): void {
-    // **Sin etiqueta RF-PD-08 a proposito**: ese requisito pide la marca aplicada
-    // a las tres aplicaciones y a los PDF, y eso lo cumple la tarea 5.8. Lo que
-    // esto comprueba es que el PUERTO por el que llegara ya resuelve desde la
-    // configuracion, que es RF-PD-01.
+    // La marca blanca es funcionalidad del plan (ADR-023), asi que la licencia se
+    // concede: lo que esto comprueba es la CASCADA, no la degradacion, que tiene
+    // sus propias pruebas en `BrandingEndpointTest`.
+    LicenseKeys::grantAll();
+
     $branding = app(BrandingProvider::class);
 
     expect($branding->current()->applicationName)->toBe('KronoQR')
         ->and($branding->current()->logoPath)->toBeNull()
-        ->and($branding->current()->accentColor)->toBe('#111827');
+        // El terracota de marca del doc 06: el valor por defecto ES el producto,
+        // y hasta la 5.8 era un gris que no era la marca de nadie.
+        ->and($branding->current()->accentColor)->toBe('#b8542a');
+
+    $logo = raizDeMarcaDeAjustes().'/logo.png';
+    file_put_contents($logo, FixedLogo::onePixelPng());
 
     Api::as(adminToken())
         ->patch('/api/v1/settings', [
             'settings' => [
                 'BRANDING_APP_NAME' => 'Hotel Marina',
                 'BRANDING_ACCENT_COLOR' => '#0f172a',
-                'BRANDING_LOGO_PATH' => '/srv/kronoqr/marca/logo.png',
+                'BRANDING_LOGO_PATH' => $logo,
             ],
         ])
         ->assertValidResponse(200);
 
+    // Las DOS capas memorizan por peticion: el decorador que aplica el plan y el
+    // que resuelve la cascada. En produccion cada peticion arranca las suyas.
     app()->forgetInstance(BrandingProvider::class);
+    app()->forgetInstance(DbBrandingProvider::class);
 
     $updated = app(BrandingProvider::class)->current();
 
     expect($updated->applicationName)->toBe('Hotel Marina')
         ->and($updated->accentColor)->toBe('#0f172a')
-        ->and($updated->logoPath)->toBe('/srv/kronoqr/marca/logo.png');
-})->group('RF-PD-01');
+        ->and($updated->logoPath)->toBe($logo);
+})->group('RF-PD-01', 'RF-PD-08');
+
+/*
+ * La ruta del logotipo se comprueba CONTRA EL DISCO al guardar (RF-PD-08, tarea
+ * 5.8).
+ *
+ * ES LA UNICA CLAVE DEL CATALOGO QUE MIRA FUERA DE SI MISMA, y esta razonada en
+ * dos frentes. El primero es de producto: aqui hay una persona delante del panel
+ * a la que se le puede decir que arreglar, mientras que al imprimir una tarjeta
+ * lo unico que cabe es seguir sin logotipo. El segundo es de seguridad:
+ * `GET /api/v1/branding/logo` es PUBLICO, asi que sin esta guarda una ruta
+ * guardada desde el panel lo convertiria en una lectura de cualquier fichero del
+ * servidor.
+ */
+
+/** Un directorio de marca propio de la prueba, ya enlazado a la configuracion. */
+function raizDeMarcaDeAjustes(): string
+{
+    $root = sys_get_temp_dir().'/kronoqr-ajustes-'.bin2hex(random_bytes(6));
+
+    mkdir($root, 0o755, true);
+    config(['branding.logo_root' => $root]);
+
+    return $root;
+}
+
+/**
+ * Intenta guardar esa ruta como logotipo y devuelve la respuesta.
+ *
+ * @return TestResponse<Response>
+ */
+function guardarRutaDeLogotipo(string $path): TestResponse
+{
+    return Api::as(adminToken())
+        ->patch('/api/v1/settings', ['settings' => ['BRANDING_LOGO_PATH' => $path]]);
+}
+
+it('rechaza con 422 una ruta de logotipo que no se puede usar', function (Closure $preparar): void {
+    $root = raizDeMarcaDeAjustes();
+
+    $ruta = $preparar($root);
+
+    guardarRutaDeLogotipo($ruta)
+        ->assertValidResponse(422)
+        ->assertJsonStructure(['errors' => ['settings.BRANDING_LOGO_PATH']]);
+
+    // Y no se ha guardado nada: la clave sigue con su valor de serie.
+    $byKey = settingsByKey(
+        Api::as(adminToken())->get('/api/v1/settings')->assertValidResponse(200)->json('data'),
+    );
+
+    expect($byKey['BRANDING_LOGO_PATH']['value'])->toBe('')
+        ->and($byKey['BRANDING_LOGO_PATH']['source'])->toBe('product_default');
+})->with([
+    'no existe' => [fn (string $root): string => $root.'/no-esta.png'],
+    'fuera del directorio de marca' => [function (string $root): string {
+        $fuera = sys_get_temp_dir().'/kronoqr-fuera-'.bin2hex(random_bytes(6));
+        mkdir($fuera, 0o755, true);
+        file_put_contents($fuera.'/logo.png', FixedLogo::onePixelPng());
+
+        return $fuera.'/logo.png';
+    }],
+    'con salto a directorio superior' => [function (string $root): string {
+        file_put_contents($root.'/logo.png', FixedLogo::onePixelPng());
+
+        return $root.'/../'.basename($root).'/logo.png';
+    }],
+    'relativa' => [fn (string $root): string => 'logo.png'],
+    'un .png que dentro es texto' => [function (string $root): string {
+        file_put_contents($root.'/logo.png', 'esto no es una imagen');
+
+        return $root.'/logo.png';
+    }],
+    'un PNG de mas de 2048 pixeles' => [function (string $root): string {
+        $png = FixedLogo::onePixelPng();
+        file_put_contents($root.'/logo.png', substr($png, 0, 16).pack('NN', 4096, 4096).substr($png, 24));
+
+        return $root.'/logo.png';
+    }],
+    'un fichero de mas de 512 KiB' => [function (string $root): string {
+        file_put_contents($root.'/logo.png', FixedLogo::onePixelPng().str_repeat('0', 600 * 1024));
+
+        return $root.'/logo.png';
+    }],
+    'un SVG con guion dentro' => [function (string $root): string {
+        file_put_contents($root.'/logo.svg', '<svg><script>alert(1)</script></svg>');
+
+        return $root.'/logo.svg';
+    }],
+])->group('RF-PD-08', 'RS-03');
+
+it('explica que hacer, y no solo que ha fallado', function (): void {
+    // Quien lee esto es personal de IT de un hotel que no conoce el sistema y que
+    // no nos tiene al lado. «El fichero no vale» obliga a adivinar; decir donde
+    // tiene que estar se arregla en un minuto.
+    $root = raizDeMarcaDeAjustes();
+
+    $errores = guardarRutaDeLogotipo($root.'/no-esta.png')
+        ->assertValidResponse(422)
+        ->json('errors');
+
+    // Indexado a mano y no con `json('errors.settings.BRANDING_LOGO_PATH')`: el
+    // punto es el separador de rutas de `data_get`, y la clave lo lleva dentro.
+    expect($errores)->toBeArray();
+
+    $mensaje = $errores['settings.BRANDING_LOGO_PATH'][0] ?? null;
+
+    expect($mensaje)->toBeString()
+        // Dice el directorio concreto de ESTA instalacion, no uno de ejemplo.
+        ->and($mensaje)->toContain($root);
+})->group('RF-PD-08');
+
+it('acepta un PNG y un SVG que viven en el directorio de marca', function (string $nombre, Closure $contenido): void {
+    // El formato se decide por el CONTENIDO, no por la extension; estos dos son
+    // ficheros de verdad y por eso pasan.
+    $root = raizDeMarcaDeAjustes();
+    file_put_contents($root.'/'.$nombre, $contenido());
+
+    guardarRutaDeLogotipo($root.'/'.$nombre)->assertValidResponse(200);
+})->with([
+    'PNG' => ['logo.png', fn (): string => FixedLogo::onePixelPng()],
+    'SVG' => ['logo.svg', fn (): string => '<svg xmlns="http://www.w3.org/2000/svg"></svg>'],
+])->group('RF-PD-08');
+
+it('sigue aceptando la cadena vacia, que es como se vuelve al logotipo del producto', function (): void {
+    // Comprobarla daria un 422 a quien esta QUITANDO su logotipo, que es lo
+    // contrario de lo que quiere.
+    raizDeMarcaDeAjustes();
+
+    guardarRutaDeLogotipo('')->assertValidResponse(200);
+})->group('RF-PD-08');
 
 /**
  * Las filas de `data` indexadas por su clave.

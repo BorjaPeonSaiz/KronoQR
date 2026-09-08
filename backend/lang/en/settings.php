@@ -29,6 +29,27 @@ return [
 
     'strict_integer' => 'The value of :attribute must be an integer, not a quoted string.',
 
+    'logo' => [
+        'not_absolute' => 'The logo path must be absolute and start with "/". '
+            .'Write the full path inside the branding directory on the server (:root).',
+        'traversal' => 'The logo path must not contain "..". '
+            .'Write the full path, without moving up directories (:root).',
+        'outside_root' => 'The logo must live inside the branding directory on the server (:root). '
+            .'Copy the file there and save the path again.',
+        'missing' => 'There is no file at that path. '
+            .'Check that the file is in :root on the server and that this directory is mounted into the container.',
+        'unreadable' => 'The file exists but the application cannot read it. '
+            .'Check the permissions: it must be readable by the container user.',
+        'too_large' => 'The logo is larger than :max_kib KiB. '
+            .'Export it at a lower resolution or save it as SVG.',
+        'unsupported_format' => 'The file is neither a PNG nor an SVG. '
+            .'The content is checked, not the extension: renaming the file does not help.',
+        'active_content' => 'The SVG contains a "<script" element and is not accepted. '
+            .'A logo needs no code: export the file without scripts or interactivity.',
+        'too_many_pixels' => 'The PNG is larger than :max_pixels pixels on a side. '
+            .'Scale it down before saving it again.',
+    ],
+
     'attributes' => [
         'ATTENDANCE_MAX_SHIFT_HOURS' => 'shift length above which an entry is anomalous (hours)',
         'ATTENDANCE_DEBOUNCE_SECONDS' => 'debounce window between two scans (seconds)',

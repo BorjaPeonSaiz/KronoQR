@@ -212,3 +212,52 @@ describe('pantalla de confirmacion', () => {
     expect(wrapper.get('[data-testid="confirmation-detail"]').text()).toBe('Clock-in 07:02')
   })
 })
+
+describe('marca de la instalacion en la confirmacion (RF-PD-08)', () => {
+  const confirmation: ScanConfirmation = {
+    kind: 'accepted',
+    scanId: 's-brand',
+    occurredAt: morning,
+    action: 'clock_in',
+    displayName: 'Lucia G.',
+    workedMinutes: 0,
+    workDate: '2026-08-14',
+  }
+
+  it('ensena el nombre del producto por defecto, discreto y fuera del anuncio', () => {
+    const wrapper = render(confirmation)
+
+    expect(wrapper.get('[data-testid="confirmation-brand-name"]').text()).toBe('KronoQR')
+    // `aria-hidden` en el contenedor de la marca: lo que se anuncia al lector
+    // de pantalla es el resultado del fichaje, no de que instalacion es esta.
+    const container = wrapper
+      .get('[data-testid="confirmation-brand-name"]')
+      .element.closest('[aria-hidden="true"]')
+    expect(container).not.toBeNull()
+  })
+
+  it('con logotipo, ensena el logotipo y no repite el nombre', () => {
+    const wrapper = mount(ScanConfirmationPanel, {
+      props: {
+        confirmation,
+        branding: {
+          applicationName: 'Hotel Marina',
+          accentColor: null,
+          logoUrl: '/api/v1/branding/logo?v=3f9a1c2b7e4d',
+          locales: { default: 'es', available: ['es'] },
+        },
+      },
+      global: { plugins: [createAppI18n('es')] },
+    })
+
+    expect(wrapper.find('[data-testid="confirmation-brand-logo"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="confirmation-brand-name"]').exists()).toBe(false)
+  })
+
+  it('la linea de marca NUNCA usa uno de los cinco colores de confirmacion como fondo propio', () => {
+    const wrapper = render(confirmation)
+    const brandLine = wrapper.get('[data-testid="confirmation-brand-name"]').element.parentElement
+
+    expect(brandLine?.className ?? '').not.toMatch(/bg-kiosk-(entry|exit|pending|notice|error)/)
+  })
+})

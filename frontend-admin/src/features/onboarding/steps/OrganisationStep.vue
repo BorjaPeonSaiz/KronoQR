@@ -19,6 +19,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   fetchInstallationSettings,
+  stringValue,
   updateInstallationSettings,
 } from '@/features/settings/settings.api'
 import type { InstallationSettings, UpdateSettingsRequest } from '@/shared/api/types'
@@ -37,12 +38,6 @@ const settings = ref<InstallationSettings | null>(null)
 const appName = ref('')
 const defaultLocale = ref<AppLocale>('es')
 const availableLocales = ref<AppLocale[]>(['es', 'en'])
-
-function stringValue(catalog: InstallationSettings, key: string): string {
-  const found = catalog.data.find((entry) => entry.key === key)
-
-  return typeof found?.value === 'string' ? found.value : ''
-}
 
 function listValue(catalog: InstallationSettings, key: string): string[] {
   const found = catalog.data.find((entry) => entry.key === key)

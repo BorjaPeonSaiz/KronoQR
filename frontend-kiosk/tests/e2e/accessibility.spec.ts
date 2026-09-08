@@ -12,7 +12,7 @@
 
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
-import { stubKioskApi, stubScanApi } from './support/kiosk'
+import { stubBrandingApi, stubKioskApi, stubScanApi } from './support/kiosk'
 
 const DISABLED_RULES = ['video-caption']
 
@@ -102,5 +102,36 @@ test(
     const panel = page.getByTestId('scan-confirmation')
     await expect(panel).toHaveAttribute('role', 'alert')
     await expect(panel).toHaveAttribute('aria-live', 'assertive')
+  },
+)
+
+test(
+  'con la marca de un cliente aplicada (logotipo y color propios) tampoco hay violaciones (RF-PD-08)',
+  { tag: ['@RF-KI-06', '@RF-PD-08'] },
+  async ({ page }) => {
+    // `stubKioskApi` YA deja la marca del producto por defecto; se sobreescribe
+    // DESPUES con la de «Hotel Marina» (acento, logotipo, un unico idioma) que
+    // es el caso que mas toca: color de acento derivado en tiempo de ejecucion
+    // y el selector de idioma SIN pintarse (doc 06 regla 8: nada que elegir).
+    await stubBrandingApi(page, { variant: 'hotel-marina' })
+    await stubScanApi(page, { outcome: 'clock_in' })
+    await page.goto('/')
+
+    await expect(page.getByTestId('brand-logo')).toBeVisible()
+    await expect(page.getByTestId('scan-confirmation')).toBeVisible()
+
+    const results = await new AxeBuilder({ page })
+      .withTags(WCAG_TAGS)
+      .disableRules(DISABLED_RULES)
+      .analyze()
+
+    const blocking = results.violations.filter(
+      (violation) => violation.impact === 'critical' || violation.impact === 'serious',
+    )
+
+    expect(
+      blocking,
+      blocking.map((violation) => `${violation.id}: ${violation.help}`).join('\n'),
+    ).toEqual([])
   },
 )

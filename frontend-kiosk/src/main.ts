@@ -5,6 +5,7 @@ import './assets/main.css'
 import { canApplyUpdate } from './features/offline/domain/updateWindow'
 import { pendingScanCount } from './features/offline/useOfflineQueue'
 import { createAppRouter } from './router'
+import { applyCachedBranding } from './shared/branding/useBranding'
 import { createAppI18n, initialLocale } from './shared/i18n'
 import { APP_VERSION, resolveDeviceId } from './shared/telemetry/deviceIdentity'
 import { createErrorReporter } from './shared/telemetry/errorReporter'
@@ -13,6 +14,12 @@ import { registerServiceWorker } from './sw/registerServiceWorker'
 
 const locale = initialLocale()
 document.documentElement.lang = locale
+
+// Marca blanca (RF-PD-08): la copia guardada -o la del producto, si no hay
+// ninguna- ANTES de montar nada. Sin red, sin `await`: es lo que evita un
+// parpadeo del nombre en el primer fotograma. `ScanView.vue` pide la version
+// fresca al servidor en segundo plano (`shared/branding/useBranding.ts`).
+applyCachedBranding()
 
 const app = createApp(App)
 

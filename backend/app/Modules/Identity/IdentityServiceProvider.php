@@ -67,6 +67,8 @@ use App\Modules\Identity\Infrastructure\Persistence\EloquentTwoFactorSecrets;
 use App\Modules\Identity\Infrastructure\Persistence\EloquentUserAccounts;
 use App\Modules\Identity\Infrastructure\Persistence\User;
 use App\Modules\Shared\Application\Port\AuthenticationJournal;
+use App\Modules\Shared\Application\Port\BrandingLogoReader;
+use App\Modules\Shared\Application\Port\BrandingProvider;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CredentialFingerprints;
 use App\Modules\Shared\Application\Port\EmployeePinVerifier;
@@ -363,12 +365,20 @@ final class IdentityServiceProvider extends ServiceProvider
             ),
         );
 
+        /*
+         * La marca entra por los dos puertos de `Shared` y no por la
+         * configuracion (tarea 5.8, RF-PD-08). El nivel de correccion del QR si
+         * es del despliegue y sigue leyendose aqui, en el borde: no tiene sentido
+         * cambiarlo sin reimprimir todas las tarjetas.
+         */
         $this->app->bind(
             CardRenderer::class,
-            static fn (): BrowsershotCardRenderer => new BrowsershotCardRenderer(
+            static fn (Application $app): BrowsershotCardRenderer => new BrowsershotCardRenderer(
                 new EndroidQrEncoder(
                     Config::string('identity.credentials.card.error_correction', 'Q'),
                 ),
+                $app->make(BrandingProvider::class),
+                $app->make(BrandingLogoReader::class),
             ),
         );
 

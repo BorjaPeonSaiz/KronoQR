@@ -21,3 +21,11 @@ capturar en el camino del escaneo es una pantalla en blanco delante de una cola 
 
 Y `recordScan` manda siempre `Idempotency-Key: <scan_id>` (regla dura 8): el mismo
 identificador en el envio original y en todos los reintentos.
+
+## `fetchBranding` (RF-PD-08, tarea 5.8)
+
+`GET /api/v1/branding` es la unica ruta de este cliente que va `authenticated: false` sin ser
+parte del emparejamiento: es publica a proposito, porque la pantalla de espera necesita el
+nombre y el logotipo del cliente antes de que nadie se identifique. Valida el cuerpo con
+`parseBranding` de `@kronoqr/web-kit/branding` en vez de duplicar sus reglas aqui; quien la
+consume (`shared/branding/useBranding.ts`) la trata siempre en segundo plano.

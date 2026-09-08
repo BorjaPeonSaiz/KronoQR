@@ -62,6 +62,14 @@ export type InstallationSetting = Schemas['InstallationSetting']
 export type InstallationSettings = Schemas['InstallationSettings']
 export type UpdateSettingsRequest = Schemas['UpdateSettingsRequest']
 
+// Marca de la instalacion (RF-PD-08, tarea 5.8): la proyeccion PUBLICA de cinco
+// claves del catalogo de arriba, tal como la sirve `GET /api/v1/branding` (sin
+// sesion). Esta es la forma en bruto del contrato, en snake_case; el estado
+// reactivo que consume la aplicacion es el `Branding` en camelCase de
+// `@kronoqr/web-kit/branding` (`parseBranding` convierte de uno a otro y no
+// lanza ante una respuesta con otra forma).
+export type Branding = Schemas['Branding']
+
 // Asistente de puesta en marcha (RF-PD-03, RF-GP-05, tarea 5.5).
 export type SetupStep = Schemas['SetupStep']
 export type SetupStepState = Schemas['SetupStepState']

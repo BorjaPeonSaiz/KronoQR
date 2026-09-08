@@ -192,6 +192,33 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         /*
+         * `PATCH /api/v1/settings` es el UNICO sitio donde una cadena vacia es un
+         * valor y no «no me han mandado nada» (RF-PD-01, RF-PD-08, tarea 5.8).
+         *
+         * EL FALLO QUE ESTO ARREGLA. `ConvertEmptyStringsToNull` viene de serie en
+         * el grupo global de Laravel y reescribe `""` como `null` antes de
+         * validar. En casi toda la API eso es lo que se quiere —un campo de
+         * formulario vacio no es un nombre vacio—, pero en el catalogo de
+         * configuracion `BRANDING_LOGO_PATH` tiene la cadena vacia como valor DE
+         * SERIE, y significa «el logotipo del producto». Con la conversion puesta,
+         * guardar `""` respondia «debe ser un texto» y **un cliente que hubiera
+         * configurado un logotipo no tenia forma de quitarlo desde el panel**:
+         * podia cambiarlo por otro, nunca volver al del producto.
+         *
+         * Se descubrio al hacer visible el logotipo en la 5.8. Antes la clave se
+         * guardaba pero no la pintaba nadie, asi que el defecto no tenia sintoma.
+         *
+         * LA EXCEPCION ES DE UNA RUTA Y DE UN METODO. No se retira el middleware:
+         * lo que se hace es no aplicarlo donde la cadena vacia esta en el
+         * catalogo. El resto de la API sigue exactamente igual — y el `GET` de
+         * esa misma ruta tampoco lo necesita, pero no tiene cuerpo que convertir.
+         */
+        $middleware->convertEmptyStringsToNull(except: [
+            static fn (Request $request): bool => $request->isMethod('PATCH')
+                && $request->is('api/v1/settings'),
+        ]);
+
+        /*
          * Modo mantenimiento (RF-PD-10, tarea 5.7). Lo activa update.sh con
          * `php artisan down` mientras hace la copia previa y migra: el panel, el
          * portal y el quiosco reciben un 503 con `Retry-After` y el quiosco

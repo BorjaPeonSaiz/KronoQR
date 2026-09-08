@@ -13,6 +13,7 @@ import { useSessionStore } from './features/auth/session.store'
 import { createAppRouter } from './router'
 import { registerAuthGuard } from './router/guards'
 import { createAppQueryClient } from './shared/api/queryClient'
+import { useBrandingStore } from './shared/branding/branding.store'
 import { createAppI18n, isSupportedLocale, resolveLocale } from './shared/i18n'
 
 const app = createApp(App)
@@ -33,6 +34,14 @@ app.use(pinia)
 const router = createAppRouter()
 const i18n = createAppI18n(resolveLocale(navigator.languages))
 const session = useSessionStore(pinia)
+
+// La marca de la instalacion (RF-PD-08, tarea 5.8): se pinta lo que ya haya
+// —el producto, siempre la primera vez— sin esperar a la red, y se pide al
+// servidor SIN bloquear el primer pintado. Un fallo de red se ignora en
+// silencio dentro del propio store: el panel arranca con el producto.
+const branding = useBrandingStore(pinia)
+branding.apply()
+void branding.load()
 
 // El cliente HTTP no conoce la tienda y la tienda no conoce al router: se atan
 // aqui, en el arranque, que es el unico sitio donde se puede sin crear un ciclo.

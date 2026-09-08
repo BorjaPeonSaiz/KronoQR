@@ -19,6 +19,7 @@ use Tests\Support\Attendance\RecordingScanMetrics;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Time\FixedClock;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -108,10 +109,19 @@ it('aplica el valor de serie de la clave corrupta y deja intactas las demas', fu
 })->group('RF-PD-01', 'RF-AT-06');
 
 it('sirve la marca del producto cuando la fila de marca esta corrupta', function (): void {
+    // Con la marca blanca CONTRATADA, para que lo que se comprueba sea la
+    // tolerancia ante una fila ilegible y no la degradacion por licencia
+    // (ADR-023, tarea 5.8), que tiene sus propias pruebas.
+    LicenseKeys::grantAll();
+
     corruptSetting('BRANDING_ACCENT_COLOR', '"rgb(17,24,39)"');
 
-    expect(app(BrandingProvider::class)->current()->accentColor)->toBe('#111827');
-})->group('RF-PD-01');
+    app()->forgetInstance(BrandingProvider::class);
+
+    // El terracota de marca del doc 06, que es el valor de serie del catalogo:
+    // nadie se queda sin imprimir una tarjeta por un `#rrggbb` mal escrito.
+    expect(app(BrandingProvider::class)->current()->accentColor)->toBe('#b8542a');
+})->group('RF-PD-01', 'RF-PD-08');
 
 it('publica la fila descartada en meta.invalid_keys, con su motivo y su impacto', function (): void {
     // La otra mitad: el descarte no puede ser silencioso. Quien administra tiene

@@ -1,9 +1,12 @@
+import { PRODUCT_BRANDING } from '@kronoqr/web-kit/branding'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import App from '@/App.vue'
 import { useSessionStore } from '@/features/login/session.store'
+import { useBrandingStore } from '@/shared/branding/branding.store'
+import type { Branding } from '@/shared/api/types'
 import es from '@/shared/i18n/locales/es.json'
 import en from '@/shared/i18n/locales/en.json'
-import { employeeWorkDays, portalEmployee } from './support/fixtures'
+import { brandingPayload, employeeWorkDays, portalEmployee } from './support/fixtures'
 import {
   createTestPinia,
   createTestRouter,
@@ -20,6 +23,25 @@ beforeEach(() => {
 afterEach(() => {
   window.sessionStorage.clear()
 })
+
+/**
+ * Simula `GET /api/v1/branding` y carga el store, igual que hace `main.ts` al
+ * arrancar. El componente `BrandMark` de `@kronoqr/web-kit` no lee ninguna
+ * tienda: recibe la marca por prop, asi que la pantalla necesita el store ya
+ * cargado antes de montarse. Las jornadas siguen sirviendose desde el mismo
+ * doble de `fetch` para las peticiones que no piden la marca.
+ */
+async function loadBranding(
+  pinia: ReturnType<typeof createTestPinia>,
+  overrides: Partial<Branding> = {},
+): Promise<void> {
+  stubFetch((url) =>
+    url.includes('/api/v1/branding')
+      ? jsonResponse(brandingPayload(overrides))
+      : jsonResponse(employeeWorkDays()),
+  )
+  await useBrandingStore(pinia).load()
+}
 
 describe('AppShellView', () => {
   it('muestra el titulo del portal y saluda a quien ha entrado por su nombre', async () => {
@@ -96,6 +118,45 @@ describe('AppShellView', () => {
 
     expect(session.isAuthenticated).toBe(false)
     expect(router.currentRoute.value.name).toBe('login')
+  })
+
+  it('sin marca configurada enseña el nombre del producto, sin logotipo', async () => {
+    const pinia = createTestPinia()
+
+    useSessionStore(pinia).employee = portalEmployee()
+    stubFetch(() => jsonResponse(employeeWorkDays()))
+
+    const router = createTestRouter()
+
+    await router.push('/records')
+
+    const wrapper = await mountView(App, { pinia, router })
+
+    await settle()
+
+    expect(wrapper.text()).toContain(PRODUCT_BRANDING.applicationName)
+    expect(wrapper.find('img').exists()).toBe(false)
+  })
+
+  it('con logotipo configurado lo enseña con su nombre como alt, y no repite el nombre en texto', async () => {
+    const pinia = createTestPinia()
+
+    useSessionStore(pinia).employee = portalEmployee()
+    await loadBranding(pinia)
+
+    const router = createTestRouter()
+
+    await router.push('/records')
+
+    const wrapper = await mountView(App, { pinia, router })
+
+    await settle()
+
+    const img = wrapper.find('[data-testid="brand-mark"]')
+
+    expect(img.element.tagName).toBe('IMG')
+    expect(img.attributes('alt')).toBe('Hotel Marina')
+    expect(wrapper.text()).not.toContain('Hotel Marina')
   })
 
   it('tiene un enlace para saltar al contenido principal', async () => {

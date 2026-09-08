@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import en from '@/shared/i18n/locales/en.json'
 import es from '@/shared/i18n/locales/es.json'
-import { DEFAULT_LOCALE, isSupportedLocale, resolveLocale } from '@/shared/i18n'
+import {
+  browserHasSupportedLocale,
+  DEFAULT_LOCALE,
+  isSupportedLocale,
+  resolveLocale,
+} from '@/shared/i18n'
 
 /** Aplana un arbol de mensajes a la lista de sus claves con punto. */
 function flatKeys(value: unknown, prefix = ''): string[] {
@@ -48,5 +53,11 @@ describe('idiomas de la aplicacion', () => {
     expect(isSupportedLocale('pt')).toBe(false)
     expect(isSupportedLocale(42)).toBe(false)
     expect(isSupportedLocale(undefined)).toBe(false)
+  })
+
+  it('detecta si el navegador ya pedia un idioma que esta version trae (RF-PD-08)', () => {
+    expect(browserHasSupportedLocale(['en-GB', 'fr-FR'])).toBe(true)
+    expect(browserHasSupportedLocale(['fr-FR', 'de-DE'])).toBe(false)
+    expect(browserHasSupportedLocale([])).toBe(false)
   })
 })

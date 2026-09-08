@@ -169,6 +169,22 @@ it('describe solo los endpoints cuya tarea existe, y todos bajo /api/v1', functi
         // separado — y un `PATCH` de varias claves a la vez es lo que permite
         // comprobar las invariantes entre ellas antes de escribir ninguna.
         '/api/v1/settings',
+        // Tarea 5.8: la marca de la instalacion (RF-PD-08). Es la proyeccion
+        // PUBLICA de cinco de esas mismas claves —las tres `BRANDING_*` y las dos
+        // `LOCALE_*`—, y por eso va justo detras: el `PATCH` de arriba es donde se
+        // edita, y esto es lo unico que sale sin autenticar.
+        //
+        // PUBLICA Y SIN POLICY, y no es un olvido: el quiosco pinta su pantalla
+        // de espera antes de que nadie escanee y el portal la suya antes de que
+        // nadie se identifique. El poder esta en la otra mitad —cambiar la marca
+        // es `PATCH /settings`, con `settings:*` y rol `admin`—, y esa si tiene
+        // policy y prueba de autorizacion negativa.
+        //
+        // El logotipo va en ruta propia y no como un campo mas del JSON porque no
+        // es JSON: son los bytes de un PNG o de un SVG, cacheables para siempre
+        // gracias a la huella del contenido que lleva su URL.
+        '/api/v1/branding',
+        '/api/v1/branding/logo',
         // Tarea 5.5: el asistente de puesta en marcha (RF-PD-03). Prefijo propio
         // y no rutas repartidas por los recursos que toca, por una razon
         // concreta: son de UN SOLO USO y se cierran a la vez. Con `POST

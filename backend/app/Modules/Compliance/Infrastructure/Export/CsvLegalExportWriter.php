@@ -12,8 +12,8 @@ use App\Modules\Compliance\Domain\ValueObject\ExportedShiftEntry;
 use App\Modules\Compliance\Domain\ValueObject\ExportedSubject;
 use App\Modules\Compliance\Domain\ValueObject\LegalExportManifest;
 use App\Modules\Compliance\Domain\ValueObject\LegalExportTally;
+use App\Modules\Shared\Application\Port\BrandingProvider;
 use App\Modules\Shared\Infrastructure\Export\CsvDialect;
-use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Lang;
 use RuntimeException;
 use Throwable;
@@ -64,10 +64,15 @@ use Throwable;
  * ## Los textos salen de `lang/` y no de aqui
  *
  * `lang/{es,en}/legal-export.php`. El idioma del documento es configuracion de
- * la instalacion (regla dura 13, ADR-017), y el nombre de la instalacion sale de
- * `config/branding.php` (RF-PD-08). Un escritor con los rotulos incrustados
- * obligaria a tocar el repositorio para vender a un cliente que trabaja en
- * ingles.
+ * la instalacion (regla dura 13, ADR-017), y el nombre de la instalacion llega
+ * por el puerto {@see BrandingProvider} (RF-PD-08). Un escritor con los rotulos
+ * incrustados obligaria a tocar el repositorio para vender a un cliente que
+ * trabaja en ingles.
+ *
+ * **Desde la tarea 5.8 el nombre sale de `installation_settings` y no del
+ * `.env`**, asi que el documento que se le entrega a la Inspeccion lleva el
+ * nombre que el cliente ve en su panel. Antes eran dos sitios y podian decir
+ * cosas distintas.
  *
  * ## Escribe a fichero, y por eso devuelve el recuento
  *
@@ -78,6 +83,8 @@ use Throwable;
  */
 final readonly class CsvLegalExportWriter implements LegalExportWriter
 {
+    public function __construct(private BrandingProvider $branding) {}
+
     /**
      * Las columnas de la tabla, en orden. La clave es la de `lang/*` y el orden
      * es el del documento.
@@ -302,17 +309,17 @@ final readonly class CsvLegalExportWriter implements LegalExportWriter
     }
 
     /**
-     * El nombre de la instalacion, de `config/branding.php` (RF-PD-08, regla
-     * dura 13). Puede estar vacio: el centro va en cada fila y siempre existe.
+     * El nombre de la instalacion, de `installation_settings` (RF-PD-08, regla
+     * dura 13).
+     *
+     * **Nunca vacio**: sin marca configurada es el nombre del producto, que es
+     * lo que el catalogo entrega de serie. Antes podia salir en blanco —la
+     * variable `BRANDING_NAME` no traia valor— y un documento legal cuya primera
+     * linea dice «Instalacion:» y nada mas no ayuda a nadie dos años despues.
      */
     private function installationName(): string
     {
-        // `Config::get` y no `Config::string`: la clave existe y vale `null`
-        // cuando `BRANDING_NAME` no esta definida, que es el caso por defecto —y
-        // `Config::string` se niega a devolver un nulo—.
-        $name = Config::get('branding.name');
-
-        return is_string($name) ? $name : '';
+        return $this->branding->current()->applicationName;
     }
 
     private function label(string $key): string
