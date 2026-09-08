@@ -2737,6 +2737,207 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/diagnostics/bundle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generar el paquete de diagnostico
+         * @description Genera y devuelve **en la misma respuesta** el paquete de diagnostico de
+         *     la instalacion (RF-PD-09, documento 02 §11.6.6,
+         *     [ADR-020](../adr/ADR-020-soporte-con-paquete-de-diagnostico.md)): un
+         *     unico fichero JSON legible que el administrador descarga con un clic y
+         *     envia a soporte por el canal de su contrato.
+         *
+         *     **Anonimizado por defecto, y verificado, no confiado** (RL-19, regla
+         *     dura 21). Cada seccion se construye con una **lista de permitidos**: lo
+         *     que no esta explicitamente permitido no entra. No hay nombres, ni
+         *     correos, ni registros de jornada; los empleados aparecen solo como
+         *     `employee_uuid` y los quioscos como `uuid`, sin su nombre. La
+         *     configuracion entra por lista blanca de claves —nunca `LICENSE_KEY`,
+         *     `QR_SIGNING_KEY_*`, `BACKUP_ENCRYPTION_KEY`, `REVERB_APP_SECRET`,
+         *     `APP_KEY` ni credenciales de base de datos o de correo— y el estado de
+         *     la licencia entra **sin la razon social del cliente**.
+         *
+         *     **Incluir datos personales es una accion distinta** (RL-19):
+         *     `include_personal_data: true`. Anade la seccion `personal_data` —plantilla
+         *     con nombre y codigo, fichajes y tramos de los ultimos `period_days`,
+         *     incidencias abiertas—, pone `manifest.anonymized` a `false` y deja un
+         *     asiento propio en `audit_log` (`diagnostics.personal_data_included`),
+         *     ademas del asiento de generacion. Nunca es el valor por defecto ni el
+         *     efecto secundario de otra opcion, y **solo puede pedirlo una cuenta de
+         *     gestion con rol `admin`**: un token de soporte (RF-PD-11) que lo intente
+         *     recibe `403`, porque decidir que sus datos salen es del cliente y de
+         *     nadie mas.
+         *
+         *     **Sin cifrado, a proposito.** El cliente tiene que poder abrir el
+         *     fichero y comprobar que no lleva nada que no quiera enviar antes de
+         *     enviarlo; un paquete cifrado se lo impediria. El `manifest` lleva el
+         *     `sha256` del resto del documento para que soporte detecte una copia
+         *     alterada o truncada.
+         *
+         *     **Funciona con la licencia caducada o ausente** (regla dura 15): es
+         *     justamente lo que se necesita cuando algo va mal.
+         *
+         *     **`admin` y solo `admin`, con ambito `diagnostics:*`** (documento 02
+         *     §7.3, regla dura 18). La generacion recorre toda la instalacion y por
+         *     eso lleva su propio limitador, `throttle:diagnostics`, mas estricto que
+         *     el de gestion.
+         *
+         *     **Auditada** (regla dura 6): cada generacion deja
+         *     `diagnostics.bundle_generated` con si iba anonimizado, que secciones
+         *     lleva, su `sha256` y su tamano.
+         *
+         *     Hasta que exista la tabla `error_events` (RF-PD-15, tarea 5.12) la
+         *     seccion `error_events` dice `{"status": "not_installed"}` y no `[]`: un
+         *     paquete que afirmase «cero errores» sobre una tabla que no existe seria
+         *     falso.
+         */
+        post: operations["generateDiagnosticsBundle"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/support/grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Accesos de soporte concedidos
+         * @description Todas las concesiones de acceso de soporte de la instalacion —activas,
+         *     caducadas y revocadas— con quien las concedio, por que, con que alcance,
+         *     hasta cuando y **cuando se uso por ultima vez** (RF-PD-11,
+         *     [ADR-020](../adr/ADR-020-soporte-con-paquete-de-diagnostico.md)).
+         *
+         *     Es la mitad «visible para el cliente» del requisito: el cliente no
+         *     tiene que leer `audit_log` para saber si el fabricante entro y cuando.
+         *     Las concesiones **no se borran nunca** (regla dura 5): una revocada o
+         *     caducada sigue en la lista con sus fechas.
+         *
+         *     Se devuelven las 100 mas recientes, de la mas nueva a la mas antigua.
+         *     El historico completo esta en `audit_log`.
+         *
+         *     **`admin` y solo `admin`, con ambito `support:*`** (documento 02 §7.3,
+         *     regla dura 18). El propio token de soporte no lleva ese ambito: quien
+         *     recibe el acceso no puede ver ni conceder ni revocar accesos.
+         */
+        get: operations["listSupportGrants"];
+        put?: never;
+        /**
+         * Conceder un acceso temporal de soporte
+         * @description Concede al fabricante un acceso **expreso, temporal, limitado, revocable
+         *     y auditado** a esta instalacion (RF-PD-11, RL-18,
+         *     [ADR-020](../adr/ADR-020-soporte-con-paquete-de-diagnostico.md), regla
+         *     dura 16).
+         *
+         *     **Lo que se emite es un token de API con caducidad**, ligado a la
+         *     concesion y no a ninguna cuenta: no existe una cuenta del fabricante en
+         *     la instalacion, ni permanente ni dormida. El token se devuelve **una sola
+         *     vez, en esta respuesta**, y no se guarda en claro en ningun sitio (solo
+         *     su hash, como el token de un quiosco). El administrador se lo hace
+         *     llegar a soporte por el canal de su contrato. Si se pierde, se revoca
+         *     esta concesion y se crea otra.
+         *
+         *     **Caducidad efectiva**: cuando llega `expires_at`, el token deja de
+         *     autenticar (`401`) sin que nadie haga nada. Revocar tiene el mismo
+         *     efecto en el acto.
+         *
+         *     **`scope` limita lo que ese token puede hacer**, y lo limita por los dos
+         *     controles que aplica el producto a cualquier sesion: los ambitos del
+         *     token y el rol con el que actua ante las policies (documento 02 §7.3).
+         *
+         *     | `scope` | Puede | Actua como |
+         *     | --- | --- | --- |
+         *     | `diagnostics` | Generar el paquete de diagnostico **anonimizado** y consultar el historico de errores | `admin` solo ante las policies de diagnostico |
+         *     | `read_only` | Lo anterior y **leer** jornadas, tramos, plantilla y auditoria | `auditor` |
+         *     | `configuration` | Lo de `diagnostics` y **cambiar** la configuracion de la instalacion, el perfil de cumplimiento y los quioscos | `admin` |
+         *
+         *     **Lo que ningun alcance concede nunca**: activar licencias, conceder o
+         *     revocar accesos de soporte, emitir o revocar credenciales, corregir
+         *     fichajes, gestionar la plantilla, generar informes de nomina o la
+         *     exportacion para la Inspeccion, ni **incluir datos personales en un
+         *     paquete de diagnostico** (RL-19). Cada una de esas puertas tiene su
+         *     prueba de que el token de soporte recibe `403`.
+         *
+         *     **`reason` es obligatorio** y va al asiento de auditoria: la concesion
+         *     existe para un incidente concreto, y usar el acceso para otro es el
+         *     abuso que este mecanismo existe para hacer visible (§8.1, `T1199`).
+         *
+         *     **Auditado** (regla dura 6): conceder deja `support_grant.granted`; cada
+         *     uso efectivo actualiza `accessed_at` y deja `support_grant.used` —como
+         *     maximo uno por concesion cada `PRODUCT_SUPPORT_USE_AUDIT_WINDOW_SECONDS`,
+         *     para que una sesion de soporte no inunde la cadena—; revocar deja
+         *     `support_grant.revoked`. Los tres son visibles para el cliente en
+         *     `audit_log` y en `GET /api/v1/support/grants`.
+         *
+         *     **Durante esa intervencion el fabricante es encargado del tratamiento
+         *     para ese supuesto concreto** (RL-18): exige el contrato de encargo del
+         *     art. 28 RGPD que la documentacion del cliente describe.
+         *
+         *     **`admin` y solo `admin`, con ambito `support:*`** (regla dura 18).
+         *     Funciona con la licencia caducada (regla dura 15): es cuando mas falta
+         *     hace.
+         */
+        post: operations["grantSupportAccess"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/support/grants/{uuid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** de la concesion de soporte (`support_grants.uuid`).
+                 *     Por lo mismo que el del quiosco: la clave interna no sale de la base de
+                 *     datos, y un numero secuencial en la URL diria cuantas veces ha entrado
+                 *     soporte en este hotel.
+                 * @example 0199f6a2-4c1e-7d3b-8a90-1b2c3d4e5f60
+                 */
+                uuid: components["parameters"]["SupportGrantUuid"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revocar un acceso de soporte
+         * @description Revoca la concesion **en el acto**: su token deja de autenticar en la
+         *     peticion siguiente, y la fila queda con `revoked_at` y quien la revoco
+         *     (RF-PD-11, regla dura 5: nada se borra).
+         *
+         *     **Idempotente.** Revocar una concesion ya revocada o ya caducada
+         *     devuelve `204` y no vuelve a auditar: la segunda pulsacion de un boton
+         *     no es un hecho nuevo. `404` solo si el `uuid` no existe.
+         *
+         *     **Es `DELETE`** porque es lo que dice el Anexo B del documento 01, y
+         *     porque lo que se retira —el acceso— si deja de existir, aunque la
+         *     concesion que lo concedio se conserve como historial.
+         *
+         *     **Auditado** (regla dura 6): `support_grant.revoked`, con la concesion y
+         *     el actor. **`admin` y solo `admin`, con ambito `support:*`** (regla dura
+         *     18). El token de soporte no puede revocarse a si mismo.
+         */
+        delete: operations["revokeSupportAccess"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/setup/status": {
         parameters: {
             query?: never;
@@ -6903,6 +7104,284 @@ export interface components {
             skippable: boolean;
         };
         /**
+         * DiagnosticsBundleRequest
+         * @description Opciones del paquete de diagnostico. Sin cuerpo, o con el cuerpo vacio,
+         *     el paquete sale **anonimizado** (RL-19).
+         */
+        DiagnosticsBundleRequest: {
+            /**
+             * @description **Accion distinta y explicita** (RL-19): anade la seccion
+             *     `personal_data`, marca el paquete como no anonimizado y deja el
+             *     asiento `diagnostics.personal_data_included`. Solo `admin`; un
+             *     token de soporte recibe `403`.
+             * @default false
+             */
+            include_personal_data: boolean;
+            /**
+             * @description Dias hacia atras que abarcan los fichajes y tramos de
+             *     `personal_data`. Sin `include_personal_data` no tiene efecto: el
+             *     paquete anonimizado no lleva registros de jornada de ningun periodo.
+             * @default 7
+             */
+            period_days: number;
+        };
+        /**
+         * DiagnosticsManifest
+         * @description Cabecera del paquete: que version lo genero, cuando, si va anonimizado
+         *     y la huella del resto del documento.
+         */
+        DiagnosticsManifest: {
+            /**
+             * @description Version de la forma del paquete. Cambia solo si cambia lo que significa una seccion.
+             * @constant
+             */
+            schema_version: 1;
+            /** @example 2.2.0 */
+            product_version: string;
+            generated_at: components["schemas"]["UtcTimestamp"];
+            /** @description `false` solo si se pidio `include_personal_data`. */
+            anonymized: boolean;
+            /**
+             * @description Quien lo genero, sin identificarlo: una cuenta de gestion, un token
+             *     de soporte o la consola. El actor concreto esta en `audit_log`.
+             * @enum {string}
+             */
+            generated_by: "user" | "support_grant" | "console";
+            /** @description Nombres de las secciones presentes, en el orden en que aparecen. */
+            sections: string[];
+            /**
+             * @description SHA-256 del documento sin este `manifest`, serializado en JSON
+             *     canonico (claves ordenadas, sin espacios). Soporte lo recalcula al
+             *     recibirlo para detectar una copia alterada o truncada.
+             */
+            sha256: string;
+        };
+        /**
+         * DoctorCheck
+         * @description Una comprobacion de `product:doctor` (RF-PD-13), con que hacer si esta en rojo.
+         */
+        DoctorCheck: {
+            /**
+             * @description Identificador estable, `familia.comprobacion`.
+             * @example database.audit_log_privileges
+             * @example tls.certificate
+             * @example disk.backup
+             */
+            id: string;
+            /**
+             * @description `failure` es algo que hay que corregir; `warning`, algo que conviene
+             *     mirar. **El estado de la licencia nunca pasa de `warning`** (regla
+             *     dura 15).
+             * @enum {string}
+             */
+            status: "ok" | "warning" | "failure";
+            /** @description Que se ha comprobado y que se ha encontrado, en el idioma pedido. */
+            summary: string;
+            /**
+             * @description **Que hacer**, redactado para quien no conoce el sistema. Nulo solo
+             *     con `status: ok`.
+             */
+            fix: string | null;
+            /** @description Cifras y rutas que apoyan el veredicto. Nunca secretos ni datos personales. */
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * DoctorReport
+         * @description Resultado completo de `php artisan product:doctor --json` (RF-PD-13).
+         *     Es la misma estructura que imprime el comando y la que va dentro del
+         *     paquete de diagnostico, para que las tres superficies no puedan
+         *     discrepar.
+         */
+        DoctorReport: {
+            /**
+             * @description El peor estado de todas las comprobaciones.
+             * @enum {string}
+             */
+            status: "ok" | "warning" | "failure";
+            /**
+             * @description `0` todo correcto; `1` solo avisos; `2` al menos un fallo. Es lo que
+             *     devuelve el comando, y lo que `install.sh` y `update.sh` traducen a
+             *     su tabla comun: solo el `2` se convierte en el `6` de esa tabla.
+             * @enum {integer}
+             */
+            exit_code: 0 | 1 | 2;
+            checked_at: components["schemas"]["UtcTimestamp"];
+            product_version: string;
+            checks: components["schemas"]["DoctorCheck"][];
+        };
+        /**
+         * DiagnosticsBundle
+         * @description El paquete de diagnostico (RF-PD-09, documento 02 §11.6.6, ADR-020).
+         *
+         *     **Cada seccion es una lista de permitidos.** Lo que no esta descrito
+         *     aqui no puede aparecer; una prueba automatica sobre un paquete generado
+         *     con volumen real (500 empleados, 90 dias) afirma que no contiene
+         *     nombres, correos, DNI ni horas de fichaje, y otra que no contiene
+         *     ninguna clave secreta del `.env`.
+         *
+         *     Las secciones que dependen de una tabla o de un fichero que no existe en
+         *     esta instalacion no desaparecen: dicen `{"status": "not_installed"}` o
+         *     `{"status": "unavailable", "reason": "..."}`.
+         */
+        DiagnosticsBundle: {
+            manifest: components["schemas"]["DiagnosticsManifest"];
+            /**
+             * @description Version, entorno, zona horaria de la aplicacion (siempre `UTC`,
+             *     regla dura 3) y del centro, idiomas y el perfil de cumplimiento con
+             *     sus umbrales. **Sin el nombre del centro ni del cliente.**
+             */
+            installation: {
+                [key: string]: unknown;
+            };
+            /**
+             * @description Solo las claves de la **lista blanca** de configuracion, con su
+             *     valor; las diferencias entre `.env` y base de datos (clave y
+             *     `differs: true`, sin valores); y `invalid_keys` tal y como las
+             *     devuelve `GET /api/v1/settings`. Ninguna clave secreta, ni
+             *     «redactada»: las que no estan en la lista no aparecen.
+             */
+            configuration: {
+                [key: string]: unknown;
+            };
+            /**
+             * @description Base de datos (alcanzable, version, migraciones pendientes), Redis,
+             *     colas con su tamano, Reverb (configurado o no), tamano y ultimo
+             *     asiento de `audit_log`.
+             */
+            services: {
+                [key: string]: unknown;
+            };
+            doctor: components["schemas"]["DoctorReport"];
+            /**
+             * @description Estado, plan, limites, dias hasta la caducidad, funcionalidades y
+             *     huella corta de la clave. **Nunca `customer_name`** ni la clave.
+             */
+            license: {
+                [key: string]: unknown;
+            };
+            /** @description Un elemento por quiosco. **Sin `name`**, que puede llevar el nombre de una persona. */
+            kiosks: {
+                /** Format: uuid */
+                uuid: string;
+                status: string;
+                app_version: string | null;
+                last_seen_at: components["schemas"]["UtcTimestamp"] | null;
+                pending_queue_size: number;
+            }[];
+            /**
+             * @description Historico de errores agrupado por huella con su `trace_id`
+             *     (RF-PD-15). Hasta la tarea 5.12, `{"status": "not_installed"}`.
+             */
+            error_events: {
+                [key: string]: unknown;
+            };
+            /** @description Contadores agregados de los puertos de metricas. Sin etiquetas de empleado. */
+            metrics: {
+                [key: string]: unknown;
+            };
+            /**
+             * @description El informe de la ultima actualizacion (`BACKUP_PATH/reports/update-*.log`)
+             *     y la lista de informes existentes. **Nunca el `.detalle.log`**, que
+             *     puede llevar datos personales y es `0600` de root (doc 07 §6).
+             */
+            updates: {
+                [key: string]: unknown;
+            };
+            /**
+             * @description Solo **recuentos** por familia y por dia de los ultimos 30 dias, y
+             *     el resultado de verificar la cadena. Ningun payload: los asientos de
+             *     `license_lifecycle` llevan la razon social y los de
+             *     `personal_data_access`, a quien se consulto.
+             */
+            audit: {
+                [key: string]: unknown;
+            };
+            /**
+             * @description **Solo con `include_personal_data: true`.** Plantilla (`uuid`,
+             *     `employee_code`, `full_name`, `status`, `department_id`), tramos y
+             *     fichajes de los ultimos `period_days` referidos por `employee_uuid`
+             *     y sin `client_meta`, e incidencias abiertas.
+             */
+            personal_data?: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * SupportScope
+         * @description Alcance de una concesion de soporte (RF-PD-11). Ver la tabla de
+         *     `POST /api/v1/support/grants`. `diagnostics` es el valor por defecto y
+         *     el que basta para la mayoria de las incidencias.
+         * @enum {string}
+         */
+        SupportScope: "diagnostics" | "read_only" | "configuration";
+        /**
+         * SupportGrant
+         * @description Una concesion de acceso de soporte (RF-PD-11, ADR-020): quien la
+         *     concedio, por que, con que alcance, hasta cuando, si se revoco y cuando
+         *     se uso por ultima vez. Se conserva para siempre (regla dura 5).
+         */
+        SupportGrant: {
+            /** Format: uuid */
+            uuid: string;
+            /**
+             * @description Calculado con el reloj del servidor en el momento de la lectura.
+             *     `revoked` gana a `expired`: una concesion revocada antes de caducar
+             *     consta como revocada.
+             * @enum {string}
+             */
+            status: "active" | "expired" | "revoked";
+            scope: components["schemas"]["SupportScope"];
+            /** @description Para que incidente se concedio. Va tal cual al asiento de auditoria. */
+            reason: string;
+            /** @description La cuenta de gestion que la concedio. */
+            granted_by: {
+                /** Format: uuid */
+                uuid: string;
+                name: string;
+            };
+            granted_at: components["schemas"]["UtcTimestamp"];
+            expires_at: components["schemas"]["UtcTimestamp"];
+            revoked_at: components["schemas"]["UtcTimestamp"] | null;
+            /** @description Ultimo uso efectivo del token. Nulo si nunca se uso. */
+            accessed_at: components["schemas"]["UtcTimestamp"] | null;
+        };
+        /** SupportGrantCollection */
+        SupportGrantCollection: {
+            data: components["schemas"]["SupportGrant"][];
+        };
+        /** GrantSupportAccessRequest */
+        GrantSupportAccessRequest: {
+            /**
+             * @description Obligatorio. El incidente que motiva el acceso.
+             * @example Incidencia #123: la cola del quiosco de recepcion no vacia
+             */
+            reason: string;
+            scope?: components["schemas"]["SupportScope"];
+            /**
+             * @description Duracion. El maximo lo fija `PRODUCT_SUPPORT_GRANT_MAX_HOURS` (72
+             *     de serie); un valor mayor es `422`.
+             * @default 24
+             */
+            hours: number;
+        };
+        /**
+         * IssuedSupportGrant
+         * @description La concesion recien creada **con su token en claro**. Es la unica vez
+         *     que el token sale del servidor: no se guarda en claro y no se puede
+         *     volver a pedir.
+         */
+        IssuedSupportGrant: {
+            data: components["schemas"]["SupportGrant"] & {
+                /**
+                 * @description Token de API con la caducidad de la concesion. Entregar a soporte por el canal del contrato.
+                 * @example 23|Kd2pQ9vLmN4tZbYcF1wQ8sE3rT6uI0oP5aS7dXyZ
+                 */
+                token: string;
+            };
+        };
+        /**
          * SetupStatus
          * @description Estado del asistente de puesta en marcha (RF-PD-03).
          *
@@ -7453,6 +7932,14 @@ export interface components {
          * @example 0199f0c2-9b30-7a21-8d40-1e2f3a4b5c60
          */
         ShiftEntryUuid: string;
+        /**
+         * @description Identificador **publico** de la concesion de soporte (`support_grants.uuid`).
+         *     Por lo mismo que el del quiosco: la clave interna no sale de la base de
+         *     datos, y un numero secuencial en la URL diria cuantas veces ha entrado
+         *     soporte en este hotel.
+         * @example 0199f6a2-4c1e-7d3b-8a90-1b2c3d4e5f60
+         */
+        SupportGrantUuid: string;
         /**
          * @description Identificador **publico** del dispositivo de quiosco (`devices.uuid`). Por
          *     lo mismo que el del empleado y el de la credencial: la clave interna no
@@ -10488,6 +10975,123 @@ export interface operations {
                     "image/svg+xml": string;
                 };
             };
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    generateDiagnosticsBundle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["DiagnosticsBundleRequest"];
+            };
+        };
+        responses: {
+            /**
+             * @description El paquete, como documento JSON descargable. `Content-Disposition`
+             *     lleva el nombre de fichero `kronoqr-diagnostics-<version>-<UTC>.json`
+             *     para que el navegador lo guarde sin que el panel tenga que inventar
+             *     uno.
+             */
+            200: {
+                headers: {
+                    /** @description `attachment; filename="kronoqr-diagnostics-2.2.0-20260908T101500Z.json"` */
+                    "Content-Disposition"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiagnosticsBundle"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listSupportGrants: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Las concesiones, de la mas reciente a la mas antigua. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportGrantCollection"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    grantSupportAccess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GrantSupportAccessRequest"];
+            };
+        };
+        responses: {
+            /** @description Concesion creada. **Es la unica vez que el token viaja en claro.** */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuedSupportGrant"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    revokeSupportAccess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** de la concesion de soporte (`support_grants.uuid`).
+                 *     Por lo mismo que el del quiosco: la clave interna no sale de la base de
+                 *     datos, y un numero secuencial en la URL diria cuantas veces ha entrado
+                 *     soporte en este hotel.
+                 * @example 0199f6a2-4c1e-7d3b-8a90-1b2c3d4e5f60
+                 */
+                uuid: components["parameters"]["SupportGrantUuid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Acceso revocado, o ya lo estaba. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
         };

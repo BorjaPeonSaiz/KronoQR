@@ -612,6 +612,10 @@ final class ProductServiceProvider extends ServiceProvider
 
         $this->observePlanLimits();
 
+        // --- 5.9 diagnostics (agente A): policy y comandos ---
+
+        // --- 5.9 support grants (agente B): policy, middleware y comandos ---
+
         if ($this->app->runningInConsole()) {
             /*
              * Los dos comandos del Anexo C (RF-PD-04).
