@@ -11,7 +11,7 @@
 integradas el 08-09-2026 con la CI de `main` completa en verde, ⑧ y ⑧b incluidas, y Node 25 en la imagen de
 nginx). **Tarea 5.9 «Paquete de diagnóstico anonimizado, `product:doctor`, accesos de soporte auditados»
 (RF-PD-09, RF-PD-11, RF-PD-13, RL-18, RL-19) IMPLEMENTADA, REVISADA y PROBADA el 08-09-2026**: **PR #47**
-contra `main`, con la CI completa y ⑧b lanzada a mano (ejecución 34230888161; ver «Siguiente acción»).
+contra `main`, con la CI completa y ⑧b lanzada a mano (ejecución 34231838987; ver «Siguiente acción»).
 
 **Cómo se hizo (misma receta que la 5.8, con una diferencia):** contrato primero (cuatro rutas y ocho esquemas),
 tipos regenerados, **bloques reservados con comentario** en `ProductServiceProvider` y `routes/api_v1.php`
@@ -72,6 +72,8 @@ ata el catálogo de ámbitos; revocación en carrera con un solo asiento; `/auth
 `update.sh`; disco de `doctor.sh` por proporción; `/health` sin BD (el middleware resolvía el caso de uso por
 constructor: 3 fallos de la suite completa, corregido).
 
+**Dos fallos de la primera CI manual, corregidos:** (a) la ⑧ exige que ninguna guía entregada enlace fuera del paquete y el runbook nuevo enlazaba al ADR-020 (los ADR no viajan): ahora lo cita en texto; (b) la ⑧b **falló de verdad** en «U1 · Actualizar»: en el escenario sintético `ci.yml` congelaba la frontera de la versión anterior con la última migración del árbol **nuevo**, así que las dos migraciones de la 5.9 quedaban atribuidas a la 2.1.0 ya instalada y `update.sh` se negaba —bien— a adivinar. Había pasado desapercibido porque 5.7 y 5.8 no traían migraciones. La frontera sale ahora del árbol `anterior/`. Trampa aprendida: un `perl -i` sobre `ci.yml` dejó un comentario a columna 0 dentro de un bloque `run: |` y el YAML entero dejó de parsear (GitHub responde «Workflow does not have workflow_dispatch trigger»): validar el YAML antes de empujar.
+
 **Verificado el 08-09:** Pint, PHPStan 9, Deptrac 0 violaciones, **suite completa del backend 3458 en
 verde**, `qa:traceability --check`, `docs:consistency --check`, gitleaks (186 commits, 0), contrato Redocly 0
 problemas, `make sh-lint` 0, panel 397 unitarias + 76 E2E (5 nuevas de `support.spec.ts` y 3 de
@@ -79,7 +81,7 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 (exit 1, tres avisos coherentes), `product:diagnostics` (71 KB, `grep -c "hotel\|@"` = 0), `--verify`
 íntegro/alterado, `support:grant`/`support:revoke`, `doctor.sh` con `app` en pie y parado.
 
-**Siguiente acción:** vigilar la ejecución manual 34230888161 (⑧ y ⑧b) y la PR #47; integrar con *merge
+**Siguiente acción:** vigilar la ejecución manual 34231838987 (⑧ y ⑧b) y la PR #47; integrar con *merge
 commit* (nunca squash) cuando esté todo en verde —**cuidado: el grupo de concurrencia cancela la ejecución en
 curso de la misma rama en cada push, así que no empujar nada mientras corra la manual**—, ejecutar `make up` (migraciones
 nuevas de `support_grants`), y arrancar la **5.10** (exportación íntegra y telemetría desactivada) en rama
