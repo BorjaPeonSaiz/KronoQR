@@ -9,7 +9,7 @@
 
 **Rama `feat/tarea-5.8-marca-blanca`**, creada desde `main` (`d83e55b`, PR #43 integrada con *merge commit*).
 **Tarea 5.8 «Marca blanca en las tres aplicaciones y en los PDF» (RF-PD-08) IMPLEMENTADA, REVISADA y PROBADA
-el 07/08-09-2026**: un commit, PR abierta contra `main` y la etapa ⑧b lanzada a mano (toca
+el 07/08-09-2026**: commit `067f04e`, **PR #46** contra `main` y la CI completa con ⑧b lanzada a mano (ejecución 34197180554) (toca
 `compose.prod.yaml`; ver «Siguiente acción»).
 
 **Cómo se hizo (vale como receta para la 5.9 y siguientes):** contrato primero (`GET /api/v1/branding`
@@ -255,4 +255,4 @@ Detalle de cada hito: mensajes de commit, PRs y `git show 9b1593d:HANDOFF.md`.
 - **07/08-09** — **Tarea 5.8** (marca blanca) en `feat/tarea-5.8-marca-blanca`: contrato público de marca,
   `web-kit/branding.ts` + `brandingState.ts` + `BrandMark.vue`, gating por licencia (`white_label`) sin
   degradar el nombre, logotipo validado al guardar, idiomas unificados, pantalla «Marca» del panel; cuatro
-  agentes en paralelo y tres revisiones. PR #44.
+  agentes en paralelo y tres revisiones. PR #46, CI manual 34197180554.
