@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Modules\Product\Application\Command\RevokeSupportAccessCommand;
+use App\Modules\Product\Application\Port\SupportAccessRecorder;
 use App\Modules\Product\Application\UseCase\RevokeSupportAccessHandler;
 use App\Modules\Product\Domain\ValueObject\SupportRevocationOutcome;
 use App\Modules\Product\Domain\ValueObject\SupportScope;
@@ -281,3 +282,54 @@ it('el asiento de revocacion es el de la primera, no el de la ultima', function 
     expect(DB::table('support_grants')->where('uuid', $issued->grant->uuid)->value('revoked_at'))
         ->toBe($primerInstante);
 })->group('RF-PD-11', 'RL-04');
+
+it('dos usos SIMULTANEOS de la misma concesion abren una sola ventana', function (): void {
+    // La prueba de arriba encadena peticiones; esta las lanza A LA VEZ. La
+    // atomicidad la da `Cache::add()` (SET NX en Redis), y sin una prueba que
+    // la ejercite con procesos concurrentes la afirmacion «un asiento por
+    // ventana» descansa en un comentario. Cada hijo abre su propia conexion a
+    // Redis: la del padre no se comparte tras el `fork`.
+    //
+    // CONTRA REDIS DE VERDAD, no contra el `array` de phpunit.xml: con la cache
+    // en memoria cada proceso tiene la suya y los ocho «ganan», que es
+    // exactamente el falso verde que esta prueba existe para no dar.
+    config()->set('cache.default', 'redis');
+    $issued = SupportGrants::issue(scope: SupportScope::Configuration);
+    $grantId = $issued->grant->id;
+    expect($grantId)->toBeInt();
+    Cache::store('redis')->forget('product:support-use:'.$grantId);
+    $children = [];
+
+    for ($i = 0; $i < 8; $i++) {
+        $pid = pcntl_fork();
+
+        if ($pid === -1) {
+            throw new RuntimeException('No se pudo crear el proceso hijo.');
+        }
+
+        if ($pid === 0) {
+            app('redis')->purge('cache');
+            $recorded = app(SupportAccessRecorder::class)->shouldRecord((int) $grantId, 900);
+            file_put_contents(sys_get_temp_dir().'/support-use-'.getmypid(), $recorded ? '1' : '0');
+            // SIGKILL y no `exit()`: el hijo comparte con el padre el socket de
+            // PDO, y un cierre ordenado mandaria el Terminate de PostgreSQL por
+            // ese socket, dejando al padre sin conexion. Sin destructores, el
+            // descriptor del hijo se cierra sin decir nada y el del padre sigue.
+            exec('kill -9 '.getmypid());
+        }
+
+        $children[] = $pid;
+    }
+
+    $recordedBy = 0;
+    foreach ($children as $pid) {
+        pcntl_waitpid($pid, $status);
+        $result = sys_get_temp_dir().'/support-use-'.$pid;
+        if (is_file($result)) {
+            $recordedBy += (int) file_get_contents($result);
+            unlink($result);
+        }
+    }
+
+    expect($recordedBy)->toBe(1);
+})->skip(! \function_exists('pcntl_fork'), 'pcntl no disponible')->group('RF-PD-11', 'RL-04');

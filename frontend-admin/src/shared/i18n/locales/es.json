@@ -1260,7 +1260,7 @@
       "intro": "Concede al fabricante un acceso temporal, limitado y revocable cuando necesites ayuda con una incidencia. Queda registrado aquí desde que se concede hasta que se usa o se revoca.",
       "fields": {
         "reason": "Motivo",
-        "reasonHint": "El incidente que motiva el acceso, entre 3 y 200 caracteres. Va tal cual al registro de auditoría.",
+        "reasonHint": "El número o la referencia de la incidencia, entre 3 y 200 caracteres. Va tal cual al registro de auditoría: sin nombres de personas ni datos de salud.",
         "scope": "Alcance",
         "hours": "Horas",
         "hoursHint": "Cuánto tiempo estará activo el acceso: entre 1 y 72 horas."

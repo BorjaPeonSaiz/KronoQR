@@ -1260,7 +1260,7 @@
       "intro": "Grant the manufacturer a temporary, limited and revocable access when you need help with an incident. It is logged here from the moment it is granted until it is used or revoked.",
       "fields": {
         "reason": "Reason",
-        "reasonHint": "The incident that motivates the access, between 3 and 200 characters. It goes as written into the audit log.",
+        "reasonHint": "The ticket number or reference, between 3 and 200 characters. It goes as written into the audit log: no people's names, no health data.",
         "scope": "Scope",
         "hours": "Hours",
         "hoursHint": "How long the access will stay active: between 1 and 72 hours."
