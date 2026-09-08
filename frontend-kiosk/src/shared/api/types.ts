@@ -45,3 +45,11 @@ export type PairingCompleted = components['schemas']['PairingCompleted']
 export type PairingClaim = components['schemas']['PairingClaim']
 /** Unica respuesta de rechazo, generica y de tiempo constante (regla dura 17). */
 export type PairingRejected = components['schemas']['PairingRejected']
+
+/**
+ * Marca de la instalacion (RF-PD-08, tarea 5.8). Publica: la pantalla de
+ * espera del quiosco la pide antes de identificar a nadie. Esta es la forma
+ * CRUDA del contrato (snake_case); `@kronoqr/web-kit/branding` la valida y la
+ * traduce a la forma que consume la aplicacion (`parseBranding`).
+ */
+export type Branding = components['schemas']['Branding']

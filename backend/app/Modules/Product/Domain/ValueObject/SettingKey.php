@@ -61,9 +61,10 @@ enum SettingKey: string
     /**
      * RF-PD-08: nombre de la aplicacion.
      *
-     * **Hoy se guarda y se audita, y todavia no se pinta.** Las tres SPA y la
-     * cabecera de los PDF siguen leyendo la marca del entorno; la tarea 5.8 es
-     * la que las pasa al puerto `BrandingProvider`, que ya lee esta clave.
+     * **Se pinta desde la tarea 5.8**: la cabecera y el titulo de pestaÃ±a de las
+     * tres SPA âque lo reciben por `GET /api/v1/branding`â, la tarjeta de
+     * credencial, el informe sellado y la cabecera de la exportacion legal. Todos
+     * lo reciben por el puerto `BrandingProvider`; ninguno lee esta tabla.
      */
     case BRANDING_APP_NAME = 'BRANDING_APP_NAME';
 
@@ -71,17 +72,40 @@ enum SettingKey: string
      * RF-PD-08: ruta del logotipo en el servidor del cliente.
      *
      * Del sistema de ficheros y no una URL: el PDF se genera en un Chromium sin
-     * salida a internet (ADR-016). **Que el fichero exista no se comprueba
-     * todavia**: lo hara `doctor` en la tarea 5.9. Quien dibuja se lo salta y
-     * sigue, porque nadie se queda sin fichar porque falte una imagen.
+     * salida a internet (ADR-016).
+     *
+     * **EL FICHERO SE COMPRUEBA AL GUARDAR, NO AL LEER** (tarea 5.8). El `PATCH`
+     * responde `422` si la ruta no es absoluta, se sale del directorio de marca,
+     * no existe, no es PNG ni SVG por su contenido o pasa de los limites de
+     * tamano: ahi hay una persona delante a la que decirle que arreglar, y ademas
+     * es lo que impide que el endpoint publico del logotipo se convierta en una
+     * lectura de cualquier fichero del servidor.
+     *
+     * **La lectura posterior es tolerante y tiene que serlo.** Si el fichero
+     * desaparece un martes, los documentos salen sin logotipo y nadie se queda
+     * sin fichar (regla dura 19). Quien lo avisa es `doctor` (tarea 5.9), que es
+     * donde un aviso sirve para algo.
+     *
+     * La cadena vacia significa Â«el logotipo del productoÂ» y no se comprueba
+     * contra nada.
      */
     case BRANDING_LOGO_PATH = 'BRANDING_LOGO_PATH';
 
     /**
      * RF-PD-08: color de acento, en notacion CSS.
      *
-     * Igual que el nombre: hoy se guarda y se audita. Su aplicacion a la
-     * interfaz y a la tarjeta impresa llega con la tarea 5.8.
+     * **Se pinta desde la tarea 5.8**: el filete de la tarjeta impresa, la
+     * cabecera del informe sellado y, en las tres SPA, los tokens `--kq-*` de la
+     * familia primaria, derivados en tiempo de ejecucion. No se recompila nada
+     * por cliente (ADR-017).
+     *
+     * `GET /api/v1/branding` publica `null` mientras rija el valor de serie, para
+     * que las SPA no toquen ningun token y el sistema visual del doc 06 quede
+     * intacto. **La distincion la hace `GetBrandingHandler` comparando el VALOR
+     * con el de serie** —insensible a mayusculas—, y no preguntando de donde sale
+     * la fila: asi «no lo ha configurado» y «su plan no incluye la marca blanca»
+     * se ven igual desde fuera, que es lo que promete ADR-023. Aqui siempre hay
+     * un color.
      */
     case BRANDING_ACCENT_COLOR = 'BRANDING_ACCENT_COLOR';
 
@@ -165,10 +189,14 @@ enum SettingKey: string
             self::BRANDING_LOGO_PATH->value => SettingDefinition::optionalText(
                 '', 512, SettingImpact::PRESENTATION,
             ),
-            // El gris del sistema visual del doc 06. Se valida la forma para que
-            // un color mal escrito de un 422 y no una interfaz sin estilo.
+            // El `primary-strong` del doc 06, que es el «texto de marca» del
+            // producto. Cambio de la 5.8: era `#111827`, un gris neutro que no era
+            // la marca de nadie —ni del producto—, y con el la tarjeta impresa
+            // salia de serie con un filete gris. El valor por defecto ES el
+            // producto (paso 8 de la tarea). Se valida la forma para que un color
+            // mal escrito de un 422 y no una interfaz sin estilo.
             self::BRANDING_ACCENT_COLOR->value => SettingDefinition::text(
-                '#111827', 7, SettingImpact::PRESENTATION, '/^#[0-9a-fA-F]{6}$/',
+                '#b8542a', 7, SettingImpact::PRESENTATION, '/^#[0-9a-fA-F]{6}$/',
             ),
             self::LOCALE_DEFAULT->value => SettingDefinition::choice(
                 'es', self::SHIPPED_LOCALES, SettingImpact::PRESENTATION,

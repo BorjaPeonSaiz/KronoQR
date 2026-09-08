@@ -12,6 +12,7 @@ use App\Modules\Reporting\Http\Response\PersonalRecordCsv;
 use App\Modules\Shared\Infrastructure\Export\CsvDialect;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Str;
+use Tests\Support\Product\FixedBranding;
 
 /*
  * Los dos CSV del producto se escriben con el mismo dialecto (RL-06, RF-IN-05,
@@ -53,7 +54,11 @@ function bytesDeLaExportacionLegal(): string
 
     // Sin ninguna fila: lo que se compara es la envoltura —el manifiesto y los
     // rotulos—, y para eso no hace falta base de datos ni plantilla.
-    (new CsvLegalExportWriter)->write(
+    //
+    // La marca llega por un doble del puerto y no por el contenedor (tarea 5.8):
+    // esta prueba compara BYTES del dialecto CSV y no debe depender de que haya
+    // base de datos ni de que la instalacion tenga un nombre u otro.
+    (new CsvLegalExportWriter(FixedBranding::product()))->write(
         new LegalExportManifest(
             generatedAt: new DateTimeImmutable('2026-03-01T00:00:00+00:00'),
             period: LegalExportPeriod::between('2026-03-01', '2026-03-31'),

@@ -10,14 +10,27 @@
 import AxeBuilder from '@axe-core/playwright'
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
-import { EMPLOYEE_UUID, logIn, logInAsAdmin, stubManagementApi, USER } from './support/admin'
+import {
+  EMPLOYEE_UUID,
+  HOTEL_BRANDING,
+  logIn,
+  logInAsAdmin,
+  stubManagementApi,
+  USER,
+} from './support/admin'
 import { stubOnboardingApi } from './support/setupWizard'
 
 /** Etiquetas WCAG que se comprueban: A y AA hasta la 2.2 (doc 01 §6.5). */
 const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
 
-async function expectNoBlockingViolations(page: Page): Promise<void> {
-  const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze()
+async function expectNoBlockingViolations(page: Page, exclude: string[] = []): Promise<void> {
+  const builder = new AxeBuilder({ page }).withTags(WCAG_TAGS)
+
+  for (const selector of exclude) {
+    builder.exclude(selector)
+  }
+
+  const results = await builder.analyze()
 
   const blocking = results.violations.filter(
     (violation) => violation.impact === 'critical' || violation.impact === 'serious',
@@ -148,6 +161,54 @@ test(
     await page.goto('/devices')
     await page.getByRole('button', { name: 'Vincular quiosco' }).click()
     await expect(page.getByRole('dialog')).toBeVisible()
+
+    await expectNoBlockingViolations(page)
+  },
+)
+
+// --- Marca de la instalacion (RF-PD-08, tarea 5.8) --------------------------
+
+test('la pantalla de marca tampoco', { tag: ['@RF-PD-08', '@RQ-04'] }, async ({ page }) => {
+  await stubManagementApi(page, { role: 'admin' })
+  await logInAsAdmin(page)
+  await page.goto('/branding')
+  await expect(page.getByRole('heading', { level: 1, name: 'Marca' })).toBeVisible()
+
+  await expectNoBlockingViolations(page)
+})
+
+test(
+  'la pantalla de marca con el aviso de contraste visible tampoco',
+  { tag: ['@RF-PD-08', '@RQ-04'] },
+  async ({ page }) => {
+    await stubManagementApi(page, { role: 'admin' })
+    await logInAsAdmin(page)
+    await page.goto('/branding')
+    await page.getByLabel('Color de acento', { exact: true }).fill('#f5e663')
+    await expect(page.getByTestId('contrast-warnings')).toBeVisible()
+
+    // La previsualizacion es DELIBERADAMENTE fiel al color escrito, y ese es
+    // justo el punto: con un acento que no llega al minimo, el propio texto de
+    // muestra («Enlace de marca») queda tan ilegible como quedaria en la
+    // aplicacion real si se guardara (doc 06 §7, «se avisa, no se impone»). Un
+    // violacion de contraste ahi es la prueba de que el aviso dice la verdad,
+    // no un fallo de esta pantalla: se excluye de axe y se confia en el aviso
+    // textual (`contrast-warnings`, ya comprobado arriba) para transmitirlo de
+    // forma accesible.
+    await expectNoBlockingViolations(page, ['[data-test="preview"]'])
+  },
+)
+
+test(
+  'el panel con una marca de cliente aplicada tampoco',
+  { tag: ['@RF-PD-08'] },
+  async ({ page }) => {
+    await stubManagementApi(page, { branding: HOTEL_BRANDING })
+    await logIn(page)
+    // Con logotipo, la cabecera lo enseña con el nombre como alternativa
+    // textual: no hay un segundo texto suelto que lo repita.
+    await expect(page.getByRole('banner').locator('img')).toHaveAttribute('alt', 'Hotel Marina')
+    await expect(page).toHaveTitle('Hotel Marina')
 
     await expectNoBlockingViolations(page)
   },

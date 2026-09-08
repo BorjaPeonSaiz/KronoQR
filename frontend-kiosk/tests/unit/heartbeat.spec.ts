@@ -21,6 +21,8 @@ function apiReturning(serverTime: string): ApiClient {
     // El latido no empareja nada: estos dos no los usa ninguna prueba de aqui.
     requestPairing: vi.fn(),
     claimPairing: vi.fn(),
+
+    fetchBranding: vi.fn(),
   }
 }
 
@@ -87,6 +89,8 @@ describe('latido del quiosco', () => {
         fetchRoster: vi.fn(),
         requestPairing: vi.fn(),
         claimPairing: vi.fn(),
+
+        fetchBranding: vi.fn(),
         sendHeartbeat: vi.fn(async () => ({
           outcome: 'failed' as const,
           cause: 'offline' as const,
@@ -110,6 +114,8 @@ describe('latido del quiosco', () => {
         fetchRoster: vi.fn(),
         requestPairing: vi.fn(),
         claimPairing: vi.fn(),
+
+        fetchBranding: vi.fn(),
         sendHeartbeat: vi.fn(async () => ({
           outcome: 'failed' as const,
           cause: 'unauthorized' as const,

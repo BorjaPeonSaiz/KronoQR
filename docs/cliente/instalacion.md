@@ -474,6 +474,47 @@ docker compose exec app php artisan credentials:status --pending
 > se cambia después desde el panel, y allí cada cambio queda registrado con su
 > autor y su fecha.
 
+### 1.8 Opcional: el logotipo del hotel
+
+No hace falta para nada de lo anterior y puede esperar. Sin logotipo, las
+aplicaciones y los documentos enseñan el nombre en texto.
+
+El logotipo es un **fichero de tu servidor**, no una subida por la web: KronoQR
+no acepta ficheros por HTTP a propósito. Vive en el **directorio de marca**, que
+el `docker-compose` monta **de solo lectura** dentro del contenedor.
+
+```bash
+# 1. La carpeta del servidor. Cualquier ruta tuya sirve; esta es la sugerida.
+sudo mkdir -p /opt/kronoqr/branding
+sudo cp logo.png /opt/kronoqr/branding/logo.png
+sudo chmod 0644 /opt/kronoqr/branding/logo.png
+
+# 2. Decirle al docker-compose dónde está. Vacío = ./branding, junto al
+#    docker-compose.yml.
+#    En el .env:  BRANDING_PATH=/opt/kronoqr/branding
+sudo docker compose up -d app
+
+# 3. Comprobar que el contenedor lo ve. Si esto sale vacío, no sigas:
+#    lo que falla es el montaje, no la configuración.
+sudo docker compose exec app ls -l /var/kronoqr/branding
+```
+
+Y después, en el panel, **Configuración › Marca**, escribe la ruta **de dentro
+del contenedor**: `/var/kronoqr/branding/logo.png`. Se comprueba al guardar, así
+que si algo no cuadra te lo dice en el momento y con qué hacer.
+
+**Formatos y límites**: PNG o SVG (se mira el contenido, no la extensión),
+512 KiB y 2048 píxeles de lado como máximo.
+
+> **Cambiar el logotipo después no exige reiniciar nada**: sustituye el fichero
+> en la carpeta del servidor y la petición siguiente ya lo sirve. El paso 2 solo
+> se repite si mueves la carpeta.
+
+Todo esto es opcional también en otro sentido: la marca propia es una
+funcionalidad del plan. Si tu licencia no la incluye, lo que configures se guarda
+y se aplica solo cuando la licencia lo cubra — mientras tanto se ve la marca de
+KronoQR. Detalle en [`configuracion.md`](configuracion.md) §2.2.
+
 ---
 
 ## 2. Códigos de salida del instalador: qué hacer con cada uno

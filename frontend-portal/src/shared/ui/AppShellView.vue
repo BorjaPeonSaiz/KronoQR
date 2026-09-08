@@ -6,13 +6,16 @@
 // cualquier empleado con sesion (regla dura 18 — la autorizacion real la
 // aplica el servidor en cada endpoint).
 import { announcement } from '@kronoqr/web-kit/announcer'
+import BrandMark from '@kronoqr/web-kit/components/BrandMark.vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, RouterView, useRouter } from 'vue-router'
 import { useSessionStore } from '@/features/login/session.store'
+import { useBrandingStore } from '@/shared/branding/branding.store'
 
 const { t } = useI18n()
 const router = useRouter()
 const session = useSessionStore()
+const branding = useBrandingStore()
 
 /** Ver la nota de `session.store.ts`: solo olvida la sesion en este dispositivo. */
 async function signOut(): Promise<void> {
@@ -43,7 +46,13 @@ async function signOut(): Promise<void> {
           ultrapanoramicos sin bajar del 80% hasta los 2000 px de ancho.
         -->
 
-        <p class="font-heading text-lg font-bold text-kq-primary-strong">{{ t('app.title') }}</p>
+        <div class="flex min-w-0 flex-col gap-0.5">
+          <BrandMark :branding="branding.current" />
+          <!-- El nombre del producto ("Mi portal del empleado") se queda como
+               subtitulo: la marca (logotipo o nombre de la instalacion) es lo
+               que identifica la aplicacion, esto dice para que sirve. -->
+          <p class="text-sm text-kq-text-muted">{{ t('app.title') }}</p>
+        </div>
         <nav :aria-label="t('app.nav.label')">
           <ul class="flex gap-2">
             <li>

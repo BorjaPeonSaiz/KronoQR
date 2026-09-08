@@ -28,6 +28,7 @@ use App\Modules\Kiosk\Http\Controller\DeviceController;
 use App\Modules\Kiosk\Http\Controller\HeartbeatController;
 use App\Modules\Kiosk\Http\Controller\PairingController;
 use App\Modules\Kiosk\Http\Controller\RosterController;
+use App\Modules\Product\Http\Controller\BrandingController;
 use App\Modules\Product\Http\Controller\ComplianceProfileController;
 use App\Modules\Product\Http\Controller\LicenseController;
 use App\Modules\Product\Http\Controller\SettingsController;
@@ -989,6 +990,62 @@ Route::middleware([
         ->name('product.compliance-profile.show');
     Route::patch('/compliance-profile', [ComplianceProfileController::class, 'update'])
         ->name('product.compliance-profile.update');
+});
+
+/*
+ * GET /api/v1/branding y GET /api/v1/branding/logo — la marca de la instalacion
+ * (tarea 5.8, RF-PD-08, regla dura 13).
+ *
+ * PUBLICAS, Y TIENEN QUE SERLO. El quiosco pinta su pantalla de espera antes de
+ * que nadie escanee nada y el portal la de acceso antes de que nadie se
+ * identifique: las dos llevan ya la marca del hotel. Detras de `auth:sanctum`
+ * habria que pintar primero el producto y repintar despues, que es el parpadeo
+ * que un cliente lee como «se ha equivocado de hotel». Son, con las dos del
+ * asistente, las unicas rutas publicas del producto.
+ *
+ * LO QUE SE PUBLICA ES EL NOMBRE DEL HOTEL Y SU COLOR, es decir, lo mismo que
+ * revela la tarjeta impresa que cada empleado lleva en el bolsillo. Ningun umbral
+ * operativo y ninguna ruta del servidor viajan por aqui, y no por omision: el
+ * caso de uso nombra una a una las cinco claves que salen.
+ *
+ * SIN POLICY, Y NO ES UN OLVIDO. La regla dura 18 pide autorizacion y prueba
+ * negativa a cada endpoint, y estos dos no tienen a quien autorizar. El poder
+ * esta en la otra mitad: CAMBIAR la marca es `PATCH /api/v1/settings`, con
+ * `settings:*` y rol `admin`, y ahi si hay policy y prueba de que un token de
+ * quiosco o de portal recibe 403.
+ *
+ * `throttle:branding` Y NO `throttle:setup`. Aquella zona tiene 10 r/m porque
+ * protege un acto que ocurre una vez en la vida de la instalacion; estas las
+ * piden NAVEGADORES AL ARRANCAR —veinte tablets, el panel de recepcion y los
+ * moviles de la plantilla, casi siempre detras de una sola IP con NAT—, y diez
+ * por minuto se agotarian solos. Compartir cubo ademas dejaria una puesta en
+ * marcha sin cupo por culpa del trafico normal.
+ *
+ * LA RUTA NO LA CIERRA NUNCA UNA LICENCIA (ADR-019, regla dura 15): responde
+ * `200` con licencia, sin ella y con ella caducada. Devolver `402` o `403` aqui
+ * dejaria al quiosco sin pantalla de espera por una fecha de vencimiento.
+ *
+ * LO QUE SI DEPENDE DEL PLAN ES EL CONTENIDO, y lo decide un unico decorador,
+ * `LicensedBrandingProvider` (decision 9 de la ficha 5.8, ADR-023). Sin la
+ * funcionalidad `white_label` en el plan, `accent_color` y `logo_url` salen en
+ * `null` —los colores y el logotipo son aspecto y son lo que se vende—, pero
+ * **`application_name` es el del cliente siempre**: ese nombre encabeza la
+ * exportacion para la Inspeccion y el informe sellado, e identifica al obligado.
+ * Degradarlo haria que un documento con valor probatorio dijera de quien es
+ * segun el estado comercial de una licencia, y eso no.
+ *
+ * Ni el nombre ni nada de esto se pierde: las filas siguen guardadas, se pueden
+ * seguir editando (`PATCH /settings` no lo cierra ninguna licencia) y el aspecto
+ * vuelve solo al renovar.
+ *
+ * NO ESTAN EXENTAS DEL MODO MANTENIMIENTO. Solo lo estan `/health` y `/ready`
+ * (tarea 5.7): durante una actualizacion, las SPA reciben el 503 con
+ * `Retry-After` como todo lo demas y lo dicen con la marca que ya tenian
+ * guardada.
+ */
+Route::prefix('branding')->middleware('throttle:branding')->group(function (): void {
+    Route::get('/', [BrandingController::class, 'show'])->name('product.branding.show');
+    Route::get('/logo', [BrandingController::class, 'logo'])->name('product.branding.logo');
 });
 
 /*

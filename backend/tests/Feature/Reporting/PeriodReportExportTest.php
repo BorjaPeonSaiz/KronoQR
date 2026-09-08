@@ -3,6 +3,9 @@
 declare(strict_types=1);
 
 use App\Modules\Reporting\Infrastructure\Metrics\RedisReportExportMetrics;
+use App\Modules\Shared\Application\Port\BrandingLogoReader;
+use App\Modules\Shared\Application\Port\BrandingProvider;
+use App\Modules\Shared\Domain\ValueObject\Branding;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use App\Modules\Shared\Infrastructure\Export\CsvDialect;
 use Illuminate\Contracts\Redis\Factory as Redis;
@@ -16,6 +19,9 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\FixedBranding;
+use Tests\Support\Product\FixedLogo;
+use Tests\Support\Product\InstallationLocale;
 use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Reporting\FakeReportDocumentRenderer;
 use Tests\Support\Reporting\PeriodReportFixtures;
@@ -179,7 +185,11 @@ it('cambia el separador del CSV cuando la instalacion habla ingles', function ()
     // fichero con `;` mete todas las columnas en la primera celda.
     $contexto = contextoDeDescargaDeInforme();
 
-    App::setLocale('en');
+    // El idioma DE LA INSTALACION es una fila de `installation_settings` desde la
+    // tarea 5.8, no `APP_LOCALE`: el cliente lo cambia desde el panel. Y es el que
+    // manda en un documento, aunque el navegador que lo descarga pida otro
+    // (`UseInstallationLocale`): el fichero lo abrira Excel, no el navegador.
+    InstallationLocale::set('en');
 
     $cuerpo = cuerpoDeLaDescarga(
         Api::as($contexto['token'])
@@ -273,11 +283,89 @@ it('descarga el informe como PDF, con su tipo y su nombre de fichero', function 
 
     expect($html)->toContain('22:30')
         ->and($html)->toContain('no se parte a medianoche')
+        // La marca de la instalacion encabeza el documento (RF-PD-08, tarea 5.8).
+        // Sin nada configurado es el nombre del producto: el valor por defecto ES
+        // el producto, nunca la marca de otro cliente.
+        ->and($html)->toContain('KronoQR')
         // Sin ninguna referencia a la red: el producto se instala en servidores
         // sin salida a internet (ADR-016).
         ->and($html)->not->toContain('http://')
         ->and($html)->not->toContain('https://');
-})->group('RF-IN-04');
+})->group('RF-IN-04', 'RF-PD-08');
+
+it('encabeza el informe con la marca del cliente y su logotipo incrustado', function (): void {
+    // El logotipo va en base64 y NUNCA por URL: el PDF lo dibuja un Chromium sin
+    // salida a internet (ADR-016), y una referencia externa daria informes sin
+    // logotipo el dia que la red del hotel tenga un mal rato.
+    $contexto = contextoDeDescargaDeInforme();
+
+    app()->instance(BrandingProvider::class, new FixedBranding(new Branding(
+        applicationName: 'Hotel Marina',
+        logoPath: '/var/kronoqr/branding/logo.png',
+        accentColor: '#0f5c8c',
+    )));
+    app()->instance(BrandingLogoReader::class, FixedLogo::png());
+
+    Api::as($contexto['token'])
+        ->get('/api/v1/reports/period/export', descargaDeMarzo('pdf'))
+        ->assertOk();
+
+    $html = FakeReportDocumentRenderer::lastHtml();
+
+    expect($html)->toContain('Hotel Marina')
+        ->and($html)->toContain('data:image/png;base64,')
+        ->and($html)->not->toContain('http://')
+        ->and($html)->not->toContain('https://');
+})->group('RF-IN-04', 'RF-PD-08');
+
+it('sale solo con el nombre, en el color de acento, cuando no hay logotipo', function (): void {
+    // Un logotipo que falta no puede dejar a nadie sin su informe: la cabecera
+    // pasa a ser el nombre y ya esta.
+    $contexto = contextoDeDescargaDeInforme();
+
+    app()->instance(BrandingProvider::class, new FixedBranding(new Branding(
+        applicationName: 'Hotel Marina',
+        logoPath: null,
+        accentColor: '#0f5c8c',
+    )));
+    app()->instance(BrandingLogoReader::class, FixedLogo::none());
+
+    Api::as($contexto['token'])
+        ->get('/api/v1/reports/period/export', descargaDeMarzo('pdf'))
+        ->assertOk();
+
+    $html = FakeReportDocumentRenderer::lastHtml();
+
+    expect($html)->toContain('Hotel Marina')
+        ->and($html)->toContain('#0f5c8c')
+        ->and($html)->not->toContain('data:image/png;base64,');
+})->group('RF-IN-04', 'RF-PD-08');
+
+it('no mete el nombre de la instalacion en el titulo ni en los metadatos del PDF', function (): void {
+    // Regla dura 21 y el criterio del documento: el `title` viaja al historial de
+    // descargas del navegador y al metadato del fichero. La marca se ve en el
+    // PAPEL; el nombre del documento sigue siendo el del producto.
+    $contexto = contextoDeDescargaDeInforme();
+
+    app()->instance(BrandingProvider::class, new FixedBranding(new Branding(
+        applicationName: 'Hotel Marina',
+        logoPath: null,
+        accentColor: '#0f5c8c',
+    )));
+    app()->instance(BrandingLogoReader::class, FixedLogo::none());
+
+    $respuesta = Api::as($contexto['token'])
+        ->get('/api/v1/reports/period/export', descargaDeMarzo('pdf'))
+        ->assertOk();
+
+    $html = FakeReportDocumentRenderer::lastHtml();
+
+    preg_match('/<title>(.*?)<\/title>/s', $html, $titulo);
+
+    expect($titulo[1] ?? '')->not->toContain('Hotel Marina')
+        // Y el nombre del fichero tampoco: es el mismo para todos los clientes.
+        ->and($respuesta->headers->get('Content-Disposition'))->not->toContain('Marina');
+})->group('RF-IN-04', 'RF-PD-08');
 
 it('publica la misma huella del contenido en los tres formatos', function (): void {
     // Es lo que hace que la huella sirva para algo: el CSV que alguien adjunta a

@@ -6,6 +6,7 @@
 // que no se puede usar no se enseña. Es cortesia, no seguridad — la de verdad
 // esta en la policy de cada endpoint (regla dura 18).
 import { announcement } from '@kronoqr/web-kit/announcer'
+import BrandMark from '@kronoqr/web-kit/components/BrandMark.vue'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, RouterView, useRouter } from 'vue-router'
@@ -21,10 +22,12 @@ import {
 } from '@/features/auth/abilities'
 import { useSessionStore } from '@/features/auth/session.store'
 import LicenseNotice from '@/features/settings/LicenseNotice.vue'
+import { useBrandingStore } from '@/shared/branding/branding.store'
 
 const { t } = useI18n()
 const router = useRouter()
 const session = useSessionStore()
+const branding = useBrandingStore()
 
 interface NavItem {
   name: string
@@ -46,6 +49,7 @@ const navigation = computed<NavItem[]>(() =>
       ability: SETTINGS_MANAGE,
     },
     { name: 'devices', label: t('app.nav.devices'), ability: SETTINGS_MANAGE },
+    { name: 'branding', label: t('app.nav.branding'), ability: SETTINGS_MANAGE },
     { name: 'license', label: t('app.nav.license'), ability: LICENSE_MANAGE },
   ].filter((item) => session.can(item.ability)),
 )
@@ -69,7 +73,15 @@ async function signOut(): Promise<void> {
 
     <header class="border-b border-kq-border bg-kq-surface-raised">
       <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 p-4">
-        <p class="font-heading text-lg font-bold text-kq-primary-strong">{{ t('app.title') }}</p>
+        <!-- Marca de la instalacion (RF-PD-08, tarea 5.8; ADR-036): logotipo
+             o nombre, resueltos por `BrandMark` (compartido con el portal,
+             `@kronoqr/web-kit`). «Panel de gestion» se queda como subtitulo,
+             siempre visible: dice que aplicacion es esta dentro del
+             producto, y la marca dice de que cliente. -->
+        <div class="flex flex-col gap-0.5">
+          <BrandMark :branding="branding.current" size="sm" />
+          <p class="text-xs text-kq-text-muted">{{ t('app.title') }}</p>
+        </div>
         <nav :aria-label="t('app.nav.label')">
           <ul class="flex gap-2">
             <li v-for="item of navigation" :key="item.name">

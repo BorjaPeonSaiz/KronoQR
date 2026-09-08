@@ -6,9 +6,16 @@ use App\Modules\Identity\Domain\ValueObject\CardFormat;
 use App\Modules\Identity\Domain\ValueObject\PrintableCard;
 use App\Modules\Identity\Domain\ValueObject\QrPayload;
 use App\Modules\Identity\Infrastructure\Adapter\BrowsershotCardRenderer;
+use App\Modules\Identity\Infrastructure\Adapter\EndroidQrEncoder;
+use App\Modules\Shared\Domain\ValueObject\Branding;
 use App\Modules\Shared\Domain\ValueObject\EmployeeCardProfile;
+use App\Modules\Shared\Domain\ValueObject\LogoFormat;
+use App\Modules\Shared\Domain\ValueObject\LogoImage;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
 use Mockery\VerificationDirector;
+use Tests\Support\Product\FixedBranding;
+use Tests\Support\Product\FixedLogo;
 
 /*
  * La DISPOSICION de la tarjeta impresa (RF-QR-04, RF-QR-05).
@@ -56,9 +63,29 @@ function printableCards(int $count = 1): array
     return $cards;
 }
 
+/**
+ * El renderizador, montado a mano con la marca que se le diga.
+ *
+ * SE CONSTRUYE Y NO SE PIDE AL CONTENEDOR, y no es capricho (tarea 5.8). Desde
+ * que la marca sale de `installation_settings`, resolver el renderizador arrastra
+ * el proveedor de configuracion, su cache y el `FeatureGate` de la licencia. Dos
+ * de estas pruebas espian el log con `Log::spy()`, lo que deja a esa cadena sin
+ * canal y la revienta — y, sobre todo, ninguna de ellas trata sobre la marca:
+ * tratan sobre MILIMETROS. Con la marca inyectada, la geometria se comprueba sin
+ * base de datos, sin licencia y sin Redis.
+ */
+function cardRenderer(?Branding $brand = null, ?LogoImage $logo = null): BrowsershotCardRenderer
+{
+    return new BrowsershotCardRenderer(
+        new EndroidQrEncoder(Config::string('identity.credentials.card.error_correction', 'Q')),
+        new FixedBranding($brand ?? FixedBranding::product()->current()),
+        new FixedLogo($logo),
+    );
+}
+
 function cardHtml(CardFormat $format = CardFormat::CARD, int $count = 1): string
 {
-    return app(BrowsershotCardRenderer::class)->htmlFor(printableCards($count), $format);
+    return cardRenderer()->htmlFor(printableCards($count), $format);
 }
 
 it('imprime el codigo de empleado en negrita justo debajo del nombre', function (): void {
@@ -216,25 +243,18 @@ it('no deja que la marca desplace ni reduzca el QR', function (): void {
     // logotipo enorme recorta el texto y jamas el QR.
     $sinMarca = cardHtml();
 
-    // Un PNG de 1x1 de verdad, escrito en un temporal: `logoDataUri()` exige que
-    // la ruta sea un fichero existente y lo incrusta en base64.
-    $png = base64_decode(
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-        true,
-    );
-
-    expect($png)->toBeString();
-
-    $logo = sys_get_temp_dir().'/kronoqr-logo-'.bin2hex(random_bytes(6)).'.png';
-    file_put_contents($logo, (string) $png);
-
-    config()->set('branding.name', 'Cadena Hotelera De Nombre Larguisimo');
-    config()->set('branding.logo_path', $logo);
-    config()->set('branding.accent_color', '#0f172a');
-
-    $conMarca = cardHtml();
-
-    unlink($logo);
+    // La marca llega POR EL PUERTO, no por `config('branding.*')`: desde la 5.8
+    // son filas de `installation_settings` que el cliente edita desde el panel.
+    // El logotipo llega ya leido y ya comprobado, asi que aqui no hay fichero
+    // temporal que crear ni que borrar.
+    $conMarca = cardRenderer(
+        new Branding(
+            applicationName: 'Cadena Hotelera De Nombre Larguisimo',
+            logoPath: '/var/kronoqr/branding/logo.png',
+            accentColor: '#0f172a',
+        ),
+        new LogoImage(LogoFormat::PNG, FixedLogo::onePixelPng()),
+    )->htmlFor(printableCards(), CardFormat::CARD);
 
     expect($conMarca)->toContain('data:image/png;base64,')
         ->and($conMarca)->toContain('flex: 0 0 42.8mm')

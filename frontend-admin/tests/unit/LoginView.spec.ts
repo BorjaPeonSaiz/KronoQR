@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import LoginView from '@/features/auth/LoginView.vue'
 import { useSessionStore } from '@/features/auth/session.store'
 import es from '@/shared/i18n/locales/es.json'
+import { useBrandingStore } from '@/shared/branding/branding.store'
 import type { FetchHandler } from './support/harness'
 import {
   session as sessionFixture,
@@ -138,6 +139,68 @@ describe('LoginView', () => {
     await fillAndSubmit(wrapper)
 
     expect(router.currentRoute.value.path).toBe('/employees')
+  })
+})
+
+describe('LoginView — marca de la instalacion (RF-PD-08)', () => {
+  it('sin logotipo, enseña el nombre de la marca del producto', async () => {
+    const wrapper = await mountView(LoginView)
+
+    expect(wrapper.find('img').exists()).toBe(false)
+    expect(wrapper.text()).toContain('KronoQR')
+  })
+
+  it('con logotipo, lo enseña con el nombre como alternativa textual y no repite el nombre', async () => {
+    stubFetch(() =>
+      jsonResponse({
+        application_name: 'Hotel Marina',
+        accent_color: null,
+        logo_url: '/api/v1/branding/logo?v=3f9a1c2b7e4d',
+        locales: { default: 'es', available: ['es'] },
+      }),
+    )
+
+    const pinia = createTestPinia()
+
+    await useBrandingStore(pinia).load()
+
+    const wrapper = await mountView(LoginView, { pinia })
+    const logo = wrapper.find('img')
+
+    expect(logo.exists()).toBe(true)
+    expect(logo.attributes('alt')).toBe('Hotel Marina')
+    // El nombre no se repite como texto suelto: para quien usa un lector de
+    // pantalla seria el mismo dato anunciado dos veces.
+    expect(wrapper.findAll('p').some((paragraph) => paragraph.text() === 'Hotel Marina')).toBe(
+      false,
+    )
+  })
+
+  it('un nombre de 60 caracteres se trunca visualmente, pero queda completo en el titulo', async () => {
+    // El limite del contrato (`Branding.applicationName`): en una pantalla de
+    // acceso de 320-375 px de ancho, sin truncar se saldria del marco.
+    const longName = 'Complejo Hotelero Costa Dorada Suites & Spa Mediterraneo XLL'
+
+    expect(longName.length).toBe(60)
+
+    stubFetch(() =>
+      jsonResponse({
+        application_name: longName,
+        accent_color: null,
+        logo_url: null,
+        locales: { default: 'es', available: ['es'] },
+      }),
+    )
+
+    const pinia = createTestPinia()
+
+    await useBrandingStore(pinia).load()
+
+    const wrapper = await mountView(LoginView, { pinia })
+    const name = wrapper.find('[data-testid="brand-mark"]')
+
+    expect(name.classes()).toContain('truncate')
+    expect(name.attributes('title')).toBe(longName)
   })
 })
 

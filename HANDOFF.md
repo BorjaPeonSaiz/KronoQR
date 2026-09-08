@@ -7,95 +7,96 @@
 
 ## Estado y objetivo actual
 
-**Rama `feat/tarea-5.7-actualizador`**, creada desde `main` (`d9a9a91`, PR #42 integrada con *merge
-commit*). **Tarea 5.7 «Actualizador: copia previa, migraciones encadenadas, verificación, vuelta atrás»
-(RF-PD-10, RQ-11) IMPLEMENTADA, REVISADA y PROBADA EN LA CI REAL el 07-09-2026**: **PR #43** abierta
-contra `main` (cinco commits: el de la tarea y cuatro arreglos que destapó la etapa ⑧b, ver más abajo).
-**La ⑧b está en verde** en la ejecución manual 34152296162: instalación de la 2.0.0, U1 (0), U2 (3), U3
-(vuelta atrás 4 + reintento 0), U4 (restauración en limpio) y las dos comprobaciones de secretos, en 5 min
-de job. Pasó por `revisor-codigo` y `seguridad-cumplimiento`; **todos los
-bloqueantes e importantes están aplicados** (ver «Lo que corrigieron las revisiones»), salvo el asiento de
-auditoría de la actualización, que es un cambio del dominio de Compliance y queda en «Pendiente».
+**Rama `feat/tarea-5.8-marca-blanca`**, creada desde `main` (`d83e55b`, PR #43 integrada con *merge commit*).
+**Tarea 5.8 «Marca blanca en las tres aplicaciones y en los PDF» (RF-PD-08) IMPLEMENTADA, REVISADA y PROBADA
+el 07/08-09-2026**: commit `067f04e`, **PR #46** contra `main` y la CI completa con ⑧b lanzada a mano (ejecución 34197180554) (toca
+`compose.prod.yaml`; ver «Siguiente acción»).
 
-**Lo construido:** `infra/scripts/update.sh` (los siete pasos del §11.6.4, ~1100 líneas, catálogo ES/EN en
-`lib/messages-update.sh`), `infra/versions.txt` (matriz de versiones publicadas con la última migración de
-cada una; `*` = versión en desarrollo), `infra/scripts/package.sh` (arma el paquete de entrega; lo usan los
-dos jobs de la etapa ⑧), `lib/checks.sh` (contadores, Docker y herramientas, extraídos de `install.sh`) y
-`kq_env_set` en `lib/env-file.sh` (el instalador delega ahí su `set_env_value`). Backend: modo mantenimiento
-con `/health` y `/ready` exentos y el 503 como `problem+json` (`urn:kronoqr:problem:maintenance`,
-`Retry-After`). CI: job **`update` (⑧b)** en `ci.yml` — instala la versión anterior, siembra una cuenta,
-actualiza (U1), idempotencia (U2), **vuelta atrás con fallo inyectado** al arrancar la versión nueva y
-reintento (U3), restauración de la copia previa en limpio (U4); con `LICENSE_KEY` inválida a propósito. Docs:
-runbook `actualizacion-cliente.md` completo (con la vuelta atrás a mano para la salida 5), `operacion.md`
-§11, `instalacion.md` (árbol y nota), `restaurar-backup.md` (§2 tabla común y §6.5), README de runbooks,
-ficha 5.7 del plan («Decisiones tomadas», puntos 6 y 11 resueltos), doc 08 §2.2/§3, doc 02 §11.6.4 (nota),
-doc 03 §6.5.2 (prompt), doc 07 §5 (fila). **`VERSION` sube a 2.1.0.**
+**Cómo se hizo (vale como receta para la 5.9 y siguientes):** contrato primero (`GET /api/v1/branding`
+público y `GET /api/v1/branding/logo`, esquema `Branding`, validación del logotipo en el `PATCH` de ajustes),
+tipos regenerados en las tres SPA, módulo compartido `packages/web-kit/src/branding.ts` con su prueba, y
+**cuatro agentes en paralelo con fronteras de ficheros disjuntas** (`producto-licencia`: backend, compose,
+`.env.example`, docs de cliente; `frontend-quiosco`; `frontend-panel`; `frontend-portal-empleado`) sobre un
+brief único; después tres revisores (`revisor-codigo`, `seguridad-cumplimiento`, `ui-ux`) y una segunda
+vuelta de los mismos agentes con los hallazgos. Prompt en doc 03 §6.5.3. **No es TDD estricto**: contrato y
+pruebas obligatorias por nivel, escritas junto al código (el usuario preguntó; si quiere TDD puro para la
+5.9, imponerlo en el brief).
 
-**Las decisiones que hay que conocer** (todas escritas en la ficha 5.7 y en la cabecera del script):
-(1) el **mantenimiento va antes de la copia** — al revés, un fichaje aceptado entre ambas se perdería en la
-vuelta atrás; (2) la **copia es bloqueante sin bandera** para omitirla; (3) la versión nueva arranca con
-`--scale nginx=0 --scale horizon=0 --scale scheduler=0 --scale reverb=0` y se sonda por **FastCGI desde
-dentro** (`cgi-fcgi`) antes de exponerla; (4) el **punto de control** es una marca en el informe + un lote de
-`migrations` por versión (`migrate --path` con la lista de `versions.txt`), y la **vuelta atrás es siempre
-restaurar la copia** con `restore.sh --yes` y relanzar la versión anterior desde su directorio, nunca
-`migrate:rollback`; (5) tabla común de salidas: `update.sh` **nunca sale con 6**, el `2` cubre «copia previa
-fallida» (mantenimiento retirado, instalación intacta); (6) la etiqueta `v2.0.0` es **anterior al
-instalador**, así que la etapa ⑧b actualiza **desde el `main` previo** (`github.event.before` en push,
-`origin/main` si no; versión sintética `X.Y.(Z+1)-ci` cuando `VERSION` no cambió), y **decidido el 07-09: no se corta
-etiqueta 2.0.x, la primera versión instalable y publicada es `v2.1.0`**; la matriz por etiquetas del §11.6.5
-empieza con el salto 2.1.0 → 2.2.0.
+**Lo construido.** Backend: puertos `BrandingLogoReader` y `LocalePolicyProvider` en `Shared` (`LogoImage`,
+`LogoFormat`, `LocalePolicy`), `LogoFileInspector` tras el puerto `Product/Application/Port/LogoInspector`
+(Deptrac: `ProductHttp` no alcanza `ProductInfrastructure`), `BrandingController` + `BrandingResource` +
+`GetBrandingHandler` (nunca 500: con la configuración ilegible devuelve el producto), `LicensedBrandingProvider`
+(decorador único del gating por licencia, ADR-023), `DbLocalePolicyProvider` + `App\Support\Locale\NegotiableLocales`
+(mismo precedente que `LicenseStateProbe`: `AppFramework` no alcanza `SharedApplicationPort`),
+`throttle:branding`, `ETag` con `304`, los tres consumidores migrados (`BrowsershotCardRenderer`,
+`CsvLegalExportWriter`, `PeriodReportPdf` con cabecera de marca), `NegotiateLocale` leyendo `LOCALE_*` con
+respaldo a config y sin tocar nada en `/health` y `/ready`, `config/branding.php` reescrito (`logo_root`,
+límites sin variable de entorno), excepción acotada a `ConvertEmptyStringsToNull` en el `PATCH /settings`
+(defecto de la 5.1: no se podía quitar un logotipo), `Feature::WhiteLabel` en `implemented()`. Compose de
+producción: volumen `${BRANDING_PATH:-./branding}:/var/kronoqr/branding:ro` en los cuatro servicios de la app;
+el de desarrollo monta `backend/storage/app/branding` en la misma ruta (**exige recrear los contenedores con
+`make up`** para probar la marca a mano). `web-kit`: `branding.ts` (`parseBranding` —solo acepta `logo_url`
+del propio contrato—, `accentOverrides` claro y quiosco —en el quiosco el acento se aclara; el anillo de foco
+se oscurece hasta 3:1—, `applyBranding`, `contrastWarnings`, `offeredLocales`, `PRODUCT_ACCENT_COLOR`),
+`brandingState.ts` (`createBrandingState`, el estado que envuelven las stores del panel y del portal) y
+`components/BrandMark.vue` (logotipo-o-nombre con `alt`, tope de ancho y truncado). Quiosco: `useBranding`
+(localStorage + reintento al volver la red), cabecera y confirmación con marca, `LanguageSelector` filtrado y
+oculto con un solo idioma, `runtimeCaching` del SW para las dos rutas de marca (única excepción a «la API no
+se cachea»). Panel: pantalla **«Marca»** (`/branding`, `settings:*`) con previsualización, avisos de contraste
+en lenguaje llano (el del botón principal con `role="alert"`), 422 del logotipo y aviso de plan sin
+`white_label`; dobles E2E de `/settings`, `/branding`, `/branding/logo` y `/license`. Portal: `BrandMark` en
+cabecera y acceso; idioma inicial anónimo desde `locales.default`. Docs: contrato, doc 02 Anexo B, doc 03
+§6.5.3, doc 06 §7, doc 07 §5/§6 (dos riesgos aceptados), ficha 5.8 (nueve «Decisiones tomadas», punto 1 de
+«no cubiertos» resuelto), `configuracion.md` §1/§2.2/§2.3/§4, `instalacion.md` §1.8.
 
-**Verificado el 07-09:** ShellCheck + shfmt + `set -euo pipefail` en todos los scripts; Pint, **PHPStan 9
-completo** y Deptrac limpios; `qa:traceability --check` y `docs:consistency` OK; gitleaks sobre los ficheros
-cambiados sin hallazgos; pruebas nuevas: `MaintenanceModeTest`, `UpdateScriptTest` (16 casos: SemVer,
-ventana, cadena, reparto de migraciones, matriz inválida, sin licencia como precondición, salida 2 sin
-escribir, inglés sin cadenas en español, catálogo), `MigrationsRoundTripTest` (**19 680 tramos sembrados en
-8 s, 39 migraciones deshechas en 0,4 s y reaplicadas en 0,6 s**, RN-01/RN-02 válidas, cadena verifica),
-tres puertas nuevas en `QualityGatesTest` (paquete + etapa ⑧b, contrato de `versions.txt`, docs);
-`tests/Integration/Install` (44) y las suites Contract+Feature+Architecture (1358) en verde con el modo
-mantenimiento nuevo.
+**Decisiones que hay que conocer** (todas en la ficha 5.8): (1) manda la BD; `BRANDING_NAME` y
+`BRANDING_ACCENT_COLOR` **retiradas** del `.env`; (2) el acento de serie pasa de `#111827` a **`#b8542a`**
+(tarjeta e informe con el filete del producto); (3) **`accent_color` público es `null`** cuando rige el valor
+de serie —también si el cliente escribe `#b8542a` en cualquier caja— y las SPA no tocan ningún token; (4) el
+logotipo es un fichero dentro de `BRANDING_LOGO_ROOT` (solo lectura) validado **al guardar** (`realpath`,
+`..` por segmento, PNG/SVG por contenido, 512 KiB, 2048 px, sin `<script`/`on*=`/`<foreignObject`/`<!ENTITY`),
+lectura tolerante; (5) `LOCALE_*` gobiernan la negociación de idioma y el selector del quiosco,
+`APP_LOCALE`/`APP_SUPPORTED_LOCALES` solo de respaldo; (6) la marca propia es funcionalidad del plan
+(`white_label`): sin ella se degradan **color y logotipo, nunca el nombre** (la exportación legal y el sello
+del informe identifican al obligado, RL-03/RL-06), las filas se conservan y se siguen editando; (7)
+`manifest.name` del quiosco sigue siendo el del producto (compilación). **Nota de versión obligatoria**:
+quien tuviera `BRANDING_NAME`/`BRANDING_ACCENT_COLOR` solo en el `.env` verá el valor del catálogo al
+actualizar.
 
-**Lo que corrigieron las revisiones (todo aplicado y re-verificado):** (a) *bloqueante de seguridad*: la
-versión nueva recibía tráfico entre que Nginx aceptaba conexiones y la sonda por loopback — ahora el
-contenedor nuevo se pone en mantenimiento antes de publicar el borde, se sonda, se hace `artisan up`, se
-comprueba que una ruta de gestión responde 401 y solo entonces arrancan horizon/scheduler/reverb; (b) el
-informe se divide en **informe** (0640, uid 1000, sin PII) y **detalle** (`update-<marca>.detalle.log`, 0600
-root: salida cruda de migrate/backup/restore/logs); `license:show` ya no se vuelca a fichero; (c) el reintento
-tras una vuelta atrás salía 2 por el `.env` que el propio script escribió — ahora se compara por APP_KEY y
-clave de copia, no byte a byte; (d) `PUNTO DE CONTROL` se imprime también cuando la versión no trae
-migraciones (es el caso de la CI con versión sintética); (e) **`restore.sh` restauraba sin privilegios
-(`--no-privileges`) y dejaba al rol de la aplicación sin permisos — ahora conserva los del volcado si el rol
-existe y comprueba `has_table_privilege` (escribe `shift_entries`, no altera `audit_log`); `update.sh` lo
-verifica tras migrar y tras restaurar; (f) la copia previa se exige `--mode dump` y con `mtime` posterior al
-arranque; (g) mensaje propio para la salida 5 cuando solo quedó el mantenimiento puesto («no restaures
-ninguna copia»); (h) `kq_env_set` atómico en el mismo directorio (`mktemp file.XXXXXX` + `mv`), sin copia
-del `.env` en `/tmp`; (i) `SIGHUP` atrapado; (j) candado ocupado → salida 2 inmediata; (k) `.env.kronoqr-pre-update`
-se retira al terminar bien; (l) `attendance:reconcile` con ventana holgada (−2 días…+1, UTC); (m)
-`assert-no-secrets.sh` en `.github/scripts/` y ejecutado tras U1 **y** tras U3 sobre salida, informe y detalle;
-(n) `app_probe` distingue «sin respuesta» de 200; (o) patrón `running` de `service_is_healthy` (también en
-`install.sh`); (p) `LC_COLLATE=C`; (q) contrato: párrafo de mantenimiento en `info.description`; doc 07 §6:
-tres riesgos aceptados y uno pendiente (asiento de auditoría). (r) la prueba de la matriz de
-versiones lee las migraciones con `dirname(__DIR__, 2)`, no con `base_path()`: las pruebas de arquitectura no
-arrancan Laravel y solo pasaba cuando otra prueba lo había arrancado antes.
+**Lo que corrigieron las revisiones (todo aplicado y re-verificado):** (a) *bloqueante ui-ux*: los avisos de
+contraste del panel enseñaban los nombres en inglés de `themePairs.ts` → diccionario de tokens a textos
+llanos; (b) *bloqueante código*: `ScanView` no pasaba la marca a `ScanConfirmationPanel` → la confirmación
+salía siempre con «KronoQR» (prueba unitaria y E2E añadidas); (c) *importante seguridad*: el gating por
+licencia degradaba también el nombre en el CSV de la Inspección y en el informe sellado → el nombre no se
+degrada nunca; (d) `parseBranding` aceptaba cualquier `logo_url` (la copia del quiosco vive en localStorage)
+→ solo `/api/v1/branding/logo[?v=…]`; (e) foco derivado hasta 3:1 (un acento casi blanco dejaba sin anillo
+de foco al panel entero); (f) panel y portal duplicaban el módulo de marca y ya divergían → `brandingState.ts`
++ `BrandMark.vue` en `web-kit` (ADR-036); (g) `.env.example` fijaba `BRANDING_LOGO_ROOT=/var/kronoqr/branding`
+y en desarrollo nada lo montaba (todo logotipo daba 422) → montaje en `compose.dev.yaml`; (h) `GET /branding`
+podía dar 500 con la configuración ilegible; (i) `ETag` prometido y no honrado → `304`; (j) SVG: filtro
+ampliado y `<!DOCTYPE svg` reconocido (antes se rechazaba con un mensaje falso); (k) `..` por segmento;
+(l) etiqueta `RL-15` mal puesta en dos pruebas (era la regla dura 15); (m) comparación del acento en
+minúsculas; (n) pruebas reales de los `catch (Throwable)` del respaldo de idiomas; (o) selector de idioma
+oculto con un solo idioma; (p) truncado de nombres de 60 caracteres y tope de ancho de logotipos en las tres
+SPA; (q) comentario de rutas y docblock de `SettingKey` alineados; (r) declinada la caché de la huella del
+logotipo (una huella obsoleta con `immutable` dejaría tablets con el logotipo viejo para siempre; aviso en
+`.env.example` en su lugar).
 
-**Lo que encontró la primera ejecución real de la ⑧b (07-09, PR #43):** (1) `docker ps --format` con
-`index .Labels` falla porque `.Labels` es una cadena, y el `2>/dev/null` lo convertía en «no hay
-instalación» → `.Label "clave"` y sin silenciar; (2) **`/api/v1/auth/me` sin `Accept: application/json`
-respondía 500** («Route [login] not defined»: Laravel redirige a un login que no existe) en **todas** las
-versiones, así que la sonda del paso 5 disparaba la vuelta atrás y la vuelta atrás no podía verificarse
-(salida 5 con la 2.0.0 sana). Tres arreglos: `redirectGuestsTo(null)` en `bootstrap/app.php` con prueba
-en `AuthenticationTest`; las sondas de `update.sh` y la comprobación de la CI mandan `Accept:
-application/json`; y la ruta de gestión se exige en las **precondiciones** (`u_c_probe_management`), de
-modo que la vuelta atrás solo pide lo que ya era verdad antes de tocar nada; (3) tras actualizar, `redis`
-(imagen fija) **no se recrea** y conserva el `config_files` del directorio antiguo → la instalación se
-localiza solo por el contenedor `app`, que cambia de imagen en cada versión; (4) el directorio de
-informes es 0750 del uid 1000 y la shell del runner no expande `update-*.log` → `sudo sh -c` en la CI.
+**Verificado el 08-09:** `make quality` en verde (Rector ignorado como siempre); gitleaks sobre los ficheros
+cambiados sin hallazgos; backend dentro del contenedor: Pint, PHPStan 9, Deptrac 0 violaciones, Feature
+Product 217 / Compliance 47 / Reporting 176 / Identity 173, Contract 59, Unit 1351, Http+Health+Architecture
+181, Integration 419, `qa:traceability --check` y `docs:consistency` OK; `web-kit` 187; quiosco 369
+unitarias + 46 E2E + bundle 99,9/250 KiB JS y 4,9/40 KiB CSS; panel 384 unitarias + 68 E2E; portal 79
+unitarias. Pruebas nuevas: `BrandingEndpointTest` (público, sin filtrar otras claves, logo por contenido,
+404/304/429, autorización negativa con tokens de quiosco y portal, gating por licencia, degradación sin 500),
+`LogoFileInspectorTest`, `LogoImageTest`, `LocalePolicyTest`, `branding.spec.ts` y `brandingState.spec.ts`
+(web-kit), `useBranding.spec.ts`, `BrandingView.spec.ts`, `branding.store.spec.ts` (panel y portal), E2E
+`branding.spec.ts` del quiosco y del panel, casos con marca en los dos `accessibility.spec.ts`.
 
-**Siguiente acción:** integrar la **PR #43 con *merge commit*** (nunca squash) cuando la ejecución
-34152296162 termine en verde en todas las etapas (⑧ y ⑧b ya lo están), y arrancar la 5.8 (marca blanca)
-en rama nueva. Recordatorio: **la ⑧b solo corre en `main`, etiquetas o a mano** (`gh workflow run ci.yml
---ref <rama>`); cada tarea que toque `update.sh`, `install.sh`, `restore.sh` o el compose de producción
-debe lanzarla sobre su rama antes de integrar, porque es la única prueba real con Docker y root.
+**Siguiente acción:** vigilar la ejecución manual de la ⑧b sobre la rama y las etapas normales de la PR;
+integrar la PR con *merge commit* (nunca squash) cuando todo esté en verde; recrear los contenedores de
+desarrollo (`make up`) por el montaje nuevo; y arrancar la **5.9** (`product:doctor` y paquete de
+diagnóstico) en rama nueva. Recordatorio: **la ⑧b solo corre en `main`, etiquetas o a mano**.
 
 ## Pendiente
 
@@ -123,12 +124,18 @@ debe lanzarla sobre su rama antes de integrar, porque es la única prueba real c
   `update.sh` no escribe métricas `.prom` (una vuelta atrás no llega a Prometheus); modo **in-place**
   tolerado con aviso (doc 07 §6); **salto de mayor de PostgreSQL** no cubierto (runbook §7);
   `backup.sh`/`restore.sh` con identificadores en español (punto 8 de «no cubiertos»); si `update.sh`
-  coincide con la copia nocturna, sale 2 y el mensaje ya dice que espere; CI ⑧b no ejecutada aún.
-- **5.8 (marca blanca):** migrar `BrowsershotCardRenderer` y `CsvLegalExportWriter` de
-  `config('branding.*')` al puerto `BrandingProvider`; decidir `BRANDING_NAME`→`BRANDING_APP_NAME`;
-  `APP_SUPPORTED_LOCALES`→`LOCALE_AVAILABLE`. Hoy marca e idiomas **se guardan y auditan pero no se
-  aplican** (así lo dicen contrato y docs). Los tokens `--kq-*` de `web-kit` ya admiten sobreescritura
-  en tiempo de ejecución.
+  coincide con la copia nocturna, sale 2 y el mensaje ya dice que espere; la ⑧b corrió en verde (34152296162).
+- **5.8 (restos):** **verificar en tablet real** que el logotipo sobrevive a una recarga sin red desde la
+  caché del SW (Playwright no puede afirmarlo: el SW no controla la primera carga que lo instala; el nombre y
+  el color sí están probados sin red); `PairingView`/`PinView` del quiosco siguen con el nombre del producto
+  (la ficha solo pedía espera y confirmación); **segundo logotipo para el fondo oscuro del quiosco**
+  (documentado como límite en `configuracion.md` §2.2); el asistente de puesta en marcha (5.5) debería avisar
+  en su paso de marca de que sin licencia activada se ve color y logotipo del producto; `manifest.name` de
+  la PWA es de compilación; regla de ESLint/Pest Arch que prohíba `v-html`/`{!! !!}` con `logoUrl`/`dataUri`
+  (riesgo aceptado en doc 07 §6); unificar el estado de carga de `ComplianceProfileView`/`LicenseView` con
+  `LoadingPanel` como ya hace `BrandingView`; cada `GET /branding` lee y hashea el logotipo (≤ 512 KiB,
+  aceptado con aviso en `.env.example`). Para la 5.9: `doctor` debe comprobar `BRANDING_LOGO_PATH` con el
+  mismo `LogoInspector` y avisar si `white_label` no está en el plan pero hay marca configurada.
 - **5.9 (`product:doctor`):** puntos de enganche documentados en `phase_verify` de `install.sh` **y en
   `phase_start_and_verify` de `update.sh`** (sustituir/añadir a las sondas por FastCGI); enseñar
   `meta.invalid_keys` de `GET /settings`; avisar si `.env` y BD difieren; comprobar que
@@ -205,6 +212,12 @@ debe lanzarla sobre su rama antes de integrar, porque es la única prueba real c
 - gitleaks (job `security`) marca como clave cualquier literal `NOMBRE_KEY=valor` aunque sea un ejemplo
   de prueba: en las aserciones, comprobar el valor sin el nombre de la variable delante.
 
+- **`packages/web-kit` no compila `.vue` en Vitest** (sin `@vitejs/plugin-vue`, a propósito: los componentes
+  los prueban las SPA). Añadir el plugin exigiría `npm install` en Windows, que es la trampa del lock de
+  arriba. Un `.spec.ts` de web-kit que importe un `.vue` falla al cargar.
+- **Empalmar texto en un `.md` con `perl -0pi` leyendo el reemplazo con `:encoding(UTF-8)` recodifica el
+  resto del fichero** (mojibake en todas las tildes). Leer el reemplazo con `:raw` para que todo sean bytes.
+
 ## Método de trabajo acordado
 
 Una rama por fase o tarea, un commit por tarea con CI en cada push, PR al cierre con *merge commit*
@@ -239,3 +252,7 @@ Detalle de cada hito: mensajes de commit, PRs y `git show 9b1593d:HANDOFF.md`.
 - **07-09** — **Tarea 5.7** implementada en `feat/tarea-5.7-actualizador` (sin commit al cerrar la
   sesión): `update.sh`, `versions.txt`, `package.sh`, etapa ⑧b, modo mantenimiento, runbook y docs.
   `VERSION` → 2.1.0.
+- **07/08-09** — **Tarea 5.8** (marca blanca) en `feat/tarea-5.8-marca-blanca`: contrato público de marca,
+  `web-kit/branding.ts` + `brandingState.ts` + `BrandMark.vue`, gating por licencia (`white_label`) sin
+  degradar el nombre, logotipo validado al guardar, idiomas unificados, pantalla «Marca» del panel; cuatro
+  agentes en paralelo y tres revisiones. PR #46, CI manual 34197180554.

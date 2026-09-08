@@ -11,7 +11,13 @@ import './assets/main.css'
 import { useSessionStore } from './features/login/session.store'
 import { createAppRouter } from './router'
 import { registerAuthGuard } from './router/guards'
-import { createAppI18n, isSupportedLocale, resolveLocale } from './shared/i18n'
+import { useBrandingStore } from './shared/branding/branding.store'
+import {
+  browserHasSupportedLocale,
+  createAppI18n,
+  isSupportedLocale,
+  resolveLocale,
+} from './shared/i18n'
 
 const app = createApp(App)
 
@@ -58,6 +64,25 @@ watch(
 )
 
 registerAuthGuard(router)
+
+// Marca de la instalacion (RF-PD-08). Se pinta el producto de inmediato -sin
+// esperar a la red, para no retrasar la primera pantalla- y se pide la marca
+// real en paralelo; si llega y es valida, sustituye a la del producto.
+const branding = useBrandingStore(pinia)
+branding.apply()
+void branding.load().then(() => {
+  // Solo cuando nadie ha elegido idioma todavia: ni el navegador pedia uno
+  // soportado (`browserHasSupportedLocale`) ni hay una persona identificada
+  // cuyo `employees.locale` ya haya fijado el idioma (el `watch` de abajo).
+  // El idioma de la instalacion nunca gana a una preferencia real.
+  if (
+    session.employee === null &&
+    !browserHasSupportedLocale(navigator.languages) &&
+    isSupportedLocale(branding.current.locales.default)
+  ) {
+    i18n.global.locale.value = branding.current.locales.default
+  }
+})
 
 app.use(router)
 app.use(i18n)

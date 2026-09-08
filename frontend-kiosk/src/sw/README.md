@@ -27,6 +27,23 @@ cuando el precacheo importa.
 `navigateFallbackDenylist` excluye `/api/`: un fichaje servido desde la cache seria un
 registro legal inventado.
 
+## La UNICA excepcion: la marca (RF-PD-08, tarea 5.8)
+
+`workbox.runtimeCaching` cachea `GET /api/v1/branding` (`NetworkFirst`, techo de 3 s) y
+`GET /api/v1/branding/logo` (`CacheFirst`, hasta 4 logotipos y 30 dias). No es un fichaje: es
+el nombre, el color y el logotipo del cliente. Sin esto, un quiosco sin red arrancaria con la
+marca del producto en vez de la del hotel (RF-KI-03) hasta recuperar conexion, lo que en un
+turno de 8 horas sin wifi es "siempre".
+
+`CacheFirst` en el logotipo es seguro porque la URL lleva la huella del contenido en `?v=`
+(`GET /api/v1/branding` la publica): un logotipo nuevo es una URL nueva, la vieja puede quedar
+cacheada para siempre sin que nadie la vea.
+
+El nombre y el color de acento NO dependen de esta cache: `shared/branding/useBranding.ts` los
+guarda en `localStorage` (`kronoqr.kiosk.branding`) y los reaplica de inmediato al arrancar,
+antes de que el service worker o la red hayan contestado nada. Lo unico que SI depende del
+service worker es el logotipo, porque sus bytes no caben en `localStorage`.
+
 ## Lo que falta
 
 **Ventana configurable de actualizacion** (RF-KI-07, tarea 3.12): la version nueva se

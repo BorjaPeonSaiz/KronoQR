@@ -118,6 +118,8 @@ function harness(options: HarnessOptions = {}): Harness {
     sendHeartbeat: vi.fn(),
     requestPairing: vi.fn(),
     claimPairing: vi.fn(),
+
+    fetchBranding: vi.fn(),
   }
 
   const queue = createScanQueue({ openStorage: createMemoryQueueStorage, clock: CLOCK })

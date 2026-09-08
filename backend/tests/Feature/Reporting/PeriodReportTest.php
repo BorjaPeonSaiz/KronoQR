@@ -294,9 +294,12 @@ it('traduce los criterios al idioma de la peticion', function (): void {
     // castellano y nadie se enteraria hasta la demo.
     $contexto = contextoDeInforme();
 
-    App::setLocale('en');
-
+    // Con `Accept-Language`, que es lo que manda un panel puesto en ingles. Desde
+    // la tarea 5.8, `App::setLocale()` ya no sirve para esto: el idioma de la
+    // instalacion sale de `installation_settings` y `NegotiateLocale` lo aplica en
+    // cada peticion, asi que lo unico que decide por peticion es la cabecera.
     $respuesta = Api::as($contexto['token'])
+        ->withHeaders(['Accept-Language' => 'en'])
         ->get('/api/v1/reports/period', ['from' => '2026-03-01', 'to' => '2026-03-07', 'granularity' => 'week'])
         ->assertValidResponse(200);
 

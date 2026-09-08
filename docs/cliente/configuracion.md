@@ -31,15 +31,12 @@ de datos.** La variable de entorno es solo el valor con el que el instalador
 siembra la primera fila la primera vez; a partir de ahí, lo que guardes en el
 panel es lo que se aplica.
 
-> **Excepción mientras dure la versión actual.** Los dos sitios donde hoy se
-> imprime la marca —la tarjeta de credencial y la cabecera de la exportación
-> legal— siguen leyendo las variables del `.env` (`BRANDING_NAME`,
-> `BRANDING_LOGO_PATH`, `BRANDING_ACCENT_COLOR`). Lo que guardes en el panel se
-> almacena y se audita, pero **todavía no cambia lo que se imprime**. La versión
-> que trae la marca blanca completa pasa esos dos documentos, las tres
-> aplicaciones y los avisos del diagnóstico a las claves del panel. Hasta
-> entonces, si necesitas cambiar la marca de una tarjeta, cámbiala en el `.env`
-> y reinicia.
+Ya no hay ninguna excepción: **las variables `BRANDING_NAME` y
+`BRANDING_ACCENT_COLOR` se retiraron del `.env`**, porque tener dos sitios para
+el mismo dato solo servía para que alguien cambiara el color en el panel, no
+viera ningún efecto y no tuviera forma de saber por qué. Lo único de marca que
+sigue en el `.env` es **dónde puede vivir el fichero del logotipo**
+(`BRANDING_LOGO_ROOT` y `BRANDING_PATH`), que es del servidor y no del hotel.
 
 ---
 
@@ -68,31 +65,125 @@ Se cambian solo las que hagan falta.
 
 | Clave | De serie | Qué es |
 | --- | --- | --- |
-> **Las tres claves de esta sección se guardan y se auditan, y todavía no se
-> pintan.** Están disponibles desde ya para que la puesta en marcha pueda dejar
-> la marca escrita; la versión que aplica la marca blanca a las tres aplicaciones
-> y a los PDF llega después. Ver la nota de la sección 1.
-
-| Clave | De serie | Qué es |
-| --- | --- | --- |
-| `BRANDING_APP_NAME` | `KronoQR` | Nombre de la aplicación. Hasta 60 caracteres: es lo que cabrá en la cabecera de la tarjeta impresa. |
+| `BRANDING_APP_NAME` | `KronoQR` | Nombre de la aplicación. Hasta 60 caracteres: es lo que cabe en la cabecera de la tarjeta impresa. |
 | `BRANDING_LOGO_PATH` | *(vacío)* | Ruta **absoluta en el servidor** a un PNG o un SVG. Vacío significa «el logotipo del producto», no «sin logotipo». |
-| `BRANDING_ACCENT_COLOR` | `#111827` | Color de acento, en notación `#rrggbb`. Cualquier otra forma se rechaza. |
+| `BRANDING_ACCENT_COLOR` | `#b8542a` | Color de acento, en notación `#rrggbb`. Cualquier otra forma se rechaza. |
 
-`BRANDING_LOGO_PATH` es una ruta del sistema de ficheros y **no una URL**: los PDF
-se generan en un navegador sin salida a internet, así que una URL remota no se
-descargaría. El fichero tiene que estar montado dentro del contenedor de la
-aplicación. **Que exista no se comprueba al guardar**: si la ruta es incorrecta,
-los documentos se imprimirán sin logotipo en lugar de fallar — nadie se queda sin
-poder fichar porque falte una imagen. El diagnóstico avisará de una ruta que no
-existe cuando llegue la versión que lo incorpora.
+**Dónde se ve.** En la cabecera y en el título de pestaña del panel, del portal y
+del quiosco; en la pantalla de acceso de los tres; en la tarjeta de credencial
+impresa; en la cabecera del informe de horas en PDF; y en la primera línea de la
+exportación para la Inspección. Un cambio se aplica **en la petición siguiente**,
+sin reiniciar nada. Las tarjetas ya impresas, naturalmente, no cambian.
+
+**Lo que no cambia nunca**: los identificadores técnicos. El prefijo `FH1` de los
+códigos QR, los nombres de las tablas, las rutas de la API y los comandos siguen
+siendo los mismos — renombrarlos dejaría sin poder fichar a quien lleva una
+tarjeta ya impresa en el bolsillo.
+
+#### El logotipo: dónde ponerlo y qué se acepta
+
+El logotipo es un **fichero en tu servidor**, no una subida por la web. Vive en el
+directorio de marca, que el `docker-compose` monta **de solo lectura** dentro del
+contenedor:
+
+| | |
+| --- | --- |
+| Carpeta en tu servidor | La de `BRANDING_PATH` del `.env`. Si está vacío, `./branding` junto al `docker-compose.yml` |
+| Ruta que se escribe en el panel | `/var/kronoqr/branding/<fichero>` |
+| Formatos | **PNG o SVG**, comprobados por su contenido y no por la extensión |
+| Tamaño máximo | **512 KiB** |
+| Dimensiones máximas (solo PNG) | **2048 píxeles** de lado |
+
+**Un solo fichero para dos fondos.** El mismo logotipo se enseña sobre fondo claro
+(panel, portal, PDF) y sobre el **fondo oscuro de la tablet**. Un logotipo de trazo
+oscuro sobre transparente se lee en el panel y desaparece en el quiosco; elige una
+versión que funcione en los dos —o con su propio fondo— y compruébalo en la
+pantalla de la tablet antes de darlo por bueno. Hoy no hay un segundo logotipo
+para el quiosco.
+
+```bash
+# 1. Copiar el logotipo a la carpeta de marca del servidor.
+sudo mkdir -p /opt/kronoqr/branding
+sudo cp logo.png /opt/kronoqr/branding/logo.png
+sudo chmod 0644 /opt/kronoqr/branding/logo.png
+
+# 2. Si no lo estaba ya, apuntar BRANDING_PATH ahí en el .env y recrear el
+#    contenedor de la aplicación (solo la primera vez: cambiar el FICHERO
+#    después no exige reiniciar nada).
+#    BRANDING_PATH=/opt/kronoqr/branding
+sudo docker compose up -d app
+
+# 3. Guardar la ruta DE DENTRO del contenedor desde el panel, o por API.
+curl -sS -X PATCH https://TU-SERVIDOR/api/v1/settings \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"settings":{"BRANDING_LOGO_PATH":"/var/kronoqr/branding/logo.png"}}'
+```
+
+**Se comprueba al guardar, y por eso te enteras en el momento.** Si el fichero no
+existe, está fuera del directorio de marca, no es un PNG ni un SVG de verdad o
+pasa de los límites, la petición responde `422` y **no se guarda nada**: el
+mensaje dice qué pasa y qué hacer. La lista completa está en la sección 4.
+
+Que se compruebe la carpeta no es una molestia burocrática: el logotipo se sirve
+por una dirección **pública** —las tablets lo piden antes de que nadie se
+identifique—, y sin ese confinamiento cualquiera con permiso para guardar la
+configuración podría publicar cualquier fichero del servidor.
+
+**Después, es tolerante.** Si el fichero se borra o el volumen deja de estar
+montado, los documentos salen sin logotipo y las aplicaciones enseñan el nombre en
+texto. Nadie se queda sin fichar por una imagen que falta.
+
+**Para volver al logotipo del producto**, guarda la clave con la cadena vacía:
+
+```bash
+curl -sS -X PATCH https://TU-SERVIDOR/api/v1/settings \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"settings":{"BRANDING_LOGO_PATH":""}}'
+```
+
+#### El aspecto propio es una funcionalidad del plan; el nombre no
+
+Si tu licencia no incluye la marca blanca —o ha caducado—, se pierden **el color
+de acento y el logotipo**: las aplicaciones y los documentos salen con los
+colores de KronoQR y sin imagen.
+
+**El nombre de tu instalación se sigue usando siempre.** No depende de la
+licencia y no puede depender de ella: ese nombre encabeza la exportación para la
+Inspección de Trabajo y el informe sellado, es decir, es la línea que dice **de
+quién** es el registro horario que alguien tiene delante. Que cambiara según el
+estado de una licencia —o según un fallo pasajero al verificarla— significaría
+que dos exportaciones del mismo mes pueden salir con encabezados distintos sin
+que haya cambiado ni un dato. Eso no pasa.
+
+Lo que hayas configurado **no se borra ni se pierde**: se sigue viendo y se sigue
+pudiendo editar en esta pantalla, y el aspecto **vuelve a aplicarse solo** en
+cuanto la licencia lo cubra, sin que tengas que reconfigurar nada.
+
+Y lo que **nunca** se degrada es el registro: se ficha, se consulta, se corrige,
+se exporta para la Inspección y se hacen copias exactamente igual. Ver la
+sección 3 bis.3.
 
 ### 2.3 Idiomas
 
 | Clave | De serie | Qué es |
 | --- | --- | --- |
 | `LOCALE_AVAILABLE` | `["es","en"]` | Idiomas que la instalación ofrece. Solo se admiten los que el producto trae traducidos. |
-| `LOCALE_DEFAULT` | `es` | Idioma con el que se sirven las aplicaciones y los documentos cuando el navegador no pide otro. **Se guarda y se audita; el idioma que hoy se aplica sale de `APP_LOCALE` y `APP_SUPPORTED_LOCALES` del `.env`**, y la versión de la marca blanca los unifica con estas dos claves. |
+| `LOCALE_DEFAULT` | `es` | Idioma con el que se sirven las aplicaciones y los documentos cuando el navegador no pide otro. |
+
+**Estas dos claves son ahora las que mandan.** `APP_LOCALE` y
+`APP_SUPPORTED_LOCALES` del `.env` quedan solo como respaldo: se aplican si la
+base de datos no responde, para que una instalación con PostgreSQL caído siga
+pudiendo decir qué le pasa en lugar de dar error en todas partes.
+
+Un documento (el CSV de la Inspección, el PDF del informe) sale siempre en el
+idioma **de la instalación**, aunque el navegador que lo descarga pida otro: el
+idioma que importa ahí es el del programa que abrirá el fichero. Lo que sí sigue
+al navegador son los textos de la pantalla.
+
+**Los idiomas no dependen de la licencia**: una instalación que trabaja en inglés
+no se queda sin su idioma porque venza un plan.
 
 **El idioma por defecto tiene que estar entre los disponibles.** Si intentas
 dejarlo fuera —por ejemplo, quitando `es` de la lista sin cambiar el idioma por
@@ -527,6 +618,52 @@ que se dan de verdad:
 | «… admite de X a Y» | El valor está fuera de rango | Usa un valor del rango. Los límites están en la tabla |
 | «… debe ser un número entero, sin comillas» | Has enviado `"12"` en lugar de `12` | Quita las comillas. Con ellas, el umbral aplicado no sería el que crees |
 | «El idioma por defecto … no está entre los idiomas disponibles» | Has quitado de la lista el idioma que está por defecto | Envía las dos claves en la misma petición |
+
+### …guardo `BRANDING_LOGO_PATH` y responde 422
+
+El fichero se comprueba **contra el disco al guardar**, así que el error te lo
+encuentras en el momento y no cuando alguien imprime una tarjeta. Cada mensaje
+dice qué hacer:
+
+| Mensaje | Qué ha pasado | Qué hacer |
+| --- | --- | --- |
+| «La ruta del logotipo tiene que ser absoluta y empezar por `/`» | Has escrito una ruta relativa | Escribe la ruta completa: `/var/kronoqr/branding/logo.png` |
+| «La ruta del logotipo no puede contener `..`» | La ruta sube de directorio | Escríbela sin saltos, tal cual queda dentro del directorio de marca |
+| «El logotipo tiene que estar dentro del directorio de marca» | El fichero está en otro sitio del servidor | Cópialo a la carpeta de `BRANDING_PATH` y guarda la ruta **de dentro del contenedor** |
+| «No hay ningún fichero en esa ruta» | Casi siempre, el volumen no está montado | `docker compose exec app ls -l /var/kronoqr/branding`. Si sale vacío, revisa `BRANDING_PATH` y `docker compose up -d app` |
+| «El fichero existe pero la aplicación no puede leerlo» | Permisos | `sudo chmod 0644 <fichero>` en el servidor |
+| «El logotipo ocupa más de 512 KiB» | Imagen demasiado pesada | Expórtala con menos resolución, o en SVG |
+| «El fichero no es un PNG ni un SVG» | Se mira el **contenido**, no la extensión | Renombrar no sirve. Vuelve a exportarlo desde tu herramienta de diseño |
+| «El SVG contiene un `<script`» | El SVG lleva código dentro | Expórtalo sin guiones ni interactividad. Un logotipo no necesita código |
+| «El PNG supera los 2048 píxeles de lado» | Imagen enorme | Redúcela antes de volver a guardarla |
+
+Mientras el `422` esté ahí **no se ha guardado nada**: la clave conserva el valor
+que tenía.
+
+### …he cambiado la marca y el quiosco sigue con la anterior
+
+1. Comprueba qué está sirviendo el servidor, que es lo que ven las tres
+   aplicaciones. No hace falta token:
+
+   ```bash
+   curl -sS https://TU-SERVIDOR/api/v1/branding
+   ```
+
+   Si ahí ya sale tu nombre, el servidor está bien y el problema es la caché del
+   navegador de la tablet.
+
+2. Si el nombre es el tuyo pero han desaparecido tu color y tu logotipo, mira la
+   licencia: el aspecto propio es funcionalidad del plan (sección 2.2). El nombre
+   nunca se degrada. Lo guardado sigue ahí y el aspecto vuelve solo al renovar.
+
+3. El **quiosco guarda la marca para poder pintarla sin red** (así la tablet
+   arranca con tu logotipo aunque el wifi tarde). Se actualiza sola al recuperar
+   la conexión; para forzarlo, recarga la pantalla del quiosco.
+
+4. El logotipo se cachea **para siempre a propósito**, pero su dirección cambia
+   cuando cambia el fichero, así que sustituirlo se ve enseguida. Si has
+   reemplazado el fichero y `curl` devuelve el mismo `logo_url` de antes, es que
+   el contenido es idéntico.
 
 ### …cambio un valor y no se aplica
 

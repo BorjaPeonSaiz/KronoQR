@@ -65,6 +65,43 @@ return [
      */
     'strict_integer' => 'El valor de :attribute debe ser un número entero, sin comillas.',
 
+    /*
+     * Por que no vale el fichero de `BRANDING_LOGO_PATH` (RF-PD-08, tarea 5.8).
+     *
+     * CADA MENSAJE DICE QUE HACER, no solo que ha fallado. Quien lee esto es
+     * personal de IT de un hotel al que no conocemos y que no tiene al fabricante
+     * al lado: «el fichero no vale» obliga a adivinar; «está fuera del directorio
+     * de marca, cópialo a :root» se arregla en un minuto.
+     *
+     * `:root` es el directorio de marca del servidor, `:max_kib` el tope de
+     * tamaño y `:max_pixels` el de lado. Van como parámetros y no escritos en el
+     * texto porque son configuración del despliegue: un mensaje con «512 KiB»
+     * dentro mentiría el día que alguien monte otra cosa.
+     *
+     * NO SE DICE NUNCA LA RUTA QUE SE INTENTÓ GUARDAR: ya la tiene delante quien
+     * la acaba de escribir, y este texto acaba en un log.
+     */
+    'logo' => [
+        'not_absolute' => 'La ruta del logotipo tiene que ser absoluta y empezar por «/». '
+            .'Escribe la ruta completa dentro del directorio de marca del servidor (:root).',
+        'traversal' => 'La ruta del logotipo no puede contener «..». '
+            .'Escribe la ruta completa, sin saltos a directorios superiores (:root).',
+        'outside_root' => 'El logotipo tiene que estar dentro del directorio de marca del servidor (:root). '
+            .'Copia el fichero ahí y vuelve a guardar la ruta.',
+        'missing' => 'No hay ningún fichero en esa ruta. '
+            .'Comprueba que el fichero está en :root dentro del servidor y que ese directorio está montado en el contenedor.',
+        'unreadable' => 'El fichero existe pero la aplicación no puede leerlo. '
+            .'Revisa los permisos: tiene que ser legible por el usuario del contenedor.',
+        'too_large' => 'El logotipo ocupa más de :max_kib KiB. '
+            .'Expórtalo con menos resolución o guárdalo en SVG.',
+        'unsupported_format' => 'El fichero no es un PNG ni un SVG. '
+            .'Se comprueba el contenido, no la extensión: renombrar el fichero no sirve.',
+        'active_content' => 'El SVG contiene un «<script» y no se admite. '
+            .'Un logotipo no necesita código: exporta el fichero sin guiones ni interactividad.',
+        'too_many_pixels' => 'El PNG supera los :max_pixels píxeles de lado. '
+            .'Redúcelo antes de volver a guardarlo.',
+    ],
+
     'attributes' => [
         'ATTENDANCE_MAX_SHIFT_HOURS' => 'duración a partir de la cual un tramo es anómalo (horas)',
         'ATTENDANCE_DEBOUNCE_SECONDS' => 'ventana anti-rebote entre dos escaneos (segundos)',

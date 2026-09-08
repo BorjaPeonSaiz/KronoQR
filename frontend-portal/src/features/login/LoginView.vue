@@ -11,11 +11,13 @@
 // baja o bloqueo por intentos activo, y esta pantalla no lo desune: el error
 // que se pinta es siempre el mismo, `errors.invalidCredentials`, venga lo que
 // venga en `problem.type`.
+import BrandMark from '@kronoqr/web-kit/components/BrandMark.vue'
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import FormField from '@kronoqr/web-kit/components/FormField.vue'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
+import { useBrandingStore } from '@/shared/branding/branding.store'
 import { useSessionStore } from './session.store'
 
 const PIN_PATTERN = /^\d{6}$/
@@ -24,6 +26,7 @@ const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const session = useSessionStore()
+const branding = useBrandingStore()
 
 const employeeCode = ref('')
 const pin = ref('')
@@ -71,6 +74,10 @@ async function submit(): Promise<void> {
     <div
       class="w-full max-w-md rounded-kq border border-kq-border bg-kq-surface-raised p-6 shadow-kq-soft"
     >
+      <div class="mb-4 flex justify-center">
+        <BrandMark :branding="branding.current" size="lg" />
+      </div>
+
       <h1 class="font-heading text-2xl font-bold text-kq-text">{{ t('login.heading') }}</h1>
 
       <ErrorNotice v-if="error !== null" :error="error" class="mt-4" />

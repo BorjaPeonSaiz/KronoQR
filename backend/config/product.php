@@ -56,4 +56,24 @@ return [
      */
     'setup_rate_limit_per_minute' => (int) env('PRODUCT_SETUP_RATE_LIMIT', 10),
 
+    /*
+     * Peticiones por minuto y por origen de las dos rutas publicas de la MARCA
+     * (RF-PD-08): `GET /api/v1/branding` y `GET /api/v1/branding/logo`.
+     *
+     * ZONA PROPIA Y NO `throttle:setup`. Aquella tiene 10 r/m porque protege un
+     * acto que ocurre una vez en la vida de la instalacion; esta la piden
+     * NAVEGADORES AL ARRANCAR, y con veinte tablets, el panel de recepcion y los
+     * moviles de la plantilla entrando al portal, diez por minuto se agotan solos.
+     * Compartir cubo con el asistente ademas dejaria a una puesta en marcha sin
+     * cupo por culpa del trafico normal.
+     *
+     * 120 NO ES UNA MEDICION: es margen de sobra para el arranque simultaneo de
+     * toda la plantilla de un hotel detras de una sola IP —que es lo normal, con
+     * NAT— y sigue cortando un bucle en el primer segundo. Lo que protege no es
+     * un secreto: lo que revela esta respuesta es el nombre del hotel y su color,
+     * que es lo mismo que revela la tarjeta que cada empleado lleva en el
+     * bolsillo. Es un techo de ruido, no un control de acceso.
+     */
+    'branding_rate_limit_per_minute' => (int) env('PRODUCT_BRANDING_RATE_LIMIT', 120),
+
 ];

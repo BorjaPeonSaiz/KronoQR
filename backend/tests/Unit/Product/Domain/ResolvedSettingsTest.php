@@ -42,7 +42,7 @@ it('resuelve cada clave por separado, sin que una fila arrastre a las demas', fu
     $settings = ResolvedSettings::resolve(['BRANDING_APP_NAME' => 'Hotel de prueba']);
 
     expect($settings->text(SettingKey::BRANDING_APP_NAME))->toBe('Hotel de prueba')
-        ->and($settings->text(SettingKey::BRANDING_ACCENT_COLOR))->toBe('#111827')
+        ->and($settings->text(SettingKey::BRANDING_ACCENT_COLOR))->toBe('#b8542a')
         ->and($settings->get(SettingKey::BRANDING_ACCENT_COLOR)->isProductDefault)->toBeTrue();
 })->group('RF-PD-01');
 
@@ -162,7 +162,7 @@ it('no arrastra a la escritura una fila que ya estaba corrupta', function (): vo
     $projected = $settings->with(SettingValue::of(SettingKey::ATTENDANCE_DEBOUNCE_SECONDS, 90));
 
     expect($projected->integer(SettingKey::ATTENDANCE_DEBOUNCE_SECONDS))->toBe(90)
-        ->and($projected->text(SettingKey::BRANDING_ACCENT_COLOR))->toBe('#111827');
+        ->and($projected->text(SettingKey::BRANDING_ACCENT_COLOR))->toBe('#b8542a');
 })->group('RF-PD-01');
 
 it('distingue una clave desconocida de una invalida', function (): void {

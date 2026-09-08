@@ -72,7 +72,19 @@ enum Feature: string
      */
     case RealtimePresence = 'realtime_presence';
 
-    /** Marca blanca (RF-PD-08). Al caducar se vuelve a la marca del fabricante. Llega en la 5.8. */
+    /**
+     * Marca blanca (RF-PD-08, tarea 5.8).
+     *
+     * Sin ella se vuelve a la marca del **fabricante** —`KronoQR`, sin logotipo
+     * y con el acento de serie— en las tres aplicaciones, en la tarjeta impresa,
+     * en el informe sellado y en la cabecera de la exportacion legal. La decision
+     * la aplica un unico decorador del puerto `BrandingProvider`; ningun
+     * consumidor la conoce.
+     *
+     * **Lo guardado no se pierde.** Las tres claves `BRANDING_*` se siguen
+     * pudiendo ver y editar —la licencia jamas cierra la configuracion (regla
+     * dura 15)—, las filas no se tocan y vuelven a aplicarse solas al renovar.
+     */
     case WhiteLabel = 'white_label';
 
     /** Telemetria opcional (RF-PD-12). Ya viene desactivada de serie. Llega en la 5.10. */
@@ -84,13 +96,16 @@ enum Feature: string
      * Existe para que la documentacion, la pantalla de licencia y `license:show`
      * puedan distinguir «esto se apagara» de «esto se apagara cuando exista», en
      * lugar de prometerle al cliente una degradacion de algo que todavia no ha
-     * comprado. Las cuatro restantes entran con su tarea (3.x, 5.8 y 5.10).
+     * comprado. Las tres restantes entran con su tarea (3.x y 5.10).
+     *
+     * `WhiteLabel` entra con la tarea 5.8, que es la que le da consumidor: el
+     * decorador `LicensedBrandingProvider`.
      *
      * @return list<self>
      */
     public static function implemented(): array
     {
-        return [self::AdvancedReports, self::RealtimePresence];
+        return [self::AdvancedReports, self::RealtimePresence, self::WhiteLabel];
     }
 
     public function isImplemented(): bool

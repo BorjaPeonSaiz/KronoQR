@@ -25,6 +25,24 @@ x-php-image: &php-image
     - ../.env
   volumes:
     - ../backend:/var/www/html
+    # Directorio de marca (RF-PD-08, tarea 5.8), EN LA MISMA RUTA QUE PRODUCCION.
+    #
+    # POR QUE NO BASTA CON EL BIND MOUNT DE ARRIBA. `.env.example` fija
+    # `BRANDING_LOGO_ROOT=/var/kronoqr/branding` y `make up` copia ese fichero a
+    # `.env`, asi que en desarrollo la aplicacion comprueba las rutas contra
+    # `/var/kronoqr/branding` — no contra `storage/app/branding`. Sin este
+    # montaje, cualquier logotipo que se intentara configurar en local daba un
+    # `422` de «fuera del directorio de marca» y la marca era imposible de probar.
+    #
+    # Detras vive `backend/storage/app/branding/`, que esta en el arbol y tiene su
+    # `.gitignore`: basta con dejar ahi un PNG o un SVG y escribir en el panel
+    # `/var/kronoqr/branding/<fichero>`, que es LA MISMA RUTA que teclea el IT de
+    # un hotel en produccion. Es lo que hace que lo que se prueba aqui sea lo que
+    # pasa alli.
+    #
+    # De lectura y escritura, al contrario que en produccion: en local interesa
+    # poder dejar y quitar ficheros de prueba sin `sudo`.
+    - ./../backend/storage/app/branding:/var/kronoqr/branding
     # vendor/ NO viaja por el bind mount, y no es una optimizacion opcional.
     #
     # En una estacion Windows el codigo vive en NTFS y Docker lo expone a los

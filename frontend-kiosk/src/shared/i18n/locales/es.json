@@ -1,8 +1,4 @@
 {
-  "app": {
-    "title": "Quiosco de fichaje",
-    "name": "KronoQR"
-  },
   "language": {
     "label": "Idioma",
     "es": "Español",

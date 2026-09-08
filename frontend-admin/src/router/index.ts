@@ -21,6 +21,7 @@ import LivePresenceView from '@/features/live/LivePresenceView.vue'
 import OnboardingView from '@/features/onboarding/OnboardingView.vue'
 import LegalExportView from '@/features/reports/LegalExportView.vue'
 import PeriodReportView from '@/features/reports/PeriodReportView.vue'
+import BrandingView from '@/features/settings/BrandingView.vue'
 import ComplianceProfileView from '@/features/settings/ComplianceProfileView.vue'
 import LicenseView from '@/features/settings/LicenseView.vue'
 import EmployeeWorkDaysView from '@/features/workdays/EmployeeWorkDaysView.vue'
@@ -158,6 +159,17 @@ export const routes: RouteRecordRaw[] = [
         path: 'devices',
         name: 'devices',
         component: DevicesView,
+        meta: { ability: SETTINGS_MANAGE },
+      },
+      {
+        // La marca de la instalacion (RF-PD-08, tarea 5.8). Ambito
+        // `settings:*`, el mismo del perfil de cumplimiento y de los quioscos:
+        // cambiar el nombre, el color o el logotipo con el que se presenta el
+        // producto es la misma potestad que configurar la instalacion. La
+        // policy del servidor es la que autoriza de verdad (regla dura 18).
+        path: 'branding',
+        name: 'branding',
+        component: BrandingView,
         meta: { ability: SETTINGS_MANAGE },
       },
       {

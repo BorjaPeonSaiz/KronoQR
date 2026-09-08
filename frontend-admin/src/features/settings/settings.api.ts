@@ -20,3 +20,17 @@ export function updateInstallationSettings(
     body: { settings: changes },
   })
 }
+
+/**
+ * El valor de una clave de tipo `text` dentro del catalogo ya cargado, o
+ * cadena vacia si no esta o no es una cadena.
+ *
+ * Compartida por el paso de organizacion del asistente (tarea 5.5) y la
+ * pantalla de marca (tarea 5.8): las dos leen el mismo catalogo por el mismo
+ * sitio para no divergir, como ya avisa la cabecera de este fichero.
+ */
+export function stringValue(catalog: InstallationSettings, key: string): string {
+  const found = catalog.data.find((entry) => entry.key === key)
+
+  return typeof found?.value === 'string' ? found.value : ''
+}

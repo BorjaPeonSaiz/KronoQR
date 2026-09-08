@@ -72,6 +72,24 @@ x-app-image: &app-image
     # dura 16, RL-14). Si BACKUP_PATH apunta a un recurso de red, debe estar
     # montado antes de levantar el servicio.
     - ${BACKUP_PATH:-/var/backups/fichaje}:${BACKUP_PATH:-/var/backups/fichaje}
+    #
+    # Directorio de marca: el logotipo del cliente, en SU disco (RF-PD-08).
+    #
+    # SOLO LECTURA. La aplicacion nunca escribe aqui: el fichero lo deja el IT
+    # del hotel con scp o con el gestor de ficheros que use, y la unica ruta que
+    # se puede configurar desde el panel tiene que caer dentro de este
+    # directorio. Ese confinamiento es lo que permite que
+    # `GET /api/v1/branding/logo` sea publico sin convertirse en una lectura de
+    # cualquier fichero del servidor.
+    #
+    # La ruta de dentro es FIJA y la de fuera configurable: `BRANDING_LOGO_ROOT`
+    # del .env vale `/var/kronoqr/branding` y es lo que la aplicacion comprueba,
+    # asi que la ruta que se escribe en el panel no cambia aunque el cliente
+    # tenga su carpeta en otro sitio del servidor.
+    #
+    # No hace falta reiniciar para cambiar el logotipo: se sustituye el fichero y
+    # la peticion siguiente ya lo sirve, con huella nueva en la URL.
+    - ${BRANDING_PATH:-./branding}:/var/kronoqr/branding:ro
   networks:
     - app
   restart: unless-stopped

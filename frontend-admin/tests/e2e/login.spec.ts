@@ -51,10 +51,11 @@ test(
     //
     // `GET /setup/status` queda fuera a proposito: es publica (RF-PD-03), la
     // guarda de rutas la consulta ANTES de saber si hay sesion, y por eso
-    // nunca lleva `Authorization`.
-    const afterLogin = api.requests.filter(
-      (request) => request.path !== '/api/v1/auth/login' && request.path !== '/api/v1/setup/status',
-    )
+    // nunca lleva `Authorization`. `GET /branding` tambien: es publica
+    // (RF-PD-08, tarea 5.8) y `main.ts` la pide sin esperar a que exista
+    // sesion, para que la pantalla de acceso ya lleve la marca del cliente.
+    const PUBLIC_PATHS = ['/api/v1/auth/login', '/api/v1/setup/status', '/api/v1/branding']
+    const afterLogin = api.requests.filter((request) => !PUBLIC_PATHS.includes(request.path))
     expect(afterLogin.length).toBeGreaterThan(0)
     for (const request of afterLogin) {
       expect(request.authorization, `${request.method} ${request.path}`).toBe(

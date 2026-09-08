@@ -12,7 +12,18 @@
     informe en algo que depende de la red del cliente.
 
     EL TITULO DEL DOCUMENTO NO LLEVA NOMBRES (regla dura 21). Va al metadato del
-    PDF y de ahi al historial de descargas del navegador.
+    PDF y de ahi al historial de descargas del navegador. La MARCA de la cabecera
+    es otra cosa: se ve en el papel y no viaja al metadato.
+
+    LA MARCA ES CONFIGURACION (RF-PD-08, tarea 5.8, regla dura 13). Nombre,
+    color y logotipo llegan desde fuera; ni uno solo esta escrito aqui. El
+    logotipo viene YA INCRUSTADO en base64 -nunca por URL-: el PDF lo dibuja un
+    Chromium sin salida a internet (ADR-016), y una referencia externa daria
+    informes sin logotipo el dia que la red del hotel tenga un mal rato.
+
+    Y TODO PUEDE FALTAR MENOS EL NOMBRE. Sin logotipo, la cabecera es el nombre
+    solo; el nombre siempre existe porque el catalogo entrega el del producto de
+    serie. Nadie se queda sin su informe por una imagen.
 --}}
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
@@ -34,6 +45,26 @@
         h1 {
             font-size: 13pt;
             margin: 0 0 6pt;
+        }
+
+        /* La cabecera de marca va SOBRE el titulo del informe y no compite con
+           el: el nombre de la instalacion es mas pequeno que el titulo, porque
+           quien coge esta hoja del monton necesita saber primero que documento
+           es y despues de quien. */
+        .brand {
+            margin: 0 0 8pt;
+        }
+
+        .brand img {
+            /* Alto acotado en milimetros y ancho automatico: un logotipo muy
+               apaisado no puede empujar la tabla a la segunda pagina. */
+            max-height: 12mm;
+            max-width: 60mm;
+        }
+
+        .brand__name {
+            font-size: 10pt;
+            font-weight: bold;
         }
 
         h2 {
@@ -105,6 +136,16 @@
     </style>
 </head>
 <body>
+<div class="brand">
+    @if ($brandLogo !== null)
+        {{-- Con logotipo, el nombre NO se repite al lado: seria la misma
+             informacion dos veces. Va en el `alt`, que es donde sirve. --}}
+        <img src="{{ $brandLogo }}" alt="{{ $brandName }}">
+    @else
+        <div class="brand__name" style="color: {{ $brandAccent }}">{{ $brandName }}</div>
+    @endif
+</div>
+
 <h1>{{ $title }}</h1>
 
 <table class="meta">
