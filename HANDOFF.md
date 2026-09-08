@@ -9,7 +9,7 @@
 
 **Rama `feat/tarea-5.10-exportacion-telemetria`** (desde `main` `2f7f2cc`). **Tarea 5.10 «Exportación íntegra de
 datos y telemetría opcional desactivada por defecto» (RF-PD-12, RF-PD-14, RL-20) IMPLEMENTADA, REVISADA y
-PROBADA el 08-09-2026**; commit único en la rama, pendiente de CI manual (⑧ y ⑧b) y PR con *merge commit*.
+PROBADA el 08-09-2026**; commit `e559e5d` empujado, **CI manual completa con ⑧ y ⑧b lanzada (ejecución 34268124784)** y PR abierta contra `main` (ver «Siguiente acción»).
 
 **Cómo se hizo (receta de la 5.9):** diez decisiones escritas en la ficha ANTES de nada (punto 14 de «no
 cubiertos» resuelto), contrato (`/api/v1/data-export` GET/POST, `/api/v1/data-export/{uuid}/download`), tipos
@@ -59,9 +59,7 @@ completa 80/80 (más 32 tras la segunda vuelta). A mano en el contenedor: `produ
 dev (ZIP inspeccionado, permisos 0600/0700), fila `running` de 3 h liberada por `--purge`, `product:telemetry`
 con destino `http://` rechazado y `storage/app/telemetry` vacío.
 
-**Siguiente acción:** `git push`, CI manual completa con ⑧ y ⑧b (`gh workflow run ci.yml --ref
-feat/tarea-5.10-exportacion-telemetria` con las entradas de la 5.9), PR contra `main` con *merge commit*
-cuando esté en verde, `make up` en `main` (migración `data_exports`). Después la **5.11** (documentación de
+**Siguiente acción:** vigilar la ejecución manual 34268124784 (⑧ y ⑧b) —**no empujar nada a la rama mientras corra: el grupo de concurrencia la cancelaría**—, integrar la PR con *merge commit* (nunca squash) cuando esté en verde, `make up` en `main` (migración `data_exports`). Después la **5.11** (documentación de
 instalación, operación, configuración y obligaciones; capturas del asistente; guía de endurecimiento). Recordatorio: **la ⑧b solo corre en `main`, etiquetas o a mano**.
 
 **Rama `feat/tarea-5.9-diagnostico-doctor-soporte`**, creada desde `main` (`d2fe595`: PR #44, #45 y #46
