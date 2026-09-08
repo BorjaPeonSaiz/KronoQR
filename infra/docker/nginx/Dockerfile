@@ -18,7 +18,7 @@
 # construye, y una imagen de entrega tiene que salir identica de un checkout
 # limpio. `dist/` esta ademas en .dockerignore, asi que un build local no puede
 # colarse en la capa.
-FROM node:24-alpine AS frontends
+FROM node:25-alpine AS frontends
 
 WORKDIR /build
 
