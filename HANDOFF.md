@@ -243,6 +243,7 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   antes de buscar en el código.
 - Hook de Pint activo: tras editar un `.php` de backend, el fichero puede quedar reformateado al
   instante.
+- **Al tocar `docs/api/openapi.yaml`, regenerar los TRES clientes** (`npm run api:generate` en `frontend-admin`, `frontend-kiosk` y `frontend-portal`): la etapa ① de la CI compara cada `schema.d.ts` versionado con el contrato y falla si uno no se regeneró, aunque esa SPA no use las rutas nuevas (pasó en la primera CI de la 5.10).
 - gitleaks (job `security`) marca como clave cualquier literal `NOMBRE_KEY=valor` aunque sea un ejemplo
   de prueba: en las aserciones, comprobar el valor sin el nombre de la variable delante.
 
