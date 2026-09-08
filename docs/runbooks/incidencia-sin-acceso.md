@@ -44,7 +44,7 @@ El cliente te ha enviado `kronoqr-diagnostics-<version>-<UTC>.json`. Es un
    pídelo de nuevo antes de diagnosticar nada.
 
    ```bash
-   docker compose exec -T app php artisan product:diagnostics --verify /ruta/al/paquete.json
+   docker compose exec -T app php artisan product:diagnostics --verify=/ruta/al/paquete.json
    ```
 
    El comando lo recalcula y dice si coincide. Si no tienes una instalación a
