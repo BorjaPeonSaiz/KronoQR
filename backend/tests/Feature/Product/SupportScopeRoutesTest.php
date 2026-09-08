@@ -156,6 +156,24 @@ it('ningun alcance alcanza una ruta de escritura que no sea de configuracion', f
         // token `configuration` recibe 403 esta en `SupportTokenBehaviourTest`.
         'PUT /api/v1/setup/steps/{step}',
         'POST /api/v1/setup/complete',
+        /*
+         * LA EXPORTACION INTEGRA (RF-PD-14, RL-20, tarea 5.10), y de todas las de
+         * esta lista es la que MAS importa que este cerrada.
+         *
+         * Viaja bajo `settings:*` porque no sale hacia el fabricante: es el
+         * cliente llevandose lo suyo, y un ambito propio seria una potestad que
+         * nadie concederia por separado. El AMBITO de `configuration` la alcanza,
+         * asi que aparece aqui; lo que la cierra es `DataExportPolicy`, que
+         * rechaza a todo actor de soporte.
+         *
+         * Si esa policy se cayera, un token de soporte podria llevarse una copia
+         * completa de la plantilla del hotel, de cuatro años de fichajes y de las
+         * cuentas de gestion: la escalada mas grave que este producto puede
+         * tener, y exactamente lo que la regla dura 16 y ADR-020 hacen imposible.
+         * Los tres alcances tienen su prueba de `403` en
+         * `DataExportAuthorizationTest`.
+         */
+        'POST /api/v1/data-export',
     ];
 
     $alcanzables = [];

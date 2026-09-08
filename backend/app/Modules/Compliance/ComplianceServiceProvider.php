@@ -46,6 +46,9 @@ use App\Modules\Compliance\Infrastructure\Listener\NotifyIncidentAssignees;
 use App\Modules\Compliance\Infrastructure\Listener\OpenIncidentOnAnomalyDetected;
 use App\Modules\Compliance\Infrastructure\Listener\RecordComplianceProfileChange;
 use App\Modules\Compliance\Infrastructure\Listener\RecordCredentialLifecycle;
+use App\Modules\Compliance\Infrastructure\Listener\RecordDataExportDownloaded;
+use App\Modules\Compliance\Infrastructure\Listener\RecordDataExportGenerated;
+use App\Modules\Compliance\Infrastructure\Listener\RecordDataExportRequested;
 use App\Modules\Compliance\Infrastructure\Listener\RecordDeviceProvisioning;
 use App\Modules\Compliance\Infrastructure\Listener\RecordDiagnosticsBundleGenerated;
 use App\Modules\Compliance\Infrastructure\Listener\RecordEmployeeImport;
@@ -89,6 +92,9 @@ use App\Modules\Identity\Domain\Event\TwoFactorEnabled;
 use App\Modules\Identity\Domain\Event\TwoFactorReset;
 use App\Modules\Kiosk\Domain\Event\DeviceProvisioned;
 use App\Modules\Product\Domain\Event\ComplianceThresholdChanged;
+use App\Modules\Product\Domain\Event\DataExportDownloaded;
+use App\Modules\Product\Domain\Event\DataExportGenerated;
+use App\Modules\Product\Domain\Event\DataExportRequested;
 use App\Modules\Product\Domain\Event\DiagnosticsBundleGenerated;
 use App\Modules\Product\Domain\Event\InstallationSettingChanged;
 use App\Modules\Product\Domain\Event\LicenseActivated;
@@ -275,6 +281,7 @@ final class ComplianceServiceProvider extends ServiceProvider
         $this->recordLicenseLifecycle();
         $this->recordDiagnosticsBundles();
         $this->recordSupportAccess();
+        $this->recordDataExports();
         $this->recordManagementAccountLifecycle();
         $this->openAndNotifyIncidents();
 
@@ -744,6 +751,35 @@ final class ComplianceServiceProvider extends ServiceProvider
             PersonalDataIncludedInDiagnostics::class,
             [RecordPersonalDataIncludedInDiagnostics::class, 'handle'],
         );
+    }
+
+    /**
+     * El mapa evento -> asiento de la **exportacion integra** (tarea 5.10,
+     * RF-PD-14, RL-20, RS-05).
+     *
+     * Familia `LegalExport`, la misma que `legal_export.generated`, porque las
+     * dos responden a la misma pregunta: «¿que ha salido del registro y quien se
+     * lo llevo?». RL-20 es la garantia de continuidad del mismo registro que
+     * RL-06 pone a disposicion de la Inspeccion. No es `PersonalDataAccess` —no
+     * es la consulta de la ficha de nadie— ni `SupportAccess` —no sale hacia el
+     * fabricante, sale hacia el propio cliente—.
+     *
+     * **Tres listeners y no uno con tres metodos**, al contrario que las
+     * credenciales: los tres hechos tienen actores que se resuelven distinto
+     * —pedir y descargar los hace una sesion, generar lo hace un trabajador de
+     * cola en nombre de quien la pidio— y juntarlos obligaria a repartir esa
+     * diferencia con condicionales dentro de un mismo objeto.
+     *
+     * Sincronos, sin `ShouldQueue` y sin `afterCommit`: si el asiento falla, la
+     * exportacion no se crea, no se marca como terminada y no se entrega
+     * (ADR-027). Un ZIP con todos los datos personales de la plantilla no sale
+     * de aqui sin rastro (regla dura 6).
+     */
+    private function recordDataExports(): void
+    {
+        Event::listen(DataExportRequested::class, [RecordDataExportRequested::class, 'handle']);
+        Event::listen(DataExportGenerated::class, [RecordDataExportGenerated::class, 'handle']);
+        Event::listen(DataExportDownloaded::class, [RecordDataExportDownloaded::class, 'handle']);
     }
 
     /**

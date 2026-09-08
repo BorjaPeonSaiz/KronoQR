@@ -664,6 +664,52 @@ operacion.md §12 explicando doctor, paquete y accesos.
 ```
 
 
+#### 6.5.5 Exportación íntegra y telemetría desactivada (tarea 5.10)
+
+```text
+Ejecuta la tarea 5.10 del plan («Exportación íntegra de datos y
+telemetría opcional desactivada por defecto», RF-PD-12, RF-PD-14, RL-20).
+La ficha ejecutable está en plan implementacion/05-fase-5-productizacion.md
+→ «Tarea 5.10»; ADR-019 y ADR-020 gobiernan.
+
+Orquesta: el contrato primero (GET/POST /api/v1/data-export,
+GET /api/v1/data-export/{uuid}/download; esquemas DataExport,
+DataExportResource, DataExportCollection), tipos regenerados, las
+decisiones ESCRITAS en la ficha antes de lanzar nada, y TRES agentes en
+paralelo con fronteras disjuntas y bloques reservados (5.10-A / 5.10-B)
+en ProductServiceProvider, routes/api_v1.php, config/product.php,
+.env.example, ComplianceServiceProvider, AuditAction y routes/console.php:
+producto-licencia (tabla data_exports, cursores de servidor, ZIP, README,
+comando, endpoints, policy, auditoría), backend-laravel (TelemetryReport
+por lista de permitidos, cliente HTTP, estado en fichero, comando,
+planificador, Feature::Telemetry implementada, prueba de arquitectura de
+canales salientes, tabla de campos en configuracion.md) y frontend-panel
+(sección «Tus datos son tuyos» en Licencia). Documentación por el
+orquestador; revisor-codigo y seguridad-cumplimiento con
+/revision-cumplimiento antes de cerrar.
+
+Los innegociables:
+- La exportación NO depende de la licencia (ADR-019, regla 15) y NUNCA la
+  hace un token de soporte (regla 16): settings:* + policy de solo admin
+  que rechaza isSupportActor(), con 403 probado para cada rol, quiosco,
+  portal y los tres alcances de soporte
+- Íntegra por lista de permitidos: todas las versiones de tramo, las
+  correcciones con autor y motivo, la auditoría con su cadena; ningún
+  secreto ni hash, ningún BIGINT interno (referencias por uuid)
+- Streaming con cursor de servidor y techo de memoria medido con volumen;
+  asíncrona desde el panel (60 s de fastcgi_read_timeout), síncrona desde
+  la consola; una sola en curso; fichero que caduca, fila que no se borra
+- Pedir, generar y descargar dejan asiento (familia legal_export)
+- Telemetría: TELEMETRY_ENABLED=false y TELEMETRY_ENDPOINT vacío de serie,
+  y hace falta que la licencia liste telemetry; contenido cerrado, atado
+  por prueba a la tabla de configuracion.md; jamás PII ni jornada; un
+  reintento y nunca en una petición; sin aviso insistente si falla
+
+Criterio de terminado: la DoD de la ficha, más obligaciones-legales.md
+recogiendo RL-20 y operacion.md explicando cómo generar, descargar, sacar
+del contenedor y cuándo caduca.
+```
+
 ### 6.6 Cierre de fase
 
 ```

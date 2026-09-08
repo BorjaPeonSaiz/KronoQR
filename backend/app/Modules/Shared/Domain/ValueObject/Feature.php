@@ -87,7 +87,15 @@ enum Feature: string
      */
     case WhiteLabel = 'white_label';
 
-    /** Telemetria opcional (RF-PD-12). Ya viene desactivada de serie. Llega en la 5.10. */
+    /**
+     * Telemetria opcional (RF-PD-12, tarea 5.10).
+     *
+     * **Ya viene desactivada de serie**, y hacen falta tres cosas a la vez para
+     * que envie algo: `TELEMETRY_ENABLED`, un `TELEMETRY_ENDPOINT` y esta
+     * funcionalidad en el plan. Que este aqui significa que una licencia
+     * caducada la apaga -es accesoria, ADR-023-, y apagarla no degrada nada:
+     * el producto funciona identicamente sin ella (RF-PD-12).
+     */
     case Telemetry = 'telemetry';
 
     /**
@@ -96,16 +104,20 @@ enum Feature: string
      * Existe para que la documentacion, la pantalla de licencia y `license:show`
      * puedan distinguir «esto se apagara» de «esto se apagara cuando exista», en
      * lugar de prometerle al cliente una degradacion de algo que todavia no ha
-     * comprado. Las tres restantes entran con su tarea (3.x y 5.10).
+     * comprado. Las tres restantes -cuadro de impacto, exportacion para nomina
+     * y resumen semanal- entran con su tarea de la Fase 3.
      *
      * `WhiteLabel` entra con la tarea 5.8, que es la que le da consumidor: el
-     * decorador `LicensedBrandingProvider`.
+     * decorador `LicensedBrandingProvider`. `Telemetry` entra con la 5.10, que
+     * le da el suyo: `SendTelemetryHandler` pregunta por ella antes de construir
+     * ni enviar nada, asi que a partir de esa tarea una licencia caducada la
+     * apaga de verdad y el cliente merece verlo en `license:show`.
      *
      * @return list<self>
      */
     public static function implemented(): array
     {
-        return [self::AdvancedReports, self::RealtimePresence, self::WhiteLabel];
+        return [self::AdvancedReports, self::RealtimePresence, self::WhiteLabel, self::Telemetry];
     }
 
     public function isImplemented(): bool

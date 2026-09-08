@@ -46,6 +46,24 @@ namespace App\Modules\Product\Infrastructure\Diagnostics;
  * `IDENTITY_` tampoco: aloja `IDENTITY_PIN_SEALING_SECRET_KEY`. De esa familia
  * entra lo que termina en un sufijo de magnitud —`_SECONDS`, `_HOURS`, `_DAYS`,
  * `_ATTEMPTS`, `_LENGTH`, `_LIMIT`—, que son plazos y contadores.
+ *
+ * ## `TELEMETRY_ENABLED` entra y `TELEMETRY_ENDPOINT` **no**, a proposito
+ *
+ * Parecen la misma familia y no lo son. El primero es un booleano del producto:
+ * dice si la telemetria esta activada, que es exactamente lo que soporte
+ * necesita saber para entender un paquete —y ademas su valor de serie es
+ * `false`, asi que verlo en `true` ya es la respuesta a una pregunta—.
+ *
+ * El segundo es **una URL del CLIENTE**. Puede llevar un identificador o un
+ * token dentro de la ruta —es la forma normal de un colector—, dice a que
+ * herramienta de supervision envia y, con ella, describe la infraestructura
+ * interna del hotel. Nada de eso hace falta para diagnosticar nada, y el paquete
+ * sale hacia el fabricante (ADR-020, regla dura 16). Minimizacion: si no hace
+ * falta, no viaja.
+ *
+ * **No lo añadas por simetria.** Que dos variables compartan prefijo no las hace
+ * igual de inocuas; es el mismo criterio por el que `BACKUP_` no es prefijo y
+ * por el que viaja `BRANDING_LOGO_ROOT` y no la ruta del logotipo.
  */
 final class DiagnosticsConfigurationAllowlist
 {

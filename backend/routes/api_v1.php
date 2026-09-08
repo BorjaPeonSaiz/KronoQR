@@ -30,6 +30,7 @@ use App\Modules\Kiosk\Http\Controller\PairingController;
 use App\Modules\Kiosk\Http\Controller\RosterController;
 use App\Modules\Product\Http\Controller\BrandingController;
 use App\Modules\Product\Http\Controller\ComplianceProfileController;
+use App\Modules\Product\Http\Controller\DataExportController;
 use App\Modules\Product\Http\Controller\DiagnosticsController;
 use App\Modules\Product\Http\Controller\LicenseController;
 use App\Modules\Product\Http\Controller\SettingsController;
@@ -1201,6 +1202,82 @@ Route::middleware([
     Route::delete('/support/grants/{uuid}', [SupportGrantController::class, 'destroy'])
         ->whereUuid('uuid')
         ->name('product.support.grants.destroy');
+});
+
+/*
+ * ---------------------------------------------------------------------------
+ * EXPORTACION INTEGRA DE LOS DATOS DEL CLIENTE (tarea 5.10, RF-PD-14)
+ * ---------------------------------------------------------------------------
+ *
+ * GET y POST /api/v1/data-export y GET /api/v1/data-export/{uuid}/download: el
+ * cliente se lleva **todos** sus datos en formato abierto, cuando quiera y sin
+ * pedir permiso a nadie (RF-PD-14, RL-20).
+ *
+ * AMBITO `settings:*` Y NO UNO PROPIO, al contrario que el diagnostico y que los
+ * accesos de soporte. La diferencia es de destinatario: aquellos existen para que
+ * algo salga hacia el FABRICANTE, y por eso tienen ambito propio que se puede
+ * conceder por separado. Esto no sale hacia nadie: es el cliente llevandose lo
+ * suyo. Un ambito nuevo solo para esto seria una potestad que nadie concederia
+ * por separado —quien administra la instalacion es quien se lleva los datos— y
+ * una linea mas en la tabla del §7.3 sin ningun caso real detras.
+ *
+ * SOLO `admin`, Y ADEMAS SOLO EL CLIENTE. `DataExportPolicy` es la otra mitad
+ * (regla dura 18) y comprueba dos cosas: el rol y que quien pregunta no sea el
+ * propio fabricante. Un token de soporte con alcance `configuration` lleva
+ * `settings:*` y actua como `admin` ante las policies, asi que sin esa segunda
+ * comprobacion podria llevarse una copia completa de la plantilla del hotel — que
+ * es exactamente lo que ADR-020 y la regla dura 16 hacen imposible. **`rrhh` no
+ * entra** aunque gestione a diario esos datos: gestionarlos dentro del producto,
+ * con su alcance y su auditoria, no es lo mismo que sacarlos en un ZIP. **El
+ * `auditor` tampoco**: lo que necesita entregar a la Inspeccion es la exportacion
+ * legal (RF-IN-05), acotada por periodo y por persona. **El quiosco y el portal**
+ * se quedan en el middleware.
+ *
+ * ASINCRONA A PROPOSITO. El `POST` **encola** y responde `202` con la fila en
+ * `pending`; el panel sondea el `GET` hasta verla `completed` y entonces
+ * descarga. Es asi porque el recorrido de todas las tablas de una instalacion con
+ * cuatro años de fichajes no cabe ni en los 60 s de `fastcgi_read_timeout` ni en
+ * la memoria de un navegador que recibe la respuesta de un `fetch` — y una
+ * descarga que se corta a la mitad es peor que ninguna: el cliente cree que tiene
+ * su copia. Desde la consola (`php artisan product:export-all`) es sincrona,
+ * porque ahi no hay ningun tiempo de espera que agotar.
+ *
+ * UNA SOLA EN CURSO. Un segundo `POST` mientras hay una `pending` o `running`
+ * responde `409` con la fila que ya existe dentro del cuerpo, para que el panel
+ * enseñe esa en lugar de pedir otra. Lo garantiza un indice unico parcial de la
+ * base de datos y no una comprobacion en PHP: dos pestañas pulsando a la vez
+ * pasarian cualquier `SELECT` previo.
+ *
+ * `throttle:data-export` Y NO `throttle:management`: 30 r/m frente a 120, pero
+ * sobre todo **por cuenta y por origen**, y aparte del resto de la gestion. El
+ * panel sondea cada cinco segundos mientras dura la generacion, asi que un techo
+ * de 3 como el del diagnostico bloquearia la pantalla sola; y lo que de verdad
+ * protege a la base de datos no es este limite, es el indice unico de arriba.
+ *
+ * ESTAS TRES RUTAS NO SE DEGRADAN NUNCA (ADR-019, regla dura 15), y aqui con mas
+ * motivo que en ninguna otra: RL-20 es la garantia de que el cliente puede
+ * llevarse sus datos **aunque la relacion comercial termine**. Cerrarla por una
+ * licencia caducada dejaria al cliente sin acceso a informacion que esta obligado
+ * a conservar cuatro años, por una accion del fabricante — es literalmente el
+ * escenario que ADR-019 existe para prohibir.
+ *
+ * SIN `DELETE`. Una exportacion no se borra: caduca sola a los
+ * `PRODUCT_DATA_EXPORT_RETENTION_DAYS` y su fila se queda como `purged` con sus
+ * fechas y sus recuentos (regla dura 5). Que no exista el verbo es lo que impide
+ * que aparezca uno «para hacer sitio».
+ */
+Route::middleware([
+    'auth:sanctum',
+    'ability:'.TokenAbility::SETTINGS_ALL->value,
+    'throttle:data-export',
+])->group(function (): void {
+    Route::get('/data-export', [DataExportController::class, 'index'])
+        ->name('product.data-export.index');
+    Route::post('/data-export', [DataExportController::class, 'store'])
+        ->name('product.data-export.store');
+    Route::get('/data-export/{uuid}/download', [DataExportController::class, 'download'])
+        ->whereUuid('uuid')
+        ->name('product.data-export.download');
 });
 
 /*

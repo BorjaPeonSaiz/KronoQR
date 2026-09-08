@@ -1022,6 +1022,57 @@
       "exceeded": "Además, se ha superado el plan contratado en: {limits}. No bloquea nada; habla con tu proveedor para ampliarlo."
     }
   },
+  "dataExport": {
+    "heading": "Tus datos son tuyos",
+    "intro": "Puedes llevarte todos los datos de esta instalación, en formato abierto, cuando quieras y sin pedir permiso a nadie, aunque la licencia haya caducado. Es tu garantía para seguir cumpliendo la obligación de conservar el registro horario cuatro años, incluso si la relación con tu proveedor termina.",
+    "generate": "Generar exportación completa",
+    "generateDisabledHint": "No se puede pedir otra mientras la anterior sigue en curso; puedes descargarla desde esta misma lista en cuanto termine.",
+    "activeNotice": "Hay una exportación en curso, pedida el {requestedAt}. Esta pantalla se actualiza sola cada pocos segundos.",
+    "requestedByConsole": "Consola",
+    "announceRequested": "Se ha pedido la exportación completa.",
+    "announceDownloaded": "Se ha descargado la exportación {filename}.",
+    "confirm": {
+      "heading": "Generar la exportación completa",
+      "warning": "El fichero contendrá todos los datos personales de la plantilla: nombres, fichajes y tramos con su historial completo, contratos, credenciales sin secretos, incidencias y el registro de auditoría entero. Pedirlo queda anotado en ese mismo registro, con quién lo pidió y cuándo.",
+      "action": "Generar exportación"
+    },
+    "list": {
+      "loading": "Cargando las exportaciones…",
+      "caption": "Exportaciones íntegras de los datos de la instalación",
+      "lastUpdatedAt": "Última actualización: {moment}",
+      "empty": {
+        "title": "Todavía no se ha pedido ninguna exportación",
+        "description": "Cuando pidas una, aparecerá aquí con su estado, quién la pidió, cuánto ocupa y hasta cuándo se puede descargar."
+      },
+      "columns": {
+        "status": "Estado",
+        "requestedBy": "Pedida por",
+        "requestedAt": "Pedida",
+        "size": "Tamaño",
+        "rows": "Filas",
+        "expiresAt": "Caduca",
+        "actions": "Acciones"
+      },
+      "rows": "{count} filas",
+      "download": "Descargar",
+      "downloading": "Descargando…",
+      "failedReason": "No se pudo generar: {reason}",
+      "failureReasons": {
+        "write_failed": "No se pudo escribir el fichero en el servidor: revisa el espacio y los permisos del directorio de exportaciones.",
+        "database_error": "La base de datos falló a mitad de la generación: revisa el diagnóstico de la instalación (product:doctor).",
+        "stale": "Se interrumpió y el sistema la dio por fallida al pasar una hora sin terminar. Puedes pedir otra.",
+        "unexpected": "Fallo inesperado. El detalle técnico está en el registro del servidor, junto al identificador de esta exportación."
+      },
+      "purgedNotice": "El fichero caducó y ya no está disponible. Pide una exportación nueva si la necesitas."
+    },
+    "status": {
+      "pending": "En cola",
+      "running": "Generando",
+      "completed": "Lista para descargar",
+      "failed": "No se pudo generar",
+      "purged": "Caducada"
+    }
+  },
   "devices": {
     "title": "Quioscos",
     "subtitle": "Los quioscos vinculados a la instalación, activos y revocados, con lo que hace falta para saber si están sanos.",

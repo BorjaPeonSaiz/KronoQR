@@ -7,6 +7,11 @@ namespace App\Modules\Product;
 use App\Modules\Identity\Domain\Event\DeviceTokenIssued;
 use App\Modules\Product\Application\Port\ComplianceProfileMetrics;
 use App\Modules\Product\Application\Port\ComplianceProfileRepository;
+use App\Modules\Product\Application\Port\DataExportArchiveWriter;
+use App\Modules\Product\Application\Port\DataExportGuide;
+use App\Modules\Product\Application\Port\DataExportQueue;
+use App\Modules\Product\Application\Port\DataExportRepository;
+use App\Modules\Product\Application\Port\DataExportSource;
 use App\Modules\Product\Application\Port\DiagnosticsBundleWriter;
 use App\Modules\Product\Application\Port\DoctorTranslator;
 use App\Modules\Product\Application\Port\LicenseMetrics;
@@ -24,14 +29,26 @@ use App\Modules\Product\Application\Port\SetupProgressRepository;
 use App\Modules\Product\Application\Port\SupportAccessRecorder;
 use App\Modules\Product\Application\Port\SupportGrantRepository;
 use App\Modules\Product\Application\Port\SupportTokenIssuer;
+use App\Modules\Product\Application\Port\TelemetryCounters;
+use App\Modules\Product\Application\Port\TelemetryFacts;
+use App\Modules\Product\Application\Port\TelemetrySender;
+use App\Modules\Product\Application\Port\TelemetryStateStore;
 use App\Modules\Product\Application\UseCase\ActivateLicenseHandler;
+use App\Modules\Product\Application\UseCase\BuildTelemetryReportHandler;
+use App\Modules\Product\Application\UseCase\DownloadDataExportHandler;
+use App\Modules\Product\Application\UseCase\GenerateDataExportHandler;
 use App\Modules\Product\Application\UseCase\GenerateDiagnosticsBundleHandler;
 use App\Modules\Product\Application\UseCase\GetLicenseStatusHandler;
 use App\Modules\Product\Application\UseCase\GetSettingsHandler;
 use App\Modules\Product\Application\UseCase\GrantSupportAccessHandler;
+use App\Modules\Product\Application\UseCase\ListDataExportsHandler;
+use App\Modules\Product\Application\UseCase\PurgeExpiredDataExportsHandler;
 use App\Modules\Product\Application\UseCase\RecordPlanUsageHandler;
 use App\Modules\Product\Application\UseCase\RecordSupportAccessUseHandler;
+use App\Modules\Product\Application\UseCase\RequestDataExportHandler;
 use App\Modules\Product\Application\UseCase\RunDoctorHandler;
+use App\Modules\Product\Application\UseCase\SendTelemetryHandler;
+use App\Modules\Product\Domain\Model\DataExport as DataExportModel;
 use App\Modules\Product\Domain\Model\SupportGrant as SupportGrantModel;
 use App\Modules\Product\Domain\ValueObject\ComplianceProfileSnapshot;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsBundle;
@@ -39,6 +56,7 @@ use App\Modules\Product\Domain\ValueObject\LicenseStatus;
 use App\Modules\Product\Domain\ValueObject\ResolvedSettings;
 use App\Modules\Product\Domain\ValueObject\SetupState;
 use App\Modules\Product\Http\Policy\ComplianceProfilePolicy;
+use App\Modules\Product\Http\Policy\DataExportPolicy;
 use App\Modules\Product\Http\Policy\DiagnosticsPolicy;
 use App\Modules\Product\Http\Policy\LicensePolicy;
 use App\Modules\Product\Http\Policy\SettingsPolicy;
@@ -57,12 +75,15 @@ use App\Modules\Product\Infrastructure\Adapter\LicensedBrandingProvider;
 use App\Modules\Product\Infrastructure\Adapter\LicensedFeatureGate;
 use App\Modules\Product\Infrastructure\Adapter\LocalBrandingLogoReader;
 use App\Modules\Product\Infrastructure\Adapter\LoggingSettingsAnomalyReporter;
+use App\Modules\Product\Infrastructure\Adapter\QueuedDataExportDispatcher;
 use App\Modules\Product\Infrastructure\Adapter\SanctumSupportTokenIssuer;
 use App\Modules\Product\Infrastructure\Branding\LogoFileInspector;
 use App\Modules\Product\Infrastructure\Console\LicenseActivateCommand;
 use App\Modules\Product\Infrastructure\Console\LicenseShowCommand;
 use App\Modules\Product\Infrastructure\Console\ProductDiagnosticsCommand;
 use App\Modules\Product\Infrastructure\Console\ProductDoctorCommand;
+use App\Modules\Product\Infrastructure\Console\ProductExportAllCommand;
+use App\Modules\Product\Infrastructure\Console\ProductTelemetryCommand;
 use App\Modules\Product\Infrastructure\Console\SupportGrantCommand;
 use App\Modules\Product\Infrastructure\Console\SupportRevokeCommand;
 use App\Modules\Product\Infrastructure\Diagnostics\Collector\AuditCollector;
@@ -88,17 +109,25 @@ use App\Modules\Product\Infrastructure\Diagnostics\Probe\QueueProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\SettingsProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\TlsProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\ServiceInspector;
+use App\Modules\Product\Infrastructure\Export\TranslatedDataExportGuide;
+use App\Modules\Product\Infrastructure\Export\ZipDataExportArchiveWriter;
 use App\Modules\Product\Infrastructure\Listener\ObservePlanLimits;
 use App\Modules\Product\Infrastructure\Metrics\RedisComplianceProfileMetrics;
 use App\Modules\Product\Infrastructure\Metrics\RedisLicenseMetrics;
 use App\Modules\Product\Infrastructure\Metrics\RedisSettingsMetrics;
 use App\Modules\Product\Infrastructure\Persistence\DatabaseComplianceProfileRepository;
+use App\Modules\Product\Infrastructure\Persistence\DatabaseDataExportRepository;
+use App\Modules\Product\Infrastructure\Persistence\DatabaseDataExportSource;
 use App\Modules\Product\Infrastructure\Persistence\DatabaseLicenseRepository;
 use App\Modules\Product\Infrastructure\Persistence\DatabasePlanUsageCounter;
 use App\Modules\Product\Infrastructure\Persistence\DatabaseSetupFacts;
 use App\Modules\Product\Infrastructure\Persistence\DatabaseSetupProgressRepository;
 use App\Modules\Product\Infrastructure\Persistence\DatabaseSupportGrantRepository;
 use App\Modules\Product\Infrastructure\Persistence\EloquentSettingsRepository;
+use App\Modules\Product\Infrastructure\Telemetry\DatabaseTelemetryFacts;
+use App\Modules\Product\Infrastructure\Telemetry\FileTelemetryStateStore;
+use App\Modules\Product\Infrastructure\Telemetry\HttpTelemetrySender;
+use App\Modules\Product\Infrastructure\Telemetry\RedisTelemetryCounters;
 use App\Modules\Shared\Application\Port\BrandingLogoReader;
 use App\Modules\Shared\Application\Port\BrandingProvider;
 use App\Modules\Shared\Application\Port\Clock;
@@ -110,12 +139,14 @@ use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
 use App\Modules\Workforce\Domain\Event\EmployeeHired;
 use App\Support\Locale\NegotiableLocales;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Contracts\Bus\Dispatcher as BusDispatcher;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\Redis\Factory as Redis;
 use Illuminate\Contracts\Translation\Translator;
+use Illuminate\Http\Client\Factory as HttpClient;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
@@ -174,6 +205,16 @@ use Illuminate\Support\ServiceProvider;
  */
 final class ProductServiceProvider extends ServiceProvider
 {
+    /**
+     * Cuantas veces el cubo por IP del limitador de la exportacion integra es
+     * mayor que el cubo por cuenta.
+     *
+     * En un hotel varios administradores comparten IP publica y el panel sondea
+     * mientras se genera: con el mismo techo en los dos ejes se cortarian entre
+     * si. Ver el comentario de `RateLimiter::for('data-export', ...)`.
+     */
+    private const int DATA_EXPORT_IP_BUDGET_FACTOR = 4;
+
     public function register(): void
     {
         /*
@@ -305,6 +346,100 @@ final class ProductServiceProvider extends ServiceProvider
         $this->registerDiagnostics();
 
         $this->registerSupportGrants();
+
+        $this->registerDataExport();
+
+        $this->registerTelemetry();
+    }
+
+    /**
+     * La telemetria opcional (tarea 5.10, **RF-PD-12**, ADR-020, ADR-023).
+     *
+     * ## Todo lo del entorno se resuelve AQUI
+     *
+     * Las dos condiciones de configuracion -`TELEMETRY_ENABLED` y
+     * `TELEMETRY_ENDPOINT`-, la ruta del estado, la espera del reintento, la
+     * version del producto y la de PHP entran ya resueltas en el caso de uso y
+     * en los adaptadores. Es el mismo criterio que los umbrales legales (regla
+     * dura 14), la clave publica de la licencia y los limites del logotipo: una
+     * clase que consulta la configuracion global no se puede probar con la
+     * telemetria encendida y apagada sin tocar el estado de todo el proceso, y
+     * esta suite necesita justamente eso.
+     *
+     * ## `bind()` y no `scoped()`
+     *
+     * Nada de esto vive dentro de una peticion: el unico consumidor es un
+     * comando de consola que se ejecuta una vez por semana. Memorizar una
+     * instancia no ahorraria nada y solo abriria la puerta a que un estado
+     * leido del disco sobreviviera a un `--send` posterior.
+     *
+     * ## El idioma del veredicto de `doctor` es el de soporte
+     *
+     * `DoctorCollector::SUPPORT_LOCALE`, la misma constante que usa el paquete
+     * de diagnostico. Da igual para lo que viaja -solo salen `ok`, `warning` y
+     * `failure`, que no se traducen-, pero fijarlo evita que el informe cambie
+     * de forma segun el idioma que tenga puesta la instalacion.
+     */
+    private function registerTelemetry(): void
+    {
+        $this->app->bind(
+            TelemetryStateStore::class,
+            static fn (): FileTelemetryStateStore => new FileTelemetryStateStore(
+                path: Config::string('product.telemetry_state_path'),
+                // Para dejar constancia si el directorio no es escribible: sin
+                // ella, la instalacion estrenaria identidad cada semana y nadie
+                // sabria por que (ver el docblock de `save()`).
+                logger: Log::channel(),
+            ),
+        );
+
+        $this->app->bind(
+            TelemetryCounters::class,
+            static fn (Application $app): RedisTelemetryCounters => new RedisTelemetryCounters($app->make(Redis::class)),
+        );
+
+        $this->app->bind(
+            TelemetryFacts::class,
+            static fn (): DatabaseTelemetryFacts => new DatabaseTelemetryFacts(DB::connection()),
+        );
+
+        $this->app->bind(
+            TelemetrySender::class,
+            static fn (Application $app): HttpTelemetrySender => new HttpTelemetrySender(
+                http: $app->make(HttpClient::class),
+                productVersion: Config::string('app.version'),
+                retryDelaySeconds: max(0, Config::integer('product.telemetry_retry_delay_seconds', 5)),
+            ),
+        );
+
+        $this->app->bind(
+            BuildTelemetryReportHandler::class,
+            static fn (Application $app): BuildTelemetryReportHandler => new BuildTelemetryReportHandler(
+                licenses: $app->make(GetLicenseStatusHandler::class),
+                doctor: $app->make(RunDoctorHandler::class),
+                usage: $app->make(PlanUsageCounter::class),
+                counters: $app->make(TelemetryCounters::class),
+                facts: $app->make(TelemetryFacts::class),
+                clock: $app->make(Clock::class),
+                productVersion: Config::string('app.version'),
+                phpVersion: PHP_VERSION,
+                doctorLocale: DoctorCollector::SUPPORT_LOCALE,
+            ),
+        );
+
+        $this->app->bind(
+            SendTelemetryHandler::class,
+            static fn (Application $app): SendTelemetryHandler => new SendTelemetryHandler(
+                reports: $app->make(BuildTelemetryReportHandler::class),
+                sender: $app->make(TelemetrySender::class),
+                state: $app->make(TelemetryStateStore::class),
+                features: $app->make(FeatureGate::class),
+                clock: $app->make(Clock::class),
+                logger: Log::channel(),
+                enabled: Config::boolean('product.telemetry_enabled'),
+                endpoint: Config::string('product.telemetry_endpoint'),
+            ),
+        );
     }
 
     /**
@@ -387,6 +522,124 @@ final class ProductServiceProvider extends ServiceProvider
                 clock: $app->make(Clock::class),
                 connection: DB::connection(),
                 windowSeconds: max(0, Config::integer('product.support_use_audit_window_seconds', 900)),
+            ),
+        );
+    }
+
+    /**
+     * La exportacion integra de los datos del cliente (tarea 5.10, **RF-PD-14**,
+     * RL-20).
+     *
+     * ## Los dos umbrales se leen AQUI, en el borde
+     *
+     * La retencion del fichero entra ya resuelta en el caso de uso (regla dura
+     * 14, mismo criterio que los limites de las concesiones de soporte y que el
+     * aviso de caducidad de la licencia), y la ruta del directorio entra ya
+     * resuelta en el escritor. Es lo que permite que una prueba fije una
+     * retencion de un dia o un directorio temporal sin tocar el estado global del
+     * proceso, y que un cliente con una politica mas dura los cambie sin tocar el
+     * repositorio (regla dura 13).
+     *
+     * ## `scoped()` para el repositorio, `bind()` para lo demas
+     *
+     * Igual que el resto del modulo: el repositorio memoriza por peticion —el
+     * panel sondea la lista y la respuesta tiene que ser la de esta peticion, no
+     * la de la anterior— y los casos de uso son objetos sin estado.
+     *
+     * ## Ninguno de los cinco recibe el `FeatureGate`
+     *
+     * Y no es un olvido: es ADR-019 y la regla dura 15 en el contenedor. La
+     * exportacion integra **no se degrada nunca** con la licencia, porque RL-20
+     * es la garantia de continuidad del cliente *«aunque la relacion comercial
+     * termine»*. Que la puerta de la licencia no llegue siquiera a estas clases
+     * es lo que impide que alguien la ate ahi mas adelante «por coherencia con el
+     * resto».
+     */
+    private function registerDataExport(): void
+    {
+        $this->app->scoped(
+            DataExportRepository::class,
+            static fn (): DatabaseDataExportRepository => new DatabaseDataExportRepository(DB::connection()),
+        );
+
+        $this->app->bind(
+            DataExportSource::class,
+            static fn (): DatabaseDataExportSource => new DatabaseDataExportSource(DB::connection()),
+        );
+
+        $this->app->bind(
+            DataExportArchiveWriter::class,
+            static fn (): ZipDataExportArchiveWriter => new ZipDataExportArchiveWriter(
+                Config::string('product.data_export_path'),
+            ),
+        );
+
+        $this->app->bind(
+            DataExportGuide::class,
+            static fn (Application $app): TranslatedDataExportGuide => new TranslatedDataExportGuide(
+                $app->make(Translator::class),
+            ),
+        );
+
+        $this->app->bind(
+            DataExportQueue::class,
+            static fn (Application $app): QueuedDataExportDispatcher => new QueuedDataExportDispatcher(
+                $app->make(BusDispatcher::class),
+            ),
+        );
+
+        $this->app->bind(
+            RequestDataExportHandler::class,
+            static fn (Application $app): RequestDataExportHandler => new RequestDataExportHandler(
+                exports: $app->make(DataExportRepository::class),
+                queue: $app->make(DataExportQueue::class),
+                events: $app->make(ProductEventPublisher::class),
+                clock: $app->make(Clock::class),
+                connection: DB::connection(),
+                staleAfterSeconds: max(1, Config::integer('product.data_export_stale_after_seconds', 3600)),
+            ),
+        );
+
+        $this->app->bind(
+            GenerateDataExportHandler::class,
+            static fn (Application $app): GenerateDataExportHandler => new GenerateDataExportHandler(
+                exports: $app->make(DataExportRepository::class),
+                source: $app->make(DataExportSource::class),
+                writer: $app->make(DataExportArchiveWriter::class),
+                guide: $app->make(DataExportGuide::class),
+                events: $app->make(ProductEventPublisher::class),
+                clock: $app->make(Clock::class),
+                locales: $app->make(LocalePolicyProvider::class),
+                connection: DB::connection(),
+                productVersion: Config::string('app.version'),
+                retentionDays: max(1, Config::integer('product.data_export_retention_days', 7)),
+            ),
+        );
+
+        $this->app->bind(
+            ListDataExportsHandler::class,
+            static fn (Application $app): ListDataExportsHandler => new ListDataExportsHandler(
+                $app->make(DataExportRepository::class),
+            ),
+        );
+
+        $this->app->bind(
+            DownloadDataExportHandler::class,
+            static fn (Application $app): DownloadDataExportHandler => new DownloadDataExportHandler(
+                exports: $app->make(DataExportRepository::class),
+                events: $app->make(ProductEventPublisher::class),
+                clock: $app->make(Clock::class),
+                connection: DB::connection(),
+            ),
+        );
+
+        $this->app->bind(
+            PurgeExpiredDataExportsHandler::class,
+            static fn (Application $app): PurgeExpiredDataExportsHandler => new PurgeExpiredDataExportsHandler(
+                exports: $app->make(DataExportRepository::class),
+                writer: $app->make(DataExportArchiveWriter::class),
+                clock: $app->make(Clock::class),
+                staleAfterSeconds: max(1, Config::integer('product.data_export_stale_after_seconds', 3600)),
             ),
         );
     }
@@ -798,6 +1051,67 @@ final class ProductServiceProvider extends ServiceProvider
         Gate::policy(DiagnosticsBundle::class, DiagnosticsPolicy::class);
 
         /*
+         * `throttle:data-export` (RF-PD-14, tarea 5.10).
+         *
+         * 30 POR MINUTO Y NO 3 COMO EL DIAGNOSTICO, y la diferencia no es un
+         * descuido. El limitador cubre las tres rutas, y **el panel sondea
+         * `GET /data-export` cada cinco segundos mientras dura la generacion**:
+         * doce peticiones por minuto solo de sondeo. Con el techo del
+         * diagnostico, la pantalla se bloquearia sola a los quince segundos de
+         * pulsar el boton, y el cliente veria un `429` justo cuando el producto
+         * esta haciendo lo que le pidio.
+         *
+         * LO QUE DE VERDAD PROTEGE A LA BASE DE DATOS NO ES ESTE NUMERO. Es el
+         * indice unico parcial `data_exports_single_in_progress_uidx`: por muchas
+         * veces que se pulse, solo puede haber una exportacion en curso, y el
+         * recorrido completo de las tablas ocurre una sola vez. Este limite esta
+         * para que un cliente HTTP mal escrito no convierta el sondeo en un bucle
+         * cerrado.
+         *
+         * POR CUENTA Y POR ORIGEN, como la zona de gestion y como el
+         * diagnostico: la cuenta es el eje que importa y el origen es la red de
+         * seguridad para cuando el actor no se puede resolver. Es configuracion
+         * y no una constante (regla dura 13).
+         *
+         * EL CUBO POR IP ES CUATRO VECES EL DE CUENTA, y ese factor arregla un
+         * fallo real. En un hotel, recepcion, direccion y el despacho de RRHH
+         * salen a internet por **la misma IP publica**: con el mismo techo en los
+         * dos ejes, tres administradores con la pantalla abierta sondeando a doce
+         * peticiones por minuto agotarian entre los tres el cubo compartido y se
+         * cortarian unos a otros. Ese `429` no protege nada —el trabajo pesado ya
+         * lo impide el indice unico— y el cliente lo lee como «el producto esta
+         * roto». Cuatro deja sitio a la plantilla de administradores que cabe en
+         * un hotel y sigue cerrando el bucle cerrado de un cliente HTTP mal
+         * escrito, que es a lo unico que apunta el limite por origen.
+         */
+        RateLimiter::for('data-export', static function (Request $request): array {
+            $perMinute = max(1, Config::integer('product.data_export_rate_limit_per_minute', 30));
+            $actor = $request->user();
+
+            return [
+                Limit::perMinute($perMinute * self::DATA_EXPORT_IP_BUDGET_FACTOR)
+                    ->by('data-export-ip:'.(string) $request->ip()),
+                Limit::perMinute($perMinute)->by('data-export-account:'.(
+                    $actor instanceof ManagementActor ? $actor->actorUuid() : 'desconocido'
+                )),
+            ];
+        });
+
+        /*
+         * Las tres rutas de `/api/v1/data-export` son de `admin` **del cliente** y
+         * de nadie mas (Anexo B del doc 01, §7.3 nota 6: `settings:*` es del
+         * administrador de instalacion). El middleware comprueba el ambito y esta
+         * policy comprueba el rol **y que quien pregunta no sea el fabricante**
+         * (regla dura 18 y regla dura 16).
+         *
+         * El sujeto es el modelo de dominio {@see DataExportModel} —«la
+         * exportacion integra de esta instalacion»— y no una fila: la policy no
+         * autoriza sobre una exportacion concreta, porque todas son iguales ante
+         * ella, y las tres operaciones existen antes de que haya ninguna.
+         */
+        Gate::policy(DataExportModel::class, DataExportPolicy::class);
+
+        /*
          * Las tres rutas de `/api/v1/support/grants` son de `admin` **del
          * cliente** y de nadie mas (Anexo B del doc 01, §7.3: `support:*` es del
          * administrador de instalacion). El middleware comprueba el ambito y esta
@@ -864,6 +1178,42 @@ final class ProductServiceProvider extends ServiceProvider
                  */
                 ProductDoctorCommand::class,
                 ProductDiagnosticsCommand::class,
+                /*
+                 * La exportacion integra (RF-PD-14, RL-20, tarea 5.10).
+                 *
+                 * **La parte `--purge` se programa; el comando entero no.**
+                 * `routes/console.php` ejecuta `product:export-all --purge` cada
+                 * hora. Generar no se programa nunca —una copia completa de la
+                 * plantilla que aparece sola en el disco cada noche seria lo
+                 * contrario de lo que RL-20 quiere—; lo que se programa es
+                 * BORRAR las que ya caducaron, porque la retencion de un fichero
+                 * asi no puede depender de que alguien se acuerde.
+                 *
+                 * En consola ademas del panel porque el panel descarga el ZIP
+                 * entero en la memoria del navegador: por encima de un giga
+                 * conviene generarlo aqui y sacarlo con `docker compose cp`. Y
+                 * porque RL-20 no puede depender de que la puerta de delante
+                 * este abierta.
+                 */
+                ProductExportAllCommand::class,
+                /*
+                 * La telemetria opcional (Anexo C, RF-PD-12, tarea 5.10).
+                 *
+                 * **El unico que se programa entero**: `routes/console.php` lo
+                 * ejecuta con `--send` los lunes a las 05:40 UTC, y eso es todo
+                 * lo que hace el comando. De los ocho de este modulo, el de
+                 * arriba tiene programada **solo su purga** y los seis restantes
+                 * no se programan nunca.
+                 *
+                 * Sin banderas no envia nada ni deja rastro: imprime el
+                 * documento que se enviaria, que es como la ficha quiere que el
+                 * cliente decida -con la lista delante-.
+                 *
+                 * Vive aqui y no en `routes/console.php` por lo mismo que los
+                 * demas: ahi vive **cuando** se ejecuta un comando, no que
+                 * comandos existen.
+                 */
+                ProductTelemetryCommand::class,
             ]);
         }
     }

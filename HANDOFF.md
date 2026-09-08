@@ -7,11 +7,67 @@
 
 ## Estado y objetivo actual
 
+**Rama `feat/tarea-5.10-exportacion-telemetria`** (desde `main` `2f7f2cc`). **Tarea 5.10 «Exportación íntegra de
+datos y telemetría opcional desactivada por defecto» (RF-PD-12, RF-PD-14, RL-20) IMPLEMENTADA, REVISADA y
+PROBADA el 08-09-2026**; commit `e559e5d` empujado, **CI manual completa con ⑧ y ⑧b lanzada (ejecución 34268124784)** y PR abierta contra `main` (ver «Siguiente acción»).
+
+**Cómo se hizo (receta de la 5.9):** diez decisiones escritas en la ficha ANTES de nada (punto 14 de «no
+cubiertos» resuelto), contrato (`/api/v1/data-export` GET/POST, `/api/v1/data-export/{uuid}/download`), tipos
+regenerados, bloques `RESERVADO 5.10-A/B` en siete ficheros compartidos, y tres agentes en paralelo:
+`producto-licencia` (exportación), `backend-laravel` (telemetría), `frontend-panel` (sección «Tus datos son
+tuyos» en Licencia). **Los tres se cortaron por el límite de sesión antes de escribir nada y se reanudaron con
+`SendMessage` sin perder contexto.** Después `revisor-codigo` y `seguridad-cumplimiento`
+(`/revision-cumplimiento`) en paralelo con la suite completa, y segunda vuelta de los tres con los hallazgos.
+Prompt en doc 03 §6.5.5.
+
+**Lo construido.** Backend: tabla `data_exports` (índice único parcial «una sola en curso», CHECK de estados y
+de `failure_reason`), `DataExportCatalog` (18 conjuntos por `FieldAllowlist`, sin ningún hash/secreto ni
+`BIGINT` salvo `audit_log`, cuya huella los necesita), cursor de servidor en `REPEATABLE READ`, ZIP con CSV
+(`CsvDialect`) + JSON + `manifest.json` + `README.md` en el idioma de la instalación (`lang/*/data-export.php`,
+cada columna descrita y atado por prueba), `product:export-all [--purge]` (síncrono; `--purge` horario borra ZIP
+caducados y libera filas atascadas `stale`), `GenerateDataExportJob` (asíncrono desde el panel, `failed()`),
+`DataExportPolicy` (admin y nunca actor de soporte), `throttle:data-export` (30/min por cuenta, ×4 por IP),
+auditoría `data_export.requested|generated|downloaded` en familia `legal_export` con actor = quien la pidió
+aunque escriba la cola, `ByteSize::human()` en `Shared`. Telemetría: `TelemetryReport` (19 campos cerrados,
+atados por prueba a `configuracion.md` §3 quinquies), cuatro condiciones (`TELEMETRY_ENABLED`,
+`TELEMETRY_ENDPOINT` **https**, `telemetry` en la licencia), `HttpTelemetrySender` (3 s/10 s, sin
+redirecciones, un reintento), `FileTelemetryStateStore` (`installation_id` aleatorio; `provisional()` para la
+vista previa sin escribir), `product:telemetry [--send] [--json] [--lang]`, lunes 05:40 UTC,
+`Feature::Telemetry` implementada, `OutboundChannelsTest` (único cliente HTTP saliente). Panel:
+`DataExportPanel.vue` en `LicenseView` (sondeo 5 s solo con una en curso, aviso `role="alert"`, 409 normalizado,
+códigos de fallo traducidos, unidades binarias). Docs: contrato, ficha 5.10 (11 puntos), doc 01 §5.5, doc 02
+(Anexo B/C, §7.3 nota 6, §11.6.7), doc 03 §6.5.5, doc 07 §6 (cinco filas), `operacion.md` §1 y §13,
+`obligaciones-legales.md` §2 (telemetría), §7 quater y §8, `configuracion.md` §3 quater y §3 quinquies.
+
+**Decisiones que hay que conocer** (ficha, «Decisiones tomadas»): asíncrona desde el panel porque
+`fastcgi_read_timeout` es 60 s; una sola en curso; fichero que caduca a 7 días, fila que nunca se borra;
+`settings:*` + policy; nunca degradada; `failure_reason` es un código (`write_failed|database_error|stale|
+unexpected`); `TELEMETRY_ENDPOINT` no viaja en el paquete de diagnóstico a propósito; `usage_7d` es la
+diferencia desde el último envío correcto (las series Redis son acumuladas).
+
+**Lo que corrigieron las revisiones (aplicado):** fila atascada bloqueaba RL-20 (tres redes: `failed()`,
+`complete()` dentro del `try` borrando el ZIP huérfano, obsolescencia `PRODUCT_DATA_EXPORT_STALE_AFTER`);
+instantánea única (`REPEATABLE READ`, solo con `transactionLevel() === 0`; `DataExportSnapshotTest` con
+`CommittedDatabase` y segunda conexión); prueba de volumen que mide el incremento (48 MiB) y no el pico absoluto
+(dentro de la suite completa el proceso ya arranca con 138 MiB); `https` obligatorio; vista previa sin
+persistir; `notice` si el estado no se puede guardar; descarga probada para quiosco y portal.
+
+**Verificado el 08-09:** suite completa **3612 en verde** (16 413 aserciones, 627 s), `make quality` (ShellCheck
+0, contrato 0, Pint, PHPStan 9, Deptrac 0), `qa:traceability --check`, `docs:consistency --check`, gitleaks
+sobre el árbol (0), enlaces del paquete (98, todos dentro), panel `type-check`/`lint`, 410 unitarias y E2E
+completa 80/80 (más 32 tras la segunda vuelta). A mano en el contenedor: `product:export-all` sobre la BD de
+dev (ZIP inspeccionado, permisos 0600/0700), fila `running` de 3 h liberada por `--purge`, `product:telemetry`
+con destino `http://` rechazado y `storage/app/telemetry` vacío.
+
+**Siguiente acción:** vigilar la ejecución manual 34268124784 (⑧ y ⑧b) —**no empujar nada a la rama mientras corra: el grupo de concurrencia la cancelaría**—, integrar la PR con *merge commit* (nunca squash) cuando esté en verde, `make up` en `main` (migración `data_exports`). Después la **5.11** (documentación de
+instalación, operación, configuración y obligaciones; capturas del asistente; guía de endurecimiento). Recordatorio: **la ⑧b solo corre en `main`, etiquetas o a mano**.
+
 **Rama `feat/tarea-5.9-diagnostico-doctor-soporte`**, creada desde `main` (`d2fe595`: PR #44, #45 y #46
 integradas el 08-09-2026 con la CI de `main` completa en verde, ⑧ y ⑧b incluidas, y Node 25 en la imagen de
 nginx). **Tarea 5.9 «Paquete de diagnóstico anonimizado, `product:doctor`, accesos de soporte auditados»
-(RF-PD-09, RF-PD-11, RF-PD-13, RL-18, RL-19) IMPLEMENTADA, REVISADA y PROBADA el 08-09-2026**: **PR #47**
-contra `main`, con la CI completa y ⑧b lanzada a mano (ejecución 34232924735; ver «Siguiente acción»).
+(RF-PD-09, RF-PD-11, RF-PD-13, RL-18, RL-19) IMPLEMENTADA, REVISADA, PROBADA e **INTEGRADA en `main` el 08-09-2026** (PR #47, *merge commit* `2f7f2cc`;
+CI manual completa con ⑧ y ⑧b en verde antes de integrar, ejecución 34232924735; CI de `main` tras el merge,
+ejecución 34242209054). Rama borrada; `make up` hecho sobre `main`.
 
 **Cómo se hizo (misma receta que la 5.8, con una diferencia):** contrato primero (cuatro rutas y ocho esquemas),
 tipos regenerados, **bloques reservados con comentario** en `ProductServiceProvider` y `routes/api_v1.php`
@@ -81,11 +137,7 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 (exit 1, tres avisos coherentes), `product:diagnostics` (71 KB, `grep -c "hotel\|@"` = 0), `--verify`
 íntegro/alterado, `support:grant`/`support:revoke`, `doctor.sh` con `app` en pie y parado.
 
-**Siguiente acción:** vigilar la ejecución manual 34232924735 (⑧ y ⑧b) y la PR #47; integrar con *merge
-commit* (nunca squash) cuando esté todo en verde —**cuidado: el grupo de concurrencia cancela la ejecución en
-curso de la misma rama en cada push, así que no empujar nada mientras corra la manual**—, ejecutar `make up` (migraciones
-nuevas de `support_grants`), y arrancar la **5.10** (exportación íntegra y telemetría desactivada) en rama
-nueva. Recordatorio: **la ⑧b solo corre en `main`, etiquetas o a mano**.
+**Siguiente acción (5.9):** ninguna; integrada. La CI de `main` tras el merge (34242209054) terminó en verde.
 
 ## Pendiente
 
@@ -191,6 +243,7 @@ nueva. Recordatorio: **la ⑧b solo corre en `main`, etiquetas o a mano**.
   antes de buscar en el código.
 - Hook de Pint activo: tras editar un `.php` de backend, el fichero puede quedar reformateado al
   instante.
+- **Al tocar `docs/api/openapi.yaml`, regenerar los TRES clientes** (`npm run api:generate` en `frontend-admin`, `frontend-kiosk` y `frontend-portal`): la etapa ① de la CI compara cada `schema.d.ts` versionado con el contrato y falla si uno no se regeneró, aunque esa SPA no use las rutas nuevas (pasó en la primera CI de la 5.10).
 - gitleaks (job `security`) marca como clave cualquier literal `NOMBRE_KEY=valor` aunque sea un ejemplo
   de prueba: en las aserciones, comprobar el valor sin el nombre de la variable delante.
 

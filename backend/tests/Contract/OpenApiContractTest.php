@@ -212,6 +212,20 @@ it('describe solo los endpoints cuya tarea existe, y todos bajo /api/v1', functi
         // revocar dos veces es `204` y `404` solo si el UUID no existe.
         '/api/v1/support/grants',
         '/api/v1/support/grants/{uuid}',
+        // Tarea 5.10: la exportacion integra de los datos del cliente (RF-PD-14,
+        // RL-20). Ambito `settings:*` y no uno propio, al contrario que el
+        // diagnostico y los accesos de soporte: aquellos existen para que algo
+        // salga hacia el FABRICANTE y por eso se conceden por separado; esto es
+        // el cliente llevandose lo suyo, y no hay nadie que lo concederia sin
+        // conceder tambien el resto de la administracion.
+        //
+        // Tres rutas y no una: el `POST` **encola** y responde `202` porque el
+        // recorrido de todas las tablas no cabe en una peticion HTTP, el `GET` es
+        // lo que el panel sondea mientras dura, y la descarga va aparte porque
+        // devuelve un binario y no JSON. Sin `DELETE`: una exportacion no se
+        // borra, caduca sola y su fila queda como `purged` (regla dura 5).
+        '/api/v1/data-export',
+        '/api/v1/data-export/{uuid}/download',
         // Tarea 5.5: el asistente de puesta en marcha (RF-PD-03). Prefijo propio
         // y no rutas repartidas por los recursos que toca, por una razon
         // concreta: son de UN SOLO USO y se cierran a la vez. Con `POST

@@ -22,6 +22,7 @@ import FormField from '@kronoqr/web-kit/components/FormField.vue'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { License } from '@/shared/api/types'
+import DataExportPanel from './DataExportPanel.vue'
 import { formatLicenseDay } from './license.dates'
 import { useLicenseStore } from './license.store'
 
@@ -275,5 +276,11 @@ onMounted(() => {
         </div>
       </form>
     </template>
+
+    <!-- «Tus datos son tuyos» (RF-PD-14, RL-20): FUERA del `v-if="license !==
+         null"` de arriba y a proposito. No depende de la licencia ni de que
+         su lectura haya funcionado (ADR-019, regla dura 15): el propio
+         componente decide su visibilidad por el ambito de la sesion. -->
+    <DataExportPanel />
   </section>
 </template>

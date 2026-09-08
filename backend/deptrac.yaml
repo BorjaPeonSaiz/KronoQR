@@ -396,10 +396,11 @@ parameters:
 
     # Las decisiones de codificacion del CSV del producto (CsvDialect). No es un
     # adaptador de ningun puerto: es la forma de un fichero que el producto
-    # entrega por dos caminos —la exportacion legal de Compliance y la descarga
-    # del portal, que sirve Reporting/Http— y que tiene que ser la misma por los
-    # dos. Se declara como capa propia, con sus dos aristas nombradas una a una,
-    # en lugar de abrir SharedInfrastructure entera a Http.
+    # entrega por tres caminos —la exportacion legal de Compliance, la descarga
+    # del portal que sirve Reporting/Http, y la exportacion integra de Product
+    # (RF-PD-14, tarea 5.10)— y que tiene que ser la misma por los tres. Se
+    # declara como capa propia, con sus aristas nombradas una a una, en lugar de
+    # abrir SharedInfrastructure entera a Http.
     - name: SharedExport
       collectors:
         - type: classNameRegex
@@ -1238,6 +1239,14 @@ parameters:
       - Eloquent
       - ExternalCode
       - ProductPersistence
+      # La exportacion integra (RF-PD-14, RL-20, tarea 5.10) escribe sus CSV con
+      # el mismo dialecto que la exportacion legal y que la descarga del portal.
+      # Ver la capa SharedExport: es la FORMA de un fichero —BOM, RFC 4180,
+      # `\r\n`, neutralizacion de formulas—, no un adaptador de ningun puerto, y
+      # por eso la arista llega a Export y para ahi. Sin ella, el producto
+      # tendria tres formatos de CSV distintos y quien los abre es la misma
+      # persona con el mismo Excel.
+      - SharedExport
       # ADR-028, tarea 5.3. `ObservePlanLimits` escucha el alta de una persona y
       # la emision del token de un quiosco para CONTAR, nunca para decidir: el
       # ADR exige por escrito que el conteo sea «un observador, no un guardian»,

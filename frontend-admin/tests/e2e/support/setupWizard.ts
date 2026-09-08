@@ -465,6 +465,15 @@ export async function stubOnboardingApi(
           licenseActivated = true
           await json(route, 200, VALID_LICENSE)
           return
+        case 'GET /api/v1/data-export':
+          // El paso de licencia del asistente incrusta `LicenseView.vue`, que
+          // desde la tarea 5.10 lleva la seccion «Tus datos son tuyos»
+          // (RF-PD-14, RL-20): el primer administrador ya tiene `settings:*`
+          // (abilities `['*']`), asi que la seccion pide esta lista. Sin
+          // ninguna exportacion pedida todavia, que es el estado real de una
+          // instalacion que se esta poniendo en marcha.
+          await json(route, 200, { data: [] })
+          return
         case 'POST /api/v1/kiosk/pair/confirm': {
           const payload = request.postDataJSON() as { code?: string; name?: string }
 
