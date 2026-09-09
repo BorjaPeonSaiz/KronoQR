@@ -43,7 +43,7 @@ return [
      * A CERO SE DESACTIVA, y solo tiene sentido para depurar en local: las dos
      * pruebas de RS-03 fallan si lo encuentran apagado.
      */
-    'rejection_floor_ms' => (int) env('SECURITY_REJECTION_FLOOR_MS', 25),
+    'rejection_floor_ms' => (int) env('IDENTITY_CREDENTIAL_REJECTION_FLOOR_MS', 25),
 
     /*
      * Si esta instalacion admite un certificado TLS autofirmado

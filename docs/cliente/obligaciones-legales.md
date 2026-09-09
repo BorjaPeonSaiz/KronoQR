@@ -1,10 +1,11 @@
 # Obligaciones legales del hotel al usar KronoQR
 
-> **Estado.** Redactado en la **tarea 2.10**, que es la que decide la política de
-> retención por tipo de dato, y ampliado en la **5.2** con la sección 7 (el
-> perfil de cumplimiento es responsabilidad del cliente, RL-16 y RL-21). La
-> **tarea 5.11** lo revisa e integra en el paquete de documentación final; no lo
-> reescribe.
+> **Lo que es este documento, y lo que no.** Explica qué obligaciones asume el
+> hotel al usar el sistema y qué hace el producto para ayudar a cumplirlas.
+> **No es asesoramiento jurídico**: el marco que recoge lo valida tu asesoría
+> laboral y, si lo tienes, tu delegado de protección de datos, que conocen tu
+> convenio y tu situación. El producto facilita el cumplimiento; no lo
+> sustituye (RL-21). En inglés: [`en/legal-obligations.md`](en/legal-obligations.md).
 
 **Quién responde de qué, dicho en una línea:** el hotel es el **responsable del
 tratamiento** y del registro horario; el fabricante entrega un producto que hace
@@ -137,7 +138,8 @@ El fabricante **no puede hacer esta evaluación por ti**: depende de tu centro, 
 tu plantilla y de qué otros sistemas tengas (ADR-020). Lo que sí te entrega es el
 material para hacerla: qué datos trata el producto (arriba), cuánto los conserva
 (§4), quién accede y con qué registro (§5) y qué medidas de seguridad hay
-(`docs/07-seguridad-madurez-y-amenazas.md`).
+([`endurecimiento.md`](endurecimiento.md) y §5 de este documento; el fabricante
+entrega a petición un resumen de las medidas de seguridad del producto).
 
 ---
 
@@ -390,8 +392,9 @@ consola en lugar del panel: [`operacion.md`](operacion.md) §13.
 
 
 Si necesitas soporte sobre una incidencia, el paquete de diagnóstico va
-**anonimizado por defecto** y cualquier acceso ampliado es expreso, temporal y
-queda auditado.
+**anonimizado por defecto** (RL-19): incluir datos personales es una decisión
+tuya, expresa, avisada en pantalla y anotada en tu auditoría; y cualquier acceso
+ampliado es expreso, temporal y queda auditado.
 
 ### Quién es qué cuando hay soporte (RL-16, RL-17, RL-18)
 

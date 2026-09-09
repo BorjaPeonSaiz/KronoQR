@@ -1254,6 +1254,16 @@ php artisan qa:traceability --check
 6. Español e inglés (§3.5, transversal).
 7. Referencia cruzada única: cada fallo se explica **en un solo sitio** y los demás enlazan. Documentación duplicada es documentación que divergirá.
 
+**Decisiones tomadas al ejecutar la tarea (08-09-2026).** Las que los documentos dejaban abiertas o que el cierre obligó a fijar; cada una está escrita también donde la lee quien la necesita (los propios documentos, `ClientDocumentationTest`, doc 02 §11.6.1, doc 03 §6.5.6, doc 07 §6):
+
+1. **La guía de endurecimiento es un quinto fichero, `docs/cliente/endurecimiento.md`, anexo de `instalacion.md`** (enlazado desde su §9 «Y después de instalar» y desde `operacion.md`). No contradice el doc 05 §10.8: los cuatro manuales prometidos siguen siendo los cuatro; este es el anexo que el doc 07 exige por escrito —fila «Gestión del entorno» del SAMM y cuatro riesgos aceptados marcados «Revisión en 5.11 (guía de endurecimiento)»: nombres por SMTP, token del quiosco en `localStorage`, `503` de mantenimiento sin autenticar y marca sin autenticar—. Cada control de la guía dice **qué riesgo cierra y de quién es** (fabricante o cliente), y no inventa ninguno que el producto no tenga: exposición de red por ruta y por rango (`KIOSK_VLAN_CIDR`, `PORTAL_INTERNAL_CIDR`, `METRICS_ALLOW_CIDR`, el panel sin publicar hasta el paso 1 del asistente), TLS, el `.env` y la custodia de secretos, el anfitrión (SSH, grupo `docker`, parches del SO), las tablets (modo quiosco/MDM, custodia física, `unpair`), SMTP (`smtps` y encargo del art. 28), copias fuera del servidor, cuentas (segundo factor, mínimo privilegio por rol, accesos de soporte con caducidad), observabilidad (Grafana, métricas) y qué revisa el fabricante en cada versión (Trivy sobre las imágenes) frente a lo que es del cliente (el anfitrión).
+2. **Inglés: `docs/cliente/en/` con nombres en inglés** (`installation.md`, `operation.md`, `configuration.md`, `legal-obligations.md`, `hardening.md`). **Los runbooks siguen solo en español**: los producen el §12 y las tareas que los originan, no esta; la versión inglesa los enlaza (`../../runbooks/…`) con una nota. **Los comandos son idénticos en las dos lenguas**: `ClientDocumentationTest` ata cada par y compara sus bloques `bash` sin las líneas de comentario; un comando que diverja rompe la CI. Traducir no es resumir: misma estructura de apartados, mismos «qué hacer si…».
+3. **Capturas generadas con Playwright sobre el doble del contrato** (`stubOnboardingApi` del E2E del panel y el doble del emparejamiento del quiosco), **sin backend y sin datos reales** —«Hotel Marina», «Youssef Amrani», regla 21—, en español e inglés, a 1366×768 (panel) y 1280×800 (tablet), en `docs/cliente/img/<idioma>/`. Se regeneran con `npm run docs:screenshots` en `frontend-admin` y `frontend-kiosk`; **nunca en la CI** (no se suben binarios desde un runner). El generador escribe el sello `docs/cliente/img/VERSION` y la prueba lo ata a `VERSION` (mayor.menor): al subir la versión menor, la CI cae hasta regenerarlas — es la «revisión en cada versión menor» de la ficha, verificada por una herramienta y no por costumbre. La CI (etapa ⑧, `check-package-links.sh`) comprueba además que cada imagen enlazada viaja en el paquete.
+4. **`configuracion.md` gana la referencia completa del `.env`, variable a variable** (el §11.6.1 lo titula «Todos los parámetros y qué hace cada uno», y antes del cierre faltaban 100 de 162): por familia, con su marca `[CLIENTE]`/`[INSTALADOR]`/`[FIJO]`, valor de serie, cuándo cambiarla y **si afecta al cálculo de horas**; más el índice de las claves de `installation_settings` (`SettingKey::cases()`). Prueba cruzada en las dos direcciones (`.env.example` ↔ `configuracion.md`, `SettingKey` ↔ `configuracion.md`): una variable nueva sin documentar rompe la CI.
+5. **`obligaciones-legales.md` cita RL-16 a RL-21 por identificador**, uno a uno, atado por prueba. El lector no conoce los identificadores; el fabricante sí, y son la forma de comprobar que ningún requisito legal se queda sin párrafo al resumir el documento.
+6. **Los «qué hacer si…» del punto de fichaje** (la tablet no accede a la cámara —`Permissions-Policy: camera=(self)`, §7.2—, la tablet no encuentra el servidor, el código de emparejamiento no funciona) **viven en el runbook `alta-nuevo-quiosco.md`** (referencia única, paso 7) e `instalacion.md` §5 remite. «Docker ausente o antiguo» y «disco insuficiente» van en `instalacion.md` §5, alineados con el código `2` del instalador. Los requisitos del punto de fichaje (tablet Android 10+, cámara trasera con autoenfoque, modo quiosco a cargo del IT) se enuncian en `instalacion.md` §0 y se detallan en el runbook.
+7. **La instalación limpia por una persona ajena siguiendo solo la guía** (criterio de terminado del doc 03 §6.5) no la sustituye ningún script y **queda pendiente del usuario** (`HANDOFF.md`): la CI prueba que los comandos funcionan, no que la guía se entienda.
+
 **Artefactos.**
 
 ```
@@ -1288,15 +1298,15 @@ Resultado esperado: se llega al primer fichaje **sin preguntar nada a nadie**. C
 
 **Terminado cuando.** Subconjunto aplicable de la DoD del §10.3:
 
-- [ ] Los cuatro documentos escritos, en español e inglés.
-- [ ] Instalación limpia completada por alguien ajeno siguiendo **solo** la guía.
-- [ ] Todos los comandos verificados en la etapa 8 de la CI.
-- [ ] Capturas actualizadas, sin PII.
-- [ ] «Qué hacer si…» completo frente a los códigos de salida de los cinco scripts.
-- [ ] Cada parámetro del Anexo B y cada clave de `installation_settings` documentados.
-- [ ] `obligaciones-legales.md` cubre `RL-16..21` uno a uno.
-- [ ] Ningún secreto y ninguna clave de aspecto real en la documentación.
-- [ ] Coherencia verificada con el doc 05 (§10.8 promete exactamente estos cuatro manuales).
+- [x] Los cuatro documentos escritos, en español e inglés (cinco: con `endurecimiento.md`; pares atados por `ClientDocumentationTest`).
+- [ ] Instalación limpia completada por alguien ajeno siguiendo **solo** la guía (decisión 7: pendiente del usuario).
+- [x] Todos los comandos verificados: el procedimiento en la etapa ⑧, y cada `artisan x:y` citado en las guías y los runbooks contrastado con el árbol por `ClientDocumentationTest` (así afloró `kiosk:health`, que no existía y se implementó).
+- [x] Capturas actualizadas, sin PII.
+- [x] «Qué hacer si…» completo frente a los códigos de salida de los cinco scripts.
+- [x] Cada parámetro del Anexo B y cada clave de `installation_settings` documentados.
+- [x] `obligaciones-legales.md` cubre `RL-16..21` uno a uno.
+- [x] Ningún secreto y ninguna clave de aspecto real en la documentación.
+- [x] Coherencia verificada con el doc 05 (§10.8 promete exactamente estos cuatro manuales).
 
 ---
 

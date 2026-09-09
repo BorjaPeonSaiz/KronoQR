@@ -134,6 +134,15 @@ export interface OnboardingApiOptions {
   stepsDone?: Partial<Record<Exclude<SetupStep, 'administrator' | 'site'>, SetupStepState>>
   /** Igual que `stepsDone`, para los dos pasos DERIVADOS. */
   siteDone?: boolean
+  /**
+   * El idioma de la cuenta que devuelven `POST /auth/2fa/confirm` y
+   * `GET /auth/me` (por defecto `'es'`). El panel adopta el idioma de la
+   * PERSONA al iniciar sesion (`main.ts`, el `watch` sobre `session.user.locale`),
+   * no el del navegador: sin esta opcion, un recorrido en ingles volveria al
+   * espanol en cuanto se confirma el segundo factor del paso 1 (tarea 5.11,
+   * generador de capturas del asistente).
+   */
+  locale?: 'es' | 'en'
 }
 
 export interface OnboardingApiStub {
@@ -164,6 +173,7 @@ export async function stubOnboardingApi(
     ...options.stepsDone,
   }
   const departments: Department[] = []
+  const accountLocale = options.locale ?? 'es'
   let appName = ''
   let credentialsPending = 0
   /** Cuantos quioscos se han vinculado durante el asistente (RF-PD-06). */
@@ -313,7 +323,7 @@ export async function stubOnboardingApi(
               uuid: '0199f0aa-1111-7000-8000-0123456789ab',
               name: 'Dirección del hotel',
               email: 'direccion@hotel.example',
-              locale: 'es',
+              locale: accountLocale,
               roles: ['admin'],
               abilities: ['*'],
               scope: { kind: 'all', department_ids: [] },
@@ -326,7 +336,7 @@ export async function stubOnboardingApi(
             uuid: '0199f0aa-1111-7000-8000-0123456789ab',
             name: 'Dirección del hotel',
             email: 'direccion@hotel.example',
-            locale: 'es',
+            locale: accountLocale,
             roles: ['admin'],
             abilities: ['*'],
             scope: { kind: 'all', department_ids: [] },

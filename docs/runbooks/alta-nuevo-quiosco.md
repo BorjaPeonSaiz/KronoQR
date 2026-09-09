@@ -61,10 +61,6 @@ docker compose exec app php artisan <comando>
 Los requisitos del **servidor** están en
 [`../cliente/instalacion.md`](../cliente/instalacion.md) §0.
 
-> **Duda anotada (para la 5.11).** Esta tabla de la tablet vive hoy solo aquí.
-> Debería estar también en `instalacion.md` §0, junto a la del servidor: quien
-> compra el hardware lee esa guía semanas antes de abrir este runbook. Como este
-> cambio no toca `instalacion.md`, queda apuntado.
 
 ### Cuatro cosas que hay que saber antes de empezar
 
@@ -192,20 +188,7 @@ https://fichaje.tuhotel.local/kiosk/
 
 Al no tener token, la aplicación va sola a la pantalla de emparejamiento:
 
-```
-  +--------------------------------------------+
-  |                                            |
-  |          Vincular este quiosco             |
-  |                                            |
-  |              483 921                       |
-  |                                            |
-  |   Escribe este codigo en el panel de       |
-  |   gestion: Quioscos > Vincular quiosco     |
-  |                                            |
-  |   Caduca en 9:42       Generar otro codigo |
-  |                                            |
-  +--------------------------------------------+
-```
+![La tablet muestra el código de emparejamiento en grande, la cuenta atrás de su caducidad, el botón de generar otro y «Esperando a que el administrador lo confirme en el panel»](../cliente/img/es/quiosco-emparejamiento-codigo.png)
 
 - El código se lee **desde lejos**: no hace falta descolgar la tablet del
   soporte.
@@ -213,6 +196,11 @@ Al no tener token, la aplicación va sola a la pantalla de emparejamiento:
   tablet pide otro **sola**: no toques nada.
 - La tablet pregunta al servidor cada pocos segundos. En cuanto confirmes, pasa a
   la pantalla de fichaje **por su cuenta**, sin recargar ni volver a tocarla.
+
+Así queda la tablet en cuanto el panel confirma: la cámara activa y «Acerca tu
+tarjeta». Si ves esto, el emparejamiento ha terminado.
+
+![La pantalla de fichaje ya operativa: la marca, «En línea», la cámara activa y el botón de fichar con código y PIN](../cliente/img/es/quiosco-emparejado.png)
 
 ### 3.2 En el panel de gestión
 
@@ -299,9 +287,15 @@ docker compose exec app php artisan kiosk:health
 Lo que hay que mirar, por orden: que el quiosco nuevo **aparece**, que su último
 contacto es de hace menos de dos minutos y que su cola pendiente es **0**.
 
-> **Duda anotada.** El formato exacto de la salida de `kiosk:health` se fija con
-> el comando; si cambia, este párrafo se actualiza en el mismo cambio. Lo que no
-> cambia es qué hay que mirar: nombre, último contacto y cola.
+La tabla trae, por quiosco: nombre, estado, versión de la aplicación, último
+contacto (relativo y en la zona del centro), cola pendiente y un **veredicto**:
+`ok` (latido de hace menos de 2 min y cola 0), `aviso` (entre 2 y 10 min sin
+latido, cola pendiente, o recién emparejado sin primer latido) o `FALLO` (más de
+10 min sin latido: el mismo umbral con el que la observabilidad avisará). Debajo,
+«Qué hay que mirar» dice qué hacer con cada aviso. Sale con `0` si todo está al
+día, `1` con avisos y `2` con algún fallo; `--json` devuelve lo mismo para
+scripts. Los dos umbrales son `KIOSK_HEALTH_FRESH_WITHIN_SECONDS` (120) y
+`KIOSK_HEALTH_SILENT_AFTER_SECONDS` (600) en el `.env`.
 
 ### 4.3 En el panel
 
@@ -423,6 +417,106 @@ Por orden de frecuencia: wifi del punto de montaje, tablet fuera de la VLAN,
 certificado que la tablet no acepta y URL mal escrita en la tablet. La pantalla
 de fichaje de un quiosco **ya vinculado** aguanta el corte sin inmutarse: encola
 y envía luego.
+
+### …la tablet dice que no puede acceder a la cámara
+
+**Mira primero cuál de los dos mensajes es**, porque son ramas distintas:
+
+| En la pantalla | Qué ha pasado |
+| --- | --- |
+| **«Sin acceso a la cámara»** | El navegador **denegó el permiso** para este sitio |
+| **«Cámara no disponible»** | El navegador **ni siquiera ofrece cámara**, o no pudo abrirla |
+
+**Si dice «Sin acceso a la cámara»** — permiso denegado para el sitio:
+
+1. Abre los permisos del sitio en la tablet: `chrome://settings/content/camera`,
+   o el candado junto a la dirección → «Permisos». Busca la URL del quiosco.
+2. Si está en «Bloqueados», quítalo de ahí y recarga la PWA. Volverá a pedir el
+   permiso; concédelo.
+3. Si la tablet va con MDM, comprueba que el perfil **concede la cámara** a esa
+   URL. Un perfil que bloquea la cámara «por seguridad» deja el quiosco inútil,
+   y es una causa frecuente en parques nuevos.
+4. Borrar los datos del sitio **también borra el permiso** — y la cola de
+   fichajes pendientes. Antes de hacerlo, comprueba que la cola está a 0
+   (§4.2).
+
+**Si dice «Cámara no disponible»** — por orden de frecuencia:
+
+1. **La PWA está abierta por `http://` y no por `https://`.** Los navegadores
+   **solo ofrecen la cámara en un origen seguro**: sobre `http://` la interfaz
+   de cámara no existe y no hay permiso que conceder. Mira la barra de
+   direcciones de la tablet: tiene que empezar por `https://`. Si el acceso por
+   HTTP redirige mal o alguien guardó el acceso directo con `http://`, ese es
+   el fallo entero.
+2. **Otra aplicación tiene la cámara tomada** (la de fotos, una de
+   videollamada). Ciérrala, o reinicia la tablet.
+3. **La tablet no tiene cámara trasera utilizable** (§1, «Qué tablet vale»).
+
+**Y hay una causa que puede dar cualquiera de los dos mensajes, que no está en
+la tablet y que se diagnostica mal y cuesta horas.** El servidor envía con cada
+página la cabecera:
+
+```
+Permissions-Policy: camera=(self), microphone=(), geolocation=(), payment=()
+```
+
+`camera=(self)` concede la cámara **al propio origen desde el que se sirvió la
+página**, y es imprescindible: sin ella, la PWA no puede abrir el vídeo. Si
+entre la tablet y el servidor hay **un proxy inverso, un balanceador o un
+aparato de filtrado** que quita o reescribe esa cabecera, o que sirve la PWA
+desde un origen distinto del que sirve la API, la cámara deja de concederse
+**sin que nada lo explique en pantalla**.
+
+Compruébalo desde una máquina de la misma red que las tablets:
+
+```bash
+curl -sI https://fichaje.tuhotel.local/kiosk/ | grep -i 'permissions-policy'
+```
+
+Tiene que salir la línea de arriba, con `camera=(self)`. Si no sale, o sale
+distinta, el problema está en lo que hayas puesto delante del servidor, no en
+la tablet ni en el producto.
+
+### …la tablet no encuentra el servidor
+
+La prueba que separa «no hay red» de «hay red y algo no cuadra» se hace **desde
+el navegador de la tablet**, escribiendo a mano:
+
+```
+https://fichaje.tuhotel.local/api/v1/health
+```
+
+Debe responder un texto corto con el estado y la versión, algo como
+`{"status":"ok","version":"2.1.0","license":"valid"}`. Según lo que salga:
+
+| Lo que ves en la tablet | Dónde está el problema |
+| --- | --- |
+| Responde el JSON | La red está bien: el fallo es de la PWA o del emparejamiento, no de red |
+| «No se puede acceder a este sitio» / no resuelve el nombre | **DNS**: la tablet no resuelve el nombre interno |
+| Tarda y agota el tiempo de espera | **Ruta o cortafuegos**: la VLAN de quioscos no llega al servidor |
+| Aviso de certificado, y al aceptarlo responde | **Certificado**: la tablet no confía en él |
+
+Y qué hacer en cada caso:
+
+- **DNS.** La tablet tiene que recibir por DHCP el **servidor DNS interno**, no
+  uno público. Un DNS público nunca resolverá `fichaje.tuhotel.local`. Si no
+  puedes tocar el DHCP de esa VLAN, publica el nombre en el DNS que sí usan las
+  tablets.
+- **Ruta.** Comprueba desde el servidor si las peticiones de esa tablet llegan
+  siquiera:
+
+  ```bash
+  docker compose logs --tail 100 nginx | grep '/api/v1/'
+  ```
+
+  Si no aparece ninguna con la IP de la tablet, el tráfico se está quedando en
+  el camino: VLAN sin ruta al servidor, o cortafuegos.
+- **Certificado.** Si es de una CA interna, instálala en el almacén de
+  confianza de la tablet (§2.5). **No enseñes al personal a aceptar el aviso**:
+  el día que alguien no lo acepte, ese quiosco no ficha.
+- **URL mal escrita.** Es más frecuente de lo que parece cuando se configuran
+  varias tablets seguidas. Compárala carácter a carácter con la de otra tablet
+  que sí funcione.
 
 ### …la PWA no arranca sola tras un reinicio
 

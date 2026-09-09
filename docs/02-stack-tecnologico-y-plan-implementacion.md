@@ -1286,10 +1286,16 @@ kronoqr-2.1.0/
 ├── certs/                      # Donde el cliente coloca tls.crt y tls.key
 ├── LICENCIA.txt
 └── docs/
-    ├── instalacion.md          # Para el IT del cliente
-    ├── operacion.md            # Copias, actualizaciones, incidencias comunes
-    ├── configuracion.md        # Todos los parámetros y qué hace cada uno
-    └── obligaciones-legales.md # Qué le corresponde al cliente (RL-21)
+    ├── cliente/
+    │   ├── instalacion.md          # Para el IT del cliente
+    │   ├── operacion.md            # Copias, actualizaciones, incidencias comunes
+    │   ├── configuracion.md        # Todos los parámetros y qué hace cada uno
+    │   ├── obligaciones-legales.md # Qué le corresponde al cliente (RL-21)
+    │   ├── endurecimiento.md       # Anexo de instalación: red, TLS, anfitrión, tablets (5.11)
+    │   ├── en/                     # Las cinco guías en inglés (5.11)
+    │   └── img/                    # Capturas del asistente y del quiosco (es/ y en/), sello VERSION (5.11)
+    ├── runbooks/                   # Procedimientos del §12, solo en español
+    └── CHANGELOG.md                # update.sh remite a él antes de tocar nada
 ```
 
 **`tools/` NO entra en el paquete** y no entra en ninguna imagen (`.dockerignore`): el emisor de licencias es del fabricante, firma claves con la clave privada del par y no tiene nada que hacer en el servidor de un hotel (§7.7, RS-08). La etapa ⑧ de la CI lo comprueba con un `test ! -e paquete/tools` al armar el paquete.
@@ -1595,7 +1601,7 @@ php artisan credentials:status --key-id=         # Quién sigue fichando con la 
 
 # Quioscos
 php artisan kiosk:pairing-code {code} --name=    # CONFIRMA el código que muestra la tablet y la vincula (vía alternativa al panel)
-php artisan kiosk:health                         # Estado de todos los quioscos
+php artisan kiosk:health [--json] [--lang=]      # Estado de todos los quioscos (RF-PA-07): último contacto, cola pendiente y qué mirar. Solo lectura. Sale 0 / 1 (avisos) / 2 (alguno activo sin latido)
 
 # Producto y licencia
 php artisan product:doctor [--json] [--lang=]     # Comprobación de salud (RF-PD-13). Sale 0 / 1 (solo avisos) / 2 (fallos)
