@@ -245,6 +245,12 @@ describe('LoginView — segundo factor (RS-06)', () => {
     await settle()
 
     expect(wrapper.text()).toContain(es.auth.twoFactor.enrolHeading)
+    // El QR se genera tras un import() dinamico del modulo de renderizado: en un
+    // runner lento los cuatro ticks de settle() no bastan (primera ejecucion real
+    // de la etapa 6 en la CI, cierre de Fase 5), asi que se espera al elemento.
+    await vi.waitFor(() => {
+      expect(wrapper.find('[data-test="two-factor-secret"]').exists()).toBe(true)
+    })
     // El secreto se enseña en texto para quien no puede escanear el QR.
     expect(wrapper.find('[data-test="two-factor-secret"]').text()).toBe(enrolment.secret)
     expect(wrapper.find('svg[role="img"]').exists()).toBe(true)
