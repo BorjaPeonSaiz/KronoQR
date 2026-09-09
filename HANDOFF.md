@@ -7,12 +7,17 @@
 
 ## Estado y objetivo actual
 
-**Rama `feat/tarea-5.11b-guias-rrhh-portal-hoja` (desde `main` `4c8e52d`). Tarea 5.11b EN CURSO (09-09-2026):** doce decisiones
-escritas en la ficha (plan 05 → «Tarea 5.11b»), fila 17 de «Puntos no cubiertos», prompt en doc 03 §6.5.8, árbol en doc 02 §11.6.1,
-contrato `GET /api/v1/credentials/instructions-sheet` y los tres `schema.d.ts` regenerados, textos de la hoja en
-`backend/lang/{es,en}/instructions-sheet.php`. Seis agentes lanzados en paralelo (A backend, B panel + capturas RRHH, C portal con
-Playwright desde cero, D capturas del quiosco, E guías ES + runbook `tarjeta-perdida-o-rota.md`, F `ClientDocumentationTest`).
-Después: traducciones EN, `revisor-codigo` + `seguridad-cumplimiento`, commit, CI manual, PR con *merge commit*, cierre de fase.
+**Rama `feat/tarea-5.11b-guias-rrhh-portal-hoja` (desde `main` `4c8e52d`). Tarea 5.11b «Guía de RRHH, guía del portal y hoja del
+empleado» (RL-05, RF-PA-*, RF-IN-*) IMPLEMENTADA, REVISADA (dos vueltas) y PROBADA el 09-09-2026**, commit `7fb784d` (más `57c5079`
+con Engram). Catorce decisiones en la ficha (plan 05 → «Tarea 5.11b»); las que importan: **la hoja la produce el producto**
+(`GET /api/v1/credentials/instructions-sheet?locale=`, PDF A4 de una cara con marca, dirección del portal e idiomas activos; fila 17
+de «Puntos no cubiertos»), **el panel no podía corregir tramos (RF-PA-04) y se construyó `CorrectionDialog`** (decisión 13), y las
+revisiones fijaron `type` propio para los tres `409` y el `422` de la corrección y `throttle:management` en `/credentials`
+(decisión 14). Seis agentes en paralelo + tres traducciones + dos revisores + segunda vuelta con tres agentes; prompt en doc 03
+§6.5.8. **Verificado sobre el árbol final:** Architecture 291 (73 de `ClientDocumentationTest`), Contract 60, Identity+Attendance
+312, AuthorizationNegative 225, InstructionsSheet 29 (6 con Chromium real), Pint/PHPStan 9/Deptrac/Redocly limpios, `qa:traceability`
+y `docs:consistency` en verde, panel type-check/lint/unit 468/E2E 103, portal unit 79, quiosco type-check/lint, paquete con 407
+enlaces resueltos, gitleaks 0 sobre los ficheros cambiados. **Ver «Siguiente acción»** para CI manual y PR.
 
 **Rama `feat/tarea-5.12-historico-errores`** (desde `main` `4f3f97b`). **Tarea 5.12 «Histórico de errores en base de
 datos» (RF-PD-15) IMPLEMENTADA, REVISADA (dos vueltas), PROBADA e INTEGRADA en `main` el 09-09-2026** (PR #51, *merge
@@ -72,13 +77,9 @@ descubierto con `scandir` (ver «Trampas»).
 gitleaks 0 sobre los ficheros cambiados, promtool sobre `errors.yml`, `check-package-links.sh` (305 enlaces), `type-check` y
 `lint` de los cuatro paquetes, unitarias web-kit 199 / panel 433 / quiosco 379 / portal 79, E2E panel 88 y quiosco 50. **CI manual 34369140085 en verde**: MSI 82,83 % (2 440 mutantes, 10 min en paralelo).
 
-**Siguiente acción:** la CI de `main` tras el merge (34375919847) terminó en verde. Arrancar la **5.11b** («Documentación de
-usuario»: guía del panel para RRHH, guía del portal del empleado y hoja de instrucciones de la tarjeta; ficha en plan 05 →
-«Tarea 5.11b»; `producto-licencia` + `frontend-panel`; misma receta: decisiones en la ficha, capturas sobre los dobles del E2E,
-ES/EN con `ClientDocumentationTest` ampliada). Después, el cierre de la Fase 5 (doc 03 §6.6) con los restos de «Pendiente».
-Commits de la 5.12: `dc9e0a1` (tarea), `f4a138d` (clientes regenerados), `816301f` (mutación en paralelo), `7aa8bb8` (HANDOFF);
-las dos primeras CI manuales cayeron por causas corregidas: clientes TypeScript sin regenerar tras un texto del contrato, y la
-mutación en serie desbordando el tope del job ③.
+**Siguiente acción:** CI manual completa (`gh workflow run ci.yml --ref feat/tarea-5.11b-guias-rrhh-portal-hoja`, lanzada tras el
+último push; no empujar nada hasta que termine) → PR con *merge commit* (nunca squash) → `make up` en `main` → borrar la rama →
+**cierre de la Fase 5** (doc 03 §6.6) con los cuatro revisores y los restos de «Pendiente».
 
 **Rama `feat/tarea-5.11-documentacion-cliente`** (desde `main` `e2860be`). **Tarea 5.11 «Documentación de instalación,
 operación, configuración y obligaciones legales» (RL-16..RL-21, RF-PD-02) IMPLEMENTADA, REVISADA, PROBADA e **INTEGRADA en
