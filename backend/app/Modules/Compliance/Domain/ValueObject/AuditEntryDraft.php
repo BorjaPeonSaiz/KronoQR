@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Compliance\Domain\ValueObject;
 
+use App\Modules\Compliance\Domain\Exception\AuditActorNotAllowedForAction;
 use App\Modules\Compliance\Domain\Exception\AuditInstantIsNotUtc;
 use DateTimeImmutable;
 
@@ -34,6 +35,14 @@ final readonly class AuditEntryDraft
     ) {
         if ($occurredAt->getOffset() !== 0) {
             throw AuditInstantIsNotUtc::forField('occurred_at', $occurredAt);
+        }
+
+        // El estado imposible se rechaza al construir y no se valida en cada
+        // camino de escritura (doc 02 §3.5): un asiento del ciclo de vida de la
+        // instalacion firmado por una persona no puede llegar a existir, porque
+        // no lo escribe una persona. Ver `AuditAction::requiresSystemActor()`.
+        if ($action->requiresSystemActor() && $actor->type !== AuditActorType::System) {
+            throw new AuditActorNotAllowedForAction($action->value, $actor->type->value);
         }
     }
 

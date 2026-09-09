@@ -574,6 +574,19 @@ it('trae doctor.sh, carga la tabla comun de codigos y lo invocan install.sh y up
     expect($doctor)->toContain('lib/exit-codes.sh')
         ->and($doctor)->toContain('lib/messages-doctor.sh');
 
+    // Y VIAJA EN EL PAQUETE. Lo cazo el cierre de la Fase 5: `package.sh` se
+    // escribio en la 5.7, `doctor.sh` llego en la 5.9 y nadie lo dio de alta en
+    // el manifiesto, asi que las tres guias mandaban ejecutar `./doctor.sh`
+    // desde un directorio que no lo tenia. Esta prueba miraba el CONTENIDO del
+    // script en el repositorio y por eso no lo vio: ahora mira tambien la
+    // lista de lo que se copia y la comprobacion de la etapa ⑧.
+    $package = repoContents('infra/scripts/package.sh');
+    $workflow = repoContents('.github/workflows/ci.yml');
+
+    expect($package)->toContain('infra/scripts/doctor.sh')
+        ->and($package)->toMatch('/for script in [^;]*\bdoctor\b[^;]*; do/')
+        ->and($workflow)->toContain('test -x paquete/doctor.sh');
+
     // Los cuatro codigos que le tocan a doctor.sh en la tabla comun (RF-PD-13,
     // decision 8 del brief de la tarea 5.9): 0 correcto, 2 sin Docker, 3 sin
     // instalacion, 6 diagnostico con al menos un fallo. El 4 y el 5 los

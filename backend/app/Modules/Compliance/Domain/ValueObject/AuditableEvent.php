@@ -8,20 +8,22 @@ namespace App\Modules\Compliance\Domain\ValueObject;
  * Las familias de hechos que **obligan** a escribir en `audit_log`
  * (`/revision-cumplimiento` bloque D, regla dura 6).
  *
- * Nacio con las **siete** del bloque D y hoy son diez. La tarea 2.6 anadio el
+ * Nacio con las **siete** del bloque D y hoy son once. La tarea 2.6 anadio el
  * ciclo de vida de una incidencia, que cumple el mismo criterio —bajo volumen y
  * relevancia legal— y no cabia en ninguna de las siete; la 5.3 anadio el de la
  * licencia, que es la unica de relevancia **comercial** y explica en su propio
  * caso por que se audita igual; la 5.9 anadio el acceso de soporte, que es el
  * unico hecho del producto en el que alguien **ajeno a la organizacion del
- * cliente** recibe una potestad sobre su instalacion. Ampliar esta lista es una
- * decision, no un tramite: cada familia nueva tiene que decir por que lo es.
+ * cliente** recibe una potestad sobre su instalacion; la 5.7 anadio el ciclo de
+ * vida de la instalacion, que es la unica cuyo hecho puede hacer desaparecer
+ * asientos de las demas. Ampliar esta lista es una decision, no un tramite: cada
+ * familia nueva tiene que decir por que lo es.
  *
  * Es el enunciado del bloque D convertido en codigo, y esta aqui por una razon
  * concreta: la lista vivia solo en una skill en Markdown, asi que una accion
  * nueva podia nacer sin auditoria y nada fallaba. Con el catalogo declarado,
  * cada `AuditAction` tiene que decir a que familia pertenece, y una prueba
- * comprueba que las diez siguen cubiertas.
+ * comprueba que las once siguen cubiertas.
  *
  * *Ante la duda, si.* El coste de auditar de mas es despreciable; el de auditar
  * de menos es una inspeccion que no puede reconstruir quien hizo que.
@@ -138,4 +140,46 @@ enum AuditableEvent: string
      * caducada, porque es cuando mas falta hace.
      */
     case SupportAccess = 'support_access';
+
+    /**
+     * El software de la instalacion cambia de version, o su base de datos se
+     * sustituye por una copia (**RF-PD-10**, RL-04, RS-07, tarea 5.7).
+     *
+     * **La undecima familia, y la cuarta que no estaba en el bloque D.** Entra
+     * por el criterio de siempre —bajo volumen, relevancia legal directa— y por
+     * un motivo que ninguna de las otras diez tiene: **es la unica familia cuyo
+     * hecho puede hacer desaparecer asientos de las demas.**
+     *
+     * Ahi esta el agujero que cierra. Una vuelta atras restaura la copia previa,
+     * y la cadena que queda **verifica en verde**: es una cadena integra, la de
+     * la copia. Lo que se ha ido —los fichajes reales del intervalo descartado y
+     * sus asientos— no deja ni un hueco visible, porque los huecos se ven en la
+     * cadena y esta cadena no tiene ninguno. Sin un asiento **encima** de la
+     * cadena restaurada que diga «lo que hay antes de mi es la copia de las
+     * HH:MM», el registro afirma una continuidad que no existio, y eso es
+     * exactamente lo que RL-04 y RS-07 prohiben.
+     *
+     * **No cabe en `RetentionPurge`.** Aquella describe una perdida
+     * **planificada, autorizada y sellada** (ADR-027): se sabe que se va, se
+     * sabe por que y queda su ancla. Esta describe una perdida **imprevista**,
+     * decidida por un script a las tres de la manana porque algo fallo.
+     * Mezclarlas haria indistinguible «venci la retencion de RL-02» de «se
+     * perdio un turno de noche», que son dos frases muy distintas ante una
+     * inspeccion.
+     *
+     * **Tampoco en `AuthorityOrCalculationChange`.** Actualizar el producto
+     * puede cambiar como se calcula —una migracion toca datos—, pero el hecho
+     * que se describe no es «alguien movio un umbral»: es «el software entero es
+     * otro». Quien consulta esa familia pregunta quien cambio las reglas, y una
+     * actualizacion no la cambia nadie del hotel.
+     *
+     * **Y no en `SupportAccess`**, aunque el actualizador venga del fabricante:
+     * ahi no hay ninguna potestad concedida sobre los datos del cliente, y el
+     * fabricante no llega a verlos (regla dura 16). Lo que hay es una operacion
+     * que el propio cliente ejecuta en su servidor.
+     *
+     * **El actor es siempre `system`** y no puede ser otro: ver
+     * {@see AuditAction::requiresSystemActor()}.
+     */
+    case InstallationLifecycle = 'installation_lifecycle';
 }

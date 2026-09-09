@@ -13,10 +13,11 @@ namespace App\Modules\Compliance\Domain\ValueObject;
  * cualquier reclamacion, y para responder «que se borro» bastan un recuento y
  * dos fechas.
  *
- * `available` distingue «no habia nada que purgar» de «ese almacen todavia no
- * existe en esta instalacion». Hoy solo lo usa `error_events`, que llega con la
- * tarea 5.12: un informe que dijera «0 filas» de una tabla inexistente afirmaria
- * que el ciclo corto de RL-11 esta corriendo cuando no lo esta.
+ * `available` distingue «no habia nada que purgar» de «ese almacen no existe en
+ * esta instalacion». Hoy solo lo usa `error_events`, cuya tabla existe en cuanto
+ * se aplican las migraciones: la distincion queda para la base a medio montar,
+ * porque un informe que dijera «0 filas» de una tabla inexistente afirmaria que
+ * el ciclo corto de RL-11 esta corriendo cuando no lo esta.
  */
 final readonly class RetentionTally
 {

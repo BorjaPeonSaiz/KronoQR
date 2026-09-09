@@ -119,7 +119,9 @@ it('dice la version del paquete y la ayuda en los dos idiomas', function (): voi
 
     expect($es)->toContain('Codigos de salida')
         // Lo que un cliente tiene que leer antes de pulsar: no hay bandera para
-        // omitir la copia, y el 6 no existe aqui.
+        // omitir la copia. El 6 casi nunca aparece (toda verificacion fallida
+        // deshace); la unica excepcion es un asiento de auditoria que no se
+        // pudo escribir tras una actualizacion que SI termino (tarea 5.7, cierre).
         ->and($es)->toContain('bloqueante')
         ->and($en)->toContain('Exit codes')
         ->and($en)->not->toContain('Codigos de salida');

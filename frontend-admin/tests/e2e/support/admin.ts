@@ -63,13 +63,13 @@ export const SITE: Site = { id: 1, name: 'Hotel Marina', timezone: 'Europe/Madri
  * recorridos del panel, que NO son ese asistente: `available: false` es lo
  * que ve una instalacion normal, ya configurada. Sin `steps`: es exactamente
  * lo que responde `GET /setup/status`, que es PUBLICA y nunca los trae
- * (revision de la 5.5) — este doble sirve esa misma ruta. El recorrido propio
- * del asistente (`setup-wizard.spec.ts`) construye su propio `SetupStatus`
- * con pasos pendientes, servido por `GET /setup/steps`.
+ * (revision de la 5.5) — este doble sirve esa misma ruta. Tampoco
+ * `completed_at`, por la misma razon y desde la revision del cierre de la Fase
+ * 5. El recorrido propio del asistente (`setup-wizard.spec.ts`) construye su
+ * propio `SetupStatus` con pasos pendientes, servido por `GET /setup/steps`.
  */
 export const SETUP_STATUS_DONE: SetupStatus = {
   available: false,
-  completed_at: '2026-01-01T00:00:00Z',
 }
 
 export const DEPARTMENTS: DepartmentCollection = {
@@ -844,6 +844,23 @@ export interface ManagementApiOptions {
    */
   readonly branding?: Branding
   /**
+   * Los umbrales operativos (`ATTENDANCE_*`) y los idiomas (`LOCALE_*`) que
+   * completan el catalogo de `GET/PATCH /api/v1/settings` (RF-PD-01, tarea
+   * 5.13, `OperationalSettingsView`). Por omision, los valores de serie del
+   * producto (12, 60, 15, 120, `es`, `[es, en]`): una instalacion recien
+   * puesta en marcha, sin nada configurado. El doble los mantiene mutables y
+   * los valida con el mismo rango que declara `SettingKey` en el backend, para
+   * que la prueba de «validacion de rango» reciba un `422` de verdad.
+   */
+  readonly operationalSettings?: {
+    readonly maxShiftHours?: number
+    readonly debounceSeconds?: number
+    readonly maxClockSkewMinutes?: number
+    readonly minTransitSeconds?: number
+    readonly localeDefault?: string
+    readonly localeAvailable?: string[]
+  }
+  /**
    * Lo que devuelve `GET /api/v1/license` (RF-PD-04, RF-PD-05, tarea 5.3).
    * Sin este campo, la ruta responde `404` -tal y como hacia antes de que
    * existiera este doble-: `LicenseNotice`/`BrandingView` lo tratan como «sin
@@ -1141,10 +1158,64 @@ export async function stubManagementApi(
   let branding: Branding = { ...(options.branding ?? PRODUCT_BRANDING) }
   let logoPath = branding.logo_url === null ? '' : '/var/kronoqr/branding/logo.png'
 
-  /** El catalogo de las tres claves `BRANDING_*`, con la forma de `GET/PATCH /settings`. */
+  // El perfil de cumplimiento (RF-PD-07, tarea 5.2): mutable, para que
+  // `PATCH /api/v1/compliance-profile` lo actualice exactamente como lo haria
+  // el servidor y `ComplianceProfileView` pueda comprobar que un umbral
+  // guardado sigue ahi tras recargar.
+  let complianceProfile: ComplianceProfile = structuredClone(
+    options.complianceProfile ?? COMPLIANCE_PROFILE,
+  )
+
+  // Los umbrales operativos y los idiomas (RF-PD-01, tarea 5.13): mutables,
+  // con los mismos valores de serie y el mismo rango que `SettingKey` declara
+  // en el backend (12/1-24, 60/0-3600, 15/1-1440, 120/0-3600, `es`/`[es, en]`).
+  let attendanceMaxShiftHours = options.operationalSettings?.maxShiftHours ?? 12
+  let attendanceDebounceSeconds = options.operationalSettings?.debounceSeconds ?? 60
+  let attendanceMaxClockSkewMinutes = options.operationalSettings?.maxClockSkewMinutes ?? 15
+  let attendanceMinTransitSeconds = options.operationalSettings?.minTransitSeconds ?? 120
+  let localeDefault = options.operationalSettings?.localeDefault ?? 'es'
+  let localeAvailable = options.operationalSettings?.localeAvailable ?? ['es', 'en']
+
+  /** El catalogo completo de `installation_settings`, con la forma de `GET/PATCH /settings`. */
   function settingsCatalog(): unknown {
     return {
       data: [
+        {
+          key: 'ATTENDANCE_MAX_SHIFT_HOURS',
+          value: attendanceMaxShiftHours,
+          type: 'integer',
+          impact: 'compliance_review',
+          affects_worked_hours: false,
+          source: attendanceMaxShiftHours === 12 ? 'product_default' : 'installation',
+          constraints: { minimum: 1, maximum: 24 },
+        },
+        {
+          key: 'ATTENDANCE_DEBOUNCE_SECONDS',
+          value: attendanceDebounceSeconds,
+          type: 'integer',
+          impact: 'worked_hours',
+          affects_worked_hours: true,
+          source: attendanceDebounceSeconds === 60 ? 'product_default' : 'installation',
+          constraints: { minimum: 0, maximum: 3600 },
+        },
+        {
+          key: 'ATTENDANCE_MAX_CLOCK_SKEW_MINUTES',
+          value: attendanceMaxClockSkewMinutes,
+          type: 'integer',
+          impact: 'compliance_review',
+          affects_worked_hours: false,
+          source: attendanceMaxClockSkewMinutes === 15 ? 'product_default' : 'installation',
+          constraints: { minimum: 1, maximum: 1440 },
+        },
+        {
+          key: 'ATTENDANCE_MIN_TRANSIT_SECONDS',
+          value: attendanceMinTransitSeconds,
+          type: 'integer',
+          impact: 'compliance_review',
+          affects_worked_hours: false,
+          source: attendanceMinTransitSeconds === 120 ? 'product_default' : 'installation',
+          constraints: { minimum: 0, maximum: 3600 },
+        },
         {
           key: 'BRANDING_APP_NAME',
           value: branding.application_name,
@@ -1173,6 +1244,27 @@ export async function stubManagementApi(
           impact: 'presentation',
           affects_worked_hours: false,
           source: logoPath === '' ? 'product_default' : 'installation',
+        },
+        {
+          key: 'LOCALE_DEFAULT',
+          value: localeDefault,
+          type: 'text',
+          impact: 'presentation',
+          affects_worked_hours: false,
+          source: localeDefault === 'es' ? 'product_default' : 'installation',
+          constraints: { allowed: ['es', 'en'] },
+        },
+        {
+          key: 'LOCALE_AVAILABLE',
+          value: localeAvailable,
+          type: 'text_list',
+          impact: 'presentation',
+          affects_worked_hours: false,
+          source:
+            JSON.stringify([...localeAvailable].sort()) === JSON.stringify(['en', 'es'])
+              ? 'product_default'
+              : 'installation',
+          constraints: { allowed: ['es', 'en'] },
         },
       ],
       meta: { unknown_keys: [], invalid_keys: [] },
@@ -1750,6 +1842,105 @@ export async function stubManagementApi(
           return
         case 'PATCH /api/v1/settings': {
           const patch = request.postDataJSON() as { settings: Record<string, unknown> }
+          const errors: Record<string, string[]> = {}
+
+          /**
+           * Un entero dentro de rango, o `undefined` -y un error colgado de
+           * `settings.<CLAVE>`- si lo que llega no lo es. Mismo rango que
+           * `SettingKey::catalog()` en el backend (comentario de la funcion
+           * que llama a esta).
+           */
+          function checkInteger(key: string, minimum: number, maximum: number): number | undefined {
+            const raw = patch.settings[key]
+
+            if (raw === undefined) {
+              return undefined
+            }
+
+            if (
+              typeof raw !== 'number' ||
+              !Number.isInteger(raw) ||
+              raw < minimum ||
+              raw > maximum
+            ) {
+              errors[`settings.${key}`] = [
+                `El valor de «${key}» tiene que ser un numero entero entre ${minimum} y ${maximum}.`,
+              ]
+
+              return undefined
+            }
+
+            return raw
+          }
+
+          const maxShiftHours = checkInteger('ATTENDANCE_MAX_SHIFT_HOURS', 1, 24)
+          const debounceSeconds = checkInteger('ATTENDANCE_DEBOUNCE_SECONDS', 0, 3600)
+          const maxClockSkewMinutes = checkInteger('ATTENDANCE_MAX_CLOCK_SKEW_MINUTES', 1, 1440)
+          const minTransitSeconds = checkInteger('ATTENDANCE_MIN_TRANSIT_SECONDS', 0, 3600)
+
+          const localeDefaultRaw = patch.settings['LOCALE_DEFAULT']
+          const localeAvailableRaw = patch.settings['LOCALE_AVAILABLE']
+
+          if (typeof localeDefaultRaw === 'string' && !['es', 'en'].includes(localeDefaultRaw)) {
+            errors['settings.LOCALE_DEFAULT'] = [
+              'Ese idioma no esta entre los que trae el producto.',
+            ]
+          }
+
+          const nextLocaleAvailable = Array.isArray(localeAvailableRaw)
+            ? localeAvailableRaw.filter((entry): entry is string => typeof entry === 'string')
+            : localeAvailable
+
+          if (Array.isArray(localeAvailableRaw) && nextLocaleAvailable.length === 0) {
+            errors['settings.LOCALE_AVAILABLE'] = ['Selecciona al menos un idioma.']
+          }
+
+          const nextLocaleDefault =
+            typeof localeDefaultRaw === 'string' && ['es', 'en'].includes(localeDefaultRaw)
+              ? localeDefaultRaw
+              : localeDefault
+
+          // La invariante ENTRE claves (ResolvedSettings::with en el backend):
+          // el idioma por defecto tiene que quedar entre los disponibles.
+          // Cuelga de `settings` a secas, nunca de una de las dos claves.
+          if (
+            errors['settings.LOCALE_DEFAULT'] === undefined &&
+            errors['settings.LOCALE_AVAILABLE'] === undefined &&
+            !nextLocaleAvailable.includes(nextLocaleDefault)
+          ) {
+            errors['settings'] = ['El idioma por defecto tiene que estar entre los disponibles.']
+          }
+
+          if (Object.keys(errors).length > 0) {
+            await validationProblem(
+              route,
+              'urn:kronoqr:problem:validation-failed',
+              'Peticion no valida',
+              errors,
+            )
+
+            return
+          }
+
+          if (maxShiftHours !== undefined) {
+            attendanceMaxShiftHours = maxShiftHours
+          }
+
+          if (debounceSeconds !== undefined) {
+            attendanceDebounceSeconds = debounceSeconds
+          }
+
+          if (maxClockSkewMinutes !== undefined) {
+            attendanceMaxClockSkewMinutes = maxClockSkewMinutes
+          }
+
+          if (minTransitSeconds !== undefined) {
+            attendanceMinTransitSeconds = minTransitSeconds
+          }
+
+          localeDefault = nextLocaleDefault
+          localeAvailable = nextLocaleAvailable
+
           const appName = patch.settings['BRANDING_APP_NAME']
           const accentColor = patch.settings['BRANDING_ACCENT_COLOR']
           const brandingLogoPath = patch.settings['BRANDING_LOGO_PATH']
@@ -1924,8 +2115,25 @@ export async function stubManagementApi(
           return
         }
         case 'GET /api/v1/compliance-profile':
-          await json(route, 200, options.complianceProfile ?? COMPLIANCE_PROFILE)
+          await json(route, 200, complianceProfile)
           return
+        case 'PATCH /api/v1/compliance-profile': {
+          // Sin validacion de rango: el 422 de verdad lo prueba el backend
+          // (regla dura 18); aqui basta con reflejar el cambio, como haria el
+          // servidor, y sellar `updated_at` para que se note que ha cambiado.
+          const patch = request.postDataJSON() as Partial<ComplianceProfile['data']>
+
+          complianceProfile = {
+            data: {
+              ...complianceProfile.data,
+              ...patch,
+              updated_at: '2026-09-10T09:00:00.000000Z',
+            },
+          }
+
+          await json(route, 200, complianceProfile)
+          return
+        }
         case 'GET /api/v1/credentials/status': {
           // Con `?key_id=` el servidor devuelve solo a quien le falta
           // reimprimir (RF-QR-07): el doble distingue las dos respuestas para

@@ -45,6 +45,31 @@ export const PRODUCT_BRANDING: Branding = {
   locales: { default: 'es', available: ['es', 'en'] },
 }
 
+/** La huella que lleva la URL del logotipo de ejemplo (`?v=`, contrato). */
+export const LOGO_DIGEST = '3f9a1c2b7e4d'
+
+/**
+ * Un hotel con nombre, color y logotipo propios (el ejemplo del contrato).
+ * Los mismos valores que `HOTEL_BRANDING` de `frontend-admin/tests/e2e/support/admin.ts`
+ * (RF-PD-08, tarea 5.8): las tres SPA aplican la misma marca del mismo cliente.
+ */
+export const HOTEL_BRANDING: Branding = {
+  application_name: 'Hotel Marina',
+  accent_color: '#0f5c8c',
+  logo_url: `/api/v1/branding/logo?v=${LOGO_DIGEST}`,
+  locales: { default: 'es', available: ['es'] },
+}
+
+/**
+ * Un PNG de 1x1 transparente, de verdad: lo que sirve el doble de
+ * `GET /api/v1/branding/logo`. No hace falta que se vea nada, solo que el
+ * `<img>` cargue con el `Content-Type` correcto (RF-PD-08).
+ */
+const ONE_PIXEL_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+  'base64',
+)
+
 function portalEmployee(locale: PortalLocale): PortalEmployee {
   return {
     uuid: EMPLOYEE_UUID,
@@ -239,8 +264,20 @@ const EXPORT_CSV =
 export interface PortalApiOptions {
   /** El idioma de la sesion (`PortalEmployee.locale`), NO el del navegador. */
   locale: PortalLocale
-  /** Si el acceso con codigo y PIN se acepta. Por omision, si. */
-  loginOutcome?: 'ok' | 'invalid'
+  /**
+   * Si el acceso con codigo y PIN se acepta. Por omision, `'ok'`.
+   *
+   * `'invalid'`: cualquier PIN se rechaza con el `401` generico de siempre
+   * (RS-03). `'rateLimited'`: simula el bloqueo creciente por intentos
+   * fallidos (RS-12, §7.5) con el `429` del contrato — el portal no distingue
+   * «PIN incorrecto» de «demasiados intentos»: los dos avisos son genericos,
+   * pero el `429` SI lleva su propio texto («demasiados intentos seguidos»)
+   * porque es un limite de trafico, no una confirmacion de que la cuenta
+   * existe.
+   */
+  loginOutcome?: 'ok' | 'invalid' | 'rateLimited'
+  /** La marca que devuelve `GET /api/v1/branding`. Por omision, la del producto. */
+  branding?: Branding
 }
 
 export interface RecordedRequest {
@@ -267,6 +304,7 @@ async function json(route: Route, status: number, body: unknown): Promise<void> 
 export async function stubPortalApi(page: Page, options: PortalApiOptions): Promise<PortalApiStub> {
   const requests: RecordedRequest[] = []
   const loginOutcome = options.loginOutcome ?? 'ok'
+  const branding = options.branding ?? PRODUCT_BRANDING
 
   await page.route(
     (url) => url.pathname.startsWith('/api/v1/'),
@@ -286,10 +324,41 @@ export async function stubPortalApi(page: Page, options: PortalApiOptions): Prom
         case 'GET /api/v1/branding':
           // Publica, sin token (RF-PD-08): la pantalla de acceso la pide
           // antes de que exista ninguna sesion.
-          await json(route, 200, PRODUCT_BRANDING)
+          await json(route, 200, branding)
+          return
+
+        case 'GET /api/v1/branding/logo':
+          // Publica tambien. Un PNG de verdad, no un doble vacio: lo que
+          // comprueba el E2E es que el `<img>` carga con el tipo correcto.
+          await route.fulfill({
+            status: 200,
+            contentType: 'image/png',
+            headers: { 'Cache-Control': 'public, max-age=31536000, immutable' },
+            body: ONE_PIXEL_PNG,
+          })
           return
 
         case 'POST /api/v1/me/login': {
+          if (loginOutcome === 'rateLimited') {
+            // El bloqueo creciente por intentos fallidos (RS-12, §7.5): un
+            // `429` con `Retry-After`, nunca un `401` que confirmaria que la
+            // cuenta esta bloqueada (RS-03). 300 s = los 5 min del primer
+            // escalon (3 fallos).
+            await route.fulfill({
+              status: 429,
+              contentType: 'application/problem+json',
+              headers: { 'Retry-After': '300' },
+              body: JSON.stringify({
+                type: 'urn:kronoqr:problem:too-many-requests',
+                title: 'Demasiadas peticiones',
+                status: 429,
+                detail: 'Reintenta pasados unos segundos.',
+              }),
+            })
+
+            return
+          }
+
           const body = request.postDataJSON() as PortalLoginRequest
 
           if (
@@ -375,4 +444,49 @@ export async function logInToPortal(
   await page.locator('input[name="pin"]').fill(credentials.pin)
   await page.locator('form button[type="submit"]').click()
   await page.waitForURL('**/records')
+}
+
+/**
+ * Igual que `logInToPortal`, pero para el camino que NO abre sesion (PIN
+ * incorrecto, bloqueo por intentos): rellena y envia sin esperar la
+ * redireccion, que aqui no llega.
+ */
+export async function submitLoginForm(
+  page: Page,
+  credentials: { employeeCode: string; pin: string } = {
+    employeeCode: PORTAL_EMPLOYEE_CODE,
+    pin: PORTAL_PIN,
+  },
+): Promise<void> {
+  await page.goto('/login')
+  await page.locator('input[name="employee_code"]').fill(credentials.employeeCode)
+  await page.locator('input[name="pin"]').fill(credentials.pin)
+  await page.locator('form button[type="submit"]').click()
+}
+
+export interface ClientErrorsEndpointStub {
+  readonly count: () => number
+}
+
+/**
+ * Doble de `POST /api/v1/client-errors` (RF-PD-15, tarea 5.12) que SIEMPRE
+ * falla con `500`: lo que importa aqui no es que el envio tenga exito, sino
+ * que un fallo al reportar un error no bloquee el portal ni reintente en
+ * bucle. Registrarlo DESPUES de `stubPortalApi` para que esta ruta, mas
+ * especifica, gane a la generica de `/api/v1/*` (mismo orden que
+ * `frontend-admin/tests/e2e/support/errors.ts`).
+ */
+export function stubClientErrorsEndpoint(page: Page): ClientErrorsEndpointStub {
+  let count = 0
+
+  void page.route('**/api/v1/client-errors', async (route: Route) => {
+    count += 1
+    await route.fulfill({
+      status: 500,
+      contentType: 'application/problem+json',
+      body: JSON.stringify({ type: 'about:blank', title: 'Error interno', status: 500 }),
+    })
+  })
+
+  return { count: () => count }
 }

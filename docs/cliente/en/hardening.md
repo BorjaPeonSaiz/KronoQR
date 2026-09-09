@@ -49,12 +49,13 @@ Assuming the URL `https://fichaje.tuhotel.local`:
 | --- | --- | --- | --- |
 | `/kiosk/` | The tablets' PWA | **Only the kiosk VLAN** | **You** (VLAN and firewall) |
 | `/api/v1/scan`, `/api/v1/scan/batch`, `/api/v1/scan/pin` | The tablets, when clocking in | **Only the kiosk VLAN** | **You**. The product **raises the limit** inside `KIOSK_VLAN_CIDR` (§1.4); it does not restrict access |
-| `/api/v1/kiosk/*` (pairing, roster, heartbeat) | The tablets | **Only the kiosk VLAN** | **You** |
+| `/api/v1/kiosk/*` (pairing, roster, heartbeat) | The tablets | **Only the kiosk VLAN**. The first two pairing routes —`POST /api/v1/kiosk/pair` and `/pair/claim`— are served **unauthenticated**: see §10 | **You** |
 | `/admin/` and the management API (`/api/v1/auth/*` and the rest of `/api/v1/*`) | The HR and IT panel | **Only the internal network or the VPN. Never the internet** | **You.** The product does **not** filter these paths by range |
 | `/portal/` and `/api/v1/me/*` | The employee portal | Only `PORTAL_INTERNAL_CIDR`; any other origin receives `403` at the edge | **The product** |
 | `/metrics` | The metrics collector | Only `METRICS_ALLOW_CIDR`; any other origin receives `403` | **The product** |
 | `/api/v1/health`, `/api/v1/ready`, `/healthz` | Probes and `doctor` | Internal network. **Unauthenticated**: see §10 | **You** |
 | `/api/v1/branding`, `/api/v1/branding/logo` | The three applications, before identifying anyone | Wherever the edge is reachable. **Unauthenticated**: see §10 | — |
+| `/api/v1/setup/status`, `/api/v1/setup/administrator` | The start-up wizard, once only | Internal network only. **Unauthenticated** as long as no management account exists: see §1.3 and §10 | **You** |
 | Grafana | You, to look at dashboards | Listens **only on `127.0.0.1:3000`**: reached through an SSH tunnel | **The product** |
 | Prometheus, Alertmanager, Loki, node-exporter | The system itself | **Publish no port** on the server | **The product** |
 | PostgreSQL, Redis, Reverb | The system itself | **Publish no port** on the server | **The product** |
@@ -597,7 +598,7 @@ disk is filling up.
 
 ## 10. What the system reveals to whoever reaches the edge
 
-Three things are served **unauthenticated**, and all three on purpose. Better
+Five things are served **unauthenticated**, and all five on purpose. Better
 to know them before an audit report shows them to you:
 
 | What it reveals | Where | Why it is acceptable |
@@ -605,6 +606,8 @@ to know them before an audit report shows them to you:
 | **The installed version and the licence status**, in one word (`valid`, `expired`, `absent`…) | `GET /api/v1/health` | It is the only probe that requires neither a session nor the database, and it is what lets `doctor` and the diagnostic bundle report the status. It does **not** give away the customer's name, the plan, the limits or the dates: those require an administrator account. An expired licence answers `200`, because otherwise an orchestrator would take out of service a system that clocks people in perfectly well |
 | **The installation's brand**: display name, one colour and the logo | `GET /api/v1/branding` and `/api/v1/branding/logo` | The kiosk and the portal need it **before** identifying anyone. What it reveals is the same thing printed on every card and on the reception sign. The response is closed to five presentation keys and has its own per-IP limit |
 | **That the installation is being updated right now**, during the maintenance window | `503` with `Retry-After` on the panel and the portal | It is what lets the tablet tell "not decided" from "rejected" and **keep the clock-in in its queue**. The body does not say from which version to which, how long is left, or who the customer is |
+| **That a tablet may ask for a pairing code** | `POST /api/v1/kiosk/pair` and `POST /api/v1/kiosk/pair/claim` | Whoever calls them has no credential yet: it is precisely the one they come to fetch. Neither of the two links anything on its own —an administrator has to confirm the request from the panel— and the claim does not hand over the token without a 32-byte secret that never left the tablet. Each one has its own limit, live requests are capped and expire on their own, and the rejection is **a single one**: it does not tell "does not exist" from "no longer valid" |
+| **That the installation still has no management account** | `GET /api/v1/setup/status` and `POST /api/v1/setup/administrator` | It is the "first administrator" screen, and it **only answers as long as no management account exists**: as soon as there is one, it closes on its own and for good. It has its own attempt limit. That is why §1.3 insists on not publishing the panel before finishing step 1 of the wizard |
 
 **During that window clocking in is not interrupted:** the tablets confirm
 locally and queue, and every clock-in keeps its real time.

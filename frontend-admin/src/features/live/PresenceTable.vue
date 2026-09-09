@@ -9,7 +9,7 @@
 // LAS HORAS SE MUESTRAN EN LA ZONA DEL CENTRO, con la zona escrita en la
 // cabecera (regla dura 3). El tiempo transcurrido se calcula contra el reloj del
 // servidor que entrega el store, nunca contra el del navegador.
-import { formatZoneLabel } from '@kronoqr/web-kit/datetime'
+import { formatZoneLabel, minutesBetween } from '@kronoqr/web-kit/datetime'
 import { durationParts } from '@kronoqr/web-kit/workdayTotals'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { computed, ref } from 'vue'
@@ -111,7 +111,8 @@ function elapsedLabel(entry: LivePresenceEntry): string {
     return '—'
   }
 
-  const minutes = Math.floor((props.serverNowMs - Date.parse(entry.clocked_in_at)) / 60_000)
+  const minutes =
+    minutesBetween(entry.clocked_in_at, new Date(props.serverNowMs).toISOString()) ?? 0
 
   return t('live.duration', durationParts(minutes))
 }

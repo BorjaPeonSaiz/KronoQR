@@ -59,9 +59,11 @@ Codigos de salida: 0 actualizado y verificado · 1 uso incorrecto · 2 precondic
 no cumplida o copia previa fallida (la instalacion NO se ha tocado) · 3 ya esta
 en la version de destino, o no hay instalacion que actualizar (nada tocado) ·
 4 fallo con vuelta atras completada: la version anterior esta en marcha ·
-5 fallo con vuelta atras INCOMPLETA: el mensaje dice que hacer a mano. El 6 no
-lo usa este script: toda verificacion fallida deshace. Tabla completa en
-docs/cliente/operacion.md."
+5 fallo con vuelta atras INCOMPLETA: el mensaje dice que hacer a mano. El 6
+casi nunca lo usa este script (toda verificacion fallida deshace); la unica
+excepcion es una actualizacion que SI termino pero cuyo asiento de auditoria
+(system.updated) no se pudo escribir: el trabajo no se deshace por eso. Tabla
+completa en docs/cliente/operacion.md."
 
 KQ_MSG_ES[u_phase_1]="Paso 1 de 7 — precondiciones. Todavia no se toca la instalacion."
 KQ_MSG_ES[u_phase_2]="Paso 2 de 7 — modo mantenimiento. El panel responde 'en mantenimiento'; los quioscos siguen fichando y encolan."
@@ -262,6 +264,13 @@ KQ_MSG_ES[u_verify_privileges_ok]="El rol %s puede escribir fichajes y NO puede 
 KQ_MSG_ES[u_f_verify_privileges]="el rol de la aplicacion (%s) no tiene los privilegios que le corresponden: o no puede escribir en shift_entries, o puede alterar audit_log. Con ese esquema las sondas dirian 'operativo' y ningun fichaje se guardaria, o la auditoria dejaria de ser inalterable. Se deshace."
 KQ_MSG_ES[u_rollback_evidence_at]="Estado fallido preservado en %s (contenedores y ultimas lineas de log; solo root) para el diagnostico."
 
+# --- tarea 5.7, cierre de la Fase 5: asiento de auditoria de la actualizacion ---
+KQ_MSG_ES[u_verify_audit_entry_ok]="Asiento 'system.updated' escrito en audit_log (RF-PD-10)"
+KQ_MSG_ES[u_verify_audit_entry_warn]="compliance:record-system-event no ha podido escribir el asiento 'system.updated' (codigo %s)"
+KQ_MSG_ES[u_verify_audit_entry_warn_fix]="la actualizacion NO se deshace por esto: el trabajo ya esta hecho y verificado por las sondas, la cadena y los privilegios. Sale con el codigo 6 (verificacion posterior fallida). Revisa la conexion a la base de datos en el fichero de detalle y repite a mano cuando puedas: 'docker compose --env-file .env -f docker-compose.yml exec app php artisan compliance:record-system-event system.updated --data=<el JSON del informe>'."
+KQ_MSG_ES[u_rollback_audit_entry_ok]="Asiento 'system.restored_from_backup' escrito en audit_log (RF-PD-10)"
+KQ_MSG_ES[u_rollback_audit_entry_failed]="compliance:record-system-event no ha podido escribir el asiento 'system.restored_from_backup' (codigo %s). La vuelta atras YA ESTA HECHA y verificada: no se reintenta por esto. Repite el asiento a mano cuando puedas con los datos de este informe."
+
 #------------------------------------------------------------------------------
 # English
 #------------------------------------------------------------------------------
@@ -296,8 +305,10 @@ Exit codes: 0 updated and verified · 1 wrong usage · 2 precondition not met or
 backup failed (the installation was NOT touched) · 3 already at the target
 version, or no installation to update (nothing touched) · 4 failure with
 rollback completed: the previous version is running · 5 failure with
-INCOMPLETE rollback: the message says what to do by hand. This script never
-exits 6: every failed verification rolls back. Full table in
+INCOMPLETE rollback: the message says what to do by hand. This script almost
+never exits 6 (every failed verification rolls back); the only exception is
+an update that DID finish but whose audit entry (system.updated) could not be
+written: the work is not undone because of that. Full table in
 docs/cliente/operacion.md."
 
 KQ_MSG_EN[u_phase_1]="Step 1 of 7 — preconditions. The installation is not touched yet."
@@ -498,3 +509,10 @@ KQ_MSG_EN[u_f_workers_up]="the background processes of version %s did not start.
 KQ_MSG_EN[u_verify_privileges_ok]="Role %s can write clockings and CANNOT alter audit_log (hard rule 6)"
 KQ_MSG_EN[u_f_verify_privileges]="the application role (%s) does not hold the privileges it should: either it cannot write shift_entries, or it can alter audit_log. With that schema the probes would say 'operational' and no clocking would be saved, or the audit trail would stop being tamper-proof. Rolling back."
 KQ_MSG_EN[u_rollback_evidence_at]="Failed state preserved at %s (containers and last log lines; root only) for diagnosis."
+
+# --- task 5.7, Phase 5 closeout: the update's audit trail entry ---
+KQ_MSG_EN[u_verify_audit_entry_ok]="'system.updated' entry written to audit_log (RF-PD-10)"
+KQ_MSG_EN[u_verify_audit_entry_warn]="compliance:record-system-event could not write the 'system.updated' entry (code %s)"
+KQ_MSG_EN[u_verify_audit_entry_warn_fix]="the update is NOT rolled back because of this: the work is already done and verified by the probes, the chain and the privileges. It exits with code 6 (post-run verification failed). Check the database connection in the detail file and repeat it by hand when you can: 'docker compose --env-file .env -f docker-compose.yml exec app php artisan compliance:record-system-event system.updated --data=<the JSON from the report>'."
+KQ_MSG_EN[u_rollback_audit_entry_ok]="'system.restored_from_backup' entry written to audit_log (RF-PD-10)"
+KQ_MSG_EN[u_rollback_audit_entry_failed]="compliance:record-system-event could not write the 'system.restored_from_backup' entry (code %s). The rollback is ALREADY DONE and verified: it is not retried because of this. Repeat the entry by hand when you can with the data from this report."

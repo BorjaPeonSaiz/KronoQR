@@ -186,7 +186,7 @@ it('la sonda de vida responde sin consultar NADA para elegir idioma', function (
     Api::guest()->get('/api/v1/health')->assertOk();
 
     expect($consultas)->toBe([]);
-})->group('RF-PD-08', 'RQ-11');
+})->group('RF-PD-08');
 
 it('la sonda de disponibilidad tampoco consulta la configuracion de idioma', function (): void {
     // `/ready` SI toca dependencias —esa es su razon de ser—, pero lo hace con su
@@ -203,7 +203,7 @@ it('la sonda de disponibilidad tampoco consulta la configuracion de idioma', fun
     foreach ($consultas as $sql) {
         expect($sql)->not->toContain('installation_settings');
     }
-})->group('RF-PD-08', 'RQ-11');
+})->group('RF-PD-08');
 
 it('traduce tambien el nombre del campo, no solo la frase', function (): void {
     // Sin `validation.attributes`, el mensaje diria «El campo include open
@@ -289,7 +289,7 @@ it('responde en el idioma del .env, y no con un 500, si la configuracion es ileg
         ->post('/api/v1/auth/login', [])
         ->assertStatus(422)
         ->assertJsonPath('errors.email.0', 'El campo correo electrónico es obligatorio.');
-})->group('RF-PD-01', 'RF-PD-08', 'RQ-11');
+})->group('RF-PD-01', 'RF-PD-08');
 
 it('la marca sigue respondiendo 200 con la configuracion ilegible', function (): void {
     // La otra mitad del mismo fallo: el quiosco pinta su pantalla de espera con
@@ -320,4 +320,4 @@ it('la marca sigue respondiendo 200 con la configuracion ilegible', function ():
 
     expect($respuesta->json('application_name'))->toBe('KronoQR')
         ->and($respuesta->json('locales.available'))->not->toBe([]);
-})->group('RF-PD-08', 'RQ-11');
+})->group('RF-PD-08');

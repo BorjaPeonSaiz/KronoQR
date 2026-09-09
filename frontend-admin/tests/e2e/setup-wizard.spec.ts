@@ -33,7 +33,7 @@ async function fillSite(page: Page): Promise<void> {
 
 test(
   'recorrido completo: de la instalacion vacia a un panel listo para emitir credenciales',
-  { tag: ['@RF-PD-03'] },
+  { tag: ['@RF-PD-03', '@RF-GP-05'] },
   async ({ page }) => {
     // El panel es de un hotel; la instalacion empieza vacia (RF-PD-03).
     await stubOnboardingApi(page)

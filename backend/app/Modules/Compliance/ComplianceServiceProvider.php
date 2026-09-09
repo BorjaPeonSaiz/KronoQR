@@ -10,6 +10,7 @@ use App\Modules\Attendance\Domain\Event\DailyTotalsReconciled;
 use App\Modules\Attendance\Domain\Event\EmployeeClockedIn;
 use App\Modules\Attendance\Domain\Event\EmployeeClockedOut;
 use App\Modules\Attendance\Domain\Event\ShiftCorrected;
+use App\Modules\Compliance\Application\Port\AuditChainHead;
 use App\Modules\Compliance\Application\Port\AuditChainReader;
 use App\Modules\Compliance\Application\Port\AuditLogPartitions;
 use App\Modules\Compliance\Application\Port\AuditMetrics;
@@ -36,10 +37,12 @@ use App\Modules\Compliance\Infrastructure\Adapter\AuditedPersonalDataAccessLog;
 use App\Modules\Compliance\Infrastructure\Adapter\GroupedAuthorizationJournal;
 use App\Modules\Compliance\Infrastructure\Adapter\GroupedPersonalDataAccessLog;
 use App\Modules\Compliance\Infrastructure\Audit\CurrentAuditContext;
+use App\Modules\Compliance\Infrastructure\Console\AuditChainHeadCommand;
 use App\Modules\Compliance\Infrastructure\Console\EnsureAuditPartitionsCommand;
 use App\Modules\Compliance\Infrastructure\Console\IncidentMetricsCommand;
 use App\Modules\Compliance\Infrastructure\Console\LegalExportCommand;
 use App\Modules\Compliance\Infrastructure\Console\PurgeOrphanedLegalExportTempFilesCommand;
+use App\Modules\Compliance\Infrastructure\Console\RecordSystemEventCommand;
 use App\Modules\Compliance\Infrastructure\Console\VerifyAuditChainCommand;
 use App\Modules\Compliance\Infrastructure\Export\CsvLegalExportWriter;
 use App\Modules\Compliance\Infrastructure\Listener\NotifyIncidentAssignees;
@@ -145,6 +148,23 @@ final class ComplianceServiceProvider extends ServiceProvider
         $this->app->singleton(
             AuditTrail::class,
             static fn (): DatabaseAuditTrail => new DatabaseAuditTrail(DB::connection()),
+        );
+
+        /*
+         * La punta de la cadena la sirve **el mismo adaptador que la escribe**
+         * (tarea 5.7). No es reutilizacion por pereza: la respuesta a «cual es
+         * la punta» tiene que ser una sola, y un segundo adaptador que la
+         * calculara por su cuenta seria la via mas silenciosa de que un dia deje
+         * de coincidir con la que usa el encadenado.
+         */
+        $this->app->singleton(
+            AuditChainHead::class,
+            static function (Application $app): DatabaseAuditTrail {
+                /** @var DatabaseAuditTrail $trail */
+                $trail = $app->make(AuditTrail::class);
+
+                return $trail;
+            },
         );
 
         $this->app->singleton(
@@ -332,6 +352,21 @@ final class ComplianceServiceProvider extends ServiceProvider
                  * pida ni lo note.
                  */
                 PurgeOrphanedLegalExportTempFilesCommand::class,
+                /*
+                 * `compliance:record-system-event` y `compliance:audit-chain-head`
+                 * (tarea 5.7, RF-PD-10). **Ninguno de los dos se programa**: los
+                 * llama `infra/scripts/update.sh` y solo el, cuando actualiza o
+                 * cuando restaura la copia previa. Un asiento del ciclo de vida
+                 * de la instalacion escribiendose solo todas las noches no
+                 * significaria nada.
+                 *
+                 * Van con el prefijo `compliance:` y no con uno propio porque el
+                 * modulo dueno de `audit_log` es este: una familia `audit:` para
+                 * dos comandos partiria en dos la consola de auditoria sin
+                 * ganar nada.
+                 */
+                RecordSystemEventCommand::class,
+                AuditChainHeadCommand::class,
                 /*
                  * `compliance:incident-metrics` (doc 02 §8.2, tarea 2.6). SI se
                  * programa, y aparte de la deteccion: el gauge de incidencias

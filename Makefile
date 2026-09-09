@@ -239,7 +239,7 @@ help: ## Muestra esta ayuda
 	@echo   make coverage         Cobertura: dominio 90, global 75 por ciento
 	@echo   make coverage-now     Cobertura actual, sin umbral
 	@echo   make mutate           Mutacion sobre el dominio, MSI 80 por ciento
-	@echo   make e2e              Playwright con camara simulada
+	@echo   make e2e              Playwright: quiosco, panel y portal
 	@echo   make changelog        Genera el CHANGELOG desde los commits convencionales
 	@echo   make changelog-check  Comprueba que una version tiene entrada (VERSION=1.2.3)
 	@echo   make backup           Copia cifrada y verificada del entorno de desarrollo
@@ -384,9 +384,12 @@ endif
 # nunca. La matriz es la evidencia de que cada obligacion legal esta verificada
 # en cada cambio; con una suite parada, era una lista de intenciones.
 #
-# Cuestan segundos y no necesitan base de datos. Cuando la etapa (4) exista con
-# Integration y E2E, esto se queda igual: son las baratas, y las baratas van en
-# cada push.
+# Cuestan segundos y no necesitan base de datos. La etapa ④ (Integracion)
+# existe desde el cierre de la Fase 5 como job propio de ci.yml -- necesita su
+# propio PostgreSQL solo para MigrationsRoundTripTest y los invariantes SQL--,
+# pero Contract y Feature se quedan aqui: son las baratas, y las baratas van en
+# cada push junto a la mutacion, no en un job aparte que solo anadiria el coste
+# de arrancar otro runner por segundos de prueba.
 test-contract: ## Contrato OpenAPI y feature, las dos suites que la CI ejecuta en cada push
 ifeq ($(wildcard backend/artisan),)
 	@echo [make] La aplicacion Laravel llega en la tarea 0.2: todavia no hay suite que ejecutar.
@@ -872,17 +875,29 @@ DOMAIN_COVERAGE_MIN  := 90
 GLOBAL_COVERAGE_MIN  := 75
 CLOVER               := storage/framework/cache/clover.xml
 
+# `--coverage` corre la suite ENTERA (Unit, Integration, Feature, Contract) con
+# Xdebug instrumentando cada linea, y la suite ha crecido por encima de 4000
+# pruebas: con el `memory_limit=1G` de infra/docker/php/Dockerfile y del
+# job `unit` de la CI, revienta a mitad de camino
+# ("memory_size of 268435456 bytes exhausted") en el fichero que le toque, hoy
+# `ClientErrorEndpointTest`. No es una fuga: es el coste normal de mantener el
+# arbol de cobertura de Xdebug de toda la suite en memoria a la vez. Medido
+# (09-09-2026): con 3G termina limpio, dominio 93,11 %, global 90,5 %.
+# `php -d` y no un `.ini` nuevo: es la UNICA orden que necesita este limite, y
+# subirlo para todo el contenedor penalizaria peticiones normales por nada.
+COVERAGE_MEMORY_LIMIT ?= 3G
+
 coverage: ## Cobertura: dominio >= 90 por ciento, global >= 75 (doc 02 seccion 9.2)
 ifeq ($(DOMAIN_MODELS),)
 	@echo "[make] El dominio llega en la tarea 1.1: todavia no hay cobertura exigible."
 	@echo "[make] Para ver la cobertura actual sin umbral: make coverage-now"
 else
-	$(RUN_APP_XDEBUG) $(PEST) --coverage --min=$(GLOBAL_COVERAGE_MIN) --coverage-clover=$(CLOVER)
+	$(RUN_APP_XDEBUG) php -d memory_limit=$(COVERAGE_MEMORY_LIMIT) $(PEST) --coverage --min=$(GLOBAL_COVERAGE_MIN) --coverage-clover=$(CLOVER)
 	$(RUN_APP) php tools/coverage-gate.php $(CLOVER) $(DOMAIN_COVERAGE_MIN) 'app/Modules/*/Domain/*'
 endif
 
 coverage-now: ## Cobertura actual sin umbral, util antes de que exista el dominio
-	$(RUN_APP_XDEBUG) $(PEST) --coverage
+	$(RUN_APP_XDEBUG) php -d memory_limit=$(COVERAGE_MEMORY_LIMIT) $(PEST) --coverage
 
 mutate: ## Mutacion sobre el dominio, MSI mayor o igual a 80 por ciento
 ifeq ($(DOMAIN_MODELS),)
@@ -933,12 +948,13 @@ else
 	$(RUN_APP_XDEBUG) sh -c 'PHP_INI_SCAN_DIR=":$$(pwd)/tools/mutation" $(PEST) --mutate --parallel --path=$(MUTATE_PATHS) --testsuite=Unit --covered-only --no-cache --except=StringConcatRemoveLeft,StringConcatRemoveRight,StringConcatSwitchSides --min=80'
 endif
 
-e2e: ## Playwright: quiosco con camara simulada y panel de gestion
+e2e: ## Playwright: quiosco con camara simulada, panel de gestion y portal
 ifeq ($(wildcard frontend-kiosk/package.json),)
 	@echo [make] Los frontends llegan en la tarea 0.5: todavia no hay E2E que ejecutar.
 else
 	npm --prefix frontend-kiosk run test:e2e
 	npm --prefix frontend-admin run test:e2e
+	npm --prefix frontend-portal run test:e2e
 endif
 
 #--- Versionado (doc 02 §10.5) ------------------------------------------------

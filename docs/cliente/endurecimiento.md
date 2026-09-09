@@ -49,12 +49,13 @@ Suponiendo la URL `https://fichaje.tuhotel.local`:
 | --- | --- | --- | --- |
 | `/kiosk/` | La PWA de las tablets | **Solo la VLAN de quioscos** | **Tú** (VLAN y cortafuegos) |
 | `/api/v1/scan`, `/api/v1/scan/batch`, `/api/v1/scan/pin` | Las tablets, al fichar | **Solo la VLAN de quioscos** | **Tú**. El producto **eleva el límite** dentro de `KIOSK_VLAN_CIDR` (§1.4); no restringe el acceso |
-| `/api/v1/kiosk/*` (emparejamiento, padrón, latido) | Las tablets | **Solo la VLAN de quioscos** | **Tú** |
+| `/api/v1/kiosk/*` (emparejamiento, padrón, latido) | Las tablets | **Solo la VLAN de quioscos**. Las dos primeras del emparejamiento —`POST /api/v1/kiosk/pair` y `/pair/claim`— se sirven **sin autenticar**: ver §10 | **Tú** |
 | `/admin/` y la API de gestión (`/api/v1/auth/*` y el resto de `/api/v1/*`) | El panel de RRHH y de IT | **Solo la red interna o la VPN. Nunca internet** | **Tú.** El producto **no** filtra estas rutas por rango |
 | `/portal/` y `/api/v1/me/*` | El portal del empleado | Solo `PORTAL_INTERNAL_CIDR`; cualquier otro origen recibe `403` en el borde | **El producto** |
 | `/metrics` | El recolector de métricas | Solo `METRICS_ALLOW_CIDR`; cualquier otro origen recibe `403` | **El producto** |
 | `/api/v1/health`, `/api/v1/ready`, `/healthz` | Sondas y `doctor` | Red interna. **Sin autenticar**: ver §10 | **Tú** |
 | `/api/v1/branding`, `/api/v1/branding/logo` | Las tres aplicaciones, antes de identificar a nadie | Donde llegue el borde. **Sin autenticar**: ver §10 | — |
+| `/api/v1/setup/status`, `/api/v1/setup/administrator` | El asistente de puesta en marcha, una sola vez | Solo la red interna. **Sin autenticar** mientras no exista ninguna cuenta de gestión: ver §1.3 y §10 | **Tú** |
 | Grafana | Tú, para mirar cuadros | Escucha **solo en `127.0.0.1:3000`**: se llega por túnel SSH | **El producto** |
 | Prometheus, Alertmanager, Loki, node-exporter | El propio sistema | **No publican ningún puerto** en el servidor | **El producto** |
 | PostgreSQL, Redis, Reverb | El propio sistema | **No publican ningún puerto** en el servidor | **El producto** |
@@ -583,7 +584,7 @@ que el archivado del registro de escritura se ha parado y el disco se llena.
 
 ## 10. Qué revela el sistema a quien alcance el borde
 
-Tres cosas se sirven **sin autenticar**, y las tres a propósito. Conviene que
+Cinco cosas se sirven **sin autenticar**, y las cinco a propósito. Conviene que
 las conozcas antes de que te las enseñe un informe de auditoría:
 
 | Qué revela | Dónde | Por qué es aceptable |
@@ -591,6 +592,8 @@ las conozcas antes de que te las enseñe un informe de auditoría:
 | **La versión instalada y el estado de la licencia**, en una palabra (`valid`, `expired`, `absent`…) | `GET /api/v1/health` | Es la única sonda que no exige sesión ni base de datos, y es lo que permite a `doctor` y al paquete de diagnóstico informar del estado. De ahí **no sale** el nombre del cliente, ni el plan, ni los límites, ni las fechas: eso exige cuenta de administrador. Una licencia caducada responde `200`, porque lo contrario haría que un orquestador retirara del servicio un sistema que ficha perfectamente |
 | **La marca de la instalación**: nombre visible, un color y el logotipo | `GET /api/v1/branding` y `/api/v1/branding/logo` | El quiosco y el portal la necesitan **antes** de identificar a nadie. Lo que revela es lo mismo que lleva impreso cada tarjeta y el rótulo de recepción. La respuesta está cerrada a cinco claves de presentación y tiene su propio límite por IP |
 | **Que la instalación se está actualizando ahora**, durante la ventana de mantenimiento | `503` con `Retry-After` en el panel y el portal | Es lo que permite a la tablet distinguir «no se decidió» de «rechazado» y **conservar el fichaje en su cola**. El cuerpo no dice de qué versión a cuál, ni cuánto falta, ni quién es el cliente |
+| **Que una tablet puede pedir un código de emparejamiento** | `POST /api/v1/kiosk/pair` y `POST /api/v1/kiosk/pair/claim` | Quien las llama todavía no tiene credencial: es justo la que viene a buscar. Ninguna de las dos vincula nada por sí sola —hace falta que un administrador confirme la solicitud desde el panel—, y la recogida no entrega el token sin un secreto de 32 bytes que nunca salió de la tablet. Cada una tiene su propio límite, las solicitudes vivas están acotadas y caducan solas, y el rechazo es **uno solo**: no distingue «no existe» de «ya no vale» |
+| **Que la instalación todavía no tiene ninguna cuenta de gestión** | `GET /api/v1/setup/status` y `POST /api/v1/setup/administrator` | Es la pantalla del «primer administrador», y **solo responde mientras no exista ninguna cuenta de gestión**: en cuanto hay una, se cierra sola y para siempre. Tiene su propio límite de intentos. Por eso el §1.3 insiste en no publicar el panel antes de terminar el paso 1 del asistente |
 
 **Durante esa ventana el fichaje no se interrumpe:** las tablets confirman en
 local y encolan, y cada fichaje conserva su hora real.

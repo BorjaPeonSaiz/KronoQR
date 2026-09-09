@@ -872,12 +872,12 @@ To check it without signing in:
 
 ```bash
 curl -sS https://TU-SERVIDOR/api/v1/setup/status
-# {"available":false,"completed_at":"2026-09-02T09:14:00Z"}
+# {"available":false}
 ```
 
 This query **needs no credentials and that is why it says nothing more**: only
-whether the wizard is still open and when it closed. The detail of the steps
-is in the panel, signed in.
+whether the wizard is still open. Neither when it closed nor which steps were
+left pending: that is in the panel, signed in.
 
 ### …the panel says a management account already exists and I have not created one
 

@@ -7,8 +7,25 @@
 
 ## Estado y objetivo actual
 
-**Rama `feat/tarea-5.11b-guias-rrhh-portal-hoja` (desde `main` `4c8e52d`). Tarea 5.11b «Guía de RRHH, guía del portal y hoja del
-empleado» (RL-05, RF-PA-*, RF-IN-*) IMPLEMENTADA, REVISADA (dos vueltas) y PROBADA el 09-09-2026**, commit `7fb784d` (más `57c5079`
+**Rama `chore/cierre-fase-5` (desde `main` `9d5ec6f`). FASE 5 CERRADA el 10-09-2026** (`current_phase => 5`, matriz de
+trazabilidad regenerada: 2 782 pruebas etiquetadas, Fase 5 con 23 de 23). Los cuatro revisores del doc 03 §6.6 sobre `main`
+encontraron **siete bloqueantes reales** y todos se corrigieron en esta rama antes de subir la fase; el detalle está en el plan 05 →
+«Cierre de fase» → «Cierre ejecutado» y en doc 07 (SAMM 1,47 → 1,73). Lo que cambia el producto: `doctor.sh` viaja en el paquete;
+asientos `system.updated`/`system.restored_from_backup` escritos por `update.sh` (comandos `compliance:record-system-event` y
+`compliance:audit-chain-head`); pantalla «Ajustes operativos» (`/settings`) para las seis claves sin vía de cambio;
+`completed_at` fuera de la respuesta pública del asistente; `throttle:management` ya en `/credentials`. Lo que cambia la
+verificación: la CI gana ④ Integración, ⑥ unitarias de los cuatro paquetes y ⑦ E2E de las tres SPA (el portal estrena 27
+E2E con `axe`), cobertura RNF-M-01 como job nocturno (`make coverage` sin OOM), `SettingsSurfaceTest`,
+`TraceabilityMatrixFreshnessTest`, `SourceDiscoveryTest` (testigo del *bind mount*, rojo en local a propósito) y las pruebas de
+arquitectura recorren `app/` con `scandir`. **Verificado sobre el árbol final:** Architecture 325/326 (el rojo es
+`SourceDiscoveryTest`), Unit 1662, Integration 92 de Compliance + 5 de volumen, Contract 60, `AuthorizationNegative` 225,
+Pint/PHPStan 9/Deptrac 0/Redocly, `qa:traceability --check` con fase 5, `docs:consistency`, panel type-check/lint/unit 469/E2E 113,
+portal unit 79/E2E 27, paquete con 407 enlaces y `doctor.sh`, shellcheck/shfmt, `ci.yml` con 13 jobs válido, gitleaks 0. **Las
+suites completas de backend (4 010) y el MSI (82,83 %) son de la revisión de QA sobre `9d5ec6f`**; la CI manual de esta rama
+los repite. **La 5.11b está INTEGRADA en `main`** (PR #52, *merge commit* `9d5ec6f`, CI manual 34400365952 y CI de `main`
+34402932670 en verde con ⑧ y ⑧b; `make up` hecho; ramas borradas, también las 14 locales ya fusionadas).
+
+**Tarea 5.11b «Guía de RRHH, guía del portal y hoja del empleado» (RL-05, RF-PA-*, RF-IN-*)**, commit `7fb784d` (más `57c5079`
 con Engram). Catorce decisiones en la ficha (plan 05 → «Tarea 5.11b»); las que importan: **la hoja la produce el producto**
 (`GET /api/v1/credentials/instructions-sheet?locale=`, PDF A4 de una cara con marca, dirección del portal e idiomas activos; fila 17
 de «Puntos no cubiertos»), **el panel no podía corregir tramos (RF-PA-04) y se construyó `CorrectionDialog`** (decisión 13), y las
@@ -77,9 +94,12 @@ descubierto con `scandir` (ver «Trampas»).
 gitleaks 0 sobre los ficheros cambiados, promtool sobre `errors.yml`, `check-package-links.sh` (305 enlaces), `type-check` y
 `lint` de los cuatro paquetes, unitarias web-kit 199 / panel 433 / quiosco 379 / portal 79, E2E panel 88 y quiosco 50. **CI manual 34369140085 en verde**: MSI 82,83 % (2 440 mutantes, 10 min en paralelo).
 
-**Siguiente acción:** CI manual completa (`gh workflow run ci.yml --ref feat/tarea-5.11b-guias-rrhh-portal-hoja`, lanzada tras el
-último push; no empujar nada hasta que termine) → PR con *merge commit* (nunca squash) → `make up` en `main` → borrar la rama →
-**cierre de la Fase 5** (doc 03 §6.6) con los cuatro revisores y los restos de «Pendiente».
+**Siguiente acción:** CI manual completa de `chore/cierre-fase-5` (lanzada tras el último push; es la **primera ejecución real de los
+jobs ④, ⑥ y ⑦**: si un detalle del runner los tumba —Chromium, memoria, presupuesto de 300 s del E2E— se corrige en la misma
+rama sin reabrir la revisión) → PR con *merge commit* (nunca squash) → `make up` en `main` → borrar la rama. Después empieza la
+**Fase 3** (plan 06: 3.1 observabilidad, 3.2 alertas y cuadros, 3.3 quioscos, 3.4/3.5 cumplimiento, 3.6 carga, 3.7 pruebas de
+abuso, 3.8 pentest, 3.10 ausencias) con los restos de «Pendiente» → «Cierre de la Fase 5» y las filas del doc 07 §6 fechadas
+«Fase 3».
 
 **Rama `feat/tarea-5.11-documentacion-cliente`** (desde `main` `e2860be`). **Tarea 5.11 «Documentación de instalación,
 operación, configuración y obligaciones legales» (RL-16..RL-21, RF-PD-02) IMPLEMENTADA, REVISADA, PROBADA e **INTEGRADA en
@@ -314,11 +334,20 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 
 ### Por tarea
 
-- **5.7 (restos):** **asientos `system.updated` y `system.restored_from_backup` en `audit_log`** (hallazgo
-  importante de `seguridad-cumplimiento`, anotado en doc 07 §6 como pendiente): tras una vuelta atrás la
-  cadena es la de la copia y el intervalo descartado es invisible desde el registro; es un cambio del
-  catálogo `AuditAction` + caso de uso, para `arquitecto-dominio`, antes del cierre de la Fase 5. Menores:
-  extraer `compose()`/`wait_for_healthy`/`edge_probe` de `install.sh` y `update.sh` a `lib/checks.sh`;
+- **Cierre de la Fase 5 (restos, 10-09-2026):** la instalación limpia y los cuatro recorridos de las guías por una persona ajena
+  (humano); ⑧b desde **cada** versión soportada y salto no consecutivo real al publicar 2.2.0; **MSI por módulo** con el global
+  en 82,83 %: `Workforce` 66,67 % (`Employee` 23, `ImportColumnMap` 22, `EmploymentContract` 12, `EmployeeCode` 11) y `Kiosk`
+  77,70 % (`KioskHealthReport` 22, `KioskHealthThresholds` 4); `Product` real 81,77 % (el 74,85 % era de media plantilla);
+  `make test-unit` en local 5,54 s > 5 s (CI 1,62 s: mirar si esas pruebas son unitarias, no subir el techo); prueba que
+  enumere el *router* y exija autorización negativa por ruta (hoy `AuthorizationNegativeTest` es una lista a mano de 35 pares);
+  `ClientErrorContextKeysTest` y `Support/ClientDocs.php` siguen con `RecursiveDirectoryIterator` sobre `frontend-*/src` y
+  `docs/`; catorce rutas de gestión sin zona de límite (doc 07 §6, Fase 3); `plan_exceeded` por fila en la importación (doc 07
+  §6, Fase 3); `audit:read` en el alcance `read_only` sin consumidor (doc 07 §6); spans OTel ausentes en los controladores de
+  5.9/5.10/5.12 (los de 5.1–5.8 tienen `*Telemetry`); métricas de exportación íntegra, telemetría, concesiones y paquetes sin
+  emitir; presupuesto de ①–③ de la CI (~20 min frente a los 4 del doc 02 §10.1); primer `run` real de los jobs ④/⑥/⑦/`coverage`
+  puede destapar detalles del runner; el `409` de `POST /setup/administrator` sigue sin señal.
+- **5.7 (restos):** menores:
+  extraer `compose()`/`wait_for_healthy`/`edge_probe` de `install.sh` y `update.sh` a `lib/checks.sh` (ya divergen);
   el `503` de mantenimiento no se enumera por endpoint en el contrato (solo el párrafo de `info`);
   `update.sh` no escribe métricas `.prom` (una vuelta atrás no llega a Prometheus); modo **in-place**
   tolerado con aviso (doc 07 §6); **salto de mayor de PostgreSQL** no cubierto (runbook §7);
@@ -382,21 +411,33 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   nada detecta una prueba que dependa del vaciado de tablas de trabajo confirmadas.
 - `heading-order` (axe, impacto moderado) en `LicenseStep`/`ComplianceProfileStep` al incrustar
   pantallas con `<h2>` propios.
-- E2E de la pantalla del perfil de cumplimiento (5.2) sin escribir.
 - El contrato OpenAPI no enumera el `503` de mantenimiento por endpoint (solo `/scan` y `/scan/batch` lo
   tenían ya); está descrito en `MaintenanceModeTest` y en `ProblemDetails::maintenance`. Decidir si va en
   `info.description` o como respuesta reutilizable en cada ruta.
-- `release.yml` sigue siendo un marcador: publicar imágenes etiquetadas y el paquete (`package.sh` ya
-  existe) es de una tarea 5.x posterior.
+- `release.yml` sigue siendo un marcador: publicar imágenes etiquetadas, el paquete y el SBOM en una *release* es del plan de
+  implementación 08 (la etapa ⑧ ya vive en `ci.yml`).
+- **Del cierre de la Fase 5 (`revisor-codigo`, con horas):** unificar `sanitizeContext` y el buffer de errores de cliente de
+  `web-kit/clientErrors.ts` y `frontend-kiosk/.../errorReporter.ts` (copia literal, 3–4 h); generar los `urn:kronoqr:problem:*`
+  del contrato y atar los ocho literales de las SPA (3–4 h); `PdfDocument::builder()` con `dontCache()` + regla Pest Arch que
+  prohíba `new PdfBuilder` fuera (2 h); subir `compose`/`service_state`/`wait_for_healthy`/`edge_probe` a `lib/checks.sh`
+  (2–3 h); tres `minutesBetween` ya aplicados; README de `pairing`/`offline` del quiosco (1 h); un fallo de Chromium en la hoja
+  sale como `500` (`Reporting` da `503`); `SourceDiscoveryTest` rojo en local por diseño: si estorba, degradarlo a aviso y
+  asumir que vuelve a ser invisible.
 
 ## Trampas del entorno — leer antes de operar
 
 - **La mutación va en `--parallel` desde la 5.12** (830 s → 85 s en el dominio de `Product`; en serie la CI tardaba 37 min
   y la 5.12 la sacó del tope de 45 del job ③, ahora 60). En paralelo, un `use DateTimeImmutable;` (clase global) en un
   fichero de prueba **sin namespace** rompe el arranque de los hijos como `ErrorException` («use statement with
-  non-compound name has no effect»): no dejar ninguno. Los 86 mutantes sin prueba de `Product/Domain` son todos de 5.1–5.10
-  (`InvalidSettingValue`, `SettingKey`, `SettingDefinition`, `InvalidComplianceProfileValue`, `InvalidLicenseKey`…): deuda
-  para subir el MSI de `Product` (74,85 %) sin depender del resto de módulos.
+  non-compound name has no effect»): no dejar ninguno. Los mutantes sin prueba de `Product/Domain` son de 5.1–5.10
+  (`InvalidSettingValue`, `SettingKey`, `SettingDefinition`, `InvalidComplianceProfileValue`, `InvalidLicenseKey`…); el MSI
+  real de `Product` es 81,77 % (el 74,85 % local era de media plantilla, ver el *bind mount* más abajo). **Toda cifra de
+  mutación o cobertura se lee de la CI**, nunca del portátil.
+- **`docs/` va montado `:ro` en el contenedor `app`** (`infra/compose.dev.yaml`): `qa:traceability` en modo escritura falla ahí;
+  la matriz se regenera con `make traceability` (usa `--output=-` y escribe desde el anfitrión). `TraceabilityMatrixFreshnessTest`
+  cae si la matriz versionada no coincide con lo que generaría el comando: **regenerar antes de cada commit que toque etiquetas**.
+- **`make test-unit` en local tarda 5,5 s y el presupuesto es 5 s** (doc 02 §9.2; en la CI 1,6 s): la puerta sale roja en Windows
+  por el *bind mount*, no por las pruebas. No subir el techo; leer el tiempo de la CI.
 - **La CI cancela la ejecución en curso de la misma rama con cada push** (`concurrency: ci-${{ github.ref }}`,
   `cancel-in-progress`). Una CI manual (`gh workflow run ci.yml --ref rama`, la única que corre ⑧b fuera de `main`) se
   lanza **después** del último push, y no se empuja nada más —ni el HANDOFF— hasta que termine.
@@ -405,6 +446,14 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   `TestDiscoveryTest` (Architecture) falla si vuelve a faltar uno: si falla en local, declarar el directorio afectado aparte.
   **Un directorio nuevo bajo `tests/Feature` hay que añadirlo a `phpunit.xml`** (la misma prueba lo exige). No dar por buena
   una cifra local de pruebas sin esa guarda en verde.
+  **También afecta a `backend/app/` (09-09-2026, cierre de Fase 5):** el iterador ve 1.189 de los 1.234 `.php` y pierde los
+  **45 de `Product/Domain/ValueObject`**, siempre los mismos. Consecuencias: la **mutación y la cobertura locales de `Product`
+  medían 52 de 97 ficheros** (el MSI del 74,85 % es de media plantilla), y las pruebas de arquitectura que recorrían con el
+  iterador daban **verde falso** —no hay nada que denunciar en un fichero que no se ve—. Ya recorren con `scandir`
+  (`ModuleTree::phpFilesUnder()`, usado por `AggregateBoundaryTest`, `OutboundChannelsTest`, `DataProtectionGuaranteesTest` y
+  `Support/SettingsSurface.php`); con los 45 dentro **no aparece ninguna violación nueva**. `SourceDiscoveryTest`
+  (Architecture) es el testigo: **en local sale en rojo a propósito** —es el síntoma del sistema de ficheros, no un defecto
+  del producto— y en la CI (Linux, sin bind mount) está en verde. Cobertura, mutación y Deptrac se leen **solo de la CI**.
 - **`package-lock.json`: cualquier `npm install` en Windows con `node_modules/` presente** pierde las
   plataformas nativas de `@tailwindcss/oxide` y rompe la imagen de Nginx (npm/cli#4828, sufrido dos
   veces). Operar el lock **siempre desde Linux y sin `node_modules`**; receta en la cabecera de
@@ -492,3 +541,12 @@ Detalle de cada hito: mensajes de commit, PRs y `git show 9b1593d:HANDOFF.md`.
   `web-kit/branding.ts` + `brandingState.ts` + `BrandMark.vue`, gating por licencia (`white_label`) sin
   degradar el nombre, logotipo validado al guardar, idiomas unificados, pantalla «Marca» del panel; cuatro
   agentes en paralelo y tres revisiones. PR #46, CI manual 34197180554.
+- **08/09-09** — **Tareas 5.9** (diagnóstico, `doctor`, accesos de soporte), **5.10** (exportación íntegra y telemetría),
+  **5.11** (cinco guías de cliente ES/EN con capturas sobre los dobles) y **5.12** (histórico de errores sin PII, `client_errors`
+  por el latido); PRs #47–#51. Hallazgo del *bind mount* sobre `tests/Feature` (`TestDiscoveryTest`).
+- **09-09** — **Engram** como memoria buscable junto a `HANDOFF.md` (reparto en `CLAUDE.md`). **Tarea 5.11b**: guía de RRHH,
+  guía del portal y hoja del empleado **generada por el producto** (`GET /credentials/instructions-sheet`), `CorrectionDialog`
+  (RF-PA-04: el panel no podía corregir), Playwright del portal desde cero, `ClientDocumentationTest` a ocho pares; PR #52.
+- **09/10-09** — **Fase 5 cerrada** (`current_phase => 5`): siete bloqueantes corregidos en `chore/cierre-fase-5` (`doctor.sh` en
+  el paquete, asientos `system.*` del actualizador, pantalla «Ajustes operativos», doc 05 ↔ ADR-023, matriz y etiquetas de
+  trazabilidad, CI con ④/⑥/⑦ y cobertura nocturna, `scandir` frente al *bind mount* en `app/`); doc 07 SAMM 1,47 → 1,73.

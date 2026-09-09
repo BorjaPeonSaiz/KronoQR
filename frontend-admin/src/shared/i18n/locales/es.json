@@ -13,6 +13,7 @@
       "incidents": "Incidencias",
       "reports": "Informes",
       "compliance": "Cumplimiento",
+      "operationalSettings": "Ajustes operativos",
       "devices": "Quioscos",
       "branding": "Marca",
       "license": "Licencia",
@@ -971,6 +972,39 @@
     "saving": "Guardando…",
     "saved": "Marca guardada. El cambio queda registrado en el trail de auditoría y se aplica en el acto.",
     "failed": "No se ha podido guardar la marca."
+  },
+  "operationalSettings": {
+    "heading": "Ajustes operativos",
+    "intro": "Los umbrales con los que se decide si un tramo es anómalo, qué escaneos se descartan como rebote y qué desfase de reloj o de tránsito abre una incidencia; y los idiomas que ofrece esta instalación. Ningún umbral legal vive aquí: eso es «Cumplimiento».",
+    "loading": "Cargando los ajustes…",
+    "attendanceHeading": "Fichaje",
+    "localesHeading": "Idiomas",
+    "fields": {
+      "maxShiftHours": "Duración máxima de un tramo (h)",
+      "debounceSeconds": "Ventana anti-rebote (s)",
+      "maxClockSkewMinutes": "Desfase de reloj tolerado (min)",
+      "minTransitSeconds": "Tránsito mínimo entre quioscos (s)",
+      "localeDefault": "Idioma por defecto",
+      "localeAvailable": "Idiomas disponibles"
+    },
+    "hints": {
+      "maxShiftHours": "A partir de esta duración, un tramo cerrado se marca como anómalo y se abre una incidencia para revisión. No cierra ningún turno por su cuenta. Rango admitido: {minimum}–{maximum} horas.",
+      "debounceSeconds": "Ventana de gracia: dos escaneos de la misma persona dentro de esta ventana cuentan como uno. Ponlo a 0 para desactivarla. Rango admitido: {minimum}–{maximum} segundos.",
+      "maxClockSkewMinutes": "Desfase tolerado entre el reloj de la tablet y el del servidor antes de marcar el fichaje para revisión. Nunca rechaza un fichaje, solo lo señala. Rango admitido: {minimum}–{maximum} minutos.",
+      "minTransitSeconds": "Tiempo mínimo creíble para ir de un quiosco a otro. Por debajo, se abre incidencia. Ponlo a 0 si hay dos tablets en la misma puerta. Rango admitido: {minimum}–{maximum} segundos.",
+      "localeDefault": "Idioma con el que se sirven las tres aplicaciones y los documentos cuando nadie elige otro. Tiene que estar entre los idiomas disponibles.",
+      "localeAvailable": "Idiomas que ofrece esta instalación. Al menos uno, y el idioma por defecto siempre tiene que quedar entre los marcados."
+    },
+    "errors": {
+      "required": "Este campo no puede quedarse vacío.",
+      "notAWholeNumber": "Escribe un número entero, sin decimales ni letras."
+    },
+    "affectsWorkedHoursWarning": "Vas a cambiar un umbral que puede modificar los minutos que quedan registrados. El cambio queda auditado con tu nombre, la fecha, el valor anterior y el nuevo.",
+    "audited": "Cada clave modificada deja su propio apunte en el trail de auditoría (calculation_setting.changed) con el valor anterior, el nuevo, quién lo cambió y cuándo.",
+    "save": "Guardar los ajustes",
+    "saving": "Guardando…",
+    "saved": "Ajustes guardados. El cambio queda registrado en el trail de auditoría.",
+    "failed": "No se han podido guardar los ajustes."
   },
   "license": {
     "heading": "Licencia",

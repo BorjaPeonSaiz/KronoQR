@@ -13,12 +13,25 @@ use Illuminate\Http\Resources\Json\JsonResource;
 /**
  * Serializa el esquema `SetupStatus` (RF-PD-03).
  *
- * ## `steps` solo con sesion de administrador
+ * ## Sin sesion viaja **solo `available`**
  *
  * `GET /api/v1/setup/status` es **publico** —tiene que serlo: se llama antes de
- * que exista ninguna cuenta— y la lista de pasos es un **inventario de la
- * postura de la instalacion**. Dice tres cosas que no se regalan sin
- * autenticar:
+ * que exista ninguna cuenta— y `available` es lo unico que el panel necesita
+ * para decidir si lleva al asistente o a la pantalla de acceso. Todo lo demas
+ * se queda fuera por minimizacion.
+ *
+ * `completed_at` incluido: **cuando** se puso en marcha la instalacion no le
+ * hace falta a un navegador sin credenciales para elegir a donde ir, y a quien
+ * mira desde fuera le dice si el servidor lleva anos funcionando o se monto
+ * ayer —que es justo la clase de dato con el que se decide si merece la pena
+ * insistir— (correccion de la revision del cierre de la Fase 5). Con sesion de
+ * administrador sigue viajando, que es donde tiene consumidor: el resumen de
+ * `POST /setup/complete` y `GET /setup/steps`.
+ *
+ * ## `steps`, por la misma razon, tampoco
+ *
+ * La lista de pasos es un **inventario de la postura de la instalacion**. Dice
+ * tres cosas que no se regalan sin autenticar:
  *
  * 1. Que hay un administrador **sin segundo factor confirmado**, es decir, una
  *    cuenta con acceso total a medio configurar.
@@ -62,24 +75,23 @@ final class SetupStatusResource extends JsonResource
         /** @var SetupState $state */
         $state = $this->resource;
 
-        $body = [
-            'available' => $state->isAvailable(),
-            // Regla dura 3: en UTC con sufijo Z, como todo instante del contrato.
-            // Por `UtcInstant` y no a mano: convierte a UTC ANTES de escribir la
-            // `Z`, asi que la invariante no depende de la zona de la sesion de
-            // base de datos ni del proceso (tarea 5.9, el mismo helper que el
-            // resto de recursos del modulo).
-            'completed_at' => UtcInstant::format($state->completedAt),
-        ];
+        $body = ['available' => $state->isAvailable()];
 
         if (! $this->detailed) {
-            // La clave NO viaja vacia: viaja ausente. Un array vacio significa
-            // «el asistente esta cerrado y no queda nada que enumerar», y usarlo
+            // Las claves NO viajan vacias ni a nulo: viajan AUSENTES. Un array
+            // vacio significa «el asistente esta cerrado y no queda nada que
+            // enumerar», y un `completed_at` nulo, «sigue abierto»: usarlos
             // tambien para «no tienes permiso para verlo» haria indistinguibles
-            // dos estados que el panel trata de forma distinta.
+            // estados que el panel trata de forma distinta.
             return $body;
         }
 
+        // Regla dura 3: en UTC con sufijo Z, como todo instante del contrato.
+        // Por `UtcInstant` y no a mano: convierte a UTC ANTES de escribir la
+        // `Z`, asi que la invariante no depende de la zona de la sesion de
+        // base de datos ni del proceso (tarea 5.9, el mismo helper que el
+        // resto de recursos del modulo).
+        $body['completed_at'] = UtcInstant::format($state->completedAt);
         $body['steps'] = $state->isAvailable() ? self::steps($state) : [];
 
         return $body;

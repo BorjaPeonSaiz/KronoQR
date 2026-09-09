@@ -3,12 +3,19 @@
 declare(strict_types=1);
 
 use App\Modules\Product\Application\UseCase\GenerateDiagnosticsBundleHandler;
+use App\Modules\Product\Application\UseCase\RecordErrorEvent;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsActor;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsOptions;
+use App\Modules\Product\Domain\ValueObject\ErrorMessageSanitizer;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\ErrorEventSink;
+use App\Modules\Shared\Domain\ValueObject\ErrorLevel;
+use App\Modules\Shared\Domain\ValueObject\ErrorReport;
+use App\Modules\Shared\Domain\ValueObject\ErrorSource;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Product\ErrorHistoryConnection;
 use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Time\FixedClock;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -171,9 +178,115 @@ function instalacionConVolumen(): array
     return $employees;
 }
 
+/**
+ * Errores reales del periodo, con PII dentro, escritos POR EL CAMINO REAL.
+ *
+ * ## Por que por el sumidero y no con `INSERT`
+ *
+ * Porque lo que se comprueba aqui no es que el paquete filtre columnas —eso ya
+ * lo hace `ErrorEventsInDiagnosticsAndExportTest` con filas puestas a mano—,
+ * sino que **el saneado que el producto aplica de verdad basta**. Escribir la
+ * fila a mano se saltaria {@see RecordErrorEvent},
+ * que es el unico camino de entrada, y la prueba pasaria afirmando algo que el
+ * producto no hace.
+ *
+ * ## Las formas de PII estan elegidas, no inventadas
+ *
+ * Son las cuatro que un error de este producto puede llevar dentro:
+ *
+ * - un **nombre interpolado entre comillas**, que es como lo escriben PHP
+ *   (`Employee '…' not found`) y PostgreSQL (`Key (…)=(…)`);
+ * - un **correo** de la plantilla, que aqui es opcional y aun asi se rellena;
+ * - un **DNI**;
+ * - una **hora de fichaje**, que es dato de jornada de una persona concreta y
+ *   esta tabla no guarda jornadas (RL-19).
+ *
+ * Y una quinta que no es PII pero lo parece: una clave de contexto inventada
+ * (`employee_name`) que **no esta en la lista de permitidos** y tiene que caerse
+ * entera.
+ *
+ * ## El `employee_uuid` es de la semilla a proposito
+ *
+ * Es el unico identificador de persona que ADR-020 admite en el paquete, y solo
+ * porque es seudonimo: sin el, soporte no puede decir «los tres errores son de
+ * la misma persona». La prueba afirma que **viaja**, para que quede escrito que
+ * es una decision y no un descuido, y que el nombre de esa misma persona no.
+ *
+ * ## Lo que esta prueba NO afirma, dicho para que nadie lea de mas
+ *
+ * Que un nombre **suelto, sin comillas, en prosa** no salga. No sale porque no
+ * puede: «Ana Ruiz» es indistinguible de «Cocina Central» para cualquier
+ * expresion regular, y {@see ErrorMessageSanitizer} lo dice con esas palabras.
+ * Lo que el saneado cubre es **donde** aparece un nombre —interpolado entre
+ * comillas, que es la convencion de PHP y de PostgreSQL— y las formas que si
+ * son reconocibles: correo, DNI, telefono, hora, secreto. Un productor que
+ * escriba `"fallo de ".$empleado->fullName()` sin comillas se lo lleva al
+ * paquete, y ninguna prueba lo va a impedir: lo impide la revision de quien
+ * escribe el mensaje. Sembrarlo aqui solo pondria la suite en rojo permanente
+ * sin cerrar el hueco.
+ *
+ * @return int Cuantos grupos quedaron escritos, contando desde el primero.
+ */
+function erroresConPiiDeLaPlantilla(string $employeeUuid, string $deviceUuid): int
+{
+    /** @var ErrorEventSink $sumidero */
+    $sumidero = app(ErrorEventSink::class);
+
+    return $sumidero->recordAll([
+        new ErrorReport(
+            source: ErrorSource::Api,
+            level: ErrorLevel::Error,
+            message: "Employee 'Marta Lopez Garcia' not found for national id ".DNI_SEMBRADO,
+            occurredAt: new DateTimeImmutable('2026-06-15T07:30:00Z'),
+            appVersion: '2.1.0',
+            context: [
+                'route' => 'api/v1/scan',
+                'method' => 'POST',
+                'reason' => "la credencial de 'Filomena Zaldivar Pou' no resuelve",
+                'employee_name' => 'Anastasio Etxeberria Uribe',
+            ],
+            exceptionClass: 'RuntimeException',
+            employeeUuid: $employeeUuid,
+            module: 'attendance',
+        ),
+        new ErrorReport(
+            source: ErrorSource::Worker,
+            level: ErrorLevel::Critical,
+            message: 'SQLSTATE[23505] duplicate key value violates unique constraint "employees_email_unique" '
+                .'DETAIL: Key (email)=('.CORREO_SEMBRADO.') already exists.',
+            occurredAt: new DateTimeImmutable('2026-06-15T07:45:00Z'),
+            appVersion: '2.1.0',
+            context: ['job' => 'ImportEmployeesJob', 'queue' => 'default', 'attempts' => 3],
+            exceptionClass: 'Illuminate\Database\QueryException',
+            module: 'workforce',
+        ),
+        new ErrorReport(
+            source: ErrorSource::Kiosk,
+            level: ErrorLevel::Error,
+            message: "no se pudo cerrar el turno de las 07:00:00 de 'Cunegunda Lopez Garcia' en "
+                ."'".NOMBRE_DE_QUIOSCO_SEMBRADO."'",
+            occurredAt: new DateTimeImmutable('2026-06-15T08:10:00Z'),
+            appVersion: '2.1.0',
+            context: ['scope' => 'queue', 'entries' => 4, 'cause' => 'network'],
+            deviceId: $deviceUuid,
+            employeeUuid: $employeeUuid,
+            module: 'kiosk',
+        ),
+    ]);
+}
+
 beforeEach(function (): void {
     app()->instance(Clock::class, FixedClock::at('2026-06-15 09:00:00'));
     LicenseKeys::grantAll();
+
+    // `error_events` se escribe por una conexion propia y esta suite no tiene el
+    // enganche global que si tiene `Feature` (ver tests/Pest.php): sin el puente,
+    // lo que escriba esta prueba sobrevive a su propio `RefreshDatabase`.
+    ErrorHistoryConnection::shareTestTransaction();
+});
+
+afterEach(function (): void {
+    ErrorHistoryConnection::release();
 });
 
 it('genera un paquete anonimizado sobre 500 empleados y 90 dias sin una sola PII', function (): void {
@@ -363,3 +476,69 @@ it('cabe en el tope configurado y dice de que ha prescindido', function (): void
         ->and($bundle->sections['configuration'])->toHaveKey('env')
         ->and($bundle->sections['license'])->toHaveKey('state');
 })->group('RF-PD-09');
+
+it('lleva el historico de errores del periodo y ni una PII de las que los errores traian dentro', function (): void {
+    // --- Arrange ------------------------------------------------------------
+
+    $employees = instalacionConVolumen();
+
+    /** @var string $deviceUuid */
+    $deviceUuid = DB::table('devices')->orderBy('id')->value('uuid');
+
+    $escritos = erroresConPiiDeLaPlantilla($employees[0], $deviceUuid);
+
+    expect($escritos)->toBe(3, 'El sumidero no pudo escribir los tres errores sembrados.');
+
+    // --- Act ----------------------------------------------------------------
+
+    $bundle = app(GenerateDiagnosticsBundleHandler::class)
+        ->handle(DiagnosticsOptions::anonymized(), DiagnosticsActor::User);
+
+    $json = $bundle->toJson();
+
+    /** @var array{status: string, total_groups: int, groups: list<array<string, mixed>>, summary: array{open: int}} $errores */
+    $errores = $bundle->sections['error_events'];
+
+    // --- Assert: la seccion sirve para diagnosticar --------------------------
+
+    // Un paquete que dijera `unavailable` o que llegara con cero grupos pasaria
+    // sin esfuerzo todo lo de abajo y no valdria para nada: soporte descartaria
+    // la hipotesis correcta creyendo que no ha habido errores.
+    expect($errores['status'])->toBe('ok')
+        ->and($errores['total_groups'])->toBe(3)
+        ->and($errores['groups'])->toHaveCount(3)
+        ->and($errores['summary']['open'])->toBe(3);
+
+    // --- Assert: ni un nombre, ni un correo, ni un DNI, ni una hora ----------
+
+    foreach (NOMBRES_SEMBRADOS as $name) {
+        expect($json)->not->toContain($name, 'El paquete contiene el nombre «'.$name.'», que venia dentro de un error.');
+    }
+
+    foreach (APELLIDOS_SEMBRADOS as $surname) {
+        expect($json)->not->toContain($surname, 'El paquete contiene el apellido «'.$surname.'».');
+    }
+
+    expect($json)->not->toContain(CORREO_SEMBRADO)
+        ->and($json)->not->toContain('@hotel-ejemplo.example')
+        ->and($json)->not->toContain(DNI_SEMBRADO)
+        ->and($json)->not->toContain(NOMBRE_DE_QUIOSCO_SEMBRADO)
+        // La hora de fichaje que iba en el mensaje del quiosco: es dato de
+        // jornada de una persona concreta y esta tabla no guarda jornadas.
+        ->and($json)->not->toContain('07:00:00')
+        // Y la clave de contexto que nadie declaro: se cae entera, con su valor.
+        ->and($json)->not->toContain('employee_name');
+
+    // --- Assert: el UUID si viaja, y es lo unico que identifica --------------
+
+    // ADR-020 lo admite donde haga falta, y aqui hace falta: sin el, soporte no
+    // puede decir que dos de los tres errores son de la misma persona. Es
+    // seudonimo y el hotel es el unico que puede resolverlo a un nombre.
+    expect($json)->toContain($employees[0])
+        ->and($json)->toContain($deviceUuid);
+
+    // Y lo que queda del mensaje sigue diciendo que paso, que es la otra mitad:
+    // un saneado que dejara la fila muda haria inutil la seccion entera.
+    expect($json)->toContain('SQLSTATE[23505]')
+        ->and($json)->toContain('duplicate key value violates unique constraint');
+})->group('RL-19', 'RF-PD-15');

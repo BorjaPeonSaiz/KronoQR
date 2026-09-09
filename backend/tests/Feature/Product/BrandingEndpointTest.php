@@ -608,4 +608,4 @@ it('responde 200 con la marca del producto aunque la configuracion sea ilegible'
         // Y con idiomas utilizables: una lista vacia dejaria al quiosco sin
         // selector y al portal sin saber en que idioma pintarse.
         ->and($response->json('locales.available'))->toBe(['es', 'en']);
-})->group('RF-PD-08', 'RQ-11');
+})->group('RF-PD-08');

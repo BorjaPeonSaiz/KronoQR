@@ -68,10 +68,13 @@ let clockTimer: ReturnType<typeof setInterval> | undefined
 const serverNowMs = computed(() => store.serverNowMs(now.value))
 
 function currentQuery() {
+  // El reloj del SERVIDOR extrapolado, no `now.value` a secas (hallazgo I4):
+  // con un PC atrasado, `periodBounds` calculado sobre el reloj local dejaba
+  // fuera errores recien creados que el servidor ya conocia.
   const bounds = periodBounds(
     periodPreset.value,
     { from: customFrom.value, to: customTo.value },
-    now.value,
+    serverNowMs.value,
   )
 
   return {

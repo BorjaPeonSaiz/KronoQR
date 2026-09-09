@@ -37,7 +37,7 @@ enum RetentionScope: string
     /** Ficheros de log de la aplicacion (RL-11). */
     case TechnicalLog = 'technical_log';
 
-    /** Historico de errores agrupado por huella (RF-PD-15, tarea 5.12). */
+    /** Historico de errores agrupado por huella, tabla `error_events` (RF-PD-15). */
     case ErrorHistory = 'error_history';
 
     /** Etiqueta para el informe y la consola. Sin i18n: el informe es del servidor. */

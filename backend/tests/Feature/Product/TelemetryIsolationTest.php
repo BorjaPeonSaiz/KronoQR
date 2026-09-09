@@ -40,6 +40,15 @@ use Tests\Support\Time\FixedClock;
  * 2. Una excepcion de conexion simulada, para el caso del enlace que acepta y
  *    corta.
  *
+ * ## Por que ademas lleva la etiqueta RL-17
+ *
+ * RL-17 -«el fabricante no es encargado del tratamiento en la operacion
+ * ordinaria, porque no aloja ni accede a los datos»- solo se sostiene si el
+ * producto funciona ENTERO sin hablar con el fabricante. Dos de las pruebas de
+ * abajo lo afirman: con el unico canal saliente activado y roto, el fichaje
+ * sigue y `doctor` sigue diciendo lo mismo. El fabricante no esta en el camino
+ * de nada.
+ *
  * ## Y `doctor` NO comprueba la telemetria, a proposito
  *
  * Un aviso semanal de «no se pudo enviar» seria justo el recordatorio insistente
@@ -135,7 +144,7 @@ it('un destino inalcanzable de verdad no rompe nada y el comando sale 0', functi
 
     // Y la sonda de vida tambien.
     Api::guest()->get('/api/v1/health')->assertOk();
-})->group('RF-PD-12', 'RF-AT-01');
+})->group('RF-PD-12', 'RF-AT-01', 'RL-17');
 
 it('el fallo queda anotado en el estado, con la clase y sin la URL', function (): void {
     Http::fake([
@@ -194,7 +203,7 @@ it('doctor no comprueba la telemetria y responde igual con ella rota', function 
     foreach ($ids($checksCon) as $id) {
         expect($id)->not->toContain('telemetry');
     }
-})->group('RF-PD-12', 'RF-PD-13');
+})->group('RF-PD-12', 'RF-PD-13', 'RL-17');
 
 it('deja constancia si no puede guardar su propio estado, y sigue enviando', function (): void {
     // El sintoma que este aviso existe para explicar: con el directorio sin

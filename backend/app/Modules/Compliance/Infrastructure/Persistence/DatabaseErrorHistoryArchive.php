@@ -9,38 +9,44 @@ use App\Modules\Compliance\Domain\ValueObject\RetentionScope;
 use App\Modules\Compliance\Domain\ValueObject\RetentionTally;
 use DateTimeImmutable;
 use Illuminate\Database\ConnectionInterface;
-use Illuminate\Support\Facades\Config;
-use InvalidArgumentException;
 
 /**
  * El historico de errores a 90 dias (RF-PD-15, RL-11).
  *
- * ## La tabla puede no existir todavia, y eso se dice
+ * ## La tabla y la columna estan fijas, y tienen que estarlo
  *
- * `error_events` la crea la **tarea 5.12**. Hasta entonces este adaptador no
- * falla ni miente: informa de que el almacen **no esta instalado**. Un informe de
- * retencion que dijera «0 filas» estaria afirmando que el ciclo corto de RL-11
- * corre sobre una tabla que no existe, y ese informe se archiva.
+ * `error_events`.`last_seen_at`: la ultima vez que se vio ese error y no la
+ * primera, porque lo que se conserva 90 dias es un grupo de errores **vivo**
+ * -uno que sigue ocurriendo cada dia no vence porque su primera aparicion sea
+ * antigua-.
  *
- * El ciclo se escribe aqui y no en la 5.12 porque la politica de retencion por
- * tipo de dato se decide en esta tarea, con el diseno delante. La 5.12 crea la
- * tabla y se la encuentra ya purgandose.
+ * Estuvieron un tiempo en `config/compliance.php`, para que la tarea que creara
+ * la tabla pudiera ajustarlas sin tocar este fichero. **Ya no**: las mismas
+ * filas las purgan dos comandos distintos -`compliance:apply-retention` por
+ * este ciclo y `product:errors:prune` por el repositorio de errores de
+ * `Product`, que lleva la columna escrita en su propio SQL- y una variable de
+ * entorno que apuntara a otra tabla o a otra columna dejaria a los dos purgando
+ * cosas distintas sin que nada lo dijera. Con dos constantes, el desalineamiento
+ * exige un cambio de codigo que se revisa.
  *
- * ## La columna del corte es configuracion, no codigo
+ * ## Que el almacen no este instalado se dice, no se supone
  *
- * `last_seen_at` -la ultima vez que se vio ese error, no la primera-, porque lo
- * que se conserva 90 dias es un grupo de errores **vivo**: uno que sigue
- * ocurriendo cada dia no vence porque su primera aparicion sea antigua. Va en
- * `config/compliance.php` para que la 5.12 pueda ajustarlo sin tocar este
- * fichero si la tabla nace con otro nombre de columna.
- *
- * Tabla y columna se validan como identificadores simples antes de concatenarse:
- * salen de la configuracion y no de una peticion, pero un identificador
- * concatenado sin validar es la unica forma de que una consulta de aqui se
- * convierta en otra cosa.
+ * `error_events` la crea la migracion de la tarea 5.12, asi que en una
+ * instalacion con las migraciones aplicadas la tabla esta siempre. La rama
+ * «no instalado» -{@see RetentionTally::unavailable()}- solo es alcanzable **sin
+ * migraciones**: una base a medio montar, o un informe pedido antes de
+ * `migrate`. Se informa asi y no con «0 filas» porque este
+ * informe se archiva, y un cero afirmaria que el ciclo corto de RL-11 corrio
+ * sobre una tabla que no existe.
  */
 final readonly class DatabaseErrorHistoryArchive implements ErrorHistoryArchive
 {
+    /** La tabla del historico de errores (RF-PD-15). */
+    private const string TABLE = 'error_events';
+
+    /** La columna por la que envejece un grupo: su ultima ocurrencia. */
+    private const string COLUMN = 'last_seen_at';
+
     public function __construct(private ConnectionInterface $connection) {}
 
     public function scope(): RetentionScope
@@ -50,24 +56,20 @@ final readonly class DatabaseErrorHistoryArchive implements ErrorHistoryArchive
 
     public function inspect(DateTimeImmutable $cutoff): RetentionTally
     {
-        $table = $this->table();
-
-        if (! $this->isInstalled($table)) {
-            return RetentionTally::unavailable(RetentionScope::ErrorHistory, $table);
+        if (! $this->isInstalled()) {
+            return RetentionTally::unavailable(RetentionScope::ErrorHistory, self::TABLE);
         }
-
-        $column = $this->column();
 
         /** @var object{row_count: int|string, oldest: string|null, newest: string|null}|null $row */
         $row = $this->connection->selectOne(
-            'SELECT count(*) AS row_count, min('.$column.')::date::text AS oldest, '
-            .'max('.$column.')::date::text AS newest FROM '.$table.' WHERE '.$column.' < ?',
+            'SELECT count(*) AS row_count, min('.self::COLUMN.')::date::text AS oldest, '
+            .'max('.self::COLUMN.')::date::text AS newest FROM '.self::TABLE.' WHERE '.self::COLUMN.' < ?',
             [$cutoff->format(DateTimeImmutable::ATOM)],
         );
 
         return new RetentionTally(
             scope: RetentionScope::ErrorHistory,
-            dataset: $table,
+            dataset: self::TABLE,
             rows: (int) ($row->row_count ?? 0),
             oldest: $row->oldest ?? null,
             newest: $row->newest ?? null,
@@ -82,8 +84,6 @@ final readonly class DatabaseErrorHistoryArchive implements ErrorHistoryArchive
             return $pending;
         }
 
-        $table = $this->table();
-        $column = $this->column();
         $limit = max(1, $batchSize);
         $deleted = 0;
 
@@ -92,8 +92,8 @@ final readonly class DatabaseErrorHistoryArchive implements ErrorHistoryArchive
         // registro de jornada, que si lo tiene.
         do {
             $affected = $this->connection->affectingStatement(
-                'DELETE FROM '.$table.' WHERE id IN ('
-                .'SELECT id FROM '.$table.' WHERE '.$column.' < ? ORDER BY id LIMIT '.$limit.')',
+                'DELETE FROM '.self::TABLE.' WHERE id IN ('
+                .'SELECT id FROM '.self::TABLE.' WHERE '.self::COLUMN.' < ? ORDER BY id LIMIT '.$limit.')',
                 [$cutoff->format(DateTimeImmutable::ATOM)],
             );
 
@@ -102,39 +102,25 @@ final readonly class DatabaseErrorHistoryArchive implements ErrorHistoryArchive
 
         return new RetentionTally(
             scope: RetentionScope::ErrorHistory,
-            dataset: $table,
+            dataset: self::TABLE,
             rows: $deleted,
             oldest: $pending->oldest,
             newest: $pending->newest,
         );
     }
 
-    private function isInstalled(string $table): bool
+    /**
+     * Si la tabla existe.
+     *
+     * Solo puede faltar sin migraciones aplicadas (ver la cabecera): se
+     * pregunta igualmente porque el informe de retencion se genera tambien en
+     * una base a medio montar y ahi tiene que decir la verdad.
+     */
+    private function isInstalled(): bool
     {
         /** @var object{present: string|null}|null $row */
-        $row = $this->connection->selectOne('SELECT to_regclass(?)::text AS present', ['public.'.$table]);
+        $row = $this->connection->selectOne('SELECT to_regclass(?)::text AS present', ['public.'.self::TABLE]);
 
         return ($row->present ?? null) !== null;
-    }
-
-    private function table(): string
-    {
-        return $this->identifier(Config::string('compliance.retention.error_history.table', 'error_events'));
-    }
-
-    private function column(): string
-    {
-        return $this->identifier(Config::string('compliance.retention.error_history.column', 'last_seen_at'));
-    }
-
-    private function identifier(string $value): string
-    {
-        if (preg_match('/^[a-z_][a-z0-9_]*$/', $value) !== 1) {
-            throw new InvalidArgumentException(
-                'El identificador «'.$value.'» de compliance.retention.error_history no es un nombre simple.'
-            );
-        }
-
-        return $value;
     }
 }

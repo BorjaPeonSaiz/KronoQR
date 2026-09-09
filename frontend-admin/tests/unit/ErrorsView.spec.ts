@@ -1,5 +1,5 @@
 // Pantalla del historico de errores (RF-PD-15, tarea 5.12).
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ErrorsView from '@/features/errors/ErrorsView.vue'
 import { useSessionStore } from '@/features/auth/session.store'
 import type { ErrorEvent, ErrorEventCollection } from '@/shared/api/types'
@@ -79,7 +79,10 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  // nada que limpiar: `stubFetch` (via `stubRoutes`) se desmonta con cada test.
+  // `stubFetch` (via `stubRoutes`) se desmonta con cada test; `useRealTimers`
+  // es barato aunque el test no haya usado reloj falso, y evita que uno que
+  // fije `Date` se cuele en el siguiente (mismo criterio que `errors.store.spec.ts`).
+  vi.useRealTimers()
 })
 
 describe('pantalla del historico de errores', () => {
@@ -179,6 +182,41 @@ describe('pantalla del historico de errores', () => {
 
     expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
     expect(wrapper.find('[data-test="error-row"]').exists()).toBe(false)
+  })
+
+  it('con el reloj del PC atrasado, el filtro de periodo usa el reloj del servidor y no lleva cota superior (hallazgo I4)', async () => {
+    // El PC de quien mira el panel cree que es una semana antes de lo que
+    // dice el servidor (`meta.generated_at` de la primera respuesta,
+    // 2026-09-09). Antes de este arreglo, `periodBounds` se calculaba sobre
+    // este reloj local y dejaba fuera cualquier error visto DESPUES de esta
+    // fecha atrasada, aunque el servidor ya lo conociera.
+    // Solo `Date`: `settle()` depende de un `setTimeout` de verdad, y con los
+    // temporizadores tambien falsificados se queda esperando para siempre.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-09-01T00:00:00.000Z'))
+
+    const urls: string[] = []
+    stubRoutes({
+      '/diagnostics/errors': (url) => {
+        urls.push(url)
+
+        return jsonResponse(errorEventCollection())
+      },
+    })
+
+    const wrapper = await mountErrorsView()
+
+    await wrapper.find('#errors-level-filter').setValue('critical')
+    await settle()
+
+    const lastQuery = new URL(urls.at(-1) ?? '', 'http://localhost').searchParams
+
+    // Sin cota superior en absoluto para un preset de «ultimos N dias».
+    expect(lastQuery.has('to')).toBe(false)
+    // `from` cuenta 7 dias hacia atras desde el reloj del SERVIDOR
+    // extrapolado (2026-09-09T08:00:00Z), no desde el reloj local atrasado
+    // (que habria dado `2026-08-25T00:00:00.000Z`).
+    expect(lastQuery.get('from')).toBe('2026-09-02T08:00:00.000Z')
   })
 
   it('un acceso de soporte con alcance «diagnostics» no ve el boton de resolver', async () => {

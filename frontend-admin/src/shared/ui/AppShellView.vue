@@ -51,6 +51,14 @@ const navigation = computed<NavItem[]>(() =>
       label: t('app.nav.compliance'),
       abilities: [SETTINGS_MANAGE],
     },
+    {
+      // Umbrales operativos e idiomas (RF-PD-01, tarea 5.13). Mismo ambito
+      // que «Cumplimiento», «Quioscos» y «Marca»: las cuatro son la misma
+      // potestad de administrador de instalacion.
+      name: 'operational-settings',
+      label: t('app.nav.operationalSettings'),
+      abilities: [SETTINGS_MANAGE],
+    },
     { name: 'devices', label: t('app.nav.devices'), abilities: [SETTINGS_MANAGE] },
     { name: 'branding', label: t('app.nav.branding'), abilities: [SETTINGS_MANAGE] },
     { name: 'license', label: t('app.nav.license'), abilities: [LICENSE_MANAGE] },

@@ -1147,17 +1147,23 @@ Nueve propiedades de la instalación no viven en el `.env` sino en la tabla
 `installation_settings`, se editan **desde el panel** y surten efecto en la
 petición siguiente sin reiniciar nada:
 
-| Clave | Dónde se explica |
-| --- | --- |
-| `ATTENDANCE_MAX_SHIFT_HOURS` | Sección 2.1 |
-| `ATTENDANCE_DEBOUNCE_SECONDS` | Sección 2.1 |
-| `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES` | Sección 2.1 |
-| `ATTENDANCE_MIN_TRANSIT_SECONDS` | Sección 2.1 |
-| `BRANDING_APP_NAME` | Sección 2.2 |
-| `BRANDING_LOGO_PATH` | Sección 2.2 |
-| `BRANDING_ACCENT_COLOR` | Sección 2.2 |
-| `LOCALE_DEFAULT` | Sección 2.3 |
-| `LOCALE_AVAILABLE` | Sección 2.3 |
+| Clave | Dónde se edita | Dónde se explica |
+| --- | --- | --- |
+| `ATTENDANCE_MAX_SHIFT_HOURS` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.1 |
+| `ATTENDANCE_DEBOUNCE_SECONDS` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.1 |
+| `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.1 |
+| `ATTENDANCE_MIN_TRANSIT_SECONDS` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.1 |
+| `BRANDING_APP_NAME` | Panel → **Marca** (`/branding`) | Sección 2.2 |
+| `BRANDING_LOGO_PATH` | Panel → **Marca** (`/branding`) | Sección 2.2 |
+| `BRANDING_ACCENT_COLOR` | Panel → **Marca** (`/branding`) | Sección 2.2 |
+| `LOCALE_DEFAULT` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.3 |
+| `LOCALE_AVAILABLE` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.3 |
+
+Las dos pantallas piden cuenta de **administrador de instalación** y las dos
+guardan con el mismo botón: el cambio surte efecto en la petición siguiente y
+queda auditado con tu nombre, la fecha y el valor anterior. Si no ves esas
+entradas en el menú, no es que falten: es que tu cuenta no es de
+administrador.
 
 **Manda la base de datos** (sección 1). Cinco de las nueve —las de marca y las
 de idioma— ya no existen como variable de entorno: se retiraron para que no

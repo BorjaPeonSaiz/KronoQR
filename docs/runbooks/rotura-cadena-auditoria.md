@@ -193,6 +193,24 @@ tabla, y las dos se descartan en un minuto:
 Si el hallazgo es de **una o unas pocas filas**, no es ninguna de las dos: un
 fallo de configuración rompe la cadena entera, no una fila del martes.
 
+### La discontinuidad que sí es legítima: una vuelta atrás del actualizador
+
+Hay un caso en el que la cadena **verifica en verde y aun así falta un
+intervalo**: `update.sh` restauró la copia previa (paso 6) y con ella la cadena
+que había en ese momento. Los asientos escritos entre la copia y el fallo ya no
+están, y nada en el encadenado lo delata, porque la cadena restaurada es íntegra.
+Desde el cierre de la Fase 5 ese hueco deja rastro propio: un asiento
+`system.restored_from_backup`, escrito **sobre la cadena restaurada**, con el
+nombre y la fecha de la copia, el paso que falló, el motivo y `chain_before`, que
+es la huella de la punta de la cadena que se descartó. Si al investigar una
+reclamación (una persona dice que fichó y no aparece) el último asiento del
+sistema es uno de estos, no busques manipulación: busca en el informe de esa
+actualización (`BACKUP_PATH/reports/update-<fecha>.log`) y en la cola de los quioscos, que
+reenvían lo que tenían encolado. Una actualización que terminó bien deja
+`system.updated`, con `chain_before` y `chain_after`; si falta ese asiento y la
+versión cambió, el actualizador salió con `6` y el aviso dice cómo escribirlo a
+mano (`compliance:record-system-event`).
+
 ---
 
 ## 4. Nadie está verificando (el silencio)

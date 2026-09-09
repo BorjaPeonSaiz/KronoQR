@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Tests\Architecture\Support\ModuleTree;
 use Tests\Architecture\Support\Repo;
 
 /*
@@ -215,22 +216,20 @@ it('no usa ninguno de los servicios de terceros que el fichero de credenciales d
     //
     // El correo del producto sale por el SMTP que declara la instalacion
     // (`config/mail.php`), que es lo que RL-14 admite.
-    $codigo = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator(Repo::file('backend/app'), FilesystemIterator::SKIP_DOTS),
-    );
-
+    // El recorrido va con `scandir` (`ModuleTree::phpFilesUnder()`) y no con
+    // `RecursiveDirectoryIterator`: sobre el bind mount de Docker Desktop el
+    // iterador se dejaba 45 de los 1.234 ficheros de `app/` —todo
+    // `Product/Domain/ValueObject`— sin decir nada, y esta prueba afirmaba que
+    // nadie usa esos servicios habiendo mirado 1.189. Un falso verde en una
+    // garantia de RL-14 es peor que no tener la garantia. Ver `SourceDiscoveryTest`.
     $usos = [];
 
-    foreach ($codigo as $fichero) {
-        if (! $fichero instanceof SplFileInfo || $fichero->getExtension() !== 'php') {
-            continue;
-        }
-
-        $contenido = (string) file_get_contents($fichero->getPathname());
+    foreach (ModuleTree::phpFilesUnder(Repo::file('backend/app')) as $fichero) {
+        $contenido = (string) file_get_contents($fichero);
 
         foreach (['services.postmark', 'services.resend', 'services.ses', 'services.slack'] as $servicio) {
             if (str_contains($contenido, $servicio)) {
-                $usos[] = $fichero->getFilename().' usa '.$servicio;
+                $usos[] = basename($fichero).' usa '.$servicio;
             }
         }
     }

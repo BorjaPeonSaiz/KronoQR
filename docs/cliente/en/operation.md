@@ -231,14 +231,17 @@ is in the message, which is what you have to read.**
 | `3` | **Incompatible prior state. NOTHING written** | `install.sh`: there is already an installation (use `update.sh`). `backup.sh`: there is no backup to verify, or the destination already exists. `restore.sh`: there are still open connections against the database. `update.sh`: already on the target version, or there is no installation to update. `doctor.sh`: **there is no installation to diagnose** on this server — if it is a new one, what you need is `install.sh` |
 | `4` | **Failed and everything done was undone** in that run. Can be retried | `install.sh`: containers, volumes and `.env` returned to their state. `backup.sh`: half-written files swept away, the previous backup intact. `restore.sh`: working database removed, the production one untouched. `update.sh`: pre-update backup restored and **previous version running and verified**. `doctor.sh`: **does not use it**, it neither writes nor undoes anything |
 | `5` | **Failed and NOT everything could be undone. Manual intervention required.** The message says exactly what is left and which order removes it | It is the only code that requires a person present. `doctor.sh`: **does not use it**, it neither writes nor undoes anything |
-| `6` | **The work was done but the subsequent verification failed.** Nothing is undone | `install.sh`: the services are up, check the certificate and the logs. `backup.sh`: the backup exists but **does not verify: treat it as non-existent**. `restore-drill.sh`: today the record could not be recovered. `update.sh`: **does not use it**, every failed verification rolls back. `doctor.sh`: **the diagnosis has found at least one failure** — with the application running, in its own report (`product:doctor`); with the application stopped, in one of the external checks. The message says what to read |
+| `6` | **The work was done but the subsequent verification failed.** Nothing is undone | `install.sh`: the services are up, check the certificate and the logs. `backup.sh`: the backup exists but **does not verify: treat it as non-existent**. `restore-drill.sh`: today the record could not be recovered. `update.sh`: **almost never** (every failed verification of the new version rolls back); the only exception is that the `system.updated` entry in `audit_log` could not be written after an update that did finish — the work was done and is not undone because of that. `doctor.sh`: **the diagnosis has found at least one failure** — with the application running, in its own report (`product:doctor`); with the application stopped, in one of the external checks. The message says what to read |
 
 `install.sh` and `update.sh` invoke `product:doctor` in their verification
 phase (RF-PD-13): in `install.sh` a warning (`product:doctor` code `1`) is
 shown and does not block, and only a failure (`2`) translates into the `6` of
-the table above. In `update.sh` there is no translation into `6`: a failed
-verification always rolls back, so a `product:doctor` failure on the new
-version triggers the rollback just like any other failure in step 5.
+the table above. In `update.sh` the diagnostic never translates into `6`: it
+is informational, and a `product:doctor` failure on the new version triggers
+the rollback (code `4`) just like any other failure in step 5, never a `6`.
+The only translation into `6` that does exist in `update.sh` is something
+else entirely: the `system.updated` entry that step 5 leaves in `audit_log`
+(section 11).
 
 ### If you had a cron job written against the previous `backup.sh` table
 
@@ -409,6 +412,12 @@ The seven steps and what happens if each one fails:
 | 5 · Start-up and verification | Automatic rollback → `4` | Same as above. **The new version never received traffic**: it is verified without the edge | Same as above |
 | 6 · Rollback | Exits `5` | **Requires a person.** The message distinguishes two cases: only maintenance mode was left on (lift it with `artisan up`, **without restoring anything**) or the restore was left half-done (three orders and the path of the backup) | Runbook §5. The kiosks keep queueing meanwhile |
 | 7 · Report | — | `BACKUP_PATH/reports/update-<fecha>.log`, always; next to it, `update-<fecha>.detalle.log` (root only, raw output, **may contain personal data**) | Attach the report to the diagnostic bundle if you open a case; the detail file, only after reviewing it and if asked for |
+
+Steps 5 and 6 also leave their own entry in `audit_log` (`system.updated` or
+`system.restored_from_backup`): if for whatever reason it cannot be written,
+the update is not rolled back because of that —the fact already happened—,
+but an update that otherwise finished fine exits `6` instead of `0`, and the
+report says so on its own line.
 
 **What does not change:** your secrets (the `.env` is copied as is and only
 `IMAGE_TAG` changes), the data, the licence (an expired licence **does not

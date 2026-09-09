@@ -215,11 +215,14 @@ export async function stubOnboardingApi(
     return { step, state, required: REQUIRED[step], skippable: SKIPPABLE[step] }
   }
 
-  /** `GET /setup/status`: PUBLICA, nunca trae `steps` (revision de la 5.5). */
+  /**
+   * `GET /setup/status`: PUBLICA. Trae **solo `available`** — nunca `steps`
+   * (revision de la 5.5) ni `completed_at` (revision del cierre de la Fase 5):
+   * cuando se monto el servidor no le hace falta a un navegador sin
+   * credenciales para decidir a donde va.
+   */
   function publicStatus() {
-    return available
-      ? { available: true, completed_at: null }
-      : { available: false, completed_at: completedAt }
+    return { available }
   }
 
   /**

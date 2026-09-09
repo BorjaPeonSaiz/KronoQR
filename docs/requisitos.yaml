@@ -182,7 +182,7 @@
 - { id: RF-PD-13,  fase: 5, titulo: "Comprobación de salud posinstalación: un comando que valida base de datos, colas, correo, certificados, permisos y espacio en disco, y devuelve un..." }
 - { id: RF-PD-14,  fase: 5, titulo: "Exportación íntegra de los datos del cliente en formato abierto, ejecutable por el propio cliente sin intervención del fabricante" }
 - { id: RF-PD-15,  fase: 5, titulo: "Histórico de errores en base de datos" }
-- { id: RL-16,     fase: 5, titulo: "El cliente es responsable del tratamiento y operador del sistema: aloja los datos, controla los accesos y responde ante la Inspección y ante su pla..." }
+- { id: RL-16,     fase: 5, titulo: "El cliente es responsable del tratamiento y operador del sistema: aloja los datos, controla los accesos y responde ante la Inspección y ante su pla...", verificacion: revision }
 - { id: RL-17,     fase: 5, titulo: "El fabricante no es encargado del tratamiento en la operación ordinaria, porque no aloja ni accede a los datos" }
 - { id: RL-18,     fase: 5, titulo: "Encargo acotado a soporte" }
 - { id: RL-19,     fase: 5, titulo: "El paquete de diagnóstico no contiene datos personales por defecto (RF-PD-09)" }

@@ -88,6 +88,13 @@ it('nombra el ciclo completo de cada familia que el bloque D enumera', function 
     // plan.
     'license.activated',
     'license.plan_exceeded',
+    // Actualiza el producto o restaura una copia previa (tarea 5.7, RF-PD-10).
+    // Las dos son del ciclo de vida de la instalacion, y la segunda es la unica
+    // accion del catalogo que describe una PERDIDA imprevista de asientos: sin
+    // ella, una vuelta atras deja una cadena integra —la de la copia— y el
+    // intervalo descartado es invisible desde el propio registro.
+    'system.updated',
+    'system.restored_from_backup',
     // Ejecuta una purga por retencion.
     'retention.partition_sealed',
     'retention.partition_dropped',

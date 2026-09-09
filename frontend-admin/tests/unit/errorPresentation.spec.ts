@@ -64,10 +64,12 @@ describe('whatToDoKey', () => {
 describe('periodBounds', () => {
   const nowMs = Date.parse('2026-09-09T08:00:00.000Z')
 
-  it('un preset de dias cuenta hacia atras desde ahora', () => {
+  it('un preset de dias cuenta hacia atras desde ahora, sin cota superior (hallazgo I4)', () => {
     const bounds = periodBounds('7', { from: '', to: '' }, nowMs)
 
-    expect(bounds.to).toBe('2026-09-09T08:00:00.000Z')
+    // Sin `to`: un reloj local atrasado tras la extrapolacion de
+    // `serverNowMs` no puede dejar fuera un error recien creado.
+    expect(bounds.to).toBeUndefined()
     expect(bounds.from).toBe('2026-09-02T08:00:00.000Z')
   })
 

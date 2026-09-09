@@ -73,7 +73,7 @@ it('publica los turnos abiertos por departamento con el nombre del centro', func
         ->and($prom)->toContain('websocket_connections_active 3')
         // El sello de tiempo delata que la tarea programada dejo de ejecutarse.
         ->and($prom)->toContain('presence_metrics_timestamp_seconds ');
-})->group('RF-PA-01', 'RQ-11');
+})->group('RF-PA-01');
 
 it('publica un cero por departamento vacio en vez de hacer desaparecer la serie', function (): void {
     // En Prometheus, una serie que se esfuma es indistinguible de una que nunca
