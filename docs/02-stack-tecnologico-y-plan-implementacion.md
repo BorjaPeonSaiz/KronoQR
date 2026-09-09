@@ -1295,8 +1295,11 @@ kronoqr-2.1.0/
     │   ├── configuracion.md        # Todos los parámetros y qué hace cada uno
     │   ├── obligaciones-legales.md # Qué le corresponde al cliente (RL-21)
     │   ├── endurecimiento.md       # Anexo de instalación: red, TLS, anfitrión, tablets (5.11)
-    │   ├── en/                     # Las cinco guías en inglés (5.11)
-    │   └── img/                    # Capturas del asistente y del quiosco (es/ y en/), sello VERSION (5.11)
+    │   ├── guia-rrhh.md            # Para quien opera el producto a diario: alta, incidencias, correcciones, Inspección (5.11b)
+    │   ├── guia-portal-empleado.md # Cómo entra el empleado a su registro y lo descarga (RL-05, 5.11b)
+    │   ├── hoja-empleado.md        # La hoja de una cara que se entrega con la tarjeta: cuándo, cómo se imprime, su texto (5.11b)
+    │   ├── en/                     # Las ocho guías en inglés (5.11, 5.11b)
+    │   └── img/                    # Capturas del asistente, del panel, del portal y del quiosco (es/ y en/), sello VERSION (5.11, 5.11b)
     ├── runbooks/                   # Procedimientos del §12, solo en español
     └── CHANGELOG.md                # update.sh remite a él antes de tocar nada
 ```

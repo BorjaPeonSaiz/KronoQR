@@ -572,13 +572,23 @@ return Application::configure(basePath: dirname(__DIR__))
          * corrija (ADR-026). Decirle `404` al segundo seria mentirle a quien
          * llego un segundo tarde en un cambio de turno: ese tramo existe, lo que
          * pasa es que otro responsable lo toco antes.
+         *
+         * Y CADA CAUSA LLEVA SU `type` (tarea 5.11b, revision de codigo). Los
+         * tres `409` de la correccion compartian
+         * `urn:kronoqr:problem:conflict`, asi que el panel solo podia
+         * distinguirlos analizando el `detail` —texto para personas, traducible,
+         * que puede cambiar sin romper el contrato—. Ahora son
+         * `shift-entry-superseded`, `shift-already-open` y
+         * `overlapping-shift-entry`, y el `422` de RN-05 es
+         * `correction-would-change-work-date`. Los cuatro estan en el contrato,
+         * en las respuestas de las tres rutas.
          */
         $exceptions->render(static function (ShiftEntryNotFound $exception): mixed {
             if (! app(ShiftEntryHistory::class)->isRetired($exception->shiftEntryUuid)) {
                 return ProblemDetails::notFound();
             }
 
-            return ProblemDetails::conflict(
+            return ProblemDetails::shiftEntrySuperseded(
                 'Ese tramo ya no es la version vigente: lo corrigio o lo anulo alguien antes. '
                 .'Vuelve a cargar la jornada antes de repetir la operacion.'
             );
@@ -603,11 +613,11 @@ return Application::configure(basePath: dirname(__DIR__))
          * servidor, no una peticion mal hecha.
          */
         $exceptions->render(static fn (ShiftAlreadyOpen $exception, Request $request): mixed => $request->routeIs('attendance.shift-entries.*')
-            ? ProblemDetails::conflict('Esa persona ya tiene un turno abierto. Cierralo o anulalo antes de dejar otro sin salida.')
+            ? ProblemDetails::shiftAlreadyOpen('Esa persona ya tiene un turno abierto. Cierralo o anulalo antes de dejar otro sin salida.')
             : null);
 
         $exceptions->render(static fn (OverlappingShiftEntry $exception, Request $request): mixed => $request->routeIs('attendance.shift-entries.*')
-            ? ProblemDetails::conflict('Las horas indicadas se solapan con otro tramo de esa persona. Revisa la jornada antes de corregir.')
+            ? ProblemDetails::overlappingShiftEntry('Las horas indicadas se solapan con otro tramo de esa persona. Revisa la jornada antes de corregir.')
             : null);
 
         /*
@@ -626,7 +636,7 @@ return Application::configure(basePath: dirname(__DIR__))
          * resolverlo. Mover horas de un dia a otro son dos actos separados y
          * auditados, no un efecto lateral de un `PATCH` (RN-05, regla dura 4).
          */
-        $exceptions->render(static fn (CorrectionWouldChangeWorkDate $exception): mixed => ProblemDetails::validationFailed([
+        $exceptions->render(static fn (CorrectionWouldChangeWorkDate $exception): mixed => ProblemDetails::correctionWouldChangeWorkDate([
             'clocked_in_at' => [
                 'Esa hora de entrada llevaria la jornada a otro dia. Para mover las horas de un dia a otro, '
                 .'anula el tramo en la jornada de origen y dalo de alta en la de destino: son dos acciones, '

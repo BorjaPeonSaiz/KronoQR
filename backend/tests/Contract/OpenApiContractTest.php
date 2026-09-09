@@ -126,6 +126,11 @@ it('describe solo los endpoints cuya tarea existe, y todos bajo /api/v1', functi
         '/api/v1/credentials/print-batch',
         '/api/v1/credentials/{uuid}/print',
         '/api/v1/credentials/{uuid}/deliver',
+        // Tarea 5.11b: la hoja de instrucciones que se entrega CON la tarjeta
+        // (RL-05). El unico `GET` del grupo ademas del panel, y por el mismo
+        // motivo: no acuña nada, no cambia el estado de nada y es el mismo
+        // documento para toda la plantilla.
+        '/api/v1/credentials/instructions-sheet',
         // Tarea 1.15: correcciones trazadas del registro horario (RF-PA-04).
         '/api/v1/shift-entries',
         '/api/v1/shift-entries/{uuid}',
@@ -872,6 +877,94 @@ it('reserva el 409 para la version que ya no es vigente', function (): void {
     // devolviera para decir «no existe el empleado», que es un 422.
     expect(Contract::keys('paths', '/api/v1/shift-entries', 'post', 'responses'))->not->toContain('404');
 })->group('RF-PA-04', 'RN-13');
+
+it('da un type propio a cada conflicto de la correccion', function (): void {
+    /*
+     * Tarea 5.11b, revision de codigo. Los tres `409` de la correccion salian
+     * con `urn:kronoqr:problem:conflict`, asi que el panel solo podia
+     * distinguirlos analizando el `detail`, que es texto para personas: se
+     * traduce, se reescribe y no rompe el contrato al cambiar. El `type` es lo
+     * unico que un cliente puede interpretar, y por eso cada causa lleva el suyo.
+     *
+     * Se comprueba sobre los EJEMPLOS y no sobre un enum porque `Problem.type`
+     * es deliberadamente abierto —lo comparten todos los endpoints del
+     * producto—, y lo que documenta la forma de una respuesta concreta son sus
+     * ejemplos. Si alguien devuelve el conflicto generico desde estas rutas, el
+     * ejemplo deja de coincidir con el codigo y esta prueba, junto con las
+     * feature de `Attendance`, lo enseña.
+     */
+    /**
+     * Los `type` declarados en los ejemplos de una respuesta, ordenados.
+     *
+     * @return list<string>
+     */
+    $tipos = static function (string $path, string $method, string $status): array {
+        $ejemplos = Contract::map(
+            'paths', $path, $method, 'responses', $status,
+            'content', 'application/problem+json', 'examples',
+        );
+
+        $tipos = [];
+
+        foreach ($ejemplos as $ejemplo) {
+            expect($ejemplo)->toBeArray();
+            \assert(\is_array($ejemplo));
+
+            $valor = $ejemplo['value'] ?? null;
+
+            expect($valor)->toBeArray();
+            \assert(\is_array($valor));
+
+            $tipo = $valor['type'] ?? null;
+
+            expect($tipo)->toBeString(
+                'Un ejemplo de '.$method.' '.$path.' ('.$status.') no declara `type`.'
+            );
+            \assert(\is_string($tipo));
+
+            $tipos[] = $tipo;
+        }
+
+        sort($tipos);
+
+        return $tipos;
+    };
+
+    // El alta no recibe ningun {uuid}, asi que no puede chocar con una version
+    // sustituida: solo con RN-01 y RN-02.
+    expect($tipos('/api/v1/shift-entries', 'post', '409'))->toBe([
+        'urn:kronoqr:problem:overlapping-shift-entry',
+        'urn:kronoqr:problem:shift-already-open',
+    ]);
+
+    // El PATCH puede chocar con las tres cosas.
+    expect($tipos('/api/v1/shift-entries/{uuid}', 'patch', '409'))->toBe([
+        'urn:kronoqr:problem:overlapping-shift-entry',
+        'urn:kronoqr:problem:shift-already-open',
+        'urn:kronoqr:problem:shift-entry-superseded',
+    ]);
+
+    // Anular no comprueba RN-01 ni RN-02: quitar un tramo no abre un turno de
+    // mas ni crea un solape. Una sola causa.
+    expect($tipos('/api/v1/shift-entries/{uuid}/void', 'post', '409'))->toBe([
+        'urn:kronoqr:problem:shift-entry-superseded',
+    ]);
+
+    // Y el 422 de RN-05, que sigue siendo 422 y con el error colgado del campo.
+    foreach ([['/api/v1/shift-entries', 'post'], ['/api/v1/shift-entries/{uuid}', 'patch']] as [$path, $method]) {
+        // `toContain` con un segundo argumento busca DOS elementos en Pest, no
+        // acepta un mensaje: por eso la afirmacion va sobre el booleano.
+        $declarados = $tipos($path, $method, '422');
+
+        foreach ([
+            'urn:kronoqr:problem:correction-would-change-work-date',
+            'urn:kronoqr:problem:validation-failed',
+        ] as $tipo) {
+            expect(\in_array($tipo, $declarados, true))
+                ->toBeTrue($method.' '.$path.' no declara un ejemplo con '.$tipo.'.');
+        }
+    }
+})->group('RF-PA-04', 'RN-01', 'RN-02', 'RN-05', 'RN-13');
 
 it('no ofrece ninguna forma de vaciar una marca ya registrada', function (): void {
     // Regla dura 5. Un tramo que no debio cerrarse se ANULA y se vuelve a dar de

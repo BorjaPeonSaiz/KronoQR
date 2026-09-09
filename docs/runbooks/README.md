@@ -49,8 +49,8 @@ Asignación literal del plan de implementación
 | 5 | [`restaurar-backup.md`](restaurar-backup.md) | Recuperación y simulacro trimestral | ✅ Fase 1 · tarea 1.18 (era 2.11, adelantada por ADR-032) → usado por 5.7 |
 | 6 | [`rotacion-secretos.md`](rotacion-secretos.md) | Rotación programada o compromiso | ✅ §7.7 · escrito en la tarea 2.12 con la rotación del QR · ampliado en 5.4 |
 | 7 | [`alta-nuevo-quiosco.md`](alta-nuevo-quiosco.md) | Emparejamiento por código y vinculación. Incluye **lo que no es del producto**: fijar la tablet en modo quiosco | ✅ Fase 5 · tarea 5.6 |
-| 8 | `alta-nuevo-empleado.md` | Alta, emisión, impresión y entrega con la antelación necesaria | Fase 1 · tarea 1.10 |
-| 9 | `tarjeta-perdida-o-rota.md` | Revocación, reemisión y reimpresión en el día | Fase 1 · tarea 1.10 |
+| 8 | ~~`alta-nuevo-empleado.md`~~ | Alta, emisión, impresión y entrega con la antelación necesaria | ✅ **No se escribe como runbook.** Es el §2 de [`../cliente/guia-rrhh.md`](../cliente/guia-rrhh.md) (Fase 5 · tarea 5.11b, decisión 7) |
+| 9 | [`tarjeta-perdida-o-rota.md`](tarjeta-perdida-o-rota.md) | Revocación, reemisión e impresión de la nueva en el día. Incluye el caso «impresión fallida» de ADR-034 (decisión arquitectónica del fabricante; no viaja en el paquete) | ✅ Fase 5 · tarea 5.11b (era 1.10; lo cita el contrato de `print`) |
 | 10 | [`rotacion-clave-qr.md`](rotacion-clave-qr.md) | Reimpresión progresiva sin dejar a nadie sin fichar | ✅ Fase 2 · tarea 2.12 |
 | 11 | [`requerimiento-inspeccion.md`](requerimiento-inspeccion.md) | **Cómo generar la exportación legal en menos de 1 hora** | ✅ Fase 1 · tarea 1.17 (era 2.9, adelantada por ADR-032) |
 | 12 | `patron-anomalo-credencial.md` | Revisar una incidencia `anomalous_pattern` sin convertir un indicio en una acusación | Fase 3 · tarea 3.11 |

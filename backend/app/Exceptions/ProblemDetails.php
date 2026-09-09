@@ -112,6 +112,52 @@ final class ProblemDetails
     public const string TYPE_DATA_EXPORT_NOT_READY = 'urn:kronoqr:problem:data-export-not-ready';
 
     /**
+     * El `{uuid}` de la correccion existio y **ya no es la version vigente**:
+     * otra persona lo corrigio o lo anulo antes (ADR-035, tarea 5.11b tras la
+     * revision de codigo).
+     *
+     * **Tipo propio y no `TYPE_CONFLICT`**, aunque los tres conflictos de la
+     * correccion sean `409`, porque el panel tiene que reaccionar distinto a
+     * cada uno y analizar el `detail` para adivinarlo es exactamente lo que el
+     * `type` existe para evitar: aqui hay que **recargar la jornada** y repetir
+     * sobre el identificador nuevo, mientras que en los otros dos hay que
+     * enseñar el tramo que estorba.
+     */
+    public const string TYPE_SHIFT_ENTRY_SUPERSEDED = 'urn:kronoqr:problem:shift-entry-superseded';
+
+    /**
+     * La operacion dejaria a esa persona con **dos turnos abiertos** (RN-01).
+     *
+     * Solo sale por las rutas de correccion. En el camino de fichaje la misma
+     * excepcion no llega nunca al cliente: alli el rechazo es generico y de
+     * tiempo constante (RS-03, regla dura 17).
+     */
+    public const string TYPE_SHIFT_ALREADY_OPEN = 'urn:kronoqr:problem:shift-already-open';
+
+    /**
+     * Las horas pisarian a **otro tramo vigente** de la misma persona (RN-02).
+     *
+     * Mismo acotamiento que {@see self::TYPE_SHIFT_ALREADY_OPEN}: rutas de
+     * correccion y nada mas.
+     */
+    public const string TYPE_OVERLAPPING_SHIFT_ENTRY = 'urn:kronoqr:problem:overlapping-shift-entry';
+
+    /**
+     * La entrada que abre la jornada se moveria al otro lado de la medianoche
+     * local y esas horas acabarian en **otra jornada** (RN-05, ADR-035).
+     *
+     * **Sigue siendo `422` y con el error colgado del campo**, no `409`: no hay
+     * nada que releer ni ninguna carrera que haya perdido nadie. Lo que se pide
+     * es imposible en un solo acto, y el mensaje del campo dice cual es el
+     * camino —anular en origen, dar de alta en destino—.
+     *
+     * Tipo propio y no `TYPE_VALIDATION_FAILED` porque el panel puede ofrecer
+     * ese camino en dos botones en lugar de pintar un texto largo junto a un
+     * campo de hora.
+     */
+    public const string TYPE_CORRECTION_WOULD_CHANGE_WORK_DATE = 'urn:kronoqr:problem:correction-would-change-work-date';
+
+    /**
      * @param  array<string, list<string>>  $errors  Detalle por campo. Solo en errores de validacion.
      * @param  array<string, string>  $headers
      */
@@ -249,6 +295,73 @@ final class ProblemDetails
             'Conflicto con el estado actual',
             JsonResponse::HTTP_CONFLICT,
             $detail,
+        );
+    }
+
+    /**
+     * Los tres `409` de la correccion de tramos, cada uno con su `type`
+     * (tarea 5.11b, segunda vuelta de `revisor-codigo`).
+     *
+     * **Por que tres metodos y no un `conflict($detail, $type)`.** Porque el
+     * segundo parametro lo acabaria rellenando quien pasara por aqui con prisa,
+     * y el `type` es lo unico de esta respuesta que un cliente puede interpretar
+     * sin leer castellano. Con un metodo por causa, el conjunto de tipos que
+     * puede salir de la correccion esta escrito y es enumerable; con un
+     * parametro libre, es lo que haya en el sitio de la llamada.
+     *
+     * El `title` es el mismo en los tres —son conflictos con el estado— y el
+     * `detail` lo pone quien llama, que es quien conoce la operacion.
+     */
+    public static function shiftEntrySuperseded(string $detail): JsonResponse
+    {
+        return self::response(
+            self::TYPE_SHIFT_ENTRY_SUPERSEDED,
+            'Conflicto con el estado actual',
+            JsonResponse::HTTP_CONFLICT,
+            $detail,
+        );
+    }
+
+    /** `409` de RN-01 en las rutas de correccion. {@see self::TYPE_SHIFT_ALREADY_OPEN} */
+    public static function shiftAlreadyOpen(string $detail): JsonResponse
+    {
+        return self::response(
+            self::TYPE_SHIFT_ALREADY_OPEN,
+            'Conflicto con el estado actual',
+            JsonResponse::HTTP_CONFLICT,
+            $detail,
+        );
+    }
+
+    /** `409` de RN-02 en las rutas de correccion. {@see self::TYPE_OVERLAPPING_SHIFT_ENTRY} */
+    public static function overlappingShiftEntry(string $detail): JsonResponse
+    {
+        return self::response(
+            self::TYPE_OVERLAPPING_SHIFT_ENTRY,
+            'Conflicto con el estado actual',
+            JsonResponse::HTTP_CONFLICT,
+            $detail,
+        );
+    }
+
+    /**
+     * `422` de RN-05 en las rutas de correccion, con el error colgado del campo.
+     *
+     * **Mismo cuerpo que `validationFailed()` salvo el `type`**, y por eso mismo
+     * es un metodo aparte y no un parametro de aquel: el resto del producto no
+     * tiene ningun motivo para elegir el `type` de un error de validacion, y
+     * poder hacerlo invita a que aparezca un tipo nuevo por endpoint.
+     *
+     * @param  array<string, list<string>>  $errors
+     */
+    public static function correctionWouldChangeWorkDate(array $errors): JsonResponse
+    {
+        return self::response(
+            self::TYPE_CORRECTION_WOULD_CHANGE_WORK_DATE,
+            'Peticion no valida',
+            JsonResponse::HTTP_UNPROCESSABLE_ENTITY,
+            'Revisa los campos indicados.',
+            $errors,
         );
     }
 

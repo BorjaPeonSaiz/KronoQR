@@ -27,6 +27,8 @@ import {
 import { durationParts, sumShiftMinutes } from '@kronoqr/web-kit/workdayTotals'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { ATTENDANCE_CORRECT, canVoidShiftEntry } from '@/features/auth/abilities'
+import { useSessionStore } from '@/features/auth/session.store'
 import type { ClockingSource, ShiftEntryStatus, WorkDayShiftEntry } from '@/shared/api/types'
 
 const props = defineProps<{
@@ -39,7 +41,22 @@ const props = defineProps<{
   workDate: string
 }>()
 
+const emit = defineEmits<{
+  /** Pide abrir «Corregir las horas» sobre este tramo vigente (RF-PA-04). */
+  correct: [WorkDayShiftEntry]
+  /** Pide abrir «Anular el tramo» sobre este tramo vigente (RF-PA-04, ADR-026). */
+  void: [WorkDayShiftEntry]
+}>()
+
 const { t, locale } = useI18n()
+const session = useSessionStore()
+
+// Regla dura 18: lo que no se puede usar no se enseña. `attendance:correct`
+// cubre añadir y corregir; anular exige ademas `rrhh+` en el servidor
+// (`ShiftEntryPolicy::void`), asi que el boton se oculta tambien por rol y no
+// solo por ambito (`canVoidShiftEntry`).
+const canCorrect = computed(() => session.can(ATTENDANCE_CORRECT))
+const canVoid = computed(() => canCorrect.value && canVoidShiftEntry(session.roles))
 
 /** A partir de este desfase, la marca no llego en el acto: viajo encolada. */
 const QUEUE_NOTICE_MINUTES = 5
@@ -62,6 +79,8 @@ interface EntryRow {
   otherTimeZone: string | null
   clockIn: MarkView
   clockOut: MarkView | null
+  /** El tramo original, para emitirlo tal cual a quien pide corregirlo o anularlo. */
+  entry: WorkDayShiftEntry
 }
 
 function mark(utcValue: string, localValue: string, recordedAt: string | null): MarkView {
@@ -92,6 +111,7 @@ const rows = computed<EntryRow[]>(() =>
       entry.clocked_out_at === null || entry.clocked_out_at_local === null
         ? null
         : mark(entry.clocked_out_at, entry.clocked_out_at_local, entry.clocked_out_recorded_at),
+    entry,
   })),
 )
 
@@ -138,6 +158,9 @@ function duration(minutes: number): string {
             <th scope="col" class="px-3 py-2">{{ t('workdays.entries.duration') }}</th>
             <th scope="col" class="px-3 py-2">{{ t('workdays.entries.source') }}</th>
             <th scope="col" class="px-3 py-2">{{ t('workdays.entries.status') }}</th>
+            <th v-if="canCorrect" scope="col" class="px-3 py-2">
+              {{ t('workdays.entries.actions') }}
+            </th>
           </tr>
         </thead>
 
@@ -227,6 +250,28 @@ function duration(minutes: number): string {
                 {{ t('workdays.entries.version', { version: row.version }) }}
               </span>
             </td>
+
+            <td v-if="canCorrect" class="px-3 py-2">
+              <div class="flex flex-col items-start gap-2">
+                <button
+                  type="button"
+                  class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-2 py-1 text-sm text-kq-text hover:bg-kq-surface-alt"
+                  data-test="entry-correct"
+                  @click="emit('correct', row.entry)"
+                >
+                  {{ t('corrections.actions.correct') }}
+                </button>
+                <button
+                  v-if="canVoid"
+                  type="button"
+                  class="rounded-kq-sm bg-kq-danger px-2 py-1 text-sm font-semibold text-kq-on-danger"
+                  data-test="entry-void"
+                  @click="emit('void', row.entry)"
+                >
+                  {{ t('corrections.actions.void') }}
+                </button>
+              </div>
+            </td>
           </tr>
         </tbody>
 
@@ -238,7 +283,7 @@ function duration(minutes: number): string {
             <td class="px-3 py-2 font-semibold tabular-nums" data-test="summed-total">
               {{ duration(summedMinutes) }}
             </td>
-            <td colspan="2" class="px-3 py-2"></td>
+            <td :colspan="canCorrect ? 3 : 2" class="px-3 py-2"></td>
           </tr>
           <tr v-if="!totalsAgree">
             <th scope="row" colspan="2" class="px-3 py-2 text-right">
@@ -247,7 +292,7 @@ function duration(minutes: number): string {
             <td class="px-3 py-2 font-semibold tabular-nums" data-test="declared-total">
               {{ duration(totalMinutes) }}
             </td>
-            <td colspan="2" class="px-3 py-2"></td>
+            <td :colspan="canCorrect ? 3 : 2" class="px-3 py-2"></td>
           </tr>
         </tfoot>
       </table>

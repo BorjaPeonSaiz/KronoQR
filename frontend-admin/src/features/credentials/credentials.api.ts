@@ -85,6 +85,28 @@ export function printCredentialBatch(
   })
 }
 
+/**
+ * La hoja de instrucciones de fichaje que se entrega con la tarjeta y el PIN
+ * (tarea 5.11b, RL-05): un PDF de una sola cara, sin datos de ninguna persona,
+ * en el idioma pedido. `GET`, no cambia nada: nunca responde `204` (a
+ * diferencia del lote de impresion) y por eso no puede devolver `null`.
+ */
+export function fetchCredentialInstructionsSheet(locale: string): Promise<BinaryDocument> {
+  // El nombre de respaldo, para el caso raro en que el servidor no mande
+  // `Content-Disposition` con nombre: el contrato llama al fichero
+  // `hoja-empleado-<locale>.pdf` (`docs/api/openapi.yaml`).
+  return requestBlob('/api/v1/credentials/instructions-sheet', 'hoja-empleado.pdf', {
+    query: { locale },
+    accept: PDF_ACCEPT,
+  }).then((document_) => {
+    if (document_ === null) {
+      throw new Error('El servidor respondio 204 a la hoja de instrucciones, que nunca es vacia.')
+    }
+
+    return document_
+  })
+}
+
 /** Registra la entrega en mano. El responsable lo pone el servidor, no el cliente. */
 export function deliverCredential(uuid: string): Promise<Credential> {
   return requestJson<Credential>(`/api/v1/credentials/${uuid}/deliver`, { method: 'POST' })

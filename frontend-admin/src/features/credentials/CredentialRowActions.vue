@@ -217,6 +217,10 @@ const selectClass =
       {{ t(`credentials.confirm.${action}.explanation`, { name: row.full_name }) }}
     </p>
 
+    <p v-if="action === 'deliver'" class="mb-4" data-test="deliver-sheet-reminder">
+      {{ t('credentials.confirm.deliver.sheetReminder') }}
+    </p>
+
     <div v-if="action === 'revoke'" class="mb-4 grid gap-4 sm:grid-cols-2">
       <div class="flex flex-col gap-1">
         <label for="revocation-reason" class="font-medium">

@@ -269,6 +269,74 @@ describe('EmployeeWorkDaysView', () => {
     expect(link?.attributes('href')).toContain(`employee=${EMPLOYEE_UUID}`)
   })
 
+  it('«Añadir un tramo» solo aparece con `attendance:correct` (RF-PA-04, regla dura 18)', async () => {
+    const withoutAbility = await mountWorkDays()
+
+    expect(withoutAbility.find('[data-test="add-shift-entry"]').exists()).toBe(false)
+
+    const withAbility = await mountWorkDays({ abilities: ['attendance:correct'] })
+
+    expect(withAbility.find('[data-test="add-shift-entry"]').text()).toBe(
+      es.corrections.actions.create,
+    )
+  })
+
+  it('añadir un tramo abre el dialogo, lo cierra al terminar y recarga la jornada', async () => {
+    const payload = employeeWorkDays()
+
+    stubFetch((url) => {
+      requestedUrls.push(url)
+
+      if (url.includes('/shift-entries')) {
+        return jsonResponse({
+          employee_uuid: EMPLOYEE_UUID,
+          work_date: '2026-08-14',
+          action: 'created',
+          shift_entry_uuid: '0199f2c1-1111-7000-8000-0123456789ff',
+          superseded_shift_entry_uuid: null,
+          version: 1,
+          status: 'closed',
+          clocked_in_at: '2026-08-14T04:00:00.000000Z',
+          clocked_out_at: '2026-08-14T12:00:00.000000Z',
+          daily_total_minutes: 480,
+        })
+      }
+
+      if (url.includes('/workdays')) {
+        return jsonResponse(payload)
+      }
+
+      return jsonResponse(employee())
+    })
+
+    const pinia = createTestPinia()
+    const session = useSessionStore(pinia)
+
+    session.token = 'token'
+    session.status = 'authenticated'
+    session.user = managementUser({ abilities: ['attendance:correct'] })
+
+    const wrapper = await mountView(EmployeeWorkDaysView, { props: { uuid: EMPLOYEE_UUID }, pinia })
+    await settle()
+
+    await wrapper.find('[data-test="add-shift-entry"]').trigger('click')
+    await settle(1)
+
+    expect(wrapper.find('[role="dialog"]').text()).toContain(es.corrections.actions.create)
+
+    await wrapper.find('[data-test="dialog-work-date"]').setValue('2026-08-14')
+    await wrapper.find('[data-test="dialog-clock-in"]').setValue('2026-08-14T06:00')
+    await wrapper.find('[data-test="dialog-reason"]').setValue('OLVIDO_FICHAJE_ENTRADA')
+    await settle(1)
+    await wrapper.find('#correction-form').trigger('submit')
+    await settle()
+
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+    expect(requestedUrls.some((url) => url.includes('/shift-entries'))).toBe(true)
+    // El registro se vuelve a pedir tras el exito, para enseñar el total recalculado.
+    expect(requestedUrls.filter((url) => url.includes('/workdays')).length).toBeGreaterThan(1)
+  })
+
   it('anuncia cuantas jornadas se han encontrado, sin mover el foco', async () => {
     await mountWorkDays()
 

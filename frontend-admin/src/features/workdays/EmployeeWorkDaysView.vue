@@ -4,8 +4,12 @@
 // Es la primera pantalla desde la que alguien con responsabilidad de gestion ve
 // el registro horario de OTRA persona. Eso decide casi todo lo que hay aqui:
 //
-//  - **Solo lee.** Ninguna accion de esta pantalla cambia el registro. Corregir
-//    un tramo es otro endpoint y otro ambito de token.
+//  - **La lectura es de todo el mundo con `attendance:read`; corregir, no.**
+//    Añadir un tramo, rectificarlo o anularlo (RF-PA-04) exige el ambito
+//    `attendance:correct`, que esta pantalla comprueba aparte
+//    (`canCorrect`/`CorrectionDialog.vue`) y que un `auditor` con solo
+//    `attendance:read` no lleva: sigue pudiendo leer el registro sin que se le
+//    ofrezca nada que lo cambie.
 //  - **Se dice que el acceso queda auditado**, porque es verdad: el servidor
 //    escribe en `audit_log` quien miro, de quien y que rango (RS-05). Quien lo
 //    hace tiene derecho a saberlo antes, no a enterarse despues.
@@ -17,6 +21,14 @@
 //    ultimos 31 dias» usaria el reloj y la zona del navegador, y el dia de hoy
 //    de un centro no lo decide el ordenador de quien mira (regla dura 3).
 //
+// **«Añadir un tramo» vive en la cabecera y no en cada jornada** porque el
+// caso que mas importa —un dia entero sin ningun fichaje, ni tramo ni
+// correccion previa— no tiene tarjeta que lo represente: el contrato solo
+// devuelve «jornadas con actividad registrada» (`EmployeeWorkDays.data`), asi
+// que ese dia no aparece en la lista de abajo. La jornada se declara a mano en
+// el propio dialogo (RN-05, ADR-024), no se deduce de una tarjeta que no
+// existe.
+//
 // Volumen: el rango acota el resultado —el contrato lo limita a 366 jornadas— y
 // el filtro es del servidor, asi que en el DOM hay como mucho un año de dias.
 // No hace falta virtualizar; lo que si hace falta es la cache de consultas, que
@@ -27,19 +39,85 @@ import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import FormField from '@kronoqr/web-kit/components/FormField.vue'
 import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
 import { exceedsMaxRange, isInvertedRange, MAX_RANGE_DAYS } from '@kronoqr/web-kit/dateRange'
+import { FALLBACK_TIMEZONE } from '@kronoqr/web-kit/datetime'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
-import { useQuery } from '@tanstack/vue-query'
+import { useQuery, useQueryClient } from '@tanstack/vue-query'
+import { ATTENDANCE_CORRECT } from '@/features/auth/abilities'
+import { useSessionStore } from '@/features/auth/session.store'
 import { getEmployee } from '@/features/employees/employees.api'
+import type { CorrectedShiftEntry, WorkDayShiftEntry } from '@/shared/api/types'
+import CorrectionDialog from './CorrectionDialog.vue'
 import WorkDayCard from './WorkDayCard.vue'
-import { useEmployeeWorkDays } from './useEmployeeWorkDays'
+import { useEmployeeWorkDays, WORKDAYS_QUERY_KEY } from './useEmployeeWorkDays'
 import type { WorkDateRange } from './workdays.api'
 import { UNBOUNDED_RANGE } from './workdays.api'
 
 const props = defineProps<{ uuid: string }>()
 
 const { t } = useI18n()
+const session = useSessionStore()
+const queryClient = useQueryClient()
+
+const canCorrect = computed(() => session.can(ATTENDANCE_CORRECT))
+
+/** Lo que hay abierto: nada, o el dialogo de una de las tres operaciones de RF-PA-04. */
+type DialogState =
+  { mode: 'add' } | { mode: 'correct' | 'void'; entry: WorkDayShiftEntry; workDate: string } | null
+
+const dialog = ref<DialogState>(null)
+
+/** `undefined` en 'add': todavia no hay jornada, la declara quien rellena el formulario. */
+const dialogWorkDate = computed<string | undefined>(() => {
+  const state = dialog.value
+
+  return state === null || state.mode === 'add' ? undefined : state.workDate
+})
+
+/** `undefined` en 'add': todavia no hay ningun tramo sobre el que actuar. */
+const dialogEntry = computed<WorkDayShiftEntry | undefined>(() => {
+  const state = dialog.value
+
+  return state === null || state.mode === 'add' ? undefined : state.entry
+})
+
+function openAdd(): void {
+  dialog.value = { mode: 'add' }
+}
+
+function openCorrect(entry: WorkDayShiftEntry, workDate: string): void {
+  dialog.value = { mode: 'correct', entry, workDate }
+}
+
+function openVoid(entry: WorkDayShiftEntry, workDate: string): void {
+  dialog.value = { mode: 'void', entry, workDate }
+}
+
+function closeDialog(): void {
+  dialog.value = null
+}
+
+/** Recarga la jornada: tras un exito, y tambien tras un 409, para que la version vigente se vea en cuanto se cierre el aviso. */
+async function reloadWorkDays(): Promise<void> {
+  await queryClient.invalidateQueries({ queryKey: [WORKDAYS_QUERY_KEY, props.uuid] })
+}
+
+async function onCorrectionSuccess(result: CorrectedShiftEntry): Promise<void> {
+  // Las cuatro claves de `corrections.action.*` son exactamente los cuatro
+  // valores de `CorrectionAction` (RF-PA-04): la respuesta ya dice que paso.
+  announce(t(`corrections.action.${result.action}`))
+  closeDialog()
+  await reloadWorkDays()
+}
+
+async function onDialogStale(): Promise<void> {
+  // Un 409: alguien corrigio o anulo este tramo mientras el dialogo estaba
+  // abierto. Se recarga en el acto para que, en cuanto se cierre el aviso, la
+  // jornada ya enseñe la version vigente (el dialogo se queda abierto con el
+  // aviso hasta que la persona lo cierra).
+  await reloadWorkDays()
+}
 
 /** Lo que hay escrito en el formulario. */
 const draft = ref<WorkDateRange>({ ...UNBOUNDED_RANGE })
@@ -118,15 +196,27 @@ watch(data, (value) => {
       {{ t('workdays.backToEmployee') }}
     </RouterLink>
 
-    <header class="mt-4">
-      <h1 class="text-2xl font-bold">{{ t('workdays.title') }}</h1>
-      <p class="mt-1 text-lg" data-test="person">
-        {{ personLabel }}
-        <span v-if="employee !== undefined" class="font-mono text-kq-text-muted">
-          {{ employee.employee_code }}
-        </span>
-      </p>
-      <p class="mt-2 max-w-prose text-kq-text-muted">{{ t('workdays.subtitle') }}</p>
+    <header class="mt-4 flex flex-wrap items-start justify-between gap-4">
+      <div>
+        <h1 class="text-2xl font-bold">{{ t('workdays.title') }}</h1>
+        <p class="mt-1 text-lg" data-test="person">
+          {{ personLabel }}
+          <span v-if="employee !== undefined" class="font-mono text-kq-text-muted">
+            {{ employee.employee_code }}
+          </span>
+        </p>
+        <p class="mt-2 max-w-prose text-kq-text-muted">{{ t('workdays.subtitle') }}</p>
+      </div>
+
+      <button
+        v-if="canCorrect && data !== undefined"
+        type="button"
+        class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary"
+        data-test="add-shift-entry"
+        @click="openAdd"
+      >
+        {{ t('corrections.actions.create') }}
+      </button>
     </header>
 
     <form class="mt-4 flex max-w-3xl flex-wrap items-end gap-4" novalidate @submit.prevent="submit">
@@ -192,7 +282,27 @@ watch(data, (value) => {
     />
 
     <div v-else class="mt-4 flex flex-col gap-6">
-      <WorkDayCard v-for="day of days" :key="day.work_date" :day="day" :employee-uuid="uuid" />
+      <WorkDayCard
+        v-for="day of days"
+        :key="day.work_date"
+        :day="day"
+        :employee-uuid="uuid"
+        @correct="openCorrect"
+        @void="openVoid"
+      />
     </div>
+
+    <CorrectionDialog
+      v-if="dialog !== null"
+      :mode="dialog.mode"
+      :employee-uuid="uuid"
+      :employee-name="personLabel"
+      :time-zone="data?.time_zone ?? FALLBACK_TIMEZONE"
+      :work-date="dialogWorkDate"
+      :entry="dialogEntry"
+      @success="onCorrectionSuccess"
+      @cancel="closeDialog"
+      @stale="onDialogStale"
+    />
   </section>
 </template>

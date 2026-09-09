@@ -38,3 +38,6 @@ coverage/
 *.log
 .DS_Store
 Thumbs.db
+
+# Engram (memoria local de Claude Code): nunca se versiona
+.engram/

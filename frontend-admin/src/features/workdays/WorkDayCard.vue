@@ -19,7 +19,7 @@ import { RouterLink } from 'vue-router'
 import { INCIDENTS_MANAGE } from '@/features/auth/abilities'
 import { useSessionStore } from '@/features/auth/session.store'
 import { severityBadgeClass } from '@/features/incidents/incidentPresentation'
-import type { WorkDayDetail } from '@/shared/api/types'
+import type { WorkDayDetail, WorkDayShiftEntry } from '@/shared/api/types'
 import CorrectionHistory from './CorrectionHistory.vue'
 import ShiftEntryTable from './ShiftEntryTable.vue'
 
@@ -27,6 +27,16 @@ const props = defineProps<{
   day: WorkDayDetail
   /** Para el enlace a la bandeja filtrada por persona (RF-PA-05). */
   employeeUuid: string
+}>()
+
+// Esta tarjeta no decide si se puede corregir ni compone la peticion (RF-PA-04):
+// solo reenvia el tramo hacia quien contiene el registro entero
+// (`EmployeeWorkDaysView`), que es quien conoce a la persona y sabe recargar la
+// jornada tras el exito. `ShiftEntryTable` ya oculta los botones por ambito y
+// por rol; esta tarjeta no repite esa comprobacion, solo el paso del evento.
+const emit = defineEmits<{
+  correct: [entry: WorkDayShiftEntry, workDate: string]
+  void: [entry: WorkDayShiftEntry, workDate: string]
 }>()
 
 const { t, locale } = useI18n()
@@ -135,6 +145,8 @@ const recalculatedAt = computed(() =>
       :total-minutes="day.total_minutes"
       :time-zone="day.time_zone"
       :work-date="day.work_date"
+      @correct="(entry) => emit('correct', entry, day.work_date)"
+      @void="(entry) => emit('void', entry, day.work_date)"
     />
 
     <p class="mt-2 text-sm text-kq-text-muted">

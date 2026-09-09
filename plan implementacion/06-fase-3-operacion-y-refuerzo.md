@@ -863,6 +863,9 @@ Y el doc 05 §8 acota el alcance con precisión: las ausencias se registran «**
 - `frontend-admin/src/features/employees/`.
 - `docs/api/openapi.yaml`.
 - `docs/cliente/configuracion.md` — tipos de ausencia y su efecto en los informes.
+- `docs/cliente/guia-rrhh.md` y `docs/cliente/en/hr-guide.md` — **apartado de ausencias**, ver la nota de abajo.
+
+> **La guía de RRHH tiene un hueco reservado para esta tarea, y cerrarla incluye rellenarlo.** La ficha de la tarea **5.11b** pedía documentar «ausencias (3.10)» en `docs/cliente/guia-rrhh.md`, pero la Fase 5 se ejecuta **antes** que la 3 (orden 0 → 1 → 2 → 5 → 3 → 4), así que la guía se escribió **sin ausencias y sin prometerlas** (decisión 9 de la ficha 5.11b: documentar una pantalla que no existe es peor que no documentarla). Al cerrar esta tarea hay que añadir el apartado —cómo se registra una ausencia, qué tipos hay, qué cambia en los informes y qué **no** hay: no existe flujo de aprobación, que es Fase 4— **en las dos lenguas**, porque `ClientDocumentationTest` compara apartado a apartado el par español/inglés y la traducción no puede perder ni inventar ninguno.
 
 **Pruebas exigidas.** §9.5: expone **endpoints** → **Feature + Contrato** y **autorización negativa por cada rol no autorizado**; toca **esquema** → **Integración**; tiene **recorrido de usuario** en el panel → **E2E**. Y como **cambia el resultado de un informe**, la fila «Genera un informe o exportación» obliga a la **unitaria del cálculo**.
 

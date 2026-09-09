@@ -12,6 +12,7 @@ npm run lint         # ESLint + Prettier, sin desviaciones
 npm run test:unit    # Vitest con cobertura, umbral 70 %
 npm run build        # construye para produccion
 npm run api:generate # regenera el cliente HTTP desde docs/api/openapi.yaml
+npm run docs:screenshots # capturas de la guia del portal (tarea 5.11b); ver tests/README.md
 ```
 
 ## `npm` se ejecuta en el host

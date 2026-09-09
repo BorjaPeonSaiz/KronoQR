@@ -17,6 +17,7 @@ use App\Modules\Identity\Http\Controller\CredentialStatusController;
 use App\Modules\Identity\Http\Controller\CurrentUserController;
 use App\Modules\Identity\Http\Controller\DeliverCredentialController;
 use App\Modules\Identity\Http\Controller\FirstAdministratorController;
+use App\Modules\Identity\Http\Controller\InstructionsSheetController;
 use App\Modules\Identity\Http\Controller\LoginController;
 use App\Modules\Identity\Http\Controller\LogoutController;
 use App\Modules\Identity\Http\Controller\PortalLoginController;
@@ -894,8 +895,29 @@ Route::middleware(['auth:sanctum', 'ability:'.TokenAbility::EMPLOYEES_ALL->value
  * que un proxy lo cachease y a que alguien lo pusiera en un enlace — y cada una
  * de las tres cosas produce una tarjeta muerta en el bolsillo de alguien. El
  * unico `GET` del grupo es el panel, que solo lee.
+ *
+ * `throttle:management` POR LO QUE CUESTA CADA PETICION (tarea 5.11b, revision
+ * de seguridad). Este grupo estaba sin zona de limite de APLICACION: lo unico
+ * que lo frenaba era Nginx, que cuenta por IP y no lee el token, asi que todo el
+ * hotel comparte contador y una sola cuenta no tiene techo propio. Y lo que hay
+ * detras no es un `SELECT`: la hoja de instrucciones, `print` y `print-batch`
+ * lanzan **un Chromium por peticion**, que compite por CPU y memoria con el
+ * camino de fichaje en la misma maquina. Ademas, revocar, entregar y emitir
+ * escriben en `audit_log`, que toma el candado global de ADR-010 —el mismo por
+ * el que pasa cada fichaje—.
+ *
+ * LOS 120 r/m NO ESTORBAN A LA IMPRESION MASIVA, y conviene dejarlo escrito
+ * porque es lo primero que se teme al poner un limite aqui: `print-batch` acuña
+ * e imprime **todas** las credenciales pendientes del centro en UNA sola
+ * peticion —no acepta ningun parametro de tamaño—, y la hoja de instrucciones es
+ * un documento por idioma. Dar de alta la plantilla entera son unas pocas
+ * llamadas, no una por tarjeta. Lo que el techo corta es el bucle.
  */
-Route::middleware(['auth:sanctum', 'ability:'.TokenAbility::CREDENTIALS_ALL->value])->group(function (): void {
+Route::middleware([
+    'auth:sanctum',
+    'ability:'.TokenAbility::CREDENTIALS_ALL->value,
+    'throttle:management',
+])->group(function (): void {
     Route::post('/credentials', [CredentialController::class, 'store'])->name('credentials.store');
 
     /*
@@ -906,6 +928,25 @@ Route::middleware(['auth:sanctum', 'ability:'.TokenAbility::CREDENTIALS_ALL->val
      */
     Route::get('/credentials/status', CredentialStatusController::class)
         ->name('credentials.status');
+
+    /*
+     * La hoja de instrucciones que se entrega con la tarjeta (tarea 5.11b,
+     * RL-05).
+     *
+     * EL SEGUNDO `GET` DEL GRUPO, Y LA EXCEPCION QUE CONFIRMA EL PARRAFO DE
+     * ARRIBA. Los cuatro endpoints de la 1.10 son `POST` porque imprimir ACUÑA
+     * el QR y es irreversible; esta hoja no acuña nada, no cambia el estado de
+     * nada, no lleva ningun secreto y es EL MISMO DOCUMENTO para toda la
+     * plantilla. Que un navegador la repita al recargar no tiene consecuencia.
+     *
+     * SIN `locale.installation`, al reves que las dos rutas de impresion. El
+     * idioma de este documento es un PARAMETRO —el panel ofrece un boton por
+     * cada idioma activo— y lo resuelve el caso de uso contra `LOCALE_AVAILABLE`
+     * / `LOCALE_DEFAULT`, no el idioma del proceso. Lo unico que queda en manos
+     * de la negociacion es el mensaje del `422`, y ese si es para quien lo pide.
+     */
+    Route::get('/credentials/instructions-sheet', InstructionsSheetController::class)
+        ->name('credentials.instructions-sheet');
 
     // Los PDF de tarjetas son documentos: idioma de la instalacion, no del
     // navegador (regla dura 13; UseInstallationLocale).

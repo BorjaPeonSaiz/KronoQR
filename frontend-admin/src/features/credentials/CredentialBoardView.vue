@@ -26,11 +26,16 @@ import { useI18n } from 'vue-i18n'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { getSite } from '@/shared/api/organisation.api'
 import type { CredentialLifecycleStatus } from '@/shared/api/types'
+import { useBrandingStore } from '@/shared/branding/branding.store'
 import ConfirmDialog from '@/shared/ui/ConfirmDialog.vue'
 import PaginationBar from '@/shared/ui/PaginationBar.vue'
 import CredentialRowActions from './CredentialRowActions.vue'
 import { STATUS_PILL_CLASS } from './credentialStatusPill'
-import { fetchCredentialBoard, printCredentialBatch } from './credentials.api'
+import {
+  fetchCredentialBoard,
+  fetchCredentialInstructionsSheet,
+  printCredentialBatch,
+} from './credentials.api'
 import {
   CLIENT_PER_PAGE,
   NO_DEPARTMENT,
@@ -192,6 +197,50 @@ function instant(value: string | null): string {
 /** Cuantas tarjetas entraran en el proximo lote. */
 const pendingPrintInScope = computed(() => summary.value?.pending_print ?? 0)
 
+// --- Hoja de instrucciones (tarea 5.11b, RL-05) ---------------------------
+//
+// Un boton por cada idioma ACTIVO de la instalacion (`LOCALE_AVAILABLE`), no
+// por cada idioma del panel: la marca (RF-PD-08) ya trae esa lista cargada
+// desde el arranque, y es la misma que decide el servidor al validar
+// `?locale=`. Visible solo en esta pantalla, que ya exige `credentials:*`
+// para entrar (regla dura 18: la autorizacion real la aplica el servidor,
+// esto solo evita ofrecer un boton que respondiera 403).
+const brandingStore = useBrandingStore()
+const availableSheetLocales = computed(() => brandingStore.current.locales.available)
+
+const instructionsSheetBusyLocale = ref<string | null>(null)
+const instructionsSheetError = ref<unknown>(null)
+
+/** Nombre del idioma en el idioma de quien mira, sin diccionario propio: un
+ *  idioma nuevo de la instalacion no exige tocar este componente. */
+function localeDisplayName(code: string): string {
+  try {
+    return new Intl.DisplayNames([locale.value], { type: 'language' }).of(code) ?? code
+  } catch {
+    return code
+  }
+}
+
+async function downloadInstructionsSheet(sheetLocale: string): Promise<void> {
+  instructionsSheetBusyLocale.value = sheetLocale
+  instructionsSheetError.value = null
+
+  try {
+    const document_ = await fetchCredentialInstructionsSheet(sheetLocale)
+
+    downloadDocument(document_)
+    announce(
+      t('credentials.announce.instructionsSheetDownloaded', {
+        locale: localeDisplayName(sheetLocale),
+      }),
+    )
+  } catch (caught) {
+    instructionsSheetError.value = caught
+  } finally {
+    instructionsSheetBusyLocale.value = null
+  }
+}
+
 // --- Acciones ------------------------------------------------------------
 //
 // Emitir, imprimir, entregar y revocar viven en `CredentialRowActions`
@@ -351,6 +400,45 @@ const selectClass =
         {{ t('credentials.summary.pendingPrint', { count: summary.pending_print }) }}
       </p>
     </div>
+
+    <!-- Hoja de instrucciones (tarea 5.11b, RL-05): un boton por cada idioma
+         activo de la instalacion. Se entrega con la tarjeta y el PIN, en el
+         mismo acto (decision 10 de la ficha). -->
+    <section
+      class="mt-4 rounded-kq border border-kq-border bg-kq-surface-raised p-4 shadow-kq-soft"
+      :aria-label="t('credentials.instructionsSheet.heading')"
+    >
+      <h2 class="font-semibold">{{ t('credentials.instructionsSheet.heading') }}</h2>
+      <div class="mt-2 flex flex-wrap gap-2">
+        <button
+          v-for="sheetLocale of availableSheetLocales"
+          :key="sheetLocale"
+          type="button"
+          class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text hover:bg-kq-surface-alt disabled:opacity-60"
+          :disabled="instructionsSheetBusyLocale !== null"
+          :aria-busy="instructionsSheetBusyLocale === sheetLocale"
+          :data-test="`instructions-sheet-button-${sheetLocale}`"
+          @click="downloadInstructionsSheet(sheetLocale)"
+        >
+          {{
+            instructionsSheetBusyLocale === sheetLocale
+              ? t('credentials.instructionsSheet.downloading')
+              : t('credentials.instructionsSheet.action', {
+                  locale: localeDisplayName(sheetLocale),
+                })
+          }}
+        </button>
+      </div>
+      <p class="mt-2 text-sm text-kq-text-muted" data-test="instructions-sheet-help">
+        {{ t('credentials.instructionsSheet.help') }}
+      </p>
+      <ErrorNotice
+        v-if="instructionsSheetError !== null"
+        :error="instructionsSheetError"
+        class="mt-3"
+        data-test="instructions-sheet-error"
+      />
+    </section>
 
     <!-- La averia que el resto del panel no delata (RF-QR-07): tarjetas vivas
          firmadas con una clave que el servidor ya no reconoce. Va ANTES del

@@ -7,9 +7,23 @@
 
 ## Estado y objetivo actual
 
+**Rama `feat/tarea-5.11b-guias-rrhh-portal-hoja` (desde `main` `4c8e52d`). Tarea 5.11b «Guía de RRHH, guía del portal y hoja del
+empleado» (RL-05, RF-PA-*, RF-IN-*) IMPLEMENTADA, REVISADA (dos vueltas) y PROBADA el 09-09-2026**, commit `7fb784d` (más `57c5079`
+con Engram). Catorce decisiones en la ficha (plan 05 → «Tarea 5.11b»); las que importan: **la hoja la produce el producto**
+(`GET /api/v1/credentials/instructions-sheet?locale=`, PDF A4 de una cara con marca, dirección del portal e idiomas activos; fila 17
+de «Puntos no cubiertos»), **el panel no podía corregir tramos (RF-PA-04) y se construyó `CorrectionDialog`** (decisión 13), y las
+revisiones fijaron `type` propio para los tres `409` y el `422` de la corrección y `throttle:management` en `/credentials`
+(decisión 14). Seis agentes en paralelo + tres traducciones + dos revisores + segunda vuelta con tres agentes; prompt en doc 03
+§6.5.8. **Verificado sobre el árbol final:** Architecture 291 (73 de `ClientDocumentationTest`), Contract 60, Identity+Attendance
+312, AuthorizationNegative 225, InstructionsSheet 29 (6 con Chromium real), Pint/PHPStan 9/Deptrac/Redocly limpios, `qa:traceability`
+y `docs:consistency` en verde, panel type-check/lint/unit 468/E2E 103, portal unit 79, quiosco type-check/lint, paquete con 407
+enlaces resueltos, gitleaks 0 sobre los ficheros cambiados. **Ver «Siguiente acción»** para CI manual y PR.
+
 **Rama `feat/tarea-5.12-historico-errores`** (desde `main` `4f3f97b`). **Tarea 5.12 «Histórico de errores en base de
-datos» (RF-PD-15) IMPLEMENTADA, REVISADA (dos vueltas) y PROBADA el 09-09-2026**; ver «Siguiente acción» para commit, CI y
-PR. **La 5.11b (guía de RRHH, portal y hoja de la tarjeta) NO se ha ejecutado**: es la última tarea de la Fase 5.
+datos» (RF-PD-15) IMPLEMENTADA, REVISADA (dos vueltas), PROBADA e INTEGRADA en `main` el 09-09-2026** (PR #51, *merge
+commit* `4c8e52d`; la PR #50 quedó cerrada sin integrar y GitHub no dejó reabrirla; CI manual completa con ⑧ y ⑧b en verde
+antes de integrar, ejecución 34369140085). Rama borrada; `make up` hecho sobre `main` (migración `error_events` aplicada).
+**La 5.11b (guía de RRHH, portal y hoja de la tarjeta) NO se ha ejecutado**: es la última tarea de la Fase 5.
 
 **Cómo se hizo (receta de la 5.11, con una diferencia).** Antes de lanzar nada: catorce decisiones en la ficha (plan 05 →
 «Tarea 5.12», «Decisiones tomadas»), fila 16 de «Puntos no cubiertos», contrato (`GET /diagnostics/errors`,
@@ -63,11 +77,9 @@ descubierto con `scandir` (ver «Trampas»).
 gitleaks 0 sobre los ficheros cambiados, promtool sobre `errors.yml`, `check-package-links.sh` (305 enlaces), `type-check` y
 `lint` de los cuatro paquetes, unitarias web-kit 199 / panel 433 / quiosco 379 / portal 79, E2E panel 88 y quiosco 50. **CI manual 34369140085 en verde**: MSI 82,83 % (2 440 mutantes, 10 min en paralelo).
 
-**Siguiente acción:** commits `dc9e0a1` (tarea), `f4a138d` (clientes regenerados) y `816301f` (mutación en paralelo) empujados;
-**CI manual completa con ⑧ y ⑧b EN VERDE** (ejecución 34369140085; las dos anteriores cayeron por causas ya corregidas: clientes
-TypeScript sin regenerar tras un texto del contrato, y la mutación en serie desbordando el tope del job ③). PR #50 abierta:
-integrar con *merge commit* (nunca squash), `make up` en `main` (migración `error_events`), borrar la rama. Después, la **5.11b** y el
-cierre de la Fase 5 (doc 03 §6.6), con los restos de «Pendiente».
+**Siguiente acción:** CI manual completa (`gh workflow run ci.yml --ref feat/tarea-5.11b-guias-rrhh-portal-hoja`, lanzada tras el
+último push; no empujar nada hasta que termine) → PR con *merge commit* (nunca squash) → `make up` en `main` → borrar la rama →
+**cierre de la Fase 5** (doc 03 §6.6) con los cuatro revisores y los restos de «Pendiente».
 
 **Rama `feat/tarea-5.11-documentacion-cliente`** (desde `main` `e2860be`). **Tarea 5.11 «Documentación de instalación,
 operación, configuración y obligaciones legales» (RL-16..RL-21, RF-PD-02) IMPLEMENTADA, REVISADA, PROBADA e **INTEGRADA en
@@ -295,6 +307,10 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   recalibración de estimación R16.
 - Plazo de purga de `employment_contracts` con la asesoría laboral (hasta entonces se conservan).
 - Techo del formato PDF (`docs/verificacion-manual.md`).
+- **Engram (09-09-2026):** en funcionamiento (binario 1.20.0 en `~/.local/bin`, plugin `engram@engram` y MCP `engram` en ámbito
+  usuario, protocolo `slim`, proyecto detectado `kronoqr`, nueve memorias sembradas: trampas del entorno, 5.12 y receta de
+  orquestación). **Falta solo** añadir `"permissions": {"allow": ["mcp__engram"]}` a `~/.claude/settings.json` (o ejecutar
+  `engram setup claude-code --protocol=slim` en una terminal) para que fuera del modo automático no pregunte por cada `mem_*`.
 
 ### Por tarea
 
@@ -324,9 +340,14 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   versión menor —la prueba del sello `img/VERSION` lo recuerda—; los runbooks siguen solo en español; la salida de
   `compliance:apply-retention` y `verify-audit-chain` está cableada en español (la guía inglesa la glosa); la
   cabecera de `instalacion.md` §1.2 y §1.3 quedó sin el bloque duplicado de `--check-only`.
-- **5.11b (sin empezar):** guía del panel para RRHH, guía del portal del empleado y hoja de instrucciones que se entrega
-  con la tarjeta (RL-05, RF-PA-*, RF-IN-*; `producto-licencia` + `frontend-panel`, 6–8 h). Es la última tarea de la Fase 5
-  después de la 5.12.
+- **5.11b (restos):** los cuatro recorridos por una persona ajena siguiendo solo las guías (decisión 11); **deuda de producto que
+  la guía destapó** (decisión 13): no hay pantalla de contratos en el panel (endpoints sí), `reissue` en un acto es solo de API (el
+  panel emite siempre con `reissue: false`), tres tipos de incidencia del filtro sin productor hasta la Fase 3; al cerrar la 3.10,
+  apartado de ausencias en `guia-rrhh.md` y `en/hr-guide.md`; **catorce rutas de gestión siguen sin zona de límite de
+  aplicación** (`POST/PATCH /employees`, `/contracts`, `/offboard`, `/pin/deliver`, `/pin/reset`, `/departments`, `/site`,
+  `GET /reports/legal-export`, `/auth/logout`, `/auth/me`): solo las frena Nginx por IP; una prueba que exija zona por ruta hoy
+  fallaría en ellas; autorización negativa del `429` de credenciales con token de quiosco/portal; prueba de «una cara» con nombre de marca de 60 caracteres y
+  logotipo de 11 mm; un fallo de Chromium en la hoja sale como `500` (la impresión de tarjetas hace lo mismo; `Reporting` da `503`).
 - **5.12 (restos):** inspección manual de `error_events` tras un día de uso con la semilla realista (la automática,
   `ErrorEventsHaveNoPersonalDataTest`, está en verde); autorización negativa del latido **con** `client_errors` (token de
   gestión con `heartbeat:write` → 403) y la variante de agrupación concurrente que entra **por el latido**; el `Employee` y el
@@ -435,6 +456,10 @@ Una rama por fase o tarea, un commit por tarea con CI en cada push, PR al cierre
 (nunca squash: el CHANGELOG se genera de los commits convencionales y **no se edita a mano**). Cada
 cierre de fase pasa por los cuatro revisores (`seguridad-cumplimiento`, `revisor-codigo`, `qa-testing`,
 `devops-observabilidad`) y sube `current_phase` en `backend/config/quality.php` solo al cerrar.
+
+Desde el 09-09-2026 hay además **Engram** (memoria local buscable, herramientas MCP `mem_*`); el reparto con este fichero
+está en `CLAUDE.md` → «Engram: memoria de búsqueda, no sustituto de `HANDOFF.md`». En resumen: este fichero manda y lleva
+la línea; Engram guarda el porqué y el detalle. Al cerrar tarea o sesión: primero `HANDOFF.md`, luego `mem_session_summary`.
 
 ## Histórico condensado
 

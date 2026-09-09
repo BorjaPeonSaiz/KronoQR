@@ -14,8 +14,10 @@ use App\Modules\Identity\Application\Port\CredentialSecretFactory;
 use App\Modules\Identity\Application\Port\DeviceRepository;
 use App\Modules\Identity\Application\Port\DeviceTokenIssuer;
 use App\Modules\Identity\Application\Port\IdentityEventPublisher;
+use App\Modules\Identity\Application\Port\InstructionsSheetRenderer;
 use App\Modules\Identity\Application\Port\LoginAttempts;
 use App\Modules\Identity\Application\Port\ManagementAccountRegistry;
+use App\Modules\Identity\Application\Port\PortalAddressProvider;
 use App\Modules\Identity\Application\Port\QrKeyProvider;
 use App\Modules\Identity\Application\Port\TwoFactorAuthenticator;
 use App\Modules\Identity\Application\Port\TwoFactorSecrets;
@@ -38,7 +40,9 @@ use App\Modules\Identity\Domain\Policy\TwoFactorRequirement;
 use App\Modules\Identity\Domain\ValueObject\DeviceStatus;
 use App\Modules\Identity\Http\Policy\CredentialPolicy;
 use App\Modules\Identity\Infrastructure\Adapter\BrowsershotCardRenderer;
+use App\Modules\Identity\Infrastructure\Adapter\BrowsershotInstructionsSheetRenderer;
 use App\Modules\Identity\Infrastructure\Adapter\CacheLoginAttempts;
+use App\Modules\Identity\Infrastructure\Adapter\ConfiguredPortalAddress;
 use App\Modules\Identity\Infrastructure\Adapter\ConfiguredQrKeyProvider;
 use App\Modules\Identity\Infrastructure\Adapter\EloquentCredentialFingerprints;
 use App\Modules\Identity\Infrastructure\Adapter\EndroidQrEncoder;
@@ -351,6 +355,44 @@ final class IdentityServiceProvider extends ServiceProvider
         );
 
         $this->registerCardPrinting();
+        $this->registerInstructionsSheet();
+    }
+
+    /**
+     * La hoja que se entrega con la tarjeta (tarea 5.11b, RL-05).
+     *
+     * **Metodo aparte del de la impresion de tarjetas**, aunque las dos cosas
+     * salgan del mismo Chromium y las pida el mismo rol: aquella acuña un QR y
+     * esta no acuña nada. Mezclarlas invitaria a que un dia el renderizador de la
+     * hoja recibiera una credencial «ya que esta».
+     *
+     * `RenderInstructionsSheet` no se declara: sus cinco dependencias son
+     * interfaces ya enlazadas y el contenedor lo resuelve solo. Se declaran las
+     * que no puede adivinar — el dibujante y la direccion del portal, que sale de
+     * la configuracion del despliegue.
+     */
+    private function registerInstructionsSheet(): void
+    {
+        $this->app->bind(
+            InstructionsSheetRenderer::class,
+            static fn (Application $app): BrowsershotInstructionsSheetRenderer => new BrowsershotInstructionsSheetRenderer(
+                $app->make(BrandingLogoReader::class),
+            ),
+        );
+
+        /*
+         * `APP_URL` se lee AQUI, en el borde, y llega al caso de uso como una
+         * cadena ya compuesta: `Application` no sabe que existe un `.env`. El
+         * `/portal/` con el que se completa es donde Nginx sirve esa SPA
+         * (`infra/docker/nginx/extra/spa.conf`) y esta escrito una sola vez, en
+         * el adaptador.
+         */
+        $this->app->bind(
+            PortalAddressProvider::class,
+            static fn (): ConfiguredPortalAddress => new ConfiguredPortalAddress(
+                Config::string('app.url'),
+            ),
+        );
     }
 
     /**

@@ -368,6 +368,7 @@
         "heading": "Registrar la entrega de la tarjeta",
         "explanation": "Se anotará que {name} ha recibido su tarjeta, con la fecha y contigo como responsable.",
         "action": "Confirmar la entrega",
+        "sheetReminder": "En este mismo acto se entregan la tarjeta, el PIN y la hoja de instrucciones.",
         "notice": "Queda en el registro de auditoría y no se puede repetir ni deshacer. Es lo que distingue «la tarjeta se perdió antes de dársela» de «el empleado la perdió»."
       },
       "revoke": {
@@ -398,6 +399,12 @@
       "warning": "Se acuñan los QR de todas ellas en este momento y no hay reimpresión. Si el PDF se pierde, cada tarjeta habrá que revocarla y volver a emitirla.",
       "bearerNotice": "El PDF es un documento al portador: quien lo tenga puede fabricar la tarjeta de otra persona. No se guarda en el servidor ni se envía por correo."
     },
+    "instructionsSheet": {
+      "heading": "Hoja de instrucciones",
+      "help": "Se entrega con la tarjeta y el PIN, en el mismo acto.",
+      "action": "Descargar en {locale}",
+      "downloading": "Generando…"
+    },
     "announce": {
       "issued": "Credencial emitida para {name}. Queda pendiente de imprimir.",
       "printed": "Tarjeta de {name} generada. Ya puede fichar cuando la reciba.",
@@ -405,6 +412,7 @@
       "revoked": "Credencial de {name} revocada.",
       "batchEmpty": "No había ninguna tarjeta pendiente de imprimir en el alcance elegido.",
       "batchPrinted": "Hoja generada. Tarjetas incluidas: {count}.",
+      "instructionsSheetDownloaded": "Hoja de instrucciones descargada en {locale}.",
       "results": "Resultados del panel de credenciales: {count}."
     }
   },
@@ -412,7 +420,13 @@
     "title": "Correcciones del registro horario",
     "notice": "No se borra ni se sobrescribe nada: la versión anterior se conserva con tu nombre, la fecha y el motivo, y sigue siendo consultable.",
     "supersededNotice": "Este tramo ya no es la versión vigente: alguien lo corrigió o lo anuló antes que tú. Vuelve a cargar la jornada y comprueba cómo está ahora.",
+    "retryOnCurrentVersion": "Reintentar sobre la versión vigente",
     "wouldChangeWorkDate": "Esa hora de entrada llevaría la jornada a otro día. Para mover las horas de un día a otro, anula el tramo aquí y dalo de alta en el día que corresponde: son dos acciones, cada una con su motivo.",
+    "conflict": {
+      "shiftAlreadyOpen": "Esta persona ya tiene un turno abierto: cierra o anula ese tramo antes de dejar otro sin salida.",
+      "overlap": "Las horas indicadas se solapan con otro tramo de esta persona. Revisa la jornada antes de continuar.",
+      "generic": "No se ha podido guardar por un conflicto con el estado actual del registro. Vuelve a cargar la jornada y compruébalo antes de repetirlo."
+    },
     "reasonLabel": "Motivo de la corrección",
     "reasonPlaceholder": "Elige un motivo",
     "reasonHint": "Queda en el registro legal y puede leerlo una inspección. Sin datos de salud ni juicios de valor.",
@@ -450,6 +464,23 @@
       "AJUSTE_ACORDADO_CON_RRHH": "Rectificación pactada con la persona y con RRHH, no un error del sistema.",
       "ALTA_RETROACTIVA": "Jornada anterior a la puesta en marcha o al alta de la persona en el sistema.",
       "OTROS": "Ninguno de los anteriores. Obliga a explicarlo por escrito."
+    },
+    "dialog": {
+      "contextEmployee": "Registro horario de {name}.",
+      "contextWorkDate": "Jornada del {date}, en horario de {zone}.",
+      "workDateLabel": "Jornada",
+      "workDateHint": "El día al que pertenece este tramo. No tiene por qué coincidir con la fecha de la hora de entrada: la vuelta de una pausa de madrugada sigue perteneciendo al día en que empezó el turno.",
+      "clockInLabel": "Hora de entrada",
+      "clockOutLabel": "Hora de salida",
+      "zoneHint": "Escribe la hora en la zona horaria del centro ({zone}), no en la de tu ordenador.",
+      "clockOutOpenHint": "En blanco si la persona sigue trabajando ahora mismo: el tramo queda abierto.",
+      "clockOutCloseHint": "Este turno está abierto. Rellena la salida para cerrarlo.",
+      "clockInCannotBeCleared": "La entrada no se puede retirar. Si el tramo no debió registrarse así, anúlalo aquí y dalo de alta otra vez.",
+      "clockOutCannotBeCleared": "La salida no se puede retirar. Si el tramo no debió cerrarse, anúlalo aquí y dalo de alta otra vez.",
+      "timeDoesNotExist": "Esa hora no existió en esta zona: el reloj saltó al cambiar de horario. Elige otra.",
+      "noChange": "Cambia al menos una de las dos horas para poder guardar: una corrección que no cambia nada es una fila de auditoría que miente.",
+      "voidSummary": "Este tramo dejará de contar para el total del día. La versión que tenía se conserva y sigue siendo consultable en el historial.",
+      "previewCaption": "Lo que cambia en este tramo"
     }
   },
   "reports": {
@@ -590,6 +621,7 @@
       "duration": "Duración",
       "source": "Origen",
       "status": "Estado",
+      "actions": "Acciones",
       "version": "Versión {version}",
       "open": "Sin cerrar",
       "openHint": "El turno sigue abierto.",
