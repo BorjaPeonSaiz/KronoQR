@@ -109,6 +109,15 @@ export type ShiftMarks = Schemas['ShiftMarks']
 export type ShiftEntryStatus = Schemas['ShiftEntryStatus']
 export type ClockingSource = Schemas['ClockingSource']
 
+// Correccion del registro horario (RF-PA-04, RN-13, ADR-026, ADR-035, tarea
+// 5.11b): alta manual, rectificar y anular un tramo. Las tres piden un motivo
+// del catalogo cerrado (`CorrectionReasonCode`, ya alias arriba) y devuelven
+// `CorrectedShiftEntry` entero.
+export type AddShiftEntryRequest = Schemas['AddShiftEntryRequest']
+export type CorrectShiftEntryRequest = Schemas['CorrectShiftEntryRequest']
+export type VoidShiftEntryRequest = Schemas['VoidShiftEntryRequest']
+export type CorrectedShiftEntry = Schemas['CorrectedShiftEntry']
+
 // `Problem`/`ValidationProblem` (RFC 9457) ya no se alias aqui: el cliente HTTP
 // base que los consumia vive en `@kronoqr/web-kit/http`, que declara su propia
 // forma estructural para no depender del `schema.d.ts` de ninguna SPA

@@ -84,6 +84,19 @@ test('el registro horario tampoco', { tag: ['@RF-PA-03'] }, async ({ page }) => 
 })
 
 test(
+  'el dialogo de corregir un tramo tampoco, con el foco dentro',
+  { tag: ['@RF-PA-04'] },
+  async ({ page }) => {
+    await logIn(page)
+    await page.goto(`/employees/${EMPLOYEE_UUID}/workdays`)
+    await page.getByTestId('entry-correct').click()
+    await expect(page.getByRole('dialog')).toBeVisible()
+
+    await expectNoBlockingViolations(page)
+  },
+)
+
+test(
   'la pantalla del codigo de segundo factor tampoco',
   { tag: ['@RF-ID-01', '@RS-06'] },
   async ({ page }) => {

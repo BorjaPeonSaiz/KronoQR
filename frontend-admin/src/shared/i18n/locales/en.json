@@ -368,6 +368,7 @@
         "heading": "Record the card handover",
         "explanation": "It will be recorded that {name} received their card, with the date and you as the responsible person.",
         "action": "Confirm the handover",
+        "sheetReminder": "This same act hands over the card, the PIN and the instructions sheet.",
         "notice": "It goes into the audit log and cannot be repeated or undone. It is what tells «the card was lost before we gave it to them» apart from «the employee lost it»."
       },
       "revoke": {
@@ -398,6 +399,12 @@
       "warning": "Their QR codes are all minted now and there is no reprinting. If the PDF is lost, every card has to be revoked and issued again.",
       "bearerNotice": "The PDF is a bearer document: whoever holds it can make somebody else's card. It is not stored on the server and it is never emailed."
     },
+    "instructionsSheet": {
+      "heading": "Instructions sheet",
+      "help": "It is handed over with the card and the PIN, in the same act.",
+      "action": "Download in {locale}",
+      "downloading": "Generating…"
+    },
     "announce": {
       "issued": "Credential issued for {name}. It is waiting to be printed.",
       "printed": "Card for {name} generated. They can clock in once they receive it.",
@@ -405,6 +412,7 @@
       "revoked": "Credential for {name} revoked.",
       "batchEmpty": "There was no card waiting to be printed within the chosen scope.",
       "batchPrinted": "Sheet generated. Cards included: {count}.",
+      "instructionsSheetDownloaded": "Instructions sheet downloaded in {locale}.",
       "results": "Credential board results: {count}."
     }
   },
@@ -412,7 +420,13 @@
     "title": "Time record corrections",
     "notice": "Nothing is deleted or overwritten: the previous version is kept with your name, the date and the reason, and stays available.",
     "supersededNotice": "This entry is no longer the current version: somebody corrected or voided it before you. Reload the work day and check how it stands now.",
-    "wouldChangeWorkDate": "That clock-in time would move the work day to another date. To move hours from one day to another, void the entry here and create it on the right day: two actions, each with its own reason.",
+    "retryOnCurrentVersion": "Retry on the current version",
+    "wouldChangeWorkDate": "That clock-in time would move the working day to another date. To move hours from one day to another, void the entry here and create it on the right day: two actions, each with its own reason.",
+    "conflict": {
+      "shiftAlreadyOpen": "This person already has an open shift: close or void that entry before leaving another one without a clock-out.",
+      "overlap": "The times entered overlap with another entry for this person. Check the work day before continuing.",
+      "generic": "This could not be saved because of a conflict with the current state of the record. Reload the work day and check it before trying again."
+    },
     "reasonLabel": "Reason for the correction",
     "reasonPlaceholder": "Choose a reason",
     "reasonHint": "It stays in the legal record and a labour inspection can read it. No health data, no value judgements.",
@@ -450,6 +464,23 @@
       "AJUSTE_ACORDADO_CON_RRHH": "Correction agreed with the person and with HR, not a system error.",
       "ALTA_RETROACTIVA": "Work day before the system went live or before the person was registered.",
       "OTROS": "None of the above. It must be explained in writing."
+    },
+    "dialog": {
+      "contextEmployee": "Time record of {name}.",
+      "contextWorkDate": "Work day of {date}, in {zone} time.",
+      "workDateLabel": "Work day",
+      "workDateHint": "The day this entry belongs to. It does not have to match the date of the clock-in time: a break that ends after midnight still belongs to the day the shift started.",
+      "clockInLabel": "Clock-in time",
+      "clockOutLabel": "Clock-out time",
+      "zoneHint": "Type the time in the site's time zone ({zone}), not the one on your computer.",
+      "clockOutOpenHint": "Leave it blank if the person is still working right now: the entry stays open.",
+      "clockOutCloseHint": "This shift is open. Fill in the clock-out time to close it.",
+      "clockInCannotBeCleared": "The clock-in time cannot be removed. If the entry should not have been recorded this way, void it here and create it again.",
+      "clockOutCannotBeCleared": "The clock-out time cannot be removed. If the entry should not have been closed, void it here and create it again.",
+      "timeDoesNotExist": "That time did not exist in this zone: the clock skipped it when daylight saving changed. Choose another.",
+      "noChange": "Change at least one of the two times to save: a correction that changes nothing is an audit row that lies.",
+      "voidSummary": "This entry will stop counting towards the daily total. The version it had is kept and stays available in the history.",
+      "previewCaption": "What changes on this entry"
     }
   },
   "reports": {
@@ -590,6 +621,7 @@
       "duration": "Duration",
       "source": "Source",
       "status": "Status",
+      "actions": "Actions",
       "version": "Version {version}",
       "open": "Not closed",
       "openHint": "The shift is still open.",

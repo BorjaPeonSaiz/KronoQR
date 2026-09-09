@@ -7,6 +7,13 @@
 
 ## Estado y objetivo actual
 
+**Rama `feat/tarea-5.11b-guias-rrhh-portal-hoja` (desde `main` `4c8e52d`). Tarea 5.11b EN CURSO (09-09-2026):** doce decisiones
+escritas en la ficha (plan 05 → «Tarea 5.11b»), fila 17 de «Puntos no cubiertos», prompt en doc 03 §6.5.8, árbol en doc 02 §11.6.1,
+contrato `GET /api/v1/credentials/instructions-sheet` y los tres `schema.d.ts` regenerados, textos de la hoja en
+`backend/lang/{es,en}/instructions-sheet.php`. Seis agentes lanzados en paralelo (A backend, B panel + capturas RRHH, C portal con
+Playwright desde cero, D capturas del quiosco, E guías ES + runbook `tarjeta-perdida-o-rota.md`, F `ClientDocumentationTest`).
+Después: traducciones EN, `revisor-codigo` + `seguridad-cumplimiento`, commit, CI manual, PR con *merge commit*, cierre de fase.
+
 **Rama `feat/tarea-5.12-historico-errores`** (desde `main` `4f3f97b`). **Tarea 5.12 «Histórico de errores en base de
 datos» (RF-PD-15) IMPLEMENTADA, REVISADA (dos vueltas), PROBADA e INTEGRADA en `main` el 09-09-2026** (PR #51, *merge
 commit* `4c8e52d`; la PR #50 quedó cerrada sin integrar y GitHub no dejó reabrirla; CI manual completa con ⑧ y ⑧b en verde
@@ -332,9 +339,14 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   versión menor —la prueba del sello `img/VERSION` lo recuerda—; los runbooks siguen solo en español; la salida de
   `compliance:apply-retention` y `verify-audit-chain` está cableada en español (la guía inglesa la glosa); la
   cabecera de `instalacion.md` §1.2 y §1.3 quedó sin el bloque duplicado de `--check-only`.
-- **5.11b (sin empezar):** guía del panel para RRHH, guía del portal del empleado y hoja de instrucciones que se entrega
-  con la tarjeta (RL-05, RF-PA-*, RF-IN-*; `producto-licencia` + `frontend-panel`, 6–8 h). Es la última tarea de la Fase 5
-  después de la 5.12.
+- **5.11b (restos):** los cuatro recorridos por una persona ajena siguiendo solo las guías (decisión 11); **deuda de producto que
+  la guía destapó** (decisión 13): no hay pantalla de contratos en el panel (endpoints sí), `reissue` en un acto es solo de API (el
+  panel emite siempre con `reissue: false`), tres tipos de incidencia del filtro sin productor hasta la Fase 3; al cerrar la 3.10,
+  apartado de ausencias en `guia-rrhh.md` y `en/hr-guide.md`; **catorce rutas de gestión siguen sin zona de límite de
+  aplicación** (`POST/PATCH /employees`, `/contracts`, `/offboard`, `/pin/deliver`, `/pin/reset`, `/departments`, `/site`,
+  `GET /reports/legal-export`, `/auth/logout`, `/auth/me`): solo las frena Nginx por IP; una prueba que exija zona por ruta hoy
+  fallaría en ellas; autorización negativa del `429` de credenciales con token de quiosco/portal; prueba de «una cara» con nombre de marca de 60 caracteres y
+  logotipo de 11 mm; un fallo de Chromium en la hoja sale como `500` (la impresión de tarjetas hace lo mismo; `Reporting` da `503`).
 - **5.12 (restos):** inspección manual de `error_events` tras un día de uso con la semilla realista (la automática,
   `ErrorEventsHaveNoPersonalDataTest`, está en verde); autorización negativa del latido **con** `client_errors` (token de
   gestión con `heartbeat:write` → 403) y la variante de agrupación concurrente que entra **por el latido**; el `Employee` y el

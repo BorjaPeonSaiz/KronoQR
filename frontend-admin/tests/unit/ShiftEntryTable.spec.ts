@@ -7,10 +7,11 @@
 // que un turno de noche siga siendo un solo tramo (regla dura 4).
 import { describe, expect, it } from 'vitest'
 import ShiftEntryTable from '@/features/workdays/ShiftEntryTable.vue'
+import { useSessionStore } from '@/features/auth/session.store'
 import es from '@/shared/i18n/locales/es.json'
-import type { WorkDayShiftEntry } from '@/shared/api/types'
-import { shiftEntry } from './support/fixtures'
-import { mountView } from './support/harness'
+import type { UserRole, WorkDayShiftEntry } from '@/shared/api/types'
+import { managementUser, shiftEntry } from './support/fixtures'
+import { createTestPinia, mountView } from './support/harness'
 
 function mountTable(
   entries: WorkDayShiftEntry[],
@@ -19,6 +20,25 @@ function mountTable(
 ): ReturnType<typeof mountView> {
   return mountView(ShiftEntryTable, {
     props: { entries, totalMinutes, timeZone: 'Europe/Madrid', workDate },
+  })
+}
+
+function mountTableAs(abilities: string[], roles: UserRole[]): ReturnType<typeof mountView> {
+  const pinia = createTestPinia()
+  const session = useSessionStore(pinia)
+
+  session.token = 'token'
+  session.status = 'authenticated'
+  session.user = managementUser({ abilities, roles })
+
+  return mountView(ShiftEntryTable, {
+    props: {
+      entries: [shiftEntry()],
+      totalMinutes: 485,
+      timeZone: 'Europe/Madrid',
+      workDate: '2026-03-14',
+    },
+    pinia,
   })
 }
 
@@ -149,5 +169,62 @@ describe('ShiftEntryTable', () => {
     expect(wrapper.findAll('thead th').every((th) => th.attributes('scope') === 'col')).toBe(true)
     expect(wrapper.findAll('tbody th').every((th) => th.attributes('scope') === 'row')).toBe(true)
     expect(wrapper.findAll('tfoot th').every((th) => th.attributes('scope') === 'row')).toBe(true)
+  })
+})
+
+describe('ShiftEntryTable, botones de correccion (RF-PA-04, regla dura 18)', () => {
+  it('sin sesion, no ofrece ni corregir ni anular', async () => {
+    const wrapper = await mountTable([shiftEntry()], 485)
+
+    expect(wrapper.find('[data-test="entry-correct"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="entry-void"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain(es.workdays.entries.actions)
+  })
+
+  it('con `attendance:correct` y rol de responsable, corrige pero no anula', async () => {
+    const wrapper = await mountTableAs(['attendance:correct'], ['responsable_departamento'])
+
+    expect(wrapper.find('[data-test="entry-correct"]').text()).toBe(es.corrections.actions.correct)
+    expect(wrapper.find('[data-test="entry-void"]').exists()).toBe(false)
+  })
+
+  it('con `attendance:correct` y rol de rrhh, ofrece las dos', async () => {
+    const wrapper = await mountTableAs(['attendance:correct'], ['rrhh'])
+
+    expect(wrapper.find('[data-test="entry-correct"]').text()).toBe(es.corrections.actions.correct)
+    expect(wrapper.find('[data-test="entry-void"]').text()).toBe(es.corrections.actions.void)
+  })
+
+  it('sin `attendance:correct` (un `auditor` con solo lectura), no ofrece ninguno', async () => {
+    const wrapper = await mountTableAs(['attendance:read'], ['auditor'])
+
+    expect(wrapper.find('[data-test="entry-correct"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="entry-void"]').exists()).toBe(false)
+  })
+
+  it('pide corregir o anular ESTE tramo, no otro', async () => {
+    const entry = shiftEntry()
+    const pinia = createTestPinia()
+    const session = useSessionStore(pinia)
+
+    session.token = 'token'
+    session.status = 'authenticated'
+    session.user = managementUser({ abilities: ['attendance:correct'], roles: ['rrhh'] })
+
+    const wrapper = await mountView(ShiftEntryTable, {
+      props: {
+        entries: [entry],
+        totalMinutes: 485,
+        timeZone: 'Europe/Madrid',
+        workDate: '2026-03-14',
+      },
+      pinia,
+    })
+
+    await wrapper.find('[data-test="entry-correct"]').trigger('click')
+    expect(wrapper.emitted('correct')?.[0]).toEqual([entry])
+
+    await wrapper.find('[data-test="entry-void"]').trigger('click')
+    expect(wrapper.emitted('void')?.[0]).toEqual([entry])
   })
 })

@@ -3,11 +3,13 @@
 declare(strict_types=1);
 
 use App\Modules\Identity\Application\Port\CardRenderer;
+use App\Modules\Identity\Application\Port\InstructionsSheetRenderer;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\Auth;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\FakeCardRenderer;
+use Tests\Support\Identity\FakeInstructionsSheetRenderer;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -109,6 +111,18 @@ function managementEndpoints(): array
         'imprimir el lote pendiente' => ['POST', '/api/v1/credentials/print-batch', []],
         'imprimir una credencial' => ['POST', '/api/v1/credentials/0199f0d1-2a5b-7d4f-8c32-5e6f7a8b9c01/print', []],
         'registrar la entrega' => ['POST', '/api/v1/credentials/0199f0d1-2a5b-7d4f-8c32-5e6f7a8b9c01/deliver', []],
+
+        // La hoja de instrucciones que se entrega con la tarjeta (tarea 5.11b,
+        // RL-05). Entra como pareja propia aunque comparta ambito y policy con
+        // las cuatro de arriba, por lo mismo que aquellas entre si: el
+        // `authorize()` esta en su propio `FormRequest`.
+        //
+        // **Y aqui la tentacion es mayor que en ninguna otra ruta del grupo**:
+        // este documento no lleva ningun dato de nadie ni ningun secreto, asi que
+        // el dia que alguien pida «que lo pueda descargar cualquiera» el
+        // argumento sonara razonable. Estas filas son las que obligan a que ese
+        // cambio se haga a la vista y no por descuido.
+        'descargar la hoja de instrucciones' => ['GET', '/api/v1/credentials/instructions-sheet', []],
 
         // PIN de respaldo (tarea 1.13, RF-ID-09). Ambito `employees:*` y policy
         // propia: restablecer el PIN de otra persona es entregarle la llave de su
@@ -469,7 +483,16 @@ it('deja pasar a RRHH a imprimir, entregar y ver el panel, que es el control pos
     Api::as($token)->post('/api/v1/credentials/print-batch')->assertStatus(204);
 
     Api::as($token)->get('/api/v1/credentials/status')->assertStatus(200);
-})->group('RQ-07', 'RF-QR-06', 'RF-QR-08');
+
+    // Y la hoja que se entrega con la tarjeta (tarea 5.11b, RL-05): sin este
+    // control, los `403` de arriba sobre `/instructions-sheet` pasarian
+    // identicos si la ruta no existiera. Tambien sin Chromium, por lo mismo.
+    app()->instance(InstructionsSheetRenderer::class, new FakeInstructionsSheetRenderer);
+
+    Api::as($token)->get('/api/v1/credentials/instructions-sheet')
+        ->assertStatus(200)
+        ->assertHeader('Content-Type', 'application/pdf');
+})->group('RQ-07', 'RF-QR-06', 'RF-QR-08', 'RL-05');
 
 it('deja pasar a RRHH a restablecer y entregar el PIN, control positivo de la 1.13', function (): void {
     // Lo mismo para las dos parejas nuevas de `/pin/*`.

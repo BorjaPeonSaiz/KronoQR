@@ -21,6 +21,23 @@ export const CREDENTIALS_MANAGE = 'credentials:*'
 export const ATTENDANCE_READ = 'attendance:read'
 
 /**
+ * Correccion del registro horario ya escrito: alta manual, rectificar las
+ * marcas y anular un tramo (RF-PA-04, RN-13).
+ *
+ * Es el UNICO ambito que el contrato declara para las tres operaciones de
+ * `POST /shift-entries`, `PATCH /shift-entries/{uuid}` y
+ * `POST /shift-entries/{uuid}/void`: no hay un estrecho por operacion como en
+ * `attendance:read`/`attendance:correct`. Lo llevan `manager+`
+ * (`responsable_departamento`, `rrhh`, `admin`), pero **anular** exige ademas
+ * el rol `rrhh+` en el servidor (`ShiftEntryPolicy::void`): un
+ * `responsable_departamento` con este ambito puede añadir y corregir, y
+ * recibiria `403` si intentara anular. El panel oculta tambien ese boton por
+ * rol y no solo por ambito (`canVoidShiftEntry`, `CorrectionDialog.vue`): un
+ * boton que siempre acaba en `403` no evita frustracion, la crea.
+ */
+export const ATTENDANCE_CORRECT = 'attendance:correct'
+
+/**
  * Exportacion normalizada para la Inspeccion de Trabajo (RF-IN-05).
  *
  * Es el ambito ESTRECHO a proposito: el `auditor` lleva `reports:legal` y nada
@@ -116,4 +133,19 @@ export function hasAbility(granted: readonly string[], required: string): boolea
   const namespace = required.split(':')[0]
 
   return namespace !== undefined && namespace !== '' && granted.includes(`${namespace}:*`)
+}
+
+/**
+ * Si el rol de la sesion puede anular un tramo (RF-PA-04, ADR-026).
+ *
+ * `attendance:correct` por si solo no basta: cubre las TRES operaciones de
+ * correccion en el contrato, pero el servidor exige ademas `rrhh+`
+ * (`ShiftEntryPolicy::void`) para anular en concreto — un
+ * `responsable_departamento` puede añadir y corregir, y no anular. Este
+ * segundo filtro es SOLO comodidad de interfaz (regla dura 18): la policy del
+ * servidor es la que autoriza de verdad, y quien la sortee desde la consola de
+ * red recibe el mismo `403`.
+ */
+export function canVoidShiftEntry(roles: readonly string[]): boolean {
+  return roles.includes('admin') || roles.includes('rrhh')
 }

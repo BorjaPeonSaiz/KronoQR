@@ -31,6 +31,24 @@ final class ClientDocs
     /** El directorio de guias que `package.sh` copia entero en el paquete. */
     public const string ROOT = 'docs/cliente';
 
+    /**
+     * Cuantos caracteres delante de «por correo» deciden si la frase lo NIEGA.
+     *
+     * Corto a proposito: la negacion legitima va pegada al marcador —«y nunca
+     * por correo», «never by email»—, mientras que un «si no recuerdas tu PIN,
+     * te lo enviamos por correo» tiene su `no` mucho antes y no debe salvarse.
+     */
+    private const int NEGATION_WINDOW = 24;
+
+    /**
+     * Longitud minima de un trozo de frase de la hoja para exigirlo en la guia.
+     *
+     * Los marcadores parten alguna frase en cachos, y un cacho de tres letras
+     * —«· » o « y »— aparece en cualquier documento: exigirlo no demostraria
+     * nada y solo daria por buena una guia que no reproduce la hoja.
+     */
+    private const int MIN_PHRASE_LENGTH = 4;
+
     /** Contenido de un fichero del repositorio, con los finales de linea normalizados. */
     public static function contents(string $relative): string
     {
@@ -144,6 +162,251 @@ final class ClientDocs
         }
 
         return $missing;
+    }
+
+    /**
+     * De una lista de literales, los que el documento SI menciona.
+     *
+     * El reverso de {@see literalsMissingFrom()}: aqui la lista es de lo que no
+     * puede aparecer —identificadores del codigo en una guia de negocio—, y lo
+     * que devuelve es lo que hay que quitar.
+     *
+     * @param  list<string>  $literals
+     * @return list<string>
+     */
+    public static function literalsFoundIn(array $literals, string $relative): array
+    {
+        $content = self::contents($relative);
+        $found = [];
+
+        foreach ($literals as $literal) {
+            if (str_contains($content, $literal)) {
+                $found[] = $literal;
+            }
+        }
+
+        return $found;
+    }
+
+    /**
+     * De una lista de frases prohibidas, las que el documento contiene.
+     *
+     * La comparacion va sobre el texto PLEGADO —minusculas, sin acentos, con
+     * las comillas tipograficas normalizadas y un solo espacio entre palabras—,
+     * para que «Credencial en el Móvil» partido por un salto de linea cuente
+     * igual que la frase de la lista. Se prohiben FRASES y no palabras sueltas
+     * a proposito (decision 6 de la ficha 5.11b): «movil» es legitimo, porque el
+     * portal se abre desde el movil; «tarjeta en el movil» no, porque no existe.
+     *
+     * @param  list<string>  $phrases
+     * @return list<string>
+     */
+    public static function forbiddenPhrasesFoundIn(array $phrases, string $relative): array
+    {
+        $text = self::folded(self::contents($relative));
+        $found = [];
+
+        foreach ($phrases as $phrase) {
+            if (str_contains($text, self::folded($phrase))) {
+                $found[] = $phrase;
+            }
+        }
+
+        return $found;
+    }
+
+    /**
+     * Los sitios donde el documento da a entender que el PIN llega por correo.
+     *
+     * NO se puede prohibir la frase entera, porque la frase correcta la contiene:
+     * `lang/es/instructions-sheet.php` dice «se entrega en mano y nunca por
+     * correo», y `hoja-empleado.md` la reproduce literal (decision 2). El
+     * criterio es la NEGACION PEGADA al marcador: se acusa todo «por correo» /
+     * «by email» que hable del PIN salvo si en los {@see NEGATION_WINDOW}
+     * caracteres inmediatamente anteriores hay una negacion. Asi «y nunca por
+     * correo» pasa y «recupera tu PIN por correo» no, y tampoco se salva un «si
+     * no recuerdas tu PIN, te lo enviamos por correo», cuyo `no` queda lejos.
+     *
+     * Se acusa solo si la FRASE habla del PIN, no una ventana de tantos
+     * caracteres: una guia puede hablar de avisos por correo, y con una ventana
+     * fija bastaba que la frase anterior nombrara el PIN para acusarla. La
+     * unidad de sentido es la frase, y esa es la que se mira y la que se
+     * devuelve en el mensaje.
+     *
+     * @return list<string>
+     */
+    public static function pinByEmailClaims(string $relative): array
+    {
+        $text = self::folded(self::contents($relative));
+
+        preg_match_all('/por correo|by email/', $text, $matches, PREG_OFFSET_CAPTURE);
+
+        $claims = [];
+
+        foreach ($matches[0] as $match) {
+            $offset = (int) $match[1];
+            $sentence = self::sentenceAround($text, $offset, strlen((string) $match[0]));
+            $negation = substr($text, max(0, $offset - self::NEGATION_WINDOW), min($offset, self::NEGATION_WINDOW));
+
+            if (! str_contains($sentence, 'pin')) {
+                continue;
+            }
+
+            if (preg_match('/\b(no|not|nunca|never|jamas|sin)\b/', $negation) === 1) {
+                continue;
+            }
+
+            $claims[] = mb_scrub($sentence);
+        }
+
+        return $claims;
+    }
+
+    /**
+     * La frase que contiene una posicion del texto, entre puntos.
+     *
+     * Sin newlines de por medio: el texto llega ya colapsado, asi que los
+     * limites son los signos de puntuacion fuerte. Una lista o una fila de
+     * tabla sin punto final se lee como una frase larga, que para lo que se
+     * pregunta aqui —¿de que habla esto?— es la lectura correcta.
+     */
+    private static function sentenceAround(string $text, int $offset, int $length): string
+    {
+        $start = 0;
+        preg_match_all('/[.!?]/', substr($text, 0, $offset), $before, PREG_OFFSET_CAPTURE);
+        $previous = end($before[0]);
+
+        if (is_array($previous)) {
+            $start = (int) $previous[1] + 1;
+        }
+
+        $end = strlen($text);
+
+        if (preg_match('/[.!?]/', $text, $after, PREG_OFFSET_CAPTURE, $offset + $length) === 1) {
+            $end = (int) $after[0][1];
+        }
+
+        return trim(substr($text, $start, $end - $start));
+    }
+
+    /**
+     * Los trozos de frase de `lang/<idioma>/instructions-sheet.php`, sin marcadores.
+     *
+     * La hoja la produce el producto y `hoja-empleado.md` la reproduce para que
+     * RRHH sepa que entrega sin abrir el PDF (decision 2 de la ficha 5.11b). Lo
+     * que se compara son los trozos ENTRE marcadores: la guia escribe «[nombre
+     * de la instalacion]» donde el producto pone `:app_name`, asi que la frase
+     * completa nunca coincidiria, pero cada trozo suyo si.
+     *
+     * Se lee con `require` porque el fichero de idioma es PHP puro que devuelve
+     * un array: no hace falta arrancar el framework, y esta suite corre sin el.
+     *
+     * @return list<string>
+     */
+    public static function instructionsSheetPhrases(string $locale): array
+    {
+        $path = Repo::file('backend/lang/'.$locale.'/instructions-sheet.php');
+
+        if (! is_file($path)) {
+            throw new RuntimeException('backend/lang/'.$locale.'/instructions-sheet.php no existe: son los textos de la hoja del empleado.');
+        }
+
+        /** @var mixed $texts */
+        $texts = require $path;
+
+        if (! is_array($texts)) {
+            throw new RuntimeException('backend/lang/'.$locale.'/instructions-sheet.php no devuelve un array plano `clave => frase`.');
+        }
+
+        $phrases = [];
+
+        foreach ($texts as $value) {
+            if (! is_string($value)) {
+                continue;
+            }
+
+            foreach (preg_split('/:app_name|:portal_url/', $value) ?: [] as $piece) {
+                $trimmed = trim($piece);
+
+                if (mb_strlen($trimmed) < self::MIN_PHRASE_LENGTH) {
+                    continue;
+                }
+
+                $phrases[] = $trimmed;
+            }
+        }
+
+        return $phrases;
+    }
+
+    /**
+     * De una lista de frases, las que el documento NO reproduce literalmente.
+     *
+     * Se comparan los dos textos con los espacios colapsados: el Markdown parte
+     * las frases largas en varias lineas, y eso es formato, no un texto
+     * distinto. Lo que si cuenta como texto distinto es una palabra cambiada o
+     * una marca de enfasis metida en mitad de la frase.
+     *
+     * @param  list<string>  $phrases
+     * @return list<string>
+     */
+    public static function phrasesMissingFrom(array $phrases, string $relative): array
+    {
+        $content = self::collapsed(self::contents($relative));
+        $missing = [];
+
+        foreach ($phrases as $phrase) {
+            if (! str_contains($content, self::collapsed($phrase))) {
+                $missing[] = $phrase;
+            }
+        }
+
+        return $missing;
+    }
+
+    /**
+     * Los textos que el panel ensena bajo una clave del fichero de idioma.
+     *
+     * La clave llega con puntos (`corrections.reasons`) y se navega aqui: la
+     * prueba pide «lo que el panel ensena» sin saber como esta anidado el JSON.
+     * Se devuelven solo los valores de texto; si la clave no existe o no es un
+     * objeto, se lanza, porque una lista vacia haria pasar la prueba sin haber
+     * comprobado nada.
+     *
+     * @return list<string>
+     */
+    public static function panelTexts(string $locale, string $dottedKey): array
+    {
+        /** @var mixed $node */
+        $node = json_decode(
+            self::contents('frontend-admin/src/shared/i18n/locales/'.$locale.'.json'),
+            true,
+            512,
+            JSON_THROW_ON_ERROR,
+        );
+
+        foreach (explode('.', $dottedKey) as $segment) {
+            if (! is_array($node) || ! array_key_exists($segment, $node)) {
+                throw new RuntimeException($locale.'.json no tiene la clave '.$dottedKey.'.');
+            }
+
+            /** @var mixed $node */
+            $node = $node[$segment];
+        }
+
+        if (! is_array($node)) {
+            throw new RuntimeException($locale.'.json -> '.$dottedKey.' no es un objeto de textos.');
+        }
+
+        $texts = [];
+
+        foreach ($node as $value) {
+            if (is_string($value)) {
+                $texts[] = $value;
+            }
+        }
+
+        return $texts;
     }
 
     /**
@@ -442,6 +705,42 @@ final class ClientDocs
         sort($files);
 
         return $files;
+    }
+
+    /**
+     * El texto con un solo espacio entre palabras y sin espacio en los bordes.
+     *
+     * Es la normalizacion que hace comparable una frase del producto con la
+     * misma frase escrita en un Markdown que la parte en tres lineas. El espacio
+     * duro entra en la lista porque `\s` no lo cubre y es lo que deja un editor
+     * al pegar texto de un PDF.
+     */
+    private static function collapsed(string $text): string
+    {
+        return trim((string) preg_replace('/[\s\x{00a0}]+/u', ' ', $text));
+    }
+
+    /**
+     * El texto plegado: colapsado, en minusculas, sin acentos y sin tipografia.
+     *
+     * Las frases prohibidas se buscan asi porque quien las escribe no las
+     * escribe como estan en la lista: en mitad de una frase, con mayuscula
+     * inicial, con comillas latinas o con un guion largo. Plegar los dos lados
+     * de la comparacion es lo que hace que la prohibicion no dependa de la
+     * forma en que se cuele.
+     */
+    private static function folded(string $text): string
+    {
+        return strtr(mb_strtolower(self::collapsed($text)), [
+            'á' => 'a', 'à' => 'a', 'ä' => 'a', 'â' => 'a', 'ã' => 'a',
+            'é' => 'e', 'è' => 'e', 'ë' => 'e', 'ê' => 'e',
+            'í' => 'i', 'ì' => 'i', 'ï' => 'i', 'î' => 'i',
+            'ó' => 'o', 'ò' => 'o', 'ö' => 'o', 'ô' => 'o', 'õ' => 'o',
+            'ú' => 'u', 'ù' => 'u', 'ü' => 'u', 'û' => 'u',
+            'ñ' => 'n', 'ç' => 'c',
+            '«' => '"', '»' => '"', '“' => '"', '”' => '"', '‘' => "'", '’' => "'",
+            '–' => '-', '—' => '-', '·' => '.',
+        ]);
     }
 
     /**

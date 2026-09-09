@@ -217,8 +217,73 @@ it('responde 409 a un PATCH sobre una version ya sustituida', function (): void 
             'reason_code' => 'AJUSTE_ACORDADO_CON_RRHH',
         ])
         ->assertValidResponse(409)
-        ->assertJsonPath('type', 'urn:kronoqr:problem:conflict');
+        // Tipo PROPIO y no el conflicto generico: es lo unico que le dice al
+        // panel que la accion es «recarga la jornada y repite sobre el
+        // identificador nuevo», y no «enseña el tramo que estorba».
+        ->assertJsonPath('type', 'urn:kronoqr:problem:shift-entry-superseded');
 })->group('RF-PA-04', 'RN-13');
+
+it('distingue por type los tres conflictos de la correccion', function (): void {
+    /*
+     * Los tres `409` de estos endpoints compartian
+     * `urn:kronoqr:problem:conflict`, asi que el panel solo podia separarlos
+     * analizando el `detail` —texto para personas, traducible y libre de cambiar
+     * sin romper el contrato—. Cada causa lleva ahora su URN, y esta prueba es
+     * la que impide que vuelvan a colapsar en uno.
+     */
+    $contexto = contextoDeCorreccion();
+
+    // 1) RN-01, un turno abierto: el alta de otro tramo sin salida choca.
+    tramoRegistrado($contexto['site'], $contexto['employee'], '2026-03-14 06:00', null);
+
+    Api::as($contexto['token'])
+        ->post('/api/v1/shift-entries', [
+            'employee_uuid' => $contexto['employee'],
+            'work_date' => '2026-03-14',
+            'clocked_in_at' => '2026-03-14T15:00:00Z',
+            'reason_code' => 'OLVIDO_FICHAJE_ENTRADA',
+        ])
+        ->assertValidRequest()
+        ->assertValidResponse(409)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:shift-already-open')
+        ->assertJsonPath('status', 409);
+
+    // 2) RN-02, solape: con el turno ya cerrado, un tramo que pisa sus horas.
+    $abierto = DB::table('shift_entries')->where('status', 'open')->value('uuid');
+
+    expect($abierto)->toBeString();
+    \assert(\is_string($abierto));
+
+    Api::as($contexto['token'])
+        ->patch('/api/v1/shift-entries/'.$abierto, [
+            'clocked_out_at' => '2026-03-14T14:00:00Z',
+            'reason_code' => 'OLVIDO_FICHAJE_SALIDA',
+        ])
+        ->assertValidResponse(200);
+
+    Api::as($contexto['token'])
+        ->post('/api/v1/shift-entries', [
+            'employee_uuid' => $contexto['employee'],
+            'work_date' => '2026-03-14',
+            'clocked_in_at' => '2026-03-14T10:00:00Z',
+            'clocked_out_at' => '2026-03-14T12:00:00Z',
+            'reason_code' => 'ALTA_RETROACTIVA',
+        ])
+        ->assertValidRequest()
+        ->assertValidResponse(409)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:overlapping-shift-entry')
+        ->assertJsonPath('status', 409);
+
+    // 3) ADR-035, version sustituida: el `void` sobre el uuid que ya dejo de
+    // serlo. El tercer tipo, y el unico que puede salir de esta ruta.
+    Api::as($contexto['token'])
+        ->post('/api/v1/shift-entries/'.$abierto.'/void', [
+            'reason_code' => 'ERROR_DE_ESCANEO_DUPLICADO',
+        ])
+        ->assertValidRequest()
+        ->assertValidResponse(409)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:shift-entry-superseded');
+})->group('RN-01', 'RN-02', 'RF-PA-04', 'RN-13');
 
 it('responde 404 a un identificador que no existe', function (): void {
     // La otra mitad de ADR-035: un uuid inventado no es un conflicto, es un
@@ -272,8 +337,29 @@ it('rechaza mover a otro dia la entrada que abre la jornada', function (): void 
             'reason_code' => 'AJUSTE_ACORDADO_CON_RRHH',
         ])
         ->assertValidResponse(422)
-        ->assertJsonPath('type', 'urn:kronoqr:problem:validation-failed');
+        // Tipo propio dentro del `422`: sigue siendo un error de campo —el panel
+        // lo pinta junto a la hora de entrada— pero le permite ofrecer los dos
+        // actos (anular aqui, dar de alta alla) en vez de un parrafo.
+        ->assertJsonPath('type', 'urn:kronoqr:problem:correction-would-change-work-date')
+        ->assertJsonPath('status', 422)
+        ->assertJsonPath('errors.clocked_in_at.0', fn (string $mensaje): bool => str_contains($mensaje, 'anula'));
 })->group('RN-05', 'RF-AT-08', 'RF-PA-04');
+
+it('deja el type generico de validacion para los errores de campo corrientes', function (): void {
+    // La otra mitad del caso anterior: si `correction-would-change-work-date`
+    // acabara saliendo en cualquier `422`, el panel no ganaria nada. Un motivo
+    // fuera del Anexo C es un error de campo y nada mas.
+    $contexto = contextoDeCorreccion();
+    $tramo = tramoRegistrado($contexto['site'], $contexto['employee']);
+
+    Api::as($contexto['token'])
+        ->patch('/api/v1/shift-entries/'.$tramo, [
+            'clocked_out_at' => '2026-03-14T05:00:00Z',
+            'reason_code' => 'AJUSTE_ACORDADO_CON_RRHH',
+        ])
+        ->assertValidResponse(422)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:validation-failed');
+})->group('RN-03', 'RF-PA-04');
 
 it('exige explicacion de veinte caracteres cuando el motivo es OTROS', function (): void {
     // Anexo C. «error», «ajuste» o «lo dijo Marta» no explican nada ante

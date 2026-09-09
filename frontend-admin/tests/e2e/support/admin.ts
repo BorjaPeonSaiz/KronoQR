@@ -9,8 +9,15 @@
 // turno del 14 de marzo de 2026 en `Europe/Madrid` al que faltaba la salida y
 // que RRHH cerro a las 14:05.
 import type { Page, Route } from '@playwright/test'
+import { minutesBetween } from '@kronoqr/web-kit/datetime'
 import type {
+  AddShiftEntryRequest,
   Branding,
+  ComplianceProfile,
+  CorrectedShiftEntry,
+  CorrectionAction,
+  CorrectShiftEntryRequest,
+  CreateEmployeeRequest,
   CredentialStatusBoard,
   DataExport,
   DepartmentCollection,
@@ -18,6 +25,7 @@ import type {
   DeviceList,
   Employee,
   EmployeeCollection,
+  EmployeeProvisioned,
   EmployeeWorkDays,
   Incident,
   IncidentCollection,
@@ -34,6 +42,9 @@ import type {
   SupportGrant,
   TwoFactorChallenge,
   TwoFactorEnrolment,
+  VoidShiftEntryRequest,
+  WorkDayDetail,
+  WorkDayShiftEntry,
 } from '@/shared/api/types'
 
 export const EMPLOYEE_UUID = '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90'
@@ -66,6 +77,30 @@ export const DEPARTMENTS: DepartmentCollection = {
     { id: 3, name: 'Recepción' },
     { id: 4, name: 'Pisos' },
   ],
+}
+
+/**
+ * El perfil de cumplimiento del centro (RF-PD-07, tarea 5.2): lo que responde
+ * `GET /api/v1/compliance-profile`. El mismo ejemplo (ES-hosteleria) que ya usa
+ * `stubOnboardingApi` en su paso de convenio, para que las dos pantallas -el
+ * asistente y `/compliance-profile'- cuenten la misma instalacion.
+ */
+export const COMPLIANCE_PROFILE: ComplianceProfile = {
+  data: {
+    id: 1,
+    name: 'ES-hosteleria',
+    jurisdiction: 'ES',
+    min_rest_hours: 12,
+    max_daily_hours: 9,
+    max_weekly_hours: 40,
+    break_required_after_hours: 6,
+    week_starts_on: 1,
+    holiday_calendar: [],
+    retention_years: 4,
+    is_default: true,
+    source: 'installation_default',
+    updated_at: null,
+  },
 }
 
 // --- Marca de la instalacion (RF-PD-08, tarea 5.8) --------------------------
@@ -140,6 +175,12 @@ export const USER: ManagementUser = {
   roles: ['rrhh'],
   abilities: [
     'attendance:read',
+    // Correccion del registro horario (RF-PA-04, tarea 5.11b): alta manual,
+    // rectificar y anular. El catalogo real de roles (migracion
+    // `seed_role_and_permission_catalog`) se lo da a `rrhh` junto con
+    // `attendance:read`; sin este ambito aqui, ningun E2E podria ejercer las
+    // tres operaciones con la cuenta que la guia de RRHH usa de principio a fin.
+    'attendance:correct',
     'employees:read',
     'employees:*',
     'credentials:*',
@@ -180,6 +221,22 @@ export const ADMIN_USER: ManagementUser = {
   locale: 'es',
   roles: ['admin'],
   abilities: ['*'],
+  scope: { kind: 'all', department_ids: [] },
+}
+
+/**
+ * Auditor (RF-ID-02): `attendance:read` sin `attendance:correct`. Sirve para
+ * comprobar que quien solo puede LEER el registro horario no ve ningun boton
+ * de las tres operaciones de correccion (RF-PA-04, tarea 5.11b) — el mismo
+ * `attendance:read` con el que se abre `EmployeeWorkDaysView`, y nada mas.
+ */
+export const AUDITOR_USER: ManagementUser = {
+  uuid: '0199f0aa-5555-7000-8000-0123456789af',
+  name: 'Auditoría externa',
+  email: 'auditoria@hotel.example',
+  locale: 'es',
+  roles: ['auditor'],
+  abilities: ['attendance:read', 'audit:read', 'reports:legal'],
   scope: { kind: 'all', department_ids: [] },
 }
 
@@ -486,6 +543,40 @@ export const PERIOD_REPORT: PeriodReport = {
   },
 }
 
+/**
+ * Los mismos criterios en ingles (hallazgo 7 de la revision: iban fijos en
+ * castellano para los dos idiomas). El mismo numero de filas que
+ * `PERIOD_REPORT.meta.criteria`, en el mismo orden: es lo unico que comprueba
+ * `period-report.spec.ts`.
+ */
+const PERIOD_REPORT_CRITERIA_EN: readonly string[] = [
+  'Totals come from the time record already consolidated (working-day projection); they are not recalculated for this report.',
+  "Each shift is attributed in full to the working day it started, in the site's time zone: a shift from 22:00 to 06:00 counts on the day it clocked in and is not split at midnight.",
+  'Days without activity appear with zero and are not omitted.',
+]
+
+/** `PERIOD_REPORT`, con los criterios en el idioma que pide la peticion. */
+function periodReportFor(requestLocale: 'es' | 'en'): PeriodReport {
+  if (requestLocale === 'es') {
+    return PERIOD_REPORT
+  }
+
+  return {
+    ...PERIOD_REPORT,
+    meta: { ...PERIOD_REPORT.meta, criteria: [...PERIOD_REPORT_CRITERIA_EN] },
+  }
+}
+
+/**
+ * El idioma que la SPA manda en `Accept-Language` (`setLocaleProvider` de
+ * `@kronoqr/web-kit/http`, atado al `locale` de la sesion tras
+ * `stubManagementApi(page, { locale })`). Por omision `es`, igual que el resto
+ * del doble.
+ */
+function requestLocaleOf(request: import('@playwright/test').Request): 'es' | 'en' {
+  return request.headers()['accept-language']?.startsWith('en') === true ? 'en' : 'es'
+}
+
 // --- Bandeja de incidencias (RF-PA-05, RF-PR-01) -----------------------------
 
 export const INCIDENT_ID = 412
@@ -689,9 +780,22 @@ export interface ManagementApiOptions {
    * Que cuenta entra por `logIn()`. `rrhh` (por omision) es `USER`, con alcance
    * completo; `manager` es `MANAGER_USER`, un `responsable_departamento` con
    * `incidents:*` y sin plantilla ni credenciales (RF-ID-03); `admin` es
-   * `ADMIN_USER`, el unico que ve «Quioscos» (RF-PD-06, tarea 5.6).
+   * `ADMIN_USER`, el unico que ve «Quioscos» (RF-PD-06, tarea 5.6); `auditor`
+   * es `AUDITOR_USER`, con `attendance:read` y sin `attendance:correct` (RF-ID-02,
+   * tarea 5.11b): ve el registro horario y ningun boton de sus tres correcciones.
    */
-  readonly role?: 'rrhh' | 'manager' | 'admin'
+  readonly role?: 'rrhh' | 'manager' | 'admin' | 'auditor'
+  /**
+   * El idioma de la cuenta que entra (`session.user.locale`). Por omision,
+   * `'es'`, como las tres cuentas de ejemplo. `main.ts` adopta este idioma
+   * para TODA la aplicacion en cuanto hay sesion -no el del navegador-, asi
+   * que un generador de capturas con un proyecto `en` (locale del navegador
+   * `en-US`, pantalla de `/login` en ingles por `resolveLocale`) necesita
+   * este campo para que el resto de pantallas, YA autenticadas, tambien
+   * salgan en ingles: sin el, la sesion volveria al español en el primer
+   * repintado tras entrar.
+   */
+  readonly locale?: 'es' | 'en'
   /**
    * La flota de quioscos que devuelve `GET /devices` de partida (RF-PA-07). Por
    * omision, `DEVICES`: un unico quiosco activo, «Recepción». El doble la
@@ -750,6 +854,12 @@ export interface ManagementApiOptions {
    */
   readonly license?: License
   /**
+   * Lo que devuelve `GET /api/v1/compliance-profile` (RF-PD-07, tarea 5.2).
+   * Por omision, `COMPLIANCE_PROFILE`: el perfil ES-hosteleria de la
+   * instalacion de referencia.
+   */
+  readonly complianceProfile?: ComplianceProfile
+  /**
    * Las concesiones de soporte que devuelve `GET /api/v1/support/grants`
    * (RF-PD-11, tarea 5.9) al arrancar. Por omision, ninguna: la mayoria de
    * los recorridos del panel no pasan por «Soporte». El doble la mantiene
@@ -766,18 +876,158 @@ export interface ManagementApiOptions {
    * depender de un backend.
    */
   readonly dataExports?: DataExport[]
+  /**
+   * Como responden `POST /api/v1/shift-entries` y `PATCH
+   * /api/v1/shift-entries/{uuid}` (RF-PA-04, tarea 5.11b, segunda vuelta). `ok`
+   * (por omision) corrige o da de alta de verdad. Las otras cuatro simulan las
+   * causas que puede dar un `409`/`422` real, cada una con el `type` propio
+   * que le da el backend (bloque A2, en paralelo a esta tarea) -sea cual sea
+   * el `uuid`, y el registro horario no cambia-, para probar que el dialogo
+   * distingue las tres causas del `409` (regla dura 5) y no confunde el `422`
+   * de cambio de jornada con el resto:
+   *
+   *  - `superseded`: la version vigente ya no es la que tenia el dialogo
+   *    abierto (`urn:kronoqr:problem:shift-entry-superseded`).
+   *  - `shiftAlreadyOpen`: esa persona ya tiene un turno abierto (RN-01,
+   *    `urn:kronoqr:problem:shift-already-open`) -la causa mas probable al
+   *    «Añadir un tramo» por un olvido de salida.
+   *  - `overlap`: las horas se solapan con otro tramo (RN-02,
+   *    `urn:kronoqr:problem:overlapping-shift-entry`).
+   *  - `workDateChange`: SOLO en `PATCH` (`correct`); corregir la entrada
+   *    moveria la jornada a otro dia (RN-05, ADR-035,
+   *    `urn:kronoqr:problem:correction-would-change-work-date`, `422`).
+   */
+  readonly correctionOutcome?:
+    'ok' | 'superseded' | 'shiftAlreadyOpen' | 'overlap' | 'workDateChange'
 }
 
 async function json(route: Route, status: number, body: unknown): Promise<void> {
   await route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
 }
 
-async function problem(route: Route, status: number, type: string, title: string): Promise<void> {
+async function problem(
+  route: Route,
+  status: number,
+  type: string,
+  title: string,
+  detail?: string,
+): Promise<void> {
   await route.fulfill({
     status,
     contentType: 'application/problem+json',
-    body: JSON.stringify({ type, title, status }),
+    body: JSON.stringify({ type, title, status, ...(detail === undefined ? {} : { detail }) }),
   })
+}
+
+/**
+ * El `422` de validacion por campo (`ValidationProblem` del contrato), para
+ * simular el de RN-05/ADR-035 (`urn:kronoqr:problem:correction-would-change-work-date`,
+ * tarea 5.11b): corregir la entrada moveria la jornada a otro dia.
+ */
+async function validationProblem(
+  route: Route,
+  type: string,
+  title: string,
+  errors: Record<string, string[]>,
+): Promise<void> {
+  await route.fulfill({
+    status: 422,
+    contentType: 'application/problem+json',
+    body: JSON.stringify({ type, title, status: 422, errors }),
+  })
+}
+
+// --- Correccion del registro horario (RF-PA-04, RN-13, ADR-026, ADR-035,
+// tarea 5.11b) ----------------------------------------------------------------
+//
+// El momento fijo de toda correccion simulada en esta suite: posterior al
+// unico que trae `WORKDAYS` (14 de marzo, 16:22 hora del centro), para que un
+// historial con dos entradas siga leyendose de mas antigua a mas reciente.
+const CORRECTION_NOW = '2026-03-20T09:00:00.000000Z'
+
+/** `LocalTimestamp` (`readLocalTimestamp` de `@kronoqr/web-kit/datetime`) para un instante UTC en `timeZone`. Sin libreria de zonas, mismo criterio que `zonedTime.ts` del panel: `Intl.DateTimeFormat`. */
+function toLocalTimestamp(utcIso: string, timeZone: string): string {
+  const instant = new Date(utcIso)
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(instant)
+  const value = (type: string): string => parts.find((part) => part.type === type)?.value ?? '00'
+  const offsetParts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    timeZoneName: 'longOffset',
+  }).formatToParts(instant)
+  const offsetRaw = offsetParts.find((part) => part.type === 'timeZoneName')?.value ?? 'GMT'
+  const offset = /^GMT([+-]\d{2}:\d{2})$/.exec(offsetRaw)?.[1] ?? '+00:00'
+
+  return `${value('year')}-${value('month')}-${value('day')}T${value('hour')}:${value('minute')}:${value('second')}${offset}`
+}
+
+let syntheticShiftEntrySeed = 0
+
+/** Un `uuid` con forma de UUID: distinto en cada llamada, y valido para la regex `[0-9a-f-]+` de las rutas. */
+function syntheticShiftEntryUuid(): string {
+  syntheticShiftEntrySeed += 1
+
+  return `0199f7c1-${String(syntheticShiftEntrySeed).padStart(4, '0')}-7a10-9c50-6d7e8f9a0b11`
+}
+
+function findShiftEntry(
+  workdays: EmployeeWorkDays,
+  uuid: string,
+): { day: WorkDayDetail; entry: WorkDayShiftEntry } | undefined {
+  for (const day of workdays.data) {
+    const entry = day.shift_entries.find((candidate) => candidate.uuid === uuid)
+
+    if (entry !== undefined) {
+      return { day, entry }
+    }
+  }
+
+  return undefined
+}
+
+function ensureWorkDay(workdays: EmployeeWorkDays, workDate: string): WorkDayDetail {
+  const existing = workdays.data.find((candidate) => candidate.work_date === workDate)
+
+  if (existing !== undefined) {
+    return existing
+  }
+
+  const created: WorkDayDetail = {
+    work_date: workDate,
+    time_zone: workdays.time_zone,
+    total_minutes: 0,
+    shift_count: 0,
+    has_open_shift: false,
+    has_incident: false,
+    recalculated_at: null,
+    shift_entries: [],
+    corrections: [],
+    incidents: [],
+  }
+
+  workdays.data.push(created)
+  workdays.data.sort((a, b) => a.work_date.localeCompare(b.work_date))
+
+  return created
+}
+
+/** Recalcula el total del dia sobre sus tramos vigentes (RN-06, regla dura 7): nunca se acumula. */
+function recalcWorkDay(day: WorkDayDetail): void {
+  day.shift_count = day.shift_entries.length
+  day.total_minutes = day.shift_entries.reduce(
+    (sum, entry) => sum + (entry.duration_minutes ?? 0),
+    0,
+  )
+  day.has_open_shift = day.shift_entries.some((entry) => entry.status === 'open')
+  day.recalculated_at = CORRECTION_NOW
 }
 
 /**
@@ -795,8 +1045,19 @@ export async function stubManagementApi(
   const twoFactor = options.twoFactor ?? 'off'
   const resolveOutcome = options.resolveOutcome ?? 'ok'
   const exportOutcome = options.exportOutcome ?? 'ok'
-  const currentUser =
-    options.role === 'manager' ? MANAGER_USER : options.role === 'admin' ? ADMIN_USER : USER
+  const correctionOutcome = options.correctionOutcome ?? 'ok'
+  const baseUser =
+    options.role === 'manager'
+      ? MANAGER_USER
+      : options.role === 'admin'
+        ? ADMIN_USER
+        : options.role === 'auditor'
+          ? AUDITOR_USER
+          : USER
+  // Copia, nunca la constante compartida: `options.locale` no puede filtrarse
+  // a otra prueba que reutilice `USER`/`MANAGER_USER`/`ADMIN_USER`/`AUDITOR_USER` tal cual.
+  const currentUser: ManagementUser =
+    options.locale === undefined ? baseUser : { ...baseUser, locale: options.locale }
   const currentSession: Session = { ...SESSION, user: currentUser }
 
   // Si `resolveOutcome` es `conflict`, la incidencia se da por cerrada -por
@@ -821,6 +1082,13 @@ export async function stubManagementApi(
   const supportGrants: SupportGrant[] = (options.supportGrants ?? []).map((candidate) => ({
     ...candidate,
   }))
+
+  // El registro horario (RF-PA-03, RF-PA-04, tarea 5.11b): mutable, y con
+  // copia PROFUNDA de `options.workdays ?? WORKDAYS` -no solo del array-,
+  // porque las tres operaciones de correccion mutan jornadas y tramos en
+  // sitio; sin esta copia, una prueba dejaria su tramo añadido o corregido
+  // dentro de la constante compartida y contaminaria el resto del fichero.
+  const workdaysState: EmployeeWorkDays = structuredClone(options.workdays ?? WORKDAYS)
 
   // La exportacion integra (RF-PD-14, RL-20, tarea 5.10): mutable, y con una
   // progresion de estado atada al reloj de VERDAD (no al de Playwright), para
@@ -1083,6 +1351,231 @@ export async function stubManagementApi(
         return
       }
 
+      // Corregir tambien lleva un `uuid` dinamico en la ruta
+      // (`PATCH /shift-entries/{uuid}`, RF-PA-04, ADR-035).
+      const correctShiftEntryMatch = /^\/api\/v1\/shift-entries\/([0-9a-f-]+)$/.exec(url.pathname)
+
+      if (method === 'PATCH' && correctShiftEntryMatch !== null) {
+        if (correctionOutcome === 'superseded') {
+          await problem(
+            route,
+            409,
+            'urn:kronoqr:problem:shift-entry-superseded',
+            'Conflicto con el estado actual',
+            'Ese tramo ya no es la version vigente. Vuelve a cargar la jornada antes de corregir.',
+          )
+
+          return
+        }
+
+        if (correctionOutcome === 'shiftAlreadyOpen') {
+          await problem(
+            route,
+            409,
+            'urn:kronoqr:problem:shift-already-open',
+            'Conflicto con el estado actual',
+            'Esa persona ya tiene un turno abierto. Cierralo o anulalo antes de dejar otro sin salida.',
+          )
+
+          return
+        }
+
+        if (correctionOutcome === 'overlap') {
+          await problem(
+            route,
+            409,
+            'urn:kronoqr:problem:overlapping-shift-entry',
+            'Conflicto con el estado actual',
+            'Las horas indicadas se solapan con otro tramo de esa persona. Revisa la jornada antes de corregir.',
+          )
+
+          return
+        }
+
+        if (correctionOutcome === 'workDateChange') {
+          await validationProblem(
+            route,
+            'urn:kronoqr:problem:correction-would-change-work-date',
+            'No se puede procesar la solicitud',
+            {
+              clocked_in_at: [
+                'Esa hora de entrada llevaria la jornada a otro dia. Para mover las horas de un ' +
+                  'dia a otro, anula el tramo en la jornada de origen y dalo de alta en la de ' +
+                  'destino: son dos acciones, cada una con su motivo.',
+              ],
+            },
+          )
+
+          return
+        }
+
+        const targetUuid = correctShiftEntryMatch[1] ?? ''
+        const found = findShiftEntry(workdaysState, targetUuid)
+
+        if (found === undefined) {
+          // Ese `uuid` existio y ya no es la version vigente -o nunca existio
+          // en este doble-: `409`, nunca `404` (ADR-035).
+          await problem(
+            route,
+            409,
+            'urn:kronoqr:problem:shift-entry-superseded',
+            'Conflicto con el estado actual',
+            'Ese tramo ya no es la version vigente. Vuelve a cargar la jornada antes de corregir.',
+          )
+
+          return
+        }
+
+        const { day, entry } = found
+        const payload = request.postDataJSON() as CorrectShiftEntryRequest
+        const newClockedIn = payload.clocked_in_at ?? entry.clocked_in_at
+        const newClockedOut =
+          payload.clocked_out_at !== undefined ? payload.clocked_out_at : entry.clocked_out_at
+        const wasOpen = entry.clocked_out_at === null
+        const action: CorrectionAction = wasOpen && newClockedOut !== null ? 'closed' : 'modified'
+        const newUuid = syntheticShiftEntryUuid()
+        const durationMinutes =
+          newClockedOut === null ? null : minutesBetween(newClockedIn, newClockedOut)
+
+        const newEntry: WorkDayShiftEntry = {
+          ...entry,
+          uuid: newUuid,
+          version: entry.version + 1,
+          status: newClockedOut === null ? 'open' : 'closed',
+          clocked_in_at: newClockedIn,
+          clocked_in_at_local:
+            payload.clocked_in_at === undefined
+              ? entry.clocked_in_at_local
+              : toLocalTimestamp(newClockedIn, day.time_zone),
+          clock_in_source:
+            payload.clocked_in_at === undefined ? entry.clock_in_source : 'manual_admin',
+          clocked_in_recorded_at:
+            payload.clocked_in_at === undefined ? entry.clocked_in_recorded_at : null,
+          clocked_out_at: newClockedOut,
+          clocked_out_at_local:
+            newClockedOut === null
+              ? null
+              : payload.clocked_out_at === undefined
+                ? entry.clocked_out_at_local
+                : toLocalTimestamp(newClockedOut, day.time_zone),
+          clock_out_source:
+            newClockedOut === null
+              ? null
+              : payload.clocked_out_at === undefined
+                ? entry.clock_out_source
+                : 'manual_admin',
+          clocked_out_recorded_at:
+            payload.clocked_out_at === undefined ? entry.clocked_out_recorded_at : null,
+          duration_minutes: durationMinutes,
+          recorded_at: CORRECTION_NOW,
+        }
+
+        day.shift_entries = day.shift_entries.filter((candidate) => candidate.uuid !== entry.uuid)
+        day.shift_entries.push(newEntry)
+        day.corrections.push({
+          shift_entry_uuid: newUuid,
+          action,
+          performed_at: CORRECTION_NOW,
+          performed_at_local: toLocalTimestamp(CORRECTION_NOW, day.time_zone),
+          performed_by: { uuid: currentUser.uuid, name: currentUser.name },
+          reason_code: payload.reason_code,
+          reason_text: payload.reason_text ?? null,
+          before: {
+            version: entry.version,
+            clocked_in_at: entry.clocked_in_at,
+            clocked_out_at: entry.clocked_out_at,
+            worked_minutes: entry.duration_minutes ?? 0,
+          },
+          after: {
+            version: newEntry.version,
+            clocked_in_at: newEntry.clocked_in_at,
+            clocked_out_at: newEntry.clocked_out_at,
+            worked_minutes: newEntry.duration_minutes ?? 0,
+          },
+        })
+        recalcWorkDay(day)
+
+        const result: CorrectedShiftEntry = {
+          employee_uuid: workdaysState.employee_uuid,
+          work_date: day.work_date,
+          action,
+          shift_entry_uuid: newUuid,
+          superseded_shift_entry_uuid: entry.uuid,
+          version: newEntry.version,
+          status: newEntry.status,
+          clocked_in_at: newEntry.clocked_in_at,
+          clocked_out_at: newEntry.clocked_out_at,
+          daily_total_minutes: day.total_minutes,
+        }
+
+        await json(route, 200, result)
+        return
+      }
+
+      // Anular tambien lleva un `uuid` dinamico en la ruta
+      // (`POST /shift-entries/{uuid}/void`, RF-PA-04, ADR-026).
+      const voidShiftEntryMatch = /^\/api\/v1\/shift-entries\/([0-9a-f-]+)\/void$/.exec(
+        url.pathname,
+      )
+
+      if (method === 'POST' && voidShiftEntryMatch !== null) {
+        const targetUuid = voidShiftEntryMatch[1] ?? ''
+        const found = findShiftEntry(workdaysState, targetUuid)
+
+        if (found === undefined) {
+          // Anular solo tiene una causa de conflicto: el tramo ya no es el
+          // vigente (ya anulado o ya sustituido). No hay «turno abierto» ni
+          // «solape» que anular pueda provocar.
+          await problem(
+            route,
+            409,
+            'urn:kronoqr:problem:shift-entry-superseded',
+            'Conflicto con el estado actual',
+            'Ese tramo ya no es la version vigente. Vuelve a cargar la jornada antes de anular.',
+          )
+
+          return
+        }
+
+        const { day, entry } = found
+        const payload = request.postDataJSON() as VoidShiftEntryRequest
+
+        day.shift_entries = day.shift_entries.filter((candidate) => candidate.uuid !== entry.uuid)
+        day.corrections.push({
+          shift_entry_uuid: entry.uuid,
+          action: 'voided',
+          performed_at: CORRECTION_NOW,
+          performed_at_local: toLocalTimestamp(CORRECTION_NOW, day.time_zone),
+          performed_by: { uuid: currentUser.uuid, name: currentUser.name },
+          reason_code: payload.reason_code,
+          reason_text: payload.reason_text ?? null,
+          before: {
+            version: entry.version,
+            clocked_in_at: entry.clocked_in_at,
+            clocked_out_at: entry.clocked_out_at,
+            worked_minutes: entry.duration_minutes ?? 0,
+          },
+          after: null,
+        })
+        recalcWorkDay(day)
+
+        const result: CorrectedShiftEntry = {
+          employee_uuid: workdaysState.employee_uuid,
+          work_date: day.work_date,
+          action: 'voided',
+          shift_entry_uuid: entry.uuid,
+          superseded_shift_entry_uuid: null,
+          version: entry.version,
+          status: 'voided',
+          clocked_in_at: entry.clocked_in_at,
+          clocked_out_at: entry.clocked_out_at,
+          daily_total_minutes: day.total_minutes,
+        }
+
+        await json(route, 200, result)
+        return
+      }
+
       switch (`${method} ${url.pathname}`) {
         case 'GET /api/v1/devices':
           await json(route, 200, { devices })
@@ -1285,11 +1778,153 @@ export async function stubManagementApi(
         case 'GET /api/v1/employees':
           await json(route, 200, EMPLOYEES)
           return
+        case 'POST /api/v1/employees': {
+          // Alta de empleado (RF-GP-01): el PIN se emite en la MISMA transaccion
+          // y viaja en la respuesta una sola vez (RF-ID-09). El contenido de
+          // verdad -huella del documento, unicidad del codigo- lo prueba el
+          // backend; aqui basta con devolver una ficha coherente con lo que se
+          // tecleo, para que el dialogo del PIN tenga algo que enseñar.
+          const payload = request.postDataJSON() as CreateEmployeeRequest
+          const created: Employee = {
+            uuid: '0199f5b1-0001-7000-8000-0123456789bb',
+            employee_code: 'E9K3M2QXPR',
+            first_name: payload.first_name,
+            last_name: payload.last_name,
+            email: payload.email ?? null,
+            department_id: payload.department_id ?? null,
+            status: 'active',
+            hired_at: payload.hired_at,
+            terminated_at: null,
+            locale: payload.locale,
+            pin_status: 'issued',
+          }
+          const provisioned: EmployeeProvisioned = {
+            employee: created,
+            pin: {
+              employee_uuid: created.uuid,
+              pin: '384920',
+              issued_at: '2026-09-08T09:00:00.000000Z',
+              pin_status: 'issued',
+            },
+          }
+
+          await json(route, 201, provisioned)
+          return
+        }
         case `GET /api/v1/employees/${EMPLOYEE_UUID}`:
           await json(route, 200, EMPLOYEE)
           return
         case `GET /api/v1/employees/${EMPLOYEE_UUID}/workdays`:
-          await json(route, 200, options.workdays ?? WORKDAYS)
+          await json(route, 200, workdaysState)
+          return
+        case 'POST /api/v1/shift-entries': {
+          // Alta manual de un tramo que nunca se ficho (RF-PA-04, accion
+          // `created`). El doble no aplica RN-01/RN-02/RN-03 al construir el
+          // resultado -eso lo prueba el backend-, pero SI simula sus tres
+          // causas de `409` cuando `correctionOutcome` lo pide: «Añadir un
+          // tramo» es donde un turno ya abierto (RN-01, un olvido de salida)
+          // es mas probable que en cualquier otra operacion.
+          if (correctionOutcome === 'superseded') {
+            await problem(
+              route,
+              409,
+              'urn:kronoqr:problem:shift-entry-superseded',
+              'Conflicto con el estado actual',
+              'Ese tramo ya no es la version vigente. Vuelve a cargar la jornada antes de anadir uno nuevo.',
+            )
+
+            return
+          }
+
+          if (correctionOutcome === 'shiftAlreadyOpen') {
+            await problem(
+              route,
+              409,
+              'urn:kronoqr:problem:shift-already-open',
+              'Conflicto con el estado actual',
+              'Esa persona ya tiene un turno abierto. Cierralo o anulalo antes de dejar otro sin salida.',
+            )
+
+            return
+          }
+
+          if (correctionOutcome === 'overlap') {
+            await problem(
+              route,
+              409,
+              'urn:kronoqr:problem:overlapping-shift-entry',
+              'Conflicto con el estado actual',
+              'Las horas indicadas se solapan con otro tramo de esa persona. Revisa la jornada antes de anadir el nuevo.',
+            )
+
+            return
+          }
+
+          const payload = request.postDataJSON() as AddShiftEntryRequest
+          const day = ensureWorkDay(workdaysState, payload.work_date)
+          const newUuid = syntheticShiftEntryUuid()
+          // Normalizado una vez: `AddShiftEntryRequest.clocked_out_at` es
+          // opcional Y nulable (`null` da de alta el tramo abierto), y de aqui
+          // en adelante solo importa si hay hora de salida o no.
+          const clockedOutAt = payload.clocked_out_at ?? null
+          const durationMinutes =
+            clockedOutAt === null ? null : minutesBetween(payload.clocked_in_at, clockedOutAt)
+
+          const entry: WorkDayShiftEntry = {
+            uuid: newUuid,
+            version: 1,
+            status: clockedOutAt === null ? 'open' : 'closed',
+            time_zone: day.time_zone,
+            clocked_in_at: payload.clocked_in_at,
+            clocked_in_at_local: toLocalTimestamp(payload.clocked_in_at, day.time_zone),
+            clocked_in_recorded_at: null,
+            clock_in_source: 'manual_admin',
+            clocked_out_at: clockedOutAt,
+            clocked_out_at_local:
+              clockedOutAt === null ? null : toLocalTimestamp(clockedOutAt, day.time_zone),
+            clocked_out_recorded_at: null,
+            clock_out_source: clockedOutAt === null ? null : 'manual_admin',
+            duration_minutes: durationMinutes,
+            recorded_at: CORRECTION_NOW,
+          }
+
+          day.shift_entries.push(entry)
+          day.corrections.push({
+            shift_entry_uuid: newUuid,
+            action: 'created',
+            performed_at: CORRECTION_NOW,
+            performed_at_local: toLocalTimestamp(CORRECTION_NOW, day.time_zone),
+            performed_by: { uuid: currentUser.uuid, name: currentUser.name },
+            reason_code: payload.reason_code,
+            reason_text: payload.reason_text ?? null,
+            before: null,
+            after: {
+              version: 1,
+              clocked_in_at: entry.clocked_in_at,
+              clocked_out_at: entry.clocked_out_at,
+              worked_minutes: entry.duration_minutes ?? 0,
+            },
+          })
+          recalcWorkDay(day)
+
+          const result: CorrectedShiftEntry = {
+            employee_uuid: payload.employee_uuid,
+            work_date: payload.work_date,
+            action: 'created',
+            shift_entry_uuid: newUuid,
+            superseded_shift_entry_uuid: null,
+            version: 1,
+            status: entry.status,
+            clocked_in_at: entry.clocked_in_at,
+            clocked_out_at: entry.clocked_out_at,
+            daily_total_minutes: day.total_minutes,
+          }
+
+          await json(route, 201, result)
+          return
+        }
+        case 'GET /api/v1/compliance-profile':
+          await json(route, 200, options.complianceProfile ?? COMPLIANCE_PROFILE)
           return
         case 'GET /api/v1/credentials/status': {
           // Con `?key_id=` el servidor devuelve solo a quien le falta
@@ -1303,6 +1938,30 @@ export async function stubManagementApi(
           await json(route, 200, board)
           return
         }
+        case 'GET /api/v1/credentials/instructions-sheet': {
+          // La hoja de instrucciones (tarea 5.11b, RL-05): un PDF por idioma,
+          // sin datos de ninguna persona. Aqui basta con que la peticion lleve
+          // el `locale` correcto y que el panel reciba algo descargable con el
+          // nombre que trae `Content-Disposition`; el contenido de verdad lo
+          // prueba el backend.
+          const sheetLocale = url.searchParams.get('locale') ?? branding.locales.default
+
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/pdf',
+            headers: {
+              'Cache-Control': 'no-store',
+              // El contrato y el servidor de verdad llaman al fichero
+              // `hoja-empleado-<locale>.pdf` (`docs/api/openapi.yaml`); el
+              // doble tenia otro nombre y la prueba lo afirmaba sin comprobar
+              // contra el contrato (hallazgo 7 de la revision).
+              'Content-Disposition': `attachment; filename=hoja-empleado-${sheetLocale}.pdf`,
+            },
+            body: Buffer.from('contenido-de-prueba-de-la-hoja'),
+          })
+
+          return
+        }
         case 'GET /api/v1/attendance/live':
           await json(route, 200, options.liveBoard ?? LIVE_BOARD)
           return
@@ -1310,8 +1969,9 @@ export async function stubManagementApi(
           // Informe de horas por periodo (RF-IN-01..03, tarea 2.8). Un mes de
           // una persona con un cambio de contrato a mitad de mes, que es el caso
           // en el que lo contratado NO es una regla de tres sobre el ultimo
-          // contrato.
-          await json(route, 200, PERIOD_REPORT)
+          // contrato. Los criterios de `meta` viajan en el idioma de quien pide
+          // el informe, igual que hace el servidor de verdad (hallazgo 7).
+          await json(route, 200, periodReportFor(requestLocaleOf(request)))
           return
         case 'GET /api/v1/reports/period/export':
           // La descarga del mismo informe (RF-IN-04, tarea 2.9). El cuerpo es un
@@ -1337,6 +1997,26 @@ export async function stubManagementApi(
                 (url.searchParams.get('format') ?? 'csv'),
               'X-Kronoqr-Report-Digest': REPORT_DIGEST,
               'X-Kronoqr-Report-Rows': String(PERIOD_REPORT.meta.row_count),
+            },
+            body: 'contenido-de-prueba',
+          })
+
+          return
+        case 'GET /api/v1/reports/legal-export':
+          // Exportacion normalizada para la Inspeccion de Trabajo (RF-IN-05,
+          // RL-06). Igual que el informe de periodo: aqui no importa el
+          // contenido del CSV -eso lo prueba el backend-, solo que la peticion
+          // lleve el periodo pedido y que las dos cifras de la cabecera lleguen
+          // al panel para que pueda decir cuanto entrego.
+          await route.fulfill({
+            status: 200,
+            contentType: 'text/csv; charset=utf-8',
+            headers: {
+              'Content-Disposition':
+                `attachment; filename=registro-horario-${url.searchParams.get('from') ?? ''}_` +
+                `${url.searchParams.get('to') ?? ''}.csv`,
+              'X-Kronoqr-Export-Shift-Rows': '21',
+              'X-Kronoqr-Export-Correction-Rows': '1',
             },
             body: 'contenido-de-prueba',
           })
@@ -1508,6 +2188,20 @@ export async function logInAsAdmin(page: Page): Promise<void> {
   await page.getByLabel(/Contraseña/).fill('una-contraseña-larga-y-valida')
   await page.getByRole('button', { name: 'Entrar' }).click()
   await page.waitForURL('**/employees')
+}
+
+/**
+ * Entra como `AUDITOR_USER` (RF-ID-02): `attendance:read` sin
+ * `employees:*` ni `attendance:correct`, asi que la primera seccion a su
+ * alcance es la exportacion legal (doc 02 §7.3, `router/guards.ts`). Exige
+ * `stubManagementApi(page, { role: 'auditor' })`.
+ */
+export async function logInAsAuditor(page: Page): Promise<void> {
+  await page.goto('/login')
+  await page.getByLabel(/Correo electrónico/).fill(AUDITOR_USER.email)
+  await page.getByLabel(/Contraseña/).fill('una-contraseña-larga-y-valida')
+  await page.getByRole('button', { name: 'Entrar' }).click()
+  await page.waitForURL('**/reports/legal-export')
 }
 
 /**

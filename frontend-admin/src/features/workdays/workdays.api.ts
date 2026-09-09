@@ -5,10 +5,13 @@
 // tampoco se convierte ninguna hora: las marcas ya vienen en UTC y resueltas en
 // la zona del centro (regla dura 3).
 //
-// **Rectificar no pasa por aqui.** Corregir un tramo es `PATCH
-// /shift-entries/{uuid}`, que exige otro ambito de token. Que esta pantalla solo
-// sepa leer no es una comodidad: es lo que permite que un rol de solo lectura la
-// abra sin poder tocar el registro.
+// **Rectificar sigue sin pasar por aqui, a proposito.** Añadir un tramo,
+// corregirlo o anularlo (RF-PA-04) es `corrections.api.ts`, que exige el
+// ambito `attendance:correct` y no el `attendance:read` con el que se puede
+// pedir esta lectura. Dos ficheros y no uno es lo que permite que un rol de
+// solo lectura (el `auditor`, `attendance:read` sin `attendance:correct`) siga
+// pudiendo consultar el registro sin que este modulo le ofrezca, ni de lejos,
+// nada que escriba en el.
 import { requestJson } from '@kronoqr/web-kit/http'
 import type { EmployeeWorkDays } from '@/shared/api/types'
 

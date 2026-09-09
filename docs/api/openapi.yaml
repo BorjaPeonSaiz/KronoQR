@@ -3805,6 +3805,80 @@ paths:
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
+  /api/v1/credentials/instructions-sheet:
+    get:
+      operationId: getCredentialInstructionsSheet
+      summary: La hoja de instrucciones que se entrega con la tarjeta
+      description: |
+        Devuelve **un PDF A4 de una sola cara** con las instrucciones basicas de
+        fichaje para el empleado: como fichar, que significa cada confirmacion
+        —incluida «registrado, pendiente de sincronizar» cuando el quiosco esta
+        sin red—, que hacer sin tarjeta (PIN de respaldo), como consultar el
+        propio registro en el portal y a quien avisar (tarea 5.11b, RL-05).
+
+        **La produce el producto y no el paquete de entrega** (ficha 5.11b,
+        decision 1): lleva la marca de la instalacion (RF-PD-08), la direccion del
+        portal de ESTA instalacion y sale en cualquiera de los idiomas activos
+        (`LOCALE_AVAILABLE`). Un PDF fijo en `docs/` no podria saber ninguna de
+        las tres cosas.
+
+        **Se entrega en el mismo acto que la tarjeta y el PIN** (tareas 1.10 y
+        1.13): un unico momento presencial. El dialogo de entrega del panel lo
+        recuerda.
+
+        **No lleva ningun dato personal ni ningun secreto**: es el mismo
+        documento para toda la plantilla. Por eso es `GET` y no cambia el estado
+        de nada, a diferencia de `print`. Aun asi va con `Cache-Control:
+        no-store`: lleva la marca y la direccion vigentes en el momento, y un
+        proxy no debe servir la de ayer.
+
+        **Sin red al renderizar**: pictogramas SVG y logotipo incrustados
+        (ADR-016).
+      tags: [Identity]
+      security:
+        - managementToken: ['credentials:*']
+      parameters:
+        - name: locale
+          in: query
+          required: false
+          description: |
+            Idioma de la hoja. Tiene que ser uno de los idiomas activos de la
+            instalacion (`LOCALE_AVAILABLE`); cualquier otro es `422`. Sin el, se
+            usa `LOCALE_DEFAULT`.
+          schema:
+            type: string
+            pattern: '^[a-z]{2}$'
+            example: es
+      responses:
+        '200':
+          description: El PDF de la hoja, una sola cara A4.
+          headers:
+            Cache-Control:
+              description: 'Siempre `no-store`: la marca y la direccion del portal son las del momento.'
+              schema:
+                type: string
+                examples: ['no-store, private']
+            Content-Disposition:
+              description: Adjunto. El nombre lleva el idioma y ningun dato de persona.
+              schema:
+                type: string
+                examples: ['attachment; filename="hoja-empleado-es.pdf"']
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
   /api/v1/shift-entries:
     post:
       operationId: addShiftEntry
@@ -3867,9 +3941,72 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '409':
-          $ref: '#/components/responses/Conflict'
+          description: |
+            El alta choca con lo que ya hay registrado en esa jornada. La
+            peticion es valida en si misma; lo que no encaja es el estado, asi
+            que no sirve corregir el formulario: hay que releer la jornada.
+
+            **`type` distingue las dos causas**, porque son dos acciones
+            distintas para quien corrige:
+
+            - `urn:kronoqr:problem:shift-already-open` — esa persona ya tiene un
+              turno abierto (RN-01). Hay que cerrarlo o anularlo antes.
+            - `urn:kronoqr:problem:overlapping-shift-entry` — las horas pisan a
+              otro tramo vigente (RN-02). Hay que revisar las marcas.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                turno-ya-abierto:
+                  value:
+                    type: 'urn:kronoqr:problem:shift-already-open'
+                    title: Conflicto con el estado actual
+                    status: 409
+                    detail: Esa persona ya tiene un turno abierto. Cierralo o anulalo antes de dejar otro sin salida.
+                solape:
+                  value:
+                    type: 'urn:kronoqr:problem:overlapping-shift-entry'
+                    title: Conflicto con el estado actual
+                    status: 409
+                    detail: Las horas indicadas se solapan con otro tramo de esa persona. Revisa la jornada antes de corregir.
         '422':
-          $ref: '#/components/responses/ValidationFailed'
+          description: |
+            La peticion no se puede aplicar tal cual. `errors` lleva el detalle
+            por campo para pintarlo junto al formulario, sin releer nada.
+
+            **`type` distingue las dos causas:**
+
+            - `urn:kronoqr:problem:validation-failed` — un campo falta, no vale o
+              referencia algo que no existe.
+            - `urn:kronoqr:problem:correction-would-change-work-date` — la hora de
+              entrada llevaria la jornada a **otro dia civil** (RN-05, ADR-035).
+              Es `422` y no `409` porque no hay nada que releer: mover horas de un
+              dia a otro son dos actos separados y auditados —anular en origen,
+              dar de alta en destino—, y el `detail` del campo lo dice.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ValidationProblem'
+              examples:
+                falta-un-campo:
+                  value:
+                    type: 'urn:kronoqr:problem:validation-failed'
+                    title: Peticion no valida
+                    status: 422
+                    detail: Revisa los campos indicados.
+                    errors:
+                      reason_code:
+                        - El motivo de la correccion es obligatorio.
+                cambiaria-de-jornada:
+                  value:
+                    type: 'urn:kronoqr:problem:correction-would-change-work-date'
+                    title: Peticion no valida
+                    status: 422
+                    detail: Revisa los campos indicados.
+                    errors:
+                      clocked_in_at:
+                        - 'Esa hora de entrada llevaria la jornada a otro dia. Para mover las horas de un dia a otro, anula el tramo en la jornada de origen y dalo de alta en la de destino: son dos acciones, cada una con su motivo.'
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
@@ -3952,6 +4089,17 @@ paths:
             Ese tramo ya no es la version vigente —lo corrigio o lo anulo alguien
             antes— o la correccion dejaria dos turnos abiertos o dos tramos
             solapados (RN-01, RN-02, ADR-026). Vuelve a leer la jornada.
+
+            **`type` distingue las tres causas**, y no es un matiz de
+            depuracion: cada una lleva a una pantalla distinta del panel.
+
+            - `urn:kronoqr:problem:shift-entry-superseded` — el `{uuid}` existio y
+              ya no es la version vigente (ADR-035). Hay que recargar la jornada
+              y repetir sobre el identificador nuevo.
+            - `urn:kronoqr:problem:shift-already-open` — la correccion dejaria a
+              esa persona con dos turnos abiertos (RN-01).
+            - `urn:kronoqr:problem:overlapping-shift-entry` — las horas pisarian a
+              otro tramo vigente (RN-02).
           content:
             application/problem+json:
               schema:
@@ -3959,12 +4107,59 @@ paths:
               examples:
                 ya-sustituido:
                   value:
-                    type: 'urn:kronoqr:problem:conflict'
+                    type: 'urn:kronoqr:problem:shift-entry-superseded'
                     title: Conflicto con el estado actual
                     status: 409
                     detail: Ese tramo ya no es la version vigente. Vuelve a cargar la jornada antes de corregir.
+                turno-ya-abierto:
+                  value:
+                    type: 'urn:kronoqr:problem:shift-already-open'
+                    title: Conflicto con el estado actual
+                    status: 409
+                    detail: Esa persona ya tiene un turno abierto. Cierralo o anulalo antes de dejar otro sin salida.
+                solape:
+                  value:
+                    type: 'urn:kronoqr:problem:overlapping-shift-entry'
+                    title: Conflicto con el estado actual
+                    status: 409
+                    detail: Las horas indicadas se solapan con otro tramo de esa persona. Revisa la jornada antes de corregir.
         '422':
-          $ref: '#/components/responses/ValidationFailed'
+          description: |
+            La peticion no se puede aplicar tal cual. `errors` lleva el detalle
+            por campo para pintarlo junto al formulario, sin releer nada.
+
+            **`type` distingue las dos causas:**
+
+            - `urn:kronoqr:problem:validation-failed` — un campo falta o no vale,
+              la salida es anterior a la entrada, o el `PATCH` no cambia nada.
+            - `urn:kronoqr:problem:correction-would-change-work-date` — mover la
+              entrada que abre la jornada al otro lado de la medianoche local
+              llevaria esas horas a **otra jornada** (RN-05, ADR-035). Es `422` y
+              no `409` porque no hay nada que releer: son dos actos separados y
+              auditados —anular en origen, dar de alta en destino—.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ValidationProblem'
+              examples:
+                salida-antes-que-entrada:
+                  value:
+                    type: 'urn:kronoqr:problem:validation-failed'
+                    title: Peticion no valida
+                    status: 422
+                    detail: Revisa los campos indicados.
+                    errors:
+                      clocked_out_at:
+                        - La hora de salida tiene que ser posterior a la de entrada.
+                cambiaria-de-jornada:
+                  value:
+                    type: 'urn:kronoqr:problem:correction-would-change-work-date'
+                    title: Peticion no valida
+                    status: 422
+                    detail: Revisa los campos indicados.
+                    errors:
+                      clocked_in_at:
+                        - 'Esa hora de entrada llevaria la jornada a otro dia. Para mover las horas de un dia a otro, anula el tramo en la jornada de origen y dalo de alta en la de destino: son dos acciones, cada una con su motivo.'
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
@@ -4039,6 +4234,12 @@ paths:
           description: |
             Ese tramo ya estaba anulado o ya fue sustituido por una version
             posterior (ADR-026). Vuelve a leer la jornada.
+
+            **Una sola causa y un solo `type`:**
+            `urn:kronoqr:problem:shift-entry-superseded`. Anular no comprueba
+            RN-01 ni RN-02 —quitar un tramo nunca abre un turno de mas ni crea un
+            solape—, asi que aqui no aparecen los otros dos tipos de conflicto de
+            `POST` y `PATCH`.
           content:
             application/problem+json:
               schema:
@@ -4046,7 +4247,7 @@ paths:
               examples:
                 ya-anulado:
                   value:
-                    type: 'urn:kronoqr:problem:conflict'
+                    type: 'urn:kronoqr:problem:shift-entry-superseded'
                     title: Conflicto con el estado actual
                     status: 409
                     detail: Ese tramo ya no es la version vigente. Vuelve a cargar la jornada antes de anular.

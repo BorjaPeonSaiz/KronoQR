@@ -1923,6 +1923,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/credentials/instructions-sheet": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * La hoja de instrucciones que se entrega con la tarjeta
+         * @description Devuelve **un PDF A4 de una sola cara** con las instrucciones basicas de
+         *     fichaje para el empleado: como fichar, que significa cada confirmacion
+         *     —incluida «registrado, pendiente de sincronizar» cuando el quiosco esta
+         *     sin red—, que hacer sin tarjeta (PIN de respaldo), como consultar el
+         *     propio registro en el portal y a quien avisar (tarea 5.11b, RL-05).
+         *
+         *     **La produce el producto y no el paquete de entrega** (ficha 5.11b,
+         *     decision 1): lleva la marca de la instalacion (RF-PD-08), la direccion del
+         *     portal de ESTA instalacion y sale en cualquiera de los idiomas activos
+         *     (`LOCALE_AVAILABLE`). Un PDF fijo en `docs/` no podria saber ninguna de
+         *     las tres cosas.
+         *
+         *     **Se entrega en el mismo acto que la tarjeta y el PIN** (tareas 1.10 y
+         *     1.13): un unico momento presencial. El dialogo de entrega del panel lo
+         *     recuerda.
+         *
+         *     **No lleva ningun dato personal ni ningun secreto**: es el mismo
+         *     documento para toda la plantilla. Por eso es `GET` y no cambia el estado
+         *     de nada, a diferencia de `print`. Aun asi va con `Cache-Control:
+         *     no-store`: lleva la marca y la direccion vigentes en el momento, y un
+         *     proxy no debe servir la de ayer.
+         *
+         *     **Sin red al renderizar**: pictogramas SVG y logotipo incrustados
+         *     (ADR-016).
+         */
+        get: operations["getCredentialInstructionsSheet"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/shift-entries": {
         parameters: {
             query?: never;
@@ -10692,6 +10735,42 @@ export interface operations {
             429: components["responses"]["TooManyRequests"];
         };
     };
+    getCredentialInstructionsSheet: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Idioma de la hoja. Tiene que ser uno de los idiomas activos de la
+                 *     instalacion (`LOCALE_AVAILABLE`); cualquier otro es `422`. Sin el, se
+                 *     usa `LOCALE_DEFAULT`.
+                 */
+                locale?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description El PDF de la hoja, una sola cara A4. */
+            200: {
+                headers: {
+                    /** @description Siempre `no-store`: la marca y la direccion del portal son las del momento. */
+                    "Cache-Control"?: string;
+                    /** @description Adjunto. El nombre lleva el idioma y ningun dato de persona. */
+                    "Content-Disposition"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
     addShiftEntry: {
         parameters: {
             query?: never;
@@ -10716,8 +10795,49 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
-            422: components["responses"]["ValidationFailed"];
+            /**
+             * @description El alta choca con lo que ya hay registrado en esa jornada. La
+             *     peticion es valida en si misma; lo que no encaja es el estado, asi
+             *     que no sirve corregir el formulario: hay que releer la jornada.
+             *
+             *     **`type` distingue las dos causas**, porque son dos acciones
+             *     distintas para quien corrige:
+             *
+             *     - `urn:kronoqr:problem:shift-already-open` — esa persona ya tiene un
+             *       turno abierto (RN-01). Hay que cerrarlo o anularlo antes.
+             *     - `urn:kronoqr:problem:overlapping-shift-entry` — las horas pisan a
+             *       otro tramo vigente (RN-02). Hay que revisar las marcas.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description La peticion no se puede aplicar tal cual. `errors` lleva el detalle
+             *     por campo para pintarlo junto al formulario, sin releer nada.
+             *
+             *     **`type` distingue las dos causas:**
+             *
+             *     - `urn:kronoqr:problem:validation-failed` — un campo falta, no vale o
+             *       referencia algo que no existe.
+             *     - `urn:kronoqr:problem:correction-would-change-work-date` — la hora de
+             *       entrada llevaria la jornada a **otro dia civil** (RN-05, ADR-035).
+             *       Es `422` y no `409` porque no hay nada que releer: mover horas de un
+             *       dia a otro son dos actos separados y auditados —anular en origen,
+             *       dar de alta en destino—, y el `detail` del campo lo dice.
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ValidationProblem"];
+                };
+            };
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -10764,6 +10884,17 @@ export interface operations {
              * @description Ese tramo ya no es la version vigente —lo corrigio o lo anulo alguien
              *     antes— o la correccion dejaria dos turnos abiertos o dos tramos
              *     solapados (RN-01, RN-02, ADR-026). Vuelve a leer la jornada.
+             *
+             *     **`type` distingue las tres causas**, y no es un matiz de
+             *     depuracion: cada una lleva a una pantalla distinta del panel.
+             *
+             *     - `urn:kronoqr:problem:shift-entry-superseded` — el `{uuid}` existio y
+             *       ya no es la version vigente (ADR-035). Hay que recargar la jornada
+             *       y repetir sobre el identificador nuevo.
+             *     - `urn:kronoqr:problem:shift-already-open` — la correccion dejaria a
+             *       esa persona con dos turnos abiertos (RN-01).
+             *     - `urn:kronoqr:problem:overlapping-shift-entry` — las horas pisarian a
+             *       otro tramo vigente (RN-02).
              */
             409: {
                 headers: {
@@ -10773,7 +10904,28 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            422: components["responses"]["ValidationFailed"];
+            /**
+             * @description La peticion no se puede aplicar tal cual. `errors` lleva el detalle
+             *     por campo para pintarlo junto al formulario, sin releer nada.
+             *
+             *     **`type` distingue las dos causas:**
+             *
+             *     - `urn:kronoqr:problem:validation-failed` — un campo falta o no vale,
+             *       la salida es anterior a la entrada, o el `PATCH` no cambia nada.
+             *     - `urn:kronoqr:problem:correction-would-change-work-date` — mover la
+             *       entrada que abre la jornada al otro lado de la medianoche local
+             *       llevaria esas horas a **otra jornada** (RN-05, ADR-035). Es `422` y
+             *       no `409` porque no hay nada que releer: son dos actos separados y
+             *       auditados —anular en origen, dar de alta en destino—.
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ValidationProblem"];
+                };
+            };
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -10816,6 +10968,12 @@ export interface operations {
             /**
              * @description Ese tramo ya estaba anulado o ya fue sustituido por una version
              *     posterior (ADR-026). Vuelve a leer la jornada.
+             *
+             *     **Una sola causa y un solo `type`:**
+             *     `urn:kronoqr:problem:shift-entry-superseded`. Anular no comprueba
+             *     RN-01 ni RN-02 —quitar un tramo nunca abre un turno de mas ni crea un
+             *     solape—, asi que aqui no aparecen los otros dos tipos de conflicto de
+             *     `POST` y `PATCH`.
              */
             409: {
                 headers: {

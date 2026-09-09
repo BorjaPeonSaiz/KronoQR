@@ -23,16 +23,17 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  * `heartbeat:write`, y ninguno de los tres abre esta puerta. Es la prueba de
  * RS-04.
  *
- * **Cada acto tiene su propia habilidad, aunque hoy las cinco resuelvan al mismo
+ * **Cada acto tiene su propia habilidad, aunque hoy las seis resuelvan al mismo
  * conjunto.** Emitir una tarjeta, **acuñar su QR**, firmar que se entrego, dejar
- * a alguien sin poder fichar y leer la lista nominal de quien no tiene tarjeta
- * son cinco responsabilidades distintas. El dia que se repartan —un recepcionista
+ * a alguien sin poder fichar, leer la lista nominal de quien no tiene tarjeta y
+ * descargar la hoja que se entrega con ella (tarea 5.11b) son seis
+ * responsabilidades distintas. El dia que se repartan —un recepcionista
  * que solo registra entregas, un auditor que solo lee el panel—, una sola lista
  * obligaria a separarlas justo cuando se cometen los errores. Escribirlas
- * separadas hoy cuesta cuatro metodos; separarlas despues cuesta revisar cada
+ * separadas hoy cuesta seis metodos; separarlas despues cuesta revisar cada
  * llamada.
  *
- * **`print` es la mas seria de las cinco y conviene decirlo.** Es el acto que
+ * **`print` es la mas seria de las seis y conviene decirlo.** Es el acto que
  * acuña el QR (ADR-034): quien pueda invocarlo recibe por respuesta un documento
  * con el que se puede fichar en nombre de otra persona. No es «generar un PDF».
  */
@@ -41,9 +42,9 @@ final class CredentialPolicy
     /**
      * `rrhh+` del Anexo B, que en la Fase 1 resuelve a `{admin, rrhh}`.
      *
-     * Se escribe **una vez** y la usan las cinco habilidades: si cada metodo
+     * Se escribe **una vez** y la usan las seis habilidades: si cada metodo
      * tuviera su propia lista literal, el dia que un rol nuevo entre en el
-     * catalogo habria cinco sitios donde acordarse, y el que se olvidara seria el
+     * catalogo habria seis sitios donde acordarse, y el que se olvidara seria el
      * que nadie prueba.
      *
      * @return list<UserRole>
@@ -70,6 +71,28 @@ final class CredentialPolicy
      * distinta seleccion, y quien puede una puede la otra.
      */
     public function print(ManagementActor $actor): bool
+    {
+        return $actor->actsAs(...self::credentialManagers());
+    }
+
+    /**
+     * Descargar la hoja de instrucciones que se entrega con la tarjeta (tarea
+     * 5.11b, RL-05).
+     *
+     * **Los mismos roles que la habilidad `print`, y no es pereza.** La hoja no lleva
+     * ningun dato de nadie ni ningun secreto —es el mismo documento para toda la
+     * plantilla— asi que la lista no la decide lo que revela, sino **con quien va
+     * en el mismo acto**: se imprime a la vez que la tarjeta y se entrega en la
+     * misma conversacion que la tarjeta y el PIN (tareas 1.10 y 1.13). Quien no
+     * puede imprimir una tarjeta no tiene ningun momento en el que necesitar esta
+     * hoja.
+     *
+     * Metodo propio y no un caso mas de `print` por lo mismo que las otras cinco
+     * habilidades estan separadas: el dia que un recepcionista solo registre
+     * entregas, esta sera la primera que se le conceda sin darle tambien la
+     * potestad de acuñar QR.
+     */
+    public function printInstructionsSheet(ManagementActor $actor): bool
     {
         return $actor->actsAs(...self::credentialManagers());
     }

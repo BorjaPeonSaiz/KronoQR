@@ -800,6 +800,53 @@ alerta con su regla, y el paquete de diagnóstico y la exportación íntegra
 con el histórico real en lugar de not_installed.
 ```
 
+#### 6.5.8 Guía de RRHH, guía del portal y hoja del empleado (tarea 5.11b)
+
+```text
+Ejecuta la tarea 5.11b del plan («Guía de uso para RRHH y hoja de
+instrucciones del empleado», RL-05 y la superficie de RF-PA-*, RF-IN-*).
+La ficha ejecutable está en plan implementacion/05-fase-5-productizacion.md
+→ «Tarea 5.11b», con las doce decisiones ya escritas: léelas antes de nada,
+porque fijan los nombres de las capturas, los pares en inglés y quién
+produce la hoja.
+
+Orquesta con ficheros disjuntos, SEIS agentes en paralelo:
+backend-laravel (endpoint GET /credentials/instructions-sheet, puerto
+InstructionsSheetRenderer con Browsershot y doble, lang/{es,en}/
+instructions-sheet.php, policy, feature + contrato + autorización negativa
+por rol, integración «una cara» con Chromium real, runbook
+tarjeta-perdida-o-rota.md NO: ese es de producto-licencia),
+frontend-panel (botón «Hoja de instrucciones» por idioma activo, recordatorio
+de las tres cosas en el diálogo de entrega, E2E, y el generador de capturas
+hr-guide.screenshots.ts con los catorce nombres de la decisión 4),
+frontend-portal-empleado (Playwright y doble del portal desde cero, cuatro
+capturas a 412×915; el lock se regenera desde Linux sin node_modules),
+frontend-quiosco (sheet.screenshots.ts con las tres confirmaciones),
+producto-licencia (guia-rrhh.md, guia-portal-empleado.md, hoja-empleado.md
+en español, runbook tarjeta-perdida-o-rota.md, índice de runbooks) y
+qa-testing (ClientDocumentationTest: ocho pares, identificadores del código
+prohibidos, nueve motivos con la etiqueta del panel, frases prohibidas,
+mínimos de capturas, texto de la hoja atado a lang/). Después, las tres
+traducciones al inglés en paralelo sobre los textos cerrados, y
+revisor-codigo + seguridad-cumplimiento (/revision-cumplimiento) antes de
+integrar.
+
+Los innegociables:
+- Lenguaje de negocio (jornada, tramo, incidencia, corrección, credencial);
+  ningún identificador del código en las guías (prueba)
+- Ninguna captura con datos reales: dobles del E2E, sello img/VERSION
+- Ni credencial en móvil, ni biometría, ni PIN por correo (prueba)
+- La hoja cabe en una cara (prueba con Chromium real) y se entrega con la
+  tarjeta y el PIN en un solo acto
+- Referencia cruzada única: lo que ya explica operacion.md, un runbook o
+  configuracion.md se enlaza, no se repite
+- Ausencias (3.10) no existen todavía: no se documentan ni se prometen
+
+Criterio de terminado: la DoD de la ficha. Los cuatro recorridos por una
+persona ajena siguiendo solo las guías no los sustituye ningún script y
+quedan pendientes del usuario.
+```
+
 ### 6.6 Cierre de fase
 
 ```
