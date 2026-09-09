@@ -14,6 +14,8 @@ use App\Modules\Product\Application\Port\DataExportRepository;
 use App\Modules\Product\Application\Port\DataExportSource;
 use App\Modules\Product\Application\Port\DiagnosticsBundleWriter;
 use App\Modules\Product\Application\Port\DoctorTranslator;
+use App\Modules\Product\Application\Port\ErrorEventRepository;
+use App\Modules\Product\Application\Port\ErrorMetrics;
 use App\Modules\Product\Application\Port\LicenseMetrics;
 use App\Modules\Product\Application\Port\LicenseRepository;
 use App\Modules\Product\Application\Port\LicenseStatePublisher;
@@ -42,7 +44,9 @@ use App\Modules\Product\Application\UseCase\GetLicenseStatusHandler;
 use App\Modules\Product\Application\UseCase\GetSettingsHandler;
 use App\Modules\Product\Application\UseCase\GrantSupportAccessHandler;
 use App\Modules\Product\Application\UseCase\ListDataExportsHandler;
+use App\Modules\Product\Application\UseCase\PruneErrorEvents;
 use App\Modules\Product\Application\UseCase\PurgeExpiredDataExportsHandler;
+use App\Modules\Product\Application\UseCase\RecordErrorEvent;
 use App\Modules\Product\Application\UseCase\RecordPlanUsageHandler;
 use App\Modules\Product\Application\UseCase\RecordSupportAccessUseHandler;
 use App\Modules\Product\Application\UseCase\RequestDataExportHandler;
@@ -52,12 +56,14 @@ use App\Modules\Product\Domain\Model\DataExport as DataExportModel;
 use App\Modules\Product\Domain\Model\SupportGrant as SupportGrantModel;
 use App\Modules\Product\Domain\ValueObject\ComplianceProfileSnapshot;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsBundle;
+use App\Modules\Product\Domain\ValueObject\ErrorEvent;
 use App\Modules\Product\Domain\ValueObject\LicenseStatus;
 use App\Modules\Product\Domain\ValueObject\ResolvedSettings;
 use App\Modules\Product\Domain\ValueObject\SetupState;
 use App\Modules\Product\Http\Policy\ComplianceProfilePolicy;
 use App\Modules\Product\Http\Policy\DataExportPolicy;
 use App\Modules\Product\Http\Policy\DiagnosticsPolicy;
+use App\Modules\Product\Http\Policy\ErrorEventPolicy;
 use App\Modules\Product\Http\Policy\LicensePolicy;
 use App\Modules\Product\Http\Policy\SettingsPolicy;
 use App\Modules\Product\Http\Policy\SetupPolicy;
@@ -78,10 +84,14 @@ use App\Modules\Product\Infrastructure\Adapter\LoggingSettingsAnomalyReporter;
 use App\Modules\Product\Infrastructure\Adapter\QueuedDataExportDispatcher;
 use App\Modules\Product\Infrastructure\Adapter\SanctumSupportTokenIssuer;
 use App\Modules\Product\Infrastructure\Branding\LogoFileInspector;
+use App\Modules\Product\Infrastructure\Capture\ExecutionContext;
+use App\Modules\Product\Infrastructure\Capture\ServerErrorReporter;
 use App\Modules\Product\Infrastructure\Console\LicenseActivateCommand;
 use App\Modules\Product\Infrastructure\Console\LicenseShowCommand;
 use App\Modules\Product\Infrastructure\Console\ProductDiagnosticsCommand;
 use App\Modules\Product\Infrastructure\Console\ProductDoctorCommand;
+use App\Modules\Product\Infrastructure\Console\ProductErrorsCommand;
+use App\Modules\Product\Infrastructure\Console\ProductErrorsPruneCommand;
 use App\Modules\Product\Infrastructure\Console\ProductExportAllCommand;
 use App\Modules\Product\Infrastructure\Console\ProductTelemetryCommand;
 use App\Modules\Product\Infrastructure\Console\SupportGrantCommand;
@@ -102,6 +112,7 @@ use App\Modules\Product\Infrastructure\Diagnostics\LaravelDoctorTranslator;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\ApplicationProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\DatabaseProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\DiskProbe;
+use App\Modules\Product\Infrastructure\Diagnostics\Probe\ErrorHistoryProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\LicenseProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\MailProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\PermissionsProbe;
@@ -113,11 +124,13 @@ use App\Modules\Product\Infrastructure\Export\TranslatedDataExportGuide;
 use App\Modules\Product\Infrastructure\Export\ZipDataExportArchiveWriter;
 use App\Modules\Product\Infrastructure\Listener\ObservePlanLimits;
 use App\Modules\Product\Infrastructure\Metrics\RedisComplianceProfileMetrics;
+use App\Modules\Product\Infrastructure\Metrics\RedisErrorMetrics;
 use App\Modules\Product\Infrastructure\Metrics\RedisLicenseMetrics;
 use App\Modules\Product\Infrastructure\Metrics\RedisSettingsMetrics;
 use App\Modules\Product\Infrastructure\Persistence\DatabaseComplianceProfileRepository;
 use App\Modules\Product\Infrastructure\Persistence\DatabaseDataExportRepository;
 use App\Modules\Product\Infrastructure\Persistence\DatabaseDataExportSource;
+use App\Modules\Product\Infrastructure\Persistence\DatabaseErrorEventRepository;
 use App\Modules\Product\Infrastructure\Persistence\DatabaseLicenseRepository;
 use App\Modules\Product\Infrastructure\Persistence\DatabasePlanUsageCounter;
 use App\Modules\Product\Infrastructure\Persistence\DatabaseSetupFacts;
@@ -132,6 +145,7 @@ use App\Modules\Shared\Application\Port\BrandingLogoReader;
 use App\Modules\Shared\Application\Port\BrandingProvider;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
+use App\Modules\Shared\Application\Port\ErrorEventSink;
 use App\Modules\Shared\Application\Port\FeatureGate;
 use App\Modules\Shared\Application\Port\LocalePolicyProvider;
 use App\Modules\Shared\Application\Port\ManagementActor;
@@ -142,10 +156,12 @@ use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Bus\Dispatcher as BusDispatcher;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Contracts\Config\Repository as ConfigRepository;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\Redis\Factory as Redis;
 use Illuminate\Contracts\Translation\Translator;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Client\Factory as HttpClient;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
@@ -155,6 +171,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
+use Throwable;
 
 /**
  * Modulo Product — configuracion de instalacion, perfiles de cumplimiento,
@@ -214,6 +231,26 @@ final class ProductServiceProvider extends ServiceProvider
      * si. Ver el comentario de `RateLimiter::for('data-export', ...)`.
      */
     private const int DATA_EXPORT_IP_BUDGET_FACTOR = 4;
+
+    /**
+     * Lo mismo para `throttle:client-errors` (RF-PD-15) y por el mismo caso
+     * real: en un hotel, recepcion, direccion y el despacho de RRHH salen a
+     * internet por la misma IP publica. Con el mismo techo en los dos ejes,
+     * tres personas con el panel abierto se cortarian entre si al drenar sus
+     * buffers, y lo unico que se perderia serian errores que nadie mas guarda.
+     */
+    private const int CLIENT_ERRORS_IP_BUDGET_FACTOR = 4;
+
+    /**
+     * La conexion por la que se ESCRIBE el historico de errores (RF-PD-15,
+     * decision 6 de la ficha 5.12).
+     *
+     * Misma base, mismo rol y **otra sesion de PostgreSQL**: es lo que hace que
+     * guardar un error no dependa del estado de la transaccion que acaba de
+     * fallar. El razonamiento completo esta en `config/database.php`, junto a la
+     * definicion de la conexion.
+     */
+    private const string ERROR_HISTORY_CONNECTION = 'error_events';
 
     public function register(): void
     {
@@ -350,6 +387,198 @@ final class ProductServiceProvider extends ServiceProvider
         $this->registerDataExport();
 
         $this->registerTelemetry();
+
+        $this->registerErrorHistory();
+
+        $this->registerErrorCapture();
+    }
+
+    /**
+     * El historico de errores agrupado por huella (**RF-PD-15**, tarea 5.12).
+     *
+     * ## Las DOS conexiones, que es lo unico raro de este metodo
+     *
+     * El repositorio recibe la conexion normal para leer, resolver y purgar, y
+     * **la conexion `error_events` para escribir**. No son dos bases ni dos
+     * roles: es la misma con el mismo usuario y otra **sesion** de PostgreSQL.
+     *
+     * Sin ella, el `INSERT` del error entraria dentro de la transaccion que
+     * acaba de fallar y se revertiria con ella —el unico rastro del error
+     * desapareceria justo por ser un error— o chocaria contra un `25P02` si
+     * PostgreSQL ya la aborto, convirtiendo un error en dos (regla dura 19). El
+     * comentario largo esta en `config/database.php`, junto a la conexion.
+     *
+     * ## `ErrorEventSink` se enlaza aqui, y es lo que rompe la dependencia
+     *
+     * El puerto vive en `Shared` porque quien reporta no es solo `Product`: el
+     * latido del quiosco lo procesa `Kiosk` y el enganche del manejador de
+     * excepciones atiende a cualquier modulo, y ninguno puede importar `Product`
+     * (doc 02 §1.6). El adaptador es el caso de uso {@see RecordErrorEvent}, que
+     * es el **unico camino** por el que algo entra en la tabla: es lo que
+     * permite afirmar que ahi no hay ni un nombre (regla dura 21).
+     *
+     * ## `bind()` y no `scoped()`
+     *
+     * Al contrario que la configuracion o la marca, aqui no hay nada que
+     * memorizar: cada escritura es una sentencia y cada lectura una consulta. Y
+     * hay una razon mas fuerte: un `scoped()` guardaria dentro de la peticion un
+     * objeto con una conexion dentro, y esta es justamente la clase que tiene que
+     * funcionar cuando la conexion de la peticion esta rota.
+     */
+    private function registerErrorHistory(): void
+    {
+        $this->app->bind(
+            ErrorMetrics::class,
+            static fn (Application $app): RedisErrorMetrics => new RedisErrorMetrics($app->make(Redis::class)),
+        );
+
+        $this->app->bind(
+            ErrorEventRepository::class,
+            static fn (): DatabaseErrorEventRepository => new DatabaseErrorEventRepository(
+                reads: DB::connection(),
+                // Ver el docblock: otra sesion, la misma base y el mismo rol.
+                writes: DB::connection(self::ERROR_HISTORY_CONNECTION),
+            ),
+        );
+
+        $this->app->bind(
+            ErrorEventSink::class,
+            static fn (Application $app): RecordErrorEvent => new RecordErrorEvent(
+                errors: $app->make(ErrorEventRepository::class),
+                metrics: $app->make(ErrorMetrics::class),
+                clock: $app->make(Clock::class),
+                // El canal por defecto y no uno propio: cuando la escritura del
+                // historico falla, lo que queda es una linea en el log tecnico,
+                // que es lo unico que seguro sigue funcionando.
+                logger: Log::channel(),
+                /*
+                 * El techo de grupos abiertos por origen (decision 14). Entra
+                 * resuelto, como el resto de la configuracion del modulo (regla
+                 * dura 14): el caso de uso no lee `config()`, y por eso una
+                 * prueba puede bajarlo a dos sin tocar el estado del proceso.
+                 */
+                maxOpenGroupsPerSource: Config::integer('product.errors_max_open_groups_per_source', 500),
+                /*
+                 * Y los dias de retencion, que son el SUELO del instante
+                 * admitido: una ocurrencia no puede nacer ya vencida. La misma
+                 * variable que usa la purga, porque las dos hablan del mismo
+                 * plazo.
+                 */
+                retentionDays: Config::integer('compliance.retention.error_history_days', 90),
+            ),
+        );
+
+        /*
+         * `RecordErrorEvent` NO se enlaza a su propio nombre, y es deliberado:
+         * **nadie debe pedirlo por la clase**. El puerto es el unico contrato, y
+         * una prueba que sustituya `ErrorEventSink` por un doble tiene que
+         * sustituirlo para todo el mundo. Con las dos claves enlazadas, un
+         * consumidor que tipara la clase concreta se saltaria ese doble sin que
+         * nada avisara.
+         */
+
+        $this->app->bind(
+            PruneErrorEvents::class,
+            static fn (Application $app): PruneErrorEvents => new PruneErrorEvents(
+                errors: $app->make(ErrorEventRepository::class),
+                clock: $app->make(Clock::class),
+                // La MISMA variable que ya leia el ciclo corto de retencion
+                // (`ERROR_HISTORY_RETENTION_DAYS`, RL-11). Dos plazos para la
+                // misma tabla serian dos purgas que se contradicen.
+                retentionDays: Config::integer('compliance.retention.error_history_days', 90),
+                /*
+                 * El mismo tamano de lote que el ciclo corto de retencion de
+                 * `Compliance`: un `DELETE` de noventa dias de golpe retendria
+                 * bloqueos sobre la tabla en la que se escribe cada error que
+                 * ocurra mientras corre, y esto se ejecuta a las 03:35, cuando
+                 * corren las tareas nocturnas que mas errores producen.
+                 */
+                batchSize: Config::integer('compliance.retention.batch_size', 1000),
+            ),
+        );
+    }
+
+    /**
+     * La captacion de los cuatro origenes de servidor (RF-PD-15, tarea 5.12,
+     * decision 2).
+     *
+     * ## Un solo enganche, y desde aqui
+     *
+     * `bootstrap/app.php` no puede nombrar una clase de ningun modulo (Deptrac,
+     * doc 02 §1.6), asi que el `reportable` se registra al resolver el
+     * `ExceptionHandler` desde la raiz de composicion del modulo que tiene la
+     * tabla. `callAfterResolving()` de `ServiceProvider` -y no
+     * `afterResolving()` del contenedor- porque el manejador es un `singleton`
+     * que puede estar ya resuelto cuando este proveedor se registra: solo esa
+     * variante ejecuta la devolucion tambien en ese caso.
+     *
+     * `method_exists()` y no un `instanceof`: en la suite de pruebas el
+     * manejador lo envuelve el de Collision, que implementa el **contrato**
+     * -donde `reportable()` no esta declarado- y delega el metodo. Comprobar la
+     * clase concreta dejaria la captacion apagada justo donde se prueba.
+     *
+     * ## Los oyentes van en `register()` y no en `boot()`
+     *
+     * El despachador de eventos es un servicio base, registrado por la
+     * aplicacion antes que cualquier proveedor: escuchar aqui es seguro y evita
+     * que un fallo durante el arranque de otro proveedor se quede sin origen.
+     *
+     * ## El sumidero no se enlaza aqui
+     *
+     * Lo hace {@see self::registerErrorHistory()}, que corre antes en el mismo
+     * `register()` y lo enlaza siempre. Hubo un `bindIf` con un sumidero que
+     * descartaba, por si el historico faltaba; la revision lo retiro por
+     * inalcanzable, y tenia razon: un enlace de respaldo que no se puede
+     * ejercitar no protege de nada y esconde el fallo que si habria que ver.
+     */
+    private function registerErrorCapture(): void
+    {
+        $this->app->singleton(ExecutionContext::class);
+
+        $this->app->singleton(
+            ServerErrorReporter::class,
+            static fn (Application $app): ServerErrorReporter => new ServerErrorReporter(
+                context: $app->make(ExecutionContext::class),
+                // Perezosos los tres: el historico se resuelve cuando hay algo
+                // que guardar, la peticion solo existe dentro de una, y el
+                // manejador no se puede pedir aqui porque esta construccion
+                // ocurre justo mientras se resuelve.
+                sink: static fn (): ErrorEventSink => $app->make(ErrorEventSink::class),
+                request: static function () use ($app): ?Request {
+                    // `bound('request')` con la CADENA: el alias de la clase esta
+                    // siempre registrado, asi que `bound(Request::class)` diria
+                    // que si tambien en un comando de consola y devolveria una
+                    // peticion vacia con ruta y metodo inventados.
+                    $request = $app->bound('request') ? $app->make('request') : null;
+
+                    return $request instanceof Request ? $request : null;
+                },
+                handler: static fn (): ExceptionHandler => $app->make(ExceptionHandler::class),
+                appVersion: Config::string('app.version'),
+                basePath: $app->basePath(),
+            ),
+        );
+
+        $context = $this->app->make(ExecutionContext::class);
+
+        foreach ($context->listeners() as $event => $listener) {
+            Event::listen($event, $listener);
+        }
+
+        $this->callAfterResolving(ExceptionHandler::class, static function (object $handler, Application $app): void {
+            if (! method_exists($handler, 'reportable')) {
+                return;
+            }
+
+            $reporter = $app->make(ServerErrorReporter::class);
+
+            // Sin `return`: una devolucion `false` cortaria la cadena de informe
+            // de Laravel y el error dejaria de llegar a Monolog. `error_events`
+            // complementa el log tecnico, no lo sustituye (§8.2.1).
+            $handler->reportable(static function (Throwable $exception) use ($reporter): void {
+                $reporter->report($exception);
+            });
+        });
     }
 
     /**
@@ -1125,6 +1354,58 @@ final class ProductServiceProvider extends ServiceProvider
          */
         Gate::policy(SupportGrantModel::class, SupportGrantPolicy::class);
 
+        /*
+         * Zona del historico de errores de cliente: **12 r/m por token y 48 por
+         * origen** (`POST /api/v1/client-errors`, RF-PD-15).
+         *
+         * ZONA PROPIA Y NO `throttle:management`. Aquella tiene 120 r/m, y aqui
+         * cada peticion puede traer **cincuenta errores**: serian seis mil filas
+         * por minuto y sesion en una tabla que nada mas acota. Tampoco
+         * `throttle:diagnostics` con sus 3 r/m: el transporte del panel drena al
+         * iniciar sesion, cada 60 s si le quedan pendientes y en `pagehide`, y
+         * con tres se cortaria solo en una sesion normal.
+         *
+         * EL EJE QUE IMPORTA ES EL TOKEN y no la cuenta, al contrario que en el
+         * resto de zonas de este modulo: aqui entran tambien **sesiones de
+         * portal**, cuyo portador no es un `ManagementActor` y no tiene
+         * `actorUuid()`. Se compone del identificador del token cuando lo hay
+         * —que ademas es mas preciso: dos pestanas de la misma persona con
+         * sesiones distintas no se estorban— y se cae al origen si no.
+         *
+         * 12 NO ES UNA MEDICION: es margen de sobra para el drenaje descrito y
+         * sigue siendo un techo. Es configuracion y no una constante (regla dura
+         * 13).
+         */
+        RateLimiter::for('client-errors', static function (Request $request): array {
+            $perMinute = max(1, Config::integer('product.client_errors_rate_limit_per_minute', 12));
+
+            return [
+                Limit::perMinute($perMinute * self::CLIENT_ERRORS_IP_BUDGET_FACTOR)
+                    ->by('client-errors-ip:'.(string) $request->ip()),
+                Limit::perMinute($perMinute)->by('client-errors-token:'.self::tokenKey($request)),
+            ];
+        });
+
+        /*
+         * `GET /api/v1/diagnostics/errors` y `POST …/{id}/resolve` son de
+         * `admin` (Anexo B del doc 01, §7.3: `diagnostics:*` es del
+         * administrador de instalacion). El middleware comprueba el ambito y
+         * esta policy el rol (regla dura 18).
+         *
+         * El sujeto es el objeto de valor {@see ErrorEvent} —«el historico de
+         * errores de esta instalacion»— y no una fila: la policy no autoriza
+         * sobre un grupo concreto, porque todos son iguales ante ella, y el
+         * listado existe antes de que haya ninguno.
+         *
+         * **La policy tiene tres metodos y solo dos pasan por aqui.**
+         * `report()` —el de `POST /api/v1/client-errors`— se invoca por su
+         * nombre desde su `FormRequest`, porque acepta tambien una sesion de
+         * portal, cuyo `tokenable` no es `Authorizable` y reventaria en el
+         * `Gate::before` del paquete de permisos. Mismo caso, y misma solucion,
+         * que `SelfJournalPolicy` y `ScanPolicy`.
+         */
+        Gate::policy(ErrorEvent::class, ErrorEventPolicy::class);
+
         if ($this->app->runningInConsole()) {
             /*
              * Los dos comandos del Anexo C (RF-PD-04).
@@ -1214,8 +1495,71 @@ final class ProductServiceProvider extends ServiceProvider
                  * comandos existen.
                  */
                 ProductTelemetryCommand::class,
+                /*
+                 * Los dos del historico de errores (Anexo C, RF-PD-15, tarea
+                 * 5.12).
+                 *
+                 * **La purga se programa; el listado no.** `routes/console.php`
+                 * ejecuta `product:errors:prune` a diario a las 03:35 UTC,
+                 * porque una tabla que crece con cada error acaba siendo un
+                 * problema de disco en un servidor al que no podemos entrar
+                 * (ADR-016). `product:errors` lo ejecuta una persona —o un
+                 * script de monitorizacion del cliente, que para eso tiene
+                 * codigos de salida— y programarlo necesitaria un destinatario
+                 * al que avisar: las alertas salen de Prometheus, que es de quien
+                 * las mira, y el fabricante no es destinatario de ninguna
+                 * (ADR-020).
+                 *
+                 * `product:errors` existe en consola por lo mismo que
+                 * `product:doctor`: **el panel puede ser justamente lo que no
+                 * funciona**.
+                 */
+                ProductErrorsCommand::class,
+                ProductErrorsPruneCommand::class,
             ]);
         }
+    }
+
+    /**
+     * La clave del cubo de `throttle:client-errors`.
+     *
+     * ## El portador, sea del tipo que sea
+     *
+     * Es la unica zona del producto que tiene que contar igual a una **cuenta de
+     * gestion** y a una **sesion de portal**, cuyo portador no es un
+     * `ManagementActor` y no tiene `actorUuid()`. Por eso no se usa aquel
+     * —devolveria «desconocido» para toda la plantilla, que compartiria un solo
+     * cubo— sino el identificador de quien autentica.
+     *
+     * **Con la clase delante**, porque el `id` es de dos tablas distintas: sin
+     * ella, el empleado 7 y la cuenta 7 compartirian cubo y se cortarian entre
+     * si sin ninguna relacion.
+     *
+     * Sin sesion, el origen. Nunca el correo ni el nombre de nadie: una clave de
+     * limitador acaba en Redis y en un log (regla dura 21).
+     */
+    private static function tokenKey(Request $request): string
+    {
+        /*
+         * `mixed` a proposito, y no el tipo que anota el framework. El guard
+         * entrega **el `tokenable` del token**, que en esta ruta puede ser una
+         * cuenta de gestion o una fila de `employees`; y `employees` extiende
+         * `Model`, no `Authenticatable`, asi que `getAuthIdentifier()` -que es
+         * lo que usa el resto del modulo- no existe ahi y reventaria la peticion
+         * con un `500`. Se pregunta por la clave del modelo, que si tienen los
+         * dos.
+         *
+         * @var mixed $actor
+         */
+        $actor = $request->user();
+
+        if (! $actor instanceof Model) {
+            return 'anon-ip:'.(string) $request->ip();
+        }
+
+        $key = $actor->getKey();
+
+        return $actor::class.':'.(is_scalar($key) ? (string) $key : 'desconocido');
     }
 
     /**
@@ -1358,6 +1702,17 @@ final class ProductServiceProvider extends ServiceProvider
                         debug: Config::boolean('app.debug'),
                         environment: Config::string('app.env'),
                     ),
+                    /*
+                     * El tamano del historico de errores (RF-PD-15, decision
+                     * 14). Va en la familia `app` y detras de `ApplicationProbe`
+                     * porque el orden de esta lista ES el del informe, y lo que
+                     * impide fichar se lee antes que lo que degrada el
+                     * diagnostico.
+                     */
+                    new ErrorHistoryProbe(
+                        database: DB::connection(),
+                        maxOpenGroupsPerSource: Config::integer('product.errors_max_open_groups_per_source', 500),
+                    ),
                     new SettingsProbe(
                         settings: $app->make(GetSettingsHandler::class),
                         environment: $_ENV,
@@ -1397,7 +1752,10 @@ final class ProductServiceProvider extends ServiceProvider
                     $app->make(DoctorCollector::class),
                     $app->make(LicenseCollector::class),
                     new KioskCollector(DB::connection()),
-                    new ErrorEventsCollector,
+                    new ErrorEventsCollector(
+                        $app->make(ErrorEventRepository::class),
+                        $app->make(Clock::class),
+                    ),
                     $app->make(MetricsCollector::class),
                     new UpdatesCollector(Config::string('backup.path')),
                     $app->make(AuditCollector::class),

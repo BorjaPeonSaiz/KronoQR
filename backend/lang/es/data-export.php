@@ -205,7 +205,6 @@ return [
 
     'not_installed_names' => [
         'absences' => 'Ausencias y permisos.',
-        'error_events' => 'Historico de errores tecnicos de las aplicaciones.',
     ],
 
     'unknown_column' => '(sin descripcion en esta version; el nombre tecnico es «:column»)',
@@ -447,6 +446,31 @@ return [
                 'revoked_at' => 'Cuando se revoco antes de tiempo, si se revoco.',
                 'revoked_by_user_uuid' => 'Quien la revoco. Vacio si la revoco la consola del servidor.',
                 'accessed_at' => 'Ultima vez que se uso. Vacio si se concedio y nunca hizo falta.',
+            ],
+        ],
+
+        'error_events' => [
+            'summary' => 'Lo que ha fallado en tu instalacion durante los ultimos 90 dias, **agrupado**: una linea por fallo distinto, no por cada vez que ocurrio. Es informacion tecnica y **no contiene datos de tu plantilla**: ni nombres, ni correos, ni horas de fichaje. Si esta vacio, no ha habido errores en ese plazo.',
+            'columns' => [
+                'fingerprint' => 'Huella del fallo: lo que hace que un mismo error repetido mil veces sea una sola linea. Se calcula con el origen, la clase del error, el punto exacto donde ocurrio y el texto del mensaje sin numeros ni identificadores.',
+                'level' => '`critical` si es algo que nadie ve (una tarea nocturna, un trabajo en cola) o que impide fichar (camara, escaner, almacen de la tablet); `error` en el resto de casos.',
+                'source' => 'De donde vino: `api` (una peticion), `worker` (un trabajo en cola), `scheduler` (una tarea programada), `console` (un comando), `kiosk` (la tablet), `admin` (el panel) o `portal` (el portal del empleado).',
+                'module' => 'Parte del sistema donde ocurrio (`attendance`, `kiosk`, `product`…). Vacio si el fallo vino de una aplicacion cliente.',
+                'code' => 'Codigo estable del error en las aplicaciones cliente (`kiosk.camera.unavailable`). Vacio en la mayoria de los errores de servidor.',
+                'message' => 'El texto del error **de la primera vez que ocurrio**, ya limpiado: correos, documentos, telefonos, horas y cualquier texto entre comillas se sustituyen por marcadores antes de guardarlo.',
+                'exception_class' => 'Clase tecnica del error en el servidor. Vacio si vino de una aplicacion cliente.',
+                'file' => 'Fichero de codigo donde ocurrio, y `line` la linea. Vacios si vino de una aplicacion cliente: la traza del navegador no se guarda nunca.',
+                'line' => 'Numero de linea. Ver `file`.',
+                'context' => 'Datos tecnicos en formato JSON, con una lista cerrada de campos posibles (ruta, metodo, estado, trabajo, cola, intentos, comando, componente, causa…). Nunca lleva nada mas.',
+                'trace_id' => 'Identificador de la peticion en la que ocurrio la ultima vez. Sirve para buscarla en el log tecnico si conservas el sistema de observabilidad.',
+                'device_id' => 'Tablet de la que vino, si vino de una. Es su identificador publico, el mismo que ves en `devices.csv`.',
+                'employee_uuid' => 'Persona implicada en la operacion que fallo, **solo como identificador** y nunca por su nombre. Casi siempre vacio.',
+                'app_version' => 'Version del servidor o de la aplicacion cliente la ultima vez que ocurrio. Sirve para saber si un fallo desaparecio al actualizar o si llego con la actualizacion.',
+                'occurrences' => 'Cuantas veces ha ocurrido este mismo fallo desde `first_seen_at`.',
+                'first_seen_at' => 'La primera vez que se vio.',
+                'last_seen_at' => 'La ultima. Es la fecha por la que se purga a los 90 dias: un fallo que sigue ocurriendo no caduca.',
+                'resolved_at' => 'Cuando alguien lo marco como resuelto desde el panel. **Si el fallo vuelve a ocurrir, se vacia y la linea se reabre**, conservando el recuento.',
+                'resolved_by_user_uuid' => 'Quien lo marco como resuelto.',
             ],
         ],
 

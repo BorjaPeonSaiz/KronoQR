@@ -779,6 +779,7 @@ scans_by_origin_total{origin}                            counter
 workdays_complete_ratio{site}                            gauge
 incident_resolution_seconds{type}                        histogram
 application_errors_total{source,level}                   counter
+application_error_groups_opened_total{source,level}      counter
 projection_divergence_total                              counter
 projection_reconciliation_last_run_timestamp_seconds     gauge
 audit_chain_verification_failures_total                  counter
@@ -831,6 +832,8 @@ de respaldo servida por el proceso que hay que restaurar no vale nada.
 **RTO**: si crece, el objetivo de 4 h se está estrechando.
 
 `projection_divergence_total` y `audit_chain_verification_failures_total` deben permanecer **siempre en cero**. Cualquier incremento es un incidente de integridad, no una métrica de tendencia.
+
+**`application_errors_total{source,level}` y `application_error_groups_opened_total{source,level}` cuentan cosas distintas del mismo histórico de errores (RF-PD-15, tarea 5.12).** La primera sube con cada ocurrencia —es lo que `product:errors` y el panel muestran como `occurrences`—; la segunda solo sube cuando el `INSERT ... ON CONFLICT` de `error_events` crea un grupo nuevo o reabre uno que estaba `resolved`. La alerta `ErroresCriticosNuevos` (`infra/observability/prometheus/rules/errors.yml`) usa la segunda a propósito: con la primera, un fallo ya conocido y sin resolver —una cámara de quiosco averiada que sigue fallando en cada intento de fichaje— mantendría la alerta encendida sin parar, en vez de sonar solo cuando aparece un problema nuevo o uno que se creía arreglado reaparece.
 
 `employees_without_delivered_credential` es la métrica operativa de la entrega: cuenta a quienes están de alta pero **todavía no pueden fichar**. Debe llegar a cero antes del primer día de cada incorporación.
 
@@ -1513,6 +1516,13 @@ PRODUCT_DATA_EXPORT_RATE_LIMIT=30      # RF-PD-14 · peticiones por minuto POR C
 PRODUCT_DATA_EXPORT_STALE_AFTER=3600   # RF-PD-14 · segundos tras los que una exportación interrumpida a
                                        # medias pasa a `failed`/`stale` y libera la siguiente (RL-20)
 ERROR_HISTORY_RETENTION_DAYS=90        # RF-PD-15 · igual que el log técnico (RL-11)
+PRODUCT_CLIENT_ERRORS_RATE_LIMIT=12    # RF-PD-15 · peticiones por minuto y por sesión del panel o del
+                                       # portal a POST /api/v1/client-errors (por IP, ×4). El quiosco no
+                                       # usa este canal: reporta dentro del latido (tarea 1.8)
+PRODUCT_ERRORS_MAX_OPEN_GROUPS_PER_SOURCE=500  # RF-PD-15 · ficha 5.12, decisión 14. Techo de grupos
+                                       # ABIERTOS por origen en error_events; por encima, la ocurrencia
+                                       # va a un grupo `overflow` de ese origen en vez de crear fila.
+                                       # `product:doctor` avisa del tamaño de la tabla
 BRANDING_LOGO_ROOT=/var/kronoqr/branding # RF-PD-08 · directorio DENTRO del contenedor donde tiene que
                                        # estar el logotipo: `BRANDING_LOGO_PATH` (clave de
                                        # installation_settings) se valida contra él al guardar. Sin

@@ -105,7 +105,11 @@ export function createOfflineQueueController(options: OfflineQueueOptions): Offl
   const queue: ScanQueue = createScanQueue({
     openStorage: () => createDexieQueueStorage(openKioskDatabase(options.databaseName)),
     onStorageFailure: (reason) =>
-      reporter.report('kiosk.offline.storage_unavailable', { reason, durable: false }),
+      reporter.report('kiosk.offline.storage_unavailable', {
+        reason,
+        durable: false,
+        message: reason,
+      }),
   })
 
   const roster: CachedRoster = createCachedRoster({

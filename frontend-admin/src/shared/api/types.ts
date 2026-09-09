@@ -180,3 +180,17 @@ export type IssuedSupportGrant = Schemas['IssuedSupportGrant']
 export type DataExport = Schemas['DataExport']
 export type DataExportResource = Schemas['DataExportResource']
 export type DataExportCollection = Schemas['DataExportCollection']
+
+// Historico de errores agrupado por huella (RF-PD-15, tarea 5.12). El envio de
+// los tres clientes (`ClientErrorReport`/`ClientErrorBatch`/
+// `ClientErrorsAccepted`) lo consume `@kronoqr/web-kit/clientErrorTransport`,
+// que define su propio cuerpo local y no importa estos tipos (ADR-036: el
+// paquete comun no depende del `schema.d.ts` de una SPA concreta).
+export type ErrorEvent = Schemas['ErrorEvent']
+export type ErrorEventCollection = Schemas['ErrorEventCollection']
+export type ErrorEventPageMeta = Schemas['ErrorEventPageMeta']
+export type ErrorSource = Schemas['ErrorSource']
+export type ErrorLevel = Schemas['ErrorLevel']
+export type ClientErrorReport = Schemas['ClientErrorReport']
+export type ClientErrorBatch = Schemas['ClientErrorBatch']
+export type ClientErrorsAccepted = Schemas['ClientErrorsAccepted']

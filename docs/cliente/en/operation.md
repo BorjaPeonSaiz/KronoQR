@@ -4,8 +4,11 @@
 > the only operation in the product that deletes data. Section 7 comes from
 > **5.3** (licence). Sections **8, 9 and 10** come from **5.4**: the exit codes
 > of the five scripts, the custody of secrets and what you lose if you switch
-> observability off. Section **11** comes from **5.7**: updating. **Task 5.11**
-> will add the kiosks; it will not rewrite anything that is already here.
+> observability off. Section **11** comes from **5.7**: updating. Sections
+> **12 and 13** come from **5.9** and **5.10**: diagnostics, support and the
+> full data export. Section **15** comes from **5.12**: the `error_events`
+> history. **Task 5.11** will add the kiosks; it will not rewrite anything
+> that is already here.
 
 ---
 > **The commands in this guide are run from the package directory**, which is
@@ -711,3 +714,93 @@ recover:
 | **Touch `daily_totals` by hand** | It is a rebuildable projection: it is recalculated in full every time a shift entry changes. A total corrected by hand goes back to its value on the next recalculation, without anyone understanding why | If a total does not add up, recalculate it: `docker compose exec app php artisan attendance:reconcile --from=2026-09-01 --to=2026-09-30` |
 | **Edit a generated secret in the `.env`** (`APP_KEY`, `QR_SIGNING_KEY_*`, `BACKUP_ENCRYPTION_KEY`) | Changing `APP_KEY` makes everything encrypted unreadable; changing the QR key invalidates every card; changing the backup key leaves the previous backups impossible to restore | Rotate with its procedure: [`../../runbooks/rotacion-secretos.md`](../../runbooks/rotacion-secretos.md) and [`../../runbooks/rotacion-clave-qr.md`](../../runbooks/rotacion-clave-qr.md) (in Spanish) |
 | **`migrate:rollback`, deleting volumes or reinstalling on top** | A rollback is always restoring the previous verified backup; the installer refuses to reinstall over an existing installation | `update.sh` (§11) and [`../../runbooks/restaurar-backup.md`](../../runbooks/restaurar-backup.md) (in Spanish) |
+
+---
+
+## 15. The error history: what is failing and since when
+
+> **Task 5.12.** How to read it and what to do with each severity, step by
+> step, is in [`../../runbooks/errores-en-el-panel.md`](../../runbooks/errores-en-el-panel.md)
+> (in Spanish): this section is the summary for knowing what it is and how it
+> is used day to day, not the diagnostic procedure.
+
+### 15.1 What it is
+
+Every error in the application —from a request, a queue job, a scheduled
+task or a console command— and every error reported by the three client
+applications (kiosk, panel, portal) is kept in `error_events`, **grouped by
+fingerprint**: the same repetition does not create a new row, it raises
+`occurrences` and updates the date of the last time. It is kept for 90 days
+and purges itself (§15.4).
+
+It is not your audit trail (`audit_log`, four years, evidentiary value) nor
+your technical log (Loki, optional, you may not have it). It is the one thing
+that always exists, in the same database you back up daily, to answer
+**"what is failing, and since when?"** without having to know the system
+from the inside. **It never carries anyone's name, email or clock-ins**: only
+technical identifiers. This is not a promise without a mechanism — the server
+sanitises the message (emails, national ID numbers, phone numbers, times, and
+any text between quotes, which is where an exception interpolates a variable
+value), a database failure never prints what it was trying to save, and the
+context only accepts a closed list of technical keys. The full mechanism, one
+by one, is in
+[`../../runbooks/errores-en-el-panel.md`](../../runbooks/errores-en-el-panel.md)
+(in Spanish) §2.
+
+One thing about level: **the `critical` level for a client error is only
+ever produced by a kiosk** — the panel and the portal never generate a
+`critical` row, and the possible codes are a closed catalogue per origin
+that the server validates.
+
+### 15.2 The panel screen
+
+**Errors**, with filters for origin, severity, status and period. Each row
+carries the severity, the origin, the message, how many times it has
+happened (`occurrences`), the first and the last time, and a copyable
+`trace_id`. Each row's detail includes a **what to do** text, written for
+someone who does not know the system. A **"Mark as resolved"** button closes
+it; if the same error happens again, the row reopens on its own, without you
+having to do anything — that is the sign that the fix was not one. **Who
+resolved it** is shown with a name to a regular management account, but not
+to a support access granted to the manufacturer: that access sees that the
+row is resolved, never who resolved it.
+
+### 15.3 The commands
+
+To look it up from the console, or so a script can ask on your behalf:
+
+```bash
+docker compose exec app php artisan product:errors --since=24h --level=critical
+```
+
+It exits `0` if none are open, `1` if there is one of level `error` and `2`
+if there is one `critical` — the same criterion as `product:doctor`. With
+`--json` it gives the same for machines; with `--source=` it narrows to one
+origin (`api`, `worker`, `scheduler`, `console`, `kiosk`, `admin`, `portal`).
+
+### 15.4 The 90-day purge and `ERROR_HISTORY_RETENTION_DAYS`
+
+Every day, at 03:35 UTC, rows whose last occurrence is older than
+`ERROR_HISTORY_RETENTION_DAYS` days (90 by default) are deleted. **It asks
+for no confirmation and leaves no record**: it is a purge of technical data
+with no legal value (RL-11), not the retention of the working-time record
+(RF-PR-03, section 3, which does require the confirmation phrase). To check
+what it would delete without deleting anything:
+
+```bash
+docker compose exec app php artisan product:errors:prune --dry-run
+```
+
+And, as with the rest of the record, **`error_events` is not edited by
+hand**: neither by direct SQL nor by touching the row from outside the panel
+or these two commands. Marking an error as resolved, or letting the
+automatic purge remove it after 90 days, are the only two correct ways for a
+row to disappear from the open list.
+
+### 15.5 The parameters
+
+| Variable | Default | What it governs |
+| --- | --- | --- |
+| `ERROR_HISTORY_RETENTION_DAYS` | `90` | Days a row is kept from its last occurrence. Same as the technical log (RL-11) |
+| `PRODUCT_CLIENT_ERRORS_RATE_LIMIT` | `12` | Requests per minute and per session from the panel or the portal to report errors; four times more per IP address |
+| `PRODUCT_ERRORS_MAX_OPEN_GROUPS_PER_SOURCE` | `500` | Ceiling of **open** groups per origin. Above it, the next occurrence that does not match an existing group goes into an overflow group for that origin (`overflow`) instead of creating a row; `product:doctor` warns about the size of the table |

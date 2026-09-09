@@ -131,7 +131,7 @@ export function createCachedRoster(options: CachedRosterOptions): CachedRoster {
 
       const entries = await openRoster(record, token, options.crypto ?? {})
       if (entries === null) {
-        options.onDiagnostic?.('roster.decrypt_failed', { purged: 1 })
+        options.onDiagnostic?.('roster.decrypt_failed', { purged: 1, message: 'decrypt_failed' })
         await purge()
         return
       }
@@ -156,7 +156,10 @@ export function createCachedRoster(options: CachedRosterOptions): CachedRoster {
           if (result.outcome === 'failed') {
             if (result.cause === 'unauthorized') options.onAuthOutcome?.(true)
             if (result.cause !== 'offline') {
-              options.onDiagnostic?.('roster.fetch_failed', { cause: result.cause })
+              options.onDiagnostic?.('roster.fetch_failed', {
+                cause: result.cause,
+                message: result.cause,
+              })
             }
           }
           return false
@@ -178,7 +181,10 @@ export function createCachedRoster(options: CachedRosterOptions): CachedRoster {
         if (sealed === null) {
           // Sin WebCrypto no se cachea NADA: un padron en claro en IndexedDB
           // incumpliria RL-12. El quiosco sigue fichando, sin nombre.
-          options.onDiagnostic?.('roster.not_cacheable', { entries: result.data.entries.length })
+          options.onDiagnostic?.('roster.not_cacheable', {
+            entries: result.data.entries.length,
+            message: 'no_webcrypto',
+          })
           return false
         }
 

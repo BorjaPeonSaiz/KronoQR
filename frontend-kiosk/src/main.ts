@@ -8,8 +8,8 @@ import { createAppRouter } from './router'
 import { applyCachedBranding } from './shared/branding/useBranding'
 import { createAppI18n, initialLocale } from './shared/i18n'
 import { APP_VERSION, resolveDeviceId } from './shared/telemetry/deviceIdentity'
-import { createErrorReporter } from './shared/telemetry/errorReporter'
-import { errorTypeOf } from './shared/telemetry/errorType'
+import { getErrorReporter } from './shared/telemetry/errorReporter'
+import { errorMessageOf, errorTypeOf } from './shared/telemetry/errorType'
 import { registerServiceWorker } from './sw/registerServiceWorker'
 
 const locale = initialLocale()
@@ -27,7 +27,13 @@ const app = createApp(App)
 // render en una tablet colgada de una pared no lo ve nadie hasta que alguien
 // reclama una jornada. Nunca lleva datos personales: `sanitizeContext` los
 // descarta por nombre de clave y por tipo.
-const bootReporter = createErrorReporter({
+//
+// `getErrorReporter`, no `createErrorReporter`: es el MISMO reporter que
+// `ScanView.vue`/`PinView.vue` piden despues (singleton por tablet, ver
+// `errorReporter.ts`). Sin esto, el latido de la pantalla nunca llegaria a
+// drenar los errores de arranque -los mas graves, porque son los que impiden
+// que nada mas funcione-.
+const bootReporter = getErrorReporter({
   appVersion: APP_VERSION,
   deviceId: resolveDeviceId(),
 })
@@ -35,14 +41,16 @@ const bootReporter = createErrorReporter({
 app.config.errorHandler = (error: unknown) => {
   bootReporter.report('kiosk.unhandled_error', {
     error_type: errorTypeOf(error),
-    error_message: error instanceof Error ? error.message : '',
+    // Clave canonica del texto del error (RF-PD-15): el servidor la toma tal
+    // cual para la columna `message` de `error_events`.
+    message: errorMessageOf(error),
     scope: 'vue',
   })
 }
 
 window.addEventListener('error', (event) => {
   bootReporter.report('kiosk.unhandled_error', {
-    error_message: event.message,
+    message: event.message,
     source: event.filename,
     line: event.lineno,
     scope: 'window',
@@ -52,6 +60,9 @@ window.addEventListener('error', (event) => {
 window.addEventListener('unhandledrejection', (event) => {
   bootReporter.report('kiosk.unhandled_error', {
     error_type: errorTypeOf(event.reason),
+    // Antes vacio: una promesa rechazada con un `Error` de verdad -el caso mas
+    // comun- se quedaba sin nada legible mas alla del codigo.
+    message: errorMessageOf(event.reason),
     scope: 'promise',
   })
 })

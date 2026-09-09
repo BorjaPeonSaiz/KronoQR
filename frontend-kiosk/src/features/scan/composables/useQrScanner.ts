@@ -24,7 +24,7 @@
 
 import type { Ref } from 'vue'
 import { onUnmounted, readonly, ref } from 'vue'
-import { errorTypeOf } from '@/shared/telemetry/errorType'
+import { errorMessageOf, errorTypeOf } from '@/shared/telemetry/errorType'
 import type { CameraFailure } from './useCamera'
 import { useCamera } from './useCamera'
 
@@ -144,7 +144,10 @@ export function useQrScanner(options: UseQrScannerOptions): QrScanner {
     const element = options.video.value
     if (element === null) {
       state.value = 'unavailable'
-      options.onDiagnostic?.('scanner.start_failed', { reason: 'no_video_element' })
+      options.onDiagnostic?.('scanner.start_failed', {
+        reason: 'no_video_element',
+        message: 'no_video_element',
+      })
       return
     }
 
@@ -165,6 +168,7 @@ export function useQrScanner(options: UseQrScannerOptions): QrScanner {
       state.value = 'unavailable'
       options.onDiagnostic?.('scanner.decoder_load_failed', {
         error_type: errorTypeOf(error),
+        message: errorMessageOf(error),
       })
       return
     }
@@ -202,6 +206,7 @@ export function useQrScanner(options: UseQrScannerOptions): QrScanner {
       state.value = 'unavailable'
       options.onDiagnostic?.('scanner.start_failed', {
         error_type: errorTypeOf(error),
+        message: errorMessageOf(error),
       })
     }
   }
@@ -213,6 +218,7 @@ export function useQrScanner(options: UseQrScannerOptions): QrScanner {
       if (Date.now() - lastAttemptAtMs < WATCHDOG_SILENCE_MS) return
       options.onDiagnostic?.('scanner.watchdog_restart', {
         silence_ms: Date.now() - lastAttemptAtMs,
+        message: 'watchdog_restart',
       })
       void restart()
     }, WATCHDOG_TICK_MS)

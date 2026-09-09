@@ -14,3 +14,21 @@ export function errorTypeOf(error: unknown): string {
   }
   return 'unknown'
 }
+
+/**
+ * Texto del error, para la columna `message` de `error_events` (RF-PD-15).
+ * Mismo motivo de duck-typing que `errorTypeOf`: un `DOMException` lleva
+ * `.message` igual que un `Error`, pero no siempre hereda de el. Si no hay
+ * texto que sacar, cadena vacia -nunca `'unknown'`, que ya lo dice
+ * `error_type` y repetirlo en `message` no anadiria nada-. El saneado final
+ * (PII, longitud) lo hace el servidor (`ErrorMessageSanitizer`); aqui solo se
+ * extrae el texto, sin decorar.
+ */
+export function errorMessageOf(error: unknown): string {
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    const { message } = error as { message: unknown }
+    if (typeof message === 'string' && message !== '') return message
+  }
+  if (typeof error === 'string' && error !== '') return error
+  return ''
+}

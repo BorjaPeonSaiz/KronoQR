@@ -1433,7 +1433,7 @@ The three ranges are explained in detail, with symptoms and checks, in
 | Variable | Marker | What it does | Default | When to change it | Affects hours calculation? |
 | --- | --- | --- | --- | --- | --- |
 | `COMPLIANCE_PROFILE` | `[CLIENTE]` | Name of the compliance profile the installer marks as the default profile | `ES-hosteleria` | On installing, if your collective agreement is a different one. **It is not read at runtime**: the thresholds come from the profile row, which is edited in the panel (section 2.4). Changing this without changing the row does nothing | No |
-| `ERROR_HISTORY_RETENTION_DAYS` | — | Days the error history is kept. See [`operation.md`](operation.md) §6 | `90` | Almost never | No |
+| `ERROR_HISTORY_RETENTION_DAYS` | — | Days the error history is kept. See [`operation.md`](operation.md) §6 and §15.4 | `90` | Almost never | No |
 | `TECHNICAL_LOG_RETENTION_DAYS` | — | Days the technical log is kept, in a different store from the previous one. See [`operation.md`](operation.md) §6 | `90` | Almost never | No |
 | `COMPLIANCE_RETENTION_BATCH_SIZE` | — | Rows per delete statement in the purge. See [`operation.md`](operation.md) §6 | `1000` | Only if the annual purge takes too long | No |
 | `COMPLIANCE_RETENTION_REPORT_PATH` | — | Where the report of each proposal and of each purge is left. **It is not cleaned up automatically**: it is the proof that the purge was regular. See [`operation.md`](operation.md) §6 | `storage/app/retention-reports` (in the container) | Almost never | No |
@@ -1474,6 +1474,8 @@ anonymised by default and there is no variable that changes that.**
 | `PRODUCT_SUPPORT_GRANT_DEFAULT_HOURS` | — | Duration of a support access grant if no other is stated. See **section 3 quater** | `24` | If your policy is stricter | No |
 | `PRODUCT_SUPPORT_GRANT_MAX_HOURS` | — | Maximum duration that can be requested. More is rejected. See **section 3 quater** | `72` | Lower it if your policy is stricter; the panel and the API adjust themselves. **It is not in the panel on purpose**: if it were, whoever grants the access could raise it before granting it | No |
 | `PRODUCT_SUPPORT_USE_AUDIT_WINDOW_SECONDS` | — | How often a new use of the same support access grant is written to the audit log. The panel's “last use” date is updated on every request regardless. See **section 3 quater** | `900` | Set it to `0` if you are investigating an incident and want one entry per request | No |
+| `PRODUCT_CLIENT_ERRORS_RATE_LIMIT` | — | Requests per minute and per session from the panel or the portal to report errors; four times more per IP address. See [`operation.md`](operation.md) §15 | `12` | Almost never | No |
+| `PRODUCT_ERRORS_MAX_OPEN_GROUPS_PER_SOURCE` | — | Ceiling of **open** groups per origin in the error history; above it, the next occurrence that does not match an existing group goes into an overflow group for that origin instead of creating a new row. See [`operation.md`](operation.md) §15.5 | `500` | Almost never | No |
 
 ### 6.19 Telemetry
 

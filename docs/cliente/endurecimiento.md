@@ -314,9 +314,20 @@ Fuera del producto, y enteramente tuyo. Lo mínimo:
   fabricante no necesita ningún valor de ese fichero para ayudarte: para eso
   está el paquete de diagnóstico ([`operacion.md`](operacion.md) §12.2), que
   además está construido para no llevarlos.
+- **`max_connections` de PostgreSQL con holgura sobre `2 × pm.max_children`.**
+  El histórico de errores (RF-PD-15) escribe por una **conexión propia**,
+  aparte de la conexión normal de cada proceso PHP-FPM —y se abre justo
+  cuando todos los procesos están fallando a la vez, que es el peor momento
+  para que además falte una conexión libre—. `pm.max_children` (20 de serie,
+  `infra/docker/php/fpm/www.conf`) fija cuántos procesos PHP-FPM puede haber
+  a la vez; si bajas `max_connections` de PostgreSQL por debajo del doble de
+  ese número, un pico de carga puede dejar sin conexión disponible justo al
+  histórico de errores, que es el que necesita escribir cuando algo va mal.
+  Si tocas cualquiera de los dos valores, mantén el margen.
 
 > **Cierra:** acceso al anfitrión, escalada por el grupo `docker`, lectura de
-> los secretos de la instalación e incidencias falsas por hora desviada.
+> los secretos de la instalación, incidencias falsas por hora desviada y un
+> histórico de errores que se queda sin conexión en el peor momento.
 > · **Dueño:** tú.
 
 ---

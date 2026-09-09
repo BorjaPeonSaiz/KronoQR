@@ -318,6 +318,67 @@ return [
     'data_export_rate_limit_per_minute' => (int) env('PRODUCT_DATA_EXPORT_RATE_LIMIT', 30),
 
     /*
+     * HISTORICO DE ERRORES (RF-PD-15, tarea 5.12)
+     * ------------------------------------------------------------------
+     *
+     * Techo de `POST /api/v1/client-errors`, **por minuto y por token**. El cubo
+     * por origen es cuatro veces este, por lo mismo que en la exportacion
+     * integra: en un hotel, recepcion, direccion y RRHH salen por la misma IP
+     * publica, y con el mismo techo en los dos ejes se cortarian entre si.
+     *
+     * DOCE Y NO TRES, y no es un numero al azar: el transporte del panel y del
+     * portal drena **al iniciar sesion, cada 60 s si hay pendientes y en
+     * `pagehide`**. Doce deja margen para una sesion que abre, cierra y vuelve a
+     * abrir pestanas sin llegar nunca al limite en uso normal.
+     *
+     * Y TAMPOCO CIENTO VEINTE como la gestion: esta es la unica ruta del
+     * producto por la que un cliente autenticado **escribe filas nuevas en una
+     * tabla** sin que ninguna otra restriccion lo acote —no hay indice unico que
+     * lo frene, como si lo hay en la exportacion—. Cincuenta errores por envio
+     * por doce envios son seiscientas filas por minuto y token en el peor caso,
+     * que sigue siendo pequeno y sigue siendo un techo.
+     *
+     * NO HAY RUTA ANONIMA que llegue aqui: los errores previos al inicio de
+     * sesion esperan en el buffer del navegador. Una superficie publica que
+     * escribe en base de datos seria un vector de denegacion de servicio.
+     *
+     * Es configuracion y no una constante (regla dura 13): un cliente con una
+     * flota grande de panel puede necesitar otro numero.
+     */
+    'client_errors_rate_limit_per_minute' => (int) env('PRODUCT_CLIENT_ERRORS_RATE_LIMIT', 12),
+
+    /*
+     * Techo de grupos ABIERTOS por origen en `error_events` (decision 14 de la
+     * ficha 5.12, revision de seguridad).
+     *
+     * EL LIMITADOR DE ARRIBA ACOTA PETICIONES, NO FILAS, y esa es la razon de
+     * que esto exista. Con cincuenta errores por envio y doce envios por minuto,
+     * una sola sesion podia crear **seiscientos grupos nuevos por minuto** y
+     * dejarlos noventa dias en la tabla: el mensaje entra en la huella y viene
+     * del navegador, asi que basta variarlo para que cada envio abra fila.
+     *
+     * Por encima del techo, una huella nueva **no crea fila**: su aparicion se
+     * cuenta en el grupo de desbordamiento del origen (`code = overflow`), que
+     * tiene huella fija y por tanto no puede desbordar a su vez. Un grupo que YA
+     * existe sigue contando sus apariciones con normalidad: el techo frena la
+     * entropia, no el registro de lo que ya se estaba viendo.
+     *
+     * POR ORIGEN Y NO GLOBAL: que el panel de un cliente tenga un problema no
+     * puede dejar sin registrar los errores del quiosco, que son los que
+     * impiden fichar.
+     *
+     * 500 NO ES UNA MEDICION: es un orden de magnitud. Una instalacion sana
+     * tiene unidades o decenas de grupos abiertos por origen; quinientos ya son
+     * una instalacion que necesita que alguien la mire, y `product:doctor` lo
+     * dice. Subirlo no arregla nada: lo que hay que hacer con quinientos grupos
+     * abiertos es atenderlos.
+     *
+     * A 0 se desactiva el techo. Es configuracion y no una constante (regla dura
+     * 13), pero la inmensa mayoria de las instalaciones no lo tocara.
+     */
+    'errors_max_open_groups_per_source' => (int) env('PRODUCT_ERRORS_MAX_OPEN_GROUPS_PER_SOURCE', 500),
+
+    /*
      * TELEMETRIA OPCIONAL (RF-PD-12, ADR-020, ADR-023, tarea 5.10)
      * ------------------------------------------------------------------
      *

@@ -381,9 +381,12 @@ jobs:
   unit:
     name: "③ Unitarias + Mutacion"
     runs-on: ubuntu-24.04
-    # 45 y no 8: la mutacion sola tarda ~25 min en la maquina de desarrollo.
-    # Con 8, el job moria por timeout antes de terminar aunque todo pasara.
-    timeout-minutes: 45
+    # 60 y no 8: la mutacion sola tardaba 37 min en serie en este runner y la
+    # tarea 5.12 (14 ficheros de dominio mas) la saco de los 45 que habia; con
+    # `--parallel` en `make mutate` baja varias veces, y el margen hasta 60 es
+    # para que el siguiente modulo de dominio no vuelva a matar el job por
+    # tiempo aunque todo pase. Si un dia se acerca, se mide, no se sube a ciegas.
+    timeout-minutes: 60
     needs: architecture
 
     env:

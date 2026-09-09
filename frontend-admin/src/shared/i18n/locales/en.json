@@ -16,7 +16,8 @@
       "devices": "Kiosks",
       "branding": "Brand",
       "license": "Licence",
-      "support": "Support"
+      "support": "Support",
+      "errors": "Errors"
     },
     "roles": {
       "admin": "Administration",
@@ -1369,6 +1370,135 @@
         "heading": "Revoke support access",
         "explanation": "This access, granted for \"{reason}\", will stop working immediately. The grant is not deleted: it will be marked as revoked, with who did it and when."
       }
+    }
+  },
+  "errorEvents": {
+    "heading": "Errors",
+    "intro": "What is failing in the installation and since when, grouped so that a fault repeated a thousand times is one row, not a thousand. This is not the time record or the audit trail: it is technical data, kept for 90 days.",
+    "loading": "Loading the error history…",
+    "duration": "{hours} h {minutes} min",
+    "summary": {
+      "openErrors": "{count} open at «Error» level",
+      "openCritical": "{count} open critical"
+    },
+    "levels": {
+      "error": "Error",
+      "critical": "Critical"
+    },
+    "sources": {
+      "api": "API / server",
+      "worker": "Queued jobs",
+      "scheduler": "Scheduled tasks",
+      "console": "Console commands",
+      "kiosk": "Kiosk",
+      "admin": "Management console",
+      "portal": "Employee portal"
+    },
+    "statuses": {
+      "open": "Open",
+      "resolved": "Resolved",
+      "all": "All"
+    },
+    "filters": {
+      "legend": "Error history filters",
+      "source": "Source",
+      "sourceAll": "All sources",
+      "level": "Level",
+      "levelAll": "All levels",
+      "status": "Status",
+      "period": "Period",
+      "period7": "Last 7 days",
+      "period30": "Last 30 days",
+      "period90": "Last 90 days",
+      "periodCustom": "Custom",
+      "from": "From (UTC)",
+      "to": "To (UTC)"
+    },
+    "table": {
+      "caption": "Errors grouped by fingerprint, times in {zone}",
+      "level": "Level",
+      "source": "Source",
+      "message": "Message",
+      "occurrences": "Occurrences",
+      "occurrencesValue": "{count}",
+      "firstSeen": "First seen",
+      "lastSeen": "Last seen",
+      "ageValue": "{duration} ago",
+      "version": "Version",
+      "traceId": "Trace",
+      "noTraceId": "No trace",
+      "copied": "Copied",
+      "actions": "Actions",
+      "expand": "Show detail",
+      "collapse": "Hide detail",
+      "resolved": "Resolved"
+    },
+    "detail": {
+      "exceptionClass": "Exception class",
+      "location": "Failure point",
+      "module": "Module",
+      "code": "Code",
+      "deviceId": "Kiosk",
+      "employeeUuid": "Employee involved",
+      "context": "Technical data",
+      "notApplicable": "Not applicable",
+      "whatToDoHeading": "What to do"
+    },
+    "whatToDo": {
+      "api": {
+        "error": "Someone hit an error using the console or the API, without it stopping them from clocking in. If it keeps happening, contact support with the trace identifier (trace_id). Guide: operacion.md §15.",
+        "critical": "A request to the clocking endpoint has failed. This can affect whether people can clock in: check as soon as possible that the server and the database are working, and contact support if it persists. Guide: operacion.md §15 and the errores-en-el-panel.md runbook."
+      },
+      "worker": {
+        "error": "A background task has failed, but it will retry automatically. It does not usually need immediate action.",
+        "critical": "A background task has exhausted its retries and will not finish on its own. Check the queue status or contact support. Guide: errores-en-el-panel.md runbook."
+      },
+      "scheduler": {
+        "error": "A scheduled task had a minor problem. Check the result next time it runs; if it keeps happening, follow the critical-level guidance.",
+        "critical": "A nightly scheduled task has failed: run \"php artisan product:doctor\" and check that tonight's backup completed. If the problem persists, contact support. Guide: operacion.md §15 and the errores-en-el-panel.md runbook."
+      },
+      "console": {
+        "error": "A command run manually or by a script had a minor problem. Check which command it was and what result you expected.",
+        "critical": "A command run manually or by a script has failed significantly. Check which command it was, what result you expected, and contact support if you don't understand it. Guide: errores-en-el-panel.md runbook."
+      },
+      "kiosk": {
+        "error": "A minor problem occurred on a clocking tablet that did not stop it from scanning. It does not usually need immediate action.",
+        "critical": "The indicated tablet cannot scan. Check the camera and permissions on the tablet itself; if it persists, restart the app. Guide: operacion.md §15 and the errores-en-el-panel.md runbook."
+      },
+      "admin": {
+        "error": "Someone hit an error using the management console. If it blocked a task, ask them to reload the page; if it persists, contact support with the trace identifier (trace_id).",
+        "critical": "Someone hit a serious error using the management console. Ask them to reload the page and contact support with the trace identifier (trace_id)."
+      },
+      "portal": {
+        "error": "Someone hit an error using their personal portal to check their time record. If they report it, ask them to reload the page; if it persists, contact support with the trace identifier (trace_id).",
+        "critical": "Someone hit a serious error using their personal portal. Ask them to reload the page and contact support with the trace identifier (trace_id)."
+      }
+    },
+    "resolve": {
+      "action": "Mark as resolved",
+      "confirmTitle": "Mark as resolved",
+      "confirmBody": "The «{level}» error from «{source}» will be marked as resolved: \"{message}\". If it happens again, it will reopen on its own, keeping the previous occurrence count.",
+      "announceResolved": "Error marked as resolved."
+    },
+    "empty": {
+      "open": {
+        "title": "No open errors",
+        "description": "There is no open error matching these filters. This is not a fault: this list fills itself in when something goes wrong."
+      },
+      "resolved": {
+        "title": "No resolved errors",
+        "description": "No error matching these filters has been marked as resolved yet."
+      },
+      "all": {
+        "title": "No errors",
+        "description": "There is no error recorded matching these filters."
+      }
+    },
+    "announce": {
+      "results": "{count} errors in the history."
+    },
+    "pagination": {
+      "label": "Error history pagination"
     }
   }
 }

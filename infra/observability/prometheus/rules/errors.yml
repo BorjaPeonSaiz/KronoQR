@@ -1,0 +1,112 @@
+# KronoQR — alerta del histórico de errores de aplicación (doc 01 §9.3,
+# RF-PD-15, tarea 5.12).
+#
+# Fila del catálogo del doc 01 §9.3 que implementa este fichero:
+#
+#   | Errores nuevos de severidad crítica en error_events | cualquiera en 5 min | Alta | IT del cliente | errores-en-el-panel.md |
+#
+# LAS OTRAS DOS FILAS QUE APUNTAN AL MISMO RUNBOOK NO ESTÁN AQUÍ. El doc 01
+# §9.3 tiene otras dos alertas con `runbook_url: errores-en-el-panel.md`:
+#
+#   | Tasa de error 5xx en el endpoint de fichaje    | > 1 % en 5 min  | Crítica |
+#   | Latencia p95 del endpoint de fichaje           | > 500 ms en 10m | Alta    |
+#
+# Las dos son de la tarea 3.2 (catálogo completo de alertas RED, que exige
+# `http_requests_total` y `http_request_duration_seconds` por ruta): el
+# runbook ya las cubre en su tabla de síntomas, pero sus REGLAS de Prometheus
+# no existen todavía. No se crean aquí para no adelantar trabajo de una tarea
+# que aún no ha definido el resto del catálogo (`quiosco-no-responde.md`,
+# `cola-offline-atascada.md`, etc., todos con el mismo "DOWN hasta la 3.1").
+#
+# LA MÉTRICA. `application_errors_total{source,level}` la escribe la
+# infraestructura de métricas del módulo `Product` (HINCRBY en Redis, mismo
+# mecanismo que `scans_total`) cada vez que un error entra en
+# `error_events` — los cuatro orígenes del servidor (`api`, `worker`,
+# `scheduler`, `console`) y los tres de cliente (`kiosk`, `admin`, `portal`).
+# La sirve `/metrics` de la aplicación, que llega en la tarea 3.1 — igual que
+# `kronoqr-api` en prometheus.yml, este job aparece DOWN hasta entonces y esta
+# regla no cambia cuando se active.
+#
+# POR QUÉ ESTA REGLA NO USA `application_errors_total` (revisión de seguridad,
+# ficha 5.12, decisión 14). Esa serie sube con CADA ocurrencia, incluidas las
+# de un grupo ya abierto y ya conocido: una cámara de quiosco con una avería
+# de hardware diagnosticada, que sigue fallando en cada intento de fichaje
+# mientras se espera el recambio, incrementaría `application_errors_total`
+# sin parar y mantendría la alerta encendida indefinidamente sobre un
+# problema que IT ya tiene localizado — el ruido exacto que apaga la utilidad
+# de una alerta. `application_error_groups_opened_total{source,level}` es una
+# serie distinta, escrita por el mismo sumidero, que solo sube cuando el
+# `INSERT ... ON CONFLICT` de `error_events` crea una fila NUEVA o REABRE una
+# que estaba `resolved`. Con ella, la alerta suena cuando aparece un fallo
+# nuevo, o cuando uno que se creía arreglado vuelve — y se calla sola en
+# cuanto deja de haber grupos nuevos, aunque el contador de ocurrencias de
+# fondo (el que ve `product:errors` y el panel como `occurrences`) siga
+# corriendo.
+#
+# NIVEL vs. SEVERIDAD. `level="critical"` es la clasificación de `ErrorLevel`
+# en el dominio del error (ficha 5.12, decisión 3: jobs que agotan intentos,
+# tareas del planificador, rutas de fichaje y los códigos de quiosco que le
+# impiden fichar). La SEVERIDAD de la alerta es otra cosa: el doc 01 §9.3 fija
+# esta fila como "Alta", un escalón por debajo de las "Crítica" de `audit.yml`
+# y `projection.yml` (que además llevan `integrity: "true"` y enrutado
+# inmediato) y por encima de la "Media" de `incidents.yml`
+# (`severity: warning`). Para no aplanar esos tres escalones en los dos únicos
+# valores que ya usaba el repositorio, esta regla es la primera en etiquetar
+# `severity: high`, literal como en el catálogo. Hasta que la tarea 3.2 fije
+# el resto de alertas "Alta" del §9.3 (cola offline, certificado TLS, espacio
+# en disco) con esta misma escala, es la única regla que usa el valor.
+#
+# DESTINATARIO: `it-cliente`, igual que `incidents.yml` y `projection.yml`.
+# Un error crítico nuevo es un síntoma de la instalación (cola caída,
+# scheduler roto, disco lleno, cámara del quiosco): quien puede mirarlo y
+# actuar es quien opera el servidor, no RRHH ni seguridad. Si al leer el
+# error resulta que alguien ha escrito por fuera de la aplicación, el propio
+# runbook remite a `rotura-cadena-auditoria.md`, que sí es de seguridad.
+#
+# IMPACTO EN EL FICHAJE: casi siempre ninguno — la regla dura 19 hace que el
+# quiosco encole y confirme igual aunque algo falle detrás—, salvo que el
+# origen sea justamente `api` sobre `/scan*` o un código `kiosk.*` de los que
+# SÍ le impiden fichar (ficha 5.12, decisión 3). El runbook explica cómo
+# distinguir un caso del otro por la columna `source`.
+#
+# ANTI-FATIGA: `for: 1m` sobre la ventana de 5 min, igual que en `auth.yml` y
+# por el mismo motivo — la expresión ya agrega sobre una ventana deslizante,
+# así que el `for` no retrasa la detección de un problema real; lo que evita
+# es que un scrape perdido justo cuando el contador acaba de subir dispare
+# una alerta que la siguiente evaluación (60 s después) habría descartado
+# sola. No hay agrupación por `source` en la expresión a propósito: un
+# cambio de turno que dispara errores `critical` en dos orígenes a la vez
+# —por ejemplo, `api` y `kiosk` por el mismo fallo de base de datos— debe
+# llegar como una sola alerta, no dos.
+
+groups:
+  - name: kronoqr-errors
+    interval: 60s
+    rules:
+      #------------------------------------------------------------------------
+      # Al menos un GRUPO nuevo o reabierto de severidad critica en los
+      # ultimos 5 minutos, de cualquier origen. "Cualquiera" es literal
+      # (doc 01 §9.3): no hay umbral de volumen que negociar para esta fila.
+      # No es "cualquier ocurrencia": ver la nota de cabecera sobre por que
+      # esta regla no usa `application_errors_total`.
+      #------------------------------------------------------------------------
+      - alert: ErroresCriticosNuevos
+        expr: increase(application_error_groups_opened_total{level="critical"}[5m]) > 0
+        for: 1m
+        labels:
+          severity: high
+          destinatario: it-cliente
+          component: errors
+        annotations:
+          summary: "Grupo(s) nuevo(s) o reabierto(s) de severidad critica en error_events"
+          description: >-
+            El histórico de errores (RF-PD-15) ha registrado al menos un
+            grupo `critical` nuevo, o uno que se había marcado como resuelto
+            y ha vuelto a ocurrir, en los últimos 5 minutos: un job que agota
+            sus intentos, una tarea del planificador, una petición a
+            `/api/v1/scan*`, o un código de quiosco que le impide fichar
+            (`kiosk.camera.*`, `kiosk.scanner.*`, `kiosk.offline.*`,
+            `kiosk.roster.decrypt_failed`, `kiosk.pin.seal_failed`). Entra en
+            el panel, sección "Errores", filtra por severidad "Crítico" y
+            sigue la tabla origen × nivel del runbook para saber qué mirar.
+          runbook_url: docs/runbooks/errores-en-el-panel.md

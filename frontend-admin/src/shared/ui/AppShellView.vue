@@ -64,6 +64,13 @@ const navigation = computed<NavItem[]>(() =>
       label: t('app.nav.support'),
       abilities: [SUPPORT_MANAGE, DIAGNOSTICS_MANAGE],
     },
+    {
+      // Historico de errores agrupado por huella (RF-PD-15, tarea 5.12): el
+      // mismo ambito que la generacion del paquete de diagnostico.
+      name: 'errors',
+      label: t('app.nav.errors'),
+      abilities: [DIAGNOSTICS_MANAGE],
+    },
   ].filter((item) => item.abilities.some((ability) => session.can(ability))),
 )
 

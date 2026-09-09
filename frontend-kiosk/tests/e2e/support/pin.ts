@@ -32,7 +32,7 @@ export async function stubKioskApiWithPin(page: Page): Promise<void> {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ server_time: new Date().toISOString() }),
+      body: JSON.stringify({ server_time: new Date().toISOString(), client_errors_accepted: 0 }),
     })
   })
   await page.route('**/api/v1/kiosk/roster', async (route: Route) => {
@@ -56,7 +56,7 @@ export async function stubKioskApiWithoutPin(page: Page): Promise<void> {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ server_time: new Date().toISOString() }),
+      body: JSON.stringify({ server_time: new Date().toISOString(), client_errors_accepted: 0 }),
     })
   })
   await page.route('**/api/v1/kiosk/roster', async (route: Route) => {

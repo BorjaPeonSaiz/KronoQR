@@ -22,7 +22,7 @@
 // `applyUpdate` desde un boton de mantenimiento, la recarga puede caer a las
 // 06:00 con quince personas en la cola.
 
-import { errorTypeOf } from '@/shared/telemetry/errorType'
+import { errorMessageOf, errorTypeOf } from '@/shared/telemetry/errorType'
 
 export interface ServiceWorkerRegistrationResult {
   /** Hay una version nueva esperando. No se aplica sin llamar a `applyUpdate`. */
@@ -69,11 +69,11 @@ export async function registerServiceWorker(
         options.onOfflineReady?.()
       },
       onRegisterError(error: unknown) {
-        options.onError?.({ error_type: errorTypeOf(error) })
+        options.onError?.({ error_type: errorTypeOf(error), message: errorMessageOf(error) })
       },
     })
   } catch (error) {
-    options.onError?.({ error_type: errorTypeOf(error) })
+    options.onError?.({ error_type: errorTypeOf(error), message: errorMessageOf(error) })
     return noop
   }
 

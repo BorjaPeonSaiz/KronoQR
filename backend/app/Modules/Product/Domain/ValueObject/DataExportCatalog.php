@@ -66,13 +66,15 @@ namespace App\Modules\Product\Domain\ValueObject;
  *   columna `roles` de `users.csv`, que es lo que responde la pregunta; las
  *   tablas de union son un detalle de implementacion de la libreria de permisos.
  *
- * ## `absences` y `error_events`
+ * ## `absences`
  *
- * **No existen todavia en este esquema**, y el manifiesto las declara
- * `not_installed` en lugar de escribir dos ficheros vacios. La diferencia
- * importa: un `absences.csv` con cero filas le dice al cliente «no tienes
- * ausencias registradas», y lo cierto es «esta version no registra ausencias».
- * `error_events` llega con la tarea 5.12.
+ * **No existe todavia en este esquema**, y el manifiesto la declara
+ * `not_installed` en lugar de escribir un fichero vacio. La diferencia importa:
+ * un `absences.csv` con cero filas le dice al cliente «no tienes ausencias
+ * registradas», y lo cierto es «esta version no registra ausencias».
+ *
+ * `error_events` estuvo en esa misma lista hasta la tarea 5.12, que creo la
+ * tabla. Ahora entra como un conjunto mas.
  *
  * ## Dominio puro
  *
@@ -306,6 +308,48 @@ final class DataExportCatalog
                 'accessed_at',
             ]),
 
+            // --- El diagnostico tecnico ---------------------------------------
+
+            /*
+             * El historico de errores agrupado por huella (RF-PD-15).
+             *
+             * **Entra entero porque son datos del cliente**, y esa es la
+             * diferencia con el paquete de diagnostico: aquel va anonimizado
+             * porque sale hacia el fabricante (ADR-020) y alli el autor de la
+             * resolucion no viaja; aqui se queda con el cliente, que es su
+             * responsable del tratamiento (RL-16), asi que sale todo — incluido
+             * quien dio cada fallo por atendido.
+             *
+             * La columna `fingerprint` sale tambien, y no es ruido tecnico: es
+             * lo que permite a quien lea el fichero anos despues entender por
+             * que hay una fila con `occurrences = 1000` en lugar de mil filas.
+             *
+             * `resolved_by_user_uuid` y no `resolved_by_user_id`, como toda
+             * referencia a `users` en esta exportacion: ningun identificador
+             * interno sale del producto (doc 01 §5.5).
+             */
+            ExportedDataset::csv('error_events', [
+                'fingerprint',
+                'level',
+                'source',
+                'module',
+                'code',
+                'message',
+                'exception_class',
+                'file',
+                'line',
+                'context',
+                'trace_id',
+                'device_id',
+                'employee_uuid',
+                'app_version',
+                'occurrences',
+                'first_seen_at',
+                'last_seen_at',
+                'resolved_at',
+                'resolved_by_user_uuid',
+            ]),
+
             // --- La configuracion del producto --------------------------------
 
             ExportedDataset::json(
@@ -362,7 +406,7 @@ final class DataExportCatalog
      */
     public static function notInstalled(): array
     {
-        return ['absences', 'error_events'];
+        return ['absences'];
     }
 
     /**

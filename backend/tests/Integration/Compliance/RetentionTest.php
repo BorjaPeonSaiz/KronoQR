@@ -416,6 +416,25 @@ it('purga el log tecnico y el historico de errores en su ciclo de 90 dias', func
     retentionScenario();
     retentionClock();
 
+    /**
+     * Una fila de `error_events` con solo lo obligatorio, vista por ultima vez
+     * en el instante que se le pase (RF-PD-15). Lo unico que le importa a la
+     * retencion es `last_seen_at`.
+     *
+     * @return array<string, scalar>
+     */
+    $grupoDeErroresDe = static fn (string $lastSeenAt): array => [
+        'fingerprint' => bin2hex(random_bytes(32)),
+        'level' => 'error',
+        'source' => 'api',
+        'message' => 'algo fallo',
+        'context' => '{}',
+        'app_version' => '2.2.0',
+        'occurrences' => 1,
+        'first_seen_at' => $lastSeenAt,
+        'last_seen_at' => $lastSeenAt,
+    ];
+
     // El log tecnico: dos ficheros, uno de hace cuatro meses y otro de ayer.
     $logs = $directory.'/logs';
     mkdir($logs, 0o750, true);
@@ -424,27 +443,25 @@ it('purga el log tecnico y el historico de errores en su ciclo de 90 dias', func
     file_put_contents($logs.'/laravel-2027-05-31.log', 'reciente');
     touch($logs.'/laravel-2027-05-31.log', strtotime('2027-05-31 00:00:00 UTC'));
 
-    // `error_events` llega con la tarea 5.12; aqui se levanta una tabla con su
-    // forma minima -clave y columna de envejecimiento- para comprobar que el
-    // ciclo corto la alcanza en cuanto exista.
+    // `error_events` YA EXISTE desde la tarea 5.12: la crea su migracion. Hasta
+    // entonces esta prueba levantaba una tabla con su forma minima para
+    // comprobar que el ciclo corto la alcanzaria en cuanto existiera; ahora se
+    // puebla la de verdad, que es mejor prueba —si alguna columna obligatoria
+    // cambiara, esto lo diria—.
     //
     // TODO EN LA CONEXION DE MIGRACION Y EN SU PROPIA TRANSACCION, igual que las
-    // pruebas de particiones y por un motivo que ademas es un hallazgo: crear la
-    // tabla con un rol y escribirla con otro deja la primera sesion esperando el
-    // bloqueo de la segunda -que no confirma hasta que acaba la prueba- y el
-    // `DROP TABLE` final se queda colgado. Crear, poblar, purgar y deshacer en una
-    // sola sesion no necesita limpieza: la deshace el `rollBack`.
+    // pruebas de particiones y por un motivo que ademas es un hallazgo: escribir
+    // la tabla con un rol y purgarla con otro deja la primera sesion esperando el
+    // bloqueo de la segunda -que no confirma hasta que acaba la prueba-. Poblar,
+    // purgar y deshacer en una sola sesion no necesita limpieza: lo deshace el
+    // `rollBack`.
     $migrator = DB::connection('pgsql_migrator');
     $migrator->beginTransaction();
 
     try {
-        $migrator->statement(
-            'CREATE TABLE error_events (id bigserial PRIMARY KEY, last_seen_at timestamptz NOT NULL)'
-        );
-
         $migrator->table('error_events')->insert([
-            ['last_seen_at' => '2027-01-15 10:00:00+00'],
-            ['last_seen_at' => '2027-05-31 10:00:00+00'],
+            $grupoDeErroresDe('2027-01-15 10:00:00+00'),
+            $grupoDeErroresDe('2027-05-31 10:00:00+00'),
         ]);
 
         $retention = retentionUsing($migrator, RETENTION_NOW);

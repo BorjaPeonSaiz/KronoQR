@@ -20,6 +20,7 @@ import {
   stubManagementApi,
   USER,
 } from './support/admin'
+import { stubErrorEventsApi } from './support/errors'
 import { stubOnboardingApi } from './support/setupWizard'
 
 /** Etiquetas WCAG que se comprueban: A y AA hasta la 2.2 (doc 01 §6.5). */
@@ -252,6 +253,48 @@ test(
     await page.getByLabel('Motivo').fill('Incidencia #123: la cola no vacía')
     await page.getByRole('button', { name: 'Conceder acceso' }).click()
     await expect(page.getByTestId('issued-token')).toBeVisible()
+
+    await expectNoBlockingViolations(page)
+  },
+)
+
+// --- Historico de errores agrupado por huella (RF-PD-15, tarea 5.12) -------
+
+test('la pantalla de errores tampoco', { tag: ['@RF-PD-15'] }, async ({ page }) => {
+  await stubManagementApi(page, { role: 'admin' })
+  await stubErrorEventsApi(page)
+  await logInAsAdmin(page)
+  await page.goto('/errors')
+  await expect(page.getByTestId('error-row')).toBeVisible()
+
+  await expectNoBlockingViolations(page)
+})
+
+test(
+  'la fila expandida del historico de errores tampoco',
+  { tag: ['@RF-PD-15'] },
+  async ({ page }) => {
+    await stubManagementApi(page, { role: 'admin' })
+    await stubErrorEventsApi(page)
+    await logInAsAdmin(page)
+    await page.goto('/errors')
+    await page.getByTestId('toggle-87').click()
+    await expect(page.getByTestId('what-to-do')).toBeVisible()
+
+    await expectNoBlockingViolations(page)
+  },
+)
+
+test(
+  'el dialogo de marcar un error como resuelto tampoco, con el foco dentro',
+  { tag: ['@RF-PD-15'] },
+  async ({ page }) => {
+    await stubManagementApi(page, { role: 'admin' })
+    await stubErrorEventsApi(page)
+    await logInAsAdmin(page)
+    await page.goto('/errors')
+    await page.getByTestId('resolve-87').click()
+    await expect(page.getByRole('dialog')).toBeVisible()
 
     await expectNoBlockingViolations(page)
   },

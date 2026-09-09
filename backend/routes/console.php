@@ -330,3 +330,37 @@ Schedule::command('product:telemetry', ['--send'])
     ->weeklyOn(1, '05:40')
     ->withoutOverlapping()
     ->runInBackground();
+
+/*
+ * Purga del historico de errores (RF-PD-15, RL-11, tarea 5.12).
+ *
+ * QUE SE BORRA: los grupos de `error_events` que llevan mas de
+ * `ERROR_HISTORY_RETENTION_DAYS` -90 de serie- sin volver a ocurrir. Por
+ * `last_seen_at` y no por `first_seen_at`: lo que se conserva noventa dias es un
+ * grupo VIVO, y uno que sigue pasando cada dia no vence porque su primera
+ * aparicion sea antigua.
+ *
+ * ESTO NO ES LA PURGA DEL REGISTRO LEGAL. `compliance:apply-retention` mueve
+ * jornadas y asientos a los cuatro anos del perfil de cumplimiento, pide un
+ * token de confirmacion y deja informe; aqui se borran datos TECNICOS de
+ * diagnostico. Por eso no hay confirmacion, no hay asiento en `audit_log` (regla
+ * dura 6, al reves: no es evidencia legal) y si hay borrado de verdad, que es la
+ * unica excepcion admitida a la regla dura 5 y esta acotada a esta tabla.
+ *
+ * DIARIA Y NO SEMANAL, al contrario que el ciclo de retencion. Una tabla que
+ * crece con cada error de la instalacion es un problema de disco en el servidor
+ * del cliente -al que no podemos entrar (ADR-016)-, y la pasada es barata: un
+ * `DELETE` sobre el indice de `last_seen_at` que casi siempre no encuentra nada.
+ *
+ * 03:35 UTC: veinte minutos despues de la copia (03:15) y media hora antes de la
+ * verificacion de la cadena (04:05). En ese hueco no hay nada mas corriendo, y
+ * queda holgura de sobra hasta el turno de las 06:00.
+ *
+ * `withoutOverlapping` por higiene: repetir la purga es seguro -no hay nada que
+ * borrar dos veces- pero dos `DELETE` a la vez sobre la misma tabla no aportan
+ * nada.
+ */
+Schedule::command('product:errors:prune')
+    ->dailyAt('03:35')
+    ->withoutOverlapping()
+    ->runInBackground();

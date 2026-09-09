@@ -67,8 +67,21 @@ it('no saca ningun identificador interno salvo en la auditoria', function (): vo
      *     hace idempotente un fichaje reenviado desde la cola.
      *   - `license.license_id` — el identificador comercial de la licencia, el
      *     que aparece en el contrato del cliente.
+     *   - `error_events.trace_id` — la traza W3C de la peticion, 32
+     *     hexadecimales, con la que se correlaciona con el log tecnico. No
+     *     referencia ninguna fila de este producto.
+     *   - `error_events.device_id` — el UUID **publico** del quiosco, el mismo
+     *     que sale en `devices.csv`. Se llama asi porque asi se llama la columna
+     *     del doc 01 §5, y cambiarle el nombre en la exportacion romperia la
+     *     correspondencia con la tabla que el cliente ve en el panel.
      */
-    $noSonClavesInternas = ['credentials.key_id', 'scan_events.scan_id', 'license.license_id'];
+    $noSonClavesInternas = [
+        'credentials.key_id',
+        'scan_events.scan_id',
+        'license.license_id',
+        'error_events.trace_id',
+        'error_events.device_id',
+    ];
 
     $conIdentificadorInterno = [];
 
@@ -144,7 +157,7 @@ it('saca la auditoria entera con su cadena de hash', function (): void {
         ->toBe(['partition_year', 'first_hash', 'last_hash', 'row_count', 'sealed_at', 'sealed_by']);
 })->group('RF-PD-14', 'RL-04');
 
-it('declara los dieciocho conjuntos de la ficha, sin efimeros ni fontaneria', function (): void {
+it('declara los diecinueve conjuntos de la ficha, sin efimeros ni fontaneria', function (): void {
     // El catalogo completo, valor a valor: añadir o quitar un conjunto tiene que
     // ser un cambio visible que alguien revise, no un efecto colateral.
     expect(DataExportCatalog::names())->toBe([
@@ -163,6 +176,7 @@ it('declara los dieciocho conjuntos de la ficha, sin efimeros ni fontaneria', fu
         'audit_chain_anchors',
         'users',
         'support_grants',
+        'error_events',
         'installation_settings',
         'compliance_profiles',
         'license',
@@ -177,14 +191,19 @@ it('declara los dieciocho conjuntos de la ficha, sin efimeros ni fontaneria', fu
     }
 })->group('RF-PD-14', 'RL-20');
 
-it('declara `absences` y `error_events` como no instalados, no como vacios', function (): void {
+it('declara `absences` como no instalado, no como vacio', function (): void {
     // La diferencia importa: un `absences.csv` con cero filas dice «no tienes
     // ausencias registradas», y lo cierto es «esta version no registra
     // ausencias».
-    expect(DataExportCatalog::notInstalled())->toBe(['absences', 'error_events'])
+    //
+    // `error_events` estuvo en esta misma lista hasta la tarea 5.12, que creo la
+    // tabla: ahora es un conjunto mas y **tiene que salir del `not_installed`**,
+    // porque decirle al cliente que su instalacion no registra errores cuando si
+    // lo hace es exactamente la mentira que este mecanismo existe para evitar.
+    expect(DataExportCatalog::notInstalled())->toBe(['absences'])
         ->and(DataExportCatalog::dataset('absences'))->toBeNull()
-        ->and(DataExportCatalog::dataset('error_events'))->toBeNull();
-})->group('RF-PD-14');
+        ->and(DataExportCatalog::dataset('error_events'))->not->toBeNull();
+})->group('RF-PD-14', 'RF-PD-15');
 
 it('usa JSON solo donde hay documentos anidados y CSV para el resto', function (): void {
     // CSV y no XLSX porque XLSX topa en 1.048.576 filas y cuatro años de

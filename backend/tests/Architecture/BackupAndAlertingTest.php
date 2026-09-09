@@ -386,6 +386,36 @@ it('programa la deteccion de incidencias y su metrica, que es lo que las hace ex
         ->toMatch('/attendance:detect-incidents\'\)\s*\n\s*->dailyAt\(/');
 })->group('RF-PR-01');
 
+it('dirige la alerta de errores criticos nuevos al IT del cliente, con runbook', function (): void {
+    // Doc 01 §9.3, fila «Errores nuevos de severidad critica en error_events |
+    // cualquiera en 5 min | Alta | IT del cliente». Tarea 5.12. Las otras dos
+    // filas que apuntan al mismo runbook —5xx y p95 del endpoint de
+    // fichaje— son de la tarea 3.2 y no tienen regla en este fichero: el
+    // runbook ya las cubre, la regla de Prometheus todavia no existe.
+    $reglas = reglasDeAlerta('infra/observability/prometheus/rules/errors.yml');
+
+    exigeProcedimientoEnCadaAlerta($reglas);
+
+    $porNombre = [];
+    foreach ($reglas as $regla) {
+        $porNombre[$regla['alert'] ?? ''] = $regla;
+    }
+
+    expect($porNombre)->toHaveKey('ErroresCriticosNuevos');
+
+    $errores = $porNombre['ErroresCriticosNuevos'];
+    // Decision 14 de la ficha 5.12: cuenta GRUPOS nuevos o reabiertos, no
+    // ocurrencias, para que una averia ya conocida y sin resolver no
+    // mantenga la alerta encendida sin parar.
+    expect($errores['expr'] ?? '')->toContain('application_error_groups_opened_total{level="critical"}');
+    expect($errores['expr'] ?? '')->toContain('> 0');
+    expect($errores['labels']['destinatario'] ?? '')->toBe('it-cliente');
+
+    expect(backupFile('docs/runbooks/errores-en-el-panel.md'))
+        ->toContain('product:errors')
+        ->toContain('error_events');
+})->group('RF-PD-15');
+
 it('no deja ningun runbook enlazado desde otro que no exista', function (): void {
     // El hallazgo que esta prueba existe para no repetir: `brecha-de-seguridad.md`
     // estuvo citado por cuatro documentos —el indice de la carpeta y tres

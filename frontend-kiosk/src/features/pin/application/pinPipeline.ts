@@ -124,9 +124,8 @@ export function createPinPipeline(options: PinPipelineOptions): PinPipeline {
     try {
       result = await options.submission.submit(scan)
     } catch (error) {
-      options.onError?.('submit_failed', {
-        reason: error instanceof Error ? error.name : 'unknown',
-      })
+      const reason = error instanceof Error ? error.name : 'unknown'
+      options.onError?.('submit_failed', { reason, message: reason })
       return null
     }
 
@@ -187,10 +186,12 @@ export function createPinPipeline(options: PinPipelineOptions): PinPipeline {
         pinSealed = await seal(pin, options.publicKey)
       } catch (error) {
         // El PIN en claro NUNCA sale de aqui, ni siquiera en el contexto de
-        // error: solo el nombre tecnico del fallo (regla dura 21).
-        options.onError?.('seal_failed', {
-          reason: error instanceof Error ? error.name : 'unknown',
-        })
+        // error: solo el nombre tecnico del fallo (regla dura 21). `message`
+        // duplica ese mismo nombre -nunca `error.message`- para no abrir una
+        // via por la que un mensaje de libsodium pudiera llevar mas de lo que
+        // este codigo esta dispuesto a arriesgar.
+        const reason = error instanceof Error ? error.name : 'unknown'
+        options.onError?.('seal_failed', { reason, message: reason })
         return { kind: 'rejected', scanId, occurredAt }
       }
 

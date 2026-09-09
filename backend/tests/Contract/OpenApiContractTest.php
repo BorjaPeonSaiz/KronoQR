@@ -199,6 +199,15 @@ it('describe solo los endpoints cuya tarea existe, y todos bajo /api/v1', functi
         // fichero por cada clic acumularia datos del cliente en el servidor sin
         // que nadie los borre.
         '/api/v1/diagnostics/bundle',
+        // Tarea 5.12: el historico de errores agrupado por huella (RF-PD-15).
+        // Dos rutas de consulta bajo `diagnostics/` —son lo que el alcance
+        // `diagnostics` de un acceso de soporte lee— y UNA de recepcion,
+        // `/client-errors`, para el panel y el portal; el quiosco reporta
+        // dentro de su latido y no tiene ruta propia (ficha 5.12, decision 7).
+        // La recepcion nunca devuelve el historico: consultar es otra potestad.
+        '/api/v1/diagnostics/errors',
+        '/api/v1/diagnostics/errors/{id}/resolve',
+        '/api/v1/client-errors',
         // Tarea 5.9: los accesos temporales de soporte (RF-PD-11, RL-18,
         // ADR-020). Ambito propio `support:*` y no `settings:*`, porque
         // configurar la instalacion y dejar entrar a alguien de fuera a los datos
