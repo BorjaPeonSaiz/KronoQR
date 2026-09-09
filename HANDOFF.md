@@ -61,11 +61,12 @@ descubierto con `scandir` (ver «Trampas»).
 **Verificado el 09-09 tras la segunda vuelta:** suite completa **3927 en verde** (17 312 aserciones, 686 s), `make quality`
 (contrato 0, Pint, PHPStan 9, Deptrac 0), `qa:traceability --check`, `docs:consistency --check`, `ClientDocumentationTest` 30,
 gitleaks 0 sobre los ficheros cambiados, promtool sobre `errors.yml`, `check-package-links.sh` (305 enlaces), `type-check` y
-`lint` de los cuatro paquetes, unitarias web-kit 199 / panel 433 / quiosco 379 / portal 79, E2E panel 88 y quiosco 50.
+`lint` de los cuatro paquetes, unitarias web-kit 199 / panel 433 / quiosco 379 / portal 79, E2E panel 88 y quiosco 50. **CI manual 34369140085 en verde**: MSI 82,83 % (2 440 mutantes, 10 min en paralelo).
 
-**Siguiente acción:** commit `dc9e0a1` empujado; **CI manual completa con ⑧ y ⑧b lanzada** (ejecución 34353623580; **ojo: la concurrencia por rama cancela la ejecución en curso con cada push**, así que
-la manual se lanza DESPUÉS del último push, no antes — la primera, 34353479059, la canceló el push del HANDOFF) y **PR #50 abierta**. Cuando la CI manual termine en verde: integrar
-con *merge commit* (nunca squash), `make up` en `main` (migración `error_events`), borrar la rama. Después, la **5.11b** y el
+**Siguiente acción:** commits `dc9e0a1` (tarea), `f4a138d` (clientes regenerados) y `816301f` (mutación en paralelo) empujados;
+**CI manual completa con ⑧ y ⑧b EN VERDE** (ejecución 34369140085; las dos anteriores cayeron por causas ya corregidas: clientes
+TypeScript sin regenerar tras un texto del contrato, y la mutación en serie desbordando el tope del job ③). PR #50 abierta:
+integrar con *merge commit* (nunca squash), `make up` en `main` (migración `error_events`), borrar la rama. Después, la **5.11b** y el
 cierre de la Fase 5 (doc 03 §6.6), con los restos de «Pendiente».
 
 **Rama `feat/tarea-5.11-documentacion-cliente`** (desde `main` `e2860be`). **Tarea 5.11 «Documentación de instalación,
