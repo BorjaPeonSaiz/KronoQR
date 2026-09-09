@@ -13,7 +13,6 @@ use App\Modules\Product\Infrastructure\Export\ZipDataExportArchiveWriter;
 use App\Modules\Product\Infrastructure\Job\GenerateDataExportJob;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
-use DateTimeImmutable;
 use Illuminate\Queue\MaxAttemptsExceededException;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\Database\RefreshDatabase;

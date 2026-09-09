@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use App\Modules\Shared\Application\Port\Clock;
-use DateTimeImmutable;
 use Illuminate\Support\Facades\DB;
 use Tests\Feature\Quality\Support\Commands;
 use Tests\Support\Database\RefreshDatabase;

@@ -7,7 +7,6 @@ use App\Modules\Workforce\Application\Port\PinHasher;
 use App\Modules\Workforce\Application\Port\PinMaterial;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use SensitiveParameter;
 use Spectator\Spectator;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;

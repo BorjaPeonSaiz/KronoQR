@@ -921,7 +921,16 @@ else
 # lugar de un >= produce minutos incorrectos en la nomina de alguien»: eso es lo
 # que este umbral tiene que vigilar. Los mutadores de comparacion, aritmetica,
 # condicional y retorno siguen TODOS activos.
-	$(RUN_APP_XDEBUG) sh -c 'PHP_INI_SCAN_DIR=":$$(pwd)/tools/mutation" $(PEST) --mutate --path=$(MUTATE_PATHS) --testsuite=Unit --covered-only --no-cache --except=StringConcatRemoveLeft,StringConcatRemoveRight,StringConcatSwitchSides --min=80'
+#
+# --parallel, medido (09-09-2026, tarea 5.12): el dominio de Product solo, 342
+# mutantes, 830 s en serie y 85 s en paralelo en la maquina de desarrollo, con
+# el mismo veredicto mutante a mutante. En serie la mutacion entera tardaba ya
+# 37 min en la CI y la 5.12 la saco del tope de 45 del job. La suite Unit es
+# segura en paralelo (no toca base de datos); la constante AHORA que impide el
+# --parallel de la suite COMPLETA vive en pruebas Feature, que aqui no corren.
+# Un `use` sin efecto (clase global en un fichero sin namespace) rompe el
+# arranque de los procesos hijos como ErrorException: no dejar ninguno.
+	$(RUN_APP_XDEBUG) sh -c 'PHP_INI_SCAN_DIR=":$$(pwd)/tools/mutation" $(PEST) --mutate --parallel --path=$(MUTATE_PATHS) --testsuite=Unit --covered-only --no-cache --except=StringConcatRemoveLeft,StringConcatRemoveRight,StringConcatSwitchSides --min=80'
 endif
 
 e2e: ## Playwright: quiosco con camara simulada y panel de gestion

@@ -14,7 +14,6 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use RuntimeException;
 use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Attendance\FakeCredentialResolver;
 use Tests\Support\Database\RefreshDatabase;

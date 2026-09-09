@@ -369,6 +369,12 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 
 ## Trampas del entorno — leer antes de operar
 
+- **La mutación va en `--parallel` desde la 5.12** (830 s → 85 s en el dominio de `Product`; en serie la CI tardaba 37 min
+  y la 5.12 la sacó del tope de 45 del job ③, ahora 60). En paralelo, un `use DateTimeImmutable;` (clase global) en un
+  fichero de prueba **sin namespace** rompe el arranque de los hijos como `ErrorException` («use statement with
+  non-compound name has no effect»): no dejar ninguno. Los 86 mutantes sin prueba de `Product/Domain` son todos de 5.1–5.10
+  (`InvalidSettingValue`, `SettingKey`, `SettingDefinition`, `InvalidComplianceProfileValue`, `InvalidLicenseKey`…): deuda
+  para subir el MSI de `Product` (74,85 %) sin depender del resto de módulos.
 - **La CI cancela la ejecución en curso de la misma rama con cada push** (`concurrency: ci-${{ github.ref }}`,
   `cancel-in-progress`). Una CI manual (`gh workflow run ci.yml --ref rama`, la única que corre ⑧b fuera de `main`) se
   lanza **después** del último push, y no se empuja nada más —ni el HANDOFF— hasta que termine.

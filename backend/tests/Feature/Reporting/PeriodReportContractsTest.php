@@ -5,8 +5,6 @@ declare(strict_types=1);
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use App\Modules\Workforce\Domain\Model\EmploymentContract;
 use App\Modules\Workforce\Domain\ValueObject\ScheduleType;
-use DateTimeImmutable;
-use DateTimeZone;
 use Spectator\Spectator;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
