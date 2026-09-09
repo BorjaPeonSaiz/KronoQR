@@ -112,3 +112,15 @@ Este proyecto se trabaja en muchas sesiones a lo largo de días o semanas. `HAND
 - **Actualiza `HANDOFF.md` al terminar una tarea significativa** (no en cada mensaje): estado, completado, pendiente, archivos tocados, siguiente acción. Sé conciso — sin pegar código ni volcados de log, sin historial de la conversación.
 - **Cuando el usuario indique que va a terminar la sesión:** revisa el trabajo hecho, deja `HANDOFF.md` completo y actualizado, y responde con un resumen breve (qué se hizo, qué queda, ficheros tocados, problemas conocidos, siguiente acción) — nada de código ni detalle temporal en la respuesta.
 - Usa `/compact` para reducir el contexto dentro de la sesión actual cuando se alargue. Usa `/clear` para empezar limpio una vez `HANDOFF.md` está al día. Evita `/resume`: si `HANDOFF.md` está bien escrito, no hace falta.
+
+### Engram: memoria de búsqueda, no sustituto de `HANDOFF.md`
+
+Además de `HANDOFF.md` hay una memoria persistente local, [Engram](https://github.com/Gentleman-Programming/engram) (plugin de Claude Code + servidor MCP `engram`, herramientas `mem_*`, base SQLite en `~/.engram/`). Los dos se reparten el trabajo así:
+
+- **`HANDOFF.md` manda.** Es la fuente de verdad del estado y de la siguiente acción: está versionado, se revisa en PR y viaja con el repositorio. Si Engram y `HANDOFF.md` se contradicen, vale `HANDOFF.md`, y corregir Engram forma parte de la tarea.
+- **Engram guarda el detalle que `HANDOFF.md` no debe cargar:** el *porqué* de una decisión, el diagnóstico completo de una trampa, lo que corrigió una revisión, una preferencia del usuario. `HANDOFF.md` lleva la línea; Engram, la explicación buscable con `mem_search`.
+- **Al empezar**, sigue leyendo `CLAUDE.md` y `HANDOFF.md`. Llama a `mem_context` o `mem_search` solo cuando `HANDOFF.md` remita a un razonamiento que no recoge, o antes de repetir un trabajo que puede haberse hecho ya. Esto sustituye al `/resume`.
+- **Durante la sesión**, `mem_save` tras cada decisión, trampa descubierta, corrección de revisión o preferencia confirmada, con un `topic_key` estable (`fase-5/tarea-5.12`, `entorno/bind-mount`) para que el tema evolucione en vez de duplicarse. No copies en Engram lo que ya está en `HANDOFF.md`, en `docs/` o en git.
+- **Al cerrar una tarea o la sesión**, primero `HANDOFF.md`, después `mem_session_summary` y `mem_session_end`. El resumen de Engram es la red de seguridad si la sesión se corta antes de actualizar `HANDOFF.md`; no lo reemplaza.
+- **Tras una compactación**, persiste el resumen inyectado con `mem_session_summary` antes de seguir.
+- **Las mismas reglas de privacidad que en los logs:** en Engram nunca van datos de un cliente, nombres de empleados ni secretos. La memoria es local a la máquina y no se versiona: no se usa `engram sync` ni existe `.engram/` en el repositorio.

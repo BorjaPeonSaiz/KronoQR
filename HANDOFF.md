@@ -8,8 +8,10 @@
 ## Estado y objetivo actual
 
 **Rama `feat/tarea-5.12-historico-errores`** (desde `main` `4f3f97b`). **Tarea 5.12 «Histórico de errores en base de
-datos» (RF-PD-15) IMPLEMENTADA, REVISADA (dos vueltas) y PROBADA el 09-09-2026**; ver «Siguiente acción» para commit, CI y
-PR. **La 5.11b (guía de RRHH, portal y hoja de la tarjeta) NO se ha ejecutado**: es la última tarea de la Fase 5.
+datos» (RF-PD-15) IMPLEMENTADA, REVISADA (dos vueltas), PROBADA e INTEGRADA en `main` el 09-09-2026** (PR #51, *merge
+commit* `4c8e52d`; la PR #50 quedó cerrada sin integrar y GitHub no dejó reabrirla; CI manual completa con ⑧ y ⑧b en verde
+antes de integrar, ejecución 34369140085). Rama borrada; `make up` hecho sobre `main` (migración `error_events` aplicada).
+**La 5.11b (guía de RRHH, portal y hoja de la tarjeta) NO se ha ejecutado**: es la última tarea de la Fase 5.
 
 **Cómo se hizo (receta de la 5.11, con una diferencia).** Antes de lanzar nada: catorce decisiones en la ficha (plan 05 →
 «Tarea 5.12», «Decisiones tomadas»), fila 16 de «Puntos no cubiertos», contrato (`GET /diagnostics/errors`,
@@ -63,11 +65,13 @@ descubierto con `scandir` (ver «Trampas»).
 gitleaks 0 sobre los ficheros cambiados, promtool sobre `errors.yml`, `check-package-links.sh` (305 enlaces), `type-check` y
 `lint` de los cuatro paquetes, unitarias web-kit 199 / panel 433 / quiosco 379 / portal 79, E2E panel 88 y quiosco 50. **CI manual 34369140085 en verde**: MSI 82,83 % (2 440 mutantes, 10 min en paralelo).
 
-**Siguiente acción:** commits `dc9e0a1` (tarea), `f4a138d` (clientes regenerados) y `816301f` (mutación en paralelo) empujados;
-**CI manual completa con ⑧ y ⑧b EN VERDE** (ejecución 34369140085; las dos anteriores cayeron por causas ya corregidas: clientes
-TypeScript sin regenerar tras un texto del contrato, y la mutación en serie desbordando el tope del job ③). PR #50 abierta:
-integrar con *merge commit* (nunca squash), `make up` en `main` (migración `error_events`), borrar la rama. Después, la **5.11b** y el
-cierre de la Fase 5 (doc 03 §6.6), con los restos de «Pendiente».
+**Siguiente acción:** la CI de `main` tras el merge (34375919847) terminó en verde. Arrancar la **5.11b** («Documentación de
+usuario»: guía del panel para RRHH, guía del portal del empleado y hoja de instrucciones de la tarjeta; ficha en plan 05 →
+«Tarea 5.11b»; `producto-licencia` + `frontend-panel`; misma receta: decisiones en la ficha, capturas sobre los dobles del E2E,
+ES/EN con `ClientDocumentationTest` ampliada). Después, el cierre de la Fase 5 (doc 03 §6.6) con los restos de «Pendiente».
+Commits de la 5.12: `dc9e0a1` (tarea), `f4a138d` (clientes regenerados), `816301f` (mutación en paralelo), `7aa8bb8` (HANDOFF);
+las dos primeras CI manuales cayeron por causas corregidas: clientes TypeScript sin regenerar tras un texto del contrato, y la
+mutación en serie desbordando el tope del job ③.
 
 **Rama `feat/tarea-5.11-documentacion-cliente`** (desde `main` `e2860be`). **Tarea 5.11 «Documentación de instalación,
 operación, configuración y obligaciones legales» (RL-16..RL-21, RF-PD-02) IMPLEMENTADA, REVISADA, PROBADA e **INTEGRADA en
@@ -295,6 +299,10 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   recalibración de estimación R16.
 - Plazo de purga de `employment_contracts` con la asesoría laboral (hasta entonces se conservan).
 - Techo del formato PDF (`docs/verificacion-manual.md`).
+- **Engram (09-09-2026):** en funcionamiento (binario 1.20.0 en `~/.local/bin`, plugin `engram@engram` y MCP `engram` en ámbito
+  usuario, protocolo `slim`, proyecto detectado `kronoqr`, nueve memorias sembradas: trampas del entorno, 5.12 y receta de
+  orquestación). **Falta solo** añadir `"permissions": {"allow": ["mcp__engram"]}` a `~/.claude/settings.json` (o ejecutar
+  `engram setup claude-code --protocol=slim` en una terminal) para que fuera del modo automático no pregunte por cada `mem_*`.
 
 ### Por tarea
 
@@ -435,6 +443,10 @@ Una rama por fase o tarea, un commit por tarea con CI en cada push, PR al cierre
 (nunca squash: el CHANGELOG se genera de los commits convencionales y **no se edita a mano**). Cada
 cierre de fase pasa por los cuatro revisores (`seguridad-cumplimiento`, `revisor-codigo`, `qa-testing`,
 `devops-observabilidad`) y sube `current_phase` en `backend/config/quality.php` solo al cerrar.
+
+Desde el 09-09-2026 hay además **Engram** (memoria local buscable, herramientas MCP `mem_*`); el reparto con este fichero
+está en `CLAUDE.md` → «Engram: memoria de búsqueda, no sustituto de `HANDOFF.md`». En resumen: este fichero manda y lleva
+la línea; Engram guarda el porqué y el detalle. Al cerrar tarea o sesión: primero `HANDOFF.md`, luego `mem_session_summary`.
 
 ## Histórico condensado
 
