@@ -7746,8 +7746,11 @@ export interface components {
             last_seen_at: components["schemas"]["UtcTimestamp"];
             resolved_at: components["schemas"]["UtcTimestamp"] | null;
             /**
-             * @description Quien lo dio por resuelto. `null` mientras siga abierto o si se
-             *     reabrio al volver a ocurrir.
+             * @description Quien lo dio por resuelto. `null` mientras siga abierto, si se
+             *     reabrio al volver a ocurrir, **o si quien pregunta es un acceso de
+             *     soporte** (RF-PD-11, ADR-020): el nombre de una persona de la
+             *     organizacion del cliente no sale hacia el fabricante, igual que el
+             *     paquete de diagnostico lo omite.
              */
             resolved_by: components["schemas"]["IncidentUser"] | null;
         };

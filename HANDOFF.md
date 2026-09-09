@@ -63,8 +63,8 @@ descubierto con `scandir` (ver «Trampas»).
 gitleaks 0 sobre los ficheros cambiados, promtool sobre `errors.yml`, `check-package-links.sh` (305 enlaces), `type-check` y
 `lint` de los cuatro paquetes, unitarias web-kit 199 / panel 433 / quiosco 379 / portal 79, E2E panel 88 y quiosco 50.
 
-**Siguiente acción:** commit `dc9e0a1` empujado; **CI manual completa con ⑧ y ⑧b lanzada** (ejecución 34353479059; la de
-push, 34353471396, la cancela la concurrencia por rama) y **PR #50 abierta**. Cuando la CI manual termine en verde: integrar
+**Siguiente acción:** commit `dc9e0a1` empujado; **CI manual completa con ⑧ y ⑧b lanzada** (ejecución 34353623580; **ojo: la concurrencia por rama cancela la ejecución en curso con cada push**, así que
+la manual se lanza DESPUÉS del último push, no antes — la primera, 34353479059, la canceló el push del HANDOFF) y **PR #50 abierta**. Cuando la CI manual termine en verde: integrar
 con *merge commit* (nunca squash), `make up` en `main` (migración `error_events`), borrar la rama. Después, la **5.11b** y el
 cierre de la Fase 5 (doc 03 §6.6), con los restos de «Pendiente».
 
@@ -369,6 +369,9 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 
 ## Trampas del entorno — leer antes de operar
 
+- **La CI cancela la ejecución en curso de la misma rama con cada push** (`concurrency: ci-${{ github.ref }}`,
+  `cancel-in-progress`). Una CI manual (`gh workflow run ci.yml --ref rama`, la única que corre ⑧b fuera de `main`) se
+  lanza **después** del último push, y no se empuja nada más —ni el HANDOFF— hasta que termine.
 - **El *bind mount* de Docker Desktop pierde ficheros al recorrer directorios**: `RecursiveDirectoryIterator` (PHPUnit/Pest)
   sobre `tests/Feature` devolvía 78 ficheros de 116 y ninguna suite avisaba. `phpunit.xml` va por subdirectorio y
   `TestDiscoveryTest` (Architecture) falla si vuelve a faltar uno: si falla en local, declarar el directorio afectado aparte.
