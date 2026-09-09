@@ -78,10 +78,10 @@ observabilidad digan lo mismo); sin ningún quiosco activo sale 1; recién empar
 21 unitarias + 11 feature. **La regla de Prometheus «quiosco sin latido» sigue sin escribir (3.2)**: hoy este comando es la
 única detección.
 
-**Siguiente acción (5.11):** commit hecho en la rama; empujar, lanzar la CI manual completa (`gh workflow run ci.yml --ref
-feat/tarea-5.11-documentacion-cliente`, con ⑧ y ⑧b; **no empujar nada mientras corra: el grupo de concurrencia la
-cancelaría**), abrir la PR contra `main` e integrar con *merge commit* cuando esté en verde; después `make up` en `main`
-(sin migraciones nuevas).
+**Siguiente acción (5.11):** commits `c7cee70` (tarea) y `e3ca363` (lock: aviso nuevo de `js-yaml`, ver «Trampas»)
+empujados; **CI manual completa con ⑧ y ⑧b en verde** (ejecución 34291785329; la primera, 34288448585, cayó solo en
+`npm audit` por el aviso de `js-yaml`); PR #49 abierta. Integrar con *merge commit* (nunca squash), `make up` en `main`
+(sin migraciones nuevas) y arrancar la **5.12** (histórico de errores en el panel y transporte del `errorReporter`).
 
 **Rama `feat/tarea-5.10-exportacion-telemetria`** (desde `main` `2f7f2cc`). **Tarea 5.10 «Exportación íntegra de
 datos y telemetría opcional desactivada por defecto» (RF-PD-12, RF-PD-14, RL-20) IMPLEMENTADA, REVISADA, PROBADA e
