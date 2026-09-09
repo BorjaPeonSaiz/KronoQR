@@ -261,6 +261,7 @@ describe('bucle de decodificacion continuo', () => {
 
     expect(onDiagnostic).toHaveBeenCalledWith('scanner.start_failed', {
       reason: 'no_video_element',
+      message: 'no_video_element',
     })
     wrapper.unmount()
   })

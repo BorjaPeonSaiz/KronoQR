@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { createErrorReporter, sanitizeContext } from '@/shared/telemetry/errorReporter'
+import {
+  createErrorReporter,
+  getErrorReporter,
+  sanitizeContext,
+} from '@/shared/telemetry/errorReporter'
 
 function reporter() {
   return createErrorReporter({
@@ -81,5 +85,22 @@ describe('reporte de errores del cliente', () => {
 
     expect(sut.size()).toBe(1)
     expect(sut.pending()[0]?.code).toBe('kiosk.wake_lock.denied')
+  })
+})
+
+describe('reporter compartido por tablet (RF-PD-15, tarea 5.12)', () => {
+  it('devuelve SIEMPRE el mismo reporter, aunque cambien las opciones', () => {
+    const first = getErrorReporter({ appVersion: '1.4.2', deviceId: 'd' })
+    first.report('kiosk.camera.unavailable', {})
+
+    // Otra pantalla que pide el reporter DESPUES: mismas opciones o no, es el
+    // mismo objeto -y por tanto ve lo que ya habia reportado la primera-, que
+    // es justo lo que permite que un solo latido drene errores de arranque
+    // (`main.ts`) y errores de pantalla (`ScanView.vue`/`PinView.vue`).
+    const second = getErrorReporter({ appVersion: '9.9.9', deviceId: 'otro' })
+
+    expect(second).toBe(first)
+    expect(second.pending()).toHaveLength(1)
+    expect(second.pending()[0]?.code).toBe('kiosk.camera.unavailable')
   })
 })

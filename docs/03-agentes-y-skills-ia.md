@@ -749,6 +749,57 @@ persona ajena siguiendo solo la guía no la sustituye ningún script y
 queda pendiente del usuario.
 ```
 
+#### 6.5.7 Histórico de errores en base de datos (tarea 5.12)
+
+```text
+Ejecuta la tarea 5.12 del plan («Histórico de errores en base de datos»,
+RF-PD-15). La ficha ejecutable está en
+plan implementacion/05-fase-5-productizacion.md → «Tarea 5.12»; la regla
+dura 21 gobierna (nunca PII en error_events) y la 19 la acota (reportar
+jamás bloquea un fichaje).
+
+Orquesta: las CATORCE decisiones ESCRITAS en la ficha antes de nada
+(qué es un error, contexto de ejecución, nivel, huella, saneado por lista
+de permitidos, escritura por conexión propia, transporte de cliente,
+autorización, consulta, comandos, métrica y alerta, paquete y
+exportación, panel, prueba de PII); el contrato primero
+(GET /api/v1/diagnostics/errors, POST …/errors/{id}/resolve,
+POST /api/v1/client-errors, client_errors en el latido del quiosco), los
+tres clientes regenerados, las piezas compartidas en Shared
+(ErrorSource, ErrorLevel, ErrorReport, puerto ErrorEventSink) y dos
+métodos reservados en ProductServiceProvider (5.12-A / 5.12-B). Después
+CINCO agentes en paralelo con ficheros disjuntos: producto-licencia
+(tabla, dominio, saneado, huella, upsert, endpoints, policy, comandos,
+purga, métrica, colector del paquete, exportación íntegra), backend-laravel
+(contexto de ejecución, enganche reportable, latido del quiosco con
+client_errors, prueba de PII por los siete orígenes), frontend-panel
+(pantalla «Errores», transporte de web-kit para panel y portal),
+frontend-quiosco (errores en el latido y acknowledge, E2E de que un
+fallo al reportar no retrasa un fichaje) y devops-observabilidad (regla
+de Prometheus, runbook errores-en-el-panel.md, operacion.md §15 y
+configuracion.md en las dos lenguas). Por último revisor-codigo y
+seguridad-cumplimiento con /revision-cumplimiento.
+
+Los innegociables:
+- Ni un nombre, correo, DNI ni hora de fichaje en la tabla: saneado en el
+  SERVIDOR aunque el cliente sanee, contexto por lista cerrada de claves,
+  prueba automática por los siete orígenes y, además, inspección manual
+- La escritura nunca lanza y nunca va por cola: un error al guardar el
+  error no puede ser un segundo error; el latido responde aunque la
+  tabla no
+- Un fallo repetido es UNA fila (ON CONFLICT atómico, probado con 50
+  escrituras concurrentes); un grupo resuelto que vuelve se reabre
+- Sin canal anónimo; el origen lo decide el servidor por el token
+- Soporte lee, no resuelve; resolver no escribe en audit_log; nada de
+  esto depende de la licencia
+- Los desenlaces de negocio (excepciones de Domain/Application de los
+  módulos, HttpException < 500) no son errores del sistema
+
+Criterio de terminado: la DoD de la ficha, más el runbook escrito, la
+alerta con su regla, y el paquete de diagnóstico y la exportación íntegra
+con el histórico real en lugar de not_installed.
+```
+
 ### 6.6 Cierre de fase
 
 ```

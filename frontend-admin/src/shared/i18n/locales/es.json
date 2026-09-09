@@ -16,7 +16,8 @@
       "devices": "Quioscos",
       "branding": "Marca",
       "license": "Licencia",
-      "support": "Soporte"
+      "support": "Soporte",
+      "errors": "Errores"
     },
     "roles": {
       "admin": "Administración",
@@ -1369,6 +1370,135 @@
         "heading": "Revocar acceso de soporte",
         "explanation": "Este acceso, concedido para «{reason}», dejará de valer de inmediato. La concesión no se borra: quedará marcada como revocada, con quién lo hizo y cuándo."
       }
+    }
+  },
+  "errorEvents": {
+    "heading": "Errores",
+    "intro": "Lo que está fallando en la instalación y desde cuándo, agrupado para que un fallo que se repite mil veces sea una fila, no mil. No es el registro horario ni la auditoría: son datos técnicos, con retención de 90 días.",
+    "loading": "Cargando el histórico de errores…",
+    "duration": "{hours} h {minutes} min",
+    "summary": {
+      "openErrors": "{count} de nivel «Error» pendientes",
+      "openCritical": "{count} críticos pendientes"
+    },
+    "levels": {
+      "error": "Error",
+      "critical": "Crítico"
+    },
+    "sources": {
+      "api": "API / panel-servidor",
+      "worker": "Tareas en cola",
+      "scheduler": "Tareas programadas",
+      "console": "Comandos de consola",
+      "kiosk": "Quiosco",
+      "admin": "Panel de gestión",
+      "portal": "Portal del empleado"
+    },
+    "statuses": {
+      "open": "Pendientes",
+      "resolved": "Resueltos",
+      "all": "Todos"
+    },
+    "filters": {
+      "legend": "Filtros del histórico de errores",
+      "source": "Origen",
+      "sourceAll": "Todos los orígenes",
+      "level": "Nivel",
+      "levelAll": "Todos los niveles",
+      "status": "Estado",
+      "period": "Periodo",
+      "period7": "Últimos 7 días",
+      "period30": "Últimos 30 días",
+      "period90": "Últimos 90 días",
+      "periodCustom": "Personalizado",
+      "from": "Desde (UTC)",
+      "to": "Hasta (UTC)"
+    },
+    "table": {
+      "caption": "Errores agrupados por huella, horas en {zone}",
+      "level": "Nivel",
+      "source": "Origen",
+      "message": "Mensaje",
+      "occurrences": "Repeticiones",
+      "occurrencesValue": "{count}",
+      "firstSeen": "Primera vez",
+      "lastSeen": "Última vez",
+      "ageValue": "Hace {duration}",
+      "version": "Versión",
+      "traceId": "Traza",
+      "noTraceId": "Sin traza",
+      "copied": "Copiado",
+      "actions": "Acciones",
+      "expand": "Ver detalle",
+      "collapse": "Ocultar detalle",
+      "resolved": "Resuelto"
+    },
+    "detail": {
+      "exceptionClass": "Clase de la excepción",
+      "location": "Punto de fallo",
+      "module": "Módulo",
+      "code": "Código",
+      "deviceId": "Quiosco",
+      "employeeUuid": "Empleado implicado",
+      "context": "Datos técnicos",
+      "notApplicable": "No aplica",
+      "whatToDoHeading": "Qué hacer"
+    },
+    "whatToDo": {
+      "api": {
+        "error": "Alguien ha encontrado un error usando el panel o la API, sin que le haya impedido fichar. Si se repite mucho, contacta con soporte indicando el identificador de traza (trace_id). Guía: operacion.md §15.",
+        "critical": "Una petición al fichaje ha fallado. Esto puede afectar a que las personas puedan fichar: comprueba cuanto antes que el servidor y la base de datos funcionan, y contacta con soporte si persiste. Guía: operacion.md §15 y runbook errores-en-el-panel.md."
+      },
+      "worker": {
+        "error": "Una tarea en segundo plano ha fallado, pero se reintentará automáticamente. No suele requerir ninguna acción inmediata.",
+        "critical": "Una tarea en segundo plano ha agotado sus reintentos y no se completará sola. Revisa el estado de las colas o contacta con soporte. Guía: runbook errores-en-el-panel.md."
+      },
+      "scheduler": {
+        "error": "Una tarea programada ha tenido un problema menor. Revisa el resultado la próxima vez que se ejecute; si se repite, sigue la guía de nivel crítico.",
+        "critical": "Una tarea nocturna programada ha fallado: ejecuta «php artisan product:doctor» y revisa que la copia de seguridad de esta noche se ha completado. Si el problema persiste, contacta con soporte. Guía: operacion.md §15 y runbook errores-en-el-panel.md."
+      },
+      "console": {
+        "error": "Un comando ejecutado manualmente o por un script ha tenido un problema menor. Revisa qué comando era y qué resultado esperabas.",
+        "critical": "Un comando ejecutado manualmente o por un script ha fallado de forma importante. Revisa qué comando era, qué resultado esperabas y contacta con soporte si no lo entiendes. Guía: runbook errores-en-el-panel.md."
+      },
+      "kiosk": {
+        "error": "Ha ocurrido un problema menor en una tablet de fichaje que no le ha impedido fichar. No suele requerir ninguna acción inmediata.",
+        "critical": "La tablet indicada no puede escanear. Comprueba la cámara y los permisos en la propia tablet; si persiste, reinicia la aplicación. Guía: operacion.md §15 y runbook errores-en-el-panel.md."
+      },
+      "admin": {
+        "error": "Alguien ha encontrado un error usando el panel de gestión. Si le ha bloqueado una tarea, pídele que recargue la página; si persiste, contacta con soporte con el identificador de traza (trace_id).",
+        "critical": "Alguien ha encontrado un error grave usando el panel de gestión. Pídele que recargue la página y contacta con soporte con el identificador de traza (trace_id)."
+      },
+      "portal": {
+        "error": "Una persona ha encontrado un error usando su portal personal para consultar su registro horario. Si te lo reporta, pídele que recargue la página; si persiste, contacta con soporte con el identificador de traza (trace_id).",
+        "critical": "Una persona ha encontrado un error grave usando su portal personal. Pídele que recargue la página y contacta con soporte con el identificador de traza (trace_id)."
+      }
+    },
+    "resolve": {
+      "action": "Marcar como resuelto",
+      "confirmTitle": "Marcar como resuelto",
+      "confirmBody": "Se dará por resuelto el error de nivel «{level}» del origen «{source}»: «{message}». Si vuelve a ocurrir, se reabrirá solo, conservando las repeticiones anteriores.",
+      "announceResolved": "Error marcado como resuelto."
+    },
+    "empty": {
+      "open": {
+        "title": "Sin errores pendientes",
+        "description": "No hay ningún error abierto con estos filtros. No es un fallo: esta lista se llena sola cuando algo va mal."
+      },
+      "resolved": {
+        "title": "Sin errores resueltos",
+        "description": "Ningún error con estos filtros se ha marcado como resuelto todavía."
+      },
+      "all": {
+        "title": "Sin errores",
+        "description": "No hay ningún error registrado con estos filtros."
+      }
+    },
+    "announce": {
+      "results": "{count} errores en el histórico."
+    },
+    "pagination": {
+      "label": "Paginación del histórico de errores"
     }
   }
 }

@@ -175,6 +175,58 @@ return [
             'sslmode' => env('DB_SSLMODE', 'prefer'),
         ],
 
+        /*
+         * Conexion del HISTORICO DE ERRORES (RF-PD-15, tarea 5.12, decision 6).
+         * Misma base, mismo rol, mismas variables de entorno: es una copia
+         * literal de `pgsql` y NO introduce ninguna variable nueva.
+         *
+         * ENTONCES, ¿PARA QUE EXISTE? Para que la escritura del error no viaje
+         * dentro de la transaccion que acaba de fallar.
+         *
+         * El caso concreto: un caso de uso abre una transaccion, algo revienta a
+         * mitad y el enganche del manejador de excepciones intenta guardar el
+         * fallo. Sobre la conexion por defecto hay dos desenlaces, los dos malos.
+         * Si la transaccion sigue abierta, el `INSERT` entra dentro y **se
+         * revierte con ella**: el unico rastro del error desaparece justo por ser
+         * un error. Si PostgreSQL ya la aborto —`25P02`, «current transaction is
+         * aborted»—, cualquier sentencia posterior sobre esa sesion falla, asi
+         * que el intento de registrar el error produce un segundo error (regla
+         * dura 19: un error al guardar el error no puede convertirse en otro).
+         *
+         * Con una conexion propia hay **otra sesion de PostgreSQL**, con su
+         * propio estado transaccional: el `INSERT … ON CONFLICT` confirma solo y
+         * sobrevive al `ROLLBACK` de quien fallo. Es la misma tecnica que usan
+         * los manejadores de errores que escriben en base de datos en cualquier
+         * stack, y el motivo por el que el driver no la puede resolver solo.
+         *
+         * MISMO ROL Y NO UNO NUEVO, al contrario que `pgsql_migrator` y
+         * `pgsql_maintenance`: aqui no se separa un privilegio, se separa una
+         * SESION. El rol de la aplicacion necesita exactamente lo que ya tiene
+         * sobre esta tabla —`INSERT`, `UPDATE` para el recuento y `DELETE` para
+         * la purga—, y pedirle al cliente una credencial mas para esto seria una
+         * variable de entorno mas que documentar, probar y soportar sin ninguna
+         * garantia nueva a cambio.
+         *
+         * CONSECUENCIA PRACTICA EN LAS PRUEBAS: una prueba que abra una
+         * transaccion y consulte `error_events` por esta conexion vera lo
+         * confirmado por la otra sesion, no lo suyo. Es la propiedad que se
+         * quiere y por la que las pruebas de escritura usan `CommittedDatabase`.
+         */
+        'error_events' => [
+            'driver' => 'pgsql',
+            'url' => env('DB_URL'),
+            'host' => env('DB_HOST', '127.0.0.1'),
+            'port' => env('DB_PORT', '5432'),
+            'database' => env('DB_DATABASE', 'laravel'),
+            'username' => env('DB_USERNAME', 'root'),
+            'password' => env('DB_PASSWORD', ''),
+            'charset' => env('DB_CHARSET', 'utf8'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'search_path' => 'public',
+            'sslmode' => env('DB_SSLMODE', 'prefer'),
+        ],
+
         'sqlsrv' => [
             'driver' => 'sqlsrv',
             'url' => env('DB_URL'),

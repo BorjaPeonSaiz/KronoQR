@@ -170,7 +170,10 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
   /** Aplica el resultado de un elemento del 207 sobre la cola. */
   function classify(entry: ScanBatchEntry): 'confirm' | 'retry' {
     if (entry.status === 200 || entry.status === 422) return 'confirm'
-    options.onDiagnostic?.('sync.item_not_processed', { http_status: entry.status })
+    options.onDiagnostic?.('sync.item_not_processed', {
+      http_status: entry.status,
+      message: 'item_not_processed',
+    })
     return 'retry'
   }
 
@@ -185,12 +188,21 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
           // El token del dispositivo esta caducado o revocado. La cola NO se
           // toca: cuando se vuelva a emparejar, los fichajes siguen ahi. Un
           // quiosco desautorizado no es motivo para perder una jornada.
-          options.onDiagnostic?.('sync.unauthorized', { http_status: result.httpStatus ?? 0 })
+          options.onDiagnostic?.('sync.unauthorized', {
+            http_status: result.httpStatus ?? 0,
+            message: 'unauthorized',
+          })
           options.onAuthOutcome?.(true)
         } else if (result.cause === 'throttled') {
-          options.onDiagnostic?.('sync.throttled', { http_status: result.httpStatus ?? 0 })
+          options.onDiagnostic?.('sync.throttled', {
+            http_status: result.httpStatus ?? 0,
+            message: 'throttled',
+          })
         } else if (result.cause !== 'offline') {
-          options.onDiagnostic?.('sync.transport_failed', { cause: result.cause })
+          options.onDiagnostic?.('sync.transport_failed', {
+            cause: result.cause,
+            message: result.cause,
+          })
         }
       }
 
@@ -213,7 +225,10 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
       if (entry === undefined) {
         // El servidor no ha dicho nada de este elemento. Se conserva: el
         // silencio no es una confirmacion.
-        options.onDiagnostic?.('sync.malformed_response', { missing: 1 })
+        options.onDiagnostic?.('sync.malformed_response', {
+          missing: 1,
+          message: 'malformed_response',
+        })
         retry.push(record.scan_id)
         continue
       }
@@ -230,7 +245,10 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
       // reclamarian y reenviarian sin pausa, un bucle de peticiones en una
       // tablet que probablemente ya este mal. Se aplazan con retroceso; reenviar
       // es seguro porque el `scan_id` es la clave de idempotencia (regla dura 8).
-      options.onDiagnostic?.('sync.confirm_not_persisted', { items: confirmed.length })
+      options.onDiagnostic?.('sync.confirm_not_persisted', {
+        items: confirmed.length,
+        message: 'confirm_not_persisted',
+      })
       await queue.retryLater(confirmed, clock.now())
       return false
     }
@@ -256,12 +274,21 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
       if (result.outcome === 'failed') {
         options.onReachability?.(false)
         if (result.cause === 'unauthorized') {
-          options.onDiagnostic?.('sync.unauthorized', { http_status: result.httpStatus ?? 0 })
+          options.onDiagnostic?.('sync.unauthorized', {
+            http_status: result.httpStatus ?? 0,
+            message: 'unauthorized',
+          })
           options.onAuthOutcome?.(true)
         } else if (result.cause === 'throttled') {
-          options.onDiagnostic?.('sync.throttled', { http_status: result.httpStatus ?? 0 })
+          options.onDiagnostic?.('sync.throttled', {
+            http_status: result.httpStatus ?? 0,
+            message: 'throttled',
+          })
         } else if (result.cause !== 'offline') {
-          options.onDiagnostic?.('sync.transport_failed', { cause: result.cause })
+          options.onDiagnostic?.('sync.transport_failed', {
+            cause: result.cause,
+            message: result.cause,
+          })
         }
         // Este y los que quedan de ESTE tramo: ninguno se manda antes de saber
         // que paso con el que fallo, o el orden se rompe igual que si se
@@ -279,7 +306,10 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
       // (regla dura 17, RS-03. La causa concreta no sale de `scan_events`).
       const removed = await queue.confirm([record.scan_id])
       if (!removed) {
-        options.onDiagnostic?.('sync.confirm_not_persisted', { items: 1 })
+        options.onDiagnostic?.('sync.confirm_not_persisted', {
+          items: 1,
+          message: 'confirm_not_persisted',
+        })
         await queue.retryLater(
           records.slice(index).map((item) => item.scan_id),
           clock.now(),
@@ -448,7 +478,10 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
     options.onReachability?.(false)
     if (result.cause === 'unauthorized') options.onAuthOutcome?.(true)
     if (result.cause !== 'offline') {
-      options.onDiagnostic?.('sync.transport_failed', { cause: result.cause })
+      options.onDiagnostic?.('sync.transport_failed', {
+        cause: result.cause,
+        message: result.cause,
+      })
     }
     await queue.retryLater([scan.scan_id], clock.now())
     scheduleNext()

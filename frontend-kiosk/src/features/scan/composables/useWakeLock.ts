@@ -15,7 +15,7 @@
 
 import type { Ref } from 'vue'
 import { onUnmounted, readonly, ref } from 'vue'
-import { errorTypeOf } from '@/shared/telemetry/errorType'
+import { errorMessageOf, errorTypeOf } from '@/shared/telemetry/errorType'
 
 export interface UseWakeLockOptions {
   readonly onDenied?: (context: Record<string, string | number | boolean>) => void
@@ -52,7 +52,7 @@ export function useWakeLock(options: UseWakeLockOptions = {}): WakeLockControlle
     } catch (error) {
       active.value = false
       sentinel = null
-      options.onDenied?.({ error_type: errorTypeOf(error) })
+      options.onDenied?.({ error_type: errorTypeOf(error), message: errorMessageOf(error) })
     } finally {
       requesting = false
     }

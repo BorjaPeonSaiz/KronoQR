@@ -317,9 +317,20 @@ Outside the product, and entirely yours. The minimum:
   vendor needs no value from that file to help you: that is what the diagnostic
   bundle is for ([`operation.md`](operation.md) §12.2), and it is built not to
   carry them.
+- **PostgreSQL's `max_connections` with headroom over `2 × pm.max_children`.**
+  The error history (RF-PD-15) writes through a **connection of its own**,
+  separate from each PHP-FPM process's normal connection — and it opens
+  exactly when every process is failing at once, which is the worst possible
+  moment to also be short of a free connection. `pm.max_children` (20 by
+  default, `infra/docker/php/fpm/www.conf`) sets how many PHP-FPM processes
+  can run at the same time; if you lower PostgreSQL's `max_connections`
+  below twice that number, a load spike can leave the error history — the
+  one that needs to write when something is going wrong — without a
+  connection to use. If you touch either value, keep the margin.
 
-> **Closes:** access to the host, escalation through the `docker` group, reading
-> of the installation's secrets, and false incidents from a drifted clock.
+> **Closes:** access to the host, escalation through the `docker` group,
+> reading of the installation's secrets, false incidents from a drifted
+> clock, and an error history left without a connection at the worst moment.
 > · **Owner:** you.
 
 ---

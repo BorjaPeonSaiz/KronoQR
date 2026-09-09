@@ -100,7 +100,7 @@ describe('createWebErrorReporter', () => {
 })
 
 describe('installGlobalErrorCapture', () => {
-  it('captura los errores del arbol de Vue sin silenciarlos', () => {
+  it('captura los errores del arbol de Vue sin silenciarlos, y no emite mas claves que message/component/hook', () => {
     const reporter = createWebErrorReporter({ app: 'admin', appVersion: '1.0.0', now: fixedNow })
     const app = createApp(StubRoot)
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
@@ -109,15 +109,21 @@ describe('installGlobalErrorCapture', () => {
     const instance = { $options: { name: 'WorkdayTable' } } as unknown as ComponentPublicInstance
     app.config.errorHandler?.(new RangeError('sin datos'), instance, 'render')
 
-    expect(reporter.pending()[0]).toMatchObject({
-      code: 'web.vue_error',
-      context: { message: 'RangeError: sin datos', component: 'WorkdayTable', hook: 'render' },
+    // `toEqual`, no `toMatchObject`: el conjunto de claves es EXACTAMENTE este
+    // -nada de PII se cuela por una clave nueva que alguien añada mañana sin
+    // darse cuenta-. `message` es la que el servidor eleva a la columna
+    // `error_events.message` (ver cabecera de `clientErrors.ts`).
+    expect(reporter.pending()[0]?.context).toEqual({
+      message: 'RangeError: sin datos',
+      component: 'WorkdayTable',
+      hook: 'render',
     })
+    expect(reporter.pending()[0]?.code).toBe('web.vue_error')
     expect(consoleError).toHaveBeenCalledOnce()
     consoleError.mockRestore()
   })
 
-  it('captura los errores globales de window y las promesas sin catch', () => {
+  it('captura los errores globales de window (recortando el script a su pathname) y las promesas sin catch', () => {
     const reporter = createWebErrorReporter({ app: 'portal', appVersion: '1.0.0', now: fixedNow })
     installGlobalErrorCapture(createApp(StubRoot), reporter)
 
@@ -133,6 +139,41 @@ describe('installGlobalErrorCapture', () => {
 
     const codes = reporter.pending().map((event) => event.code)
     expect(codes).toEqual(['web.unhandled_error', 'web.unhandled_rejection'])
-    expect(reporter.pending()[0]?.context).toMatchObject({ source: 'app.js:42' })
+    // `new URL('app.js', origin)` resuelve a la raiz: pathname `/app.js`.
+    expect(reporter.pending()[0]?.context).toEqual({
+      message: 'TypeError: roto',
+      source: '/app.js:42',
+    })
+    // La rejeccion sin catch tampoco lleva mas que `message`.
+    expect(reporter.pending()[1]?.context).toEqual({ message: 'Error: sin catch' })
+  })
+
+  it('un script con query o hash en la URL pierde los dos: solo viaja el pathname (regla dura 21)', () => {
+    const reporter = createWebErrorReporter({ app: 'admin', appVersion: '1.0.0', now: fixedNow })
+    installGlobalErrorCapture(createApp(StubRoot), reporter)
+
+    window.dispatchEvent(
+      new ErrorEvent('error', {
+        error: new Error('roto'),
+        filename: 'https://cdn.hotel.example/assets/index-abc123.js?v=session-tok3n#frag',
+        lineno: 7,
+      }),
+    )
+
+    expect(reporter.pending()[0]?.context['source']).toBe('/assets/index-abc123.js:7')
+  })
+
+  it('un filename vacio (error de origen cruzado) no revienta: cae en el pathname raiz', () => {
+    const reporter = createWebErrorReporter({ app: 'admin', appVersion: '1.0.0', now: fixedNow })
+    installGlobalErrorCapture(createApp(StubRoot), reporter)
+
+    window.dispatchEvent(
+      new ErrorEvent('error', { error: new Error('roto'), filename: '', lineno: 0 }),
+    )
+
+    // `new URL('', origen)` resuelve al propio origen: pathname `/`. El
+    // `catch` de `scriptLocation` es defensivo -para una entrada que ni
+    // siquiera se pueda resolver contra un origen valido-, no para esta.
+    expect(reporter.pending()[0]?.context['source']).toBe('/:0')
   })
 })

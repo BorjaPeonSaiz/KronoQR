@@ -8,24 +8,34 @@
 // reloj y avisa (RF-AT-10). **Nunca le impide fichar** (regla dura 19); el
 // desfase se registra escaneo a escaneo y se corrige despues.
 //
-// HUECO DE CONTRATO, CONSCIENTE Y DOCUMENTADO
-// -------------------------------------------
-// El paso 13 de la tarea 1.8 pide preparar el canal de errores del cliente «en
-// el latido». La parte de cliente esta hecha (`errorReporter.ts`), pero
-// `KioskHeartbeatRequest` declara `additionalProperties: false` y no tiene
-// ningun campo donde meterlos: enviarlos hoy produciria un 400 y romperia la
-// prueba de contrato del backend.
+// CANAL DE ERRORES DE CLIENTE (RF-PD-15, tarea 5.12). El mismo cuerpo lleva
+// `client_errors` cuando el reporter tiene algo pendiente (`buildHeartbeatBody`,
+// maximo 50, los mas antiguos primero, sin `device_id`: el servidor lo sabe
+// por el token). La respuesta trae `client_errors_accepted`, y solo ESO es lo
+// que `acknowledge()` vacia del buffer -un latido que llega pero no pudo
+// escribir nada (`0`) no pierde ni un error, vuelve en el siguiente-.
 //
-// Por eso el planificador expone `pendingClientErrors()` en lugar de meterlos en
-// el cuerpo. Cuando el contrato gane su campo (RF-PD-15, tarea 5.12), lo unico
-// que cambia es `buildHeartbeatBody`, y `acknowledge()` ya esta escrito para
-// vaciar el buffer solo tras confirmacion del servidor.
+// Regla dura 19 aplicada al reves: reportar un error NUNCA puede dejar la
+// tablet sin latido. Si el servidor rechaza el propio `client_errors` con
+// `400` -su unica parte variable, y por tanto la unica que un fallo de forma
+// puede tumbar-, el buffer se vacia igualmente (perder unos pocos errores
+// tecnicos es preferible a repetir el mismo `400` en cada ciclo para
+// siempre) y se dice por que en un nuevo `kiosk.heartbeat.failed`.
 
 import type { ApiClient } from '@/shared/api/client'
-import type { KioskHeartbeatRequest } from '@/shared/api/types'
+import type { ClientErrorReport, KioskHeartbeatRequest } from '@/shared/api/types'
 import type { Clock } from '@/shared/time/clock'
 import { systemClock } from '@/shared/time/clock'
 import type { ClientErrorEvent, ErrorReporter } from './errorReporter'
+
+/**
+ * Tope de `client_errors` por latido (contrato,
+ * `KioskHeartbeatRequest.client_errors.maxItems`). El reporter ya no deja
+ * crecer su buffer mas alla de esto, pero el corte se repite aqui: quien
+ * construye el cuerpo no debe fiarse de un limite ajeno para cumplir el
+ * contrato.
+ */
+const MAX_CLIENT_ERRORS_PER_HEARTBEAT = 50
 
 /** Cada minuto. La alerta del doc 01 §9.3 dispara a los 10 min sin latido. */
 export const DEFAULT_HEARTBEAT_INTERVAL_MS = 60_000
@@ -41,17 +51,43 @@ export interface KioskTelemetrySnapshot {
   readonly oldestPendingAt?: string | undefined
 }
 
-export function buildHeartbeatBody(snapshot: KioskTelemetrySnapshot): KioskHeartbeatRequest {
+/**
+ * Traduce la forma INTERNA del quiosco a la del contrato. `device_id` nunca
+ * sale de aqui: el servidor decide `source` (`kiosk`) por el token, no por lo
+ * que diga el cuerpo (RS-03, regla dura 21).
+ */
+function toClientErrorReport(event: ClientErrorEvent): ClientErrorReport {
+  return {
+    code: event.code,
+    occurred_at: event.occurred_at,
+    app_version: event.app_version,
+    context: event.context,
+  }
+}
+
+export function buildHeartbeatBody(
+  snapshot: KioskTelemetrySnapshot,
+  clientErrors: readonly ClientErrorEvent[] = [],
+): KioskHeartbeatRequest {
   const body: KioskHeartbeatRequest = {
     app_version: snapshot.appVersion,
     pending_queue_size: snapshot.pendingQueueSize,
   }
   // `exactOptionalPropertyTypes`: la clave no se escribe si no hay valor, en vez
   // de escribirse con `undefined`. El contrato dice «ausente cuando la cola esta
-  // vacia», no «presente y nulo».
-  return snapshot.oldestPendingAt === undefined
-    ? body
-    : { ...body, oldest_pending_at: snapshot.oldestPendingAt }
+  // vacia», no «presente y nulo». Mismo criterio para `client_errors`: ausente
+  // cuando no hay nada pendiente, no una lista vacia.
+  const withOldest: KioskHeartbeatRequest =
+    snapshot.oldestPendingAt === undefined
+      ? body
+      : { ...body, oldest_pending_at: snapshot.oldestPendingAt }
+
+  if (clientErrors.length === 0) return withOldest
+
+  return {
+    ...withOldest,
+    client_errors: clientErrors.slice(0, MAX_CLIENT_ERRORS_PER_HEARTBEAT).map(toClientErrorReport),
+  }
 }
 
 /**
@@ -86,8 +122,6 @@ export interface HeartbeatScheduler {
   stop(): void
   /** Envia uno ahora. Devuelve el desfase medido, o `null` si no hubo respuesta. */
   beat(): Promise<number | null>
-  /** Errores de cliente a la espera de un campo en el contrato. Ver cabecera. */
-  pendingClientErrors(): readonly ClientErrorEvent[]
 }
 
 export function createHeartbeatScheduler(options: HeartbeatSchedulerOptions): HeartbeatScheduler {
@@ -96,17 +130,56 @@ export function createHeartbeatScheduler(options: HeartbeatSchedulerOptions): He
   let timer: ReturnType<typeof setInterval> | null = null
 
   async function beat(): Promise<number | null> {
-    const result = await options.api.sendHeartbeat(buildHeartbeatBody(options.snapshot()))
+    // Lo pendiente en el momento de construir el cuerpo, no en el de recibir
+    // la respuesta: si algo se reporta MIENTRAS este latido esta en el aire,
+    // se queda para el siguiente ciclo en vez de perderse (`acknowledge` solo
+    // vacia lo que de verdad viajo).
+    const pendingErrors = options.reporter.pending()
+    const result = await options.api.sendHeartbeat(
+      buildHeartbeatBody(options.snapshot(), pendingErrors),
+    )
 
     if (result.outcome !== 'ok') {
       // Un latido perdido no es una averia: puede ser el hotel sin ADSL. Se
       // anota y se sigue. Nunca se reintenta agresivamente ni se bloquea nada.
       if (result.outcome === 'failed') {
         if (result.cause === 'unauthorized') options.onAuthOutcome?.(true)
+
+        // `400` que NOMBRA `client_errors` entre los campos invalidos (no
+        // cualquier `400`: `app_version` o `pending_queue_size` tambien
+        // pueden fallar la validacion, y esos no tienen nada que ver con el
+        // buffer de errores). El servidor ha rechazado el propio
+        // `client_errors` (la unica parte de este cuerpo que el quiosco no
+        // controla del todo, decision 7 de la tarea 5.12). Sin esto la
+        // tablet reenviaria el mismo lote invalido en cada ciclo y se
+        // quedaria muda para siempre (regla dura 19, al reves: un fallo al
+        // REPORTAR no puede impedir que el latido siga sirviendo para lo
+        // demas). Se descarta solo lo que se intento enviar en ESTE latido
+        // -no `size()`, que podria incluir algo reportado mientras la
+        // peticion estaba en el aire- y queda dicho por que. Un `400` por
+        // otro campo (o sin cuerpo `ValidationProblem` reconocible) CONSERVA
+        // el buffer: no hay motivo para creer que el problema sea el mismo
+        // lote de errores.
+        if (
+          result.httpStatus === 400 &&
+          pendingErrors.length > 0 &&
+          result.invalidFields?.includes('client_errors') === true
+        ) {
+          const attempted = Math.min(pendingErrors.length, MAX_CLIENT_ERRORS_PER_HEARTBEAT)
+          options.reporter.acknowledge(attempted)
+          options.reporter.report('kiosk.heartbeat.failed', {
+            cause: 'client_errors_rejected',
+            http_status: 400,
+            message: 'client_errors_rejected',
+          })
+          return null
+        }
+
         if (result.cause !== 'offline') {
           options.reporter.report('kiosk.heartbeat.failed', {
             cause: result.cause,
             http_status: result.httpStatus ?? 0,
+            message: result.cause,
           })
         }
       }
@@ -114,11 +187,20 @@ export function createHeartbeatScheduler(options: HeartbeatSchedulerOptions): He
     }
 
     options.onAuthOutcome?.(false)
+    // Solo AHORA, confirmado por el servidor, se vacia lo enviado -y solo lo
+    // que declara `client_errors_accepted`-. `0` (no se enviaron, o la base
+    // de datos no pudo guardarlos) no toca el buffer: vuelve integro en el
+    // siguiente latido.
+    options.reporter.acknowledge(result.data.client_errors_accepted)
+
     const skew = clockSkewSeconds(clock.now(), result.data.server_time)
     if (skew === null) return null
 
     if (Math.abs(skew) >= CLOCK_SKEW_WARNING_SECONDS) {
-      options.reporter.report('kiosk.clock.skew_detected', { skew_seconds: skew })
+      options.reporter.report('kiosk.clock.skew_detected', {
+        skew_seconds: skew,
+        message: 'clock_skew_detected',
+      })
     }
     options.onSkew?.(skew)
     return skew
@@ -136,6 +218,5 @@ export function createHeartbeatScheduler(options: HeartbeatSchedulerOptions): He
       timer = null
     },
     beat,
-    pendingClientErrors: () => options.reporter.pending(),
   }
 }

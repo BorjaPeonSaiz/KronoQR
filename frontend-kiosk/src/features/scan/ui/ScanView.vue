@@ -31,7 +31,7 @@ import {
   readDeviceToken,
   resolveDeviceId,
 } from '@/shared/telemetry/deviceIdentity'
-import { createErrorReporter } from '@/shared/telemetry/errorReporter'
+import { getErrorReporter } from '@/shared/telemetry/errorReporter'
 import { createHeartbeatScheduler } from '@/shared/telemetry/heartbeat'
 import ConnectionStatusBadge from '@/shared/ui/ConnectionStatusBadge.vue'
 import LanguageSelector from '@/shared/ui/LanguageSelector.vue'
@@ -50,7 +50,10 @@ const router = useRouter()
 const video = ref<HTMLVideoElement | null>(null)
 
 const deviceId = resolveDeviceId()
-const reporter = createErrorReporter({ appVersion: APP_VERSION, deviceId })
+// Un reporter por tablet, no uno por pantalla (RF-PD-15): el mismo que
+// `main.ts` crea al arrancar y el mismo que usa `PinView.vue`, para que un
+// unico latido drene los errores de las tres fuentes (ver `errorReporter.ts`).
+const reporter = getErrorReporter({ appVersion: APP_VERSION, deviceId })
 const connectivity = useConnectivity()
 const privacyConfig = readPrivacyNoticeConfig()
 

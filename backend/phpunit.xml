@@ -17,8 +17,31 @@
         <testsuite name="Integration">
             <directory>tests/Integration</directory>
         </testsuite>
+        <!--
+            Feature va POR SUBDIRECTORIO y no como `tests/Feature` entero. No es
+            estilo: sobre el bind mount de Docker Desktop (NTFS -> contenedor),
+            RecursiveDirectoryIterator recorriendo `tests/Feature` PERDIA 38 de los
+            41 ficheros de `tests/Feature/Product` sin avisar (09-09-2026: la suite
+            local decia «3639 en verde» mientras ~430 pruebas del modulo no se
+            ejecutaban; la CI en Linux si las corria). Iterando cada subdirectorio
+            por separado el iterador devuelve todos. `TestDiscoveryTest`
+            (Architecture) compara lo que descubre esta configuracion con un
+            `scandir` recursivo y falla si vuelve a faltar un fichero: un
+            directorio nuevo bajo `tests/Feature` hay que anadirlo aqui.
+        -->
         <testsuite name="Feature">
-            <directory>tests/Feature</directory>
+            <file>tests/Feature/AuthorizationNegativeTest.php</file>
+            <file>tests/Feature/ModuleServiceProvidersTest.php</file>
+            <directory>tests/Feature/Attendance</directory>
+            <directory>tests/Feature/Compliance</directory>
+            <directory>tests/Feature/Health</directory>
+            <directory>tests/Feature/Http</directory>
+            <directory>tests/Feature/Identity</directory>
+            <directory>tests/Feature/Kiosk</directory>
+            <directory>tests/Feature/Product</directory>
+            <directory>tests/Feature/Quality</directory>
+            <directory>tests/Feature/Reporting</directory>
+            <directory>tests/Feature/Workforce</directory>
         </testsuite>
         <testsuite name="Contract">
             <directory>tests/Contract</directory>

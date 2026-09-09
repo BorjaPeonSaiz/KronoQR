@@ -29,9 +29,11 @@ use App\Modules\Kiosk\Http\Controller\HeartbeatController;
 use App\Modules\Kiosk\Http\Controller\PairingController;
 use App\Modules\Kiosk\Http\Controller\RosterController;
 use App\Modules\Product\Http\Controller\BrandingController;
+use App\Modules\Product\Http\Controller\ClientErrorController;
 use App\Modules\Product\Http\Controller\ComplianceProfileController;
 use App\Modules\Product\Http\Controller\DataExportController;
 use App\Modules\Product\Http\Controller\DiagnosticsController;
+use App\Modules\Product\Http\Controller\ErrorEventController;
 use App\Modules\Product\Http\Controller\LicenseController;
 use App\Modules\Product\Http\Controller\SettingsController;
 use App\Modules\Product\Http\Controller\SetupController;
@@ -1141,6 +1143,107 @@ Route::middleware([
     Route::post('/diagnostics/bundle', [DiagnosticsController::class, 'generate'])
         ->name('product.diagnostics.bundle');
 });
+
+/*
+ * ---------------------------------------------------------------------------
+ * HISTORICO DE ERRORES (tarea 5.12, RF-PD-15)
+ * ---------------------------------------------------------------------------
+ *
+ * GET /api/v1/diagnostics/errors — que esta fallando en la instalacion y desde
+ * cuando, agrupado por huella, para el IT del cliente y sin conocer el sistema.
+ * POST /api/v1/diagnostics/errors/{id}/resolve — darlo por atendido.
+ *
+ * MISMO AMBITO QUE EL PAQUETE, `diagnostics:*`, y no uno nuevo. Son la misma
+ * potestad —diagnosticar sin poder tocar nada— y el §7.3 la declara una sola
+ * vez. Un ambito propio para el historico habria significado que una concesion
+ * de soporte para mirar un problema no alcanzara los errores, que es lo primero
+ * que hay que mirar.
+ *
+ * SOLO `admin`, y `ErrorEventPolicy` es la otra mitad (regla dura 18). **Un
+ * acceso de soporte LEE pero NO RESUELVE**: el alcance `diagnostics` de la 5.9
+ * se concede «para el paquete anonimizado y los errores», asi que negarle la
+ * lista dejaria la concesion sin la mitad de su utilidad; pero dar un fallo por
+ * resuelto en la instalacion de un cliente es una decision del cliente
+ * (ADR-020). **`rrhh` no entra** aunque suela ser quien detecta el sintoma: lo
+ * que hay detras es el estado tecnico del servidor. **El `auditor` tampoco**: su
+ * ambito es el registro horario. **El quiosco y el portal** se quedan en el
+ * middleware, porque sus tokens no llevan `diagnostics:*`.
+ *
+ * `throttle:management` Y NO `throttle:diagnostics`, al contrario que el
+ * paquete. Aqui no hay ningun recorrido caro: son dos consultas sobre indices y
+ * un `UPDATE` de dos columnas. Con el techo de 3 r/m del paquete, la pantalla se
+ * bloquearia sola al segundo filtro — y esta es justamente la pantalla que se
+ * usa a golpe de filtro cuando algo va mal.
+ *
+ * SIN `DELETE` Y SIN `PATCH`. Un error no se edita y no se borra a mano: se
+ * resuelve, y el ciclo de retencion se lleva los que llevan 90 dias sin volver a
+ * ocurrir (`product:errors:prune`, RL-11). Un endpoint para borrar una fila
+ * concreta solo serviria para hacer desaparecer un fallo incomodo.
+ *
+ * ESTAS DOS RUTAS NO SE DEGRADAN NUNCA con la licencia caducada o ausente (regla
+ * dura 15, ADR-019), y con mas motivo que ninguna: es la pantalla que dice **por
+ * que** algo no funciona. Cerrarla al caducar seria apagar la luz justo al
+ * entrar en la habitacion a oscuras.
+ */
+Route::middleware([
+    'auth:sanctum',
+    'ability:'.TokenAbility::DIAGNOSTICS_ALL->value,
+    'throttle:management',
+])->group(function (): void {
+    Route::get('/diagnostics/errors', [ErrorEventController::class, 'index'])
+        ->name('product.diagnostics.errors.index');
+
+    Route::post('/diagnostics/errors/{id}/resolve', [ErrorEventController::class, 'resolve'])
+        ->whereNumber('id')
+        ->name('product.diagnostics.errors.resolve');
+});
+
+/*
+ * ---------------------------------------------------------------------------
+ * RECEPCION DE ERRORES DE CLIENTE (tarea 5.12, RF-PD-15)
+ * ---------------------------------------------------------------------------
+ *
+ * POST /api/v1/client-errors: el panel de gestion y el portal del empleado
+ * vacian su buffer de errores de navegador.
+ *
+ * SIN `ability`, Y ES LA UNICA RUTA AUTENTICADA DEL PRODUCTO QUE NO LO LLEVA.
+ * No es un olvido de la regla dura 18 —la policy esta y tiene sus pruebas
+ * negativas—: es que **no hay ningun ambito que exigir**. Vale cualquier sesion
+ * de gestion, sea cual sea su rol, y vale una sesion de portal (`self:read`);
+ * exigir un ambito concreto significaria que un `empleado` con el portal abierto
+ * no pudiera reportar el error que acaba de sufrir, que es exactamente al reves
+ * de lo que se quiere. Quien sufre el error es quien lo reporta.
+ *
+ * `ErrorEventPolicy::report()` hace el trabajo entero: acepta cualquier
+ * `ManagementActor` y una sesion de portal, y **rechaza un token de
+ * dispositivo**. El quiosco tiene su canal dentro del latido
+ * (`POST /api/v1/kiosk/heartbeat`) y abrirle un segundo competiria con la cola
+ * de fichajes por la misma red que ya le esta fallando (regla dura 19).
+ *
+ * NO HAY RUTA ANONIMA, y es deliberado: los errores anteriores al inicio de
+ * sesion esperan en el buffer del navegador —techo de 50— y salen con la primera
+ * sesion. Una superficie publica que escribe filas en la base de datos seria un
+ * vector de denegacion de servicio contra la misma base por la que pasa cada
+ * fichaje (ADR-010).
+ *
+ * `throttle:client-errors` Y ZONA PROPIA: 12 por minuto y por token, ×4 por
+ * origen (`PRODUCT_CLIENT_ERRORS_RATE_LIMIT`). Ni la de gestion —120 r/m son
+ * seis mil filas por minuto y sesion— ni la del diagnostico —3 r/m cortaria el
+ * drenaje normal del buffer—. El eje que importa es el token, y el de origen es
+ * ×4 porque en un hotel varios equipos comparten IP publica.
+ *
+ * NUNCA DEVUELVE EL HISTORICO. La respuesta es `{accepted}` y nada mas:
+ * consultar es otra potestad (`diagnostics:*`) y otra ruta. Que cualquier sesion
+ * pueda escribir aqui no puede convertirse en que pueda leer lo que escriben las
+ * demas.
+ *
+ * NO SE DEGRADA CON LA LICENCIA (regla dura 15): el buffer del cliente tiene
+ * techo, y dejar de aceptar errores significaria perderlos justo cuando la
+ * instalacion tiene un problema.
+ */
+Route::post('/client-errors', [ClientErrorController::class, 'store'])
+    ->middleware(['auth:sanctum', 'throttle:client-errors'])
+    ->name('product.client_errors.store');
 
 /*
  * ---------------------------------------------------------------------------

@@ -35,6 +35,15 @@ export type KioskRosterEntry = components['schemas']['KioskRosterEntry']
 export type KioskHeartbeatRequest = components['schemas']['KioskHeartbeatRequest']
 export type KioskHeartbeat = components['schemas']['KioskHeartbeat']
 
+/**
+ * Un error de cliente tal y como lo espera el servidor (RF-PD-15, tarea
+ * 5.12): sin `device_id` ni ningun otro dato de identidad, porque eso lo
+ * decide el servidor por el token. `heartbeat.ts` traduce `ClientErrorEvent`
+ * (la forma interna del quiosco, que si lleva `device_id` para el contexto
+ * local) a esto antes de meterlo en `KioskHeartbeatRequest.client_errors`.
+ */
+export type ClientErrorReport = components['schemas']['ClientErrorReport']
+
 /** Emparejamiento de quiosco (RF-PD-06, tarea 5.6). Las tres rutas son publicas. */
 export type PairingRequestBody = components['schemas']['PairingRequestBody']
 export type PairingRequested = components['schemas']['PairingRequested']

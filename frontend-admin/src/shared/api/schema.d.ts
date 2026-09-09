@@ -2793,12 +2793,141 @@ export interface paths {
          *     `diagnostics.bundle_generated` con si iba anonimizado, que secciones
          *     lleva, su `sha256` y su tamano.
          *
-         *     Hasta que exista la tabla `error_events` (RF-PD-15, tarea 5.12) la
-         *     seccion `error_events` dice `{"status": "not_installed"}` y no `[]`: un
-         *     paquete que afirmase «cero errores» sobre una tabla que no existe seria
-         *     falso.
+         *     La seccion `error_events` (RF-PD-15, tarea 5.12) lleva el resumen por
+         *     origen y nivel y los grupos del periodo con su `trace_id`; si la tabla
+         *     no se pudiera leer diria `{"status": "unavailable"}` y no `[]`: un
+         *     paquete que afirmase «cero errores» sin haber mirado seria falso.
          */
         post: operations["generateDiagnosticsBundle"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/diagnostics/errors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Historico de errores agrupado por huella
+         * @description Lo que esta fallando en la instalacion y desde cuando, para el IT del
+         *     cliente y **sin conocer el sistema** (RF-PD-15, documento 02 §8.2.1).
+         *
+         *     **Una fila por fallo, no por repeticion.** Un error que se repite mil
+         *     veces en un cambio de turno es un grupo con `occurrences: 1000`; la
+         *     huella es el hash de la clase, el punto de fallo y el mensaje
+         *     normalizado sin identificadores variables. Cada repeticion actualiza
+         *     `last_seen_at`, y **un grupo resuelto que vuelve a ocurrir se reabre**:
+         *     que un fallo dado por arreglado reaparezca es justo lo que hay que ver.
+         *
+         *     **Sin datos personales, nunca** (regla dura 21, RL-19). Ni nombres, ni
+         *     correos, ni horas de fichaje: el mensaje se sanea en el servidor antes
+         *     de guardarse y el contexto solo admite claves de una lista cerrada. Las
+         *     personas aparecen, si acaso, como `employee_uuid`; los quioscos como
+         *     `device_id`. Este mismo historico viaja en el paquete de diagnostico.
+         *
+         *     **No es auditoria** (regla dura 6). Retencion de 90 dias por
+         *     `last_seen_at` (`ERROR_HISTORY_RETENTION_DAYS`, RL-11), distinta de los
+         *     cuatro anos del registro legal.
+         *
+         *     Ordenado por `last_seen_at` descendente. `status=open` por omision.
+         *     Los instantes salen en UTC; el panel los presenta en `meta.time_zone`
+         *     (regla dura 3).
+         *
+         *     **`admin` con ambito `diagnostics:*`** (regla dura 18). Un acceso de
+         *     soporte con alcance `diagnostics` (RF-PD-11) **lee** este historico:
+         *     es para lo que se le concede. **Funciona con la licencia caducada o
+         *     ausente** (regla dura 15).
+         */
+        get: operations["listErrorEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/diagnostics/errors/{id}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador del grupo de errores (`error_events.id`). Clave interna
+                 *     por el mismo motivo que `IncidentId`: un grupo de errores no es nadie,
+                 *     no viaja impreso y su numero no revela nada sobre la plantilla.
+                 * @example 87
+                 */
+                id: components["parameters"]["ErrorEventId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Marcar un grupo de errores como resuelto
+         * @description Da un grupo por atendido (RF-PD-15). Quedan `resolved_at` y quien lo
+         *     hizo; **si el error vuelve a ocurrir, el grupo se reabre** y conserva su
+         *     recuento, para que «resuelto» signifique «ya no pasa» y no «ya no se ve».
+         *
+         *     **Idempotente.** Resolver un grupo ya resuelto responde `200` con la
+         *     misma fila: la accion no tiene segundo efecto y no merece un `409`.
+         *
+         *     **No deja asiento en `audit_log`.** Son datos tecnicos sin relevancia
+         *     legal (regla dura 6, en sentido inverso): la traza de quien y cuando
+         *     vive en la propia fila.
+         *
+         *     **`admin` y solo `admin`, con ambito `diagnostics:*`.** Un acceso de
+         *     soporte recibe `403` aunque pueda leer el historico: dar un fallo por
+         *     resuelto en la instalacion de un cliente es decision del cliente
+         *     (ADR-020).
+         */
+        post: operations["resolveErrorEvent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/client-errors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Recibir errores del panel o del portal
+         * @description El canal por el que el panel de gestion y el portal del empleado vacian
+         *     su buffer de errores (RF-PD-15, tarea 5.12). El quiosco **no** usa esta
+         *     ruta: reporta dentro de su latido (`POST /api/v1/kiosk/heartbeat`), y un
+         *     token de dispositivo aqui recibe `403`.
+         *
+         *     **El servidor decide el origen por el token** (`admin` para una sesion
+         *     de gestion, `portal` para una de empleado), nunca por lo que diga el
+         *     cuerpo, y **sanea otra vez** mensaje y contexto antes de agrupar por
+         *     huella: el saneado del cliente es una cortesia, no una garantia.
+         *
+         *     **Sin canal anonimo.** Los errores anteriores al inicio de sesion
+         *     esperan en el buffer del navegador (techo 50) y salen con la primera
+         *     sesion; una ruta publica que escribe en base de datos seria un vector
+         *     de denegacion de servicio. Limite propio `throttle:client-errors`
+         *     (`PRODUCT_CLIENT_ERRORS_RATE_LIMIT`, 12 por minuto y token).
+         *
+         *     **Nunca devuelve el historico** ni nada mas que el recuento aceptado:
+         *     consultar es otra potestad (`diagnostics:*`) y otra ruta.
+         *
+         *     Cualquier sesion de gestion vale, sea cual sea su rol: quien sufre el
+         *     error es quien lo reporta.
+         */
+        post: operations["reportClientErrors"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3956,12 +4085,38 @@ export interface components {
              *     quiosco que lleva media jornada incomunicado.
              */
             oldest_pending_at?: components["schemas"]["UtcTimestamp"];
+            /**
+             * @description Errores de la propia tablet desde el ultimo latido (RF-PD-15, tarea
+             *     5.12). **En el latido y no en una llamada propia**: el quiosco no abre
+             *     otro canal de red que compita con la sincronizacion de la cola en un
+             *     cambio de turno, y si el latido falla los errores esperan al siguiente
+             *     (techo de 50 en la tablet; los mas antiguos se descartan).
+             *
+             *     **El servidor no se fia del saneado del cliente**: sanea otra vez,
+             *     decide el origen (`kiosk`) por el token y no por lo que diga el cuerpo,
+             *     y agrupa por huella en `error_events`. Un error de reporte **nunca
+             *     afecta a un fichaje** (regla dura 19): aunque esta lista sea invalida
+             *     el latido se rechaza con `400` y la cola sigue drenando por `/scan/batch`.
+             *
+             *     Sin datos personales, por construccion: `code` es un catalogo cerrado
+             *     y `context` solo admite escalares de claves permitidas.
+             */
+            client_errors?: components["schemas"]["ClientErrorReport"][];
         };
         /**
          * KioskHeartbeat
-         * @description Lo unico que el servidor le devuelve al quiosco: su hora.
+         * @description Lo que el servidor le devuelve al quiosco: su hora y cuantos errores de
+         *     cliente ha aceptado.
          */
         KioskHeartbeat: {
+            /**
+             * @description Cuantos elementos de `client_errors` se han persistido. La tablet vacia
+             *     de su buffer **solo esos** (`acknowledge(n)`), de modo que un latido
+             *     que llego pero no pudo escribir no pierde nada: los errores vuelven en
+             *     el siguiente. `0` cuando no se enviaron o cuando la base de datos no
+             *     los pudo guardar.
+             */
+            client_errors_accepted: number;
             /**
              * @description Hora del servidor en el momento de atender el latido. La tablet la compara
              *     con la suya para saber si su reloj se ha ido y avisar (RF-AT-10).
@@ -7410,7 +7565,11 @@ export interface components {
             }[];
             /**
              * @description Historico de errores agrupado por huella con su `trace_id`
-             *     (RF-PD-15). Hasta la tarea 5.12, `{"status": "not_installed"}`.
+             *     (RF-PD-15, tarea 5.12): `status: ok`, `period_days`, `summary`
+             *     (recuentos por `source` y por `level`, abiertos y resueltos) y
+             *     `groups` —hasta 500, `last_seen_at` descendente— con los mismos
+             *     campos que `ErrorEvent`. Cada grupo entra por lista de permitidos:
+             *     nunca un nombre, un correo ni una hora de fichaje (regla dura 21).
              */
             error_events: {
                 [key: string]: unknown;
@@ -7493,6 +7652,174 @@ export interface components {
             accessed_at: components["schemas"]["UtcTimestamp"] | null;
         };
         /**
+         * ErrorSource
+         * @description De donde viene el error (RF-PD-15, documento 01 §5). Los cuatro del
+         *     servidor los decide el contexto de ejecucion; los tres de cliente los
+         *     decide el **tipo de token** con el que se reporto, nunca el cuerpo.
+         * @enum {string}
+         */
+        ErrorSource: "api" | "worker" | "scheduler" | "console" | "kiosk" | "admin" | "portal";
+        /**
+         * ErrorLevel
+         * @description `critical` es lo que nadie ve o lo que no puede parar: un trabajo de
+         *     cola que agota sus intentos, cualquier tarea del planificador, un fallo
+         *     en las rutas de fichaje y los errores de quiosco que le impiden fichar
+         *     (camara, escaner, almacen local, padron, sellado del PIN). Todo lo demas
+         *     es `error`. La tabla completa esta en el runbook `errores-en-el-panel.md`.
+         * @enum {string}
+         */
+        ErrorLevel: "error" | "critical";
+        /**
+         * ErrorEvent
+         * @description Un grupo de errores con la misma huella (RF-PD-15). **Sin datos
+         *     personales**: `message` va saneado (correos, documentos, telefonos,
+         *     horas, secretos y todo texto entrecomillado sustituidos por marcadores),
+         *     `context` solo lleva claves de una lista cerrada con valores escalares,
+         *     y las personas aparecen como `employee_uuid` si acaso (regla dura 21).
+         *
+         *     `message`, `exception_class`, `file` y `line` son los de la **primera**
+         *     aparicion; `app_version`, `trace_id`, `device_id` y `employee_uuid`, los
+         *     de la **ultima**.
+         */
+        ErrorEvent: {
+            /**
+             * Format: int64
+             * @example 87
+             */
+            id: number;
+            level: components["schemas"]["ErrorLevel"];
+            source: components["schemas"]["ErrorSource"];
+            /**
+             * @description Modulo del monolito al que pertenece el punto de fallo
+             *     (`attendance`, `kiosk`, `product`, …), deducido del espacio de
+             *     nombres; `null` cuando el fallo esta fuera de los modulos o viene
+             *     de un cliente.
+             */
+            module: string | null;
+            /**
+             * @description Codigo estable del error. En los clientes es el del catalogo cerrado
+             *     del reporter (`kiosk.camera.unavailable`, `web.vue_error`…); en el
+             *     servidor, `null` salvo que la excepcion declare uno.
+             */
+            code: string | null;
+            /**
+             * @description Mensaje saneado de la primera aparicion.
+             * @example SQLSTATE[08006] connection to server at '…' failed
+             */
+            message: string;
+            /** @description Clase de la excepcion en el servidor; `null` en un error de cliente. */
+            exception_class: string | null;
+            /**
+             * @description Fichero del punto de fallo, relativo a la raiz de la aplicacion.
+             *     `null` en un error de cliente: el `stack` del navegador nunca viaja
+             *     (una URL con un uuid dentro correlaciona a una persona).
+             */
+            file: string | null;
+            line: number | null;
+            /**
+             * @description Datos tecnicos por lista de permitidos: `route`, `method`, `status`,
+             *     `job`, `queue`, `attempts`, `command`, `component`, `hook`, `cause`,
+             *     `http_status`, `code`, `skew_seconds`, `queue_size`, `outcome`,
+             *     `reason`. Solo escalares, truncados a 200 caracteres.
+             */
+            context: {
+                [key: string]: string | number | boolean;
+            };
+            /**
+             * @description Traza W3C de la peticion en la que ocurrio la ultima vez, para
+             *     correlacionar con el log tecnico cuando el cliente conserva Loki.
+             *     `null` fuera de una peticion o sin traza.
+             */
+            trace_id: string | null;
+            /** @description UUID publico del quiosco si el error viene de uno; `null` si no. */
+            device_id: string | null;
+            /**
+             * @description Empleado implicado si la operacion que fallo lo tenia y **solo como
+             *     uuid** (regla dura 21). `null` en la mayoria de los casos.
+             */
+            employee_uuid: string | null;
+            /** @description Version del servidor o del cliente en la ultima aparicion (§10.5). */
+            app_version: string;
+            /** @description Cuantas veces se ha visto esta huella desde `first_seen_at`. */
+            occurrences: number;
+            first_seen_at: components["schemas"]["UtcTimestamp"];
+            last_seen_at: components["schemas"]["UtcTimestamp"];
+            resolved_at: components["schemas"]["UtcTimestamp"] | null;
+            /**
+             * @description Quien lo dio por resuelto. `null` mientras siga abierto o si se
+             *     reabrio al volver a ocurrir.
+             */
+            resolved_by: components["schemas"]["IncidentUser"] | null;
+        };
+        /**
+         * ErrorEventCollection
+         * @description Pagina del historico de errores.
+         */
+        ErrorEventCollection: {
+            data: components["schemas"]["ErrorEvent"][];
+            meta: components["schemas"]["ErrorEventPageMeta"];
+        };
+        /**
+         * ErrorEventPageMeta
+         * @description Situacion de la pagina, mas lo que el panel necesita para pintar
+         *     «hace tres horas» sin adivinar (regla dura 3), y los recuentos de
+         *     abiertos por nivel para la cabecera de la pantalla.
+         */
+        ErrorEventPageMeta: {
+            page: number;
+            per_page: number;
+            /** @description Grupos que casan con los filtros. */
+            total: number;
+            total_pages: number;
+            /** @description Grupos abiertos de nivel `error` en toda la instalacion, sin filtros. */
+            open_errors: number;
+            /** @description Grupos abiertos de nivel `critical` en toda la instalacion, sin filtros. */
+            open_critical: number;
+            time_zone: components["schemas"]["TimeZoneName"];
+            /** @description Reloj del servidor al responder; contra el se calcula la antiguedad. */
+            generated_at: components["schemas"]["UtcTimestamp"];
+        };
+        /**
+         * ClientErrorReport
+         * @description Un error tal y como lo cuenta un cliente (quiosco, panel o portal).
+         *     **Sin identidad**: ni `device_id` ni `app` ni usuario, porque todo eso
+         *     lo sabe el servidor por el token y no se acepta de un cuerpo. **Sin
+         *     `stack`**: una URL con un uuid dentro correlaciona a una persona.
+         */
+        ClientErrorReport: {
+            /**
+             * @description Codigo del catalogo cerrado del reporter de cada cliente
+             *     (`kiosk.camera.unavailable`, `web.unhandled_rejection`…). Un codigo
+             *     libre acabaria siendo una frase, y una frase acaba llevando un nombre.
+             * @example kiosk.camera.stream_lost
+             */
+            code: string;
+            /** @description Cuando ocurrio en el reloj del cliente; el servidor guarda ademas cuando lo recibio. */
+            occurred_at: components["schemas"]["UtcTimestamp"];
+            app_version: string;
+            /**
+             * @description Contexto tecnico, solo escalares. El servidor descarta cualquier
+             *     clave fuera de su lista de permitidos y sanea los valores; el
+             *     cliente ya descarta por nombre (`name`, `email`, `pin`, `token`,
+             *     `payload`…), pero no se confia en ello.
+             */
+            context: {
+                [key: string]: string | number | boolean;
+            };
+        };
+        /** ClientErrorBatch */
+        ClientErrorBatch: {
+            errors: components["schemas"]["ClientErrorReport"][];
+        };
+        /**
+         * ClientErrorsAccepted
+         * @description Cuantos se han persistido. El cliente vacia de su buffer **solo esos**
+         *     (`acknowledge(n)`): lo que no se pudo guardar vuelve en el siguiente envio.
+         */
+        ClientErrorsAccepted: {
+            accepted: number;
+        };
+        /**
          * SupportGrant
          * @description Una concesion de acceso de soporte (RF-PD-11, ADR-020): quien la
          *     concedio, por que, con que alcance, hasta cuando, si se revoco y cuando
@@ -7544,8 +7871,10 @@ export interface components {
          *     `row_counts` es un objeto con una clave por fichero del ZIP
          *     (`employees`, `shift_entries`, `audit_log`, …) y el numero de filas de
          *     datos que contiene. Las tablas que no existen en esta version
-         *     (`absences`, `error_events`) no aparecen aqui y constan como
-         *     `not_installed` en el `manifest.json` del propio ZIP.
+         *     (`absences`) no aparecen aqui y constan como `not_installed` en el
+         *     `manifest.json` del propio ZIP. `error_events` si viaja desde la tarea
+         *     5.12: es el historico tecnico del cliente y forma parte de «todos sus
+         *     datos» (RL-20).
          */
         DataExport: {
             /** Format: uuid */
@@ -8420,6 +8749,13 @@ export interface components {
          * @example 412
          */
         IncidentId: number;
+        /**
+         * @description Identificador del grupo de errores (`error_events.id`). Clave interna
+         *     por el mismo motivo que `IncidentId`: un grupo de errores no es nadie,
+         *     no viaja impreso y su numero no revela nada sobre la plantilla.
+         * @example 87
+         */
+        ErrorEventId: number;
         /**
          * @description Situacion de la incidencia. **`open` por omision**, que es la pregunta
          *     que hace quien abre la bandeja: que tengo pendiente.
@@ -11259,6 +11595,101 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listErrorEvents: {
+        parameters: {
+            query?: {
+                source?: components["schemas"]["ErrorSource"];
+                level?: components["schemas"]["ErrorLevel"];
+                /** @description `open` por omision: lo que tengo pendiente. */
+                status?: "open" | "resolved" | "all";
+                /** @description Grupos con `last_seen_at` desde este instante (UTC), incluido. */
+                from?: components["schemas"]["UtcTimestamp"];
+                /** @description Grupos con `last_seen_at` hasta este instante (UTC), incluido. */
+                to?: components["schemas"]["UtcTimestamp"];
+                page?: number;
+                per_page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pagina del historico. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEventCollection"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    resolveErrorEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador del grupo de errores (`error_events.id`). Clave interna
+                 *     por el mismo motivo que `IncidentId`: un grupo de errores no es nadie,
+                 *     no viaja impreso y su numero no revela nada sobre la plantilla.
+                 * @example 87
+                 */
+                id: components["parameters"]["ErrorEventId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description El grupo, ya resuelto. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEvent"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    reportClientErrors: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClientErrorBatch"];
+            };
+        };
+        responses: {
+            /** @description Recibido. `accepted` dice cuantos se han persistido. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientErrorsAccepted"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
             429: components["responses"]["TooManyRequests"];
         };
     };

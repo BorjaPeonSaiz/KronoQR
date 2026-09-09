@@ -131,6 +131,13 @@ export interface RequestOptions {
    * error, porque el formato es propio del endpoint, no de este cliente.
    */
   accept?: string
+  /**
+   * `fetch(..., { keepalive: true })`: la peticion sigue viva aunque la
+   * pagina se descargue mientras esta en vuelo. Existe para
+   * `clientErrorTransport.ts` (tarea 5.12), que vacia el buffer de errores en
+   * `pagehide`/`visibilitychange: hidden` sin poder esperar a que termine.
+   */
+  keepalive?: boolean
 }
 
 let authTokenProvider: () => string | null = () => null
@@ -304,6 +311,7 @@ async function send(path: string, options: RequestOptions, accept: string): Prom
         ? {}
         : { body: isMultipart ? (options.body as FormData) : JSON.stringify(options.body) }),
       ...(options.signal === undefined ? {} : { signal: options.signal }),
+      ...(options.keepalive === true ? { keepalive: true } : {}),
     })
   } catch {
     throw new ApiError({ kind: 'network', status: 0 })

@@ -180,7 +180,6 @@ return [
 
     'not_installed_names' => [
         'absences' => 'Absences and leave.',
-        'error_events' => 'Technical error history of the applications.',
     ],
 
     'unknown_column' => '(not described in this version; its technical name is ":column")',
@@ -422,6 +421,31 @@ return [
                 'revoked_at' => 'When it was revoked early, if it was.',
                 'revoked_by_user_uuid' => 'Who revoked it. Empty if it was revoked from the server console.',
                 'accessed_at' => 'Last time it was used. Empty if it was granted and never needed.',
+            ],
+        ],
+
+        'error_events' => [
+            'summary' => 'What has failed in your installation over the last 90 days, **grouped**: one line per distinct failure, not per occurrence. It is technical information and **contains no staff data**: no names, no e-mail addresses, no clock-in times. If it is empty, there were no errors in that period.',
+            'columns' => [
+                'fingerprint' => 'Fingerprint of the failure: what makes the same error repeated a thousand times a single line. It is computed from the source, the error class, the exact point where it happened and the message text with numbers and identifiers stripped.',
+                'level' => '`critical` when it is something nobody sees (a nightly task, a queued job) or something that stops people clocking in (camera, scanner, tablet storage); `error` otherwise.',
+                'source' => 'Where it came from: `api` (a request), `worker` (a queued job), `scheduler` (a scheduled task), `console` (a command), `kiosk` (the tablet), `admin` (the panel) or `portal` (the employee portal).',
+                'module' => 'Part of the system where it happened (`attendance`, `kiosk`, `product`…). Empty when the failure came from a client application.',
+                'code' => 'Stable error code in the client applications (`kiosk.camera.unavailable`). Empty for most server errors.',
+                'message' => 'The error text **from the first time it happened**, already cleaned: e-mail addresses, national IDs, phone numbers, times and any quoted text are replaced by markers before storing it.',
+                'exception_class' => 'Technical class of the error on the server. Empty if it came from a client application.',
+                'file' => 'Source file where it happened, and `line` the line. Both empty if it came from a client application: the browser stack is never stored.',
+                'line' => 'Line number. See `file`.',
+                'context' => 'Technical data as JSON, with a closed list of possible fields (route, method, status, job, queue, attempts, command, component, cause…). It never carries anything else.',
+                'trace_id' => 'Identifier of the request in which it last happened. Use it to find it in the technical log if you keep the observability stack.',
+                'device_id' => 'Tablet it came from, if any. It is its public identifier, the same one you see in `devices.csv`.',
+                'employee_uuid' => 'Person involved in the operation that failed, **as an identifier only** and never by name. Almost always empty.',
+                'app_version' => 'Version of the server or of the client application the last time it happened. Tells you whether a failure went away with an upgrade or arrived with it.',
+                'occurrences' => 'How many times this same failure has happened since `first_seen_at`.',
+                'first_seen_at' => 'The first time it was seen.',
+                'last_seen_at' => 'The last one. This is the date the 90-day purge uses: a failure that keeps happening does not expire.',
+                'resolved_at' => 'When somebody marked it as resolved in the panel. **If the failure happens again it is cleared and the line reopens**, keeping its count.',
+                'resolved_by_user_uuid' => 'Who marked it as resolved.',
             ],
         ],
 

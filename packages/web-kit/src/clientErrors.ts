@@ -10,15 +10,29 @@
 //
 // QUE HACE HOY. Un unico punto de paso: sanea el contexto, agrupa en un buffer
 // acotado y deja el error tambien en la consola (capturar jamas significa
-// silenciar). El TRANSPORTE llega con `error_events` (tarea 5.12): cuando
-// exista, `pending()`/`acknowledge()` son la misma pareja que ya drena el
-// reporter del quiosco por el latido.
+// silenciar). El TRANSPORTE hacia `error_events` es `clientErrorTransport.ts`
+// (tarea 5.12): drena este buffer con `pending()`/`acknowledge()`, la misma
+// pareja que ya usaba el reporter del quiosco por el latido.
+//
+// `message` ES LA CLAVE QUE EL SERVIDOR ELEVA A COLUMNA. El contrato
+// (`ClientErrorReport`) no tiene un campo `message` propio a proposito: viaja
+// dentro de `context`, y es el servidor quien la saca de ahi para la columna
+// `error_events.message` antes de aplicar su propia lista de claves
+// permitidas al resto del contexto (decision 5 de la ficha 5.12). Las otras
+// tres claves que emite este fichero -`component`, `hook` (del arbol de
+// componentes de Vue) y `source` (`fichero:linea` de un error global de
+// `window`)- son las unicas, y no hay ninguna mas: quien añada una cuarta
+// tiene que añadirla tambien a la prueba de `installGlobalErrorCapture` que
+// fija el conjunto exacto.
 //
 // QUE NO PUEDE LLEVAR NUNCA. Datos personales. El saneado es el mismo contrato
 // que el del quiosco: descarta claves prohibidas por nombre, tipos no
 // escalares, y trunca cadenas. No se envia `stack` (una URL con un uuid dentro
 // correlaciona a una persona) — el codigo estable + mensaje + componente
-// bastan para agrupar.
+// bastan para agrupar. `source` tampoco puede: se recorta al `pathname` del
+// script, sin `query` ni `hash` (`scriptLocation`), aunque un fichero estatico
+// no suele llevar ninguno de los dos -es cinturon y tirantes contra el dia en
+// que un cache-buster o un parametro de sesion se cuele en la URL de un script-.
 
 import type { App } from 'vue'
 
@@ -149,6 +163,26 @@ function describe(error: unknown): string {
 }
 
 /**
+ * `pathname:linea` del script que lanzo un error global de `window`, SIN
+ * `query` ni `hash` (regla dura 21). Un fichero estatico servido por Vite no
+ * suele llevar ninguno de los dos, pero no se confia en «no suele»: si
+ * `filename` fuera una URL con un parametro o un fragmento -un cache-buster,
+ * un token de sesion en una integracion futura-, `new URL` los separa y aqui
+ * se descartan explicitamente. Si `filename` ni siquiera es una URL valida
+ * (un evento de origen cruzado lo deja vacio, o `"anonymous"`), se usa tal
+ * cual: no hay nada que recortar y no vale la pena inventar un valor.
+ */
+function scriptLocation(filename: string, lineno: number): string {
+  try {
+    const url = new URL(filename, window.location.origin)
+
+    return `${url.pathname}:${lineno}`
+  } catch {
+    return `${filename}:${lineno}`
+  }
+}
+
+/**
  * Engancha el reporter a los tres puntos por los que un error puede escapar:
  * el arbol de componentes de Vue, los errores globales de `window` y las
  * promesas rechazadas sin `catch`. Capturar no silencia: todo sigue saliendo
@@ -167,7 +201,7 @@ export function installGlobalErrorCapture(app: App, reporter: WebErrorReporter):
   window.addEventListener('error', (event) => {
     reporter.report('web.unhandled_error', {
       message: describe(event.error ?? event.message),
-      source: `${event.filename ?? ''}:${event.lineno ?? 0}`,
+      source: scriptLocation(event.filename ?? '', event.lineno ?? 0),
     })
   })
 

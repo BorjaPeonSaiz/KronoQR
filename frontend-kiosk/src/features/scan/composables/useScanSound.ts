@@ -118,7 +118,7 @@ export function createScanSound(options: ScanSoundOptions = {}): ScanSound {
       void ctx.resume().catch(() => undefined)
       if (!blockedReported) {
         blockedReported = true
-        options.onBlocked?.({ audio_state: ctx.state })
+        options.onBlocked?.({ audio_state: ctx.state, message: ctx.state })
       }
     }
 

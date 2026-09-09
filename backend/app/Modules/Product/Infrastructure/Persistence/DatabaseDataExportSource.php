@@ -208,6 +208,7 @@ final readonly class DatabaseDataExportSource implements DataExportSource
         'audit_chain_anchors' => self::AUDIT_CHAIN_ANCHORS,
         'users' => self::USERS,
         'support_grants' => self::SUPPORT_GRANTS,
+        'error_events' => self::ERROR_EVENTS,
         'installation_settings' => self::INSTALLATION_SETTINGS,
         'compliance_profiles' => self::COMPLIANCE_PROFILES,
         'license' => self::LICENSE,
@@ -493,6 +494,36 @@ final readonly class DatabaseDataExportSource implements DataExportSource
           JOIN users gu      ON gu.id = g.granted_by_user_id
           LEFT JOIN users ru ON ru.id = g.revoked_by_user_id
          ORDER BY g.id
+        SQL;
+
+    /*
+     * El historico de errores (RF-PD-15). `context` sale como texto JSON en una
+     * celda del CSV, que es lo correcto para una hoja de calculo; el `README`
+     * explica que hay dentro.
+     */
+    private const string ERROR_EVENTS = <<<'SQL'
+        SELECT e.fingerprint,
+               e.level,
+               e.source,
+               e.module,
+               e.code,
+               e.message,
+               e.exception_class,
+               e.file,
+               e.line::text          AS line,
+               e.context::text       AS context,
+               e.trace_id,
+               e.device_id::text     AS device_id,
+               e.employee_uuid::text AS employee_uuid,
+               e.app_version,
+               e.occurrences::text   AS occurrences,
+               to_char(e.first_seen_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS first_seen_at,
+               to_char(e.last_seen_at  AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS last_seen_at,
+               to_char(e.resolved_at   AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS resolved_at,
+               u.uuid::text          AS resolved_by_user_uuid
+          FROM error_events e
+          LEFT JOIN users u ON u.id = e.resolved_by_user_id
+         ORDER BY e.id
         SQL;
 
     private const string INSTALLATION_SETTINGS = <<<'SQL'

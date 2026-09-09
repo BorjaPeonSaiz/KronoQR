@@ -48,7 +48,19 @@ export type ApiFailureCause =
 export type ApiResult<TOk, TProblem = ScanRejected> =
   | { readonly outcome: 'ok'; readonly data: TOk }
   | { readonly outcome: 'rejected'; readonly problem: TProblem }
-  | { readonly outcome: 'failed'; readonly cause: ApiFailureCause; readonly httpStatus?: number }
+  | {
+      readonly outcome: 'failed'
+      readonly cause: ApiFailureCause
+      readonly httpStatus?: number
+      /**
+       * Nombres de campo de un `400` con forma `ValidationProblem`
+       * (`errors`, RFC 9457). `undefined` salvo que quien llama lo rellene:
+       * hoy solo `sendHeartbeat`, para distinguir un `client_errors` invalido
+       * de un `app_version`/`pending_queue_size` invalidos sin adivinar por
+       * el codigo de estado (tarea 5.12, RF-PD-15).
+       */
+      readonly invalidFields?: readonly string[]
+    }
 
 export interface ApiClientOptions {
   /** Origen de la API. Vacio significa mismo origen, que es lo normal en el quiosco. */
@@ -163,6 +175,19 @@ function causeForStatus(status: number): ApiFailureCause {
   if (status === 401 || status === 403) return 'unauthorized'
   if (status === 429) return 'throttled'
   return 'server'
+}
+
+/**
+ * Nombres de campo de un `400` con forma `ValidationProblem`
+ * (`{ errors: { <campo>: string[] } }`, RFC 9457). `undefined` si el cuerpo
+ * no trae esa forma -otro tipo de `400`, o un cuerpo vacio-.
+ */
+function invalidFieldsOf(body: unknown): readonly string[] | undefined {
+  if (!isRecord(body)) return undefined
+  const { errors } = body
+  if (!isRecord(errors)) return undefined
+  const fields = Object.keys(errors)
+  return fields.length > 0 ? fields : undefined
 }
 
 export function createApiClient(options: ApiClientOptions = {}): ApiClient {
@@ -310,7 +335,19 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
           ? { outcome: 'ok', data: result.body }
           : { outcome: 'failed', cause: 'malformed', httpStatus: 200 }
       }
-      return { outcome: 'failed', cause: causeForStatus(result.status), httpStatus: result.status }
+      // `invalidFields` solo tiene sentido en un `400` (`ValidationProblem`):
+      // en cualquier otro estado seria un cuerpo de otra forma, y el
+      // planificador del latido (`heartbeat.ts`) solo lo mira cuando
+      // `httpStatus === 400`, asi que no vale la pena parsear en los demas.
+      // `exactOptionalPropertyTypes`: la clave se omite del todo cuando no
+      // hay nada que ofrecer, en vez de escribirse con `undefined`.
+      const invalidFields = result.status === 400 ? invalidFieldsOf(result.body) : undefined
+      return {
+        outcome: 'failed',
+        cause: causeForStatus(result.status),
+        httpStatus: result.status,
+        ...(invalidFields === undefined ? {} : { invalidFields }),
+      }
     },
 
     async requestPairing(body) {

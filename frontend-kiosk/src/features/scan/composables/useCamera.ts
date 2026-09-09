@@ -14,7 +14,7 @@
 
 import type { Ref, ShallowRef } from 'vue'
 import { readonly, ref, shallowRef } from 'vue'
-import { errorTypeOf } from '@/shared/telemetry/errorType'
+import { errorMessageOf, errorTypeOf } from '@/shared/telemetry/errorType'
 
 export type CameraState = 'idle' | 'starting' | 'running' | 'denied' | 'unavailable'
 
@@ -116,7 +116,10 @@ export function useCamera(options: UseCameraOptions = {}): CameraController {
     const media = globalThis.navigator?.mediaDevices
     if (media === undefined) {
       state.value = 'unavailable'
-      options.onFailure?.('unavailable', { reason: 'no_media_devices' })
+      options.onFailure?.('unavailable', {
+        reason: 'no_media_devices',
+        message: 'no_media_devices',
+      })
       return null
     }
 
@@ -148,7 +151,14 @@ export function useCamera(options: UseCameraOptions = {}): CameraController {
       const name = errorTypeOf(error)
       const denied = name === 'NotAllowedError' || name === 'SecurityError'
       state.value = denied ? 'denied' : 'unavailable'
-      options.onFailure?.(denied ? 'permission_denied' : 'unavailable', { error_type: name })
+      // `getUserMedia` casi nunca da mas texto que el nombre de la excepcion
+      // (`error.message` suele venir vacio); cuando lo da, es mejor que el
+      // nombre solo, y cuando no, cae al nombre para que la fila del panel
+      // -que muestra `message`- no se quede en blanco.
+      options.onFailure?.(denied ? 'permission_denied' : 'unavailable', {
+        error_type: name,
+        message: errorMessageOf(error) || name,
+      })
       return null
     }
   }

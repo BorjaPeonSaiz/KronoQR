@@ -174,6 +174,26 @@ it('ningun alcance alcanza una ruta de escritura que no sea de configuracion', f
          * `DataExportAuthorizationTest`.
          */
         'POST /api/v1/data-export',
+        /*
+         * RESOLVER UN GRUPO DEL HISTORICO DE ERRORES (RF-PD-15, tarea 5.12).
+         *
+         * Viaja bajo `diagnostics:*` —el mismo ambito que el paquete, porque es
+         * la misma potestad: diagnosticar—, asi que **los tres alcances lo
+         * alcanzan por el middleware**. Y tiene que ser asi: negar ese ambito
+         * dejaria a un acceso de soporte sin poder LEER el historico, que es
+         * justamente para lo que se concede el alcance `diagnostics`.
+         *
+         * Lo que cierra la escritura es `ErrorEventPolicy::resolve()`, que
+         * rechaza a todo actor de soporte: dar un fallo por atendido en la
+         * instalacion de un cliente es una decision del cliente (ADR-020). La
+         * prueba de que los tres alcances reciben `403` esta en
+         * `ErrorEventAuthorizationTest`.
+         *
+         * Lo que se perderia si esa policy se cayera es acotado —el fabricante
+         * podria vaciar la bandeja de errores del cliente— pero es exactamente
+         * el tipo de decision que la regla dura 16 reserva al cliente.
+         */
+        'POST /api/v1/diagnostics/errors/{id}/resolve',
     ];
 
     $alcanzables = [];

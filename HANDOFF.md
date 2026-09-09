@@ -7,9 +7,71 @@
 
 ## Estado y objetivo actual
 
+**Rama `feat/tarea-5.12-historico-errores`** (desde `main` `4f3f97b`). **Tarea 5.12 «Histórico de errores en base de
+datos» (RF-PD-15) IMPLEMENTADA, REVISADA (dos vueltas) y PROBADA el 09-09-2026**; ver «Siguiente acción» para commit, CI y
+PR. **La 5.11b (guía de RRHH, portal y hoja de la tarjeta) NO se ha ejecutado**: es la última tarea de la Fase 5.
+
+**Cómo se hizo (receta de la 5.11, con una diferencia).** Antes de lanzar nada: catorce decisiones en la ficha (plan 05 →
+«Tarea 5.12», «Decisiones tomadas»), fila 16 de «Puntos no cubiertos», contrato (`GET /diagnostics/errors`,
+`POST /diagnostics/errors/{id}/resolve`, `POST /client-errors`, `client_errors` en el latido y `client_errors_accepted` en su
+respuesta), los tres `schema.d.ts` regenerados, lista de rutas de `OpenApiContractTest`, **piezas compartidas en `Shared`**
+(`ErrorSource`, `ErrorLevel`, `ErrorReport`, `ClientErrorCode`, puerto `ErrorEventSink`) y dos métodos reservados en
+`ProductServiceProvider` (`registerErrorHistory()` A, `registerErrorCapture()` B). Cinco agentes en paralelo:
+`producto-licencia` (A), `backend-laravel` (B), `frontend-panel` (C: panel + `web-kit`), `frontend-quiosco` (D),
+`devops-observabilidad` (F: alerta, runbook y docs). **La diferencia:** `revisor-codigo` y `seguridad-cumplimiento` encontraron
+tres bloqueantes reales y hubo **segunda vuelta con los cinco**, reanudados por `SendMessage` (los cinco se cortaron a la
+vez por el límite de sesión y se reanudaron sin perder contexto). Prompt en doc 03 §6.5.7.
+
+**Lo construido.** Backend: tabla `error_events` (migración `2026_09_13_100000`, `fingerprint` UNIQUE, CHECK de `level` y
+`source`), `ErrorFingerprint`/`ErrorMessageNormalizer`/`ErrorMessageSanitizer`/`ErrorContextAllowlist` (23 claves derivadas de
+lo que emiten los clientes y el servidor; `message` se eleva a columna), `RecordErrorEvent` (implementa el sink; nunca lanza;
+`INSERT … ON CONFLICT` con `GREATEST`/`LEAST`, reapertura solo con ocurrencia posterior a `resolved_at`, `RETURNING xmax = 0`
+para la métrica de grupos, por la conexión propia `error_events`), techo de grupos por origen con grupo `overflow`,
+`ListErrorEvents`, `ResolveErrorEvent` (idempotente, sin asiento), `PruneErrorEvents` (lotes), `product:errors` (exit 0/1/2)
+y `product:errors:prune` (03:35 UTC), `RedisErrorMetrics` (`application_errors_total` y
+`application_error_groups_opened_total`), `ErrorEventsCollector` real y `error_events` en la exportación íntegra, sonda
+`app.error_history` de `doctor`, `ErrorEventPolicy` (soporte lee, no resuelve; `resolved_by` nulo para soporte),
+`throttle:client-errors` (`PRODUCT_CLIENT_ERRORS_RATE_LIMIT=12`). Captación: `Product/Infrastructure/Capture`
+(`ExecutionContext` con oyentes de cola/planificador/consola, `ServerErrorReporter` con `reportable`: es error lo que el
+manejador respondería con `5xx`; `QueryException` compuesta con `getSql()`, `Failing row` cortado; `trace_id` de OTel o
+`traceparent`). Kiosk: `client_errors` en el latido validado contra `ClientErrorCode`. Frontends: `web-kit/clientErrorTransport`
+(drena al autenticarse vía `notifyAuthenticated()`, cada 60 s con pendientes y en `pagehide` con `keepalive`),
+`frontend-admin/src/features/errors` (ruta `/errors`, filtros, «qué hacer» por origen × nivel es/en, resolver con
+confirmación), quiosco con reporter único por tablet, `client_errors` en el latido, `acknowledge(accepted)` y `400` distinguido
+por campo. Observabilidad y docs: `errors.yml` (`ErroresCriticosNuevos` sobre grupos nuevos), runbook `errores-en-el-panel.md`,
+`operacion.md` §15 ES/EN, `configuracion.md` (dos variables nuevas), `endurecimiento.md` (holgura de `max_connections`), doc 02
+§8.2 y Anexo B, doc 07 §5/§6 (tres riesgos abiertos y cerrados en la misma tarea, dos aceptados), ficha 5.12 con 15 decisiones.
+
+**Lo que corrigieron las revisiones (aplicado):** claves de contexto de los clientes ausentes de la lista de permitidos (los
+errores llegaban sin mensaje y todos los `web.vue_error` colapsaban en una fila); `last_seen_at` que retrocedía con un reloj
+de tablet atrasado; mensaje de `QueryException` con los valores enlazados en claro (nombres, bcrypt de un PIN) más la segunda
+fuga `DETAIL: Failing row contains (…)`; exclusión por espacio de nombres que dejaba 50 excepciones sin traducción fuera del
+histórico; cualquier sesión de portal fabricaba `critical` con un código de quiosco y disparaba la alerta; sin techo de grupos;
+alerta sobre ocurrencias en vez de grupos nuevos; purga sin lotes; `DiscardingErrorEventSink` inalcanzable; puente de
+transacción en pruebas fichero a fichero (ahora global, con `DB::purge` en `afterEach` para convivir con `CommittedDatabase`);
+`resolved_by.name` servido a soporte; `code`/`exception_class`/`file` sin truncar; `product:errors` con exit code de la
+primera página; sondeo de 1 s en el transporte web; `400` del latido que vaciaba el buffer por cualquier campo.
+
+**Hallazgo grave del entorno, corregido:** sobre el *bind mount* de Docker Desktop, `RecursiveDirectoryIterator` recorriendo
+`tests/Feature` perdía 38 de los 41 ficheros de `tests/Feature/Product` sin avisar: **~430 pruebas de 5.3–5.12 no se
+ejecutaban en local** (la CI en Linux sí) y las cifras «suite completa en verde» de sesiones anteriores eran incompletas.
+`phpunit.xml` declara ahora la suite Feature por subdirectorio y `tests/Architecture/TestDiscoveryTest.php` compara lo
+descubierto con `scandir` (ver «Trampas»).
+
+**Verificado el 09-09 tras la segunda vuelta:** suite completa **3927 en verde** (17 312 aserciones, 686 s), `make quality`
+(contrato 0, Pint, PHPStan 9, Deptrac 0), `qa:traceability --check`, `docs:consistency --check`, `ClientDocumentationTest` 30,
+gitleaks 0 sobre los ficheros cambiados, promtool sobre `errors.yml`, `check-package-links.sh` (305 enlaces), `type-check` y
+`lint` de los cuatro paquetes, unitarias web-kit 199 / panel 433 / quiosco 379 / portal 79, E2E panel 88 y quiosco 50.
+
+**Siguiente acción:** commit único de la tarea, push, **CI manual completa con ⑧ y ⑧b** (`gh workflow run ci.yml --ref
+feat/tarea-5.12-historico-errores`; la ⑧b solo corre en `main`, etiquetas o a mano), PR con *merge commit* (nunca squash),
+`make up` en `main` (migración `error_events`). Después, la **5.11b** y el cierre de la Fase 5 (doc 03 §6.6), con los restos
+de «Pendiente».
+
 **Rama `feat/tarea-5.11-documentacion-cliente`** (desde `main` `e2860be`). **Tarea 5.11 «Documentación de instalación,
-operación, configuración y obligaciones legales» (RL-16..RL-21, RF-PD-02) IMPLEMENTADA, REVISADA y PROBADA el
-08-09-2026**; ver «Siguiente acción» para el estado del commit, la CI y la PR.
+operación, configuración y obligaciones legales» (RL-16..RL-21, RF-PD-02) IMPLEMENTADA, REVISADA, PROBADA e **INTEGRADA en
+`main` el 09-09-2026** (PR #49, *merge commit* `4f3f97b`; CI manual completa con ⑧ y ⑧b en verde antes de integrar,
+ejecución 34291785329). Rama borrada; `make up` hecho sobre `main` (sin migraciones nuevas).
 
 **Cómo se hizo (receta de la 5.10):** siete decisiones escritas en la ficha ANTES de nada, y cinco agentes en paralelo con
 ficheros disjuntos: `producto-licencia` ×2 (guía de endurecimiento + huecos de «qué hacer si…»; referencia completa del
@@ -78,10 +140,10 @@ observabilidad digan lo mismo); sin ningún quiosco activo sale 1; recién empar
 21 unitarias + 11 feature. **La regla de Prometheus «quiosco sin latido» sigue sin escribir (3.2)**: hoy este comando es la
 única detección.
 
-**Siguiente acción (5.11):** commits `c7cee70` (tarea) y `e3ca363` (lock: aviso nuevo de `js-yaml`, ver «Trampas»)
-empujados; **CI manual completa con ⑧ y ⑧b en verde** (ejecución 34291785329; la primera, 34288448585, cayó solo en
-`npm audit` por el aviso de `js-yaml`); PR #49 abierta. Integrar con *merge commit* (nunca squash), `make up` en `main`
-(sin migraciones nuevas) y arrancar la **5.12** (histórico de errores en el panel y transporte del `errorReporter`).
+**Siguiente acción:** comprobar que la CI de `main` tras el merge (con ⑧ y ⑧b) termina en verde y arrancar la **5.12**
+(histórico de errores en el panel y transporte del `errorReporter`; el punto 6 de la ficha 5.9 y el 5.12 de «Pendiente»
+ya lo anticipan). Commits de la 5.11: `c7cee70` (tarea), `e3ca363` (lock: aviso nuevo de `js-yaml`, ver «Trampas») y la
+primera CI manual, 34288448585, cayó solo en `npm audit` por ese aviso.
 
 **Rama `feat/tarea-5.10-exportacion-telemetria`** (desde `main` `2f7f2cc`). **Tarea 5.10 «Exportación íntegra de
 datos y telemetría opcional desactivada por defecto» (RF-PD-12, RF-PD-14, RL-20) IMPLEMENTADA, REVISADA, PROBADA e
@@ -261,7 +323,17 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   versión menor —la prueba del sello `img/VERSION` lo recuerda—; los runbooks siguen solo en español; la salida de
   `compliance:apply-retention` y `verify-audit-chain` está cableada en español (la guía inglesa la glosa); la
   cabecera de `instalacion.md` §1.2 y §1.3 quedó sin el bloque duplicado de `--check-only`.
-- **5.12:** transporte del buffer de errores del cliente (`errorReporter` ya saneado en las tres SPA).
+- **5.11b (sin empezar):** guía del panel para RRHH, guía del portal del empleado y hoja de instrucciones que se entrega
+  con la tarjeta (RL-05, RF-PA-*, RF-IN-*; `producto-licencia` + `frontend-panel`, 6–8 h). Es la última tarea de la Fase 5
+  después de la 5.12.
+- **5.12 (restos):** inspección manual de `error_events` tras un día de uso con la semilla realista (la automática,
+  `ErrorEventsHaveNoPersonalDataTest`, está en verde); autorización negativa del latido **con** `client_errors` (token de
+  gestión con `heartbeat:write` → 403) y la variante de agrupación concurrente que entra **por el latido**; el `Employee` y el
+  `Device` no son `Authenticatable` y `tokenKey()` lo esquiva con `instanceof Model` (deuda de Identity); la regla
+  `severity: high` es la primera del repositorio y Alertmanager la enruta por defecto: al montar las alertas «Alta» de la 3.2
+  unificar el valor; `ErrorLevel` critical de servidor no distingue un `5xx` puntual de una tormenta (la alerta cuenta grupos
+  nuevos y basta por ahora); el saneado convierte los identificadores SQL entrecomillados en `'…'` (decisión: seguridad sobre
+  detalle); dos comprobaciones de `doctor` más de las que citan las guías si enumeran su número.
 - **Fase 3:** 3.2 paso 9 (alertas de los comandos nocturnos: `onFailure()`, series
   `*_last_failures`, reglas Loki) **y la regla «quiosco sin latido > 10 min» del doc 01 §9.3 (hoy solo la
   detecta `kiosk:health`; atar `KIOSK_HEALTH_SILENT_AFTER_SECONDS` a la regla por prueba)** **y declarar la ventana de mantenimiento de `update.sh` en la
@@ -297,6 +369,11 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 
 ## Trampas del entorno — leer antes de operar
 
+- **El *bind mount* de Docker Desktop pierde ficheros al recorrer directorios**: `RecursiveDirectoryIterator` (PHPUnit/Pest)
+  sobre `tests/Feature` devolvía 78 ficheros de 116 y ninguna suite avisaba. `phpunit.xml` va por subdirectorio y
+  `TestDiscoveryTest` (Architecture) falla si vuelve a faltar uno: si falla en local, declarar el directorio afectado aparte.
+  **Un directorio nuevo bajo `tests/Feature` hay que añadirlo a `phpunit.xml`** (la misma prueba lo exige). No dar por buena
+  una cifra local de pruebas sin esa guarda en verde.
 - **`package-lock.json`: cualquier `npm install` en Windows con `node_modules/` presente** pierde las
   plataformas nativas de `@tailwindcss/oxide` y rompe la imagen de Nginx (npm/cli#4828, sufrido dos
   veces). Operar el lock **siempre desde Linux y sin `node_modules`**; receta en la cabecera de

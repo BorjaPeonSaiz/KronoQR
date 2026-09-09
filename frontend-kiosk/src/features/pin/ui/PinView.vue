@@ -31,7 +31,7 @@ import {
   readDeviceToken,
   resolveDeviceId,
 } from '@/shared/telemetry/deviceIdentity'
-import { createErrorReporter } from '@/shared/telemetry/errorReporter'
+import { getErrorReporter } from '@/shared/telemetry/errorReporter'
 import { createHeartbeatScheduler } from '@/shared/telemetry/heartbeat'
 import ConnectionStatusBadge from '@/shared/ui/ConnectionStatusBadge.vue'
 import LanguageSelector from '@/shared/ui/LanguageSelector.vue'
@@ -53,7 +53,9 @@ const { t } = useI18n()
 const router = useRouter()
 
 const deviceId = resolveDeviceId()
-const reporter = createErrorReporter({ appVersion: APP_VERSION, deviceId })
+// Mismo reporter que `ScanView.vue` y que `main.ts` (singleton por tablet,
+// RF-PD-15): ver `errorReporter.ts`.
+const reporter = getErrorReporter({ appVersion: APP_VERSION, deviceId })
 const connectivity = useConnectivity()
 const privacyConfig = readPrivacyNoticeConfig()
 

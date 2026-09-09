@@ -1412,7 +1412,7 @@ Los tres rangos están explicados con detalle, con síntomas y comprobaciones, e
 | Variable | Marca | Qué hace | De serie | Cuándo cambiarla | ¿Afecta al cálculo de horas? |
 | --- | --- | --- | --- | --- | --- |
 | `COMPLIANCE_PROFILE` | `[CLIENTE]` | Nombre del perfil de cumplimiento con el que el instalador marca el perfil por defecto | `ES-hosteleria` | Al instalar, si tu convenio es otro. **No se lee en ejecución**: los umbrales salen de la fila del perfil, que se edita en el panel (sección 2.4). Cambiar esto sin cambiar la fila no hace nada | No |
-| `ERROR_HISTORY_RETENTION_DAYS` | — | Días que se conserva el histórico de errores. Ver [`operacion.md`](operacion.md) §6 | `90` | Casi nunca | No |
+| `ERROR_HISTORY_RETENTION_DAYS` | — | Días que se conserva el histórico de errores. Ver [`operacion.md`](operacion.md) §6 y §15.4 | `90` | Casi nunca | No |
 | `TECHNICAL_LOG_RETENTION_DAYS` | — | Días que se conserva el registro técnico, en un almacén distinto del anterior. Ver [`operacion.md`](operacion.md) §6 | `90` | Casi nunca | No |
 | `COMPLIANCE_RETENTION_BATCH_SIZE` | — | Filas por sentencia de borrado en la purga. Ver [`operacion.md`](operacion.md) §6 | `1000` | Solo si la purga anual tarda demasiado | No |
 | `COMPLIANCE_RETENTION_REPORT_PATH` | — | Dónde queda el informe de cada propuesta y de cada purga. **No se limpia solo**: es la constancia de que la purga fue regular. Ver [`operacion.md`](operacion.md) §6 | `storage/app/retention-reports` (en el contenedor) | Casi nunca | No |
@@ -1452,6 +1452,8 @@ anonimizado por defecto y no hay ninguna variable que lo cambie.**
 | `PRODUCT_SUPPORT_GRANT_DEFAULT_HOURS` | — | Duración de un acceso de soporte si no se indica otra. Ver **sección 3 quater** | `24` | Si tu política es más estricta | No |
 | `PRODUCT_SUPPORT_GRANT_MAX_HOURS` | — | Duración máxima que se puede pedir. Más se rechaza. Ver **sección 3 quater** | `72` | Bájalo si tu política es más estricta; el panel y la API se ajustan solos. **No está en el panel a propósito**: si estuviera, quien concede el acceso podría subirlo antes de concederlo | No |
 | `PRODUCT_SUPPORT_USE_AUDIT_WINDOW_SECONDS` | — | Cada cuánto se anota en auditoría un nuevo uso del mismo acceso de soporte. La fecha de «último uso» del panel se actualiza en cada petición igualmente. Ver **sección 3 quater** | `900` | Ponlo a `0` si estás investigando un incidente y quieres un asiento por petición | No |
+| `PRODUCT_CLIENT_ERRORS_RATE_LIMIT` | — | Peticiones por minuto y por sesión del panel o del portal para reportar errores; por IP, cuatro veces más. Ver [`operacion.md`](operacion.md) §15 | `12` | Casi nunca | No |
+| `PRODUCT_ERRORS_MAX_OPEN_GROUPS_PER_SOURCE` | — | Techo de grupos **abiertos** por origen en el histórico de errores; por encima, la siguiente ocurrencia que no encaja en un grupo existente va a un grupo de desbordamiento de ese origen en vez de crear fila nueva. Ver [`operacion.md`](operacion.md) §15.5 | `500` | Casi nunca | No |
 
 ### 6.19 Telemetría
 

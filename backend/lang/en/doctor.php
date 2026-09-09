@@ -208,6 +208,19 @@ return [
                 'failure' => 'Debug mode (APP_DEBUG) is on in production. Any error shows the database '
                     .'passwords and the signing keys of the system to whoever triggers it.',
             ],
+            'error_history' => [
+                'ok' => 'The error history is a normal size (:total lines in total; the source with the most '
+                    .'unresolved errors has :open).',
+                'warning' => 'Source ":source" has :open unresolved errors, and the maximum is :cap. Once it '
+                    .'reaches the maximum, NEW errors from that source will stop being stored separately.',
+                'failure' => 'Source ":source" has reached the maximum of :cap unresolved errors. Its new errors '
+                    .'are NO LONGER stored separately: they are all counted together in a single line saying '
+                    .'"the cap has been reached", so you are losing detail about what is failing.',
+                'warning_busy' => 'The error history has :total distinct lines. That is not a problem in itself, '
+                    .'but a normal installation does not accumulate that many in 90 days.',
+                'warning_unavailable' => 'The error history could not be queried (:failure). Every other check did '
+                    .'run.',
+            ],
         ],
 
         'settings' => [
@@ -434,6 +447,29 @@ return [
                     ."  APP_DEBUG=false\n"
                     ."and restart the application:\n"
                     .'  docker compose up -d app',
+            ],
+            'error_history' => [
+                'warning' => "Open the panel, go to Settings -> Errors, and deal with or mark as resolved the\n"
+                    ."errors from that source. To see them from here:\n"
+                    ."  php artisan product:errors --since=30d --source=:source\n"
+                    .'Raising the maximum fixes nothing: what those errors need is someone looking at them.',
+                'failure' => "You are losing detail about what is failing. Open the panel, go to Settings ->\n"
+                    ."Errors, filter by source \":source\" and mark as resolved the ones you have already\n"
+                    ."dealt with; as soon as they drop below the maximum, new errors are stored separately\n"
+                    ."again. To see them from here:\n"
+                    ."  php artisan product:errors --since=30d --source=:source\n"
+                    ."If you really need to store more, raise the limit in the .env file:\n"
+                    ."  PRODUCT_ERRORS_MAX_OPEN_GROUPS_PER_SOURCE=1000\n"
+                    .'and restart with  docker compose up -d app',
+                'warning_busy' => "Check whether an error repeats with a different text each time: that creates\n"
+                    ."a new line per repetition instead of adding up in one. Look at it with:\n"
+                    ."  php artisan product:errors --since=7d\n"
+                    ."Clearing out the ones older than 90 days happens on its own every night; to run it\n"
+                    ."now:\n"
+                    .'  php artisan product:errors:prune',
+                'warning_unavailable' => "Check that the database responds and that the installation is fully\n"
+                    ."up to date:\n"
+                    .'  php artisan migrate --force',
             ],
         ],
 

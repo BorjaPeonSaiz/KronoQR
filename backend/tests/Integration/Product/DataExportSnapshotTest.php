@@ -23,7 +23,7 @@ use Tests\Support\Workforce\WorkforceFixtures;
  *
  * ## Que fallo protege
  *
- * Los dieciocho conjuntos se leen con dieciocho cursores de servidor distintos.
+ * Los diecinueve conjuntos se leen con diecinueve cursores de servidor distintos.
  * En `READ COMMITTED` —el nivel por omision de PostgreSQL y el que usa este
  * producto— **cada `DECLARE ... CURSOR` toma su propia instantanea al
  * declararse**, no al abrirse la transaccion. Un hotel ficha a las 06:00 y a las

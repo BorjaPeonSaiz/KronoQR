@@ -68,6 +68,13 @@ final readonly class MetricsCollector implements DiagnosticsCollector
      * @var list<string>
      */
     private const array SERIES = [
+        // RF-PD-15: `application_errors_total{source,level}`. Catorce campos como
+        // maximo y ninguna etiqueta que identifique a nadie; es el contador que
+        // sostiene la alerta «errores nuevos de severidad critica» del doc 01
+        // §9.3 y el que da el orden de magnitud antes de mirar la seccion
+        // `error_events` del propio paquete.
+        'application_error_groups_opened_total',
+        'application_errors_total',
         'compliance_profile_changes_total',
         'http_request_duration_seconds',
         'http_requests_total',

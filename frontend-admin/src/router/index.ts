@@ -18,6 +18,7 @@ import CredentialBoardView from '@/features/credentials/CredentialBoardView.vue'
 import DevicesView from '@/features/devices/DevicesView.vue'
 import EmployeeDetailView from '@/features/employees/EmployeeDetailView.vue'
 import EmployeeListView from '@/features/employees/EmployeeListView.vue'
+import ErrorsView from '@/features/errors/ErrorsView.vue'
 import IncidentsView from '@/features/incidents/IncidentsView.vue'
 import LivePresenceView from '@/features/live/LivePresenceView.vue'
 import OnboardingView from '@/features/onboarding/OnboardingView.vue'
@@ -207,6 +208,19 @@ export const routes: RouteRecordRaw[] = [
         name: 'support',
         component: SupportView,
         meta: { abilities: [SUPPORT_MANAGE, DIAGNOSTICS_MANAGE] },
+      },
+      {
+        // Historico de errores agrupado por huella (RF-PD-15, tarea 5.12).
+        // Ambito `diagnostics:*`, el mismo que exige el contrato para
+        // `GET /diagnostics/errors`: quien puede generar el paquete de
+        // diagnostico tambien puede leer este historico. La policy del
+        // servidor (`ErrorEventPolicy`) es la que autoriza de verdad (regla
+        // dura 18); resolver un grupo exige ademas `admin` y nunca un acceso
+        // de soporte, y eso lo decide el servidor, no esta ruta.
+        path: 'errors',
+        name: 'errors',
+        component: ErrorsView,
+        meta: { ability: DIAGNOSTICS_MANAGE },
       },
       { path: 'forbidden', name: 'forbidden', component: ForbiddenView },
       {

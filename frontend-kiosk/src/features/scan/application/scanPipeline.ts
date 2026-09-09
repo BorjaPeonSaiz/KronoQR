@@ -145,9 +145,8 @@ export function createScanPipeline(options: ScanPipelineOptions): ScanPipeline {
       result = await options.submission.submit(scan)
     } catch (error) {
       // Un puerto que incumple su contrato no puede tumbar el quiosco.
-      options.onError?.('submit_failed', {
-        reason: error instanceof Error ? error.name : 'unknown',
-      })
+      const reason = error instanceof Error ? error.name : 'unknown'
+      options.onError?.('submit_failed', { reason, message: reason })
       return
     }
 

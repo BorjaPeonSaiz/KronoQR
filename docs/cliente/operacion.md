@@ -4,8 +4,10 @@
 > purga, que es la única operación del producto que borra datos. La 7 es de la
 > **5.3** (licencia). Las **8, 9 y 10** son de la **5.4**: los códigos de
 > salida de los cinco scripts, la custodia de secretos y qué pierdes si apagas
-> la observabilidad. La **11** es de la **5.7**: actualizar. La **tarea 5.11** añadirá los quioscos;
-> no reescribirá nada de lo que ya está aquí.
+> la observabilidad. La **11** es de la **5.7**: actualizar. Las **12 y 13**
+> son de la **5.9** y la **5.10**: diagnóstico, soporte y exportación íntegra.
+> La **15** es de la **5.12**: el histórico de `error_events`. La **tarea 5.11**
+> añadirá los quioscos; no reescribirá nada de lo que ya está aquí.
 
 ---
 > **Los comandos de esta guía se ejecutan desde el directorio del paquete**, que
@@ -689,3 +691,89 @@ poder recuperarse:
 | **Tocar `daily_totals` a mano** | Es una proyección reconstruible: se recalcula entera cada vez que cambia un tramo. Un total corregido a mano vuelve a su valor en el siguiente recálculo, sin que nadie entienda por qué | Si un total no cuadra, recalcúlalo: `docker compose exec app php artisan attendance:reconcile --from=2026-09-01 --to=2026-09-30` |
 | **Editar en el `.env` un secreto generado** (`APP_KEY`, `QR_SIGNING_KEY_*`, `BACKUP_ENCRYPTION_KEY`) | Cambiar `APP_KEY` deja ilegible lo cifrado; cambiar la clave QR invalida todas las tarjetas; cambiar la de copias deja las copias anteriores sin poder restaurar | Rotar con su procedimiento: [`../runbooks/rotacion-secretos.md`](../runbooks/rotacion-secretos.md) y [`../runbooks/rotacion-clave-qr.md`](../runbooks/rotacion-clave-qr.md) |
 | **`migrate:rollback`, borrar volúmenes o reinstalar encima** | Una vuelta atrás es siempre restaurar la copia verificada previa; el instalador se niega a reinstalar sobre una instalación existente | `update.sh` (§11) y [`../runbooks/restaurar-backup.md`](../runbooks/restaurar-backup.md) |
+
+---
+
+## 15. El histórico de errores: qué falla y desde cuándo
+
+> **Tarea 5.12.** Cómo se lee y qué se hace con cada severidad, paso a paso,
+> está en [`../runbooks/errores-en-el-panel.md`](../runbooks/errores-en-el-panel.md):
+> este apartado es el resumen para saber qué es y cómo se usa desde el día a
+> día, no el procedimiento de diagnóstico.
+
+### 15.1 Qué es
+
+Todo error de la aplicación —de una petición, de un trabajo de cola, de una
+tarea programada o de un comando de consola— y todo error que reportan las
+tres aplicaciones cliente (quiosco, panel, portal) queda en `error_events`,
+**agrupado por huella**: la misma repetición no crea una fila nueva, sube
+`occurrences` y actualiza la fecha de la última vez. Se conserva 90 días y se
+purga sola (§15.4).
+
+No es tu auditoría (`audit_log`, cuatro años, valor probatorio) ni tu log
+técnico (Loki, opcional, puedes no tenerlo). Es lo único que existe siempre,
+en la misma base de datos que respaldas a diario, para responder a **«¿qué
+está fallando, y desde cuándo?»** sin tener que conocer el sistema por dentro.
+**Nunca lleva nombres, correos ni fichajes de nadie**: solo identificadores
+técnicos. No es una promesa sin mecanismo — el servidor sanea el mensaje
+(correos, DNI, teléfonos, horas y cualquier texto entre comillas, que es donde
+una excepción interpola un valor variable), un fallo de base de datos nunca
+imprime lo que se intentó guardar, y el contexto solo admite una lista cerrada
+de claves técnicas. El detalle completo, mecanismo a mecanismo, está en
+[`../runbooks/errores-en-el-panel.md`](../runbooks/errores-en-el-panel.md) §2.
+
+Un dato de nivel: **el nivel `critical` de un error de cliente solo lo produce
+un quiosco** — el panel y el portal nunca generan una fila `critical`, y los
+códigos posibles son un catálogo cerrado por origen que el servidor valida.
+
+### 15.2 La pantalla del panel
+
+**Errores**, con filtros de origen, severidad, estado y periodo. Cada fila
+trae la severidad, el origen, el mensaje, cuántas veces ha ocurrido
+(`occurrences`), la primera y la última vez, y un `trace_id` copiable. El
+detalle de cada fila incluye un texto de **qué hacer**, escrito para quien no
+conoce el sistema. Un botón **«Marcar como resuelto»** la cierra; si el mismo
+error vuelve a ocurrir, la fila se reabre sola, sin que tengas que hacer
+nada — es la señal de que el arreglo no fue tal. **Quién lo resolvió** se ve
+con nombre desde una cuenta de gestión normal, pero no desde un acceso de
+soporte concedido al fabricante: ese acceso ve que la fila está resuelta,
+nunca quién la resolvió.
+
+### 15.3 Los comandos
+
+Para consultarlo desde la consola, o para que un script pregunte por ti:
+
+```bash
+docker compose exec app php artisan product:errors --since=24h --level=critical
+```
+
+Sale `0` si no hay ninguno abierto, `1` si hay de nivel `error` y `2` si hay
+alguno `critical` — igual criterio que `product:doctor`. Con `--json` da lo
+mismo para máquinas; con `--source=` acota a un origen (`api`, `worker`,
+`scheduler`, `console`, `kiosk`, `admin`, `portal`).
+
+### 15.4 La purga a 90 días y `ERROR_HISTORY_RETENTION_DAYS`
+
+Cada día, a las 03:35 UTC, se borran las filas cuya última aparición supera
+`ERROR_HISTORY_RETENTION_DAYS` días (90 de serie). **No pide confirmación y no
+deja asiento**: es una purga de datos técnicos sin valor legal (RL-11), no la
+retención del registro horario (RF-PR-03, sección 3, que sí exige la frase de
+confirmación). Para comprobar qué borraría sin borrar nada:
+
+```bash
+docker compose exec app php artisan product:errors:prune --dry-run
+```
+
+Y, como con el resto del registro, **`error_events` no se edita a mano**: ni
+por SQL directo ni tocando la fila desde fuera del panel o de estos dos
+comandos. Marcar un error como resuelto, o dejar que la purga automática lo
+retire a los 90 días, son las dos únicas formas correctas de que una fila
+desaparezca de la lista de abiertos.
+
+### 15.5 Los parámetros
+
+| Variable | De serie | Qué gobierna |
+| --- | --- | --- |
+| `ERROR_HISTORY_RETENTION_DAYS` | `90` | Días que se conserva una fila desde su última aparición. Igual que el log técnico (RL-11) |
+| `PRODUCT_CLIENT_ERRORS_RATE_LIMIT` | `12` | Peticiones por minuto y por sesión del panel o del portal para reportar errores; por IP, cuatro veces más |
+| `PRODUCT_ERRORS_MAX_OPEN_GROUPS_PER_SOURCE` | `500` | Techo de grupos **abiertos** por origen. Por encima, la siguiente ocurrencia que no encaja en un grupo existente va a un grupo de desbordamiento de ese origen (`overflow`) en vez de crear fila; `product:doctor` avisa del tamaño de la tabla |

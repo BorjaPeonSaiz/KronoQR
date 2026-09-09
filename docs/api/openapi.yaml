@@ -907,6 +907,23 @@ paths:
                   app_version: 1.4.2
                   pending_queue_size: 37
                   oldest_pending_at: '2026-08-14T05:58:31Z'
+              con-errores:
+                summary: |
+                  Quiosco que reporta dos errores de camara desde el ultimo
+                  latido (RF-PD-15). Sin nombres, sin `qr_payload`, sin `scan_id`.
+                value:
+                  app_version: 2.2.0
+                  pending_queue_size: 0
+                  client_errors:
+                    - code: kiosk.camera.stream_lost
+                      occurred_at: '2026-09-09T05:58:31Z'
+                      app_version: 2.2.0
+                      context:
+                        cause: NotReadableError
+                    - code: kiosk.scanner.watchdog_restart
+                      occurred_at: '2026-09-09T05:58:40Z'
+                      app_version: 2.2.0
+                      context: {}
       responses:
         '200':
           description: Latido registrado.
@@ -918,6 +935,11 @@ paths:
                 latido:
                   value:
                     server_time: '2026-08-14T09:00:03.114Z'
+                    client_errors_accepted: 0
+                con-errores:
+                  value:
+                    server_time: '2026-09-09T06:00:03.114Z'
+                    client_errors_accepted: 2
         '400':
           $ref: '#/components/responses/InvalidRequest'
         '401':
@@ -5524,10 +5546,10 @@ paths:
         `diagnostics.bundle_generated` con si iba anonimizado, que secciones
         lleva, su `sha256` y su tamano.
 
-        Hasta que exista la tabla `error_events` (RF-PD-15, tarea 5.12) la
-        seccion `error_events` dice `{"status": "not_installed"}` y no `[]`: un
-        paquete que afirmase «cero errores» sobre una tabla que no existe seria
-        falso.
+        La seccion `error_events` (RF-PD-15, tarea 5.12) lleva el resumen por
+        origen y nivel y los grupos del periodo con su `trace_id`; si la tabla
+        no se pudiera leer diria `{"status": "unavailable"}` y no `[]`: un
+        paquete que afirmase «cero errores» sin haber mirado seria falso.
       tags: [Product]
       security:
         - managementToken: ['diagnostics:*']
@@ -5559,6 +5581,207 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '422':
           $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/diagnostics/errors:
+    get:
+      operationId: listErrorEvents
+      summary: Historico de errores agrupado por huella
+      description: |
+        Lo que esta fallando en la instalacion y desde cuando, para el IT del
+        cliente y **sin conocer el sistema** (RF-PD-15, documento 02 §8.2.1).
+
+        **Una fila por fallo, no por repeticion.** Un error que se repite mil
+        veces en un cambio de turno es un grupo con `occurrences: 1000`; la
+        huella es el hash de la clase, el punto de fallo y el mensaje
+        normalizado sin identificadores variables. Cada repeticion actualiza
+        `last_seen_at`, y **un grupo resuelto que vuelve a ocurrir se reabre**:
+        que un fallo dado por arreglado reaparezca es justo lo que hay que ver.
+
+        **Sin datos personales, nunca** (regla dura 21, RL-19). Ni nombres, ni
+        correos, ni horas de fichaje: el mensaje se sanea en el servidor antes
+        de guardarse y el contexto solo admite claves de una lista cerrada. Las
+        personas aparecen, si acaso, como `employee_uuid`; los quioscos como
+        `device_id`. Este mismo historico viaja en el paquete de diagnostico.
+
+        **No es auditoria** (regla dura 6). Retencion de 90 dias por
+        `last_seen_at` (`ERROR_HISTORY_RETENTION_DAYS`, RL-11), distinta de los
+        cuatro anos del registro legal.
+
+        Ordenado por `last_seen_at` descendente. `status=open` por omision.
+        Los instantes salen en UTC; el panel los presenta en `meta.time_zone`
+        (regla dura 3).
+
+        **`admin` con ambito `diagnostics:*`** (regla dura 18). Un acceso de
+        soporte con alcance `diagnostics` (RF-PD-11) **lee** este historico:
+        es para lo que se le concede. **Funciona con la licencia caducada o
+        ausente** (regla dura 15).
+      tags: [Product]
+      security:
+        - managementToken: ['diagnostics:*']
+      parameters:
+        - name: source
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/ErrorSource'
+        - name: level
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/ErrorLevel'
+        - name: status
+          in: query
+          required: false
+          description: '`open` por omision: lo que tengo pendiente.'
+          schema:
+            type: string
+            enum: [open, resolved, all]
+            default: open
+        - name: from
+          in: query
+          required: false
+          description: Grupos con `last_seen_at` desde este instante (UTC), incluido.
+          schema:
+            $ref: '#/components/schemas/UtcTimestamp'
+        - name: to
+          in: query
+          required: false
+          description: Grupos con `last_seen_at` hasta este instante (UTC), incluido.
+          schema:
+            $ref: '#/components/schemas/UtcTimestamp'
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: per_page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+      responses:
+        '200':
+          description: Pagina del historico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEventCollection'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/diagnostics/errors/{id}/resolve:
+    parameters:
+      - $ref: '#/components/parameters/ErrorEventId'
+    post:
+      operationId: resolveErrorEvent
+      summary: Marcar un grupo de errores como resuelto
+      description: |
+        Da un grupo por atendido (RF-PD-15). Quedan `resolved_at` y quien lo
+        hizo; **si el error vuelve a ocurrir, el grupo se reabre** y conserva su
+        recuento, para que «resuelto» signifique «ya no pasa» y no «ya no se ve».
+
+        **Idempotente.** Resolver un grupo ya resuelto responde `200` con la
+        misma fila: la accion no tiene segundo efecto y no merece un `409`.
+
+        **No deja asiento en `audit_log`.** Son datos tecnicos sin relevancia
+        legal (regla dura 6, en sentido inverso): la traza de quien y cuando
+        vive en la propia fila.
+
+        **`admin` y solo `admin`, con ambito `diagnostics:*`.** Un acceso de
+        soporte recibe `403` aunque pueda leer el historico: dar un fallo por
+        resuelto en la instalacion de un cliente es decision del cliente
+        (ADR-020).
+      tags: [Product]
+      security:
+        - managementToken: ['diagnostics:*']
+      responses:
+        '200':
+          description: El grupo, ya resuelto.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEvent'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/client-errors:
+    post:
+      operationId: reportClientErrors
+      summary: Recibir errores del panel o del portal
+      description: |
+        El canal por el que el panel de gestion y el portal del empleado vacian
+        su buffer de errores (RF-PD-15, tarea 5.12). El quiosco **no** usa esta
+        ruta: reporta dentro de su latido (`POST /api/v1/kiosk/heartbeat`), y un
+        token de dispositivo aqui recibe `403`.
+
+        **El servidor decide el origen por el token** (`admin` para una sesion
+        de gestion, `portal` para una de empleado), nunca por lo que diga el
+        cuerpo, y **sanea otra vez** mensaje y contexto antes de agrupar por
+        huella: el saneado del cliente es una cortesia, no una garantia.
+
+        **Sin canal anonimo.** Los errores anteriores al inicio de sesion
+        esperan en el buffer del navegador (techo 50) y salen con la primera
+        sesion; una ruta publica que escribe en base de datos seria un vector
+        de denegacion de servicio. Limite propio `throttle:client-errors`
+        (`PRODUCT_CLIENT_ERRORS_RATE_LIMIT`, 12 por minuto y token).
+
+        **Nunca devuelve el historico** ni nada mas que el recuento aceptado:
+        consultar es otra potestad (`diagnostics:*`) y otra ruta.
+
+        Cualquier sesion de gestion vale, sea cual sea su rol: quien sufre el
+        error es quien lo reporta.
+      tags: [Product]
+      security:
+        - managementToken: []
+        - employeeToken: ['self:read']
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClientErrorBatch'
+            examples:
+              panel:
+                value:
+                  errors:
+                    - code: web.vue_error
+                      occurred_at: '2026-09-09T08:12:03.512Z'
+                      app_version: 2.2.0
+                      context:
+                        component: WorkdaysView
+                        hook: setup function
+      responses:
+        '202':
+          description: Recibido. `accepted` dice cuantos se han persistido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientErrorsAccepted'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
@@ -7197,6 +7420,20 @@ components:
         minimum: 1
       example: 412
 
+    ErrorEventId:
+      name: id
+      in: path
+      required: true
+      description: |
+        Identificador del grupo de errores (`error_events.id`). Clave interna
+        por el mismo motivo que `IncidentId`: un grupo de errores no es nadie,
+        no viaja impreso y su numero no revela nada sobre la plantilla.
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+      example: 87
+
     IncidentStatusFilter:
       name: status
       in: query
@@ -8180,15 +8417,46 @@ components:
             Es lo que convierte «hay 37 pendientes» en «el mas antiguo es de hace tres
             horas», que es la diferencia entre una sincronizacion en curso y un
             quiosco que lleva media jornada incomunicado.
+        client_errors:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/ClientErrorReport'
+          description: |
+            Errores de la propia tablet desde el ultimo latido (RF-PD-15, tarea
+            5.12). **En el latido y no en una llamada propia**: el quiosco no abre
+            otro canal de red que compita con la sincronizacion de la cola en un
+            cambio de turno, y si el latido falla los errores esperan al siguiente
+            (techo de 50 en la tablet; los mas antiguos se descartan).
+
+            **El servidor no se fia del saneado del cliente**: sanea otra vez,
+            decide el origen (`kiosk`) por el token y no por lo que diga el cuerpo,
+            y agrupa por huella en `error_events`. Un error de reporte **nunca
+            afecta a un fichaje** (regla dura 19): aunque esta lista sea invalida
+            el latido se rechaza con `400` y la cola sigue drenando por `/scan/batch`.
+
+            Sin datos personales, por construccion: `code` es un catalogo cerrado
+            y `context` solo admite escalares de claves permitidas.
 
     KioskHeartbeat:
       type: object
       title: KioskHeartbeat
       description: |
-        Lo unico que el servidor le devuelve al quiosco: su hora.
+        Lo que el servidor le devuelve al quiosco: su hora y cuantos errores de
+        cliente ha aceptado.
       additionalProperties: false
-      required: [server_time]
+      required: [server_time, client_errors_accepted]
       properties:
+        client_errors_accepted:
+          type: integer
+          minimum: 0
+          maximum: 50
+          description: |
+            Cuantos elementos de `client_errors` se han persistido. La tablet vacia
+            de su buffer **solo esos** (`acknowledge(n)`), de modo que un latido
+            que llego pero no pudo escribir no pierde nada: los errores vuelven en
+            el siguiente. `0` cuando no se enviaron o cuando la base de datos no
+            los pudo guardar.
         server_time:
           allOf:
             - $ref: '#/components/schemas/UtcTimestamp'
@@ -12912,7 +13180,11 @@ components:
           type: object
           description: |
             Historico de errores agrupado por huella con su `trace_id`
-            (RF-PD-15). Hasta la tarea 5.12, `{"status": "not_installed"}`.
+            (RF-PD-15, tarea 5.12): `status: ok`, `period_days`, `summary`
+            (recuentos por `source` y por `level`, abiertos y resueltos) y
+            `groups` —hasta 500, `last_seen_at` descendente— con los mismos
+            campos que `ErrorEvent`. Cada grupo entra por lista de permitidos:
+            nunca un nombre, un correo ni una hora de fichaje (regla dura 21).
           additionalProperties: true
         metrics:
           type: object
@@ -13016,6 +13288,311 @@ components:
             - type: 'null'
           description: Ultimo uso efectivo del token. Nulo si nunca se uso.
 
+    ErrorSource:
+      type: string
+      title: ErrorSource
+      description: |
+        De donde viene el error (RF-PD-15, documento 01 §5). Los cuatro del
+        servidor los decide el contexto de ejecucion; los tres de cliente los
+        decide el **tipo de token** con el que se reporto, nunca el cuerpo.
+      enum: [api, worker, scheduler, console, kiosk, admin, portal]
+
+    ErrorLevel:
+      type: string
+      title: ErrorLevel
+      description: |
+        `critical` es lo que nadie ve o lo que no puede parar: un trabajo de
+        cola que agota sus intentos, cualquier tarea del planificador, un fallo
+        en las rutas de fichaje y los errores de quiosco que le impiden fichar
+        (camara, escaner, almacen local, padron, sellado del PIN). Todo lo demas
+        es `error`. La tabla completa esta en el runbook `errores-en-el-panel.md`.
+      enum: [error, critical]
+
+    ErrorEvent:
+      type: object
+      title: ErrorEvent
+      description: |
+        Un grupo de errores con la misma huella (RF-PD-15). **Sin datos
+        personales**: `message` va saneado (correos, documentos, telefonos,
+        horas, secretos y todo texto entrecomillado sustituidos por marcadores),
+        `context` solo lleva claves de una lista cerrada con valores escalares,
+        y las personas aparecen como `employee_uuid` si acaso (regla dura 21).
+
+        `message`, `exception_class`, `file` y `line` son los de la **primera**
+        aparicion; `app_version`, `trace_id`, `device_id` y `employee_uuid`, los
+        de la **ultima**.
+      additionalProperties: false
+      required:
+        - id
+        - level
+        - source
+        - module
+        - code
+        - message
+        - exception_class
+        - file
+        - line
+        - context
+        - trace_id
+        - device_id
+        - employee_uuid
+        - app_version
+        - occurrences
+        - first_seen_at
+        - last_seen_at
+        - resolved_at
+        - resolved_by
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+          examples:
+            - 87
+        level:
+          $ref: '#/components/schemas/ErrorLevel'
+        source:
+          $ref: '#/components/schemas/ErrorSource'
+        module:
+          description: |
+            Modulo del monolito al que pertenece el punto de fallo
+            (`attendance`, `kiosk`, `product`, …), deducido del espacio de
+            nombres; `null` cuando el fallo esta fuera de los modulos o viene
+            de un cliente.
+          oneOf:
+            - type: string
+              maxLength: 40
+            - type: 'null'
+        code:
+          description: |
+            Codigo estable del error. En los clientes es el del catalogo cerrado
+            del reporter (`kiosk.camera.unavailable`, `web.vue_error`…); en el
+            servidor, `null` salvo que la excepcion declare uno.
+          oneOf:
+            - type: string
+              maxLength: 80
+            - type: 'null'
+        message:
+          type: string
+          maxLength: 1000
+          description: Mensaje saneado de la primera aparicion.
+          examples:
+            - "SQLSTATE[08006] connection to server at '…' failed"
+        exception_class:
+          description: Clase de la excepcion en el servidor; `null` en un error de cliente.
+          oneOf:
+            - type: string
+              maxLength: 255
+            - type: 'null'
+        file:
+          description: |
+            Fichero del punto de fallo, relativo a la raiz de la aplicacion.
+            `null` en un error de cliente: el `stack` del navegador nunca viaja
+            (una URL con un uuid dentro correlaciona a una persona).
+          oneOf:
+            - type: string
+              maxLength: 255
+            - type: 'null'
+        line:
+          oneOf:
+            - type: integer
+              minimum: 0
+            - type: 'null'
+        context:
+          type: object
+          description: |
+            Datos tecnicos por lista de permitidos: `route`, `method`, `status`,
+            `job`, `queue`, `attempts`, `command`, `component`, `hook`, `cause`,
+            `http_status`, `code`, `skew_seconds`, `queue_size`, `outcome`,
+            `reason`. Solo escalares, truncados a 200 caracteres.
+          additionalProperties:
+            # `anyOf` y no `oneOf`: en JSON Schema un entero valida contra
+            # `integer` Y contra `number`, y `oneOf` exige exactamente uno.
+            anyOf:
+              - type: string
+                maxLength: 200
+              - type: integer
+              - type: number
+              - type: boolean
+        trace_id:
+          description: |
+            Traza W3C de la peticion en la que ocurrio la ultima vez, para
+            correlacionar con el log tecnico cuando el cliente conserva Loki.
+            `null` fuera de una peticion o sin traza.
+          oneOf:
+            - type: string
+              pattern: '^[0-9a-f]{32}$'
+            - type: 'null'
+        device_id:
+          description: UUID publico del quiosco si el error viene de uno; `null` si no.
+          oneOf:
+            - type: string
+              format: uuid
+            - type: 'null'
+        employee_uuid:
+          description: |
+            Empleado implicado si la operacion que fallo lo tenia y **solo como
+            uuid** (regla dura 21). `null` en la mayoria de los casos.
+          oneOf:
+            - type: string
+              format: uuid
+            - type: 'null'
+        app_version:
+          type: string
+          maxLength: 32
+          description: Version del servidor o del cliente en la ultima aparicion (§10.5).
+        occurrences:
+          type: integer
+          minimum: 1
+          description: Cuantas veces se ha visto esta huella desde `first_seen_at`.
+        first_seen_at:
+          $ref: '#/components/schemas/UtcTimestamp'
+        last_seen_at:
+          $ref: '#/components/schemas/UtcTimestamp'
+        resolved_at:
+          oneOf:
+            - $ref: '#/components/schemas/UtcTimestamp'
+            - type: 'null'
+        resolved_by:
+          description: |
+            Quien lo dio por resuelto. `null` mientras siga abierto, si se
+            reabrio al volver a ocurrir, **o si quien pregunta es un acceso de
+            soporte** (RF-PD-11, ADR-020): el nombre de una persona de la
+            organizacion del cliente no sale hacia el fabricante, igual que el
+            paquete de diagnostico lo omite.
+          oneOf:
+            - $ref: '#/components/schemas/IncidentUser'
+            - type: 'null'
+
+    ErrorEventCollection:
+      type: object
+      title: ErrorEventCollection
+      description: Pagina del historico de errores.
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ErrorEvent'
+        meta:
+          $ref: '#/components/schemas/ErrorEventPageMeta'
+
+    ErrorEventPageMeta:
+      type: object
+      title: ErrorEventPageMeta
+      description: |
+        Situacion de la pagina, mas lo que el panel necesita para pintar
+        «hace tres horas» sin adivinar (regla dura 3), y los recuentos de
+        abiertos por nivel para la cabecera de la pantalla.
+      additionalProperties: false
+      required: [page, per_page, total, total_pages, open_errors, open_critical, time_zone, generated_at]
+      properties:
+        page:
+          type: integer
+          minimum: 1
+        per_page:
+          type: integer
+          minimum: 1
+          maximum: 100
+        total:
+          type: integer
+          minimum: 0
+          description: Grupos que casan con los filtros.
+        total_pages:
+          type: integer
+          minimum: 0
+        open_errors:
+          type: integer
+          minimum: 0
+          description: Grupos abiertos de nivel `error` en toda la instalacion, sin filtros.
+        open_critical:
+          type: integer
+          minimum: 0
+          description: Grupos abiertos de nivel `critical` en toda la instalacion, sin filtros.
+        time_zone:
+          $ref: '#/components/schemas/TimeZoneName'
+        generated_at:
+          allOf:
+            - $ref: '#/components/schemas/UtcTimestamp'
+          description: Reloj del servidor al responder; contra el se calcula la antiguedad.
+
+    ClientErrorReport:
+      type: object
+      title: ClientErrorReport
+      description: |
+        Un error tal y como lo cuenta un cliente (quiosco, panel o portal).
+        **Sin identidad**: ni `device_id` ni `app` ni usuario, porque todo eso
+        lo sabe el servidor por el token y no se acepta de un cuerpo. **Sin
+        `stack`**: una URL con un uuid dentro correlaciona a una persona.
+      additionalProperties: false
+      required: [code, occurred_at, app_version, context]
+      properties:
+        code:
+          type: string
+          minLength: 3
+          maxLength: 80
+          pattern: '^[a-z][a-z0-9]*(\.[a-z][a-z0-9_]*)+$'
+          description: |
+            Codigo del catalogo cerrado del reporter de cada cliente
+            (`kiosk.camera.unavailable`, `web.unhandled_rejection`…). Un codigo
+            libre acabaria siendo una frase, y una frase acaba llevando un nombre.
+          examples:
+            - kiosk.camera.stream_lost
+        occurred_at:
+          allOf:
+            - $ref: '#/components/schemas/UtcTimestamp'
+          description: Cuando ocurrio en el reloj del cliente; el servidor guarda ademas cuando lo recibio.
+        app_version:
+          type: string
+          minLength: 1
+          maxLength: 32
+          pattern: '^[0-9A-Za-z][0-9A-Za-z.+-]*$'
+        context:
+          type: object
+          maxProperties: 12
+          description: |
+            Contexto tecnico, solo escalares. El servidor descarta cualquier
+            clave fuera de su lista de permitidos y sanea los valores; el
+            cliente ya descarta por nombre (`name`, `email`, `pin`, `token`,
+            `payload`…), pero no se confia en ello.
+          additionalProperties:
+            # `anyOf` y no `oneOf`: en JSON Schema un entero valida contra
+            # `integer` Y contra `number`, y `oneOf` exige exactamente uno.
+            anyOf:
+              - type: string
+                maxLength: 200
+              - type: integer
+              - type: number
+              - type: boolean
+
+    ClientErrorBatch:
+      type: object
+      title: ClientErrorBatch
+      additionalProperties: false
+      required: [errors]
+      properties:
+        errors:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/ClientErrorReport'
+
+    ClientErrorsAccepted:
+      type: object
+      title: ClientErrorsAccepted
+      description: |
+        Cuantos se han persistido. El cliente vacia de su buffer **solo esos**
+        (`acknowledge(n)`): lo que no se pudo guardar vuelve en el siguiente envio.
+      additionalProperties: false
+      required: [accepted]
+      properties:
+        accepted:
+          type: integer
+          minimum: 0
+          maximum: 50
+
     SupportGrant:
       title: SupportGrant
       description: |
@@ -13097,8 +13674,10 @@ components:
         `row_counts` es un objeto con una clave por fichero del ZIP
         (`employees`, `shift_entries`, `audit_log`, …) y el numero de filas de
         datos que contiene. Las tablas que no existen en esta version
-        (`absences`, `error_events`) no aparecen aqui y constan como
-        `not_installed` en el `manifest.json` del propio ZIP.
+        (`absences`) no aparecen aqui y constan como `not_installed` en el
+        `manifest.json` del propio ZIP. `error_events` si viaja desde la tarea
+        5.12: es el historico tecnico del cliente y forma parte de «todos sus
+        datos» (RL-20).
       additionalProperties: false
       required:
         - uuid

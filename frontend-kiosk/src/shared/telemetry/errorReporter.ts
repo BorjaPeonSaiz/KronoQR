@@ -7,8 +7,11 @@
 //
 // COMO VIAJA. En el latido (`POST /api/v1/kiosk/heartbeat`), no en una llamada
 // propia: el quiosco no debe abrir otro canal de red que compita con la
-// sincronizacion de la cola en el cambio de turno. Del latido acaban en
-// `error_events` del servidor.
+// sincronizacion de la cola en el cambio de turno. `heartbeat.ts` ->
+// `buildHeartbeatBody` mete lo pendiente en `client_errors` (maximo 50, los
+// mas antiguos primero) y descarta `device_id`: el servidor identifica el
+// dispositivo por el token, nunca por lo que diga el cuerpo (RF-PD-15, tarea
+// 5.12). Del latido acaban en `error_events` del servidor.
 //
 // QUE NO PUEDE LLEVAR NUNCA. Datos personales (regla dura 21). Ni nombres, ni
 // el `qr_payload`, ni el token de la tarjeta, ni el hash del padron. Solo
@@ -16,11 +19,14 @@
 // intencion: `sanitizeContext` descarta por nombre de clave y por tipo, y hay
 // una prueba unitaria que lo comprueba.
 //
-// ESTADO DEL CANAL. El buffer y el saneado estan terminados; lo que falta es el
-// campo en el contrato. `KioskHeartbeatRequest` declara hoy
-// `additionalProperties: false` y no tiene sitio donde meter esto, asi que
-// anadirlo al cuerpo lo haria rechazable por el validador de contrato. Ver
-// `heartbeat.ts` -> `pendingClientErrors()`.
+// UN REPORTER POR TABLET, NO UNO POR PANTALLA. `getErrorReporter` (al final de
+// este fichero) es un singleton perezoso, con el mismo patron que
+// `getOfflineQueueController` (`useOfflineQueue.ts`): sin el, `main.ts`
+// (errores globales de arranque, de Vue y de `window`), `ScanView.vue` y
+// `PinView.vue` creaban cada uno el suyo con `createErrorReporter`, y el
+// latido de cada pantalla solo drenaba SU reporter. Los errores de arranque
+// -los mas graves, porque son los que impiden que nada mas funcione- se
+// quedaban en un buffer que ningun latido llegaba a leer nunca.
 
 const MAX_BUFFERED_ERRORS = 50
 const MAX_CONTEXT_KEYS = 12
@@ -172,4 +178,19 @@ export function createErrorReporter(options: ErrorReporterOptions): ErrorReporte
       return buffer.length
     },
   }
+}
+
+let singleton: ErrorReporter | null = null
+
+/**
+ * Un reporter por tablet. Ver la cabecera de este fichero: `main.ts`,
+ * `ScanView.vue` y `PinView.vue` llaman a esto en vez de a
+ * `createErrorReporter` directamente, para que los tres compartan el MISMO
+ * buffer y el latido de la pantalla que este montada drene tambien lo que
+ * reporto el arranque de la aplicacion. Las opciones solo se usan la primera
+ * vez: quien llegue despues recibe el reporter ya creado.
+ */
+export function getErrorReporter(options: ErrorReporterOptions): ErrorReporter {
+  singleton ??= createErrorReporter(options)
+  return singleton
 }

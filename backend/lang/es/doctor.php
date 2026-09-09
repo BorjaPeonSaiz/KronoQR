@@ -246,6 +246,19 @@ return [
                     .'muestra por pantalla las contraseñas de la base de datos y las claves de firma del '
                     .'sistema a quien lo provoque.',
             ],
+            'error_history' => [
+                'ok' => 'El historico de errores esta en tamano normal (:total lineas en total; el origen con mas '
+                    .'errores sin resolver lleva :open).',
+                'warning' => 'El origen «:source» acumula :open errores sin resolver, y el maximo son :cap. '
+                    .'Cuando llegue al maximo, los errores NUEVOS de ese origen dejaran de guardarse por separado.',
+                'failure' => 'El origen «:source» ha llegado al maximo de :cap errores sin resolver. Sus errores '
+                    .'nuevos YA NO se guardan por separado: se cuentan todos juntos en una linea que dice '
+                    .'«se ha alcanzado el techo», asi que estas perdiendo detalle de lo que esta fallando.',
+                'warning_busy' => 'El historico de errores tiene :total lineas distintas. No es un problema por si '
+                    .'mismo, pero una instalacion normal no acumula tantas en 90 dias.',
+                'warning_unavailable' => 'No se ha podido consultar el historico de errores (:failure). El resto de '
+                    .'comprobaciones si se ha ejecutado.',
+            ],
         ],
 
         // --- Configuracion ---------------------------------------------------
@@ -478,6 +491,29 @@ return [
                     ."  APP_DEBUG=false\n"
                     ."y reinicia la aplicacion:\n"
                     .'  docker compose up -d app',
+            ],
+            'error_history' => [
+                'warning' => "Entra en el panel, en Ajustes -> Errores, y atiende o marca como resueltos los\n"
+                    ."errores de ese origen. Para verlos desde aqui:\n"
+                    ."  php artisan product:errors --since=30d --source=:source\n"
+                    .'Subir el maximo no arregla nada: lo que hay que hacer con esos errores es mirarlos.',
+                'failure' => "Estas perdiendo detalle de lo que falla. Entra en el panel, en Ajustes -> Errores,\n"
+                    ."filtra por el origen «:source» y marca como resueltos los que ya hayas atendido; en\n"
+                    ."cuanto bajen del maximo, los errores nuevos vuelven a guardarse por separado.\n"
+                    ."Para verlos desde aqui:\n"
+                    ."  php artisan product:errors --since=30d --source=:source\n"
+                    ."Si de verdad necesitas guardar mas, sube el limite en el fichero .env:\n"
+                    ."  PRODUCT_ERRORS_MAX_OPEN_GROUPS_PER_SOURCE=1000\n"
+                    .'y reinicia con  docker compose up -d app',
+                'warning_busy' => "Comprueba si hay un error que se repite con un texto distinto cada vez: eso\n"
+                    ."crea una linea nueva por repeticion en vez de sumar en una. Miralo con:\n"
+                    ."  php artisan product:errors --since=7d\n"
+                    ."La limpieza de los mas antiguos de 90 dias se hace sola cada madrugada; para\n"
+                    ."lanzarla ahora:\n"
+                    .'  php artisan product:errors:prune',
+                'warning_unavailable' => "Comprueba que la base de datos responde y que la instalacion esta\n"
+                    ."actualizada del todo:\n"
+                    .'  php artisan migrate --force',
             ],
         ],
 
