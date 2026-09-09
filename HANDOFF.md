@@ -63,10 +63,10 @@ descubierto con `scandir` (ver «Trampas»).
 gitleaks 0 sobre los ficheros cambiados, promtool sobre `errors.yml`, `check-package-links.sh` (305 enlaces), `type-check` y
 `lint` de los cuatro paquetes, unitarias web-kit 199 / panel 433 / quiosco 379 / portal 79, E2E panel 88 y quiosco 50.
 
-**Siguiente acción:** commit único de la tarea, push, **CI manual completa con ⑧ y ⑧b** (`gh workflow run ci.yml --ref
-feat/tarea-5.12-historico-errores`; la ⑧b solo corre en `main`, etiquetas o a mano), PR con *merge commit* (nunca squash),
-`make up` en `main` (migración `error_events`). Después, la **5.11b** y el cierre de la Fase 5 (doc 03 §6.6), con los restos
-de «Pendiente».
+**Siguiente acción:** commit `dc9e0a1` empujado; **CI manual completa con ⑧ y ⑧b lanzada** (ejecución 34353479059; la de
+push, 34353471396, la cancela la concurrencia por rama) y **PR #50 abierta**. Cuando la CI manual termine en verde: integrar
+con *merge commit* (nunca squash), `make up` en `main` (migración `error_events`), borrar la rama. Después, la **5.11b** y el
+cierre de la Fase 5 (doc 03 §6.6), con los restos de «Pendiente».
 
 **Rama `feat/tarea-5.11-documentacion-cliente`** (desde `main` `e2860be`). **Tarea 5.11 «Documentación de instalación,
 operación, configuración y obligaciones legales» (RL-16..RL-21, RF-PD-02) IMPLEMENTADA, REVISADA, PROBADA e **INTEGRADA en
