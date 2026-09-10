@@ -324,6 +324,8 @@ La tabla del §3.1 tiene 13 filas. **Once son paquetes de Composer**; PHP es el 
 | **Cola offline** | **Dexie 4 (IndexedDB)** | Transaccional. `localStorage` es síncrono, con 5 MB y sin transacciones: inadecuado para una cola con garantías |
 | Wake lock | Screen Wake Lock API con *fallback* | Evita que la tablet se suspenda (RF-KI-01) |
 
+**Probar el escáner con la webcam del portátil** (`http://localhost:5173`). Antes de abrirlo, apaga los efectos de cámara de Windows (Configuración › Bluetooth y dispositivos › Cámaras › la cámara: «Encuadre automático», «Efectos de fondo», «Contacto visual»): «Windows Studio Effects» se aplica antes de que Chrome reciba el fotograma y el QR llega recortado y difuminado sin que la PWA pueda evitarlo. Y una webcam es de foco fijo (40-60 cm): no ejercita el `focusMode: continuous` que pide `useCamera.ts`, y una tarjeta a 20 cm sale borrosa; sostenla a 30-50 cm. Los tres fixtures E2E (`.y4m`) son un QR grande, nítido y centrado, así que ninguna prueba automática cubre enfoque ni distancia: **el enfoque solo se juzga en la tablet** (pendiente de hardware en `HANDOFF.md`). Procedimiento para el cliente en `docs/runbooks/alta-nuevo-quiosco.md` §6.
+
 **Exclusivo del panel** (`frontend-admin/`):
 
 | Componente | Elección | Nota |

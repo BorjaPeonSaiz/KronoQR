@@ -52,7 +52,7 @@ docker compose exec app php artisan <comando>
 | Requisito | Mínimo |
 | --- | --- |
 | Sistema | **Android 10 o superior** |
-| Cámara | **Trasera, con autoenfoque.** Sin autoenfoque, una tarjeta plastificada a 20 cm no enfoca y el escaneo falla de forma intermitente |
+| Cámara | **Trasera, con autoenfoque.** Sin autoenfoque, una tarjeta plastificada a 20 cm no enfoca y el escaneo falla de forma intermitente. Y sin efectos de cámara del fabricante activos: encuadre automático o desenfoque de fondo recortan y difuminan el código (§6) |
 | Montaje | Soporte de pared o de mesa, a la altura del pecho, sin contraluz directo sobre la cámara |
 | Alimentación | **Corriente permanente.** Un quiosco a batería es un quiosco apagado a las 06:00 |
 | Red | Cobertura wifi estable en ese punto, dentro de la VLAN de quioscos (§2.5) |
@@ -476,6 +476,35 @@ curl -sI https://fichaje.tuhotel.local/kiosk/ | grep -i 'permissions-policy'
 Tiene que salir la línea de arriba, con `camera=(self)`. Si no sale, o sale
 distinta, el problema está en lo que hayas puesto delante del servidor, no en
 la tablet ni en el producto.
+
+### …la imagen hace zoom sola o el fondo sale borroso
+
+La cámara se ve, pero la imagen **se acerca por su cuenta** a la persona y **el
+fondo aparece difuminado**, y el código no se lee o se lee a ratos. Eso son
+**efectos de cámara del sistema o del fabricante**, no el producto: se aplican
+al fotograma **antes** de que el navegador lo reciba, así que el lector QR
+trabaja sobre una imagen recortada y desenfocada y no tiene forma de apagarlos.
+
+Por orden de frecuencia:
+
+1. **Windows con «Windows Studio Effects»** (portátiles y equipos con NPU):
+   «Encuadre automático» es el zoom, «Efectos de fondo» es el desenfoque y
+   «Contacto visual» retoca la mirada. Se apagan en Configuración › Bluetooth y
+   dispositivos › Cámaras › la cámara en cuestión: desactiva los tres. Se ve
+   sobre todo cuando alguien prueba la URL del quiosco desde un PC (abajo).
+2. **El programa de la webcam** (Logitech, Dell, HP, Lenovo…), que trae su
+   propio encuadre automático. Se apaga en ese programa.
+3. **En una tablet Android** estos efectos **no existen para el navegador**. Si
+   aparece el síntoma, hay una app del fabricante con la cámara tomada: ciérrala
+   o reinicia la tablet («…no puede acceder a la cámara», causa 2).
+
+**Si estás probando desde un ordenador, lee esto antes de dar parte.** Una
+webcam de portátil **no tiene autoenfoque**: enfoca fijo a unos 40-60 cm, así
+que una tarjeta a 20 cm sale borrosa aunque los efectos estén apagados. Sostén
+la tarjeta a **30-50 cm**, bien iluminada y sin contraluz. Un PC sirve para
+comprobar el recorrido completo (escanear, confirmar, ver el fichaje en el
+panel), **no para juzgar el enfoque**: eso solo se juzga en una tablet que
+cumpla el §1, con cámara trasera con autoenfoque.
 
 ### …la tablet no encuentra el servidor
 
