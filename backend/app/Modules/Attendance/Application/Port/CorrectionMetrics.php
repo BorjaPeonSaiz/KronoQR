@@ -37,4 +37,24 @@ interface CorrectionMetrics
      * fichaje: quien lo implemente traga sus propios fallos.
      */
     public function correctionRecorded(string $reasonCode): void;
+
+    /**
+     * `scans_by_origin_total{origin="manual"}` (§8.2, RF-IN-08, tarea 3.1).
+     *
+     * **Solo cuando se AÑADE un tramo, nunca al corregir uno existente**, y la
+     * distincion es toda la razon de que este metodo sea suyo y no una rama de
+     * `correctionRecorded()`. La serie reparte **jornadas registradas** entre
+     * sus tres origenes: un tramo que alguien teclea porque el empleado se dejo
+     * la tarjeta en casa es una jornada que el sistema no capturo sola, y ahi
+     * cuenta. Rectificar la hora de salida de un tramo que ya existia no crea
+     * ninguna: ese fichaje ya se conto cuando ocurrio, con su origen de verdad,
+     * y volver a contarlo aqui haria que un hotel muy ordenado —el que corrige
+     * cuidadosamente sus errores— pareciera el que menos usa la tarjeta.
+     *
+     * La anulacion tampoco cuenta: resta un tramo, no lo añade. Un contador de
+     * Prometheus no baja.
+     *
+     * **Medir no puede romper una correccion**, igual que arriba.
+     */
+    public function manualEntryAdded(): void;
 }

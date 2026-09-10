@@ -7,6 +7,31 @@
 
 ## Estado y objetivo actual
 
+**Rama `feat/tarea-3.1-observabilidad` (desde `main` `5bfa619`). FASE 3 EN CURSO. Tarea 3.1 «OpenTelemetry extremo a
+extremo, Prometheus, Grafana, Loki» IMPLEMENTADA, REVISADA (dos vueltas) y PROBADA el 10-09-2026.** Catorce decisiones en la ficha
+(plan 06 → «Tarea 3.1» → «Decisiones tomadas»); las que importan: **la instrumentación ya existía en gran parte y faltaba la
+costura** —doce series escritas en Redis que nadie exponía, el SDK de OTel instalado sin arrancar, `LOKI_URL` que nadie leía—, así
+que `/metrics` es un **lector de exposición** sobre `kronoqr:metrics:*` con catálogo único (`MetricCatalogue`, prueba bidireccional
+contra el doc 02 §8.2) y `promphp` solo para renderizar; **Tempo** como destino OTLP (los docs no decían a dónde iban las trazas);
+SDK arrancado solo con `OTEL_EXPORTER_OTLP_ENDPOINT`; logs a Loki por un handler de Monolog propio con búfer tras la respuesta,
+solo con `LOKI_URL` (vacía de serie); correlación global por `Context` (viaja a los jobs) con `extra` acotado a cinco claves;
+`/health` sigue sin dependencias y `/ready` valida BD y Redis, sondeadas por **blackbox-exporter por TLS**; `traceparent` W3C
+generado en `web-kit/http.ts` y `kiosk/client.ts` sin SDK web (+0,1 KiB). Las siete series sin emisor: `queue_*` (eventos del
+worker y `Queue::size()` en el scrape), `db_query_duration_seconds` (acumulado en memoria, volcado en `terminating`),
+`anomalous_patterns_detected_total` (puerto `AnomalyMetrics`), `scans_by_origin_total{qr|pin|manual}` y
+`workdays_complete_ratio{site}` (`reporting:adoption-metrics`, `.prom`). **Lo que corrigieron las revisiones** (decisión 14): el
+`TrustProxies` de Laravel 13 confiaba en `X-Forwarded-For` con `Host` `.on-forge.com` (IP de `audit_log` y guarda de `/metrics`
+falsificables) → `TrustProxies` propio con `TRUSTED_PROXIES`; sondas retiradas del puerto 80; `phpunit.xml` neutraliza OTLP y Loki;
+`SafeSpan` desaparece (capa Deptrac `SharedTracingSupport`, `TraceparentHeader` única copia); `autoFlush: false` con
+`forceFlush` por job y comando. Seis filas nuevas en doc 07 §6 (A-1..A-5 y B-2). **Verificado sobre el árbol final:** Architecture
+339 (+ el rojo conocido `SourceDiscoveryTest`), Unit 1752, Feature 1579, Integration 557, Contract 60, Playwright `traceparent.spec`
+3, web-kit 205 / quiosco 380 unitarias, `qa:traceability --check`, `docs:consistency`, Pint 1802, PHPStan 9 sin errores, Deptrac
+0/0, shellcheck/shfmt 0, Redocly, `nginx-smoke` 5/5, presupuesto del quiosco 100,4 KiB de 250. **En vivo:** Prometheus con los
+cuatro jobs en UP, 24 series en `/metrics`, `probe_success=1`, y una petición con `traceparent` a `/ready` recuperada en Tempo con
+`GET health.ready` → `postgresql select`. **Ver «Siguiente acción».**
+
+**Siguiente acción:** commit único de la tarea con este HANDOFF, `push`, CI manual completa (`gh workflow run ci.yml --ref feat/tarea-3.1-observabilidad`; NO empujar nada después: la cancela), PR contra `main` con *merge commit*, `make up` en `main`, rama borrada. Después, **tarea 3.2** (cuadros y alertas: ya puede evaluar `auth.yml` y `errors.yml`, renombrar el job `kronoqr-backup`, usar `probe_ssl_earliest_cert_expiry` y `probe_success`, y decidir los nombres semconv de `db.*`).
+
 **Rama `chore/cierre-fase-5` (desde `main` `9d5ec6f`). FASE 5 CERRADA el 10-09-2026** (`current_phase => 5`, matriz de
 trazabilidad regenerada: 2 782 pruebas etiquetadas, Fase 5 con 23 de 23). Los cuatro revisores del doc 03 §6.6 sobre `main`
 encontraron **siete bloqueantes reales** y todos se corrigieron en esta rama antes de subir la fase; el detalle está en el plan 05 →
@@ -347,6 +372,27 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 
 ### Por tarea
 
+- **3.1 (restos, 10-09-2026):** `MetricsCollector` del paquete de diagnóstico llama `command('SCAN', [...])` con cinco argumentos y
+  phpredis lanza `ArgumentCountError` tragado en su `try`: `installation_setting_changes_total`, `compliance_profile_changes_total` y
+  `license_limit_exceeded_total` **nunca han viajado en el paquete** (desde la 5.5; usar `RedisMetricReader` o `scan($cursor, $opts)`
+  con cursor `null` y prefijo a mano); comprobación de `doctor` que avise si `LOKI_URL` u `OTEL_EXPORTER_OTLP_ENDPOINT` apuntan a un
+  contenedor que no existe (`Probe` nueva en `Product/Infrastructure/Diagnostics/Probe/`); **doc 07 §6 A-4: validar con el DPO del
+  cliente** que el log técnico con `employee_uuid` + instante de fichaje en Loki 90 días sin borrado selectivo encaja con el derecho
+  de supresión (no es asesoramiento jurídico); `ScanBatchTelemetry` escribe `oldest_occurred_at` (hora real de fichaje) en el log
+  técnico; logs de Nginx, PostgreSQL y Redis no van a Loki (Promtail EOL 03-2026; Alloy y el driver exigen `docker.sock`); el SDK de
+  OTel escribe sus fallos de exportación con `error_log()` fuera de Monolog (acotar con `OTEL_LOG_LEVEL`, variable no introducida);
+  atributos `db.system`/`db.operation` según la ficha y no semconv 1.38 (`db.system.name`, `db.operation.name`): se cambia en la 3.2
+  con los cuadros o nunca; el span del planificador ya no se activa (las consultas de una tarea en primer plano no cuelgan de él;
+  casi todo `console.php` usa `runInBackground()`); `overrides` de Tempo (`max_traces_per_user: 100000`) sin datos reales; sin
+  `mem_limit` en Tempo ni blackbox (ningún servicio de observabilidad lo declara); `QueuedTraceContext` probado con `sync`, falta
+  `queue:work --once` real sobre Redis; falta la gemela concurrente «Loki inalcanzable» de `ScanIdempotencyWithTracingTest`;
+  `TraceparentHeader` y `LogChannelStack` son reglas puras fuera de `Domain/` y `make mutate` no las cubre; `db_query_duration_seconds`
+  acumula las consultas del *setup* de la propia prueba (se afirma presencia e invariante, no cifras); doble ejecución de
+  `attendance:detect-incidents` la misma noche sumaría dos veces `anomalous_patterns_detected_total`; `scan_batch_size` y
+  `pin_resets_total` siguen en Redis y en el paquete pero no en `/metrics` (no están en el §8.2); el `.env` local de dev sigue con
+  `LOG_CHANNEL=stderr` (para probar Loki en local: `LOG_CHANNEL=stack`, `LOKI_URL=http://loki:3100`); la traza «fetch del quiosco →
+  SQL en Grafana» se verificó con `curl` + Tempo API, no navegando en Grafana; la comprobación de memoria del quiosco a 12 h sigue
+  siendo manual; `Unit` tarda 4,5 s en el contenedor frente al techo de 2 s del §9 (ya lo hacía antes).
 - **Cierre de la Fase 5 (restos, 10-09-2026):** la instalación limpia y los cuatro recorridos de las guías por una persona ajena
   (humano); ⑧b desde **cada** versión soportada y salto no consecutivo real al publicar 2.2.0; **MSI por módulo** con el global
   en 82,83 %: `Workforce` 66,67 % (`Employee` 23, `ImportColumnMap` 22, `EmploymentContract` 12, `EmployeeCode` 11) y `Kiosk`

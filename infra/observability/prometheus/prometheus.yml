@@ -68,3 +68,48 @@ scrape_configs:
       - targets: ["node-exporter:9100"]
         labels:
           service: backup
+
+  # Sonda de uptime (tarea 3.1, §8.1): comprueba desde FUERA del proceso que
+  # el borde responde, en vez de confiar solo en que /metrics siga sirviendo
+  # series. blackbox-exporter hace la peticion real por nosotros y publica
+  # `probe_success` y `probe_duration_seconds`.
+  #
+  # POR TLS, CONTRA EL PUERTO 8443, NUNCA POR EL 8080. El 8080 lo publica el
+  # host como HTTP_PORT (compose.prod.yaml) y no lleva `limit_req`: sondear
+  # ahi habria dejado /api/v1/health y /api/v1/ready alcanzables sin cuota
+  # desde cualquiera que llegue al puerto 80, justo lo que las reglas duras 15
+  # y 19 prohiben. Sondeando por 8443 la peticion entra por `location ^~
+  # /api/` del bloque 443 de kronoqr.conf.template y pasa por
+  # `limit_req zone=api`, igual que cualquier otro cliente HTTPS.
+  #
+  # `insecure_skip_verify: true` (modulo `http_2xx_tls` de blackbox.yml) es
+  # aceptable aqui: la peticion viaja dentro de la red de contenedores, el
+  # certificado que sirve `nginx` es el del dominio del hotel (no el de
+  # `nginx`), y lo que esta sonda comprueba es DISPONIBILIDAD (¿responde
+  # 200?), no identidad del servidor.
+  #
+  # Relabelling estandar de blackbox: el objetivo de verdad (la URL a sondear)
+  # va como parametro `target` de /probe, y el nombre visible en Grafana
+  # (`instance`) pasa a ser esa URL y no la IP del propio blackbox-exporter.
+  #
+  # ES EL MISMO EXPORTADOR QUE USARA LA TAREA 3.2 para «certificado TLS
+  # proximo a expirar» (`probe_ssl_earliest_cert_expiry`, modulo
+  # `http_2xx_tls` de blackbox/blackbox.yml): al sondear ya por HTTPS, esa
+  # metrica sale gratis de esta misma peticion — no hace falta levantar un
+  # segundo contenedor ni anadir una sonda para esa alerta.
+  - job_name: kronoqr-uptime
+    metrics_path: /probe
+    params:
+      module: [http_2xx_tls]
+    scrape_interval: 30s
+    static_configs:
+      - targets:
+          - https://nginx:8443/api/v1/health
+          - https://nginx:8443/api/v1/ready
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115

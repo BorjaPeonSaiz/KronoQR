@@ -6,6 +6,7 @@ use App\Exceptions\ProblemDetails;
 use App\Http\Middleware\NegotiateLocale;
 use App\Http\Middleware\PropagateTraceContext;
 use App\Http\Middleware\RecordHttpMetrics;
+use App\Http\Middleware\TrustProxies;
 use App\Http\Middleware\UseInstallationLocale;
 use App\Modules\Attendance\Application\Exception\EmployeeCannotBeClocked;
 use App\Modules\Attendance\Application\Exception\ShiftEntryNotFound;
@@ -123,6 +124,25 @@ return Application::configure(basePath: dirname(__DIR__))
         ],
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        /*
+         * QUE PROXIES SE CREE LA APLICACION — y de serie, ninguno (RS-02, RS-09,
+         * RS-12, tarea 3.1).
+         *
+         * Se SUSTITUYE el `TrustProxies` del framework por el del producto. El de
+         * Laravel, sin proxies declarados, confia en `X-Forwarded-For` cuando el
+         * `Host` de la peticion termina en `.on-forge.com` o `.on-vapor.com`; el
+         * Nginx del producto es `server_name _` y captura cualquier `Host`, asi
+         * que esa rama se alcanzaba con una cabecera. A partir de ahi
+         * `$request->ip()` era lo que dijera el cliente, y de `$request->ip()`
+         * dependen el `403` de `/metrics`, la IP que consta en `audit_log` y los
+         * limites por IP de los intentos de autenticacion.
+         *
+         * Se sustituye y no se retira: la clase propia SI se usa cuando el cliente
+         * declara `TRUSTED_PROXIES` porque tiene otro balanceador delante. Ver el
+         * docblock de {@see TrustProxies}.
+         */
+        $middleware->replace(Illuminate\Http\Middleware\TrustProxies::class, TrustProxies::class);
+
         /*
          * Los alias de Sanctum para comprobar el AMBITO del token (doc 02 §7.3).
          *

@@ -397,7 +397,9 @@ El **Anexo D** recoge la equivalencia para MySQL 8 si la infraestructura de un c
 | Objetos | MinIO | Sistema de ficheros local o almacenamiento del cliente |
 | Observabilidad | Stack completo en Compose | Prometheus + Grafana + Loki + Alertmanager |
 
-Servicios de desarrollo: `app`, `nginx`, `postgres`, `redis`, `horizon`, `reverb`, `scheduler`, `node-kiosk`, `node-admin`, `node-portal`, `mailpit`, `prometheus`, `grafana`, `loki`, `node-exporter`. Un `make up` debe dejar el entorno completo funcionando con datos de ejemplo.
+Servicios de desarrollo: `app`, `nginx`, `postgres`, `redis`, `horizon`, `reverb`, `scheduler`, `node-kiosk`, `node-admin`, `node-portal`, `mailpit`, `prometheus`, `grafana`, `loki`, `node-exporter`, `tempo`, `blackbox-exporter`. Un `make up` debe dejar el entorno completo funcionando con datos de ejemplo.
+
+`tempo` y `blackbox-exporter` se añadieron en la tarea 3.1. `tempo` (Grafana Tempo, monolítico sobre sistema de ficheros) es el destino de las trazas OTLP que exporta la aplicación: sin él, el `trace_id` no se puede seguir del `fetch` del quiosco a la consulta SQL, por completa que esté la instrumentación. `blackbox-exporter` sondea `/api/v1/health` y `/api/v1/ready` desde fuera del proceso (uptime real, no solo «el proceso vive») y es el mismo exportador que la tarea 3.2 reutiliza para la caducidad del certificado TLS.
 
 `node-exporter` se añadió en la tarea 1.18 y tiene un único cometido: publicar a Prometheus el **resultado de la copia de seguridad, de su verificación y del simulacro de restauración** (§8.2), que los scripts escriben como ficheros en `BACKUP_PATH/metrics/`. Está en desarrollo y en producción por la misma razón por la que están las demás piezas de observabilidad: una alerta que solo existe en el servidor del cliente no la prueba nadie.
 
@@ -743,10 +745,10 @@ Nada de secretos en el repositorio. En desarrollo, `.env` local a partir de `.en
 | Señal | Herramienta | Detalle |
 |---|---|---|
 | **Métricas** | Prometheus + `promphp/prometheus_client_php`, expuesto en `/metrics` restringido a red interna | Técnicas (RED) y de negocio |
-| **Trazas** | OpenTelemetry, exportador OTLP | Desde el `fetch` del navegador del quiosco hasta la consulta SQL. `trace_id` propagado en cabecera |
+| **Trazas** | OpenTelemetry, exportador OTLP/HTTP → **Grafana Tempo** (tarea 3.1, monolítico sobre sistema de ficheros, retención 90 días como el log técnico) | Desde el `fetch` del navegador del quiosco hasta la consulta SQL. `trace_id` propagado en cabecera `traceparent` (W3C). Cabecera `traceparent`, no `X-Trace-Id`: los tres frontends generan el identificador por `fetch`, sin cargar el SDK web (presupuesto del quiosco) |
 | **Logs** | Monolog en JSON → Loki | Con `trace_id`, `scan_id`, `device_id`, `employee_uuid`. **Nunca nombres en claro** |
 | **Errores** | Tabla `error_events` en PostgreSQL, 90 días (RF-PD-15) | Agrupados por huella y consultables desde el panel. En on-premise no se envían al fabricante: viajan en el paquete de diagnóstico si el cliente lo genera |
-| **Uptime** | Sonda interna sobre `/api/v1/health` | — |
+| **Uptime** | Sonda interna sobre `/api/v1/health` y `/api/v1/ready`, vía **blackbox-exporter** (tarea 3.1) | Petición HTTP real desde fuera del proceso, cada 30 s; el mismo exportador sirve la comprobación de caducidad del certificado TLS de la tarea 3.2 |
 | **Auditoría** | Tabla `audit_log` propia | **Separada de los logs técnicos**: distinta retención, distinto propósito, valor probatorio |
 
 ### 8.2 Métricas expuestas
@@ -1568,12 +1570,13 @@ IMAGE_TAG=                             # RF-PD-02 · VACÍA en la plantilla y SI
                                        # (RF-PD-15), la matriz de versiones soportadas (§11.6.5) y la
                                        # vuelta atrás de update.sh, que necesita nombrar la anterior
 COMPOSE_PROFILES=observability         # Perfil de Compose, no una variable del producto. Enciende
-                                       # Prometheus, node-exporter, Alertmanager, Grafana y Loki, que son
-                                       # quienes avisan de que la copia de anoche falló o de que el
-                                       # archivado de WAL se ha parado. ENCENDIDO de serie. Vaciarlo los
-                                       # apaga: libera ~700 MiB en un servidor justo en el mínimo de 4 GB
-                                       # y convierte la verificación de la copia en tarea manual semanal
-                                       # del cliente (docs/cliente/operacion.md §10)
+                                       # Prometheus, node-exporter, Alertmanager, Grafana, Loki, Tempo y
+                                       # blackbox-exporter, que son quienes avisan de que la copia de
+                                       # anoche falló o de que el archivado de WAL se ha parado. ENCENDIDO
+                                       # de serie. Vaciarlo los apaga: libera ~850 MiB en un servidor
+                                       # justo en el mínimo de 4 GB y convierte la verificación de la
+                                       # copia en tarea manual semanal del cliente
+                                       # (docs/cliente/operacion.md §10)
 HTTP_PORT=80
 HTTPS_PORT=443
 TLS_CERT_DIR=./certs                   # Con tls.crt y tls.key. Sin ellos el borde no arranca

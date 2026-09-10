@@ -381,18 +381,44 @@ parameters:
       collectors:
         - type: classNameRegex
           value: '#^App\\Modules\\Shared\\Application\\Port\\#'
+    # Todo Shared/Application MENOS Port y MENOS Support. Ver SharedTracingSupport.
     - name: SharedApplication
       collectors:
         - type: classNameRegex
-          value: '#^App\\Modules\\Shared\\Application\\(?!Port\\)#'
-    # Todo Shared/Infrastructure MENOS Export. La exclusion no es cosmetica: en
-    # esta capa viven adaptadores (SystemClock, CachePinAttempts...) que ninguna
-    # capa Http debe poder alcanzar, y el dialecto CSV si. Separarlos es lo que
-    # permite conceder lo segundo sin conceder lo primero.
+          value: '#^App\\Modules\\Shared\\Application\\(?!Port\\|Support\\)#'
+
+    # El andamiaje transversal de `Shared\Application\Support`: SpanScope (abrir
+    # y cerrar un span sin que medir pueda romper lo medido), TraceparentHeader
+    # (la UNICA copia del formato W3C del `traceparent` y de la normalizacion del
+    # identificador) y ConstantTimeFloor (el suelo de tiempo del rechazo, RS-03).
+    #
+    # Mismo argumento y misma forma que SharedExport y SharedMetricsExposition:
+    # no es un adaptador de ningun puerto ni un caso de uso, es andamiaje que
+    # tienen que compartir los modulos Y el armazon.
+    #
+    # POR QUE SE DECLARA APARTE (tarea 3.1). `App\Support\Observability` y
+    # `App\Http\Middleware` —capa AppFramework— tenian una copia linea por linea
+    # de SpanScope (`SafeSpan`) y una tercera copia de la regex del `traceparent`,
+    # precisamente porque el arranque de la aplicacion no puede depender de un
+    # modulo. El resultado no fue una frontera respetada: fueron tres respuestas
+    # distintas a «que trace_id se escribe en el log».
+    #
+    # Se abre UNA arista, `AppFramework -> SharedTracingSupport`, en lugar de
+    # abrir SharedApplication entera: alli viven los casos de uso compartidos, y
+    # ninguno tiene por que quedar al alcance de un middleware.
+    - name: SharedTracingSupport
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Shared\\Application\\Support\\#'
+    # Todo Shared/Infrastructure MENOS Export y MENOS Metrics/Exposition. La
+    # exclusion no es cosmetica: en esta capa viven adaptadores (SystemClock,
+    # CachePinAttempts...) que ninguna capa Http debe poder alcanzar, y el
+    # dialecto CSV si. Separarlos es lo que permite conceder lo segundo sin
+    # conceder lo primero.
     - name: SharedInfrastructure
       collectors:
         - type: classNameRegex
-          value: '#^App\\Modules\\Shared\\Infrastructure\\(?!Export\\)#'
+          value: '#^App\\Modules\\Shared\\Infrastructure\\(?!Export\\|Metrics\\Exposition\\)#'
 
     # Las decisiones de codificacion del CSV del producto (CsvDialect). No es un
     # adaptador de ningun puerto: es la forma de un fichero que el producto
@@ -405,6 +431,22 @@ parameters:
       collectors:
         - type: classNameRegex
           value: '#^App\\Modules\\Shared\\Infrastructure\\Export\\#'
+
+    # El catalogo de series de `/metrics`, su lector de Redis y el renderizado
+    # (tarea 3.1, doc 02 §8.2). Mismo argumento que SharedExport y misma forma:
+    # es una TABLA de lo que el producto publica —nombre, tipo, HELP, etiquetas—
+    # mas la lectura que la compone, no un adaptador de ningun puerto. Quien la
+    # usa es el controlador `GET /metrics`, que vive en App\Http y no en un
+    # modulo porque es una ruta de infraestructura.
+    #
+    # Se declara aparte en lugar de abrir SharedInfrastructure entera a
+    # AppFramework: alli viven SystemClock, CachePinAttempts y los adaptadores
+    # de credenciales, y ninguno tiene por que quedar al alcance del arranque de
+    # la aplicacion.
+    - name: SharedMetricsExposition
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Shared\\Infrastructure\\Metrics\\Exposition\\#'
     - name: SharedHttp
       collectors:
         - type: classNameRegex
@@ -448,6 +490,7 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
+      - SharedTracingSupport
       - SharedApplicationPort
       - Laravel
       - ExternalCode
@@ -460,6 +503,7 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
+      - SharedTracingSupport
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
@@ -475,6 +519,7 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
+      - SharedTracingSupport
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
@@ -495,6 +540,7 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
+      - SharedTracingSupport
       - SharedApplicationPort
       - Laravel
       - LaravelFacade
@@ -515,6 +561,7 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
+      - SharedTracingSupport
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
@@ -556,6 +603,7 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
+      - SharedTracingSupport
       - SharedApplicationPort
       - Laravel
       - ExternalCode
@@ -569,6 +617,7 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
+      - SharedTracingSupport
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
@@ -594,6 +643,7 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
+      - SharedTracingSupport
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
@@ -640,6 +690,7 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
+      - SharedTracingSupport
       - SharedApplicationPort
       - Laravel
       - LaravelFacade
@@ -661,6 +712,7 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
+      - SharedTracingSupport
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
@@ -711,6 +763,7 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
+      - SharedTracingSupport
       - SharedApplicationPort
       - Laravel
       - ExternalCode
@@ -723,6 +776,7 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
+      - SharedTracingSupport
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
@@ -741,6 +795,7 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
+      - SharedTracingSupport
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
@@ -762,6 +817,7 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
+      - SharedTracingSupport
       - SharedApplicationPort
       - Laravel
       - LaravelFacade
@@ -784,6 +840,7 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
+      - SharedTracingSupport
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
@@ -825,6 +882,7 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
+      - SharedTracingSupport
       - SharedApplicationPort
       - Laravel
       - ExternalCode
@@ -837,6 +895,7 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
+      - SharedTracingSupport
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
@@ -855,6 +914,7 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
+      - SharedTracingSupport
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
@@ -876,6 +936,7 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
+      - SharedTracingSupport
       - SharedApplicationPort
       - Laravel
       - LaravelFacade
@@ -898,6 +959,7 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
+      - SharedTracingSupport
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
@@ -941,6 +1003,7 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
+      - SharedTracingSupport
       - SharedApplicationPort
       - Laravel
       - ExternalCode
@@ -959,6 +1022,7 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
+      - SharedTracingSupport
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
@@ -974,6 +1038,7 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
+      - SharedTracingSupport
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
@@ -1000,6 +1065,7 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
+      - SharedTracingSupport
       - SharedApplicationPort
       # PersonalRecordCsv escribe el CSV del portal con el mismo dialecto que el
       # de la Inspeccion. Ver la capa SharedExport: es la forma de un fichero,
@@ -1024,6 +1090,7 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
+      - SharedTracingSupport
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
@@ -1073,6 +1140,7 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
+      - SharedTracingSupport
       - SharedApplicationPort
       - Laravel
       - ExternalCode
@@ -1099,6 +1167,7 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
+      - SharedTracingSupport
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
@@ -1114,6 +1183,7 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
+      - SharedTracingSupport
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
@@ -1134,6 +1204,7 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
+      - SharedTracingSupport
       - SharedApplicationPort
       - Laravel
       - LaravelFacade
@@ -1155,6 +1226,7 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
+      - SharedTracingSupport
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
@@ -1202,6 +1274,7 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
+      - SharedTracingSupport
       - SharedApplicationPort
       - Laravel
       - ExternalCode
@@ -1214,6 +1287,7 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
+      - SharedTracingSupport
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
@@ -1232,6 +1306,7 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
+      - SharedTracingSupport
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
@@ -1285,6 +1360,7 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
+      - SharedTracingSupport
       - SharedApplicationPort
       - Laravel
       - LaravelFacade
@@ -1311,6 +1387,7 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
+      - SharedTracingSupport
       - SharedApplicationPort
       - SharedInfrastructure
       - Laravel
@@ -1338,7 +1415,22 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplicationPort
+      - SharedTracingSupport
       - Laravel
+      - ExternalCode
+
+    # SpanScope, TraceparentHeader y ConstantTimeFloor. Solo objetos de valor de
+    # Shared y la API —no el SDK— de OpenTelemetry, que es una abstraccion.
+    #
+    # NI LARAVEL NI NINGUN MODULO, y eso es lo que la mantiene util: esta capa es
+    # el unico destino que el armazon de la aplicacion tiene dentro de
+    # `App\Modules`, asi que cada cosa que entrase aqui quedaria automaticamente
+    # al alcance de `bootstrap/` y de cualquier middleware. Si algun dia hace
+    # falta el contenedor, un facade o el reloj, lo que se ha metido en `Support`
+    # no es andamiaje: es un caso de uso, y su sitio es `SharedApplication`.
+    SharedTracingSupport:
+      - SharedDomain
+      - SharedDomainEvent
       - ExternalCode
 
     # SystemClock vive aqui (ADR-021).
@@ -1347,6 +1439,7 @@ parameters:
       - SharedDomainEvent
       - SharedApplicationPort
       - SharedApplication
+      - SharedTracingSupport
       - Laravel
       - LaravelFacade
       - Eloquent
@@ -1357,11 +1450,21 @@ parameters:
     # vacia, lo que ha entrado en Export es contenido y no formato.
     SharedExport: ~
 
+    # Redis para leer las series y `promphp` para renderizarlas. NINGUN modulo:
+    # el catalogo nombra las series por su cadena, no por la constante del
+    # adaptador que las escribe, y eso es deliberado —una arista de aqui a los
+    # ocho modulos convertiria la exposicion en el centro del grafo—. Lo que ata
+    # el catalogo a los emisores es una prueba de arquitectura, no un `use`.
+    SharedMetricsExposition:
+      - Laravel
+      - ExternalCode
+
     SharedHttp:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplicationPort
       - SharedApplication
+      - SharedTracingSupport
       - Laravel
       - LaravelFacade
       - ExternalCode
@@ -1372,6 +1475,7 @@ parameters:
       - SharedDomainEvent
       - SharedApplicationPort
       - SharedApplication
+      - SharedTracingSupport
       - SharedInfrastructure
       - SharedHttp
       - Laravel
@@ -1388,6 +1492,21 @@ parameters:
       - Eloquent
       - ExternalCode
       - AppEloquentModels
+      # Las DOS UNICAS aristas de aqui hacia un modulo, las dos de la tarea 3.1 y
+      # las dos acotadas a un directorio que no es dominio ni caso de uso.
+      #
+      # La tabla de series de `/metrics`. El controlador y el colector de colas
+      # viven en App\Http y App\Support porque la exposicion es transversal a
+      # los ocho modulos; el catalogo vive en Shared porque es donde estan las
+      # demas piezas de metricas del producto. Sin esta linea, la unica salida
+      # habria sido duplicar el catalogo en dos sitios.
+      - SharedMetricsExposition
+      # El andamiaje de spans y el parseo del `traceparent`. Sin esta linea, la
+      # unica salida fue duplicarlo — y se duplico: `SafeSpan` era una copia
+      # linea por linea de `SpanScope`, y la regex del W3C llego a tener tres
+      # versiones que no coincidian. Una frontera que obliga a copiar no protege
+      # nada; protege menos que la arista nombrada que la sustituye.
+      - SharedTracingSupport
 
     AppEloquentModels:
       - Laravel

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Attendance\Application\UseCase;
 
 use App\Modules\Attendance\Application\Command\DetectAnomaliesCommand;
+use App\Modules\Attendance\Application\Port\AnomalyMetrics;
 use App\Modules\Attendance\Application\Port\EventPublisher;
 use App\Modules\Attendance\Application\Port\FlaggedScan;
 use App\Modules\Attendance\Application\Port\FlaggedScans;
@@ -69,6 +70,7 @@ final readonly class DetectAttendanceAnomalies
         private OperationalSettingsProvider $settings,
         private CompliancePolicyProvider $compliance,
         private EventPublisher $events,
+        private AnomalyMetrics $anomalyMetrics,
         private Clock $clock,
         private LoggerInterface $logger,
     ) {}
@@ -110,10 +112,19 @@ final readonly class DetectAttendanceAnomalies
             anomaliesDetected: \count($anomalies),
         ));
 
+        $byType = $this->tally($anomalies);
+
+        // `anomalous_patterns_detected_total{pattern}` (doc 02 §8.2, tarea 3.1).
+        // El MISMO recuento que devuelve el comando, para que la serie de
+        // Grafana y la salida de `attendance:detect-incidents` no puedan
+        // discrepar. Va detras del aviso a proposito: medir es lo ultimo y no
+        // puede impedir nada de lo anterior.
+        $this->anomalyMetrics->anomaliesDetected($byType);
+
         return AnomalyScanResult::of(
             daysInspected: $command->lookbackDays,
             workDaysInspected: \count($workDays),
-            byType: $this->tally($anomalies),
+            byType: $byType,
             failures: $failures,
         );
     }

@@ -1402,7 +1402,8 @@ Los tres rangos están explicados con detalle, con síntomas y comprobaciones, e
 | --- | --- | --- | --- | --- | --- |
 | `KIOSK_VLAN_CIDR` | `[CLIENTE]` | Rango de la VLAN de quioscos, al que se le eleva el límite de fichaje. Ver [`instalacion.md`](instalacion.md) §6 | `10.0.20.0/24` | **Al instalar, siempre.** Si los quioscos quedan fuera, el fallo es silencioso y se manifiesta como «el quiosco va lento a las 06:00» | No |
 | `PORTAL_INTERNAL_CIDR` | `[CLIENTE]` | Red desde la que se permite el portal del empleado. Fuera de ella se responde `403` antes de llegar a la aplicación. Ver [`instalacion.md`](instalacion.md) §6 | `172.28.0.0/16` (una red de desarrollo) | **Al instalar, siempre**, por la LAN real del hotel o la VPN. Exponerlo a internet es una decisión explícita que se toma poniendo `0.0.0.0/0`, nunca dejando el valor de serie; documéntala en el acta de entrega | No |
-| `METRICS_ALLOW_CIDR` | `[CLIENTE]` | Único origen autorizado a leer las métricas. Todo lo demás recibe `403`, incluido el propio servidor. Ver [`instalacion.md`](instalacion.md) §6 | `172.29.0.20/32` | Al instalar, si mueves el recolector de métricas. Es una `/32` a propósito | No |
+| `METRICS_ALLOW_CIDR` | `[CLIENTE]` | Único origen autorizado a leer las métricas. Todo lo demás recibe `403`, incluido el propio servidor. Ver [`instalacion.md`](instalacion.md) §6 | `172.29.0.20/32` | Al instalar, si mueves el recolector de métricas. Es una `/32` a propósito, y **un solo rango**: el borde (Nginx) no admite más de uno aunque la aplicación acepte varios separados por comas | No |
+| `TRUSTED_PROXIES` | — | En quién confía la aplicación para fijar la IP del cliente (`X-Forwarded-For`), lista de IP/CIDR separadas por comas | *(vacía: no se confía en ningún proxy)* | **Solo si pones otro proxy delante del borde de KronoQR** ([`endurecimiento.md`](endurecimiento.md) §1.6): entonces lleva la IP de ese proxy, no la de Nginx. Laravel trae de fábrica una heurística que confía en `X-Forwarded-For` cuando el `Host` termina en `.on-forge.com` —y el `Host` lo manda el propio cliente—; el producto la desactiva del todo y exige esta lista explícita | No |
 | `NGINX_CLIENT_MAX_BODY_SIZE` | — | Tamaño máximo de cuerpo que acepta el servidor web | `8m` | Casi nunca. Súbelo solo si subes también `WORKFORCE_IMPORT_MAX_FILE_KILOBYTES` por encima de eso | No |
 | `TLS_ALLOW_SELF_SIGNED` | `[CLIENTE]` | Permite arrancar con un certificado autofirmado | `true` en la plantilla | **A `false` en producción.** Con `false` y sin certificado, el servidor web no arranca y dice que hay que colocarlo. Es intencionado. Ver [`instalacion.md`](instalacion.md) §6 | No |
 | `TLS_CERT_FILE` | — | Ruta del certificado **dentro del contenedor** | `/etc/nginx/certs/tls.crt` | Nunca. Lo que se cambia es la carpeta del servidor, `TLS_CERT_DIR` | No |
@@ -1419,7 +1420,7 @@ Los tres rangos están explicados con detalle, con síntomas y comprobaciones, e
 | --- | --- | --- | --- | --- | --- |
 | `COMPLIANCE_PROFILE` | `[CLIENTE]` | Nombre del perfil de cumplimiento con el que el instalador marca el perfil por defecto | `ES-hosteleria` | Al instalar, si tu convenio es otro. **No se lee en ejecución**: los umbrales salen de la fila del perfil, que se edita en el panel (sección 2.4). Cambiar esto sin cambiar la fila no hace nada | No |
 | `ERROR_HISTORY_RETENTION_DAYS` | — | Días que se conserva el histórico de errores. Ver [`operacion.md`](operacion.md) §6 y §15.4 | `90` | Casi nunca | No |
-| `TECHNICAL_LOG_RETENTION_DAYS` | — | Días que se conserva el registro técnico, en un almacén distinto del anterior. Ver [`operacion.md`](operacion.md) §6 | `90` | Casi nunca | No |
+| `TECHNICAL_LOG_RETENTION_DAYS` | — | Días que se conserva el registro técnico, en Loki y en Tempo (un almacén distinto del anterior). Ver [`operacion.md`](operacion.md) §10 | `90` | Casi nunca, y **nunca sola**: ni Loki ni Tempo releen esta variable —su plazo está fijado en horas dentro de `infra/observability/loki/loki.yaml` y de `infra/observability/tempo/tempo.yaml`—, así que cambiarla exige editar también esos dos ficheros | No |
 | `COMPLIANCE_RETENTION_BATCH_SIZE` | — | Filas por sentencia de borrado en la purga. Ver [`operacion.md`](operacion.md) §6 | `1000` | Solo si la purga anual tarda demasiado | No |
 | `COMPLIANCE_RETENTION_REPORT_PATH` | — | Dónde queda el informe de cada propuesta y de cada purga. **No se limpia solo**: es la constancia de que la purga fue regular. Ver [`operacion.md`](operacion.md) §6 | `storage/app/retention-reports` (en el contenedor) | Casi nunca | No |
 | `COMPLIANCE_LEGAL_EXPORT_TEMP_RETENTION_HOURS` | — | Horas que puede vivir un temporal huérfano de la descarga de la exportación legal antes de que se borre solo. **No afecta** a la copia deliberada que genera el comando de exportación: esa la custodia quien la generó | `6` | Casi nunca | No |
@@ -1475,17 +1476,19 @@ Viene apagada y así se queda si no haces nada. Está explicada entera en la
 
 ### 6.20 Observabilidad
 
-Qué se pierde exactamente si apagas los servicios de observabilidad está en
-[`operacion.md`](operacion.md) §10.
+Qué se pierde exactamente si apagas los servicios de observabilidad, y qué
+añaden Tempo y blackbox-exporter, está en [`operacion.md`](operacion.md) §10.
 
 | Variable | Marca | Qué hace | De serie | Cuándo cambiarla | ¿Afecta al cálculo de horas? |
 | --- | --- | --- | --- | --- | --- |
-| `LOG_CHANNEL` | — | A dónde escribe la aplicación su registro técnico | `stderr` | Nunca. Es lo que permite que el recolector de registros lo lea | No |
+| `LOG_CHANNEL` | — | A dónde escribe la aplicación su registro técnico. `stack` reparte a los canales de `LOG_STACK` | `stack` | Nunca | No |
+| `LOG_STACK` | — | Canales del registro técnico, separados por comas | `stderr` | Casi nunca. **No decide si se envía a Loki**: eso lo decide `LOKI_URL`, nombres o no `loki` aquí | No |
 | `LOG_LEVEL` | — | Cuánto detalle escribe | `debug` en la plantilla | **A `info` o `warning` en producción.** Con `debug` el registro crece mucho y se llena el disco antes de que nadie lo mire | No |
-| `LOG_STDERR_FORMATTER` | — | Formato del registro: una línea JSON por evento, que es lo que se puede buscar y filtrar | `Monolog\Formatter\JsonFormatter` | Nunca | No |
-| `LOKI_URL` | — | Dirección del almacén de registros | `http://loki:3100` | Casi nunca. **Por sí sola no cambia el destino de nada**: la aplicación escribe en `stderr` y el cuadro de mandos ya viene apuntado. Se conserva porque viaja en el paquete de diagnóstico y le dice a soporte a dónde miras | No |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | — | A dónde se exportan las trazas | *(vacía: desactivado)* | Solo si tienes un sistema de trazas propio al que enviarlas | No |
+| `LOKI_URL` | — | Dirección del almacén de registros al que se envía el registro técnico | *(vacía: desactivado)* | **Es la que enciende o apaga el envío**, igual que `OTEL_EXPORTER_OTLP_ENDPOINT` de la fila siguiente: con el perfil `observability` encendido, `http://loki:3100` hace que cada petición y cada trabajo de cola terminen con un envío a Loki. Vacía, el canal `loki` no se registra, aunque `LOG_STACK` lo nombre. Encender el perfil no envía nada por sí solo: son dos decisiones distintas | No |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | — | A dónde se exportan las trazas | *(vacía: desactivado)* | Con el perfil `observability` encendido, `http://tempo:4318` envía las trazas a Tempo. Vacía, el rastreador ni arranca | No |
 | `OTEL_SERVICE_NAME` | — | Nombre con el que aparece el servicio en esas trazas | `kronoqr-api` | Solo si el anterior está configurado y necesitas distinguir instalaciones | No |
+| `OTEL_TRACES_SAMPLER_ARG` | — | Proporción de peticiones de las que se guarda traza | `1.0` (todas) | Casi nunca: un hotel no genera el volumen que justificaría muestrear menos | No |
+| `OTEL_EXPORTER_OTLP_TIMEOUT` | — | Segundos de margen antes de dar por perdido el envío de una traza | `2` | Casi nunca. Un valor alto podría notarse en la latencia si Tempo no responde | No |
 | `GRAFANA_ADMIN_USER` | — | Cuenta de administración del cuadro de mandos | `admin` | Cámbiala si tu política lo pide | No |
 | `GRAFANA_ADMIN_PASSWORD` | `[INSTALADOR]` | Su contraseña | (vacía; la genera `install.sh`) | Se rota desde el propio cuadro de mandos. **Nunca se expone sin autenticación** | No |
 
@@ -1539,7 +1542,7 @@ Las lee el `docker-compose` de producción. En desarrollo se ignoran.
 | --- | --- | --- | --- | --- | --- |
 | `IMAGE_REGISTRY` | `[CLIENTE]` | Registro del que se descargan las imágenes | `ghcr.io/kronoqr` | Si tienes un registro interno propio, o si instalas sin salida a internet. Ver [`instalacion.md`](instalacion.md) §7 | No |
 | `IMAGE_TAG` | `[INSTALADOR]` | La versión desplegada: la etiqueta de las imágenes y lo que publica la sonda de salud | (la escribe `install.sh` desde el fichero `VERSION` del paquete) | Nunca a mano. **`latest` está prohibido en producción** y no hay valor por defecto: si esto está vacío, Compose se para antes de crear nada y dice qué poner. Una instalación que no sabe decir qué versión corre hace imposible la vuelta atrás de `update.sh` | No |
-| `COMPOSE_PROFILES` | — | Enciende los servicios de observabilidad | `observability` | Déjalo puesto. Son los que avisan de que la copia de anoche falló o de que el archivado de transacciones se ha parado, los dos fallos que convierten una instalación sana en una pérdida de datos sin que nadie lo note. **Dejarlo vacío los apaga**, es una configuración soportada que libera unos 700 MiB, y entonces verificar la copia pasa a ser una tarea manual semanal tuya | No |
+| `COMPOSE_PROFILES` | — | Enciende los siete servicios de observabilidad (Prometheus, node-exporter, Alertmanager, Grafana, Loki, Tempo y blackbox-exporter) | `observability` | Déjalo puesto. Son los que avisan de que la copia de anoche falló o de que el archivado de transacciones se ha parado, los dos fallos que convierten una instalación sana en una pérdida de datos sin que nadie lo note. **Dejarlo vacío los apaga**, es una configuración soportada que libera unos 850 MiB, y entonces verificar la copia pasa a ser una tarea manual semanal tuya | No |
 | `HTTP_PORT` | `[CLIENTE]` | Puerto en el que el servidor escucha peticiones sin cifrar, para redirigirlas | `80` | Solo si ese puerto ya está ocupado en la máquina | No |
 | `HTTPS_PORT` | `[CLIENTE]` | Puerto cifrado por el que entran el panel, el portal y las tablets | `443` | Íd. Si lo cambias, tiene que aparecer también en `APP_URL` | No |
 | `TLS_CERT_DIR` | `[CLIENTE]` | Carpeta **de tu servidor** con el certificado y su clave privada, montada de solo lectura. Ver [`instalacion.md`](instalacion.md) §6 | `./certs` | Al instalar, si guardas los certificados en otro sitio del servidor | No |

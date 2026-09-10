@@ -38,6 +38,8 @@
             <directory>tests/Feature/Http</directory>
             <directory>tests/Feature/Identity</directory>
             <directory>tests/Feature/Kiosk</directory>
+            <directory>tests/Feature/Metrics</directory>
+            <directory>tests/Feature/Observability</directory>
             <directory>tests/Feature/Product</directory>
             <directory>tests/Feature/Quality</directory>
             <directory>tests/Feature/Reporting</directory>
@@ -77,6 +79,25 @@
              denied» mientras en el contenedor local pasaban. force: ningun .env
              puede devolverlas al directorio del producto. -->
         <env name="METRICS_TEXTFILE_PATH" value="storage/framework/testing/metrics" force="true"/>
+        <!--
+            LA SUITE NO EXPORTA TRAZAS NI LOGS DE VERDAD.
+
+            `infra/compose.dev.yaml` exporta `OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318`
+            y `LOKI_URL=http://loki:3100` al contenedor `app`, que es lo correcto
+            para desarrollar. Dentro de la suite eso encendia el SDK de
+            OpenTelemetry y el canal `loki` en TODAS las pruebas: cada prueba
+            construia spans reales, los exportaba por HTTP y empujaba cada linea
+            de log a Loki. Medido el 10-09-2026: `tests/Feature/Product` daba 195
+            fallos con las variables del contenedor y 0 con estas dos vacias.
+
+            Las pruebas que necesitan el SDK de verdad LO MONTAN A MANO
+            (`Tests\Support\Telemetry\RecordingTracer`,
+            `Tests\Support\Observability\UnreachableCollector`) y lo desmontan al
+            terminar, que es la unica forma de que una prueba de trazas no decida
+            por las otras cuatro mil.
+        -->
+        <env name="OTEL_EXPORTER_OTLP_ENDPOINT" value="" force="true"/>
+        <env name="LOKI_URL" value="" force="true"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>
         <env name="CACHE_STORE" value="array"/>
@@ -133,6 +154,10 @@
         <server name="APP_TIMEZONE" value="UTC" force="true"/>
         <server name="APP_MAINTENANCE_DRIVER" value="file" force="true"/>
         <server name="DB_DATABASE" value="fichaje_test" force="true"/>
+        <!-- Las dos lineas o ninguna: el contenedor `app` define las dos. -->
+        <server name="OTEL_EXPORTER_OTLP_ENDPOINT" value="" force="true"/>
+        <server name="LOKI_URL" value="" force="true"/>
+        <server name="METRICS_TEXTFILE_PATH" value="storage/framework/testing/metrics" force="true"/>
         <server name="BCRYPT_ROUNDS" value="4" force="true"/>
         <server name="BROADCAST_CONNECTION" value="null" force="true"/>
         <server name="CACHE_STORE" value="array" force="true"/>

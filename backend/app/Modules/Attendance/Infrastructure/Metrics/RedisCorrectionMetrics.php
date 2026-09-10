@@ -42,4 +42,26 @@ final readonly class RedisCorrectionMetrics implements CorrectionMetrics
             // Silencio deliberado y acotado a este metodo: ver el docblock.
         }
     }
+
+    /**
+     * La tercera pata de `scans_by_origin_total` (§8.2, RF-IN-08).
+     *
+     * **Escribe en la MISMA serie que `RedisScanMetrics`**, y por eso reutiliza
+     * su constante en vez de declarar una propia: dos constantes con el mismo
+     * valor es exactamente como dejan de coincidir dos cosas que tenian que
+     * coincidir. `HINCRBY` sobre el mismo hash con otra etiqueta suma donde
+     * tiene que sumar.
+     */
+    public function manualEntryAdded(): void
+    {
+        try {
+            $this->redis->connection()->command('HINCRBY', [
+                RedisScanMetrics::SCANS_BY_ORIGIN,
+                'origin=manual',
+                1,
+            ]);
+        } catch (Throwable) {
+            // Silencio deliberado y acotado a este metodo: ver el docblock.
+        }
+    }
 }

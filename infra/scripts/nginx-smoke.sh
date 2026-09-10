@@ -3,7 +3,7 @@
 # KronoQR — comprobacion rapida del borde HTTP, con la imagen sola.
 #
 # PROPOSITO. Arrancar `kronoqr/nginx:ci` sin Compose, sin base de datos y sin
-# aplicacion, y comprobar las cuatro respuestas que definen si el borde sirve
+# aplicacion, y comprobar las cinco respuestas que definen si el borde sirve
 # lo que tiene que servir.
 #
 # POR QUE EXISTE, SI LA ETAPA ⑧ YA LO CUBRE. Por dos razones que no cubre:
@@ -129,6 +129,15 @@ main() {
   # 403 y no 200: este anfitrion queda FUERA de CIDR_PORTAL. Que el portal se
   # sirva a cualquiera seria el fallo (RF-ID-08).
   comprobar /portal/ 403
+
+  # 403 y no 502: METRICS_ALLOW_CIDR=10.91.0.5/32 no incluye a este anfitrion,
+  # y el candado lo decide el `geo` de la IMAGEN SOLA, antes de intentar
+  # hablar con PHP-FPM (que aqui ni existe). Si esto diera 502 en vez de 403,
+  # el borde estaria dejando pasar la peticion hacia la aplicacion y
+  # confiando en que ELLA la rechace -la segunda guarda de la tarea 3.1-, que
+  # es justo el escenario que una plantilla de Nginx mal editada podria dejar
+  # abierto sin que nadie lo notara hasta que alguien mirara desde fuera.
+  comprobar /metrics 403
 
   if [ "${fallo}" -ne 0 ]; then
     printf '\nEl borde no responde lo que debe. Registro de errores:\n' >&2

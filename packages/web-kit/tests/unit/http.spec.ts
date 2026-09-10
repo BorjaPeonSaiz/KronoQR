@@ -34,6 +34,38 @@ describe('cliente HTTP', () => {
     expect(headers.get('Authorization')).toBe('Bearer un-token')
   })
 
+  it('manda un traceparent (W3C Trace Context) nuevo en cada peticion', async () => {
+    const spy = stubFetch(() => jsonResponse({ ok: true }))
+
+    await request('/api/v1/auth/me')
+    await request('/api/v1/auth/me')
+
+    const first = (spy.mock.calls[0]?.[1] as RequestInit).headers as Headers
+    const second = (spy.mock.calls[1]?.[1] as RequestInit).headers as Headers
+    const traceparentPattern = /^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/
+
+    expect(first.get('traceparent')).toMatch(traceparentPattern)
+    expect(second.get('traceparent')).toMatch(traceparentPattern)
+    // Una traceparent por peticion, no reutilizada entre llamadas.
+    expect(first.get('traceparent')).not.toBe(second.get('traceparent'))
+  })
+
+  it('requestBlob tambien lleva traceparent: es el mismo `send()` de por medio', async () => {
+    const spy = stubFetch(
+      () =>
+        new Response(new Blob(['contenido']), {
+          status: 200,
+          headers: { 'Content-Type': 'application/pdf' },
+        }),
+    )
+
+    await requestBlob('/api/v1/employees/1/credential.pdf', 'credencial.pdf')
+
+    const headers = (spy.mock.calls[0]?.[1] as RequestInit).headers as Headers
+
+    expect(headers.get('traceparent')).toMatch(/^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/)
+  })
+
   it('pide al servidor el idioma activo de la SPA con Accept-Language', async () => {
     // Sin la cabecera, un `422` llegaba en el idioma de la instalacion aunque
     // el panel estuviera en otro. Se lee en cada peticion: el idioma cambia al

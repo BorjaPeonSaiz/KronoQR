@@ -81,6 +81,18 @@ final readonly class CorrectionTelemetry
         }
 
         $this->metrics->correctionRecorded($reasonCode);
+
+        // `scans_by_origin_total{origin="manual"}` (RF-IN-08, tarea 3.1).
+        //
+        // SOLO EL ALTA. `add` crea un tramo que no existia —una jornada que el
+        // sistema no capturo sola—; `correct` y `void` operan sobre uno que ya
+        // se conto cuando ocurrio, con su origen de verdad. Contar tambien
+        // aquellos haria que un hotel que corrige con cuidado sus errores
+        // pareciera el que menos usa la tarjeta.
+        if ($operation === 'add') {
+            $this->metrics->manualEntryAdded();
+        }
+
         $span->end(['correction.action' => $corrected->action->value]);
         $this->log($corrected, $reasonCode, $span);
 

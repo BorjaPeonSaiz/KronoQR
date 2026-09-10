@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Application\Port;
 
+use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
+
 /**
  * Las dos metricas de negocio del fichaje (doc 02 §8.2):
  * `scans_total{device,result}` y `scan_processing_duration_seconds`.
@@ -85,4 +87,30 @@ interface ScanMetrics
      * @param  int  $siteId  Centro del empleado que ficho.
      */
     public function pinFallbackScan(int $siteId): void;
+
+    /**
+     * `scans_by_origin_total{origin}` (§8.2, RF-IN-08, tarea 3.1).
+     *
+     * **Es la metrica de adopcion, no una segunda `scans_total`.** Aquella
+     * cuenta por quiosco y por desenlace y sirve para operar; esta contesta la
+     * pregunta que sostiene la renovacion de la licencia: *«¿la gente esta
+     * fichando con su tarjeta, o el hotel funciona a base de PIN y de
+     * correcciones a mano?»*. Los tres origenes del doc 01 §9.2 son `qr`, `pin`
+     * y `manual`, y el tercero no pasa por aqui: lo emite `CorrectionMetrics`
+     * cuando se AÑADE un tramo a mano.
+     *
+     * **Solo lo ACEPTADO.** Un rechazo no es un fichaje —no produjo tramo— y un
+     * anti-rebote es el mismo fichaje contado dos veces. Con cualquiera de los
+     * dos dentro, el reparto entre origenes dejaria de sumar lo que de verdad
+     * ocurrio en el hotel, que es lo unico que esta serie promete.
+     *
+     * **Ninguna etiqueta identifica a nadie** (regla dura 21): la unica es el
+     * origen, con tres valores.
+     *
+     * Recibe el origen del dominio y no una cadena porque quien mide no tiene
+     * por que saber como se llama cada uno en Prometheus: esa traduccion —y la
+     * decision de que `import` no cuenta como fichaje de nadie— es del
+     * adaptador.
+     */
+    public function scanOriginRecorded(ScanOrigin $origin): void;
 }

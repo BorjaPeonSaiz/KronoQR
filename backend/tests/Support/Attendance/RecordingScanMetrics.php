@@ -6,6 +6,7 @@ namespace Tests\Support\Attendance;
 
 use App\Modules\Attendance\Application\Port\ScanMetrics;
 use App\Modules\Attendance\Application\Port\ScanResult;
+use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 
 /**
  * Doble del puerto `ScanMetrics` que recuerda lo medido.
@@ -37,6 +38,14 @@ final class RecordingScanMetrics implements ScanMetrics
      */
     public array $pinFallbacks = [];
 
+    /**
+     * Fichajes contados por origen (`scans_by_origin_total`, RF-IN-08, tarea
+     * 3.1). Acumulado por etiqueta, que es como lo hace Prometheus.
+     *
+     * @var array<string, int>
+     */
+    public array $origins = [];
+
     public function scanProcessed(string $deviceUuid, ScanResult $result, float $durationSeconds): void
     {
         $this->observations[] = [
@@ -58,6 +67,14 @@ final class RecordingScanMetrics implements ScanMetrics
     public function pinFallbackScan(int $siteId): void
     {
         $this->pinFallbacks[] = $siteId;
+    }
+
+    public function scanOriginRecorded(ScanOrigin $origin): void
+    {
+        // Se guarda el valor del ENUM y no la etiqueta de Prometheus: lo que
+        // esta prueba afirma es que el caso de uso conto el origen correcto, no
+        // como lo traduce el adaptador de Redis.
+        $this->origins[$origin->value] = ($this->origins[$origin->value] ?? 0) + 1;
     }
 
     /**

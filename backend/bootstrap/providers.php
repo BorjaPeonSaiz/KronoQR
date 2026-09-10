@@ -12,6 +12,9 @@ use App\Modules\Reporting\ReportingServiceProvider;
 use App\Modules\Shared\SharedServiceProvider;
 use App\Modules\Workforce\WorkforceServiceProvider;
 use App\Providers\AppServiceProvider;
+use App\Support\Observability\Logging\LoggingServiceProvider;
+use App\Support\Observability\Metrics\MetricsServiceProvider;
+use App\Support\Observability\Tracing\TracingServiceProvider;
 
 /*
  * Los ocho modulos del doc 02 §1.6, registrados explicitamente y en orden de
@@ -40,4 +43,13 @@ return [
     ReportingServiceProvider::class,
     KioskServiceProvider::class,
     ProductServiceProvider::class,
+
+    /*
+     * Instrumentacion transversal (tarea 3.1, doc 02 §8.1): metricas, trazas y
+     * logs de TODO el proceso. Van despues de los modulos porque observan lo
+     * que estos registran, y fuera de ellos porque no pertenecen a ninguno.
+     */
+    MetricsServiceProvider::class,
+    TracingServiceProvider::class,
+    LoggingServiceProvider::class,
 ];

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Facades\Log;
+use OpenTelemetry\SDK\Trace\ImmutableSpan;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\PortalLogins;
@@ -86,6 +87,31 @@ function capturaApuntesDePortal(array &$apuntes): void
 }
 
 /**
+ * **El** span del acceso al portal entre los terminados, y solo el.
+ *
+ * Se busca por nombre y no se cuentan todos los spans: desde la decision 6 de la
+ * ficha 3.1 cada peticion abre ademas su span `SERVER`
+ * (`PropagateTraceContext`), asi que `toHaveCount(1)` sobre el total pasaba a
+ * significar «no hay span de servidor», que no es lo que estas pruebas afirman.
+ * Lo que si tienen que afirmar —y siguen afirmando— es que
+ * `identity.portal_login` se abre **una vez y solo una**: dos serian dos
+ * mediciones del mismo acto.
+ *
+ * @param  list<ImmutableSpan>  $spans
+ */
+function spanDelPortal(array $spans): ImmutableSpan
+{
+    $propios = array_values(array_filter(
+        $spans,
+        static fn (ImmutableSpan $span): bool => $span->getName() === 'identity.portal_login',
+    ));
+
+    expect($propios)->toHaveCount(1);
+
+    return $propios[0];
+}
+
+/**
  * @param  list<array{message: string, trace_id: string|null}>  $apuntes
  * @return list<string|null>
  */
@@ -111,16 +137,13 @@ it('fecha el apunte de acceso aceptado con el trace_id del span, sin traceparent
             'pin' => PortalLogins::PIN,
         ])->assertStatus(200);
 
-        $spans = $tracer->finishedSpans();
-
-        expect($spans)->toHaveCount(1)
-            ->and($spans[0]->getName())->toBe('identity.portal_login');
+        $span = spanDelPortal($tracer->finishedSpans());
 
         // Uno, y del rastro: la telemetria del portal ya no escribe el suyo.
         expect($apuntes)->toHaveCount(1)
             ->and($apuntes[0]['message'])->toBe('auth.login_succeeded');
 
-        expect(traceIdsDe($apuntes))->toBe([$spans[0]->getContext()->getTraceId()]);
+        expect(traceIdsDe($apuntes))->toBe([$span->getContext()->getTraceId()]);
     });
 })->group('RF-ID-06', 'RL-05');
 
@@ -139,14 +162,13 @@ it('fecha tambien el apunte de acceso rechazado con el trace_id de su propio spa
             'pin' => '999111',
         ])->assertStatus(401);
 
-        $spans = $tracer->finishedSpans();
+        $span = spanDelPortal($tracer->finishedSpans());
 
-        expect($spans)->toHaveCount(1)
-            // Uno solo: el verificador escribe el rechazo y nadie lo repite.
-            ->and($apuntes)->toHaveCount(1)
+        // Uno solo: el verificador escribe el rechazo y nadie lo repite.
+        expect($apuntes)->toHaveCount(1)
             ->and($apuntes[0]['message'])->toBe('auth.login_failed');
 
-        expect(traceIdsDe($apuntes))->toBe([$spans[0]->getContext()->getTraceId()]);
+        expect(traceIdsDe($apuntes))->toBe([$span->getContext()->getTraceId()]);
     });
 })->group('RF-ID-06', 'RS-03');
 

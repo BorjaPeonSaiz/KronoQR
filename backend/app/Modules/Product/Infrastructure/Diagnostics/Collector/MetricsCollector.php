@@ -73,9 +73,11 @@ final readonly class MetricsCollector implements DiagnosticsCollector
         // sostiene la alerta «errores nuevos de severidad critica» del doc 01
         // §9.3 y el que da el orden de magnitud antes de mirar la seccion
         // `error_events` del propio paquete.
+        'anomalous_patterns_detected_total',
         'application_error_groups_opened_total',
         'application_errors_total',
         'compliance_profile_changes_total',
+        'db_query_duration_seconds',
         'http_request_duration_seconds',
         'http_requests_total',
         'incident_resolution_seconds',
@@ -88,9 +90,12 @@ final readonly class MetricsCollector implements DiagnosticsCollector
         'manual_corrections_total',
         'pin_fallback_scans_total',
         'pin_resets_total',
+        'queue_job_duration_seconds',
+        'queue_jobs_failed_total',
         'report_exports_total',
         'scan_batch_size',
         'scan_processing_duration_seconds',
+        'scans_by_origin_total',
         'scans_total',
         'sync_delay_seconds',
     ];
@@ -248,7 +253,7 @@ final readonly class MetricsCollector implements DiagnosticsCollector
         try {
             return $connection->command($command, $parameters);
         } catch (Throwable) {
-            // Una serie ilegible no tumba las diecisiete restantes, y desde
+            // Una serie ilegible no tumba a las demas de la lista, y desde
             // luego no tumba el paquete.
             return null;
         }

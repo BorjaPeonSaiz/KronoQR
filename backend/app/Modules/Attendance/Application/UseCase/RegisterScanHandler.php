@@ -10,6 +10,7 @@ use App\Modules\Attendance\Application\Port\CredentialResolver;
 use App\Modules\Attendance\Application\Port\EmployeeDirectory;
 use App\Modules\Attendance\Application\Port\EventPublisher;
 use App\Modules\Attendance\Application\Port\ScanLog;
+use App\Modules\Attendance\Application\Port\ScanMetrics;
 use App\Modules\Attendance\Application\Port\ScanRecord;
 use App\Modules\Attendance\Application\Port\ScanResult;
 use App\Modules\Attendance\Application\Port\SiteCalendar;
@@ -155,6 +156,7 @@ final readonly class RegisterScanHandler
         private SiteCalendar $calendar,
         private OperationalSettingsProvider $settings,
         private EventPublisher $events,
+        private ScanMetrics $metrics,
         private Clock $clock,
     ) {}
 
@@ -199,9 +201,9 @@ final readonly class RegisterScanHandler
             $attempt++;
 
             try {
-                return $this->connection->transaction(
+                return $this->counted($this->connection->transaction(
                     fn (): RegisterScanResult => $this->process($command, $recordedAt, $resolution),
-                );
+                ), $command);
             } catch (ScanAlreadyRecorded $replayed) {
                 // RF-AT-07: la transaccion ya revirtio; se responde con lo que
                 // quedo registrado la primera vez.
@@ -226,6 +228,37 @@ final readonly class RegisterScanHandler
                 }
             }
         }
+    }
+
+    /**
+     * `scans_by_origin_total{origin}` (doc 02 §8.2, RF-IN-08, tarea 3.1).
+     *
+     * ## Por que en el caso de uso y no en la telemetria del borde
+     *
+     * Porque aqui pasan los TRES caminos que producen un fichaje —la tarjeta,
+     * el PIN (que delega en este mismo metodo) y el lote de la cola offline— y
+     * porque aqui esta el origen. `ScanTelemetry` es comun al endpoint de
+     * tarjeta y al de PIN y no sabe cual de los dos la llamo, asi que contar
+     * alli habria etiquetado como `qr` todos los fichajes por PIN.
+     *
+     * ## Fuera de la transaccion y solo si se acepto
+     *
+     * Se cuenta con el tramo ya escrito y la transaccion confirmada. Un rechazo
+     * no es un fichaje y un anti-rebote es el mismo fichaje otra vez: ninguno
+     * de los dos cuenta (ver `ScanMetrics::scanOriginRecorded()`).
+     *
+     * **Un reenvio tampoco vuelve a contar.** La rama de `ScanAlreadyRecorded`
+     * no pasa por aqui: la idempotencia por `scan_id` (regla dura 8) tiene que
+     * valer tambien para las metricas, o una tablet con mala cobertura inflaria
+     * el reparto por origen con reintentos.
+     */
+    private function counted(RegisterScanResult $result, RegisterScanCommand $command): RegisterScanResult
+    {
+        if ($result->result->isAccepted()) {
+            $this->metrics->scanOriginRecorded($command->origin);
+        }
+
+        return $result;
     }
 
     /**

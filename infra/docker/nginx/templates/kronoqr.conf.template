@@ -123,7 +123,12 @@ log_format kronoqr_json escape=json
   '"bytes":$body_bytes_sent,'
   '"duration_seconds":$request_time,'
   '"upstream_seconds":"$upstream_response_time",'
-  '"trace_id":"$http_x_trace_id",'
+  # `traceparent`, no `X-Trace-Id`: es la cabecera W3C que generan los tres
+  # frontends por cada `fetch` (tarea 3.1, decision 7) y la que la aplicacion
+  # ya sabia leer. `$http_x_trace_id` no la enviaba nadie -quedo del diseno
+  # anterior a esa decision- y el registro de acceso del borde se quedaba sin
+  # correlacion con la traza real.
+  '"traceparent":"$http_traceparent",'
   '"device_id":"$http_x_device_id",'
   '"user_agent":"$http_user_agent"'
   '}';
@@ -150,8 +155,35 @@ resolver_timeout 5s;
 #   real_ip_recursive on;
 
 #==============================================================================
-# Puerto 80 — redireccion a TLS, mas las dos rutas que no deben depender de el
+# Puerto 80 — redireccion a TLS, mas lo minimo que no debe depender de ella
 #==============================================================================
+# Este puerto lo publica el host como HTTP_PORT (80 de serie,
+# compose.prod.yaml), asi que TODO lo que se sirva aqui es alcanzable desde
+# la red del hotel, no solo desde la red de contenedores. Eso descarta de
+# raiz cualquier ruta que hable con PHP-FPM sin las guardas del bloque 443
+# (limit_req, TLS): por eso las sondas de la aplicacion (/api/v1/health y
+# /api/v1/ready) NO viven aqui. Lo que si vive en este puerto:
+#
+#   - la redireccion a HTTPS (`location /`);
+#   - /healthz, que Nginx responde el mismo sin tocar la aplicacion (sonda
+#     del propio contenedor, no del producto);
+#   - /metrics, detras de la guarda `geo` de METRICS_ALLOW_CIDR — igual que
+#     en el bloque 443, para que una instalacion con el 80 abierto a la LAN
+#     de ofimatica no deje las series de Prometheus sin candado.
+#
+# blackbox-exporter (tarea 3.1, §8.1) sondea /api/v1/health y /api/v1/ready
+# por TLS contra el puerto 8443 (`https://nginx:8443/...`, modulo
+# `http_2xx_tls` de infra/observability/blackbox/blackbox.yml), exactamente
+# como cualquier otro cliente HTTPS: la peticion entra por `location ^~
+# /api/` del bloque de abajo y pasa por `limit_req zone=api`. `certificate
+# insecure_skip_verify: true` en ese modulo es a proposito: el certificado
+# que sirve `nginx` dentro de la red de contenedores es el del dominio del
+# hotel, no el de `nginx`, asi que la verificacion de identidad daria
+# siempre un falso negativo; lo que la sonda de disponibilidad necesita
+# comprobar es que el borde responde 200, no que el nombre del certificado
+# coincida con el nombre del contenedor. De regalo, esa misma peticion HTTPS
+# es la que expone `probe_ssl_earliest_cert_expiry` para la alerta de
+# caducidad de la tarea 3.2, sin anadir una sonda mas.
 server {
   listen 8080;
   server_name _;
@@ -164,7 +196,9 @@ server {
   # Sonda del contenedor: comprueba Nginx, no la aplicacion. Las del producto
   # son dos y estan en la aplicacion: /api/v1/health dice si el proceso vive —y
   # no toca ninguna dependencia a proposito— y /api/v1/ready dice si puede
-  # aceptar trafico, que es la que comprueba PostgreSQL y Redis.
+  # aceptar trafico, que es la que comprueba PostgreSQL y Redis. Las dos se
+  # sirven SOLO por el bloque 443/8443, nunca aqui: ver el comentario de
+  # arriba.
   location = /healthz {
     access_log off;
     default_type text/plain;

@@ -8,8 +8,14 @@
 // fichar** (regla dura 19). Por eso no lanza excepciones hacia arriba; devuelve
 // un `ApiResult` y quien llama decide. Un `reject` sin capturar en el camino del
 // escaneo es una pantalla en blanco delante de una cola de gente.
+//
+// Cada peticion lleva un `traceparent` (W3C Trace Context) nuevo, generado con
+// `@kronoqr/web-kit/traceparent` (tarea 3.1): es la raiz de la traza que el
+// backend sigue hasta la consulta SQL. Se genera por INTENTO, no por fichaje:
+// ver el comentario en `send()`.
 
 import { parseBranding } from '@kronoqr/web-kit/branding'
+import { createTraceparent } from '@kronoqr/web-kit/traceparent'
 import type {
   Branding,
   KioskHeartbeat,
@@ -219,7 +225,14 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
       return { failure: 'offline' }
     }
 
-    const headers: Record<string, string> = { Accept: 'application/json' }
+    // `traceparent` (W3C Trace Context) nuevo por intento, no por fichaje
+    // (tarea 3.1, decision 7): un reenvio de la cola offline con el MISMO
+    // `scan_id` genera una traza distinta cada vez. Es la traza del intento;
+    // el `scan_id` sigue siendo la correlacion entre intentos (doc 01 §9.4).
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      traceparent: createTraceparent(),
+    }
     if (init.authenticated !== false) {
       const token = deviceToken()
       if (token !== null && token !== '') headers['Authorization'] = `Bearer ${token}`

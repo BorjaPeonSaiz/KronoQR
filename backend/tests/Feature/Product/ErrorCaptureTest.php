@@ -26,11 +26,14 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use OpenTelemetry\API\Trace\SpanKind;
+use OpenTelemetry\SDK\Trace\ImmutableSpan;
 use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Output\NullOutput;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Product\InMemoryErrorEventSink;
+use Tests\Support\Telemetry\RecordingTracer;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -198,10 +201,45 @@ it('capta un fallo de la API con su ruta, su metodo y su traza', function (): vo
         ->and($error->message)->toBe('El adaptador no respondio');
 })->group('RF-PD-15');
 
-it('no inventa una traza cuando la peticion no trae traceparent', function (): void {
+it('sin SDK y sin traceparent, no inventa una traza', function (): void {
+    /*
+     * El estado de serie y el de la mayoria de las instalaciones: sin destino
+     * OTLP no hay span y `Globals` devuelve el proveedor inerte, cuyo `trace_id`
+     * son treinta y dos ceros. Escribir eso seria peor que no escribir nada
+     * —parece un identificador y nadie lo buscaria dos veces—, asi que la columna
+     * queda nula.
+     */
     Api::guest()->get(RUTA_QUE_REVIENTA)->assertStatus(500);
 
     expect(historico()->only()->traceId)->toBeNull();
+})->group('RF-PD-15');
+
+it('con SDK y sin traceparent, fecha el error con la traza del span de servidor', function (): void {
+    /*
+     * **Y esto es lo correcto, no un caso residual** (decision 6 de la ficha 3.1).
+     *
+     * `PropagateTraceContext` abre un span `SERVER` por peticion. Cuando el
+     * cliente no envia `traceparent` —una llamada desde `curl`, una sonda, un
+     * navegador sin la cabecera— ese span es la RAIZ de una traza nueva, que es
+     * exactamente la traza que estara en Tempo con las consultas SQL de la
+     * peticion que reventó. Fechar `error_events.trace_id` con ella es lo que
+     * convierte una fila del panel de errores en un enlace a lo que pasó.
+     *
+     * Lo que la prueba de arriba fija es que ese identificador **existe de
+     * verdad**: sin SDK no se inventa uno.
+     */
+    RecordingTracer::around(function (RecordingTracer $tracer): void {
+        Api::guest()->get(RUTA_QUE_REVIENTA)->assertStatus(500);
+
+        $servidor = array_values(array_filter(
+            $tracer->finishedSpans(),
+            static fn (ImmutableSpan $span): bool => $span->getKind() === SpanKind::KIND_SERVER,
+        ));
+
+        expect($servidor)->not->toBeEmpty();
+
+        expect(historico()->only()->traceId)->toBe($servidor[0]->getContext()->getTraceId());
+    });
 })->group('RF-PD-15');
 
 it('marca como critico cualquier fallo en las rutas de fichaje', function (): void {

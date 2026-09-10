@@ -1143,19 +1143,22 @@ already loaded, it does not try to talk to any registry and does not sit
 waiting.
 
 If you are also going to use observability (on by default), add to the
-`docker save` the five public images of the profile: `prom/prometheus`,
-`prom/node-exporter`, `prom/alertmanager`, `grafana/grafana` and
-`grafana/loki`. Their exact versions are in `docker-compose.yml`. If you would
-rather not, switch the profile off by leaving `COMPOSE_PROFILES=` empty in the
-`.env` and read in [`operation.md`](operation.md) which alerts you lose.
+`docker save` the seven public images of the profile: `prom/prometheus`,
+`prom/node-exporter`, `prom/alertmanager`, `grafana/grafana`, `grafana/loki`,
+`grafana/tempo` and `prom/blackbox-exporter`. Their exact versions are in
+`docker-compose.yml`. If you would rather not, switch the profile off by
+leaving `COMPOSE_PROFILES=` empty in the `.env` and read in
+[`operation.md`](operation.md) which alerts you lose.
 
 ---
 
 ## 8. Observability: on by default, and why it is worth leaving on
 
-The `.env` ships with `COMPOSE_PROFILES=observability`, which brings up five
-more services (Prometheus, node-exporter, Alertmanager, Grafana and Loki) and
-takes about 700 MiB of RAM.
+The `.env` ships with `COMPOSE_PROFILES=observability`, which brings up seven
+more services (Prometheus, node-exporter, Alertmanager, Grafana, Loki, Tempo
+and blackbox-exporter) and takes about 850 MiB of RAM. What Tempo (traces) and
+blackbox-exporter (a real uptime probe, not just "the process is alive") add
+is explained in [`operation.md`](operation.md) §10.2.
 
 **What they do is warn about the two things that turn a healthy installation
 into data loss without anyone noticing by looking at the screen:** that last

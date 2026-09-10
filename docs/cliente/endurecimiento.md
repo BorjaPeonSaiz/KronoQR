@@ -571,8 +571,10 @@ que el archivado del registro de escritura se ha parado y el disco se llena.
   una red entera no es manía: con la red completa autorizada, las peticiones
   hechas desde el anfitrión entran dentro del rango y `/metrics` queda accesible
   sin que nada lo avise.
-- **Si la apagas** —es una configuración soportada, y libera unos 700 MiB en un
-  servidor justo de memoria—, pierdes las alertas de copia y de disco:
+- **Si la apagas** —es una configuración soportada, y libera unos 850 MiB en un
+  servidor justo de memoria (siete servicios: Prometheus, node-exporter,
+  Alertmanager, Grafana, Loki, Tempo y blackbox-exporter)—, pierdes las
+  alertas de copia y de disco:
   comprobar la copia pasa a ser una tarea manual **semanal** tuya. Lo que se
   pierde exactamente está en [`operacion.md`](operacion.md) §10.
 

@@ -330,8 +330,9 @@ necesita nada de esto**: solo cuenta, y cuenta con el rol de la aplicación.
 
 ## 10. La observabilidad, y qué pierdes si la apagas
 
-El `.env` trae `COMPOSE_PROFILES=observability`. Levanta cinco servicios más
-—Prometheus, node-exporter, Alertmanager, Grafana y Loki— y ocupa unos 700 MiB.
+El `.env` trae `COMPOSE_PROFILES=observability`. Levanta siete servicios más
+—Prometheus, node-exporter, Alertmanager, Grafana, Loki, Tempo y
+blackbox-exporter— y ocupa unos 850 MiB.
 
 **Está encendida de serie porque es lo que avisa de los dos fallos que
 convierten una instalación sana en una pérdida de datos sin que nadie lo note
@@ -354,6 +355,73 @@ Es una configuración soportada, pero **asume esta tarea manual**:
 
 Grafana escucha **solo en `127.0.0.1:3000`**: se llega por túnel SSH o desde el
 propio servidor, **nunca desde internet**.
+
+### 10.1 Los tres registros del sistema
+
+Se confunden con facilidad y sirven para cosas distintas; mezclarlos es un
+error que se paga tarde, normalmente delante de un inspector o de un cliente
+enfadado.
+
+| Registro | Dónde vive | Retención | Para qué sirve | Quién lo lee |
+| --- | --- | --- | --- | --- |
+| **Log técnico** | Fichero JSON en `stderr`, y en Loki si `LOKI_URL` tiene valor (no `LOG_STACK`: ver más abajo) | 90 días (`TECHNICAL_LOG_RETENTION_DAYS`) | Depurar con detalle una petición concreta: qué pasó, en qué orden, con qué contexto técnico | Quien tiene delante el cuadro de mandos de observabilidad (normalmente soporte del fabricante, con tu paquete de diagnóstico, o tu propio IT si sabe leer Grafana) |
+| **`error_events`** | Tabla en tu PostgreSQL | 90 días (`ERROR_HISTORY_RETENTION_DAYS`) | Que **tú** veas qué está fallando y desde cuándo, sin necesidad de conocer el sistema por dentro | Tú, desde el panel («Soporte» → histórico de errores, sección 15) |
+| **`audit_log`** | Tabla en tu PostgreSQL, solo-añadir y encadenada por hash | Años, según tu perfil de cumplimiento | Valor probatorio ante una inspección: quién hizo qué y cuándo | Tú, un auditor, la Inspección |
+
+**El perfil `observability` enciende el contenedor de Loki; `LOKI_URL` decide si
+la aplicación le envía algo.** Son dos decisiones distintas, a propósito, con
+el mismo criterio que `OTEL_EXPORTER_OTLP_ENDPOINT` (§10.2): `LOKI_URL` viene
+**vacía de serie** en `.env.example`, así que una instalación recién puesta en
+marcha tiene Loki corriendo pero sin nadie escribiendo en él, hasta que pongas
+`LOKI_URL=http://loki:3100` en el `.env` y reinicies `app`, `horizon` y el
+planificador. `LOG_STACK` no interviene en esta decisión: nombrar `loki` ahí
+sin `LOKI_URL` no activa nada.
+
+**Por qué `error_events` no es redundante con Loki.** Loki es parte del perfil
+`observability`, que es opcional: puedes apagarlo, puede que nadie lo mire, y
+lo pierdes si reinstalas sin conservar su volumen. `error_events` vive en la
+misma base de datos que respaldas a diario y viaja en el paquete de
+diagnóstico, así que sigue ahí aunque Loki no exista.
+
+**Los registros de Nginx, PostgreSQL y Redis no viajan a Loki.** Solo lo hace
+el registro técnico de la aplicación (Laravel, Horizon, el planificador).
+Si necesitas los de Nginx, están en `docker compose logs nginx`; los de
+PostgreSQL y Redis, con el mismo patrón.
+
+### 10.2 Qué añaden Tempo y blackbox-exporter
+
+**Tempo** guarda las trazas: el recorrido completo de una petición, desde el
+`fetch` de la tablet hasta la consulta SQL que escribió el fichaje, con los
+mismos 90 días de retención que el registro técnico (cambiar el plazo exige
+tocar `infra/observability/loki/loki.yaml` **y** `infra/observability/tempo/tempo.yaml`
+a la vez: ver `configuracion.md` §6.20). No se activa por sí solo: hace falta
+además que `OTEL_EXPORTER_OTLP_ENDPOINT` apunte a `http://tempo:4318` en tu
+`.env` (vacío de serie, incluso con el perfil encendido).
+
+**blackbox-exporter** hace una petición HTTP real a `/api/v1/health` y
+`/api/v1/ready` cada 30 segundos, desde fuera del proceso: es la diferencia
+entre «el proceso vive» (lo que ya comprueba Docker) y «el borde sirve
+tráfico de verdad». Es el mismo exportador que usa la comprobación de
+caducidad del certificado TLS.
+
+### 10.3 Seguir un fichaje concreto: de `scan_id` a la traza completa
+
+Cuando alguien dice «yo fiché a las 07:02 y el sistema no lo tiene», el
+camino para comprobarlo es:
+
+1. En Grafana, entra en **Explore** con la fuente de datos **Loki** y filtra
+   por `scan_id` (va en cada línea del registro técnico que tocó ese
+   fichaje).
+2. Cada línea de log que tenga traza asociada muestra un enlace **«Tempo»**
+   junto al campo `trace_id`: ábrelo y verás la petición completa —cada paso,
+   cada consulta a la base de datos— con sus tiempos.
+3. Si la línea no tiene `trace_id` (por ejemplo, porque las trazas estaban
+   apagadas ese día), el propio registro técnico sigue teniendo el detalle:
+   la traza es un atajo, no la única fuente.
+
+Esto solo funciona con el perfil `observability` encendido y con
+`OTEL_EXPORTER_OTLP_ENDPOINT` configurado; sin trazas, el paso 1 (Loki) sigue
+disponible igual.
 
 ---
 

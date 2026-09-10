@@ -51,6 +51,22 @@ use Throwable;
  * de las siete copias sin consolidar. Aqui no depende de nadie: solo de la
  * **API** de OpenTelemetry, que es una abstraccion —no el SDK— y que las capas
  * `Application` ya tienen concedida.
+ *
+ * ## Y tambien la usa el ARMAZON, fuera de los modulos
+ *
+ * La instrumentacion transversal de la tarea 3.1 —el span de servidor de
+ * `App\Http\Middleware\PropagateTraceContext`, el span por consulta de
+ * `App\Support\Observability\Tracing\DatabaseSpans` y el del planificador—
+ * necesita exactamente este andamiaje, y durante un tiempo tuvo su propia
+ * copia (`SafeSpan`) linea por linea. Dos copias del mismo `try/catch` son dos
+ * sitios donde arreglar el mismo fallo, y la segunda solo existia porque
+ * `App\*` no podia depender de un modulo.
+ *
+ * Se resolvio abriendo UNA arista nombrada en Deptrac —`AppFramework` ->
+ * `SharedTracingSupport`, la capa que es exactamente este directorio— en lugar
+ * de duplicar. La arista es estrecha a proposito: alcanza este andamiaje y
+ * {@see TraceparentHeader}, no `Shared\Application` entera ni ningun otro
+ * modulo.
  */
 final class SpanScope
 {
@@ -73,14 +89,19 @@ final class SpanScope
      * @param  SpanKind::KIND_*  $kind
      * @param  array<string, scalar|null>  $attributes  Solo identificadores publicos: un
      *                                                  atributo de traza acaba en el mismo sitio que un log (regla dura 21).
+     * @param  int|null  $startEpochNanos  Marca de inicio RETROACTIVA. Existe por lo
+     *                                     que solo se puede medir cuando ya ha ocurrido: `QueryExecuted` llega
+     *                                     con la consulta terminada y su duracion, y sin poder fechar el
+     *                                     principio el span duraria cero. `null` —el caso normal— es «ahora».
      */
     public static function start(
         string $tracer,
         string $name,
         int $kind = SpanKind::KIND_SERVER,
         array $attributes = [],
+        ?int $startEpochNanos = null,
     ): self {
-        return new self(self::open($tracer, $name, $kind, $attributes), null);
+        return new self(self::open($tracer, $name, $kind, $attributes, $startEpochNanos), null);
     }
 
     /**
@@ -111,7 +132,7 @@ final class SpanScope
         int $kind = SpanKind::KIND_SERVER,
         array $attributes = [],
     ): self {
-        $span = self::open($tracer, $name, $kind, $attributes);
+        $span = self::open($tracer, $name, $kind, $attributes, null);
 
         if (! $span instanceof SpanInterface) {
             return new self(null, null);
@@ -196,14 +217,23 @@ final class SpanScope
      * @param  SpanKind::KIND_*  $kind
      * @param  array<string, scalar|null>  $attributes
      */
-    private static function open(string $tracer, string $name, int $kind, array $attributes): ?SpanInterface
-    {
+    private static function open(
+        string $tracer,
+        string $name,
+        int $kind,
+        array $attributes,
+        ?int $startEpochNanos,
+    ): ?SpanInterface {
         try {
             $builder = Globals::tracerProvider()
                 ->getTracer($tracer)
                 ->spanBuilder($name)
                 ->setSpanKind($kind)
                 ->setParent(Context::getCurrent());
+
+            if ($startEpochNanos !== null) {
+                $builder->setStartTimestamp($startEpochNanos);
+            }
 
             foreach ($attributes as $key => $value) {
                 if ($key !== '') {
@@ -218,12 +248,11 @@ final class SpanScope
     }
 
     /**
-     * Un `trace_id` a ceros es el que devuelve un span inerte: escribirlo seria
-     * peor que no escribir nada, porque **parece** un identificador y nadie lo
-     * buscaria dos veces.
+     * Una sola normalizacion del identificador «significativo» en todo el
+     * producto. Ver {@see TraceparentHeader::significant()}.
      */
     private static function significant(string $traceId): ?string
     {
-        return trim($traceId, '0') === '' ? null : $traceId;
+        return TraceparentHeader::significant($traceId);
     }
 }

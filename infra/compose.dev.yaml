@@ -1,5 +1,5 @@
 #==============================================================================
-# KronoQR — entorno de desarrollo. Los 15 servicios del doc 02 §3.4.
+# KronoQR — entorno de desarrollo. Los 17 servicios del doc 02 §3.4.
 #
 # Uso previsto:  make up      (desde la raiz del repositorio)
 #
@@ -118,6 +118,25 @@ services:
     <<: *php-image
     container_name: kronoqr-app
     command: ["fpm"]
+    # Repite BACKUP_SCRIPT_PATH y BACKUP_ENCRYPTION_KEY de x-php-image a
+    # proposito: un `environment:` propio en el servicio NO SE FUSIONA con el
+    # de la plantilla fusionada por `<<:` -lo SUSTITUYE entero-, asi que
+    # anadir una variable nueva sin repetir las de arriba las habria dejado
+    # sin valor. Mismo patron en horizon y scheduler, mas abajo.
+    environment:
+      BACKUP_SCRIPT_PATH: /var/www/repo/infra/scripts
+      BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY:-kronoqr_local_dev_only_backup_key}
+      # Tarea 3.1 (§8.1): destino de las trazas OTLP. Solo en desarrollo y
+      # solo aqui -en produccion la decide el cliente en su .env, vacia de
+      # serie (regla dura 15: sin destino, el SDK no arranca y el fichaje no
+      # depende de que Tempo responda)-.
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
+      # Mismo criterio que la de arriba: LOKI_URL viene vacia de serie en
+      # .env.example (produccion la decide el cliente, y solo si enciende el
+      # perfil `observability`), pero en desarrollo el perfil SIEMPRE esta
+      # arriba -no hay `profiles:` en este fichero- y conviene poder ver el
+      # log tecnico llegar a Loki sin tocar el `.env` local.
+      LOKI_URL: http://loki:3100
     depends_on:
       postgres:
         condition: service_healthy
@@ -265,6 +284,13 @@ services:
     <<: *php-image
     container_name: kronoqr-horizon
     command: ["horizon"]
+    # Ver el comentario del servicio `app`: un `environment:` propio SUSTITUYE
+    # el de x-php-image, no lo amplia.
+    environment:
+      BACKUP_SCRIPT_PATH: /var/www/repo/infra/scripts
+      BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY:-kronoqr_local_dev_only_backup_key}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
+      LOKI_URL: http://loki:3100
     depends_on:
       redis:
         condition: service_healthy
@@ -289,6 +315,13 @@ services:
     <<: *php-image
     container_name: kronoqr-scheduler
     command: ["scheduler"]
+    # Ver el comentario del servicio `app`: un `environment:` propio SUSTITUYE
+    # el de x-php-image, no lo amplia.
+    environment:
+      BACKUP_SCRIPT_PATH: /var/www/repo/infra/scripts
+      BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY:-kronoqr_local_dev_only_backup_key}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
+      LOKI_URL: http://loki:3100
     depends_on:
       postgres:
         condition: service_healthy
@@ -447,7 +480,65 @@ services:
       retries: 5
       start_period: 30s
 
-  #--- 15 · Metricas de la copia de seguridad y del disco ---------------------
+  #--- 15 · Trazas --------------------------------------------------------
+  # Grafana Tempo, monolitico y sobre sistema de ficheros (tarea 3.1, §8.1): el
+  # destino de las trazas OTLP que exporta la aplicacion. Sin este servicio,
+  # OTEL_EXPORTER_OTLP_ENDPOINT no tendria a donde apuntar y la traza completa
+  # del fetch del quiosco a la consulta SQL no se podria seguir en Grafana.
+  tempo:
+    image: grafana/tempo:2.7.1
+    container_name: kronoqr-tempo
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    volumes:
+      - ./observability/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo-data:/var/tempo
+    ports:
+      # Solo para inspeccionar trazas a mano en desarrollo (API de consulta de
+      # Tempo). Nunca 0.0.0.0, mismo criterio que Prometheus y Grafana.
+      - "127.0.0.1:3200:3200"
+    networks:
+      # 'app': la aplicacion, Horizon y el Scheduler exportan aqui por
+      # OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318. 'observability': para
+      # que Grafana lo use como fuente de datos.
+      - app
+      - observability
+    restart: unless-stopped
+    healthcheck:
+      # start_period a 30s y no a los 15s del resto: medido en esta maquina,
+      # el ingester de Tempo en modo monolitico tarda unos 30s en marcarse
+      # listo tras arrancar (espera fija tras unirse al ring), y con un
+      # start_period mas corto el contenedor pasaria por "unhealthy" en cada
+      # arranque sin que haya nada roto.
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://127.0.0.1:3200/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  #--- 16 · Sonda de uptime del borde ------------------------------------
+  # blackbox-exporter (tarea 3.1, §8.1): Prometheus scrapea /metrics de la
+  # propia aplicacion, pero eso solo dice que el PROCESO responde. La sonda de
+  # uptime hace una peticion HTTP real a /api/v1/health y /api/v1/ready, que es
+  # lo que distingue "el proceso vive" de "el borde sirve trafico". El mismo
+  # exportador sirve la comprobacion de caducidad del certificado TLS que anade
+  # la tarea 3.2.
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.25.0
+    container_name: kronoqr-blackbox-exporter
+    command:
+      - --config.file=/etc/blackbox_exporter/blackbox.yml
+      - --web.listen-address=:9115
+    volumes:
+      - ./observability/blackbox/blackbox.yml:/etc/blackbox_exporter/blackbox.yml:ro
+    networks:
+      # 'app': tiene que poder resolver y alcanzar `nginx:8080`. 'observability':
+      # para que Prometheus lo scrapee via /probe.
+      - app
+      - observability
+    restart: unless-stopped
+    # Sin puertos publicados: no es un servicio que nadie consulte a mano.
+
+  #--- 17 · Metricas de la copia de seguridad y del disco ---------------------
   #
   # node-exporter esta aqui por UNA razon concreta: publicar el resultado de la
   # copia diaria (tarea 1.18). Los scripts escriben ficheros .prom en
@@ -499,6 +590,7 @@ volumes:
   prometheus-data:
   grafana-data:
   loki-data:
+  tempo-data:
   nginx-certs:
   # Copias cifradas, sus metricas y los informes de restauracion. En produccion
   # esto es un disco del cliente montado en la misma ruta (regla dura 16: la

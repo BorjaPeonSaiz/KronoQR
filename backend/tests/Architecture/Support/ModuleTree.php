@@ -175,10 +175,22 @@ final class ModuleTree
     }
 
     /**
-     * Ruta relativa a app/Modules/, para que el mensaje de fallo sea legible.
+     * Ruta relativa a app/Modules/ —o a la raiz que se le indique—, para que el
+     * mensaje de fallo sea legible **y para que una excepcion por fichero pueda
+     * compararse por ruta completa**.
+     *
+     * El segundo parametro existe por `OutboundChannelsTest`: alli tambien se
+     * recorre `app/Support`, `app/Http`… que no estan bajo `app/Modules`, y las
+     * excepciones se comparaban por `basename()`. Un `basename` no identifica un
+     * fichero: cualquier `HttpLokiTransport.php` nuevo en otro directorio del
+     * armazon heredaba la excepcion de un canal saliente sin que nadie lo
+     * decidiera.
      */
-    public static function relative(string $file): string
+    public static function relative(string $file, ?string $root = null): string
     {
-        return str_replace('\\', '/', str_replace(self::root().\DIRECTORY_SEPARATOR, '', $file));
+        $root = rtrim($root ?? self::root(), '/\\');
+        $file = str_replace('\\', '/', $file);
+
+        return ltrim(str_replace(str_replace('\\', '/', $root), '', $file), '/');
     }
 }

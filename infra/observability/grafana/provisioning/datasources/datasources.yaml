@@ -23,9 +23,34 @@ datasources:
     jsonData:
       maxLines: 1000
       # Enlaza el log con su traza: el trace_id viaja en el contexto de cada
-      # linea JSON de Monolog (§8.1).
-      # El enlace a la traza se completa en la tarea 3.1, cuando exista el
-      # exportador OTLP y una fuente de datos de trazas a la que apuntar.
+      # linea JSON de Monolog (§8.1). Con Tempo ya provisionado (tarea 3.1),
+      # el enlace queda completo: desde una linea de log en Loki se puede
+      # saltar directamente a la traza en Tempo que la produjo, que es lo que
+      # permite responder a «el empleado dice que fichó a las 07:02» siguiendo
+      # el scan_id por Loki y el trace_id por Tempo.
       derivedFields:
         - name: trace_id
           matcherRegex: '"trace_id":"([a-f0-9-]+)"'
+          datasourceUid: kronoqr-tempo
+          url: '$${__value.raw}'
+
+  - name: Tempo
+    type: tempo
+    uid: kronoqr-tempo
+    access: proxy
+    url: http://tempo:3200
+    jsonData:
+      # De una traza hacia atras, a los logs que comparten su trace_id: el
+      # camino inverso al derivedField de Loki de arriba.
+      tracesToLogsV2:
+        datasourceUid: kronoqr-loki
+        spanStartTimeShift: -1m
+        spanEndTimeShift: 1m
+        filterByTraceID: true
+        customQuery: false
+      # Compatibilidad con paneles que todavia esperan el formato anterior.
+      tracesToLogs:
+        datasourceUid: kronoqr-loki
+        spanStartTimeShift: -1m
+        spanEndTimeShift: 1m
+        filterByTraceID: true

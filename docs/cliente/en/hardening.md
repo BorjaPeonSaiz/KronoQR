@@ -586,9 +586,11 @@ disk is filling up.
   authorised, requests made from the host fall inside the range and `/metrics`
   becomes reachable without anything warning you.
 - **If you switch it off** — it is a supported configuration, and it frees up
-  about 700 MiB on a server tight on memory — you lose the backup and disk
-  alerts: checking the backup becomes a **weekly** manual task of yours. What
-  exactly is lost is in [`operation.md`](operation.md) §10.
+  about 850 MiB on a server tight on memory (seven services: Prometheus,
+  node-exporter, Alertmanager, Grafana, Loki, Tempo and blackbox-exporter) —
+  you lose the backup and disk alerts: checking the backup becomes a
+  **weekly** manual task of yours. What exactly is lost is in
+  [`operation.md`](operation.md) §10.
 
 > **Closes:** exposure of the system's internal state, and a loss of backups
 > that nobody detects. · **Owner:** the vendor (the isolation), you (the

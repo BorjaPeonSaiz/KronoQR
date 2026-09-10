@@ -55,13 +55,13 @@ final readonly class DependencyProbe
         try {
             $this->connections->connection()->select('select 1');
         } catch (Throwable $exception) {
-            return new DependencyFailure('database', $exception->getMessage());
+            return new DependencyFailure('database', $exception::class);
         }
 
         try {
             $this->redis->connection()->command('PING', []);
         } catch (Throwable $exception) {
-            return new DependencyFailure('redis', $exception->getMessage());
+            return new DependencyFailure('redis', $exception::class);
         }
 
         return null;
