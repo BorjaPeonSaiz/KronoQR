@@ -1,0 +1,121 @@
+# KronoQR — pruebas unitarias de infra/observability/prometheus/rules/host.yml
+# (tarea 3.2, decision 2).
+rule_files:
+  - ../rules/host.yml
+
+evaluation_interval: 1m
+
+tests:
+  #-----------------------------------------------------------------------------
+  # EspacioEnDiscoBajo: 10 % libre, por debajo del 20 % del catalogo.
+  #-----------------------------------------------------------------------------
+  - name: espacio_bajo_dispara
+    interval: 1m
+    input_series:
+      - series: 'node_filesystem_size_bytes{mountpoint="/", fstype="ext4"}'
+        values: "1000000000x20"
+      - series: 'node_filesystem_avail_bytes{mountpoint="/", fstype="ext4"}'
+        values: "100000000x20"
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: EspacioEnDiscoBajo
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: EspacioEnDiscoBajo
+        exp_alerts:
+          - exp_labels:
+              severity: high
+              destinatario: it-cliente
+              component: host
+              mountpoint: /
+              fstype: ext4
+            exp_annotations:
+              summary: "Queda menos del 20 % de espacio libre en el disco del servidor"
+              description: >-
+                El disco del sistema (no el volumen de copias, que tiene su
+                propia alerta) esta por debajo del 20 % libre. Si se llena,
+                PostgreSQL deja de poder escribir: el fichaje, la auditoria y
+                la proyeccion se ven todos afectados a la vez. Libera
+                espacio o amplia el disco antes de que llegue a cero.
+              runbook_url: docs/runbooks/espacio-en-disco.md
+
+  #-----------------------------------------------------------------------------
+  # Valor limite justo por debajo: exactamente 20 % libre, para siempre. El
+  # umbral es `< 0.20` estricto: nunca dispara.
+  #-----------------------------------------------------------------------------
+  - name: espacio_bajo_boundary
+    interval: 1m
+    input_series:
+      - series: 'node_filesystem_size_bytes{mountpoint="/", fstype="ext4"}'
+        values: "1000000000x40"
+      - series: 'node_filesystem_avail_bytes{mountpoint="/", fstype="ext4"}'
+        values: "200000000x40"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: EspacioEnDiscoBajo
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # Excluido por fstype (tmpfs): aunque tenga 0 % libre, no cuenta como disco
+  # real y no dispara.
+  #-----------------------------------------------------------------------------
+  - name: espacio_bajo_tmpfs_excluido
+    interval: 1m
+    input_series:
+      - series: 'node_filesystem_size_bytes{mountpoint="/", fstype="tmpfs"}'
+        values: "1000000000x20"
+      - series: 'node_filesystem_avail_bytes{mountpoint="/", fstype="tmpfs"}'
+        values: "0x20"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: EspacioEnDiscoBajo
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # MetricasDelAnfitrionAusentes: node-exporter no publica la serie del
+  # filesystem raiz (colector apagado, montaje /host perdido).
+  #-----------------------------------------------------------------------------
+  - name: metricas_ausentes_dispara
+    interval: 1m
+    input_series:
+      # Una serie de OTRO punto de montaje para que el fichero de reglas
+      # cargue, pero ninguna con mountpoint="/": absent() debe ver un hueco.
+      - series: 'node_filesystem_size_bytes{mountpoint="/data", fstype="ext4"}'
+        values: "1000000000x40"
+    alert_rule_test:
+      - eval_time: 29m
+        alertname: MetricasDelAnfitrionAusentes
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: MetricasDelAnfitrionAusentes
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              destinatario: it-cliente
+              component: host
+              # `absent()` repite en el resultado las etiquetas de IGUALDAD
+              # del selector (`mountpoint="/"`), no las de comparacion regex.
+              mountpoint: /
+            exp_annotations:
+              summary: "No llega ninguna metrica de espacio en disco del servidor"
+              description: >-
+                Prometheus no ve node_filesystem_size_bytes del punto de
+                montaje raiz. O node-exporter no tiene el colector
+                `filesystem` habilitado, o el montaje de
+                `--path.rootfs=/host` se ha perdido: en cualquiera de los dos
+                casos, la alerta de espacio en disco esta ciega y no
+                distingue "hay sitio de sobra" de "nadie lo esta midiendo".
+              runbook_url: docs/runbooks/espacio-en-disco.md
+
+  #-----------------------------------------------------------------------------
+  # Valor limite: la serie SI llega. Nunca dispara.
+  #-----------------------------------------------------------------------------
+  - name: metricas_ausentes_boundary
+    interval: 1m
+    input_series:
+      - series: 'node_filesystem_size_bytes{mountpoint="/", fstype="ext4"}'
+        values: "1000000000x60"
+    alert_rule_test:
+      - eval_time: 1h
+        alertname: MetricasDelAnfitrionAusentes
+        exp_alerts: []

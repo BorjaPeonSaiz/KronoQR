@@ -43,7 +43,7 @@ use DateTimeImmutable;
  *
  * **La mecanica de escritura no vive aqui.** El guard del colector, la escritura
  * atomica, el fallo ruidoso y el escapado de las etiquetas son de
- * {@see TextfileExposition}, que es la misma para los siete adaptadores del
+ * {@see TextfileExposition}, que es la misma para los nueve adaptadores del
  * producto. Aqui solo se componen las lineas.
  */
 final readonly class TextfilePresenceMetrics implements PresenceMetrics

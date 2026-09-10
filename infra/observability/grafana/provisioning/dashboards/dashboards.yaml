@@ -1,9 +1,25 @@
 # KronoQR — carga de cuadros de mando desde el repositorio.
 #
 # Los cinco cuadros del doc 02 §8.3 (operacion de quioscos, salud de la API,
-# integridad del dato, negocio, impacto y adopcion) los escribe la tarea 3.2.
-# Este proveedor ya existe para que se carguen solos al aparecer, sin que nadie
+# integridad del dato, negocio, impacto y adopcion) los escribe la tarea 3.2,
+# como ficheros JSON en infra/observability/grafana/dashboards/KronoQR/. Este
+# proveedor ya existia para que se carguen solos al aparecer, sin que nadie
 # los importe a mano.
+#
+# Los ficheros van EN UNA SUBCARPETA `KronoQR/`, no sueltos en la raiz de
+# `path` (tarea 3.2, verificacion en dev, 10-09-2026). Con
+# `foldersFromFilesStructure: true` y ficheros en la raiz de `path`, Grafana
+# 11.5 los deja en la carpeta "General" e IGNORA el campo `folder`: se
+# comprobo con GET /api/dashboards/uid/<uid> -> meta.folderTitle == "General".
+# Con los ficheros en `KronoQR/`, el nombre de la subcarpeta es el nombre de
+# carpeta que usa Grafana, y coincide con el que exige la decision 1 de la
+# tarea 3.2. El campo `folder: KronoQR` de aqui abajo queda como red de
+# seguridad para el caso (no usado hoy) de que algun fichero acabe suelto en
+# la raiz de `path`.
+#
+# Si se anaden cuadros de otro grupo en el futuro, van en su propia subcarpeta
+# de `path` (p. ej. `path/OtroGrupo/`): asi se obtiene una carpeta de Grafana
+# por subcarpeta del repositorio, sin tocar este proveedor.
 
 apiVersion: 1
 

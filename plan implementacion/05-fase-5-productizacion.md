@@ -80,7 +80,7 @@ El Anexo A del [doc 01](../docs/01-especificaciones-proyecto.md) repite el mismo
 | Al llegar aquí **ya existe** | Al llegar aquí **todavía no existe** (llega en la Fase 3) |
 |---|---|
 | Dominio y fichaje completos (Fase 1) | OpenTelemetry, Prometheus, Grafana y Loki extremo a extremo (3.1) |
-| `audit_log` encadenado y verificable (2.2) | Los 4 cuadros de mando y el catálogo de alertas con runbooks (3.2) |
+| `audit_log` encadenado y verificable (2.2) | Los 5 cuadros de mando y el catálogo de alertas con runbooks (3.2) |
 | Correcciones trazadas (2.3), informes y exportación legal (2.8, 2.9) | Panel de salud de quioscos y pantalla de diagnóstico (3.3) |
 | Retención y purga (2.10), copias verificadas (2.11) | Vista de cumplimiento sobre RN-10/11/12 (3.4) |
 | Autenticación completa con 2FA y RBAC (2.1) | Validación de desfase de reloj y fichaje de pausa (3.5) |

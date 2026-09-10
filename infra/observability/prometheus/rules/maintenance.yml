@@ -1,0 +1,72 @@
+# KronoQR — ventana de mantenimiento automatica del actualizador (doc 02 §8.4,
+# tarea 3.2, decision 6c). Fuera del catalogo del doc 01 §9.3 y justificada:
+# no es una alerta que avise de un fallo, es la señal que INHIBE otras
+# alertas mientras `update.sh` tiene el mantenimiento puesto.
+#
+# LA METRICA. `infra/scripts/update.sh` escribe
+# `BACKUP_PATH/metrics/kronoqr_maintenance.prom` —el mismo mecanismo textfile
+# que backup.sh, projection.yml e incidents.yml— con
+# `kronoqr_maintenance_active` (1 mientras el actualizador tiene la aplicacion
+# en `php artisan down`, 0 el resto del tiempo) y
+# `kronoqr_maintenance_since_timestamp_seconds` (cuando empezo el
+# mantenimiento en curso, o el ultimo). Se escribe a 1 en `phase_maintenance`
+# y a 0 en `lift_maintenance`, en el final feliz, en la vuelta atras y en los
+# `trap` de interrupcion: en cualquier desenlace de `update.sh`, el fichero
+# queda coherente con lo que de verdad esta pasando con el mantenimiento.
+#
+# ESTA ALERTA NO NOTIFICA A NADIE A PROPOSITO (`severity: info`,
+# `alertmanager.yml.template`: la ruta de `severity="info"` va al receptor
+# `silencio`). Su unico trabajo es EXISTIR mientras la condicion se cumple,
+# para que la regla de inhibicion de Alertmanager
+# (`alertname="VentanaDeMantenimientoActiva"` calla `component=~"kiosk|api|tls|
+# host"`) tenga algo que mirar: un servidor que reinicia sus servicios durante
+# una actualizacion no debe despertar a nadie por el quiosco, la API, el
+# certificado TLS o el disco — son sintomas ESPERADOS de una actualizacion en
+# marcha, no de una averia. Auditoria, copia, integridad, autenticacion e
+# incidencias NUNCA se inhiben por esto (`alertmanager.yml.template` las deja
+# fuera de la expresion regular a proposito): son justo las que hay que seguir
+# viendo durante un mantenimiento.
+#
+# EL TOPE, DE 4 H A 2 H (decision 17f de la revision de seguridad). Sin
+# tope, un `update.sh` que muriera sin llegar a `lift_maintenance` ni a los
+# `trap` de vuelta atras —una caida del propio proceso, un `kill -9` desde
+# fuera— dejaria `kronoqr_maintenance_active` en 1 para siempre, y con el la
+# inhibicion de cuatro componentes activa de forma permanente. Pero el canal
+# —un fichero de texto en BACKUP_PATH/metrics, el mismo que ya sirve el
+# resultado de la copia— no distingue entre "el actualizador lo escribio" y
+# "cualquiera con permiso de escritura en ese directorio (uid 1000, el mismo
+# que ya podia falsear `kronoqr_backup_last_result`) lo refresco a mano para
+# silenciar el quiosco, la API, el TLS o el disco durante mas tiempo del que
+# un mantenimiento real necesita". El riesgo no es nuevo -el canal ya existia
+# y ya era falsificable por ese uid- pero el TOPE si limita el daño: una
+# actualizacion real se mide en minutos (el paso 2 del actualizador, doc 02
+# §10.4), asi que 2 h ya son un margen generoso, y la mitad de ventana es la
+# mitad de tiempo en que alguien con ese acceso podria mantener la
+# inhibicion viva. Riesgo residual aceptado en doc 07 §6 (quien puede escribir
+# en BACKUP_PATH ya podia falsear otras metricas de la instalacion).
+#
+# `for: 0s`: esta regla no necesita confirmar persistencia. Es un ESTADO, no
+# un sintoma que pueda ser ruido de un solo scrape — mientras el mantenimiento
+# este puesto de verdad, la metrica lo dice sin ambigüedad, y cualquier
+# retraso en reflejarlo retrasaria tambien la inhibicion que existe para
+# proteger de falsas alarmas durante la propia actualizacion.
+groups:
+  - name: kronoqr-maintenance
+    interval: 30s
+    rules:
+      - alert: VentanaDeMantenimientoActiva
+        expr: kronoqr_maintenance_active == 1 and (time() - kronoqr_maintenance_since_timestamp_seconds) < 2 * 3600
+        for: 0s
+        labels:
+          severity: info
+          destinatario: it-cliente
+          component: maintenance
+        annotations:
+          summary: "El actualizador tiene el mantenimiento puesto"
+          description: >-
+            update.sh esta actualizando la instalacion (o lo estaba hace
+            menos de 2 h). Mientras dura, las alertas de quiosco, API,
+            certificado TLS y disco estan inhibidas: son sintomas esperados
+            de una actualizacion en marcha. Esta alerta no notifica a nadie;
+            existe solo para sostener esa inhibicion.
+          runbook_url: docs/runbooks/actualizacion-cliente.md

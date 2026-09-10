@@ -1,0 +1,124 @@
+# KronoQR — pruebas unitarias de infra/observability/prometheus/rules/
+# alerting.yml (tarea 3.2, decision 17c).
+rule_files:
+  - ../rules/alerting.yml
+
+evaluation_interval: 1m
+
+tests:
+  #-----------------------------------------------------------------------------
+  # EnrutadoDeAlertasCaido: Alertmanager cae (up pasa a 0).
+  #-----------------------------------------------------------------------------
+  - name: enrutado_caido_dispara
+    interval: 1m
+    input_series:
+      - series: 'up{job="alertmanager"}'
+        values: "0x10"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: EnrutadoDeAlertasCaido
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: EnrutadoDeAlertasCaido
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              destinatario: it-cliente
+              component: alerting
+              job: alertmanager
+            exp_annotations:
+              summary: "Alertmanager no responde"
+              description: >-
+                Prometheus no puede alcanzar a Alertmanager desde hace 5
+                minutos. El fichaje no esta afectado: es el reparto de
+                avisos lo que esta parado. Mientras dure, ninguna alerta de
+                esta instalacion -ni siquiera una rotura de la cadena de
+                auditoria- llega a nadie. Revisa el contenedor
+                `alertmanager` y su configuracion renderizada.
+              runbook_url: docs/runbooks/entrega-de-alertas.md
+
+  #-----------------------------------------------------------------------------
+  # La otra mitad: Alertmanager nunca llega a scrapearse (absent).
+  #-----------------------------------------------------------------------------
+  - name: enrutado_caido_por_absent
+    interval: 1m
+    input_series:
+      # Otra serie cualquiera, para que el grupo se evalue con datos.
+      - series: 'up{job="prometheus"}'
+        values: "1x10"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: EnrutadoDeAlertasCaido
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              destinatario: it-cliente
+              component: alerting
+              job: alertmanager
+            exp_annotations:
+              summary: "Alertmanager no responde"
+              description: >-
+                Prometheus no puede alcanzar a Alertmanager desde hace 5
+                minutos. El fichaje no esta afectado: es el reparto de
+                avisos lo que esta parado. Mientras dure, ninguna alerta de
+                esta instalacion -ni siquiera una rotura de la cadena de
+                auditoria- llega a nadie. Revisa el contenedor
+                `alertmanager` y su configuracion renderizada.
+              runbook_url: docs/runbooks/entrega-de-alertas.md
+
+  #-----------------------------------------------------------------------------
+  # Valor limite: Alertmanager responde con normalidad. Nunca dispara.
+  #-----------------------------------------------------------------------------
+  - name: enrutado_caido_boundary
+    interval: 1m
+    input_series:
+      - series: 'up{job="alertmanager"}'
+        values: "1x20"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: EnrutadoDeAlertasCaido
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # EntregaDeAlertasFallando: al menos una entrega fallida en 15 min.
+  #-----------------------------------------------------------------------------
+  - name: entrega_fallando_dispara
+    interval: 1m
+    input_series:
+      - series: 'alertmanager_notifications_failed_total{integration="email"}'
+        values: "0+1x10"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: EntregaDeAlertasFallando
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: EntregaDeAlertasFallando
+        exp_alerts:
+          - exp_labels:
+              severity: high
+              destinatario: it-cliente
+              component: alerting
+              integration: email
+            exp_annotations:
+              summary: "Alertmanager no ha podido entregar alguna notificacion en los ultimos 15 min"
+              description: >-
+                La integracion email de Alertmanager ha fallado al menos
+                una entrega. Revisa el SMTP configurado
+                (MAIL_HOST/MAIL_PORT/MAIL_USERNAME/MAIL_PASSWORD/MAIL_SCHEME)
+                o el webhook del destinatario afectado: la interfaz de
+                Alertmanager (127.0.0.1:9093) muestra el error exacto de la
+                ultima entrega.
+              runbook_url: docs/runbooks/entrega-de-alertas.md
+
+  #-----------------------------------------------------------------------------
+  # Valor limite: ninguna entrega fallida. Nunca dispara.
+  #-----------------------------------------------------------------------------
+  - name: entrega_fallando_boundary
+    interval: 1m
+    input_series:
+      - series: 'alertmanager_notifications_failed_total{integration="email"}'
+        values: "0x20"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: EntregaDeAlertasFallando
+        exp_alerts: []

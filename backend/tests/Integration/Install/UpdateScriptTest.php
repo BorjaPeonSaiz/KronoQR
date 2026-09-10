@@ -329,3 +329,69 @@ it('mantiene el catalogo de mensajes del actualizador completo en los dos idioma
 
     expect($resultado->getExitCode())->toBe(0, $resultado->getErrorOutput());
 })->group('RF-PD-10');
+
+it('escribe la ventana de mantenimiento para Prometheus de forma atomica', function (): void {
+    // Tarea 3.2, decision 6(c). `VentanaDeMantenimientoActiva`
+    // (infra/observability/prometheus/rules/maintenance.yml) lee este fichero
+    // por el colector textfile de node-exporter: sin el, una actualizacion en
+    // marcha se ve identica a un quiosco, una API o un certificado TLS de
+    // verdad caidos, y las cuatro alertas suenan a la vez por cada
+    // reinicio de servicios que hace el propio actualizador.
+    $directorio = sys_get_temp_dir().'/kronoqr-maintenance-'.bin2hex(random_bytes(6));
+    mkdir($directorio.'/metrics', 0o755, true);
+
+    $resultado = bashConElActualizador(sprintf(
+        'CFG_BACKUP_PATH=%s; write_maintenance_metric 1 1700000000; cat %s',
+        escapeshellarg($directorio),
+        escapeshellarg($directorio.'/metrics/kronoqr_maintenance.prom'),
+    ));
+
+    expect($resultado->getExitCode())->toBe(0, $resultado->getErrorOutput())
+        ->and($resultado->getOutput())->toContain('kronoqr_maintenance_active 1')
+        ->and($resultado->getOutput())->toContain('kronoqr_maintenance_since_timestamp_seconds 1700000000')
+        // TYPE gauge, no counter: el valor puede bajar de 1 a 0 (RN-15 no
+        // aplica aqui, pero la semantica de Prometheus si).
+        ->and($resultado->getOutput())->toContain('# TYPE kronoqr_maintenance_active gauge');
+
+    // Vuelve a poner el fichero a 0: es lo que hace `lift_maintenance`, el
+    // camino feliz y la vuelta atras. El fichero se SOBRESCRIBE entero (no se
+    // incrementa ni se anexa), como cualquier gauge de este directorio.
+    $segundoResultado = bashConElActualizador(sprintf(
+        'CFG_BACKUP_PATH=%s; write_maintenance_metric 0 1700000000; cat %s',
+        escapeshellarg($directorio),
+        escapeshellarg($directorio.'/metrics/kronoqr_maintenance.prom'),
+    ));
+
+    expect($segundoResultado->getExitCode())->toBe(0, $segundoResultado->getErrorOutput())
+        ->and($segundoResultado->getOutput())->toContain('kronoqr_maintenance_active 0')
+        ->and($segundoResultado->getOutput())->not->toContain('kronoqr_maintenance_active 1');
+
+    // Permisos legibles por CUALQUIER uid (0644): update.sh corre en el
+    // anfitrion, normalmente como root, y node-exporter siempre lee como el
+    // uid 1000 del contenedor `app`. Sin el bit de "otros", el fichero
+    // existiria y node-exporter no podria leerlo, que es peor que si no
+    // existiera: la alerta de disponibilidad de node-exporter no lo veria.
+    $permisos = fileperms($directorio.'/metrics/kronoqr_maintenance.prom') & 0o777;
+    expect(sprintf('%o', $permisos))->toBe('644');
+
+    unlink($directorio.'/metrics/kronoqr_maintenance.prom');
+    rmdir($directorio.'/metrics');
+    rmdir($directorio);
+})->group('RF-PD-10');
+
+it('no falla si el directorio de metricas no existe: no hay a quien avisar', function (): void {
+    // Perfil `observability` apagado, o una instalacion que todavia no ha
+    // hecho su primera copia (que es quien crea el arbol de BACKUP_PATH). En
+    // ninguno de los dos casos update.sh puede fallar por esto: escribir la
+    // ventana de mantenimiento es instrumentacion, nunca una precondicion.
+    $directorio = sys_get_temp_dir().'/kronoqr-maintenance-ausente-'.bin2hex(random_bytes(6));
+
+    $resultado = bashConElActualizador(sprintf(
+        'CFG_BACKUP_PATH=%s; write_maintenance_metric 1 1700000000; echo "sin-error"',
+        escapeshellarg($directorio),
+    ));
+
+    expect($resultado->getExitCode())->toBe(0, $resultado->getErrorOutput())
+        ->and($resultado->getOutput())->toContain('sin-error')
+        ->and(is_dir($directorio))->toBeFalse('write_maintenance_metric no debe crear el directorio: solo escribe si ya existe.');
+})->group('RF-PD-10');

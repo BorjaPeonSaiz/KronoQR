@@ -10,15 +10,16 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 /*
- * Los siete ficheros `.prom` del producto se escriben con la misma mecanica
+ * Los nueve ficheros `.prom` del producto se escriben con la misma mecanica
  * (doc 02 §8.2).
  *
  * **Por que existe esta prueba.** Es la hermana de
  * `tests/Integration/Shared/CsvFormatConsistencyTest.php` y nace del mismo
- * fallo. Siete adaptadores publican metricas por fichero —proyeccion,
- * incidencias, retencion, credenciales, presencia, auditoria y exportacion
- * legal—; su contenido es distinto a proposito, su forma de escribir no puede
- * serlo. Cuando cada uno declaraba su propio bloque de escritura, dejaron de
+ * fallo. Nueve adaptadores publican metricas por fichero —proyeccion, deteccion
+ * de incidencias, incidencias abiertas, retencion, credenciales, presencia,
+ * adopcion, auditoria y exportacion legal—; su contenido es distinto a
+ * proposito, su forma de escribir no puede serlo. Cuando cada uno declaraba su
+ * propio bloque de escritura, dejaron de
  * coincidir sin que fallara nada: `TextfileLegalExportMetrics` acabo siendo el
  * unico que no comprobaba el retorno de `rename()` —un `.prom` con la cifra de
  * ayer se lee en Grafana igual que una instalacion tranquila— y el unico cuyo
@@ -28,9 +29,9 @@ use Illuminate\Support\Str;
  *
  * Asi que esto no comprueba que un fichero de metricas sea correcto —de eso se
  * ocupan `PresenceMetricsTest`, `IncidentDetectionTest`,
- * `DailyTotalsReconciliationTest`, `SigningKeyRotationTest`, `AuditLogTest` y
- * `RetentionTest`—: comprueba que **los siete son la misma mecanica**, y que esa
- * mecanica hace lo que dice.
+ * `DailyTotalsReconciliationTest`, `AttendanceTextfileMetricsTest`,
+ * `SigningKeyRotationTest`, `AuditLogTest` y `RetentionTest`—: comprueba que
+ * **los nueve son la misma mecanica**, y que esa mecanica hace lo que dice.
  */
 
 beforeEach(function (): void {
@@ -126,6 +127,7 @@ it('ningun adaptador textfile escribe su propio fichero', function (): void {
     // volver a divergir en silencio: la escritura es de `TextfileExposition` o
     // no es.
     $adaptadores = [
+        'app/Modules/Attendance/Infrastructure/Metrics/TextfileIncidentDetectionMetrics.php',
         'app/Modules/Attendance/Infrastructure/Metrics/TextfileProjectionMetrics.php',
         'app/Modules/Compliance/Infrastructure/Metrics/TextfileAuditMetrics.php',
         'app/Modules/Compliance/Infrastructure/Metrics/TextfileIncidentMetrics.php',
@@ -226,8 +228,9 @@ it('la exportacion legal acumula su contador leyendo el fichero anterior', funct
 /*
  * --- `workdays_complete_ratio{site}` (RF-IN-08, tarea 3.1) --------------------
  *
- * El octavo adaptador, y el unico que puede decidir **no publicar una serie**.
- * Se prueba aqui, junto a la mecanica que comparte con los otros siete, porque
+ * `TextfileAdoptionMetrics`, el unico adaptador que puede decidir **no publicar
+ * una serie**.
+ * Se prueba aqui, junto a la mecanica que comparte con los otros ocho, porque
  * lo que hay que fijar es exactamente eso: que la omision es deliberada y que el
  * fichero que queda sigue siendo un `.prom` que `node-exporter` puede leer.
  */

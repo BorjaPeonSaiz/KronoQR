@@ -361,7 +361,12 @@ jobs:
   architecture:
     name: "② Arquitectura"
     runs-on: ubuntu-24.04
-    timeout-minutes: 6
+    # 6 min no bastaba desde la tarea 3.2: promtool y amtool se descargan de
+    # cero en un runner limpio (nunca cacheados, a diferencia de ShellCheck y
+    # shfmt en ①), y `docker run` con esas dos imagenes mas Deptrac y Pest Arch
+    # necesitan margen. Medido en local con las imagenes ya en cache: 11 s; en
+    # el runner, con la descarga incluida, el presupuesto de abajo lo refleja.
+    timeout-minutes: 10
     needs: [lint-backend, lint-frontend, contract]
 
     steps:
@@ -386,11 +391,23 @@ jobs:
       - name: Pest Arch (reglas duras 1 y 2)
         run: make test-arch
 
+      # Tarea 3.2: promtool check/test rules y amtool check-config sobre la
+      # plantilla RENDERIZADA de Alertmanager (ObservabilityToolingTest exige
+      # este paso literal). Las imagenes son las mismas que fija
+      # compose.prod.yaml: la herramienta que valida la regla aqui es la misma
+      # que despues la evalua en produccion.
+      - name: Reglas de Prometheus, pruebas de umbral y Alertmanager (0 errores)
+        run: make observability-check
+
       - name: Presupuesto de la etapa
         if: always()
         env:
           ETAPA: "② Arquitectura"
-          PRESUPUESTO: "30"
+          # 30 s no cubria las dos descargas de imagen que anadio la tarea 3.2
+          # (promtool y amtool no se cachean en este job, a diferencia de
+          # ShellCheck/shfmt en ①): 90 s deja margen realista sin dejar de
+          # avisar si el paso empieza a irse de verdad.
+          PRESUPUESTO: "90"
         run: |
           ahora=$(date +%s)
           comprobaciones=$((ahora - ${TOOLS_START:-$ahora}))

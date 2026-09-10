@@ -8,9 +8,7 @@
 #             kiosk_pin (respaldo del quiosco, RF-AT-11)
 #   outcome   success · failure · lockout
 #
-# La sirve `/metrics` de la aplicacion, que llega en la tarea 3.1 — igual que
-# `kronoqr-api` en prometheus.yml, este job aparece DOWN hasta entonces y estas
-# reglas no cambian cuando se active.
+# La sirve `/metrics` de la aplicacion, en pie desde la tarea 3.1.
 #
 # Destinatario: responsable de seguridad, no IT del cliente. Mismo criterio que
 # `RoturaDeCadenaDeAuditoria` en audit.yml: la respuesta a un intento de

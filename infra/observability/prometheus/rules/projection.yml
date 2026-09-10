@@ -29,7 +29,13 @@
 #
 # Las metricas las escribe `php artisan attendance:reconcile` (diaria, 03:50 UTC)
 # en BACKUP_PATH/metrics, y las sirve node-exporter por el colector textfile.
-# `/metrics` de la aplicacion llega en la tarea 3.1; estas reglas no cambian.
+#
+# UNA REGLA MAS, DE LA TAREA 3.2 (deuda de la Fase 2). `ReconciliacionConFallos`
+# vigila el codigo de salida de `attendance:reconcile`: hasta ahora, si la
+# reconciliacion no lograba corregir una divergencia que si detecto, ese
+# fallo solo quedaba en el log del planificador. `projection_reconciliation_
+# last_failures` es el gauge de la ULTIMA pasada, no un acumulado: "¿la
+# reconciliacion de anoche dejo algo sin resolver?".
 
 groups:
   - name: kronoqr-projection
@@ -98,4 +104,28 @@ groups:
             publicar la metrica, o el destino de metricas no esta montado.
             Mientras dure, no se sabe si la proyeccion cuadra: no se sabe que
             cuadra, que no es lo mismo que saber que no cuadra.
+          runbook_url: docs/runbooks/divergencia-proyeccion.md
+
+      #------------------------------------------------------------------------
+      # Tarea 3.2, deuda de la Fase 2. La reconciliacion SI se ejecuto, pero
+      # encontro divergencias que no logro corregir del todo (por ejemplo, un
+      # tramo bloqueado por otra transaccion). No sustituye a
+      # DivergenciaEnReconciliacionNocturna: esa avisa de que hubo divergencia;
+      # esta avisa de que, ademas, algo se quedo sin resolver.
+      #------------------------------------------------------------------------
+      - alert: ReconciliacionConFallos
+        expr: projection_reconciliation_last_failures > 0
+        for: 5m
+        labels:
+          severity: high
+          destinatario: it-cliente
+          component: projection
+        annotations:
+          summary: "La reconciliacion de anoche dejo {{ $value }} jornada(s) sin resolver"
+          description: >-
+            `attendance:reconcile` no pudo corregir al menos una de las
+            divergencias que detecto. daily_totals sigue siendo una
+            proyeccion de lectura: el fichaje no esta afectado, pero el panel
+            y los informes pueden estar mostrando un total desviado en esas
+            jornadas hasta la siguiente pasada.
           runbook_url: docs/runbooks/divergencia-proyeccion.md

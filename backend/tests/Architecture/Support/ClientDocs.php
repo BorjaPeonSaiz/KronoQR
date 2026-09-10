@@ -121,6 +121,70 @@ final class ClientDocs
     }
 
     /**
+     * Las variables que `.env.example` marca `[CLIENTE]`: las que rellena el IT
+     * del hotel antes de instalar.
+     *
+     * La marca va en la linea de comentario inmediatamente anterior a la
+     * declaracion —o en la misma linea—, que es la convencion que el propio
+     * fichero explica en su cabecera («UNA VARIABLE VACIA NO LLEVA COMENTARIO EN
+     * SU MISMA LINEA. El comentario va en la linea de encima»). La marca alcanza
+     * a UNA variable: el bloque se cierra en cuanto aparece una declaracion, o
+     * una `[CLIENTE]` puesta al principio de una familia se llevaria por delante
+     * a las diez siguientes, que no lo son.
+     *
+     * @return list<string>
+     */
+    public static function clientOwnedEnvironmentKeys(): array
+    {
+        $marked = [];
+        $pending = false;
+
+        foreach (explode("\n", str_replace("\r\n", "\n", self::contents('.env.example'))) as $line) {
+            if (preg_match('/^([A-Z][A-Z0-9_]+)=/', $line, $match) === 1) {
+                if ($pending || str_contains($line, '[CLIENTE]')) {
+                    $marked[] = $match[1];
+                }
+
+                $pending = false;
+
+                continue;
+            }
+
+            if (trim($line) === '') {
+                $pending = false;
+
+                continue;
+            }
+
+            $pending = $pending || str_contains($line, '[CLIENTE]');
+        }
+
+        $marked = array_values(array_unique($marked));
+        sort($marked);
+
+        return $marked;
+    }
+
+    /**
+     * Las variables que la tabla de referencia de una guia marca `[CLIENTE]`.
+     *
+     * @return list<string>
+     */
+    public static function clientOwnedGuideKeys(string $relative): array
+    {
+        preg_match_all(
+            '/^\| `([A-Z][A-Z0-9_]+)` \| `\[CLIENTE\]` \|/m',
+            self::contents($relative),
+            $matches,
+        );
+
+        $keys = array_values(array_unique($matches[1]));
+        sort($keys);
+
+        return $keys;
+    }
+
+    /**
      * De una lista de nombres, los que el documento NO cita entre comillas inversas.
      *
      * Entre comillas inversas y no sueltos a proposito: es como se escribe un

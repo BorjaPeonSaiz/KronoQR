@@ -1,26 +1,27 @@
 # KronoQR — configuracion base de Prometheus (doc 02 §8.1).
 #
-# El catalogo completo de alertas del doc 01 §9.3 es de la tarea 3.2. Lo que ya
-# vive en rules/ son las de la copia de seguridad (tarea 1.18), porque la copia
-# existe desde la Fase 1 y una copia que falla sin avisar es indistinguible de
-# no tener copias.
+# El catalogo completo de alertas del doc 01 §9.3 (tarea 3.2) vive en rules/:
+# once ficheros, uno por componente, con cabecera propia que cita la fila del
+# catalogo que implementa.
 
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
-  # La etiqueta de instalacion (una por cliente, ADR-016) la anade la tarea 3.2
-  # junto con el catalogo de alertas: sin reglas que la usen no aporta nada y
-  # obligaria a activar una feature flag de Prometheus desde el primer dia.
+  # SIN etiqueta de instalacion (decision 8 de la tarea 3.2). ADR-016 fija una
+  # instalacion por cliente y los destinatarios de cada alerta son los de ESE
+  # cliente (el fabricante no recibe ninguna, ADR-020): una etiqueta que nadie
+  # consume a cambio de una feature flag y una variable mas no aporta nada. Si
+  # un grupo con varios hoteles quisiera un Alertmanager comun, es una decision
+  # de esa instalacion y se documenta como limite en docs/cliente/operacion.md.
 
 rule_files:
   - /etc/prometheus/rules/*.yml
 
 # Alertmanager, ya conectado: desde la tarea 1.18 hay reglas que encaminar.
-#
-# En desarrollo no existe el servicio 'alertmanager' (solo esta en
-# compose.prod.yaml) y Prometheus lo dice en su log una vez cada intervalo. Es
-# ruido conocido y aceptado: la alternativa —dos ficheros de configuracion, uno
-# por entorno— acaba con reglas que solo se prueban en produccion.
+# Desde la tarea 3.2 tambien existe en desarrollo (compose.dev.yaml, mismo
+# entrypoint de renderizado que produccion): los dos entornos evaluan la
+# ruta y la inhibicion contra el MISMO Alertmanager, no solo contra las
+# reglas de Prometheus.
 alerting:
   alertmanagers:
     - static_configs:
@@ -45,29 +46,31 @@ scrape_configs:
         labels:
           service: api
 
-  # Resultado de la copia de seguridad, de su verificacion y del simulacro de
-  # restauracion (tarea 1.18), mas el espacio en disco del servidor.
+  # node-exporter: resultado de la copia de seguridad, de su verificacion y del
+  # simulacro de restauracion (tarea 1.18), la ventana de mantenimiento del
+  # actualizador (tarea 3.2, kronoqr_maintenance.prom), el espacio en disco del
+  # servidor (tarea 3.2, host.yml) y, desde la tarea 2.4, open_shifts_current y
+  # websocket_connections_active (§8.2) por el mismo colector textfile.
   #
-  # Las escriben los scripts de infra/scripts en BACKUP_PATH/metrics y las sirve
-  # el colector textfile de node-exporter. Se recogen cada minuto y no cada 15
-  # segundos: son ficheros que cambian una vez al dia, y sondearlos mas a
-  # menudo solo engorda la base de metricas.
+  # RENOMBRADO EN LA TAREA 3.2 (decision 7): el job se llamaba `kronoqr-backup`
+  # desde la Fase 1, cuando de verdad solo servia el resultado de la copia.
+  # Desde la tarea 2.4 ya servia mucho mas y el nombre mentia; ahora que este
+  # mismo job es tambien el origen de `node_filesystem_*` para la alerta de
+  # disco y de `kronoqr_maintenance_*` para la inhibicion, mentir un escalon
+  # mas habria sido peor. Ninguna regla de alerta casa por la etiqueta
+  # `service`, todas casan por nombre de metrica, asi que el cambio es solo de
+  # nombre visible en Prometheus y Grafana. `BackupAndAlertingTest` deja de
+  # afirmar el nombre antiguo.
   #
-  # EL NOMBRE DEL TRABAJO SE HA QUEDADO CORTO Y ES DEUDA CONOCIDA. Desde la
-  # tarea 2.4, el mismo colector textfile sirve tambien open_shifts_current y
-  # websocket_connections_active (§8.2), que no tienen nada que ver con las
-  # copias y aun asi heredan la etiqueta service="backup". Es cosmetico —ninguna
-  # regla de alerta usa esa etiqueta, todas casan por nombre de metrica— pero
-  # confunde en Grafana. Renombrarlo aqui exige tocar tests/Architecture/
-  # BackupAndAlertingTest.php, que afirma `job_name: kronoqr-backup` como
-  # garantia de la Fase 1: lo hace devops-observabilidad al montar el catalogo
-  # de alertas de la tarea 3.2, no una tarea de panel.
-  - job_name: kronoqr-backup
+  # La mayoria de estas metricas cambian una vez al dia o una vez por
+  # mantenimiento; se recogen cada minuto y no cada 15 segundos para no
+  # engordar la base de metricas con ficheros que apenas cambian.
+  - job_name: kronoqr-node
     scrape_interval: 60s
     static_configs:
       - targets: ["node-exporter:9100"]
         labels:
-          service: backup
+          service: node
 
   # Sonda de uptime (tarea 3.1, §8.1): comprueba desde FUERA del proceso que
   # el borde responde, en vez de confiar solo en que /metrics siga sirviendo
@@ -92,11 +95,25 @@ scrape_configs:
   # va como parametro `target` de /probe, y el nombre visible en Grafana
   # (`instance`) pasa a ser esa URL y no la IP del propio blackbox-exporter.
   #
-  # ES EL MISMO EXPORTADOR QUE USARA LA TAREA 3.2 para «certificado TLS
-  # proximo a expirar» (`probe_ssl_earliest_cert_expiry`, modulo
-  # `http_2xx_tls` de blackbox/blackbox.yml): al sondear ya por HTTPS, esa
-  # metrica sale gratis de esta misma peticion — no hace falta levantar un
-  # segundo contenedor ni anadir una sonda para esa alerta.
+  # ES EL MISMO EXPORTADOR QUE USA LA ALERTA «certificado TLS proximo a
+  # expirar» de la tarea 3.2 (`probe_ssl_earliest_cert_expiry`, `rules/
+  # tls.yml`, modulo `http_2xx_tls` de blackbox/blackbox.yml): al sondear ya
+  # por HTTPS, esa metrica sale gratis de esta misma peticion — no hizo falta
+  # levantar un segundo contenedor ni anadir una sonda para esa alerta.
+  # Alertmanager, vigilado (decision 17c de la tarea 3.2). Hasta ahora nadie
+  # scrapeaba a Alertmanager: sin este job, `up{job="alertmanager"}` no existe
+  # y `EnrutadoDeAlertasCaido` (rules/alerting.yml) no tiene nada que evaluar.
+  # Con la copia fallando Y la cadena de auditoria rota A LA VEZ que
+  # Alertmanager, nadie se habria enterado de ninguna de las tres. El propio
+  # binario expone /metrics en su puerto HTTP, incluida
+  # `alertmanager_notifications_failed_total`, que es la otra mitad de
+  # `alerting.yml` (`EntregaDeAlertasFallando`).
+  - job_name: alertmanager
+    static_configs:
+      - targets: ["alertmanager:9093"]
+        labels:
+          service: alerting
+
   - job_name: kronoqr-uptime
     metrics_path: /probe
     params:

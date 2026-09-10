@@ -1,0 +1,285 @@
+# KronoQR — pruebas unitarias de infra/observability/prometheus/rules/kiosk.yml
+# (tarea 3.2, decision 2). `promtool test rules` sobre series sinteticas; se
+# ejecuta desde `make observability-check` y desde la etapa ② de la CI.
+#
+# `exp_annotations` compara el conjunto COMPLETO de anotaciones, no un
+# subconjunto: cada asercion repite `summary`, `description` y `runbook_url`
+# tal cual los produce la regla.
+#
+# TRUCO DE LA PROGRESION ARITMETICA (se repite en todo este directorio para
+# cualquier regla del tipo `time() - metrica > umbral`). `kiosk_last_seen_
+# seconds` es un gauge que la aplicacion fija al instante del ultimo latido y
+# que NO cambia entre latidos: para dejarlo "justo por debajo del umbral para
+# siempre" (y no solo en un instante), la serie crece al MISMO ritmo que
+# `time()` (progresion `A+Bx N`, con paso B = el `interval` de la prueba).
+# `promtool` da a la PRIMERA muestra el valor `A+B`, no `A` —comprobado
+# directamente—, asi que con B = interval el valor en el instante `t` es
+# `A + t` y la diferencia `time() - valor` es simplemente `-A` en TODAS las
+# evaluaciones, por muy larga que dure la prueba: es la unica forma de
+# afirmar "nunca dispara", no solo "no ha disparado todavia".
+rule_files:
+  - ../rules/kiosk.yml
+
+evaluation_interval: 1m
+
+tests:
+  #-----------------------------------------------------------------------------
+  # QuioscoSinLatido: cruza los 600 s y dispara tras el `for: 5m`.
+  #
+  # El quiosco no vuelve a latir desde el minuto 1 (valor fijo en 0): a partir
+  # de time() > 600 (minuto 11) la alerta entra en `pending`, y a los 5
+  # minutos de `pending` continuo (minuto 16) pasa a `firing`.
+  #-----------------------------------------------------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'kiosk_last_seen_seconds{device="kiosk-recepcion"}'
+        values: "0x20"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: QuioscoSinLatido
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: QuioscoSinLatido
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: QuioscoSinLatido
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              destinatario: it-cliente
+              component: kiosk
+              device: kiosk-recepcion
+            exp_annotations:
+              summary: "El quiosco kiosk-recepcion lleva mas de 10 min sin latido"
+              description: >-
+                El dispositivo kiosk-recepcion no envia POST
+                /api/v1/kiosk/heartbeat desde hace mas de 10 minutos. El
+                fichaje en ESE quiosco puede estar afectado (red caida,
+                tablet apagada, aplicacion colgada); el resto de quioscos del
+                centro siguen operando con normalidad. Comprueba la tablet
+                antes de que empiece el siguiente cambio de turno.
+              runbook_url: docs/runbooks/quiosco-no-responde.md
+
+  #-----------------------------------------------------------------------------
+  # Valor limite justo por debajo: la diferencia se queda en 600 s EXACTOS para
+  # siempre (progresion aritmetica). `> 600` es estricto, asi que 600 no
+  # dispara nunca, por mucho que pase el tiempo.
+  #-----------------------------------------------------------------------------
+  - interval: 1m
+    input_series:
+      # Serie "A+Bx N": la PRIMERA muestra ya vale A+B (comprobado contra el
+      # `promtool` real), asi que con paso B = interval(60) el desfase
+      # constante es simplemente A = -600: value(t) = t - 600, y por tanto
+      # time()-value = 600 en TODAS las muestras.
+      - series: 'kiosk_last_seen_seconds{device="kiosk-recepcion"}'
+        values: "-600+60x120"
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: QuioscoSinLatido
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # Anti-fatiga (§8.4): un quiosco que se reinicia y vuelve a latir en menos
+  # de 5 minutos no genera notificacion. Aqui ni siquiera llega a "pending":
+  # el hueco de 3 minutos sin latido solo separa el reloj y el ultimo latido
+  # 180 s, muy por debajo de los 600 s del umbral.
+  #-----------------------------------------------------------------------------
+  - interval: 1m
+    input_series:
+      # Late con normalidad minuto a minuto (valor = instante del latido)
+      # hasta el minuto 9; deja de latir 3 minutos (valor congelado en 540,
+      # el ultimo latido real, mientras el reloj sigue: la diferencia llega
+      # como mucho a 180 s en el minuto 12); vuelve a latir con normalidad
+      # desde el minuto 13.
+      - series: 'kiosk_last_seen_seconds{device="kiosk-recepcion"}'
+        values: "60 120 180 240 300 360 420 480 540 540 540 540 780 840 900 960 1020 1080 1140 1200"
+    alert_rule_test:
+      - eval_time: 13m
+        alertname: QuioscoSinLatido
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: QuioscoSinLatido
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # Anti-fatiga, la otra mitad: cinco quioscos callados A LA VEZ producen
+  # CINCO alertas activas en Prometheus, una por `device` -eso SI lo afirma
+  # `promtool`, es lo que se comprueba mas abajo-. Que esas cinco lleguen como
+  # UNA sola notificacion es cosa de la RUTA de `component="kiosk"` en
+  # `alertmanager.yml.template` (`group_by: ["alertname"]`, decision 17e: sin
+  # `device` en el `group_by`, los cinco `QuioscoSinLatido` comparten grupo) y
+  # NO se puede afirmar con `promtool`, que no conoce Alertmanager: se
+  # documenta aqui y se prueba en `AlertmanagerConfigTest` (backend), no en
+  # este fichero.
+  #-----------------------------------------------------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'kiosk_last_seen_seconds{device="kiosk-recepcion"}'
+        values: "0x20"
+      - series: 'kiosk_last_seen_seconds{device="kiosk-cocina"}'
+        values: "0x20"
+      - series: 'kiosk_last_seen_seconds{device="kiosk-pisos"}'
+        values: "0x20"
+      - series: 'kiosk_last_seen_seconds{device="kiosk-spa"}'
+        values: "0x20"
+      - series: 'kiosk_last_seen_seconds{device="kiosk-restaurante"}'
+        values: "0x20"
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: QuioscoSinLatido
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              destinatario: it-cliente
+              component: kiosk
+              device: kiosk-cocina
+            exp_annotations:
+              summary: "El quiosco kiosk-cocina lleva mas de 10 min sin latido"
+              description: >-
+                El dispositivo kiosk-cocina no envia POST
+                /api/v1/kiosk/heartbeat desde hace mas de 10 minutos. El
+                fichaje en ESE quiosco puede estar afectado (red caida,
+                tablet apagada, aplicacion colgada); el resto de quioscos del
+                centro siguen operando con normalidad. Comprueba la tablet
+                antes de que empiece el siguiente cambio de turno.
+              runbook_url: docs/runbooks/quiosco-no-responde.md
+          - exp_labels:
+              severity: critical
+              destinatario: it-cliente
+              component: kiosk
+              device: kiosk-pisos
+            exp_annotations:
+              summary: "El quiosco kiosk-pisos lleva mas de 10 min sin latido"
+              description: >-
+                El dispositivo kiosk-pisos no envia POST
+                /api/v1/kiosk/heartbeat desde hace mas de 10 minutos. El
+                fichaje en ESE quiosco puede estar afectado (red caida,
+                tablet apagada, aplicacion colgada); el resto de quioscos del
+                centro siguen operando con normalidad. Comprueba la tablet
+                antes de que empiece el siguiente cambio de turno.
+              runbook_url: docs/runbooks/quiosco-no-responde.md
+          - exp_labels:
+              severity: critical
+              destinatario: it-cliente
+              component: kiosk
+              device: kiosk-recepcion
+            exp_annotations:
+              summary: "El quiosco kiosk-recepcion lleva mas de 10 min sin latido"
+              description: >-
+                El dispositivo kiosk-recepcion no envia POST
+                /api/v1/kiosk/heartbeat desde hace mas de 10 minutos. El
+                fichaje en ESE quiosco puede estar afectado (red caida,
+                tablet apagada, aplicacion colgada); el resto de quioscos del
+                centro siguen operando con normalidad. Comprueba la tablet
+                antes de que empiece el siguiente cambio de turno.
+              runbook_url: docs/runbooks/quiosco-no-responde.md
+          - exp_labels:
+              severity: critical
+              destinatario: it-cliente
+              component: kiosk
+              device: kiosk-restaurante
+            exp_annotations:
+              summary: "El quiosco kiosk-restaurante lleva mas de 10 min sin latido"
+              description: >-
+                El dispositivo kiosk-restaurante no envia POST
+                /api/v1/kiosk/heartbeat desde hace mas de 10 minutos. El
+                fichaje en ESE quiosco puede estar afectado (red caida,
+                tablet apagada, aplicacion colgada); el resto de quioscos del
+                centro siguen operando con normalidad. Comprueba la tablet
+                antes de que empiece el siguiente cambio de turno.
+              runbook_url: docs/runbooks/quiosco-no-responde.md
+          - exp_labels:
+              severity: critical
+              destinatario: it-cliente
+              component: kiosk
+              device: kiosk-spa
+            exp_annotations:
+              summary: "El quiosco kiosk-spa lleva mas de 10 min sin latido"
+              description: >-
+                El dispositivo kiosk-spa no envia POST
+                /api/v1/kiosk/heartbeat desde hace mas de 10 minutos. El
+                fichaje en ESE quiosco puede estar afectado (red caida,
+                tablet apagada, aplicacion colgada); el resto de quioscos del
+                centro siguen operando con normalidad. Comprueba la tablet
+                antes de que empiece el siguiente cambio de turno.
+              runbook_url: docs/runbooks/quiosco-no-responde.md
+
+  #-----------------------------------------------------------------------------
+  # ColaOfflineAtascada: cruza los 50 elementos y dispara tras 5 min.
+  #-----------------------------------------------------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'kiosk_offline_queue_size{device="kiosk-recepcion"}'
+        values: "51x10"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: ColaOfflineAtascada
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: ColaOfflineAtascada
+        exp_alerts:
+          - exp_labels:
+              severity: high
+              destinatario: it-cliente
+              component: kiosk
+              device: kiosk-recepcion
+            exp_annotations:
+              summary: "El quiosco kiosk-recepcion tiene 51 fichajes sin sincronizar"
+              description: >-
+                La cola offline de kiosk-recepcion supera los 50 elementos
+                (RF-AT-10, RN-15): el quiosco sigue aceptando fichajes —regla
+                dura 19, nunca bloquea al empleado—, pero el registro legal y
+                el panel no veran esos fichajes hasta que sincronicen. Revisa
+                la conectividad del quiosco con el servidor.
+              runbook_url: docs/runbooks/cola-offline-atascada.md
+
+  #-----------------------------------------------------------------------------
+  # Valor limite justo por debajo: exactamente 50 (el umbral es `> 50`) para
+  # siempre. Nunca dispara.
+  #-----------------------------------------------------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'kiosk_offline_queue_size{device="kiosk-recepcion"}'
+        values: "50x30"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: ColaOfflineAtascada
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # ColaOfflineSinVaciar: la cola nunca llega a cero durante mas de 2 h
+  # seguidas. El "valor limite justo por debajo" aqui no es una cifra sino un
+  # instante: la cola se vacia UNA VEZ, en el minuto 1, y se queda con
+  # elementos pendientes despues sin volver a vaciarse. Mientras esa unica
+  # muestra a cero siga DENTRO de la ventana de 2 h, la regla no dispara —a
+  # las 2 h exactas (minuto 120) el minuto 1 sigue dentro de (0, 120] y no
+  # dispara—; en cuanto la muestra a cero queda FUERA de la ventana, la regla
+  # ve una cola que "nunca" ha estado a cero en las ultimas 2 h y dispara tras
+  # el `for: 5m`.
+  #-----------------------------------------------------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'kiosk_offline_queue_size{device="kiosk-recepcion"}'
+        values: "0 5x200"
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: ColaOfflineSinVaciar
+        exp_alerts: []
+      - eval_time: 2h10m
+        alertname: ColaOfflineSinVaciar
+        exp_alerts:
+          - exp_labels:
+              severity: high
+              destinatario: it-cliente
+              component: kiosk
+              device: kiosk-recepcion
+            exp_annotations:
+              summary: "El quiosco kiosk-recepcion lleva mas de 2 h sin vaciar su cola offline"
+              description: >-
+                La cola offline de kiosk-recepcion no ha llegado a cero en
+                las ultimas 2 horas (RF-AT-10, RN-15): sincroniza mal o no
+                sincroniza, aunque el numero de elementos pendientes sea
+                bajo. El fichaje en el quiosco sigue funcionando; lo que esta
+                en riesgo es que el registro tarde en reflejar lo que ya ha
+                ocurrido.
+              runbook_url: docs/runbooks/cola-offline-atascada.md

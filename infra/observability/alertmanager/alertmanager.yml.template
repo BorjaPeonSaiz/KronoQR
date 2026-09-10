@@ -1,0 +1,203 @@
+# KronoQR — plantilla de Alertmanager (doc 02 §8.4, tarea 3.2, decision 5).
+#
+# NO SE CARGA DIRECTAMENTE. `render-config.sh` la resuelve contra el .env del
+# cliente (las marcas `@@TOKEN@@`) y escribe el resultado en
+# /alertmanager/alertmanager.yml, que es el fichero que lee Alertmanager. Este
+# fichero viaja de solo lectura (compose.dev.yaml y compose.prod.yaml montan
+# infra/observability/alertmanager en /etc/alertmanager:ro): editarlo aqui
+# cambia la configuracion de TODAS las instalaciones; los destinatarios reales
+# de un cliente concreto solo viven en su .env, nunca en el repositorio (regla
+# dura 13).
+#
+# NINGUN SECRETO EN ESTE FICHERO (§7.7). La contraseña SMTP no se sustituye
+# aqui: `smtp_auth_password_file` apunta a un fichero que `render-config.sh`
+# escribe aparte, con permisos 0600.
+#
+# Norma que no se negocia (doc 02 §8.4): cada alerta lleva destinatario, umbral
+# y enlace a su runbook. Aqui se resuelve la mitad que le toca a Alertmanager:
+# que el destinatario de la etiqueta `destinatario` reciba de verdad la
+# notificacion, y que las reglas anti-fatiga (agrupacion, ventana de
+# mantenimiento, escalado tras `for:`) sean efectivas.
+
+global:
+  resolve_timeout: 5m
+  smtp_smarthost: '@@SMTP_SMARTHOST@@'
+  smtp_from: '@@SMTP_FROM@@'
+  smtp_hello: kronoqr
+  smtp_auth_username: '@@SMTP_AUTH_USERNAME@@'
+  smtp_auth_password_file: '@@SMTP_AUTH_PASSWORD_FILE@@'
+  smtp_require_tls: @@SMTP_REQUIRE_TLS@@
+
+route:
+  # Agrupacion por dispositivo: un quiosco que se reinicia no despierta a
+  # nadie; cinco a la vez llegan como una sola notificacion que si lo merece.
+  group_by: ["alertname", "site", "device"]
+  # Margen para que se agrupen los avisos del mismo suceso.
+  group_wait: 30s
+  group_interval: 5m
+  # Repetir cada 4 h lo que sigue sin resolverse. Mas frecuente se ignora.
+  repeat_interval: 4h
+  # Receptor de respaldo: no deberia alcanzarse nunca, porque las once alertas
+  # del catalogo llevan `destinatario` y las tres rutas de mas abajo lo cubren
+  # entero (la prueba de arquitectura lo comprueba). Si algun dia se añade una
+  # regla sin esa etiqueta, que llegue a IT y no que se pierda en silencio.
+  receiver: it-cliente
+
+  routes:
+    # `severity: info` nunca notifica a nadie: existe para INHIBIR, no para
+    # avisar (VentanaDeMantenimientoActiva, maintenance.yml). Va primero y sin
+    # `continue`, para que ninguna otra regla de enrutado la alcance.
+    - matchers:
+        - severity = "info"
+      receiver: silencio
+
+    # Los incidentes de integridad no esperan a la agrupacion: divergencia de
+    # proyeccion y rotura de la cadena de auditoria deben permanecer SIEMPRE en
+    # cero, y cualquier incremento es un incidente, no una tendencia. La
+    # etiqueta la ponen las reglas de audit.yml y projection.yml; el
+    # destinatario sigue siendo el de cada alerta (seguridad para la cadena de
+    # auditoria, IT del cliente para la divergencia de proyeccion): esta rama
+    # solo acelera el aviso, no decide a quien.
+    - matchers:
+        - integrity = "true"
+      group_wait: 0s
+      repeat_interval: 1h
+      routes:
+        - matchers:
+            - destinatario = "seguridad"
+          receiver: seguridad
+        - receiver: it-cliente
+
+    # Copias de seguridad. Se agrupan aparte de las alertas de dispositivo —no
+    # tienen etiqueta `device` y agruparlas con quioscos las enterraria— y se
+    # repiten cada 6 h: es un aviso que se atiende dentro de la jornada, no a
+    # las 03:00, salvo que llegue el archivado de WAL detenido, que si puede
+    # acabar parando la base de datos.
+    #
+    # La ventana de mantenimiento NO las silencia a proposito: la actualizacion
+    # del producto (RF-PD-10) exige copia previa verificada, asi que si la
+    # copia falla justo durante el mantenimiento es cuando mas hay que saberlo.
+    - matchers:
+        - component = "backup"
+      group_by: ["alertname"]
+      group_wait: 30s
+      repeat_interval: 6h
+      receiver: it-cliente
+
+    # Ventana de mantenimiento declarada (doc 02 §8.4, anti-fatiga). Solo estos
+    # cuatro componentes: un servidor que se reinicia en su ventana no debe
+    # despertar a nadie por el quiosco, la API, el certificado TLS o el disco.
+    # NUNCA integridad, copia, auditoria, autenticacion, incidencias ni
+    # `alerting` (rules/alerting.yml, decision 17c): la propia herramienta que
+    # reparte alertas no se puede quedar muda durante un mantenimiento, que es
+    # justo cuando mas alertas puede haber en juego (copia previa,
+    # verificacion posterior).
+    #
+    # QUIOSCO EN SU PROPIA RUTA, CON `group_by: ["alertname"]` (decision 17e,
+    # corrige un error de la version anterior: con el `group_by` general
+    # [alertname, site, device] heredado de la raiz, CINCO quioscos callados a
+    # la vez eran CINCO grupos —y cinco notificaciones—, justo lo contrario de
+    # lo que el §8.4 pide como anti-fatiga. Sin `device` en el `group_by` de
+    # esta ruta, los cinco `QuioscoSinLatido` caen en el MISMO grupo
+    # (comparten `alertname`) y llegan como una sola notificacion con los
+    # cinco `device` dentro.
+    - matchers:
+        - component = "kiosk"
+      group_by: ["alertname"]
+      mute_time_intervals:
+        - ventana-mantenimiento
+      receiver: it-cliente
+
+    # API, TLS y disco: sin etiqueta `device`, así que el `group_by` general ya
+    # las agrupa por `alertname` de hecho (no hay nada mas por lo que
+    # separarlas). Ruta aparte de la del quiosco solo para que
+    # `mute_time_intervals` no dependa de una alternancia regex que mezcle
+    # comportamientos distintos en una sola linea.
+    - matchers:
+        - component =~ "api|tls|host"
+      mute_time_intervals:
+        - ventana-mantenimiento
+      receiver: it-cliente
+
+    - matchers:
+        - destinatario = "rrhh"
+      receiver: rrhh
+
+    - matchers:
+        - destinatario = "seguridad"
+      receiver: seguridad
+
+    - matchers:
+        - destinatario = "it-cliente"
+      receiver: it-cliente
+
+inhibit_rules:
+  # Si el quiosco de un centro esta caido de verdad (critica), no hace falta
+  # ademas la de menor severidad del mismo dispositivo.
+  #
+  # ACOTADA A `component="kiosk"` EN ORIGEN Y DESTINO, Y SIN `equal: ["site"]`
+  # (decision 17d, corrige un bloqueante real de la revision de seguridad,
+  # verificado contra la imagen). Sin acotar por componente, CUALQUIER alerta
+  # `critical` de la instalacion —un certificado TLS caducado, una copia
+  # fallida, una rotura de cadena de auditoria— inhibia TODAS las `warning`
+  # del producto: `TurnoAbiertoProlongado`, las tres de `auth.yml`, y los
+  # cuatro vigilantes de silencio (`VerificacionDeAuditoriaAusente`,
+  # `MetricaDeIncidenciasAusente`... todos `severity: warning`). Y `equal:
+  # ["site"]` no acotaba nada: NINGUNA regla del catalogo emite la etiqueta
+  # `site`, y Alertmanager considera iguales dos etiquetas ausentes en las dos
+  # alertas, asi que la condicion se cumplia siempre. El comentario original
+  # ya decia "no notificar quiosco por quiosco": esto es lo que hacia falta
+  # para que el codigo dijera lo mismo que el comentario.
+  - source_matchers:
+      - severity = "critical"
+      - component = "kiosk"
+    target_matchers:
+      - severity = "warning"
+      - component = "kiosk"
+
+  # La ventana de mantenimiento automatica de update.sh (tarea 3.2, decision
+  # 6c; tope reducido a 2 h en la decision 17f): mientras
+  # kronoqr_maintenance_active valga 1 y lleve menos de 2 h activa,
+  # VentanaDeMantenimientoActiva esta firmando y calla las alertas de quiosco,
+  # API, TLS y disco -las mismas cuatro que la ventana semanal declarada de
+  # mas arriba-. Sin `equal`: es un estado de la instalacion entera, no algo
+  # que correlacionar por `site` o por `device`.
+  - source_matchers:
+      - alertname = "VentanaDeMantenimientoActiva"
+    target_matchers:
+      - component =~ "kiosk|api|tls|host"
+
+time_intervals:
+  # Ventana de mantenimiento declarada. La instalacion la ajusta a su horario
+  # con ALERT_MAINTENANCE_WEEKDAY/START/END: el cambio de turno de las 06:00
+  # nunca debe caer dentro.
+  - name: ventana-mantenimiento
+    time_intervals:
+      - weekdays: ["@@ALERT_MAINTENANCE_WEEKDAY@@"]
+        times:
+          - start_time: "@@ALERT_MAINTENANCE_START@@"
+            end_time: "@@ALERT_MAINTENANCE_END@@"
+
+receivers:
+  # Para severity=info (VentanaDeMantenimientoActiva): nunca notifica a nadie
+  # a proposito, existe solo para poder inhibir. Un receptor sin ninguna
+  # integracion es valido en Alertmanager.
+  - name: silencio
+
+  # Uno por destinatario del doc 01 §9.3 (IT del cliente, RRHH, seguridad).
+  # `render-config.sh` añade `email_configs`/`webhook_configs` solo si el
+  # correo o el webhook correspondiente no estan vacios en el .env: un destino
+  # vacio no genera esa entrega, y una instalacion con las tres direcciones
+  # vacias no entrega ninguna alerta a nadie (lo detecta `product:doctor`).
+  # El webhook va como `url_file` y no como `url` (decision 17g): es tan
+  # secreto como la contraseña SMTP -quien lo conoce puede hacerse pasar por
+  # el sistema de tickets del cliente- y recibe el mismo trato, un fichero
+  # 0600 por destinatario que `render-config.sh` escribe aparte.
+  - name: it-cliente
+@@RECEIVER_IT_CLIENTE@@
+
+  - name: rrhh
+@@RECEIVER_RRHH@@
+
+  - name: seguridad
+@@RECEIVER_SEGURIDAD@@

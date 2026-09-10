@@ -1412,7 +1412,7 @@ through the same IP.
 | `KIOSK_PIN_SCAN_RATE_PER_IP` | — | Clock-ins by PIN per minute and per origin | `60` | Almost never, and for the same reason | No |
 | `KIOSK_BATCH_MAX_SIZE` | — | Maximum scans in a synchronisation batch | `50` | Never: it is also in the API contract, so changing it here does not change it on the tablet. **Lowering it below 50 makes the server reject every batch from the tablets (422) and their offline queue never drains**: it does not shift minutes, it loses whole clock-ins | No |
 | `KIOSK_HEALTH_FRESH_WITHIN_SECONDS` | — | Seconds of leeway before `php artisan kiosk:health` stops treating a kiosk's last contact as up to date | `120` | Almost never. The heartbeat runs every 60 s, so two minutes are two missed beats: a single one can be a flickering wi-fi | No |
-| `KIOSK_HEALTH_SILENT_AFTER_SECONDS` | — | Seconds after which `php artisan kiosk:health` treats a kiosk as silent and exits with code 2 | `600` | Almost never. It is the same threshold as the "Kiosk with no heartbeat > 10 min" alert: separate them and the console and the alert will say different things about the same kiosk | No |
+| `KIOSK_HEALTH_SILENT_AFTER_SECONDS` | — | Seconds after which `php artisan kiosk:health` treats a kiosk as silent and exits with code 2 | `600` | Almost never. **It is the same threshold as the `QuioscoSinLatido` alert** (`infra/observability/prometheus/rules/kiosk.yml`, [`operation.md`](operation.md) §10.4): change one and change the other at the same time, or the console and the alert will say different things about the same kiosk | No |
 
 ### 6.15 Network, TLS and edge
 
@@ -1513,6 +1513,15 @@ Tempo and blackbox-exporter add, is in [`operation.md`](operation.md) §10.
 | `OTEL_EXPORTER_OTLP_TIMEOUT` | — | Seconds of margin before giving up on sending a trace | `2` | Almost never. A high value could show up as latency if Tempo does not respond | No |
 | `GRAFANA_ADMIN_USER` | — | Administration account of the dashboard | `admin` | Change it if your policy requires it | No |
 | `GRAFANA_ADMIN_PASSWORD` | `[INSTALADOR]` | Its password | (empty; `install.sh` generates it) | It is rotated from the dashboard itself. **It is never exposed without authentication** | No |
+| `ALERT_EMAIL_IT` | `[CLIENTE]` | Who Alertmanager notifies for alerts routed to IT. See [`operation.md`](operation.md) §10.4 | *(empty)* | **At install time, if you leave the `observability` profile on** — which is the default. Empty, those alerts reach nobody | No |
+| `ALERT_EMAIL_RRHH` | `[CLIENTE]` | Who is notified for alerts routed to HR (open shifts, insufficient rest). See [`operation.md`](operation.md) §10.4 | *(empty)* | Same | No |
+| `ALERT_EMAIL_SEGURIDAD` | `[CLIENTE]` | Who is notified for alerts routed to security (audit chain breakage, brute-force attempts). See [`operation.md`](operation.md) §10.4 | *(empty)* | Same. These are incidents, not outages: review it with whoever holds that role in your organisation | No |
+| `ALERT_WEBHOOK_IT` | `[CLIENTE]` | Additional webhook for IT alerts, if you use one (Slack, an on-call system…). See [`operation.md`](operation.md) §10.4 | *(empty)* | Optional. An empty value does not generate that delivery, same as with email | No |
+| `ALERT_WEBHOOK_RRHH` | `[CLIENTE]` | Same, for HR alerts | *(empty)* | Optional | No |
+| `ALERT_WEBHOOK_SEGURIDAD` | `[CLIENTE]` | Same, for security alerts | *(empty)* | Optional | No |
+| `ALERT_MAINTENANCE_WEEKDAY` | `[CLIENTE]` | Day of the week of the maintenance window that silences kiosk, API, certificate and disk alerts. **Value in English and lower case** (`monday`…`sunday`): `render-config.sh` rejects anything else and refuses to start. See [`operation.md`](operation.md) §10.4 | `sunday` | If your quiet window is another day. **Never the day of the 06:00 shift change** | No |
+| `ALERT_MAINTENANCE_START` | `[CLIENTE]` | Start time of that window, in the **server's** time zone, not the site's | `02:00` | Same | No |
+| `ALERT_MAINTENANCE_END` | `[CLIENTE]` | End time | `04:00` | Same | No |
 
 ### 6.21 Email
 

@@ -1,5 +1,5 @@
 #==============================================================================
-# KronoQR — entorno de desarrollo. Los 17 servicios del doc 02 §3.4.
+# KronoQR — entorno de desarrollo. Los 18 servicios del doc 02 §3.4.
 #
 # Uso previsto:  make up      (desde la raiz del repositorio)
 #
@@ -427,7 +427,70 @@ services:
       timeout: 5s
       retries: 3
 
-  #--- 13 · Cuadros de mando --------------------------------------------------
+  #--- 13 · Enrutado de alertas ------------------------------------------------
+  #
+  # Solo en local: ver el enrutado y la inhibicion en vivo (tarea 3.2, decision
+  # 15). En produccion vive en compose.prod.yaml, detras del perfil
+  # `observability`; aqui no hace falta perfil porque este fichero no declara
+  # ninguno (todo arranca siempre).
+  #
+  # MISMO ENTRYPOINT DE RENDERIZADO que produccion: `/etc/alertmanager/
+  # render-config.sh` lee las variables ALERT_* y MAIL_* del entorno del
+  # contenedor, escribe /alertmanager/alertmanager.yml (nunca el `.template`,
+  # que es de solo lectura) y la contraseña SMTP -y cada webhook, decision 17(g)-
+  # en ficheros aparte con permisos 0600: eso es lo que NUNCA entra en el YAML.
+  #
+  # `environment:` CON LAS QUINCE VARIABLES UNA A UNA, Y NO `env_file: .env`
+  # (correccion de la revision de seguridad, decision 17a). `env_file: .env`
+  # metia el `.env` ENTERO en el entorno de un binario de terceros que solo
+  # necesita quince variables: `QR_SIGNING_KEY_CURRENT`,
+  # `IDENTITY_PIN_SEALING_SECRET_KEY`, `BACKUP_ENCRYPTION_KEY`, `APP_KEY`,
+  # `DB_PASSWORD`, `LICENSE_KEY`... todos legibles con `docker inspect` o
+  # `/proc/1/environ` por cualquiera con acceso al socket de Docker. Con
+  # `environment:`, MAIL_PASSWORD y los nueve ALERT_* SI son legibles ahi -es
+  # el mismo trato que ya reciben `app`, `horizon` y `reverb`, que llevan
+  # `DB_PASSWORD` de la misma forma- pero NINGUNA otra clave del `.env` lo es:
+  # la superficie pasa de "todo el `.env`" a "las quince variables que este
+  # binario declara usar", que es el umbral que se puede razonar y auditar.
+  alertmanager:
+    image: prom/alertmanager:v0.28.0
+    container_name: kronoqr-alertmanager
+    entrypoint: ["/etc/alertmanager/render-config.sh"]
+    command:
+      - --config.file=/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    environment:
+      ALERT_EMAIL_IT: ${ALERT_EMAIL_IT:-}
+      ALERT_EMAIL_RRHH: ${ALERT_EMAIL_RRHH:-}
+      ALERT_EMAIL_SEGURIDAD: ${ALERT_EMAIL_SEGURIDAD:-}
+      ALERT_WEBHOOK_IT: ${ALERT_WEBHOOK_IT:-}
+      ALERT_WEBHOOK_RRHH: ${ALERT_WEBHOOK_RRHH:-}
+      ALERT_WEBHOOK_SEGURIDAD: ${ALERT_WEBHOOK_SEGURIDAD:-}
+      ALERT_MAINTENANCE_WEEKDAY: ${ALERT_MAINTENANCE_WEEKDAY:-sunday}
+      ALERT_MAINTENANCE_START: ${ALERT_MAINTENANCE_START:-02:00}
+      ALERT_MAINTENANCE_END: ${ALERT_MAINTENANCE_END:-04:00}
+      MAIL_HOST: ${MAIL_HOST:-}
+      MAIL_PORT: ${MAIL_PORT:-}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-}
+      MAIL_SCHEME: ${MAIL_SCHEME:-}
+    volumes:
+      - ./observability/alertmanager:/etc/alertmanager:ro
+      - alertmanager-data:/alertmanager
+    ports:
+      # Nunca 0.0.0.0: Alertmanager no se expone a internet, igual que Prometheus.
+      - "127.0.0.1:9093:9093"
+    networks:
+      - observability
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://127.0.0.1:9093/-/healthy || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  #--- 14 · Cuadros de mando --------------------------------------------------
   grafana:
     image: grafana/grafana:11.5.1
     container_name: kronoqr-grafana
@@ -459,7 +522,7 @@ services:
       timeout: 5s
       retries: 3
 
-  #--- 14 · Logs estructurados ------------------------------------------------
+  #--- 15 · Logs estructurados ------------------------------------------------
   loki:
     image: grafana/loki:3.3.2
     container_name: kronoqr-loki
@@ -480,7 +543,7 @@ services:
       retries: 5
       start_period: 30s
 
-  #--- 15 · Trazas --------------------------------------------------------
+  #--- 16 · Trazas --------------------------------------------------------
   # Grafana Tempo, monolitico y sobre sistema de ficheros (tarea 3.1, §8.1): el
   # destino de las trazas OTLP que exporta la aplicacion. Sin este servicio,
   # OTEL_EXPORTER_OTLP_ENDPOINT no tendria a donde apuntar y la traza completa
@@ -515,7 +578,7 @@ services:
       retries: 5
       start_period: 30s
 
-  #--- 16 · Sonda de uptime del borde ------------------------------------
+  #--- 17 · Sonda de uptime del borde ------------------------------------
   # blackbox-exporter (tarea 3.1, §8.1): Prometheus scrapea /metrics de la
   # propia aplicacion, pero eso solo dice que el PROCESO responde. La sonda de
   # uptime hace una peticion HTTP real a /api/v1/health y /api/v1/ready, que es
@@ -538,7 +601,7 @@ services:
     restart: unless-stopped
     # Sin puertos publicados: no es un servicio que nadie consulte a mano.
 
-  #--- 17 · Metricas de la copia de seguridad y del disco ---------------------
+  #--- 18 · Metricas de la copia de seguridad y del disco ---------------------
   #
   # node-exporter esta aqui por UNA razon concreta: publicar el resultado de la
   # copia diaria (tarea 1.18). Los scripts escriben ficheros .prom en
@@ -560,10 +623,28 @@ services:
       - --collector.disable-defaults
       - --collector.textfile
       - --collector.textfile.directory=/var/backups/metrics
+      # Espacio en disco del anfitrion (tarea 3.2, host.yml): igual que en
+      # produccion, para poder ejercitar EspacioEnDiscoBajo en desarrollo sin
+      # que el compose de produccion sea el unico sitio donde la regla se
+      # pueda evaluar de verdad.
+      - --collector.filesystem
+      - --path.rootfs=/host
       - --web.listen-address=:9100
     volumes:
       # Solo lectura: quien publica las metricas es la copia, no el exportador.
       - backup-data:/var/backups:ro
+      # El mismo montaje que compose.prod.yaml pero SIN `rslave`: Docker Desktop
+      # (Windows y macOS) rechaza la propagacion ("path / is mounted on / but
+      # it is not a shared or slave mount") y node-exporter no arrancaba. Sin
+      # ella se monta la raiz de la VM de Docker, que es lo que hay que medir
+      # en desarrollo; en produccion (Linux) se conserva `rslave` para que un
+      # disco montado despues de arrancar tambien se vea. LIMITE en Docker
+      # Desktop: la VM no publica ninguna serie con mountpoint="/" (su raiz es
+      # overlay, que host.yml excluye), asi que en Windows/macOS
+      # EspacioEnDiscoBajo no se puede ejercitar con datos reales y
+      # MetricasDelAnfitrionAusentes queda encendida; las dos se prueban con
+      # series sinteticas (promtool) y en un servidor Linux.
+      - /:/host:ro
     networks:
       - observability
     restart: unless-stopped
@@ -588,6 +669,7 @@ volumes:
   postgres-data:
   redis-data:
   prometheus-data:
+  alertmanager-data:
   grafana-data:
   loki-data:
   tempo-data:

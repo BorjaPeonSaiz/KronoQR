@@ -1,0 +1,298 @@
+{
+  "id": null,
+  "uid": "kronoqr-business",
+  "title": "KronoQR · Negocio",
+  "description": "RRHH y dirección. Horas por departamento, alertas de cumplimiento (doc 02 §8.3). Trabajadas frente a contratadas, absentismo e impuntualidad no tienen serie todavía: ver el panel de texto (decisión 13 de la tarea 3.2).",
+  "tags": ["kronoqr", "negocio", "rrhh"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "refresh": "1m",
+  "style": "dark",
+  "graphTooltip": 1,
+  "liveNow": false,
+  "time": { "from": "now-7d", "to": "now" },
+  "timepicker": { "refresh_intervals": ["30s", "1m", "5m"] },
+  "links": [],
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "templating": {
+    "list": [
+      {
+        "current": { "selected": true, "text": "All", "value": "$__all" },
+        "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+        "hide": 0,
+        "includeAll": true,
+        "multi": true,
+        "name": "site",
+        "label": "Centro",
+        "options": [],
+        "query": { "query": "label_values(worked_minutes_total, site)", "refId": "StandardVariableQuery" },
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "Qué falta en este cuadro y de qué tarea es",
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 0 },
+      "options": {
+        "mode": "markdown",
+        "content": "El doc 02 §8.3 pide para este cuadro **horas trabajadas frente a contratadas**, **absentismo** e **impuntualidad**. Ninguna de las tres tiene serie de Prometheus todavía (decisión 13 de la tarea 3.2):\n\n- **Horas contratadas** viven en `employment_contracts` y hoy solo las lee el informe del panel de administración (tarea 3.4, vista de cumplimiento); no hay `worked_minutes_total` frente a un denominador de horas pactadas.\n- **Absentismo** depende del registro de ausencias, que es la **tarea 3.10** (todavía no ejecutada al escribir este cuadro).\n- **Impuntualidad** no tiene tipo de incidencia en el catálogo (`IncidentType`, doc 01 §5.5): no existe ningún hallazgo que contar.\n\nLo que sí muestra este cuadro con las series que existen: horas trabajadas por departamento, turnos abiertos ahora, incidencias de cumplimiento abiertas por tipo (descanso insuficiente, jornada larga, pausa ausente, turno sin cerrar), fichajes por PIN de respaldo y patrones anómalos de credencial."
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Horas trabajadas por departamento (24h)",
+      "description": "worked_minutes_total{site,department} / 60. Control de costes laborales (doc 01 §9.2).",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "sum by (department) (increase(worked_minutes_total{site=~\"$site\"}[24h])) / 60",
+          "legendFormat": "{{department}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 60,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "stacking": { "mode": "normal", "group": "A" },
+            "axisPlacement": "auto"
+          },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["sum"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Turnos abiertos ahora, por departamento",
+      "description": "open_shifts_current{site,site_name,department}. Contraste con la ocupación esperada (doc 01 §9.2).",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "open_shifts_current{site=~\"$site\"}",
+          "legendFormat": "{{site_name}} · {{department}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "pointSize": 5,
+            "stacking": { "mode": "none", "group": "A" },
+            "axisPlacement": "auto"
+          },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 4,
+      "type": "table",
+      "title": "Incidencias de cumplimiento abiertas, por tipo",
+      "description": "incidents_open filtrado a los cuatro tipos de cumplimiento (RN-10/11/12): descanso insuficiente, jornada larga, pausa ausente, turno sin cerrar. Alertas de cumplimiento del cuadro (doc 02 §8.3).",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "incidents_open{type=~\"insufficient_rest|long_shift|missing_break|open_shift_expired\"}",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time": true, "instance": true, "job": true, "service": true, "__name__": true },
+            "renameByName": { "type": "Tipo", "severity": "Severidad", "Value": "Abiertas" }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "custom": { "align": "auto", "cellOptions": { "type": "auto" } } },
+        "overrides": []
+      },
+      "options": { "showHeader": true, "cellHeight": "sm", "footer": { "show": false } }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Turnos abiertos > 12 h (incidencia)",
+      "description": "incidents_open{type=\"open_shift_expired\"}. Umbral de la alerta homónima: cualquiera, media, RRHH (docs/runbooks/turno-abierto-prolongado.md).",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" }, "expr": "sum(incidents_open{type=\"open_shift_expired\"}) OR vector(0)", "instant": true }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "#EAB839", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Total de horas trabajadas (24h)",
+      "description": "sum(worked_minutes_total) / 60, en el ámbito del centro elegido.",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" }, "expr": "sum(increase(worked_minutes_total{site=~\"$site\"}[24h])) / 60", "instant": true }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "min": 0,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Fichajes por PIN de respaldo, por centro (24h)",
+      "description": "pin_fallback_scans_total{site}. Una subida indica un problema con la emisión o el estado de las tarjetas (doc 01 §9.2).",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 22 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" }, "expr": "sum by (site) (increase(pin_fallback_scans_total{site=~\"$site\"}[24h]))", "legendFormat": "centro {{site}}" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "pointSize": 5,
+            "stacking": { "mode": "none", "group": "A" },
+            "axisPlacement": "auto"
+          },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Patrones anómalos detectados por tipo (7 días)",
+      "description": "anomalous_patterns_detected_total{pattern} (RF-PR-06). Indicio de préstamo de credencial: se revisa, no se sanciona automáticamente.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 22 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" }, "expr": "sum by (pattern) (increase(anomalous_patterns_detected_total[7d]))", "legendFormat": "{{pattern}}" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 60,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "stacking": { "mode": "normal", "group": "A" },
+            "axisPlacement": "auto"
+          },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["sum"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    }
+  ]
+}

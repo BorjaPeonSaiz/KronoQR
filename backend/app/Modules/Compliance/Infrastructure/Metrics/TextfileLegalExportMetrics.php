@@ -41,7 +41,7 @@ use Throwable;
  * siete que ni comprobaba el retorno de `rename()` ni miraba el interruptor del
  * colector en su propio metodo de escritura, y las dos cosas se ven igual desde
  * fuera: una serie que sigue publicando la cifra de ayer. Ahora la mecanica es
- * la de {@see TextfileExposition} —comun a los siete— y el fallo que esta clase
+ * la de {@see TextfileExposition} —comun a los nueve— y el fallo que esta clase
  * decide no propagar se escribe en el log con la clase de la excepcion y sin un
  * solo dato personal (regla dura 21).
  *

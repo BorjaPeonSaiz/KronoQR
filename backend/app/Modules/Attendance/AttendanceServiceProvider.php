@@ -10,6 +10,7 @@ use App\Modules\Attendance\Application\Port\CorrectionMetrics;
 use App\Modules\Attendance\Application\Port\DailyTotalsProjection;
 use App\Modules\Attendance\Application\Port\EventPublisher;
 use App\Modules\Attendance\Application\Port\FlaggedScans;
+use App\Modules\Attendance\Application\Port\IncidentDetectionMetrics;
 use App\Modules\Attendance\Application\Port\ProjectionMetrics;
 use App\Modules\Attendance\Application\Port\ScanLog;
 use App\Modules\Attendance\Application\Port\ScanMetrics;
@@ -27,6 +28,7 @@ use App\Modules\Attendance\Infrastructure\Console\ReconcileProjectionsCommand;
 use App\Modules\Attendance\Infrastructure\Metrics\RedisAnomalyMetrics;
 use App\Modules\Attendance\Infrastructure\Metrics\RedisCorrectionMetrics;
 use App\Modules\Attendance\Infrastructure\Metrics\RedisScanMetrics;
+use App\Modules\Attendance\Infrastructure\Metrics\TextfileIncidentDetectionMetrics;
 use App\Modules\Attendance\Infrastructure\Metrics\TextfileProjectionMetrics;
 use App\Modules\Attendance\Infrastructure\Persistence\DatabaseShiftCorrectionLedger;
 use App\Modules\Attendance\Infrastructure\Persistence\EloquentFlaggedScans;
@@ -142,6 +144,19 @@ final class AttendanceServiceProvider extends ServiceProvider
          * la serie a cero, que es justo el valor que significa «todo esta bien».
          */
         $this->app->singleton(ProjectionMetrics::class, TextfileProjectionMetrics::class);
+
+        /*
+         * El desenlace de la revision diaria, tambien por fichero (doc 02 §8.2,
+         * tarea 3.2).
+         *
+         * Convive con `AnomalyMetrics` y no lo sustituye: aquel cuenta hallazgos
+         * por tipo y es una serie de tendencia; este responde «¿corrio anoche?» y
+         * «¿dejo algo sin abrir?», y las dos respuestas se leen igual de mal
+         * cuando la serie desaparece. Un `FLUSHALL` en un despliegue diria
+         * «ninguna pasada y cero fallos», que es exactamente como se lee una
+         * instalacion tranquila.
+         */
+        $this->app->singleton(IncidentDetectionMetrics::class, TextfileIncidentDetectionMetrics::class);
     }
 
     public function boot(): void

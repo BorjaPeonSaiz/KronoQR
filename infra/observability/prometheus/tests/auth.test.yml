@@ -1,0 +1,149 @@
+# KronoQR — pruebas unitarias de infra/observability/prometheus/rules/auth.yml
+# (tarea 3.2, decision 2). Las tres reglas (desde la tarea 5.x de
+# autenticacion) no tenian ninguna prueba: las ganan aqui.
+rule_files:
+  - ../rules/auth.yml
+
+evaluation_interval: 1m
+
+tests:
+  #-----------------------------------------------------------------------------
+  # KronoqrAuthFailureBurst: 25 fallos en 5 min en el canal `portal`, por
+  # encima de los 20 del umbral.
+  #-----------------------------------------------------------------------------
+  - name: burst_dispara
+    interval: 1m
+    input_series:
+      - series: 'kronoqr_auth_attempts_total{channel="portal", outcome="failure"}'
+        values: "0+5x30"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: KronoqrAuthFailureBurst
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              destinatario: seguridad
+              component: auth
+              mitre_attack: T1110
+              channel: portal
+            exp_annotations:
+              summary: "Mas de 20 fallos de autenticacion en 5 min en el canal portal"
+              description: >-
+                MITRE ATT&CK T1110 (Brute Force). El canal portal ha
+                acumulado mas de 20 intentos de autenticacion fallidos en
+                los ultimos 5 minutos. Nadie se ha quedado sin acceder:
+                RS-12 y el bloqueo por intentos siguen protegiendo cada
+                cuenta por su cuenta. Lo que hay que determinar es si es una
+                persona con la contrasena equivocada varias veces o un
+                intento automatizado contra una o pocas cuentas.
+              runbook_url: docs/runbooks/ataque-a-credenciales.md
+
+  #-----------------------------------------------------------------------------
+  # Valor limite justo por debajo: exactamente 20 fallos en 5 min (4/min). El
+  # umbral es `> 20` estricto: nunca dispara.
+  #-----------------------------------------------------------------------------
+  - name: burst_boundary
+    interval: 1m
+    input_series:
+      - series: 'kronoqr_auth_attempts_total{channel="portal", outcome="failure"}'
+        values: "0+4x30"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: KronoqrAuthFailureBurst
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # KronoqrAuthLockouts: 3 bloqueos DISTINTOS en 15 min, el minimo del
+  # catalogo (`>= 3`, no `> 3`).
+  #-----------------------------------------------------------------------------
+  - name: lockouts_dispara
+    interval: 1m
+    input_series:
+      # Un bloqueo nuevo cada 5 min: al minuto 15 van tres bloqueos DISTINTOS
+      # dentro de la ventana de 15 min (valores explicitos, uno por minuto,
+      # t=1..15m). Mismo `interval` que el grupo de reglas (1m): un paso mas
+      # largo que el lookback delta (5m) deja la serie "ausente" entre
+      # muestras.
+      - series: 'kronoqr_auth_attempts_total{channel="management", outcome="lockout"}'
+        values: "0 0 0 0 0 1 1 1 1 1 2 2 2 2 3"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: KronoqrAuthLockouts
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              destinatario: seguridad
+              component: auth
+              mitre_attack: T1110.004
+              channel: management
+            exp_annotations:
+              summary: "Al menos 3 bloqueos por intentos en 15 min en el canal management"
+              description: >-
+                MITRE ATT&CK T1110.004 (Credential Stuffing). Tres o mas
+                bloqueos en el canal management en 15 minutos: RS-12 ya ha
+                frenado cada cuenta afectada, y nadie puede fichar por PIN
+                ni entrar hasta que el bloqueo expire por su cuenta — eso es
+                RN-15 haciendo su trabajo, no un fallo. Lo urgente es acotar
+                el alcance: cuantas cuentas distintas y si alguna de ellas
+                SI acabo entrando antes del bloqueo.
+              runbook_url: docs/runbooks/ataque-a-credenciales.md
+
+  #-----------------------------------------------------------------------------
+  # Valor limite justo por debajo: 2 bloqueos en 15 min. Nunca dispara.
+  #-----------------------------------------------------------------------------
+  - name: lockouts_boundary
+    interval: 1m
+    input_series:
+      # Mismos saltos que arriba, pero se queda en DOS bloqueos: nunca
+      # dispara (el umbral es `>= 3`).
+      - series: 'kronoqr_auth_attempts_total{channel="management", outcome="lockout"}'
+        values: "0 0 0 0 0 1 1 1 1 1 2 2 2 2 2"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: KronoqrAuthLockouts
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # KronoqrAuthFailureSpike: 125 fallos en 5 min, por encima de los 100.
+  #-----------------------------------------------------------------------------
+  - name: spike_dispara
+    interval: 1m
+    input_series:
+      - series: 'kronoqr_auth_attempts_total{channel="kiosk_pin", outcome="failure"}'
+        values: "0+25x30"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: KronoqrAuthFailureSpike
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              destinatario: seguridad
+              component: auth
+              mitre_attack: T1110
+              channel: kiosk_pin
+            exp_annotations:
+              summary: "Mas de 100 fallos de autenticacion en 5 min en el canal kiosk_pin"
+              description: >-
+                MITRE ATT&CK T1110 (Brute Force), posible T1110.004
+                (Credential Stuffing) si el bloqueo por intentos esta
+                conteniendolo cuenta a cuenta sin frenar el volumen total.
+                Este ritmo satura ademas la zona `auth` de Nginx (5 r/m por
+                IP, doc 02 §7.1): si el origen es uno solo, el limite YA lo
+                esta frenando; si son muchos, hace falta bloquear en el
+                borde. El runbook explica como, sin tocar el rate limiting
+                declarativo.
+              runbook_url: docs/runbooks/ataque-a-credenciales.md
+
+  #-----------------------------------------------------------------------------
+  # Valor limite justo por debajo: exactamente 100 fallos en 5 min (20/min).
+  # El umbral es `> 100` estricto: nunca dispara.
+  #-----------------------------------------------------------------------------
+  - name: spike_boundary
+    interval: 1m
+    input_series:
+      - series: 'kronoqr_auth_attempts_total{channel="kiosk_pin", outcome="failure"}'
+        values: "0+20x30"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: KronoqrAuthFailureSpike
+        exp_alerts: []

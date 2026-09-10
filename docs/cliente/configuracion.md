@@ -1391,7 +1391,7 @@ salen por la misma IP.
 | `KIOSK_PIN_SCAN_RATE_PER_IP` | — | Fichajes por PIN por minuto y por origen | `60` | Casi nunca, y por el mismo motivo | No |
 | `KIOSK_BATCH_MAX_SIZE` | — | Escaneos como máximo en un lote de sincronización | `50` | Nunca: también está en el contrato de la API, así que cambiarlo aquí no lo cambia en la tablet. **Bajarlo por debajo de 50 hace que el servidor rechace todos los lotes de las tablets (422) y su cola sin red no se vacíe nunca**: no cambia minutos, pierde fichajes enteros | No |
 | `KIOSK_HEALTH_FRESH_WITHIN_SECONDS` | — | Segundos de margen antes de que `php artisan kiosk:health` deje de dar por «al día» el último contacto de un quiosco | `120` | Casi nunca. El latido va cada 60 s, así que dos minutos son dos latidos perdidos: uno suelto puede ser un wifi que parpadea | No |
-| `KIOSK_HEALTH_SILENT_AFTER_SECONDS` | — | Segundos a partir de los cuales `php artisan kiosk:health` da un quiosco por callado y sale con código 2 | `600` | Casi nunca. Es el mismo umbral que la alerta «Quiosco sin latido > 10 min»: si los separas, la consola y la alerta dirán cosas distintas del mismo quiosco | No |
+| `KIOSK_HEALTH_SILENT_AFTER_SECONDS` | — | Segundos a partir de los cuales `php artisan kiosk:health` da un quiosco por callado y sale con código 2 | `600` | Casi nunca. **Es el mismo umbral que la alerta `QuioscoSinLatido`** (`infra/observability/prometheus/rules/kiosk.yml`, [`operacion.md`](operacion.md) §10.4): si cambias uno, cambia el otro a la vez, o la consola y la alerta dirán cosas distintas del mismo quiosco | No |
 
 ### 6.15 Red, TLS y borde
 
@@ -1491,6 +1491,15 @@ añaden Tempo y blackbox-exporter, está en [`operacion.md`](operacion.md) §10.
 | `OTEL_EXPORTER_OTLP_TIMEOUT` | — | Segundos de margen antes de dar por perdido el envío de una traza | `2` | Casi nunca. Un valor alto podría notarse en la latencia si Tempo no responde | No |
 | `GRAFANA_ADMIN_USER` | — | Cuenta de administración del cuadro de mandos | `admin` | Cámbiala si tu política lo pide | No |
 | `GRAFANA_ADMIN_PASSWORD` | `[INSTALADOR]` | Su contraseña | (vacía; la genera `install.sh`) | Se rota desde el propio cuadro de mandos. **Nunca se expone sin autenticación** | No |
+| `ALERT_EMAIL_IT` | `[CLIENTE]` | A quién avisa Alertmanager de las alertas de destinatario IT. Ver [`operacion.md`](operacion.md) §10.4 | *(vacía)* | **Al instalar, si dejas el perfil `observability` encendido** — que es el valor de serie. Vacía, esas alertas no llegan a nadie | No |
+| `ALERT_EMAIL_RRHH` | `[CLIENTE]` | A quién avisa de las alertas de destinatario RRHH (turnos abiertos, descanso insuficiente). Ver [`operacion.md`](operacion.md) §10.4 | *(vacía)* | Íd | No |
+| `ALERT_EMAIL_SEGURIDAD` | `[CLIENTE]` | A quién avisa de las alertas de destinatario seguridad (rotura de cadena de auditoría, ataques de fuerza bruta). Ver [`operacion.md`](operacion.md) §10.4 | *(vacía)* | Íd. Son incidentes, no averías: revísalo con quien tenga ese papel en tu organización | No |
+| `ALERT_WEBHOOK_IT` | `[CLIENTE]` | Webhook adicional para las alertas de IT, si usas uno (Slack, un sistema de guardias…). Ver [`operacion.md`](operacion.md) §10.4 | *(vacía)* | Opcional. Un valor vacío no genera ese envío, igual que con el correo | No |
+| `ALERT_WEBHOOK_RRHH` | `[CLIENTE]` | Íd. para las de RRHH | *(vacía)* | Opcional | No |
+| `ALERT_WEBHOOK_SEGURIDAD` | `[CLIENTE]` | Íd. para las de seguridad | *(vacía)* | Opcional | No |
+| `ALERT_MAINTENANCE_WEEKDAY` | `[CLIENTE]` | Día de la semana de la ventana de mantenimiento que silencia alertas de quiosco, API, certificado y disco. **Valor en inglés y minúsculas** (`monday`…`sunday`): `render-config.sh` rechaza cualquier otro y no arranca. Ver [`operacion.md`](operacion.md) §10.4 | `sunday` | Si tu ventana tranquila es otro día. **Nunca el día del cambio de turno de las 06:00** | No |
+| `ALERT_MAINTENANCE_START` | `[CLIENTE]` | Hora de inicio de esa ventana, en la zona horaria del **servidor**, no la del centro | `02:00` | Íd | No |
+| `ALERT_MAINTENANCE_END` | `[CLIENTE]` | Hora de fin | `04:00` | Íd | No |
 
 ### 6.21 Correo
 

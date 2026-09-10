@@ -21,7 +21,7 @@ alerta o su procedimiento**, con el sistema delante. Quien introduce el modo de
 fallo es quien sabe qué hay que hacer cuando ocurra.
 
 El escrutinio de la Fase 0 sobre esta regla es sencillo: la tarea 0.1 no añade
-ninguna alerta —el catálogo es de la tarea 3.2— y el único modo de fallo nuevo
+ninguna alerta —el catálogo completo lo entrega la tarea 3.2— y el único modo de fallo nuevo
 que introduce, `KIOSK_VLAN_CIDR` mal configurado, es un **parámetro de
 instalación**, así que se documenta donde le corresponde:
 [`docs/cliente/instalacion.md`](../cliente/instalacion.md).
@@ -42,9 +42,9 @@ Asignación literal del plan de implementación
 
 | # | Runbook | Cuándo se usa | Lo escribe |
 |---|---|---|---|
-| 1 | `quiosco-no-responde.md` | Alerta de latido perdido | Fase 3 · tarea 3.2 |
-| 2 | `cola-offline-atascada.md` | Cola de un dispositivo por encima del umbral | Fase 3 · tarea 3.2 |
-| 3 | [`divergencia-proyeccion.md`](divergencia-proyeccion.md) | La reconciliación nocturna detecta discrepancia | ✅ Fase 2 · tarea 2.7 → destinatarios reales en 3.2 |
+| 1 | [`quiosco-no-responde.md`](quiosco-no-responde.md) | Alerta de latido perdido | ✅ Fase 3 · tarea 3.2 |
+| 2 | [`cola-offline-atascada.md`](cola-offline-atascada.md) | Cola de un dispositivo por encima del umbral | ✅ Fase 3 · tarea 3.2 |
+| 3 | [`divergencia-proyeccion.md`](divergencia-proyeccion.md) | La reconciliación nocturna detecta discrepancia | ✅ Fase 2 · tarea 2.7 (destinatarios reales, hecho en 3.2) |
 | 4 | [`rotura-cadena-auditoria.md`](rotura-cadena-auditoria.md) | **Incidente de seguridad.** Incluye preservación de evidencia | ✅ Fase 1 · tarea 1.14 (era 2.2, adelantada por ADR-032) |
 | 5 | [`restaurar-backup.md`](restaurar-backup.md) | Recuperación y simulacro trimestral | ✅ Fase 1 · tarea 1.18 (era 2.11, adelantada por ADR-032) → usado por 5.7 |
 | 6 | [`rotacion-secretos.md`](rotacion-secretos.md) | Rotación programada o compromiso | ✅ §7.7 · escrito en la tarea 2.12 con la rotación del QR · ampliado en 5.4 |
@@ -60,8 +60,8 @@ Asignación literal del plan de implementación
 | 16 | [`incidencia-sin-acceso.md`](incidencia-sin-acceso.md) | **Diagnosticar con el paquete que envía el cliente**, sin acceso a su servidor. Es el runbook que decide si el paquete está bien diseñado | ✅ Fase 5 · tarea 5.9 |
 | 17 | [`errores-en-el-panel.md`](errores-en-el-panel.md) | Cómo lee el IT del cliente `error_events` y qué hacer con cada severidad | ✅ Fase 5 · tarea 5.12 |
 | 18 | [`turno-abierto-prolongado.md`](turno-abierto-prolongado.md) | Turno abierto más de 12 h. **El sistema nunca lo cierra solo** (RN-08). Destinatario RRHH: no es una avería | ✅ Fase 2 · tarea 2.6 |
-| 19 | `renovacion-certificado-tls.md` | Certificado a menos de 21 días de expirar | Fase 3 · tarea 3.2 |
-| 20 | `espacio-en-disco.md` | Espacio libre por debajo del 20 % | Fase 3 · tarea 3.2 |
+| 19 | [`renovacion-certificado-tls.md`](renovacion-certificado-tls.md) | Certificado a menos de 21 días de expirar | ✅ Fase 3 · tarea 3.2 |
+| 20 | [`espacio-en-disco.md`](espacio-en-disco.md) | Espacio libre por debajo del 20 % | ✅ Fase 3 · tarea 3.2 |
 
 ## Runbooks fuera de esa lista
 
@@ -75,6 +75,7 @@ fallo*. Se escriben en la tarea que los introduce.
 | [`fallo-de-ci.md`](fallo-de-ci.md) | Una etapa del pipeline está en rojo, o la puerta de versión bloquea una etiqueta | Fase 0 · tarea 0.4 |
 | [`ataque-a-credenciales.md`](ataque-a-credenciales.md) | Alertas `KronoqrAuthFailureBurst`/`KronoqrAuthLockouts`/`KronoqrAuthFailureSpike` (OWASP A09) | SSDLC · pipeline de seguridad |
 | [`triaje-hallazgos-seguridad.md`](triaje-hallazgos-seguridad.md) | Un hallazgo de Semgrep comunitario o Trivy en modo informe del job `security` | SSDLC · pipeline de seguridad |
+| [`entrega-de-alertas.md`](entrega-de-alertas.md) | Alertas `EnrutadoDeAlertasCaido`/`EntregaDeAlertasFallando`: Alertmanager caído o sin poder entregar. No responde a una fila del catálogo del doc 01 §9.3, responde a un fallo de la propia infraestructura de alertas | Fase 3 · tarea 3.2 (segunda vuelta, revisión de seguridad) |
 
 ## Qué debe contener un runbook
 

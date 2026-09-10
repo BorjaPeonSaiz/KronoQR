@@ -1,0 +1,55 @@
+# KronoQR — pruebas unitarias de infra/observability/prometheus/rules/
+# errors.yml (tarea 3.2, decision 2). La regla, de la tarea 5.12, no tenia
+# ninguna prueba: la gana aqui.
+rule_files:
+  - ../rules/errors.yml
+
+evaluation_interval: 1m
+
+tests:
+  #-----------------------------------------------------------------------------
+  # ErroresCriticosNuevos: un grupo nuevo se abre en los ultimos 5 min.
+  #-----------------------------------------------------------------------------
+  - name: nuevos_dispara
+    interval: 1m
+    input_series:
+      - series: 'application_error_groups_opened_total{source="api", level="critical"}'
+        values: "0+1x10"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: ErroresCriticosNuevos
+        exp_alerts:
+          - exp_labels:
+              severity: high
+              destinatario: it-cliente
+              component: errors
+              source: api
+              level: critical
+            exp_annotations:
+              summary: "Grupo(s) nuevo(s) o reabierto(s) de severidad critica en error_events"
+              description: >-
+                El histórico de errores (RF-PD-15) ha registrado al menos un
+                grupo `critical` nuevo, o uno que se había marcado como
+                resuelto y ha vuelto a ocurrir, en los últimos 5 minutos: un
+                job que agota sus intentos, una tarea del planificador, una
+                petición a `/api/v1/scan*`, o un código de quiosco que le
+                impide fichar (`kiosk.camera.*`, `kiosk.scanner.*`,
+                `kiosk.offline.*`, `kiosk.roster.decrypt_failed`,
+                `kiosk.pin.seal_failed`). Entra en el panel, sección
+                "Errores", filtra por severidad "Crítico" y sigue la tabla
+                origen × nivel del runbook para saber qué mirar.
+              runbook_url: docs/runbooks/errores-en-el-panel.md
+
+  #-----------------------------------------------------------------------------
+  # Valor limite: ningun grupo nuevo (el contador de grupos NO sube, aunque
+  # `application_errors_total` de ocurrencias si lo hiciera). Nunca dispara.
+  #-----------------------------------------------------------------------------
+  - name: nuevos_boundary
+    interval: 1m
+    input_series:
+      - series: 'application_error_groups_opened_total{source="api", level="critical"}'
+        values: "3x30"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: ErroresCriticosNuevos
+        exp_alerts: []

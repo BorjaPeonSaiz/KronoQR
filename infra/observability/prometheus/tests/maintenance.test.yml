@@ -1,0 +1,72 @@
+# KronoQR — pruebas unitarias de infra/observability/prometheus/rules/
+# maintenance.yml (tarea 3.2, decision 2; tope reducido a 2 h en la decision
+# 17f de la revision de seguridad). Cubren en particular el TOPE: sin el, un
+# `update.sh` que muriera sin retirar la marca de mantenimiento silenciaria
+# los quioscos, la API, el certificado TLS y el disco para siempre.
+rule_files:
+  - ../rules/maintenance.yml
+
+evaluation_interval: 1m
+
+tests:
+  #-----------------------------------------------------------------------------
+  # Mantenimiento activo, arrancado en el instante 0 del reloj simulado (el
+  # gauge `kronoqr_maintenance_since_timestamp_seconds` se fija UNA vez al
+  # empezar y no cambia mientras dura, asi que "flat en 0" representa
+  # justamente eso): a 1 h 59 min sigue dentro de la ventana de 2 h y
+  # dispara; en el minuto exacto de las 2 h, deja de hacerlo — es el tope.
+  #-----------------------------------------------------------------------------
+  - name: activa_y_tope_de_2h
+    interval: 1m
+    input_series:
+      - series: kronoqr_maintenance_active
+        values: "1x300"
+      - series: kronoqr_maintenance_since_timestamp_seconds
+        values: "0x300"
+    alert_rule_test:
+      - eval_time: 1h59m
+        alertname: VentanaDeMantenimientoActiva
+        exp_alerts:
+          - exp_labels:
+              severity: info
+              destinatario: it-cliente
+              component: maintenance
+            exp_annotations:
+              summary: "El actualizador tiene el mantenimiento puesto"
+              description: >-
+                update.sh esta actualizando la instalacion (o lo estaba hace
+                menos de 2 h). Mientras dura, las alertas de quiosco, API,
+                certificado TLS y disco estan inhibidas: son sintomas
+                esperados de una actualizacion en marcha. Esta alerta no
+                notifica a nadie; existe solo para sostener esa inhibicion.
+              runbook_url: docs/runbooks/actualizacion-cliente.md
+      # El tope: a las 2 h EXACTAS, `(time() - since) < 2*3600` deja de
+      # cumplirse (7200 no es menor que 7200) y la alerta se apaga sola,
+      # aunque `kronoqr_maintenance_active` siga en 1 -el escenario de un
+      # `update.sh` que murio sin retirar la marca, o de alguien refrescando
+      # el fichero a mano-.
+      - eval_time: 2h
+        alertname: VentanaDeMantenimientoActiva
+        exp_alerts: []
+      - eval_time: 2h30m
+        alertname: VentanaDeMantenimientoActiva
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # Valor limite: sin mantenimiento activo (`active == 0`), nunca dispara,
+  # por mucho que "since" diga que hace poco que se puso.
+  #-----------------------------------------------------------------------------
+  - name: inactiva_nunca_dispara
+    interval: 1m
+    input_series:
+      - series: kronoqr_maintenance_active
+        values: "0x300"
+      - series: kronoqr_maintenance_since_timestamp_seconds
+        values: "0x300"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: VentanaDeMantenimientoActiva
+        exp_alerts: []
+      - eval_time: 5h
+        alertname: VentanaDeMantenimientoActiva
+        exp_alerts: []

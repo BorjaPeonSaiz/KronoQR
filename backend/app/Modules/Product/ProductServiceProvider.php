@@ -109,6 +109,7 @@ use App\Modules\Product\Infrastructure\Diagnostics\Collector\ServicesCollector;
 use App\Modules\Product\Infrastructure\Diagnostics\Collector\UpdatesCollector;
 use App\Modules\Product\Infrastructure\Diagnostics\JsonDiagnosticsBundleWriter;
 use App\Modules\Product\Infrastructure\Diagnostics\LaravelDoctorTranslator;
+use App\Modules\Product\Infrastructure\Diagnostics\Probe\AlertRecipientsProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\ApplicationProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\DatabaseProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\DiskProbe;
@@ -1680,6 +1681,38 @@ final class ProductServiceProvider extends ServiceProvider
                         host: self::text(Config::get('mail.mailers.smtp.host')),
                         port: self::number(Config::get('mail.mailers.smtp.port')),
                         environment: Config::string('app.env'),
+                    ),
+                    /*
+                     * A quien llegan las alertas (tarea 3.2, decision 5). Va
+                     * pegada a `MailProbe` porque el orden de esta lista ES el
+                     * del informe: quien acaba de leer «el SMTP responde» es
+                     * quien tiene que leer a continuacion «y las alertas no
+                     * tienen a donde ir».
+                     */
+                    new AlertRecipientsProbe(
+                        // Lectura tolerante, como el correo: `COMPOSE_PROFILES`
+                        // la define el anfitrion y puede no llegar al
+                        // contenedor. Un `doctor` que reventara por eso seria
+                        // inutil justo cuando hace falta.
+                        composeProfiles: self::text(Config::get('observability.alerting.profiles')) ?? '',
+                        // Las claves son los tres valores que admite la etiqueta
+                        // `destinatario` de las reglas, no unos nombres propios:
+                        // lo que el informe nombra tiene que ser lo mismo que
+                        // busca quien va a arreglarlo.
+                        destinations: [
+                            'it-cliente' => [
+                                'email' => self::text(Config::get('observability.alerting.email.it')) ?? '',
+                                'webhook' => self::text(Config::get('observability.alerting.webhook.it')) ?? '',
+                            ],
+                            'rrhh' => [
+                                'email' => self::text(Config::get('observability.alerting.email.hr')) ?? '',
+                                'webhook' => self::text(Config::get('observability.alerting.webhook.hr')) ?? '',
+                            ],
+                            'seguridad' => [
+                                'email' => self::text(Config::get('observability.alerting.email.security')) ?? '',
+                                'webhook' => self::text(Config::get('observability.alerting.webhook.security')) ?? '',
+                            ],
+                        ],
                     ),
                     new TlsProbe(
                         applicationUrl: Config::string('app.url'),

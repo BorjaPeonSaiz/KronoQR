@@ -17,6 +17,7 @@ use DateTimeImmutable;
  * projection_reconciliation_last_run_timestamp_seconds 1773541800
  * projection_reconciliation_work_days_inspected 214
  * projection_reconciliation_last_corrections 0
+ * projection_reconciliation_last_failures 0
  * ```
  *
  * ## Por que *textfile* y no Redis
@@ -53,7 +54,7 @@ use DateTimeImmutable;
  *
  * **La mecanica de escritura no vive aqui.** El guard del colector, la escritura
  * atomica y el fallo ruidoso son de {@see TextfileExposition}, que es la misma
- * para los siete adaptadores del producto. Aqui solo se componen las lineas.
+ * para los nueve adaptadores del producto. Aqui solo se componen las lineas.
  */
 final readonly class TextfileProjectionMetrics implements ProjectionMetrics
 {
@@ -65,6 +66,7 @@ final readonly class TextfileProjectionMetrics implements ProjectionMetrics
         int $workDaysInspected,
         int $divergences,
         int $corrected,
+        int $failures,
         DateTimeImmutable $at,
     ): void {
         $total = $this->previousCounter() + $divergences;
@@ -82,6 +84,9 @@ final readonly class TextfileProjectionMetrics implements ProjectionMetrics
             '# HELP projection_reconciliation_last_corrections Filas reescritas en la ultima pasada. Distinto de cero significa que la proyeccion se habia desviado.',
             '# TYPE projection_reconciliation_last_corrections gauge',
             'projection_reconciliation_last_corrections '.$corrected,
+            '# HELP projection_reconciliation_last_failures Jornadas que la ultima pasada no pudo dejar resueltas. Distinto de cero significa que la divergencia sigue ahi.',
+            '# TYPE projection_reconciliation_last_failures gauge',
+            'projection_reconciliation_last_failures '.$failures,
         ]);
     }
 

@@ -1,0 +1,127 @@
+# KronoQR — alertas RED del endpoint de fichaje (doc 01 §9.3, tarea 3.2).
+#
+# Filas del catalogo del doc 01 §9.3 que implementa este fichero:
+#
+#   | Tasa de error 5xx en el endpoint de fichaje | > 1 % en 5 min  | Critica |
+#   | Latencia p95 del endpoint de fichaje        | > 500 ms en 10m | Alta    |
+#
+# LAS METRICAS. `http_requests_total{route,method,status}` y
+# `http_request_duration_seconds{route,method,status}` las escribe
+# `RecordHttpMetrics` (regla dura 21: la etiqueta `route` es el NOMBRE de la
+# ruta con nombre de Laravel, nunca la URI — cardinalidad de decenas, no de
+# UUIDs). "El endpoint de fichaje" son TRES rutas con nombre —
+# `attendance.scan`, `attendance.scan.batch`, `attendance.scan.pin`—: el
+# escaneo simple, el envio en lote de la cola offline y el PIN de respaldo
+# (RF-AT-11). Las tres comparten el mismo presupuesto de latencia (RNF-P-02) y
+# el mismo impacto si fallan, asi que la expresion las agrupa con
+# `route=~"attendance\\.scan(\\..*)?"` en vez de triplicar la regla.
+#
+# `for: 1m` y no `5m`: la ventana de agregacion (5 min para la tasa de error,
+# 10 min para la latencia) ya suaviza el ruido de un solo scrape; el `for`
+# solo evita que una evaluacion aislada con datos a medio escribir dispare la
+# alerta un ciclo antes de que la ventana la habria descartado sola — el mismo
+# criterio que `auth.yml` y `errors.yml` aplican a sus propias ventanas
+# deslizantes.
+#
+# LA TERCERA REGLA, FUERA DEL CATALOGO Y JUSTIFICADA. `SondaDelBordeFallida`
+# no esta en la tabla del §9.3, pero sin ella la regla de 5xx tiene un punto
+# ciego: si NADA llega a PHP-FPM —Nginx caido, el borde sin certificado, la
+# red del hotel cortada—, `http_requests_total` no crece, la proporcion de
+# 5xx es 0/0 (indefinida, no dispara) y el fichaje puede estar completamente
+# parado sin que ninguna alerta lo diga. `probe_success` viene de la sonda de
+# uptime de la tarea 3.1 (blackbox-exporter contra `/api/v1/health` y
+# `/api/v1/ready` POR TLS, `prometheus.yml`, job `kronoqr-uptime`): una
+# peticion real desde fuera del proceso, que tambien suena cuando `/ready`
+# dice que la base de datos o Redis no responden. Apunta al mismo runbook
+# porque el sintoma que ve quien recibe la alerta es el mismo: "el fichaje va
+# lento o no responde".
+#
+# DESTINATARIO: IT del cliente en las tres. Es quien opera el servidor, la
+# base de datos y el borde; el runbook `errores-en-el-panel.md` ya las lista
+# en su tabla de sintomas (tarea 5.12) y aqui es donde nacen las reglas.
+#
+# IMPACTO EN EL FICHAJE: DIRECTO. A diferencia de la mayoria de alertas de
+# este catalogo —que vigilan proyecciones, auditoria o trabajo pendiente sin
+# tocar el acto de fichar—, estas tres SI describen al fichaje fallando o
+# yendo lento de verdad para quien esta delante del quiosco en ese momento.
+# La cola offline (regla dura 19) absorbe el fallo desde el cliente, pero
+# alguien tiene que arreglar el servidor para que deje de acumularse.
+groups:
+  - name: kronoqr-api
+    interval: 60s
+    rules:
+      #------------------------------------------------------------------------
+      # Proporcion de 5xx sobre el total, en las tres rutas de fichaje. Con
+      # trafico cero la division es 0/0 (NaN) y Prometheus la descarta: no hay
+      # falso positivo por falta de trafico, solo por errores de verdad.
+      #------------------------------------------------------------------------
+      - alert: ErroresDeServidorEnElFichaje
+        expr: >-
+          (
+            sum(increase(http_requests_total{route=~"attendance\\.scan(\\..*)?", status=~"5.."}[5m]))
+            /
+            sum(increase(http_requests_total{route=~"attendance\\.scan(\\..*)?"}[5m]))
+          ) > 0.01
+        for: 1m
+        labels:
+          severity: critical
+          destinatario: it-cliente
+          component: api
+        annotations:
+          summary: "Mas del 1 % de las peticiones de fichaje han fallado en los ultimos 5 min"
+          description: >-
+            Las rutas attendance.scan, attendance.scan.batch y
+            attendance.scan.pin estan devolviendo 5xx por encima del 1 % de
+            sus peticiones. El quiosco encola y confirma localmente (regla
+            dura 19: nunca bloquea al empleado), pero esos fichajes no llegan
+            al servidor hasta que el fallo se resuelva. Revisa el estado de la
+            base de datos, Redis y el ultimo despliegue.
+          runbook_url: docs/runbooks/errores-en-el-panel.md
+
+      #------------------------------------------------------------------------
+      # p95 de latencia por encima de 500 ms, mismas tres rutas.
+      #------------------------------------------------------------------------
+      - alert: LatenciaDelFichajeAlta
+        expr: >-
+          histogram_quantile(
+            0.95,
+            sum(rate(http_request_duration_seconds_bucket{route=~"attendance\\.scan(\\..*)?"}[10m])) by (le)
+          ) > 0.5
+        for: 1m
+        labels:
+          severity: high
+          destinatario: it-cliente
+          component: api
+        annotations:
+          summary: "El p95 de latencia del fichaje supera los 500 ms desde hace 10 min"
+          description: >-
+            RNF-P-02 fija p95 < 150 ms; esta alerta suena muy por encima, a
+            500 ms, porque a partir de ahi el retraso ya lo nota quien esta
+            fichando delante del quiosco. Con 500 personas en el cambio de
+            turno, una cola de peticiones lentas en el servidor se traduce
+            en gente esperando frente a la tablet.
+          runbook_url: docs/runbooks/errores-en-el-panel.md
+
+      #------------------------------------------------------------------------
+      # Fuera del catalogo (justificado en la cabecera): sin trafico que medir,
+      # la regla de 5xx no puede sonar. Esta cubre ese hueco desde fuera del
+      # proceso.
+      #------------------------------------------------------------------------
+      - alert: SondaDelBordeFallida
+        expr: probe_success == 0
+        for: 5m
+        labels:
+          severity: critical
+          destinatario: it-cliente
+          component: api
+        annotations:
+          summary: "La sonda de disponibilidad de {{ $labels.instance }} no responde"
+          description: >-
+            La comprobacion externa (fuera del proceso de la aplicacion, tarea
+            3.1) contra /api/v1/health o /api/v1/ready ha fallado durante 5
+            minutos. O nada llega al borde (Nginx caido, red del hotel
+            cortada, certificado TLS invalido), o /ready dice que la base de
+            datos o Redis no responden. El fichaje puede estar completamente
+            parado en el servidor: el quiosco seguira encolando (regla dura
+            19), pero nada llegara hasta que esto se resuelva.
+          runbook_url: docs/runbooks/errores-en-el-panel.md

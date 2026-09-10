@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use Symfony\Component\Yaml\Yaml;
+use Tests\Architecture\Support\AlertRules;
 use Tests\Architecture\Support\Repo;
 
 /*
@@ -32,27 +32,12 @@ function backupFile(string $relative): string
     return Repo::contents($relative);
 }
 
-/**
- * Las reglas de alerta, ya en la forma que espera Prometheus.
- *
- * @return list<array{alert?: string, expr?: string, for?: string, labels?: array<string, string>, annotations?: array<string, string>}>
+/*
+ * `reglasDeAlerta()` vivia aqui y ha desaparecido a favor de
+ * `AlertRules::inFile()` (decision 17k de la ficha 3.2): eran dos lecturas del
+ * mismo YAML con dos formas distintas de tratar un fichero sin `groups`, y la
+ * de `Support/` es la que usan las tres pruebas nuevas de la tarea.
  */
-function reglasDeAlerta(string $relative): array
-{
-    /** @var array{groups: list<array{rules?: list<array<string, mixed>>}>} $documento */
-    $documento = Yaml::parse(backupFile($relative));
-    expect($documento)->toBeArray()->toHaveKey('groups');
-
-    $reglas = [];
-    foreach ($documento['groups'] as $grupo) {
-        foreach ($grupo['rules'] ?? [] as $regla) {
-            /** @var array{alert?: string, expr?: string, for?: string, labels?: array<string, string>, annotations?: array<string, string>} $regla */
-            $reglas[] = $regla;
-        }
-    }
-
-    return $reglas;
-}
 
 /**
  * La norma del doc 02 §8.4 aplicada a un fichero de reglas: **cada** alerta
@@ -96,6 +81,25 @@ function horaProgramada(string $scheduler, string $command): string
     );
 
     return $encontrado === 1 ? $partes[1] : '';
+}
+
+/**
+ * El bloque de programacion de un comando: desde su `Schedule::command(` hasta
+ * el siguiente, o hasta el final del fichero.
+ *
+ * Se acota el bloque en vez de buscar `->onFailure(` en todo el planificador
+ * porque en todo el planificador SIEMPRE aparece: bastaria con que otro comando
+ * cualquiera lo tuviera para que la comprobacion pasara sin comprobar nada.
+ */
+function bloqueProgramado(string $scheduler, string $command): string
+{
+    $encontrado = preg_match(
+        '/'.preg_quote("Schedule::command('".$command."'", '/').'.*?(?=Schedule::command\(|$)/s',
+        $scheduler,
+        $partes,
+    );
+
+    return $encontrado === 1 ? $partes[0] : '';
 }
 
 it('archiva el WAL con el intervalo del que depende el RPO de 15 minutos', function (): void {
@@ -148,7 +152,7 @@ it('deja cada alerta con umbral, destinatario y un runbook que existe', function
     // Doc 02 §8.4 y doc 01 §9.3: cada alerta lleva destinatario, umbral y
     // enlace a su runbook. Una alerta sin procedimiento asociado es ruido y se
     // elimina. Esta prueba es la que impide que se cuele la siguiente.
-    $reglas = reglasDeAlerta('infra/observability/prometheus/rules/backup.yml');
+    $reglas = AlertRules::inFile('infra/observability/prometheus/rules/backup.yml');
 
     exigeProcedimientoEnCadaAlerta($reglas);
 
@@ -183,8 +187,12 @@ it('publica el resultado de la copia como metrica, no solo en un log', function 
     expect(backupFile('infra/scripts/restore-drill.sh'))
         ->toContain('kronoqr_backup_restore_drill_last_success_timestamp_seconds');
 
+    // DECISION 7 de la ficha 3.2: el objetivo se llama `kronoqr-node`. Desde la
+    // tarea 3.2 ese node-exporter sirve mucho mas que copias —espacio en disco
+    // del anfitrion y la marca de mantenimiento del actualizador—, y las alertas
+    // casan por nombre de serie, no por `job`.
     expect(backupFile('infra/observability/prometheus/prometheus.yml'))
-        ->toContain('job_name: kronoqr-backup')
+        ->toContain('job_name: kronoqr-node')
         ->toContain('alertmanagers');
 })->group('RF-PR-04');
 
@@ -194,7 +202,7 @@ it('deja la alerta de rotura de cadena sin umbral, dirigida a seguridad y con ru
     // no una tendencia— y al RESPONSABLE DE SEGURIDAD, no al IT (ADR-010): la
     // respuesta no es reiniciar nada, es acotar el alcance de un acceso
     // indebido (RL-15).
-    $reglas = reglasDeAlerta('infra/observability/prometheus/rules/audit.yml');
+    $reglas = AlertRules::inFile('infra/observability/prometheus/rules/audit.yml');
 
     exigeProcedimientoEnCadaAlerta($reglas);
 
@@ -223,7 +231,7 @@ it('dirige las alertas de ataque a credenciales a seguridad, con runbook y tecni
     // adversario esta viendo (T1110) y donde esta el procedimiento. Sin esta
     // prueba, la puerta «cada alerta con runbook que existe» no cubria
     // `auth.yml`: solo escaneaba `backup.yml` y `audit.yml`.
-    $reglas = reglasDeAlerta('infra/observability/prometheus/rules/auth.yml');
+    $reglas = AlertRules::inFile('infra/observability/prometheus/rules/auth.yml');
 
     exigeProcedimientoEnCadaAlerta($reglas);
 
@@ -285,7 +293,7 @@ it('dirige la alerta de turnos abiertos a RRHH, con runbook y sin cierre automat
     // puede decidir a que hora salio una persona. La tercera afirmacion es la que
     // protege RN-08: el procedimiento tiene que decir que el sistema NUNCA cierra
     // el turno solo.
-    $reglas = reglasDeAlerta('infra/observability/prometheus/rules/incidents.yml');
+    $reglas = AlertRules::inFile('infra/observability/prometheus/rules/incidents.yml');
 
     exigeProcedimientoEnCadaAlerta($reglas);
 
@@ -300,7 +308,20 @@ it('dirige la alerta de turnos abiertos a RRHH, con runbook y sin cierre automat
         // El silencio: sin esta, apagar la tarea programada seria la forma mas
         // comoda de que las dos de arriba no volvieran a sonar nunca.
         'MetricaDeIncidenciasAusente',
+        // Tarea 3.2, decision 3. Las dos mitades del silencio de la DETECCION,
+        // que hasta ahora no vigilaba nadie: la que corre y falla, y la que no
+        // llega a correr. Sin ellas, `TurnoAbiertoProlongado` puede llevar
+        // semanas sin sonar porque no hay nada que la alimente, y eso se lee
+        // como «no hay turnos abiertos».
+        'DeteccionDeIncidenciasConFallos',
+        'DeteccionDeIncidenciasAusente',
     ]);
+
+    expect($porNombre['DeteccionDeIncidenciasConFallos']['expr'] ?? '')
+        ->toContain('incident_detection_last_failures > 0');
+    expect($porNombre['DeteccionDeIncidenciasConFallos']['labels']['destinatario'] ?? '')->toBe('it-cliente');
+    expect($porNombre['DeteccionDeIncidenciasAusente']['expr'] ?? '')
+        ->toContain('incident_detection_last_run_timestamp_seconds');
 
     $turnos = $porNombre['TurnoAbiertoProlongado'];
     expect($turnos['expr'] ?? '')->toContain('incidents_open{type="open_shift_expired"} > 0');
@@ -323,7 +344,7 @@ it('deja la alerta de divergencia de proyeccion sin umbral, dirigida al IT y con
     // SIEMPRE en cero— y al IT del cliente y no a seguridad, porque lo que hay
     // que averiguar es quien escribio en la base, y eso lo mira quien opera la
     // instalacion (ADR-007: «el destinatario es el IT del cliente»).
-    $reglas = reglasDeAlerta('infra/observability/prometheus/rules/projection.yml');
+    $reglas = AlertRules::inFile('infra/observability/prometheus/rules/projection.yml');
 
     exigeProcedimientoEnCadaAlerta($reglas);
 
@@ -337,7 +358,16 @@ it('deja la alerta de divergencia de proyeccion sin umbral, dirigida al IT y con
         // El silencio: sin esta, apagar la tarea nocturna seria la forma mas
         // comoda de que la de arriba no volviera a sonar nunca.
         'ReconciliacionDeProyeccionAusente',
+        // Tarea 3.2, decision 3. La reconciliacion puede EJECUTARSE y fallar en
+        // parte de los dias que revisa: se ejecuto, la marca de tiempo esta
+        // fresca y `ReconciliacionDeProyeccionAusente` no suena, pero hay
+        // jornadas que nadie ha recalculado. Ese hueco es el que cierra esta.
+        'ReconciliacionConFallos',
     ]);
+
+    expect($porNombre['ReconciliacionConFallos']['expr'] ?? '')
+        ->toContain('projection_reconciliation_last_failures > 0');
+    expect($porNombre['ReconciliacionConFallos']['labels']['destinatario'] ?? '')->toBe('it-cliente');
 
     $divergencia = $porNombre['DivergenciaEnReconciliacionNocturna'];
     expect($divergencia['expr'] ?? '')->toContain('projection_divergence_total');
@@ -372,6 +402,15 @@ it('programa la reconciliacion nocturna antes de la deteccion de incidencias', f
     expect($reconcileAt < $detectAt)->toBeTrue(
         'La reconciliacion ('.$reconcileAt.') tiene que correr antes que la deteccion ('.$detectAt.').'
     );
+
+    // DECISION 11(d) de la ficha 3.2. Con `runInBackground()`, un comando
+    // programado que muere deja el planificador tan contento: no hay excepcion
+    // que atrapar, no hay salida que nadie lea y la metrica de la noche
+    // anterior se queda con el valor de la anterior. `->onFailure(...)` es lo
+    // que convierte ese silencio en una linea localizable en Loki.
+    expect(str_contains(bloqueProgramado($scheduler, 'attendance:reconcile'), '->onFailure('))->toBeTrue(
+        'attendance:reconcile no registra su fallo: si la reconciliacion muere, nadie se entera.'
+    );
 })->group('RF-PR-02');
 
 it('programa la deteccion de incidencias y su metrica, que es lo que las hace existir', function (): void {
@@ -384,7 +423,17 @@ it('programa la deteccion de incidencias y su metrica, que es lo que las hace ex
         ->toContain("Schedule::command('attendance:detect-incidents')")
         ->toContain("Schedule::command('compliance:incident-metrics')")
         ->toMatch('/attendance:detect-incidents\'\)\s*\n\s*->dailyAt\(/');
-})->group('RF-PR-01');
+
+    // DECISION 11(d). Los tres comandos con consecuencia legal o de nomina que
+    // corren de noche registran su fallo: la deteccion de incidencias —sin ella
+    // la alerta de turnos abiertos es ciega— y la retencion, cuyo fallo
+    // silencioso deja datos personales mas alla de su plazo (RL-11).
+    foreach (['attendance:detect-incidents', 'compliance:apply-retention'] as $comando) {
+        expect(str_contains(bloqueProgramado($scheduler, $comando), '->onFailure('))->toBeTrue(
+            $comando.' no registra su fallo: con runInBackground() nadie se entera de que murio.'
+        );
+    }
+})->group('RF-PR-01', 'RL-11');
 
 it('dirige la alerta de errores criticos nuevos al IT del cliente, con runbook', function (): void {
     // Doc 01 §9.3, fila «Errores nuevos de severidad critica en error_events |
@@ -392,7 +441,7 @@ it('dirige la alerta de errores criticos nuevos al IT del cliente, con runbook',
     // filas que apuntan al mismo runbook —5xx y p95 del endpoint de
     // fichaje— son de la tarea 3.2 y no tienen regla en este fichero: el
     // runbook ya las cubre, la regla de Prometheus todavia no existe.
-    $reglas = reglasDeAlerta('infra/observability/prometheus/rules/errors.yml');
+    $reglas = AlertRules::inFile('infra/observability/prometheus/rules/errors.yml');
 
     exigeProcedimientoEnCadaAlerta($reglas);
 
@@ -415,6 +464,59 @@ it('dirige la alerta de errores criticos nuevos al IT del cliente, con runbook',
         ->toContain('product:errors')
         ->toContain('error_events');
 })->group('RF-PD-15');
+
+it('no deja ningun fichero de reglas fuera de la norma del §8.4', function (): void {
+    // EL HALLAZGO QUE ESTA PRUEBA EXISTE PARA NO REPETIR. La norma «cada alerta
+    // con umbral, destinatario y runbook que existe» se comprobaba fichero a
+    // fichero, con la lista de ficheros escrita a mano en esta suite. `auth.yml`
+    // se quedo fuera de esa lista desde que se escribio hasta la tarea 3.1: tres
+    // alertas de ataque a credenciales sin que nadie comprobara que llevaban
+    // procedimiento, y la puerta figurando en verde todo ese tiempo.
+    //
+    // Con el descubrimiento por `glob`, el fichero numero once entra en la norma
+    // el dia que se crea y sin que nadie se acuerde de añadirlo (decision 4 de
+    // la ficha 3.2). Las pruebas por fichero de arriba siguen: dicen COSAS
+    // DISTINTAS de cada grupo —a quien avisa, con que umbral—; esta dice lo
+    // mismo de todos.
+    $ficheros = AlertRules::files();
+
+    // Cota inferior: si el `glob` deja de encontrar nada —una ruta mal escrita,
+    // un directorio movido—, el bucle no itera y la prueba pasa sin comprobar
+    // ninguna alerta.
+    expect(\count($ficheros))->toBeGreaterThanOrEqual(
+        6,
+        'El descubrimiento de reglas no encuentra los ficheros: la ruta '.AlertRules::DIRECTORY.' esta mal.'
+    );
+
+    foreach ($ficheros as $fichero) {
+        exigeProcedimientoEnCadaAlerta(AlertRules::inFile($fichero));
+    }
+})->group('RF-PR-01', 'RF-PR-02', 'RF-PR-04', 'RS-07');
+
+it('no admite ninguna severidad ni ningun destinatario fuera de los cuatro y los tres declarados', function (): void {
+    // DECISIONES 3 y 4 de la ficha 3.2. La escala es de cuatro valores
+    // —`critical`, `high`, `warning`, `info`— y los destinatarios son tres, cada
+    // uno con su ruta en Alertmanager. Un `severity: major` o un `destinatario:
+    // soporte` inventados sobre la marcha no encuentran ruta, caen en el
+    // receptor de respaldo y no avisan a nadie: la alerta figura escrita,
+    // probada y encaminada, y en la practica es un fichero de texto.
+    //
+    // La norma del §8.4 no lo cubre: comprueba que las etiquetas EXISTEN, no que
+    // digan algo que el enrutado entienda.
+    $fuera = [];
+
+    foreach (AlertRules::all() as $regla) {
+        if (! \in_array($regla['severity'], AlertRules::SEVERITIES, true)) {
+            $fuera[] = $regla['file'].' · '.$regla['alert'].' · severity='.$regla['severity'];
+        }
+
+        if (! \in_array($regla['destinatario'], AlertRules::RECIPIENTS, true)) {
+            $fuera[] = $regla['file'].' · '.$regla['alert'].' · destinatario='.$regla['destinatario'];
+        }
+    }
+
+    expect($fuera)->toBe([]);
+})->group('RF-PR-04', 'RS-07');
 
 it('no deja ningun runbook enlazado desde otro que no exista', function (): void {
     // El hallazgo que esta prueba existe para no repetir: `brecha-de-seguridad.md`

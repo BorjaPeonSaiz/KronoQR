@@ -1,0 +1,452 @@
+{
+  "id": null,
+  "uid": "kronoqr-kiosks",
+  "title": "KronoQR · Operación de quioscos",
+  "description": "Soporte / IT del cliente. Estado por dispositivo, último latido, cola pendiente, escaneos por hora (doc 02 §8.3). Primer paso del runbook docs/runbooks/quiosco-no-responde.md.",
+  "tags": ["kronoqr", "quioscos", "operacion"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "refresh": "30s",
+  "style": "dark",
+  "graphTooltip": 1,
+  "liveNow": false,
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": { "refresh_intervals": ["10s", "30s", "1m", "5m"] },
+  "links": [],
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "templating": {
+    "list": [
+      {
+        "current": { "selected": true, "text": "All", "value": "$__all" },
+        "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+        "hide": 0,
+        "includeAll": true,
+        "multi": true,
+        "name": "device",
+        "label": "Quiosco",
+        "options": [],
+        "query": { "query": "label_values(kiosk_last_seen_seconds, device)", "refId": "StandardVariableQuery" },
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "table",
+      "title": "Estado por dispositivo",
+      "description": "¿Qué quiosco lleva parado y desde cuándo, a las 06:00? Ultimo latido en segundos, cola offline pendiente de sincronizar y escaneos de la última hora, por dispositivo.",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "time() - kiosk_last_seen_seconds{device=~\"$device\"}",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "kiosk_offline_queue_size{device=~\"$device\"}",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "refId": "C",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "sum by (device) (increase(scans_total{device=~\"$device\"}[1h]))",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": { "byField": "device", "mode": "outer" }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time": true, "Time 1": true, "Time 2": true, "Time 3": true },
+            "renameByName": {
+              "device": "Dispositivo",
+              "Value #A": "Último latido (s)",
+              "Value #B": "Cola offline",
+              "Value #C": "Escaneos última hora"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "custom": { "align": "auto", "cellOptions": { "type": "auto" } } },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Último latido (s)" },
+            "properties": [
+              { "id": "unit", "value": "s" },
+              {
+                "id": "custom.cellOptions",
+                "value": { "type": "color-background", "mode": "basic" }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "green", "value": null },
+                    { "color": "#EAB839", "value": 120 },
+                    { "color": "red", "value": 600 }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Cola offline" },
+            "properties": [
+              { "id": "unit", "value": "short" },
+              {
+                "id": "custom.cellOptions",
+                "value": { "type": "color-background", "mode": "basic" }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "green", "value": null },
+                    { "color": "#EAB839", "value": 25 },
+                    { "color": "red", "value": 50 }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": { "showHeader": true, "cellHeight": "sm", "footer": { "show": false } }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Dispositivos con latido en Prometheus",
+      "description": "Cuántos quioscos tienen serie kiosk_last_seen_seconds viva ahora mismo. No es el recuento de dispositivos emparejados (eso vive en la base de datos y lo muestra el panel de salud de la tarea 3.3): si Redis se vació, un quiosco ya callado puede desaparecer de aquí hasta su siguiente latido (límite conocido, decisión 10 de la tarea 3.2).",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 9 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "count(kiosk_last_seen_seconds)",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Quioscos sin latido > 10 min",
+      "description": "Recuento de dispositivos que cruzan el umbral de la alerta QuioscoSinLatido (crítica, IT del cliente, docs/runbooks/quiosco-no-responde.md). Debe ser cero fuera de una incidencia real.",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 9 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "count(time() - kiosk_last_seen_seconds > 600) OR vector(0)",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Fichajes por PIN de respaldo (24h)",
+      "description": "Una subida indica un problema con la emisión o el estado de las tarjetas (doc 01 §9.2). Termometro barato de la calidad de la credencial.",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 9 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "sum(increase(pin_fallback_scans_total[24h])) OR vector(0)",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Escaneos rechazados (1h)",
+      "description": "Escaneos con resultado rejected_* en la última hora, de cualquier causa. Detecta credenciales deterioradas o intentos de fraude (doc 01 §9.2). El desglose por causa está abajo.",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 9 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "sum(increase(scans_total{result=~\"rejected.*\"}[1h])) OR vector(0)",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "#EAB839", "value": 10 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Escaneos por hora, por quiosco",
+      "description": "Detecta un quiosco caído en el cambio de turno (doc 01 §9.2): una línea que cae a cero mientras las demás siguen es un quiosco sin actividad.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 13 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "sum by (device) (increase(scans_total{device=~\"$device\"}[1h]))",
+          "legendFormat": "{{device}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "pointSize": 5,
+            "stacking": { "mode": "none", "group": "A" },
+            "axisPlacement": "auto"
+          },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Cola offline por dispositivo",
+      "description": "Antigüedad de la cola offline por dispositivo (doc 01 §9.2): detecta tablets desconectadas. Línea de umbral en 50 elementos, coherente con la alerta ColaOfflineAtascada.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 13 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "kiosk_offline_queue_size{device=~\"$device\"}",
+          "legendFormat": "{{device}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "pointSize": 5,
+            "stacking": { "mode": "none", "group": "A" },
+            "axisPlacement": "auto",
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 50 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Retraso de sincronización (p95), por dispositivo",
+      "description": "Tiempo que esperó en la tablet el fichaje más antiguo de cada lote sincronizado (doc 01 §9.2): dice si una cola drena o lleva media jornada atascada.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 21 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "histogram_quantile(0.95, sum by (le, device) (rate(sync_delay_seconds_bucket{device=~\"$device\"}[10m])))",
+          "legendFormat": "{{device}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "pointSize": 5,
+            "stacking": { "mode": "none", "group": "A" },
+            "axisPlacement": "auto"
+          },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Escaneos rechazados por causa (1h)",
+      "description": "Desglose de rejected_unknown, rejected_revoked, etc. (doc 01 §9.2, RS-03). El desenlace detallado solo sale por aquí: nunca se revela al empleado por qué se rechazó (regla dura 17).",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 21 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "sum by (result) (increase(scans_total{result=~\"rejected.*\"}[1h]))",
+          "legendFormat": "{{result}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 60,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "stacking": { "mode": "normal", "group": "A" },
+            "axisPlacement": "auto"
+          },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["sum"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    }
+  ]
+}

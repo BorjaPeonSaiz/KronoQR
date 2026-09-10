@@ -1,0 +1,143 @@
+# KronoQR — pruebas unitarias de infra/observability/prometheus/rules/
+# projection.yml (tarea 3.2, decision 2). Las dos reglas existentes desde la
+# Fase 2 (DivergenciaEnReconciliacionNocturna, ReconciliacionDeProyeccionAusente)
+# no tenian ninguna prueba: las ganan aqui, junto con la nueva de esta tarea
+# (ReconciliacionConFallos, deuda de la Fase 2).
+rule_files:
+  - ../rules/projection.yml
+
+evaluation_interval: 1m
+
+tests:
+  #-----------------------------------------------------------------------------
+  # DivergenciaEnReconciliacionNocturna: al menos una jornada desviada en las
+  # ultimas 24 h. `projection_divergence_total` debe permanecer SIEMPRE en
+  # cero (doc 02 §8.2): cualquier incremento dispara.
+  #-----------------------------------------------------------------------------
+  - name: divergencia_dispara
+    interval: 1m
+    input_series:
+      - series: projection_divergence_total
+        values: "0+1x10"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: DivergenciaEnReconciliacionNocturna
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: DivergenciaEnReconciliacionNocturna
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              integrity: "true"
+              destinatario: it-cliente
+              component: projection
+            exp_annotations:
+              summary: "La reconciliacion ha encontrado 6 jornada(s) con la proyeccion desviada"
+              description: >-
+                daily_totals no coincidia con los tramos vigentes de esos
+                dias. La reconciliacion ya ha reescrito las filas y ha
+                dejado el antes y el despues en audit_log, asi que los
+                numeros que se ven ahora son correctos: lo que hay que
+                averiguar es COMO se desviaron, porque la proyeccion se
+                recalcula entera en cada escritura y no deberia poder
+                hacerlo. El fichaje NO esta afectado y nadie se ha quedado
+                sin poder fichar: la fuente de verdad son shift_entries.
+              runbook_url: docs/runbooks/divergencia-proyeccion.md
+
+  #-----------------------------------------------------------------------------
+  # Valor limite: el contador nunca sube. Nunca dispara.
+  #-----------------------------------------------------------------------------
+  - name: divergencia_boundary
+    interval: 1m
+    input_series:
+      - series: projection_divergence_total
+        values: "0x30"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: DivergenciaEnReconciliacionNocturna
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # ReconciliacionDeProyeccionAusente: la metrica no llega nunca.
+  #-----------------------------------------------------------------------------
+  - name: reconciliacion_ausente_dispara
+    interval: 1m
+    input_series:
+      - series: projection_divergence_total
+        values: "0x40"
+    alert_rule_test:
+      - eval_time: 29m
+        alertname: ReconciliacionDeProyeccionAusente
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: ReconciliacionDeProyeccionAusente
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              destinatario: it-cliente
+              component: projection
+            exp_annotations:
+              summary: "Hace mas de 26 h que no se reconcilia daily_totals"
+              description: >-
+                La alerta de divergencia solo suena si el comando diario se
+                ejecuta. O el scheduler esta parado, o
+                `attendance:reconcile` falla antes de publicar la metrica, o
+                el destino de metricas no esta montado. Mientras dure, no se
+                sabe si la proyeccion cuadra: no se sabe que cuadra, que no
+                es lo mismo que saber que no cuadra.
+              runbook_url: docs/runbooks/divergencia-proyeccion.md
+
+  #-----------------------------------------------------------------------------
+  # Valor limite: la reconciliacion se ejecuto hace poco. Nunca dispara.
+  #-----------------------------------------------------------------------------
+  - name: reconciliacion_ausente_boundary
+    interval: 1m
+    input_series:
+      - series: projection_reconciliation_last_run_timestamp_seconds
+        values: "0+60x1620"
+    alert_rule_test:
+      - eval_time: 26h
+        alertname: ReconciliacionDeProyeccionAusente
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # ReconciliacionConFallos: la pasada de anoche dejo jornadas sin resolver.
+  #-----------------------------------------------------------------------------
+  - name: reconciliacion_con_fallos_dispara
+    interval: 1m
+    input_series:
+      - series: projection_reconciliation_last_failures
+        values: "1x10"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: ReconciliacionConFallos
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: ReconciliacionConFallos
+        exp_alerts:
+          - exp_labels:
+              severity: high
+              destinatario: it-cliente
+              component: projection
+            exp_annotations:
+              summary: "La reconciliacion de anoche dejo 1 jornada(s) sin resolver"
+              description: >-
+                `attendance:reconcile` no pudo corregir al menos una de las
+                divergencias que detecto. daily_totals sigue siendo una
+                proyeccion de lectura: el fichaje no esta afectado, pero el
+                panel y los informes pueden estar mostrando un total
+                desviado en esas jornadas hasta la siguiente pasada.
+              runbook_url: docs/runbooks/divergencia-proyeccion.md
+
+  #-----------------------------------------------------------------------------
+  # Valor limite: la pasada de anoche no dejo ningun fallo. Nunca dispara.
+  #-----------------------------------------------------------------------------
+  - name: reconciliacion_con_fallos_boundary
+    interval: 1m
+    input_series:
+      - series: projection_reconciliation_last_failures
+        values: "0x20"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: ReconciliacionConFallos
+        exp_alerts: []

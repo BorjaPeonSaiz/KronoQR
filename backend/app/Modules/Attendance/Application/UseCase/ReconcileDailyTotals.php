@@ -346,6 +346,11 @@ final readonly class ReconcileDailyTotals
      * ejecutarse, y el silencio es el peor de los fallos: sin el sello de tiempo,
      * apagar el planificador seria la forma mas comoda de que la alerta de
      * divergencia no volviera a sonar nunca.
+     *
+     * Los fallos van con el resto (tarea 3.2): `projection_reconciliation_last_failures`
+     * es lo que distingue «anoche no habia nada que corregir» de «anoche hubo
+     * algo y no se pudo corregir», que hasta ahora solo se podia leer en el
+     * codigo de salida del comando.
      */
     private function publish(ReconciliationReport $report, DateTimeImmutable $now): ReconciliationReport
     {
@@ -353,6 +358,7 @@ final readonly class ReconcileDailyTotals
             $report->workDaysInspected,
             $report->divergences,
             $report->corrected,
+            $report->failures,
             $now,
         );
 

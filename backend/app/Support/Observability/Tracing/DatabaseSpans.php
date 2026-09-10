@@ -74,12 +74,17 @@ final class DatabaseSpans
                 'postgresql '.$operation,
                 SpanKind::KIND_CLIENT,
                 [
-                    // Nombres del §8.1 de la ficha. La semantica 1.38 los llama
-                    // `db.system.name` y `db.operation.name`; el cambio de nombre
-                    // afecta a los cuadros de mando de la 3.2 y se hace ahi o en
-                    // ninguna parte, no a medias.
-                    'db.system' => 'postgresql',
-                    'db.operation' => $operation,
+                    // Nombres ESTABLES de la convencion semantica 1.38 (tarea
+                    // 3.2, decision 12). La 3.1 los dejo como `db.system` y
+                    // `db.operation` —los nombres de la ficha— con la nota de que
+                    // se cambiaban con los cuadros de mando o en ninguna parte:
+                    // renombrar un atributo cuando ya hay paneles y consultas
+                    // encima cuesta mucho mas que hacerlo ahora, que no hay
+                    // ninguna. `db.query.text` ya era el nombre estable;
+                    // `db.connection` es el nombre de la conexion de Laravel y
+                    // no tiene equivalente en la convencion, asi que se queda.
+                    'db.system.name' => 'postgresql',
+                    'db.operation.name' => $operation,
                     'db.query.text' => $this->queryTextOf($event->sql),
                     'db.connection' => $event->connectionName,
                 ],

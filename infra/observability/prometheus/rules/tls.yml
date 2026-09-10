@@ -1,0 +1,83 @@
+# KronoQR — alertas de caducidad del certificado TLS (doc 01 §9.3, tarea 3.2).
+#
+# Fila del catalogo del doc 01 §9.3 que implementa este fichero:
+#
+#   | Certificado TLS proximo a expirar | < 21 dias | Alta |
+#
+# LA METRICA. `probe_ssl_earliest_cert_expiry` sale GRATIS de la sonda de
+# uptime que ya existe desde la tarea 3.1 (`job: kronoqr-uptime`,
+# `prometheus.yml`): blackbox-exporter sondea `/api/v1/health` y
+# `/api/v1/ready` por HTTPS contra el puerto 8443 (modulo `http_2xx_tls`,
+# `blackbox/blackbox.yml`) y, de paso, mide cuando caduca el certificado que
+# sirve esa conexion. No hace falta un contenedor ni una sonda nueva: es la
+# razon de que `blackbox.yml` ya avisara de esto en su cabecera desde la 3.1.
+#
+# `min(...)`: hay dos instancias sondeadas (`/health` y `/ready`), las dos
+# contra el MISMO certificado del borde. Sin agregar, la misma caducidad
+# produciria dos alertas identicas; con `min`, una — y si alguna vez el borde
+# sirviera dos certificados distintos, la que caduca antes es la que importa.
+#
+# DESTINATARIO: IT del cliente. Es quien gestiona el certificado del servidor
+# (autofirmado o de una CA, doc 02 §3.4) y quien puede renovarlo.
+#
+# IMPACTO EN EL FICHAJE SI NADIE ACTUA: TOTAL. Un certificado caducado hace
+# que el navegador del quiosco (y cualquier cliente que valide la cadena)
+# rechace la conexion HTTPS entera: no es un endpoint fallando, es el borde
+# entero inalcanzable. 21 dias de aviso es deliberadamente largo para que
+# renovar nunca sea una emergencia de madrugada.
+groups:
+  - name: kronoqr-tls
+    interval: 1h
+    rules:
+      #------------------------------------------------------------------------
+      # Aviso temprano: menos de 21 dias para la caducidad. `for: 1h` porque el
+      # margen es de dias, no de minutos: no hace falta reaccionar a la
+      # primera evaluacion, y evita que un scrape con el certificado a medio
+      # leer dispare la alerta un ciclo antes de tiempo.
+      #
+      # `and ... >= 0` (decision 17h): sin esta segunda mitad, un certificado
+      # YA CADUCADO (diferencia negativa) tambien es "< 21 dias" y esta alerta
+      # sigue disparando A LA VEZ que `CertificadoTlsCaducado` -dos alertas de
+      # severidad distinta por el mismo hecho, y la de "Alta" sonando junto a
+      # la de "Critica" resta urgencia a la que de verdad la tiene-. Con el
+      # `>= 0`, esta regla se apaga en el instante en que el certificado
+      # caduca y `CertificadoTlsCaducado` toma el relevo en solitario.
+      #------------------------------------------------------------------------
+      - alert: CertificadoTlsProximoACaducar
+        expr: >-
+          min(probe_ssl_earliest_cert_expiry) - time() < 21 * 86400
+          and min(probe_ssl_earliest_cert_expiry) - time() >= 0
+        for: 1h
+        labels:
+          severity: high
+          destinatario: it-cliente
+          component: tls
+        annotations:
+          summary: "El certificado TLS del borde caduca en menos de 21 dias"
+          description: >-
+            La sonda de disponibilidad mide que el certificado que sirve
+            /api/v1/health y /api/v1/ready caduca en menos de 21 dias. El
+            fichaje sigue funcionando hoy con normalidad: esto es tiempo para
+            renovarlo con calma, no una averia. Si caduca, el quiosco (y
+            cualquier navegador) dejara de poder conectar por HTTPS.
+          runbook_url: docs/runbooks/renovacion-certificado-tls.md
+
+      #------------------------------------------------------------------------
+      # El certificado YA ha caducado. Critica y con `for` corto: aqui si
+      # importan los minutos.
+      #------------------------------------------------------------------------
+      - alert: CertificadoTlsCaducado
+        expr: min(probe_ssl_earliest_cert_expiry) - time() < 0
+        for: 5m
+        labels:
+          severity: critical
+          destinatario: it-cliente
+          component: tls
+        annotations:
+          summary: "El certificado TLS del borde ha caducado"
+          description: >-
+            El certificado que sirve el borde HTTPS ya no es valido. Los
+            navegadores y las tablets del quiosco rechazaran la conexion:
+            este es el escenario que la alerta de 21 dias existia para
+            evitar. Renueva el certificado de inmediato.
+          runbook_url: docs/runbooks/renovacion-certificado-tls.md

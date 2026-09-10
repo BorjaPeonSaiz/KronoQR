@@ -1,0 +1,203 @@
+# KronoQR — pruebas unitarias de infra/observability/prometheus/rules/audit.yml
+# (tarea 3.2, decision 2). Las cuatro reglas existentes desde la Fase 1
+# (RoturaDeCadenaDeAuditoria, VerificacionDeAuditoriaAusente,
+# ParticionDeAuditoriaAusente, ParticionDeAuditoriaDelProximoAnoSinPreparar)
+# no tenian ninguna prueba: las ganan aqui.
+rule_files:
+  - ../rules/audit.yml
+
+evaluation_interval: 1m
+
+tests:
+  #-----------------------------------------------------------------------------
+  # RoturaDeCadenaDeAuditoria: "cualquiera" es literal, sin umbral numerico.
+  # Una sola entrada rota (>0) dispara tras el `for: 1m`.
+  #-----------------------------------------------------------------------------
+  - name: rotura_dispara
+    interval: 1m
+    input_series:
+      - series: audit_chain_verification_failures_total
+        values: "1x10"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: RoturaDeCadenaDeAuditoria
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              integrity: "true"
+              destinatario: seguridad
+              component: audit
+            exp_annotations:
+              summary: "La cadena de hash de audit_log esta rota"
+              description: >-
+                La verificacion diaria ha encontrado al menos una entrada de
+                audit_log cuyo contenido no produce su hash, o cuyo
+                prev_hash no encaja con la entrada anterior. Alguien ha
+                escrito en la tabla por fuera de la aplicacion. El fichaje
+                NO esta afectado y no hay que parar nada: lo que hay que
+                hacer es acotar el alcance antes de que se pierdan los
+                registros del servidor (RL-15).
+              runbook_url: docs/runbooks/rotura-cadena-auditoria.md
+
+  #-----------------------------------------------------------------------------
+  # Valor limite justo por debajo: 0 fallos, para siempre. Nunca dispara.
+  #-----------------------------------------------------------------------------
+  - name: rotura_boundary
+    interval: 1m
+    input_series:
+      - series: audit_chain_verification_failures_total
+        values: "0x30"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: RoturaDeCadenaDeAuditoria
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # VerificacionDeAuditoriaAusente, primera mitad: la serie no llega nunca
+  # (absent). Dispara tras el `for: 30m`.
+  #-----------------------------------------------------------------------------
+  - name: verificacion_ausente_por_absent
+    interval: 1m
+    input_series:
+      # Otra serie cualquiera, para que el grupo se evalue con datos.
+      - series: audit_chain_verification_failures_total
+        values: "0x40"
+    alert_rule_test:
+      - eval_time: 29m
+        alertname: VerificacionDeAuditoriaAusente
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: VerificacionDeAuditoriaAusente
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              destinatario: seguridad
+              component: audit
+            exp_annotations:
+              summary: "Hace mas de 26 h que no se verifica la cadena de auditoria"
+              description: >-
+                RS-07 exige detectar una rotura en menos de 24 h, y eso solo
+                es cierto si el comando diario se ejecuta. O el scheduler
+                esta parado, o el comando falla antes de publicar la
+                metrica, o el destino de metricas no esta montado. El
+                umbral son 26 h para que un retraso normal de la ventana
+                nocturna no dispare la alerta.
+              runbook_url: docs/runbooks/rotura-cadena-auditoria.md
+
+  #-----------------------------------------------------------------------------
+  # VerificacionDeAuditoriaAusente, segunda mitad: la serie llega, pero lleva
+  # mas de 93600 s (26 h) sin actualizarse. El valor se congela desde el
+  # minuto 1 (`time() - valor` crece sin freno): cruza el umbral en el minuto
+  # 1561 (26 h y 1 min: la primera muestra con time()-valor > 93600) y
+  # dispara 30 min despues, en el minuto 1591 (26 h 31 min). Mismo `interval`
+  # que el grupo de reglas (1m): con un paso mas largo que el `lookback
+  # delta` por defecto de Prometheus (5m) la serie parece ausente entre
+  # muestras y se prueba otra cosa sin querer.
+  #-----------------------------------------------------------------------------
+  - name: verificacion_ausente_por_antiguedad
+    interval: 1m
+    input_series:
+      - series: audit_chain_last_verification_timestamp_seconds
+        values: "0x1620"
+    alert_rule_test:
+      - eval_time: 26h
+        alertname: VerificacionDeAuditoriaAusente
+        exp_alerts: []
+      - eval_time: 26h31m
+        alertname: VerificacionDeAuditoriaAusente
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              destinatario: seguridad
+              component: audit
+            exp_annotations:
+              summary: "Hace mas de 26 h que no se verifica la cadena de auditoria"
+              description: >-
+                RS-07 exige detectar una rotura en menos de 24 h, y eso solo
+                es cierto si el comando diario se ejecuta. O el scheduler
+                esta parado, o el comando falla antes de publicar la
+                metrica, o el destino de metricas no esta montado. El
+                umbral son 26 h para que un retraso normal de la ventana
+                nocturna no dispare la alerta.
+              runbook_url: docs/runbooks/rotura-cadena-auditoria.md
+
+  #-----------------------------------------------------------------------------
+  # Valor limite justo por debajo: la diferencia se queda en 93600 s EXACTOS
+  # (26 h) para siempre. El umbral es `> 93600` estricto: nunca dispara.
+  #-----------------------------------------------------------------------------
+  - name: verificacion_ausente_boundary
+    interval: 1m
+    input_series:
+      # value(t) = t - 93600: con A = -93600 y paso B = interval(60), la
+      # diferencia time()-valor es 93600 en TODAS las muestras.
+      - series: audit_chain_last_verification_timestamp_seconds
+        values: "-93600+60x1800"
+    alert_rule_test:
+      - eval_time: 30h
+        alertname: VerificacionDeAuditoriaAusente
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # ParticionDeAuditoriaAusente: falta la particion del año en curso.
+  #-----------------------------------------------------------------------------
+  - name: particion_ausente_dispara
+    interval: 1m
+    input_series:
+      - series: audit_log_partition_ready{horizon="current"}
+        values: "0x10"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: ParticionDeAuditoriaAusente
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: ParticionDeAuditoriaAusente
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              destinatario: it-cliente
+              component: audit
+              horizon: current
+            exp_annotations:
+              summary: "audit_log no tiene particion para el año en curso"
+              description: >-
+                Un INSERT en audit_log cuyo occurred_at no cae en ninguna
+                particion falla, y ese fallo tumba la transaccion de la
+                accion auditada: el fichaje deja de funcionar. `php artisan
+                compliance:ensure-audit-partitions` la crea; el runbook
+                explica que comprobar despues, porque haber llegado a este
+                estado significa que algo estuvo fallando antes.
+              runbook_url: docs/runbooks/rotura-cadena-auditoria.md
+
+  #-----------------------------------------------------------------------------
+  # Valor limite: la particion SI esta lista. Nunca dispara.
+  #-----------------------------------------------------------------------------
+  - name: particion_ausente_boundary
+    interval: 1m
+    input_series:
+      - series: audit_log_partition_ready{horizon="current"}
+        values: "1x20"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: ParticionDeAuditoriaAusente
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # ParticionDeAuditoriaDelProximoAnoSinPreparar: LIMITE CONOCIDO de esta
+  # comprobacion. `month() >= 11` exige noviembre o diciembre, y el reloj
+  # simulado de `promtool test rules` arranca SIEMPRE en el instante Unix 0
+  # (1 de enero de 1970: comprobado con `promql_expr_test` sobre `month()`,
+  # que devuelve 1 en cualquier `eval_time` de esta suite). No existe forma de
+  # anclar la prueba a un mes distinto, asi que el "dispara" de esta regla NO
+  # se puede ejercitar con promtool: solo se puede afirmar que, aunque falte
+  # la particion del año que viene, la alerta NO dispara mientras estemos
+  # (siempre, en esta herramienta) en enero.
+  #-----------------------------------------------------------------------------
+  - name: particion_proximo_ano_no_disparable_en_enero
+    interval: 1m
+    input_series:
+      - series: audit_log_partition_ready{horizon="next"}
+        values: "0x1200"
+    alert_rule_test:
+      - eval_time: 20h
+        alertname: ParticionDeAuditoriaDelProximoAnoSinPreparar
+        exp_alerts: []

@@ -1495,11 +1495,40 @@ prepare_package() {
 }
 
 #------------------------------------------------------------------------------
+# Ventana de mantenimiento para Prometheus/Alertmanager (tarea 3.2, decision
+# 6c): escribe kronoqr_maintenance.prom en BACKUP_PATH/metrics, el mismo
+# directorio y el mismo colector textfile de node-exporter que ya sirve el
+# resultado de la copia. `VentanaDeMantenimientoActiva` (rules/maintenance.yml)
+# lo lee para INHIBIR quiosco, API, TLS y disco mientras dura la actualizacion
+# -sintomas esperados de un reinicio de servicios, no una averia-, con un tope
+# de 4 h por si este script muriera sin llegar a poner active=0.
+#
+# SI EL DIRECTORIO NO EXISTE, NO ES UN ERROR: perfil `observability` apagado,
+# o una instalacion que todavia no ha hecho su primera copia (que es quien crea
+# el arbol de BACKUP_PATH). Sencillamente no hay a quien avisar. Y NUNCA deshace
+# la actualizacion por no poder escribir la metrica: `|| true` en la escritura
+# atomica es a proposito, con el mismo criterio que el resto de instrumentacion
+# de este script (doc 02 §3.5: fallo seguro, nada a medias).
+write_maintenance_metric() {
+  local active="$1" since="$2" dir="${CFG_BACKUP_PATH}/metrics"
+  [ -d "${dir}" ] || return 0
+  {
+    printf '# HELP kronoqr_maintenance_active Vale 1 mientras update.sh tiene el mantenimiento puesto (artisan down) y 0 el resto del tiempo.\n'
+    printf '# TYPE kronoqr_maintenance_active gauge\n'
+    printf 'kronoqr_maintenance_active %s\n' "${active}"
+    printf '# HELP kronoqr_maintenance_since_timestamp_seconds Marca de tiempo UNIX de cuando empezo el mantenimiento en curso, o el ultimo.\n'
+    printf '# TYPE kronoqr_maintenance_since_timestamp_seconds gauge\n'
+    printf 'kronoqr_maintenance_since_timestamp_seconds %s\n' "${since}"
+  } | kq_write_metrics_atomic "${dir}/kronoqr_maintenance.prom" || true
+}
+
+#------------------------------------------------------------------------------
 # Paso 2 — mantenimiento. Desde aqui, cualquier fallo deshace.
 #------------------------------------------------------------------------------
 lift_maintenance() {
   detail_note "--- retirando el mantenimiento de la version ${SOURCE_VERSION} ---"
   compose_current exec -T app php artisan up >>"$(detail_sink)" 2>&1 || return 1
+  write_maintenance_metric 0 "${MAINTENANCE_SINCE}"
   compose_current up -d horizon scheduler >>"$(detail_sink)" 2>&1 || return 1
   MAINTENANCE_SECONDS=$(($(now_epoch) - MAINTENANCE_SINCE))
   say "$(kq_format u_maintenance_off "${SOURCE_VERSION}")"
@@ -1529,6 +1558,7 @@ phase_maintenance() {
   if ! compose_current exec -T app php artisan down --retry="${KQ_MAINTENANCE_RETRY_SECONDS}" >>"$(detail_sink)" 2>&1; then
     rollback_and_die "$(kq_format u_f_maintenance_on "${CURRENT_COMPOSE}")" maintenance_failed
   fi
+  write_maintenance_metric 1 "${MAINTENANCE_SINCE}"
   say "$(kq_text u_maintenance_on)"
 
   say "$(kq_format u_stop_workers "${SOURCE_VERSION}")"
@@ -1917,6 +1947,7 @@ phase_start_and_verify() {
   detail_note "--- artisan up (${TARGET_VERSION}) ---"
   compose_new exec -T app php artisan up >>"$(detail_sink)" 2>&1 ||
     rollback_and_die "$(kq_format u_f_maintenance_off "${COMPOSE_FILE}")" maintenance_failed
+  write_maintenance_metric 0 "${MAINTENANCE_SINCE}"
   status="$(edge_status "${KQ_MANAGEMENT_PROBE}")"
   if [ "${status}" = "401" ]; then
     kq_msg check_ok "$(kq_format u_verify_lifted_ok "${KQ_MANAGEMENT_PROBE}")"
@@ -2053,6 +2084,7 @@ rollback_and_die() {
   # La version anterior arranca en un contenedor nuevo, sin el fichero de
   # mantenimiento: `up` por si acaso, y no importa que no hubiera nada.
   compose_rollback exec -T app php artisan up >>"$(detail_sink)" 2>&1
+  write_maintenance_metric 0 "${MAINTENANCE_SINCE}"
 
   body="$(edge_probe /api/v1/health)" || {
     err "$(kq_format u_f_rollback_relaunch "${SOURCE_VERSION}")"

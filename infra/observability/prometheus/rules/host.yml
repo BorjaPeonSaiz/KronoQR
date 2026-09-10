@@ -1,0 +1,83 @@
+# KronoQR — alertas de espacio en disco del servidor (doc 01 §9.3, tarea 3.2).
+#
+# Fila del catalogo del doc 01 §9.3 que implementa este fichero:
+#
+#   | Espacio en disco | < 20 % | Alta |
+#
+# LA METRICA. `node_filesystem_avail_bytes` / `node_filesystem_size_bytes` del
+# colector `filesystem` de node-exporter, con `--path.rootfs=/host` y el
+# sistema de ficheros del anfitrion montado de solo lectura en `/host`
+# (`compose.prod.yaml`, y desde esta tarea tambien `compose.dev.yaml`, para
+# poder ejercitar esta regla en desarrollo). Es el disco del SERVIDOR
+# —PostgreSQL, WAL, la aplicacion, los logs—, no el volumen de copias: esa
+# alerta ya existe por separado (`DiscoDeCopiasCasiLleno`, `backup.yml`) y
+# mira solo `BACKUP_PATH`, que puede llenarse sin que el disco del sistema se
+# resienta y viceversa.
+#
+# `mountpoint="/"` y no una serie por cada punto de montaje: dentro de un
+# contenedor con `--path.rootfs=/host`, el punto que representa el disco del
+# anfitrion es la raiz de ese montaje. `fstype!~"tmpfs|overlay|squashfs"`
+# descarta sistemas de ficheros virtuales que no representan disco real y que,
+# sin filtrar, podrian dar un ratio falso.
+#
+# DESTINATARIO: IT del cliente. Es quien puede ampliar el disco, mover
+# BACKUP_RETENTION_DAYS o liberar espacio.
+#
+# IMPACTO EN EL FICHAJE SI NADIE ACTUA: SEVERO Y EN CASCADA. Con el disco
+# lleno, PostgreSQL deja de poder escribir —el fichaje, la auditoria, la
+# proyeccion, todo—, el archivado de WAL falla (RPO se degrada, `backup.yml` /
+# `ArchivadoDeWalDetenido` ya lo vigila desde ese angulo) y la copia diaria
+# tambien falla. El 20 % de margen existe para que renovar espacio nunca sea
+# una carrera contra un disco que ya esta a cero.
+groups:
+  - name: kronoqr-host
+    interval: 60s
+    rules:
+      #------------------------------------------------------------------------
+      # Menos del 20 % libre en el disco del sistema. `for: 15m` porque el
+      # espacio en disco no cambia en segundos: un pico transitorio (una copia
+      # a medio escribir, un `vacuum` de PostgreSQL) no debe disparar la
+      # alerta antes de que se confirme que el problema persiste.
+      #------------------------------------------------------------------------
+      - alert: EspacioEnDiscoBajo
+        expr: >-
+          node_filesystem_avail_bytes{mountpoint="/", fstype!~"tmpfs|overlay|squashfs"}
+          / node_filesystem_size_bytes{mountpoint="/", fstype!~"tmpfs|overlay|squashfs"}
+          < 0.20
+        for: 15m
+        labels:
+          severity: high
+          destinatario: it-cliente
+          component: host
+        annotations:
+          summary: "Queda menos del 20 % de espacio libre en el disco del servidor"
+          description: >-
+            El disco del sistema (no el volumen de copias, que tiene su
+            propia alerta) esta por debajo del 20 % libre. Si se llena,
+            PostgreSQL deja de poder escribir: el fichaje, la auditoria y la
+            proyeccion se ven todos afectados a la vez. Libera espacio o
+            amplia el disco antes de que llegue a cero.
+          runbook_url: docs/runbooks/espacio-en-disco.md
+
+      #------------------------------------------------------------------------
+      # El silencio: sin esta regla, que node-exporter deje de publicar la
+      # serie del disco (colector caido, montaje /host perdido tras un
+      # cambio de configuracion) seria indistinguible de "el disco esta bien".
+      #------------------------------------------------------------------------
+      - alert: MetricasDelAnfitrionAusentes
+        expr: absent(node_filesystem_size_bytes{mountpoint="/"})
+        for: 30m
+        labels:
+          severity: warning
+          destinatario: it-cliente
+          component: host
+        annotations:
+          summary: "No llega ninguna metrica de espacio en disco del servidor"
+          description: >-
+            Prometheus no ve node_filesystem_size_bytes del punto de montaje
+            raiz. O node-exporter no tiene el colector `filesystem`
+            habilitado, o el montaje de `--path.rootfs=/host` se ha perdido:
+            en cualquiera de los dos casos, la alerta de espacio en disco esta
+            ciega y no distingue "hay sitio de sobra" de "nadie lo esta
+            midiendo".
+          runbook_url: docs/runbooks/espacio-en-disco.md
