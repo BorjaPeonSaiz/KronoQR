@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Modules\Compliance\Application\UseCase\VerifyAuditChain;
 use App\Modules\Compliance\Domain\AuditChain;
 use App\Modules\Compliance\Domain\ValueObject\AuditAction;
+use App\Modules\Compliance\Domain\ValueObject\AuditActionName;
 use App\Modules\Compliance\Domain\ValueObject\AuditActor;
 use App\Modules\Compliance\Domain\ValueObject\AuditChainAnchor;
 use App\Modules\Compliance\Domain\ValueObject\AuditChainBreakKind;
@@ -58,6 +59,37 @@ function intactChain(int $length, ?string $from = null): array
     }
 
     return $entries;
+}
+
+/**
+ * Un borrador con una accion que **no** esta en el catalogo de esta version, tal
+ * y como lo reconstruye `AuditLogRow` al leer la fila.
+ *
+ * @param  array<array-key, mixed>  $payload
+ */
+function unknownActionDraft(int $minute, string $action, array $payload = []): AuditEntryDraft
+{
+    return new AuditEntryDraft(
+        occurredAt: Instants::utc(sprintf('2026-08-19 06:%02d:00', $minute)),
+        actor: AuditActor::system(),
+        action: AuditActionName::fromStorage($action),
+        subject: AuditSubject::of('installation'),
+        payload: AuditPayload::of($payload),
+    );
+}
+
+/**
+ * Cadena de dos eslabones: uno normal y, encima, uno con la accion desconocida.
+ * Es la forma exacta de una base actualizada y luego devuelta atras.
+ *
+ * @return list<AuditEntry>
+ */
+function chainWithAction(string $action): array
+{
+    $first = AuditChain::link(chainDraft(0), AuditChain::genesisHash())->withId(1);
+    $second = AuditChain::link(unknownActionDraft(1, $action), $first->hash)->withId(2);
+
+    return [$first, $second];
 }
 
 function verifierFor(InMemoryAuditChainReader $reader, RecordingAuditMetrics $metrics): VerifyAuditChain
@@ -183,3 +215,67 @@ it('publica el resultado como metrica tambien cuando esta todo bien', function (
     expect($metrics->lastVerification)->not->toBeNull()
         ->and($metrics->lastVerification?->rowsVerified)->toBe(2);
 })->group('RS-07');
+
+// --- Compatibilidad hacia delante: acciones que esta version no conoce -------
+
+it('verifica en verde una fila cuya accion no esta en el catalogo de esta version', function (): void {
+    // El caso real de la etapa ⑧b: tras una vuelta atras, la version ANTERIOR
+    // verifica una base en la que la SIGUIENTE ya escribio. Las acciones nuevas
+    // las estrena siempre la version de despues, asi que un verificador antiguo
+    // tiene que recorrer nombres que no reconoce. La cadena se comprueba por
+    // hash, no por catalogo: si el hash cuadra, la fila esta integra.
+    $chain = chainWithAction('system.future_action');
+
+    $metrics = new RecordingAuditMetrics;
+    $result = verifierFor(new InMemoryAuditChainReader($chain), $metrics)->handle();
+
+    expect($result->isIntact())->toBeTrue()
+        ->and($result->rowsVerified)->toBe(2)
+        ->and($metrics->failuresTotal)->toBe(0)
+        ->and($result->sawUnknownActions())->toBeTrue()
+        ->and($result->unknownActions)->toBe(['system.future_action']);
+})->group('RS-07', 'RL-04', 'RF-PD-10');
+
+it('no cuenta las acciones desconocidas como hallazgos ni las repite', function (): void {
+    // Dos filas con el mismo nombre desconocido y una con otro: la lista es de
+    // nombres distintos y ordenada, para que la salida del comando no dependa
+    // del orden de las filas.
+    $previous = AuditChain::genesisHash();
+    $chain = [];
+    $id = 1;
+
+    foreach (['zeta.desconocida', 'alfa.desconocida', 'zeta.desconocida'] as $action) {
+        $entry = AuditChain::link(unknownActionDraft($id, $action), $previous)->withId($id);
+        $chain[] = $entry;
+        $previous = $entry->hash;
+        $id++;
+    }
+
+    $result = verifierFor(new InMemoryAuditChainReader($chain), new RecordingAuditMetrics)->handle();
+
+    expect($result->failureCount())->toBe(0)
+        ->and($result->unknownActions)->toBe(['alfa.desconocida', 'zeta.desconocida']);
+})->group('RS-07', 'RL-04');
+
+it('sigue denunciando la manipulacion de una fila con accion desconocida', function (): void {
+    // La contraparte imprescindible: tolerar el nombre no puede significar
+    // dejar de comprobar el contenido. Se altera el payload de la fila que
+    // lleva la accion desconocida y el verificador tiene que verlo.
+    $chain = chainWithAction('system.future_action');
+
+    $tampered = new AuditEntry(
+        unknownActionDraft(2, 'system.future_action', ['alterado' => true]),
+        $chain[1]->previousHash,
+        $chain[1]->hash,
+        2,
+    );
+
+    $result = verifierFor(
+        new InMemoryAuditChainReader([$chain[0], $tampered]),
+        new RecordingAuditMetrics,
+    )->handle();
+
+    expect($result->isIntact())->toBeFalse()
+        ->and($result->breaks[0]->kind)->toBe(AuditChainBreakKind::ContentAltered)
+        ->and($result->unknownActions)->toBe(['system.future_action']);
+})->group('RS-07', 'RL-04');

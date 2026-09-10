@@ -7,6 +7,7 @@ namespace App\Modules\Compliance\Application\UseCase;
 use App\Modules\Compliance\Application\Port\AuditChainReader;
 use App\Modules\Compliance\Application\Port\AuditMetrics;
 use App\Modules\Compliance\Domain\AuditChain;
+use App\Modules\Compliance\Domain\ValueObject\AuditActionName;
 use App\Modules\Compliance\Domain\ValueObject\AuditChainBreak;
 use App\Modules\Compliance\Domain\ValueObject\AuditChainBreakKind;
 use App\Modules\Compliance\Domain\ValueObject\AuditChainVerification;
@@ -33,6 +34,15 @@ use App\Modules\Shared\Application\Port\Clock;
  * sonar la alerta critica todos los dias de forma permanente, y una alerta que
  * suena siempre se silencia.
  *
+ * **Una accion que este binario no conoce no es una rotura.** La cadena se
+ * verifica por hash y el hash se recalcula con la accion como cadena literal
+ * (doc 02 §7.4): una fila cuya accion no esta en el catalogo de esta version
+ * verifica exactamente igual. Ocurre de verdad —y por diseño— cuando una
+ * actualizacion se deshace y la version anterior queda corriendo sobre una base
+ * en la que la siguiente ya escribio: las acciones nuevas siempre las estrena la
+ * version de despues. Se informan como aviso, nunca como hallazgo. Ver
+ * {@see AuditActionName}.
+ *
  * **No para en la primera rotura.** Recorre hasta el final y devuelve todas: al
  * responder un incidente, saber si son tres filas seguidas o trescientas
  * repartidas es la mitad del diagnostico (RL-15).
@@ -50,10 +60,21 @@ final readonly class VerifyAuditChain
         $expectedPrevious = null;
         $sealedPurgeYears = [];
         $breaks = [];
+        $unknownActions = [];
         $rows = 0;
 
         foreach ($this->reader->inChainOrder($chunkSize) as $entry) {
             $rows++;
+
+            if (! $entry->draft->action->isKnown()) {
+                // No es una rotura y no cuenta como hallazgo: el hash se
+                // recalcula con la cadena literal, asi que esta fila verifica
+                // igual. Se anota para poder decirlo en la salida, porque
+                // significa que esta base la escribio una version posterior a
+                // la que esta corriendo. Como clave del array para deduplicar
+                // sin recorrer la lista en cada vuelta.
+                $unknownActions[$entry->draft->action->value] = true;
+            }
 
             if ($expectedPrevious === null) {
                 // Primera fila viva de la tabla. Su `prev_hash` decide si
@@ -92,7 +113,16 @@ final readonly class VerifyAuditChain
             $expectedPrevious = $entry->hash;
         }
 
-        $result = new AuditChainVerification($rows, $breaks, $sealedPurgeYears);
+        // Orden estable: la salida del comando y la del informe de diagnostico
+        // no pueden depender del orden en que aparecieron las filas.
+        ksort($unknownActions);
+
+        $result = new AuditChainVerification(
+            $rows,
+            $breaks,
+            $sealedPurgeYears,
+            array_keys($unknownActions),
+        );
 
         $this->metrics->recordVerification($result, $this->clock->now());
 

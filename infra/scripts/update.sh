@@ -2109,17 +2109,32 @@ rollback_and_die() {
   # no ha cambiado desde entonces, asi que el codigo nuevo escribe en una base
   # antigua sin tocar nada mas.
   detail_note "--- compliance:record-system-event system.restored_from_backup (imagen nueva, base restaurada) ---"
-  audit_status=0
-  audit_output="$(compose_new run --rm --no-deps -T app php artisan compliance:record-system-event system.restored_from_backup --data="${audit_json}" 2>&1)" ||
-    audit_status=$?
-  detail_note "${audit_output}"
+  # ...PERO SOLO SI LA VERSION RESTAURADA CONOCE LA ACCION. Un verificador
+  # anterior a la accion (`compliance:verify-audit-chain` de la 2.1.0 y antes)
+  # hace `AuditAction::from()` sobre cada fila y revienta con una que no esta en
+  # su catalogo: el asiento que documenta la discontinuidad dejaria a la
+  # instalacion restaurada sin verificacion nocturna hasta la siguiente
+  # actualizacion, que es peor que no tenerlo. Se comprueba si la version que
+  # queda en pie tiene el comando (lo tiene desde la misma version que la
+  # accion); si no, no se escribe, y el informe dice que hay que escribirlo a
+  # mano tras la proxima actualizacion, con los datos de este mismo informe.
+  if compose_rollback exec -T app php artisan list --raw 2>/dev/null | grep -q '^compliance:record-system-event'; then
+    audit_status=0
+    audit_output="$(compose_new run --rm --no-deps -T app php artisan compliance:record-system-event system.restored_from_backup --data="${audit_json}" 2>&1)" ||
+      audit_status=$?
+    detail_note "${audit_output}"
 
-  if [ "${audit_status}" -eq 0 ]; then
-    say "$(kq_text u_rollback_audit_entry_ok)"
-    remember_check "audit-entry-rollback" "$(kq_text u_report_ok)"
+    if [ "${audit_status}" -eq 0 ]; then
+      say "$(kq_text u_rollback_audit_entry_ok)"
+      remember_check "audit-entry-rollback" "$(kq_text u_report_ok)"
+    else
+      err "$(kq_format u_rollback_audit_entry_failed "${audit_status}")"
+      remember_check "audit-entry-rollback" "$(kq_text u_report_failed) (${audit_status})"
+    fi
   else
-    err "$(kq_format u_rollback_audit_entry_failed "${audit_status}")"
-    remember_check "audit-entry-rollback" "$(kq_text u_report_failed) (${audit_status})"
+    detail_note "${audit_json}"
+    err "$(kq_format u_rollback_audit_entry_skipped "${SOURCE_VERSION}")"
+    remember_check "audit-entry-rollback" "$(kq_format u_rollback_audit_entry_skipped "${SOURCE_VERSION}")"
   fi
 
   # daily_totals es una proyeccion reconstruible (regla dura 7): se reconcilian

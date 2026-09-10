@@ -786,6 +786,7 @@ audit_chain_verification_failures_total                  counter
 audit_chain_last_verification_timestamp_seconds          gauge
 audit_chain_last_verification_result                     gauge
 audit_chain_rows_verified                                gauge
+audit_chain_unknown_actions                              gauge
 audit_log_partition_ready{horizon}                       gauge
 audit_log_partition_check_timestamp_seconds              gauge
 worked_minutes_total{site,department}                    counter

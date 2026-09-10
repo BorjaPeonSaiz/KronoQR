@@ -21,6 +21,12 @@ use Illuminate\Support\Facades\Log;
  * «cualquiera». Una sola fila alterada invalida la afirmacion de que el registro
  * es detectablemente inalterable, que es lo unico que esta tabla aporta.
  *
+ * **Un aviso que no es un fallo.** Si alguna fila lleva una accion que este
+ * binario no tiene en su catalogo, se nombra como «accion desconocida» y el
+ * codigo de salida **no cambia**: la cadena se verifica por hash, no por
+ * catalogo. Pasa cuando una actualizacion se deshace y la version anterior
+ * queda corriendo sobre una base en la que la siguiente ya escribio.
+ *
  * **Que se publica y donde.** El detalle —que fila, que tipo de rotura, que
  * hash— va al log tecnico y a la salida del comando. La alerta la dispara la
  * metrica. Ni una cosa ni otra llevan nombres: identificadores y hashes (regla
@@ -45,6 +51,20 @@ final class VerifyAuditChainCommand extends Command
             // (ADR-027). Se informa para que quede en el log del dia, no para
             // que nadie haga nada.
             $this->line('Purga sellada reconocida: particion '.$year.' (ADR-027).');
+        }
+
+        foreach ($result->unknownActions as $action) {
+            // Aviso, no hallazgo. Que el catalogo de esta version no reconozca
+            // un nombre no dice nada de la integridad de la fila: el hash se
+            // recalcula con la cadena literal y cuadra. Lo que si dice es que
+            // esta base la escribio una version posterior a la que esta
+            // corriendo -tipicamente tras una vuelta atras de `update.sh`-, y
+            // eso conviene verlo en el log del dia.
+            $this->warn(
+                'Accion desconocida para esta version: '.$action
+                .' — no es una rotura (el hash cuadra). Escrita por una version posterior; '
+                .'ver docs/runbooks/rotura-cadena-auditoria.md §3.'
+            );
         }
 
         if ($result->isIntact()) {

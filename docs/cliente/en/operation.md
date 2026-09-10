@@ -417,7 +417,10 @@ Steps 5 and 6 also leave their own entry in `audit_log` (`system.updated` or
 `system.restored_from_backup`): if for whatever reason it cannot be written,
 the update is not rolled back because of that —the fact already happened—,
 but an update that otherwise finished fine exits `6` instead of `0`, and the
-report says so on its own line.
+report says so on its own line. The rollback entry is only written if the version
+you roll back to already knows that action (from 2.2.0): an earlier one could not
+verify the chain with it, so the report keeps the data and you write it with
+`compliance:record-system-event` after the next update.
 
 **What does not change:** your secrets (the `.env` is copied as is and only
 `IMAGE_TAG` changes), the data, the licence (an expired licence **does not

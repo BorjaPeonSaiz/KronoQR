@@ -1952,12 +1952,21 @@ jobs:
             echo "users=$(consulta 'SELECT count(*) FROM users')"
             echo "audit_log=$(consulta 'SELECT count(*) FROM audit_log')"
           } | tee conteos-despues-u3.txt
-          # Datos intactos tras la vuelta atras, y UN asiento mas: system.restored_from_backup,
-          # escrito sobre la cadena restaurada (cierre de la Fase 5, regla dura 6).
+          # Datos intactos tras la vuelta atras. Y el asiento system.restored_from_backup
+          # sobre la cadena restaurada (cierre de la Fase 5, regla dura 6) SOLO si la
+          # version que queda en pie conoce la accion: un verificador anterior revienta
+          # con una accion fuera de su catalogo, asi que update.sh no lo escribe y lo
+          # deja en el informe. Con la 2.1.0 como version anterior es la segunda rama;
+          # al publicar la siguiente, la primera. Las dos se exigen, no se toleran.
           test "$(grep '^users=' conteos-antes-u3.txt)" = "$(grep '^users=' conteos-despues-u3.txt)"
           antes="$(sed -n 's/^audit_log=//p' conteos-antes-u3.txt)"; despues="$(sed -n 's/^audit_log=//p' conteos-despues-u3.txt)"
-          test "$despues" -eq "$((antes + 1))" || { echo "audit_log paso de ${antes} a ${despues}: se esperaba exactamente un asiento system.restored_from_backup mas"; exit 1; }
-          consulta "SELECT action FROM audit_log ORDER BY id DESC LIMIT 1" | grep -qx 'system.restored_from_backup'
+          if compose exec -T app php artisan list --raw | grep -q '^compliance:record-system-event'; then
+            test "$despues" -eq "$((antes + 1))" || { echo "audit_log paso de ${antes} a ${despues}: se esperaba exactamente un asiento system.restored_from_backup mas"; exit 1; }
+            consulta "SELECT action FROM audit_log ORDER BY id DESC LIMIT 1" | grep -qx 'system.restored_from_backup'
+          else
+            test "$despues" -eq "$antes" || { echo "audit_log paso de ${antes} a ${despues}: la version anterior no conoce system.restored_from_backup y no debia escribirse nada"; exit 1; }
+            grep -q "NO escrito: la version restaurada" paquete-nuevo/salida-u3.log
+          fi
           compose exec -T app php artisan compliance:verify-audit-chain
           sudo sh -c "grep -l 'Vuelta atras' /var/backups/fichaje/reports/update-*.log"
 

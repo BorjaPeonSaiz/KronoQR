@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Compliance\Infrastructure\Persistence;
 
-use App\Modules\Compliance\Domain\ValueObject\AuditAction;
+use App\Modules\Compliance\Domain\ValueObject\AuditActionName;
 use App\Modules\Compliance\Domain\ValueObject\AuditActor;
 use App\Modules\Compliance\Domain\ValueObject\AuditEntry;
 use App\Modules\Compliance\Domain\ValueObject\AuditEntryDraft;
@@ -39,7 +39,11 @@ final class AuditLogRow
         $draft = new AuditEntryDraft(
             occurredAt: self::toUtc($row->occurred_at),
             actor: AuditActor::fromStorage($row->actor_type, $row->actor_id === null ? null : (int) $row->actor_id),
-            action: AuditAction::from($row->action),
+            // `fromStorage()` y no `AuditAction::from()`: la accion se conserva
+            // como cadena aunque esta version no la conozca. Es lo que permite
+            // que un verificador antiguo recorra filas escritas por la version
+            // siguiente sin reventar con un `ValueError` (ver `AuditActionName`).
+            action: AuditActionName::fromStorage($row->action),
             subject: AuditSubject::fromStorage(
                 $row->subject_type,
                 $row->subject_id === null ? null : (int) $row->subject_id,

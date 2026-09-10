@@ -94,9 +94,23 @@ descubierto con `scandir` (ver «Trampas»).
 gitleaks 0 sobre los ficheros cambiados, promtool sobre `errors.yml`, `check-package-links.sh` (305 enlaces), `type-check` y
 `lint` de los cuatro paquetes, unitarias web-kit 199 / panel 433 / quiosco 379 / portal 79, E2E panel 88 y quiosco 50. **CI manual 34369140085 en verde**: MSI 82,83 % (2 440 mutantes, 10 min en paralelo).
 
-**Siguiente acción:** CI manual completa de `chore/cierre-fase-5` (lanzada tras el último push; es la **primera ejecución real de los
-jobs ④, ⑥ y ⑦**: si un detalle del runner los tumba —Chromium, memoria, presupuesto de 300 s del E2E— se corrige en la misma
-rama sin reabrir la revisión) → PR con *merge commit* (nunca squash) → `make up` en `main` → borrar la rama. Después empieza la
+**Siguiente acción:** CI manual completa de `chore/cierre-fase-5` (octavo intento). Los siete anteriores destaparon
+lo que solo destapa la **primera ejecución real** de ④/⑥/⑦/cobertura y de ⑧b con los asientos, y todo se corrigió en la rama
+(commits `19c16f0` cierre, `test(panel)`, `ci(cierre-fase-5)`, `ci(cobertura)`): una unitaria frágil del alta de TOTP (`vi.waitFor`);
+«Cannot find module 'puppeteer'» en los PDF con motor real —el `chromium-browser` del runner es un envoltorio de snap: puppeteer trae
+su Chrome y `LARAVEL_PDF_CHROME_PATH`/`LARAVEL_PDF_NODE_MODULES_PATH` apuntan a él en ④ y en cobertura; los `hayChromium()` respetan
+la variable—; U1/U3 de ⑧b esperaban `audit_log` idéntico y ahora esperan exactamente un asiento `system.*` más; y las dos E2E del
+PIN del quiosco con 400 ms de retraso que el runner no llegaba a ver (ahora 1200 ms); `QualityGatesTest` exigía el `cmp` de conteos
+que U1 ya no usa; y el E2E del asistente buscaba «Recepción» con `getByText` y en modo estricto coincidía también con la pista
+«Cocina, recepción, pisos…» durante un instante (ahora dentro de `department-list`); y en U3 el asiento `system.restored_from_backup`
+se intentaba escribir con la imagen ANTERIOR, que no tiene el comando: lo escribe ahora la imagen nueva con
+`compose_new run --rm --no-deps` contra la base restaurada (el esquema de `audit_log` es el de la 1.14); y el verificador de la
+versión ANTERIOR (2.1.0) reventaba con `AuditAction::from()` ante la acción nueva: desde esta versión la lectura de `audit_log`
+tolera acciones desconocidas (`AuditActionName`, aviso y gauge `audit_chain_unknown_actions`, `AuditChainReadPathTest`), y
+`update.sh` NO escribe el asiento de la vuelta atrás si la versión restaurada no conoce la acción (lo deja en el informe; U3 de
+⑧b exige una rama u otra según la versión anterior). El séptimo intento dejó en verde todo salvo ⑧b, cobertura incluida. **El job de cobertura corre en cada disparo
+manual** (además del nocturno): ~15 min más por CI manual. Si el cuarto intento cae, se corrige en la misma rama sin reabrir la
+revisión → PR #53 con *merge commit* (nunca squash) → `make up` en `main` → borrar la rama. Después empieza la
 **Fase 3** (plan 06: 3.1 observabilidad, 3.2 alertas y cuadros, 3.3 quioscos, 3.4/3.5 cumplimiento, 3.6 carga, 3.7 pruebas de
 abuso, 3.8 pentest, 3.10 ausencias) con los restos de «Pendiente» → «Cierre de la Fase 5» y las filas del doc 07 §6 fechadas
 «Fase 3».
@@ -345,7 +359,10 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   §6, Fase 3); `audit:read` en el alcance `read_only` sin consumidor (doc 07 §6); spans OTel ausentes en los controladores de
   5.9/5.10/5.12 (los de 5.1–5.8 tienen `*Telemetry`); métricas de exportación íntegra, telemetría, concesiones y paquetes sin
   emitir; presupuesto de ①–③ de la CI (~20 min frente a los 4 del doc 02 §10.1); primer `run` real de los jobs ④/⑥/⑦/`coverage`
-  puede destapar detalles del runner; el `409` de `POST /setup/administrator` sigue sin señal.
+  puede destapar detalles del runner; el `409` de `POST /setup/administrator` sigue sin señal. **Del verificador tolerante:** una fila manipulada con acción `system.*` y `actor_type` cambiado hace que
+  `AuditEntryDraft` lance `AuditActorNotAllowedForAction` AL LEER, y el verificador muere con excepción en vez de reportar
+  `content_altered` (ruidoso, no silencioso; exige una vía de construcción de solo lectura: `arquitecto-dominio`); mutación de
+  `AuditActionName` en la CI; al publicar 2.2.0, U3 debe probar la vuelta atrás DESDE 2.2.0 y el aviso «acción desconocida».
 - **5.7 (restos):** menores:
   extraer `compose()`/`wait_for_healthy`/`edge_probe` de `install.sh` y `update.sh` a `lib/checks.sh` (ya divergen);
   el `503` de mantenimiento no se enumera por endpoint en el contrato (solo el párrafo de `info`);

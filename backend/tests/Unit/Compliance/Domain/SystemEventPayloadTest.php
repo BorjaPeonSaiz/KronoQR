@@ -250,5 +250,9 @@ it('deja construirlo con el actor sistema', function (): void {
         payload: SystemEventPayload::for(AuditAction::SystemUpdated, updatedData())->payload,
     );
 
-    expect($draft->action)->toBe(AuditAction::SystemUpdated);
+    // El borrador guarda el NOMBRE de la accion (`AuditActionName`), no el caso
+    // del enum: al leer una fila puede no haber enum detras. En el camino de
+    // escritura, que es este, el caso siempre esta.
+    expect($draft->action->known())->toBe(AuditAction::SystemUpdated)
+        ->and($draft->action->value)->toBe('system.updated');
 })->group('RF-PD-10');

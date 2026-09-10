@@ -403,7 +403,10 @@ Los pasos 5 y 6 dejan además su propio asiento en `audit_log` (`system.updated`
 o `system.restored_from_backup`): si por lo que sea no se puede escribir, la
 actualización no se deshace por eso —el hecho ya ocurrió—, pero una
 actualización que por lo demás terminó bien sale con `6` en vez de `0`, y el
-informe lo dice en su propia línea.
+informe lo dice en su propia línea. El asiento de la vuelta atrás solo se escribe si la versión a la
+que se vuelve ya conoce esa acción (desde la 2.2.0): una anterior no sabría verificar la cadena con
+él, así que el informe deja los datos y hay que escribirlo con `compliance:record-system-event`
+después de la siguiente actualización.
 
 **Lo que no cambia:** tus secretos (el `.env` se copia tal cual y solo cambia
 `IMAGE_TAG`), los datos, la licencia (una licencia caducada **no impide
