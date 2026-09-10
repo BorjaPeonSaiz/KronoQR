@@ -94,7 +94,7 @@ descubierto con `scandir` (ver «Trampas»).
 gitleaks 0 sobre los ficheros cambiados, promtool sobre `errors.yml`, `check-package-links.sh` (305 enlaces), `type-check` y
 `lint` de los cuatro paquetes, unitarias web-kit 199 / panel 433 / quiosco 379 / portal 79, E2E panel 88 y quiosco 50. **CI manual 34369140085 en verde**: MSI 82,83 % (2 440 mutantes, 10 min en paralelo).
 
-**Siguiente acción:** CI manual completa de `chore/cierre-fase-5` (octavo intento). Los siete anteriores destaparon
+**CI manual completa EN VERDE al octavo intento (34424860230: los 13 jobs, ④/⑥/⑦/cobertura y ⑧b incluidos).** Los siete anteriores destaparon
 lo que solo destapa la **primera ejecución real** de ④/⑥/⑦/cobertura y de ⑧b con los asientos, y todo se corrigió en la rama
 (commits `19c16f0` cierre, `test(panel)`, `ci(cierre-fase-5)`, `ci(cobertura)`): una unitaria frágil del alta de TOTP (`vi.waitFor`);
 «Cannot find module 'puppeteer'» en los PDF con motor real —el `chromium-browser` del runner es un envoltorio de snap: puppeteer trae
@@ -109,8 +109,7 @@ versión ANTERIOR (2.1.0) reventaba con `AuditAction::from()` ante la acción nu
 tolera acciones desconocidas (`AuditActionName`, aviso y gauge `audit_chain_unknown_actions`, `AuditChainReadPathTest`), y
 `update.sh` NO escribe el asiento de la vuelta atrás si la versión restaurada no conoce la acción (lo deja en el informe; U3 de
 ⑧b exige una rama u otra según la versión anterior). El séptimo intento dejó en verde todo salvo ⑧b, cobertura incluida. **El job de cobertura corre en cada disparo
-manual** (además del nocturno): ~15 min más por CI manual. Si el cuarto intento cae, se corrige en la misma rama sin reabrir la
-revisión → PR #53 con *merge commit* (nunca squash) → `make up` en `main` → borrar la rama. Después empieza la
+manual** (además del nocturno): ~15 min más por CI manual. **Siguiente acción:** PR #53 integrada con *merge commit*, `make up` en `main`, rama borrada. Empieza la
 **Fase 3** (plan 06: 3.1 observabilidad, 3.2 alertas y cuadros, 3.3 quioscos, 3.4/3.5 cumplimiento, 3.6 carga, 3.7 pruebas de
 abuso, 3.8 pentest, 3.10 ausencias) con los restos de «Pendiente» → «Cierre de la Fase 5» y las filas del doc 07 §6 fechadas
 «Fase 3».
