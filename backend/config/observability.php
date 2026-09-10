@@ -68,6 +68,69 @@ return [
     ],
 
     /*
+     * A QUIEN LLEGAN LAS ALERTAS (doc 01 §9.3, tarea 3.2, decisiones 5 y 15).
+     *
+     * QUIEN LAS ENVIA NO ES LA APLICACION. Las evalua Prometheus y las reparte
+     * Alertmanager, que lee estas mismas variables del `.env` a traves de
+     * `infra/observability/alertmanager/render-config.sh`. La aplicacion no
+     * manda ni un correo de alerta y no debe: el dia que interese saber si la
+     * copia fallo o si el borde no responde puede ser justo el dia en que la
+     * aplicacion no arranca.
+     *
+     * ENTONCES, ¿POR QUE ESTAN AQUI? Porque `product:doctor` es donde el IT del
+     * cliente mira, y una instalacion con el perfil de observabilidad encendido
+     * y los tres buzones vacios es **peor que una sin alertas**: se cree
+     * vigilada. Alertmanager no puede avisar de eso —un destino vacio
+     * simplemente no genera entrega— y nadie mas lo mira.
+     *
+     * NACEN VACIAS y con la marca `[CLIENTE]` en `.env.example` (regla dura 13):
+     * el buzon de informatica de un hotel no vive en este repositorio.
+     */
+    'alerting' => [
+
+        /*
+         * Los perfiles de Docker Compose activos en la instalacion. Con
+         * `observability` dentro, el `.env` levanta Prometheus, Alertmanager,
+         * Grafana y las sondas; sin el, no hay nada que enrutar y la
+         * comprobacion de `doctor` no tiene sentido.
+         *
+         * Es una variable del ANFITRION que el `.env` comparte con el
+         * contenedor (`env_file` en `infra/compose.*.yaml`): se lee, no se
+         * escribe.
+         */
+        'profiles' => env('COMPOSE_PROFILES', ''),
+
+        /*
+         * Un buzon por destinatario, exactamente los tres que admite la etiqueta
+         * `destinatario` de las reglas. El envio va por el SMTP del cliente, el
+         * mismo de `MAIL_*`.
+         */
+        'email' => [
+            'it' => env('ALERT_EMAIL_IT', ''),
+            'hr' => env('ALERT_EMAIL_RRHH', ''),
+            'security' => env('ALERT_EMAIL_SEGURIDAD', ''),
+        ],
+
+        /*
+         * El otro camino de entrega del mismo destinatario: un webhook del
+         * cliente (su chat corporativo, su sistema de tickets). Opcional, y
+         * ALTERNATIVO al correo a efectos de esta lectura: un destinatario con
+         * webhook y sin buzon **si** recibe sus alertas.
+         *
+         * SON SECRETOS PORTADORES: quien tiene la URL puede escribir en ese
+         * canal. Alertmanager las recibe por `url_file` con permisos 0600 y
+         * **aqui solo se mira si estan puestas**, nunca su valor: esta lectura
+         * la consume `product:doctor`, cuyo informe viaja en el paquete de
+         * diagnostico (ADR-020).
+         */
+        'webhook' => [
+            'it' => env('ALERT_WEBHOOK_IT', ''),
+            'hr' => env('ALERT_WEBHOOK_RRHH', ''),
+            'security' => env('ALERT_WEBHOOK_SEGURIDAD', ''),
+        ],
+    ],
+
+    /*
      * QUE PROXIES PUEDE CREERSE LA APLICACION (RS-02, RS-09, RS-12, regla dura 13).
      *
      * Lista de direcciones o rangos CIDR separados por coma o espacio. **VACIA DE

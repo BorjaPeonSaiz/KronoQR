@@ -123,6 +123,16 @@ return [
                 'warning_not_configured' => 'No mail server is configured. Email notifications will not go out. '
                     .'This does not prevent clocking in or reading the record.',
             ],
+            'alert_recipients' => [
+                'ok' => 'All :expected alert recipients (it-cliente, rrhh and seguridad) have somewhere to '
+                    .'receive their alerts, by email or by webhook.',
+                'ok_disabled' => 'Automatic monitoring is switched off in this installation, so there are no '
+                    .'alerts to send to anyone.',
+                'warning' => 'Automatic monitoring is switched on and :missing of the :expected alert '
+                    .'recipients have neither an email address nor a webhook: :roles. The alerts addressed to '
+                    .'them turn on and off without anyone seeing them. These are not minor notices: a broken '
+                    .'audit record goes to «seguridad» and unclosed shifts go to «rrhh».',
+            ],
         ],
 
         'tls' => [
@@ -349,6 +359,21 @@ return [
                 'warning_not_configured' => "If you want email notifications, fill in MAIL_MAILER, MAIL_HOST and\n"
                     ."MAIL_PORT in the .env file and restart with `docker compose up -d app`.\n"
                     .'If you do not want them, there is nothing to do.',
+            ],
+            'alert_recipients' => [
+                'warning' => "Put a destination in the .env file for EACH missing recipient (:roles).\n"
+                    ."Each one accepts an email address, a webhook or both; one of the two is enough:\n"
+                    ."  it-cliente  ->  ALERT_EMAIL_IT=it@yourhotel.example\n"
+                    ."                  ALERT_WEBHOOK_IT=\n"
+                    ."  rrhh        ->  ALERT_EMAIL_RRHH=hr@yourhotel.example\n"
+                    ."                  ALERT_WEBHOOK_RRHH=\n"
+                    ."  seguridad   ->  ALERT_EMAIL_SEGURIDAD=management@yourhotel.example\n"
+                    ."                  ALERT_WEBHOOK_SEGURIDAD=\n"
+                    ."If it is the same person at your hotel, put the same address in all three: what does\n"
+                    ."not work is leaving one empty, because nobody receives its alerts.\n"
+                    ."Then reload the alert routing:\n"
+                    ."  docker compose up -d alertmanager\n"
+                    .'If you would rather not receive alerts, switch monitoring off by leaving COMPOSE_PROFILES empty.',
             ],
         ],
 

@@ -13,8 +13,9 @@ use RuntimeException;
  *
  * ## Por que existe
  *
- * Siete adaptadores publican metricas por fichero —proyeccion, incidencias,
- * retencion, credenciales, presencia, auditoria y exportacion legal— y su
+ * Nueve adaptadores publican metricas por fichero —proyeccion, deteccion de
+ * incidencias, incidencias abiertas, retencion, credenciales, presencia,
+ * adopcion, auditoria y exportacion legal— y su
  * **contenido** es y debe ser distinto: cada uno sabe que series tiene que
  * escribir y por que. Su **mecanica de escritura**, en cambio, tiene que ser la
  * misma: es el mismo colector el que los lee y las mismas averias las que se

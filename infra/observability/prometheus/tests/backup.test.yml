@@ -1,0 +1,325 @@
+# KronoQR — pruebas unitarias de infra/observability/prometheus/rules/
+# backup.yml (tarea 3.2, decision 2). Las siete reglas, desde la tarea 1.18,
+# no tenian ninguna prueba: las ganan aqui.
+#
+# `interval: 1m` en todos los grupos, tambien los de `for` largo (24 h, 26 h):
+# es lo que evita que una serie parezca "ausente" entre muestras por superar
+# el lookback delta de 5 min de Prometheus, y lo que hace exacto el instante
+# en que el `for` se cumple.
+rule_files:
+  - ../rules/backup.yml
+
+evaluation_interval: 1m
+
+tests:
+  #-----------------------------------------------------------------------------
+  # CopiaDeSeguridadFallida: la ultima copia fallo.
+  #-----------------------------------------------------------------------------
+  - name: fallida_dispara
+    interval: 1m
+    input_series:
+      - series: 'kronoqr_backup_last_result{type="dump"}'
+        values: "0x10"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: CopiaDeSeguridadFallida
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: CopiaDeSeguridadFallida
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              destinatario: it-cliente
+              component: backup
+              type: dump
+            exp_annotations:
+              summary: "La ultima copia de seguridad ha fallado"
+              description: >-
+                El ultimo intento de copia (dump) termino en error. La
+                instalacion sigue funcionando y el fichaje no esta afectado,
+                pero desde ahora se esta acumulando trabajo sin respaldo
+                diario.
+              runbook_url: docs/runbooks/restaurar-backup.md
+
+  #-----------------------------------------------------------------------------
+  # Valor limite: la copia tuvo exito. Nunca dispara.
+  #-----------------------------------------------------------------------------
+  - name: fallida_boundary
+    interval: 1m
+    input_series:
+      - series: 'kronoqr_backup_last_result{type="dump"}'
+        values: "1x30"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: CopiaDeSeguridadFallida
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # CopiaDeSeguridadSinVerificar: la verificacion dio error.
+  #-----------------------------------------------------------------------------
+  - name: sin_verificar_dispara
+    interval: 1m
+    input_series:
+      - series: 'kronoqr_backup_last_verify_result{type="dump"}'
+        values: "0x20"
+      # Fresca (sigue el reloj): con esto se aisla la primera mitad de la
+      # condicion, que es la que se esta probando.
+      - series: 'kronoqr_backup_last_verified_timestamp_seconds{type="dump"}'
+        values: "0+60x20"
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: CopiaDeSeguridadSinVerificar
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: CopiaDeSeguridadSinVerificar
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              destinatario: it-cliente
+              component: backup
+              type: dump
+            exp_annotations:
+              summary: "No hay ninguna copia verificada de las ultimas 26 horas"
+              description: >-
+                O la verificacion dio error —la copia no se descifra o no la
+                entiende pg_restore— o hace mas de 26 h que no se verifica
+                ninguna. El umbral son 26 h y no 24 para que un retraso
+                normal de la ventana nocturna no dispare la alerta.
+              runbook_url: docs/runbooks/restaurar-backup.md
+
+  #-----------------------------------------------------------------------------
+  # Valor limite: verificacion correcta y reciente. Nunca dispara.
+  #-----------------------------------------------------------------------------
+  - name: sin_verificar_boundary
+    interval: 1m
+    input_series:
+      - series: 'kronoqr_backup_last_verify_result{type="dump"}'
+        values: "1x30"
+      - series: 'kronoqr_backup_last_verified_timestamp_seconds{type="dump"}'
+        values: "0+60x30"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: CopiaDeSeguridadSinVerificar
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # CopiaDeSeguridadAusente: ninguna de las dos series llega nunca.
+  #-----------------------------------------------------------------------------
+  - name: ausente_dispara
+    interval: 1m
+    input_series:
+      # Otra serie del mismo fichero, para que el grupo se evalue con datos.
+      - series: 'kronoqr_backup_last_result{type="dump"}'
+        values: "1x40"
+    alert_rule_test:
+      - eval_time: 29m
+        alertname: CopiaDeSeguridadAusente
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: CopiaDeSeguridadAusente
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              destinatario: it-cliente
+              component: backup
+            exp_annotations:
+              summary: "No llega ninguna metrica de copia de seguridad"
+              description: >-
+                Prometheus no ve la metrica de resultado de la copia. O
+                nunca se ha ejecutado, o el destino de copias no esta
+                montado, o node-exporter no lee BACKUP_PATH/metrics. Es
+                indistinguible de no tener copias.
+              runbook_url: docs/runbooks/restaurar-backup.md
+
+  #-----------------------------------------------------------------------------
+  # Valor limite: las dos series llegan. Nunca dispara.
+  #-----------------------------------------------------------------------------
+  - name: ausente_boundary
+    interval: 1m
+    input_series:
+      - series: 'kronoqr_backup_last_success_timestamp_seconds{type="dump"}'
+        values: "0+60x40"
+      - series: 'kronoqr_backup_last_verified_timestamp_seconds{type="dump"}'
+        values: "0+60x40"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: CopiaDeSeguridadAusente
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # ArchivadoDeWalDetenido: el ultimo segmento archivado tiene 2000 s, por
+  # encima de los 1800 del catalogo.
+  #-----------------------------------------------------------------------------
+  - name: wal_detenido_dispara
+    interval: 1m
+    input_series:
+      - series: kronoqr_backup_wal_last_archived_age_seconds
+        values: "2000x15"
+      - series: kronoqr_backup_wal_archive_failures_total
+        values: "0x15"
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: ArchivadoDeWalDetenido
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: ArchivadoDeWalDetenido
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              destinatario: it-cliente
+              component: backup
+            exp_annotations:
+              summary: "El archivado de WAL esta detenido o falla"
+              description: >-
+                Hace mas de 30 min que no se archiva un segmento, con
+                archive_timeout=900 s, o ha habido fallos de archivado en la
+                ultima hora. Dos consecuencias, y la segunda es la urgente:
+                el RPO deja de ser 15 min (RNF-D-02), y PostgreSQL conserva
+                el WAL sin reciclar hasta llenar el disco de datos y
+                pararse.
+              runbook_url: docs/runbooks/restaurar-backup.md
+
+  #-----------------------------------------------------------------------------
+  # Valor limite justo por debajo: exactamente 1800 s, sin fallos, para
+  # siempre. Nunca dispara.
+  #-----------------------------------------------------------------------------
+  - name: wal_detenido_boundary
+    interval: 1m
+    input_series:
+      - series: kronoqr_backup_wal_last_archived_age_seconds
+        values: "1800x30"
+      - series: kronoqr_backup_wal_archive_failures_total
+        values: "0x30"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: ArchivadoDeWalDetenido
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # DiscoDeCopiasCasiLleno: 10 % libre, por debajo del 20 %.
+  #-----------------------------------------------------------------------------
+  - name: disco_copias_dispara
+    interval: 1m
+    input_series:
+      - series: kronoqr_backup_volume_free_ratio
+        values: "0.10x20"
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: DiscoDeCopiasCasiLleno
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: DiscoDeCopiasCasiLleno
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              destinatario: it-cliente
+              component: backup
+            exp_annotations:
+              summary: "Queda menos del 20 % libre en el destino de copias"
+              description: >-
+                Con el destino lleno, la copia diaria falla y el archivado
+                de WAL tambien. Se resuelve bajando BACKUP_RETENTION_DAYS o
+                ampliando el almacenamiento; el runbook explica cual
+                conviene en cada caso.
+              runbook_url: docs/runbooks/restaurar-backup.md
+
+  #-----------------------------------------------------------------------------
+  # Valor limite justo por debajo: exactamente 20 % libre, para siempre.
+  # Nunca dispara.
+  #-----------------------------------------------------------------------------
+  - name: disco_copias_boundary
+    interval: 1m
+    input_series:
+      - series: kronoqr_backup_volume_free_ratio
+        values: "0.20x30"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: DiscoDeCopiasCasiLleno
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # SimulacroDeRestauracionNuncaEjecutado: la metrica no llega nunca.
+  #-----------------------------------------------------------------------------
+  - name: simulacro_nunca_dispara
+    interval: 1m
+    input_series:
+      - series: kronoqr_backup_last_result{type="dump"}
+        values: "1x1500"
+    alert_rule_test:
+      - eval_time: 23h59m
+        alertname: SimulacroDeRestauracionNuncaEjecutado
+        exp_alerts: []
+      - eval_time: 24h
+        alertname: SimulacroDeRestauracionNuncaEjecutado
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              destinatario: it-cliente
+              component: backup
+            exp_annotations:
+              summary: "Nunca se ha ejecutado un simulacro de restauracion"
+              description: >-
+                No consta ningun simulacro correcto en esta instalacion.
+                Hasta que se ejecute uno, nadie ha comprobado que estas
+                copias se puedan restaurar: solo que existen y que se
+                descifran.
+              runbook_url: docs/runbooks/restaurar-backup.md
+
+  #-----------------------------------------------------------------------------
+  # Valor limite: el simulacro SI dejo su marca de tiempo. Nunca dispara.
+  #-----------------------------------------------------------------------------
+  - name: simulacro_nunca_boundary
+    interval: 1m
+    input_series:
+      - series: kronoqr_backup_restore_drill_last_success_timestamp_seconds
+        values: "0+60x1500"
+    alert_rule_test:
+      - eval_time: 24h
+        alertname: SimulacroDeRestauracionNuncaEjecutado
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # SimulacroDeRestauracionCaducado: el ultimo simulacro fallo.
+  #-----------------------------------------------------------------------------
+  - name: simulacro_caducado_dispara
+    interval: 1m
+    input_series:
+      - series: kronoqr_backup_restore_drill_last_result
+        values: "0x70"
+      # Fresca: aisla la primera mitad de la condicion.
+      - series: kronoqr_backup_restore_drill_last_success_timestamp_seconds
+        values: "0+60x70"
+    alert_rule_test:
+      - eval_time: 59m
+        alertname: SimulacroDeRestauracionCaducado
+        exp_alerts: []
+      - eval_time: 1h
+        alertname: SimulacroDeRestauracionCaducado
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              destinatario: it-cliente
+              component: backup
+            exp_annotations:
+              summary: "El simulacro de restauracion fallo o lleva mas de 100 dias sin ejecutarse"
+              description: >-
+                RNF-D-05 exige una prueba de restauracion trimestral. El
+                umbral son 100 dias para dejar margen dentro del trimestre.
+                Si el ultimo simulacro FALLO, la ultima copia no restaura:
+                eso si es urgente.
+              runbook_url: docs/runbooks/restaurar-backup.md
+
+  #-----------------------------------------------------------------------------
+  # Valor limite: simulacro correcto y reciente. Nunca dispara.
+  #-----------------------------------------------------------------------------
+  - name: simulacro_caducado_boundary
+    interval: 1m
+    input_series:
+      - series: kronoqr_backup_restore_drill_last_result
+        values: "1x70"
+      - series: kronoqr_backup_restore_drill_last_success_timestamp_seconds
+        values: "0+60x70"
+    alert_rule_test:
+      - eval_time: 1h
+        alertname: SimulacroDeRestauracionCaducado
+        exp_alerts: []

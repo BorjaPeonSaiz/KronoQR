@@ -11,21 +11,17 @@
 #   | Tasa de error 5xx en el endpoint de fichaje    | > 1 % en 5 min  | Crítica |
 #   | Latencia p95 del endpoint de fichaje           | > 500 ms en 10m | Alta    |
 #
-# Las dos son de la tarea 3.2 (catálogo completo de alertas RED, que exige
-# `http_requests_total` y `http_request_duration_seconds` por ruta): el
-# runbook ya las cubre en su tabla de síntomas, pero sus REGLAS de Prometheus
-# no existen todavía. No se crean aquí para no adelantar trabajo de una tarea
-# que aún no ha definido el resto del catálogo (`quiosco-no-responde.md`,
-# `cola-offline-atascada.md`, etc., todos con el mismo "DOWN hasta la 3.1").
+# Las dos son de la tarea 3.2 (`api.yml`, catálogo completo de alertas RED,
+# `http_requests_total` y `http_request_duration_seconds` por ruta) y ya
+# existen: no se duplican aquí, el runbook las cubre en su tabla de síntomas y
+# `api.yml` en su propia cabecera explica por qué comparten runbook con esta.
 #
 # LA MÉTRICA. `application_errors_total{source,level}` la escribe la
 # infraestructura de métricas del módulo `Product` (HINCRBY en Redis, mismo
 # mecanismo que `scans_total`) cada vez que un error entra en
 # `error_events` — los cuatro orígenes del servidor (`api`, `worker`,
 # `scheduler`, `console`) y los tres de cliente (`kiosk`, `admin`, `portal`).
-# La sirve `/metrics` de la aplicación, que llega en la tarea 3.1 — igual que
-# `kronoqr-api` en prometheus.yml, este job aparece DOWN hasta entonces y esta
-# regla no cambia cuando se active.
+# La sirve `/metrics` de la aplicación (tarea 3.1, en pie desde entonces).
 #
 # POR QUÉ ESTA REGLA NO USA `application_errors_total` (revisión de seguridad,
 # ficha 5.12, decisión 14). Esa serie sube con CADA ocurrencia, incluidas las
@@ -50,11 +46,10 @@
 # esta fila como "Alta", un escalón por debajo de las "Crítica" de `audit.yml`
 # y `projection.yml` (que además llevan `integrity: "true"` y enrutado
 # inmediato) y por encima de la "Media" de `incidents.yml`
-# (`severity: warning`). Para no aplanar esos tres escalones en los dos únicos
-# valores que ya usaba el repositorio, esta regla es la primera en etiquetar
-# `severity: high`, literal como en el catálogo. Hasta que la tarea 3.2 fije
-# el resto de alertas "Alta" del §9.3 (cola offline, certificado TLS, espacio
-# en disco) con esta misma escala, es la única regla que usa el valor.
+# (`severity: warning`). Esta regla fue la primera en etiquetar
+# `severity: high`, literal como en el catálogo; desde la tarea 3.2 la escala
+# de cuatro valores (`critical`/`high`/`warning`/`info`) es la de TODO el
+# catálogo, no solo la de este fichero.
 #
 # DESTINATARIO: `it-cliente`, igual que `incidents.yml` y `projection.yml`.
 # Un error crítico nuevo es un síntoma de la instalación (cola caída,

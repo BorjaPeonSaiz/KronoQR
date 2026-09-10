@@ -33,10 +33,17 @@ final readonly class AnomalyScanResult
          * escribirse y el resto de la pasada continuo.
          *
          * Se cuenta y no se traga: el comando termina con codigo distinto de
-         * cero, pero lo que si se abrio queda abierto. Ese codigo de salida llega
-         * hoy al log del planificador y nada mas; la serie de fallos y su alerta
-         * son de la tarea 3.2. Aqui viven recuentos, no personas: quien fallo
-         * esta en el log tecnico con su `employee_uuid` (regla dura 21).
+         * cero, pero lo que si se abrio queda abierto.
+         *
+         * **Adonde llega esta cifra** (tarea 3.2): se publica como
+         * `incident_detection_last_failures` en el colector *textfile*
+         * (`IncidentDetectionMetrics`), la regla `DeteccionDeIncidenciasConFallos`
+         * la evalua con `> 0` y el `->onFailure()` de `routes/console.php` deja
+         * ademas `scheduler.command_failed` en el log, con el codigo de salida y
+         * sin la salida del comando.
+         *
+         * Aqui viven recuentos, no personas: quien fallo esta en el log tecnico
+         * con su `employee_uuid` (regla dura 21).
          */
         public int $failures,
     ) {}

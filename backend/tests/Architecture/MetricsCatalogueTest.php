@@ -7,8 +7,8 @@ use App\Modules\Attendance\Infrastructure\Metrics\RedisScanMetrics;
 use App\Modules\Shared\Infrastructure\Metrics\Exposition\MetricCatalogue;
 use App\Modules\Shared\Infrastructure\Metrics\Exposition\MetricDefinition;
 use App\Modules\Shared\Infrastructure\Metrics\RedisAuthenticationMetrics;
+use Tests\Architecture\Support\Doc82Series;
 use Tests\Architecture\Support\ModuleTree;
-use Tests\Architecture\Support\Repo;
 
 /*
  * El catalogo de `/metrics` contra el listado del doc 02 §8.2 (tarea 3.1,
@@ -65,6 +65,18 @@ function textfileSeries(): array
         // Attendance\Infrastructure\Metrics\TextfileProjectionMetrics
         'projection_divergence_total',
         'projection_reconciliation_last_run_timestamp_seconds',
+        // Las dos siguientes las emite el adaptador desde la Fase 5 y nadie las
+        // habia catalogado: el cuadro «Integridad del dato» de la 3.2 las
+        // grafica, y una serie graficada que el §8.2 no nombra es exactamente el
+        // hueco que esta prueba existe para cerrar.
+        'projection_reconciliation_work_days_inspected',
+        'projection_reconciliation_last_corrections',
+        'projection_reconciliation_last_failures',
+        // Attendance\Infrastructure\Metrics\TextfileIncidentDetectionMetrics (tarea 3.2)
+        'incident_detection_last_run_timestamp_seconds',
+        'incident_detection_work_days_inspected',
+        'incident_detection_last_findings',
+        'incident_detection_last_failures',
         // Compliance\Infrastructure\Metrics\TextfileAuditMetrics
         'audit_chain_verification_failures_total',
         'audit_chain_last_verification_timestamp_seconds',
@@ -86,39 +98,16 @@ function textfileSeries(): array
 /**
  * El bloque de codigo del §8.2, ya troceado en `nombre => ['type' => …, 'labels' => …]`.
  *
+ * El parseo vive en `Support\Doc82Series` desde la tarea 3.2 (decision 17k):
+ * `GrafanaDashboardsTest` necesita el mismo listado para comprobar que ningun
+ * cuadro grafica una serie que el documento no declara, y las dos copias de la
+ * misma expresion regular se habrian separado a la primera.
+ *
  * @return array<string, array{type: string, labels: list<string>}>
  */
 function documentedSeries(): array
 {
-    $document = str_replace("\r\n", "\n", Repo::contents('docs/02-stack-tecnologico-y-plan-implementacion.md'));
-
-    $section = strstr($document, '### 8.2 Métricas expuestas');
-
-    expect($section)->toBeString('El §8.2 del doc 02 ha cambiado de titulo: esta prueba lo localiza por el encabezado.');
-
-    preg_match('/```\n(.*?)\n```/s', (string) $section, $block);
-
-    $listing = $block[1] ?? null;
-
-    expect($listing)->toBeString('El §8.2 ya no lleva el bloque de codigo con el listado literal de series.');
-
-    preg_match_all(
-        '/^([a-z][a-z0-9_]*)(?:\{([a-z0-9_,]*)\})?[ \t]+(counter|gauge|histogram)$/m',
-        (string) $listing,
-        $matches,
-        PREG_SET_ORDER,
-    );
-
-    $series = [];
-
-    foreach ($matches as $match) {
-        $series[$match[1]] = [
-            'type' => $match[3],
-            'labels' => $match[2] === '' ? [] : explode(',', $match[2]),
-        ];
-    }
-
-    return $series;
+    return Doc82Series::withTypes();
 }
 
 /**

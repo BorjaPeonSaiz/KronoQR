@@ -9,6 +9,7 @@ use App\Modules\Attendance\Application\Port\AnomalyMetrics;
 use App\Modules\Attendance\Application\Port\EventPublisher;
 use App\Modules\Attendance\Application\Port\FlaggedScan;
 use App\Modules\Attendance\Application\Port\FlaggedScans;
+use App\Modules\Attendance\Application\Port\IncidentDetectionMetrics;
 use App\Modules\Attendance\Application\Port\WorkDayLedger;
 use App\Modules\Attendance\Application\Support\ClockingPolicies;
 use App\Modules\Attendance\Domain\Event\AttendanceAnomalyDetected;
@@ -71,6 +72,7 @@ final readonly class DetectAttendanceAnomalies
         private CompliancePolicyProvider $compliance,
         private EventPublisher $events,
         private AnomalyMetrics $anomalyMetrics,
+        private IncidentDetectionMetrics $detectionMetrics,
         private Clock $clock,
         private LoggerInterface $logger,
     ) {}
@@ -79,11 +81,15 @@ final readonly class DetectAttendanceAnomalies
     {
         $site = $this->sites->installationSite();
 
+        $now = $this->clock->now();
+
         if ($site === null) {
-            return AnomalyScanResult::withoutSite();
+            // Con ceros, pero se publica (tarea 3.2). Una serie que solo aparece
+            // cuando hay centro es indistinguible de un planificador parado, y
+            // `DeteccionDeIncidenciasAusente` no podria separar los dos casos.
+            return $this->measure(AnomalyScanResult::withoutSite(), $now);
         }
 
-        $now = $this->clock->now();
         $timezone = new DateTimeZone($site->timezone);
         $policy = $this->policyFor($site->id);
 
@@ -121,12 +127,40 @@ final readonly class DetectAttendanceAnomalies
         // puede impedir nada de lo anterior.
         $this->anomalyMetrics->anomaliesDetected($byType);
 
-        return AnomalyScanResult::of(
-            daysInspected: $command->lookbackDays,
-            workDaysInspected: \count($workDays),
-            byType: $byType,
-            failures: $failures,
+        return $this->measure(
+            AnomalyScanResult::of(
+                daysInspected: $command->lookbackDays,
+                workDaysInspected: \count($workDays),
+                byType: $byType,
+                failures: $failures,
+            ),
+            $now,
         );
+    }
+
+    /**
+     * Publica el desenlace de la pasada y devuelve el resultado sin tocarlo
+     * (`incident_detection_*`, doc 02 §8.2, tarea 3.2).
+     *
+     * **Es lo ultimo que ocurre y no puede impedir nada** (regla dura 19), igual
+     * que `anomalyMetrics`: cuando se llega aqui las incidencias ya estan
+     * abiertas y el aviso al responsable ya ha salido.
+     *
+     * Se llama SIEMPRE, tambien en el camino sin centro y tambien cuando la
+     * pasada no encontro nada: el silencio de esta serie es justo lo que la
+     * alerta `DeteccionDeIncidenciasAusente` tiene que poder distinguir de una
+     * noche tranquila.
+     */
+    private function measure(AnomalyScanResult $result, DateTimeImmutable $now): AnomalyScanResult
+    {
+        $this->detectionMetrics->scanCompleted(
+            $result->workDaysInspected,
+            $result->total(),
+            $result->failures,
+            $now,
+        );
+
+        return $result;
     }
 
     /**
@@ -144,10 +178,15 @@ final readonly class DetectAttendanceAnomalies
      * Un proceso que aborta a la mitad es peor que uno que informa: deja la
      * revision hecha a medias y sin decir por donde iba.
      *
-     * **Hasta donde llega hoy ese codigo de salida:** al log del planificador y a
-     * quien encadene el comando en un script. No hay `onFailure()`, ni regla de
-     * Loki, ni serie `..._last_failures` que lo convierta en una alerta — eso es
-     * de la tarea 3.2 y esta anotado alli.
+     * **Hasta donde llega hoy ese codigo de salida** (tarea 3.2): a la serie
+     * `incident_detection_last_failures` del colector *textfile*, que la regla
+     * `DeteccionDeIncidenciasConFallos` evalua con `> 0` y enruta al IT del
+     * cliente con su runbook; y al apunte `scheduler.command_failed` que escribe
+     * `App\Support\Scheduling\LogScheduledCommandFailure` desde el
+     * `->onFailure()` de `routes/console.php`, que es lo que lo hace localizable
+     * en Loki. Con `runInBackground()` el codigo de salida NO produce ninguna
+     * excepcion —`ScheduleRunCommand` solo lanza para las tareas en primer
+     * plano—, asi que sin esas dos piezas no llegaba a ninguna parte.
      *
      * El log lleva `employee_uuid` y la clase de la excepcion, **nunca nombres ni
      * la traza** (regla dura 21): esto viaja a Loki y de ahi al paquete de

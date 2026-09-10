@@ -1,0 +1,73 @@
+# KronoQR — alertas sobre el propio Alertmanager (tarea 3.2, decision 17c).
+# Fuera del catalogo del doc 01 §9.3 y justificada: nadie vigilaba a quien
+# vigila. Sin este fichero, una copia fallando Y la cadena de auditoria rota A
+# LA VEZ que Alertmanager estuviera caido habrian producido tres alertas
+# reales de las que nadie se habria enterado.
+#
+# `component: alerting` A PROPOSITO. Ni `mute_time_intervals` en
+# `alertmanager.yml.template` ni la inhibicion de `VentanaDeMantenimientoActiva`
+# alcanzan a este componente (esas dos solo cubren `kiosk|api|tls|host`,
+# decision 6b/6c de la ficha): la propia herramienta que reparte las alertas
+# no se puede quedar muda durante un mantenimiento, que es precisamente cuando
+# mas alertas puede haber en juego (copia previa, verificacion posterior).
+#
+# LAS METRICAS. `up{job="alertmanager"}` la publica el scrape de Prometheus
+# (prometheus.yml, job `alertmanager`, en pie desde esta misma tarea).
+# `alertmanager_notifications_failed_total{integration}` la publica el propio
+# binario en su /metrics: sube cuando una entrega (correo o webhook) falla
+# -SMTP inalcanzable, webhook que devuelve error-.
+#
+# DESTINATARIO: IT del cliente en las dos. Es quien opera el servidor y puede
+# revisar el contenedor, el SMTP o el webhook configurado.
+groups:
+  - name: kronoqr-alerting
+    interval: 60s
+    rules:
+      #------------------------------------------------------------------------
+      # Alertmanager no responde, o Prometheus no lo ve. Sin el, NINGUNA
+      # alerta de esta instalacion llega a nadie: es la unica regla de todo
+      # el catalogo cuyo fallo silencia a todas las demas, y por eso no puede
+      # depender de Alertmanager para avisar de si mismo (avisa igual, con
+      # el silencio como sintoma en su propia interfaz y en el cuadro «Salud
+      # de la API»).
+      #------------------------------------------------------------------------
+      - alert: EnrutadoDeAlertasCaido
+        expr: up{job="alertmanager"} == 0 or absent(up{job="alertmanager"})
+        for: 5m
+        labels:
+          severity: critical
+          destinatario: it-cliente
+          component: alerting
+        annotations:
+          summary: "Alertmanager no responde"
+          description: >-
+            Prometheus no puede alcanzar a Alertmanager desde hace 5 minutos.
+            El fichaje no esta afectado: es el reparto de avisos lo que esta
+            parado. Mientras dure, ninguna alerta de esta instalacion -ni
+            siquiera una rotura de la cadena de auditoria- llega a nadie.
+            Revisa el contenedor `alertmanager` y su configuracion renderizada.
+          runbook_url: docs/runbooks/entrega-de-alertas.md
+
+      #------------------------------------------------------------------------
+      # Alertmanager responde, pero una entrega concreta esta fallando (SMTP
+      # inalcanzable, webhook que devuelve error). Puede no llegar a nadie si
+      # lo roto es justo el correo: queda en el cuadro «Salud de la API» y en
+      # la propia interfaz de Alertmanager (127.0.0.1:9093), y la guia de
+      # operacion lo dice.
+      #------------------------------------------------------------------------
+      - alert: EntregaDeAlertasFallando
+        expr: increase(alertmanager_notifications_failed_total[15m]) > 0
+        for: 5m
+        labels:
+          severity: high
+          destinatario: it-cliente
+          component: alerting
+        annotations:
+          summary: "Alertmanager no ha podido entregar alguna notificacion en los ultimos 15 min"
+          description: >-
+            La integracion {{ $labels.integration }} de Alertmanager ha
+            fallado al menos una entrega. Revisa el SMTP configurado
+            (MAIL_HOST/MAIL_PORT/MAIL_USERNAME/MAIL_PASSWORD/MAIL_SCHEME) o el
+            webhook del destinatario afectado: la interfaz de Alertmanager
+            (127.0.0.1:9093) muestra el error exacto de la ultima entrega.
+          runbook_url: docs/runbooks/entrega-de-alertas.md

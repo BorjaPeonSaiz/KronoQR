@@ -74,6 +74,7 @@ SH_FILES := $(wildcard infra/scripts/*.sh) \
             $(wildcard infra/docker/*/*.sh) \
             $(wildcard infra/docker/*/*/*.sh) \
             $(wildcard infra/docker/*/*/*.envsh) \
+            $(wildcard infra/observability/alertmanager/*.sh) \
             $(wildcard .github/scripts/*.sh) \
             $(wildcard load-tests/k6/*.sh)
 
@@ -182,6 +183,46 @@ ifeq ($(GITLEAKS),)
 GITLEAKS := $(DOCKER_RUN) zricethezav/gitleaks:$(GITLEAKS_VERSION)
 endif
 
+# promtool y amtool (tarea 3.2, ObservabilityToolingTest): NO se declaran aqui
+# por segunda vez. Se leen de compose.prod.yaml, que ya fija las imagenes de
+# Prometheus y Alertmanager para produccion y para desarrollo: una tercera
+# version escrita a mano en el Makefile solo podria quedarse desincronizada de
+# las dos que de verdad se despliegan.
+PROMETHEUS_VERSION   := $(shell grep -oE 'prom/prometheus:v[0-9.]+' infra/compose.prod.yaml | head -n1 | cut -d: -f2)
+ALERTMANAGER_VERSION := $(shell grep -oE 'prom/alertmanager:v[0-9.]+' infra/compose.prod.yaml | head -n1 | cut -d: -f2)
+
+PROMTOOL := $(DOCKER_RUN) --entrypoint promtool prom/prometheus:$(PROMETHEUS_VERSION)
+
+# El renderizado de amtool necesita DOS montajes que $(DOCKER_RUN) no monta
+# (la plantilla de solo lectura y un volumen de trabajo aparte), asi que no
+# reutiliza esa variable. El volumen se limpia al principio y al final del
+# objetivo: si una ejecucion anterior murio a medias, no deja basura que
+# invalide la siguiente.
+AMTOOL_CHECK_VOLUME := kronoqr-observability-check
+AMTOOL_RENDER := MSYS_NO_PATHCONV=1 docker run --rm $(GIT_SAFE_DIRECTORY_ENV) \
+	-v "$(HOST_PWD)/infra/observability/alertmanager:/etc/alertmanager:ro" \
+	-v $(AMTOOL_CHECK_VOLUME):/alertmanager \
+	-e ALERTMANAGER_RENDER_ONLY=1 \
+	-e ALERT_EMAIL_IT=it@ejemplo.invalid \
+	-e ALERT_EMAIL_RRHH=rrhh@ejemplo.invalid \
+	-e ALERT_EMAIL_SEGURIDAD=seguridad@ejemplo.invalid \
+	-e ALERT_WEBHOOK_IT=https://ejemplo.invalid/kronoqr \
+	-e MAIL_HOST=smtp.ejemplo.invalid \
+	-e MAIL_PORT=587 \
+	-e MAIL_USERNAME=kronoqr \
+	-e MAIL_PASSWORD=ejemplo_no_es_un_secreto_real \
+	-e MAIL_FROM_ADDRESS=kronoqr@ejemplo.invalid \
+	-e MAIL_SCHEME=smtp \
+	-e ALERT_MAINTENANCE_WEEKDAY=sunday \
+	-e ALERT_MAINTENANCE_START=02:00 \
+	-e ALERT_MAINTENANCE_END=04:00 \
+	--entrypoint /etc/alertmanager/render-config.sh \
+	prom/alertmanager:$(ALERTMANAGER_VERSION)
+AMTOOL := MSYS_NO_PATHCONV=1 docker run --rm $(GIT_SAFE_DIRECTORY_ENV) -v $(AMTOOL_CHECK_VOLUME):/alertmanager --entrypoint amtool prom/alertmanager:$(ALERTMANAGER_VERSION)
+
+RULE_FILES      := $(wildcard infra/observability/prometheus/rules/*.yml)
+RULE_TEST_FILES := $(wildcard infra/observability/prometheus/tests/*.test.yml)
+
 # El .env se crea la primera vez a partir de .env.example, sin sobrescribir
 # nunca uno existente. Se hace con funciones de make, no con cp, para que
 # funcione igual en Windows, Linux y macOS.
@@ -201,7 +242,7 @@ endif
         test-arch test-contract quality tools-ready php-lint deptrac rector sh-lint api-lint sast \
         sast-community trivy-fs trivy-image secrets-scan sbom build-ci-images release-gate nginx-smoke \
         traceability traceability-check docs-consistency deps-audit-php deps-audit-js coverage coverage-now mutate e2e clean changelog changelog-check tool-versions \
-        backup backup-verify restore-drill
+        backup backup-verify restore-drill observability-check
 
 help: ## Muestra esta ayuda
 	@echo KronoQR - objetivos disponibles:
@@ -224,6 +265,7 @@ help: ## Muestra esta ayuda
 	@echo   make rector           Solo Rector, informativo  (etapa 1 de la CI)
 	@echo   make sh-lint          Solo ShellCheck y shfmt   (etapa 1 de la CI)
 	@echo   make api-lint         Contrato OpenAPI 3.1      (etapa 1 de la CI)
+	@echo   make observability-check  Reglas de Prometheus y Alertmanager (etapa 2 de la CI)
 	@echo   make sast             Semgrep: reglas propias de .semgrep (bloqueante)
 	@echo   make sast-community   Semgrep: reglas comunitarias PHP/JS/TS/OWASP (bloqueante)
 	@echo   make trivy-fs         Trivy: dependencias, Dockerfiles y secretos del repo (informe)
@@ -506,6 +548,37 @@ else
 	$(REDOCLY) lint --config docs/api/redocly.yaml
 	@echo [make] Contrato OpenAPI 3.1: 0 problemas.
 endif
+
+# Cadena de calidad de la observabilidad (tarea 3.2, doc 02 §9.2 y §10.1,
+# etapa ② de la CI). Tres comprobaciones, cada una con su propia herramienta
+# real (nunca un `grep` sobre el YAML: un `>` donde iba `<` o una unidad en
+# minutos donde iba en segundos no lo detecta ningun analisis de texto):
+#
+#   1. `promtool check rules`  — cada fichero de infra/observability/prometheus/
+#      rules/ parsea y sus expresiones son PromQL valido. Un fichero que no
+#      carga tira TODAS sus alertas al mismo tiempo, en silencio.
+#   2. `promtool test rules`   — cada regla dispara al cruzar su umbral y NO
+#      justo por debajo, con las series sinteticas de infra/observability/
+#      prometheus/tests/*.test.yml (doc 02 §3.5: valores limite explicitos).
+#   3. `amtool check-config`   — la plantilla de Alertmanager RENDERIZADA de
+#      verdad por render-config.sh (nunca la plantilla en crudo, que tiene
+#      marcadores `@@TOKEN@@` que no son YAML de Alertmanager) es valida y
+#      enruta. El entorno de ejemplo usa direcciones ficticias en .invalid
+#      (RFC 2606): esto no manda correo a nadie, solo comprueba que el YAML
+#      resultante arranca.
+#
+# Umbral: 0 errores en las tres. Las imagenes son las mismas que fija
+# compose.prod.yaml (PROMETHEUS_VERSION/ALERTMANAGER_VERSION, mas arriba en
+# este fichero): la herramienta que valida la regla es la MISMA que despues
+# la evalua en produccion.
+observability-check: ## Reglas de Prometheus, pruebas de umbral y Alertmanager (etapa 2 de la CI)
+	@docker volume rm -f $(AMTOOL_CHECK_VOLUME) >/dev/null 2>&1 || true
+	$(PROMTOOL) check rules $(RULE_FILES)
+	$(PROMTOOL) test rules $(RULE_TEST_FILES)
+	$(AMTOOL_RENDER)
+	$(AMTOOL) check-config /alertmanager/alertmanager.yml
+	@docker volume rm -f $(AMTOOL_CHECK_VOLUME) >/dev/null 2>&1 || true
+	@echo [make] promtool y amtool: 0 errores.
 
 deps-audit-php: tools-ready ## composer audit (RS-10, umbral: 0 vulnerabilidades)
 	$(RUN_APP) composer audit --no-interaction

@@ -423,6 +423,169 @@ Esto solo funciona con el perfil `observability` encendido y con
 `OTEL_EXPORTER_OTLP_ENDPOINT` configurado; sin trazas, el paso 1 (Loki) sigue
 disponible igual.
 
+### 10.4 Cuadros de mando y alertas
+
+Prometheus evalúa el catálogo de alertas del documento 01 §9.3 sobre las
+métricas del §8.2, y Grafana carga **cinco cuadros de mando versionados como
+código** en `infra/observability/grafana/dashboards/` de la instalación —no
+se editan desde la interfaz (`allowUiUpdates: false`): un cambio se hace en
+el fichero y se despliega, igual que cualquier otra configuración—.
+
+| Cuadro | Audiencia | Qué pregunta responde |
+| --- | --- | --- |
+| **Operación de quioscos** (`kronoqr-kiosks`) | Soporte / tu IT | El cuadro muestra el estado de cada dispositivo, su último latido, el tamaño de su cola pendiente, la versión desplegada y los escaneos por hora: responde a «¿algún punto de fichaje necesita atención ahora mismo?» |
+| **Salud de la API** (`kronoqr-api`) | Desarrollo | El cuadro muestra el patrón RED (ritmo, errores, duración) por ruta, el estado de las colas y de la base de datos: responde a «¿el sistema está sirviendo tráfico con normalidad?» |
+| **Integridad del dato** (`kronoqr-integrity`) | Desarrollo y cumplimiento | El cuadro muestra las divergencias de la reconciliación nocturna, el resultado de la verificación de la cadena de auditoría, las correcciones manuales y las incidencias por antigüedad: responde a «¿el registro sigue siendo fiable?» — y las dos series que deben quedarse siempre a cero, `projection_divergence_total` y `audit_chain_verification_failures_total`, son lo primero que muestra |
+| **Negocio** (`kronoqr-business`) | RRHH y dirección | El cuadro muestra horas trabajadas por departamento, turnos abiertos, incidencias por tipo y alertas de cumplimiento: responde a «¿cómo va la plantilla esta semana?» |
+| **Impacto y adopción** (`kronoqr-adoption`) | Dirección, y el propio fabricante en la venta | El cuadro muestra jornadas con registro completo, el reparto de fichajes por origen (QR, PIN, manual) y los patrones anómalos detectados: responde a «¿esto está sirviendo para algo?» |
+
+Ninguno lleva marca ni nombre de cliente, y ninguno identifica a una
+persona: como mucho, `device` o `employee_uuid` (regla dura 21). **Lo que el
+cuadro de Negocio todavía no puede mostrar** —horas contratadas frente a
+trabajadas, absentismo, impuntualidad— lo dice el propio panel de texto del
+cuadro: son indicadores de tareas posteriores que hoy no tienen serie que
+los alimente.
+
+**Cómo llegan las alertas.** Alertmanager envía por **correo, con tu propio
+SMTP** (las `MAIL_*` que ya rellenaste al instalar, §10.1) a tres
+destinatarios — IT, RRHH y seguridad — y, si lo configuras, también a un
+**webhook** por cada uno. Las nueve variables (`ALERT_EMAIL_IT`,
+`ALERT_EMAIL_RRHH`, `ALERT_EMAIL_SEGURIDAD`, `ALERT_WEBHOOK_IT`,
+`ALERT_WEBHOOK_RRHH`, `ALERT_WEBHOOK_SEGURIDAD`, `ALERT_MAINTENANCE_*`)
+nacen vacías o con su valor de serie: un destino vacío no genera ese envío,
+así que rellena al menos las tres de correo — `product:doctor` avisa **por
+cada papel que se quede sin ningún camino de entrega**, uno a uno: IT, RRHH
+y seguridad. No basta con rellenar uno solo y dar el aviso por bueno — con
+solo IT relleno, una `RoturaDeCadenaDeAuditoria` (que es de seguridad) no
+llegaría a nadie, y antes de esta revisión `doctor` no lo habría dicho. Una
+instalación con alertas que no llegan a nadie es peor que sin alertas: se
+cree vigilada sin estarlo. Tabla completa en
+[`configuracion.md`](configuracion.md) §6.20.
+
+**La interfaz de Alertmanager**, para ver el enrutado y los silencios
+activos, escucha igual que Grafana — **solo en `127.0.0.1:9093`, nunca desde
+internet** —, y se llega igual, por túnel SSH:
+
+```bash
+ssh -L 9093:127.0.0.1:9093 tu-usuario@fichaje.tuhotel.local
+```
+
+Y después, `http://127.0.0.1:9093` en tu navegador. **Alertmanager se vigila
+a sí mismo** con las dos primeras filas de la tabla de abajo
+(`EnrutadoDeAlertasCaido`, `EntregaDeAlertasFallando`): si el propio
+servicio cae, o si algo impide entregar (el correo caído, un webhook que no
+responde), lo sabrás — la segunda puede no llegarte por correo si lo roto es
+justamente el correo, pero se ve igual en el cuadro «Salud de la API» y en
+esta misma interfaz. Procedimiento en
+[`entrega-de-alertas.md`](../runbooks/entrega-de-alertas.md).
+
+**El catálogo completo**, con lo que hay que hacer al recibir cada una —
+incluye las alertas del propio catálogo del doc 01 §9.3 y las que vigilan el
+silencio de cada una (que ninguna alerta quede ciega porque el comando que
+la alimenta dejó de ejecutarse):
+
+| Alerta | Umbral | Severidad | Destinatario | Runbook | A las 06:30 |
+| --- | --- | --- | --- | --- | --- |
+| `EnrutadoDeAlertasCaido` | Alertmanager no responde, `for: 5m` | Crítica | IT | [`entrega-de-alertas.md`](../runbooks/entrega-de-alertas.md) | `docker compose ps alertmanager` y sus registros primero |
+| `EntregaDeAlertasFallando` | Notificaciones fallidas en 15 min | Alta | IT | [`entrega-de-alertas.md`](../runbooks/entrega-de-alertas.md) | Revisa el SMTP y el webhook configurados; puede no llegarte por correo si lo roto es el correo |
+| `QuioscoSinLatido` | > 10 min sin latido | Crítica | IT | [`quiosco-no-responde.md`](../runbooks/quiosco-no-responde.md) | Comprueba si la tablet enciende y tiene red; si sí, espera un latido; si no, atiéndela en persona |
+| `ColaOfflineAtascada` | Cola de un dispositivo > 50 elementos | Alta | IT | [`cola-offline-atascada.md`](../runbooks/cola-offline-atascada.md) | Mira `kiosk:health`: no se pierde nada, pero no desvincules esa tablet todavía |
+| `ColaOfflineSinVaciar` | La cola no baja a 0 en 2 h | Alta | IT | [`cola-offline-atascada.md`](../runbooks/cola-offline-atascada.md) | Igual: revisa la red o el certificado de ese punto |
+| `ErroresDeServidorEnElFichaje` | > 1 % de `5xx` en `/api/v1/scan*`, 5 min | Crítica | IT | [`errores-en-el-panel.md`](../runbooks/errores-en-el-panel.md) | `product:doctor` primero: base de datos y disco son la causa más frecuente |
+| `LatenciaDelFichajeAlta` | p95 del fichaje > 500 ms, 10 min | Alta | IT | [`errores-en-el-panel.md`](../runbooks/errores-en-el-panel.md) | Mira si coincide con el cambio de turno o con una actualización reciente |
+| `SondaDelBordeFallida` | El servidor no responde, `for: 5m` | Crítica | IT | [`errores-en-el-panel.md`](../runbooks/errores-en-el-panel.md) | `docker compose ps` y los registros de `postgres`/`redis`, antes que el panel |
+| `CertificadoTlsProximoACaducar` | < 21 días | Alta | IT | [`renovacion-certificado-tls.md`](../runbooks/renovacion-certificado-tls.md) | Empieza el trámite de renovación con el emisor de tu certificado |
+| `CertificadoTlsCaducado` | Caducado | Crítica | IT | [`renovacion-certificado-tls.md`](../runbooks/renovacion-certificado-tls.md) | Todos los quioscos afectados: coloca el certificado renovado y recarga Nginx |
+| `EspacioEnDiscoBajo` | < 20 % libre en `/` | Alta | IT | [`espacio-en-disco.md`](../runbooks/espacio-en-disco.md) | `docker system df`; libera imágenes antiguas antes que nada del registro |
+| `MetricasDelAnfitrionAusentes` | Sin métricas del anfitrión | Media | IT | [`espacio-en-disco.md`](../runbooks/espacio-en-disco.md) | Comprueba que `node-exporter` sigue en pie |
+| `TurnoAbiertoProlongado` | Turno abierto > 12 h | Media | RRHH | [`turno-abierto-prolongado.md`](../runbooks/turno-abierto-prolongado.md) | Pregunta a la persona a qué hora salió; el sistema nunca cierra el turno solo |
+| `DescansoEntreJornadasInsuficiente` | Descanso por debajo del mínimo legal | Media | RRHH | [`turno-abierto-prolongado.md`](../runbooks/turno-abierto-prolongado.md) | Comprueba que las horas son correctas antes de tratarlo como planificación |
+| `MetricaDeIncidenciasAusente` / `DeteccionDeIncidenciasAusente` | Silencio de la detección nocturna | Media | IT | [`turno-abierto-prolongado.md`](../runbooks/turno-abierto-prolongado.md) | Comprueba que el `scheduler` sigue vivo |
+| `DeteccionDeIncidenciasConFallos` | La pasada de anoche falló | Alta | IT | [`errores-en-el-panel.md`](../runbooks/errores-en-el-panel.md) | `product:doctor`, y si señala a la reconciliación, sigue ese runbook en su lugar |
+| `ErroresCriticosNuevos` | Grupo `critical` nuevo o reabierto en 5 min | Alta | IT | [`errores-en-el-panel.md`](../runbooks/errores-en-el-panel.md) | Abre «Errores» en el panel y sigue la columna «Qué hacer» de esa fila |
+| `DivergenciaEnReconciliacionNocturna` | Cualquiera | Crítica | IT | [`divergencia-proyeccion.md`](../runbooks/divergencia-proyeccion.md) | La corrección ya está hecha; averigua quién escribió fuera del recálculo |
+| `ReconciliacionConFallos` | La pasada de anoche falló | Alta | IT | [`divergencia-proyeccion.md`](../runbooks/divergencia-proyeccion.md) | Ejecuta `attendance:reconcile` a mano y mira el motivo del fallo |
+| `ReconciliacionDeProyeccionAusente` | > 26 h sin reconciliar | Media | IT | [`divergencia-proyeccion.md`](../runbooks/divergencia-proyeccion.md) | Comprueba que el `scheduler` sigue vivo y ejecuta `attendance:reconcile` a mano |
+| `RoturaDeCadenaDeAuditoria` | Cualquiera | Crítica | Seguridad | [`rotura-cadena-auditoria.md`](../runbooks/rotura-cadena-auditoria.md) | Preserva la evidencia (§2 de ese runbook) antes de tocar nada |
+| `VerificacionDeAuditoriaAusente` | > 26 h sin verificar | Crítica | Seguridad | [`rotura-cadena-auditoria.md`](../runbooks/rotura-cadena-auditoria.md) | Comprueba que el `scheduler` sigue vivo |
+| `ParticionDeAuditoriaAusente` | Falta la partición del año en curso | Crítica | IT | [`rotura-cadena-auditoria.md`](../runbooks/rotura-cadena-auditoria.md) | **El fichaje está caído**: `compliance:ensure-audit-partitions` ya |
+| `ParticionDeAuditoriaDelProximoAnoSinPreparar` | Falta la del año próximo, desde noviembre | Media | IT | [`rotura-cadena-auditoria.md`](../runbooks/rotura-cadena-auditoria.md) | Comprueba el `scheduler` y `DB_MIGRATION_USERNAME` en el `.env` |
+| `CopiaDeSeguridadFallida` / `CopiaDeSeguridadSinVerificar` | Cualquiera | Crítica | IT | [`restaurar-backup.md`](../runbooks/restaurar-backup.md) | `backup:verify` y reintenta con `backup:run` |
+| `CopiaDeSeguridadAusente` | Sin métrica en 30 min | Crítica | IT | [`restaurar-backup.md`](../runbooks/restaurar-backup.md) | Comprueba el `scheduler` y que `BACKUP_PATH` está montado |
+| `ArchivadoDeWalDetenido` | > 30 min sin archivar | Crítica | IT | [`restaurar-backup.md`](../runbooks/restaurar-backup.md) | Urgente: sin espacio, PostgreSQL termina parándose entero |
+| `DiscoDeCopiasCasiLleno` | < 20 % libre en el volumen de copias | Media | IT | [`restaurar-backup.md`](../runbooks/restaurar-backup.md) | Amplía el disco o baja `BACKUP_RETENTION_DAYS` |
+| `SimulacroDeRestauracionNuncaEjecutado` | Ninguno registrado todavía | Media | IT | [`restaurar-backup.md`](../runbooks/restaurar-backup.md) | Ejecútalo: sin él, nadie ha comprobado que las copias restauran de verdad |
+| `SimulacroDeRestauracionCaducado` | Fallido o > 100 días | Media | IT | [`restaurar-backup.md`](../runbooks/restaurar-backup.md) | Repite el simulacro con la copia anterior si la última falla |
+| `KronoqrAuthFailureBurst` | > 20 fallos en 5 min, un canal | Media | Seguridad | [`ataque-a-credenciales.md`](../runbooks/ataque-a-credenciales.md) | Determina si es una persona equivocándose o un intento automatizado |
+| `KronoqrAuthLockouts` | ≥ 3 bloqueos distintos en 15 min, un canal | Media | Seguridad | [`ataque-a-credenciales.md`](../runbooks/ataque-a-credenciales.md) | Acota cuántas cuentas y si alguna llegó a entrar antes del bloqueo |
+| `KronoqrAuthFailureSpike` | > 100 fallos en 5 min, un canal | Crítica | Seguridad | [`ataque-a-credenciales.md`](../runbooks/ataque-a-credenciales.md) | Preserva la evidencia antes de bloquear el origen en el borde |
+| `VentanaDeMantenimientoActiva` | Mientras dura una actualización, tope 2 h | Info (no notifica) | — | [`actualizacion-cliente.md`](../runbooks/actualizacion-cliente.md) | Nada: solo silencia otras alertas mientras dura |
+
+**Lo que las alertas de certificado NO vigilan.** `CertificadoTlsProximoACaducar`
+y `CertificadoTlsCaducado` miran únicamente la **fecha de caducidad** — es lo
+único que mide `probe_ssl_earliest_cert_expiry`. La sonda que la alimenta
+sondea con `insecure_skip_verify: true` (tarea 3.1, deliberado: el
+certificado del servidor de un hotel puede ser autofirmado o de una CA
+propia, y verificar la cadena o el nombre daría siempre un falso negativo),
+así que **la validez de la cadena, quién la firmó y si el nombre (`CN`)
+coincide con tu dominio no los vigila ninguna alerta**. Si alguien sustituye
+tu certificado por uno que no corresponde, no verás una alerta de
+certificado por ello — verás que las tablets dejan de conectar
+(`QuioscoSinLatido`, y con el tiempo `ColaOfflineAtascada`), porque son ellas
+las que sí validan la identidad del servidor. Revisar la cadena a mano es
+parte de la lista trimestral de endurecimiento
+([`endurecimiento.md`](endurecimiento.md)).
+
+**Si conectas un webhook a un servicio externo** (`ALERT_WEBHOOK_IT` y las
+otras dos), las etiquetas y los textos de cada alerta que dispare —el nombre
+del centro, el dispositivo, el componente afectado, el resumen y la
+descripción— salen del servidor del hotel hacia ese servicio. **Nunca lleva
+datos de personas** (regla dura 21: como mucho `device` o `employee_uuid`),
+pero sí identifica a tu organización y a su instalación. Decidir si ese
+servicio externo es adecuado, y contratarlo como encargado del tratamiento
+si hace falta, es una decisión tuya y de tu DPO — el producto no la toma por
+ti (ver [`obligaciones-legales.md`](obligaciones-legales.md)).
+
+**La ventana de mantenimiento semanal.** `ALERT_MAINTENANCE_WEEKDAY`,
+`ALERT_MAINTENANCE_START` y `ALERT_MAINTENANCE_END` (domingo 02:00–04:00 de
+serie, en la zona horaria del servidor — nunca en el cambio de turno de las
+06:00) silencian las alertas de quiosco, API, certificado y disco: un
+servidor que se reinicia en su propia ventana no tiene que despertar a
+nadie. **Lo que nunca se silencia, ni en esta ventana ni en la automática de
+`update.sh`** (que abre la misma marca mientras dura una actualización, con
+un **tope de 2 horas** por si el actualizador se cae sin retirarla — una
+actualización real se mide en minutos): copia de seguridad, integridad del
+dato, auditoría, autenticación e incidencias. Son justo las que hay que
+poder ver durante un mantenimiento.
+
+**Anti-fatiga: cinco quioscos callados a la vez llegan como una sola
+notificación**, no como cinco. Las alertas de quiosco se agrupan por el
+nombre de la alerta (no por dispositivo), así que un corte de red que afecte
+a varias tablets a la vez produce un único correo con los cinco dispositivos
+dentro, en vez de cinco avisos separados — es la lectura práctica de «un
+único quiosco reiniciándose no debe despertar a nadie» del doc 02 §8.4.
+
+**Los umbrales viven en la instalación, no en el repositorio del
+fabricante.** `infra/observability/` viaja en tu paquete y lo puedes editar.
+Solo un umbral está atado a otra parte del sistema y **tiene que cambiar a
+la vez**: `KIOSK_HEALTH_SILENT_AFTER_SECONDS` ([`configuracion.md`](configuracion.md)
+§6.14) y el umbral de `QuioscoSinLatido` son el mismo número — si los
+separas, la consola (`kiosk:health`) y la alerta dirán cosas distintas del
+mismo quiosco.
+
+**Dos límites que conviene conocer.** No hay un Alertmanager común entre
+instalaciones de clientes distintos: cada instalación tiene la suya, con sus
+propios destinatarios, y eso es intencionado (ADR-016 — el fabricante no
+recibe ninguna alerta, ADR-020). Y la serie que alimenta `QuioscoSinLatido`
+vive en Redis: si Redis se vacía, un quiosco que ya estaba callado puede
+quedarse sin serie —y con ella, sin poder disparar la alerta— hasta su
+siguiente latido, que por definición no llegará; `kiosk:health` no depende
+de Redis y es la segunda red de seguridad. El detalle completo está en
+[`quiosco-no-responde.md`](../runbooks/quiosco-no-responde.md).
+
+Grafana, igual que Alertmanager, **no se expone a internet** — ver el
+principio de esta sección.
+
 ---
 
 Las obligaciones que van con todo esto —qué informar, qué archivar, quién

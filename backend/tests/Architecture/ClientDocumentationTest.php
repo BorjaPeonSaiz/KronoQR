@@ -150,6 +150,35 @@ it('documenta en la guia de configuracion cada variable que declara el fichero d
         .implode(', ', $undocumented));
 })->with('la referencia de configuracion en las dos lenguas')->group('RF-PD-02', 'RL-21');
 
+it('marca en la guia como del cliente exactamente las variables que el .env.example le atribuye', function (string $guide): void {
+    // La marca `[CLIENTE]` no es una etiqueta decorativa: `install.sh` **se
+    // niega a instalar** si falta alguna, y la guia la usa para decirle al IT del
+    // hotel que abra el `.env` antes de empezar. Las dos listas se escriben en
+    // ficheros distintos y nada las relaciona.
+    //
+    // Los dos desajustes hacen daño y en direcciones opuestas: una variable
+    // marcada en el `.env.example` y no en la guia se queda sin rellenar y la
+    // instalacion se para sin que el IT sepa por que; una marcada en la guia y no
+    // en el fichero le hace buscar y rellenar algo que no le corresponde —y las
+    // seis `ALERT_*` son justo de las que deciden si las alertas llegan a alguien.
+    $delFichero = ClientDocs::clientOwnedEnvironmentKeys();
+    $deLaGuia = ClientDocs::clientOwnedGuideKeys($guide);
+
+    // Guarda: si cualquiera de los dos lectores deja de encontrar la marca, las
+    // dos diferencias salen vacias y la prueba pasa sin comprobar nada.
+    expect(\count($delFichero))->toBeGreaterThan(20, 'El .env.example ha dejado de declarar la marca [CLIENTE].');
+    expect(\count($deLaGuia))->toBeGreaterThan(20, $guide.' ha dejado de marcar variables como [CLIENTE].');
+
+    expect(array_values(array_diff($delFichero, $deLaGuia)))->toBe(
+        [],
+        'Variables marcadas [CLIENTE] en .env.example que '.$guide.' no marca.'
+    );
+    expect(array_values(array_diff($deLaGuia, $delFichero)))->toBe(
+        [],
+        'Variables que '.$guide.' marca [CLIENTE] y el .env.example no.'
+    );
+})->with('la referencia de configuracion en las dos lenguas')->group('RF-PD-01', 'RF-PD-02');
+
 it('no inventa en la referencia del entorno ninguna variable que la instalacion no lea', function (string $guide): void {
     // La otra direccion de la comprobacion cruzada, y la que de verdad enganna:
     // una variable documentada que el codigo no lee nunca. El IT la escribe en su

@@ -1,0 +1,225 @@
+# KronoQR — pruebas unitarias de infra/observability/prometheus/rules/
+# incidents.yml (tarea 3.2, decision 2). Las tres reglas existentes desde la
+# Fase 2 (TurnoAbiertoProlongado, DescansoEntreJornadasInsuficiente,
+# MetricaDeIncidenciasAusente) no tenian ninguna prueba: las ganan aqui, junto
+# con las dos nuevas de esta tarea (deuda de la Fase 2).
+rule_files:
+  - ../rules/incidents.yml
+
+evaluation_interval: 1m
+
+tests:
+  #-----------------------------------------------------------------------------
+  # TurnoAbiertoProlongado: un turno abierto por encima del maximo.
+  #-----------------------------------------------------------------------------
+  - name: turno_abierto_dispara
+    interval: 1m
+    input_series:
+      - series: 'incidents_open{type="open_shift_expired"}'
+        values: "1x20"
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: TurnoAbiertoProlongado
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: TurnoAbiertoProlongado
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              destinatario: rrhh
+              component: incidents
+              type: open_shift_expired
+            exp_annotations:
+              summary: "Hay 1 turno(s) abierto(s) por encima del maximo configurado"
+              description: >-
+                La revision diaria ha encontrado tramos que siguen abiertos
+                despues de superar ATTENDANCE_MAX_SHIFT_HOURS. El sistema NO
+                los cierra (RN-08): la salida real la fija una persona con
+                una correccion trazada. El fichaje no esta afectado y nadie
+                se ha quedado sin poder fichar.
+              runbook_url: docs/runbooks/turno-abierto-prolongado.md
+
+  #-----------------------------------------------------------------------------
+  # Valor limite: cero turnos abiertos fuera de plazo. Nunca dispara.
+  #-----------------------------------------------------------------------------
+  - name: turno_abierto_boundary
+    interval: 1m
+    input_series:
+      - series: 'incidents_open{type="open_shift_expired"}'
+        values: "0x30"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: TurnoAbiertoProlongado
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # DescansoEntreJornadasInsuficiente: mismo patron, otro tipo de incidencia.
+  #-----------------------------------------------------------------------------
+  - name: descanso_insuficiente_dispara
+    interval: 1m
+    input_series:
+      - series: 'incidents_open{type="insufficient_rest"}'
+        values: "1x20"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: DescansoEntreJornadasInsuficiente
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              destinatario: rrhh
+              component: incidents
+              type: insufficient_rest
+            exp_annotations:
+              summary: "Hay 1 jornada(s) con el descanso minimo por debajo del perfil"
+              description: >-
+                Entre el fin de una jornada y el inicio de la siguiente han
+                mediado menos horas que el minimo del perfil de
+                cumplimiento (RN-10). Es un hecho ya ocurrido: lo que se
+                hace con el es revisar el cuadrante y dejar constancia, no
+                cerrar la incidencia sin mirarla.
+              runbook_url: docs/runbooks/turno-abierto-prolongado.md
+
+  - name: descanso_insuficiente_boundary
+    interval: 1m
+    input_series:
+      - series: 'incidents_open{type="insufficient_rest"}'
+        values: "0x30"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: DescansoEntreJornadasInsuficiente
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # MetricaDeIncidenciasAusente: la metrica no llega nunca.
+  #-----------------------------------------------------------------------------
+  - name: metrica_incidencias_ausente_dispara
+    interval: 1m
+    input_series:
+      - series: 'incidents_open{type="open_shift_expired"}'
+        values: "0x40"
+    alert_rule_test:
+      - eval_time: 29m
+        alertname: MetricaDeIncidenciasAusente
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: MetricaDeIncidenciasAusente
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              destinatario: it-cliente
+              component: incidents
+            exp_annotations:
+              summary: "El recuento de incidencias lleva mas de 30 minutos sin actualizarse"
+              description: >-
+                `compliance:incident-metrics` deberia reescribir el fichero
+                del colector textfile cada cinco minutos. Si no lo hace, las
+                alertas de incidencias estan ciegas: no distinguen «no hay
+                ninguna» de «nadie esta contando». Esta si es para el IT del
+                cliente, porque lo que falla es el planificador, no el
+                registro.
+              runbook_url: docs/runbooks/turno-abierto-prolongado.md
+
+  #-----------------------------------------------------------------------------
+  # Valor limite: la metrica llega fresca. Nunca dispara.
+  #-----------------------------------------------------------------------------
+  - name: metrica_incidencias_ausente_boundary
+    interval: 1m
+    input_series:
+      - series: incidents_metrics_timestamp_seconds
+        values: "0+60x40"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: MetricaDeIncidenciasAusente
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # DeteccionDeIncidenciasConFallos: la pasada de anoche dejo hallazgos sin
+  # convertir en incidencia.
+  #-----------------------------------------------------------------------------
+  - name: deteccion_con_fallos_dispara
+    interval: 1m
+    input_series:
+      - series: incident_detection_last_failures
+        values: "2x10"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: DeteccionDeIncidenciasConFallos
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: DeteccionDeIncidenciasConFallos
+        exp_alerts:
+          - exp_labels:
+              severity: high
+              destinatario: it-cliente
+              component: incidents
+            exp_annotations:
+              summary: "La deteccion de incidencias de anoche dejo 2 hallazgo(s) sin convertir"
+              description: >-
+                `attendance:detect-incidents` encontro al menos un hallazgo
+                que no pudo convertir en incidencia. El fichaje no esta
+                afectado; lo que esta en riesgo es que un turno abierto o un
+                descanso insuficiente no llegue a generar la incidencia que
+                RRHH tendria que revisar. El detalle esta en el log tecnico:
+                una linea `scheduler.command_failed` con el codigo de salida y
+                una `attendance.incident_not_opened` por hallazgo, con
+                employee_uuid y la clase de la excepcion. NO esperes verlo en
+                error_events: con runInBackground() el planificador no
+                convierte el codigo de salida en excepcion; solo entra ahi si
+                la propia pasada lanzo una. El runbook del historico explica
+                como leer las dos cosas.
+              runbook_url: docs/runbooks/errores-en-el-panel.md
+
+  #-----------------------------------------------------------------------------
+  # Valor limite: la pasada de anoche no dejo ningun fallo. Nunca dispara.
+  #-----------------------------------------------------------------------------
+  - name: deteccion_con_fallos_boundary
+    interval: 1m
+    input_series:
+      - series: incident_detection_last_failures
+        values: "0x20"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: DeteccionDeIncidenciasConFallos
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # DeteccionDeIncidenciasAusente: la deteccion no se ejecuta nunca.
+  #-----------------------------------------------------------------------------
+  - name: deteccion_ausente_dispara
+    interval: 1m
+    input_series:
+      - series: incident_detection_last_failures
+        values: "0x40"
+    alert_rule_test:
+      - eval_time: 29m
+        alertname: DeteccionDeIncidenciasAusente
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: DeteccionDeIncidenciasAusente
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              destinatario: it-cliente
+              component: incidents
+            exp_annotations:
+              summary: "Hace mas de 26 h que no se ejecuta la deteccion de incidencias"
+              description: >-
+                attendance:detect-incidents deberia correr a diario. Si no
+                lo hace, las alertas de turnos abiertos y descanso
+                insuficiente no ven nada nuevo aunque el problema exista: no
+                distinguen «no hay ninguna incidencia» de «nadie la ha
+                buscado todavia».
+              runbook_url: docs/runbooks/turno-abierto-prolongado.md
+
+  #-----------------------------------------------------------------------------
+  # Valor limite: la deteccion se ejecuto hace poco. Nunca dispara.
+  #-----------------------------------------------------------------------------
+  - name: deteccion_ausente_boundary
+    interval: 1m
+    input_series:
+      - series: incident_detection_last_run_timestamp_seconds
+        values: "0+60x1620"
+    alert_rule_test:
+      - eval_time: 26h
+        alertname: DeteccionDeIncidenciasAusente
+        exp_alerts: []

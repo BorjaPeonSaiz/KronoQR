@@ -17,7 +17,6 @@
 #
 # Las metricas las escribe `php artisan compliance:verify-audit-chain` (diaria)
 # en BACKUP_PATH/metrics, y las sirve node-exporter por el colector textfile.
-# `/metrics` de la aplicacion llega en la tarea 3.1; estas reglas no cambian.
 
 groups:
   - name: kronoqr-audit

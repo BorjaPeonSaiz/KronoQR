@@ -152,6 +152,16 @@ return [
                 'warning_not_configured' => 'No hay servidor de correo configurado. Los avisos por correo no '
                     .'saldran. No impide fichar ni consultar el registro.',
             ],
+            'alert_recipients' => [
+                'ok' => 'Los :expected destinatarios de aviso (it-cliente, rrhh y seguridad) tienen a donde '
+                    .'recibir sus alertas, por correo o por webhook.',
+                'ok_disabled' => 'La vigilancia automatica esta apagada en esta instalacion, asi que no hay '
+                    .'alertas que enviar a nadie.',
+                'warning' => 'La vigilancia automatica esta encendida y :missing de los :expected destinatarios '
+                    .'de aviso no tienen ni correo ni webhook: :roles. Las alertas dirigidas a ellos se '
+                    .'encienden y se apagan sin que las vea nadie. No son avisos menores: la rotura del '
+                    .'registro de auditoria va a «seguridad» y los turnos sin cerrar van a «rrhh».',
+            ],
         ],
 
         // --- Certificado -----------------------------------------------------
@@ -393,6 +403,21 @@ return [
                 'warning_not_configured' => "Si quieres avisos por correo, rellena MAIL_MAILER, MAIL_HOST y\n"
                     ."MAIL_PORT en el fichero .env y reinicia con `docker compose up -d app`.\n"
                     .'Si no los quieres, no hay nada que hacer.',
+            ],
+            'alert_recipients' => [
+                'warning' => "Pon en el fichero .env un destino para CADA destinatario que falte (:roles).\n"
+                    ."Cada uno admite correo, webhook o los dos; con uno de los dos basta:\n"
+                    ."  it-cliente  ->  ALERT_EMAIL_IT=informatica@tuhotel.example\n"
+                    ."                  ALERT_WEBHOOK_IT=\n"
+                    ."  rrhh        ->  ALERT_EMAIL_RRHH=personal@tuhotel.example\n"
+                    ."                  ALERT_WEBHOOK_RRHH=\n"
+                    ."  seguridad   ->  ALERT_EMAIL_SEGURIDAD=direccion@tuhotel.example\n"
+                    ."                  ALERT_WEBHOOK_SEGURIDAD=\n"
+                    ."Si en el hotel es la misma persona, pon la misma direccion en los tres: lo que no\n"
+                    ."vale es dejar uno vacio, porque sus alertas no las recibe nadie.\n"
+                    ."Despues recarga el enrutado de avisos:\n"
+                    ."  docker compose up -d alertmanager\n"
+                    .'Si prefieres no recibir avisos, apaga la vigilancia dejando COMPOSE_PROFILES vacio.',
             ],
         ],
 

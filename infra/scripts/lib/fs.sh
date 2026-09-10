@@ -47,3 +47,23 @@ kq_free_gib() {
   bytes="$(kq_free_bytes "$1")"
   printf '%d' "$((${bytes:-0} / 1073741824))"
 }
+
+# Escritura ATOMICA de un fichero de metricas para el colector textfile de
+# node-exporter (doc 02 §8.2): temporal en el mismo directorio + `mv`, mismo
+# criterio que `write_metrics` de `lib/backup-common.sh`. Vive aqui y no alli
+# porque la llama tambien `update.sh` (tarea 3.2, ventana de mantenimiento),
+# que no carga `backup-common.sh` -esa biblioteca asume la configuracion de
+# copia cargada, y update.sh solo necesita escribir dos lineas de texto-.
+#
+# 0644: legible por CUALQUIER uid, no solo por el propietario. Hace falta
+# porque quien escribe no es siempre el mismo: `backup.sh`/`restore-drill.sh`
+# corren como el uid 1000 del contenedor `app`, pero `update.sh` corre en el
+# ANFITRION, normalmente como root; node-exporter siempre lee como uid 1000.
+# Sin el permiso de "otros", un fichero escrito por root no lo veria nadie mas.
+kq_write_metrics_atomic() {
+  local file="$1" tmp
+  tmp="${file}.$$.tmp"
+  cat >"$tmp"
+  chmod 0644 "$tmp"
+  mv -f "$tmp" "$file"
+}

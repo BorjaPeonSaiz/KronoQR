@@ -1,0 +1,642 @@
+{
+  "id": null,
+  "uid": "kronoqr-integrity",
+  "title": "KronoQR · Integridad del dato",
+  "description": "Desarrollo y cumplimiento. Divergencias, verificación de cadena, correcciones manuales, incidencias por antigüedad (doc 02 §8.3). projection_divergence_total y audit_chain_verification_failures_total deben permanecer SIEMPRE en cero (doc 02 §8.2, reglas duras 6 y 7).",
+  "tags": ["kronoqr", "integridad", "auditoria"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "refresh": "1m",
+  "style": "dark",
+  "graphTooltip": 1,
+  "liveNow": false,
+  "time": { "from": "now-7d", "to": "now" },
+  "timepicker": { "refresh_intervals": ["30s", "1m", "5m"] },
+  "links": [],
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Divergencia de proyección (total acumulado)",
+      "description": "projection_divergence_total. DEBE ser siempre cero (regla dura 7, ADR-007). Cualquier incremento es un incidente de integridad, nunca una tendencia.",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" }, "expr": "projection_divergence_total", "instant": true }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Roturas de cadena de auditoría (total acumulado)",
+      "description": "audit_chain_verification_failures_total. DEBE ser siempre cero (regla dura 6, RS-07). No se repara borrando: se investiga (docs/runbooks/rotura-cadena-auditoria.md).",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" }, "expr": "audit_chain_verification_failures_total", "instant": true }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Última verificación de cadena",
+      "description": "audit_chain_last_verification_result: 1 si la cadena estaba íntegra en la última pasada, 0 si se detectó alguna rotura.",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" }, "expr": "audit_chain_last_verification_result", "instant": true }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "mappings": [
+            { "type": "value", "options": { "1": { "text": "ÍNTEGRA", "color": "green" } } },
+            { "type": "value", "options": { "0": { "text": "ROTA", "color": "red" } } }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Partición de audit_log lista (año actual)",
+      "description": "audit_log_partition_ready{horizon=\"current\"}. A 0, toda acción auditable falla: es la alerta más urgente de todo el catálogo si se apaga.",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" }, "expr": "audit_log_partition_ready{horizon=\"current\"}", "instant": true }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "mappings": [
+            { "type": "value", "options": { "1": { "text": "LISTA", "color": "green" } } },
+            { "type": "value", "options": { "0": { "text": "FALTA", "color": "red" } } }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Reconciliación con fallos (última pasada)",
+      "description": "projection_reconciliation_last_failures: jornadas que la reconciliación nocturna no pudo procesar (deuda de la Fase 2 cerrada en 3.2). No confundir con las divergencias encontradas: esto es 'la pasada de anoche se completó', no 'todo cuadraba'.",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" }, "expr": "projection_reconciliation_last_failures", "instant": true }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "noValue": "sin dato",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Detección de incidencias: fallos (última pasada)",
+      "description": "incident_detection_last_failures: hallazgos que la revisión nocturna no pudo convertir en incidencia (deuda de la Fase 2 cerrada en 3.2).",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" }, "expr": "incident_detection_last_failures", "instant": true }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "noValue": "sin dato",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Antigüedad de la última detección de incidencias",
+      "description": "time() - incident_detection_last_run_timestamp_seconds. Si crece sin parar, la tarea programada dejó de ejecutarse y la alerta 'Turnos abiertos > 12 h' se queda ciega.",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" }, "expr": "time() - incident_detection_last_run_timestamp_seconds", "instant": true }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "noValue": "sin dato",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 93600 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Partición de audit_log lista (año próximo)",
+      "description": "audit_log_partition_ready{horizon=\"next\"}: prepara el 1 de enero antes de que llegue.",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" }, "expr": "audit_log_partition_ready{horizon=\"next\"}", "instant": true }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "mappings": [
+            { "type": "value", "options": { "1": { "text": "LISTA", "color": "green" } } },
+            { "type": "value", "options": { "0": { "text": "FALTA", "color": "#EAB839" } } }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "#EAB839", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Reconciliación nocturna: jornadas inspeccionadas y correcciones",
+      "description": "projection_reconciliation_work_days_inspected y projection_reconciliation_last_corrections, por pasada. Distinto de cero en correcciones significa que la proyección se había desviado.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" }, "expr": "projection_reconciliation_work_days_inspected", "legendFormat": "jornadas inspeccionadas" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" }, "expr": "projection_reconciliation_last_corrections", "legendFormat": "filas corregidas" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "pointSize": 5,
+            "stacking": { "mode": "none", "group": "A" },
+            "axisPlacement": "auto"
+          },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Copia de seguridad: resultado y verificación, por tipo",
+      "description": "kronoqr_backup_last_result y kronoqr_backup_last_verify_result. Una copia no verificada no es una copia (doc 02 §8.2).",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" }, "expr": "kronoqr_backup_last_result", "legendFormat": "resultado {{type}}" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" }, "expr": "kronoqr_backup_last_verify_result", "legendFormat": "verificación" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "max": 1,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "pointSize": 5,
+            "stacking": { "mode": "none", "group": "A" },
+            "axisPlacement": "auto"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 11,
+      "type": "table",
+      "title": "Incidencias abiertas, por tipo y severidad",
+      "description": "incidents_open{type,severity} (doc 01 §5.5). Salud del proceso de RRHH (doc 01 §9.2). Se escriben todos los tipos, también a cero.",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "incidents_open",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time": true, "instance": true, "job": true, "service": true, "__name__": true },
+            "renameByName": { "type": "Tipo", "severity": "Severidad", "Value": "Abiertas" }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "custom": { "align": "auto", "cellOptions": { "type": "auto" } } },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Abiertas" },
+            "properties": [
+              { "id": "custom.cellOptions", "value": { "type": "color-background", "mode": "basic" } },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "green", "value": null },
+                    { "color": "#EAB839", "value": 1 },
+                    { "color": "red", "value": 10 }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": { "showHeader": true, "cellHeight": "sm", "footer": { "show": false } }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Incidencias abiertas en el tiempo, por tipo",
+      "description": "Aproximación a 'incidencias por antigüedad' (doc 02 §8.3): incidents_open no lleva un bucket de edad por incidencia, así que esto muestra CUÁNTO TIEMPO se mantiene una serie por encima de cero como indicio de envejecimiento del backlog. El detalle de antigüedad por incidencia individual está en la bandeja del panel (tarea 2.5), no en Prometheus.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" }, "expr": "sum by (type) (incidents_open)", "legendFormat": "{{type}}" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 15,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "pointSize": 5,
+            "stacking": { "mode": "none", "group": "A" },
+            "axisPlacement": "auto"
+          },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Correcciones manuales por motivo (24h)",
+      "description": "manual_corrections_total{reason_code} (Anexo C). Calidad del dato y posible mal uso (doc 01 §9.2).",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" }, "expr": "sum by (reason_code) (increase(manual_corrections_total[24h]))", "legendFormat": "{{reason_code}}" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 60,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "stacking": { "mode": "normal", "group": "A" },
+            "axisPlacement": "auto"
+          },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["sum"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 14,
+      "type": "stat",
+      "title": "Ratio de correcciones manuales / fichajes (24h)",
+      "description": "Si sube, el registro se está degradando (doc 01 §9.2, RF-IN-08).",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 32 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "sum(increase(manual_corrections_total[24h])) / sum(increase(scans_total[24h]))",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "#EAB839", "value": 0.05 },
+              { "color": "red", "value": 0.15 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 15,
+      "type": "stat",
+      "title": "Antigüedad de la última copia verificada",
+      "description": "kronoqr_backup_verified_copy_age_seconds.",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 32 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" }, "expr": "kronoqr_backup_verified_copy_age_seconds", "instant": true }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 93600 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 16,
+      "type": "stat",
+      "title": "RTO: duración del último simulacro de restauración",
+      "description": "kronoqr_backup_restore_drill_duration_seconds. Es la única medida real del RTO (doc 02 §8.2): si crece, el objetivo de 4 h (RNF-D-02) se estrecha.",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 32 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" }, "expr": "kronoqr_backup_restore_drill_duration_seconds", "instant": true }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "#EAB839", "value": 10800 },
+              { "color": "red", "value": 14400 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 17,
+      "type": "stat",
+      "title": "Patrones anómalos detectados (24h)",
+      "description": "anomalous_patterns_detected_total{pattern} (RF-PR-06). Indicio de préstamo de credencial: se revisa, no se sanciona automáticamente (doc 01 §9.2).",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 32 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" }, "expr": "sum(increase(anomalous_patterns_detected_total[24h])) OR vector(0)", "instant": true }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "#EAB839", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    }
+  ]
+}

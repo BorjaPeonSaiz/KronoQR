@@ -314,20 +314,58 @@ services:
         max-size: "20m"
         max-file: "5"
 
+  # ENTRYPOINT DE RENDERIZADO (tarea 3.2, decision 5). Alertmanager no expande
+  # variables de entorno en su configuracion, asi que lo que viaja montado en
+  # /etc/alertmanager es una PLANTILLA (`alertmanager.yml.template`) y un
+  # script POSIX (`render-config.sh`) que la resuelve contra las variables
+  # ALERT_* y MAIL_* del entorno del contenedor ANTES de que el binario
+  # arranque. El resultado se escribe en /alertmanager/alertmanager.yml -el
+  # volumen de datos, de lectura y escritura, nunca el `.template`, que es de
+  # solo lectura- y `--config.file` apunta ahi. La contraseña SMTP y cada
+  # webhook (decision 17g) nunca entran en el YAML: se leen de ficheros aparte
+  # con permisos 0600 que el propio script escribe.
+  #
+  # `environment:` CON LAS QUINCE VARIABLES UNA A UNA, Y NO `env_file: .env`
+  # (correccion de la revision de seguridad, decision 17a): vease el
+  # comentario equivalente en compose.dev.yaml para el porque completo. En
+  # resumen, `env_file: .env` metia el `.env` ENTERO -claves de firma,
+  # secretos de sellado, contraseña de base de datos, clave de licencia- en el
+  # entorno de un binario de terceros que solo necesita quince variables.
   alertmanager:
     profiles: [observability]
     image: prom/alertmanager:v0.28.0
+    entrypoint: ["/etc/alertmanager/render-config.sh"]
     command:
-      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --config.file=/alertmanager/alertmanager.yml
       - --storage.path=/alertmanager
-    env_file:
-      - .env
+    environment:
+      ALERT_EMAIL_IT: ${ALERT_EMAIL_IT:-}
+      ALERT_EMAIL_RRHH: ${ALERT_EMAIL_RRHH:-}
+      ALERT_EMAIL_SEGURIDAD: ${ALERT_EMAIL_SEGURIDAD:-}
+      ALERT_WEBHOOK_IT: ${ALERT_WEBHOOK_IT:-}
+      ALERT_WEBHOOK_RRHH: ${ALERT_WEBHOOK_RRHH:-}
+      ALERT_WEBHOOK_SEGURIDAD: ${ALERT_WEBHOOK_SEGURIDAD:-}
+      ALERT_MAINTENANCE_WEEKDAY: ${ALERT_MAINTENANCE_WEEKDAY:-sunday}
+      ALERT_MAINTENANCE_START: ${ALERT_MAINTENANCE_START:-02:00}
+      ALERT_MAINTENANCE_END: ${ALERT_MAINTENANCE_END:-04:00}
+      MAIL_HOST: ${MAIL_HOST:-}
+      MAIL_PORT: ${MAIL_PORT:-}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-}
+      MAIL_SCHEME: ${MAIL_SCHEME:-}
     volumes:
       - ./observability/alertmanager:/etc/alertmanager:ro
       - alertmanager-data:/alertmanager
     networks:
       - observability
     restart: unless-stopped
+    # Decision 17(c): sin esto, nadie vigilaba que Alertmanager siguiera vivo.
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://127.0.0.1:9093/-/healthy || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   grafana:
     profiles: [observability]

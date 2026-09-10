@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Support\Scheduling\LogScheduledCommandFailure;
 use Illuminate\Support\Facades\Schedule;
 
 /*
@@ -11,6 +12,19 @@ use Illuminate\Support\Facades\Schedule;
  * no aqui.
  *
  * Lo que si vive aqui es CUANDO se ejecutan.
+ *
+ * QUE PASA CUANDO UNA DE ESTAS TAREAS TERMINA EN ROJO (tarea 3.2, paso 9).
+ * Casi todas llevan `runInBackground()`, y eso cambia el desenlace de un codigo
+ * de salida distinto de cero: `ScheduleRunCommand` solo lo convierte en
+ * excepcion para las tareas en PRIMER PLANO, asi que en segundo plano no hay
+ * excepcion, no se despacha `ScheduledTaskFailed` y no queda fila en
+ * `error_events`. El codigo llega por `schedule:finish`, que llama a
+ * `Event::finish()`, y ahi si se ejecutan los callbacks de `onFailure()`. Las
+ * tres tareas cuyo codigo de salida significa algo —reconciliacion, deteccion de
+ * incidencias y propuesta de purga— encadenan por eso
+ * `LogScheduledCommandFailure`, que deja `scheduler.command_failed` con el
+ * nombre de la tarea y su codigo, NUNCA su salida (regla dura 21: la de la
+ * retencion son recuentos del registro horario del cliente).
  */
 
 /*
@@ -231,11 +245,17 @@ Schedule::command('reporting:adoption-metrics')
  * `withoutOverlapping` porque una pasada sobre un rango ancho lanzada a mano
  * puede seguir corriendo a la hora de la nocturna, y dos reconciliaciones
  * simultaneas sobre la misma jornada solo duplican la lectura.
+ *
+ * `onFailure()` deja el codigo de salida en el log (ver la cabecera del
+ * fichero): con `runInBackground()`, Laravel ejecuta ese callback desde
+ * `schedule:finish` y es la unica traza localizable de que anoche fallo. La
+ * alerta la dispara `projection_reconciliation_last_failures`.
  */
-Schedule::command('attendance:reconcile')
+$reconcile = Schedule::command('attendance:reconcile')
     ->dailyAt('03:50')
     ->withoutOverlapping()
     ->runInBackground();
+$reconcile->onFailure(LogScheduledCommandFailure::of('attendance:reconcile', $reconcile));
 
 /*
  * Deteccion automatica de incidencias (RF-PR-01, tarea 2.6).
@@ -256,11 +276,18 @@ Schedule::command('attendance:reconcile')
  * seguro —la idempotencia la garantiza la restriccion `one_incident_per_finding`—,
  * asi que `withoutOverlapping` esta por no duplicar el trabajo, no por
  * correccion.
+ *
+ * `onFailure()` deja el codigo de salida en el log (ver la cabecera del
+ * fichero): con `runInBackground()`, Laravel ejecuta ese callback desde
+ * `schedule:finish`. La alerta la dispara `incident_detection_last_failures`, y
+ * `incident_detection_last_run_timestamp_seconds` delata que la pasada dejo de
+ * ejecutarse — que hasta la tarea 3.2 no vigilaba nadie.
  */
-Schedule::command('attendance:detect-incidents')
+$detectIncidents = Schedule::command('attendance:detect-incidents')
     ->dailyAt('04:30')
     ->withoutOverlapping()
     ->runInBackground();
+$detectIncidents->onFailure(LogScheduledCommandFailure::of('attendance:detect-incidents', $detectIncidents));
 
 /*
  * Metrica de incidencias abiertas (doc 02 §8.2, doc 01 §9.2, tarea 2.6).
@@ -303,11 +330,19 @@ Schedule::command('compliance:incident-metrics')
  * cadena (04:05) y de la deteccion de incidencias (04:30), y antes de que entre
  * nadie a trabajar. Recorre tablas grandes con `count(*)`, asi que no comparte
  * ventana con el turno de las 06:00.
+ *
+ * `onFailure()` deja el codigo de salida en el log (ver la cabecera del
+ * fichero): con `runInBackground()`, Laravel ejecuta ese callback desde
+ * `schedule:finish`. Aqui la salida del comando **no** entra en el apunte, y es
+ * el caso que mas lo justifica: son recuentos de filas por tabla del registro
+ * horario del cliente, y el log tecnico viaja al fabricante dentro del paquete
+ * de diagnostico (ADR-020, regla dura 21).
  */
-Schedule::command('compliance:apply-retention', ['--dry-run'])
+$retentionDryRun = Schedule::command('compliance:apply-retention', ['--dry-run'])
     ->weeklyOn(1, '05:10')
     ->withoutOverlapping()
     ->runInBackground();
+$retentionDryRun->onFailure(LogScheduledCommandFailure::of('compliance:apply-retention', $retentionDryRun));
 
 /*
  * Purga de las exportaciones integras caducadas (RF-PD-14, RL-20, tarea 5.10).

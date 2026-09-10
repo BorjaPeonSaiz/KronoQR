@@ -34,7 +34,7 @@ use DateTimeImmutable;
  *
  * **La mecanica de escritura no vive aqui.** El guard del colector, la escritura
  * atomica y el fallo ruidoso son de {@see TextfileExposition}, que es la misma
- * para los siete adaptadores del producto. Aqui solo se componen las lineas.
+ * para los nueve adaptadores del producto. Aqui solo se componen las lineas.
  */
 final readonly class TextfileRetentionMetrics implements RetentionMetrics
 {

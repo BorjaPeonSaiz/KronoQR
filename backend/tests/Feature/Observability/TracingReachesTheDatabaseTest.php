@@ -88,8 +88,12 @@ it('abre un span por consulta con la consulta en marcadores y sin un solo valor 
         foreach ($consultas as $span) {
             $atributos = $span->getAttributes()->toArray();
 
-            expect($atributos['db.system'] ?? null)->toBe('postgresql')
-                ->and($atributos['db.operation'] ?? null)->toBeIn(
+            // Los nombres de la convencion semantica 1.38 (tarea 3.2, decision
+            // 12): `db.system.name` y `db.operation.name`. Con los antiguos, los
+            // paneles y las consultas de traza de esta misma tarea dejarian de
+            // encontrar la mitad de los atributos.
+            expect($atributos['db.system.name'] ?? null)->toBe('postgresql')
+                ->and($atributos['db.operation.name'] ?? null)->toBeIn(
                     ['select', 'insert', 'update', 'delete', 'begin', 'commit', 'rollback', 'other']
                 );
 

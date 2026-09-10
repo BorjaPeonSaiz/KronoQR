@@ -1,0 +1,113 @@
+# KronoQR — alertas de operacion de quioscos (doc 01 §9.3, tarea 3.2).
+#
+# Filas del catalogo del doc 01 §9.3 que implementa este fichero:
+#
+#   | Quiosco sin latido                | > 10 min            | Critica (operaciones) |
+#   | Cola offline de un dispositivo    | > 50 elementos o > 2 h | Alta                |
+#
+# LAS METRICAS. `kiosk_last_seen_seconds{device}` y `kiosk_offline_queue_size
+# {device}` las escribe la aplicacion (doc 02 §8.2) en Redis en cada latido
+# (`POST /api/v1/kiosk/heartbeat`, Anexo B) y las sirve `/metrics`, ya en pie
+# desde la tarea 3.1.
+#
+# EL 600 ES EL MISMO NUMERO QUE `KIOSK_HEALTH_SILENT_AFTER_SECONDS`
+# (`config/kiosk.php`, 600 s de serie): una prueba de arquitectura ata la
+# regla, la configuracion y `.env.example` para que este fichero y `php
+# artisan kiosk:health` no puedan discrepar sobre cuando un quiosco esta
+# "callado". Si la instalacion cambia uno, tiene que cambiar el otro —
+# `docs/cliente/operacion.md` lo dice con las dos rutas.
+#
+# ANTI-FATIGA (doc 02 §8.4). `for: 5m` es lo que hace que un quiosco que se
+# reinicia y vuelve a latir en menos de cinco minutos NO notifique a nadie: el
+# `time() - kiosk_last_seen_seconds` vuelve a caer por debajo de 600 en cuanto
+# llega el siguiente latido, y la condicion deja de cumplirse antes de que el
+# `for` termine de confirmarla. Cinco quioscos callados a la vez SI disparan,
+# como cinco alertas activas en Prometheus con la misma etiqueta `alertname`
+# -eso lo prueba `infra/observability/prometheus/tests/kiosk.test.yml`-, pero
+# LLEGAN COMO UNA SOLA NOTIFICACION: la ruta de `component="kiosk"` en
+# `alertmanager.yml.template` agrupa con `group_by: ["alertname"]` (decision
+# 17e; sin `device` en esa lista, comparten grupo) y `group_wait: 30s` les da
+# margen para agruparse. `promtool` no conoce Alertmanager y no puede afirmar
+# esa segunda mitad: se prueba en `AlertmanagerConfigTest` (backend).
+#
+# DESTINATARIO: IT del cliente. Es quien opera la instalacion y el unico que
+# puede acercarse al quiosco, revisar la tablet o la red del hotel (doc 01
+# §9.3, criterio de asignacion).
+#
+# IMPACTO EN EL FICHAJE (regla dura 19): NINGUNO directo si el resto de
+# quioscos del centro siguen en pie. Un quiosco sin latido puede seguir
+# aceptando y encolando fichajes sin conexion — es la propia razon por la que
+# hace falta esta alerta y no basta con que el empleado "no se queje": la cola
+# offline puede estar creciendo sin que nadie en el hotel lo note hasta que
+# alguien mira la tablet. Si la cola SUPERA el umbral, el riesgo deja de ser
+# hipotetico: sincronizar 50+ fichajes o mas de 2 h de cola tarda, y durante
+# ese tiempo el panel y el registro legal no ven esos fichajes todavia.
+groups:
+  - name: kronoqr-kiosk
+    interval: 60s
+    rules:
+      #------------------------------------------------------------------------
+      # Sin latido desde hace mas de 10 minutos (umbral literal del catalogo).
+      #------------------------------------------------------------------------
+      - alert: QuioscoSinLatido
+        expr: time() - kiosk_last_seen_seconds > 600
+        for: 5m
+        labels:
+          severity: critical
+          destinatario: it-cliente
+          component: kiosk
+        annotations:
+          summary: "El quiosco {{ $labels.device }} lleva mas de 10 min sin latido"
+          description: >-
+            El dispositivo {{ $labels.device }} no envia
+            POST /api/v1/kiosk/heartbeat desde hace mas de 10 minutos. El
+            fichaje en ESE quiosco puede estar afectado (red caida, tablet
+            apagada, aplicacion colgada); el resto de quioscos del centro
+            siguen operando con normalidad. Comprueba la tablet antes de que
+            empiece el siguiente cambio de turno.
+          runbook_url: docs/runbooks/quiosco-no-responde.md
+
+      #------------------------------------------------------------------------
+      # Cola offline por encima de 50 elementos (la mitad de la fila: "> 50
+      # elementos O > 2 h"). Un quiosco puede latir con normalidad y aun asi
+      # tener una cola creciendo si sincroniza pero no vacia.
+      #------------------------------------------------------------------------
+      - alert: ColaOfflineAtascada
+        expr: kiosk_offline_queue_size > 50
+        for: 5m
+        labels:
+          severity: high
+          destinatario: it-cliente
+          component: kiosk
+        annotations:
+          summary: "El quiosco {{ $labels.device }} tiene {{ $value }} fichajes sin sincronizar"
+          description: >-
+            La cola offline de {{ $labels.device }} supera los 50 elementos
+            (RF-AT-10, RN-15): el quiosco sigue aceptando fichajes —regla dura
+            19, nunca bloquea al empleado—, pero el registro legal y el panel
+            no veran esos fichajes hasta que sincronicen. Revisa la
+            conectividad del quiosco con el servidor.
+          runbook_url: docs/runbooks/cola-offline-atascada.md
+
+      #------------------------------------------------------------------------
+      # La otra mitad de la misma fila: la cola no se ha vaciado NI UNA VEZ en
+      # las ultimas 2 h, aunque nunca haya superado 50 elementos. Un quiosco
+      # con una cola pequeña pero permanente tiene el mismo problema de fondo
+      # (nunca sincroniza) y esta regla es la unica que lo ve.
+      #------------------------------------------------------------------------
+      - alert: ColaOfflineSinVaciar
+        expr: min_over_time(kiosk_offline_queue_size[2h]) > 0
+        for: 5m
+        labels:
+          severity: high
+          destinatario: it-cliente
+          component: kiosk
+        annotations:
+          summary: "El quiosco {{ $labels.device }} lleva mas de 2 h sin vaciar su cola offline"
+          description: >-
+            La cola offline de {{ $labels.device }} no ha llegado a cero en
+            las ultimas 2 horas (RF-AT-10, RN-15): sincroniza mal o no
+            sincroniza, aunque el numero de elementos pendientes sea bajo. El
+            fichaje en el quiosco sigue funcionando; lo que esta en riesgo es
+            que el registro tarde en reflejar lo que ya ha ocurrido.
+          runbook_url: docs/runbooks/cola-offline-atascada.md

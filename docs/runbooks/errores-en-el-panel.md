@@ -2,27 +2,48 @@
 
 > **Quién lo usa:** el IT del cliente, desde el panel de gestión.
 > **Cuándo:** al recibir `ErroresCriticosNuevos`, al investigar una tasa de
-> error 5xx o una latencia alta del fichaje (las dos alertas de la tarea 3.2
-> que también apuntan aquí), o en la ronda semanal de mantenimiento. **Cuánto
+> error 5xx, una latencia alta del fichaje, una sonda del borde fallida o una
+> detección de incidencias con fallos (las cuatro alertas de la tarea 3.2 que
+> también apuntan aquí), o en la ronda semanal de mantenimiento. **Cuánto
 > dura:** entre 2 y 10 minutos hasta tener una hipótesis; casi todos los casos
 > se resuelven mirando la fila y siguiendo la columna «Qué hacer» de la §4.
 
 ---
 
-## 1. Las tres alertas que traen aquí, y la revisión sin alerta
+## 1. Las cinco alertas que traen aquí, y la revisión sin alerta
 
 | Alerta | Umbral | Severidad | Regla | Estado |
 | --- | --- | --- | --- | --- |
 | `ErroresCriticosNuevos` | Un grupo `critical` **nuevo o reabierto** en 5 min | Alta | `infra/observability/prometheus/rules/errors.yml` | ✅ Tarea 5.12 |
-| Tasa de error 5xx en `/api/v1/scan*` | > 1 % en 5 min | Crítica | — | Tarea 3.2 |
-| Latencia p95 del fichaje | > 500 ms en 10 min | Alta | — | Tarea 3.2 |
+| `ErroresDeServidorEnElFichaje` | Tasa de `5xx` en `/api/v1/scan*` > 1 % en 5 min | Crítica | `infra/observability/prometheus/rules/api.yml` | ✅ Tarea 3.2 |
+| `LatenciaDelFichajeAlta` | p95 de `/api/v1/scan*` > 500 ms en 10 min | Alta | `infra/observability/prometheus/rules/api.yml` | ✅ Tarea 3.2 |
+| `SondaDelBordeFallida` | `probe_success == 0`, `for: 5m` (nada llega, o `/ready` dice que la base de datos o Redis no responden) | Crítica | `infra/observability/prometheus/rules/api.yml` | ✅ Tarea 3.2 |
+| `DeteccionDeIncidenciasConFallos` | `incident_detection_last_failures > 0`, `for: 5m` | Alta | `infra/observability/prometheus/rules/incidents.yml` | ✅ Tarea 3.2 |
 
-Las dos últimas no tienen regla de Prometheus todavía —nacen con el catálogo
-completo de la tarea 3.2, que necesita `http_requests_total` y
-`http_request_duration_seconds` por ruta—, pero cuando alguien las reciba el
-procedimiento es el mismo: la causa casi siempre queda escrita en
-`error_events` con más detalle del que da la métrica agregada, así que se
-empieza igual, por la §3 de este documento.
+Las cuatro de la tarea 3.2 se apoyan en las mismas métricas que ya recoge
+Prometheus desde la 3.1 (`http_requests_total`, `http_request_duration_seconds`
+y `probe_success`) más el gauge de la última pasada de la detección nocturna de
+incidencias. El procedimiento de todas es el mismo: la causa casi siempre
+queda escrita en `error_events` con más detalle del que da la métrica
+agregada, así que se empieza igual, por la §3 de este documento — salvo
+`SondaDelBordeFallida`, que por definición suena cuando el servidor ni
+siquiera responde para dejar un registro: ahí el primer paso es
+`docker compose ps` y `docker compose logs postgres redis`, no el panel.
+
+**Excepción: `DeteccionDeIncidenciasConFallos` no deja rastro en `error_events`.**
+Un código de salida distinto de cero de una tarea programada en segundo plano
+(`runInBackground()`) no se convierte en excepción, así que no abre ningún
+grupo en el histórico; solo lo haría una excepción no capturada dentro de la
+propia pasada. Su rastro es el log técnico: una línea `scheduler.command_failed`
+con `command` y `exit_code`, y una `attendance.incident_not_opened` por
+hallazgo, con `employee_uuid` y la clase de la excepción (nunca nombres).
+Búscalas con `docker compose logs scheduler | grep -E 'scheduler.command_failed|incident_not_opened'`
+o en Loki. Corregida la causa (casi siempre base de datos o disco:
+`product:doctor`), repite `php artisan attendance:detect-incidents`: es
+idempotente y no duplica lo que sí se abrió; la métrica vuelve a cero en la
+siguiente pasada y la alerta se apaga sola. Lo mismo vale para
+`ReconciliacionConFallos` y `attendance:reconcile`, cuyo runbook es
+[`divergencia-proyeccion.md`](divergencia-proyeccion.md).
 
 **Por qué la primera alerta cuenta grupos y no ocurrencias.** Hay dos
 métricas: `application_errors_total{source,level}` sube con **cada**

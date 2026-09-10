@@ -784,6 +784,13 @@ application_errors_total{source,level}                   counter
 application_error_groups_opened_total{source,level}      counter
 projection_divergence_total                              counter
 projection_reconciliation_last_run_timestamp_seconds     gauge
+projection_reconciliation_work_days_inspected            gauge
+projection_reconciliation_last_corrections               gauge
+projection_reconciliation_last_failures                  gauge
+incident_detection_last_run_timestamp_seconds            gauge
+incident_detection_work_days_inspected                   gauge
+incident_detection_last_findings                         gauge
+incident_detection_last_failures                         gauge
 audit_chain_verification_failures_total                  counter
 audit_chain_last_verification_timestamp_seconds          gauge
 audit_chain_last_verification_result                     gauge
@@ -835,6 +842,8 @@ de respaldo servida por el proceso que hay que restaurar no vale nada.
 **RTO**: si crece, el objetivo de 4 h se está estrechando.
 
 `projection_divergence_total` y `audit_chain_verification_failures_total` deben permanecer **siempre en cero**. Cualquier incremento es un incidente de integridad, no una métrica de tendencia.
+
+**Las series `*_last_failures` de la reconciliación y de la detección de incidencias son *gauges* de la última pasada, no contadores** (tarea 3.2, paso 9). `attendance:reconcile` y `attendance:detect-incidents` terminan con código de salida distinto de cero cuando dejan trabajo sin hacer —una jornada que no se pudo reconciliar, un hallazgo que no se pudo convertir en incidencia—, y ese código, con `runInBackground()`, no produce excepción ni entra en `error_events`: lo único que lo hacía visible era el log del planificador. Desde la 3.2 cada pasada publica cuántos fallos dejó (`projection_reconciliation_last_failures`, `incident_detection_last_failures`) y cuándo corrió (`incident_detection_last_run_timestamp_seconds`, que es lo que sostiene la alerta de silencio de la detección), y la programación encadena `onFailure()` con una línea `scheduler.command_failed` localizable en Loki. La pregunta que responden es «¿la pasada de anoche dejó algo sin hacer?», por eso son de la última pasada: un contador acumulado obligaría a restar, y un fallo de hace tres meses ya corregido seguiría sumando.
 
 **`application_errors_total{source,level}` y `application_error_groups_opened_total{source,level}` cuentan cosas distintas del mismo histórico de errores (RF-PD-15, tarea 5.12).** La primera sube con cada ocurrencia —es lo que `product:errors` y el panel muestran como `occurrences`—; la segunda solo sube cuando el `INSERT ... ON CONFLICT` de `error_events` crea un grupo nuevo o reabre uno que estaba `resolved`. La alerta `ErroresCriticosNuevos` (`infra/observability/prometheus/rules/errors.yml`) usa la segunda a propósito: con la primera, un fallo ya conocido y sin resolver —una cámara de quiosco averiada que sigue fallando en cada intento de fichaje— mantendría la alerta encendida sin parar, en vez de sonar solo cuando aparece un problema nuevo o uno que se creía arreglado reaparece.
 
@@ -1009,7 +1018,7 @@ Esto resuelve tres cosas que ninguna métrica de cobertura resuelve:
 ```mermaid
 graph LR
     PR["Pull Request"] --> L["① Lint + Tipos<br/>Pint · PHPStan 9 · ESLint · vue-tsc · ShellCheck<br/>~1 min"]
-    L --> A["② Arquitectura<br/>Deptrac · Pest Arch<br/>~30 s"]
+    L --> A["② Arquitectura<br/>Deptrac · Pest Arch · promtool · amtool<br/>~90 s"]
     A --> U["③ Unitarias + Mutación<br/>Pest · MSI ≥ 80%<br/>~2 min"]
     U --> T["③b Trazabilidad<br/>qa:traceability --check<br/>~10 s"]
     T --> I["④ Integración + Feature<br/>PostgreSQL real · Contrato OpenAPI<br/>~3 min"]
@@ -1203,7 +1212,7 @@ Convierte el sistema en un producto que un tercero puede comprar, instalar y ope
 | # | Tarea | h | Requisitos | Agente / Skill |
 |---|---|---|---|---|
 | 3.1 | OpenTelemetry extremo a extremo, Prometheus, Grafana, Loki | 12–16 | §8 | `devops-observabilidad` |
-| 3.2 | Los 4 cuadros de mando y el catálogo de alertas con runbooks | 8–10 | §8.3, §8.4 | `devops-observabilidad` |
+| 3.2 | Los 5 cuadros de mando y el catálogo de alertas con runbooks | 8–10 | §8.3, §8.4 | `devops-observabilidad` |
 | 3.3 | Panel de salud de quioscos y pantalla de diagnóstico | 6–8 | RF-PA-07, RF-KI-08 | `frontend-panel` + `frontend-quiosco` |
 | 3.4 | Vista de cumplimiento: descansos, jornada máxima, exceso semanal | 8–10 | RF-PA-06, RN-10..12 | `backend-laravel` + `frontend-panel` |
 | 3.5 | Fichaje de pausa y validación de desfase de reloj | 8–10 | RF-AT-10, RF-AT-12 | `arquitecto-dominio` → `backend-laravel` |

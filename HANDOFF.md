@@ -7,6 +7,33 @@
 
 ## Estado y objetivo actual
 
+**Rama `feat/tarea-3.2-cuadros-y-alertas` (desde `main` `d8162af`). Tarea 3.2 «Los 5 cuadros de mando y el catálogo de alertas
+con runbooks» IMPLEMENTADA, REVISADA (dos vueltas) y PROBADA el 10-09-2026; pendiente de commit, CI manual y PR.** Diecisiete
+decisiones en la ficha (plan 06 → «Tarea 3.2» → «Decisiones tomadas»); las que importan: **cinco cuadros, no cuatro** (corregido en
+doc 02 §11, plan 05 y plan 06), como JSON en `infra/observability/grafana/dashboards/KronoQR/` (subcarpeta porque el provisionador
+de Grafana 11.5 ignora `folder:` con `foldersFromFilesStructure`); **las once filas del doc 01 §9.3 tienen regla** (siete ya
+existían; nuevas `kiosk.yml`, `api.yml`, `tls.yml`, `host.yml`, `maintenance.yml`, `alerting.yml` y tres más en `projection.yml` e
+`incidents.yml`: 36 reglas en 12 ficheros, cada una con umbral, severidad `critical|high|warning|info`, `destinatario`
+`it-cliente|rrhh|seguridad`, `component` y runbook que existe); **Alertmanager con destinatarios reales sin nada del cliente**:
+`alertmanager.yml.template` + `render-config.sh` (POSIX, entrypoint del contenedor, escapa `'`, rechaza saltos de línea y valida su
+salida con `amtool` antes del `exec`) a partir de nueve `ALERT_*` del `.env` (correo por el SMTP del cliente, webhook por `url_file`,
+ventana semanal); **anti-fatiga**: ruta de quiosco agrupada por `alertname` (cinco tablets = un aviso), `mute_time_intervals` solo
+en `kiosk|api|tls|host`, ventana automática de `update.sh` por `.prom` (`kronoqr_maintenance_active`, tope 2 h) que inhibe esos
+cuatro componentes y nunca integridad, copia, auditoría, autenticación, incidencias ni la propia entrega; **paso 9 cerrado**:
+`projection_reconciliation_last_failures`, `incident_detection_{last_run_timestamp_seconds,last_failures,last_findings,work_days_inspected}`
+(adaptador `TextfileIncidentDetectionMetrics`), `->onFailure(LogScheduledCommandFailure::of(...))` en reconciliación, detección y
+retención, y **con `runInBackground()` un código de salida ≠ 0 NO entra en `error_events`** (solo una excepción): la línea
+`scheduler.command_failed` es su única traza; semconv `db.system.name`/`db.operation.name`; sonda de `doctor` que avisa por cada
+papel sin correo ni webhook; job `kronoqr-backup` → `kronoqr-node`; `promtool test rules` (12 ficheros de umbral y límite) y
+`amtool check-config` en `make observability-check` y en el job `architecture` de la CI (presupuesto 90 s). **Lo que corrigieron las
+revisiones** (decisión 17): el `env_file: .env` heredado de la 1.18 exponía la clave HMAC del QR y todos los secretos al contenedor
+de Alertmanager (ahora `environment:` explícito y prueba «sin env_file»); una comilla en un correo dejaba Alertmanager en
+*crash-loop* mudo y un salto de línea inyectaba un receptor; nadie vigilaba a Alertmanager (`EnrutadoDeAlertasCaido`,
+`EntregaDeAlertasFallando`, runbook `entrega-de-alertas.md`); la inhibición `critical → warning` con `equal: ["site"]` apagaba todas
+las `warning` del producto (acotada a `component="kiosk"`); guía con `ALERT_MAINTENANCE_WEEKDAY=0` cuando solo vale `monday..sunday`.
+Tres filas nuevas en doc 07 §6 (A-6, A-7, A-8). Cuatro runbooks nuevos más `entrega-de-alertas.md`; `operacion.md` §10.4 (ES/EN)
+con la tabla de las 30 alertas atada por prueba a `rules/*.yml`. **Verificado sobre el árbol final:** Architecture 463 (+ el rojo conocido `SourceDiscoveryTest`, matriz de trazabilidad regenerada), Unit 1761, Integration 563 (`UpdateScriptTest` 26), Feature 1603, Pint 1818, PHPStan 9 sin errores, Deptrac 0/0, ShellCheck/shfmt 0, `promtool check/test rules` (36 reglas, 12 ficheros de prueba) y `amtool check-config` en verde, `docs:consistency`, gitleaks 0 sobre el diff. **En vivo:** 36 reglas cargadas sin error, `up{job="alertmanager"}=1`, Alertmanager arranca con la configuración renderizada, la inhibición acotada suprime la `warning` de quiosco y deja activa la de incidencias, los cinco cuadros cargan en la carpeta KronoQR y `VentanaDeMantenimientoActiva` inhibe `kiosk|api|tls|host` (verificado por el agente A antes del corte).
+
 **Rama `main`. FASE 3 EN CURSO. Tarea 3.1 «OpenTelemetry extremo a extremo, Prometheus, Grafana, Loki» IMPLEMENTADA,
 REVISADA (dos vueltas), PROBADA e INTEGRADA en `main` el 10-09-2026** (PR #54, *merge commit* `545d4e2`; CI manual 34475373363
 en verde con los 13 jobs, ⑧ y ⑧b incluidos; el primer intento cayó en ⑧ por la lista fija de servicios del perfil `observability` en
@@ -32,7 +59,7 @@ falsificables) → `TrustProxies` propio con `TRUSTED_PROXIES`; sondas retiradas
 cuatro jobs en UP, 24 series en `/metrics`, `probe_success=1`, y una petición con `traceparent` a `/ready` recuperada en Tempo con
 `GET health.ready` → `postgresql select`. **Ver «Siguiente acción».**
 
-**Siguiente acción:** `make up` hecho en `main`. Empieza la **tarea 3.2** (cuadros y alertas: ya puede evaluar `auth.yml` y `errors.yml`, renombrar el job `kronoqr-backup`, usar `probe_ssl_earliest_cert_expiry` y `probe_success`, y decidir los nombres semconv de `db.*`).
+**Siguiente acción:** confirmar la 3.2 en un único commit `feat(observabilidad): …` en `feat/tarea-3.2-cuadros-y-alertas`, lanzar la CI manual completa (`gh workflow run ci.yml --ref feat/tarea-3.2-cuadros-y-alertas`, sin empujar nada después), abrir la PR contra `main` con *merge commit* y, en verde, integrar; después `make up` en `main` y arrancar la **3.3** (panel de salud de quioscos; no depende de la 3.2, decisión 14).
 
 **Rama `chore/cierre-fase-5` (desde `main` `9d5ec6f`). FASE 5 CERRADA el 10-09-2026** (`current_phase => 5`, matriz de
 trazabilidad regenerada: 2 782 pruebas etiquetadas, Fase 5 con 23 de 23). Los cuatro revisores del doc 03 §6.6 sobre `main`
@@ -374,6 +401,22 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 
 ### Por tarea
 
+- **3.2 (restos, 10-09-2026):** `amtool check-config` solo corre en `make observability-check`, en la CI y al arrancar el contenedor
+  (`AlertmanagerConfigTest` valida con el parser de Symfony, más laxo); `render-config.sh` sin prueba de sus `die` de plantilla
+  ausente; las variables de plantilla de Grafana (`label_values`) y los `legendFormat` no se contrastan con el §8.2 ni con la regla
+  dura 21; «incidencias por antigüedad» del cuadro de integridad es una aproximación (`incidents_open` en el tiempo: no hay serie por
+  edad); «Negocio» no muestra horas contratadas, absentismo ni impuntualidad (sin serie: 3.10/3.13); `kiosk_last_seen_seconds` vive
+  en Redis y un quiosco callado ANTES de un `FLUSHALL` desaparece de la serie (segunda red: `kiosk:health`); `QuioscoSinLatido`
+  lleva 600 s literal atados por prueba al valor por defecto de `KIOSK_HEALTH_SILENT_AFTER_SECONDS`, pero cambiar la variable en una
+  instalación no mueve la regla; las alertas de TLS no ven validez ni cadena ni CN (`insecure_skip_verify`; doc 07 A-8, candidata a
+  la 3.8: segundo módulo de blackbox contra `APP_URL` con verificación); `EntregaDeAlertasFallando` no llega por correo si lo roto es
+  el correo; falta prueba de que un fallo de tarea en segundo plano NO llega a `error_events` y `onFailure` de extremo a extremo con
+  `schedule:run`; `ParticionDeAuditoriaDelProximoAnoSinPreparar` no se puede disparar con `promtool` (reloj fijo en 1970); una
+  prueba de arquitectura que ate el nombre de la serie de cada adaptador textfile con el de su regla; `AlertmanagerConfigTest`
+  arranca ocho `sh` (~11 s de la etapa ②); `LogScheduledCommandFailure` y `AlertRecipientsProbe` son lógica pura fuera de `Domain/`
+  y `make mutate` no las cubre; en Docker Desktop `MetricasDelAnfitrionAusentes` queda encendida en dev (ver Trampas) y con
+  Alertmanager en dev intentará entregarse a buzones vacíos; comprobar en tablet real que un `.prom` truncado por disco lleno no
+  inhibe nada (fail-safe verificado solo por lectura); ficha 3.1 «Verificación final» sigue citando `kronoqr-backup` (histórico).
 - **3.1 (restos, 10-09-2026):** `MetricsCollector` del paquete de diagnóstico llama `command('SCAN', [...])` con cinco argumentos y
   phpredis lanza `ArgumentCountError` tragado en su `try`: `installation_setting_changes_total`, `compliance_profile_changes_total` y
   `license_limit_exceeded_total` **nunca han viajado en el paquete** (desde la 5.5; usar `RedisMetricReader` o `scan($cursor, $opts)`
@@ -449,10 +492,7 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   unificar el valor; `ErrorLevel` critical de servidor no distingue un `5xx` puntual de una tormenta (la alerta cuenta grupos
   nuevos y basta por ahora); el saneado convierte los identificadores SQL entrecomillados en `'…'` (decisión: seguridad sobre
   detalle); dos comprobaciones de `doctor` más de las que citan las guías si enumeran su número.
-- **Fase 3:** 3.2 paso 9 (alertas de los comandos nocturnos: `onFailure()`, series
-  `*_last_failures`, reglas Loki) **y la regla «quiosco sin latido > 10 min» del doc 01 §9.3 (hoy solo la
-  detecta `kiosk:health`; atar `KIOSK_HEALTH_SILENT_AFTER_SECONDS` a la regla por prueba)** **y declarar la ventana de mantenimiento de `update.sh` en la
-  observabilidad** (§8.4: silenciar «quiosco sin latido» mientras dura); 3.4 estrena
+- **Fase 3:** 3.4 estrena
   `maximumWeeklyMinutes`/`weekStartsOn`/`holidayCalendar` de `CompliancePolicy`; 3.5 reactiva RN-12 (vaciar
   `DetectAttendanceAnomalies::SUSPENDED_UNTIL_DECLARED_BREAK`) y el descanso intra-día de RN-10 con la
   pausa declarada (RF-AT-12); RNF-D-03 fallback de colas Redis→BD; pasada k6 en Linux para el p95
@@ -490,6 +530,16 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 
 ## Trampas del entorno — leer antes de operar
 
+- **Docker Desktop y `node-exporter` (3.2):** el montaje `/:/host:ro,rslave` de producción no arranca en Windows/macOS («path / is
+  mounted on / but it is not a shared or slave mount»); `compose.dev.yaml` lo lleva sin `rslave`. Aun así la VM no publica ninguna
+  serie con `mountpoint="/"` (su raíz es `overlay`), así que en local `EspacioEnDiscoBajo` no se ejercita con datos reales y
+  `MetricasDelAnfitrionAusentes` queda encendida: las dos se prueban con `promtool` y en Linux. `docker compose -f
+  infra/compose.prod.yaml config` exige un `.env` junto al compose (`cp .env infra/.env` temporal, y borrarlo: está ignorado).
+- **Ningún contenedor de terceros recibe `env_file: .env`** (3.2, doc 07 A-6): Alertmanager lo heredaba de la 1.18 y exponía la clave
+  HMAC del QR en `docker inspect`. Variables nombradas una a una con `environment:`; `AlertmanagerConfigTest` lo vigila. Y todo
+  renderizado de YAML desde el entorno escapa `'` y se valida con la herramienta real antes de arrancar.
+- **`promtool test rules` fija el reloj en 1970**: una regla con `month()` no se puede disparar en pruebas; `expect($output)->not->toContain('serie 1')`
+  casa también con un `# HELP` que empiece por «serie 1 mientras…» (pasó con `kronoqr_maintenance_active`).
 - **La mutación va en `--parallel` desde la 5.12** (830 s → 85 s en el dominio de `Product`; en serie la CI tardaba 37 min
   y la 5.12 la sacó del tope de 45 del job ③, ahora 60). En paralelo, un `use DateTimeImmutable;` (clase global) en un
   fichero de prueba **sin namespace** rompe el arranque de los hijos como `ErrorException` («use statement with

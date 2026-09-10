@@ -448,7 +448,44 @@ it('abre el resto de hallazgos cuando uno falla, y lo dice en el codigo de salid
     expect($opened)->toBe([$scenario['employee']]);
 
     Notification::assertSentOnDemand(IncidentDigestNotification::class);
+
+    // Y el fallo llega a la serie que dispara la alerta (tarea 3.2). Sin esto,
+    // el codigo de salida 1 se quedaba en el log del planificador: las tres
+    // tareas de madrugada corren con `runInBackground()` y en ese camino un
+    // codigo distinto de cero no produce ni excepcion ni fila en `error_events`.
+    $publicado = ficheroDeDeteccion();
+
+    expect($publicado)
+        ->toContain('incident_detection_last_failures 1')
+        ->toContain('incident_detection_last_findings 2')
+        ->toContain('incident_detection_last_run_timestamp_seconds');
 })->group('RF-PR-01');
+
+it('publica la pasada limpia y tambien la que no encontro nada', function (): void {
+    // Doc 02 §8.2. Una serie que solo aparece cuando algo va mal es
+    // indistinguible de una tarea programada que dejo de ejecutarse, y de eso
+    // vive `DeteccionDeIncidenciasAusente`: sin ella, apagar el planificador
+    // seria la forma mas comoda de que la alerta de turnos abiertos no volviera
+    // a sonar nunca.
+    Notification::fake();
+
+    departmentWithManager();
+
+    expect(runDetection())->toBe(0);
+
+    expect(ficheroDeDeteccion())
+        ->toContain('incident_detection_last_failures 0')
+        ->toContain('incident_detection_last_findings 0')
+        ->toContain('incident_detection_last_run_timestamp_seconds '.strtotime(DETECTION_NOW.'+00:00'));
+})->group('RF-PR-01');
+
+/** El `.prom` de la revision diaria, tal como lo dejo la ultima pasada. */
+function ficheroDeDeteccion(): string
+{
+    $directory = rtrim(config()->string('observability.metrics.textfile_path'), '/');
+
+    return (string) file_get_contents($directory.'/kronoqr_incident_detection.prom');
+}
 
 it('rechaza una ventana que no es un numero en vez de caer al valor configurado', function (): void {
     // `--days=siete` caia en silencio a los siete dias de `config`. Quien escribio

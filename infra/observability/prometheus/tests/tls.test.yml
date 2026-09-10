@@ -1,0 +1,118 @@
+# KronoQR — pruebas unitarias de infra/observability/prometheus/rules/tls.yml
+# (tarea 3.2, decision 2).
+#
+# Mismo truco de progresion aritmetica que kiosk.test.yml (ver su cabecera
+# para el porque), aqui al reves: `probe_ssl_earliest_cert_expiry` es un
+# instante FUTURO (cuando caduca el certificado), asi que lo que se mantiene
+# constante es `valor - time()` —los dias que quedan— y no `time() - valor`.
+# Con paso B = interval (la serie crece al mismo ritmo que el reloj
+# simulado), `valor - time() = A` directamente: sin desfase que sumar.
+rule_files:
+  - ../rules/tls.yml
+
+evaluation_interval: 1h
+
+tests:
+  #-----------------------------------------------------------------------------
+  # CertificadoTlsProximoACaducar: quedan 10 dias, por debajo de los 21 del
+  # catalogo.
+  #-----------------------------------------------------------------------------
+  - name: proximo_fires
+    interval: 1h
+    input_series:
+      # A = dias_restantes = 10*86400 = 864000: value(t) = t + 864000, y por tanto
+      # valor - time() = 864000 en TODAS las muestras.
+      - series: 'probe_ssl_earliest_cert_expiry{instance="https://nginx:8443/api/v1/health"}'
+        values: "864000+3600x10"
+    alert_rule_test:
+      - eval_time: 3h
+        alertname: CertificadoTlsProximoACaducar
+        exp_alerts:
+          - exp_labels:
+              severity: high
+              destinatario: it-cliente
+              component: tls
+            exp_annotations:
+              summary: "El certificado TLS del borde caduca en menos de 21 dias"
+              description: >-
+                La sonda de disponibilidad mide que el certificado que sirve
+                /api/v1/health y /api/v1/ready caduca en menos de 21 dias. El
+                fichaje sigue funcionando hoy con normalidad: esto es tiempo
+                para renovarlo con calma, no una averia. Si caduca, el
+                quiosco (y cualquier navegador) dejara de poder conectar por
+                HTTPS.
+              runbook_url: docs/runbooks/renovacion-certificado-tls.md
+
+  #-----------------------------------------------------------------------------
+  # Valor limite justo por debajo: quedan EXACTAMENTE 21 dias, para siempre.
+  # El umbral es `< 21 dias` estricto: nunca dispara.
+  #-----------------------------------------------------------------------------
+  - name: proximo_boundary
+    interval: 1h
+    input_series:
+      # A = 21*86400 = 1814400 (el umbral exacto, constante en TODAS las muestras).
+      - series: 'probe_ssl_earliest_cert_expiry{instance="https://nginx:8443/api/v1/health"}'
+        values: "1814400+3600x10"
+    alert_rule_test:
+      - eval_time: 5h
+        alertname: CertificadoTlsProximoACaducar
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # Decision 17(h): un certificado YA CADUCADO no debe hacer sonar tambien
+  # "proximo a caducar" -son la misma emergencia contada dos veces, con la de
+  # severidad Alta distrayendo de la Critica-. Con `caduco hace 1 h` (diff
+  # negativa), la clausula `>= 0` apaga esta regla y solo suena
+  # CertificadoTlsCaducado (probado en el siguiente bloque, `caducado_fires`).
+  #-----------------------------------------------------------------------------
+  - name: proximo_no_duplica_caducado
+    interval: 1h
+    input_series:
+      # A = -3600: certificado caducado desde hace 1 h en TODAS las muestras.
+      - series: 'probe_ssl_earliest_cert_expiry{instance="https://nginx:8443/api/v1/health"}'
+        values: "-3600+3600x10"
+    alert_rule_test:
+      - eval_time: 5h
+        alertname: CertificadoTlsProximoACaducar
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # CertificadoTlsCaducado: caduco hace 1 h.
+  #-----------------------------------------------------------------------------
+  - name: caducado_fires
+    interval: 1h
+    input_series:
+      # A = -3600: value(t) = t - 3600, caducado desde hace 1 h en TODAS las muestras.
+      - series: 'probe_ssl_earliest_cert_expiry{instance="https://nginx:8443/api/v1/health"}'
+        values: "-3600+3600x10"
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: CertificadoTlsCaducado
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              destinatario: it-cliente
+              component: tls
+            exp_annotations:
+              summary: "El certificado TLS del borde ha caducado"
+              description: >-
+                El certificado que sirve el borde HTTPS ya no es valido. Los
+                navegadores y las tablets del quiosco rechazaran la
+                conexion: este es el escenario que la alerta de 21 dias
+                existia para evitar. Renueva el certificado de inmediato.
+              runbook_url: docs/runbooks/renovacion-certificado-tls.md
+
+  #-----------------------------------------------------------------------------
+  # Valor limite justo por debajo: quedan EXACTAMENTE 0 segundos (todavia no
+  # caducado) para siempre. El umbral es `< 0` estricto: nunca dispara.
+  #-----------------------------------------------------------------------------
+  - name: caducado_boundary
+    interval: 1h
+    input_series:
+      # A = 0 (el umbral exacto, constante en TODAS las muestras).
+      - series: 'probe_ssl_earliest_cert_expiry{instance="https://nginx:8443/api/v1/health"}'
+        values: "0+3600x10"
+    alert_rule_test:
+      - eval_time: 5h
+        alertname: CertificadoTlsCaducado
+        exp_alerts: []
