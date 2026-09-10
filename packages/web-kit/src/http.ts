@@ -21,6 +21,15 @@
 // declaran aqui y no se importan del cliente generado de cada SPA: son
 // identicas para cualquier endpoint y mantenerlas locales evita que este
 // paquete dependa del `schema.d.ts` particular de una aplicacion.
+//
+// CADA PETICION LLEVA `traceparent` (tarea 3.1, decision 7: "la cabecera es
+// `traceparent`, en el borde, en la aplicacion y en los tres frontends"). Se
+// genera aqui, en el unico punto de salida, para que el panel y el portal no
+// tengan que acordarse de hacerlo cada uno por su lado. El backend
+// (`PropagateTraceContext`) abre el span `SERVER` de la peticion a partir de
+// esta cabecera: la raiz de la traza es este `fetch`.
+
+import { createTraceparent } from './traceparent'
 
 /** Un problema `application/problem+json` (RFC 9457), tal y como lo define el contrato. */
 export interface Problem {
@@ -274,7 +283,7 @@ async function toApiError(response: Response): Promise<ApiError> {
 }
 
 async function send(path: string, options: RequestOptions, accept: string): Promise<Response> {
-  const headers = new Headers({ Accept: accept })
+  const headers = new Headers({ Accept: accept, traceparent: createTraceparent() })
   const token = options.token ?? (options.anonymous === true ? null : authTokenProvider())
 
   if (token !== null) {

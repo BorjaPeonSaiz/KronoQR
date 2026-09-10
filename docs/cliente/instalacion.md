@@ -1118,19 +1118,22 @@ sudo ./install.sh
 cargadas, no intenta hablar con ningún registro y no se queda esperando.
 
 Si además vas a usar la observabilidad (encendida de serie), añade al `docker
-save` las cinco imágenes públicas del perfil: `prom/prometheus`,
-`prom/node-exporter`, `prom/alertmanager`, `grafana/grafana` y `grafana/loki`.
-Sus versiones exactas están en `docker-compose.yml`. Si prefieres no hacerlo,
-apaga el perfil dejando `COMPOSE_PROFILES=` vacío en el `.env` y lee en
-[`operacion.md`](operacion.md) qué avisos pierdes.
+save` las siete imágenes públicas del perfil: `prom/prometheus`,
+`prom/node-exporter`, `prom/alertmanager`, `grafana/grafana`, `grafana/loki`,
+`grafana/tempo` y `prom/blackbox-exporter`. Sus versiones exactas están en
+`docker-compose.yml`. Si prefieres no hacerlo, apaga el perfil dejando
+`COMPOSE_PROFILES=` vacío en el `.env` y lee en [`operacion.md`](operacion.md)
+qué avisos pierdes.
 
 ---
 
 ## 8. La observabilidad: encendida de serie, y por qué conviene dejarla
 
-El `.env` trae `COMPOSE_PROFILES=observability`, que levanta cinco servicios
-más (Prometheus, node-exporter, Alertmanager, Grafana y Loki) y ocupa unos
-700 MiB de RAM.
+El `.env` trae `COMPOSE_PROFILES=observability`, que levanta siete servicios
+más (Prometheus, node-exporter, Alertmanager, Grafana, Loki, Tempo y
+blackbox-exporter) y ocupa unos 850 MiB de RAM. Qué añaden Tempo (trazas) y
+blackbox-exporter (sonda de disponibilidad real, no solo «el proceso vive»)
+está explicado en [`operacion.md`](operacion.md) §10.2.
 
 **Lo que hacen es avisar de las dos cosas que convierten una instalación sana
 en una pérdida de datos sin que nadie lo note mirando la pantalla:** que la

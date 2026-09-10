@@ -23,9 +23,29 @@ final class RecordingCorrectionMetrics implements CorrectionMetrics
     /** @var array<string, int> */
     private array $counts = [];
 
+    /**
+     * Altas manuales de tramo (`scans_by_origin_total{origin="manual"}`,
+     * RF-IN-08, tarea 3.1).
+     */
+    private int $manualEntries = 0;
+
     public function correctionRecorded(string $reasonCode): void
     {
         $this->counts[$reasonCode] = ($this->counts[$reasonCode] ?? 0) + 1;
+    }
+
+    public function manualEntryAdded(): void
+    {
+        $this->manualEntries++;
+    }
+
+    /**
+     * Cuantos tramos se contaron como fichaje de origen manual. Tiene que ser
+     * cero tras una correccion o una anulacion: aquellas no crean jornada.
+     */
+    public function manualEntries(): int
+    {
+        return $this->manualEntries;
     }
 
     /**

@@ -1,0 +1,77 @@
+# KronoQR — configuracion base de Grafana Tempo (doc 02 §8.1, tarea 3.1).
+#
+# POR QUE EXISTE. La instrumentacion de trazas (OpenTelemetry, exportador OTLP)
+# lleva meses declarada en el doc 02 sin decir A DONDE van las trazas: sin un
+# almacen que las reciba, la promesa de «seguir el mismo trace_id en Grafana
+# desde el fetch del quiosco hasta la consulta SQL» no se puede cumplir. Tempo
+# es ese destino.
+#
+# MODO MONOLITICO SOBRE SISTEMA DE FICHEROS, no un despliegue distribuido: el
+# producto se instala en el servidor de UN cliente (ADR-017), no en un cluster,
+# y es el mismo criterio que ya rige Loki y Prometheus en este directorio.
+#
+# RETENCION: 90 dias, LA MISMA que el log tecnico de Loki (RL-11, doc 02
+# §8.2.1). Atada aqui a mano —Tempo, igual que Loki, no admite dias ni
+# expresiones de configuracion, solo horas— a `TECHNICAL_LOG_RETENTION_DAYS`
+# (90 de serie, `backend/config/compliance.php`): si cambias esa variable,
+# cambia tambien `compactor.compaction.block_retention` aqui Y `retention_period`
+# en `infra/observability/loki/loki.yaml`. Las dos retenciones NO se sincronizan
+# solas: son dos ficheros YAML estaticos, y quien suba `TECHNICAL_LOG_RETENTION_DAYS`
+# sin tocarlos deja el registro tecnico con dos plazos distintos sin que nada lo
+# avise.
+
+server:
+  # Puerto de consulta (la API que usa Grafana como datasource) y de estado.
+  http_listen_port: 3200
+  log_level: warn
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        # El navegador del quiosco no puede llegar aqui directo (no hay SDK
+        # web, decision 7 de la tarea 3.1): quien exporta es SIEMPRE el backend
+        # PHP, con `open-telemetry/exporter-otlp` sobre Guzzle, que habla
+        # OTLP/HTTP con protobuf. El puerto 4318 es el que usa
+        # OTEL_EXPORTER_OTLP_ENDPOINT.
+        http:
+          endpoint: 0.0.0.0:4318
+        # gRPC no cuesta nada tener activo -mismo receptor, otro puerto- y deja
+        # la puerta abierta a un exportador futuro que prefiera gRPC sin volver
+        # a tocar este fichero.
+        grpc:
+          endpoint: 0.0.0.0:4317
+
+ingester:
+  # Cierra un bloque cada 5 min en vez de esperar al tamano por defecto: un
+  # hotel no genera el volumen de trazas de una instalacion multi-tenant, y un
+  # bloque que tarda horas en cerrarse deja las trazas recientes invisibles
+  # para consultas por rango.
+  max_block_duration: 5m
+
+compactor:
+  compaction:
+    # 90 dias = 2160 horas. Ver la nota de retencion de arriba: acompana a
+    # `limits_config.retention_period` de loki.yaml, no lo sustituye.
+    block_retention: 2160h
+
+storage:
+  trace:
+    backend: local
+    local:
+      path: /var/tempo/traces
+    wal:
+      path: /var/tempo/wal
+
+# Sin metrics-generator: no hay Mimir ni otro backend de metricas de series
+# temporales al que enviarle RED metrics derivadas de las trazas, y activarlo
+# sin destino solo consume CPU para nada. Las metricas RED de negocio ya salen
+# por /metrics (Prometheus), que es un camino mas barato y ya construido.
+
+overrides:
+  defaults:
+    # Limite generoso para un solo hotel: evita que una rafaga de fichaje (un
+    # cambio de turno con cientos de scans/minuto) tire trazas por cuota antes
+    # de que nadie las mire.
+    ingestion:
+      max_traces_per_user: 100000

@@ -29,7 +29,22 @@ namespace App\Modules\Product\Infrastructure\Diagnostics;
  * `BACKUP_ENCRYPTION_KEY`, `REVERB_APP_*`, `DB_*`, `REDIS_PASSWORD`,
  * `MAIL_HOST`/`USERNAME`/`PASSWORD`/`FROM_*`, `APP_KEY`, `APP_URL`,
  * `IDENTITY_PIN_SEALING_SECRET_KEY`, `GRAFANA_*`, `*_CIDR`, `LOKI_URL` y
- * `OTEL_*`.
+ * `OTEL_EXPORTER_OTLP_ENDPOINT`.
+ *
+ * ## De la observabilidad viajan las MAGNITUDES, nunca los destinos
+ *
+ * Mismo criterio que `TELEMETRY_ENABLED` frente a `TELEMETRY_ENDPOINT`, aplicado
+ * a la tarea 3.1: `OTEL_TRACES_SAMPLER_ARG` y `OTEL_EXPORTER_OTLP_TIMEOUT` son
+ * numeros del producto —explican por que una traza no aparece o por que el
+ * exportador se rinde— y no dicen nada de la instalacion. `LOG_STACK` es la lista
+ * de canales activos, hermana de `LOG_CHANNEL`, que ya viajaba: sin ella no se
+ * puede responder «¿por que no hay logs?».
+ *
+ * `OTEL_EXPORTER_OTLP_ENDPOINT` y `LOKI_URL` **no**, y no por simetria inversa:
+ * son URL de la red interna del cliente, describen su infraestructura de
+ * supervision y no hacen falta para diagnosticar nada desde fuera (ADR-020,
+ * regla dura 16). `OTEL_SERVICE_NAME` tampoco: es un nombre que el cliente puede
+ * haber personalizado, y no aporta.
  *
  * ## Los prefijos son regla, no comodidad
  *
@@ -92,6 +107,11 @@ final class DiagnosticsConfigurationAllowlist
         'MAIL_SCHEME',
         'LOG_CHANNEL',
         'LOG_LEVEL',
+        // Los canales activos y las dos magnitudes de las trazas (tarea 3.1).
+        // Ver el docblock: las magnitudes viajan, los destinos no.
+        'LOG_STACK',
+        'OTEL_TRACES_SAMPLER_ARG',
+        'OTEL_EXPORTER_OTLP_TIMEOUT',
         'KIOSK_BATCH_MAX_SIZE',
         'ERROR_HISTORY_RETENTION_DAYS',
         'TECHNICAL_LOG_RETENTION_DAYS',

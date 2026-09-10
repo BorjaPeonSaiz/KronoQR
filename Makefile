@@ -232,7 +232,7 @@ help: ## Muestra esta ayuda
 	@echo   make sbom             SBOM CycloneDX en sbom/kronoqr-VERSION.cdx.json
 	@echo   make build-ci-images  Construye kronoqr/{postgres,app,nginx}:ci (IMAGES=postgres|app|nginx)
 	@echo   make release-gate     Falla si la entrega saldria sin clave publica del fabricante
-	@echo   make nginx-smoke      Arranca la imagen del borde sola y pide las cuatro rutas
+	@echo   make nginx-smoke      Arranca la imagen del borde sola y pide las cinco rutas
 	@echo   make traceability     Matriz requisito - prueba (RQ-13)
 	@echo   make traceability-check  Falla si un requisito no tiene prueba
 	@echo   make docs-consistency  Coherencia documental (RQ-12, RNF-M-04)
@@ -678,14 +678,14 @@ build-ci-images: ## Construye kronoqr/{postgres,app,nginx}:ci (IMAGES=postgres|a
 	done
 
 
-# Comprobacion rapida del borde: arranca la imagen sola y pide las cuatro rutas
+# Comprobacion rapida del borde: arranca la imagen sola y pide las cinco rutas
 # que definen si sirve lo que tiene que servir. 30 segundos.
 #
 # NO duplica la etapa ⑧ de la CI: adelanta el hallazgo. Esa etapa tarda entre
 # 20 y 30 minutos en llegar a la misma comprobacion, y ADEMAS no se puede
 # ejecutar en el portatil de quien programa. Las tres SPA devolviendo 403 por
 # una directiva `index` que faltaba se detecta aqui antes de empujar.
-nginx-smoke: ## Arranca kronoqr/nginx:ci sola y comprueba /admin/, /kiosk/, /portal/ y /healthz
+nginx-smoke: ## Arranca kronoqr/nginx:ci sola y comprueba /admin/, /kiosk/, /portal/, /healthz y /metrics
 	bash infra/scripts/nginx-smoke.sh
 
 # Trivy sobre el arbol de fuentes: dependencias de composer.lock y

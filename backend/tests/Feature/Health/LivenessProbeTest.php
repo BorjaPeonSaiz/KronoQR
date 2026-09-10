@@ -48,7 +48,10 @@ it('responde 200 con el estado y la version desplegada', function (): void {
     expect($response->json('version'))
         ->toBeString()
         ->toMatch(DeployedVersion::SEMVER);
-})->group('RQ-06');
+    // RF-PD-13 tambien: «la version desplegada es visible en /api/v1/health»
+    // (doc 02 §10.5) es lo que permite correlacionar un incidente con una
+    // version concreta, que es la mitad del diagnostico posinstalacion.
+})->group('RQ-06', 'RF-PD-13');
 
 it('publica exactamente la version que resuelve la configuracion', function (): void {
     // El controlador no puede tener su propia idea de la version: lee
@@ -56,7 +59,7 @@ it('publica exactamente la version que resuelve la configuracion', function (): 
     Api::guest()->get('/api/v1/health')
         ->assertOk()
         ->assertJsonPath('version', config()->string('app.version'));
-})->group('RQ-06');
+})->group('RQ-06', 'RF-PD-13');
 
 it('no exige autenticacion, porque quien la consulta todavia no la tiene', function (): void {
     // El contrato la declara `security: []`. Un orquestador que arranca un

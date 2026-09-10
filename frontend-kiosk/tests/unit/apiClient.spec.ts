@@ -44,6 +44,27 @@ describe('cliente HTTP del quiosco', () => {
     expect(headers['Idempotency-Key']).toBe(REQUEST.scan_id)
   })
 
+  it('manda un traceparent (W3C Trace Context) nuevo en cada peticion, incluso con el mismo scan_id', async () => {
+    // Regla dura 8 (el `scan_id` es el mismo en todo reenvio) y tarea 3.1,
+    // decision 7: la traceparent es del INTENTO, no del fichaje. Dos envios
+    // del mismo `scan_id` -el reintento tipico de la cola offline- llevan la
+    // misma `Idempotency-Key` y dos `traceparent` distintas.
+    const fetchImpl = vi.fn<FetchLike>(async () => jsonResponse(200, ACCEPTED))
+    const client = createApiClient({ fetchImpl: fetchImpl as unknown as typeof fetch })
+
+    await client.recordScan(REQUEST)
+    await client.recordScan(REQUEST)
+
+    const firstHeaders = fetchImpl.mock.calls[0]?.[1]?.headers as Record<string, string>
+    const secondHeaders = fetchImpl.mock.calls[1]?.[1]?.headers as Record<string, string>
+    const traceparentPattern = /^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/
+
+    expect(firstHeaders['traceparent']).toMatch(traceparentPattern)
+    expect(secondHeaders['traceparent']).toMatch(traceparentPattern)
+    expect(firstHeaders['traceparent']).not.toBe(secondHeaders['traceparent'])
+    expect(firstHeaders['Idempotency-Key']).toBe(secondHeaders['Idempotency-Key'])
+  })
+
   it('devuelve la accion que decidio el servidor, sin interpretarla', async () => {
     const client = createApiClient({
       fetchImpl: (async () => jsonResponse(200, ACCEPTED)) as unknown as typeof fetch,

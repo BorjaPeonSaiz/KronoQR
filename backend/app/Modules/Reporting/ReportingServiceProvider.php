@@ -7,6 +7,7 @@ namespace App\Modules\Reporting;
 use App\Modules\Attendance\Domain\Event\EmployeeClockedIn;
 use App\Modules\Attendance\Domain\Event\EmployeeClockedOut;
 use App\Modules\Attendance\Domain\Event\ShiftCorrected;
+use App\Modules\Reporting\Application\Port\AdoptionMetrics;
 use App\Modules\Reporting\Application\Port\EmployeeAttribution;
 use App\Modules\Reporting\Application\Port\LivePresenceReader;
 use App\Modules\Reporting\Application\Port\PeriodReportReader;
@@ -15,6 +16,7 @@ use App\Modules\Reporting\Application\Port\RealtimeConnectionCounter;
 use App\Modules\Reporting\Application\Port\ReportDocumentRenderer;
 use App\Modules\Reporting\Application\Port\ReportExportMetrics;
 use App\Modules\Reporting\Application\Port\ReportIssuerDirectory;
+use App\Modules\Reporting\Application\Port\WorkDayCompletionReader;
 use App\Modules\Reporting\Application\Port\WorkDayJournalReader;
 use App\Modules\Reporting\Application\Port\WorkedTimeMetrics;
 use App\Modules\Reporting\Domain\ValueObject\PeriodReport;
@@ -26,15 +28,18 @@ use App\Modules\Reporting\Http\Policy\WorkDayJournalPolicy;
 use App\Modules\Reporting\Infrastructure\Adapter\BrowsershotReportRenderer;
 use App\Modules\Reporting\Infrastructure\Adapter\ReverbConnectionCounter;
 use App\Modules\Reporting\Infrastructure\Broadcasting\BroadcastPresenceChange;
+use App\Modules\Reporting\Infrastructure\Console\AdoptionMetricsCommand;
 use App\Modules\Reporting\Infrastructure\Console\PresenceMetricsCommand;
 use App\Modules\Reporting\Infrastructure\Listener\RecordWorkedMinutes;
 use App\Modules\Reporting\Infrastructure\Metrics\RedisReportExportMetrics;
 use App\Modules\Reporting\Infrastructure\Metrics\RedisWorkedTimeMetrics;
+use App\Modules\Reporting\Infrastructure\Metrics\TextfileAdoptionMetrics;
 use App\Modules\Reporting\Infrastructure\Metrics\TextfilePresenceMetrics;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseEmployeeAttribution;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseLivePresenceReader;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabasePeriodReportReader;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseReportIssuerDirectory;
+use App\Modules\Reporting\Infrastructure\Persistence\DatabaseWorkDayCompletionReader;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseWorkDayJournalReader;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Database\ConnectionInterface;
@@ -84,6 +89,17 @@ final class ReportingServiceProvider extends ServiceProvider
          */
         $this->app->bind(PresenceMetrics::class, TextfilePresenceMetrics::class);
 
+        /*
+         * `workdays_complete_ratio{site}` (doc 02 §8.2, RF-IN-08, tarea 3.1).
+         *
+         * Tambien por fichero, y por una razon propia ademas de la de arriba: es
+         * un RATIO que se recalcula entero desde los datos cada noche (regla
+         * dura 7 aplicada a la instrumentacion), no un contador que se
+         * incrementa. Ver el docblock de `TextfileAdoptionMetrics`.
+         */
+        $this->app->bind(WorkDayCompletionReader::class, DatabaseWorkDayCompletionReader::class);
+        $this->app->bind(AdoptionMetrics::class, TextfileAdoptionMetrics::class);
+
         // Reverb corre en otro proceso y no expone Prometheus: las conexiones
         // vivas se le preguntan por su API HTTP compatible con Pusher.
         $this->app->bind(RealtimeConnectionCounter::class, ReverbConnectionCounter::class);
@@ -116,7 +132,7 @@ final class ReportingServiceProvider extends ServiceProvider
         $this->recordWorkedMinutes();
 
         if ($this->app->runningInConsole()) {
-            $this->commands([PresenceMetricsCommand::class]);
+            $this->commands([AdoptionMetricsCommand::class, PresenceMetricsCommand::class]);
         }
     }
 

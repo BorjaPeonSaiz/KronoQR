@@ -1,0 +1,38 @@
+# KronoQR — modulos de prom/blackbox-exporter (doc 02 §8.1, tarea 3.1).
+#
+# UN SOLO EXPORTADOR PARA DOS COSAS. La sonda de uptime de esta tarea
+# (`GET /api/v1/health` y `GET /api/v1/ready`, job `kronoqr-uptime` en
+# prometheus.yml) y la comprobacion de caducidad del certificado TLS de la
+# tarea 3.2 (`probe_ssl_earliest_cert_expiry`, alerta «certificado proximo a
+# expirar») son el MISMO contenedor Y EL MISMO MODULO: no tiene sentido
+# levantar dos exportadores para dos sondas HTTP, ni sondear dos veces la
+# misma ruta con y sin TLS.
+#
+# `http_2xx_tls` sondea SIEMPRE por HTTPS, contra el puerto 8443 del borde
+# (nunca el 8080: ese lo publica el host como HTTP_PORT y no lleva
+# `limit_req`, ver el comentario en kronoqr.conf.template). La peticion entra
+# como cualquier cliente HTTPS normal, por `location ^~ /api/`, y pasa por
+# `limit_req zone=api`. `insecure_skip_verify: true` es a proposito: el
+# certificado del servidor del cliente puede ser el suyo propio, no
+# necesariamente de una CA publica (doc 02 §3.4: «certificado propio del
+# cliente si no hay salida a internet»), y ademas el nombre que lleva es el
+# dominio del hotel, no `nginx` (el nombre con el que blackbox-exporter lo
+# alcanza dentro de la red de contenedores) — verificar la cadena o la
+# identidad aqui daria SIEMPRE un falso negativo. Lo que las dos sondas que
+# usan este modulo necesitan comprobar es DISPONIBILIDAD (200) y FECHA de
+# caducidad del certificado, no su identidad: `probe_ssl_earliest_cert_expiry`
+# se calcula igual con un certificado no verificable.
+#
+# No hay modulo en texto plano: ninguna sonda del producto habla con
+# PHP-FPM sin pasar por las guardas del bloque 443 (TLS, `limit_req`).
+modules:
+  http_2xx_tls:
+    prober: http
+    timeout: 5s
+    http:
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      method: GET
+      preferred_ip_protocol: "ip4"
+      fail_if_not_ssl: true
+      tls_config:
+        insecure_skip_verify: true

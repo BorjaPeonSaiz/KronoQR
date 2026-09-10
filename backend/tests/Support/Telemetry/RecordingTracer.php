@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Support\Telemetry;
 
+use App\Support\Observability\Tracing\TracingServiceProvider;
 use ArrayObject;
 use OpenTelemetry\API\Globals;
 use OpenTelemetry\SDK\Trace\ImmutableSpan;
@@ -84,7 +85,7 @@ final class RecordingTracer
             new SimpleSpanProcessor(new InMemoryExporter($storage)),
         );
 
-        Globals::reset();
+        self::resetGlobals();
         Globals::registerInitializer(
             static fn (object $configurator): object => $configurator->withTracerProvider($provider),
         );
@@ -94,7 +95,22 @@ final class RecordingTracer
 
     public function uninstall(): void
     {
+        self::resetGlobals();
+    }
+
+    /**
+     * `Globals::reset()` **y** la bandera de `TracingServiceProvider`.
+     *
+     * Las dos o ninguna. `Globals::reset()` borra los inicializadores; la bandera
+     * estatica del proveedor no se entera y sigue diciendo «ya registre el SDK en
+     * este proceso», asi que a partir de la primera prueba que use este tracer el
+     * proveedor **no volvia a registrar nada** y el resto de la suite corria con
+     * instrumentacion inerte sin que ninguna prueba lo dijera.
+     */
+    private static function resetGlobals(): void
+    {
         Globals::reset();
+        TracingServiceProvider::forgetRegistration();
     }
 
     /**

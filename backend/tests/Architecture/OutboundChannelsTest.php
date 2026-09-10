@@ -67,6 +67,18 @@ function clientesHttp(): array
         'curl' => ['curl', '/\bcurl_(init|exec|setopt)\s*\(/'],
         'un flujo HTTP con file_get_contents' => ['file_get_contents sobre una URL', "/file_get_contents\(\s*['\"]https?:/"],
         'un flujo HTTP con fopen' => ['fopen sobre una URL', "/fopen\(\s*['\"]https?:/"],
+        /*
+         * El exportador OTLP de OpenTelemetry (tarea 3.1). Abre una conexion
+         * saliente de verdad —hacia el Tempo del propio cliente— y no la ve
+         * ninguno de los patrones de arriba: el SDK trae su propia fabrica de
+         * transporte y descubre el cliente HTTP por `psr/http-client-discovery`,
+         * asi que un `Http::post()` no aparece por ninguna parte.
+         *
+         * Sin esta fila, cualquier fichero podia estrenar un exportador OTLP
+         * —de logs, de metricas, hacia donde fuera— sin que esta prueba dijera
+         * nada, que es justo la clase de canal que ADR-020 vigila.
+         */
+        'el exportador OTLP de OpenTelemetry' => ['el exportador OTLP de OpenTelemetry', '/OpenTelemetry\\\\Contrib\\\\Otlp\b/'],
     ];
 }
 
@@ -116,18 +128,77 @@ it('ningun fichero de un modulo abre una conexion saliente fuera de la telemetri
     );
 })->with(clientesHttp())->group('RF-PD-12', 'RF-PD-11', 'RL-17');
 
+/**
+ * La segunda excepcion, tambien acotada a un fichero y a un patron (tarea 3.1).
+ *
+ * `HttpLokiTransport` empuja el log tecnico a **Loki, que vive en el servidor del
+ * cliente** (doc 02 §1.4: «Observabilidad (en el mismo servidor)»; de serie
+ * `LOKI_URL` vacia; con el perfil `observability`, `http://loki:3100`, que no sale del `docker compose`). Es la misma
+ * clase de conexion saliente que PostgreSQL, Redis o el servidor de correo, y el
+ * docblock de arriba ya la declara fuera de lo que esta prueba afirma: lo que se
+ * prohibe es un canal **hacia el fabricante**, no que el producto hable con la
+ * infraestructura del propio cliente.
+ *
+ * Se descarto la alternativa —un agente de recoleccion como Alloy o el driver de
+ * Docker para Loki— precisamente por seguridad: los dos exigen el socket de
+ * Docker dentro de un contenedor con privilegios (decision 8 de la ficha 3.1).
+ *
+ * La excepcion es de UN fichero por patron, comparado por **ruta relativa
+ * completa**: un `Http::post()` en cualquier otro sitio del armazon sigue
+ * rompiendo la prueba, y `LoggingServiceProvider` —su raiz de composicion—
+ * enlaza el adaptador por clase justo para no tener que nombrar la fabrica HTTP.
+ *
+ * La segunda excepcion, del mismo tipo, es el exportador OTLP de trazas
+ * (tarea 3.1): tambien apunta a infraestructura del propio cliente (Tempo) y
+ * tambien viene sin destino de serie.
+ *
+ * @return list<string>
+ */
+function canalDeObservabilidad(string $descripcion): array
+{
+    return match ($descripcion) {
+        'el cliente HTTP de Laravel' => ['Support/Observability/Logging/HttpLokiTransport.php'],
+        /*
+         * `TracerFactory` es la raiz de composicion del SDK de trazas: el unico
+         * sitio que nombra el transporte y el exportador OTLP, y el unico que
+         * conoce el destino —el Tempo del propio cliente, `OTEL_EXPORTER_OTLP_ENDPOINT`,
+         * vacio de serie—. Mismo argumento que `HttpLokiTransport`: es
+         * infraestructura del cliente, no un canal hacia el fabricante.
+         *
+         * Un exportador OTLP en cualquier otro fichero sigue rompiendo la prueba.
+         */
+        'el exportador OTLP de OpenTelemetry' => ['Support/Observability/Tracing/TracerFactory.php'],
+        default => [],
+    };
+}
+
 it('tampoco lo hace el armazon de la aplicacion, fuera de los modulos', function (string $descripcion, string $patron): void {
     // `app/Support`, `app/Http`, `app/Providers`, `app/Console`: todo lo que no
     // es un modulo. Un `Http::get()` en un middleware seria igual de saliente.
     $offenders = [];
+    $permitidos = canalDeObservabilidad($descripcion);
+    $raiz = Repo::file('backend/app');
 
     // `scandir` y no `RecursiveDirectoryIterator`: sobre el bind mount de Docker
     // Desktop el iterador pierde ficheros en silencio, y un fichero que esta
     // regla no ve es un canal saliente que nadie denuncia. Ver `ModuleTree`.
     foreach (['Support', 'Http', 'Providers', 'Console', 'Models', 'Exceptions'] as $directory) {
         foreach (ModuleTree::phpFilesUnder(Repo::file('backend/app/'.$directory)) as $file) {
+            /*
+             * RUTA RELATIVA COMPLETA, nunca `basename()`. Un nombre de fichero no
+             * identifica un fichero: con `basename`, un `TracerFactory.php` nuevo
+             * en cualquier otro directorio del armazon heredaba la excepcion de
+             * un canal saliente sin que nadie lo decidiera, que es exactamente el
+             * agujero silencioso que estas pruebas existen para no tener.
+             */
+            $relative = ModuleTree::relative($file, $raiz);
+
+            if (in_array($relative, $permitidos, true)) {
+                continue;
+            }
+
             if (preg_match($patron, (string) file_get_contents($file)) === 1) {
-                $offenders[] = 'app/'.$directory.'/'.basename($file);
+                $offenders[] = 'app/'.$relative;
             }
         }
     }

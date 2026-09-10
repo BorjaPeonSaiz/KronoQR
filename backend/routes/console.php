@@ -153,6 +153,51 @@ Schedule::command('reporting:presence-metrics')
     ->withoutOverlapping();
 
 /*
+ * Metricas de adopcion (doc 02 §8.2, RF-IN-08, tarea 3.1).
+ *
+ *   workdays_complete_ratio{site}
+ *
+ * DIARIA, a las 04:50 UTC. Va DESPUES de la reconciliacion (03:50) y de la
+ * deteccion de incidencias (04:30), y las dos precedencias tienen motivo:
+ *
+ *   · Despues de la reconciliacion, porque si esa noche se corrigio una
+ *     proyeccion, el ratio se calcula ya sobre la version buena.
+ *   · Despues de la deteccion, porque es la que puede haber cerrado el dia con
+ *     una incidencia por turno abierto: el indicador y la bandeja tienen que
+ *     contar la misma jornada.
+ *
+ * LA HORA ES UTC Y NO ES «ANTES DEL TURNO DE LAS 06:00». En Madrid, 04:50 UTC
+ * son las 06:50 en verano y las 05:50 en invierno, asi que en verano esta tarea
+ * corre DESPUES de que entre el turno de mañana. No importa, y por eso se deja
+ * donde esta: lo que mide es la jornada de AYER, que a esa hora ya esta cerrada
+ * y no la cambia nadie que fiche hoy. El orden que si importa es el relativo a
+ * los demas comandos —todos en UTC, todos en este fichero—: reconciliacion
+ * (03:50) y deteccion de incidencias (04:30) antes que esta.
+ *
+ * MIDE AYER Y NO HOY, por lo mismo que `attendance:reconcile`: la jornada de
+ * ayer es la ultima que ya no va a cambiar por si sola. El ratio del dia en
+ * curso empezaria en cero a las 06:00 y subiria toda la jornada — describiria la
+ * hora a la que se mira, no la adopcion.
+ *
+ * SE RECALCULA ENTERO, NUNCA SE INCREMENTA (regla dura 7 aplicada a la
+ * instrumentacion). Repetirla es seguro: da el mismo numero.
+ *
+ * UNA VEZ AL DIA Y NO MAS. Lo que mide es un dia cerrado: volver a calcularlo a
+ * media tarde daria exactamente la misma cifra.
+ *
+ * `runInBackground()` porque el calculo recorre las jornadas de ayer de toda la
+ * plantilla y escribe un fichero `.prom`: en una instalacion grande no es
+ * inmediato, y el planificador tiene que seguir despachando las tareas que vayan
+ * detras. Es el mismo criterio que las otras siete tareas pesadas de este
+ * fichero; la unica sin `runInBackground` es la de Reverb, y su comentario dice
+ * por que.
+ */
+Schedule::command('reporting:adoption-metrics')
+    ->dailyAt('04:50')
+    ->withoutOverlapping()
+    ->runInBackground();
+
+/*
  * Reconciliacion de `daily_totals` con sus eventos origen (RF-PR-02, ADR-007,
  * tarea 2.7).
  *

@@ -7,6 +7,7 @@ namespace App\Modules\Attendance\Http\Support;
 use App\Modules\Attendance\Application\Port\ScanMetrics;
 use App\Modules\Attendance\Application\UseCase\RegisterScanResult;
 use App\Modules\Shared\Application\Support\SpanScope;
+use Illuminate\Support\Facades\Context;
 use OpenTelemetry\API\Trace\SpanKind;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -70,6 +71,13 @@ final readonly class ScanTelemetry
             'scan.id' => $scanId,
             'device.id' => $deviceUuid,
         ]);
+
+        // Y en el `Context` de Laravel, para que los lleve TODA linea de log de
+        // esta peticion —tambien las que escriba un `Log::` suelto o una
+        // excepcion no controlada— y las del trabajo que esta peticion encole
+        // (tarea 3.1, decision 9). Aqui es donde se conocen.
+        $this->correlate(['scan_id' => $scanId, 'device_id' => $deviceUuid]);
+
         $startedAt = microtime(true);
 
         try {
@@ -82,11 +90,32 @@ final readonly class ScanTelemetry
 
         $seconds = microtime(true) - $startedAt;
 
+        $this->correlate(['employee_uuid' => $result->employeeUuid]);
+
         $this->metrics->scanProcessed($deviceUuid, $result->result, $seconds);
         $span->end(['scan.result' => $result->result->value]);
         $this->log($result, $deviceUuid, $seconds, $span);
 
         return $result;
+    }
+
+    /**
+     * Los identificadores del §8.1 en el contexto de la peticion. **Solo
+     * identificadores opacos**: nunca un nombre (regla dura 21).
+     *
+     * @param  array<string, string|null>  $values
+     */
+    private function correlate(array $values): void
+    {
+        try {
+            foreach ($values as $key => $value) {
+                if ($value !== null && $value !== '') {
+                    Context::add($key, $value);
+                }
+            }
+        } catch (Throwable) {
+            // Correlacionar un fichaje no puede impedirlo (regla dura 19).
+        }
     }
 
     private function log(RegisterScanResult $result, string $deviceUuid, float $seconds, SpanScope $span): void

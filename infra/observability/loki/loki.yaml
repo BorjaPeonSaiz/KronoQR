@@ -38,6 +38,17 @@ schema_config:
 
 limits_config:
   # 90 dias, igual que error_events y que lo que exige RL-11.
+  #
+  # 2160h = TECHNICAL_LOG_RETENTION_DAYS (90 de serie, backend/config/
+  # compliance.php) x 24. Loki no acepta dias ni expresiones, asi que el
+  # numero va escrito a mano y NO se recalcula solo si alguien cambia la
+  # variable de entorno: una prueba de arquitectura (la escribe
+  # devops-observabilidad junto al backend en la tarea 3.1) ata este valor al
+  # de serie de la variable para que la desincronizacion se note en la CI y no
+  # en una auditoria. `infra/observability/tempo/tempo.yaml` fija la MISMA
+  # cifra en `compactor.compaction.block_retention`: cambiar el plazo del
+  # registro tecnico exige tocar los dos ficheros a la vez
+  # (docs/cliente/configuracion.md lo dice en la fila de la variable).
   retention_period: 2160h
   # Los quioscos pueden sincronizar cola offline con horas de retraso: si Loki
   # rechazara muestras antiguas, perderiamos justo los logs del incidente.

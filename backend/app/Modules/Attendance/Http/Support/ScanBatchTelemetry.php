@@ -7,6 +7,7 @@ namespace App\Modules\Attendance\Http\Support;
 use App\Modules\Attendance\Application\Command\ScanBatch;
 use App\Modules\Attendance\Application\UseCase\ScanBatchOutcome;
 use App\Modules\Shared\Application\Support\SpanScope;
+use Illuminate\Support\Facades\Context;
 use OpenTelemetry\API\Trace\SpanKind;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -60,6 +61,10 @@ final readonly class ScanBatchTelemetry
             'scan_batch.size' => $batch->size(),
             'device.id' => $deviceUuid,
         ]);
+        // Y en el `Context` de Laravel, para que lo lleve TODA linea de log de
+        // esta peticion, no solo las de aqui (tarea 3.1, decision 9).
+        $this->correlate($deviceUuid);
+
         $startedAt = microtime(true);
 
         try {
@@ -82,6 +87,21 @@ final readonly class ScanBatchTelemetry
         $this->log($batch, $deviceUuid, $pending, microtime(true) - $startedAt, $span);
 
         return $outcomes;
+    }
+
+    /**
+     * El identificador del dispositivo en el contexto de la peticion. **Opaco y
+     * nada mas**: nunca un nombre (regla dura 21).
+     */
+    private function correlate(string $deviceUuid): void
+    {
+        try {
+            if ($deviceUuid !== '') {
+                Context::add('device_id', $deviceUuid);
+            }
+        } catch (Throwable) {
+            // Correlacionar una sincronizacion no puede impedirla (regla dura 19).
+        }
     }
 
     private function log(ScanBatch $batch, string $deviceUuid, int $pending, float $seconds, SpanScope $span): void

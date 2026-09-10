@@ -40,6 +40,14 @@ it('no exige autenticacion, como toda sonda del orquestador', function (): void 
     Api::guest()->get('/api/v1/ready')->assertOk();
 })->group('RQ-06');
 
+/*
+ * RF-PD-13 CUELGA DE `/ready` Y NO DE `/health`, y es una correccion consciente
+ * de la ficha 3.1 (su decision 10). El paso 6 pedia que «las dos sondas validen
+ * base de datos y Redis»; `/health` prohibe expresamente lo primero y con razon,
+ * porque es la sonda de VIDA que el orquestador usa para reiniciar el proceso:
+ * un proceso sano que reinicia porque PostgreSQL esta caido empeora la averia.
+ * La comprobacion de dependencias del diagnostico posinstalacion es esta.
+ */
 it('responde 503 en problem+json cuando la base de datos no responde', function (): void {
     config(['database.default' => 'una-conexion-que-no-existe']);
 
@@ -48,7 +56,7 @@ it('responde 503 en problem+json cuando la base de datos no responde', function 
         ->assertHeader('Content-Type', 'application/problem+json')
         ->assertJsonPath('type', 'urn:kronoqr:problem:not-ready')
         ->assertJsonPath('status', 503);
-})->group('RQ-06');
+})->group('RQ-06', 'RF-PD-13');
 
 it('responde 503 cuando Redis no responde', function (): void {
     app()->instance(Redis::class, new UnavailableRedis);
@@ -56,7 +64,7 @@ it('responde 503 cuando Redis no responde', function (): void {
     Api::guest()->get('/api/v1/ready')
         ->assertValidResponse(503)
         ->assertJsonPath('type', 'urn:kronoqr:problem:not-ready');
-})->group('RQ-06');
+})->group('RQ-06', 'RF-PD-13');
 
 it('no dice que dependencia ha fallado', function (): void {
     /*

@@ -6,6 +6,7 @@ namespace App\Modules\Attendance\Infrastructure\Metrics;
 
 use App\Modules\Attendance\Application\Port\ScanMetrics;
 use App\Modules\Attendance\Application\Port\ScanResult;
+use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use Illuminate\Contracts\Redis\Factory as Redis;
 use Throwable;
 
@@ -53,6 +54,8 @@ final readonly class RedisScanMetrics implements ScanMetrics
 
     /** RF-AT-11: fichajes por PIN de respaldo, por centro (§8.2, tarea 1.12). */
     public const string PIN_FALLBACK_SCANS = self::KEY_PREFIX.'pin_fallback_scans_total';
+
+    public const string SCANS_BY_ORIGIN = self::KEY_PREFIX.'scans_by_origin_total';
 
     /**
      * Cubos en segundos, del contrato de Prometheus: cada uno cuenta las
@@ -164,6 +167,46 @@ final readonly class RedisScanMetrics implements ScanMetrics
             // Ver `scanProcessed()`: cuando se llega aqui el fichaje ya esta
             // confirmado, y una excepcion de la capa de metricas lo convertiria
             // en un `500` para el quiosco.
+        }
+    }
+
+    /**
+     * `scans_by_origin_total{origin}` (§8.2, RF-IN-08).
+     *
+     * **La traduccion de origenes vive aqui y no en el dominio.** El modelo
+     * tiene cuatro (`qr_kiosk`, `pin_kiosk`, `manual_admin`, `import`) porque
+     * necesita distinguir de donde salio cada tramo; la metrica de adopcion
+     * tiene los tres del doc 01 §9.2, que son las tres formas en que una
+     * PERSONA deja constancia de su jornada. `import` no es ninguna de ellas
+     * —son datos que venian de otro sistema al poner en marcha la instalacion—
+     * y contarlo hincharia el reparto del primer dia con jornadas que nadie
+     * ficho. Se descarta sin ruido.
+     *
+     * `manual_admin` si cuenta, pero **no llega por aqui**: lo emite
+     * `RedisCorrectionMetrics` cuando se añade un tramo a mano, que es el unico
+     * momento en el que una correccion crea una jornada que no existia. Si se
+     * contara tambien desde este camino, un tramo añadido a mano sumaria dos.
+     */
+    public function scanOriginRecorded(ScanOrigin $origin): void
+    {
+        $label = match ($origin) {
+            ScanOrigin::QR_KIOSK => 'qr',
+            ScanOrigin::PIN_KIOSK => 'pin',
+            ScanOrigin::MANUAL_ADMIN, ScanOrigin::IMPORT => null,
+        };
+
+        if ($label === null) {
+            return;
+        }
+
+        try {
+            $this->redis->connection()->command('HINCRBY', [
+                self::SCANS_BY_ORIGIN,
+                'origin='.$label,
+                1,
+            ]);
+        } catch (Throwable) {
+            // Ver `scanProcessed()`: el fichaje ya esta confirmado.
         }
     }
 }

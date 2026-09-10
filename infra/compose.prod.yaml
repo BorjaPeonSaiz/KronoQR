@@ -37,7 +37,8 @@
 # Si falta, Compose se para con el mensaje de abajo antes de crear nada.
 #
 #------------------------------------------------------------------------------
-# PERFIL `observability` (prometheus, node-exporter, alertmanager, grafana, loki)
+# PERFIL `observability` (prometheus, node-exporter, alertmanager, grafana,
+# loki, tempo, blackbox-exporter)
 #------------------------------------------------------------------------------
 # Van en un perfil, y el perfil viene ENCENDIDO de serie: .env.example trae
 # COMPOSE_PROFILES=observability. El valor por defecto es el producto, y el
@@ -362,6 +363,54 @@ services:
       - observability
     restart: unless-stopped
 
+  # Destino de las trazas OTLP (tarea 3.1, §8.1). En produccion NO arranca
+  # sola: OTEL_EXPORTER_OTLP_ENDPOINT viene vacia de serie en .env.example y
+  # el cliente la pone a http://tempo:4318 cuando quiere trazas ademas de este
+  # perfil encendido (regla dura 15: sin destino configurado, el SDK del
+  # backend ni arranca, y el fichaje no depende de que este contenedor viva).
+  tempo:
+    profiles: [observability]
+    image: grafana/tempo:2.7.1
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    volumes:
+      - ./observability/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo-data:/var/tempo
+    networks:
+      # 'app': la aplicacion exporta aqui. 'observability': Grafana lo usa
+      # como fuente de datos. Sin puertos publicados al host: se consulta
+      # solo desde Grafana, nunca directamente desde fuera del servidor.
+      - app
+      - observability
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # Sonda de uptime sobre /api/v1/health y /api/v1/ready (tarea 3.1, §8.1), y
+  # el mismo exportador que la tarea 3.2 usa para la caducidad del certificado
+  # TLS: un solo contenedor para las dos sondas HTTP.
+  blackbox-exporter:
+    profiles: [observability]
+    image: prom/blackbox-exporter:v0.25.0
+    command:
+      - --config.file=/etc/blackbox_exporter/blackbox.yml
+      - --web.listen-address=:9115
+    volumes:
+      - ./observability/blackbox/blackbox.yml:/etc/blackbox_exporter/blackbox.yml:ro
+    networks:
+      # 'app': tiene que alcanzar `nginx:8080`. 'observability': Prometheus lo
+      # scrapea via /probe.
+      - app
+      - observability
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
 networks:
   app:
     name: kronoqr-app
@@ -378,3 +427,4 @@ volumes:
   alertmanager-data:
   grafana-data:
   loki-data:
+  tempo-data:

@@ -6,6 +6,7 @@ namespace App\Modules\Product\Infrastructure\Capture;
 
 use App\Modules\Shared\Application\Port\ErrorEventSink;
 use App\Modules\Shared\Application\Support\SpanScope;
+use App\Modules\Shared\Application\Support\TraceparentHeader;
 use App\Modules\Shared\Domain\ValueObject\ErrorLevel;
 use App\Modules\Shared\Domain\ValueObject\ErrorReport;
 use App\Modules\Shared\Domain\ValueObject\ErrorSource;
@@ -267,22 +268,15 @@ final readonly class ServerErrorReporter
      * `trace_id` de la traza en curso; si no hay SDK configurado -la mayoria de
      * las instalaciones- la del `traceparent` que envio el cliente, que es lo que
      * `PropagateTraceContext` activo al entrar.
+     *
+     * El parseo de la cabecera es {@see TraceparentHeader} y no una copia local:
+     * este fichero tenia la tercera copia de la expresion regular del W3C y de la
+     * normalizacion del identificador a ceros, y las tres no coincidian.
      */
     private function traceId(?Request $request): ?string
     {
-        $active = SpanScope::currentTraceId();
-
-        if ($active !== null) {
-            return $active;
-        }
-
-        $header = $request?->headers->get('traceparent');
-
-        if (! \is_string($header) || preg_match('/^[0-9a-f]{2}-([0-9a-f]{32})-[0-9a-f]{16}-[0-9a-f]{2}$/', $header, $matches) !== 1) {
-            return null;
-        }
-
-        return trim($matches[1], '0') === '' ? null : $matches[1];
+        return SpanScope::currentTraceId()
+            ?? TraceparentHeader::traceIdOf($request?->headers->get(TraceparentHeader::NAME));
     }
 
     /**

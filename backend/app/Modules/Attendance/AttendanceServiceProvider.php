@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Attendance;
 
 use App\Http\RateLimiting\KioskRateLimit;
+use App\Modules\Attendance\Application\Port\AnomalyMetrics;
 use App\Modules\Attendance\Application\Port\CorrectionMetrics;
 use App\Modules\Attendance\Application\Port\DailyTotalsProjection;
 use App\Modules\Attendance\Application\Port\EventPublisher;
@@ -23,6 +24,7 @@ use App\Modules\Attendance\Http\Policy\ShiftEntryPolicy;
 use App\Modules\Attendance\Infrastructure\Adapter\LaravelEventBus;
 use App\Modules\Attendance\Infrastructure\Console\DetectIncidentsCommand;
 use App\Modules\Attendance\Infrastructure\Console\ReconcileProjectionsCommand;
+use App\Modules\Attendance\Infrastructure\Metrics\RedisAnomalyMetrics;
 use App\Modules\Attendance\Infrastructure\Metrics\RedisCorrectionMetrics;
 use App\Modules\Attendance\Infrastructure\Metrics\RedisScanMetrics;
 use App\Modules\Attendance\Infrastructure\Metrics\TextfileProjectionMetrics;
@@ -117,6 +119,16 @@ final class AttendanceServiceProvider extends ServiceProvider
         // En las pruebas se sustituye por un doble que cuenta.
         $this->app->singleton(ScanMetrics::class, RedisScanMetrics::class);
         $this->app->singleton(CorrectionMetrics::class, RedisCorrectionMetrics::class);
+
+        /*
+         * `anomalous_patterns_detected_total{pattern}` (doc 02 §8.2, tarea 3.1).
+         *
+         * En Redis y no por fichero, al contrario que la de abajo: es un
+         * contador PURO que solo suma, no una cifra que se reescriba entera cada
+         * noche leyendo su valor anterior. Ver el docblock de
+         * `RedisAnomalyMetrics`.
+         */
+        $this->app->singleton(AnomalyMetrics::class, RedisAnomalyMetrics::class);
 
         /*
          * `projection_divergence_total` sobre el colector textfile y no sobre
