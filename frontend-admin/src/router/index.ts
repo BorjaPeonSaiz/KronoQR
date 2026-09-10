@@ -50,6 +50,14 @@ declare module 'vue-router' {
      * lista, cualquiera de los que contiene.
      */
     abilities?: readonly string[]
+    /**
+     * Seccion del menu a la que pertenece una pantalla que no tiene entrada
+     * propia (la ficha de un empleado y su registro horario cuelgan de
+     * «Plantilla»). `AppShellView` la usa para marcar la seccion activa y
+     * ponerle `aria-current`: `RouterLink` solo reconoce como activa la ruta
+     * exacta o sus hijas, y estas son hermanas a proposito (`props: true`).
+     */
+    section?: string
   }
 }
 
@@ -91,7 +99,7 @@ export const routes: RouteRecordRaw[] = [
         name: 'employee',
         component: EmployeeDetailView,
         props: true,
-        meta: { ability: EMPLOYEES_MANAGE },
+        meta: { ability: EMPLOYEES_MANAGE, section: 'employees' },
       },
       {
         // El registro horario de una persona (RF-PA-03). Cuelga de la ficha y no
@@ -105,7 +113,7 @@ export const routes: RouteRecordRaw[] = [
         name: 'employee-workdays',
         component: EmployeeWorkDaysView,
         props: true,
-        meta: { ability: ATTENDANCE_READ },
+        meta: { ability: ATTENDANCE_READ, section: 'employees' },
       },
       {
         // Presencia en tiempo real (RF-PA-01, RF-PA-02). Ambito `attendance:read`,
