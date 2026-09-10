@@ -109,7 +109,7 @@ versión ANTERIOR (2.1.0) reventaba con `AuditAction::from()` ante la acción nu
 tolera acciones desconocidas (`AuditActionName`, aviso y gauge `audit_chain_unknown_actions`, `AuditChainReadPathTest`), y
 `update.sh` NO escribe el asiento de la vuelta atrás si la versión restaurada no conoce la acción (lo deja en el informe; U3 de
 ⑧b exige una rama u otra según la versión anterior). El séptimo intento dejó en verde todo salvo ⑧b, cobertura incluida. **El job de cobertura corre en cada disparo
-manual** (además del nocturno): ~15 min más por CI manual. **Siguiente acción:** PR #53 integrada con *merge commit*, `make up` en `main`, rama borrada. Empieza la
+manual** (además del nocturno): ~15 min más por CI manual. **Siguiente acción:** PR #53 integrada con *merge commit*, `make up` en `main`, rama borrada; **CI de `main` tras el merge en verde** (CI 34426908040: los 13 jobs, ③ 24 min, ⑧b 7,6 min; simulacro de restauración 34426907845 en verde). Empieza la
 **Fase 3** (plan 06: 3.1 observabilidad, 3.2 alertas y cuadros, 3.3 quioscos, 3.4/3.5 cumplimiento, 3.6 carga, 3.7 pruebas de
 abuso, 3.8 pentest, 3.10 ausencias) con los restos de «Pendiente» → «Cierre de la Fase 5» y las filas del doc 07 §6 fechadas
 «Fase 3».
