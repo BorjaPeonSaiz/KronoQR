@@ -661,6 +661,17 @@ jobs:
           docker logs kronoqr-pg | tail -50
           exit 1
 
+      - name: Puppeteer y Chrome para Browsershot (los PDF de una cara y el sello del informe se prueban con el motor real)
+        # La imagen del producto instala puppeteer global y usa el Chromium de la
+        # distribucion; en el runner el `chromium-browser` de Ubuntu es un
+        # envoltorio de snap que no arranca, asi que aqui puppeteer trae su
+        # propio Chrome y las dos variables que lee laravel-pdf apuntan a el.
+        run: |
+          sudo npm install --global --omit=dev puppeteer@24
+          modules="$(npm root -g)"
+          echo "LARAVEL_PDF_NODE_MODULES_PATH=${modules}" >>"$GITHUB_ENV"
+          echo "LARAVEL_PDF_CHROME_PATH=$(NODE_PATH="${modules}" node -e "console.log(require('puppeteer').executablePath())")" >>"$GITHUB_ENV"
+
       - name: Pest — suite de Integracion (PostgreSQL real; MigrationsRoundTripTest sola en este job)
         run: make test-integration
 
@@ -1843,7 +1854,12 @@ jobs:
             echo "users=$(consulta 'SELECT count(*) FROM users')"
             echo "audit_log=$(consulta 'SELECT count(*) FROM audit_log')"
           } | tee conteos-despues.txt
-          cmp conteos-antes.txt conteos-despues.txt
+          # Los usuarios no cambian; audit_log crece EXACTAMENTE en uno: el asiento
+          # system.updated que el paso 5 escribe desde el cierre de la Fase 5.
+          test "$(grep '^users=' conteos-antes.txt)" = "$(grep '^users=' conteos-despues.txt)"
+          antes="$(sed -n 's/^audit_log=//p' conteos-antes.txt)"; despues="$(sed -n 's/^audit_log=//p' conteos-despues.txt)"
+          test "$despues" -eq "$((antes + 1))" || { echo "audit_log paso de ${antes} a ${despues}: se esperaba exactamente un asiento system.updated mas"; exit 1; }
+          consulta "SELECT action FROM audit_log ORDER BY id DESC LIMIT 1" | grep -qx 'system.updated'
           # Ninguna migracion pendiente, y el informe donde dice la guia.
           sudo docker compose --env-file paquete-nuevo/.env -f paquete-nuevo/docker-compose.yml \
             exec -T app php artisan migrate:status --database=pgsql_migrator --pending=1
@@ -1936,7 +1952,12 @@ jobs:
             echo "users=$(consulta 'SELECT count(*) FROM users')"
             echo "audit_log=$(consulta 'SELECT count(*) FROM audit_log')"
           } | tee conteos-despues-u3.txt
-          cmp conteos-antes-u3.txt conteos-despues-u3.txt
+          # Datos intactos tras la vuelta atras, y UN asiento mas: system.restored_from_backup,
+          # escrito sobre la cadena restaurada (cierre de la Fase 5, regla dura 6).
+          test "$(grep '^users=' conteos-antes-u3.txt)" = "$(grep '^users=' conteos-despues-u3.txt)"
+          antes="$(sed -n 's/^audit_log=//p' conteos-antes-u3.txt)"; despues="$(sed -n 's/^audit_log=//p' conteos-despues-u3.txt)"
+          test "$despues" -eq "$((antes + 1))" || { echo "audit_log paso de ${antes} a ${despues}: se esperaba exactamente un asiento system.restored_from_backup mas"; exit 1; }
+          consulta "SELECT action FROM audit_log ORDER BY id DESC LIMIT 1" | grep -qx 'system.restored_from_backup'
           compose exec -T app php artisan compliance:verify-audit-chain
           sudo sh -c "grep -l 'Vuelta atras' /var/backups/fichaje/reports/update-*.log"
 

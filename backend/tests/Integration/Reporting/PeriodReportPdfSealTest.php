@@ -98,6 +98,14 @@ function informeSellable(int $workedMinutes = 9720): PeriodReport
  */
 function hayChromium(): bool
 {
+    // En la CI, laravel-pdf apunta al Chrome de puppeteer (job de integracion);
+    // en la imagen del producto, al Chromium de la distribucion. Se comprueba
+    // el binario que de verdad se va a usar.
+    $configured = getenv('LARAVEL_PDF_CHROME_PATH');
+    if (is_string($configured) && $configured !== '') {
+        return is_executable($configured);
+    }
+
     return is_executable('/usr/bin/chromium') || is_executable('/usr/bin/chromium-browser');
 }
 
