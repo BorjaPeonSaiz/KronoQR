@@ -532,6 +532,11 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 
 ## Trampas del entorno — leer antes de operar
 
+- **La webcam del portátil no vale para juzgar el enfoque del quiosco** (10-09-2026): «Windows Studio Effects» (encuadre
+  automático + desenfoque de fondo, equipos con NPU) se aplica antes de que Chrome vea la imagen y el QR llega recortado y borroso
+  sin que la PWA pueda evitarlo; se apaga en Configuración › Cámaras. Y una webcam no tiene autoenfoque: tarjeta a 30-50 cm.
+  Documentado en `docs/runbooks/alta-nuevo-quiosco.md` §6 y plan 01 §C.2; la **3.3** debe mostrar `getSettings()` (incluido
+  `backgroundBlur`) en la pantalla de diagnóstico (nota en su ficha, paso 4).
 - **Docker Desktop y `node-exporter` (3.2):** el montaje `/:/host:ro,rslave` de producción no arranca en Windows/macOS («path / is
   mounted on / but it is not a shared or slave mount»); `compose.dev.yaml` lo lleva sin `rslave`. Aun así la VM no publica ninguna
   serie con `mountpoint="/"` (su raíz es `overlay`), así que en local `EspacioEnDiscoBajo` no se ejercita con datos reales y
