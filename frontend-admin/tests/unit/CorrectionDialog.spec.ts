@@ -460,7 +460,12 @@ describe('CorrectionDialog, modo «correct»', () => {
     expect(clockIn.value).toBe('2026-03-15T00:30')
   })
 
-  it('reconoce el 422 de cambio de jornada por el campo aunque el `type` todavia no llegue (reserva mientras el bloque A2 no lo publica)', async () => {
+  it('un 422 generico con el mismo campo, pero sin el `type` de cambio de jornada, NO se confunde con el', async () => {
+    // Contraprueba de la anterior: el reconocimiento es por `type`, no por
+    // campo (correccion de revision, M1 del cierre de la Fase 5). Antes de
+    // esa correccion, cualquier `422` sobre `clocked_in_at` en modo «correct»
+    // con la entrada cambiada se pintaba como cambio de jornada aunque fuera
+    // otra cosa.
     stubFetch(() =>
       problemResponse(422, 'urn:kronoqr:problem:validation-failed', {
         errors: { clocked_in_at: ['texto crudo del servidor que no debe verse'] },
@@ -484,7 +489,7 @@ describe('CorrectionDialog, modo «correct»', () => {
     await wrapper.find('#correction-form').trigger('submit')
     await settle()
 
-    expect(wrapper.text()).toContain(es.corrections.wouldChangeWorkDate)
+    expect(wrapper.text()).not.toContain(es.corrections.wouldChangeWorkDate)
   })
 
   it('vaciar la salida de un tramo cerrado no cuenta como cambio y avisa de que no se puede retirar', async () => {

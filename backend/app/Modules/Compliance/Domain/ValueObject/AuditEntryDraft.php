@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Compliance\Domain\ValueObject;
 
+use App\Modules\Compliance\Domain\Exception\AuditActorNotAllowedForAction;
 use App\Modules\Compliance\Domain\Exception\AuditInstantIsNotUtc;
 use DateTimeImmutable;
 
@@ -20,20 +21,39 @@ use DateTimeImmutable;
  *
  * `occurred_at` es el momento del hecho, en UTC (regla dura 3 y 9). `ip` y
  * `userAgent` son opcionales: el scheduler no tiene ninguno de los dos.
+ *
+ * **La accion se guarda como {@see AuditActionName} y no como {@see AuditAction}.**
+ * Quien escribe sigue entregando el caso del catalogo —el constructor lo acepta
+ * y lo envuelve—, pero el borrador que se reconstruye al *leer* una fila puede
+ * llevar una accion que esta version no conoce, porque las acciones nuevas las
+ * estrena siempre la version siguiente. El motivo completo esta en el docblock
+ * de `AuditActionName`.
  */
 final readonly class AuditEntryDraft
 {
+    public AuditActionName $action;
+
     public function __construct(
         public DateTimeImmutable $occurredAt,
         public AuditActor $actor,
-        public AuditAction $action,
+        AuditAction|AuditActionName $action,
         public AuditSubject $subject,
         public AuditPayload $payload,
         public ?string $ip = null,
         public ?string $userAgent = null,
     ) {
+        $this->action = $action instanceof AuditAction ? AuditActionName::of($action) : $action;
+
         if ($occurredAt->getOffset() !== 0) {
             throw AuditInstantIsNotUtc::forField('occurred_at', $occurredAt);
+        }
+
+        // El estado imposible se rechaza al construir y no se valida en cada
+        // camino de escritura (doc 02 §3.5): un asiento del ciclo de vida de la
+        // instalacion firmado por una persona no puede llegar a existir, porque
+        // no lo escribe una persona. Ver `AuditAction::requiresSystemActor()`.
+        if ($this->action->requiresSystemActor() && $actor->type !== AuditActorType::System) {
+            throw new AuditActorNotAllowedForAction($this->action->value, $actor->type->value);
         }
     }
 

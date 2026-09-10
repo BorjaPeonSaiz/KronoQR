@@ -1,41 +1,57 @@
-# KronoQR — etapas 1-3 del pipeline (doc 02 §10.1).
+# KronoQR — pipeline completo (doc 02 §10.1).
 #
 #   ① Lint + Tipos            Pint · PHPStan 9 · ESLint · vue-tsc · ShellCheck   ~1 min
 #                             + @redocly/cli sobre docs/api/openapi.yaml
 #   ② Arquitectura            Deptrac · Pest Arch                                ~30 s
 #   ③ Unitarias + Mutacion    Pest Unit · Contract · Feature · MSI >= 80 %       ~2 min
+#   ③b Trazabilidad           qa:traceability --check · docs:consistency --check (dentro del job ③, al final)
+#   ④ Integracion             Pest --testsuite=Integration con PostgreSQL real   ~3 min
+#                             (invariantes SQL, MigrationsRoundTripTest, los caminos
+#                             de install.sh/update.sh que no necesitan Docker ni root)
+#   ⑤ Seguridad               composer/npm audit · Semgrep propio + comunitario ·
+#                             gitleaks · Trivy fs/image · SBOM                   ~2 min
+#   ⑥ Frontend unitarias      Vitest de los CUATRO paquetes del workspace
+#                             (packages/web-kit + las tres SPA)                  ~2 min
+#   ⑦ E2E                     Playwright + camara simulada + axe                 ~5 min
+#   ⑧ Instalacion limpia      `clean-install`, desde la tarea 5.4. Levanta el producto
+#                             entero en un runner virgen con el instalador y comprueba
+#                             los cuatro escenarios de RQ-11. No corre en cada push
+#                             -cuesta entre 6 y 18 minutos-: corre en `main`, en cada
+#                             etiqueta `vX.Y.Z` y a mano con «Run workflow».
+#   ⑧b Actualizacion          `update`, desde la tarea 5.7: instala la version anterior
+#                             (el `main` previo hasta que exista la primera etiqueta con
+#                             instalador), la actualiza con update.sh, comprueba la
+#                             idempotencia y la VUELTA ATRAS con un fallo inyectado, y
+#                             restaura la copia previa en limpio. Mismos disparadores
+#                             que la ⑧; 45-60 min en frio.
 #
-# Las tres se ejecutan en CADA push y tienen que devolver resultado en menos de
-# 4 minutos en total. El limite no es estetico: una CI lenta se acaba ignorando,
-# y una cadena de calidad que nadie mira no verifica nada.
+# POR QUE TODO EN CADA PUSH, Y NO "④-⑦ en pull request" COMO DICE EL §10.1. Este
+# repositorio no dispara en `pull_request` (mira el `on:` de mas abajo: solo
+# `push` y `workflow_dispatch`), y una etapa que solo corre en un evento que
+# nadie emite no corre nunca. Cada etapa que el §10.1 sitúa "en pull request"
+# corre aqui en cada push -mas estricto, no menos-, el mismo criterio que ya se
+# aplico a Contract y Feature (parte de la etapa ④) desde el cierre de la Fase
+# 0, y a la etapa ⑤ (seguridad) desde la misma fecha.
 #
-# Lo que NO esta aqui, y por que:
-#   ③b Trazabilidad   `qa:traceability --check`. Su comando lo crea la tarea 0.7.
-#                     Su sitio es entre la etapa ③ y la ④; hay un hueco marcado
-#                     al final de la etapa ③.
-#   ④, ⑥, ⑦          Integracion, frontend y E2E. Se ejecutan en pull request
-#                     (§10.1) y quedan fuera de la tarea 0.4.
-#   ⑧ Instalacion limpia  SI existe, desde la tarea 5.4: `clean-install`, al
-#                     final de este fichero. Levanta el producto entero en un
-#                     runner virgen con el instalador y comprueba los cuatro
-#                     escenarios de RQ-11. No corre en cada push -cuesta entre 6
-#                     y 18 minutos-: corre en `main`, en cada etiqueta `vX.Y.Z`
-#                     y a mano con «Run workflow».
-#   ⑧b Actualizacion   `update`, desde la tarea 5.7: instala la version anterior
-#                     (el `main` previo hasta que exista la primera etiqueta
-#                     con instalador), la actualiza con update.sh, comprueba la
-#                     idempotencia y la VUELTA ATRAS con un fallo inyectado, y
-#                     restaura la copia previa en limpio. Mismos disparadores
-#                     que la ⑧; 45-60 min en frio.
+# Las etapas ①-④ y ⑥-⑦ tienen que devolver resultado en un tiempo razonable en
+# cada push: una CI lenta se acaba ignorando, y una cadena de calidad que nadie
+# mira no verifica nada. Los presupuestos de cada etapa son los del §10.1;
+# cada job los comprueba con una anotacion `::warning`, no con un fallo duro
+# -son un termometro, no una puerta mas-.
 #
-# La etapa ⑤ (seguridad) tampoco esta donde el §10.1 la situa: se ejecuta en
-# cada push desde el cierre de la Fase 0, que es mas estricto, no menos.
+# LA PUERTA DE COBERTURA (RNF-M-01: dominio >= 90 %, global >= 75 %, doc 02
+# §9.2) NO ES NINGUNA DE LAS OCHO ETAPAS NUMERADAS. `make coverage` instrumenta
+# con Xdebug la suite ENTERA -Unit, Integration, Feature y Contract juntas, no
+# solo Unit- y tarda ~15 minutos medidos en este mismo runner (job `coverage`,
+# al final del fichero): casi lo que suman las etapas ①-④. Correr eso en cada
+# push duplicaria, con Xdebug encendido, un trabajo que la etapa ③ ya paga sin
+# el, y por el mismo motivo que la etapa ⑧ no corre en cada push. Se ejecuta de
+# noche (`schedule`) y a mano (`workflow_dispatch`), nunca en un push normal.
 #
-# Contract y Feature SI se ejecutan en cada push desde el cierre de la Fase 0,
-# aunque el §10.1 las situe en la ④. Mientras la ④ no existiera, no las ejecutaba
-# nadie, y `qa:traceability` cuenta sus etiquetas: un requisito podia figurar
-# cubierto en la matriz por una prueba parada. Cuestan segundos y no necesitan
-# base de datos. Integration sigue esperando a la ④ porque exige PostgreSQL.
+# ⑦ E2E sustituye al marcador `.github/workflows/e2e.yml` (retirado, no
+# reemplazado por un workflow separado): el patron de este repositorio es UN
+# workflow con un job por etapa, no una composicion de workflows con
+# `workflow_call`, y ⑦ no es distinta de ⑤ o de ⑧ en eso.
 #
 # Secretos: ninguno. Este workflow no lee `secrets.*`, no escribe ficheros de
 # entorno y no imprime variables. El unico token que aparece es `github.token`,
@@ -48,6 +64,14 @@ on:
   # se comprueba es una rama que llega a main sin comprobar.
   push:
   workflow_dispatch:
+  schedule:
+    # Dispara UNICAMENTE el job `coverage` (ver su comentario): todos los
+    # demas jobs de este fichero llevan `if: github.event_name != 'schedule'`
+    # -o la variante que ya tenian `clean-install`/`update`, que sin la
+    # exclusion explicita habrian arrastrado el pipeline entero, y `install`/
+    # `update` con el, cada noche. Hora fuera del horario de trabajo habitual
+    # del equipo (España, UTC+1/+2).
+    - cron: "17 3 * * *"
 
 # Minimo imprescindible. Este workflow lee el codigo y no escribe nada.
 permissions:
@@ -73,6 +97,9 @@ jobs:
     name: "① Lint + Tipos · backend"
     runs-on: ubuntu-24.04
     timeout-minutes: 6
+    # El `schedule` nocturno solo existe para el job `coverage` (ver cabecera).
+    # Sin esto, la entrada de cron dispararia el pipeline entero cada noche.
+    if: github.event_name != 'schedule'
 
     steps:
       - name: Marcar el inicio del job
@@ -171,6 +198,8 @@ jobs:
     name: "① Lint + Tipos · ${{ matrix.app }}"
     runs-on: ubuntu-24.04
     timeout-minutes: 6
+    # Ver el comentario de `lint-backend`: el `schedule` es solo para `coverage`.
+    if: github.event_name != 'schedule'
     strategy:
       fail-fast: false
       matrix:
@@ -297,6 +326,8 @@ jobs:
     name: "① Lint + Tipos · contrato OpenAPI"
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    # Ver el comentario de `lint-backend`: el `schedule` es solo para `coverage`.
+    if: github.event_name != 'schedule'
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -486,10 +517,12 @@ jobs:
         # push durante media fase sin que nadie mirase Actions (hallazgo de la
         # auditoria de cierre de la Fase 1).
         #
-        # Siguen aqui y no en la etapa ④ (pull request, tarea 3.x) por la misma
-        # razon de entonces: `qa:traceability` cuenta las etiquetas de estas
-        # suites, y un requisito no puede figurar cubierto por una prueba que
-        # ningun workflow ejecuta.
+        # Siguen aqui y no en el job `integration` (mas abajo, la etapa ④ real)
+        # por la misma razon de entonces: `qa:traceability` cuenta las
+        # etiquetas de estas suites, y un requisito no puede figurar cubierto
+        # por una prueba que ningun workflow ejecuta. Ademas son baratas -no
+        # necesitan mas que este mismo PostgreSQL- y separarlas solo anadiria
+        # el coste de arrancar otro runner.
         run: make test-contract
 
       - name: Mutacion sobre Modules/*/Domain (MSI >= 80 %)
@@ -530,6 +563,123 @@ jobs:
         env:
           ETAPA: "③ Unitarias + Mutacion"
           PRESUPUESTO: "120"
+        run: |
+          ahora=$(date +%s)
+          comprobaciones=$((ahora - ${TOOLS_START:-$ahora}))
+          total=$((ahora - ${JOB_START:-$ahora}))
+          {
+            echo "### ${ETAPA}"
+            echo ""
+            echo "| Comprobaciones | Presupuesto §10.1 | Job completo |"
+            echo "|---|---|---|"
+            echo "| ${comprobaciones} s | ${PRESUPUESTO} s | ${total} s |"
+          } >>"$GITHUB_STEP_SUMMARY"
+          if [ "$comprobaciones" -gt "$PRESUPUESTO" ]; then
+            echo "::warning title=Presupuesto excedido::${ETAPA} ha tardado ${comprobaciones} s frente a los ${PRESUPUESTO} s del doc 02 §10.1."
+          fi
+
+  #-----------------------------------------------------------------------------
+  # ④ Integracion (doc 02 §10.1, §9.2)
+  #
+  # Repositorios y esquema contra PostgreSQL REAL: invariantes SQL (lo que una
+  # regla de negocio delega en un CHECK/EXCLUDE de la base, no en el dominio),
+  # `MigrationsRoundTripTest` (deshace y reaplica TODAS las migraciones con
+  # `CommittedDatabase`: por eso corre SOLA en este job, nunca junto a otra
+  # suite en el mismo proceso) e `InstallScriptTest`/`UpdateScriptTest` — los
+  # caminos de `install.sh`/`update.sh` que NO necesitan Docker ni root:
+  # comprobacion de requisitos, codigos de salida, tratamiento del `.env`. La
+  # instalacion y la actualizacion COMPLETAS las prueba la etapa ⑧/⑧b, porque
+  # exigen una maquina Linux con Docker y las imagenes de entrega.
+  #
+  # El §10.1 sitúa esta etapa "en pull request"; este repositorio no dispara en
+  # `pull_request` (cabecera del fichero), asi que corre en cada push, igual
+  # que Contract y Feature (job `unit`) desde el cierre de la Fase 0.
+  #
+  # PostgreSQL y Redis: la MISMA imagen y los MISMOS roles que el job `unit`
+  # (kronoqr/postgres:ci, roles de aplicacion y de migracion) — no la imagen
+  # oficial de PostgreSQL, que no trae los tres roles de la regla dura 6 ni la
+  # base `fichaje_test`. Cada job de la CI arranca su PROPIO contenedor: no hay
+  # nada que compartir con `unit`, cada runner es una maquina aislada.
+  #-----------------------------------------------------------------------------
+  integration:
+    name: "④ Integracion"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    needs: architecture
+
+    env:
+      APP_KEY: "base64:a3Jvbm9xci1jaS1jbGF2ZS1kZS0zMi1ieXRlcyEhISE="
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+      DB_DATABASE: fichaje
+      DB_USERNAME: fichaje_app
+      DB_PASSWORD: ci_local_app
+      DB_MIGRATION_USERNAME: fichaje_migrator
+      DB_MIGRATION_PASSWORD: ci_local_migrator
+      REDIS_HOST: 127.0.0.1
+
+    steps:
+      - name: Marcar el inicio del job
+        run: echo "JOB_START=$(date +%s)" >>"$GITHUB_ENV"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: PostgreSQL 17 del producto y Redis 7
+        run: |
+          make build-ci-images
+          docker run -d --name kronoqr-pg \
+            -e POSTGRES_DB="$DB_DATABASE" \
+            -e POSTGRES_USER="$DB_MIGRATION_USERNAME" \
+            -e POSTGRES_PASSWORD="$DB_MIGRATION_PASSWORD" \
+            -e DB_PASSWORD="$DB_PASSWORD" \
+            -p 5432:5432 \
+            kronoqr/postgres:ci \
+            postgres -c timezone=UTC -c log_timezone=UTC \
+              -c hba_file=/etc/kronoqr/pg_hba.conf
+          docker run -d --name kronoqr-redis -p 6379:6379 redis:7-alpine
+
+      - uses: ./.github/actions/php-toolchain
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          coverage: none
+
+      - name: Marcar el inicio de las comprobaciones
+        run: echo "TOOLS_START=$(date +%s)" >>"$GITHUB_ENV"
+
+      - name: Esperar a PostgreSQL
+        run: |
+          for i in $(seq 1 30); do
+            if docker exec kronoqr-pg pg_isready -h 127.0.0.1 -U "$DB_MIGRATION_USERNAME" -d "$DB_DATABASE" >/dev/null 2>&1; then
+              echo "PostgreSQL listo en $((i * 2)) s"; exit 0
+            fi
+            sleep 2
+          done
+          echo "::error title=PostgreSQL no arranco::pg_isready sigue fallando tras 60 s."
+          docker logs kronoqr-pg | tail -50
+          exit 1
+
+      - name: Puppeteer y Chrome para Browsershot (los PDF de una cara y el sello del informe se prueban con el motor real)
+        # La imagen del producto instala puppeteer global y usa el Chromium de la
+        # distribucion; en el runner el `chromium-browser` de Ubuntu es un
+        # envoltorio de snap que no arranca, asi que aqui puppeteer trae su
+        # propio Chrome y las dos variables que lee laravel-pdf apuntan a el.
+        run: |
+          sudo npm install --global --omit=dev puppeteer@24
+          modules="$(npm root -g)"
+          echo "LARAVEL_PDF_NODE_MODULES_PATH=${modules}" >>"$GITHUB_ENV"
+          echo "LARAVEL_PDF_CHROME_PATH=$(NODE_PATH="${modules}" node -e "console.log(require('puppeteer').executablePath())")" >>"$GITHUB_ENV"
+
+      - name: Pest — suite de Integracion (PostgreSQL real; MigrationsRoundTripTest sola en este job)
+        run: make test-integration
+
+      - name: Presupuesto de la etapa
+        if: always()
+        env:
+          ETAPA: "④ Integracion"
+          PRESUPUESTO: "180"
         run: |
           ahora=$(date +%s)
           comprobaciones=$((ahora - ${TOOLS_START:-$ahora}))
@@ -591,6 +741,8 @@ jobs:
     name: "Dependencias y SAST"
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    # Ver el comentario de `lint-backend`: el `schedule` es solo para `coverage`.
+    if: github.event_name != 'schedule'
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -800,10 +952,193 @@ jobs:
       # Recuperalo de ahi en vez de reinventarlo; el runbook
       # docs/runbooks/triaje-hallazgos-seguridad.md explica cuando procede.
 
+  #-----------------------------------------------------------------------------
+  # ⑥ Frontend unitarias (doc 02 §10.1, §9.2: Vitest + Vue Test Utils, >= 70 %)
+  #
+  # Los CUATRO paquetes del workspace, no solo las tres SPA: `packages/web-kit`
+  # tiene su propia suite (solo logica pura en `src/**/*.ts`; los cinco
+  # componentes `.vue` los ejercitan las SPA que los consumen, ver el
+  # comentario de `packages/web-kit/vitest.config.ts`).
+  #
+  # El umbral de cobertura NO se repite aqui: vive en `coverage.thresholds` de
+  # cada `vitest.config.ts` (mismo criterio que Pint/PHPStan/Deptrac en el
+  # Makefile — la orden y el umbral en un solo sitio). `vitest run --coverage`
+  # FALLA solo si algun paquete no llega al 70 %, asi que el paso no necesita
+  # parsear ningun informe.
+  #
+  # Independiente del resto (sin `needs`): son pruebas de Node puro, no
+  # dependen de que el backend compile, y son de las mas baratas del pipeline.
+  #-----------------------------------------------------------------------------
+  frontend-unit:
+    name: "⑥ Frontend unitarias · ${{ matrix.package }}"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # Ver el comentario de `lint-backend`: el `schedule` es solo para `coverage`.
+    if: github.event_name != 'schedule'
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [packages/web-kit, frontend-admin, frontend-kiosk, frontend-portal]
+
+    steps:
+      - name: Marcar el inicio del job
+        run: echo "JOB_START=$(date +%s)" >>"$GITHUB_ENV"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          # El lock de la RAIZ, mismo motivo que en `lint-frontend` (ADR-036).
+          cache-dependency-path: package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Marcar el inicio de las comprobaciones
+        run: echo "TOOLS_START=$(date +%s)" >>"$GITHUB_ENV"
+
+      - name: Vitest --coverage (umbral en vitest.config.ts, §9.2)
+        run: npm run test:unit --prefix ${{ matrix.package }}
+
+      - name: Presupuesto de la etapa
+        if: always()
+        env:
+          ETAPA: "⑥ Frontend unitarias"
+          PRESUPUESTO: "120"
+        run: |
+          ahora=$(date +%s)
+          comprobaciones=$((ahora - ${TOOLS_START:-$ahora}))
+          {
+            echo "### ${ETAPA} · ${{ matrix.package }}"
+            echo ""
+            echo "| Comprobaciones | Presupuesto §10.1 |"
+            echo "|---|---|"
+            echo "| ${comprobaciones} s | ${PRESUPUESTO} s |"
+          } >>"$GITHUB_STEP_SUMMARY"
+          if [ "$comprobaciones" -gt "$PRESUPUESTO" ]; then
+            echo "::warning title=Presupuesto excedido::${ETAPA} (${{ matrix.package }}) ha tardado ${comprobaciones} s frente a los ${PRESUPUESTO} s del doc 02 §10.1."
+          fi
+
+  #-----------------------------------------------------------------------------
+  # ⑦ E2E (doc 02 §10.1, §9.4: Playwright + camara simulada + axe)
+  #
+  # Sustituye al marcador `.github/workflows/e2e.yml`, retirado (ver la
+  # cabecera de este fichero): el patron de este repositorio es un solo
+  # workflow con un job por etapa, no una composicion de workflows separados
+  # con `workflow_call` — ⑦ no es distinta de ⑤ o de ⑧ en eso.
+  #
+  # SIN BACKEND: cada SPA intercepta `/api/v1/*` con los dobles del contrato
+  # (`tests/e2e/support/*.ts` de cada frontend, ver la cabecera de cada
+  # `playwright.config.ts`); no hay PostgreSQL ni Redis en este job.
+  #
+  # SE PRUEBA EL BUILD, NO EL SERVIDOR DE DESARROLLO (mismo criterio que en
+  # cada `playwright.config.ts`). El panel lo reconstruye su propio
+  # `webServer` en cada ejecucion; el quiosco NO —su `webServer` solo hace
+  # `vite preview` sobre un `dist/` que ya tiene que existir—. Construir aqui,
+  # de forma explicita y uniforme para las tres SPA, evita que la unica que
+  # construye sola (el panel) sea la unica prueba real y las otras dos corran
+  # contra un `dist/` que nadie genero en un runner limpio.
+  #
+  # CONTRATO CON QUIEN ESCRIBE EL E2E DEL PORTAL: `frontend-portal` tiene que
+  # traer `playwright.config.ts` y el script `test:e2e` en su `package.json`.
+  # El paso "Comprobar el contrato" falla con un mensaje claro si falta, en vez
+  # de que el job entero muera con un `npm error Missing script`.
+  #-----------------------------------------------------------------------------
+  e2e:
+    name: "⑦ E2E · ${{ matrix.app }}"
+    runs-on: ubuntu-24.04
+    # Generoso en frio: instalar Chromium con sus dependencias del sistema y
+    # construir la SPA antes de los propios escenarios.
+    timeout-minutes: 20
+    needs: lint-frontend
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [frontend-admin, frontend-kiosk, frontend-portal]
+
+    steps:
+      - name: Marcar el inicio del job
+        run: echo "JOB_START=$(date +%s)" >>"$GITHUB_ENV"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Comprobar el contrato de scripts de package.json
+        run: |
+          jq -e '.scripts["test:e2e"]' "${{ matrix.app }}/package.json" >/dev/null 2>&1 || {
+            echo "::error title=Falta test:e2e en ${{ matrix.app }}::Anade el script test:e2e (playwright test) a ${{ matrix.app }}/package.json y su playwright.config.ts."
+            exit 1
+          }
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Cache de los navegadores de Playwright
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Instalar Chromium (con dependencias del sistema)
+        run: npx playwright install --with-deps chromium
+
+      - name: Marcar el inicio de las comprobaciones
+        run: echo "TOOLS_START=$(date +%s)" >>"$GITHUB_ENV"
+
+      - name: Construir la aplicacion (dist real, no el servidor de desarrollo)
+        run: npm run build --prefix ${{ matrix.app }}
+
+      - name: Playwright (camara simulada en el quiosco; axe en el panel)
+        # El reporter (github + list) lo elige cada playwright.config.ts segun
+        # `process.env.CI`, que GitHub Actions define solo: no hace falta
+        # repetirlo aqui con --reporter.
+        run: npm run test:e2e --prefix ${{ matrix.app }}
+
+      - name: Presupuesto de la etapa
+        if: always()
+        env:
+          ETAPA: "⑦ E2E"
+          PRESUPUESTO: "300"
+        run: |
+          ahora=$(date +%s)
+          comprobaciones=$((ahora - ${TOOLS_START:-$ahora}))
+          {
+            echo "### ${ETAPA} · ${{ matrix.app }}"
+            echo ""
+            echo "| Comprobaciones | Presupuesto §10.1 |"
+            echo "|---|---|"
+            echo "| ${comprobaciones} s | ${PRESUPUESTO} s |"
+          } >>"$GITHUB_STEP_SUMMARY"
+          if [ "$comprobaciones" -gt "$PRESUPUESTO" ]; then
+            echo "::warning title=Presupuesto excedido::${ETAPA} (${{ matrix.app }}) ha tardado ${comprobaciones} s frente a los ${PRESUPUESTO} s del doc 02 §10.1."
+          fi
+
+      - name: Subir los artefactos de Playwright SOLO si algo ha fallado
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: e2e-${{ matrix.app }}
+          path: ${{ matrix.app }}/test-results/
+          retention-days: 14
+          if-no-files-found: warn
+
   changelog:
     name: "Puerta de version · CHANGELOG"
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    # Ver el comentario de `lint-backend`: el `schedule` es solo para `coverage`.
+    if: github.event_name != 'schedule'
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -874,10 +1209,17 @@ jobs:
     # entera) y descarga las cinco imagenes de observabilidad. Estimacion en
     # frio, sin cache de Actions: 20-30 min. Con cache: 10-15.
     timeout-minutes: 50
+    # `github.ref == 'refs/heads/main'` es CIERTO tambien en un evento
+    # `schedule` (dispara contra la rama por defecto): sin la exclusion
+    # explicita, la entrada de cron de `coverage` habria arrastrado esta etapa
+    # de 6-18 minutos cada noche sin que nadie lo hubiera pedido.
     if: >-
-      github.event_name == 'workflow_dispatch'
-      || startsWith(github.ref, 'refs/tags/v')
-      || github.ref == 'refs/heads/main'
+      github.event_name != 'schedule'
+      && (
+        github.event_name == 'workflow_dispatch'
+        || startsWith(github.ref, 'refs/tags/v')
+        || github.ref == 'refs/heads/main'
+      )
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -941,6 +1283,7 @@ jobs:
           bash infra/scripts/package.sh paquete
           test -x paquete/install.sh
           test -x paquete/update.sh
+          test -x paquete/doctor.sh
           test -f paquete/versions.txt
           test ! -e paquete/tools
           ls -la paquete
@@ -1295,10 +1638,16 @@ jobs:
     # actualizacion, una reinstalacion y una actualizacion con vuelta atras
     # que espera 3 minutos a un borde que nunca arranca. En frio, 45-60 min.
     timeout-minutes: 90
+    # Ver el comentario de `clean-install`: sin excluir `schedule` a proposito,
+    # la entrada de cron de `coverage` habria arrastrado esta etapa de 45-60
+    # minutos cada noche.
     if: >-
-      github.event_name == 'workflow_dispatch'
-      || startsWith(github.ref, 'refs/tags/v')
-      || github.ref == 'refs/heads/main'
+      github.event_name != 'schedule'
+      && (
+        github.event_name == 'workflow_dispatch'
+        || startsWith(github.ref, 'refs/tags/v')
+        || github.ref == 'refs/heads/main'
+      )
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -1505,7 +1854,12 @@ jobs:
             echo "users=$(consulta 'SELECT count(*) FROM users')"
             echo "audit_log=$(consulta 'SELECT count(*) FROM audit_log')"
           } | tee conteos-despues.txt
-          cmp conteos-antes.txt conteos-despues.txt
+          # Los usuarios no cambian; audit_log crece EXACTAMENTE en uno: el asiento
+          # system.updated que el paso 5 escribe desde el cierre de la Fase 5.
+          test "$(grep '^users=' conteos-antes.txt)" = "$(grep '^users=' conteos-despues.txt)"
+          antes="$(sed -n 's/^audit_log=//p' conteos-antes.txt)"; despues="$(sed -n 's/^audit_log=//p' conteos-despues.txt)"
+          test "$despues" -eq "$((antes + 1))" || { echo "audit_log paso de ${antes} a ${despues}: se esperaba exactamente un asiento system.updated mas"; exit 1; }
+          consulta "SELECT action FROM audit_log ORDER BY id DESC LIMIT 1" | grep -qx 'system.updated'
           # Ninguna migracion pendiente, y el informe donde dice la guia.
           sudo docker compose --env-file paquete-nuevo/.env -f paquete-nuevo/docker-compose.yml \
             exec -T app php artisan migrate:status --database=pgsql_migrator --pending=1
@@ -1598,7 +1952,21 @@ jobs:
             echo "users=$(consulta 'SELECT count(*) FROM users')"
             echo "audit_log=$(consulta 'SELECT count(*) FROM audit_log')"
           } | tee conteos-despues-u3.txt
-          cmp conteos-antes-u3.txt conteos-despues-u3.txt
+          # Datos intactos tras la vuelta atras. Y el asiento system.restored_from_backup
+          # sobre la cadena restaurada (cierre de la Fase 5, regla dura 6) SOLO si la
+          # version que queda en pie conoce la accion: un verificador anterior revienta
+          # con una accion fuera de su catalogo, asi que update.sh no lo escribe y lo
+          # deja en el informe. Con la 2.1.0 como version anterior es la segunda rama;
+          # al publicar la siguiente, la primera. Las dos se exigen, no se toleran.
+          test "$(grep '^users=' conteos-antes-u3.txt)" = "$(grep '^users=' conteos-despues-u3.txt)"
+          antes="$(sed -n 's/^audit_log=//p' conteos-antes-u3.txt)"; despues="$(sed -n 's/^audit_log=//p' conteos-despues-u3.txt)"
+          if compose exec -T app php artisan list --raw | grep -q '^compliance:record-system-event'; then
+            test "$despues" -eq "$((antes + 1))" || { echo "audit_log paso de ${antes} a ${despues}: se esperaba exactamente un asiento system.restored_from_backup mas"; exit 1; }
+            consulta "SELECT action FROM audit_log ORDER BY id DESC LIMIT 1" | grep -qx 'system.restored_from_backup'
+          else
+            test "$despues" -eq "$antes" || { echo "audit_log paso de ${antes} a ${despues}: la version anterior no conoce system.restored_from_backup y no debia escribirse nada"; exit 1; }
+            grep -q "NO escrito: la version restaurada" paquete-nuevo/salida-u3.log
+          fi
           compose exec -T app php artisan compliance:verify-audit-chain
           sudo sh -c "grep -l 'Vuelta atras' /var/backups/fichaje/reports/update-*.log"
 
@@ -1657,3 +2025,107 @@ jobs:
             paquete-nuevo/salida-u3b.log
           retention-days: 14
           if-no-files-found: warn
+
+  #-----------------------------------------------------------------------------
+  # Cobertura — RNF-M-01: dominio >= 90 %, global >= 75 % (doc 02 §9.2)
+  #
+  # NO es una de las ocho etapas numeradas del §10.1: es una puerta de calidad
+  # aparte, y su coste no encaja en el presupuesto de ninguna de ellas.
+  # `make coverage` instrumenta con Xdebug la suite ENTERA —Unit, Integration,
+  # Feature y Contract juntas, no solo Unit— porque el umbral de dominio se
+  # mide sobre el mismo informe Clover que el umbral global (`tools/coverage-
+  # gate.php` acota el segundo del primero, no repite la ejecucion). Medido en
+  # este runner (09-09-2026): ~15 minutos, memoria de PHP en 3G
+  # (`COVERAGE_MEMORY_LIMIT` del Makefile — con el 1G de costumbre, Xdebug
+  # agota la memoria a mitad de la suite).
+  #
+  # Correr esto en cada push habria duplicado, con Xdebug encendido, un trabajo
+  # que la etapa ③ ya paga sin el —Xdebug con cobertura es varias veces mas
+  # lento que ejecutar la misma suite sin instrumentar—, y por el mismo motivo
+  # que la etapa ⑧ no corre en cada push: una CI que nadie espera se acaba
+  # ignorando. Por eso es un job propio, nocturno (`schedule`) y a mano
+  # (`workflow_dispatch`); el `if` de abajo es lo unico que lo distingue de un
+  # job normal —nunca corre en un `push`—, y todos los demas jobs de este
+  # fichero llevan la guarda simetrica (`!= 'schedule'`, ver `lint-backend`)
+  # para que la entrada de cron no arrastre el pipeline entero cada noche.
+  #
+  # PostgreSQL y Redis: la misma imagen y los mismos roles que los jobs `unit`
+  # e `integration` — la suite completa toca Feature e Integration, que
+  # necesitan base de datos real.
+  #-----------------------------------------------------------------------------
+  coverage:
+    name: "Cobertura (RNF-M-01, nocturna)"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+
+    env:
+      APP_KEY: "base64:a3Jvbm9xci1jaS1jbGF2ZS1kZS0zMi1ieXRlcyEhISE="
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+      DB_DATABASE: fichaje
+      DB_USERNAME: fichaje_app
+      DB_PASSWORD: ci_local_app
+      DB_MIGRATION_USERNAME: fichaje_migrator
+      DB_MIGRATION_PASSWORD: ci_local_migrator
+      REDIS_HOST: 127.0.0.1
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: PostgreSQL 17 del producto y Redis 7
+        run: |
+          make build-ci-images
+          docker run -d --name kronoqr-pg \
+            -e POSTGRES_DB="$DB_DATABASE" \
+            -e POSTGRES_USER="$DB_MIGRATION_USERNAME" \
+            -e POSTGRES_PASSWORD="$DB_MIGRATION_PASSWORD" \
+            -e DB_PASSWORD="$DB_PASSWORD" \
+            -p 5432:5432 \
+            kronoqr/postgres:ci \
+            postgres -c timezone=UTC -c log_timezone=UTC \
+              -c hba_file=/etc/kronoqr/pg_hba.conf
+          docker run -d --name kronoqr-redis -p 6379:6379 redis:7-alpine
+
+      - uses: ./.github/actions/php-toolchain
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          coverage: xdebug
+
+      - name: Esperar a PostgreSQL
+        run: |
+          for i in $(seq 1 30); do
+            if docker exec kronoqr-pg pg_isready -h 127.0.0.1 -U "$DB_MIGRATION_USERNAME" -d "$DB_DATABASE" >/dev/null 2>&1; then
+              echo "PostgreSQL listo en $((i * 2)) s"; exit 0
+            fi
+            sleep 2
+          done
+          echo "::error title=PostgreSQL no arranco::pg_isready sigue fallando tras 60 s."
+          docker logs kronoqr-pg | tail -50
+          exit 1
+
+      - name: Puppeteer y Chrome para Browsershot (la suite completa incluye los PDF con motor real)
+        # Misma receta que el job de integracion: el chromium-browser del runner
+        # es un envoltorio de snap; puppeteer trae su Chrome y laravel-pdf lo lee
+        # de estas dos variables.
+        run: |
+          sudo npm install --global --omit=dev puppeteer@24
+          modules="$(npm root -g)"
+          echo "LARAVEL_PDF_NODE_MODULES_PATH=${modules}" >>"$GITHUB_ENV"
+          echo "LARAVEL_PDF_CHROME_PATH=$(NODE_PATH="${modules}" node -e "console.log(require('puppeteer').executablePath())")" >>"$GITHUB_ENV"
+
+      - name: Cobertura — dominio >= 90 %, global >= 75 % (doc 02 §9.2)
+        run: make coverage
+
+      - name: Resumen
+        if: always()
+        run: |
+          {
+            echo "### Cobertura (RNF-M-01)"
+            echo ""
+            echo "Umbrales: dominio >= 90 %, global >= 75 %. Detalle linea a linea en el"
+            echo "log de \`make coverage\` de este mismo job."
+          } >>"$GITHUB_STEP_SUMMARY"

@@ -38,6 +38,15 @@ use Tests\Support\Workforce\WorkforceFixtures;
  * ninguna. Despues se afirma que el historial de peticiones esta vacio, que es
  * lo que cierra el hueco de una peticion que se hiciera y devolviera algo.
  *
+ * ## Y por eso lleva tambien RL-17
+ *
+ * RL-17 afirma que el fabricante **no accede a los datos** en la operacion
+ * ordinaria. La licencia es el unico punto del producto donde el fabricante
+ * tiene algo que decir, y por eso es el candidato natural a convertirse en una
+ * llamada a casa: bastaria con «comprobar si sigue vigente» una vez al dia para
+ * que el fabricante supiera cuando trabaja cada hotel. Estas seis pruebas son
+ * las que impiden que eso aparezca sin que nadie lo note.
+ *
  * Cubre los cuatro caminos que tocan la licencia: activar, consultar, decidir si
  * una funcionalidad esta habilitada, y los dos comandos de consola.
  */
@@ -58,7 +67,7 @@ it('activar una licencia no hace ninguna peticion saliente', function (): void {
     app(ActivateLicenseHandler::class)->handle(new ActivateLicenseCommand(LicenseKeys::current()->issue()));
 
     Http::assertNothingSent();
-})->group('RF-PD-04');
+})->group('RF-PD-04', 'RL-17');
 
 it('consultar el estado no hace ninguna peticion saliente', function (): void {
     app(ActivateLicenseHandler::class)->handle(new ActivateLicenseCommand(LicenseKeys::current()->issue()));
@@ -66,7 +75,7 @@ it('consultar el estado no hace ninguna peticion saliente', function (): void {
     app(DescribeLicenseHandler::class)->handle();
 
     Http::assertNothingSent();
-})->group('RF-PD-04');
+})->group('RF-PD-04', 'RL-17');
 
 it('decidir si una funcionalidad esta habilitada no hace ninguna peticion saliente', function (): void {
     // Es el camino que mas veces se recorre: cualquier pantalla del panel.
@@ -75,7 +84,7 @@ it('decidir si una funcionalidad esta habilitada no hace ninguna peticion salien
     expect(app(FeatureGate::class)->isEnabled(Feature::AdvancedReports))->toBeTrue();
 
     Http::assertNothingSent();
-})->group('RF-PD-04');
+})->group('RF-PD-04', 'RL-17');
 
 it('el endpoint de licencia no hace ninguna peticion saliente', function (): void {
     $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN));
@@ -84,14 +93,14 @@ it('el endpoint de licencia no hace ninguna peticion saliente', function (): voi
     Api::as($token)->get('/api/v1/license')->assertOk();
 
     Http::assertNothingSent();
-})->group('RF-PD-04');
+})->group('RF-PD-04', 'RL-17');
 
 it('los comandos de consola no hacen ninguna peticion saliente', function (): void {
     Artisan::call('license:activate', ['key' => LicenseKeys::current()->issue()]);
     Artisan::call('license:show');
 
     Http::assertNothingSent();
-})->group('RF-PD-04');
+})->group('RF-PD-04', 'RL-17');
 
 it('una licencia caducada tampoco intenta llamar a nadie', function (): void {
     // El caso en el que un producto mal diseñado «revalidaria contra el
@@ -106,4 +115,4 @@ it('una licencia caducada tampoco intenta llamar a nadie', function (): void {
     app(FeatureGate::class)->isEnabled(Feature::AdvancedReports);
 
     Http::assertNothingSent();
-})->group('RF-PD-04');
+})->group('RF-PD-04', 'RL-17');

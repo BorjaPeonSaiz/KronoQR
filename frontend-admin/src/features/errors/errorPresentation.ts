@@ -1,6 +1,7 @@
 // Presentacion pura (sin Vue) del historico de errores (RF-PD-15, tarea 5.12):
 // el color del nivel, el periodo en UTC y el «que hacer» por origen y nivel.
 // Se prueba sin montar `ErrorsView`, igual que `incidentPresentation.ts`.
+import { minutesBetween } from '@kronoqr/web-kit/datetime'
 import { durationParts } from '@kronoqr/web-kit/workdayTotals'
 import type { DurationParts } from '@kronoqr/web-kit/workdayTotals'
 import type { ErrorLevel, ErrorSource } from '@/shared/api/types'
@@ -34,7 +35,12 @@ export function whatToDoKey(source: ErrorSource, level: ErrorLevel): string {
  * reloj local ligeramente adelantado no puede dar una antiguedad negativa.
  */
 export function ageSinceLastSeen(lastSeenAt: string, serverNowMs: number): DurationParts {
-  const minutes = Math.max(Math.floor((serverNowMs - Date.parse(lastSeenAt)) / 60_000), 0)
+  // El `Math.max` SI hace falta aqui, a diferencia de `IncidentTable`/
+  // `PresenceTable`: `last_seen_at` lo declara el cliente que reporto el
+  // error (una tablet, un navegador), con su propio reloj, y puede llegar
+  // adelantado respecto al `serverNowMs` extrapolado antes de la primera
+  // foto del servidor.
+  const minutes = Math.max(minutesBetween(lastSeenAt, new Date(serverNowMs).toISOString()) ?? 0, 0)
 
   return durationParts(minutes)
 }
@@ -56,13 +62,19 @@ export interface ErrorPeriodBounds {
 /**
  * Los limites `from`/`to` que se mandan al servidor para un preset de periodo.
  *
- * Los presets (7/30/90 dias) se cuentan hacia atras desde el reloj del
- * NAVEGADOR: son solo un filtro de conveniencia sobre `last_seen_at`, no un
- * dato que se presente (regla dura 3 protege la PRESENTACION del tiempo; esto
- * es una consulta). El periodo `custom` se declara **en UTC explicito**
- * -nunca en la zona del navegador, que seria adivinar (regla dura 3)-: la
- * fecha civil que se escribe se interpreta como el dia calendario en UTC, y
- * los campos lo dejan escrito («Desde (UTC)»).
+ * `nowMs` tiene que ser el reloj del SERVIDOR extrapolado
+ * (`errors.store.ts#serverNowMs`), nunca `Date.now()` a secas: con un reloj
+ * local atrasado, un `to` calculado sobre el navegador dejaba fuera errores
+ * recien creados que el servidor ya conocia (hallazgo I4 del cierre de la
+ * Fase 5). Los presets (7/30/90 dias) **no llevan `to`**: son «los ultimos N
+ * dias», sin cota superior, para que un error que acaba de ocurrir -aunque el
+ * reloj local siga desfasado tras la extrapolacion- nunca quede fuera por una
+ * cota que no aporta nada (`from` ya acota la ventana por el lado que
+ * importa). El periodo `custom` se declara **en UTC explicito** -nunca en la
+ * zona del navegador, que seria adivinar (regla dura 3)-: la fecha civil que
+ * se escribe se interpreta como el dia calendario en UTC, y los campos lo
+ * dejan escrito («Desde (UTC)»). Ahi si tiene sentido un `to`: es la fecha que
+ * la persona ha escrito a proposito, no un limite calculado.
  */
 export function periodBounds(
   preset: ErrorPeriodPreset,
@@ -78,8 +90,5 @@ export function periodBounds(
 
   const days = Number.parseInt(preset, 10)
 
-  return {
-    from: new Date(nowMs - days * 86_400_000).toISOString(),
-    to: new Date(nowMs).toISOString(),
-  }
+  return { from: new Date(nowMs - days * 86_400_000).toISOString() }
 }

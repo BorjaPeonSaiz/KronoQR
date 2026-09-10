@@ -382,14 +382,15 @@ export function setupSteps(
 }
 
 /**
- * `available`/`completed_at`, tal y como responde `GET /setup/status`
- * (PUBLICA, revision de la 5.5): **nunca trae `steps`**, que solo viaja en
- * `GET /setup/steps` (autenticada). Para un doble de esa segunda respuesta,
- * pasa `steps: setupSteps(...)` explicito — no hay un valor de serie aqui a
- * proposito, para que ningun doble finja tener `steps` sin pedirlo.
+ * Solo `available`, tal y como responde `GET /setup/status` (PUBLICA): **nunca
+ * trae `steps`** (revision de la 5.5) **ni `completed_at`** (revision del cierre
+ * de la Fase 5). Las dos claves solo viajan en las respuestas autenticadas
+ * —`GET /setup/steps`, `PUT /setup/steps/{step}` y `POST /setup/complete`—, y
+ * para un doble de esas se pasan explicitas: no hay valor de serie aqui a
+ * proposito, para que ningun doble finja traerlas sin pedirlo.
  */
 export function setupStatus(overrides: Partial<SetupStatus> = {}): SetupStatus {
-  return { available: true, completed_at: null, ...overrides }
+  return { available: true, ...overrides }
 }
 
 export function setupCompletion(overrides: Partial<SetupCompletion> = {}): SetupCompletion {

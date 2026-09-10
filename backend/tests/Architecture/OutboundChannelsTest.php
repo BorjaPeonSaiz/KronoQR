@@ -25,6 +25,16 @@ use Tests\Architecture\Support\Repo;
  * con una intencion razonable -avisar a un webhook, comprobar si hay version
  * nueva, mandar un correo por una API-.
  *
+ * ## Y por eso lleva la etiqueta RL-17
+ *
+ * RL-17 dice que el fabricante **no es encargado del tratamiento en la
+ * operacion ordinaria, porque no aloja ni accede a los datos**. Lo primero lo
+ * decide el despliegue -cada cliente en su servidor-; lo segundo lo decide este
+ * repositorio, y es lo que estas pruebas afirman: no hay ni un cliente HTTP de
+ * proposito general fuera de la telemetria, tampoco en el armazon, y el unico
+ * que hay viene apagado y sin destino. Sin esto, RL-17 seria una declaracion del
+ * documento del cliente que nada respalda.
+ *
  * ## Se lee el codigo como TEXTO
  *
  * Como el resto de las pruebas de arquitectura: hay que poder hablar de ficheros
@@ -104,36 +114,26 @@ it('ningun fichero de un modulo abre una conexion saliente fuera de la telemetri
         .'diagnostico y de la telemetria, y esa afirmacion se sostiene en que el unico cliente HTTP '
         .'saliente viva en un solo sitio, apagado de serie.'
     );
-})->with(clientesHttp())->group('RF-PD-12', 'RF-PD-11');
+})->with(clientesHttp())->group('RF-PD-12', 'RF-PD-11', 'RL-17');
 
 it('tampoco lo hace el armazon de la aplicacion, fuera de los modulos', function (string $descripcion, string $patron): void {
     // `app/Support`, `app/Http`, `app/Providers`, `app/Console`: todo lo que no
     // es un modulo. Un `Http::get()` en un middleware seria igual de saliente.
     $offenders = [];
 
+    // `scandir` y no `RecursiveDirectoryIterator`: sobre el bind mount de Docker
+    // Desktop el iterador pierde ficheros en silencio, y un fichero que esta
+    // regla no ve es un canal saliente que nadie denuncia. Ver `ModuleTree`.
     foreach (['Support', 'Http', 'Providers', 'Console', 'Models', 'Exceptions'] as $directory) {
-        $path = Repo::file('backend/app/'.$directory);
-
-        if (! is_dir($path)) {
-            continue;
-        }
-
-        /** @var SplFileInfo $file */
-        foreach (new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS)
-        ) as $file) {
-            if (! $file->isFile() || $file->getExtension() !== 'php') {
-                continue;
-            }
-
-            if (preg_match($patron, (string) file_get_contents($file->getPathname())) === 1) {
-                $offenders[] = 'app/'.$directory.'/'.$file->getFilename();
+        foreach (ModuleTree::phpFilesUnder(Repo::file('backend/app/'.$directory)) as $file) {
+            if (preg_match($patron, (string) file_get_contents($file)) === 1) {
+                $offenders[] = 'app/'.$directory.'/'.basename($file);
             }
         }
     }
 
     expect($offenders)->toBe([], 'Estos ficheros del armazon usan '.$descripcion.': '.implode(', ', $offenders));
-})->with(clientesHttp())->group('RF-PD-12');
+})->with(clientesHttp())->group('RF-PD-12', 'RL-17');
 
 it('el unico canal saliente esta apagado de serie', function (): void {
     // La otra mitad de la garantia: que el canal exista en un solo sitio no
@@ -150,7 +150,7 @@ it('el unico canal saliente esta apagado de serie', function (): void {
 
     expect($config)->toContain("env('TELEMETRY_ENABLED', false)")
         ->and($config)->toContain("env('TELEMETRY_ENDPOINT', '')");
-})->group('RF-PD-12');
+})->group('RF-PD-12', 'RL-17');
 
 it('la raiz de composicion nombra el cliente HTTP, pero no lo usa', function (): void {
     // La contrapartida de la excepcion de `raizDeComposicion()`: el proveedor
@@ -165,4 +165,4 @@ it('la raiz de composicion nombra el cliente HTTP, pero no lo usa', function ():
         expect(str_contains($source, 'HttpClient'.$llamada))->toBeFalse();
         expect(str_contains($source, '$http'.$llamada))->toBeFalse();
     }
-})->group('RF-PD-12');
+})->group('RF-PD-12', 'RL-17');

@@ -224,14 +224,16 @@ mensaje, que es lo que hay que leer.**
 | `3` | **Estado previo incompatible. NADA escrito** | `install.sh`: ya hay una instalación (usa `update.sh`). `backup.sh`: no hay copia que verificar, o el destino ya existe. `restore.sh`: quedan conexiones abiertas contra la base. `update.sh`: ya está en la versión de destino, o no hay instalación que actualizar. `doctor.sh`: **no hay ninguna instalación que diagnosticar** en este servidor — si es uno nuevo, lo que hace falta es `install.sh` |
 | `4` | **Falló y se deshizo todo lo hecho** en esa ejecución. Se puede reintentar | `install.sh`: contenedores, volúmenes y `.env` devueltos a su estado. `backup.sh`: los ficheros a medias barridos, la copia anterior intacta. `restore.sh`: base de trabajo eliminada, la de producción sin tocar. `update.sh`: copia previa restaurada y **versión anterior en marcha y verificada**. `doctor.sh`: **no lo usa**, no escribe ni deshace nada |
 | `5` | **Falló y NO se pudo deshacer todo. Hay que intervenir a mano.** El mensaje dice exactamente qué queda y qué orden lo retira | Es el único código que exige a una persona delante. `doctor.sh`: **no lo usa**, no escribe ni deshace nada |
-| `6` | **El trabajo se hizo pero la verificación posterior falló.** No se deshace nada | `install.sh`: los servicios están en pie, revisa certificado y logs. `backup.sh`: la copia existe pero **no verifica: trátala como inexistente**. `restore-drill.sh`: hoy no se podría recuperar el registro. `update.sh`: **no lo usa**, toda verificación fallida deshace. `doctor.sh`: **el diagnóstico ha encontrado al menos un fallo** — con la aplicación en marcha, en su propio informe (`product:doctor`); con la aplicación parada, en una de las comprobaciones externas. El mensaje dice qué leer |
+| `6` | **El trabajo se hizo pero la verificación posterior falló.** No se deshace nada | `install.sh`: los servicios están en pie, revisa certificado y logs. `backup.sh`: la copia existe pero **no verifica: trátala como inexistente**. `restore-drill.sh`: hoy no se podría recuperar el registro. `update.sh`: **casi nunca** (toda verificación de la versión nueva que falla deshace); la única excepción es que el asiento `system.updated` de `audit_log` no se pudiera escribir tras una actualización que sí terminó — el trabajo se hizo y no se deshace por eso. `doctor.sh`: **el diagnóstico ha encontrado al menos un fallo** — con la aplicación en marcha, en su propio informe (`product:doctor`); con la aplicación parada, en una de las comprobaciones externas. El mensaje dice qué leer |
 
 `install.sh` y `update.sh` invocan `product:doctor` en su fase de verificación
 (RF-PD-13): en `install.sh` un aviso (código `1` de `product:doctor`) se
 muestra y no bloquea, y solo un fallo (`2`) se traduce al `6` de la tabla de
-arriba. En `update.sh` no hay traducción a `6`: la verificación fallida
-siempre deshace, así que un fallo de `product:doctor` en la versión nueva
-provoca la vuelta atrás igual que cualquier otro fallo del paso 5.
+arriba. En `update.sh` el diagnóstico no se traduce a `6`: es informativo, y
+un fallo de `product:doctor` en la versión nueva provoca la vuelta atrás
+(código `4`) igual que cualquier otro fallo del paso 5, nunca un `6`. La única
+traducción a `6` que sí existe en `update.sh` es otra cosa por completo: el
+asiento `system.updated` que el paso 5 deja en `audit_log` (sección 11).
 
 ### Si tenías un cron escrito contra la tabla anterior de `backup.sh`
 
@@ -396,6 +398,15 @@ Los siete pasos y lo que pasa si falla cada uno:
 | 5 · Arranque y verificación | Vuelta atrás automática → `4` | Igual que arriba. **La versión nueva nunca recibió tráfico**: se verifica sin borde | Igual que arriba |
 | 6 · Vuelta atrás | Sale `5` | **Requiere una persona.** El mensaje distingue dos casos: solo quedó el mantenimiento puesto (retirarlo con `artisan up`, **sin restaurar nada**) o la restauración quedó a medias (tres órdenes y la ruta de la copia) | Runbook §5. Los quioscos siguen encolando mientras tanto |
 | 7 · Informe | — | `BACKUP_PATH/reports/update-<fecha>.log`, siempre; al lado, `update-<fecha>.detalle.log` (solo root, salida cruda, **puede llevar datos personales**) | Adjuntar el informe al paquete de diagnóstico si se abre un caso; el detalle, solo tras revisarlo y si lo piden |
+
+Los pasos 5 y 6 dejan además su propio asiento en `audit_log` (`system.updated`
+o `system.restored_from_backup`): si por lo que sea no se puede escribir, la
+actualización no se deshace por eso —el hecho ya ocurrió—, pero una
+actualización que por lo demás terminó bien sale con `6` en vez de `0`, y el
+informe lo dice en su propia línea. El asiento de la vuelta atrás solo se escribe si la versión a la
+que se vuelve ya conoce esa acción (desde la 2.2.0): una anterior no sabría verificar la cadena con
+él, así que el informe deja los datos y hay que escribirlo con `compliance:record-system-event`
+después de la siguiente actualización.
 
 **Lo que no cambia:** tus secretos (el `.env` se copia tal cual y solo cambia
 `IMAGE_TAG`), los datos, la licencia (una licencia caducada **no impide

@@ -54,6 +54,13 @@ final readonly class TextfileAuditMetrics implements AuditMetrics
             '# HELP audit_chain_rows_verified Filas de audit_log recorridas en la ultima verificacion.',
             '# TYPE audit_chain_rows_verified gauge',
             'audit_chain_rows_verified '.$result->rowsVerified,
+            // Distintas, no filas: lo que interesa es «cuantos nombres de accion
+            // no reconoce este binario». Por encima de cero, esta base la
+            // escribio una version posterior a la que corre. NO es una rotura y
+            // por eso es un gauge propio y no suma en el contador de fallos.
+            '# HELP audit_chain_unknown_actions Acciones distintas de audit_log que esta version no tiene en su catalogo. No es una rotura: indica que la base la escribio una version posterior.',
+            '# TYPE audit_chain_unknown_actions gauge',
+            'audit_chain_unknown_actions '.\count($result->unknownActions),
         ]);
     }
 

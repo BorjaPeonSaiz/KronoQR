@@ -137,24 +137,19 @@ return [
          */
         'technical_log_days' => (int) env('TECHNICAL_LOG_RETENTION_DAYS', 90),
 
-        /* Historico de errores agrupado por huella (RF-PD-15, tabla de la tarea 5.12). */
-        'error_history_days' => (int) env('ERROR_HISTORY_RETENTION_DAYS', 90),
-
         /*
-         * La tabla del historico de errores y la columna por la que envejece.
+         * Historico de errores agrupado por huella (RF-PD-15, tabla `error_events`).
          *
-         * `last_seen_at` y no `first_seen_at`: lo que se conserva 90 dias es un
-         * grupo de errores VIVO. Uno que sigue ocurriendo cada dia no vence
-         * porque su primera aparicion sea antigua.
-         *
-         * Configurable para que la tarea 5.12 pueda crear la tabla sin tener que
-         * volver a tocar el adaptador de retencion. Mientras no exista, el
-         * informe dice «no instalado» en lugar de «0 filas».
+         * SOLO EL PLAZO ES CONFIGURABLE. La tabla y la columna por la que
+         * envejece —`error_events`.`last_seen_at`— estan fijas en
+         * {@see \App\Modules\Compliance\Infrastructure\Persistence\DatabaseErrorHistoryArchive}:
+         * las mismas filas las purgan dos comandos distintos
+         * —`compliance:apply-retention` por este ciclo y `product:errors:prune`
+         * por el repositorio de `Product`, con la columna escrita en su SQL— y
+         * una variable de entorno que apuntara a otra tabla o a otra columna
+         * dejaria a los dos purgando cosas distintas sin que nada lo dijera.
          */
-        'error_history' => [
-            'table' => env('COMPLIANCE_ERROR_HISTORY_TABLE', 'error_events'),
-            'column' => env('COMPLIANCE_ERROR_HISTORY_COLUMN', 'last_seen_at'),
-        ],
+        'error_history_days' => (int) env('ERROR_HISTORY_RETENTION_DAYS', 90),
 
         /*
          * Donde queda el informe de cada pasada, de propuesta o de purga

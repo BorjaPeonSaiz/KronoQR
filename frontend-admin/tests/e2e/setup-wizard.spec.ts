@@ -33,7 +33,7 @@ async function fillSite(page: Page): Promise<void> {
 
 test(
   'recorrido completo: de la instalacion vacia a un panel listo para emitir credenciales',
-  { tag: ['@RF-PD-03'] },
+  { tag: ['@RF-PD-03', '@RF-GP-05'] },
   async ({ page }) => {
     // El panel es de un hotel; la instalacion empieza vacia (RF-PD-03).
     await stubOnboardingApi(page)
@@ -58,7 +58,7 @@ test(
     await expect(page.getByRole('heading', { name: 'Departamentos' })).toBeVisible()
     await page.getByLabel('Nombre del departamento').fill('Recepción')
     await page.getByRole('button', { name: 'Añadir' }).click()
-    await expect(page.getByText('Recepción')).toBeVisible()
+    await expect(page.getByTestId('department-list').getByText('Recepción')).toBeVisible()
     await page.getByTestId('continue').click()
 
     // Paso 5: perfil de convenio. No omitible (RL-21): se confirma sin

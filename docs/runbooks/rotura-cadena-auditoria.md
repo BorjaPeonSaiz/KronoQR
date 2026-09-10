@@ -64,6 +64,11 @@ La entrada génesis usa `prev_hash = SHA256("FICHAJE-HOTEL-GENESIS")`, que vale
 3. **Una purga sellada no es una rotura.** Si la línea dice `Purga sellada
    reconocida: partición 2026`, es la retención de RL-02 haciendo su trabajo
    (ADR-027) y el comando sale con código 0.
+4. **Una acción desconocida tampoco es una rotura.** Si la salida dice `Acción
+   desconocida para esta versión: system.…`, el comando sale con código 0 igual:
+   la cadena se verifica **por hash, no por catálogo**. Significa otra cosa —que
+   esta base la escribió una versión más nueva que la que está corriendo— y se
+   explica en la §3.
 
 ---
 
@@ -192,6 +197,59 @@ tabla, y las dos se descartan en un minuto:
 
 Si el hallazgo es de **una o unas pocas filas**, no es ninguna de las dos: un
 fallo de configuración rompe la cadena entera, no una fila del martes.
+
+### El aviso que no es un hallazgo: «acción desconocida»
+
+```text
+Accion desconocida para esta version: system.future_action — no es una rotura
+(el hash cuadra). Escrita por una version posterior; ver docs/runbooks/…
+```
+
+**Código de salida 0 y la cadena íntegra.** No hay nada que investigar en la
+integridad: la fórmula del §7.4 mete la acción en el hash **como cadena
+literal**, así que una fila cuya acción no está en el catálogo de esta versión se
+recalcula y cuadra igual que las demás.
+
+Lo que sí dice el aviso es **qué versión escribió esa fila**: una posterior a la
+que está corriendo ahora. Las acciones nuevas las estrena siempre la versión
+siguiente, así que solo hay un camino normal para llegar aquí —una actualización
+que se deshizo (`update.sh`, paso 6) y dejó corriendo el binario anterior sobre
+una base en la que el nuevo ya había escrito—. Comprueba entonces dos cosas:
+
+```bash
+# 1. Qué versión está instalada (desde el directorio de la instalación).
+cat VERSION
+
+# 2. Qué acciones hay en la tabla y cuál es la última fila de cada una.
+docker compose exec -T postgres psql -U fichaje_app -d fichaje -c \
+  "SELECT action, count(*), max(occurred_at) FROM audit_log GROUP BY action ORDER BY 1"
+```
+
+Si la instalación se quedó en la versión anterior después de una vuelta atrás,
+lo que toca es el runbook del actualizador, no este: **no se borra ni se toca
+ninguna fila**. Al reinstalar la versión nueva, el aviso desaparece solo porque
+la acción vuelve a estar en el catálogo. La métrica
+`audit_chain_unknown_actions` publica cuántos nombres distintos hay sin
+reconocer; no dispara alerta y no suma en
+`audit_chain_verification_failures_total`.
+
+### La discontinuidad que sí es legítima: una vuelta atrás del actualizador
+
+Hay un caso en el que la cadena **verifica en verde y aun así falta un
+intervalo**: `update.sh` restauró la copia previa (paso 6) y con ella la cadena
+que había en ese momento. Los asientos escritos entre la copia y el fallo ya no
+están, y nada en el encadenado lo delata, porque la cadena restaurada es íntegra.
+Desde el cierre de la Fase 5 ese hueco deja rastro propio: un asiento
+`system.restored_from_backup`, escrito **sobre la cadena restaurada**, con el
+nombre y la fecha de la copia, el paso que falló, el motivo y `chain_before`, que
+es la huella de la punta de la cadena que se descartó. Si al investigar una
+reclamación (una persona dice que fichó y no aparece) el último asiento del
+sistema es uno de estos, no busques manipulación: busca en el informe de esa
+actualización (`BACKUP_PATH/reports/update-<fecha>.log`) y en la cola de los quioscos, que
+reenvían lo que tenían encolado. Una actualización que terminó bien deja
+`system.updated`, con `chain_before` y `chain_after`; si falta ese asiento y la
+versión cambió, el actualizador salió con `6` y el aviso dice cómo escribirlo a
+mano (`compliance:record-system-event`).
 
 ---
 

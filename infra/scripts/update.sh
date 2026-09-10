@@ -77,12 +77,17 @@
 #   5  Fallo con VUELTA ATRAS INCOMPLETA. Hace falta una persona; el mensaje
 #      imprime las ordenes exactas (y distingue si solo queda retirar el
 #      mantenimiento de si hay que restaurar la copia).
-#   6  NO LO USA ESTE SCRIPT: toda verificacion fallida deshace (RF-PD-10),
-#      con UNA excepcion documentada: un `product:doctor` con fallos o
-#      avisos (tarea 5.9, segunda vuelta) es informativo y NO deshace, porque
-#      la version nueva ya esta verificada por las sondas, la cadena y los
-#      privilegios; solo deshace si el comando falta en la imagen, que es un
-#      paquete roto.
+#   6  CASI NUNCA LO USA ESTE SCRIPT: toda verificacion fallida deshace
+#      (RF-PD-10), con UNA excepcion documentada: un `product:doctor` con
+#      fallos o avisos (tarea 5.9, segunda vuelta) es informativo y NO
+#      deshace, porque la version nueva ya esta verificada por las sondas, la
+#      cadena y los privilegios; solo deshace si el comando falta en la
+#      imagen, que es un paquete roto.
+#      LA OTRA EXCEPCION (tarea 5.7, cierre): la actualizacion termino de
+#      verdad —version nueva en marcha, servicios sanos— pero el asiento
+#      `system.updated` de `audit_log` (RF-PD-10, regla dura 6) no se pudo
+#      escribir. El trabajo hecho no se deshace por eso: se deja escrito en el
+#      informe («audit-entry» con el codigo) y se sale con `6` en vez de `0`.
 #
 # Que NO hace, a proposito:
 #   · No exige licencia. Una licencia caducada no puede dejar a un cliente sin
@@ -135,6 +140,11 @@ readonly KQ_CONTAINER_MIGRATIONS="/var/www/html/database/migrations"
 readonly KQ_CONTAINER_SCRIPTS="/opt/kronoqr/scripts"
 readonly KQ_MIN_DOCKER_FREE_GIB=2
 readonly KQ_MAINTENANCE_RETRY_SECONDS=60
+# Huella sha256 de la copia previa para el asiento de auditoria (tarea 5.7,
+# cierre): OPCIONAL a proposito. Un volcado de varios GiB puede tardar mas de
+# lo razonable, y un asiento sin huella vale infinitamente mas que ningun
+# asiento: si no termina en este tiempo, se omite el campo.
+readonly KQ_BACKUP_FINGERPRINT_TIMEOUT_SECONDS=20
 # Restricciones de RN-01 y RN-02 que la verificacion posterior exige presentes
 # y validas (doc 02 §9.4, invariantes de base de datos).
 readonly KQ_RN01_INDEX="one_open_shift_per_employee"
@@ -213,6 +223,22 @@ STEP="1"
 ROLLBACK_ARMED=0
 ROLLBACK_SUMMARY=""
 FINAL_STATE=""
+# Segunda mitad del paso 5 (RF-PD-10, SystemUpdateStep): 0 mientras se arranca
+# y se verifica sin exponer · 1 desde que el borde (nginx) se abre de verdad.
+# Decide si un fallo de ahi en adelante es `start_and_verify` o `expose`.
+STEP5_EXPOSED=0
+# El asiento `system.updated`/`system.restored_from_backup` de audit_log
+# (RF-PD-10, RL-04, RS-07, regla dura 6). Vacio = aun no se ha intentado.
+MIGRATIONS_APPLIED=0
+BACKUP_TAKEN_AT=""
+BACKUP_SHA256=""
+CHAIN_BEFORE=""
+CHAIN_AFTER=""
+CHAIN_DISCARDED=""
+# 1 si la actualizacion termino de verdad pero su asiento `system.updated` no
+# se pudo escribir: el trabajo no se deshace por eso, pero final_report()
+# sale con KQ_EXIT_VERIFY_FAILED (6) en vez de KQ_EXIT_OK.
+AUDIT_ENTRY_FAILED=0
 declare -a CHECKPOINTS=()
 declare -a REPORT_CHECKS=()
 
@@ -828,6 +854,67 @@ json_field() {
 }
 
 #------------------------------------------------------------------------------
+# Asiento de auditoria del instalador (RF-PD-10, RL-04, RS-07, regla dura 6,
+# tarea 5.7 cierre). El payload lo valida y lo cierra `SystemEventPayload`
+# (dominio); aqui solo se construye el JSON y se distingue una clave OPCIONAL
+# vacia —que se OMITE, nunca como cadena ""— de una con valor.
+#------------------------------------------------------------------------------
+
+# Escapa lo minimo que un valor de este payload puede necesitar. Los valores
+# que llegan aqui son versiones, huellas sha256, nombres de fichero e
+# instantes UTC: nunca texto libre ni lo que un empleado escribio.
+audit_json_escape() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  printf '%s' "${value}"
+}
+
+# `clave=valor ...`. Una clave con valor vacio se OMITE del objeto (nunca una
+# cadena vacia): es exactamente lo que pide el payload del dominio para sus
+# campos opcionales (`chain_before`, `chain_after`, `backup_fingerprint`,
+# `report_id`). `migrations_applied` es el UNICO campo numerico y se escribe
+# sin comillas cuando su valor es un entero no negativo.
+audit_json_object() {
+  local pair key value out="{" first=1
+  for pair in "$@"; do
+    key="${pair%%=*}"
+    value="${pair#*=}"
+    [ -n "${value}" ] || continue
+    [ "${first}" -eq 1 ] || out+=","
+    first=0
+    if [ "${key}" = "migrations_applied" ] && [[ "${value}" =~ ^[0-9]+$ ]]; then
+      out+="\"${key}\":${value}"
+    else
+      out+="\"${key}\":\"$(audit_json_escape "${value}")\""
+    fi
+  done
+  out+="}"
+  printf '%s' "${out}"
+}
+
+# El paso de `SystemUpdateStep` en el que esta la actualizacion AHORA MISMO,
+# para el asiento `system.restored_from_backup` de una vuelta atras. `STEP` no
+# distingue las dos mitades del paso 5 (arranque sin exponer / apertura del
+# borde y salida de mantenimiento): lo hace `STEP5_EXPOSED`.
+resolve_failed_step() {
+  case "${STEP}" in
+  1) printf 'preflight' ;;
+  2) printf 'maintenance' ;;
+  3) printf 'backup' ;;
+  4) printf 'migrations' ;;
+  5)
+    if [ "${STEP5_EXPOSED}" -eq 1 ]; then
+      printf 'expose'
+    else
+      printf 'start_and_verify'
+    fi
+    ;;
+  *) printf 'unknown' ;;
+  esac
+}
+
+#------------------------------------------------------------------------------
 # Informe (paso 7). Se abre en cuanto se conoce BACKUP_PATH y se cierra SIEMPRE,
 # tambien tras una vuelta atras: el fabricante no tiene acceso al servidor
 # (ADR-016), asi que si el informe no queda aqui no queda en ninguna parte.
@@ -1319,6 +1406,7 @@ check_audit_chain() {
   if compose_current exec -T app php artisan compliance:verify-audit-chain >>"$(detail_sink)" 2>&1; then
     check_pass "$(kq_text u_c_audit_chain)"
     remember_check "audit-chain-before" "$(kq_text u_report_ok)"
+    CHAIN_BEFORE="$(json_field "$(compose_current exec -T app php artisan compliance:audit-chain-head 2>/dev/null || true)" hash)"
   else
     check_fail "$(kq_text u_c_audit_chain)" "$(kq_text u_f_audit_chain)"
     remember_check "audit-chain-before" "$(kq_text u_report_failed)"
@@ -1419,10 +1507,10 @@ lift_maintenance() {
 }
 
 arm_rollback_traps() {
-  trap 'rollback_and_die "$(kq_format u_f_unexpected "${LINENO}")"' ERR
-  trap 'rollback_and_die "$(kq_format u_interrupted INT)"' INT
-  trap 'rollback_and_die "$(kq_format u_interrupted TERM)"' TERM
-  trap 'rollback_and_die "$(kq_format u_interrupted HUP)"' HUP
+  trap 'rollback_and_die "$(kq_format u_f_unexpected "${LINENO}")" unexpected_error' ERR
+  trap 'rollback_and_die "$(kq_format u_interrupted INT)" interrupted' INT
+  trap 'rollback_and_die "$(kq_format u_interrupted TERM)" interrupted' TERM
+  trap 'rollback_and_die "$(kq_format u_interrupted HUP)" interrupted' HUP
 }
 
 disarm_rollback_traps() {
@@ -1439,13 +1527,13 @@ phase_maintenance() {
 
   detail_note "--- artisan down (${SOURCE_VERSION}) ---"
   if ! compose_current exec -T app php artisan down --retry="${KQ_MAINTENANCE_RETRY_SECONDS}" >>"$(detail_sink)" 2>&1; then
-    rollback_and_die "$(kq_format u_f_maintenance_on "${CURRENT_COMPOSE}")"
+    rollback_and_die "$(kq_format u_f_maintenance_on "${CURRENT_COMPOSE}")" maintenance_failed
   fi
   say "$(kq_text u_maintenance_on)"
 
   say "$(kq_format u_stop_workers "${SOURCE_VERSION}")"
   if ! compose_current stop horizon scheduler >>"$(detail_sink)" 2>&1; then
-    rollback_and_die "$(kq_format u_f_stop_workers "${CURRENT_COMPOSE}")"
+    rollback_and_die "$(kq_format u_f_stop_workers "${CURRENT_COMPOSE}")" workers_failed
   fi
 }
 
@@ -1489,6 +1577,18 @@ phase_backup() {
     backup_failed "$(kq_format u_f_backup_stale "${CFG_BACKUP_PATH}/daily/${name}")"
   fi
   BACKUP_FILE="${CFG_BACKUP_PATH}/daily/${name}"
+
+  # `mtime` ya se comprobo mas nuevo que el arranque: es el instante de esta
+  # copia, no el de otra. La huella es OPCIONAL (comentario junto a
+  # KQ_BACKUP_FINGERPRINT_TIMEOUT_SECONDS): si sha256sum tarda o no esta, se
+  # omite y el asiento se escribe igual sin ella.
+  BACKUP_TAKEN_AT="$(date -u -d "@${mtime}" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || true)"
+  BACKUP_SHA256=""
+  if command -v sha256sum >/dev/null 2>&1 && command -v timeout >/dev/null 2>&1; then
+    BACKUP_SHA256="$(timeout "${KQ_BACKUP_FINGERPRINT_TIMEOUT_SECONDS}" sha256sum "${BACKUP_FILE}" 2>/dev/null | cut -d' ' -f1 || true)"
+  fi
+  [[ "${BACKUP_SHA256}" =~ ^[0-9a-f]{64}$ ]] || BACKUP_SHA256=""
+
   BACKUP_RESULT="$(kq_text u_report_ok)"
   say "$(kq_format u_backup_done "${BACKUP_FILE}")"
 }
@@ -1517,7 +1617,7 @@ phase_migrations() {
 
   if [ "${IN_PLACE}" -eq 1 ]; then
     if ! kq_env_set "${ENV_FILE}" "IMAGE_TAG" "${TARGET_VERSION}" || ! chmod 0600 "${ENV_FILE}"; then
-      rollback_and_die "$(kq_format u_f_prepare_env "${ENV_FILE}")"
+      rollback_and_die "$(kq_format u_f_prepare_env "${ENV_FILE}")" env_prepare_failed
     fi
   fi
 
@@ -1527,20 +1627,23 @@ phase_migrations() {
   say "$(kq_format u_infra_up "${TARGET_VERSION}")"
   detail_note "--- up -d postgres redis (${TARGET_VERSION}) ---"
   compose_new up -d postgres redis >>"$(detail_sink)" 2>&1 ||
-    rollback_and_die "$(kq_format u_f_infra_up "${TARGET_VERSION}")"
+    rollback_and_die "$(kq_format u_f_infra_up "${TARGET_VERSION}")" service_start_failed
   wait_for_healthy compose_new postgres "${KQ_WAIT_DEPENDENCIES}" ||
-    rollback_and_die "$(kq_format u_f_infra_up "${TARGET_VERSION}")"
+    rollback_and_die "$(kq_format u_f_infra_up "${TARGET_VERSION}")" service_start_failed
   wait_for_healthy compose_new redis "${KQ_WAIT_DEPENDENCIES}" ||
-    rollback_and_die "$(kq_format u_f_infra_up "${TARGET_VERSION}")"
+    rollback_and_die "$(kq_format u_f_infra_up "${TARGET_VERSION}")" service_start_failed
 
   MIGRATIONS_IN_IMAGE="$(compose_new run --rm --no-deps -T app sh -c "ls -1 ${KQ_CONTAINER_MIGRATIONS}" 2>/dev/null |
     sed -n 's/\.php$//p' | sort || true)"
-  [ -n "${MIGRATIONS_IN_IMAGE}" ] || rollback_and_die "$(kq_format u_f_migrations_list "${TARGET_VERSION}")"
+  [ -n "${MIGRATIONS_IN_IMAGE}" ] || rollback_and_die "$(kq_format u_f_migrations_list "${TARGET_VERSION}")" migration_failed
   applied="$(applied_migrations)"
 
   total="$(printf '%s\n' "${MIGRATIONS_IN_IMAGE}" | grep -c . || true)"
   pending_total="$(printf '%s\n' "${MIGRATIONS_IN_IMAGE}" | grep -vxF -f <(printf '%s\n' "${applied}") | grep -c . || true)"
   say "$(kq_format u_migrations_list "${TARGET_VERSION}" "${total}" "${pending_total}")"
+  # Para el asiento `system.updated` (RF-PD-10): cuantas migraciones trae esta
+  # cadena de actualizacion, no cuantas tiene la imagen en total.
+  MIGRATIONS_APPLIED="${pending_total}"
 
   for version in "${UPGRADE_CHAIN[@]}"; do
     files=()
@@ -1570,7 +1673,7 @@ phase_migrations() {
     detail_note "--- migrate (${version}) ---"
     if ! compose_new run --rm --no-deps -T app php artisan migrate --force --database=pgsql_migrator --realpath "${args[@]}" \
       >>"$(detail_sink)" 2>&1; then
-      rollback_and_die "$(kq_format u_f_migrating_version "${version}" "${LAST_CHECKPOINT:-$(kq_text u_report_none)}")"
+      rollback_and_die "$(kq_format u_f_migrating_version "${version}" "${LAST_CHECKPOINT:-$(kq_text u_report_none)}")" migration_failed
     fi
     seconds=$(($(now_epoch) - started))
     batch="$(last_migration_batch)"
@@ -1585,7 +1688,7 @@ phase_migrations() {
   local pending
   pending="$(printf '%s\n' "${MIGRATIONS_IN_IMAGE}" | grep -vxF -f <(printf '%s\n' "${applied}") | tr '\n' ' ' || true)"
   if [ -n "${pending// /}" ]; then
-    rollback_and_die "$(kq_format u_f_pending_left "${pending% }")"
+    rollback_and_die "$(kq_format u_f_pending_left "${pending% }")" migration_failed
   fi
   say "$(kq_format u_no_pending "${TARGET_VERSION}")"
 }
@@ -1621,6 +1724,7 @@ verify_privileges() {
 
 phase_start_and_verify() {
   local reported failed path body status service doctor_status doctor_output
+  local audit_json audit_status audit_output
 
   STEP="5"
   heading "$(kq_format u_phase_5 "${TARGET_VERSION}")"
@@ -1628,9 +1732,9 @@ phase_start_and_verify() {
   say "$(kq_format u_app_up "${TARGET_VERSION}")"
   detail_note "--- up -d app, sin borde ni procesos de fondo (${TARGET_VERSION}) ---"
   compose_new up -d --remove-orphans --scale nginx=0 --scale horizon=0 --scale scheduler=0 --scale reverb=0 \
-    >>"$(detail_sink)" 2>&1 || rollback_and_die "$(kq_format u_f_app_up "${TARGET_VERSION}")"
+    >>"$(detail_sink)" 2>&1 || rollback_and_die "$(kq_format u_f_app_up "${TARGET_VERSION}")" service_start_failed
   wait_for_healthy compose_new app "${KQ_WAIT_APPLICATION}" ||
-    rollback_and_die "$(kq_format u_f_app_up "${TARGET_VERSION}")"
+    rollback_and_die "$(kq_format u_f_app_up "${TARGET_VERSION}")" service_start_failed
 
   for path in /api/v1/health /api/v1/ready; do
     if app_probe "${path}" && [ "${PROBE_STATUS}" = "200" ]; then
@@ -1640,7 +1744,7 @@ phase_start_and_verify() {
       remember_check "${path}" "$(kq_text u_report_failed) (${PROBE_STATUS:-0})"
       detail_note "--- ${path}: ${PROBE_STATUS:-0} ---"
       detail_note "${PROBE_BODY}"
-      rollback_and_die "$(kq_format u_f_verify_probe "${path}" "${PROBE_STATUS:-0}" 200)"
+      rollback_and_die "$(kq_format u_f_verify_probe "${path}" "${PROBE_STATUS:-0}" 200)" health_probe_failed
     fi
     if [ "${path}" = "/api/v1/health" ]; then
       reported="$(json_field "${PROBE_BODY}" version)"
@@ -1649,7 +1753,7 @@ phase_start_and_verify() {
         remember_check "version" "${reported}"
       else
         remember_check "version" "$(kq_text u_report_failed) (${reported:-?})"
-        rollback_and_die "$(kq_format u_f_verify_version "${reported}" "${TARGET_VERSION}")"
+        rollback_and_die "$(kq_format u_f_verify_version "${reported}" "${TARGET_VERSION}")" version_mismatch
       fi
     fi
   done
@@ -1660,7 +1764,7 @@ phase_start_and_verify() {
     remember_check "audit-chain-after" "$(kq_text u_report_ok)"
   else
     remember_check "audit-chain-after" "$(kq_text u_report_failed)"
-    rollback_and_die "$(kq_text u_f_verify_chain)"
+    rollback_and_die "$(kq_text u_f_verify_chain)" audit_chain_broken
   fi
 
   if failed="$(verify_constraints)"; then
@@ -1668,7 +1772,7 @@ phase_start_and_verify() {
     remember_check "RN-01/RN-02" "$(kq_text u_report_ok)"
   else
     remember_check "RN-01/RN-02" "$(kq_text u_report_failed) (${failed})"
-    rollback_and_die "$(kq_format u_f_verify_constraints "${failed}")"
+    rollback_and_die "$(kq_format u_f_verify_constraints "${failed}")" constraint_violation
   fi
 
   if verify_privileges compose_new; then
@@ -1676,7 +1780,40 @@ phase_start_and_verify() {
     remember_check "privileges" "$(kq_text u_report_ok)"
   else
     remember_check "privileges" "$(kq_text u_report_failed)"
-    rollback_and_die "$(kq_format u_f_verify_privileges "${CFG_DB_USERNAME}")"
+    rollback_and_die "$(kq_format u_f_verify_privileges "${CFG_DB_USERNAME}")" privileges_check_failed
+  fi
+
+  # Punta de la cadena DESPUES de migrar y de verificar (RF-PD-10): con la
+  # de `check_audit_chain` (CHAIN_BEFORE), es lo que el asiento `system.updated`
+  # necesita para decir por donde iba el trail antes y despues de tocar nada.
+  CHAIN_AFTER="$(json_field "$(compose_new exec -T app php artisan compliance:audit-chain-head 2>/dev/null || true)" hash)"
+
+  audit_json="$(audit_json_object \
+    "from_version=${SOURCE_VERSION}" \
+    "to_version=${TARGET_VERSION}" \
+    "migrations_applied=${MIGRATIONS_APPLIED}" \
+    "chain_before=${CHAIN_BEFORE}" \
+    "chain_after=${CHAIN_AFTER}" \
+    "backup_fingerprint=${BACKUP_SHA256}" \
+    "report_id=update-${STARTED_UTC}")"
+
+  detail_note "--- compliance:record-system-event system.updated ---"
+  audit_status=0
+  audit_output="$(compose_new exec -T app php artisan compliance:record-system-event system.updated --data="${audit_json}" 2>&1)" ||
+    audit_status=$?
+  detail_note "${audit_output}"
+
+  if [ "${audit_status}" -eq 0 ]; then
+    kq_msg check_ok "$(kq_text u_verify_audit_entry_ok)"
+    remember_check "audit-entry" "$(kq_text u_report_ok)"
+  else
+    # El trabajo YA ESTA HECHO: no se deshace una actualizacion correcta
+    # porque su asiento no se pudo escribir (regla dura 6, doc del script,
+    # tarea 5.7 cierre). Se marca para que final_report() salga con
+    # KQ_EXIT_VERIFY_FAILED en vez de KQ_EXIT_OK.
+    kq_msg check_warn "$(kq_format u_verify_audit_entry_warn "${audit_status}")" "$(kq_text u_verify_audit_entry_warn_fix)"
+    remember_check "audit-entry" "$(kq_text u_report_failed) (${audit_status})"
+    AUDIT_ENTRY_FAILED=1
   fi
 
   # `product:doctor` (tarea 5.9) es el diagnostico oficial del producto, pero
@@ -1706,7 +1843,7 @@ phase_start_and_verify() {
   if ! printf '%s
 ' "${available_commands}" | grep -q '^product:doctor'; then
     remember_check "doctor" "$(kq_text u_report_failed)"
-    rollback_and_die "$(kq_text u_f_verify_doctor_missing_command)"
+    rollback_and_die "$(kq_text u_f_verify_doctor_missing_command)" doctor_failed
   fi
 
   detail_note "--- product:doctor (${TARGET_VERSION}) ---"
@@ -1748,14 +1885,18 @@ phase_start_and_verify() {
   say "$(kq_format u_maintenance_new "${TARGET_VERSION}")"
   detail_note "--- artisan down (${TARGET_VERSION}) ---"
   compose_new exec -T app php artisan down --retry="${KQ_MAINTENANCE_RETRY_SECONDS}" >>"$(detail_sink)" 2>&1 ||
-    rollback_and_die "$(kq_format u_f_maintenance_on "${COMPOSE_FILE}")"
+    rollback_and_die "$(kq_format u_f_maintenance_on "${COMPOSE_FILE}")" maintenance_failed
 
   say "$(kq_format u_edge_up "${TARGET_VERSION}")"
   detail_note "--- up -d nginx (${TARGET_VERSION}) ---"
   compose_new up -d --no-deps nginx >>"$(detail_sink)" 2>&1 ||
-    rollback_and_die "$(kq_format u_f_edge_up "${TARGET_VERSION}")"
+    rollback_and_die "$(kq_format u_f_edge_up "${TARGET_VERSION}")" service_start_failed
   wait_for_healthy compose_new nginx "${KQ_WAIT_APPLICATION}" ||
-    rollback_and_die "$(kq_format u_f_edge_up "${TARGET_VERSION}")"
+    rollback_and_die "$(kq_format u_f_edge_up "${TARGET_VERSION}")" service_start_failed
+
+  # A partir de aqui el borde esta abierto de verdad (SystemUpdateStep::Expose):
+  # un fallo desde este punto ya no es «arranque sin exponer».
+  STEP5_EXPOSED=1
 
   for path in /api/v1/health /api/v1/ready; do
     if body="$(edge_probe "${path}")"; then
@@ -1763,36 +1904,36 @@ phase_start_and_verify() {
       remember_check "edge ${path}" "$(kq_text u_report_ok)"
     else
       remember_check "edge ${path}" "$(kq_text u_report_failed)"
-      rollback_and_die "$(kq_format u_f_edge_probe "${path}" "${CFG_HTTPS_PORT}" "${COMPOSE_FILE}")"
+      rollback_and_die "$(kq_format u_f_edge_probe "${path}" "${CFG_HTTPS_PORT}" "${COMPOSE_FILE}")" health_probe_failed
     fi
   done
   reported="$(json_field "$(edge_probe /api/v1/health || true)" version)"
   [ "${reported}" = "${TARGET_VERSION}" ] ||
-    rollback_and_die "$(kq_format u_f_verify_version "${reported}" "${TARGET_VERSION}")"
+    rollback_and_die "$(kq_format u_f_verify_version "${reported}" "${TARGET_VERSION}")" version_mismatch
 
   # Verificado: se abre. Y se comprueba que se ha abierto de verdad, porque
   # las dos sondas no lo distinguen: una ruta de gestion sin sesion responde
   # 401 si la aplicacion atiende y 503 si sigue en mantenimiento.
   detail_note "--- artisan up (${TARGET_VERSION}) ---"
   compose_new exec -T app php artisan up >>"$(detail_sink)" 2>&1 ||
-    rollback_and_die "$(kq_format u_f_maintenance_off "${COMPOSE_FILE}")"
+    rollback_and_die "$(kq_format u_f_maintenance_off "${COMPOSE_FILE}")" maintenance_failed
   status="$(edge_status "${KQ_MANAGEMENT_PROBE}")"
   if [ "${status}" = "401" ]; then
     kq_msg check_ok "$(kq_format u_verify_lifted_ok "${KQ_MANAGEMENT_PROBE}")"
     remember_check "maintenance-lifted" "$(kq_text u_report_ok)"
   else
     remember_check "maintenance-lifted" "$(kq_text u_report_failed) (${status})"
-    rollback_and_die "$(kq_format u_f_verify_lifted "${KQ_MANAGEMENT_PROBE}" "${status}")"
+    rollback_and_die "$(kq_format u_f_verify_lifted "${KQ_MANAGEMENT_PROBE}" "${status}")" health_probe_failed
   fi
   MAINTENANCE_SECONDS=$(($(now_epoch) - MAINTENANCE_SINCE))
 
   say "$(kq_format u_workers_up "${TARGET_VERSION}")"
   detail_note "--- up -d (resto de servicios, ${TARGET_VERSION}) ---"
   compose_new up -d --remove-orphans >>"$(detail_sink)" 2>&1 ||
-    rollback_and_die "$(kq_format u_f_workers_up "${TARGET_VERSION}")"
+    rollback_and_die "$(kq_format u_f_workers_up "${TARGET_VERSION}")" workers_failed
   for service in horizon scheduler reverb; do
     wait_for_healthy compose_new "${service}" "${KQ_WAIT_WORKERS}" ||
-      rollback_and_die "$(kq_format u_f_workers_up "${TARGET_VERSION}")"
+      rollback_and_die "$(kq_format u_f_workers_up "${TARGET_VERSION}")" workers_failed
   done
 }
 
@@ -1837,7 +1978,8 @@ rollback_incomplete() {
 }
 
 rollback_and_die() {
-  local reason="$1" code=0 body reported from_date to_date
+  local reason="$1" reason_code="${2:-unexpected_error}" code=0 body reported from_date to_date
+  local failed_step audit_json audit_status audit_output
 
   # SOLO EN EL PROCESO PRINCIPAL. Con `set -E` el trap se hereda en las
   # subshells de `$(...)`; deshacer desde ahi restauraria la base y el padre
@@ -1848,6 +1990,10 @@ rollback_and_die() {
   fi
   disarm_rollback_traps
   set +e
+
+  # Se resuelve AQUI, con el STEP de cuando se disparo la vuelta atras: nada
+  # de lo que sigue en esta funcion cambia de paso (RF-PD-10, SystemUpdateStep).
+  failed_step="$(resolve_failed_step)"
 
   heading "$(kq_text u_phase_6)"
   err "$(kq_format u_rollback_reason "${reason}")"
@@ -1871,6 +2017,13 @@ rollback_and_die() {
   compose_new stop app horizon scheduler reverb nginx >>"$(detail_sink)" 2>&1
   compose_new up -d postgres redis >>"$(detail_sink)" 2>&1
   wait_for_healthy compose_new postgres "${KQ_WAIT_DEPENDENCIES}" || rollback_incomplete "${reason}"
+
+  # La punta de la cadena que se va a DESCARTAR, leida en el ultimo instante
+  # en que la base todavia es la migrada (RF-PD-10, RS-07): es la unica prueba
+  # de que hubo un intervalo que ya no esta. `app` esta parado (arriba); se
+  # levanta un contenedor suelto solo para leerla, como hace restore.sh.
+  detail_note "--- compliance:audit-chain-head (punta a punto de descartarse) ---"
+  CHAIN_DISCARDED="$(json_field "$(compose_new run --rm --no-deps -T app php artisan compliance:audit-chain-head 2>/dev/null || true)" hash)"
 
   say "$(kq_format u_rollback_restore "${BACKUP_FILE}")"
   detail_note "--- restore.sh --file ${BACKUP_FILE} --yes ---"
@@ -1928,6 +2081,62 @@ rollback_and_die() {
     rollback_incomplete "${reason}"
   fi
 
+  # El asiento `system.restored_from_backup` (RF-PD-10, RL-04, RS-07, regla
+  # dura 6): con `CHAIN_DISCARDED` es lo unico que deja, dentro del propio
+  # registro, la prueba de que un intervalo de fichajes reales quedo fuera de
+  # la base que sirve ahora. Si falla, la vuelta atras YA ESTA HECHA y
+  # verificada: no se reintenta (instruccion (e)); se queda escrito en el
+  # informe y la salida sigue siendo KQ_EXIT_ROLLED_BACK.
+  audit_json="$(audit_json_object \
+    "backup_file=$(basename -- "${BACKUP_FILE}")" \
+    "backup_taken_at=${BACKUP_TAKEN_AT}" \
+    "failed_step=${failed_step}" \
+    "reason=${reason_code}" \
+    "from_version=${SOURCE_VERSION}" \
+    "to_version=${TARGET_VERSION}" \
+    "backup_fingerprint=${BACKUP_SHA256}" \
+    "chain_before=${CHAIN_DISCARDED}" \
+    "report_id=update-${STARTED_UTC}")"
+
+  # LO ESCRIBE LA IMAGEN NUEVA, no la restaurada. Tras la vuelta atras corre la
+  # version anterior, y la version anterior puede no conocer todavia el comando
+  # (la primera que lo lleva vuelve a una que no lo tiene: asi se vio en la
+  # etapa 8b del cierre de la Fase 5). Los dos proyectos son el MISMO (`name:
+  # kronoqr`), asi que un contenedor efimero de la imagen nueva llega al
+  # PostgreSQL que ya sirve la base restaurada; `--no-deps` para no levantar
+  # nada de la pila nueva, que esta parada. El esquema de `audit_log` que el
+  # asiento necesita (actor `system`, cadena por hash) es el de la tarea 1.14 y
+  # no ha cambiado desde entonces, asi que el codigo nuevo escribe en una base
+  # antigua sin tocar nada mas.
+  detail_note "--- compliance:record-system-event system.restored_from_backup (imagen nueva, base restaurada) ---"
+  # ...PERO SOLO SI LA VERSION RESTAURADA CONOCE LA ACCION. Un verificador
+  # anterior a la accion (`compliance:verify-audit-chain` de la 2.1.0 y antes)
+  # hace `AuditAction::from()` sobre cada fila y revienta con una que no esta en
+  # su catalogo: el asiento que documenta la discontinuidad dejaria a la
+  # instalacion restaurada sin verificacion nocturna hasta la siguiente
+  # actualizacion, que es peor que no tenerlo. Se comprueba si la version que
+  # queda en pie tiene el comando (lo tiene desde la misma version que la
+  # accion); si no, no se escribe, y el informe dice que hay que escribirlo a
+  # mano tras la proxima actualizacion, con los datos de este mismo informe.
+  if compose_rollback exec -T app php artisan list --raw 2>/dev/null | grep -q '^compliance:record-system-event'; then
+    audit_status=0
+    audit_output="$(compose_new run --rm --no-deps -T app php artisan compliance:record-system-event system.restored_from_backup --data="${audit_json}" 2>&1)" ||
+      audit_status=$?
+    detail_note "${audit_output}"
+
+    if [ "${audit_status}" -eq 0 ]; then
+      say "$(kq_text u_rollback_audit_entry_ok)"
+      remember_check "audit-entry-rollback" "$(kq_text u_report_ok)"
+    else
+      err "$(kq_format u_rollback_audit_entry_failed "${audit_status}")"
+      remember_check "audit-entry-rollback" "$(kq_text u_report_failed) (${audit_status})"
+    fi
+  else
+    detail_note "${audit_json}"
+    err "$(kq_format u_rollback_audit_entry_skipped "${SOURCE_VERSION}")"
+    remember_check "audit-entry-rollback" "$(kq_format u_rollback_audit_entry_skipped "${SOURCE_VERSION}")"
+  fi
+
   # daily_totals es una proyeccion reconstruible (regla dura 7): se reconcilian
   # las jornadas de la ventana. El rango va holgado a proposito —dos dias antes
   # del arranque y hasta manana, en UTC—: cubre la jornada anterior, a la que
@@ -1956,6 +2165,8 @@ rollback_and_die() {
 # Paso 7 — informe y despedida.
 #------------------------------------------------------------------------------
 final_report() {
+  local exit_code="${KQ_EXIT_OK}"
+
   STEP="7"
   heading "$(kq_text u_phase_7)"
   FINAL_STATE="${TARGET_VERSION}"
@@ -1966,7 +2177,14 @@ final_report() {
     rm -f "${ROLLBACK_ENV}"
   fi
 
-  close_report "${KQ_EXIT_OK}"
+  # El trabajo se hizo: no se deshace nada por esto (instruccion (e)). Se sale
+  # con KQ_EXIT_VERIFY_FAILED en vez de KQ_EXIT_OK para que quien automatiza
+  # la actualizacion note que el asiento de auditoria no quedo escrito.
+  if [ "${AUDIT_ENTRY_FAILED}" -eq 1 ]; then
+    exit_code="${KQ_EXIT_VERIFY_FAILED}"
+  fi
+
+  close_report "${exit_code}"
 
   heading "$(kq_format u_done_title "${SOURCE_VERSION}" "${TARGET_VERSION}")"
   say ""
@@ -1978,6 +2196,12 @@ final_report() {
     say ""
     say "$(kq_format u_done_old_dir "${CURRENT_DIR}")"
   fi
+
+  if [ "${exit_code}" -ne "${KQ_EXIT_OK}" ]; then
+    err ""
+    err "$(kq_format exit_line "${exit_code}" "$(kq_exit_name "${exit_code}")")"
+  fi
+  exit "${exit_code}"
 }
 
 #------------------------------------------------------------------------------

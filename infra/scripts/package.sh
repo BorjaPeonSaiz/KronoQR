@@ -75,6 +75,7 @@ required=(
   infra/scripts/backup.sh
   infra/scripts/restore.sh
   infra/scripts/restore-drill.sh
+  infra/scripts/doctor.sh
   infra/scripts/lib
   infra/observability
   docs/cliente
@@ -91,7 +92,9 @@ cp "${REPO_ROOT}/infra/compose.prod.yaml" "${DEST}/docker-compose.yml"
 cp "${REPO_ROOT}/.env.example" "${DEST}/.env.example"
 cp "${REPO_ROOT}/VERSION" "${DEST}/VERSION"
 cp "${REPO_ROOT}/infra/versions.txt" "${DEST}/versions.txt"
-for script in install update backup restore restore-drill; do
+# doctor.sh entra desde el cierre de la Fase 5: las tres guias mandan ejecutarlo
+# desde el directorio de la instalacion (RF-PD-13) y hasta entonces no viajaba.
+for script in install update backup restore restore-drill doctor; do
   cp "${REPO_ROOT}/infra/scripts/${script}.sh" "${DEST}/${script}.sh"
   chmod +x "${DEST}/${script}.sh"
 done

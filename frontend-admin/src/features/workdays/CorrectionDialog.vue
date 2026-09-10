@@ -58,11 +58,7 @@ const SHIFT_ENTRY_SUPERSEDED_TYPE = 'urn:kronoqr:problem:shift-entry-superseded'
 const SHIFT_ALREADY_OPEN_TYPE = 'urn:kronoqr:problem:shift-already-open'
 const OVERLAPPING_SHIFT_ENTRY_TYPE = 'urn:kronoqr:problem:overlapping-shift-entry'
 
-/**
- * El `422` de RN-05/ADR-035 (corregir la entrada movería la jornada a otro
- * día). El bloque A2 le va a dar este `type` propio; hasta que llegue en
- * `schema.d.ts`, es el mismo texto literal que ya usa el doble del E2E.
- */
+/** El `422` de RN-05/ADR-035 (corregir la entrada movería la jornada a otro día). */
 const WORK_DATE_CHANGE_PROBLEM_TYPE = 'urn:kronoqr:problem:correction-would-change-work-date'
 
 type ConflictKind = 'superseded' | 'shiftAlreadyOpen' | 'overlap' | 'generic'
@@ -282,23 +278,9 @@ function conflictMessageFor(kind: ConflictKind): string {
   return t('corrections.conflict.generic')
 }
 
-/**
- * El `422` de RN-05/ADR-035. Se reconoce por `type` en cuanto el bloque A2 lo
- * publique; hasta entonces, por el campo reservado `clocked_in_at`: en modo
- * «correct» con la entrada cambiada, el unico `422` que puede caer ahi hoy es
- * este (`CorrectionWouldChangeWorkDate`, `bootstrap/app.php`) -no hay ninguna
- * otra regla de validacion que señale ese campo con la entrada ya cambiada.
- */
+/** El `422` de RN-05/ADR-035, reconocido por su `type` propio del contrato. */
 function isWorkDateChangeProblem(caught: ApiError): boolean {
-  if (caught.status !== 422) {
-    return false
-  }
-
-  if (caught.problem?.type === WORK_DATE_CHANGE_PROBLEM_TYPE) {
-    return true
-  }
-
-  return props.mode === 'correct' && clockInChanged.value && 'clocked_in_at' in caught.fieldErrors
+  return caught.status === 422 && caught.problem?.type === WORK_DATE_CHANGE_PROBLEM_TYPE
 }
 
 /** `2026-08-14, 06:00`, tal cual lo escribió quien rellena el formulario: sin convertir nada. */

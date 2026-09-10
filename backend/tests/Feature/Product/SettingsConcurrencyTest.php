@@ -111,7 +111,7 @@ it('nunca deja el idioma por defecto fuera de los idiomas disponibles', function
     expect($available)->toBeArray()
         ->and($default)->toBeString()
         ->and($available)->toContain($default);
-})->group('RF-PD-01', 'RQ-11');
+})->group('RF-PD-01');
 
 it('no pierde ni duplica asientos cuando varios cambian el mismo umbral a la vez', function (): void {
     // El candado serializa, no descarta: cada escritor que de verdad cambia el

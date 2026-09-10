@@ -36,15 +36,16 @@ test(
   { tag: ['@RF-AT-11'] },
   async ({ page }) => {
     await stubKioskApiWithPin(page)
-    // Un retraso de 400 ms -- por encima de `PIN_VERIFY_GRACE_MS` (300 ms) y
-    // muy por debajo de `PIN_VERIFY_TIMEOUT_MS` -- deja tiempo a observar
+    // Un retraso de 1200 ms -- por encima de `PIN_VERIFY_GRACE_MS` (300 ms), con
+    // holgura para que el sondeo de Playwright lo vea en un runner lento, y
+    // muy por debajo de `PIN_VERIFY_TIMEOUT_MS` (2500) -- deja tiempo a observar
     // «Comprobando…» antes de que se asiente en el desenlace real: el PIN no
     // se puede validar en local (viaja sellado, RF-AT-11), asi que esa
     // pantalla intermedia es del contrato, no un detalle de temporizacion.
     // Un retraso mas corto (o nulo) queda cubierto por la prueba siguiente,
     // que comprueba justo lo contrario: sin retraso, «Comprobando…» no debe
     // llegar a aparecer.
-    const pinApi = await stubPinScanApi(page, 'clock_in', 400)
+    const pinApi = await stubPinScanApi(page, 'clock_in', 1200)
 
     await page.goto('/')
     await expect(page.getByTestId('pin-entry-link')).toBeVisible()
@@ -163,10 +164,10 @@ test(
   { tag: ['@RF-AT-11', '@RS-03'] },
   async ({ page }) => {
     await stubKioskApiWithPin(page)
-    // El mismo retraso corto que en el caso de exito: sin el, la
-    // interceptacion de Playwright podria contestar tan rapido que no
-    // llegaria a comprobarse que «Comprobando…» aparecio de verdad.
-    await stubPinScanApi(page, 'rejected', 400)
+    // El mismo retraso que en el caso de exito: sin el, la interceptacion de
+    // Playwright contesta tan rapido que no llega a comprobarse que
+    // «Comprobando…» aparecio de verdad (con 400 ms fallaba en el runner de la CI).
+    await stubPinScanApi(page, 'rejected', 1200)
 
     await page.goto('/')
     await page.getByTestId('pin-entry-link').click()

@@ -12,6 +12,16 @@ namespace Tests\Architecture\Support;
  * cargar —un puerto que importa algo inexistente, una clase duplicada en dos
  * modulos—, que es justo el fallo que viene a detectar. La reflexion exige que
  * el autoload resuelva, y para entonces el dano ya esta hecho.
+ *
+ * Y SE RECORRE CON `scandir`, NUNCA CON `RecursiveDirectoryIterator`. Sobre el
+ * *bind mount* de Docker Desktop (NTFS -> contenedor) el iterador **pierde
+ * ficheros sin avisar**: en `tests/Feature` se comio 38 de 116 (ver
+ * `TestDiscoveryTest`) y en `app/` se come los 45 de
+ * `Product/Domain/ValueObject`. Aqui el efecto es peor que en las pruebas,
+ * porque una prueba de arquitectura que no ve un fichero **pasa en verde**: no
+ * hay nada que denunciar en un fichero que no existe. La regla se seguia
+ * comprobando sobre 52 de los 97 ficheros del modulo y ninguna cifra lo decia.
+ * `SourceDiscoveryTest` vigila que el fenomeno siga acotado a esto.
  */
 final class ModuleTree
 {
@@ -44,14 +54,48 @@ final class ModuleTree
             return [];
         }
 
+        return self::phpFilesUnder($path);
+    }
+
+    /**
+     * Todos los `.php` bajo una ruta absoluta, recursivo y ordenados.
+     *
+     * Es el UNICO recorrido de directorios de las pruebas de arquitectura, y va
+     * con `scandir` por lo que dice el docblock de la clase. Devuelve [] si la
+     * ruta no es un directorio, para que quien llama no tenga que comprobarlo.
+     *
+     * @return list<string>
+     */
+    public static function phpFilesUnder(string $directory): array
+    {
+        // La barra final se quita SIEMPRE: `filesIn('')` llega aqui como
+        // `…/app/Modules/`, y concatenar produciria `…/app/Modules//Attendance/…`.
+        // El iterador normalizaba y `scandir` no, asi que sin esto `relative()`
+        // no recorta la raiz y media suite de arquitectura se pone roja por una
+        // barra.
+        $directory = rtrim($directory, '/');
+
+        if (! is_dir($directory)) {
+            return [];
+        }
+
         $files = [];
 
-        /** @var \SplFileInfo $file */
-        foreach (new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($path, \FilesystemIterator::SKIP_DOTS)
-        ) as $file) {
-            if ($file->isFile() && $file->getExtension() === 'php') {
-                $files[] = $file->getPathname();
+        foreach (scandir($directory) ?: [] as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+
+            $path = $directory.'/'.$entry;
+
+            if (is_dir($path)) {
+                $files = [...$files, ...self::phpFilesUnder($path)];
+
+                continue;
+            }
+
+            if (str_ends_with($entry, '.php')) {
+                $files[] = $path;
             }
         }
 

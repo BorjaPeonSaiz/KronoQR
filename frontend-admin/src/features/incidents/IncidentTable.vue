@@ -11,7 +11,7 @@
 //
 // LA ANTIGUEDAD SE CALCULA CONTRA EL RELOJ DEL SERVIDOR (regla dura 3): la
 // vista pasa `serverNowMs`, nunca se usa `Date.now()` aqui dentro.
-import { formatInstant, formatZoneLabel } from '@kronoqr/web-kit/datetime'
+import { formatInstant, formatZoneLabel, minutesBetween } from '@kronoqr/web-kit/datetime'
 import { durationParts } from '@kronoqr/web-kit/workdayTotals'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { computed, ref } from 'vue'
@@ -87,10 +87,11 @@ const zoneLabel = computed(() =>
 )
 
 function ageLabel(incident: Incident): string {
-  const minutes = Math.max(
-    Math.floor((props.serverNowMs - Date.parse(incident.detected_at)) / 60_000),
-    0,
-  )
+  // Sin `Math.max`: `detected_at` es del servidor y `serverNowMs` tambien -el
+  // «ahora» ya extrapolado, nunca el reloj crudo del navegador (regla dura
+  // 3)-, asi que el primero nunca es posterior al segundo.
+  const minutes =
+    minutesBetween(incident.detected_at, new Date(props.serverNowMs).toISOString()) ?? 0
 
   return t('incidents.table.ageValue', {
     duration: t('incidents.duration', durationParts(minutes)),

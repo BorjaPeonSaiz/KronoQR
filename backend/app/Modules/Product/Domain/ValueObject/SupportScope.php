@@ -85,6 +85,22 @@ enum SupportScope: string
      * corregir una hora trabajada, mover la plantilla o emitir la exportacion
      * para la Inspeccion son actos del cliente con valor legal, y el fabricante
      * no los hace ni con permiso (RL-19).
+     *
+     * ## `audit:read` NO TIENE HOY NINGUNA RUTA QUE LO CONSUMA
+     *
+     * Y por eso este alcance, en la practica, abre jornadas y plantilla y nada
+     * mas: ninguna ruta de `routes/api_v1.php` pide ese ambito porque no hay
+     * ningun endpoint de `audit_log`. El ambito esta declarado porque la tabla
+     * del §7.3 lo contempla, no porque hoy sirva de algo.
+     *
+     * **El dia que ese endpoint se escriba hay que decidir explicitamente si un
+     * acceso de soporte lo alcanza, y esa decision no la hereda de aqui.** La
+     * traza de correcciones —quien cambio que hora, cuando y por que, con el
+     * actor de cada asiento— es el conjunto mas sensible del producto, y que el
+     * token del fabricante llegue a el por arrastre de una linea escrita antes
+     * de que existiera la ruta no es una decision: es un descuido. Riesgo
+     * abierto en el doc 07 §6 (cierre de Fase 5, 09-09-2026), con dueño y sin
+     * fecha, porque la fecha la pone quien escriba la ruta.
      */
     case ReadOnly = 'read_only';
 

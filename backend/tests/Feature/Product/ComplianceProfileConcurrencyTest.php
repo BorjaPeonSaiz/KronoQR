@@ -108,7 +108,7 @@ it('no pierde el cambio de nadie aunque seis toquen campos distintos a la vez', 
         ->and($perfil?->break_required_after_hours)->toBe(5)
         ->and($perfil?->week_starts_on)->toBe(7)
         ->and($perfil?->retention_years)->toBe(6);
-})->group('RF-PD-07', 'RQ-11');
+})->group('RF-PD-07');
 
 it('no pierde ni duplica asientos cuando varios cambian el mismo umbral a la vez', function (): void {
     // El candado serializa, no descarta: cada escritor que de verdad cambia el

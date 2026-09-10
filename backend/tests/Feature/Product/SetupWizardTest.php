@@ -92,16 +92,34 @@ function resolveWizardSteps(string $token, array $except = []): void
 // -----------------------------------------------------------------------------
 
 it('dice que el asistente esta disponible en una instalacion recien montada', function (): void {
-    // LA RUTA PUBLICA DEVUELVE LO MINIMO: si sigue abierto y cuando se cerro. El
-    // detalle vive en `GET /setup/steps`, que exige sesion, porque la lista de
-    // pasos es un inventario de la postura de la instalacion.
+    // LA RUTA PUBLICA DEVUELVE LO MINIMO: si el asistente sigue abierto, y nada
+    // mas. El detalle vive en `GET /setup/steps`, que exige sesion, porque la
+    // lista de pasos es un inventario de la postura de la instalacion y
+    // `completed_at` dice desde cuando esta montado el servidor.
     $response = Api::guest()->get('/api/v1/setup/status')
         ->assertValidRequest()
         ->assertValidResponse(200)
-        ->assertJsonPath('available', true)
-        ->assertJsonPath('completed_at', null);
+        ->assertJsonPath('available', true);
 
-    expect($response->json())->not->toHaveKey('steps');
+    expect($response->json())->toBe(['available' => true]);
+})->group('RF-PD-03');
+
+it('no publica sin autenticar cuando se puso en marcha la instalacion', function (): void {
+    // Minimizacion (correccion de la revision del cierre de la Fase 5): con el
+    // asistente ya cerrado, la respuesta publica sigue siendo un solo booleano.
+    // `completed_at` no le hace falta a un navegador sin credenciales para
+    // decidir a donde va, y a quien mira desde fuera le diria si el servidor
+    // lleva años funcionando o se monto ayer.
+    $token = wizardAdminToken();
+    WorkforceFixtures::site();
+    resolveWizardSteps($token);
+    Api::as($token)->post('/api/v1/setup/complete')->assertValidResponse(200);
+
+    $response = Api::guest()->get('/api/v1/setup/status')
+        ->assertValidRequest()
+        ->assertValidResponse(200);
+
+    expect($response->json())->toBe(['available' => false]);
 })->group('RF-PD-03');
 
 it('enumera los pasos para quien ha entrado, con los derivados en pending', function (): void {

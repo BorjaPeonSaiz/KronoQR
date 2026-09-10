@@ -230,6 +230,40 @@ test(
   },
 )
 
+// --- Perfil de cumplimiento (RF-PD-07, tarea 5.2) ---------------------------
+
+test('la pantalla de cumplimiento tampoco', { tag: ['@RF-PD-07'] }, async ({ page }) => {
+  await stubManagementApi(page, { role: 'admin' })
+  await logInAsAdmin(page)
+  await page.goto('/compliance-profile')
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Perfil de cumplimiento' }),
+  ).toBeVisible()
+
+  await expectNoBlockingViolations(page)
+})
+
+// --- Credenciales (RF-QR-*, tarea 1.9/1.10) ---------------------------------
+
+test('la pantalla de credenciales tampoco', { tag: ['@RF-QR-07'] }, async ({ page }) => {
+  await logIn(page)
+  await page.goto('/credentials')
+  await expect(page.getByRole('heading', { level: 1, name: 'Credenciales' })).toBeVisible()
+
+  await expectNoBlockingViolations(page)
+})
+
+// --- Ajustes operativos (RF-PD-01, tarea 5.13) ------------------------------
+
+test('la pantalla de ajustes operativos tampoco', { tag: ['@RF-PD-01'] }, async ({ page }) => {
+  await stubManagementApi(page, { role: 'admin' })
+  await logInAsAdmin(page)
+  await page.goto('/settings')
+  await expect(page.getByRole('heading', { level: 1, name: 'Ajustes operativos' })).toBeVisible()
+
+  await expectNoBlockingViolations(page)
+})
+
 // --- Soporte: paquete de diagnostico y accesos temporales (RF-PD-09,
 // RF-PD-11, tarea 5.9) --------------------------------------------------------
 

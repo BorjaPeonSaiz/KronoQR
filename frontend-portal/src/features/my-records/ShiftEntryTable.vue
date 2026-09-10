@@ -109,6 +109,9 @@ function duration(minutes: number): string {
 
     <div
       v-else
+      tabindex="0"
+      role="region"
+      :aria-label="t('myRecords.entries.caption', { date: workDate })"
       class="overflow-x-auto rounded-kq border border-kq-border bg-kq-surface-raised shadow-kq-soft"
     >
       <table class="w-full table-fixed border-collapse text-left">

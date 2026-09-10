@@ -27,6 +27,7 @@ import PeriodReportView from '@/features/reports/PeriodReportView.vue'
 import BrandingView from '@/features/settings/BrandingView.vue'
 import ComplianceProfileView from '@/features/settings/ComplianceProfileView.vue'
 import LicenseView from '@/features/settings/LicenseView.vue'
+import OperationalSettingsView from '@/features/settings/OperationalSettingsView.vue'
 import SupportView from '@/features/support/SupportView.vue'
 import EmployeeWorkDaysView from '@/features/workdays/EmployeeWorkDaysView.vue'
 import AppShellView from '@/shared/ui/AppShellView.vue'
@@ -159,6 +160,18 @@ export const routes: RouteRecordRaw[] = [
         path: 'compliance-profile',
         name: 'compliance-profile',
         component: ComplianceProfileView,
+        meta: { ability: SETTINGS_MANAGE },
+      },
+      {
+        // Los umbrales operativos (`ATTENDANCE_*`) y los idiomas (`LOCALE_*`)
+        // de la instalacion (RF-PD-01, tarea 5.13, hallazgo B1 del cierre de
+        // la Fase 5). Ambito `settings:*`, el mismo del perfil de
+        // cumplimiento, la marca y los quioscos: cambiar estos umbrales es la
+        // misma potestad que configurar la instalacion. La policy del
+        // servidor es la que autoriza de verdad (regla dura 18).
+        path: 'settings',
+        name: 'operational-settings',
+        component: OperationalSettingsView,
         meta: { ability: SETTINGS_MANAGE },
       },
       {

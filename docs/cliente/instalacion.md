@@ -853,12 +853,12 @@ Para comprobarlo sin entrar:
 
 ```bash
 curl -sS https://TU-SERVIDOR/api/v1/setup/status
-# {"available":false,"completed_at":"2026-09-02T09:14:00Z"}
+# {"available":false}
 ```
 
 Esta consulta **no necesita credenciales y por eso no dice nada más**: solo si el
-asistente sigue abierto y cuándo se cerró. El detalle de los pasos está en el
-panel, con sesión iniciada.
+asistente sigue abierto. Ni cuándo se cerró ni qué pasos quedaron pendientes: eso
+está en el panel, con sesión iniciada.
 
 ### …el panel dice que ya hay una cuenta de gestión y yo no he creado ninguna
 

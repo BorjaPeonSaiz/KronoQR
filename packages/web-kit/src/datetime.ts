@@ -1,12 +1,19 @@
 // Presentacion del tiempo, compartida por las SPA del panel y del portal
 // (ADR-036).
 //
-// Regla dura 3: todo instante llega en UTC. La conversion a la zona del centro
-// ocurre AQUI y en ningun otro sitio, y la zona se pasa siempre de forma
-// explicita: **nunca se usa la del navegador de quien mira**. Un responsable
-// que abre el panel desde su casa en Canarias, o un empleado que consulta el
-// portal desde su movil en otro pais, tienen que ver las horas de SU centro,
-// que son las que constan en el contrato de esa persona.
+// Regla dura 3: todo instante llega en UTC. La conversion de UTC a la zona
+// del centro para LEERLO ocurre AQUI y en ningun otro sitio, y la zona se pasa
+// siempre de forma explicita: **nunca se usa la del navegador de quien mira**.
+// Un responsable que abre el panel desde su casa en Canarias, o un empleado
+// que consulta el portal desde su movil en otro pais, tienen que ver las
+// horas de SU centro, que son las que constan en el contrato de esa persona.
+//
+// La direccion CONTRARIA -de lo que alguien teclea pensando en la hora del
+// centro al `UtcTimestamp` que exige el contrato- no vive aqui: la necesita
+// solo `frontend-admin/src/features/workdays/zonedTime.ts`, al corregir un
+// tramo (RF-PA-04), y no se ha traido a este paquete porque ademas de leer
+// tiene que adivinar-y-corregir en los dos filos del cambio de horario, que
+// es un algoritmo bastante mas largo que el resto de este fichero.
 //
 // Las fechas civiles (`hired_at`, `work_date`) NO son instantes y no se
 // convierten: un `2026-08-14` es el 14 de agosto en cualquier zona.

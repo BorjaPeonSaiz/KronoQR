@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Modules\Compliance\Infrastructure\Persistence;
 
+use App\Modules\Compliance\Application\Port\AuditChainHead;
 use App\Modules\Compliance\Application\Port\AuditTrail;
 use App\Modules\Compliance\Domain\AuditChain;
+use App\Modules\Compliance\Domain\ValueObject\AuditChainHeadSnapshot;
 use App\Modules\Compliance\Domain\ValueObject\AuditEntry;
 use App\Modules\Compliance\Domain\ValueObject\AuditEntryDraft;
 use Illuminate\Database\ConnectionInterface;
@@ -52,7 +54,7 @@ use Illuminate\Database\ConnectionInterface;
  *    claves al guardarlas como `jsonb` —lo hace por longitud y despues por
  *    bytes—, y da igual: la canonicalizacion ordena al leer.
  */
-final readonly class DatabaseAuditTrail implements AuditTrail
+final readonly class DatabaseAuditTrail implements AuditChainHead, AuditTrail
 {
     /**
      * Identificador del candado. Dos enteros de 32 bits fijos, elegidos a mano
@@ -98,7 +100,46 @@ final readonly class DatabaseAuditTrail implements AuditTrail
     }
 
     /**
+     * La punta de la cadena **ahora** (puerto {@see AuditChainHead}, tarea 5.7).
+     *
+     * Es publica porque `update.sh` necesita la huella de la cadena que verifico
+     * antes de tocar nada y la de despues de migrar, para escribirlas en el
+     * asiento `system.*`. Comparte implementacion con el encadenado —y no una
+     * copia— porque la respuesta a «cual es la punta» tiene que ser una sola: dos
+     * lecturas independientes serian la via mas silenciosa de que un dia dejen
+     * de coincidir.
+     *
+     * **No toma el candado.** Es una lectura, y quien la usa la interpreta como
+     * lo que es: la punta en el instante en que se pregunto. Tomar el candado
+     * global de la cadena (ADR-010) para leer serializaria contra el camino del
+     * fichaje sin comprar nada.
+     */
+    public function snapshot(): AuditChainHeadSnapshot
+    {
+        /** @var object{id: int, hash: string}|null $last */
+        $last = $this->connection->table(AuditLogSchema::TABLE)
+            ->select('id', 'hash')
+            ->orderByDesc('id')
+            ->limit(1)
+            ->first();
+
+        if ($last !== null) {
+            return new AuditChainHeadSnapshot($last->hash, $last->id);
+        }
+
+        return new AuditChainHeadSnapshot($this->headOfEmptyTable());
+    }
+
+    /**
      * El `hash` del ultimo eslabon, o la genesis si no hay ninguno.
+     */
+    private function previousHash(): string
+    {
+        return $this->snapshot()->hash;
+    }
+
+    /**
+     * La punta cuando la tabla viva no tiene ni una fila.
      *
      * **El caso raro que no lo es tanto:** la tabla puede estar vacia sin que
      * la instalacion sea nueva, si la retencion solto la ultima particion viva.
@@ -106,19 +147,8 @@ final readonly class DatabaseAuditTrail implements AuditTrail
      * `last_hash` del ancla mas reciente (ADR-027). Sin esto, el dia siguiente a
      * esa purga la cadena tendria dos origenes y el verificador lo diria.
      */
-    private function previousHash(): string
+    private function headOfEmptyTable(): string
     {
-        /** @var object{hash: string}|null $last */
-        $last = $this->connection->table(AuditLogSchema::TABLE)
-            ->select('hash')
-            ->orderByDesc('id')
-            ->limit(1)
-            ->first();
-
-        if ($last !== null) {
-            return $last->hash;
-        }
-
         /** @var object{last_hash: string}|null $anchor */
         $anchor = $this->connection->table(AuditLogSchema::ANCHORS_TABLE)
             ->select('last_hash')

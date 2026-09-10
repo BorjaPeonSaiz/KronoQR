@@ -403,6 +403,64 @@ enum AuditAction: string
      */
     case DataExportDownloaded = 'data_export.downloaded';
 
+    // --- Ciclo de vida de la instalacion (RF-PD-10, RL-04, RS-07, tarea 5.7) --
+
+    /**
+     * El producto se ha actualizado a otra version y las migraciones se han
+     * aplicado (**RF-PD-10**, regla dura 6).
+     *
+     * **Se audita porque cambia el sistema que produce el registro legal.** El
+     * `audit_log` responde «quien hizo que y cuando» sobre las horas de la
+     * plantilla; si el software que las calcula se sustituye entero sin dejar
+     * asiento, hay un dia en el que el registro cambia de autor y el propio
+     * registro no lo sabe. Con este asiento, una jornada de marzo calculada de
+     * una manera y una de abril calculada de otra tienen entre las dos una linea
+     * que lo explica.
+     *
+     * **Se escribe una sola vez, tras el paso 5** —migraciones aplicadas y salud
+     * verificada—, y **nunca antes**: un asiento escrito antes de saber si la
+     * actualizacion iba a salir bien afirmaria un hecho que puede no ocurrir, y
+     * la vuelta atras lo borraria junto con todo lo demas.
+     *
+     * El payload lleva versiones, recuento de migraciones, la huella de la copia
+     * previa y las huellas de la cadena verificada antes y despues. **Ni un dato
+     * personal, ni un secreto, ni una ruta absoluta** (regla dura 21); la lista
+     * de claves admitidas es cerrada y la impone
+     * {@see SystemEventPayload}.
+     */
+    case SystemUpdated = 'system.updated';
+
+    /**
+     * La actualizacion ha fallado y el instalador ha restaurado la copia previa:
+     * **la base de datos que hay ahora es la de ese momento** (**RF-PD-10**,
+     * RL-04, RS-07).
+     *
+     * **Es el asiento mas importante de los dos, y el que cierra el agujero.**
+     * Tras una vuelta atras, `compliance:verify-audit-chain` sale en verde
+     * —porque la cadena restaurada es integra— y el intervalo descartado, que
+     * puede contener fichajes reales, no deja ningun hueco visible. Un registro
+     * que perdio horas sin decirlo no es un registro con valor legal.
+     *
+     * **Se escribe SOBRE la cadena ya restaurada**, y esa es la decision entera.
+     * El asiento entra como eslabon siguiente al ultimo de la copia, asi que su
+     * `prev_hash` es la huella del ultimo hecho que sobrevivio: el asiento
+     * significa, literalmente, «lo que hay antes de mi es la copia de las HH:MM,
+     * y lo que hubo entre esa hora y ahora no esta». Escribirlo en la cadena
+     * anterior a restaurar habria sido escribirlo en la cadena que se tira.
+     *
+     * El `chain_before` de este asiento es **la punta de la cadena que se
+     * descarta**, leida justo antes de restaurar. No encaja con el `prev_hash`
+     * de la fila, y esa discrepancia —la unica que hay— es lo que acredita,
+     * dentro del propio registro, que hubo un intervalo que ya no esta.
+     *
+     * El payload lleva el **nombre** del fichero de copia —nunca su ruta—, su
+     * huella, cuando se tomo, en que paso fallo la actualizacion y **por que, en
+     * codigo cerrado**, no en texto libre: un motivo escrito a mano por un script
+     * es un campo que nadie puede consultar dos años despues. Ver
+     * {@see SystemRestoreReason} y {@see SystemUpdateStep}.
+     */
+    case SystemRestoredFromBackup = 'system.restored_from_backup';
+
     // --- Retencion (RL-02, ADR-027) ------------------------------------------
 
     case RetentionPartitionSealed = 'retention.partition_sealed';
@@ -524,6 +582,12 @@ enum AuditAction: string
         // fabricante, sale hacia el propio cliente, que es el responsable del
         // tratamiento (RL-16, regla dura 16).
         'data_export' => AuditableEvent::LegalExport,
+        // Actualizar el producto y restaurar una copia son los dos hechos que
+        // pueden cambiar —o hacer desaparecer— el resto del trail. No son una
+        // purga de retencion (aquella es planificada y sellada) ni un cambio de
+        // parametro del calculo: son el ciclo de vida de la instalacion entera.
+        // Ver `AuditableEvent::InstallationLifecycle`.
+        'system' => AuditableEvent::InstallationLifecycle,
     ];
 
     /**
@@ -543,5 +607,29 @@ enum AuditAction: string
 
         return self::EVENT_BY_SUBJECT[$subject]
             ?? throw new AuditActionHasNoEvent($this->value, $subject);
+    }
+
+    /**
+     * ¿Esta accion solo puede escribirla el sistema, nunca una persona?
+     *
+     * **Es una invariante del dominio, no una comprobacion de la interfaz.** Un
+     * `system.restored_from_backup` firmado por una cuenta de gestion afirmaria
+     * que una persona restauro la base de datos, cuando lo que ocurre de verdad
+     * es que lo hizo `update.sh` sin sesion de nadie. Peor: seria la forma mas
+     * comoda de inyectar en el trail un asiento que explica una discontinuidad
+     * que en realidad provoco otra cosa.
+     *
+     * Lo comprueba {@see AuditEntryDraft}, que es el objeto donde por primera
+     * vez coinciden accion y actor: asi el estado imposible no se puede
+     * construir, en lugar de tener que acordarse de validarlo en cada camino de
+     * escritura.
+     *
+     * Se decide por el sujeto y no caso por caso, con el mismo criterio que
+     * {@see self::event()}: si manana hay un `system.*` mas, hereda la regla sin
+     * que nadie tenga que acordarse.
+     */
+    public function requiresSystemActor(): bool
+    {
+        return explode('.', $this->value)[0] === 'system';
     }
 }

@@ -309,7 +309,7 @@ it('traduce los criterios al idioma de la peticion', function (): void {
     expect(implode(' ', $criterios))->toContain('is not split at midnight')
         ->and(implode(' ', $criterios))->toContain('ISO 8601')
         ->and(implode(' ', $criterios))->not->toContain('criteria.');
-})->group('RF-IN-01', 'RQ-11');
+})->group('RF-IN-01');
 
 it('rechaza un rango de mas de tres meses remitiendo a la generacion en diferido', function (): void {
     // RNF-P-05 y `/informe-nuevo` paso 5. La respuesta honesta a una peticion que

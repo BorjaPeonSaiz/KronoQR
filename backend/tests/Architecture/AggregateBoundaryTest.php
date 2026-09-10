@@ -59,9 +59,14 @@ function filesOutsideTheAggregate(): array
 {
     $aggregate = str_replace('\\', '/', ModuleTree::root()).'/Attendance/Domain/Model';
 
+    // Los dos recorridos van por `ModuleTree::phpFilesUnder()`, que usa
+    // `scandir`: con `RecursiveDirectoryIterator` el bind mount de Docker
+    // Desktop se comia ficheros enteros y esta prueba pasaba en verde sin
+    // haberlos mirado, que es el modo de fallo peor de una regla de
+    // arquitectura. Ver el docblock de `ModuleTree` y `SourceDiscoveryTest`.
     $files = [
         ...ModuleTree::filesIn(''),
-        ...phpFilesUnder(Repo::file('backend/tests')),
+        ...ModuleTree::phpFilesUnder(Repo::file('backend/tests')),
     ];
 
     $normalized = array_map(static fn (string $file): string => str_replace('\\', '/', $file), $files);
@@ -70,31 +75,6 @@ function filesOutsideTheAggregate(): array
         $normalized,
         static fn (string $file): bool => ! str_starts_with($file, $aggregate),
     ));
-}
-
-/**
- * @return list<string>
- */
-function phpFilesUnder(string $directory): array
-{
-    if (! is_dir($directory)) {
-        return [];
-    }
-
-    $files = [];
-
-    /** @var SplFileInfo $file */
-    foreach (new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($directory, FilesystemIterator::SKIP_DOTS)
-    ) as $file) {
-        if ($file->isFile() && $file->getExtension() === 'php') {
-            $files[] = $file->getPathname();
-        }
-    }
-
-    sort($files);
-
-    return $files;
 }
 
 it('no llama desde fuera del agregado a los metodos internos del tramo', function (string $method): void {

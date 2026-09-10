@@ -27,6 +27,13 @@ use Tests\Support\Workforce\WorkforceFixtures;
  * sea **visible para el cliente**. Sin estos tres asientos, la unica evidencia de
  * que el fabricante entro seria una fila que la aplicacion puede actualizar.
  *
+ * POR QUE LLEVA RL-17. RL-17 dice que el fabricante no es encargado del
+ * tratamiento **en la operacion ordinaria**. Esa frase solo se sostiene si
+ * entrar deja de ser ordinario: hace falta una concesion explicita del cliente,
+ * con caducidad, y las cuatro pruebas etiquetadas afirman las cuatro piezas de
+ * esa acotacion -conceder, usar, que el cliente lo VEA en `accessed_at`, y
+ * revocar-. Lo que RL-18 acota, RL-17 lo excluye del dia a dia.
+ *
  * Y la otra mitad, que es igual de importante: **el uso escribe un asiento por
  * ventana y no uno por peticion**. `audit_log` es una cadena encadenada por hash
  * bajo un candado global (ADR-010) —el mismo por el que pasa cada fichaje—, asi
@@ -86,7 +93,7 @@ it('conceder deja un asiento con el actor, el motivo y la caducidad', function (
         ->and($payload['reason'])->toBe('Incidencia #123: la cola del quiosco no vacia')
         ->and($payload['expires_at'])->toBeString()
         ->and($payload['granted_by_user_id'])->toBe($admin->id);
-})->group('RF-PD-11', 'RL-18', 'RL-04');
+})->group('RF-PD-11', 'RL-18', 'RL-17', 'RL-04');
 
 it('el asiento de concesion NO lleva el token ni su hash', function (): void {
     // El trail se conserva cuatro años y se exporta. Un secreto ahi dentro es un
@@ -123,7 +130,7 @@ it('usar el acceso deja un asiento cuyo actor es la CONCESION', function (): voi
         ->and($payload['grant_uuid'])->toBe($issued->grant->uuid)
         ->and($payload['method'])->toBe('GET')
         ->and($payload['route'])->toBe('api/v1/settings');
-})->group('RF-PD-11', 'RL-18');
+})->group('RF-PD-11', 'RL-18', 'RL-17');
 
 it('usar el acceso actualiza accessed_at, que es lo que ve el cliente', function (): void {
     $issued = SupportGrants::issue(scope: SupportScope::Configuration);
@@ -133,7 +140,7 @@ it('usar el acceso actualiza accessed_at, que es lo que ve el cliente', function
     Api::as($issued->token)->get('/api/v1/settings')->assertOk();
 
     expect(DB::table('support_grants')->where('uuid', $issued->grant->uuid)->value('accessed_at'))->not->toBeNull();
-})->group('RF-PD-11');
+})->group('RF-PD-11', 'RL-17');
 
 it('un uso escribe UN asiento por ventana, no uno por peticion', function (): void {
     // La mitad que protege el camino de fichaje. Cinco peticiones seguidas dentro
@@ -194,7 +201,7 @@ it('revocar deja un asiento con quien lo hizo y si el acceso estaba vivo', funct
         // Distingue «se corto un acceso vivo» de «se retiro uno ya caducado»: una
         // decision urgente y una limpieza no son el mismo hecho.
         ->and($payload['was_active'])->toBeTrue();
-})->group('RF-PD-11', 'RL-04');
+})->group('RF-PD-11', 'RL-17', 'RL-04');
 
 it('los tres asientos caen en la misma familia del bloque D', function (): void {
     // `support_access`, la decima. Es lo que permite responder «¿ha entrado el

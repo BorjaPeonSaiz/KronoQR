@@ -6394,12 +6394,14 @@ paths:
         describe. Lo unico que revela es que esta instalacion aun no se ha
         configurado, que es tambien lo que revela un panel vacio.
 
-        **Y no revela nada mas.** El detalle —que pasos estan hechos y cuales no—
-        vive en `GET /api/v1/setup/steps`, que exige sesion de administrador. Esa
-        lista dice si hay un administrador **sin segundo factor**, si no se ha
-        activado licencia y si no hay ningun quiosco vinculado: informacion util
-        para quien mira si merece la pena insistir, e innecesaria para redirigir
-        un navegador.
+        **Y no revela nada mas: la respuesta trae `available` y nada mas.** El
+        detalle —que pasos estan hechos y cuales no, y **cuando** se cerro la
+        puesta en marcha— vive en `GET /api/v1/setup/steps`, que exige sesion de
+        administrador. Esa lista dice si hay un administrador **sin segundo
+        factor**, si no se ha activado licencia y si no hay ningun quiosco
+        vinculado, y `completed_at` dice desde cuando esta montado el servidor:
+        informacion util para quien mira si merece la pena insistir, e
+        innecesaria para redirigir un navegador.
 
         **El asistente es de un solo uso.** Se cierra con
         `POST /api/v1/setup/complete` y no vuelve a abrirse: lo que despues se
@@ -6420,12 +6422,10 @@ paths:
                   summary: Instalacion recien montada
                   value:
                     available: true
-                    completed_at: null
                 publico-ya-terminado:
                   summary: Puesta en marcha terminada
                   value:
                     available: false
-                    completed_at: '2026-09-02T09:14:00Z'
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
@@ -14031,25 +14031,29 @@ components:
         segundo booleano de «ya inicializado» seria el mismo dato dicho dos veces,
         con la posibilidad de que se contradigan.
 
-        ## `steps` solo viaja con sesion de administrador
+        ## Sin sesion viaja solo `available`
 
-        Y es la razon por la que **no esta en `required`**. `GET
-        /api/v1/setup/status` es publico —tiene que serlo: se llama antes de que
-        exista ninguna cuenta— y la lista de pasos es un **inventario de la
-        postura de la instalacion**: dice si hay un administrador sin segundo
-        factor, si no se ha activado licencia y si no hay ningun quiosco
-        vinculado. Eso no se regala sin autenticar, ni antes ni despues de
-        terminar la puesta en marcha.
+        Y es la razon por la que **ni `completed_at` ni `steps` estan en
+        `required`**. `GET /api/v1/setup/status` es publico —tiene que serlo: se
+        llama antes de que exista ninguna cuenta— y `available` es lo unico que
+        el panel necesita para decidir si lleva al asistente o a la pantalla de
+        acceso. Lo demas se queda fuera por minimizacion.
 
-        Sin credenciales, la respuesta trae **solo `available` y
-        `completed_at`**, que es exactamente lo que el panel necesita para
-        decidir a donde lleva. Con una sesion de administrador, trae ademas los
-        pasos y su estado, que es lo que hace el asistente reanudable.
+        La lista de pasos es un **inventario de la postura de la instalacion**:
+        dice si hay un administrador sin segundo factor, si no se ha activado
+        licencia y si no hay ningun quiosco vinculado. `completed_at` dice
+        **cuando** se monto el servidor. Ninguna de las dos cosas se regala sin
+        autenticar, ni antes ni despues de terminar la puesta en marcha.
 
-        **El panel debe tratar `steps` como opcional** y no asumir su presencia:
-        en la primera llamada, antes de crear la cuenta, no estara.
+        Con una sesion de administrador —`GET /api/v1/setup/steps`,
+        `PUT /api/v1/setup/steps/{step}` y el `status` de
+        `POST /api/v1/setup/complete`— viajan las tres.
+
+        **El panel debe tratar `completed_at` y `steps` como opcionales** y no
+        asumir su presencia: en la primera llamada, antes de crear la cuenta, no
+        estaran.
       additionalProperties: false
-      required: [available, completed_at]
+      required: [available]
       properties:
         available:
           type: boolean
@@ -14060,7 +14064,10 @@ components:
         completed_at:
           type: [string, 'null']
           format: date-time
-          description: Cuando se cerro, en UTC con sufijo `Z`, o `null` si sigue abierto.
+          description: |
+            Cuando se cerro, en UTC con sufijo `Z`, o `null` si sigue abierto.
+            **Solo con sesion de administrador**; ausente en la respuesta
+            publica de `GET /api/v1/setup/status`.
           examples:
             - '2026-09-02T09:14:00Z'
         steps:

@@ -13,6 +13,7 @@
       "incidents": "Incidents",
       "reports": "Reports",
       "compliance": "Compliance",
+      "operationalSettings": "Operational settings",
       "devices": "Kiosks",
       "branding": "Brand",
       "license": "Licence",
@@ -971,6 +972,39 @@
     "saving": "Saving…",
     "saved": "Brand saved. The change is recorded in the audit trail and applied immediately.",
     "failed": "The brand could not be saved."
+  },
+  "operationalSettings": {
+    "heading": "Operational settings",
+    "intro": "The thresholds that decide whether a shift entry is anomalous, which scans are discarded as bounce, and which clock or transit skew opens an incident; and the languages this installation offers. No legal threshold lives here: that is «Compliance».",
+    "loading": "Loading the settings…",
+    "attendanceHeading": "Attendance",
+    "localesHeading": "Languages",
+    "fields": {
+      "maxShiftHours": "Maximum shift entry duration (h)",
+      "debounceSeconds": "Anti-bounce window (s)",
+      "maxClockSkewMinutes": "Tolerated clock skew (min)",
+      "minTransitSeconds": "Minimum transit between kiosks (s)",
+      "localeDefault": "Default language",
+      "localeAvailable": "Available languages"
+    },
+    "hints": {
+      "maxShiftHours": "Past this duration, a closed shift entry is flagged as anomalous and an incident is opened for review. It never closes a shift on its own. Accepted range: {minimum}–{maximum} hours.",
+      "debounceSeconds": "Grace window: two scans of the same person inside it count as one. Set it to 0 to disable it. Accepted range: {minimum}–{maximum} seconds.",
+      "maxClockSkewMinutes": "Skew tolerated between the tablet's clock and the server's before flagging the scan for review. It never rejects a scan, only flags it. Accepted range: {minimum}–{maximum} minutes.",
+      "minTransitSeconds": "The minimum believable time to walk from one kiosk to another. Below it, an incident is opened. Set it to 0 if two tablets sit at the same door. Accepted range: {minimum}–{maximum} seconds.",
+      "localeDefault": "The language the three applications and the documents are served in when nobody picks another. It has to be among the available languages.",
+      "localeAvailable": "Languages this installation offers. At least one, and the default language always has to stay checked."
+    },
+    "errors": {
+      "required": "This field cannot be left empty.",
+      "notAWholeNumber": "Enter a whole number, with no decimals or letters."
+    },
+    "affectsWorkedHoursWarning": "You are about to change a threshold that can change the minutes recorded. The change is audited with your name, the date, the previous value and the new one.",
+    "audited": "Every changed key leaves its own audit trail entry (calculation_setting.changed) with the previous value, the new one, who changed it and when.",
+    "save": "Save the settings",
+    "saving": "Saving…",
+    "saved": "Settings saved. The change is recorded in the audit trail.",
+    "failed": "The settings could not be saved."
   },
   "license": {
     "heading": "Licence",

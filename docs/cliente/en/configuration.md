@@ -1168,17 +1168,23 @@ Nine properties of the installation do not live in the `.env` but in the
 `installation_settings` table, are edited **from the panel** and take effect on
 the next request without restarting anything:
 
-| Key | Where it is explained |
-| --- | --- |
-| `ATTENDANCE_MAX_SHIFT_HOURS` | Section 2.1 |
-| `ATTENDANCE_DEBOUNCE_SECONDS` | Section 2.1 |
-| `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES` | Section 2.1 |
-| `ATTENDANCE_MIN_TRANSIT_SECONDS` | Section 2.1 |
-| `BRANDING_APP_NAME` | Section 2.2 |
-| `BRANDING_LOGO_PATH` | Section 2.2 |
-| `BRANDING_ACCENT_COLOR` | Section 2.2 |
-| `LOCALE_DEFAULT` | Section 2.3 |
-| `LOCALE_AVAILABLE` | Section 2.3 |
+| Key | Where it is changed | Where it is explained |
+| --- | --- | --- |
+| `ATTENDANCE_MAX_SHIFT_HOURS` | Panel → **Operational settings** (`/settings`) | Section 2.1 |
+| `ATTENDANCE_DEBOUNCE_SECONDS` | Panel → **Operational settings** (`/settings`) | Section 2.1 |
+| `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES` | Panel → **Operational settings** (`/settings`) | Section 2.1 |
+| `ATTENDANCE_MIN_TRANSIT_SECONDS` | Panel → **Operational settings** (`/settings`) | Section 2.1 |
+| `BRANDING_APP_NAME` | Panel → **Branding** (`/branding`) | Section 2.2 |
+| `BRANDING_LOGO_PATH` | Panel → **Branding** (`/branding`) | Section 2.2 |
+| `BRANDING_ACCENT_COLOR` | Panel → **Branding** (`/branding`) | Section 2.2 |
+| `LOCALE_DEFAULT` | Panel → **Operational settings** (`/settings`) | Section 2.3 |
+| `LOCALE_AVAILABLE` | Panel → **Operational settings** (`/settings`) | Section 2.3 |
+
+Both screens require an **installation administrator** account and both save
+with the same button: the change takes effect on the next request and is
+recorded in the audit trail with your name, the date and the previous value. If
+you cannot see those entries in the menu, they are not missing: your account is
+not an administrator one.
 
 **The database wins** (section 1). Five of the nine —the branding and language
 ones— no longer exist as environment variables: they were removed so that there

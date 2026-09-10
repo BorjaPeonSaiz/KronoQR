@@ -226,8 +226,7 @@ fichaje-hotel/
 │   ├── agents/                      # 10 agentes especializados
 │   └── skills/                      # 6 skills de generación
 ├── .github/workflows/
-│   ├── ci.yml                       # Calidad, pruebas, seguridad
-│   ├── e2e.yml                      # Playwright con cámara simulada
+│   ├── ci.yml                       # Calidad, pruebas, seguridad, E2E con cámara simulada (etapas ①–⑧)
 │   └── release.yml                  # Publicación de versión e imágenes
 │
 ├── backend/
@@ -768,6 +767,7 @@ scan_processing_duration_seconds                         histogram
 open_shifts_current{site,site_name,department}           gauge
 kiosk_last_seen_seconds{device}                          gauge
 kiosk_offline_queue_size{device}                         gauge
+kiosk_pairing_total{result,reason}                       counter
 sync_delay_seconds{device}                               histogram
 incidents_open{type,severity}                            gauge
 incidents_metrics_timestamp_seconds                      gauge
@@ -786,6 +786,7 @@ audit_chain_verification_failures_total                  counter
 audit_chain_last_verification_timestamp_seconds          gauge
 audit_chain_last_verification_result                     gauge
 audit_chain_rows_verified                                gauge
+audit_chain_unknown_actions                              gauge
 audit_log_partition_ready{horizon}                       gauge
 audit_log_partition_check_timestamp_seconds              gauge
 worked_minutes_total{site,department}                    counter
@@ -1017,7 +1018,11 @@ graph LR
     INST --> REL["🚀 Publicación de versión<br/>imágenes etiquetadas + paquete de entrega"]
 ```
 
-Etapas 1–3 en cada *push* (retroalimentación en menos de 4 minutos). Etapas 4–7 en cada PR. Etapa 8 antes de publicar una versión.
+Etapas 1–3 en cada *push* (retroalimentación en menos de 4 minutos). Etapa 8 antes de publicar una versión.
+
+**Etapas 4–7 en cada *push*, no en cada PR.** Este repositorio no usa *pull request* como disparador de CI (trunk-based con ramas cortas, §10.5): todo el pipeline vive en un único `push:` de `.github/workflows/ci.yml`, y una etapa que solo corriera en un evento que nadie emite no correría nunca. Las cuatro etapas corren en cada push desde el cierre de la Fase 5 (jobs `integration`, `security` —desde el cierre de la Fase 0—, `frontend-unit` y `e2e`), más estricto que lo que este apartado pedía originalmente, no menos.
+
+**La puerta de cobertura (RNF-M-01, §9.2) no es ninguna de las ocho etapas numeradas.** Instrumentar con Xdebug la suite completa (Unit + Integration + Feature + Contract) para medir dominio ≥ 90 % / global ≥ 75 % tarda minutos que duplicarían, sin aportar nada nuevo, lo que la etapa ③ ya comprueba sin cobertura. Corre como job `coverage` de `ci.yml`, nocturno (`schedule`) y a mano (`workflow_dispatch`), nunca en un push normal.
 
 > **La etapa ⑧ existe desde la tarea 5.4**: job `clean-install` de `.github/workflows/ci.yml`. En un runner limpio construye las tres imágenes de entrega, **arma el paquete del §11.6.1** y ejecuta el instalador **desde ese paquete**, no desde el árbol del repositorio —si el instalador dependiera de algo que solo existe aquí, es la única forma de verlo—. Cuatro escenarios: `--check-only` sin escribir; **fallo seguro** con un puerto ocupado a propósito (salida `2` y máquina intacta, comprobada contenedor a contenedor); instalación completa verificada con `/health`, `/ready`, las tres SPA y **cero datos de demostración** en la base; y **segunda ejecución** (salida `3` y el sistema respondiendo después). Comprueba además que **ningún secreto aparece en la salida del instalador**, extrayendo cada valor del `.env` recién escrito. Se ejecuta en `main`, en cada etiqueta `vX.Y.Z` y a mano; no en cada *push*, porque cuesta entre 6 y 18 minutos y una CI que nadie espera acaba ignorándose entera. La parte de **actualización desde la versión anterior** llega con la tarea 5.7.
 
