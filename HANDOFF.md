@@ -7,8 +7,10 @@
 
 ## Estado y objetivo actual
 
-**Rama `feat/tarea-3.2-cuadros-y-alertas` (desde `main` `d8162af`). Tarea 3.2 «Los 5 cuadros de mando y el catálogo de alertas
-con runbooks» IMPLEMENTADA, REVISADA (dos vueltas), PROBADA y CONFIRMADA el 10-09-2026** (commit `824899e`, 99 ficheros; CI manual 34507978469 cayó en ② por `set -o pipefail` bajo `dash`; corregido en el segundo commit y CI relanzada; **PR #55** abierta contra `main`).** Diecisiete
+**Rama `main`. FASE 3 EN CURSO. Tarea 3.2 «Los 5 cuadros de mando y el catálogo de alertas con runbooks» IMPLEMENTADA,
+REVISADA (dos vueltas), PROBADA e INTEGRADA en `main` el 10-09-2026** (PR #55, *merge commit* `e429e48`; commits `824899e` y
+`b7ff175`; CI manual 34509403514 en verde con los 20 jobs, ⑧ y ⑧b incluidos; la primera, 34507978469, cayó en ② porque el `sh` del
+runner es `dash` y el renderizador llevaba `set -o pipefail` —ver Trampas—; rama borrada).** Diecisiete
 decisiones en la ficha (plan 06 → «Tarea 3.2» → «Decisiones tomadas»); las que importan: **cinco cuadros, no cuatro** (corregido en
 doc 02 §11, plan 05 y plan 06), como JSON en `infra/observability/grafana/dashboards/KronoQR/` (subcarpeta porque el provisionador
 de Grafana 11.5 ignora `folder:` con `foldersFromFilesStructure`); **las once filas del doc 01 §9.3 tienen regla** (siete ya
@@ -59,7 +61,7 @@ falsificables) → `TrustProxies` propio con `TRUSTED_PROXIES`; sondas retiradas
 cuatro jobs en UP, 24 series en `/metrics`, `probe_success=1`, y una petición con `traceparent` a `/ready` recuperada en Tempo con
 `GET health.ready` → `postgresql select`. **Ver «Siguiente acción».**
 
-**Siguiente acción:** esperar la CI manual relanzada tras el segundo commit (13 jobs, ⑧ y ⑧b; su id está en la PR #55) sin empujar nada a la rama; si cae, corregir y relanzar; en verde, integrar la PR #55 con *merge commit* (nunca squash), borrar la rama; después `make up` en `main` y arrancar la **3.3** (panel de salud de quioscos; no depende de la 3.2, decisión 14).
+**Siguiente acción:** `make up` hecho en `main` (`e429e48`). Arrancar la **3.3** (panel de salud de quioscos; no depende de la 3.2, decisión 14).
 
 **Rama `chore/cierre-fase-5` (desde `main` `9d5ec6f`). FASE 5 CERRADA el 10-09-2026** (`current_phase => 5`, matriz de
 trazabilidad regenerada: 2 782 pruebas etiquetadas, Fase 5 con 23 de 23). Los cuatro revisores del doc 03 §6.6 sobre `main`
