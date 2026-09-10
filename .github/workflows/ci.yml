@@ -2098,6 +2098,16 @@ jobs:
           docker logs kronoqr-pg | tail -50
           exit 1
 
+      - name: Puppeteer y Chrome para Browsershot (la suite completa incluye los PDF con motor real)
+        # Misma receta que el job de integracion: el chromium-browser del runner
+        # es un envoltorio de snap; puppeteer trae su Chrome y laravel-pdf lo lee
+        # de estas dos variables.
+        run: |
+          sudo npm install --global --omit=dev puppeteer@24
+          modules="$(npm root -g)"
+          echo "LARAVEL_PDF_NODE_MODULES_PATH=${modules}" >>"$GITHUB_ENV"
+          echo "LARAVEL_PDF_CHROME_PATH=$(NODE_PATH="${modules}" node -e "console.log(require('puppeteer').executablePath())")" >>"$GITHUB_ENV"
+
       - name: Cobertura — dominio >= 90 %, global >= 75 % (doc 02 §9.2)
         run: make coverage
 
