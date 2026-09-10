@@ -2098,9 +2098,19 @@ rollback_and_die() {
     "chain_before=${CHAIN_DISCARDED}" \
     "report_id=update-${STARTED_UTC}")"
 
-  detail_note "--- compliance:record-system-event system.restored_from_backup ---"
+  # LO ESCRIBE LA IMAGEN NUEVA, no la restaurada. Tras la vuelta atras corre la
+  # version anterior, y la version anterior puede no conocer todavia el comando
+  # (la primera que lo lleva vuelve a una que no lo tiene: asi se vio en la
+  # etapa 8b del cierre de la Fase 5). Los dos proyectos son el MISMO (`name:
+  # kronoqr`), asi que un contenedor efimero de la imagen nueva llega al
+  # PostgreSQL que ya sirve la base restaurada; `--no-deps` para no levantar
+  # nada de la pila nueva, que esta parada. El esquema de `audit_log` que el
+  # asiento necesita (actor `system`, cadena por hash) es el de la tarea 1.14 y
+  # no ha cambiado desde entonces, asi que el codigo nuevo escribe en una base
+  # antigua sin tocar nada mas.
+  detail_note "--- compliance:record-system-event system.restored_from_backup (imagen nueva, base restaurada) ---"
   audit_status=0
-  audit_output="$(compose_rollback exec -T app php artisan compliance:record-system-event system.restored_from_backup --data="${audit_json}" 2>&1)" ||
+  audit_output="$(compose_new run --rm --no-deps -T app php artisan compliance:record-system-event system.restored_from_backup --data="${audit_json}" 2>&1)" ||
     audit_status=$?
   detail_note "${audit_output}"
 
