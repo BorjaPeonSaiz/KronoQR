@@ -8,7 +8,7 @@
 ## Estado y objetivo actual
 
 **Rama `feat/tarea-3.2-cuadros-y-alertas` (desde `main` `d8162af`). Tarea 3.2 «Los 5 cuadros de mando y el catálogo de alertas
-con runbooks» IMPLEMENTADA, REVISADA (dos vueltas) y PROBADA el 10-09-2026; pendiente de commit, CI manual y PR.** Diecisiete
+con runbooks» IMPLEMENTADA, REVISADA (dos vueltas), PROBADA y CONFIRMADA el 10-09-2026** (commit `824899e`, 99 ficheros; CI manual 34507978469 cayó en ② por `set -o pipefail` bajo `dash`; corregido en el segundo commit y CI relanzada; **PR #55** abierta contra `main`).** Diecisiete
 decisiones en la ficha (plan 06 → «Tarea 3.2» → «Decisiones tomadas»); las que importan: **cinco cuadros, no cuatro** (corregido en
 doc 02 §11, plan 05 y plan 06), como JSON en `infra/observability/grafana/dashboards/KronoQR/` (subcarpeta porque el provisionador
 de Grafana 11.5 ignora `folder:` con `foldersFromFilesStructure`); **las once filas del doc 01 §9.3 tienen regla** (siete ya
@@ -59,7 +59,7 @@ falsificables) → `TrustProxies` propio con `TRUSTED_PROXIES`; sondas retiradas
 cuatro jobs en UP, 24 series en `/metrics`, `probe_success=1`, y una petición con `traceparent` a `/ready` recuperada en Tempo con
 `GET health.ready` → `postgresql select`. **Ver «Siguiente acción».**
 
-**Siguiente acción:** confirmar la 3.2 en un único commit `feat(observabilidad): …` en `feat/tarea-3.2-cuadros-y-alertas`, lanzar la CI manual completa (`gh workflow run ci.yml --ref feat/tarea-3.2-cuadros-y-alertas`, sin empujar nada después), abrir la PR contra `main` con *merge commit* y, en verde, integrar; después `make up` en `main` y arrancar la **3.3** (panel de salud de quioscos; no depende de la 3.2, decisión 14).
+**Siguiente acción:** esperar la CI manual relanzada tras el segundo commit (13 jobs, ⑧ y ⑧b; su id está en la PR #55) sin empujar nada a la rama; si cae, corregir y relanzar; en verde, integrar la PR #55 con *merge commit* (nunca squash), borrar la rama; después `make up` en `main` y arrancar la **3.3** (panel de salud de quioscos; no depende de la 3.2, decisión 14).
 
 **Rama `chore/cierre-fase-5` (desde `main` `9d5ec6f`). FASE 5 CERRADA el 10-09-2026** (`current_phase => 5`, matriz de
 trazabilidad regenerada: 2 782 pruebas etiquetadas, Fase 5 con 23 de 23). Los cuatro revisores del doc 03 §6.6 sobre `main`
@@ -538,6 +538,9 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 - **Ningún contenedor de terceros recibe `env_file: .env`** (3.2, doc 07 A-6): Alertmanager lo heredaba de la 1.18 y exponía la clave
   HMAC del QR en `docker inspect`. Variables nombradas una a una con `environment:`; `AlertmanagerConfigTest` lo vigila. Y todo
   renderizado de YAML desde el entorno escapa `'` y se valida con la herramienta real antes de arrancar.
+- **El `sh` del runner de la CI es `dash`** (3.2): un `#!/bin/sh` con `set -o pipefail` o `IFS=$'
+	'` pasa en Git Bash (bash) y en BusyBox (ash) y cae en la CI («Illegal option»). Los scripts POSIX llevan `set -eu` e `IFS="$(printf '
+	')"`, `make sh-lint` lo exige por shebang, y se prueban con `docker run debian:stable-slim sh …`.
 - **`promtool test rules` fija el reloj en 1970**: una regla con `month()` no se puede disparar en pruebas; `expect($output)->not->toContain('serie 1')`
   casa también con un `# HELP` que empiece por «serie 1 mientras…» (pasó con `kronoqr_maintenance_active`).
 - **La mutación va en `--parallel` desde la 5.12** (830 s → 85 s en el dominio de `Product`; en serie la CI tardaba 37 min

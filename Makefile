@@ -510,15 +510,27 @@ else
 	# shell que lo carga -aqui, el punto de entrada de la imagen de Nginx, que
 	# no es codigo nuestro-. Por eso el `.envsh` oficial de la imagen base usa
 	# `set -eu` a secas, y el nuestro hace lo mismo.
+	# Los scripts con `#!/bin/sh` (hoy, render-config.sh de Alertmanager) corren
+	# con el sh que haya: BusyBox ash en su imagen, dash en la CI y en Ubuntu.
+	# dash rechaza `set -o pipefail` ("Illegal option") y no entiende el
+	# entrecomillado ANSI-C, asi que a ellos se les exige `set -eu` y un IFS
+	# compuesto con printf. La primera CI de la tarea 3.2 cayo por esto: en
+	# local (Git Bash) y en el contenedor (ash) el preambulo bash pasaba.
 	@fallos=0; \
 	for f in $(SH_FILES); do \
 	  case "$$f" in \
 	    *.envsh) \
 	      : ;; \
 	    *) \
-	      grep -qE '^[[:space:]]*set -E?euo pipefail[[:space:]]*$$' "$$f" || { \
-	        echo "$$f: falta 'set -euo pipefail' o 'set -Eeuo pipefail'. Anadelo tras la cabecera del script (doc 02 seccion 3.5)."; \
-	        fallos=1; }; \
+	      if head -n 1 "$$f" | grep -q '^#!/bin/sh'; then \
+	        grep -qE '^[[:space:]]*set -eu[[:space:]]*$$' "$$f" || { \
+	          echo "$$f: script POSIX sh: falta 'set -eu' (sin pipefail: dash, el sh de la CI, no lo admite)."; \
+	          fallos=1; }; \
+	      else \
+	        grep -qE '^[[:space:]]*set -E?euo pipefail[[:space:]]*$$' "$$f" || { \
+	          echo "$$f: falta 'set -euo pipefail' o 'set -Eeuo pipefail'. Anadelo tras la cabecera del script (doc 02 seccion 3.5)."; \
+	          fallos=1; }; \
+	      fi; \
 	      grep -qE "^[[:space:]]*IFS=" "$$f" || { \
 	        echo "$$f: falta IFS. Anade IFS=\$$'\\n\\t' junto al set -euo pipefail (doc 02 seccion 3.5)."; \
 	        fallos=1; }; \

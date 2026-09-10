@@ -13,11 +13,11 @@
 # segun si la variable tiene contenido; un script si.
 #
 # POSIX `sh`, no bash: este script se ejecuta con el `/bin/sh` (BusyBox ash) de
-# la propia imagen `prom/alertmanager`, que no lleva bash. Nada de arrays ni
-# `[[ ]]`. Comprobado contra la imagen fijada en los dos compose: este ash SI
-# admite `set -o pipefail`, `IFS=$'\n\t'` y `local` (los tres son extensiones
-# de BusyBox, no POSIX puro), asi que el script lleva el mismo preambulo que el
-# resto de scripts del repositorio (doc 02 §3.5) en vez de una excepcion.
+# la propia imagen `prom/alertmanager`, que no lleva bash, y ademas con el `sh`
+# del anfitrion que lo prueba (dash en el runner de la CI y en Ubuntu, bash en
+# Git Bash). Nada de arrays, `[[ ]]`, `pipefail` ni `$'...'`: solo lo que los
+# tres interpretes comparten (ver el preambulo mas abajo). `local` si: lo
+# admiten los tres.
 #
 # COMO SE RENDERIZA. El fichero se lee LINEA A LINEA y cada marca `@@TOKEN@@`
 # se sustituye con expansion de parametros de POSIX (`${var%%patron*}` /
@@ -65,15 +65,17 @@
 # la forma que se le exige, o `amtool check-config` rechaza el resultado. El
 # mensaje de error dice siempre que corregir.
 
-# ShellCheck analiza `#!/bin/sh` en modo POSIX estricto y marca `pipefail` y el
-# entrecomillado ANSI-C como extensiones "no definidas en POSIX sh" (SC3040,
-# SC3003). Las dos estan comprobadas contra el `/bin/sh` real de la imagen
-# fijada en los dos compose (BusyBox ash 1.36.1): funcionan, y esta linea es la
-# unica diferencia entre este script y el preambulo que exige doc 02 §3.5 para
-# el resto de scripts del repositorio.
-# shellcheck disable=SC3040,SC3003
-set -euo pipefail
-IFS=$'\n\t'
+# POSIX PURO, sin `set -o pipefail` ni `IFS=$'\n\t'`. El preambulo de los scripts
+# bash del repositorio (doc 02 §3.5) no vale aqui: este script lo ejecuta el
+# `/bin/sh` que haya -BusyBox ash en la imagen de Alertmanager, dash en el
+# runner de la CI y en cualquier Debian/Ubuntu, bash en Git Bash- y dash
+# rechaza `set -o pipefail` ("Illegal option") y trata `$'\n\t'` como la cadena
+# literal de cinco caracteres. La primera CI de la 3.2 cayo exactamente por
+# eso: en local (bash) y en el contenedor (ash) pasaba. `pipefail` no hace
+# falta: la unica tuberia del script es un `printf | sed` cuyo productor no
+# puede fallar. El IFS se compone con printf, que si es POSIX.
+set -eu
+IFS="$(printf '\n\t')"
 
 TEMPLATE_FILE="${ALERTMANAGER_TEMPLATE_FILE:-/etc/alertmanager/alertmanager.yml.template}"
 STORAGE_PATH="${ALERTMANAGER_STORAGE_PATH:-/alertmanager}"
