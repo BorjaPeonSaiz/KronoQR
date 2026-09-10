@@ -7,8 +7,10 @@
 
 ## Estado y objetivo actual
 
-**Rama `feat/tarea-3.1-observabilidad` (desde `main` `5bfa619`). FASE 3 EN CURSO. Tarea 3.1 «OpenTelemetry extremo a
-extremo, Prometheus, Grafana, Loki» IMPLEMENTADA, REVISADA (dos vueltas) y PROBADA el 10-09-2026.** Catorce decisiones en la ficha
+**Rama `main`. FASE 3 EN CURSO. Tarea 3.1 «OpenTelemetry extremo a extremo, Prometheus, Grafana, Loki» IMPLEMENTADA,
+REVISADA (dos vueltas), PROBADA e INTEGRADA en `main` el 10-09-2026** (PR #54, *merge commit* `545d4e2`; CI manual 34475373363
+en verde con los 13 jobs, ⑧ y ⑧b incluidos; el primer intento cayó en ⑧ por la lista fija de servicios del perfil `observability` en
+`ci.yml`, corregida en `af99732`; rama borrada). Catorce decisiones en la ficha
 (plan 06 → «Tarea 3.1» → «Decisiones tomadas»); las que importan: **la instrumentación ya existía en gran parte y faltaba la
 costura** —doce series escritas en Redis que nadie exponía, el SDK de OTel instalado sin arrancar, `LOKI_URL` que nadie leía—, así
 que `/metrics` es un **lector de exposición** sobre `kronoqr:metrics:*` con catálogo único (`MetricCatalogue`, prueba bidireccional
@@ -30,7 +32,7 @@ falsificables) → `TrustProxies` propio con `TRUSTED_PROXIES`; sondas retiradas
 cuatro jobs en UP, 24 series en `/metrics`, `probe_success=1`, y una petición con `traceparent` a `/ready` recuperada en Tempo con
 `GET health.ready` → `postgresql select`. **Ver «Siguiente acción».**
 
-**Siguiente acción:** commit único de la tarea con este HANDOFF, `push`, CI manual completa (`gh workflow run ci.yml --ref feat/tarea-3.1-observabilidad`; NO empujar nada después: la cancela), PR contra `main` con *merge commit*, `make up` en `main`, rama borrada. Después, **tarea 3.2** (cuadros y alertas: ya puede evaluar `auth.yml` y `errors.yml`, renombrar el job `kronoqr-backup`, usar `probe_ssl_earliest_cert_expiry` y `probe_success`, y decidir los nombres semconv de `db.*`).
+**Siguiente acción:** `make up` hecho en `main`. Empieza la **tarea 3.2** (cuadros y alertas: ya puede evaluar `auth.yml` y `errors.yml`, renombrar el job `kronoqr-backup`, usar `probe_ssl_earliest_cert_expiry` y `probe_success`, y decidir los nombres semconv de `db.*`).
 
 **Rama `chore/cierre-fase-5` (desde `main` `9d5ec6f`). FASE 5 CERRADA el 10-09-2026** (`current_phase => 5`, matriz de
 trazabilidad regenerada: 2 782 pruebas etiquetadas, Fase 5 con 23 de 23). Los cuatro revisores del doc 03 §6.6 sobre `main`
