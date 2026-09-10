@@ -1323,7 +1323,7 @@ jobs:
             GRAFANA_ADMIN_PASSWORD=x COMPOSE_PROFILES=observability \
             docker compose -f docker-compose.yml config --services | sort | tr '\n' ' ')"
           echo "servicios: ${servicios}"
-          test "${servicios}" = "alertmanager app grafana horizon loki nginx node-exporter postgres prometheus redis reverb scheduler "
+          test "${servicios}" = "alertmanager app blackbox-exporter grafana horizon loki nginx node-exporter postgres prometheus redis reverb scheduler tempo "
 
       - name: "A · --check-only en la maquina virgen: fase 1 verde y nada escrito"
         run: |
