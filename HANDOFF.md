@@ -7,6 +7,16 @@
 
 ## Estado y objetivo actual
 
+**Dos trabajos ad hoc del 10-09-2026, ambos INTEGRADOS en `main`:** (1) **cámara del quiosco «enfoca mal» en local** → no era el
+código sino Windows Studio Effects más el foco fijo de la webcam; solo documentación (PR #56, *merge commit* `23b0c52`, CI 34521308593
+en verde): runbook `alta-nuevo-quiosco.md` §6, plan 01 §C.2, ficha 3.3 paso 4 (`getSettings()` con `backgroundBlur` en la pantalla de
+diagnóstico) y trampa nueva abajo. (2) **Menú lateral del panel** a petición del usuario (PR #57, *merge commit* `1d42373`, commit
+`f8e5fa6`, CI manual 34524850028 en verde): `AppShellView.vue` en dos columnas desde `md` —la cabecera es una columna de 16 rem,
+sigue siendo el landmark `banner`, activo calculado en el marco con `meta.section` y `aria-current`—, regla 11 en doc 06 §6,
+`tests/e2e/shell.spec.ts` nuevo (aria-current desde la ficha; apilado a 700 px con las 13 secciones visibles y axe), 28 capturas
+`rrhh-*` regeneradas. La revisión `ui-ux` corrigió dos bloqueantes de AA (anillo de foco sobre la activa; hover crema con texto
+blanco); el porqué en Engram `panel/menu-lateral`.
+
 **Rama `main`. FASE 3 EN CURSO. Tarea 3.2 «Los 5 cuadros de mando y el catálogo de alertas con runbooks» IMPLEMENTADA,
 REVISADA (dos vueltas), PROBADA e INTEGRADA en `main` el 10-09-2026** (PR #55, *merge commit* `e429e48`; commits `824899e` y
 `b7ff175`; CI manual 34509403514 en verde con los 20 jobs, ⑧ y ⑧b incluidos; la primera, 34507978469, cayó en ② porque el `sh` del
@@ -61,7 +71,7 @@ falsificables) → `TrustProxies` propio con `TRUSTED_PROXIES`; sondas retiradas
 cuatro jobs en UP, 24 series en `/metrics`, `probe_success=1`, y una petición con `traceparent` a `/ready` recuperada en Tempo con
 `GET health.ready` → `postgresql select`. **Ver «Siguiente acción».**
 
-**Siguiente acción:** `make up` hecho en `main` (`e429e48`). Arrancar la **3.3** (panel de salud de quioscos; no depende de la 3.2, decisión 14).
+**Siguiente acción:** `make up` hecho en `main` (`1d42373`). Arrancar la **3.3** (panel de salud de quioscos; no depende de la 3.2, decisión 14).
 
 **Rama `chore/cierre-fase-5` (desde `main` `9d5ec6f`). FASE 5 CERRADA el 10-09-2026** (`current_phase => 5`, matriz de
 trazabilidad regenerada: 2 782 pruebas etiquetadas, Fase 5 con 23 de 23). Los cuatro revisores del doc 03 §6.6 sobre `main`
@@ -509,6 +519,9 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 
 ### Deuda técnica anotada
 
+- **`frontend-admin/src/router/guards.ts` `SECTIONS` duplica el orden del menú de `AppShellView.vue` y ya divergía** (10-09-2026):
+  unificar en una sola lista cuando se toque la navegación. Falta una captura de referencia con `LicenseNotice` activo y las 13
+  secciones (hallazgo opcional de la revisión del menú lateral).
 - **Rector: 227 ficheros en rojo e ignorado** en `make quality` — aplicar esas reglas o retirarlas del
   conjunto; un paso siempre rojo y siempre ignorado acaba sin leerse.
 - XLSX se lee sin cota de descompresión más allá de `max_rows` y los 4 MB (riesgo bajo, consciente).
