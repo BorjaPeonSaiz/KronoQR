@@ -98,6 +98,105 @@
       "status": "Quiosco vinculado. Entrando…"
     }
   },
+  "diagnostics": {
+    "trigger": {
+      "ariaLabel": "Abrir diagnóstico del quiosco (mantén pulsado 3 segundos)"
+    },
+    "title": "Diagnóstico del quiosco",
+    "back": "Volver a fichar",
+    "autoReturnHint": "Esta pantalla vuelve sola al fichaje si no se toca nada.",
+    "gate": {
+      "heading": "Código de servicio",
+      "hint": "Introduce el código de servicio de esta instalación.",
+      "codeLabel": "Código de servicio",
+      "confirm": "Comprobar",
+      "rejected": "Código incorrecto. Queda 1 intento. | Código incorrecto. Queda 1 intento. | Código incorrecto. Quedan {count} intentos.",
+      "locked": "Demasiados intentos. Espera {seconds} s.",
+      "noCodeConfigured": "Esta instalación no tiene código de servicio configurado."
+    },
+    "sections": {
+      "camera": "Cámara",
+      "network": "Red",
+      "queue": "Cola",
+      "roster": "Padrón",
+      "token": "Token",
+      "version": "Versión",
+      "battery": "Batería",
+      "wakeLock": "Bloqueo de pantalla",
+      "errors": "Errores pendientes de enviar",
+      "privacy": "Responsable del tratamiento"
+    },
+    "rows": {
+      "camera": {
+        "state": "Estado",
+        "label": "Cámara",
+        "resolution": "Resolución",
+        "frameRate": "Fotogramas por segundo",
+        "facingMode": "Orientación",
+        "focusMode": "Enfoque",
+        "zoom": "Zoom",
+        "backgroundBlur": "Desenfoque de fondo",
+        "torch": "Linterna disponible"
+      },
+      "network": {
+        "connection": "Conexión",
+        "reachable": "Servidor alcanzable",
+        "lastHeartbeat": "Último latido correcto",
+        "clockSkew": "Desfase de reloj",
+        "clockSkewValue": "{seconds} s"
+      },
+      "queue": {
+        "size": "Fichajes pendientes",
+        "oldest": "Más antiguo",
+        "storage": "Almacenamiento",
+        "syncing": "Sincronizando"
+      },
+      "roster": {
+        "generatedAt": "Generado",
+        "entries": "Credenciales indexadas",
+        "pinAvailable": "Fichaje por PIN disponible"
+      },
+      "token": {
+        "present": "Estado",
+        "id": "Identificador",
+        "expiresAt": "Caduca",
+        "deviceId": "Identificador de dispositivo",
+        "deviceName": "Nombre del quiosco"
+      },
+      "version": {
+        "app": "Versión de la aplicación",
+        "serviceWorker": "Service worker activo"
+      },
+      "battery": {
+        "level": "Nivel",
+        "charging": "Cargando"
+      },
+      "wakeLock": {
+        "supported": "Compatible",
+        "active": "Activo"
+      }
+    },
+    "values": {
+      "yes": "Sí",
+      "no": "No",
+      "unknown": "Se desconoce",
+      "notAvailable": "No disponible",
+      "online": "En línea",
+      "offline": "Sin conexión",
+      "present": "Presente",
+      "absent": "Sin token",
+      "durable": "Persistente (IndexedDB)",
+      "memory": "En memoria (respaldo)",
+      "configured": "Configurado",
+      "notConfigured": "Sin configurar",
+      "unpaired": "Esta tablet no está emparejada: no hay padrón que mostrar."
+    },
+    "warnings": {
+      "background_blur": "El sistema está desenfocando el fondo de la imagen. Desactiva los efectos de cámara del sistema operativo.",
+      "focus_not_continuous": "La cámara no tiene enfoque continuo activo. Puede costar más leer tarjetas gastadas.",
+      "low_resolution": "La resolución es menor de 1280×720. Revisa los ajustes de cámara del sistema."
+    }
+  },
   "privacy": {
     "heading": "Aviso de protección de datos",
     "controllerKnown": "Responsable: {controller}.",

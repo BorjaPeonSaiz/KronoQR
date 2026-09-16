@@ -98,6 +98,105 @@
       "status": "Kiosk paired. Entering…"
     }
   },
+  "diagnostics": {
+    "trigger": {
+      "ariaLabel": "Open kiosk diagnostics (hold for 3 seconds)"
+    },
+    "title": "Kiosk diagnostics",
+    "back": "Back to clock-in",
+    "autoReturnHint": "This screen returns to clock-in on its own if nothing is touched.",
+    "gate": {
+      "heading": "Service code",
+      "hint": "Enter this installation's service code.",
+      "codeLabel": "Service code",
+      "confirm": "Check",
+      "rejected": "Wrong code. 1 attempt left. | Wrong code. 1 attempt left. | Wrong code. {count} attempts left.",
+      "locked": "Too many attempts. Wait {seconds} s.",
+      "noCodeConfigured": "This installation has no service code configured."
+    },
+    "sections": {
+      "camera": "Camera",
+      "network": "Network",
+      "queue": "Queue",
+      "roster": "Roster",
+      "token": "Token",
+      "version": "Version",
+      "battery": "Battery",
+      "wakeLock": "Screen wake lock",
+      "errors": "Errors pending to send",
+      "privacy": "Data controller"
+    },
+    "rows": {
+      "camera": {
+        "state": "State",
+        "label": "Camera",
+        "resolution": "Resolution",
+        "frameRate": "Frame rate",
+        "facingMode": "Facing",
+        "focusMode": "Focus",
+        "zoom": "Zoom",
+        "backgroundBlur": "Background blur",
+        "torch": "Torch available"
+      },
+      "network": {
+        "connection": "Connection",
+        "reachable": "Server reachable",
+        "lastHeartbeat": "Last successful heartbeat",
+        "clockSkew": "Clock skew",
+        "clockSkewValue": "{seconds} s"
+      },
+      "queue": {
+        "size": "Pending records",
+        "oldest": "Oldest",
+        "storage": "Storage",
+        "syncing": "Syncing"
+      },
+      "roster": {
+        "generatedAt": "Generated",
+        "entries": "Indexed credentials",
+        "pinAvailable": "PIN clock-in available"
+      },
+      "token": {
+        "present": "State",
+        "id": "Identifier",
+        "expiresAt": "Expires",
+        "deviceId": "Device identifier",
+        "deviceName": "Kiosk name"
+      },
+      "version": {
+        "app": "App version",
+        "serviceWorker": "Service worker active"
+      },
+      "battery": {
+        "level": "Level",
+        "charging": "Charging"
+      },
+      "wakeLock": {
+        "supported": "Supported",
+        "active": "Active"
+      }
+    },
+    "values": {
+      "yes": "Yes",
+      "no": "No",
+      "unknown": "Unknown",
+      "notAvailable": "Not available",
+      "online": "Online",
+      "offline": "Offline",
+      "present": "Present",
+      "absent": "No token",
+      "durable": "Durable (IndexedDB)",
+      "memory": "In memory (fallback)",
+      "configured": "Configured",
+      "notConfigured": "Not configured",
+      "unpaired": "This tablet is not paired: there is no roster to show."
+    },
+    "warnings": {
+      "background_blur": "The system is blurring the video background. Turn off the operating system's camera effects.",
+      "focus_not_continuous": "The camera does not have continuous focus active. Worn cards may be harder to read.",
+      "low_resolution": "The resolution is below 1280×720. Check the system's camera settings."
+    }
+  },
   "privacy": {
     "heading": "Data protection notice",
     "controllerKnown": "Controller: {controller}.",

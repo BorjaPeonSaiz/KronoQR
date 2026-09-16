@@ -167,15 +167,21 @@ final readonly class UpdateSettingsHandler
 
         foreach ($changed as $value) {
             $previous = $current->get($value->key);
+            // Una clave `confidential` —hoy `KIOSK_SERVICE_CODE`— no entrega sus
+            // valores al evento: el secreto **no se transporta** para confiar
+            // despues en que nadie lo escriba. El asiento dira que cambio, quien
+            // y cuando (tarea 3.3, decision 6).
+            $redacted = $value->key->definition()->confidential;
 
             $events[] = new InstallationSettingChanged(
                 key: $value->key->value,
-                previousValue: $previous->value(),
-                newValue: $value->value(),
+                previousValue: $redacted ? '' : $previous->value(),
+                newValue: $redacted ? '' : $value->value(),
                 impact: $value->key->definition()->impact->value,
                 affectsWorkedHours: $value->affectsWorkedHours(),
                 wasProductDefault: $previous->isProductDefault,
                 occurredAt: $at,
+                valueRedacted: $redacted,
             );
         }
 

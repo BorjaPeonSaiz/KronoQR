@@ -26,6 +26,7 @@ import type { ApiClient } from '@/shared/api/client'
 import type { ClientErrorReport, KioskHeartbeatRequest } from '@/shared/api/types'
 import type { Clock } from '@/shared/time/clock'
 import { systemClock } from '@/shared/time/clock'
+import { storeServiceCodeHash } from './deviceIdentity'
 import type { ClientErrorEvent, ErrorReporter } from './errorReporter'
 
 /**
@@ -49,6 +50,14 @@ export interface KioskTelemetrySnapshot {
   readonly pendingQueueSize: number
   /** `occurred_at` del elemento mas antiguo de la cola, si hay cola (tarea 1.9). */
   readonly oldestPendingAt?: string | undefined
+  /**
+   * Bateria (RF-PA-07, tarea 3.3), de `navigator.getBattery()`. Ausentes -no
+   * `null`- cuando el navegador no ofrece la API (`exactOptionalPropertyTypes`,
+   * y el contrato dice «opcional», no «presente y nulo»): solo Chrome en
+   * Android la tiene, y una tablet que no informa no es una tablet averiada.
+   */
+  readonly batteryLevel?: number | undefined
+  readonly batteryCharging?: boolean | undefined
 }
 
 /**
@@ -75,19 +84,51 @@ export function buildHeartbeatBody(
   }
   // `exactOptionalPropertyTypes`: la clave no se escribe si no hay valor, en vez
   // de escribirse con `undefined`. El contrato dice «ausente cuando la cola esta
-  // vacia», no «presente y nulo». Mismo criterio para `client_errors`: ausente
-  // cuando no hay nada pendiente, no una lista vacia.
+  // vacia», no «presente y nulo». Mismo criterio para `client_errors`, y para
+  // los dos campos de bateria (tarea 3.3): ausentes cuando el navegador no
+  // ofrece la Battery Status API, no presentes y `null`.
   const withOldest: KioskHeartbeatRequest =
     snapshot.oldestPendingAt === undefined
       ? body
       : { ...body, oldest_pending_at: snapshot.oldestPendingAt }
 
-  if (clientErrors.length === 0) return withOldest
+  const withBatteryLevel: KioskHeartbeatRequest =
+    snapshot.batteryLevel === undefined
+      ? withOldest
+      : { ...withOldest, battery_level: snapshot.batteryLevel }
+
+  const withBattery: KioskHeartbeatRequest =
+    snapshot.batteryCharging === undefined
+      ? withBatteryLevel
+      : { ...withBatteryLevel, battery_charging: snapshot.batteryCharging }
+
+  if (clientErrors.length === 0) return withBattery
 
   return {
-    ...withOldest,
+    ...withBattery,
     client_errors: clientErrors.slice(0, MAX_CLIENT_ERRORS_PER_HEARTBEAT).map(toClientErrorReport),
   }
+}
+
+/**
+ * Ultimo latido con exito, tal como lo necesita la pantalla de diagnostico
+ * (RF-KI-08, tarea 3.3): «hora del ultimo latido correcto» y «desfase de
+ * reloj». Vive en el MODULO, no en el planificador de una pantalla concreta:
+ * `ScanView.vue` y `PinView.vue` crean cada una el suyo y lo paran en
+ * `onUnmounted`, pero el ultimo resultado tiene que sobrevivir a la navegacion
+ * hasta `/diagnostics` (mismo patron que `errorReporter.ts` y
+ * `useOfflineQueue.ts`: un dato de tablet, no un dato de pantalla).
+ */
+interface LastHeartbeatResult {
+  readonly beatAt: string
+  readonly skewSeconds: number | null
+}
+
+let lastHeartbeatResult: LastHeartbeatResult | null = null
+
+/** `null` si esta tablet no ha completado ningun latido en esta sesion. */
+export function getLastHeartbeatResult(): LastHeartbeatResult | null {
+  return lastHeartbeatResult
 }
 
 /**
@@ -193,7 +234,22 @@ export function createHeartbeatScheduler(options: HeartbeatSchedulerOptions): He
     // siguiente latido.
     options.reporter.acknowledge(result.data.client_errors_accepted)
 
+    // Huella del codigo de servicio (RF-KI-08, tarea 3.3), cacheada en CADA
+    // `200`, aunque el desfase de mas abajo no se pueda calcular. Se comprueba
+    // el tipo en vez de fiarse ciegamente del contrato: un doble de pruebas
+    // (o una version de servidor mas vieja que esta PWA) puede responder sin
+    // el campo, y en ese caso NO se toca la huella cacheada -no es lo mismo
+    // «el servidor dice que no hay codigo» (`null`, SI se cachea) que «este
+    // latido no dijo nada al respecto» (`undefined`, se conserva la anterior).
+    if (
+      typeof result.data.service_code_hash === 'string' ||
+      result.data.service_code_hash === null
+    ) {
+      storeServiceCodeHash(result.data.service_code_hash)
+    }
+
     const skew = clockSkewSeconds(clock.now(), result.data.server_time)
+    lastHeartbeatResult = { beatAt: clock.now().toISOString(), skewSeconds: skew }
     if (skew === null) return null
 
     if (Math.abs(skew) >= CLOCK_SKEW_WARNING_SECONDS) {

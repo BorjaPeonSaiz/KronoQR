@@ -80,6 +80,8 @@ afterEach(() => {
   vi.unstubAllGlobals()
   localStorage.removeItem('kronoqr.kiosk.device_token')
   localStorage.removeItem('kronoqr.kiosk.device_id')
+  localStorage.removeItem('kronoqr.kiosk.device_token_expires_at')
+  localStorage.removeItem('kronoqr.kiosk.device_name')
 })
 
 describe('pantalla de emparejamiento — RF-PD-06', () => {
@@ -105,6 +107,12 @@ describe('pantalla de emparejamiento — RF-PD-06', () => {
 
     expect(localStorage.getItem('kronoqr.kiosk.device_token')).toBe(TOKEN_VALUE)
     expect(localStorage.getItem('kronoqr.kiosk.device_id')).toBe(DEVICE_UUID)
+    // Tarea 3.3 (RF-KI-08): la pantalla de diagnostico necesita la caducidad
+    // del token y el nombre del quiosco, solo para mostrarlos.
+    expect(localStorage.getItem('kronoqr.kiosk.device_token_expires_at')).toBe(
+      '2026-12-06T10:07:00Z',
+    )
+    expect(localStorage.getItem('kronoqr.kiosk.device_name')).toBe('Recepcion')
 
     wrapper.unmount()
   })

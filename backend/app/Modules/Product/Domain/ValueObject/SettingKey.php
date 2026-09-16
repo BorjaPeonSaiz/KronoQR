@@ -116,6 +116,37 @@ enum SettingKey: string
     case LOCALE_AVAILABLE = 'LOCALE_AVAILABLE';
 
     /**
+     * RF-KI-08: el codigo con el que se abre la pantalla de diagnostico de la
+     * tablet (tarea 3.3, decision 6).
+     *
+     * **Numerico de 8 a 12 cifras** porque la tablet solo tiene el teclado en
+     * pantalla de `PinNumericKeypad`: un codigo con letras seria un codigo que
+     * nadie puede teclear donde hay que teclearlo.
+     *
+     * **Vacio de serie**, y el vacio significa «la pantalla se abre sin codigo».
+     * Una tablet sin emparejar no tiene nada que proteger —ni token, ni padron,
+     * ni cola con jornadas— y es justo la que hay que diagnosticar (regla dura
+     * 19): el producto no se entrega con un codigo de fabrica que todo el mundo
+     * conoceria.
+     *
+     * **El quiosco no recibe nunca el codigo**, solo su huella
+     * `sha256("{uuid}:{codigo}")` en cada `POST /api/v1/kiosk/heartbeat`
+     * (`service_code_hash`), y comprueba el codigo en local para que la pantalla
+     * funcione sin red.
+     *
+     * **Es la unica clave `confidential` del catalogo:** su valor no se copia al
+     * asiento de auditoria de su propio cambio —queda constancia de que cambio,
+     * de quien y de cuando— ni entra en el paquete de diagnostico ni en ningun
+     * log. `KIOSK_SERVICE_CODE` no esta en `DiagnosticsConfigurationAllowlist`,
+     * que solo deja pasar de la familia `KIOSK_` los techos de peticiones.
+     *
+     * Impacto `PRESENTATION`: no mueve ni un minuto del registro horario. Lo que
+     * cambia es quien puede abrir una pantalla que no muestra ningun dato
+     * personal.
+     */
+    case KIOSK_SERVICE_CODE = 'KIOSK_SERVICE_CODE';
+
+    /**
      * Los idiomas que el producto trae traducidos.
      *
      * No es configuracion del cliente: es lo que hay en `lang/` y en los `i18n`
@@ -203,6 +234,16 @@ enum SettingKey: string
             ),
             self::LOCALE_AVAILABLE->value => SettingDefinition::choiceList(
                 self::SHIPPED_LOCALES, self::SHIPPED_LOCALES, SettingImpact::PRESENTATION,
+            ),
+            // Vacio de serie: sin codigo, la pantalla de diagnostico de la
+            // tablet se abre sin el (RF-KI-08). Solo cifras y de 8 a 12 porque
+            // se teclea en el teclado numerico del quiosco; el maximo de 12 es
+            // el mismo del patron y no una longitud de columna.
+            //
+            // `confidential`: su valor no viaja al asiento de auditoria ni al
+            // paquete de diagnostico. Ver el docblock de la clave.
+            self::KIOSK_SERVICE_CODE->value => SettingDefinition::optionalText(
+                '', 12, SettingImpact::PRESENTATION, '/^[0-9]{8,12}$/', confidential: true,
             ),
         ];
     }

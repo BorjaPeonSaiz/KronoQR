@@ -1,15 +1,21 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ApiClient } from '@/shared/api/client'
+import { readServiceCodeHash } from '@/shared/telemetry/deviceIdentity'
 import type { ClientErrorEvent } from '@/shared/telemetry/errorReporter'
 import { createErrorReporter } from '@/shared/telemetry/errorReporter'
 import {
   buildHeartbeatBody,
   clockSkewSeconds,
   createHeartbeatScheduler,
+  getLastHeartbeatResult,
 } from '@/shared/telemetry/heartbeat'
 import { fixedClock } from '@/shared/time/clock'
 
-function apiReturning(serverTime: string, clientErrorsAccepted = 0): ApiClient {
+function apiReturning(
+  serverTime: string,
+  clientErrorsAccepted = 0,
+  serviceCodeHash: string | null = null,
+): ApiClient {
   return {
     recordScan: vi.fn(),
     recordPinScan: vi.fn(),
@@ -17,7 +23,11 @@ function apiReturning(serverTime: string, clientErrorsAccepted = 0): ApiClient {
     fetchRoster: vi.fn(),
     sendHeartbeat: vi.fn(async () => ({
       outcome: 'ok' as const,
-      data: { server_time: serverTime, client_errors_accepted: clientErrorsAccepted },
+      data: {
+        server_time: serverTime,
+        client_errors_accepted: clientErrorsAccepted,
+        service_code_hash: serviceCodeHash,
+      },
     })),
     // El latido no empareja nada: estos dos no los usa ninguna prueba de aqui.
     requestPairing: vi.fn(),
@@ -366,5 +376,85 @@ describe('latido del quiosco', () => {
 
     expect(api.sendHeartbeat).toHaveBeenCalledTimes(4) // 1 al arrancar + 3 ciclos
     vi.useRealTimers()
+  })
+
+  describe('bateria en el cuerpo (RF-PA-07, tarea 3.3)', () => {
+    it('omite los dos campos cuando el navegador no ofrece Battery Status API', () => {
+      const body = buildHeartbeatBody({ appVersion: '1.4.2', pendingQueueSize: 0 })
+      expect('battery_level' in body).toBe(false)
+      expect('battery_charging' in body).toBe(false)
+    })
+
+    it('incluye nivel y carga cuando se conocen', () => {
+      const body = buildHeartbeatBody({
+        appVersion: '1.4.2',
+        pendingQueueSize: 0,
+        batteryLevel: 83,
+        batteryCharging: true,
+      })
+      expect(body).toMatchObject({ battery_level: 83, battery_charging: true })
+    })
+
+    it('los dos son independientes: se puede conocer el nivel sin saber si carga', () => {
+      const body = buildHeartbeatBody({
+        appVersion: '1.4.2',
+        pendingQueueSize: 0,
+        batteryLevel: 15,
+      })
+      expect(body).toMatchObject({ battery_level: 15 })
+      expect('battery_charging' in body).toBe(false)
+    })
+  })
+
+  describe('huella del codigo de servicio y ultimo resultado (RF-KI-08, tarea 3.3)', () => {
+    afterEach(() => {
+      localStorage.removeItem('kronoqr.kiosk.service_code_hash')
+    })
+
+    it('cachea la huella que devuelve el servidor en cada 200', async () => {
+      const reporter = createErrorReporter({ appVersion: '1.4.2', deviceId: 'd' })
+      const scheduler = createHeartbeatScheduler({
+        api: apiReturning('2026-09-16T06:00:00.000Z', 0, 'a1b2c3'),
+        reporter,
+        snapshot: () => ({ appVersion: '1.4.2', pendingQueueSize: 0 }),
+        clock: fixedClock(new Date('2026-09-16T06:00:00.000Z')),
+      })
+
+      await scheduler.beat()
+
+      expect(readServiceCodeHash()).toBe('a1b2c3')
+    })
+
+    it('`null` BORRA la huella cacheada: la instalacion ha quitado el codigo', async () => {
+      localStorage.setItem('kronoqr.kiosk.service_code_hash', 'huella-vieja')
+      const reporter = createErrorReporter({ appVersion: '1.4.2', deviceId: 'd' })
+      const scheduler = createHeartbeatScheduler({
+        api: apiReturning('2026-09-16T06:00:00.000Z', 0, null),
+        reporter,
+        snapshot: () => ({ appVersion: '1.4.2', pendingQueueSize: 0 }),
+        clock: fixedClock(new Date('2026-09-16T06:00:00.000Z')),
+      })
+
+      await scheduler.beat()
+
+      expect(readServiceCodeHash()).toBeNull()
+    })
+
+    it('conserva el ultimo resultado (hora y desfase) para la pantalla de diagnostico', async () => {
+      const reporter = createErrorReporter({ appVersion: '1.4.2', deviceId: 'd' })
+      const scheduler = createHeartbeatScheduler({
+        api: apiReturning('2026-09-16T06:00:20.000Z'),
+        reporter,
+        snapshot: () => ({ appVersion: '1.4.2', pendingQueueSize: 0 }),
+        clock: fixedClock(new Date('2026-09-16T06:00:00.000Z')),
+      })
+
+      await scheduler.beat()
+
+      expect(getLastHeartbeatResult()).toEqual({
+        beatAt: '2026-09-16T06:00:00.000Z',
+        skewSeconds: -20,
+      })
+    })
   })
 })

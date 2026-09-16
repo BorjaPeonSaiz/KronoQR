@@ -6,6 +6,8 @@ namespace App\Modules\Product\Http\Resource;
 
 use App\Modules\Product\Domain\ValueObject\SettingDefinition;
 use App\Modules\Product\Domain\ValueObject\SettingValue;
+use App\Modules\Product\Http\Policy\SettingsPolicy;
+use App\Modules\Shared\Application\Port\ManagementActor;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -30,6 +32,16 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * `maximum_length` y una cadena libre no lleva `allowed`. Un objeto con nulos
  * obligaria al cliente a distinguir «sin limite» de «limite nulo».
  *
+ * ## `redacted`: el fabricante no se lleva los secretos del cliente
+ *
+ * Va **siempre**, y vale `false` en todo salvo en una clave `confidential`
+ * servida a un actor de soporte, donde ademas `value` sale `null`. Que este
+ * siempre y no solo cuando es `true` es deliberado: un campo que aparece a
+ * veces obliga a distinguir «ausente» de «falso», y es asi como se acaba con un
+ * panel que enseña un valor vacio como si fuera el valor.
+ *
+ * Es aditivo sobre `/api/v1` (ADR-012): un cliente que no lo conozca lo ignora.
+ *
  * @property-read SettingValue $resource
  */
 final class SettingResource extends JsonResource
@@ -45,16 +57,46 @@ final class SettingResource extends JsonResource
         $setting = $this->resource;
 
         $definition = $setting->key->definition();
+        $redacted = $definition->confidential && self::isSupportActor($request);
 
         return [
             'key' => $setting->key->value,
-            'value' => $setting->value(),
+            'value' => $redacted ? null : $setting->value(),
+            'redacted' => $redacted,
             'type' => $definition->type->value,
             'impact' => $definition->impact->value,
             'affects_worked_hours' => $setting->affectsWorkedHours(),
             'source' => $setting->isProductDefault ? 'product_default' : 'installation',
             ...$this->constraints($definition),
         ];
+    }
+
+    /**
+     * Si quien pide esta pantalla es el **fabricante** y no el cliente.
+     *
+     * Un acceso de soporte con alcance `configuration` entra aqui a proposito
+     * —configurar la instalacion del cliente es para lo que se concede— pero una
+     * clave `confidential` no es configuracion: es un secreto vivo del cliente.
+     * El codigo de servicio del quiosco (RF-KI-08) abre la pantalla de
+     * mantenimiento de todas sus tablets, y quien viene a arreglar una incidencia
+     * tecnica no lo necesita para nada.
+     *
+     * **Ni pretender que no existe.** Se devuelve la fila con `value: null` y
+     * `redacted: true` en lugar de omitirla: ocultarla diria «ese ajuste no
+     * existe en este producto», y quien esta al teléfono con el cliente tiene que
+     * poder decirle «esto lo tienes puesto, míralo tú». El `PATCH` que la toque
+     * recibe `403` por la otra mitad de la puerta
+     * ({@see SettingsPolicy::updateConfidential()}).
+     *
+     * Se resuelve por el puerto compartido {@see ManagementActor::isSupportActor()},
+     * igual que las policies de licencia, diagnostico y concesiones: la pregunta
+     * «¿es soporte?» tiene una sola respuesta en el producto.
+     */
+    private static function isSupportActor(Request $request): bool
+    {
+        $actor = $request->user();
+
+        return $actor instanceof ManagementActor && $actor->isSupportActor();
     }
 
     /**

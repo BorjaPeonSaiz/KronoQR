@@ -34,5 +34,16 @@ final readonly class HeartbeatOutcome
         public DateTimeImmutable $seenAt,
         /** Cuantos de los `client_errors` recibidos quedaron en el historico. `0` si no vino ninguno. */
         public int $clientErrorsAccepted,
+        /**
+         * La huella del codigo de servicio de la pantalla de diagnostico
+         * (RF-KI-08, tarea 3.3), o `null` si la instalacion no tiene codigo.
+         *
+         * **Viaja en el latido y no en el padron** porque el padron es «dos
+         * campos y ni uno mas» (RL-12) y el latido es el unico canal autenticado
+         * que la tablet repite cada minuto: un codigo cambiado en el panel llega
+         * a todas las tablets en sesenta segundos. La tablet la guarda y
+         * comprueba el codigo **en local**, sin red.
+         */
+        public ?string $serviceCodeHash = null,
     ) {}
 }

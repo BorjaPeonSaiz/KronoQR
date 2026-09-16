@@ -118,3 +118,68 @@ test(
     await expect(page.getByTestId('locale-available-en')).toBeChecked()
   },
 )
+
+// --- Codigo de servicio del quiosco (RF-KI-08, tarea 3.3) -------------------
+//
+// Abre la pantalla de diagnostico de la tablet (`frontend-kiosk`); aqui solo
+// se prueba el lado del panel: que se guarda, que vacio sigue siendo valido y
+// que una forma invalida no llega a mandarse al servidor.
+
+test(
+  'guardar el codigo de servicio del quiosco persiste tras recargar',
+  { tag: ['@RF-KI-08'] },
+  async ({ page }) => {
+    await stubManagementApi(page, { role: 'admin' })
+    await logInAsAdmin(page)
+
+    await page.goto('/settings')
+
+    await page.getByTestId('kiosk-service-code').fill('48392017')
+    await page.getByTestId('save').click()
+
+    await expect(page.getByTestId('saved')).toBeVisible()
+
+    await page.reload()
+    await expect(page.getByTestId('kiosk-service-code')).toHaveValue('48392017')
+  },
+)
+
+test(
+  'un codigo con letras o fuera de 8-12 cifras no deja guardar, sin llegar al servidor',
+  { tag: ['@RF-KI-08'] },
+  async ({ page }) => {
+    await stubManagementApi(page, { role: 'admin' })
+    await logInAsAdmin(page)
+
+    await page.goto('/settings')
+
+    await page.getByTestId('kiosk-service-code').fill('12A45')
+
+    await expect(page.getByText('Escribe un código de 8 a 12 cifras')).toBeVisible()
+    await expect(page.getByTestId('save')).toBeDisabled()
+  },
+)
+
+test(
+  'vaciar el codigo de servicio del quiosco es un cambio valido: la pantalla se abre sin el',
+  { tag: ['@RF-KI-08'] },
+  async ({ page }) => {
+    await stubManagementApi(page, {
+      role: 'admin',
+      operationalSettings: { kioskServiceCode: '48392017' },
+    })
+    await logInAsAdmin(page)
+
+    await page.goto('/settings')
+
+    await expect(page.getByTestId('kiosk-service-code')).toHaveValue('48392017')
+
+    await page.getByTestId('kiosk-service-code').fill('')
+    await page.getByTestId('save').click()
+
+    await expect(page.getByTestId('saved')).toBeVisible()
+
+    await page.reload()
+    await expect(page.getByTestId('kiosk-service-code')).toHaveValue('')
+  },
+)

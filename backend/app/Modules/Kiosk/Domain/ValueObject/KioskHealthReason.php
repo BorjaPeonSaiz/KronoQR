@@ -55,4 +55,16 @@ enum KioskHealthReason: string
 
     /** Desvinculado. No late porque no debe latir. */
     case Revoked = 'revoked';
+
+    /**
+     * Bateria por debajo del umbral **y sin cargar**.
+     *
+     * Una tablet colgada de la pared que se descarga es una tablet a la que
+     * alguien ha quitado el cargador, y morira durante el turno: se sabe antes
+     * de que la pantalla se apague, no despues. Con `battery_charging` a `true`
+     * no hay nada que decir, y con cualquiera de los dos a `null` tampoco: la
+     * Battery Status API solo la ofrece Chrome en Android y una tablet que no
+     * informa no es una tablet averiada (decision 5 de la ficha 3.3).
+     */
+    case BatteryLow = 'battery_low';
 }

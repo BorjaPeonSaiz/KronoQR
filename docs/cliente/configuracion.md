@@ -1141,9 +1141,9 @@ sudo docker compose exec app php artisan product:doctor
 > significa que quien tenga uno puede leer las copias, firmar tarjetas o abrir
 > los PIN sellados del otro.
 
-### 6.0 Las nueve claves que NO son variables de entorno
+### 6.0 Las diez claves que NO son variables de entorno
 
-Nueve propiedades de la instalación no viven en el `.env` sino en la tabla
+Diez propiedades de la instalación no viven en el `.env` sino en la tabla
 `installation_settings`, se editan **desde el panel** y surten efecto en la
 petición siguiente sin reiniciar nada:
 
@@ -1158,6 +1158,30 @@ petición siguiente sin reiniciar nada:
 | `BRANDING_ACCENT_COLOR` | Panel → **Marca** (`/branding`) | Sección 2.2 |
 | `LOCALE_DEFAULT` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.3 |
 | `LOCALE_AVAILABLE` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.3 |
+| `KIOSK_SERVICE_CODE` | Panel → **Ajustes operativos** (`/settings`) | Sección 6.0, aquí mismo |
+
+**`KIOSK_SERVICE_CODE` — el código de servicio de la tablet.** Es el código
+numérico, de 8 a 12 cifras, con el que se abre la **pantalla de diagnóstico** de
+un quiosco (pulsación larga sobre el reloj). Esa pantalla muestra el estado de la
+cámara, de la red, de la cola de fichajes sin enviar y la versión instalada; no
+muestra ningún dato de empleados ni la clave de la tablet. Sirve para que quien
+atiende una avería no tenga que llamar a nadie.
+
+- **Vacío de serie**, y vacío significa *la pantalla se abre sin pedir código*.
+  No hay un código de fábrica: uno igual para todos los hoteles no protegería
+  nada.
+- **Las tablets lo reciben solas en menos de un minuto** después de guardarlo, y
+  **nunca reciben el código**: reciben una huella con la que comprobarlo sin
+  salir a la red, para que la pantalla siga funcionando cuando el problema es
+  justamente que no hay red.
+- **No se puede recuperar leyéndolo en ningún registro.** Queda constancia en la
+  auditoría de quién lo cambió y cuándo, pero no de cuál es, y tampoco viaja en
+  el paquete de diagnóstico que se envía a soporte. Si lo olvidas, escribe uno
+  nuevo.
+- Apúntalo donde lo tenga quien mantiene los quioscos. **No lo pegues en la
+  propia tablet.**
+- `php artisan product:doctor` avisa —solo avisa, nunca falla— mientras no haya
+  ninguno configurado.
 
 Las dos pantallas piden cuenta de **administrador de instalación** y las dos
 guardan con el mismo botón: el cambio surte efecto en la petición siguiente y
@@ -1165,9 +1189,11 @@ queda auditado con tu nombre, la fecha y el valor anterior. Si no ves esas
 entradas en el menú, no es que falten: es que tu cuenta no es de
 administrador.
 
-**Manda la base de datos** (sección 1). Cinco de las nueve —las de marca y las
-de idioma— ya no existen como variable de entorno: se retiraron para que no
-hubiera dos sitios donde escribir el mismo dato.
+**Manda la base de datos** (sección 1). Seis de las diez —las de marca, las de
+idioma y el código de servicio— no existen como variable de entorno: las cinco
+primeras se retiraron para que no hubiera dos sitios donde escribir el mismo
+dato, y la última nunca la tuvo, porque un secreto en el `.env` es un secreto que
+acaba en una copia de seguridad sin cifrar.
 
 **Las cuatro `ATTENDANCE_*` sí siguen apareciendo en `.env.example`, y conviene
 saber exactamente qué son:** una copia del valor de serie, escrita ahí para que
@@ -1392,6 +1418,7 @@ salen por la misma IP.
 | `KIOSK_BATCH_MAX_SIZE` | — | Escaneos como máximo en un lote de sincronización | `50` | Nunca: también está en el contrato de la API, así que cambiarlo aquí no lo cambia en la tablet. **Bajarlo por debajo de 50 hace que el servidor rechace todos los lotes de las tablets (422) y su cola sin red no se vacíe nunca**: no cambia minutos, pierde fichajes enteros | No |
 | `KIOSK_HEALTH_FRESH_WITHIN_SECONDS` | — | Segundos de margen antes de que `php artisan kiosk:health` deje de dar por «al día» el último contacto de un quiosco | `120` | Casi nunca. El latido va cada 60 s, así que dos minutos son dos latidos perdidos: uno suelto puede ser un wifi que parpadea | No |
 | `KIOSK_HEALTH_SILENT_AFTER_SECONDS` | — | Segundos a partir de los cuales `php artisan kiosk:health` da un quiosco por callado y sale con código 2 | `600` | Casi nunca. **Es el mismo umbral que la alerta `QuioscoSinLatido`** (`infra/observability/prometheus/rules/kiosk.yml`, [`operacion.md`](operacion.md) §10.4): si cambias uno, cambia el otro a la vez, o la consola y la alerta dirán cosas distintas del mismo quiosco | No |
+| `KIOSK_HEALTH_BATTERY_LOW_PERCENT` | — | Nivel de batería por debajo del cual un quiosco **que no está cargando** sale en aviso, en el panel y en `php artisan kiosk:health` | `15` | Si tus tablets están siempre enchufadas puedes bajarlo; si las rotas a mano, súbelo. Con el cargador puesto no avisa nunca, y una tablet cuyo navegador no informa de la batería tampoco: solo Chrome en Android la informa | No |
 
 ### 6.15 Red, TLS y borde
 

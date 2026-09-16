@@ -8,7 +8,11 @@ use App\Modules\Identity\Application\Command\RevokeDeviceTokenCommand;
 use App\Modules\Identity\Application\UseCase\RevokeDeviceToken;
 use App\Modules\Kiosk\Application\Command\UnpairDeviceCommand;
 use App\Modules\Kiosk\Application\Port\DeviceRegistry;
+use App\Modules\Kiosk\Application\Query\DeviceView;
 use App\Modules\Kiosk\Domain\ValueObject\DeviceSummary;
+use App\Modules\Kiosk\Domain\ValueObject\KioskHealthRow;
+use App\Modules\Kiosk\Domain\ValueObject\KioskHealthThresholds;
+use App\Modules\Shared\Application\Port\Clock;
 
 /**
  * Retira un quiosco de servicio (`POST /api/v1/devices/{uuid}/unpair`,
@@ -63,17 +67,21 @@ final readonly class UnpairDevice
     public function __construct(
         private DeviceRegistry $devices,
         private RevokeDeviceToken $tokens,
+        private Clock $clock,
+        private KioskHealthThresholds $thresholds,
     ) {}
 
     /**
-     * @return DeviceSummary|null El quiosco **ya revocado**, para que el panel
-     *                            repinte la fila sin volver a pedir la lista.
-     *                            `null` si el `uuid` no existe: es el `404` del
-     *                            contrato.
+     * @return DeviceView|null El quiosco **ya revocado**, con su veredicto —que
+     *                         sera `revoked`—, para que el panel repinte la fila
+     *                         sin volver a pedir la lista. `null` si el `uuid` no
+     *                         existe: es el `404` del contrato.
      */
-    public function handle(UnpairDeviceCommand $command): ?DeviceSummary
+    public function handle(UnpairDeviceCommand $command): ?DeviceView
     {
-        if (! $this->devices->findByUuid($command->deviceUuid) instanceof DeviceSummary) {
+        $before = $this->devices->findByUuid($command->deviceUuid);
+
+        if (! $before instanceof DeviceSummary) {
             return null;
         }
 
@@ -87,6 +95,17 @@ final readonly class UnpairDevice
         // Se vuelve a leer para devolver el estado de DESPUES. Con la lectura de
         // arriba, la respuesta diria `active` sobre un quiosco que acaba de
         // dejar de serlo, y el panel pintaria la fila al reves.
-        return $this->devices->findByUuid($command->deviceUuid);
+        //
+        // El `?? $before` cubre una fila que desapareciera entre las dos
+        // lecturas, que no puede pasar —nada se borra (regla dura 5)— y que, si
+        // pasara, no puede convertir en `404` un `unpair` que ya revoco el
+        // token: quien pulso el boton se quedaria sin saber que si funciono.
+        $device = $this->devices->findByUuid($command->deviceUuid) ?? $before;
+
+        // El veredicto lo calcula la MISMA clase que el panel y la consola, y
+        // sobre el estado ya revocado: `revoked` no cuenta para ninguna alerta,
+        // que es justo lo que el panel tiene que pintar en cuanto se desvincula
+        // (decision 2 de la ficha 3.3).
+        return new DeviceView($device, KioskHealthRow::of($device, $this->clock->now(), $this->thresholds));
     }
 }

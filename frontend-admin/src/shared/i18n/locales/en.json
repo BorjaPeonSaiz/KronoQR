@@ -978,12 +978,14 @@
     "intro": "The thresholds that decide whether a shift entry is anomalous, which scans are discarded as bounce, and which clock or transit skew opens an incident; and the languages this installation offers. No legal threshold lives here: that is «Compliance».",
     "loading": "Loading the settings…",
     "attendanceHeading": "Attendance",
+    "diagnosticsHeading": "Diagnostics",
     "localesHeading": "Languages",
     "fields": {
       "maxShiftHours": "Maximum shift entry duration (h)",
       "debounceSeconds": "Anti-bounce window (s)",
       "maxClockSkewMinutes": "Tolerated clock skew (min)",
       "minTransitSeconds": "Minimum transit between kiosks (s)",
+      "kioskServiceCode": "Kiosk service code",
       "localeDefault": "Default language",
       "localeAvailable": "Available languages"
     },
@@ -992,12 +994,15 @@
       "debounceSeconds": "Grace window: two scans of the same person inside it count as one. Set it to 0 to disable it. Accepted range: {minimum}–{maximum} seconds.",
       "maxClockSkewMinutes": "Skew tolerated between the tablet's clock and the server's before flagging the scan for review. It never rejects a scan, only flags it. Accepted range: {minimum}–{maximum} minutes.",
       "minTransitSeconds": "The minimum believable time to walk from one kiosk to another. Below it, an incident is opened. Set it to 0 if two tablets sit at the same door. Accepted range: {minimum}–{maximum} seconds.",
+      "kioskServiceCode": "It opens the tablet's diagnostics screen. Empty: the screen opens with no code. Digits only, 8 to 12.",
+      "kioskServiceCodeRedacted": "Not visible with this kind of access: someone signing in as support cannot see or change the service code.",
       "localeDefault": "The language the three applications and the documents are served in when nobody picks another. It has to be among the available languages.",
       "localeAvailable": "Languages this installation offers. At least one, and the default language always has to stay checked."
     },
     "errors": {
       "required": "This field cannot be left empty.",
-      "notAWholeNumber": "Enter a whole number, with no decimals or letters."
+      "notAWholeNumber": "Enter a whole number, with no decimals or letters.",
+      "notAServiceCode": "Enter a code with 8 to 12 digits, or leave it empty to use none."
     },
     "affectsWorkedHoursWarning": "You are about to change a threshold that can change the minutes recorded. The change is audited with your name, the date, the previous value and the new one.",
     "audited": "Every changed key leaves its own audit trail entry (calculation_setting.changed) with the previous value, the new one, who changed it and when.",
@@ -1149,12 +1154,14 @@
       "description": "Link the first tablet with the six-digit code it shows on screen."
     },
     "table": {
-      "caption": "Kiosks of the installation",
+      "caption": "Kiosks of the installation, times in {zone}",
       "name": "Name",
       "status": "Status",
+      "health": "Health",
       "appVersion": "Version",
       "lastSeen": "Last heartbeat",
       "pendingQueue": "Unsynced clockings",
+      "battery": "Battery",
       "pairedAt": "Linked",
       "actions": "Actions"
     },
@@ -1165,8 +1172,45 @@
     "list": {
       "lastUpdatedAt": "Updated: {moment}",
       "lastSeenAgo": "{hours} h {minutes} min ago",
-      "neverSeen": "No heartbeat yet"
+      "neverSeen": "No heartbeat yet",
+      "oldestPendingAgo": "The oldest one, {hours} h {minutes} min ago"
     },
+    "health": {
+      "verdict": {
+        "ok": "Up to date",
+        "warning": "Warning",
+        "failure": "Failure",
+        "revoked": "Revoked"
+      },
+      "reason": {
+        "beating": "Beating normally.",
+        "queue_pending": "Beating normally, with clockings still to sync.",
+        "late": "The last heartbeat arrived later than expected.",
+        "silent": "It has gone longer than expected without a heartbeat.",
+        "awaiting_first_heartbeat": "Just linked: it has not sent its first heartbeat yet.",
+        "never_seen": "It has never beaten and has been linked longer than expected.",
+        "revoked": "Unlinked: it no longer counts for anything.",
+        "battery_low": "Low battery and not charging."
+      },
+      "whatToDoHeading": "What to do",
+      "whatToDo": {
+        "beating": "The kiosk is up to date: no action is needed.",
+        "queue_pending": "It has network and still has clockings it has not sent: wait a few minutes; if the queue does not shrink, check the tablet's diagnostics screen (queue and sync) and the «Kiosk not responding» runbook (docs/runbooks/quiosco-no-responde.md) §2.",
+        "late": "Watch it: no heartbeat is not the same as no clocking, the tablet keeps recording in its local queue and will send it as soon as it gets network back. If it does not catch up with the next heartbeat, follow the «Kiosk not responding» runbook (docs/runbooks/quiosco-no-responde.md) §2.",
+        "silent": "No heartbeat is not the same as no clocking: the tablet keeps recording in its local queue and will send it as soon as it gets network back. Follow the «Kiosk not responding» runbook (docs/runbooks/quiosco-no-responde.md) §2 and run «php artisan kiosk:health» from the server.",
+        "awaiting_first_heartbeat": "It is normal right after linking it. If it takes several minutes to beat, check the tablet's connection.",
+        "never_seen": "Follow the «Kiosk not responding» runbook (docs/runbooks/quiosco-no-responde.md) §2 and run «php artisan kiosk:health» from the server.",
+        "revoked": "This kiosk is unlinked: no action is needed.",
+        "battery_low": "Check the charger: the tablet's battery is low and it is not charging."
+      }
+    },
+    "battery": {
+      "charging": "Charging",
+      "notCharging": "Not charging",
+      "unknown": "No data",
+      "lowWarning": "Low battery"
+    },
+    "legend": "Up to date until {fresh} without a heartbeat; failure from {silent} on; low battery below {batteryPercent} % while not charging.",
     "pair": {
       "action": "Link kiosk",
       "heading": "Link kiosk",

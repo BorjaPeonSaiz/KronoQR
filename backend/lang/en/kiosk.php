@@ -46,7 +46,21 @@ return [
             'version' => 'Version',
             'last_seen' => 'Last contact',
             'queue' => 'Queue',
+            'battery' => 'Battery',
             'verdict' => 'Verdict',
+        ],
+
+        /*
+         * The tablet battery (task 3.3).
+         *
+         * `unknown` is NOT zero: it means "this browser does not report it",
+         * which is every browser other than Chrome on Android. Printing "0 %"
+         * there would put half the fleet in warning on day one.
+         */
+        'battery' => [
+            'level' => ':level %',
+            'charging' => ':level % (charging)',
+            'unknown' => '—',
         ],
 
         // The real `devices.status` catalogue (doc 01 §5.5): two values.
@@ -93,6 +107,9 @@ return [
                 .'the tablet picks up its token on its own. Run this command again in a minute.',
             'never_seen' => 'Paired and NEVER seen. The tablet either never picked up its token or cannot reach the server: '
                 .'check that the application is open and that the server URL is correct.',
+            'battery_low' => 'It has :level % battery left and is NOT charging. It is almost always an unplugged charger '
+                .'or a cable that came loose: plug it in before it dies mid-shift. '
+                .'While it has battery it keeps recording clock-ins normally.',
         ],
 
         'fleet_empty' => 'No kiosk is paired yet. Pair the first one from the panel, under "Kiosks", '

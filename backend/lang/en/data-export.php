@@ -453,7 +453,11 @@ return [
             'summary' => 'Installation configuration as you left it in the panel: languages, branding, operational thresholds.',
             'columns' => [
                 'key' => 'Setting name.',
-                'value' => 'Its value, as a JSON document.',
+                'value' => 'Its value, as a JSON document. Empty for settings that are a secret: see `value_redacted`.',
+                'value_redacted' => 'Whether the value was deliberately withheld from this file. It is only `true` for '
+                    .'settings that are a secret shared with the tablets, such as the kiosk service code: the row is here '
+                    .'—with when it changed and who changed it— but the value is not, exactly as in the audit trail. '
+                    .'This file gets stored and forwarded; you can always see the value in the panel, under Operational settings.',
                 'updated_at' => 'When it was last changed.',
                 'updated_by_user_uuid' => 'Who changed it.',
             ],

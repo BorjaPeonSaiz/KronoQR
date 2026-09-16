@@ -74,8 +74,13 @@ final readonly class RecordInstallationSettingChange
                 // El antes y el despues, que es lo que hace el asiento
                 // reconstruible. Ninguno lleva datos personales: son umbrales,
                 // nombres de marca e idiomas (regla dura 21).
-                'previous_value' => $event->previousValue,
-                'new_value' => $event->newValue,
+                //
+                // **Salvo en una clave `confidential`**, donde no aparecen y en
+                // su lugar va `value_redacted` (tarea 3.3): `KIOSK_SERVICE_CODE`
+                // es un secreto compartido con cada tablet del hotel y este
+                // trail se enseña en una inspeccion. Que cambio, quien y cuando
+                // sigue estando, que es lo que RL-04 exige.
+                ...$this->values($event),
                 // Sobre que actua la clave: `worked_hours`, `compliance_review`
                 // o `presentation`.
                 'impact' => $event->impact,
@@ -91,5 +96,22 @@ final readonly class RecordInstallationSettingChange
             ip: $this->context->ip(),
             userAgent: $this->context->userAgent(),
         ));
+    }
+
+    /**
+     * El antes y el despues, **o la marca de que no se escriben**.
+     *
+     * No se redacta con un `'***'` ni con la longitud del valor: un asiento que
+     * dijera «pasa de 8 a 10 cifras» seria informacion sobre el secreto escrita
+     * en una tabla que se enseña. O esta el valor, o esta la marca de que no
+     * esta; no hay termino medio que no sea una filtracion parcial.
+     *
+     * @return array<string, int|string|list<string>|bool>
+     */
+    private function values(InstallationSettingChanged $event): array
+    {
+        return $event->valueRedacted
+            ? ['value_redacted' => true]
+            : ['previous_value' => $event->previousValue, 'new_value' => $event->newValue];
     }
 }

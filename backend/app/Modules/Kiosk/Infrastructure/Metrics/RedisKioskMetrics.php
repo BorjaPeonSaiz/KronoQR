@@ -9,8 +9,8 @@ use Illuminate\Contracts\Redis\Factory as Redis;
 use Throwable;
 
 /**
- * `kiosk_last_seen_seconds{device}` y `kiosk_offline_queue_size{device}` sobre
- * Redis (doc 02 §8.2).
+ * `kiosk_last_seen_seconds{device}`, `kiosk_offline_queue_size{device}` y
+ * `kiosk_battery_level{device}` sobre Redis (doc 02 §8.2).
  *
  * **Redis y no el colector *textfile***, por lo mismo que
  * `Attendance\Infrastructure\Metrics\RedisScanMetrics`: el hecho medido lo
@@ -45,6 +45,15 @@ final readonly class RedisKioskMetrics implements KioskMetrics
     public const string QUEUE_SIZE = self::KEY_PREFIX.'kiosk_offline_queue_size';
 
     /**
+     * `kiosk_battery_level{device}` (RF-PA-07, tarea 3.3, doc 02 §8.2).
+     *
+     * Gauge como los dos de arriba y por lo mismo: lo que interesa es el nivel
+     * de AHORA, no cuantas veces se midio. **Solo se publica cuando el
+     * dispositivo informa**: ver {@see self::heartbeat()}.
+     */
+    public const string BATTERY_LEVEL = self::KEY_PREFIX.'kiosk_battery_level';
+
+    /**
      * `kiosk_pairing_total{result,reason}` (RF-PD-06, doc 02 §8.2).
      *
      * Un solo contador con etiquetas y no cuatro metricas: las cuatro responden
@@ -55,14 +64,31 @@ final readonly class RedisKioskMetrics implements KioskMetrics
 
     public function __construct(private Redis $redis) {}
 
-    public function heartbeat(string $deviceUuid, int $seenAtUnixSeconds, int $pendingQueueSize): void
-    {
+    public function heartbeat(
+        string $deviceUuid,
+        int $seenAtUnixSeconds,
+        int $pendingQueueSize,
+        ?int $batteryLevel = null,
+    ): void {
         try {
             $connection = $this->redis->connection();
             $label = 'device='.$deviceUuid;
 
             $connection->command('HSET', [self::LAST_SEEN, $label, $seenAtUnixSeconds]);
             $connection->command('HSET', [self::QUEUE_SIZE, $label, $pendingQueueSize]);
+
+            if ($batteryLevel !== null) {
+                // **Sin `else`, y esa es la decision**: una tablet cuyo navegador
+                // no implementa la Battery Status API no publica la serie, en
+                // lugar de publicar un cero. Un cero de relleno pondria en rojo
+                // cualquier panel de bateria y dispararia el aviso de la ficha
+                // por cada quiosco que simplemente no sabe cuanta le queda.
+                //
+                // La serie se queda con el ULTIMO valor conocido mientras el
+                // dispositivo deje de informar, que es lo que hace un gauge y lo
+                // correcto aqui: «no lo se ahora» no borra lo que se supo.
+                $connection->command('HSET', [self::BATTERY_LEVEL, $label, $batteryLevel]);
+            }
         } catch (Throwable) {
             // Silencio deliberado y acotado a este metodo: ver el docblock.
         }

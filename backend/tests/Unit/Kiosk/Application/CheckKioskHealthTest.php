@@ -31,14 +31,23 @@ use Tests\Support\Time\FixedClock;
  * caen y le obligan a mirar el otro documento.
  */
 
-/** Los plazos de serie: los mismos que `config/kiosk.php`. */
+/** Los umbrales de serie: los mismos que `config/kiosk.php`. */
 function umbralesDeSalud(): KioskHealthThresholds
 {
-    return new KioskHealthThresholds(freshWithinSeconds: 120, silentAfterSeconds: 600);
+    return new KioskHealthThresholds(
+        freshWithinSeconds: 120,
+        silentAfterSeconds: 600,
+        batteryLowPercent: 15,
+    );
 }
 
 /**
  * Un quiosco a medida, con el minimo que hay que decir en cada prueba.
+ *
+ * `batteryLevel` y `batteryCharging` son `null` por defecto porque ese es el
+ * caso normal de una tablet cuyo navegador no implementa la Battery Status API
+ * —todo lo que no sea Chrome en Android—, y porque asi las pruebas que no hablan
+ * de bateria comprueban de paso que la bateria desconocida no cambia nada.
  */
 function quioscoDePrueba(
     string $name = 'Recepcion',
@@ -46,6 +55,8 @@ function quioscoDePrueba(
     ?string $lastSeenAt = null,
     int $pendingQueueSize = 0,
     ?string $pairedAt = '2026-09-09 08:00:00',
+    ?int $batteryLevel = null,
+    ?bool $batteryCharging = null,
 ): DeviceSummary {
     return new DeviceSummary(
         id: 1,
@@ -56,6 +67,8 @@ function quioscoDePrueba(
         lastSeenAt: $lastSeenAt === null ? null : new DateTimeImmutable($lastSeenAt, new DateTimeZone('UTC')),
         pendingQueueSize: $pendingQueueSize,
         pairedAt: $pairedAt === null ? null : new DateTimeImmutable($pairedAt, new DateTimeZone('UTC')),
+        batteryLevel: $batteryLevel,
+        batteryCharging: $batteryCharging,
     );
 }
 
@@ -144,6 +157,112 @@ it('cuenta antes el silencio que la cola cuando se dan los dos a la vez', functi
     $report = saludDeLaFlota([quioscoDePrueba(lastSeenAt: '2026-09-09 09:00:00', pendingQueueSize: 40)])->handle();
 
     expect($report->devices[0]->reason)->toBe(KioskHealthReason::Silent);
+})->group('RF-PA-07');
+
+// --- La bateria (tarea 3.3) -------------------------------------------------
+
+/*
+ * La bateria entra en el veredicto SOLO POR ABAJO Y SOLO DESCARGANDOSE
+ * (decision 5 de la ficha). Lo que se fija aqui son las tres condiciones que
+ * tienen que darse a la vez y la frontera inclusiva del umbral: cualquiera de
+ * ellas mal puesta pone en aviso a la flota entera —y un aviso que sale siempre
+ * se ignora siempre— o no avisa nunca, que es no tener la columna.
+ */
+
+it('decide la bateria por el nivel, por si esta cargando y por el umbral, todo a la vez', function (
+    ?int $level,
+    ?bool $charging,
+    KioskHealthVerdict $verdict,
+    KioskHealthReason $reason,
+): void {
+    $report = saludDeLaFlota([quioscoDePrueba(
+        lastSeenAt: '2026-09-09 11:59:30',
+        batteryLevel: $level,
+        batteryCharging: $charging,
+    )])->handle();
+
+    expect($report->devices[0]->verdict)->toBe($verdict)
+        ->and($report->devices[0]->reason)->toBe($reason);
+})->with([
+    // El umbral es INCLUSIVO: el 15 que el cliente escribe en su `.env` es el
+    // primero que quiere ver avisado, no el primero que no lo esta.
+    'al 16 %, descargandose: todavia no' => [16, false, KioskHealthVerdict::Ok, KioskHealthReason::Beating],
+    'al 15 % exacto, descargandose: avisa' => [15, false, KioskHealthVerdict::Warning, KioskHealthReason::BatteryLow],
+    'al 3 %, descargandose: avisa' => [3, false, KioskHealthVerdict::Warning, KioskHealthReason::BatteryLow],
+    // Enchufada al 3 % esta haciendo exactamente lo que tiene que hacer.
+    'al 3 % pero cargando: no avisa' => [3, true, KioskHealthVerdict::Ok, KioskHealthReason::Beating],
+    // Los dos `null` significan «no lo se» y NO son cero: la Battery Status API
+    // solo la ofrece Chrome en Android, y no informar no es estar averiado.
+    'sin nivel ni estado de carga: no avisa' => [null, null, KioskHealthVerdict::Ok, KioskHealthReason::Beating],
+    'con nivel bajo pero sin saber si carga: no avisa' => [5, null, KioskHealthVerdict::Ok, KioskHealthReason::Beating],
+    'descargandose pero sin saber el nivel: no avisa' => [null, false, KioskHealthVerdict::Ok, KioskHealthReason::Beating],
+])->group('RF-PA-07');
+
+it('cuenta antes la bateria que la cola, y antes el silencio que la bateria', function (): void {
+    // La prioridad de la decision 5: revocado -> nunca visto -> callado ->
+    // tardio -> BATERIA -> cola -> latiendo. Una tablet que se apaga se lleva su
+    // cola por delante, y se arregla en treinta segundos con un cable; una que
+    // no habla no drena su cola la enchufe quien la enchufe.
+    $conLasDos = saludDeLaFlota([quioscoDePrueba(
+        lastSeenAt: '2026-09-09 11:59:30',
+        pendingQueueSize: 12,
+        batteryLevel: 4,
+        batteryCharging: false,
+    )])->handle();
+
+    $callado = saludDeLaFlota([quioscoDePrueba(
+        lastSeenAt: '2026-09-09 09:00:00',
+        batteryLevel: 4,
+        batteryCharging: false,
+    )])->handle();
+
+    expect($conLasDos->devices[0]->reason)->toBe(KioskHealthReason::BatteryLow)
+        ->and($conLasDos->exitCode())->toBe(1)
+        ->and($callado->devices[0]->reason)->toBe(KioskHealthReason::Silent);
+})->group('RF-PA-07');
+
+it('no avisa por la bateria de un quiosco revocado', function (): void {
+    // Un desvinculado no tiene salud: su tablet puede estar en un cajon sin
+    // cargador y eso no es un problema de nadie.
+    $report = saludDeLaFlota([quioscoDePrueba(
+        status: 'revoked',
+        lastSeenAt: '2026-09-09 11:59:30',
+        batteryLevel: 2,
+        batteryCharging: false,
+    )])->handle();
+
+    expect($report->devices[0]->reason)->toBe(KioskHealthReason::Revoked)
+        ->and($report->exitCode())->toBe(1);
+})->group('RF-PA-07');
+
+it('exige que el umbral de bateria sea un porcentaje', function (): void {
+    // Fuera de 0..100 avisaria siempre o no avisaria nunca, y las dos cosas
+    // acaban con alguien ignorando la columna.
+    expect(fn (): KioskHealthThresholds => new KioskHealthThresholds(120, 600, 101))
+        ->toThrow(InvalidArgumentException::class);
+
+    expect(fn (): KioskHealthThresholds => new KioskHealthThresholds(120, 600, -1))
+        ->toThrow(InvalidArgumentException::class);
+})->group('RF-PA-07');
+
+it('publica la bateria y su umbral en el informe para maquinas', function (): void {
+    // El `--json` lo consume un script y `meta.thresholds` de `GET /devices` lo
+    // consume la leyenda del panel: los dos salen de aqui, asi que la cifra que
+    // ve el IT en la consola y la que ve en el panel no pueden divergir.
+    $json = saludDeLaFlota([quioscoDePrueba(
+        lastSeenAt: '2026-09-09 11:59:30',
+        batteryLevel: 42,
+        batteryCharging: true,
+    )])->handle()->toArray();
+
+    /** @var array{battery_low_percent: int} $thresholds */
+    $thresholds = $json['thresholds'];
+    /** @var list<array<string, mixed>> $devices */
+    $devices = $json['devices'];
+
+    expect($thresholds['battery_low_percent'])->toBe(15)
+        ->and($devices[0]['battery_level'])->toBe(42)
+        ->and($devices[0]['battery_charging'])->toBeTrue();
 })->group('RF-PA-07');
 
 // --- Sin haber latido nunca -------------------------------------------------

@@ -6,7 +6,8 @@ namespace App\Modules\Kiosk\Application\Port;
 
 /**
  * Las metricas de salud del quiosco del doc 02 §8.2:
- * `kiosk_last_seen_seconds{device}` y `kiosk_offline_queue_size{device}`.
+ * `kiosk_last_seen_seconds{device}`, `kiosk_offline_queue_size{device}` y
+ * `kiosk_battery_level{device}`.
  *
  * Es un puerto y no una llamada directa por el mismo motivo que
  * `Attendance\Application\Port\ScanMetrics`: quien mide no sabe si detras hay un
@@ -44,8 +45,19 @@ interface KioskMetrics
      *                                  hace Prometheus con `time()`, que es lo que
      *                                  mantiene la metrica correcta aunque nadie fiche.
      * @param  int  $pendingQueueSize  Lo que el dispositivo declara tener sin sincronizar.
+     * @param  int|null  $batteryLevel  Nivel de bateria en tanto por ciento, o `null`.
+     *                                  **Con `null` no se publica la serie**, y esa es la
+     *                                  decision: un cero de relleno pondria en rojo cualquier
+     *                                  panel de bateria por cada tablet cuyo navegador no
+     *                                  implementa la Battery Status API, y una metrica ausente
+     *                                  es exactamente lo que Prometheus sabe representar.
      */
-    public function heartbeat(string $deviceUuid, int $seenAtUnixSeconds, int $pendingQueueSize): void;
+    public function heartbeat(
+        string $deviceUuid,
+        int $seenAtUnixSeconds,
+        int $pendingQueueSize,
+        ?int $batteryLevel = null,
+    ): void;
 
     /**
      * Una tablet ha pedido un codigo (`POST /api/v1/kiosk/pair`).

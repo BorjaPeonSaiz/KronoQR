@@ -33,6 +33,7 @@ import {
 } from '@/shared/telemetry/deviceIdentity'
 import { getErrorReporter } from '@/shared/telemetry/errorReporter'
 import { createHeartbeatScheduler } from '@/shared/telemetry/heartbeat'
+import { useBatteryStatus } from '@/shared/media/useBatteryStatus'
 import ConnectionStatusBadge from '@/shared/ui/ConnectionStatusBadge.vue'
 import LanguageSelector from '@/shared/ui/LanguageSelector.vue'
 import PrivacyNoticePanel from '@/shared/ui/PrivacyNoticePanel.vue'
@@ -69,9 +70,11 @@ const api = createApiClient({
 
 // Mismo controlador de cola UNICO que la pantalla de escaneo (tarea 1.9): el
 // fichaje por PIN se encola exactamente igual, con el mismo drenaje.
-// `onDeviceRevoked` es el mismo listener que `ScanView.vue` (RF-PD-06, tarea
-// 5.6): el controlador es un singleton por tablet, asi que solo la primera
-// pantalla que lo crea gana la opcion, pero da igual cual sea, hacen lo mismo.
+// `onDeviceRevoked` es una SUSCRIPCION (RF-PD-06, tarea 5.6, revision de la
+// 3.3): el controlador es un singleton por tablet, pero cada pantalla que se
+// monta se suscribe la suya -esta, `ScanView.vue` y `DiagnosticsView.vue`-,
+// asi que el orden de montaje no importe: la que este viva cuando la
+// revocacion dispare es la que limpia el token y navega.
 const offline = useOfflineQueue({
   api,
   reporter,
@@ -229,10 +232,18 @@ const wakeLock = useWakeLock({
   onDenied: (context) => reporter.report('kiosk.wake_lock.denied', context),
 })
 
+// Bateria (RF-PA-07, tarea 3.3): misma lectura que ScanView, aqui alimenta el
+// latido de esta pantalla mientras el fichaje por PIN esta en marcha.
+const battery = useBatteryStatus()
+
 const heartbeat = createHeartbeatScheduler({
   api,
   reporter,
-  snapshot: () => offline.telemetry(APP_VERSION),
+  snapshot: () => ({
+    ...offline.telemetry(APP_VERSION),
+    ...(battery.level.value === null ? {} : { batteryLevel: battery.level.value }),
+    ...(battery.charging.value === null ? {} : { batteryCharging: battery.charging.value }),
+  }),
 })
 
 onMounted(() => {

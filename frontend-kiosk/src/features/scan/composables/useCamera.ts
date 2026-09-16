@@ -37,6 +37,15 @@ export interface CameraController {
   start(): Promise<MediaStream | null>
   stop(): void
   toggleTorch(): Promise<void>
+  /**
+   * Ajustes REALES de la pista en marcha (RF-KI-08, tarea 3.3): resolucion,
+   * `frameRate`, `facingMode`, `focusMode`, `zoom`, `backgroundBlur`. `null`
+   * sin camara abierta o si el navegador no expone `getSettings()`. Sincrono
+   * y de solo lectura: no pide nada al aparato, lee lo que ya negocio
+   * `getUserMedia`. Lo usa la pantalla de diagnostico; el bucle de escaneo no
+   * lo necesita.
+   */
+  settings(): MediaTrackSettings | null
 }
 
 /** 720p: suficiente para un QR version 3 a 20 cm y la mitad de pixeles que 1080p. */
@@ -192,6 +201,20 @@ export function useCamera(options: UseCameraOptions = {}): CameraController {
     }
   }
 
+  function currentTrack(): MediaStreamTrack | undefined {
+    return stream.value?.getVideoTracks()[0]
+  }
+
+  function settings(): MediaTrackSettings | null {
+    const track = currentTrack()
+    if (track === undefined) return null
+    try {
+      return track.getSettings()
+    } catch {
+      return null
+    }
+  }
+
   return {
     state: readonly(state),
     stream: stream as Readonly<ShallowRef<MediaStream | null>>,
@@ -200,5 +223,6 @@ export function useCamera(options: UseCameraOptions = {}): CameraController {
     start,
     stop,
     toggleTorch,
+    settings,
   }
 }

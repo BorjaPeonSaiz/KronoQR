@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Product\Http\Policy;
 
+use App\Modules\Product\Http\Resource\SettingResource;
 use App\Modules\Shared\Application\Port\ManagementActor;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 
@@ -58,5 +59,35 @@ final class SettingsPolicy
     public function update(ManagementActor $actor): bool
     {
         return $actor->actsAs(...self::administrators());
+    }
+
+    /**
+     * Si ademas puede tocar una clave **confidencial** (tarea 3.3).
+     *
+     * ## El fabricante configura la instalacion; no se lleva sus secretos
+     *
+     * Un acceso de soporte con alcance `configuration` pasa `update()` a
+     * proposito: cambiar los umbrales o el idioma del cliente es justo para lo
+     * que el cliente concede ese acceso (RF-PD-11). Una clave `confidential` no
+     * es eso. Hoy es `KIOSK_SERVICE_CODE`, el codigo con el que se abre la
+     * pantalla de mantenimiento de todas las tablets del hotel (RF-KI-08):
+     * escribirlo daria al fabricante una llave que el cliente no le dio, y que
+     * no caduca con la concesion — porque la tablet la guarda.
+     *
+     * Y **leerlo tampoco**: {@see SettingResource}
+     * sirve `value: null` y `redacted: true` al mismo actor. Las dos mitades
+     * dicen lo mismo, que es lo que exige ADR-020 y la regla dura 16.
+     *
+     * ## Un tercer metodo, y no un `if` dentro de `update()`
+     *
+     * Porque son dos preguntas distintas —«¿puede escribir configuracion?» y
+     * «¿puede escribir ESTA configuracion?»— y la matriz de autorizacion negativa
+     * tiene que poder probarlas por separado (regla dura 18). Fundirlas dejaria
+     * a un actor de soporte sin poder cambiar un idioma, que es lo contrario de
+     * lo que la concesion `configuration` significa.
+     */
+    public function updateConfidential(ManagementActor $actor): bool
+    {
+        return $this->update($actor) && ! $actor->isSupportActor();
     }
 }

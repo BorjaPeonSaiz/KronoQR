@@ -46,6 +46,7 @@ docker compose exec app php artisan <comando>
 | La cola local del quiosco | Guarda los fichajes cuando no hay red y los envía al recuperarla (regla dura 19) | El producto |
 | El latido | Cada 60 s. Es lo que actualiza «último contacto» en el panel | El producto |
 | `kiosk:health` | Estado de todos los quioscos desde la consola | El producto |
+| La pantalla de diagnóstico | Lo que la tablet sabe de sí misma —cámara, red, cola, token, versión— sin salir del modo quiosco. Se abre con pulsación larga sobre el reloj y el **código de servicio** de la instalación (§4.4) | El producto; el código lo pones **tú**, en Panel → «Ajustes operativos» |
 
 ### Qué tablet vale
 
@@ -266,7 +267,7 @@ vinculó un quiosco, usa el panel.
 
 ---
 
-## 4. Verificación: tres comprobaciones y ya
+## 4. Verificación: cuatro comprobaciones y ya
 
 ### 4.1 Un fichaje real
 
@@ -300,13 +301,51 @@ scripts. Los dos umbrales son `KIOSK_HEALTH_FRESH_WITHIN_SECONDS` (120) y
 ### 4.3 En el panel
 
 **Quioscos** muestra, de cada uno: nombre, estado, versión de la aplicación,
-**último contacto** y **cola pendiente**. El latido llega **cada 60 segundos**:
-si «último contacto» pasa de dos o tres minutos, la tablet no está hablando con
-el servidor y lo primero que hay que mirar es la red.
+**último contacto** (con su antigüedad y en la zona del centro), **cola
+pendiente** y el más antiguo, **batería** y un **veredicto** con su razón. El
+latido llega **cada 60 segundos**: si «último contacto» pasa de dos o tres
+minutos, la tablet no está hablando con el servidor y lo primero que hay que
+mirar es la red.
 
-> **Duda anotada.** La **alerta** automática de latido perdido —y su runbook
-> `quiosco-no-responde.md`— llega con una versión posterior. Hasta entonces esta
-> pantalla se mira a mano; conviene incluirla en la ronda de la mañana.
+El quiosco recién emparejado aparece en **aviso** —«esperando el primer
+latido»— hasta que da señal; en cuanto la da, pasa a **al día**. Esa es la
+comprobación: no te vayas del punto de montaje con la fila en aviso.
+
+El panel, `kiosk:health` y la alerta `QuioscoSinLatido` usan la misma regla y
+los mismos umbrales, así que los tres dicen lo mismo del mismo quiosco.
+Columna a columna, en [`../cliente/operacion.md`](../cliente/operacion.md)
+§16; qué hacer cuando uno deja de dar señales, en
+[`quiosco-no-responde.md`](quiosco-no-responde.md).
+
+### 4.4 La pantalla de diagnóstico, con la tablet ya colgada
+
+Las tres comprobaciones anteriores se hacen desde el servidor. Esta se hace
+**en la tablet, ya montada en su sitio definitivo**, que es donde de verdad se
+ve si la cámara enfoca y si el wifi llega: una tablet que funcionaba en el
+mostrador puede no funcionar en la columna del pasillo.
+
+Mantén pulsado **tres segundos el reloj** de la pantalla de fichaje y teclea
+el **código de servicio** de la instalación —8 a 12 dígitos, en Panel →
+«Ajustes operativos», y lo custodia tu IT ([`../cliente/operacion.md`](../cliente/operacion.md)
+§16.5)—. Si la instalación todavía no tiene código, la pantalla se abre
+directamente y lo dice en su cabecera; conviene ponerlo antes de que el parque
+crezca. Y si acabas de ponerlo, **espera un latido** —hasta 60 segundos—: una
+tablet que aún no ha recibido ninguno posterior al cambio todavía abre la
+pantalla sin código. La pantalla **vuelve sola a fichar a los dos minutos**,
+sigue latiendo mientras está abierta y no interrumpe nada.
+
+Qué tiene que verse, y es toda la comprobación:
+
+| Fila | Qué tiene que decir |
+| --- | --- |
+| **Cámara** | Permiso concedido, resolución **1280×720 o más** y **ningún aviso**. Los tres avisos posibles —fondo difuminado, enfoque no continuo, resolución baja— son las tres causas de «no lee el código»; se corrigen con §6 antes de dar el punto por bueno |
+| **Red** | Con conexión, servidor alcanzable y un último latido reciente. Si hay conexión pero el servidor no responde, es DNS, ruta o certificado (§6) |
+| **Token** | Vinculada, con el **nombre del quiosco** que acabas de poner y una caducidad razonable. El token no se muestra nunca: solo ocho caracteres de su huella |
+| **Cola** | **0 pendientes** tras el fichaje de prueba del §4.1 |
+
+Si el punto de montaje falla justo aquí —la cámara enfoca mal por la luz, o el
+wifi llega débil—, es mucho más barato moverlo ahora que cuando haya cien
+fichajes al día pasando por él.
 
 ---
 
@@ -478,6 +517,12 @@ distinta, el problema está en lo que hayas puesto delante del servidor, no en
 la tablet ni en el producto.
 
 ### …la imagen hace zoom sola o el fondo sale borroso
+
+**Confírmalo primero en la pantalla de diagnóstico de la tablet** (§4.4): la
+fila de cámara avisa, sin bloquear, cuando el fondo llega difuminado o cuando
+el enfoque no es continuo, que son exactamente los dos efectos de abajo. Si la
+pantalla no da ninguno de esos avisos y la resolución es 1280×720 o mayor, el
+problema no es este apartado.
 
 La cámara se ve, pero la imagen **se acerca por su cuenta** a la persona y **el
 fondo aparece difuminado**, y el código no se lee o se lee a ratos. Eso son

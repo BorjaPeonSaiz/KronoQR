@@ -8,7 +8,9 @@ import type {
   CredentialStatusRow,
   Department,
   Device,
+  DeviceHealth,
   DeviceList,
+  DeviceListMeta,
   Employee,
   EmployeeCollection,
   EmployeeImportReport,
@@ -174,6 +176,11 @@ export function board(
 
 export const DEVICE_UUID = '0199f3c9-1b7d-7a44-8e02-3c4d5e6f7a81'
 
+/** El veredicto «al día, late con normalidad» (tarea 3.3): el punto de partida de `device()`. */
+export function beatingHealth(overrides: Partial<DeviceHealth> = {}): DeviceHealth {
+  return { verdict: 'ok', reason: 'beating', seconds_since_last_seen: 60, ...overrides }
+}
+
 export function device(overrides: Partial<Device> = {}): Device {
   return {
     uuid: DEVICE_UUID,
@@ -183,12 +190,29 @@ export function device(overrides: Partial<Device> = {}): Device {
     last_seen_at: '2026-09-07T09:59:41.000000Z',
     pending_queue_size: 0,
     paired_at: '2026-09-01T08:12:00.000000Z',
+    oldest_pending_at: null,
+    battery_level: 83,
+    battery_charging: true,
+    health: beatingHealth(),
     ...overrides,
   }
 }
 
-export function deviceList(devices: Device[] = [device()]): DeviceList {
-  return { devices }
+/** `DeviceList.meta` (tarea 3.3): el reloj y los umbrales que trae `GET /devices`. */
+export function deviceListMeta(overrides: Partial<DeviceListMeta> = {}): DeviceListMeta {
+  return {
+    generated_at: '2026-09-07T10:00:00.000000Z',
+    timezone: 'Europe/Madrid',
+    thresholds: { fresh_within_seconds: 120, silent_after_seconds: 600, battery_low_percent: 15 },
+    ...overrides,
+  }
+}
+
+export function deviceList(
+  devices: Device[] = [device()],
+  metaOverrides: Partial<DeviceListMeta> = {},
+): DeviceList {
+  return { devices, meta: deviceListMeta(metaOverrides) }
 }
 
 export function pairingConfirmed(

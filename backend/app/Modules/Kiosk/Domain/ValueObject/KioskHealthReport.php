@@ -127,10 +127,7 @@ final readonly class KioskHealthReport
             'generated_at' => self::utc($this->generatedAt),
             'status' => $this->status->value,
             'exit_code' => $this->exitCode(),
-            'thresholds' => [
-                'fresh_within_seconds' => $this->thresholds->freshWithinSeconds,
-                'silent_after_seconds' => $this->thresholds->silentAfterSeconds,
-            ],
+            'thresholds' => $this->thresholdsAsArray(),
             'fleet' => [
                 'total' => $this->total(),
                 'active' => $this->active(),
@@ -143,9 +140,30 @@ final readonly class KioskHealthReport
                 'last_seen_at' => self::utc($row->lastSeenAt),
                 'seconds_since_last_seen' => $row->secondsSinceLastSeen,
                 'pending_queue_size' => $row->pendingQueueSize,
+                'battery_level' => $row->batteryLevel,
+                'battery_charging' => $row->batteryCharging,
                 'verdict' => $row->verdict->value,
                 'reason' => $row->reason->value,
             ], $this->devices),
+        ];
+    }
+
+    /**
+     * Los umbrales con los que se juzgo, tal cual.
+     *
+     * **Los sirven dos superficies y por eso estan escritos una vez**: el
+     * `--json` del comando y el `meta.thresholds` de `GET /api/v1/devices`, que
+     * es lo que permite a la leyenda del panel decir la cifra real de la
+     * instalacion y no una supuesta (decision 3 de la ficha 3.3).
+     *
+     * @return array{fresh_within_seconds: int, silent_after_seconds: int, battery_low_percent: int}
+     */
+    public function thresholdsAsArray(): array
+    {
+        return [
+            'fresh_within_seconds' => $this->thresholds->freshWithinSeconds,
+            'silent_after_seconds' => $this->thresholds->silentAfterSeconds,
+            'battery_low_percent' => $this->thresholds->batteryLowPercent,
         ];
     }
 

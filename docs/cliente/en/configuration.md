@@ -1162,9 +1162,9 @@ sudo docker compose exec app php artisan product:doctor
 > means whoever has one can read the backups, sign cards or open the sealed
 > PINs of the other.
 
-### 6.0 The nine keys that are NOT environment variables
+### 6.0 The ten keys that are NOT environment variables
 
-Nine properties of the installation do not live in the `.env` but in the
+Ten properties of the installation do not live in the `.env` but in the
 `installation_settings` table, are edited **from the panel** and take effect on
 the next request without restarting anything:
 
@@ -1179,6 +1179,29 @@ the next request without restarting anything:
 | `BRANDING_ACCENT_COLOR` | Panel → **Branding** (`/branding`) | Section 2.2 |
 | `LOCALE_DEFAULT` | Panel → **Operational settings** (`/settings`) | Section 2.3 |
 | `LOCALE_AVAILABLE` | Panel → **Operational settings** (`/settings`) | Section 2.3 |
+| `KIOSK_SERVICE_CODE` | Panel → **Operational settings** (`/settings`) | Section 6.0, right here |
+
+**`KIOSK_SERVICE_CODE` — the tablet service code.** It is the numeric code, 8 to
+12 digits, that opens a kiosk's **diagnostics screen** (long press on the clock).
+That screen shows the state of the camera, the network, the queue of unsent
+clock-ins and the installed version; it shows no employee data and never the
+tablet key. It is there so that whoever attends a fault does not have to call
+anyone.
+
+- **Empty by default**, and empty means *the screen opens without asking for a
+  code*. There is no factory code: one that was the same for every hotel would
+  protect nothing.
+- **The tablets pick it up on their own in under a minute** after you save it,
+  and **they never receive the code**: they receive a fingerprint they use to
+  check it without going out to the network, so that the screen still works when
+  the problem is precisely that there is no network.
+- **It cannot be recovered by reading it anywhere.** The audit trail records who
+  changed it and when, but not what it is, and it does not travel in the
+  diagnostics bundle sent to support either. If you forget it, type a new one.
+- Write it down wherever whoever maintains the kiosks keeps it. **Do not stick it
+  on the tablet itself.**
+- `php artisan product:doctor` warns —only warns, never fails— while none is
+  configured.
 
 Both screens require an **installation administrator** account and both save
 with the same button: the change takes effect on the next request and is
@@ -1186,9 +1209,11 @@ recorded in the audit trail with your name, the date and the previous value. If
 you cannot see those entries in the menu, they are not missing: your account is
 not an administrator one.
 
-**The database wins** (section 1). Five of the nine —the branding and language
-ones— no longer exist as environment variables: they were removed so that there
-were not two places to write the same piece of data.
+**The database wins** (section 1). Six of the ten —the branding ones, the
+language ones and the service code— do not exist as environment variables: the
+first five were removed so that there were not two places to write the same piece
+of data, and the last one never had one, because a secret in the `.env` is a
+secret that ends up in an unencrypted backup.
 
 **The four `ATTENDANCE_*` do still appear in `.env.example`, and it is worth
 knowing exactly what they are:** a copy of the default value, written there so
@@ -1413,6 +1438,7 @@ through the same IP.
 | `KIOSK_BATCH_MAX_SIZE` | — | Maximum scans in a synchronisation batch | `50` | Never: it is also in the API contract, so changing it here does not change it on the tablet. **Lowering it below 50 makes the server reject every batch from the tablets (422) and their offline queue never drains**: it does not shift minutes, it loses whole clock-ins | No |
 | `KIOSK_HEALTH_FRESH_WITHIN_SECONDS` | — | Seconds of leeway before `php artisan kiosk:health` stops treating a kiosk's last contact as up to date | `120` | Almost never. The heartbeat runs every 60 s, so two minutes are two missed beats: a single one can be a flickering wi-fi | No |
 | `KIOSK_HEALTH_SILENT_AFTER_SECONDS` | — | Seconds after which `php artisan kiosk:health` treats a kiosk as silent and exits with code 2 | `600` | Almost never. **It is the same threshold as the `QuioscoSinLatido` alert** (`infra/observability/prometheus/rules/kiosk.yml`, [`operation.md`](operation.md) §10.4): change one and change the other at the same time, or the console and the alert will say different things about the same kiosk | No |
+| `KIOSK_HEALTH_BATTERY_LOW_PERCENT` | — | Battery level below which a kiosk **that is not charging** is flagged as a warning, both in the panel and in `php artisan kiosk:health` | `15` | Lower it if your tablets are always plugged in; raise it if you rotate them by hand. With the charger plugged in it never warns, and neither does a tablet whose browser does not report the battery: only Chrome on Android does | No |
 
 ### 6.15 Network, TLS and edge
 

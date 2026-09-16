@@ -175,6 +175,7 @@ final class KioskHealthCommand extends Command
                 $this->say($translator, 'column.version'),
                 $this->say($translator, 'column.last_seen'),
                 $this->say($translator, 'column.queue'),
+                $this->say($translator, 'column.battery'),
                 $this->say($translator, 'column.verdict'),
             ],
             array_map(fn (KioskHealthRow $row): array => [
@@ -183,6 +184,7 @@ final class KioskHealthCommand extends Command
                 $row->appVersion ?? '-',
                 $this->lastSeen($row, $zone, $translator),
                 (string) $row->pendingQueueSize,
+                $this->battery($row, $translator),
                 $this->say($translator, 'verdict.'.$row->verdict->value),
             ], $report->devices),
         );
@@ -220,8 +222,32 @@ final class KioskHealthCommand extends Command
             $this->line('  '.$row->name.' — '.$this->say($translator, 'advice.'.$row->reason->value, [
                 'elapsed' => $this->duration($row->secondsSinceLastSeen ?? 0, $translator),
                 'queue' => $row->pendingQueueSize,
+                'level' => $row->batteryLevel ?? 0,
             ]));
         }
+    }
+
+    /**
+     * La bateria en una celda: «83 %», «12 % ⚡» o «—».
+     *
+     * **El guion NO es cero** y por eso no se escribe «0 %»: significa que el
+     * navegador de esa tablet no informa de su bateria, que es el caso de
+     * cualquier cosa que no sea Chrome en Android. Confundir las dos cosas
+     * pondria media flota en aviso el dia que se ejecute esto por primera vez.
+     *
+     * El signo de carga va con la cifra porque los dos datos juntos son los que
+     * significan algo: «al 15 %» cargando es normal y descargandose es una
+     * tablet a la que alguien ha quitado el cargador.
+     */
+    private function battery(KioskHealthRow $row, Translator $translator): string
+    {
+        if ($row->batteryLevel === null) {
+            return $this->say($translator, 'battery.unknown');
+        }
+
+        return $this->say($translator, 'battery.'.($row->batteryCharging === true ? 'charging' : 'level'), [
+            'level' => $row->batteryLevel,
+        ]);
     }
 
     private function result(KioskHealthReport $report, Translator $translator): void

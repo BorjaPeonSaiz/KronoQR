@@ -29,6 +29,15 @@ export const routes: RouteRecordRaw[] = [
     // pantalla que SI ve un empleado cada vez (tarea 5.6, Anexo A).
     component: () => import('@/features/pairing/ui/PairingView.vue'),
   },
+  {
+    path: '/diagnostics',
+    name: 'diagnostics',
+    // RF-KI-08, tarea 3.3: se abre con una pulsacion larga sobre el reloj de
+    // `ScanView`/`PairingView`, nunca en el arranque. `import()` para que no
+    // compita con el LCP de la pantalla que SI ve un empleado cada vez, mismo
+    // criterio que `/pair` y `/pin`.
+    component: () => import('@/features/diagnostics/ui/DiagnosticsView.vue'),
+  },
 ]
 
 export function createAppRouter(): ReturnType<typeof createRouter> {
@@ -49,6 +58,14 @@ export function createAppRouter(): ReturnType<typeof createRouter> {
   // navega aqui ella misma), cualquier intento posterior de volver a `/` se
   // quede en `/pair` hasta que se complete un emparejamiento nuevo.
   router.beforeEach((to) => {
+    // `/diagnostics` es la UNICA ruta exceptuada de este guard (decision 7 de
+    // la tarea 3.3): una tablet sin emparejar no tiene token, ni padron, ni
+    // cola con jornadas -nada que proteger-, y es justo la que hay que poder
+    // diagnosticar desde `/pair`. La propia pantalla decide si pide codigo de
+    // servicio, con la huella cacheada del ultimo latido; el router no sabe
+    // nada de eso, solo la deja pasar.
+    if (to.name === 'diagnostics') return true
+
     const paired = readDeviceToken() !== null
     const goingToPairing = to.name === 'pair'
 

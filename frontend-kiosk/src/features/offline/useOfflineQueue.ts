@@ -37,6 +37,10 @@ export interface OfflineQueueController {
   pinSealingPublicKey(): string | null
   /** Ver `CachedRoster.settled()`: si `pinSealingPublicKey()` en `null` es definitivo. */
   rosterSettled(): boolean
+  /** `generated_at` de la copia del padron en uso (RF-KI-08, tarea 3.3). `null` sin padron cargado. */
+  rosterGeneratedAt(): string | null
+  /** Cuantas credenciales tiene indexadas el padron en uso (RF-KI-08, tarea 3.3). */
+  rosterEntryCount(): number
   stats(): QueueStats
   subscribe(listener: (stats: QueueStats) => void): () => void
   onSyncing(listener: (syncing: boolean) => void): () => void
@@ -47,6 +51,23 @@ export interface OfflineQueueController {
    * instalacion ofrece fichaje por PIN, sin que nadie tenga que sondear.
    */
   onRosterUpdated(listener: () => void): () => void
+  /**
+   * Dos `401`/`403` seguidos, sin exito de por medio, en el latido, el padron
+   * o la sincronizacion (RF-PD-06, tarea 5.6, `deviceRevocation.ts`). Cuando
+   * dispara, el padron YA esta purgado (`cachedRoster.purge()`, doc 01 §8.1);
+   * quien escucha solo tiene que limpiar el token y navegar a `/pair`. La cola
+   * offline de fichajes NUNCA se toca aqui.
+   *
+   * SUSCRIPCION, no una opcion del constructor (revision de la 3.3, segunda
+   * vuelta): `getOfflineQueueController` congela sus opciones en la PRIMERA
+   * llamada -es un singleton por tablet-, asi que un `onDeviceRevoked` pasado
+   * ahi solo ganaba si la pantalla que lo pasaba era la primera en montarse.
+   * `DiagnosticsView` puede llegar a montarse antes que `ScanView` (una tablet
+   * emparejada recargada directamente sobre `/diagnostics`, que el guard del
+   * router exceptua): con esto, el orden de montaje deja de importar, porque
+   * cada pantalla se suscribe la suya y todas se enteran.
+   */
+  onDeviceRevoked(listener: () => void): () => void
   /**
    * Lo que el LATIDO ha averiguado sobre su propia autenticacion, para que
    * alimente el mismo contador que ya llevan la sincronizacion y el padron
@@ -68,14 +89,6 @@ export interface OfflineQueueOptions {
   readonly reporter: ErrorReporter
   readonly deviceToken?: () => string | null
   readonly databaseName?: string
-  /**
-   * Dos `401`/`403` seguidos, sin exito de por medio, en el latido, el padron
-   * o la sincronizacion (RF-PD-06, tarea 5.6, `deviceRevocation.ts`). Cuando
-   * dispara, el padron YA esta purgado (`cachedRoster.purge()`, doc 01 §8.1);
-   * quien escucha solo tiene que limpiar el token y navegar a `/pair`. La cola
-   * offline de fichajes NUNCA se toca aqui.
-   */
-  readonly onDeviceRevoked?: () => void
 }
 
 const SYNC_DIAGNOSTIC_CODES = {
@@ -98,6 +111,7 @@ export function createOfflineQueueController(options: OfflineQueueOptions): Offl
   const syncingListeners = new Set<(syncing: boolean) => void>()
   const reachabilityListeners = new Set<(reachable: boolean) => void>()
   const rosterUpdateListeners = new Set<() => void>()
+  const deviceRevokedListeners = new Set<() => void>()
   const notifyRosterUpdated = (): void => {
     for (const listener of rosterUpdateListeners) listener()
   }
@@ -124,11 +138,12 @@ export function createOfflineQueueController(options: OfflineQueueOptions): Offl
   // Un solo contador de `401` consecutivos para toda la tablet: la
   // revocacion es una decision por dispositivo, no una por canal (heartbeat,
   // padron, sincronizacion). Purga el padron ANTES de avisar: quien escucha
-  // `onDeviceRevoked` (la pantalla) solo tiene que limpiar el token y navegar.
+  // `onDeviceRevoked` (la pantalla, o las pantallas, que esten suscritas en
+  // ese momento) solo tiene que limpiar el token y navegar.
   const revocation = createDeviceRevocationWatcher({
     onRevoked: () => {
       void roster.purge()
-      options.onDeviceRevoked?.()
+      for (const listener of deviceRevokedListeners) listener()
     },
   })
 
@@ -173,6 +188,8 @@ export function createOfflineQueueController(options: OfflineQueueOptions): Offl
     roster: roster.port,
     pinSealingPublicKey: () => roster.pinSealingPublicKey(),
     rosterSettled: () => roster.settled(),
+    rosterGeneratedAt: () => roster.generatedAt(),
+    rosterEntryCount: () => roster.size(),
 
     stats: () => queue.stats(),
     subscribe: (listener) => queue.subscribe(listener),
@@ -195,6 +212,13 @@ export function createOfflineQueueController(options: OfflineQueueOptions): Offl
       rosterUpdateListeners.add(listener)
       return () => {
         rosterUpdateListeners.delete(listener)
+      }
+    },
+
+    onDeviceRevoked(listener) {
+      deviceRevokedListeners.add(listener)
+      return () => {
+        deviceRevokedListeners.delete(listener)
       }
     },
 
@@ -231,6 +255,7 @@ export function createOfflineQueueController(options: OfflineQueueOptions): Offl
       syncingListeners.clear()
       reachabilityListeners.clear()
       rosterUpdateListeners.clear()
+      deviceRevokedListeners.clear()
       queue.storage().close()
     },
   }
@@ -263,6 +288,13 @@ export async function disposeOfflineQueue(): Promise<void> {
 
 export interface UseOfflineQueueOptions extends OfflineQueueOptions {
   readonly connectivity: ConnectivityController
+  /**
+   * Ver `OfflineQueueController.onDeviceRevoked`. Aqui, y no en
+   * `OfflineQueueOptions`, porque es una SUSCRIPCION de esta pantalla
+   * concreta -se desengancha en `onUnmounted`, como `onSyncing`/
+   * `onReachability`-, no una opcion del constructor del controlador.
+   */
+  readonly onDeviceRevoked?: () => void
 }
 
 export interface UseOfflineQueue {
@@ -328,6 +360,9 @@ export function useOfflineQueue(options: UseOfflineQueueOptions): UseOfflineQueu
       pinSealingPublicKey.value = controller.pinSealingPublicKey()
       pinSealingKnown.value = controller.rosterSettled()
     }),
+    ...(options.onDeviceRevoked === undefined
+      ? []
+      : [controller.onDeviceRevoked(options.onDeviceRevoked)]),
   ]
 
   onUnmounted(() => {

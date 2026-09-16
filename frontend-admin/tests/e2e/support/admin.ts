@@ -23,6 +23,7 @@ import type {
   DepartmentCollection,
   Device,
   DeviceList,
+  DeviceListMeta,
   Employee,
   EmployeeCollection,
   EmployeeProvisioned,
@@ -642,9 +643,20 @@ export const DEVICE: Device = {
   last_seen_at: '2026-09-07T09:59:41.000000Z',
   pending_queue_size: 0,
   paired_at: '2026-09-01T08:12:00.000000Z',
+  oldest_pending_at: null,
+  battery_level: 83,
+  battery_charging: true,
+  health: { verdict: 'ok', reason: 'beating', seconds_since_last_seen: 60 },
 }
 
-export const DEVICES: DeviceList = { devices: [DEVICE] }
+/** `DeviceList.meta` (tarea 3.3): el reloj y los umbrales que trae `GET /devices`. */
+export const DEVICES_META: DeviceListMeta = {
+  generated_at: '2026-09-07T10:00:00.000000Z',
+  timezone: 'Europe/Madrid',
+  thresholds: { fresh_within_seconds: 120, silent_after_seconds: 600, battery_low_percent: 15 },
+}
+
+export const DEVICES: DeviceList = { devices: [DEVICE], meta: DEVICES_META }
 
 /** El codigo que el doble acepta en `POST /kiosk/pair/confirm`. Cualquier otro se rechaza. */
 export const PAIRING_CODE = '483921'
@@ -797,11 +809,14 @@ export interface ManagementApiOptions {
    */
   readonly locale?: 'es' | 'en'
   /**
-   * La flota de quioscos que devuelve `GET /devices` de partida (RF-PA-07). Por
-   * omision, `DEVICES`: un unico quiosco activo, «Recepción». El doble la
-   * mantiene mutable: `confirm` añade o reactiva, `unpair` revoca.
+   * La flota de quioscos que devuelve `GET /devices` de partida (RF-PA-07,
+   * tarea 3.3). Por omision, `DEVICES`: un unico quiosco activo, «Recepción»,
+   * con salud `ok`/`beating`. El doble mantiene `devices` mutable: `confirm`
+   * añade o reactiva, `unpair` revoca. `meta` es PARCIAL a proposito -se
+   * combina con `DEVICES_META`- para que las pruebas que solo quieren tocar
+   * la flota no tengan que repetir el reloj y los umbrales en cada llamada.
    */
-  readonly devices?: DeviceList
+  readonly devices?: { devices: DeviceList['devices']; meta?: Partial<DeviceListMeta> }
   /**
    * Que responde `POST /incidents/{id}/resolve`. `ok` (por omision) cierra la
    * incidencia y la devuelve entera. `conflict` simula que otra persona se
@@ -857,6 +872,8 @@ export interface ManagementApiOptions {
     readonly debounceSeconds?: number
     readonly maxClockSkewMinutes?: number
     readonly minTransitSeconds?: number
+    /** `KIOSK_SERVICE_CODE` (RF-KI-08, tarea 3.3). Por omision, cadena vacia: sin codigo, de serie. */
+    readonly kioskServiceCode?: string
     readonly localeDefault?: string
     readonly localeAvailable?: string[]
   }
@@ -1092,6 +1109,8 @@ export async function stubManagementApi(
   const devices: Device[] = (options.devices?.devices ?? DEVICES.devices).map((candidate) => ({
     ...candidate,
   }))
+  /** `DeviceList.meta` (tarea 3.3): el reloj y los umbrales de la flota anterior. */
+  const devicesMeta: DeviceListMeta = { ...DEVICES_META, ...(options.devices?.meta ?? {}) }
 
   // Los accesos de soporte (RF-PD-11, tarea 5.9): mutable, para que conceder y
   // revocar la vayan cambiando exactamente como lo haria el servidor. Vacia
@@ -1175,6 +1194,7 @@ export async function stubManagementApi(
   let attendanceMinTransitSeconds = options.operationalSettings?.minTransitSeconds ?? 120
   let localeDefault = options.operationalSettings?.localeDefault ?? 'es'
   let localeAvailable = options.operationalSettings?.localeAvailable ?? ['es', 'en']
+  let kioskServiceCode = options.operationalSettings?.kioskServiceCode ?? ''
 
   /** El catalogo completo de `installation_settings`, con la forma de `GET/PATCH /settings`. */
   function settingsCatalog(): unknown {
@@ -1244,6 +1264,14 @@ export async function stubManagementApi(
           impact: 'presentation',
           affects_worked_hours: false,
           source: logoPath === '' ? 'product_default' : 'installation',
+        },
+        {
+          key: 'KIOSK_SERVICE_CODE',
+          value: kioskServiceCode,
+          type: 'text',
+          impact: 'presentation',
+          affects_worked_hours: false,
+          source: kioskServiceCode === '' ? 'product_default' : 'installation',
         },
         {
           key: 'LOCALE_DEFAULT',
@@ -1670,7 +1698,7 @@ export async function stubManagementApi(
 
       switch (`${method} ${url.pathname}`) {
         case 'GET /api/v1/devices':
-          await json(route, 200, { devices })
+          await json(route, 200, { devices, meta: devicesMeta })
           return
         case 'POST /api/v1/kiosk/pair/confirm': {
           const payload = request.postDataJSON() as { code?: string; name?: string }
@@ -1711,6 +1739,16 @@ export async function stubManagementApi(
 
           if (revokedByName !== undefined) {
             revokedByName.status = 'active'
+            // Recien reactivada: todavia no ha latido con la tablet nueva.
+            revokedByName.last_seen_at = null
+            revokedByName.oldest_pending_at = null
+            revokedByName.battery_level = null
+            revokedByName.battery_charging = null
+            revokedByName.health = {
+              verdict: 'warning',
+              reason: 'awaiting_first_heartbeat',
+              seconds_since_last_seen: null,
+            }
             const confirmed: PairingConfirmed = {
               device: {
                 uuid: revokedByName.uuid,
@@ -1732,6 +1770,14 @@ export async function stubManagementApi(
             last_seen_at: null,
             pending_queue_size: 0,
             paired_at: '2026-09-07T10:00:00.000000Z',
+            oldest_pending_at: null,
+            battery_level: null,
+            battery_charging: null,
+            health: {
+              verdict: 'warning',
+              reason: 'awaiting_first_heartbeat',
+              seconds_since_last_seen: null,
+            },
           }
           devices.push(created)
 
@@ -1878,6 +1924,18 @@ export async function stubManagementApi(
           const maxClockSkewMinutes = checkInteger('ATTENDANCE_MAX_CLOCK_SKEW_MINUTES', 1, 1440)
           const minTransitSeconds = checkInteger('ATTENDANCE_MIN_TRANSIT_SECONDS', 0, 3600)
 
+          const serviceCodeRaw = patch.settings['KIOSK_SERVICE_CODE']
+
+          if (
+            typeof serviceCodeRaw === 'string' &&
+            serviceCodeRaw !== '' &&
+            !/^[0-9]{8,12}$/.test(serviceCodeRaw)
+          ) {
+            errors['settings.KIOSK_SERVICE_CODE'] = [
+              'El código de servicio tiene que ser de 8 a 12 cifras, o quedarse vacío.',
+            ]
+          }
+
           const localeDefaultRaw = patch.settings['LOCALE_DEFAULT']
           const localeAvailableRaw = patch.settings['LOCALE_AVAILABLE']
 
@@ -1940,6 +1998,10 @@ export async function stubManagementApi(
 
           localeDefault = nextLocaleDefault
           localeAvailable = nextLocaleAvailable
+
+          if (typeof serviceCodeRaw === 'string') {
+            kioskServiceCode = serviceCodeRaw
+          }
 
           const appName = patch.settings['BRANDING_APP_NAME']
           const accentColor = patch.settings['BRANDING_ACCENT_COLOR']

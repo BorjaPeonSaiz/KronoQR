@@ -7,8 +7,8 @@
 > observability off. Section **11** comes from **5.7**: updating. Sections
 > **12 and 13** come from **5.9** and **5.10**: diagnostics, support and the
 > full data export. Section **15** comes from **5.12**: the `error_events`
-> history. **Task 5.11** will add the kiosks; it will not rewrite anything
-> that is already here.
+> history. Section **16** comes from **3.3**: the kiosks screen in the panel,
+> the service code and the tablet's diagnostic screen.
 
 ---
 > **The commands in this guide are run from the package directory**, which is
@@ -796,7 +796,7 @@ time.
 | --- | --- | --- |
 | `diagnostics` (default) | Generate the **anonymised** bundle and consult errors | See anyone |
 | `read_only` | In addition, **read** working days, workforce and audit trail | Change anything |
-| `configuration` | In addition, **change** the operational settings and pair or unlink kiosks | See working days or the workforce, or touch the compliance profile (legal thresholds and retention years are yours) |
+| `configuration` | In addition, **change** the operational settings and pair or unlink kiosks | See working days or the workforce, or touch the compliance profile (legal thresholds and retention years are yours), **or see or change the kiosk service code**: it arrives empty and marked as redacted, and any attempt to change it gets a 403 (§16.5) |
 
 With no scope can it activate licences, grant or revoke access, issue or revoke
 cards, correct clock-ins, generate payroll reports or the export for the
@@ -846,7 +846,10 @@ the installation. Dates and times are in **UTC**; the `README` states the
 site's time zone and how to convert them.
 
 **No secret leaves**: no passwords, no PINs, no hashes, no licence key. No
-internal numbers: references between files go by `uuid`.
+internal numbers: references between files go by `uuid`. Confidential
+configuration keys travel **marked as redacted and without their value**
+(`value_redacted`), just as in the audit entry that records their change: **the
+kiosk service code travels marked as redacted, not in the clear** (§16.5).
 
 It is your continuity guarantee (RL-20): **it works with the licence expired,
 absent or unreadable**, only the installation administrator generates it, and
@@ -944,7 +947,7 @@ retried the following week.
 
 ## 14. What must never be touched
 
-Five things a system administrator does every day on other products and that
+Six things a system administrator does every day on other products and that
 here destroy the legal value of the record or leave the installation unable to
 recover:
 
@@ -955,6 +958,7 @@ recover:
 | **Touch `daily_totals` by hand** | It is a rebuildable projection: it is recalculated in full every time a shift entry changes. A total corrected by hand goes back to its value on the next recalculation, without anyone understanding why | If a total does not add up, recalculate it: `docker compose exec app php artisan attendance:reconcile --from=2026-09-01 --to=2026-09-30` |
 | **Edit a generated secret in the `.env`** (`APP_KEY`, `QR_SIGNING_KEY_*`, `BACKUP_ENCRYPTION_KEY`) | Changing `APP_KEY` makes everything encrypted unreadable; changing the QR key invalidates every card; changing the backup key leaves the previous backups impossible to restore | Rotate with its procedure: [`../../runbooks/rotacion-secretos.md`](../../runbooks/rotacion-secretos.md) and [`../../runbooks/rotacion-clave-qr.md`](../../runbooks/rotacion-clave-qr.md) (in Spanish) |
 | **`migrate:rollback`, deleting volumes or reinstalling on top** | A rollback is always restoring the previous verified backup; the installer refuses to reinstall over an existing installation | `update.sh` (§11) and [`../../runbooks/restaurar-backup.md`](../../runbooks/restaurar-backup.md) (in Spanish) |
+| **Unpairing a kiosk with pending clock-ins, or clearing its site data**, so that the alert stops firing | The clock-ins in the local queue live only on that tablet until they are sent: unpairing it or wiping it loses them, and they are working days of people who did clock in | Empty the queue first (§16.4) and check that it is at 0. If the tablet is lost and there is no alternative, unpair it and tell HR: those hours have to be rebuilt by manual correction with `FALLO_TECNICO_QUIOSCO` |
 
 ---
 
@@ -1045,3 +1049,186 @@ row to disappear from the open list.
 | `ERROR_HISTORY_RETENTION_DAYS` | `90` | Days a row is kept from its last occurrence. Same as the technical log (RL-11) |
 | `PRODUCT_CLIENT_ERRORS_RATE_LIMIT` | `12` | Requests per minute and per session from the panel or the portal to report errors; four times more per IP address |
 | `PRODUCT_ERRORS_MAX_OPEN_GROUPS_PER_SOURCE` | `500` | Ceiling of **open** groups per origin. Above it, the next occurrence that does not match an existing group goes into an overflow group for that origin (`overflow`) instead of creating a row; `product:doctor` warns about the size of the table |
+
+---
+
+## 16. The "Kiosks" screen in the panel
+
+> **Task 3.3.** What to do, step by step, when a kiosk stops sending signals is
+> in [`../../runbooks/quiosco-no-responde.md`](../../runbooks/quiosco-no-responde.md)
+> (in Spanish); registering and replacing a tablet is in
+> [`../../runbooks/alta-nuevo-quiosco.md`](../../runbooks/alta-nuevo-quiosco.md)
+> (in Spanish). This section is what you need in order to **read** the screen
+> and to **keep custody of the service code**, not the diagnostic procedure.
+
+**Panel → "Kiosks"** (`/devices`). It is opened by whoever holds the
+`settings:*` scope —the same one as the compliance profile and the branding—
+and the real authorisation is enforced by the server: **only the administrator
+role** can list, pair or unpair. Registering a kiosk means creating a source of
+clock-ins, and unpairing it means withdrawing one; this is not a read-only
+screen.
+
+### 16.1 What each row shows
+
+| Column | What it says | How to read it |
+| --- | --- | --- |
+| **Name and status** | The name the tablet was paired with, and whether it is still paired or has been unpaired | An unpaired kiosk stays in the list with its history: the replacement tablet is paired **with the same name** to keep it |
+| **Application version** | The version of the PWA that tablet has loaded | If a tablet falls behind after an update, you see it here. It catches up when the PWA is reloaded |
+| **Last contact** | The instant of the last heartbeat, **in the site's time zone**, and how old it is ("40 s ago") | The heartbeat arrives **every 60 seconds**. The age is measured against the **server's clock**, which travels in the response, never against the clock of the computer you are looking from: a panel with the wrong time does not invent dead kiosks |
+| **Pending** | How many clock-ins the tablet holds in its local queue without sending, and **how old the oldest one is** | "37 pending, the oldest 3 h ago" is a tablet that has been without network for three hours, not an error. The clock-ins are safe as long as the tablet is not unpaired and its site data is not cleared |
+| **Battery** | The level and whether it is charging; **"not reported"** when the tablet does not publish the figure | Only Chrome on Android offers the battery level to the browser: a tablet that does not report it **is not faulty**, it simply does not tell. One that is draining **while not charging** is almost always an unplugged charger |
+| **Status** | The **verdict** (up to date, warning, failure, unpaired) and **its reason** | It is never told apart by colour alone: every row carries its text and its icon (§16.2) |
+
+The list is not paginated: an installation is one hotel with a handful of
+kiosks, and they all fit on the screen.
+
+### 16.2 The verdict: the same rule in the panel, in the console and in the alert
+
+The verdict **is calculated by the server**, with the same rule and the same
+thresholds used by `php artisan kiosk:health` and by the `QuioscoSinLatido`
+alert (§10.4). There are not three criteria: there is one. If the panel says
+"failure", the console says `FALLO` and the alert fires, for the same kiosk and
+at the same time.
+
+| Verdict | Reason shown | What it means |
+| --- | --- | --- |
+| **Up to date** | *Beating* | Heartbeat less than `KIOSK_HEALTH_FRESH_WITHIN_SECONDS` (120 s) old and nothing pending |
+| **Warning** | *Late heartbeat* | More than 120 s without a heartbeat, but less than 10 minutes. A missed heartbeat is not a fault |
+| **Warning** | *Pending clock-ins* | **It has network and still has clock-ins left to send.** See [`../../runbooks/cola-offline-atascada.md`](../../runbooks/cola-offline-atascada.md) (in Spanish) |
+| **Warning** | *Low battery* | Level at or below `KIOSK_HEALTH_BATTERY_LOW_PERCENT` (15 %) **and not charging**. A wall-mounted tablet that is draining is a tablet whose charger someone removed |
+| **Warning** | *Awaiting the first heartbeat* | Just paired and not talking yet. It resolves itself within a minute |
+| **Failure** | *No signal* | More than `KIOSK_HEALTH_SILENT_AFTER_SECONDS` (600 s, 10 minutes) without a heartbeat |
+| **Failure** | *Never seen* | Paired more than ten minutes ago and not one heartbeat |
+| **Unpaired** | *Unpaired* | No longer a source of clock-ins. It counts for no alert |
+
+When there is more than one reason, the row shows **the most serious one**, in
+this order: unpaired, never seen, no signal, late heartbeat, low battery,
+pending clock-ins, beating.
+
+The legend at the foot of the screen **states your installation's real
+thresholds**, not assumed ones: if you change one, the legend changes with it.
+And if you change `KIOSK_HEALTH_SILENT_AFTER_SECONDS`, you have to change the
+threshold of the `QuioscoSinLatido` alert in `infra/observability/` **at the
+same time** (§10.4): they are the same number, and separating them is precisely
+what breaks the coherence this screen exists to provide.
+
+### 16.3 "No heartbeat" is not "no clocking in"
+
+It is the first thing to know when you look at a row in failure. That a kiosk
+is not talking to the server **does not mean nobody can clock in on it**: the
+kiosk never blocks the employee. If the tablet is switched on, it keeps
+accepting cards, confirming on screen and saving every clock-in in its local
+queue with its real time; when the network comes back, it sends everything with
+the time it actually happened.
+
+What does leave people unable to clock in is a tablet that is **switched off,
+without power or broken**. That is why the first question of the diagnosis is
+not about the network: it is "is the screen on?".
+
+The hours of whoever could not clock in are corrected afterwards from the panel
+with the reason `FALLO_TECNICO_QUIOSCO`, by asking the person. **A time is
+never invented.**
+
+### 16.4 What to do when a row is not up to date
+
+**When —and only when— the verdict is not "up to date"**, the row carries a
+**"What to do"** block written for someone who does not know the system, with
+the next step for its reason. A kiosk that is fine asks for nothing. The
+summary:
+
+| What you see | Where to start |
+| --- | --- |
+| **Failure, no signal** | [`../../runbooks/quiosco-no-responde.md`](../../runbooks/quiosco-no-responde.md) (in Spanish) §2, which starts on this very screen |
+| **Warning, pending clock-ins** — the tablet **has network and still has clock-ins left to send** | [`../../runbooks/cola-offline-atascada.md`](../../runbooks/cola-offline-atascada.md) (in Spanish). **Do not unpair that tablet**: you would lose the queue |
+| **Warning, low battery** | Go to the mounting point: unplugged charger, switched-off power strip or a broken cable |
+| **Warning, late heartbeat** | Nothing yet. If it does not return to "up to date" within ten minutes it becomes a failure and the alert fires |
+| **The tablet went back to the pairing screen on its own** | Someone unpaired it or rotated its token: [`../../runbooks/alta-nuevo-quiosco.md`](../../runbooks/alta-nuevo-quiosco.md) (in Spanish) §6 |
+
+The same information, from the console and without opening the panel —and the
+only one that still works if Redis has been emptied (§10.4)—:
+
+```bash
+docker compose exec app php artisan kiosk:health
+```
+
+It exits `0` if everything is up to date, `1` with warnings and `2` with any
+failure; `--json` gives the same for a script and `--lang=es|en` sets the
+language of the report.
+
+### 16.5 The service code and the tablet's diagnostic screen
+
+When the problem is **in the tablet**, the tablet tells you itself. It has a
+diagnostic screen that opens with a **three-second long press on the clock** of
+the clock-in screen (and of the pairing screen, for a tablet that is not a
+kiosk yet). It is protected with the installation's **service code**.
+
+**Where the code is set.** Panel → **Operational settings** (`/settings`),
+field "Kiosk service code" (`KIOSK_SERVICE_CODE`), administrator role. **8 to
+12 digits** —digits only, because the tablet has nothing but the on-screen
+numeric keypad—. **It is born empty**: until you set one, the screen opens
+without a code and says so in its header; `product:doctor` (§12.1) reminds you
+as a warning, never as a failure.
+
+**How it reaches the tablets.** The code **never travels in the clear**: the
+server sends its fingerprint inside the heartbeat and the tablet checks the
+code against it **locally**. Two practical consequences: the diagnostic screen
+**works without network** —which is exactly when you need it— and a code
+changed in the panel is on every tablet **in under a minute**, without touching
+any of them. Five consecutive failed attempts lock the keypad for 60 seconds,
+and the lock **is stored on the tablet**: leaving the screen or reloading the
+application does not skip it.
+
+**A tablet that has not yet received any heartbeat later than the moment the
+code was configured opens the screen without it.** That is the case of a paired
+tablet that has been without network since before you set the code: there is no
+way for it to know the code, and the alternative —refusing it the diagnosis—
+would leave undiagnosed precisely the tablet in the worst shape. The screen's
+own header says whether it was opened with a code or without one.
+
+**Custody.** Your IT keeps the code, like any other maintenance credential: it
+is not stuck on a label behind the tablet and it is not shared with reception.
+**Only whoever can edit it can see it**: the product does not show it anywhere
+except in its own field under "Operational settings", which only the `admin`
+role opens; if nobody remembers it, you set another one. Nor does it appear in
+the audit trail —it is recorded **that** it changed, never the value—, in the
+diagnostic bundle, or in the technical logs, and in the full data export it
+comes out **marked as redacted and without its value** (§13.1).
+
+**A vendor support access neither sees it nor changes it**, with any scope —not
+even with `configuration`, which can touch the rest of the operational
+settings—: it arrives empty and marked as redacted, and an attempt to change it
+is refused with a 403 (§12.4). The code is yours, like the compliance profile.
+
+**What the screen shows**, and what it does not:
+
+| Block | What it says |
+| --- | --- |
+| **Camera** | Permission, chosen camera, real resolution, focus and zoom. **It warns without blocking** if the background comes out blurred, if focus is not continuous or if the resolution is below 1280×720: the three causes of "the code will not read" |
+| **Network** | Whether there is a connection, whether the server responds, when the last correct heartbeat was and **the tablet's clock skew** in seconds, with its sign. The screen sends a heartbeat as soon as it opens and keeps beating while it is open, so "server reachable" is a **live** signal, not the memory of the last heartbeat |
+| **Queue** | Pending clock-ins, how old the oldest is, whether the tablet's storage is durable and whether it is syncing right now |
+| **Roster** | How old the local copy of the workforce is and how many entries it has |
+| **Token** | Whether the tablet is paired, when its credential expires, its device identifier and the kiosk name. **The token is never shown**: only eight characters of its fingerprint, so you can compare it with the panel |
+| **Version** | The version of the PWA and the state of its background update |
+| **Battery and screen** | Level, whether it is charging and whether the screen is being kept awake |
+| **Errors to send** | How many errors the tablet has stored without being able to report |
+
+**Not one name, not one clock-in, not the token in the clear**: the screen
+identifies by device and shows counts. It is your information and it does not
+leave the installation on its own; it reaches the manufacturer only inside the
+anonymised diagnostic bundle, and only if you send it (§12.2).
+
+**It does not get in the way of clocking in.** While it is open there is no
+scanning, so it has a large "Back to clocking in" button and, if nobody touches
+it, it **returns to the clock-in screen on its own after two minutes**. Opening
+it unpairs nothing, deletes no queue, does not interrupt the sending of what is
+pending and **does not stop the heartbeat**: in the panel, a kiosk whose IT is
+looking at its diagnostic screen still shows as up to date.
+
+### 16.6 The parameters
+
+| Variable | Default | What it governs |
+| --- | --- | --- |
+| `KIOSK_HEALTH_FRESH_WITHIN_SECONDS` | `120` | Up to how many seconds without a heartbeat a kiosk is **up to date** |
+| `KIOSK_HEALTH_SILENT_AFTER_SECONDS` | `600` | From how many seconds without a heartbeat it is in **failure**. **It is the same number as the `QuioscoSinLatido` alert**: both are changed together, or neither is |
+| `KIOSK_HEALTH_BATTERY_LOW_PERCENT` | `15` | Level below which, **and while not charging**, the kiosk raises a battery warning |
+| `KIOSK_SERVICE_CODE` | *(empty)* | The 8 to 12 digit code for the diagnostic screen. **It is not a `.env` variable**: it is changed in the panel, under "Operational settings", and takes effect on the next heartbeat |

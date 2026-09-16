@@ -28,6 +28,15 @@ use InvalidArgumentException;
  * cuando un quiosco esta caido, y quien atiende la incidencia solo puede
  * sostener una.
  *
+ * ## Y un umbral que NO es un plazo: `batteryLowPercent`
+ *
+ * 15 % de serie (`KIOSK_HEALTH_BATTERY_LOW_PERCENT`, tarea 3.3). No es un
+ * tercer plazo de latido —no mide tiempo— sino el punto por debajo del cual una
+ * tablet **que no esta cargando** se avisa antes de que se apague sola en mitad
+ * de un turno. Se administra igual que los otros dos y por el mismo motivo: un
+ * hotel cuyas tablets estan siempre enchufadas y otro que las rota a mano no
+ * tienen el mismo margen razonable.
+ *
  * ## Configuracion, no constantes (regla dura 13, ADR-017)
  *
  * Los valores llegan resueltos desde `config/kiosk.php` —claves
@@ -42,7 +51,23 @@ final readonly class KioskHealthThresholds
         public int $freshWithinSeconds,
         /** A partir de aqui, esta callado: es la alerta critica del doc 01 §9.3. */
         public int $silentAfterSeconds,
+        /**
+         * Por debajo de este nivel, y **sin cargar**, el quiosco avisa.
+         *
+         * El limite es INCLUSIVO —«al 15 % y descargandose» ya avisa— porque el
+         * numero que el cliente escribe en su `.env` es el que quiere ver
+         * avisado, no el primero que no lo esta.
+         */
+        public int $batteryLowPercent = 15,
     ) {
+        if ($batteryLowPercent < 0 || $batteryLowPercent > 100) {
+            // Un porcentaje fuera de 0..100 no avisaria nunca o avisaria
+            // siempre, y las dos cosas acaban con alguien ignorando la columna.
+            // La raiz de composicion lo acota antes de llegar aqui; esto atrapa
+            // al que construya el objeto por otro camino.
+            throw new InvalidArgumentException('El umbral de bateria baja va entre 0 y 100.');
+        }
+
         if ($freshWithinSeconds < 1) {
             throw new InvalidArgumentException('El plazo de latido fresco es de al menos un segundo.');
         }

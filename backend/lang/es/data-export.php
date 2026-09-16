@@ -478,7 +478,11 @@ return [
             'summary' => 'La configuracion de la instalacion tal como la dejaste desde el panel: idiomas, marca, umbrales operativos.',
             'columns' => [
                 'key' => 'Nombre del ajuste.',
-                'value' => 'Su valor, como documento JSON.',
+                'value' => 'Su valor, como documento JSON. Viene vacio en los ajustes que son un secreto: mira `value_redacted`.',
+                'value_redacted' => 'Si el valor se ha retirado a proposito de este fichero. Solo es `true` en los ajustes '
+                    .'que son un secreto compartido con las tablets, como el codigo de servicio del quiosco: la fila esta '
+                    .'—con cuando se cambio y quien lo hizo— pero el valor no, igual que en el registro de auditoria. '
+                    .'Este fichero se guarda y se reenvia; el valor puedes verlo siempre en el panel, en Ajustes operativos.',
                 'updated_at' => 'Cuando se cambio por ultima vez.',
                 'updated_by_user_uuid' => 'Quien lo cambio.',
             ],

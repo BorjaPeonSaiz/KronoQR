@@ -64,6 +64,10 @@ final class SettingsSurface
         'BRANDING_ACCENT_COLOR' => ['view' => 'BrandingView.vue', 'route' => '/branding'],
         'LOCALE_DEFAULT' => ['view' => 'OperationalSettingsView.vue', 'route' => '/settings'],
         'LOCALE_AVAILABLE' => ['view' => 'OperationalSettingsView.vue', 'route' => '/settings'],
+        // El codigo de servicio de la pantalla de diagnostico de la tablet
+        // (RF-KI-08, tarea 3.3). Va con los umbrales operativos y no con la
+        // marca: es operacion de los quioscos, no imagen.
+        'KIOSK_SERVICE_CODE' => ['view' => 'OperationalSettingsView.vue', 'route' => '/settings'],
     ];
 
     /** La pantalla pactada para una clave, o cadena vacia si nadie la ha decidido. */

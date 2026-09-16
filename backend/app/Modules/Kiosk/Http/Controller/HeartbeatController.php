@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace App\Modules\Kiosk\Http\Controller;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Kiosk\Application\UseCase\HeartbeatOutcome;
 use App\Modules\Kiosk\Application\UseCase\RecordHeartbeat;
 use App\Modules\Kiosk\Http\Request\KioskHeartbeatRequest;
 use App\Modules\Kiosk\Http\Resource\KioskHeartbeatResource;
+use App\Modules\Kiosk\Http\Support\KioskTelemetry;
 use Illuminate\Http\JsonResponse;
 
 /**
@@ -28,8 +30,17 @@ use Illuminate\Http\JsonResponse;
  */
 final class HeartbeatController extends Controller
 {
-    public function __invoke(KioskHeartbeatRequest $request, RecordHeartbeat $heartbeat): JsonResponse
-    {
-        return (new KioskHeartbeatResource($heartbeat->handle($request->toCommand())))->response();
+    public function __invoke(
+        KioskHeartbeatRequest $request,
+        RecordHeartbeat $heartbeat,
+        KioskTelemetry $telemetry,
+    ): JsonResponse {
+        $command = $request->toCommand();
+
+        return (new KioskHeartbeatResource($telemetry->measureHeartbeat(
+            $command->deviceUuid,
+            $command->telemetry->batteryLevel,
+            static fn (): HeartbeatOutcome => $heartbeat->handle($command),
+        )))->response();
     }
 }

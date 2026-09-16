@@ -894,10 +894,12 @@ paths:
               $ref: '#/components/schemas/KioskHeartbeatRequest'
             examples:
               al-dia:
-                summary: Quiosco con red y sin cola pendiente
+                summary: Quiosco con red, sin cola pendiente y enchufado
                 value:
                   app_version: 1.4.2
                   pending_queue_size: 0
+                  battery_level: 100
+                  battery_charging: true
               con-cola:
                 summary: |
                   Quiosco que lleva tres horas sin poder sincronizar. El
@@ -936,10 +938,12 @@ paths:
                   value:
                     server_time: '2026-08-14T09:00:03.114Z'
                     client_errors_accepted: 0
+                    service_code_hash: null
                 con-errores:
                   value:
                     server_time: '2026-09-09T06:00:03.114Z'
                     client_errors_accepted: 2
+                    service_code_hash: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
         '400':
           $ref: '#/components/responses/InvalidRequest'
         '401':
@@ -1397,7 +1401,7 @@ paths:
                 $ref: '#/components/schemas/DeviceList'
               examples:
                 flota:
-                  summary: Dos quioscos vivos y uno revocado tras una averia
+                  summary: Un quiosco al dia, uno callado con cola y uno revocado tras una averia
                   value:
                     devices:
                       - uuid: 0199f3c9-1b7d-7a44-8e02-3c4d5e6f7a81
@@ -1407,6 +1411,13 @@ paths:
                         last_seen_at: '2026-09-07T09:59:41Z'
                         pending_queue_size: 0
                         paired_at: '2026-09-01T08:12:00Z'
+                        oldest_pending_at: null
+                        battery_level: 100
+                        battery_charging: true
+                        health:
+                          verdict: ok
+                          reason: beating
+                          seconds_since_last_seen: 22
                       - uuid: 0199e1aa-55c2-7b31-9d70-1a2b3c4d5e6f
                         name: Cocina
                         status: active
@@ -1414,6 +1425,13 @@ paths:
                         last_seen_at: '2026-09-07T06:31:02Z'
                         pending_queue_size: 37
                         paired_at: '2026-09-02T11:40:00Z'
+                        oldest_pending_at: '2026-09-07T05:58:31Z'
+                        battery_level: 14
+                        battery_charging: false
+                        health:
+                          verdict: failure
+                          reason: silent
+                          seconds_since_last_seen: 12541
                       - uuid: 0199d0bb-2f31-7c08-8a55-9e8d7c6b5a41
                         name: Almacen
                         status: revoked
@@ -1421,6 +1439,20 @@ paths:
                         last_seen_at: null
                         pending_queue_size: 0
                         paired_at: null
+                        oldest_pending_at: null
+                        battery_level: null
+                        battery_charging: null
+                        health:
+                          verdict: revoked
+                          reason: revoked
+                          seconds_since_last_seen: null
+                    meta:
+                      generated_at: '2026-09-07T10:00:03.114Z'
+                      timezone: Europe/Madrid
+                      thresholds:
+                        fresh_within_seconds: 120
+                        silent_after_seconds: 600
+                        battery_low_percent: 15
         '401':
           $ref: '#/components/responses/Unauthenticated'
         '403':
@@ -1488,6 +1520,13 @@ paths:
                     last_seen_at: '2026-09-07T09:59:41Z'
                     pending_queue_size: 0
                     paired_at: '2026-09-01T08:12:00Z'
+                    oldest_pending_at: null
+                    battery_level: 100
+                    battery_charging: true
+                    health:
+                      verdict: revoked
+                      reason: revoked
+                      seconds_since_last_seen: 22
         '401':
           $ref: '#/components/responses/Unauthenticated'
         '403':
@@ -8618,6 +8657,27 @@ components:
             Es lo que convierte «hay 37 pendientes» en «el mas antiguo es de hace tres
             horas», que es la diferencia entre una sincronizacion en curso y un
             quiosco que lleva media jornada incomunicado.
+        battery_level:
+          type: ['integer', 'null']
+          minimum: 0
+          maximum: 100
+          description: |
+            Nivel de bateria en tanto por ciento, tal y como lo declara la Battery
+            Status API del navegador (RF-PA-07, tarea 3.3). Opcional y admite
+            `null`: solo Chrome en Android la ofrece, y una tablet que no informa
+            no es una tablet averiada. El servidor lo guarda tal cual en
+            `devices.battery_level`; la ultima lectura es la que se muestra.
+          examples:
+            - 83
+        battery_charging:
+          type: ['boolean', 'null']
+          description: |
+            Si la tablet esta enchufada. Con `battery_level` es lo que distingue
+            «al 15 % cargando», que es normal, de «al 15 % descargandose», que es
+            una tablet a la que alguien ha quitado el cargador y morira durante el
+            turno. `null` cuando el navegador no lo sabe.
+          examples:
+            - true
         client_errors:
           type: array
           maxItems: 50
@@ -8646,8 +8706,26 @@ components:
         Lo que el servidor le devuelve al quiosco: su hora y cuantos errores de
         cliente ha aceptado.
       additionalProperties: false
-      required: [server_time, client_errors_accepted]
+      required: [server_time, client_errors_accepted, service_code_hash]
       properties:
+        service_code_hash:
+          type: ['string', 'null']
+          pattern: '^[0-9a-f]{64}$'
+          description: |
+            Huella del codigo de servicio con el que se abre la pantalla de
+            diagnostico de la tablet (RF-KI-08, tarea 3.3): SHA-256 en hexadecimal
+            de `"{uuid del dispositivo}:{codigo}"`, donde el codigo es el ajuste
+            `KIOSK_SERVICE_CODE` de la instalacion. `null` mientras la instalacion
+            no tenga codigo; entonces la pantalla se abre sin el.
+
+            **Viaja en el latido y no en el padron** porque el padron es «dos
+            campos y ni uno mas» (RL-12) y el latido es el unico canal
+            autenticado que la tablet repite cada minuto: un codigo cambiado en el
+            panel llega a todas las tablets en sesenta segundos. La tablet guarda
+            la huella y comprueba el codigo **en local**, de modo que la pantalla
+            de diagnostico funciona sin red. Nunca viaja el codigo en claro.
+          examples:
+            - 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
         client_errors_accepted:
           type: integer
           minimum: 0
@@ -9091,6 +9169,10 @@ components:
         - last_seen_at
         - pending_queue_size
         - paired_at
+        - oldest_pending_at
+        - battery_level
+        - battery_charging
+        - health
       properties:
         uuid:
           type: string
@@ -9161,6 +9243,141 @@ components:
 
             `null` en los dispositivos dados de alta antes de que existiera el
             emparejamiento por codigo: no se inventa una fecha para ellos.
+        oldest_pending_at:
+          oneOf:
+            - $ref: '#/components/schemas/UtcTimestamp'
+            - type: 'null'
+          description: |
+            `occurred_at` del fichaje mas antiguo de la cola que el dispositivo
+            declaro en su ultimo latido (tarea 3.3). Convierte «37 pendientes» en
+            «el mas antiguo es de hace tres horas», que es la diferencia entre una
+            sincronizacion en curso y un quiosco que lleva media jornada
+            incomunicado. `null` con la cola vacia o sin latido.
+        battery_level:
+          type: ['integer', 'null']
+          minimum: 0
+          maximum: 100
+          description: |
+            Nivel de bateria declarado en el ultimo latido (RF-PA-07). `null` si
+            la tablet no lo informa o nunca ha latido.
+          examples:
+            - 83
+        battery_charging:
+          type: ['boolean', 'null']
+          description: |
+            Si la tablet estaba enchufada en el ultimo latido. `null` si no lo
+            informa.
+        health:
+          $ref: '#/components/schemas/DeviceHealth'
+
+    DeviceHealth:
+      type: object
+      title: DeviceHealth
+      description: |
+        El veredicto de salud del quiosco, **calculado por el servidor con la misma
+        regla que `php artisan kiosk:health`** (`KioskHealthRow`) y con los mismos
+        umbrales que la alerta «Quiosco sin latido > 10 min» del documento 01
+        §9.3, de modo que panel, consola y alerta cuentan lo mismo (tarea 3.3).
+
+        **«Sin latido» no es «sin fichar»** (regla dura 19): un quiosco
+        silencioso puede seguir registrando en su cola local. El veredicto dice
+        que hay que ir a mirarlo, no que se haya perdido nada.
+      additionalProperties: false
+      required: [verdict, reason, seconds_since_last_seen]
+      properties:
+        verdict:
+          type: string
+          enum: [ok, warning, failure, revoked]
+          description: |
+            `ok` late y no debe nada; `warning` late tarde, tiene cola, se
+            descarga o acaba de vincularse; `failure` lleva mas de
+            `silent_after_seconds` callado o nunca ha hablado; `revoked` esta
+            desvinculado y no cuenta para nada.
+        reason:
+          type: string
+          enum:
+            - beating
+            - queue_pending
+            - late
+            - silent
+            - awaiting_first_heartbeat
+            - never_seen
+            - revoked
+            - battery_low
+          description: |
+            **Una sola razon, la mas grave**, en este orden: `revoked`,
+            `never_seen` (sin latido y vinculado hace mas de
+            `silent_after_seconds`), `awaiting_first_heartbeat` (sin latido pero
+            recien vinculado), `silent` (callado mas de `silent_after_seconds`),
+            `late` (mas de `fresh_within_seconds`), `battery_low` (por debajo de
+            `battery_low_percent` **y sin cargar**), `queue_pending`, `beating`.
+        seconds_since_last_seen:
+          type: ['integer', 'null']
+          minimum: 0
+          description: |
+            Segundos entre `meta.generated_at` y `last_seen_at`, calculados con el
+            reloj del servidor. `null` sin latido. Es la misma cifra que
+            `kiosk_last_seen_seconds` (§8.2) convertida a antiguedad.
+
+    DeviceListMeta:
+      type: object
+      title: DeviceListMeta
+      description: |
+        Lo que el panel necesita para leer la lista con el reloj del servidor y
+        con los umbrales reales de la instalacion (tarea 3.3).
+      additionalProperties: false
+      required: [generated_at, timezone, thresholds]
+      properties:
+        generated_at:
+          allOf:
+            - $ref: '#/components/schemas/UtcTimestamp'
+          description: |
+            Instante del servidor en que se calculo la lista. **El panel mide la
+            antiguedad de cada latido contra este instante**, extrapolado con el
+            tiempo transcurrido desde que recibio la respuesta, y nunca contra el
+            reloj del navegador (regla dura 3).
+        timezone:
+          type: string
+          description: |
+            Zona horaria del centro (IANA), en la que el panel muestra los
+            instantes. La lista lleva los instantes en UTC como todo el contrato.
+          examples:
+            - Europe/Madrid
+        thresholds:
+          $ref: '#/components/schemas/KioskHealthThresholds'
+
+    KioskHealthThresholds:
+      type: object
+      title: KioskHealthThresholds
+      description: |
+        Los umbrales con los que se calculo `health`, tal y como los fija la
+        instalacion (`KIOSK_HEALTH_FRESH_WITHIN_SECONDS`,
+        `KIOSK_HEALTH_SILENT_AFTER_SECONDS`, `KIOSK_HEALTH_BATTERY_LOW_PERCENT`),
+        para que la leyenda del panel diga la cifra real y no una supuesta.
+      additionalProperties: false
+      required: [fresh_within_seconds, silent_after_seconds, battery_low_percent]
+      properties:
+        fresh_within_seconds:
+          type: integer
+          minimum: 1
+          description: Hasta cuantos segundos sin latido el quiosco esta al dia.
+          examples:
+            - 120
+        silent_after_seconds:
+          type: integer
+          minimum: 2
+          description: |
+            A partir de cuantos segundos sin latido el quiosco esta en fallo. Es
+            el mismo valor que la alerta «Quiosco sin latido» de Prometheus.
+          examples:
+            - 600
+        battery_low_percent:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Nivel por debajo del cual, sin cargar, el quiosco avisa.
+          examples:
+            - 15
 
     DeviceList:
       type: object
@@ -9168,21 +9385,27 @@ components:
       description: |
         Los quioscos de la instalacion, activos y revocados, en una sola respuesta.
 
-        **Sin paginacion y sin `meta`.** Una instalacion es un hotel
+        **Sin paginacion.** Una instalacion es un hotel
         ([ADR-040](../adr/ADR-040-un-centro-por-instalacion-y-por-licencia.md)) con
         unos pocos quioscos: paginar una lista que cabe entera en la pantalla solo
-        añadiria un contrato que nadie usaria. Si algun dia hiciera falta, añadir
-        `meta` es aditivo sobre la v1 (ADR-012).
+        añadiria un contrato que nadie usaria.
+
+        **Con `meta` desde la tarea 3.3** (aditivo sobre la v1, ADR-012): el reloj
+        del servidor, la zona del centro y los umbrales de salud, sin los cuales
+        el panel tendria que medir con el reloj del navegador y suponer el umbral
+        de la alerta.
 
         **Se envuelve en un objeto y no es un array desnudo**, por lo mismo: una
         respuesta que ya es un array no admite crecer sin romper a quien la lee.
       additionalProperties: false
-      required: [devices]
+      required: [devices, meta]
       properties:
         devices:
           type: array
           items:
             $ref: '#/components/schemas/Device'
+        meta:
+          $ref: '#/components/schemas/DeviceListMeta'
 
     PairingCodeRejected:
       type: object
@@ -10116,6 +10339,13 @@ components:
         una tarjeta ya impresa, naturalmente, no cambia. Ninguna de las nueve
         tiene ya una variable de entorno que la sustituya: `BRANDING_NAME` y
         `BRANDING_ACCENT_COLOR` del Anexo B se retiraron en la 5.8.
+
+        `KIOSK_SERVICE_CODE` (tarea 3.3, RF-KI-08) es el codigo numerico de 8 a
+        12 cifras con el que se abre la pantalla de diagnostico de la tablet.
+        Vacio de serie: sin codigo, la pantalla se abre sin el. El quiosco no
+        recibe nunca el codigo, solo su huella por `POST /api/v1/kiosk/heartbeat`
+        (`service_code_hash`). Es la unica clave cuyo valor no se copia al
+        asiento de auditoria ni al paquete de diagnostico.
       enum:
         - ATTENDANCE_MAX_SHIFT_HOURS
         - ATTENDANCE_DEBOUNCE_SECONDS
@@ -10126,6 +10356,7 @@ components:
         - BRANDING_ACCENT_COLOR
         - LOCALE_DEFAULT
         - LOCALE_AVAILABLE
+        - KIOSK_SERVICE_CODE
 
     SettingValue:
       title: SettingValue
@@ -10231,7 +10462,38 @@ components:
         key:
           $ref: '#/components/schemas/SettingKey'
         value:
-          $ref: '#/components/schemas/SettingValue'
+          oneOf:
+            - $ref: '#/components/schemas/SettingValue'
+            - type: 'null'
+          description: |
+            El valor vigente de la clave.
+
+            **`null` significa «no se te muestra», nunca «no vale nada»**
+            (tarea 3.3): ocurre en una clave marcada como secreta —hoy solo
+            `KIOSK_SERVICE_CODE`— cuando quien consulta es un **acceso de
+            soporte del fabricante**. En ese caso `redacted` vale `true` y la
+            fila sigue apareciendo con su tipo, su origen y sus restricciones,
+            para que soporte pueda decirle al cliente «eso lo tienes puesto,
+            miralo tu» sin verlo.
+
+            A un `admin` de la instalacion se le sirve siempre el valor: es quien
+            lo escribio y esta es la pantalla donde lo escribio.
+        redacted:
+          type: boolean
+          default: false
+          description: |
+            Si el valor se ha retirado de esta respuesta a proposito (tarea 3.3,
+            RF-KI-08, ADR-020, regla dura 16).
+
+            **Va siempre y vale `false` en casi todo.** Solo es `true` en una
+            clave secreta servida a un acceso de soporte, y entonces `value` es
+            `null`. Un campo que apareciera solo cuando es `true` obligaria al
+            panel a distinguir «ausente» de «falso», que es como se acaba
+            enseñando un hueco como si fuera el valor.
+
+            Campo **aditivo** sobre `/api/v1`
+            ([ADR-012](../adr/ADR-012-api-versionada-en-la-ruta.md)): un cliente
+            que no lo conozca lo ignora y sigue leyendo `value`.
         type:
           $ref: '#/components/schemas/SettingType'
         impact:
@@ -10819,6 +11081,7 @@ components:
               - BRANDING_ACCENT_COLOR
               - LOCALE_DEFAULT
               - LOCALE_AVAILABLE
+              - KIOSK_SERVICE_CODE
           additionalProperties:
             $ref: '#/components/schemas/SettingValue'
           examples:

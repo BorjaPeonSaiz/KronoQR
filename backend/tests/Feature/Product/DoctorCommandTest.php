@@ -7,14 +7,18 @@ use App\Modules\Product\Application\Port\DoctorTranslator;
 use App\Modules\Product\Application\UseCase\RunDoctorHandler;
 use App\Modules\Product\Domain\ValueObject\DoctorCheck;
 use App\Modules\Product\Domain\ValueObject\DoctorFinding;
+use App\Modules\Product\Domain\ValueObject\DoctorReport;
 use App\Modules\Product\Domain\ValueObject\DoctorStatus;
 use App\Modules\Product\Infrastructure\Diagnostics\ServiceInspector;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Contracts\Redis\Factory as Redis;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Http\Api;
+use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -59,6 +63,23 @@ function runDoctor(array $parameters = []): array
     $code = Artisan::call('product:doctor', $parameters);
 
     return ['code' => $code, 'output' => Artisan::output()];
+}
+
+/**
+ * Una comprobacion del informe por su identificador estable.
+ *
+ * Falla con el nombre delante en lugar de devolver `null`: una sonda que
+ * desapareciera del informe dejaria la prueba en verde comparando contra nada.
+ */
+function comprobacion(DoctorReport $report, string $id): DoctorCheck
+{
+    foreach ($report->checks as $check) {
+        if ($check->id === $id) {
+            return $check;
+        }
+    }
+
+    throw new RuntimeException('El informe de doctor no trae la comprobacion '.$id.'.');
 }
 
 /**
@@ -224,6 +245,44 @@ it('sobrevive a una sonda que revienta y lo dice sin filtrar el mensaje', functi
         // Y las demas sondas se ejecutan igual.
         ->and($result['output'])->toContain('disk.storage');
 })->group('RF-PD-13', 'RS-08');
+
+// --- El codigo de servicio del quiosco (RF-KI-08, tarea 3.3) ----------------
+
+it('avisa, y nunca falla, mientras no haya codigo de servicio de quiosco', function (): void {
+    // AVISO Y NO FALLO, y esa es la decision que hace util la sonda: un
+    // `failure` devolveria `2`, `update.sh` lo traduciria al `6` de su tabla
+    // comun y **una actualizacion se abortaria porque el hotel no ha puesto un
+    // codigo de servicio**. No hay nada roto: sin codigo la pantalla de
+    // diagnostico se abre sin el, que es como sale de fabrica (decision 7).
+    $report = app(RunDoctorHandler::class)->handle('es');
+
+    $check = comprobacion($report, 'kiosk.service_code');
+
+    expect($check->status)->toBe(DoctorStatus::Warning)
+        ->and($check->details)->toBe(['configured' => false])
+        // Y dice que hacer, con la pantalla y el formato del codigo.
+        ->and($check->fix)->toBeString()
+        ->and((string) $check->fix)->toContain('Ajustes operativos');
+})->group('RF-PD-13', 'RF-KI-08');
+
+it('da por correcto el codigo de servicio configurado sin publicarlo', function (): void {
+    // El hallazgo dice `configured: true` y NADA MAS: este informe viaja al
+    // fabricante dentro del paquete de diagnostico (ADR-020, regla dura 16).
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN));
+
+    Api::as($token)
+        ->patch('/api/v1/settings', ['settings' => ['KIOSK_SERVICE_CODE' => '48392017']])
+        ->assertStatus(200);
+
+    $report = app(RunDoctorHandler::class)->handle('es');
+    $check = comprobacion($report, 'kiosk.service_code');
+
+    expect($check->status)->toBe(DoctorStatus::Ok)
+        ->and($check->fix)->toBeNull()
+        ->and($check->details)->toBe(['configured' => true])
+        ->and($check->summary)->not->toContain('48392017')
+        ->and(json_encode($report->toArray(), JSON_THROW_ON_ERROR))->not->toContain('48392017');
+})->group('RF-PD-13', 'RF-KI-08');
 
 // --- Informe ----------------------------------------------------------------
 

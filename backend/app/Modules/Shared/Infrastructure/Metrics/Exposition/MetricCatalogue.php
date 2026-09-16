@@ -149,6 +149,13 @@ final class MetricCatalogue
                 ['device'],
             ),
             new MetricDefinition(
+                'kiosk_battery_level',
+                MetricType::Gauge,
+                MetricStorage::LabelledHash,
+                'Nivel de bateria que declara cada quiosco, en tanto por ciento. Sin serie mientras el navegador no lo informe.',
+                ['device'],
+            ),
+            new MetricDefinition(
                 'kiosk_pairing_total',
                 MetricType::Counter,
                 MetricStorage::LabelledHash,

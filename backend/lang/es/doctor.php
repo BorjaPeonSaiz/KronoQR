@@ -291,6 +291,21 @@ return [
             ],
         ],
 
+        // --- Quioscos --------------------------------------------------------
+
+        'kiosk' => [
+            'probe' => $probe,
+            'service_code' => [
+                'ok' => 'La pantalla de diagnostico de las tablets pide un codigo de servicio.',
+                'warning' => 'No hay codigo de servicio configurado, asi que cualquiera que tenga una tablet '
+                    .'delante puede abrir su pantalla de diagnostico. Esa pantalla no muestra ningun dato de '
+                    .'empleados ni la clave de la tablet, pero si dice si hay red, cuantos fichajes quedan sin '
+                    .'enviar y que version corre. No hay nada roto: es como sale de fabrica.',
+                'warning_unavailable' => 'No se ha podido comprobar si hay codigo de servicio configurado para la '
+                    .'pantalla de diagnostico de las tablets. El fichaje no se ve afectado.',
+            ],
+        ],
+
         // --- Licencia --------------------------------------------------------
 
         'license' => [
@@ -554,6 +569,18 @@ return [
                 'warning' => "No hay nada roto. Si el valor que quieres es el del fichero .env, cambialo en el\n"
                     ."panel, en Configuracion, que es lo que manda. Si el que quieres es el del panel, quita o\n"
                     .'corrige esas lineas del fichero .env para que no confundan a quien lo lea.',
+            ],
+        ],
+
+        'kiosk' => [
+            'probe' => $probeFix,
+            'service_code' => [
+                'warning' => "Entra en el panel, en Ajustes operativos, y escribe un codigo de 8 a 12 cifras en\n"
+                    ."«Codigo de servicio del quiosco». Las tablets lo reciben solas en menos de un minuto.\n"
+                    ."Apuntalo donde lo tenga quien mantiene los quioscos y no lo pegues en la propia tablet.\n"
+                    .'Si prefieres dejar la pantalla abierta para todo el mundo, puedes ignorar este aviso.',
+                'warning_unavailable' => "Vuelve a ejecutar `php artisan product:doctor` cuando la base de datos responda.\n"
+                    .'Si el problema sigue, mira antes las comprobaciones de la base de datos de este mismo informe.',
             ],
         ],
 

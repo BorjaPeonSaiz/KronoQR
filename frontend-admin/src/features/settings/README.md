@@ -1,10 +1,20 @@
 # settings
 
 Configuracion de la instalacion, perfil de cumplimiento, **licencia** y marca
-(RF-PD-01, RF-PD-04, RF-PD-05, RF-PD-07, RF-PD-08). Tareas 5.1, 5.2, 5.3 y 5.8.
+(RF-PD-01, RF-PD-04, RF-PD-05, RF-PD-07, RF-PD-08, RF-KI-08). Tareas 5.1, 5.2,
+5.3, 5.8, 5.13 y 3.3.
 
-Hoy viven aqui tres pantallas:
+Hoy viven aqui cuatro pantallas:
 
+- **`OperationalSettingsView.vue`** — los umbrales operativos `ATTENDANCE_*`
+  (duracion maxima de un tramo, ventana anti-rebote, desfase de reloj,
+  transito minimo entre quioscos), los idiomas `LOCALE_*` y, desde la tarea
+  3.3, **`KIOSK_SERVICE_CODE`** (RF-KI-08): el codigo de 8 a 12 cifras con el
+  que se abre la pantalla de diagnostico de la tablet. Vacio de serie -la
+  pantalla se abre sin codigo-, y con forma fija en el propio panel
+  (`^[0-9]{8,12}$`, igual que `BrandingView` fija `HEX_COLOR`): el servidor
+  nunca lo audita en claro ni lo envia a la tablet, solo su huella SHA-256 por
+  el latido.
 - **`ComplianceProfileView.vue`** — los umbrales **legales** del centro
   (tarea 5.2).
 - **`LicenseView.vue`** — el estado de la licencia y la activacion de una clave
@@ -26,10 +36,6 @@ persistente que `AppShellView` pinta en **todas** las secciones del panel. Vive
 aqui y no en `shared/ui` porque su contenido es de esta _feature_ —comparte
 store, textos y destino con la pantalla de licencia—; lo unico que aporta el
 marco es el sitio donde colgarlo.
-
-La configuracion de la instalacion que **todavia no tiene pantalla propia**
-son los umbrales operativos (`ATTENDANCE_*`): se guardan y se auditan desde la
-5.1 por `settings.api.ts`, pero ninguna pantalla los edita todavia.
 
 Los tres son recursos distintos a proposito: un umbral legal lo fija la
 jurisdiccion, uno operativo lo fija el hotel (doc 01 §4) y la licencia dice **que

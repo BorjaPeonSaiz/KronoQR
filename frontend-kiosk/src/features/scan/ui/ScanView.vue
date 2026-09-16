@@ -33,10 +33,12 @@ import {
 } from '@/shared/telemetry/deviceIdentity'
 import { getErrorReporter } from '@/shared/telemetry/errorReporter'
 import { createHeartbeatScheduler } from '@/shared/telemetry/heartbeat'
+import { useBatteryStatus } from '@/shared/media/useBatteryStatus'
 import ConnectionStatusBadge from '@/shared/ui/ConnectionStatusBadge.vue'
 import LanguageSelector from '@/shared/ui/LanguageSelector.vue'
 import PrivacyNoticePanel from '@/shared/ui/PrivacyNoticePanel.vue'
 import { useOfflineQueue } from '@/features/offline/useOfflineQueue'
+import ClockDiagnosticsTrigger from '@/features/diagnostics/ui/ClockDiagnosticsTrigger.vue'
 import { createScanPipeline } from '../application/scanPipeline'
 import { useQrScanner } from '../composables/useQrScanner'
 import { useScanSessionWithCleanup } from '../composables/useScanSession'
@@ -135,6 +137,10 @@ const wakeLock = useWakeLock({
   onDenied: (context) => reporter.report('kiosk.wake_lock.denied', context),
 })
 
+// Bateria (RF-PA-07, tarea 3.3): la misma lectura alimenta el latido y, si se
+// abre desde aqui, la pantalla de diagnostico.
+const battery = useBatteryStatus()
+
 const heartbeat = createHeartbeatScheduler({
   api,
   reporter,
@@ -142,7 +148,11 @@ const heartbeat = createHeartbeatScheduler({
   // convierte «hay 37 pendientes» en «el mas antiguo es de hace tres horas»,
   // que es la diferencia entre una sincronizacion en curso y un quiosco que
   // lleva media jornada incomunicado.
-  snapshot: () => offline.telemetry(APP_VERSION),
+  snapshot: () => ({
+    ...offline.telemetry(APP_VERSION),
+    ...(battery.level.value === null ? {} : { batteryLevel: battery.level.value }),
+    ...(battery.charging.value === null ? {} : { batteryCharging: battery.charging.value }),
+  }),
   // El latido alimenta el MISMO contador de `401` consecutivos que la cola
   // (RF-PD-06, tarea 5.6): la revocacion es una decision por tablet, no una
   // por canal.
@@ -201,7 +211,13 @@ onUnmounted(() => {
           :syncing="offline.syncing.value"
         />
       </div>
-      <LanguageSelector :policy="branding.current.value.locales" />
+      <div class="flex shrink-0 items-center gap-3">
+        <!-- Reloj de pared, y puerta de la pantalla de diagnostico con una
+             pulsacion larga de 3 s (RF-KI-08, tarea 3.3, decision 8). Nunca
+             compite con el fichaje: una pulsacion corta no hace nada. -->
+        <ClockDiagnosticsTrigger />
+        <LanguageSelector :policy="branding.current.value.locales" />
+      </div>
     </header>
 
     <section class="relative min-h-0 flex-1 overflow-hidden" data-testid="scan-camera-section">

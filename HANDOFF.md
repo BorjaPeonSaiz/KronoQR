@@ -7,6 +7,40 @@
 
 ## Estado y objetivo actual
 
+**Rama `feat/tarea-3.3-salud-quioscos` (desde `main` `931d3de`, con #58, #59 y #63 ya integradas). Tarea 3.3 «Panel de salud de
+quioscos y pantalla de diagnóstico» (RF-PA-07, RF-KI-08) IMPLEMENTADA, REVISADA (dos vueltas) y PROBADA el 16-09-2026; ver
+«Siguiente acción» para commit, CI manual y PR.** Dieciocho decisiones en la ficha (la 18 es «lo que corrigieron las revisiones»:
+la exportación íntegra llevaba el código de servicio en claro → `value_redacted`; un actor de soporte lo leía y cambiaba →
+`redacted: true` y 403, contrato aditivo de `InstallationSetting`; el bloqueo 5/60 s vivía en la vista → persistido; abrir el
+diagnóstico desde `/pair` perdía `onDeviceRevoked` → suscripción; «servidor alcanzable» congelado y tablet sin latir con la pantalla
+abierta → `onReachability` y latido propio; reloj-disparador sin teclado → `keydown`/`keyup`; insignia camuflada con el tinte de la
+fila → variante sólida; doc 07 A-9/A-10 exactas). Diecisiete decisiones previas en la ficha (plan 06 → «Tarea 3.3» → «Decisiones tomadas»); las que importan: **el veredicto lo calcula el
+servidor con la misma clase que `kiosk:health`** (`KioskHealthRow`; `GET /devices` devuelve `health{verdict,reason,
+seconds_since_last_seen}` y `meta{generated_at,timezone,thresholds}`; umbrales siguen en `config/kiosk.php`, nuevo
+`KIOSK_HEALTH_BATTERY_LOW_PERCENT=15`, razón nueva `battery_low` solo si no carga); **batería y `oldest_pending_at` persistidos**
+(migración expand `2026_09_16_100000`, `--database=pgsql_migrator`); **código de servicio** `SettingKey::KIOSK_SERVICE_CODE`
+(8–12 dígitos, vacío = sin código, `SettingDefinition::$confidential`: el asiento de auditoría lleva `value_redacted`, fuera del
+paquete y de logs) entregado como `service_code_hash` = SHA-256 de `uuid:código` en cada latido y comprobado en local en la tablet
+(5 fallos → 60 s); **sin huella conocida la pantalla abre sin código**; **apertura por pulsación larga de 3 s sobre un reloj NUEVO**
+en la cabecera de `ScanView`/`PairingView` (`ClockDiagnosticsTrigger.vue`; las vistas no tenían reloj: corrección a la decisión 8),
+ruta `/diagnostics` fuera del guard, retorno automático a 120 s; **panel sin virtualización** (contrato sin paginar, ADR-040), reloj
+del servidor extrapolado, «qué hacer» por veredicto nombrando el runbook; **no degradable** (ADR-023). Cuatro agentes en paralelo
+(`backend-laravel`, `frontend-quiosco`, `frontend-panel`, `producto-licencia` para `operacion.md` §16 ES/EN, runbooks y doc 07
+A-9/A-10) tras ampliar y validar el contrato (Redocly 0) y regenerar los tres `schema.d.ts`. Cifras de los agentes: backend Unit
+577, Feature+Contract 911, Architecture 467 (+ los rojos conocidos), PHPStan 9, Deptrac 0; quiosco unit 430, E2E 67, 104 KiB de
+250; panel unit 504, E2E dirigidos 52; documentación 75. **Tras la segunda vuelta y QA:** quiosco unit 445 / E2E 61 (diagnóstico 8/8 con márgenes ampliados: 3,6 s de
+pulsación, 25 sondeos y 40 s en la prueba de revocación), panel unit 509 / E2E 52, mutación 100 % sobre `KioskHealthRow`,
+`KioskHealthThresholds`, `HeartbeatTelemetry` y `ServiceCodeFingerprint` (102 mutantes), `HeartbeatConcurrencyTest` (dos latidos
+simultáneos y «cinco columnas en un solo UPDATE»), `LangParityTest` (17 pares `lang/{es,en}` sin exclusiones), documentación 131,
+Pint 1842, PHPStan 9 sin errores, Deptrac 0/0, Redocly 0, `docs:consistency`, matriz regenerada (Pest 2894, Playwright 203);
+**suites completas de backend sobre el árbol final: Architecture + Unit + Feature + Integration + Contract 4614 en verde**
+(978 s; único rojo el conocido `SourceDiscoveryTest`).
+
+**Siguiente acción:** commit único `feat(quioscos): …`, CI manual en la rama (sin empujar nada después), PR con *merge commit*, `make up` en `main` tras integrar
+(migración `2026_09_16_100000` con `--database=pgsql_migrator`: el usuario `fichaje_app` no tiene DDL; `make up` ya lo hace).
+Después, arrancar la **3.4** (vista de cumplimiento: descansos, jornada máxima, exceso semanal; estrena
+`maximumWeeklyMinutes`/`weekStartsOn`/`holidayCalendar` de `CompliancePolicy`; `backend-laravel` + `frontend-panel`).
+
 **Hotfix del 16-09-2026 INTEGRADO en `main`** (PR #62, *merge commit* `a90d163`, commit `3d7e22f`; CI manual 35076362124 en
 verde con los 20 jobs, ⑧b y cobertura incluidos; rama borrada; `make up` hecho). **`main` estaba EN ROJO desde la nocturna del
 13-09 sin ningún push de por medio** (verde el 11 y el 12; rojas 34747422819, 34825362023, 34948456610 y 35074773680, todas en
@@ -441,6 +475,19 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 
 ### Por tarea
 
+- **3.3 (restos, 16-09-2026):** verificar en una tablet Android real que Chrome expone `focusMode`, `zoom` y `backgroundBlur` en
+  `getSettings()` y que el aviso de desenfoque dispara (la cámara falsa de Chromium no los trae: el E2E afirma filas y avisos, no
+  valores); `CheckKioskHealthTest` y `KioskHealthRowTest` fijan las mismas reglas desde dos ficheros (fusionar al tocar el dominio de
+  salud); panel de batería en el cuadro Grafana «Operación de quioscos» (`kiosk_battery_level{device}` ya se expone); la paridad
+  ES/EN de los `locales/*.json` la atan `i18n.spec.ts` del quiosco y del panel, el portal no tiene esa prueba (`LangParityTest` solo
+  cubre `backend/lang/`); `diagnostics.spec.ts` tiene una prueba con tiempo de gesto (3,6 s para los 3 s de pulsación larga); **la primera
+  CI manual (35107182531) cayó en ⑦ quiosco** en «dos 401 seguidos vuelve a `/pair`»: las peticiones de montaje de `ScanView`
+  salían antes de instalar las rutas 401 y el siguiente latido tardaba 60 s; ahora la prueba recarga la página tras instalar las
+  rutas (dos 401 deterministas); una tablet sin ningún latido posterior a la
+  configuración del código abre el diagnóstico sin él (decisión 7, documentado en A-10 y §16.5); mover los umbrales de salud a
+  `installation_settings` sigue descartado (decisión 2); `make test-unit` en local ~8 s con la máquina cargada frente a los 5 s del
+  presupuesto (medir en reposo y leer la CI); `HeartbeatConcurrencyTest` dio un falso positivo con `migrate:fresh` de otro agente
+  (BD compartida); el `settings/README.md` del panel ya no dice que ningún umbral tiene pantalla.
 - **Dependabot (16-09-2026):** cuatro PRs abiertas. #58 (composer menores) y #59 (npm menores) caían solo por la bomba de tiempo
   de `main`: `@dependabot rebase` tras integrar el hotfix e integrarlas si pasan. **#60 (`@vitest/coverage-v8` 5.0) y #61 (`vitest`
   5.0) son un cambio mayor** (Node 22, `sequential` retirado, `toHaveTextContent` estricto, entradas obsoletas) que rompe ① y ⑥
