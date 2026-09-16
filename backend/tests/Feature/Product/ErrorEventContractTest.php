@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
 use Spectator\Spectator;
@@ -10,7 +9,7 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Identity\PortalLogins;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -54,7 +53,7 @@ beforeEach(function (): void {
  */
 function conRelojFijo(): void
 {
-    app()->instance(Clock::class, FixedClock::at(ERROR_HISTORY_NOW));
+    FrozenTime::at(ERROR_HISTORY_NOW);
 }
 
 /**

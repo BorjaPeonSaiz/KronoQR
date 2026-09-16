@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use App\Modules\Compliance\Application\Port\IncidentResolutionMetrics;
 use App\Modules\Compliance\Domain\ValueObject\AuditAction;
-use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
 use Spectator\Spectator;
@@ -13,7 +12,7 @@ use Tests\Support\Compliance\RecordingIncidentResolutionMetrics;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -41,7 +40,7 @@ beforeEach(function (): void {
     // se deja explicito para no depender del valor de serie.
     config()->set('identity.two_factor.required_roles', []);
 
-    app()->instance(Clock::class, FixedClock::at(INCIDENT_NOW));
+    FrozenTime::at(INCIDENT_NOW);
 });
 
 /**

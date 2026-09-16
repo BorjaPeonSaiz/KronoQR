@@ -8,7 +8,6 @@ use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Attendance\Infrastructure\Projection\DailyTotalsProjector;
-use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -19,7 +18,7 @@ use Tests\Support\Factory\ClockingPolicyFactory;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Identity\PortalLogins;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Time\Instants;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -302,7 +301,7 @@ it('sin rango devuelve los 31 dias que terminan hoy en la zona del centro', func
     // curso justo en el turno de noche, que es cuando alguien mira esta pantalla.
     $contexto = contextoDeJornadas();
 
-    app()->instance(Clock::class, FixedClock::at('2026-03-14 23:30:00'));
+    FrozenTime::at('2026-03-14 23:30:00');
 
     Api::as($contexto['token'])
         ->get('/api/v1/employees/'.$contexto['employee'].'/workdays')

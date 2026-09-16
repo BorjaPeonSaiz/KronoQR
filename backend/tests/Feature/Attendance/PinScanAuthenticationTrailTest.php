@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use App\Modules\Compliance\Application\UseCase\VerifyAuditChain;
-use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\AuthChannel;
 use App\Modules\Shared\Domain\ValueObject\AuthOutcome;
 use Illuminate\Contracts\Cache\Repository as Cache;
@@ -15,7 +14,7 @@ use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Shared\AuthenticationTrail;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\EmployeePins;
 
 /*
@@ -69,7 +68,7 @@ function escenarioDelRastroDePin(): array
 
     EmployeePins::issue($escenario['employee'], PIN_DEL_RASTRO);
 
-    app()->instance(Clock::class, FixedClock::at('2026-03-14 07:02:31'));
+    FrozenTime::at('2026-03-14 07:02:31');
 
     return [
         ...$escenario,

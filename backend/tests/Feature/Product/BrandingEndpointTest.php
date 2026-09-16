@@ -9,7 +9,6 @@ use App\Modules\Product\Infrastructure\Adapter\DbBrandingProvider;
 use App\Modules\Product\Infrastructure\Adapter\DbLocalePolicyProvider;
 use App\Modules\Shared\Application\Port\BrandingLogoReader;
 use App\Modules\Shared\Application\Port\BrandingProvider;
-use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\FeatureGate;
 use App\Modules\Shared\Application\Port\LocalePolicyProvider;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
@@ -21,7 +20,7 @@ use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Identity\PortalLogins;
 use Tests\Support\Product\FixedLogo;
 use Tests\Support\Product\LicenseKeys;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -366,7 +365,7 @@ function conMarcaBlancaContratada(): void
  */
 function sinMarcaBlancaEnElPlan(array $features = ['advanced_reports']): void
 {
-    app()->instance(Clock::class, FixedClock::at('2026-06-15 09:00:00'));
+    FrozenTime::at('2026-06-15 09:00:00');
 
     app(ActivateLicenseHandler::class)->handle(
         new ActivateLicenseCommand(
@@ -380,7 +379,7 @@ function sinMarcaBlancaEnElPlan(array $features = ['advanced_reports']): void
 /** Licencia que incluia la marca blanca, pero que ya vencio. */
 function conLicenciaVencida(): void
 {
-    app()->instance(Clock::class, FixedClock::at('2026-06-15 09:00:00'));
+    FrozenTime::at('2026-06-15 09:00:00');
 
     app(ActivateLicenseHandler::class)->handle(
         new ActivateLicenseCommand(

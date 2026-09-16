@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use App\Modules\Attendance\Application\Port\CredentialResolver;
 use App\Modules\Attendance\Application\Port\ScanMetrics;
-use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\CredentialRejectionReason;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -16,7 +15,7 @@ use Tests\Support\Attendance\FakeCredentialResolver;
 use Tests\Support\Attendance\RecordingScanMetrics;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 
 /*
  * `POST /api/v1/scan/batch` de punta a punta, validado contra
@@ -52,7 +51,7 @@ function escenarioDeLote(): array
 {
     $escenario = AttendanceFixtures::scenario();
 
-    app()->instance(Clock::class, FixedClock::at(SINCRONIZADO_A_LAS));
+    FrozenTime::at(SINCRONIZADO_A_LAS);
     app()->instance(
         CredentialResolver::class,
         FakeCredentialResolver::new()

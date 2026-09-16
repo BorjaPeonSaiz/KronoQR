@@ -7,6 +7,24 @@
 
 ## Estado y objetivo actual
 
+**Rama `fix/plan-limits-token-expiry` (desde `main` `3969d5c`). Hotfix del 16-09-2026: `main` estaba EN ROJO desde la nocturna
+del 13-09 sin ningún push de por medio** (verde el 11 y el 12; rojas 34747422819, 34825362023, 34948456610 y 35074773680, todas en
+el job de cobertura, y las cuatro PRs de Dependabot #58–#61 por arrastre). Causa: `PlanLimitsDoNotBlockTest` instalaba
+`FixedClock` de junio, emitía un token de quiosco con `IssueDeviceToken` (caducidad = junio + 90 días) y fichaba; Sanctum comparaba
+`expires_at` con el reloj real → 401. **No es defecto de producto**: es una prueba que dependía del calendario (ver Trampas).
+Arreglo: `tests/Support/Time/FrozenTime.php` (`FrozenTime::at('…')` instala el `FixedClock` en el contenedor Y congela Carbon en
+el mismo instante; el `TestCase` de Laravel devuelve Carbon al reloj real en cada `tearDown`); las 92 vinculaciones manuales
+`app()->instance(Clock::class, FixedClock::at(…))` de Feature, Integration y Contract (63 ficheros, incluida la variante por
+variable de `RetentionTest`) sustituidas por el helper —`PairingTest` y `PairingAuditTest` eran las siguientes bombas, con reloj
+del 07-09 y estallido el 06-12—; `tests/Architecture/FrozenTimeTest.php` prohíbe `->instance|bind|singleton|scoped(Clock::class`
+en esas suites y exige que el helper tenga uso; `tests/Feature/Quality/FrozenTimeTest.php` es la regresión directa (token de
+quiosco emitido bajo un reloj detenido el 01-01-2026 —la partición más antigua de `audit_log`— sigue valiendo para Sanctum) y
+prueba que los dos relojes coinciden; regla nueva en `.claude/agents/qa-testing.md`. Los `FixedClock` pasados a mano a un servicio
+(`CachePinAttempts`, `VerifyAuditChain`, `AuditLogTest`) se quedan como estaban: no tocan el reloj del framework.
+**Verificado sobre el árbol final:** Architecture + Feature + Integration + Contract 2689 en verde (915 s; el único rojo es el
+conocido `SourceDiscoveryTest`), Pint, PHPStan 9 sin errores, `qa:traceability --check` (matriz regenerada) y `docs:consistency`
+en verde. **Ver «Siguiente acción».**
+
 **Dos trabajos ad hoc del 10-09-2026, ambos INTEGRADOS en `main`:** (1) **cámara del quiosco «enfoca mal» en local** → no era el
 código sino Windows Studio Effects más el foco fijo de la webcam; solo documentación (PR #56, *merge commit* `23b0c52`, CI 34521308593
 en verde): runbook `alta-nuevo-quiosco.md` §6, plan 01 §C.2, ficha 3.3 paso 4 (`getSettings()` con `backgroundBlur` en la pantalla de
@@ -71,7 +89,16 @@ falsificables) → `TrustProxies` propio con `TRUSTED_PROXIES`; sondas retiradas
 cuatro jobs en UP, 24 series en `/metrics`, `probe_success=1`, y una petición con `traceparent` a `/ready` recuperada en Tempo con
 `GET health.ready` → `postgresql select`. **Ver «Siguiente acción».**
 
-**Siguiente acción:** `make up` hecho en `main` (`1d42373`). Arrancar la **3.3** (panel de salud de quioscos; no depende de la 3.2, decisión 14).
+**Siguiente acción:** commit del hotfix, CI manual en `fix/plan-limits-token-expiry` (sin empujar nada después), PR con *merge
+commit*, comprobar que la nocturna siguiente de `main` sale en verde y hacer `@dependabot rebase` en #58 y #59 (ver «Pendiente»).
+Después, arrancar la **3.3** (panel de salud de quioscos; no depende de la 3.2, decisión 14). Análisis de huecos de la 3.3 ya
+hecho el 16-09: falta `battery_level` en el latido y en `GET /devices` (contrato primero, migración expand, tres `schema.d.ts`),
+el resaltado por umbral en el panel (`elapsedSinceHeartbeat` mide contra el reloj del navegador y no hay umbral; decidir cómo
+conoce `KIOSK_HEALTH_SILENT_AFTER_SECONDS`), la pantalla de diagnóstico del quiosco con código de servicio (no existe nada;
+`frontend-kiosk/src/features/diagnostics/` es un README; el código de servicio es configuración, regla 13, y hoy no hay ninguna
+variable), el enlace al runbook `quiosco-no-responde.md`, E2E `@RF-PA-07`/`@RF-KI-08`, autorización negativa y clasificación
+ADR-023. Ya existen y no se rehacen: `frontend-admin/src/features/devices/`, `POST /kiosk/heartbeat`, `GET /devices`,
+`kiosk:health`, la alerta `QuioscoSinLatido` y el runbook.
 
 **Rama `chore/cierre-fase-5` (desde `main` `9d5ec6f`). FASE 5 CERRADA el 10-09-2026** (`current_phase => 5`, matriz de
 trazabilidad regenerada: 2 782 pruebas etiquetadas, Fase 5 con 23 de 23). Los cuatro revisores del doc 03 §6.6 sobre `main`
@@ -413,6 +440,11 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 
 ### Por tarea
 
+- **Dependabot (16-09-2026):** cuatro PRs abiertas. #58 (composer menores) y #59 (npm menores) caían solo por la bomba de tiempo
+  de `main`: `@dependabot rebase` tras integrar el hotfix e integrarlas si pasan. **#60 (`@vitest/coverage-v8` 5.0) y #61 (`vitest`
+  5.0) son un cambio mayor** (Node 22, `sequential` retirado, `toHaveTextContent` estricto, entradas obsoletas) que rompe ① y ⑥
+  en los cuatro paquetes: decidir entre una tarea de migración a Vitest 5 o fijar `<5` en `dependabot.yml`; no integrar tal cual.
+  Recordar la trampa del lock (`npm install` solo desde Linux y sin `node_modules`).
 - **3.2 (restos, 10-09-2026):** `amtool check-config` solo corre en `make observability-check`, en la CI y al arrancar el contenedor
   (`AlertmanagerConfigTest` valida con el parser de Symfony, más laxo); `render-config.sh` sin prueba de sus `die` de plantilla
   ausente; las variables de plantilla de Grafana (`label_values`) y los `legendFormat` no se contrastan con el §8.2 ni con la regla
@@ -545,6 +577,14 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 
 ## Trampas del entorno — leer antes de operar
 
+- **Reloj fijo + token Sanctum = bomba de tiempo** (16-09-2026): una prueba con framework tiene dos relojes, el puerto `Clock` del
+  dominio y Carbon (Sanctum, Eloquent, limitador). `PlanLimitsDoNotBlockTest` instalaba un `FixedClock` de junio, emitía con él un
+  token de quiosco (caducidad = junio + 90 días de `IDENTITY_DEVICE_TOKEN_DAYS`) y fichaba; Sanctum comparaba la caducidad con el
+  reloj REAL y desde el 13-09 respondía 401: `main` en rojo tres días sin que nadie tocara nada. **En Feature, Integration y Contract
+  el reloj se detiene con `FrozenTime::at('…')`** (`tests/Support/Time`), que instala el `FixedClock` y congela Carbon en el mismo
+  instante; `FrozenTimeTest` (Architecture) prohíbe `->instance(Clock::class, …)` en esas suites. `audit_log` está particionado por
+  año: un reloj detenido antes de 2026 rompe cualquier asiento. La CI nocturna (`schedule`) es la única que corre sin un push
+  delante: si `main` pasa a rojo sin commits, mirar primero fechas fijas.
 - **La webcam del portátil no vale para juzgar el enfoque del quiosco** (10-09-2026): «Windows Studio Effects» (encuadre
   automático + desenfoque de fondo, equipos con NPU) se aplica antes de que Chrome vea la imagen y el QR llega recortado y borroso
   sin que la PWA pueda evitarlo; se apaga en Configuración › Cámaras. Y una webcam no tiene autoenfoque: tarjeta a 30-50 cm.

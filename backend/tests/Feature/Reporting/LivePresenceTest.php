@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use App\Modules\Workforce\Infrastructure\Persistence\Department;
 use Illuminate\Support\Facades\DB;
@@ -13,7 +12,7 @@ use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Reporting\PresenceFixtures;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -78,7 +77,7 @@ function escenarioDePresencia(): array
     PresenceFixtures::openShift($dentro, $site, deviceId: $device['id']);
     PresenceFixtures::closedShift($fuera, $site);
 
-    app()->instance(Clock::class, FixedClock::at(PRESENCIA_AHORA));
+    FrozenTime::at(PRESENCIA_AHORA);
 
     Spectator::using('openapi.yaml');
 

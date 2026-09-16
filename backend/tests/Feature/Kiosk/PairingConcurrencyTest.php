@@ -3,14 +3,13 @@
 declare(strict_types=1);
 
 use App\Modules\Identity\Infrastructure\Persistence\Device;
-use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\Concurrency\ParallelRequests;
 use Tests\Support\Database\CommittedDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -41,7 +40,7 @@ const CONFIRMACIONES_PARALELAS = 4;
 
 it('deja un solo dispositivo aunque dos personas confirmen el mismo codigo a la vez', function (): void {
     WorkforceFixtures::site();
-    app()->instance(Clock::class, FixedClock::at('2026-09-07 10:00:00'));
+    FrozenTime::at('2026-09-07 10:00:00');
 
     /** @var array{code: string} $ticket */
     $ticket = Api::guest()->post('/api/v1/kiosk/pair', ['app_version' => '1.4.2'])->json();
@@ -103,7 +102,7 @@ it('entrega un solo token aunque la tablet sondee cuatro veces a la vez', functi
     // Esa ultima afirmacion es la que importa: dos tokens vivos para la misma
     // tablet significarian que revocar el visible deja el otro funcionando.
     WorkforceFixtures::site();
-    app()->instance(Clock::class, FixedClock::at('2026-09-07 10:00:00'));
+    FrozenTime::at('2026-09-07 10:00:00');
 
     /** @var array{pairing_id: string, pairing_secret: string, code: string} $ticket */
     $ticket = Api::guest()->post('/api/v1/kiosk/pair', ['app_version' => '1.4.2'])->json();
@@ -188,7 +187,7 @@ it('deja un solo quiosco aunque dos personas confirmen a la vez con el MISMO nom
     // Son DOS solicitudes distintas a proposito: con el mismo codigo, el ganador
     // lo decidiria el `UPDATE` condicional y esta prueba no diria nada del indice.
     WorkforceFixtures::site();
-    app()->instance(Clock::class, FixedClock::at('2026-09-07 10:00:00'));
+    FrozenTime::at('2026-09-07 10:00:00');
 
     $tickets = [];
     $tokens = [];

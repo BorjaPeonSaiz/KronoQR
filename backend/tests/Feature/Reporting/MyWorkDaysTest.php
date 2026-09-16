@@ -15,7 +15,7 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Factory\ClockingPolicyFactory;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\PortalLogins;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Time\Instants;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -62,7 +62,7 @@ function miPortal(): array
     // Un instante fijo dentro del mes de los escenarios: sin esto, el rango por
     // omision —los 31 dias que terminan hoy— dependeria del dia en que se
     // ejecute la suite (regla dura 2).
-    app()->instance(Clock::class, FixedClock::at('2026-03-20 09:00:00'));
+    FrozenTime::at('2026-03-20 09:00:00');
 
     return [
         'token' => $token,

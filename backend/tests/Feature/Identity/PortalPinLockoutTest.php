@@ -11,6 +11,7 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\PortalLogins;
 use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\EmployeePins;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -110,7 +111,7 @@ function fallaEnElPortal(string $codigo): void
  */
 function fallaEnElPortalEn(string $codigo, string $instante): void
 {
-    app()->instance(Clock::class, FixedClock::at($instante));
+    FrozenTime::at($instante);
     app()->forgetInstance(PinAttempts::class);
 
     fallaEnElPortal($codigo);
@@ -169,7 +170,7 @@ it('deja intentarlo en el portal a quien esta bloqueado en el quiosco', function
     // consultar sus horas desde el movil.
     $empleado = empleadoParaBloqueo();
 
-    app()->instance(Clock::class, FixedClock::at('2026-03-14 06:00:00'));
+    FrozenTime::at('2026-03-14 06:00:00');
 
     $contador = app(PinAttempts::class);
     $contador->recordFailure($empleado['uuid'], PinOrigin::KIOSK);

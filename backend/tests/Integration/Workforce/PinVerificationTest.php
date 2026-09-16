@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\EmployeePinVerifier;
 use App\Modules\Shared\Application\Port\PinAttempts;
 use App\Modules\Shared\Application\Port\SealedPinOpener;
@@ -10,7 +9,7 @@ use App\Modules\Shared\Domain\ValueObject\PinOrigin;
 use Illuminate\Contracts\Cache\Repository as Cache;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\Database\RefreshDatabase;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\EmployeePins;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -62,7 +61,7 @@ beforeEach(function (): void {
     // 12 tardan unos cientos de milisegundos cada una—, asi que
     // `retryAfterSeconds()` salia 300 o 299 segun el humor de la maquina. Es el
     // motivo por el que el puerto existe.
-    app()->instance(Clock::class, FixedClock::at('2026-03-14 06:00:00'));
+    FrozenTime::at('2026-03-14 06:00:00');
     app()->forgetInstance(PinAttempts::class);
 });
 

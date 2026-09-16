@@ -2,12 +2,11 @@
 
 declare(strict_types=1);
 
-use App\Modules\Shared\Application\Port\Clock;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\Support\Database\RefreshDatabase;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -40,7 +39,7 @@ const AHORA_EN_LA_SALUD = '2026-09-09 12:00:00';
 
 beforeEach(function (): void {
     WorkforceFixtures::site();
-    app()->instance(Clock::class, FixedClock::at(AHORA_EN_LA_SALUD));
+    FrozenTime::at(AHORA_EN_LA_SALUD);
 });
 
 /**

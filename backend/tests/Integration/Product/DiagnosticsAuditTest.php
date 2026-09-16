@@ -8,12 +8,11 @@ use App\Modules\Product\Application\Port\ProductEventPublisher;
 use App\Modules\Product\Application\UseCase\GenerateDiagnosticsBundleHandler;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsActor;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsOptions;
-use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\Event\DomainEvent;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Product\LicenseKeys;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -36,7 +35,7 @@ uses(RefreshDatabase::class);
 beforeEach(function (): void {
     WorkforceFixtures::site();
     LicenseKeys::install();
-    app()->instance(Clock::class, FixedClock::at('2026-06-15 09:00:00'));
+    FrozenTime::at('2026-06-15 09:00:00');
 });
 
 function generarPaquete(DiagnosticsOptions $options): void

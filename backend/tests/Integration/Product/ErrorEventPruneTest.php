@@ -3,14 +3,13 @@
 declare(strict_types=1);
 
 use App\Modules\Product\Application\UseCase\PruneErrorEvents;
-use App\Modules\Shared\Application\Port\Clock;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Product\ErrorHistoryConnection;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -31,7 +30,7 @@ use Tests\Support\Workforce\WorkforceFixtures;
 uses(RefreshDatabase::class);
 
 beforeEach(function (): void {
-    app()->instance(Clock::class, FixedClock::at('2027-06-01 04:00:00'));
+    FrozenTime::at('2027-06-01 04:00:00');
     ErrorHistoryConnection::shareTestTransaction();
 });
 

@@ -5,7 +5,6 @@ declare(strict_types=1);
 use App\Modules\Attendance\Application\Port\CredentialResolver;
 use App\Modules\Attendance\Application\Port\ScanMetrics;
 use App\Modules\Attendance\Application\Port\ScanResult;
-use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\CredentialRejectionReason;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -17,7 +16,7 @@ use Tests\Support\Attendance\FakeCredentialResolver;
 use Tests\Support\Attendance\RecordingScanMetrics;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -56,7 +55,7 @@ function escenarioDeFichaje(string $ahora = AHORA, string $timezone = 'Europe/Ma
 {
     $escenario = AttendanceFixtures::scenario($timezone);
 
-    app()->instance(Clock::class, FixedClock::at($ahora));
+    FrozenTime::at($ahora);
     app()->instance(
         CredentialResolver::class,
         FakeCredentialResolver::new()
@@ -142,7 +141,7 @@ it('cierra el turno y devuelve el acumulado recalculado del dia', function (): v
 
     escanear($escenario, Str::uuid7()->toString(), '2026-03-14T06:02:00Z')->assertOk();
 
-    app()->instance(Clock::class, FixedClock::at('2026-03-14 10:02:00'));
+    FrozenTime::at('2026-03-14 10:02:00');
     $salida = escanear($escenario, Str::uuid7()->toString(), '2026-03-14T10:02:00Z');
 
     $salida->assertOk()->assertValidResponse();
@@ -168,7 +167,7 @@ it('descarta el segundo escaneo dentro del periodo de gracia', function (): void
 
     escanear($escenario, Str::uuid7()->toString(), '2026-03-14T07:02:31Z')->assertOk();
 
-    app()->instance(Clock::class, FixedClock::at('2026-03-14 07:02:51'));
+    FrozenTime::at('2026-03-14 07:02:51');
     $rebote = escanear($escenario, Str::uuid7()->toString(), '2026-03-14T07:02:51Z');
 
     $rebote->assertOk()->assertValidResponse();
@@ -194,7 +193,7 @@ it('deja fichar la salida pasada la ventana de gracia', function (): void {
 
     escanear($escenario, Str::uuid7()->toString(), '2026-03-14T07:02:31Z')->assertOk();
 
-    app()->instance(Clock::class, FixedClock::at('2026-03-14 07:03:31'));
+    FrozenTime::at('2026-03-14 07:03:31');
     $salida = escanear($escenario, Str::uuid7()->toString(), '2026-03-14T07:03:31Z');
 
     expect($salida->json('action'))->toBe('clock_out');
@@ -213,7 +212,7 @@ it('devuelve la respuesta original ante un reenvio con el mismo scan_id', functi
     $primera->assertOk();
 
     // El reenvio llega mas tarde, como llegaria de la cola offline.
-    app()->instance(Clock::class, FixedClock::at('2026-03-14 09:30:00'));
+    FrozenTime::at('2026-03-14 09:30:00');
     $reenvio = escanear($escenario, $scanId);
 
     $reenvio->assertOk()->assertValidResponse();
@@ -374,7 +373,7 @@ it('cierra a las 06:00 el turno que entro a las 22:00 sin partirlo', function ()
 
     escanear($escenario, Str::uuid7()->toString(), '2026-03-13T21:00:00Z')->assertOk();
 
-    app()->instance(Clock::class, FixedClock::at('2026-03-14 05:00:00'));
+    FrozenTime::at('2026-03-14 05:00:00');
     $salida = escanear($escenario, Str::uuid7()->toString(), '2026-03-14T05:00:00Z');
 
     $salida->assertOk()->assertValidResponse();
@@ -394,7 +393,7 @@ it('deja en audit_log una entrada encadenada por cada tramo, sin nombres', funct
 
     escanear($escenario, Str::uuid7()->toString(), '2026-03-14T07:02:31Z')->assertOk();
 
-    app()->instance(Clock::class, FixedClock::at('2026-03-14 11:02:31'));
+    FrozenTime::at('2026-03-14 11:02:31');
     escanear($escenario, Str::uuid7()->toString(), '2026-03-14T11:02:31Z')->assertOk();
 
     /** @var list<stdClass> $asientos */

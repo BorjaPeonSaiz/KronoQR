@@ -11,7 +11,6 @@ use App\Modules\Product\Application\UseCase\RequestDataExportHandler;
 use App\Modules\Product\Domain\ValueObject\DataExportOrigin;
 use App\Modules\Product\Infrastructure\Export\ZipDataExportArchiveWriter;
 use App\Modules\Product\Infrastructure\Job\GenerateDataExportJob;
-use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Queue\MaxAttemptsExceededException;
 use Illuminate\Support\Facades\DB;
@@ -19,7 +18,7 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Product\DataExports;
 use Tests\Support\Product\LicenseKeys;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -44,7 +43,7 @@ use Tests\Support\Workforce\WorkforceFixtures;
 uses(RefreshDatabase::class);
 
 beforeEach(function (): void {
-    app()->instance(Clock::class, FixedClock::at('2026-09-08 10:00:00'));
+    FrozenTime::at('2026-09-08 10:00:00');
     WorkforceFixtures::site();
     LicenseKeys::install();
 

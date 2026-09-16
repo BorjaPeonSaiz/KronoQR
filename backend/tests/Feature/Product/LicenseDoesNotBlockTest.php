@@ -8,7 +8,6 @@ use App\Modules\Product\Application\Command\ActivateLicenseCommand;
 use App\Modules\Product\Application\UseCase\ActivateLicenseHandler;
 use App\Modules\Product\Application\UseCase\GetLicenseStatusHandler;
 use App\Modules\Product\Domain\ValueObject\LicenseState;
-use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\FeatureGate;
 use App\Modules\Shared\Domain\ValueObject\CredentialRejectionReason;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
@@ -21,7 +20,7 @@ use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Identity\PortalLogins;
 use Tests\Support\Product\LicenseKeys;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\EmployeePins;
 
 /*
@@ -62,14 +61,14 @@ function instalacionConLicenciaCaducada(): array
     $keys = LicenseKeys::install();
     $escenario = AttendanceFixtures::scenario();
 
-    app()->instance(Clock::class, FixedClock::at('2026-06-15 09:00:00'));
+    FrozenTime::at('2026-06-15 09:00:00');
     app(ActivateLicenseHandler::class)->handle(new ActivateLicenseCommand($keys->issue([
         'valid_from' => '2026-01-01T00:00:00Z',
         'valid_until' => '2026-12-31T23:59:59Z',
     ])));
 
     // Y ahora es 2027: la licencia lleva medio año caducada.
-    app()->instance(Clock::class, FixedClock::at(AHORA_CADUCADA));
+    FrozenTime::at(AHORA_CADUCADA);
     app()->forgetInstance(FeatureGate::class);
 
     expect(app(GetLicenseStatusHandler::class)->handle()->state)->toBe(LicenseState::Expired);
@@ -215,7 +214,7 @@ it('SIN NINGUNA LICENCIA se ficha igual', function (): void {
     // nadie pegue la clave. Si el fichaje dependiera de ella, el producto no se
     // podria ni instalar.
     $escenario = AttendanceFixtures::scenario();
-    app()->instance(Clock::class, FixedClock::at('2026-03-14 07:00:00'));
+    FrozenTime::at('2026-03-14 07:00:00');
     app()->instance(
         CredentialResolver::class,
         FakeCredentialResolver::new()->resolving('FH1.a3.7QK2mXpR9vLdN4tZbYcF1w.k9Xm2pQrT5vN8wLa', $escenario['employee']),
@@ -241,7 +240,7 @@ it('CON UNA LICENCIA ILEGIBLE se ficha igual', function (): void {
     // fichaje. Es el mismo criterio que la tarea 5.1 aplico a la configuracion.
     $escenario = AttendanceFixtures::scenario();
     LicenseKeys::install();
-    app()->instance(Clock::class, FixedClock::at('2026-03-14 07:00:00'));
+    FrozenTime::at('2026-03-14 07:00:00');
 
     DB::table('license')->insert([
         'signed_key' => 'esto-no-es-una-clave',

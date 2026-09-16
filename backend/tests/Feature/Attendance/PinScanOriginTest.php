@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use App\Modules\Attendance\Application\Port\ScanMetrics;
-use App\Modules\Shared\Application\Port\Clock;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
@@ -12,7 +11,7 @@ use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Attendance\RecordingScanMetrics;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\EmployeePins;
 
 /*
@@ -44,7 +43,7 @@ function escenarioDeOrigen(string $ahora = '2026-03-14 07:02:31'): array
 
     EmployeePins::issue($escenario['employee'], PIN_ORIGEN);
 
-    app()->instance(Clock::class, FixedClock::at($ahora));
+    FrozenTime::at($ahora);
     app()->instance(ScanMetrics::class, new RecordingScanMetrics);
 
     return [
@@ -171,7 +170,7 @@ it('deja el fichaje por PIN en audit_log con su origen y sin nombres', function 
 
     ficharPorPin($escenario, Str::uuid7()->toString(), '2026-03-14T07:02:31Z')->assertOk();
 
-    app()->instance(Clock::class, FixedClock::at('2026-03-14 15:02:31'));
+    FrozenTime::at('2026-03-14 15:02:31');
     ficharPorPin($escenario, Str::uuid7()->toString(), '2026-03-14T15:02:31Z')->assertOk();
 
     /** @var list<stdClass> $asientos */

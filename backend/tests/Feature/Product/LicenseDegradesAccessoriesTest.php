@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use App\Modules\Product\Application\Command\ActivateLicenseCommand;
 use App\Modules\Product\Application\UseCase\ActivateLicenseHandler;
-use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\FeatureGate;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Spectator\Spectator;
@@ -12,7 +11,7 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Product\LicenseKeys;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -47,7 +46,7 @@ beforeEach(function (): void {
  */
 function conFuncionalidades(array $features): void
 {
-    app()->instance(Clock::class, FixedClock::at('2026-06-15 09:00:00'));
+    FrozenTime::at('2026-06-15 09:00:00');
     app(ActivateLicenseHandler::class)->handle(new ActivateLicenseCommand(
         LicenseKeys::current()->issue(['features' => $features]),
     ));
@@ -59,7 +58,7 @@ function conFuncionalidades(array $features): void
  */
 function conLicenciaCaducada(): void
 {
-    app()->instance(Clock::class, FixedClock::at('2026-06-15 09:00:00'));
+    FrozenTime::at('2026-06-15 09:00:00');
     app(ActivateLicenseHandler::class)->handle(new ActivateLicenseCommand(LicenseKeys::current()->issue([
         'valid_from' => '2025-01-01T00:00:00Z',
         'valid_until' => '2025-12-31T23:59:59Z',

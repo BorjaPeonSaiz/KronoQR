@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use App\Modules\Attendance\Application\Port\CredentialResolver;
 use App\Modules\Attendance\Application\Port\ScanMetrics;
-use App\Modules\Shared\Application\Port\Clock;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\Support\Attendance\AttendanceFixtures;
@@ -13,7 +12,7 @@ use Tests\Support\Attendance\RecordingScanMetrics;
 use Tests\Support\Concurrency\ParallelRequests;
 use Tests\Support\Database\CommittedDatabase;
 use Tests\Support\Http\Api;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 
 /*
  * **Idempotencia bajo concurrencia** — escenario ineludible del doc 02 §9.4 y
@@ -43,7 +42,7 @@ const TARJETA_CONCURRENTE = 'FH1.a3.7QK2mXpR9vLdN4tZbYcF1w.k9Xm2pQrT5vN8wLa';
 it('crea exactamente un tramo y devuelve diez respuestas identicas', function (): void {
     $escenario = AttendanceFixtures::scenario();
 
-    app()->instance(Clock::class, FixedClock::at('2026-03-14 07:02:31'));
+    FrozenTime::at('2026-03-14 07:02:31');
     app()->instance(ScanMetrics::class, new RecordingScanMetrics);
     app()->instance(
         CredentialResolver::class,
@@ -109,7 +108,7 @@ it('crea un solo tramo aunque las diez peticiones traigan scan_id distintos', fu
     // el tramo del ganador y se resuelven como anti-rebote.
     $escenario = AttendanceFixtures::scenario();
 
-    app()->instance(Clock::class, FixedClock::at('2026-03-14 07:02:31'));
+    FrozenTime::at('2026-03-14 07:02:31');
     app()->instance(ScanMetrics::class, new RecordingScanMetrics);
     app()->instance(
         CredentialResolver::class,

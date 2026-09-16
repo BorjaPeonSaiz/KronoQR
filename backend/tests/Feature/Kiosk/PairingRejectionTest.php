@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use App\Modules\Kiosk\Http\Response\PairingRejectedResponse;
-use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
@@ -13,7 +12,7 @@ use Symfony\Component\HttpFoundation\Response;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -50,7 +49,7 @@ uses(RefreshDatabase::class);
 
 beforeEach(function (): void {
     Spectator::using('openapi.yaml');
-    app()->instance(Clock::class, FixedClock::at('2026-09-07 10:00:00'));
+    FrozenTime::at('2026-09-07 10:00:00');
 });
 
 /**
@@ -233,7 +232,7 @@ it('no distingue las tres causas del codigo tampoco en el confirm', function ():
         'name' => 'Recepcion',
     ])->assertOk();
 
-    app()->instance(Clock::class, FixedClock::at('2026-09-07 10:10:01'));
+    FrozenTime::at('2026-09-07 10:10:01');
 
     $cuerpos = [];
 

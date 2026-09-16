@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use App\Modules\Attendance\Infrastructure\Metrics\RedisAnomalyMetrics;
-use App\Modules\Shared\Application\Port\Clock;
 use Illuminate\Contracts\Redis\Factory as Redis;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -11,7 +10,7 @@ use Illuminate\Support\Str;
 use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -93,7 +92,7 @@ function tramoDeRevision(string $employeeUuid, int $siteId, string $clockedInAt,
  */
 function revisionNocturna(): array
 {
-    app()->instance(Clock::class, FixedClock::at(AHORA_DE_LA_REVISION));
+    FrozenTime::at(AHORA_DE_LA_REVISION);
 
     expect(Artisan::call('attendance:detect-incidents'))->toBe(0);
 

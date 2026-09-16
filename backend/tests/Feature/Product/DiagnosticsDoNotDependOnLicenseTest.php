@@ -7,7 +7,6 @@ use App\Modules\Product\Application\UseCase\ActivateLicenseHandler;
 use App\Modules\Product\Application\UseCase\RunDoctorHandler;
 use App\Modules\Product\Domain\ValueObject\DoctorCheck;
 use App\Modules\Product\Domain\ValueObject\DoctorStatus;
-use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\FeatureGate;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
@@ -15,7 +14,7 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Product\LicenseKeys;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -54,7 +53,7 @@ function diagnosticoConLicenciaCaducada(): void
         'valid_until' => '2026-08-01T00:00:00Z',
     ])));
 
-    app()->instance(Clock::class, FixedClock::at('2026-09-01 10:00:00'));
+    FrozenTime::at('2026-09-01 10:00:00');
     app()->forgetInstance(FeatureGate::class);
 }
 

@@ -7,7 +7,6 @@ use App\Modules\Product\Application\UseCase\RecordErrorEvent;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsActor;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsOptions;
 use App\Modules\Product\Domain\ValueObject\ErrorMessageSanitizer;
-use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\ErrorEventSink;
 use App\Modules\Shared\Domain\ValueObject\ErrorLevel;
 use App\Modules\Shared\Domain\ValueObject\ErrorReport;
@@ -17,7 +16,7 @@ use Illuminate\Support\Str;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Product\ErrorHistoryConnection;
 use Tests\Support\Product\LicenseKeys;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -276,7 +275,7 @@ function erroresConPiiDeLaPlantilla(string $employeeUuid, string $deviceUuid): i
 }
 
 beforeEach(function (): void {
-    app()->instance(Clock::class, FixedClock::at('2026-06-15 09:00:00'));
+    FrozenTime::at('2026-06-15 09:00:00');
     LicenseKeys::grantAll();
 
     // `error_events` se escribe por una conexion propia y esta suite no tiene el

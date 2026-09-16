@@ -5,7 +5,6 @@ declare(strict_types=1);
 use App\Modules\Product\Application\UseCase\SendTelemetryHandler;
 use App\Modules\Product\Domain\ValueObject\TelemetryReport;
 use App\Modules\Product\Infrastructure\Telemetry\HttpTelemetrySender;
-use App\Modules\Shared\Application\Port\Clock;
 use Illuminate\Http\Client\Factory as HttpClient;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Config;
@@ -14,7 +13,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Product\LicenseKeys;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -113,7 +112,7 @@ function cuerpoEnviado(): string
 }
 
 beforeEach(function (): void {
-    app()->instance(Clock::class, FixedClock::at('2026-06-15 09:00:00'));
+    FrozenTime::at('2026-06-15 09:00:00');
 
     Config::set('app.url', TELE_URL);
     Config::set('product.telemetry_enabled', true);
