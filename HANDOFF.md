@@ -444,8 +444,10 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 - **Dependabot (16-09-2026):** cuatro PRs abiertas. #58 (composer menores) y #59 (npm menores) caían solo por la bomba de tiempo
   de `main`: `@dependabot rebase` tras integrar el hotfix e integrarlas si pasan. **#60 (`@vitest/coverage-v8` 5.0) y #61 (`vitest`
   5.0) son un cambio mayor** (Node 22, `sequential` retirado, `toHaveTextContent` estricto, entradas obsoletas) que rompe ① y ⑥
-  en los cuatro paquetes: decidir entre una tarea de migración a Vitest 5 o fijar `<5` en `dependabot.yml`; no integrar tal cual.
-  Recordar la trampa del lock (`npm install` solo desde Linux y sin `node_modules`).
+  en los cuatro paquetes. **Decisión del usuario (16-09): APLAZAR.** `dependabot.yml` ignora las mayores de `vitest` y `@vitest/*`
+  y las agrupa (`vitest-mayor`) para que, al levantar el `ignore`, lleguen en una sola PR coherente; #60 y #61 cerradas. La
+  migración a Vitest 5 se aborda a propósito en la 3.7 o al cierre de la Fase 3 (`qa-testing`, rama única con los dos paquetes,
+  lock regenerado desde Linux). Recordar la trampa del lock (`npm install` solo desde Linux y sin `node_modules`).
 - **3.2 (restos, 10-09-2026):** `amtool check-config` solo corre en `make observability-check`, en la CI y al arrancar el contenedor
   (`AlertmanagerConfigTest` valida con el parser de Symfony, más laxo); `render-config.sh` sin prueba de sus `die` de plantilla
   ausente; las variables de plantilla de Grafana (`label_values`) y los `legendFormat` no se contrastan con el §8.2 ni con la regla
