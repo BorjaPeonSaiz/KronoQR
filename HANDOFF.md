@@ -36,8 +36,13 @@ Contract 60, Architecture 527 (+ `SourceDiscoveryTest` conocido), PHPStan 9 sin 
 árbol final (Architecture + Unit + Feature + Integration + Contract): 4718 en verde, 20 810 aserciones, 992 s; único rojo el
 conocido `SourceDiscoveryTest`.**
 
-**Siguiente acción:** commit único `feat(cumplimiento): …`, CI manual en la rama (sin empujar nada después), PR con *merge commit*.
-Sin migración: tras integrar basta `git pull` (y `make up` si se quiere el comando nocturno programado en el contenedor). Después,
+**Confirmada en el commit único `726ee6d`** (`feat(cumplimiento): …`, 109 ficheros), rama empujada, **CI manual completa 35152401417**
+lanzada tras el push (la del push la canceló la concurrencia) y **PR #65** abierta contra `main`.
+
+**CI manual 35152401417 EN VERDE con los 21 jobs** (③ mutación, ⑧b y cobertura incluidos).
+
+**Siguiente acción:** el usuario integra la PR #65 con *merge commit* y borra la rama. Sin migración: tras integrar basta
+`git pull` (y `make up` si se quiere el comando nocturno programado en el contenedor). Después,
 la **3.5** (fichaje de pausa y validación de desfase de reloj: vaciar `ComplianceRuleSuspension`, RN-12 vuelve a abrir incidencias
 y la vista empieza a contarla sin tocar nada; descanso intra-jornada de RN-10 con la pausa declarada; RF-AT-12).
 
