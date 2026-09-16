@@ -213,7 +213,15 @@ test.describe('pantalla de diagnostico (RF-KI-08, tarea 3.3)', () => {
         })
       })
 
-      await expect(page).toHaveURL(/\/pair$/, { timeout: 10_000 })
+      // Recarga a proposito: las peticiones de montaje de `ScanView` pueden
+      // haber salido ANTES de instalar las rutas de arriba (en la CI paso:
+      // 200 a las dos y el siguiente latido no llega hasta 60 s despues).
+      // Con el token aun en `localStorage`, el guard deja pasar a `/`,
+      // `ScanView` se vuelve a montar y lanza latido y padron en el acto:
+      // dos `401` deterministas, sin depender de quien gane la carrera.
+      await page.reload()
+
+      await expect(page).toHaveURL(/\/pair$/, { timeout: 15_000 })
       await expect(page.getByTestId('pairing-code')).toBeVisible()
     },
   )

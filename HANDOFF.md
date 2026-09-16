@@ -480,8 +480,10 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   valores); `CheckKioskHealthTest` y `KioskHealthRowTest` fijan las mismas reglas desde dos ficheros (fusionar al tocar el dominio de
   salud); panel de batería en el cuadro Grafana «Operación de quioscos» (`kiosk_battery_level{device}` ya se expone); la paridad
   ES/EN de los `locales/*.json` la atan `i18n.spec.ts` del quiosco y del panel, el portal no tiene esa prueba (`LangParityTest` solo
-  cubre `backend/lang/`); `diagnostics.spec.ts` sigue teniendo dos pruebas con tiempos de gesto y sondeo (3,6 s y 25 sondeos/40 s):
-  si aparecen intermitencias en la CI, esperar por condición en vez de por tiempo; una tablet sin ningún latido posterior a la
+  cubre `backend/lang/`); `diagnostics.spec.ts` tiene una prueba con tiempo de gesto (3,6 s para los 3 s de pulsación larga); **la primera
+  CI manual (35107182531) cayó en ⑦ quiosco** en «dos 401 seguidos vuelve a `/pair`»: las peticiones de montaje de `ScanView`
+  salían antes de instalar las rutas 401 y el siguiente latido tardaba 60 s; ahora la prueba recarga la página tras instalar las
+  rutas (dos 401 deterministas); una tablet sin ningún latido posterior a la
   configuración del código abre el diagnóstico sin él (decisión 7, documentado en A-10 y §16.5); mover los umbrales de salud a
   `installation_settings` sigue descartado (decisión 2); `make test-unit` en local ~8 s con la máquina cargada frente a los 5 s del
   presupuesto (medir en reposo y leer la CI); `HeartbeatConcurrencyTest` dio un falso positivo con `migrate:fresh` de otro agente
