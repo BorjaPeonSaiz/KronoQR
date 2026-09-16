@@ -38,6 +38,25 @@ const DEVICE_ID_KEY = 'kronoqr.kiosk.device_id'
  */
 const DEVICE_TOKEN_KEY = 'kronoqr.kiosk.device_token'
 
+/**
+ * Caducidad del token y nombre del quiosco (`PairingCompleted.token.expires_at`
+ * y `PairingCompleted.device.name`, tarea 3.3). Antes de esta tarea
+ * `persistPairedDevice` los descartaba: la pantalla de diagnostico (RF-KI-08)
+ * es la primera en necesitarlos, y solo para MOSTRARLOS — ninguna decision de
+ * negocio depende de ellos, por eso viven en `localStorage` con el mismo
+ * criterio que el resto de este fichero.
+ */
+const DEVICE_TOKEN_EXPIRES_AT_KEY = 'kronoqr.kiosk.device_token_expires_at'
+const DEVICE_NAME_KEY = 'kronoqr.kiosk.device_name'
+
+/**
+ * Huella del codigo de servicio (`KioskHeartbeat.service_code_hash`, RF-KI-08,
+ * tarea 3.3). La escribe el planificador del latido (`heartbeat.ts`) tras cada
+ * `200`, nunca el codigo en claro. `null` = la instalacion no tiene codigo
+ * configurado; en ese caso la pantalla de diagnostico se abre sin pedirlo.
+ */
+const SERVICE_CODE_HASH_KEY = 'kronoqr.kiosk.service_code_hash'
+
 /** Version de la PWA. La inyecta Vite desde `package.json` (ver `vite.config.ts`). */
 export const APP_VERSION: string = __APP_VERSION__
 
@@ -81,6 +100,73 @@ export function resolveDeviceId(): string {
 }
 
 /**
+ * Caducidad del token guardada en el emparejamiento (tarea 3.3, solo lectura
+ * para la pantalla de diagnostico). `null` si no hay token o si no se guardo
+ * caducidad (tablets emparejadas antes de esta tarea).
+ */
+export function readDeviceTokenExpiresAt(): string | null {
+  const storage = safeStorage()
+  if (storage === null) return null
+  try {
+    const stored = storage.getItem(DEVICE_TOKEN_EXPIRES_AT_KEY)
+    return stored === null || stored === '' ? null : stored
+  } catch {
+    return null
+  }
+}
+
+/** Nombre del quiosco tal como lo puso quien administra el panel (tarea 3.3). */
+export function readDeviceName(): string | null {
+  const storage = safeStorage()
+  if (storage === null) return null
+  try {
+    const stored = storage.getItem(DEVICE_NAME_KEY)
+    return stored === null || stored === '' ? null : stored
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Huella del codigo de servicio cacheada por el ultimo latido con `200`
+ * (RF-KI-08, tarea 3.3). `null` = sin codigo configurado en esta instalacion,
+ * O tablet que aun no ha latido nunca: los dos casos abren la pantalla de
+ * diagnostico sin pedir codigo (decision 7 de la tarea 3.3), que es la
+ * respuesta correcta para los dos.
+ */
+export function readServiceCodeHash(): string | null {
+  const storage = safeStorage()
+  if (storage === null) return null
+  try {
+    const stored = storage.getItem(SERVICE_CODE_HASH_KEY)
+    return stored === null || stored === '' ? null : stored
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Lo llama SOLO el planificador del latido (`heartbeat.ts`), tras cada `200`
+ * de `POST /kiosk/heartbeat`. `null` BORRA la huella cacheada: si el panel
+ * quita el codigo de servicio de la instalacion, el siguiente latido lo dice y
+ * la pantalla de diagnostico deja de pedirlo, sin que nadie tenga que
+ * desvincular ni reiniciar nada.
+ */
+export function storeServiceCodeHash(hash: string | null): void {
+  const storage = safeStorage()
+  if (storage === null) return
+  try {
+    if (hash === null) storage.removeItem(SERVICE_CODE_HASH_KEY)
+    else storage.setItem(SERVICE_CODE_HASH_KEY, hash)
+  } catch {
+    // Sin almacenamiento no hay huella que guardar ni que borrar: la pantalla
+    // de diagnostico seguira preguntando al `localStorage` (vacio) y se abrira
+    // sin codigo, que es la degradacion honesta (regla dura 19 al reves: esto
+    // nunca puede impedir fichar, y tampoco impide diagnosticar).
+  }
+}
+
+/**
  * Guarda el token emitido en `PairingCompleted` (tarea 5.6). Interno: quien
  * empareja llama a `persistPairedDevice`, no a esto directamente.
  */
@@ -119,6 +205,28 @@ function storeDeviceId(deviceId: string): void {
   }
 }
 
+function storeDeviceTokenExpiresAt(expiresAt: string): void {
+  const storage = safeStorage()
+  if (storage === null) return
+  try {
+    storage.setItem(DEVICE_TOKEN_EXPIRES_AT_KEY, expiresAt)
+  } catch {
+    // Solo se pierde una fila informativa de la pantalla de diagnostico, no el
+    // fichaje: `expires_at` no gobierna nada (la rotacion automatica del token
+    // la hace el servidor, ver el comentario del campo en el contrato).
+  }
+}
+
+function storeDeviceName(name: string): void {
+  const storage = safeStorage()
+  if (storage === null) return
+  try {
+    storage.setItem(DEVICE_NAME_KEY, name)
+  } catch {
+    // Mismo criterio: solo afecta a una fila de diagnostico.
+  }
+}
+
 /**
  * Resultado de `PairingCompleted` (RF-PD-06, tarea 5.6): el token con el que
  * la tablet firma `/scan`, `/kiosk/roster` y `/kiosk/heartbeat`, y el
@@ -127,10 +235,22 @@ function storeDeviceId(deviceId: string): void {
  * lleno a mitad de escritura, caso extremo), es preferible quedarse con un
  * token sin id de servidor —el quiosco sigue pudiendo fichar con el— que con
  * un id nuevo y sin token, que el guard del router manda directo a `/pair`.
+ *
+ * `expiresAt` y `deviceName` (tarea 3.3, RF-KI-08) van DESPUES de las dos
+ * escrituras que si importan para fichar: son solo para la pantalla de
+ * diagnostico, y un fallo de almacenamiento a mitad de estas dos ultimas no
+ * puede degradar nada de lo anterior.
  */
-export function persistPairedDevice(token: string, deviceId: string): void {
+export function persistPairedDevice(
+  token: string,
+  deviceId: string,
+  expiresAt: string,
+  deviceName: string,
+): void {
   storeDeviceToken(token)
   storeDeviceId(deviceId)
+  storeDeviceTokenExpiresAt(expiresAt)
+  storeDeviceName(deviceName)
 }
 
 /**

@@ -157,6 +157,30 @@ it('saca la auditoria entera con su cadena de hash', function (): void {
         ->toBe(['partition_year', 'first_hash', 'last_hash', 'row_count', 'sealed_at', 'sealed_by']);
 })->group('RF-PD-14', 'RL-04');
 
+it('declara la marca de redaccion junto al valor de la configuracion', function (): void {
+    /*
+     * La unica excepcion a «sale todo» (tarea 3.3, segunda vuelta).
+     *
+     * Las claves marcadas `confidential` en `SettingDefinition` —hoy solo
+     * `KIOSK_SERVICE_CODE`, el codigo con el que se abre la pantalla de
+     * mantenimiento de todas las tablets del hotel (RF-KI-08)— salen con `value`
+     * nulo y `value_redacted` a `true`. Este ZIP se queda con el cliente (RL-16)
+     * y por eso lleva sus datos personales enteros, pero se guarda, se reenvia y
+     * se archiva años: un secreto vivo no es un dato del registro horario, igual
+     * que `pin_hash` o `token_hash`.
+     *
+     * **La columna se declara aqui y no solo en la consulta** porque de esta
+     * lista sale la descripcion que el cliente lee en el README: una columna que
+     * apareciera en el fichero y no en el catalogo se entregaria con una nota de
+     * «sin descripcion», que es como se entrega un dato que nadie sabe
+     * interpretar. La prueba de mas abajo exige ademas su texto en las dos
+     * lenguas, y el ZIP de verdad lo comprueba
+     * `tests/Feature/Product/DataExportOmitsServiceCodeTest.php`.
+     */
+    expect(DataExportCatalog::dataset('installation_settings')?->columns())
+        ->toBe(['key', 'value', 'value_redacted', 'updated_at', 'updated_by_user_uuid']);
+})->group('RF-PD-14', 'RL-20', 'RF-KI-08');
+
 it('declara los diecinueve conjuntos de la ficha, sin efimeros ni fontaneria', function (): void {
     // El catalogo completo, valor a valor: añadir o quitar un conjunto tiene que
     // ser un cambio visible que alguien revise, no un efecto colateral.

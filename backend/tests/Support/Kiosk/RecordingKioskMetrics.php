@@ -21,7 +21,7 @@ use App\Modules\Kiosk\Application\Port\KioskMetrics;
  */
 final class RecordingKioskMetrics implements KioskMetrics
 {
-    /** @var list<array{device: string, seen_at: int, queue: int}> */
+    /** @var list<array{device: string, seen_at: int, queue: int, battery: int|null}> */
     public array $heartbeats = [];
 
     public int $requested = 0;
@@ -33,12 +33,20 @@ final class RecordingKioskMetrics implements KioskMetrics
     /** @var list<string> Motivos, en orden. */
     public array $rejected = [];
 
-    public function heartbeat(string $deviceUuid, int $seenAtUnixSeconds, int $pendingQueueSize): void
-    {
+    public function heartbeat(
+        string $deviceUuid,
+        int $seenAtUnixSeconds,
+        int $pendingQueueSize,
+        ?int $batteryLevel = null,
+    ): void {
         $this->heartbeats[] = [
             'device' => $deviceUuid,
             'seen_at' => $seenAtUnixSeconds,
             'queue' => $pendingQueueSize,
+            // `null` se recuerda como tal y no como cero: la diferencia entre
+            // «no informa» y «sin bateria» es justo lo que la tarea 3.3 tiene
+            // que poder afirmar.
+            'battery' => $batteryLevel,
         ];
     }
 

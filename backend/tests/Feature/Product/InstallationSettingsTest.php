@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Modules\Product\Domain\ValueObject\SettingKey;
 use App\Modules\Product\Infrastructure\Adapter\DbBrandingProvider;
 use App\Modules\Shared\Application\Port\BrandingProvider;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
@@ -125,7 +126,11 @@ it('cambia varias claves a la vez y devuelve el conjunto completo', function ():
 
     $byKey = settingsByKey($response->json('data'));
 
-    expect($byKey)->toHaveCount(9)
+    // El catalogo entero, no solo lo que cambio: el panel repinta la pantalla
+    // con la respuesta del `PATCH`. La cifra sale de `SettingKey` y no de un
+    // literal para que una clave nueva —`KIOSK_SERVICE_CODE` fue la decima— no
+    // obligue a tocar esta prueba por algo que no es lo que afirma.
+    expect($byKey)->toHaveCount(count(SettingKey::cases()))
         ->and($byKey['ATTENDANCE_MAX_SHIFT_HOURS']['value'])->toBe(10)
         ->and($byKey['BRANDING_APP_NAME']['value'])->toBe('Hotel Marina');
 

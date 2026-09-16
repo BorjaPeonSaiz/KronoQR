@@ -168,6 +168,12 @@ export type PairingConfirmed = Schemas['PairingConfirmed']
 export type PairingCodeRejected = Schemas['PairingCodeRejected']
 export type Device = Schemas['Device']
 export type DeviceList = Schemas['DeviceList']
+// Salud del quiosco y reloj/umbrales del servidor (RF-PA-07, tarea 3.3): el
+// veredicto lo calcula el servidor con la misma regla que `kiosk:health`, y
+// `meta` es lo que el panel necesita para no adivinar ni la hora ni el umbral.
+export type DeviceHealth = Schemas['DeviceHealth']
+export type DeviceListMeta = Schemas['DeviceListMeta']
+export type KioskHealthThresholds = Schemas['KioskHealthThresholds']
 
 // Diagnostico y accesos de soporte (RF-PD-09, RF-PD-11, RF-PD-13, tarea 5.9,
 // ADR-020). El paquete se descarga tal cual llega: el panel no lo interpreta,

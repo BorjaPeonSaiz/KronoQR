@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Modules\Product\Domain\Exception\InvalidSettingValue;
 use App\Modules\Product\Domain\Exception\UnknownSettingKey;
 use App\Modules\Product\Domain\ValueObject\SettingImpact;
 use App\Modules\Product\Domain\ValueObject\SettingKey;
@@ -73,7 +74,56 @@ it('clasifica el impacto de cada clave', function (SettingKey $key, SettingImpac
     'el color de acento solo se ve' => [SettingKey::BRANDING_ACCENT_COLOR, SettingImpact::PRESENTATION],
     'el idioma por defecto solo se ve' => [SettingKey::LOCALE_DEFAULT, SettingImpact::PRESENTATION],
     'los idiomas disponibles solo se ven' => [SettingKey::LOCALE_AVAILABLE, SettingImpact::PRESENTATION],
+    'el codigo de servicio no mueve ni un minuto' => [SettingKey::KIOSK_SERVICE_CODE, SettingImpact::PRESENTATION],
 ])->group('RF-PD-01');
+
+// --- El codigo de servicio del quiosco (RF-KI-08, tarea 3.3) ----------------
+
+it('acepta como codigo de servicio de 8 a 12 cifras, y nada mas', function (string $code, bool $valid): void {
+    // NUMERICO Y NO ALFANUMERICO porque la tablet solo tiene el teclado en
+    // pantalla de `PinNumericKeypad`: un codigo con letras seria un codigo que
+    // nadie puede teclear donde hay que teclearlo (decision 6 de la ficha 3.3).
+    $definition = SettingKey::KIOSK_SERVICE_CODE->definition();
+    $validate = fn (): int|string|array => $definition->validate(SettingKey::KIOSK_SERVICE_CODE, $code);
+
+    $valid
+        ? expect($validate())->toBe($code)
+        : expect($validate)->toThrow(InvalidSettingValue::class);
+})->with([
+    'ocho cifras, el minimo' => ['12345678', true],
+    'doce cifras, el maximo' => ['123456789012', true],
+    'diez cifras' => ['1234567890', true],
+    'siete cifras, corto' => ['1234567', false],
+    'trece cifras, largo' => ['1234567890123', false],
+    'con letras' => ['1234abcd', false],
+    'con espacios' => ['1234 5678', false],
+    'con guion' => ['1234-5678', false],
+])->group('RF-PD-01', 'RF-KI-08');
+
+it('deja quitar el codigo de servicio con la cadena vacia', function (): void {
+    // El vacio es el valor de serie y significa «la pantalla se abre sin
+    // codigo». Si el patron se comprobara tambien sobre el vacio, un codigo ya
+    // configurado no se podria RETIRAR nunca desde el panel.
+    $definition = SettingKey::KIOSK_SERVICE_CODE->definition();
+
+    expect($definition->default)->toBe('')
+        ->and($definition->validate(SettingKey::KIOSK_SERVICE_CODE, ''))->toBe('');
+})->group('RF-PD-01', 'RF-KI-08');
+
+it('marca como confidencial el codigo de servicio y solo el codigo de servicio', function (): void {
+    // LA MARCA QUE IMPIDE QUE EL VALOR ACABE EN `audit_log` Y EN EL PAQUETE DE
+    // DIAGNOSTICO. Vive en la definicion y no en el listener a proposito: si la
+    // decision estuviera en quien escribe el asiento, la clave siguiente que
+    // hubiera que proteger se olvidaria. Y se afirma ademas que **solo** esta lo
+    // esta, porque marcar de mas convertiria el trail de los umbrales en un
+    // «alguien cambio algo» inservible para RL-04.
+    $confidential = array_values(array_filter(
+        SettingKey::cases(),
+        static fn (SettingKey $key): bool => $key->definition()->confidential,
+    ));
+
+    expect($confidential)->toBe([SettingKey::KIOSK_SERVICE_CODE]);
+})->group('RF-PD-01', 'RF-KI-08', 'RL-04');
 
 it('rechaza una clave que no esta en el catalogo', function (): void {
     // Aceptarla produciria una fila que no lee nadie: el cliente creeria haber

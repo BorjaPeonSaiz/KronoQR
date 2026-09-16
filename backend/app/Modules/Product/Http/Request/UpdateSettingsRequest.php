@@ -91,7 +91,47 @@ final class UpdateSettingsRequest extends FormRequest
 
     public function authorize(): bool
     {
-        return Gate::allows('update', ResolvedSettings::class);
+        if (! Gate::allows('update', ResolvedSettings::class)) {
+            return false;
+        }
+
+        /*
+         * La segunda puerta, y solo se abre si la peticion toca una clave
+         * CONFIDENCIAL (tarea 3.3).
+         *
+         * Se comprueba aqui y no en la policy porque la policy responde «¿puede
+         * escribir configuracion?» y esto es «¿puede escribir ESTA?»: la
+         * respuesta depende del cuerpo de la peticion, que una policy no ve. La
+         * regla sigue viviendo en {@see SettingsPolicy::updateConfidential()} —
+         * aqui solo se decide cuando preguntarla, para que la matriz de
+         * autorizacion negativa la encuentre donde encuentra a las demas.
+         *
+         * **Antes de validar, a proposito.** Un actor de soporte que intente
+         * escribir el codigo de servicio recibe `403` y no un `422`: el segundo
+         * le confirmaria la forma que tiene ese valor, y quien no puede tocar una
+         * clave tampoco tiene por que aprender como se escribe.
+         */
+        return ! $this->touchesConfidentialKey() || Gate::allows('updateConfidential', ResolvedSettings::class);
+    }
+
+    /**
+     * Si el cuerpo pretende cambiar alguna clave marcada `confidential`.
+     *
+     * Una clave desconocida no cuenta: la rechaza `rejectUnknownSettingKeys()`
+     * con un `422` que dice cual es, y convertirla aqui en un `403` escondería
+     * un error de escritura detras de un problema de permisos.
+     */
+    private function touchesConfidentialKey(): bool
+    {
+        foreach ($this->submittedKeys() as $name) {
+            $key = SettingKey::tryFrom($name);
+
+            if ($key instanceof SettingKey && $key->definition()->confidential) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

@@ -769,6 +769,7 @@ scan_processing_duration_seconds                         histogram
 open_shifts_current{site,site_name,department}           gauge
 kiosk_last_seen_seconds{device}                          gauge
 kiosk_offline_queue_size{device}                         gauge
+kiosk_battery_level{device}                              gauge
 kiosk_pairing_total{result,reason}                       counter
 sync_delay_seconds{device}                               histogram
 incidents_open{type,severity}                            gauge

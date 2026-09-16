@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Kiosk\Application\Command;
 
+use App\Modules\Kiosk\Domain\ValueObject\HeartbeatTelemetry;
 use App\Modules\Shared\Domain\ValueObject\ErrorReport;
-use DateTimeImmutable;
 
 /**
  * La orden de registrar el latido de un quiosco (RF-PA-07, doc 01 §5.5).
@@ -16,6 +16,11 @@ use DateTimeImmutable;
  * fichaje: sus dos identificadores salen del token autenticado. Si viajaran en el
  * cuerpo, cualquier portador podria declarar la cola de otro quiosco y el panel de
  * salud diria que la tablet averiada es otra.
+ *
+ * **La telemetria declarada va en un objeto** ({@see HeartbeatTelemetry}) y no
+ * en escalares sueltos: son cinco campos del mismo puñado de tipos primitivos y
+ * la firma anterior ya se estaba convirtiendo en una lista posicional donde
+ * cruzar dos numeros no lo nota nadie.
  *
  * **`oldestPendingAt` es opcional y su ausencia significa algo**: no hay cola. Es
  * lo que distingue «37 pendientes de hace un minuto» —una sincronizacion en
@@ -40,9 +45,7 @@ final readonly class RecordHeartbeatCommand
     public function __construct(
         public int $deviceId,
         public string $deviceUuid,
-        public string $appVersion,
-        public int $pendingQueueSize,
-        public ?DateTimeImmutable $oldestPendingAt = null,
+        public HeartbeatTelemetry $telemetry,
         public array $clientErrors = [],
     ) {}
 }

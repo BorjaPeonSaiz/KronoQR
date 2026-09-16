@@ -126,6 +126,56 @@ it('deja un asiento por clave cambiada, con el valor anterior y el posterior', f
     ]);
 })->group('RF-PD-01', 'RL-04');
 
+it('deja constancia de que el codigo de servicio cambio, y nunca del codigo', function (): void {
+    // RF-KI-08, tarea 3.3, decision 6. `KIOSK_SERVICE_CODE` es un secreto
+    // compartido con cada tablet del hotel y `audit_log` se enseña en una
+    // inspeccion: RL-04 exige saber QUIEN lo cambio y CUANDO —eso sigue— pero el
+    // valor no aporta nada a esa pregunta y si abriria una via para leerlo.
+    //
+    // No se redacta con `'***'` ni con la longitud: un asiento que dijera «pasa
+    // de 8 a 10 cifras» seria informacion sobre el secreto escrita en la tabla
+    // que se enseña. O esta el valor, o esta la marca de que no esta.
+    $admin = ManagementUsers::withRole(UserRole::ADMIN);
+
+    Api::as(ManagementUsers::tokenFor($admin))
+        ->patch('/api/v1/settings', ['settings' => ['KIOSK_SERVICE_CODE' => '48392017']])
+        ->assertStatus(200);
+
+    $entries = settingAuditEntries();
+
+    expect($entries)->toHaveCount(1);
+
+    $payload = auditPayload($entries[0]);
+
+    expect($payload)->toBe([
+        'affects_worked_hours' => false,
+        'impact' => 'presentation',
+        'key' => 'KIOSK_SERVICE_CODE',
+        // La marca, y NI `previous_value` NI `new_value`.
+        'value_redacted' => true,
+        'was_product_default' => true,
+    ])
+        // Quien lo hizo sigue estando, que es la mitad del asiento que importa.
+        ->and($entries[0]->actor_id)->toBe($admin->id)
+        ->and($entries[0]->actor_type)->toBe('user')
+        // Y el codigo no esta en ninguna parte del asiento, ni por descuido.
+        ->and($entries[0]->payload)->not->toContain('48392017');
+})->group('RF-PD-01', 'RF-KI-08', 'RL-04');
+
+it('mantiene el antes y el despues en las claves que no son confidenciales', function (): void {
+    // El guarda del guarda: si la redaccion se aplicara de mas, el trail de los
+    // umbrales operativos se convertiria en un «alguien cambio algo» inservible
+    // para investigar una discrepancia de nomina seis meses despues.
+    Api::as(ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN)))
+        ->patch('/api/v1/settings', ['settings' => ['ATTENDANCE_DEBOUNCE_SECONDS' => 90]])
+        ->assertStatus(200);
+
+    $payload = auditPayload(settingAuditEntries()[0]);
+
+    expect($payload)->toHaveKeys(['previous_value', 'new_value'])
+        ->and($payload)->not->toHaveKey('value_redacted');
+})->group('RF-PD-01', 'RL-04');
+
 it('no deja asiento cuando el PATCH no cambia nada', function (): void {
     // Abrir la pantalla y pulsar «guardar» no puede ensuciar el trail: la señal
     // que importa —«alguien cambio el anti-rebote»— quedaria enterrada entre

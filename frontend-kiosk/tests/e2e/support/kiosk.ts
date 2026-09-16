@@ -1,4 +1,14 @@
+import { createHash } from 'node:crypto'
 import type { Page, Route } from '@playwright/test'
+
+/**
+ * Huella del codigo de servicio (RF-KI-08, tarea 3.3, decision 6): SHA-256 hex
+ * de `"{device_id}:{codigo}"`, calculada en el proceso de Node de la prueba
+ * -no en el navegador-, con la misma formula que `KioskHeartbeat.service_code_hash`.
+ */
+function serviceCodeHashOf(deviceId: string, code: string): string {
+  return createHash('sha256').update(`${deviceId}:${code}`).digest('hex')
+}
 
 /** El payload que lleva el QR de `e2e/fixtures/qr-video.y4m`. */
 export const FIXTURE_PAYLOAD = 'FH1.a3.7QK2mXpR9vLdN4tZbYcF1w.k9Xm2pQrT5vN8wLa'
@@ -115,16 +125,50 @@ export async function pairDevice(page: Page): Promise<void> {
   })
 }
 
+/**
+ * Codigo de servicio de la pantalla de diagnostico (RF-KI-08, tarea 3.3,
+ * decision 6), para las pruebas que necesitan una huella conocida. `deviceId`
+ * tiene que fijarse en `localStorage` ANTES de que la aplicacion arranque
+ * -por eso `stubKioskApi` lo escribe con `addInitScript`-, o la tablet
+ * generaria uno propio y la huella precalculada aqui no coincidiria con la
+ * que comprueba `serviceCodeGate.ts`.
+ */
+export interface ServiceCodeStubOptions {
+  readonly deviceId: string
+  readonly code: string
+}
+
+export interface KioskApiStubOptions {
+  /** Ausente = instalacion SIN codigo de servicio (el caso de todas las pruebas que no son de diagnostico). */
+  readonly serviceCode?: ServiceCodeStubOptions
+}
+
 /** El latido no debe ensuciar las trazas ni fallar por no haber servidor. */
-export async function stubKioskApi(page: Page): Promise<void> {
+export async function stubKioskApi(page: Page, options: KioskApiStubOptions = {}): Promise<void> {
   await pairDevice(page)
+
+  let serviceCodeHash: string | null = null
+  if (options.serviceCode !== undefined) {
+    const { deviceId, code } = options.serviceCode
+    serviceCodeHash = serviceCodeHashOf(deviceId, code)
+    await page.addInitScript((id: string) => {
+      window.localStorage.setItem('kronoqr.kiosk.device_id', id)
+    }, deviceId)
+  }
+
   await page.route('**/api/v1/kiosk/heartbeat', async (route: Route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       // `client_errors_accepted` es obligatorio en el contrato (RF-PD-15,
       // tarea 5.12): `0` porque este doble no inspecciona lo que llego.
-      body: JSON.stringify({ server_time: new Date().toISOString(), client_errors_accepted: 0 }),
+      // `service_code_hash` (RF-KI-08, tarea 3.3): `null` salvo que la prueba
+      // pida explicitamente un codigo de servicio.
+      body: JSON.stringify({
+        server_time: new Date().toISOString(),
+        client_errors_accepted: 0,
+        service_code_hash: serviceCodeHash,
+      }),
     })
   })
   await page.route('**/api/v1/kiosk/roster', async (route: Route) => {
@@ -256,6 +300,8 @@ export interface HeartbeatCaptureOptions {
    * algo que no tiene nada que ver con lo que la prueba quiere observar.
    */
   readonly serverTime?: () => string
+  /** Igual que en `KioskApiStubOptions` (RF-KI-08, tarea 3.3). Ausente = sin codigo. */
+  readonly serviceCode?: ServiceCodeStubOptions
 }
 
 /**
@@ -270,6 +316,10 @@ export async function stubHeartbeatWithErrorCapture(
 ): Promise<HeartbeatRecorder> {
   const recorder: HeartbeatRecorder = { calls: [] }
   const status = options.status ?? 200
+  const serviceCodeHash =
+    options.serviceCode === undefined
+      ? null
+      : serviceCodeHashOf(options.serviceCode.deviceId, options.serviceCode.code)
 
   await page.route('**/api/v1/kiosk/heartbeat', async (route: Route) => {
     const body = route.request().postDataJSON() as {
@@ -320,6 +370,7 @@ export async function stubHeartbeatWithErrorCapture(
       body: JSON.stringify({
         server_time: serverTime,
         client_errors_accepted: accepted,
+        service_code_hash: serviceCodeHash,
       }),
     })
   })

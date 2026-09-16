@@ -6,8 +6,9 @@
 > salida de los cinco scripts, la custodia de secretos y qué pierdes si apagas
 > la observabilidad. La **11** es de la **5.7**: actualizar. Las **12 y 13**
 > son de la **5.9** y la **5.10**: diagnóstico, soporte y exportación íntegra.
-> La **15** es de la **5.12**: el histórico de `error_events`. La **tarea 5.11**
-> añadirá los quioscos; no reescribirá nada de lo que ya está aquí.
+> La **15** es de la **5.12**: el histórico de `error_events`. La **16** es de
+> la **3.3**: la pantalla de quioscos del panel, el código de servicio y la
+> pantalla de diagnóstico de la tablet.
 
 ---
 > **Los comandos de esta guía se ejecutan desde el directorio del paquete**, que
@@ -775,7 +776,7 @@ con motivo, alcance y duración, y lo puedes revocar en cualquier momento.
 | --- | --- | --- |
 | `diagnostics` (por defecto) | Generar el paquete **anonimizado** y consultar errores | Ver a nadie |
 | `read_only` | Además, **leer** jornadas, plantilla y auditoría | Cambiar nada |
-| `configuration` | Además, **cambiar** los ajustes operativos y emparejar o desvincular quioscos | Ver jornadas ni plantilla, ni tocar el perfil de cumplimiento (umbrales legales y años de conservación son tuyos) |
+| `configuration` | Además, **cambiar** los ajustes operativos y emparejar o desvincular quioscos | Ver jornadas ni plantilla, ni tocar el perfil de cumplimiento (umbrales legales y años de conservación son tuyos), **ni ver ni cambiar el código de servicio del quiosco**: lo recibe vacío y marcado como redactado, y si intenta cambiarlo obtiene un 403 (§16.5) |
 
 Con ningún alcance puede activar licencias, conceder o revocar accesos,
 emitir o revocar tarjetas, corregir fichajes, generar informes de nómina o la
@@ -826,6 +827,10 @@ convertirlas.
 
 **Ningún secreto sale**: ni contraseñas, ni PIN, ni hashes, ni la clave de
 licencia. Ningún número interno: las referencias entre ficheros van por `uuid`.
+Las claves de configuración confidenciales viajan **marcadas como redactadas y
+sin valor** (`value_redacted`), igual que en el asiento de auditoría que
+registra su cambio: **el código de servicio del quiosco viaja marcado como
+redactado, no en claro** (§16.5).
 
 Es tu garantía de continuidad (RL-20): **funciona con la licencia caducada,
 ausente o ilegible**, la genera solo el administrador de la instalación, y
@@ -922,7 +927,7 @@ el log técnico y se vuelve a intentar la semana siguiente.
 
 ## 14. Lo que no se toca nunca
 
-Cinco cosas que un administrador de sistemas hace a diario en otros productos y
+Seis cosas que un administrador de sistemas hace a diario en otros productos y
 que aquí destruyen el valor legal del registro o dejan la instalación sin
 poder recuperarse:
 
@@ -933,6 +938,7 @@ poder recuperarse:
 | **Tocar `daily_totals` a mano** | Es una proyección reconstruible: se recalcula entera cada vez que cambia un tramo. Un total corregido a mano vuelve a su valor en el siguiente recálculo, sin que nadie entienda por qué | Si un total no cuadra, recalcúlalo: `docker compose exec app php artisan attendance:reconcile --from=2026-09-01 --to=2026-09-30` |
 | **Editar en el `.env` un secreto generado** (`APP_KEY`, `QR_SIGNING_KEY_*`, `BACKUP_ENCRYPTION_KEY`) | Cambiar `APP_KEY` deja ilegible lo cifrado; cambiar la clave QR invalida todas las tarjetas; cambiar la de copias deja las copias anteriores sin poder restaurar | Rotar con su procedimiento: [`../runbooks/rotacion-secretos.md`](../runbooks/rotacion-secretos.md) y [`../runbooks/rotacion-clave-qr.md`](../runbooks/rotacion-clave-qr.md) |
 | **`migrate:rollback`, borrar volúmenes o reinstalar encima** | Una vuelta atrás es siempre restaurar la copia verificada previa; el instalador se niega a reinstalar sobre una instalación existente | `update.sh` (§11) y [`../runbooks/restaurar-backup.md`](../runbooks/restaurar-backup.md) |
+| **Desvincular un quiosco con fichajes pendientes, o borrarle los datos del sitio**, para que deje de sonar la alerta | Los fichajes de la cola local viven solo en esa tablet hasta que se envían: desvincularla o limpiarla los pierde, y son jornadas de personas que sí ficharon | Vacía la cola primero (§16.4) y comprueba que está a 0. Si la tablet se ha extraviado y no hay alternativa, desvincula y avisa a RRHH: esas horas hay que reconstruirlas por corrección manual con `FALLO_TECNICO_QUIOSCO` |
 
 ---
 
@@ -1019,3 +1025,184 @@ desaparezca de la lista de abiertos.
 | `ERROR_HISTORY_RETENTION_DAYS` | `90` | Días que se conserva una fila desde su última aparición. Igual que el log técnico (RL-11) |
 | `PRODUCT_CLIENT_ERRORS_RATE_LIMIT` | `12` | Peticiones por minuto y por sesión del panel o del portal para reportar errores; por IP, cuatro veces más |
 | `PRODUCT_ERRORS_MAX_OPEN_GROUPS_PER_SOURCE` | `500` | Techo de grupos **abiertos** por origen. Por encima, la siguiente ocurrencia que no encaja en un grupo existente va a un grupo de desbordamiento de ese origen (`overflow`) en vez de crear fila; `product:doctor` avisa del tamaño de la tabla |
+
+---
+
+## 16. La pantalla «Quioscos» del panel
+
+> **Tarea 3.3.** Qué hacer, paso a paso, cuando un quiosco deja de dar señales
+> está en [`../runbooks/quiosco-no-responde.md`](../runbooks/quiosco-no-responde.md);
+> el alta y la sustitución de una tablet, en
+> [`../runbooks/alta-nuevo-quiosco.md`](../runbooks/alta-nuevo-quiosco.md).
+> Este apartado es lo que hace falta para **leer** la pantalla y para
+> **custodiar el código de servicio**, no el procedimiento de diagnóstico.
+
+**Panel → «Quioscos»** (`/devices`). La abre quien tiene el ámbito
+`settings:*` —el mismo del perfil de cumplimiento y de la marca— y la
+autorización real la pone el servidor: **solo el rol administrador** puede
+listar, emparejar o desvincular. Dar de alta un quiosco es crear un origen de
+fichajes, y desvincularlo es retirarlo; no es una pantalla de consulta.
+
+### 16.1 Qué muestra cada fila
+
+| Columna | Qué dice | Cómo se lee |
+| --- | --- | --- |
+| **Nombre y estado** | El nombre con el que se emparejó la tablet, y si sigue vinculada o está desvinculada | Un quiosco desvinculado se queda en la lista con su historia: la tablet de repuesto se vincula **con el mismo nombre** para conservarla |
+| **Versión de la aplicación** | La versión de la PWA que esa tablet tiene cargada | Si una tablet se queda atrás tras una actualización, aquí se ve. Se pone al día al recargar la PWA |
+| **Último contacto** | El instante del último latido, **en la zona horaria del centro**, y su antigüedad («hace 40 s») | El latido llega **cada 60 segundos**. La antigüedad se mide contra el **reloj del servidor**, que viaja en la respuesta, nunca contra el del ordenador desde el que miras: un panel con la hora mal puesta no inventa quioscos caídos |
+| **Pendientes** | Cuántos fichajes tiene la tablet en su cola local sin enviar, y **de cuándo es el más antiguo** | «37 pendientes, el más antiguo de hace 3 h» es una tablet que lleva tres horas sin red, no un error. Los fichajes están a salvo mientras la tablet no se desvincule ni se le borren los datos del sitio |
+| **Batería** | El nivel y si está cargando; **«no informa»** cuando la tablet no publica el dato | Solo Chrome sobre Android ofrece el nivel de batería al navegador: una tablet que no lo informa **no está averiada**, simplemente no lo cuenta. Una que se descarga **sin cargar** es casi siempre un cargador desenchufado |
+| **Estado** | El **veredicto** (al día, aviso, fallo, desvinculado) y **su razón** | Nunca se distingue solo por el color: cada fila lleva su texto y su icono (§16.2) |
+
+La lista no pagina: una instalación es un hotel con unos pocos quioscos y
+caben todos en la pantalla.
+
+### 16.2 El veredicto: la misma regla en el panel, en la consola y en la alerta
+
+El veredicto **lo calcula el servidor**, con la misma regla y los mismos
+umbrales que usan `php artisan kiosk:health` y la alerta `QuioscoSinLatido`
+(§10.4). No hay tres criterios: hay uno. Si el panel dice «fallo», la consola
+dice `FALLO` y la alerta suena, del mismo quiosco y a la vez.
+
+| Veredicto | Razón que muestra | Qué significa |
+| --- | --- | --- |
+| **Al día** | *Latiendo* | Latido de hace menos de `KIOSK_HEALTH_FRESH_WITHIN_SECONDS` (120 s) y nada pendiente |
+| **Aviso** | *Latido tardío* | Más de 120 s sin latido, pero menos de 10 minutos. Un latido perdido no es una avería |
+| **Aviso** | *Fichajes pendientes* | **Tiene red y sigue con fichajes sin enviar.** Ver [`../runbooks/cola-offline-atascada.md`](../runbooks/cola-offline-atascada.md) |
+| **Aviso** | *Batería baja* | Nivel igual o por debajo de `KIOSK_HEALTH_BATTERY_LOW_PERCENT` (15 %) **y sin cargar**. Una tablet de pared que se descarga es una tablet a la que alguien quitó el cargador |
+| **Aviso** | *Esperando el primer latido* | Recién emparejada y todavía sin hablar. Se resuelve sola en un minuto |
+| **Fallo** | *Sin señal* | Más de `KIOSK_HEALTH_SILENT_AFTER_SECONDS` (600 s, 10 minutos) sin latido |
+| **Fallo** | *Nunca ha dado señal* | Emparejada hace más de diez minutos y sin un solo latido |
+| **Desvinculado** | *Desvinculado* | Ya no es un origen de fichajes. No cuenta para ninguna alerta |
+
+Cuando hay más de un motivo, la fila muestra **el más grave**, en este orden:
+desvinculado, nunca ha dado señal, sin señal, latido tardío, batería baja,
+fichajes pendientes, latiendo.
+
+La leyenda al pie de la pantalla **dice los umbrales reales de tu
+instalación**, no unos supuestos: si cambias uno, la leyenda cambia con él. Y
+si cambias `KIOSK_HEALTH_SILENT_AFTER_SECONDS`, tienes que cambiar **a la vez**
+el umbral de la alerta `QuioscoSinLatido` en `infra/observability/` (§10.4):
+son el mismo número, y separarlos es justamente lo que rompe la coherencia que
+esta pantalla existe para dar.
+
+### 16.3 «Sin latido» no es «sin fichar»
+
+Es lo primero que hay que saber al mirar una fila en fallo. Que un quiosco no
+hable con el servidor **no quiere decir que nadie pueda fichar en él**: el
+quiosco nunca bloquea al empleado. Si la tablet está encendida, sigue
+aceptando tarjetas, confirmando en pantalla y guardando cada fichaje en su
+cola local con su hora real; cuando recupera la red, lo envía todo con la hora
+a la que ocurrió de verdad.
+
+Lo que sí deja a la gente sin poder fichar es una tablet **apagada, sin
+corriente o rota**. Por eso la primera pregunta del diagnóstico no es de red:
+es «¿está encendida la pantalla?».
+
+Las horas de quien no pudo fichar se corrigen después desde el panel con el
+motivo `FALLO_TECNICO_QUIOSCO`, preguntando a la persona. **Nunca se inventa
+una hora.**
+
+### 16.4 Qué hacer cuando una fila no está al día
+
+**Cuando —y solo cuando— el veredicto no es «al día»**, la fila trae un bloque
+**«Qué hacer»** escrito para quien no conoce el sistema, con el paso siguiente
+según la razón. Un quiosco que va bien no pide nada. El resumen:
+
+| Lo que ves | Por dónde empezar |
+| --- | --- |
+| **Fallo, sin señal** | [`../runbooks/quiosco-no-responde.md`](../runbooks/quiosco-no-responde.md) §2, que arranca en esta misma pantalla |
+| **Aviso, fichajes pendientes** — la tablet **tiene red y sigue con fichajes sin enviar** | [`../runbooks/cola-offline-atascada.md`](../runbooks/cola-offline-atascada.md). **No desvincules esa tablet**: perderías la cola |
+| **Aviso, batería baja** | Ve al punto de montaje: cargador desenchufado, regleta apagada o cable partido |
+| **Aviso, latido tardío** | Nada todavía. Si no vuelve a «al día» en diez minutos pasará a fallo y sonará la alerta |
+| **La tablet volvió sola a la pantalla de emparejamiento** | Alguien la desvinculó o rotó su token: [`../runbooks/alta-nuevo-quiosco.md`](../runbooks/alta-nuevo-quiosco.md) §6 |
+
+La misma información, desde la consola y sin abrir el panel —y la única que
+sigue funcionando si Redis se ha vaciado (§10.4)—:
+
+```bash
+docker compose exec app php artisan kiosk:health
+```
+
+Sale `0` si todo está al día, `1` con avisos y `2` con algún fallo; `--json`
+devuelve lo mismo para un script y `--lang=es|en` fija el idioma del informe.
+
+### 16.5 El código de servicio y la pantalla de diagnóstico de la tablet
+
+Cuando el problema está **en la tablet**, la tablet lo cuenta por sí misma.
+Tiene una pantalla de diagnóstico que se abre con una **pulsación larga de
+tres segundos sobre el reloj** de la pantalla de fichaje (y de la de
+emparejamiento, para una tablet que todavía no es quiosco). Se protege con el
+**código de servicio** de la instalación.
+
+**Dónde se pone el código.** Panel → **Ajustes operativos** (`/settings`),
+campo «Código de servicio del quiosco» (`KIOSK_SERVICE_CODE`), rol
+administrador. **De 8 a 12 dígitos** —solo cifras, porque la tablet únicamente
+tiene el teclado numérico en pantalla—. **Nace vacío**: mientras no pongas
+uno, la pantalla se abre sin código y lo dice en su cabecera; `product:doctor`
+(§12.1) te lo recuerda como aviso, nunca como fallo.
+
+**Cómo llega a las tablets.** El código **no viaja nunca en claro**: el
+servidor manda su huella dentro del latido y la tablet comprueba el código
+contra ella **en local**. Dos consecuencias prácticas: la pantalla de
+diagnóstico **funciona sin red** —que es justo cuando hace falta— y un código
+cambiado en el panel está en todas las tablets **en menos de un minuto**, sin
+tocar ninguna. Cinco intentos fallidos seguidos bloquean el teclado 60
+segundos, y el bloqueo **se guarda en la tablet**: salir de la pantalla o
+recargar la aplicación no lo salta.
+
+**Una tablet que todavía no ha recibido ningún latido posterior a la
+configuración del código abre la pantalla sin él.** Es el caso de una tablet
+emparejada que lleva sin red desde antes de que pusieras el código: no hay
+forma de que lo conozca, y la alternativa —negarle el diagnóstico— sería dejar
+sin diagnosticar justamente a la tablet que peor está. Se ve en la cabecera de
+la propia pantalla, que dice si está abierta con código o sin él.
+
+**Custodia.** El código lo guarda tu IT, como cualquier otra credencial de
+mantenimiento: no se pega en una etiqueta detrás de la tablet ni se comparte
+con recepción. **Solo lo ve quien puede editarlo**: el producto no lo enseña en
+ningún sitio salvo en su propio campo de «Ajustes operativos», que solo abre
+el rol `admin`; si nadie lo recuerda, se pone otro. Tampoco aparece en la
+auditoría —queda registrado **que** cambió, nunca el valor—, ni en el paquete
+de diagnóstico, ni en los registros técnicos, y en la exportación íntegra sale
+**marcado como redactado y sin valor** (§13.1).
+
+**Un acceso de soporte del fabricante no lo ve ni lo cambia**, con ningún
+alcance —tampoco con `configuration`, que sí puede tocar el resto de ajustes
+operativos—: lo recibe vacío y marcado como redactado, y un intento de
+cambiarlo se rechaza con un 403 (§12.4). El código es tuyo, como el perfil de
+cumplimiento.
+
+**Qué enseña la pantalla**, y qué no:
+
+| Bloque | Qué dice |
+| --- | --- |
+| **Cámara** | Permiso, cámara elegida, resolución real, enfoque y zoom. **Avisa sin bloquear** si el fondo sale difuminado, si el enfoque no es continuo o si la resolución es menor de 1280×720: las tres causas de «el código no se lee» |
+| **Red** | Si hay conexión, si el servidor responde, cuándo fue el último latido correcto y **el desfase de reloj** de la tablet en segundos, con su signo. La pantalla manda un latido nada más abrirse y sigue latiendo mientras está abierta, así que «servidor alcanzable» es una señal **viva**, no el recuerdo del último latido |
+| **Cola** | Fichajes pendientes, de cuándo es el más antiguo, si el almacenamiento de la tablet es duradero y si está sincronizando ahora |
+| **Padrón** | De cuándo es la copia local de la plantilla y cuántas entradas tiene |
+| **Token** | Si la tablet está vinculada, cuándo caduca su credencial, su identificador de dispositivo y el nombre del quiosco. **El token no se muestra nunca**: solo ocho caracteres de su huella, para poder compararlo con el panel |
+| **Versión** | La versión de la PWA y el estado de su actualización en segundo plano |
+| **Batería y pantalla** | Nivel, si carga y si la pantalla se mantiene encendida |
+| **Errores por enviar** | Cuántos errores tiene la tablet guardados sin poder reportar |
+
+**Ni un nombre, ni un fichaje, ni el token en claro**: la pantalla identifica
+por dispositivo y muestra recuentos. Es información tuya y no sale de la
+instalación por sí sola; al fabricante solo llega dentro del paquete de
+diagnóstico anonimizado, y solo si tú lo envías (§12.2).
+
+**No se interpone en el fichaje.** Mientras está abierta no se escanea, así
+que tiene un botón «Volver a fichar» grande y, si nadie la toca, **vuelve sola
+a la pantalla de fichaje a los dos minutos**. Abrirla no desvincula nada, no
+borra la cola, no interrumpe el envío de lo pendiente y **no deja de latir**:
+en el panel, un quiosco cuyo IT está mirando su pantalla de diagnóstico sigue
+apareciendo al día.
+
+### 16.6 Los parámetros
+
+| Variable | De serie | Qué gobierna |
+| --- | --- | --- |
+| `KIOSK_HEALTH_FRESH_WITHIN_SECONDS` | `120` | Hasta cuántos segundos sin latido un quiosco está **al día** |
+| `KIOSK_HEALTH_SILENT_AFTER_SECONDS` | `600` | A partir de cuántos segundos sin latido está en **fallo**. **Es el mismo número que la alerta `QuioscoSinLatido`**: los dos se cambian a la vez, o no se cambia ninguno |
+| `KIOSK_HEALTH_BATTERY_LOW_PERCENT` | `15` | Nivel por debajo del cual, **y sin cargar**, el quiosco avisa por batería |
+| `KIOSK_SERVICE_CODE` | *(vacío)* | Código de 8 a 12 dígitos de la pantalla de diagnóstico. **No es una variable del `.env`**: se cambia en el panel, en «Ajustes operativos», y surte efecto en el latido siguiente |

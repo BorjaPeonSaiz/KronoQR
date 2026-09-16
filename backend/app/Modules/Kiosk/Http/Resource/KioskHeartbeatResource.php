@@ -12,7 +12,16 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * Serializa el `200` de `POST /api/v1/kiosk/heartbeat`: el esquema
  * `KioskHeartbeat`.
  *
- * **Dos campos, y los dos obligatorios.**
+ * ## La huella del codigo de servicio, y solo la huella (RF-KI-08, tarea 3.3)
+ *
+ * `service_code_hash` es `sha256("{uuid del dispositivo}:{codigo}")`. **El codigo
+ * nunca viaja en claro** y no puede: la tablet lo guarda en `localStorage` para
+ * comprobar lo que alguien teclea sin salir a la red, que es lo que hace que la
+ * pantalla de diagnostico funcione cuando no hay red — el momento en que hace
+ * falta. Con el `uuid` dentro, la huella es distinta en cada quiosco: una tabla
+ * precalculada no sirve para la tablet de al lado.
+ *
+ * **Tres campos, y los tres obligatorios.**
  *
  * - `server_time` es con lo que la tablet mide su propio desfase de reloj y avisa
  *   (RF-AT-10), que es la mitad de cliente de esa incidencia. Nunca le impide
@@ -49,6 +58,13 @@ final class KioskHeartbeatResource extends JsonResource
         return [
             'server_time' => $outcome->seenAt->format('Y-m-d\TH:i:s.v\Z'),
             'client_errors_accepted' => $outcome->clientErrorsAccepted,
+            // **La huella, nunca el codigo** (RF-KI-08, tarea 3.3). Va siempre,
+            // tambien cuando vale `null`: el contrato la declara obligatoria
+            // porque un campo ausente y un `null` significan cosas distintas
+            // para la tablet —«esta version del servidor no lo manda» frente a
+            // «la instalacion no tiene codigo»— y del segundo depende que la
+            // pantalla de diagnostico se abra sin pedirlo.
+            'service_code_hash' => $outcome->serviceCodeHash,
         ];
     }
 }

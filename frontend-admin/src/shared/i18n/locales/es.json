@@ -978,12 +978,14 @@
     "intro": "Los umbrales con los que se decide si un tramo es anómalo, qué escaneos se descartan como rebote y qué desfase de reloj o de tránsito abre una incidencia; y los idiomas que ofrece esta instalación. Ningún umbral legal vive aquí: eso es «Cumplimiento».",
     "loading": "Cargando los ajustes…",
     "attendanceHeading": "Fichaje",
+    "diagnosticsHeading": "Diagnóstico",
     "localesHeading": "Idiomas",
     "fields": {
       "maxShiftHours": "Duración máxima de un tramo (h)",
       "debounceSeconds": "Ventana anti-rebote (s)",
       "maxClockSkewMinutes": "Desfase de reloj tolerado (min)",
       "minTransitSeconds": "Tránsito mínimo entre quioscos (s)",
+      "kioskServiceCode": "Código de servicio del quiosco",
       "localeDefault": "Idioma por defecto",
       "localeAvailable": "Idiomas disponibles"
     },
@@ -992,12 +994,15 @@
       "debounceSeconds": "Ventana de gracia: dos escaneos de la misma persona dentro de esta ventana cuentan como uno. Ponlo a 0 para desactivarla. Rango admitido: {minimum}–{maximum} segundos.",
       "maxClockSkewMinutes": "Desfase tolerado entre el reloj de la tablet y el del servidor antes de marcar el fichaje para revisión. Nunca rechaza un fichaje, solo lo señala. Rango admitido: {minimum}–{maximum} minutos.",
       "minTransitSeconds": "Tiempo mínimo creíble para ir de un quiosco a otro. Por debajo, se abre incidencia. Ponlo a 0 si hay dos tablets en la misma puerta. Rango admitido: {minimum}–{maximum} segundos.",
+      "kioskServiceCode": "Con él se abre la pantalla de diagnóstico de la tablet. Vacío: la pantalla se abre sin código. Solo cifras, de 8 a 12.",
+      "kioskServiceCodeRedacted": "No visible con este tipo de acceso: quien entra como soporte no ve ni puede cambiar el código de servicio.",
       "localeDefault": "Idioma con el que se sirven las tres aplicaciones y los documentos cuando nadie elige otro. Tiene que estar entre los idiomas disponibles.",
       "localeAvailable": "Idiomas que ofrece esta instalación. Al menos uno, y el idioma por defecto siempre tiene que quedar entre los marcados."
     },
     "errors": {
       "required": "Este campo no puede quedarse vacío.",
-      "notAWholeNumber": "Escribe un número entero, sin decimales ni letras."
+      "notAWholeNumber": "Escribe un número entero, sin decimales ni letras.",
+      "notAServiceCode": "Escribe un código de 8 a 12 cifras, o déjalo vacío para no usar ninguno."
     },
     "affectsWorkedHoursWarning": "Vas a cambiar un umbral que puede modificar los minutos que quedan registrados. El cambio queda auditado con tu nombre, la fecha, el valor anterior y el nuevo.",
     "audited": "Cada clave modificada deja su propio apunte en el trail de auditoría (calculation_setting.changed) con el valor anterior, el nuevo, quién lo cambió y cuándo.",
@@ -1149,12 +1154,14 @@
       "description": "Vincula la primera tablet con el código de seis dígitos que muestra en pantalla."
     },
     "table": {
-      "caption": "Quioscos de la instalación",
+      "caption": "Quioscos de la instalación, horas en {zone}",
       "name": "Nombre",
       "status": "Estado",
+      "health": "Salud",
       "appVersion": "Versión",
       "lastSeen": "Último latido",
       "pendingQueue": "Fichajes sin sincronizar",
+      "battery": "Batería",
       "pairedAt": "Vinculado",
       "actions": "Acciones"
     },
@@ -1165,8 +1172,45 @@
     "list": {
       "lastUpdatedAt": "Actualizado: {moment}",
       "lastSeenAgo": "Hace {hours} h {minutes} min",
-      "neverSeen": "Todavía no ha latido"
+      "neverSeen": "Todavía no ha latido",
+      "oldestPendingAgo": "El más antiguo, hace {hours} h {minutes} min"
     },
+    "health": {
+      "verdict": {
+        "ok": "Al día",
+        "warning": "Aviso",
+        "failure": "Fallo",
+        "revoked": "Revocado"
+      },
+      "reason": {
+        "beating": "Late con normalidad.",
+        "queue_pending": "Late con normalidad, con fichajes todavía por sincronizar.",
+        "late": "El último latido llega más tarde de lo esperado.",
+        "silent": "Lleva más tiempo del esperado sin latido.",
+        "awaiting_first_heartbeat": "Recién vinculado: todavía no ha enviado su primer latido.",
+        "never_seen": "Nunca ha latido y lleva vinculado más tiempo del esperado.",
+        "revoked": "Desvinculado: ya no cuenta para nada.",
+        "battery_low": "Batería baja y sin cargar."
+      },
+      "whatToDoHeading": "Qué hacer",
+      "whatToDo": {
+        "beating": "El quiosco está al día: no hace falta ninguna acción.",
+        "queue_pending": "Tiene red y sigue con fichajes sin enviar: espera unos minutos; si la cola no baja, mira la pantalla de diagnóstico de la tablet (cola y sincronización) y el runbook «Quiosco no responde» (docs/runbooks/quiosco-no-responde.md) §2.",
+        "late": "Vigílalo: sin latido no es sin fichar, la tablet sigue registrando en su cola local y la enviará en cuanto recupere la red. Si no se pone al día con el próximo latido, sigue el procedimiento del runbook «Quiosco no responde» (docs/runbooks/quiosco-no-responde.md) §2.",
+        "silent": "Sin latido no es sin fichar: la tablet sigue registrando en su cola local y la enviará en cuanto recupere la red. Sigue el procedimiento del runbook «Quiosco no responde» (docs/runbooks/quiosco-no-responde.md) §2 y ejecuta «php artisan kiosk:health» desde el servidor.",
+        "awaiting_first_heartbeat": "Es normal justo después de vincularlo. Si tarda varios minutos en latir, revisa la conexión de la tablet.",
+        "never_seen": "Sigue el procedimiento del runbook «Quiosco no responde» (docs/runbooks/quiosco-no-responde.md) §2 y ejecuta «php artisan kiosk:health» desde el servidor.",
+        "revoked": "Este quiosco está desvinculado: no hace falta ninguna acción.",
+        "battery_low": "Revisa el cargador: la tablet tiene la batería baja y no está cargando."
+      }
+    },
+    "battery": {
+      "charging": "Cargando",
+      "notCharging": "Sin cargar",
+      "unknown": "No informa",
+      "lowWarning": "Batería baja"
+    },
+    "legend": "Al día hasta {fresh} sin latido; fallo a partir de {silent}; batería baja por debajo del {batteryPercent} % sin cargar.",
     "pair": {
       "action": "Vincular quiosco",
       "heading": "Vincular quiosco",

@@ -6,6 +6,8 @@ namespace App\Modules\Product\Infrastructure\Persistence;
 
 use App\Modules\Product\Application\Port\DataExportSource;
 use App\Modules\Product\Domain\ValueObject\ExportedDataset;
+use App\Modules\Product\Domain\ValueObject\SettingDefinition;
+use App\Modules\Product\Domain\ValueObject\SettingKey;
 use Closure;
 use Illuminate\Database\ConnectionInterface;
 use RuntimeException;
@@ -181,10 +183,74 @@ final readonly class DatabaseDataExportSource implements DataExportSource
      */
     private static function sqlFor(string $dataset): string
     {
+        // La UNICA consulta que no es un literal: ver `installationSettingsSql()`.
+        // La lista de claves confidenciales vive en el catalogo de dominio y
+        // copiarla aqui a mano seria una segunda fuente de verdad que se
+        // desincroniza en silencio — y en la direccion peligrosa.
+        if ($dataset === 'installation_settings') {
+            return self::installationSettingsSql();
+        }
+
         return self::SQL_BY_DATASET[$dataset] ?? throw new RuntimeException(
             'El conjunto «'.$dataset.'» esta en el catalogo de la exportacion integra y no tiene consulta. '
             .'Añadela en DatabaseDataExportSource.'
         );
+    }
+
+    /**
+     * La configuracion de la instalacion, **con las claves confidenciales
+     * redactadas** (RF-PD-14, RL-20, RF-KI-08).
+     *
+     * ## Por que se compone y no se escribe
+     *
+     * Que una clave sea confidencial lo decide {@see SettingDefinition}, en el
+     * dominio, y lo comparten cuatro salidas: el asiento de auditoria, el
+     * paquete de diagnostico, los logs y esta. Escribir aqui `WHERE key <>
+     * 'KIOSK_SERVICE_CODE'` a mano habria funcionado hoy y habria dejado de
+     * funcionar el dia en que alguien marque la segunda clave — sin que nada lo
+     * dijera, y entregando el secreto en un ZIP.
+     *
+     * ## La fila sale, el valor no
+     *
+     * `value` nulo y `value_redacted` a `true`. Una fila ausente le diria al
+     * cliente «ese ajuste no esta configurado», que es falso y ademas peor: la
+     * columna dice que existe, cuando se cambio y quien lo hizo, y que el valor
+     * se ha retirado a proposito. El resto de las claves salen con
+     * `value_redacted: false`, no con la columna vacia, porque un hueco en una
+     * columna booleana se lee como «no se sabe».
+     *
+     * ## Los literales vienen del enum, no de fuera
+     *
+     * Las claves son casos de un `enum` de PHP: no hay entrada del usuario en
+     * esta cadena. Aun asi se escapan las comillas simples, porque la unica
+     * garantia que no depende de quien lea esto mañana es la que esta escrita.
+     */
+    private static function installationSettingsSql(): string
+    {
+        $confidential = array_map(
+            static fn (SettingKey $key): string => "'".str_replace("'", "''", $key->value)."'",
+            array_values(array_filter(
+                SettingKey::cases(),
+                static fn (SettingKey $key): bool => $key->definition()->confidential,
+            )),
+        );
+
+        // Sin ninguna clave confidencial, `key IN ()` no es SQL valido: se usa un
+        // predicado que siempre es falso. No es teorico —el catalogo no tenia
+        // ninguna hasta la tarea 3.3— y deja la consulta correcta en los dos
+        // estados del producto.
+        $predicate = $confidential === [] ? 'false' : 's.key IN ('.implode(', ', $confidential).')';
+
+        return <<<SQL
+            SELECT s.key,
+                   CASE WHEN {$predicate} THEN NULL ELSE s.value::text END AS value,
+                   ({$predicate})::text AS value_redacted,
+                   to_char(s.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at,
+                   u.uuid::text  AS updated_by_user_uuid
+              FROM installation_settings s
+              LEFT JOIN users u ON u.id = s.updated_by_user_id
+             ORDER BY s.key
+            SQL;
     }
 
     /**
@@ -209,7 +275,8 @@ final readonly class DatabaseDataExportSource implements DataExportSource
         'users' => self::USERS,
         'support_grants' => self::SUPPORT_GRANTS,
         'error_events' => self::ERROR_EVENTS,
-        'installation_settings' => self::INSTALLATION_SETTINGS,
+        // `installation_settings` NO esta aqui: es la unica consulta que se
+        // compone, en `installationSettingsSql()`.
         'compliance_profiles' => self::COMPLIANCE_PROFILES,
         'license' => self::LICENSE,
     ];
@@ -524,16 +591,6 @@ final readonly class DatabaseDataExportSource implements DataExportSource
           FROM error_events e
           LEFT JOIN users u ON u.id = e.resolved_by_user_id
          ORDER BY e.id
-        SQL;
-
-    private const string INSTALLATION_SETTINGS = <<<'SQL'
-        SELECT s.key,
-               s.value::text AS value,
-               to_char(s.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at,
-               u.uuid::text  AS updated_by_user_uuid
-          FROM installation_settings s
-          LEFT JOIN users u ON u.id = s.updated_by_user_id
-         ORDER BY s.key
         SQL;
 
     private const string COMPLIANCE_PROFILES = <<<'SQL'

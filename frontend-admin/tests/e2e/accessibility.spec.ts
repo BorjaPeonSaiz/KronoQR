@@ -13,6 +13,7 @@ import { expect, test } from '@playwright/test'
 import {
   DATA_EXPORT_RUNNING,
   DATA_EXPORT_UUID,
+  DEVICE,
   EMPLOYEE_UUID,
   HOTEL_BRANDING,
   logIn,
@@ -159,8 +160,24 @@ test(
   },
 )
 
-test('la pantalla de quioscos tampoco', { tag: ['@RF-PD-06'] }, async ({ page }) => {
-  await stubManagementApi(page, { role: 'admin' })
+test('la pantalla de quioscos tampoco', { tag: ['@RF-PD-06', '@RF-PA-07'] }, async ({ page }) => {
+  await stubManagementApi(page, {
+    role: 'admin',
+    // Con un quiosco en fallo y otro con la bateria baja: la fila resaltada,
+    // el badge de veredicto y el aviso de bateria pasan por axe tambien, no
+    // solo el camino sin avisos.
+    devices: {
+      devices: [
+        DEVICE,
+        {
+          ...DEVICE,
+          uuid: '0199f3c9-1b7d-7a44-8e02-3c4d5e6f7a82',
+          name: 'Cocina',
+          health: { verdict: 'failure', reason: 'silent', seconds_since_last_seen: 900 },
+        },
+      ],
+    },
+  })
   await logInAsAdmin(page)
   await page.goto('/devices')
   await expect(page.getByRole('table')).toBeVisible()
@@ -170,7 +187,7 @@ test('la pantalla de quioscos tampoco', { tag: ['@RF-PD-06'] }, async ({ page })
 
 test(
   'el dialogo de vincular un quiosco tampoco, con el foco dentro',
-  { tag: ['@RF-PD-06'] },
+  { tag: ['@RF-PD-06', '@RF-PA-07'] },
   async ({ page }) => {
     await stubManagementApi(page, { role: 'admin' })
     await logInAsAdmin(page)

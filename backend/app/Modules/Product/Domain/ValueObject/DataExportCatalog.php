@@ -352,9 +352,32 @@ final class DataExportCatalog
 
             // --- La configuracion del producto --------------------------------
 
+            /*
+             * La configuracion de la instalacion, con **una excepcion a «sale
+             * todo»** (tarea 3.3, decision 1 de la segunda vuelta).
+             *
+             * Las claves marcadas `confidential` en {@see SettingDefinition}
+             * —hoy solo `KIOSK_SERVICE_CODE`— salen con `value` nulo y
+             * `value_redacted: true`. No es una exclusion silenciosa: la fila
+             * esta, se ve cuando se cambio y quien lo hizo, y la columna dice
+             * con todas las letras que el valor no viene.
+             *
+             * **Por que aqui si y en el resto no.** Este ZIP se queda con el
+             * cliente (RL-16) y por eso lleva sus datos personales enteros; pero
+             * un ZIP se guarda, se reenvia por correo y se archiva años, y lo
+             * que hay dentro de esa clave es el codigo con el que se abre la
+             * pantalla de mantenimiento de todas sus tablets (RF-KI-08). Es el
+             * mismo criterio con el que no salen `pin_hash` ni `token_hash`: un
+             * secreto vivo no es un dato del registro horario. Y es la misma
+             * decision que ya toma el asiento de `audit_log` de su propio
+             * cambio, para que las dos evidencias digan lo mismo.
+             *
+             * El valor sigue estando donde el cliente lo escribio: `GET
+             * /api/v1/settings` en la pantalla «Ajustes operativos».
+             */
             ExportedDataset::json(
                 'installation_settings',
-                ['key', 'value', 'updated_at', 'updated_by_user_uuid'],
+                ['key', 'value', 'value_redacted', 'updated_at', 'updated_by_user_uuid'],
                 ['value'],
             ),
 

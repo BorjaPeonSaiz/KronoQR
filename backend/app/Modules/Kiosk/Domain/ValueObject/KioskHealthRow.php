@@ -40,6 +40,10 @@ final readonly class KioskHealthRow
         public int $pendingQueueSize,
         public KioskHealthVerdict $verdict,
         public KioskHealthReason $reason,
+        /** Nivel de bateria declarado en el ultimo latido; `null` si no lo informa. */
+        public ?int $batteryLevel = null,
+        /** Si estaba enchufada; `null` si no lo informa. */
+        public ?bool $batteryCharging = null,
     ) {}
 
     /**
@@ -59,10 +63,15 @@ final readonly class KioskHealthRow
      * 3. **Callado** — pasa del plazo de silencio: es la alerta critica del doc 01
      *    §9.3 dicha en la consola.
      * 4. **Atrasado** — entre los dos plazos. Lo primero que hay que mirar es la red.
-     * 5. **Con cola** — late al dia pero declara fichajes sin enviar. `aviso` y no
+     * 5. **Bateria baja** — al dia, pero por debajo del umbral y **sin cargar**:
+     *    alguien le ha quitado el cargador y se apagara durante el turno. Va
+     *    detras de lo que ya no responde y delante de la cola porque una tablet
+     *    que se apaga se lleva su cola por delante, y porque se arregla en
+     *    treinta segundos con un cable (decision 5 de la ficha 3.3).
+     * 6. **Con cola** — late al dia pero declara fichajes sin enviar. `aviso` y no
      *    `ok` porque esos fichajes son registro horario de personas reales y se
      *    pierden si alguien revoca el token antes de que drenen (runbook §5.1).
-     * 6. **Correcto**.
+     * 7. **Correcto**.
      *
      * `pending_queue_size` lo declara el dispositivo y nadie lo comprueba: es
      * informacion de operacion, no autoridad, y no cambia ni un fichaje.
@@ -83,6 +92,8 @@ final readonly class KioskHealthRow
             pendingQueueSize: $device->pendingQueueSize,
             verdict: $verdict,
             reason: $reason,
+            batteryLevel: $device->batteryLevel,
+            batteryCharging: $device->batteryCharging,
         );
     }
 
@@ -115,11 +126,34 @@ final readonly class KioskHealthRow
             return [KioskHealthVerdict::Warning, KioskHealthReason::Late];
         }
 
+        if (self::batteryIsLow($device, $thresholds)) {
+            return [KioskHealthVerdict::Warning, KioskHealthReason::BatteryLow];
+        }
+
         if ($device->pendingQueueSize > 0) {
             return [KioskHealthVerdict::Warning, KioskHealthReason::QueuePending];
         }
 
         return [KioskHealthVerdict::Ok, KioskHealthReason::Beating];
+    }
+
+    /**
+     * La bateria entra en el veredicto **solo por abajo y solo descargandose**.
+     *
+     * Los tres `null` son deliberados y significan lo mismo: *no lo se*. La
+     * Battery Status API solo la ofrece Chrome en Android —que es la tablet del
+     * producto— y un navegador que no la implementa no puede poner en aviso a la
+     * flota entera el dia del despliegue. `charging === true` tampoco avisa: una
+     * tablet al 8 % enchufada esta haciendo exactamente lo que tiene que hacer.
+     *
+     * El umbral es INCLUSIVO: el numero que el cliente escribe es el primero que
+     * quiere ver avisado.
+     */
+    private static function batteryIsLow(DeviceSummary $device, KioskHealthThresholds $thresholds): bool
+    {
+        return $device->batteryLevel !== null
+            && $device->batteryCharging === false
+            && $device->batteryLevel <= $thresholds->batteryLowPercent;
     }
 
     /**

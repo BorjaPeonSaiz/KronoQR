@@ -73,6 +73,7 @@ use App\Modules\Product\Infrastructure\Adapter\CachedSettingsRepository;
 use App\Modules\Product\Infrastructure\Adapter\CacheSupportAccessRecorder;
 use App\Modules\Product\Infrastructure\Adapter\DbBrandingProvider;
 use App\Modules\Product\Infrastructure\Adapter\DbCompliancePolicyProvider;
+use App\Modules\Product\Infrastructure\Adapter\DbKioskServiceCodeProvider;
 use App\Modules\Product\Infrastructure\Adapter\DbLocalePolicyProvider;
 use App\Modules\Product\Infrastructure\Adapter\DbOperationalSettingsProvider;
 use App\Modules\Product\Infrastructure\Adapter\Ed25519LicenseVerifier;
@@ -114,6 +115,7 @@ use App\Modules\Product\Infrastructure\Diagnostics\Probe\ApplicationProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\DatabaseProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\DiskProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\ErrorHistoryProbe;
+use App\Modules\Product\Infrastructure\Diagnostics\Probe\KioskServiceCodeProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\LicenseProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\MailProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\PermissionsProbe;
@@ -148,6 +150,7 @@ use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\ErrorEventSink;
 use App\Modules\Shared\Application\Port\FeatureGate;
+use App\Modules\Shared\Application\Port\KioskServiceCodeProvider;
 use App\Modules\Shared\Application\Port\LocalePolicyProvider;
 use App\Modules\Shared\Application\Port\ManagementActor;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
@@ -305,6 +308,25 @@ final class ProductServiceProvider extends ServiceProvider
         $this->app->scoped(
             OperationalSettingsProvider::class,
             static fn (Application $app): DbOperationalSettingsProvider => new DbOperationalSettingsProvider(
+                $app->make(GetSettingsHandler::class),
+            ),
+        );
+
+        /*
+         * El codigo de servicio de la pantalla de diagnostico del quiosco
+         * (RF-KI-08, tarea 3.3).
+         *
+         * `bind` y no `scoped`: se pide una vez por latido —una por minuto y por
+         * quiosco— y no en cada escaneo, asi que una memoria por peticion seria
+         * un sitio mas donde un secreto vive en memoria a cambio de nada.
+         *
+         * **El puerto vive en `Shared` y el adaptador aqui** porque `Kiosk` no
+         * puede importar `Product` (doc 02 §1.6, ADR-025 restriccion 3), igual
+         * que con los umbrales operativos.
+         */
+        $this->app->bind(
+            KioskServiceCodeProvider::class,
+            static fn (Application $app): DbKioskServiceCodeProvider => new DbKioskServiceCodeProvider(
                 $app->make(GetSettingsHandler::class),
             ),
         );
@@ -1750,6 +1772,18 @@ final class ProductServiceProvider extends ServiceProvider
                         settings: $app->make(GetSettingsHandler::class),
                         environment: $_ENV,
                     ),
+                    /*
+                     * El codigo de servicio de la pantalla de diagnostico de las
+                     * tablets (RF-KI-08, tarea 3.3, decision 7). Detras de
+                     * `SettingsProbe` porque el orden de esta lista ES el del
+                     * informe: primero si la configuracion se aplica, y despues
+                     * que dice una de sus claves.
+                     *
+                     * **Aviso y nunca fallo**: sin codigo la pantalla se abre
+                     * sin el, que es el valor de serie del producto. Un `2` aqui
+                     * abortaria una actualizacion por algo que no esta roto.
+                     */
+                    new KioskServiceCodeProbe($app->make(KioskServiceCodeProvider::class)),
                     $app->make(LicenseProbe::class),
                 ],
                 translator: $app->make(DoctorTranslator::class),

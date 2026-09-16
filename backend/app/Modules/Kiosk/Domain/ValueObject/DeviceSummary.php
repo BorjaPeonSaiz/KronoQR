@@ -35,5 +35,16 @@ final readonly class DeviceSummary
         public int $pendingQueueSize,
         /** `null` en los dispositivos dados de alta antes del emparejamiento por codigo. */
         public ?DateTimeImmutable $pairedAt,
+        /** `occurred_at` del fichaje mas antiguo de su cola; `null` con la cola vacia o sin latido. */
+        public ?DateTimeImmutable $oldestPendingAt = null,
+        /**
+         * Nivel de bateria en tanto por ciento, `null` si el navegador no lo informa.
+         *
+         * **`null` no es cero y no avisa**: la Battery Status API solo la ofrece
+         * Chrome en Android, y una tablet que no informa no es una tablet averiada.
+         */
+        public ?int $batteryLevel = null,
+        /** Si estaba enchufada en su ultimo latido; `null` si no lo informa. */
+        public ?bool $batteryCharging = null,
     ) {}
 }

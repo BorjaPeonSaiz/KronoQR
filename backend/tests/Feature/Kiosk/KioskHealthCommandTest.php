@@ -59,6 +59,8 @@ function quioscoEnLaBase(
     string $status = 'active',
     ?string $appVersion = '1.4.0',
     ?string $tokenHash = null,
+    ?int $batteryLevel = null,
+    ?bool $batteryCharging = null,
 ): void {
     DB::table('devices')->insert([
         'uuid' => (string) Str::uuid(),
@@ -68,6 +70,10 @@ function quioscoEnLaBase(
         'app_version' => $appVersion,
         'last_seen_at' => $lastSeenAt,
         'pending_queue_size' => $pendingQueueSize,
+        // `null` por defecto: es el estado de una tablet cuyo navegador no
+        // implementa la Battery Status API, que es el caso normal (tarea 3.3).
+        'battery_level' => $batteryLevel,
+        'battery_charging' => $batteryCharging,
         'status' => $status,
         'paired_at' => '2026-09-01 08:00:00+00',
         'created_at' => '2026-09-01 08:00:00+00',
@@ -201,6 +207,62 @@ it('no imprime el hash del token de ningun dispositivo', function (): void {
         ->and(ejecutarSalud(['--json' => true])['output'])->not->toContain(str_repeat('a', 64));
 })->group('RF-PA-07');
 
+// --- La bateria en la consola (tarea 3.3) -----------------------------------
+
+it('enseña la bateria de cada quiosco y distingue «no informa» de «vacia»', function (): void {
+    // EL GUION NO ES CERO. Una tablet cuyo navegador no implementa la Battery
+    // Status API —todo lo que no sea Chrome en Android— sale con «—»; escribir
+    // «0 %» ahi pondria media flota en aviso el primer dia que se ejecuta esto.
+    quioscoEnLaBase('Recepcion', '2026-09-09 11:59:30+00', batteryLevel: 83, batteryCharging: true);
+    quioscoEnLaBase('Cocina', '2026-09-09 11:59:30+00');
+
+    $resultado = ejecutarSalud();
+
+    expect($resultado['code'])->toBe(0)
+        ->and($resultado['output'])->toContain('Bateria')
+        ->and($resultado['output'])->toContain('83 % (cargando)')
+        ->and($resultado['output'])->toContain('—');
+})->group('RF-PA-07');
+
+it('avisa del quiosco que se esta descargando y dice que hacer', function (): void {
+    // El consejo tiene que decir la ACCION y no solo que algo va mal: casi
+    // siempre es un cargador desenchufado, y se arregla en treinta segundos.
+    quioscoEnLaBase('Recepcion', '2026-09-09 11:59:30+00', batteryLevel: 9, batteryCharging: false);
+
+    $resultado = ejecutarSalud();
+
+    expect($resultado['code'])->toBe(1)
+        ->and($resultado['output'])->toContain('Resultado: CON AVISOS')
+        ->and($resultado['output'])->toContain('Que hay que mirar')
+        ->and($resultado['output'])->toContain('un 9 % de bateria')
+        ->and($resultado['output'])->toContain('cargador desenchufado');
+})->group('RF-PA-07');
+
+it('no avisa de la bateria baja de un quiosco enchufado', function (): void {
+    // Al 9 % y cargando esta haciendo exactamente lo que tiene que hacer.
+    quioscoEnLaBase('Recepcion', '2026-09-09 11:59:30+00', batteryLevel: 9, batteryCharging: true);
+
+    expect(ejecutarSalud()['code'])->toBe(0);
+})->group('RF-PA-07');
+
+it('publica la bateria tambien en el --json', function (): void {
+    quioscoEnLaBase('Recepcion', '2026-09-09 11:59:30+00', batteryLevel: 9, batteryCharging: false);
+    quioscoEnLaBase('Cocina', '2026-09-09 11:59:30+00');
+
+    /** @var array{devices: list<array<string, mixed>>} $informe */
+    $informe = json_decode(ejecutarSalud(['--json' => true])['output'], true, 512, JSON_THROW_ON_ERROR);
+
+    $porNombre = array_column($informe['devices'], null, 'name');
+
+    expect($porNombre['Recepcion']['battery_level'])->toBe(9)
+        ->and($porNombre['Recepcion']['battery_charging'])->toBeFalse()
+        ->and($porNombre['Recepcion']['reason'])->toBe('battery_low')
+        // `null` y no `0`: quien automatiza la comprobacion tiene que poder
+        // distinguir «no lo se» de «sin bateria».
+        ->and($porNombre['Cocina']['battery_level'])->toBeNull()
+        ->and($porNombre['Cocina']['battery_charging'])->toBeNull();
+})->group('RF-PA-07');
+
 // --- El `--json`, que es lo que consume un script ---------------------------
 
 it('devuelve por --json la misma informacion, en UTC y con el mismo codigo de salida', function (): void {
@@ -208,13 +270,20 @@ it('devuelve por --json la misma informacion, en UTC y con el mismo codigo de sa
 
     $resultado = ejecutarSalud(['--json' => true]);
 
-    /** @var array{status: string, exit_code: int, thresholds: array{fresh_within_seconds: int, silent_after_seconds: int}, fleet: array{total: int, active: int}, devices: list<array<string, mixed>>} $informe */
+    /** @var array{status: string, exit_code: int, thresholds: array<string, int>, fleet: array{total: int, active: int}, devices: list<array<string, mixed>>} $informe */
     $informe = json_decode($resultado['output'], true, 512, JSON_THROW_ON_ERROR);
 
     expect($resultado['code'])->toBe(2)
         ->and($informe['status'])->toBe('failure')
         ->and($informe['exit_code'])->toBe(2)
-        ->and($informe['thresholds'])->toBe(['fresh_within_seconds' => 120, 'silent_after_seconds' => 600])
+        // Los MISMOS tres umbrales que `meta.thresholds` de `GET /devices`: si
+        // la consola y el panel publicaran cifras distintas, la leyenda de uno
+        // de los dos seria falsa (tarea 3.3, decision 3).
+        ->and($informe['thresholds'])->toBe([
+            'fresh_within_seconds' => 120,
+            'silent_after_seconds' => 600,
+            'battery_low_percent' => 15,
+        ])
         ->and($informe['fleet'])->toBe(['total' => 3, 'active' => 3])
         ->and($informe['devices'])->toHaveCount(3);
 

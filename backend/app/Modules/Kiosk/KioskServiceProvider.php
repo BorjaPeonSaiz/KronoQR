@@ -6,6 +6,7 @@ namespace App\Modules\Kiosk;
 
 use App\Http\RateLimiting\KioskRateLimit;
 use App\Modules\Identity\Application\UseCase\IssueDeviceToken;
+use App\Modules\Identity\Application\UseCase\RevokeDeviceToken;
 use App\Modules\Kiosk\Application\Port\DeviceFleet;
 use App\Modules\Kiosk\Application\Port\DeviceRegistry;
 use App\Modules\Kiosk\Application\Port\KioskEventPublisher;
@@ -14,7 +15,9 @@ use App\Modules\Kiosk\Application\Port\PairingRequests;
 use App\Modules\Kiosk\Application\Port\PairingSecrets;
 use App\Modules\Kiosk\Application\UseCase\CheckKioskHealth;
 use App\Modules\Kiosk\Application\UseCase\ClaimPairing;
+use App\Modules\Kiosk\Application\UseCase\ListDevices;
 use App\Modules\Kiosk\Application\UseCase\RequestPairing;
+use App\Modules\Kiosk\Application\UseCase\UnpairDevice;
 use App\Modules\Kiosk\Domain\Model\PairingRequest;
 use App\Modules\Kiosk\Domain\ValueObject\DeviceSummary;
 use App\Modules\Kiosk\Domain\ValueObject\KioskHealthThresholds;
@@ -29,6 +32,7 @@ use App\Modules\Kiosk\Infrastructure\Persistence\DbDeviceFleet;
 use App\Modules\Kiosk\Infrastructure\Persistence\DbDeviceRegistry;
 use App\Modules\Kiosk\Infrastructure\Persistence\DbPairingRequests;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Support\ConstantTimeFloor;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -155,32 +159,67 @@ final class KioskServiceProvider extends ServiceProvider
     }
 
     /**
-     * `kiosk:health` con sus dos plazos **ya resueltos** (RF-PA-07, tarea 5.11).
+     * Las tres superficies de la salud del quiosco, con sus umbrales **ya
+     * resueltos** (RF-PA-07, tareas 5.11 y 3.3): `kiosk:health`,
+     * `GET /api/v1/devices` y la respuesta de `unpair`.
      *
      * Misma regla que los dos casos de uso del emparejamiento: la configuracion
      * se resuelve en la raiz de composicion y no dentro del caso de uso, que asi
      * se prueba con dos valores sin tocar la configuracion global y no necesita
      * facades (§3.5, verificado por Deptrac).
-     *
-     * **Los ordena antes de construir el objeto de valor**, y no es celo: los dos
-     * numeros salen del `.env` de un cliente. {@see KioskHealthThresholds} exige
-     * que el plazo de silencio vaya despues del de latido fresco —si no, no
-     * habria zona de aviso—, y un `.env` con los dos cruzados dejaria sin
-     * diagnostico justo a quien lo ejecuta porque algo va mal. Se ordena, se
-     * diagnostica, y el numero raro se ve en el `--json`.
      */
     private function registerHealthUseCase(): void
     {
-        $this->app->bind(CheckKioskHealth::class, static function ($app): CheckKioskHealth {
-            $fresh = max(1, Config::integer('kiosk.health.fresh_within_seconds', 120));
-            $silent = max($fresh + 1, Config::integer('kiosk.health.silent_after_seconds', 600));
+        $this->app->bind(CheckKioskHealth::class, static fn ($app): CheckKioskHealth => new CheckKioskHealth(
+            $app->make(DeviceRegistry::class),
+            $app->make(Clock::class),
+            self::healthThresholds(),
+        ));
 
-            return new CheckKioskHealth(
-                $app->make(DeviceRegistry::class),
-                $app->make(Clock::class),
-                new KioskHealthThresholds($fresh, $silent),
-            );
-        });
+        /*
+         * `GET /api/v1/devices` juzga con LOS MISMOS umbrales que la consola
+         * (tarea 3.3, decision 2). Salen del mismo metodo a proposito: dos
+         * lecturas de `config()` con dos valores por defecto distintos serian dos
+         * opiniones sobre cuando un quiosco esta caido, que es exactamente lo que
+         * esta tarea viene a eliminar.
+         */
+        $this->app->bind(ListDevices::class, static fn ($app): ListDevices => new ListDevices(
+            $app->make(DeviceRegistry::class),
+            $app->make(Clock::class),
+            self::healthThresholds(),
+            $app->make(InstallationSiteProvider::class),
+        ));
+
+        // `unpair` devuelve el quiosco YA REVOCADO con su veredicto, para que el
+        // panel repinte la fila sin volver a pedir la lista: necesita los mismos
+        // dos ingredientes.
+        $this->app->bind(UnpairDevice::class, static fn ($app): UnpairDevice => new UnpairDevice(
+            $app->make(DeviceRegistry::class),
+            $app->make(RevokeDeviceToken::class),
+            $app->make(Clock::class),
+            self::healthThresholds(),
+        ));
+    }
+
+    /**
+     * Los umbrales de salud del quiosco, resueltos una sola vez para las tres
+     * superficies: `kiosk:health`, `GET /devices` y la respuesta de `unpair`.
+     *
+     * **Se ordenan y se acotan antes de construir el objeto de valor**, y no es
+     * celo: los tres numeros salen del `.env` de un cliente.
+     * {@see KioskHealthThresholds} exige que el plazo de silencio vaya despues
+     * del de latido fresco —si no, no habria zona de aviso— y que el nivel de
+     * bateria sea un porcentaje. Un `.env` con los numeros cruzados dejaria sin
+     * diagnostico justo a quien lo ejecuta porque algo va mal. Se ordena, se
+     * diagnostica, y el numero raro se ve en el `--json` y en `meta.thresholds`.
+     */
+    private static function healthThresholds(): KioskHealthThresholds
+    {
+        $fresh = max(1, Config::integer('kiosk.health.fresh_within_seconds', 120));
+        $silent = max($fresh + 1, Config::integer('kiosk.health.silent_after_seconds', 600));
+        $battery = min(100, max(0, Config::integer('kiosk.health.battery_low_percent', 15)));
+
+        return new KioskHealthThresholds($fresh, $silent, $battery);
     }
 
     /**

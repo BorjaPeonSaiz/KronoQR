@@ -78,6 +78,12 @@ final readonly class DbDeviceRegistry implements DeviceRegistry
                 'app_version' => $appVersion,
                 'last_seen_at' => null,
                 'pending_queue_size' => 0,
+                // Y la telemetria de la tarea 3.3, por el mismo motivo: la
+                // bateria y la cola mas antigua de la tablet anterior hablarian
+                // de un aparato que ya no esta en esa pared.
+                'oldest_pending_at' => null,
+                'battery_level' => null,
+                'battery_charging' => null,
                 'updated_at' => $this->timestamp($now),
             ]);
 
@@ -186,7 +192,10 @@ final readonly class DbDeviceRegistry implements DeviceRegistry
      */
     private function columns(): array
     {
-        return ['id', 'uuid', 'name', 'status', 'app_version', 'last_seen_at', 'pending_queue_size', 'paired_at'];
+        return [
+            'id', 'uuid', 'name', 'status', 'app_version', 'last_seen_at', 'pending_queue_size', 'paired_at',
+            'oldest_pending_at', 'battery_level', 'battery_charging',
+        ];
     }
 
     private function hydrate(object $row): DeviceSummary
@@ -201,6 +210,9 @@ final readonly class DbDeviceRegistry implements DeviceRegistry
          *     last_seen_at: string|null,
          *     pending_queue_size: int|string,
          *     paired_at: string|null,
+         *     oldest_pending_at: string|null,
+         *     battery_level: int|string|null,
+         *     battery_charging: bool|null,
          * } $row
          */
         return new DeviceSummary(
@@ -212,6 +224,11 @@ final readonly class DbDeviceRegistry implements DeviceRegistry
             lastSeenAt: $this->instant($row->last_seen_at),
             pendingQueueSize: (int) $row->pending_queue_size,
             pairedAt: $this->instant($row->paired_at),
+            oldestPendingAt: $this->instant($row->oldest_pending_at),
+            // `null` se conserva: es «el navegador no informa», que no es cero
+            // y no puede convertirse en un aviso de bateria baja.
+            batteryLevel: $row->battery_level === null ? null : (int) $row->battery_level,
+            batteryCharging: $row->battery_charging,
         );
     }
 

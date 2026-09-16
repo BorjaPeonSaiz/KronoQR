@@ -7,7 +7,7 @@
 // enseñar, y `docs/cliente/configuracion.md` §6.0 y §2.1 prometian «se editan
 // desde el panel» sin que hubiera panel.
 //
-// Dos decisiones que esta pantalla dice en voz alta, en vez de dejarlas
+// Cuatro decisiones que esta pantalla dice en voz alta, en vez de dejarlas
 // implicitas:
 //
 //  - **El rango de cada umbral NO se copia aqui.** Viene de
@@ -23,6 +23,24 @@
 //    divergir). Las casillas de disponibles reutilizan el patron ya probado de
 //    `onboarding/steps/OrganisationStep.vue`: no se puede desmarcar el idioma
 //    que esta activo por defecto.
+//  - **`KIOSK_SERVICE_CODE` (RF-KI-08, tarea 3.3) es texto OPCIONAL, con la
+//    forma fija en el propio panel** (`^[0-9]{8,12}$`), igual que
+//    `BrandingView` fija `HEX_COLOR` para `BRANDING_ACCENT_COLOR`: no es un
+//    umbral con rango que copiar del contrato, es una forma. Vacio es SIEMPRE
+//    valido -«sin codigo, la pantalla se abre sin el»-, y por eso su error
+//    local no se dispara con el campo en blanco (a diferencia de los cuatro
+//    `ATTENDANCE_*`, que exigen `required`). El valor nunca se audita ni sale
+//    de esta pantalla en claro (decision 6 de la ficha 3.3): el servidor solo
+//    envia su huella SHA-256 al quiosco por el latido.
+//  - **Guardado DEFENSIVO ante `KIOSK_SERVICE_CODE` redactada** (segunda
+//    vuelta de la tarea 3.3, hallazgo de `revisor-codigo`): si el backend
+//    empieza a servir esta clave con `value: null` para un actor de SOPORTE
+//    que no debe leerla (ADR-020), el campo se deshabilita, se vacia y enseña
+//    una nota en vez del hint normal, y la clave NUNCA entra en lo que se
+//    manda al guardar -nada mas de la pantalla se rompe-. El contrato de hoy
+//    no declara ese `null` (`SettingValue` es `number | string | string[]`);
+//    la comprobacion pasa por `unknown` a proposito, para no dar por hecho el
+//    tipo de una respuesta que `schema.d.ts` todavia no describe.
 import { announce } from '@kronoqr/web-kit/announcer'
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import FormField from '@kronoqr/web-kit/components/FormField.vue'
@@ -35,9 +53,12 @@ import type {
   InstallationSettings,
   UpdateSettingsRequest,
 } from '@/shared/api/types'
-import { fetchInstallationSettings, updateInstallationSettings } from './settings.api'
+import { fetchInstallationSettings, stringValue, updateInstallationSettings } from './settings.api'
 
 const { t } = useI18n()
+
+/** La forma que exige el panel para `KIOSK_SERVICE_CODE` (RF-KI-08): 8 a 12 cifras. Vacio siempre vale. */
+const SERVICE_CODE_PATTERN = /^[0-9]{8,12}$/
 
 /** Las cuatro claves `ATTENDANCE_*`, en el orden en que las declara el catalogo. */
 const ATTENDANCE_FIELDS = [
@@ -71,6 +92,18 @@ const form = ref<Record<AttendanceKey, number | string>>({
 })
 const localeDefault = ref('')
 const localeAvailable = ref<string[]>([])
+const serviceCode = ref('')
+/**
+ * Guardado DEFENSIVO (segunda vuelta de la tarea 3.3): el contrato de hoy
+ * (`SettingValue = number | string | string[]`) no admite `null`, pero un
+ * actor de SOPORTE (ADR-020) no deberia poder leer una clave confidencial
+ * como `KIOSK_SERVICE_CODE`, y la forma prevista para eso es
+ * `value: null` -la clave sigue en el catalogo, solo que sin valor legible-.
+ * En cuanto el contrato lo declare, este guardado deja de ser defensivo y
+ * pasa a ser el camino normal; hasta entonces, protege contra un servidor
+ * que ya lo sirva asi sin que `schema.d.ts` lo sepa todavia.
+ */
+const serviceCodeRedacted = ref(false)
 
 /** La fila de una clave del catalogo ya cargado, o `undefined` si no llego a resolverse. */
 function entryOf(catalog: InstallationSettings, key: string): InstallationSetting | undefined {
@@ -114,6 +147,18 @@ function rangeOf(
   return { minimum: constraints?.minimum ?? 0, maximum: constraints?.maximum ?? 0 }
 }
 
+/**
+ * `true` si el servidor devolvio `KIOSK_SERVICE_CODE` redactada: es lo que
+ * recibe un acceso de soporte del fabricante (`redacted: true`, `value: null`,
+ * tarea 3.3). Se mira la marca y no el `value`, que es lo que el contrato
+ * declara como señal (ver el comentario de `serviceCodeRedacted`).
+ */
+function isServiceCodeRedacted(catalog: InstallationSettings): boolean {
+  const entry = entryOf(catalog, 'KIOSK_SERVICE_CODE')
+
+  return entry?.redacted === true || entry?.value === null
+}
+
 function fill(catalog: InstallationSettings): void {
   settings.value = catalog
 
@@ -126,6 +171,8 @@ function fill(catalog: InstallationSettings): void {
 
   localeDefault.value = typeof storedDefault === 'string' ? storedDefault : ''
   localeAvailable.value = Array.isArray(storedAvailable) ? [...storedAvailable] : []
+  serviceCodeRedacted.value = isServiceCodeRedacted(catalog)
+  serviceCode.value = serviceCodeRedacted.value ? '' : stringValue(catalog, 'KIOSK_SERVICE_CODE')
 }
 
 async function load(): Promise<void> {
@@ -154,6 +201,7 @@ const fieldLabels = computed<Record<string, string>>(() => ({
   'settings.ATTENDANCE_DEBOUNCE_SECONDS': t('operationalSettings.fields.debounceSeconds'),
   'settings.ATTENDANCE_MAX_CLOCK_SKEW_MINUTES': t('operationalSettings.fields.maxClockSkewMinutes'),
   'settings.ATTENDANCE_MIN_TRANSIT_SECONDS': t('operationalSettings.fields.minTransitSeconds'),
+  'settings.KIOSK_SERVICE_CODE': t('operationalSettings.fields.kioskServiceCode'),
   'settings.LOCALE_DEFAULT': t('operationalSettings.fields.localeDefault'),
   'settings.LOCALE_AVAILABLE': t('operationalSettings.fields.localeAvailable'),
 }))
@@ -193,6 +241,26 @@ const invalidFields = computed(() =>
   ATTENDANCE_FIELDS.filter((field) => issueOf(field.key) !== null),
 )
 
+/**
+ * `null` (valido) con el campo vacio -«sin codigo, la pantalla se abre sin
+ * el», decision 6 de la ficha 3.3-, o si lo escrito son de 8 a 12 cifras. El
+ * `422` del servidor sigue mandando (`serviceCodeErrors` lo añade).
+ */
+const serviceCodeLocalIssue = computed<'notAServiceCode' | null>(() => {
+  const trimmed = serviceCode.value.trim()
+
+  return trimmed === '' || SERVICE_CODE_PATTERN.test(trimmed) ? null : 'notAServiceCode'
+})
+
+const serviceCodeErrors = computed<readonly string[]>(() => {
+  const local =
+    serviceCodeLocalIssue.value === null
+      ? []
+      : [t(`operationalSettings.errors.${serviceCodeLocalIssue.value}`)]
+
+  return [...local, ...serverFieldErrors('KIOSK_SERVICE_CODE')]
+})
+
 /** Un idioma no se puede desmarcar si es el que esta activo por defecto (mismo patron que `OrganisationStep`). */
 function toggleLocale(code: string): void {
   if (localeAvailable.value.includes(code)) {
@@ -224,6 +292,18 @@ const pendingChanges = computed<UpdateSettingsRequest['settings']>(() => {
     }
   }
 
+  // Redactado para este actor (guardado defensivo, ver `serviceCodeRedacted`):
+  // el campo esta deshabilitado y vacio, y NO es «la persona ha borrado el
+  // codigo» -es que no lo ve-, asi que nunca entra en lo que se manda.
+  if (!serviceCodeRedacted.value) {
+    const trimmedServiceCode = serviceCode.value.trim()
+    const previousServiceCode = stringValue(current, 'KIOSK_SERVICE_CODE')
+
+    if (serviceCodeLocalIssue.value === null && trimmedServiceCode !== previousServiceCode) {
+      changes['KIOSK_SERVICE_CODE'] = trimmedServiceCode
+    }
+  }
+
   const trimmedDefault = localeDefault.value.trim()
   const previousDefault = entryOf(current, 'LOCALE_DEFAULT')?.value
 
@@ -251,6 +331,7 @@ const canSave = computed(
   () =>
     hasChanges.value &&
     invalidFields.value.length === 0 &&
+    serviceCodeLocalIssue.value === null &&
     localeAvailable.value.length > 0 &&
     !saving.value,
 )
@@ -347,6 +428,39 @@ async function save(): Promise<void> {
       >
         {{ t('operationalSettings.affectsWorkedHoursWarning') }}
       </p>
+
+      <fieldset class="flex flex-col gap-4">
+        <legend class="text-lg font-medium text-kq-text">
+          {{ t('operationalSettings.diagnosticsHeading') }}
+        </legend>
+
+        <FormField
+          :label="t('operationalSettings.fields.kioskServiceCode')"
+          :hint="
+            serviceCodeRedacted
+              ? t('operationalSettings.hints.kioskServiceCodeRedacted')
+              : t('operationalSettings.hints.kioskServiceCode')
+          "
+          :errors="serviceCodeErrors"
+        >
+          <template #default="{ id, describedBy, invalid }">
+            <input
+              :id="id"
+              v-model="serviceCode"
+              type="text"
+              inputmode="numeric"
+              autocomplete="off"
+              spellcheck="false"
+              maxlength="12"
+              :disabled="serviceCodeRedacted"
+              data-test="kiosk-service-code"
+              :aria-describedby="describedBy"
+              :aria-invalid="invalid"
+              class="w-40 rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 font-mono text-kq-text disabled:cursor-not-allowed disabled:opacity-60"
+            />
+          </template>
+        </FormField>
+      </fieldset>
 
       <fieldset class="flex flex-col gap-4">
         <legend class="text-lg font-medium text-kq-text">

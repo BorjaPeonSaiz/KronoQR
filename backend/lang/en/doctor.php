@@ -251,6 +251,19 @@ return [
             ],
         ],
 
+        'kiosk' => [
+            'probe' => $probe,
+            'service_code' => [
+                'ok' => 'The tablets ask for a service code before opening their diagnostics screen.',
+                'warning' => 'No service code is configured, so anyone standing in front of a tablet can open '
+                    .'its diagnostics screen. That screen shows no employee data and never the tablet key, but '
+                    .'it does say whether there is network, how many clock-ins are still unsent and which '
+                    .'version is running. Nothing is broken: this is how the product ships.',
+                'warning_unavailable' => 'Could not check whether a service code is configured for the tablet '
+                    .'diagnostics screen. Clocking in is unaffected.',
+            ],
+        ],
+
         'license' => [
             'probe' => $probe,
             'state' => [
@@ -510,6 +523,18 @@ return [
                 'warning' => "Nothing is broken. If the value you want is the one in the .env file, change it in\n"
                     ."the panel under Settings, which is what wins. If the one you want is the panel value,\n"
                     .'remove or fix those lines in the .env file so they stop misleading whoever reads it.',
+            ],
+        ],
+
+        'kiosk' => [
+            'probe' => $probeFix,
+            'service_code' => [
+                'warning' => "Go to the panel, under Operational settings, and type a code of 8 to 12 digits in\n"
+                    ."«Kiosk service code». The tablets pick it up on their own in under a minute.\n"
+                    ."Write it down wherever whoever maintains the kiosks keeps it, and do not stick it on the\n"
+                    .'tablet itself. If you would rather leave the screen open to everyone, ignore this warning.',
+                'warning_unavailable' => "Run `php artisan product:doctor` again once the database responds.\n"
+                    .'If it persists, look first at the database checks in this same report.',
             ],
         ],
 

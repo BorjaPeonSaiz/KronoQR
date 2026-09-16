@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 use App\Modules\Identity\Domain\ValueObject\TokenAbility;
 use App\Modules\Product\Domain\ValueObject\SupportScope;
+use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
+use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Product\SupportGrants;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -31,6 +33,25 @@ beforeEach(function (): void {
     WorkforceFixtures::site();
     LicenseKeys::install();
 });
+
+/**
+ * Una clave de la respuesta de `GET /api/v1/settings`, por su nombre.
+ *
+ * Falla con el nombre delante en vez de devolver `null`: una clave que
+ * desapareciera de la respuesta dejaria la prueba comparando contra nada.
+ *
+ * @return array<string, mixed>
+ */
+function ajusteServido(mixed $data, string $key): array
+{
+    foreach (is_array($data) ? $data : [] as $fila) {
+        if (is_array($fila) && ($fila['key'] ?? null) === $key) {
+            return $fila;
+        }
+    }
+
+    throw new RuntimeException('GET /api/v1/settings no devolvio la clave '.$key.'.');
+}
 
 /** El registro horario de una persona: lo que `read_only` puede leer y los otros dos no. */
 function unaJornadaAjena(): string
@@ -282,6 +303,110 @@ it('configuration NO cambia el perfil de cumplimiento', function (): void {
         ->patch('/api/v1/compliance-profile', ['retention_years' => 6])
         ->assertStatus(403);
 })->group('RF-PD-11', 'RL-01', 'RL-02');
+
+// --- Los secretos del cliente no son configuracion (RF-KI-08, ADR-020) -------
+
+/*
+ * EL FABRICANTE CONFIGURA LA INSTALACION; NO SE LLEVA SUS SECRETOS.
+ *
+ * `KIOSK_SERVICE_CODE` es el codigo con el que se abre la pantalla de
+ * mantenimiento de **todas** las tablets del hotel (RF-KI-08, tarea 3.3). Un
+ * acceso de soporte con alcance `configuration` entra en `/settings` a
+ * proposito —para eso se concede— pero ese valor no es un umbral ni un idioma:
+ * es una llave que la tablet guarda y que **no caduca con la concesion**.
+ *
+ * Las dos mitades tienen que decir lo mismo (ADR-020, regla dura 16): no se lee
+ * y no se escribe. Y la fila sigue apareciendo, porque ocultarla diria «ese
+ * ajuste no existe» y soporte tiene que poder decirle al cliente «eso lo tienes
+ * puesto, miralo tu».
+ */
+
+it('sirve el codigo de servicio redactado a los tres alcances de soporte', function (SupportScope $scope): void {
+    // Los tres, aunque hoy solo `configuration` llegue por ambito: si mañana se
+    // amplia un alcance, esta prueba ya cubre el caso en lugar de descubrirlo el
+    // dia en que alguien lo use.
+    $admin = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN));
+
+    Api::as($admin)
+        ->patch('/api/v1/settings', ['settings' => ['KIOSK_SERVICE_CODE' => '48392017']])
+        ->assertStatus(200);
+
+    $respuesta = Api::as(SupportGrants::tokenWithAbilities([TokenAbility::SETTINGS_ALL->value], $scope))
+        ->get('/api/v1/settings')
+        ->assertOk();
+
+    $codigo = ajusteServido($respuesta->json('data'), 'KIOSK_SERVICE_CODE');
+    $antirrebote = ajusteServido($respuesta->json('data'), 'ATTENDANCE_DEBOUNCE_SECONDS');
+
+    expect($codigo['value'])->toBeNull()
+        ->and($codigo['redacted'])->toBeTrue()
+        // La fila NO desaparece: su tipo, su origen y sus restricciones siguen
+        // ahi para que soporte pueda explicar de que se trata.
+        ->and($codigo['source'])->toBe('installation')
+        ->and($codigo['type'])->toBe('text')
+        // Y el codigo no se cuela por ningun otro campo de la respuesta.
+        ->and((string) $respuesta->getContent())->not->toContain('48392017');
+
+    // El guarda del guarda: lo que NO es secreto se sigue viendo entero, o el
+    // alcance `configuration` no serviria para nada.
+    expect($antirrebote['value'])->toBe(60)
+        ->and($antirrebote['redacted'])->toBeFalse();
+})->with(SupportScope::cases())->group('RF-PD-11', 'RF-KI-08', 'RS-04');
+
+it('no deja que un actor de soporte escriba el codigo de servicio', function (): void {
+    // `403` y no `422`: un error de validacion le confirmaria la forma que tiene
+    // ese valor, y quien no puede tocar una clave tampoco tiene por que aprender
+    // como se escribe.
+    $token = SupportGrants::tokenFor(SupportScope::Configuration);
+
+    Api::as($token)
+        ->patch('/api/v1/settings', ['settings' => ['KIOSK_SERVICE_CODE' => '900112233']])
+        ->assertStatus(403);
+
+    // Ni mezclada con una clave que si puede tocar: la peticion entera cae.
+    Api::as($token)
+        ->patch('/api/v1/settings', [
+            'settings' => [
+                'ATTENDANCE_DEBOUNCE_SECONDS' => 90,
+                'KIOSK_SERVICE_CODE' => '900112233',
+            ],
+        ])
+        ->assertStatus(403);
+
+    expect(DB::table('installation_settings')->where('key', 'KIOSK_SERVICE_CODE')->exists())->toBeFalse()
+        ->and(DB::table('installation_settings')->where('key', 'ATTENDANCE_DEBOUNCE_SECONDS')->exists())->toBeFalse();
+})->group('RF-PD-11', 'RF-KI-08', 'RS-04');
+
+it('deja que un actor de soporte cambie lo que si es configuracion', function (): void {
+    // El control positivo, y es el que hace significativos los dos `403` de
+    // arriba: sin el, pasarian igual si `configuration` hubiera dejado de poder
+    // tocar la configuracion entera — que es justo lo contrario de lo que ese
+    // alcance significa (RF-PD-11).
+    Api::as(SupportGrants::tokenFor(SupportScope::Configuration))
+        ->patch('/api/v1/settings', ['settings' => ['ATTENDANCE_DEBOUNCE_SECONDS' => 90]])
+        ->assertStatus(200);
+
+    expect(DB::table('installation_settings')->where('key', 'ATTENDANCE_DEBOUNCE_SECONDS')->exists())->toBeTrue();
+})->group('RF-PD-11');
+
+it('sigue enseñando el codigo de servicio al administrador del cliente', function (): void {
+    // La otra mitad, y la que impide «arreglarlo» redactando para todos: quien
+    // lo escribio tiene que poder leerlo en la pantalla donde lo escribio, o el
+    // ajuste seria de un solo uso.
+    $admin = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN));
+
+    Api::as($admin)
+        ->patch('/api/v1/settings', ['settings' => ['KIOSK_SERVICE_CODE' => '48392017']])
+        ->assertStatus(200)
+        ->assertJsonPath('data.9.key', 'KIOSK_SERVICE_CODE')
+        ->assertJsonPath('data.9.value', '48392017')
+        ->assertJsonPath('data.9.redacted', false);
+
+    Api::as($admin)->get('/api/v1/settings')
+        ->assertOk()
+        ->assertJsonPath('data.9.value', '48392017')
+        ->assertJsonPath('data.9.redacted', false);
+})->group('RF-PD-01', 'RF-KI-08');
 
 // --- Cerrar sesion no es revocar (ADR-020) -----------------------------------
 

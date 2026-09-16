@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Product\Domain\ValueObject;
 
+use App\Modules\Product\Domain\Event\InstallationSettingChanged;
 use App\Modules\Product\Domain\Exception\InvalidSettingValue;
 
 /**
@@ -27,6 +28,36 @@ use App\Modules\Product\Domain\Exception\InvalidSettingValue;
  * con una expresion regular, o una de texto con maximo y minimo numericos, son
  * estados imposibles: aqui no se pueden construir, en lugar de validarse mas
  * tarde.
+ *
+ * ## `confidential`: el valor tiene UNA sola salida
+ *
+ * Una cuarta propiedad, y vive aqui por lo mismo que las otras tres: si la
+ * decision de no copiar un valor estuviera repartida por el listener de
+ * auditoria, el coleccionista del diagnostico y la consulta de la exportacion,
+ * la clave siguiente que hubiera que proteger se olvidaria en alguno de los
+ * tres. Marcada aqui, las cuatro salidas la respetan a la vez:
+ *
+ * | Salida | Que sale |
+ * |---|---|
+ * | `audit_log` ({@see InstallationSettingChanged}) | **Que la clave cambio**, con autor y momento; `value_redacted: true` en lugar del antes y el despues. |
+ * | Paquete de diagnostico (`DiagnosticsConfigurationAllowlist`, `SettingsDrift`) | Nada. La clave no esta en la lista de permitidos y la diferencia con el `.env` publica el nombre, nunca los valores. |
+ * | Logs (`SettingsTelemetry`) | Solo el nombre de la clave, como con todas. |
+ * | Exportacion integra (`DataExportCatalog`, RF-PD-14) | La fila, con `value` nulo y `value_redacted: true`. |
+ *
+ * **La unica superficie que muestra el valor es `GET /api/v1/settings` servido a
+ * un `admin` DEL CLIENTE**, que es quien lo escribio y en la pantalla donde lo
+ * escribio. A un actor de soporte se le sirve `value: null` y `redacted: true`
+ * (`Http\Resource\SettingResource`; sin `{@see}`, porque una referencia
+ * resoluble desde `Domain/` hacia `Http/` es una arista que Deptrac prohibe
+ * —regla dura 1— aunque solo viva en un comentario), y un `PATCH` suyo
+ * que la toque recibe `403`: el fabricante configura la instalacion, no se lleva
+ * sus secretos (ADR-020, regla dura 16).
+ *
+ * Hoy la lleva `KIOSK_SERVICE_CODE` (RF-KI-08): es un secreto compartido con
+ * cada tablet del hotel, y tanto `audit_log` como el ZIP de la exportacion se
+ * enseñan, se archivan y se reenvian. Que quede constancia de quien lo cambio y
+ * cuando es lo que exige RL-04; el valor en si no aporta nada a esa pregunta y
+ * si abre una via para leerlo.
  */
 final readonly class SettingDefinition
 {
@@ -44,6 +75,7 @@ final readonly class SettingDefinition
         public ?array $allowed,
         public int $maximumLength,
         public bool $allowsEmpty,
+        public bool $confidential = false,
     ) {}
 
     /**
@@ -66,11 +98,25 @@ final readonly class SettingDefinition
 
     /**
      * Una cadena que puede estar vacia, y cuyo vacio **significa algo**: la ruta
-     * del logotipo vacia es «el logotipo del producto», no «sin logotipo».
+     * del logotipo vacia es «el logotipo del producto», no «sin logotipo»; el
+     * codigo de servicio vacio es «la pantalla de diagnostico se abre sin
+     * codigo», no «no hay pantalla».
+     *
+     * **La forma exigida no se comprueba sobre el vacio**, y es deliberado: el
+     * vacio es un valor legitimo de estas claves y se acepta antes de llegar al
+     * patron. Un `^[0-9]{8,12}$` que rechazara la cadena vacia haria imposible
+     * **quitar** un codigo ya configurado.
      */
-    public static function optionalText(string $default, int $maximumLength, SettingImpact $impact): self
-    {
-        return new self(SettingType::TEXT, $default, $impact, null, null, null, null, $maximumLength, true);
+    public static function optionalText(
+        string $default,
+        int $maximumLength,
+        SettingImpact $impact,
+        ?string $pattern = null,
+        bool $confidential = false,
+    ): self {
+        return new self(
+            SettingType::TEXT, $default, $impact, null, null, $pattern, null, $maximumLength, true, $confidential,
+        );
     }
 
     /**

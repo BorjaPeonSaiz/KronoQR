@@ -4131,6 +4131,23 @@ export interface components {
              */
             oldest_pending_at?: components["schemas"]["UtcTimestamp"];
             /**
+             * @description Nivel de bateria en tanto por ciento, tal y como lo declara la Battery
+             *     Status API del navegador (RF-PA-07, tarea 3.3). Opcional y admite
+             *     `null`: solo Chrome en Android la ofrece, y una tablet que no informa
+             *     no es una tablet averiada. El servidor lo guarda tal cual en
+             *     `devices.battery_level`; la ultima lectura es la que se muestra.
+             * @example 83
+             */
+            battery_level?: number | null;
+            /**
+             * @description Si la tablet esta enchufada. Con `battery_level` es lo que distingue
+             *     «al 15 % cargando», que es normal, de «al 15 % descargandose», que es
+             *     una tablet a la que alguien ha quitado el cargador y morira durante el
+             *     turno. `null` cuando el navegador no lo sabe.
+             * @example true
+             */
+            battery_charging?: boolean | null;
+            /**
              * @description Errores de la propia tablet desde el ultimo latido (RF-PD-15, tarea
              *     5.12). **En el latido y no en una llamada propia**: el quiosco no abre
              *     otro canal de red que compita con la sincronizacion de la cola en un
@@ -4154,6 +4171,22 @@ export interface components {
          *     cliente ha aceptado.
          */
         KioskHeartbeat: {
+            /**
+             * @description Huella del codigo de servicio con el que se abre la pantalla de
+             *     diagnostico de la tablet (RF-KI-08, tarea 3.3): SHA-256 en hexadecimal
+             *     de `"{uuid del dispositivo}:{codigo}"`, donde el codigo es el ajuste
+             *     `KIOSK_SERVICE_CODE` de la instalacion. `null` mientras la instalacion
+             *     no tenga codigo; entonces la pantalla se abre sin el.
+             *
+             *     **Viaja en el latido y no en el padron** porque el padron es «dos
+             *     campos y ni uno mas» (RL-12) y el latido es el unico canal
+             *     autenticado que la tablet repite cada minuto: un codigo cambiado en el
+             *     panel llega a todas las tablets en sesenta segundos. La tablet guarda
+             *     la huella y comprueba el codigo **en local**, de modo que la pantalla
+             *     de diagnostico funciona sin red. Nunca viaja el codigo en claro.
+             * @example 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+             */
+            service_code_hash: string | null;
             /**
              * @description Cuantos elementos de `client_errors` se han persistido. La tablet vacia
              *     de su buffer **solo esos** (`acknowledge(n)`), de modo que un latido
@@ -4570,22 +4603,130 @@ export interface components {
              *     emparejamiento por codigo: no se inventa una fecha para ellos.
              */
             paired_at: components["schemas"]["UtcTimestamp"] | null;
+            /**
+             * @description `occurred_at` del fichaje mas antiguo de la cola que el dispositivo
+             *     declaro en su ultimo latido (tarea 3.3). Convierte «37 pendientes» en
+             *     «el mas antiguo es de hace tres horas», que es la diferencia entre una
+             *     sincronizacion en curso y un quiosco que lleva media jornada
+             *     incomunicado. `null` con la cola vacia o sin latido.
+             */
+            oldest_pending_at: components["schemas"]["UtcTimestamp"] | null;
+            /**
+             * @description Nivel de bateria declarado en el ultimo latido (RF-PA-07). `null` si
+             *     la tablet no lo informa o nunca ha latido.
+             * @example 83
+             */
+            battery_level: number | null;
+            /**
+             * @description Si la tablet estaba enchufada en el ultimo latido. `null` si no lo
+             *     informa.
+             */
+            battery_charging: boolean | null;
+            health: components["schemas"]["DeviceHealth"];
+        };
+        /**
+         * DeviceHealth
+         * @description El veredicto de salud del quiosco, **calculado por el servidor con la misma
+         *     regla que `php artisan kiosk:health`** (`KioskHealthRow`) y con los mismos
+         *     umbrales que la alerta «Quiosco sin latido > 10 min» del documento 01
+         *     §9.3, de modo que panel, consola y alerta cuentan lo mismo (tarea 3.3).
+         *
+         *     **«Sin latido» no es «sin fichar»** (regla dura 19): un quiosco
+         *     silencioso puede seguir registrando en su cola local. El veredicto dice
+         *     que hay que ir a mirarlo, no que se haya perdido nada.
+         */
+        DeviceHealth: {
+            /**
+             * @description `ok` late y no debe nada; `warning` late tarde, tiene cola, se
+             *     descarga o acaba de vincularse; `failure` lleva mas de
+             *     `silent_after_seconds` callado o nunca ha hablado; `revoked` esta
+             *     desvinculado y no cuenta para nada.
+             * @enum {string}
+             */
+            verdict: "ok" | "warning" | "failure" | "revoked";
+            /**
+             * @description **Una sola razon, la mas grave**, en este orden: `revoked`,
+             *     `never_seen` (sin latido y vinculado hace mas de
+             *     `silent_after_seconds`), `awaiting_first_heartbeat` (sin latido pero
+             *     recien vinculado), `silent` (callado mas de `silent_after_seconds`),
+             *     `late` (mas de `fresh_within_seconds`), `battery_low` (por debajo de
+             *     `battery_low_percent` **y sin cargar**), `queue_pending`, `beating`.
+             * @enum {string}
+             */
+            reason: "beating" | "queue_pending" | "late" | "silent" | "awaiting_first_heartbeat" | "never_seen" | "revoked" | "battery_low";
+            /**
+             * @description Segundos entre `meta.generated_at` y `last_seen_at`, calculados con el
+             *     reloj del servidor. `null` sin latido. Es la misma cifra que
+             *     `kiosk_last_seen_seconds` (§8.2) convertida a antiguedad.
+             */
+            seconds_since_last_seen: number | null;
+        };
+        /**
+         * DeviceListMeta
+         * @description Lo que el panel necesita para leer la lista con el reloj del servidor y
+         *     con los umbrales reales de la instalacion (tarea 3.3).
+         */
+        DeviceListMeta: {
+            /**
+             * @description Instante del servidor en que se calculo la lista. **El panel mide la
+             *     antiguedad de cada latido contra este instante**, extrapolado con el
+             *     tiempo transcurrido desde que recibio la respuesta, y nunca contra el
+             *     reloj del navegador (regla dura 3).
+             */
+            generated_at: components["schemas"]["UtcTimestamp"];
+            /**
+             * @description Zona horaria del centro (IANA), en la que el panel muestra los
+             *     instantes. La lista lleva los instantes en UTC como todo el contrato.
+             * @example Europe/Madrid
+             */
+            timezone: string;
+            thresholds: components["schemas"]["KioskHealthThresholds"];
+        };
+        /**
+         * KioskHealthThresholds
+         * @description Los umbrales con los que se calculo `health`, tal y como los fija la
+         *     instalacion (`KIOSK_HEALTH_FRESH_WITHIN_SECONDS`,
+         *     `KIOSK_HEALTH_SILENT_AFTER_SECONDS`, `KIOSK_HEALTH_BATTERY_LOW_PERCENT`),
+         *     para que la leyenda del panel diga la cifra real y no una supuesta.
+         */
+        KioskHealthThresholds: {
+            /**
+             * @description Hasta cuantos segundos sin latido el quiosco esta al dia.
+             * @example 120
+             */
+            fresh_within_seconds: number;
+            /**
+             * @description A partir de cuantos segundos sin latido el quiosco esta en fallo. Es
+             *     el mismo valor que la alerta «Quiosco sin latido» de Prometheus.
+             * @example 600
+             */
+            silent_after_seconds: number;
+            /**
+             * @description Nivel por debajo del cual, sin cargar, el quiosco avisa.
+             * @example 15
+             */
+            battery_low_percent: number;
         };
         /**
          * DeviceList
          * @description Los quioscos de la instalacion, activos y revocados, en una sola respuesta.
          *
-         *     **Sin paginacion y sin `meta`.** Una instalacion es un hotel
+         *     **Sin paginacion.** Una instalacion es un hotel
          *     ([ADR-040](../adr/ADR-040-un-centro-por-instalacion-y-por-licencia.md)) con
          *     unos pocos quioscos: paginar una lista que cabe entera en la pantalla solo
-         *     añadiria un contrato que nadie usaria. Si algun dia hiciera falta, añadir
-         *     `meta` es aditivo sobre la v1 (ADR-012).
+         *     añadiria un contrato que nadie usaria.
+         *
+         *     **Con `meta` desde la tarea 3.3** (aditivo sobre la v1, ADR-012): el reloj
+         *     del servidor, la zona del centro y los umbrales de salud, sin los cuales
+         *     el panel tendria que medir con el reloj del navegador y suponer el umbral
+         *     de la alerta.
          *
          *     **Se envuelve en un objeto y no es un array desnudo**, por lo mismo: una
          *     respuesta que ya es un array no admite crecer sin romper a quien la lee.
          */
         DeviceList: {
             devices: components["schemas"]["Device"][];
+            meta: components["schemas"]["DeviceListMeta"];
         };
         /**
          * PairingCodeRejected
@@ -5285,9 +5426,16 @@ export interface components {
          *     una tarjeta ya impresa, naturalmente, no cambia. Ninguna de las nueve
          *     tiene ya una variable de entorno que la sustituya: `BRANDING_NAME` y
          *     `BRANDING_ACCENT_COLOR` del Anexo B se retiraron en la 5.8.
+         *
+         *     `KIOSK_SERVICE_CODE` (tarea 3.3, RF-KI-08) es el codigo numerico de 8 a
+         *     12 cifras con el que se abre la pantalla de diagnostico de la tablet.
+         *     Vacio de serie: sin codigo, la pantalla se abre sin el. El quiosco no
+         *     recibe nunca el codigo, solo su huella por `POST /api/v1/kiosk/heartbeat`
+         *     (`service_code_hash`). Es la unica clave cuyo valor no se copia al
+         *     asiento de auditoria ni al paquete de diagnostico.
          * @enum {string}
          */
-        SettingKey: "ATTENDANCE_MAX_SHIFT_HOURS" | "ATTENDANCE_DEBOUNCE_SECONDS" | "ATTENDANCE_MAX_CLOCK_SKEW_MINUTES" | "ATTENDANCE_MIN_TRANSIT_SECONDS" | "BRANDING_APP_NAME" | "BRANDING_LOGO_PATH" | "BRANDING_ACCENT_COLOR" | "LOCALE_DEFAULT" | "LOCALE_AVAILABLE";
+        SettingKey: "ATTENDANCE_MAX_SHIFT_HOURS" | "ATTENDANCE_DEBOUNCE_SECONDS" | "ATTENDANCE_MAX_CLOCK_SKEW_MINUTES" | "ATTENDANCE_MIN_TRANSIT_SECONDS" | "BRANDING_APP_NAME" | "BRANDING_LOGO_PATH" | "BRANDING_ACCENT_COLOR" | "LOCALE_DEFAULT" | "LOCALE_AVAILABLE" | "KIOSK_SERVICE_CODE";
         /**
          * SettingValue
          * @description El valor de una clave. `installation_settings.value` es `JSONB` porque el
@@ -5372,7 +5520,37 @@ export interface components {
          */
         InstallationSetting: {
             key: components["schemas"]["SettingKey"];
-            value: components["schemas"]["SettingValue"];
+            /**
+             * @description El valor vigente de la clave.
+             *
+             *     **`null` significa «no se te muestra», nunca «no vale nada»**
+             *     (tarea 3.3): ocurre en una clave marcada como secreta —hoy solo
+             *     `KIOSK_SERVICE_CODE`— cuando quien consulta es un **acceso de
+             *     soporte del fabricante**. En ese caso `redacted` vale `true` y la
+             *     fila sigue apareciendo con su tipo, su origen y sus restricciones,
+             *     para que soporte pueda decirle al cliente «eso lo tienes puesto,
+             *     miralo tu» sin verlo.
+             *
+             *     A un `admin` de la instalacion se le sirve siempre el valor: es quien
+             *     lo escribio y esta es la pantalla donde lo escribio.
+             */
+            value: components["schemas"]["SettingValue"] | null;
+            /**
+             * @description Si el valor se ha retirado de esta respuesta a proposito (tarea 3.3,
+             *     RF-KI-08, ADR-020, regla dura 16).
+             *
+             *     **Va siempre y vale `false` en casi todo.** Solo es `true` en una
+             *     clave secreta servida a un acceso de soporte, y entonces `value` es
+             *     `null`. Un campo que apareciera solo cuando es `true` obligaria al
+             *     panel a distinguir «ausente» de «falso», que es como se acaba
+             *     enseñando un hueco como si fuera el valor.
+             *
+             *     Campo **aditivo** sobre `/api/v1`
+             *     ([ADR-012](../adr/ADR-012-api-versionada-en-la-ruta.md)): un cliente
+             *     que no lo conozca lo ignora y sigue leyendo `value`.
+             * @default false
+             */
+            redacted: boolean;
             type: components["schemas"]["SettingType"];
             impact: components["schemas"]["SettingImpact"];
             /**

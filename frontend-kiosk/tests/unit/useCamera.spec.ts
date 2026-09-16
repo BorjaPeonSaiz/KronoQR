@@ -7,14 +7,19 @@ interface FakeTrack {
   stop: ReturnType<typeof vi.fn>
   applyConstraints: ReturnType<typeof vi.fn>
   getCapabilities: ReturnType<typeof vi.fn>
+  getSettings: ReturnType<typeof vi.fn>
 }
 
-function fakeTrack(capabilities: MediaTrackCapabilities = {}): FakeTrack {
+function fakeTrack(
+  capabilities: MediaTrackCapabilities = {},
+  settings: MediaTrackSettings = {},
+): FakeTrack {
   return {
     kind: 'video',
     stop: vi.fn(),
     applyConstraints: vi.fn(async () => undefined),
     getCapabilities: vi.fn(() => capabilities),
+    getSettings: vi.fn(() => settings),
   }
 }
 
@@ -177,5 +182,51 @@ describe('control explicito del MediaStream', () => {
     expect(await result.start()).toBeNull()
     expect(result.state.value).toBe('unavailable')
     wrapper.unmount()
+  })
+
+  describe('ajustes reales de la pista (RF-KI-08, tarea 3.3)', () => {
+    it('sin camara abierta, null', () => {
+      const { result, wrapper } = withSetup(() => useCamera())
+      expect(result.settings()).toBeNull()
+      wrapper.unmount()
+    })
+
+    it('con camara abierta, lo que devuelve getSettings de la pista', async () => {
+      const track = fakeTrack(
+        { focusMode: ['continuous'], zoom: { min: 1, max: 4 } },
+        {
+          width: 1280,
+          height: 720,
+          frameRate: 30,
+          facingMode: 'environment',
+          focusMode: 'continuous',
+        },
+      )
+      installMediaDevices(async () => fakeStream([track]))
+
+      const { result, wrapper } = withSetup(() => useCamera())
+      await result.start()
+
+      expect(result.settings()).toEqual({
+        width: 1280,
+        height: 720,
+        frameRate: 30,
+        facingMode: 'environment',
+        focusMode: 'continuous',
+      })
+      wrapper.unmount()
+    })
+
+    it('vuelve a null tras parar la camara', async () => {
+      const track = fakeTrack({}, { width: 1280, height: 720 })
+      installMediaDevices(async () => fakeStream([track]))
+
+      const { result, wrapper } = withSetup(() => useCamera())
+      await result.start()
+      result.stop()
+
+      expect(result.settings()).toBeNull()
+      wrapper.unmount()
+    })
   })
 })

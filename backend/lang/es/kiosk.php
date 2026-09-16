@@ -62,7 +62,21 @@ return [
             'version' => 'Version',
             'last_seen' => 'Ultimo contacto',
             'queue' => 'Cola',
+            'battery' => 'Bateria',
             'verdict' => 'Veredicto',
+        ],
+
+        /*
+         * La bateria de la tablet (tarea 3.3).
+         *
+         * `unknown` NO es cero: es «este navegador no informa», que es el caso de
+         * todo lo que no sea Chrome en Android. Escribir «0 %» ahi pondria media
+         * flota en aviso el primer dia.
+         */
+        'battery' => [
+            'level' => ':level %',
+            'charging' => ':level % (cargando)',
+            'unknown' => '—',
         ],
 
         // El catalogo real de `devices.status` (doc 01 §5.5): dos valores.
@@ -118,6 +132,9 @@ return [
                 .'la tablet recoge su token sola. Vuelve a ejecutar este comando en un minuto.',
             'never_seen' => 'Vinculado y sin haber latido NUNCA. La tablet no llego a recoger su token o no llega al servidor: '
                 .'comprueba que la aplicacion esta abierta y que la URL del servidor es la correcta.',
+            'battery_low' => 'Le queda un :level % de bateria y NO esta cargando. Casi siempre es un cargador desenchufado '
+                .'o un cable que se ha soltado: enchufalo antes de que se apague en mitad del turno. '
+                .'Mientras tenga bateria sigue fichando con normalidad.',
         ],
 
         'fleet_empty' => 'Todavia no hay ningun quiosco vinculado. Vincula el primero desde el panel, '

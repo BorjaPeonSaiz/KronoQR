@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Kiosk\Infrastructure\Persistence;
 
 use App\Modules\Kiosk\Application\Port\DeviceFleet;
+use App\Modules\Kiosk\Domain\ValueObject\HeartbeatTelemetry;
 use DateTimeImmutable;
 use Illuminate\Support\Facades\DB;
 
@@ -26,13 +27,14 @@ use Illuminate\Support\Facades\DB;
  * Porque un segundo modelo `Device` sobre la misma tabla —con sus `fillable`, sus
  * `casts` y sus `hidden`— seria una segunda definicion de la fila que habria que
  * mantener sincronizada con la de `Identity` sin que nada lo verifique. Aqui se
- * tocan tres columnas de telemetria y ninguna mas: para eso, un `UPDATE`
+ * tocan las columnas de telemetria y ninguna mas: para eso, un `UPDATE`
  * explicito dice mas y esconde menos.
  *
  * ## Una sola sentencia
  *
  * Sin leer antes para escribir despues. No hay nada que decidir con el valor
- * anterior —los tres campos se sustituyen— y un `SELECT` previo seria una
+ * anterior —todos los campos se sustituyen, incluido un `NULL` que significa «el
+ * navegador ya no informa de la bateria»— y un `SELECT` previo seria una
  * condicion de carrera con dos quioscos... que no existe, porque solo un
  * dispositivo late por si mismo. Pero seguiria siendo una consulta de mas en un
  * endpoint que se llama cada minuto por cada tablet del hotel.
@@ -46,17 +48,34 @@ final readonly class DbDeviceFleet implements DeviceFleet
 {
     public function recordHeartbeat(
         int $deviceId,
-        string $appVersion,
-        int $pendingQueueSize,
+        HeartbeatTelemetry $telemetry,
         DateTimeImmutable $seenAt,
     ): void {
+        $now = $this->timestamp($seenAt);
+
         DB::table('devices')
             ->where('id', $deviceId)
             ->update([
-                'last_seen_at' => $seenAt->format('Y-m-d H:i:s.uP'),
-                'app_version' => $appVersion,
-                'pending_queue_size' => $pendingQueueSize,
-                'updated_at' => $seenAt->format('Y-m-d H:i:s.uP'),
+                'last_seen_at' => $now,
+                'app_version' => $telemetry->appVersion,
+                'pending_queue_size' => $telemetry->pendingQueueSize,
+                // Las tres columnas de la tarea 3.3. Se escriben SIEMPRE, tambien
+                // cuando valen `NULL`: dejar el valor anterior haria que una cola
+                // ya drenada siguiera diciendo «el mas antiguo es de hace tres
+                // horas» y que una tablet que dejo de informar de su bateria
+                // conservase para siempre el ultimo nivel que dijo.
+                'oldest_pending_at' => $telemetry->oldestPendingAt === null
+                    ? null
+                    : $this->timestamp($telemetry->oldestPendingAt),
+                'battery_level' => $telemetry->batteryLevel,
+                'battery_charging' => $telemetry->batteryCharging,
+                'updated_at' => $now,
             ]);
+    }
+
+    /** El formato que PostgreSQL espera en una columna `TIMESTAMPTZ(6)`. */
+    private function timestamp(DateTimeImmutable $instant): string
+    {
+        return $instant->format('Y-m-d H:i:s.uP');
     }
 }

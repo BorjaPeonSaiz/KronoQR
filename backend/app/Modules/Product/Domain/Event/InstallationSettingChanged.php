@@ -37,6 +37,13 @@ use DateTimeImmutable;
  * sesion en curso, porque es una propiedad de la peticion y no del hecho, igual
  * que en el resto de los eventos del producto.
  *
+ * **Salvo cuando la clave es `confidential`** (tarea 3.3). Entonces el antes y el
+ * despues llegan vacios y `valueRedacted` vale `true`: queda constancia de que
+ * alguien cambio el codigo de servicio del quiosco, con su autor y su momento,
+ * y no de cual es. Un `audit_log` que se enseña en una inspeccion no es sitio
+ * para un secreto compartido con cada tablet del hotel, y el valor no aporta
+ * nada a la pregunta que ese asiento responde.
+ *
  * `wasProductDefault` distingue «se subio de 12 a 10» de «nadie lo habia tocado
  * nunca y ahora vale 10». Son indistinguibles en la cifra anterior —el valor de
  * serie tambien es 12— y muy distintos en la conversacion: en el primer caso
@@ -60,6 +67,19 @@ final readonly class InstallationSettingChanged implements DomainEvent
         /** Si antes no habia fila y regia el valor de serie del producto. */
         public bool $wasProductDefault,
         private DateTimeImmutable $occurredAt,
+        /**
+         * La clave es `confidential` y **sus valores no viajan en este evento**
+         * (tarea 3.3, decision 6).
+         *
+         * Cuando vale `true`, `previousValue` y `newValue` llegan ya vacios: el
+         * secreto no se transporta para despues confiar en que nadie lo escriba.
+         * El asiento registra que la clave cambio, quien y cuando —que es lo que
+         * pide RL-04— y no a que.
+         *
+         * Hoy solo `KIOSK_SERVICE_CODE`: es un secreto compartido con cada
+         * tablet del hotel y `audit_log` se enseña en una inspeccion.
+         */
+        public bool $valueRedacted = false,
     ) {}
 
     /**

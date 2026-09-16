@@ -7,6 +7,7 @@ namespace App\Modules\Kiosk\Http\Request;
 use App\Exceptions\ProblemDetails;
 use App\Http\Requests\RejectsUnknownInput;
 use App\Modules\Kiosk\Application\Command\RecordHeartbeatCommand;
+use App\Modules\Kiosk\Domain\ValueObject\HeartbeatTelemetry;
 use App\Modules\Kiosk\Http\Policy\KioskPolicy;
 use App\Modules\Kiosk\Http\Support\KioskDevice;
 use App\Modules\Shared\Domain\ValueObject\ClientErrorCode;
@@ -25,11 +26,21 @@ use Illuminate\Http\Exceptions\HttpResponseException;
  *
  * ## Que se valida y por que tan poco
  *
- * Los tres campos de telemetria son **declarados por el propio dispositivo** y
+ * Los campos de telemetria son **declarados por el propio dispositivo** y
  * ninguno influye en el registro horario: lo que se comprueba es que no puedan
  * hacer daño —longitudes, rangos, formato de instante—, no que sean ciertos. Un
  * quiosco que mienta sobre su cola ensucia el panel de salud y no cambia ni un
  * fichaje.
+ *
+ * ## La bateria es opcional Y admite `null`, que no es lo mismo
+ *
+ * `sometimes` cubre la tablet que no manda el campo; `nullable`, la que lo manda
+ * a `null` porque su navegador no implementa la Battery Status API —solo Chrome
+ * en Android la ofrece—. Los dos casos significan «no lo se» y ninguno es un
+ * error de forma: rechazar el latido de una tablet por no saber su bateria seria
+ * apagar la unica senal de que sigue viva (regla dura 19, tarea 3.3). El rango
+ * 0..100 si se exige, porque un numero fuera de el acabaria en la metrica
+ * `kiosk_battery_level` y en la columna del panel.
  *
  * `pending_queue_size` lleva techo por la misma razon que `qr_payload` lleva
  * longitud maxima: es proteccion de recursos, no validacion de negocio. Una cola
@@ -38,9 +49,10 @@ use Illuminate\Http\Exceptions\HttpResponseException;
  *
  * ## `oldest_pending_at`, en UTC como todo lo demas
  *
- * Regla dura 3: solo se acepta el sufijo `Z`. Aqui el motivo es mas debil que en
- * un fichaje —no se persiste, solo alimenta el diagnostico— pero la excepcion
- * seria peor que la regla: dos formatos de instante en la misma API son dos
+ * Regla dura 3: solo se acepta el sufijo `Z`. **Desde la tarea 3.3 se persiste**
+ * —hasta entonces se validaba y se tiraba—, asi que el motivo ya no es solo de
+ * coherencia: es la columna que convierte «37 pendientes» en «el mas antiguo es
+ * de hace tres horas». Dos formatos de instante en la misma API serian dos
  * formatos que alguien tendra que distinguir a mano algun dia.
  *
  * ## `client_errors`: el cuarto campo, y el unico que se persiste
@@ -104,6 +116,13 @@ final class KioskHeartbeatRequest extends FormRequest
             'app_version' => ['required', 'string', 'min:1', 'max:32', 'regex:'.self::APP_VERSION],
             'pending_queue_size' => ['required', 'integer', 'min:0', 'max:100000'],
             'oldest_pending_at' => ['sometimes', 'string', 'regex:'.self::UTC_INSTANT],
+            // `nullable` porque el contrato admite explicitamente `null`: una
+            // tablet cuyo navegador no implementa la Battery Status API manda
+            // `null` y eso NO es un error de forma (tarea 3.3, decision 1). El
+            // rango es el mismo del contrato y el de la columna: un `-1` o un
+            // `300` acabarian en la metrica `kiosk_battery_level` y en el panel.
+            'battery_level' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:100'],
+            'battery_charging' => ['sometimes', 'nullable', 'boolean'],
             'client_errors' => ['sometimes', 'array', 'max:'.self::MAX_CLIENT_ERRORS],
             // `array:` con las cuatro claves reproduce el `additionalProperties:
             // false` del contrato dentro de cada elemento: sin el, un campo de mas
@@ -154,15 +173,25 @@ final class KioskHeartbeatRequest extends FormRequest
     {
         $device = KioskDevice::of($this);
         $oldest = $this->input('oldest_pending_at');
+        $level = $this->input('battery_level');
+        $charging = $this->input('battery_charging');
 
         return new RecordHeartbeatCommand(
             deviceId: $device->id,
             deviceUuid: $device->uuid,
-            appVersion: $this->string('app_version')->value(),
-            pendingQueueSize: $this->integer('pending_queue_size'),
-            oldestPendingAt: is_string($oldest)
-                ? new DateTimeImmutable($oldest, new DateTimeZone('UTC'))
-                : null,
+            telemetry: new HeartbeatTelemetry(
+                appVersion: $this->string('app_version')->value(),
+                pendingQueueSize: $this->integer('pending_queue_size'),
+                oldestPendingAt: is_string($oldest)
+                    ? new DateTimeImmutable($oldest, new DateTimeZone('UTC'))
+                    : null,
+                // `is_int` y no un `(int)` de cortesia: la validacion ya exige
+                // entero, asi que lo que no lo sea es `null` —ausente o
+                // declarado— y `null` significa «el navegador no lo sabe», que
+                // no es cero y no puede convertirse en un aviso de bateria baja.
+                batteryLevel: is_int($level) ? $level : null,
+                batteryCharging: is_bool($charging) ? $charging : null,
+            ),
             clientErrors: $this->clientErrors($device->uuid),
         );
     }

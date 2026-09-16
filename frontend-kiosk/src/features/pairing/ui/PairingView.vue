@@ -27,6 +27,7 @@ import { createApiClient } from '@/shared/api/client'
 import type { PairingCompleted } from '@/shared/api/types'
 import { APP_VERSION, persistPairedDevice } from '@/shared/telemetry/deviceIdentity'
 import LanguageSelector from '@/shared/ui/LanguageSelector.vue'
+import ClockDiagnosticsTrigger from '@/features/diagnostics/ui/ClockDiagnosticsTrigger.vue'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -44,7 +45,14 @@ const state = ref<PairingState>({ kind: 'idle' })
 function handlePaired(result: PairingCompleted): void {
   // El `device.uuid` sustituye al identificador local en la MISMA clave
   // (`deviceIdentity.ts`); el token es la unica vez que sale del servidor.
-  persistPairedDevice(result.token.value, result.device.uuid)
+  // `expires_at` y `device.name` (tarea 3.3) solo alimentan la pantalla de
+  // diagnostico: no gobiernan nada del fichaje.
+  persistPairedDevice(
+    result.token.value,
+    result.device.uuid,
+    result.token.expires_at,
+    result.device.name,
+  )
   void router.replace({ name: 'home' })
 }
 
@@ -142,6 +150,13 @@ onUnmounted(() => {
     class="relative flex h-dvh w-full flex-col items-center justify-center gap-8 bg-kq-kiosk-surface px-10 text-center text-kq-kiosk-text"
   >
     <h1 class="kiosk-sr-only">{{ t('pairing.title') }}</h1>
+
+    <div class="absolute top-6 left-6">
+      <!-- Reloj y puerta de diagnostico (RF-KI-08, tarea 3.3, decision 8):
+           una tablet sin emparejar es justo la que hay que poder
+           diagnosticar. -->
+      <ClockDiagnosticsTrigger />
+    </div>
 
     <div class="absolute top-6 right-6">
       <LanguageSelector />

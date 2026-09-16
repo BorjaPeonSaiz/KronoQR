@@ -246,10 +246,11 @@ return [
     'batch_max_size' => (int) env('KIOSK_BATCH_MAX_SIZE', 50),
 
     /*
-     * Los dos plazos con los que `php artisan kiosk:health` juzga un latido
-     * (RF-PA-07, doc 02 Anexo C).
+     * Los umbrales con los que se juzga el latido de un quiosco: los usan
+     * `php artisan kiosk:health`, `GET /api/v1/devices` y la respuesta de
+     * `unpair` (RF-PA-07, doc 02 Anexo C, tarea 3.3).
      *
-     * SON DOS, Y NINGUNO ES NUEVO. Los dos estaban ya escritos en documentacion
+     * LOS DOS PLAZOS SON LOS DE SIEMPRE, Y NINGUNO ES NUEVO. Los dos estaban ya escritos en documentacion
      * que el cliente tiene en la mano, y este bloque solo los pone donde el
      * codigo puede leerlos:
      *
@@ -276,6 +277,25 @@ return [
     'health' => [
         'fresh_within_seconds' => (int) env('KIOSK_HEALTH_FRESH_WITHIN_SECONDS', 120),
         'silent_after_seconds' => (int) env('KIOSK_HEALTH_SILENT_AFTER_SECONDS', 600),
+
+        /*
+         * Nivel de bateria por debajo del cual un quiosco **que no esta
+         * cargando** sale en aviso (tarea 3.3, decision 5).
+         *
+         * NO ES UN TERCER PLAZO: no mide tiempo. Una tablet colgada de la pared
+         * que se descarga es una tablet a la que alguien ha quitado el cargador,
+         * y se sabe antes de que se apague en mitad de un turno. Con el cargador
+         * puesto no avisa nunca, y una tablet cuyo navegador no informa de su
+         * bateria tampoco: la Battery Status API solo la ofrece Chrome en
+         * Android y no informar no es estar averiado.
+         *
+         * Quince por ciento con el latido cada 60 s deja margen de sobra para
+         * que alguien llegue con un cable. La raiz de composicion lo acota a
+         * 0..100 antes de construir el objeto de valor: un porcentaje imposible
+         * avisaria siempre o no avisaria nunca, y las dos cosas acaban con
+         * alguien ignorando la columna.
+         */
+        'battery_low_percent' => (int) env('KIOSK_HEALTH_BATTERY_LOW_PERCENT', 15),
     ],
 
 ];

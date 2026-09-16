@@ -7,8 +7,10 @@ namespace App\Modules\Kiosk\Application\UseCase;
 use App\Modules\Kiosk\Application\Command\RecordHeartbeatCommand;
 use App\Modules\Kiosk\Application\Port\DeviceFleet;
 use App\Modules\Kiosk\Application\Port\KioskMetrics;
+use App\Modules\Kiosk\Domain\ValueObject\ServiceCodeFingerprint;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\ErrorEventSink;
+use App\Modules\Shared\Application\Port\KioskServiceCodeProvider;
 
 /**
  * Registra el latido de un quiosco (`POST /api/v1/kiosk/heartbeat`, RF-PA-07) y
@@ -16,7 +18,7 @@ use App\Modules\Shared\Application\Port\ErrorEventSink;
  *
  * ## Sin transaccion, y es correcto
  *
- * Escribe tres columnas de una fila y no publica ningun evento: no hay invariante
+ * Escribe la telemetria de una fila y no publica ningun evento: no hay invariante
  * que proteger ni proyeccion que mantener. Abrir una transaccion aqui seria
  * ceremonia; lo que si hace falta —y lo hace el adaptador— es que la escritura sea
  * una sola sentencia. El historico de errores tampoco entra en ella: escribe por
@@ -46,6 +48,14 @@ use App\Modules\Shared\Application\Port\ErrorEventSink;
  * devolver cuantos pudo guardar, asi que aqui no hay ni `try` ni rama de fallo
  * (regla dura 19): si el historico no responde, el latido responde `200` con
  * `client_errors_accepted: 0` y la tablet conserva su buffer para el siguiente.
+ *
+ * ## La huella del codigo de servicio sale de aqui (RF-KI-08, tarea 3.3)
+ *
+ * El latido es el unico canal autenticado que la tablet repite cada minuto, asi
+ * que es por donde le llega —como huella, nunca en claro— el codigo con el que
+ * se abre su pantalla de diagnostico. **Nunca puede tumbar un latido**: el
+ * adaptador del puerto devuelve `null` si la configuracion no se puede leer, y
+ * sin huella la pantalla se abre sin codigo (decision 7 de la ficha).
  */
 final readonly class RecordHeartbeat
 {
@@ -54,23 +64,20 @@ final readonly class RecordHeartbeat
         private KioskMetrics $metrics,
         private Clock $clock,
         private ErrorEventSink $errors,
+        private KioskServiceCodeProvider $serviceCodes,
     ) {}
 
     public function handle(RecordHeartbeatCommand $command): HeartbeatOutcome
     {
         $seenAt = $this->clock->now();
 
-        $this->devices->recordHeartbeat(
-            $command->deviceId,
-            $command->appVersion,
-            $command->pendingQueueSize,
-            $seenAt,
-        );
+        $this->devices->recordHeartbeat($command->deviceId, $command->telemetry, $seenAt);
 
         $this->metrics->heartbeat(
             $command->deviceUuid,
             $seenAt->getTimestamp(),
-            $command->pendingQueueSize,
+            $command->telemetry->pendingQueueSize,
+            $command->telemetry->batteryLevel,
         );
 
         return new HeartbeatOutcome(
@@ -79,6 +86,7 @@ final readonly class RecordHeartbeat
             // que no haya pasado nada, y una llamada por minuto y por quiosco para
             // recorrer una lista vacia es trabajo que no compra nada.
             $command->clientErrors === [] ? 0 : $this->errors->recordAll($command->clientErrors),
+            ServiceCodeFingerprint::of($command->deviceUuid, $this->serviceCodes->serviceCode()),
         );
     }
 }
