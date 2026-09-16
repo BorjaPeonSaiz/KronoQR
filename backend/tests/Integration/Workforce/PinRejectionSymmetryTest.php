@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\EmployeePinVerifier;
 use App\Modules\Shared\Application\Port\PinAttempts;
 use App\Modules\Shared\Domain\ValueObject\PinOrigin;
@@ -11,7 +10,7 @@ use Illuminate\Support\Facades\DB;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Shared\AuthenticationTrail;
 use Tests\Support\Shared\RecordingPinAttempts;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\EmployeePins;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -62,7 +61,7 @@ beforeEach(function (): void {
     // El reloj detenido (ADR-021, regla dura 2): con el reloj real, cinco
     // comparaciones de bcrypt cruzan cambios de segundo y los escalones dejan de
     // ser deterministas.
-    app()->instance(Clock::class, FixedClock::at('2026-03-14 06:00:00'));
+    FrozenTime::at('2026-03-14 06:00:00');
     app()->forgetInstance(PinAttempts::class);
 });
 

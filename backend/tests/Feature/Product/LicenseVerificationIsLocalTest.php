@@ -5,7 +5,6 @@ declare(strict_types=1);
 use App\Modules\Product\Application\Command\ActivateLicenseCommand;
 use App\Modules\Product\Application\UseCase\ActivateLicenseHandler;
 use App\Modules\Product\Application\UseCase\DescribeLicenseHandler;
-use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\FeatureGate;
 use App\Modules\Shared\Domain\ValueObject\Feature;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
@@ -14,7 +13,7 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Product\LicenseKeys;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -56,7 +55,7 @@ uses(RefreshDatabase::class);
 beforeEach(function (): void {
     WorkforceFixtures::site();
     LicenseKeys::install();
-    app()->instance(Clock::class, FixedClock::at('2026-06-15 09:00:00'));
+    FrozenTime::at('2026-06-15 09:00:00');
 
     // Cualquier peticion saliente que no este simulada hace fallar la prueba.
     Http::preventStrayRequests();

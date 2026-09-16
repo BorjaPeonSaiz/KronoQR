@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use App\Modules\Attendance\Application\Port\CredentialResolver;
-use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\CredentialRejectionReason;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Log\Events\MessageLogged;
@@ -17,7 +16,7 @@ use Tests\Support\Attendance\FakeCredentialResolver;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Product\LicenseKeys;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 
 /*
  * **CON LA TELEMETRIA ACTIVADA Y SIN SALIDA A INTERNET NO CAMBIA NADA**
@@ -98,7 +97,7 @@ function nivelesRegistrados(callable $block): array
 }
 
 beforeEach(function (): void {
-    app()->instance(Clock::class, FixedClock::at('2026-06-15 05:40:00'));
+    FrozenTime::at('2026-06-15 05:40:00');
 
     Config::set('product.telemetry_enabled', true);
     Config::set('product.telemetry_endpoint', TELE_PUERTO_CERRADO);

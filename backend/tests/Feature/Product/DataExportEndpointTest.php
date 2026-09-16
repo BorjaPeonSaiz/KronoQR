@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use App\Modules\Product\Infrastructure\Job\GenerateDataExportJob;
-use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
@@ -13,7 +12,7 @@ use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Product\DataExports;
 use Tests\Support\Product\LicenseKeys;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -293,7 +292,7 @@ it('una exportacion atascada no bloquea la siguiente para siempre', function ():
 
     // El reloj de la instalacion, dos horas despues de que arrancara: por encima
     // del umbral de una hora.
-    app()->instance(Clock::class, FixedClock::at('2026-09-08 10:00:00'));
+    FrozenTime::at('2026-09-08 10:00:00');
 
     $response = Api::as(exportAdminToken())
         ->post('/api/v1/data-export')
@@ -326,7 +325,7 @@ it('no da por atascada una exportacion que sigue dentro de su plazo', function (
         'started_at' => '2026-09-08 09:50:02+00',
     ]);
 
-    app()->instance(Clock::class, FixedClock::at('2026-09-08 10:00:00'));
+    FrozenTime::at('2026-09-08 10:00:00');
 
     Api::as(exportAdminToken())->post('/api/v1/data-export')->assertStatus(409);
 

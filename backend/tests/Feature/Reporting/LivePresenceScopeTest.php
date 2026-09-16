@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use App\Modules\Workforce\Infrastructure\Persistence\Department;
 use Spectator\Spectator;
@@ -11,7 +10,7 @@ use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Reporting\PresenceFixtures;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -38,7 +37,7 @@ beforeEach(function (): void {
     // se deja explicito para no depender del valor de serie.
     config()->set('identity.two_factor.required_roles', []);
 
-    app()->instance(Clock::class, FixedClock::at('2026-03-14 09:12:03'));
+    FrozenTime::at('2026-03-14 09:12:03');
 
     /*
      * Reverb en pie y una licencia que conceda el tiempo real (tarea 5.3).

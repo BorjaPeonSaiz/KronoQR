@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use App\Modules\Attendance\Application\Port\ScanMetrics;
-use App\Modules\Shared\Application\Port\Clock;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\Support\Attendance\AttendanceFixtures;
@@ -11,7 +10,7 @@ use Tests\Support\Attendance\RecordingScanMetrics;
 use Tests\Support\Concurrency\ParallelRequests;
 use Tests\Support\Database\CommittedDatabase;
 use Tests\Support\Http\Api;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\EmployeePins;
 
 /*
@@ -53,7 +52,7 @@ function escenarioIdempotente(string $ahora = '2026-03-14 07:02:31'): array
 
     EmployeePins::issue($escenario['employee'], PIN_IDEMPOTENTE);
 
-    app()->instance(Clock::class, FixedClock::at($ahora));
+    FrozenTime::at($ahora);
     app()->instance(ScanMetrics::class, new RecordingScanMetrics);
 
     return [
@@ -140,7 +139,7 @@ it('devuelve en el reenvio el acumulado que tenia el fichaje, no el de ahora', f
     expect($primera->json('worked_minutes'))->toBe(0);
 
     // Cuatro horas despues, la salida: la jornada pasa a tener 240 minutos.
-    app()->instance(Clock::class, FixedClock::at('2026-03-14 11:00:00'));
+    FrozenTime::at('2026-03-14 11:00:00');
 
     $salida = Str::uuid7()->toString();
 

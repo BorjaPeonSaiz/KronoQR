@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use App\Modules\Attendance\Application\Port\CredentialResolver;
 use App\Modules\Attendance\Application\Port\ScanMetrics;
-use App\Modules\Shared\Application\Port\Clock;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\Support\Attendance\AttendanceFixtures;
@@ -13,7 +12,7 @@ use Tests\Support\Attendance\RecordingScanMetrics;
 use Tests\Support\Concurrency\ParallelRequests;
 use Tests\Support\Database\CommittedDatabase;
 use Tests\Support\Http\Api;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -55,7 +54,7 @@ it('registra un tramo por persona sin duplicados ni jornadas perdidas', function
         $credenciales->resolving($tarjeta, WorkforceFixtures::employee($site, $department));
     }
 
-    app()->instance(Clock::class, FixedClock::at('2026-03-14 06:00:00'));
+    FrozenTime::at('2026-03-14 06:00:00');
     app()->instance(ScanMetrics::class, new RecordingScanMetrics);
     app()->instance(CredentialResolver::class, $credenciales);
 

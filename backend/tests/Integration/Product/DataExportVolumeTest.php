@@ -6,13 +6,12 @@ use App\Modules\Product\Application\Command\RequestDataExportCommand;
 use App\Modules\Product\Application\UseCase\GenerateDataExportHandler;
 use App\Modules\Product\Application\UseCase\RequestDataExportHandler;
 use App\Modules\Product\Domain\ValueObject\DataExportOrigin;
-use App\Modules\Shared\Application\Port\Clock;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Product\DataExports;
 use Tests\Support\Product\LicenseKeys;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -299,7 +298,7 @@ function contenidoDelZip(string $path): string
 }
 
 beforeEach(function (): void {
-    app()->instance(Clock::class, FixedClock::at('2026-06-15 09:00:00'));
+    FrozenTime::at('2026-06-15 09:00:00');
     LicenseKeys::grantAll();
 
     DataExports::useTemporaryPath();

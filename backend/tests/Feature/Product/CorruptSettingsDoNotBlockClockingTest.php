@@ -5,7 +5,6 @@ declare(strict_types=1);
 use App\Modules\Attendance\Application\Port\CredentialResolver;
 use App\Modules\Attendance\Application\Port\ScanMetrics;
 use App\Modules\Shared\Application\Port\BrandingProvider;
-use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Log\Events\MessageLogged;
@@ -20,7 +19,7 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Product\LicenseKeys;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -77,7 +76,7 @@ it('deja fichar con una fila de marca corrupta en la base de datos', function ()
 
     $card = 'FH1.a3.tarjeta000000000000001.firma';
     app()->instance(CredentialResolver::class, FakeCredentialResolver::new()->resolving($card, $scenario['employee']));
-    app()->instance(Clock::class, FixedClock::at('2026-03-14 06:00:00'));
+    FrozenTime::at('2026-03-14 06:00:00');
     app()->instance(ScanMetrics::class, new RecordingScanMetrics);
 
     $scanId = Str::uuid7()->toString();

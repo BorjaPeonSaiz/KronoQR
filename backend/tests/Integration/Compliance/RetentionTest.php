@@ -41,6 +41,7 @@ use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -218,7 +219,7 @@ function retentionCounts(): array
 
 function retentionClock(string $now = RETENTION_NOW): void
 {
-    app()->instance(Clock::class, FixedClock::at($now));
+    FrozenTime::at($now);
 }
 
 /**
@@ -245,8 +246,7 @@ function retentionToken(): string
  */
 function retentionUsing(ConnectionInterface $connection, string $now): ApplyRetention
 {
-    $clock = FixedClock::at($now);
-    app()->instance(Clock::class, $clock);
+    $clock = FrozenTime::at($now);
 
     $work = new DatabaseWorkRecordArchive($connection);
     $partitions = new DatabaseAuditPartitionArchive($connection);

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use App\Modules\Attendance\Application\Port\CredentialResolver;
 use App\Modules\Identity\Infrastructure\Adapter\HmacSignatureVerifier;
-use App\Modules\Shared\Application\Port\Clock;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Spectator\Spectator;
@@ -12,7 +11,7 @@ use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\Credentials;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 
 /*
  * El recorrido completo **sin ningun doble**: una tarjeta emitida de verdad,
@@ -41,7 +40,7 @@ it('ficha con una tarjeta emitida y firmada de verdad', function (): void {
     $escenario = AttendanceFixtures::scenario();
     $payload = Credentials::issueFor(AttendanceFixtures::employeeIdOf($escenario['employee']));
 
-    app()->instance(Clock::class, FixedClock::at('2026-03-14 07:02:31'));
+    FrozenTime::at('2026-03-14 07:02:31');
     Spectator::using('openapi.yaml');
 
     $scanId = Str::uuid7()->toString();
@@ -75,7 +74,7 @@ it('rechaza con la respuesta generica una tarjeta con la firma manipulada', func
 
     $manipulado = substr($payload, 0, -1).(str_ends_with($payload, 'A') ? 'B' : 'A');
 
-    app()->instance(Clock::class, FixedClock::at('2026-03-14 07:02:31'));
+    FrozenTime::at('2026-03-14 07:02:31');
     Spectator::using('openapi.yaml');
 
     $scanId = Str::uuid7()->toString();
@@ -112,7 +111,7 @@ it('rechaza una tarjeta revocada igual que una inexistente', function (): void {
         'revoked_reason' => 'lost',
     ]);
 
-    app()->instance(Clock::class, FixedClock::at('2026-03-14 07:02:31'));
+    FrozenTime::at('2026-03-14 07:02:31');
 
     $scanId = Str::uuid7()->toString();
 

@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use App\Modules\Attendance\Application\Port\ScanMetrics;
-use App\Modules\Shared\Application\Port\Clock;
 use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -15,7 +14,7 @@ use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Attendance\RecordingScanMetrics;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\EmployeePins;
 
 /*
@@ -60,7 +59,7 @@ function escenarioDePin(string $ahora = MOMENTO, string $timezone = 'Europe/Madr
 
     EmployeePins::issue($escenario['employee'], PIN_DEL_EMPLEADO);
 
-    app()->instance(Clock::class, FixedClock::at($ahora));
+    FrozenTime::at($ahora);
 
     $metricas = new RecordingScanMetrics;
     app()->instance(ScanMetrics::class, $metricas);

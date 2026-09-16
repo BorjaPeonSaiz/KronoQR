@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use App\Modules\Attendance\Application\Port\CredentialResolver;
-use App\Modules\Shared\Application\Port\Clock;
 use App\Support\Observability\Logging\LokiHandler;
 use App\Support\Observability\Logging\LokiTransport;
 use Illuminate\Support\Facades\Log;
@@ -12,7 +11,7 @@ use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Attendance\FakeCredentialResolver;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -65,7 +64,7 @@ function escenarioDeFichajeConLogs(): array
     $employee = WorkforceFixtures::employee($site, WorkforceFixtures::department($site));
     $device = AttendanceFixtures::device($site);
 
-    app()->instance(Clock::class, FixedClock::at(AHORA_DEL_FICHAJE_CON_LOKI));
+    FrozenTime::at(AHORA_DEL_FICHAJE_CON_LOKI);
     app()->instance(
         CredentialResolver::class,
         FakeCredentialResolver::new()->resolving(TARJETA_DEL_FICHAJE_CON_LOKI, $employee),

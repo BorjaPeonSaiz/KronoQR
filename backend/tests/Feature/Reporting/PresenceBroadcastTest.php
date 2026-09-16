@@ -8,7 +8,6 @@ use App\Modules\Reporting\Domain\ValueObject\PresenceBoard;
 use App\Modules\Reporting\Domain\ValueObject\PresenceEntry;
 use App\Modules\Reporting\Domain\ValueObject\PresenceStatus;
 use App\Modules\Reporting\Infrastructure\Broadcasting\PresenceUpdated;
-use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\AccessScope;
 use App\Modules\Shared\Domain\ValueObject\CredentialRejectionReason;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
@@ -23,7 +22,7 @@ use Tests\Support\Attendance\FakeCredentialResolver;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -59,7 +58,7 @@ function escenarioDeDifusion(string $ahora = '2026-03-14 07:02:31'): array
     $employee = WorkforceFixtures::employee($site, $cocina, 'active', 'Youssef', 'Amrani');
     $device = AttendanceFixtures::device($site, 'Entrada de personal');
 
-    app()->instance(Clock::class, FixedClock::at($ahora));
+    FrozenTime::at($ahora);
     app()->instance(
         CredentialResolver::class,
         FakeCredentialResolver::new()
@@ -162,7 +161,7 @@ it('difunde la salida dejando a la persona como ausente y sin datos de tramo', f
 
     ficharParaDifundir($escenario, '2026-03-14T07:02:31Z')->assertOk();
 
-    app()->instance(Clock::class, FixedClock::at('2026-03-14 11:02:31'));
+    FrozenTime::at('2026-03-14 11:02:31');
 
     Event::fake([PresenceUpdated::class]);
 

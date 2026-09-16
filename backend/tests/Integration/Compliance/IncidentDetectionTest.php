@@ -9,7 +9,6 @@ use App\Modules\Compliance\Domain\ValueObject\AuditAction;
 use App\Modules\Compliance\Domain\ValueObject\IncidentStatus;
 use App\Modules\Compliance\Infrastructure\Notification\IncidentDigestNotification;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseIncidentLedger;
-use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\AccessScope;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use App\Modules\Workforce\Infrastructure\Persistence\Department;
@@ -23,7 +22,7 @@ use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Compliance\FailingIncidentLedger;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Identity\ManagementUsers;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -98,7 +97,7 @@ function shiftEntry(string $employeeUuid, int $siteId, string $workDate, string 
 
 function runDetection(string $now = DETECTION_NOW): int
 {
-    app()->instance(Clock::class, FixedClock::at($now));
+    FrozenTime::at($now);
 
     return Artisan::call('attendance:detect-incidents');
 }

@@ -9,11 +9,10 @@ use App\Modules\Product\Application\UseCase\DescribeLicenseHandler;
 use App\Modules\Product\Domain\Exception\LicenseKeyRejected;
 use App\Modules\Product\Domain\ValueObject\LicenseState;
 use App\Modules\Product\Domain\ValueObject\LicenseStatus;
-use App\Modules\Shared\Application\Port\Clock;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Product\LicenseKeys;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -29,7 +28,7 @@ uses(RefreshDatabase::class);
 beforeEach(function (): void {
     WorkforceFixtures::site();
     LicenseKeys::install();
-    app()->instance(Clock::class, FixedClock::at('2026-06-15T09:00:00'));
+    FrozenTime::at('2026-06-15T09:00:00');
 });
 
 function activateKey(string $key, ?int $actorUserId = null): LicenseStatus

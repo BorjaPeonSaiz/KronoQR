@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use App\Modules\Product\Application\Command\ActivateLicenseCommand;
 use App\Modules\Product\Application\UseCase\ActivateLicenseHandler;
-use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\FeatureGate;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Artisan;
@@ -12,7 +11,7 @@ use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Http;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Product\LicenseKeys;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -66,7 +65,7 @@ function activarTelemetria(): void
 beforeEach(function (): void {
     WorkforceFixtures::site();
     LicenseKeys::install();
-    app()->instance(Clock::class, FixedClock::at('2026-06-15 05:40:00'));
+    FrozenTime::at('2026-06-15 05:40:00');
 
     Config::set('product.telemetry_state_path', directorioDeTelemetria().'/state.json');
     Config::set('product.telemetry_retry_delay_seconds', 0);

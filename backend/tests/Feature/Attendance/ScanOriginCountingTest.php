@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use App\Modules\Attendance\Application\Port\CredentialResolver;
 use App\Modules\Attendance\Infrastructure\Metrics\RedisScanMetrics;
-use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Contracts\Redis\Factory as Redis;
 use Illuminate\Support\Facades\DB;
@@ -16,7 +15,7 @@ use Tests\Support\Attendance\FakeCredentialResolver;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\EmployeePins;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -82,7 +81,7 @@ function escenarioDeOrigenReal(): array
 
     EmployeePins::issue($escenario['employee'], PIN_DE_ORIGEN);
 
-    app()->instance(Clock::class, FixedClock::at(AHORA_DEL_ORIGEN));
+    FrozenTime::at(AHORA_DEL_ORIGEN);
     app()->instance(
         CredentialResolver::class,
         FakeCredentialResolver::new()->resolving(TARJETA_DE_ORIGEN, $escenario['employee']),

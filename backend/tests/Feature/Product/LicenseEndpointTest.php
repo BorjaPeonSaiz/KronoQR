@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use App\Support\Health\LicenseStateProbe;
 use Illuminate\Support\Facades\DB;
@@ -11,7 +10,7 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Product\LicenseKeys;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -31,7 +30,7 @@ beforeEach(function (): void {
     WorkforceFixtures::site();
 
     LicenseKeys::install();
-    app()->instance(Clock::class, FixedClock::at('2026-06-15 09:00:00'));
+    FrozenTime::at('2026-06-15 09:00:00');
 });
 
 function licenseAdminToken(): string

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use App\Modules\Attendance\Application\Port\CredentialResolver;
 use App\Modules\Kiosk\Application\Port\KioskMetrics;
-use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -17,7 +16,7 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Kiosk\RecordingKioskMetrics;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -45,7 +44,7 @@ const MOMENTO_DEL_EMPAREJAMIENTO = '2026-09-07 10:00:00';
 
 beforeEach(function (): void {
     Spectator::using('openapi.yaml');
-    app()->instance(Clock::class, FixedClock::at(MOMENTO_DEL_EMPAREJAMIENTO));
+    FrozenTime::at(MOMENTO_DEL_EMPAREJAMIENTO);
 });
 
 /**
@@ -235,7 +234,7 @@ it('rechaza un codigo caducado y deja pedir otro sin intervencion', function ():
     $ticket = ticketNuevo();
 
     // Diez minutos y un segundo despues.
-    app()->instance(Clock::class, FixedClock::at('2026-09-07 10:10:01'));
+    FrozenTime::at('2026-09-07 10:10:01');
 
     Api::as(panelDe())->post('/api/v1/kiosk/pair/confirm', [
         'code' => $ticket['code'],
@@ -266,7 +265,7 @@ it('entrega el token de una solicitud ya confirmada aunque el codigo haya caduca
     ])->assertOk();
 
     // Media hora despues de que el codigo hubiera caducado.
-    app()->instance(Clock::class, FixedClock::at('2026-09-07 10:40:00'));
+    FrozenTime::at('2026-09-07 10:40:00');
 
     sondear($ticket['pairing_id'], $ticket['pairing_secret'])
         ->assertOk()
@@ -369,7 +368,7 @@ it('purga las solicitudes viejas al crear una nueva', function (): void {
     $vieja = ticketNuevo();
 
     // Veinticinco horas despues.
-    app()->instance(Clock::class, FixedClock::at('2026-09-08 11:00:00'));
+    FrozenTime::at('2026-09-08 11:00:00');
 
     pedirCodigo();
 
@@ -489,7 +488,7 @@ it('vuelve a admitir solicitudes en cuanto las vivas caducan', function (): void
     pedirCodigo()->assertStatus(503);
 
     // Diez minutos y un segundo despues, la primera ya no esta viva.
-    app()->instance(Clock::class, FixedClock::at('2026-09-07 10:10:01'));
+    FrozenTime::at('2026-09-07 10:10:01');
 
     pedirCodigo()->assertStatus(201);
 })->group('RF-PD-06', 'RS-02');
@@ -503,7 +502,7 @@ it('libera el codigo de una pendiente caducada en la peticion siguiente', functi
 
     $caducada = ticketNuevo();
 
-    app()->instance(Clock::class, FixedClock::at('2026-09-07 10:10:01'));
+    FrozenTime::at('2026-09-07 10:10:01');
 
     pedirCodigo()->assertStatus(201);
 
@@ -520,7 +519,7 @@ it('no purga una pendiente que todavia esta viva', function (): void {
     $viva = ticketNuevo();
 
     // Nueve minutos despues: dentro de plazo.
-    app()->instance(Clock::class, FixedClock::at('2026-09-07 10:09:00'));
+    FrozenTime::at('2026-09-07 10:09:00');
 
     pedirCodigo()->assertStatus(201);
 

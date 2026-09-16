@@ -4,10 +4,9 @@ declare(strict_types=1);
 
 use App\Modules\Reporting\Application\Port\RealtimeConnectionCounter;
 use App\Modules\Reporting\Application\UseCase\PublishPresenceMetrics;
-use App\Modules\Shared\Application\Port\Clock;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Reporting\PresenceFixtures;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -31,7 +30,7 @@ beforeEach(function (): void {
     config()->set('observability.metrics.enabled', true);
     config()->set('observability.metrics.textfile_path', sys_get_temp_dir().'/kronoqr-presence-'.bin2hex(random_bytes(4)));
 
-    app()->instance(Clock::class, FixedClock::at('2026-03-14 09:12:03'));
+    FrozenTime::at('2026-03-14 09:12:03');
 });
 
 function ficheroDeMetricasDePresencia(): string

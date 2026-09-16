@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use App\Modules\Attendance\Application\Port\CredentialResolver;
 use App\Modules\Product\Infrastructure\Capture\ExecutionContext;
-use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
@@ -16,7 +15,7 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Observability\CapturedLog;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -103,7 +102,7 @@ function escenarioConDatosPersonales(): array
     $device = AttendanceFixtures::device($site);
     $user = ManagementUsers::withRole(UserRole::RRHH);
 
-    app()->instance(Clock::class, FixedClock::at(AHORA_DE_LA_JORNADA));
+    FrozenTime::at(AHORA_DE_LA_JORNADA);
     app()->instance(
         CredentialResolver::class,
         FakeCredentialResolver::new()->resolving(TARJETA_DE_MARIA, $employee),

@@ -6,7 +6,6 @@ use App\Modules\Product\Application\Port\ErrorEventRepository;
 use App\Modules\Product\Application\UseCase\RecordErrorEvent;
 use App\Modules\Product\Domain\ValueObject\ErrorFingerprint;
 use App\Modules\Product\Infrastructure\Metrics\RedisErrorMetrics;
-use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\ErrorEventSink;
 use App\Modules\Shared\Domain\ValueObject\ErrorLevel;
 use App\Modules\Shared\Domain\ValueObject\ErrorReport;
@@ -19,7 +18,7 @@ use Illuminate\Support\Facades\DB;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Product\ErrorHistoryConnection;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -43,7 +42,7 @@ uses(RefreshDatabase::class);
 const ERROR_CLOCK_NOW = '2026-09-09 08:00:00';
 
 beforeEach(function (): void {
-    app()->instance(Clock::class, FixedClock::at(ERROR_CLOCK_NOW));
+    FrozenTime::at(ERROR_CLOCK_NOW);
 
     WorkforceFixtures::site();
     ErrorHistoryConnection::shareTestTransaction();

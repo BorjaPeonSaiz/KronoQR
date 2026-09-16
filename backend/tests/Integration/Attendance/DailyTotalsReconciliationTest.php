@@ -7,7 +7,6 @@ use App\Modules\Attendance\Application\Command\VoidShiftCommand;
 use App\Modules\Attendance\Application\UseCase\CorrectShiftHandler;
 use App\Modules\Attendance\Application\UseCase\VoidShiftHandler;
 use App\Modules\Attendance\Domain\ValueObject\CorrectionReason;
-use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use App\Modules\Shared\Infrastructure\Persistence\Row;
 use Illuminate\Support\Facades\Artisan;
@@ -16,7 +15,7 @@ use Illuminate\Support\Str;
 use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Identity\ManagementUsers;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Time\Instants;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -145,7 +144,7 @@ function projectDailyTotals(string $recalculatedAt = '2026-03-14 12:00:00+00'): 
  */
 function runReconcile(string $from, string $to, string $now = RECONCILIATION_NOW): int
 {
-    app()->instance(Clock::class, FixedClock::at($now));
+    FrozenTime::at($now);
 
     return Artisan::call('attendance:reconcile', ['--from' => $from, '--to' => $to]);
 }
@@ -264,7 +263,7 @@ it('cuadra con los eventos origen despues de una correccion y una anulacion', fu
     // error que ADR-007 existe para impedir.
     $scenario = reconciliationScenario();
     $author = ManagementUsers::withRole(UserRole::RRHH);
-    app()->instance(Clock::class, FixedClock::at('2026-03-16 09:00:00'));
+    FrozenTime::at('2026-03-16 09:00:00');
 
     $corregible = reconciledShiftEntry($scenario['employee'], $scenario['site'], '2026-03-15', '2026-03-15 06:00:00+00', '2026-03-15 14:00:00+00');
     $duplicado = reconciledShiftEntry($scenario['employee'], $scenario['site'], '2026-03-15', '2026-03-15 15:00:00+00', '2026-03-15 17:00:00+00');

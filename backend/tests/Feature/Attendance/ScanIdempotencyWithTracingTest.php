@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use App\Modules\Attendance\Application\Port\CredentialResolver;
 use App\Modules\Attendance\Application\Port\ScanMetrics;
-use App\Modules\Shared\Application\Port\Clock;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use OpenTelemetry\SDK\Trace\TracerProvider;
@@ -15,7 +14,7 @@ use Tests\Support\Concurrency\ParallelRequests;
 use Tests\Support\Database\CommittedDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Observability\UnreachableCollector;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 
 /*
  * **La idempotencia de RQ-03, con el SDK de trazas encendido y el colector
@@ -63,7 +62,7 @@ const TARJETA_CON_TRAZAS = 'FH1.a3.7QK2mXpR9vLdN4tZbYcF1w.k9Xm2pQrT5vN8wLa';
 it('sigue creando un solo tramo con el exportador de trazas apuntando a la nada', function (): void {
     $escenario = AttendanceFixtures::scenario();
 
-    app()->instance(Clock::class, FixedClock::at('2026-03-14 07:02:31'));
+    FrozenTime::at('2026-03-14 07:02:31');
     app()->instance(ScanMetrics::class, new RecordingScanMetrics);
     app()->instance(
         CredentialResolver::class,

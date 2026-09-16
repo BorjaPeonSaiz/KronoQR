@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use App\Modules\Compliance\Application\Port\RetentionPolicyProvider;
-use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Facades\Artisan;
@@ -11,7 +10,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Tests\Support\Database\RefreshDatabase;
-use Tests\Support\Time\FixedClock;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -129,7 +128,7 @@ it('abre las incidencias de RN-10 y RN-11 aunque el calendario este corrupto', f
     corruptCalendarShift($employee, $site, '2026-03-13', '2026-03-13 08:00:00+00', '2026-03-13 13:00:00+00');
     corruptCalendarShift($employee, $site, '2026-03-13', '2026-03-13 14:00:00+00', '2026-03-13 18:30:00+00');
 
-    app()->instance(Clock::class, FixedClock::at('2026-03-14 19:00:00'));
+    FrozenTime::at('2026-03-14 19:00:00');
 
     expect(Artisan::call('attendance:detect-incidents'))->toBe(0);
 
