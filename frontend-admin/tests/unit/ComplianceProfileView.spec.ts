@@ -50,8 +50,36 @@ describe('perfil de cumplimiento', () => {
     expect(wrapper.find('[data-test="detection-warning"]').text()).toBe(
       es.compliance.detectionWarning,
     )
-    // Y los tres campos sin consumidor se declaran como tales.
+    // Y el unico campo que sigue sin consumidor (el calendario de festivos,
+    // tarea 3.10) se declara como tal: la jornada semanal y el dia de inicio de
+    // semana ya los aplica la vista de cumplimiento desde la tarea 3.4.
     expect(wrapper.find('[data-test="not-applied-yet"]').text()).toBe(es.compliance.notAppliedYet)
+  })
+
+  it('dice que la jornada semanal y el inicio de semana mueven la vista de cumplimiento, no la bandeja', async () => {
+    stubFetch(() => jsonResponse(profile))
+
+    const wrapper = await mountView(ComplianceProfileView)
+    await settle()
+
+    // Aviso permanente, igual que `detection-warning`: RN-17 es informativa
+    // (computo anual, art. 34.1 ET) y nunca abre incidencia, al contrario que
+    // el descanso minimo y la jornada diaria.
+    expect(wrapper.find('[data-test="compliance-view-effect"]').text()).toBe(
+      es.compliance.complianceViewEffect,
+    )
+
+    // Y el aviso del calendario de festivos vive junto a SU campo, no antes
+    // de la jornada semanal (que ya tiene consumidor desde la tarea 3.4).
+    const html = wrapper.html()
+    const weekStartsOnAt = html.indexOf('data-test="week-starts-on"')
+    const effectAt = html.indexOf('data-test="compliance-view-effect"')
+    const holidayCalendarAt = html.indexOf('data-test="holiday-calendar"')
+    const notAppliedYetAt = html.indexOf('data-test="not-applied-yet"')
+
+    expect(weekStartsOnAt).toBeLessThan(effectAt)
+    expect(effectAt).toBeLessThan(holidayCalendarAt)
+    expect(holidayCalendarAt).toBeLessThan(notAppliedYetAt)
   })
 
   it('dice si el perfil es del centro o el de la instalacion', async () => {

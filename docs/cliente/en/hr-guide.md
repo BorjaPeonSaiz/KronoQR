@@ -12,13 +12,14 @@ need to know anything about systems.**
 > [`legal-obligations.md`](legal-obligations.md). Each thing is explained in one
 > single place; here it is linked.
 
-The eight sections of this guide, in case you are looking for one in
+The nine sections of this guide, in case you are looking for one in
 particular:
 
 1. [Vocabulary first](#1-vocabulary-first)
 2. [Adding a person, from start to finish](#2-adding-a-person-from-start-to-finish)
 3. [Live presence and the time record](#3-live-presence-and-the-time-record)
 4. [The incident inbox](#4-the-incident-inbox)
+    - [4 bis. The compliance view](#4-bis-the-compliance-view)
 5. [Corrections: changing an hour without breaking the record](#5-corrections-changing-an-hour-without-breaking-the-record)
 6. [Reports, exports and the Labour Inspectorate hand-over](#6-reports-exports-and-the-labour-inspectorate-hand-over)
 7. [The compliance profile](#7-the-compliance-profile)
@@ -320,6 +321,193 @@ first and with which outcome, instead of overwriting anybody's work.
 
 ---
 
+## 4 bis. The compliance view
+
+**Compliance** reviews the record against the legal thresholds of the site's
+profile and shows, for your scope, the working days and the weeks that fall
+outside them. The inbox (§4) tells you **what is pending resolution**; this
+screen tells you **whether what is recorded complies with the law**, whether or
+not anybody has opened anything.
+
+They are not the same list: the inbox has eight incident types and this screen
+four legal rules. They overlap on the first two, and that is on purpose.
+
+### 4 bis.1 The four warnings, and with which threshold
+
+At the top there are four cards, one per rule, with the count for the period and
+the threshold that has been applied:
+
+| Warning | What it looks at | Profile field | Default in `ES-hosteleria` |
+| --- | --- | --- | --- |
+| **Minimum rest between shifts** | The hours between the last clock-out of one working day and the first clock-in of the next | `min_rest_hours` | 12 h |
+| **Ordinary daily working time** | The sum of the shift entries of the same day | `max_daily_hours` | 9 h |
+| **Maximum continuous stretch without a break** | The longest closed shift entry of the day | `break_required_after_hours` | 6 h |
+| **Ordinary weekly working time** | The sum of the hours of the week | `max_weekly_hours` | 40 h |
+
+Each card is named exactly like the profile field it comes from, so that nothing
+has to be translated between the two screens. And the threshold is not hidden:
+under the name, the card spells it out —"**12 h 00 min under the ES-hosteleria
+profile**"—. That is deliberate: **a warning whose criterion is not visible is a
+warning nobody can defend in front of an employee**. If you adjust a threshold in
+the compliance profile (§7), this screen changes with it from the moment it is
+saved.
+
+The filters are period, department and rule. **With no dates, the last 28 days
+are shown** —four weeks, which is what gets reviewed—. The period has a cap, 92
+days by default; if you ask for more, the screen says so and does not query.
+When there is nothing to warn about it says that too, and with the criteria
+applied in plain sight: "No alerts in the period" without saying which period
+would be of no use at all.
+
+### 4 bis.2 What counts and what does not
+
+This is what raises the most questions, and it is worth being clear about it
+**before** discussing a warning with anybody:
+
+- **Rest is measured between working days, not within the day.** It is the gap
+  between the last clock-out of one working day and the first clock-in of the
+  next. The time somebody spends outside mid-morning is not rest between
+  working days and is not counted here. And with no previous working day there
+  is nothing to measure: the first day of a person's record never warns.
+- **Night shifts are not split.** A shift from 22:00 to 06:00 is a single one
+  and belongs to the day it started. The following rest is measured from its
+  real end, 06:00, not from midnight.
+- **Only closed shift entries count.** A shift still open is worth zero hours
+  and the row comes out flagged **"Open shift"**. It does not mean that day
+  complies: it means it cannot be known yet. When somebody closes the shift, the
+  total goes up and the warning may appear.
+- **The totals are the same ones you see in the person's record.** The screen
+  does not recalculate the hours on its own: it reads them.
+- **"Maximum continuous stretch without a break" is shown, with its threshold,
+  but is not evaluated yet.** Its card appears flagged **"Not evaluated"**, with
+  the reason —"not evaluated until a declared break exists"—, and produces no
+  rows. The reason is the same as in the inbox (§4.1): until the kiosk
+  records the break as such, the system cannot tell "did not rest" from "rested
+  and did not clock it", and warning under those conditions would mean warning
+  about almost everybody almost every day. The threshold is stored, it is
+  audited, and the rule starts counting on its own as soon as break clocking
+  exists, with nothing to touch. It is shown rather than hidden so that you know
+  the rule exists and with which threshold it will apply.
+- **The first two count exactly like the inbox.** Minimum rest between shifts
+  and ordinary daily working time are measured with the same criterion as the
+  nightly review —the one that opens "Insufficient rest" and "Shift too long" in
+  the inbox (§4.1)—, so when
+  there is already an incident open for that person, that day and that rule, the
+  row links to it. The weekly one **never opens an incident**
+  (§4 bis.3).
+
+**The week is the one from the profile, and always a whole one.** It starts on
+the day the `week_starts_on` field says —Monday by default— and it is seven
+dates. If the period you asked for cuts a week in half, **that week is evaluated
+in full anyway**, with the days outside the period included. The opposite would
+give a weekly total that does not match the one the person sees in their own
+record, and there is no way to explain that difference.
+
+### 4 bis.3 What the weekly warning means
+
+The **ordinary weekly working time** warning is informative, and it is the only
+one of the four that **does not open an incident**. That is not an
+oversight: the Workers' Statute sets the forty weekly hours **as an annual
+average** (art. 34.1), so a forty-four-hour week is not in itself a breach —it
+may be offset by a thirty-six-hour one—.
+
+What the screen does is flag it **so that you look at it with the collective
+agreement in front of you**. Many hospitality agreements set their own rules on
+uneven distribution, on a weekly maximum or on compensatory rest, and those can
+indeed be breached by a week like that. That reading belongs to the hotel: the
+system does not know your agreement and cannot do it for you.
+
+### 4 bis.4 How to read a row
+
+Each row is an employee and a working day —or an employee and a week, in the
+weekly warning—, with the hours in the site's time zone, as everywhere in the
+panel. These are the columns, and the three numbers always come in hours and
+minutes:
+
+| Column | What it is |
+| --- | --- |
+| **Employee** | Who |
+| **Shift day or week** | The day of the warning, or the Monday-to-Sunday of the week |
+| **Measured** | What the record says: the rest there was, the hours that were worked |
+| **Threshold** | What the profile requires |
+| **Difference** | What separates the two: "**Short by** 2 h 00 min" when the rest falls short, "**Over by** 0 h 40 min" when the working day goes over |
+| **Incident** | The link to the one in the inbox, if there is one |
+
+Read straight through, a rest row says: *Measured 10 h 00 min · Threshold
+12 h 00 min · Short by 2 h 00 min*. That subtraction is the one you have to be
+able to explain, and that is why all three numbers are visible and not just the
+last one.
+
+And two links:
+
+- **The employee's name** leads to their time record, placed at the working day
+  —or the week— of the warning, which is where it is looked at and where it is
+  corrected (§5).
+- **"View incident"** only appears when the inbox already has one open for that
+  same case, and it leads to **the incident inbox narrowed to that person**,
+  which is where it gets resolved (§4.3). It does not resolve it for you: no
+  link on this screen writes anything.
+
+### 4 bis.5 Who sees it, and what gets logged
+
+- A **department manager** sees the people in their department and nobody else;
+  the counts on the cards are only for their people too.
+- **HR** and **administrator** see everything.
+- The **auditor** does not get into this screen. Auditing is reviewing what was
+  written down, not managing the day-to-day.
+
+**Every query is logged in the audit log**, just like consulting a person's time
+record (§3.2): who looked, which period and with which filters. The scope of the
+query is logged, never the names of the people who appeared in it. That is
+normal and it is intentional.
+
+**This screen does not depend on the licence.** It is a reading of the legal
+record against the legal thresholds: even with an expired licence it keeps
+working just the same (§8, "there is a licence notice in the panel").
+
+### 4 bis.6 What to do about a warning
+
+A warning is neither a penalty nor a system failure: it is a working day
+somebody has to look at. The order that works:
+
+1. **Check it against the person's record.** Go in through their name and look
+   at the day. The explanation is often in plain sight: a missed clock-out that
+   joins two working days, a double scan, a shift that was closed the next day.
+2. **If the record is wrong, correct it** from there, with its reason (§5). The
+   warning disappears the next time the screen is opened, because it is
+   calculated from the record and not from a stored list.
+3. **If the record is right, talk to the person and to their manager** and check
+   the case against the collective agreement that applies to you. An eleven-hour
+   rest can be true and still be a problem; a forty-four-hour week can be true
+   and be perfectly offset.
+4. **If there is also an incident open**, close it when you are done, with the
+   note of what happened (§4.3). Resolving the incident does not change any
+   hour: they are two separate actions.
+
+> **The screen corrects nothing and stores no verdict.** It is recalculated
+> every time it is opened, from the record and the thresholds of that moment. If
+> tomorrow you change a threshold in the profile, what is seen tomorrow will be
+> what the new threshold says, for last week's working days too.
+
+**The inbox and this screen behave differently when a threshold changes, and you
+have to be able to explain that.** It is not an inconsistency: they are two
+things with two purposes.
+
+| | The incident inbox (§4) | The compliance view (§4 bis) |
+| --- | --- | --- |
+| What it is | A work list: each incident was opened on a given day and somebody has to close it | A query that is calculated on the spot |
+| When a threshold changes | **History is not reprocessed.** Incidents already open keep the criterion they were opened with, and none is closed or reopened on its own | **It always recalculates with the threshold in force** at the moment of the query |
+| How you know which criterion applied | From the profile's audit log: who changed which value and when (§7) | From the screen itself, which shows the profile and the threshold of each rule |
+
+That is why this screen always shows the name of the profile and the thresholds
+it calculated with: it is what lets you say, in front of an employee or an
+inspector, **which criterion the warning used and since when that criterion has
+been in force**. And that is why the inbox is not reprocessed: reopening today
+incidents for working days already handed to the staff or to the Labour
+Inspectorate, with a threshold that did not exist back then, would help nobody.
+
+---
+
 ## 5. Corrections: changing an hour without breaking the record
 
 ### 5.1 When to correct
@@ -445,10 +633,12 @@ blank, the whole workforce comes out. What the file contains:
 
 ## 7. The compliance profile
 
-**Compliance** holds the legal thresholds the record is reviewed against:
-minimum rest between working days, ordinary daily and weekly working hours,
-maximum continuous stretch without a break, first day of the week, public
-holidays and years records are kept.
+**Compliance profile** holds the legal thresholds the record is reviewed
+against: minimum rest between working days, ordinary daily and weekly working
+hours, maximum continuous stretch without a break, first day of the week, public
+holidays and years records are kept. Do not confuse it with **Compliance**
+(§4 bis), which is the screen that *applies* these thresholds to the record:
+here they are decided, there the consequences are seen.
 
 ![Compliance profile screen](../img/en/rrhh-14-perfil-cumplimiento.png)
 
@@ -465,6 +655,14 @@ legal effect, and that is why:
 - It is logged in the audit log with the previous value, the new one, who
   changed it and when. Without that, there is no way to explain why a working
   day three months ago raised no alert.
+
+**Where each threshold shows up.** Minimum rest between working days and maximum
+daily working time move both things: the incident inbox (§4) and the compliance
+view (§4 bis). **Ordinary weekly working hours** and the **first day of the
+week** are applied only by the compliance view, which warns but opens no
+incident. The **holiday calendar** is stored and audited from today, but **no
+rule applies it yet**: the absence management of a later version will be the
+first to use it, and the screen says so next to the field.
 
 The product ships with the Spanish hospitality profile. **Adjusting it to the
 collective agreement that applies to you is the hotel's responsibility**, not

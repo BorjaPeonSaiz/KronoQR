@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 /*
- * Los nueve ficheros `.prom` del producto se escriben con la misma mecanica
+ * Los diez ficheros `.prom` del producto se escriben con la misma mecanica
  * (doc 02 §8.2).
  *
  * **Por que existe esta prueba.** Es la hermana de
@@ -31,7 +31,7 @@ use Illuminate\Support\Str;
  * ocupan `PresenceMetricsTest`, `IncidentDetectionTest`,
  * `DailyTotalsReconciliationTest`, `AttendanceTextfileMetricsTest`,
  * `SigningKeyRotationTest`, `AuditLogTest` y `RetentionTest`—: comprueba que
- * **los nueve son la misma mecanica**, y que esa mecanica hace lo que dice.
+ * **los diez son la misma mecanica**, y que esa mecanica hace lo que dice.
  */
 
 beforeEach(function (): void {
@@ -135,6 +135,7 @@ it('ningun adaptador textfile escribe su propio fichero', function (): void {
         'app/Modules/Compliance/Infrastructure/Metrics/TextfileRetentionMetrics.php',
         'app/Modules/Identity/Infrastructure/Metrics/TextfileCredentialMetrics.php',
         'app/Modules/Reporting/Infrastructure/Metrics/TextfileAdoptionMetrics.php',
+        'app/Modules/Reporting/Infrastructure/Metrics/TextfileComplianceMetrics.php',
         'app/Modules/Reporting/Infrastructure/Metrics/TextfilePresenceMetrics.php',
     ];
 

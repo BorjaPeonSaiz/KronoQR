@@ -39,6 +39,7 @@ use App\Modules\Product\Http\Controller\LicenseController;
 use App\Modules\Product\Http\Controller\SettingsController;
 use App\Modules\Product\Http\Controller\SetupController;
 use App\Modules\Product\Http\Controller\SupportGrantController;
+use App\Modules\Reporting\Http\Controller\ComplianceSummaryController;
 use App\Modules\Reporting\Http\Controller\EmployeeWorkDayController;
 use App\Modules\Reporting\Http\Controller\LivePresenceController;
 use App\Modules\Reporting\Http\Controller\MyWorkDayController;
@@ -254,6 +255,52 @@ Route::get('/attendance/live', LivePresenceController::class)
         'throttle:management',
     ])
     ->name('reporting.attendance.live');
+
+/*
+ * GET /api/v1/compliance/summary — la vista de cumplimiento (RF-PA-06, tarea
+ * 3.4).
+ *
+ * `attendance:read`, EL MISMO AMBITO QUE LA PRESENCIA Y QUE EL REGISTRO HORARIO.
+ * Esto es una lectura del registro con los umbrales del perfil aplicados encima:
+ * quien puede leer las horas de la plantilla puede leerlas con una regla delante.
+ * Un ambito propio habria significado poder conceder «ver quien incumple» a quien
+ * no puede ver las horas de las que sale ese incumplimiento, que es una
+ * distincion sin sentido.
+ *
+ * NO `reports:*`, aunque la consulta viva en Reporting: aquel ambito abre el
+ * informe de horas para nomina, que es otra potestad del §7.3 y que el
+ * `responsable_departamento` no tiene — y esta pantalla es suya.
+ *
+ * LA OTRA MITAD ES `ComplianceSummaryPolicy`, que comprueba el ROL: «manager+»
+ * del Anexo B, que aqui es `{admin, rrhh, responsable_departamento}` (regla dura
+ * 18). Es la mitad que deja fuera al `auditor`, que lleva `attendance:read` en el
+ * token y aun asi recibe `403`: auditar es mirar lo que quedo escrito, no la
+ * gestion del dia.
+ *
+ * EL ALCANCE POR DEPARTAMENTO NO SE COMPRUEBA AQUI: entra **en la consulta**
+ * (RF-ID-03), incluidos los recuentos de `meta.totals`. Es un listado, y un
+ * listado acota en vez de denegar.
+ *
+ * `throttle:management` PORQUE CADA PETICION CUESTA: cruza la plantilla del
+ * alcance con hasta tres meses de calendario y deja ademas un asiento de
+ * divulgacion sin agrupar (RS-05). Sin techo por cuenta, una pestaña en bucle de
+ * reintento golpea la misma base de datos que atiende el fichaje (RNF-P-02).
+ *
+ * NO ADMITE `site_id` (ADR-040: hay un centro) NI PAGINACION: solo salen los
+ * incumplimientos, que son escasos, y el techo lo pone el rango. El porque esta
+ * escrito en el contrato.
+ *
+ * NO SE DEGRADA CON LA LICENCIA (ADR-023): es el registro legal contra los
+ * umbrales legales, asi que no hay ningun caso en `Feature` ni ninguna consulta a
+ * la licencia en este camino.
+ */
+Route::get('/compliance/summary', ComplianceSummaryController::class)
+    ->middleware([
+        'auth:sanctum',
+        'ability:'.TokenAbility::ATTENDANCE_READ->value,
+        'throttle:management',
+    ])
+    ->name('reporting.compliance.summary');
 
 /*
  * GET /api/v1/employees/{uuid}/workdays — el registro horario de una persona

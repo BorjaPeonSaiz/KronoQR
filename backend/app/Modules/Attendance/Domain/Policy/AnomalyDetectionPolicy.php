@@ -64,11 +64,19 @@ final readonly class AnomalyDetectionPolicy
      * la unidad del dominio **aqui, una sola vez**, en el borde. Que cada regla
      * lo hiciera por su cuenta es como acaban dos comparaciones midiendo cosas
      * distintas.
+     *
+     * **Las tres duraciones son el CONTEXTO de la incidencia, no la
+     * comparacion.** Quien decide si un umbral se ha superado es el propio
+     * {@see CompliancePolicy}, con sus predicados, porque la vista de
+     * cumplimiento (RF-PA-06, tarea 3.4) vive en otro modulo y tiene que contar
+     * exactamente lo mismo que esta bandeja: con un `<` aqui y otro alli,
+     * bastaria tocar uno para que las dos pantallas discreparan sobre la misma
+     * jornada.
      */
     public function __construct(
         public ClockingPolicy $clocking,
         public ReviewPolicy $review,
-        CompliancePolicy $legal,
+        public CompliancePolicy $legal,
     ) {
         $this->minimumRest = WorkedDuration::ofMinutes($legal->minimumRestMinutes);
         $this->maximumDaily = WorkedDuration::ofMinutes($legal->maximumDailyMinutes);
@@ -167,7 +175,7 @@ final readonly class AnomalyDetectionPolicy
         // RN-12. Solo sobre tramos CERRADOS: mientras uno sigue vivo, «lleva 6 h
         // y media» no es un hecho —la persona puede estar a punto de salir a
         // comer— y alertarlo convertiria cada turno largo en dos incidencias.
-        if ($worked->isLongerThan($this->breakRequiredAfter)) {
+        if ($this->legal->continuousShiftNeedsBreak($worked->minutes)) {
             $anomalies[] = $this->anomaly(AnomalyType::MISSING_BREAK, $day, $entry->uuid(), $now, [
                 'worked_minutes' => $worked->minutes,
                 'threshold_minutes' => $this->breakRequiredAfter->minutes,
@@ -237,7 +245,7 @@ final readonly class AnomalyDetectionPolicy
 
         $worked = $day->totalWorked();
 
-        if (! $worked->isLongerThan($this->maximumDaily)) {
+        if (! $this->legal->dailyTimeIsExcessive($worked->minutes)) {
             return null;
         }
 
@@ -306,7 +314,7 @@ final readonly class AnomalyDetectionPolicy
 
         $rest = WorkedDuration::ofMinutes(intdiv($restSeconds, 60));
 
-        if (! $rest->isShorterThan($this->minimumRest)) {
+        if (! $this->legal->restIsInsufficient($rest->minutes)) {
             return null;
         }
 

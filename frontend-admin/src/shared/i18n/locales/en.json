@@ -13,6 +13,7 @@
       "incidents": "Incidents",
       "reports": "Reports",
       "compliance": "Compliance",
+      "complianceProfile": "Compliance profile",
       "operationalSettings": "Operational settings",
       "devices": "Kiosks",
       "branding": "Brand",
@@ -851,10 +852,11 @@
     "heading": "Compliance profile",
     "intro": "The legal thresholds used to review this site's time records. They ship with the Spanish hospitality profile; adjust them to the collective agreement that applies to you.",
     "loading": "Loading the profile…",
-    "detectionWarning": "These thresholds decide which working days are flagged for review. A change applies from the moment it is saved: history is not recalculated and no already-recorded issue is closed or reopened. Note that the daily review looks back over the last 7 days, so tightening a threshold can raise issues for past working days that fall inside that window.",
+    "detectionWarning": "Minimum rest and the daily working day decide which working days are flagged for review. A change applies from the moment it is saved: history is not recalculated and no already-recorded issue is closed or reopened. Note that the daily review looks back over the last 7 days, so tightening either one can raise issues for past working days that fall inside that window.",
     "pendingDetectionWarning": "You are about to change an incident detection threshold. From the next daily review, different working days will be flagged than are flagged today.",
+    "complianceViewEffect": "This affects the compliance view, not the incident inbox: the reckoning under art. 34.1 ET is annual, so the weekly alert is informative.",
     "retentionWarning": "You are about to change how many years records are kept. Lowering it widens what the purge treats as expired, over data you are legally required to keep. No purge runs on its own: the retention command proposes in simulation first and requires an explicit confirmation.",
-    "notAppliedYet": "Weekly working hours, the first day of the week and the holiday calendar are stored and audited, but no rule applies them yet: the compliance view will be the first to use them.",
+    "notAppliedYet": "The holiday calendar is stored and audited, but no rule applies it yet: the absence log will be the first to use it.",
     "save": "Save profile",
     "saving": "Saving…",
     "saved": "Profile saved. The change is recorded in the audit trail.",
@@ -897,6 +899,72 @@
     "errors": {
       "notAWholeNumber": "Enter a whole number, with no decimals or letters.",
       "required": "This field cannot be left empty."
+    }
+  },
+  "complianceSummary": {
+    "title": "Compliance",
+    "subtitle": "Rest, shift, break and weekly alerts, with the profile threshold applied to each one.",
+    "loading": "Loading the compliance view…",
+    "notEvaluated": "Not evaluated",
+    "duration": "{hours} h {minutes} min",
+    "threshold": "{duration} under the {profile} profile.",
+    "generatedAt": "Data from {moment} · site time zone: {zone}",
+    "findingsHeading": "Findings",
+    "filters": {
+      "legend": "Compliance view filters",
+      "from": "From",
+      "to": "To",
+      "department": "Department",
+      "departmentAll": "All departments",
+      "rule": "Rule",
+      "ruleAll": "All rules",
+      "apply": "Apply filters"
+    },
+    "announce": {
+      "results": "{count} breaches in the compliance view."
+    },
+    "rules": {
+      "insufficient_rest": {
+        "label": "Minimum rest between working days"
+      },
+      "daily_excess": {
+        "label": "Ordinary daily working time"
+      },
+      "missing_break": {
+        "label": "Maximum continuous stretch without a break"
+      },
+      "weekly_excess": {
+        "label": "Ordinary weekly working time"
+      }
+    },
+    "suspensionReasons": {
+      "awaiting_declared_break": "Not evaluated until a declared break exists."
+    },
+    "difference": {
+      "missing": "Short by",
+      "excess": "Over by",
+      "value": "{label} {duration}"
+    },
+    "table": {
+      "caption": "Findings for «{rule}», site time zone: {timeZone}",
+      "employee": "Employee",
+      "period": "Shift day or week",
+      "measured": "Measured",
+      "threshold": "Threshold",
+      "difference": "Difference",
+      "incident": "Incident",
+      "openShift": "Open shift",
+      "viewIncident": "View incident",
+      "viewWorkdays": ", view record"
+    },
+    "empty": {
+      "title": "No alerts in the period",
+      "description": "No finding matches the criteria below for this period. That is not a failure: it is what is expected when the record meets the profile thresholds."
+    },
+    "criteria": {
+      "title": "Criteria for this view",
+      "generated": "Generated on {at} · site time zone: {timeZone}",
+      "employeesEvaluated": "{affected} of {evaluated} people evaluated in the period have at least one finding."
     }
   },
   "branding": {
@@ -975,7 +1043,7 @@
   },
   "operationalSettings": {
     "heading": "Operational settings",
-    "intro": "The thresholds that decide whether a shift entry is anomalous, which scans are discarded as bounce, and which clock or transit skew opens an incident; and the languages this installation offers. No legal threshold lives here: that is «Compliance».",
+    "intro": "The thresholds that decide whether a shift entry is anomalous, which scans are discarded as bounce, and which clock or transit skew opens an incident; and the languages this installation offers. No legal threshold lives here: that is «Compliance profile».",
     "loading": "Loading the settings…",
     "attendanceHeading": "Attendance",
     "diagnosticsHeading": "Diagnostics",

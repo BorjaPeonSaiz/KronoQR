@@ -8,6 +8,10 @@ use App\Modules\Attendance\Domain\Event\EmployeeClockedIn;
 use App\Modules\Attendance\Domain\Event\EmployeeClockedOut;
 use App\Modules\Attendance\Domain\Event\ShiftCorrected;
 use App\Modules\Reporting\Application\Port\AdoptionMetrics;
+use App\Modules\Reporting\Application\Port\ComplianceFactsReader;
+use App\Modules\Reporting\Application\Port\ComplianceIncidentLinks;
+use App\Modules\Reporting\Application\Port\ComplianceMetrics;
+use App\Modules\Reporting\Application\Port\ComplianceProfileReference;
 use App\Modules\Reporting\Application\Port\EmployeeAttribution;
 use App\Modules\Reporting\Application\Port\LivePresenceReader;
 use App\Modules\Reporting\Application\Port\PeriodReportReader;
@@ -19,9 +23,11 @@ use App\Modules\Reporting\Application\Port\ReportIssuerDirectory;
 use App\Modules\Reporting\Application\Port\WorkDayCompletionReader;
 use App\Modules\Reporting\Application\Port\WorkDayJournalReader;
 use App\Modules\Reporting\Application\Port\WorkedTimeMetrics;
+use App\Modules\Reporting\Domain\ValueObject\ComplianceSummary;
 use App\Modules\Reporting\Domain\ValueObject\PeriodReport;
 use App\Modules\Reporting\Domain\ValueObject\PresenceBoard;
 use App\Modules\Reporting\Domain\ValueObject\WorkDayJournal;
+use App\Modules\Reporting\Http\Policy\ComplianceSummaryPolicy;
 use App\Modules\Reporting\Http\Policy\LivePresencePolicy;
 use App\Modules\Reporting\Http\Policy\PeriodReportPolicy;
 use App\Modules\Reporting\Http\Policy\WorkDayJournalPolicy;
@@ -29,12 +35,17 @@ use App\Modules\Reporting\Infrastructure\Adapter\BrowsershotReportRenderer;
 use App\Modules\Reporting\Infrastructure\Adapter\ReverbConnectionCounter;
 use App\Modules\Reporting\Infrastructure\Broadcasting\BroadcastPresenceChange;
 use App\Modules\Reporting\Infrastructure\Console\AdoptionMetricsCommand;
+use App\Modules\Reporting\Infrastructure\Console\ComplianceMetricsCommand;
 use App\Modules\Reporting\Infrastructure\Console\PresenceMetricsCommand;
 use App\Modules\Reporting\Infrastructure\Listener\RecordWorkedMinutes;
 use App\Modules\Reporting\Infrastructure\Metrics\RedisReportExportMetrics;
 use App\Modules\Reporting\Infrastructure\Metrics\RedisWorkedTimeMetrics;
 use App\Modules\Reporting\Infrastructure\Metrics\TextfileAdoptionMetrics;
+use App\Modules\Reporting\Infrastructure\Metrics\TextfileComplianceMetrics;
 use App\Modules\Reporting\Infrastructure\Metrics\TextfilePresenceMetrics;
+use App\Modules\Reporting\Infrastructure\Persistence\DatabaseComplianceFactsReader;
+use App\Modules\Reporting\Infrastructure\Persistence\DatabaseComplianceIncidentLinks;
+use App\Modules\Reporting\Infrastructure\Persistence\DatabaseComplianceProfileReference;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseEmployeeAttribution;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseLivePresenceReader;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabasePeriodReportReader;
@@ -105,6 +116,7 @@ final class ReportingServiceProvider extends ServiceProvider
         $this->app->bind(RealtimeConnectionCounter::class, ReverbConnectionCounter::class);
 
         $this->registerPeriodReport();
+        $this->registerComplianceSummary();
     }
 
     public function boot(): void
@@ -128,11 +140,24 @@ final class ReportingServiceProvider extends ServiceProvider
          */
         Gate::policy(PeriodReport::class, PeriodReportPolicy::class);
 
+        /*
+         * La vista de cumplimiento (RF-PA-06, tarea 3.4). «manager+» del Anexo B,
+         * que aqui es `{admin, rrhh, responsable_departamento}` —el mismo conjunto
+         * que la presencia y que la bandeja de incidencias, porque esta pantalla
+         * es lo que un responsable mira despues de aquella—. El `auditor` queda
+         * fuera teniendo el ambito, que es la mitad que aporta la policy.
+         */
+        Gate::policy(ComplianceSummary::class, ComplianceSummaryPolicy::class);
+
         $this->broadcastPresenceChanges();
         $this->recordWorkedMinutes();
 
         if ($this->app->runningInConsole()) {
-            $this->commands([AdoptionMetricsCommand::class, PresenceMetricsCommand::class]);
+            $this->commands([
+                AdoptionMetricsCommand::class,
+                ComplianceMetricsCommand::class,
+                PresenceMetricsCommand::class,
+            ]);
         }
     }
 
@@ -167,6 +192,47 @@ final class ReportingServiceProvider extends ServiceProvider
         $this->app->bind(EmployeeAttribution::class, DatabaseEmployeeAttribution::class);
 
         $this->registerPeriodReportExport();
+    }
+
+    /**
+     * La vista de cumplimiento y sus dos metricas (RF-PA-06, tarea 3.4).
+     *
+     * **El `statement_timeout` se inyecta desde `config/reporting.php`** por lo
+     * mismo que en el informe: `Infrastructure` puede hablar con el framework,
+     * pero un adaptador que consulta la configuracion por su cuenta es un
+     * adaptador que no se puede construir en una prueba con otro techo. El techo
+     * del rango lo lee el controlador y lo pasa al caso de uso, porque
+     * `Application` no lee configuracion (doc 02 §3.5).
+     *
+     * **Los tres adaptadores son SQL plano sobre la conexion** y viven en
+     * `Infrastructure/Persistence`: ni un modelo Eloquent y ningun `N+1` —una
+     * consulta para los hechos, una para el perfil y una para todo el lote de
+     * incidencias—.
+     */
+    private function registerComplianceSummary(): void
+    {
+        $this->app->bind(
+            ComplianceFactsReader::class,
+            static fn (Application $app): DatabaseComplianceFactsReader => new DatabaseComplianceFactsReader(
+                $app->make(ConnectionInterface::class),
+                Config::integer('reporting.compliance.statement_timeout_seconds'),
+            ),
+        );
+
+        $this->app->bind(ComplianceProfileReference::class, DatabaseComplianceProfileReference::class);
+        $this->app->bind(ComplianceIncidentLinks::class, DatabaseComplianceIncidentLinks::class);
+
+        /*
+         * `compliance_findings_last_week{rule}` y
+         * `compliance_employees_affected_last_week` (doc 02 §8.2).
+         *
+         * Fichero para el colector *textfile*, como las de presencia y adopcion:
+         * son gauges que recalcula entero un comando programado que corre y
+         * termina (regla dura 7 aplicada a la instrumentacion). Un contador en
+         * Redis no se podria corregir cuando una correccion de jornada deshace el
+         * hallazgo, porque solo puede crecer.
+         */
+        $this->app->bind(ComplianceMetrics::class, TextfileComplianceMetrics::class);
     }
 
     /**

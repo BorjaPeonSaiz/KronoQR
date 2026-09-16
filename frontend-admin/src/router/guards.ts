@@ -13,36 +13,9 @@
 // La autorizacion real la aplica el servidor en cada endpoint (regla dura 18).
 // Aqui se evita la frustracion de entrar a una pantalla que devolveria 403.
 import type { Router } from 'vue-router'
-import {
-  ATTENDANCE_READ,
-  CREDENTIALS_MANAGE,
-  EMPLOYEES_MANAGE,
-  INCIDENTS_MANAGE,
-  REPORTS_LEGAL,
-} from '@/features/auth/abilities'
 import { useSessionStore } from '@/features/auth/session.store'
 import { useSetupStore } from '@/features/onboarding/setup.store'
-
-/** Secciones navegables, en el orden en el que se ofrecen. */
-const SECTIONS: readonly { name: string; ability: string }[] = [
-  { name: 'employees', ability: EMPLOYEES_MANAGE },
-  { name: 'credentials', ability: CREDENTIALS_MANAGE },
-  // La ultima, y eso importa: es la unica seccion que alcanza un `auditor`, que
-  // no tiene ni plantilla ni credenciales. Sin ella, entrar con ese rol acababa
-  // en «sin permiso» teniendo permiso para algo.
-  { name: 'legal-export', ability: REPORTS_LEGAL },
-  // Despues de la exportacion a proposito: el `auditor` tambien lee la
-  // presencia, pero su pantalla de partida sigue siendo la Inspeccion. Es la
-  // primera seccion que alcanza un `responsable_departamento`, que no tiene
-  // plantilla, ni credenciales, ni exportacion legal (RF-ID-03).
-  { name: 'live', ability: ATTENDANCE_READ },
-  // Tambien alcanza a un `responsable_departamento` (RF-PA-05), pero despues de
-  // la presencia: ver quien esta dentro ahora mismo es la foto, trabajar la
-  // bandeja es la tarea, y quien entra sin la presencia a su alcance
-  // (`admin`/`rrhh` sin `attendance:read` en un despliegue que se lo quitara)
-  // sigue llegando aqui igualmente.
-  { name: 'incidents', ability: INCIDENTS_MANAGE },
-]
+import { FALLBACK_SECTIONS } from '@/shared/ui/navigation'
 
 export function registerAuthGuard(router: Router): void {
   router.beforeEach(async (to) => {
@@ -102,7 +75,9 @@ export function registerAuthGuard(router: Router): void {
       return true
     }
 
-    const fallback = SECTIONS.find((section) => session.can(section.ability))
+    const fallback = FALLBACK_SECTIONS.find((section) =>
+      section.abilities.some((ability) => session.can(ability)),
+    )
 
     return fallback === undefined ? { name: 'forbidden' } : { name: fallback.name }
   })

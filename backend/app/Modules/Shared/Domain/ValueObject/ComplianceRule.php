@@ -8,10 +8,13 @@ namespace App\Modules\Shared\Domain\ValueObject;
  * Las reglas de cumplimiento cuyo umbral fija el perfil del centro
  * (doc 01 §4, RF-PD-07).
  *
- * Son **tres y solo tres**: las que el doc 01 declara «parametros del perfil de
+ * Son **cuatro**: las que el doc 01 declara «parametros del perfil de
  * cumplimiento, no constantes». RN-01 a RN-09 y RN-13 a RN-15 son estructurales
  * y no se configuran; RN-08 y RN-16 llevan umbral pero **operativo**, y viven en
  * `installation_settings`.
+ *
+ * La cuarta, RN-17, la enuncia la tarea 3.4 y es la primera que **no abre
+ * incidencia**: ver {@see self::opensIncident()}.
  *
  * ## Por que un enum en Shared y no una constante en cada modulo
  *
@@ -35,4 +38,30 @@ enum ComplianceRule: string
 
     /** Tramo continuo maximo sin pausa registrada. */
     case BreakInContinuousShift = 'RN-12';
+
+    /** Jornada semanal ordinaria, sobre la semana que empieza en `week_starts_on`. */
+    case MaximumWeeklyWorkingTime = 'RN-17';
+
+    /**
+     * Si superar esta regla **abre una incidencia** en la bandeja, o si solo se
+     * señala en la vista de cumplimiento.
+     *
+     * RN-17 es la unica que no la abre, y no por falta de implementacion: el
+     * art. 34.1 ET fija las 40 h en **computo anual**, asi que una semana por
+     * encima no es por si sola un incumplimiento. Abrir una incidencia por cada
+     * semana larga convertiria la bandeja —donde alguien tiene que decidir algo—
+     * en un calendario de horas extra, que es informacion y no trabajo
+     * pendiente. La vista de cumplimiento (RF-PA-06) la señala para que RRHH la
+     * contraste con el convenio.
+     *
+     * **No es lo mismo que {@see ComplianceRuleSuspension}**, y confundirlos
+     * seria grave: aquello es temporal —RN-12 abrira incidencia en cuanto exista
+     * la pausa declarada (tarea 3.5)— y esto es permanente, porque describe lo
+     * que la regla significa. Una regla suspendida es una regla que hoy no abre;
+     * una regla que no abre incidencias es una regla que nunca lo hara.
+     */
+    public function opensIncident(): bool
+    {
+        return $this !== self::MaximumWeeklyWorkingTime;
+    }
 }

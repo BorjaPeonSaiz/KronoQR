@@ -22,6 +22,7 @@ import { announce } from '@kronoqr/web-kit/announcer'
 import EmptyState from '@kronoqr/web-kit/components/EmptyState.vue'
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
+import { formatInstant } from '@kronoqr/web-kit/datetime'
 import { downloadDocument } from '@kronoqr/web-kit/downloadDocument'
 import { useQuery } from '@tanstack/vue-query'
 import { computed, ref } from 'vue'
@@ -36,7 +37,7 @@ const GRANULARITIES: readonly ReportGranularity[] = ['day', 'week', 'month', 'ra
 const GROUPINGS: readonly ReportGrouping[] = ['employee', 'department', 'site']
 const FORMATS: readonly PeriodReportFormat[] = ['csv', 'xlsx', 'pdf']
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 // Como se llama cada campo de la consulta EN ESTA PANTALLA, para que un `422`
 // diga «Hasta: …» y no «to: …». El servidor ya manda el mensaje en el idioma de
@@ -66,6 +67,17 @@ const includeOpenShifts = ref(false)
 const report = ref<PeriodReport | null>(null)
 const loading = ref(false)
 const error = ref<unknown>(null)
+
+/**
+ * El instante de generacion, resuelto en la zona del centro (regla dura 3):
+ * NUNCA se enseña el ISO/UTC crudo, que es la hora de nadie (`datetime.ts`,
+ * mismo patron que `LivePresenceView.vue`).
+ */
+const generatedAtLabel = computed(() =>
+  report.value === null
+    ? ''
+    : formatInstant(report.value.meta.generated_at, report.value.meta.time_zone, locale.value),
+)
 
 /**
  * La consulta **que produjo el informe que hay en pantalla**, no la del
@@ -314,7 +326,7 @@ const fieldClass =
           {{
             t('reports.period.criteria.generated', {
               timeZone: report.meta.time_zone,
-              at: report.meta.generated_at,
+              at: generatedAtLabel,
             })
           }}
         </p>

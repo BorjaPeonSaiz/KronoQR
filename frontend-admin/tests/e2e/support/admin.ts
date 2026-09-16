@@ -14,6 +14,7 @@ import type {
   AddShiftEntryRequest,
   Branding,
   ComplianceProfile,
+  ComplianceSummary,
   CorrectedShiftEntry,
   CorrectionAction,
   CorrectShiftEntryRequest,
@@ -101,6 +102,120 @@ export const COMPLIANCE_PROFILE: ComplianceProfile = {
     is_default: true,
     source: 'installation_default',
     updated_at: null,
+  },
+}
+
+/**
+ * La vista de cumplimiento (RF-PA-06, tarea 3.4): lo que responde
+ * `GET /api/v1/compliance/summary`. Adaptado del ejemplo `cuatro-semanas` del
+ * contrato, con la persona y el tramo del resto de esta suite (`EMPLOYEE_UUID`
+ * es «Youssef Amrani», el mismo `shift_entry_uuid` que `WORKDAYS`) y su
+ * departamento «Recepción» -el que ya conoce `DEPARTMENTS`-, no «Cocina»: dos
+ * fichas de la misma persona en el mismo departamento en toda la suite.
+ * `insufficient_rest` tiene un hallazgo enlazado a la incidencia 412 (la misma
+ * que `WORKDAYS_WITH_INCIDENT`); `missing_break` esta suspendida
+ * (`awaiting_declared_break`, RN-12, hasta la tarea 3.5) y sin ningun
+ * hallazgo; `weekly_excess` es informativa, no enlaza incidencia y trae
+ * `has_open_shift: true` (RF-PA-06 segunda vuelta) para que el E2E vea la
+ * insignia «Turno abierto» con texto, no solo con color.
+ *
+ * `meta.criteria` son los CINCO criterios reales de
+ * `backend/lang/es/compliance-summary.php` (`ReadComplianceSummary`), tal
+ * cual: no se resumen ni se inventan para el doble.
+ */
+export const COMPLIANCE_SUMMARY: ComplianceSummary = {
+  data: [
+    {
+      rule: 'insufficient_rest',
+      requirement: 'RN-10',
+      employee: {
+        uuid: EMPLOYEE_UUID,
+        employee_code: 'E7QK2MXPR',
+        full_name: 'Youssef Amrani',
+        department: { id: 3, name: 'Recepción' },
+      },
+      work_date: '2026-03-14',
+      week: null,
+      measured_minutes: 600,
+      threshold_minutes: 720,
+      difference_minutes: 120,
+      shift_entry_uuid: '0199f2c1-8a10-7b40-9c50-6d7e8f9a0b11',
+      has_open_shift: false,
+      incident: { id: 412, status: 'open' },
+    },
+    {
+      rule: 'weekly_excess',
+      requirement: 'RN-17',
+      employee: {
+        uuid: EMPLOYEE_UUID,
+        employee_code: 'E7QK2MXPR',
+        full_name: 'Youssef Amrani',
+        department: { id: 3, name: 'Recepción' },
+      },
+      work_date: null,
+      week: { starts_on: '2026-03-09', ends_on: '2026-03-15' },
+      measured_minutes: 2530,
+      threshold_minutes: 2400,
+      difference_minutes: 130,
+      shift_entry_uuid: null,
+      has_open_shift: true,
+      incident: null,
+    },
+  ],
+  meta: {
+    generated_at: '2026-03-31T09:12:03.418000Z',
+    time_zone: 'Europe/Madrid',
+    from: '2026-03-04',
+    to: '2026-03-31',
+    profile: { id: 1, name: 'ES-hosteleria', jurisdiction: 'ES' },
+    week_starts_on: 1,
+    rules: [
+      {
+        rule: 'insufficient_rest',
+        requirement: 'RN-10',
+        threshold_minutes: 720,
+        evaluated: true,
+        suspension_reason: null,
+      },
+      {
+        rule: 'daily_excess',
+        requirement: 'RN-11',
+        threshold_minutes: 540,
+        evaluated: true,
+        suspension_reason: null,
+      },
+      {
+        rule: 'missing_break',
+        requirement: 'RN-12',
+        threshold_minutes: 360,
+        evaluated: false,
+        suspension_reason: 'awaiting_declared_break',
+      },
+      {
+        rule: 'weekly_excess',
+        requirement: 'RN-17',
+        threshold_minutes: 2400,
+        evaluated: true,
+        suspension_reason: null,
+      },
+    ],
+    totals: {
+      by_rule: { insufficient_rest: 1, daily_excess: 0, missing_break: 0, weekly_excess: 1 },
+      employees_affected: 1,
+      employees_evaluated: 48,
+    },
+    scope: 'all',
+    // Las CINCO claves de `backend/lang/es/compliance-summary.php`, tal cual
+    // las traduce `ReadComplianceSummary` (no se leen del fichero PHP aqui: el
+    // panel no depende del backend, regla dura 18; se copian a mano y quedan
+    // atadas por lectura humana a ese fichero, que no se modifica).
+    criteria: [
+      'El descanso se mide entre jornadas: la última salida de una jornada frente a la primera entrada de la siguiente. El hueco entre dos tramos del mismo día no se evalúa todavía, porque hoy no se puede distinguir una pausa para comer del descanso entre dos turnos.',
+      'La jornada diaria es la suma de los tramos cerrados del día, tal como está en el registro horario consolidado. No se recalcula para esta vista.',
+      'La semana se compone de siete días naturales desde el día en que la empieza el perfil, y se evalúa completa aunque el periodo consultado la corte. La semana por encima de la jornada ordinaria es informativa: el cómputo legal es anual, así que se señala para contrastarla con el convenio y no abre incidencia.',
+      'Una jornada con un tramo todavía abierto se marca y no alerta: ese tramo aún no aporta minutos y el total puede crecer.',
+      'Solo aparecen las personas que están dentro del alcance de quien consulta, incluidas las que causaron baja durante el periodo.',
+    ],
   },
 }
 
@@ -893,6 +1008,15 @@ export interface ManagementApiOptions {
    * instalacion de referencia.
    */
   readonly complianceProfile?: ComplianceProfile
+  /**
+   * Lo que devuelve `GET /api/v1/compliance/summary` (RF-PA-06, tarea 3.4).
+   * Por omision, `COMPLIANCE_SUMMARY`: un descanso insuficiente enlazado a la
+   * incidencia 412 y un exceso semanal informativo, con la pausa (RN-12)
+   * suspendida. El doble ignora los filtros de la peticion -igual que
+   * `GET /api/v1/reports/period'-: lo que el E2E prueba es el recorrido por el
+   * panel, no el filtrado, que se prueba en el backend (regla dura 18).
+   */
+  readonly complianceSummary?: ComplianceSummary
   /**
    * Las concesiones de soporte que devuelve `GET /api/v1/support/grants`
    * (RF-PD-11, tarea 5.9) al arrancar. Por omision, ninguna: la mayoria de
@@ -2196,6 +2320,9 @@ export async function stubManagementApi(
           await json(route, 200, complianceProfile)
           return
         }
+        case 'GET /api/v1/compliance/summary':
+          await json(route, 200, options.complianceSummary ?? COMPLIANCE_SUMMARY)
+          return
         case 'GET /api/v1/credentials/status': {
           // Con `?key_id=` el servidor devuelve solo a quien le falta
           // reimprimir (RF-QR-07): el doble distingue las dos respuestas para

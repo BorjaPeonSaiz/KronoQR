@@ -22,6 +22,7 @@ import {
 } from './support/fixtures'
 import {
   createTestPinia,
+  createTestRouter,
   jsonResponse,
   mountView,
   problemResponse,
@@ -37,6 +38,11 @@ interface MountOptions {
   employeeAccessible?: boolean
   /** Ambitos del token. Por omision, ninguno: sin sesion no se enseña el enlace a la bandeja. */
   abilities?: string[]
+  /**
+   * El rango de la URL (`?from=&to=`), como llega desde el enlace «al día del
+   * aviso» de la vista de cumplimiento (RF-PA-06, tarea 3.4).
+   */
+  query?: { from: string; to: string }
 }
 
 let requestedUrls: string[] = []
@@ -66,7 +72,20 @@ async function mountWorkDays(options: MountOptions = {}): Promise<Wrapper> {
     session.user = managementUser({ abilities: options.abilities })
   }
 
-  const wrapper = await mountView(EmployeeWorkDaysView, { props: { uuid: EMPLOYEE_UUID }, pinia })
+  const router = createTestRouter()
+
+  await router.push({
+    name: 'employee-workdays',
+    params: { uuid: EMPLOYEE_UUID },
+    ...(options.query === undefined ? {} : { query: options.query }),
+  })
+  await router.isReady()
+
+  const wrapper = await mountView(EmployeeWorkDaysView, {
+    props: { uuid: EMPLOYEE_UUID },
+    pinia,
+    router,
+  })
 
   await settle()
 
@@ -119,6 +138,24 @@ describe('EmployeeWorkDaysView', () => {
 
     expect((inputs[0]?.element as HTMLInputElement).value).toBe('2026-03-14')
     expect((inputs[1]?.element as HTMLInputElement).value).toBe('2026-03-14')
+  })
+
+  it('un enlace con ?from=&to= (RF-PA-06) pide ese rango, no el que resolveria el servidor', async () => {
+    // «Al dia del aviso»: la vista de cumplimiento enlaza aqui con la jornada o
+    // la semana del hallazgo (`ComplianceFindingsTable.vue`). Sin esto, un
+    // hallazgo de hace dos meses caeria fuera de los ultimos 31 dias que
+    // resuelve el servidor por omision, y la persona veria «sin jornadas» en
+    // vez del dia que vino a mirar.
+    const wrapper = await mountWorkDays({ query: { from: '2026-01-05', to: '2026-01-11' } })
+    const inputs = wrapper.findAll('input[type="date"]')
+
+    expect((inputs[0]?.element as HTMLInputElement).value).toBe('2026-01-05')
+    expect((inputs[1]?.element as HTMLInputElement).value).toBe('2026-01-11')
+
+    const workdaysUrl = requestedUrls.find((url) => url.includes('/workdays')) ?? ''
+
+    expect(workdaysUrl).toContain('from=2026-01-05')
+    expect(workdaysUrl).toContain('to=2026-01-11')
   })
 
   it('consulta el rango que se le pide, y lo pide al servidor', async () => {

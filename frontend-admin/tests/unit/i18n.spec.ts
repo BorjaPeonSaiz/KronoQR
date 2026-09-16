@@ -155,6 +155,14 @@ describe('idiomas de la aplicacion', () => {
         'unavailable',
         'unexpected',
       ].flatMap((kind) => [`errors.${kind}.title`, `errors.${kind}.advice`]),
+      // La vista de cumplimiento (RF-PA-06, tarea 3.4): las cuatro reglas del
+      // contrato (`ComplianceRuleName`) se traducen dinamicamente
+      // (`t(ruleLabelKey(rule))`), y el unico motivo de suspension de hoy
+      // (`awaiting_declared_break`, RN-12) tambien.
+      ...['insufficient_rest', 'daily_excess', 'missing_break', 'weekly_excess'].map(
+        (rule) => `complianceSummary.rules.${rule}.label`,
+      ),
+      'complianceSummary.suspensionReasons.awaiting_declared_break',
     ]
 
     expect(required.filter((key) => !available.has(key))).toEqual([])

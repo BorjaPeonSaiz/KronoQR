@@ -17,10 +17,10 @@ use App\Modules\Shared\Domain\ValueObject\OperationalSettings;
  * validacion en cada sitio que los recibe.
  */
 
-it('rechaza un perfil de cumplimiento con un umbral legal no positivo', function (int $rest, int $daily, int $break, int $retention): void {
+it('rechaza un perfil de cumplimiento con un umbral legal no positivo', function (int $rest, int $daily, int $break, int $retention, int $weekly = 2400): void {
     // Regla dura 14: los umbrales legales llegan resueltos del perfil, y un cero
     // ahi apagaria una alerta obligatoria sin que nadie se enterase.
-    expect(fn (): CompliancePolicy => new CompliancePolicy($rest, $daily, $break, $retention, 2400, 1, []))
+    expect(fn (): CompliancePolicy => new CompliancePolicy($rest, $daily, $break, $retention, $weekly, 1, []))
         ->toThrow(InvalidArgumentException::class);
 })->with([
     'sin descanso entre jornadas' => [0, 540, 360, 4],
@@ -28,7 +28,12 @@ it('rechaza un perfil de cumplimiento con un umbral legal no positivo', function
     'sin tramo continuo maximo' => [720, 540, 0, 4],
     'sin retencion' => [720, 540, 360, 0],
     'con retencion negativa' => [720, 540, 360, -1],
-])->group('RL-02');
+    // RN-17 desde la tarea 3.4. La fila la rechazan DOS guardas —el `positive()`
+    // y el «la semana no puede caber por debajo del dia»— y aun asi entra: es el
+    // unico caso que ejercita el quinto `positive()`, y sin ella ese umbral seria
+    // el unico del perfil sin su propia frontera probada.
+    'sin jornada semanal' => [720, 540, 360, 4, 0],
+])->group('RL-02', 'RN-17');
 
 it('conserva los cuatro umbrales legales del perfil de cumplimiento', function (): void {
     $policy = new CompliancePolicy(720, 540, 360, 4, 2400, 1, []);
@@ -115,10 +120,11 @@ it('acepta el calendario vacio, que es el valor de serie del perfil espanol', fu
     expect((new CompliancePolicy(720, 540, 360, 4, 2400, 1, []))->holidayCalendar)->toBe([]);
 })->group('RF-PD-07');
 
-it('conserva los tres campos que todavia no tienen consumidor', function (): void {
-    // `maximumWeeklyMinutes`, `weekStartsOn` y `holidayCalendar` los estrena la
-    // tarea 3.4. Que nadie los lea no los hace decorativos: se guardan, se validan
-    // y se auditan desde la 5.2, y esta prueba fija que llegan enteros al dominio.
+it('conserva la jornada semanal, el inicio de semana y los festivos', function (): void {
+    // `maximumWeeklyMinutes` y `weekStartsOn` los estreno RN-17 en la tarea 3.4;
+    // `holidayCalendar` sigue sin consumidor a proposito hasta la 3.10. Que nadie
+    // lea uno de ellos no lo hace decorativo: se guarda, se valida y se audita
+    // desde la 5.2, y esta prueba fija que llegan enteros al dominio.
     $policy = new CompliancePolicy(720, 540, 360, 4, 2400, 1, ['2026-01-06']);
 
     expect($policy->maximumWeeklyMinutes)->toBe(2400)

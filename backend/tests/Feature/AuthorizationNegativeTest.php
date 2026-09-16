@@ -141,6 +141,19 @@ function managementEndpoints(): array
         // esta matriz comprueba es el par rol x endpoint.
         'ver la presencia en vivo' => ['GET', '/api/v1/attendance/live', []],
 
+        // Vista de cumplimiento (tarea 3.4, RF-PA-06). Mismo ambito
+        // `attendance:read` y policy propia: es «manager+» del Anexo B, asi que
+        // el `auditor` recibe `403` **teniendo el ambito** —auditar es mirar lo
+        // que quedo escrito, no la gestion del dia— y el quiosco ni siquiera lo
+        // tiene.
+        //
+        // **Y aqui el `403` del auditor importa mas que en ninguna otra ruta del
+        // grupo**: lo que esta pantalla reparte es una lista de quien ha
+        // incumplido el convenio, con nombre y departamento. El dia que alguien
+        // pida «que el auditor tambien la vea», este par obliga a que el cambio
+        // se haga a la vista.
+        'ver la vista de cumplimiento' => ['GET', '/api/v1/compliance/summary', []],
+
         // Bandeja de incidencias (tarea 2.5, RF-PA-05). Ambito `incidents:*` y
         // policy propia: es «manager+» del Anexo B. El `auditor` recibe `403`
         // por partida doble —no lleva ese ambito y tampoco esta en el conjunto
@@ -344,6 +357,12 @@ function endpointsDeniedToDepartmentManager(): array
         // de `403` se prueban en `Tests\Feature\Reporting\LivePresenceScopeTest`:
         // aqui no caben, porque dependen de a quien se pida.
         $endpoints['ver la presencia en vivo'],
+        // Y la vista de cumplimiento desde la tarea 3.4, por lo mismo: es
+        // «manager+», el responsable entra **acotado a sus departamentos**
+        // —tambien en los recuentos— y su alcance se prueba en
+        // `Tests\Feature\Reporting\ComplianceSummaryScopeTest`. Aqui no cabe,
+        // porque depende de a quien se pida.
+        $endpoints['ver la vista de cumplimiento'],
         // Y la bandeja de incidencias desde la tarea 2.5, por la misma razon: es
         // «manager+», el responsable entra **acotado a sus departamentos**, y su
         // alcance —listado sin `403`, resolucion ajena con `403` y asiento— se

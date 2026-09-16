@@ -13,6 +13,7 @@
       "incidents": "Incidencias",
       "reports": "Informes",
       "compliance": "Cumplimiento",
+      "complianceProfile": "Perfil de cumplimiento",
       "operationalSettings": "Ajustes operativos",
       "devices": "Quioscos",
       "branding": "Marca",
@@ -851,10 +852,11 @@
     "heading": "Perfil de cumplimiento",
     "intro": "Los umbrales legales con los que se revisa el registro horario de este centro. Se entregan con el perfil español de hostelería; ajústalos al convenio que os aplique.",
     "loading": "Cargando el perfil…",
-    "detectionWarning": "Estos umbrales deciden qué jornadas se marcan para revisión. Un cambio rige desde el momento en que se guarda: no se recalcula el histórico y no se cierra ni se reabre ninguna incidencia ya registrada. Ten en cuenta que la revisión diaria vuelve a mirar los últimos 7 días, así que endurecer un umbral puede abrir incidencias de jornadas ya pasadas que caigan dentro de esa ventana.",
+    "detectionWarning": "El descanso mínimo y la jornada diaria deciden qué jornadas se marcan para revisión. Un cambio rige desde el momento en que se guarda: no se recalcula el histórico y no se cierra ni se reabre ninguna incidencia ya registrada. Ten en cuenta que la revisión diaria vuelve a mirar los últimos 7 días, así que endurecer alguno de los dos puede abrir incidencias de jornadas ya pasadas que caigan dentro de esa ventana.",
     "pendingDetectionWarning": "Vas a cambiar un umbral de detección de incidencias. A partir de la próxima revisión diaria se marcarán jornadas distintas de las que se marcan hoy.",
+    "complianceViewEffect": "Esto mueve la vista de cumplimiento, no la bandeja de incidencias: el cómputo del art. 34.1 ET es anual y el aviso semanal es informativo.",
     "retentionWarning": "Vas a cambiar los años de conservación del registro. Bajarlo amplía lo que la purga considera vencido, sobre datos que hay obligación legal de conservar. Ninguna purga se ejecuta sola: la orden de retención propone primero en simulación y exige una confirmación explícita.",
-    "notAppliedYet": "La jornada semanal, el día de inicio de semana y el calendario de festivos se guardan y se auditan, pero todavía no los aplica ninguna regla: los estrenará la vista de cumplimiento.",
+    "notAppliedYet": "El calendario de festivos se guarda y se audita, pero todavía no lo aplica ninguna regla: lo estrenará el registro de ausencias.",
     "save": "Guardar el perfil",
     "saving": "Guardando…",
     "saved": "Perfil guardado. El cambio queda registrado en el trail de auditoría.",
@@ -897,6 +899,72 @@
     "errors": {
       "notAWholeNumber": "Escribe un número entero, sin decimales ni letras.",
       "required": "Este campo no puede quedarse vacío."
+    }
+  },
+  "complianceSummary": {
+    "title": "Cumplimiento",
+    "subtitle": "Las alertas de descanso, jornada, pausa y semana, con el umbral del perfil aplicado a cada una.",
+    "loading": "Cargando la vista de cumplimiento…",
+    "notEvaluated": "No se evalúa",
+    "duration": "{hours} h {minutes} min",
+    "threshold": "{duration} según el perfil {profile}.",
+    "generatedAt": "Datos del {moment} · zona horaria del centro: {zone}",
+    "findingsHeading": "Hallazgos",
+    "filters": {
+      "legend": "Filtros de la vista de cumplimiento",
+      "from": "Desde",
+      "to": "Hasta",
+      "department": "Departamento",
+      "departmentAll": "Todos los departamentos",
+      "rule": "Regla",
+      "ruleAll": "Todas las reglas",
+      "apply": "Aplicar filtros"
+    },
+    "announce": {
+      "results": "{count} incumplimientos en la vista de cumplimiento."
+    },
+    "rules": {
+      "insufficient_rest": {
+        "label": "Descanso mínimo entre jornadas"
+      },
+      "daily_excess": {
+        "label": "Jornada diaria ordinaria"
+      },
+      "missing_break": {
+        "label": "Tramo continuo máximo sin pausa"
+      },
+      "weekly_excess": {
+        "label": "Jornada semanal ordinaria"
+      }
+    },
+    "suspensionReasons": {
+      "awaiting_declared_break": "No se evalúa hasta que exista la pausa declarada."
+    },
+    "difference": {
+      "missing": "Faltan",
+      "excess": "Sobran",
+      "value": "{label} {duration}"
+    },
+    "table": {
+      "caption": "Hallazgos de «{rule}», zona horaria del centro: {timeZone}",
+      "employee": "Empleado",
+      "period": "Jornada o semana",
+      "measured": "Medido",
+      "threshold": "Umbral",
+      "difference": "Diferencia",
+      "incident": "Incidencia",
+      "openShift": "Turno abierto",
+      "viewIncident": "Ver incidencia",
+      "viewWorkdays": ", ver registro"
+    },
+    "empty": {
+      "title": "Sin alertas en el periodo",
+      "description": "Ningún hallazgo cumple los criterios de abajo en este periodo. No es un fallo: es lo que se espera cuando el registro cumple los umbrales del perfil."
+    },
+    "criteria": {
+      "title": "Criterios de esta vista",
+      "generated": "Generado el {at} · zona horaria del centro: {timeZone}",
+      "employeesEvaluated": "{affected} de {evaluated} personas evaluadas en el periodo tienen al menos un hallazgo."
     }
   },
   "branding": {
@@ -975,7 +1043,7 @@
   },
   "operationalSettings": {
     "heading": "Ajustes operativos",
-    "intro": "Los umbrales con los que se decide si un tramo es anómalo, qué escaneos se descartan como rebote y qué desfase de reloj o de tránsito abre una incidencia; y los idiomas que ofrece esta instalación. Ningún umbral legal vive aquí: eso es «Cumplimiento».",
+    "intro": "Los umbrales con los que se decide si un tramo es anómalo, qué escaneos se descartan como rebote y qué desfase de reloj o de tránsito abre una incidencia; y los idiomas que ofrece esta instalación. Ningún umbral legal vive aquí: eso es «Perfil de cumplimiento».",
     "loading": "Cargando los ajustes…",
     "attendanceHeading": "Fichaje",
     "diagnosticsHeading": "Diagnóstico",

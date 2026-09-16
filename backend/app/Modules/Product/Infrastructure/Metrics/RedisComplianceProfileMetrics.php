@@ -16,10 +16,16 @@ use Throwable;
  * una tarea programada pueda recalcular leyendo la tabla —`compliance_profiles`
  * solo guarda el valor de hoy, no cuantas veces se cambio—. `INCRBY` es atomico.
  *
- * Tres etiquetas y no dos booleanos separados: `any` cuenta todos los campos
- * cambiados, `incident_detection` y `retention` los que ademas tienen esa
- * consecuencia. Un cambio puede contar en dos, y eso es correcto: son
- * consecuencias, no categorias excluyentes.
+ * Cuatro valores de etiqueta y no tres booleanos separados: `any` cuenta todos
+ * los campos cambiados, e `incident_detection`, `compliance_view` y `retention`
+ * los que ademas tienen esa consecuencia. Un cambio puede contar en varios, y
+ * eso es correcto: son consecuencias, no categorias excluyentes.
+ *
+ * `compliance_view` lo añade la tarea 3.4 con RN-17 y **no toca el catalogo del
+ * §8.2**: la serie sigue teniendo una sola etiqueta, `effect`, y lo que cambia es
+ * el conjunto de valores que puede tomar. Un valor nuevo aparece solo en el
+ * cuadro de mando en cuanto alguien lo produce; una etiqueta nueva habria roto
+ * las consultas existentes.
  */
 final readonly class RedisComplianceProfileMetrics implements ComplianceProfileMetrics
 {
@@ -30,10 +36,15 @@ final readonly class RedisComplianceProfileMetrics implements ComplianceProfileM
 
     public function __construct(private Redis $redis) {}
 
-    public function profileChanged(int $changes, int $affectingIncidentDetection, int $affectingRetention): void
-    {
+    public function profileChanged(
+        int $changes,
+        int $affectingIncidentDetection,
+        int $affectingComplianceView,
+        int $affectingRetention,
+    ): void {
         $this->increment('any', $changes);
         $this->increment('incident_detection', $affectingIncidentDetection);
+        $this->increment('compliance_view', $affectingComplianceView);
         $this->increment('retention', $affectingRetention);
     }
 

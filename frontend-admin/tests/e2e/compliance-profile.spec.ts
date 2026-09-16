@@ -16,7 +16,7 @@ test(
     await stubManagementApi(page, { role: 'manager' })
     await logInAsManager(page)
 
-    await expect(page.getByRole('link', { name: 'Cumplimiento' })).not.toBeVisible()
+    await expect(page.getByRole('link', { name: 'Perfil de cumplimiento' })).not.toBeVisible()
 
     // El enlace esta oculto, pero la URL sigue existiendo: quien la escribe a
     // mano no llega a la pantalla, y la guarda manda a la primera seccion a
@@ -36,7 +36,7 @@ test(
     await stubManagementApi(page, { role: 'admin' })
     await logInAsAdmin(page)
 
-    await page.getByRole('link', { name: 'Cumplimiento' }).click()
+    await page.getByRole('link', { name: 'Perfil de cumplimiento' }).click()
     await expect(
       page.getByRole('heading', { level: 1, name: 'Perfil de cumplimiento' }),
     ).toBeVisible()

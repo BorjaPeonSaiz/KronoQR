@@ -21,9 +21,9 @@ namespace App\Modules\Product\Application\Port;
  *
  * Una etiqueta por campo daria ocho series de las que siete valen cero casi
  * siempre. Lo que cambia la conducta de quien mira el cuadro de mando es separar
- * «esto cambia que alertas saltan» de «esto cambia que se puede borrar»: son las
- * dos preguntas que se hacen, y son exactamente los dos booleanos que ya lleva
- * el asiento.
+ * «esto cambia que alertas saltan» de «esto cambia lo que RRHH ve en la vista de
+ * cumplimiento» y de «esto cambia que se puede borrar»: son las tres preguntas
+ * que se hacen, y son exactamente los tres booleanos que ya lleva el asiento.
  *
  * ## Contar no puede romper un cambio ya guardado
  *
@@ -35,7 +35,13 @@ interface ComplianceProfileMetrics
     /**
      * @param  int  $changes  cuantos campos han cambiado de valor en esta operacion
      * @param  int  $affectingIncidentDetection  cuantos de ellos mueven RN-10, RN-11 o RN-12
+     * @param  int  $affectingComplianceView  cuantos de ellos mueven la vista de cumplimiento (RF-PA-06), RN-17 incluida
      * @param  int  $affectingRetention  cuantos de ellos mueven el plazo de RL-02
      */
-    public function profileChanged(int $changes, int $affectingIncidentDetection, int $affectingRetention): void;
+    public function profileChanged(
+        int $changes,
+        int $affectingIncidentDetection,
+        int $affectingComplianceView,
+        int $affectingRetention,
+    ): void;
 }

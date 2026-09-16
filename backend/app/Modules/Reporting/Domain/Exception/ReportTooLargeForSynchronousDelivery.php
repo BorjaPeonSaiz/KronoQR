@@ -69,4 +69,34 @@ final class ReportTooLargeForSynchronousDelivery extends DomainException
             .'Reduce el rango, sube la granularidad o pide la generacion en diferido.',
         );
     }
+
+    /**
+     * La vista de cumplimiento cancelada por `statement_timeout` (RF-PA-06,
+     * tarea 3.4).
+     *
+     * Factoria propia y no {@see self::timedOut()}: aquel mensaje ofrece «sube la
+     * granularidad» y «pide la generacion en diferido», y **esta vista no tiene
+     * ninguna de las dos cosas**. Una salida que no existe es peor que ninguna,
+     * porque quien la lee se va a buscarla.
+     */
+    public static function complianceTimedOut(int $timeoutSeconds): self
+    {
+        return new self(
+            'La vista de cumplimiento ha superado los '.$timeoutSeconds.' segundos y se ha cancelado. '
+            .'Reduce el rango o acota el departamento.',
+        );
+    }
+
+    /**
+     * El rango pedido a la vista de cumplimiento supera el presupuesto sincrono.
+     *
+     * Misma razon que arriba para no reutilizar {@see self::rangeTooWide()}.
+     */
+    public static function complianceRangeTooWide(int $days, int $maximumDays): self
+    {
+        return new self(
+            'La vista de cumplimiento abarca '.$days.' dias y el maximo que se entrega en el acto es '
+            .$maximumDays.'. Reduce el rango.',
+        );
+    }
 }

@@ -25,18 +25,31 @@ use InvalidArgumentException;
  * porque Shared no puede depender de un modulo (doc 02 §1.6). Quien evalua la
  * regla lo convierte a `WorkedDuration` al recibirlo.
  *
- * ## Tres campos sin consumidor todavia, y por que estan
+ * ## Un campo sin consumidor todavia, y por que esta
  *
- * `maximumWeeklyMinutes`, `weekStartsOn` y `holidayCalendar` completan el perfil
- * del doc 01 §5 y **los estrena la tarea 3.4** (vista de cumplimiento, RF-PA-06),
- * que es la que agrega por semana y necesita saber por que dia empieza y que dias
- * son festivos. Se añaden aqui en la 5.2, con el resto del perfil, en lugar de
- * esperar: la alternativa era que la 3.4 tuviera que ampliar a la vez el esquema,
- * el puerto, el contrato y la pantalla — y hasta entonces el panel enseñaria un
- * perfil incompleto que el cliente no podria ajustar a su convenio.
+ * `maximumWeeklyMinutes` y `weekStartsOn` los **estreno la tarea 3.4** (RN-17 y
+ * la vista de cumplimiento, RF-PA-06). `holidayCalendar` sigue sin consumidor a
+ * proposito: ninguna de las cuatro reglas lee festivos —la semanal mide la
+ * semana trabajada, no los dias laborables— y fingir lo contrario seria prometer
+ * un efecto que no existe. Lo estrena la tarea 3.10 (ausencias).
  *
- * **Que no haya consumidor no los hace decorativos**: los tres se guardan, se
- * validan, se auditan y se sirven. Lo unico que falta es la regla que los lea.
+ * **Que no haya consumidor no lo hace decorativo**: se guarda, se valida, se
+ * audita y se sirve. Lo unico que falta es la regla que lo lea.
+ *
+ * ## Una comparacion, un sitio
+ *
+ * Los cuatro predicados de abajo son **la unica** forma de preguntar si un
+ * umbral se ha superado. Los usan la revision diaria —que abre las incidencias
+ * (`Attendance\Domain\Policy\AnomalyDetectionPolicy`)— y el evaluador de la
+ * vista de cumplimiento (`Reporting\Domain\Policy\ComplianceEvaluation`), que
+ * viven en modulos que no pueden verse (doc 02 §1.6) y **tienen que contar
+ * exactamente lo mismo**. Con dos copias del `<` bastaria cambiar una para que
+ * la bandeja marcara una jornada que la vista no, y la primera persona en
+ * descubrirlo seria un empleado defendiendose de un aviso.
+ *
+ * El limite es **abierto** en las cuatro, tal como lo enuncia el doc 01: con 12 h
+ * de descanso minimo, 11 h 59 alerta y 12 h exactas no. Escrito una vez aqui, ese
+ * matiz no se puede perder al copiarlo.
  */
 final readonly class CompliancePolicy
 {
@@ -74,14 +87,13 @@ final readonly class CompliancePolicy
         public int $breakRequiredAfterMinutes,
         /** RL-02: anos que se conserva el registro horario antes de la purga. */
         public int $retentionYears,
-        /** Jornada semanal ordinaria (art. 34.1 ET). Sin consumidor hasta la tarea 3.4. */
+        /** RN-17: jornada semanal ordinaria (art. 34.1 ET). */
         public int $maximumWeeklyMinutes,
         /**
          * Dia en que empieza la semana, en numeracion **ISO-8601**: 1 es lunes y
          * 7 domingo. Es la misma que usan los informes por periodo, y por eso se
          * guarda como numero y no como el nombre del dia: un nombre habria que
-         * traducirlo y volver a interpretarlo en cada consumidor. Sin consumidor
-         * hasta la tarea 3.4.
+         * traducirlo y volver a interpretarlo en cada consumidor.
          */
         public int $weekStartsOn,
         array $holidayCalendar,
@@ -90,7 +102,15 @@ final readonly class CompliancePolicy
         $this->positive($maximumDailyMinutes, 'la jornada diaria ordinaria (RN-11)');
         $this->positive($breakRequiredAfterMinutes, 'el tramo continuo sin pausa (RN-12)');
         $this->positive($retentionYears, 'los anos de retencion (RL-02)');
-        $this->positive($maximumWeeklyMinutes, 'la jornada semanal ordinaria');
+        // **Defensa redundante y deliberada** (RN-17). La guarda de abajo —«la
+        // semana no puede caber por debajo del dia»— ya rechaza cualquier valor no
+        // positivo, porque la jornada diaria si es positiva por la linea anterior.
+        // Se deja porque el mensaje que produce nombra el campo equivocado en el
+        // otro camino, y porque quitarla dejaria a `max_weekly_hours` como el
+        // unico umbral del perfil sin su propia frontera declarada. La
+        // consecuencia asumida: es un mutante que ninguna prueba puede matar, y
+        // este comentario es lo que impide que alguien lo «arregle» borrandola.
+        $this->positive($maximumWeeklyMinutes, 'la jornada semanal ordinaria (RN-17)');
 
         if ($weekStartsOn < 1 || $weekStartsOn > 7) {
             throw new InvalidArgumentException(
@@ -111,6 +131,47 @@ final readonly class CompliancePolicy
         }
 
         $this->holidayCalendar = HolidayCalendar::of($holidayCalendar)->days;
+    }
+
+    /**
+     * RN-10: el descanso **entre jornadas** se queda por debajo del minimo.
+     *
+     * `$restMinutes` es el hueco real entre el fin del ultimo tramo de la jornada
+     * anterior y la primera entrada de esta, ya en minutos enteros. Cero minutos
+     * es un descanso —el peor que se puede registrar sin solapar— y por tanto
+     * insuficiente; un valor negativo no describe un descanso sino un solape, que
+     * es de RN-02, y quien llama no debe llegar aqui con el.
+     */
+    public function restIsInsufficient(int $restMinutes): bool
+    {
+        return $restMinutes < $this->minimumRestMinutes;
+    }
+
+    /**
+     * RN-11: la suma de los tramos **cerrados** de la jornada supera la jornada
+     * diaria ordinaria.
+     */
+    public function dailyTimeIsExcessive(int $workedMinutes): bool
+    {
+        return $workedMinutes > $this->maximumDailyMinutes;
+    }
+
+    /**
+     * RN-12: un tramo continuo **cerrado** se ha alargado por encima del maximo
+     * sin pausa registrada.
+     */
+    public function continuousShiftNeedsBreak(int $continuousMinutes): bool
+    {
+        return $continuousMinutes > $this->breakRequiredAfterMinutes;
+    }
+
+    /**
+     * RN-17: la suma de la semana del perfil supera la jornada semanal
+     * ordinaria.
+     */
+    public function weeklyTimeIsExcessive(int $weeklyMinutes): bool
+    {
+        return $weeklyMinutes > $this->maximumWeeklyMinutes;
     }
 
     private function positive(int $value, string $what): void
