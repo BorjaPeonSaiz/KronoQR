@@ -65,6 +65,25 @@ updates:
     groups:
       npm-menores-y-parches:
         update-types: ["minor", "patch"]
+      # `vitest` y `@vitest/coverage-v8` solo pueden subir de mayor A LA VEZ:
+      # el 14-09-2026 llegaron como dos PR separadas (#60 y #61) y cada una
+      # rompia lint, tipos y unitarias de los cuatro paquetes por el desajuste
+      # entre ejecutor y cobertura. Con el grupo, la proxima mayor llega en
+      # una sola PR coherente.
+      vitest-mayor:
+        patterns: ["vitest", "@vitest/*"]
+        update-types: ["major"]
+    # Vitest 5 se APLAZA (decision del 16-09-2026): es una dependencia de
+    # desarrollo sin efecto en el producto ni en RS-10, y la migracion exige
+    # revisar las unitarias de los cuatro paquetes (`sequential` retirado,
+    # `toHaveTextContent` estricto, entradas obsoletas). Se aborda a proposito
+    # en la 3.7 o al cierre de la Fase 3; hasta entonces, sin PR automaticas
+    # de mayor. Menores y parches de la rama 4 siguen llegando.
+    ignore:
+      - dependency-name: "vitest"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@vitest/*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
