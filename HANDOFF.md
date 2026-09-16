@@ -7,8 +7,9 @@
 
 ## Estado y objetivo actual
 
-**Rama `fix/plan-limits-token-expiry` (desde `main` `3969d5c`). Hotfix del 16-09-2026: `main` estaba EN ROJO desde la nocturna
-del 13-09 sin ningún push de por medio** (verde el 11 y el 12; rojas 34747422819, 34825362023, 34948456610 y 35074773680, todas en
+**Hotfix del 16-09-2026 INTEGRADO en `main`** (PR #62, *merge commit* `a90d163`, commit `3d7e22f`; CI manual 35076362124 en
+verde con los 20 jobs, ⑧b y cobertura incluidos; rama borrada; `make up` hecho). **`main` estaba EN ROJO desde la nocturna del
+13-09 sin ningún push de por medio** (verde el 11 y el 12; rojas 34747422819, 34825362023, 34948456610 y 35074773680, todas en
 el job de cobertura, y las cuatro PRs de Dependabot #58–#61 por arrastre). Causa: `PlanLimitsDoNotBlockTest` instalaba
 `FixedClock` de junio, emitía un token de quiosco con `IssueDeviceToken` (caducidad = junio + 90 días) y fichaba; Sanctum comparaba
 `expires_at` con el reloj real → 401. **No es defecto de producto**: es una prueba que dependía del calendario (ver Trampas).
@@ -89,8 +90,8 @@ falsificables) → `TrustProxies` propio con `TRUSTED_PROXIES`; sondas retiradas
 cuatro jobs en UP, 24 series en `/metrics`, `probe_success=1`, y una petición con `traceparent` a `/ready` recuperada en Tempo con
 `GET health.ready` → `postgresql select`. **Ver «Siguiente acción».**
 
-**Siguiente acción:** commit del hotfix, CI manual en `fix/plan-limits-token-expiry` (sin empujar nada después), PR con *merge
-commit*, comprobar que la nocturna siguiente de `main` sale en verde y hacer `@dependabot rebase` en #58 y #59 (ver «Pendiente»).
+**Siguiente acción:** `@dependabot rebase` pedido en #58 y #59 el 16-09 tras integrar el hotfix: integrarlas con *merge commit*
+si su CI sale en verde; decidir #60/#61 (Vitest 5, ver «Pendiente»); comprobar que la nocturna siguiente de `main` sale en verde.
 Después, arrancar la **3.3** (panel de salud de quioscos; no depende de la 3.2, decisión 14). Análisis de huecos de la 3.3 ya
 hecho el 16-09: falta `battery_level` en el latido y en `GET /devices` (contrato primero, migración expand, tres `schema.d.ts`),
 el resaltado por umbral en el panel (`elapsedSinceHeartbeat` mide contra el reloj del navegador y no hay umbral; decidir cómo
