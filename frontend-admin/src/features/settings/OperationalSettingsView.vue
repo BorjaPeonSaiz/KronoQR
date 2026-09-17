@@ -41,6 +41,16 @@
 //    no declara ese `null` (`SettingValue` es `number | string | string[]`);
 //    la comprobacion pasa por `unknown` a proposito, para no dar por hecho el
 //    tipo de una respuesta que `schema.d.ts` todavia no describe.
+//  - **`ATTENDANCE_BREAK_CLOCKING` (RF-AT-12, tarea 3.5) es de tipo `text`
+//    con un conjunto cerrado de dos valores** (`enabled`/`disabled`), igual
+//    que `LOCALE_DEFAULT`: un desplegable sobre `constraints.allowed`, nunca
+//    un catalogo propio. Ya esta en el enum `SettingKey` del contrato
+//    (`BREAK_CLOCKING_KEY` la tipa una vez, para que un cambio de nombre en
+//    el contrato falle aqui y no en `changes['ATTENDANCE_BREAK_CLOCKING']`).
+//    Activarlo enseña el boton «Pausa» en la tablet y reactiva RN-12 (tramo
+//    continuo sin pausa) desde la siguiente revision nocturna; desactivarlo
+//    la vuelve a suspender sin cerrar ninguna incidencia ya abierta -las
+//    tres consecuencias van en el hint del campo-.
 import { announce } from '@kronoqr/web-kit/announcer'
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import FormField from '@kronoqr/web-kit/components/FormField.vue'
@@ -51,6 +61,7 @@ import { useI18n } from 'vue-i18n'
 import type {
   InstallationSetting,
   InstallationSettings,
+  SettingKey,
   UpdateSettingsRequest,
 } from '@/shared/api/types'
 import { fetchInstallationSettings, stringValue, updateInstallationSettings } from './settings.api'
@@ -59,6 +70,9 @@ const { t } = useI18n()
 
 /** La forma que exige el panel para `KIOSK_SERVICE_CODE` (RF-KI-08): 8 a 12 cifras. Vacio siempre vale. */
 const SERVICE_CODE_PATTERN = /^[0-9]{8,12}$/
+
+/** Tipada con el enum del contrato (RF-AT-12, tarea 3.5): un cambio de nombre en `SettingKey` falla aqui. */
+const BREAK_CLOCKING_KEY: SettingKey = 'ATTENDANCE_BREAK_CLOCKING'
 
 /** Las cuatro claves `ATTENDANCE_*`, en el orden en que las declara el catalogo. */
 const ATTENDANCE_FIELDS = [
@@ -93,6 +107,8 @@ const form = ref<Record<AttendanceKey, number | string>>({
 const localeDefault = ref('')
 const localeAvailable = ref<string[]>([])
 const serviceCode = ref('')
+/** `enabled`/`disabled` (RF-AT-12, tarea 3.5). `disabled` de serie, como en el catalogo. */
+const breakClocking = ref('disabled')
 /**
  * Guardado DEFENSIVO (segunda vuelta de la tarea 3.3): el contrato de hoy
  * (`SettingValue = number | string | string[]`) no admite `null`, pero un
@@ -131,6 +147,28 @@ const shippedLocales = computed<readonly string[]>(() => {
     []
   )
 })
+
+/** Los dos valores que el catalogo admite para `ATTENDANCE_BREAK_CLOCKING` (`constraints.allowed`), con el mismo criterio que `shippedLocales`: nunca un catalogo duplicado en el cliente. */
+const breakClockingOptions = computed<readonly string[]>(() => {
+  const catalog = settings.value
+
+  return catalog === null ? [] : (entryOf(catalog, BREAK_CLOCKING_KEY)?.constraints?.allowed ?? [])
+})
+
+/**
+ * `enabled`/`disabled` ya cargado, con `disabled` -el valor de serie del
+ * catalogo (decision 7 de la ficha 3.5)- como respaldo mientras la clave no
+ * tenga fila (instalacion recien puesta en marcha). Usada en `fill()` Y en
+ * `pendingChanges` para que las dos comparen SIEMPRE la misma normalizacion:
+ * sin esto, una cadena vacia del servidor se leeria como «disabled» en
+ * pantalla pero como «cambio pendiente» al guardar, y el boton de guardar se
+ * quedaria activo sin que nadie tocara nada.
+ */
+function breakClockingValueOf(catalog: InstallationSettings): string {
+  const stored = stringValue(catalog, BREAK_CLOCKING_KEY)
+
+  return stored === '' ? 'disabled' : stored
+}
 
 /** Como se llama un idioma, en el idioma de la interfaz. Sin traduccion propia, el codigo tal cual: no debería pasar con el catalogo de serie (`es`, `en`). */
 function localeLabel(code: string): string {
@@ -173,6 +211,8 @@ function fill(catalog: InstallationSettings): void {
   localeAvailable.value = Array.isArray(storedAvailable) ? [...storedAvailable] : []
   serviceCodeRedacted.value = isServiceCodeRedacted(catalog)
   serviceCode.value = serviceCodeRedacted.value ? '' : stringValue(catalog, 'KIOSK_SERVICE_CODE')
+
+  breakClocking.value = breakClockingValueOf(catalog)
 }
 
 async function load(): Promise<void> {
@@ -202,6 +242,7 @@ const fieldLabels = computed<Record<string, string>>(() => ({
   'settings.ATTENDANCE_MAX_CLOCK_SKEW_MINUTES': t('operationalSettings.fields.maxClockSkewMinutes'),
   'settings.ATTENDANCE_MIN_TRANSIT_SECONDS': t('operationalSettings.fields.minTransitSeconds'),
   'settings.KIOSK_SERVICE_CODE': t('operationalSettings.fields.kioskServiceCode'),
+  'settings.ATTENDANCE_BREAK_CLOCKING': t('operationalSettings.fields.breakClocking'),
   'settings.LOCALE_DEFAULT': t('operationalSettings.fields.localeDefault'),
   'settings.LOCALE_AVAILABLE': t('operationalSettings.fields.localeAvailable'),
 }))
@@ -302,6 +343,12 @@ const pendingChanges = computed<UpdateSettingsRequest['settings']>(() => {
     if (serviceCodeLocalIssue.value === null && trimmedServiceCode !== previousServiceCode) {
       changes['KIOSK_SERVICE_CODE'] = trimmedServiceCode
     }
+  }
+
+  const previousBreakClocking = breakClockingValueOf(current)
+
+  if (breakClocking.value !== previousBreakClocking) {
+    changes['ATTENDANCE_BREAK_CLOCKING'] = breakClocking.value
   }
 
   const trimmedDefault = localeDefault.value.trim()
@@ -416,6 +463,27 @@ async function save(): Promise<void> {
               :aria-invalid="invalid"
               class="w-32 rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text"
             />
+          </template>
+        </FormField>
+
+        <FormField
+          :label="t('operationalSettings.fields.breakClocking')"
+          :hint="t('operationalSettings.hints.breakClocking')"
+          :errors="serverFieldErrors(BREAK_CLOCKING_KEY)"
+        >
+          <template #default="{ id, describedBy, invalid }">
+            <select
+              :id="id"
+              v-model="breakClocking"
+              data-test="break-clocking"
+              :aria-describedby="describedBy"
+              :aria-invalid="invalid"
+              class="w-48 rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text"
+            >
+              <option v-for="option of breakClockingOptions" :key="option" :value="option">
+                {{ t(`operationalSettings.breakClockingOptions.${option}`) }}
+              </option>
+            </select>
           </template>
         </FormField>
       </fieldset>

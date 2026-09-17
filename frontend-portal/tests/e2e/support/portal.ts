@@ -124,6 +124,8 @@ function normalDay(date: string, clockInHourUtc: number): WorkDayDetail {
         clocked_out_at_local: clockedOutLocal,
         clocked_out_recorded_at: clockedOutAt,
         clock_out_source: 'qr_kiosk',
+        opened_by: 'clock_in',
+        closed_by: 'clock_out',
         duration_minutes: 480,
         recorded_at: clockedOutAt,
       },
@@ -161,6 +163,8 @@ function correctedDay(): WorkDayDetail {
         clocked_out_at_local: '2026-03-14T14:05:00.000000+01:00',
         clocked_out_recorded_at: null,
         clock_out_source: 'manual_admin',
+        opened_by: 'clock_in',
+        closed_by: 'clock_out',
         duration_minutes: 485,
         recorded_at: '2026-03-14T15:22:41.900000Z',
       },
@@ -216,8 +220,80 @@ function openDay(): WorkDayDetail {
         clocked_out_at_local: null,
         clocked_out_recorded_at: null,
         clock_out_source: null,
+        opened_by: 'clock_in',
+        closed_by: null,
         duration_minutes: null,
         recorded_at: '2026-03-20T07:00:01.500000Z',
+      },
+    ],
+    corrections: [],
+    incidents: [],
+  }
+}
+
+/**
+ * Jornada con una pausa declarada (tarea 3.5, ADR-024): entrada a las 06:00,
+ * pausa de 30 minutos a mediodia, salida a las 16:00. El tramo de la mañana
+ * cierra con `break_start` y el de la tarde abre con `break_end`.
+ */
+const BREAK_SHIFT_ENTRY_UUIDS: readonly [string, string] = [
+  '0199f2c1-8a10-7b40-9c50-6d7e8f9a0b31',
+  '0199f2c1-8a10-7b40-9c50-6d7e8f9a0b32',
+]
+
+/**
+ * Exportada para los escenarios que la necesitan sueltos: `my-records.spec.ts`
+ * (`@RF-AT-12`) y `accessibility.spec.ts` la registran con `page.route`
+ * DESPUES de `stubPortalApi`, como el resto de escenarios de un solo dia, en
+ * vez de sumarla a `PORTAL_WORKDAYS` — que varias pruebas cuentan a "6
+ * jornadas" y una jornada mas romperia ese recuento sin decir nada del caso
+ * que de verdad prueban.
+ */
+export function dayWithBreak(): WorkDayDetail {
+  return {
+    work_date: '2026-03-19',
+    time_zone: 'Europe/Madrid',
+    total_minutes: 570,
+    shift_count: 2,
+    has_open_shift: false,
+    has_incident: false,
+    recalculated_at: '2026-03-19T15:00:00.000000Z',
+    shift_entries: [
+      {
+        uuid: BREAK_SHIFT_ENTRY_UUIDS[0],
+        version: 1,
+        status: 'closed',
+        time_zone: 'Europe/Madrid',
+        clocked_in_at: '2026-03-19T05:00:00.000000Z',
+        clocked_in_at_local: '2026-03-19T06:00:00.000000+01:00',
+        clocked_in_recorded_at: '2026-03-19T05:00:00.000000Z',
+        clock_in_source: 'qr_kiosk',
+        clocked_out_at: '2026-03-19T11:00:00.000000Z',
+        clocked_out_at_local: '2026-03-19T12:00:00.000000+01:00',
+        clocked_out_recorded_at: '2026-03-19T11:00:00.000000Z',
+        clock_out_source: 'qr_kiosk',
+        opened_by: 'clock_in',
+        closed_by: 'break_start',
+        duration_minutes: 360,
+        recorded_at: '2026-03-19T11:00:00.000000Z',
+      },
+      {
+        uuid: BREAK_SHIFT_ENTRY_UUIDS[1],
+        version: 1,
+        status: 'closed',
+        time_zone: 'Europe/Madrid',
+        clocked_in_at: '2026-03-19T11:30:00.000000Z',
+        clocked_in_at_local: '2026-03-19T12:30:00.000000+01:00',
+        clocked_in_recorded_at: '2026-03-19T11:30:00.000000Z',
+        clock_in_source: 'qr_kiosk',
+        clocked_out_at: '2026-03-19T15:00:00.000000Z',
+        clocked_out_at_local: '2026-03-19T16:00:00.000000+01:00',
+        clocked_out_recorded_at: '2026-03-19T15:00:00.000000Z',
+        clock_out_source: 'qr_kiosk',
+        opened_by: 'break_end',
+        closed_by: 'clock_out',
+        duration_minutes: 210,
+        recorded_at: '2026-03-19T15:00:00.000000Z',
       },
     ],
     corrections: [],
@@ -247,6 +323,23 @@ function employeeWorkDays(from: string, to: string): EmployeeWorkDays {
     to,
     data,
     meta: { total: data.length },
+  }
+}
+
+/**
+ * Envuelve un unico dia en la forma de `GET /api/v1/me/workdays`, para los
+ * escenarios que registran su propia ruta con `page.route` DESPUES de
+ * `stubPortalApi` en vez de sumar el dia a `PORTAL_WORKDAYS` (mismo patron que
+ * el descuadre de totales de `my-records.spec.ts`).
+ */
+export function singleDayEmployeeWorkDays(day: WorkDayDetail): EmployeeWorkDays {
+  return {
+    employee_uuid: EMPLOYEE_UUID,
+    time_zone: 'Europe/Madrid',
+    from: day.work_date,
+    to: day.work_date,
+    data: [day],
+    meta: { total: 1 },
   }
 }
 

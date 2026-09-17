@@ -38,9 +38,10 @@ tras la primera carga, para que se vea exactamente qué rango se está mirando.
 Regla dura 14: los umbrales legales se leen del perfil de cumplimiento, nunca
 de una constante del código. Cada tarjeta dice, por ejemplo, «12 h según el
 perfil ES-hosteleria»: un aviso cuyo criterio no se ve es un aviso que nadie
-defiende ante un empleado. La regla suspendida (`missing_break`, RN-12, hasta
-que exista la pausa declarada de la tarea 3.5) lo dice también, con su motivo
-traducido — nunca se calla.
+defiende ante un empleado. La regla suspendida (`missing_break`, RN-12,
+suspendida mientras el fichaje de pausa esté desactivado en «Ajustes
+operativos», `ATTENDANCE_BREAK_CLOCKING`, tarea 3.5) lo dice también, con su
+motivo traducido (`break_clocking_disabled`) — nunca se calla.
 
 ## Nada se calcula aquí (regla dura 7)
 

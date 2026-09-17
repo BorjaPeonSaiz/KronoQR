@@ -28,6 +28,8 @@ import { useConnectivity } from '@/shared/connectivity/useConnectivity'
 import {
   APP_VERSION,
   clearDeviceToken,
+  readBreakClockingEnabled,
+  readClockSkewToleranceSeconds,
   readDeviceToken,
   resolveDeviceId,
 } from '@/shared/telemetry/deviceIdentity'
@@ -39,6 +41,7 @@ import LanguageSelector from '@/shared/ui/LanguageSelector.vue'
 import PrivacyNoticePanel from '@/shared/ui/PrivacyNoticePanel.vue'
 import { useOfflineQueue } from '@/features/offline/useOfflineQueue'
 import ScanConfirmationPanel from '@/features/scan/ui/ScanConfirmationPanel.vue'
+import { useBreakIntent } from '@/features/scan/composables/useBreakIntent'
 import { useScanSessionWithCleanup } from '@/features/scan/composables/useScanSession'
 import { useScanSound } from '@/features/scan/composables/useScanSound'
 import { useWakeLock } from '@/features/scan/composables/useWakeLock'
@@ -98,6 +101,19 @@ watchEffect(() => {
 
 const sound = useScanSound({
   onBlocked: (context) => reporter.report('kiosk.audio.blocked', context),
+})
+
+// Ajustes de la tarea 3.5 (RF-AT-12, RF-AT-10). Mismo controlador SINGLETON
+// que `ScanView.vue` (`useBreakIntent`, `application/breakIntent.ts`), pero
+// el arme NO sobrevive a la navegacion desde `ScanView` (revision de la
+// segunda vuelta, seguridad: la intencion es de la tablet, no de la
+// persona). Quien llega aqui con la tarjeta olvidada tiene que volver a
+// armar el boton, ya en esta pantalla.
+const breakClockingEnabled = ref(readBreakClockingEnabled())
+const clockSkewToleranceSeconds = ref(readClockSkewToleranceSeconds())
+const breakIntent = useBreakIntent({
+  armedAnnouncement: () => t('pin.break.armedHint'),
+  disarmedAnnouncement: () => t('scan.break.disarmed'),
 })
 
 const session = useScanSessionWithCleanup({
@@ -178,6 +194,14 @@ async function confirm(): Promise<void> {
     deviceId,
     publicKey,
     isOffline: () => connectivity.status.value === 'offline',
+    // ADR-024, decision 5 de la tarea 3.5.
+    resolveIntent: () => breakIntent.consumeIntent(),
+    clockSkewToleranceSeconds: () => clockSkewToleranceSeconds.value,
+    // Revision de la segunda vuelta (QA): un PIN mal tecleado con la pausa
+    // armada no debe hacer perder la intencion. `breakIntent` es el MISMO
+    // controlador singleton de `ScanView.vue`: volver a armar aqui es seguro
+    // aunque esta pantalla ya se haya desmontado cuando el rechazo llega.
+    onIntentRejected: () => breakIntent.arm(),
     onSettled: (confirmation) => {
       // `onSettled` puede llegar segundos despues de que esta pantalla se
       // haya desmontado (Wi-Fi degradada, respuesta tardia del servidor): la
@@ -244,6 +268,10 @@ const heartbeat = createHeartbeatScheduler({
     ...(battery.level.value === null ? {} : { batteryLevel: battery.level.value }),
     ...(battery.charging.value === null ? {} : { batteryCharging: battery.charging.value }),
   }),
+  onSettingsUpdated: (settings) => {
+    breakClockingEnabled.value = settings.breakClockingEnabled
+    clockSkewToleranceSeconds.value = settings.clockSkewToleranceSeconds
+  },
 })
 
 onMounted(() => {
@@ -317,6 +345,39 @@ onUnmounted(() => {
           >
             {{ t('pin.code.continue') }}
           </button>
+
+          <!-- Boton «Pausa» (RF-AT-12, ADR-024, decision 5 de la tarea 3.5):
+               mismo criterio visual que en `ScanView.vue` (revision de la
+               segunda vuelta): acento en el borde incluso en reposo, relleno
+               solido cuando esta armado, y el pictograma ⏸ para reconocerlo
+               sin leer la palabra. -->
+          <button
+            v-if="breakClockingEnabled"
+            type="button"
+            class="kiosk-touch inline-flex items-center justify-center gap-2 rounded-kq-sm border-2 border-kq-kiosk-primary text-confirm-sm font-semibold"
+            :class="
+              breakIntent.armed.value
+                ? 'bg-kq-kiosk-primary-strong text-kq-kiosk-on-primary'
+                : 'bg-kq-kiosk-surface-raised text-kq-kiosk-primary-strong'
+            "
+            :aria-pressed="breakIntent.armed.value"
+            data-testid="break-toggle"
+            @click="breakIntent.armed.value ? breakIntent.disarm() : breakIntent.arm()"
+          >
+            <span aria-hidden="true">⏸</span>
+            {{ breakIntent.armed.value ? t('scan.break.toggleOn') : t('scan.break.toggleOff') }}
+          </button>
+
+          <!-- Region viva SIEMPRE montada (revision de la segunda vuelta):
+               anuncia tanto el armado como el desarme. Ver `ScanView.vue`. -->
+          <p
+            role="status"
+            aria-live="polite"
+            class="text-confirm-sm text-center font-semibold"
+            data-testid="break-armed-hint"
+          >
+            {{ breakIntent.announcement.value }}
+          </p>
         </div>
 
         <div

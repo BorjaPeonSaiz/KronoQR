@@ -23,10 +23,15 @@ use App\Modules\Attendance\Domain\Exception\ShiftAlreadyOpen;
 use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\Policy\DebouncePolicy;
 use App\Modules\Attendance\Domain\Policy\ReviewPolicy;
+use App\Modules\Attendance\Domain\Policy\ScanIntentPolicy;
+use App\Modules\Attendance\Domain\ValueObject\AcceptedScan;
+use App\Modules\Attendance\Domain\ValueObject\ClockingResolution;
 use App\Modules\Attendance\Domain\ValueObject\ClockSkew;
 use App\Modules\Attendance\Domain\ValueObject\ScanRejectionReason;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
+use App\Modules\Attendance\Domain\ValueObject\WorkedDuration;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
 use App\Modules\Shared\Domain\ValueObject\CredentialResolution;
 use App\Modules\Shared\Domain\ValueObject\EmployeeSnapshot;
@@ -41,11 +46,24 @@ use RuntimeException;
  * del producto y el sitio donde media docena de reglas duras se cumplen o se
  * rompen.
  *
- * Orquesta; no decide. Quien decide si el escaneo abre o cierra turno es el
- * agregado `WorkDay` (RF-AT-02, RF-AT-03); quien decide si cae en el periodo de
- * gracia es `DebouncePolicy` (RF-AT-06); quien decide si el tramo pide revision
- * humana es `ClockingPolicy` (RN-07, RN-08). Aqui no hay ni un `if` con una
- * regla de negocio dentro.
+ * Orquesta; no decide. Quien decide **que hace** el escaneo —entrada, salida,
+ * pausa o vuelta de pausa— es `ScanIntentPolicy` (RF-AT-02, RF-AT-03, RF-AT-12,
+ * ADR-024); quien lo ejecuta es el agregado `WorkDay`; quien decide si cae en el
+ * periodo de gracia es `DebouncePolicy` (RF-AT-06); quien decide si el tramo
+ * pide revision humana es `ClockingPolicy` (RN-07, RN-08). Aqui no hay ni un
+ * `if` con una regla de negocio dentro.
+ *
+ * ## El orden de la tarea 3.5, y por que es ese
+ *
+ * Desde RF-AT-12 la decision depende de tres hechos y no de uno, asi que
+ * {@see processResolved()} lee en este orden: **turno abierto → ultimo aceptado
+ * → adyacentes → resolucion → jornada destino → anti-rebote → aplicar**. Que la
+ * resolucion vaya **antes** de cargar la jornada y antes del anti-rebote no es
+ * gusto: la jornada de una vuelta de pausa es la del tramo que la pausa cerro
+ * (ADR-024), y el acumulado que devuelve un escaneo suprimido de madrugada tiene
+ * que ser el de esa misma jornada y no el del dia civil. La invariante de
+ * READ COMMITTED que se documenta mas abajo se conserva intacta: el agregado se
+ * sigue leyendo antes que la ventana.
  *
  * ## Los ocho pasos
  *
@@ -127,7 +145,8 @@ use RuntimeException;
  *   umbral de la instalacion, deja el fichaje marcado para validacion humana
  *   (RN-15, {@see ReviewPolicy}); el fichaje se acepta siempre. Nunca se pierde
  *   una jornada por un problema tecnico ajeno al empleado. La incidencia
- *   `clock_skew` que consume esa marca es de la tarea 3.5 (ADR-032).
+ *   `clock_skew` que consume esa marca la abre la pasada nocturna desde la tarea
+ *   2.6 (ADR-032), y la tarea 3.5 le anadio el aviso en la tablet.
  * - **No distingue causas de rechazo hacia fuera** (regla dura 17, RS-03). Las
  *   cuatro —prefijo, clave, firma, credencial revocada— y la quinta —empleado no
  *   activo, RN-14— recorren exactamente el mismo camino y escriben la misma
@@ -155,6 +174,17 @@ final readonly class RegisterScanHandler
         private EmployeeDirectory $employees,
         private SiteCalendar $calendar,
         private OperationalSettingsProvider $settings,
+        /**
+         * Los umbrales **legales** del centro, que son otra fuente distinta de
+         * los operativos (doc 01 §4).
+         *
+         * Lo necesita RF-AT-12: el techo por debajo del cual un hueco sigue
+         * siendo una pausa es el descanso minimo entre jornadas de RN-10, y sale
+         * del perfil de cumplimiento — nunca de una constante (regla dura 14,
+         * ADR-017). Es el mismo puerto y el mismo uso que en
+         * {@see DetectAttendanceAnomalies}.
+         */
+        private CompliancePolicyProvider $compliance,
         private EventPublisher $events,
         private ScanMetrics $metrics,
         private Clock $clock,
@@ -336,14 +366,12 @@ final readonly class RegisterScanHandler
         // nueva a las 06:00 y partiria el turno.
         $workDate = WorkDate::fromInstant($command->occurredAt, $timezone);
 
-        $workDay = $this->workDays->findOpenWorkDayFor($employee->employeeUuid)
-            ?? $this->workDays->findWorkDayFor($employee->employeeUuid, $workDate)
-            ?? WorkDay::start($employee->employeeUuid, $employee->siteId, $workDate);
+        $openWorkDay = $this->workDays->findOpenWorkDayFor($employee->employeeUuid);
 
-        // RF-AT-06. La regla la evalua el dominio; aqui solo se le sirven los
-        // candidatos y el umbral ya resuelto (regla dura 14).
+        // RF-AT-06 y RF-AT-12. Las reglas las evalua el dominio; aqui solo se le
+        // sirven los hechos y el umbral ya resuelto (regla dura 14).
         //
-        // **EL ORDEN DE ESTAS DOS LECTURAS NO ES INDIFERENTE**, y costo un 500
+        // **EL ORDEN DE ESTAS LECTURAS NO ES INDIFERENTE**, y costo un 500
         // intermitente bajo carga. PostgreSQL trabaja en READ COMMITTED, asi que
         // cada consulta ve una instantanea nueva: si la ventana se midiera
         // ANTES de cargar la jornada, dos escaneos simultaneos del mismo
@@ -356,17 +384,67 @@ final readonly class RegisterScanHandler
         // ya trae el tramo del ganador es que su transaccion confirmo, y una
         // consulta posterior no puede dejar de ver el escaneo que confirmo con
         // el. El tiempo solo avanza en un sentido.
+        $hasOpenEntry = $openWorkDay?->hasOpenEntry() ?? false;
+
+        // **Solo se pregunta cuando puede cambiar algo.** Con tramo abierto, la
+        // politica no mira el ultimo aceptado —decide el estado del agregado,
+        // que es el hecho fuerte— asi que leerlo seria una consulta de mas en el
+        // camino de fichaje por cada salida del cambio de turno.
+        $lastAccepted = $hasOpenEntry
+            ? null
+            : $this->scans->lastAcceptedScanOf($employee->employeeUuid);
+
+        $adjacent = $this->scans->acceptedScansAdjacentTo($employee->employeeUuid, $command->occurredAt);
+
+        // Paso 3: el dominio decide QUE hace este escaneo (RF-AT-02, RF-AT-03,
+        // RF-AT-12). Se resuelve **antes** de cargar la jornada destino y antes
+        // del anti-rebote a proposito: la jornada que hay que devolver depende
+        // de la decision —una vuelta de pausa continua la del tramo que la pausa
+        // cerro, en cualquier dia natural (ADR-024, RN-05)— y tambien la tiene
+        // que devolver un `auto` suprimido de madrugada, que si no responderia
+        // con el acumulado de una jornada que no es la suya.
+        //
+        // El techo de continuacion es RN-10 del perfil del centro, ya resuelto
+        // (regla dura 14): por debajo del descanso minimo entre jornadas un
+        // hueco es una pausa; a partir de el, por definicion legal ya es otra
+        // jornada. Sin ese techo, un «Pausa» del lunes que nadie continuo se
+        // comeria la jornada del martes.
+        $resolution = ScanIntentPolicy::allowingBreaksShorterThan(
+            WorkedDuration::ofMinutes($this->compliance->forSite($employee->siteId)->minimumRestMinutes),
+        )->resolve($command->intent->declared(), $hasOpenEntry, $command->occurredAt, $lastAccepted);
+
+        // Cargar la jornada puede CAMBIAR la decision: ver {@see ScanTarget}.
+        $target = $this->targetOf($resolution, $openWorkDay, $employee, $workDate, $flaggedForReview);
+
+        $resolution = $target->resolution;
+        $workDay = $target->workDay;
+        $flaggedForReview = $target->flaggedForReview;
+
         $suppressor = DebouncePolicy::ofSeconds($settings->debounceSeconds)->suppressorOf(
             $command->occurredAt,
-            ...$this->scans->acceptedScansAdjacentTo($employee->employeeUuid, $command->occurredAt),
+            $command->intent->declared(),
+            ...$adjacent,
         );
 
-        if ($suppressor instanceof DateTimeImmutable) {
-            return $this->debounce($command, $recordedAt, $employee, $workDay, $suppressor, $flaggedForReview);
+        if ($suppressor instanceof AcceptedScan) {
+            return $this->debounce($command, $recordedAt, $employee, $workDay, $suppressor->occurredAt, $flaggedForReview);
         }
 
-        // Paso 3: el dominio decide. `hasOpenEntry()` es RF-AT-02 y RF-AT-03.
-        if ($workDay->hasOpenEntry()) {
+        if ($resolution->opensEntry()) {
+            // UUID v7 y no v4: ordenable temporalmente, lo que mantiene la
+            // localidad de los indices que lo referencian (doc 02 §6). Lo genera
+            // el caso de uso porque el dominio no pregunta la hora.
+            //
+            // La accion viaja al agregado y de ahi al evento: el asiento de
+            // `audit_log` tiene que poder distinguir una entrada de una vuelta
+            // de pausa, y `scan_events` no es solo-append (ADR-024, RL-04).
+            $entry = $workDay->clockIn(
+                Str::uuid7()->toString(),
+                $command->occurredAt,
+                $command->origin,
+                $resolution->action,
+            );
+        } else {
             // La politica sale de `ClockingPolicies` y no de una constante
             // propia: es el unico sitio donde vive el umbral de RN-07, para que
             // un fichaje y una correccion (1.15) nunca clasifiquen distinto la
@@ -375,15 +453,15 @@ final readonly class RegisterScanHandler
                 $command->occurredAt,
                 $command->origin,
                 ClockingPolicies::forSettings($settings),
+                $resolution->action,
             );
-            $result = ScanResult::CLOCK_OUT;
-        } else {
-            // UUID v7 y no v4: ordenable temporalmente, lo que mantiene la
-            // localidad de los indices que lo referencian (doc 02 §6). Lo genera
-            // el caso de uso porque el dominio no pregunta la hora.
-            $entry = $workDay->clockIn(Str::uuid7()->toString(), $command->occurredAt, $command->origin);
-            $result = ScanResult::CLOCK_IN;
         }
+
+        // `intent` guarda lo que el quiosco pidio y `result` lo que se decidio
+        // (doc 01 §5.5): son dos columnas y no una, tambien cuando no coinciden.
+        // **Se fija despues de cargar la jornada** porque la carga pudo degradar
+        // la decision.
+        $result = ScanResult::forAction($resolution->action);
 
         // Pasos 4 y 5: persistir y recalcular `daily_totals`, en esta misma
         // transaccion (RN-06, regla dura 7).
@@ -429,6 +507,58 @@ final readonly class RegisterScanHandler
             workDate: $workDay->workDate()->isoDate,
             workedMinutes: $workedMinutes,
         );
+    }
+
+    /**
+     * La jornada sobre la que actua este escaneo, **segun lo que el dominio
+     * decidio** y con la decision ya corregida si la carga la invalido
+     * (ADR-024, RN-05, regla dura 4).
+     *
+     * Dos caminos y no uno:
+     *
+     * - **Vuelve de una pausa.** La jornada es la del tramo que la pausa cerro,
+     *   se llegue por `break_end` o por `auto`, y se busca por `uuid` de tramo y
+     *   no por fecha. Un 22:00 → 06:00 con pausa de 02:00 a 02:30 seguiria
+     *   siendo una sola jornada del dia D; buscar por la fecha civil del escaneo
+     *   la partiria en 240 minutos el dia D y 210 el D+1.
+     *
+     *   Se busca con `findWorkDayOfAnyShiftEntry()` y **no** con la consulta de
+     *   las correcciones: entre la pausa y la vuelta puede haber pasado una
+     *   correccion (RN-13) que dejo aquel tramo `superseded`, y su jornada sigue
+     *   siendo la misma. Con el filtro de vigencia puesto, corregir la hora de
+     *   entrada de alguien que esta descansando le partiria el turno al volver.
+     * - **Todo lo demas.** El camino de siempre: el turno abierto, la jornada de
+     *   la fecha o una nueva.
+     *
+     * Si el tramo **no existe** —ni vigente ni retirado: solo una purga por
+     * retencion (RL-02) lo produce— no hay jornada que continuar y la decision
+     * se degrada a entrada normal **marcada para revision** ({@see ScanTarget}).
+     * Antes esto caia al camino normal en silencio y `scan_events.result` seguia
+     * diciendo `break_end` sobre una jornada nueva: una pausa afirmada sobre un
+     * dia que no la tuvo, en un registro con valor legal.
+     */
+    private function targetOf(
+        ClockingResolution $resolution,
+        ?WorkDay $openWorkDay,
+        EmployeeSnapshot $employee,
+        WorkDate $workDate,
+        bool $flaggedForReview,
+    ): ScanTarget {
+        $continues = $resolution->continuesWorkDayOf();
+
+        $fallback = fn (): WorkDay => $openWorkDay
+            ?? $this->workDays->findWorkDayFor($employee->employeeUuid, $workDate)
+            ?? WorkDay::start($employee->employeeUuid, $employee->siteId, $workDate);
+
+        if ($continues === null) {
+            return ScanTarget::of($fallback(), $resolution, $flaggedForReview);
+        }
+
+        $continued = $this->workDays->findWorkDayOfAnyShiftEntry($continues);
+
+        return $continued instanceof WorkDay
+            ? ScanTarget::of($continued, $resolution, $flaggedForReview)
+            : ScanTarget::degradedToClockIn($fallback());
     }
 
     /**
@@ -628,17 +758,16 @@ final readonly class RegisterScanHandler
     ): RegisterScanResult {
         $adjacent = $this->scans->acceptedScansAdjacentTo($employee->employeeUuid, $occurredAt);
 
-        // Sin ventana: el escaneo que suprimio a este ya esta decidido y
-        // escrito. Lo que se busca es cual fue, y es el aceptado mas cercano.
-        $closest = null;
-
-        foreach ($adjacent as $candidate) {
-            if ($closest === null
-                || abs($candidate->getTimestamp() - $occurredAt->getTimestamp())
-                 < abs($closest->getTimestamp() - $occurredAt->getTimestamp())) {
-                $closest = $candidate;
-            }
-        }
+        // **Sin mirar la intencion**: el escaneo que suprimio a este ya esta
+        // decidido y escrito, asi que lo unico que se busca es cual fue, y es el
+        // aceptado mas cercano. Volver a aplicar la excepcion de ADR-024 aqui
+        // —`suppressorOf()`— podria devolver `null` para una fila que existe.
+        //
+        // La definicion de «el mas cercano» sale del dominio y no se reescribe
+        // aqui: dos copias de esa busqueda son dos sitios donde discrepar sobre
+        // la misma fila.
+        $closest = DebouncePolicy::ofSeconds($this->settings->forSite($employee->siteId)->debounceSeconds)
+            ->closestWithinWindow($occurredAt, ...$adjacent);
 
         return RegisterScanResult::debounced(
             scanId: $scanId,
@@ -653,8 +782,11 @@ final readonly class RegisterScanHandler
             // El aceptado que lo suprimio no puede faltar —lo exige la propia
             // existencia de la fila y nada se borra (regla dura 5)—, pero el
             // contrato obliga a un instante y no a un nulo, asi que el escaneo
-            // se describe a si mismo antes que mentir con una fecha ajena.
-            lastAcceptedAt: $closest ?? $occurredAt,
+            // se describe a si mismo antes que mentir con una fecha ajena. El
+            // mismo nulo cubre el caso raro de que alguien haya ESTRECHADO la
+            // ventana entre el escaneo y su reenvio: el suppressor sigue en la
+            // tabla pero ya cae fuera.
+            lastAcceptedAt: $closest instanceof AcceptedScan ? $closest->occurredAt : $occurredAt,
             isReplay: true,
         );
     }

@@ -59,6 +59,29 @@ test(
   },
 )
 
+// --- Fichaje de pausa (RF-AT-12, tarea 3.5) ---------------------------------
+
+test(
+  'activar el fichaje de pausa persiste tras recargar',
+  { tag: ['@RF-PD-01', '@RF-AT-12'] },
+  async ({ page }) => {
+    await stubManagementApi(page, { role: 'admin' })
+    await logInAsAdmin(page)
+
+    await page.goto('/settings')
+
+    await expect(page.getByTestId('break-clocking')).toHaveValue('disabled')
+
+    await page.getByTestId('break-clocking').selectOption('enabled')
+    await page.getByTestId('save').click()
+
+    await expect(page.getByTestId('saved')).toBeVisible()
+
+    await page.reload()
+    await expect(page.getByTestId('break-clocking')).toHaveValue('enabled')
+  },
+)
+
 test(
   'un umbral fuera de rango se rechaza con el mensaje del servidor, sin perder lo escrito',
   { tag: ['@RF-PD-01'] },

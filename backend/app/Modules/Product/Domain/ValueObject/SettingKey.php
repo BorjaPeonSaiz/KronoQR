@@ -26,10 +26,11 @@ use App\Modules\Product\Domain\Exception\UnknownSettingKey;
  * pide la tarea 5.11 («cada parametro del Anexo B y cada clave de
  * `installation_settings` documentados»).
  *
- * Las cuatro claves `ATTENDANCE_*` **se conservan tal como las sembro la tarea
- * 1.3**: renombrarlas seria una migracion de datos a cambio de nada. Son ademas
- * identificadores tecnicos internos, y el doc 02 §5.8 dice que esos no se
- * renombran.
+ * Las cuatro claves `ATTENDANCE_*` de la tarea 1.3 **se conservan tal como las
+ * sembro**: renombrarlas seria una migracion de datos a cambio de nada. La
+ * quinta, `ATTENDANCE_BREAK_CLOCKING`, la anade la tarea 3.5 y sigue la misma
+ * convencion. Son ademas identificadores tecnicos internos, y el doc 02 §5.8
+ * dice que esos no se renombran.
  *
  * ## Que no esta aqui, y por que
  *
@@ -57,6 +58,23 @@ enum SettingKey: string
 
     /** RN-16: transito minimo creible entre dos quioscos del centro. */
     case ATTENDANCE_MIN_TRANSIT_SECONDS = 'ATTENDANCE_MIN_TRANSIT_SECONDS';
+
+    /**
+     * RF-AT-12: si el quiosco ofrece fichar la pausa en esta instalacion
+     * (ADR-024, tarea 3.5).
+     *
+     * **«Configurable por centro» es esto**, y no una columna por centro: ADR-040
+     * fija un centro por instalacion, asi que el ambito del centro y el de la
+     * instalacion son el mismo (RF-PD-01).
+     *
+     * Activarlo hace dos cosas: el boton «Pausa» aparece en la tablet y **RN-12
+     * vuelve a abrir incidencias** (`ComplianceRuleSuspension`). Por eso su
+     * impacto es `COMPLIANCE_REVIEW` y no `PRESENTATION`: no mueve ni un minuto
+     * del calculo de horas —la pausa son dos tramos y su tiempo simplemente no
+     * esta en ninguno—, pero cambia que jornadas se marcan, y el asiento de
+     * `installation_setting.changed` tiene que decirlo.
+     */
+    case ATTENDANCE_BREAK_CLOCKING = 'ATTENDANCE_BREAK_CLOCKING';
 
     /**
      * RF-PD-08: nombre de la aplicacion.
@@ -206,6 +224,20 @@ enum SettingKey: string
             // Cero es legitimo: dos tablets contiguas en la misma puerta.
             self::ATTENDANCE_MIN_TRANSIT_SECONDS->value => SettingDefinition::integer(
                 120, 0, 3600, SettingImpact::COMPLIANCE_REVIEW,
+            ),
+            // `choice` de dos valores y no un tipo booleano nuevo: anadir
+            // `SettingType::BOOLEAN` obligaria a ampliar el enum, el contrato,
+            // la validacion y el panel para una sola clave, y el dia que haya
+            // una tercera opcion —«solo en el quiosco de cocina»— el enumerado
+            // ya la admite sin migrar el valor guardado (decision 7 de la ficha
+            // 3.5).
+            //
+            // **`disabled` de serie.** El doc 05 lo vende como opcional, y
+            // arrancar en `enabled` reactivaria RN-12 en una plantilla que
+            // descansa sin fichar: incidencias contra gente que no hizo nada
+            // mal, el primer dia de uso.
+            self::ATTENDANCE_BREAK_CLOCKING->value => SettingDefinition::choice(
+                'disabled', ['enabled', 'disabled'], SettingImpact::COMPLIANCE_REVIEW,
             ),
             // El valor por defecto **es** el producto (tarea 5.8, paso 8): sin
             // configurar nada se ve la marca del fabricante, nunca la de otro

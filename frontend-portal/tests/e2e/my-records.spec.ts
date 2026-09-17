@@ -10,7 +10,13 @@
 // nunca pide ni construye una URL con un identificador que no sea el propio.
 import { expect, test } from '@playwright/test'
 import type { Route } from '@playwright/test'
-import { EMPLOYEE_UUID, logInToPortal, stubPortalApi } from './support/portal'
+import {
+  dayWithBreak,
+  EMPLOYEE_UUID,
+  logInToPortal,
+  singleDayEmployeeWorkDays,
+  stubPortalApi,
+} from './support/portal'
 
 test(
   've sus jornadas con el total en horas y minutos, nunca en decimal',
@@ -137,6 +143,44 @@ test(
     await expect(day).toContainText('avisa a Recursos Humanos')
     // Y la incidencia abierta se dice, no se esconde detras de un numero.
     await expect(day.getByTestId('flag-incident')).toBeVisible()
+  },
+)
+
+test(
+  'una jornada con pausa enseña la insignia en la salida y «Pausa de HH:MM a HH:MM (N min)» entre los dos tramos',
+  { tag: ['@RF-AT-12'] },
+  async ({ page }) => {
+    await stubPortalApi(page, { locale: 'es' })
+
+    // Registrada DESPUES de `stubPortalApi` para que esta ruta, mas
+    // especifica, gane a la generica (mismo patron que el descuadre de
+    // totales).
+    await page.route('**/api/v1/me/workdays', async (route: Route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(singleDayEmployeeWorkDays(dayWithBreak())),
+      })
+    })
+
+    await logInToPortal(page)
+
+    const day = page.getByTestId('workday')
+    await expect(day).toHaveCount(1)
+
+    // La insignia va en la salida del tramo que cerro la pausa, con texto
+    // ademas del icono (WCAG 1.4.1: nunca solo color).
+    await expect(day.getByTestId('break-badge')).toHaveCount(1)
+    await expect(day.getByTestId('break-badge')).toHaveText('Pausa')
+
+    // Entre los dos tramos, la duracion de la pausa.
+    await expect(day.getByTestId('break-row')).toHaveText('Pausa de 12:00 a 12:30 (0 h 30 min)')
+
+    // El total sigue viniendo del servidor y cuadra con la suma de los dos
+    // tramos: 6 h + 3 h 30 min = 9 h 30 min. Ningun descuadre por la pausa.
+    await expect(day.getByTestId('day-total')).toHaveText('9 h 30 min')
+    await expect(day.getByTestId('summed-total')).toHaveText('9 h 30 min')
+    await expect(day.getByTestId('totals-mismatch')).not.toBeVisible()
   },
 )
 

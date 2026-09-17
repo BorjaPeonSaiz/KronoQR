@@ -112,6 +112,8 @@
       "openHint": "Este turno sigue abierto.",
       "nextDay": "(día siguiente)",
       "openDuration": "En curso",
+      "breakBadge": "Pausa",
+      "breakRow": "Pausa de {from} a {to} ({duration})",
       "empty": "Esta jornada no tiene ningún tramo vigente. Si hay correcciones más abajo, es que se anularon: el historial sigue completo.",
       "sum": "Suma de los tramos",
       "declared": "Total registrado del día",

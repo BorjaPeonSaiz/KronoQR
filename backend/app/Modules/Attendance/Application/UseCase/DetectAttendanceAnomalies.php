@@ -25,6 +25,7 @@ use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
+use App\Modules\Shared\Domain\ValueObject\ComplianceRuleSuspension;
 use DateTimeImmutable;
 use DateTimeZone;
 use Psr\Log\LoggerInterface;
@@ -93,10 +94,20 @@ final readonly class DetectAttendanceAnomalies
         $timezone = new DateTimeZone($site->timezone);
         $policy = $this->policyFor($site->id);
 
+        // RF-AT-12 y decision 8 de la ficha 3.5: que reglas abren incidencia en
+        // ESTA instalacion depende de si el hotel ficha la pausa. Se resuelve
+        // aqui —que es quien alcanza los ajustes— y se le pasa ya resuelta al
+        // dominio (regla dura 14). Una pasada entera usa el mismo valor: leerlo
+        // por hallazgo podria dar dos respuestas si alguien cambia el ajuste a
+        // mitad de la noche.
+        $suspension = ComplianceRuleSuspension::forInstallation(
+            $this->settings->forSite($site->id)->breakClockingEnabled,
+        );
+
         $workDays = $this->workDaysToInspect($command, $timezone, $now);
 
         $anomalies = [
-            ...$this->inspectWorkDays($workDays, $policy, $now),
+            ...$this->inspectWorkDays($workDays, $policy, $now, $suspension),
             ...$this->inspectFlaggedScans($command, $policy, $site->id, $timezone, $now),
         ];
 
@@ -274,7 +285,11 @@ final readonly class DetectAttendanceAnomalies
      *
      * La regla sigue enunciada, implementada en `AnomalyDetectionPolicy` y
      * cubierta por su prueba unitaria; lo que se suspende es SOLO la apertura de
-     * la incidencia. La tarea 3.5 la reactiva cuando exista la pausa declarada.
+     * la incidencia. **Desde la tarea 3.5 la suspension es del hotel y no del
+     * producto**: RN-12 vuelve a abrir `missing_break` en cuanto la instalacion
+     * active `ATTENDANCE_BREAK_CLOCKING` (RF-AT-12, ADR-024), y sigue suspendida
+     * donde el quiosco no registra la pausa — abrirla alli seria senalar a quien
+     * descanso sin fichar.
      *
      * **La lista ya no vive aqui** (tarea 5.2). Estaba escrita como una constante
      * privada de este caso de uso, y funcionaba mientras la mirase solo quien
@@ -284,14 +299,20 @@ final readonly class DetectAttendanceAnomalies
      * afirmar `affects_incident_detection: true` sobre un registro con valor
      * legal. `Product` no puede importar `Attendance` (doc 02 §1.6), asi que el
      * hecho subio a `Shared\Domain\ValueObject\ComplianceRuleSuspension` y aqui
-     * se **consulta**. La 3.5 sigue reactivando la regla vaciando una sola
-     * lista, y ahora el panel y el asiento se enteran solos.
+     * se **recibe ya resuelto** (regla dura 14). Desde la 3.5 no hay ninguna
+     * lista que vaciar: la suspension se construye desde
+     * `ATTENDANCE_BREAK_CLOCKING`, asi que un hotel la reactiva desde el panel y
+     * el filtro, la pantalla del perfil y el asiento se enteran solos.
      *
      * @param  list<WorkDay>  $workDays
      * @return list<DetectedAnomaly>
      */
-    private function inspectWorkDays(array $workDays, AnomalyDetectionPolicy $policy, DateTimeImmutable $now): array
-    {
+    private function inspectWorkDays(
+        array $workDays,
+        AnomalyDetectionPolicy $policy,
+        DateTimeImmutable $now,
+        ComplianceRuleSuspension $suspension,
+    ): array {
         $anomalies = [];
 
         foreach ($workDays as $workDay) {
@@ -303,7 +324,7 @@ final readonly class DetectAttendanceAnomalies
 
         return array_values(array_filter(
             $anomalies,
-            static fn (DetectedAnomaly $anomaly): bool => ! $anomaly->type->openingIsSuspended(),
+            static fn (DetectedAnomaly $anomaly): bool => ! $anomaly->type->openingIsSuspended($suspension),
         ));
     }
 

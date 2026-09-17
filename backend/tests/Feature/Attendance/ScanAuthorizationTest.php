@@ -195,3 +195,30 @@ it('limita el fichaje por dispositivo sin tocar la cuota de los demas quioscos',
         ->post('/api/v1/scan', $cuerpo)
         ->assertStatus(403);
 })->group('RS-02', 'RS-04');
+
+it('deniega tambien el fichaje de pausa a cada rol de gestion y al portal', function (UserRole $rol): void {
+    // RF-AT-12 y regla dura 18. La intencion declarada NO es una via nueva de
+    // autorizacion: `intent: break_start` recorre exactamente el mismo endpoint
+    // y la misma policy, asi que un token de gestion o de portal sigue recibiendo
+    // `403`. Se prueba aparte porque la tarea 3.5 hace que el servidor **actue**
+    // sobre ese campo, y lo que actua es lo que hay que volver a cerrar.
+    [$scanId, $cuerpo] = escaneoValido();
+
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole($rol));
+
+    Api::as($token)
+        ->withHeaders(['Idempotency-Key' => $scanId])
+        ->post('/api/v1/scan', [...$cuerpo, 'intent' => 'break_start'])
+        ->assertStatus(403);
+
+    expect(DB::table('scan_events')->count())->toBe(0);
+})->with([
+    'administrador' => [UserRole::ADMIN],
+    'rrhh' => [UserRole::RRHH],
+    'responsable de departamento' => [UserRole::RESPONSABLE_DEPARTAMENTO],
+    'auditor' => [UserRole::AUDITOR],
+    // El portal del empleado: su token es el de un `empleado`, y que la persona
+    // sea la titular de la jornada no le da potestad para fichar desde fuera del
+    // quiosco (RF-AT-11 tiene su propio endpoint y su propio ambito).
+    'empleado (portal)' => [UserRole::EMPLEADO],
+])->group('RS-04', 'RQ-07', 'RF-AT-12');

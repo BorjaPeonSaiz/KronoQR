@@ -133,7 +133,7 @@ it('conserva la jornada semanal, el inicio de semana y los festivos', function (
 })->group('RF-PD-07');
 
 it('rechaza una configuracion operativa con un umbral que no puede ser cero', function (int $anomalous, int $debounce, int $skew, int $transit): void {
-    expect(fn (): OperationalSettings => new OperationalSettings($anomalous, $debounce, $skew, $transit))
+    expect(fn (): OperationalSettings => new OperationalSettings($anomalous, $debounce, $skew, $transit, breakClockingEnabled: false))
         ->toThrow(InvalidArgumentException::class);
 })->with([
     'sin duracion anomala de tramo' => [0, 60, 10, 120],
@@ -146,7 +146,7 @@ it('admite apagar el anti-rebote y el transito minimo con un cero', function ():
     // Cero es legitimo en los dos que desactivan una comprobacion: un centro
     // puede querer el anti-rebote apagado, o dos quioscos contiguos donde el
     // transito real es de segundos.
-    $settings = new OperationalSettings(720, 0, 10, 0);
+    $settings = new OperationalSettings(720, 0, 10, 0, breakClockingEnabled: false);
 
     expect($settings->debounceSeconds)->toBe(0)
         ->and($settings->minimumTransitSeconds)->toBe(0)
@@ -155,7 +155,7 @@ it('admite apagar el anti-rebote y el transito minimo con un cero', function ():
 })->group('RF-AT-06');
 
 it('acepta un umbral operativo de exactamente una unidad', function (): void {
-    $settings = new OperationalSettings(1, 1, 1, 1);
+    $settings = new OperationalSettings(1, 1, 1, 1, breakClockingEnabled: true);
 
     expect($settings->anomalousShiftMinutes)->toBe(1)
         ->and($settings->maximumClockSkewMinutes)->toBe(1);
@@ -256,3 +256,18 @@ it('guarda el valor de columna de cada motivo de rechazo de credencial', functio
     'revocada' => [CredentialRejectionReason::REVOKED, 'revoked'],
     'mala firma' => [CredentialRejectionReason::INVALID_SIGNATURE, 'invalid_signature'],
 ])->group('RS-03');
+
+it('transporta el fichaje de pausa sin suponer ningun valor', function (bool $enabled): void {
+    // RF-AT-12. **Sin valor por defecto** (regla dura 14): el valor de serie
+    // —`disabled`— vive en el catalogo de `SettingKey` y lo resuelve el
+    // adaptador. Un defecto aqui seria una segunda fuente para el mismo dato, y
+    // la que ganaria en silencio el dia que el adaptador se olvidara de leer la
+    // clave: el hotel activaria la pausa en el panel y el quiosco seguiria sin
+    // ofrecerla.
+    $settings = new OperationalSettings(720, 60, 15, 120, breakClockingEnabled: $enabled);
+
+    expect($settings->breakClockingEnabled)->toBe($enabled);
+})->with([
+    'activado' => [true],
+    'desactivado' => [false],
+])->group('RF-PD-01', 'RF-AT-12');

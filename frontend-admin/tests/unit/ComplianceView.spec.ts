@@ -71,7 +71,7 @@ function summary(overrides: Partial<ComplianceSummary> = {}): ComplianceSummary 
           requirement: 'RN-12',
           threshold_minutes: 360,
           evaluated: false,
-          suspension_reason: 'awaiting_declared_break',
+          suspension_reason: 'break_clocking_disabled',
         },
         {
           rule: 'weekly_excess',
@@ -178,7 +178,7 @@ describe('vista de cumplimiento', () => {
       es.complianceSummary.notEvaluated,
     )
     expect(breakCard?.find('[data-test="rule-suspended-reason"]').text()).toBe(
-      es.complianceSummary.suspensionReasons.awaiting_declared_break,
+      es.complianceSummary.suspensionReasons.break_clocking_disabled,
     )
   })
 

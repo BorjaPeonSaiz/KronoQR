@@ -19,8 +19,10 @@ use App\Modules\Reporting\Domain\ValueObject\DateRange;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
+use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
+use App\Modules\Shared\Domain\ValueObject\ComplianceRuleSuspension;
 use App\Modules\Shared\Domain\ValueObject\InstallationSite;
 use DateTimeZone;
 use RuntimeException;
@@ -91,6 +93,17 @@ final readonly class ReadComplianceSummary
         private InstallationSiteProvider $installation,
         private Clock $clock,
         private PersonalDataAccessLog $disclosures,
+        /**
+         * De donde sale si RN-12 se evalua en esta instalacion (RF-AT-12,
+         * decision 8 de la ficha 3.5).
+         *
+         * El evaluador es dominio puro y no consulta configuracion (regla dura
+         * 14): recibe la suspension ya construida. La vista **recalcula siempre
+         * con lo vigente**, asi que activar `ATTENDANCE_BREAK_CLOCKING` hace que
+         * la siguiente consulta empiece a contar los avisos de pausa sin que
+         * nadie reprocese nada.
+         */
+        private OperationalSettingsProvider $settings,
     ) {}
 
     /**
@@ -126,7 +139,10 @@ final readonly class ReadComplianceSummary
         }
 
         $policy = $this->policies->forSite($site->id);
-        $evaluation = new ComplianceEvaluation($policy);
+        $evaluation = new ComplianceEvaluation(
+            $policy,
+            ComplianceRuleSuspension::forInstallation($this->settings->forSite($site->id)->breakClockingEnabled),
+        );
         $query = $this->resolve($criteria, $site->timezone);
 
         // **Antes de tocar la base de datos**, que es lo barato. Se comprueba aqui

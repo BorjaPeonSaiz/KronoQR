@@ -48,8 +48,8 @@
             /* La misma pila que las tarjetas: del sistema, nunca remota
                (ADR-016). */
             font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-            font-size: 10.5pt;
-            line-height: 1.35;
+            font-size: 9.8pt;
+            line-height: 1.28;
             color: #111827;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
@@ -84,15 +84,15 @@
         }
 
         h1 {
-            font-size: 19pt;
-            line-height: 1.15;
-            margin: 6mm 0 2.5mm;
+            font-size: 17pt;
+            line-height: 1.12;
+            margin: 4.5mm 0 2mm;
         }
 
         .intro {
-            font-size: 11pt;
+            font-size: 10pt;
             color: #374151;
-            margin-bottom: 5mm;
+            margin-bottom: 3.5mm;
         }
 
         /* --- Los cinco bloques ------------------------------------------ */
@@ -100,19 +100,19 @@
         .block {
             display: flex;
             align-items: flex-start;
-            gap: 5mm;
-            margin-bottom: 4.5mm;
+            gap: 4mm;
+            margin-bottom: 3mm;
         }
 
         .block__icon {
-            flex: 0 0 18mm;
+            flex: 0 0 15mm;
             /* Los pictogramas heredan el color de acento por `currentColor`. */
             color: {{ $brand['accent'] }};
         }
 
         .icon {
-            width: 18mm;
-            height: 12mm;
+            width: 15mm;
+            height: 10mm;
             display: block;
         }
 
@@ -122,8 +122,8 @@
         }
 
         h2 {
-            font-size: 12.5pt;
-            margin: 0 0 1.2mm;
+            font-size: 11.5pt;
+            margin: 0 0 1mm;
             color: {{ $brand['accent'] }};
         }
 
@@ -155,17 +155,17 @@
            se salga del papel. */
         .portal-url {
             font-family: "Courier New", Courier, monospace;
-            font-size: 14pt;
+            font-size: 12.5pt;
             font-weight: 700;
-            margin: 2mm 0;
+            margin: 1.5mm 0;
             word-break: break-all;
         }
 
         /* --- Contacto y pie --------------------------------------------- */
 
         .contact {
-            margin-top: 5mm;
-            padding: 3.5mm 4mm 4mm;
+            margin-top: 3.5mm;
+            padding: 3mm 3.5mm 3.5mm;
             border: 0.3mm solid #9ca3af;
         }
 
@@ -191,8 +191,8 @@
         }
 
         .footer {
-            margin-top: 5mm;
-            padding-top: 2mm;
+            margin-top: 3.5mm;
+            padding-top: 1.8mm;
             border-top: 0.3mm solid #d1d5db;
             font-size: 8.5pt;
             color: #6b7280;
@@ -215,6 +215,12 @@
     <div class="block__body">
         <h2>{{ $texts['scan_title'] }}</h2>
         <p>{{ $texts['scan_body'] }}</p>
+        {{-- RF-AT-12. Va condicionada en el TEXTO y no en la plantilla («si tu
+             hotel usa el fichaje de pausa…»): la hoja es la misma para toda la
+             plantilla y se imprime una vez, mientras que el ajuste se activa o se
+             apaga desde el panel el mes que viene. Una hoja que dependiera del
+             ajuste quedaria desfasada en el cajon el dia que alguien lo cambie. --}}
+        <p>{{ $texts['scan_break'] }}</p>
     </div>
 </div>
 
@@ -224,6 +230,8 @@
         <h2>{{ $texts['results_title'] }}</h2>
         <ul class="list">
             <li>{{ $texts['result_ok'] }}</li>
+            <li>{{ $texts['result_break_start'] }}</li>
+            <li>{{ $texts['result_break_end'] }}</li>
             <li>{{ $texts['result_pending'] }}</li>
             <li>{{ $texts['result_debounced'] }}</li>
             <li>{{ $texts['result_rejected'] }}</li>

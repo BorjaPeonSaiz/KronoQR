@@ -273,3 +273,71 @@ it('rechaza un codigo de servicio que no sean de 8 a 12 cifras', function (strin
     'largo' => ['1234567890123'],
     'con letras' => ['4839a017'],
 ])->group('RF-KI-08', 'RF-PD-01');
+
+// --- Los dos ajustes de la pantalla de fichaje (RF-AT-12, RF-AT-10) ----------
+
+it('entrega el ajuste de fichaje de pausa y la tolerancia de desfase en cada latido', function (): void {
+    // Tarea 3.5, decision 1. El latido es el unico canal autenticado que la
+    // tablet repite cada minuto, y estos dos son los ajustes que la pantalla de
+    // fichaje necesita para funcionar **sin red**: con el primero enseña u
+    // oculta el boton «Pausa»; con el segundo decide cuando avisar de que su
+    // reloj se ha ido. De serie, la pausa esta desactivada (decision 7) y la
+    // tolerancia son los 15 minutos de `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES`.
+    $quiosco = quioscoConMetricas();
+
+    Api::as($quiosco['token'])->post('/api/v1/kiosk/heartbeat', [
+        'app_version' => '2.2.0',
+        'pending_queue_size' => 0,
+    ])
+        ->assertOk()
+        ->assertValidRequest()
+        ->assertValidResponse()
+        ->assertJsonPath('break_clocking_enabled', false)
+        // Minutos en el ajuste, segundos en el contrato: la tablet compara con
+        // su propio reloj y no tiene por que convertir nada.
+        ->assertJsonPath('clock_skew_tolerance_seconds', 900);
+})->group('RF-AT-12', 'RF-AT-10', 'RF-KI-08');
+
+it('lleva a la tablet el fichaje de pausa activado y el umbral cambiado', function (): void {
+    // El mismo motivo por el que el codigo de servicio viaja aqui: activar la
+    // pausa en el panel enciende el boton en todas las tablets en sesenta
+    // segundos, sin reinstalar nada ni tocar la tablet. Y el umbral de desfase
+    // sale del ajuste y no de una constante del quiosco, para que la tablet y el
+    // servidor no puedan discrepar sobre cuando un reloj esta desviado.
+    $quiosco = quioscoConMetricas();
+
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN));
+
+    Api::as($token)->patch('/api/v1/settings', ['settings' => [
+        SettingKey::ATTENDANCE_BREAK_CLOCKING->value => 'enabled',
+        SettingKey::ATTENDANCE_MAX_CLOCK_SKEW_MINUTES->value => 20,
+    ]])->assertStatus(200);
+
+    Api::as($quiosco['token'])->post('/api/v1/kiosk/heartbeat', [
+        'app_version' => '2.2.0',
+        'pending_queue_size' => 0,
+    ])
+        ->assertOk()
+        ->assertValidResponse()
+        ->assertJsonPath('break_clocking_enabled', true)
+        ->assertJsonPath('clock_skew_tolerance_seconds', 1200);
+
+    // Y apagarlo vuelve a ocultar el boton en el latido siguiente.
+    Api::as($token)->patch('/api/v1/settings', ['settings' => [
+        SettingKey::ATTENDANCE_BREAK_CLOCKING->value => 'disabled',
+    ]])->assertStatus(200);
+
+    // `OperationalSettingsProvider` esta enlazado con `scoped()`: memoria por
+    // PETICION, que en produccion muere con ella. En una prueba de feature las
+    // peticiones comparten proceso y contenedor, asi que hay que deshacer a mano
+    // lo que alli deshace el borde. Sin esta linea la prueba pasaria por la
+    // memoria de la peticion anterior y no probaria nada.
+    app()->forgetScopedInstances();
+
+    Api::as($quiosco['token'])->post('/api/v1/kiosk/heartbeat', [
+        'app_version' => '2.2.0',
+        'pending_queue_size' => 0,
+    ])
+        ->assertValidResponse()
+        ->assertJsonPath('break_clocking_enabled', false);
+})->group('RF-AT-12', 'RF-AT-10', 'RF-PD-01');

@@ -65,8 +65,16 @@ final readonly class BrowsershotInstructionsSheetRenderer implements Instruction
      * Los 8 mm de la hoja de tarjetas son el minimo para no recortar; aqui hay
      * texto que se lee de pie, y un texto pegado al borde se lee mal aunque se
      * imprima entero.
+     *
+     * **De 14 a 12 mm en la tarea 3.5**: la hoja gana tres parrafos —como fichar
+     * la pausa y que significan «Pausa» y «Vuelta» (RF-AT-12)— y una cara A4 no
+     * es negociable (ficha 5.11b, decision 1). Se recorto el margen y se apreto
+     * la tipografia de la plantilla antes que partir la hoja en dos, porque la
+     * segunda cara es la que la mitad de la gente no lee. Sigue muy por encima
+     * de los 8 mm de recorte y la prueba que cuenta paginas con Chromium real lo
+     * verifica en los dos idiomas.
      */
-    private const float MARGIN_MM = 14.0;
+    private const float MARGIN_MM = 12.0;
 
     public function __construct(private BrandingLogoReader $logos) {}
 

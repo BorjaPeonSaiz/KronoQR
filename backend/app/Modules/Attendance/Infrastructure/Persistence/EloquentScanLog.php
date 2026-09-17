@@ -8,10 +8,14 @@ use App\Modules\Attendance\Application\Port\RecordedScan;
 use App\Modules\Attendance\Application\Port\ScanLog;
 use App\Modules\Attendance\Application\Port\ScanRecord;
 use App\Modules\Attendance\Application\Port\ScanResult;
+use App\Modules\Attendance\Domain\ValueObject\AcceptedScan;
+use App\Modules\Attendance\Domain\ValueObject\ClockingAction;
 use DateTimeImmutable;
 use DateTimeInterface;
 use DateTimeZone;
 use Illuminate\Database\ConnectionInterface;
+use Illuminate\Database\Query\Builder;
+use stdClass;
 
 /**
  * `scan_events` sobre PostgreSQL: el registro de **todo** escaneo.
@@ -30,6 +34,17 @@ use Illuminate\Database\ConnectionInterface;
  * alguien. `ON CONFLICT` no tiene ventana: PostgreSQL **espera** a la
  * transaccion que esta insertando la misma clave y, cuando confirma, devuelve
  * cero. Nunca dos.
+ *
+ * ## Las dos lecturas del camino de fichaje caben en el mismo indice
+ *
+ * `acceptedScansAdjacentTo()` mide la ventana de RF-AT-06 y
+ * `lastAcceptedScanOf()` responde en que estado quedo la persona (RF-AT-12,
+ * ADR-024). Las dos resuelven por `(employee_id, occurred_at DESC)` con un
+ * `LIMIT 1`, asi que la tarea 3.5 anade **una fila mas leida** por escaneo, no
+ * un recorrido del historico. Desde esa tarea las dos devuelven
+ * {@see AcceptedScan} y no instantes sueltos: el anti-rebote necesita saber
+ * **que fue** el escaneo vecino y la resolucion de la intencion **de que tramo**
+ * venia.
  *
  * ## Lo que no se guarda
  *
@@ -120,32 +135,107 @@ final readonly class EloquentScanLog implements ScanLog
         // caben en el indice `(employee_id, occurred_at DESC)` en lugar de
         // ordenar el historico entero del empleado en cada fichaje. Con cuatro
         // anos de retencion (RL-02) eso son miles de filas por persona.
-        $before = $this->connection->table('scan_events')
-            ->where('employee_id', $employeeId)
-            ->whereIn('result', ScanResult::acceptedValues())
-            ->where('occurred_at', '<=', $at)
-            ->orderByDesc('occurred_at')
-            ->value('occurred_at');
+        $before = $this->acceptedScansOf($employeeId)
+            ->where('scan_events.occurred_at', '<=', $at)
+            ->orderByDesc('scan_events.occurred_at')
+            ->first();
 
         // Estrictamente posterior: sin el `>`, un escaneo con el mismo
         // `occurred_at` exacto aparecerian dos veces y la ventana se medira
         // igual, pero la consulta haria trabajo de mas.
-        $after = $this->connection->table('scan_events')
-            ->where('employee_id', $employeeId)
-            ->whereIn('result', ScanResult::acceptedValues())
-            ->where('occurred_at', '>', $at)
-            ->orderBy('occurred_at')
-            ->value('occurred_at');
+        $after = $this->acceptedScansOf($employeeId)
+            ->where('scan_events.occurred_at', '>', $at)
+            ->orderBy('scan_events.occurred_at')
+            ->first();
 
         $adjacent = [];
 
         foreach ([$before, $after] as $candidate) {
-            if (is_string($candidate) || $candidate instanceof DateTimeInterface) {
-                $adjacent[] = $this->toUtc($candidate);
+            $scan = $this->acceptedScanOf($candidate);
+
+            if ($scan instanceof AcceptedScan) {
+                $adjacent[] = $scan;
             }
         }
 
         return $adjacent;
+    }
+
+    public function lastAcceptedScanOf(string $employeeUuid): ?AcceptedScan
+    {
+        $employeeId = $this->employeeIdOf($employeeUuid);
+
+        if ($employeeId === null) {
+            return null;
+        }
+
+        // Sin cota inferior y por el mismo indice `(employee_id, occurred_at
+        // DESC)` que la ventana de RF-AT-06: lo que se busca es el ESTADO en que
+        // quedo la persona, y ese estado puede ser de hace media hora —lo que
+        // dura una comida— o de hace cuatro. `ORDER BY occurred_at DESC LIMIT 1`
+        // lee una sola fila del indice, no el historico.
+        return $this->acceptedScanOf(
+            $this->acceptedScansOf($employeeId)->orderByDesc('scan_events.occurred_at')->first()
+        );
+    }
+
+    /**
+     * Los escaneos del empleado que **produjeron tramo**, con el `uuid` publico
+     * de ese tramo.
+     *
+     * El `LEFT JOIN` y no un `JOIN`: `scan_events.shift_entry_id` puede ser nulo
+     * en una fila importada, y un `JOIN` la haria desaparecer de la ventana
+     * anti-rebote sin que nadie se enterara. {@see AcceptedScan} admite el nulo
+     * y sabe que hacer con el.
+     */
+    private function acceptedScansOf(int $employeeId): Builder
+    {
+        return $this->connection->table('scan_events')
+            ->leftJoin('shift_entries', 'shift_entries.id', '=', 'scan_events.shift_entry_id')
+            ->where('scan_events.employee_id', $employeeId)
+            ->whereIn('scan_events.result', ScanResult::acceptedValues())
+            ->select([
+                'scan_events.occurred_at',
+                'scan_events.result',
+                'shift_entries.uuid as shift_entry_uuid',
+            ]);
+    }
+
+    /**
+     * Traduce la fila al vocabulario del dominio, o `null` si no hay fila.
+     *
+     * `ScanResult::action()` devuelve `null` para los cuatro rechazos, que aqui
+     * no pueden llegar —la consulta ya los excluye— pero el tipado lo
+     * contempla: antes que construir un `AcceptedScan` imposible, se descarta.
+     */
+    private function acceptedScanOf(mixed $row): ?AcceptedScan
+    {
+        if (! $row instanceof stdClass) {
+            return null;
+        }
+
+        /** @var mixed $result */
+        $result = $row->result ?? null;
+        /** @var mixed $occurredAt */
+        $occurredAt = $row->occurred_at ?? null;
+        /** @var mixed $shiftEntryUuid */
+        $shiftEntryUuid = $row->shift_entry_uuid ?? null;
+
+        if (! is_string($result) || ! (is_string($occurredAt) || $occurredAt instanceof DateTimeInterface)) {
+            return null;
+        }
+
+        $action = ScanResult::from($result)->action();
+
+        if (! $action instanceof ClockingAction) {
+            return null;
+        }
+
+        return new AcceptedScan(
+            occurredAt: $this->toUtc($occurredAt),
+            action: $action,
+            shiftEntryUuid: is_string($shiftEntryUuid) ? $shiftEntryUuid : null,
+        );
     }
 
     private function employeeIdOf(string $employeeUuid): ?int

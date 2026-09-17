@@ -234,6 +234,41 @@ Qué mirar:
   auditoría, con quién ha mirado, de quién y qué periodo. Es normal y es
   intencionado.
 
+### 3.3 La pausa en el registro
+
+Si el hotel tiene activado el **fichaje de pausa**, una jornada con descanso no
+se ve como un tramo con un agujero dentro: se ve como **dos tramos con la marca
+«Pausa» entre ellos**. Eso es todo lo que cambia, y es lo que hay que saber para
+explicárselo a alguien:
+
+- **La pausa no cuenta como tiempo trabajado.** No hay ninguna resta: el tiempo
+  del descanso sencillamente no está dentro de ningún tramo, así que el total
+  del día ya sale bien sin tocar nada.
+- **Un descanso de madrugada no parte la jornada.** Quien entra a las 22:00,
+  descansa a las 02:00 y vuelve a las 02:30 sigue en la jornada del día
+  anterior, y el día siguiente le sale a cero. Es la misma regla de siempre: la
+  jornada pertenece al día en que empezó.
+- **Pero una pausa no se queda abierta para siempre.** La vuelta continúa la
+  jornada anterior solo si llega **antes** del descanso mínimo entre jornadas que
+  tengas puesto en el perfil (`min_rest_hours`, 12 h de serie —§7—). Pasado ese
+  tiempo, el siguiente fichaje **abre una jornada nueva**, que es lo correcto:
+  quien pulsó «Pausa» a las 15:00 y ficha al día siguiente a las 08:00 está
+  empezando su turno, no volviendo de un descanso de diecisiete horas.
+- **Una pausa sin vuelta no abre incidencia.** Si alguien pulsa «Pausa», pasa la
+  tarjeta y se va a casa, la jornada queda **cerrada en ese momento**, con la
+  marca «Pausa» y sin tramo de vuelta. El sistema no se inventa una hora de
+  salida ni te avisa: **se corrige a mano como cualquier otro tramo** (§5), y el
+  motivo habitual es «Olvido de fichaje de salida». Míralo cuando un total del
+  día salga más corto de lo esperado.
+- **Se distingue de un hueco sin explicar.** Dos tramos seguidos sin la marca
+  «Pausa» son otra cosa —una salida y una entrada—, y eso es exactamente lo que
+  el fichaje de pausa viene a aclarar.
+- **Una pausa mal fichada se corrige como cualquier otro tramo**, desde la misma
+  pantalla y con su motivo (§5). No hay un procedimiento aparte: lo que hay que
+  corregir es una hora de entrada o de salida, como siempre.
+- **Si el hotel no tiene activado el fichaje de pausa, aquí no cambia nada** y
+  no verás ninguna marca.
+
 ---
 
 ## 4. La bandeja de incidencias
@@ -253,14 +288,29 @@ resolver solo. Se llena sola cada madrugada, al revisar el registro.
 | **Jornada demasiado corta** | Baja | Un tramo por debajo de la duración mínima computable | Un doble escaneo, o una entrada y una salida seguidas por error |
 | **Desfase de reloj** | Baja | La tablet tenía la hora desviada al fichar | **El fichaje se registró igual.** Es un aviso para IT sobre esa tablet, no un problema de la persona |
 | **Salida sin fichar** | Media | Describe un olvido de salida **ya cerrado a mano** | **No la abre nadie automáticamente.** Mientras el turno sigue abierto, lo que hay es «Turno abierto sin cerrar» |
-| **Sin pausa registrada** | Media | Un tramo continuo por encima del umbral del convenio | **Hoy no se abre ninguna**: mientras el quiosco no registre la pausa como tal, el sistema no puede distinguir «no descansó» de «descansó y no lo fichó» |
+| **Sin pausa registrada** | Media | Un tramo continuo por encima del umbral del convenio | **Se abre solo si el hotel tiene activado el fichaje de pausa.** Sin él, el sistema no puede distinguir «no descansó» de «descansó y no lo fichó», y no avisa de ninguna |
 | **Patrón anómalo de uso de la credencial** | Alta | — | **Hoy no se abre ninguna.** El detector llega en una versión posterior |
 
-> **El filtro «Tipo» enseña los ocho, y hoy solo cinco se abren solos**:
-> descanso insuficiente, turno abierto, jornada demasiado larga, jornada
-> demasiado corta y desfase de reloj. Los otros tres están en la lista porque el
-> sistema tiene que poder registrarlos sin cambiar nada cuando llegue su
-> momento. No es un fallo de la instalación.
+> **El filtro «Tipo» enseña los ocho, y cuántos se abren solos depende de un
+> ajuste.** Cinco lo hacen siempre —descanso insuficiente, turno abierto,
+> jornada demasiado larga, jornada demasiado corta y desfase de reloj—, y
+> **«Sin pausa registrada» se suma a ellos en cuanto el hotel activa el fichaje
+> de pausa** (Panel → «Ajustes operativos» → «Fichaje de pausa»; lo explica
+> [`configuracion.md`](configuracion.md) §2.1). Los otros dos están en la lista
+> porque el sistema tiene que poder registrarlos sin cambiar nada cuando llegue
+> su momento. No es un fallo de la instalación.
+>
+> **Activar el fichaje de pausa no llena la bandeja de golpe.** La revisión
+> empieza a abrir «Sin pausa registrada» en su pasada siguiente y solo sobre los
+> últimos días; no vuelve atrás sobre el histórico. Y desactivarlo **no cierra**
+> las que ya estén abiertas: se dejan de abrir nuevas y las que hay se resuelven
+> como cualquier otra.
+>
+> **Dos cosas que la bandeja NO te va a decir, y conviene saberlas para no
+> esperarlas:** el hueco entre dos tramos de una misma jornada —la jornada
+> partida— **no se mira** (§4 bis.2), y una **pausa sin vuelta** —alguien pulsa
+> «Pausa» y se va a casa— **no abre ninguna incidencia**: la jornada queda
+> cerrada ahí y se corrige a mano (§3.3).
 
 ### 4.2 El sistema nunca cierra un turno por su cuenta
 
@@ -358,6 +408,18 @@ comentar un aviso con nadie:
   que alguien pasa fuera a media mañana no es descanso entre jornadas y no se
   cuenta aquí. Y sin jornada anterior no hay nada que medir: el primer día del
   registro de una persona nunca avisa.
+- **⚠️ El hueco DENTRO de una jornada no se mira, y eso el sistema no te lo va a
+  avisar nunca.** Una jornada partida —salir a las 15:00 y volver a las 23:00 del
+  mismo día— son dos tramos del mismo día con ocho horas de por medio, y **no
+  aparece ni aquí ni en la bandeja**. Si esa vuelta cayera a las 00:30 ya sería
+  otra jornada y sí avisaría. No es un fallo: dentro de una jornada partida ese
+  hueco es la pausa, y avisar de todos convertiría cada turno partido del hotel
+  en una alerta. **Pero es un caso que el producto no cubre**, así que si tu
+  convenio dice algo sobre los descansos dentro de la jornada partida, eso se
+  revisa a mano: **el sistema aplica el umbral que tengas puesto, no dictamina si
+  una jornada cumple el Estatuto ni tu convenio**. Contrastarlo es de tu asesoría
+  laboral, no del fabricante —
+  [`obligaciones-legales.md`](obligaciones-legales.md) §7.
 - **Los turnos de noche no se parten.** Un turno de 22:00 a 06:00 es uno solo y
   pertenece al día en que empezó. El descanso siguiente se mide desde su fin
   real, las 06:00, no desde medianoche.
@@ -367,16 +429,19 @@ comentar un aviso con nadie:
   sube y el aviso puede aparecer.
 - **Los totales son los mismos que ves en el registro de la persona.** La
   pantalla no recalcula las horas por su cuenta: las lee.
-- **«Tramo continuo máximo sin pausa» se enseña, con su umbral, pero todavía no
-  se evalúa.** Su tarjeta aparece marcada **«No se evalúa»**, con el motivo —«no
-  se evalúa hasta que exista la pausa declarada»—, y no produce ninguna fila. El
-  motivo es el mismo que en la bandeja (§4.1): mientras el quiosco no
-  registre la pausa como tal, el sistema no puede distinguir «no descansó» de
-  «descansó y no lo fichó», y avisar en esas condiciones sería avisar de casi
-  todo el mundo casi todos los días. El umbral se guarda, se audita, y la regla
-  empieza a contar sola en cuanto exista el fichaje de pausa, sin que haya que
-  tocar nada. Se enseña en lugar de ocultarse para que sepas que la regla existe
-  y con qué umbral se aplicará.
+- **«Tramo continuo máximo sin pausa» se evalúa solo si el hotel tiene activado
+  el fichaje de pausa.** Mientras no lo esté, su tarjeta aparece marcada **«No
+  se evalúa»**, con el motivo escrito —«No se evalúa mientras el fichaje de
+  pausa esté desactivado en Ajustes operativos»— y no produce ninguna fila. El motivo es el mismo que en la
+  bandeja (§4.1): si el quiosco no registra la pausa, el sistema no puede
+  distinguir «no descansó» de «descansó y no lo fichó», y avisar en esas
+  condiciones sería avisar de casi todo el mundo casi todos los días. El umbral
+  se guarda y se audita igual, y la regla empieza a contar sola en cuanto se
+  activa el ajuste, sin que haya que tocar nada más. Se enseña en lugar de
+  ocultarse para que sepas que la regla existe y con qué umbral se aplicará. Lo
+  activa tu IT en Panel → «Ajustes operativos» → «Fichaje de pausa»
+  ([`configuracion.md`](configuracion.md) §2.1), y conviene hablarlo antes: la
+  bandeja empieza a recibir avisos que hoy no recibe.
 - **Las dos primeras cuentan igual que la bandeja.** El descanso mínimo entre
   jornadas y la jornada diaria ordinaria se miden con el mismo criterio que la
   revisión de cada madrugada —la que abre «Descanso insuficiente» y «Jornada
@@ -646,6 +711,17 @@ semana** los aplica solo la vista de cumplimiento, que avisa pero no abre
 incidencia. El **calendario de festivos** se guarda y se audita desde hoy, pero
 **todavía no lo aplica ninguna regla**: lo estrenará la gestión de ausencias de
 una versión posterior, y la pantalla lo indica al lado del campo.
+
+**`break_required_after_hours` —el tramo máximo sin pausa— depende además de un
+ajuste que no está en esta pantalla.** Solo se aplica si el hotel tiene activado
+el **fichaje de pausa** (Panel → «Ajustes operativos» → «Fichaje de pausa»; lo
+explica [`configuracion.md`](configuracion.md) §2.1). Sin él, el umbral se
+guarda y se audita igual, pero **no abre ninguna incidencia** y la vista de
+cumplimiento lo enseña marcado «No se evalúa». Es deliberado: sin pausas
+fichadas nadie puede distinguir «no descansó» de «descansó y no lo fichó», y una
+bandeja con un aviso por cada turno largo deja de leerse. En cuanto se activa, la
+regla empieza a contar sola con el umbral que tengas guardado aquí, así que
+revisa el número **antes** de pedir que lo enciendan.
 
 El producto se entrega con el perfil español de hostelería. **Ajustarlo al
 convenio que os aplique es responsabilidad del hotel**, no del fabricante: lo

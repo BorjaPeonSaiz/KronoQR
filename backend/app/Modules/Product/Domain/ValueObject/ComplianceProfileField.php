@@ -149,23 +149,29 @@ enum ComplianceProfileField: string
      *     art. 34.1 ET fija la jornada semanal en computo anual, asi que una
      *     semana larga se señala en la vista de cumplimiento y no en la bandeja
      *     ({@see ComplianceRule::opensIncident()}). Es permanente.
-     *   - **La apertura esta suspendida.** RN-12 lo esta hasta que el quiosco
-     *     registre la pausa declarada (ADR-024, RF-AT-12, tarea 3.5), y lo dice
-     *     {@see ComplianceRuleSuspension}. Es temporal: el dia que la 3.5 vacie
-     *     esa lista, esto vuelve a `true` solo, sin tocar este fichero.
+     *   - **La apertura esta suspendida.** RN-12 lo esta mientras el fichaje de
+     *     pausa siga desactivado en esta instalacion (ADR-024, RF-AT-12), y lo
+     *     dice {@see ComplianceRuleSuspension}. Es temporal y **depende del
+     *     hotel**: activar `ATTENDANCE_BREAK_CLOCKING` devuelve esto a `true`
+     *     solo, sin tocar este fichero.
      *
      * Escribir `true` en cualquiera de los dos casos seria afirmar algo falso
      * dentro de un registro con valor legal. Lo que distingue uno de otro para
      * quien lea el asiento son {@see self::governsSuspendedRule()} y
      * {@see self::affectsComplianceView()}.
+     *
+     * **La suspension llega por parametro** (regla dura 14): quien la resuelve
+     * es `UpdateComplianceProfileHandler`, que es el que alcanza los ajustes de
+     * la instalacion. Un enum de dominio que fuera a buscarla seria dominio
+     * leyendo configuracion.
      */
-    public function affectsIncidentDetection(): bool
+    public function affectsIncidentDetection(ComplianceRuleSuspension $suspension): bool
     {
         $rule = $this->complianceRule();
 
         return $rule instanceof ComplianceRule
             && $rule->opensIncident()
-            && ! ComplianceRuleSuspension::isSuspended($rule);
+            && ! $suspension->isSuspended($rule);
     }
 
     /**
@@ -190,23 +196,29 @@ enum ComplianceProfileField: string
 
     /**
      * Si el campo gobierna una regla que existe, se evalua y tiene sus pruebas,
-     * pero **cuya apertura de incidencia esta suspendida hoy**.
+     * pero **cuya apertura de incidencia esta suspendida en esta instalacion**.
      *
      * Es lo que distingue «este campo no mueve ninguna alerta porque no gobierna
      * ninguna regla» —el nombre del convenio— de «este campo gobierna RN-12 y
      * RN-12 no esta abriendo incidencias». Sin esta distincion, el asiento y la
      * pantalla dirian lo mismo de las dos cosas, y son muy distintas: la segunda
-     * cambia de comportamiento en cuanto llegue la tarea 3.5.
+     * cambia de comportamiento en cuanto el hotel active
+     * `ATTENDANCE_BREAK_CLOCKING` (RF-AT-12), y eso es un ajuste que quien lee la
+     * pantalla puede cambiar el mismo.
      *
      * **No es lo mismo que {@see self::hasNoConsumerYet()}**, y confundirlos seria
      * mentir en la otra direccion: aquellos tres campos no los lee **ninguna**
      * regla; este lo lee una regla que si se evalua.
+     *
+     * Recibe la suspension por el mismo motivo que
+     * {@see self::affectsIncidentDetection()}: desde la tarea 3.5 la respuesta
+     * depende de un ajuste del hotel, y el dominio no lo consulta.
      */
-    public function governsSuspendedRule(): bool
+    public function governsSuspendedRule(ComplianceRuleSuspension $suspension): bool
     {
         $rule = $this->complianceRule();
 
-        return $rule instanceof ComplianceRule && ComplianceRuleSuspension::isSuspended($rule);
+        return $rule instanceof ComplianceRule && $suspension->isSuspended($rule);
     }
 
     /**

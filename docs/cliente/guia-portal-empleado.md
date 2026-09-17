@@ -87,6 +87,7 @@ si no eliges nada—, y dentro de cada una:
 | **Tramo** | Cada par entrada/salida de ese día, con su duración |
 | **Total de la jornada** | La suma de los tramos de ese día |
 | **Cómo se registró** | Escaneo de tu tarjeta, PIN en el quiosco, o registrado a mano por RRHH |
+| **«Pausa»** | Entre dos tramos: ahí hiciste un descanso y lo fichaste. **La pausa no cuenta como tiempo trabajado**, por eso no está dentro de ningún tramo. Solo aparece si tu hotel usa el fichaje de pausa |
 | **«Turno abierto»** | Todavía no has fichado la salida de ese turno: el total va a subir |
 | **«Revisión pendiente»** | Ese día quedó marcado para que alguien lo revise. **No es un error tuyo** |
 | **«Se registró X después de fichar»** | La tablet estaba sin red y el fichaje llegó al servidor más tarde. **Lo que cuenta es la hora a la que fichaste** |

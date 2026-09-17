@@ -233,3 +233,34 @@ it('mantiene la cadena de auditoria intacta despues de varios cambios', function
 
     expect(app(VerifyAuditChain::class)->handle()->isIntact())->toBeTrue();
 })->group('RF-PD-01', 'RL-04', 'RS-07');
+
+it('deja asiento de impacto de cumplimiento al activar el fichaje de pausa', function (): void {
+    // RF-AT-12 y decision 8 de la ficha 3.5. Activarlo no mueve ni un minuto del
+    // calculo —por eso `affects_worked_hours` es `false`— pero **reactiva RN-12**
+    // y desde la noche siguiente empiezan a abrirse incidencias `missing_break`.
+    // El asiento tiene que decirlo: quien lea el registro seis meses despues
+    // necesita poder explicar por que aquel dia aparecieron cuarenta avisos.
+    $admin = ManagementUsers::withRole(UserRole::ADMIN);
+
+    Api::as(ManagementUsers::tokenFor($admin))
+        ->patch('/api/v1/settings', ['settings' => ['ATTENDANCE_BREAK_CLOCKING' => 'enabled']])
+        ->assertStatus(200);
+
+    $entries = settingAuditEntries();
+
+    expect($entries)->toHaveCount(1)
+        ->and($entries[0]->actor_type)->toBe('user')
+        ->and($entries[0]->actor_id)->toBe($admin->id)
+        ->and($entries[0]->subject_type)->toBe('installation_setting')
+        ->and(auditPayload($entries[0]))->toBe([
+            'affects_worked_hours' => false,
+            'impact' => 'compliance_review',
+            'key' => 'ATTENDANCE_BREAK_CLOCKING',
+            'new_value' => 'enabled',
+            'previous_value' => 'disabled',
+            'was_product_default' => true,
+        ]);
+
+    // Y la cadena sigue intacta: un asiento nuevo no la rompe (regla dura 6).
+    expect(app(VerifyAuditChain::class)->handle()->isIntact())->toBeTrue();
+})->group('RF-PD-01', 'RF-AT-12', 'RL-04');

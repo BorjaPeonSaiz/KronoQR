@@ -16,6 +16,7 @@ use App\Modules\Attendance\Domain\Exception\ShiftAlreadyOpen;
 use App\Modules\Attendance\Domain\Exception\ShiftEntryDoesNotBelongToWorkDay;
 use App\Modules\Attendance\Domain\Exception\ShiftEntryNotInWorkDay;
 use App\Modules\Attendance\Domain\Policy\ClockingPolicy;
+use App\Modules\Attendance\Domain\ValueObject\ClockingAction;
 use App\Modules\Attendance\Domain\ValueObject\Correction;
 use App\Modules\Attendance\Domain\ValueObject\CorrectionAction;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
@@ -133,9 +134,20 @@ final class WorkDay
      *
      * El `entryUuid` lo genera el caso de uso; el dominio no fabrica
      * identificadores basados en la hora (regla dura 2).
+     *
+     * `$action` dice **por que** se abre —una entrada o una vuelta de pausa
+     * (RF-AT-12, ADR-024)— y viaja al evento para que el asiento de auditoria lo
+     * conserve. La estructura es identica en los dos casos, asi que el agregado
+     * no se comporta distinto: lo unico que cambia es lo que el hecho afirma.
+     * Lleva valor por defecto porque las correcciones y las altas manuales
+     * (RF-PA-04) abren tramo sin que haya habido pausa ninguna.
      */
-    public function clockIn(string $entryUuid, DateTimeImmutable $at, ScanOrigin $origin): ShiftEntry
-    {
+    public function clockIn(
+        string $entryUuid,
+        DateTimeImmutable $at,
+        ScanOrigin $origin,
+        ClockingAction $action = ClockingAction::CLOCK_IN,
+    ): ShiftEntry {
         TimeRange::assertUtc('clockedInAt', $at);
         $this->guardNoOpenEntry();
         $this->guardNothingExtendsBeyond($at);
@@ -150,6 +162,7 @@ final class WorkDay
             $this->workDate,
             $at,
             $origin,
+            $action,
         ));
         $this->record($this->dailyTotals($at));
 
@@ -163,9 +176,19 @@ final class WorkDay
      * La politica llega por parametro con sus umbrales ya resueltos: el
      * agregado no sabe de donde salen ni tiene ninguna constante (regla
      * dura 14).
+     *
+     * `$action` dice **por que** se cierra —fin de jornada o inicio de pausa
+     * (RF-AT-12, ADR-024)— y viaja al evento. RN-07 y RN-08 se evaluan igual en
+     * los dos casos: una pausa no exime a un tramo de ser demasiado corto ni
+     * demasiado largo. Lleva valor por defecto porque las correcciones
+     * (RF-PA-04) cierran tramos sin que haya habido pausa ninguna.
      */
-    public function clockOut(DateTimeImmutable $at, ScanOrigin $origin, ClockingPolicy $policy): ShiftEntry
-    {
+    public function clockOut(
+        DateTimeImmutable $at,
+        ScanOrigin $origin,
+        ClockingPolicy $policy,
+        ClockingAction $action = ClockingAction::CLOCK_OUT,
+    ): ShiftEntry {
         TimeRange::assertUtc('clockedOutAt', $at);
 
         $entry = $this->openEntry()
@@ -195,6 +218,7 @@ final class WorkDay
             $entry->workedDuration(),
             $this->totalWorked(),
             $anomalies,
+            $action,
         ));
         $this->record($this->dailyTotals($at));
 

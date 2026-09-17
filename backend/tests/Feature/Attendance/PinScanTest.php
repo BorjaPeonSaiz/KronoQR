@@ -427,3 +427,41 @@ it('devuelve la clave nula cuando la instalacion no ofrece fichaje por PIN', fun
 
     expect($respuesta->json('pin_sealing_public_key'))->toBeNull();
 })->group('RF-AT-11', 'RF-KI-03');
+
+// --- RF-AT-12: la pausa tambien se ficha por PIN (ADR-024) --------------------
+
+it('ficha la pausa y la vuelta por PIN igual que por tarjeta', function (): void {
+    // RF-AT-11 y RF-AT-12. El fichaje por PIN comparte el caso de uso con el de
+    // tarjeta a proposito (tarea 1.12), y la pausa no puede ser la excepcion:
+    // quien se dejo la tarjeta en la taquilla tiene el mismo derecho a que su
+    // descanso quede registrado como pausa y no como fin de jornada.
+    $escenario = escenarioDePin('2026-03-14 06:00:00');
+
+    ficharConPin($escenario, Str::uuid7()->toString(), occurredAt: '2026-03-14T06:00:00Z')->assertOk();
+
+    FrozenTime::at('2026-03-14 10:00:00');
+    $pausa = ficharConPin(
+        $escenario,
+        Str::uuid7()->toString(),
+        occurredAt: '2026-03-14T10:00:00Z',
+        overrides: ['intent' => 'break_start'],
+    );
+
+    $pausa->assertOk()->assertValidRequest()->assertValidResponse();
+
+    expect($pausa->json('action'))->toBe('break_start')
+        ->and($pausa->json('worked_minutes'))->toBe(240);
+
+    // Y la vuelta, sin declarar nada: el mismo gesto de siempre.
+    FrozenTime::at('2026-03-14 10:30:00');
+    $vuelta = ficharConPin($escenario, Str::uuid7()->toString(), occurredAt: '2026-03-14T10:30:00Z');
+
+    $vuelta->assertOk()->assertValidResponse();
+
+    expect($vuelta->json('action'))->toBe('break_end')
+        ->and($vuelta->json('work_date'))->toBe('2026-03-14')
+        ->and(DB::table('shift_entries')->where('work_date', '2026-03-14')->count())->toBe(2)
+        // Los dos tramos del dia son del mismo origen: el PIN no abre una via
+        // distinta, usa la misma (RF-AT-11).
+        ->and(DB::table('shift_entries')->where('clock_in_source', 'pin_kiosk')->count())->toBe(2);
+})->group('RF-AT-11', 'RF-AT-12');

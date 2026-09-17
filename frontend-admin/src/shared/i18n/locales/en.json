@@ -633,6 +633,8 @@
       "recorded": "Received by the server: {moment}",
       "notRecorded": "No reception mark: this time was written by a person, not by a scan.",
       "queued": "It arrived from the kiosk queue, {delay} after the clocking. What counts for the record is the time of the clocking.",
+      "breakBadge": "Break",
+      "breakRow": "Break from {from} to {to} ({duration})",
       "empty": "This day has no current periods of work. If there are amendments below, they were voided: the history is still complete.",
       "sum": "Sum of the entries",
       "declared": "Recorded daily total",
@@ -881,7 +883,7 @@
       "minRestHours": "An issue is opened if fewer hours pass between the end of one shift and the start of the next. 12 in the Spanish profile (art. 34.3 ET).",
       "maxDailyHours": "An issue is opened if the sum of a day's shifts exceeds these hours. 9 in the Spanish profile.",
       "maxWeeklyHours": "40 in the Spanish profile (art. 34.1 ET). Annual averaging is set by the collective agreement.",
-      "breakRequiredAfterHours": "Threshold for a continuous stretch with no break recorded. 6 in the Spanish profile. It is stored and evaluated; it does not raise issues today (see the note below).",
+      "breakRequiredAfterHours": "Threshold for a continuous stretch with no break recorded. 6 in the Spanish profile. It is always stored and evaluated; it only raises issues while break clocking is switched on (see the note below).",
       "weekStartsOn": "Used to group by week. Monday in the Spanish profile (ISO 8601).",
       "holidayCalendar": "One date per line, in YYYY-MM-DD format. Ships empty: holidays depend on the town and the year, so each installation loads its own.",
       "retentionYears": "Four years in Spain (art. 34.9 ET). Nothing can be purged before that."
@@ -895,7 +897,9 @@
       "6": "Saturday",
       "7": "Sunday"
     },
-    "breakSuspended": "The continuous stretch without a break is evaluated, but it does not raise issues yet: until the kiosk records the break as such, the system cannot tell \"did not rest\" from \"rested and did not clock it\". The threshold is stored and will apply once detection is switched back on.",
+    "breakSuspendedDisabled": "The continuous stretch without a break is evaluated but does not raise issues while break clocking is switched off: until the kiosk records the break as such, the system cannot tell \"did not rest\" from \"rested and did not clock it\".",
+    "breakSuspendedDisabledLink": "Switch it on in Operational settings → Break clocking",
+    "breakSuspendedEnabled": "The continuous stretch without a break is evaluated and raises issues: break clocking is switched on in this installation.",
     "errors": {
       "notAWholeNumber": "Enter a whole number, with no decimals or letters.",
       "required": "This field cannot be left empty."
@@ -938,7 +942,7 @@
       }
     },
     "suspensionReasons": {
-      "awaiting_declared_break": "Not evaluated until a declared break exists."
+      "break_clocking_disabled": "Not evaluated while break clocking is switched off in Operational settings."
     },
     "difference": {
       "missing": "Short by",
@@ -1054,6 +1058,7 @@
       "maxClockSkewMinutes": "Tolerated clock skew (min)",
       "minTransitSeconds": "Minimum transit between kiosks (s)",
       "kioskServiceCode": "Kiosk service code",
+      "breakClocking": "Break clocking",
       "localeDefault": "Default language",
       "localeAvailable": "Available languages"
     },
@@ -1064,8 +1069,13 @@
       "minTransitSeconds": "The minimum believable time to walk from one kiosk to another. Below it, an incident is opened. Set it to 0 if two tablets sit at the same door. Accepted range: {minimum}–{maximum} seconds.",
       "kioskServiceCode": "It opens the tablet's diagnostics screen. Empty: the screen opens with no code. Digits only, 8 to 12.",
       "kioskServiceCodeRedacted": "Not visible with this kind of access: someone signing in as support cannot see or change the service code.",
+      "breakClocking": "Enabled: the tablet shows the «Break» button and, from the next nightly review, a continuous stretch with no break (RN-12) starts opening incidents and counting in the compliance view. Disabled: the button disappears from the tablet and RN-12 is suspended again, without closing any incident already open.",
       "localeDefault": "The language the three applications and the documents are served in when nobody picks another. It has to be among the available languages.",
       "localeAvailable": "Languages this installation offers. At least one, and the default language always has to stay checked."
+    },
+    "breakClockingOptions": {
+      "enabled": "Enabled",
+      "disabled": "Disabled"
     },
     "errors": {
       "required": "This field cannot be left empty.",

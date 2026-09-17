@@ -89,6 +89,22 @@ final class UpdateSettingsRequest extends FormRequest
         withValidator as private rejectUnknownInput;
     }
 
+    /**
+     * Las claves que **el actor de soporte no puede escribir** porque deciden
+     * que jornadas se marcan (RF-AT-12, RF-PD-11, ADR-020).
+     *
+     * @var list<string>
+     */
+    private const array COMPLIANCE_GOVERNING_KEYS = [
+        // Activarla reactiva RN-12 sobre la plantilla del cliente y
+        // desactivarla la silencia. Es la misma potestad que
+        // `ComplianceProfilePolicy` le niega al fabricante sobre el perfil.
+        //
+        // Por el enum y no como cadena suelta: si alguien renombrara la clave,
+        // esto deja de compilar en lugar de convertirse en una guarda muda.
+        SettingKey::ATTENDANCE_BREAK_CLOCKING->value,
+    ];
+
     public function authorize(): bool
     {
         if (! Gate::allows('update', ResolvedSettings::class)) {
@@ -111,7 +127,49 @@ final class UpdateSettingsRequest extends FormRequest
          * le confirmaria la forma que tiene ese valor, y quien no puede tocar una
          * clave tampoco tiene por que aprender como se escribe.
          */
-        return ! $this->touchesConfidentialKey() || Gate::allows('updateConfidential', ResolvedSettings::class);
+        if ($this->touchesConfidentialKey() && ! Gate::allows('updateConfidential', ResolvedSettings::class)) {
+            return false;
+        }
+
+        /*
+         * La tercera puerta (tarea 3.5, RF-AT-12): las claves que deciden **que
+         * es una incidencia**.
+         *
+         * Mismo mecanismo y mismo motivo que la anterior, con otra pregunta
+         * detras: `ComplianceProfilePolicy` ya le niega al actor de soporte el
+         * perfil de cumplimiento entero, y `ATTENDANCE_BREAK_CLOCKING` hace lo
+         * mismo desde otra tabla — reactiva o suspende RN-12 sobre la plantilla
+         * del cliente. Ver {@see SettingsPolicy::updateComplianceGoverning()}.
+         *
+         * Tambien `403` antes de validar, por lo mismo: quien no puede tocar una
+         * clave no tiene por que aprender que valores admite.
+         */
+        return ! $this->touchesComplianceGoverningKey()
+            || Gate::allows('updateComplianceGoverning', ResolvedSettings::class);
+    }
+
+    /**
+     * Si el cuerpo pretende cambiar alguna clave que decide **que es una
+     * incidencia** (RF-AT-12, tarea 3.5).
+     *
+     * Lista explicita y no una propiedad del catalogo, a diferencia de
+     * `confidential`. No es pereza: las dos alternativas mienten. `confidential`
+     * ademas **redacta el valor** al leerlo, y este ajuste lo tiene que ver el
+     * panel; y `SettingImpact::COMPLIANCE_REVIEW` lo llevan cuatro claves, tres
+     * de las cuales son parametros operativos que el soporte si debe poder
+     * ajustar (RF-PD-11). Cuando haya una segunda clave asi, esta lista crece —y
+     * si llegara a haber cinco, habra ganado el derecho a ser una propiedad del
+     * dominio.
+     */
+    private function touchesComplianceGoverningKey(): bool
+    {
+        foreach ($this->submittedKeys() as $name) {
+            if (in_array($name, self::COMPLIANCE_GOVERNING_KEYS, true)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

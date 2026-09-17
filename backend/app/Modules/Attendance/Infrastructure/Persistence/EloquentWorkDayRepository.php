@@ -121,11 +121,42 @@ final readonly class EloquentWorkDayRepository implements WorkDayRepository
      */
     public function findWorkDayOfShiftEntry(string $shiftEntryUuid): ?WorkDay
     {
-        $row = ShiftEntry::query()
+        return $this->workDayOf(ShiftEntry::query()
             ->where('uuid', $shiftEntryUuid)
             ->whereNotIn('status', self::historicalStatuses())
-            ->first();
+            ->first());
+    }
 
+    /**
+     * La jornada que contiene un tramo, **vigente o retirado** (RF-AT-12,
+     * ADR-024, tarea 3.5).
+     *
+     * La misma consulta que {@see findWorkDayOfShiftEntry()} **sin el filtro de
+     * estado**, y esa diferencia de una linea es toda la razon de ser del
+     * metodo: entre la pausa y la vuelta puede haber pasado una correccion
+     * (RN-13) que dejo el tramo `superseded`, y su jornada sigue siendo la
+     * misma. Con el filtro puesto, esa vuelta caeria en `WorkDay::start()` sobre
+     * la fecha civil del escaneo y partiria el turno de noche en dos dias.
+     *
+     * No se colapsan en un solo metodo con un booleano porque las dos preguntas
+     * son distintas —«¿que jornada puedo corregir?» frente a «¿de que jornada es
+     * este tramo?»— y responder la primera con un tramo retirado convertiria el
+     * `409` honesto de la correccion en un error inesperado.
+     */
+    public function findWorkDayOfAnyShiftEntry(string $shiftEntryUuid): ?WorkDay
+    {
+        return $this->workDayOf(ShiftEntry::query()->where('uuid', $shiftEntryUuid)->first());
+    }
+
+    /**
+     * La jornada `(empleado, work_date)` a la que pertenece la fila, o `null` si
+     * no hay fila o su empleado ya no esta.
+     *
+     * La `work_date` se lee de la propia fila y no se recalcula: es la fecha
+     * civil que se decidio cuando el turno se abrio (RN-05, ADR-006).
+     */
+    private function workDayOf(?ShiftEntry $row): ?WorkDay
+    {
         if (! $row instanceof ShiftEntry) {
             return null;
         }

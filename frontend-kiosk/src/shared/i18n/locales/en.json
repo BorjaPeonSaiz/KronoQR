@@ -39,6 +39,17 @@
       "break_start": "Break {time}",
       "break_end": "Back {time}"
     },
+    "breakOpenHint": "Your shift is still open: tap your card when you're back.",
+    "break": {
+      "toggleOff": "Break",
+      "toggleOn": "Break armed",
+      "armedHint": "Tap your card to start the break",
+      "disarmed": "Break disarmed."
+    },
+    "clockSkew": {
+      "ahead": "This tablet's clock is {minutes} min ahead. Records are still saved; the manager will review it.",
+      "behind": "This tablet's clock is {minutes} min behind. Records are still saved; the manager will review it."
+    },
     "duration": "{hours} h {minutes} min",
     "todayTotal": "Today: {duration}",
     "pending": {
@@ -80,6 +91,9 @@
       "label": "Numeric keypad",
       "clear": "Clear all",
       "backspace": "Delete last digit"
+    },
+    "break": {
+      "armedHint": "Enter your code to start the break"
     }
   },
   "pairing": {

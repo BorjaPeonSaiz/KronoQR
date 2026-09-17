@@ -45,6 +45,18 @@ final readonly class RecordHeartbeatCommand
     public function __construct(
         public int $deviceId,
         public string $deviceUuid,
+        /**
+         * El centro al que esta vinculado el quiosco, **del token** como los dos
+         * identificadores de arriba.
+         *
+         * Lo pide la tarea 3.5: la respuesta del latido lleva los dos ajustes
+         * que la tablet necesita para funcionar sin red —el fichaje de pausa y
+         * la tolerancia de desfase— y `OperationalSettingsProvider` los entrega
+         * por centro. Sale del token y no de una consulta a `devices` ni del
+         * cuerpo: el latido corre cada minuto por cada tablet y el dato ya
+         * estaba ahi.
+         */
+        public int $siteId,
         public HeartbeatTelemetry $telemetry,
         public array $clientErrors = [],
     ) {}

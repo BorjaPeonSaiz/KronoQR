@@ -40,6 +40,23 @@ function spanishProfileSnapshot(): ComplianceProfileSnapshot
     );
 }
 
+/**
+ * La suspension que rige en una instalacion que **no** ficha la pausa, que es la
+ * de serie (`ATTENDANCE_BREAK_CLOCKING=disabled`, decision 7 de la ficha 3.5).
+ *
+ * Nombre propio del fichero: en Pest las funciones de un fichero de prueba son
+ * globales para toda la suite.
+ */
+function withoutBreakClocking(): ComplianceRuleSuspension
+{
+    return ComplianceRuleSuspension::forInstallation(breakClockingEnabled: false);
+}
+
+function withBreakClocking(): ComplianceRuleSuspension
+{
+    return ComplianceRuleSuspension::forInstallation(breakClockingEnabled: true);
+}
+
 it('aplica un cambio sin tocar el perfil anterior', function (): void {
     // El asiento declara un valor anterior y uno nuevo: si `with()` mutara, el
     // «antes» se perderia y el trail diria que el umbral no cambio.
@@ -185,12 +202,12 @@ it('separa las tres consecuencias de cada campo, que es lo que lee el asiento', 
     // «¿Cambia esto que alertas saltan?», «¿cambia esto lo que RRHH ve en la vista
     // de cumplimiento?» y «¿cambia esto que se puede borrar?» son tres preguntas
     // distintas y quien lee el trail busca una u otra.
-    expect(ComplianceProfileField::MinRestHours->affectsIncidentDetection())->toBeTrue()
-        ->and(ComplianceProfileField::MaxDailyHours->affectsIncidentDetection())->toBeTrue()
-        ->and(ComplianceProfileField::RetentionYears->affectsIncidentDetection())->toBeFalse()
+    expect(ComplianceProfileField::MinRestHours->affectsIncidentDetection(withoutBreakClocking()))->toBeTrue()
+        ->and(ComplianceProfileField::MaxDailyHours->affectsIncidentDetection(withoutBreakClocking()))->toBeTrue()
+        ->and(ComplianceProfileField::RetentionYears->affectsIncidentDetection(withoutBreakClocking()))->toBeFalse()
         ->and(ComplianceProfileField::RetentionYears->affectsRetention())->toBeTrue()
         ->and(ComplianceProfileField::MinRestHours->affectsRetention())->toBeFalse()
-        ->and(ComplianceProfileField::Name->affectsIncidentDetection())->toBeFalse()
+        ->and(ComplianceProfileField::Name->affectsIncidentDetection(withoutBreakClocking()))->toBeFalse()
         ->and(ComplianceProfileField::Name->affectsRetention())->toBeFalse()
         // La tercera, de la tarea 3.4: los cuatro campos que gobiernan una regla
         // mueven lo que enseña la vista de cumplimiento, tambien el de la regla
@@ -216,10 +233,10 @@ it('no afirma que el limite semanal mueva la deteccion, porque RN-17 no abre inc
      * bandeja. Es permanente, no un «todavia no» como el de RN-12: por eso
      * `governsSuspendedRule()` es `false` y `affectsComplianceView()` es `true`.
      */
-    expect(ComplianceProfileField::MaxWeeklyHours->affectsIncidentDetection())->toBeFalse()
-        ->and(ComplianceProfileField::WeekStartsOn->affectsIncidentDetection())->toBeFalse()
-        ->and(ComplianceProfileField::MaxWeeklyHours->governsSuspendedRule())->toBeFalse()
-        ->and(ComplianceProfileField::WeekStartsOn->governsSuspendedRule())->toBeFalse()
+    expect(ComplianceProfileField::MaxWeeklyHours->affectsIncidentDetection(withoutBreakClocking()))->toBeFalse()
+        ->and(ComplianceProfileField::WeekStartsOn->affectsIncidentDetection(withoutBreakClocking()))->toBeFalse()
+        ->and(ComplianceProfileField::MaxWeeklyHours->governsSuspendedRule(withoutBreakClocking()))->toBeFalse()
+        ->and(ComplianceProfileField::WeekStartsOn->governsSuspendedRule(withoutBreakClocking()))->toBeFalse()
         ->and(ComplianceRule::MaximumWeeklyWorkingTime->opensIncident())->toBeFalse()
         ->and(ComplianceRule::MinimumRestBetweenWorkDays->opensIncident())->toBeTrue()
         ->and(ComplianceRule::MaximumDailyWorkingTime->opensIncident())->toBeTrue()
@@ -228,40 +245,59 @@ it('no afirma que el limite semanal mueva la deteccion, porque RN-17 no abre inc
 
 it('no afirma que el umbral de la pausa mueva la deteccion mientras RN-12 este suspendida', function (): void {
     // **El defecto que esto fija.** `break_required_after_hours` gobierna RN-12,
-    // y RN-12 se evalua pero **no abre incidencias** hasta que el quiosco
-    // registre la pausa declarada (ADR-024, RF-AT-12, tarea 3.5). Escribir
+    // y RN-12 se evalua pero **no abre incidencias** mientras el fichaje de
+    // pausa siga desactivado en la instalacion (ADR-024, RF-AT-12). Escribir
     // `affects_incident_detection: true` en `audit_log` era afirmar algo falso
     // dentro de un registro con valor legal, y la pantalla prometia jornadas
     // marcadas que no se marcan.
-    expect(ComplianceProfileField::BreakRequiredAfterHours->affectsIncidentDetection())->toBeFalse()
+    expect(ComplianceProfileField::BreakRequiredAfterHours->affectsIncidentDetection(withoutBreakClocking()))->toBeFalse()
         // Pero el matiz se conserva: no es que el campo no gobierne nada, es que
         // lo que gobierna esta suspendido. Sin esta distincion, el asiento seria
         // indistinguible del de un cambio de nombre del convenio.
-        ->and(ComplianceProfileField::BreakRequiredAfterHours->governsSuspendedRule())->toBeTrue()
-        ->and(ComplianceProfileField::Name->governsSuspendedRule())->toBeFalse()
-        ->and(ComplianceProfileField::MinRestHours->governsSuspendedRule())->toBeFalse();
+        ->and(ComplianceProfileField::BreakRequiredAfterHours->governsSuspendedRule(withoutBreakClocking()))->toBeTrue()
+        ->and(ComplianceProfileField::Name->governsSuspendedRule(withoutBreakClocking()))->toBeFalse()
+        ->and(ComplianceProfileField::MinRestHours->governsSuspendedRule(withoutBreakClocking()))->toBeFalse();
 })->group('RF-PD-07', 'RN-12', 'RL-04');
 
-it('deriva la suspension de una unica lista, para que la 3.5 la reactive sin tocar Product', function (): void {
-    // La propiedad que hace que esto no vuelva a divergir: el dia que la tarea
-    // 3.5 vacie `ComplianceRuleSuspension::SUSPENDED`, este campo volvera a
-    // afirmar que mueve la deteccion **sin que nadie edite `ComplianceProfileField`**.
-    // Si alguien reintrodujera un literal aqui, esta prueba seguiria en verde
-    // pero la de abajo —que compara las dos fuentes— no.
-    $suspended = ComplianceRuleSuspension::suspended();
+it('vuelve a afirmar que el umbral de la pausa mueve la deteccion en cuanto el hotel la ficha', function (): void {
+    // **La otra rama, que hasta la tarea 3.5 no se podia ejercitar** porque la
+    // suspension era una constante privada (trampa apuntada en `HANDOFF.md`).
+    // Activar `ATTENDANCE_BREAK_CLOCKING` devuelve el campo a `true` sin que
+    // nadie edite `ComplianceProfileField`: el asiento y la pantalla vuelven a
+    // decir la verdad solos.
+    expect(ComplianceProfileField::BreakRequiredAfterHours->affectsIncidentDetection(withBreakClocking()))->toBeTrue()
+        ->and(ComplianceProfileField::BreakRequiredAfterHours->governsSuspendedRule(withBreakClocking()))->toBeFalse()
+        // Y no arrastra a nadie: RN-17 sigue sin abrir incidencia, porque eso no
+        // es una suspension sino lo que la regla significa.
+        ->and(ComplianceProfileField::MaxWeeklyHours->affectsIncidentDetection(withBreakClocking()))->toBeFalse()
+        ->and(ComplianceProfileField::MinRestHours->affectsIncidentDetection(withBreakClocking()))->toBeTrue();
+})->group('RF-PD-07', 'RN-12', 'RF-AT-12', 'RL-04');
 
-    expect($suspended)->toBe([ComplianceRule::BreakInContinuousShift]);
+it('deriva la suspension de un unico sitio, para que el ajuste la reactive sin tocar Product', function (bool $breakClocking): void {
+    // La propiedad que hace que esto no vuelva a divergir: la respuesta se
+    // **deriva** de la suspension que se reciba, no se enumera aqui. Si alguien
+    // reintrodujera un literal en `ComplianceProfileField`, una de las dos
+    // vueltas de esta prueba se pondria roja.
+    $suspension = ComplianceRuleSuspension::forInstallation($breakClocking);
+
+    expect($suspension->suspended())->toBe(
+        $breakClocking ? [] : [ComplianceRule::BreakInContinuousShift],
+    );
 
     foreach (ComplianceProfileField::cases() as $field) {
         $rule = $field->complianceRule();
 
         // Las dos condiciones se derivan, ninguna se enumera: la regla dice si
-        // abre incidencia y la lista dice si esa apertura esta suspendida hoy.
-        expect($field->affectsIncidentDetection())->toBe(
-            $rule instanceof ComplianceRule && $rule->opensIncident() && ! in_array($rule, $suspended, true),
+        // abre incidencia y la suspension dice si esa apertura esta suspendida
+        // en esta instalacion.
+        expect($field->affectsIncidentDetection($suspension))->toBe(
+            $rule instanceof ComplianceRule && $rule->opensIncident() && ! $suspension->isSuspended($rule),
         );
     }
-})->group('RF-PD-07', 'RN-12', 'RN-17');
+})->with([
+    'sin fichaje de pausa' => [false],
+    'con fichaje de pausa' => [true],
+])->group('RF-PD-07', 'RN-12', 'RN-17', 'RF-AT-12');
 
 it('declara cuales de sus campos todavia no aplica ninguna regla', function (): void {
     // Prometer un efecto que hoy no existe es peor que no ofrecer el campo: el

@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ApiClient } from '@/shared/api/client'
-import { readServiceCodeHash } from '@/shared/telemetry/deviceIdentity'
+import {
+  readBreakClockingEnabled,
+  readClockSkewToleranceSeconds,
+  readServiceCodeHash,
+} from '@/shared/telemetry/deviceIdentity'
 import type { ClientErrorEvent } from '@/shared/telemetry/errorReporter'
 import { createErrorReporter } from '@/shared/telemetry/errorReporter'
 import {
@@ -11,10 +15,15 @@ import {
 } from '@/shared/telemetry/heartbeat'
 import { fixedClock } from '@/shared/time/clock'
 
+/** `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES` por defecto (doc 02, Anexo B), en segundos. */
+const DEFAULT_TOLERANCE_SECONDS = 15 * 60
+
 function apiReturning(
   serverTime: string,
   clientErrorsAccepted = 0,
   serviceCodeHash: string | null = null,
+  breakClockingEnabled = false,
+  clockSkewToleranceSeconds = DEFAULT_TOLERANCE_SECONDS,
 ): ApiClient {
   return {
     recordScan: vi.fn(),
@@ -27,6 +36,8 @@ function apiReturning(
         server_time: serverTime,
         client_errors_accepted: clientErrorsAccepted,
         service_code_hash: serviceCodeHash,
+        break_clocking_enabled: breakClockingEnabled,
+        clock_skew_tolerance_seconds: clockSkewToleranceSeconds,
       },
     })),
     // El latido no empareja nada: estos dos no los usa ninguna prueba de aqui.
@@ -90,6 +101,16 @@ function clientError(overrides: Partial<ClientErrorEvent> = {}): ClientErrorEven
 }
 
 describe('latido del quiosco', () => {
+  // Cualquier `scheduler.beat()` con exito de ESTE fichero cachea los dos
+  // ajustes de la tarea 3.5 (mismo patron que `service_code_hash`): sin esto,
+  // una prueba que corre despues de otra hereda lo que la anterior escribio en
+  // el `localStorage` compartido de jsdom, y el describe de mas abajo que
+  // comprueba «sin latido todavia» dejaria de ser verdad.
+  afterEach(() => {
+    localStorage.removeItem('kronoqr.kiosk.break_clocking_enabled')
+    localStorage.removeItem('kronoqr.kiosk.clock_skew_tolerance_seconds')
+  })
+
   it('declara version y cola pendiente', () => {
     expect(buildHeartbeatBody({ appVersion: '1.4.2', pendingQueueSize: 37 })).toEqual({
       app_version: '1.4.2',
@@ -455,6 +476,96 @@ describe('latido del quiosco', () => {
         beatAt: '2026-09-16T06:00:00.000Z',
         skewSeconds: -20,
       })
+    })
+  })
+
+  describe('fichaje de pausa y umbral de desfase (RF-AT-12, RF-AT-10, tarea 3.5)', () => {
+    it('cachea los dos ajustes de cada 200, con el mismo patron que la huella del codigo', async () => {
+      const reporter = createErrorReporter({ appVersion: '1.4.2', deviceId: 'd' })
+      const scheduler = createHeartbeatScheduler({
+        api: apiReturning('2026-09-17T06:00:00.000Z', 0, null, true, 600),
+        reporter,
+        snapshot: () => ({ appVersion: '1.4.2', pendingQueueSize: 0 }),
+        clock: fixedClock(new Date('2026-09-17T06:00:00.000Z')),
+      })
+
+      await scheduler.beat()
+
+      expect(readBreakClockingEnabled()).toBe(true)
+      expect(readClockSkewToleranceSeconds()).toBe(600)
+    })
+
+    it('sin latido todavia, el fichaje de pausa esta desactivado y no hay umbral', () => {
+      expect(readBreakClockingEnabled()).toBe(false)
+      expect(readClockSkewToleranceSeconds()).toBeNull()
+    })
+
+    it('avisa a `onSettingsUpdated` en CADA 200, no solo al primero', async () => {
+      const reporter = createErrorReporter({ appVersion: '1.4.2', deviceId: 'd' })
+      const updates: Array<{ breakClockingEnabled: boolean; clockSkewToleranceSeconds: number }> =
+        []
+      const scheduler = createHeartbeatScheduler({
+        api: apiReturning('2026-09-17T06:00:00.000Z', 0, null, true, 300),
+        reporter,
+        snapshot: () => ({ appVersion: '1.4.2', pendingQueueSize: 0 }),
+        clock: fixedClock(new Date('2026-09-17T06:00:00.000Z')),
+        onSettingsUpdated: (settings) => updates.push(settings),
+      })
+
+      await scheduler.beat()
+
+      expect(updates).toEqual([{ breakClockingEnabled: true, clockSkewToleranceSeconds: 300 }])
+    })
+
+    it('usa el umbral de ESTE latido para decidir si avisa del desfase, no una constante', async () => {
+      const reporter = createErrorReporter({ appVersion: '1.4.2', deviceId: 'd' })
+      // 90 s de desfase: por debajo de la vieja constante de 15 min, pero por
+      // encima de un umbral de instalacion mas estricto (60 s, el minimo del
+      // contrato).
+      const scheduler = createHeartbeatScheduler({
+        api: apiReturning('2026-09-17T06:00:00.000Z', 0, null, false, 60),
+        reporter,
+        snapshot: () => ({ appVersion: '1.4.2', pendingQueueSize: 0 }),
+        clock: fixedClock(new Date('2026-09-17T06:01:30.000Z')),
+      })
+
+      const skew = await scheduler.beat()
+
+      expect(skew).toBe(90)
+      expect(reporter.pending()[0]?.code).toBe('kiosk.clock.skew_detected')
+    })
+
+    it('con un umbral holgado, el mismo desfase NO avisa', async () => {
+      const reporter = createErrorReporter({ appVersion: '1.4.2', deviceId: 'd' })
+      const scheduler = createHeartbeatScheduler({
+        api: apiReturning('2026-09-17T06:00:00.000Z', 0, null, false, 900),
+        reporter,
+        snapshot: () => ({ appVersion: '1.4.2', pendingQueueSize: 0 }),
+        clock: fixedClock(new Date('2026-09-17T06:01:30.000Z')),
+      })
+
+      await scheduler.beat()
+
+      expect(reporter.size()).toBe(0)
+    })
+
+    // Un solo operador (revision de la segunda vuelta): aqui vivia un `>=`
+    // distinto del `>` estricto de `settleFrom.ts` y del servidor. Un desfase
+    // EXACTAMENTE igual al umbral no es "superarlo".
+    it('no avisa con un desfase exactamente igual al umbral', async () => {
+      const reporter = createErrorReporter({ appVersion: '1.4.2', deviceId: 'd' })
+      const scheduler = createHeartbeatScheduler({
+        api: apiReturning('2026-09-17T06:00:00.000Z', 0, null, false, 90),
+        reporter,
+        snapshot: () => ({ appVersion: '1.4.2', pendingQueueSize: 0 }),
+        // 90 s de desfase exactos contra un umbral de 90 s.
+        clock: fixedClock(new Date('2026-09-17T06:01:30.000Z')),
+      })
+
+      const skew = await scheduler.beat()
+
+      expect(skew).toBe(90)
+      expect(reporter.size()).toBe(0)
     })
   })
 })

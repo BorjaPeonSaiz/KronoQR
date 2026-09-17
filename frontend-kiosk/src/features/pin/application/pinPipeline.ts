@@ -42,6 +42,7 @@ import { settleFrom } from '@/features/scan/application/settleFrom'
 import type { Clock } from '@/shared/time/clock'
 import { systemClock, toUtcIso } from '@/shared/time/clock'
 import { uuidV7 } from '@/shared/ids/uuidV7'
+import type { ScanIntent } from '@/shared/api/types'
 import { sealPin } from '../infrastructure/pinSealing'
 
 export { PIN_VERIFY_TIMEOUT_MS }
@@ -71,6 +72,24 @@ export interface PinPipelineOptions {
    * misma conclusion honesta — «pendiente» — que ya se sabe de antemano.
    */
   readonly isOffline?: () => boolean
+  /**
+   * Misma semantica que en `scanPipeline.ts` (ADR-024, decision 5 de la
+   * tarea 3.5): se llama UNA vez, al construir el `QueuedPinScan`, tras
+   * sellar el PIN. Por defecto `'auto'`.
+   */
+  readonly resolveIntent?: () => ScanIntent
+  /** Ver `scanPipeline.ts` (decision 6 de la tarea 3.5). `null` = sin umbral todavia. */
+  readonly clockSkewToleranceSeconds?: () => number | null
+  /**
+   * El PIN tecleado con la pausa armada resulto RECHAZADO (revision de la
+   * segunda vuelta, QA): la intencion ya se consumio al encolar (decision 5),
+   * asi que un reintento inmediato con el PIN correcto se iria como `auto` si
+   * nadie la vuelve a armar. Se llama SOLO cuando la intencion que se uso era
+   * `'break_start'` y el desenlace final es `rejected` -nunca con `auto`, que
+   * no tenia nada que rearmar-. Quien escucha (la pantalla) vuelve a llamar a
+   * `arm()`, con el mismo plazo de siempre.
+   */
+  readonly onIntentRejected?: () => void
   /** Llega cuando el servidor contesta. Puede no llegar nunca: es opcional por diseno. */
   readonly onSettled?: (confirmation: ScanConfirmation) => void
   readonly onError?: (
@@ -129,7 +148,12 @@ export function createPinPipeline(options: PinPipelineOptions): PinPipeline {
       return null
     }
 
-    return settleFrom(result, scan.scan_id, occurredAt)
+    return settleFrom(
+      result,
+      scan.scan_id,
+      occurredAt,
+      options.clockSkewToleranceSeconds?.() ?? null,
+    )
   }
 
   /**
@@ -195,13 +219,31 @@ export function createPinPipeline(options: PinPipelineOptions): PinPipeline {
         return { kind: 'rejected', scanId, occurredAt }
       }
 
+      // Se consume tras sellar, ya con un PIN que de verdad va a encolarse
+      // (ADR-024, decision 5 de la tarea 3.5): un sellado que falla no llega
+      // aqui y no desarma el boton por nada.
+      const intent = options.resolveIntent?.() ?? 'auto'
+
+      /**
+       * Un PIN rechazado con la pausa armada la vuelve a armar (revision de
+       * la segunda vuelta): la persona escribio mal el PIN, no cambio de
+       * intencion. Se comprueba en CADA salida que entrega un desenlace
+       * final -offline, gracia o plazo vencido-, nunca en `pending` ni
+       * `verifying`, que no son el desenlace definitivo.
+       */
+      function rearmIfRejected(confirmation: ScanConfirmation): void {
+        if (intent === 'break_start' && confirmation.kind === 'rejected') {
+          options.onIntentRejected?.()
+        }
+      }
+
       const scan: QueuedPinScan = {
         kind: 'pin',
         scan_id: scanId,
         employee_code: employeeCode,
         pin_sealed: pinSealed,
         occurred_at: toUtcIso(occurredAt),
-        intent: 'auto',
+        intent,
         device_id: options.deviceId,
       }
 
@@ -220,7 +262,10 @@ export function createPinPipeline(options: PinPipelineOptions): PinPipeline {
         // drena sola al volver la red), el desenlace real llega por `onSettled`
         // exactamente igual que hoy.
         void dispatchPromise.then((confirmation) => {
-          if (confirmation !== null) settle(confirmation)
+          if (confirmation !== null) {
+            rearmIfRejected(confirmation)
+            settle(confirmation)
+          }
         })
         return pendingConfirmation
       }
@@ -232,6 +277,7 @@ export function createPinPipeline(options: PinPipelineOptions): PinPipeline {
       // — un unico pintado, un unico sonido, tal y como lo veria el QR.
       const graceOutcome = await raceGrace(dispatchPromise)
       if (graceOutcome !== GRACE_TIMED_OUT && graceOutcome !== null) {
+        rearmIfRejected(graceOutcome)
         return graceOutcome
       }
 
@@ -244,6 +290,7 @@ export function createPinPipeline(options: PinPipelineOptions): PinPipeline {
       // critico de esta llamada.
       void verifyWithTimeout(dispatchPromise).then((outcome) => {
         if (outcome !== null && outcome !== VERIFY_TIMED_OUT) {
+          rearmIfRejected(outcome)
           settle(outcome)
           return
         }

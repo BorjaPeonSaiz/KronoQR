@@ -388,3 +388,44 @@ it('mide el retraso de sincronizacion y cuenta cada escaneo del lote', function 
         // 18:00:00 - 07:02:31 = 10 h 57 min 29 s.
         ->and($metricas->batches[0]['delay'])->toBe(39_449);
 })->group('RF-KI-04', 'RNF-P-02');
+
+// --- RF-AT-12: la pausa sobrevive a la cola offline (ADR-024) -----------------
+
+it('atribuye igual una pausa encolada que una en linea, aunque llegue del reves', function (): void {
+    // RF-AT-12 y RF-KI-03. El turno de noche completo —entrada, pausa y vuelta—
+    // encolado sin red y sincronizado a la tarde siguiente, y **enviado en orden
+    // inverso**. El `intent` viaja por elemento y el orden lo pone `occurred_at`:
+    // si el lote se procesara por orden de llegada, la vuelta no encontraria su
+    // pausa, se resolveria como entrada y el turno quedaria partido en dos
+    // jornadas — exactamente lo que ADR-024 prohibe.
+    $escenario = escenarioDeLote();
+
+    $entrada = escaneoEncolado('2026-03-13T21:00:00Z');
+    $pausa = [...escaneoEncolado('2026-03-14T01:00:00Z'), 'intent' => 'break_start'];
+    $vuelta = [...escaneoEncolado('2026-03-14T01:30:00Z'), 'intent' => 'break_end'];
+    $salida = escaneoEncolado('2026-03-14T05:00:00Z');
+
+    $respuesta = sincronizar($escenario, [$salida, $vuelta, $pausa, $entrada]);
+
+    $respuesta->assertStatus(207)->assertValidRequest()->assertValidResponse();
+
+    expect(array_column((array) $respuesta->json('results'), 'scan_id'))
+        ->toBe([$entrada['scan_id'], $pausa['scan_id'], $vuelta['scan_id'], $salida['scan_id']])
+        ->and($respuesta->json('results.0.outcome.action'))->toBe('clock_in')
+        ->and($respuesta->json('results.1.outcome.action'))->toBe('break_start')
+        ->and($respuesta->json('results.2.outcome.action'))->toBe('break_end')
+        ->and($respuesta->json('results.3.outcome.action'))->toBe('clock_out')
+        // 22:00 -> 02:00 y 02:30 -> 06:00 locales: 450 minutos, todos del dia 13.
+        ->and($respuesta->json('results.3.outcome.worked_minutes'))->toBe(450)
+        ->and($respuesta->json('results.3.outcome.work_date'))->toBe('2026-03-13');
+
+    expect(DB::table('shift_entries')->where('work_date', '2026-03-13')->count())->toBe(2)
+        ->and(DB::table('shift_entries')->where('work_date', '2026-03-14')->count())->toBe(0)
+        ->and(DB::table('daily_totals')->where('work_date', '2026-03-13')->value('total_minutes'))->toBe(450)
+        ->and(DB::table('daily_totals')->where('work_date', '2026-03-14')->count())->toBe(0)
+        // La intencion llega tal cual desde la cola: no se pierde ni se
+        // reescribe al pasar por el lote (RF-KI-03).
+        ->and(DB::table('scan_events')->orderBy('occurred_at')->pluck('intent')->all())
+        ->toBe(['auto', 'break_start', 'break_end', 'auto'])
+        ->and(AttendanceFixtures::projectionDivergences())->toBe([]);
+})->group('RF-AT-12', 'RF-AT-07', 'RF-KI-03', 'RN-05');

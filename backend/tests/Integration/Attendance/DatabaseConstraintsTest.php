@@ -390,3 +390,73 @@ it('entrega los cuatro umbrales operativos del Anexo B sin ninguna fila en la ta
         ->and($settings->maximumClockSkewMinutes)->toBe(15)    // RF-AT-10
         ->and($settings->minimumTransitSeconds)->toBe(120);    // RN-16
 })->group('RF-PD-01');
+
+// --- RN-01 y RN-02 con pausas de por medio (RF-AT-12, ADR-024) ---------------
+
+it('sigue rechazando el segundo tramo abierto aunque el primero venga de una pausa', function (): void {
+    // RN-01 con el escenario que estrena RF-AT-12: la vuelta de una pausa abre
+    // un tramo nuevo dentro de la MISMA jornada, asi que la instalacion pasa a
+    // tener tramos abiertos que no son «el primero del dia». El indice unico
+    // parcial no distingue de donde viene el tramo —ni debe— y esa es justo la
+    // garantia: `one_open_shift_per_employee` cuenta tramos abiertos, no
+    // jornadas.
+    $fixture = attendanceFixture();
+
+    // Primera mitad del turno, cerrada por la pausa.
+    insertClosedShiftEntry($fixture, $fixture['employee'], '2026-03-02 10:00:00+00', ['duration_minutes' => 240]);
+
+    // La vuelta: tramo abierto en la misma jornada.
+    insertShiftEntry($fixture, $fixture['employee'], ['clocked_in_at' => '2026-03-02 10:30:00+00']);
+
+    expectRejectionBy('one_open_shift_per_employee', function () use ($fixture): void {
+        insertShiftEntry($fixture, $fixture['employee'], ['clocked_in_at' => '2026-03-02 12:00:00+00']);
+    });
+})->group('RN-01', 'RF-AT-12');
+
+it('rechaza un tramo que invade el hueco de una pausa ya registrada', function (): void {
+    // RN-02 con pausa: los dos tramos del turno partido conviven porque no se
+    // solapan, y cualquier cosa que se meta encima de uno de ellos sigue
+    // chocando. Es lo que impide que una correccion manual «rellene» la pausa
+    // alargando el primer tramo sin anular el segundo.
+    $fixture = attendanceFixture();
+
+    insertClosedShiftEntry($fixture, $fixture['employee'], '2026-03-02 10:00:00+00', ['duration_minutes' => 240]);
+    insertClosedShiftEntry($fixture, $fixture['employee'], '2026-03-02 14:30:00+00', [
+        'clocked_in_at' => '2026-03-02 10:30:00+00',
+        'duration_minutes' => 240,
+    ]);
+
+    expectRejectionBy('shift_entries_no_overlap', function () use ($fixture): void {
+        insertClosedShiftEntry($fixture, $fixture['employee'], '2026-03-02 14:30:00+00', [
+            'clocked_in_at' => '2026-03-02 06:00:00+00',
+            'duration_minutes' => 510,
+            'clock_out_source' => 'manual_admin',
+            'version' => 2,
+        ]);
+    });
+})->group('RN-02', 'RF-AT-12');
+
+it('acepta el turno de noche partido por una pausa, con los dos tramos en la misma jornada', function (): void {
+    // ADR-024 y regla dura 4 en la tabla: 22:00 -> 02:00 y 02:30 -> 06:00 son
+    // **dos tramos con el mismo `work_date`**, el del dia en que empezo el turno.
+    // La restriccion de exclusion no mira `work_date` —mira el rango de tiempo—
+    // asi que esto tiene que entrar sin protestar.
+    $fixture = attendanceFixture();
+
+    $primero = insertClosedShiftEntry($fixture, $fixture['employee'], '2026-03-03 01:00:00+00', [
+        'work_date' => '2026-03-02',
+        'clocked_in_at' => '2026-03-02 21:00:00+00',
+        'duration_minutes' => 240,
+    ]);
+
+    $segundo = insertClosedShiftEntry($fixture, $fixture['employee'], '2026-03-03 05:00:00+00', [
+        'work_date' => '2026-03-02',
+        'clocked_in_at' => '2026-03-03 01:30:00+00',
+        'duration_minutes' => 210,
+    ]);
+
+    expect($primero)->toBeGreaterThan(0)
+        ->and($segundo)->toBeGreaterThan(0)
+        ->and(DB::table('shift_entries')->where('work_date', '2026-03-02')->count())->toBe(2)
+        ->and(DB::table('shift_entries')->where('work_date', '2026-03-03')->count())->toBe(0);
+})->group('RN-01', 'RN-02', 'RN-05', 'RF-AT-12');

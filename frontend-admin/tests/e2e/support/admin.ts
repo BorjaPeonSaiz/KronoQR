@@ -114,8 +114,9 @@ export const COMPLIANCE_PROFILE: ComplianceProfile = {
  * fichas de la misma persona en el mismo departamento en toda la suite.
  * `insufficient_rest` tiene un hallazgo enlazado a la incidencia 412 (la misma
  * que `WORKDAYS_WITH_INCIDENT`); `missing_break` esta suspendida
- * (`awaiting_declared_break`, RN-12, hasta la tarea 3.5) y sin ningun
- * hallazgo; `weekly_excess` es informativa, no enlaza incidencia y trae
+ * (`break_clocking_disabled`, RN-12, tarea 3.5: el fichaje de pausa esta
+ * desactivado de serie) y sin ningun hallazgo; `weekly_excess` es informativa,
+ * no enlaza incidencia y trae
  * `has_open_shift: true` (RF-PA-06 segunda vuelta) para que el E2E vea la
  * insignia «Turno abierto» con texto, no solo con color.
  *
@@ -189,7 +190,7 @@ export const COMPLIANCE_SUMMARY: ComplianceSummary = {
         requirement: 'RN-12',
         threshold_minutes: 360,
         evaluated: false,
-        suspension_reason: 'awaiting_declared_break',
+        suspension_reason: 'break_clocking_disabled',
       },
       {
         rule: 'weekly_excess',
@@ -487,6 +488,10 @@ export const WORKDAYS: EmployeeWorkDays = {
           clocked_out_at_local: '2026-03-14T14:05:00.000000+01:00',
           clocked_out_recorded_at: null,
           clock_out_source: 'manual_admin',
+          // Tarea 3.5, ADR-024: cerrado a mano (RRHH), sin escaneo de pausa
+          // detras -es lo que ya venia siendo este tramo antes de la 3.5-.
+          opened_by: 'clock_in',
+          closed_by: 'clock_out',
           duration_minutes: 485,
           recorded_at: '2026-03-14T15:22:41.900000Z',
         },
@@ -540,6 +545,70 @@ export const WORKDAYS_WITH_INCIDENT: EmployeeWorkDays = {
             incidents: [{ id: 412, type: 'insufficient_rest', severity: 'high', status: 'open' }],
           },
         ],
+}
+
+/**
+ * Una jornada con una pausa fichada (tarea 3.5, ADR-024, RF-AT-12): dos
+ * tramos, el primero cerrado por `break_start` y el segundo abierto por
+ * `break_end`, con un hueco de 30 min entre los dos que el panel enseña como
+ * «Pausa de 10:00 a 10:30 (0 h 30 min)» sin calcular nada mas que la resta de
+ * esos dos instantes. Usada por el E2E del registro horario y por
+ * accesibilidad (`accessibility.spec.ts`).
+ */
+export const WORKDAYS_WITH_BREAK: EmployeeWorkDays = {
+  ...WORKDAYS,
+  data: [
+    {
+      work_date: '2026-03-14',
+      time_zone: 'Europe/Madrid',
+      total_minutes: 455,
+      shift_count: 2,
+      has_open_shift: false,
+      has_incident: false,
+      recalculated_at: '2026-03-14T13:10:00.000000Z',
+      shift_entries: [
+        {
+          uuid: '0199f2c1-8a10-7b40-9c50-6d7e8f9a0b21',
+          version: 1,
+          status: 'closed',
+          time_zone: 'Europe/Madrid',
+          clocked_in_at: '2026-03-14T05:00:00.000000Z',
+          clocked_in_at_local: '2026-03-14T06:00:00.000000+01:00',
+          clocked_in_recorded_at: '2026-03-14T05:00:02.113000Z',
+          clock_in_source: 'qr_kiosk',
+          clocked_out_at: '2026-03-14T09:00:00.000000Z',
+          clocked_out_at_local: '2026-03-14T10:00:00.000000+01:00',
+          clocked_out_recorded_at: '2026-03-14T09:00:01.802000Z',
+          clock_out_source: 'qr_kiosk',
+          opened_by: 'clock_in',
+          closed_by: 'break_start',
+          duration_minutes: 240,
+          recorded_at: '2026-03-14T09:00:01.802000Z',
+        },
+        {
+          uuid: '0199f2c1-8a10-7b40-9c50-6d7e8f9a0b22',
+          version: 1,
+          status: 'closed',
+          time_zone: 'Europe/Madrid',
+          clocked_in_at: '2026-03-14T09:30:00.000000Z',
+          clocked_in_at_local: '2026-03-14T10:30:00.000000+01:00',
+          clocked_in_recorded_at: '2026-03-14T09:30:01.500000Z',
+          clock_in_source: 'qr_kiosk',
+          clocked_out_at: '2026-03-14T13:05:00.000000Z',
+          clocked_out_at_local: '2026-03-14T14:05:00.000000+01:00',
+          clocked_out_recorded_at: '2026-03-14T13:05:01.244000Z',
+          clock_out_source: 'qr_kiosk',
+          opened_by: 'break_end',
+          closed_by: 'clock_out',
+          duration_minutes: 215,
+          recorded_at: '2026-03-14T13:05:01.244000Z',
+        },
+      ],
+      corrections: [],
+      incidents: [],
+    },
+  ],
+  meta: { total: 1 },
 }
 
 // --- Presencia en vivo (RF-PA-01, RF-PA-02) ----------------------------------
@@ -989,6 +1058,13 @@ export interface ManagementApiOptions {
     readonly minTransitSeconds?: number
     /** `KIOSK_SERVICE_CODE` (RF-KI-08, tarea 3.3). Por omision, cadena vacia: sin codigo, de serie. */
     readonly kioskServiceCode?: string
+    /**
+     * `ATTENDANCE_BREAK_CLOCKING` (RF-AT-12, tarea 3.5). Por omision,
+     * `disabled`: el valor de serie del catalogo (decision 7 de la ficha
+     * 3.5), la misma instalacion recien puesta en marcha que el resto de
+     * `operationalSettings`.
+     */
+    readonly breakClocking?: 'enabled' | 'disabled'
     readonly localeDefault?: string
     readonly localeAvailable?: string[]
   }
@@ -1319,6 +1395,7 @@ export async function stubManagementApi(
   let localeDefault = options.operationalSettings?.localeDefault ?? 'es'
   let localeAvailable = options.operationalSettings?.localeAvailable ?? ['es', 'en']
   let kioskServiceCode = options.operationalSettings?.kioskServiceCode ?? ''
+  let attendanceBreakClocking = options.operationalSettings?.breakClocking ?? 'disabled'
 
   /** El catalogo completo de `installation_settings`, con la forma de `GET/PATCH /settings`. */
   function settingsCatalog(): unknown {
@@ -1396,6 +1473,19 @@ export async function stubManagementApi(
           impact: 'presentation',
           affects_worked_hours: false,
           source: kioskServiceCode === '' ? 'product_default' : 'installation',
+        },
+        // Tarea 3.5, RF-AT-12: `text` con un conjunto cerrado de dos valores
+        // (decision 7 de la ficha), no un booleano nuevo. Impacto
+        // `compliance_review`: no mueve minutos, mueve que incidencias abre
+        // RN-12 (`ComplianceRuleSuspension`).
+        {
+          key: 'ATTENDANCE_BREAK_CLOCKING',
+          value: attendanceBreakClocking,
+          type: 'text',
+          impact: 'compliance_review',
+          affects_worked_hours: false,
+          source: attendanceBreakClocking === 'disabled' ? 'product_default' : 'installation',
+          constraints: { allowed: ['enabled', 'disabled'] },
         },
         {
           key: 'LOCALE_DEFAULT',
@@ -1710,6 +1800,15 @@ export async function stubManagementApi(
                 : 'manual_admin',
           clocked_out_recorded_at:
             payload.clocked_out_at === undefined ? entry.clocked_out_recorded_at : null,
+          // Tarea 3.5, ADR-024: una marca corregida a mano deja de tener un
+          // escaneo de pausa detras, tanto si entra como si sale.
+          opened_by: payload.clocked_in_at === undefined ? entry.opened_by : 'clock_in',
+          closed_by:
+            payload.clocked_out_at === undefined
+              ? entry.closed_by
+              : newClockedOut === null
+                ? null
+                : 'clock_out',
           duration_minutes: durationMinutes,
           recorded_at: CORRECTION_NOW,
         }
@@ -2060,6 +2159,17 @@ export async function stubManagementApi(
             ]
           }
 
+          const breakClockingRaw = patch.settings['ATTENDANCE_BREAK_CLOCKING']
+
+          if (
+            typeof breakClockingRaw === 'string' &&
+            !['enabled', 'disabled'].includes(breakClockingRaw)
+          ) {
+            errors['settings.ATTENDANCE_BREAK_CLOCKING'] = [
+              'El valor tiene que ser «enabled» o «disabled».',
+            ]
+          }
+
           const localeDefaultRaw = patch.settings['LOCALE_DEFAULT']
           const localeAvailableRaw = patch.settings['LOCALE_AVAILABLE']
 
@@ -2125,6 +2235,10 @@ export async function stubManagementApi(
 
           if (typeof serviceCodeRaw === 'string') {
             kioskServiceCode = serviceCodeRaw
+          }
+
+          if (breakClockingRaw === 'enabled' || breakClockingRaw === 'disabled') {
+            attendanceBreakClocking = breakClockingRaw
           }
 
           const appName = patch.settings['BRANDING_APP_NAME']
@@ -2261,6 +2375,11 @@ export async function stubManagementApi(
               clockedOutAt === null ? null : toLocalTimestamp(clockedOutAt, day.time_zone),
             clocked_out_recorded_at: null,
             clock_out_source: clockedOutAt === null ? null : 'manual_admin',
+            // Tarea 3.5, ADR-024: un tramo dado de alta a mano no tiene
+            // escaneo de pausa detras, con independencia de si queda abierto
+            // o cerrado.
+            opened_by: 'clock_in',
+            closed_by: clockedOutAt === null ? null : 'clock_out',
             duration_minutes: durationMinutes,
             recorded_at: CORRECTION_NOW,
           }

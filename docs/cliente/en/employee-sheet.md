@@ -100,6 +100,14 @@ one made with the card.
 
 ![Kiosk with the code and PIN keypad](../img/en/quiosco-pin-respaldo.png)
 
+**What is worth repeating out loud when handing the sheet over, if your hotel
+uses break clocking** (the sheet does print it, in its section 1, and it is still
+the thing people forget the most):
+**"if you are going home, clock out, do not start a break"**. A break nobody
+closes leaves the working day closed at that moment and without the real
+clock-out time, and it has to be corrected by hand afterwards. The tablet cannot
+tell the two apart: it only knows what was pressed.
+
 ---
 
 ## 5. The text of the sheet
@@ -121,9 +129,15 @@ This sheet comes with your card and your PIN. Keep it: it explains what you need
 
 Hold the card up to the tablet camera, code facing the screen, and wait for the confirmation. The same gesture works for clocking in and for clocking out.
 
+If your hotel uses break clocking, you will see a "Break" button on the tablet: when you go for a break, press it and scan your card. To come back, just scan the card, pressing nothing. If you do not see that button, your hotel does not clock breaks and there is nothing special for you to do. If you are going home, clock out, do not start a break.
+
 ### 2. What the screen means
 
 "Clock-in" or "Clock-out" with the time: your entry has been recorded. Nothing else to do.
+
+"Break" with the time: your break has started. Your working day stays open and the time on break does not count as worked.
+
+"Back" with the time: you are back from the break and you are still in the same working day, even if it is already the early hours.
 
 "Pending validation": the tablet has no network right now, but your entry is already saved and will be sent on its own. Do not repeat it.
 

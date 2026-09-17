@@ -39,6 +39,17 @@
       "break_start": "Pausa {time}",
       "break_end": "Vuelta {time}"
     },
+    "breakOpenHint": "Tu jornada sigue abierta: pasa la tarjeta al volver.",
+    "break": {
+      "toggleOff": "Pausa",
+      "toggleOn": "Pausa armada",
+      "armedHint": "Pasa tu tarjeta para empezar la pausa",
+      "disarmed": "Pausa desarmada."
+    },
+    "clockSkew": {
+      "ahead": "La hora de esta tablet va {minutes} min adelantada. Los fichajes se registran igual; el responsable lo revisará.",
+      "behind": "La hora de esta tablet va {minutes} min atrasada. Los fichajes se registran igual; el responsable lo revisará."
+    },
     "duration": "{hours} h {minutes} min",
     "todayTotal": "Hoy: {duration}",
     "pending": {
@@ -80,6 +91,9 @@
       "label": "Teclado numérico",
       "clear": "Borrar todo",
       "backspace": "Borrar último dígito"
+    },
+    "break": {
+      "armedHint": "Introduce tu código para empezar la pausa"
     }
   },
   "pairing": {

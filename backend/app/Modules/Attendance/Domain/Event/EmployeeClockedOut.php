@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Domain\Event;
 
+use App\Modules\Attendance\Domain\ValueObject\ClockingAction;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Attendance\Domain\ValueObject\ShiftAnomaly;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
@@ -23,6 +24,10 @@ use DateTimeImmutable;
  * la confirmacion —«Hasta luego, Lucia — Salida 11:02 · Hoy: 6 h 0 min»
  * (RF-AT-05)— y porque es lo que evita que quien escuche este evento tenga que
  * sumar tramos por su cuenta y se invente una segunda forma de calcular RN-06.
+ *
+ * Y lleva **que lo cerro** —fin de jornada o pausa—, que es lo que permite al
+ * detalle de jornada del panel y del portal enseñar «pausa» donde la hubo y al
+ * asiento de auditoria no confundir las dos cosas (ADR-024, decision 1).
  */
 final readonly class EmployeeClockedOut implements DomainEvent
 {
@@ -43,6 +48,20 @@ final readonly class EmployeeClockedOut implements DomainEvent
         /** Total de la jornada **recalculado** como suma de sus tramos, nunca incrementado (RN-06). */
         public WorkedDuration $dailyTotal,
         public array $anomalies = [],
+        /**
+         * Que cerro el tramo: `CLOCK_OUT` o `BREAK_START` (RF-AT-12, ADR-024).
+         *
+         * **La copia inmutable tiene que distinguir la pausa del fin de
+         * jornada.** `scan_events.result` lo sabe, pero esa tabla no es
+         * solo-append ni esta encadenada por hash como `audit_log`: el asiento
+         * `shift_entry.closed` es la unica version del hecho que no se puede
+         * reescribir, y sin este campo afirmaria que alguien termino su jornada
+         * a las 15:00 cuando solo se fue a comer (RL-04).
+         *
+         * Valor por defecto para no romper las correcciones (RF-PA-04), que
+         * cierran tramos sin que haya habido pausa ninguna.
+         */
+        public ClockingAction $action = ClockingAction::CLOCK_OUT,
     ) {}
 
     #[\Override]

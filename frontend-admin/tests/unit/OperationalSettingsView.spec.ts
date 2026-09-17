@@ -3,14 +3,18 @@
 // (umbrales `ATTENDANCE_*`, idiomas) ya tenia cobertura de extremo a extremo
 // en `tests/e2e/settings.spec.ts`; esta prueba se centra en lo que añade esta
 // tarea: texto opcional, con forma fija en el propio panel y vacio siempre
-// valido.
+// valido. Tambien cubre el campo de la tarea 3.5, «Fichaje de pausa»
+// (`ATTENDANCE_BREAK_CLOCKING`, RF-AT-12).
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import OperationalSettingsView from '@/features/settings/OperationalSettingsView.vue'
 import es from '@/shared/i18n/locales/es.json'
 import { jsonResponse, mountView, problemResponse, settle, stubFetch } from './support/harness'
 
 /** El catalogo completo que devuelve `GET /api/v1/settings`, con un codigo de servicio ya puesto. */
-function catalog(serviceCode = '48392017'): unknown {
+function catalog(
+  serviceCode = '48392017',
+  breakClocking: 'enabled' | 'disabled' = 'disabled',
+): unknown {
   return {
     data: [
       {
@@ -82,6 +86,15 @@ function catalog(serviceCode = '48392017'): unknown {
         impact: 'presentation',
         affects_worked_hours: false,
         source: serviceCode === '' ? 'product_default' : 'installation',
+      },
+      {
+        key: 'ATTENDANCE_BREAK_CLOCKING',
+        value: breakClocking,
+        type: 'text',
+        impact: 'compliance_review',
+        affects_worked_hours: false,
+        source: breakClocking === 'disabled' ? 'product_default' : 'installation',
+        constraints: { allowed: ['enabled', 'disabled'] },
       },
       {
         key: 'LOCALE_DEFAULT',
@@ -205,5 +218,73 @@ describe('OperationalSettingsView — código de servicio del quiosco (RF-KI-08)
 
     expect(wrapper.text()).toContain(es.operationalSettings.fields.kioskServiceCode)
     expect(wrapper.text()).toContain('Ese código ya lo usa otra instalación.')
+  })
+})
+
+describe('OperationalSettingsView — fichaje de pausa (RF-AT-12, tarea 3.5)', () => {
+  it('carga «Desactivado» de serie, con las tres consecuencias en el hint', async () => {
+    stubFetch(() => jsonResponse(catalog('48392017', 'disabled')))
+
+    const wrapper = await mountView(OperationalSettingsView)
+    await settle()
+
+    expect(wrapper.find('[data-test="break-clocking"]').element).toHaveProperty('value', 'disabled')
+    expect(wrapper.text()).toContain(es.operationalSettings.hints.breakClocking)
+  })
+
+  it('activarlo y guardarlo manda solo esa clave', async () => {
+    const fetchSpy = stubFetch((_url, init) =>
+      init?.method === 'PATCH'
+        ? jsonResponse(catalog('48392017', 'enabled'))
+        : jsonResponse(catalog('48392017', 'disabled')),
+    )
+
+    const wrapper = await mountView(OperationalSettingsView)
+    await settle()
+
+    await wrapper.find('[data-test="break-clocking"]').setValue('enabled')
+    await wrapper.find('[data-test="save"]').trigger('submit')
+    await settle()
+
+    const patch = fetchSpy.mock.calls.find(([, init]) => (init as RequestInit).method === 'PATCH')
+
+    expect(patch).toBeDefined()
+    expect(JSON.parse(String((patch?.[1] as RequestInit).body))).toEqual({
+      settings: { ATTENDANCE_BREAK_CLOCKING: 'enabled' },
+    })
+  })
+
+  it('persiste tras recargar', async () => {
+    stubFetch((_url, init) =>
+      init?.method === 'PATCH'
+        ? jsonResponse(catalog('48392017', 'enabled'))
+        : jsonResponse(catalog('48392017', 'enabled')),
+    )
+
+    const wrapper = await mountView(OperationalSettingsView)
+    await settle()
+
+    expect(wrapper.find('[data-test="break-clocking"]').element).toHaveProperty('value', 'enabled')
+    expect(wrapper.find('[data-test="save"]').attributes('disabled')).toBeDefined()
+  })
+
+  it('el 422 del servidor se muestra bajo el campo, con el nombre traducido', async () => {
+    stubFetch((_url, init) =>
+      init?.method === 'PATCH'
+        ? problemResponse(422, 'urn:kronoqr:problem:validation-failed', {
+            errors: { 'settings.ATTENDANCE_BREAK_CLOCKING': ['El valor tiene que ser válido.'] },
+          })
+        : jsonResponse(catalog('48392017', 'disabled')),
+    )
+
+    const wrapper = await mountView(OperationalSettingsView)
+    await settle()
+
+    await wrapper.find('[data-test="break-clocking"]').setValue('enabled')
+    await wrapper.find('[data-test="save"]').trigger('submit')
+    await settle()
+
+    expect(wrapper.text()).toContain(es.operationalSettings.fields.breakClocking)
+    expect(wrapper.text()).toContain('El valor tiene que ser válido.')
   })
 })

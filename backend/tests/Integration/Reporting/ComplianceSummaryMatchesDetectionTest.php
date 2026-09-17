@@ -44,9 +44,11 @@ use Tests\Support\Workforce\WorkforceFixtures;
  *
  * ## RN-12 no entra, y no es un olvido
  *
- * Esta suspendida (`ComplianceRuleSuspension`, ADR-024): ni la bandeja la abre ni
- * la vista la emite. Cuando la tarea 3.5 vacie esa lista, las dos empezaran a
- * contarla a la vez — que es exactamente la propiedad que esta prueba describe.
+ * Esta suspendida mientras el fichaje de pausa siga desactivado en la instalacion
+ * (`ComplianceRuleSuspension`, ADR-024, RF-AT-12), que es como nace: ni la
+ * bandeja la abre ni la vista la emite. En cuanto el hotel active
+ * `ATTENDANCE_BREAK_CLOCKING`, las dos empiezan a contarla a la vez — que es
+ * exactamente la propiedad que esta prueba describe.
  */
 
 uses(RefreshDatabase::class);
@@ -275,7 +277,8 @@ it('no enlaza nada cuando la revision diaria todavia no ha pasado', function ():
 it('la regla suspendida no aparece en ninguno de los dos lados', function (): void {
     // Un tramo continuado de ocho horas supera el maximo de seis, y aun asi ni la
     // bandeja abre incidencia ni la vista emite hallazgo: la decision vive en una
-    // sola lista (`ComplianceRuleSuspension`) y la tarea 3.5 la vacia alli.
+    // sola decision (`ComplianceRuleSuspension`), construida desde el ajuste de
+    // la instalacion, y los dos lados la reciben ya resuelta (regla dura 14).
     escenarioComparadoDeCumplimiento();
 
     expect(Artisan::call('attendance:detect-incidents'))->toBe(0);
@@ -347,3 +350,51 @@ it('cuando un tramo ya explica el dia por RN-08, la bandeja abre una sola incide
         ->and($exceso[0]->incident?->id)->toBe($incidencias[0]->id)
         ->and($exceso[0]->incident?->status)->toBe('open');
 })->group('RN-08', 'RN-11', 'RF-PA-06');
+
+it('con el fichaje de pausa activado, la bandeja y la vista cuentan RN-12 igual', function (): void {
+    // RF-AT-12 y decision 8 de la ficha 3.5. La propiedad que la prueba anterior
+    // describe en negativo, ahora en positivo: **activar el ajuste hace que los
+    // dos lados empiecen a contarla a la vez**, sin reprocesar nada y sin tocar
+    // codigo. Si uno de los dos se hubiera quedado con la suspension cableada,
+    // aqui divergirian.
+    $escenario = escenarioComparadoDeCumplimiento();
+
+    DB::table('installation_settings')->updateOrInsert(
+        ['key' => 'ATTENDANCE_BREAK_CLOCKING'],
+        ['value' => '"enabled"', 'updated_at' => '2026-03-31 04:30:00+00'],
+    );
+
+    // `scoped()`: la memoria por peticion muere con ella en produccion, y aqui
+    // hay que tirarla a mano o la pasada leeria el valor anterior.
+    app()->forgetScopedInstances();
+
+    expect(Artisan::call('attendance:detect-incidents'))->toBe(0);
+
+    $vista = paresDeLaVista('missing_break');
+
+    expect($vista)->not->toBe([], 'Con el fichaje de pausa activado, RN-12 tiene que señalar algo.')
+        ->and($vista)->toBe(paresDeLaBandeja('missing_break'));
+
+    // Y la pantalla deja de decir que no se evalua: sin esto, el panel seguiria
+    // explicando al cliente por que no ve avisos de pausas que si se estan
+    // abriendo.
+    $summary = app(ReadComplianceSummary::class)->handle(
+        new ComplianceSummaryCriteria(
+            scope: AccessScope::unrestricted(),
+            from: '2026-03-01',
+            to: '2026-03-31',
+        ),
+        maxRangeDays: 92,
+    );
+
+    foreach ($summary->rules as $regla) {
+        if ($regla->rule->requirement() === 'RN-12') {
+            expect($regla->evaluated)->toBeTrue()
+                ->and($regla->suspensionReason)->toBeNull();
+
+            return;
+        }
+    }
+
+    throw new RuntimeException('La vista ya no publica RN-12 en meta.rules.');
+})->group('RN-12', 'RF-AT-12', 'RF-PA-06');

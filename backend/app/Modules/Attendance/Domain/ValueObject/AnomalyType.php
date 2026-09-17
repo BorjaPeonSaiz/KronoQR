@@ -89,15 +89,20 @@ enum AnomalyType: string
     }
 
     /**
-     * Si la apertura de incidencia de este hallazgo esta suspendida hoy.
+     * Si la apertura de incidencia de este hallazgo esta suspendida en esta
+     * instalacion.
      *
-     * Deriva de {@see ComplianceRuleSuspension}, que es donde la decision vive:
-     * vaciar aquella lista reactiva esto y todo lo que cuelga de ello.
+     * Deriva de {@see ComplianceRuleSuspension}, que es donde la decision vive.
+     * **La suspension llega por parametro y no se pregunta a un estatico**
+     * (regla dura 14): desde la tarea 3.5 depende de si el hotel tiene activado
+     * el fichaje de pausa, y quien lo sabe es el caso de uso que ya inyecta
+     * `OperationalSettingsProvider`. Un enum que fuera a buscarlo por su cuenta
+     * seria dominio leyendo configuracion.
      */
-    public function openingIsSuspended(): bool
+    public function openingIsSuspended(ComplianceRuleSuspension $suspension): bool
     {
         $rule = $this->complianceRule();
 
-        return $rule instanceof ComplianceRule && ComplianceRuleSuspension::isSuspended($rule);
+        return $rule instanceof ComplianceRule && $suspension->isSuspended($rule);
     }
 }

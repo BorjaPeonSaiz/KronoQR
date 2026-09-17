@@ -16,6 +16,19 @@
 //    traslado no reescribe donde ocurrieron las jornadas— se dice en su fila.
 //  - **Un turno nocturno es UN tramo** (regla dura 4). No se parte: se marca que
 //    la salida cae en el dia siguiente.
+//  - **Las marcas de pausa (tarea 3.5, ADR-024, RF-AT-12).** La pausa son dos
+//    tramos, no un hueco dentro de uno: cuando el tramo anterior lo cerro un
+//    `break_start` (`closed_by`) y el siguiente lo abrio un `break_end`
+//    (`opened_by`), se enseña «Pausa de HH:MM a HH:MM (N min)» entre las dos
+//    filas, y el tramo que cierra la pausa lleva una insignia «Pausa» -texto
+//    e icono, nunca solo color (WCAG 1.4.1)- junto a su salida. El predicado
+//    y la duracion (`breakBetween`) viven en `@kronoqr/web-kit/breaks`
+//    (ADR-036, segunda vuelta de la tarea 3.5): el portal necesita EXACTAMENTE
+//    la misma regla, y ya habia divergido una vez. Un tramo con
+//    `closed_by: null` sigue siendo «abierto» -no lleva insignia-, y un tramo
+//    cerrado o abierto a mano sin escaneo detras llega como
+//    `clock_out`/`clock_in`, sin marca de pausa.
+import BreakBadge from '@kronoqr/web-kit/components/BreakBadge.vue'
 import {
   formatInstant,
   formatLocalTime,
@@ -24,6 +37,8 @@ import {
   minutesBetween,
   readLocalTimestamp,
 } from '@kronoqr/web-kit/datetime'
+import { breakBetween } from '@kronoqr/web-kit/breaks'
+import type { BreakBetween } from '@kronoqr/web-kit/breaks'
 import { durationParts, sumShiftMinutes } from '@kronoqr/web-kit/workdayTotals'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -115,6 +130,15 @@ const rows = computed<EntryRow[]>(() =>
   })),
 )
 
+/** Una entrada por tramo: la pausa que sigue a ESE tramo, o `null`. Mismo indice que `rows`. */
+const breakAfter = computed<(BreakBetween | null)[]>(() =>
+  props.entries.map((entry, index) => {
+    const next = props.entries[index + 1]
+
+    return next === undefined ? null : breakBetween(entry, next)
+  }),
+)
+
 const summedMinutes = computed(() => sumShiftMinutes(props.entries))
 const totalsAgree = computed(() => summedMinutes.value === props.totalMinutes)
 
@@ -165,114 +189,139 @@ function duration(minutes: number): string {
         </thead>
 
         <tbody>
-          <tr v-for="row of rows" :key="row.uuid" class="border-b border-kq-border align-top">
-            <th scope="row" class="px-3 py-2 font-medium">
-              <span class="text-lg tabular-nums">{{ row.clockIn.local }}</span>
-              <span v-if="row.otherTimeZone !== null" class="ml-1 text-sm font-normal">
-                ({{ row.otherTimeZone }})
-              </span>
-              <span class="block text-sm font-normal text-kq-text-muted">
-                {{ t('workdays.entries.utc', { time: row.clockIn.utc }) }}
-              </span>
-              <span
-                v-if="row.clockIn.recordedAt !== null"
-                class="block text-sm font-normal text-kq-text-muted"
-              >
-                {{ t('workdays.entries.recorded', { moment: row.clockIn.recordedAt }) }}
-              </span>
-              <span v-else class="block text-sm font-normal text-kq-text-muted">
-                {{ t('workdays.entries.notRecorded') }}
-              </span>
-              <span
-                v-if="row.clockIn.queueDelayMinutes !== null"
-                class="mt-1 block text-sm font-normal text-kq-warning"
-              >
-                {{
-                  t('workdays.entries.queued', { delay: duration(row.clockIn.queueDelayMinutes) })
-                }}
-              </span>
-            </th>
-
-            <td class="px-3 py-2">
-              <template v-if="row.clockOut === null">
-                <span class="text-lg">{{ t('workdays.entries.open') }}</span>
-                <span class="block text-sm text-kq-text-muted">
-                  {{ t('workdays.entries.openHint') }}
+          <template v-for="(row, index) of rows" :key="row.uuid">
+            <tr class="border-b border-kq-border align-top">
+              <th scope="row" class="px-3 py-2 font-medium">
+                <span class="text-lg tabular-nums">{{ row.clockIn.local }}</span>
+                <span v-if="row.otherTimeZone !== null" class="ml-1 text-sm font-normal">
+                  ({{ row.otherTimeZone }})
                 </span>
-              </template>
-              <template v-else>
-                <span class="text-lg tabular-nums">{{ row.clockOut.local }}</span>
-                <span v-if="row.clockOut.nextDay" class="ml-1 text-sm text-kq-text-muted">
-                  {{ t('workdays.entries.nextDay') }}
-                </span>
-                <span class="block text-sm text-kq-text-muted">
-                  {{ t('workdays.entries.utc', { time: row.clockOut.utc }) }}
+                <span class="block text-sm font-normal text-kq-text-muted">
+                  {{ t('workdays.entries.utc', { time: row.clockIn.utc }) }}
                 </span>
                 <span
-                  v-if="row.clockOut.recordedAt !== null"
-                  class="block text-sm text-kq-text-muted"
+                  v-if="row.clockIn.recordedAt !== null"
+                  class="block text-sm font-normal text-kq-text-muted"
                 >
-                  {{ t('workdays.entries.recorded', { moment: row.clockOut.recordedAt }) }}
+                  {{ t('workdays.entries.recorded', { moment: row.clockIn.recordedAt }) }}
                 </span>
-                <span v-else class="block text-sm text-kq-text-muted">
+                <span v-else class="block text-sm font-normal text-kq-text-muted">
                   {{ t('workdays.entries.notRecorded') }}
                 </span>
                 <span
-                  v-if="row.clockOut.queueDelayMinutes !== null"
-                  class="mt-1 block text-sm text-kq-warning"
+                  v-if="row.clockIn.queueDelayMinutes !== null"
+                  class="mt-1 block text-sm font-normal text-kq-warning"
                 >
                   {{
-                    t('workdays.entries.queued', {
-                      delay: duration(row.clockOut.queueDelayMinutes),
-                    })
+                    t('workdays.entries.queued', { delay: duration(row.clockIn.queueDelayMinutes) })
                   }}
                 </span>
-              </template>
-            </td>
+              </th>
 
-            <td class="px-3 py-2 tabular-nums" data-test="entry-duration">
-              <template v-if="row.durationMinutes === null">
-                {{ t('workdays.entries.openDuration') }}
-              </template>
-              <template v-else>{{ duration(row.durationMinutes) }}</template>
-            </td>
+              <td class="px-3 py-2">
+                <template v-if="row.clockOut === null">
+                  <span class="text-lg">{{ t('workdays.entries.open') }}</span>
+                  <span class="block text-sm text-kq-text-muted">
+                    {{ t('workdays.entries.openHint') }}
+                  </span>
+                </template>
+                <template v-else>
+                  <span class="text-lg tabular-nums">{{ row.clockOut.local }}</span>
+                  <span v-if="row.clockOut.nextDay" class="ml-1 text-sm text-kq-text-muted">
+                    {{ t('workdays.entries.nextDay') }}
+                  </span>
+                  <BreakBadge
+                    v-if="row.entry.closed_by === 'break_start'"
+                    data-test="break-badge"
+                    class="ml-2"
+                    :label="t('workdays.entries.breakBadge')"
+                  />
+                  <span class="block text-sm text-kq-text-muted">
+                    {{ t('workdays.entries.utc', { time: row.clockOut.utc }) }}
+                  </span>
+                  <span
+                    v-if="row.clockOut.recordedAt !== null"
+                    class="block text-sm text-kq-text-muted"
+                  >
+                    {{ t('workdays.entries.recorded', { moment: row.clockOut.recordedAt }) }}
+                  </span>
+                  <span v-else class="block text-sm text-kq-text-muted">
+                    {{ t('workdays.entries.notRecorded') }}
+                  </span>
+                  <span
+                    v-if="row.clockOut.queueDelayMinutes !== null"
+                    class="mt-1 block text-sm text-kq-warning"
+                  >
+                    {{
+                      t('workdays.entries.queued', {
+                        delay: duration(row.clockOut.queueDelayMinutes),
+                      })
+                    }}
+                  </span>
+                </template>
+              </td>
 
-            <td class="px-3 py-2">
-              {{ t(`workdays.sources.${row.source}`) }}
-              <span v-if="row.outSource !== null && row.outSource !== row.source" class="block">
-                {{ t(`workdays.sources.${row.outSource}`) }}
-              </span>
-            </td>
+              <td class="px-3 py-2 tabular-nums" data-test="entry-duration">
+                <template v-if="row.durationMinutes === null">
+                  {{ t('workdays.entries.openDuration') }}
+                </template>
+                <template v-else>{{ duration(row.durationMinutes) }}</template>
+              </td>
 
-            <td class="px-3 py-2">
-              {{ t(`workdays.entryStatus.${row.status}`) }}
-              <span class="block text-sm text-kq-text-muted">
-                {{ t('workdays.entries.version', { version: row.version }) }}
-              </span>
-            </td>
+              <td class="px-3 py-2">
+                {{ t(`workdays.sources.${row.source}`) }}
+                <span v-if="row.outSource !== null && row.outSource !== row.source" class="block">
+                  {{ t(`workdays.sources.${row.outSource}`) }}
+                </span>
+              </td>
 
-            <td v-if="canCorrect" class="px-3 py-2">
-              <div class="flex flex-col items-start gap-2">
-                <button
-                  type="button"
-                  class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-2 py-1 text-sm text-kq-text hover:bg-kq-surface-alt"
-                  data-test="entry-correct"
-                  @click="emit('correct', row.entry)"
-                >
-                  {{ t('corrections.actions.correct') }}
-                </button>
-                <button
-                  v-if="canVoid"
-                  type="button"
-                  class="rounded-kq-sm bg-kq-danger px-2 py-1 text-sm font-semibold text-kq-on-danger"
-                  data-test="entry-void"
-                  @click="emit('void', row.entry)"
-                >
-                  {{ t('corrections.actions.void') }}
-                </button>
-              </div>
-            </td>
-          </tr>
+              <td class="px-3 py-2">
+                {{ t(`workdays.entryStatus.${row.status}`) }}
+                <span class="block text-sm text-kq-text-muted">
+                  {{ t('workdays.entries.version', { version: row.version }) }}
+                </span>
+              </td>
+
+              <td v-if="canCorrect" class="px-3 py-2">
+                <div class="flex flex-col items-start gap-2">
+                  <button
+                    type="button"
+                    class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-2 py-1 text-sm text-kq-text hover:bg-kq-surface-alt"
+                    data-test="entry-correct"
+                    @click="emit('correct', row.entry)"
+                  >
+                    {{ t('corrections.actions.correct') }}
+                  </button>
+                  <button
+                    v-if="canVoid"
+                    type="button"
+                    class="rounded-kq-sm bg-kq-danger px-2 py-1 text-sm font-semibold text-kq-on-danger"
+                    data-test="entry-void"
+                    @click="emit('void', row.entry)"
+                  >
+                    {{ t('corrections.actions.void') }}
+                  </button>
+                </div>
+              </td>
+            </tr>
+            <tr
+              v-if="breakAfter[index] !== null"
+              class="border-b border-kq-border bg-kq-primary-soft"
+            >
+              <td :colspan="canCorrect ? 6 : 5" class="px-3 py-2 text-center" data-test="break-row">
+                <BreakBadge
+                  :pill="false"
+                  :label="
+                    t('workdays.entries.breakRow', {
+                      from: breakAfter[index]?.from,
+                      to: breakAfter[index]?.to,
+                      duration: duration(breakAfter[index]?.minutes ?? 0),
+                    })
+                  "
+                />
+              </td>
+            </tr>
+          </template>
         </tbody>
 
         <tfoot class="border-t-2 border-kq-border-strong bg-kq-surface-alt">

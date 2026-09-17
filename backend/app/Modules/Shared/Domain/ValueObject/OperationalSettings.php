@@ -12,13 +12,14 @@ use InvalidArgumentException;
  *
  * No provienen del marco normativo: los fija el hotel. `compliance_profiles`
  * ni siquiera tiene columna para la duracion anomala de tramo, y por eso estos
- * cuatro valores llegan por un puerto distinto del de {@see CompliancePolicy}
+ * valores llegan por un puerto distinto del de {@see CompliancePolicy}
  * (doc 01 §4, nota sobre RN-08 y RN-16).
  *
  * **Ningun valor por defecto vive aqui** (regla dura 14). Los del Anexo B del
  * doc 02 —`ATTENDANCE_MAX_SHIFT_HOURS`, `ATTENDANCE_DEBOUNCE_SECONDS`,
  * `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES`, `ATTENDANCE_MIN_TRANSIT_SECONDS`— se
- * siembran en la tarea 1.3 y se editan desde el panel en la 5.1.
+ * siembran en la tarea 1.3 y se editan desde el panel en la 5.1;
+ * `ATTENDANCE_BREAK_CLOCKING` se anade en la 3.5.
  */
 final readonly class OperationalSettings
 {
@@ -31,6 +32,27 @@ final readonly class OperationalSettings
         public int $maximumClockSkewMinutes,
         /** RN-16: transito minimo creible entre dos quioscos del centro. */
         public int $minimumTransitSeconds,
+        /**
+         * RF-AT-12: si el quiosco ofrece fichar la pausa en esta instalacion
+         * (`ATTENDANCE_BREAK_CLOCKING`, ADR-024).
+         *
+         * Gobierna **dos cosas y no tres**: la pantalla de la tablet —el boton
+         * «Pausa» solo aparece con esto activado— y la evaluacion de RN-12
+         * ({@see ComplianceRuleSuspension}), que abre `missing_break` solo donde
+         * la plantilla ficha la pausa. **No gobierna si el servidor honra la
+         * intencion declarada**: eso se hace siempre (decision 1 de la ficha
+         * 3.5), porque `intent` es lo que la persona pidio y ese hecho no
+         * depende de un ajuste.
+         *
+         * **Sin valor por defecto**, como los otros cuatro: el valor de serie
+         * —`disabled`— vive en el catalogo de `SettingKey`, lo siembra la
+         * migracion y lo sirve `OperationalSettingsProvider` (regla dura 14). Un
+         * `= false` aqui seria una segunda fuente para el mismo dato, y la que
+         * ganaria en silencio el dia que el adaptador se olvidara de leer la
+         * clave: el hotel activaria la pausa en el panel y el quiosco seguiria
+         * sin ofrecerla.
+         */
+        public bool $breakClockingEnabled,
     ) {
         $this->positive($anomalousShiftMinutes, 'la duracion anomala de tramo (RN-08)');
         $this->notNegative($debounceSeconds, 'la ventana anti-rebote (RF-AT-06)');

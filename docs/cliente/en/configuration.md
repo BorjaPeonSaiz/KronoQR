@@ -51,10 +51,58 @@ only the ones you need.
 
 | Key | Default | Range | What happens if you change it |
 | --- | --- | --- | --- |
+| `ATTENDANCE_BREAK_CLOCKING` | `disabled` | `enabled` or `disabled` | Turns **break clocking** on for the whole installation. Three consequences, no more and no fewer — see below the table. |
 | `ATTENDANCE_MAX_SHIFT_HOURS` | `12` | 1 – 24 | From that duration on, a closed shift entry is marked as **anomalous** and an incident is opened for review. **It never closes a shift on its own.** |
 | `ATTENDANCE_DEBOUNCE_SECONDS` | `60` | 0 – 3600 | Grace window: two scans by the same person within that window count as one. **This key changes the recorded hours** — see the warning below. `0` disables it. |
-| `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES` | `15` | 1 – 1440 | Drift tolerated between the tablet's clock and the server's before flagging the clock-in for review. **It never rejects a clock-in**, it only flags it. |
+| `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES` | `15` | 1 – 1440 | Drift tolerated between the tablet's clock and the server's before flagging the clock-in for review. **It never rejects a clock-in**, it only flags it. It is also the threshold at which **the tablet itself warns** that its clock has drifted. |
 | `ATTENDANCE_MIN_TRANSIT_SECONDS` | `120` | 0 – 3600 | Minimum credible time to get from one kiosk to another. Below it, an incident is opened. Set it to `0` if you have two tablets at the same door; raise it if there are two buildings. |
+
+**`ATTENDANCE_BREAK_CLOCKING` — exactly what changes.** It is set in
+Panel → **Operational settings** (`/settings`) → "Break clocking", where the two
+options are called "Enabled" and "Disabled". It takes effect on the next
+request. With `enabled`:
+
+1. **The "Break" button appears on the tablet.** Whoever goes for a break
+   presses it and scans their card; **to come back they just scan the card**,
+   pressing nothing. With `disabled` the button does not exist and nobody sees
+   any difference.
+2. **The nightly review starts opening the "No break registered" incident** over
+   continuous shift entries above the collective agreement's threshold. **It
+   does not reprocess the past**: it starts on the next pass and only within its
+   review window (7 days out of the box).
+3. **The "Compliance" screen starts counting that rule.** While it is
+   `disabled`, the card is shown with its threshold and flagged "Not
+   evaluated", with the reason written out.
+
+**Turn it on only when the staff are really going to clock their breaks, and
+tell them first.** Switching it on in a hotel where nobody clocks them opens one
+incident for every shift longer than six hours, and none of them tells "did not
+rest" from "rested and did not clock it": within a week the inbox is useless.
+That is why it ships disabled.
+
+**Going back to `disabled` is safe**: the rule is suspended again, no new
+incidents are opened and **the ones already open stay as they are** — none is
+closed on its own, just like with any other change of criterion. Break clockings
+already recorded **are neither touched nor reinterpreted**: they remain two
+shift entries with their break in between.
+
+> **The break threshold is not here.** "After how many hours a break must have
+> been taken" is `break_required_after_hours` in the compliance profile
+> (section 2.4), 6 h in the Spanish hospitality profile that ships out of the
+> box. This key decides **whether the rule is evaluated**; that one, **with
+> which number**. While this one is `disabled`, changing that one alters no
+> incident, and the audit log entry for the change says so.
+>
+> **And the cap on how long a break can last is not here either**: the return
+> only continues the working day if it arrives before `min_rest_hours`
+> (section 2.4). After that time, the clocking opens a new working day.
+
+> **The vendor's support cannot touch this key.** A support access with the
+> `configuration` scope changes the rest of the operational settings, but **not
+> this one**: any attempt gets a 403. It is the same exception as the compliance
+> profile, and for the same reason —it decides **what counts as an incident** in
+> your working-time record, and that decision is the hotel's—. You turn it on
+> from your own panel; the full split is in [`operation.md`](operation.md) §12.4.
 
 > **⚠️ `ATTENDANCE_DEBOUNCE_SECONDS` affects the hours calculation.** Raising it
 > makes real clock-ins that are very close together get discarded, and the total
@@ -62,6 +110,13 @@ only the ones you need.
 > moves minutes of the legal record. Change it with care and leave it in
 > writing: the change is audited with your name, the date and the previous
 > value.
+>
+> **A break pressed by mistake does not fall into this window.** If somebody
+> presses "Break" by accident and scans the card again twenty seconds later, the
+> system recognises that the second intent is the opposite of the first and
+> **does not discard it**: those twenty seconds are lost, not the whole
+> afternoon. What the window still discards is the accidental double scan, which
+> is what it exists for.
 
 ### 2.2 Branding
 
@@ -210,15 +265,26 @@ The **`ES-hosteleria`** profile is shipped, with these values:
 
 | Field | Default | What it does | Where it comes from |
 | --- | --- | --- | --- |
-| `min_rest_hours` | `12` | An incident is opened if **fewer** than that many hours elapse between the end of one shift and the start of the next | Art. 34.3 of the Workers' Statute |
+| `min_rest_hours` | `12` | An incident is opened if **fewer** than that many hours elapse between the end of one shift and the start of the next. **It also caps the break** — see the note below the table | Art. 34.3 of the Workers' Statute |
 | `max_daily_hours` | `9` | An incident is opened if the sum of the shift entries of a working day **exceeds** that many hours | Art. 34.3 of the Workers' Statute |
-| `break_required_after_hours` | `6` | Threshold for a continuous shift entry without a recorded break. **Today the rule is evaluated but does not open incidents** (see below) | Art. 34.4 of the Workers' Statute |
+| `break_required_after_hours` | `6` | Threshold for a continuous shift entry without a recorded break. **It only opens incidents if break clocking is on** (`ATTENDANCE_BREAK_CLOCKING`, section 2.1; see below) | Art. 34.4 of the Workers' Statute |
 | `updated_at` | empty | Read-only: when it was last adjusted. **Empty means “as installed”** | — |
 | `max_weekly_hours` | `40` | Ordinary weekly working hours. **The compliance view applies it**: it warns about the weeks that go over, **opening no incident** (see below) | Art. 34.1 of the Workers' Statute |
 | `week_starts_on` | `1` (Monday) | Day the week starts on. **It defines the week the compliance view measures** | ISO 8601 |
 | `holiday_calendar` | empty | The site's public holidays, one date per line. **No rule applies it yet** | You load it |
 | `retention_years` | `4` | Years the record has to be kept before it can be purged | Art. 34.9 of the Workers' Statute |
 | `name` | `ES-hosteleria` | What the collective agreement the profile describes is called | You set it |
+
+**`min_rest_hours` also does a second thing: it caps how long a break can last.**
+The return from a break continues the working day that was in progress only if it
+arrives **before** that many hours have passed since the break started; after
+that time, the next clocking **opens a new working day**. That is what stops
+somebody who pressed "Break" at 15:00 and went home from seeing their next day's
+clock-in glued to the previous working day. Consequence of raising or lowering
+this number: it moves both things at once —what counts as insufficient rest and
+how long a return still counts as a return—, so **do not use it to tune only one
+of them**. With break clocking off (section 2.1) the cap is not noticeable,
+because nobody declares breaks.
 
 **The holiday calendar is shipped empty on purpose.** Public holidays depend on
 the municipality and the year: a calendar built into the product would expire
@@ -239,17 +305,21 @@ breach—, so changing either of them **alters no incident**, but it does change
 what is seen on that screen from the moment it is saved. It is explained in
 [`hr-guide.md`](hr-guide.md) §4 bis.
 
-**`break_required_after_hours` is stated but does not open incidents yet.** The
-system cannot tell “did not rest” from “rested and did not clock it” until the
-kiosk records the break as such; opening incidents in the meantime would fill
-the inbox with false positives and bury the ones that do matter. The threshold
-is stored and will apply when detection is reactivated.
+**`break_required_after_hours` only opens incidents if break clocking is turned
+on.** While `ATTENDANCE_BREAK_CLOCKING` is `disabled` —the default, section
+2.1— the system cannot tell “did not rest” from “rested and did not clock it”,
+so the rule is shown with its threshold and is not evaluated: opening incidents
+under those conditions would fill the inbox with false positives and bury the
+ones that do matter. The threshold is stored all the same and starts applying on
+the first nightly review after break clocking is turned on.
 
-Practical consequence, worth knowing before touching it: **changing that
-threshold today does not alter a single incident**. The screen says so next to
-the field and the audit log writes it down (`detection_suspended`), so that in
-two years' time “this moved no alerts” can be told apart from “it moved them,
-but the rule was suspended at the time”.
+Practical consequence, worth knowing before touching it: **with break clocking
+off, changing that threshold does not alter a single incident**. The screen says
+so next to the field and the audit log writes it down (`detection_suspended`),
+so that in two years' time “this moved no alerts” can be told apart from “it
+moved them, but the rule was suspended at the time”. With break clocking on, on
+the other hand, tightening the threshold **can** open incidents for recent
+working days, within the review window.
 
 #### Changing a threshold applies from the change onwards, not backwards
 
@@ -1170,14 +1240,15 @@ sudo docker compose exec app php artisan product:doctor
 > means whoever has one can read the backups, sign cards or open the sealed
 > PINs of the other.
 
-### 6.0 The ten keys that are NOT environment variables
+### 6.0 The eleven keys that are NOT environment variables
 
-Ten properties of the installation do not live in the `.env` but in the
+Eleven properties of the installation do not live in the `.env` but in the
 `installation_settings` table, are edited **from the panel** and take effect on
 the next request without restarting anything:
 
 | Key | Where it is changed | Where it is explained |
 | --- | --- | --- |
+| `ATTENDANCE_BREAK_CLOCKING` | Panel → **Operational settings** (`/settings`) → "Break clocking" | Section 2.1 |
 | `ATTENDANCE_MAX_SHIFT_HOURS` | Panel → **Operational settings** (`/settings`) | Section 2.1 |
 | `ATTENDANCE_DEBOUNCE_SECONDS` | Panel → **Operational settings** (`/settings`) | Section 2.1 |
 | `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES` | Panel → **Operational settings** (`/settings`) | Section 2.1 |
@@ -1217,28 +1288,30 @@ recorded in the audit trail with your name, the date and the previous value. If
 you cannot see those entries in the menu, they are not missing: your account is
 not an administrator one.
 
-**The database wins** (section 1). Six of the ten —the branding ones, the
+**The database wins** (section 1). Six of the eleven —the branding ones, the
 language ones and the service code— do not exist as environment variables: the
 first five were removed so that there were not two places to write the same piece
 of data, and the last one never had one, because a secret in the `.env` is a
 secret that ends up in an unencrypted backup.
 
-**The four `ATTENDANCE_*` do still appear in `.env.example`, and it is worth
+**The five `ATTENDANCE_*` do still appear in `.env.example`, and it is worth
 knowing exactly what they are:** a copy of the default value, written there so
 that whoever reads the file knows what numbers the system works with. **The
-application does not read them.** The four thresholds always come from
+application does not read them.** The five settings always come from
 `installation_settings`, which the migration seeded with those same values (12,
-60, 15 and 120). Practical consequence, and the cause of half the *“but I have
-it set to something else”*:
+60, 15, 120 and `disabled`). Practical consequence, and the cause of half the
+*“but I have it set to something else”*:
 
 > **Editing `ATTENDANCE_DEBOUNCE_SECONDS` in the `.env` changes nothing.** Not
-> even after a restart. It is changed in the panel, section 2.1.
+> even after a restart. It is changed in the panel, section 2.1. The same goes
+> for `ATTENDANCE_BREAK_CLOCKING`: setting it to `enabled` in the file turns on
+> the "Break" button on no tablet at all.
 
 `product:doctor` detects it: if the `.env` and the database say different things
-for one of those four keys, the `settings.env_differs_from_db` check comes out
+for one of those five keys, the `settings.env_differs_from_db` check comes out
 as a **warning** and tells you which one. It is not a failure —nothing is
 broken— but it means the file is misleading whoever reads it. The right thing
-is to leave the `.env` with the same value as the panel, or delete those four
+is to leave the `.env` with the same value as the panel, or delete those five
 lines.
 
 ### 6.1 Application
@@ -1336,11 +1409,12 @@ is needed.
 
 ### 6.7 Clocking rules
 
-**The first four are changed in the panel, not here** (section 6.0). The `.env`
+**The first five are changed in the panel, not here** (section 6.0). The `.env`
 line is a copy of the default value and **editing it does nothing**.
 
 | Variable | Marker | What it does | Default | When to change it | Affects hours calculation? |
 | --- | --- | --- | --- | --- | --- |
+| `ATTENDANCE_BREAK_CLOCKING` | — | Break clocking: "Break" button on the tablet and evaluation of the "No break registered" rule. See **section 2.1** | `disabled` | In the panel. Here, never | It moves no minutes; **it does open incidents** |
 | `ATTENDANCE_DEBOUNCE_SECONDS` | — | Debounce window between two scans by the same person. See **section 2.1** | `60` | In the panel. Here, never | **Yes** |
 | `ATTENDANCE_MAX_SHIFT_HOURS` | — | Duration from which a closed shift entry is anomalous. See **section 2.1** | `12` | In the panel. Here, never | **Yes** (opens incidents) |
 | `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES` | — | Drift tolerated between the tablet's clock and the server's. **Raises an incident, never rejects the clock-in** (RF-AT-10). See **section 2.1** | `15` | In the panel. Here, never | **Yes** (opens incidents) |

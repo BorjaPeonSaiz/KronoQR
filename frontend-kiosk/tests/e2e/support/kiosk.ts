@@ -13,9 +13,37 @@ function serviceCodeHashOf(deviceId: string, code: string): string {
 /** El payload que lleva el QR de `e2e/fixtures/qr-video.y4m`. */
 export const FIXTURE_PAYLOAD = 'FH1.a3.7QK2mXpR9vLdN4tZbYcF1w.k9Xm2pQrT5vN8wLa'
 
+/**
+ * Retrasa `getUserMedia` `delayMs`, para las pruebas que necesitan interactuar
+ * con la pantalla (armar el boton «Pausa», tarea 3.5) ANTES de que la camara
+ * simulada -que decodifica la tarjeta del video en bucle en cuanto arranca-
+ * produzca el primer fichaje. Sin esto, armar «a tiempo» seria una carrera
+ * contra la camara; con esto, el boton siempre esta listo antes de que exista
+ * nada que decodificar. No toca codigo de produccion: envuelve la funcion
+ * nativa del dispositivo falso (`--use-fake-device-for-media-stream`).
+ */
+export async function delayCameraStart(page: Page, delayMs: number): Promise<void> {
+  await page.addInitScript((delay: number) => {
+    const original = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices)
+    navigator.mediaDevices.getUserMedia = (constraints) =>
+      new Promise((resolve, reject) => {
+        setTimeout(() => {
+          original(constraints).then(resolve, reject)
+        }, delay)
+      })
+  }, delayMs)
+}
+
 export interface ScanStubOptions {
-  /** Desenlace que devuelve el servidor simulado. */
-  readonly outcome?: 'clock_in' | 'clock_out' | 'debounced' | 'rejected' | 'offline'
+  /**
+   * Desenlace que devuelve el servidor simulado. `break_start` y `break_end`
+   * (tarea 3.5, ADR-024): el servidor decide la ACCION, que puede no
+   * coincidir con el `intent` que llevo la peticion (`ScanIntentPolicy`) —
+   * este doble siempre devuelve la que se le pida, para que la prueba fije lo
+   * que le interesa sin montar el backend real.
+   */
+  readonly outcome?:
+    'clock_in' | 'clock_out' | 'break_start' | 'break_end' | 'debounced' | 'rejected' | 'offline'
   readonly displayName?: string
   readonly workedMinutes?: number
 }
@@ -141,6 +169,21 @@ export interface ServiceCodeStubOptions {
 export interface KioskApiStubOptions {
   /** Ausente = instalacion SIN codigo de servicio (el caso de todas las pruebas que no son de diagnostico). */
   readonly serviceCode?: ServiceCodeStubOptions
+  /** `KioskHeartbeat.break_clocking_enabled` (RF-AT-12, tarea 3.5). Por defecto `false`. */
+  readonly breakClockingEnabled?: boolean
+  /**
+   * `KioskHeartbeat.clock_skew_tolerance_seconds` (RF-AT-10, tarea 3.5). Por
+   * defecto 900 (`ATTENDANCE_MAX_CLOCK_SKEW_MINUTES=15` del Anexo B del doc
+   * 02).
+   */
+  readonly clockSkewToleranceSeconds?: number
+  /**
+   * `KioskHeartbeat.server_time` de cada latido. Por defecto la hora REAL del
+   * proceso de pruebas. Para simular un reloj de servidor desviado del de la
+   * tablet (RF-AT-10) sin tocar el reloj de la pagina, que sigue midiendo el
+   * paso real del tiempo entre latidos.
+   */
+  readonly serverTime?: () => string
 }
 
 /** El latido no debe ensuciar las trazas ni fallar por no haber servidor. */
@@ -156,6 +199,9 @@ export async function stubKioskApi(page: Page, options: KioskApiStubOptions = {}
     }, deviceId)
   }
 
+  const breakClockingEnabled = options.breakClockingEnabled ?? false
+  const clockSkewToleranceSeconds = options.clockSkewToleranceSeconds ?? 900
+
   await page.route('**/api/v1/kiosk/heartbeat', async (route: Route) => {
     await route.fulfill({
       status: 200,
@@ -163,11 +209,14 @@ export async function stubKioskApi(page: Page, options: KioskApiStubOptions = {}
       // `client_errors_accepted` es obligatorio en el contrato (RF-PD-15,
       // tarea 5.12): `0` porque este doble no inspecciona lo que llego.
       // `service_code_hash` (RF-KI-08, tarea 3.3): `null` salvo que la prueba
-      // pida explicitamente un codigo de servicio.
+      // pida explicitamente un codigo de servicio. `break_clocking_enabled`
+      // y `clock_skew_tolerance_seconds` (RF-AT-12, RF-AT-10, tarea 3.5).
       body: JSON.stringify({
-        server_time: new Date().toISOString(),
+        server_time: options.serverTime?.() ?? new Date().toISOString(),
         client_errors_accepted: 0,
         service_code_hash: serviceCodeHash,
+        break_clocking_enabled: breakClockingEnabled,
+        clock_skew_tolerance_seconds: clockSkewToleranceSeconds,
       }),
     })
   })
@@ -302,6 +351,10 @@ export interface HeartbeatCaptureOptions {
   readonly serverTime?: () => string
   /** Igual que en `KioskApiStubOptions` (RF-KI-08, tarea 3.3). Ausente = sin codigo. */
   readonly serviceCode?: ServiceCodeStubOptions
+  /** Igual que en `KioskApiStubOptions` (RF-AT-12, tarea 3.5). Por defecto `false`. */
+  readonly breakClockingEnabled?: boolean
+  /** Igual que en `KioskApiStubOptions` (RF-AT-10, tarea 3.5). Por defecto 900. */
+  readonly clockSkewToleranceSeconds?: number
 }
 
 /**
@@ -371,6 +424,8 @@ export async function stubHeartbeatWithErrorCapture(
         server_time: serverTime,
         client_errors_accepted: accepted,
         service_code_hash: serviceCodeHash,
+        break_clocking_enabled: options.breakClockingEnabled ?? false,
+        clock_skew_tolerance_seconds: options.clockSkewToleranceSeconds ?? 900,
       }),
     })
   })

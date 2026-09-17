@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Domain\Event;
 
+use App\Modules\Attendance\Domain\ValueObject\ClockingAction;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Shared\Domain\Event\DomainEvent;
@@ -19,6 +20,13 @@ use DateTimeImmutable;
  *
  * Identifica al empleado por `employeeUuid` y **no lleva su nombre** (regla
  * dura 21): el evento se serializa en logs y en `audit_log.payload`.
+ *
+ * **Lleva la accion que lo abrio** ({@see ClockingAction}: `clock_in` o
+ * `break_end`). No es redundante con `scan_events.result`: esa tabla NO esta
+ * protegida como `audit_log` —no es solo-append ni encadenada por hash—, y el
+ * asiento `shift_entry.created` es la copia inmutable del hecho. Sin este campo,
+ * la unica prueba de que un tramo se abrio volviendo de una pausa vive en una
+ * tabla que se puede modificar (RL-04, ADR-024).
  */
 final readonly class EmployeeClockedIn implements DomainEvent
 {
@@ -30,6 +38,13 @@ final readonly class EmployeeClockedIn implements DomainEvent
         /** Momento real de la entrada. En un fichaje offline es el `occurred_at` del dispositivo (regla dura 9). */
         public DateTimeImmutable $clockedInAt,
         public ScanOrigin $origin,
+        /**
+         * Que abrio el tramo: `CLOCK_IN` o `BREAK_END` (RF-AT-12, ADR-024).
+         *
+         * Valor por defecto para no romper las correcciones (RF-PA-04) ni las
+         * altas manuales, que abren tramo sin que haya habido pausa ninguna.
+         */
+        public ClockingAction $action = ClockingAction::CLOCK_IN,
     ) {}
 
     #[\Override]

@@ -59,6 +59,10 @@ final class SettingsSurface
         'ATTENDANCE_DEBOUNCE_SECONDS' => ['view' => 'OperationalSettingsView.vue', 'route' => '/settings'],
         'ATTENDANCE_MAX_CLOCK_SKEW_MINUTES' => ['view' => 'OperationalSettingsView.vue', 'route' => '/settings'],
         'ATTENDANCE_MIN_TRANSIT_SECONDS' => ['view' => 'OperationalSettingsView.vue', 'route' => '/settings'],
+        // El fichaje de pausa (RF-AT-12, ADR-024, tarea 3.5). Va con los
+        // umbrales operativos y no con el perfil de cumplimiento: lo decide el
+        // hotel y no el convenio, aunque reactive RN-12.
+        'ATTENDANCE_BREAK_CLOCKING' => ['view' => 'OperationalSettingsView.vue', 'route' => '/settings'],
         'BRANDING_APP_NAME' => ['view' => 'BrandingView.vue', 'route' => '/branding'],
         'BRANDING_LOGO_PATH' => ['view' => 'BrandingView.vue', 'route' => '/branding'],
         'BRANDING_ACCENT_COLOR' => ['view' => 'BrandingView.vue', 'route' => '/branding'],

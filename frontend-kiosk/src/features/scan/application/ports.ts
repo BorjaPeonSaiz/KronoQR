@@ -21,9 +21,12 @@ interface QueuedScanBase {
   readonly scan_id: string
   readonly occurred_at: string
   /**
-   * Nace ya en el registro de la cola (ADR-024). En esta fase el quiosco escribe
-   * siempre `'auto'`; declararlo desde la v1 evita migrar una cola cargada de
-   * fichajes sin sincronizar en tablets que pueden estar sin red.
+   * Nace ya en el registro de la cola (ADR-024). Se escribia siempre `'auto'`
+   * desde la v1 -para no tener que migrar una cola cargada de fichajes sin
+   * sincronizar en tablets que pueden estar sin red-, y desde la tarea 3.5
+   * vale `'break_start'` cuando el boton «Pausa» esta armado al encolar
+   * (`scanPipeline.ts`/`pinPipeline.ts` -> `resolveIntent`). Se fija AL
+   * ENCOLAR, no al enviar: un reintento reenvia la misma intencion.
    */
   readonly intent: ScanIntent
   readonly device_id: string

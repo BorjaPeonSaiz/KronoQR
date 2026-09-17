@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Application\Port;
 
+use App\Modules\Attendance\Domain\ValueObject\AcceptedScan;
+use App\Modules\Attendance\Domain\ValueObject\ClockingAction;
 use DateTimeImmutable;
 
 /**
@@ -66,7 +68,42 @@ interface ScanLog
      * hiciera bastaria con pasar la tarjeta cada 50 segundos para prolongarla
      * indefinidamente.
      *
-     * @return list<DateTimeImmutable> Cero, uno o dos instantes, en UTC.
+     * **Desde la tarea 3.5 lleva tambien QUE fue cada uno** (ADR-024): el
+     * anti-rebote ya no puede decidir solo con el instante, porque un
+     * `break_end` a veinte segundos de un `break_start` no es un rebote sino
+     * alguien corrigiendo una pausa mal pulsada. El adaptador devuelve por tanto
+     * `result` y `shift_entry_uuid` ademas de `occurred_at`, y como todos son
+     * aceptados la accion siempre cabe en {@see ClockingAction}.
+     *
+     * @return list<AcceptedScan> Cero, uno o dos escaneos, con su instante en UTC.
      */
     public function acceptedScansAdjacentTo(string $employeeUuid, DateTimeImmutable $instant): array;
+
+    /**
+     * El **ultimo** escaneo aceptado del empleado, sea de cuando sea, o `null`
+     * si nunca ficho.
+     *
+     * Es uno de los hechos que necesita {@see \App\Modules\Attendance\Domain\
+     * Policy\ScanIntentPolicy} y responde a una pregunta que no es la de
+     * {@see acceptedScansAdjacentTo()}: aquella busca vecinos de un instante
+     * para medir una ventana de segundos; esta busca el **estado en que quedo la
+     * persona**.
+     *
+     * **La consulta no lleva cota y eso es deliberado: la cota la pone el
+     * dominio.** Cuanto puede durar una pausa antes de dejar de serlo es una
+     * regla de negocio —es el descanso minimo entre jornadas de RN-10, resuelto
+     * desde el perfil del centro (regla dura 14)— y vive en `ScanIntentPolicy`,
+     * que compara el `occurred_at` del escaneo con el de esto. Escribir aqui un
+     * `WHERE occurred_at > …` pondria el mismo umbral en dos sitios, y el de SQL
+     * seria el que ganaria sin que ninguna prueba de dominio lo viera.
+     *
+     * «Ultimo» se mide por `occurred_at` y no por orden de llegada (regla dura
+     * 9): un lote offline sincronizado ahora puede traer escaneos anteriores a
+     * otros ya registrados, y el estado de la persona lo fija el momento real.
+     *
+     * Resuelve por el mismo indice `(employee_id, occurred_at DESC)` que ya usa
+     * la ventana de RF-AT-06, asi que no anade una lectura cara al camino de
+     * fichaje.
+     */
+    public function lastAcceptedScanOf(string $employeeUuid): ?AcceptedScan;
 }

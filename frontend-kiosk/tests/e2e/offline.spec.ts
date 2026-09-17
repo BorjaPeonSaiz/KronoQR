@@ -14,7 +14,7 @@
 // llegada, y que nada se borra sin que el servidor lo confirme.
 
 import { expect, test } from '@playwright/test'
-import { FIXTURE_PAYLOAD, stubKioskApi } from './support/kiosk'
+import { FIXTURE_PAYLOAD, delayCameraStart, stubKioskApi } from './support/kiosk'
 import { announceOnline, readQueue, seedQueue, stubBatchApi } from './support/offlineQueue'
 
 test.beforeEach(async ({ page }) => {
@@ -163,5 +163,39 @@ test(
 
     const after = await readQueue(page)
     expect(after.some((row) => row.scan_id === before[0]?.scan_id)).toBe(true)
+  },
+)
+
+test(
+  'un break_start armado y encolado sin red llega a la cola con esa intencion (ADR-024, tarea 3.5)',
+  { tag: ['@RF-AT-12', '@RF-KI-03', '@RQ-05'] },
+  async ({ page }) => {
+    // El boton necesita el ajuste activado, y armarlo tiene que ganarle la
+    // carrera a la camara simulada (ver `support/kiosk.ts`).
+    await delayCameraStart(page, 1_500)
+    await stubKioskApi(page, { breakClockingEnabled: true })
+    await page.route('**/api/v1/scan', async (route) => route.abort('failed'))
+    const batch = await stubBatchApi(page)
+
+    await page.goto('/')
+
+    const toggle = page.getByTestId('break-toggle')
+    await expect(toggle).toBeVisible()
+    await toggle.click()
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true')
+
+    // Se encola sin red, con `intent: 'break_start'` ya escrito -no `'auto'`-.
+    await expect.poll(async () => (await readQueue(page)).length).toBeGreaterThan(0)
+    const queued = await readQueue(page)
+    expect(queued[0]?.intent).toBe('break_start')
+
+    // Y sobrevive a la sincronizacion por lote, horas despues: el servidor lo
+    // recibe con la misma intencion (`ADR-024`: «se reenvia en cada reintento»).
+    await page.unroute('**/api/v1/scan')
+    await announceOnline(page)
+
+    await expect.poll(() => batch.calls.length).toBeGreaterThan(0)
+    const sent = batch.calls[0]?.scans.find((item) => item.scan_id === queued[0]?.scan_id)
+    expect(sent?.intent).toBe('break_start')
   },
 )

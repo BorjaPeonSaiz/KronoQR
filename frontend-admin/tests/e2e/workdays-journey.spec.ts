@@ -9,7 +9,13 @@
 // 05:00 y esto fallaria (regla dura 3).
 
 import { expect, test } from '@playwright/test'
-import { EMPLOYEE, EMPLOYEE_UUID, logIn, stubManagementApi } from './support/admin'
+import {
+  EMPLOYEE,
+  EMPLOYEE_UUID,
+  logIn,
+  stubManagementApi,
+  WORKDAYS_WITH_BREAK,
+} from './support/admin'
 
 const FULL_NAME = `${EMPLOYEE.first_name} ${EMPLOYEE.last_name}`
 
@@ -75,5 +81,35 @@ test(
     await expect(page).toHaveURL(new RegExp(`/employees/${EMPLOYEE_UUID}/workdays$`))
     await expect(page.getByRole('heading', { level: 1, name: 'Registro horario' })).toBeVisible()
     await expect(page.getByTestId('workday')).toHaveCount(1)
+  },
+)
+
+test(
+  'una jornada con pausa fichada enseña la marca entre los dos tramos (RF-AT-12, tarea 3.5)',
+  { tag: ['@RF-PA-03', '@RF-AT-12'] },
+  async ({ page }) => {
+    await stubManagementApi(page, { workdays: WORKDAYS_WITH_BREAK })
+    await logIn(page)
+
+    await page.goto(`/employees/${EMPLOYEE_UUID}/workdays`)
+
+    const day = page.getByTestId('workday')
+    await expect(day).toHaveCount(1)
+    await expect(day.getByTestId('day-total')).toHaveText('7 h 35 min')
+
+    // La insignia va en la salida del tramo que cierra la pausa, no en el que
+    // la abre: texto e icono, nunca solo color (WCAG 1.4.1).
+    await expect(day.getByTestId('break-badge')).toHaveCount(1)
+    await expect(day.getByTestId('break-badge')).toContainText('Pausa')
+
+    // Y la fila que explica el hueco, con hora de salida, hora de vuelta y
+    // duracion: nada calculado salvo la resta de esos dos instantes.
+    await expect(day.getByTestId('break-row')).toContainText('10:00')
+    await expect(day.getByTestId('break-row')).toContainText('10:30')
+    await expect(day.getByTestId('break-row')).toContainText('0 h 30 min')
+
+    // Las partes siguen sumando el total (RN-06): 4 h + 3 h 35 min = 7 h 35 min.
+    await expect(day.getByTestId('summed-total')).toHaveText('7 h 35 min')
+    await expect(day.getByTestId('totals-mismatch')).toHaveCount(0)
   },
 )

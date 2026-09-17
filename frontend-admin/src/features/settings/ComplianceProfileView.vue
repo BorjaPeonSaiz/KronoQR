@@ -21,6 +21,19 @@
 //    marca como tal junto al propio campo, para no mentir sobre el efecto.
 //  - **`retention_years` es el unico cuyo error se paga con datos que no
 //    vuelven**, y lleva su propio aviso al lado.
+//  - **El aviso de `break_required_after_hours` YA NO es un texto fijo**
+//    (tarea 3.5, RF-AT-12): esta pantalla lee `ATTENDANCE_BREAK_CLOCKING` de
+//    `GET /api/v1/settings` -misma potestad `settings:*`, mismo `settings.api.ts`
+//    que ya usa `OperationalSettingsView`- y dice si RN-12 esta suspendida
+//    (fichaje de pausa desactivado, con un enlace a donde se activa) o si ya
+//    esta activada de verdad. Las dos peticiones se piden EN PARALELO con
+//    `Promise.allSettled`, no `Promise.all`: son recursos distintos, y una
+//    lectura meramente informativa (`ATTENDANCE_BREAK_CLOCKING`) no puede
+//    dejar sin cargar el formulario del perfil legal si falla -eso convertiria
+//    un aviso accesorio en un bloqueo de la pantalla que de verdad importa. Si
+//    `GET /settings` falla, se cae a «desactivado» (el aviso mas conservador:
+//    el que no promete que un cambio de umbral mueva la bandeja) y el perfil
+//    se sigue pudiendo editar con normalidad.
 //
 // Los limites de cada campo NO se copian aqui: el `422` del servidor es el que
 // manda y `ErrorNotice` lo pinta con el nombre del campo.
@@ -29,8 +42,10 @@ import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import FormField from '@kronoqr/web-kit/components/FormField.vue'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { RouterLink } from 'vue-router'
 import type { ComplianceProfileBody, UpdateComplianceProfileRequest } from '@/shared/api/types'
 import { fetchComplianceProfile, updateComplianceProfile } from './complianceProfile.api'
+import { fetchInstallationSettings, stringValue } from './settings.api'
 
 /**
  * `headingLevel` existe por el asistente de puesta en marcha (tarea 5.5), que
@@ -47,6 +62,8 @@ const loading = ref(true)
 const saving = ref(false)
 const error = ref<unknown>(null)
 const saved = ref(false)
+/** `ATTENDANCE_BREAK_CLOCKING === 'enabled'` (tarea 3.5, RF-AT-12): si RN-12 esta suspendida o no. */
+const breakClockingEnabled = ref(false)
 
 /**
  * El formulario.
@@ -108,13 +125,28 @@ async function load(): Promise<void> {
   loading.value = true
   error.value = null
 
-  try {
-    fill((await fetchComplianceProfile()).data)
-  } catch (failure) {
-    error.value = failure
-  } finally {
-    loading.value = false
+  // `allSettled` y no `all`: el perfil legal es lo que esta pantalla edita, y
+  // el ajuste de fichaje de pausa es solo el texto de un aviso. Un fallo en
+  // el segundo no puede impedir cargar ni editar el primero.
+  const [profileResult, settingsResult] = await Promise.allSettled([
+    fetchComplianceProfile(),
+    fetchInstallationSettings(),
+  ])
+
+  if (profileResult.status === 'fulfilled') {
+    fill(profileResult.value.data)
+  } else {
+    error.value = profileResult.reason
   }
+
+  // Si `GET /settings` falla, «desconocido» se trata como «desactivado»: es
+  // el aviso mas conservador (el que no promete que cambiar el umbral mueva
+  // la bandeja), nunca el que afirma de mas.
+  breakClockingEnabled.value =
+    settingsResult.status === 'fulfilled' &&
+    stringValue(settingsResult.value, 'ATTENDANCE_BREAK_CLOCKING') === 'enabled'
+
+  loading.value = false
 }
 
 onMounted(load)
@@ -252,19 +284,23 @@ const canSave = computed(
  * Si el cambio pendiente toca alguno de los umbrales que **hoy** mueven la
  * revisión diaria.
  *
- * `break_required_after_hours` NO está en la lista, y no es un olvido: RN-12 se
- * evalúa pero su apertura de incidencia está suspendida hasta que el quiosco
- * registre la pausa declarada, así que cambiar ese umbral no altera ni una
- * incidencia. Prometer lo contrario sería mentir en la pantalla, igual que lo
- * era en el asiento de auditoría. El campo lleva su propio aviso, que dice lo
- * que de verdad pasa.
+ * `break_required_after_hours` solo entra en la lista **mientras el fichaje de
+ * pausa esté activado** (`breakClockingEnabled`, tarea 3.5): con el ajuste
+ * desactivado, RN-12 sigue suspendida y cambiar ese umbral no altera ni una
+ * incidencia -prometer lo contrario sería mentir en la pantalla, igual que lo
+ * era en el asiento de auditoría-, y el campo lleva su propio aviso
+ * (`break-suspended`) que dice lo que de verdad pasa.
  *
  * **La autoridad es el servidor**, que decide lo mismo derivándolo de una única
  * lista de reglas suspendidas: esto solo elige qué aviso enseñar.
  */
-const changesDetection = computed(() =>
-  ['min_rest_hours', 'max_daily_hours'].some((field) => field in pendingChanges.value),
-)
+const changesDetection = computed(() => {
+  const fields = breakClockingEnabled.value
+    ? ['min_rest_hours', 'max_daily_hours', 'break_required_after_hours']
+    : ['min_rest_hours', 'max_daily_hours']
+
+  return fields.some((field) => field in pendingChanges.value)
+})
 
 /** Si el cambio pendiente toca el plazo de conservacion, que es el irreversible. */
 const changesRetention = computed(() => 'retention_years' in pendingChanges.value)
@@ -389,8 +425,21 @@ async function save(): Promise<void> {
           </template>
         </FormField>
 
-        <p class="text-sm text-kq-text-muted sm:col-span-2" data-test="break-suspended">
-          {{ t('compliance.breakSuspended') }}
+        <p
+          v-if="!breakClockingEnabled"
+          class="text-sm text-kq-text-muted sm:col-span-2"
+          data-test="break-suspended"
+        >
+          {{ t('compliance.breakSuspendedDisabled') }}
+          <RouterLink
+            :to="{ name: 'operational-settings' }"
+            class="font-semibold text-kq-text underline"
+          >
+            {{ t('compliance.breakSuspendedDisabledLink') }}
+          </RouterLink>
+        </p>
+        <p v-else class="text-sm text-kq-text-muted sm:col-span-2" data-test="break-suspended">
+          {{ t('compliance.breakSuspendedEnabled') }}
         </p>
 
         <FormField

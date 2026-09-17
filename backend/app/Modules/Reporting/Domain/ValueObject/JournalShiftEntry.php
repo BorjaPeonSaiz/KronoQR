@@ -22,6 +22,19 @@ use InvalidArgumentException;
  * **esta version de la fila**. En una version corregida es el momento de la
  * correccion; en una fichada, el del fichaje.
  *
+ * ## Quien lo abrio y quien lo cerro (RF-AT-12, tarea 3.5)
+ *
+ * Con el fichaje de pausa, dos tramos consecutivos pueden ser **una sola
+ * jornada con un descanso en medio** o dos jornadas distintas, y en la tabla se
+ * ven exactamente igual: dos filas con un hueco. `openedBy` y `closedBy` son lo
+ * que los distingue, y salen de `scan_events.result` —no de una heuristica
+ * sobre el hueco—. Un tramo cerrado con `break_start` y el siguiente abierto con
+ * `break_end` son una pausa; sin eso, el panel y el portal solo podrian enseñar
+ * un hueco mudo que cada cual interpretaria a su manera (ADR-024, consecuencias).
+ *
+ * El tiempo de la pausa **no esta en ningun tramo**, asi que la duracion del dia
+ * ya era correcta antes de esta tarea: lo que faltaba era poder explicarla.
+ *
  * ## Un turno nocturno es un tramo
  *
  * Nada aqui parte un tramo a medianoche (RN-05, ADR-006, regla dura 4): un
@@ -37,6 +50,16 @@ use InvalidArgumentException;
  */
 final readonly class JournalShiftEntry
 {
+    /** Los dos escaneos que abren un tramo (`ClockingAction::opensEntry()`). */
+    public const string OPENED_BY_CLOCK_IN = 'clock_in';
+
+    public const string OPENED_BY_BREAK_END = 'break_end';
+
+    /** Los dos que lo cierran. Un tramo abierto no tiene ninguno. */
+    public const string CLOSED_BY_CLOCK_OUT = 'clock_out';
+
+    public const string CLOSED_BY_BREAK_START = 'break_start';
+
     public function __construct(
         /** Identificador de ESTA version (ADR-035): el que acepta `PATCH /shift-entries/{uuid}`. */
         public string $uuid,
@@ -56,6 +79,28 @@ final readonly class JournalShiftEntry
         public ?int $durationMinutes,
         /** Cuando el servidor escribio esta version de la fila. */
         public DateTimeImmutable $recordedAt,
+        /**
+         * Que escaneo abrio este tramo: `clock_in` o `break_end` (RF-AT-12,
+         * ADR-024, tarea 3.5).
+         *
+         * Sale de `scan_events.result` del escaneo que lo abrio. **Nunca es
+         * nulo**: un tramo existe porque alguien entro, y un tramo declarado o
+         * corregido a mano —que no tiene escaneo detras— va como `clock_in`,
+         * que es lo que de hecho ocurrio. Es lo que permite al panel y al portal
+         * enseñar «pausa» entre dos tramos en vez de un hueco mudo.
+         */
+        public string $openedBy = self::OPENED_BY_CLOCK_IN,
+        /**
+         * Que escaneo lo cerro: `clock_out`, `break_start`, o `null` mientras
+         * siga abierto.
+         *
+         * `break_start` significa que la jornada **sigue viva** y que el tramo
+         * siguiente vendra con `openedBy = 'break_end'`. Nulo **solo** si el
+         * tramo sigue abierto: uno cerrado a mano, sin escaneo detras, va como
+         * `clock_out`, y el constructor lo exige para que la respuesta no pueda
+         * decir «sigue abierto» sobre un tramo que tiene hora de salida.
+         */
+        public ?string $closedBy = null,
     ) {
         if ($uuid === '') {
             throw new InvalidArgumentException('Un tramo del detalle de jornada necesita su identificador publico.');
@@ -75,6 +120,38 @@ final readonly class JournalShiftEntry
 
         if ($durationMinutes !== null && $durationMinutes < 0) {
             throw new InvalidArgumentException('Un tramo no puede haber durado '.$durationMinutes.' minutos.');
+        }
+
+        $this->assertClockingMarks($openedBy, $closedBy, $clockedOutAt);
+    }
+
+    /**
+     * Las tres reglas de `openedBy` y `closedBy` (RF-AT-12, ADR-024).
+     *
+     * En un metodo propio y no en el constructor porque son las de la tarea 3.5
+     * y forman una sola idea —«que abrio y que cerro este tramo, y si eso encaja
+     * con que este cerrado»— frente a las cinco comprobaciones de identidad que
+     * el constructor ya tenia. El limite de complejidad del §3.5 lo obliga y de
+     * paso lo deja mejor leido.
+     */
+    private function assertClockingMarks(string $openedBy, ?string $closedBy, ?DateTimeImmutable $clockedOutAt): void
+    {
+        if (! in_array($openedBy, [self::OPENED_BY_CLOCK_IN, self::OPENED_BY_BREAK_END], true)) {
+            throw new InvalidArgumentException('Un tramo se abre con clock_in o con break_end, no con «'.$openedBy.'».');
+        }
+
+        if ($closedBy !== null && ! in_array($closedBy, [self::CLOSED_BY_CLOCK_OUT, self::CLOSED_BY_BREAK_START], true)) {
+            throw new InvalidArgumentException('Un tramo se cierra con clock_out o con break_start, no con «'.$closedBy.'».');
+        }
+
+        // Las dos mitades de la misma verdad: si hay hora de salida, algo lo
+        // cerro —un escaneo o una correccion— y el contrato lo declara
+        // obligatorio. Un nulo aqui haria que el panel pintara «en curso» un
+        // tramo terminado.
+        if (($clockedOutAt instanceof DateTimeImmutable) !== ($closedBy !== null)) {
+            throw new InvalidArgumentException(
+                'Un tramo con hora de salida tiene que decir que lo cerro, y uno abierto no puede decirlo.'
+            );
         }
     }
 

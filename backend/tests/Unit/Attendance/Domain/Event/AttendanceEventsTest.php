@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Modules\Attendance\Domain\Event\ScanRejected;
+use App\Modules\Attendance\Domain\ValueObject\ClockingAction;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Attendance\Domain\ValueObject\ScanRejectionReason;
 use App\Modules\Shared\Domain\ValueObject\CredentialRejectionReason;
@@ -147,3 +148,65 @@ it('guarda el valor de columna de cada origen de marca', function (ScanOrigin $o
     'alta manual del panel' => [ScanOrigin::MANUAL_ADMIN, 'manual_admin'],
     'importacion del sistema anterior' => [ScanOrigin::IMPORT, 'import'],
 ])->group('RF-AT-01', 'RF-AT-11');
+
+it('lleva en la copia inmutable si el tramo lo abrio una entrada o una vuelta de pausa', function (): void {
+    /*
+     * **Por que el evento lo lleva y no basta con `scan_events`.** Esa tabla NO
+     * esta protegida como `audit_log`: no es solo-append ni esta encadenada por
+     * hash, y el usuario de base de datos de la aplicacion puede escribirla
+     * (regla dura 6). El asiento `shift_entry.created` es la version del hecho
+     * que no se puede reescribir, asi que tiene que decir tambien que la abrio
+     * (RL-04, ADR-024).
+     */
+    $entrada = WorkDayFactory::new()->build();
+    $entrada->clockIn('shift-entry-1', Instants::utc('2026-03-14 06:00'), ScanOrigin::QR_KIOSK, ClockingAction::CLOCK_IN);
+
+    $vuelta = WorkDayFactory::new()->build();
+    $vuelta->clockIn('shift-entry-2', Instants::utc('2026-03-14 15:00'), ScanOrigin::QR_KIOSK, ClockingAction::BREAK_END);
+
+    expect(RecordedEvents::clockedIn($entrada->releaseEvents())->action)->toBe(ClockingAction::CLOCK_IN)
+        ->and(RecordedEvents::clockedIn($vuelta->releaseEvents())->action)->toBe(ClockingAction::BREAK_END);
+})->group('RF-AT-12', 'RL-04', 'RS-07');
+
+it('lleva en la copia inmutable si el tramo lo cerro el fin de jornada o una pausa', function (): void {
+    // Sin esto, el asiento afirmaria que alguien termino su jornada a las 15:00
+    // cuando solo se fue a comer — y esa afirmacion es la que se exporta a una
+    // inspeccion.
+    $salida = WorkDayFactory::new()->withOpenShiftSince('2026-03-14 06:00')->build();
+    $salida->clockOut(Instants::utc('2026-03-14 14:00'), ScanOrigin::QR_KIOSK, ClockingPolicyFactory::standard());
+
+    $pausa = WorkDayFactory::new()->withOpenShiftSince('2026-03-14 06:00')->build();
+    $pausa->clockOut(Instants::utc('2026-03-14 12:00'), ScanOrigin::QR_KIOSK, ClockingPolicyFactory::standard(), ClockingAction::BREAK_START);
+
+    expect(RecordedEvents::clockedOut($salida->releaseEvents())->action)->toBe(ClockingAction::CLOCK_OUT)
+        ->and(RecordedEvents::clockedOut($pausa->releaseEvents())->action)->toBe(ClockingAction::BREAK_START);
+})->group('RF-AT-12', 'RL-04', 'RS-07');
+
+it('da por sentada la entrada y la salida cuando nadie declara la accion', function (): void {
+    // El valor por defecto no es comodidad: las correcciones y las altas
+    // manuales (RF-PA-04) abren y cierran tramos sin que haya habido pausa
+    // ninguna, y tienen que seguir diciendo exactamente eso.
+    $workDay = WorkDayFactory::new()->build();
+
+    $workDay->clockIn('shift-entry-1', Instants::utc('2026-03-14 06:00'), ScanOrigin::MANUAL_ADMIN);
+    $workDay->clockOut(Instants::utc('2026-03-14 14:00'), ScanOrigin::MANUAL_ADMIN, ClockingPolicyFactory::standard());
+
+    $events = $workDay->releaseEvents();
+
+    expect(RecordedEvents::clockedIn($events)->action)->toBe(ClockingAction::CLOCK_IN)
+        ->and(RecordedEvents::clockedOut($events)->action)->toBe(ClockingAction::CLOCK_OUT);
+})->group('RF-PA-04', 'RL-04');
+
+it('no cambia la clasificacion de la duracion por ser una pausa', function (): void {
+    // RN-07 y RN-08 se evaluan igual: una pausa no exime a un tramo de ser
+    // demasiado corto. Si lo eximiera, bastaria declarar la pausa para que un
+    // tramo de dos segundos dejara de pedir revision.
+    $workDay = WorkDayFactory::new()->withOpenShiftSince('2026-03-14 06:00:00')->build();
+
+    $workDay->clockOut(Instants::utc('2026-03-14 06:00:30'), ScanOrigin::QR_KIOSK, ClockingPolicyFactory::standard(), ClockingAction::BREAK_START);
+
+    $clockedOut = RecordedEvents::clockedOut($workDay->releaseEvents());
+
+    expect($clockedOut->action)->toBe(ClockingAction::BREAK_START)
+        ->and($clockedOut->anomalies)->not->toBe([]);
+})->group('RF-AT-12', 'RN-07');

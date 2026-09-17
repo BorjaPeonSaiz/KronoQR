@@ -24,15 +24,30 @@ async function stubBackgroundQrTraffic(page: Page): Promise<void> {
  */
 export const PIN_SEALING_PUBLIC_KEY = '7cXt0m5rXf8mB2mHnV1kQe0k0f5T2xY3rZq8w9AbCdE='
 
+export interface PinKioskStubOptions {
+  /** `KioskHeartbeat.break_clocking_enabled` (RF-AT-12, tarea 3.5). Por defecto `false`. */
+  readonly breakClockingEnabled?: boolean
+  /** `KioskHeartbeat.clock_skew_tolerance_seconds` (RF-AT-10, tarea 3.5). Por defecto 900. */
+  readonly clockSkewToleranceSeconds?: number
+}
+
 /** El `GET /api/v1/kiosk/roster` de esta instalacion SI ofrece fichaje por PIN. */
-export async function stubKioskApiWithPin(page: Page): Promise<void> {
+export async function stubKioskApiWithPin(
+  page: Page,
+  options: PinKioskStubOptions = {},
+): Promise<void> {
   await pairDevice(page)
   await stubBackgroundQrTraffic(page)
   await page.route('**/api/v1/kiosk/heartbeat', async (route: Route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ server_time: new Date().toISOString(), client_errors_accepted: 0 }),
+      body: JSON.stringify({
+        server_time: new Date().toISOString(),
+        client_errors_accepted: 0,
+        break_clocking_enabled: options.breakClockingEnabled ?? false,
+        clock_skew_tolerance_seconds: options.clockSkewToleranceSeconds ?? 900,
+      }),
     })
   })
   await page.route('**/api/v1/kiosk/roster', async (route: Route) => {
@@ -49,14 +64,22 @@ export async function stubKioskApiWithPin(page: Page): Promise<void> {
 }
 
 /** Como la anterior, pero la instalacion NO ofrece fichaje por PIN (ADR-017). */
-export async function stubKioskApiWithoutPin(page: Page): Promise<void> {
+export async function stubKioskApiWithoutPin(
+  page: Page,
+  options: PinKioskStubOptions = {},
+): Promise<void> {
   await pairDevice(page)
   await stubBackgroundQrTraffic(page)
   await page.route('**/api/v1/kiosk/heartbeat', async (route: Route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ server_time: new Date().toISOString(), client_errors_accepted: 0 }),
+      body: JSON.stringify({
+        server_time: new Date().toISOString(),
+        client_errors_accepted: 0,
+        break_clocking_enabled: options.breakClockingEnabled ?? false,
+        clock_skew_tolerance_seconds: options.clockSkewToleranceSeconds ?? 900,
+      }),
     })
   })
   await page.route('**/api/v1/kiosk/roster', async (route: Route) => {
@@ -78,6 +101,7 @@ export interface RecordedPinScan {
   readonly pinSealed: string
   readonly occurredAt: string
   readonly idempotencyKey: string | undefined
+  readonly intent: string | undefined
 }
 
 export interface PinScanStub {
@@ -87,7 +111,9 @@ export interface PinScanStub {
 /** Intercepta `POST /api/v1/scan/pin`. */
 export async function stubPinScanApi(
   page: Page,
-  outcome: 'clock_in' | 'rejected' | 'offline' = 'clock_in',
+  // `break_start`/`break_end` (tarea 3.5, ADR-024): mismo criterio que
+  // `stubScanApi` en `support/kiosk.ts`.
+  outcome: 'clock_in' | 'break_start' | 'break_end' | 'rejected' | 'offline' = 'clock_in',
   /**
    * Retraso artificial antes de contestar (RF-AT-11): la interceptacion de
    * Playwright resuelve en microsegundos, demasiado rapido para observar con
@@ -106,6 +132,7 @@ export async function stubPinScanApi(
       employee_code: string
       pin_sealed: string
       occurred_at: string
+      intent?: string
     }
     recorded.push({
       scanId: body.scan_id,
@@ -113,6 +140,7 @@ export async function stubPinScanApi(
       pinSealed: body.pin_sealed,
       occurredAt: body.occurred_at,
       idempotencyKey: route.request().headers()['idempotency-key'],
+      intent: body.intent,
     })
 
     if (delayMs > 0) {
@@ -144,7 +172,7 @@ export async function stubPinScanApi(
       contentType: 'application/json',
       body: JSON.stringify({
         scan_id: body.scan_id,
-        action: 'clock_in',
+        action: outcome,
         employee_display_name: 'Lucia G.',
         work_date: body.occurred_at.slice(0, 10),
         occurred_at: body.occurred_at,

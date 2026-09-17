@@ -242,6 +242,41 @@ What to look at:
 - **Consulting somebody else's record is logged** in the audit log, with who
   looked, at whom and at which period. That is normal and it is intentional.
 
+### 3.3 The break in the record
+
+If the hotel has **break clocking** turned on, a working day with a break is not
+shown as one entry with a hole inside it: it is shown as **two entries with the
+"Break" mark between them**. That is all that changes, and it is what you need
+to know in order to explain it to somebody:
+
+- **The break does not count as worked time.** There is no subtraction: the
+  break time is simply not inside any entry, so the day's total comes out right
+  without touching anything.
+- **A break in the early hours does not split the working day.** Somebody who
+  clocks in at 22:00, takes a break at 02:00 and comes back at 02:30 is still in
+  the previous day's working day, and the next day comes out at zero. It is the
+  same rule as always: the working day belongs to the day it started.
+- **But a break does not stay open for ever.** The return continues the previous
+  working day only if it arrives **before** the minimum rest between working
+  days you have set in the profile (`min_rest_hours`, 12 h out of the box —§7—).
+  After that time, the next clocking **opens a new working day**, which is the
+  right thing: somebody who pressed "Break" at 15:00 and clocks in the next day
+  at 08:00 is starting their shift, not coming back from a seventeen-hour break.
+- **A break with no return opens no incident.** If somebody presses "Break",
+  scans their card and goes home, the working day is **closed at that moment**,
+  with the "Break" mark and with no return entry. The system neither invents a
+  clock-out time nor warns you: **it is corrected by hand like any other entry**
+  (§5), and the usual reason is "Forgotten clock-out". Look at it when a day's
+  total comes out shorter than expected.
+- **It is told apart from an unexplained gap.** Two entries in a row without the
+  "Break" mark are something else —a clock-out and a clock-in—, and that is
+  exactly what break clocking is there to clarify.
+- **A badly clocked break is corrected like any other entry**, from the same
+  screen and with its reason (§5). There is no separate procedure: what has to
+  be corrected is a clock-in or clock-out time, as always.
+- **If the hotel does not have break clocking turned on, nothing changes here**
+  and you will see no mark.
+
 ---
 
 ## 4. The incident inbox
@@ -261,14 +296,29 @@ its own. It fills itself every night, when the record is reviewed.
 | **Shift too short** | Low | An entry below the minimum countable duration | A double scan, or a clock-in and a clock-out one after the other by mistake |
 | **Clock skew** | Low | The tablet's clock was off when the clocking happened | **The clocking was recorded all the same.** It is a warning for IT about that tablet, not a problem for the person |
 | **Missing clock-out** | Medium | It describes a forgotten clock-out **already closed by hand** | **Nobody opens it automatically.** While the shift is still open, what you have is "Open shift not closed" |
-| **No break registered** | Medium | A continuous entry above the collective agreement's threshold | **None is opened today**: until the kiosk records the break as such, the system cannot tell "they did not rest" from "they rested and did not clock it" |
+| **No break registered** | Medium | A continuous entry above the collective agreement's threshold | **It only opens by itself if the hotel has break clocking turned on.** Without it, the system cannot tell "they did not rest" from "they rested and did not clock it", and warns about none |
 | **Anomalous credential usage pattern** | High | — | **None is opened today.** The detector arrives in a later version |
 
-> **The "Type" filter shows all eight, and today only five open by
-> themselves**: insufficient rest, open shift, shift too long, shift too short
-> and clock skew. The other three are in the list because the system has to be
-> able to record them without changing anything when their time comes. It is
-> not a fault in the installation.
+> **The "Type" filter shows all eight, and how many open by themselves depends
+> on a setting.** Five always do —insufficient rest, open shift, shift too long,
+> shift too short and clock skew—, and **"No break registered" joins them as
+> soon as the hotel turns on break clocking** (Panel → "Operational settings" →
+> "Break clocking"; it is explained in
+> [`configuration.md`](configuration.md) §2.1). The other two are in the list
+> because the system has to be able to record them without changing anything
+> when their time comes. It is not a fault in the installation.
+>
+> **Turning break clocking on does not flood the inbox at once.** The review
+> starts opening "No break registered" on its next pass and only over the last
+> few days; it does not go back over history. And turning it off **does not
+> close** the ones already open: no new ones are opened and the existing ones
+> are resolved like any other.
+>
+> **Two things the inbox will NOT tell you, worth knowing so you do not wait for
+> them:** the gap between two entries of the same working day —the split working
+> day— **is not looked at** (§4 bis.2), and a **break with no return** —somebody
+> presses "Break" and goes home— **opens no incident**: the working day is
+> closed there and it is corrected by hand (§3.3).
 
 ### 4.2 The system never closes a shift on its own
 
@@ -369,6 +419,19 @@ This is what raises the most questions, and it is worth being clear about it
   next. The time somebody spends outside mid-morning is not rest between
   working days and is not counted here. And with no previous working day there
   is nothing to measure: the first day of a person's record never warns.
+- **⚠️ The gap WITHIN a working day is not looked at, and the system will never
+  warn you about it.** A split working day —leaving at 15:00 and coming back at
+  23:00 the same day— is two entries of the same day with eight hours in
+  between, and **it appears neither here nor in the inbox**. If that return fell
+  at 00:30 it would already be another working day and it would warn. It is not
+  a fault: inside a split working day that gap is the break, and warning about
+  all of them would turn every split shift in the hotel into an alert. **But it
+  is a case the product does not cover**, so if your collective agreement says
+  anything about rests within a split working day, that is reviewed by hand:
+  **the system applies the threshold you have set, it does not rule on whether a
+  working day complies with the Workers' Statute or with your agreement**.
+  Checking that is your labour advisers' job, not the vendor's —
+  [`legal-obligations.md`](legal-obligations.md) §7.
 - **Night shifts are not split.** A shift from 22:00 to 06:00 is a single one
   and belongs to the day it started. The following rest is measured from its
   real end, 06:00, not from midnight.
@@ -378,16 +441,20 @@ This is what raises the most questions, and it is worth being clear about it
   total goes up and the warning may appear.
 - **The totals are the same ones you see in the person's record.** The screen
   does not recalculate the hours on its own: it reads them.
-- **"Maximum continuous stretch without a break" is shown, with its threshold,
-  but is not evaluated yet.** Its card appears flagged **"Not evaluated"**, with
-  the reason —"not evaluated until a declared break exists"—, and produces no
-  rows. The reason is the same as in the inbox (§4.1): until the kiosk
-  records the break as such, the system cannot tell "did not rest" from "rested
-  and did not clock it", and warning under those conditions would mean warning
-  about almost everybody almost every day. The threshold is stored, it is
-  audited, and the rule starts counting on its own as soon as break clocking
-  exists, with nothing to touch. It is shown rather than hidden so that you know
-  the rule exists and with which threshold it will apply.
+- **"Maximum continuous stretch without a break" is evaluated only if the hotel
+  has break clocking turned on.** While it is not, its card appears flagged
+  **"Not evaluated"**, with the reason written out —"Not evaluated while break
+  clocking is switched off in Operational settings"— and produces no rows. The reason is the same as in the
+  inbox (§4.1): if the kiosk does not record the break, the system cannot tell
+  "did not rest" from "rested and did not clock it", and warning under those
+  conditions would mean warning about almost everybody almost every day. The
+  threshold is stored and audited all the same, and the rule starts counting on
+  its own as soon as the setting is turned on, with nothing else to touch. It is
+  shown rather than hidden so that you know the rule exists and with which
+  threshold it will apply. Your IT turns it on in Panel → "Operational settings"
+  → "Break clocking" ([`configuration.md`](configuration.md) §2.1), and it is
+  worth discussing first: the inbox starts receiving warnings it does not
+  receive today.
 - **The first two count exactly like the inbox.** Minimum rest between shifts
   and ordinary daily working time are measured with the same criterion as the
   nightly review —the one that opens "Insufficient rest" and "Shift too long" in
@@ -663,6 +730,18 @@ week** are applied only by the compliance view, which warns but opens no
 incident. The **holiday calendar** is stored and audited from today, but **no
 rule applies it yet**: the absence management of a later version will be the
 first to use it, and the screen says so next to the field.
+
+**`break_required_after_hours` —the maximum stretch without a break— also
+depends on a setting that is not on this screen.** It only applies if the hotel
+has **break clocking** turned on (Panel → "Operational settings" → "Break
+clocking"; it is explained in [`configuration.md`](configuration.md) §2.1).
+Without it the threshold is stored and audited all the same, but it **opens no
+incident** and the compliance view shows it flagged "Not evaluated". That is
+deliberate: with no breaks clocked, nobody can tell "did not rest" from "rested
+and did not clock it", and an inbox with one warning per long shift stops being
+read. As soon as it is turned on, the rule starts counting on its own with
+whichever threshold you have saved here, so review the number **before** asking
+for it to be switched on.
 
 The product ships with the Spanish hospitality profile. **Adjusting it to the
 collective agreement that applies to you is the hotel's responsibility**, not

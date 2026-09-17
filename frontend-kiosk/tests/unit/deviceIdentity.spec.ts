@@ -1,11 +1,15 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   persistPairedDevice,
+  readBreakClockingEnabled,
+  readClockSkewToleranceSeconds,
   readDeviceName,
   readDeviceToken,
   readDeviceTokenExpiresAt,
   readServiceCodeHash,
   resolveDeviceId,
+  storeBreakClockingEnabled,
+  storeClockSkewToleranceSeconds,
   storeServiceCodeHash,
 } from '@/shared/telemetry/deviceIdentity'
 
@@ -15,6 +19,8 @@ const KEYS = [
   'kronoqr.kiosk.device_token_expires_at',
   'kronoqr.kiosk.device_name',
   'kronoqr.kiosk.service_code_hash',
+  'kronoqr.kiosk.break_clocking_enabled',
+  'kronoqr.kiosk.clock_skew_tolerance_seconds',
 ]
 
 afterEach(() => {
@@ -58,5 +64,25 @@ describe('huella del codigo de servicio (RF-KI-08, tarea 3.3)', () => {
     storeServiceCodeHash('huella-vieja')
     storeServiceCodeHash(null)
     expect(readServiceCodeHash()).toBeNull()
+  })
+})
+
+describe('fichaje de pausa y umbral de desfase (RF-AT-12, RF-AT-10, tarea 3.5)', () => {
+  it('sin latido todavia, el fichaje de pausa esta desactivado y no hay umbral', () => {
+    expect(readBreakClockingEnabled()).toBe(false)
+    expect(readClockSkewToleranceSeconds()).toBeNull()
+  })
+
+  it('storeBreakClockingEnabled guarda lo que devuelve el latido', () => {
+    storeBreakClockingEnabled(true)
+    expect(readBreakClockingEnabled()).toBe(true)
+
+    storeBreakClockingEnabled(false)
+    expect(readBreakClockingEnabled()).toBe(false)
+  })
+
+  it('storeClockSkewToleranceSeconds guarda el umbral de la instalacion', () => {
+    storeClockSkewToleranceSeconds(600)
+    expect(readClockSkewToleranceSeconds()).toBe(600)
   })
 })

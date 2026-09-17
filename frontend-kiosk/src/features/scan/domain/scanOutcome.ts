@@ -42,6 +42,16 @@ export interface AcceptedConfirmation extends ScanConfirmationBase {
   readonly displayName: string
   readonly workedMinutes: number
   readonly workDate: string
+  /**
+   * Desfase de reloj, en segundos, SOLO cuando `settleFrom` mide que
+   * `|recorded_at - occurred_at|` supera la tolerancia de la instalacion
+   * (RF-AT-10, decision 6 de la tarea 3.5). Ausente -no `undefined`- en
+   * cualquier otro caso: es un escaneo respondido en linea (nunca uno
+   * consolidado de la cola offline, `settleFrom` no lo calcula alli) y sin
+   * desfase que avisar. Mismo signo que `clockSkewSeconds` del latido:
+   * positivo = tablet adelantada.
+   */
+  readonly clockSkewSeconds?: number
 }
 
 export interface PendingConfirmation extends ScanConfirmationBase {

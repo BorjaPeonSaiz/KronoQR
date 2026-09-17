@@ -57,6 +57,19 @@ const DEVICE_NAME_KEY = 'kronoqr.kiosk.device_name'
  */
 const SERVICE_CODE_HASH_KEY = 'kronoqr.kiosk.service_code_hash'
 
+/**
+ * Los dos ajustes de la tarea 3.5 (RF-AT-12, RF-AT-10), MISMO PATRON que
+ * `service_code_hash`: los escribe el planificador del latido tras cada
+ * `200` y se leen en local para que el boton «Pausa» y el aviso de desfase
+ * funcionen sin red. `KioskHeartbeat.break_clocking_enabled` y
+ * `.clock_skew_tolerance_seconds` son obligatorios en el contrato, asi que
+ * -a diferencia de `service_code_hash`- no hay un `null` de «el servidor no
+ * dijo nada»: solo «esta tablet no ha latido nunca en esta sesion», que es
+ * el estado que los valores por defecto de abajo representan.
+ */
+const BREAK_CLOCKING_ENABLED_KEY = 'kronoqr.kiosk.break_clocking_enabled'
+const CLOCK_SKEW_TOLERANCE_SECONDS_KEY = 'kronoqr.kiosk.clock_skew_tolerance_seconds'
+
 /** Version de la PWA. La inyecta Vite desde `package.json` (ver `vite.config.ts`). */
 export const APP_VERSION: string = __APP_VERSION__
 
@@ -163,6 +176,65 @@ export function storeServiceCodeHash(hash: string | null): void {
     // de diagnostico seguira preguntando al `localStorage` (vacio) y se abrira
     // sin codigo, que es la degradacion honesta (regla dura 19 al reves: esto
     // nunca puede impedir fichar, y tampoco impide diagnosticar).
+  }
+}
+
+/**
+ * `false` mientras esta tablet no haya completado ningun latido en NINGUNA
+ * sesion (nunca escrito en disco): «sin latido previo, `break_clocking_enabled`
+ * es `false`» (decision 1 de la tarea 3.5) — el boton «Pausa» se queda oculto
+ * hasta que el primer latido confirme que la instalacion lo tiene activado, en
+ * vez de mostrarlo con un valor inventado.
+ */
+export function readBreakClockingEnabled(): boolean {
+  const storage = safeStorage()
+  if (storage === null) return false
+  try {
+    return storage.getItem(BREAK_CLOCKING_ENABLED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+/** Lo llama SOLO el planificador del latido, tras cada `200`. */
+export function storeBreakClockingEnabled(enabled: boolean): void {
+  const storage = safeStorage()
+  if (storage === null) return
+  try {
+    storage.setItem(BREAK_CLOCKING_ENABLED_KEY, enabled ? '1' : '0')
+  } catch {
+    // El boton se queda en el estado que ya tenia pintado (degradacion honesta).
+  }
+}
+
+/**
+ * `null` = esta tablet no ha completado ningun latido todavia (en esta sesion
+ * ni en ninguna anterior): «mientras no haya latido: sin banda, no un valor
+ * inventado» (decision 6 de la tarea 3.5). El aviso de desfase se queda
+ * apagado hasta que exista un umbral de verdad, en vez de compararse contra
+ * una constante que la instalacion podria haber cambiado.
+ */
+export function readClockSkewToleranceSeconds(): number | null {
+  const storage = safeStorage()
+  if (storage === null) return null
+  try {
+    const stored = storage.getItem(CLOCK_SKEW_TOLERANCE_SECONDS_KEY)
+    if (stored === null || stored === '') return null
+    const parsed = Number(stored)
+    return Number.isFinite(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+/** Lo llama SOLO el planificador del latido, tras cada `200`. */
+export function storeClockSkewToleranceSeconds(seconds: number): void {
+  const storage = safeStorage()
+  if (storage === null) return
+  try {
+    storage.setItem(CLOCK_SKEW_TOLERANCE_SECONDS_KEY, String(seconds))
+  } catch {
+    // El aviso se queda con el umbral que ya tenia cacheado (degradacion honesta).
   }
 }
 

@@ -66,15 +66,29 @@ use App\Modules\Shared\Domain\ValueObject\ComplianceRuleSuspension;
  *
  * ## Las reglas suspendidas no emiten
  *
- * RN-12 lo esta hasta que exista la pausa declarada
- * ({@see ComplianceRuleSuspension}, ADR-024, tarea 3.5). No se calla: su umbral
- * viaja en `meta.rules[]` con `evaluated: false` y su motivo, para que la pantalla
- * pueda decir «no se evalua hasta que exista la pausa declarada». Cuando la 3.5
- * vacie esa lista, esta clase empieza a emitirla sin tocar una linea.
+ * RN-12 lo esta mientras el fichaje de pausa siga desactivado en esta
+ * instalacion ({@see ComplianceRuleSuspension}, ADR-024, RF-AT-12). No se calla:
+ * su umbral viaja en `meta.rules[]` con `evaluated: false` y su motivo, para que
+ * la pantalla pueda decir por que no ve avisos de pausas. En cuanto el hotel
+ * active `ATTENDANCE_BREAK_CLOCKING`, esta clase empieza a emitirla sin tocar
+ * una linea: la vista recalcula siempre con lo vigente.
  */
 final readonly class ComplianceEvaluation
 {
-    public function __construct(private CompliancePolicy $policy) {}
+    /**
+     * @param  CompliancePolicy  $policy  los cuatro umbrales del perfil del centro, ya
+     *                                    resueltos (regla dura 14)
+     * @param  ComplianceRuleSuspension  $suspension  que reglas no abren incidencia en esta
+     *                                                instalacion. Desde la tarea 3.5 depende de
+     *                                                `ATTENDANCE_BREAK_CLOCKING`, asi que la
+     *                                                inyecta `ReadComplianceSummary`, que es quien
+     *                                                alcanza los ajustes: el evaluador no pregunta
+     *                                                nada, se le dice
+     */
+    public function __construct(
+        private CompliancePolicy $policy,
+        private ComplianceRuleSuspension $suspension,
+    ) {}
 
     /**
      * Los hallazgos del periodo, ordenados por persona, jornada o semana y regla.
@@ -119,14 +133,15 @@ final readonly class ComplianceEvaluation
             fn (ComplianceRuleName $name): ComplianceRuleStatus => new ComplianceRuleStatus(
                 rule: $name,
                 thresholdMinutes: $this->thresholdOf($name),
-                evaluated: ! ComplianceRuleSuspension::isSuspended($name->rule()),
+                evaluated: $this->evaluates($name),
                 // Hoy solo hay un motivo de suspension y por eso no hay `match`:
                 // el dia que haya dos, el enum crece y esta linea se convierte en
                 // uno. Un `match` con un solo caso seria adivinar cual sera el
-                // segundo.
-                suspensionReason: ComplianceRuleSuspension::isSuspended($name->rule())
-                    ? ComplianceSuspensionReason::AwaitingDeclaredBreak
-                    : null,
+                // segundo. El motivo es el de verdad —«el fichaje de pausa esta
+                // desactivado en esta instalacion»— y no «esperando a la 3.5».
+                suspensionReason: $this->evaluates($name)
+                    ? null
+                    : ComplianceSuspensionReason::BreakClockingDisabled,
             ),
             ComplianceRuleName::inRequirementOrder(),
         );
@@ -316,7 +331,7 @@ final readonly class ComplianceEvaluation
 
     private function evaluates(ComplianceRuleName $name): bool
     {
-        return ! ComplianceRuleSuspension::isSuspended($name->rule());
+        return ! $this->suspension->isSuspended($name->rule());
     }
 
     /**

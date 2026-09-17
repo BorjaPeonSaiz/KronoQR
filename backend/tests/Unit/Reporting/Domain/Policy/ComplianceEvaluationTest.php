@@ -12,6 +12,7 @@ use App\Modules\Reporting\Domain\ValueObject\ComplianceShiftSegment;
 use App\Modules\Reporting\Domain\ValueObject\ComplianceSuspensionReason;
 use App\Modules\Reporting\Domain\ValueObject\DateRange;
 use App\Modules\Shared\Domain\ValueObject\CompliancePolicy;
+use App\Modules\Shared\Domain\ValueObject\ComplianceRuleSuspension;
 use Tests\Support\Time\Instants;
 
 /*
@@ -53,6 +54,23 @@ function evaluationProfile(
         maximumWeeklyMinutes: $weeklyHours * 60,
         weekStartsOn: $weekStartsOn,
         holidayCalendar: [],
+    );
+}
+
+/**
+ * El evaluador con ese perfil y la suspension que corresponda.
+ *
+ * **Por omision, sin fichaje de pausa**, que es el estado de serie de una
+ * instalacion (`ATTENDANCE_BREAK_CLOCKING=disabled`, decision 7 de la ficha 3.5)
+ * y el que suspende RN-12. Los casos que van de RN-10, RN-11 o RN-17 no tienen
+ * que hablar del ajuste para que su tramo largo no dispare tambien un
+ * `missing_break`; los que van de la pausa lo dicen explicitamente.
+ */
+function evaluationOf(CompliancePolicy $policy, bool $breakClockingEnabled = false): ComplianceEvaluation
+{
+    return new ComplianceEvaluation(
+        $policy,
+        ComplianceRuleSuspension::forInstallation($breakClockingEnabled),
     );
 }
 
@@ -121,7 +139,7 @@ it('mide el descanso desde el fin real del turno nocturno, sin partirlo a median
      * descanso saldria de 18 h: la regla no saltaria nunca y nadie se enteraria.
      * Y si se midiera contra la entrada, saldrian 20 h.
      */
-    $findings = (new ComplianceEvaluation(evaluationProfile()))->evaluate(
+    $findings = (evaluationOf(evaluationProfile()))->evaluate(
         [
             evaluationDay('2026-03-14', firstIn: '2026-03-14 22:00', lastOut: '2026-03-15 06:00', totalMinutes: 480),
             evaluationDay('2026-03-15', firstIn: '2026-03-15 18:00', lastOut: '2026-03-15 23:00', previousLastOut: '2026-03-15 06:00', totalMinutes: 300),
@@ -135,7 +153,7 @@ it('mide el descanso desde el fin real del turno nocturno, sin partirlo a median
 it('alerta cuando ese mismo descanso se queda en once horas y cincuenta y nueve minutos', function (): void {
     // Un minuto antes, y la regla salta. Es el otro lado del mismo caso: lo que
     // se compara es el hueco real, no el dia de calendario.
-    $findings = (new ComplianceEvaluation(evaluationProfile()))->evaluate(
+    $findings = (evaluationOf(evaluationProfile()))->evaluate(
         [
             evaluationDay('2026-03-14', firstIn: '2026-03-14 22:00', lastOut: '2026-03-15 06:00', totalMinutes: 480),
             evaluationDay('2026-03-15', firstIn: '2026-03-15 17:59', lastOut: '2026-03-15 23:00', previousLastOut: '2026-03-15 06:00', totalMinutes: 301),
@@ -159,7 +177,7 @@ it('no evalua el descanso de la primera jornada de la que consta la anterior', f
     // Sin jornada anterior no se evalua: suponer que el dia anterior termino a
     // medianoche produciria una alerta de descanso insuficiente sobre alguien que
     // acaba de incorporarse. Aqui la jornada del 14 no la tiene, y no sale.
-    $findings = (new ComplianceEvaluation(evaluationProfile()))->evaluate(
+    $findings = (evaluationOf(evaluationProfile()))->evaluate(
         [evaluationDay('2026-03-14', firstIn: '2026-03-14 09:00', lastOut: '2026-03-14 17:00', totalMinutes: 480)],
         DateRange::between('2026-03-14', '2026-03-14'),
     );
@@ -172,7 +190,7 @@ it('no confunde un solape con el peor descanso posible', function (): void {
     // descanso corto sino un solape, del que responde RN-02 en el esquema.
     // Medirlo aqui daria un descanso negativo, que ademas se leeria como el
     // incumplimiento mas grave que se puede registrar.
-    $findings = (new ComplianceEvaluation(evaluationProfile()))->evaluate(
+    $findings = (evaluationOf(evaluationProfile()))->evaluate(
         [evaluationDay('2026-03-15', firstIn: '2026-03-15 08:00', lastOut: '2026-03-15 12:00', previousLastOut: '2026-03-15 09:00', totalMinutes: 240)],
         DateRange::between('2026-03-15', '2026-03-15'),
     );
@@ -193,7 +211,7 @@ it('el cambio de hora de marzo no regala una hora de descanso ni desplaza la sem
      * calendario. El domingo del cambio sigue siendo el septimo dia de la semana
      * que empezo el lunes 23.
      */
-    $findings = (new ComplianceEvaluation(evaluationProfile()))->evaluate(
+    $findings = (evaluationOf(evaluationProfile()))->evaluate(
         [
             evaluationDay('2026-03-28', firstIn: '2026-03-28 15:00', lastOut: '2026-03-28 23:00', totalMinutes: 480),
             evaluationDay('2026-03-29', firstIn: '2026-03-29 10:00', lastOut: '2026-03-29 18:00', previousLastOut: '2026-03-28 23:00', totalMinutes: 480),
@@ -221,7 +239,7 @@ it('el cambio de hora de octubre no roba una hora de descanso', function (): voi
      * doce horas exactas. La resta sobre instantes UTC es lo que lo evita, y es la
      * misma que en marzo quita una hora.
      */
-    $findings = (new ComplianceEvaluation(evaluationProfile()))->evaluate(
+    $findings = (evaluationOf(evaluationProfile()))->evaluate(
         [
             evaluationDay('2026-10-24', firstIn: '2026-10-24 15:00', lastOut: '2026-10-24 23:00', totalMinutes: 480),
             evaluationDay('2026-10-25', firstIn: '2026-10-25 10:00', lastOut: '2026-10-25 18:00', previousLastOut: '2026-10-24 23:00', totalMinutes: 480),
@@ -244,7 +262,7 @@ it('un turno que atraviesa el salto de octubre dura lo que dura de verdad', func
      * de inicio (ADR-006, regla dura 4): partirlo a medianoche daría dos jornadas
      * de cuatro horas y media y ningún aviso.
      */
-    $findings = (new ComplianceEvaluation(evaluationProfile()))->evaluate(
+    $findings = (evaluationOf(evaluationProfile()))->evaluate(
         [evaluationDay(
             '2026-10-24',
             firstIn: '2026-10-24 22:00',
@@ -278,7 +296,7 @@ it('suma la semana del perfil sobre siete fechas civiles y la evalua completa au
         $days[] = evaluationDay($date, firstIn: $date.' 09:00', lastOut: $date.' 17:00', totalMinutes: 8 * 60 + 12);
     }
 
-    $findings = (new ComplianceEvaluation(evaluationProfile()))->evaluate(
+    $findings = (evaluationOf(evaluationProfile()))->evaluate(
         $days,
         DateRange::between('2026-03-12', '2026-03-12'),
     );
@@ -309,7 +327,7 @@ it('corta la semana por donde diga el perfil y no siempre por el lunes', functio
         $days[] = evaluationDay($date, firstIn: $date.' 09:00', lastOut: $date.' 17:00', totalMinutes: 8 * 60 + 12);
     }
 
-    $findings = (new ComplianceEvaluation(evaluationProfile(weekStartsOn: 7)))->evaluate(
+    $findings = (evaluationOf(evaluationProfile(weekStartsOn: 7)))->evaluate(
         $days,
         DateRange::between('2026-03-12', '2026-03-12'),
     );
@@ -330,7 +348,7 @@ it('no alerta mientras lo cerrado de la jornada no supere el umbral', function (
      */
     $open = evaluationDay('2026-03-14', firstIn: '2026-03-14 09:00', totalMinutes: 240, hasOpenShift: true);
 
-    $findings = (new ComplianceEvaluation(evaluationProfile()))
+    $findings = (evaluationOf(evaluationProfile()))
         ->evaluate([$open], DateRange::between('2026-03-14', '2026-03-14'));
 
     expect(ruleNamesOf($findings))->toBe([]);
@@ -342,7 +360,7 @@ it('alerta con lo ya cerrado y ademas marca la jornada abierta', function (): vo
     // crecer»— y no una segunda alerta.
     $long = evaluationDay('2026-03-14', firstIn: '2026-03-14 09:00', totalMinutes: 9 * 60 + 1, hasOpenShift: true);
 
-    $findings = (new ComplianceEvaluation(evaluationProfile()))
+    $findings = (evaluationOf(evaluationProfile()))
         ->evaluate([$long], DateRange::between('2026-03-14', '2026-03-14'));
 
     expect(ruleNamesOf($findings))->toBe(['daily_excess'])
@@ -352,18 +370,19 @@ it('alerta con lo ya cerrado y ademas marca la jornada abierta', function (): vo
         ->and($findings[0]->shiftEntryUuid)->toBeNull();
 })->group('RN-11', 'RF-PA-06');
 
-it('no emite RN-12 mientras la regla siga suspendida, y aun asi publica su umbral', function (): void {
+it('no emite RN-12 mientras el fichaje de pausa este desactivado, y aun asi publica su umbral', function (): void {
     /*
-     * `ComplianceRuleSuspension` es el unico sitio donde vive esa decision, y la
-     * tarea 3.5 la vacia alli. Mientras tanto un tramo continuado de 8 h no
-     * produce hallazgo — pero la regla **no se calla**: `meta.rules[]` lleva su
+     * `ComplianceRuleSuspension` es el unico sitio donde vive esa decision, y
+     * desde la tarea 3.5 la construye el ajuste del hotel. Con el fichaje de
+     * pausa desactivado —el estado de serie— un tramo continuado de 8 h no
+     * produce hallazgo, pero la regla **no se calla**: `meta.rules[]` lleva su
      * umbral, `evaluated: false` y el motivo, para que la pantalla pueda decir
-     * «no se evalua hasta que exista la pausa declarada».
+     * que hacer para que se evalue.
      *
      * Callarla seria peor que no tenerla: quien no ve alertas de pausas creeria
      * que nadie encadena ocho horas.
      */
-    $evaluation = new ComplianceEvaluation(evaluationProfile());
+    $evaluation = evaluationOf(evaluationProfile(), breakClockingEnabled: false);
 
     $day = evaluationDay(
         '2026-03-14',
@@ -382,15 +401,54 @@ it('no emite RN-12 mientras la regla siga suspendida, y aun asi publica su umbra
     ))[0];
 
     expect($suspended->evaluated)->toBeFalse()
-        ->and($suspended->suspensionReason)->toBe(ComplianceSuspensionReason::AwaitingDeclaredBreak)
+        ->and($suspended->suspensionReason)->toBe(ComplianceSuspensionReason::BreakClockingDisabled)
         ->and($suspended->thresholdMinutes)->toBe(6 * 60)
         ->and($suspended->requirement())->toBe('RN-12');
-})->group('RN-12', 'RF-PA-06');
+})->group('RN-12', 'RF-PA-06', 'RF-AT-12');
+
+it('emite RN-12 en cuanto el hotel ficha la pausa, sin tocar una linea del evaluador', function (): void {
+    /*
+     * **La rama que hasta la tarea 3.5 no se podia ejercitar** (trampa apuntada
+     * en `HANDOFF.md`: con la suspension en una constante privada, la emision de
+     * RN-12 quedaba sin cubrir en todos los niveles).
+     *
+     * Los mismos hechos, el mismo perfil y el mismo evaluador: lo unico que
+     * cambia es `ATTENDANCE_BREAK_CLOCKING`. La vista recalcula siempre con lo
+     * vigente, asi que activarlo hace aparecer el aviso sobre jornadas ya
+     * cerradas — y eso es lo que el asiento de `installation_setting.changed`
+     * advierte por su impacto.
+     */
+    $evaluation = evaluationOf(evaluationProfile(), breakClockingEnabled: true);
+
+    $day = evaluationDay(
+        '2026-03-14',
+        firstIn: '2026-03-14 09:00',
+        lastOut: '2026-03-14 17:00',
+        totalMinutes: 480,
+        longestFrom: '2026-03-14 09:00',
+        longestTo: '2026-03-14 17:00',
+    );
+
+    $findings = $evaluation->evaluate([$day], DateRange::between('2026-03-14', '2026-03-14'));
+
+    expect(ruleNamesOf($findings))->toBe(['missing_break'])
+        // El tramo continuo son 8 h contra un umbral de 6 h: dos horas de exceso.
+        ->and($findings[0]->differenceMinutes)->toBe(120);
+
+    $missingBreak = array_values(array_filter(
+        $evaluation->appliedRules(),
+        static fn (ComplianceRuleStatus $r): bool => $r->rule === ComplianceRuleName::MissingBreak,
+    ))[0];
+
+    expect($missingBreak->evaluated)->toBeTrue()
+        ->and($missingBreak->suspensionReason)->toBeNull()
+        ->and($missingBreak->thresholdMinutes)->toBe(6 * 60);
+})->group('RN-12', 'RF-PA-06', 'RF-AT-12');
 
 it('publica las cuatro reglas en el orden del documento, con su umbral del perfil', function (): void {
     // El contrato promete las cuatro siempre, se filtre o no: el criterio es parte
     // de la vista. Y en el orden RN-10, RN-11, RN-12, RN-17.
-    $rules = (new ComplianceEvaluation(evaluationProfile(restHours: 10, dailyHours: 8, breakAfterHours: 5, weeklyHours: 38)))
+    $rules = (evaluationOf(evaluationProfile(restHours: 10, dailyHours: 8, breakAfterHours: 5, weeklyHours: 38)))
         ->appliedRules();
 
     expect(array_map(static fn (ComplianceRuleStatus $r): string => $r->requirement(), $rules))
@@ -416,7 +474,7 @@ it('ordena por persona, luego por jornada o semana y por ultimo por regla', func
         evaluationDay('2026-03-09', firstIn: '2026-03-09 09:00', lastOut: '2026-03-09 23:00', totalMinutes: 9 * 60 + 30, employee: $amrani),
     ];
 
-    $findings = (new ComplianceEvaluation(evaluationProfile()))->evaluate(
+    $findings = (evaluationOf(evaluationProfile()))->evaluate(
         $days,
         DateRange::between('2026-03-09', '2026-03-10'),
     );
@@ -436,7 +494,7 @@ it('ordena por persona, luego por jornada o semana y por ultimo por regla', func
 it('ordena las reglas de una misma jornada en el orden del documento', function (): void {
     // Una jornada que incumple dos reglas a la vez: entra nueve horas despues de
     // salir (RN-10) y hace 9 h 30 (RN-11). Las dos salen, y en ese orden.
-    $findings = (new ComplianceEvaluation(evaluationProfile()))->evaluate(
+    $findings = (evaluationOf(evaluationProfile()))->evaluate(
         [
             evaluationDay('2026-03-09', firstIn: '2026-03-09 09:00', lastOut: '2026-03-09 17:00', totalMinutes: 480),
             evaluationDay('2026-03-10', firstIn: '2026-03-10 02:00', lastOut: '2026-03-10 11:30', previousLastOut: '2026-03-09 17:00', totalMinutes: 570),
@@ -459,7 +517,7 @@ it('pone la semana despues de las jornadas de su primer dia', function (): void 
         $days[] = evaluationDay($date, firstIn: $date.' 09:00', lastOut: $date.' 18:00', totalMinutes: 9 * 60 + 1);
     }
 
-    $findings = (new ComplianceEvaluation(evaluationProfile()))->evaluate(
+    $findings = (evaluationOf(evaluationProfile()))->evaluate(
         $days,
         DateRange::between('2026-03-09', '2026-03-13'),
     );
@@ -494,7 +552,7 @@ it('evalua todas las semanas que toca el rango, no solo la primera', function ()
         $days[] = evaluationDay($date, firstIn: $date.' 09:00', lastOut: $date.' 17:12', totalMinutes: 8 * 60 + 12);
     }
 
-    $findings = (new ComplianceEvaluation(evaluationProfile()))->evaluate(
+    $findings = (evaluationOf(evaluationProfile()))->evaluate(
         $days,
         DateRange::between('2026-03-09', '2026-03-20'),
     );
@@ -506,7 +564,7 @@ it('evalua todas las semanas que toca el rango, no solo la primera', function ()
 it('no señala una semana en la que esa persona no ficho ningun dia', function (): void {
     // Cero minutos no incumplen nada, y una semana sin jornadas no puede producir
     // un hallazgo colgado de nadie.
-    $findings = (new ComplianceEvaluation(evaluationProfile()))->evaluate(
+    $findings = (evaluationOf(evaluationProfile()))->evaluate(
         [evaluationDay('2026-03-09', firstIn: '2026-03-09 09:00', lastOut: '2026-03-09 17:00', totalMinutes: 480)],
         // El rango toca dos semanas y la segunda esta vacia.
         DateRange::between('2026-03-09', '2026-03-20'),
@@ -526,7 +584,7 @@ it('marca la semana cuando alguna de sus jornadas sigue abierta', function (): v
     ];
 
     $findings = array_values(array_filter(
-        (new ComplianceEvaluation(evaluationProfile()))->evaluate($days, DateRange::between('2026-03-09', '2026-03-12')),
+        (evaluationOf(evaluationProfile()))->evaluate($days, DateRange::between('2026-03-09', '2026-03-12')),
         static fn (ComplianceFinding $f): bool => $f->rule === ComplianceRuleName::WeeklyExcess,
     ));
 
@@ -545,7 +603,7 @@ it('no marca la semana cuyas jornadas estan todas cerradas', function (): void {
         $days[] = evaluationDay($date, firstIn: $date.' 09:00', lastOut: $date.' 17:12', totalMinutes: 8 * 60 + 12);
     }
 
-    $findings = (new ComplianceEvaluation(evaluationProfile()))
+    $findings = (evaluationOf(evaluationProfile()))
         ->evaluate($days, DateRange::between('2026-03-09', '2026-03-13'));
 
     expect(ruleNamesOf($findings))->toBe(['weekly_excess'])
@@ -557,7 +615,7 @@ it('no señala las jornadas de fuera del rango que solo estan ahi para dar conte
     // La jornada anterior a `from` se carga para que RN-10 se pueda evaluar en la
     // primera del rango. Señalarla seria enseñar alertas de un periodo que nadie
     // pidio.
-    $findings = (new ComplianceEvaluation(evaluationProfile()))->evaluate(
+    $findings = (evaluationOf(evaluationProfile()))->evaluate(
         [
             evaluationDay('2026-03-13', firstIn: '2026-03-13 09:00', lastOut: '2026-03-13 23:00', totalMinutes: 14 * 60),
             evaluationDay('2026-03-14', firstIn: '2026-03-14 09:00', lastOut: '2026-03-14 17:00', previousLastOut: '2026-03-13 23:00', totalMinutes: 480),

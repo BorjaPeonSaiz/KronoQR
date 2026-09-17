@@ -61,7 +61,7 @@ test(
 
     await expect(breakCard.getByTestId('rule-suspended')).toHaveText('No se evalúa')
     await expect(breakCard.getByTestId('rule-suspended-reason')).toContainText(
-      'hasta que exista la pausa declarada',
+      'mientras el fichaje de pausa esté desactivado',
     )
     // Sin hallazgos propios: el recuento de la tarjeta es cero y no hay tabla
     // para esta regla.
@@ -119,7 +119,7 @@ test(
               requirement: 'RN-12',
               threshold_minutes: 360,
               evaluated: false,
-              suspension_reason: 'awaiting_declared_break',
+              suspension_reason: 'break_clocking_disabled',
             },
             {
               rule: 'weekly_excess',

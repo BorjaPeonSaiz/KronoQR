@@ -56,8 +56,9 @@ export function findingDurations(finding: ComplianceFinding): FindingDurations {
 
 /**
  * La clave i18n del motivo por el que una regla no se evalua, o `null` cuando
- * si se evalua. Hoy solo existe `awaiting_declared_break` (RN-12, ADR-024),
- * pero el catalogo del contrato es el que decide, no esta lista.
+ * si se evalua. Hoy solo existe `break_clocking_disabled` (RN-12, ADR-024,
+ * tarea 3.5: RN-12 se evalua unicamente cuando el fichaje de pausa esta
+ * activado), pero el catalogo del contrato es el que decide, no esta lista.
  */
 export function suspensionReasonKey(rule: ComplianceRuleStatus): string | null {
   return rule.suspension_reason === null

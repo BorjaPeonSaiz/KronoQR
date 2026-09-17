@@ -241,6 +241,11 @@ function textosDelQuiosco(string $locale): array
         'scan.debounced.title' => ['scan', 'debounced', 'title'],
         'scan.rejected.title' => ['scan', 'rejected', 'title'],
         'pin.entryButton' => ['pin', 'entryButton'],
+        // Las dos de la pausa (RF-AT-12, tarea 3.5). Llevan el marcador `{time}`
+        // porque la tablet escribe la hora dentro —«Pausa 15:02»— y la hoja cita
+        // solo la palabra; de quitar el marcador se encarga {@see sinMarcadores()}.
+        'scan.action.break_start' => ['scan', 'action', 'break_start'],
+        'scan.action.break_end' => ['scan', 'action', 'break_end'],
     ] as $clave => $ruta) {
         $actual = $decoded;
 
@@ -271,6 +276,21 @@ function textosDelQuiosco(string $locale): array
  * tipografia de uno de los dos idiomas. Se admiten los tres pares que un texto
  * de producto puede llevar.
  */
+/**
+ * El texto del quiosco sin sus marcadores de interpolacion ni los espacios que
+ * dejan.
+ *
+ * `scan.action.break_start` es «Pausa {time}»: la tablet escribe la hora dentro
+ * y la hoja impresa cita solo la palabra, porque la hora la pone cada fichaje.
+ * Lo que tiene que coincidir es **la palabra que el empleado ve en la pantalla**
+ * —si el quiosco pasara a decir «Descanso», la hoja tendria que decir lo
+ * mismo—, no el formato de la hora.
+ */
+function sinMarcadores(string $texto): string
+{
+    return trim((string) preg_replace('/\{[a-zA-Z_]+\}/', '', $texto));
+}
+
 function citaEntreComillas(string $frase, string $cita): bool
 {
     foreach ([['«', '»'], ['"', '"'], ['“', '”']] as [$abre, $cierra]) {
@@ -293,17 +313,25 @@ it('cita literalmente los textos que muestra el quiosco', function (string $loca
         'result_debounced' => 'scan.debounced.title',
         'result_rejected' => 'scan.rejected.title',
         'no_card_body' => 'pin.entryButton',
+        // RF-AT-12: las dos confirmaciones de la pausa. Son las que mas falta
+        // hacen citadas —quien ve «Pausa» y esperaba «Salida» necesita saber en
+        // el papel que su jornada sigue abierta— y las que mas facil es retocar
+        // en la PWA sin acordarse del PDF.
+        'result_break_start' => 'scan.action.break_start',
+        'result_break_end' => 'scan.action.break_end',
     ];
 
     foreach ($citas as $claveDeLaHoja => $claveDelQuiosco) {
         expect(\array_key_exists($claveDeLaHoja, $hoja))
             ->toBeTrue('Falta la frase «'.$claveDeLaHoja.'» en '.$locale.'.');
 
-        expect(citaEntreComillas($hoja[$claveDeLaHoja], $quiosco[$claveDelQuiosco]))
+        $cita = sinMarcadores($quiosco[$claveDelQuiosco]);
+
+        expect(citaEntreComillas($hoja[$claveDeLaHoja], $cita))
             ->toBeTrue(
                 'La frase «'.$claveDeLaHoja.'» de '.$locale.' no cita entre comillas el texto del quiosco '
-                .'('.$claveDelQuiosco.': «'.$quiosco[$claveDelQuiosco].'»). '
+                .'('.$claveDelQuiosco.': «'.$cita.'»). '
                 .'Si el quiosco cambio ese texto, la hoja impresa tiene que decir lo mismo.'
             );
     }
-})->with(['es', 'en'])->group('RL-05', 'RF-AT-06', 'RF-KI-04');
+})->with(['es', 'en'])->group('RL-05', 'RF-AT-06', 'RF-AT-12', 'RF-KI-04');

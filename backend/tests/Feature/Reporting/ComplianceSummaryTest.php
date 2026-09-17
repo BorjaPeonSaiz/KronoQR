@@ -134,7 +134,10 @@ it('publica el criterio con el que ha medido: perfil, umbrales y semana', functi
         // RN-12 no se calla: se publica su umbral con `evaluated: false` y el
         // motivo, para que la pantalla lo explique (ADR-024, tarea 3.5).
         ->and(array_column($reglas, 'evaluated'))->toBe([true, true, false, true])
-        ->and($reglas[2]['suspension_reason'])->toBe('awaiting_declared_break')
+        // El motivo es el de verdad desde la tarea 3.5: no «esperando a la 3.5»
+        // sino «el fichaje de pausa esta desactivado en esta instalacion», que
+        // es algo que el hotel puede cambiar (decision 8 de la ficha).
+        ->and($reglas[2]['suspension_reason'])->toBe('break_clocking_disabled')
         ->and($reglas[0]['suspension_reason'])->toBeNull();
 })->group('RF-PA-06', 'RF-PD-07');
 

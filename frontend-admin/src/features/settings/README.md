@@ -1,8 +1,8 @@
 # settings
 
 Configuracion de la instalacion, perfil de cumplimiento, **licencia** y marca
-(RF-PD-01, RF-PD-04, RF-PD-05, RF-PD-07, RF-PD-08, RF-KI-08). Tareas 5.1, 5.2,
-5.3, 5.8, 5.13 y 3.3.
+(RF-PD-01, RF-PD-04, RF-PD-05, RF-PD-07, RF-PD-08, RF-KI-08, RF-AT-12). Tareas
+5.1, 5.2, 5.3, 5.8, 5.13, 3.3 y 3.5.
 
 Hoy viven aqui cuatro pantallas:
 
@@ -14,9 +14,21 @@ Hoy viven aqui cuatro pantallas:
   pantalla se abre sin codigo-, y con forma fija en el propio panel
   (`^[0-9]{8,12}$`, igual que `BrandingView` fija `HEX_COLOR`): el servidor
   nunca lo audita en claro ni lo envia a la tablet, solo su huella SHA-256 por
-  el latido.
+  el latido. **Desde la tarea 3.5, tambien `ATTENDANCE_BREAK_CLOCKING`**
+  (RF-AT-12): «Fichaje de pausa», un desplegable de dos valores (`enabled`,
+  `disabled`) sobre `constraints.allowed` -igual que `LOCALE_DEFAULT`, no un
+  catalogo propio-. `disabled` de serie. Activarlo enseña el boton «Pausa» en
+  la tablet y reactiva RN-12 desde la siguiente revision nocturna;
+  desactivarlo la suspende de nuevo sin cerrar ninguna incidencia ya abierta.
+  Impacto `compliance_review`, auditado como el resto de claves de ese
+  impacto.
 - **`ComplianceProfileView.vue`** — los umbrales **legales** del centro
-  (tarea 5.2).
+  (tarea 5.2). **Desde la tarea 3.5**, pide tambien `GET /api/v1/settings` (en
+  paralelo, mismo `settings.api.ts` que `OperationalSettingsView`) para saber
+  si `ATTENDANCE_BREAK_CLOCKING` esta activado: el aviso de
+  `break_required_after_hours` deja de ser un texto fijo y dice, si esta
+  desactivado, por que RN-12 no abre incidencias con un enlace a «Ajustes
+  operativos», y si esta activado, que ya las abre.
 - **`LicenseView.vue`** — el estado de la licencia y la activacion de una clave
   (tarea 5.3), con su `license.store.ts` y su `license.api.ts`.
 - **`BrandingView.vue`** — el nombre, el color de acento y la ruta del

@@ -11,6 +11,7 @@ use App\Modules\Kiosk\Domain\ValueObject\ServiceCodeFingerprint;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\ErrorEventSink;
 use App\Modules\Shared\Application\Port\KioskServiceCodeProvider;
+use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
 
 /**
  * Registra el latido de un quiosco (`POST /api/v1/kiosk/heartbeat`, RF-PA-07) y
@@ -56,6 +57,17 @@ use App\Modules\Shared\Application\Port\KioskServiceCodeProvider;
  * se abre su pantalla de diagnostico. **Nunca puede tumbar un latido**: el
  * adaptador del puerto devuelve `null` si la configuracion no se puede leer, y
  * sin huella la pantalla se abre sin codigo (decision 7 de la ficha).
+ *
+ * ## Y desde la tarea 3.5, los dos ajustes de la pantalla de fichaje
+ *
+ * `break_clocking_enabled` (RF-AT-12) y `clock_skew_tolerance_seconds`
+ * (RF-AT-10) viajan por el mismo canal y por el mismo motivo: es el unico
+ * autenticado que la tablet repite cada minuto, y la tablet los guarda en local
+ * para que el boton «Pausa» y el aviso de desfase sigan funcionando sin red. El
+ * primero gobierna **la pantalla**, no al servidor: una intencion declarada se
+ * honra siempre (decision 1 de la ficha 3.5). El segundo sustituye a la
+ * constante de 15 minutos que el quiosco llevaba escrita, para que la tablet y
+ * el servidor no puedan discrepar sobre cuando un reloj esta desviado.
  */
 final readonly class RecordHeartbeat
 {
@@ -65,11 +77,19 @@ final readonly class RecordHeartbeat
         private Clock $clock,
         private ErrorEventSink $errors,
         private KioskServiceCodeProvider $serviceCodes,
+        private OperationalSettingsProvider $settings,
     ) {}
 
     public function handle(RecordHeartbeatCommand $command): HeartbeatOutcome
     {
         $seenAt = $this->clock->now();
+
+        // Los dos ajustes que la tablet necesita para funcionar sin red
+        // (RF-AT-12, RF-AT-10). Se leen aqui y no en el `Resource` porque la
+        // capa Http no consulta configuracion; el adaptador resuelve la cascada
+        // y **nunca falla por falta de fila**, asi que esto no puede tumbar un
+        // latido (regla dura 19).
+        $settings = $this->settings->forSite($command->siteId);
 
         $this->devices->recordHeartbeat($command->deviceId, $command->telemetry, $seenAt);
 
@@ -87,6 +107,11 @@ final readonly class RecordHeartbeat
             // recorrer una lista vacia es trabajo que no compra nada.
             $command->clientErrors === [] ? 0 : $this->errors->recordAll($command->clientErrors),
             ServiceCodeFingerprint::of($command->deviceUuid, $this->serviceCodes->serviceCode()),
+            $settings->breakClockingEnabled,
+            // Minutos en el ajuste porque asi lo enuncia el negocio —«15 min»— y
+            // segundos en el contrato porque es lo que la tablet compara con su
+            // propio reloj. La conversion vive en un solo sitio.
+            $settings->maximumClockSkewMinutes * 60,
         );
     }
 }

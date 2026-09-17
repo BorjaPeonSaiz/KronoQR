@@ -2,7 +2,15 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import ComplianceProfileView from '@/features/settings/ComplianceProfileView.vue'
 import es from '@/shared/i18n/locales/es.json'
 import { clearAnnouncement } from '@kronoqr/web-kit/announcer'
-import { jsonResponse, mountView, problemResponse, settle, stubFetch } from './support/harness'
+import type { FetchHandler } from './support/harness'
+import {
+  jsonResponse,
+  mountView,
+  problemResponse,
+  settle,
+  stubFetch,
+  stubRoutes,
+} from './support/harness'
 
 // La pantalla del perfil de cumplimiento (RF-PD-07, regla dura 14).
 //
@@ -32,13 +40,51 @@ const profile = {
   },
 }
 
+/**
+ * El catalogo minimo de `GET /api/v1/settings` que esta pantalla necesita
+ * (tarea 3.5): solo `ATTENDANCE_BREAK_CLOCKING`, con su conjunto cerrado de
+ * valores.
+ */
+function settingsCatalog(breakClocking: 'enabled' | 'disabled' = 'disabled'): unknown {
+  return {
+    data: [
+      {
+        key: 'ATTENDANCE_BREAK_CLOCKING',
+        value: breakClocking,
+        type: 'text',
+        impact: 'compliance_review',
+        affects_worked_hours: false,
+        source: breakClocking === 'disabled' ? 'product_default' : 'installation',
+        constraints: { allowed: ['enabled', 'disabled'] },
+      },
+    ],
+    meta: { unknown_keys: [], invalid_keys: [] },
+  }
+}
+
+/**
+ * Enruta `GET/PATCH /api/v1/compliance-profile` a `onProfile` y
+ * `GET /api/v1/settings` al catalogo fijo: desde la tarea 3.5 esta pantalla
+ * pide los dos recursos a la vez, y las pruebas que no dependen de
+ * `ATTENDANCE_BREAK_CLOCKING` lo dejan en `disabled`, el valor de serie.
+ */
+function stubProfileApi(
+  onProfile: FetchHandler,
+  breakClocking: 'enabled' | 'disabled' = 'disabled',
+): ReturnType<typeof stubFetch> {
+  return stubRoutes({
+    '/compliance-profile': onProfile,
+    '/settings': () => jsonResponse(settingsCatalog(breakClocking)),
+  })
+}
+
 beforeEach(() => {
   clearAnnouncement()
 })
 
 describe('perfil de cumplimiento', () => {
   it('carga el perfil y avisa de que los umbrales mueven la deteccion', async () => {
-    stubFetch(() => jsonResponse(profile))
+    stubProfileApi(() => jsonResponse(profile))
 
     const wrapper = await mountView(ComplianceProfileView)
     await settle()
@@ -57,7 +103,7 @@ describe('perfil de cumplimiento', () => {
   })
 
   it('dice que la jornada semanal y el inicio de semana mueven la vista de cumplimiento, no la bandeja', async () => {
-    stubFetch(() => jsonResponse(profile))
+    stubProfileApi(() => jsonResponse(profile))
 
     const wrapper = await mountView(ComplianceProfileView)
     await settle()
@@ -83,7 +129,7 @@ describe('perfil de cumplimiento', () => {
   })
 
   it('dice si el perfil es del centro o el de la instalacion', async () => {
-    stubFetch(() => jsonResponse(profile))
+    stubProfileApi(() => jsonResponse(profile))
 
     const wrapper = await mountView(ComplianceProfileView)
     await settle()
@@ -95,7 +141,7 @@ describe('perfil de cumplimiento', () => {
   })
 
   it('no deja guardar mientras no haya ningun cambio', async () => {
-    stubFetch(() => jsonResponse(profile))
+    stubProfileApi(() => jsonResponse(profile))
 
     const wrapper = await mountView(ComplianceProfileView)
     await settle()
@@ -104,7 +150,7 @@ describe('perfil de cumplimiento', () => {
   })
 
   it('manda solo los campos que han cambiado', async () => {
-    const fetchSpy = stubFetch((_url, init) =>
+    const fetchSpy = stubProfileApi((_url, init) =>
       init?.method === 'PATCH'
         ? jsonResponse({ data: { ...profile.data, min_rest_hours: 10 } })
         : jsonResponse(profile),
@@ -126,7 +172,7 @@ describe('perfil de cumplimiento', () => {
   })
 
   it('avisa aparte cuando lo que se va a cambiar es el plazo de conservacion', async () => {
-    stubFetch(() => jsonResponse(profile))
+    stubProfileApi(() => jsonResponse(profile))
 
     const wrapper = await mountView(ComplianceProfileView)
     await settle()
@@ -143,7 +189,7 @@ describe('perfil de cumplimiento', () => {
   })
 
   it('avisa cuando el cambio pendiente mueve la deteccion de incidencias', async () => {
-    stubFetch(() => jsonResponse(profile))
+    stubProfileApi(() => jsonResponse(profile))
 
     const wrapper = await mountView(ComplianceProfileView)
     await settle()
@@ -163,7 +209,7 @@ describe('perfil de cumplimiento', () => {
   })
 
   it('manda el calendario de festivos como lista de fechas', async () => {
-    const fetchSpy = stubFetch((_url, init) =>
+    const fetchSpy = stubProfileApi((_url, init) =>
       init?.method === 'PATCH'
         ? jsonResponse({
             data: { ...profile.data, holiday_calendar: ['2026-01-01', '2026-12-25'] },
@@ -188,7 +234,7 @@ describe('perfil de cumplimiento', () => {
   })
 
   it('enseña el error del servidor con el nombre del campo, no con el de la columna', async () => {
-    stubFetch((_url, init) =>
+    stubProfileApi((_url, init) =>
       init?.method === 'PATCH'
         ? problemResponse(422, 'urn:kronoqr:problem:validation-failed', {
             errors: { max_daily_hours: ['El campo admite de 1 a 24 y ha recibido 90.'] },
@@ -209,7 +255,7 @@ describe('perfil de cumplimiento', () => {
   })
 
   it('enseña el error de carga sin dejar el formulario a medias', async () => {
-    stubFetch(() => problemResponse(404, 'urn:kronoqr:problem:not-found'))
+    stubProfileApi(() => problemResponse(404, 'urn:kronoqr:problem:not-found'))
 
     const wrapper = await mountView(ComplianceProfileView)
     await settle()
@@ -219,25 +265,33 @@ describe('perfil de cumplimiento', () => {
   })
 })
 
-describe('perfil de cumplimiento: la regla suspendida', () => {
+describe('perfil de cumplimiento: la regla suspendida (fichaje de pausa desactivado)', () => {
   it('no promete que cambiar el umbral de pausa mueva la bandeja', async () => {
-    stubFetch(() => jsonResponse(profile))
+    stubProfileApi(() => jsonResponse(profile))
 
     const wrapper = await mountView(ComplianceProfileView)
     await settle()
 
     await wrapper.find('[data-test="break-required-after-hours"]').setValue('5')
 
-    // RN-12 se evalua pero no abre incidencias hasta que el quiosco registre la
-    // pausa declarada. Con el aviso generico, la pantalla afirmaria que «se
-    // marcaran jornadas distintas» y no se marcaria ninguna.
+    // RN-12 se evalua pero no abre incidencias mientras el fichaje de pausa
+    // este desactivado (tarea 3.5). Con el aviso generico, la pantalla
+    // afirmaria que «se marcaran jornadas distintas» y no se marcaria ninguna.
     expect(wrapper.find('[data-test="pending-detection-warning"]').exists()).toBe(false)
-    // Y el campo lleva su propia explicacion, siempre visible.
-    expect(wrapper.find('[data-test="break-suspended"]').text()).toBe(es.compliance.breakSuspended)
+    // Y el campo lleva su propia explicacion, siempre visible, con el enlace
+    // a donde se activa.
+    expect(wrapper.find('[data-test="break-suspended"]').text()).toContain(
+      es.compliance.breakSuspendedDisabled,
+    )
+    expect(wrapper.find('[data-test="break-suspended"]').text()).toContain(
+      es.compliance.breakSuspendedDisabledLink,
+    )
+    // El enlace lleva a donde se activa (`OperationalSettingsView`, RF-AT-12).
+    expect(wrapper.find('[data-test="break-suspended"] a').attributes('href')).toContain('settings')
   })
 
   it('sigue avisando por los dos umbrales que hoy si mueven la bandeja', async () => {
-    stubFetch(() => jsonResponse(profile))
+    stubProfileApi(() => jsonResponse(profile))
 
     const wrapper = await mountView(ComplianceProfileView)
     await settle()
@@ -250,7 +304,7 @@ describe('perfil de cumplimiento: la regla suspendida', () => {
   it('avisa de que la revision mira siete dias hacia atras', async () => {
     // Endurecer un umbral puede abrir incidencias de jornadas ya pasadas que
     // caigan dentro de la ventana: quien lo cambia tiene que saberlo antes.
-    stubFetch(() => jsonResponse(profile))
+    stubProfileApi(() => jsonResponse(profile))
 
     const wrapper = await mountView(ComplianceProfileView)
     await settle()
@@ -259,9 +313,58 @@ describe('perfil de cumplimiento: la regla suspendida', () => {
   })
 })
 
+describe('perfil de cumplimiento: RN-12 activada (fichaje de pausa activado, tarea 3.5)', () => {
+  it('dice que RN-12 se evalua y abre incidencias, sin el enlace de activacion', async () => {
+    stubProfileApi(() => jsonResponse(profile), 'enabled')
+
+    const wrapper = await mountView(ComplianceProfileView)
+    await settle()
+
+    expect(wrapper.find('[data-test="break-suspended"]').text()).toBe(
+      es.compliance.breakSuspendedEnabled,
+    )
+  })
+
+  it('cambiar el umbral de pausa SI avisa de que mueve la deteccion', async () => {
+    stubProfileApi(() => jsonResponse(profile), 'enabled')
+
+    const wrapper = await mountView(ComplianceProfileView)
+    await settle()
+
+    expect(wrapper.find('[data-test="pending-detection-warning"]').exists()).toBe(false)
+
+    await wrapper.find('[data-test="break-required-after-hours"]').setValue('5')
+
+    expect(wrapper.find('[data-test="pending-detection-warning"]').exists()).toBe(true)
+  })
+})
+
+describe('perfil de cumplimiento: el ajuste de pausa es informativo, nunca bloqueante', () => {
+  it('si GET /settings falla, el perfil se carga y se puede editar igual', async () => {
+    stubRoutes({
+      '/compliance-profile': () => jsonResponse(profile),
+      '/settings': () => problemResponse(500, 'urn:kronoqr:problem:unexpected'),
+    })
+
+    const wrapper = await mountView(ComplianceProfileView)
+    await settle()
+
+    // El perfil se cargo con normalidad: una lectura meramente informativa no
+    // puede dejar sin editar el formulario que de verdad importa.
+    expect(wrapper.find('[data-test="min-rest-hours"]').element).toHaveProperty('value', '12')
+    expect(wrapper.find('[data-test="save"]').exists()).toBe(true)
+
+    // Y cae al aviso mas conservador: «desactivado», que es el que no
+    // promete de mas.
+    expect(wrapper.find('[data-test="break-suspended"]').text()).toContain(
+      es.compliance.breakSuspendedDisabled,
+    )
+  })
+})
+
 describe('perfil de cumplimiento: entrada que no es un numero', () => {
   it('marca el campo vaciado en vez de ignorarlo en silencio', async () => {
-    stubFetch(() => jsonResponse(profile))
+    stubProfileApi(() => jsonResponse(profile))
 
     const wrapper = await mountView(ComplianceProfileView)
     await settle()
@@ -275,7 +378,7 @@ describe('perfil de cumplimiento: entrada que no es un numero', () => {
   })
 
   it('marca un decimal, que es lo unico que un campo numerico deja teclear mal', async () => {
-    stubFetch(() => jsonResponse(profile))
+    stubProfileApi(() => jsonResponse(profile))
 
     const wrapper = await mountView(ComplianceProfileView)
     await settle()
@@ -289,7 +392,7 @@ describe('perfil de cumplimiento: entrada que no es un numero', () => {
   })
 
   it('deja de marcar el campo en cuanto se corrige', async () => {
-    stubFetch(() => jsonResponse(profile))
+    stubProfileApi(() => jsonResponse(profile))
 
     const wrapper = await mountView(ComplianceProfileView)
     await settle()

@@ -776,7 +776,7 @@ con motivo, alcance y duración, y lo puedes revocar en cualquier momento.
 | --- | --- | --- |
 | `diagnostics` (por defecto) | Generar el paquete **anonimizado** y consultar errores | Ver a nadie |
 | `read_only` | Además, **leer** jornadas, plantilla y auditoría | Cambiar nada |
-| `configuration` | Además, **cambiar** los ajustes operativos y emparejar o desvincular quioscos | Ver jornadas ni plantilla, ni tocar el perfil de cumplimiento (umbrales legales y años de conservación son tuyos), **ni ver ni cambiar el código de servicio del quiosco**: lo recibe vacío y marcado como redactado, y si intenta cambiarlo obtiene un 403 (§16.5) |
+| `configuration` | Además, **cambiar** los ajustes operativos y emparejar o desvincular quioscos | Ver jornadas ni plantilla, ni tocar el perfil de cumplimiento (umbrales legales y años de conservación son tuyos), **ni activar o desactivar el fichaje de pausa** (`ATTENDANCE_BREAK_CLOCKING`: decide qué se considera incidencia, igual que el perfil; si lo intenta obtiene un 403), **ni ver ni cambiar el código de servicio del quiosco**: lo recibe vacío y marcado como redactado, y si intenta cambiarlo obtiene un 403 (§16.5) |
 
 Con ningún alcance puede activar licencias, conceder o revocar accesos,
 emitir o revocar tarjetas, corregir fichajes, generar informes de nómina o la

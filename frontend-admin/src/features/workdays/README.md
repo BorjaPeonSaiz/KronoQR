@@ -3,6 +3,23 @@
 Detalle de jornada de un empleado (RF-PA-03, tarea 1.16): tramos vigentes, total del día y el
 historial completo de correcciones con su «de → a» (RN-13, RL-04).
 
+**Las marcas de pausa (tarea 3.5, ADR-024, RF-AT-12) viven en `ShiftEntryTable.vue`, pero el
+predicado no.** La pausa son dos tramos, no un hueco dentro de uno: cuando el tramo anterior lo
+cerró un escaneo `break_start` (`closed_by`) y el siguiente lo abrió un `break_end` (`opened_by`),
+la tabla enseña una fila «Pausa de HH:MM a HH:MM (N min)» entre los dos, y el tramo que cierra la
+pausa lleva una insignia «Pausa» junto a su salida. **`breakBetween` vive en
+`@kronoqr/web-kit/breaks`** (ADR-036, segunda vuelta de la tarea 3.5): el portal necesita
+exactamente la misma regla —los mismos dos escaneos, la misma resta de instantes— y una primera
+versión de cada SPA ya había divergido (`null` sin fila frente a texto con `0 min`, `1 h 30 min`
+frente a `90 min`). La insignia y el texto de la fila comparten además el mismo componente,
+`@kronoqr/web-kit/components/BreakBadge.vue` (mismo icono SVG, misma pareja de tokens
+`bg-kq-primary-soft`/`text-kq-on-primary-soft` —texto e icono, nunca solo color, WCAG 1.4.1—;
+`kq-accent` es decorativo y no debe llevar un significado como «esto fue una pausa», doc 06 §6.5).
+Aquí solo queda el formato final (`durationParts`, «1 h 30 min», nunca minutos crudos) y el
+`data-test` (`break-badge`, `break-row`). Un tramo con `closed_by: null` sigue siendo «abierto» y
+uno corregido o dado de alta a mano sin escaneo detrás llega como `clock_in`/`clock_out`, sin
+marca de pausa.
+
 **Corregir vive aquí también, desde la tarea 5.11b (RF-PA-04).** `CorrectionDialog.vue` es un único
 diálogo con tres modos —añadir un tramo, corregir sus marcas, anularlo— que abren
 `EmployeeWorkDaysView.vue` (el botón de la cabecera, para el caso sin ninguna jornada previa) y

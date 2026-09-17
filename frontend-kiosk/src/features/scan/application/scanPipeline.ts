@@ -17,6 +17,7 @@
 import type { Clock } from '@/shared/time/clock'
 import { systemClock, toUtcIso } from '@/shared/time/clock'
 import { uuidV7 } from '@/shared/ids/uuidV7'
+import type { ScanIntent } from '@/shared/api/types'
 import { parseCredentialPayload } from '../domain/credentialPayload'
 import type { ScanConfirmation } from '../domain/scanOutcome'
 import type { QueuedScan, RosterLookupPort, ScanSubmissionPort } from './ports'
@@ -80,6 +81,32 @@ export interface ScanPipelineOptions {
   readonly newScanId?: () => string
   readonly repeatWindowMs?: number
   readonly heldGapMs?: number
+  /**
+   * La intencion para el PROXIMO fichaje que de verdad se encole (ADR-024,
+   * decision 5 de la tarea 3.5). Se llama UNA vez, justo al construir el
+   * `QueuedScan` -nunca en una lectura previa a saber si el payload es una
+   * tarjeta valida, o el boton se desarmaria por una lectura ilegible que no
+   * llego a fichar nada-. Por defecto `'auto'`, que es el comportamiento de
+   * siempre: sin boton «Pausa» (instalacion sin el ajuste activado) esto no
+   * se pasa y nada cambia.
+   */
+  readonly resolveIntent?: () => ScanIntent
+  /**
+   * Tolerancia de desfase de la instalacion, para que `settleFrom` sepa
+   * cuando avisar en la confirmacion (RF-AT-10, decision 6 de la tarea 3.5).
+   * `null` mientras esta tablet no haya latido: sin umbral, sin aviso.
+   */
+  readonly clockSkewToleranceSeconds?: () => number | null
+  /**
+   * Se llama en CADA lectura que NO llega a encolar un fichaje: un payload
+   * ilegible, o una repeticion (tarjeta sostenida, o la misma tarjeta dentro
+   * de `repeatWindowMs`) -revision de la segunda vuelta, seguridad-. La
+   * pantalla lo usa para desarmar el boton «Pausa»: mientras esta armado, la
+   * intencion es de la TABLET, no de quien la toco, y cualquier lectura que
+   * no sea el fichaje esperado cierra la ventana de confusion en vez de
+   * dejarla abierta hasta los 10 s completos.
+   */
+  readonly onUnqueuedRead?: () => void
   /** Llega cuando el servidor contesta. Puede no llegar nunca: es opcional por diseno. */
   readonly onSettled?: (confirmation: ScanConfirmation) => void
   readonly onError?: (
@@ -150,7 +177,12 @@ export function createScanPipeline(options: ScanPipelineOptions): ScanPipeline {
       return
     }
 
-    const confirmation = settleFrom(result, scan.scan_id, occurredAt)
+    const confirmation = settleFrom(
+      result,
+      scan.scan_id,
+      occurredAt,
+      options.clockSkewToleranceSeconds?.() ?? null,
+    )
     if (confirmation === null) {
       // Sigue en la cola. La pantalla ya dice «pendiente»: no se toca, porque
       // corregir una confirmacion que era correcta solo confunde. `fallbackName`
@@ -172,20 +204,37 @@ export function createScanPipeline(options: ScanPipelineOptions): ScanPipeline {
         // Rechazo generico y sin causa (regla dura 17). Se aplica la misma
         // logica anti-repeticion: un QR ajeno delante del objetivo no puede
         // hacer sonar el pitido de error cada pocos segundos mientras siga ahi.
-        if (isRepeat(rawText, nowMs)) return null
+        if (isRepeat(rawText, nowMs)) {
+          // Repeticion SILENCIOSA (ni confirmacion ni sonido): tambien
+          // desarma, por si el boton seguia armado desde antes de que
+          // empezara esta racha de lecturas ilegibles. Idempotente si ya
+          // estaba desarmado.
+          options.onUnqueuedRead?.()
+          return null
+        }
         markAccepted(rawText, nowMs)
+        options.onUnqueuedRead?.()
         return { kind: 'unreadable', scanId: newScanId(), occurredAt }
       }
 
-      if (isRepeat(payload.raw, nowMs)) return null
+      if (isRepeat(payload.raw, nowMs)) {
+        options.onUnqueuedRead?.()
+        return null
+      }
       markAccepted(payload.raw, nowMs)
+
+      // Se consume AQUI, con la tarjeta ya reconocida como una lectura de
+      // verdad que va a encolarse (ADR-024, decision 5). Todo lo que no
+      // llega hasta aqui (ilegible o repetido, arriba) desarma en vez de
+      // dejar el boton armado para una lectura que no era la esperada.
+      const intent = options.resolveIntent?.() ?? 'auto'
 
       const scan: QueuedScan = {
         kind: 'qr',
         scan_id: newScanId(),
         qr_payload: payload.raw,
         occurred_at: toUtcIso(occurredAt),
-        intent: 'auto',
+        intent,
         device_id: options.deviceId,
       }
 

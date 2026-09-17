@@ -97,6 +97,14 @@ exactamente igual que uno con tarjeta.
 
 ![Quiosco con el teclado de código y PIN](img/es/quiosco-pin-respaldo.png)
 
+**Lo que conviene repetir en voz alta al entregar la hoja, si vuestro hotel usa
+el fichaje de pausa** (la hoja lo lleva impreso en su apartado 1, y aun así es lo
+que más se olvida):
+**«si te vas a casa, ficha la salida, no la pausa»**. Una pausa que nadie cierra
+deja la jornada cerrada en ese momento y sin la hora real de salida, y hay que
+corregirla a mano después. La tablet no puede distinguir las dos cosas: solo sabe
+lo que se ha pulsado.
+
 ---
 
 ## 5. Texto de la hoja
@@ -118,9 +126,15 @@ Esta hoja va con tu tarjeta y tu PIN. Guárdala: explica lo que necesitas para f
 
 Acerca la tarjeta a la cámara de la tablet, con el código hacia la pantalla, y espera la confirmación. El mismo gesto sirve para la entrada y para la salida.
 
+Si tu hotel usa el fichaje de pausa, verás un botón «Pausa» en la tablet: cuando salgas a descansar, púlsalo y pasa la tarjeta. Para volver, solo pasa la tarjeta, sin pulsar nada. Si no ves ese botón, tu hotel no ficha las pausas y no tienes que hacer nada especial. Si te vas a casa, ficha la salida, no la pausa.
+
 ### 2. Qué significa lo que ves en pantalla
 
 «Entrada» o «Salida» con la hora: tu fichaje ha quedado registrado. No hace falta nada más.
+
+«Pausa» con la hora: has empezado tu descanso. Tu jornada sigue abierta y el tiempo de la pausa no cuenta como trabajado.
+
+«Vuelta» con la hora: has vuelto del descanso y sigues en la misma jornada, aunque sea ya de madrugada.
 
 «Pendiente de validar»: la tablet está sin red en ese momento, pero tu fichaje ya está guardado y se enviará solo. No lo repitas.
 

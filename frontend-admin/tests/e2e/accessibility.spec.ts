@@ -20,6 +20,7 @@ import {
   logInAsAdmin,
   stubManagementApi,
   USER,
+  WORKDAYS_WITH_BREAK,
 } from './support/admin'
 import { stubErrorEventsApi } from './support/errors'
 import { stubOnboardingApi } from './support/setupWizard'
@@ -83,6 +84,20 @@ test('el registro horario tampoco', { tag: ['@RF-PA-03'] }, async ({ page }) => 
 
   await expectNoBlockingViolations(page)
 })
+
+test(
+  'el registro horario con una pausa fichada tampoco (RF-AT-12, tarea 3.5)',
+  { tag: ['@RF-PA-03', '@RF-AT-12'] },
+  async ({ page }) => {
+    await stubManagementApi(page, { workdays: WORKDAYS_WITH_BREAK })
+    await logIn(page)
+    await page.goto(`/employees/${EMPLOYEE_UUID}/workdays`)
+    await expect(page.getByTestId('break-row')).toBeVisible()
+    await expect(page.getByTestId('break-badge')).toBeVisible()
+
+    await expectNoBlockingViolations(page)
+  },
+)
 
 test(
   'el dialogo de corregir un tramo tampoco, con el foco dentro',

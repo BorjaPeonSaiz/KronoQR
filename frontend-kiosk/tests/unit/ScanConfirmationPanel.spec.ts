@@ -143,6 +143,116 @@ describe('pantalla de confirmacion', () => {
     )
   })
 
+  it('break_start: pausa con tono y color de SALIDA, y la jornada sigue abierta', () => {
+    const wrapper = render({
+      kind: 'accepted',
+      scanId: 's-break-start',
+      occurredAt: noonish,
+      action: 'break_start',
+      displayName: 'Lucia G.',
+      workedMinutes: 240,
+      workDate: '2026-08-14',
+    })
+
+    expect(wrapper.get('[data-testid="confirmation-detail"]').text()).toBe('Pausa 11:02')
+    expect(wrapper.get('[data-testid="scan-confirmation"]').attributes('data-variant')).toBe('exit')
+    expect(wrapper.get('[data-testid="confirmation-break-open-hint"]').text()).toBe(
+      'Tu jornada sigue abierta: pasa la tarjeta al volver.',
+    )
+    // Pictograma de PAUSA (revision de la segunda vuelta, UI/UX), no la
+    // flecha de salida normal: a dos metros no se confunde con un
+    // `clock_out`, aunque comparta color.
+    expect(wrapper.get('span[aria-hidden="true"]').text()).toBe('⏸')
+  })
+
+  it('break_end: vuelta con tono y color de ENTRADA, sin la linea de jornada abierta', () => {
+    const wrapper = render({
+      kind: 'accepted',
+      scanId: 's-break-end',
+      occurredAt: noonish,
+      action: 'break_end',
+      displayName: 'Lucia G.',
+      workedMinutes: 240,
+      workDate: '2026-08-14',
+    })
+
+    expect(wrapper.get('[data-testid="confirmation-detail"]').text()).toBe('Vuelta 11:02')
+    expect(wrapper.get('[data-testid="scan-confirmation"]').attributes('data-variant')).toBe(
+      'entry',
+    )
+    expect(wrapper.find('[data-testid="confirmation-break-open-hint"]').exists()).toBe(false)
+    expect(wrapper.get('span[aria-hidden="true"]').text()).toBe('⏸')
+  })
+
+  it('clock_in/clock_out normales conservan su flecha, no el pictograma de pausa', () => {
+    const clockIn = render({
+      kind: 'accepted',
+      scanId: 's-arrow-in',
+      occurredAt: morning,
+      action: 'clock_in',
+      displayName: 'Lucia G.',
+      workedMinutes: 0,
+      workDate: '2026-08-14',
+    })
+    const clockOut = render({
+      kind: 'accepted',
+      scanId: 's-arrow-out',
+      occurredAt: noonish,
+      action: 'clock_out',
+      displayName: 'Lucia G.',
+      workedMinutes: 360,
+      workDate: '2026-08-14',
+    })
+
+    expect(clockIn.get('span[aria-hidden="true"]').text()).toBe('→')
+    expect(clockOut.get('span[aria-hidden="true"]').text()).toBe('←')
+  })
+
+  it('clock_in/clock_out normales nunca llevan la linea de jornada abierta de la pausa', () => {
+    const wrapper = render({
+      kind: 'accepted',
+      scanId: 's-clockin',
+      occurredAt: morning,
+      action: 'clock_in',
+      displayName: 'Lucia G.',
+      workedMinutes: 0,
+      workDate: '2026-08-14',
+    })
+
+    expect(wrapper.find('[data-testid="confirmation-break-open-hint"]').exists()).toBe(false)
+  })
+
+  it('avisa del desfase de reloj en la confirmacion cuando settleFrom lo mide (RF-AT-10)', () => {
+    const wrapper = render({
+      kind: 'accepted',
+      scanId: 's-skew',
+      occurredAt: morning,
+      action: 'clock_in',
+      displayName: 'Lucia G.',
+      workedMinutes: 0,
+      workDate: '2026-08-14',
+      clockSkewSeconds: -2400,
+    })
+
+    expect(wrapper.get('[data-testid="confirmation-clock-skew-notice"]').text()).toBe(
+      'La hora de esta tablet va 40 min atrasada. Los fichajes se registran igual; el responsable lo revisará.',
+    )
+  })
+
+  it('sin clockSkewSeconds, no ensena ningun aviso de desfase', () => {
+    const wrapper = render({
+      kind: 'accepted',
+      scanId: 's-no-skew',
+      occurredAt: morning,
+      action: 'clock_in',
+      displayName: 'Lucia G.',
+      workedMinutes: 0,
+      workDate: '2026-08-14',
+    })
+
+    expect(wrapper.find('[data-testid="confirmation-clock-skew-notice"]').exists()).toBe(false)
+  })
+
   it('no comunica solo por color: cada desenlace lleva variante y simbolo propios', () => {
     const entry = render({
       kind: 'accepted',
