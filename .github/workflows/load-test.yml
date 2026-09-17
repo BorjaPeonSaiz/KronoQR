@@ -143,8 +143,22 @@ jobs:
           grep -q 'instalado y verificado' salida-instalacion.log
           curl -fsS -k https://127.0.0.1/api/v1/ready >/dev/null
 
-      - name: "KIOSK_VLAN_CIDR a la subred real de la red docker"
-        # POR QUE ESTE PASO EXISTE. Los contenedores de k6 se unen a la misma
+      - name: "La pila del runner es de pruebas: APP_ENV=staging y KIOSK_VLAN_CIDR real"
+        # DOS AJUSTES AL .env DEL PAQUETE, y los dos despues de instalar.
+        #
+        # (1) APP_ENV=staging. `install.sh` exige APP_ENV=production para
+        # instalar (fase 1, `f_app_env`): asi es como se instala en un
+        # cliente, y asi se mide aqui. Pero el aprovisionamiento de la carga
+        # SE NIEGA a correr con `isProduction()` -crea empleados, tarjetas y
+        # quioscos de prueba, y esa guarda no se debilita ni con la
+        # confirmacion explicita (3.6, bloqueante de la revision de
+        # seguridad)-, y la primera ejecucion real de este workflow cayo
+        # justo ahi. La pila del runner es de pruebas de verdad, asi que se
+        # declara como tal DESPUES de instalar: ningun camino del producto
+        # consulta `isProduction()` (comprobado: solo lo hace el
+        # aprovisionamiento de k6), de modo que la medida es la misma.
+        #
+        # (2) KIOSK_VLAN_CIDR. Los contenedores de k6 se unen a la misma
         # red docker que nginx (`kronoqr-app`, nombre fijo tanto en
         # compose.dev.yaml como en compose.prod.yaml), y esa es exactamente la
         # situacion del doc 02 §7.1: todos los quioscos de un hotel salen por
@@ -162,10 +176,14 @@ jobs:
           subred="$(docker network inspect kronoqr-app --format '{{ (index .IPAM.Config 0).Subnet }}')"
           echo "Subred real de kronoqr-app: ${subred}"
           sudo sed -i "s|^KIOSK_VLAN_CIDR=.*|KIOSK_VLAN_CIDR=${subred}|" .env
+          sudo sed -i 's|^APP_ENV=.*|APP_ENV=staging|' .env
+          grep -q '^APP_ENV=staging$' .env
           # `restart` no basta: relanza el proceso existente sin releer
-          # env_file. `up -d --wait` recrea nginx con el .env de disco y
-          # espera a que su healthcheck pase antes de seguir.
-          sudo docker compose --env-file .env -f docker-compose.yml up -d --wait nginx
+          # env_file. `up -d --wait` recrea los servicios con el .env de disco
+          # y espera a que su healthcheck pase antes de seguir. Los cuatro
+          # roles PHP se recrean para que ninguno se quede con el APP_ENV
+          # anterior; nginx, por el CIDR.
+          sudo docker compose --env-file .env -f docker-compose.yml up -d --wait app horizon scheduler reverb nginx
           curl -fsS -k https://127.0.0.1/api/v1/ready >/dev/null
 
       - name: "paquete/.env legible por el runner, sin sudo (lo necesita run.sh)"
