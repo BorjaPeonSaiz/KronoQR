@@ -49,6 +49,7 @@ const openEntry = (overrides: Partial<WorkDayShiftEntry> = {}): WorkDayShiftEntr
     clocked_out_at_local: null,
     clocked_out_recorded_at: null,
     clock_out_source: null,
+    closed_by: null,
     duration_minutes: null,
     ...overrides,
   })
@@ -169,6 +170,83 @@ describe('ShiftEntryTable', () => {
     expect(wrapper.findAll('thead th').every((th) => th.attributes('scope') === 'col')).toBe(true)
     expect(wrapper.findAll('tbody th').every((th) => th.attributes('scope') === 'row')).toBe(true)
     expect(wrapper.findAll('tfoot th').every((th) => th.attributes('scope') === 'row')).toBe(true)
+  })
+})
+
+describe('ShiftEntryTable, marcas de pausa (tarea 3.5, ADR-024, RF-AT-12)', () => {
+  const breakStart = shiftEntry({
+    uuid: 'a',
+    clocked_in_at: '2026-03-14T05:00:00.000000Z',
+    clocked_in_at_local: '2026-03-14T06:00:00.000000+01:00',
+    clocked_out_at: '2026-03-14T09:00:00.000000Z',
+    clocked_out_at_local: '2026-03-14T10:00:00.000000+01:00',
+    duration_minutes: 240,
+    opened_by: 'clock_in',
+    closed_by: 'break_start',
+  })
+  const breakEnd = shiftEntry({
+    uuid: 'b',
+    clocked_in_at: '2026-03-14T09:30:00.000000Z',
+    clocked_in_at_local: '2026-03-14T10:30:00.000000+01:00',
+    clocked_out_at: '2026-03-14T13:05:00.000000Z',
+    clocked_out_at_local: '2026-03-14T14:05:00.000000+01:00',
+    duration_minutes: 215,
+    opened_by: 'break_end',
+    closed_by: 'clock_out',
+  })
+
+  it('enseña una fila «Pausa de … a … (…)» entre los dos tramos de la pausa', async () => {
+    const wrapper = await mountTable([breakStart, breakEnd], 455)
+
+    const pause = wrapper.find('[data-test="break-row"]')
+
+    expect(pause.exists()).toBe(true)
+    expect(pause.text()).toContain('10:00')
+    expect(pause.text()).toContain('10:30')
+    expect(pause.text()).toContain('0 h 30 min')
+  })
+
+  it('marca con una insignia de texto el tramo que cierra en pausa, no el que la abre', async () => {
+    const wrapper = await mountTable([breakStart, breakEnd], 455)
+
+    const badges = wrapper.findAll('[data-test="break-badge"]')
+
+    expect(badges).toHaveLength(1)
+    expect(badges[0]?.text()).toContain(es.workdays.entries.breakBadge)
+  })
+
+  it('sin la pareja break_start/break_end, no hay fila de pausa aunque el hueco exista', async () => {
+    // Un tramo corregido a mano entre los dos rompe la pareja (decision 1 de
+    // la ficha 3.5): no hubo pausa fichada, hubo un tramo nuevo.
+    const manual = shiftEntry({
+      uuid: 'c',
+      clocked_in_at: '2026-03-14T09:30:00.000000Z',
+      clocked_in_at_local: '2026-03-14T10:30:00.000000+01:00',
+      clocked_out_at: '2026-03-14T13:05:00.000000Z',
+      clocked_out_at_local: '2026-03-14T14:05:00.000000+01:00',
+      duration_minutes: 215,
+      opened_by: 'clock_in',
+      closed_by: 'clock_out',
+    })
+
+    const wrapper = await mountTable([breakStart, manual], 455)
+
+    expect(wrapper.find('[data-test="break-row"]').exists()).toBe(false)
+    expect(wrapper.findAll('[data-test="break-badge"]')).toHaveLength(1)
+  })
+
+  it('un tramo cerrado a mano sigue siendo «cerrado», sin insignia de pausa', async () => {
+    const wrapper = await mountTable([shiftEntry()], 485)
+
+    expect(wrapper.find('[data-test="break-badge"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="break-row"]').exists()).toBe(false)
+  })
+
+  it('un tramo abierto (closed_by: null) sigue siendo «abierto», sin insignia', async () => {
+    const wrapper = await mountTable([openEntry()], 0)
+
+    expect(wrapper.find('[data-test="break-badge"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain(es.workdays.entries.open)
   })
 })
 

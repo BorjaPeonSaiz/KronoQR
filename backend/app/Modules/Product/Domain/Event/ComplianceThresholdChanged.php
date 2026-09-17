@@ -44,11 +44,12 @@ use DateTimeImmutable;
  * ## Y un tercero que explica el `false`
  *
  * `detectionSuspended` existe porque `affectsIncidentDetection` tiene que decir
- * la verdad de **hoy**, y hoy RN-12 se evalua pero no abre incidencia
- * (ADR-024, RF-AT-12, tarea 3.5). Sin el matiz, el asiento de un cambio de
+ * la verdad de **esta instalacion**: donde el fichaje de pausa esta desactivado
+ * —`ATTENDANCE_BREAK_CLOCKING`, el valor de serie— RN-12 se evalua pero no abre
+ * incidencia (ADR-024, RF-AT-12). Sin el matiz, el asiento de un cambio de
  * `break_required_after_hours` seria indistinguible del de un cambio de nombre
  * del convenio, y son cosas muy distintas: la primera vuelve a mover alertas en
- * cuanto llegue la 3.5. Los dos se derivan de
+ * cuanto alguien active el ajuste. Los dos se derivan de
  * `Shared\Domain\ValueObject\ComplianceRuleSuspension`, que es donde la decision
  * vive, para que reactivar la regla no exija tocar nada de aqui.
  */
@@ -78,8 +79,9 @@ final readonly class ComplianceThresholdChanged implements DomainEvent
          */
         public bool $affectsComplianceView,
         /**
-         * Si el campo gobierna una regla que hoy **no abre incidencias** aunque
-         * se evalue (RN-12 hasta la tarea 3.5).
+         * Si el campo gobierna una regla que en ESTA instalacion **no abre
+         * incidencias** aunque se evalue (RN-12 mientras `ATTENDANCE_BREAK_CLOCKING`
+         * este en `disabled`, RF-AT-12).
          *
          * Es lo que explica un `affects_incident_detection: false` sobre un
          * umbral legal: sin este dato, quien lea el asiento dentro de dos años no

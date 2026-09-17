@@ -36,6 +36,15 @@ use Throwable;
  * ya esta: si el orden se decidiera en este metodo, no habria forma de probarlo
  * sin base de datos, y es la comprobacion unitaria que exige el §9.5.
  *
+ * **Desde RF-AT-12 ese orden decide ademas la atribucion** (ADR-024): la
+ * resolucion de cada escaneo mira el ultimo aceptado del empleado, y cada
+ * elemento confirma su transaccion antes de que empiece el siguiente, asi que un
+ * lote con `break_start` y `break_end` desordenados produce exactamente la misma
+ * jornada que si hubieran llegado en linea — la vuelta encuentra su tramo y no
+ * la fecha civil del escaneo. El orden lo pone `occurred_at` y no el orden del
+ * JSON, que es lo que hace que una cola offline sincronizada tres horas despues
+ * no parta un turno de noche.
+ *
  * ## Un elemento que revienta no se lleva el lote
  *
  * Cualquier `Throwable` de un elemento se registra y se devuelve como **no

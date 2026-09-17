@@ -147,6 +147,13 @@ final class EmployeeWorkDaysResource extends JsonResource
             'clocked_out_at_local' => self::localOrNull($entry->clockedOutAt, $entry->timeZone),
             'clocked_out_recorded_at' => self::utcOrNull($entry->clockOutRecordedAt),
             'clock_out_source' => $entry->clockOutSource,
+            // RF-AT-12 y ADR-024: lo que distingue una pausa de un fin de
+            // jornada. Los dos van **siempre**, tambien en el portal: es el
+            // mismo esquema `WorkDayShiftEntry` para las dos pantallas, y quien
+            // mas necesita saber que aquello fue un descanso y no una salida es
+            // la persona que lo ficho.
+            'opened_by' => $entry->openedBy,
+            'closed_by' => $entry->closedBy,
             'duration_minutes' => $entry->durationMinutes,
             'recorded_at' => self::utc($entry->recordedAt),
         ];

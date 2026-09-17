@@ -26,6 +26,7 @@ import { PRODUCT_BRANDING, type Branding } from '@kronoqr/web-kit/branding'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { formatClockTime } from '../domain/clockTime'
+import { clockSkewMinutesFrom } from '../domain/clockSkewMessage'
 import { greetingSlotFor } from '../domain/greeting'
 import type { ConfirmationVariant, ScanConfirmation } from '../domain/scanOutcome'
 import { isArrival, variantFor } from '../domain/scanOutcome'
@@ -81,6 +82,25 @@ const SYMBOLS: Readonly<Record<ConfirmationVariant, string>> = {
 }
 
 const variant = computed<ConfirmationVariant>(() => variantFor(props.confirmation))
+
+/**
+ * `break_start`/`break_end` comparten variante -y por tanto color y flecha-
+ * con `clock_out`/`clock_in` (mismo tono de salida/entrada, ADR-024): sin
+ * nada mas, una pausa y un fin de jornada se verian identicos a dos metros.
+ * El pictograma ⏸ (revision de la segunda vuelta, UI/UX: mismo icono que el
+ * panel y el portal) sustituye a la flecha SOLO para las dos acciones de
+ * pausa, para que se reconozcan sin leer la palabra.
+ */
+const symbol = computed<string>(() => {
+  const confirmation = props.confirmation
+  if (
+    confirmation.kind === 'accepted' &&
+    (confirmation.action === 'break_start' || confirmation.action === 'break_end')
+  ) {
+    return '⏸'
+  }
+  return SYMBOLS[variant.value]
+})
 
 const time = computed(() => formatClockTime(props.confirmation.occurredAt, locale.value))
 
@@ -138,6 +158,31 @@ const total = computed(() => {
     duration: t('scan.duration', { hours: worked.hours, minutes: worked.minutes }),
   })
 })
+
+/**
+ * Solo en `break_start` (ADR-024, decision 5 de la tarea 3.5): la pausa cierra
+ * un tramo, pero la JORNADA sigue abierta -no es un «Hasta luego» de verdad-,
+ * y quien la ficha tiene que saber que falta pasar la tarjeta al volver.
+ */
+const breakOpenHint = computed(() =>
+  props.confirmation.kind === 'accepted' && props.confirmation.action === 'break_start'
+    ? t('scan.breakOpenHint')
+    : null,
+)
+
+/**
+ * Aviso de desfase en la confirmacion (RF-AT-10, decision 6 de la tarea 3.5).
+ * `settleFrom` solo deja `clockSkewSeconds` cuando de verdad supera el umbral
+ * de la instalacion: aqui solo queda traducirlo a la misma frase que la banda
+ * persistente de `ScanView`.
+ */
+const clockSkewNotice = computed(() => {
+  const confirmation = props.confirmation
+  if (confirmation.kind !== 'accepted' || confirmation.clockSkewSeconds === undefined) return null
+
+  const { minutes, direction } = clockSkewMinutesFrom(confirmation.clockSkewSeconds)
+  return t(`scan.clockSkew.${direction}`, { minutes })
+})
 </script>
 
 <template>
@@ -151,12 +196,8 @@ const total = computed(() => {
     aria-live="assertive"
     aria-atomic="true"
   >
-    <span
-      v-if="SYMBOLS[variant] !== ''"
-      aria-hidden="true"
-      class="text-[5rem] leading-none font-black"
-    >
-      {{ SYMBOLS[variant] }}
+    <span v-if="symbol !== ''" aria-hidden="true" class="text-[5rem] leading-none font-black">
+      {{ symbol }}
     </span>
 
     <p class="text-confirm-lg leading-tight font-bold" data-testid="confirmation-headline">
@@ -169,6 +210,23 @@ const total = computed(() => {
 
     <p v-if="total !== null" class="text-confirm-md font-medium" data-testid="confirmation-total">
       {{ total }}
+    </p>
+
+    <p
+      v-if="breakOpenHint !== null"
+      class="text-confirm-sm font-medium"
+      data-testid="confirmation-break-open-hint"
+    >
+      {{ breakOpenHint }}
+    </p>
+
+    <p
+      v-if="clockSkewNotice !== null"
+      role="status"
+      class="text-confirm-sm rounded-full bg-white/15 px-6 py-2 font-medium"
+      data-testid="confirmation-clock-skew-notice"
+    >
+      {{ clockSkewNotice }}
     </p>
 
     <p

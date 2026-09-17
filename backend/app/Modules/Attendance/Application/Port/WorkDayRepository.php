@@ -56,8 +56,44 @@ interface WorkDayRepository
      * o sustituido—, porque en ninguno de los dos casos hay una jornada que
      * pueda corregirlo (ADR-026). Quien llama distingue el `404` del `409`
      * consultando el historico, que es donde esta la diferencia.
+     *
+     * **Esta pregunta es «¿que jornada puedo corregir?», no «¿de que jornada es
+     * este tramo?»**. Para la segunda esta {@see findWorkDayOfAnyShiftEntry()},
+     * y son dos y no una a proposito: si esta empezara a devolver la jornada de
+     * un tramo retirado, `correctEntry()` y `voidEntry()` recibirian un agregado
+     * que no contiene ese tramo y el `409` honesto de hoy se convertiria en un
+     * error inesperado.
      */
     public function findWorkDayOfShiftEntry(string $shiftEntryUuid): ?WorkDay;
+
+    /**
+     * La jornada a la que pertenece un tramo, **vigente o retirado**.
+     *
+     * Es la consulta con la que una **vuelta de pausa** encuentra su jornada
+     * (RF-AT-12, ADR-024 consecuencia 2): el escaneo trae el `uuid` del tramo
+     * que el `break_start` cerro, y la jornada que hay que continuar es la suya
+     * en cualquier dia natural, nunca la de la fecha civil del escaneo, que
+     * partiria el turno de noche (RN-05, ADR-006, regla dura 4).
+     *
+     * **Un tramo retirado sigue identificando su jornada.** Esa es la diferencia
+     * entera con {@see findWorkDayOfShiftEntry()}, y el motivo por el que hacen
+     * falta las dos: entre la pausa y la vuelta puede haber pasado una
+     * correccion (RN-13) que dejo el tramo `superseded` o anulado, y su version
+     * nueva sigue perteneciendo a la misma jornada `(empleado, work_date)`. Con
+     * la consulta de correcciones, esa vuelta caeria en `WorkDay::start()` sobre
+     * la fecha civil del escaneo: el turno partido en dos dias, y un
+     * `result: break_end` afirmando una pausa sobre una jornada que no la tiene.
+     * Nada de eso lo veria nadie hasta la nomina.
+     *
+     * Devuelve `null` **solo** si ese `uuid` no existe en `shift_entries`. Es un
+     * caso que el producto no produce —el `uuid` sale de `scan_events`, que tiene
+     * clave foranea al tramo— pero que puede darse tras una purga por retencion
+     * (RL-02): quien llama degrada entonces al camino normal
+     * (`ClockingResolution::clockIn()` sobre la jornada de la fecha) y marca el
+     * escaneo para revision humana, que es lo que la regla dura 19 exige en
+     * lugar de fallar.
+     */
+    public function findWorkDayOfAnyShiftEntry(string $shiftEntryUuid): ?WorkDay;
 
     /**
      * Guarda la jornada y **recalcula** su proyeccion en la misma transaccion

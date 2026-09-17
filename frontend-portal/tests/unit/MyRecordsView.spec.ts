@@ -16,6 +16,7 @@ import {
   EMPLOYEE_UUID,
   employeeWorkDays,
   portalEmployee,
+  shiftEntriesWithBreak,
   shiftEntry,
   workDay,
 } from './support/fixtures'
@@ -188,6 +189,38 @@ describe('MyRecordsView', () => {
     )
     expect(wrapper.find('[data-test="flag-incident"]').text()).toBe(es.myRecords.day.flags.incident)
     expect(wrapper.text()).toContain(es.myRecords.day.flags.openShiftHint)
+  })
+
+  it('una jornada con pausa enseña «Pausa de HH:MM a HH:MM (N min)» entre los dos tramos y la insignia en la salida que la abre', async () => {
+    const wrapper = await mountMyRecords(
+      employeeWorkDays([workDay({ shift_entries: shiftEntriesWithBreak() })]),
+    )
+
+    // La insignia va en la salida del tramo cerrado por `break_start`, con
+    // texto ademas del icono decorativo (WCAG 1.4.1: nunca solo color).
+    const badges = wrapper.findAll('[data-test="break-badge"]')
+    expect(badges).toHaveLength(1)
+    expect(badges[0]?.text()).toBe('Pausa')
+
+    // Entre los dos tramos, la duracion de la pausa: la UNICA resta que
+    // hace el cliente (regla dura 7 — el total del dia lo sigue declarando
+    // el servidor, comprobado mas abajo).
+    const breakRows = wrapper.findAll('[data-test="break-row"]')
+    expect(breakRows).toHaveLength(1)
+    expect(breakRows[0]?.text()).toBe('Pausa de 12:00 a 12:30 (0 h 30 min)')
+
+    // 360 + 210 minutos de los dos tramos = 9 h 30 min, y coincide con lo
+    // que declara el servidor: ningun descuadre por la pausa.
+    expect(wrapper.find('[data-test="day-total"]').text()).toBe('9 h 30 min')
+    expect(wrapper.find('[data-test="summed-total"]').text()).toBe('9 h 30 min')
+    expect(wrapper.find('[data-test="totals-mismatch"]').exists()).toBe(false)
+  })
+
+  it('un tramo abierto sin pausa no enseña ninguna insignia ni fila de pausa', async () => {
+    const wrapper = await mountMyRecords()
+
+    expect(wrapper.find('[data-test="break-badge"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="break-row"]').exists()).toBe(false)
   })
 
   it('anuncia cuantas jornadas se han encontrado, sin mover el foco', async () => {

@@ -44,6 +44,39 @@ final readonly class HeartbeatOutcome
          * a todas las tablets en sesenta segundos. La tablet la guarda y
          * comprueba el codigo **en local**, sin red.
          */
-        public ?string $serviceCodeHash = null,
+        public ?string $serviceCodeHash,
+        /**
+         * RF-AT-12: si la instalacion tiene activado el fichaje de pausa
+         * (`ATTENDANCE_BREAK_CLOCKING`, ADR-024).
+         *
+         * Con `true` la tablet enseña el boton «Pausa» que arma la intencion
+         * `break_start` del siguiente escaneo; con `false` lo oculta. **No
+         * gobierna al servidor**: una intencion declarada se honra siempre
+         * (decision 1 de la ficha 3.5). Viaja por el latido y no por el padron
+         * por lo mismo que la huella del codigo de servicio, y la tablet lo
+         * guarda en local para que el boton siga estando cuando no hay red.
+         *
+         * **Sin valor por defecto**, igual que el de abajo: no hay ninguno
+         * razonable que este objeto pueda inventarse, porque el valor es de la
+         * instalacion y quien lo tiene es el caso de uso.
+         */
+        public bool $breakClockingEnabled,
+        /**
+         * RF-AT-10: a partir de cuantos segundos de desfase la tablet avisa.
+         *
+         * Es `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES` en segundos, y sustituye a la
+         * constante de 15 min que el quiosco llevaba escrita: con un umbral
+         * propio, la tablet podia avisar por un desfase que el servidor no marca
+         * —o callarse ante uno que si— y las dos pantallas contaban historias
+         * distintas del mismo reloj. **Nunca impide fichar** (regla dura 19).
+         *
+         * **Sin valor por defecto.** Lo tuvo —`0`— y era un `0` que el contrato
+         * prohibe: `clock_skew_tolerance_seconds` declara `minimum: 60`, asi que
+         * cualquier camino que se olvidara de pasarlo habria servido una
+         * respuesta invalida y, peor, una tolerancia de cero segundos que dejaria
+         * la banda de aviso encendida en todas las tablets del hotel. El valor de
+         * serie vive donde tiene que vivir: en el catalogo de `SettingKey`.
+         */
+        public int $clockSkewToleranceSeconds,
     ) {}
 }

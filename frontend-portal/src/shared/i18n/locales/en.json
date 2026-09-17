@@ -112,6 +112,8 @@
       "openHint": "This shift is still open.",
       "nextDay": "(next day)",
       "openDuration": "In progress",
+      "breakBadge": "Break",
+      "breakRow": "Break from {from} to {to} ({duration})",
       "empty": "This work day has no current shift. If there are corrections below, they were voided: the history is still complete.",
       "sum": "Sum of the shifts",
       "declared": "Recorded total for the day",

@@ -592,6 +592,57 @@ Y qué hacer en cada caso:
   varias tablets seguidas. Compárala carácter a carácter con la de otra tablet
   que sí funcione.
 
+### …la tablet avisa de que «la hora de esta tablet va N min adelantada» (o atrasada)
+
+**Lo primero, para poder decírselo a quien pregunte: no se ha perdido ningún
+fichaje y nadie se ha quedado sin fichar.** La banda es un aviso, no un bloqueo.
+La tablet sigue admitiendo tarjetas y PIN exactamente igual, y cada fichaje se
+registra con la hora real a la que ocurrió.
+
+**Qué está pasando.** La tablet compara su reloj con el del servidor en cada
+latido y avisa cuando la diferencia pasa del margen de la instalación
+(`ATTENDANCE_MAX_CLOCK_SKEW_MINUTES`, 15 minutos de serie; se cambia en
+Panel → «Ajustes operativos» —
+[`../cliente/configuracion.md`](../cliente/configuracion.md) §2.1). El mismo
+margen lo aplica el servidor: los fichajes que llegan con esa desviación quedan
+**marcados para revisión** y la revisión de la madrugada abre una incidencia
+**«Desfase de reloj»** asignada al responsable. RRHH las verá en su bandeja;
+no son culpa de nadie ni un error de la persona, y así lo explica
+[`../cliente/guia-rrhh.md`](../cliente/guia-rrhh.md) §4.1.
+
+**Qué hacer, por orden:**
+
+1. **Pon la tablet en hora automática.** En Android, *Ajustes → Sistema → Fecha
+   y hora*: activa «Usar la hora proporcionada por la red» y «Usar la zona
+   horaria proporcionada por la red». Es la causa en la mayoría de los casos:
+   una tablet que lleva meses colgada de una pared, sin tarjeta SIM y con la
+   hora puesta a mano, se desvía sola.
+2. **Comprueba que llega al servidor de hora.** Si la VLAN de quioscos
+   (§2.5) bloquea la salida, la sincronización automática no funciona aunque
+   esté activada: abre el **NTP (UDP 123)** hacia el servidor de hora que use el
+   hotel, o publica uno interno y decláralo en el DHCP de esa VLAN.
+3. **Confirma que el desviado es el dispositivo y no el servidor.** Si **todas**
+   las tablets avisan a la vez, el que va mal es el servidor: revisa su
+   sincronización de hora antes de tocar ninguna tablet.
+4. **Comprueba que el aviso se retira.** Abre la pantalla de diagnóstico de la
+   tablet —pulsación larga de tres segundos sobre el reloj— y mira la fila
+   «Red», que trae el desfase medido. Se actualiza con el latido siguiente, en
+   menos de un minuto. Desde la consola, el estado de la flota:
+
+   ```bash
+   docker compose -f infra/compose.prod.yaml exec -T app php artisan kiosk:health
+   ```
+
+5. **Avisa a RRHH de las incidencias ya abiertas.** Las que se abrieron mientras
+   la hora estaba mal **no se cierran solas**: se resuelven a mano, y si alguna
+   hora quedó mal registrada se corrige como cualquier otra (RN-13). Corregir la
+   hora de la tablet no reescribe nada hacia atrás, y es lo correcto: el registro
+   conserva lo que ocurrió y la corrección queda trazada.
+
+**Lo que no hay que hacer:** desvincular la tablet, borrar sus datos o
+reinstalar la aplicación. Nada de eso corrige el reloj y lo primero **pierde los
+fichajes que tuviera en cola** (§5.1).
+
 ### …la PWA no arranca sola tras un reinicio
 
 No es del producto: revisa el §2.2. La comprobación es siempre la misma —

@@ -96,6 +96,115 @@ describe('tuberia del escaneo', () => {
     expect(sent[0]?.device_id).toBe('kiosk-recepcion-01')
   })
 
+  describe('intent del boton «Pausa» (ADR-024, decision 5 de la tarea 3.5)', () => {
+    it('sin resolveIntent, sigue escribiendo auto (compatibilidad)', () => {
+      const { port, sent } = recorder()
+      const pipeline = createScanPipeline({ submission: port, deviceId: 'dev-1' })
+
+      pipeline.handleDecoded(PAYLOAD)
+
+      expect(sent[0]?.intent).toBe('auto')
+    })
+
+    it('escribe break_start cuando resolveIntent lo dice armado', () => {
+      const { port, sent } = recorder()
+      const pipeline = createScanPipeline({
+        submission: port,
+        deviceId: 'dev-1',
+        resolveIntent: () => 'break_start',
+      })
+
+      pipeline.handleDecoded(PAYLOAD)
+
+      expect(sent[0]?.intent).toBe('break_start')
+    })
+
+    it('se llama UNA sola vez por escaneo que de verdad se encola, no por cada lectura ignorada', () => {
+      const { port, sent } = recorder()
+      let calls = 0
+      const pipeline = createScanPipeline({
+        submission: port,
+        deviceId: 'dev-1',
+        resolveIntent: () => {
+          calls += 1
+          return 'break_start'
+        },
+      })
+
+      // Lectura ilegible: no se encola nada, no debe consumir la intencion.
+      pipeline.handleDecoded('https://wifi.hotel.example')
+      expect(calls).toBe(0)
+
+      pipeline.handleDecoded(PAYLOAD)
+      expect(calls).toBe(1)
+      expect(sent).toHaveLength(1)
+    })
+  })
+
+  describe('onUnqueuedRead: desarma ante una lectura que no llega a fichar nada (revision de la segunda vuelta, seguridad)', () => {
+    it('se llama con un payload ilegible', () => {
+      const { port } = recorder()
+      let calls = 0
+      const pipeline = createScanPipeline({
+        submission: port,
+        deviceId: 'dev-1',
+        onUnqueuedRead: () => {
+          calls += 1
+        },
+      })
+
+      pipeline.handleDecoded('https://wifi.hotel.example')
+
+      expect(calls).toBe(1)
+    })
+
+    it('se llama con una repeticion SILENCIOSA (tarjeta sostenida o dentro de la ventana), no solo con el unreadable', () => {
+      const { port } = recorder()
+      let calls = 0
+      let nowMs = Date.parse('2026-08-14T05:02:00.000Z')
+      const pipeline = createScanPipeline({
+        submission: port,
+        deviceId: 'dev-1',
+        clock: { now: () => new Date(nowMs) },
+        onUnqueuedRead: () => {
+          calls += 1
+        },
+      })
+
+      pipeline.handleDecoded(PAYLOAD) // aceptado: no cuenta como "no encolado"
+      expect(calls).toBe(0)
+
+      nowMs += 300 // dentro de HELD_GAP_MS: repeticion silenciosa (null)
+      const repeated = pipeline.handleDecoded(PAYLOAD)
+
+      expect(repeated).toBeNull()
+      expect(calls).toBe(1)
+    })
+
+    it('NO se llama cuando el escaneo si se encola', () => {
+      const { port } = recorder()
+      let calls = 0
+      const pipeline = createScanPipeline({
+        submission: port,
+        deviceId: 'dev-1',
+        onUnqueuedRead: () => {
+          calls += 1
+        },
+      })
+
+      pipeline.handleDecoded(PAYLOAD)
+
+      expect(calls).toBe(0)
+    })
+
+    it('sin la opcion, no rompe nada (compatibilidad)', () => {
+      const { port } = recorder()
+      const pipeline = createScanPipeline({ submission: port, deviceId: 'dev-1' })
+
+      expect(() => pipeline.handleDecoded('https://wifi.hotel.example')).not.toThrow()
+    })
+  })
+
   it('ENCOLA aunque el padron no reconozca la tarjeta: degradacion honesta', () => {
     const { port, sent } = recorder()
     const pipeline = createScanPipeline({
@@ -307,6 +416,45 @@ describe('tuberia del escaneo', () => {
 
     // Lo importante: el empleado vio su confirmacion igualmente.
     expect(confirmation?.kind).toBe('pending')
+  })
+
+  it('pasa el umbral de desfase a settleFrom, para el aviso de la confirmacion (RF-AT-10)', async () => {
+    const settled: ScanConfirmation[] = []
+    const withSkew: ScanAccepted = {
+      ...accepted,
+      occurred_at: '2026-08-14T05:02:00.000Z',
+      recorded_at: '2026-08-14T05:42:00.000Z', // 40 min
+    }
+    const pipeline = createScanPipeline({
+      submission: { submit: async () => ({ kind: 'accepted', response: withSkew }) },
+      deviceId: 'dev-1',
+      clockSkewToleranceSeconds: () => 900,
+      onSettled: (confirmation) => settled.push(confirmation),
+    })
+
+    pipeline.handleDecoded(PAYLOAD)
+    await vi.waitFor(() => expect(settled).toHaveLength(1))
+
+    expect(settled[0]).toMatchObject({ kind: 'accepted', clockSkewSeconds: -2400 })
+  })
+
+  it('sin clockSkewToleranceSeconds, nunca avisa de desfase (compatibilidad)', async () => {
+    const settled: ScanConfirmation[] = []
+    const withSkew: ScanAccepted = {
+      ...accepted,
+      occurred_at: '2026-08-14T05:02:00.000Z',
+      recorded_at: '2026-08-14T05:42:00.000Z',
+    }
+    const pipeline = createScanPipeline({
+      submission: { submit: async () => ({ kind: 'accepted', response: withSkew }) },
+      deviceId: 'dev-1',
+      onSettled: (confirmation) => settled.push(confirmation),
+    })
+
+    pipeline.handleDecoded(PAYLOAD)
+    await vi.waitFor(() => expect(settled).toHaveLength(1))
+
+    expect(settled[0]).not.toHaveProperty('clockSkewSeconds')
   })
 
   it('convierte un rechazo del servidor en un mensaje generico', async () => {

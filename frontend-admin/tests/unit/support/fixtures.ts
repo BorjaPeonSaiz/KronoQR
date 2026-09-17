@@ -261,6 +261,11 @@ export function shiftEntry(overrides: Partial<WorkDayShiftEntry> = {}): WorkDayS
     clocked_out_at_local: '2026-03-14T14:05:00.000000+01:00',
     clocked_out_recorded_at: null,
     clock_out_source: 'manual_admin',
+    // Tarea 3.5, ADR-024: por omision, un tramo sin escaneo de pausa detras
+    // (`clock_in`/`clock_out`). Los casos de pausa se construyen a mano con
+    // `overrides` en las pruebas que los necesitan.
+    opened_by: 'clock_in',
+    closed_by: 'clock_out',
     duration_minutes: 485,
     recorded_at: '2026-03-14T15:22:41.900000Z',
     ...overrides,

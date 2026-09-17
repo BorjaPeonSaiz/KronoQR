@@ -102,3 +102,32 @@ it('mide el desfase entre las dos marcas de tiempo del escaneo', function (): vo
     expect(ReviewPolicy::toleratingSkewOfMinutes(15)->requiresReview(ScanOrigin::QR_KIOSK, $desfase))
         ->toBeTrue();
 })->group('RF-AT-09', 'RN-15', 'RQ-01');
+
+it('marca el desfase en sus tres valores de borde y en ninguno rechaza el fichaje', function (): void {
+    /*
+     * **RF-AT-10, literal: «nunca se rechaza un fichaje por desfase de reloj».**
+     *
+     * El limite escrito en minutos, que es como lo lee quien configura
+     * `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES`: 14:59 no pide validacion, 15:00
+     * tampoco —el umbral exacto todavia no se ha superado— y 15:01 si.
+     *
+     * Lo que esta prueba afirma ademas es lo que NO hay: esta politica solo
+     * sabe devolver `true` o `false`. No tiene rama de rechazo, no lanza y no
+     * devuelve un motivo, asi que ninguna configuracion del umbral puede dejar
+     * una jornada sin registrar por un problema tecnico ajeno al empleado
+     * (regla dura 19). Si algun dia alguien anadiera esa rama, esta prueba es
+     * el sitio donde se veria.
+     */
+    $politica = ReviewPolicy::toleratingSkewOfMinutes(15);
+
+    $resultados = array_map(
+        fn (int $segundos): bool => $politica->requiresReview(ScanOrigin::QR_KIOSK, ClockSkew::ofSeconds($segundos)),
+        [14 * 60 + 59, 15 * 60, 15 * 60 + 1],
+    );
+
+    expect($resultados)->toBe([false, false, true])
+        // La otra mitad: ninguna de las tres ramas devuelve nada que no sea un
+        // booleano, ni para el reloj adelantado ni para el atrasado.
+        ->and($politica->exceedsSkewTolerance(ClockSkew::ofSeconds(-(15 * 60 + 1))))->toBeTrue()
+        ->and($politica->exceedsSkewTolerance(ClockSkew::ofSeconds(-(14 * 60 + 59))))->toBeFalse();
+})->group('RF-AT-10', 'RN-15', 'RQ-01');

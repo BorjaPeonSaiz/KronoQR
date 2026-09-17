@@ -140,3 +140,44 @@ it('entrega el valor de serie marcado como tal', function (): void {
     expect($value->asText())->toBe('KronoQR')
         ->and($value->isProductDefault)->toBeTrue();
 })->group('RF-PD-01');
+
+// --- El fichaje de pausa (RF-AT-12, ADR-024, tarea 3.5) ----------------------
+
+it('entrega el fichaje de pausa desactivado de serie', function (): void {
+    // **`disabled` y no `enabled`.** El doc 05 lo vende como opcional, y arrancar
+    // activado reactivaria RN-12 (`ComplianceRuleSuspension`) en una plantilla
+    // que descansa sin fichar: incidencias `missing_break` contra gente que no
+    // hizo nada mal, el primer dia de uso.
+    $definition = SettingKey::ATTENDANCE_BREAK_CLOCKING->definition();
+
+    expect($definition->default)->toBe('disabled')
+        ->and($definition->validate(SettingKey::ATTENDANCE_BREAK_CLOCKING, 'enabled'))->toBe('enabled')
+        ->and($definition->validate(SettingKey::ATTENDANCE_BREAK_CLOCKING, 'disabled'))->toBe('disabled');
+})->group('RF-PD-01', 'RF-AT-12');
+
+it('admite solo los dos valores del fichaje de pausa', function (string $value): void {
+    // `choice` de dos valores y no un tipo booleano nuevo (decision 7 de la ficha
+    // 3.5): anadir `SettingType::BOOLEAN` obligaria a ampliar el enum, el
+    // contrato, la validacion y el panel para una sola clave, y un enumerado
+    // admite una tercera opcion el dia que la haya sin migrar lo guardado.
+    expect(fn (): int|string|array => SettingKey::ATTENDANCE_BREAK_CLOCKING->definition()
+        ->validate(SettingKey::ATTENDANCE_BREAK_CLOCKING, $value))
+        ->toThrow(InvalidSettingValue::class);
+})->with([
+    'booleano de PHP serializado' => ['1'],
+    'booleano en texto' => ['true'],
+    'vacio' => [''],
+    'mayusculas' => ['ENABLED'],
+])->group('RF-PD-01', 'RF-AT-12');
+
+it('clasifica el fichaje de pausa como revision de cumplimiento y no como calculo de horas', function (): void {
+    // No mueve ni un minuto: la pausa son dos tramos y su tiempo simplemente no
+    // esta en ninguno (ADR-024), asi que no hay ninguna resta que hacer. Lo que
+    // si cambia es **que jornadas se marcan**, porque reactiva RN-12, y el
+    // asiento de `installation_setting.changed` tiene que decirlo.
+    $definition = SettingKey::ATTENDANCE_BREAK_CLOCKING->definition();
+
+    expect($definition->impact)->toBe(SettingImpact::COMPLIANCE_REVIEW)
+        ->and($definition->impact->affectsWorkedHours())->toBeFalse()
+        ->and($definition->confidential)->toBeFalse();
+})->group('RF-PD-01', 'RF-AT-12', 'RL-04');

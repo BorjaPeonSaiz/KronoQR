@@ -18,6 +18,7 @@ use Tests\Support\Factory\ClockingPolicyFactory;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Identity\PortalLogins;
+use Tests\Support\Reporting\BreakFixtures;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Time\Instants;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -467,3 +468,110 @@ it('no enseña al empleado en su portal las incidencias de sus jornadas', functi
 
     expect($respuesta->json('data.0.incidents'))->toBe([]);
 })->group('RF-PA-03', 'RF-PA-05', 'RF-ID-05');
+
+it('distingue la pausa de la salida en el detalle de jornada', function (): void {
+    // RF-AT-12 y ADR-024. Sin `opened_by` / `closed_by`, los dos tramos de un
+    // turno con pausa se ven en el panel exactamente igual que dos jornadas
+    // seguidas: dos filas con un hueco en medio. Quien revisa el registro no
+    // puede saber si esa persona se fue a casa y volvio o si se tomo la comida,
+    // y de eso depende que abra una incidencia o no.
+    $contexto = contextoDeJornadas();
+
+    BreakFixtures::dayWithBreak(
+        $contexto['site'],
+        $contexto['employee'],
+        '2026-03-14',
+        '2026-03-14 06:00',
+        '2026-03-14 10:00',
+        '2026-03-14 10:30',
+        '2026-03-14 14:00',
+    );
+
+    Api::as($contexto['token'])
+        ->get('/api/v1/employees/'.$contexto['employee'].'/workdays', [
+            'from' => '2026-03-14',
+            'to' => '2026-03-14',
+        ])
+        ->assertValidRequest()
+        ->assertValidResponse(200)
+        ->assertJsonPath('data.0.shift_entries.0.opened_by', 'clock_in')
+        // La pausa: el tramo se cierra y **la jornada sigue viva**.
+        ->assertJsonPath('data.0.shift_entries.0.closed_by', 'break_start')
+        ->assertJsonPath('data.0.shift_entries.1.opened_by', 'break_end')
+        ->assertJsonPath('data.0.shift_entries.1.closed_by', 'clock_out')
+        // Y la media hora de pausa no esta en ningun tramo: 7 h 30 min.
+        ->assertJsonPath('data.0.total_minutes', 450);
+})->group('RF-AT-12', 'RF-PA-03');
+
+it('atribuye a la entrada y a la salida un tramo declarado a mano', function (): void {
+    // Un tramo escrito o corregido por RRHH no tiene ningun escaneo detras
+    // (RF-PA-04, RN-13), y el contrato declara `opened_by` obligatorio. Lo que
+    // se publica es lo que de hecho ocurrio —una entrada y una salida— y no un
+    // nulo que el panel tendria que interpretar.
+    $contexto = contextoDeJornadas();
+
+    jornadaRegistrada($contexto['site'], $contexto['employee'], '2026-03-14', '2026-03-14 06:00', '2026-03-14 14:00');
+    jornadaRegistrada($contexto['site'], $contexto['employee'], '2026-03-16', '2026-03-16 07:00', null);
+
+    Api::as($contexto['token'])
+        ->get('/api/v1/employees/'.$contexto['employee'].'/workdays', [
+            'from' => '2026-03-14',
+            'to' => '2026-03-16',
+        ])
+        ->assertValidResponse(200)
+        ->assertJsonPath('data.0.shift_entries.0.opened_by', 'clock_in')
+        ->assertJsonPath('data.0.shift_entries.0.closed_by', 'clock_out')
+        // Y el tramo abierto no dice que lo cerro nadie: ahi el nulo SI es la
+        // verdad, y es lo que el panel pinta como «en curso».
+        ->assertJsonPath('data.1.shift_entries.0.opened_by', 'clock_in')
+        ->assertJsonPath('data.1.shift_entries.0.closed_by', null);
+})->group('RF-AT-12', 'RF-PA-03', 'RF-PA-04');
+
+it('conserva la marca de pausa tras corregir la hora de salida del primer tramo', function (): void {
+    // **El bloqueante que encontro la revision.** Una correccion (RN-13,
+    // RF-PA-04) no crea escaneos: crea una version nueva del tramo y jubila la
+    // anterior. Mirando solo los escaneos de la version vigente, corregir por
+    // cinco minutos la hora en que alguien se fue a comer hacia **desaparecer la
+    // marca de pausa**: dos tramos con un hueco mudo, indistinguibles de dos
+    // jornadas seguidas, y precisamente en el registro que alguien acaba de
+    // tocar — que es el que mas se mira despues.
+    //
+    // El tiempo seguia bien; lo que se perdia era poder explicarlo.
+    $contexto = contextoDeJornadas();
+
+    $tramos = BreakFixtures::dayWithBreak(
+        $contexto['site'],
+        $contexto['employee'],
+        '2026-03-14',
+        '2026-03-14 06:00',
+        '2026-03-14 10:00',
+        '2026-03-14 10:30',
+        '2026-03-14 14:00',
+    );
+
+    // Se corrige el tramo que la PAUSA cerro: cinco minutos antes.
+    Api::as($contexto['token'])
+        ->patch('/api/v1/shift-entries/'.$tramos['first'], [
+            'clocked_out_at' => '2026-03-14T08:55:00Z',
+            'reason_code' => 'AJUSTE_ACORDADO_CON_RRHH',
+        ])
+        ->assertValidResponse(200);
+
+    $respuesta = Api::as($contexto['token'])
+        ->get('/api/v1/employees/'.$contexto['employee'].'/workdays', [
+            'from' => '2026-03-14',
+            'to' => '2026-03-14',
+        ])
+        ->assertValidResponse(200);
+
+    $respuesta
+        // La version nueva del primer tramo **hereda las marcas del escaneo
+        // original**, que es lo que de verdad ocurrio: aquella persona se fue de
+        // pausa, y corregir el minuto no cambia eso.
+        ->assertJsonPath('data.0.shift_entries.0.version', 2)
+        ->assertJsonPath('data.0.shift_entries.0.opened_by', 'clock_in')
+        ->assertJsonPath('data.0.shift_entries.0.closed_by', 'break_start')
+        // Y el segundo tramo, intacto, sigue diciendo que fue una vuelta.
+        ->assertJsonPath('data.0.shift_entries.1.opened_by', 'break_end')
+        ->assertJsonPath('data.0.shift_entries.1.closed_by', 'clock_out');
+})->group('RF-AT-12', 'RF-PA-04', 'RN-13');

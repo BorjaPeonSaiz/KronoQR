@@ -30,7 +30,9 @@ use Psr\Log\LoggerInterface;
  * abre quien lleva un turno.
  *
  * Con la tarea 2.5 hay una quinta, las incidencias, y **solo cuando se piden**:
- * el panel las incrusta en el detalle (RF-PA-05) y el portal del empleado no.
+ * el panel las incrusta en el detalle (RF-PA-05) y el portal del empleado no. Y
+ * con la 3.5 una sexta, las marcas de pausa de cada tramo ({@see
+ * clockingMarks()}), agrupada por tramo y solo si el rango trajo alguno.
  *
  * Los tres filtros por empleado y rango caen sobre
  * `shift_entries_employee_id_work_date_index` y sobre el UNIQUE de
@@ -50,6 +52,18 @@ use Psr\Log\LoggerInterface;
  * por instante**: un tramo tiene un escaneo que lo abrio y puede tener otro que
  * lo cerro, y lo que los distingue es su `occurred_at`. Un tramo escrito a mano
  * no tiene ninguno y los dos quedan nulos, que es la verdad: nadie lo escaneo.
+ *
+ * ## Quien abrio y quien cerro (RF-AT-12, tarea 3.5)
+ *
+ * `opened_by` y `closed_by` salen de `scan_events.result` de esos mismos
+ * escaneos, y se correlacionan **por el desenlace** y no por el instante: lo que
+ * abre es `clock_in` o `break_end` y lo que cierra es `clock_out` o
+ * `break_start` (ADR-024). Van en una **quinta consulta** —{@see
+ * clockingMarks()}— y no en subconsultas correlacionadas porque hay que subir
+ * por la cadena de versiones: una correccion no crea escaneos, y mirando solo la
+ * version vigente la marca de pausa desaparecia en cuanto alguien corregia el
+ * tramo. Sin escaneo en toda la estirpe —un tramo declarado a mano— valen
+ * `clock_in` y `clock_out`, que es lo que de hecho ocurrio.
  *
  * ## Un turno nocturno no se parte
  *
@@ -179,7 +193,7 @@ final readonly class DatabaseWorkDayJournalReader implements WorkDayJournalReade
 
         /** @var list<object> $rows */
         $rows = $this->connection->select(<<<SQL
-            SELECT se.uuid, se.version, se.status, se.site_id, sites.timezone,
+            SELECT se.id, se.uuid, se.version, se.status, se.site_id, sites.timezone,
                    se.work_date, se.clocked_in_at, se.clocked_out_at,
                    se.duration_minutes, se.clock_in_source, se.clock_out_source,
                    se.created_at,
@@ -197,10 +211,19 @@ final readonly class DatabaseWorkDayJournalReader implements WorkDayJournalReade
              ORDER BY se.work_date, se.clocked_in_at
         SQL, [$employeeId, $range->isoFrom(), $range->isoTo()]);
 
+        $ids = [];
+
+        foreach ($rows as $raw) {
+            $ids[] = Row::of($raw)->int('id');
+        }
+
+        $marks = $this->clockingMarks($ids);
+
         $byDate = [];
 
         foreach ($rows as $raw) {
             $row = Row::of($raw);
+            $mark = $marks[$row->int('id')] ?? ['opened_by' => null, 'closed_by' => null];
             $byDate[$this->isoDate($row->string('work_date'))][] = new JournalShiftEntry(
                 uuid: $row->string('uuid'),
                 version: $row->int('version'),
@@ -215,10 +238,107 @@ final readonly class DatabaseWorkDayJournalReader implements WorkDayJournalReade
                 clockOutSource: $row->nullableString('clock_out_source'),
                 durationMinutes: $row->nullableInt('duration_minutes'),
                 recordedAt: $row->instant('created_at'),
+                // **No hay escaneo que valga `null` aqui** (RF-AT-12, tarea
+                // 3.5): un tramo declarado o corregido a mano no tiene ninguna
+                // fila en `scan_events` en toda su cadena de versiones, y lo que
+                // de hecho ocurrio es una entrada y una salida.
+                openedBy: $mark['opened_by'] ?? JournalShiftEntry::OPENED_BY_CLOCK_IN,
+                closedBy: $this->closedBy($mark['closed_by'], $row->nullableInstant('clocked_out_at')),
             );
         }
 
         return $byDate;
+    }
+
+    /**
+     * Que abrio y que cerro cada tramo, **siguiendo su cadena de versiones**
+     * (RF-AT-12, ADR-024, ADR-035).
+     *
+     * ## Por que no basta con mirar los escaneos del tramo vigente
+     *
+     * Porque una correccion (RN-13, RF-PA-04) **no crea escaneos**: crea una
+     * version nueva, marca la anterior `superseded` y apunta a ella con
+     * `superseded_by_id`. Los escaneos siguen colgando de la version vieja. Con
+     * la consulta directa, corregir por un minuto la hora de salida de una
+     * jornada con pausa hacia **desaparecer la marca de pausa** del panel y del
+     * portal: dos tramos con un hueco mudo, indistinguibles de dos jornadas, y
+     * justo en el registro que alguien acaba de tocar — que es el que mas se
+     * mira. El tiempo seguia bien; lo que se perdia era poder explicarlo.
+     *
+     * ## Como se sigue la cadena
+     *
+     * Con un `WITH RECURSIVE` que sube de la version vigente a sus antepasados
+     * —`prev.superseded_by_id = descendiente`— y recoge los escaneos de toda la
+     * estirpe. `ARRAY_AGG(...) FILTER (...)` ordenado por `occurred_at` toma el
+     * primero que abre y el ultimo que cierra.
+     *
+     * **Una consulta para todo el rango, agrupada por tramo**, no una por fila:
+     * el detalle de un mes pasa de cuatro `SELECT` a cinco (seis con
+     * incidencias), no a uno por tramo. Con la lista vacia ni siquiera se
+     * pregunta.
+     *
+     * @param  list<int>  $entryIds  `shift_entries.id` de las versiones vigentes del rango
+     * @return array<int, array{opened_by: string|null, closed_by: string|null}>
+     */
+    private function clockingMarks(array $entryIds): array
+    {
+        if ($entryIds === []) {
+            return [];
+        }
+
+        $placeholders = implode(', ', array_fill(0, count($entryIds), '?'));
+
+        /** @var list<object> $rows */
+        $rows = $this->connection->select(<<<SQL
+            WITH RECURSIVE lineage(current_id, entry_id) AS (
+                SELECT se.id, se.id
+                  FROM shift_entries se
+                 WHERE se.id IN ({$placeholders})
+                 UNION ALL
+                SELECT l.current_id, previous.id
+                  FROM shift_entries previous
+                  JOIN lineage l ON previous.superseded_by_id = l.entry_id
+            )
+            SELECT l.current_id,
+                   (ARRAY_AGG(ev.result ORDER BY ev.occurred_at)
+                      FILTER (WHERE ev.result IN ('clock_in', 'break_end')))[1] AS opened_by,
+                   (ARRAY_AGG(ev.result ORDER BY ev.occurred_at DESC)
+                      FILTER (WHERE ev.result IN ('clock_out', 'break_start')))[1] AS closed_by
+              FROM lineage l
+              JOIN scan_events ev ON ev.shift_entry_id = l.entry_id
+             GROUP BY l.current_id
+        SQL, $entryIds);
+
+        $marks = [];
+
+        foreach ($rows as $raw) {
+            $row = Row::of($raw);
+
+            $marks[$row->int('current_id')] = [
+                'opened_by' => $row->nullableString('opened_by'),
+                'closed_by' => $row->nullableString('closed_by'),
+            ];
+        }
+
+        return $marks;
+    }
+
+    /**
+     * Que cerro el tramo, o `null` si sigue abierto (RF-AT-12, tarea 3.5).
+     *
+     * Tres casos y no dos: el escaneo que lo cerro, el tramo cerrado a mano —sin
+     * escaneo, pero con hora de salida: `clock_out`— y el tramo que sigue
+     * abierto. **El nulo se reserva al tercero** porque es lo que el contrato
+     * promete y lo que el panel pinta como «en curso»; devolverlo para un tramo
+     * terminado diria que alguien sigue trabajando.
+     */
+    private function closedBy(?string $recorded, ?DateTimeImmutable $clockedOutAt): ?string
+    {
+        if (! $clockedOutAt instanceof DateTimeImmutable) {
+            return null;
+        }
+
+        return $recorded ?? JournalShiftEntry::CLOSED_BY_CLOCK_OUT;
     }
 
     /**

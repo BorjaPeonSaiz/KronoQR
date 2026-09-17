@@ -88,6 +88,7 @@ Under "My record" you see your working days for the period you choose —the las
 | **Entry** | Each clock-in–clock-out pair of that day, with its duration |
 | **"Total for the day"** | The sum of the entries of that day |
 | **"How it was recorded"** | "Card scan", "PIN at the kiosk", or "Entered by hand by Human Resources" |
+| **"Break"** | Between two entries: you took a break there and clocked it. **A break does not count as worked time**, which is why it is not inside any entry. It only appears if your hotel uses break clocking |
 | **"Shift still open"** | You have not clocked out of that shift yet: the total is going to go up |
 | **"Pending review"** | That day was flagged for someone to review. **It is not your mistake** |
 | **"Recorded X after clocking"** | The tablet had no network and the clocking reached the server later. **What counts is the time you actually clocked** |

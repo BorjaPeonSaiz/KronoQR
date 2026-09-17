@@ -56,10 +56,64 @@ export function shiftEntry(overrides: Partial<WorkDayShiftEntry> = {}): WorkDayS
     clocked_out_at_local: '2026-03-14T14:05:00.000000+01:00',
     clocked_out_recorded_at: null,
     clock_out_source: 'manual_admin',
+    // `clock_in` / `clock_out`: entrada y salida normales (tarea 3.5,
+    // ADR-024). Los escenarios de pausa lo sobrescriben explicitamente.
+    opened_by: 'clock_in',
+    closed_by: 'clock_out',
     duration_minutes: 485,
     recorded_at: '2026-03-14T15:22:41.900000Z',
     ...overrides,
   }
+}
+
+export const BREAK_ENTRY_UUIDS: readonly [string, string] = [
+  '0199f2c1-8a10-7b40-9c50-6d7e8f9a0b21',
+  '0199f2c1-8a10-7b40-9c50-6d7e8f9a0b22',
+]
+
+/**
+ * Una jornada partida por una pausa declarada (tarea 3.5, ADR-024): entrada a
+ * las 06:00, pausa de 30 minutos a mediodia, salida a las 16:00. El tramo de
+ * la mañana cierra con `break_start` y el de la tarde abre con `break_end`,
+ * que es lo que hace que el portal enseñe «Pausa de 12:00 a 12:30 (30 min)»
+ * entre los dos en vez de un hueco mudo, y la insignia «Pausa» en la salida
+ * del primero.
+ */
+export function shiftEntriesWithBreak(): WorkDayShiftEntry[] {
+  return [
+    shiftEntry({
+      uuid: BREAK_ENTRY_UUIDS[0],
+      version: 1,
+      clocked_in_at: '2026-03-14T05:00:00.000000Z',
+      clocked_in_at_local: '2026-03-14T06:00:00.000000+01:00',
+      clocked_in_recorded_at: '2026-03-14T05:00:00.000000Z',
+      clock_in_source: 'qr_kiosk',
+      clocked_out_at: '2026-03-14T11:00:00.000000Z',
+      clocked_out_at_local: '2026-03-14T12:00:00.000000+01:00',
+      clocked_out_recorded_at: '2026-03-14T11:00:00.000000Z',
+      clock_out_source: 'qr_kiosk',
+      opened_by: 'clock_in',
+      closed_by: 'break_start',
+      duration_minutes: 360,
+      recorded_at: '2026-03-14T11:00:00.000000Z',
+    }),
+    shiftEntry({
+      uuid: BREAK_ENTRY_UUIDS[1],
+      version: 1,
+      clocked_in_at: '2026-03-14T11:30:00.000000Z',
+      clocked_in_at_local: '2026-03-14T12:30:00.000000+01:00',
+      clocked_in_recorded_at: '2026-03-14T11:30:00.000000Z',
+      clock_in_source: 'qr_kiosk',
+      clocked_out_at: '2026-03-14T15:00:00.000000Z',
+      clocked_out_at_local: '2026-03-14T16:00:00.000000+01:00',
+      clocked_out_recorded_at: '2026-03-14T15:00:00.000000Z',
+      clock_out_source: 'qr_kiosk',
+      opened_by: 'break_end',
+      closed_by: 'clock_out',
+      duration_minutes: 210,
+      recorded_at: '2026-03-14T15:00:00.000000Z',
+    }),
+  ]
 }
 
 export function correction(overrides: Partial<WorkDayCorrection> = {}): WorkDayCorrection {

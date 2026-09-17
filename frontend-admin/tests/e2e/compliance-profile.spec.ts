@@ -54,3 +54,47 @@ test(
     await expect(page.getByTestId('min-rest-hours')).toHaveValue('10')
   },
 )
+
+// --- Aviso de RN-12, condicionado al fichaje de pausa (RF-AT-12, tarea 3.5) -
+
+test(
+  'con el fichaje de pausa desactivado, el aviso explica por que y enlaza a donde se activa',
+  { tag: ['@RF-PD-07', '@RF-AT-12'] },
+  async ({ page }) => {
+    await stubManagementApi(page, { role: 'admin' })
+    await logInAsAdmin(page)
+
+    await page.goto('/compliance-profile')
+
+    await expect(page.getByTestId('break-suspended')).toContainText(
+      'no abre incidencias mientras el fichaje de pausa esté desactivado',
+    )
+    await expect(
+      page.getByTestId('break-suspended').getByRole('link', { name: /Ajustes operativos/ }),
+    ).toBeVisible()
+    // No promete lo que el ajuste desactivado no cumple.
+    await expect(page.getByTestId('pending-detection-warning')).not.toBeVisible()
+    await page.getByTestId('break-required-after-hours').fill('5')
+    await expect(page.getByTestId('pending-detection-warning')).not.toBeVisible()
+  },
+)
+
+test(
+  'con el fichaje de pausa activado, el aviso confirma que RN-12 abre incidencias',
+  { tag: ['@RF-PD-07', '@RF-AT-12'] },
+  async ({ page }) => {
+    await stubManagementApi(page, {
+      role: 'admin',
+      operationalSettings: { breakClocking: 'enabled' },
+    })
+    await logInAsAdmin(page)
+
+    await page.goto('/compliance-profile')
+
+    await expect(page.getByTestId('break-suspended')).toHaveText(
+      'El tramo continuo sin pausa se evalúa y abre incidencias: el fichaje de pausa está activado en esta instalación.',
+    )
+    await page.getByTestId('break-required-after-hours').fill('5')
+    await expect(page.getByTestId('pending-detection-warning')).toBeVisible()
+  },
+)

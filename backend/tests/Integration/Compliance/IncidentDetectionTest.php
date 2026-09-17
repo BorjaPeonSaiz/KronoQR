@@ -526,3 +526,141 @@ it('deja asiento de divulgacion por cada resumen que sale por correo', function 
         ->and($payload['employee_uuids'])->toBe($scenario['employee'])
         ->and(json_encode($payload, JSON_THROW_ON_ERROR))->not->toContain('Persona');
 })->group('RF-PR-01', 'RS-05');
+
+/**
+ * Deja escrito el ajuste del fichaje de pausa y tira la memoria por peticion.
+ *
+ * `OperationalSettingsProvider` esta enlazado con `scoped()`: en produccion esa
+ * memoria muere con la peticion, pero una prueba de integracion comparte proceso
+ * y contenedor con lo que ya se resolvio antes. Sin el `forgetScopedInstances()`
+ * la pasada leeria el valor anterior y la prueba pasaria sin probar nada.
+ */
+function configuraFichajeDePausa(string $value): void
+{
+    DB::table('installation_settings')->updateOrInsert(
+        ['key' => 'ATTENDANCE_BREAK_CLOCKING'],
+        ['value' => json_encode($value, JSON_THROW_ON_ERROR), 'updated_at' => DETECTION_NOW.'+00'],
+    );
+
+    app()->forgetScopedInstances();
+}
+
+it('no abre missing_break mientras el fichaje de pausa este desactivado', function (): void {
+    // RN-12 y decision 8 de la ficha 3.5. Sin pausa declarada, un hueco entre dos
+    // tramos puede ser una comida o el descanso entre dos turnos, y las dos cosas
+    // se leen igual en la tabla: abrir la incidencia aqui seria señalar a quien
+    // descanso sin fichar. El ajuste nace en `disabled` a proposito (decision 7).
+    Notification::fake();
+
+    $scenario = departmentWithManager();
+    configuraFichajeDePausa('disabled');
+
+    // Ocho horas seguidas, muy por encima de las seis del perfil por defecto.
+    shiftEntry(
+        $scenario['employee'],
+        $scenario['site'],
+        '2026-03-14',
+        '2026-03-14 06:00:00+00',
+        '2026-03-14 14:00:00+00',
+    );
+
+    expect(runDetection())->toBe(0)
+        ->and(DB::table('incidents')->where('type', 'missing_break')->count())->toBe(0);
+})->group('RN-12', 'RF-AT-12', 'RF-PR-01');
+
+it('abre missing_break en cuanto la instalacion activa el fichaje de pausa', function (): void {
+    // La otra mitad, y la que estrena RF-AT-12: donde el quiosco registra la
+    // pausa, un tramo continuo de mas de seis horas **si** dice algo. No hace
+    // falta tocar codigo ni reprocesar nada: la pasada siguiente lo abre.
+    Notification::fake();
+
+    $scenario = departmentWithManager();
+    configuraFichajeDePausa('enabled');
+
+    $entryUuid = shiftEntry(
+        $scenario['employee'],
+        $scenario['site'],
+        '2026-03-14',
+        '2026-03-14 06:00:00+00',
+        '2026-03-14 14:00:00+00',
+    );
+
+    expect(runDetection())->toBe(0);
+
+    $incidencia = DB::table('incidents')->where('type', 'missing_break')->first();
+
+    expect($incidencia)->not->toBeNull()
+        ->and($incidencia?->work_date)->toBe('2026-03-14')
+        // Asignada al responsable, como cualquier otra (RF-PR-01).
+        ->and($incidencia?->assigned_to_user_id)->toBe($scenario['manager'])
+        ->and($incidencia?->shift_entry_id)
+        ->toBe(DB::table('shift_entries')->where('uuid', $entryUuid)->value('id'));
+
+    /** @var array<string, int> $contexto */
+    $contexto = json_decode((string) $incidencia?->context, true, 512, JSON_THROW_ON_ERROR);
+
+    // El umbral del perfil viaja con el hallazgo (regla dura 14): sin el, «480
+    // minutos» no dice si aqui eso es mucho.
+    expect($contexto)->toEqualCanonicalizing([
+        'worked_minutes' => 480,
+        'threshold_minutes' => 360,
+    ]);
+})->group('RN-12', 'RF-AT-12', 'RF-PR-01');
+
+it('no abre missing_break sobre un tramo cortado por una pausa declarada', function (): void {
+    // RN-12 dice «tramo continuo». Con el fichaje de pausa activado, ocho horas
+    // repartidas en dos tramos de cuatro **no incumplen nada**: es exactamente el
+    // caso que la regla persigue y la razon por la que no podia evaluarse antes
+    // de que existiera la pausa (ADR-024).
+    Notification::fake();
+
+    $scenario = departmentWithManager();
+    configuraFichajeDePausa('enabled');
+
+    shiftEntry($scenario['employee'], $scenario['site'], '2026-03-14', '2026-03-14 06:00:00+00', '2026-03-14 10:00:00+00');
+    shiftEntry($scenario['employee'], $scenario['site'], '2026-03-14', '2026-03-14 10:30:00+00', '2026-03-14 14:30:00+00');
+
+    expect(runDetection())->toBe(0)
+        ->and(DB::table('incidents')->where('type', 'missing_break')->count())->toBe(0);
+})->group('RN-12', 'RF-AT-12');
+
+it('desactivar el fichaje de pausa no cierra las incidencias missing_break ya abiertas', function (): void {
+    // Regla dura 5 y decision 8 de la ficha 3.5: **nada se borra ni se cierra
+    // solo**. Suspender una regla deja de ABRIR incidencias; las que ya estan
+    // abiertas describen una jornada real que alguien tiene que revisar, y
+    // cerrarlas automaticamente destruiria el rastro de una decision que todavia
+    // no ha tomado ninguna persona.
+    //
+    // Es ademas el camino que un hotel recorre de verdad: se activa la pausa,
+    // se prueba una semana, y se apaga porque la plantilla no la ficha.
+    Notification::fake();
+
+    $scenario = departmentWithManager();
+    configuraFichajeDePausa('enabled');
+
+    shiftEntry(
+        $scenario['employee'],
+        $scenario['site'],
+        '2026-03-14',
+        '2026-03-14 06:00:00+00',
+        '2026-03-14 14:00:00+00',
+    );
+
+    expect(runDetection())->toBe(0)
+        ->and(DB::table('incidents')->where('type', 'missing_break')->count())->toBe(1);
+
+    $incidencia = DB::table('incidents')->where('type', 'missing_break')->first();
+
+    configuraFichajeDePausa('disabled');
+
+    expect(runDetection())->toBe(0);
+
+    $despues = DB::table('incidents')->where('type', 'missing_break')->first();
+
+    // Sigue ahi, abierta y sin tocar: ni el estado, ni el momento de deteccion,
+    // ni el responsable.
+    expect(DB::table('incidents')->where('type', 'missing_break')->count())->toBe(1)
+        ->and($despues?->status)->toBe(IncidentStatus::Open->value)
+        ->and($despues?->detected_at)->toBe($incidencia?->detected_at)
+        ->and($despues?->assigned_to_user_id)->toBe($scenario['manager']);
+})->group('RN-12', 'RF-AT-12', 'RL-04');

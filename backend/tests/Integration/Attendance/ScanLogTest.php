@@ -6,6 +6,7 @@ use App\Modules\Attendance\Application\Port\ScanIntent;
 use App\Modules\Attendance\Application\Port\ScanLog;
 use App\Modules\Attendance\Application\Port\ScanRecord;
 use App\Modules\Attendance\Application\Port\ScanResult;
+use App\Modules\Attendance\Domain\ValueObject\ClockingAction;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
@@ -48,8 +49,13 @@ function escaneoFixture(): array
 /**
  * @param  array{site: int, employee: string, device: int}  $fixture
  */
-function registro(array $fixture, string $scanId, ScanResult $result = ScanResult::CLOCK_IN, ?string $occurredAt = null): ScanRecord
-{
+function registro(
+    array $fixture,
+    string $scanId,
+    ScanResult $result = ScanResult::CLOCK_IN,
+    ?string $occurredAt = null,
+    ?string $shiftEntryUuid = null,
+): ScanRecord {
     return new ScanRecord(
         scanId: $scanId,
         deviceId: $fixture['device'],
@@ -59,6 +65,7 @@ function registro(array $fixture, string $scanId, ScanResult $result = ScanResul
         origin: ScanOrigin::QR_KIOSK,
         intent: ScanIntent::AUTO,
         result: $result,
+        shiftEntryUuid: $shiftEntryUuid,
         payloadFingerprint: hash('sha256', 'FH1.a3.7QK2mXpR9vLdN4tZbYcF1w.k9Xm2pQrT5vN8wLa'),
         clockSkewSeconds: 1,
         // `scan_events_chk_worked_minutes`: nulo solo en los tres rechazos de
@@ -66,6 +73,36 @@ function registro(array $fixture, string $scanId, ScanResult $result = ScanResul
         // relleno basta en todo lo demas, anti-rebote incluido (ADR-031).
         workedMinutes: \in_array($result, [ScanResult::REJECTED_UNKNOWN, ScanResult::REJECTED_REVOKED, ScanResult::REJECTED_SIGNATURE], true) ? null : 0,
     );
+}
+
+/**
+ * Un tramo vigente al que puedan apuntar los escaneos, y su `uuid` publico.
+ *
+ * Se inserta por SQL y no por el agregado a proposito: lo que este fichero
+ * prueba es el adaptador, no el dominio, y un tramo escrito a mano es ademas el
+ * caso realista de una jornada importada.
+ *
+ * @param  array{site: int, employee: string, device: int}  $fixture
+ */
+function tramoDeFixture(array $fixture, string $workDate, string $clockedInAt, ?string $clockedOutAt = null): string
+{
+    $uuid = Str::uuid7()->toString();
+
+    DB::table('shift_entries')->insert([
+        'uuid' => $uuid,
+        'employee_id' => AttendanceFixtures::employeeIdOf($fixture['employee']),
+        'site_id' => $fixture['site'],
+        'work_date' => $workDate,
+        'clocked_in_at' => $clockedInAt.'+00',
+        'clocked_out_at' => $clockedOutAt === null ? null : $clockedOutAt.'+00',
+        'duration_minutes' => $clockedOutAt === null ? null : 240,
+        'status' => $clockedOutAt === null ? 'open' : 'closed',
+        'clock_in_source' => 'qr_kiosk',
+        'clock_out_source' => $clockedOutAt === null ? null : 'qr_kiosk',
+        'version' => 1,
+    ]);
+
+    return $uuid;
 }
 
 it('escribe el escaneo con sus dos marcas de tiempo y sin el payload', function (): void {
@@ -211,9 +248,14 @@ it('busca los escaneos aceptados adyacentes a un instante, a los dos lados', fun
     $adyacentes = $log->acceptedScansAdjacentTo($fixture['employee'], Instants::utc('2026-03-14 07:30:00'));
 
     expect($adyacentes)->toHaveCount(2)
-        ->and($adyacentes[0]->format('H:i'))->toBe('07:00')
-        ->and($adyacentes[1]->format('H:i'))->toBe('09:00');
-})->group('RF-AT-06');
+        ->and($adyacentes[0]->occurredAt->format('H:i'))->toBe('07:00')
+        ->and($adyacentes[1]->occurredAt->format('H:i'))->toBe('09:00')
+        // Desde la tarea 3.5 lleva ademas QUE fue cada uno: sin eso el
+        // anti-rebote no puede distinguir una vuelta de pausa de un rebote
+        // (ADR-024).
+        ->and($adyacentes[0]->action)->toBe(ClockingAction::CLOCK_OUT)
+        ->and($adyacentes[1]->action)->toBe(ClockingAction::CLOCK_IN);
+})->group('RF-AT-06', 'RF-AT-12');
 
 it('ignora los escaneos rechazados al medir la ventana anti-rebote', function (): void {
     // Un `rejected_debounce` no reinicia la ventana: si lo hiciera, bastaria con
@@ -229,8 +271,61 @@ it('ignora los escaneos rechazados al medir la ventana anti-rebote', function ()
     $adyacentes = $log->acceptedScansAdjacentTo($fixture['employee'], Instants::utc('2026-03-14 06:01:00'));
 
     expect($adyacentes)->toHaveCount(1)
-        ->and($adyacentes[0]->format('H:i:s'))->toBe('06:00:00');
+        ->and($adyacentes[0]->occurredAt->format('H:i:s'))->toBe('06:00:00');
 })->group('RF-AT-06');
+
+it('devuelve el ultimo escaneo aceptado con el tramo del que viene', function (): void {
+    // RF-AT-12 y ADR-024. Es el tercer hecho de `ScanIntentPolicy`: sin el, una
+    // vuelta de pausa y una entrada nueva son indistinguibles —las dos llegan
+    // sin tramo abierto— y el turno de noche se partiria en dos jornadas.
+    //
+    // **Sin acotar por tiempo**: lo que se busca es el ESTADO en que quedo la
+    // persona, y una pausa para comer dura lo que dura.
+    $fixture = escaneoFixture();
+    $log = app(ScanLog::class);
+    $tramo = tramoDeFixture($fixture, '2026-03-13', '2026-03-13 21:00:00', '2026-03-14 01:00:00');
+
+    $log->record(registro($fixture, Str::uuid7()->toString(), ScanResult::CLOCK_IN, '2026-03-13 21:00:00'));
+    $log->record(registro($fixture, Str::uuid7()->toString(), ScanResult::BREAK_START, '2026-03-14 01:00:00', $tramo));
+
+    $ultimo = $log->lastAcceptedScanOf($fixture['employee']);
+
+    expect($ultimo?->action)->toBe(ClockingAction::BREAK_START)
+        ->and($ultimo?->occurredAt->format('Y-m-d H:i'))->toBe('2026-03-14 01:00')
+        // El tramo del que viene: es lo que el handler pasa a
+        // `findWorkDayOfShiftEntry()` en lugar de la fecha civil del escaneo.
+        ->and($ultimo?->breakInProgressShiftEntry())->toBe($tramo);
+})->group('RF-AT-12', 'RN-05');
+
+it('mide el ultimo aceptado por occurred_at y no por orden de llegada', function (): void {
+    // Regla dura 9: un lote offline sincronizado ahora puede traer escaneos
+    // ANTERIORES a otros ya registrados. Si «ultimo» fuera el ultimo insertado,
+    // la vuelta de una pausa de ayer reabriria la jornada de hoy.
+    $fixture = escaneoFixture();
+    $log = app(ScanLog::class);
+
+    $log->record(registro($fixture, Str::uuid7()->toString(), ScanResult::CLOCK_OUT, '2026-03-14 14:00:00'));
+    // Se escribe despues pero ocurrio antes.
+    $log->record(registro($fixture, Str::uuid7()->toString(), ScanResult::CLOCK_IN, '2026-03-14 06:00:00'));
+
+    expect($log->lastAcceptedScanOf($fixture['employee'])?->occurredAt->format('H:i'))->toBe('14:00');
+})->group('RF-AT-12', 'RF-KI-03');
+
+it('no inventa un ultimo aceptado para quien nunca ficho ni para los rechazos', function (): void {
+    // Un rechazo no deja estado: `ScanIntentPolicy` tiene que ver `null` y
+    // resolver `CLOCK_IN`, que es lo que hace que una tarjeta mal leida no
+    // convierta la siguiente entrada en una vuelta de pausa.
+    $fixture = escaneoFixture();
+    $log = app(ScanLog::class);
+
+    expect($log->lastAcceptedScanOf($fixture['employee']))->toBeNull()
+        ->and($log->lastAcceptedScanOf(Str::uuid7()->toString()))->toBeNull();
+
+    $log->record(registro($fixture, Str::uuid7()->toString(), ScanResult::REJECTED_SIGNATURE, '2026-03-14 06:00:00'));
+    $log->record(registro($fixture, Str::uuid7()->toString(), ScanResult::REJECTED_DEBOUNCE, '2026-03-14 06:00:30'));
+
+    expect($log->lastAcceptedScanOf($fixture['employee']))->toBeNull();
+})->group('RF-AT-12', 'RF-AT-06');
 
 it('registra un escaneo que no resolvio a ningun empleado', function (): void {
     // Doc 01 §5.5: `scan_events` registra TODO escaneo. La fila del rechazo es
@@ -301,3 +396,37 @@ it('escribe el fichaje por PIN con su origen, su marca de revision y sin huella'
     expect(app(ScanLog::class)->record($porPin))->toBeFalse()
         ->and(DB::table('scan_events')->where('scan_id', $scanId)->count())->toBe(1);
 })->group('RF-AT-11', 'RF-AT-07');
+
+it('devuelve el tramo del break_start aunque una correccion lo haya sustituido', function (): void {
+    // RF-AT-12 con RN-13 de por medio. Una correccion no toca `scan_events`:
+    // crea una version nueva del tramo y jubila la anterior, y el escaneo sigue
+    // apuntando a la vieja. Lo que este metodo tiene que devolver es **el uuid
+    // que el escaneo dejo escrito**, sea cual sea su estado: de encontrar su
+    // jornada se encarga `WorkDayRepository::findWorkDayOfAnyShiftEntry()`, que
+    // resuelve igual sobre un tramo retirado.
+    //
+    // Si aqui se filtrara por vigencia, corregir la hora de entrada de alguien
+    // que esta en la pausa le partiria el turno al volver.
+    $fixture = escaneoFixture();
+    $log = app(ScanLog::class);
+    $original = tramoDeFixture($fixture, '2026-03-13', '2026-03-13 21:00:00', '2026-03-14 01:00:00');
+
+    $log->record(registro($fixture, Str::uuid7()->toString(), ScanResult::BREAK_START, '2026-03-14 01:00:00', $original));
+
+    // La correccion, tal y como la escribe `CorrectShiftHandler`: primero la
+    // version anterior pasa a `superseded` —si no, la sucesora chocaria contra
+    // `shift_entries_no_overlap`, que es exactamente lo que ese estado existe
+    // para permitir (ADR-026)— y despues se enlazan.
+    DB::table('shift_entries')->where('uuid', $original)->update(['status' => 'superseded']);
+
+    $sucesora = tramoDeFixture($fixture, '2026-03-13', '2026-03-13 21:05:00', '2026-03-14 01:00:00');
+
+    DB::table('shift_entries')->where('uuid', $original)->update([
+        'superseded_by_id' => DB::table('shift_entries')->where('uuid', $sucesora)->value('id'),
+    ]);
+
+    $ultimo = $log->lastAcceptedScanOf($fixture['employee']);
+
+    expect($ultimo?->action)->toBe(ClockingAction::BREAK_START)
+        ->and($ultimo?->breakInProgressShiftEntry())->toBe($original);
+})->group('RF-AT-12', 'RN-13', 'RN-05');

@@ -28,11 +28,13 @@ import { useConnectivity } from '@/shared/connectivity/useConnectivity'
 import {
   APP_VERSION,
   clearDeviceToken,
+  readBreakClockingEnabled,
+  readClockSkewToleranceSeconds,
   readDeviceToken,
   resolveDeviceId,
 } from '@/shared/telemetry/deviceIdentity'
 import { getErrorReporter } from '@/shared/telemetry/errorReporter'
-import { createHeartbeatScheduler } from '@/shared/telemetry/heartbeat'
+import { createHeartbeatScheduler, getLastHeartbeatResult } from '@/shared/telemetry/heartbeat'
 import { useBatteryStatus } from '@/shared/media/useBatteryStatus'
 import ConnectionStatusBadge from '@/shared/ui/ConnectionStatusBadge.vue'
 import LanguageSelector from '@/shared/ui/LanguageSelector.vue'
@@ -40,7 +42,9 @@ import PrivacyNoticePanel from '@/shared/ui/PrivacyNoticePanel.vue'
 import { useOfflineQueue } from '@/features/offline/useOfflineQueue'
 import ClockDiagnosticsTrigger from '@/features/diagnostics/ui/ClockDiagnosticsTrigger.vue'
 import { createScanPipeline } from '../application/scanPipeline'
+import { clockSkewMinutesFrom, exceedsClockSkewTolerance } from '../domain/clockSkewMessage'
 import { useQrScanner } from '../composables/useQrScanner'
+import { useBreakIntent } from '../composables/useBreakIntent'
 import { useScanSessionWithCleanup } from '../composables/useScanSession'
 import { useScanSound } from '../composables/useScanSound'
 import { useWakeLock } from '../composables/useWakeLock'
@@ -96,6 +100,34 @@ const sound = useScanSound({
   onBlocked: (context) => reporter.report('kiosk.audio.blocked', context),
 })
 
+// Ajustes de la tarea 3.5 (RF-AT-12, RF-AT-10). Sembrados con lo ultimo que
+// dijo el latido -en esta sesion o en una anterior, `deviceIdentity.ts` los
+// cachea en `localStorage`- y actualizados en cada `200` por
+// `onSettingsUpdated` de mas abajo, sin esperar a que nadie navegue de
+// vuelta a esta pantalla.
+const breakClockingEnabled = ref(readBreakClockingEnabled())
+const clockSkewToleranceSeconds = ref(readClockSkewToleranceSeconds())
+// Ultimo desfase medido por CUALQUIER latido de esta tablet (modulo, no de
+// esta pantalla): sobrevive a la navegacion igual que `getLastHeartbeatResult`.
+const lastSkewSeconds = ref(getLastHeartbeatResult()?.skewSeconds ?? null)
+
+const breakIntent = useBreakIntent({
+  armedAnnouncement: () => t('scan.break.armedHint'),
+  disarmedAnnouncement: () => t('scan.break.disarmed'),
+})
+
+const showClockSkewBanner = computed(
+  () =>
+    lastSkewSeconds.value !== null &&
+    exceedsClockSkewTolerance(lastSkewSeconds.value, clockSkewToleranceSeconds.value),
+)
+
+const clockSkewBannerMessage = computed(() => {
+  if (lastSkewSeconds.value === null) return ''
+  const { minutes, direction } = clockSkewMinutesFrom(lastSkewSeconds.value)
+  return t(`scan.clockSkew.${direction}`, { minutes })
+})
+
 const pipeline = createScanPipeline({
   submission: offline.submission,
   deviceId,
@@ -103,6 +135,14 @@ const pipeline = createScanPipeline({
   // `null`, el quiosco encola igual y confirma «pendiente de validar»: es la
   // «degradacion honesta» del §6, nunca un rechazo.
   roster: offline.roster,
+  // ADR-024, decision 5 de la tarea 3.5: la intencion se resuelve al
+  // encolar, no antes.
+  resolveIntent: () => breakIntent.consumeIntent(),
+  clockSkewToleranceSeconds: () => clockSkewToleranceSeconds.value,
+  // Revision de la segunda vuelta (seguridad): una lectura ilegible o
+  // repetida que no llega a fichar nada desarma el boton, en vez de dejarlo
+  // armado para una tarjeta que no es la que se esperaba.
+  onUnqueuedRead: () => breakIntent.disarm(),
   onSettled: (confirmation) => session.settle(confirmation),
   onError: (_code, context) => reporter.report('kiosk.scan.submit_failed', context),
 })
@@ -157,6 +197,15 @@ const heartbeat = createHeartbeatScheduler({
   // (RF-PD-06, tarea 5.6): la revocacion es una decision por tablet, no una
   // por canal.
   onAuthOutcome: (unauthorized) => offline.reportAuthOutcome(unauthorized),
+  // Boton «Pausa» y umbral de desfase (tarea 3.5): se actualizan con CADA
+  // latido con exito, no solo al abrir la pantalla.
+  onSettingsUpdated: (settings) => {
+    breakClockingEnabled.value = settings.breakClockingEnabled
+    clockSkewToleranceSeconds.value = settings.clockSkewToleranceSeconds
+  },
+  onSkew: (seconds) => {
+    lastSkewSeconds.value = seconds
+  },
 })
 
 const cameraFailed = computed(
@@ -220,6 +269,36 @@ onUnmounted(() => {
       </div>
     </header>
 
+    <!-- Aviso de desfase (RF-AT-10, decision 6 de la tarea 3.5): discreto pero
+         SIEMPRE presente mientras el ultimo latido mida un desfase por encima
+         de la tolerancia de la instalacion. Nunca cambia el camino de
+         fichaje: es informativo, igual que `ConnectionStatusBadge`.
+
+         `text-kiosk-notice` (#78350f) es SOLO para texto en blanco sobre ese
+         fondo (ver `ScanConfirmationPanel`/`ConnectionStatusBadge`): usado
+         como color de TEXTO sobre `bg-kq-kiosk-surface-raised` no llega a
+         2:1 (fallo de la primera version de este aviso, revision de la
+         3.5). Aqui el acento va SOLO en el borde; el texto y el simbolo
+         usan `text-kq-kiosk-text`, el mismo par que ya prueba
+         `ConnectionStatusBadge` en su estado «en linea».
+
+         El BORDE tambien se corrigio en la segunda vuelta:
+         `border-kiosk-notice` sobre `bg-kq-kiosk-surface-raised` mide 1,88:1;
+         `border-kq-kiosk-border` (el borde neutro del sistema, ya usado en
+         `ConnectionStatusBadge`) mide 3,18:1. Un borde decorativo no exige
+         el 4,5:1 del texto (no es texto), pero por debajo de 3:1 deja de
+         verse como borde en absoluto -es el mismo umbral que WCAG 1.4.11
+         pide para componentes de interfaz-. -->
+    <p
+      v-if="showClockSkewBanner"
+      role="status"
+      class="mx-6 mb-2 flex items-center justify-center gap-2 rounded-kq-sm border border-kq-kiosk-border bg-kq-kiosk-surface-raised px-4 py-2 text-center text-base font-medium text-kq-kiosk-text"
+      data-testid="clock-skew-banner"
+    >
+      <span aria-hidden="true">⚠</span>
+      {{ clockSkewBannerMessage }}
+    </p>
+
     <section class="relative min-h-0 flex-1 overflow-hidden" data-testid="scan-camera-section">
       <video
         ref="video"
@@ -271,6 +350,49 @@ onUnmounted(() => {
           >
             {{ t('pin.entryButton') }}
           </RouterLink>
+
+          <!-- Boton «Pausa» (RF-AT-12, ADR-024, decision 5 de la tarea 3.5):
+               solo si la instalacion tiene el fichaje de pausa activado. Un
+               toque lo arma; el siguiente escaneo se encola con
+               `intent: 'break_start'` y el boton se desarma solo (uso, 10 s,
+               un escaneo que no llega a fichar nada, o cambiar de pantalla).
+               Junto al enlace del PIN, pero DIFERENCIADO de el (revision de
+               la segunda vuelta: eran identicos en reposo) con el pictograma
+               ⏸ y el acento `kq-kiosk-primary` en el borde incluso desarmado;
+               armado gana peso visual de verdad -relleno solido, no solo el
+               borde- para que se note a distancia que la tablet esta a punto
+               de fichar una pausa. -->
+          <button
+            v-if="breakClockingEnabled"
+            type="button"
+            class="kiosk-touch pointer-events-auto mt-1 inline-flex items-center justify-center gap-2 rounded-kq-sm border-2 border-kq-kiosk-primary px-6 text-confirm-sm font-semibold"
+            :class="
+              breakIntent.armed.value
+                ? 'bg-kq-kiosk-primary-strong text-kq-kiosk-on-primary'
+                : 'bg-kq-kiosk-surface-raised text-kq-kiosk-primary-strong'
+            "
+            :aria-pressed="breakIntent.armed.value"
+            data-testid="break-toggle"
+            @click="breakIntent.armed.value ? breakIntent.disarm() : breakIntent.arm()"
+          >
+            <span aria-hidden="true">⏸</span>
+            {{ breakIntent.armed.value ? t('scan.break.toggleOn') : t('scan.break.toggleOff') }}
+          </button>
+
+          <!-- Region viva del boton, SIEMPRE montada (revision de la segunda
+               vuelta): anuncia tanto el armado como el DESARME -uso, tiempo,
+               escaneo no encolado o cambio de pantalla-. Retirar el nodo al
+               desarmar (version anterior) no anuncia nada en la mayoria de
+               lectores de pantalla; cambiar el texto de un nodo que ya
+               estaba ahi, si. -->
+          <p
+            role="status"
+            aria-live="polite"
+            class="pointer-events-auto text-confirm-sm font-semibold"
+            data-testid="break-armed-hint"
+          >
+            {{ breakIntent.announcement.value }}
+          </p>
 
           <p v-if="scanner.state.value === 'starting'" class="text-confirm-sm">
             {{ t('scan.camera.starting') }}

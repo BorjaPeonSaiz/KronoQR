@@ -20,9 +20,12 @@ return [
 
     'scan_title' => '1. Clocking in and out',
     'scan_body' => 'Hold the card up to the tablet camera, code facing the screen, and wait for the confirmation. The same gesture works for clocking in and for clocking out.',
+    'scan_break' => 'If your hotel uses break clocking, you will see a "Break" button on the tablet: when you go for a break, press it and scan your card. To come back, just scan the card, pressing nothing. If you do not see that button, your hotel does not clock breaks and there is nothing special for you to do. If you are going home, clock out, do not start a break.',
 
     'results_title' => '2. What the screen means',
     'result_ok' => '"Clock-in" or "Clock-out" with the time: your entry has been recorded. Nothing else to do.',
+    'result_break_start' => '"Break" with the time: your break has started. Your working day stays open and the time on break does not count as worked.',
+    'result_break_end' => '"Back" with the time: you are back from the break and you are still in the same working day, even if it is already the early hours.',
     'result_pending' => '"Pending validation": the tablet has no network right now, but your entry is already saved and will be sent on its own. Do not repeat it.',
     'result_debounced' => '"You clocked in a few seconds ago": nothing new was recorded. If you meant to clock out, wait a moment and try again.',
     'result_rejected' => '"Invalid code": the tablet could not read your card. Clock in with your code and PIN and tell your manager.',

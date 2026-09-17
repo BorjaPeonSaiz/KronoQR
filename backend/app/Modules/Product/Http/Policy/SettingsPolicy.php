@@ -90,4 +90,47 @@ final class SettingsPolicy
     {
         return $this->update($actor) && ! $actor->isSupportActor();
     }
+
+    /**
+     * Si ademas puede tocar una clave que **decide que es una incidencia**
+     * (tarea 3.5, RF-AT-12).
+     *
+     * ## El fabricante no decide el cumplimiento del cliente
+     *
+     * Es la misma frontera que ya traza `ComplianceProfilePolicy`, que le niega
+     * al actor de soporte el perfil de cumplimiento entero: los umbrales legales
+     * son del hotel, responden a su convenio y de ellos depende que jornadas se
+     * marcan. `ATTENDANCE_BREAK_CLOCKING` vive en `installation_settings` y no
+     * en `compliance_profiles` por razones de esquema —es un interruptor, no un
+     * umbral—, pero hace exactamente eso: activarlo **reactiva RN-12** y desde la
+     * noche siguiente se abren incidencias `missing_break` contra la plantilla
+     * del cliente; desactivarlo las apaga. Un actor de soporte que pudiera
+     * moverlo estaria decidiendo, desde fuera, de que responde el hotel ante una
+     * inspeccion.
+     *
+     * Y al reves que en el perfil, la consecuencia de apagarlo es peor que la de
+     * encenderlo: silenciar avisos de descanso en la instalacion de un cliente
+     * es justo lo que nadie ajeno debe poder hacer (ADR-020, regla dura 16).
+     *
+     * ## Por que NO se resuelve marcandola `confidential`
+     *
+     * Porque `confidential` significa «este valor es un secreto»: ademas del
+     * `403` al escribir, {@see SettingResource} lo sirve como `value: null` con
+     * `redacted: true`. Este ajuste no es ningun secreto —el panel lo enseña, la
+     * guia de RRHH lo explica y el latido lo reparte a todas las tablets—, y
+     * redactarlo dejaria la pantalla de ajustes sin poder pintar su estado. Son
+     * dos propiedades distintas de una clave y confundirlas romperia una de las
+     * dos.
+     *
+     * ## Ni por `SettingImpact::COMPLIANCE_REVIEW`
+     *
+     * Cuatro claves lo llevan —la jornada maxima, la tolerancia de desfase, el
+     * transito minimo y esta— y las otras tres son parametros operativos que el
+     * soporte SI debe poder ajustar mientras diagnostica (RF-PD-11). Un impacto
+     * describe la consecuencia de un cambio, no quien puede hacerlo.
+     */
+    public function updateComplianceGoverning(ManagementActor $actor): bool
+    {
+        return $this->update($actor) && ! $actor->isSupportActor();
+    }
 }

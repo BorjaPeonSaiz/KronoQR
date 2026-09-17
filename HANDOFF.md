@@ -7,7 +7,36 @@
 
 ## Estado y objetivo actual
 
-**Rama `feat/tarea-3.4-vista-cumplimiento` (desde `main` `b57a6e6`, con la 3.3 integrada por PR #64). Tarea 3.4 «Vista de
+**Rama `feat/tarea-3.5-pausa-y-desfase` (desde `main` `c1ccba0`, con la 3.4 integrada por PR #65). Tarea 3.5 «Fichaje de pausa y
+validación de desfase de reloj» (RF-AT-10, RF-AT-12, RN-05, RN-12, RN-15, ADR-024) IMPLEMENTADA, REVISADA (dos vueltas) y PROBADA el
+17-09-2026; ver «Siguiente acción».** Quince decisiones en la ficha (plan 06 → «Tarea 3.5» → «Decisiones tomadas»; la 15 es «lo que
+corrigieron las revisiones»). Las que importan: **el servidor honra siempre la intención declarada** y la decide
+`Attendance\Domain\Policy\ScanIntentPolicy` (con tramo abierto `break_start` cierra como `break_start` y `auto` como `clock_out`; sin
+tramo, `auto` o `break_end` **continúan la jornada** del `break_start` —en cualquier día natural, `findWorkDayOfAnyShiftEntry()`—
+**solo si desde él ha pasado menos que el descanso mínimo del perfil** (`CompliancePolicy::minimumRestMinutes` por puerto; con 12 h o
+más abre jornada nueva); una intención contradictoria se resuelve por estructura sin rechazar); **por eso volver de la pausa no
+exige pulsar nada**; el anti-rebote nunca suprime una intención explícita inversa del aceptado más cercano (60 s se queda);
+**`ATTENDANCE_BREAK_CLOCKING`** (`choice` `enabled|disabled`, `disabled` de serie, impacto `compliance_review`, editable en «Ajustes
+operativos», vedada al actor de soporte) viaja al quiosco por el latido (`break_clocking_enabled`, `clock_skew_tolerance_seconds`)
+y **RN-12 se evalúa solo cuando está activada** (`ComplianceRuleSuspension::forInstallation()`, razón `break_clocking_disabled`,
+sin retroactividad, desactivar no cierra nada); el quiosco arma un botón «Pausa» antes de pasar la tarjeta (10 s, se desarma al
+cambiar de pantalla o ante lecturas que no fichan; el PIN rechazado la rearma) y avisa del desfase con el umbral del latido sin
+bloquear; `WorkDayShiftEntry.opened_by/closed_by` (siguiendo la cadena de versiones) enseñan «Pausa» en panel y portal con
+`breakBetween()`/`BreakBadge.vue` de `web-kit`; `action` en `EmployeeClockedIn/Out` y en los asientos `shift_entry.*`; hoja
+impresa del empleado con la pausa (margen 12 mm). **Sin migración** (el `CHECK` ya admitía `break_*`). **No degradable.**
+**Desviaciones documentadas que el usuario debe conocer:** RN-10 intrajornada NO se evalúa (decisión 9; nota del doc 01 §4
+reescrita sin dictamen legal, remitiendo a la asesoría) y la «pausa sin vuelta» no abre incidencia (tipo nuevo, fuera de alcance).
+Cifras de la segunda vuelta: backend Unit 1922, Feature 1719, Integration 604, Contract 60, Architecture 530 (+ `SourceDiscoveryTest`
+conocido), PHPStan 9 sin errores, Deptrac 0/0, Redocly 0, mutación acotada del dominio 98,65 %; quiosco unit 503 / E2E 71 (PWA
+106 KiB de 250); panel unit 546 / E2E 130; portal unit 81 / E2E 29; web-kit unit 212; `ClientDocumentationTest` 75.
+
+**Suites completas de backend sobre el árbol final (Architecture + Unit + Feature + Integration + Contract): 4835 en verde, 21 350
+aserciones, 996 s; único rojo el conocido `SourceDiscoveryTest`.**
+
+**Siguiente acción:** commit único `feat(fichaje): …`, CI manual en la rama (sin empujar nada después), PR con *merge commit*. Sin migración: tras integrar basta `git pull`. Después, la **3.6** (pruebas
+de carga k6 y ajuste de rendimiento: incluir `lastAcceptedScanOf()` y el endpoint de cumplimiento).
+
+**Tarea 3.4 (cerrada e integrada, PR #65 `c1ccba0`). Rama `feat/tarea-3.4-vista-cumplimiento` (desde `main` `b57a6e6`, con la 3.3 integrada por PR #64). Tarea 3.4 «Vista de
 cumplimiento: descansos, jornada máxima, exceso semanal» (RF-PA-06, RN-10..12 y la nueva RN-17) IMPLEMENTADA, REVISADA (dos
 vueltas) y PROBADA el 16-09-2026; ver «Siguiente acción» para commit, CI manual y PR.** Quince decisiones en la ficha (plan 06 →
 «Tarea 3.4» → «Decisiones tomadas»; la 15 es «lo que corrigieron las revisiones»). Las que importan: **`GET /api/v1/compliance/summary`**
@@ -514,6 +543,20 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 
 ### Por tarea
 
+- **3.5 (restos, 17-09-2026):** **decisión del usuario sobre el doc 05** (no editado): línea ~142 «Fichaje de pausa | Opcional y
+  configurable por centro: marcar inicio y fin de descanso» → «Opcional, se activa desde el panel: quien sale a descansar pulsa
+  «Pausa» y pasa la tarjeta; para volver, solo pasa la tarjeta»; línea ~167 «falta de pausa» → «falta de pausa —si se activa el
+  fichaje de pausa—»; **doc 07 §6 en el cierre de fase:** `break_clocking_enabled` y la tolerancia en `localStorage` de la tablet
+  (manipulables; el servidor honra la intención y aplica su umbral; control: modo quiosco sin devtools), la ventana de 10 s del
+  botón «Pausa» (la intención es de la tablet, no de la persona), y la excepción de soporte sobre `ATTENDANCE_BREAK_CLOCKING`;
+  **«pausa sin vuelta» sin incidencia** (candidata a tipo nuevo `open_break`/`missing_break_end` con migración y bandeja); la
+  divergencia `intent`/`result` solo se ve en la base de datos (ninguna pantalla la muestra); `qa:traceability` no exige aún
+  RF-AT-10/12 (`current_phase` 5 hasta cerrar la Fase 3); probar en tablet real TalkBack del aviso armado y la banda con guantes;
+  captura `quiosco-pausa-confirmada` para la hoja; k6 sobre `lastAcceptedScanOf()` con años de `scan_events` (3.6); la pantalla del
+  perfil descarga el catálogo entero de ajustes (con `KIOSK_SERVICE_CODE` en claro para `admin`) para leer una clave; la mitad
+  `break_end`-tras-`break_start` de la exención del anti-rebote solo la ejercita un cliente de API (el quiosco nunca envía
+  `break_end`); `ScanTarget` es una clase nueva no prevista en el contrato del arquitecto; activar el ajuste en una prueba exige
+  `app()->forgetScopedInstances()` (`OperationalSettingsProvider` es `scoped`).
 - **3.4 (restos, 16-09-2026):** **decisión del usuario sobre el doc 05** (no editado): la fila «Vista de cumplimiento» (~l. 167)
   dice «falta de pausa» sin matiz y se entrega visible pero no evaluada hasta la 3.5, y §10.3 (~l. 395) dice que los tres campos del
   perfil los aplica la vista «cuando entra en servicio» cuando dos ya se aplican (frases propuestas en Engram `fase-3/tarea-3.4`);
@@ -638,9 +681,8 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   unificar el valor; `ErrorLevel` critical de servidor no distingue un `5xx` puntual de una tormenta (la alerta cuenta grupos
   nuevos y basta por ahora); el saneado convierte los identificadores SQL entrecomillados en `'…'` (decisión: seguridad sobre
   detalle); dos comprobaciones de `doctor` más de las que citan las guías si enumeran su número.
-- **Fase 3:** `holidayCalendar` de `CompliancePolicy` sigue sin consumidor (3.10); 3.5 reactiva RN-12 (vaciar
-  `Shared\Domain\ValueObject\ComplianceRuleSuspension::SUSPENDED`: la detección, el asiento del perfil, la pantalla del perfil y la
-  vista de cumplimiento derivan de ahí) y el descanso intra-día de RN-10 con la pausa declarada (RF-AT-12); RNF-D-03 fallback de colas Redis→BD; pasada k6 en Linux para el p95
+- **Fase 3:** `holidayCalendar` de `CompliancePolicy` sigue sin consumidor (3.10); RN-12 ya deriva del ajuste
+  `ATTENDANCE_BREAK_CLOCKING` (3.5) y el descanso intra-día de RN-10 queda fuera por decisión (3.5, decisión 9); RNF-D-03 fallback de colas Redis→BD; pasada k6 en Linux para el p95
   (RNF-P-02/06); la puerta de cobertura (`make coverage`) no corre en CI.
 - **Decisiones de producto abiertas:** **baja de cuentas de gestión** (no existe ni pantalla ni comando; `users.is_active` nunca pasa a
   `false`; la guía de endurecimiento lo declara como límite de la 2.1 y remite al fabricante — hace falta
@@ -748,6 +790,19 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   `tests/Integration/Install/`). **`IFS=$'\n\t'` de los scripts anula la división por espacios**: un
   `set -- ${line}` o un `read a b` sin `IFS=' '` local deja todo en el primer campo (pasó en
   `kq_versions_load`).
+- **Una clave nueva de `installation_settings` va en DOS listas del contrato** (`SettingKey` y el `propertyNames` de
+  `UpdateSettingsRequest`), en `SettingsSurface::SCREENS` (Architecture), en la pantalla del panel con su `data-test`, en
+  `configuracion.md` ES/EN con la ruta por la que se cambia y en `.env.example`: cinco sitios, tres pruebas (3.5).
+- **La hoja impresa del empleado vive en `lang/{es,en}/instructions-sheet.php` y `ClientDocumentationTest` solo comprueba guía ⊇
+  código**: añadir texto a la guía no avisa de que el PDF no lo imprime; y tres párrafos más la sacaron de una cara A4
+  (`InstructionsSheetLayoutTest` con Chromium real; margen 14 → 12 mm) (3.5).
+- **Un proveedor `scoped()` (p. ej. `OperationalSettingsProvider`) memoriza por petición: en una prueba que cambia el ajuste hay
+  que `app()->forgetScopedInstances()`** antes de volver a leerlo (3.5).
+- **Una regla de continuación de estado («sigue en pausa») necesita SIEMPRE una cota temporal derivada de un umbral del perfil**, o
+  el estado se vuelve eterno y absorbe la jornada siguiente; y una marca derivada de `scan_events` (`closed_by`) debe seguir la
+  cadena de versiones de RN-13 o la corrección la borra (3.5, bloqueantes de la revisión).
+- **Un agente que corre cobertura dentro del contenedor con una ruta de Windows deja `backend/C：/…/unit-clover.xml`** (dos puntos de
+  ancho completo U+F03A): borrar con `rm -rf "$(printf 'backend/C\357\200\272')"` antes de `git add -A` (3.5).
 - **Las series del colector *textfile* se declaran en `textfileSeries()` de `tests/Architecture/MetricsCatalogueTest.php` y en el
   doc 02 §8.2**, no en `MetricCatalogue.php` (que solo cataloga lo que sale por `/metrics`): una serie `.prom` nueva sin esas dos
   entradas rompe `MetricsCatalogueTest` o `GrafanaDashboardsTest` (3.4).

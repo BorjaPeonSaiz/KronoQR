@@ -1477,9 +1477,15 @@ QR_SIGNING_KEY_PREVIOUS_ID=            # Solape durante la rotación: las dos
 QR_SIGNING_KEY_PREVIOUS=               # vacías salvo mientras dura una (§5.3)
 QR_ERROR_CORRECTION=Q                  # Tolerancia al desgaste de la tarjeta
 
-ATTENDANCE_DEBOUNCE_SECONDS=60         # RF-AT-06
+ATTENDANCE_BREAK_CLOCKING=disabled     # RF-AT-12 · enabled|disabled; activa el botón Pausa y la
+                                       # evaluación de RN-12. Desactivado de serie (ADR-024)
+ATTENDANCE_DEBOUNCE_SECONDS=60         # RF-AT-06 · revisado en la 3.5: una intención explícita
+                                       # inversa nunca se suprime (un break_end a los 20 s de un
+                                       # break_start mal pulsado reabre el tramo)
 ATTENDANCE_MAX_SHIFT_HOURS=12          # RN-08
-ATTENDANCE_MAX_CLOCK_SKEW_MINUTES=15   # RF-AT-10 · genera incidencia, nunca rechaza el fichaje
+ATTENDANCE_MAX_CLOCK_SKEW_MINUTES=15   # RF-AT-10 · genera incidencia, nunca rechaza el fichaje;
+                                       # ×60 viaja en el latido y es el umbral con el que la
+                                       # tablet avisa de su propio desfase
 ATTENDANCE_PATTERN_WINDOW_SECONDS=10   # RF-PR-06 · fichajes consecutivos en el mismo quiosco
 ATTENDANCE_PATTERN_MIN_REPEATS=3       # RF-PR-06 · coincidencias antes de generar incidencia
 ATTENDANCE_MIN_TRANSIT_SECONDS=120     # RN-16 · tránsito mínimo entre dos quioscos distintos

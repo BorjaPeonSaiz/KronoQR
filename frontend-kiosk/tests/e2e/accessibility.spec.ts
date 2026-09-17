@@ -12,7 +12,7 @@
 
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
-import { stubBrandingApi, stubKioskApi, stubScanApi } from './support/kiosk'
+import { delayCameraStart, stubBrandingApi, stubKioskApi, stubScanApi } from './support/kiosk'
 
 const DISABLED_RULES = ['video-caption']
 
@@ -102,6 +102,70 @@ test(
     const panel = page.getByTestId('scan-confirmation')
     await expect(panel).toHaveAttribute('role', 'alert')
     await expect(panel).toHaveAttribute('aria-live', 'assertive')
+  },
+)
+
+test(
+  'con el boton «Pausa» armado tampoco hay violaciones (RF-AT-12, tarea 3.5)',
+  { tag: ['@RF-KI-06', '@RF-AT-12'] },
+  async ({ page }) => {
+    // Sin `beforeEach` generico: este caso necesita el fichaje de pausa
+    // activado Y ganarle la carrera a la camara simulada para poder armar el
+    // boton antes de que el video en bucle produzca un fichaje.
+    await delayCameraStart(page, 3_000)
+    await stubKioskApi(page, { breakClockingEnabled: true })
+    await stubScanApi(page, { outcome: 'break_start' })
+    await page.goto('/')
+
+    const toggle = page.getByTestId('break-toggle')
+    await expect(toggle).toBeVisible()
+    await toggle.click()
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByTestId('break-armed-hint')).toBeVisible()
+
+    const results = await new AxeBuilder({ page })
+      .withTags(WCAG_TAGS)
+      .disableRules(DISABLED_RULES)
+      .analyze()
+
+    const blocking = results.violations.filter(
+      (violation) => violation.impact === 'critical' || violation.impact === 'serious',
+    )
+
+    expect(
+      blocking,
+      blocking.map((violation) => `${violation.id}: ${violation.help}`).join('\n'),
+    ).toEqual([])
+  },
+)
+
+test(
+  'con la banda de desfase de reloj visible tampoco hay violaciones (RF-AT-10, tarea 3.5)',
+  { tag: ['@RF-KI-06', '@RF-AT-10'] },
+  async ({ page }) => {
+    const skewedServerTime = new Date(Date.now() - 40 * 60 * 1000).toISOString()
+    await stubKioskApi(page, {
+      clockSkewToleranceSeconds: 900,
+      serverTime: () => skewedServerTime,
+    })
+    await stubScanApi(page, { outcome: 'offline' })
+    await page.goto('/')
+
+    await expect(page.getByTestId('clock-skew-banner')).toBeVisible({ timeout: 5_000 })
+
+    const results = await new AxeBuilder({ page })
+      .withTags(WCAG_TAGS)
+      .disableRules(DISABLED_RULES)
+      .analyze()
+
+    const blocking = results.violations.filter(
+      (violation) => violation.impact === 'critical' || violation.impact === 'serious',
+    )
+
+    expect(
+      blocking,
+      blocking.map((violation) => `${violation.id}: ${violation.help}`).join('\n'),
+    ).toEqual([])
   },
 )
 

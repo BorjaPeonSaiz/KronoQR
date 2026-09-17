@@ -21,7 +21,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * falta. Con el `uuid` dentro, la huella es distinta en cada quiosco: una tabla
  * precalculada no sirve para la tablet de al lado.
  *
- * **Tres campos, y los tres obligatorios.**
+ * **Cinco campos, y los cinco obligatorios.**
  *
  * - `server_time` es con lo que la tablet mide su propio desfase de reloj y avisa
  *   (RF-AT-10), que es la mitad de cliente de esa incidencia. Nunca le impide
@@ -32,6 +32,12 @@ use Illuminate\Http\Resources\Json\JsonResource;
  *   lo declara obligatorio porque un campo ausente y un cero significan cosas
  *   distintas para `acknowledge(n)`, y un cliente que tuviera que distinguirlos
  *   acabaria tirando errores que nadie guardo.
+ * - `break_clocking_enabled` y `clock_skew_tolerance_seconds` son los dos
+ *   ajustes que la pantalla de fichaje necesita para funcionar **sin red**
+ *   (RF-AT-12, RF-AT-10, tarea 3.5): con el primero la tablet enseña u oculta el
+ *   boton «Pausa», y con el segundo decide cuando avisar de que su reloj esta
+ *   desviado — el mismo umbral con el que el servidor marca el escaneo, de modo
+ *   que las dos pantallas no puedan contar historias distintas.
  *
  * **No devuelve el estado del dispositivo**, ni su nombre, ni su centro, ni
  * cuando caduca su token. Un latido es una escritura, no una consulta, y cada
@@ -65,6 +71,13 @@ final class KioskHeartbeatResource extends JsonResource
             // «la instalacion no tiene codigo»— y del segundo depende que la
             // pantalla de diagnostico se abra sin pedirlo.
             'service_code_hash' => $outcome->serviceCodeHash,
+            // **Los dos de la tarea 3.5, y los dos obligatorios** (RF-AT-12,
+            // RF-AT-10). Van siempre por lo mismo que `client_errors_accepted`:
+            // un campo ausente obligaria a la tablet a elegir un valor por su
+            // cuenta, y en el caso del umbral de desfase eso es volver a la
+            // constante de 15 minutos que esta tarea vino a retirar.
+            'break_clocking_enabled' => $outcome->breakClockingEnabled,
+            'clock_skew_tolerance_seconds' => $outcome->clockSkewToleranceSeconds,
         ];
     }
 }

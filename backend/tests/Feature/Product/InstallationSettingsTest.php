@@ -554,3 +554,54 @@ it('traduce el motivo de una fila descartada al idioma negociado', function (): 
         ->and($spanish)->not->toBe($english)
         ->and($spanish)->not->toContain('settings.errors');
 })->group('RF-PD-01');
+
+it('acepta activar y desactivar el fichaje de pausa, y nada mas', function (): void {
+    // RF-AT-12 y decision 7 de la ficha 3.5. `choice` de dos valores y no un
+    // tipo booleano nuevo: lo que se comprueba aqui es que el enumerado se
+    // respeta de verdad, porque un tercer valor cualquiera dejaria una fila que
+    // el adaptador leeria como «desactivado» sin que nadie lo hubiera pedido.
+    $token = adminToken();
+
+    $respuesta = Api::as($token)
+        ->patch('/api/v1/settings', ['settings' => [SettingKey::ATTENDANCE_BREAK_CLOCKING->value => 'enabled']])
+        ->assertValidRequest()
+        ->assertValidResponse(200);
+
+    $porClave = settingsByKey($respuesta->json('data'));
+
+    expect($porClave['ATTENDANCE_BREAK_CLOCKING']['value'])->toBe('enabled')
+        ->and($porClave['ATTENDANCE_BREAK_CLOCKING']['source'])->toBe('installation')
+        // No mueve ni un minuto del calculo —la pausa son dos tramos y su tiempo
+        // no esta en ninguno— pero cambia que jornadas se marcan (RN-12).
+        ->and($porClave['ATTENDANCE_BREAK_CLOCKING']['affects_worked_hours'])->toBeFalse();
+
+    Api::as($token)
+        ->patch('/api/v1/settings', ['settings' => [SettingKey::ATTENDANCE_BREAK_CLOCKING->value => 'disabled']])
+        ->assertValidResponse(200);
+
+    Api::as($token)
+        ->patch('/api/v1/settings', ['settings' => [SettingKey::ATTENDANCE_BREAK_CLOCKING->value => 'si']])
+        ->assertValidResponse(422)
+        ->assertJsonStructure(['errors' => ['settings.ATTENDANCE_BREAK_CLOCKING']]);
+
+    // Y el valor rechazado no se escribio: sigue rigiendo el ultimo valido.
+    expect(DB::table('installation_settings')->where('key', 'ATTENDANCE_BREAK_CLOCKING')->value('value'))
+        ->toBe('"disabled"');
+})->group('RF-PD-01', 'RF-AT-12');
+
+it('nace con el fichaje de pausa desactivado', function (): void {
+    // Decision 7: arrancar en `enabled` reactivaria RN-12 en una plantilla que
+    // descansa sin fichar, y el primer dia de uso el hotel veria incidencias
+    // contra gente que no hizo nada mal. El doc 05 lo vende como opcional.
+    DB::table('installation_settings')->delete();
+
+    $respuesta = Api::as(adminToken())->get('/api/v1/settings')->assertValidResponse(200);
+
+    $porClave = settingsByKey($respuesta->json('data'));
+
+    expect($porClave['ATTENDANCE_BREAK_CLOCKING']['value'])->toBe('disabled')
+        ->and($porClave['ATTENDANCE_BREAK_CLOCKING']['source'])->toBe('product_default')
+        // Y lo resuelto para el nucleo dice lo mismo, que es lo que apaga el
+        // boton del quiosco y mantiene RN-12 suspendida.
+        ->and(app(OperationalSettingsProvider::class)->forSite(1)->breakClockingEnabled)->toBeFalse();
+})->group('RF-PD-01', 'RF-AT-12');

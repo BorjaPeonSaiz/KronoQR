@@ -14,6 +14,25 @@
 //    centro -un traslado no reescribe donde ocurrieron las jornadas- se dice.
 //  - **Un turno nocturno es UN tramo** (regla dura 4). No se parte: se marca
 //    que la salida cae en el dia siguiente.
+//  - **La pausa son dos tramos, no un hueco mudo** (tarea 3.5, ADR-024). Un
+//    tramo cerrado por `break_start` lleva una insignia «Pausa» en su salida
+//    (texto e icono, nunca solo color, WCAG 1.4.1), y si el tramo siguiente lo
+//    abrio un `break_end` se enseña ademas «Pausa de HH:MM a HH:MM (N min)»
+//    entre los dos. **El predicado y la duracion (`breakBetween`) viven en
+//    `@kronoqr/web-kit/breaks`** (ADR-036, segunda vuelta de la tarea 3.5): el
+//    panel necesita exactamente la misma regla -los mismos dos escaneos, la
+//    misma resta de instantes-, y una primera version de cada SPA ya habia
+//    divergido (aqui se enseñaba `0 min` con `?? 0` cuando el analisis
+//    fallaba; el panel ocultaba la fila). Esa resta es la UNICA que hace este
+//    cliente: el total del dia lo sigue declarando el servidor (regla dura
+//    7). La insignia y el texto de la fila comparten ademas el mismo
+//    componente, `@kronoqr/web-kit/components/BreakBadge.vue` (mismo icono
+//    SVG, misma pareja de tokens `bg-kq-primary-soft`/`text-kq-on-primary-soft`
+//    -antes este cliente usaba `kq-accent-soft`, que es decorativo y no debe
+//    llevar un significado como «esto fue una pausa», doc 06 §6.5-).
+import BreakBadge from '@kronoqr/web-kit/components/BreakBadge.vue'
+import { breakBetween } from '@kronoqr/web-kit/breaks'
+import type { BreakBetween } from '@kronoqr/web-kit/breaks'
 import {
   formatInstant,
   formatLocalTime,
@@ -56,6 +75,10 @@ interface EntryRow {
   otherTimeZone: string | null
   clockIn: MarkView
   clockOut: MarkView | null
+  /** `closed_by: break_start`: esta salida es un inicio de pausa, no un fin de jornada. */
+  closedByBreak: boolean
+  /** Pausa hacia el tramo siguiente, o `null` si no la hay (jornada sin pausa, o pausa sin cerrar). */
+  breakAfter: BreakBetween | null
 }
 
 function mark(utcValue: string, localValue: string, recordedAt: string | null): MarkView {
@@ -72,19 +95,25 @@ function mark(utcValue: string, localValue: string, recordedAt: string | null): 
 }
 
 const rows = computed<EntryRow[]>(() =>
-  props.entries.map((entry) => ({
-    uuid: entry.uuid,
-    status: entry.status,
-    source: entry.clock_in_source,
-    outSource: entry.clock_out_source,
-    durationMinutes: entry.duration_minutes,
-    otherTimeZone: entry.time_zone === props.timeZone ? null : entry.time_zone,
-    clockIn: mark(entry.clocked_in_at, entry.clocked_in_at_local, entry.clocked_in_recorded_at),
-    clockOut:
-      entry.clocked_out_at === null || entry.clocked_out_at_local === null
-        ? null
-        : mark(entry.clocked_out_at, entry.clocked_out_at_local, entry.clocked_out_recorded_at),
-  })),
+  props.entries.map((entry, index) => {
+    const next = props.entries[index + 1]
+
+    return {
+      uuid: entry.uuid,
+      status: entry.status,
+      source: entry.clock_in_source,
+      outSource: entry.clock_out_source,
+      durationMinutes: entry.duration_minutes,
+      otherTimeZone: entry.time_zone === props.timeZone ? null : entry.time_zone,
+      clockIn: mark(entry.clocked_in_at, entry.clocked_in_at_local, entry.clocked_in_recorded_at),
+      clockOut:
+        entry.clocked_out_at === null || entry.clocked_out_at_local === null
+          ? null
+          : mark(entry.clocked_out_at, entry.clocked_out_at_local, entry.clocked_out_recorded_at),
+      closedByBreak: entry.closed_by === 'break_start',
+      breakAfter: next === undefined ? null : breakBetween(entry, next),
+    }
+  }),
 )
 
 const summedMinutes = computed(() => sumShiftMinutes(props.entries))
@@ -143,63 +172,93 @@ function duration(minutes: number): string {
         </thead>
 
         <tbody>
-          <tr v-for="row of rows" :key="row.uuid" class="border-b border-kq-border align-top">
-            <th scope="row" class="px-3 py-2 font-medium">
-              <span class="text-lg tabular-nums">{{ row.clockIn.local }}</span>
-              <span v-if="row.otherTimeZone !== null" class="ml-1 text-sm font-normal">
-                ({{ row.otherTimeZone }})
-              </span>
-              <span
-                v-if="row.clockIn.queueDelayMinutes !== null"
-                class="mt-1 block text-sm font-normal text-kq-warning"
-              >
-                {{
-                  t('myRecords.entries.queued', {
-                    delay: duration(row.clockIn.queueDelayMinutes),
-                  })
-                }}
-              </span>
-            </th>
-
-            <td class="px-3 py-2">
-              <template v-if="row.clockOut === null">
-                <span class="text-lg">{{ t('myRecords.entries.open') }}</span>
-                <span class="block text-sm text-kq-text-muted">
-                  {{ t('myRecords.entries.openHint') }}
-                </span>
-              </template>
-              <template v-else>
-                <span class="text-lg tabular-nums">{{ row.clockOut.local }}</span>
-                <span v-if="row.clockOut.nextDay" class="ml-1 text-sm text-kq-text-muted">
-                  {{ t('myRecords.entries.nextDay') }}
+          <template v-for="row of rows" :key="row.uuid">
+            <tr class="border-b border-kq-border align-top">
+              <th scope="row" class="px-3 py-2 font-medium">
+                <span class="text-lg tabular-nums">{{ row.clockIn.local }}</span>
+                <span v-if="row.otherTimeZone !== null" class="ml-1 text-sm font-normal">
+                  ({{ row.otherTimeZone }})
                 </span>
                 <span
-                  v-if="row.clockOut.queueDelayMinutes !== null"
-                  class="mt-1 block text-sm text-kq-warning"
+                  v-if="row.clockIn.queueDelayMinutes !== null"
+                  class="mt-1 block text-sm font-normal text-kq-warning"
                 >
                   {{
                     t('myRecords.entries.queued', {
-                      delay: duration(row.clockOut.queueDelayMinutes),
+                      delay: duration(row.clockIn.queueDelayMinutes),
                     })
                   }}
                 </span>
-              </template>
-            </td>
+              </th>
 
-            <td class="px-3 py-2 tabular-nums" data-test="entry-duration">
-              <template v-if="row.durationMinutes === null">
-                {{ t('myRecords.entries.openDuration') }}
-              </template>
-              <template v-else>{{ duration(row.durationMinutes) }}</template>
-            </td>
+              <td class="px-3 py-2">
+                <template v-if="row.clockOut === null">
+                  <span class="text-lg">{{ t('myRecords.entries.open') }}</span>
+                  <span class="block text-sm text-kq-text-muted">
+                    {{ t('myRecords.entries.openHint') }}
+                  </span>
+                </template>
+                <template v-else>
+                  <span class="text-lg tabular-nums">{{ row.clockOut.local }}</span>
+                  <span v-if="row.clockOut.nextDay" class="ml-1 text-sm text-kq-text-muted">
+                    {{ t('myRecords.entries.nextDay') }}
+                  </span>
+                  <span
+                    v-if="row.clockOut.queueDelayMinutes !== null"
+                    class="mt-1 block text-sm text-kq-warning"
+                  >
+                    {{
+                      t('myRecords.entries.queued', {
+                        delay: duration(row.clockOut.queueDelayMinutes),
+                      })
+                    }}
+                  </span>
+                  <!-- Insignia «Pausa»: texto e icono, nunca solo color (WCAG
+                       1.4.1). Un tramo cerrado por `break_start` no es un fin
+                       de jornada, aunque cierre el tramo igual que uno. -->
+                  <BreakBadge
+                    v-if="row.closedByBreak"
+                    data-test="break-badge"
+                    class="mt-1"
+                    :label="t('myRecords.entries.breakBadge')"
+                  />
+                </template>
+              </td>
 
-            <td class="px-3 py-2">
-              {{ t(`myRecords.sources.${row.source}`) }}
-              <span v-if="row.outSource !== null && row.outSource !== row.source" class="block">
-                {{ t(`myRecords.sources.${row.outSource}`) }}
-              </span>
-            </td>
-          </tr>
+              <td class="px-3 py-2 tabular-nums" data-test="entry-duration">
+                <template v-if="row.durationMinutes === null">
+                  {{ t('myRecords.entries.openDuration') }}
+                </template>
+                <template v-else>{{ duration(row.durationMinutes) }}</template>
+              </td>
+
+              <td class="px-3 py-2">
+                {{ t(`myRecords.sources.${row.source}`) }}
+                <span v-if="row.outSource !== null && row.outSource !== row.source" class="block">
+                  {{ t(`myRecords.sources.${row.outSource}`) }}
+                </span>
+              </td>
+            </tr>
+
+            <!-- Entre dos tramos, la pausa completa: «Pausa de HH:MM a HH:MM
+                 (N min)» en vez de un hueco mudo. La UNICA resta que hace este
+                 cliente esta en `breakBetween` (regla dura 7: el total del
+                 dia lo declara el servidor, esto solo describe el hueco). -->
+            <tr v-if="row.breakAfter !== null" class="border-b border-kq-border bg-kq-primary-soft">
+              <td colspan="4" class="px-3 py-2" data-test="break-row">
+                <BreakBadge
+                  :pill="false"
+                  :label="
+                    t('myRecords.entries.breakRow', {
+                      from: row.breakAfter.from,
+                      to: row.breakAfter.to,
+                      duration: duration(row.breakAfter.minutes),
+                    })
+                  "
+                />
+              </td>
+            </tr>
+          </template>
         </tbody>
 
         <tfoot class="border-t-2 border-kq-border-strong bg-kq-surface-alt">

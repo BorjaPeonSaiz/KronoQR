@@ -214,6 +214,105 @@ describe('tuberia del PIN (RF-AT-11)', () => {
     expect(sent[0]?.device_id).toBe('kiosk-recepcion-01')
   })
 
+  describe('intent del boton «Pausa» (ADR-024, decision 5 de la tarea 3.5)', () => {
+    it('escribe break_start cuando resolveIntent lo dice armado', async () => {
+      const { port, sent } = recorder()
+      const pipeline = createPinPipeline({
+        submission: port,
+        deviceId: 'dev-1',
+        publicKey: PUBLIC_KEY,
+        seal: fakeSeal,
+        resolveIntent: () => 'break_start',
+      })
+
+      await pipeline.submit('E7QK2MXPR', RAW_PIN)
+
+      expect(sent[0]?.intent).toBe('break_start')
+    })
+
+    it('un sellado que falla no consume la intencion: nada se encolo', async () => {
+      let calls = 0
+      const pipeline = createPinPipeline({
+        submission: recorder().port,
+        deviceId: 'dev-1',
+        publicKey: PUBLIC_KEY,
+        seal: async () => {
+          throw new Error('WebAssembly no disponible')
+        },
+        resolveIntent: () => {
+          calls += 1
+          return 'break_start'
+        },
+      })
+
+      await pipeline.submit('E7QK2MXPR', RAW_PIN)
+
+      expect(calls).toBe(0)
+    })
+
+    // Revision de la segunda vuelta (QA): la intencion se consume al
+    // ENCOLAR (decision 5), asi que un PIN mal tecleado con la pausa armada
+    // dejaria el reintento como `auto` si nadie la volviera a armar.
+    it('un PIN rechazado no deja al empleado sin su intencion de pausa', async () => {
+      const { port } = recorder({ kind: 'rejected' })
+      let rearmed = 0
+      const pipeline = createPinPipeline({
+        submission: port,
+        deviceId: 'dev-1',
+        publicKey: PUBLIC_KEY,
+        seal: fakeSeal,
+        resolveIntent: () => 'break_start',
+        onIntentRejected: () => {
+          rearmed += 1
+        },
+      })
+
+      const confirmation = await pipeline.submit('E7QK2MXPR', RAW_PIN)
+
+      expect(confirmation.kind).toBe('rejected')
+      expect(rearmed).toBe(1)
+    })
+
+    it('un PIN rechazado SIN la pausa armada no rearma nada: no habia nada que perder', async () => {
+      const { port } = recorder({ kind: 'rejected' })
+      let rearmed = 0
+      const pipeline = createPinPipeline({
+        submission: port,
+        deviceId: 'dev-1',
+        publicKey: PUBLIC_KEY,
+        seal: fakeSeal,
+        // Sin `resolveIntent`: por defecto `'auto'`, igual que un boton
+        // nunca armado.
+        onIntentRejected: () => {
+          rearmed += 1
+        },
+      })
+
+      await pipeline.submit('E7QK2MXPR', RAW_PIN)
+
+      expect(rearmed).toBe(0)
+    })
+
+    it('un PIN ACEPTADO con la pausa armada no rearma nada: se ficho de verdad', async () => {
+      const { port } = recorder({ kind: 'accepted', response: accepted })
+      let rearmed = 0
+      const pipeline = createPinPipeline({
+        submission: port,
+        deviceId: 'dev-1',
+        publicKey: PUBLIC_KEY,
+        seal: fakeSeal,
+        resolveIntent: () => 'break_start',
+        onIntentRejected: () => {
+          rearmed += 1
+        },
+      })
+
+      await pipeline.submit('E7QK2MXPR', RAW_PIN)
+
+      expect(rearmed).toBe(0)
+    })
+  })
+
   it('un sellado que falla se convierte en rechazo generico, sin el PIN en el contexto de error', async () => {
     const { port, sent } = recorder()
     const errors: Array<{ code: string; context: Record<string, unknown> }> = []
@@ -272,6 +371,32 @@ describe('tuberia del PIN (RF-AT-11)', () => {
         // Nadie llama a `onSettled` para un desenlace que `submit()` ya
         // entrego: un unico pintado, un unico sonido.
         expect(settled).toHaveLength(0)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('pasa el umbral de desfase a settleFrom, para el aviso de la confirmacion (RF-AT-10)', async () => {
+      vi.useFakeTimers()
+      try {
+        const withSkew: ScanAccepted = {
+          ...accepted,
+          occurred_at: '2026-08-14T05:59:02.000Z',
+          recorded_at: '2026-08-14T06:39:02.000Z', // 40 min
+        }
+        const pipeline = createPinPipeline({
+          submission: delayedSubmission(100, { kind: 'accepted', response: withSkew }),
+          deviceId: 'dev-1',
+          publicKey: PUBLIC_KEY,
+          seal: fakeSeal,
+          clockSkewToleranceSeconds: () => 900,
+        })
+
+        const submitPromise = pipeline.submit('E7QK2MXPR', RAW_PIN)
+        await vi.advanceTimersByTimeAsync(100)
+        const confirmation = await submitPromise
+
+        expect(confirmation).toMatchObject({ kind: 'accepted', clockSkewSeconds: -2400 })
       } finally {
         vi.useRealTimers()
       }

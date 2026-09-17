@@ -115,11 +115,11 @@ describe('suspensionReasonKey', () => {
       rule: 'missing_break',
       requirement: 'RN-12',
       evaluated: false,
-      suspension_reason: 'awaiting_declared_break',
+      suspension_reason: 'break_clocking_disabled',
     })
 
     expect(suspensionReasonKey(suspended)).toBe(
-      'complianceSummary.suspensionReasons.awaiting_declared_break',
+      'complianceSummary.suspensionReasons.break_clocking_disabled',
     )
   })
 })
@@ -151,7 +151,7 @@ describe('groupFindingsByRule', () => {
       requirement: 'RN-12',
       threshold_minutes: 360,
       evaluated: false,
-      suspension_reason: 'awaiting_declared_break',
+      suspension_reason: 'break_clocking_disabled',
     }),
     ruleStatus({ rule: 'weekly_excess', requirement: 'RN-17', threshold_minutes: 2400 }),
   ]

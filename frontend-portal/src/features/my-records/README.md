@@ -6,6 +6,20 @@ Consulta del registro propio: jornadas, tramos y totales (RF-ID-05, RF-ID-06, RF
 - `workdays.api.ts` — `GET /api/v1/me/workdays`. **Sin ningun identificador de empleado**: la ausencia es la autorizacion (RF-ID-07, regla dura 18).
 - `ShiftEntryTable.vue`, `CorrectionHistory.vue`, `WorkDayCard.vue` — misma forma de datos que el detalle de jornada del panel (tarea 1.16), pantalla mas simple: sin acciones de correccion, solo lectura.
 
+**Fichaje de pausa (tarea 3.5, ADR-024, RF-AT-12).** La pausa son dos tramos, no un hueco mudo:
+`ShiftEntryTable.vue` lee `WorkDayShiftEntry.opened_by`/`closed_by` (contrato) para enseñar una
+insignia «Pausa» en la salida de un tramo cerrado por `break_start`, y entre ese tramo y el
+siguiente —si abre con `opened_by: break_end`— el texto «Pausa de HH:MM a HH:MM (N min)».
+**`breakBetween` ya no vive aqui: se movio a `@kronoqr/web-kit/breaks`** (ADR-036, segunda vuelta
+de la tarea 3.5), junto con la insignia (`@kronoqr/web-kit/components/BreakBadge.vue`, `pill`/no
+`pill` para las dos formas en que aparece). El panel necesita exactamente la misma regla, y una
+primera version de cada SPA ya habia divergido: aqui se enseñaba `0 min` cuando el analisis
+fallaba (`?? 0`) y se formateaba el minuto crudo; el panel ocultaba la fila y formateaba con
+`durationParts` («1 h 30 min»). La resta de los dos instantes sigue siendo la UNICA que hace este
+cliente: el total del dia lo sigue declarando el servidor (regla dura 7), sin tocar
+`workdayTotals.ts`. Un tramo con `closed_by: null` sigue siendo un turno abierto, igual que antes
+de esta tarea.
+
 **`workdayTotals.ts` ya no vive aqui.** La aritmetica de la jornada —suma de tramos, contraste
 con el total declarado (RN-06, regla dura 7)— se movio a `@kronoqr/web-kit/workdayTotals`
 (ADR-036): es la pieza que diverguio de verdad entre panel y portal, y no puede haber una segunda

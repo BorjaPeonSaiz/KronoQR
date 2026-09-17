@@ -26,7 +26,12 @@ import type { ApiClient } from '@/shared/api/client'
 import type { ClientErrorReport, KioskHeartbeatRequest } from '@/shared/api/types'
 import type { Clock } from '@/shared/time/clock'
 import { systemClock } from '@/shared/time/clock'
-import { storeServiceCodeHash } from './deviceIdentity'
+import { exceedsClockSkewTolerance } from '@/features/scan/domain/clockSkewMessage'
+import {
+  storeBreakClockingEnabled,
+  storeClockSkewToleranceSeconds,
+  storeServiceCodeHash,
+} from './deviceIdentity'
 import type { ClientErrorEvent, ErrorReporter } from './errorReporter'
 
 /**
@@ -41,8 +46,18 @@ const MAX_CLIENT_ERRORS_PER_HEARTBEAT = 50
 /** Cada minuto. La alerta del doc 01 §9.3 dispara a los 10 min sin latido. */
 export const DEFAULT_HEARTBEAT_INTERVAL_MS = 60_000
 
-/** ATTENDANCE_MAX_CLOCK_SKEW_MINUTES por defecto (doc 02, Anexo B). */
-export const CLOCK_SKEW_WARNING_SECONDS = 15 * 60
+/**
+ * NO HAY YA UNA CONSTANTE DE DESFASE (tarea 3.5, decision 6). Hasta esta
+ * tarea el quiosco comparaba contra `CLOCK_SKEW_WARNING_SECONDS`, un valor
+ * fijo que podia no coincidir con `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES` de la
+ * instalacion (regla dura 13: el umbral es configuracion, no una constante
+ * del producto). Ahora el umbral es `KioskHeartbeat.clock_skew_tolerance_seconds`,
+ * el mismo con el que el servidor marca el fichaje para revision (RF-AT-10),
+ * cacheado por `storeClockSkewToleranceSeconds` tras cada `200` y leido con
+ * `readClockSkewToleranceSeconds()`. Mientras esta tablet no haya latido
+ * NUNCA no hay umbral que aplicar: no se pinta ninguna banda, en vez de
+ * inventar uno.
+ */
 
 /** Lo que el quiosco sabe de si mismo en el momento de latir. */
 export interface KioskTelemetrySnapshot {
@@ -156,6 +171,16 @@ export interface HeartbeatSchedulerOptions {
    * desvinculacion).
    */
   readonly onAuthOutcome?: (unauthorized: boolean) => void
+  /**
+   * `break_clocking_enabled` y `clock_skew_tolerance_seconds` de CADA `200`
+   * (tarea 3.5), ya cacheados en `localStorage` cuando esto se llama: la
+   * pantalla los usa para pintar el boton «Pausa» y la banda de desfase sin
+   * esperar a un nuevo render disparado desde fuera.
+   */
+  readonly onSettingsUpdated?: (settings: {
+    readonly breakClockingEnabled: boolean
+    readonly clockSkewToleranceSeconds: number
+  }) => void
 }
 
 export interface HeartbeatScheduler {
@@ -248,11 +273,27 @@ export function createHeartbeatScheduler(options: HeartbeatSchedulerOptions): He
       storeServiceCodeHash(result.data.service_code_hash)
     }
 
+    // Ajustes de la tarea 3.5, cacheados en CADA `200` con el mismo patron que
+    // `service_code_hash`: el boton «Pausa» y la banda de desfase de la
+    // pantalla siguen funcionando sin red con lo ultimo que dijo la instalacion.
+    storeBreakClockingEnabled(result.data.break_clocking_enabled)
+    storeClockSkewToleranceSeconds(result.data.clock_skew_tolerance_seconds)
+    options.onSettingsUpdated?.({
+      breakClockingEnabled: result.data.break_clocking_enabled,
+      clockSkewToleranceSeconds: result.data.clock_skew_tolerance_seconds,
+    })
+
     const skew = clockSkewSeconds(clock.now(), result.data.server_time)
     lastHeartbeatResult = { beatAt: clock.now().toISOString(), skewSeconds: skew }
     if (skew === null) return null
 
-    if (Math.abs(skew) >= CLOCK_SKEW_WARNING_SECONDS) {
+    // El MISMO umbral con el que el servidor marca el fichaje para revision
+    // (RF-AT-10, decision 6 de la tarea 3.5): ya no una constante propia, y
+    // el MISMO operador (`>` estricto) que `ReviewPolicy` en el servidor y
+    // que `settleFrom.ts` -un solo sitio decide "supera", `exceedsClockSkewTolerance`
+    // (revision de la segunda vuelta: aqui vivia un `>=` suelto, distinto del
+    // `>` del resto).
+    if (exceedsClockSkewTolerance(skew, result.data.clock_skew_tolerance_seconds)) {
       options.reporter.report('kiosk.clock.skew_detected', {
         skew_seconds: skew,
         message: 'clock_skew_detected',

@@ -44,9 +44,12 @@ return [
 
     'scan_title' => '1. Fichar',
     'scan_body' => 'Acerca la tarjeta a la cámara de la tablet, con el código hacia la pantalla, y espera la confirmación. El mismo gesto sirve para la entrada y para la salida.',
+    'scan_break' => 'Si tu hotel usa el fichaje de pausa, verás un botón «Pausa» en la tablet: cuando salgas a descansar, púlsalo y pasa la tarjeta. Para volver, solo pasa la tarjeta, sin pulsar nada. Si no ves ese botón, tu hotel no ficha las pausas y no tienes que hacer nada especial. Si te vas a casa, ficha la salida, no la pausa.',
 
     'results_title' => '2. Qué significa lo que ves en pantalla',
     'result_ok' => '«Entrada» o «Salida» con la hora: tu fichaje ha quedado registrado. No hace falta nada más.',
+    'result_break_start' => '«Pausa» con la hora: has empezado tu descanso. Tu jornada sigue abierta y el tiempo de la pausa no cuenta como trabajado.',
+    'result_break_end' => '«Vuelta» con la hora: has vuelto del descanso y sigues en la misma jornada, aunque sea ya de madrugada.',
     'result_pending' => '«Pendiente de validar»: la tablet está sin red en ese momento, pero tu fichaje ya está guardado y se enviará solo. No lo repitas.',
     'result_debounced' => '«Ya has fichado hace unos segundos»: no se ha anotado nada nuevo. Si querías fichar la salida, espera un momento y vuelve a intentarlo.',
     'result_rejected' => '«Código no válido»: la tablet no ha podido leer tu tarjeta. Ficha con tu código y tu PIN y avisa a tu responsable.',

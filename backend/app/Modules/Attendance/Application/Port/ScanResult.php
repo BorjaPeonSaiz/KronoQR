@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Application\Port;
 
+use App\Modules\Attendance\Domain\ValueObject\AcceptedScan;
+use App\Modules\Attendance\Domain\ValueObject\ClockingAction;
 use App\Modules\Attendance\Domain\ValueObject\ScanRejectionReason;
 
 /**
@@ -23,9 +25,14 @@ use App\Modules\Attendance\Domain\ValueObject\ScanRejectionReason;
  * (ADR-025, restriccion 2): un enum declarado en `Application/` no seria
  * alcanzable desde aqui. Su mitad de rechazo ya existe en el dominio como
  * {@see ScanRejectionReason} —que es la que el dominio necesita— y este es su
- * complemento de persistencia. Si una regla futura tuviera que razonar sobre
- * `clock_in` frente a `break_start`, el enum completo subiria a `Domain/` y esa
- * es una decision de `arquitecto-dominio`.
+ * complemento de persistencia.
+ *
+ * **Y la mitad de aceptacion subio en la tarea 3.5**, exactamente por el motivo
+ * que este docblock dejaba escrito: `ScanIntentPolicy` y `DebouncePolicy` tienen
+ * que razonar sobre `clock_in` frente a `break_start` (ADR-024), asi que esos
+ * cuatro casos son ahora {@see ClockingAction} y aqui quedan `forAction()` y
+ * `action()` como unico puente. Los cuatro rechazos se quedan: de ellos el
+ * dominio solo necesita el motivo, no el valor de la columna.
  */
 enum ScanResult: string
 {
@@ -33,7 +40,7 @@ enum ScanResult: string
 
     case CLOCK_OUT = 'clock_out';
 
-    /** RF-AT-12, tarea 3.5. El enum nace completo porque la columna nace con su CHECK completo. */
+    /** RF-AT-12, estrenado por la tarea 3.5. El enum nacio completo porque la columna nacio con su CHECK completo. */
     case BREAK_START = 'break_start';
 
     case BREAK_END = 'break_end';
@@ -45,6 +52,50 @@ enum ScanResult: string
     case REJECTED_DEBOUNCE = 'rejected_debounce';
 
     case REJECTED_SIGNATURE = 'rejected_signature';
+
+    /**
+     * El valor de columna que corresponde a lo que el dominio decidio
+     * ({@see ClockingAction}, ADR-024).
+     *
+     * Son dos enums porque el dominio no puede nombrar `Application\Port\`
+     * (ADR-025, restriccion 2) y porque describen cosas distintas: aquel dice
+     * **que se hizo con la jornada** y este **que se escribio**. Anadir un
+     * desenlace de persistencia —un rechazo nuevo— no obliga a tocar el dominio,
+     * que es la misma razon por la que existe {@see fromRejection()}.
+     */
+    public static function forAction(ClockingAction $action): self
+    {
+        return match ($action) {
+            ClockingAction::CLOCK_IN => self::CLOCK_IN,
+            ClockingAction::CLOCK_OUT => self::CLOCK_OUT,
+            ClockingAction::BREAK_START => self::BREAK_START,
+            ClockingAction::BREAK_END => self::BREAK_END,
+        };
+    }
+
+    /**
+     * La accion de dominio que corresponde a este desenlace, o `null` si el
+     * escaneo no produjo tramo.
+     *
+     * Es el camino de vuelta de {@see forAction()}, y lo usa el adaptador de
+     * {@see ScanLog} para reconstruir un {@see AcceptedScan} desde la columna:
+     * el dominio pregunta «¿que fue el escaneo anterior?» y la respuesta esta
+     * guardada en el vocabulario de la persistencia.
+     *
+     * Los cuatro rechazos devuelven `null`, el anti-rebote incluido: no creo
+     * tramo, y por eso tampoco entra en la ventana de RF-AT-06.
+     */
+    public function action(): ?ClockingAction
+    {
+        return match ($this) {
+            self::CLOCK_IN => ClockingAction::CLOCK_IN,
+            self::CLOCK_OUT => ClockingAction::CLOCK_OUT,
+            self::BREAK_START => ClockingAction::BREAK_START,
+            self::BREAK_END => ClockingAction::BREAK_END,
+            self::REJECTED_UNKNOWN, self::REJECTED_REVOKED,
+            self::REJECTED_DEBOUNCE, self::REJECTED_SIGNATURE => null,
+        };
+    }
 
     /**
      * El motivo con el que el dominio describio el rechazo, traducido al valor

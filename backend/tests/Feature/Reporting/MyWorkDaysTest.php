@@ -15,6 +15,7 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Factory\ClockingPolicyFactory;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\PortalLogins;
+use Tests\Support\Reporting\BreakFixtures;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Time\Instants;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -254,3 +255,31 @@ it('exporta el mes por omision cuando no se pide rango', function (): void {
             'attachment; filename=mi-registro-horario-2026-02-18_2026-03-20.csv',
         );
 })->group('RF-ID-05', 'RN-04');
+
+it('enseña la pausa tambien en el registro que el empleado consulta', function (): void {
+    // RF-AT-12 y RF-ID-05. Quien mas necesita saber que aquel hueco fue un
+    // descanso y no una salida es la persona a la que se le van a pagar esas
+    // horas: el portal comparte el esquema `WorkDayShiftEntry` con el panel a
+    // proposito, y las dos marcas viajan tambien por esta puerta.
+    $portal = miPortal();
+
+    BreakFixtures::dayWithBreak(
+        $portal['site'],
+        $portal['employee'],
+        '2026-03-14',
+        '2026-03-14 06:00',
+        '2026-03-14 10:00',
+        '2026-03-14 10:30',
+        '2026-03-14 14:00',
+    );
+
+    Api::as($portal['token'])
+        ->get('/api/v1/me/workdays', ['from' => '2026-03-14', 'to' => '2026-03-14'])
+        ->assertValidRequest()
+        ->assertValidResponse(200)
+        ->assertJsonPath('data.0.shift_entries.0.opened_by', 'clock_in')
+        ->assertJsonPath('data.0.shift_entries.0.closed_by', 'break_start')
+        ->assertJsonPath('data.0.shift_entries.1.opened_by', 'break_end')
+        ->assertJsonPath('data.0.shift_entries.1.closed_by', 'clock_out')
+        ->assertJsonPath('data.0.total_minutes', 450);
+})->group('RF-AT-12', 'RF-ID-05', 'RF-PA-03');

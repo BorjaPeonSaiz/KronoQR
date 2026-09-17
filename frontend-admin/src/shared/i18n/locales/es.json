@@ -633,6 +633,8 @@
       "recorded": "Recibido en el servidor: {moment}",
       "notRecorded": "Sin marca de recepción: esta hora la escribió una persona, no un escaneo.",
       "queued": "Llegó desde la cola del quiosco, {delay} después de fichar. Lo que cuenta para el registro es la hora del fichaje.",
+      "breakBadge": "Pausa",
+      "breakRow": "Pausa de {from} a {to} ({duration})",
       "empty": "Esta jornada no tiene ningún tramo vigente. Si abajo hay correcciones, es que se anularon: el historial sigue completo.",
       "sum": "Suma de los tramos",
       "declared": "Total registrado del día",
@@ -881,7 +883,7 @@
       "minRestHours": "Se abre incidencia si entre el fin de un turno y el inicio del siguiente median menos horas. 12 en el perfil español (art. 34.3 ET).",
       "maxDailyHours": "Se abre incidencia si la suma de los tramos de una jornada supera estas horas. 9 en el perfil español.",
       "maxWeeklyHours": "40 en el perfil español (art. 34.1 ET). El promedio en cómputo anual lo fija el convenio.",
-      "breakRequiredAfterHours": "Umbral del tramo continuo sin pausa registrada. 6 en el perfil español. Se guarda y se evalúa; hoy no abre incidencias (ver la nota de debajo).",
+      "breakRequiredAfterHours": "Umbral del tramo continuo sin pausa registrada. 6 en el perfil español. Se guarda y se evalúa siempre; solo abre incidencias mientras el fichaje de pausa esté activado (ver la nota de debajo).",
       "weekStartsOn": "Se usa para agrupar por semanas. Lunes en el perfil español (ISO 8601).",
       "holidayCalendar": "Una fecha por línea, en formato AAAA-MM-DD. Se entrega vacío: los festivos dependen del municipio y del año, así que los carga cada instalación.",
       "retentionYears": "Cuatro años en España (art. 34.9 ET). Antes de ese plazo nada puede purgarse."
@@ -895,7 +897,9 @@
       "6": "Sábado",
       "7": "Domingo"
     },
-    "breakSuspended": "El tramo continuo sin pausa se evalúa, pero hoy no abre incidencias: hasta que el quiosco registre la pausa como tal, el sistema no puede distinguir «no descansó» de «descansó y no lo fichó». El umbral se guarda y se aplicará cuando la detección se reactive.",
+    "breakSuspendedDisabled": "El tramo continuo sin pausa se evalúa pero no abre incidencias mientras el fichaje de pausa esté desactivado: hasta que el quiosco registre la pausa como tal, el sistema no puede distinguir «no descansó» de «descansó y no lo fichó».",
+    "breakSuspendedDisabledLink": "Actívalo en Ajustes operativos → Fichaje de pausa",
+    "breakSuspendedEnabled": "El tramo continuo sin pausa se evalúa y abre incidencias: el fichaje de pausa está activado en esta instalación.",
     "errors": {
       "notAWholeNumber": "Escribe un número entero, sin decimales ni letras.",
       "required": "Este campo no puede quedarse vacío."
@@ -938,7 +942,7 @@
       }
     },
     "suspensionReasons": {
-      "awaiting_declared_break": "No se evalúa hasta que exista la pausa declarada."
+      "break_clocking_disabled": "No se evalúa mientras el fichaje de pausa esté desactivado en Ajustes operativos."
     },
     "difference": {
       "missing": "Faltan",
@@ -1054,6 +1058,7 @@
       "maxClockSkewMinutes": "Desfase de reloj tolerado (min)",
       "minTransitSeconds": "Tránsito mínimo entre quioscos (s)",
       "kioskServiceCode": "Código de servicio del quiosco",
+      "breakClocking": "Fichaje de pausa",
       "localeDefault": "Idioma por defecto",
       "localeAvailable": "Idiomas disponibles"
     },
@@ -1064,8 +1069,13 @@
       "minTransitSeconds": "Tiempo mínimo creíble para ir de un quiosco a otro. Por debajo, se abre incidencia. Ponlo a 0 si hay dos tablets en la misma puerta. Rango admitido: {minimum}–{maximum} segundos.",
       "kioskServiceCode": "Con él se abre la pantalla de diagnóstico de la tablet. Vacío: la pantalla se abre sin código. Solo cifras, de 8 a 12.",
       "kioskServiceCodeRedacted": "No visible con este tipo de acceso: quien entra como soporte no ve ni puede cambiar el código de servicio.",
+      "breakClocking": "Activado: la tablet enseña el botón «Pausa» y, a partir de la próxima revisión nocturna, un tramo continuo sin pausa (RN-12) empieza a abrir incidencias y a contarse en la vista de cumplimiento. Desactivado: el botón desaparece de la tablet y RN-12 vuelve a quedar suspendida, sin cerrar ninguna incidencia ya abierta.",
       "localeDefault": "Idioma con el que se sirven las tres aplicaciones y los documentos cuando nadie elige otro. Tiene que estar entre los idiomas disponibles.",
       "localeAvailable": "Idiomas que ofrece esta instalación. Al menos uno, y el idioma por defecto siempre tiene que quedar entre los marcados."
+    },
+    "breakClockingOptions": {
+      "enabled": "Activado",
+      "disabled": "Desactivado"
     },
     "errors": {
       "required": "Este campo no puede quedarse vacío.",

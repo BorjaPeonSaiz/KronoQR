@@ -75,3 +75,49 @@ describe('settleFrom — traduccion unica del desenlace del servidor', () => {
     expect(settleFrom(result, SCAN_ID, ATTEMPT_AT)).toBeNull()
   })
 })
+
+describe('settleFrom — desfase de reloj en la confirmacion (RF-AT-10, decision 6 de la tarea 3.5)', () => {
+  it('sin umbral (tablet sin latido todavia), nunca avisa', () => {
+    const withSkew: ScanAccepted = {
+      ...accepted,
+      occurred_at: '2026-08-14T05:59:02.000Z',
+      recorded_at: '2026-08-14T06:39:02.000Z', // 40 min de diferencia
+    }
+    const result: ScanSubmissionResult = { kind: 'accepted', response: withSkew }
+
+    expect(settleFrom(result, SCAN_ID, ATTEMPT_AT, null)).not.toHaveProperty('clockSkewSeconds')
+  })
+
+  it('dentro del umbral, no avisa', () => {
+    const withinTolerance: ScanAccepted = {
+      ...accepted,
+      occurred_at: '2026-08-14T05:59:02.000Z',
+      recorded_at: '2026-08-14T05:59:07.000Z', // 5 s
+    }
+    const result: ScanSubmissionResult = { kind: 'accepted', response: withinTolerance }
+
+    expect(settleFrom(result, SCAN_ID, ATTEMPT_AT, 900)).not.toHaveProperty('clockSkewSeconds')
+  })
+
+  it('por encima del umbral, deja el desfase medido en segundos, con signo', () => {
+    const exceeding: ScanAccepted = {
+      ...accepted,
+      occurred_at: '2026-08-14T05:59:02.000Z',
+      recorded_at: '2026-08-14T06:39:02.000Z', // 2400 s de diferencia
+    }
+    const result: ScanSubmissionResult = { kind: 'accepted', response: exceeding }
+
+    // `occurred_at` (lo que declaro el dispositivo) queda 40 min POR DETRAS
+    // de `recorded_at` (lo que recibio el servidor): la tablet va atrasada,
+    // mismo signo negativo que `clockSkewSeconds` del latido para ese caso.
+    expect(settleFrom(result, SCAN_ID, ATTEMPT_AT, 900)).toMatchObject({
+      clockSkewSeconds: -2400,
+    })
+  })
+
+  it('debounced nunca lleva el campo: el aviso es solo de la confirmacion aceptada', () => {
+    const result: ScanSubmissionResult = { kind: 'debounced', response: debounced }
+
+    expect(settleFrom(result, SCAN_ID, ATTEMPT_AT, 1)).not.toHaveProperty('clockSkewSeconds')
+  })
+})

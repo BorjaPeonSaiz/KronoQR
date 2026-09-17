@@ -30,9 +30,10 @@ use App\Modules\Shared\Domain\ValueObject\OperationalSettings;
  * el puerto de anomalias y viaja en `meta.invalid_keys` de
  * `GET /api/v1/settings`.
  *
- * **Y solo se toman las cuatro claves que se consumen.** Del conjunto resuelto
- * salen `ATTENDANCE_*` y nada mas: la marca y los idiomas no entran aqui ni
- * pueden influir en lo que este adaptador devuelve.
+ * **Y solo se toman las claves que se consumen.** Del conjunto resuelto salen
+ * `ATTENDANCE_*` y nada mas —cinco desde la tarea 3.5, con
+ * `ATTENDANCE_BREAK_CLOCKING`—: la marca y los idiomas no entran aqui ni pueden
+ * influir en lo que este adaptador devuelve.
  *
  * ## La cascada, ahora con dos escalones
  *
@@ -97,6 +98,13 @@ final class DbOperationalSettingsProvider implements OperationalSettingsProvider
             debounceSeconds: $settings->integer(SettingKey::ATTENDANCE_DEBOUNCE_SECONDS),
             maximumClockSkewMinutes: $settings->integer(SettingKey::ATTENDANCE_MAX_CLOCK_SKEW_MINUTES),
             minimumTransitSeconds: $settings->integer(SettingKey::ATTENDANCE_MIN_TRANSIT_SECONDS),
+            // `choice` de dos valores y no un tipo booleano nuevo (decision 7 de
+            // la ficha 3.5): la comparacion con `'enabled'` es la unica
+            // traduccion, y esta en un solo sitio. Cualquier otra cosa —una fila
+            // corrupta, un valor futuro— vale `false`, que es el lado seguro:
+            // RN-12 sigue suspendida y nadie recibe incidencias por una pausa
+            // que su hotel no ficha.
+            breakClockingEnabled: $settings->text(SettingKey::ATTENDANCE_BREAK_CLOCKING) === 'enabled',
         );
     }
 }

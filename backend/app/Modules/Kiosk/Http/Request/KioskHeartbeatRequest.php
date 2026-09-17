@@ -179,6 +179,9 @@ final class KioskHeartbeatRequest extends FormRequest
         return new RecordHeartbeatCommand(
             deviceId: $device->id,
             deviceUuid: $device->uuid,
+            // Del token, como los dos de arriba (tarea 3.5): con el se resuelven
+            // los dos ajustes que la respuesta devuelve.
+            siteId: $device->siteId,
             telemetry: new HeartbeatTelemetry(
                 appVersion: $this->string('app_version')->value(),
                 pendingQueueSize: $this->integer('pending_queue_size'),

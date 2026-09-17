@@ -17,9 +17,20 @@ use Tests\Support\Time\Instants;
  * arrancar el framework.
  */
 
-/** Un tramo vigente del detalle, con lo minimo para poder hablar de su duracion. */
-function tramoDelDetalle(?int $duracion, string $estado = 'closed', ?string $salida = '2026-03-14 14:00'): JournalShiftEntry
-{
+/**
+ * Un tramo vigente del detalle, con lo minimo para poder hablar de su duracion.
+ *
+ * `closedBy` acompaña a la hora de salida porque el objeto de valor lo exige
+ * desde RF-AT-12: un tramo con salida tiene que decir que lo cerro, y uno
+ * abierto no puede decirlo (ADR-024).
+ */
+function tramoDelDetalle(
+    ?int $duracion,
+    string $estado = 'closed',
+    ?string $salida = '2026-03-14 14:00',
+    string $abiertoPor = JournalShiftEntry::OPENED_BY_CLOCK_IN,
+    string $cerradoPor = JournalShiftEntry::CLOSED_BY_CLOCK_OUT,
+): JournalShiftEntry {
     return new JournalShiftEntry(
         uuid: '0199f2c1-8a10-7b40-9c50-6d7e8f9a0b11',
         version: 1,
@@ -34,6 +45,8 @@ function tramoDelDetalle(?int $duracion, string $estado = 'closed', ?string $sal
         clockOutSource: $salida === null ? null : 'qr_kiosk',
         durationMinutes: $duracion,
         recordedAt: Instants::utc('2026-03-14 14:00'),
+        openedBy: $abiertoPor,
+        closedBy: $salida === null ? null : $cerradoPor,
     );
 }
 
@@ -117,3 +130,60 @@ it('rechaza un rango invertido, una fecha que no existe y uno mas ancho que el t
     'con otro formato' => [['14/03/2026', '2026-03-31']],
     'mas de 366 dias' => [['2025-01-01', '2026-03-01']],
 ])->group('RF-PA-03');
+
+it('dice quien abrio y quien cerro cada tramo, y no admite otra cosa', function (): void {
+    // RF-AT-12 y ADR-024. Dos tramos consecutivos pueden ser una jornada con
+    // pausa o dos jornadas distintas, y en la tabla se ven igual: lo que los
+    // distingue es esto. Los valores son los del contrato
+    // (`WorkDayShiftEntry.opened_by` / `closed_by`) y no una cadena libre,
+    // porque un valor inventado llegaria al panel y al portal sin que nadie lo
+    // parara.
+    $pausa = tramoDelDetalle(240, salida: '2026-03-14 10:00', cerradoPor: JournalShiftEntry::CLOSED_BY_BREAK_START);
+    $vuelta = tramoDelDetalle(240, abiertoPor: JournalShiftEntry::OPENED_BY_BREAK_END);
+
+    expect($pausa->closedBy)->toBe('break_start')
+        ->and($pausa->openedBy)->toBe('clock_in')
+        ->and($vuelta->openedBy)->toBe('break_end')
+        ->and(static fn () => tramoDelDetalle(240, abiertoPor: 'break_start'))
+        ->toThrow(InvalidArgumentException::class)
+        ->and(static fn () => tramoDelDetalle(240, cerradoPor: 'break_end'))
+        ->toThrow(InvalidArgumentException::class);
+})->group('RF-AT-12', 'RF-PA-03');
+
+it('exige que un tramo cerrado diga que lo cerro y que uno abierto no lo diga', function (): void {
+    // Las dos mitades de la misma verdad: el contrato declara `closed_by`
+    // obligatorio y nulo SOLO mientras el tramo sigue abierto. Un nulo en un
+    // tramo terminado haria que el panel pintara «en curso» algo que termino, y
+    // un valor en uno abierto diria que alguien ya se fue.
+    expect(static fn (): JournalShiftEntry => new JournalShiftEntry(
+        uuid: '0199f2c1-8a10-7b40-9c50-6d7e8f9a0b11',
+        version: 1,
+        status: 'closed',
+        siteId: 1,
+        timeZone: 'Europe/Madrid',
+        clockedInAt: Instants::utc('2026-03-14 06:00'),
+        clockInRecordedAt: null,
+        clockInSource: 'qr_kiosk',
+        clockedOutAt: Instants::utc('2026-03-14 14:00'),
+        clockOutRecordedAt: null,
+        clockOutSource: 'qr_kiosk',
+        durationMinutes: 480,
+        recordedAt: Instants::utc('2026-03-14 14:00'),
+    ))->toThrow(InvalidArgumentException::class)
+        ->and(static fn (): JournalShiftEntry => new JournalShiftEntry(
+            uuid: '0199f2c1-8a10-7b40-9c50-6d7e8f9a0b11',
+            version: 1,
+            status: 'open',
+            siteId: 1,
+            timeZone: 'Europe/Madrid',
+            clockedInAt: Instants::utc('2026-03-14 06:00'),
+            clockInRecordedAt: null,
+            clockInSource: 'qr_kiosk',
+            clockedOutAt: null,
+            clockOutRecordedAt: null,
+            clockOutSource: null,
+            durationMinutes: null,
+            recordedAt: Instants::utc('2026-03-14 06:00'),
+            closedBy: JournalShiftEntry::CLOSED_BY_CLOCK_OUT,
+        ))->toThrow(InvalidArgumentException::class);
+})->group('RF-AT-12', 'RF-PA-03');

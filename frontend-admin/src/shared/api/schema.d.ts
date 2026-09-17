@@ -1433,8 +1433,9 @@ export interface paths {
          *     y la jornada sale marcada `has_open_shift`) y RN-12 sobre el tramo
          *     cerrado mas largo. Cuando la bandeja tiene una incidencia para la misma
          *     persona, jornada y tipo, el hallazgo la enlaza en `incident`. **Las
-         *     reglas suspendidas no se cuentan**: RN-12 lo esta hasta que exista la
-         *     pausa declarada (documento 01 §4, ADR-024), y `meta.rules[]` la lista
+         *     reglas suspendidas no se cuentan**: RN-12 lo esta mientras el fichaje de
+         *     pausa no este activado en la instalacion (`ATTENDANCE_BREAK_CLOCKING`,
+         *     RF-AT-12, tarea 3.5; documento 01 §4, ADR-024), y `meta.rules[]` la lista
          *     con `evaluated: false` y su umbral en lugar de callarla.
          *
          *     **Con una excepcion, y conviene conocerla:** cuando un tramo suelto ya
@@ -3819,8 +3820,34 @@ export interface components {
          *     siempre: omitir el campo equivale a `auto` y no cambia nada (aditivo, ADR-012).
          *
          *     `break_start` y `break_end` existen porque la pausa son dos tramos (ADR-024) y
-         *     el servidor no puede distinguir un inicio de pausa de un fin de turno. Solo
-         *     tienen efecto si el fichaje de pausa esta habilitado en el centro (RF-AT-12).
+         *     el servidor no puede distinguir un inicio de pausa de un fin de turno.
+         *
+         *     **El servidor honra la intencion declarada siempre**, este o no activado
+         *     el fichaje de pausa en la instalacion (`ATTENDANCE_BREAK_CLOCKING`,
+         *     RF-AT-12, tarea 3.5): el ajuste gobierna la pantalla de la tablet y la
+         *     evaluacion de RN-12, no la verdad de lo que la persona declaro. Como lo
+         *     decide (`Attendance\Domain\Policy\ScanIntentPolicy`): con tramo abierto,
+         *     `break_start` lo cierra como **`break_start`** y `auto` como `clock_out`;
+         *     sin tramo abierto, `break_end` —y tambien `auto`— **continua la jornada**
+         *     como `break_end` si el ultimo escaneo aceptado de esa persona fue un
+         *     `break_start` **y desde el ha pasado menos tiempo que el descanso minimo
+         *     entre jornadas del perfil de cumplimiento** (`min_rest_hours`, RN-05,
+         *     RN-10): con ese tiempo o mas, por definicion ya es otra jornada y el
+         *     escaneo abre como `clock_in`, igual que si no habia pausa que
+         *     continuar. Sin esa cota, una pausa que nadie continuo absorberia la
+         *     jornada del dia siguiente. Por eso volver de la pausa no exige pulsar
+         *     nada. Una pausa sin vuelta no abre incidencia en esta version: la
+         *     jornada queda cerrada con la marca de pausa (`closed_by: break_start`)
+         *     y se corrige como cualquier tramo (RN-13). Una
+         *     intencion que contradice el estado (`break_end` con tramo abierto,
+         *     `break_start` sin el) se resuelve por la estructura, se registra tal cual
+         *     en `scan_events.intent` y **nunca se rechaza** (regla dura 19); `action`
+         *     dice lo que se decidio.
+         *
+         *     Un `break_end` continua la jornada del `break_start` **en cualquier dia
+         *     natural** (RN-05): la vuelta a las 02:30 de una pausa que empezo a las
+         *     02:00 sigue en la jornada que abrio a las 22:00, y el dia siguiente queda
+         *     a cero.
          * @default auto
          * @enum {string}
          */
@@ -4297,6 +4324,32 @@ export interface components {
              *     los pudo guardar.
              */
             client_errors_accepted: number;
+            /**
+             * @description Si la instalacion tiene activado el **fichaje de pausa** (RF-AT-12,
+             *     ajuste `ATTENDANCE_BREAK_CLOCKING`, tarea 3.5). Cuando es `true` la
+             *     tablet enseña el boton «Pausa» que arma la intencion `break_start`
+             *     del siguiente escaneo; cuando es `false` lo oculta. Viaja en el
+             *     latido por lo mismo que `service_code_hash`: es el unico canal
+             *     autenticado que la tablet repite cada minuto, y la tablet lo guarda
+             *     en local para que el boton funcione sin red. **No gobierna al
+             *     servidor**: una intencion declarada se honra siempre, este o no
+             *     activado el ajuste; lo que el ajuste gobierna es la pantalla y la
+             *     evaluacion de RN-12.
+             * @example false
+             */
+            break_clocking_enabled: boolean;
+            /**
+             * @description La tolerancia de desfase de reloj de la instalacion, en segundos
+             *     (`ATTENDANCE_MAX_CLOCK_SKEW_MINUTES` × 60, RF-AT-10). La tablet la usa
+             *     para decidir cuando avisar de que su hora se ha ido —comparando
+             *     `server_time` con la suya en cada latido, y `recorded_at` con
+             *     `occurred_at` en cada escaneo respondido en linea— **con el mismo
+             *     umbral con el que el servidor marca el fichaje para revision**, en
+             *     vez de con una constante propia (regla dura 13). El aviso nunca
+             *     impide fichar.
+             * @example 900
+             */
+            clock_skew_tolerance_seconds: number;
             /**
              * @description Hora del servidor en el momento de atender el latido. La tablet la compara
              *     con la suya para saber si su reloj se ha ido y avisar (RF-AT-10).
@@ -5535,9 +5588,21 @@ export interface components {
          *     recibe nunca el codigo, solo su huella por `POST /api/v1/kiosk/heartbeat`
          *     (`service_code_hash`). Es la unica clave cuyo valor no se copia al
          *     asiento de auditoria ni al paquete de diagnostico.
+         *
+         *     `ATTENDANCE_BREAK_CLOCKING` (tarea 3.5, RF-AT-12, ADR-024) es la quinta
+         *     clave de fichaje: `enabled` o `disabled`, **`disabled` de serie**. Con
+         *     `enabled` la tablet enseña el boton «Pausa» —lo recibe por el latido,
+         *     `break_clocking_enabled`— y la regla RN-12 (tramo continuo sin pausa)
+         *     deja de estar suspendida: abre incidencias `missing_break` en la
+         *     siguiente revision nocturna y se cuenta en la vista de cumplimiento.
+         *     Con `disabled` la regla vuelve a suspenderse sin cerrar nada. Es una
+         *     eleccion (`text` con dos valores admitidos) y no un tipo booleano nuevo:
+         *     una sola clave no justifica ampliar `SettingType`. Se desactiva de serie
+         *     porque activarla en una plantilla que no ficha la pausa abriria
+         *     incidencias contra gente que descanso sin fichar.
          * @enum {string}
          */
-        SettingKey: "ATTENDANCE_MAX_SHIFT_HOURS" | "ATTENDANCE_DEBOUNCE_SECONDS" | "ATTENDANCE_MAX_CLOCK_SKEW_MINUTES" | "ATTENDANCE_MIN_TRANSIT_SECONDS" | "BRANDING_APP_NAME" | "BRANDING_LOGO_PATH" | "BRANDING_ACCENT_COLOR" | "LOCALE_DEFAULT" | "LOCALE_AVAILABLE" | "KIOSK_SERVICE_CODE";
+        SettingKey: "ATTENDANCE_MAX_SHIFT_HOURS" | "ATTENDANCE_DEBOUNCE_SECONDS" | "ATTENDANCE_MAX_CLOCK_SKEW_MINUTES" | "ATTENDANCE_MIN_TRANSIT_SECONDS" | "ATTENDANCE_BREAK_CLOCKING" | "BRANDING_APP_NAME" | "BRANDING_LOGO_PATH" | "BRANDING_ACCENT_COLOR" | "LOCALE_DEFAULT" | "LOCALE_AVAILABLE" | "KIOSK_SERVICE_CODE";
         /**
          * SettingValue
          * @description El valor de una clave. `installation_settings.value` es `JSONB` porque el
@@ -6717,6 +6782,27 @@ export interface components {
             clocked_out_recorded_at: components["schemas"]["UtcTimestamp"] | null;
             clock_out_source: components["schemas"]["ClockingSource"] | null;
             /**
+             * @description Que escaneo abrio este tramo (tarea 3.5, ADR-024): `clock_in` es una
+             *     entrada y `break_end` la **vuelta de una pausa**, que continua la
+             *     jornada anterior. Se deriva de `scan_events.result` del escaneo que
+             *     lo abrio; un tramo declarado o corregido a mano sin escaneo detras
+             *     va como `clock_in`. Es lo que permite al panel y al portal enseñar
+             *     «pausa» entre dos tramos en vez de un hueco mudo.
+             * @example clock_in
+             * @enum {string}
+             */
+            opened_by: "clock_in" | "break_end";
+            /**
+             * @description Que escaneo cerro este tramo: `clock_out` es un fin de jornada y
+             *     `break_start` un **inicio de pausa** (la jornada sigue abierta y el
+             *     siguiente tramo vendra con `opened_by: break_end`). Nulo mientras el
+             *     tramo siga abierto. Un tramo cerrado a mano sin escaneo detras va
+             *     como `clock_out`.
+             * @example clock_out
+             * @enum {string|null}
+             */
+            closed_by: "clock_out" | "break_start" | null;
+            /**
              * @description Minutos del tramo. `null` mientras esta abierto, y entonces aporta
              *     **cero** a `total_minutes`: inventarle una duracion a un turno en
              *     curso seria dar por terminado lo que no ha terminado.
@@ -7463,8 +7549,9 @@ export interface components {
          *       `long_shift`, que alli cubre tambien el tramo suelto de RN-08; aqui se
          *       nombra por lo que mide.
          *     - `missing_break`: tramo continuado por encima del maximo sin pausa
-         *       (RN-12, `break_required_after_hours`). **Suspendida** hasta que exista
-         *       la pausa declarada: `meta.rules[]` lo dice.
+         *       (RN-12, `break_required_after_hours`). **Suspendida** mientras el
+         *       fichaje de pausa no este activado en la instalacion
+         *       (`ATTENDANCE_BREAK_CLOCKING`, tarea 3.5): `meta.rules[]` lo dice.
          *     - `weekly_excess`: la suma de la semana del perfil supera la jornada
          *       semanal ordinaria (RN-17, `max_weekly_hours`). Informativa: no abre
          *       incidencia.
@@ -7608,12 +7695,15 @@ export interface components {
             evaluated: boolean;
             /**
              * @description Por que no se evalua, cuando `evaluated` es `false`. Hoy solo
-             *     `awaiting_declared_break`: RN-12 espera a la pausa declarada
-             *     (ADR-024, RF-AT-12).
-             * @example awaiting_declared_break
+             *     `break_clocking_disabled`: RN-12 se evalua **unicamente cuando el
+             *     fichaje de pausa esta activado** en la instalacion (ajuste
+             *     `ATTENDANCE_BREAK_CLOCKING`, RF-AT-12, tarea 3.5). Sin el, la plantilla
+             *     no puede declarar que descanso, y «no descanso» seria indistinguible
+             *     de «descanso y no lo ficho» (ADR-024).
+             * @example break_clocking_disabled
              * @enum {string|null}
              */
-            suspension_reason: "awaiting_declared_break" | null;
+            suspension_reason: "break_clocking_disabled" | null;
         };
         /**
          * ComplianceProfileRef

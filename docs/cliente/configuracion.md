@@ -50,16 +50,70 @@ Se cambian solo las que hagan falta.
 
 | Clave | De serie | Rango | Qué pasa si la cambias |
 | --- | --- | --- | --- |
+| `ATTENDANCE_BREAK_CLOCKING` | `disabled` | `enabled` o `disabled` | Enciende el **fichaje de pausa** en toda la instalación. Tres consecuencias, ni una más ni una menos — ver debajo de la tabla. |
 | `ATTENDANCE_MAX_SHIFT_HOURS` | `12` | 1 – 24 | A partir de esa duración, un tramo cerrado se marca como **anómalo** y se abre una incidencia para revisión. **No cierra ningún turno por su cuenta.** |
 | `ATTENDANCE_DEBOUNCE_SECONDS` | `60` | 0 – 3600 | Ventana de gracia: dos escaneos de la misma persona dentro de esa ventana cuentan como uno. **Esta clave cambia las horas registradas** — ver el aviso de abajo. `0` la desactiva. |
-| `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES` | `15` | 1 – 1440 | Desfase tolerado entre el reloj de la tablet y el del servidor antes de marcar el fichaje para revisión. **Nunca rechaza un fichaje**, solo lo señala. |
+| `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES` | `15` | 1 – 1440 | Desfase tolerado entre el reloj de la tablet y el del servidor antes de marcar el fichaje para revisión. **Nunca rechaza un fichaje**, solo lo señala. Es además el umbral con el que **la propia tablet avisa** de que su hora se ha ido. |
 | `ATTENDANCE_MIN_TRANSIT_SECONDS` | `120` | 0 – 3600 | Tiempo mínimo creíble para ir de un quiosco a otro. Por debajo, se abre incidencia. Ponlo a `0` si tienes dos tablets en la misma puerta; súbelo si hay dos edificios. |
+
+**`ATTENDANCE_BREAK_CLOCKING` — qué cambia exactamente.** Se pone en
+Panel → **Ajustes operativos** (`/settings`) → «Fichaje de pausa», donde las dos
+opciones se llaman «Activado» y «Desactivado». Surte efecto en la petición
+siguiente. Con `enabled`:
+
+1. **Aparece el botón «Pausa» en la tablet.** Quien sale a descansar lo pulsa y
+   pasa la tarjeta; **para volver solo pasa la tarjeta**, sin pulsar nada. Con
+   `disabled` el botón no existe y nadie ve ninguna diferencia.
+2. **La revisión de cada madrugada empieza a abrir la incidencia «Sin pausa
+   registrada»** sobre los tramos continuos por encima del umbral del convenio.
+   **No reprocesa el pasado**: empieza en la pasada siguiente y solo dentro de
+   su ventana de revisión (7 días de serie).
+3. **La pantalla «Cumplimiento» empieza a contar esa regla.** Mientras está en
+   `disabled`, la tarjeta se ve con su umbral y marcada «No se evalúa», con el
+   motivo escrito.
+
+**Actívalo solo cuando la plantilla vaya a fichar la pausa de verdad, y avisa
+antes.** Encenderlo en un hotel donde nadie la ficha abre una incidencia por
+cada turno de más de seis horas, y ninguna de ellas distingue «no descansó» de
+«descansó y no lo fichó»: en una semana la bandeja queda inservible. Por eso se
+entrega desactivado.
+
+**Volver a `disabled` es seguro**: la regla se suspende otra vez, dejan de
+abrirse incidencias nuevas y **las que ya estaban abiertas se quedan como
+están** — no se cierra ninguna sola, igual que con cualquier otro cambio de
+criterio. Los fichajes de pausa ya registrados **no se tocan ni se
+reinterpretan**: siguen siendo dos tramos con su pausa en medio.
+
+> **El umbral de la pausa no está aquí.** «A partir de cuántas horas hay que
+> haber descansado» es `break_required_after_hours` del perfil de cumplimiento
+> (sección 2.4), 6 h en el perfil español de hostelería que se entrega de serie.
+> Esta clave decide **si la regla se evalúa**; aquella, **con qué número**.
+> Mientras esta esté en `disabled`, cambiar aquella no altera ninguna
+> incidencia, y el registro de auditoría del cambio lo dice.
+>
+> **Y la cota de cuánto puede durar una pausa tampoco está aquí**: la vuelta solo
+> continúa la jornada si llega antes de `min_rest_hours` (sección 2.4). Pasado
+> ese tiempo, el fichaje abre jornada nueva.
+
+> **El soporte del fabricante no puede tocar esta clave.** Un acceso de soporte
+> con alcance `configuration` cambia el resto de ajustes operativos, pero **no
+> este**: si lo intenta, recibe un 403. Es la misma excepción que el perfil de
+> cumplimiento, y por el mismo motivo —decide **qué se considera incidencia** en
+> tu registro horario, y esa decisión es del hotel—. Lo activas tú desde tu
+> panel; el reparto completo está en
+> [`operacion.md`](operacion.md) §12.4.
 
 > **⚠️ `ATTENDANCE_DEBOUNCE_SECONDS` afecta al cálculo de horas.** Subirlo hace
 > que fichajes reales muy seguidos se descarten, y el total de la jornada sale
 > distinto. Es la única clave de esta lista que mueve minutos del registro legal.
 > Cámbiala con criterio y déjalo dicho por escrito: el cambio queda auditado con
 > tu nombre, la fecha y el valor anterior.
+>
+> **Una pausa mal pulsada no cae en esta ventana.** Si alguien pulsa «Pausa» sin
+> querer y vuelve a pasar la tarjeta a los veinte segundos, el sistema reconoce
+> que la segunda intención es la contraria de la primera y **no la descarta**:
+> se pierden esos veinte segundos, no la tarde entera. Lo que la ventana sigue
+> descartando es el doble escaneo accidental, que es para lo que existe.
 
 ### 2.2 Marca
 
@@ -202,15 +256,26 @@ Se entrega el perfil **`ES-hosteleria`**, con estos valores:
 
 | Campo | De serie | Qué hace | De dónde sale |
 | --- | --- | --- | --- |
-| `min_rest_hours` | `12` | Se abre incidencia si entre el fin de un turno y el inicio del siguiente median **menos** de esas horas | Art. 34.3 ET |
+| `min_rest_hours` | `12` | Se abre incidencia si entre el fin de un turno y el inicio del siguiente median **menos** de esas horas. **Acota además la pausa** — ver la nota de debajo de la tabla | Art. 34.3 ET |
 | `max_daily_hours` | `9` | Se abre incidencia si la suma de los tramos de una jornada **supera** esas horas | Art. 34.3 ET |
-| `break_required_after_hours` | `6` | Umbral del tramo continuo sin pausa registrada. **Hoy la regla se evalúa pero no abre incidencia** (ver abajo) | Art. 34.4 ET |
+| `break_required_after_hours` | `6` | Umbral del tramo continuo sin pausa registrada. **Solo abre incidencia si el fichaje de pausa está activado** (`ATTENDANCE_BREAK_CLOCKING`, sección 2.1; ver abajo) | Art. 34.4 ET |
 | `updated_at` | vacío | Solo lectura: cuándo se ajustó por última vez. **Vacío significa «tal como se instaló»** | — |
 | `max_weekly_hours` | `40` | Jornada semanal ordinaria. **Lo aplica la vista de cumplimiento** del panel: avisa de las semanas que lo superan, **sin abrir incidencia** (ver abajo) | Art. 34.1 ET |
 | `week_starts_on` | `1` (lunes) | Día en que empieza la semana. **Define la semana que mide la vista de cumplimiento** | ISO 8601 |
 | `holiday_calendar` | vacío | Festivos del centro, una fecha por línea. **Todavía no lo aplica ninguna regla** | Lo cargas tú |
 | `retention_years` | `4` | Años que hay que conservar el registro antes de poder purgarlo | Art. 34.9 ET |
 | `name` | `ES-hosteleria` | Cómo se llama el convenio que el perfil describe | Lo pones tú |
+
+**`min_rest_hours` hace además una segunda cosa: acota cuánto puede durar una
+pausa.** La vuelta de un descanso continúa la jornada que estaba en curso solo si
+llega **antes** de ese número de horas desde que empezó la pausa; con ese tiempo
+o más, el siguiente fichaje **abre una jornada nueva**. Es lo que impide que
+quien pulsó «Pausa» a las 15:00 y se fue a casa vea su entrada del día siguiente
+pegada a la jornada anterior. Consecuencia de subir o bajar este número: mueve
+las dos cosas a la vez —qué se considera descanso insuficiente y hasta cuándo una
+vuelta sigue siendo una vuelta—, así que **no lo uses para ajustar solo una de
+ellas**. Con el fichaje de pausa desactivado (sección 2.1) la cota no se nota,
+porque nadie declara pausas.
 
 **El calendario de festivos se entrega vacío a propósito.** Los festivos dependen
 del municipio y del año: un calendario metido dentro del producto caducaría cada
@@ -231,17 +296,21 @@ incumplimiento—, de modo que cambiar cualquiera de los dos **no altera ninguna
 incidencia**, pero sí cambia lo que se ve en esa pantalla desde el momento en
 que se guarda. Lo explica [`guia-rrhh.md`](guia-rrhh.md) §4 bis.
 
-**`break_required_after_hours` está enunciado pero no abre incidencias todavía.**
-El sistema no puede distinguir «no descansó» de «descansó y no lo fichó» hasta que
-el quiosco registre la pausa como tal; abrir incidencias mientras tanto llenaría
-la bandeja de falsos positivos y taparía las que sí importan. El umbral se guarda
-y se aplicará cuando la detección se reactive.
+**`break_required_after_hours` solo abre incidencias si el fichaje de pausa está
+activado.** Mientras `ATTENDANCE_BREAK_CLOCKING` esté en `disabled` —el valor de
+serie, sección 2.1— el sistema no puede distinguir «no descansó» de «descansó y
+no lo fichó», así que la regla se enseña con su umbral y no se evalúa: abrir
+incidencias en esas condiciones llenaría la bandeja de falsos positivos y
+taparía las que sí importan. El umbral se guarda igual y empieza a aplicarse en
+la primera revisión nocturna posterior a activar el fichaje de pausa.
 
-Consecuencia práctica, y conviene saberla antes de tocarlo: **cambiar ese umbral
-hoy no altera ni una incidencia**. La pantalla lo dice al lado del campo y el
-registro de auditoría lo deja escrito (`detection_suspended`), para que dentro
-de dos años se pueda distinguir «esto no movía alertas» de «las movía, pero
-entonces la regla estaba suspendida».
+Consecuencia práctica, y conviene saberla antes de tocarlo: **con el fichaje de
+pausa desactivado, cambiar ese umbral no altera ni una incidencia**. La pantalla
+lo dice al lado del campo y el registro de auditoría lo deja escrito
+(`detection_suspended`), para que dentro de dos años se pueda distinguir «esto
+no movía alertas» de «las movía, pero entonces la regla estaba suspendida». Con
+el fichaje de pausa activado, en cambio, endurecer el umbral **sí** puede abrir
+incidencias de jornadas recientes, dentro de la ventana de revisión.
 
 #### Cambiar un umbral rige desde el cambio, no hacia atrás
 
@@ -1150,14 +1219,15 @@ sudo docker compose exec app php artisan product:doctor
 > significa que quien tenga uno puede leer las copias, firmar tarjetas o abrir
 > los PIN sellados del otro.
 
-### 6.0 Las diez claves que NO son variables de entorno
+### 6.0 Las once claves que NO son variables de entorno
 
-Diez propiedades de la instalación no viven en el `.env` sino en la tabla
+Once propiedades de la instalación no viven en el `.env` sino en la tabla
 `installation_settings`, se editan **desde el panel** y surten efecto en la
 petición siguiente sin reiniciar nada:
 
 | Clave | Dónde se edita | Dónde se explica |
 | --- | --- | --- |
+| `ATTENDANCE_BREAK_CLOCKING` | Panel → **Ajustes operativos** (`/settings`) → «Fichaje de pausa» | Sección 2.1 |
 | `ATTENDANCE_MAX_SHIFT_HOURS` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.1 |
 | `ATTENDANCE_DEBOUNCE_SECONDS` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.1 |
 | `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.1 |
@@ -1198,29 +1268,31 @@ queda auditado con tu nombre, la fecha y el valor anterior. Si no ves esas
 entradas en el menú, no es que falten: es que tu cuenta no es de
 administrador.
 
-**Manda la base de datos** (sección 1). Seis de las diez —las de marca, las de
+**Manda la base de datos** (sección 1). Seis de las once —las de marca, las de
 idioma y el código de servicio— no existen como variable de entorno: las cinco
 primeras se retiraron para que no hubiera dos sitios donde escribir el mismo
 dato, y la última nunca la tuvo, porque un secreto en el `.env` es un secreto que
 acaba en una copia de seguridad sin cifrar.
 
-**Las cuatro `ATTENDANCE_*` sí siguen apareciendo en `.env.example`, y conviene
+**Las cinco `ATTENDANCE_*` sí siguen apareciendo en `.env.example`, y conviene
 saber exactamente qué son:** una copia del valor de serie, escrita ahí para que
 quien lea el fichero sepa con qué números trabaja el sistema. **La aplicación no
-las lee.** Los cuatro umbrales salen siempre de `installation_settings`, que la
-migración sembró con esos mismos valores (12, 60, 15 y 120). Consecuencia
-práctica, y es la causa de la mitad de los *«pues yo lo tengo puesto a otra
-cosa»*:
+las lee.** Los cinco ajustes salen siempre de `installation_settings`, que la
+migración sembró con esos mismos valores (12, 60, 15, 120 y `disabled`).
+Consecuencia práctica, y es la causa de la mitad de los *«pues yo lo tengo puesto
+a otra cosa»*:
 
 > **Editar `ATTENDANCE_DEBOUNCE_SECONDS` en el `.env` no cambia nada.** Ni
-> reiniciando. Se cambia en el panel, sección 2.1.
+> reiniciando. Se cambia en el panel, sección 2.1. Lo mismo vale para
+> `ATTENDANCE_BREAK_CLOCKING`: ponerlo a `enabled` en el fichero no enciende el
+> botón «Pausa» de ninguna tablet.
 
 `product:doctor` lo detecta: si el `.env` y la base de datos dicen cosas
-distintas en una de esas cuatro claves, la comprobación
+distintas en una de esas cinco claves, la comprobación
 `settings.env_differs_from_db` sale en **aviso** y te dice cuál. No es un fallo
 —no hay nada roto— pero significa que el fichero está engañando a quien lo lea.
 Lo correcto es dejar el `.env` con el mismo valor que el panel, o borrar esas
-cuatro líneas.
+cinco líneas.
 
 ### 6.1 Aplicación
 
@@ -1318,11 +1390,12 @@ salida a internet.
 
 ### 6.7 Reglas de fichaje
 
-**Las cuatro primeras se cambian en el panel, no aquí** (sección 6.0). La línea
+**Las cinco primeras se cambian en el panel, no aquí** (sección 6.0). La línea
 del `.env` es una copia del valor de serie y **editarla no hace nada**.
 
 | Variable | Marca | Qué hace | De serie | Cuándo cambiarla | ¿Afecta al cálculo de horas? |
 | --- | --- | --- | --- | --- | --- |
+| `ATTENDANCE_BREAK_CLOCKING` | — | Fichaje de pausa: botón «Pausa» en la tablet y evaluación de la regla «Sin pausa registrada». Ver **sección 2.1** | `disabled` | En el panel. Aquí, nunca | No mueve minutos; **sí abre incidencias** |
 | `ATTENDANCE_DEBOUNCE_SECONDS` | — | Ventana anti-rebote entre dos escaneos de la misma persona. Ver **sección 2.1** | `60` | En el panel. Aquí, nunca | **Sí** |
 | `ATTENDANCE_MAX_SHIFT_HOURS` | — | Duración a partir de la cual un tramo cerrado es anómalo. Ver **sección 2.1** | `12` | En el panel. Aquí, nunca | **Sí** (abre incidencias) |
 | `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES` | — | Desfase tolerado entre el reloj de la tablet y el del servidor. **Genera incidencia, nunca rechaza el fichaje** (RF-AT-10). Ver **sección 2.1** | `15` | En el panel. Aquí, nunca | **Sí** (abre incidencias) |

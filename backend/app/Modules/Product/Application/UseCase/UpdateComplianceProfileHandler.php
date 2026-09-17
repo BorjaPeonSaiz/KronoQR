@@ -14,6 +14,8 @@ use App\Modules\Product\Domain\ValueObject\ComplianceProfileField;
 use App\Modules\Product\Domain\ValueObject\ComplianceProfileSnapshot;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
+use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
+use App\Modules\Shared\Domain\ValueObject\ComplianceRuleSuspension;
 use Illuminate\Database\ConnectionInterface;
 
 /**
@@ -80,6 +82,19 @@ final readonly class UpdateComplianceProfileHandler
         private ComplianceProfileMetrics $metrics,
         private Clock $clock,
         private ConnectionInterface $connection,
+        /**
+         * Los ajustes operativos de la instalacion, de los que sale si el
+         * fichaje de pausa esta activado (RF-AT-12, decision 8 de la ficha 3.5).
+         *
+         * `Product` implementa este puerto —{@see \App\Modules\Product\
+         * Infrastructure\Adapter\DbOperationalSettingsProvider}— y aqui lo
+         * consume: el asiento de `audit_log` tiene que decir la verdad sobre si
+         * cambiar el umbral de RN-12 mueve alguna alerta, y esa verdad depende
+         * de un ajuste del hotel. Sin esto, el asiento de un registro con valor
+         * legal afirmaria `affects_incident_detection` sobre una regla que en
+         * esta instalacion no abre nada.
+         */
+        private OperationalSettingsProvider $settings,
     ) {}
 
     /**
@@ -96,10 +111,18 @@ final readonly class UpdateComplianceProfileHandler
             return null;
         }
 
+        // Una sola lectura para todo el cambio (regla dura 14): el asiento y la
+        // metrica tienen que describir el mismo estado de la instalacion, y
+        // preguntarlo dos veces podria dar dos respuestas si alguien activa el
+        // fichaje de pausa entre medias.
+        $suspension = ComplianceRuleSuspension::forInstallation(
+            $this->settings->forSite($site->id)->breakClockingEnabled,
+        );
+
         /** @var list<ComplianceProfileField> $changed */
         $changed = [];
 
-        $profile = $this->connection->transaction(function () use ($command, $site, &$changed): ?ComplianceProfileSnapshot {
+        $profile = $this->connection->transaction(function () use ($command, $site, $suspension, &$changed): ?ComplianceProfileSnapshot {
             $this->connection->statement('SELECT pg_advisory_xact_lock(?)', [self::LOCK_KEY]);
 
             $current = $this->profiles->forSiteForWrite($site->id);
@@ -128,7 +151,7 @@ final readonly class UpdateComplianceProfileHandler
             }
 
             $this->profiles->save($updated, $command->actorUserId, $this->clock->now());
-            $this->publish($changed, $current, $updated);
+            $this->publish($changed, $current, $updated, $suspension);
 
             // Se relee dentro de la misma transaccion en lugar de devolver
             // `$updated`: asi la respuesta lleva la marca de modificacion que
@@ -144,7 +167,7 @@ final readonly class UpdateComplianceProfileHandler
         // transaccion que despues se revierte —el contador no se deshace— y
         // ademas alargaria el candado por un `INCRBY` que no tiene por que estar
         // dentro.
-        $this->observe($changed);
+        $this->observe($changed, $suspension);
 
         return $profile;
     }
@@ -154,8 +177,12 @@ final readonly class UpdateComplianceProfileHandler
      *
      * @param  list<ComplianceProfileField>  $changed
      */
-    private function publish(array $changed, ComplianceProfileSnapshot $current, ComplianceProfileSnapshot $updated): void
-    {
+    private function publish(
+        array $changed,
+        ComplianceProfileSnapshot $current,
+        ComplianceProfileSnapshot $updated,
+        ComplianceRuleSuspension $suspension,
+    ): void {
         $at = $this->clock->now();
         $events = [];
 
@@ -165,9 +192,9 @@ final readonly class UpdateComplianceProfileHandler
                 field: $field->value,
                 previousValue: $current->valueOf($field),
                 newValue: $updated->valueOf($field),
-                affectsIncidentDetection: $field->affectsIncidentDetection(),
+                affectsIncidentDetection: $field->affectsIncidentDetection($suspension),
                 affectsComplianceView: $field->affectsComplianceView(),
-                detectionSuspended: $field->governsSuspendedRule(),
+                detectionSuspended: $field->governsSuspendedRule($suspension),
                 affectsRetention: $field->affectsRetention(),
                 occurredAt: $at,
             );
@@ -197,14 +224,14 @@ final readonly class UpdateComplianceProfileHandler
      *
      * @param  list<ComplianceProfileField>  $changed
      */
-    private function observe(array $changed): void
+    private function observe(array $changed, ComplianceRuleSuspension $suspension): void
     {
         $detection = 0;
         $complianceView = 0;
         $retention = 0;
 
         foreach ($changed as $field) {
-            if ($field->affectsIncidentDetection()) {
+            if ($field->affectsIncidentDetection($suspension)) {
                 $detection++;
             }
 

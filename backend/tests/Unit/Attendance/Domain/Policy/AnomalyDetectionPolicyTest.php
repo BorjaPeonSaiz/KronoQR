@@ -723,3 +723,39 @@ it('aplica el umbral de pausa al turno de noche entero, que no se parte a median
     'perfil espanol de 6 horas' => [6, ['missing_break']],
     'convenio que exige pausa a las 9 horas' => [9, []],
 ])->group('RN-05', 'RN-09', 'RF-PD-07');
+
+it('alerta del tramo de 6 h 01 sin pausa y calla si la pausa lo partio a las 3 h', function (): void {
+    /*
+     * **La prueba de RF-AT-12 sobre RN-12** (ADR-024, «Verificacion»): el mismo
+     * tiempo de presencia, el mismo dia y la misma persona, con y sin pausa
+     * fichada.
+     *
+     * Sin pausa son 6 h 01 de tramo continuo y se alerta. Con la pausa fichada a
+     * las 3 h son **dos tramos** de 3 h y 3 h 01, ninguno continuo por encima del
+     * umbral, y no se alerta — y eso ocurre **sin logica nueva**: «un tramo
+     * continuo sin pausa registrada» es, literalmente, un tramo largo. Es la
+     * razon por la que la pausa se modela como dos tramos y no como un intervalo
+     * interno: con un hueco dentro del tramo habria que restar, y toda resta es
+     * una oportunidad de equivocarse en la nomina de alguien.
+     */
+    $sinPausa = WorkDayFactory::new()
+        ->onWorkDate('2026-03-14')
+        ->withClosedShift('2026-03-14 06:00', '2026-03-14 12:01')
+        ->build();
+
+    $conPausa = WorkDayFactory::new()
+        ->onWorkDate('2026-03-14')
+        ->withClosedShift('2026-03-14 06:00', '2026-03-14 09:00')
+        ->withClosedShift('2026-03-14 09:30', '2026-03-14 12:31')
+        ->build();
+
+    $ahora = Instants::utc('2026-03-14 23:00');
+
+    expect(typesOf(detectionPolicy()->inspect($sinPausa, $ahora)))->toBe(['missing_break'])
+        ->and(typesOf(detectionPolicy()->inspect($conPausa, $ahora)))->toBe([])
+        // RN-06: el total del dia no depende de si se ficho la pausa. Los tres
+        // minutos de diferencia son la pausa, que simplemente no esta en ningun
+        // tramo — no se resta de ninguna parte.
+        ->and($sinPausa->totalWorked()->minutes)->toBe(361)
+        ->and($conPausa->totalWorked()->minutes)->toBe(361);
+})->group('RN-12', 'RF-AT-12', 'RN-06');

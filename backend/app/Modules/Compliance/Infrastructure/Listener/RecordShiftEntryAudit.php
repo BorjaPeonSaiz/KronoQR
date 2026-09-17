@@ -75,6 +75,17 @@ final readonly class RecordShiftEntryAudit
             'work_date' => $event->workDate->isoDate,
             'clocked_in_at' => $event->clockedInAt->format('Y-m-d\TH:i:s.u\Z'),
             'origin' => $event->origin->value,
+            // **Que abrio el tramo**: `clock_in` o `break_end` (RF-AT-12,
+            // ADR-024). No es redundante con `scan_events.result`: esa tabla no
+            // es solo-append ni esta encadenada por hash, y este asiento es la
+            // copia del hecho que no se puede reescribir (RL-04). Sin el, la
+            // unica prueba de que alguien volvio de una pausa —y no empezo una
+            // jornada nueva— viviria en una tabla modificable.
+            //
+            // Se lee del evento y no del enum de `Attendance`: `Compliance` solo
+            // alcanza `Attendance\Domain\Event` (doc 02 §1.6), y `->value` es ya
+            // el vocabulario de la columna y del contrato.
+            'action' => $event->action->value,
         ]);
     }
 
@@ -88,6 +99,12 @@ final readonly class RecordShiftEntryAudit
             'clocked_in_at' => $event->clockedInAt->format('Y-m-d\TH:i:s.u\Z'),
             'clocked_out_at' => $event->clockedOutAt->format('Y-m-d\TH:i:s.u\Z'),
             'origin' => $event->origin->value,
+            // **Que lo cerro**: `clock_out` o `break_start` (RF-AT-12, ADR-024).
+            // Sin esto, el asiento de una pausa de las 15:00 afirmaria que esa
+            // persona termino su jornada, y es el unico registro del hecho que
+            // no se puede modificar (RL-04). Mismo motivo y misma forma que en
+            // `clockedIn()`.
+            'action' => $event->action->value,
             // Los minutos del tramo y el total del dia quedan en el asiento
             // porque son **lo que se afirma**: una correccion posterior (1.15)
             // cambiara el tramo, y la unica forma de demostrar que el valor

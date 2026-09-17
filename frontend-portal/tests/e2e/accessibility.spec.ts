@@ -10,9 +10,16 @@
 // rompe los binarios nativos de `@tailwindcss/oxide` (ver HANDOFF.md ->
 // "Trampas del entorno"): se importa tal cual, sin declararlo.
 import AxeBuilder from '@axe-core/playwright'
-import type { Page } from '@playwright/test'
+import type { Page, Route } from '@playwright/test'
 import { expect, test } from '@playwright/test'
-import { HOTEL_BRANDING, logInToPortal, stubPortalApi, submitLoginForm } from './support/portal'
+import {
+  dayWithBreak,
+  HOTEL_BRANDING,
+  logInToPortal,
+  singleDayEmployeeWorkDays,
+  stubPortalApi,
+  submitLoginForm,
+} from './support/portal'
 
 /** Etiquetas WCAG que se comprueban: A y AA hasta la 2.2 (doc 01 §6.5). */
 const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
@@ -69,6 +76,28 @@ test(
     await stubPortalApi(page, { locale: 'es' })
     await logInToPortal(page)
     await expect(page.getByTestId('workday')).toHaveCount(6)
+
+    await expectNoBlockingViolations(page)
+  },
+)
+
+test(
+  'una jornada con pausa tampoco: la insignia y el aviso entre tramos llevan texto, no solo color',
+  { tag: ['@RL-05', '@RF-ID-05', '@RF-AT-12'] },
+  async ({ page }) => {
+    await stubPortalApi(page, { locale: 'es' })
+
+    await page.route('**/api/v1/me/workdays', async (route: Route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(singleDayEmployeeWorkDays(dayWithBreak())),
+      })
+    })
+
+    await logInToPortal(page)
+    await expect(page.getByTestId('break-badge')).toBeVisible()
+    await expect(page.getByTestId('break-row')).toBeVisible()
 
     await expectNoBlockingViolations(page)
   },

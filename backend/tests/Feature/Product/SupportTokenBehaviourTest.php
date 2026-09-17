@@ -6,6 +6,7 @@ use App\Modules\Identity\Domain\ValueObject\TokenAbility;
 use App\Modules\Product\Domain\ValueObject\SupportScope;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Testing\TestResponse;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
@@ -395,17 +396,35 @@ it('sigue enseñando el codigo de servicio al administrador del cliente', functi
     // ajuste seria de un solo uso.
     $admin = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN));
 
-    Api::as($admin)
-        ->patch('/api/v1/settings', ['settings' => ['KIOSK_SERVICE_CODE' => '48392017']])
-        ->assertStatus(200)
-        ->assertJsonPath('data.9.key', 'KIOSK_SERVICE_CODE')
-        ->assertJsonPath('data.9.value', '48392017')
-        ->assertJsonPath('data.9.redacted', false);
+    // **Por clave y no por posicion.** El catalogo entero viaja en `data` y su
+    // orden es el del enum: una clave nueva —`ATTENDANCE_BREAK_CLOCKING` en la
+    // tarea 3.5— desplaza a todas las de detras, y un indice fijo convertiria
+    // eso en el fallo de una prueba que no va de ordenes.
+    $delCodigo = static function (TestResponse $respuesta): array {
+        /** @var list<array{key: string, value: mixed, redacted: bool}> $ajustes */
+        $ajustes = $respuesta->json('data');
 
-    Api::as($admin)->get('/api/v1/settings')
-        ->assertOk()
-        ->assertJsonPath('data.9.value', '48392017')
-        ->assertJsonPath('data.9.redacted', false);
+        foreach ($ajustes as $ajuste) {
+            if ($ajuste['key'] === 'KIOSK_SERVICE_CODE') {
+                return $ajuste;
+            }
+        }
+
+        throw new RuntimeException('El catalogo ya no publica KIOSK_SERVICE_CODE.');
+    };
+
+    $escrito = $delCodigo(
+        Api::as($admin)
+            ->patch('/api/v1/settings', ['settings' => ['KIOSK_SERVICE_CODE' => '48392017']])
+            ->assertStatus(200)
+    );
+
+    $leido = $delCodigo(Api::as($admin)->get('/api/v1/settings')->assertOk());
+
+    expect($escrito['value'])->toBe('48392017')
+        ->and($escrito['redacted'])->toBeFalse()
+        ->and($leido['value'])->toBe('48392017')
+        ->and($leido['redacted'])->toBeFalse();
 })->group('RF-PD-01', 'RF-KI-08');
 
 // --- Cerrar sesion no es revocar (ADR-020) -----------------------------------
@@ -433,3 +452,65 @@ it('el logout de un actor de soporte no toca la concesion ni su token', function
 
     Api::as($issued->token)->get('/api/v1/settings')->assertOk();
 })->group('RF-PD-11', 'RS-12');
+
+it('no deja que un actor de soporte active ni apague el fichaje de pausa', function (SupportScope $alcance): void {
+    // RF-AT-12, RF-PD-11 y ADR-020. Es la misma frontera que
+    // `ComplianceProfilePolicy` ya traza sobre el perfil de cumplimiento: los
+    // umbrales legales son del hotel y de ellos depende que jornadas se marcan.
+    // `ATTENDANCE_BREAK_CLOCKING` vive en otra tabla pero hace eso mismo —
+    // activarlo reactiva RN-12 sobre la plantilla del cliente y apagarlo la
+    // silencia—, y silenciar avisos de descanso en la instalacion de otro es
+    // justo lo que nadie ajeno puede hacer.
+    //
+    // `403` y no `422`, como con el codigo de servicio: quien no puede tocar una
+    // clave tampoco tiene por que aprender que valores admite.
+    $token = SupportGrants::tokenFor($alcance);
+
+    Api::as($token)
+        ->patch('/api/v1/settings', ['settings' => ['ATTENDANCE_BREAK_CLOCKING' => 'enabled']])
+        ->assertStatus(403);
+
+    // Ni mezclada con una clave que si puede tocar: la peticion entera cae.
+    Api::as($token)
+        ->patch('/api/v1/settings', [
+            'settings' => [
+                'ATTENDANCE_DEBOUNCE_SECONDS' => 90,
+                'ATTENDANCE_BREAK_CLOCKING' => 'disabled',
+            ],
+        ])
+        ->assertStatus(403);
+
+    expect(DB::table('installation_settings')->where('key', 'ATTENDANCE_BREAK_CLOCKING')->exists())->toBeFalse()
+        ->and(DB::table('installation_settings')->where('key', 'ATTENDANCE_DEBOUNCE_SECONDS')->exists())->toBeFalse();
+})->with([
+    'configuracion' => [SupportScope::Configuration],
+    'diagnostico' => [SupportScope::Diagnostics],
+])->group('RF-PD-11', 'RF-AT-12', 'RS-04');
+
+it('sigue enseñando y dejando cambiar el fichaje de pausa al administrador del cliente', function (): void {
+    // La otra mitad, y la que impide «arreglarlo» marcando la clave como
+    // confidencial: el ajuste NO es un secreto —el panel lo pinta, la guia de
+    // RRHH lo explica y el latido lo reparte a todas las tablets—, asi que el
+    // administrador del hotel lo lee con su valor y lo cambia sin obstaculos.
+    $admin = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN));
+
+    Api::as($admin)
+        ->patch('/api/v1/settings', ['settings' => ['ATTENDANCE_BREAK_CLOCKING' => 'enabled']])
+        ->assertStatus(200);
+
+    /** @var list<array{key: string, value: mixed, redacted: bool}> $ajustes */
+    $ajustes = Api::as($admin)->get('/api/v1/settings')->assertOk()->json('data');
+
+    foreach ($ajustes as $ajuste) {
+        if ($ajuste['key'] === 'ATTENDANCE_BREAK_CLOCKING') {
+            expect($ajuste['value'])->toBe('enabled')
+                // **No redactado**: si lo estuviera, la pantalla de ajustes no
+                // podria pintar su estado y el cliente no sabria si esta activo.
+                ->and($ajuste['redacted'])->toBeFalse();
+
+            return;
+        }
+    }
+
+    throw new RuntimeException('El catalogo ya no publica ATTENDANCE_BREAK_CLOCKING.');
+})->group('RF-PD-01', 'RF-AT-12');
