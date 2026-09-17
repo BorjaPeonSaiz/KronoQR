@@ -114,6 +114,10 @@ parameters:
       collectors:
         - type: classNameRegex
           value: '#^App\\Modules\\Attendance\\Domain\\(?!Event\\)#'
+    # Es el vocabulario PUBLICO del modulo —lo unico de su Domain que otro modulo
+    # puede alcanzar— y admite ademas de los eventos sus cargas utiles tipadas
+    # (`DailyTotalsSnapshot`, RL-04). Quien vive aqui lo vigila
+    # `tests/Architecture/DomainEventLayerTest.php` con una lista explicita.
     - name: AttendanceDomainEvent
       collectors:
         - type: classNameRegex

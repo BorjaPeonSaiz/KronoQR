@@ -38,7 +38,7 @@ it('conserva los seis campos tal como se le dan', function (): void {
         ->and($snapshot->hasIncident)->toBeTrue()
         ->and($snapshot->firstClockInAtIso())->toBe('2026-03-14T06:00:00.000000+00:00')
         ->and($snapshot->lastClockOutAtIso())->toBe('2026-03-14T14:00:00.000000+00:00');
-})->group('RN-06', 'RL-04');
+})->group('RN-06', 'RL-04', 'RF-PR-02');
 
 it('conserva los microsegundos de los dos instantes', function (): void {
     // Los `TIMESTAMPTZ` del producto se guardan con seis decimales y la
@@ -56,7 +56,7 @@ it('conserva los microsegundos de los dos instantes', function (): void {
 
     expect($snapshot->firstClockInAtIso())->toBe('2026-03-14T06:00:00.123456+00:00')
         ->and($snapshot->lastClockOutAtIso())->toBe('2026-03-14T06:01:00.000001+00:00');
-})->group('RN-06', 'RL-04');
+})->group('RN-06', 'RL-04', 'RF-PR-02');
 
 it('escribe el desplazamiento que trae el instante, sin reinterpretarlo', function (): void {
     // Regla dura 3: todo instante del producto viaja en UTC, y el accesor lo
@@ -77,7 +77,7 @@ it('escribe el desplazamiento que trae el instante, sin reinterpretarlo', functi
         // escribe, no lo que dice.
         ->and($madrid->firstClockInAt?->getTimestamp())
         ->toBe((new DateTimeImmutable('2026-03-14 06:00:00', new DateTimeZone('UTC')))->getTimestamp());
-})->group('RN-06', 'RL-04');
+})->group('RN-06', 'RL-04', 'RF-PR-02');
 
 it('distingue un instante ausente de uno a cero', function (): void {
     // `last_out_at` a nulo es lo que dice «este turno sigue abierto», y es uno de
@@ -112,7 +112,7 @@ it('distingue un instante ausente de uno a cero', function (): void {
         ->and($voided->lastClockOutAtIso())->toBeNull()
         ->and($voided->totalMinutes)->toBe(0)
         ->and($voided->shiftCount)->toBe(0);
-})->group('RN-06', 'RL-04');
+})->group('RN-06', 'RL-04', 'RF-PR-02');
 
 it('dice que faltaba la fila cuando el evento no trae un antes', function (): void {
     // `rowWasMissing()` se **deriva** de `before` y no viaja aparte: dos formas
@@ -136,7 +136,7 @@ it('dice que faltaba la fila cuando el evento no trae un antes', function (): vo
         ->and($missing->workDateIso())->toBe('2026-03-14')
         ->and($missing->eventName())->toBe('attendance.daily_totals_reconciled')
         ->and($missing->occurredAt()->format(DateTimeImmutable::ATOM))->toBe('2026-03-15T03:50:00+00:00');
-})->group('RN-06', 'RL-04');
+})->group('RN-06', 'RL-04', 'RF-PR-02');
 
 it('no dice que faltaba la fila cuando la habia, aunque estuviera a cero', function (): void {
     // El caso que un `empty()` o un «esta vacio» habria confundido: una fila
@@ -155,4 +155,4 @@ it('no dice que faltaba la fila cuando la habia, aunque estuviera a cero', funct
     expect($reconciled->rowWasMissing())->toBeFalse()
         ->and($reconciled->before)->toBe($zeroed)
         ->and($reconciled->divergentFields)->toBe(['total_minutes', 'shift_count']);
-})->group('RN-06', 'RL-04');
+})->group('RN-06', 'RL-04', 'RF-PR-02');

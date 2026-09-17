@@ -201,7 +201,12 @@ debounce_query="echo app('App\\Modules\\Shared\\Application\\Port\\OperationalSe
 debounce_seconds="$(compose exec -T "${K6_APP_SERVICE}" php artisan tinker --execute="${debounce_query}" 2>/dev/null | tr -cd '0-9')" || debounce_seconds=""
 
 if [ -z "${debounce_seconds}" ] || [ "${debounce_seconds}" -le 0 ]; then
-  log "AVISO: no se pudo leer la ventana anti-rebote de la instalacion; se dimensiona con 60 s."
+  # Lo normal es que sea una instalacion recien hecha: todavia no hay centro al
+  # que preguntarle, y el aprovisionamiento lo creara enseguida. Lo unico que
+  # depende de este numero es el TAMANO de las rebanadas; el valor real viaja
+  # despues en los fixtures y es el que usa el veredicto.
+  log "AVISO: no se pudo leer la ventana anti-rebote de la instalacion (¿sin centro todavia?);"
+  log "       las rebanadas se dimensionan con 60 s."
   debounce_seconds=60
 fi
 
