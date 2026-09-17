@@ -41,13 +41,17 @@ on:
   workflow_dispatch:
     inputs:
       instances:
-        description: "Instancias de k6 (una IP de origen cada una). 8 produce 56 fichajes/s validos, por encima de los 50 de RNF-P-06."
+        description: "Instancias de k6 (una IP de origen cada una, 6 fichajes/s por instancia). 10 produce 60 fichajes/s validos, por encima de los 50 de RNF-P-06."
         required: false
-        default: "8"
+        default: "10"
       duration:
         description: "Duracion sostenida de cada escenario (p. ej. 120s, 5m)."
         required: false
         default: "120s"
+      fpm_max_children:
+        description: "PHP_FPM_MAX_CHILDREN del paquete instalado. Vacio = tal cual se instala (20, el servidor minimo del §11.6.2); 40 es el perfil recomendado de 4 nucleos/8 GB, que es la clase del runner."
+        required: false
+        default: ""
   push:
     tags:
       - "v*.0.0"
@@ -170,6 +174,8 @@ jobs:
         # para internet y la medida saldria tres ordenes de magnitud por
         # debajo de RNF-P-06 antes de que la aplicacion llegara a sudar (el
         # mismo aviso del paso 5 de la ficha de esta tarea).
+        env:
+          FPM_MAX_CHILDREN: ${{ inputs.fpm_max_children }}
         run: |
           set -euo pipefail
           cd paquete
@@ -178,6 +184,19 @@ jobs:
           sudo sed -i "s|^KIOSK_VLAN_CIDR=.*|KIOSK_VLAN_CIDR=${subred}|" .env
           sudo sed -i 's|^APP_ENV=.*|APP_ENV=staging|' .env
           grep -q '^APP_ENV=staging$' .env
+          # (3) Pool de PHP-FPM, solo si quien lanza el workflow lo pide: sirve
+          # para medir el mismo runner con el perfil recomendado del §11.6.2
+          # (40) frente al minimo con el que se instala (20). El valor se
+          # escribe en el .env del paquete y lo rinde el entrypoint al recrear
+          # `app`; el aprovisionamiento lo deja anotado en summary.json.
+          if [ -n "${FPM_MAX_CHILDREN}" ]; then
+            if grep -q '^PHP_FPM_MAX_CHILDREN=' .env; then
+              sudo sed -i "s|^PHP_FPM_MAX_CHILDREN=.*|PHP_FPM_MAX_CHILDREN=${FPM_MAX_CHILDREN}|" .env
+            else
+              echo "PHP_FPM_MAX_CHILDREN=${FPM_MAX_CHILDREN}" | sudo tee -a .env >/dev/null
+            fi
+            grep -q "^PHP_FPM_MAX_CHILDREN=${FPM_MAX_CHILDREN}$" .env
+          fi
           # `restart` no basta: relanza el proceso existente sin releer
           # env_file. `up -d --wait` recrea los servicios con el .env de disco
           # y espera a que su healthcheck pase antes de seguir. Los cuatro
