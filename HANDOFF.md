@@ -33,7 +33,14 @@ conocido), PHPStan 9 sin errores, Deptrac 0/0, Redocly 0, mutación acotada del 
 **Suites completas de backend sobre el árbol final (Architecture + Unit + Feature + Integration + Contract): 4835 en verde, 21 350
 aserciones, 996 s; único rojo el conocido `SourceDiscoveryTest`.**
 
-**Siguiente acción:** commit único `feat(fichaje): …`, CI manual en la rama (sin empujar nada después), PR con *merge commit*. Sin migración: tras integrar basta `git pull`. Después, la **3.6** (pruebas
+**Confirmada en el commit único `76dd8e2`** (`feat(fichaje): …`, 166 ficheros), rama empujada, **CI manual completa 35222243539**
+lanzada tras el push (la del push la canceló la concurrencia) y **PR #66** abierta contra `main`.
+
+**CI manual 35222243539 EN VERDE con los 21 jobs** (③ mutación, ⑧b y cobertura incluidos).
+
+**Siguiente acción:** el usuario integra la PR #66 con *merge commit* y borra la rama. Sin migración: tras integrar basta
+`git pull`. Después, la **3.6** (pruebas de carga k6 y ajuste de rendimiento: incluir `lastAcceptedScanOf()` y el endpoint de
+cumplimiento) y, en su momento, las decisiones del usuario sobre el doc 05 anotadas en «3.4 (restos)» y «3.5 (restos)». Sin migración: tras integrar basta `git pull`. Después, la **3.6** (pruebas
 de carga k6 y ajuste de rendimiento: incluir `lastAcceptedScanOf()` y el endpoint de cumplimiento).
 
 **Tarea 3.4 (cerrada e integrada, PR #65 `c1ccba0`). Rama `feat/tarea-3.4-vista-cumplimiento` (desde `main` `b57a6e6`, con la 3.3 integrada por PR #64). Tarea 3.4 «Vista de
