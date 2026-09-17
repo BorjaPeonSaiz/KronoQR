@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Compliance\Infrastructure\Listener;
 
 use App\Modules\Attendance\Domain\Event\DailyTotalsReconciled;
+use App\Modules\Attendance\Domain\Event\DailyTotalsSnapshot;
 use App\Modules\Compliance\Application\Command\RecordAuditEntryCommand;
 use App\Modules\Compliance\Application\UseCase\RecordAuditEntry;
 use App\Modules\Compliance\Domain\ValueObject\AuditAction;
@@ -91,19 +92,20 @@ final readonly class RecordProjectionReconciliationAudit
                 // fila entera» de «el total estaba mal por diez minutos», y lo
                 // que permite agrupar divergencias por causa sin releer el log.
                 'divergent_fields' => $event->divergentFields,
-                'row_was_missing' => $event->rowWasMissing,
+                'row_was_missing' => $event->rowWasMissing(),
                 // El antes y el despues completos, que es lo que hace util este
                 // asiento: `audit_log` es solo-append y encadenado por hash, asi
                 // que es la unica copia de lo que la proyeccion afirmaba que ya
                 // no se puede tocar (ADR-027).
-                'before' => [
-                    'total_minutes' => $event->previousTotalMinutes,
-                    'shift_count' => $event->previousShiftCount,
-                ],
-                'after' => [
-                    'total_minutes' => $event->totalMinutes,
-                    'shift_count' => $event->shiftCount,
-                ],
+                //
+                // **Los seis campos comparados, no dos** (tarea 3.6). Con el
+                // total y el numero de tramos no se puede reconstruir la fila que
+                // decia `has_open_shift = true` sobre un turno ya cerrado, que es
+                // la divergencia que la prueba de carga destapo; y desde que la
+                // correccion no reescribe nada cuando la sospecha se deshace
+                // sola, no queda ninguna otra copia de la fila mala.
+                'before' => self::snapshot($event->before),
+                'after' => self::snapshot($event->after),
             ]),
             // El momento de la CORRECCION, no el de las horas trabajadas: la
             // jornada corregida puede ser de hace tres semanas y sus marcas van
@@ -112,5 +114,34 @@ final readonly class RecordProjectionReconciliationAudit
             ip: $this->context->ip(),
             userAgent: $this->context->userAgent(),
         ));
+    }
+
+    /**
+     * Una cara del asiento: los seis campos que la reconciliacion compara.
+     *
+     * `null` cuando no habia fila, y **no** un mapa de nulos: la diferencia entre
+     * «la proyeccion decia un dia a cero» y «la proyeccion no decia nada» es la
+     * divergencia entera en el caso de la fila ausente.
+     *
+     * Los instantes van en ISO 8601 con microsegundos, que es lo que el evento
+     * ofrece ya formateado: el payload se canonicaliza y se encadena por hash,
+     * asi que aqui no cabe ningun objeto.
+     *
+     * @return array<string, bool|int|string|null>|null
+     */
+    private static function snapshot(?DailyTotalsSnapshot $snapshot): ?array
+    {
+        if (! $snapshot instanceof DailyTotalsSnapshot) {
+            return null;
+        }
+
+        return [
+            'total_minutes' => $snapshot->totalMinutes,
+            'shift_count' => $snapshot->shiftCount,
+            'first_in_at' => $snapshot->firstClockInAtIso(),
+            'last_out_at' => $snapshot->lastClockOutAtIso(),
+            'has_open_shift' => $snapshot->hasOpenShift,
+            'has_incident' => $snapshot->hasIncident,
+        ];
     }
 }

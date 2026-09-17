@@ -8,11 +8,13 @@ use App\Modules\Shared\Application\Port\AuthenticationMetrics;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\PinAttempts;
 use App\Modules\Shared\Application\Port\SealedPinOpener;
+use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Application\Support\ConstantTimeFloor;
 use App\Modules\Shared\Infrastructure\Adapter\CachePinAttempts;
 use App\Modules\Shared\Infrastructure\Adapter\SodiumSealedPinOpener;
 use App\Modules\Shared\Infrastructure\Adapter\SystemClock;
 use App\Modules\Shared\Infrastructure\Metrics\RedisAuthenticationMetrics;
+use App\Modules\Shared\Infrastructure\Persistence\ChainLockedWrite;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\ServiceProvider;
 
@@ -56,6 +58,15 @@ final class SharedServiceProvider extends ServiceProvider
         // importarse entre si, y una metrica contada por tres adaptadores
         // distintos serian tres series con el mismo nombre y distinto criterio.
         $this->app->singleton(AuthenticationMetrics::class, RedisAuthenticationMetrics::class);
+
+        // El orden de candados de toda escritura que se audita (ADR-010,
+        // ADR-027, tarea 3.6). Vive aqui, y no en `Compliance`, porque lo
+        // necesita `Attendance` —la reconciliacion de `daily_totals` corrige una
+        // fila y deja asiento— y `Attendance` no puede importar `Compliance`
+        // (doc 02 §1.6). La clave del candado es la MISMA que usa el escritor de
+        // la cadena, y por eso vive en una sola clase: dos claves serian dos
+        // ordenes de adquisicion y el mismo abrazo mortal por otra puerta.
+        $this->app->singleton(SerializedLedgerWrite::class, ChainLockedWrite::class);
 
         // El suelo de tiempo de todo camino de rechazo (RS-03, tarea 5.6).
         // Vive aqui por el mismo motivo que el contador de intentos: lo aplican

@@ -52,6 +52,7 @@ Tres reglas operativas:
 - **`attendance:reconcile` y su alerta de divergencia son parte del producto, no una herramienta interna.** El destinatario es el IT del cliente y tiene runbook (`divergencia-proyeccion.md`). Una divergencia significa que alguien escribió `daily_totals` por un camino no previsto, o que hay datos manipulados.
 - **La reconstrucción completa debe ser posible y probada.** Si reconstruir la proyección desde cero cambiara algún total, la proyección habría dejado de ser derivable y este ADR estaría incumplido.
 - **`daily_totals` nunca se exporta como registro legal.** La exportación para Inspección (RL-06) se construye sobre `shift_entries`, que es la fuente de verdad. Un agregado no es el registro.
+- **La reconciliación es el detector de RN-06, no un segundo escritor: relee bajo candado antes de corregir** (tarea 3.6). Inspecciona el día con dos lecturas sin instantánea común, así que un fichaje que confirme entre ellas le deja una mitad nueva y otra vieja; escribir eso de vuelta convertía al detector en la causa de la divergencia. Antes de reescribir toma la fila con `FOR UPDATE`, relee la jornada y, si ya cuadra, **no escribe**. Y toma antes el candado global de la cadena de auditoría, que es el orden del fichaje: al revés cerraba un abrazo mortal cuya víctima podía ser el propio fichaje.
 - **Ninguna otra tabla puede depender de `daily_totals` como si fuera un hecho**, ni referenciarla con clave foránea: es reconstruible, y lo reconstruible se puede borrar.
 
 ## Verificación

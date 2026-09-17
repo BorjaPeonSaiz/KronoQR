@@ -51,6 +51,17 @@ SUM(shift_entries.duration_minutes) WHERE status NOT IN ('voided','superseded')
 una jornada con tramos que no aparece en la proyección es un día que el panel
 muestra vacío.
 
+**«N jornada(s) se resolvieron solas» no es una divergencia.** Desde la tarea 3.6
+el comando puede imprimir esa línea, y significa que la pasada leyó el registro
+horario y la proyección con alguien fichando en medio: al releer esa jornada con
+la fila bloqueada, ya cuadraba y **no se escribió nada**. Es normal a las 03:50
+UTC en un hotel con turno de noche. No sube `projection_divergence_total`, no
+enciende ninguna alerta, no deja asiento en `audit_log` y no cambia el código de
+salida. El detalle, con `employee_uuid`, está en el log como
+`attendance.projection_divergence_resolved_itself`. Si el número fuera grande
+noche tras noche, lo que dice es que la pasada coincide con la hora punta de
+fichaje del centro —se puede mover— no que haya nada roto.
+
 ---
 
 ## 2. Antes de tocar nada: qué conservar

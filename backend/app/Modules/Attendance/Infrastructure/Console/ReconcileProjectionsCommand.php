@@ -118,6 +118,8 @@ final class ReconcileProjectionsCommand extends Command
             $report->daysInspected,
         ));
 
+        $this->reportSelfResolved($report);
+
         if ($report->isClean()) {
             $this->line('Sin divergencias: la proyeccion coincide con los tramos vigentes (RN-06).');
 
@@ -145,6 +147,32 @@ final class ReconcileProjectionsCommand extends Command
         }
 
         return self::FAILURE;
+    }
+
+    /**
+     * Las sospechas que se deshicieron al releer con la fila bloqueada.
+     *
+     * **Se imprimen y no se esconden, pero no son un fallo.** Que la pasada se
+     * cruce con alguien fichando es normal a las 03:50 en un hotel con turno de
+     * noche, y desde que la correccion relee bajo candado eso ya no escribe nada
+     * ni corrompe la proyeccion. Verlo en la salida es util por lo contrario: si
+     * un dia el numero fuera grande, diria que la pasada se esta ejecutando en
+     * hora punta y conviene moverla, no que haya nada roto.
+     *
+     * Recuentos, nunca personas (regla dura 21): el detalle —con
+     * `employee_uuid`— esta en «attendance.projection_divergence_resolved_itself».
+     */
+    private function reportSelfResolved(ReconciliationReport $report): void
+    {
+        if ($report->selfResolved === 0) {
+            return;
+        }
+
+        $this->line(sprintf(
+            '%d jornada(s) se resolvieron solas: la lectura se cruzo con un fichaje y al releerlas '
+            .'bajo candado ya cuadraban. No se ha escrito nada en ellas.',
+            $report->selfResolved,
+        ));
     }
 
     /**

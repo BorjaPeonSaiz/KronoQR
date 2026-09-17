@@ -65,6 +65,7 @@ it('publica los fallos de la ultima reconciliacion junto al resto de la pasada',
         divergences: 3,
         corrected: 2,
         failures: 1,
+        selfResolved: 4,
         at: new DateTimeImmutable('2026-03-15T03:50:00+00:00'),
     );
 
@@ -76,7 +77,13 @@ it('publica los fallos de la ultima reconciliacion junto al resto de la pasada',
         ->toContain('projection_reconciliation_last_corrections 2')
         ->toContain('projection_reconciliation_work_days_inspected 214')
         ->toContain('projection_divergence_total 3')
-        ->toContain('projection_reconciliation_last_run_timestamp_seconds '.strtotime('2026-03-15T03:50:00+00:00'));
+        ->toContain('projection_reconciliation_last_run_timestamp_seconds '.strtotime('2026-03-15T03:50:00+00:00'))
+        // Tarea 3.6: las resueltas solas van en su propia serie y **no** suman al
+        // contador de divergencias, que es el que dispara la alerta critica de
+        // integridad. Cuatro carreras con el turno de noche y tres divergencias:
+        // el fichero tiene que poder decir las dos cosas por separado.
+        ->toContain('# TYPE projection_reconciliation_last_self_resolved gauge')
+        ->toContain('projection_reconciliation_last_self_resolved 4');
 })->group('RF-PR-02', 'RN-06');
 
 it('vuelve a cero los fallos en cuanto una pasada sale limpia', function (): void {
@@ -85,13 +92,16 @@ it('vuelve a cero los fallos en cuanto una pasada sale limpia', function (): voi
     // sonando eternamente por un fallo de hace un mes ya resuelto.
     $metricas = new TextfileProjectionMetrics;
 
-    $metricas->reconciliationCompleted(1, 1, 0, 1, new DateTimeImmutable('2026-03-15T03:50:00+00:00'));
-    $metricas->reconciliationCompleted(1, 0, 0, 0, new DateTimeImmutable('2026-03-16T03:50:00+00:00'));
+    $metricas->reconciliationCompleted(1, 1, 0, 1, 2, new DateTimeImmutable('2026-03-15T03:50:00+00:00'));
+    $metricas->reconciliationCompleted(1, 0, 0, 0, 0, new DateTimeImmutable('2026-03-16T03:50:00+00:00'));
 
     $publicado = publicadoEnAttendance('kronoqr_projection.prom');
 
     expect($publicado)
         ->toContain('projection_reconciliation_last_failures 0')
+        // Lo mismo vale para las resueltas solas: es la foto de la ultima pasada,
+        // no un historico de carreras.
+        ->toContain('projection_reconciliation_last_self_resolved 0')
         // Y el contador de divergencias SI acumula: es la unica serie del fichero
         // que solo puede subir.
         ->toContain('projection_divergence_total 1');

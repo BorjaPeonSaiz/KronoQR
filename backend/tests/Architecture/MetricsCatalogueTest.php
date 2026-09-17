@@ -72,6 +72,11 @@ function textfileSeries(): array
         'projection_reconciliation_work_days_inspected',
         'projection_reconciliation_last_corrections',
         'projection_reconciliation_last_failures',
+        // Tarea 3.6: las sospechas que se deshacen al releer con la fila
+        // bloqueada. No son divergencias —la pasada se cruzo con un fichaje y no
+        // escribio nada— y tienen serie propia justamente para que no puedan
+        // contarse como tales.
+        'projection_reconciliation_last_self_resolved',
         // Attendance\Infrastructure\Metrics\TextfileIncidentDetectionMetrics (tarea 3.2)
         'incident_detection_last_run_timestamp_seconds',
         'incident_detection_work_days_inspected',

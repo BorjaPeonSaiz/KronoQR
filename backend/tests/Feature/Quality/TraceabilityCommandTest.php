@@ -44,6 +44,21 @@ function useTests(string $source = ''): string
     return $root;
 }
 
+/**
+ * Lo mismo con la prueba de carga: un `scan-peak.js` temporal como unica fuente
+ * de etiquetas. La de verdad vive en `load-tests/k6/` y no se toca desde aqui.
+ */
+function useLoadTest(string $source): string
+{
+    $root = sys_get_temp_dir().'/kronoqr-suite-'.bin2hex(random_bytes(6));
+    mkdir($root, 0o777, true);
+    file_put_contents($root.'/scan-peak.js', $source);
+
+    config(['quality.test_paths' => ['k6' => [$root]]]);
+
+    return $root;
+}
+
 afterEach(function (): void {
     foreach (['kronoqr-docs-*', 'kronoqr-suite-*'] as $pattern) {
         foreach (glob(sys_get_temp_dir().'/'.$pattern) ?: [] as $directory) {
@@ -146,4 +161,73 @@ it('genera la matriz por la salida estandar sin escribir ficheros', function ():
 
     expect($exit)->toBe(0);
     expect($output)->toContain('RN-05');
+    // Y la entrada de Pest no arrastra ningun marcador: es el caso por defecto.
+    expect($output)->toContain('` — no parte el turno |');
+})->group('RQ-13');
+
+it('da por cubierto un requisito cuya unica prueba es un escenario de k6', function (): void {
+    // RNF-P-06 y RQ-08 no tienen ni pueden tener prueba de Pest: los mide la
+    // prueba de carga, que dura minutos y necesita la pila levantada (§10.1).
+    // Sin este tercer formato, `--check` bloquearia por dos requisitos que si
+    // estan verificados, y la puerta que avisa de verdad se acaba desactivando.
+    useCatalog("- { id: RNF-P-06, fase: 0, titulo: 50 fichajes por segundo en el cambio de turno }\n");
+    useLoadTest(FakeTestSource::k6(['scan' => FakeTestSource::k6Requirements('RNF-P-06 RNF-P-02 RQ-08')]));
+    config(['quality.current_phase' => 0]);
+
+    // Etiquetada SOLO con RQ-13: esta prueba verifica el escaner, no el pico de
+    // 50 fichajes/s. Citar aqui RNF-P-06 haria figurar en la matriz una prueba
+    // de milisegundos como evidencia de un umbral de carga.
+    expect(Commands::run('qa:traceability --check')[0])->toBe(0);
+})->group('RQ-13');
+
+it('enumera las pruebas de k6 en el alcance de la matriz', function (): void {
+    // «Pest N, Playwright N, k6 N». La cifra es lo que vigila
+    // TraceabilityMatrixFreshnessTest para que la matriz versionada no describa
+    // un arbol que ya no existe.
+    useCatalog("- { id: RNF-P-06, fase: 0, titulo: 50 fichajes por segundo en el cambio de turno }\n");
+    useLoadTest(FakeTestSource::k6(['scan' => FakeTestSource::k6Requirements('RNF-P-06')]));
+    config(['quality.current_phase' => 0]);
+
+    [$exit, $output] = Commands::run('qa:traceability --output=-');
+
+    expect($exit)->toBe(0);
+    expect($output)->toContain('Pest 0, Playwright 0, k6 1');
+    expect($output)->toContain('scan-peak.js:5` — scan');
+})->group('RQ-13');
+
+it('escribe en cada entrada cada cuanto se ejecuta esa prueba', function (): void {
+    // La matriz se entrega como evidencia de RQ-13, y de k6 no es cierto que
+    // «verifique en cada cambio»: la prueba de carga corre a mano y en la
+    // etiqueta de cada version mayor. Quien lee la fila tiene que poder
+    // distinguirlo sin salir de ella.
+    useCatalog("- { id: RNF-P-06, fase: 0, titulo: 50 fichajes por segundo en el cambio de turno }\n");
+    useLoadTest(FakeTestSource::k6(['scan' => FakeTestSource::k6Requirements('RNF-P-06')]));
+    config(['quality.current_phase' => 0]);
+
+    [, $output] = Commands::run('qa:traceability --output=-');
+
+    // Solo se marca lo que se aparta del caso normal: Pest y Playwright corren
+    // en cada push y no llevan nada, que es lo que mantiene la matriz legible.
+    expect($output)->toContain('(k6: a mano y en cada etiqueta vX.0.0)');
+    expect($output)->not->toContain('automática que la verifica en cada cambio');
+})->group('RQ-13');
+
+it('enumera aparte, y no como aviso, las pruebas condicionadas al entorno', function (): void {
+    // Nueve pruebas del arbol dependen de una herramienta que no esta en todos
+    // los entornos. Salian como «etiqueta con forma de requisito que no lo es»
+    // y sus requisitos, sin cobertura.
+    useCatalog("- { id: RF-IN-04, fase: 0, titulo: Sello del informe de periodo }\n");
+    useTests(FakeTestSource::file([
+        FakeTestSource::pest('sella el informe', ['RF-IN-04'], chained: "->skip(! hayChromium(), 'no esta instalado')"),
+    ]));
+    config(['quality.current_phase' => 0]);
+
+    [$exit, $output] = Commands::run('qa:traceability --output=-');
+
+    expect($exit)->toBe(0);
+    expect($output)->toContain('## Pruebas condicionadas al entorno');
+    expect($output)->toContain('sella el informe');
+    expect($output)->toContain('si el entorno la deja correr');
+    expect($output)->not->toContain('esta saltada y no cubre');
+    expect($output)->not->toContain('etiqueta con forma de requisito que no lo es');
 })->group('RQ-13');

@@ -1,0 +1,338 @@
+// Las pruebas del agregado: el codigo que decide si una version mayor sale o no
+// sale (RQ-08). Sin ellas, «VEREDICTO: verde» es una afirmacion que nadie ha
+// comprobado nunca — y un agregado que no supiera fallar daria verde tambien
+// sobre una pasada rota.
+//
+// CADA PRUEBA ROMPE UNA SOLA CONDICION sobre la misma pasada verde: p95 de 151
+// ms, 49,9 tramos/s, un reenvio con cuerpo distinto, una clase de rechazo
+// separada 21 ms, un 403 entre fichajes validos, una clase con pocas muestras y
+// un `check()` de contrato fallido. Asi el fallo senala la condicion y no «algo
+// del agregado».
+//
+// Se corre a mano; `make` no la ejecuta porque no hay etapa de Node para
+// `load-tests/`:
+//
+//   node --test load-tests/k6/aggregate.test.js
+//
+// (o `cd load-tests/k6 && node --test`. La forma `node --test load-tests/k6/`
+// falla en Windows: el descubridor por directorio resuelve la ruta como modulo.)
+//
+// Sin dependencias: `node --test` y `node:assert` vienen con Node 24.
+
+'use strict'
+
+const test = require('node:test')
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
+
+const { readResults, analyse, exitCodeOf, splitCsvLine, parseTags, percentiles } = require('./aggregate.js')
+
+// --- Construccion de CSV como el que escribe k6 ------------------------------
+
+const HEADER = [
+  'metric_name',
+  'timestamp',
+  'metric_value',
+  'check',
+  'error',
+  'error_code',
+  'expected_response',
+  'group',
+  'method',
+  'name',
+  'proto',
+  'scenario',
+  'service',
+  'status',
+  'subproto',
+  'tls_version',
+  'url',
+  'extra_tags',
+  'metadata',
+]
+
+function row({ metric, value = 1, check = '', scenario = '', status = '', tags = {} }) {
+  const fields = Array.from({ length: HEADER.length }, () => '')
+
+  fields[0] = metric
+  fields[1] = '1789658089'
+  fields[2] = Number(value).toFixed(6)
+  fields[3] = check
+  fields[11] = scenario
+  fields[13] = status
+  fields[17] = Object.entries(tags)
+    .map(([key, tagValue]) => `${key}=${tagValue}`)
+    .join('&')
+
+  // Solo `extra_tags` puede llevar comas (no las lleva) o espacios; el escritor
+  // de Go entrecomilla lo que haga falta y aqui se imita esa regla.
+  return fields.map((field) => (field.includes(',') ? `"${field}"` : field)).join(',')
+}
+
+function scanRows({ count, durationMs, status = '200', phase = 'scan', scenario = 'scan' }) {
+  return Array.from({ length: count }, () =>
+    row({
+      metric: 'http_req_duration',
+      value: durationMs,
+      scenario,
+      status,
+      tags: { requirements: 'RNF-P-06 RNF-P-02 RQ-08', phase },
+    }),
+  )
+}
+
+function rejectRows({ rejectClass, durations, status = '422' }) {
+  return durations.map((durationMs) =>
+    row({
+      metric: 'http_req_duration',
+      value: durationMs,
+      scenario: 'reject',
+      status,
+      tags: { requirements: 'RS-03', phase: 'reject', reject_class: rejectClass },
+    }),
+  )
+}
+
+/**
+ * Una pasada VERDE, con las cifras justas por encima de cada suelo. Cada prueba
+ * la muta en un solo punto.
+ */
+function greenRun(overrides = {}) {
+  const lines = [
+    ...scanRows({ count: 60, durationMs: overrides.scanDurationMs ?? 100 }),
+    ...rejectRows({ rejectClass: 'signature', durations: Array(20).fill(30) }),
+    ...rejectRows({
+      rejectClass: 'unknown',
+      durations: Array(overrides.unknownSamples ?? 20).fill(30),
+    }),
+    ...rejectRows({ rejectClass: 'revoked', durations: overrides.revokedDurations ?? Array(20).fill(30) }),
+    row({
+      metric: 'scan_outcomes',
+      value: overrides.shiftProducing ?? 60,
+      scenario: 'scan',
+      tags: { phase: 'scan', action: 'clock_in' },
+    }),
+    row({
+      metric: 'resend_matches',
+      value: overrides.resendIdentical ?? 12,
+      scenario: 'resend',
+      tags: { match: 'yes' },
+    }),
+    row({ metric: 'checks', value: 1, check: 'el rechazo es 422 problem+json', scenario: 'reject' }),
+  ]
+
+  if (overrides.resendDivergent) {
+    lines.push(
+      row({
+        metric: 'resend_matches',
+        value: overrides.resendDivergent,
+        scenario: 'resend',
+        tags: { match: 'no' },
+      }),
+    )
+  }
+
+  if (overrides.failedCheck) {
+    lines.push(
+      row({
+        metric: 'checks',
+        value: 0,
+        check: 'el cuerpo es el generico, con el scan_id como unica variacion',
+        scenario: 'reject',
+      }),
+    )
+  }
+
+  if (overrides.extraScanStatus) {
+    lines.push(...scanRows({ count: 1, durationMs: 100, status: overrides.extraScanStatus }))
+  }
+
+  return lines
+}
+
+function runAnalysis(lines, options = {}) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'k6-aggregate-'))
+
+  try {
+    fs.writeFileSync(path.join(dir, 'instance-0.csv'), `${HEADER.join(',')}\n${lines.join('\n')}\n`)
+
+    return analyse(readResults(dir), {
+      durationSeconds: 1,
+      instances: 10,
+      scanRate: 6,
+      offeredRate: 60,
+      rejectionFloorMs: 25,
+      now: '2026-09-17T00:00:00.000Z',
+      ...options,
+    })
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+const statusOf = (summary, requirement) => summary.verdicts[requirement].status
+
+// --- Las funciones sueltas ---------------------------------------------------
+
+test('parte una linea de CSV respetando el entrecomillado', () => {
+  assert.deepEqual(splitCsvLine('a,"b,c",d'), ['a', 'b,c', 'd'])
+  assert.deepEqual(splitCsvLine('a,"b""c",d'), ['a', 'b"c', 'd'])
+})
+
+test('lee las etiquetas extra con valores que llevan espacios', () => {
+  assert.deepEqual(parseTags('requirements=RNF-P-06 RQ-08&phase=scan'), {
+    requirements: 'RNF-P-06 RQ-08',
+    phase: 'scan',
+  })
+})
+
+test('no inventa percentiles cuando no hay muestras', () => {
+  assert.deepEqual(percentiles([]), { samples: 0, min: null, p50: null, p95: null, p99: null, max: null })
+})
+
+// --- La pasada verde ---------------------------------------------------------
+
+test('da verde cuando todo esta dentro de presupuesto', () => {
+  const summary = runAnalysis(greenRun())
+
+  assert.equal(statusOf(summary, 'RNF-P-02'), 'pass')
+  assert.equal(statusOf(summary, 'RNF-P-06'), 'pass')
+  assert.equal(statusOf(summary, 'RQ-03'), 'pass')
+  assert.equal(statusOf(summary, 'RS-03'), 'pass')
+  assert.equal(statusOf(summary, 'CHECKS'), 'pass')
+  assert.equal(exitCodeOf(summary), 0)
+})
+
+test('publica en el resumen de quien y de donde salio la medida', () => {
+  const summary = runAnalysis(greenRun(), {
+    gitSha: 'abc1234',
+    runner: 'ubuntu-24.04',
+    k6Version: 'v2.2.0',
+    k6Image: 'grafana/k6:2.2.0@sha256:deadbeef',
+  })
+
+  assert.equal(summary.git_sha, 'abc1234')
+  assert.equal(summary.runner, 'ubuntu-24.04')
+  assert.equal(summary.k6_version, 'v2.2.0')
+  assert.equal(summary.k6_image, 'grafana/k6:2.2.0@sha256:deadbeef')
+  assert.equal(summary.instances, 10)
+})
+
+// --- Un solo fallo cada vez --------------------------------------------------
+
+test('falla RNF-P-02 con un p95 de 151 ms', () => {
+  const summary = runAnalysis(greenRun({ scanDurationMs: 151 }))
+
+  assert.equal(statusOf(summary, 'RNF-P-02'), 'fail')
+  assert.equal(statusOf(summary, 'RNF-P-06'), 'pass')
+  assert.equal(exitCodeOf(summary), 1)
+})
+
+test('falla RNF-P-06 con 49,9 tramos por segundo', () => {
+  const summary = runAnalysis(greenRun({ shiftProducing: 499 }), { durationSeconds: 10 })
+
+  assert.equal(statusOf(summary, 'RNF-P-06'), 'fail')
+  assert.match(summary.verdicts['RNF-P-06'].detail, /49\.9\/s/)
+  assert.equal(exitCodeOf(summary), 1)
+})
+
+test('falla RQ-03 cuando un reenvio devuelve un cuerpo distinto', () => {
+  const summary = runAnalysis(greenRun({ resendDivergent: 1 }))
+
+  assert.equal(statusOf(summary, 'RQ-03'), 'fail')
+  assert.equal(exitCodeOf(summary), 1)
+})
+
+test('falla RS-03 cuando una clase de rechazo se separa 21 ms de las otras', () => {
+  // Mismo minimo que las demas —30 ms— y mediana 21 ms por encima: se rompe la
+  // separacion de medianas y NADA MAS, ni el suelo ni la de minimos.
+  const summary = runAnalysis(greenRun({ revokedDurations: [30, ...Array(19).fill(51)] }))
+
+  assert.equal(statusOf(summary, 'RS-03'), 'fail')
+  assert.match(summary.verdicts['RS-03'].detail, /separacion de medianas 21\.0 ms/)
+  assert.match(summary.verdicts['RS-03'].detail, /suelo de 25 ms respetado/)
+  assert.equal(exitCodeOf(summary), 1)
+})
+
+test('falla RS-03 cuando un rechazo baja del suelo de tiempo constante', () => {
+  const summary = runAnalysis(greenRun({ revokedDurations: Array(20).fill(24) }))
+
+  assert.equal(statusOf(summary, 'RS-03'), 'fail')
+  assert.match(summary.verdicts['RS-03'].detail, /NO respetado/)
+})
+
+test('falla RNF-P-06 con un solo 403 entre fichajes validos', () => {
+  // Un `429` seria degradacion encolable y se tolera; un `403` es el servidor
+  // diciendole que no a alguien que venia a fichar.
+  const summary = runAnalysis(greenRun({ extraScanStatus: '403' }))
+
+  assert.equal(statusOf(summary, 'RNF-P-06'), 'fail')
+  assert.match(summary.verdicts['RNF-P-06'].detail, /rechazos al empleado 1/)
+})
+
+test('falla CHECKS cuando una comprobacion de contrato no pasa bajo carga', () => {
+  const summary = runAnalysis(greenRun({ failedCheck: true }))
+
+  assert.equal(statusOf(summary, 'CHECKS'), 'fail')
+  assert.equal(summary.checks.failed.length, 1)
+  assert.equal(exitCodeOf(summary), 1)
+})
+
+// --- No evaluable, que no es ni verde ni rojo --------------------------------
+
+test('declara RS-03 no evaluable cuando una clase apenas tiene muestras', () => {
+  const summary = runAnalysis(greenRun({ unknownSamples: 5 }))
+
+  assert.equal(statusOf(summary, 'RS-03'), 'unmeasurable')
+  assert.equal(exitCodeOf(summary), 2)
+})
+
+test('declara RNF-P-06 no evaluable cuando la carga ofrecida no llega a 50/s', () => {
+  const summary = runAnalysis(greenRun(), { instances: 2, offeredRate: 12 })
+
+  assert.equal(statusOf(summary, 'RNF-P-06'), 'unmeasurable')
+  assert.equal(exitCodeOf(summary), 2)
+})
+
+test('declara RQ-03 no evaluable cuando casi ningun par se pudo comparar', () => {
+  const lines = greenRun({ resendIdentical: 5 })
+
+  lines.push(
+    row({ metric: 'resend_matches', value: 200, scenario: 'resend', tags: { match: 'skipped' } }),
+  )
+
+  const summary = runAnalysis(lines)
+
+  assert.equal(statusOf(summary, 'RQ-03'), 'unmeasurable')
+})
+
+test('un rojo manda sobre un no evaluable', () => {
+  const summary = runAnalysis(greenRun({ unknownSamples: 5, scanDurationMs: 151 }))
+
+  assert.equal(statusOf(summary, 'RS-03'), 'unmeasurable')
+  assert.equal(statusOf(summary, 'RNF-P-02'), 'fail')
+  assert.equal(exitCodeOf(summary), 1)
+})
+
+// --- Linea base: avisa, no falla ---------------------------------------------
+
+test('avisa de una regresion del 26 por ciento sin cambiar el veredicto', () => {
+  const summary = runAnalysis(greenRun({ scanDurationMs: 126 }), {
+    baseline: { scenarios: { scan: { p95: 100 } } },
+  })
+
+  assert.equal(summary.baseline.regression, true)
+  assert.match(summary.baseline.note, /AVISO/)
+  assert.equal(exitCodeOf(summary), 0)
+})
+
+test('no avisa de una regresion del 24 por ciento', () => {
+  const summary = runAnalysis(greenRun({ scanDurationMs: 124 }), {
+    baseline: { scenarios: { scan: { p95: 100 } } },
+  })
+
+  assert.equal(summary.baseline.regression, false)
+  assert.equal(exitCodeOf(summary), 0)
+})

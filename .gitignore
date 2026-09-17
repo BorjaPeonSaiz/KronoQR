@@ -24,7 +24,8 @@ dist/
 coverage/
 .phpunit.result.cache
 .phpunit.cache/
-/load-tests/k6/results/
+/load-tests/k6/.results/
+/load-tests/k6/.fixtures/
 
 # SBOM generado por `make sbom` (doc 02 §9.2). Se sube como artefacto de cada
 # ejecucion de la CI, no se versiona: es un derivado de composer.lock y

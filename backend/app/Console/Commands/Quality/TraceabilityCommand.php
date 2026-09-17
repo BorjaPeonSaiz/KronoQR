@@ -95,8 +95,10 @@ final class TraceabilityCommand extends Command
             }
         }
 
-        foreach ($scan->malformed as $tag) {
-            $this->log()->writeln('<comment>Aviso: etiqueta con forma de requisito que no lo es → '.$tag.'</comment>');
+        // Redactados en el escaner: una etiqueta mal escrita y una prueba
+        // saltada no son lo mismo y no pueden salir con el mismo rotulo.
+        foreach ($scan->malformed as $warning) {
+            $this->log()->writeln('<comment>Aviso: '.$warning.'</comment>');
         }
     }
 

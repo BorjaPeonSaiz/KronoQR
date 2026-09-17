@@ -42,16 +42,31 @@ final readonly class DailyTotalsReconciled implements DomainEvent
         public string $employeeUuid,
         public WorkDate $workDate,
         public array $divergentFields,
-        /** No habia fila: la jornada existia en `shift_entries` y no en la proyeccion. */
-        public bool $rowWasMissing,
-        /** Lo que la proyeccion afirmaba. Nulo si no habia fila. */
-        public ?int $previousTotalMinutes,
-        public ?int $previousShiftCount,
+        /**
+         * Lo que la proyeccion afirmaba, **con los seis campos**. Nulo si no
+         * habia fila: la jornada existia en `shift_entries` y no en la
+         * proyeccion.
+         *
+         * Los seis y no dos desde la tarea 3.6: este asiento es la unica copia
+         * de la fila mala que queda, y con el total y el numero de tramos no se
+         * puede reconstruir una que decia «turno abierto» sobre uno cerrado.
+         */
+        public ?DailyTotalsSnapshot $before,
         /** Lo que dicen los tramos vigentes, que es lo que se ha escrito. */
-        public int $totalMinutes,
-        public int $shiftCount,
+        public DailyTotalsSnapshot $after,
         public DateTimeImmutable $reconciledAt,
     ) {}
+
+    /**
+     * No habia fila que corregir: habia que crearla.
+     *
+     * Se deriva de `before` en lugar de viajar aparte — dos formas de decir lo
+     * mismo acaban contradiciendose.
+     */
+    public function rowWasMissing(): bool
+    {
+        return ! $this->before instanceof DailyTotalsSnapshot;
+    }
 
     /** La jornada afectada, en `Y-m-d` y ya resuelta en la zona del centro (RN-05). */
     public function workDateIso(): string

@@ -104,6 +104,39 @@ final class EloquentWorkDayLedger implements WorkDayLedger
         return $this->groupIntoWorkDays(array_values($rows));
     }
 
+    /**
+     * La relectura de una sola jornada, para la reconciliacion (RF-PR-02).
+     *
+     * Misma consulta que {@see workDaysBetween()} acotada a una persona y un
+     * dia, y **el mismo agrupamiento**: si tuviera camino propio, la
+     * comprobacion podria empezar a construir el agregado de una forma y la
+     * pasada de inspeccion de otra, que es exactamente la clase de diferencia
+     * que produce una divergencia inventada.
+     *
+     * Un empleado que ya no esta en `employees` no tiene jornada que releer:
+     * `groupIntoWorkDays()` descarta sus tramos, y devolver `null` aqui es lo
+     * mismo que decir «no hay nada vigente».
+     */
+    public function workDayOf(string $employeeUuid, WorkDate $workDate): ?WorkDay
+    {
+        $employeeId = $this->employeeIdOf($employeeUuid);
+
+        if ($employeeId === null) {
+            return null;
+        }
+
+        $rows = ShiftEntry::query()
+            ->where('employee_id', $employeeId)
+            ->where('work_date', $workDate->isoDate)
+            ->whereNotIn('status', self::historicalStatuses())
+            ->orderBy('clocked_in_at')
+            ->orderBy('id')
+            ->get()
+            ->all();
+
+        return $this->groupIntoWorkDays(array_values($rows))[0] ?? null;
+    }
+
     public function lastClockOutBefore(string $employeeUuid, DateTimeImmutable $instant): ?DateTimeImmutable
     {
         $employeeId = $this->employeeIdOf($employeeUuid);

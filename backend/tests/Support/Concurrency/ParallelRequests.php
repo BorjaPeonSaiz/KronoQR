@@ -77,6 +77,48 @@ final class ParallelRequests
      */
     public static function run(int $count, callable $request): array
     {
+        $responses = self::runTasks($count, static function (int $index) use ($request): array {
+            $response = $request($index);
+
+            return ['status' => $response->getStatusCode(), 'body' => $response->json()];
+        });
+
+        $results = [];
+
+        foreach ($responses as $index => $decoded) {
+            // El viaje de ida y vuelta por JSON pierde los tipos, asi que se
+            // comprueban aqui en lugar de moldearlos: una respuesta que no tenga
+            // forma de respuesta es un fallo del arnes, y tiene que decirlo.
+            if (! is_array($decoded) || ! isset($decoded['status']) || ! is_int($decoded['status'])) {
+                throw new RuntimeException('El proceso '.$index.' no ha devuelto una respuesta HTTP.');
+            }
+
+            $results[] = ['status' => $decoded['status'], 'body' => $decoded['body'] ?? null];
+        }
+
+        return $results;
+    }
+
+    /**
+     * Lo mismo, con una clausura cualquiera en vez de una peticion HTTP.
+     *
+     * **Existe porque no toda concurrencia que hay que probar entra por el
+     * borde.** La reconciliacion de `daily_totals` es un comando de consola, y
+     * la carrera que corrompia la proyeccion (RF-PR-02, RN-06) solo se reproduce
+     * con fichajes confirmando de verdad **mientras** la pasada recorre el dia:
+     * dos cosas que no son dos peticiones.
+     *
+     * El valor que devuelva la clausura viaja al padre por el mismo fichero
+     * JSON, asi que tiene que ser serializable. Todo lo demas —el cierre de
+     * conexiones antes de bifurcar, el SIGKILL del hijo, el fallo que viaja en
+     * vez de perderse— es identico, y es justo lo que no se queria copiar.
+     *
+     * @param  int  $count  Cuantos procesos.
+     * @param  callable(int): mixed  $task  Lo que hace cada hijo, con su indice.
+     * @return list<mixed> Resultados en el orden de lanzamiento.
+     */
+    public static function runTasks(int $count, callable $task): array
+    {
         if (! \function_exists('pcntl_fork')) {
             throw new RuntimeException(
                 'Las pruebas de concurrencia del doc 02 §9.4 necesitan la extension pcntl. '
@@ -104,7 +146,7 @@ final class ParallelRequests
             DB::disconnect((string) $name);
         }
 
-        $children = self::spawn($count, $request, $directory);
+        $children = self::spawn($count, $task, $directory);
 
         foreach ($children as $pid) {
             pcntl_waitpid($pid, $status);
@@ -114,10 +156,10 @@ final class ParallelRequests
     }
 
     /**
-     * @param  callable(int): TestResponse<Response>  $request
+     * @param  callable(int): mixed  $task
      * @return list<int>
      */
-    private static function spawn(int $count, callable $request, string $directory): array
+    private static function spawn(int $count, callable $task, string $directory): array
     {
         $children = [];
 
@@ -129,7 +171,7 @@ final class ParallelRequests
             }
 
             if ($pid === 0) {
-                self::child($index, $request, $directory);
+                self::child($index, $task, $directory);
             }
 
             $children[] = $pid;
@@ -141,17 +183,14 @@ final class ParallelRequests
     /**
      * El trabajo de un hijo. **Nunca vuelve.**
      *
-     * @param  callable(int): TestResponse<Response>  $request
+     * @param  callable(int): mixed  $task
      */
-    private static function child(int $index, callable $request, string $directory): never
+    private static function child(int $index, callable $task, string $directory): never
     {
-        $payload = ['status' => 0, 'body' => null, 'error' => null];
+        $payload = ['value' => null, 'error' => null];
 
         try {
-            $response = $request($index);
-
-            $payload['status'] = $response->getStatusCode();
-            $payload['body'] = $response->json();
+            $payload['value'] = $task($index);
         } catch (Throwable $failure) {
             // El fallo viaja al padre en lugar de perderse en la salida de un
             // proceso que nadie lee: sin esto, una prueba de concurrencia que
@@ -185,7 +224,7 @@ final class ParallelRequests
     }
 
     /**
-     * @return list<array{status: int, body: mixed}>
+     * @return list<mixed>
      */
     private static function collect(int $count, string $directory): array
     {
@@ -199,14 +238,14 @@ final class ParallelRequests
                 throw new RuntimeException('El proceso '.$index.' no ha dejado resultado.');
             }
 
-            /** @var array{status: int, body: mixed, error: string|null} $decoded */
+            /** @var array{value: mixed, error: string|null} $decoded */
             $decoded = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
 
             if ($decoded['error'] !== null) {
                 throw new RuntimeException('El proceso '.$index.' fallo con '.$decoded['error']);
             }
 
-            $results[] = ['status' => $decoded['status'], 'body' => $decoded['body']];
+            $results[] = $decoded['value'];
 
             unlink($file);
         }

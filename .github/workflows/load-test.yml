@@ -1,0 +1,233 @@
+# KronoQR — prueba de carga k6 sobre las imagenes de entrega (RQ-08, RNF-P-06).
+#
+# POR QUE UN WORKFLOW PROPIO Y NO `ci.yml` NI `release.yml` (decision 12 de la
+# ficha 3.6, plan 06). Las etapas ①-③ de `ci.yml` tienen que seguir por debajo
+# de 4 minutos (doc 02 §10.1): una CI lenta se acaba ignorando, y el pipeline
+# de ese fichero no tiene etapa de carga. `release.yml` sigue siendo el
+# marcador del plan de implementacion 08 (publicacion de verdad): esto no
+# publica nada, solo MIDE.
+#
+# QUE MIDE. `load-tests/k6/scan-peak.js` (cinco escenarios: fichajes validos,
+# reenvios idempotentes, rechazos de firma/desconocidos/revocados, lotes y la
+# vista de cumplimiento) contra las TRES IMAGENES DE ENTREGA, instaladas desde
+# el paquete del §11.6.1 con el instalador real -no contra la imagen de
+# desarrollo, y no contra el arbol del repositorio-, exactamente como hace el
+# job `clean-install` (etapa ⑧) de `ci.yml`. El umbral bloqueante es el que
+# fija el doc 02 §9.2: RNF-P-06, 50 fichajes/s con p95 < 150 ms.
+#
+# EL RUNNER PUBLICO NO ES EL HARDWARE DE REFERENCIA. GitHub da 4 vCPU/16 GB a
+# este workflow; el numero que vale para decirle a un cliente que su servidor
+# aguanta el cambio de turno es el que se mide en el hardware Linux de
+# referencia del doc 02 §11.6.2 (4 nucleos/8 GB), no el de este runner. Lo que
+# SI es bloqueante aqui es que la prueba no empeore y que el camino de carga
+# —Nginx, PHP-FPM, PostgreSQL con los ajustes de la tarea 3.6— siga siendo el
+# mismo que se entrega.
+#
+# CUANDO CORRE. A mano (`workflow_dispatch`, con `instances`/`duration`
+# propios) y en cada etiqueta `vX.0.0` -una version MAYOR-, como red de
+# seguridad si alguien etiqueta una sin haberla corrido antes: el
+# procedimiento de publicacion del plan 08 la ejecuta a mano antes de
+# etiquetar, y esto es lo que impide que una mayor sin la carga verificada
+# pase desapercibida. Nunca en cada push: cuesta demasiado y nadie la espera
+# ahi (mismo criterio que la etapa ⑧ de `ci.yml`).
+#
+# Secretos: ninguno. Igual que `ci.yml`, no lee `secrets.*` y no escribe
+# ficheros de entorno con datos reales: el `.env` del paquete se rellena con
+# los mismos valores de relleno de `.github/scripts/prepare-package-env.sh`.
+
+name: Prueba de carga
+
+on:
+  workflow_dispatch:
+    inputs:
+      instances:
+        description: "Instancias de k6 (una IP de origen cada una). 8 produce 56 fichajes/s validos, por encima de los 50 de RNF-P-06."
+        required: false
+        default: "8"
+      duration:
+        description: "Duracion sostenida de cada escenario (p. ej. 120s, 5m)."
+        required: false
+        default: "120s"
+  push:
+    tags:
+      - "v*.0.0"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: load-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  load-test:
+    name: "Carga k6 sobre el paquete de entrega"
+    runs-on: ubuntu-24.04
+    # Generoso a proposito: construye tres imagenes, instala el paquete
+    # completo (mismo coste que el escenario C de `clean-install`) y sostiene
+    # la carga durante `duration` en cinco escenarios a la vez. Con
+    # INSTANCES=8 y DURATION=120s, medido en frio: 15-20 min.
+    timeout-minutes: 50
+
+    env:
+      INSTANCES: ${{ github.event.inputs.instances || '8' }}
+      DURATION: ${{ github.event.inputs.duration || '120s' }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
+
+      - name: Construir las tres imagenes de entrega
+        run: make build-ci-images IMAGES="postgres app nginx" BUILDX_CACHE=gha
+
+      - name: "Pool de PHP-FPM contra la imagen real: lo que la etapa de Integracion no puede cubrir"
+        # La etapa ④ de `ci.yml` instala PHP directamente en el runner
+        # (`.github/actions/php-toolchain`): sin `php-fpm` ni
+        # `/usr/local/etc/php-fpm.d/www.conf` ahi, las siete pruebas
+        # funcionales de `FpmPoolRenderTest.php` se SALTAN (`hayFpmDeVerdad()`
+        # es falso). Aqui SI esta la imagen real recien construida: un paso de
+        # segundos que ejerce el mismo camino -`PHP_FPM_MAX_CHILDREN=40` y un
+        # valor invalido- y cubre justo el fallo de arranque real que la tarea
+        # 3.6 encontro y corrigio (`render_fpm_pool` devolviendo una ruta
+        # corrompida por la salida de `php-fpm -t`).
+        run: |
+          set -euo pipefail
+          echo "--- PHP_FPM_MAX_CHILDREN=40 (recomendado): tiene que rendir y validar con php-fpm -t ---"
+          docker run --rm --entrypoint bash -e PHP_FPM_MAX_CHILDREN=40 kronoqr/app:ci -c \
+            '. /usr/local/bin/kronoqr-entrypoint; render_fpm_pool >/dev/null'
+
+          echo "--- PHP_FPM_MAX_CHILDREN=abc (invalido): tiene que salir 2 con Que hacer ---"
+          set +e
+          docker run --rm --entrypoint bash -e PHP_FPM_MAX_CHILDREN=abc kronoqr/app:ci -c \
+            '. /usr/local/bin/kronoqr-entrypoint; render_fpm_pool' >render-invalido.log 2>&1
+          codigo=$?
+          set -e
+          cat render-invalido.log
+          test "${codigo}" -eq 2 || { echo "Se esperaba salida 2 y fue ${codigo}"; exit 1; }
+          grep -q 'Que hacer' render-invalido.log
+
+      # Los cuatro pasos siguientes -etiquetar, armar el paquete, rellenar
+      # [CLIENTE] e instalar- son la MISMA secuencia que el escenario C del
+      # job `clean-install` de `ci.yml` (etapa ⑧): mide las imagenes que se
+      # instalarian de verdad, no las de desarrollo. Se repiten aqui en vez de
+      # factorizarse en un script compartido para no arriesgar el
+      # comportamiento ya verificado de esa etapa; la logica que SI se saco a
+      # un script porque la necesitan varios jobs a la vez —el relleno de
+      # [CLIENTE]— ya vive en `.github/scripts/prepare-package-env.sh`.
+      - name: Etiquetar las imagenes como las nombra compose.prod.yaml
+        run: |
+          set -euo pipefail
+          version="$(cat VERSION)"
+          docker tag kronoqr/app:ci      "kronoqr/php:${version}"
+          docker tag kronoqr/postgres:ci "kronoqr/postgres:${version}"
+          docker tag kronoqr/nginx:ci    "kronoqr/nginx:${version}"
+
+      - name: Armar el paquete de entrega
+        run: |
+          set -euo pipefail
+          bash infra/scripts/package.sh paquete
+          test -x paquete/install.sh
+
+      - name: Rellenar lo marcado [CLIENTE], como haria el IT del hotel
+        run: bash .github/scripts/prepare-package-env.sh paquete
+
+      - name: Instalar desde el paquete
+        run: |
+          set -euo pipefail
+          cd paquete
+          sudo ./install.sh | tee salida-instalacion.log
+          grep -q 'instalado y verificado' salida-instalacion.log
+          curl -fsS -k https://127.0.0.1/api/v1/ready >/dev/null
+
+      - name: "KIOSK_VLAN_CIDR a la subred real de la red docker"
+        # POR QUE ESTE PASO EXISTE. Los contenedores de k6 se unen a la misma
+        # red docker que nginx (`kronoqr-app`, nombre fijo tanto en
+        # compose.dev.yaml como en compose.prod.yaml), y esa es exactamente la
+        # situacion del doc 02 §7.1: todos los quioscos de un hotel salen por
+        # la misma IP. `prepare-package-env.sh` deja KIOSK_VLAN_CIDR con un
+        # valor de relleno (10.92.0.0/24) que NO tiene por que coincidir con
+        # la subred que Docker asigno de verdad a `kronoqr-app` -al contrario
+        # que en desarrollo, compose.prod.yaml no fija una subred con IPAM-.
+        # Sin que coincidan, Nginx aplicaria a k6 la zona de 30 r/m pensada
+        # para internet y la medida saldria tres ordenes de magnitud por
+        # debajo de RNF-P-06 antes de que la aplicacion llegara a sudar (el
+        # mismo aviso del paso 5 de la ficha de esta tarea).
+        run: |
+          set -euo pipefail
+          cd paquete
+          subred="$(docker network inspect kronoqr-app --format '{{ (index .IPAM.Config 0).Subnet }}')"
+          echo "Subred real de kronoqr-app: ${subred}"
+          sudo sed -i "s|^KIOSK_VLAN_CIDR=.*|KIOSK_VLAN_CIDR=${subred}|" .env
+          # `restart` no basta: relanza el proceso existente sin releer
+          # env_file. `up -d --wait` recrea nginx con el .env de disco y
+          # espera a que su healthcheck pase antes de seguir.
+          sudo docker compose --env-file .env -f docker-compose.yml up -d --wait nginx
+          curl -fsS -k https://127.0.0.1/api/v1/ready >/dev/null
+
+      - name: "paquete/.env legible por el runner, sin sudo (lo necesita run.sh)"
+        # `install.sh` deja `.env` en `root:root 0600` (§7.7, RS-08: el `.env`
+        # del cliente no lo lee cualquiera). El paso siguiente invoca `make
+        # load-test` SIN `sudo` a proposito -un `sudo make load-test` perderia
+        # `node` del PATH, que `run.sh` necesita para `aggregate.js`-, y el
+        # cliente `docker compose` del runner resuelve `--env-file` en SU
+        # PROPIO proceso, no en el demonio: sin poder leer el fichero, falla
+        # antes de arrancar nada. Se cede la PROPIEDAD al usuario del runner
+        # -que ya esta en el grupo docker- y se CONSERVA el modo 0600: sigue
+        # sin ser legible por nadie mas.
+        #
+        # Ningun otro fichero que `run.sh` necesite queda de root:
+        # `docker-compose.yml` lo escribe `package.sh` como el propio runner
+        # (nunca con sudo) y `.results/` lo crea `run.sh` con `mkdir -p`, sin
+        # sudo tampoco.
+        run: sudo chown "$(id -u):$(id -g)" paquete/.env
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+
+      - name: "Carga k6: RNF-P-06 (50 fichajes/s, p95 < 150 ms) y RQ-08"
+        # El veredicto de load-tests/k6/run.sh ES el del job: sin
+        # continue-on-error y sin capturar el codigo de salida, un veredicto
+        # rojo (1) o una medida no fiable (2) rompen este paso y el job entero
+        # sale en rojo. La subida de resultados, mas abajo, lleva `if:
+        # always()` justo para que eso no se pierda.
+        #
+        # Las cinco variables K6_* de abajo son la interfaz que describe la
+        # ficha de la tarea 3.6 para `load-tests/k6/run.sh` (aprovisionamiento
+        # de verdad, TLS del paquete instalado, la zona de Nginx a contar en
+        # el log, y la procedencia de la medida para la linea base). No pasan
+        # por `make load-test` -que solo reenvia INSTANCES/DURATION/
+        # K6_COMPOSE_ARGS/NETWORK, decision 15- sino como variables de este
+        # paso: `run.sh` las lee directamente del entorno, y las que aun no
+        # existan las ignora sin fallar.
+        env:
+          K6_ACKNOWLEDGE_TEST_DATABASE: "yes"
+          K6_INSECURE_TLS: "1"
+          K6_EDGE_SERVICE: nginx
+          K6_GIT_SHA: ${{ github.sha }}
+          K6_RUNNER: "github-${{ runner.os }}-${{ runner.arch }}"
+        run: |
+          make load-test \
+            INSTANCES="${INSTANCES}" \
+            DURATION="${DURATION}" \
+            NETWORK=kronoqr-app \
+            K6_COMPOSE_ARGS="--env-file paquete/.env -f paquete/docker-compose.yml"
+
+      - name: Resultados de la carga (CSV, logs y summary.json)
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: load-test-results
+          # .results/ es un directorio OCULTO (el nombre empieza por `.`):
+          # actions/upload-artifact v4 lo excluye por defecto y subiria un
+          # artefacto vacio sin avisar. `path` explicito -no
+          # `load-tests/k6/` a secas- para no arrastrar `.fixtures/` (el
+          # aprovisionamiento de tarjetas y credenciales de la carga).
+          path: load-tests/k6/.results
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 30

@@ -1667,6 +1667,25 @@ Las lee el `docker-compose` de producción. En desarrollo se ignoran.
 | `HTTPS_PORT` | `[CLIENTE]` | Puerto cifrado por el que entran el panel, el portal y las tablets | `443` | Íd. Si lo cambias, tiene que aparecer también en `APP_URL` | No |
 | `TLS_CERT_DIR` | `[CLIENTE]` | Carpeta **de tu servidor** con el certificado y su clave privada, montada de solo lectura. Ver [`instalacion.md`](instalacion.md) §6 | `./certs` | Al instalar, si guardas los certificados en otro sitio del servidor | No |
 
+### 6.24 Rendimiento del servidor
+
+Los tres se entregan con un valor que funciona y **casi nadie tendrá que
+cambiarlos**. El apartado que explica cuándo sí, cómo medirlo antes y después, y
+qué síntoma corresponde a cada uno es [`operacion.md`](operacion.md) **§17**.
+
+| Variable | Marca | Qué hace | De serie | Cuándo cambiarla | ¿Afecta al cálculo de horas? |
+| --- | --- | --- | --- | --- | --- |
+| `PHP_FPM_MAX_CHILDREN` | — | Cuántas peticiones atiende la aplicación a la vez (tamaño del pool de PHP-FPM). Los demás valores del pool se derivan de este | `20`, que es el pool del servidor mínimo publicado: 2 núcleos y 4 GB | Con el servidor recomendado —4 núcleos y 8 GB— súbelo a `40`. Solo tiene sentido si **sobra CPU** y las peticiones esperan turno: cada trabajador ocupa unos **60 MB**, así que el techo lo pone la RAM, y más trabajadores sobre una CPU saturada empeoran la latencia. Mídelo con [`operacion.md`](operacion.md) §17 antes y después | No |
+| `DB_LOCK_TIMEOUT` | — | Cuánto espera una consulta a que se libere un candado de la base de datos antes de rendirse. **Solo en el servicio que atiende peticiones** (`app`): fichaje, panel, portal y migraciones | `5s` | Casi nunca. Sin este tope, un fichaje espera **indefinidamente** detrás de una transacción colgada y el cambio de turno entero se para. Cuando salta, esa petición falla, **el quiosco la encola y la reenvía**, y el empleado no se entera | No |
+| `DB_IDLE_IN_TRANSACTION_TIMEOUT` | — | Cuánto se tolera una transacción abierta que no hace nada antes de cerrar esa sesión. **Solo en el servicio que atiende peticiones**, igual que el anterior | `60s` | Casi nunca. Corta a la sesión que **tiene** el candado, que es la causa, y no a las que lo esperan. Súbelo solo si una tarea tuya de mantenimiento legítima necesita más tiempo dentro de una transacción | No |
+
+**Ni la copia de seguridad ni las tareas nocturnas llevan estos dos topes.** Los
+trabajos en segundo plano, el planificador y la presencia en vivo corren sin
+ellos a propósito: un `pg_dump` de una base grande tarda legítimamente mucho más
+de un minuto, y abortarlo por un tope pensado para que nadie espere delante de
+un quiosco convertiría una copia lenta en una copia que no existe. Ver
+[`operacion.md`](operacion.md) §17.4.
+
 ---
 
 ← [Instalación](instalacion.md) · [Operación](operacion.md) · [Obligaciones legales](obligaciones-legales.md)

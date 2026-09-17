@@ -7,6 +7,41 @@
 
 ## Estado y objetivo actual
 
+**Rama `feat/tarea-3.6-carga-k6` (desde `main` `5d13cf1`, con la 3.5 integrada por PR #66). Tarea 3.6 «Pruebas de carga k6 y ajuste de
+rendimiento» (RNF-P-06, RNF-P-02, RQ-08; restos de la 3.4 y la 3.5: endpoint de cumplimiento y `lastAcceptedScanOf()` bajo carga)
+IMPLEMENTADA, REVISADA (dos vueltas; tres para la reconciliación) y PROBADA el 17-09-2026; ver «Siguiente acción».** Dieciocho
+decisiones en la ficha (plan 06 → «Tarea 3.6» → «Decisiones tomadas»; la 18 es «lo que corrigieron las revisiones»). Las que importan:
+**`load-tests/k6/scan-peak.js`** (sustituye a `scan-p95.js`) con cinco escenarios etiquetados `tags: { requirements: '…' }` —`scan` 6/s,
+`resend` (reenvío idéntico), `reject` (tres clases comparadas ENTRE SÍ, suelo de 25 ms juzgado sobre el mínimo), `batch` (pares del
+mismo empleado en orden inverso), `compliance` desde una instancia «panel»—; **cada instancia de k6 es un origen** (≤ 8 r/s: la zona
+de Nginx es un cubo con fuga) y `INSTANCES=10` → 60 fichajes/s; **la población de la carga la crea el script** (departamento «Carga
+k6», códigos `K6…`, aborta si hay `K6…` fuera, exige `K6_ACKNOWLEDGE_TEST_DATABASE=yes` además de negarse en producción); histórico
+de 365 días × 200 empleados y `EXPLAIN` sobre el SQL real capturado con `DB::listen` (+ `ScanLogIndexUsageTest`); verificación
+posterior (`verify-after-load.php`: reconcile, cuadre, `verify-audit-chain`, regla 21 en cuatro servicios y `error_events`) y cierre
+con `trap` (`cleanup-after-load.php`: revoca tarjetas y tokens, desactiva la cuenta, borra `.fixtures/`); `aggregate.js` con
+veredictos por requisito (RNF-P-02 solo sobre 200/207, RNF-P-06 con «degradación encolable» ≤ 0,5 % y rechazo al empleado = 0, RQ-03 y
+RS-03 con suelos RELATIVOS → salida 2 «no evaluable», CHECKS de contrato, `edge_limits` del log de Nginx, `server_metrics` leídas
+desde el contenedor `prometheus`, `--baseline` que avisa al 25 %) y **18 pruebas propias con `node --test load-tests/k6/aggregate.test.js`**;
+**`TagScanner` gana la herramienta `k6`** (matriz: «Pest 3147, Playwright 226, k6 5», marcador solo en k6 y en pruebas condicionadas,
+sección «Pruebas condicionadas al entorno», `->skip(<condición>)` distinguido del incondicional; 0 avisos); **`load-test.yml`**
+(decisión 3-17: workflow propio, `workflow_dispatch` + etiquetas `v*.0.0`, mide las imágenes de entrega instaladas desde el paquete
+como ⑧, `chown` del `.env` del paquete, `include-hidden-files`, rendido del pool dentro de `kronoqr/app:ci`); **`PHP_FPM_MAX_CHILDREN`**
+(20/40, techo 500) rendido por el entrypoint con `php-fpm -t`; **`PGOPTIONS` solo en el servicio `app`** (`DB_LOCK_TIMEOUT=5s`,
+`DB_IDLE_IN_TRANSACTION_TIMEOUT=60s`, validados en el entrypoint; nunca en `scheduler`/`horizon`: `pg_dump` y nocturnas); `make load-test`;
+`operacion.md` §17 ES/EN, `configuracion.md` §6.24, doc 02 §2/§3.4/§8.2/§9.6/§10.1, doc 07 (fila STRIDE, A-11, A-12), ADR-007.
+**Defecto de producto destapado por la carga y corregido:** `attendance:reconcile` leía jornada y proyección sin instantánea y
+pisaba `daily_totals` si coincidía con fichajes; ahora `correct()` toma **primero el candado de la cadena** (puerto
+`Shared\…\SerializedLedgerWrite`, clave única en `Shared\Infrastructure\Persistence\AuditChainLock`, el mismo orden que el fichaje: sin
+abrazo mortal) y después `FOR UPDATE` de la fila, relee y solo escribe si la divergencia persiste (`CorrectionOutcome`: corregida /
+resuelta sola / contención 55P03-40P01 / fallida; solo la confirmada cuenta en `projection_divergence_total`); el asiento
+`projection.reconciled` lleva los seis campos (`DailyTotalsSnapshot`, `Domain/Event/`: **pendiente de ratificar por
+`arquitecto-dominio`**); gauge nuevo `projection_reconciliation_last_self_resolved`. **Local, informativo (Docker Desktop):** pasada
+llena 10 × 6/s → p95 55 s, 82 % «encolable» por `limit_conn conn_per_ip 64` (0 de `limit_req`), verificación posterior verde
+entera; pasada sin saturar (1 × 2/s) → RS-03 y RQ-03 verdes, p95 779 ms. **RNF-P-02/06 solo se evalúan en el runner o en hardware
+Linux.** Cifras finales: backend Unit 1957, Feature 1729, Integration 636, Architecture 559 (+ `SourceDiscoveryTest` conocido),
+Contract + Feature 1789 (`make test-contract`), PHPStan 9 sin errores, Deptrac 0/0, `sh-lint` 0, `docs:consistency` sin divergencias, mutación acotada:
+`TagScanner` 82,41 %, evento del snapshot 100 %.
+
 **Rama `feat/tarea-3.5-pausa-y-desfase` (desde `main` `c1ccba0`, con la 3.4 integrada por PR #65). Tarea 3.5 «Fichaje de pausa y
 validación de desfase de reloj» (RF-AT-10, RF-AT-12, RN-05, RN-12, RN-15, ADR-024) IMPLEMENTADA, REVISADA (dos vueltas) y PROBADA el
 17-09-2026; ver «Siguiente acción».** Quince decisiones en la ficha (plan 06 → «Tarea 3.5» → «Decisiones tomadas»; la 15 es «lo que
@@ -551,6 +586,18 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 
 ### Por tarea
 
+- **3.6 (restos, 17-09-2026):** `load-tests/k6/baseline.json` sale del `summary.json` de la primera ejecución del workflow en el
+  runner (decisión 17) y hasta entonces `--baseline` no se aplica; **`load-test.yml` no ha corrido nunca** (primero a mano con
+  `INSTANCES=2 DURATION=30s`, después la llena); **un elemento de lote con `503` (`ClockOutBeforeClockIn`) se reintentaría para
+  siempre** (el contrato dice «conservar en la cola»; candidato a incidencia RN-15); `DailyTotalsSnapshot` en `Domain/Event/` está
+  pendiente de ratificar por `arquitecto-dominio`; el `[global]` del pool rendido solo repone `error_log`/`daemonize` frente al
+  `php-fpm.conf.default` de la imagen base; `compliance:verify-audit-chain` no admite rango (recorre la cadena entera tras la
+  carga); `/metrics` solo es legible desde el contenedor `prometheus` (si la pila del paquete no lo lleva, `summary.json` va sin
+  `server_metrics`); `node --test load-tests/k6/` falla en Windows (usar la ruta del fichero); cierre de la Fase 3: revisar A-11 y
+  A-12 del doc 07 y las «pruebas de abuso» que quedan para la 3.7; la base de desarrollo queda con ~5 800 empleados `K6…`
+  («Carga k6»), 81 quioscos `k6-*`, 145 600 escaneos de histórico y `projection_divergence_total` en 6 (tarjetas, tokens y cuenta
+  revocados por el cierre); `make help` funciona de nuevo en Git Bash (44 líneas entrecomilladas); el residuo «fila ausente +
+  fichaje simultáneo» de la reconciliación es A-12.
 - **3.5 (restos, 17-09-2026):** **doc 07 §6 en el cierre de fase:** `break_clocking_enabled` y la tolerancia en `localStorage` de la tablet
   (manipulables; el servidor honra la intención y aplica su umbral; control: modo quiosco sin devtools), la ventana de 10 s del
   botón «Pausa» (la intención es de la tablet, no de la persona), y la excepción de soporte sobre `ATTENDANCE_BREAK_CLOCKING`;
@@ -721,6 +768,26 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 
 ## Trampas del entorno — leer antes de operar
 
+- **Prueba de carga en Docker Desktop: los `429` salen de `limit_conn conn_per_ip 64`, no de `limit_req`** (3.6): con p95 de 44 s
+  cada origen acumula rate × latencia ≈ 400 conexiones abiertas; `summary.json.edge_limits` distingue las dos causas. Un rojo por
+  429 en local no dice nada del presupuesto de tasa; el veredicto vale solo en el runner o en Linux.
+- **`grafana/k6` corre con uid 12345** y en un runner Linux no escribe en un `.results/` creado por el invocante: `run.sh` lanza con
+  `--user "$(id -u):$(id -g)"`. Docker Desktop lo esconde (ignora el uid del bind mount). Y `install.sh` deja `paquete/.env` a
+  `root:root 0600`: `docker compose --env-file` desde el usuario del runner necesita el `chown` previo (3.6).
+- **`actions/upload-artifact` v4 excluye los directorios ocultos** (`.results/`) salvo `include-hidden-files: true` (3.6).
+- **`GLOB_BRACE` no existe en la imagen Alpine/musl del contenedor `app`**: «Undefined constant»; usar `scandir()`/`Finder` (3.6).
+- **En una cadena de reemplazo de `s{}{}` de Perl sin `/e`, `$\``, `$&` y `$'` se interpolan**: un reemplazo con `?$\`` (regex escrita
+  dentro de código Markdown) insertó 720 líneas del propio documento. Escapar `\$` y comprobar `git diff --stat` contra las líneas
+  esperadas (3.6).
+- **`Finder::contains()` de Symfony une varias llamadas con O, no con Y** (`MultiplePcreFilterIterator`): dos condiciones van en un
+  solo patrón con anticipaciones (3.6).
+- **Un script de datos sintéticos que selecciona por convención de nombre (`K6%`) es peligroso sobre un clon de producción**: la
+  pertenencia se decide por lo que el propio script crea (departamento propio), con confirmación explícita, y abortando ante
+  cualquier coincidencia ajena (3.6, bloqueante de seguridad).
+- **Orden de candados entre el fichaje y cualquier escritura que audite**: el fichaje toma el candado consultivo de la cadena
+  (`EmployeeClockedIn/Out` se graba antes que `DailyTotalsRecalculated`) y DESPUÉS la fila de `daily_totals`. Todo camino que
+  escriba la proyección y deje asiento toma los candados en ese orden (`SerializedLedgerWrite::withChainLock`) o hay abrazo mortal
+  y la víctima puede ser el fichaje (3.6, la prueba lo reproduce: 500 antes, 200 después).
 - **Reloj fijo + token Sanctum = bomba de tiempo** (16-09-2026): una prueba con framework tiene dos relojes, el puerto `Clock` del
   dominio y Carbon (Sanctum, Eloquent, limitador). `PlanLimitsDoNotBlockTest` instalaba un `FixedClock` de junio, emitía con él un
   token de quiosco (caducidad = junio + 90 días de `IDENTITY_DEVICE_TOKEN_DAYS`) y fichaba; Sanctum comparaba la caducidad con el

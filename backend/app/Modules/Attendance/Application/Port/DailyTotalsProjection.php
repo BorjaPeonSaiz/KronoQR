@@ -41,4 +41,29 @@ interface DailyTotalsProjection
      * @return list<ProjectedDailyTotal>
      */
     public function between(WorkDate $from, WorkDate $to): array;
+
+    /**
+     * La fila de esa jornada **con candado de escritura**, o `null` si no existe.
+     *
+     * **Sigue sin escribir: bloquear no es escribir.** Es la lectura que la
+     * correccion hace dentro de su propia transaccion, justo antes de decidir si
+     * publica el recalculo, y el candado es lo unico que la separa de pisar el
+     * trabajo de un fichaje que esta confirmando en ese mismo instante. Sin el,
+     * la reconciliacion compara una lectura vieja —tomada en la pasada de
+     * inspeccion, milisegundos antes— contra una fila que ya cambio, y
+     * «corrige» con datos caducados una fila que estaba bien (RN-06, regla dura
+     * 7).
+     *
+     * El candado sirve porque el fichaje escribe el tramo y esta fila en la
+     * **misma** transaccion (ADR-007): quien tenga la fila tomada obliga al
+     * `UPSERT` del fichaje a esperar, y quien llegue despues reescribe con sus
+     * propios valores, que son los buenos. Lo unico que el candado no cubre es
+     * la fila que **todavia no existe**, porque no hay nada que bloquear; ese
+     * residuo esta escrito en el caso de uso.
+     *
+     * Devolver `null` es significativo —no hay fila, no hay candado— y no
+     * equivale a una fila a cero: la diferencia entre las dos cosas es
+     * exactamente la divergencia «fila ausente».
+     */
+    public function lockedFor(string $employeeUuid, WorkDate $workDate): ?ProjectedDailyTotal;
 }
