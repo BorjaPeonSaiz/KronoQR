@@ -1688,6 +1688,26 @@ The production `docker-compose` reads them. In development they are ignored.
 | `HTTPS_PORT` | `[CLIENTE]` | Encrypted port through which the panel, the portal and the tablets come in | `443` | Same as above. If you change it, it has to appear in `APP_URL` too | No |
 | `TLS_CERT_DIR` | `[CLIENTE]` | Folder **on your server** with the certificate and its private key, mounted read-only. See [`installation.md`](installation.md) §6 | `./certs` | On installing, if you keep the certificates somewhere else on the server | No |
 
+### 6.24 Server performance
+
+All three ship with a value that works and **almost nobody will have to change
+them**. The section that explains when you would, how to measure before and
+after, and which symptom matches each one is [`operation.md`](operation.md)
+**§17**.
+
+| Variable | Marker | What it does | Default | When to change it | Affects hours calculation? |
+| --- | --- | --- | --- | --- | --- |
+| `PHP_FPM_MAX_CHILDREN` | — | How many requests the application serves at the same time (the size of the PHP-FPM pool). The rest of the pool values are derived from this one | `20`, which is the pool of the published minimum server: 2 cores and 4 GB | With the recommended server — 4 cores and 8 GB — raise it to `40`. It only makes sense if there is **spare CPU** and requests are waiting their turn: each worker takes about **60 MB**, so the ceiling is set by RAM, and more workers on a saturated CPU make latency worse. Measure with [`operation.md`](operation.md) §17 before and after | No |
+| `DB_LOCK_TIMEOUT` | — | How long a query waits for a database lock to be released before giving up. **Only on the service that serves requests** (`app`): clocking in, the panel, the portal and the migrations | `5s` | Almost never. Without this timeout a clock-in waits **indefinitely** behind a stuck transaction and the whole shift change stops. When it fires, that request fails, **the kiosk queues and resends it**, and the employee never notices | No |
+| `DB_IDLE_IN_TRANSACTION_TIMEOUT` | — | How long an open transaction doing nothing is tolerated before that session is closed. **Only on the service that serves requests**, same as the previous one | `60s` | Almost never. It cuts off the session that **holds** the lock, which is the cause, and not the ones waiting for it. Raise it only if a legitimate maintenance task of yours needs more time inside a transaction | No |
+
+**Neither the backup nor the nightly tasks carry these two timeouts.** The
+background jobs, the scheduler and live presence run without them on purpose: a
+`pg_dump` of a large database legitimately takes far more than a minute, and
+aborting it with a timeout meant to stop anyone waiting in front of a kiosk
+would turn a slow backup into a backup that does not exist. See
+[`operation.md`](operation.md) §17.4.
+
 ---
 
 ← [Installation](installation.md) · [Operation](operation.md) · [Legal obligations](legal-obligations.md)

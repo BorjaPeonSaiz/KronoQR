@@ -15,6 +15,44 @@ namespace App\Console\Commands\Quality\Support;
  */
 final readonly class TraceabilityReport
 {
+    /**
+     * Cada herramienta y CADA CUANTO se ejecuta de verdad (doc 02 §10.1).
+     *
+     * Va escrito en cada entrada de la matriz porque la matriz se entrega como
+     * evidencia de que «cada obligacion tiene una prueba automatica que la
+     * verifica EN CADA CAMBIO», y de k6 eso es falso: la prueba de carga dura
+     * minutos, necesita la pila levantada y corre a mano y en la etiqueta de
+     * cada version mayor (RQ-08, decision 12 de la tarea 3.6). Una entrada de
+     * k6 acredita que el umbral se midio en la ultima version mayor, no que se
+     * este verificando hoy, y quien lee la matriz tiene que poder distinguirlo
+     * sin salir de la fila.
+     *
+     * Es texto fijo por herramienta, no una fecha: dos ejecuciones sobre el
+     * mismo arbol tienen que producir el mismo fichero.
+     *
+     * @var array<string, string>
+     */
+    private const array CADENCE = [
+        'pest' => 'Pest, en cada push',
+        'playwright' => 'Playwright, en cada push',
+        'k6' => 'k6, a mano y en cada etiqueta vX.0.0',
+    ];
+
+    /**
+     * Las herramientas que corren EN CADA PUSH, que es el caso por defecto y
+     * por eso no se anota en la matriz.
+     *
+     * Anotar las 3.300 entradas de Pest para decir lo que ya dice el preambulo
+     * engordaba el fichero un 18 % sin informar de nada: lo que hay que ver de
+     * un vistazo es lo que se APARTA del caso normal.
+     *
+     * @var list<string>
+     */
+    private const array EVERY_PUSH = ['pest', 'playwright'];
+
+    /** El marcador corto de lo que no corre en cada push. */
+    private const array OFF_CADENCE = ['k6' => 'k6: a mano y en cada etiqueta vX.0.0'];
+
     /** @var array<string, list<TaggedTest>> */
     private array $tests;
 
@@ -140,6 +178,7 @@ final readonly class TraceabilityReport
             ...$this->summarySection(),
             ...$this->missingSection(),
             ...$this->matrixSection(),
+            ...$this->conditionalSection(),
             ...$this->warningSection(),
             '',
         ]);
@@ -155,9 +194,28 @@ final readonly class TraceabilityReport
             '',
             '<!-- Generado por `php artisan qa:traceability` (doc 02 §9.6, RQ-13). No se edita a mano. -->',
             '',
-            'Cada prueba declara qué requisitos cubre con `->group(...)` en Pest o `{ tag: [...] }` en',
-            'Playwright. Esta matriz es la evidencia documental de que cada obligación —y en particular',
-            'cada `RL-*`— tiene una prueba automática que la verifica en cada cambio.',
+            'Cada prueba declara qué requisitos cubre con `->group(...)` en Pest, `{ tag: [...] }` en',
+            'Playwright o `tags: { requirements: \'...\' }` en el escenario de k6. Esta matriz es la',
+            'evidencia documental de que cada obligación —y en particular cada `RL-*`— tiene una prueba',
+            'automática que la verifica.',
+            '',
+            '**Las tres herramientas no corren con la misma frecuencia**, y las entradas que se apartan del',
+            'caso normal lo llevan escrito al lado:',
+            '',
+            '- **Pest, en cada push** — etapas ①–④ del pipeline (doc 02 §10.1).',
+            '- **Playwright, en cada push** — etapa ⑦, E2E con cámara simulada.',
+            '- **k6, a mano y en cada etiqueta `vX.0.0`** — la prueba de carga dura minutos y necesita la',
+            '  pila levantada, así que está fuera del pipeline de cada cambio (RQ-08, doc 02 §10.1). Una',
+            '  entrada de k6 acredita que el umbral **se midió en la última versión mayor**, no que se',
+            '  esté verificando hoy. Se marca `(k6: a mano y en cada etiqueta vX.0.0)`.',
+            '',
+            '**Una entrada sin marcador se verifica en cada push.** Solo se anota lo que se aparta de ahí,',
+            'que es lo único que hay que ver de un vistazo.',
+            '',
+            'Las pruebas que se saltan solas cuando su entorno no tiene la herramienta que necesitan',
+            '—`->skip(! hayChromium(), ...)`— cuentan como cobertura, se marcan `(si el entorno la deja',
+            'correr)` y se enumeran además en su propio apartado: verifican lo que dicen, pero no en todas',
+            'las máquinas.',
             '',
             'No lleva fecha a propósito: dos ejecuciones sobre el mismo árbol producen el mismo fichero,',
             'así que un `git diff` sobre esta matriz solo enseña cambios reales de cobertura.',
@@ -172,6 +230,7 @@ final readonly class TraceabilityReport
     {
         $pest = count($this->scan->by('pest'));
         $playwright = count($this->scan->by('playwright'));
+        $k6 = count($this->scan->by('k6'));
 
         $rows = ['| Fase | ¿Ejecutada? | Requisitos | Con prueba | Sin prueba |', '|---|---|---|---|---|'];
 
@@ -185,7 +244,7 @@ final readonly class TraceabilityReport
             '',
             '- Catálogo: `docs/requisitos.yaml`, **'.count($this->catalog->requirements).' requisitos**.',
             '- Fase en curso (`quality.current_phase`): **'.$this->currentPhase.'**. Orden real de ejecución: '.$this->order->describe().'.',
-            '- Pruebas etiquetadas: **'.count($this->scan->tests).'** (Pest '.$pest.', Playwright '.$playwright.').',
+            '- Pruebas etiquetadas: **'.count($this->scan->tests).'** (Pest '.$pest.', Playwright '.$playwright.', k6 '.$k6.').',
             '- Bloquean solo las fases ya ejecutadas: un requisito de la Fase 3 no bloquea mientras se trabaja en la Fase 1.',
             '',
             ...$rows,
@@ -239,6 +298,51 @@ final readonly class TraceabilityReport
     }
 
     /**
+     * Las pruebas que se saltan solas cuando el entorno no trae lo que
+     * necesitan: Chromium para sellar un PDF, `php-fpm` para comprobar el pool
+     * rendido. NO son pruebas saltadas —se ejecutan y verifican en cuanto la
+     * herramienta esta— y por eso cuentan como cobertura.
+     *
+     * Se enumeran igualmente, y con su nombre: un verde que depende de que
+     * maquina lo ejecute es una reserva sobre la evidencia, y la reserva se
+     * escribe donde se lee la evidencia. El §9.6 no las tenia contempladas y
+     * salian entre los avisos con el rotulo de «etiqueta con forma de requisito
+     * que no lo es», que era sencillamente falso.
+     *
+     * @return list<string>
+     */
+    private function conditionalSection(): array
+    {
+        $conditional = array_values(array_filter(
+            $this->scan->tests,
+            static fn (TaggedTest $test): bool => $test->conditional,
+        ));
+
+        $heading = ['## Pruebas condicionadas al entorno', ''];
+
+        if ($conditional === []) {
+            return [...$heading, 'Ninguna.', ''];
+        }
+
+        $rows = ['| Prueba | Requisitos | Se ejecuta |', '|---|---|---|'];
+
+        foreach ($conditional as $test) {
+            $rows[] = '| `'.$test->reference().'` — '.self::cell($test->name)
+                .' | '.implode(', ', array_map(static fn (string $id): string => '`'.$id.'`', $test->requirements))
+                .' | '.self::cadence($test).' |';
+        }
+
+        return [
+            ...$heading,
+            'Se saltan solas donde su herramienta no está instalada y se ejecutan donde sí. Cuentan como',
+            'cobertura, con esa reserva.',
+            '',
+            ...$rows,
+            '',
+        ];
+    }
+
+    /**
      * @return list<string>
      */
     private function warningSection(): array
@@ -250,8 +354,12 @@ final readonly class TraceabilityReport
             $warnings[] = '- `'.$id.'`: '.count($tests).' prueba(s) la citan y no figura en `docs/requisitos.yaml`.';
         }
 
-        foreach ($this->scan->malformed as $tag) {
-            $warnings[] = '- Etiqueta con forma de requisito que no lo es: '.$tag;
+        // El aviso llega ya redactado desde el escaner: son dos cosas distintas
+        // —una etiqueta mal escrita y una prueba saltada que no cubre lo que
+        // dice— y rotularlas a las dos igual, como se hacia, describia mal la
+        // mitad de ellas.
+        foreach ($this->scan->malformed as $warning) {
+            $warnings[] = '- '.$warning;
         }
 
         foreach ($this->scan->missingRoots as $tool => $roots) {
@@ -265,7 +373,37 @@ final readonly class TraceabilityReport
 
     private static function describe(TaggedTest $test): string
     {
-        return '`'.$test->reference().'` — '.self::cell($test->name);
+        return '`'.$test->reference().'` — '.self::cell($test->name).self::mark($test);
+    }
+
+    /**
+     * Lo que hay que saber de esta entrada que NO vale para la de al lado: que
+     * no corre en cada push, o que su verde depende del entorno. Las demas no
+     * llevan nada, y el preambulo dice lo que significa no llevarlo.
+     *
+     * Una herramienta nueva sin cadencia declarada lo DICE en vez de callarse:
+     * dar por «en cada push» algo que no lo es es justo el fallo que este
+     * marcador existe para evitar.
+     */
+    private static function mark(TaggedTest $test): string
+    {
+        $notes = [];
+
+        if (! in_array($test->tool, self::EVERY_PUSH, true)) {
+            $notes[] = self::OFF_CADENCE[$test->tool] ?? $test->tool.': frecuencia sin declarar';
+        }
+
+        if ($test->conditional) {
+            $notes[] = 'si el entorno la deja correr';
+        }
+
+        return $notes === [] ? '' : ' ('.implode(', ', $notes).')';
+    }
+
+    /** Con que frecuencia se ejecuta esta prueba, en largo. */
+    private static function cadence(TaggedTest $test): string
+    {
+        return self::CADENCE[$test->tool] ?? $test->tool.', frecuencia sin declarar';
     }
 
     private static function cell(string $text): string

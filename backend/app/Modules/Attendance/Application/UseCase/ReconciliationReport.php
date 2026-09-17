@@ -29,6 +29,18 @@ final readonly class ReconciliationReport
         public int $divergences,
         public int $corrected,
         public int $failures,
+        /**
+         * Sospechas que la relectura con la fila bloqueada no confirmo.
+         *
+         * **No son divergencias y por eso van en su propio contador.** Salen de
+         * que la inspeccion lee el registro horario y la proyeccion en dos
+         * consultas distintas: un fichaje que confirma entre las dos le deja una
+         * mitad nueva y otra vieja. Que se cuenten aparte es lo que permite
+         * distinguir «la proyeccion estaba rota» de «la pasada se cruzo con el
+         * turno de noche», y lo segundo no puede encender la alerta de
+         * integridad ni teñir de rojo el codigo de salida.
+         */
+        public int $selfResolved,
         public array $byField,
     ) {}
 
@@ -39,7 +51,7 @@ final readonly class ReconciliationReport
      */
     public static function withoutSite(): self
     {
-        return new self(false, '', '', 0, 0, 0, 0, 0, []);
+        return new self(false, '', '', 0, 0, 0, 0, 0, 0, []);
     }
 
     /**
@@ -53,6 +65,7 @@ final readonly class ReconciliationReport
         int $divergences,
         int $corrected,
         int $failures,
+        int $selfResolved,
         array $byField,
     ): self {
         return new self(
@@ -64,12 +77,17 @@ final readonly class ReconciliationReport
             $divergences,
             $corrected,
             $failures,
+            $selfResolved,
             $byField,
         );
     }
 
     /**
      * La proyeccion coincide con sus eventos origen y la pasada pudo terminarla.
+     *
+     * **`selfResolved` no la ensucia**: una sospecha que se deshace al releer no
+     * dejo nada escrito ni nada por escribir, y hacer terminar el comando en rojo
+     * por ella convertiria el turno de noche en un fallo nocturno recurrente.
      */
     public function isClean(): bool
     {

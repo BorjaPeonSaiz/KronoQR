@@ -18,6 +18,7 @@ use DateTimeImmutable;
  * projection_reconciliation_work_days_inspected 214
  * projection_reconciliation_last_corrections 0
  * projection_reconciliation_last_failures 0
+ * projection_reconciliation_last_self_resolved 0
  * ```
  *
  * ## Por que *textfile* y no Redis
@@ -67,6 +68,7 @@ final readonly class TextfileProjectionMetrics implements ProjectionMetrics
         int $divergences,
         int $corrected,
         int $failures,
+        int $selfResolved,
         DateTimeImmutable $at,
     ): void {
         $total = $this->previousCounter() + $divergences;
@@ -87,6 +89,16 @@ final readonly class TextfileProjectionMetrics implements ProjectionMetrics
             '# HELP projection_reconciliation_last_failures Jornadas que la ultima pasada no pudo dejar resueltas. Distinto de cero significa que la divergencia sigue ahi.',
             '# TYPE projection_reconciliation_last_failures gauge',
             'projection_reconciliation_last_failures '.$failures,
+            // NO es una divergencia y por eso no toca el contador: son las
+            // jornadas en las que la pasada se cruzo con un fichaje y, al
+            // releerlas con la fila bloqueada, ya cuadraban (tarea 3.6). Se
+            // publica porque el log de la pasada nocturna no lo lee nadie
+            // —`runInBackground()`— y porque un numero grande noche tras noche
+            // dice que la reconciliacion coincide con la hora punta de fichaje
+            // del centro, que es una decision de horario y no un fallo.
+            '# HELP projection_reconciliation_last_self_resolved Jornadas sospechosas que al releerse bajo candado ya cuadraban en la ultima pasada: la pasada se cruzo con un fichaje y no escribio nada. No son divergencias.',
+            '# TYPE projection_reconciliation_last_self_resolved gauge',
+            'projection_reconciliation_last_self_resolved '.$selfResolved,
         ]);
     }
 

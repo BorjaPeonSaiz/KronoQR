@@ -13,7 +13,7 @@ declare(strict_types=1);
 
 /*
  * La raiz del repositorio, resuelta UNA vez y usada por las dos claves que la
- * necesitan (`repo_path` y `test_paths.playwright`).
+ * necesitan (`repo_path` y las rutas de Playwright y k6 de `test_paths`).
  *
  * Dentro del contenedor `app` llega por un montaje aparte de solo lectura
  * (/var/www/repo); en la CI —que corre sobre el arbol completo sin contenedor—
@@ -113,8 +113,10 @@ return [
     'plan_path' => 'plan implementacion',
 
     /*
-     * Donde se buscan las etiquetas. Dos herramientas y dos formatos (§9.6):
-     * Pest/PHPUnit con `->group('RN-05')` y Playwright con `{ tag: ['@RN-05'] }`.
+     * Donde se buscan las etiquetas. Tres herramientas y tres formatos (§9.6):
+     * Pest/PHPUnit con `->group('RN-05')`, Playwright con `{ tag: ['@RN-05'] }`
+     * y k6 con `tags: { requirements: 'RNF-P-06 RNF-P-02' }` en el escenario,
+     * que es etiqueta nativa del ejecutor y viaja tambien en cada muestra.
      *
      * LOS FRONTENDS SE RESUELVEN DESDE `$repoPath`, NO DESDE `base_path('..')`,
      * y esa diferencia es justo la que hacia que la puerta comprobara cosas
@@ -144,6 +146,19 @@ return [
             $repoPath.'/frontend-kiosk/tests/e2e',
             $repoPath.'/frontend-admin/tests/e2e',
             $repoPath.'/frontend-portal/tests/e2e',
+        ],
+        /*
+         * La prueba de carga (tarea 3.6). Vive fuera de `backend/` como los
+         * frontends y se resuelve igual, desde `$repoPath`: es la unica ruta
+         * que vale en el contenedor y en la CI a la vez.
+         *
+         * No se ejecuta en cada cambio —dura minutos y necesita la pila
+         * levantada, §10.1— y por eso su cobertura se lee del fuente como la de
+         * Playwright: RNF-P-06 y RQ-08 no tendrian ninguna prueba en la matriz
+         * si hubiera que correr k6 para contarla.
+         */
+        'k6' => [
+            $repoPath.'/load-tests/k6',
         ],
     ],
 

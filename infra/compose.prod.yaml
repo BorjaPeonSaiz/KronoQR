@@ -110,6 +110,20 @@ services:
       redis:
         condition: service_healthy
     command: ["fpm"]
+    environment:
+      # PGOPTIONS (tarea 3.6, RNF-P-06, RNF-D-01) SOLO en `app`, el servicio
+      # que sirve peticiones (fichaje, panel, portal) y las migraciones
+      # (`compose run app php artisan migrate ...`). NO en `horizon` ni
+      # `scheduler`: `idle_in_transaction_session_timeout=60s` puede abortar
+      # el `pg_dump` de `backup.sh` con un destino de red lento, y
+      # `lock_timeout=5s` rendiria una tarea de mantenimiento larga ante un
+      # `VACUUM` en curso (hallazgo de la revision de seguridad de esta
+      # tarea). NI en `reverb`: no hace consultas de escritura en el camino
+      # critico. lo lee libpq del entorno del PROPIO PROCESO al abrir la
+      # conexion, no algo que configure Laravel; `DB_LOCK_TIMEOUT`/
+      # `DB_IDLE_IN_TRANSACTION_TIMEOUT` son variables de COMPOSE (las
+      # resuelve `docker compose` desde el .env del cliente).
+      PGOPTIONS: "-c lock_timeout=${DB_LOCK_TIMEOUT:-5s} -c idle_in_transaction_session_timeout=${DB_IDLE_IN_TRANSACTION_TIMEOUT:-60s}"
     healthcheck:
       test: ["CMD-SHELL", "SCRIPT_NAME=/ping SCRIPT_FILENAME=/ping REQUEST_METHOD=GET cgi-fcgi -bind -connect 127.0.0.1:9000 | grep -q pong"]
       interval: 15s

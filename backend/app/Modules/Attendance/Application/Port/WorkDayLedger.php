@@ -50,6 +50,22 @@ interface WorkDayLedger
     public function workDaysBetween(WorkDate $from, WorkDate $to): array;
 
     /**
+     * La jornada de un empleado en una fecha, con sus tramos vigentes, o `null`
+     * si esa persona no tiene ninguno ese dia.
+     *
+     * **Es una relectura, no un atajo de {@see workDaysBetween()}.** Existe
+     * porque la reconciliacion tiene que volver a mirar **una sola** jornada
+     * dentro de la transaccion en la que va a corregirla: la lectura en bloque
+     * se tomo antes, fuera de toda transaccion, y entre las dos puede haber
+     * confirmado un fichaje. Pedir el bloque entero otra vez seria releer la
+     * plantilla completa para comprobar una fila.
+     *
+     * Sigue siendo **solo lectura**, como todo este puerto: ni cierra tramos ni
+     * guarda nada (RN-08).
+     */
+    public function workDayOf(string $employeeUuid, WorkDate $workDate): ?WorkDay;
+
+    /**
      * Fin del ultimo tramo **cerrado** anterior a ese instante, o `null` si no
      * consta ninguno.
      *

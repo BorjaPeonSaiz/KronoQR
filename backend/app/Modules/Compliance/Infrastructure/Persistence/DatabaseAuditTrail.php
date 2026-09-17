@@ -10,6 +10,7 @@ use App\Modules\Compliance\Domain\AuditChain;
 use App\Modules\Compliance\Domain\ValueObject\AuditChainHeadSnapshot;
 use App\Modules\Compliance\Domain\ValueObject\AuditEntry;
 use App\Modules\Compliance\Domain\ValueObject\AuditEntryDraft;
+use App\Modules\Shared\Infrastructure\Persistence\AuditChainLock;
 use Illuminate\Database\ConnectionInterface;
 
 /**
@@ -56,16 +57,6 @@ use Illuminate\Database\ConnectionInterface;
  */
 final readonly class DatabaseAuditTrail implements AuditChainHead, AuditTrail
 {
-    /**
-     * Identificador del candado. Dos enteros de 32 bits fijos, elegidos a mano
-     * y documentados aqui para que nadie reutilice el par por accidente: si otro
-     * proceso tomara este mismo candado para otra cosa, serializaria contra los
-     * fichajes sin que se viera la relacion.
-     */
-    private const int LOCK_NAMESPACE = 0x4B52; // 'KR'
-
-    private const int LOCK_RESOURCE = 0x4155;  // 'AU'
-
     public function __construct(private ConnectionInterface $connection) {}
 
     public function append(AuditEntryDraft $draft): AuditEntry
@@ -74,10 +65,14 @@ final readonly class DatabaseAuditTrail implements AuditChainHead, AuditTrail
         // no una segunda transaccion: el candado de transaccion sigue siendo el
         // de la exterior y se suelta con ella.
         return $this->connection->transaction(function () use ($draft): AuditEntry {
-            $this->connection->statement(
-                'SELECT pg_advisory_xact_lock(?, ?)',
-                [self::LOCK_NAMESPACE, self::LOCK_RESOURCE],
-            );
+            // La clave vive en `AuditChainLock` y no aqui desde la tarea 3.6: la
+            // toma tambien, **por delante de cualquier fila**, quien va a
+            // escribir algo que se audita (`SerializedLedgerWrite`), y con la
+            // clave copiada en dos clases los dos caminos podrian dejar de
+            // serializarse entre si sin que nada fallara. Es reentrante en la
+            // misma transaccion, asi que a quien ya lo tenga esto no le cuesta
+            // una espera.
+            AuditChainLock::takeOn($this->connection);
 
             $entry = AuditChain::link($draft, $this->previousHash());
 

@@ -137,6 +137,17 @@ services:
       # arriba -no hay `profiles:` en este fichero- y conviene poder ver el
       # log tecnico llegar a Loki sin tocar el `.env` local.
       LOKI_URL: http://loki:3100
+      # PGOPTIONS (tarea 3.6, RNF-P-06, RNF-D-01) SOLO en `app`, ninguno de
+      # los otros tres servicios de esta plantilla: `idle_in_transaction_
+      # session_timeout=60s` puede abortar el `pg_dump` de `backup.sh` (en
+      # `scheduler`) con un destino de red lento, y `lock_timeout=5s` rendiria
+      # una tarea de mantenimiento larga ante un `VACUUM` en curso (hallazgo
+      # de la revision de seguridad de esta tarea). `reverb` no hace consultas
+      # de escritura en el camino critico. Lo lee libpq del entorno del PROPIO
+      # PROCESO al abrir la conexion, no algo que configure Laravel;
+      # `${DB_LOCK_TIMEOUT}` y compania son variables de COMPOSE (vienen del
+      # `.env` por `--env-file`), no de la aplicacion.
+      PGOPTIONS: "-c lock_timeout=${DB_LOCK_TIMEOUT:-5s} -c idle_in_transaction_session_timeout=${DB_IDLE_IN_TRANSACTION_TIMEOUT:-60s}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -291,6 +302,10 @@ services:
       BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY:-kronoqr_local_dev_only_backup_key}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
       LOKI_URL: http://loki:3100
+      # Sin PGOPTIONS a proposito (tarea 3.6, revision de seguridad): Horizon
+      # ejecuta trabajos en cola, algunos largos, y un `idle_in_transaction_
+      # session_timeout`/`lock_timeout` pensados para el camino de fichaje los
+      # rendiria en mitad de una tarea legitima. Solo lo lleva `app`.
     depends_on:
       redis:
         condition: service_healthy
@@ -322,6 +337,12 @@ services:
       BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY:-kronoqr_local_dev_only_backup_key}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
       LOKI_URL: http://loki:3100
+      # Sin PGOPTIONS a proposito (tarea 3.6, revision de seguridad): el
+      # scheduler ejecuta `attendance:reconcile`, `backup:run` (que hace
+      # `pg_dump`) y la retencion, tareas largas por diseno. Un
+      # `idle_in_transaction_session_timeout`/`lock_timeout` de 5-60 s
+      # pensados para el camino de fichaje las abortaria a mitad. Solo lo
+      # lleva `app`.
     depends_on:
       postgres:
         condition: service_healthy

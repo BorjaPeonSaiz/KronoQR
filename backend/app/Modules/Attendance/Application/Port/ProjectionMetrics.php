@@ -37,12 +37,21 @@ interface ProjectionMetrics
      * @param  int  $divergences  filas que no coincidian con sus eventos origen
      * @param  int  $corrected  de las anteriores, cuantas se reescribieron
      * @param  int  $failures  jornadas que la pasada NO pudo dejar resueltas
+     * @param  int  $selfResolved
+     *                             sospechas que se deshicieron al releerlas con la fila
+     *                             bloqueada (tarea 3.6). **No son divergencias**: la pasada se cruzo
+     *                             con un fichaje y no escribio nada. Se publican para que la huella
+     *                             de la carrera no dependa solo del log —el comando nocturno corre
+     *                             con `runInBackground()` y su salida no la lee nadie— y para poder
+     *                             responder «¿la pasada coincide con la hora punta de fichaje del
+     *                             centro?» sin abrir Loki.
      */
     public function reconciliationCompleted(
         int $workDaysInspected,
         int $divergences,
         int $corrected,
         int $failures,
+        int $selfResolved,
         DateTimeImmutable $at,
     ): void;
 }

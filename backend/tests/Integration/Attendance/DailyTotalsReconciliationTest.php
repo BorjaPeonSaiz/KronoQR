@@ -414,7 +414,7 @@ it('deja asiento en audit_log por cada fila corregida, con el antes y el despues
 
     DB::table('daily_totals')
         ->where('employee_id', AttendanceFixtures::employeeIdOf($scenario['employee']))
-        ->update(['total_minutes' => 999]);
+        ->update(['total_minutes' => 999, 'has_open_shift' => true, 'last_out_at' => null]);
 
     expect(runReconcile('2026-03-14', '2026-03-14'))->toBe(1);
 
@@ -427,11 +427,33 @@ it('deja asiento en audit_log por cada fila corregida, con el antes y el despues
 
     expect($payload['employee_uuid'] ?? null)->toBe($scenario['employee'])
         ->and($payload['work_date'] ?? null)->toBe('2026-03-14')
-        ->and($payload['divergent_fields'] ?? null)->toBe(['total_minutes'])
+        ->and($payload['divergent_fields'] ?? null)
+        ->toEqualCanonicalizing(['total_minutes', 'last_out_at', 'has_open_shift'])
+        // **Los SEIS campos comparados a cada lado** (tarea 3.6). Con solo el
+        // total y el numero de tramos, una fila que decia «turno abierto» sobre
+        // uno ya cerrado no se podia reconstruir desde el asiento, y desde que la
+        // correccion no reescribe nada cuando la sospecha se deshace sola este
+        // asiento es la unica copia que queda de la fila mala (RL-04, ADR-027).
+        //
         // `toEqualCanonicalizing` y no `toBe`: el payload se canonicaliza antes
         // de encadenarlo por hash y JSONB no conserva el orden de las claves.
-        ->and($payload['before'] ?? null)->toEqualCanonicalizing(['total_minutes' => 999, 'shift_count' => 1])
-        ->and($payload['after'] ?? null)->toEqualCanonicalizing(['total_minutes' => 480, 'shift_count' => 1]);
+        ->and($payload['before'] ?? null)->toEqualCanonicalizing([
+            'total_minutes' => 999,
+            'shift_count' => 1,
+            'first_in_at' => '2026-03-14T06:00:00.000000+00:00',
+            'last_out_at' => null,
+            'has_open_shift' => true,
+            'has_incident' => false,
+        ])
+        ->and($payload['after'] ?? null)->toEqualCanonicalizing([
+            'total_minutes' => 480,
+            'shift_count' => 1,
+            'first_in_at' => '2026-03-14T06:00:00.000000+00:00',
+            'last_out_at' => '2026-03-14T14:00:00.000000+00:00',
+            'has_open_shift' => false,
+            'has_incident' => false,
+        ])
+        ->and($payload['row_was_missing'] ?? null)->toBeFalse();
 
     // Regla dura 21: el asiento identifica por UUID y no lleva ningun nombre.
     expect(json_encode($payload, JSON_THROW_ON_ERROR))->not->toContain('Persona');

@@ -227,6 +227,7 @@ fichaje-hotel/
 │   └── skills/                      # 6 skills de generación
 ├── .github/workflows/
 │   ├── ci.yml                       # Calidad, pruebas, seguridad, E2E con cámara simulada (etapas ①–⑧)
+│   ├── load-test.yml                # Carga k6 sobre el paquete de entrega (RQ-08, fuera de las ocho etapas)
 │   └── release.yml                  # Publicación de versión e imágenes
 │
 ├── backend/
@@ -389,7 +390,7 @@ El **Anexo D** recoge la equivalencia para MySQL 8 si la infraestructura de un c
 | Componente | Desarrollo | Producción (servidor del cliente) |
 |---|---|---|
 | Orquestación | Docker Compose | Docker Compose autocontenido |
-| Servidor web | Nginx | Nginx + PHP-FPM con pool ajustado |
+| Servidor web | Nginx | Nginx + PHP-FPM con pool ajustado (`PHP_FPM_MAX_CHILDREN`) |
 | TLS | mkcert | Let's Encrypt, o certificado propio del cliente si no hay salida a internet |
 | Base de datos | PostgreSQL 17 en contenedor | PostgreSQL 17 con WAL archiving |
 | Caché y colas | Redis 7 | Redis 7 con persistencia AOF |
@@ -402,6 +403,8 @@ Servicios de desarrollo: `app`, `nginx`, `postgres`, `redis`, `horizon`, `reverb
 `tempo` y `blackbox-exporter` se añadieron en la tarea 3.1. `tempo` (Grafana Tempo, monolítico sobre sistema de ficheros) es el destino de las trazas OTLP que exporta la aplicación: sin él, el `trace_id` no se puede seguir del `fetch` del quiosco a la consulta SQL, por completa que esté la instrumentación. `blackbox-exporter` sondea `/api/v1/health` y `/api/v1/ready` desde fuera del proceso (uptime real, no solo «el proceso vive») y es el mismo exportador que la tarea 3.2 reutiliza para la caducidad del certificado TLS.
 
 `node-exporter` se añadió en la tarea 1.18 y tiene un único cometido: publicar a Prometheus el **resultado de la copia de seguridad, de su verificación y del simulacro de restauración** (§8.2), que los scripts escriben como ficheros en `BACKUP_PATH/metrics/`. Está en desarrollo y en producción por la misma razón por la que están las demás piezas de observabilidad: una alerta que solo existe en el servidor del cliente no la prueba nadie.
+
+**«Pool ajustado» (tarea 3.6, RNF-P-06) ya no es un literal de `www.conf`: es la variable `PHP_FPM_MAX_CHILDREN`.** `entrypoint.sh` la lee al arrancar el rol `fpm` (solo ese rol: `horizon`, `reverb` y `scheduler` no sirven peticiones) y deriva `pm.start_servers` (20 %), `pm.min_spare_servers` (10 %) y `pm.max_spare_servers` (30 %), con un piso de 1 en cada valor. Por omisión 20 (el servidor mínimo publicado en el §11.6.2: 2 núcleos, 4 GB); 40 es el valor recomendado con 4 núcleos y 8 GB, el hardware de referencia contra el que se mide RNF-P-06. Criterio de dimensionado: ~60 MB por trabajador. El fichero rendido se valida con `php-fpm -t` antes de arrancar; un valor que no sea un entero ≥ 1 detiene el contenedor con salida 2 y dice qué corregir.
 
 ### 3.5 Convenciones de código (RNF-M-06)
 
@@ -791,6 +794,7 @@ projection_reconciliation_last_run_timestamp_seconds     gauge
 projection_reconciliation_work_days_inspected            gauge
 projection_reconciliation_last_corrections               gauge
 projection_reconciliation_last_failures                  gauge
+projection_reconciliation_last_self_resolved             gauge
 incident_detection_last_run_timestamp_seconds            gauge
 incident_detection_work_days_inspected                   gauge
 incident_detection_last_findings                         gauge
@@ -846,6 +850,8 @@ de respaldo servida por el proceso que hay que restaurar no vale nada.
 **RTO**: si crece, el objetivo de 4 h se está estrechando.
 
 `projection_divergence_total` y `audit_chain_verification_failures_total` deben permanecer **siempre en cero**. Cualquier incremento es un incidente de integridad, no una métrica de tendencia.
+
+**Lo que `projection_divergence_total` y `projection_reconciliation_last_corrections` cuentan desde la tarea 3.6: solo divergencias confirmadas bajo candado.** La pasada de reconciliación inspecciona el día con dos lecturas —los tramos vigentes primero, las filas de la proyección después— y sin instantánea común, así que un fichaje que confirme entre las dos le deja una mitad nueva y otra vieja: eso *parece* una divergencia y no lo es. Corre a las 03:50 UTC, que en un hotel es hora de turno de noche, de modo que no es un caso de laboratorio. Desde la 3.6 la corrección **relee la jornada con la fila de `daily_totals` bloqueada** antes de escribir, y lo que ahí ya cuadra no toca ninguna de las dos series: se cuenta en `projection_reconciliation_last_self_resolved` —*gauge* de la última pasada, sin etiquetas— y se deja en el log como `attendance.projection_divergence_resolved_itself`. Si contara como divergencia, la alerta crítica de integridad sonaría cada madrugada y dejaría de significar «alguien escribió la tabla por un camino que no es el recálculo», que es lo único que tiene que significar. Por el mismo motivo **la contención tampoco cuenta como divergencia**: un `lock_timeout` (`55P03`) o un abrazo mortal (`40P01`) dicen que esa jornada no se llegó a comparar, y salen en `projection_reconciliation_last_failures` —hubo trabajo sin hacer— no en el contador de integridad.
 
 **Las series `*_last_failures` de la reconciliación y de la detección de incidencias son *gauges* de la última pasada, no contadores** (tarea 3.2, paso 9). `attendance:reconcile` y `attendance:detect-incidents` terminan con código de salida distinto de cero cuando dejan trabajo sin hacer —una jornada que no se pudo reconciliar, un hallazgo que no se pudo convertir en incidencia—, y ese código, con `runInBackground()`, no produce excepción ni entra en `error_events`: lo único que lo hacía visible era el log del planificador. Desde la 3.2 cada pasada publica cuántos fallos dejó (`projection_reconciliation_last_failures`, `incident_detection_last_failures`) y cuándo corrió (`incident_detection_last_run_timestamp_seconds`, que es lo que sostiene la alerta de silencio de la detección), y la programación encadena `onFailure()` con una línea `scheduler.command_failed` localizable en Loki. La pregunta que responden es «¿la pasada de anoche dejó algo sin hacer?», por eso son de la última pasada: un contador acumulado obligaría a restar, y un fallo de hace tres meses ya corregido seguiría sumando.
 
@@ -1000,6 +1006,13 @@ it('no parte un turno que cruza medianoche', function () { /* … */ })
 test('ficha sin red y sincroniza al reconectar', { tag: ['@RF-KI-03', '@RF-KI-04'] }, async ({ page }) => { /* … */ });
 ```
 
+```js
+// k6 — un escenario de load-tests/k6/scan-peak.js
+scan: { executor: 'constant-arrival-rate', /* … */ tags: { requirements: 'RNF-P-06 RNF-P-02 RQ-08' } },
+```
+
+`qa:traceability` lee las tres herramientas por igual (Pest, Playwright y k6): la matriz enumera los requisitos cubiertos por cada una, y `--check` los trata sin distinción. La prueba de carga (RQ-08, tarea 3.6) no corre en cada *push* —§10.1 la deja fuera de las ocho etapas—, pero sus escenarios están etiquetados igual que cualquier otro: `qa:traceability` no sabe ni le importa con qué frecuencia se ejecuta la herramienta que produjo la etiqueta.
+
 Un comando recorre la suite, extrae las etiquetas y genera `docs/trazabilidad-pruebas.md`:
 
 ```bash
@@ -1040,6 +1053,8 @@ Etapas 1–3 en cada *push* (retroalimentación en menos de 4 minutos). Etapa 8 
 **Etapas 4–7 en cada *push*, no en cada PR.** Este repositorio no usa *pull request* como disparador de CI (trunk-based con ramas cortas, §10.5): todo el pipeline vive en un único `push:` de `.github/workflows/ci.yml`, y una etapa que solo corriera en un evento que nadie emite no correría nunca. Las cuatro etapas corren en cada push desde el cierre de la Fase 5 (jobs `integration`, `security` —desde el cierre de la Fase 0—, `frontend-unit` y `e2e`), más estricto que lo que este apartado pedía originalmente, no menos.
 
 **La puerta de cobertura (RNF-M-01, §9.2) no es ninguna de las ocho etapas numeradas.** Instrumentar con Xdebug la suite completa (Unit + Integration + Feature + Contract) para medir dominio ≥ 90 % / global ≥ 75 % tarda minutos que duplicarían, sin aportar nada nuevo, lo que la etapa ③ ya comprueba sin cobertura. Corre como job `coverage` de `ci.yml`, nocturno (`schedule`) y a mano (`workflow_dispatch`), nunca en un push normal.
+
+**La prueba de carga (RQ-08, tarea 3.6) tampoco es ninguna de las ocho etapas**, por el mismo motivo que la cobertura: `load-tests/k6/scan-peak.js` sostiene 50 fichajes/s durante minutos, y meterla en `ci.yml` rompería el presupuesto de las etapas ①–③ (< 4 min) sin que nadie la espere en cada *push*. Vive en `.github/workflows/load-test.yml`, un *workflow* propio que corre a mano (`workflow_dispatch`) y en cada etiqueta `vX.0.0` —una versión MAYOR—, nunca en cada *push* ni en cada PR. Mide las **imágenes de entrega instaladas desde el paquete** del §11.6.1 (construidas, etiquetadas e instaladas con el mismo instalador que la etapa ⑧, no la imagen de desarrollo), y su veredicto es bloqueante para ese *workflow*: RNF-P-06 (50 fichajes/s con p95 < 150 ms) tiene que cumplirse antes de etiquetar una versión mayor. La cifra que vale para el cliente es la del hardware Linux de referencia del §11.6.2 (4 núcleos/8 GB), no la del runner del propio GitHub Actions (4 vCPU/16 GB), que mide el *workflow* pero no dimensiona ningún servidor.
 
 > **La etapa ⑧ existe desde la tarea 5.4**: job `clean-install` de `.github/workflows/ci.yml`. En un runner limpio construye las tres imágenes de entrega, **arma el paquete del §11.6.1** y ejecuta el instalador **desde ese paquete**, no desde el árbol del repositorio —si el instalador dependiera de algo que solo existe aquí, es la única forma de verlo—. Cuatro escenarios: `--check-only` sin escribir; **fallo seguro** con un puerto ocupado a propósito (salida `2` y máquina intacta, comprobada contenedor a contenedor); instalación completa verificada con `/health`, `/ready`, las tres SPA y **cero datos de demostración** en la base; y **segunda ejecución** (salida `3` y el sistema respondiendo después). Comprueba además que **ningún secreto aparece en la salida del instalador**, extrayendo cada valor del `.env` recién escrito. Se ejecuta en `main`, en cada etiqueta `vX.Y.Z` y a mano; no en cada *push*, porque cuesta entre 6 y 18 minutos y una CI que nadie espera acaba ignorándose entera. La parte de **actualización desde la versión anterior** llega con la tarea 5.7.
 

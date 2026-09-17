@@ -24,6 +24,14 @@ Vue.** Hace falta un servidor Linux con Docker y treinta minutos.
 | Sistema | **Linux** con **Docker 24 o superior** y **Compose v2** | Íd. |
 | Red | Alcanzable desde la red interna. Salida a internet **opcional** | Íd. |
 
+**¿Da la talla este servidor para mi cambio de turno?** El mínimo sostiene una
+plantilla de hasta 100 personas con la configuración de serie; el recomendado,
+hasta 500. Si quieres comprobarlo con una medida tuya en lugar de creernos, hay
+una prueba de carga que lo dice requisito a requisito, y un solo mando que tocar
+—`PHP_FPM_MAX_CHILDREN`— cuando sobra CPU y falta pool:
+[`operacion.md`](operacion.md) **§17**. Se ejecuta **en un entorno de pruebas,
+nunca en producción**.
+
 **Linux con Docker, sin ambigüedad.** No existe instalador de Windows y no está
 previsto que exista. Si tu infraestructura es solo Windows, la instalación va
 sobre una **máquina virtual Linux** (Hyper-V, VMware, Proxmox: cualquiera).

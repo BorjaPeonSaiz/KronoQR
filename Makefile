@@ -241,53 +241,54 @@ endif
 .PHONY: help up down restart build ps logs shell seed test test-unit test-integration \
         test-arch test-contract quality tools-ready php-lint deptrac rector sh-lint api-lint sast \
         sast-community trivy-fs trivy-image secrets-scan sbom build-ci-images release-gate nginx-smoke \
-        traceability traceability-check docs-consistency deps-audit-php deps-audit-js coverage coverage-now mutate e2e clean changelog changelog-check tool-versions \
+        traceability traceability-check docs-consistency deps-audit-php deps-audit-js coverage coverage-now mutate e2e load-test clean changelog changelog-check tool-versions \
         backup backup-verify restore-drill observability-check
 
 help: ## Muestra esta ayuda
-	@echo KronoQR - objetivos disponibles:
-	@echo   make up               Levanta el entorno completo de desarrollo
-	@echo   make down             Para el entorno y conserva los volumenes
-	@echo   make restart          Reinicia los servicios
-	@echo   make build            Reconstruye las imagenes (tras tocar un Dockerfile)
-	@echo   make ps               Estado de los 15 servicios
-	@echo   make logs             Sigue los logs de todos los servicios
-	@echo   make shell            Abre una shell en el contenedor app
-	@echo   make migrate          Migra con el rol de migracion (regla dura 6)
-	@echo   make migrate-fresh    Recrea el esquema desde cero
-	@echo   make seed             Carga la semilla de desarrollo
-	@echo   make test             Toda la suite
-	@echo   make test-unit        Dominio, sin base de datos
-	@echo   make test-arch        Solo las pruebas de arquitectura (Pest Arch)
-	@echo   make quality          Pint + PHPStan 9 + Deptrac + Rector + ShellCheck + shfmt
-	@echo   make php-lint         Solo Pint y PHPStan       (etapa 1 de la CI)
-	@echo   make deptrac          Solo Deptrac              (etapa 2 de la CI)
-	@echo   make rector           Solo Rector, informativo  (etapa 1 de la CI)
-	@echo   make sh-lint          Solo ShellCheck y shfmt   (etapa 1 de la CI)
-	@echo   make api-lint         Contrato OpenAPI 3.1      (etapa 1 de la CI)
-	@echo   make observability-check  Reglas de Prometheus y Alertmanager (etapa 2 de la CI)
-	@echo   make sast             Semgrep: reglas propias de .semgrep (bloqueante)
-	@echo   make sast-community   Semgrep: reglas comunitarias PHP/JS/TS/OWASP (bloqueante)
-	@echo   make trivy-fs         Trivy: dependencias, Dockerfiles y secretos del repo (informe)
-	@echo   make trivy-image      Trivy: postgres:ci y app:ci ya construidas (informe)
-	@echo   make secrets-scan     gitleaks sobre el historico completo (bloqueante)
-	@echo   make sbom             SBOM CycloneDX en sbom/kronoqr-VERSION.cdx.json
-	@echo   make build-ci-images  Construye kronoqr/{postgres,app,nginx}:ci (IMAGES=postgres|app|nginx)
-	@echo   make release-gate     Falla si la entrega saldria sin clave publica del fabricante
-	@echo   make nginx-smoke      Arranca la imagen del borde sola y pide las cinco rutas
-	@echo   make traceability     Matriz requisito - prueba (RQ-13)
-	@echo   make traceability-check  Falla si un requisito no tiene prueba
-	@echo   make docs-consistency  Coherencia documental (RQ-12, RNF-M-04)
-	@echo   make coverage         Cobertura: dominio 90, global 75 por ciento
-	@echo   make coverage-now     Cobertura actual, sin umbral
-	@echo   make mutate           Mutacion sobre el dominio, MSI 80 por ciento
-	@echo   make e2e              Playwright: quiosco, panel y portal
-	@echo   make changelog        Genera el CHANGELOG desde los commits convencionales
-	@echo   make changelog-check  Comprueba que una version tiene entrada (VERSION=1.2.3)
-	@echo   make backup           Copia cifrada y verificada del entorno de desarrollo
-	@echo   make backup-verify    Verifica la ultima copia (huella, descifrado, indice)
-	@echo   make restore-drill    Simulacro: restaura en contenedor limpio y valida
-	@echo   make clean            Para el entorno y BORRA los volumenes
+	@echo "KronoQR - objetivos disponibles:"
+	@echo "  make up               Levanta el entorno completo de desarrollo"
+	@echo "  make down             Para el entorno y conserva los volumenes"
+	@echo "  make restart          Reinicia los servicios"
+	@echo "  make build            Reconstruye las imagenes (tras tocar un Dockerfile)"
+	@echo "  make ps               Estado de los 15 servicios"
+	@echo "  make logs             Sigue los logs de todos los servicios"
+	@echo "  make shell            Abre una shell en el contenedor app"
+	@echo "  make migrate          Migra con el rol de migracion (regla dura 6)"
+	@echo "  make migrate-fresh    Recrea el esquema desde cero"
+	@echo "  make seed             Carga la semilla de desarrollo"
+	@echo "  make test             Toda la suite"
+	@echo "  make test-unit        Dominio, sin base de datos"
+	@echo "  make test-arch        Solo las pruebas de arquitectura (Pest Arch)"
+	@echo "  make quality          Pint + PHPStan 9 + Deptrac + Rector + ShellCheck + shfmt"
+	@echo "  make php-lint         Solo Pint y PHPStan       (etapa 1 de la CI)"
+	@echo "  make deptrac          Solo Deptrac              (etapa 2 de la CI)"
+	@echo "  make rector           Solo Rector, informativo  (etapa 1 de la CI)"
+	@echo "  make sh-lint          Solo ShellCheck y shfmt   (etapa 1 de la CI)"
+	@echo "  make api-lint         Contrato OpenAPI 3.1      (etapa 1 de la CI)"
+	@echo "  make observability-check  Reglas de Prometheus y Alertmanager (etapa 2 de la CI)"
+	@echo "  make sast             Semgrep: reglas propias de .semgrep (bloqueante)"
+	@echo "  make sast-community   Semgrep: reglas comunitarias PHP/JS/TS/OWASP (bloqueante)"
+	@echo "  make trivy-fs         Trivy: dependencias, Dockerfiles y secretos del repo (informe)"
+	@echo "  make trivy-image      Trivy: postgres:ci y app:ci ya construidas (informe)"
+	@echo "  make secrets-scan     gitleaks sobre el historico completo (bloqueante)"
+	@echo "  make sbom             SBOM CycloneDX en sbom/kronoqr-VERSION.cdx.json"
+	@echo "  make build-ci-images  Construye kronoqr/{postgres,app,nginx}:ci (IMAGES=postgres|app|nginx)"
+	@echo "  make release-gate     Falla si la entrega saldria sin clave publica del fabricante"
+	@echo "  make nginx-smoke      Arranca la imagen del borde sola y pide las cinco rutas"
+	@echo "  make traceability     Matriz requisito - prueba (RQ-13)"
+	@echo "  make traceability-check  Falla si un requisito no tiene prueba"
+	@echo "  make docs-consistency  Coherencia documental (RQ-12, RNF-M-04)"
+	@echo "  make coverage         Cobertura: dominio 90, global 75 por ciento"
+	@echo "  make coverage-now     Cobertura actual, sin umbral"
+	@echo "  make mutate           Mutacion sobre el dominio, MSI 80 por ciento"
+	@echo "  make e2e              Playwright: quiosco, panel y portal"
+	@echo "  make load-test        Carga k6 (RNF-P-06): 50 fichajes/s, p95 menor que 150 ms. INSTANCES=8 DURATION=120s"
+	@echo "  make changelog        Genera el CHANGELOG desde los commits convencionales"
+	@echo "  make changelog-check  Comprueba que una version tiene entrada (VERSION=1.2.3)"
+	@echo "  make backup           Copia cifrada y verificada del entorno de desarrollo"
+	@echo "  make backup-verify    Verifica la ultima copia (huella, descifrado, indice)"
+	@echo "  make restore-drill    Simulacro: restaura en contenedor limpio y valida"
+	@echo "  make clean            Para el entorno y BORRA los volumenes"
 
 up: ## Levanta el entorno completo
 	# Sin --build a proposito. Compose construye solo lo que falte, asi que en
@@ -1041,6 +1042,22 @@ else
 	npm --prefix frontend-admin run test:e2e
 	npm --prefix frontend-portal run test:e2e
 endif
+
+# Envoltorio de load-tests/k6/run.sh (tarea 3.6, doc 02 §9.6). Nunca contra
+# produccion: el aprovisionamiento crea empleados y credenciales de prueba.
+#
+# Las cuatro variables solo se pasan al script SI ESTAN DEFINIDAS aqui: sin
+# ellas, run.sh aplica sus propios valores por omision (INSTANCES=8,
+# DURATION=120s, NETWORK=kronoqr-app, K6_COMPOSE_ARGS apuntando al compose de
+# desarrollo). K6_COMPOSE_ARGS necesita comillas propias porque lleva espacios
+# (p. ej. "--env-file .env -f infra/compose.dev.yaml").
+load-test: ## Prueba de carga k6 (RNF-P-06, RQ-08): 50 fichajes/s con p95 < 150 ms; INSTANCES=8 DURATION=120s
+	env \
+	  $(if $(INSTANCES),INSTANCES=$(INSTANCES)) \
+	  $(if $(DURATION),DURATION=$(DURATION)) \
+	  $(if $(K6_COMPOSE_ARGS),K6_COMPOSE_ARGS='$(K6_COMPOSE_ARGS)') \
+	  $(if $(NETWORK),NETWORK=$(NETWORK)) \
+	  bash load-tests/k6/run.sh
 
 #--- Versionado (doc 02 §10.5) ------------------------------------------------
 # El CHANGELOG se GENERA de los mensajes de commit convencionales, no se escribe

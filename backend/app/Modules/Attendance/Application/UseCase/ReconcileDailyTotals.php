@@ -13,14 +13,16 @@ use App\Modules\Attendance\Application\Port\ProjectionMetrics;
 use App\Modules\Attendance\Application\Port\WorkDayLedger;
 use App\Modules\Attendance\Domain\Event\DailyTotalsRecalculated;
 use App\Modules\Attendance\Domain\Event\DailyTotalsReconciled;
+use App\Modules\Attendance\Domain\Event\DailyTotalsSnapshot;
 use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Attendance\Domain\ValueObject\WorkedDuration;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
+use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use DateTimeImmutable;
 use DateTimeZone;
-use Illuminate\Database\ConnectionInterface;
+use Illuminate\Database\QueryException;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -71,6 +73,22 @@ use Throwable;
  * escribe. Aqui no hay ningun `UPDATE daily_totals`, y es deliberado: dos
  * caminos de escritura serian dos oportunidades de divergir.
  *
+ * ## Inspeccionar es sospechar; corregir es confirmar
+ *
+ * La pasada de inspeccion **no puede** concluir nada por si sola: lee el
+ * registro horario y la proyeccion en dos consultas distintas y sin instantanea
+ * comun, asi que un fichaje que confirme entre las dos le deja una mitad nueva y
+ * otra vieja. Por eso lo que devuelve son **sospechas**, y la unica lectura que
+ * decide es la que {@see correct()} hace con la fila bloqueada dentro de su
+ * transaccion. Lo que ahi deja de divergir se cuenta aparte —«resueltas
+ * solas»— y **no** sube `projection_divergence_total`: si contara, la alerta
+ * critica de integridad sonaria cada madrugada en cualquier hotel con turno de
+ * noche, y una alerta que suena siempre no la mira nadie.
+ *
+ * Esto no relaja nada de lo anterior. Una divergencia **confirmada** sigue
+ * siendo un incidente que no deberia poder ocurrir; lo que se ha quitado de en
+ * medio es el falso positivo que la propia pasada se fabricaba.
+ *
  * ## Filas sin tramos vigentes
  *
  * Una jornada anulada por completo deja fila en la proyeccion y ningun tramo
@@ -82,7 +100,16 @@ use Throwable;
 final readonly class ReconcileDailyTotals
 {
     public function __construct(
-        private ConnectionInterface $connection,
+        /**
+         * La transaccion de cada correccion, **con el candado de la cadena de
+         * auditoria ya tomado** (ver {@see correct()}).
+         *
+         * No es un `ConnectionInterface` a proposito: el orden de los candados
+         * es una garantia del producto y no un detalle que cada caso de uso
+         * recuerde. Quien la ofrece es un puerto de `Shared` porque el candado
+         * lo comparte con `Compliance`, que es quien escribe la cadena.
+         */
+        private SerializedLedgerWrite $serialized,
         private WorkDayLedger $workDays,
         private DailyTotalsProjection $projection,
         private InstallationSiteProvider $sites,
@@ -109,23 +136,49 @@ final readonly class ReconcileDailyTotals
         $divergences = 0;
         $corrected = 0;
         $failures = 0;
+        $selfResolved = 0;
         $byField = [];
 
         foreach ($dates as $date) {
-            foreach ($this->inspect($date, $now, $workDaysInspected, $failures) as $divergence) {
-                $divergences++;
+            foreach ($this->inspect($date, $now, $workDaysInspected, $failures) as $suspicion) {
+                $attempt = $this->correct($suspicion, $now);
 
-                foreach ($divergence->fields as $field) {
-                    $byField[$field] = ($byField[$field] ?? 0) + 1;
+                // **Cada desenlace se cuenta donde dice `CorrectionOutcome`**, y
+                // los cuatro cuentan distinto:
+                //
+                //   · La sospecha que el candado no confirma no es una
+                //     divergencia: era la lectura de la pasada quedandose vieja
+                //     mientras alguien fichaba. Si contara,
+                //     `projection_divergence_total` —la alerta critica de
+                //     integridad— sonaria cada madrugada en cualquier hotel con
+                //     turno de noche.
+                //   · La contencion tampoco: nadie llego a comparar nada, asi
+                //     que no dice nada sobre la integridad de la tabla. Queda
+                //     como fallo, que es lo que de verdad ocurrio.
+                //   · Solo lo corregido y lo que fallo teniendo divergencia
+                //     delante suben el contador y salen agrupados por columna.
+                if ($attempt->outcome->countsAsDivergence()) {
+                    $divergences++;
+
+                    // Las columnas son las de la divergencia **confirmada**, no
+                    // las que vio la inspeccion: lo que se informa tiene que ser
+                    // lo que se escribio.
+                    foreach ($attempt->divergentFields() as $field) {
+                        $byField[$field] = ($byField[$field] ?? 0) + 1;
+                    }
                 }
 
-                if ($this->correct($divergence, $now)) {
+                if ($attempt->outcome === CorrectionOutcome::Corrected) {
                     $corrected++;
-
-                    continue;
                 }
 
-                $failures++;
+                if ($attempt->outcome === CorrectionOutcome::ResolvedItself) {
+                    $selfResolved++;
+                }
+
+                if ($attempt->outcome->countsAsFailure()) {
+                    $failures++;
+                }
             }
         }
 
@@ -138,6 +191,7 @@ final readonly class ReconcileDailyTotals
                 divergences: $divergences,
                 corrected: $corrected,
                 failures: $failures,
+                selfResolved: $selfResolved,
                 byField: $byField,
             ),
             $now,
@@ -145,7 +199,11 @@ final readonly class ReconcileDailyTotals
     }
 
     /**
-     * Contrasta una fecha civil completa y devuelve lo que no cuadra.
+     * Contrasta una fecha civil completa y devuelve lo que **parece** no cuadrar.
+     *
+     * Son sospechas y no veredictos: las confirma o las descarta
+     * {@see correct()} releyendo con la fila bloqueada. Ver «Inspeccionar es
+     * sospechar» en la cabecera de la clase.
      *
      * **Dos lecturas por dia y no una por empleado**: los tramos vigentes de la
      * fecha por un lado y las filas de la proyeccion por otro. Sobre una
@@ -190,7 +248,7 @@ final readonly class ReconcileDailyTotals
             );
 
             if ($divergence instanceof DailyTotalsDivergence) {
-                $divergences[] = $this->announce($divergence);
+                $divergences[] = $divergence;
             }
         }
 
@@ -210,7 +268,7 @@ final readonly class ReconcileDailyTotals
             );
 
             if ($divergence instanceof DailyTotalsDivergence) {
-                $divergences[] = $this->announce($divergence);
+                $divergences[] = $divergence;
             }
         }
 
@@ -218,51 +276,233 @@ final readonly class ReconcileDailyTotals
     }
 
     /**
-     * Reescribe la fila divergente y deja traza de la correccion, las dos cosas
-     * en la misma transaccion. Devuelve si lo consiguio.
+     * Vuelve a mirar la jornada **con la fila bloqueada** y, si sigue
+     * divergiendo, la reescribe y deja traza de la correccion — las dos cosas en
+     * la misma transaccion.
      *
-     * Se publican dos eventos y cada uno tiene su destinatario:
-     * `DailyTotalsRecalculated` lo recoge el proyector —el unico camino de
-     * escritura de la tabla— y `DailyTotalsReconciled` lo recoge `Compliance`
-     * para sellar el asiento de `audit_log` con el valor anterior y el nuevo
-     * (regla dura 6). Si el asiento falla, la reescritura revierte: es preferible
-     * una fila que sigue mintiendo a una corregida de la que no queda constancia.
+     * ## Por que hay que releer, y por que no bastaba con no hacerlo
+     *
+     * La inspeccion lee dos cosas en dos consultas y sin instantanea comun: los
+     * tramos vigentes del dia por un lado y las filas de la proyeccion por otro.
+     * Un fichaje que confirma **entre** las dos —o despues de las dos y antes de
+     * esta transaccion— escribe su tramo y su fila a la vez (ADR-007), asi que
+     * deja a la pasada con una mitad nueva y otra vieja: eso **parece** una
+     * divergencia y no lo es. Escribirla de vuelta con la lectura vieja es lo que
+     * corrompia la proyeccion — un empleado con su tramo abierto y
+     * `shift_count = 0`, otro con el turno ya cerrado y `total_minutes = 0` con
+     * `has_open_shift = true`—, y ocurria de verdad: la reconciliacion corre a
+     * las 03:50 UTC, que en un hotel es hora punta del turno de noche.
+     *
+     * ## Por que el candado basta
+     *
+     * El fichaje escribe el tramo y hace el `UPSERT` de `daily_totals` dentro de
+     * la **misma** transaccion, de modo que una jornada confirmada siempre tiene
+     * su fila. Tomarla con `FOR UPDATE` serializa esta correccion con ese
+     * `UPSERT`: o se toma antes —y entonces el fichaje espera a que esta
+     * transaccion termine y **reescribe despues con sus propios valores**, que
+     * son los buenos porque su tramo ya esta escrito— o se toma despues, y
+     * entonces lo que se relee ya incluye el fichaje y no hay divergencia que
+     * corregir. En los dos ordenes el ultimo en escribir lo hace con el registro
+     * horario completo delante.
+     *
+     * La relectura de la jornada va **detras** del candado a proposito: en
+     * READ COMMITTED cada sentencia toma instantanea nueva, asi que un `SELECT`
+     * posterior a un `FOR UPDATE` que tuvo que esperar ve ya lo que confirmo
+     * quien lo hizo esperar.
+     *
+     * ## El orden de los candados, que es el del fichaje y no otro
+     *
+     * **Primero el candado global de la cadena de auditoria y despues la fila**,
+     * envolviendo todo con `SerializedLedgerWrite::withChainLock()`. Ese es el
+     * orden que toma el camino del fichaje, y no por casualidad: el agregado
+     * registra primero el hecho —`EmployeeClockedIn`/`Out`, que `Compliance`
+     * sella tomando el candado— y despues `DailyTotalsRecalculated`, que es el
+     * `UPSERT` de la fila.
+     *
+     * Hacerlo al reves —la fila primero, el asiento al publicar— cerraba un
+     * ciclo con el fichaje, y eso no es una carrera que se resuelva
+     * reintentando: es un abrazo mortal que PostgreSQL rompe matando a una de
+     * las dos transacciones a `deadlock_timeout`. La victima podia ser el
+     * fichaje, es decir, un empleado recibiendo un error al pasar la tarjeta
+     * porque una tarea de mantenimiento estaba reconciliando (regla dura 19).
+     *
+     * El candado consultivo es reentrante en la misma transaccion, asi que el
+     * asiento que se escribe al final vuelve a pedirlo y no espera. **El coste
+     * es que el candado global se retiene durante la correccion de cada fila**
+     * —milisegundos, y solo cuando hay una divergencia de verdad—: por eso se
+     * envuelve una jornada y nunca el recorrido del dia.
+     *
+     * ## Contencion no es divergencia
+     *
+     * Si el candado no llega dentro de `lock_timeout` (`55P03`) o PostgreSQL
+     * rompe un abrazo con un tercero (`40P01`), esta jornada **no se ha
+     * comparado**: se cuenta como fallo —quedo trabajo sin hacer, y el comando
+     * sale en rojo— pero no como divergencia. Contarla como divergencia
+     * convertiria un pico de fichajes en la alerta critica que significa
+     * «alguien escribio la tabla por un camino que no es el recalculo».
+     *
+     * ## El residuo que se acepta
+     *
+     * **Una fila que todavia no existe no se puede bloquear.** Si la jornada es
+     * de verdad una divergencia «fila ausente» y a la vez un fichaje de esa misma
+     * persona y ese mismo dia esta confirmando en ese instante, el `INSERT …
+     * ON CONFLICT` de esta correccion espera al suyo y termina pisandolo con lo
+     * releido una fraccion de segundo antes. Es una ventana de milisegundos, pide
+     * que coincidan dos sucesos que ya son raros por separado —la fila ausente no
+     * deberia existir nunca— y **no toca el registro legal**: `shift_entries`
+     * manda (regla dura 7) y la pasada siguiente lo vuelve a dejar bien. Cerrarla
+     * exigiria un candado que el camino de fichaje tambien tomara, es decir,
+     * encarecer los treinta fichajes por minuto de un cambio de turno para
+     * proteger un caso que no deberia darse: no compensa.
+     *
+     * ## Que se publica
+     *
+     * Dos eventos, cada uno con su destinatario: `DailyTotalsRecalculated` lo
+     * recoge el proyector —el unico camino de escritura de la tabla— y
+     * `DailyTotalsReconciled` lo recoge `Compliance` para sellar el asiento de
+     * `audit_log` con el valor anterior y el nuevo (regla dura 6). Si el asiento
+     * falla, la reescritura revierte: es preferible una fila que sigue mintiendo
+     * a una corregida de la que no queda constancia. Y se publican **los valores
+     * releidos**, no los de la inspeccion: el asiento tiene que describir la
+     * escritura que de verdad ocurrio.
+     *
+     * La transaccion la abre el puerto, no este metodo: un candado de
+     * transaccion tomado sin transaccion se suelta al terminar la sentencia y no
+     * serializa nada.
      */
-    private function correct(DailyTotalsDivergence $divergence, DateTimeImmutable $now): bool
+    private function correct(DailyTotalsDivergence $suspicion, DateTimeImmutable $now): CorrectionAttempt
     {
         try {
-            $this->connection->transaction(function () use ($divergence, $now): void {
-                $this->events->publish(
-                    $divergence->expected,
-                    $this->reconciled($divergence, $now),
-                );
-            });
-
-            return true;
+            return $this->serialized->withChainLock(
+                fn (): CorrectionAttempt => $this->recheckAndWrite($suspicion, $now),
+            );
         } catch (Throwable $failure) {
+            $sqlState = self::sqlStateOf($failure);
+
             $this->logger->error('attendance.projection_not_corrected', [
-                'employee_uuid' => $divergence->employeeUuid(),
-                'work_date' => $divergence->workDate(),
-                'fields' => $divergence->fields,
+                'employee_uuid' => $suspicion->employeeUuid(),
+                'work_date' => $suspicion->workDate(),
+                'fields' => $suspicion->fields,
                 'exception' => $failure::class,
+                // El SQLSTATE distingue «no pude tomar el candado» de «la
+                // escritura fallo»: sin el, las dos se leen igual en el log y la
+                // primera parece un problema de integridad.
+                'sqlstate' => $sqlState,
             ]);
 
-            return false;
+            return self::isContention($sqlState)
+                ? CorrectionAttempt::contended($suspicion)
+                : CorrectionAttempt::failed($suspicion);
         }
     }
 
     /**
-     * Deja la diferencia en el log **antes** de escribir nada.
+     * El SQLSTATE de un fallo del motor, o `null` si no viene de PostgreSQL.
+     *
+     * Se lee de `errorInfo` y no de `getCode()`: el codigo de una
+     * `QueryException` es el SQLSTATE en unos drivers y un entero en otros, y
+     * esta decision no puede depender de eso.
+     */
+    private static function sqlStateOf(Throwable $failure): ?string
+    {
+        if (! $failure instanceof QueryException) {
+            return null;
+        }
+
+        $state = $failure->errorInfo[0] ?? null;
+
+        return \is_string($state) ? $state : null;
+    }
+
+    /**
+     * `55P03` lock_not_available (el `lock_timeout` de la instalacion) y `40P01`
+     * deadlock_detected. Los dos dicen lo mismo: no se llego a comparar nada.
+     */
+    private static function isContention(?string $sqlState): bool
+    {
+        return $sqlState === '55P03' || $sqlState === '40P01';
+    }
+
+    /**
+     * El cuerpo de la transaccion: bloquear, releer, comparar y solo entonces
+     * escribir.
+     */
+    private function recheckAndWrite(DailyTotalsDivergence $suspicion, DateTimeImmutable $now): CorrectionAttempt
+    {
+        $employeeUuid = $suspicion->employeeUuid();
+        $workDate = $suspicion->expected->workDate;
+
+        $actual = $this->projection->lockedFor($employeeUuid, $workDate);
+        $workDay = $this->workDays->workDayOf($employeeUuid, $workDate);
+
+        if (! $workDay instanceof WorkDay && ! $actual instanceof ProjectedDailyTotal) {
+            // Ni jornada ni fila: no hay nada que reconciliar. Ocurre cuando lo
+            // que la inspeccion vio era una fila que otro proceso acabo de
+            // retirar, y escribir aqui un dia a cero **inventaria** la fila que
+            // la comparacion echa en falta.
+            return $this->resolvedItself($suspicion, 'row_is_gone');
+        }
+
+        $divergence = DailyTotalsDivergence::between(
+            $workDay instanceof WorkDay
+                ? $this->expectedFor($workDay, $now)
+                : $this->emptyFor($employeeUuid, $workDate, $now),
+            $actual,
+        );
+
+        if (! $divergence instanceof DailyTotalsDivergence) {
+            return $this->resolvedItself($suspicion, 'projection_caught_up');
+        }
+
+        $this->announce($divergence);
+
+        $this->events->publish(
+            $divergence->expected,
+            $this->reconciled($divergence, $now),
+        );
+
+        return CorrectionAttempt::corrected($divergence);
+    }
+
+    /**
+     * La sospecha que el candado no confirma.
+     *
+     * **Se deja escrita igualmente, y en `info`**: no es un incidente de
+     * integridad —por eso no cuenta como divergencia ni sube la metrica— pero sin
+     * esta linea no habria forma de distinguir «anoche no habia nada» de «anoche
+     * hubo tres carreras con el turno de noche», que es justo lo que hay que
+     * mirar si la proyeccion vuelve a aparecer torcida.
+     */
+    private function resolvedItself(DailyTotalsDivergence $suspicion, string $reason): CorrectionAttempt
+    {
+        $this->logger->notice('attendance.projection_divergence_resolved_itself', [
+            'employee_uuid' => $suspicion->employeeUuid(),
+            'work_date' => $suspicion->workDate(),
+            'fields' => $suspicion->fields,
+            'reason' => $reason,
+        ]);
+
+        return CorrectionAttempt::resolvedItself();
+    }
+
+    /**
+     * Deja la diferencia en el log **antes** de escribir nada y **despues** de
+     * confirmarla bajo candado.
      *
      * No es un adorno: en cuanto la fila se reescribe, la unica prueba de lo que
      * la proyeccion afirmaba esta aqui y en el asiento de auditoria. Sin este
      * apunte, a la mañana siguiente se sabria que hubo una divergencia y no cual
      * era.
      *
+     * Que se anuncie con el candado tomado y no en la inspeccion es lo que hace
+     * que esta linea siga significando algo: antes se escribia un `warning` por
+     * cada sospecha, incluidas las que se deshacian solas al releer, y una
+     * advertencia que aparece cada noche sin que haya nada roto se deja de leer.
+     *
      * `employee_uuid`, nunca nombres (regla dura 21): esto viaja a Loki y de ahi
      * al paquete de diagnostico (ADR-020).
      */
-    private function announce(DailyTotalsDivergence $divergence): DailyTotalsDivergence
+    private function announce(DailyTotalsDivergence $divergence): void
     {
         $this->logger->warning('attendance.projection_divergence', [
             'employee_uuid' => $divergence->employeeUuid(),
@@ -274,8 +514,6 @@ final readonly class ReconcileDailyTotals
             'projected_shift_count' => $divergence->actual?->shiftCount,
             'expected_shift_count' => $divergence->expected->shiftCount,
         ]);
-
-        return $divergence;
     }
 
     /**
@@ -323,17 +561,39 @@ final readonly class ReconcileDailyTotals
         );
     }
 
+    /**
+     * El hecho que `Compliance` sella, con **los seis campos** a cada lado.
+     *
+     * Los seis y no el total y el numero de tramos: desde que la correccion no
+     * escribe cuando la sospecha se deshace sola, este asiento es la unica copia
+     * que queda de lo que la fila mala afirmaba, y una divergencia de
+     * `has_open_shift` o de `last_out_at` no se puede reconstruir a partir de un
+     * total (RL-04).
+     */
     private function reconciled(DailyTotalsDivergence $divergence, DateTimeImmutable $now): DailyTotalsReconciled
     {
         return new DailyTotalsReconciled(
             employeeUuid: $divergence->employeeUuid(),
             workDate: $divergence->expected->workDate,
             divergentFields: $divergence->fields,
-            rowWasMissing: $divergence->rowWasMissing(),
-            previousTotalMinutes: $divergence->actual?->totalMinutes,
-            previousShiftCount: $divergence->actual?->shiftCount,
-            totalMinutes: $divergence->expected->total->minutes,
-            shiftCount: $divergence->expected->shiftCount,
+            before: $divergence->actual instanceof ProjectedDailyTotal
+                ? new DailyTotalsSnapshot(
+                    totalMinutes: $divergence->actual->totalMinutes,
+                    shiftCount: $divergence->actual->shiftCount,
+                    firstClockInAt: $divergence->actual->firstClockInAt,
+                    lastClockOutAt: $divergence->actual->lastClockOutAt,
+                    hasOpenShift: $divergence->actual->hasOpenShift,
+                    hasIncident: $divergence->actual->hasIncident,
+                )
+                : null,
+            after: new DailyTotalsSnapshot(
+                totalMinutes: $divergence->expected->total->minutes,
+                shiftCount: $divergence->expected->shiftCount,
+                firstClockInAt: $divergence->expected->firstClockInAt,
+                lastClockOutAt: $divergence->expected->lastClockOutAt,
+                hasOpenShift: $divergence->expected->hasOpenShift,
+                hasIncident: $divergence->expected->hasAnomaly,
+            ),
             reconciledAt: $now,
         );
     }
@@ -359,10 +619,11 @@ final readonly class ReconcileDailyTotals
             $report->divergences,
             $report->corrected,
             $report->failures,
+            $report->selfResolved,
             $now,
         );
 
-        $this->logger->info('attendance.projection_reconciliation', [
+        $this->logger->notice('attendance.projection_reconciliation', [
             'from' => $report->fromIsoDate,
             'to' => $report->toIsoDate,
             'days_inspected' => $report->daysInspected,
@@ -370,6 +631,11 @@ final readonly class ReconcileDailyTotals
             'divergences' => $report->divergences,
             'corrected' => $report->corrected,
             'failures' => $report->failures,
+            // Tambien va a `projection_reconciliation_last_self_resolved` (doc 02
+            // §8.2): el log de la pasada nocturna no lo lee nadie —corre con
+            // `runInBackground()`— asi que la huella de la carrera no puede
+            // depender solo de esta linea.
+            'self_resolved' => $report->selfResolved,
             'by_field' => $report->byField,
         ]);
 

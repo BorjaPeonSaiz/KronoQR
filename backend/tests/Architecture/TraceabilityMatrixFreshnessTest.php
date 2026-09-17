@@ -47,7 +47,7 @@ use Tests\Architecture\Support\Repo;
  *
  * Los directorios son los mismos que declara `quality.test_paths` y la ruta base
  * la misma que pasa el comando (`dirname(base_path())`). Se explora una sola
- * vez: son 400 ficheros y las cuatro pruebas de abajo miran el mismo resultado.
+ * vez: son 400 ficheros y las cinco pruebas de abajo miran el mismo resultado.
  *
  * @return array<string, int>
  */
@@ -68,11 +68,13 @@ function pruebasEtiquetadasPorHerramienta(): array
             Repo::file('frontend-admin/tests/e2e'),
             Repo::file('frontend-portal/tests/e2e'),
         ],
+        'k6' => [Repo::file('load-tests/k6')],
     ], \dirname($backend)))->scan();
 
     return $recuento = [
         'pest' => \count($scan->by('pest')),
         'playwright' => \count($scan->by('playwright')),
+        'k6' => \count($scan->by('k6')),
     ];
 }
 
@@ -123,8 +125,17 @@ it('declara en la matriz las pruebas de Playwright que hay de verdad en el arbol
     // Aparte de las de Pest a proposito: el E2E vive fuera de `backend/` y es lo
     // primero que se queda sin contar cuando alguien regenera la matriz desde un
     // sitio donde los frontends no estan montados.
-    expect(cifraDeLaMatriz('/Pruebas etiquetadas: \*\*\d+\*\* \(Pest \d+, Playwright (\d+)\)/u'))
+    expect(cifraDeLaMatriz('/Pruebas etiquetadas: \*\*\d+\*\* \(Pest \d+, Playwright (\d+),/u'))
         ->toBe(pruebasEtiquetadasPorHerramienta()['playwright'], 'La matriz cuenta otras pruebas de Playwright.'.COMO_REGENERAR);
+})->group('RQ-13');
+
+it('declara en la matriz los escenarios de k6 que hay de verdad en el arbol', function (): void {
+    // Aparte tambien, y por el mismo motivo que Playwright: la prueba de carga
+    // vive fuera de `backend/`. Ademas es la UNICA cobertura automatica de
+    // RNF-P-06 y de RQ-08, asi que si su recuento se cae, lo que se cae de la
+    // matriz es la evidencia de que el umbral de rendimiento se mide.
+    expect(cifraDeLaMatriz('/Pruebas etiquetadas: \*\*\d+\*\* \(Pest \d+, Playwright \d+, k6 (\d+)\)/u'))
+        ->toBe(pruebasEtiquetadasPorHerramienta()['k6'], 'La matriz cuenta otros escenarios de k6.'.COMO_REGENERAR);
 })->group('RQ-13');
 
 it('declara en la matriz la misma fase en curso que config/quality.php', function (): void {

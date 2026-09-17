@@ -1206,3 +1206,242 @@ apareciendo al día.
 | `KIOSK_HEALTH_SILENT_AFTER_SECONDS` | `600` | A partir de cuántos segundos sin latido está en **fallo**. **Es el mismo número que la alerta `QuioscoSinLatido`**: los dos se cambian a la vez, o no se cambia ninguno |
 | `KIOSK_HEALTH_BATTERY_LOW_PERCENT` | `15` | Nivel por debajo del cual, **y sin cargar**, el quiosco avisa por batería |
 | `KIOSK_SERVICE_CODE` | *(vacío)* | Código de 8 a 12 dígitos de la pantalla de diagnóstico. **No es una variable del `.env`**: se cambia en el panel, en «Ajustes operativos», y surte efecto en el latido siguiente |
+
+---
+
+## 17. Dimensionado del servidor y prueba de carga
+
+> **Para qué es este apartado.** Para responder con una medida tuya, y no con
+> una promesa nuestra, a dos preguntas que solo se hacen una vez: «¿este
+> servidor aguanta mi cambio de turno?» y «¿qué toco si no aguanta?».
+
+### 17.1 Qué promete el producto, y qué significa en un hotel
+
+El producto se publica con un umbral escrito: **50 fichajes por segundo
+sostenidos en el servidor, con el 95 % de las respuestas por debajo de 150 ms**
+(`RNF-P-06` y `RNF-P-02`). **Se mide antes de cada versión mayor, como paso del
+procedimiento de publicación**, y el resultado viaja con la versión. Hay además
+una red de seguridad automática que vuelve a medirlo al etiquetar la versión,
+por si alguien se saltó el paso.
+
+Traducido a tu hotel son **dos límites distintos**, y conviene no confundirlos:
+
+| Dónde | Qué límite hay | Por qué |
+| --- | --- | --- |
+| **En el borde, por origen** (el servidor web) | Desde `KIOSK_VLAN_CIDR`: **una ráfaga de 50 fichajes en el acto** y después **10 por segundo** (600 por minuto). Desde cualquier otro origen, 30 por minuto con ráfaga de 10 | Todos los quioscos de un hotel salen por la misma IP. Ver [`instalacion.md`](instalacion.md) §6 |
+| **En el servidor, en total** | **50 fichajes por segundo sostenidos** sumando todos los orígenes, con p95 < 150 ms | Es lo que mide la prueba de carga y lo que decide si una versión mayor sale |
+
+**El cambio de turno de una plantilla entera cabe en la ráfaga.** Las primeras
+50 tarjetas pasan de golpe; a partir de ahí el borde deja pasar diez fichajes
+por segundo y por origen, que es más de lo que escanea una fila de gente. El
+límite del borde no está para frenarte: está para que un equipo comprometido
+enchufado a la VLAN de quioscos no quede sin techo.
+
+**Lo que la prueba demuestra**, y lo dice requisito a requisito en su salida:
+que el servidor sostiene 50 fichajes por segundo **desde varios orígenes a la
+vez** con el p95 por debajo de 150 ms; que **ningún tramo se duplica** aunque el
+quiosco reenvíe el mismo fichaje; que los totales diarios cuadran con los
+fichajes que los originaron; y que **un rechazo no revela nada** —una tarjeta
+desconocida, una revocada y una con la firma alterada tardan lo mismo y
+responden lo mismo—.
+
+> **Si alguien te dice «el quiosco va lento a las 06:00», no empieces por
+> aquí.** Empieza por `KIOSK_VLAN_CIDR`: es el fallo silencioso más frecuente y
+> se comprueba en un minuto ([`instalacion.md`](instalacion.md) §6). Un quiosco
+> fuera de ese rango cae bajo el límite pensado para internet, y no hay cantidad
+> de CPU que lo arregle.
+
+### 17.2 Cómo se ejecuta
+
+**Dónde: en un entorno de pruebas, nunca en producción.** La prueba **crea
+plantilla sintética** —empleados «Carga k6 NNNN» en un departamento llamado
+«Carga k6», sus tarjetas y varios quioscos— y ficha con ella miles de veces.
+Mide sobre una copia del entorno: la misma máquina que vas a comprar, o una
+equivalente.
+
+**Tres cierres, y ninguno es un obstáculo que haya que rodear:**
+
+1. El aprovisionamiento **se niega a ejecutarse contra una instalación de
+   producción**.
+2. Te obliga a **decir en voz alta que esa base de datos es de pruebas**, con
+   una variable que no tiene valor por omisión.
+3. Solo trata como suyos a los empleados **de ese departamento y con código
+   `K6…`**. Si encuentra un código `K6…` fuera del departamento «Carga k6», se
+   para: eso significa que la base no es la que cree, y prefiere no tocar nada.
+
+**Qué hace falta.** La prueba de carga **no viaja en el paquete de entrega**
+—el paquete lleva el producto, no el banco de pruebas—: se ejecuta desde una
+copia del repositorio del producto, que el fabricante te facilita si quieres
+medir tu propio hardware. En esa máquina hacen falta **Docker con Compose v2**,
+**Node 20 o superior** y la pila del entorno de pruebas levantada.
+
+```bash
+make load-test K6_ACKNOWLEDGE_TEST_DATABASE=yes
+```
+
+Eso levanta **once generadores de carga: diez de quiosco y uno de panel**. Cada
+uno es un origen distinto —una IP—, porque el borde limita por IP. Diez orígenes
+a **6 fichajes por segundo** son 60 por segundo, un 20 % por encima de los 50
+del umbral: ese margen no sobra. El borde es un cubo con fuga —deja salir un
+permiso cada 100 ms, con una ráfaga inicial de 50— y sin holgura la prueba
+mediría el límite del borde en lugar de la capacidad del servidor.
+
+La duración y el número de orígenes se cambian sin tocar nada:
+
+```bash
+INSTANCES=10 DURATION=120s make load-test K6_ACKNOWLEDGE_TEST_DATABASE=yes
+```
+
+Con menos orígenes el pico baja en proporción: **diez de quiosco es lo que hace
+falta** para llegar con margen a los 50 fichajes por segundo.
+
+**Si el entorno de pruebas usa un certificado autofirmado**, hay que decírselo;
+contra un entorno con certificado real no hace falta nada:
+
+```bash
+K6_INSECURE_TLS=1 make load-test K6_ACKNOWLEDGE_TEST_DATABASE=yes
+```
+
+**Qué imprime.** Un veredicto por requisito —cumple o no cumple, con la cifra
+medida al lado— y el detalle completo en un fichero legible por una máquina,
+por si quieres guardarlo con el acta de la puesta en marcha:
+
+```bash
+cat load-tests/k6/.results/summary.json
+```
+
+Ese fichero anota además **con qué se midió**: `git_sha` de la versión,
+`runner` (la máquina), `k6_version` e `instances`. Sin esos cuatro datos, una
+cifra no se puede comparar con otra.
+
+**Códigos de salida**, para encadenarla en un script tuyo:
+
+| Código | Qué significa |
+| --- | --- |
+| `0` | Todos los veredictos cumplen |
+| `1` | **Algún requisito no se cumple.** Cuál, y con qué cifra, está en la salida y en `summary.json`. Es el caso que hay que mirar |
+| `2` | **La medida no es fiable, y por eso no se da veredicto.** La pila no está levantada, falta `node`, la carga realmente ofrecida se quedó por debajo de 50 fichajes/s, no hubo muestras comparables suficientes, o k6 no pudo escribir sus resultados. **Un `2` no dice que tu servidor vaya mal**: dice que esta ejecución no sirve y hay que repetirla |
+
+### 17.3 Cómo leer el veredicto y qué tocar
+
+Lo primero: **no hay ninguna cifra de latencia tuya escrita en esta guía, y no
+la va a haber.** Depende de tu hardware, de tu disco y de tu red. El fabricante
+publica su propia línea base en `load-tests/k6/baseline.json` **con cada versión
+mayor**, medida en el servidor de su integración continua: sirve para ver que
+una versión nueva ha empeorado respecto de la anterior, **no** para decirte qué
+p95 deberías ver en tu sala de servidores. Si ese fichero no está, la
+herramienta se limita a aplicar el presupuesto —los 150 ms y los 50
+fichajes/s— y no compara con nada. La cifra de tu instalación sale de tu propia
+ejecución de `make load-test`.
+
+| Lo que ves | Qué está pasando | Qué hacer |
+| --- | --- | --- |
+| **p95 alto y CPU del servidor con margen**, con peticiones esperando su turno en PHP-FPM | Faltan trabajadores: hay CPU libre y nadie que la use | Sube `PHP_FPM_MAX_CHILDREN` (§17.7). De serie son **20**, el pool del servidor mínimo; con 4 núcleos y 8 GB, **40** es el valor recomendado |
+| **p95 alto y CPU al límite** | El servidor está saturado de verdad | **No subas `PHP_FPM_MAX_CHILDREN`**: más trabajadores sobre la misma CPU empeoran el p95. Lo que falta son núcleos |
+| **RAM al límite** | Cada trabajador de PHP-FPM ocupa unos **60 MB** | **No subas `PHP_FPM_MAX_CHILDREN`.** Cuarenta trabajadores son unos 2,4 GB solo de aplicación, y hay que dejar sitio a PostgreSQL y a Redis. Si lo que falta es RAM, el mando no es este |
+| **No sabes por dónde se está atascando** | Hay que mirarlo mientras ocurre | **Durante la pasada**, abre en Grafana el cuadro **«Salud de la API»** (`kronoqr-api`, §10.4) y mira tres cosas: `db_query_duration_seconds{operation}` (¿es la base de datos?), `scan_processing_duration_seconds` (¿es el fichaje en sí?) y `queue_jobs_pending{queue}` (¿se está acumulando trabajo en segundo plano?). Si la herramienta pudo leer `/metrics`, esas mismas series salen ya restadas —antes y después de la carga— en el bloque `server_metrics` de `summary.json` |
+| **Fichajes sueltos que fallan con un error de servidor**, mientras el resto va bien | Una transacción se quedó colgada y los demás esperaban por ella; los topes de la base de datos (§17.4) la cortan | Nada urgente: el quiosco **encola y reenvía**, y nadie se queda sin fichar. Si se repite, sigue el `trace_id` de una de esas peticiones en el registro técnico (§10.3) |
+| **Respuestas `429` sobre fichajes válidos** | El límite del borde o el de por dispositivo están frenando | Comprueba que los quioscos caen dentro de `KIOSK_VLAN_CIDR` ([`instalacion.md`](instalacion.md) §6). Es la causa en la inmensa mayoría de los casos |
+| **Un rechazo tarda claramente más o menos que otro** | Es un fallo del producto, no de tu servidor | Abre incidencia con el fabricante y adjunta `summary.json`: un rechazo que se distingue por el tiempo permitiría averiguar desde fuera qué tarjetas existen |
+
+**El hardware, como referencia.** Los mínimos publicados son **2 núcleos y
+4 GB**; el recomendado, **4 núcleos y 8 GB** ([`instalacion.md`](instalacion.md)
+§0). El mínimo sostiene una plantilla de hasta 100 personas con el pool de
+serie; a partir de ahí la conversación es de núcleos y de RAM antes que de
+parámetros.
+
+**Un `429` no deja a nadie sin fichar.** El quiosco no bloquea nunca al
+empleado: confirma en pantalla, guarda el fichaje en su cola local con la hora
+real y lo reenvía cuando el servidor respira. Por eso la prueba tolera un
+porcentaje pequeño de `429` sobre fichajes válidos —es degradación encolable— y
+**falla** ante cualquier rechazo que sí llegaría al empleado.
+
+### 17.4 Los dos topes de la base de datos
+
+La instalación los aplica de serie y casi nadie tendrá que cambiarlos. Están
+aquí porque, cuando saltan, el síntoma se ve en esta prueba.
+
+- **`DB_LOCK_TIMEOUT` (5 s).** Cuánto espera una consulta a que se libere un
+  candado antes de rendirse. Sin él, un fichaje puede esperar **para siempre**
+  detrás de una transacción colgada, y con él esperan todos los demás: el cambio
+  de turno entero se para sin un solo error en el registro.
+- **`DB_IDLE_IN_TRANSACTION_TIMEOUT` (60 s).** Cuánto se tolera una transacción
+  abierta que no hace nada. Corta justamente a la sesión que dejó el candado
+  puesto.
+
+**A qué alcanzan, y a qué no.** Los dos topes se aplican **solo al servicio que
+atiende peticiones** (`app`): el fichaje, el panel, el portal y las migraciones.
+**No** alcanzan a los trabajos en segundo plano, al planificador de tareas
+nocturnas ni a la presencia en vivo, y **no alcanzan a la copia de seguridad**.
+Es deliberado: un `pg_dump` de una base grande tarda legítimamente mucho más de
+un minuto con una transacción abierta, y no puede abortarse por un tope pensado
+para que nadie se quede esperando delante de un quiosco. **Una copia lenta no se
+corta por estos dos valores.**
+
+**Qué pasa cuando uno salta:** esa petición concreta falla, el quiosco la encola
+y la reenvía, y el empleado no se entera. Ese es el cambio que importa: **de
+«todo el hotel deja de fichar» a «unos cuantos fichajes llegan unos segundos más
+tarde»**.
+
+Bajarlos hace que salten antes y más a menudo; subirlos devuelve el sistema a la
+espera indefinida. Si los cambias, mide antes y después con esta misma prueba.
+
+### 17.5 Qué NO hace esta prueba
+
+Dicho para que nadie lea de más en su veredicto:
+
+- **No mide la tablet.** Ni el tiempo desde que se acerca la tarjeta hasta que
+  aparece el saludo en pantalla, ni el arranque de la aplicación del quiosco.
+  Eso son otros requisitos y los comprueban las pruebas de recorrido de usuario
+  del fabricante, en un navegador real.
+- **No sustituye a la revisión nocturna.** La reconciliación del registro (§1,
+  04:30 UTC) y las alertas de divergencia (§10.4) siguen siendo lo que vigila
+  que los totales cuadran día tras día. La prueba comprueba que cuadran
+  **después de la carga**, una vez.
+- **No se ejecuta con empleados reales, ni contra tu base de datos de
+  producción, ni contra una copia restaurada de producción.** Esto último no es
+  una precaución de más: la prueba **emite y revoca tarjetas** y **escribe
+  fichajes** de su población sintética. Sobre una restauración de tus datos
+  reales estarías mezclando fichajes inventados con los de tu plantilla, en una
+  base que algún día podrías tomar por buena. Si necesitas volumen realista,
+  usa una base de pruebas y deja que la herramienta cree la suya.
+- **No es una prueba de seguridad.** Comprueba que los rechazos tardan lo mismo
+  entre sí; el resto del endurecimiento está en
+  [`endurecimiento.md`](endurecimiento.md).
+
+### 17.6 Qué queda en la base después de medir
+
+Conviene saberlo antes de lanzarla, no después.
+
+**Se limpia solo, al terminar:**
+
+- Las **tarjetas** que emitió quedan revocadas.
+- Los **tokens de los quioscos** sintéticos quedan revocados.
+- La cuenta de gestión «Responsable carga k6» queda **desactivada**.
+- El fichero de trabajo `load-tests/k6/.fixtures/` **se borra**. Mientras dura
+  la pasada contiene **tarjetas y tokens vivos**: se escribe con permisos
+  `0600`, no se sube a ningún sitio y no se adjunta a ningún tique. Si una
+  ejecución se corta a la mitad y el fichero sigue ahí, bórralo tú.
+
+**Se queda, y es lo correcto:**
+
+- Los **empleados sintéticos** («Carga k6 NNNN») y su departamento «Carga k6».
+- Los **fichajes** que generó y el histórico que sembró para que las consultas
+  trabajen con volumen realista.
+
+Se quedan porque borrarlos exigiría que el producto supiera borrar registros de
+jornada, y **el producto no borra nada**: las correcciones crean versiones
+nuevas. Por eso la prueba no se lanza sobre una base que vayas a conservar. En
+un entorno de pruebas la respuesta es la de siempre: se vuelve a sembrar.
+
+### 17.7 Los parámetros
+
+| Variable | De serie | Qué gobierna |
+| --- | --- | --- |
+| `PHP_FPM_MAX_CHILDREN` | `20` | Cuántas peticiones se atienden a la vez. **20** es el pool del servidor mínimo (2 núcleos, 4 GB); **40**, el recomendado con 4 núcleos y 8 GB. Cada trabajador ocupa unos **60 MB**: el techo lo pone la RAM |
+| `DB_LOCK_TIMEOUT` | `5s` | Cuánto espera una consulta a un candado antes de rendirse. **Solo en el servicio que atiende peticiones**, nunca en la copia de seguridad |
+| `DB_IDLE_IN_TRANSACTION_TIMEOUT` | `60s` | Cuánto se tolera una transacción abierta sin actividad. Corta a la sesión que tiene el candado, no a quien lo espera. **Solo en el servicio que atiende peticiones** |
+| `KIOSK_VLAN_CIDR` | `10.0.20.0/24` | Rango desde el que el borde permite la ráfaga de 50 y los 600 fichajes por minuto. **Se rellena al instalar, siempre** ([`instalacion.md`](instalacion.md) §6) |
+
+Las tres primeras se cambian en el `.env` y **exigen reiniciar los servicios**;
+su ficha completa está en [`configuracion.md`](configuracion.md) §6.24 y §6.15.

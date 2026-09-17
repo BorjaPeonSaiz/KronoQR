@@ -1232,3 +1232,246 @@ looking at its diagnostic screen still shows as up to date.
 | `KIOSK_HEALTH_SILENT_AFTER_SECONDS` | `600` | From how many seconds without a heartbeat it is in **failure**. **It is the same number as the `QuioscoSinLatido` alert**: both are changed together, or neither is |
 | `KIOSK_HEALTH_BATTERY_LOW_PERCENT` | `15` | Level below which, **and while not charging**, the kiosk raises a battery warning |
 | `KIOSK_SERVICE_CODE` | *(empty)* | The 8 to 12 digit code for the diagnostic screen. **It is not a `.env` variable**: it is changed in the panel, under "Operational settings", and takes effect on the next heartbeat |
+
+---
+
+## 17. Server sizing and load test
+
+> **What this section is for.** To answer, with a measurement of your own rather
+> than a promise of ours, two questions that are only asked once: "does this
+> server cope with my shift change?" and "what do I change if it does not?".
+
+### 17.1 What the product promises, and what it means in a hotel
+
+The product is published with a written threshold: **50 clock-ins per second
+sustained on the server, with 95 % of the responses under 150 ms** (`RNF-P-06`
+and `RNF-P-02`). **It is measured before every major version, as a step of the
+release procedure**, and the result travels with the version. There is also an
+automatic safety net that measures it again when the version is tagged, in case
+somebody skipped the step.
+
+Translated to your hotel these are **two different limits**, and they should not
+be confused:
+
+| Where | What the limit is | Why |
+| --- | --- | --- |
+| **At the edge, per origin** (the web server) | From `KIOSK_VLAN_CIDR`: **a burst of 50 clock-ins straight away** and then **10 per second** (600 per minute). From any other origin, 30 per minute with a burst of 10 | Every kiosk in a hotel goes out through the same IP. See [`installation.md`](installation.md) §6 |
+| **On the server, in total** | **50 clock-ins per second sustained** across all origins, with p95 < 150 ms | It is what the load test measures and what decides whether a major version ships |
+
+**The shift change of a whole workforce fits inside the burst.** The first 50
+cards go through at once; from then on the edge lets ten clock-ins per second
+per origin through, which is more than a queue of people scans. The edge limit
+is not there to slow you down: it is there so that a compromised machine plugged
+into the kiosk VLAN is not left without a ceiling.
+
+**What the test proves**, and it says so requirement by requirement in its
+output: that the server sustains 50 clock-ins per second **from several origins
+at the same time** with p95 under 150 ms; that **no entry is duplicated** even
+if the kiosk resends the same clock-in; that the daily totals match the
+clock-ins that produced them; and that **a rejection reveals nothing** — an
+unknown card, a revoked one and one with an altered signature take the same time
+and answer the same.
+
+> **If somebody tells you "the kiosk is slow at 06:00", do not start here.**
+> Start with `KIOSK_VLAN_CIDR`: it is the most frequent silent failure and it is
+> checked in a minute ([`installation.md`](installation.md) §6). A kiosk outside
+> that range falls under the limit meant for the internet, and no amount of CPU
+> fixes that.
+
+### 17.2 How it is run
+
+**Where: on a test environment, never on production.** The test **creates
+synthetic staff** — employees named "Carga k6 NNNN" in a department called
+"Carga k6", their cards and several kiosks — and clocks in with them thousands
+of times. Measure on a copy of the environment: the same machine you are about
+to buy, or an equivalent one.
+
+**Three locks, and none of them is an obstacle to be worked around:**
+
+1. Provisioning **refuses to run against a production installation**.
+2. It makes you **say out loud that this database is a test one**, through a
+   variable that has no default value.
+3. It only treats as its own the employees **in that department and with a
+   `K6…` code**. If it finds a `K6…` code outside the "Carga k6" department it
+   stops: that means the database is not the one it thinks it is, and it would
+   rather touch nothing.
+
+**What you need.** The load test **does not travel in the delivery package** —
+the package carries the product, not the test bench —: it is run from a copy of
+the product repository, which the vendor provides if you want to measure your
+own hardware. On that machine you need **Docker with Compose v2**, **Node 20 or
+newer** and the test environment's stack up.
+
+```bash
+make load-test K6_ACKNOWLEDGE_TEST_DATABASE=yes
+```
+
+That brings up **eleven load generators: ten kiosk ones and one panel one**.
+Each is a separate origin — an IP — because the edge limits per IP. Ten origins
+at **6 clock-ins per second** are 60 per second, 20 % above the 50 of the
+threshold: that headroom is not spare. The edge is a leaky bucket — it releases
+one permit every 100 ms, with an initial burst of 50 — and without slack the
+test would be measuring the edge limit instead of the server's capacity.
+
+The duration and the number of origins are changed without touching anything:
+
+```bash
+INSTANCES=10 DURATION=120s make load-test K6_ACKNOWLEDGE_TEST_DATABASE=yes
+```
+
+With fewer origins the peak drops proportionally: **ten kiosk ones is what it
+takes** to reach the 50 clock-ins per second with headroom.
+
+**If the test environment uses a self-signed certificate**, you have to say so;
+against an environment with a real certificate nothing is needed:
+
+```bash
+K6_INSECURE_TLS=1 make load-test K6_ACKNOWLEDGE_TEST_DATABASE=yes
+```
+
+**What it prints.** A verdict per requirement — met or not met, with the
+measured figure beside it — and the full detail in a machine-readable file, in
+case you want to keep it with the go-live record:
+
+```bash
+cat load-tests/k6/.results/summary.json
+```
+
+That file also records **what it was measured with**: the `git_sha` of the
+version, the `runner` (the machine), `k6_version` and `instances`. Without those
+four, one figure cannot be compared with another.
+
+**Exit codes**, so you can chain it in a script of your own:
+
+| Code | What it means |
+| --- | --- |
+| `0` | Every verdict is met |
+| `1` | **Some requirement is not met.** Which one, and with what figure, is in the output and in `summary.json`. This is the case to look into |
+| `2` | **The measurement is not reliable, so no verdict is given.** The stack is not up, `node` is missing, the load actually offered stayed below 50 clock-ins/s, there were not enough comparable samples, or k6 could not write its results. **A `2` does not say your server is doing badly**: it says this run is no good and has to be repeated |
+
+### 17.3 How to read the verdict and what to change
+
+First of all: **there is no latency figure of yours written in this guide, and
+there is not going to be one.** It depends on your hardware, your disk and your
+network. The vendor publishes its own baseline in `load-tests/k6/baseline.json`
+**with every major version**, measured on its continuous integration server: it
+is there to see that a new version has got worse than the previous one, **not**
+to tell you what p95 you should be seeing in your server room. If that file is
+not there, the tool simply applies the budget — the 150 ms and the 50
+clock-ins/s — and compares with nothing. The figure for your installation comes
+from your own run of `make load-test`.
+
+| What you see | What is happening | What to do |
+| --- | --- | --- |
+| **High p95 and spare CPU on the server**, with requests waiting their turn in PHP-FPM | Workers are missing: there is free CPU and nobody using it | Raise `PHP_FPM_MAX_CHILDREN` (§17.7). The default is **20**, the pool of the minimum server; with 4 cores and 8 GB, **40** is the recommended value |
+| **High p95 and CPU at its limit** | The server really is saturated | **Do not raise `PHP_FPM_MAX_CHILDREN`**: more workers on the same CPU make p95 worse. What is missing is cores |
+| **RAM at its limit** | Each PHP-FPM worker takes about **60 MB** | **Do not raise `PHP_FPM_MAX_CHILDREN`.** Forty workers are about 2.4 GB of application alone, and room has to be left for PostgreSQL and Redis. If what is missing is RAM, this is not the control to use |
+| **You cannot tell where it is getting stuck** | It has to be watched while it happens | **During the run**, open the **"API health"** dashboard in Grafana (`kronoqr-api`, §10.4) and look at three things: `db_query_duration_seconds{operation}` (is it the database?), `scan_processing_duration_seconds` (is it clocking in itself?) and `queue_jobs_pending{queue}` (is background work piling up?). If the tool could read `/metrics`, those same series come out already subtracted — before and after the load — in the `server_metrics` block of `summary.json` |
+| **Isolated clock-ins failing with a server error**, while the rest goes fine | A transaction got stuck and the others were waiting behind it; the database timeouts (§17.4) cut it off | Nothing urgent: the kiosk **queues and resends**, and nobody is left unable to clock in. If it repeats, follow the `trace_id` of one of those requests in the technical log (§10.3) |
+| **`429` responses on valid clock-ins** | The edge limit or the per-device one is throttling | Check that the kiosks fall inside `KIOSK_VLAN_CIDR` ([`installation.md`](installation.md) §6). That is the cause in the vast majority of cases |
+| **One kind of rejection clearly takes more or less time than another** | It is a product defect, not a problem with your server | Open an incident with the vendor and attach `summary.json`: a rejection that can be told apart by timing would allow working out from outside which cards exist |
+
+**The hardware, for reference.** The published minimums are **2 cores and
+4 GB**; the recommended, **4 cores and 8 GB**
+([`installation.md`](installation.md) §0). The minimum sustains a workforce of
+up to 100 people with the default pool; beyond that, the conversation is about
+cores and RAM before it is about parameters.
+
+**A `429` leaves nobody unable to clock in.** The kiosk never blocks the
+employee: it confirms on screen, stores the clock-in in its local queue with the
+real time and resends it when the server catches its breath. That is why the
+test tolerates a small percentage of `429` on valid clock-ins — it is queueable
+degradation — and **fails** on any rejection that would actually reach the
+employee.
+
+### 17.4 The two database timeouts
+
+The installation applies them by default and almost nobody will have to change
+them. They are here because, when they fire, the symptom shows up in this test.
+
+- **`DB_LOCK_TIMEOUT` (5 s).** How long a query waits for a lock to be released
+  before giving up. Without it, a clock-in can wait **forever** behind a stuck
+  transaction, and with it everybody else waits too: the whole shift change
+  stops without a single error in the record.
+- **`DB_IDLE_IN_TRANSACTION_TIMEOUT` (60 s).** How long an open transaction that
+  is doing nothing is tolerated. It cuts off precisely the session that left the
+  lock in place.
+
+**What they reach, and what they do not.** Both timeouts apply **only to the
+service that serves requests** (`app`): clocking in, the panel, the portal and
+the migrations. They do **not** reach the background jobs, the scheduler of
+nightly tasks or live presence, and **they do not reach the backup**. That is
+deliberate: a `pg_dump` of a large database legitimately takes far more than a
+minute with a transaction open, and it cannot be aborted by a timeout meant to
+stop anyone waiting in front of a kiosk. **A slow backup is not cut short by
+these two values.**
+
+**What happens when one fires:** that particular request fails, the kiosk queues
+it and resends it, and the employee never notices. That is the change that
+matters: **from "the whole hotel stops clocking in" to "a few clock-ins arrive a
+few seconds later"**.
+
+Lowering them makes them fire sooner and more often; raising them returns the
+system to waiting indefinitely. If you change them, measure before and after
+with this same test.
+
+### 17.5 What this test does NOT do
+
+Said so that nobody reads more than there is into its verdict:
+
+- **It does not measure the tablet.** Neither the time from presenting the card
+  to the greeting appearing on screen, nor the start-up of the kiosk
+  application. Those are other requirements and the vendor's user-journey tests
+  check them, in a real browser.
+- **It does not replace the nightly review.** The reconciliation of the record
+  (§1, 04:30 UTC) and the divergence alerts (§10.4) remain what watches that the
+  totals add up day after day. The test checks that they add up **after the
+  load**, once.
+- **It is not run with real employees, nor against your production database, nor
+  against a copy restored from production.** That last one is not an extra
+  precaution: the test **issues and revokes cards** and **writes clock-ins** for
+  its synthetic population. On a restore of your real data you would be mixing
+  invented clock-ins with those of your workforce, in a database you might one
+  day take as good. If you need realistic volume, use a test database and let
+  the tool create its own.
+- **It is not a security test.** It checks that rejections take the same time as
+  each other; the rest of the hardening is in [`hardening.md`](hardening.md).
+
+### 17.6 What is left in the database after measuring
+
+Worth knowing before launching it, not afterwards.
+
+**It cleans up after itself, when it finishes:**
+
+- The **cards** it issued are left revoked.
+- The **tokens of the synthetic kiosks** are left revoked.
+- The management account "Responsable carga k6" is left **deactivated**.
+- The working file `load-tests/k6/.fixtures/` **is deleted**. While the run
+  lasts it contains **live cards and tokens**: it is written with `0600`
+  permissions, it is not uploaded anywhere and it is not attached to any ticket.
+  If a run is interrupted halfway and the file is still there, delete it
+  yourself.
+
+**It stays, and that is correct:**
+
+- The **synthetic employees** ("Carga k6 NNNN") and their "Carga k6" department.
+- The **clock-ins** it generated and the history it seeded so that the queries
+  work with realistic volume.
+
+They stay because deleting them would require the product to know how to delete
+attendance records, and **the product deletes nothing**: corrections create new
+versions. That is why the test is not run on a database you intend to keep. On a
+test environment the answer is the usual one: seed it again.
+
+### 17.7 The parameters
+
+| Variable | Default | What it governs |
+| --- | --- | --- |
+| `PHP_FPM_MAX_CHILDREN` | `20` | How many requests are served at the same time. **20** is the pool of the minimum server (2 cores, 4 GB); **40**, the recommended one with 4 cores and 8 GB. Each worker takes about **60 MB**: the ceiling is set by RAM |
+| `DB_LOCK_TIMEOUT` | `5s` | How long a query waits for a lock before giving up. **Only on the service that serves requests**, never on the backup |
+| `DB_IDLE_IN_TRANSACTION_TIMEOUT` | `60s` | How long an open transaction with no activity is tolerated. It cuts off the session holding the lock, not the one waiting for it. **Only on the service that serves requests** |
+| `KIOSK_VLAN_CIDR` | `10.0.20.0/24` | Range from which the edge allows the burst of 50 and the 600 clock-ins per minute. **Filled in on installing, always** ([`installation.md`](installation.md) §6) |
+
+The first three are changed in the `.env` and **require restarting the
+services**; their full entry is in [`configuration.md`](configuration.md) §6.24
+and §6.15.

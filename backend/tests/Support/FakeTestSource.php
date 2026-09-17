@@ -30,6 +30,10 @@ final class FakeTestSource
 
     private const string PLAYWRIGHT_TAG = 'tag';
 
+    private const string K6_TAG = 'tags';
+
+    private const string K6_REQUIREMENTS = 'requirements';
+
     /**
      * `it('nombre')->group('RN-05')...;`
      *
@@ -67,5 +71,34 @@ final class FakeTestSource
     public static function playwright(string $name, string $requirement, string $declaration = 'test'): string
     {
         return $declaration."('".$name."', { ".self::PLAYWRIGHT_TAG.": ['@".$requirement."'] }, async () => {});\n";
+    }
+
+    /**
+     * Un `export const options` de k6 con sus escenarios (tarea 3.6, dec. 11).
+     *
+     * El cuerpo de cada escenario va crudo para que las pruebas puedan montar
+     * tambien lo que NO debe contar: una etiqueta fuera de `tags`, un `tags`
+     * sin requisitos o un identificador mal escrito.
+     *
+     * @param  array<string, string>  $scenarios  Clave del escenario -> cuerpo.
+     */
+    public static function k6(array $scenarios): string
+    {
+        $blocks = '';
+
+        foreach ($scenarios as $name => $body) {
+            $blocks .= '    '.$name.": {\n"
+                ."      executor: 'constant-arrival-rate',\n"
+                .'      '.$body."\n"
+                ."    },\n";
+        }
+
+        return "export const options = {\n  scenarios: {\n".$blocks."  },\n};\n";
+    }
+
+    /** `tags: { requirements: 'RNF-P-06 RNF-P-02' }`, la etiqueta nativa de k6. */
+    public static function k6Requirements(string $value): string
+    {
+        return self::K6_TAG.': { '.self::K6_REQUIREMENTS.": '".$value."' },";
     }
 }

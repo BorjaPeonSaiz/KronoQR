@@ -444,7 +444,7 @@ Las otras once —valores del perfil `ES-hosteleria`, retroactividad al cambiar 
 | 3-14 | 3.8 | **Dónde vive el informe de revisión de seguridad.** Ni el §2 ni el §12 lo ubican. Nunca en el paquete que se entrega al cliente si contiene detalles explotables | 🟡 |
 | 3-15 | 3.4 | **Nombre de la carpeta de la vista de cumplimiento** en `frontend-admin`. El §2 lista ocho *features* y ninguna es de cumplimiento | 🟢 |
 | 3-16 | 3.2 | **Si 3.3 espera al cuadro de operación de quioscos** o va en paralelo | 🟢 |
-| 3-17 | 3.6 | **Si la prueba de carga va en `release.yml`** o en un *workflow* propio | 🟢 |
+| 3-17 | 3.6 | ✅ ***Workflow* propio: `.github/workflows/load-test.yml`.** No `release.yml` —que sigue siendo un marcador del plan 08— ni `ci.yml`: el pipeline del §10.1 no tiene etapa de carga y **las etapas ①–③ deben seguir por debajo de 4 minutos**. Se dispara a mano (`workflow_dispatch`, con `instances` y `duration`) y en **cada etiqueta `vX.0.0`**, que es la red de seguridad de RQ-08 si alguien publica una versión mayor sin haberla corrido antes. Mide **las imágenes de entrega instaladas desde el paquete**, no la pila de desarrollo, y sube `.results/` como artefacto (nunca `.fixtures/`, que lleva tarjetas y tokens vivos mientras dura la pasada) | ✅ |
 
 ### Entrega al cliente — [08-entrega-despliegue-y-actualizacion](08-entrega-despliegue-y-actualizacion.md)
 
