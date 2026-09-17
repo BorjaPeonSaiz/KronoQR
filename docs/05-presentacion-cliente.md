@@ -139,7 +139,7 @@ Bloquearlo dejaría al hotel incumpliendo la ley por una acción del proveedor, 
 | Doble marca de tiempo | Hora real del fichaje y hora de recepción en el servidor, siempre ambas |
 | Control de reloj | Si la tablet tiene la hora desviada más allá del margen admitido, se avisa y se marca para revisión |
 | PIN de respaldo | Fichaje con código de empleado y PIN de 6 dígitos cuando falta la tarjeta |
-| Fichaje de pausa | Opcional y configurable por centro: marcar inicio y fin de descanso |
+| Fichaje de pausa | Opcional, se activa desde el panel: quien sale a descansar pulsa «Pausa» y pasa la tarjeta; para volver, solo pasa la tarjeta |
 | Sin duplicados | Si la tablet reenvía un fichaje por un problema de red, el sistema reconoce que es el mismo y no lo duplica |
 
 ### 5.2 Tarjetas QR
@@ -164,7 +164,7 @@ Bloquearlo dejaría al hotel incumpliendo la ley por una acción del proveedor, 
 | Detalle de jornada | Todos los tramos de un empleado y un día, con totales, incidencias y correcciones |
 | Correcciones trazadas | Crear, ajustar la hora, cerrar un turno abierto o anular, siempre con motivo de un catálogo más texto libre |
 | Bandeja de incidencias | Lista de situaciones pendientes, asignadas al responsable que corresponde, con flujo de resolución |
-| Vista de cumplimiento | Avisos de descanso insuficiente entre jornadas, jornada diaria excesiva, falta de pausa y exceso semanal |
+| Vista de cumplimiento | Avisos de descanso insuficiente entre jornadas, jornada diaria excesiva, falta de pausa —si se activa el fichaje de pausa— y exceso semanal (informativo), cada uno con el umbral del convenio a la vista |
 | Salud de las tablets | Última señal de vida, versión, fichajes pendientes de enviar y batería de cada quiosco |
 | Histórico de errores | Todo fallo del sistema queda guardado 90 días con su fecha, su origen y cuántas veces se ha repetido. Su informático lo consulta desde el panel, sin necesidad de saber leer registros técnicos, y viaja en el paquete de diagnóstico si hay que enviarlo al soporte. **Sin nombres ni datos de nadie** |
 
@@ -392,7 +392,7 @@ Un servidor de estas características cubre 500 empleados y 10 tablets con holgu
 Todo lo que puede variar entre hoteles es **configuración**, no programación:
 
 - **Marca blanca**: logotipo, colores y nombre de la aplicación, aplicados a la tablet, al panel, al portal y a las tarjetas y documentos PDF. El logotipo y el color forman parte del plan contratado: si la licencia caduca, las aplicaciones y los documentos vuelven al aspecto por defecto del producto y **el nombre del hotel se conserva** (punto 10.5). Lo configurado no se borra y se recupera al renovar.
-- **Perfil de cumplimiento**: años de retención, descanso mínimo entre jornadas, jornada máxima diaria y semanal, pausas obligatorias, inicio de semana y calendario de festivos. **Se entrega el perfil español de hostelería ya configurado**, y se puede ajustar si el convenio aplicable difiere. Los tres últimos —jornada semanal, inicio de semana y festivos— **se guardan y se auditan desde ya, y los aplica la vista de cumplimiento** cuando entra en servicio; la pantalla lo indica al lado de cada campo para no dar por hecho un efecto que aún no existe.
+- **Perfil de cumplimiento**: años de retención, descanso mínimo entre jornadas, jornada máxima diaria y semanal, pausas obligatorias, inicio de semana y calendario de festivos. **Se entrega el perfil español de hostelería ya configurado**, y se puede ajustar si el convenio aplicable difiere. La **jornada semanal ordinaria** y el **inicio de semana** ya los aplica la vista de cumplimiento, que avisa pero no abre incidencia. El **calendario de festivos** se guarda y se audita desde ya y todavía no lo aplica ninguna regla: lo estrenará la gestión de ausencias, y la pantalla lo indica al lado del campo para no dar por hecho un efecto que aún no existe.
 - **Umbrales operativos**: margen anti-doble-escaneo, horas a partir de las cuales un turno se considera anómalo, tolerancia de desviación de reloj, intentos de PIN antes del bloqueo.
 - **Idiomas** activos y funcionalidades habilitadas.
 

@@ -40,7 +40,8 @@ lanzada tras el push (la del push la canceló la concurrencia) y **PR #66** abie
 
 **Siguiente acción:** el usuario integra la PR #66 con *merge commit* y borra la rama. Sin migración: tras integrar basta
 `git pull`. Después, la **3.6** (pruebas de carga k6 y ajuste de rendimiento: incluir `lastAcceptedScanOf()` y el endpoint de
-cumplimiento) y, en su momento, las decisiones del usuario sobre el doc 05 anotadas en «3.4 (restos)» y «3.5 (restos)». Sin migración: tras integrar basta `git pull`. Después, la **3.6** (pruebas
+cumplimiento). **Doc 05 alineado el 17-09-2026 por decisión del usuario** (filas «Fichaje de pausa» y «Vista de cumplimiento», y
+§10.3 sobre los campos del perfil): ya no queda ninguna frase del doc 05 pendiente de las tareas 3.4 y 3.5. Sin migración: tras integrar basta `git pull`. Después, la **3.6** (pruebas
 de carga k6 y ajuste de rendimiento: incluir `lastAcceptedScanOf()` y el endpoint de cumplimiento).
 
 **Tarea 3.4 (cerrada e integrada, PR #65 `c1ccba0`). Rama `feat/tarea-3.4-vista-cumplimiento` (desde `main` `b57a6e6`, con la 3.3 integrada por PR #64). Tarea 3.4 «Vista de
@@ -550,10 +551,7 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 
 ### Por tarea
 
-- **3.5 (restos, 17-09-2026):** **decisión del usuario sobre el doc 05** (no editado): línea ~142 «Fichaje de pausa | Opcional y
-  configurable por centro: marcar inicio y fin de descanso» → «Opcional, se activa desde el panel: quien sale a descansar pulsa
-  «Pausa» y pasa la tarjeta; para volver, solo pasa la tarjeta»; línea ~167 «falta de pausa» → «falta de pausa —si se activa el
-  fichaje de pausa—»; **doc 07 §6 en el cierre de fase:** `break_clocking_enabled` y la tolerancia en `localStorage` de la tablet
+- **3.5 (restos, 17-09-2026):** **doc 07 §6 en el cierre de fase:** `break_clocking_enabled` y la tolerancia en `localStorage` de la tablet
   (manipulables; el servidor honra la intención y aplica su umbral; control: modo quiosco sin devtools), la ventana de 10 s del
   botón «Pausa» (la intención es de la tablet, no de la persona), y la excepción de soporte sobre `ATTENDANCE_BREAK_CLOCKING`;
   **«pausa sin vuelta» sin incidencia** (candidata a tipo nuevo `open_break`/`missing_break_end` con migración y bandeja); la
@@ -564,10 +562,7 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   `break_end`-tras-`break_start` de la exención del anti-rebote solo la ejercita un cliente de API (el quiosco nunca envía
   `break_end`); `ScanTarget` es una clase nueva no prevista en el contrato del arquitecto; activar el ajuste en una prueba exige
   `app()->forgetScopedInstances()` (`OperationalSettingsProvider` es `scoped`).
-- **3.4 (restos, 16-09-2026):** **decisión del usuario sobre el doc 05** (no editado): la fila «Vista de cumplimiento» (~l. 167)
-  dice «falta de pausa» sin matiz y se entrega visible pero no evaluada hasta la 3.5, y §10.3 (~l. 395) dice que los tres campos del
-  perfil los aplica la vista «cuando entra en servicio» cuando dos ya se aplican (frases propuestas en Engram `fase-3/tarea-3.4`);
-  captura `rrhh-15-cumplimiento` para las dos guías cuando exista el generador en `tests/screenshots/hr-guide.screenshots.ts`;
+- **3.4 (restos, 16-09-2026):** captura `rrhh-15-cumplimiento` para las dos guías cuando exista el generador en `tests/screenshots/hr-guide.screenshots.ts`;
   `REPORTING_PERIOD_MAX_RANGE_DAYS`/`_MAX_ROWS`/`_TIMEOUT_SECONDS` nunca estuvieron en `.env.example` ni en `configuracion.md`
   (hueco previo); medir en la 3.6 (k6) el endpoint de cumplimiento, que alcanza también al responsable y deja asiento bajo el
   candado de ADR-010; en el cierre de la Fase 3 anotar en doc 07 que `compliance_summary` se dejó fuera de `disclosure_grouping`
