@@ -532,24 +532,26 @@ function analyse(results, options = {}) {
   } else {
     const allowedRate = baselineRate === null ? null : Math.round(baselineRate * BASELINE_RATE_TOLERANCE * 10) / 10
 
+    // Aqui NO se exige que la carga ofrecida llegue a 50/s: el perfil del runner
+    // son 18/s a proposito (decision 19), porque a 60/s se satura y deja RQ-03 y
+    // RS-03 sin muestras. Lo unico que hace evaluable este veredicto es que la
+    // linea base sea comparable (mismos parametros); la tasa se juzga contra lo
+    // que esta misma maquina demostro sostener con esos parametros.
     verdict(
       'RNF-P-06',
-      !peakOffered || !baselineUsable
+      !baselineUsable
         ? 'unmeasurable'
         : shiftRate >= baselineRate * BASELINE_RATE_TOLERANCE && alwaysRequired
           ? 'pass'
           : 'fail',
-      !peakOffered
-        ? `la carga ofrecida son ${offeredRate}/s y el umbral es ${SHIFT_RATE_BUDGET}/s: ` +
-          'sube INSTANCES o SCAN_RATE para poder juzgarlo'
-        : !baselineUsable
-          ? `${noBaselineDetail} ${thresholdNotJudged}`
-          : // La degradacion encolable NO se juzga aqui: en este runner es el
-            // sintoma de la CPU compartida y ya esta contada en la tasa. Lo que
-            // se exige es que la tasa no caiga respecto a lo que esta maquina ya
-            // demostro sostener.
-            `${peakMeasured}; minimo ${allowedRate}/s (${BASELINE_RATE_TOLERANCE}x la ${baselineReference}). ` +
-            thresholdNotJudged,
+      !baselineUsable
+        ? `${noBaselineDetail} ${thresholdNotJudged}`
+        : // La degradacion encolable NO se juzga aqui: en este runner es el
+          // sintoma de la CPU compartida y ya esta contada en la tasa. Lo que
+          // se exige es que la tasa no caiga respecto a lo que esta maquina ya
+          // demostro sostener.
+          `${peakMeasured}; minimo ${allowedRate}/s (${BASELINE_RATE_TOLERANCE}x la ${baselineReference}). ` +
+          thresholdNotJudged,
     )
   }
 

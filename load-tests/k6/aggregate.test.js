@@ -373,6 +373,23 @@ test('en modo linea base da verde cuando la pasada iguala a la anterior', () => 
   assert.equal(exitCodeOf(summary), 0)
 })
 
+test('en modo linea base una carga ofrecida por debajo de 50/s sigue siendo evaluable', () => {
+  // El perfil del runner son 18/s (3 instancias) a proposito: a 60/s se satura
+  // y RQ-03 y RS-03 se quedan sin muestras. La regla «sin 50/s no hay nada que
+  // juzgar» es del modo umbral; aqui lo que se juzga es la tasa frente a la
+  // que esta misma maquina sostuvo con los mismos parametros.
+  const summary = runAnalysis(greenRun(), {
+    instances: 3,
+    offeredRate: 18,
+    latencyVerdictMode: 'baseline',
+    baseline: asBaseline({ instances: 3, totals: { shift_entries_per_second: 18 } }),
+  })
+
+  assert.equal(statusOf(summary, 'RNF-P-06'), 'pass')
+  assert.match(summary.verdicts['RNF-P-06'].detail, /minimo 14.4\/s/)
+  assert.equal(exitCodeOf(summary), 0)
+})
+
 test('en modo linea base el p95 que empeora un 26 por ciento es rojo', () => {
   const summary = runAnalysis(greenRun({ scanDurationMs: 126 }), {
     latencyVerdictMode: 'baseline',
