@@ -41,9 +41,9 @@ on:
   workflow_dispatch:
     inputs:
       instances:
-        description: "Instancias de k6 (una IP de origen cada una, 6 fichajes/s por instancia). 10 produce 60 fichajes/s validos, por encima de los 50 de RNF-P-06."
+        description: "Instancias de k6 (una IP de origen cada una, 6 fichajes/s por instancia). 3 es el perfil del runner (18/s, ~60 % de su capacidad medida: todo es medible y la linea base compara con esos mismos parametros); 10 (60/s, por encima de los 50 de RNF-P-06) solo tiene sentido en hardware de referencia, donde se usa `make load-test`."
         required: false
-        default: "10"
+        default: "3"
       duration:
         description: "Duracion sostenida de cada escenario (p. ej. 120s, 5m)."
         required: false

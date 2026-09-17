@@ -7,6 +7,29 @@
 
 ## Estado y objetivo actual
 
+**Restos de la 3.6 en `fix/load-test-pila-de-pruebas` (17/18-09-2026), tras integrar la PR #67 en `main` (`0b6e247`).** Primera ejecución
+real de `load-test.yml` desde `main` (35269713019): el aprovisionamiento se negó porque el paquete instala con `APP_ENV=production`
+(`install.sh` lo exige) → el workflow declara la pila como `staging` DESPUÉS de instalar y recrea los cuatro roles PHP y nginx
+(ningún camino del producto consulta `isProduction()`; la guarda de k6 no se debilita). Segunda (35270209201): «la instalación no tiene
+ningún centro» → `provision-fixtures.php` completa la puesta en marcha mínima con `CreateSiteHandler` y `CreateDepartmentHandler`
+cuando no hay centro (asiento `site.created` incluido; no cierra el asistente —exige un administrador con TOTP— ni asigna perfil:
+el nulo significa «perfil por omisión», `ES-hosteleria`); probado sobre `migrate:fresh` sin semilla. Tercera (35277357994, 2 × 6/s,
+30 s): **todo el ciclo en verde en el runner** —aprovisionamiento, carga, agregado, reconciliación, `verify-audit-chain`, verificación
+posterior, regla 21, cierre—, 0 rechazos del borde, RQ-03 y RS-03 verdes (separación de medianas 11,5 ms, de mínimos 2,4 ms, suelo
+25 ms), y **RNF-P-02 en rojo ya a 12 fichajes/s: p50 86 ms, p95 157 ms, p99 291 ms**. Pasada llena (10 × 6/s, 120 s):
+**29,1 tramos/s sostenidos con p95 26 s** (5 218 `limit_conn`, 0 `limit_req`; 469 iteraciones descartadas; verificación posterior íntegra: 4 131 escaneos sin duplicados, proyección cuadrada, cadena íntegra), y con `PHP_FPM_MAX_CHILDREN=40` (entrada nueva `fpm_max_children`) **igual: 27,8/s, p95 27,6 s** → el cuello es la CPU compartida, no el pool → **decisión 19**: en el runner RNF-P-02/06 se juzgan contra la línea base (`K6_LATENCY_VERDICT=baseline`: p95 ≤ +25 %, tramos/s ≥ −20 %) y el umbral solo en hardware de referencia con `make load-test`. Línea base versionada en `load-tests/k6/baseline.json` (copia literal del `summary.json` del runner, con
+`git_sha`, `runner`, `k6_version`, `edge_limits`). También en esta rama: `DomainEventLayerTest` (Architecture: en `Domain/Event/`
+solo eventos o cargas útiles listadas; `DailyTotalsSnapshot` ratificado por `arquitecto-dominio`, que confirma que Deptrac obliga a
+esa ubicación) y la comprobación del plan `EXPLAIN` sobre el árbol (un `Seq Scan` de `shift_entries` se atribuía a `scan_events`).
+La base de desarrollo se recreó y sembró (`make migrate-fresh && make seed`): 257 empleados, 0 sintéticos. **Dictamen sobre el
+elemento de lote con `503`** (`ClockOutBeforeClockIn`, reintentado para siempre): es regla de negocio nueva → **RN-18 «Fichaje
+irreconciliable»** en doc 01 §4 antes de codificar; diseño: `422` con cuerpo genérico (no `409`: ADR-012, los quioscos desplegados
+solo borran ante 200/422), `scan_events.result = rejected_out_of_order` + `flagged_for_review` (dos `CHECK`), incidencia
+`out_of_order_scan` abierta por la pasada nocturna leyendo la columna (sin evento ni listener nuevos), decisión en el agregado
+`WorkDay` y no en el `catch`; detalle en Engram `attendance/fichaje-irreconciliable`. Pendiente como tarea ad hoc propia.
+
+**Siguiente acción:** el usuario integra la PR de restos (`fix/load-test-pila-de-pruebas`) con *merge commit* y borra la rama; sin migración, basta `git pull`. Pasada de validación del modo línea base en el runner: __RUN_BASELINE__. Después, en este orden: (1) tarea ad hoc **«fichaje irreconciliable»** en rama propia (RN-18 en doc 01 §4 con `/nueva-regla-de-negocio`, luego contrato aditivo, migraciones expand de los dos `CHECK`, resolución en `WorkDay`, `rejected_out_of_order`, incidencia `out_of_order_scan` por la pasada nocturna, contador en el quiosco, i18n del panel; cinco niveles de prueba + E2E «la cola llega a cero»); (2) la **3.7** con las decisiones ya borradas en el scratchpad de la sesión del 17-09 (Engram `fase-3/tarea-3.7/analisis`): `RQ-04` reetiquetado, bloqueo del PIN E2E, deterioro repartido al 25 %, canal sonoro E2E, Vitest 5 como primer paso, `retries: 0`.
+
 **Rama `feat/tarea-3.6-carga-k6` (desde `main` `5d13cf1`, con la 3.5 integrada por PR #66). Tarea 3.6 «Pruebas de carga k6 y ajuste de
 rendimiento» (RNF-P-06, RNF-P-02, RQ-08; restos de la 3.4 y la 3.5: endpoint de cumplimiento y `lastAcceptedScanOf()` bajo carga)
 IMPLEMENTADA, REVISADA (dos vueltas; tres para la reconciliación) y PROBADA el 17-09-2026; ver «Siguiente acción».** Dieciocho
@@ -779,6 +802,9 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 
 ## Trampas del entorno — leer antes de operar
 
+- **Un `workflow_dispatch` nuevo no se puede lanzar desde una rama hasta que el fichero existe en la rama por defecto** (404 en la API): la primera ejecución de un workflow nuevo es tras integrar; después sí se lanza con `--ref rama` (3.6, restos).
+- **El paquete instala con `APP_ENV=production` (lo exige `install.sh`) y el aprovisionamiento de k6 se niega contra producción**: el workflow declara la pila `staging` DESPUÉS de instalar y recrea los roles PHP; ningún camino del producto consulta `isProduction()` (3.6, restos).
+- **El runner de GitHub no alcanza RNF-P-06** (4 vCPU compartidas entre servidor y once generadores: ~29 fichajes/s con p95 de decenas de segundos, igual con el pool doblado): allí RNF-P-02/06 se juzgan contra `baseline.json` (`K6_LATENCY_VERDICT=baseline`), nunca contra el umbral (decisión 19).
 - **Prueba de carga en Docker Desktop: los `429` salen de `limit_conn conn_per_ip 64`, no de `limit_req`** (3.6): con p95 de 44 s
   cada origen acumula rate × latencia ≈ 400 conexiones abiertas; `summary.json.edge_limits` distingue las dos causas. Un rojo por
   429 en local no dice nada del presupuesto de tasa; el veredicto vale solo en el runner o en Linux.
