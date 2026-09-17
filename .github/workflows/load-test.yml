@@ -245,6 +245,15 @@ jobs:
           K6_ACKNOWLEDGE_TEST_DATABASE: "yes"
           K6_INSECURE_TLS: "1"
           K6_EDGE_SERVICE: nginx
+          # El runner no alcanza el umbral de RNF-P-02/06 (4 vCPU compartidas
+          # entre el servidor y los generadores: ~29 fichajes/s con p95 de
+          # decenas de segundos), asi que aqui esos dos requisitos se juzgan
+          # contra la linea base del propio runner (load-tests/k6/baseline.json:
+          # p95 <= +25 %, tramos/s >= -20 %), no contra el umbral, que se mide en
+          # el hardware de referencia con `make load-test` (decision 19, ficha
+          # 3.6). Contrato, RQ-03, RS-03, verificacion posterior y regla 21
+          # siguen bloqueando.
+          K6_LATENCY_VERDICT: baseline
           K6_GIT_SHA: ${{ github.sha }}
           K6_RUNNER: "github-${{ runner.os }}-${{ runner.arch }}"
         run: |

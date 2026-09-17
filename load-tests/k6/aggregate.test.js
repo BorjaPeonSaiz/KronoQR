@@ -218,6 +218,8 @@ test('publica en el resumen de quien y de donde salio la medida', () => {
   assert.equal(summary.k6_version, 'v2.2.0')
   assert.equal(summary.k6_image, 'grafana/k6:2.2.0@sha256:deadbeef')
   assert.equal(summary.instances, 10)
+  // De serie se juzga contra el requisito; el modo `baseline` hay que pedirlo.
+  assert.equal(summary.latency_verdict_mode, 'threshold')
 })
 
 // --- Un solo fallo cada vez --------------------------------------------------
@@ -335,4 +337,98 @@ test('no avisa de una regresion del 24 por ciento', () => {
 
   assert.equal(summary.baseline.regression, false)
   assert.equal(exitCodeOf(summary), 0)
+})
+
+// --- Modo «linea base»: el runner no juzga el umbral (decision 19) -----------
+
+/**
+ * La linea base de una pasada igual a la verde: p95 de 100 ms y 60 tramos/s con
+ * los mismos parametros (10 instancias, 6 fichajes/s, 1 s).
+ */
+const RUNNER_BASELINE = {
+  git_sha: 'deadbee',
+  runner: 'github-Linux-X64',
+  instances: 10,
+  scan_rate: 6,
+  duration_seconds: 1,
+  write_path: { p95: 100 },
+  totals: { shift_entries_per_second: 60 },
+  scenarios: { scan: { p95: 100 } },
+}
+
+const asBaseline = (overrides = {}) => ({ ...RUNNER_BASELINE, ...overrides })
+
+test('en modo linea base da verde cuando la pasada iguala a la anterior', () => {
+  const summary = runAnalysis(greenRun(), {
+    latencyVerdictMode: 'baseline',
+    baseline: asBaseline(),
+  })
+
+  assert.equal(summary.latency_verdict_mode, 'baseline')
+  assert.equal(statusOf(summary, 'RNF-P-02'), 'pass')
+  assert.equal(statusOf(summary, 'RNF-P-06'), 'pass')
+  // El detalle dice contra que se ha juzgado y que el umbral no se juzga aqui.
+  assert.match(summary.verdicts['RNF-P-02'].detail, /linea base del runner: p95 100 ms, 60 tramos\/s \(git_sha deadbee\)/)
+  assert.match(summary.verdicts['RNF-P-06'].detail, /El umbral de RNF-P-02 y RNF-P-06 NO se juzga en este runner/)
+  assert.equal(exitCodeOf(summary), 0)
+})
+
+test('en modo linea base el p95 que empeora un 26 por ciento es rojo', () => {
+  const summary = runAnalysis(greenRun({ scanDurationMs: 126 }), {
+    latencyVerdictMode: 'baseline',
+    baseline: asBaseline(),
+  })
+
+  assert.equal(statusOf(summary, 'RNF-P-02'), 'fail')
+  assert.equal(statusOf(summary, 'RNF-P-06'), 'pass')
+  assert.equal(exitCodeOf(summary), 1)
+})
+
+test('en modo linea base una caida del 21 por ciento en la tasa es roja', () => {
+  // 47 tramos/s frente a los 60 de la linea base: por debajo del 80 %.
+  const summary = runAnalysis(greenRun({ shiftProducing: 47 }), {
+    latencyVerdictMode: 'baseline',
+    baseline: asBaseline(),
+  })
+
+  assert.equal(statusOf(summary, 'RNF-P-06'), 'fail')
+  assert.match(summary.verdicts['RNF-P-06'].detail, /minimo 48\/s/)
+  assert.equal(statusOf(summary, 'RNF-P-02'), 'pass')
+  assert.equal(exitCodeOf(summary), 1)
+})
+
+test('en modo linea base una pasada con otros parametros no es evaluable', () => {
+  // Comparar un p95 de 120 s de carga con el de 1 s es comparar dos cosas
+  // distintas y llamarlo regresion.
+  const summary = runAnalysis(greenRun(), {
+    latencyVerdictMode: 'baseline',
+    baseline: asBaseline({ duration_seconds: 120 }),
+  })
+
+  assert.equal(statusOf(summary, 'RNF-P-02'), 'unmeasurable')
+  assert.equal(statusOf(summary, 'RNF-P-06'), 'unmeasurable')
+  assert.match(summary.verdicts['RNF-P-02'].detail, /duracion: 120 frente a 1/)
+  assert.equal(exitCodeOf(summary), 2)
+})
+
+test('en modo linea base sin linea base no hay veredicto, y lo dice', () => {
+  const summary = runAnalysis(greenRun(), { latencyVerdictMode: 'baseline' })
+
+  assert.equal(statusOf(summary, 'RNF-P-02'), 'unmeasurable')
+  assert.equal(statusOf(summary, 'RNF-P-06'), 'unmeasurable')
+  assert.match(summary.verdicts['RNF-P-02'].detail, /La PRIMERA pasada de este runner es la que la crea/)
+  assert.equal(exitCodeOf(summary), 2)
+})
+
+test('en modo linea base un rechazo al empleado sigue siendo rojo', () => {
+  // Lo que se relaja contra la linea base es la CAPACIDAD, no el trato al
+  // empleado: un 403 sobre un fichaje valido es una jornada perdida en
+  // cualquier maquina.
+  const summary = runAnalysis(greenRun({ extraScanStatus: '403' }), {
+    latencyVerdictMode: 'baseline',
+    baseline: asBaseline(),
+  })
+
+  assert.equal(statusOf(summary, 'RNF-P-06'), 'fail')
+  assert.match(summary.verdicts['RNF-P-06'].detail, /rechazos al empleado 1/)
 })

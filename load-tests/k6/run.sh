@@ -71,6 +71,18 @@ K6_INSECURE_TLS="${K6_INSECURE_TLS:-1}"
 # sesiones vivas. Fuera de una depuracion no se usa.
 K6_KEEP_FIXTURES="${K6_KEEP_FIXTURES:-0}"
 
+# Contra que se juzgan RNF-P-02 y RNF-P-06 (decision 19 de la ficha 3.6):
+#
+#   threshold  contra el requisito. Es el de serie y el que vale en hardware de
+#              referencia, que es donde el umbral significa algo.
+#   baseline   contra `baseline.json`, la pasada anterior de la MISMA maquina.
+#              Es lo que usa el workflow: en el runner de GitHub el servidor, la
+#              base de datos y los once generadores comparten 4 vCPU, y a 60
+#              fichajes/s ofrecidos el servidor sostiene 29 tramos/s con un p95
+#              de 26 s. Ahi el umbral solo puede dar un rojo permanente que se
+#              aprende a ignorar; lo que si se puede vigilar es la REGRESION.
+K6_LATENCY_VERDICT="${K6_LATENCY_VERDICT:-threshold}"
+
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "${script_dir}/../.." && pwd)"
 
@@ -444,6 +456,7 @@ aggregate_args=(
   "--git-sha=${git_sha}"
   "--runner=${runner}"
   "--k6-image=${K6_IMAGE}"
+  "--latency-verdict=${K6_LATENCY_VERDICT}"
 )
 
 k6_version="$(MSYS_NO_PATHCONV=1 docker run --rm "${K6_IMAGE}" version 2>/dev/null | head -n 1 || true)"
@@ -462,6 +475,11 @@ fi
 
 if [ -f "${script_dir}/baseline.json" ]; then
   aggregate_args+=("--baseline=${script_dir}/baseline.json")
+elif [ "${K6_LATENCY_VERDICT}" = "baseline" ]; then
+  # No se inventa un veredicto: el agregado lo marcara «no evaluable» y saldra
+  # con 2. Esto es solo para que quien lo vea sepa que hacer con el.
+  log "AVISO: K6_LATENCY_VERDICT=baseline y no hay ${script_dir}/baseline.json."
+  log "       Versiona el summary.json de esta pasada como baseline.json y vuelve a medir."
 fi
 
 aggregate_exit=0

@@ -25,6 +25,7 @@
 //        [--k6-image grafana/k6:2.2.0@sha256:…]
 //        [--edge-limits fichero.json] [--server-metrics fichero.json]
 //        [--baseline load-tests/k6/baseline.json]
+//        [--latency-verdict threshold|baseline]
 //
 // Las funciones puras se exportan para `aggregate.test.js`:
 //   node --test load-tests/k6/aggregate.test.js
@@ -44,7 +45,18 @@ const DEBOUNCE_CEILING_RATIO = 0.05 // el anti-rebote no puede ser la mayoria
 const REJECT_SPREAD_BUDGET_MS = 20 // RS-03: separacion maxima entre clases
 const DEFAULT_REJECTION_FLOOR_MS = 25 // si la instalacion no lo dice
 const COMPLIANCE_BUDGET_MS = 2000 // orientativo: ningun requisito lo fija
-const BASELINE_REGRESSION_RATIO = 1.25 // avisa, no falla
+
+/**
+ * Cuanto puede empeorar el p95 frente a la linea base.
+ *
+ * El MISMO numero en los dos usos que tiene, y a proposito: en modo `threshold`
+ * es un aviso sobre la tendencia y en modo `baseline` es el veredicto. Lo que
+ * cambia es quien manda, no cuanto se tolera.
+ */
+const BASELINE_REGRESSION_RATIO = 1.25
+
+/** Cuanto puede caer la tasa de tramos frente a la linea base (modo `baseline`). */
+const BASELINE_RATE_TOLERANCE = 0.8
 
 // Suelos de evaluabilidad.
 const ATTENDED_SAMPLES_FLOOR = 30 // RNF-P-02
@@ -70,6 +82,27 @@ const REALTIME_PHASES = new Set(['scan', 'resend_original'])
 const VALID_SCAN_PHASES = new Set(['scan', 'resend_original', 'resend_replay', 'batch'])
 
 const REJECT_CLASSES = ['signature', 'unknown', 'revoked']
+
+/**
+ * Los dos modos de juzgar la latencia y el pico.
+ *
+ * POR QUE EXISTE EL SEGUNDO (decision 19 de la ficha 3.6). En el runner de
+ * GitHub —4 vCPU donde el servidor, la base de datos y los once generadores
+ * comparten la misma maquina— el presupuesto de RNF-P-02 es inalcanzable por
+ * construccion: a 12 fichajes/s el p95 ya esta en 157 ms, y a 60 ofrecidos el
+ * servidor sostiene 29 tramos/s con un p95 de 26 s. Se comprobo ademas que
+ * subir `PHP_FPM_MAX_CHILDREN` de 20 a 40 no mueve la cifra (27,8 tramos/s,
+ * p95 27,6 s): el cuello es la CPU compartida, no el pool.
+ *
+ * Juzgar el umbral ahi solo puede dar dos resultados, y los dos son malos: un
+ * rojo permanente que se aprende a ignorar, o un umbral rebajado que deja de
+ * significar lo que dice el requisito. Asi que en el runner **no se juzga el
+ * umbral**: se juzga la REGRESION contra la linea base tomada en ese mismo
+ * runner. El umbral de RNF-P-02 y RNF-P-06 se sigue juzgando donde tiene
+ * sentido —hardware de referencia, `make load-test`— y ahi el modo es
+ * `threshold`, que es el de serie.
+ */
+const LATENCY_VERDICT_MODES = ['threshold', 'baseline']
 
 // --- Lectura del CSV ---------------------------------------------------------
 
@@ -283,6 +316,49 @@ function analyse(results, options = {}) {
     verdicts[requirement] = { status, detail }
   }
 
+  // --- Contra que se juzgan la latencia y el pico ----------------------------
+
+  const mode = LATENCY_VERDICT_MODES.includes(options.latencyVerdictMode)
+    ? options.latencyVerdictMode
+    : 'threshold'
+
+  const baseline = options.baseline ?? null
+  const baselineP95 = baseline?.write_path?.p95 ?? null
+  const baselineRate = baseline?.totals?.shift_entries_per_second ?? null
+
+  // LA LINEA BASE SOLO VALE PARA LA MISMA PASADA. Comparar un p95 de diez
+  // instancias con el de dos, o de 120 s con el de 30, es comparar dos cosas
+  // distintas y llamarlo regresion. Si los parametros no coinciden, el veredicto
+  // no es rojo: es que no hay con que juzgarlo.
+  const baselineParameters = [
+    ['instancias', baseline?.instances, instanceCount],
+    ['fichajes/s por instancia', baseline?.scan_rate, scanRate],
+    ['duracion', baseline?.duration_seconds, durationSeconds],
+  ]
+  const baselineMismatches = baselineParameters.filter(([, before, now]) => before !== now)
+
+  const baselineUsable =
+    baseline !== null && baselineP95 !== null && baselineRate !== null && baselineMismatches.length === 0
+
+  const baselineReference =
+    baseline === null
+      ? ''
+      : `linea base del runner: p95 ${baselineP95} ms, ${baselineRate} tramos/s ` +
+        `(git_sha ${baseline.git_sha ?? 'n/d'})`
+
+  const noBaselineDetail =
+    baseline === null
+      ? 'modo linea base sin --baseline: no hay con que comparar. La PRIMERA pasada de este ' +
+        'runner es la que la crea; versiona su summary.json como baseline.json y vuelve a medir.'
+      : `la linea base no es comparable con esta pasada (${baselineMismatches
+          .map(([name, before, now]) => `${name}: ${before} frente a ${now}`)
+          .join('; ')}). Mide con los mismos parametros o regenera la linea base.`
+
+  /** La coletilla que explica por que el umbral no se esta juzgando. */
+  const thresholdNotJudged =
+    'El umbral de RNF-P-02 y RNF-P-06 NO se juzga en este runner (decision 19): ' +
+    'solo en hardware de referencia con make load-test.'
+
   // --- Por escenario ---------------------------------------------------------
 
   const scenarioNames = [...new Set(durations.map((sample) => sample.scenario))].sort()
@@ -357,20 +433,43 @@ function analyse(results, options = {}) {
 
   const latencyMeasurable = write.samples >= ATTENDED_SAMPLES_FLOOR
 
-  verdict(
-    'RNF-P-02',
-    !latencyMeasurable
-      ? 'unmeasurable'
-      : write.p95 <= P95_BUDGET_MS && write.p99 <= P99_BUDGET_MS && instancesOutOfBudget.length === 0
-        ? 'pass'
-        : 'fail',
-    !latencyMeasurable
-      ? `solo ${write.samples} fichajes atendidos, hacen falta ${ATTENDED_SAMPLES_FLOOR}: ` +
-        'el servidor no llego a servir bastantes para medir un percentil'
-      : `p95 ${round(write.p95)} ms (presupuesto ${P95_BUDGET_MS}), p99 ${round(write.p99)} ms ` +
-        `(presupuesto ${P99_BUDGET_MS}) sobre ${write.samples} fichajes atendidos; ` +
-        `${instancesOutOfBudget.length} de ${perInstance.length} instancias fuera de presupuesto`,
-  )
+  const noSamplesDetail =
+    `solo ${write.samples} fichajes atendidos, hacen falta ${ATTENDED_SAMPLES_FLOOR}: ` +
+    'el servidor no llego a servir bastantes para medir un percentil'
+
+  if (mode === 'threshold') {
+    verdict(
+      'RNF-P-02',
+      !latencyMeasurable
+        ? 'unmeasurable'
+        : write.p95 <= P95_BUDGET_MS && write.p99 <= P99_BUDGET_MS && instancesOutOfBudget.length === 0
+          ? 'pass'
+          : 'fail',
+      !latencyMeasurable
+        ? noSamplesDetail
+        : `p95 ${round(write.p95)} ms (presupuesto ${P95_BUDGET_MS}), p99 ${round(write.p99)} ms ` +
+          `(presupuesto ${P99_BUDGET_MS}) sobre ${write.samples} fichajes atendidos; ` +
+          `${instancesOutOfBudget.length} de ${perInstance.length} instancias fuera de presupuesto`,
+    )
+  } else {
+    const allowedP95 = baselineP95 === null ? null : round(baselineP95 * BASELINE_REGRESSION_RATIO)
+
+    verdict(
+      'RNF-P-02',
+      !latencyMeasurable || !baselineUsable
+        ? 'unmeasurable'
+        : write.p95 <= baselineP95 * BASELINE_REGRESSION_RATIO
+          ? 'pass'
+          : 'fail',
+      !latencyMeasurable
+        ? noSamplesDetail
+        : !baselineUsable
+          ? `${noBaselineDetail} ${thresholdNotJudged}`
+          : `p95 ${round(write.p95)} ms sobre ${write.samples} fichajes atendidos, frente a un maximo ` +
+            `de ${allowedP95} ms (${BASELINE_REGRESSION_RATIO}x la ${baselineReference}). ` +
+            thresholdNotJudged,
+    )
+  }
 
   // --- RNF-P-06: 50 fichajes/s que producen tramo ----------------------------
 
@@ -402,25 +501,57 @@ function analyse(results, options = {}) {
   // instancias no puede decir si el servidor sostiene el pico.
   const peakOffered = offeredRate >= SHIFT_RATE_BUDGET
 
-  verdict(
-    'RNF-P-06',
-    !peakOffered
-      ? 'unmeasurable'
-      : shiftRate >= SHIFT_RATE_BUDGET &&
-          queueableRatio <= QUEUEABLE_DEGRADATION_RATIO &&
-          refusals.length === 0 &&
-          debounceRatio <= DEBOUNCE_CEILING_RATIO
-        ? 'pass'
-        : 'fail',
-    !peakOffered
-      ? `la carga ofrecida son ${offeredRate}/s y el umbral es ${SHIFT_RATE_BUDGET}/s: ` +
-        'sube INSTANCES o SCAN_RATE para poder juzgarlo'
-      : `${realtimeShifts} tramos en tiempo real en ${durationSeconds} s = ${shiftRate.toFixed(1)}/s ` +
-        `(presupuesto ${SHIFT_RATE_BUDGET}/s, ofrecidos ${offeredRate}/s); anti-rebote ` +
-        `${(debounceRatio * 100).toFixed(1)} %; degradacion encolable ${queueable.length} ` +
-        `(${(queueableRatio * 100).toFixed(2)} %, tope ${QUEUEABLE_DEGRADATION_RATIO * 100} %); ` +
-        `rechazos al empleado ${refusals.length}`,
-  )
+  const peakMeasured =
+    `${realtimeShifts} tramos en tiempo real en ${durationSeconds} s = ${shiftRate.toFixed(1)}/s ` +
+    `(ofrecidos ${offeredRate}/s); anti-rebote ${(debounceRatio * 100).toFixed(1)} %; ` +
+    `degradacion encolable ${queueable.length} (${(queueableRatio * 100).toFixed(2)} %); ` +
+    `rechazos al empleado ${refusals.length}`
+
+  // EN LOS DOS MODOS: un `4xx` que no sea 429 sobre un fichaje valido es una
+  // jornada perdida, y el anti-rebote por encima del techo significa que el
+  // guion se esta midiendo a si mismo. Ninguna de las dos cosas depende de la
+  // maquina, asi que ninguna se relaja contra la linea base.
+  const alwaysRequired = refusals.length === 0 && debounceRatio <= DEBOUNCE_CEILING_RATIO
+
+  if (mode === 'threshold') {
+    verdict(
+      'RNF-P-06',
+      !peakOffered
+        ? 'unmeasurable'
+        : shiftRate >= SHIFT_RATE_BUDGET &&
+            queueableRatio <= QUEUEABLE_DEGRADATION_RATIO &&
+            alwaysRequired
+          ? 'pass'
+          : 'fail',
+      !peakOffered
+        ? `la carga ofrecida son ${offeredRate}/s y el umbral es ${SHIFT_RATE_BUDGET}/s: ` +
+          'sube INSTANCES o SCAN_RATE para poder juzgarlo'
+        : `${peakMeasured}; presupuesto ${SHIFT_RATE_BUDGET}/s y tope de degradacion ` +
+          `${QUEUEABLE_DEGRADATION_RATIO * 100} %`,
+    )
+  } else {
+    const allowedRate = baselineRate === null ? null : Math.round(baselineRate * BASELINE_RATE_TOLERANCE * 10) / 10
+
+    verdict(
+      'RNF-P-06',
+      !peakOffered || !baselineUsable
+        ? 'unmeasurable'
+        : shiftRate >= baselineRate * BASELINE_RATE_TOLERANCE && alwaysRequired
+          ? 'pass'
+          : 'fail',
+      !peakOffered
+        ? `la carga ofrecida son ${offeredRate}/s y el umbral es ${SHIFT_RATE_BUDGET}/s: ` +
+          'sube INSTANCES o SCAN_RATE para poder juzgarlo'
+        : !baselineUsable
+          ? `${noBaselineDetail} ${thresholdNotJudged}`
+          : // La degradacion encolable NO se juzga aqui: en este runner es el
+            // sintoma de la CPU compartida y ya esta contada en la tasa. Lo que
+            // se exige es que la tasa no caiga respecto a lo que esta maquina ya
+            // demostro sostener.
+            `${peakMeasured}; minimo ${allowedRate}/s (${BASELINE_RATE_TOLERANCE}x la ${baselineReference}). ` +
+            thresholdNotJudged,
+    )
+  }
 
   // --- RQ-03: idempotencia bajo carga ----------------------------------------
 
@@ -528,18 +659,18 @@ function analyse(results, options = {}) {
 
   // --- Linea base ------------------------------------------------------------
 
-  let baseline = null
+  let baselineReport = null
 
-  if (options.baseline !== undefined && options.baseline !== null) {
-    const before = options.baseline?.scenarios?.scan?.p95 ?? null
+  if (baseline !== null) {
+    const before = baseline?.scenarios?.scan?.p95 ?? null
     const now = scenarios.scan?.p95 ?? null
 
     if (before === null || now === null) {
-      baseline = { note: 'la linea base o esta pasada no traen el p95 de scan', regression: null }
+      baselineReport = { note: 'la linea base o esta pasada no traen el p95 de scan', regression: null }
     } else {
       const ratio = now / before
 
-      baseline = {
+      baselineReport = {
         note:
           `p95 de scan ${now} ms frente a ${before} ms de la linea base ` +
           `(${((ratio - 1) * 100).toFixed(1)} %)` +
@@ -565,6 +696,9 @@ function analyse(results, options = {}) {
     duration_seconds: durationSeconds,
     scan_rate: scanRate,
     offered_scan_rate: offeredRate,
+    // `threshold` (el de serie) juzga RNF-P-02 y RNF-P-06 contra el requisito;
+    // `baseline`, contra la pasada anterior de la MISMA maquina (decision 19).
+    latency_verdict_mode: mode,
     rejection_floor_ms: rejectionFloorMs,
     debounce_seconds: options.debounceSeconds ?? null,
     scenarios,
@@ -616,7 +750,7 @@ function analyse(results, options = {}) {
     edge_limits: options.edgeLimits ?? null,
     server_metrics: options.serverMetrics ?? null,
     verdicts,
-    baseline,
+    baseline: baselineReport,
   }
 }
 
@@ -650,6 +784,11 @@ function formatReport(summary) {
       `ofrecidos: ${summary.offered_scan_rate} fichajes/s`,
   )
   say(`generador ${summary.k6_version ?? 'n/d'}   commit ${summary.git_sha ?? 'n/d'}   runner ${summary.runner ?? 'n/d'}`)
+  say(
+    summary.latency_verdict_mode === 'baseline'
+      ? 'RNF-P-02 y RNF-P-06 se juzgan contra la LINEA BASE de esta maquina, no contra el umbral (decision 19).'
+      : 'RNF-P-02 y RNF-P-06 se juzgan contra el UMBRAL del requisito.',
+  )
   say('')
   say('Latencia de las respuestas CONTESTADAS por el servidor, por escenario (ms):')
 
@@ -826,6 +965,7 @@ function main() {
     runner: named.runner ?? null,
     k6Version: named['k6-version'] ?? null,
     k6Image: named['k6-image'] ?? null,
+    latencyVerdictMode: named['latency-verdict'] ?? 'threshold',
     edgeLimits: readJsonOrNull(named['edge-limits']),
     serverMetrics: readJsonOrNull(named['server-metrics']),
     baseline: readJsonOrNull(named.baseline),

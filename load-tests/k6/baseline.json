@@ -1,0 +1,269 @@
+{
+  "generated_at": "2026-09-17T21:43:06.793Z",
+  "git_sha": "04f672684a1cb7a8e280ddef9292dc0d77da0368",
+  "runner": "github-Linux-X64",
+  "k6_version": "k6 v2.2.0 (commit/00a9a1b7f5, go1.26.5, linux/amd64)",
+  "k6_image": "grafana/k6:2.2.0@sha256:9bd01d6941fca969cb61bb57d2da5ee9b385fe2aa8881df3798c196564d6ace6",
+  "instances": 10,
+  "instance_ids": [
+    "0",
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "panel"
+  ],
+  "duration_seconds": 120,
+  "scan_rate": 6,
+  "offered_scan_rate": 60,
+  "rejection_floor_ms": 25,
+  "debounce_seconds": 60,
+  "scenarios": {
+    "batch": {
+      "requirements": [
+        "RF-KI-04"
+      ],
+      "samples": 29,
+      "answered_samples": 12,
+      "p50": 10381.6,
+      "p95": 22919.1,
+      "p99": 22919.1,
+      "max": 22919.1,
+      "statuses": {
+        "207": 12,
+        "429": 17
+      }
+    },
+    "compliance": {
+      "requirements": [
+        "RF-PA-06"
+      ],
+      "samples": 53,
+      "answered_samples": 53,
+      "p50": 19783.6,
+      "p95": 37114.4,
+      "p99": 54821.7,
+      "max": 54821.7,
+      "statuses": {
+        "200": 53
+      }
+    },
+    "reject": {
+      "requirements": [
+        "RS-03"
+      ],
+      "samples": 1163,
+      "answered_samples": 309,
+      "p50": 18243.2,
+      "p95": 27511.5,
+      "p99": 53617.2,
+      "max": 54934.3,
+      "statuses": {
+        "0": 3,
+        "422": 309,
+        "429": 850,
+        "504": 1
+      }
+    },
+    "resend": {
+      "requirements": [
+        "RQ-03",
+        "RF-AT-07"
+      ],
+      "samples": 1208,
+      "answered_samples": 241,
+      "p50": 18324.5,
+      "p95": 26587.7,
+      "p99": 45959.3,
+      "max": 57097.3,
+      "statuses": {
+        "0": 8,
+        "200": 241,
+        "429": 958,
+        "502": 1
+      }
+    },
+    "scan": {
+      "requirements": [
+        "RNF-P-06",
+        "RNF-P-02",
+        "RQ-08"
+      ],
+      "samples": 6792,
+      "answered_samples": 3345,
+      "p50": 18743.1,
+      "p95": 26279.3,
+      "p99": 47364.5,
+      "max": 59962.6,
+      "statuses": {
+        "0": 48,
+        "200": 3345,
+        "429": 3393,
+        "502": 2,
+        "504": 4
+      }
+    }
+  },
+  "reject_classes": {
+    "signature": {
+      "samples": 121,
+      "offered": 390,
+      "min": 544.8,
+      "p50": 18238,
+      "p95": 25390.4,
+      "max": 54475.3,
+      "measurable": false
+    },
+    "unknown": {
+      "samples": 89,
+      "offered": 388,
+      "min": 4233.9,
+      "p50": 18095.1,
+      "p95": 23730.2,
+      "max": 54042.2,
+      "measurable": false
+    },
+    "revoked": {
+      "samples": 99,
+      "offered": 385,
+      "min": 6967.3,
+      "p50": 18451.4,
+      "p95": 34788.9,
+      "max": 54934.3,
+      "measurable": false
+    }
+  },
+  "checks": {
+    "total": 9295,
+    "failed": []
+  },
+  "totals": {
+    "shift_producing_realtime": 3497,
+    "shift_entries_per_second": 29.1,
+    "shift_producing_batch": 600,
+    "batch_entries_per_second": 5,
+    "debounced": 0,
+    "debounced_ratio": 0,
+    "queueable_degradation": 4431,
+    "employee_refusals": 0,
+    "resend_identical": 66,
+    "resend_divergent": 0,
+    "resend_skipped": 538,
+    "batch_accepted": 600,
+    "batch_debounced": 0,
+    "batch_retryable": 0,
+    "batch_rejected": 0,
+    "compliance_p95": 37114.4,
+    "dropped_iterations": 469,
+    "dropped_iterations_by_scenario": {
+      "scan": 415,
+      "reject": 46,
+      "resend": 1,
+      "compliance": 7
+    }
+  },
+  "write_path": {
+    "samples": 3497,
+    "min": 642.7,
+    "p50": 18703.5,
+    "p95": 26391.4,
+    "p99": 48572.3,
+    "max": 59962.6,
+    "per_instance": [
+      {
+        "instance": "0",
+        "samples": 353,
+        "p95": 27655.3,
+        "p99": 53117.6
+      },
+      {
+        "instance": "1",
+        "samples": 338,
+        "p95": 26047.5,
+        "p99": 46712.8
+      },
+      {
+        "instance": "2",
+        "samples": 340,
+        "p95": 26373.8,
+        "p99": 44248
+      },
+      {
+        "instance": "3",
+        "samples": 344,
+        "p95": 32411,
+        "p99": 54432.4
+      },
+      {
+        "instance": "4",
+        "samples": 339,
+        "p95": 26396,
+        "p99": 38483.5
+      },
+      {
+        "instance": "5",
+        "samples": 365,
+        "p95": 26212.1,
+        "p99": 38140.5
+      },
+      {
+        "instance": "6",
+        "samples": 337,
+        "p95": 29311.8,
+        "p99": 54161.7
+      },
+      {
+        "instance": "7",
+        "samples": 367,
+        "p95": 23838.8,
+        "p99": 35968.6
+      },
+      {
+        "instance": "8",
+        "samples": 358,
+        "p95": 23572.5,
+        "p99": 54143.3
+      },
+      {
+        "instance": "9",
+        "samples": 356,
+        "p95": 26115.2,
+        "p99": 35228.5
+      }
+    ]
+  },
+  "edge_limits": {
+    "service": "nginx",
+    "limiting_requests": 0,
+    "limiting_connections": 5218
+  },
+  "server_metrics": null,
+  "verdicts": {
+    "CHECKS": {
+      "status": "pass",
+      "detail": "9295 comprobaciones de k6, 0 con fallos"
+    },
+    "RNF-P-02": {
+      "status": "fail",
+      "detail": "p95 26391.4 ms (presupuesto 150), p99 48572.3 ms (presupuesto 400) sobre 3497 fichajes atendidos; 10 de 10 instancias fuera de presupuesto"
+    },
+    "RNF-P-06": {
+      "status": "fail",
+      "detail": "3497 tramos en tiempo real en 120 s = 29.1/s (presupuesto 50/s, ofrecidos 60/s); anti-rebote 0.0 %; degradacion encolable 4431 (55.19 %, tope 0.5 %); rechazos al empleado 0"
+    },
+    "RQ-03": {
+      "status": "unmeasurable",
+      "detail": "66 reenvios identicos al original, 0 distintos, 538 sin respuesta del servidor en alguno de los dos envios — NO EVALUABLE: 66 pares comparables de 604 intentados (hacen falta 10 y el 50 %)"
+    },
+    "RS-03": {
+      "status": "unmeasurable",
+      "detail": "solo 0 de 3 clases con muestras suficientes (20 respuestas 422 y el 50 % de las ofrecidas)"
+    }
+  },
+  "baseline": null
+}

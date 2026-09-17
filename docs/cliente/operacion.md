@@ -1219,10 +1219,20 @@ apareciendo al día.
 
 El producto se publica con un umbral escrito: **50 fichajes por segundo
 sostenidos en el servidor, con el 95 % de las respuestas por debajo de 150 ms**
-(`RNF-P-06` y `RNF-P-02`). **Se mide antes de cada versión mayor, como paso del
-procedimiento de publicación**, y el resultado viaja con la versión. Hay además
-una red de seguridad automática que vuelve a medirlo al etiquetar la versión,
-por si alguien se saltó el paso.
+(`RNF-P-06` y `RNF-P-02`). **Se mide antes de cada versión mayor sobre hardware
+de referencia y con esta misma orden, `make load-test`, como paso del
+procedimiento de publicación**, y el resultado viaja con la versión. Es el mismo
+procedimiento que puedes repetir tú sobre tu servidor.
+
+Al etiquetar la versión hay además una comprobación automática en la
+infraestructura del fabricante, pero **esa no juzga el umbral y no debe leerse
+como si lo hiciera**: corre en una máquina compartida donde el servidor y los
+generadores de carga se reparten la misma CPU, así que su latencia no es
+comparable con la de un servidor dedicado. Lo que sí comprueba ahí, que es lo
+que aporta, son dos cosas distintas y las dos necesarias: que la versión nueva
+**no ha empeorado** respecto de la anterior medida en la misma máquina, y que
+**bajo sobrecarga el registro sigue siendo correcto** —ningún tramo duplicado,
+totales cuadrados y cadena de auditoría intacta—.
 
 Traducido a tu hotel son **dos límites distintos**, y conviene no confundirlos:
 
@@ -1325,14 +1335,20 @@ cifra no se puede comparar con otra.
 ### 17.3 Cómo leer el veredicto y qué tocar
 
 Lo primero: **no hay ninguna cifra de latencia tuya escrita en esta guía, y no
-la va a haber.** Depende de tu hardware, de tu disco y de tu red. El fabricante
-publica su propia línea base en `load-tests/k6/baseline.json` **con cada versión
-mayor**, medida en el servidor de su integración continua: sirve para ver que
-una versión nueva ha empeorado respecto de la anterior, **no** para decirte qué
-p95 deberías ver en tu sala de servidores. Si ese fichero no está, la
-herramienta se limita a aplicar el presupuesto —los 150 ms y los 50
-fichajes/s— y no compara con nada. La cifra de tu instalación sale de tu propia
-ejecución de `make load-test`.
+la va a haber.** Depende de tu hardware, de tu disco y de tu red. La cifra de tu
+instalación sale de tu propia ejecución de `make load-test` sobre tu servidor.
+
+**Qué es —y qué no es— la «línea base» del fabricante.**
+`load-tests/k6/baseline.json` guarda el resultado de una pasada en la máquina de
+integración continua del fabricante: p95 y tramos por segundo, junto al `git_sha`
+de la versión medida, la máquina y la versión de la herramienta. Sirve para una
+sola cosa: comparar la versión siguiente **consigo misma en esa misma máquina**
+y detectar que ha empeorado —se admite hasta un 25 % más de p95 y hasta un 20 %
+menos de tramos por segundo—. **No es una promesa de latencia ni el p95 que
+debería dar tu servidor**: en esa máquina el servidor comparte CPU con los once
+generadores de carga, de modo que sus milisegundos no significan nada fuera de
+ella. Si el fichero no está, la herramienta se limita a aplicar el presupuesto
+—los 150 ms y los 50 fichajes/s— y no compara con nada.
 
 | Lo que ves | Qué está pasando | Qué hacer |
 | --- | --- | --- |
@@ -1343,6 +1359,29 @@ ejecución de `make load-test`.
 | **Fichajes sueltos que fallan con un error de servidor**, mientras el resto va bien | Una transacción se quedó colgada y los demás esperaban por ella; los topes de la base de datos (§17.4) la cortan | Nada urgente: el quiosco **encola y reenvía**, y nadie se queda sin fichar. Si se repite, sigue el `trace_id` de una de esas peticiones en el registro técnico (§10.3) |
 | **Respuestas `429` sobre fichajes válidos** | El límite del borde o el de por dispositivo están frenando | Comprueba que los quioscos caen dentro de `KIOSK_VLAN_CIDR` ([`instalacion.md`](instalacion.md) §6). Es la causa en la inmensa mayoría de los casos |
 | **Un rechazo tarda claramente más o menos que otro** | Es un fallo del producto, no de tu servidor | Abre incidencia con el fabricante y adjunta `summary.json`: un rechazo que se distingue por el tiempo permitiría averiguar desde fuera qué tarjetas existen |
+
+**Subir `PHP_FPM_MAX_CHILDREN` no mueve la cifra si la CPU está saturada**, y
+conviene verlo con números antes de gastar una tarde en ello. Estas medidas son
+de una máquina de cuatro núcleos que además ejecutaba los once generadores de
+carga —es decir, con el servidor y la carga peleándose por la misma CPU—, y por
+eso mismo ilustran bien el caso:
+
+| Carga ofrecida | Pool | Lo que se sostuvo | p95 |
+| --- | --- | --- | --- |
+| 12 fichajes/s | 20 trabajadores | 12 fichajes/s | 157 ms (p50: 86 ms) |
+| 60 fichajes/s | 20 trabajadores | 29 tramos/s | 26 s |
+| 60 fichajes/s | **40 trabajadores** | **27,8 tramos/s** | sin cambio apreciable |
+
+Doblar el pool no mejoró nada: no faltaban trabajadores, faltaba CPU. Con la
+carga suave, la misma máquina daba un p95 de 157 ms. Y en la saturación, los
+rechazos no vinieron del límite de fichajes por minuto sino del **límite de
+conexiones simultáneas** del servidor web, que es el síntoma típico de un
+servidor que ya no da abasto.
+
+**Lo importante: en todas esas pasadas la comprobación posterior salió
+íntegra** —ningún tramo duplicado, totales cuadrados y cadena de auditoría
+intacta—. Un servidor al límite **responde tarde; no escribe mal**. Y lo que el
+empleado ve es lo de siempre: el quiosco confirma, encola y reenvía.
 
 **El hardware, como referencia.** Los mínimos publicados son **2 núcleos y
 4 GB**; el recomendado, **4 núcleos y 8 GB** ([`instalacion.md`](instalacion.md)
