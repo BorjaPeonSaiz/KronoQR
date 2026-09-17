@@ -158,6 +158,7 @@
 - { id: RF-PR-05,  fase: 3, titulo: "Resumen semanal por correo al responsable de cada departamento" }
 - { id: RF-PR-06,  fase: 3, titulo: "Detección de patrones anómalos de uso de credencial: dos fichajes consecutivos en el mismo quiosco separados por segundos, coincidencias sistemátic..." }
 - { id: RN-16,     fase: 3, titulo: "Secuencia imposible de credencial: dos escaneos de la misma credencial en dispositivos distintos separados por menos del tiempo mínimo de tránsito..." }
+- { id: RN-17,     fase: 3, titulo: "Jornada semanal ordinaria: se señala la semana del perfil que supera max_weekly_hours. Informativa, no abre incidencia (art. 34.1 ET, cómputo anual)" }
 - { id: RNF-D-01,  fase: 3, titulo: "Disponibilidad del servicio: 99,5 % mensual" }
 - { id: RNF-P-02,  fase: 3, titulo: "Latencia del endpoint de fichaje en servidor" }
 - { id: RNF-P-06,  fase: 3, titulo: "Pico de concurrencia soportado" }

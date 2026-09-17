@@ -1404,6 +1404,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/compliance/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Vista de cumplimiento
+         * @description Las alertas de cumplimiento del periodo, para el alcance de quien
+         *     pregunta (RF-PA-06): descanso insuficiente entre jornadas (RN-10),
+         *     jornada diaria por encima de la ordinaria (RN-11), tramo continuado sin
+         *     pausa (RN-12) y semana por encima de la jornada ordinaria (RN-17).
+         *
+         *     **Los umbrales vienen del perfil de cumplimiento del centro**
+         *     (`compliance_profiles`, RF-PD-07, regla dura 14), nunca del codigo, y
+         *     **viajan en la respuesta** (`meta.rules[]`, `meta.profile`) para que la
+         *     pantalla diga con que criterio se ha avisado: un aviso cuyo criterio no
+         *     se ve es un aviso que nadie defiende ante un empleado. Un cliente con
+         *     otro convenio cambia el perfil y esta vista cambia con el, sin
+         *     desplegar nada (ADR-017).
+         *
+         *     **Cuenta exactamente lo mismo que la bandeja de incidencias.** RN-10 se
+         *     mide solo entre jornadas —la ultima salida de la jornada anterior
+         *     frente a la primera entrada de esta—, RN-11 sobre la suma de los tramos
+         *     **cerrados** de la jornada (`daily_totals`: un tramo abierto vale cero
+         *     y la jornada sale marcada `has_open_shift`) y RN-12 sobre el tramo
+         *     cerrado mas largo. Cuando la bandeja tiene una incidencia para la misma
+         *     persona, jornada y tipo, el hallazgo la enlaza en `incident`. **Las
+         *     reglas suspendidas no se cuentan**: RN-12 lo esta hasta que exista la
+         *     pausa declarada (documento 01 §4, ADR-024), y `meta.rules[]` la lista
+         *     con `evaluated: false` y su umbral en lugar de callarla.
+         *
+         *     **Con una excepcion, y conviene conocerla:** cuando un tramo suelto ya
+         *     explica el dia por RN-08 —mas de `ATTENDANCE_MAX_SHIFT_HOURS` seguidas—
+         *     la bandeja abre **una sola** incidencia, colgada de ese tramo, y no una
+         *     segunda por RN-11; dos incidencias que dicen lo mismo con distinta
+         *     precision solo hacen ruido en la bandeja de quien las revisa. La vista si
+         *     emite su `daily_excess`, porque lo que mide es el dia, y enlaza esa
+         *     incidencia en `incident`. El hallazgo y la incidencia siguen siendo el
+         *     mismo hecho; lo que cambia es que la incidencia señala el tramo y el
+         *     hallazgo el dia.
+         *
+         *     **Se recalcula con el umbral vigente en el momento de la consulta**, y
+         *     eso la distingue de la bandeja: la revision diaria no reprocesa el pasado
+         *     —una incidencia abierta con el umbral de ayer sigue abierta— mientras que
+         *     esta vista vuelve a medir las jornadas del periodo cada vez que se pide.
+         *     Bajar `min_rest_hours` hace aparecer jornadas que ayer no salian **sin**
+         *     abrir ninguna incidencia nueva. Por eso `meta.profile` y `meta.rules[]`
+         *     viajan en la respuesta: son el criterio con el que se ha medido **esta**
+         *     respuesta, y sin ellos dos capturas de la misma pantalla en fechas
+         *     distintas serian imposibles de explicar (documento 01 §4).
+         *
+         *     **RN-17 es informativa.** El art. 34.1 ET fija la jornada semanal en
+         *     computo anual, asi que una semana por encima no es por si sola un
+         *     incumplimiento: se señala para que RRHH la contraste con el convenio, y
+         *     no abre incidencia. La semana empieza en `meta.week_starts_on` (ISO
+         *     8601: 1 lunes … 7 domingo) y se compone de siete fechas civiles
+         *     `work_date`, ya en la zona del centro (RN-05). **Toda semana que toque
+         *     el rango se evalua sobre sus siete dias**, aunque el rango la corte:
+         *     evaluar solo la parte de dentro daria totales que no suman lo que la
+         *     persona ve en su registro.
+         *
+         *     **Minutos enteros en todas partes** (`measured_minutes`,
+         *     `threshold_minutes`, `difference_minutes`): nunca horas con decimales,
+         *     para que las partes sumen el total. La aritmetica de descansos y tramos
+         *     se hace restando instantes UTC (RN-09): el cambio de hora no altera
+         *     nada.
+         *
+         *     **Sin `from` ni `to` se toman los 28 dias que terminan hoy** en la zona
+         *     del centro: cuatro semanas, la ventana que RRHH revisa. El rango no
+         *     puede superar el presupuesto sincrono de la instalacion
+         *     (`REPORTING_COMPLIANCE_MAX_RANGE_DAYS`, 92 de serie): por encima
+         *     responde `422`, como el informe por periodo. **Sin paginacion**: solo
+         *     salen los incumplimientos, que son escasos, y el techo lo pone el
+         *     rango.
+         *
+         *     **El alcance por departamento se aplica en la consulta** (RF-ID-03),
+         *     incluidos los recuentos de `meta.totals`: un
+         *     `responsable_departamento` recibe a su gente y solo a su gente, y un
+         *     `department_id` fuera de su alcance devuelve `data` vacio, no `403`
+         *     (mismo criterio que la presencia en vivo). El `auditor` lleva
+         *     `attendance:read` y aun asi recibe `403`: auditar es mirar lo que quedo
+         *     escrito, no la gestion del dia.
+         *
+         *     **Solo lee.** Nada de lo que devuelve cambia el registro ni ninguna
+         *     incidencia. **No se degrada con la licencia** (ADR-023): es una lectura
+         *     del registro legal contra los umbrales legales.
+         *
+         *     **Es un acceso a datos personales de terceros y queda registrado en
+         *     `audit_log`** (RS-05), con el alcance —periodo, filtros, cuantas filas—
+         *     y nunca con lo divulgado (regla dura 21).
+         */
+        get: operations["getComplianceSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/employees/{uuid}/workdays": {
         parameters: {
             query?: never;
@@ -7348,6 +7450,296 @@ export interface components {
             valid_from: string;
         };
         /**
+         * ComplianceRuleName
+         * @description Que regla del perfil de cumplimiento se ha superado (RF-PA-06). Los
+         *     nombres son los de `incidents.type` cuando la regla abre incidencia,
+         *     para que un hallazgo de esta vista y la incidencia de la bandeja se
+         *     llamen igual:
+         *
+         *     - `insufficient_rest`: descanso entre jornadas por debajo del minimo
+         *       (RN-10, `min_rest_hours`).
+         *     - `daily_excess`: la suma de los tramos cerrados de la jornada supera la
+         *       jornada diaria ordinaria (RN-11, `max_daily_hours`). En la bandeja es
+         *       `long_shift`, que alli cubre tambien el tramo suelto de RN-08; aqui se
+         *       nombra por lo que mide.
+         *     - `missing_break`: tramo continuado por encima del maximo sin pausa
+         *       (RN-12, `break_required_after_hours`). **Suspendida** hasta que exista
+         *       la pausa declarada: `meta.rules[]` lo dice.
+         *     - `weekly_excess`: la suma de la semana del perfil supera la jornada
+         *       semanal ordinaria (RN-17, `max_weekly_hours`). Informativa: no abre
+         *       incidencia.
+         * @example insufficient_rest
+         * @enum {string}
+         */
+        ComplianceRuleName: "insufficient_rest" | "daily_excess" | "missing_break" | "weekly_excess";
+        /**
+         * ComplianceWeek
+         * @description La semana del perfil sobre la que se ha medido un exceso semanal: siete
+         *     fechas civiles desde `meta.week_starts_on`. Se evalua completa aunque el
+         *     rango pedido la corte.
+         */
+        ComplianceWeek: {
+            /**
+             * Format: date
+             * @example 2026-03-09
+             */
+            starts_on: string;
+            /**
+             * Format: date
+             * @example 2026-03-15
+             */
+            ends_on: string;
+        };
+        /**
+         * ComplianceIncidentLink
+         * @description La incidencia de la bandeja que describe este mismo hecho —misma
+         *     persona, misma jornada, mismo tipo— cuando existe. Es la demostracion
+         *     visible de que la vista y la bandeja cuentan lo mismo, y el enlace para
+         *     resolverla.
+         */
+        ComplianceIncidentLink: {
+            /**
+             * Format: int64
+             * @example 42
+             */
+            id: number;
+            status: components["schemas"]["IncidentStatus"];
+        };
+        /**
+         * ComplianceFinding
+         * @description Un incumplimiento del perfil de cumplimiento, medido sobre una jornada
+         *     (RN-10, RN-11, RN-12) o sobre una semana (RN-17).
+         *
+         *     **`work_date` y `week` son excluyentes**: las reglas diarias llevan la
+         *     jornada y `week` nulo; la semanal lleva la semana y `work_date` nulo.
+         *
+         *     **Todos los minutos son enteros** y `difference_minutes` es siempre
+         *     positivo: lo que falta de descanso en RN-10, lo que sobra de jornada,
+         *     tramo o semana en las otras tres. Con los tres numeros la pantalla
+         *     enseña «10 h 00 de 12 h 00 (faltan 2 h 00)» sin calcular nada.
+         */
+        ComplianceFinding: {
+            rule: components["schemas"]["ComplianceRuleName"];
+            /**
+             * @description El identificador de la regla en el documento de especificaciones
+             *     (`RN-10`, `RN-11`, `RN-12`, `RN-17`), que es como la nombra quien lee
+             *     un asiento de auditoria o defiende el aviso ante un empleado.
+             * @example RN-10
+             * @enum {string}
+             */
+            requirement: "RN-10" | "RN-11" | "RN-12" | "RN-17";
+            employee: components["schemas"]["IncidentEmployee"];
+            /**
+             * Format: date
+             * @description La jornada medida (RN-05). Nulo en `weekly_excess`.
+             * @example 2026-03-14
+             */
+            work_date: string | null;
+            /** @description La semana medida. Solo en `weekly_excess`. */
+            week: components["schemas"]["ComplianceWeek"] | null;
+            /**
+             * @description Lo medido: el descanso real en RN-10; la suma de tramos cerrados de
+             *     la jornada en RN-11; la duracion del tramo continuado en RN-12; la
+             *     suma de la semana en RN-17.
+             * @example 600
+             */
+            measured_minutes: number;
+            /**
+             * @description El umbral del perfil con el que se ha comparado, en minutos.
+             * @example 720
+             */
+            threshold_minutes: number;
+            /**
+             * @description Cuanto falta (RN-10) o cuanto sobra (RN-11, RN-12, RN-17). Siempre
+             *     positivo, porque solo salen incumplimientos.
+             * @example 120
+             */
+            difference_minutes: number;
+            /**
+             * Format: uuid
+             * @description El tramo que señala el hallazgo: el que **abre** la jornada en RN-10
+             *     (el que empezo antes de tiempo), el tramo continuado en RN-12. Nulo
+             *     en RN-11 y RN-17, donde ningun tramo por si solo explica el exceso.
+             * @example 0199f2c1-8a10-7b40-9c50-6d7e8f9a0b11
+             */
+            shift_entry_uuid: string | null;
+            /**
+             * @description Si la jornada (o alguna jornada de la semana) tiene un tramo todavia
+             *     abierto. El total mostrado cuenta ese tramo como cero y puede
+             *     crecer: es un aviso de lectura, no una segunda alerta.
+             * @example false
+             */
+            has_open_shift: boolean;
+            /**
+             * @description La incidencia de la bandeja para el mismo hecho, si existe. Nula en
+             *     `weekly_excess` (RN-17 no abre incidencia), en `missing_break`
+             *     mientras siga suspendida, y cuando la revision diaria aun no ha
+             *     pasado por esa jornada.
+             *
+             *     En `daily_excess` puede venir una incidencia de tipo `long_shift`
+             *     **colgada de un tramo**: es el caso de una jornada que RN-08 ya
+             *     explico con un solo turno desmedido, donde la bandeja abre esa y no
+             *     una segunda por el dia. Es la misma jornada y el enlace lleva a donde
+             *     hay que ir.
+             */
+            incident: components["schemas"]["ComplianceIncidentLink"] | null;
+        };
+        /**
+         * ComplianceRuleStatus
+         * @description Una regla del perfil tal como se ha aplicado en esta respuesta: su
+         *     umbral, y si se ha evaluado. Las cuatro van siempre, se filtre o no,
+         *     porque el criterio es parte de la vista.
+         */
+        ComplianceRuleStatus: {
+            rule: components["schemas"]["ComplianceRuleName"];
+            /**
+             * @example RN-12
+             * @enum {string}
+             */
+            requirement: "RN-10" | "RN-11" | "RN-12" | "RN-17";
+            /** @example 360 */
+            threshold_minutes: number;
+            /**
+             * @description `false` cuando la regla esta suspendida (documento 01 §4,
+             *     `ComplianceRuleSuspension`): el umbral se enseña y no se aplica, y
+             *     `data` no lleva ningun hallazgo suyo.
+             * @example false
+             */
+            evaluated: boolean;
+            /**
+             * @description Por que no se evalua, cuando `evaluated` es `false`. Hoy solo
+             *     `awaiting_declared_break`: RN-12 espera a la pausa declarada
+             *     (ADR-024, RF-AT-12).
+             * @example awaiting_declared_break
+             * @enum {string|null}
+             */
+            suspension_reason: "awaiting_declared_break" | null;
+        };
+        /**
+         * ComplianceProfileRef
+         * @description El perfil de cumplimiento con el que se ha evaluado, para que la
+         *     pantalla lo nombre («12 h segun el perfil ES-hosteleria»). Solo lo
+         *     identifica: los umbrales van en `rules[]`.
+         */
+        ComplianceProfileRef: {
+            /**
+             * Format: int64
+             * @example 1
+             */
+            id: number;
+            /** @example ES-hosteleria */
+            name: string;
+            /** @example ES */
+            jurisdiction: string;
+        };
+        /**
+         * ComplianceTotals
+         * @description Recuentos del alcance y del periodo pedidos. **Acotados por el alcance**
+         *     igual que `data` (RF-ID-03): un responsable no sabe cuanta gente de otro
+         *     departamento incumple.
+         */
+        ComplianceTotals: {
+            /**
+             * @description Hallazgos por regla, con las cuatro claves siempre presentes (cero
+             *     incluido). **Describe el periodo entero, se filtre o no `data`**: las
+             *     cuatro tarjetas de la pantalla son la foto completa y no cambian al
+             *     pulsar una de ellas.
+             */
+            by_rule: {
+                insufficient_rest: number;
+                daily_excess: number;
+                missing_break: number;
+                weekly_excess: number;
+            };
+            /**
+             * @description Personas con al menos un hallazgo **en el periodo, se filtre o no
+             *     `data`**. Mismo criterio que `by_rule`: el filtro `rule` acota lo que
+             *     se lista, no lo que se cuenta.
+             * @example 1
+             */
+            employees_affected: number;
+            /**
+             * @description Personas del alcance con alguna jornada **evaluada**, incluidas las de
+             *     las semanas del borde que el periodo corta. Es el denominador honesto:
+             *     quien no ficho no ha cumplido ni incumplido.
+             *
+             *     Se mide sobre la ventana evaluada y no sobre `[from, to]` para que
+             *     nunca pueda quedar por debajo de `employees_affected`: una semana
+             *     señalada por RN-17 puede tener sus siete jornadas fuera del periodo
+             *     pedido, y el par «1 de 0» haria dudar de toda la pantalla.
+             * @example 48
+             */
+            employees_evaluated: number;
+        };
+        /**
+         * ComplianceSummaryMeta
+         * @description El criterio con el que se ha construido `data`: instante, zona,
+         *     periodo, perfil, reglas y recuentos.
+         */
+        ComplianceSummaryMeta: {
+            /**
+             * Format: date-time
+             * @description Instante de generacion, en UTC (puerto `Clock`).
+             */
+            generated_at: string;
+            /**
+             * @description Zona del centro (ADR-040). Las jornadas y semanas ya estan expresadas
+             *     en ella; el cliente la enseña y no la adivina (regla dura 3).
+             * @example Europe/Madrid
+             */
+            time_zone: string;
+            /**
+             * Format: date
+             * @description Primera jornada evaluada, ya resuelta (con el valor por omision aplicado).
+             */
+            from: string;
+            /**
+             * Format: date
+             * @description Ultima jornada evaluada, ya resuelta.
+             */
+            to: string;
+            profile: components["schemas"]["ComplianceProfileRef"];
+            /**
+             * @description Dia en que empieza la semana del perfil, ISO 8601 (1 lunes … 7 domingo).
+             * @example 1
+             */
+            week_starts_on: number;
+            /** @description Las cuatro reglas con su umbral, en el orden RN-10, RN-11, RN-12, RN-17. */
+            rules: components["schemas"]["ComplianceRuleStatus"][];
+            totals: components["schemas"]["ComplianceTotals"];
+            /**
+             * @description Con que alcance se ha servido la vista (RF-ID-03): `all` para
+             *     `admin` y `rrhh`, `departments` para un responsable acotado a los
+             *     suyos.
+             * @example all
+             * @enum {string}
+             */
+            scope: "all" | "departments";
+            /**
+             * @description **Los criterios de evaluacion, ya traducidos al idioma de la
+             *     peticion.** Van en la respuesta y no en un manual por lo mismo que
+             *     en el informe por periodo: un aviso cuyo criterio no se ve es un
+             *     aviso que nadie defiende ante un empleado. El cliente los enseña tal
+             *     cual, sin reordenarlos ni resumirlos.
+             */
+            criteria: string[];
+        };
+        /**
+         * ComplianceSummary
+         * @description La vista de cumplimiento completa (RF-PA-06): los hallazgos del periodo
+         *     y el criterio con el que se han medido.
+         */
+        ComplianceSummary: {
+            /**
+             * @description Solo incumplimientos, ordenados por persona, jornada o semana y
+             *     regla. **Sin paginacion**: el rango esta acotado por
+             *     `REPORTING_COMPLIANCE_MAX_RANGE_DAYS` y una vista de alertas se lee
+             *     entera o no significa nada.
+             */
+            data: components["schemas"]["ComplianceFinding"][];
+            meta: components["schemas"]["ComplianceSummaryMeta"];
+        };
+        /**
          * ReportGranularity
          * @description Grano de agrupacion del informe por periodo (RF-IN-01).
          *
@@ -8848,6 +9240,40 @@ export interface components {
          */
         EmployeeSearch: string;
         /**
+         * @description Primera **jornada** de la vista de cumplimiento, inclusive
+         *     (`shift_entries.work_date`): una fecha civil en la zona del centro, no
+         *     un instante (RN-05, regla dura 4).
+         *
+         *     Sin `from` se toman los **28 dias** que terminan en `to`: cuatro
+         *     semanas, la ventana que RRHH revisa. El rango no puede superar el
+         *     presupuesto sincrono de la instalacion
+         *     (`REPORTING_COMPLIANCE_MAX_RANGE_DAYS`, 92 dias de serie): por encima
+         *     responde `422`. Las semanas que el rango corte se evaluan completas.
+         * @example 2026-03-04
+         */
+        ComplianceFrom: string;
+        /**
+         * @description Ultima jornada de la vista, inclusive. Sin `to` se toma **hoy** en la
+         *     zona del centro (ADR-040), que es la unica que decide que dia es hoy
+         *     para esa plantilla.
+         * @example 2026-03-31
+         */
+        ComplianceTo: string;
+        /**
+         * @description Limita la vista a una persona, por su identificador **publico**. Fuera
+         *     del alcance de quien pregunta devuelve `data` vacio, no `403`: es un
+         *     filtro, no la peticion de un recurso ajeno.
+         * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+         */
+        ComplianceEmployeeFilter: string;
+        /**
+         * @description Limita la vista a una regla. `meta.rules[]` y `meta.totals` describen
+         *     siempre las cuatro, se filtre o no: el filtro acota `data`, no el
+         *     criterio.
+         * @example insufficient_rest
+         */
+        ComplianceRuleFilter: components["schemas"]["ComplianceRuleName"];
+        /**
          * @description Primera **jornada** del rango, inclusive (`shift_entries.work_date`). Es
          *     una fecha civil en la zona del centro, no un instante: filtrar por
          *     `work_date` y no por la hora de las marcas es lo que mantiene entero un
@@ -10342,6 +10768,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LivePresenceBoard"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getComplianceSummary: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Primera **jornada** de la vista de cumplimiento, inclusive
+                 *     (`shift_entries.work_date`): una fecha civil en la zona del centro, no
+                 *     un instante (RN-05, regla dura 4).
+                 *
+                 *     Sin `from` se toman los **28 dias** que terminan en `to`: cuatro
+                 *     semanas, la ventana que RRHH revisa. El rango no puede superar el
+                 *     presupuesto sincrono de la instalacion
+                 *     (`REPORTING_COMPLIANCE_MAX_RANGE_DAYS`, 92 dias de serie): por encima
+                 *     responde `422`. Las semanas que el rango corte se evaluan completas.
+                 * @example 2026-03-04
+                 */
+                from?: components["parameters"]["ComplianceFrom"];
+                /**
+                 * @description Ultima jornada de la vista, inclusive. Sin `to` se toma **hoy** en la
+                 *     zona del centro (ADR-040), que es la unica que decide que dia es hoy
+                 *     para esa plantilla.
+                 * @example 2026-03-31
+                 */
+                to?: components["parameters"]["ComplianceTo"];
+                /**
+                 * @description Limita el resultado al departamento indicado.
+                 * @example 3
+                 */
+                department_id?: components["parameters"]["DepartmentFilter"];
+                /**
+                 * @description Limita la vista a una persona, por su identificador **publico**. Fuera
+                 *     del alcance de quien pregunta devuelve `data` vacio, no `403`: es un
+                 *     filtro, no la peticion de un recurso ajeno.
+                 * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                 */
+                employee_uuid?: components["parameters"]["ComplianceEmployeeFilter"];
+                /**
+                 * @description Limita la vista a una regla. `meta.rules[]` y `meta.totals` describen
+                 *     siempre las cuatro, se filtre o no: el filtro acota `data`, no el
+                 *     criterio.
+                 * @example insufficient_rest
+                 */
+                rule?: components["parameters"]["ComplianceRuleFilter"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description Los hallazgos del periodo, ordenados por persona (apellidos, nombre
+             *     y, en empate, identificador), despues por jornada o semana y por
+             *     ultimo por regla, con los umbrales aplicados en `meta`.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComplianceSummary"];
                 };
             };
             401: components["responses"]["Unauthenticated"];

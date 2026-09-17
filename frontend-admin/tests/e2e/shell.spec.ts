@@ -19,10 +19,11 @@ const SECTIONS = [
   'Plantilla',
   'Presencia',
   'Incidencias',
+  'Cumplimiento',
   'Credenciales',
   'Informes',
   'Inspección',
-  'Cumplimiento',
+  'Perfil de cumplimiento',
   'Ajustes operativos',
   'Quioscos',
   'Marca',
@@ -58,7 +59,7 @@ test('la seccion activa lleva aria-current, tambien desde la ficha de un emplead
   await expect(employees).not.toHaveAttribute('aria-current')
 })
 
-test('por debajo de md el menu se apila y las trece secciones siguen visibles', async ({
+test('por debajo de md el menu se apila y las catorce secciones siguen visibles', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 700, height: 900 })
@@ -67,7 +68,10 @@ test('por debajo de md el menu se apila y las trece secciones siguen visibles', 
   const nav = banner.getByRole('navigation')
 
   for (const section of SECTIONS) {
-    await expect(nav.getByRole('link', { name: section })).toBeVisible()
+    // `exact: true`: «Cumplimiento» es subcadena de «Perfil de cumplimiento»
+    // (RF-PA-06/RF-PD-07, tarea 3.4) y una coincidencia por subcadena
+    // encontraria las dos.
+    await expect(nav.getByRole('link', { name: section, exact: true })).toBeVisible()
   }
   await expect(nav.getByRole('link')).toHaveCount(SECTIONS.length)
 

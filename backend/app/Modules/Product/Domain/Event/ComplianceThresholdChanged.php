@@ -29,11 +29,13 @@ use DateTimeImmutable;
  * convenio y el descanso minimo cambiados a la vez— y ese booleano perderia
  * justo el matiz para el que existe.
  *
- * ## Los dos booleanos, que no son el mismo de la configuracion
+ * ## Los tres booleanos, que no son el mismo de la configuracion
  *
- * `affectsIncidentDetection` responde «¿cambia esto que alertas saltan?» y
- * `affectsRetention` responde «¿cambia esto que se puede borrar?». Son dos
- * consecuencias distintas y quien lee el trail busca una o la otra. Ninguno de
+ * `affectsIncidentDetection` responde «¿cambia esto que alertas saltan?»,
+ * `affectsComplianceView` responde «¿cambia esto lo que RRHH ve en la vista de
+ * cumplimiento?» y `affectsRetention` responde «¿cambia esto que se puede
+ * borrar?». Son consecuencias distintas y quien lee el trail busca una u otra.
+ * Ninguno de
  * los campos del perfil cambia los **minutos** que se calculan —las reglas de
  * cumplimiento clasifican, no corrigen (doc 01 §4, regla dura 19)— asi que el
  * `affects_worked_hours` de la configuracion de instalacion no aplica aqui, y
@@ -65,6 +67,16 @@ final readonly class ComplianceThresholdChanged implements DomainEvent
         public int|string|array $newValue,
         /** Si cambia que incidencias abre la revision diaria (RN-10, RN-11, RN-12). */
         public bool $affectsIncidentDetection,
+        /**
+         * Si cambia lo que enseña la vista de cumplimiento (RF-PA-06).
+         *
+         * Es el efecto que explica un `affects_incident_detection: false` sobre
+         * `max_weekly_hours` o `week_starts_on`: RN-17 no abre incidencia —el
+         * art. 34.1 ET fija la jornada semanal en computo anual— y aun asi mueve
+         * los avisos que RRHH revisa. Sin este dato, ese asiento seria
+         * indistinguible del de un cambio de nombre del convenio.
+         */
+        public bool $affectsComplianceView,
         /**
          * Si el campo gobierna una regla que hoy **no abre incidencias** aunque
          * se evalue (RN-12 hasta la tarea 3.5).

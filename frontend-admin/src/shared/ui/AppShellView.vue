@@ -10,21 +10,10 @@ import BrandMark from '@kronoqr/web-kit/components/BrandMark.vue'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
-import {
-  ATTENDANCE_READ,
-  CREDENTIALS_MANAGE,
-  DIAGNOSTICS_MANAGE,
-  EMPLOYEES_MANAGE,
-  INCIDENTS_MANAGE,
-  LICENSE_MANAGE,
-  REPORTS_LEGAL,
-  REPORTS_MANAGE,
-  SETTINGS_MANAGE,
-  SUPPORT_MANAGE,
-} from '@/features/auth/abilities'
 import { useSessionStore } from '@/features/auth/session.store'
 import LicenseNotice from '@/features/settings/LicenseNotice.vue'
 import { useBrandingStore } from '@/shared/branding/branding.store'
+import { NAVIGATION_SECTIONS } from '@/shared/ui/navigation'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -35,52 +24,16 @@ const branding = useBrandingStore()
 interface NavItem {
   name: string
   label: string
-  /** En O: basta con que la sesion lleve uno de los ambitos listados. */
-  abilities: readonly string[]
 }
 
+// La lista de secciones -nombre, clave i18n y ambitos- vive en un unico sitio
+// (`shared/ui/navigation.ts`): aqui solo se resuelve la etiqueta al idioma
+// actual y se filtra por lo que la sesion alcanza, en el MISMO orden en que
+// se declaran.
 const navigation = computed<NavItem[]>(() =>
-  [
-    { name: 'employees', label: t('app.nav.employees'), abilities: [EMPLOYEES_MANAGE] },
-    { name: 'live', label: t('app.nav.live'), abilities: [ATTENDANCE_READ] },
-    { name: 'incidents', label: t('app.nav.incidents'), abilities: [INCIDENTS_MANAGE] },
-    { name: 'credentials', label: t('app.nav.credentials'), abilities: [CREDENTIALS_MANAGE] },
-    { name: 'reports', label: t('app.nav.reports'), abilities: [REPORTS_MANAGE] },
-    { name: 'legal-export', label: t('app.nav.legalExport'), abilities: [REPORTS_LEGAL] },
-    {
-      name: 'compliance-profile',
-      label: t('app.nav.compliance'),
-      abilities: [SETTINGS_MANAGE],
-    },
-    {
-      // Umbrales operativos e idiomas (RF-PD-01, tarea 5.13). Mismo ambito
-      // que «Cumplimiento», «Quioscos» y «Marca»: las cuatro son la misma
-      // potestad de administrador de instalacion.
-      name: 'operational-settings',
-      label: t('app.nav.operationalSettings'),
-      abilities: [SETTINGS_MANAGE],
-    },
-    { name: 'devices', label: t('app.nav.devices'), abilities: [SETTINGS_MANAGE] },
-    { name: 'branding', label: t('app.nav.branding'), abilities: [SETTINGS_MANAGE] },
-    { name: 'license', label: t('app.nav.license'), abilities: [LICENSE_MANAGE] },
-    {
-      // Soporte (RF-PD-09, RF-PD-11, tarea 5.9): la alcanza quien lleva
-      // `support:*` -para conceder y revocar accesos- **o** `diagnostics:*`
-      // -un token de soporte con ese alcance tambien puede generar el
-      // paquete anonimizado de su propia intervencion-. Ninguno de los dos lo
-      // lleva un rol distinto de `admin` (doc 02 §7.3).
-      name: 'support',
-      label: t('app.nav.support'),
-      abilities: [SUPPORT_MANAGE, DIAGNOSTICS_MANAGE],
-    },
-    {
-      // Historico de errores agrupado por huella (RF-PD-15, tarea 5.12): el
-      // mismo ambito que la generacion del paquete de diagnostico.
-      name: 'errors',
-      label: t('app.nav.errors'),
-      abilities: [DIAGNOSTICS_MANAGE],
-    },
-  ].filter((item) => item.abilities.some((ability) => session.can(ability))),
+  NAVIGATION_SECTIONS.filter((item) => item.abilities.some((ability) => session.can(ability))).map(
+    (item) => ({ name: item.name, label: t(item.labelKey) }),
+  ),
 )
 
 /**

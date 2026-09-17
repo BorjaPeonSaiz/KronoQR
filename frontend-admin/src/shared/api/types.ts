@@ -209,3 +209,18 @@ export type ErrorLevel = Schemas['ErrorLevel']
 export type ClientErrorReport = Schemas['ClientErrorReport']
 export type ClientErrorBatch = Schemas['ClientErrorBatch']
 export type ClientErrorsAccepted = Schemas['ClientErrorsAccepted']
+
+// Vista de cumplimiento (RF-PA-06, tarea 3.4): descanso insuficiente entre
+// jornadas (RN-10), jornada diaria excesiva (RN-11), tramo continuado sin
+// pausa (RN-12, suspendida) y exceso semanal informativo (RN-17). El umbral de
+// cada regla y el perfil que lo fija viajan siempre en `meta` (regla dura 14):
+// nunca se copia un limite legal en el panel.
+export type ComplianceSummary = Schemas['ComplianceSummary']
+export type ComplianceFinding = Schemas['ComplianceFinding']
+export type ComplianceSummaryMeta = Schemas['ComplianceSummaryMeta']
+export type ComplianceRuleStatus = Schemas['ComplianceRuleStatus']
+export type ComplianceRuleName = Schemas['ComplianceRuleName']
+export type ComplianceWeek = Schemas['ComplianceWeek']
+export type ComplianceIncidentLink = Schemas['ComplianceIncidentLink']
+export type ComplianceProfileRef = Schemas['ComplianceProfileRef']
+export type ComplianceTotals = Schemas['ComplianceTotals']

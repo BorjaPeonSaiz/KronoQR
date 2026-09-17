@@ -111,6 +111,10 @@ it('describe solo los endpoints cuya tarea existe, y todos bajo /api/v1', functi
         // inicial del panel y el camino de sondeo al que degrada el WebSocket
         // (ADR-011): por eso vive en la API y no solo en el canal.
         '/api/v1/attendance/live',
+        // Tarea 3.4: la vista de cumplimiento (RF-PA-06). Mismo ambito que la
+        // presencia y que el registro horario —`attendance:read`— porque es una
+        // lectura del registro con los umbrales del perfil aplicados encima.
+        '/api/v1/compliance/summary',
         // Tarea 1.16: detalle de jornada del panel (RF-PA-03). Cuelga de
         // `/employees` pero no es plantilla: son las horas de una persona, y por
         // eso su ambito es `attendance:read` y no `employees:*`.

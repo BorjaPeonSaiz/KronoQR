@@ -7,7 +7,46 @@
 
 ## Estado y objetivo actual
 
-**Rama `feat/tarea-3.3-salud-quioscos` (desde `main` `931d3de`, con #58, #59 y #63 ya integradas). Tarea 3.3 «Panel de salud de
+**Rama `feat/tarea-3.4-vista-cumplimiento` (desde `main` `b57a6e6`, con la 3.3 integrada por PR #64). Tarea 3.4 «Vista de
+cumplimiento: descansos, jornada máxima, exceso semanal» (RF-PA-06, RN-10..12 y la nueva RN-17) IMPLEMENTADA, REVISADA (dos
+vueltas) y PROBADA el 16-09-2026; ver «Siguiente acción» para commit, CI manual y PR.** Quince decisiones en la ficha (plan 06 →
+«Tarea 3.4» → «Decisiones tomadas»; la 15 es «lo que corrigieron las revisiones»). Las que importan: **`GET /api/v1/compliance/summary`**
+(tag `Reporting`, ámbito `attendance:read`, policy `{admin, rrhh, responsable_departamento}`, auditor 403, alcance en el `WHERE`
+incluidos `meta.totals`, sin paginación, por omisión 28 días hasta hoy, techo `REPORTING_COMPLIANCE_MAX_RANGE_DAYS=92` y
+`statement_timeout` de `REPORTING_COMPLIANCE_TIMEOUT_SECONDS=10` → `422`); **RN-17 «Jornada semanal ordinaria» nueva en doc 01 §4**
+(informativa: el art. 34.1 ET es cómputo anual; no abre incidencia; `ComplianceRule::opensIncident()`), con Gherkin en §11 y Anexo A;
+**los predicados de límite abierto viven en `Shared\...\CompliancePolicy`** y los comparten `AnomalyDetectionPolicy` (sin cambio de
+comportamiento) y el evaluador puro `Reporting\Domain\Policy\ComplianceEvaluation`; el SQL trae hechos (`daily_totals`, tramos
+vigentes, `lag()` de la jornada anterior partiendo una jornada antes de `from`, semanas del borde completas), no veredictos;
+**cuenta lo mismo que la bandeja** (probado contra `DetectAttendanceAnomalies`, con la excepción escrita de RN-08) y **RN-12 no se
+cuenta mientras `ComplianceRuleSuspension` la suspenda** (`meta.rules[].evaluated=false`); **la vista recalcula siempre con el
+umbral vigente y la bandeja no se reprocesa** (doc 01 §4, contrato, guía §4 bis.6); asiento RS-05 `compliance_summary` sin agrupar y
+en el runbook de brecha (`DisclosureDatasetsInventoryTest`); **no degradable** (ADR-023); series textfile
+`compliance_findings_last_week{rule}`, `compliance_employees_affected_last_week` y `compliance_metrics_week_start_seconds` por
+`reporting:compliance-metrics` (04:45 UTC) con dos paneles nuevos en «Negocio»; el cambio de `max_weekly_hours`/`week_starts_on`
+deja `affects_compliance_view` en el asiento y `effect=compliance_view` en la métrica del perfil; solo `holiday_calendar` sigue sin
+consumidor. **Panel:** `features/compliance/` en `/compliance` («Cumplimiento», tras «Incidencias»; el perfil pasa a «Perfil de
+cumplimiento»), cuatro tarjetas con el umbral en palabras y el nombre del perfil, tabla agrupada por regla con `HH:MM`, enlace al
+registro situado en la jornada/semana del aviso (`EmployeeWorkDaysView` lee `from`/`to` de la URL) y a la bandeja acotada a la
+persona; **secciones del menú y de la guarda unificadas en `shared/ui/navigation.ts`** (deuda pagada). Guías: `guia-rrhh.md` §4 bis
+/ `hr-guide.md` y `configuracion.md` ES/EN. Cifras de la segunda vuelta: backend Unit 1858, Feature 1682, Integration 591,
+Contract 60, Architecture 527 (+ `SourceDiscoveryTest` conocido), PHPStan 9 sin errores, Deptrac 0/0, Redocly 0, mutación acotada a
+`Reporting/Domain` + `CompliancePolicy` 85,23 %; panel type-check, lint, unit 534, E2E 125 (5 `@RF-PA-06`, axe 0);
+`ClientDocumentationTest` 75; `GrafanaDashboardsTest` 37; `docs:consistency` sin divergencias. **Suites completas de backend sobre el
+árbol final (Architecture + Unit + Feature + Integration + Contract): 4718 en verde, 20 810 aserciones, 992 s; único rojo el
+conocido `SourceDiscoveryTest`.**
+
+**Confirmada en el commit único `726ee6d`** (`feat(cumplimiento): …`, 109 ficheros), rama empujada, **CI manual completa 35152401417**
+lanzada tras el push (la del push la canceló la concurrencia) y **PR #65** abierta contra `main`.
+
+**CI manual 35152401417 EN VERDE con los 21 jobs** (③ mutación, ⑧b y cobertura incluidos).
+
+**Siguiente acción:** el usuario integra la PR #65 con *merge commit* y borra la rama. Sin migración: tras integrar basta
+`git pull` (y `make up` si se quiere el comando nocturno programado en el contenedor). Después,
+la **3.5** (fichaje de pausa y validación de desfase de reloj: vaciar `ComplianceRuleSuspension`, RN-12 vuelve a abrir incidencias
+y la vista empieza a contarla sin tocar nada; descanso intra-jornada de RN-10 con la pausa declarada; RF-AT-12).
+
+**Tarea 3.3 (cerrada e integrada, PR #64 `b57a6e6`). Rama `feat/tarea-3.3-salud-quioscos` (desde `main` `931d3de`, con #58, #59 y #63 ya integradas). Tarea 3.3 «Panel de salud de
 quioscos y pantalla de diagnóstico» (RF-PA-07, RF-KI-08) IMPLEMENTADA, REVISADA (dos vueltas) y PROBADA el 16-09-2026; ver
 «Siguiente acción» para commit, CI manual y PR.** Dieciocho decisiones en la ficha (la 18 es «lo que corrigieron las revisiones»:
 la exportación íntegra llevaba el código de servicio en claro → `value_redacted`; un actor de soporte lo leía y cambiaba →
@@ -475,6 +514,19 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 
 ### Por tarea
 
+- **3.4 (restos, 16-09-2026):** **decisión del usuario sobre el doc 05** (no editado): la fila «Vista de cumplimiento» (~l. 167)
+  dice «falta de pausa» sin matiz y se entrega visible pero no evaluada hasta la 3.5, y §10.3 (~l. 395) dice que los tres campos del
+  perfil los aplica la vista «cuando entra en servicio» cuando dos ya se aplican (frases propuestas en Engram `fase-3/tarea-3.4`);
+  captura `rrhh-15-cumplimiento` para las dos guías cuando exista el generador en `tests/screenshots/hr-guide.screenshots.ts`;
+  `REPORTING_PERIOD_MAX_RANGE_DAYS`/`_MAX_ROWS`/`_TIMEOUT_SECONDS` nunca estuvieron en `.env.example` ni en `configuracion.md`
+  (hueco previo); medir en la 3.6 (k6) el endpoint de cumplimiento, que alcanza también al responsable y deja asiento bajo el
+  candado de ADR-010; en el cierre de la Fase 3 anotar en doc 07 que `compliance_summary` se dejó fuera de `disclosure_grouping`
+  a propósito y es el conjunto que más revela por fila; «Ver incidencia» lleva a la bandeja acotada a la persona (`?employee=`), no
+  a la incidencia por `id`; dos tramos cerrados con el mismo máximo (desempate por `se.id`) sin prueba hasta que la 3.5 reactive
+  RN-12; la fábrica `missingBreak()` está probada pero la rama de emisión no se ejercita mientras dure la suspensión;
+  `ComplianceProfileView` incrusta avisos por efecto (`compliance_view`) que la 3.5 deberá revisar al vaciar la suspensión;
+  cobertura y MSI oficiales se leen de la CI; el panel «Qué falta» del cuadro Negocio atribuye horas contratadas e impuntualidad a
+  la 3.13 (previsión, no compromiso); los `.spec` del portal siguen sin prueba de paridad ES/EN (de la 3.3).
 - **3.3 (restos, 16-09-2026):** verificar en una tablet Android real que Chrome expone `focusMode`, `zoom` y `backgroundBlur` en
   `getSettings()` y que el aviso de desenfoque dispara (la cámara falsa de Chromium no los trae: el E2E afirma filas y avisos, no
   valores); `CheckKioskHealthTest` y `KioskHealthRowTest` fijan las mismas reglas desde dos ficheros (fusionar al tocar el dominio de
@@ -586,10 +638,9 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   unificar el valor; `ErrorLevel` critical de servidor no distingue un `5xx` puntual de una tormenta (la alerta cuenta grupos
   nuevos y basta por ahora); el saneado convierte los identificadores SQL entrecomillados en `'…'` (decisión: seguridad sobre
   detalle); dos comprobaciones de `doctor` más de las que citan las guías si enumeran su número.
-- **Fase 3:** 3.4 estrena
-  `maximumWeeklyMinutes`/`weekStartsOn`/`holidayCalendar` de `CompliancePolicy`; 3.5 reactiva RN-12 (vaciar
-  `DetectAttendanceAnomalies::SUSPENDED_UNTIL_DECLARED_BREAK`) y el descanso intra-día de RN-10 con la
-  pausa declarada (RF-AT-12); RNF-D-03 fallback de colas Redis→BD; pasada k6 en Linux para el p95
+- **Fase 3:** `holidayCalendar` de `CompliancePolicy` sigue sin consumidor (3.10); 3.5 reactiva RN-12 (vaciar
+  `Shared\Domain\ValueObject\ComplianceRuleSuspension::SUSPENDED`: la detección, el asiento del perfil, la pantalla del perfil y la
+  vista de cumplimiento derivan de ahí) y el descanso intra-día de RN-10 con la pausa declarada (RF-AT-12); RNF-D-03 fallback de colas Redis→BD; pasada k6 en Linux para el p95
   (RNF-P-02/06); la puerta de cobertura (`make coverage`) no corre en CI.
 - **Decisiones de producto abiertas:** **baja de cuentas de gestión** (no existe ni pantalla ni comando; `users.is_active` nunca pasa a
   `false`; la guía de endurecimiento lo declara como límite de la 2.1 y remite al fabricante — hace falta
@@ -601,9 +652,8 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 
 ### Deuda técnica anotada
 
-- **`frontend-admin/src/router/guards.ts` `SECTIONS` duplica el orden del menú de `AppShellView.vue` y ya divergía** (10-09-2026):
-  unificar en una sola lista cuando se toque la navegación. Falta una captura de referencia con `LicenseNotice` activo y las 13
-  secciones (hallazgo opcional de la revisión del menú lateral).
+- Falta una captura de referencia del panel con `LicenseNotice` activo y las 14 secciones (hallazgo opcional de la revisión del
+  menú lateral del 10-09-2026; la duplicación `guards.ts`/`AppShellView.vue` quedó pagada en la 3.4 con `shared/ui/navigation.ts`).
 - **Rector: 227 ficheros en rojo e ignorado** en `make quality` — aplicar esas reglas o retirarlas del
   conjunto; un paso siempre rojo y siempre ignorado acaba sin leerse.
 - XLSX se lee sin cota de descompresión más allá de `max_rows` y los 4 MB (riesgo bajo, consciente).
@@ -698,6 +748,13 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   `tests/Integration/Install/`). **`IFS=$'\n\t'` de los scripts anula la división por espacios**: un
   `set -- ${line}` o un `read a b` sin `IFS=' '` local deja todo en el primer campo (pasó en
   `kq_versions_load`).
+- **Las series del colector *textfile* se declaran en `textfileSeries()` de `tests/Architecture/MetricsCatalogueTest.php` y en el
+  doc 02 §8.2**, no en `MetricCatalogue.php` (que solo cataloga lo que sale por `/metrics`): una serie `.prom` nueva sin esas dos
+  entradas rompe `MetricsCatalogueTest` o `GrafanaDashboardsTest` (3.4).
+- **`wrapper.find(...)` de `@vue/test-utils` nunca es falsy** (devuelve un envoltorio también cuando no encuentra nada): una
+  aserción `expect(wrapper.find(sel)).toBeTruthy()` no puede fallar; usar `findAll(sel).length` o `.exists()` (3.4).
+- **Una regla suspendida por `ComplianceRuleSuspension` deja su rama de emisión sin ejercitar en todos los niveles** (la constante es
+  privada y no se puede levantar desde una prueba): fijar al menos la fábrica del hallazgo (`ComplianceFinding::missingBreak()`).
 - **Pest: `expect($array)->toContain($x, $mensaje)` trata el mensaje como otro elemento a buscar**; para
   un mensaje propio usar `expect(in_array(...))->toBeTrue($mensaje)`. PHPStan 9 rechaza `(int) $mixed`:
   con `DB::scalar()`/`selectOne()` usar el query builder (`count()`, `value()`).

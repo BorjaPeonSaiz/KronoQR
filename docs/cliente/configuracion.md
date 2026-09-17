@@ -17,7 +17,7 @@ cambio no se aplica** y no hay ningún aviso que te lo diga.
 | Qué | Dónde | Cómo se cambia | ¿Hay que reiniciar? |
 | --- | --- | --- | --- |
 | **Marca, idiomas y umbrales operativos** | Tabla `installation_settings` | `PATCH /api/v1/settings` (panel, rol *administrador*) | No |
-| **Umbrales legales**: descanso mínimo, jornada máxima, pausas, años de retención | Tabla `compliance_profiles` | `PATCH /api/v1/compliance-profile` (panel → «Cumplimiento», rol *administrador*) | No |
+| **Umbrales legales**: descanso mínimo, jornada máxima, pausas, años de retención | Tabla `compliance_profiles` | `PATCH /api/v1/compliance-profile` (panel → «Perfil de cumplimiento», rol *administrador*) | No |
 | **Todo lo del despliegue**: rutas, credenciales, puertos, claves | Fichero `.env` del servidor | Editar y reiniciar los contenedores | **Sí** |
 
 La regla para no equivocarse: **si lo cambiarías sin avisar a nadie de
@@ -193,7 +193,7 @@ defecto—, la petición se rechaza entera y no se guarda nada.
 
 ### 2.4 Umbrales legales: el perfil de cumplimiento
 
-Esto **no** está en la pantalla de configuración: tiene la suya, «Cumplimiento», y
+Esto **no** está en la pantalla de configuración: tiene la suya, «Perfil de cumplimiento», y
 también es de administrador. Están aparte porque son otra cosa. Un umbral
 **operativo** lo decides tú según cómo funciona tu hotel; un umbral **legal** lo
 fija la norma o el convenio, y equivocarse tiene consecuencias distintas.
@@ -206,8 +206,8 @@ Se entrega el perfil **`ES-hosteleria`**, con estos valores:
 | `max_daily_hours` | `9` | Se abre incidencia si la suma de los tramos de una jornada **supera** esas horas | Art. 34.3 ET |
 | `break_required_after_hours` | `6` | Umbral del tramo continuo sin pausa registrada. **Hoy la regla se evalúa pero no abre incidencia** (ver abajo) | Art. 34.4 ET |
 | `updated_at` | vacío | Solo lectura: cuándo se ajustó por última vez. **Vacío significa «tal como se instaló»** | — |
-| `max_weekly_hours` | `40` | Jornada semanal ordinaria. **Todavía no lo aplica ninguna regla** | Art. 34.1 ET |
-| `week_starts_on` | `1` (lunes) | Día en que empieza la semana. **Todavía no lo aplica ninguna regla** | ISO 8601 |
+| `max_weekly_hours` | `40` | Jornada semanal ordinaria. **Lo aplica la vista de cumplimiento** del panel: avisa de las semanas que lo superan, **sin abrir incidencia** (ver abajo) | Art. 34.1 ET |
+| `week_starts_on` | `1` (lunes) | Día en que empieza la semana. **Define la semana que mide la vista de cumplimiento** | ISO 8601 |
 | `holiday_calendar` | vacío | Festivos del centro, una fecha por línea. **Todavía no lo aplica ninguna regla** | Lo cargas tú |
 | `retention_years` | `4` | Años que hay que conservar el registro antes de poder purgarlo | Art. 34.9 ET |
 | `name` | `ES-hosteleria` | Cómo se llama el convenio que el perfil describe | Lo pones tú |
@@ -217,10 +217,19 @@ del municipio y del año: un calendario metido dentro del producto caducaría ca
 31 de diciembre y sería incorrecto para la mitad de los clientes. Lo cargas tú,
 una vez al año, pegando las fechas.
 
-**Tres campos se guardan y todavía no se aplican** —jornada semanal, día de
-inicio de semana y festivos—. La pantalla lo dice al lado de los campos. Puedes
-dejarlos ya ajustados a tu convenio: los estrena la vista de cumplimiento de una
-versión posterior, y los cambios quedan auditados desde hoy.
+**Un campo se guarda y todavía no se aplica**: el calendario de festivos. La
+pantalla lo dice al lado del campo. Puedes dejarlo ya cargado: lo estrena la
+gestión de ausencias de una versión posterior, y los cambios quedan auditados
+desde hoy.
+
+**La jornada semanal y el día de inicio de semana sí se aplican ya**, en la
+**vista de cumplimiento** del panel: señala las semanas que superan la jornada
+ordinaria, con la semana empezando el día que tú digas. Ese aviso es
+**informativo y no abre incidencia** —el art. 34.1 ET fija las cuarenta horas en
+cómputo anual, así que una semana por encima no es por sí sola un
+incumplimiento—, de modo que cambiar cualquiera de los dos **no altera ninguna
+incidencia**, pero sí cambia lo que se ve en esa pantalla desde el momento en
+que se guarda. Lo explica [`guia-rrhh.md`](guia-rrhh.md) §4 bis.
 
 **`break_required_after_hours` está enunciado pero no abre incidencias todavía.**
 El sistema no puede distinguir «no descansó» de «descansó y no lo fichó» hasta que
@@ -1103,9 +1112,9 @@ docker compose exec app php artisan identity:2fa-reset     # retira un segundo f
 ## 6. Referencia completa del `.env`, variable a variable
 
 Esta es la lista **completa** de lo que se puede escribir en el `.env` del
-servidor: **161 variables**, todas las que trae `.env.example`. Está aquí para
-que no tengas que leer el fichero entero cuando buscas una sola cosa, y para
-que sepas de un vistazo si tocarla mueve horas de trabajo o no.
+servidor: **todas las variables que declara `.env.example`**, una por una. Está
+aquí para que no tengas que leer el fichero entero cuando buscas una sola cosa,
+y para que sepas de un vistazo si tocarla mueve horas de trabajo o no.
 
 **Antes de cambiar nada, tres cosas:**
 
@@ -1453,6 +1462,8 @@ Los tres rangos están explicados con detalle, con síntomas y comprobaciones, e
 | `COMPLIANCE_LEGAL_EXPORT_TEMP_RETENTION_HOURS` | — | Horas que puede vivir un temporal huérfano de la descarga de la exportación legal antes de que se borre solo. **No afecta** a la copia deliberada que genera el comando de exportación: esa la custodia quien la generó | `6` | Casi nunca | No |
 | `COMPLIANCE_AUTHZ_DENIAL_WINDOW_SECONDS` | — | Ventana en la que las denegaciones repetidas de un mismo actor se agrupan en un solo asiento de auditoría. Protege la cadena de auditoría de una enumeración | `60` | Ponla a `0` si estás investigando un incidente y quieres un asiento por denegación | No |
 | `COMPLIANCE_INCIDENT_LOOKBACK_DAYS` | — | Días hacia atrás que revisa la detección diaria de incidencias. Los tramos **todavía abiertos** se revisan siempre, sea cual sea su fecha | `7` | Casi nunca. **Subirlo puede abrir incidencias de jornadas ya entregadas a la plantilla o a la Inspección**, que es justo lo que la ventana evita | **Sí** (abre incidencias) |
+| `REPORTING_COMPLIANCE_MAX_RANGE_DAYS` | — | Días como máximo que puede abarcar una consulta de la vista de cumplimiento ([`guia-rrhh.md`](guia-rrhh.md) §4 bis). Por encima, la pantalla lo dice y no consulta | `92` | Casi nunca. Subirlo alarga la consulta y acerca el límite de la variable siguiente; si necesitas un periodo mayor, pide dos | No |
+| `REPORTING_COMPLIANCE_TIMEOUT_SECONDS` | — | Segundos que se le conceden a esa consulta dentro de PostgreSQL antes de abandonarla. Protege al resto del sistema: nada se bloquea y la pantalla pide un periodo más corto | `10` | Solo si tu servidor es lento y la pantalla falla con periodos legítimos. Si tienes que subirlo mucho, el problema es la base de datos, no este número | No |
 
 ### 6.17 Licencia
 

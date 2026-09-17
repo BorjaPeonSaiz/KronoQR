@@ -77,6 +77,13 @@ final readonly class RecordComplianceProfileChange
                 // busca una o la otra: «¿cambio esto que alertas saltan?» y
                 // «¿cambio esto que se puede borrar?».
                 'affects_incident_detection' => $event->affectsIncidentDetection,
+                // La tercera consecuencia, de la tarea 3.4: hay umbrales legales
+                // que mueven los avisos que RRHH revisa **sin** abrir ninguna
+                // incidencia. RN-17 es el caso —el art. 34.1 ET fija la jornada
+                // semanal en computo anual—, y sin esta linea el asiento de un
+                // cambio de `max_weekly_hours` seria indistinguible del de un
+                // cambio de nombre del convenio.
+                'affects_compliance_view' => $event->affectsComplianceView,
                 // Explica el `false` de arriba cuando el campo SI gobierna una
                 // regla legal: RN-12 se evalua y tiene sus pruebas, pero su
                 // apertura de incidencia esta suspendida hasta que el quiosco

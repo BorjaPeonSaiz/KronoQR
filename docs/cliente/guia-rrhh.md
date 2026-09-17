@@ -12,12 +12,13 @@ falta saber nada de sistemas.**
 > [`obligaciones-legales.md`](obligaciones-legales.md). Cada cosa se explica en
 > un solo sitio; aquí se enlaza.
 
-Los ocho apartados de esta guía, por si buscas uno concreto:
+Los nueve apartados de esta guía, por si buscas uno concreto:
 
 1. [El vocabulario, primero](#1-el-vocabulario-primero)
 2. [Alta de una persona, de principio a fin](#2-alta-de-una-persona-de-principio-a-fin)
 3. [Presencia en vivo y registro horario](#3-presencia-en-vivo-y-registro-horario)
 4. [La bandeja de incidencias](#4-la-bandeja-de-incidencias)
+    - [4 bis. La vista de cumplimiento](#4-bis-la-vista-de-cumplimiento)
 5. [Correcciones: cambiar una hora sin romper el registro](#5-correcciones-cambiar-una-hora-sin-romper-el-registro)
 6. [Informes, exportaciones y la entrega a la Inspección](#6-informes-exportaciones-y-la-entrega-a-la-inspección)
 7. [El perfil de cumplimiento](#7-el-perfil-de-cumplimiento)
@@ -311,6 +312,188 @@ y con qué desenlace, en lugar de pisar el trabajo de nadie.
 
 ---
 
+## 4 bis. La vista de cumplimiento
+
+**Cumplimiento** revisa el registro contra los umbrales legales del perfil del
+centro y enseña, para tu ámbito, las jornadas y las semanas que se salen de
+ellos. La bandeja (§4) te dice **qué hay pendiente de resolver**; esta pantalla
+te dice **si lo registrado cumple la norma**, lo haya abierto alguien o no.
+
+No son la misma lista: la bandeja tiene ocho tipos de incidencia y esta pantalla
+cuatro reglas legales. Coinciden en las dos primeras, y eso es a propósito.
+
+### 4 bis.1 Los cuatro avisos, y con qué umbral
+
+Arriba hay cuatro tarjetas, una por regla, con el recuento del periodo y el
+umbral que se ha aplicado:
+
+| Aviso | Qué mira | Campo del perfil | De serie en `ES-hosteleria` |
+| --- | --- | --- | --- |
+| **Descanso mínimo entre jornadas** | Las horas entre la última salida de una jornada y la primera entrada de la siguiente | `min_rest_hours` | 12 h |
+| **Jornada diaria ordinaria** | La suma de los tramos de un mismo día | `max_daily_hours` | 9 h |
+| **Tramo continuo máximo sin pausa** | El tramo cerrado más largo del día | `break_required_after_hours` | 6 h |
+| **Jornada semanal ordinaria** | La suma de las horas de la semana | `max_weekly_hours` | 40 h |
+
+Cada tarjeta se llama igual que el campo del perfil del que sale, para que no
+haya que traducir nada entre las dos pantallas. Y el umbral no está escondido:
+debajo del nombre, la tarjeta lo escribe con todas las letras —«**12 h 00 min
+según el perfil ES-hosteleria**»—. Es deliberado: **un aviso cuyo criterio no se
+ve es un aviso que nadie puede defender delante de un empleado**. Si ajustas un
+umbral en el perfil de cumplimiento (§7), esta pantalla cambia con él desde el
+momento en que se guarda.
+
+Los filtros son periodo, departamento y regla. **Sin fechas se enseñan los
+últimos 28 días** —cuatro semanas, que es lo que se revisa—. El periodo tiene un
+tope, 92 días de serie; si pides más, la pantalla lo dice y no consulta. Cuando
+no hay nada que avisar lo dice también, y con los criterios aplicados a la
+vista: «Sin alertas en el periodo» sin decir de qué periodo no valdría de nada.
+
+### 4 bis.2 Qué cuenta y qué no
+
+Esto es lo que más preguntas genera, y conviene tenerlo claro **antes** de
+comentar un aviso con nadie:
+
+- **El descanso se mide entre jornadas, no dentro del día.** Es el hueco entre
+  la última salida de una jornada y la primera entrada de la siguiente. El rato
+  que alguien pasa fuera a media mañana no es descanso entre jornadas y no se
+  cuenta aquí. Y sin jornada anterior no hay nada que medir: el primer día del
+  registro de una persona nunca avisa.
+- **Los turnos de noche no se parten.** Un turno de 22:00 a 06:00 es uno solo y
+  pertenece al día en que empezó. El descanso siguiente se mide desde su fin
+  real, las 06:00, no desde medianoche.
+- **Solo cuentan los tramos cerrados.** Un turno todavía abierto vale cero horas
+  y la fila sale marcada **«Turno abierto»**. No significa que ese día cumpla:
+  significa que aún no se puede saber. Cuando alguien cierre el turno, el total
+  sube y el aviso puede aparecer.
+- **Los totales son los mismos que ves en el registro de la persona.** La
+  pantalla no recalcula las horas por su cuenta: las lee.
+- **«Tramo continuo máximo sin pausa» se enseña, con su umbral, pero todavía no
+  se evalúa.** Su tarjeta aparece marcada **«No se evalúa»**, con el motivo —«no
+  se evalúa hasta que exista la pausa declarada»—, y no produce ninguna fila. El
+  motivo es el mismo que en la bandeja (§4.1): mientras el quiosco no
+  registre la pausa como tal, el sistema no puede distinguir «no descansó» de
+  «descansó y no lo fichó», y avisar en esas condiciones sería avisar de casi
+  todo el mundo casi todos los días. El umbral se guarda, se audita, y la regla
+  empieza a contar sola en cuanto exista el fichaje de pausa, sin que haya que
+  tocar nada. Se enseña en lugar de ocultarse para que sepas que la regla existe
+  y con qué umbral se aplicará.
+- **Las dos primeras cuentan igual que la bandeja.** El descanso mínimo entre
+  jornadas y la jornada diaria ordinaria se miden con el mismo criterio que la
+  revisión de cada madrugada —la que abre «Descanso insuficiente» y «Jornada
+  demasiado larga» en la bandeja (§4.1)—, así
+  que cuando ya hay una incidencia abierta para esa persona, ese día y esa
+  regla, la fila la enlaza. La semanal **no abre incidencia nunca**
+  (§4 bis.3).
+
+**La semana es la del perfil, y siempre entera.** Empieza el día que diga el
+campo `week_starts_on` —lunes de serie— y son siete fechas. Si el periodo que
+has pedido corta una semana por la mitad, **esa semana se evalúa completa de
+todos modos**, con los días de fuera del periodo incluidos. Lo contrario daría
+un total semanal que no coincide con el que la persona ve en su propio registro,
+y esa diferencia no hay manera de explicarla.
+
+### 4 bis.3 Qué significa el aviso semanal
+
+El aviso de **jornada semanal ordinaria es informativo**, y es el único de los
+cuatro que **no abre incidencia**. No es un descuido: el
+Estatuto de los Trabajadores fija las cuarenta horas semanales **en cómputo
+anual** (art. 34.1), así que una semana de cuarenta y cuatro horas no es por sí
+sola un incumplimiento —puede quedar compensada con otra de treinta y seis—.
+
+Lo que hace la pantalla es señalártela **para que la mires con el convenio
+delante**. Muchos convenios de hostelería fijan reglas propias de distribución
+irregular, de máximo semanal o de descanso compensatorio, y esas sí se pueden
+incumplir con una semana así. Esa lectura es del hotel: el sistema no conoce tu
+convenio y no la puede hacer por ti.
+
+### 4 bis.4 Cómo se lee una fila
+
+Cada fila es un empleado y una jornada —o un empleado y una semana, en el aviso
+semanal—, con las horas en la zona horaria del centro, como en todo el panel.
+Las columnas son estas, y los tres números van siempre en horas y minutos:
+
+| Columna | Qué es |
+| --- | --- |
+| **Empleado** | Quién |
+| **Jornada o semana** | El día del aviso, o el lunes a domingo de la semana |
+| **Medido** | Lo que dice el registro: el descanso que hubo, las horas que se trabajaron |
+| **Umbral** | Lo que pide el perfil |
+| **Diferencia** | Lo que separa a los dos: «**Faltan** 2 h 00 min» cuando el descanso se queda corto, «**Sobran** 0 h 40 min» cuando la jornada se pasa |
+| **Incidencia** | El enlace a la de la bandeja, si existe |
+
+Leída del tirón, una fila de descanso dice: *Medido 10 h 00 min · Umbral
+12 h 00 min · Faltan 2 h 00 min*. Esa resta es la que hay que poder explicar, y
+por eso los tres números están a la vista y no solo el último.
+
+Y dos enlaces:
+
+- **El nombre del empleado** lleva a su registro horario, situado en la jornada
+  —o en la semana— del aviso, que es donde se mira y donde se corrige (§5).
+- **«Ver incidencia»** aparece solo cuando la bandeja ya tiene una abierta para
+  ese mismo caso, y lleva a **la bandeja de incidencias acotada a esa persona**,
+  que es donde se resuelve (§4.3). No la resuelve por ti: ningún enlace de esta
+  pantalla escribe nada.
+
+### 4 bis.5 Quién la ve, y qué queda anotado
+
+- Un **responsable de departamento** ve a la gente de su departamento y nada
+  más; también los recuentos de las tarjetas son solo de su gente.
+- **RRHH** y **administrador** lo ven todo.
+- El **auditor** no entra en esta pantalla. Auditar es revisar lo que quedó
+  escrito, no gestionar el día a día.
+
+**Cada consulta queda anotada en el registro de auditoría**, igual que consultar
+el registro horario de una persona (§3.2): quién ha mirado, qué periodo y con
+qué filtros. Se anota el alcance de la consulta, nunca los nombres de quienes
+aparecieron en ella. Es normal y es intencionado.
+
+**Esta pantalla no depende de la licencia.** Es una lectura del registro legal
+contra los umbrales legales: aunque la licencia esté caducada, sigue
+funcionando igual (§8, «hay un aviso de licencia en el panel»).
+
+### 4 bis.6 Qué hacer con un aviso
+
+Un aviso no es una sanción ni un fallo del sistema: es una jornada que alguien
+tiene que mirar. El orden que funciona:
+
+1. **Contrástalo con el registro de la persona.** Entra por su nombre y mira el
+   día. Muchas veces la explicación está a la vista: una salida sin fichar que
+   junta dos jornadas, un doble escaneo, un turno que se cerró al día siguiente.
+2. **Si el registro está mal, corrígelo** desde ahí, con su motivo (§5). El
+   aviso desaparece la próxima vez que se abra la pantalla, porque se calcula
+   sobre el registro y no sobre una lista guardada.
+3. **Si el registro está bien, habla con la persona y con su responsable** y
+   contrasta el caso con el convenio que os aplique. Un descanso de once horas
+   puede ser cierto y aun así ser un problema; una semana de cuarenta y cuatro
+   horas puede ser cierta y estar perfectamente compensada.
+4. **Si además hay una incidencia abierta**, ciérrala al terminar, con la nota
+   de qué pasó (§4.3). Resolver la incidencia no cambia ninguna hora: son dos
+   acciones distintas.
+
+> **La pantalla no corrige nada y no guarda ningún veredicto.** Se recalcula
+> cada vez que se abre, sobre el registro y los umbrales de ese momento. Si
+> mañana cambias un umbral del perfil, lo que se vea mañana será lo que diga el
+> umbral nuevo, también para las jornadas de la semana pasada.
+
+**La bandeja y esta pantalla se comportan distinto ante un cambio de umbral, y
+hay que saber explicarlo.** No es una incoherencia: son dos cosas con dos
+propósitos.
+
+| | La bandeja de incidencias (§4) | La vista de cumplimiento (§4 bis) |
+| --- | --- | --- |
+| Qué es | Una lista de trabajo: cada incidencia se abrió un día concreto y alguien la tiene que cerrar | Una consulta que se calcula en el momento |
+| Al cambiar un umbral | **No se reprocesa el histórico.** Las incidencias ya abiertas se quedan con el criterio con el que se abrieron, y ninguna se cierra ni se reabre sola | **Siempre recalcula con el umbral vigente** en el momento de consultar |
+| Cómo se sabe con qué criterio | Por el registro de auditoría del perfil: quién cambió qué valor y cuándo (§7) | Por la propia pantalla, que enseña el perfil y el umbral de cada regla |
+
+Por eso esta pantalla enseña siempre el nombre del perfil y los umbrales con los
+que ha calculado: es lo que permite decir, delante de un empleado o de un
+inspector, **con qué criterio se avisó y desde cuándo rige ese criterio**. Y por
+eso la bandeja no se reprocesa: reabrir hoy incidencias de jornadas ya
+entregadas a la plantilla o a la Inspección, con un umbral que entonces no
+existía, no ayudaría a nadie.
+
+---
+
 ## 5. Correcciones: cambiar una hora sin romper el registro
 
 ### 5.1 Cuándo se corrige
@@ -435,9 +618,12 @@ alcance.
 
 ## 7. El perfil de cumplimiento
 
-**Cumplimiento** son los umbrales legales con los que se revisa el registro:
-descanso mínimo entre jornadas, jornada diaria y semanal ordinaria, tramo máximo
-sin pausa, día de inicio de semana, festivos y años de conservación.
+**Perfil de cumplimiento** son los umbrales legales con los que se revisa el
+registro: descanso mínimo entre jornadas, jornada diaria y semanal ordinaria,
+tramo máximo sin pausa, día de inicio de semana, festivos y años de
+conservación. No lo confundas con **Cumplimiento** (§4 bis), que es la pantalla
+que *aplica* estos umbrales al registro: aquí se deciden, allí se ven las
+consecuencias.
 
 ![Pantalla del perfil de cumplimiento](img/es/rrhh-14-perfil-cumplimiento.png)
 
@@ -452,6 +638,14 @@ jornadas se marcan para revisión**. Es un cambio con efecto legal, y por eso:
 - Queda anotado en el registro de auditoría con el valor anterior, el nuevo,
   quién lo cambió y cuándo. Sin eso no se puede explicar por qué una jornada de
   hace tres meses no generó ninguna alerta.
+
+**Dónde se nota cada umbral.** El descanso mínimo entre jornadas y la jornada
+diaria máxima mueven las dos cosas: la bandeja de incidencias (§4) y la vista de
+cumplimiento (§4 bis). La **jornada semanal ordinaria** y el **día de inicio de
+semana** los aplica solo la vista de cumplimiento, que avisa pero no abre
+incidencia. El **calendario de festivos** se guarda y se audita desde hoy, pero
+**todavía no lo aplica ninguna regla**: lo estrenará la gestión de ausencias de
+una versión posterior, y la pantalla lo indica al lado del campo.
 
 El producto se entrega con el perfil español de hostelería. **Ajustarlo al
 convenio que os aplique es responsabilidad del hotel**, no del fabricante: lo

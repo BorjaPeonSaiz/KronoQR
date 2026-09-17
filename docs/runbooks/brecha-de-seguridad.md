@@ -258,7 +258,8 @@ docker compose --env-file .env -f infra/compose.prod.yaml exec -T postgres \
     FROM audit_log
    WHERE action = 'personal_data.accessed'
      AND payload->>'dataset' IN ('employee_directory','kiosk_roster','credential_status',
-                                 'incident_board','period_report','live_presence')
+                                 'incident_board','period_report','live_presence',
+                                 'compliance_summary')
      AND occurred_at BETWEEN '<inicio de la ventana>' AND '<fin de la ventana>'
    ORDER BY occurred_at;"
 ```
@@ -283,7 +284,22 @@ centro: si el padrón se descargó, esa persona estaba dentro.
 | `employee_workdays` | Registro horario de una persona | **Sí**: `employee_uuid` |
 | `period_report` | Informe de periodo, en pantalla o descargado | No (recuento, `format`, alcance) |
 | `live_presence` | Presencia en vivo del panel | No. **Agrupado por ventana de 15 min** |
+| `compliance_summary` | Vista de cumplimiento: quién incumplió y en qué | No (recuento, rango, filtros y alcance) |
 | `incident` | Una incidencia concreta al resolverla | Según el asiento |
+
+**Sobre `compliance_summary`, que es el más sensible de los que no nombran a
+nadie.** Lo que se divulga no es una lista de personas: es una lista de personas
+**con un incumplimiento al lado**, y eso pesa distinto en la notificación del art.
+33. El payload lleva el rango (`from`, `to`), el departamento si se filtró, si
+hubo filtro por persona (`employee` como booleano, nunca el identificador), la
+regla si se acotó y el alcance. Para saber si esa persona estaba dentro se razona
+igual que con `employee_directory` —`scope` y `department_id`— con una diferencia:
+**solo aparecen quienes incumplieron algo en ese periodo**, así que una fila de
+este conjunto con `record_count` alto describe una divulgación más concreta que
+una del directorio con el mismo número.
+
+Y **no agrupa**: cada apertura de la pantalla es una fila. El recuento de filas
+sí es el número de lecturas, al contrario que en `live_presence`.
 
 ### 4.2 «¿Qué se llevó esta cuenta, y cuándo?»
 

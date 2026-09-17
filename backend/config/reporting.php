@@ -66,4 +66,41 @@ return [
          */
         'statement_timeout_seconds' => (int) env('REPORTING_PERIOD_TIMEOUT_SECONDS', 10),
     ],
+
+    /*
+     * VISTA DE CUMPLIMIENTO (RF-PA-06, tarea 3.4).
+     *
+     * Los dos son presupuestos de RECURSOS, como los del informe por periodo.
+     * LOS UMBRALES LEGALES NO ESTAN AQUI y no pueden estarlo: descanso minimo,
+     * jornada diaria, jornada semanal y pausa se leen del perfil de cumplimiento
+     * (`compliance_profiles`, regla dura 14, ADR-017). Si algun dia apareciera un
+     * `12` en este fichero, seria un umbral legal escondido en el repositorio.
+     */
+    'compliance' => [
+
+        /*
+         * Techo del rango que se entrega en el acto, en dias.
+         *
+         * Tres meses, el mismo presupuesto sincrono que el informe por periodo y
+         * por el mismo motivo: son las dos consultas del producto que cruzan la
+         * plantilla entera con el calendario. No sustituye al techo de
+         * `DateRange::MAXIMUM_DAYS` (366), que es el limite del objeto de dominio
+         * para cualquier consulta de jornadas.
+         *
+         * Se comprueba sobre el rango YA RESUELTO —con la omision aplicada— y
+         * antes de tocar la base de datos, que es lo barato.
+         */
+        'max_range_days' => (int) env('REPORTING_COMPLIANCE_MAX_RANGE_DAYS', 92),
+
+        /*
+         * `statement_timeout` de la consulta de hechos, en segundos.
+         *
+         * Diez, como el informe. Se aplica con `SET LOCAL` en la transaccion de la
+         * consulta y no con un cronometro en PHP: asi lo corta PostgreSQL y libera
+         * la conexion, en lugar de descubrir tarde que la consulta lleva cuarenta
+         * segundos ocupando la base de datos que atiende el fichaje (RNF-P-02,
+         * regla dura 19). La cancelacion sale como el mismo `422` del informe.
+         */
+        'statement_timeout_seconds' => (int) env('REPORTING_COMPLIANCE_TIMEOUT_SECONDS', 10),
+    ],
 ];

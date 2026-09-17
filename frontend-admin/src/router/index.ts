@@ -14,6 +14,7 @@ import {
   SUPPORT_MANAGE,
 } from '@/features/auth/abilities'
 import LoginView from '@/features/auth/LoginView.vue'
+import ComplianceView from '@/features/compliance/ComplianceView.vue'
 import CredentialBoardView from '@/features/credentials/CredentialBoardView.vue'
 import DevicesView from '@/features/devices/DevicesView.vue'
 import EmployeeDetailView from '@/features/employees/EmployeeDetailView.vue'
@@ -138,6 +139,21 @@ export const routes: RouteRecordRaw[] = [
         name: 'incidents',
         component: IncidentsView,
         meta: { ability: INCIDENTS_MANAGE },
+      },
+      {
+        // Vista de cumplimiento (RF-PA-06, tarea 3.4): descanso insuficiente
+        // entre jornadas, jornada diaria excesiva, pausa en tramo continuado y
+        // exceso semanal, con el umbral del perfil aplicado a la vista. Ambito
+        // `attendance:read`, el mismo que la presencia y el registro horario:
+        // es una lectura del registro con una regla legal encima, y quien
+        // puede leerlo puede leerlo con la regla. La policy del servidor
+        // (`ComplianceSummaryPolicy`) es la que autoriza de verdad (regla dura
+        // 18); el `auditor` la lleva y aun asi recibe `403`, como en la
+        // presencia.
+        path: 'compliance',
+        name: 'compliance',
+        component: ComplianceView,
+        meta: { ability: ATTENDANCE_READ },
       },
       {
         // Informes de horas por periodo (RF-IN-01, RF-IN-02, RF-IN-03). Ambito

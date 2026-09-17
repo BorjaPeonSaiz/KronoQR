@@ -166,6 +166,7 @@ final readonly class UpdateComplianceProfileHandler
                 previousValue: $current->valueOf($field),
                 newValue: $updated->valueOf($field),
                 affectsIncidentDetection: $field->affectsIncidentDetection(),
+                affectsComplianceView: $field->affectsComplianceView(),
                 detectionSuspended: $field->governsSuspendedRule(),
                 affectsRetention: $field->affectsRetention(),
                 occurredAt: $at,
@@ -178,6 +179,16 @@ final readonly class UpdateComplianceProfileHandler
     /**
      * `compliance_profile_changes_total{effect}` (doc 02 §8.2).
      *
+     * **El efecto `compliance_view` es de la tarea 3.4 y no amplia el catalogo**:
+     * la serie ya declara la etiqueta `effect` y lo unico que cambia es que tiene
+     * un valor mas. Hacia falta porque los dos efectos que habia no saben decir
+     * «mueve los avisos de RRHH pero no abre incidencias», que es exactamente lo
+     * que hacen `max_weekly_hours` y `week_starts_on` desde RN-17: sin el, un
+     * cambio suyo solo contaria en `any` y seria indistinguible de renombrar el
+     * convenio. Un cambio puede contar en varios efectos a la vez, que es lo que
+     * el docblock del adaptador ya advierte: son consecuencias, no categorias
+     * excluyentes.
+     *
      * **Fuera de la transaccion** y sin poder romperla: cuando se llega aqui las
      * filas estan escritas y sus asientos confirmados. Un contador incrementado
      * dentro de una transaccion que despues se revierte no se deshace, y
@@ -189,6 +200,7 @@ final readonly class UpdateComplianceProfileHandler
     private function observe(array $changed): void
     {
         $detection = 0;
+        $complianceView = 0;
         $retention = 0;
 
         foreach ($changed as $field) {
@@ -196,11 +208,15 @@ final readonly class UpdateComplianceProfileHandler
                 $detection++;
             }
 
+            if ($field->affectsComplianceView()) {
+                $complianceView++;
+            }
+
             if ($field->affectsRetention()) {
                 $retention++;
             }
         }
 
-        $this->metrics->profileChanged(count($changed), $detection, $retention);
+        $this->metrics->profileChanged(count($changed), $detection, $complianceView, $retention);
     }
 }

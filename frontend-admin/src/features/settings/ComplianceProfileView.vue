@@ -14,8 +14,11 @@
 //    proxima revision diaria. Es el aviso permanente de arriba.
 //  - **No hay retroactividad**: el valor nuevo rige desde el cambio y el
 //    historico no se reprocesa; ninguna incidencia se cierra ni se reabre.
-//  - **Tres campos se guardan y todavia no los aplica ninguna regla.** Se marcan
-//    uno a uno. Prometer un efecto que no existe es peor que no ofrecer el campo.
+//  - **La jornada semanal y el dia de inicio de semana mueven la vista de
+//    cumplimiento (RF-PA-06, tarea 3.4), no la bandeja de incidencias**: RN-17
+//    es informativa (computo anual, art. 34.1 ET) y nunca abre incidencia. El
+//    calendario de festivos es el UNICO campo que sigue sin consumidor; se
+//    marca como tal junto al propio campo, para no mentir sobre el efecto.
 //  - **`retention_years` es el unico cuyo error se paga con datos que no
 //    vuelven**, y lleva su propio aviso al lado.
 //
@@ -409,10 +412,6 @@ async function save(): Promise<void> {
         </FormField>
       </div>
 
-      <p class="text-sm text-kq-text-muted" data-test="not-applied-yet">
-        {{ t('compliance.notAppliedYet') }}
-      </p>
-
       <FormField
         :label="t('compliance.fields.weekStartsOn')"
         :hint="t('compliance.hints.weekStartsOn')"
@@ -432,6 +431,16 @@ async function save(): Promise<void> {
         </template>
       </FormField>
 
+      <!-- La jornada semanal y el dia de inicio de semana (arriba) mueven la
+           VISTA DE CUMPLIMIENTO (RF-PA-06, tarea 3.4), no la bandeja: RN-17 es
+           informativa (el computo del art. 34.1 ET es anual) y nunca abre
+           incidencia, al contrario que el descanso minimo y la jornada diaria
+           de mas arriba. Decirlo aqui evita que se lea como una quinta linea
+           de `detectionWarning`. -->
+      <p class="text-sm text-kq-text-muted" role="note" data-test="compliance-view-effect">
+        {{ t('compliance.complianceViewEffect') }}
+      </p>
+
       <FormField
         :label="t('compliance.fields.holidayCalendar')"
         :hint="t('compliance.hints.holidayCalendar')"
@@ -448,6 +457,14 @@ async function save(): Promise<void> {
           ></textarea>
         </template>
       </FormField>
+
+      <!-- El unico campo que sigue sin consumidor (calendario de festivos,
+           tarea 3.10): se declara justo debajo, no antes de la jornada
+           semanal ni del dia de inicio, que SI tienen consumidor desde la
+           3.4. -->
+      <p class="text-sm text-kq-text-muted" data-test="not-applied-yet">
+        {{ t('compliance.notAppliedYet') }}
+      </p>
 
       <FormField
         :label="t('compliance.fields.retentionYears')"

@@ -42,7 +42,7 @@ import { exceedsMaxRange, isInvertedRange, MAX_RANGE_DAYS } from '@kronoqr/web-k
 import { FALLBACK_TIMEZONE } from '@kronoqr/web-kit/datetime'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { ATTENDANCE_CORRECT } from '@/features/auth/abilities'
 import { useSessionStore } from '@/features/auth/session.store'
@@ -57,6 +57,7 @@ import { UNBOUNDED_RANGE } from './workdays.api'
 const props = defineProps<{ uuid: string }>()
 
 const { t } = useI18n()
+const route = useRoute()
 const session = useSessionStore()
 const queryClient = useQueryClient()
 
@@ -119,10 +120,26 @@ async function onDialogStale(): Promise<void> {
   await reloadWorkDays()
 }
 
+/**
+ * El rango que trae la URL (`?from=&to=`), si llega alguno de los dos.
+ *
+ * Es el enlace «al día del aviso» de la vista de cumplimiento (RF-PA-06,
+ * tarea 3.4, `ComplianceFindingsTable.vue`): un hallazgo de hace dos meses
+ * queda fuera del rango por omisión del servidor (los últimos 31 días), y sin
+ * esto la persona que sigue el enlace vería «sin jornadas» en vez del día que
+ * vino a mirar. Mismo patrón que `IncidentsView` con `?employee=`.
+ */
+function rangeFromQuery(): WorkDateRange | null {
+  const from = typeof route.query['from'] === 'string' ? route.query['from'] : ''
+  const to = typeof route.query['to'] === 'string' ? route.query['to'] : ''
+
+  return from === '' && to === '' ? null : { from, to }
+}
+
 /** Lo que hay escrito en el formulario. */
-const draft = ref<WorkDateRange>({ ...UNBOUNDED_RANGE })
+const draft = ref<WorkDateRange>(rangeFromQuery() ?? { ...UNBOUNDED_RANGE })
 /** Lo que se ha pedido de verdad. Cambia al enviar, no al teclear. */
-const applied = ref<WorkDateRange>({ ...UNBOUNDED_RANGE })
+const applied = ref<WorkDateRange>(rangeFromQuery() ?? { ...UNBOUNDED_RANGE })
 
 const inverted = computed(() => isInvertedRange(draft.value))
 const tooWide = computed(() => exceedsMaxRange(draft.value))

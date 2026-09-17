@@ -100,6 +100,9 @@ it('deja un asiento por campo cambiado, con el valor anterior y el posterior', f
 
     // El umbral que mueve la deteccion de incidencias (RN-10).
     expect($byField['min_rest_hours'])->toBe([
+        // La tercera consecuencia, de la tarea 3.4: ademas de mover las
+        // incidencias, mueve lo que enseña la vista de cumplimiento (RF-PA-06).
+        'affects_compliance_view' => true,
         'affects_incident_detection' => true,
         'affects_retention' => false,
         // La decision de retroactividad, escrita en el propio asiento.
@@ -112,6 +115,7 @@ it('deja un asiento por campo cambiado, con el valor anterior y el posterior', f
 
     // El unico campo cuyo error se paga con datos que no vuelven (RL-02).
     expect($byField['retention_years'])->toBe([
+        'affects_compliance_view' => false,
         'affects_incident_detection' => false,
         'affects_retention' => true,
         'applies_from' => 'change_forward_only',
@@ -123,6 +127,9 @@ it('deja un asiento por campo cambiado, con el valor anterior y el posterior', f
 
     // Y el nombre del convenio, que no mueve ni una alerta ni un dia de purga.
     expect($byField['name'])->toBe([
+        // El nombre del convenio no mueve nada: ni alertas, ni la vista, ni la
+        // purga. Es el contraste que hace utiles a los otros dos booleanos.
+        'affects_compliance_view' => false,
         'affects_incident_detection' => false,
         'affects_retention' => false,
         'applies_from' => 'change_forward_only',
@@ -196,6 +203,10 @@ it('dice la verdad sobre el umbral de la pausa, cuya regla esta suspendida', fun
     expect($entries)->toHaveCount(1);
 
     expect(profileAuditPayload($entries[0]))->toBe([
+        // El umbral de la pausa SI mueve lo que enseña la vista de cumplimiento
+        // —`meta.rules[]` publica su valor aunque la regla no se evalue— y eso
+        // distingue este asiento del de un cambio de nombre del convenio.
+        'affects_compliance_view' => true,
         // La verdad de hoy.
         'affects_incident_detection' => false,
         'affects_retention' => false,

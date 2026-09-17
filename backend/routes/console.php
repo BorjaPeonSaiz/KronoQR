@@ -290,6 +290,43 @@ $detectIncidents = Schedule::command('attendance:detect-incidents')
 $detectIncidents->onFailure(LogScheduledCommandFailure::of('attendance:detect-incidents', $detectIncidents));
 
 /*
+ * Metricas de la vista de cumplimiento (doc 02 §8.2, RF-PA-06, tarea 3.4).
+ *
+ *   reporting:compliance-metrics
+ *
+ *   compliance_findings_last_week{rule}
+ *   compliance_employees_affected_last_week
+ *
+ * DIARIA, a las 04:45 UTC: **quince minutos despues de `attendance:detect-incidents`**
+ * y no antes. La vista enlaza cada hallazgo con la incidencia de la bandeja, asi
+ * que publicando antes de la deteccion el enlace faltaria justo en las jornadas de
+ * la vispera — y el cuadro de mando diria que la vista y la bandeja no cuentan lo
+ * mismo cuando lo unico que pasa es que se miro demasiado pronto.
+ *
+ * UNA VEZ AL DIA Y NO MAS, al contrario que `compliance:incident-metrics`, que va
+ * cada cinco minutos. Aquella es un gauge de «cuantas hay AHORA» y cambia cuando
+ * alguien resuelve una; esta describe una semana **cerrada**, que no cambia salvo
+ * por una correccion de jornada. Publicarla mas a menudo solo engordaria la base
+ * de metricas con la misma cifra.
+ *
+ * SOBRE LA ULTIMA SEMANA COMPLETA DEL PERFIL, no los ultimos siete dias: RN-17 se
+ * evalua sobre la semana que empieza en `week_starts_on`, y una ventana movil
+ * mediria semanas que la pantalla no enseña.
+ *
+ * SIN ALERTA: es un indicador de RRHH, no un fallo de operacion, y una alerta sin
+ * runbook es ruido (doc 02 §8.4).
+ *
+ * `onFailure()` deja el codigo de salida en el log (ver la cabecera del fichero):
+ * con `runInBackground()`, Laravel ejecuta ese callback desde `schedule:finish` y
+ * es la unica traza localizable de que anoche fallo.
+ */
+$complianceMetrics = Schedule::command('reporting:compliance-metrics')
+    ->dailyAt('04:45')
+    ->withoutOverlapping()
+    ->runInBackground();
+$complianceMetrics->onFailure(LogScheduledCommandFailure::of('reporting:compliance-metrics', $complianceMetrics));
+
+/*
  * Metrica de incidencias abiertas (doc 02 §8.2, doc 01 §9.2, tarea 2.6).
  *
  *   incidents_open{type,severity}

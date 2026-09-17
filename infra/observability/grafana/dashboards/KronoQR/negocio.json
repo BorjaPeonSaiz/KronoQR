@@ -56,7 +56,7 @@
       "gridPos": { "h": 6, "w": 24, "x": 0, "y": 0 },
       "options": {
         "mode": "markdown",
-        "content": "El doc 02 §8.3 pide para este cuadro **horas trabajadas frente a contratadas**, **absentismo** e **impuntualidad**. Ninguna de las tres tiene serie de Prometheus todavía (decisión 13 de la tarea 3.2):\n\n- **Horas contratadas** viven en `employment_contracts` y hoy solo las lee el informe del panel de administración (tarea 3.4, vista de cumplimiento); no hay `worked_minutes_total` frente a un denominador de horas pactadas.\n- **Absentismo** depende del registro de ausencias, que es la **tarea 3.10** (todavía no ejecutada al escribir este cuadro).\n- **Impuntualidad** no tiene tipo de incidencia en el catálogo (`IncidentType`, doc 01 §5.5): no existe ningún hallazgo que contar.\n\nLo que sí muestra este cuadro con las series que existen: horas trabajadas por departamento, turnos abiertos ahora, incidencias de cumplimiento abiertas por tipo (descanso insuficiente, jornada larga, pausa ausente, turno sin cerrar), fichajes por PIN de respaldo y patrones anómalos de credencial."
+        "content": "El doc 02 §8.3 pide para este cuadro **horas trabajadas frente a contratadas**, **absentismo**, **impuntualidad** y **alertas de cumplimiento**. La tarea 3.4 entrega las alertas de cumplimiento (paneles «Alertas de cumplimiento de la última semana, por regla» y «Personas con alguna alerta», más abajo). De las tres que quedan:\n\n- **Horas contratadas frente a trabajadas** viven en `employment_contracts`; no hay serie que las compare con `worked_minutes_total`. Candidata de la **tarea 3.13** (cuadro de impacto y adopción), que calcula «horas trabajadas frente a contratadas» para su propio cuadro; aquí no se duplica hasta que exista la serie.\n- **Absentismo** depende del registro de ausencias, que es la **tarea 3.10** (todavía no ejecutada al escribir este cuadro).\n- **Impuntualidad** no tiene tipo de incidencia en el catálogo (`IncidentType`, doc 01 §5.5): no existe ningún hallazgo que contar; sin tarea asignada.\n\nLo que sí muestra este cuadro con las series que existen: horas trabajadas por departamento, turnos abiertos ahora, incidencias de cumplimiento abiertas por tipo (descanso insuficiente, jornada larga, pausa ausente, turno sin cerrar), alertas de cumplimiento de la última semana por regla y personas afectadas, fichajes por PIN de respaldo y patrones anómalos de credencial."
       }
     },
     {
@@ -292,6 +292,73 @@
       "options": {
         "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["sum"] },
         "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 9,
+      "type": "bargauge",
+      "title": "Alertas de cumplimiento de la última semana, por regla",
+      "description": "compliance_findings_last_week{rule} (RN-10/11/12, RN-17). Publicada cada noche por reporting:compliance-metrics sobre la última semana completa del perfil de cumplimiento, con la MISMA consulta que la pantalla «Cumplimiento» del panel de administración (tarea 3.4): el panel y este cuadro no pueden discrepar. missing_break (RN-12) sale a 0 mientras la regla siga suspendida (ComplianceRuleSuspension, hasta que la tarea 3.5 active la pausa declarada). Sin alerta de Prometheus asociada: es un indicador de RRHH, no un fallo de operación (doc 02 §8.4).",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 30 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" }, "expr": "compliance_findings_last_week", "legendFormat": "{{rule}}", "instant": true }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "noValue": "sin dato",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "#EAB839", "value": 1 },
+              { "color": "red", "value": 10 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showUnfilled": true
+      }
+    },
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "Personas con alguna alerta de cumplimiento (última semana)",
+      "description": "compliance_employees_affected_last_week. Misma fuente y misma cadencia que el panel de barras: reporting:compliance-metrics, cada noche, última semana completa del perfil.",
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 30 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" }, "expr": "compliance_employees_affected_last_week", "instant": true }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "noValue": "sin dato",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "#EAB839", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
       }
     }
   ]

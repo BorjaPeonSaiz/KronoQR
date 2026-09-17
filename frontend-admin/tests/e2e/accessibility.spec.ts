@@ -260,6 +260,17 @@ test('la pantalla de cumplimiento tampoco', { tag: ['@RF-PD-07'] }, async ({ pag
   await expectNoBlockingViolations(page)
 })
 
+// --- Vista de cumplimiento (RF-PA-06, tarea 3.4) -----------------------------
+
+test('la vista de cumplimiento tampoco', { tag: ['@RF-PA-06'] }, async ({ page }) => {
+  await logIn(page)
+  await page.goto('/compliance')
+  await expect(page.getByRole('heading', { level: 1, name: 'Cumplimiento' })).toBeVisible()
+  await expect(page.getByTestId('compliance-finding-row').first()).toBeVisible()
+
+  await expectNoBlockingViolations(page)
+})
+
 // --- Credenciales (RF-QR-*, tarea 1.9/1.10) ---------------------------------
 
 test('la pantalla de credenciales tampoco', { tag: ['@RF-QR-07'] }, async ({ page }) => {

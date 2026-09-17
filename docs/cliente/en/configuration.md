@@ -17,7 +17,7 @@ wrong place, the change is not applied** and nothing warns you about it.
 | What | Where | How it is changed | Restart needed? |
 | --- | --- | --- | --- |
 | **Branding, languages and operational thresholds** | Table `installation_settings` | `PATCH /api/v1/settings` (management panel, *administrator* role) | No |
-| **Legal thresholds**: minimum rest, maximum working day, breaks, retention years | Table `compliance_profiles` | `PATCH /api/v1/compliance-profile` (management panel → “Compliance”, *administrator* role) | No |
+| **Legal thresholds**: minimum rest, maximum working day, breaks, retention years | Table `compliance_profiles` | `PATCH /api/v1/compliance-profile` (management panel → “Compliance profile”, *administrator* role) | No |
 | **Everything about the deployment**: paths, credentials, ports, keys | The server's `.env` file | Edit it and restart the containers | **Yes** |
 
 The rule for not getting it wrong: **if you would change it without telling
@@ -200,7 +200,7 @@ language— the whole request is rejected and nothing is saved.
 
 ### 2.4 Legal thresholds: the compliance profile
 
-This is **not** on the configuration screen: it has its own, “Compliance”, and it
+This is **not** on the configuration screen: it has its own, “Compliance profile”, and it
 is also administrator-only. They are kept apart because they are a different
 thing. An **operational** threshold is decided by you according to how your
 hotel works; a **legal** threshold is set by the law or the collective
@@ -214,8 +214,8 @@ The **`ES-hosteleria`** profile is shipped, with these values:
 | `max_daily_hours` | `9` | An incident is opened if the sum of the shift entries of a working day **exceeds** that many hours | Art. 34.3 of the Workers' Statute |
 | `break_required_after_hours` | `6` | Threshold for a continuous shift entry without a recorded break. **Today the rule is evaluated but does not open incidents** (see below) | Art. 34.4 of the Workers' Statute |
 | `updated_at` | empty | Read-only: when it was last adjusted. **Empty means “as installed”** | — |
-| `max_weekly_hours` | `40` | Ordinary weekly working hours. **No rule applies it yet** | Art. 34.1 of the Workers' Statute |
-| `week_starts_on` | `1` (Monday) | Day the week starts on. **No rule applies it yet** | ISO 8601 |
+| `max_weekly_hours` | `40` | Ordinary weekly working hours. **The compliance view applies it**: it warns about the weeks that go over, **opening no incident** (see below) | Art. 34.1 of the Workers' Statute |
+| `week_starts_on` | `1` (Monday) | Day the week starts on. **It defines the week the compliance view measures** | ISO 8601 |
 | `holiday_calendar` | empty | The site's public holidays, one date per line. **No rule applies it yet** | You load it |
 | `retention_years` | `4` | Years the record has to be kept before it can be purged | Art. 34.9 of the Workers' Statute |
 | `name` | `ES-hosteleria` | What the collective agreement the profile describes is called | You set it |
@@ -225,11 +225,19 @@ the municipality and the year: a calendar built into the product would expire
 every 31 December and be wrong for half the customers. You load it, once a year,
 by pasting the dates.
 
-**Three fields are stored and not applied yet** —weekly working hours, first day
-of the week and holidays—. The screen says so next to the fields. You can leave
-them already adjusted to your collective agreement: the compliance view of a
-later version will be the first to use them, and the changes are audited from
-today.
+**One field is stored and not applied yet**: the holiday calendar. The screen
+says so next to the field. You can leave it already loaded: the absence
+management of a later version will be the first to use it, and the changes are
+audited from today.
+
+**Weekly working hours and the first day of the week are applied now**, in the
+**compliance view** of the panel: it flags the weeks that go over the ordinary
+working hours, with the week starting on the day you say. That warning is
+**informative and opens no incident** —art. 34.1 of the Workers' Statute sets
+the forty hours as an annual average, so a week above is not in itself a
+breach—, so changing either of them **alters no incident**, but it does change
+what is seen on that screen from the moment it is saved. It is explained in
+[`hr-guide.md`](hr-guide.md) §4 bis.
 
 **`break_required_after_hours` is stated but does not open incidents yet.** The
 system cannot tell “did not rest” from “rested and did not clock it” until the
@@ -1120,7 +1128,7 @@ docker compose exec app php artisan identity:2fa-reset     # retira un segundo f
 ## 6. Complete `.env` reference, variable by variable
 
 This is the **complete** list of what can be written in the server's `.env`:
-**161 variables**, all those that `.env.example` ships. It is here so that you
+**every variable `.env.example` declares**, one by one. It is here so that you
 do not have to read the whole file when you are looking for one thing, and so
 that you can tell at a glance whether touching it moves working hours or not.
 
@@ -1473,6 +1481,8 @@ The three ranges are explained in detail, with symptoms and checks, in
 | `COMPLIANCE_LEGAL_EXPORT_TEMP_RETENTION_HOURS` | — | Hours an orphaned temporary file from the legal export download may live before it is deleted automatically. **It does not affect** the deliberate copy generated by the export command: that one is kept by whoever generated it | `6` | Almost never | No |
 | `COMPLIANCE_AUTHZ_DENIAL_WINDOW_SECONDS` | — | Window in which repeated denials for the same actor are grouped into a single audit entry. Protects the audit chain from an enumeration | `60` | Set it to `0` if you are investigating an incident and want one entry per denial | No |
 | `COMPLIANCE_INCIDENT_LOOKBACK_DAYS` | — | Days back that the daily incident detection reviews. Shift entries **still open** are always reviewed, whatever their date | `7` | Almost never. **Raising it can open incidents for working days already handed to the staff or to the Labour Inspectorate**, which is exactly what the window avoids | **Yes** (opens incidents) |
+| `REPORTING_COMPLIANCE_MAX_RANGE_DAYS` | — | Maximum days a compliance view query may span ([`hr-guide.md`](hr-guide.md) §4 bis). Above that, the screen says so and does not query | `92` | Almost never. Raising it makes the query longer and brings the limit of the next variable closer; if you need a longer period, ask for two | No |
+| `REPORTING_COMPLIANCE_TIMEOUT_SECONDS` | — | Seconds granted to that query inside PostgreSQL before giving it up. It protects the rest of the system: nothing is blocked and the screen asks for a shorter period | `10` | Only if your server is slow and the screen fails with legitimate periods. If you have to raise it a lot, the problem is the database, not this number | No |
 
 ### 6.17 Licence
 

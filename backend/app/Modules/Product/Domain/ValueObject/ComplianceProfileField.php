@@ -43,16 +43,16 @@ enum ComplianceProfileField: string
     /** RN-11: jornada diaria ordinaria por encima de la cual se alerta. */
     case MaxDailyHours = 'max_daily_hours';
 
-    /** Jornada semanal ordinaria (art. 34.1 ET). Sin consumidor hasta la tarea 3.4. */
+    /** RN-17: jornada semanal ordinaria (art. 34.1 ET). */
     case MaxWeeklyHours = 'max_weekly_hours';
 
     /** RN-12: tramo continuo maximo sin pausa registrada. */
     case BreakRequiredAfterHours = 'break_required_after_hours';
 
-    /** Dia en que empieza la semana, ISO-8601. Sin consumidor hasta la tarea 3.4. */
+    /** RN-17: dia en que empieza la semana del perfil, ISO-8601. */
     case WeekStartsOn = 'week_starts_on';
 
-    /** Festivos del centro. Sin consumidor hasta la tarea 3.4. */
+    /** Festivos del centro. Sin consumidor hasta la tarea 3.10 (ausencias). */
     case HolidayCalendar = 'holiday_calendar';
 
     /** RL-02: años que se conserva el registro horario antes de poder purgarlo. */
@@ -110,11 +110,18 @@ enum ComplianceProfileField: string
     /**
      * La regla del **perfil de cumplimiento** cuyo umbral fija este campo, o
      * `null` si el campo no gobierna ninguna regla (el nombre del convenio, los
-     * años de retencion, y los tres que todavia no lee nadie).
+     * años de retencion y los festivos, que todavia no lee nadie).
      *
      * Es el vocabulario de `Shared`, que es el unico que este modulo comparte con
-     * `Attendance` (doc 02 §1.6). Sirve para saber si la regla abre incidencias
-     * **hoy** sin tener que repetir aqui la lista de reglas suspendidas.
+     * `Attendance` y con `Reporting` (doc 02 §1.6). Sirve para saber si la regla
+     * abre incidencias **hoy** sin tener que repetir aqui la lista de reglas
+     * suspendidas.
+     *
+     * **`week_starts_on` gobierna RN-17 igual que `max_weekly_hours`**, aunque no
+     * sea un umbral sino el dia por el que se corta la semana: mover el inicio de
+     * semana cambia que siete jornadas se suman, y por tanto cambia que semanas
+     * salen señaladas. Dejarlo fuera habria hecho que el asiento de auditoria de
+     * ese cambio dijera «no afecta a nada».
      */
     public function complianceRule(): ?ComplianceRule
     {
@@ -122,6 +129,7 @@ enum ComplianceProfileField: string
             self::MinRestHours => ComplianceRule::MinimumRestBetweenWorkDays,
             self::MaxDailyHours => ComplianceRule::MaximumDailyWorkingTime,
             self::BreakRequiredAfterHours => ComplianceRule::BreakInContinuousShift,
+            self::MaxWeeklyHours, self::WeekStartsOn => ComplianceRule::MaximumWeeklyWorkingTime,
             default => null,
         };
     }
@@ -133,19 +141,51 @@ enum ComplianceProfileField: string
      * quien llega con una inspeccion delante: «¿por que esta jornada no genero
      * alerta?».
      *
-     * **Dice la verdad de hoy, no la del catalogo.** Gobernar una regla no basta:
-     * si la apertura de esa regla esta suspendida —RN-12 lo esta hasta que el
-     * quiosco registre la pausa declarada (ADR-024, RF-AT-12, tarea 3.5)—
-     * cambiar su umbral **no altera ni una incidencia**, y escribir `true` en un
-     * registro con valor legal seria afirmar algo falso. Se deriva de
-     * {@see ComplianceRuleSuspension}: el dia que la 3.5 vacie esa lista, esto
-     * vuelve a `true` solo, sin tocar este fichero.
+     * **Dice la verdad de hoy, no la del catalogo.** Gobernar una regla no basta,
+     * y hay dos motivos distintos por los que un umbral legal puede no mover
+     * ninguna incidencia:
+     *
+     *   - **La regla no abre incidencias, por definicion.** RN-17 no lo hace: el
+     *     art. 34.1 ET fija la jornada semanal en computo anual, asi que una
+     *     semana larga se señala en la vista de cumplimiento y no en la bandeja
+     *     ({@see ComplianceRule::opensIncident()}). Es permanente.
+     *   - **La apertura esta suspendida.** RN-12 lo esta hasta que el quiosco
+     *     registre la pausa declarada (ADR-024, RF-AT-12, tarea 3.5), y lo dice
+     *     {@see ComplianceRuleSuspension}. Es temporal: el dia que la 3.5 vacie
+     *     esa lista, esto vuelve a `true` solo, sin tocar este fichero.
+     *
+     * Escribir `true` en cualquiera de los dos casos seria afirmar algo falso
+     * dentro de un registro con valor legal. Lo que distingue uno de otro para
+     * quien lea el asiento son {@see self::governsSuspendedRule()} y
+     * {@see self::affectsComplianceView()}.
      */
     public function affectsIncidentDetection(): bool
     {
         $rule = $this->complianceRule();
 
-        return $rule instanceof ComplianceRule && ! ComplianceRuleSuspension::isSuspended($rule);
+        return $rule instanceof ComplianceRule
+            && $rule->opensIncident()
+            && ! ComplianceRuleSuspension::isSuspended($rule);
+    }
+
+    /**
+     * Si cambiarlo cambia **lo que enseña la vista de cumplimiento** (RF-PA-06).
+     *
+     * Es el efecto que faltaba, y hace falta por RN-17: `max_weekly_hours` y
+     * `week_starts_on` dejaron de ser «campos sin consumidor» con la tarea 3.4,
+     * pero **no** afectan a la deteccion de incidencias. Sin este tercer efecto,
+     * el asiento de auditoria de un cambio suyo seria indistinguible del de un
+     * cambio de nombre del convenio —los dos con los tres booleanos en `false`—,
+     * y son cosas muy distintas: una mueve los avisos que RRHH revisa.
+     *
+     * **Las cuatro reglas del perfil se enseñan en esa vista**, tambien la
+     * suspendida: `meta.rules[]` lleva el umbral de RN-12 con `evaluated: false`,
+     * asi que cambiarlo cambia lo que la pantalla dice. Por eso esto es
+     * exactamente «gobierna alguna regla» y no un subconjunto.
+     */
+    public function affectsComplianceView(): bool
+    {
+        return $this->complianceRule() instanceof ComplianceRule;
     }
 
     /**
@@ -184,20 +224,21 @@ enum ComplianceProfileField: string
     /**
      * Si el producto lo guarda pero todavia **no lo aplica ninguna regla**.
      *
-     * Los estrena la vista de cumplimiento (tarea 3.4). Se declara aqui —y viaja
-     * al panel— para no prometer un efecto que hoy no existe.
+     * Queda **uno solo**: los festivos. La tarea 3.4 estreno `max_weekly_hours` y
+     * `week_starts_on` con RN-17, y `holiday_calendar` sigue aqui a proposito
+     * —ninguna de las cuatro reglas lee festivos, porque la semanal mide la
+     * semana trabajada y no los dias laborables—. Lo estrena la tarea 3.10
+     * (ausencias). Se declara aqui —y viaja al panel— para no prometer un efecto
+     * que hoy no existe.
      *
-     * **No confundir con {@see self::governsSuspendedRule()}.** Aquellos tres no
-     * los lee **nadie**; `break_required_after_hours` lo lee RN-12, que se evalua
-     * y tiene sus pruebas — lo unico suspendido es que abra incidencia. Meterlos
-     * en el mismo saco haria que la pantalla dijera «no lo aplica ninguna regla»
-     * de una regla que si se aplica, que es mentir en la otra direccion.
+     * **No confundir con {@see self::governsSuspendedRule()}.** Este no lo lee
+     * **nadie**; `break_required_after_hours` lo lee RN-12, que se evalua y tiene
+     * sus pruebas — lo unico suspendido es que abra incidencia. Meterlos en el
+     * mismo saco haria que la pantalla dijera «no lo aplica ninguna regla» de una
+     * regla que si se aplica, que es mentir en la otra direccion.
      */
     public function hasNoConsumerYet(): bool
     {
-        return match ($this) {
-            self::MaxWeeklyHours, self::WeekStartsOn, self::HolidayCalendar => true,
-            default => false,
-        };
+        return $this === self::HolidayCalendar;
     }
 }

@@ -92,6 +92,10 @@ function textfileSeries(): array
         'credentials_active_unknown_key',
         // Reporting\Infrastructure\Metrics\TextfileAdoptionMetrics (tarea 3.1)
         'workdays_complete_ratio',
+        // Reporting\Infrastructure\Metrics\TextfileComplianceMetrics (tarea 3.4, decision 10)
+        'compliance_findings_last_week',
+        'compliance_employees_affected_last_week',
+        'compliance_metrics_week_start_seconds',
     ];
 }
 

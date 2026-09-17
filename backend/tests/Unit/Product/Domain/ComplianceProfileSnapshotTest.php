@@ -181,17 +181,50 @@ it('solo declara cambiado lo que de verdad cambia de valor', function (): void {
         ->and($profile->fieldsThatChange(['holiday_calendar' => []]))->toBe([]);
 })->group('RF-PD-07', 'RL-04');
 
-it('separa las dos consecuencias de cada campo, que es lo que lee el asiento', function (): void {
-    // «¿Cambia esto que alertas saltan?» y «¿cambia esto que se puede borrar?»
-    // son dos preguntas distintas y quien lee el trail busca una o la otra.
+it('separa las tres consecuencias de cada campo, que es lo que lee el asiento', function (): void {
+    // «¿Cambia esto que alertas saltan?», «¿cambia esto lo que RRHH ve en la vista
+    // de cumplimiento?» y «¿cambia esto que se puede borrar?» son tres preguntas
+    // distintas y quien lee el trail busca una u otra.
     expect(ComplianceProfileField::MinRestHours->affectsIncidentDetection())->toBeTrue()
         ->and(ComplianceProfileField::MaxDailyHours->affectsIncidentDetection())->toBeTrue()
         ->and(ComplianceProfileField::RetentionYears->affectsIncidentDetection())->toBeFalse()
         ->and(ComplianceProfileField::RetentionYears->affectsRetention())->toBeTrue()
         ->and(ComplianceProfileField::MinRestHours->affectsRetention())->toBeFalse()
         ->and(ComplianceProfileField::Name->affectsIncidentDetection())->toBeFalse()
-        ->and(ComplianceProfileField::Name->affectsRetention())->toBeFalse();
-})->group('RF-PD-07', 'RL-04');
+        ->and(ComplianceProfileField::Name->affectsRetention())->toBeFalse()
+        // La tercera, de la tarea 3.4: los cuatro campos que gobiernan una regla
+        // mueven lo que enseña la vista de cumplimiento, tambien el de la regla
+        // suspendida —`meta.rules[]` publica su umbral— y tambien los de RN-17,
+        // que no abre incidencia.
+        ->and(ComplianceProfileField::MinRestHours->affectsComplianceView())->toBeTrue()
+        ->and(ComplianceProfileField::BreakRequiredAfterHours->affectsComplianceView())->toBeTrue()
+        ->and(ComplianceProfileField::MaxWeeklyHours->affectsComplianceView())->toBeTrue()
+        ->and(ComplianceProfileField::WeekStartsOn->affectsComplianceView())->toBeTrue()
+        ->and(ComplianceProfileField::Name->affectsComplianceView())->toBeFalse()
+        ->and(ComplianceProfileField::RetentionYears->affectsComplianceView())->toBeFalse()
+        ->and(ComplianceProfileField::HolidayCalendar->affectsComplianceView())->toBeFalse();
+})->group('RF-PD-07', 'RL-04', 'RF-PA-06');
+
+it('no afirma que el limite semanal mueva la deteccion, porque RN-17 no abre incidencia', function (): void {
+    /*
+     * La distincion que estrena la tarea 3.4, y que no es la misma que la
+     * suspension de RN-12.
+     *
+     * `max_weekly_hours` y `week_starts_on` gobiernan RN-17, que **por definicion**
+     * no abre incidencia: el art. 34.1 ET fija la jornada semanal en computo
+     * anual, asi que una semana por encima se señala en la vista y no en la
+     * bandeja. Es permanente, no un «todavia no» como el de RN-12: por eso
+     * `governsSuspendedRule()` es `false` y `affectsComplianceView()` es `true`.
+     */
+    expect(ComplianceProfileField::MaxWeeklyHours->affectsIncidentDetection())->toBeFalse()
+        ->and(ComplianceProfileField::WeekStartsOn->affectsIncidentDetection())->toBeFalse()
+        ->and(ComplianceProfileField::MaxWeeklyHours->governsSuspendedRule())->toBeFalse()
+        ->and(ComplianceProfileField::WeekStartsOn->governsSuspendedRule())->toBeFalse()
+        ->and(ComplianceRule::MaximumWeeklyWorkingTime->opensIncident())->toBeFalse()
+        ->and(ComplianceRule::MinimumRestBetweenWorkDays->opensIncident())->toBeTrue()
+        ->and(ComplianceRule::MaximumDailyWorkingTime->opensIncident())->toBeTrue()
+        ->and(ComplianceRule::BreakInContinuousShift->opensIncident())->toBeTrue();
+})->group('RF-PD-07', 'RN-17', 'RL-04');
 
 it('no afirma que el umbral de la pausa mueva la deteccion mientras RN-12 este suspendida', function (): void {
     // **El defecto que esto fija.** `break_required_after_hours` gobierna RN-12,
@@ -222,24 +255,28 @@ it('deriva la suspension de una unica lista, para que la 3.5 la reactive sin toc
     foreach (ComplianceProfileField::cases() as $field) {
         $rule = $field->complianceRule();
 
-        expect($field->affectsIncidentDetection())
-            ->toBe($rule instanceof ComplianceRule && ! in_array($rule, $suspended, true));
+        // Las dos condiciones se derivan, ninguna se enumera: la regla dice si
+        // abre incidencia y la lista dice si esa apertura esta suspendida hoy.
+        expect($field->affectsIncidentDetection())->toBe(
+            $rule instanceof ComplianceRule && $rule->opensIncident() && ! in_array($rule, $suspended, true),
+        );
     }
-})->group('RF-PD-07', 'RN-12');
+})->group('RF-PD-07', 'RN-12', 'RN-17');
 
 it('declara cuales de sus campos todavia no aplica ninguna regla', function (): void {
     // Prometer un efecto que hoy no existe es peor que no ofrecer el campo: el
     // panel lo dice a partir de aqui, no de una lista propia.
+    //
+    // **Queda uno.** La tarea 3.4 estreno `max_weekly_hours` y `week_starts_on`
+    // con RN-17; `holiday_calendar` sigue sin consumidor a proposito, porque
+    // ninguna de las cuatro reglas lee festivos —la semanal mide la semana
+    // trabajada, no los dias laborables— y lo estrena la 3.10 (ausencias).
     $pending = array_values(array_filter(
         ComplianceProfileField::cases(),
         static fn (ComplianceProfileField $field): bool => $field->hasNoConsumerYet(),
     ));
 
-    expect($pending)->toBe([
-        ComplianceProfileField::MaxWeeklyHours,
-        ComplianceProfileField::WeekStartsOn,
-        ComplianceProfileField::HolidayCalendar,
-    ]);
+    expect($pending)->toBe([ComplianceProfileField::HolidayCalendar]);
 })->group('RF-PD-07');
 
 it('rechaza justo por encima del maximo de cada campo', function (string $field, int $value): void {
