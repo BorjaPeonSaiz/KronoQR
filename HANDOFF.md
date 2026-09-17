@@ -44,7 +44,7 @@ Contract + Feature 1789 (`make test-contract`), PHPStan 9 sin errores, Deptrac 0
 
 **Confirmada en el commit único `bac7da2`** (`feat(carga): …`, 76 ficheros), rama empujada; **`load-test.yml` NO se pudo lanzar a mano
 desde la rama** (GitHub solo registra un `workflow_dispatch` nuevo cuando el fichero existe en la rama por defecto: 404 en la API),
-así que su primera ejecución real es desde `main`. CI manual completa lanzada tras el último push y **PR #67** abierta contra `main`.
+así que su primera ejecución real es desde `main`. CI manual completa **35263015385 EN VERDE con los 21 jobs** (③ mutación, ⑧b y cobertura incluidos; ③ tardó 1288 s, aviso conocido) y **PR #67** abierta contra `main`.
 
 **Siguiente acción:** el usuario integra la PR con *merge commit* y borra la rama. Sin migración: tras integrar, `git pull` y `make up`
 (el entrypoint y los compose cambian: `PGOPTIONS` y el rendido del pool). Después, desde `main`: `gh workflow run load-test.yml -f
