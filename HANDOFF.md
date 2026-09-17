@@ -42,6 +42,17 @@ Linux.** Cifras finales: backend Unit 1957, Feature 1729, Integration 636, Archi
 Contract + Feature 1789 (`make test-contract`), PHPStan 9 sin errores, Deptrac 0/0, `sh-lint` 0, `docs:consistency` sin divergencias, mutación acotada:
 `TagScanner` 82,41 %, evento del snapshot 100 %.
 
+**Confirmada en el commit único `bac7da2`** (`feat(carga): …`, 76 ficheros), rama empujada; **`load-test.yml` NO se pudo lanzar a mano
+desde la rama** (GitHub solo registra un `workflow_dispatch` nuevo cuando el fichero existe en la rama por defecto: 404 en la API),
+así que su primera ejecución real es desde `main`. CI manual completa lanzada tras el último push y **PR #67** abierta contra `main`.
+
+**Siguiente acción:** el usuario integra la PR con *merge commit* y borra la rama. Sin migración: tras integrar, `git pull` y `make up`
+(el entrypoint y los compose cambian: `PGOPTIONS` y el rendido del pool). Después, desde `main`: `gh workflow run load-test.yml -f
+instances=2 -f duration=30s` (primera ejecución en el runner, barata: destapa lo que solo aparece allí), luego la llena (`instances=10`,
+`duration=120s`), descargar el artefacto `.results/summary.json` y versionarlo como `load-tests/k6/baseline.json` en un commit propio
+(`docs(carga): línea base …`) con PR pequeña; si el runner no alcanza p95 < 150 ms, la cifra válida sigue siendo la del hardware Linux
+de referencia (doc 07 A-11). Después, la **3.7** (E2E con cámara simulada y accesibilidad; incluye la migración a Vitest 5 aplazada).
+
 **Rama `feat/tarea-3.5-pausa-y-desfase` (desde `main` `c1ccba0`, con la 3.4 integrada por PR #65). Tarea 3.5 «Fichaje de pausa y
 validación de desfase de reloj» (RF-AT-10, RF-AT-12, RN-05, RN-12, RN-15, ADR-024) IMPLEMENTADA, REVISADA (dos vueltas) y PROBADA el
 17-09-2026; ver «Siguiente acción».** Quince decisiones en la ficha (plan 06 → «Tarea 3.5» → «Decisiones tomadas»; la 15 es «lo que
