@@ -7,6 +7,45 @@
 
 ## Estado y objetivo actual
 
+**Rama `feat/fichaje-irreconciliable` (desde la rama de restos de la 3.6, PR #68 ya integrada en `main`). Tarea ad hoc
+«fichaje irreconciliable», RN-18 (derivada de la 3.6; decisión 20 de su ficha), IMPLEMENTADA, REVISADA (tres vueltas) y PROBADA el 18-09-2026.** Once decisiones en Engram
+(`attendance/fichaje-irreconciliable`, `…/ejecucion`); ejecutada con la skill `/nueva-regla-de-negocio` (documentar → probar →
+implementar) y revisada por `seguridad-cumplimiento`, `revisor-codigo` y `qa-testing`. Lo que importa: **RN-18 en doc 01 §4 con
+sus DOS formas** —salida que no es posterior a la entrada del turno abierto (RN-03, límite estricto: el instante igual tampoco
+cuadra) y, ampliación decidida en la revisión, entrada que caería dentro o antes de un tramo ya cerrado de esa persona en cualquier jornada —lectura por empleado en el camino de apertura, porque `shift_entries_no_overlap` cruza jornadas— (RN-02, intervalo
+`[inicio, fin)`: a las 13:00 exactas contra [09:00, 13:00) sí cuadra); los tramos ABIERTOS quedan fuera por construcción en el camino
+de apertura (son la carrera de diez lecturas de RN-01, que sigue saliendo por anti-rebote)—, §5.5 (`rejected_out_of_order`,
+`out_of_order_scan`), §11 (dos Gherkin), §13 (*fichaje irreconciliable* → `OutOfOrderScan`), `requisitos.yaml`; **la decisión vive en
+`WorkDay::outOfOrderScanFor(acción, instante)`** (objeto de valor `OutOfOrderScan` con `beforeOpenEntry`/`overlappingClosedEntry`,
+`openedAt`/`closedAt`/`occurredAt`, que rechaza construirse si el escaneo sí cuadra; `TimeRange`/`ClockOutBeforeClockIn` y
+`guardNothingExtendsBeyond`/`OverlappingShiftEntry` intactos como última defensa), evaluada en `RegisterScanHandler` DESPUÉS del
+anti-rebote (ADR-031) y antes del agregado; `ClockOutBeforeClockIn` sale del `catch` de carreras; `scan_events.result =
+rejected_out_of_order` + `flagged_for_review`, sin tramo ni acumulado (migraciones expand de `scan_events_chk_result`,
+`scan_events_chk_worked_minutes` e `incidents_chk_type`, `down()` que valida y se niega si ya hay filas: regla 5); **`422` con el cuerpo
+genérico** también por elemento del lote (ADR-012: los quioscos desplegados solo borran ante 200/422; su latencia es la del camino
+aceptado, sin suelo: doc 07 A-13 explica por qué no abre oráculo); incidencia **`out_of_order_scan`** (media) abierta por la pasada
+nocturna leyendo la columna **acotada por `recorded_at`** (un elemento atascado que drena tras actualizar llega con días de retraso y
+debe abrir incidencia; la jornada es la fecha civil del `occurred_at` en la zona del centro) y por el índice parcial de
+`flagged_for_review`, una por persona y jornada, `context` escalar con `scan_id`/`occurred_at` (`Z`)/`scans` (contrato: `IncidentType`
+enum + `IncidentContext` `anyOf [integer, string ≤ 64]`, aditivo; `IncidentContextKeysTest` con lista cerrada de claves por tipo);
+quiosco sin cambios de código (el 422 dentro de un 207 ya se descartaba; E2E «la cola llega a cero» sin espera fija y unitaria del caso
+mixto); panel con la etiqueta «Fichaje fuera de orden», filtro y contexto legible en la zona del centro (E2E `@RN-18 @RF-PA-05`); guía de
+RRHH §4.4 ES/EN (la hora está en la incidencia, no en el registro horario; cuatro pasos) y runbook `cola-offline-atascada.md` §4
+(«un elemento que jamás podrá cuadrar»: actualizar el servidor basta); k6: el `422` del lote es registro, un elemento imposible por lote
+que nunca recibe `503` (`RN-18` en `summary.json`) y veredicto nuevo `SERVICIO` (5xx ≤ 1 % de lo atendido, siempre evaluado); sin
+retroactividad (las incidencias de los primeros días llevarán fecha antigua: son las tablets vaciando lo atascado). Defecto propio
+corregido por el camino: la comprobación incondicional daba 422 al perdedor de la carrera de diez lecturas (ahora la excluye el
+agregado y hay prueba determinista en Feature con `StaleOpenWorkDayRepository`). Cifras: backend Unit 1988, Integration 652, Contract + Feature 1809, Architecture 572 (+ `SourceDiscoveryTest` conocido), PHPStan 9 sin errores, Deptrac 0/0, Redocly 0, `docs:consistency` sin divergencias, matriz 3458 (Pest 3225, Playwright 228, k6 5); mutación acotada: `WorkDay` 88,89 % (0 vivos en lo nuevo), `OutOfOrderScan` 100 %; quiosco unit 504, E2E offline 14; panel unit 547, E2E incidencias 6; `aggregate.test.js` 32; `ClientDocumentationTest` 75.
+
+**Confirmada en commit único (`feat(fichaje): …`), rama empujada, CI manual lanzada tras el push y PR abierta contra `main`
+(ver el número en la PR).** **Siguiente acción:** el usuario integra la PR de RN-18 con *merge commit* y borra la rama; **con migración**
+(tres `CHECK` expand: `2026_09_18_100000/100100/100200`): tras integrar, `git pull` y `make up` (aplica con `--database=pgsql_migrator`).
+Después, la **3.7** «E2E con cámara simulada y suite de accesibilidad»: el análisis de huecos está en Engram
+(`fase-3/tarea-3.7/analisis`) y el borrador de trece decisiones en el scratchpad de la sesión del 17/18-09 (resumen: `RQ-04`
+reetiquetado a las pruebas del quiosco con vídeo; E2E del bloqueo del PIN; deterioro repartido al 25 % con semilla como sostén del
+doc 05 §5.2; canal sonoro E2E con doble de `AudioContext`; Vitest 5 como primer paso con lock regenerado desde Linux; `retries: 0`;
+paso 9 de la ficha corregido: no hay `e2e.yml`).
+
 **Restos de la 3.6 en `fix/load-test-pila-de-pruebas` (17/18-09-2026), tras integrar la PR #67 en `main` (`0b6e247`).** Primera ejecución
 real de `load-test.yml` desde `main` (35269713019): el aprovisionamiento se negó porque el paquete instala con `APP_ENV=production`
 (`install.sh` lo exige) → el workflow declara la pila como `staging` DESPUÉS de instalar y recrea los cuatro roles PHP y nginx
@@ -28,7 +67,7 @@ solo borran ante 200/422), `scan_events.result = rejected_out_of_order` + `flagg
 `out_of_order_scan` abierta por la pasada nocturna leyendo la columna (sin evento ni listener nuevos), decisión en el agregado
 `WorkDay` y no en el `catch`; detalle en Engram `attendance/fichaje-irreconciliable`. Pendiente como tarea ad hoc propia.
 
-**Siguiente acción:** el usuario integra la PR de restos (`fix/load-test-pila-de-pruebas`) con *merge commit* y borra la rama; sin migración, basta `git pull`. Pasada de validación del modo línea base en el runner: run 35281772812 → success; veredictos {"CHECKS":"pass","RNF-P-02":"pass","RNF-P-06":"pass","RQ-03":"pass","RS-03":"pass"}; p95 405.7 ms, 19.5 tramos/s frente a la línea base 367 ms / 19,6 tramos/s (perfil de 3 instancias). Después, en este orden: (1) tarea ad hoc **«fichaje irreconciliable»** en rama propia (RN-18 en doc 01 §4 con `/nueva-regla-de-negocio`, luego contrato aditivo, migraciones expand de los dos `CHECK`, resolución en `WorkDay`, `rejected_out_of_order`, incidencia `out_of_order_scan` por la pasada nocturna, contador en el quiosco, i18n del panel; cinco niveles de prueba + E2E «la cola llega a cero»); (2) la **3.7** con las decisiones ya borradas en el scratchpad de la sesión del 17-09 (Engram `fase-3/tarea-3.7/analisis`): `RQ-04` reetiquetado, bloqueo del PIN E2E, deterioro repartido al 25 %, canal sonoro E2E, Vitest 5 como primer paso, `retries: 0`.
+**PR #68 integrada en `main` (`9e6508e`, 18-09-2026; CI manual 35282240133 en verde tras relanzar ④ por ruido del runner).** Lo que decía la siguiente acción de entonces: integrar la PR de restos; sin migración, basta `git pull`. Pasada de validación del modo línea base en el runner: run 35281772812 → success; veredictos {"CHECKS":"pass","RNF-P-02":"pass","RNF-P-06":"pass","RQ-03":"pass","RS-03":"pass"}; p95 405.7 ms, 19.5 tramos/s frente a la línea base 367 ms / 19,6 tramos/s (perfil de 3 instancias). Después, en este orden: (1) tarea ad hoc **«fichaje irreconciliable»** en rama propia (RN-18 en doc 01 §4 con `/nueva-regla-de-negocio`, luego contrato aditivo, migraciones expand de los dos `CHECK`, resolución en `WorkDay`, `rejected_out_of_order`, incidencia `out_of_order_scan` por la pasada nocturna, contador en el quiosco, i18n del panel; cinco niveles de prueba + E2E «la cola llega a cero»); (2) la **3.7** con las decisiones ya borradas en el scratchpad de la sesión del 17-09 (Engram `fase-3/tarea-3.7/analisis`): `RQ-04` reetiquetado, bloqueo del PIN E2E, deterioro repartido al 25 %, canal sonoro E2E, Vitest 5 como primer paso, `retries: 0`.
 
 **Rama `feat/tarea-3.6-carga-k6` (desde `main` `5d13cf1`, con la 3.5 integrada por PR #66). Tarea 3.6 «Pruebas de carga k6 y ajuste de
 rendimiento» (RNF-P-06, RNF-P-02, RQ-08; restos de la 3.4 y la 3.5: endpoint de cumplimiento y `lastAcceptedScanOf()` bajo carga)
@@ -620,6 +659,15 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 
 ### Por tarea
 
+- **RN-18 (restos, 18-09-2026):** la salvaguarda de la carrera y el puerto `closedEntryEndingAfter` no tienen unitaria de Application
+  (el handler exige un `ConnectionInterface` falso; lo determinista lo cubren dos Feature con `StaleOpenWorkDayRepository`); la
+  E2E de la bandeja del panel no usa dobles por tipo (solo `OPEN_INCIDENT`); `verify-after-load.php` compara `filas >= contadas`
+  porque el escaneo previo `batch_seed` puede producir su propia fila RN-18; el detalle de jornada no muestra escaneos ni la marca de
+  revisión (la hora del fichaje irreconciliable solo se ve en la incidencia; si se quiere en el registro horario es cambio de contrato
+  y de panel); `PeriodReportVolumeTest` (RNF-P-05, 5 s) cayó una vez en la CI de la #68 por ruido del runner (5,6 s) y pasó al
+  repetir: candidata a intermitente si repite; `make test-unit` en local sigue por encima de los 5 s por el bind mount (6,05 s);
+  `load-tests/` queda fuera del alcance de Pint (comillas dobles sin interpolación las detecta una revisión, no una herramienta); doc 05
+  §9.2/§9.5 admite reforzar «nada se pierde» con RN-18 (decisión comercial, sin tocar).
 - **3.6 (restos, 17-09-2026):** `load-tests/k6/baseline.json` sale del `summary.json` de la primera ejecución del workflow en el
   runner (decisión 17) y hasta entonces `--baseline` no se aplica; **`load-test.yml` no ha corrido nunca** (primero a mano con
   `INSTANCES=2 DURATION=30s`, después la llena); **un elemento de lote con `503` (`ClockOutBeforeClockIn`) se reintentaría para
@@ -802,6 +850,11 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 
 ## Trampas del entorno — leer antes de operar
 
+- **`shift_entries_no_overlap` cruza jornadas y el agregado `WorkDay` solo ve la suya**: una regla enunciada sobre «el turno abierto»
+  o sobre «los tramos de la jornada» deja fuera el turno de noche cerrado de la jornada anterior; en el camino de apertura hay que
+  preguntar por empleado (`WorkDayRepository::closedEntryEndingAfter`, servida por el índice GiST de la propia restricción) (RN-18).
+- **Una detección nocturna que acota por `occurred_at` no sirve para hechos que llegan tarde a propósito** (elementos atascados en
+  colas): acotar por `recorded_at` y derivar la jornada del `occurred_at` (RN-18).
 - **Un `workflow_dispatch` nuevo no se puede lanzar desde una rama hasta que el fichero existe en la rama por defecto** (404 en la API): la primera ejecución de un workflow nuevo es tras integrar; después sí se lanza con `--ref rama` (3.6, restos).
 - **El paquete instala con `APP_ENV=production` (lo exige `install.sh`) y el aprovisionamiento de k6 se niega contra producción**: el workflow declara la pila `staging` DESPUÉS de instalar y recrea los roles PHP; ningún camino del producto consulta `isProduction()` (3.6, restos).
 - **El runner de GitHub no alcanza RNF-P-06** (4 vCPU compartidas entre servidor y once generadores: ~29 fichajes/s con p95 de decenas de segundos, igual con el pool doblado): allí RNF-P-02/06 se juzgan contra `baseline.json` (`K6_LATENCY_VERDICT=baseline`), nunca contra el umbral (decisión 19).

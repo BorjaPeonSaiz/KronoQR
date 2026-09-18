@@ -7,10 +7,12 @@
 import { expect, test } from '@playwright/test'
 import {
   EMPLOYEE_UUID,
+  INCIDENT_BOARD_WITH_OUT_OF_ORDER,
   INCIDENT_CLOSED_BY_OTHER,
   logIn,
   logInAsManager,
   OPEN_INCIDENT,
+  OUT_OF_ORDER_INCIDENT,
   stubManagementApi,
   WORKDAYS_WITH_INCIDENT,
 } from './support/admin'
@@ -150,6 +152,57 @@ test('el responsable de departamento ve la seccion', { tag: ['@RF-PA-05'] }, asy
   ).toBeVisible()
   await expect(page.getByTestId('incident-row')).toHaveCount(1)
 })
+
+test(
+  'RN-18: el fichaje fuera de orden se lista, se filtra y su detalle es legible',
+  { tag: ['@RN-18', '@RF-PA-05'] },
+  async ({ page }) => {
+    const api = await stubManagementApi(page, { incidentBoard: INCIDENT_BOARD_WITH_OUT_OF_ORDER })
+    await logIn(page)
+    await page.goto('/incidents')
+
+    // Se lista con su etiqueta, junto a la incidencia de otro tipo de la
+    // misma persona: las dos filas comparten empleado, asi que hace falta el
+    // segundo filtro para distinguirlas.
+    const row = page
+      .getByTestId('incident-row')
+      .filter({ hasText: OUT_OF_ORDER_INCIDENT.employee.full_name })
+      .filter({ hasText: 'Fichaje fuera de orden' })
+    await expect(row).toBeVisible()
+    await expect(row).toContainText('Media')
+
+    // Sin tramo asociado (`shift_entry_uuid: null`, como el resto de tipos sin
+    // tramo): enlaza a la jornada del dia igual que los demas.
+    await expect(row.getByRole('link', { name: OUT_OF_ORDER_INCIDENT.work_date })).toHaveAttribute(
+      'href',
+      `/employees/${OUT_OF_ORDER_INCIDENT.employee.uuid}/workdays`,
+    )
+
+    // Aparece en el filtro por tipo, y elegirlo manda el parametro al servidor.
+    await page.getByLabel('Tipo').selectOption('out_of_order_scan')
+    await expect
+      .poll(() =>
+        api.requests.some(
+          (request) =>
+            request.path === '/api/v1/incidents' &&
+            request.query.includes('type=out_of_order_scan'),
+        ),
+      )
+      .toBe(true)
+    await page.getByLabel('Tipo').selectOption('')
+
+    // El detalle enseña el contexto legible: la hora en la zona del centro
+    // (Europe/Madrid), el identificador del escaneo tal cual, y el recuento
+    // como numero simple.
+    await row.getByTestId('resolve-button').click()
+    const dialog = page.getByRole('dialog', { name: 'Cerrar incidencia' })
+    await expect(dialog).toContainText('hora del fichaje: 14/3/26, 14:50')
+    await expect(dialog).toContainText(
+      `identificador del escaneo: ${String(OUT_OF_ORDER_INCIDENT.context['scan_id'])}`,
+    )
+    await expect(dialog).toContainText('escaneos fuera de orden: 2')
+  },
+)
 
 test(
   'la marca de incidencia aparece en el detalle de jornada y enlaza a la bandeja',

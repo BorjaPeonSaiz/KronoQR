@@ -64,6 +64,26 @@ enum AnomalyType: string
     case CLOCK_SKEW = 'clock_skew';
 
     /**
+     * RN-18: llego un escaneo que **no podia encajar** en el registro de esa
+     * persona y se guardo como `rejected_out_of_order`, sin producir tramo. Dos
+     * situaciones: su hora real no era posterior a la entrada del turno abierto
+     * (RN-03), o la entrada habria pisado un tramo **ya cerrado** suyo, en
+     * cualquier jornada (RN-02).
+     *
+     * Se detecta igual que `CLOCK_SKEW`: leyendo hacia atras lo que el fichaje ya
+     * escribio en `scan_events`, sin evento ni proceso nuevos. Y como aquel, **no
+     * cierra ni corrige nada**: quien lo resuelve es una persona con una
+     * correccion trazada (RN-13, RF-PA-04), porque el sistema no puede inventar a
+     * que hora entro o salio alguien.
+     *
+     * **Sin tramo que señalar** (`shift_entry_uuid` nulo): el escaneo no produjo
+     * ninguno, y el que estaba abierto no es el problema sino el contexto. La
+     * incidencia dice «revisa esta jornada», y por eso sale una por empleado y
+     * jornada por mucho que los escaneos imposibles sean varios.
+     */
+    case OUT_OF_ORDER_SCAN = 'out_of_order_scan';
+
+    /**
      * La regla del **perfil de cumplimiento** cuyo umbral gobierna este hallazgo,
      * o `null` si el umbral que lo decide es operativo y no legal.
      *
@@ -77,6 +97,11 @@ enum AnomalyType: string
      * proposito: sus umbrales los fija el hotel (`installation_settings`), no la
      * jurisdiccion. `LONG_SHIFT` devuelve RN-11 porque es el unico de sus dos
      * origenes que sale del perfil.
+     *
+     * `OUT_OF_ORDER_SCAN` tambien es `null`, y ahi no hay umbral de ninguna
+     * clase: RN-18 es **estructural** (doc 01 §4, como RN-01 y RN-02) y no se
+     * configura. Suspenderla equivaldria a decidir que un fichaje real de alguien
+     * no se revisa.
      */
     public function complianceRule(): ?ComplianceRule
     {
@@ -84,7 +109,8 @@ enum AnomalyType: string
             self::INSUFFICIENT_REST => ComplianceRule::MinimumRestBetweenWorkDays,
             self::LONG_SHIFT => ComplianceRule::MaximumDailyWorkingTime,
             self::MISSING_BREAK => ComplianceRule::BreakInContinuousShift,
-            self::OPEN_SHIFT_EXPIRED, self::SHORT_SHIFT, self::CLOCK_SKEW => null,
+            self::OPEN_SHIFT_EXPIRED, self::SHORT_SHIFT, self::CLOCK_SKEW,
+            self::OUT_OF_ORDER_SCAN => null,
         };
     }
 

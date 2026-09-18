@@ -14,6 +14,9 @@ declare(strict_types=1);
  *   RQ-03     ningun empleado con dos tramos abiertos.
  *   RF-KI-04  los lotes llegaron con la salida ANTES que la entrada y el
  *             servidor los ordeno: el empleado acabo con un tramo cerrado.
+ *   RN-18     el elemento imposible del lote quedo REGISTRADO como
+ *             `rejected_out_of_order` y marcado para revision, no devuelto a la
+ *             cola con un 503 que el quiosco reintentaria para siempre.
  *   RNF-P-02  las dos consultas calientes del fichaje resuelven por
  *             `scan_events_employee_id_occurred_at_index`.
  *
@@ -480,6 +483,59 @@ $explain('ventana anti-rebote (acceptedScansAdjacentTo)', $adjacentQueries);
 
 $summary = k6_read_json(K6_WORK_DIR.'/summary.json');
 
+// --- RN-18: el irreconciliable queda REGISTRADO y marcado para revision ------
+
+// Un elemento de lote que no se puede reconciliar —una salida anterior a la
+// entrada del turno que tendria que cerrar— ya no devuelve `503`. Devolverlo
+// significaba «conservalo en la cola», y la cola de ese quiosco se quedaba
+// reintentandolo para siempre. Ahora responde `422` con el cuerpo generico y
+// **deja fila**: `result = 'rejected_out_of_order'` y `flagged_for_review`, para
+// que una persona lo mire. Lo que se afirma aqui es justo eso: que cada `422`
+// que conto k6 tiene su fila, y que ninguna de esas filas se quedo sin marcar
+// —una fila que nadie va a revisar es una jornada que nadie va a arreglar—.
+$outOfOrder = DB::table('scan_events')
+    ->whereIn('employee_id', $employeeIds)
+    ->where('recorded_at', '>=', $since)
+    ->where('result', 'rejected_out_of_order')
+    ->selectRaw('count(*) as total, count(*) filter (where flagged_for_review) as flagged')
+    ->first();
+
+$outOfOrderRows = (int) ($outOfOrder->total ?? 0);
+$outOfOrderFlagged = (int) ($outOfOrder->flagged ?? 0);
+$reportedUnreconcilable = $summary['totals']['batch_unreconcilable'] ?? null;
+
+$report['out_of_order'] = [
+    'filas' => $outOfOrderRows,
+    'marcadas_para_revision' => $outOfOrderFlagged,
+    'contadas_por_k6' => $reportedUnreconcilable,
+];
+
+if (! is_numeric($reportedUnreconcilable)) {
+    $warn('RN-18: no hay summary.json con el recuento de irreconciliables; solo se comprueba la marca.');
+}
+
+// LA DESIGUALDAD ES A UN SOLO LADO, y no por prudencia: el escaneo previo con
+// el que el guion abre el tramo del caso imposible puede producir SU PROPIA fila
+// de RN-18 —si la tarjeta llega con un tramo abierto posterior a `seedAt`, ese
+// escaneo es tambien un cierre irreconciliable—, y esa fila no sale en el
+// recuento de elementos de lote. Que sobren filas es correcto; que falten, no.
+$check(
+    'RN-18',
+    $outOfOrderRows === $outOfOrderFlagged
+    && (! is_numeric($reportedUnreconcilable) || $outOfOrderRows >= (int) $reportedUnreconcilable),
+    'k6 conto '.($reportedUnreconcilable ?? 'n/d').' elementos irreconciliables (422) en los lotes y la '
+    .'base guarda '.$outOfOrderRows.' filas rejected_out_of_order, '.$outOfOrderFlagged
+    .' de ellas marcadas para revision'
+);
+
+if (is_numeric($reportedUnreconcilable) && $outOfOrderRows !== (int) $reportedUnreconcilable) {
+    $warn('RN-18: hay '.($outOfOrderRows - (int) $reportedUnreconcilable).' filas rejected_out_of_order '
+        .'de mas respecto a los elementos de lote. Lo esperable es que salgan del escaneo previo del caso '
+        .'imposible; si son muchas mas, mira que otro camino las esta produciendo.');
+}
+
+// --- Lo que k6 dijo frente a lo que la base guarda ---------------------------
+
 $reportedRealtime = $summary['totals']['shift_producing_realtime'] ?? null;
 $reportedBatch = $summary['totals']['shift_producing_batch'] ?? null;
 
@@ -525,4 +581,4 @@ file_put_contents(K6_WORK_DIR.'/verify-ok.json', json_encode([
 ], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR));
 
 $say('VERIFICACION POSTERIOR: verde'.($warnings === [] ? '' : ' con '.count($warnings).' avisos')
-    .'. RN-06, RF-AT-07, RQ-03 y RF-KI-04 se sostienen sobre lo que quedo escrito.');
+    .'. RN-06, RF-AT-07, RQ-03, RF-KI-04 y RN-18 se sostienen sobre lo que quedo escrito.');

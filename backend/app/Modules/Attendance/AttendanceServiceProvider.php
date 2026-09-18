@@ -11,6 +11,7 @@ use App\Modules\Attendance\Application\Port\DailyTotalsProjection;
 use App\Modules\Attendance\Application\Port\EventPublisher;
 use App\Modules\Attendance\Application\Port\FlaggedScans;
 use App\Modules\Attendance\Application\Port\IncidentDetectionMetrics;
+use App\Modules\Attendance\Application\Port\OutOfOrderScans;
 use App\Modules\Attendance\Application\Port\ProjectionMetrics;
 use App\Modules\Attendance\Application\Port\ScanLog;
 use App\Modules\Attendance\Application\Port\ScanMetrics;
@@ -32,6 +33,7 @@ use App\Modules\Attendance\Infrastructure\Metrics\TextfileIncidentDetectionMetri
 use App\Modules\Attendance\Infrastructure\Metrics\TextfileProjectionMetrics;
 use App\Modules\Attendance\Infrastructure\Persistence\DatabaseShiftCorrectionLedger;
 use App\Modules\Attendance\Infrastructure\Persistence\EloquentFlaggedScans;
+use App\Modules\Attendance\Infrastructure\Persistence\EloquentOutOfOrderScans;
 use App\Modules\Attendance\Infrastructure\Persistence\EloquentScanLog;
 use App\Modules\Attendance\Infrastructure\Persistence\EloquentShiftEntryHistory;
 use App\Modules\Attendance\Infrastructure\Persistence\EloquentShiftEntrySubject;
@@ -100,6 +102,12 @@ final class AttendanceServiceProvider extends ServiceProvider
          */
         $this->app->bind(WorkDayLedger::class, EloquentWorkDayLedger::class);
         $this->app->bind(FlaggedScans::class, EloquentFlaggedScans::class);
+
+        // RN-18: los fichajes irreconciliables que la revision diaria convierte
+        // en incidencia. Puerto propio y no un campo mas del anterior: los dos
+        // leen `scan_events` hacia atras, pero responden preguntas distintas y
+        // cada uno trae solo lo que su hallazgo necesita.
+        $this->app->bind(OutOfOrderScans::class, EloquentOutOfOrderScans::class);
 
         // De quien es un tramo, para autorizar la correccion antes de ejecutarla
         // (RF-ID-03). Puerto propio y no un metodo mas del anterior: aquel existe

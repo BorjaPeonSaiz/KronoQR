@@ -42,6 +42,7 @@ const P99_BUDGET_MS = 400 // RNF-P-02
 const SHIFT_RATE_BUDGET = 50 // RNF-P-06: fichajes que producen tramo, por segundo
 const QUEUEABLE_DEGRADATION_RATIO = 0.005 // regla dura 19: 429, 5xx y sin respuesta
 const DEBOUNCE_CEILING_RATIO = 0.05 // el anti-rebote no puede ser la mayoria
+const SERVER_ERROR_TOLERANCE = 0.01 // 5xx sobre lo que SI llego al servidor
 const REJECT_SPREAD_BUDGET_MS = 20 // RS-03: separacion maxima entre clases
 const DEFAULT_REJECTION_FLOOR_MS = 25 // si la instalacion no lo dice
 const COMPLIANCE_BUDGET_MS = 2000 // orientativo: ningun requisito lo fija
@@ -78,8 +79,16 @@ const SHIFT_ACTIONS = new Set(['clock_in', 'clock_out', 'break_start', 'break_en
  */
 const REALTIME_PHASES = new Set(['scan', 'resend_original'])
 
-/** Fases que son un fichaje valido: aqui un 4xx que no sea 429 es un rechazo al empleado. */
-const VALID_SCAN_PHASES = new Set(['scan', 'resend_original', 'resend_replay', 'batch'])
+/**
+ * Fases que son un fichaje valido: aqui un 4xx que no sea 429 es un rechazo al
+ * empleado.
+ *
+ * `batch_seed` es el escaneo con el que el guion abre el tramo que despues
+ * contradice el elemento imposible de RN-18. Es un fichaje como cualquier otro
+ * —si el servidor se lo niega, es un rechazo— pero no cuenta para el pico: lo
+ * emite el guion una vez por lote, no una persona en la cola del quiosco.
+ */
+const VALID_SCAN_PHASES = new Set(['scan', 'resend_original', 'resend_replay', 'batch', 'batch_seed'])
 
 const REJECT_CLASSES = ['signature', 'unknown', 'revoked']
 
@@ -267,6 +276,7 @@ function readResults(dir) {
         metric === 'scan_outcomes' ||
         metric === 'resend_matches' ||
         metric === 'batch_outcomes' ||
+        metric === 'batch_impossible' ||
         metric === 'dropped_iterations'
       ) {
         counters.push({ metric, value: Number(row[column.value]), tags, scenario })
@@ -555,6 +565,41 @@ function analyse(results, options = {}) {
     )
   }
 
+  // --- SERVICIO: el servidor esta sirviendo, no reventando --------------------
+
+  // POR QUE ESTO EXISTE APARTE DE RNF-P-06. La tolerancia de degradacion vive
+  // dentro de RNF-P-06, y RNF-P-06 deja de evaluarse en cuanto la carga ofrecida
+  // no llega al umbral — que es lo normal en una pasada corta de depuracion. Con
+  // eso, una pasada de 30 s en la que el servidor contesta `500` a TODOS los
+  // cierres de turno terminaba en verde: los cuadres comparaban cero con cero y
+  // nadie miraba los codigos. Paso de verdad, el 18-09-2026, con un metodo de
+  // dominio que no existia.
+  //
+  // SE MIDE SOBRE LO QUE LLEGO AL SERVIDOR, no sobre todo lo ofrecido: un `429`
+  // del borde y una peticion sin respuesta son capacidad —y de eso ya responde
+  // RNF-P-06—, mientras que un `5xx` significa que la peticion entro, se ejecuto
+  // codigo y reventó. Un uno por ciento es holgado para una maquina saturada y
+  // deja fuera cualquier fallo sistematico.
+  const reachedServer = validScanSamples.filter(
+    (sample) => sample.status !== '429' && sample.status !== '0' && sample.status !== '(sin status)',
+  )
+  const serverErrors = reachedServer.filter((sample) => sample.status.startsWith('5'))
+  const serverErrorRatio = reachedServer.length === 0 ? 0 : serverErrors.length / reachedServer.length
+
+  verdict(
+    'SERVICIO',
+    reachedServer.length === 0
+      ? 'unmeasurable'
+      : serverErrorRatio <= SERVER_ERROR_TOLERANCE
+        ? 'pass'
+        : 'fail',
+    reachedServer.length === 0
+      ? 'ninguna peticion de fichaje llego al servidor: no hay nada que juzgar'
+      : `${serverErrors.length} de ${reachedServer.length} fichajes que llegaron al servidor ` +
+        `terminaron en 5xx (${(serverErrorRatio * 100).toFixed(2)} %, tope ` +
+        `${SERVER_ERROR_TOLERANCE * 100} %)`,
+  )
+
   // --- RQ-03: idempotencia bajo carga ----------------------------------------
 
   const resendYes = countersWhere('resend_matches', (tags) => tags.match === 'yes')
@@ -642,11 +687,48 @@ function analyse(results, options = {}) {
 
   const batchAccepted = countersWhere('batch_outcomes', (tags) => SHIFT_ACTIONS.has(tags.action))
   const batchDebounced = countersWhere('batch_outcomes', (tags) => tags.action === 'debounced')
-  // `503` por elemento no es un rechazo: el contrato dice que el quiosco
-  // CONSERVA ese elemento en la cola y lo reintenta. Solo el `4xx` saca un
-  // fichaje de la cola sin haberlo registrado.
+  // TRES DESENLACES DE ELEMENTO, Y NINGUNO ES EL OTRO:
+  //
+  //   5xx  el servidor NO lo proceso; el quiosco lo conserva en la cola y lo
+  //        reintenta (regla dura 19).
+  //   422  RN-18: SI lo proceso, no se puede reconciliar, queda como
+  //        `rejected_out_of_order` marcado para revision humana, y el quiosco
+  //        tiene que SACARLO de la cola. Es registro, no perdida.
+  //   resto de 4xx  el unico que saca un fichaje de la cola sin dejar rastro.
+  //        Ese es el que cuenta como rechazo.
   const batchRetryable = countersWhere('batch_outcomes', (tags) => /^http_5\d\d$/.test(String(tags.action)))
-  const batchRejected = countersWhere('batch_outcomes', (tags) => /^http_4\d\d$/.test(String(tags.action)))
+  const batchUnreconcilable = countersWhere('batch_outcomes', (tags) => String(tags.action) === 'http_422')
+  const batchRejected = countersWhere(
+    'batch_outcomes',
+    (tags) => /^http_4\d\d$/.test(String(tags.action)) && String(tags.action) !== 'http_422',
+  )
+
+  // --- RN-18: el elemento imposible se registra, no se reintenta -------------
+
+  const impossibleOf = (outcome) => countersWhere('batch_impossible', (tags) => tags.outcome === outcome)
+  const impossible = {
+    unreconcilable: impossibleOf('unreconcilable'),
+    retried: impossibleOf('retried'),
+    accepted: impossibleOf('accepted'),
+    inconclusive: impossibleOf('inconclusive'),
+    not_set_up: impossibleOf('not_set_up'),
+  }
+  const impossibleJudged = impossible.unreconcilable + impossible.retried + impossible.accepted
+
+  verdict(
+    'RN-18',
+    impossibleJudged === 0
+      ? 'unmeasurable'
+      : impossible.retried === 0 && impossible.accepted === 0
+        ? 'pass'
+        : 'fail',
+    impossibleJudged === 0
+      ? `ningun lote llego a montar el caso imposible (${impossible.not_set_up} sin tramo previo, ` +
+        `${impossible.inconclusive} sin desenlace concluyente): RN-18 no se ha ejercitado`
+      : `${impossible.unreconcilable} elementos imposibles registrados como irreconciliables (422), ` +
+        `${impossible.retried} devueltos a la cola con 5xx y ${impossible.accepted} aceptados. ` +
+        'Un 5xx aqui es el bucle de reintentos infinito que RN-18 vino a eliminar.',
+  )
   const compliance = percentiles(
     valuesWhere((sample) => sample.phase === 'compliance' && isAttended(sample.status)),
   )
@@ -730,7 +812,9 @@ function analyse(results, options = {}) {
       batch_accepted: batchAccepted,
       batch_debounced: batchDebounced,
       batch_retryable: batchRetryable,
+      batch_unreconcilable: batchUnreconcilable,
       batch_rejected: batchRejected,
+      batch_impossible: impossible,
       compliance_p95: round(compliance.p95),
       dropped_iterations: droppedTotal,
       dropped_iterations_by_scenario: droppedByScenario,
@@ -833,7 +917,7 @@ function formatReport(summary) {
 
   say('')
 
-  for (const requirement of ['CHECKS', 'RNF-P-02', 'RNF-P-06', 'RQ-03']) {
+  for (const requirement of ['CHECKS', 'SERVICIO', 'RNF-P-02', 'RNF-P-06', 'RQ-03', 'RN-18']) {
     const entry = summary.verdicts[requirement]
 
     if (entry !== undefined) {
@@ -857,7 +941,8 @@ function formatReport(summary) {
   say('')
   say(
     `INFO RF-KI-04: ${summary.totals.batch_accepted} elementos con tramo, ` +
-      `${summary.totals.batch_debounced} anti-rebote, ${summary.totals.batch_retryable} conservados ` +
+      `${summary.totals.batch_debounced} anti-rebote, ${summary.totals.batch_unreconcilable} ` +
+      `irreconciliables registrados (422, RN-18), ${summary.totals.batch_retryable} conservados ` +
       `en la cola (5xx) y ${summary.totals.batch_rejected} rechazados (4xx); ` +
       `${summary.totals.batch_entries_per_second}/s, aparte del pico en tiempo real`,
   )

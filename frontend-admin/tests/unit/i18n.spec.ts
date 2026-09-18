@@ -139,6 +139,10 @@ describe('idiomas de la aplicacion', () => {
         'clock_skew',
         'missing_clock_out',
         'anomalous_pattern',
+        // RN-18 «Fichaje irreconciliable»: lo abre la pasada nocturna leyendo
+        // `scan_events.result`, sin evento ni listener nuevos (Engram
+        // `attendance/fichaje-irreconciliable`, decision 5).
+        'out_of_order_scan',
       ].map((type) => `incidents.types.${type}`),
       ...['high', 'medium', 'low'].map((severity) => `incidents.severities.${severity}`),
       ...['open', 'resolved', 'dismissed'].map((status) => `incidents.status.${status}`),

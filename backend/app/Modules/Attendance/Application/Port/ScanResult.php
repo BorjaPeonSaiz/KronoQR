@@ -9,7 +9,7 @@ use App\Modules\Attendance\Domain\ValueObject\ClockingAction;
 use App\Modules\Attendance\Domain\ValueObject\ScanRejectionReason;
 
 /**
- * El desenlace detallado de un escaneo: los ocho valores de
+ * El desenlace detallado de un escaneo: los nueve valores de
  * `scan_events.result` (doc 01 §5.5).
  *
  * **Nunca sale por la API.** RS-03 y la regla dura 17 obligan a que el rechazo
@@ -31,7 +31,8 @@ use App\Modules\Attendance\Domain\ValueObject\ScanRejectionReason;
  * que este docblock dejaba escrito: `ScanIntentPolicy` y `DebouncePolicy` tienen
  * que razonar sobre `clock_in` frente a `break_start` (ADR-024), asi que esos
  * cuatro casos son ahora {@see ClockingAction} y aqui quedan `forAction()` y
- * `action()` como unico puente. Los cuatro rechazos se quedan: de ellos el
+ * `action()` como unico puente. Los cinco rechazos se quedan —el de RN-18 lo
+ * estreno la tarea ad hoc del 18-09-2026—: de ellos el
  * dominio solo necesita el motivo, no el valor de la columna.
  */
 enum ScanResult: string
@@ -52,6 +53,20 @@ enum ScanResult: string
     case REJECTED_DEBOUNCE = 'rejected_debounce';
 
     case REJECTED_SIGNATURE = 'rejected_signature';
+
+    /**
+     * RN-18, tarea ad hoc del 18-09-2026: el escaneo llego con una hora que **no
+     * puede encajar** en el registro de esa persona —ni cerrando el turno
+     * abierto (RN-03) ni abriendo uno que pisaria a otro ya cerrado, en
+     * cualquier jornada (RN-02)—, asi que no produjo tramo y no se va a
+     * reintentar.
+     *
+     * Es el noveno valor de la columna y el unico rechazo que describe **el
+     * registro** y no la credencial: por eso su fila queda marcada para revision
+     * y abre incidencia, mientras que hacia fuera responde el mismo `422`
+     * generico que los demas (RS-03).
+     */
+    case REJECTED_OUT_OF_ORDER = 'rejected_out_of_order';
 
     /**
      * El valor de columna que corresponde a lo que el dominio decidio
@@ -82,8 +97,14 @@ enum ScanResult: string
      * el dominio pregunta «¿que fue el escaneo anterior?» y la respuesta esta
      * guardada en el vocabulario de la persistencia.
      *
-     * Los cuatro rechazos devuelven `null`, el anti-rebote incluido: no creo
-     * tramo, y por eso tampoco entra en la ventana de RF-AT-06.
+     * Los cinco rechazos devuelven `null`, el anti-rebote incluido: no creo
+     * tramo, y por eso tampoco entra en la ventana de RF-AT-06. El de RN-18
+     * tampoco, y ahi el `null` es la afirmacion mas fuerte del enum: un fichaje
+     * irreconciliable **no puede** haber producido accion ninguna.
+     *
+     * El `match` es exhaustivo a proposito —sin `default`—: un desenlace nuevo no
+     * compila hasta que alguien decida si creo tramo o no, que es justo la
+     * pregunta que no se puede resolver por omision.
      */
     public function action(): ?ClockingAction
     {
@@ -93,7 +114,8 @@ enum ScanResult: string
             self::BREAK_START => ClockingAction::BREAK_START,
             self::BREAK_END => ClockingAction::BREAK_END,
             self::REJECTED_UNKNOWN, self::REJECTED_REVOKED,
-            self::REJECTED_DEBOUNCE, self::REJECTED_SIGNATURE => null,
+            self::REJECTED_DEBOUNCE, self::REJECTED_SIGNATURE,
+            self::REJECTED_OUT_OF_ORDER => null,
         };
     }
 
@@ -113,6 +135,7 @@ enum ScanResult: string
             ScanRejectionReason::REVOKED_CREDENTIAL => self::REJECTED_REVOKED,
             ScanRejectionReason::INVALID_SIGNATURE => self::REJECTED_SIGNATURE,
             ScanRejectionReason::DEBOUNCE => self::REJECTED_DEBOUNCE,
+            ScanRejectionReason::OUT_OF_ORDER => self::REJECTED_OUT_OF_ORDER,
         };
     }
 

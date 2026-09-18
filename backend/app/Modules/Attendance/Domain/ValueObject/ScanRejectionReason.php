@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Domain\ValueObject;
 
+use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Shared\Domain\ValueObject\CredentialRejectionReason;
 
 /**
@@ -29,6 +30,24 @@ enum ScanRejectionReason: string
     case REVOKED_CREDENTIAL = 'rejected_revoked';
     case INVALID_SIGNATURE = 'rejected_signature';
     case DEBOUNCE = 'rejected_debounce';
+
+    /**
+     * RN-18, el **fichaje irreconciliable**: el escaneo ocurrio de verdad y lo
+     * que no se puede es derivar de el un tramo. Son **dos situaciones con dos
+     * limites opuestos**, y las resuelve {@see WorkDay::outOfOrderScanFor()}: al
+     * cerrar, su `occurred_at` no es posterior a la entrada del turno abierto
+     * (RN-03, y la igualdad tambien lo es); al abrir, el tramo que crearia
+     * pisaria a uno ya cerrado (RN-02, con limites `[inicio, fin)`: entrar a la
+     * hora exacta en que se salio si cuadra).
+     *
+     * **Es el unico motivo que no habla de la credencial**, y esa diferencia se
+     * nota en el registro y no en la respuesta: la fila queda **marcada para
+     * revision** y la revision diaria abre una incidencia con ella, mientras que
+     * hacia fuera viaja el mismo `422` generico que los demas (RS-03, regla dura
+     * 17). Distinguirlo en la respuesta convertiria el quiosco en un oraculo
+     * sobre la jornada de otra persona.
+     */
+    case OUT_OF_ORDER = 'rejected_out_of_order';
 
     /**
      * Traduce el motivo con el que Identity rechazo la credencial.

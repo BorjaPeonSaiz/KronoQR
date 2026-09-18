@@ -37,6 +37,9 @@ const TYPES: readonly IncidentType[] = [
   'clock_skew',
   'missing_clock_out',
   'anomalous_pattern',
+  // RN-18 «Fichaje irreconciliable»: la pasada nocturna abre esta incidencia
+  // leyendo `scan_events.result`, sin evento ni listener nuevos.
+  'out_of_order_scan',
 ]
 const SEVERITIES: readonly IncidentSeverity[] = ['high', 'medium', 'low']
 

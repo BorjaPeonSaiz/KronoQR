@@ -347,7 +347,7 @@ final readonly class AnomalyDetectionPolicy
     }
 
     /**
-     * @param  array<string, int>  $context
+     * @param  array<string, int|string>  $context
      */
     private function anomaly(
         AnomalyType $type,

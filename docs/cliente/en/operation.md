@@ -1144,6 +1144,14 @@ summary:
 | **Warning, late heartbeat** | Nothing yet. If it does not return to "up to date" within ten minutes it becomes a failure and the alert fires |
 | **The tablet went back to the pairing screen on its own** | Someone unpaired it or rotated its token: [`../../runbooks/alta-nuevo-quiosco.md`](../../runbooks/alta-nuevo-quiosco.md) (in Spanish) §6 |
 
+**If the queue does not go down even though the network at that point is
+fine**, and the "oldest" in the "Pending" column stays stuck at the same time
+day after day, there may be a clocking in it that will never be able to add up:
+that is covered by §4 of
+[`../../runbooks/cola-offline-atascada.md`](../../runbooks/cola-offline-atascada.md)
+(in Spanish), "Un elemento que jamás podrá cuadrar" —an item that will never be
+able to add up—. There is nothing to touch on the tablet.
+
 The same information, from the console and without opening the panel —and the
 only one that still works if Redis has been emptied (§10.4)—:
 

@@ -18,7 +18,7 @@ final readonly class OpenIncidentCommand
 {
     /**
      * @param  string  $type  Valor de `incidents.type`, tal y como lo emitio la deteccion.
-     * @param  array<string, int>  $context  Minutos medidos y umbral aplicado. Sin datos personales.
+     * @param  array<string, int|string>  $context  Los hechos que lo sostienen: minutos, umbral o el `scan_id` de RN-18. Nunca datos personales.
      */
     public function __construct(
         public string $type,

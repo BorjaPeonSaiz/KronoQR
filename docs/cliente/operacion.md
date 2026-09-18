@@ -1117,6 +1117,12 @@ según la razón. Un quiosco que va bien no pide nada. El resumen:
 | **Aviso, latido tardío** | Nada todavía. Si no vuelve a «al día» en diez minutos pasará a fallo y sonará la alerta |
 | **La tablet volvió sola a la pantalla de emparejamiento** | Alguien la desvinculó o rotó su token: [`../runbooks/alta-nuevo-quiosco.md`](../runbooks/alta-nuevo-quiosco.md) §6 |
 
+**Si la cola no baja aunque la red de ese punto vaya bien**, y el «más antiguo»
+de la columna «Pendientes» se queda clavado en la misma hora día tras día,
+puede haber en ella un fichaje que ya nunca podrá cuadrar: lo cubre el §4 de
+[`../runbooks/cola-offline-atascada.md`](../runbooks/cola-offline-atascada.md),
+«Un elemento que jamás podrá cuadrar». No hay nada que tocar en la tablet.
+
 La misma información, desde la consola y sin abrir el panel —y la única que
 sigue funcionando si Redis se ha vaciado (§10.4)—:
 

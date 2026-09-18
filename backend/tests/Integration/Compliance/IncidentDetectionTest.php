@@ -664,3 +664,228 @@ it('desactivar el fichaje de pausa no cierra las incidencias missing_break ya ab
         ->and($despues?->detected_at)->toBe($incidencia?->detected_at)
         ->and($despues?->assigned_to_user_id)->toBe($scenario['manager']);
 })->group('RN-12', 'RF-AT-12', 'RL-04');
+
+// --- RN-18 · el fichaje irreconciliable --------------------------------------
+
+/**
+ * Un escaneo ya registrado como irreconciliable, tal y como lo deja el camino de
+ * fichaje: sin tramo, sin acumulado y marcado para revision.
+ */
+function outOfOrderScan(
+    string $employeeUuid,
+    int $deviceId,
+    string $occurredAt,
+    ?string $scanId = null,
+    string $recordedAt = '2026-03-14 18:00:00+00',
+    int $clockSkewSeconds = 0,
+): string {
+    $uuid = $scanId ?? Str::uuid7()->toString();
+
+    DB::table('scan_events')->insert([
+        'scan_id' => $uuid,
+        'device_id' => $deviceId,
+        'employee_id' => DB::table('employees')->where('uuid', $employeeUuid)->value('id'),
+        'occurred_at' => $occurredAt,
+        'recorded_at' => $recordedAt,
+        'clock_skew_seconds' => $clockSkewSeconds,
+        'origin' => 'qr_kiosk',
+        'intent' => 'auto',
+        'result' => 'rejected_out_of_order',
+        'shift_entry_id' => null,
+        'worked_minutes' => null,
+        'client_meta' => '{}',
+        'flagged_for_review' => true,
+    ]);
+
+    return $uuid;
+}
+
+it('abre UNA incidencia por jornada aunque la cola traiga varios escaneos imposibles', function (): void {
+    // RN-18 leido hacia atras, igual que `clock_skew`: la columna la escribio el
+    // fichaje y la pasada nocturna solo la lee. Dos escaneos imposibles del mismo
+    // dia dicen lo mismo —«esta jornada no cuadra»— y la incidencia lo dice una
+    // vez: la sostienen el agrupado del caso de uso y, debajo,
+    // `one_incident_per_finding` con `NULLS NOT DISTINCT`.
+    Notification::fake();
+
+    $scenario = departmentWithManager();
+    $device = AttendanceFixtures::device($scenario['site']);
+
+    // **En orden descendente a proposito**: se inserta antes el de las 15:20 y
+    // despues el de las 13:50, de modo que el mas temprano sea el ultimo por
+    // `id`. Si el puerto dejara de ordenar por `occurred_at`, el contexto
+    // señalaria al escaneo equivocado y quien trabaje la incidencia empezaria a
+    // mirar por el sitio que no es. Insertados en orden natural, ese defecto no
+    // se veria.
+    //
+    // El segundo lleva ademas un desfase de reloj enorme —una hora—, que es lo
+    // normal en un elemento que drena tarde: sirve para afirmar abajo que no
+    // abre TAMBIEN una incidencia `clock_skew`.
+    outOfOrderScan($scenario['employee'], $device['id'], '2026-03-14 15:20:00+00', clockSkewSeconds: 3600);
+    $primero = outOfOrderScan($scenario['employee'], $device['id'], '2026-03-14 13:50:00+00', clockSkewSeconds: 3600);
+
+    expect(runDetection())->toBe(0);
+
+    $incidents = DB::table('incidents')->where('type', 'out_of_order_scan')->get();
+
+    // Una de RN-18 y **ninguna mas**: las filas de RN-18 tambien estan marcadas
+    // para revision, asi que `inspectFlaggedScans()` las recorre; lo que no hace
+    // es abrir `clock_skew` sobre ellas —no produjeron tramo, no hay jornada que
+    // revisar por ese otro motivo— y este recuento es lo que lo fija.
+    expect($incidents)->toHaveCount(1)
+        ->and(DB::table('incidents')->count())->toBe(1);
+
+    $incident = $incidents->first();
+
+    expect($incident?->severity)->toBe('medium')
+        ->and($incident?->status)->toBe('open')
+        ->and($incident?->work_date)->toBe('2026-03-14')
+        // La incidencia es de la JORNADA: el escaneo no produjo tramo y el que
+        // estaba abierto no es el problema, sino el contexto.
+        ->and($incident?->shift_entry_id)->toBeNull()
+        // Y llega asignada al responsable del departamento, como las demas.
+        ->and($incident?->assigned_to_user_id)->toBe($scenario['manager']);
+
+    /** @var array<string, int|string> $context */
+    $context = json_decode((string) $incident?->context, true, 512, JSON_THROW_ON_ERROR);
+
+    // El PRIMERO de la jornada —por donde empieza a mirar quien la trabaja— y
+    // cuantos fueron. `toEqualCanonicalizing` porque JSONB no conserva el orden.
+    //
+    // El instante va con sufijo `Z` y microsegundos, la forma del esquema
+    // `UtcTimestamp` del contrato: es el mismo formato que cualquier otra fecha
+    // de la API y el panel lo pinta al lado de ellas.
+    expect($context)->toEqualCanonicalizing([
+        'scan_id' => $primero,
+        'occurred_at' => '2026-03-14T13:50:00.000000Z',
+        'scans' => 2,
+    ]);
+
+    // Regla dura 21: ni nombre, ni apellidos, ni codigo de empleado en el
+    // contexto que viaja al panel y a la exportacion.
+    $employee = DB::table('employees')->where('uuid', $scenario['employee'])->first();
+    $escrito = (string) ($incident->context ?? '');
+
+    expect(str_contains($escrito, (string) ($employee->first_name ?? 'x')))->toBeFalse('el contexto lleva el nombre')
+        ->and(str_contains($escrito, (string) ($employee->last_name ?? 'x')))->toBeFalse('el contexto lleva el apellido')
+        ->and(str_contains($escrito, (string) ($employee->employee_code ?? 'x')))->toBeFalse('el contexto lleva el codigo');
+
+    // Y el escaneo sigue marcado: la marca es el rastro del hecho, no un estado
+    // que la deteccion consuma.
+    expect(DB::table('scan_events')->where('scan_id', $primero)->value('flagged_for_review'))->toBeTrue();
+})->group('RN-18', 'RF-PR-01');
+
+it('separa por jornada los escaneos imposibles del mismo empleado', function (): void {
+    // «Una por empleado y jornada» es exactamente eso: dos dias distintos son dos
+    // incidencias. Sin esto, agrupar por empleado dejaria sin revisar el segundo
+    // dia, y con `NULLS NOT DISTINCT` la fila ni siquiera entraria.
+    Notification::fake();
+
+    $scenario = departmentWithManager();
+    $device = AttendanceFixtures::device($scenario['site']);
+
+    outOfOrderScan($scenario['employee'], $device['id'], '2026-03-13 13:50:00+00');
+    outOfOrderScan($scenario['employee'], $device['id'], '2026-03-14 13:50:00+00');
+
+    expect(runDetection())->toBe(0);
+
+    $workDates = DB::table('incidents')
+        ->where('type', 'out_of_order_scan')
+        ->orderBy('work_date')
+        ->pluck('work_date')
+        ->all();
+
+    expect($workDates)->toBe(['2026-03-13', '2026-03-14']);
+})->group('RN-18', 'RF-PR-01');
+
+it('no duplica la incidencia del fichaje irreconciliable al repetir la pasada', function (): void {
+    // La pasada es idempotente, y no por un `SELECT` previo: la segunda insercion
+    // choca con `one_incident_per_finding` y se ignora. Alguien ejecutando el
+    // comando a mano mientras el planificador corre es el caso real.
+    Notification::fake();
+
+    $scenario = departmentWithManager();
+    $device = AttendanceFixtures::device($scenario['site']);
+
+    outOfOrderScan($scenario['employee'], $device['id'], '2026-03-14 13:50:00+00');
+
+    expect(runDetection())->toBe(0)
+        ->and(runDetection())->toBe(0)
+        ->and(DB::table('incidents')->where('type', 'out_of_order_scan')->count())->toBe(1);
+})->group('RN-18', 'RF-PR-01');
+
+it('atribuye la jornada en la zona del centro y no en UTC', function (string $occurredAt, string $expected): void {
+    // RN-05 y regla dura 3: el escaneo no produjo tramo del que heredar la
+    // jornada, asi que la deriva el caso de uso convirtiendo `occurred_at` a la
+    // zona del centro —Madrid—. Los tres instantes estan elegidos para que en
+    // UTC den un dia y en Madrid otro, o para caer en los dos cambios de hora:
+    // con la conversion quitada o hecha en UTC, los tres siguen «verdes» en el
+    // resto de pruebas y solo fallan aqui.
+    Notification::fake();
+
+    $scenario = departmentWithManager();
+    $device = AttendanceFixtures::device($scenario['site']);
+
+    outOfOrderScan($scenario['employee'], $device['id'], $occurredAt, recordedAt: '2026-10-25 12:00:00+00');
+
+    expect(runDetection('2026-10-25 19:00:00'))->toBe(0)
+        ->and(DB::table('incidents')->where('type', 'out_of_order_scan')->value('work_date'))->toBe($expected);
+})->with([
+    // 23:30 UTC del 14 son las 00:30 del 15 en Madrid (CET, +1).
+    'la noche pasa al dia siguiente' => ['2026-03-14 23:30:00+00', '2026-03-15'],
+    // 00:15 UTC del 25 de octubre son las 02:15 en Madrid, todavia CEST (+2):
+    // es la madrugada en que el reloj retrocede y esa hora existe dos veces.
+    'vuelta del horario de verano' => ['2026-10-25 00:15:00+00', '2026-10-25'],
+    // 01:30 UTC del 29 de marzo son las 02:30 en Madrid: la hora que NO existe
+    // ese dia, porque el reloj salta de 02:00 a 03:00.
+    'salto del horario de verano' => ['2026-03-29 01:30:00+00', '2026-03-29'],
+])->group('RN-18', 'RN-05', 'RN-09');
+
+it('abre la incidencia del fichaje que se quedo dias en la cola', function (): void {
+    // El caso que da sentido a RN-18: un elemento atascado que drena **ayer**
+    // con el `occurred_at` de hace tres semanas. La ventana de la deteccion se
+    // mide sobre `recorded_at` —cuando el servidor lo supo— precisamente para
+    // esto: medida sobre el momento real, el escaneo que mas necesita que
+    // alguien lo mire seria el unico que nadie mira.
+    //
+    // La jornada de la incidencia sigue siendo la del fichaje, no la de hoy.
+    Notification::fake();
+
+    $scenario = departmentWithManager();
+    $device = AttendanceFixtures::device($scenario['site']);
+
+    outOfOrderScan(
+        $scenario['employee'],
+        $device['id'],
+        '2026-02-22 13:50:00+00',
+        recordedAt: '2026-03-13 18:00:00+00',
+    );
+
+    expect(runDetection())->toBe(0);
+
+    $incident = DB::table('incidents')->where('type', 'out_of_order_scan')->first();
+
+    expect($incident)->not->toBeNull()
+        ->and($incident?->work_date)->toBe('2026-02-22');
+})->group('RN-18', 'RF-KI-04', 'RF-PR-01');
+
+it('no mira los fichajes irreconciliables que llegaron antes de la ventana', function (): void {
+    // La otra mitad de la ventana: lo que el servidor supo hace mas de los dias
+    // de retroactividad ya se reviso en su pasada. Sin esta cota, cada noche se
+    // volveria a recorrer el historico entero.
+    Notification::fake();
+
+    $scenario = departmentWithManager();
+    $device = AttendanceFixtures::device($scenario['site']);
+
+    outOfOrderScan(
+        $scenario['employee'],
+        $device['id'],
+        '2026-03-14 13:50:00+00',
+        // Treinta dias antes del «ahora» de la pasada, con siete de ventana.
+        recordedAt: '2026-02-12 18:00:00+00',
+    );
+
+    expect(runDetection())->toBe(0)
+        ->and(DB::table('incidents')->count())->toBe(0);
+})->group('RN-18', 'RF-PR-01');
