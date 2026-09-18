@@ -62,9 +62,11 @@ final readonly class AttendanceAnomalyDetected implements DomainEvent
     }
 
     /**
-     * Minutos medidos y umbral aplicado. Sin datos personales.
+     * Los hechos que sostienen el hallazgo: minutos medidos y umbral aplicado, o
+     * el `scan_id` y el `occurred_at` del fichaje irreconciliable de RN-18.
+     * **Sin datos personales** (regla dura 21).
      *
-     * @return array<string, int>
+     * @return array<string, int|string>
      */
     public function context(): array
     {

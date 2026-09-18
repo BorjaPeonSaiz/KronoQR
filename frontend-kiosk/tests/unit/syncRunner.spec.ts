@@ -383,6 +383,56 @@ describe('garantia 5 — no se pierde nada', () => {
     expect(bench.queue.stats().size).toBe(0)
   })
 
+  // RN-18 «fichaje irreconciliable»: el servidor deja de reintentar para
+  // siempre un elemento cuyo `occurred_at` no puede cuadrar con el tramo
+  // abierto -antes daba `503` (garantia 5, tarea 3.6)- y contesta `422` con
+  // el mismo cuerpo generico `ScanRejected` de cualquier otro rechazo. El
+  // quiosco NO distingue el motivo (RS-03): esto prueba que un `422` saca su
+  // elemento aunque venga MEZCLADO, en el mismo `207`, con un `200` de otro.
+  it('un `422` mezclado con un `200` en el MISMO lote saca solo el rechazado, y confirma el otro (RN-18)', async () => {
+    const REJECTED_ID = '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90'
+    const bench = harness({
+      onBatch: (request) => ({
+        outcome: 'ok',
+        data: {
+          results: request.scans.map((item) =>
+            item.scan_id === REJECTED_ID
+              ? {
+                  scan_id: item.scan_id,
+                  status: 422 as const,
+                  outcome: {
+                    type: 'urn:kronoqr:problem:scan-rejected' as const,
+                    title: 'Escaneo no valido' as const,
+                    status: 422 as const,
+                    detail: 'El escaneo no se ha podido registrar.' as const,
+                    scan_id: item.scan_id,
+                  },
+                }
+              : {
+                  scan_id: item.scan_id,
+                  status: 200 as const,
+                  outcome: accepted(item.scan_id, item.occurred_at, 'clock_in'),
+                },
+          ),
+        },
+      }),
+    })
+    const runner = runnerFor(bench)
+
+    await bench.queue.enqueue(scan(REJECTED_ID, '2026-08-14T08:00:00.000Z'))
+    await bench.queue.enqueue(
+      scan('0199f13a-7c22-7b41-9e88-0c4d5e6f7a81', '2026-08-14T16:00:00.000Z'),
+    )
+    await runner.drain({ ignoreSchedule: true })
+
+    // Los dos han desaparecido: el `422` es un desenlace tanto como el `200`
+    // (regla dura 8, al reves de un `503` -que SI se conserva, ver arriba-).
+    expect(bench.queue.stats().size).toBe(0)
+    // Ambos viajaron en la MISMA llamada de lote: no son dos pasadas.
+    expect(bench.batches).toHaveLength(1)
+    expect(bench.batches[0]?.scans).toHaveLength(2)
+  })
+
   it('un fallo de transporte no borra NADA', async () => {
     const bench = harness({ onBatch: () => ({ outcome: 'failed', cause: 'network' }) })
     const runner = runnerFor(bench)

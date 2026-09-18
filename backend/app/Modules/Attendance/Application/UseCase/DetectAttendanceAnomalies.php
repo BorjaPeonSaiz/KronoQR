@@ -10,6 +10,7 @@ use App\Modules\Attendance\Application\Port\EventPublisher;
 use App\Modules\Attendance\Application\Port\FlaggedScan;
 use App\Modules\Attendance\Application\Port\FlaggedScans;
 use App\Modules\Attendance\Application\Port\IncidentDetectionMetrics;
+use App\Modules\Attendance\Application\Port\OutOfOrderScans;
 use App\Modules\Attendance\Application\Port\WorkDayLedger;
 use App\Modules\Attendance\Application\Support\ClockingPolicies;
 use App\Modules\Attendance\Domain\Event\AttendanceAnomalyDetected;
@@ -26,6 +27,7 @@ use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
 use App\Modules\Shared\Domain\ValueObject\ComplianceRuleSuspension;
+use App\Modules\Shared\Domain\ValueObject\UtcInstant;
 use DateTimeImmutable;
 use DateTimeZone;
 use Psr\Log\LoggerInterface;
@@ -48,6 +50,7 @@ use Throwable;
  * | Tramos todavia abiertos | **Ninguna** | Un turno sin cerrar no es historia: sigue creciendo (RN-08) |
  * | Jornadas con tramos cerrados | `lookbackDays` | Decision de retroactividad, doc 01 §4 |
  * | Escaneos marcados para revision | `lookbackDays` | RN-15, leyendo hacia atras `flagged_for_review` |
+ * | Fichajes irreconciliables | `lookbackDays` | RN-18, leyendo hacia atras `result = 'rejected_out_of_order'` |
  *
  * ## Los umbrales llegan por sus puertos, y son de dos clases
  *
@@ -68,6 +71,8 @@ final readonly class DetectAttendanceAnomalies
     public function __construct(
         private WorkDayLedger $workDays,
         private FlaggedScans $flaggedScans,
+        /** RN-18: los escaneos que el fichaje ya registro como irreconciliables. */
+        private OutOfOrderScans $outOfOrderScans,
         private InstallationSiteProvider $sites,
         private OperationalSettingsProvider $settings,
         private CompliancePolicyProvider $compliance,
@@ -109,6 +114,7 @@ final readonly class DetectAttendanceAnomalies
         $anomalies = [
             ...$this->inspectWorkDays($workDays, $policy, $now, $suspension),
             ...$this->inspectFlaggedScans($command, $policy, $site->id, $timezone, $now),
+            ...$this->inspectOutOfOrderScans($command, $site->id, $timezone, $now),
         ];
 
         $failures = $this->publishEach($anomalies);
@@ -361,6 +367,15 @@ final readonly class DetectAttendanceAnomalies
      * jornada a la que atribuir la incidencia, no hay nada que un responsable
      * pueda revisar en el registro.
      *
+     * **Eso incluye los fichajes irreconciliables de RN-18**, que tambien nacen
+     * marcados y con un desfase medido, a veces enorme —vienen de una cola que
+     * drena dias despues—. No abren `clock_skew`: su hallazgo es otro, lo emite
+     * {@see inspectOutOfOrderScans()} y decirlo dos veces pondria dos
+     * incidencias sobre el mismo hecho. Que la condicion se cumpla por
+     * `workDate === null` no es casualidad —un rechazo no produce tramo, y por
+     * eso no tiene jornada— pero la prueba de la deteccion lo fija por si algun
+     * dia el puerto empezara a traerla.
+     *
      * @return list<DetectedAnomaly>
      */
     private function inspectFlaggedScans(
@@ -415,6 +430,92 @@ final readonly class DetectAttendanceAnomalies
                 'threshold_seconds' => $policy->review->skewToleranceSeconds,
             ],
         );
+    }
+
+    /**
+     * RN-18: los fichajes que no se pudieron cuadrar con el registro.
+     *
+     * **La decision ya esta tomada y escrita** —`scan_events.result =
+     * 'rejected_out_of_order'`, puesta por el agregado en el momento del
+     * fichaje—, asi que aqui no se compara ninguna hora: se lee hacia atras y se
+     * agrupa, exactamente como con el desfase de reloj. Volver a decidirlo esta
+     * noche, con un registro que puede haber cambiado por una correccion (RN-13),
+     * daria dos respuestas distintas sobre el mismo escaneo.
+     *
+     * **Una por empleado y jornada, no una por escaneo.** Una cola offline
+     * desordenada trae varios seguidos y todos dicen lo mismo: «esta jornada de
+     * esta persona no cuadra». La incidencia dice eso, y el `context` lleva el
+     * **primero** —con que encontrarlo en el log— y cuantos fueron. La misma
+     * garantia la sostiene ademas el esquema (`one_incident_per_finding` con
+     * `NULLS NOT DISTINCT`), que es lo que hace idempotente repetir la pasada.
+     *
+     * La jornada se deriva del `occurred_at` del escaneo en la zona del centro
+     * (RN-05): el escaneo no produjo tramo del que heredarla, y esa es la unica
+     * fecha civil que el propio hecho sostiene.
+     *
+     * @return list<DetectedAnomaly>
+     */
+    private function inspectOutOfOrderScans(
+        DetectAnomaliesCommand $command,
+        int $siteId,
+        DateTimeZone $timezone,
+        DateTimeImmutable $now,
+    ): array {
+        $from = $now->modify('-'.$command->lookbackDays.' days');
+
+        /** @var array<string, array{employeeUuid: string, workDate: WorkDate, scanId: string, occurredAt: DateTimeImmutable, scans: int}> $groups */
+        $groups = [];
+
+        foreach ($this->outOfOrderScans->outOfOrderBetween($from, $now) as $scan) {
+            $workDate = WorkDate::fromInstant($scan->occurredAt, $timezone);
+            $key = $scan->employeeUuid.'|'.$workDate->isoDate;
+
+            if (isset($groups[$key])) {
+                $groups[$key]['scans']++;
+
+                // El primero se queda: el puerto entrega en orden ascendente de
+                // `occurred_at`, asi que el que ya esta es el mas antiguo.
+                continue;
+            }
+
+            $groups[$key] = [
+                'employeeUuid' => $scan->employeeUuid,
+                'workDate' => $workDate,
+                'scanId' => $scan->scanId,
+                'occurredAt' => $scan->occurredAt,
+                'scans' => 1,
+            ];
+        }
+
+        $anomalies = [];
+
+        foreach ($groups as $group) {
+            $anomalies[] = new DetectedAnomaly(
+                type: AnomalyType::OUT_OF_ORDER_SCAN,
+                employeeUuid: $group['employeeUuid'],
+                siteId: $siteId,
+                workDate: $group['workDate'],
+                // El escaneo no produjo tramo, y el que estaba abierto no es el
+                // problema sino el contexto: la incidencia es de la jornada.
+                shiftEntryUuid: null,
+                detectedAt: $now,
+                context: [
+                    // Con que encontrar el fichaje en el log y con que entender
+                    // que estaba intentando registrar. **Sin datos personales**
+                    // (regla dura 21): un UUID de escaneo y un instante.
+                    'scan_id' => $group['scanId'],
+                    // La MISMA forma que cualquier instante de la API —sufijo
+                    // `Z`, esquema `UtcTimestamp`— y no `ATOM`, que escribe
+                    // `+00:00`: este valor se pinta en la bandeja junto a los
+                    // demas y viaja en la exportacion, y dos formatos de fecha en
+                    // la misma pantalla son dos formatos que alguien parsea mal.
+                    'occurred_at' => UtcInstant::of($group['occurredAt']),
+                    'scans' => $group['scans'],
+                ],
+            );
+        }
+
+        return $anomalies;
     }
 
     /**

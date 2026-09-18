@@ -51,9 +51,13 @@ it('reparte la severidad por lo que se rompe si nadie lo mira', function (Incide
     'jornada larga' => [IncidentType::LongShift, IncidentSeverity::Medium],
     'sin pausa' => [IncidentType::MissingBreak, IncidentSeverity::Medium],
     'falta la salida' => [IncidentType::MissingClockOut, IncidentSeverity::Medium],
+    // RN-18: media porque hay un fichaje real que **falta** en el registro y
+    // alguien tiene que corregirlo con traza, no porque se haya incumplido una
+    // norma ni porque el dato sea meramente raro.
+    'fichaje irreconciliable' => [IncidentType::OutOfOrderScan, IncidentSeverity::Medium],
     'tramo corto' => [IncidentType::ShortShift, IncidentSeverity::Low],
     'reloj desviado' => [IncidentType::ClockSkew, IncidentSeverity::Low],
-])->group('RF-PR-01');
+])->group('RF-PR-01', 'RN-18');
 
 it('traduce cada tipo que la deteccion puede emitir', function (AnomalyType $detected): void {
     // Los dos catalogos viven en modulos que no pueden importarse entre si

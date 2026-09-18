@@ -24,6 +24,7 @@ return [
         'clock_skew' => 'Fichaje con el reloj desviado',
         'missing_clock_out' => 'Falta el fichaje de salida',
         'anomalous_pattern' => 'Patrón anómalo de uso de credencial',
+        'out_of_order_scan' => 'Fichaje que no cuadra con el registro',
     ],
 
     'severities' => [

@@ -460,3 +460,117 @@ it('acepta el turno de noche partido por una pausa, con los dos tramos en la mis
         ->and(DB::table('shift_entries')->where('work_date', '2026-03-02')->count())->toBe(2)
         ->and(DB::table('shift_entries')->where('work_date', '2026-03-03')->count())->toBe(0);
 })->group('RN-01', 'RN-02', 'RN-05', 'RF-AT-12');
+
+// --- RN-18 · el catalogo del fichaje irreconciliable -------------------------
+
+/**
+ * Un escaneo por SQL directo, con lo justo para que la fila exista.
+ *
+ * @param  array{site: int, employee: int, other: int}  $fixture
+ * @param  array<string, string|int|bool|null>  $overrides
+ */
+function insertScanEvent(array $fixture, array $overrides = []): int
+{
+    $deviceId = DB::table('devices')->insertGetId([
+        'uuid' => Str::uuid7()->toString(),
+        'site_id' => $fixture['site'],
+        'name' => 'Quiosco '.Str::random(6),
+        'pending_queue_size' => 0,
+        'status' => 'active',
+        'created_at' => CLOCK_IN,
+        'updated_at' => CLOCK_IN,
+    ]);
+
+    return DB::table('scan_events')->insertGetId(array_merge([
+        'scan_id' => Str::uuid7()->toString(),
+        'device_id' => $deviceId,
+        'employee_id' => $fixture['employee'],
+        'occurred_at' => CLOCK_IN,
+        'recorded_at' => CLOCK_IN,
+        'origin' => 'qr_kiosk',
+        'intent' => 'auto',
+        'result' => 'rejected_out_of_order',
+        'flagged_for_review' => true,
+        'worked_minutes' => null,
+        'client_meta' => '{}',
+    ], $overrides));
+}
+
+it('acepta por SQL directo el escaneo irreconciliable sin tramo ni acumulado', function (): void {
+    // RN-18 en el esquema: `rejected_out_of_order` es un valor legitimo de
+    // `result`, y la fila que escribe el caso de uso —sin tramo, sin acumulado y
+    // marcada para revision— entra sin protestar por ninguna de las tres
+    // restricciones que la gobiernan.
+    $fixture = attendanceFixture();
+
+    $id = insertScanEvent($fixture);
+
+    $fila = DB::table('scan_events')->where('id', $id)->first();
+
+    expect($id)->toBeGreaterThan(0)
+        ->and($fila?->result)->toBe('rejected_out_of_order')
+        ->and($fila?->shift_entry_id)->toBeNull()
+        ->and($fila?->worked_minutes)->toBeNull()
+        ->and($fila?->flagged_for_review)->toBeTrue();
+})->group('RN-18');
+
+it('sigue rechazando por SQL directo un resultado que no existe', function (): void {
+    // La ampliacion del catalogo no lo abre: `scan_events_chk_result` sigue
+    // siendo una lista cerrada. Sin esta comprobacion, un `CHECK` mal reescrito
+    // en la migracion expand pasaria inadvertido.
+    $fixture = attendanceFixture();
+
+    expectRejectionBy('scan_events_chk_result', function () use ($fixture): void {
+        insertScanEvent($fixture, ['result' => 'rejected_porque_si']);
+    });
+})->group('RN-18');
+
+it('rechaza por SQL directo un escaneo irreconciliable con acumulado', function (): void {
+    // `scan_events_chk_worked_minutes` es una equivalencia, no una lista de
+    // permitidos: si `rejected_out_of_order` no estuviera en ella, la fila de
+    // RN-18 seria imposible de escribir; estando, guardar acumulado en una
+    // respuesta que no lo lleva tambien lo es.
+    $fixture = attendanceFixture();
+
+    expectRejectionBy('scan_events_chk_worked_minutes', function () use ($fixture): void {
+        insertScanEvent($fixture, ['worked_minutes' => 480]);
+    });
+})->group('RN-18');
+
+it('rechaza por SQL directo un escaneo irreconciliable colgado de un tramo', function (): void {
+    // `scan_events_chk_rejected_has_no_shift_entry` ya cubria este valor sin
+    // tocarla —compara con `LIKE 'rejected%'`— y esta prueba es lo que lo
+    // demuestra en vez de darlo por supuesto.
+    $fixture = attendanceFixture();
+    $tramo = insertShiftEntry($fixture, $fixture['employee']);
+
+    expectRejectionBy('scan_events_chk_rejected_has_no_shift_entry', function () use ($fixture, $tramo): void {
+        insertScanEvent($fixture, ['shift_entry_id' => $tramo]);
+    });
+})->group('RN-18');
+
+it('acepta la incidencia del fichaje irreconciliable y rechaza un tipo inventado', function (): void {
+    // `incidents_chk_type`: el catalogo admite el tipo nuevo y **solo** el tipo
+    // nuevo. La incidencia llega sin tramo, que es como la abre la revision
+    // diaria (RN-18: la incidencia es de la jornada, no de un tramo).
+    $fixture = attendanceFixture();
+
+    $fila = [
+        'employee_id' => $fixture['employee'],
+        'work_date' => '2026-03-02',
+        'shift_entry_id' => null,
+        'type' => 'out_of_order_scan',
+        'severity' => 'medium',
+        'status' => 'open',
+        'detected_at' => CLOCK_IN,
+        'context' => '{"scans": 2}',
+        'created_at' => CLOCK_IN,
+        'updated_at' => CLOCK_IN,
+    ];
+
+    expect(DB::table('incidents')->insertGetId($fila))->toBeGreaterThan(0);
+
+    expectRejectionBy('incidents_chk_type', function () use ($fila): void {
+        DB::table('incidents')->insert([...$fila, 'type' => 'fichaje_raro', 'work_date' => '2026-03-03']);
+    });
+})->group('RN-18');

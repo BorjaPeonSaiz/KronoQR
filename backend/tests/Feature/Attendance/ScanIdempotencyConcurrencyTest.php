@@ -137,7 +137,14 @@ it('crea un solo tramo aunque las diez peticiones traigan scan_id distintos', fu
 
     // Ninguna peticion falla —el empleado no tiene la culpa de haber pasado la
     // tarjeta a la vez que otro (regla dura 19)— y solo una crea tramo.
-    expect(array_unique(array_map(static fn (array $r): int => $r['status'], $respuestas)))->toBe([200])
+    // El detalle va en el mensaje porque esta prueba habla de una carrera: sin
+    // los resultados escritos, un fallo esporadico obliga a reproducirlo a
+    // ciegas. Fue asi como se vio que RN-18 estaba rechazando al perdedor de la
+    // carrera en lugar de dejarle reintentar (ver `RegisterScanHandler`).
+    expect(array_unique(array_map(static fn (array $r): int => $r['status'], $respuestas)))->toBe([200], json_encode(
+        DB::table('scan_events')->pluck('result')->all(),
+        JSON_THROW_ON_ERROR,
+    ))
         ->and(array_count_values(array_filter($acciones, is_string(...)))['clock_in'] ?? 0)->toBe(1)
         ->and(DB::table('shift_entries')->count())->toBe(1)
         // Los diez escaneos quedan registrados: `scan_events` es el log de TODO
@@ -272,3 +279,58 @@ it('con dos tablets pidiendo pausa y vuelta a la vez, no quedan dos tramos abier
         ->and(DB::table('scan_events')->count())->toBe(3)
         ->and(AttendanceFixtures::projectionDivergences())->toBe([]);
 })->group('RF-AT-07', 'RF-AT-12', 'RN-01', 'RQ-03');
+
+it('deduplica el fichaje irreconciliable reenviado diez veces a la vez', function (): void {
+    // RN-18 bajo la misma carrera: el rechazo tambien pasa por `recordOrReplay()`,
+    // asi que diez reintentos simultaneos de un elemento imposible tienen que
+    // dejar **una** fila y diez respuestas identicas. Si la deduplicacion no
+    // cubriera este camino, una tablet con mala cobertura llenaria `scan_events`
+    // de copias del mismo fichaje que no cuadra y la bandeja contaria diez veces
+    // el mismo problema.
+    $escenario = AttendanceFixtures::scenario();
+
+    FrozenTime::at('2026-03-14 18:00:00');
+    app()->instance(ScanMetrics::class, new RecordingScanMetrics);
+    app()->instance(
+        CredentialResolver::class,
+        FakeCredentialResolver::new()->resolving(TARJETA_CONCURRENTE, $escenario['employee']),
+    );
+
+    // El turno abierto que fija el limite de RN-18.
+    $entrada = Str::uuid7()->toString();
+    Api::as($escenario['token'])
+        ->withHeaders(['Idempotency-Key' => $entrada])
+        ->post('/api/v1/scan', [
+            'scan_id' => $entrada,
+            'occurred_at' => '2026-03-14T14:00:00Z',
+            'qr_payload' => TARJETA_CONCURRENTE,
+        ])
+        ->assertOk();
+
+    $scanId = Str::uuid7()->toString();
+
+    $respuestas = ParallelRequests::run(
+        PETICIONES_PARALELAS,
+        static fn (): mixed => Api::as($escenario['token'])
+            ->withHeaders(['Idempotency-Key' => $scanId])
+            ->post('/api/v1/scan', [
+                'scan_id' => $scanId,
+                // Diez minutos ANTES de la entrada: no puede cuadrar nunca.
+                'occurred_at' => '2026-03-14T13:50:00Z',
+                'qr_payload' => TARJETA_CONCURRENTE,
+            ]),
+    );
+
+    $cuerpos = array_map(static fn (array $r): string => json_encode($r['body'], JSON_THROW_ON_ERROR), $respuestas);
+    $codigos = array_map(static fn (array $r): int => $r['status'], $respuestas);
+
+    expect($respuestas)->toHaveCount(PETICIONES_PARALELAS)
+        ->and(array_unique($codigos))->toBe([422])
+        ->and(array_values(array_unique($cuerpos)))->toHaveCount(1)
+        // Una sola fila de rechazo, y el turno que el empleado SI ficho, intacto.
+        ->and(DB::table('scan_events')->where('scan_id', $scanId)->count())->toBe(1)
+        ->and(DB::table('scan_events')->where('result', 'rejected_out_of_order')->count())->toBe(1)
+        ->and(DB::table('shift_entries')->count())->toBe(1)
+        ->and(DB::table('shift_entries')->first()?->status)->toBe('open')
+        ->and(AttendanceFixtures::projectionDivergences())->toBe([]);
+})->group('RN-18', 'RF-AT-07', 'RQ-03');

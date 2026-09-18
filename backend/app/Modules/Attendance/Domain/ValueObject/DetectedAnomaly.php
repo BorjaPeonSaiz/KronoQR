@@ -22,17 +22,27 @@ use InvalidArgumentException;
  * como `employeeUuid`, que es lo que la Inspeccion resuelve contra `employees`
  * cuando de verdad hace falta.
  *
- * **`context` son numeros, no prosa.** Guarda los minutos medidos y el umbral
+ * **`context` son hechos, no prosa.** Guarda los minutos medidos y el umbral
  * aplicado, que es lo que permite a la bandeja explicar el hallazgo sin
  * recalcularlo y lo que deja constancia del umbral **vigente en el momento de la
  * deteccion**: el perfil de cumplimiento puede cambiar despues (RF-PD-07) y una
  * incidencia sin el numero con el que se abrio no se puede defender.
+ *
+ * Nacio admitiendo **solo enteros** —era la forma mas corta de garantizar que no
+ * lleva datos personales— y RN-18 lo amplio a **entero o cadena**: el fichaje
+ * irreconciliable no tiene ningun numero que explicar, sino un `scan_id` y un
+ * `occurred_at` con los que una persona encuentra el fichaje en el log para
+ * corregirlo. La garantia no se apoya ya en el tipo, sino donde de verdad estaba:
+ * en que quien construye el hallazgo no tiene por donde alcanzar un nombre —aqui
+ * la persona es un UUID— y en la prueba de la deteccion, que afirma clave por
+ * clave lo que lleva cada tipo de hallazgo. Sigue siendo **escalar**: ni objetos
+ * ni listas, de modo que no hay donde alojar una estructura con un nombre dentro.
  */
 final readonly class DetectedAnomaly
 {
     /**
      * @param  string|null  $shiftEntryUuid  El tramo que lo explica, o `null` cuando el hallazgo es de la jornada entera.
-     * @param  array<string, int>  $context  Minutos medidos y umbral aplicado. Nunca datos personales.
+     * @param  array<string, int|string>  $context  Los hechos que lo sostienen —minutos, umbral, el `scan_id` de RN-18—. Nunca datos personales.
      */
     public function __construct(
         public AnomalyType $type,

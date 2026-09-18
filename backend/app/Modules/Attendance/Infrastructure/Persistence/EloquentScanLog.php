@@ -204,7 +204,7 @@ final readonly class EloquentScanLog implements ScanLog
     /**
      * Traduce la fila al vocabulario del dominio, o `null` si no hay fila.
      *
-     * `ScanResult::action()` devuelve `null` para los cuatro rechazos, que aqui
+     * `ScanResult::action()` devuelve `null` para los cinco rechazos, que aqui
      * no pueden llegar —la consulta ya los excluye— pero el tipado lo
      * contempla: antes que construir un `AcceptedScan` imposible, se descarta.
      */

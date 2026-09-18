@@ -12,6 +12,7 @@ use App\Modules\Attendance\Domain\Model\ShiftEntry as ShiftEntryEntity;
 use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Attendance\Domain\ValueObject\ShiftEntryStatus;
+use App\Modules\Attendance\Domain\ValueObject\TimeRange;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Shared\Application\Port\Clock;
 use DateTimeImmutable;
@@ -224,6 +225,55 @@ final readonly class EloquentWorkDayRepository implements WorkDayRepository
                 throw $this->translate($exception, $workDay);
             }
         });
+    }
+
+    /**
+     * RN-18 a traves de jornadas (RN-02).
+     *
+     * **La consulta es la restriccion de exclusion escrita como pregunta.** El
+     * tramo que una entrada abriria no tiene fin —`tstzrange(occurred_at, NULL)`
+     * es `[occurred_at, ∞)`— asi que solapa con todo lo que siga vivo despues.
+     * Se pregunta con el mismo operador `&&` y sobre el mismo predicado parcial
+     * que `shift_entries_no_overlap`, de modo que **el indice GiST de la propia
+     * restriccion la sirve** y, sobre todo, de modo que la respuesta no pueda
+     * discrepar de lo que la base de datos hara medio milisegundo despues: si
+     * aqui dijera «cabe» y alli no cupiera, volveriamos al `500`.
+     *
+     * `[)` incluido: entrar a la misma hora a la que se salio **no** solapa, y
+     * por eso no hay que restarle nada al instante.
+     *
+     * Se descartan los tramos sin salida —el turno abierto— porque ese caso es
+     * RN-01 y se resuelve reintentando (ver el puerto).
+     */
+    public function closedEntryEndingAfter(string $employeeUuid, DateTimeImmutable $at): ?TimeRange
+    {
+        $employeeId = $this->employeeIdOf($employeeUuid);
+
+        if ($employeeId === null) {
+            return null;
+        }
+
+        $entry = ShiftEntry::query()
+            ->where('employee_id', $employeeId)
+            ->whereNotNull('clocked_out_at')
+            ->whereNotIn('status', self::historicalStatuses())
+            ->whereRaw(
+                'tstzrange(clocked_in_at, clocked_out_at) && tstzrange(?::timestamptz, NULL)',
+                [$this->toTimestamp($at)],
+            )
+            // El primero que estorba, que es el que mira primero quien trabaja
+            // la incidencia.
+            ->orderBy('clocked_out_at')
+            ->first();
+
+        if (! $entry instanceof ShiftEntry || $entry->clocked_out_at === null) {
+            return null;
+        }
+
+        return new TimeRange(
+            $this->toUtc($entry->clocked_in_at),
+            $this->toUtc($entry->clocked_out_at),
+        );
     }
 
     /**

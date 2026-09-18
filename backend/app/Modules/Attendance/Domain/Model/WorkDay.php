@@ -19,6 +19,7 @@ use App\Modules\Attendance\Domain\Policy\ClockingPolicy;
 use App\Modules\Attendance\Domain\ValueObject\ClockingAction;
 use App\Modules\Attendance\Domain\ValueObject\Correction;
 use App\Modules\Attendance\Domain\ValueObject\CorrectionAction;
+use App\Modules\Attendance\Domain\ValueObject\OutOfOrderScan;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Attendance\Domain\ValueObject\ShiftAnomaly;
 use App\Modules\Attendance\Domain\ValueObject\ShiftEntryStatus;
@@ -44,6 +45,13 @@ use DateTimeImmutable;
  * | La jornada no cambia de dia | RN-05 | `guardOpeningStaysOnThisWorkDate()` |
  * | Total recalculado | RN-06 | `totalWorked()`, que **suma**, no acumula |
  * | Version nueva, nunca sobrescritura | RN-13 | `correctEntry()`, `voidEntry()` |
+ *
+ * **Y responde una pregunta ademas de protegerlas** (RN-18, tarea ad hoc del
+ * 18-09-2026): {@see outOfOrderScanFor()} dice si un escaneo puede llegar a
+ * encajar en esta jornada **antes** de intentarlo. No son invariantes nuevas
+ * —las que deciden siguen siendo RN-03 al cerrar y RN-02 al abrir— sino la
+ * forma de que el camino de fichaje no tenga que provocar una excepcion para
+ * enterarse de algo que el agregado sabe.
  *
  * **El total es un calculo, no un campo.** No existe ningun `$total` que
  * incrementar, y por eso no puede desincronizarse: anular o corregir un tramo
@@ -445,6 +453,103 @@ final class WorkDay
     public function hasOpenEntry(): bool
     {
         return $this->openEntry() instanceof ShiftEntry;
+    }
+
+    /**
+     * RN-18: el **fichaje irreconciliable**, si este escaneo lo es.
+     *
+     * Devuelve el desenlace en vez de lanzarlo, y esa es toda la regla: un
+     * escaneo que no puede encajar en esta jornada **no va a poder nunca**, asi
+     * que no es un fallo pasajero que merezca un reintento sino una decision que
+     * hay que tomar una sola vez.
+     *
+     * Hay dos formas de no encajar, una por cada camino del fichaje, y la accion
+     * ya resuelta dice cual toca comprobar:
+     *
+     * - **Al cerrar** (`clock_out`, `break_start`): el escaneo no es posterior a
+     *   la entrada del turno abierto. Lo prohibe RN-03.
+     * - **Al abrir** (`clock_in`, `break_end`): el tramo que se crearia no tiene
+     *   fin, asi que pisa a cualquier tramo **ya cerrado** que siga vivo despues
+     *   de su inicio. Lo prohibe RN-02.
+     *
+     * Se mira `opensEntry()` y no el caso concreto: una pausa y una jornada se
+     * comportan igual (ADR-024), de modo que ampliar el vocabulario de acciones
+     * no deja ningun borde sin cubrir.
+     *
+     * **Por que aqui y no en el caso de uso.** Quien sabe que tramos tiene la
+     * jornada y en que estado es este agregado, y las dos comparaciones son
+     * exactamente las que gobiernan RN-02 y RN-03. Decidirlo fuera obligaria a
+     * leer los tramos por otro camino y a repetir dos criterios opuestos en cada
+     * llamador; el dia que uno de ellos escribiera `>=` donde va `>`, la
+     * diferencia acabaria en un registro con valor legal.
+     *
+     * **Las invariantes no se relajan.** Esto se anticipa a `clockOut()` y a
+     * `clockIn()`, no los sustituye: quien fiche sin preguntar sigue chocando
+     * con {@see TimeRange} (RN-03) y con `guardNothingExtendsBeyond()` (RN-02),
+     * que siguen siendo la ultima defensa. Lo que cambia es que el camino de
+     * fichaje ya no necesita provocar una excepcion para descubrir lo que puede
+     * preguntar.
+     */
+    public function outOfOrderScanFor(ClockingAction $action, DateTimeImmutable $at): ?OutOfOrderScan
+    {
+        TimeRange::assertUtc('occurredAt', $at);
+
+        return $action->opensEntry()
+            ? $this->scanOverlappingClosedEntry($at)
+            : $this->scanBeforeOpenEntry($at);
+    }
+
+    /**
+     * RN-18 al cerrar (RN-03).
+     *
+     * Sin turno abierto no hay entrada que contradecir y la respuesta es nula.
+     * El caso de uso no llega aqui —sin tramo abierto la intencion se resuelve
+     * como apertura— pero la pregunta tiene que poder hacerse en cualquier
+     * orden.
+     */
+    private function scanBeforeOpenEntry(DateTimeImmutable $at): ?OutOfOrderScan
+    {
+        $open = $this->openEntry();
+
+        if (! $open instanceof ShiftEntry) {
+            return null;
+        }
+
+        if ($at->getTimestamp() > $open->clockedInAt()->getTimestamp()) {
+            return null;
+        }
+
+        return OutOfOrderScan::beforeOpenEntry($open->clockedInAt(), $at);
+    }
+
+    /**
+     * RN-18 al abrir (RN-02).
+     *
+     * **Solo mira los tramos CERRADOS, y es deliberado.** Un tramo abierto en
+     * esta jornada, en el camino de apertura, no describe un fichaje
+     * irreconciliable: describe la carrera de diez personas pasando la tarjeta a
+     * la vez en un cambio de turno. Esa la resuelve RN-01 —`ShiftAlreadyOpen`,
+     * el caso de uso reintenta y en el segundo intento el perdedor ya ve el
+     * tramo del ganador y sale por el anti-rebote (RF-AT-06)— y convertirla en
+     * RN-18 dejaria sin fichar a quien llego segundo, que es exactamente lo que
+     * la regla dura 19 prohibe.
+     *
+     * Es la misma comprobacion de `guardNothingExtendsBeyond()` menos ese caso,
+     * y se escribe con `period()` en vez de con `extendsBeyond()` precisamente
+     * para que el tramo abierto quede fuera por construccion y no por un `if`
+     * que alguien pueda quitar.
+     */
+    private function scanOverlappingClosedEntry(DateTimeImmutable $at): ?OutOfOrderScan
+    {
+        foreach ($this->entries as $entry) {
+            $period = $entry->period();
+
+            if ($period instanceof TimeRange && $period->endsAfter($at)) {
+                return OutOfOrderScan::overlappingClosedEntry($period, $at);
+            }
+        }
+
+        return null;
     }
 
     public function hasAnomaly(): bool
