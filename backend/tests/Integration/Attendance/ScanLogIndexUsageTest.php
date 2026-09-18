@@ -139,15 +139,97 @@ function consultasDelPuerto(Closure $llamada): array
 }
 
 /**
- * El plan de ejecucion de esa consulta, como texto JSON.
+ * El plan de ejecucion de esa consulta, ya aplanado en nodos.
+ *
+ * SE RECORRE EL ARBOL Y NO SE BUSCAN SUBCADENAS. La consulta lleva un
+ * `LEFT JOIN` con `shift_entries`, asi que el JSON del plan contiene a la vez
+ * «Seq Scan» y «scan_events» en cuanto la segunda tabla se recorre entera —lo
+ * que es correcto cuando es pequeña—. Comprobarlo con `str_contains` daba un
+ * fallo que aparecia y desaparecia segun cuantos tramos hubiera sembrados.
+ *
+ * (El mismo recorrido vive en `load-tests/k6/support.php` para la verificacion
+ * posterior a la prueba de carga. No se comparte a proposito: son dos arboles
+ * distintos del repositorio y atar la suite del backend a `load-tests/` por ocho
+ * lineas costaria mas de lo que ahorra.)
+ *
+ * @param  array{sql: string, bindings: list<mixed>}  $query
+ * @return list<array<string, mixed>>
+ */
+function nodosDelPlan(array $query): array
+{
+    $explained = DB::select('EXPLAIN (FORMAT JSON) '.$query['sql'], $query['bindings']);
+    $raiz = raizDelPlan((string) ($explained[0]->{'QUERY PLAN'} ?? ''));
+
+    return $raiz === null ? [] : nodosBajo($raiz);
+}
+
+/**
+ * El nodo raiz del JSON de `EXPLAIN`, o `null` si no se pudo leer.
+ *
+ * @return array<mixed, mixed>|null
+ */
+function raizDelPlan(string $explained): ?array
+{
+    /** @var mixed $decoded */
+    $decoded = json_decode($explained, true);
+    /** @var mixed $first */
+    $first = is_array($decoded) ? ($decoded[0] ?? null) : null;
+    /** @var mixed $root */
+    $root = is_array($first) ? ($first['Plan'] ?? null) : null;
+
+    return is_array($root) ? $root : null;
+}
+
+/**
+ * @param  array<mixed, mixed>  $raiz
+ * @return list<array<string, mixed>>
+ */
+function nodosBajo(array $raiz): array
+{
+    /** @var list<array<string, mixed>> $nodes */
+    $nodes = [];
+    /** @var list<array<string, mixed>> $pending */
+    $pending = [$raiz];
+
+    while ($pending !== []) {
+        $current = array_pop($pending);
+        $nodes[] = $current;
+
+        /** @var mixed $children */
+        $children = $current['Plans'] ?? [];
+
+        foreach (is_array($children) ? $children : [] as $child) {
+            if (is_array($child)) {
+                $pending[] = $child;
+            }
+        }
+    }
+
+    return $nodes;
+}
+
+/**
+ * Comprueba que `scan_events` se resuelve por su indice y sin recorrerla entera.
  *
  * @param  array{sql: string, bindings: list<mixed>}  $query
  */
-function planDe(array $query): string
+function resuelvePorElIndice(array $query): void
 {
-    $explained = DB::select('EXPLAIN (FORMAT JSON) '.$query['sql'], $query['bindings']);
+    $nodes = nodosDelPlan($query);
 
-    return (string) ($explained[0]->{'QUERY PLAN'} ?? '');
+    expect($nodes)->not->toBeEmpty('El plan de ejecucion no se pudo leer');
+
+    $usaIndice = false;
+    $recorreLaTabla = false;
+
+    foreach ($nodes as $node) {
+        $usaIndice = $usaIndice || ($node['Index Name'] ?? '') === 'scan_events_employee_id_occurred_at_index';
+        $recorreLaTabla = $recorreLaTabla
+            || (($node['Node Type'] ?? '') === 'Seq Scan' && ($node['Relation Name'] ?? '') === 'scan_events');
+    }
+
+    expect($usaIndice)->toBeTrue('El plan no usa scan_events_employee_id_occurred_at_index');
+    expect($recorreLaTabla)->toBeFalse('El plan recorre scan_events de principio a fin');
 }
 
 it('resuelve el ultimo escaneo aceptado por el indice del historico', function (): void {
@@ -158,11 +240,7 @@ it('resuelve el ultimo escaneo aceptado por el indice del historico', function (
 
     expect($queries)->not->toBeEmpty();
 
-    $plan = planDe($queries[0]);
-
-    expect($plan)->toContain('scan_events_employee_id_occurred_at_index')
-        ->and(str_contains($plan, '"Node Type": "Seq Scan"') && str_contains($plan, '"Relation Name": "scan_events"'))
-        ->toBeFalse();
+    resuelvePorElIndice($queries[0]);
 })->group('RNF-P-02', 'RF-AT-12');
 
 it('resuelve la ventana anti-rebote por el mismo indice', function (): void {
@@ -179,10 +257,6 @@ it('resuelve la ventana anti-rebote por el mismo indice', function (): void {
     expect($queries)->toHaveCount(2);
 
     foreach ($queries as $query) {
-        $plan = planDe($query);
-
-        expect($plan)->toContain('scan_events_employee_id_occurred_at_index')
-            ->and(str_contains($plan, '"Node Type": "Seq Scan"') && str_contains($plan, '"Relation Name": "scan_events"'))
-            ->toBeFalse();
+        resuelvePorElIndice($query);
     }
 })->group('RNF-P-02', 'RF-AT-06');

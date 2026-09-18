@@ -67,6 +67,10 @@ use App\Modules\Identity\Infrastructure\Persistence\User;
 use App\Modules\Product\Application\UseCase\GetLicenseStatusHandler;
 use App\Modules\Product\Domain\ValueObject\PlanLimit;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
+use App\Modules\Workforce\Application\Command\CreateDepartmentCommand;
+use App\Modules\Workforce\Application\Command\CreateSiteCommand;
+use App\Modules\Workforce\Application\UseCase\CreateDepartmentHandler;
+use App\Modules\Workforce\Application\UseCase\CreateSiteHandler;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -140,15 +144,69 @@ if ($license->license === null) {
     }
 }
 
-// --- Centro y departamento de la carga --------------------------------------
+// --- Puesta en marcha minima, solo si la instalacion esta recien instalada ---
 
+/*
+ * UNA INSTALACION RECIEN HECHA CON `install.sh` NO TIENE CENTRO. El asistente de
+ * RF-PD-03 es quien lo crea, y en el workflow de carga no hay nadie que lo
+ * recorra: la prueba se instala, se mide y se tira. Hasta aqui esto fallaba con
+ * «La instalacion no tiene ningun centro», que es cierto y no ayuda.
+ *
+ * SE CREA CON EL CASO DE USO DEL PRODUCTO, no con un `INSERT`. `CreateSiteHandler`
+ * valida la zona horaria, respeta el indice de centro unico (ADR-040) y —esto es
+ * lo que de verdad importa— **escribe el asiento `site.created` dentro de la
+ * misma transaccion**: es la constancia de con que zona horaria nacio la
+ * instalacion, que es el parametro con el que RN-05 atribuye cada tramo a un dia.
+ * Un centro insertado a mano dejaria el registro legal sin la pieza que explica
+ * como se calcularon las jornadas, y eso no se reconstruye despues.
+ *
+ * LO QUE NO SE HACE, Y ES DELIBERADO: **el asistente se deja ABIERTO**. Cerrarlo
+ * exige un administrador con SEGUNDO FACTOR ya confirmado
+ * (`SetupState::hasAdministrator`), y una herramienta de carga no tiene por que
+ * enrolar un secreto TOTP ni dejar una cuenta de administracion viva en la
+ * instalacion que acaba de medir. Nada del camino de fichaje depende de que el
+ * asistente este cerrado: no hay ningun guarda que lo exija.
+ *
+ * TAMPOCO SE ASIGNA PERFIL DE CUMPLIMIENTO. `sites.compliance_profile_id` es
+ * nullable y su nulo SIGNIFICA «usa el perfil por omision», que siembra la
+ * migracion de `compliance_profiles` porque es dato de producto. Asignarlo aqui
+ * seria decidir por el cliente algo que el producto ya resuelve.
+ */
 $siteId = DB::table('sites')->orderBy('id')->value('id');
+$createdDuringSetup = [];
 
 if ($siteId === null) {
-    throw new RuntimeException('La instalacion no tiene ningun centro: completa la puesta en marcha antes.');
+    $site = app(CreateSiteHandler::class)->handle(
+        new CreateSiteCommand(name: K6_SITE_NAME, timezone: K6_SITE_TIMEZONE)
+    );
+
+    $siteId = (int) $site->id;
+    $createdDuringSetup[] = 'centro «'.K6_SITE_NAME.'» ('.K6_SITE_TIMEZONE.')';
+
+    $say('[puesta en marcha] La instalacion no tenia centro: creado «'.K6_SITE_NAME.'» '
+        .'en '.K6_SITE_TIMEZONE.' con CreateSiteHandler (asiento site.created incluido).');
+    $say('[puesta en marcha] El asistente de RF-PD-03 se deja ABIERTO a proposito: cerrarlo '
+        .'exigiria un administrador con segundo factor y la prueba de carga no enrola secretos.');
+} else {
+    $siteId = (int) $siteId;
 }
 
-$siteId = (int) $siteId;
+// El perfil que va a aplicar de verdad, dicho en voz alta: de el salen el
+// descanso minimo y la jornada maxima que consulta el dominio (regla dura 14).
+$profile = DB::table('compliance_profiles')
+    ->leftJoin('sites', 'sites.compliance_profile_id', '=', 'compliance_profiles.id')
+    ->where(static function ($query) use ($siteId): void {
+        $query->where('sites.id', $siteId)->orWhere('compliance_profiles.is_default', true);
+    })
+    ->orderByRaw('case when sites.id is null then 1 else 0 end')
+    ->value('compliance_profiles.name');
+
+$say('[puesta en marcha] Perfil de cumplimiento en vigor para el centro: '
+    .($profile === null ? 'NINGUNO (la migracion de compliance_profiles no ha sembrado el de serie)' : (string) $profile)
+    .'.');
+
+// --- Departamento de la carga ------------------------------------------------
+
 $departmentId = k6_department_id($siteId);
 
 // ANTES de crear nada: si hay codigos de la carga fuera de su departamento, se
@@ -156,10 +214,15 @@ $departmentId = k6_department_id($siteId);
 k6_assert_no_foreign_codes($departmentId);
 
 if ($departmentId === null) {
-    $departmentId = (int) DB::table('departments')->insertGetId([
-        'site_id' => $siteId,
-        'name' => K6_DEPARTMENT_NAME,
-    ]);
+    // Por el caso de uso y no por un `INSERT`: exige que exista el centro de la
+    // instalacion (`InstallationSiteMissing`), que es justo el invariante que
+    // esta seccion acaba de asegurar.
+    $department = app(CreateDepartmentHandler::class)->handle(
+        new CreateDepartmentCommand(name: K6_DEPARTMENT_NAME)
+    );
+
+    $departmentId = (int) $department->id;
+    $createdDuringSetup[] = 'departamento «'.K6_DEPARTMENT_NAME.'»';
 }
 
 // --- Empleados sinteticos ----------------------------------------------------
@@ -541,6 +604,9 @@ file_put_contents($outputPath, json_encode([
     'rejection_floor_ms' => $rejectionFloorMs,
     'debounce_seconds' => $debounceSeconds,
     'projection_divergence_before' => $divergenceBefore,
+    // Que hubo que crear porque la instalacion venia recien instalada. Vacio en
+    // un entorno que ya habia pasado por el asistente.
+    'created_during_setup' => $createdDuringSetup,
     'history' => [
         'device_uuid' => $historyDeviceUuid,
         'employees' => $historyOwners->count(),
@@ -551,3 +617,8 @@ file_put_contents($outputPath, json_encode([
 
 $say('Fixtures en '.$outputPath.': '.count($payloads).' tarjetas, '.count($deviceTokens).' quioscos, '
     .'rebanada de '.$geometry['cards_per_instance'].' tarjetas por instancia.');
+
+$say($createdDuringSetup === []
+    ? 'Puesta en marcha: la instalacion ya estaba configurada; no se ha tocado nada de ella.'
+    : 'Puesta en marcha: se ha creado '.implode(' y ', $createdDuringSetup)
+        .'. El asistente sigue abierto y no hay ninguna cuenta de administracion nueva.');

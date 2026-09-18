@@ -399,6 +399,17 @@ $sampleUuid = DB::table('scan_events')
     ->limit(1)
     ->value('employees.uuid');
 
+// UN PLAN SOBRE UNA TABLA PEQUENA NO DICE NADA. Con pocas filas, PostgreSQL
+// elige un recorrido completo porque de verdad es mas barato, y exigir el indice
+// ahi convierte esta comprobacion en un aviso de «tu entorno tiene pocos datos»
+// disfrazado de defecto. El umbral es el mismo volumen que siembra
+// `ScanLogIndexUsageTest`, que es la prueba que guarda el plan de forma
+// determinista; esto es la confirmacion sobre el volumen real de la instalacion.
+const K6_PLAN_MIN_ROWS = 20_000;
+
+$scanEventRows = DB::table('scan_events')->count();
+$planIsMeaningful = $scanEventRows >= K6_PLAN_MIN_ROWS;
+
 $captured = [];
 
 DB::listen(static function ($query) use (&$captured): void {
@@ -416,8 +427,9 @@ $scanLog->acceptedScansAdjacentTo((string) $sampleUuid, new DateTimeImmutable('n
 $adjacentQueries = $captured;
 
 $report['plans'] = [];
+$report['scan_events_rows'] = $scanEventRows;
 
-$explain = static function (string $name, array $queries) use ($check, &$report): void {
+$explain = static function (string $name, array $queries) use ($check, $warn, $planIsMeaningful, &$report): void {
     // De todas las consultas que emitio el puerto, la que interesa es la que
     // toca `scan_events`: la resolucion de `employees.id` es otra pregunta y
     // tiene su propio indice.
@@ -436,19 +448,28 @@ $explain = static function (string $name, array $queries) use ($check, &$report)
     foreach ($relevant as $index => $query) {
         $explained = DB::select('EXPLAIN (FORMAT JSON) '.$query['sql'], $query['bindings']);
         $plan = (string) ($explained[0]->{'QUERY PLAN'} ?? '');
-        $usesIndex = str_contains($plan, 'scan_events_employee_id_occurred_at_index');
-        $scansTable = str_contains($plan, '"Node Type": "Seq Scan"')
-            && str_contains($plan, '"Relation Name": "scan_events"');
+
+        // Recorriendo el ARBOL del plan y no buscando subcadenas: la consulta
+        // lleva un `LEFT JOIN` con `shift_entries`, y un recorrido completo de
+        // ESA tabla —correcto, es pequeña— se atribuia a `scan_events`.
+        $usesIndex = k6_plan_uses_index($plan, 'scan_events_employee_id_occurred_at_index');
+        $scansTable = k6_plan_scans_sequentially($plan, 'scan_events');
 
         $label = $name.($index > 0 ? ' ['.($index + 1).']' : '');
         $report['plans'][$label] = ['index' => $usesIndex, 'seq_scan' => $scansTable];
 
-        $check(
-            'RNF-P-02/plan',
-            $usesIndex && ! $scansTable,
-            $label.': '.($usesIndex ? 'usa el indice' : 'NO usa scan_events_employee_id_occurred_at_index')
-            .($scansTable ? ' y recorre la tabla' : '')
-        );
+        $detail = $label.': '.($usesIndex ? 'usa el indice' : 'NO usa scan_events_employee_id_occurred_at_index')
+            .($scansTable ? ' y recorre la tabla' : '');
+
+        if (! $planIsMeaningful) {
+            $warn('RNF-P-02/plan: '.$detail.' — no evaluable: scan_events tiene menos de '
+                .K6_PLAN_MIN_ROWS.' filas y con esa cantidad el recorrido completo es legitimo. '
+                .'Sube K6_HISTORY_DAYS/K6_HISTORY_EMPLOYEES o mide contra un entorno con historico.');
+
+            continue;
+        }
+
+        $check('RNF-P-02/plan', $usesIndex && ! $scansTable, $detail);
     }
 };
 

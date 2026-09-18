@@ -29,6 +29,19 @@ const K6_DEPARTMENT_NAME = 'Carga k6';
 /** Prefijo del codigo de los empleados que crea la carga, DENTRO de su departamento. */
 const K6_EMPLOYEE_CODE_PREFIX = 'K6';
 
+/**
+ * El centro que se crea SOLO si la instalacion no tiene ninguno.
+ *
+ * Una instalacion recien hecha con `install.sh` no ha pasado por el asistente de
+ * RF-PD-03 y no tiene centro; en la pila de desarrollo o en un entorno de pruebas
+ * con datos, si lo tiene y no se toca. El nombre es sintetico y la zona es la de
+ * la instalacion de referencia: RN-05 atribuye cada tramo a un dia con ella, asi
+ * que no puede quedarse sin decidir.
+ */
+const K6_SITE_NAME = 'Centro de carga k6';
+
+const K6_SITE_TIMEZONE = 'Europe/Madrid';
+
 /** Nombre del dispositivo que firma el historico importado. */
 const K6_HISTORY_DEVICE = 'k6-history';
 
@@ -168,6 +181,95 @@ function k6_textfile_metric(string $file, string $metric): ?int
     }
 
     return $value;
+}
+
+/**
+ * Todos los nodos de un plan de `EXPLAIN (FORMAT JSON)`, aplanados.
+ *
+ * UN PLAN ES UN ARBOL Y HAY QUE RECORRERLO. Buscar «Seq Scan» y «scan_events»
+ * como dos subcadenas sueltas del JSON da un falso positivo en cuanto la
+ * consulta toca dos tablas: la del `LEFT JOIN` con `shift_entries` recorre esa
+ * —que es pequeña y ahi el recorrido es lo correcto— y la comprobacion lo
+ * atribuia a `scan_events`. Pasó de verdad, y el sintoma era un rojo que
+ * aparecia y desaparecia segun cuantos tramos hubiera.
+ *
+ * @param  array<string, mixed>  $node
+ * @return list<array<string, mixed>>
+ */
+function k6_plan_nodes(array $node): array
+{
+    $nodes = [];
+    $pending = [$node];
+
+    while ($pending !== []) {
+        $current = array_pop($pending);
+        $nodes[] = $current;
+
+        /** @var mixed $children */
+        $children = $current['Plans'] ?? [];
+
+        if (is_array($children)) {
+            foreach ($children as $child) {
+                if (is_array($child)) {
+                    $pending[] = $child;
+                }
+            }
+        }
+    }
+
+    return $nodes;
+}
+
+/**
+ * El nodo raiz del plan, o `null` si no se pudo leer.
+ *
+ * @return array<string, mixed>|null
+ */
+function k6_plan_root(string $explained): ?array
+{
+    /** @var mixed $decoded */
+    $decoded = json_decode($explained, true);
+    $root = is_array($decoded) ? ($decoded[0]['Plan'] ?? null) : null;
+
+    return is_array($root) ? $root : null;
+}
+
+/** ¿Recorre ESA tabla de principio a fin en algun punto del plan? */
+function k6_plan_scans_sequentially(string $explained, string $relation): bool
+{
+    $root = k6_plan_root($explained);
+
+    // Un plan ilegible NO se da por bueno: el silencio de una comprobacion es
+    // peor que su fallo.
+    if ($root === null) {
+        return true;
+    }
+
+    foreach (k6_plan_nodes($root) as $node) {
+        if (($node['Node Type'] ?? '') === 'Seq Scan' && ($node['Relation Name'] ?? '') === $relation) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/** ¿Resuelve por ESE indice en algun punto del plan? */
+function k6_plan_uses_index(string $explained, string $index): bool
+{
+    $root = k6_plan_root($explained);
+
+    if ($root === null) {
+        return false;
+    }
+
+    foreach (k6_plan_nodes($root) as $node) {
+        if (($node['Index Name'] ?? '') === $index) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 /**

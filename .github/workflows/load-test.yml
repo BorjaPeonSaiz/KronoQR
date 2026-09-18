@@ -41,13 +41,17 @@ on:
   workflow_dispatch:
     inputs:
       instances:
-        description: "Instancias de k6 (una IP de origen cada una). 8 produce 56 fichajes/s validos, por encima de los 50 de RNF-P-06."
+        description: "Instancias de k6 (una IP de origen cada una, 6 fichajes/s por instancia). 3 es el perfil del runner (18/s, ~60 % de su capacidad medida: todo es medible y la linea base compara con esos mismos parametros); 10 (60/s, por encima de los 50 de RNF-P-06) solo tiene sentido en hardware de referencia, donde se usa `make load-test`."
         required: false
-        default: "8"
+        default: "3"
       duration:
         description: "Duracion sostenida de cada escenario (p. ej. 120s, 5m)."
         required: false
         default: "120s"
+      fpm_max_children:
+        description: "PHP_FPM_MAX_CHILDREN del paquete instalado. Vacio = tal cual se instala (20, el servidor minimo del §11.6.2); 40 es el perfil recomendado de 4 nucleos/8 GB, que es la clase del runner."
+        required: false
+        default: ""
   push:
     tags:
       - "v*.0.0"
@@ -143,8 +147,22 @@ jobs:
           grep -q 'instalado y verificado' salida-instalacion.log
           curl -fsS -k https://127.0.0.1/api/v1/ready >/dev/null
 
-      - name: "KIOSK_VLAN_CIDR a la subred real de la red docker"
-        # POR QUE ESTE PASO EXISTE. Los contenedores de k6 se unen a la misma
+      - name: "La pila del runner es de pruebas: APP_ENV=staging y KIOSK_VLAN_CIDR real"
+        # DOS AJUSTES AL .env DEL PAQUETE, y los dos despues de instalar.
+        #
+        # (1) APP_ENV=staging. `install.sh` exige APP_ENV=production para
+        # instalar (fase 1, `f_app_env`): asi es como se instala en un
+        # cliente, y asi se mide aqui. Pero el aprovisionamiento de la carga
+        # SE NIEGA a correr con `isProduction()` -crea empleados, tarjetas y
+        # quioscos de prueba, y esa guarda no se debilita ni con la
+        # confirmacion explicita (3.6, bloqueante de la revision de
+        # seguridad)-, y la primera ejecucion real de este workflow cayo
+        # justo ahi. La pila del runner es de pruebas de verdad, asi que se
+        # declara como tal DESPUES de instalar: ningun camino del producto
+        # consulta `isProduction()` (comprobado: solo lo hace el
+        # aprovisionamiento de k6), de modo que la medida es la misma.
+        #
+        # (2) KIOSK_VLAN_CIDR. Los contenedores de k6 se unen a la misma
         # red docker que nginx (`kronoqr-app`, nombre fijo tanto en
         # compose.dev.yaml como en compose.prod.yaml), y esa es exactamente la
         # situacion del doc 02 §7.1: todos los quioscos de un hotel salen por
@@ -156,16 +174,35 @@ jobs:
         # para internet y la medida saldria tres ordenes de magnitud por
         # debajo de RNF-P-06 antes de que la aplicacion llegara a sudar (el
         # mismo aviso del paso 5 de la ficha de esta tarea).
+        env:
+          FPM_MAX_CHILDREN: ${{ inputs.fpm_max_children }}
         run: |
           set -euo pipefail
           cd paquete
           subred="$(docker network inspect kronoqr-app --format '{{ (index .IPAM.Config 0).Subnet }}')"
           echo "Subred real de kronoqr-app: ${subred}"
           sudo sed -i "s|^KIOSK_VLAN_CIDR=.*|KIOSK_VLAN_CIDR=${subred}|" .env
+          sudo sed -i 's|^APP_ENV=.*|APP_ENV=staging|' .env
+          grep -q '^APP_ENV=staging$' .env
+          # (3) Pool de PHP-FPM, solo si quien lanza el workflow lo pide: sirve
+          # para medir el mismo runner con el perfil recomendado del §11.6.2
+          # (40) frente al minimo con el que se instala (20). El valor se
+          # escribe en el .env del paquete y lo rinde el entrypoint al recrear
+          # `app`; el aprovisionamiento lo deja anotado en summary.json.
+          if [ -n "${FPM_MAX_CHILDREN}" ]; then
+            if grep -q '^PHP_FPM_MAX_CHILDREN=' .env; then
+              sudo sed -i "s|^PHP_FPM_MAX_CHILDREN=.*|PHP_FPM_MAX_CHILDREN=${FPM_MAX_CHILDREN}|" .env
+            else
+              echo "PHP_FPM_MAX_CHILDREN=${FPM_MAX_CHILDREN}" | sudo tee -a .env >/dev/null
+            fi
+            grep -q "^PHP_FPM_MAX_CHILDREN=${FPM_MAX_CHILDREN}$" .env
+          fi
           # `restart` no basta: relanza el proceso existente sin releer
-          # env_file. `up -d --wait` recrea nginx con el .env de disco y
-          # espera a que su healthcheck pase antes de seguir.
-          sudo docker compose --env-file .env -f docker-compose.yml up -d --wait nginx
+          # env_file. `up -d --wait` recrea los servicios con el .env de disco
+          # y espera a que su healthcheck pase antes de seguir. Los cuatro
+          # roles PHP se recrean para que ninguno se quede con el APP_ENV
+          # anterior; nginx, por el CIDR.
+          sudo docker compose --env-file .env -f docker-compose.yml up -d --wait app horizon scheduler reverb nginx
           curl -fsS -k https://127.0.0.1/api/v1/ready >/dev/null
 
       - name: "paquete/.env legible por el runner, sin sudo (lo necesita run.sh)"
@@ -208,6 +245,15 @@ jobs:
           K6_ACKNOWLEDGE_TEST_DATABASE: "yes"
           K6_INSECURE_TLS: "1"
           K6_EDGE_SERVICE: nginx
+          # El runner no alcanza el umbral de RNF-P-02/06 (4 vCPU compartidas
+          # entre el servidor y los generadores: ~29 fichajes/s con p95 de
+          # decenas de segundos), asi que aqui esos dos requisitos se juzgan
+          # contra la linea base del propio runner (load-tests/k6/baseline.json:
+          # p95 <= +25 %, tramos/s >= -20 %), no contra el umbral, que se mide en
+          # el hardware de referencia con `make load-test` (decision 19, ficha
+          # 3.6). Contrato, RQ-03, RS-03, verificacion posterior y regla 21
+          # siguen bloqueando.
+          K6_LATENCY_VERDICT: baseline
           K6_GIT_SHA: ${{ github.sha }}
           K6_RUNNER: "github-${{ runner.os }}-${{ runner.arch }}"
         run: |

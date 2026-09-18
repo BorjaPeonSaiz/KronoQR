@@ -1245,10 +1245,20 @@ looking at its diagnostic screen still shows as up to date.
 
 The product is published with a written threshold: **50 clock-ins per second
 sustained on the server, with 95 % of the responses under 150 ms** (`RNF-P-06`
-and `RNF-P-02`). **It is measured before every major version, as a step of the
-release procedure**, and the result travels with the version. There is also an
-automatic safety net that measures it again when the version is tagged, in case
-somebody skipped the step.
+and `RNF-P-02`). **It is measured before every major version on reference
+hardware and with this very command, `make load-test`, as a step of the release
+procedure**, and the result travels with the version. It is the same procedure
+you can repeat on your own server.
+
+When the version is tagged there is also an automatic check on the vendor's
+infrastructure, but **that one does not judge the threshold and should not be
+read as if it did**: it runs on a shared machine where the server and the load
+generators share the same CPU, so its latency is not comparable with that of a
+dedicated server. What it does check there, which is what it contributes, are
+two different things and both are needed: that the new version **has not got
+worse** than the previous one measured on the same machine, and that **under
+overload the record is still correct** — no duplicated entry, totals adding up
+and the audit chain intact.
 
 Translated to your hotel these are **two different limits**, and they should not
 be confused:
@@ -1353,13 +1363,20 @@ four, one figure cannot be compared with another.
 
 First of all: **there is no latency figure of yours written in this guide, and
 there is not going to be one.** It depends on your hardware, your disk and your
-network. The vendor publishes its own baseline in `load-tests/k6/baseline.json`
-**with every major version**, measured on its continuous integration server: it
-is there to see that a new version has got worse than the previous one, **not**
-to tell you what p95 you should be seeing in your server room. If that file is
-not there, the tool simply applies the budget — the 150 ms and the 50
-clock-ins/s — and compares with nothing. The figure for your installation comes
-from your own run of `make load-test`.
+network. The figure for your installation comes from your own run of
+`make load-test` on your own server.
+
+**What the vendor's "baseline" is — and what it is not.**
+`load-tests/k6/baseline.json` keeps the result of one run on the vendor's
+continuous integration machine: p95 and entries per second, along with the
+`git_sha` of the version measured, the machine and the version of the tool. It
+serves one purpose only: comparing the next version **with itself on that same
+machine** and detecting that it has got worse — up to 25 % more p95 and up to
+20 % fewer entries per second are allowed. **It is not a latency promise, nor
+the p95 your server should give**: on that machine the server shares CPU with
+the eleven load generators, so its milliseconds mean nothing outside it. If the
+file is not there, the tool simply applies the budget — the 150 ms and the 50
+clock-ins/s — and compares with nothing.
 
 | What you see | What is happening | What to do |
 | --- | --- | --- |
@@ -1370,6 +1387,30 @@ from your own run of `make load-test`.
 | **Isolated clock-ins failing with a server error**, while the rest goes fine | A transaction got stuck and the others were waiting behind it; the database timeouts (§17.4) cut it off | Nothing urgent: the kiosk **queues and resends**, and nobody is left unable to clock in. If it repeats, follow the `trace_id` of one of those requests in the technical log (§10.3) |
 | **`429` responses on valid clock-ins** | The edge limit or the per-device one is throttling | Check that the kiosks fall inside `KIOSK_VLAN_CIDR` ([`installation.md`](installation.md) §6). That is the cause in the vast majority of cases |
 | **One kind of rejection clearly takes more or less time than another** | It is a product defect, not a problem with your server | Open an incident with the vendor and attach `summary.json`: a rejection that can be told apart by timing would allow working out from outside which cards exist |
+
+**Raising `PHP_FPM_MAX_CHILDREN` does not move the figure if the CPU is
+saturated**, and it is worth seeing that with numbers before spending an
+afternoon on it. These measurements come from a four-core machine that was also
+running the eleven load generators — that is, with the server and the load
+fighting over the same CPU — and for that very reason they illustrate the case
+well:
+
+| Load offered | Pool | What was sustained | p95 |
+| --- | --- | --- | --- |
+| 12 clock-ins/s | 20 workers | 12 clock-ins/s | 157 ms (p50: 86 ms) |
+| 60 clock-ins/s | 20 workers | 29 entries/s | 26 s |
+| 60 clock-ins/s | **40 workers** | **27.8 entries/s** | no appreciable change |
+
+Doubling the pool improved nothing: workers were not what was missing, CPU was.
+Under the gentle load, the same machine gave a p95 of 157 ms. And under
+saturation the rejections did not come from the clock-ins-per-minute limit but
+from the web server's **simultaneous connection limit**, which is the typical
+symptom of a server that can no longer keep up.
+
+**The important part: in every one of those runs the post-load check came out
+intact** — no duplicated entry, totals adding up and the audit chain intact. A
+server at its limit **answers late; it does not write badly**. And what the
+employee sees is the usual thing: the kiosk confirms, queues and resends.
 
 **The hardware, for reference.** The published minimums are **2 cores and
 4 GB**; the recommended, **4 cores and 8 GB**

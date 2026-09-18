@@ -1,0 +1,209 @@
+{
+  "generated_at": "2026-09-17T22:10:47.861Z",
+  "git_sha": "5a8d130fc41aa948898946fc15286657972e93aa",
+  "runner": "github-Linux-X64",
+  "k6_version": "k6 v2.2.0 (commit/00a9a1b7f5, go1.26.5, linux/amd64)",
+  "k6_image": "grafana/k6:2.2.0@sha256:9bd01d6941fca969cb61bb57d2da5ee9b385fe2aa8881df3798c196564d6ace6",
+  "instances": 3,
+  "instance_ids": [
+    "0",
+    "1",
+    "2",
+    "panel"
+  ],
+  "duration_seconds": 120,
+  "scan_rate": 6,
+  "offered_scan_rate": 18,
+  "latency_verdict_mode": "baseline",
+  "rejection_floor_ms": 25,
+  "debounce_seconds": 60,
+  "scenarios": {
+    "batch": {
+      "requirements": [
+        "RF-KI-04"
+      ],
+      "samples": 7,
+      "answered_samples": 7,
+      "p50": 3243.5,
+      "p95": 4664.5,
+      "p99": 4664.5,
+      "max": 4664.5,
+      "statuses": {
+        "207": 7
+      }
+    },
+    "compliance": {
+      "requirements": [
+        "RF-PA-06"
+      ],
+      "samples": 61,
+      "answered_samples": 61,
+      "p50": 309.4,
+      "p95": 503.3,
+      "p99": 738.6,
+      "max": 738.6,
+      "statuses": {
+        "200": 61
+      }
+    },
+    "reject": {
+      "requirements": [
+        "RS-03"
+      ],
+      "samples": 362,
+      "answered_samples": 362,
+      "p50": 99.2,
+      "p95": 275.7,
+      "p99": 552.6,
+      "max": 624,
+      "statuses": {
+        "422": 362
+      }
+    },
+    "resend": {
+      "requirements": [
+        "RQ-03",
+        "RF-AT-07"
+      ],
+      "samples": 366,
+      "answered_samples": 366,
+      "p50": 187.2,
+      "p95": 361.4,
+      "p99": 667.2,
+      "max": 750.6,
+      "statuses": {
+        "200": 366
+      }
+    },
+    "scan": {
+      "requirements": [
+        "RNF-P-06",
+        "RNF-P-02",
+        "RQ-08"
+      ],
+      "samples": 2163,
+      "answered_samples": 2163,
+      "p50": 109.3,
+      "p95": 367.4,
+      "p99": 678.6,
+      "max": 849.3,
+      "statuses": {
+        "200": 2163
+      }
+    }
+  },
+  "reject_classes": {
+    "signature": {
+      "samples": 122,
+      "offered": 122,
+      "min": 72.9,
+      "p50": 101.9,
+      "p95": 279.4,
+      "max": 427.7,
+      "measurable": true
+    },
+    "unknown": {
+      "samples": 120,
+      "offered": 120,
+      "min": 75.3,
+      "p50": 103.7,
+      "p95": 253.1,
+      "max": 624,
+      "measurable": true
+    },
+    "revoked": {
+      "samples": 120,
+      "offered": 120,
+      "min": 72.9,
+      "p50": 94.2,
+      "p95": 218.2,
+      "max": 612.9,
+      "measurable": true
+    }
+  },
+  "checks": {
+    "total": 3145,
+    "failed": []
+  },
+  "totals": {
+    "shift_producing_realtime": 2346,
+    "shift_entries_per_second": 19.6,
+    "shift_producing_batch": 350,
+    "batch_entries_per_second": 2.9,
+    "debounced": 0,
+    "debounced_ratio": 0,
+    "queueable_degradation": 0,
+    "employee_refusals": 0,
+    "resend_identical": 183,
+    "resend_divergent": 0,
+    "resend_skipped": 0,
+    "batch_accepted": 350,
+    "batch_debounced": 0,
+    "batch_retryable": 0,
+    "batch_rejected": 0,
+    "compliance_p95": 503.3,
+    "dropped_iterations": 0,
+    "dropped_iterations_by_scenario": {}
+  },
+  "write_path": {
+    "samples": 2346,
+    "min": 74.4,
+    "p50": 111.7,
+    "p95": 367.4,
+    "p99": 678.6,
+    "max": 849.3,
+    "per_instance": [
+      {
+        "instance": "0",
+        "samples": 782,
+        "p95": 352.3,
+        "p99": 680.4
+      },
+      {
+        "instance": "1",
+        "samples": 782,
+        "p95": 380.6,
+        "p99": 692.1
+      },
+      {
+        "instance": "2",
+        "samples": 782,
+        "p95": 382.2,
+        "p99": 677.8
+      }
+    ]
+  },
+  "edge_limits": {
+    "service": "nginx",
+    "limiting_requests": 0,
+    "limiting_connections": 0
+  },
+  "server_metrics": null,
+  "verdicts": {
+    "CHECKS": {
+      "status": "pass",
+      "detail": "3145 comprobaciones de k6, 0 con fallos"
+    },
+    "RNF-P-02": {
+      "status": "unmeasurable",
+      "detail": "la linea base no es comparable con esta pasada (instancias: 10 frente a 3). Mide con los mismos parametros o regenera la linea base. El umbral de RNF-P-02 y RNF-P-06 NO se juzga en este runner (decision 19): solo en hardware de referencia con make load-test."
+    },
+    "RNF-P-06": {
+      "status": "unmeasurable",
+      "detail": "la carga ofrecida son 18/s y el umbral es 50/s: sube INSTANCES o SCAN_RATE para poder juzgarlo"
+    },
+    "RQ-03": {
+      "status": "pass",
+      "detail": "183 reenvios identicos al original, 0 distintos, 0 sin respuesta del servidor en alguno de los dos envios"
+    },
+    "RS-03": {
+      "status": "pass",
+      "detail": "separacion de medianas 9.6 ms y de minimos 2.4 ms (tope 20); suelo de 25 ms respetado sobre el minimo de cada clase"
+    }
+  },
+  "baseline": {
+    "note": "p95 de scan 367.4 ms frente a 26279.3 ms de la linea base (-98.6 %)",
+    "regression": false,
+    "ratio": 0.014
+  }
+}
