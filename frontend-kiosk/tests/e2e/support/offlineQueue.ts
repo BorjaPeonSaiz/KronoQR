@@ -44,6 +44,31 @@ export async function readQueue(page: Page): Promise<QueuedRow[]> {
   )
 }
 
+/**
+ * `true` en cuanto la base de datos y el almacen de la cola existen (el
+ * controlador de la cola -Dexie- ya arranco). `seedQueue` da por hecho que el
+ * almacen ya existe -su transaccion lanza `NotFoundError` si no-, y esta es
+ * la condicion que lo garantiza sin adivinar cuanto tarda el arranque con una
+ * espera fija.
+ */
+export async function queueStoreReady(page: Page): Promise<boolean> {
+  return page.evaluate(
+    async ([databaseName, storeName]) => {
+      const db = await new Promise<IDBDatabase | null>((resolve) => {
+        const request = indexedDB.open(databaseName)
+        request.onsuccess = () => resolve(request.result)
+        request.onerror = () => resolve(null)
+        request.onblocked = () => resolve(null)
+      })
+      if (db === null) return false
+      const exists = db.objectStoreNames.contains(storeName)
+      db.close()
+      return exists
+    },
+    [QUEUE_DATABASE, QUEUE_STORE] as const,
+  )
+}
+
 export interface BatchCall {
   readonly idempotencyKey: string | undefined
   readonly scans: Array<{ scan_id: string; occurred_at: string; intent?: string }>
