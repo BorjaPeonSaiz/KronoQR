@@ -272,6 +272,20 @@ Son **500 veces más lento**. Y `vendor/` son **16.919 de los 17.779 ficheros** 
 
 > **Si se repone el entorno desde cero**, `make up` basta: el entrypoint puebla el volumen. Si `composer install` falla, el volumen quedó a medias y se borra con `docker volume rm kronoqr_backend-vendor` antes de repetir.
 
+### B.7 El mismo problema en los tres frontends, con el workspace de npm de por medio
+
+**Resuelto el 22 de septiembre de 2026 al ejecutar la rama `chore/restos-3.8`.** Es la misma restricción del §B.6 —el `node_modules` del host no vale dentro del contenedor Linux—, pero con una capa adicional: desde que el repositorio es un workspace de npm (ADR-036, `package.json` de la raíz con `workspaces: frontend-admin, frontend-portal, frontend-kiosk, packages/*` y un único `package-lock.json`), los binarios —`vite` incluido— se hozan en `/app/node_modules/.bin` de la **raíz** del workspace, no en el `node_modules` de cada frontend.
+
+**El hecho.** Los tres servicios `node-kiosk`, `node-admin` y `node-portal` montaban `../frontend-<nombre>:/app` —un solo frontend, sin la raíz del repositorio— e instalaban con `npm ci --prefix /app`. Sin la raíz montada, ese `npm ci` no veía el `package-lock.json` que gobierna el workspace, y aunque lo hubiera visto, `vite` habría acabado en una ruta que `npm --prefix frontend-<nombre> run dev` no mira. Resultado: `sh: vite: not found` en bucle de reinicio en los tres contenedores, y las tres URL de `make up` (`/kiosk/`, `/admin/`, `/portal/`) sin responder.
+
+**La solución.** El bind mount pasa a ser la raíz completa del repositorio (`..:/app`), con `working_dir: /app/frontend-<nombre>` moviendo el arranque de Vite al directorio correcto, y **cinco** volúmenes con nombre —no uno—: `node-modules-root` (el de la raíz) y uno por cada `node_modules` que ya existía anidado en el host (`frontend-kiosk`, `frontend-admin`, `frontend-portal`, `packages/web-kit`: npm crea un `node_modules` anidado cuando una dependencia no se puede hozar a la raíz, típicamente binarios nativos específicos de plataforma como los de esbuild o rollup, y esos binarios son de Windows en esta máquina).
+
+**Instalación: un rol designado, no un servicio de un solo disparo.** Los tres servicios comparten el mismo árbol de `node_modules`, así que tres `npm ci` en paralelo instalarían tres veces sobre el mismo volumen. Se descartó un cuarto servicio de "un solo disparo" (`node-deps` con `condition: service_completed_successfully`) porque el repositorio ya resuelve el mismo problema —un volumen compartido que solo uno debe poblar— con otro patrón: `infra/docker/php/entrypoint.sh` designa el rol `fpm` para instalar `vendor/`, y `horizon`/`reverb`/`scheduler` esperan sondeando el mismo fichero dentro del **mismo** entrypoint. Introducir un mecanismo distinto para un problema idéntico habría sido la única diferencia sin motivo. `infra/docker/node/entrypoint.sh` sigue ese precedente: `NODE_WORKSPACE_INSTALLER=true` —que `infra/compose.dev.yaml` solo pone en `node-kiosk`— ejecuta `npm ci` en la raíz; `node-admin` y `node-portal` sondean `/app/node_modules/.bin/vite` hasta que aparece.
+
+**Medido en esta máquina:** `npm ci` del workspace completo (727 paquetes: los tres frontends más `packages/web-kit`) tardó **16 s** dentro del contenedor, sin señales de la trampa de ficheros omitidos del §B.6 —posiblemente porque `npm ci` opera sobre el volumen con nombre (disco del contenedor), no sobre el bind mount NTFS—. Sin datos aún de si esa trampa reaparece con una caché de npm fría o en una máquina distinta: si `npm ci` falla o se cuelga sin motivo aparente en otra instalación, es lo primero que hay que descartar.
+
+> **Si se repone el entorno desde cero**, `make up` basta: `node-kiosk` puebla los cinco volúmenes la primera vez. Si `npm ci` falla, los volúmenes quedaron a medias y se borran con `docker volume rm kronoqr_node-modules-root kronoqr_node-modules-kiosk kronoqr_node-modules-admin kronoqr_node-modules-portal kronoqr_node-modules-web-kit` antes de repetir.
+
 ---
 
 ## Bloque C — Dependencias del proyecto

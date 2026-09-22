@@ -38,21 +38,23 @@ que U3 toma la rama «+1 asiento» de H-14.** Después, `d5c07bc` (`docs(handoff
 porque la copia local ya estaba ahí; el usuario lo dio por bueno. `make up` hecho sobre `main`: pila sana, Prometheus rendido desde la
 plantilla con las tres alertas nuevas y el job TLS verificado omitido a propósito (`TLS_ALLOW_SELF_SIGNED=true` en dev).
 
-**Rama `chore/restos-3.8` creada (desde `main` `d5c07bc`). Siguiente acción, decidida por el usuario el 22-09-2026: tres restos cortos
-en esta rama y después la tarea grande (3.9 o 3.10).** (1) **Contenedores `node-kiosk`/`node-admin`/`node-portal` de dev en bucle de
-reinicio** (`vite: not found`, desde el workspace de npm: montan solo su carpeta y `vite` vive en el `node_modules` de la raíz; Nginx
-de dev reenvía `/kiosk/`, `/admin/` y `/portal/` a ellos, así que las tres URL de `make up` no responden y la tablet real no puede
-abrir el quiosco por HTTPS desde esta máquina): `devops-observabilidad` monta la raíz como `/app` con `working_dir` por SPA y un
-volumen con nombre en `/app/node_modules` (los binarios nativos de tu `node_modules` son de Windows; el contenedor hace su `npm ci`
-la primera vez), actualiza `infra/docker/node/entrypoint.sh`, doc 02 §10.2 y añade una prueba de arquitectura que lo ate; hoy están
-parados con `docker compose stop`. (2) **Línea base del runner**: pasada de `load-test.yml` lanzada en `main` tras integrar la 3.8
-(run **35724101995**, perfil de 3 instancias y 120 s, el mismo de `baseline.json`): copiar su `summary.json` (artefacto `.results/`) a
-`load-tests/k6/baseline.json` como en la 3.6, y leer ahí la primera cifra de `reject_out_of_order` para A-13 (doc 07 §6).
-(3) **Fila nueva del modelo de amenazas** «Manipulación del reloj del quiosco» en doc 01 §8.1 (detalle en «3.8 (restos)»), su fila en
-doc 07 §4 y «once» → «doce» en la ficha 3.8 y en el informe de `docs/seguridad/`; `docs:consistency` en verde. Commit único
-`chore(restos-3.8): …`, CI manual, PR con *merge commit*. Después: la **3.10** «Registro de ausencias» (3–4 h, RF-GP-04, desbloquea
-el apartado pendiente de las guías de RRHH) o la **3.9** «Informes asíncronos con enlace de descarga caducable y exportación
-configurable para nómina» (`backend-laravel` + `/informe-nuevo`, RF-IN-06/07); las dos están prometidas en el doc 05.
+**Rama `chore/restos-3.8` (desde `main` `d5c07bc`). Los tres restos de la 3.8 HECHOS el 22-09-2026 en un commit único
+`chore(restos-3.8): …`, CI manual tras el push y PR contra `main` (*merge commit*). Sin migración: basta `git pull` y `make up`, que
+reconstruye la imagen `kronoqr/node:dev`.** (1) **Contenedores `node-*` de dev arreglados** (`devops-observabilidad`): montan la raíz
+del workspace (`..:/app`) con `working_dir` por SPA y **cinco volúmenes con nombre** (`node-modules-root/-kiosk/-admin/-portal/-web-kit`)
+que tapan los `node_modules` de Windows; **solo `node-kiosk` ejecuta `npm ci`** (`NODE_WORKSPACE_INSTALLER=true`, mismo patrón que `vendor/`
+en el entrypoint de PHP) y los otros dos sondean `node_modules/.bin/vite`; el Dockerfile pre-crea los puntos de montaje como `node`;
+`NodeWorkspaceComposeTest` (8, `RNF-M-04`/`RNF-M-06`) lo ata; doc 02 §10.2 y plan 01 §B.7. Verificado: los tres `Up` sin reinicios,
+`/kiosk/`, `/admin/` y `/portal/` en 200 por el Nginx de dev, `npm ci` del workspace 16 s. (2) **Línea base del runner regenerada**:
+`baseline.json` = `summary.json` del run 35724101995 (`d5c07bc`, 3 instancias × 6/s × 120 s: p95 468,8 ms, 19,5 tramos/s). Ese run salió
+rojo **solo** en RNF-P-02 (+27,6 %) por comparar con el perfil viejo sin `reject-out-of-order`; RQ-03, RS-03, RN-18 y la verificación posterior
+verdes. Primera cifra de A-13 escrita en doc 07 §6 (RN-18 frente a los tres rechazos de credencial: medianas +75–82 ms, mínimos +14–16 ms;
+aceptación mantenida). (3) **Fila 12 del modelo de amenazas** «reloj del quiosco» (`T1070.006`) en doc 01 §8.1 con su nota de detección
+(incidencia `clock_skew`, sin alerta a propósito), doc 07 §2.2, informe (cierre de H-12 y fila 12 del §4) y ficha 3.8 (paso 1, decisión 19);
+el repudio de lectura NO se añade (RS-05). `docs:consistency`, `qa:traceability --check` y Architecture en verde salvo `SourceDiscoveryTest`
+(trampa del bind mount, verde en la CI). **Siguiente acción:** integrar la PR y empezar la tarea grande: la **3.10** «Registro de ausencias»
+(3–4 h, RF-GP-04, desbloquea el apartado pendiente de las guías de RRHH) o la **3.9** «Informes asíncronos con enlace de descarga caducable y
+exportación configurable para nómina» (`backend-laravel` + `/informe-nuevo`, RF-IN-06/07); las dos están prometidas en el doc 05.
 
 **Rama `feat/tarea-3.7-e2e-accesibilidad` (desde el commit de RN-18 `d326406`; PR #69 integrada en `main` el 22-09-2026, `91db9eb`). Tarea 3.7 «E2E con cámara simulada y suite de accesibilidad» (RQ-04, RQ-05, RF-QR-05, RS-12, RF-AT-11,
 RF-KI-06) IMPLEMENTADA, REVISADA (dos vueltas: `seguridad-cumplimiento`, `ui-ux`, `qa-testing`) y PROBADA el 18-09-2026; verificada
@@ -730,8 +732,8 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 
 ### Del usuario
 
-- **Decididas el 22-09-2026 (3.8):** pantalla de cuentas de gestión en el panel (sí), regenerar la línea base del runner de k6 tras
-  integrar la 3.8, y una fila nueva en el modelo de amenazas (reloj del quiosco). Detalle y reparto en «3.8 (restos)».
+- **Decididas el 22-09-2026 (3.8):** pantalla de cuentas de gestión en el panel (sí; tarea ad hoc pendiente, reparto en «3.8 (restos)»).
+  La línea base del runner y la fila del modelo de amenazas (reloj del quiosco) ya se hicieron en `chore/restos-3.8`.
 - **Generar el par ed25519 una vez** (`php tools/license-issuer/generate-keypair.php`), privada al
   gestor de secretos, pública como valor por defecto de `env('LICENSE_PUBLIC_KEY', '')` en
   `backend/config/license.php`. `make release-gate` lo exige en cada etiqueta `vX.Y.Z`.
@@ -772,8 +774,7 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   pequeña, como en la 3.6); (c) **el modelo de amenazas gana una fila** «Manipulación del reloj del quiosco» (STRIDE Manipulación;
   mitigación: `recorded_at` es la hora del servidor, desfase tolerado y aviso de RF-AT-10 (3.5), incidencia y anti-rebote; ATT&CK
   T1070.006 *Timestomp*) en doc 01 §8.1, con su fila en doc 07 §4 y «once» → «doce» en la ficha 3.8; el repudio de la lectura de datos
-  por un responsable NO se añade (ya lo cubre RS-05 con `personal_data.accessed`). (b) y (c) caben en el arranque de la
-  siguiente tarea o en el cierre de la Fase 3; `SecurityReviewEvidenceTest` no exige que los
+  por un responsable NO se añade (ya lo cubre RS-05 con `personal_data.accessed`). (b) y (c) **HECHOS en `chore/restos-3.8` (22-09-2026)**; `SecurityReviewEvidenceTest` no exige que los
   `BLOQUEANTE` del informe estén cerrados (el §8 no tiene formato fijo); el escenario `reject-out-of-order` deja 50 turnos abiertos
   permanentes en empleados reservados de k6 (deliberado, regla 5); `docs/runbooks/brecha-de-seguridad.md` menciona el paquete del
   revisor sin enlazarlo (no viaja al cliente).
@@ -1107,8 +1108,9 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   plataformas nativas de `@tailwindcss/oxide` y rompe la imagen de Nginx (npm/cli#4828, sufrido dos
   veces). Operar el lock **siempre desde Linux y sin `node_modules`**; receta en la cabecera de
   `infra/docker/nginx/Dockerfile`; guarda en `QualityGatesTest`.
-- Los contenedores `node-*` están **estructuralmente rotos** (ADR-036) y se dejan parados: las tres SPA
-  se sirven desde el host con `npm run dev` (kiosk 5173, admin 5174, portal 5175).
+- Los contenedores `node-*` **funcionan desde `chore/restos-3.8`** (raíz del workspace en `/app`, `node_modules` en los cinco
+  volúmenes `node-modules-*`, solo `node-kiosk` instala; plan 01 §B.7). Si `npm ci` queda a medias: `docker volume rm` de esos
+  cinco y `make up`. Servir desde el host con `npm run dev` (5173/5174/5175) sigue valiendo como alternativa.
 - La base `fichaje_test` es compartida: **no correr dos suites de backend a la vez** (fallos falsos
   «relation … does not exist»). `MigrationsRoundTripTest` deshace y reaplica **todas** las migraciones
   (usa `CommittedDatabase`): jamás en paralelo con otra suite.
@@ -1219,3 +1221,6 @@ Detalle de cada hito: mensajes de commit, PRs y `git show 9b1593d:HANDOFF.md`.
 - **09/10-09** — **Fase 5 cerrada** (`current_phase => 5`): siete bloqueantes corregidos en `chore/cierre-fase-5` (`doctor.sh` en
   el paquete, asientos `system.*` del actualizador, pantalla «Ajustes operativos», doc 05 ↔ ADR-023, matriz y etiquetas de
   trazabilidad, CI con ④/⑥/⑦ y cobertura nocturna, `scandir` frente al *bind mount* en `app/`); doc 07 SAMM 1,47 → 1,73.
+- **22-09** — **3.7** cerrada (PR #72) y **3.8** completa (PR #74: revisión interna ASVS 2, paquete del revisor, 14 hallazgos
+  cerrados con prueba, H-14 del `grep -q` bajo `pipefail`); restos de la 3.8 (`node-*` desde el workspace, línea base del runner,
+  fila 12 del modelo de amenazas) en `chore/restos-3.8`.
