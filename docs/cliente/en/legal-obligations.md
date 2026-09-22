@@ -182,6 +182,7 @@ Policy per data type, which is the one the system applies:
 | Error history | **90 days** | Your installation |
 | Backups | 30 days by default | Your installation (`BACKUP_RETENTION_DAYS`) |
 | Contract data (agreed hours, type of working day, validity period) | **Employment relationship + 4 years**, indicative | **Pending confirmation with your employment law advisers.** Today **it is kept**: the system does not purge it |
+| Absences (type, dates, note, versions and voidings) | **Employment relationship + 4 years**, indicative | **Pending confirmation with your employment law advisers.** Today **they are kept**: the system does not purge them. **They contain health data** |
 
 **Contract data still has no automatic purge, and that is deliberate.** The
 indicative period — the duration of the employment relationship plus four
@@ -191,6 +192,16 @@ Order) — **is not validated**, and deleting on the basis of a period that late
 turns out to be too short is worse than keeping for a bounded time too long.
 Confirm it with your employment law advisers; until then that data remains and
 appears in any response to an access request.
+
+**Absences go the same way, and with one more reason not to improvise the
+period.** They have no automatic purge and no validated period either, and on
+top of that the **Sick leave** type is **health data** —a special category under
+art. 9 of the GDPR—, which means the period has to be justified better, not
+worse. Until your advisers set it, absences are kept and appear in any response
+to an access request, **including the note, which is handed over exactly as it
+is written**. That is why the HR guide asks that no diagnosis and no medical
+reason be written in that note ([`hr-guide.md`](hr-guide.md) §5 bis.5): what is
+not written does not have to be kept, handed over or explained.
 
 **Purging is never automatic** (RF-PR-03). Every week the system **proposes**
 and leaves a report; deleting requires explicit confirmation from the person

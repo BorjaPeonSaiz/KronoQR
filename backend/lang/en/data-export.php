@@ -241,6 +241,25 @@ return [
             ],
         ],
 
+        'absences' => [
+            'summary' => 'Recorded absences —holidays, sick leave and other leave— with **all their versions**: correcting one creates a new row and keeps the previous one. Voided ones stay here too. Nothing is deleted.',
+            'columns' => [
+                'uuid' => 'Identifier of **this version** of the absence. Correcting it creates another row with a new identifier.',
+                'employee_uuid' => 'Person it belongs to.',
+                'type' => 'Category: `vacation`, `sick_leave`, `leave` or `other` (which always carries a note).',
+                'starts_on' => 'First day of the absence. It counts in full.',
+                'ends_on' => 'Last day of the absence. It counts in full: a single-day absence repeats the same date.',
+                'note' => 'Free text written by whoever recorded it. It is in your export because it is your data; inside the product only HR sees it.',
+                'status' => 'State: `active` (current), `superseded` (replaced by a later correction) or `voided` (cancelled).',
+                'version' => 'Version number. It starts at 1 and goes up with each correction; voiding does not raise it.',
+                'supersedes_uuid' => 'Version this row replaces. Empty on the original.',
+                'change_reason' => 'Why it was corrected. Required from version 2 onwards.',
+                'voided_at' => 'When it was voided. Empty if it was not.',
+                'void_reason' => 'Why it was voided.',
+                'created_at' => 'When this version was recorded.',
+                'created_by_user_uuid' => 'Who recorded it. Empty if it came in through a file load with no session behind it.',
+            ],
+        ],
         'credentials' => [
             'summary' => 'QR cards issued, revoked ones included. **It carries no card secret**: without it, none of these rows can be used to clock in.',
             'columns' => [

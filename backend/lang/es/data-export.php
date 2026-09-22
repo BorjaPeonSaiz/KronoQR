@@ -266,6 +266,25 @@ return [
             ],
         ],
 
+        'absences' => [
+            'summary' => 'Las ausencias registradas —vacaciones, bajas y permisos— con **todas sus versiones**: cuando se corrige una, se crea una fila nueva y la anterior se conserva. Las anuladas tambien siguen aqui. Nada se borra.',
+            'columns' => [
+                'uuid' => 'Identificador de **esta version** de la ausencia. Corregirla crea otra fila con un identificador nuevo.',
+                'employee_uuid' => 'Persona a la que corresponde.',
+                'type' => 'Categoria: `vacation` (vacaciones), `sick_leave` (baja medica), `leave` (permiso) u `other` (otro, que siempre lleva nota).',
+                'starts_on' => 'Primer dia de la ausencia. Cuenta entero.',
+                'ends_on' => 'Ultimo dia de la ausencia. Cuenta entero: una ausencia de un solo dia repite la misma fecha.',
+                'note' => 'Texto libre que escribio quien la registro. Sale en tu exportacion porque son tus datos; dentro del producto solo lo ve RRHH.',
+                'status' => 'Situacion: `active` (vigente), `superseded` (sustituida por una correccion posterior) o `voided` (anulada).',
+                'version' => 'Numero de version. Empieza en 1 y sube con cada correccion; anular no la sube.',
+                'supersedes_uuid' => 'Version a la que sustituye esta fila. Vacio en la original.',
+                'change_reason' => 'Por que se corrigio. Obligatorio a partir de la version 2.',
+                'voided_at' => 'Cuando se anulo. Vacio si no se anulo.',
+                'void_reason' => 'Por que se anulo.',
+                'created_at' => 'Cuando se registro esta version.',
+                'created_by_user_uuid' => 'Quien la registro. Vacio si entro por una carga de fichero sin sesion detras.',
+            ],
+        ],
         'credentials' => [
             'summary' => 'Las tarjetas QR emitidas, incluidas las revocadas. **No lleva el secreto de ninguna tarjeta**: sin el, ninguna de estas filas sirve para fichar.',
             'columns' => [

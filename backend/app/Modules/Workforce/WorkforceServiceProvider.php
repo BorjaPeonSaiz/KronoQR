@@ -13,6 +13,7 @@ use App\Modules\Shared\Application\Port\EmployeeRegistry;
 use App\Modules\Shared\Application\Port\EmployeeScopeDirectory;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\PortalSessionIssuer;
+use App\Modules\Workforce\Application\Port\AbsenceRepository;
 use App\Modules\Workforce\Application\Port\DepartmentRepository;
 use App\Modules\Workforce\Application\Port\EmployeeImportDirectory;
 use App\Modules\Workforce\Application\Port\EmployeeImportSource;
@@ -24,10 +25,12 @@ use App\Modules\Workforce\Application\Port\PinMetrics;
 use App\Modules\Workforce\Application\Port\PinPolicyProvider;
 use App\Modules\Workforce\Application\Port\SiteRepository;
 use App\Modules\Workforce\Application\Port\WorkforceEventPublisher;
+use App\Modules\Workforce\Domain\Model\Absence;
 use App\Modules\Workforce\Domain\Model\Department;
 use App\Modules\Workforce\Domain\Model\Employee;
 use App\Modules\Workforce\Domain\Model\EmploymentContract;
 use App\Modules\Workforce\Domain\Model\Site;
+use App\Modules\Workforce\Http\Policy\AbsencePolicy;
 use App\Modules\Workforce\Http\Policy\DepartmentPolicy;
 use App\Modules\Workforce\Http\Policy\EmployeePolicy;
 use App\Modules\Workforce\Http\Policy\EmploymentContractPolicy;
@@ -46,6 +49,7 @@ use App\Modules\Workforce\Infrastructure\Adapter\LaravelWorkforceEventPublisher;
 use App\Modules\Workforce\Infrastructure\Adapter\SanctumPortalSessionIssuer;
 use App\Modules\Workforce\Infrastructure\Adapter\SimpleExcelImportSource;
 use App\Modules\Workforce\Infrastructure\Metrics\RedisPinMetrics;
+use App\Modules\Workforce\Infrastructure\Persistence\EloquentAbsenceRepository;
 use App\Modules\Workforce\Infrastructure\Persistence\EloquentDepartmentRepository;
 use App\Modules\Workforce\Infrastructure\Persistence\EloquentEmployeeImportDirectory;
 use App\Modules\Workforce\Infrastructure\Persistence\EloquentEmployeePinRepository;
@@ -103,6 +107,23 @@ final class WorkforceServiceProvider extends ServiceProvider
             static fn (): EloquentEmployeeImportDirectory => new EloquentEmployeeImportDirectory(DB::connection()),
         );
         $this->app->bind(WorkforceEventPublisher::class, LaravelWorkforceEventPublisher::class);
+
+        /*
+         * Ausencias (RF-GP-04, tarea 3.10).
+         *
+         * El repositorio recibe el puerto `Clock` —`created_at` y el momento de
+         * la anulacion salen de ahi y no del reloj del proceso (regla dura 2)— y
+         * la conexion, porque las lecturas van con `JOIN` por el constructor de
+         * consultas: la pantalla necesita el codigo, el nombre y el departamento
+         * de la persona en la misma fila, y resolverlos con relaciones serian
+         * tres consultas por ausencia en un listado que se abre a diario.
+         *
+         * **No hay adaptador de lectura aparte.** El mismo repositorio sirve las
+         * escrituras y las consultas porque la frontera que importa aqui es otra:
+         * lo que no puede existir es un `delete()` (regla dura 5), y no lo hay en
+         * ninguno de los dos lados.
+         */
+        $this->app->bind(AbsenceRepository::class, EloquentAbsenceRepository::class);
 
         // Contratos historizados (RF-GP-02, tarea 2.8). Es lo que permite al
         // informe de RF-IN-03 comparar cada dia contra lo que estaba pactado
@@ -195,5 +216,6 @@ final class WorkforceServiceProvider extends ServiceProvider
         Gate::policy(Site::class, SitePolicy::class);
         Gate::policy(Department::class, DepartmentPolicy::class);
         Gate::policy(EmploymentContract::class, EmploymentContractPolicy::class);
+        Gate::policy(Absence::class, AbsencePolicy::class);
     }
 }

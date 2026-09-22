@@ -100,6 +100,44 @@ final class PeriodReportFixtures
     }
 
     /**
+     * Una ausencia **vigente**, escrita directamente en la tabla (RF-GP-04).
+     *
+     * ## Por que no pasa por el caso de uso de `Workforce`
+     *
+     * Por lo mismo que los contratos, y ademas por una razon de frontera: lo que
+     * estas pruebas ejercitan es **el informe**, no el registro de ausencias. Si
+     * fueran por `RegisterAbsence`, un cambio en las validaciones de aquel
+     * —fechas fuera de la relacion laboral, solape, motivo obligatorio— pondria
+     * en rojo las pruebas del informe sin que el informe hubiera cambiado. El
+     * caso de uso tiene las suyas en `Workforce`.
+     *
+     * `status` es siempre `active` y `version` siempre 1: las versiones
+     * supersedidas y las anuladas tienen su prueba propia, que comprueba
+     * justamente que **no** cuentan.
+     */
+    public static function absence(
+        string $employeeUuid,
+        string $type,
+        string $startsOn,
+        string $endsOn,
+    ): void {
+        $employeeId = DB::table('employees')->where('uuid', $employeeUuid)->value('id');
+
+        DB::table('absences')->insert([
+            'uuid' => Str::uuid7()->toString(),
+            'employee_id' => $employeeId,
+            'type' => $type,
+            'starts_on' => $startsOn,
+            'ends_on' => $endsOn,
+            'note' => null,
+            'status' => 'active',
+            'version' => 1,
+            'created_at' => (string) now(),
+            'created_by_user_id' => null,
+        ]);
+    }
+
+    /**
      * Una fila de `daily_totals` escrita directamente.
      *
      * **Solo para la prueba de volumen de RNF-P-05**, y por eso vive aparte de

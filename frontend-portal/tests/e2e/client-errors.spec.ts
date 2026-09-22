@@ -93,8 +93,13 @@ test(
     // parado desde `pauseAt`: nada de lo que tarde este mismo recorrido de
     // Playwright (rellenar, enviar, esperar la redireccion) se suma a este
     // avance, y por eso el resultado no depende de la maquina que lo ejecute.
+    // Y se ESPERA a que la peticion llegue: `runFor` dispara el temporizador,
+    // pero el `fetch` que este arma viaja de forma asincrona hasta la ruta
+    // interceptada, y leer el contador en la misma vuelta del bucle lo
+    // encontraba a veces todavia en `firstCount` (fallo intermitente en la
+    // CI, tambien en `main`). Mismo patron que `heartbeat-errors.spec.ts`.
     await page.clock.runFor(RETRY_INTERVAL_MS)
-    expect(clientErrors.count()).toBe(firstCount + 1)
+    await expect.poll(() => clientErrors.count(), { timeout: 5_000 }).toBe(firstCount + 1)
 
     // El portal sigue funcionando tras el 500: se puede seguir navegando.
     // (Una navegacion de verdad -`page.goto`, en modo `history`- recarga la

@@ -271,7 +271,7 @@ The **`ES-hosteleria`** profile is shipped, with these values:
 | `updated_at` | empty | Read-only: when it was last adjusted. **Empty means “as installed”** | — |
 | `max_weekly_hours` | `40` | Ordinary weekly working hours. **The compliance view applies it**: it warns about the weeks that go over, **opening no incident** (see below) | Art. 34.1 of the Workers' Statute |
 | `week_starts_on` | `1` (Monday) | Day the week starts on. **It defines the week the compliance view measures** | ISO 8601 |
-| `holiday_calendar` | empty | The site's public holidays, one date per line. **No rule applies it yet** | You load it |
+| `holiday_calendar` | empty | The site's public holidays, one date per line. **The hours-per-period report applies it**: those days are not counted as unexplained absence. **It opens and closes no incident** | You load it |
 | `retention_years` | `4` | Years the record has to be kept before it can be purged | Art. 34.9 of the Workers' Statute |
 | `name` | `ES-hosteleria` | What the collective agreement the profile describes is called | You set it |
 
@@ -291,10 +291,30 @@ the municipality and the year: a calendar built into the product would expire
 every 31 December and be wrong for half the customers. You load it, once a year,
 by pasting the dates.
 
-**One field is stored and not applied yet**: the holiday calendar. The screen
-says so next to the field. You can leave it already loaded: the absence
-management of a later version will be the first to use it, and the changes are
-audited from today.
+**Where the holiday calendar shows up, exactly.** It is applied by the
+**hours-per-period report**: the days listed in it are **not counted as
+unexplained absence**, and they come out in a column of their own. That is its
+only effect. **It affects no incident** —no public holiday opens or closes
+anything in the inbox— and it does not change a single hour of the record. Since
+the report is calculated the moment you ask for it, adding or removing dates
+also changes what the reports for periods already past say, and the change is
+audited. It is explained in [`hr-guide.md`](hr-guide.md) §5 bis.4.
+
+**The four absence types are not configurable either.** The catalogue is closed,
+for the same reason as the one for correction reasons: types tailored to each
+hotel would make two installations incomparable and would force the product to
+be touched in order to sell to the next customer.
+
+| Type | What it is |
+| --- | --- |
+| **Holiday** | Holidays already granted |
+| **Sick leave** | Temporary incapacity, accident, any leave with a certificate |
+| **Time off** | Paid and unpaid leave |
+| **Other** | None of the above. **It requires a note** |
+
+There is no approval workflow, no holiday balance and no parameter to touch
+here. How they are registered, corrected, voided and loaded from a file, and
+what each role sees, is in [`hr-guide.md`](hr-guide.md) §5 bis.
 
 **Weekly working hours and the first day of the week are applied now**, in the
 **compliance view** of the panel: it flags the weeks that go over the ordinary

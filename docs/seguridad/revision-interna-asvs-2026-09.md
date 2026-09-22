@@ -160,7 +160,7 @@ Los seis `REVISAR` se agrupan en tres familias: **techos de aplicación que falt
 - **Consecuencia:** ninguna técnica; ruido en la revisión externa.
 - **Corrección:** corregir el número en la ficha. Candidatas a fila nueva, si el usuario quiere ampliar el modelo: manipulación del reloj del quiosco (cubierta por RF-AT-12) y repudio de la lectura de datos por un responsable. Agente: documentación.
 - **Requisito:** doc 01 §8.1.
-- **Cierre (restos de la 3.8, 22-09-2026):** el número de la ficha se corrigió en la propia 3.8. Decisión del usuario sobre las candidatas: **se añade** «Manipulación del reloj del quiosco» (`T1070.006`; la mitigación es RF-AT-09/RF-AT-10, no RF-AT-12: el desfase se tolera, se avisa y abre incidencia `clock_skew` sin rechazar) y **no se añade** el repudio de la lectura de datos por un responsable, que RS-05 ya cubre con el asiento `personal_data.accessed`. El modelo tiene doce filas; la doceava está en el §4.
+- **Cierre (restos de la 3.8, 22-09-2026):** el número de la ficha se corrigió en la propia 3.8. Decisión del usuario sobre las candidatas: **se añade** «Manipulación del reloj del quiosco» (`T1070.006`; la mitigación es RF-AT-09/RF-AT-10, no RF-AT-12: el desfase se tolera, se avisa y abre incidencia `clock_skew` sin rechazar) y **no se añade** el repudio de la lectura de datos por un responsable, que RS-05 ya cubre con el asiento `personal_data.accessed`. El modelo quedó entonces en doce filas; la doceava está en el §4. **Desde la tarea 3.10 (22-09-2026) tiene trece**: su revisión de cumplimiento añadió la fila de divulgación del dato de salud del registro de ausencias (`T1213`), recogida en el §4 como fila 13 y en doc 07 §6 como riesgo aceptado A-17 por su retención sin plazo.
 
 ### H-13 · Sin `needsRehash` de contraseñas ni de PIN al iniciar sesión
 
@@ -207,7 +207,7 @@ Los seis `REVISAR` se agrupan en tres familias: **techos de aplicación que falt
 
 ---
 
-## §4 STRIDE × las doce filas del doc 01 §8.1
+## §4 STRIDE × las trece filas del doc 01 §8.1
 
 | # | Categoría | Vector | Control existente, con evidencia | Estado | Hueco |
 |---|---|---|---|---|---|
@@ -223,6 +223,7 @@ Los seis `REVISAR` se agrupan en tres familias: **techos de aplicación que falt
 | 10 | Elevación | Token de quiosco contra gestión | `ability` + policy en cada ruta; tres ámbitos exactos; `AuthorizationNegativeTest` prueba el 403 del token de quiosco (`RS-04`). | **Cubierta** (mitigación) · **sin cubrir** (detección) | Un 403 por ámbito no deja asiento ni alerta (H-10, decisión: no se añade asiento); cobertura negativa manual (H-02). |
 | 11 | Elevación | Acceso de soporte fuera del incidente | Concesión expresa, temporal, de alcance limitado y revocable; `RecordSupportAccess` en el grupo entero; `DataExportPolicy` rechaza a todo actor de soporte. | **Cubierta** | Agrupación de 900 s aceptada y alineada con el cliente; `audit:read` sin consumidor, aceptado hasta el primer endpoint de auditoría. |
 | 12 | Manipulación | Reloj del quiosco movido (fila añadida el 22-09-2026 en los restos de la tarea, H-12) | `recorded_at` lo pone el servidor (RF-AT-09). Desfase tolerado hasta `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES` (`ClockSkew` en el dominio de Attendance); por encima, el fichaje se registra igual con `clock_skew_seconds`, incidencia `clock_skew` y aviso en el quiosco (RF-AT-10; `ClockSkewIncidentTest`). Anti-rebote (RF-AT-06) y RN-16 acotan el efecto. Nunca rechaza (regla dura 19). | **Cubierta** (mitigación) · **parcial** (detección) | La señal es la incidencia en la bandeja (`incidents_open{type="clock_skew"}`), sin alerta a propósito: la juzga una persona. Sin hallazgo. |
+| 13 | Divulgación | Dato de salud en el registro de ausencias: el tipo `sick_leave` de una persona identificada, y la nota que se escriba junto a él (fila añadida el 22-09-2026 en la tarea 3.10) | Lectura acotada a `rrhh` y `admin`; el `responsable_departamento` ve solo su departamento y **sin el campo `note`** —omitido, no `null`— (RF-GP-04, RF-ID-03). Asiento `personal_data.accessed` con conjunto `absence_register` en cada página leída (RS-05). `note` nunca en `audit_log` (solo `has_note`), ni en logs técnicos, ni en `error_events`, ni en el paquete de diagnóstico (regla dura 21). El informe por periodo no desglosa por tipo a propósito. | **Cubierta** (mitigación) · **cubierta** (detección) | La retención no tiene plazo: `RetentionScope` no cubre `absences` y no hay purga automática. **Aceptado, pendiente de la asesoría laboral del cliente** (doc 07 §6, fila A-17, revisión en el cierre de Fase 3). |
 
 ---
 

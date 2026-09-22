@@ -263,6 +263,7 @@ final readonly class DatabaseDataExportSource implements DataExportSource
         'departments' => self::DEPARTMENTS,
         'employees' => self::EMPLOYEES,
         'employment_contracts' => self::EMPLOYMENT_CONTRACTS,
+        'absences' => self::ABSENCES,
         'credentials' => self::CREDENTIALS,
         'devices' => self::DEVICES,
         'shift_entries' => self::SHIFT_ENTRIES,
@@ -345,6 +346,48 @@ final readonly class DatabaseDataExportSource implements DataExportSource
           JOIN employees e  ON e.id = c.employee_id
           LEFT JOIN users u ON u.id = c.created_by_user_id
          ORDER BY c.id
+        SQL;
+
+    /*
+     * Ausencias (RF-GP-04, tarea 3.10).
+     *
+     * **TODAS LAS VERSIONES, tambien las supersedidas y las anuladas** (regla
+     * dura 5, RL-04), con su `version`, su `supersedes_uuid`, su motivo de
+     * cambio y su anulacion. Una exportacion que enseñara solo la ultima version
+     * seria un registro reescrito, exactamente lo mismo que ya evita
+     * `shift_entries`.
+     *
+     * **`note` SALE.** Es la unica decision de este conjunto que merece
+     * explicacion, porque en todas las demas superficies del producto la nota se
+     * protege: no viaja al `responsable_departamento`, no entra en `audit_log` y
+     * no aparece en ningun log. Aqui si, porque este ZIP **se queda con el
+     * cliente**, que es el responsable del tratamiento (RL-16) y a quien RL-20
+     * obliga a entregar todos sus datos. Lo que no puede salir son secretos y
+     * credenciales, no los datos propios.
+     *
+     * Las dos referencias de version salen como **UUID** y no como clave interna
+     * (doc 01 §5.5), resueltas con `LEFT JOIN` sobre la propia tabla.
+     */
+    private const string ABSENCES = <<<'SQL'
+        SELECT a.uuid::text  AS uuid,
+               e.uuid::text  AS employee_uuid,
+               a.type,
+               to_char(a.starts_on, 'YYYY-MM-DD') AS starts_on,
+               to_char(a.ends_on,   'YYYY-MM-DD') AS ends_on,
+               a.note,
+               a.status,
+               a.version::text AS version,
+               p.uuid::text  AS supersedes_uuid,
+               a.change_reason,
+               to_char(a.voided_at  AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS voided_at,
+               a.void_reason,
+               to_char(a.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at,
+               u.uuid::text  AS created_by_user_uuid
+          FROM absences a
+          JOIN employees e    ON e.id = a.employee_id
+          LEFT JOIN absences p ON p.id = a.supersedes_id
+          LEFT JOIN users u   ON u.id = a.created_by_user_id
+         ORDER BY a.id
         SQL;
 
     private const string CREDENTIALS = <<<'SQL'

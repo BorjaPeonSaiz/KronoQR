@@ -212,9 +212,64 @@ function managementEndpoints(): array
             'valid_from' => '2026-03-01',
         ]],
 
+        ...absenceEndpoints(),
         ...installationSettingsEndpoints(),
         ...complianceProfileEndpoints(),
         ...kioskPairingEndpoints(),
+    ];
+}
+
+/**
+ * Las ausencias (tarea 3.10, RF-GP-04). **Seis rutas, dos ambitos.**
+ *
+ * Las dos de lectura llevan `employees:read` y policy «manager+»; las cuatro de
+ * escritura llevan `employees:*` y policy «rrhh+». La asimetria es deliberada:
+ * el `responsable_departamento` tiene que poder ver quien falta de su gente
+ * —acotado, RF-ID-03— y no puede registrar, corregir ni anular nada, porque eso
+ * cambia el absentismo de una persona, que es un numero con consecuencias
+ * laborales.
+ *
+ * **Las seis entran una a una** aunque compartan ambito de dos en dos, por lo
+ * mismo que los cuatro de credenciales: la policy se declara en el `FormRequest`
+ * de cada endpoint —o en el `Gate::authorize` del `GET` de detalle— asi que un
+ * `authorize()` que devolviera `true` en uno solo seria invisible desde los
+ * otros cinco.
+ *
+ * **Y aqui el `403` del auditor y del quiosco pesa mas que en casi cualquier
+ * otra ruta del fichero**: lo que reparte el listado es una lista de personas
+ * con una categoria de ausencia al lado, y una de esas categorias es una baja
+ * medica —dato de salud del art. 9 del RGPD—. El dia que alguien pida «que el
+ * auditor tambien lo vea», estos pares obligan a que el cambio se haga a la
+ * vista.
+ *
+ * Los cuerpos y los identificadores son validos a proposito, para que lo que
+ * falle sea la autorizacion y no la validacion: un `422` esconderia si la policy
+ * funciona, y un `404` significaria que la denegacion llega **despues** de mirar
+ * los datos, que ya seria el fallo.
+ *
+ * @return array<string, array{0: string, 1: string, 2: array<string, mixed>}>
+ */
+function absenceEndpoints(): array
+{
+    $uuid = '0199f4a1-6c22-7e10-9b40-2a3b4c5d6e70';
+
+    return [
+        'listar ausencias' => ['GET', '/api/v1/absences', []],
+        'ver una ausencia' => ['GET', '/api/v1/absences/'.$uuid, []],
+        'registrar una ausencia' => ['POST', '/api/v1/absences', [
+            'employee_uuid' => '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90',
+            'type' => 'vacation',
+            'starts_on' => '2026-03-02',
+            'ends_on' => '2026-03-06',
+        ]],
+        'corregir una ausencia' => ['PATCH', '/api/v1/absences/'.$uuid, [
+            'ends_on' => '2026-03-09',
+            'reason' => 'El parte de baja se prorrogo.',
+        ]],
+        'anular una ausencia' => ['POST', '/api/v1/absences/'.$uuid.'/void', [
+            'reason' => 'Se registro a la persona equivocada.',
+        ]],
+        'cargar ausencias por fichero' => ['POST', '/api/v1/absences/import', ['mode' => 'validate']],
     ];
 }
 
@@ -421,6 +476,17 @@ function endpointsDeniedToDepartmentManager(): array
         // prueba en `Tests\Feature\Compliance\IncidentScopeTest`.
         $endpoints['ver la bandeja de incidencias'],
         $endpoints['resolver una incidencia'],
+        // Y las DOS de lectura de ausencias desde la tarea 3.10, por lo mismo:
+        // el responsable las ve **acotadas a sus departamentos** y sin la nota
+        // (RF-GP-04, RF-ID-03). Su alcance y la ausencia del campo `note` se
+        // prueban en `Tests\Feature\Workforce\AbsenceScopeTest`: aqui no caben,
+        // porque dependen de a quien se pida.
+        //
+        // **Las CUATRO de escritura se quedan**, y son la mitad que importa de
+        // esta tarea: registrar, corregir o anular una ausencia cambia el
+        // absentismo de una persona, y eso es de `rrhh+`.
+        $endpoints['listar ausencias'],
+        $endpoints['ver una ausencia'],
     );
 
     return $endpoints;

@@ -4,13 +4,17 @@ declare(strict_types=1);
 
 namespace App\Modules\Reporting\Application\Query;
 
+use App\Modules\Reporting\Application\Port\ComplianceProfileReference;
 use App\Modules\Reporting\Application\Port\PeriodReportReader;
 use App\Modules\Reporting\Application\Support\ReportDelivery;
 use App\Modules\Reporting\Domain\Exception\ReportTooLargeForSynchronousDelivery;
+use App\Modules\Reporting\Domain\ValueObject\ComplianceProfileRef;
 use App\Modules\Reporting\Domain\ValueObject\PeriodReport;
 use App\Modules\Reporting\Domain\ValueObject\PeriodReportQuery;
+use App\Modules\Reporting\Domain\ValueObject\ReportCriterion;
 use App\Modules\Reporting\Domain\ValueObject\ReportGranularity;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
@@ -20,7 +24,7 @@ use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
  *
  * ## Que decide esta clase y que no
  *
- * Decide **cuatro** cosas, y ninguna es una regla de negocio:
+ * Decide **cinco** cosas, y ninguna es una regla de negocio:
  *
  *   1. Que el informe se entrega en el acto o no se entrega (RNF-P-05).
  *   2. Que los criterios de inclusion salen **con** el resultado y no en un
@@ -28,6 +32,22 @@ use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
  *   3. Que generarlo deja constancia en `audit_log` cuando lleva datos de
  *      terceros.
  *   4. Que el instante y la zona los pone el servidor, no el cliente.
+ *   5. Que el calendario de festivos del centro lo **resuelve el servidor** y no
+ *      lo elige quien pregunta (RF-GP-04, regla dura 14).
+ *
+ * ## Los festivos se resuelven aqui, y por eso el dominio no los busca
+ *
+ * `CompliancePolicyProvider` entrega el perfil del centro con su calendario ya
+ * normalizado, y esta clase lo mete en la consulta con `withHolidays()`. Es la
+ * aplicacion literal de la regla dura 14 —el dominio recibe el umbral resuelto,
+ * nunca lo consulta— y lo que hace que `holiday_calendar` estrene consumidor:
+ * desde RF-GP-04, un festivo del perfil deja de contar como absentismo.
+ *
+ * El **nombre** del perfil llega por otro puerto, `ComplianceProfileReference`,
+ * por lo mismo que en la vista de cumplimiento: `CompliancePolicy` son umbrales
+ * y no lleva nombre a proposito, para que ninguna regla pueda escribir «si el
+ * perfil es ES-hosteleria, entonces…» (ADR-017). Aqui el nombre no decide nada:
+ * solo aparece en la linea de criterios que explica de donde salen los festivos.
  *
  * El calculo de los totales no se decide aqui —lo define RN-06 y lo tiene
  * `daily_totals` (regla dura 7)—, el prorrateo de lo contratado lo define
@@ -107,6 +127,10 @@ final readonly class GeneratePeriodReport
         private InstallationSiteProvider $installation,
         private Clock $clock,
         private PersonalDataAccessLog $disclosures,
+        /** El calendario de festivos del centro, ya resuelto (RF-GP-04, regla dura 14). */
+        private CompliancePolicyProvider $policies,
+        /** Solo para **nombrar** el perfil en los criterios. No decide nada. */
+        private ComplianceProfileReference $profiles,
     ) {}
 
     /**
@@ -137,6 +161,10 @@ final readonly class GeneratePeriodReport
 
         $this->assertFitsInASynchronousResponse($query, $maxRangeDays, $maxRows);
 
+        // RF-GP-04. El calendario entra **antes** de consultar, no despues: lo
+        // necesita el propio `SELECT` para no contar un festivo como absentismo.
+        $query = $query->withHolidays($this->policies->forSite($site->id)->holidayCalendar);
+
         $rows = $this->reader->rows($query, $site->name);
         $coverage = $this->reader->contractCoverage($query);
 
@@ -147,7 +175,7 @@ final readonly class GeneratePeriodReport
             grouping: $query->grouping,
             timeZone: $site->timezone,
             generatedAt: $this->clock->now(),
-            criteria: $this->criteriaFor($query),
+            criteria: $this->criteriaFor($query, $site->id),
             contractCoverage: $coverage,
         );
 
@@ -181,19 +209,46 @@ final readonly class GeneratePeriodReport
      * tiene que cambiarlo: un informe que dijera siempre lo mismo sobre ellos
      * mentiria en uno de los dos casos.
      *
-     * @return list<string>
+     * **Las tres lineas de RF-GP-04 van juntas y en este orden** —que las
+     * ausencias justifican, cuantos festivos hay y que el producto no conoce el
+     * cuadrante— porque se leen como un solo parrafo: las dos primeras dicen que
+     * se ha descontado y la tercera, que es lo que sigue sin descontarse. Sacar
+     * la tercera de ahi convertiria `unjustified_absence_days` en un numero que
+     * parece medir lo que no mide.
+     *
+     * @return list<ReportCriterion>
      */
-    private function criteriaFor(PeriodReportQuery $query): array
+    private function criteriaFor(PeriodReportQuery $query, int $siteId): array
     {
-        $criteria = self::BASE_CRITERIA;
+        $criteria = ReportCriterion::listOf(self::BASE_CRITERIA);
 
-        $criteria[] = $query->includeOpenShifts
+        $criteria[] = new ReportCriterion($query->includeOpenShifts
             ? 'criteria.open_shifts_included'
-            : 'criteria.open_shifts_excluded';
+            : 'criteria.open_shifts_excluded');
 
         if ($query->granularity === ReportGranularity::Week) {
-            $criteria[] = 'criteria.iso_week';
+            $criteria[] = new ReportCriterion('criteria.iso_week');
         }
+
+        $criteria[] = new ReportCriterion('criteria.absences');
+
+        $profile = $this->profiles->forSite($siteId);
+
+        if ($profile instanceof ComplianceProfileRef) {
+            // Con el recuento del periodo y el nombre del perfil, que es lo que
+            // permite ir a mirarlo: «cero festivos» sobre un calendario que nadie
+            // cargo y «cero festivos» sobre marzo son la misma cifra con dos
+            // causas distintas, y saber de que perfil se habla es la mitad de la
+            // respuesta. Sin perfil resoluble no hay festivos que contar ni
+            // nombre que citar, y la linea se omite en vez de decir «del perfil
+            // (ninguno)».
+            $criteria[] = new ReportCriterion('criteria.holidays', [
+                'count' => (string) \count($query->holidaysInRange()),
+                'profile' => $profile->name,
+            ]);
+        }
+
+        $criteria[] = new ReportCriterion('criteria.no_roster');
 
         return $criteria;
     }

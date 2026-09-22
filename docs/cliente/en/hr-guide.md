@@ -12,7 +12,7 @@ need to know anything about systems.**
 > [`legal-obligations.md`](legal-obligations.md). Each thing is explained in one
 > single place; here it is linked.
 
-The nine sections of this guide, in case you are looking for one in
+The ten sections of this guide, in case you are looking for one in
 particular:
 
 1. [Vocabulary first](#1-vocabulary-first)
@@ -21,6 +21,7 @@ particular:
 4. [The incident inbox](#4-the-incident-inbox)
     - [4 bis. The compliance view](#4-bis-the-compliance-view)
 5. [Corrections: changing an hour without breaking the record](#5-corrections-changing-an-hour-without-breaking-the-record)
+    - [5 bis. Absences: holidays, sick leave and time off](#5-bis-absences-holidays-sick-leave-and-time-off)
 6. [Reports, exports and the Labour Inspectorate hand-over](#6-reports-exports-and-the-labour-inspectorate-hand-over)
 7. [The compliance profile](#7-the-compliance-profile)
 8. [What to do if…](#8-what-to-do-if)
@@ -742,6 +743,230 @@ they can do is raise it, and HR corrects it with their signature.
 
 ---
 
+## 5 bis. Absences: holidays, sick leave and time off
+
+**Absences** is the screen where it gets written down that a person was not
+there, and why. It sits in the menu right after "Employees", because an absence
+belongs to the workforce and not to one particular day of the record.
+
+It serves one purpose, and it is worth saying before anything else: **so that
+the reports do not count as an unexplained absence a day on which the person
+was not supposed to be there**. With no absences on record, the hours-per-period
+report only knows that there was no clocking that day, and it cannot tell
+holidays from a no-show.
+
+### 5 bis.1 What an absence is and what it is not
+
+An absence is **a fact that gets written down**, not a request that gets
+processed.
+
+**There is no approval workflow.** There is no "pending approval", no
+"approved", and no approve button, and that is not an oversight: the decision is
+taken outside the system —when closing the roster, talking to the person, with
+the medical certificate in front of you— and here it is only recorded. Whoever
+registers an absence is saying "this is already decided", not "this has been
+requested".
+
+There are four types, and no more can be added:
+
+| Type | When it is used |
+| --- | --- |
+| **Holiday** | Holidays already granted, whichever period they belong to |
+| **Sick leave** | Temporary incapacity, accident, any leave with a certificate |
+| **Time off** | Paid and unpaid leave: moving house, an exam, personal matters, caring for a relative |
+| **Other** | None of the above. **It requires a note** saying what it is about |
+
+The rest of what you need to know fits in a list:
+
+- **Whole days only.** You give the first day and the last one, and **both
+  count**: an absence from the 3rd to the 5th is three days. There are no half
+  days and no absences by the hour. If somebody misses half an afternoon, that
+  is not an absence: it is a shorter working day, and it shows in their record.
+- **It can be registered backwards and forwards.** Sick leave is almost always
+  known after it has started, and holidays are written down months ahead. Both
+  are fine, and neither waits for the day to arrive.
+- **Registering an absence does not stop anyone clocking.** If that person turns
+  up and uses their card, the clocking is recorded as normal: the absence
+  neither blocks it nor opens any incident by itself. What has to be sorted out
+  then is the fact, not the system — and if the absence was wrong, you correct
+  it (§5 bis.2).
+- **It does not track a holiday balance and it notifies nobody.** The product
+  does not work out how many days each person has left, and it sends no notice
+  to the manager when an absence is registered for their people.
+- **The employee does not see them in their portal.** The portal is their time
+  record and nothing else
+  ([`employee-portal-guide.md`](employee-portal-guide.md)). Absences are
+  consulted by HR and by their manager.
+
+### 5 bis.2 Registering, correcting and voiding
+
+Three actions, and none of them deletes anything:
+
+| Action | When |
+| --- | --- |
+| **"Register"** | Write down a new absence: person, type, first day, last day and, if needed, a note |
+| **"Correct"** | The dates or the type are not what happened: the sick leave lasted two days longer, or what were holidays got written down as time off |
+| **"Void"** | The absence should not exist: the person did work those days, or it was registered against the wrong person |
+
+**When registering**, you look the person up by name or by their code and you
+give the days. If those dates overlap another absence already in force for the
+same person, **it is not saved and the screen says so**: two overlapping
+absences would make the same day count twice in the report.
+
+**When correcting**, the screen shows **from which value to which** before you
+confirm —the type before and the type now, the dates before and the dates now—
+and it **asks for a reason**. That is not red tape: it is what gets read six
+months later to understand why the March report says something different today
+from what it said in March.
+
+**Nothing is deleted.** Correcting does not rewrite the absence: it creates a
+new version and keeps the previous one, with who made it, when and why. Opening
+an absence shows its full history, from the first version to the current one,
+just like the amendment history of a working day (§5.3).
+
+**Voiding also asks for a reason, and it does not delete either.** The absence
+stays where it was, marked as voided, with who voided it, when and why. It stops
+counting in the reports from that moment on, but it remains available to
+consult — which is exactly what makes it possible to explain why last week's
+report carried a day of absence that today's no longer carries.
+
+> **Voiding is not the same as correcting.** If what you want is to change some
+> dates or the type, **correct**: the absence happened and still stands, it just
+> says something else. **Void** only what should never have been registered.
+
+### 5 bis.3 Loading from a file
+
+For a big batch —the whole summer's holidays, the year's history you had in a
+spreadsheet— there is loading from a CSV or Excel file, with **the same two
+steps as the workforce load**: first it is checked, then it is applied.
+
+1. **Check.** You upload the file and the system reads it right through
+   **without saving anything**: it gives you back, line by line, which ones
+   would go in and which ones would not and why.
+2. **Apply.** Only if you confirm. The valid lines are registered and the rest
+   are rejected, with the same detail.
+
+The first row holds the **column names**. The order does not matter and spare
+columns do no harm:
+
+| Field | Required | Names that are recognised |
+| --- | --- | --- |
+| Employee code | **Yes** | `employee_code`, `codigo` |
+| Absence type | **Yes** | `type`, `tipo` |
+| First day | **Yes** | `starts_on`, `desde` |
+| Last day | **Yes** | `ends_on`, `hasta` |
+| Note | No, except for "Other" | `note`, `nota` |
+
+- **The employee code** is the one the system generated when the person was
+  added, and the one printed on their card. You have it in the employee list.
+- **The type is written by its name**: `vacation`, `sick_leave`, `leave` or
+  `other`, or their Spanish equivalents `vacaciones`, `baja`, `permiso` and
+  `otro`.
+- **Dates** are accepted as `2026-07-01` or as `01/07/2026`. Never
+  month/day/year, for the same reason as in the workforce load.
+- **The separator and the encoding are detected on their own**, just as there:
+  it is explained in [`configuration.md`](configuration.md) §3 ter.3.
+
+**Uploading the same file again is safe.** A line identical to an absence
+already registered —same person, same type, same dates— **raises no error and
+does not duplicate it**: it comes out marked as "unchanged" and the system moves
+on to the next one. That is what lets you fix three lines of a two-hundred-line
+file and upload the whole thing again without thinking twice.
+
+A line is rejected when the employee code does not exist, when the dates are the
+wrong way round or cannot be read, when the type is not one of the four, when
+the absence overlaps another one already registered for that person **or another
+line of the same file**, or when the type is "Other" and it carries no note.
+
+> **The file is not kept on the server.** It is read, applied and discarded.
+> What remains is each absence registered, with its log entry (§5 bis.6).
+
+### 5 bis.4 What changes in the hours-per-period report
+
+The hours-per-period report (§6.1) carries **three columns** that depend on what
+has been registered here:
+
+| Column | What it counts |
+| --- | --- |
+| **Absence days** | Days on which the person was on the books and there was an absence on record, whether there were clockings or not |
+| **Public holidays** | Days on the books that appear in the compliance profile's holiday calendar (§7) and are **not** already covered by an absence |
+| **Unexplained absence** | Days on the books **with no clocking, no absence and no public holiday** |
+
+Each day counts **in one column only**: if a public holiday falls inside some
+holidays, that day is an absence day and not a public holiday. And only days on
+which the person was on the books count, as in the rest of the report: anything
+before their start date or after they left appears in none of the three.
+
+> **⚠️ The limit you have to know before showing this report to anybody.**
+> **The product does not know your roster.** It knows when people clocked, not
+> which days each person has off. So **weekly rest days come out counted as
+> unexplained absence**, exactly like a no-show: nobody clocked and there is no
+> absence or public holiday to explain it. It is not a fault: it is all the
+> system can know with what it has. That column is **a starting point** —the
+> days nobody has explained— and it has to be checked against the shift calendar
+> before drawing any conclusion about a person. If somebody reads it as "days
+> missed", the number will be wrong every time.
+
+Two more things:
+
+- **The report does not break the figure down by type, and that is on purpose.**
+  There is no "sick leave days" column per department: it would be aggregated
+  health data that nobody asked for and that would end up in a shared
+  spreadsheet. The breakdown by type is seen on the **Absences** screen, with
+  each person's scope (§5 bis.5).
+- **The three columns also come out in CSV, in Excel and in PDF**, and the
+  criteria the report declares below the table say how many of the profile's
+  public holidays fell in the period and repeat the warning about the roster.
+
+### 5 bis.5 Who sees what
+
+| Who | What they can do |
+| --- | --- |
+| **HR** and **administrator** | They see every absence, with its note. They register, correct and void |
+| **Department manager** | Sees the ones for their people, with the type and the dates. **They do not see the note**, and they cannot register, correct or void |
+| **Auditor** and **employee** | Do not enter this screen |
+
+The manager **does** see the type, and that is deliberate: whoever organises a
+shift has to know who is missing and under which category, or they cannot cover
+it. The **note** does not reach them —neither empty nor blanked out: the field
+does not exist for them, so that nobody confuses "they are not showing it to me"
+with "there is no note".
+
+> **Sick leave is health data. Write only what is needed.**
+> **Do not put the diagnosis or the medical reason in the note.** The **Sick
+> leave** type is enough: it is what the report needs and the only thing needed
+> to cover the shift. The same goes for the reason of a correction or of a
+> voiding, which in addition **stays in the legal record and a labour inspection
+> can read it**, just like the correction reasons of §5.2: no health data and no
+> value judgements about the person.
+>
+> The medical certificate, the supporting document and everything the
+> regulations oblige you to keep go wherever you keep the person's file, not
+> here. What you may keep and for how long is explained in
+> [`legal-obligations.md`](legal-obligations.md).
+
+### 5 bis.6 What gets logged
+
+**Every registration, every correction and every voiding leaves an entry in the
+audit log**, with who did it, when, what changed and why. In a correction the
+entry carries **the values before and the values after**, so that the complete
+history of an absence can be reconstructed without opening the screen.
+
+A file load leaves **one entry per absence registered**, not a summary one: a
+hundred imported absences are a hundred log entries.
+
+**The note never goes into the entry.** It may carry information about a
+person's health, and the entry does not need it to explain what happened: the
+type, the dates, who and when are enough. For the same reason, neither the type
+nor the note appear in the system's technical logs or in the diagnostics package
+that is sent to the vendor.
+
+And the usual: **nothing is deleted**. A corrected absence keeps every one of
+its versions, and a voided absence is still there, marked as such. It is the
+same rule that makes the working-time record hold up in an inspection (§1).
+
+---
+
 ## 6. Reports, exports and the Labour Inspectorate hand-over
 
 They are two different things and they are easily confused:
@@ -768,6 +993,11 @@ Two warnings worth reading:
   still going to change are included. For payroll, close them first.
 - **"Person-days with no contract on record"**: those rows have the hours
   worked right and the deviation incomplete (§2.3).
+
+The report also carries **three columns that come from the absences**: absence
+days, public holidays and unexplained absence. What each one counts exactly
+—and, above all, **what the product cannot know** about rest days— is in
+§5 bis.4. Read it before showing that last column to anybody.
 
 ### 6.2 The export for the Labour Inspectorate
 
@@ -826,9 +1056,11 @@ legal effect, and that is why:
 daily working time move both things: the incident inbox (§4) and the compliance
 view (§4 bis). **Ordinary weekly working hours** and the **first day of the
 week** are applied only by the compliance view, which warns but opens no
-incident. The **holiday calendar** is stored and audited from today, but **no
-rule applies it yet**: the absence management of a later version will be the
-first to use it, and the screen says so next to the field.
+incident. The **holiday calendar** is applied by the **hours-per-period
+report**: the days listed in it are not counted as unexplained absence
+(§5 bis.4). It **opens and closes no incident** and it does not change a single
+hour of the record; if you leave it empty, the report simply discounts no public
+holiday.
 
 **`break_required_after_hours` —the maximum stretch without a break— also
 depends on a setting that is not on this screen.** It only applies if the hotel

@@ -2,7 +2,7 @@
   "id": null,
   "uid": "kronoqr-business",
   "title": "KronoQR · Negocio",
-  "description": "RRHH y dirección. Horas por departamento, alertas de cumplimiento (doc 02 §8.3). Trabajadas frente a contratadas, absentismo e impuntualidad no tienen serie todavía: ver el panel de texto (decisión 13 de la tarea 3.2).",
+  "description": "RRHH y dirección. Horas por departamento, alertas de cumplimiento, personas ausentes hoy por tipo (RF-GP-04, doc 02 §8.3). Trabajadas frente a contratadas e impuntualidad no tienen serie todavía: ver el panel de texto (decisión 13 de la tarea 3.2 y decisión 8 de la tarea 3.10).",
   "tags": ["kronoqr", "negocio", "rrhh"],
   "timezone": "browser",
   "schemaVersion": 39,
@@ -56,7 +56,7 @@
       "gridPos": { "h": 6, "w": 24, "x": 0, "y": 0 },
       "options": {
         "mode": "markdown",
-        "content": "El doc 02 §8.3 pide para este cuadro **horas trabajadas frente a contratadas**, **absentismo**, **impuntualidad** y **alertas de cumplimiento**. La tarea 3.4 entrega las alertas de cumplimiento (paneles «Alertas de cumplimiento de la última semana, por regla» y «Personas con alguna alerta», más abajo). De las tres que quedan:\n\n- **Horas contratadas frente a trabajadas** viven en `employment_contracts`; no hay serie que las compare con `worked_minutes_total`. Candidata de la **tarea 3.13** (cuadro de impacto y adopción), que calcula «horas trabajadas frente a contratadas» para su propio cuadro; aquí no se duplica hasta que exista la serie.\n- **Absentismo** depende del registro de ausencias, que es la **tarea 3.10** (todavía no ejecutada al escribir este cuadro).\n- **Impuntualidad** no tiene tipo de incidencia en el catálogo (`IncidentType`, doc 01 §5.5): no existe ningún hallazgo que contar; sin tarea asignada.\n\nLo que sí muestra este cuadro con las series que existen: horas trabajadas por departamento, turnos abiertos ahora, incidencias de cumplimiento abiertas por tipo (descanso insuficiente, jornada larga, pausa ausente, turno sin cerrar), alertas de cumplimiento de la última semana por regla y personas afectadas, fichajes por PIN de respaldo y patrones anómalos de credencial."
+        "content": "El doc 02 §8.3 pide para este cuadro **horas trabajadas frente a contratadas**, **absentismo**, **impuntualidad** y **alertas de cumplimiento**. La tarea 3.4 entrega las alertas de cumplimiento (paneles «Alertas de cumplimiento de la última semana, por regla» y «Personas con alguna alerta», más abajo). **Absentismo ya tiene serie**: la tarea 3.10 (RF-GP-04) publica `absences_current{type}` y este cuadro gana el panel «Personas ausentes hoy, por tipo», más abajo. De lo que queda:\n\n- **Horas contratadas frente a trabajadas** viven en `employment_contracts`; no hay serie que las compare con `worked_minutes_total`. Candidata de la **tarea 3.13** (cuadro de impacto y adopción), que calcula «horas trabajadas frente a contratadas» para su propio cuadro; aquí no se duplica hasta que exista la serie.\n- **Impuntualidad** no tiene tipo de incidencia en el catálogo (`IncidentType`, doc 01 §5.5): no existe ningún hallazgo que contar; sin tarea asignada.\n\nLo que sí muestra este cuadro con las series que existen: horas trabajadas por departamento, turnos abiertos ahora, incidencias de cumplimiento abiertas por tipo (descanso insuficiente, jornada larga, pausa ausente, turno sin cerrar), alertas de cumplimiento de la última semana por regla y personas afectadas, fichajes por PIN de respaldo, patrones anómalos de credencial y personas ausentes hoy por tipo (vacaciones, baja médica, permiso, otro; RF-GP-04, sin alerta porque no hay runbook que la sostenga)."
       }
     },
     {
@@ -359,6 +359,37 @@
         "colorMode": "value",
         "graphMode": "none",
         "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 11,
+      "type": "bargauge",
+      "title": "Personas ausentes hoy, por tipo",
+      "description": "absences_current{type} (RF-GP-04). Personas de alta con una ausencia activa que cubre la fecha de hoy en la zona del centro, por tipo; la serie no lleva nombres de personas. Publicada cada noche por Reporting (PublishAbsenceMetrics, tarea 3.10), mismo patrón y cadencia que compliance_findings_last_week. Indicador de RRHH, no de operación: sin alerta de Prometheus, porque no hay runbook que la sostenga (doc 02 §8.4).",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 38 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" }, "expr": "absences_current", "legendFormat": "{{type}}", "instant": true }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "noValue": "sin dato",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "vacation" }, "properties": [{ "id": "displayName", "value": "Vacaciones" }] },
+          { "matcher": { "id": "byName", "options": "sick_leave" }, "properties": [{ "id": "displayName", "value": "Baja médica" }] },
+          { "matcher": { "id": "byName", "options": "leave" }, "properties": [{ "id": "displayName", "value": "Permiso" }] },
+          { "matcher": { "id": "byName", "options": "other" }, "properties": [{ "id": "displayName", "value": "Otro" }] }
+        ]
+      },
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showUnfilled": true
       }
     }
   ]

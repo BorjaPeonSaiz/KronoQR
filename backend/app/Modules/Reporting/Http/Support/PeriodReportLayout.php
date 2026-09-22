@@ -6,6 +6,7 @@ namespace App\Modules\Reporting\Http\Support;
 
 use App\Modules\Reporting\Domain\ValueObject\PeriodReport;
 use App\Modules\Reporting\Domain\ValueObject\PeriodReportRow;
+use App\Modules\Reporting\Domain\ValueObject\ReportCriterion;
 use App\Modules\Reporting\Domain\ValueObject\ReportedDuration;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -76,6 +77,14 @@ final readonly class PeriodReportLayout
         'open_shift_days',
         'incident_days',
         'days_without_contract',
+        // RF-GP-04, y **al final y en este orden** a proposito: quien abre el
+        // fichero lee las tres seguidas, que es como se entienden —dos de dias
+        // justificados y una de lo que queda—. Intercalarlas entre las de
+        // actividad habria cambiado de sitio las columnas de todos los informes
+        // que un hotel ya tenga guardados.
+        'absence_days',
+        'holiday_days',
+        'unjustified_absence_days',
     ];
 
     /**
@@ -93,6 +102,9 @@ final readonly class PeriodReportLayout
         12.0, 32.0, 14.0, 38.0, 12.0, 12.0, 12.0,
         10.0, 12.0, 12.0, 10.0,
         10.0, 12.0, 14.0, 16.0, 14.0, 12.0, 16.0,
+        // Las tres de RF-GP-04. La ultima es ancha porque su rotulo lo es:
+        // «Absentismo no justificado» / «Unexplained absence».
+        14.0, 12.0, 20.0,
     ];
 
     private function __construct() {}
@@ -139,6 +151,9 @@ final readonly class PeriodReportLayout
             (string) $row->openShiftDays,
             (string) $row->incidentDays,
             (string) $row->daysWithoutContract,
+            (string) $row->absenceDays,
+            (string) $row->holidayDays,
+            (string) $row->unjustifiedAbsenceDays,
         ];
     }
 
@@ -176,7 +191,10 @@ final readonly class PeriodReportLayout
     public static function criteria(PeriodReport $report): array
     {
         $lines = array_map(
-            static fn (string $key): string => self::text($key),
+            static fn (ReportCriterion $criterion): string => self::text(
+                $criterion->key,
+                $criterion->replacements,
+            ),
             $report->criteria,
         );
 

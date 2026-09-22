@@ -117,10 +117,13 @@ it('el umbral cambiado llega al dominio por el puerto, que es el criterio de la 
         ->and($policy->breakRequiredAfterMinutes)->toBe(360);
 })->group('RF-PD-07', 'RN-10', 'RN-11');
 
-it('guarda los tres campos que todavia no tiene consumidor', function (): void {
-    // `max_weekly_hours`, `week_starts_on` y `holiday_calendar` los estrena la
-    // tarea 3.4. Que no los lea ninguna regla no los hace decorativos: el cliente
-    // tiene que poder dejar cargado su convenio y sus festivos hoy.
+it('guarda los tres campos que nacieron sin consumidor, y que hoy ya lo tienen', function (): void {
+    // `max_weekly_hours` y `week_starts_on` los estreno la tarea 3.4 con RN-17;
+    // `holiday_calendar`, la 3.10: el informe por periodo no cuenta un festivo
+    // como absentismo (RF-GP-04). Ya no queda ningun campo del perfil que se
+    // guarde sin que nadie lo lea —lo afirma `ComplianceProfileSnapshotTest`—, y
+    // lo que esta prueba sigue defendiendo es que los tres se guardan y se
+    // devuelven tal cual.
     $response = Api::as(profileAdminToken())
         ->patch('/api/v1/compliance-profile', [
             'max_weekly_hours' => 38,

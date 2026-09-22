@@ -198,8 +198,12 @@ test(
     // (no ha reintentado) ni mas de uno (bucle)-, que es la propiedad que
     // dice el titulo de la prueba. Reemplaza el `waitForTimeout(3_000)` real:
     // determinista, cubre el intervalo entero y no tarda esos 60 s de verdad.
+    // Y se ESPERA a que la peticion llegue: el `fetch` que arma el temporizador
+    // viaja de forma asincrona hasta la ruta interceptada, y leerlo en la misma
+    // vuelta del bucle es la carrera que fallaba de forma intermitente en el
+    // portal (misma prueba, mismo patron; corregido en la 3.10).
     await page.clock.runFor(RETRY_INTERVAL_MS)
-    expect(clientErrors.count()).toBe(firstCount + 1)
+    await expect.poll(() => clientErrors.count(), { timeout: 5_000 }).toBe(firstCount + 1)
   },
 )
 

@@ -80,6 +80,19 @@ final readonly class EloquentEmployeeImportDirectory implements EmployeeImportDi
         return \is_string($uuid) ? $uuid : null;
     }
 
+    public function uuidByEmployeeCode(string $employeeCode): ?string
+    {
+        // Sin bajar a minusculas ni recortar aqui: la columna es `citext` y la
+        // comparacion ya es insensible a mayusculas, y el recorte lo hace el
+        // planificador al normalizar la celda. Dos reglas para lo mismo acabarian
+        // separandose.
+        $uuid = $this->connection->table('employees')
+            ->where('employee_code', $employeeCode)
+            ->value('uuid');
+
+        return \is_string($uuid) ? $uuid : null;
+    }
+
     public function departmentsByNormalisedName(): array
     {
         $departments = [];

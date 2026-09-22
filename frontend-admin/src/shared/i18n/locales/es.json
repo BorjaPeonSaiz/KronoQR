@@ -7,6 +7,7 @@
     "nav": {
       "label": "Secciones del panel",
       "employees": "Plantilla",
+      "absences": "Ausencias",
       "credentials": "Credenciales",
       "legalExport": "Inspección",
       "live": "Presencia",
@@ -286,6 +287,141 @@
     "announce": {
       "reset": "PIN restablecido. Se muestra una sola vez.",
       "delivered": "Entrega del PIN registrada."
+    }
+  },
+  "absences": {
+    "title": "Ausencias",
+    "subtitle": "Vacaciones, baja médica y permiso. Se registran como un hecho: sin flujo de aprobación.",
+    "loading": "Cargando las ausencias…",
+    "actions": {
+      "register": "Registrar",
+      "import": "Importar",
+      "correct": "Corregir",
+      "void": "Anular",
+      "history": "Historial"
+    },
+    "filters": {
+      "legend": "Filtros de ausencias",
+      "from": "Desde",
+      "to": "Hasta",
+      "department": "Departamento",
+      "departmentAll": "Todos los departamentos",
+      "type": "Tipo",
+      "typeAll": "Todos los tipos",
+      "includeAllStatuses": "Incluir corregidas y anuladas"
+    },
+    "types": {
+      "vacation": "Vacaciones",
+      "sick_leave": "Baja médica",
+      "leave": "Permiso",
+      "other": "Otro"
+    },
+    "status": {
+      "active": "Vigente",
+      "superseded": "Corregida",
+      "voided": "Anulada"
+    },
+    "fields": {
+      "type": "Tipo",
+      "startsOn": "Desde",
+      "endsOn": "Hasta",
+      "note": "Nota",
+      "departmentNone": "Sin departamento"
+    },
+    "table": {
+      "caption": "Ausencias registradas, con su tipo, sus fechas y sus días.",
+      "person": "Persona",
+      "code": "Código",
+      "department": "Departamento",
+      "type": "Tipo",
+      "from": "Desde",
+      "to": "Hasta",
+      "days": "Días",
+      "note": "Nota",
+      "actions": "Acciones"
+    },
+    "pagination": {
+      "label": "Paginación de ausencias"
+    },
+    "empty": {
+      "title": "No hay ausencias que mostrar",
+      "description": "Todavía no hay ninguna ausencia registrada en el periodo elegido.",
+      "filtered": "Ninguna ausencia encaja con los filtros elegidos. Prueba a quitarlos."
+    },
+    "announce": {
+      "results": "Ausencias encontradas: {count}.",
+      "registered": "La ausencia se ha registrado.",
+      "corrected": "La corrección se ha guardado.",
+      "voided": "La ausencia se ha anulado."
+    },
+    "register": {
+      "heading": "Registrar una ausencia",
+      "personLabel": "Persona",
+      "personHint": "Busca por nombre o código de empleado. Solo personas de alta.",
+      "searching": "Buscando…",
+      "personSelected": "Persona seleccionada: {name}.",
+      "typePlaceholder": "Elige un tipo",
+      "endsOnHint": "Inclusive: el último día de la ausencia cuenta.",
+      "noteHint": "Opcional. Sin datos de salud ni diagnósticos: una baja médica no necesita explicarse aquí.",
+      "noteRequiredHint": "Obligatoria con «Otro»: es el permiso que no es ninguno de los demás, y sin nota no explica nada.",
+      "submit": "Registrar"
+    },
+    "correct": {
+      "heading": "Corregir una ausencia",
+      "previewCaption": "Lo que cambia en esta ausencia",
+      "noChange": "Cambia al menos un dato para poder guardar: una corrección que no cambia nada es una fila que miente.",
+      "reasonLabel": "Motivo de la corrección",
+      "reasonHint": "Entre 3 y 500 caracteres. Queda en el registro de auditoría.",
+      "conflict": "Esta ausencia ya no es la versión vigente, o la corrección solapa con otra activa. Cierra el diálogo y vuelve a intentarlo sobre los datos actuales.",
+      "submit": "Corregir"
+    },
+    "void": {
+      "heading": "Anular una ausencia",
+      "explanation": "Se anulará la ausencia de {name}: {type}, del {from} al {to}. La versión que tenía se conserva y sigue siendo consultable en el historial.",
+      "reasonLabel": "Motivo de la anulación",
+      "reasonHint": "Entre 3 y 500 caracteres. Queda en el registro de auditoría.",
+      "notice": "No se puede repetir ni deshacer. La ausencia deja de contar en los informes desde este momento.",
+      "action": "Anular"
+    },
+    "history": {
+      "dialogHeading": "Historial de la ausencia",
+      "loading": "Cargando el historial…",
+      "notice": "Nada se ha borrado: cada corrección conserva la versión anterior, con el motivo y el momento.",
+      "registered": "Ausencia registrada",
+      "correctedToVersion": "Corrección (versión {version})",
+      "at": "El {moment}",
+      "reason": "Motivo",
+      "caption": "Lo que cambió el {moment}",
+      "voided": "Ausencia anulada"
+    },
+    "dialog": {
+      "contextEmployee": "{name} ({code})."
+    },
+    "import": {
+      "heading": "Importar ausencias",
+      "intro": "Dos pasos: primero se valida el fichero sin escribir nada, y solo tras revisar el informe se aplica.",
+      "fileLabel": "Fichero (CSV o XLSX)",
+      "fileHint": "Columnas: código de empleado, tipo, desde, hasta, nota (opcional). Se admiten también los nombres en castellano.",
+      "validate": "Validar",
+      "validating": "Validando…",
+      "apply": "Aplicar",
+      "applying": "Aplicando…",
+      "truncated": "El fichero tiene más filas de las que se pueden mostrar aquí. Divídelo y vuelve a intentarlo.",
+      "fileWarnings": "Avisos del fichero completo",
+      "validatedSummary": "Simulación: {create} de alta, {unchanged} sin cambios, {reject} rechazadas.",
+      "appliedSummary": "Aplicado: {create} de alta, {unchanged} sin cambios, {reject} rechazadas.",
+      "tableCaption": "Resultado de la importación, fila a fila.",
+      "columns": {
+        "line": "Línea",
+        "label": "Código de empleado",
+        "outcome": "Resultado",
+        "messages": "Mensajes"
+      },
+      "outcomes": {
+        "create": "Alta",
+        "unchanged": "Sin cambios",
+        "reject": "Rechazada"
+      }
     }
   },
   "credentials": {
@@ -574,7 +710,13 @@
       "daysWithoutActivity": "Días sin actividad",
       "openShiftDays": "Días con turno abierto",
       "incidentDays": "Días con incidencia",
-      "withoutDepartment": "Sin departamento"
+      "withoutDepartment": "Sin departamento",
+      "absenceDays": "Días de ausencia",
+      "absenceDaysTitle": "Días-persona de alta cubiertos por una ausencia registrada (vacaciones, baja médica o permiso). No cuentan como absentismo no justificado.",
+      "holidayDays": "Festivos",
+      "holidayDaysTitle": "Días de alta que son festivo del calendario del perfil de cumplimiento y no están cubiertos por una ausencia. Tampoco cuentan como absentismo no justificado.",
+      "unjustifiedAbsenceDays": "Absentismo no justificado",
+      "unjustifiedAbsenceDaysTitle": "Días de alta sin actividad, sin ausencia registrada y sin ser festivo. El producto no conoce el cuadrante: contrasta esta cifra con el calendario de turnos."
     }
   },
   "workdays": {
@@ -863,7 +1005,7 @@
     "pendingDetectionWarning": "Vas a cambiar un umbral de detección de incidencias. A partir de la próxima revisión diaria se marcarán jornadas distintas de las que se marcan hoy.",
     "complianceViewEffect": "Esto mueve la vista de cumplimiento, no la bandeja de incidencias: el cómputo del art. 34.1 ET es anual y el aviso semanal es informativo.",
     "retentionWarning": "Vas a cambiar los años de conservación del registro. Bajarlo amplía lo que la purga considera vencido, sobre datos que hay obligación legal de conservar. Ninguna purga se ejecuta sola: la orden de retención propone primero en simulación y exige una confirmación explícita.",
-    "notAppliedYet": "El calendario de festivos se guarda y se audita, pero todavía no lo aplica ninguna regla: lo estrenará el registro de ausencias.",
+    "notAppliedYet": "El calendario de festivos lo aplica el informe de horas por periodo (RF-GP-04): los festivos no cuentan como absentismo no justificado. No afecta a ninguna incidencia.",
     "save": "Guardar el perfil",
     "saving": "Guardando…",
     "saved": "Perfil guardado. El cambio queda registrado en el trail de auditoría.",

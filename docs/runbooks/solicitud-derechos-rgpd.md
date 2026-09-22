@@ -37,9 +37,22 @@ Lo que sí procede siempre: **acceso**, **portabilidad**, **rectificación** y l
 | Auditoría (`audit_log`) | PostgreSQL, particionada por año | **4 años** | El mismo perfil de cumplimiento |
 | Ficha de la persona (`employees`), credenciales | PostgreSQL | Mientras haya relación laboral, y después lo que exija la normativa laboral y fiscal aplicable | Decisión del responsable del tratamiento |
 | Contratos (`employment_contracts`: horas pactadas, tipo de jornada, vigencia) | PostgreSQL | **Duración de la relación laboral + 4 años**, orientativo (art. 21 LISOS, a validar) | **Pendiente de la asesoría laboral (tarea 5.2).** Hoy **no hay purga automática**: se conserva |
+| Ausencias (`absences`: tipo, fechas, nota, versiones y anulaciones) | PostgreSQL | **Duración de la relación laboral + 4 años**, orientativo (art. 21 LISOS, a validar) | **Pendiente de la asesoría laboral (tarea 3.10).** Hoy **no hay purga automática**: se conserva. **Contiene dato de salud** |
 | Log técnico | `storage/logs` | **90 días** | `TECHNICAL_LOG_RETENTION_DAYS` |
 | Histórico de errores (`error_events`) | PostgreSQL | **90 días** | `ERROR_HISTORY_RETENTION_DAYS` |
 | Copias de seguridad | `BACKUP_PATH` | `BACKUP_RETENTION_DAYS` (30 de serie) | Configuración de la instalación |
+
+**Contratos y ausencias quedan fuera de la purga automática a propósito.** El
+ámbito de retención que ejecuta la purga es una **lista cerrada** —registro de
+jornada, auditoría, log técnico e histórico de errores— y ninguna de esas dos
+tablas entra en ella. No es un olvido: el plazo no está validado, y purgar con un
+plazo que luego resulte corto destruye datos que puede haber obligación de
+conservar. Hasta que la asesoría laboral del cliente lo fije, las dos se
+conservan y salen en cualquier respuesta a un derecho de acceso. En las
+ausencias, además, `note` puede contener **dato de salud** (art. 9 RGPD): se
+conserva y se entrega tal cual, y por eso la guía de RRHH pide que ahí no se
+escriba el diagnóstico ([`../cliente/guia-rrhh.md`](../cliente/guia-rrhh.md)
+§5 bis.5).
 
 **Ni el log técnico ni el histórico de errores llevan nombres** (regla dura 21):
 identifican con `employee_uuid`. No hace falta buscar ahí para atender un derecho
@@ -85,8 +98,31 @@ docker compose --env-file .env -f infra/compose.dev.yaml exec app \
   fechas de alta y baja—, se exportan desde el panel; no llevan más de lo que
   ella ya conoce.
 
+**Las ausencias no salen en esa exportación, y hay que añadirlas a mano.**
+`compliance:legal-export` produce el registro horario del art. 34.9 ET, que no
+incluye las ausencias; y el portal del empleado **tampoco las muestra**, así que
+el interesado no tiene forma de obtenerlas por su cuenta. Si la solicitud es de
+acceso completo —y el art. 15 lo es—, hay que sacarlas aparte:
+
+- Desde una cuenta con rol `rrhh` (o `admin`), pide
+  `GET /api/v1/absences?employee_uuid=<uuid>&status=all`. El `status=all` es
+  necesario: sin él no salen las versiones supersedidas ni las anuladas, y el
+  derecho de acceso alcanza a **todo** lo que se conserva sobre la persona,
+  también a lo que se corrigió y a lo que se anuló.
+- La lectura **queda auditada** (`personal_data.accessed`, conjunto
+  `absence_register`), igual que cualquier otro acceso a datos de un tercero
+  (RS-05). El asiento registra quién miró y con qué alcance, nunca el dato.
+- **La nota se entrega tal como esté escrita**, y puede contener dato de salud.
+  Revísala antes de enviar: no para censurarla —el interesado tiene derecho a
+  ver lo que hay escrito sobre él—, sino para saber qué estás entregando y por
+  qué canal.
+- **No uses una cuenta de `responsable_departamento` para esto.** A ese rol el
+  campo de la nota no le llega, y la respuesta saldría incompleta sin que nada
+  lo advierta.
+
 **Portabilidad**: el mismo CSV sirve. Es un formato estructurado, de uso común y
-lectura mecánica (art. 20.1 RGPD).
+lectura mecánica (art. 20.1 RGPD). Las ausencias se adjuntan en el mismo envío,
+en el formato en que las devuelva la consulta anterior.
 
 ---
 

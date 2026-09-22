@@ -160,6 +160,23 @@ export type EmploymentContractCollection = Schemas['EmploymentContractCollection
 export type CreateEmploymentContractRequest = Schemas['CreateEmploymentContractRequest']
 export type ScheduleType = Schemas['ScheduleType']
 
+// Ausencias (RF-GP-04, tarea 3.10): vacaciones, baja medica y permiso, sin
+// flujo de aprobacion (doc 05 §8). `AbsenceDetail` envuelve la vigente
+// (`absence`) y sus versiones anteriores (`history`, de la mas antigua a la
+// mas reciente, sin incluir la propia).
+export type AbsenceType = Schemas['AbsenceType']
+export type AbsenceStatus = Schemas['AbsenceStatus']
+export type Absence = Schemas['Absence']
+export type AbsenceDetail = Schemas['AbsenceDetail']
+export type AbsenceCollection = Schemas['AbsenceCollection']
+export type CreateAbsenceRequest = Schemas['CreateAbsenceRequest']
+export type CorrectAbsenceRequest = Schemas['CorrectAbsenceRequest']
+export type VoidAbsenceRequest = Schemas['VoidAbsenceRequest']
+export type AbsenceImportOutcome = Schemas['AbsenceImportOutcome']
+export type AbsenceImportMessage = Schemas['AbsenceImportMessage']
+export type AbsenceImportRow = Schemas['AbsenceImportRow']
+export type AbsenceImportReport = Schemas['AbsenceImportReport']
+
 // Emparejamiento de quiosco por codigo (RF-PD-06, tarea 5.6). El panel solo
 // confirma: `PairingRequested`/`PairingClaim*` son cosa de la tablet
 // (frontend-kiosk) y no se alias aqui.

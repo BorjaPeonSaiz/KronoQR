@@ -32,6 +32,24 @@ interface EmployeeImportDirectory
     public function uuidByEmail(string $email): ?string;
 
     /**
+     * UUID publico de quien tiene ese codigo de empleado, o `null`
+     * (tarea 3.10, RF-GP-04).
+     *
+     * **Lo usa la carga de ausencias y no la de plantilla**, y la asimetria es
+     * deliberada: el codigo lo genera el servidor y es opaco (doc 01 §5.5), asi
+     * que un fichero de altas **no puede** traerlo —{@see ImportColumnMap} lo
+     * dice: no hay alias para `employee_code`— pero un fichero de ausencias
+     * habla de gente que **ya existe**, y el codigo es lo unico estable y
+     * publico con lo que referirse a ella. El nombre se repite y el documento de
+     * identidad no se almacena (RL-08).
+     *
+     * La comparacion no baja a minusculas: la columna es `citext` y ya es
+     * insensible a mayusculas. Hacerlo aqui ademas seria una segunda regla que
+     * podria separarse de la del esquema.
+     */
+    public function uuidByEmployeeCode(string $employeeCode): ?string;
+
+    /**
      * Departamentos de la instalacion por su nombre normalizado, para resolver
      * la columna del fichero sin una consulta por linea.
      *

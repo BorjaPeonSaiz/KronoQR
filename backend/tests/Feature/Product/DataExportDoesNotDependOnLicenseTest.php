@@ -155,8 +155,8 @@ it('el comando genera la exportacion completa con la licencia caducada', functio
     /** @var array<string, int> $recuentos */
     $recuentos = json_decode((string) $fila?->row_counts, true, 512, JSON_THROW_ON_ERROR);
 
-    // Los diecinueve conjuntos del catalogo, no un subconjunto degradado.
-    expect($recuentos)->toHaveCount(19)
+    // Los veinte conjuntos del catalogo (`absences` desde la tarea 3.10), no un subconjunto degradado.
+    expect($recuentos)->toHaveCount(20)
         ->and($recuentos)->toHaveKey('employees')
         ->and($recuentos)->toHaveKey('audit_log')
         ->and($recuentos)->toHaveKey('shift_entries');

@@ -259,7 +259,7 @@ docker compose --env-file .env -f infra/compose.prod.yaml exec -T postgres \
    WHERE action = 'personal_data.accessed'
      AND payload->>'dataset' IN ('employee_directory','kiosk_roster','credential_status',
                                  'incident_board','period_report','live_presence',
-                                 'compliance_summary')
+                                 'compliance_summary','absence_register')
      AND occurred_at BETWEEN '<inicio de la ventana>' AND '<fin de la ventana>'
    ORDER BY occurred_at;"
 ```
@@ -285,7 +285,18 @@ centro: si el padrón se descargó, esa persona estaba dentro.
 | `period_report` | Informe de periodo, en pantalla o descargado | No (recuento, `format`, alcance) |
 | `live_presence` | Presencia en vivo del panel | No. **Agrupado por ventana de 15 min** |
 | `compliance_summary` | Vista de cumplimiento: quién incumplió y en qué | No (recuento, rango, filtros y alcance) |
+| `absence_register` | Listado de ausencias: quién falta y **por qué categoría** | Solo si se filtró por una persona: `employee_uuid` |
 | `incident` | Una incidencia concreta al resolverla | Según el asiento |
+
+**Sobre `absence_register`, que puede llevar dato de salud.** Lo que se divulga
+es una lista de personas con una categoría de ausencia al lado, y una de esas
+categorías es `sick_leave`: eso es **dato relativo a la salud** del art. 9 del
+RGPD y pesa distinto en la valoración del riesgo del art. 33. El payload lleva el
+rango (`from`, `to`), el departamento si se filtró, el tipo si se acotó, el
+estado y el alcance; y lleva el `employee_uuid` **solo cuando la consulta se
+acotó a una persona**, porque ahí sí describe de quién se fueron los datos. La
+**nota** de la ausencia no se divulga nunca por esta vía: no viaja al
+`responsable_departamento` y no entra en ningún asiento (regla dura 21).
 
 **Sobre `compliance_summary`, que es el más sensible de los que no nombran a
 nadie.** Lo que se divulga no es una lista de personas: es una lista de personas

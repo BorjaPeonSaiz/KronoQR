@@ -7,6 +7,8 @@ namespace App\Modules\Reporting;
 use App\Modules\Attendance\Domain\Event\EmployeeClockedIn;
 use App\Modules\Attendance\Domain\Event\EmployeeClockedOut;
 use App\Modules\Attendance\Domain\Event\ShiftCorrected;
+use App\Modules\Reporting\Application\Port\AbsenceCensusReader;
+use App\Modules\Reporting\Application\Port\AbsenceMetrics;
 use App\Modules\Reporting\Application\Port\AdoptionMetrics;
 use App\Modules\Reporting\Application\Port\ComplianceFactsReader;
 use App\Modules\Reporting\Application\Port\ComplianceIncidentLinks;
@@ -34,15 +36,18 @@ use App\Modules\Reporting\Http\Policy\WorkDayJournalPolicy;
 use App\Modules\Reporting\Infrastructure\Adapter\BrowsershotReportRenderer;
 use App\Modules\Reporting\Infrastructure\Adapter\ReverbConnectionCounter;
 use App\Modules\Reporting\Infrastructure\Broadcasting\BroadcastPresenceChange;
+use App\Modules\Reporting\Infrastructure\Console\AbsenceMetricsCommand;
 use App\Modules\Reporting\Infrastructure\Console\AdoptionMetricsCommand;
 use App\Modules\Reporting\Infrastructure\Console\ComplianceMetricsCommand;
 use App\Modules\Reporting\Infrastructure\Console\PresenceMetricsCommand;
 use App\Modules\Reporting\Infrastructure\Listener\RecordWorkedMinutes;
 use App\Modules\Reporting\Infrastructure\Metrics\RedisReportExportMetrics;
 use App\Modules\Reporting\Infrastructure\Metrics\RedisWorkedTimeMetrics;
+use App\Modules\Reporting\Infrastructure\Metrics\TextfileAbsenceMetrics;
 use App\Modules\Reporting\Infrastructure\Metrics\TextfileAdoptionMetrics;
 use App\Modules\Reporting\Infrastructure\Metrics\TextfileComplianceMetrics;
 use App\Modules\Reporting\Infrastructure\Metrics\TextfilePresenceMetrics;
+use App\Modules\Reporting\Infrastructure\Persistence\DatabaseAbsenceCensusReader;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseComplianceFactsReader;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseComplianceIncidentLinks;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseComplianceProfileReference;
@@ -115,6 +120,18 @@ final class ReportingServiceProvider extends ServiceProvider
         // vivas se le preguntan por su API HTTP compatible con Pusher.
         $this->app->bind(RealtimeConnectionCounter::class, ReverbConnectionCounter::class);
 
+        /*
+         * `absences_current{type}` (doc 02 §8.2, RF-GP-04, tarea 3.10).
+         *
+         * Fichero para el colector *textfile*, con el mismo patron que las de
+         * cumplimiento y adopcion: es un gauge que un comando programado
+         * recalcula entero cada noche (regla dura 7 aplicada a la
+         * instrumentacion). El lector es SQL plano sobre la conexion —una
+         * consulta agregada, sin Eloquent y sin `N+1`—.
+         */
+        $this->app->bind(AbsenceCensusReader::class, DatabaseAbsenceCensusReader::class);
+        $this->app->bind(AbsenceMetrics::class, TextfileAbsenceMetrics::class);
+
         $this->registerPeriodReport();
         $this->registerComplianceSummary();
     }
@@ -154,6 +171,7 @@ final class ReportingServiceProvider extends ServiceProvider
 
         if ($this->app->runningInConsole()) {
             $this->commands([
+                AbsenceMetricsCommand::class,
                 AdoptionMetricsCommand::class,
                 ComplianceMetricsCommand::class,
                 PresenceMetricsCommand::class,

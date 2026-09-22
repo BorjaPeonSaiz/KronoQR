@@ -35,6 +35,7 @@ function assertPainted(box: BoundingBox | null, label: string): asserts box is B
 
 const SECTIONS = [
   'Plantilla',
+  'Ausencias',
   'Presencia',
   'Incidencias',
   'Cumplimiento',
@@ -77,7 +78,7 @@ test('la seccion activa lleva aria-current, tambien desde la ficha de un emplead
   await expect(employees).not.toHaveAttribute('aria-current')
 })
 
-test('por debajo de md el menu se apila y las catorce secciones siguen visibles', async ({
+test('por debajo de md el menu se apila y las quince secciones siguen visibles', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 700, height: 900 })

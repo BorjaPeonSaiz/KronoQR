@@ -38,6 +38,47 @@ que U3 toma la rama «+1 asiento» de H-14.** Después, `d5c07bc` (`docs(handoff
 porque la copia local ya estaba ahí; el usuario lo dio por bueno. `make up` hecho sobre `main`: pila sana, Prometheus rendido desde la
 plantilla con las tres alertas nuevas y el job TLS verificado omitido a propósito (`TLS_ALLOW_SELF_SIGNED=true` en dev).
 
+**Rama `feat/tarea-3.10-ausencias` (desde `main` `6f5e363`, PR #75 de los restos de la 3.8 integrada). Tarea 3.10 «Registro de
+ausencias» (RF-GP-04) IMPLEMENTADA, REVISADA (dos vueltas: `revisor-codigo` y `seguridad-cumplimiento`) y PROBADA el 22-09-2026;
+ver «Siguiente acción».** Doce decisiones en la ficha (plan 06 → «Tarea 3.10» → «Decisiones tomadas»). Lo que importa: **se registran
+hechos, no solicitudes** (sin aprobación, que es Fase 4; días completos; hacia atrás y hacia delante); módulo `Workforce` con `Absence`
+(`uuid` v7, tipos cerrados `vacation|sick_leave|leave|other`, `other` exige nota), tabla `absences` con versión sin sobrescribir
+(`PATCH` crea `version + 1` con `uuid` nuevo y deja la anterior `superseded`; `POST …/void` anula sin versión; nunca `DELETE`),
+exclusión `absences_no_overlap` **`DEFERRABLE INITIALLY IMMEDIATE`** (corregir inserta y cierra en la misma transacción; decisión 3
+ampliada) y lectura con `lockForUpdate()` dentro de la transacción tras el bloqueante de la revisión (dos correcciones simultáneas
+daban dos versiones activas; `AbsenceConcurrencyTest`). Contrato `/absences` de primer nivel: lista con alcance en el `WHERE`, alta,
+detalle con historial, corrección, anulación e importación en dos fases calcada de `/employees/import` (`note_too_long` en la fase de
+comprobación tras el segundo bloqueante: la nota larga chocaba con el `CHECK` y la `QueryException` volcaba nota y tipo al log
+técnico; `translate()` ya no deja salir ninguna `QueryException` con su mensaje). **La nota no viaja al `responsable_departamento`**
+(clave omitida, decidida por `AbsencePolicy::viewNote()`), no entra en `audit_log` (`absence.registered|corrected|voided` con
+`has_note`), ni en logs, ni en `error_events` (`AbsencePrivacyTest` vigila `Workforce`, `Reporting` y el listener). **Informe por
+periodo**: `PeriodReportRow` gana `absence_days`, `holiday_days` y `unjustified_absence_days` con la definición en
+`Reporting\Domain\Policy\AbsenteeismRule` (pura; la integración la compara con el SQL), tres líneas nuevas en `meta.criteria`
+—incluida la del límite: el producto no conoce el cuadrante—, columnas en CSV/XLSX/PDF, huella `kronoqr-period-report/2`;
+**`holiday_calendar` estrena consumidor** (`hasNoConsumerYet()` ya no es cierto para nadie; textos de panel, `configuracion.md` y
+doc 05 §9 cambiados). Serie `absences_current{type}` por textfile (`reporting:absence-metrics`, diario 04:55) y panel «Personas
+ausentes hoy, por tipo» en «Negocio». Panel: `features/absences/` (lista, alta con buscador, corrección **antes → después**, anulación,
+historial, carga por fichero), «Ausencias» en el menú, tres columnas en el informe, aviso del calendario reescrito. Docs: guía de RRHH
+«5 bis. Ausencias» en ES/EN, doc 01 §5.5 (diecisiete columnas) y §8.1 (fila 13, Divulgación, `T1213`), doc 07 §6 **A-17** (retención
+de `absences` pendiente de la asesoría, vía (b) como `employment_contracts`), runbook de derechos RGPD §1/§3 (art. 15), doc 02 §8.2,
+`DataExportCatalog` con `absences` y `notInstalled()` vacío. Cifras (22-09-2026, esta máquina): `make quality` en verde; Unit 2072,
+Integration 684, Contract 60, Architecture 610 (+ `SourceDiscoveryTest` conocido), Feature 1894; mutación acotada a `Absence`,
+`AbsenceType` y `AbsenteeismRule`: **MSI 83,46 %** (127 mutantes, 21 sin cubrir); `qa:traceability --check`, `docs:consistency`,
+`ClientDocumentationTest` (75) y `observability-check` en verde; matriz **3663 (Pest 3407, Playwright 250, k6 6)**; panel: lint, `vue-tsc`, 556 unitarias, 138 E2E
+(6 nuevas `@RF-GP-04`); quiosco y portal: tipos regenerados, `vue-tsc` y lint en verde. El diff de `openapi.yaml` parece una
+reordenación (+2492/−1277) y no lo es: con `git diff --patience` es +1222/−7. **La CI manual 35757184533 salió roja solo en
+⑦ E2E del portal** por `client-errors.spec.ts` («no reintenta en bucle»: esperaba 2 y recibía 1), una intermitencia previa —la misma
+prueba falló en `main` en el run 35731421172, antes de esta rama—: tras `runFor` el `fetch` del temporizador viaja de forma asíncrona
+hasta la ruta interceptada y la prueba leía el contador en la misma vuelta; corregido con `expect.poll` en el portal y en el panel
+(misma prueba, mismo patrón), 20/20 y 30/30 en local con `--repeat-each`, en un segundo commit `fix(pruebas): …`.
+
+**Siguiente acción:** el usuario integra la PR #76 de la 3.10 (commit `a336e59` + `23000ff` con el `fix(pruebas)` de la E2E del
+portal; **CI manual 35776674369 en verde en todos los jobs**) con *merge commit* y borra la rama. **Con migración** (`2026_09_22_100000_absences.php`): tras integrar, `git pull`
+y `make up`, y comprobar `php artisan migrate:status` y el fichero `kronoqr_absences.prom` tras la primera ejecución de
+`reporting:absence-metrics`. Después,
+la **3.9** «Informes asíncronos con enlace de descarga caducable y exportación configurable para nómina» (`backend-laravel` +
+`/informe-nuevo`, RF-IN-06/07) o la **3.11** «Patrones anómalos de uso de credencial» (RN-16).
+
 **Rama `chore/restos-3.8` (desde `main` `d5c07bc`). Los tres restos de la 3.8 HECHOS el 22-09-2026 en un commit único
 `chore(restos-3.8): …`, CI manual tras el push y PR contra `main` (*merge commit*). Sin migración: basta `git pull` y `make up`, que
 reconstruye la imagen `kronoqr/node:dev`.** (1) **Contenedores `node-*` de dev arreglados** (`devops-observabilidad`): montan la raíz
@@ -742,7 +783,8 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   visible, (c) restablecimiento masivo — y documentarla en `configuracion.md` §3 ter.
 - Hardware: tarjeta impresa y plastificada escaneada en quiosco real; resistencia 12 h en tablet;
   recalibración de estimación R16.
-- Plazo de purga de `employment_contracts` con la asesoría laboral (hasta entonces se conservan).
+- Plazo de purga de `employment_contracts` **y de `absences`** con la asesoría laboral (hasta entonces se conservan; `absences`
+  contiene dato de salud y `RetentionScope` es lista cerrada: doc 07 §6 **A-17**, runbook de derechos §1, `obligaciones-legales.md` §4).
 - Techo del formato PDF (`docs/verificacion-manual.md`).
 - **Engram (09-09-2026):** en funcionamiento (binario 1.20.0 en `~/.local/bin`, plugin `engram@engram` y MCP `engram` en ámbito
   usuario, protocolo `slim`, proyecto detectado `kronoqr`, nueve memorias sembradas: trampas del entorno, 5.12 y receta de
@@ -751,6 +793,17 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 
 ### Por tarea
 
+- **3.10 (restos, 22-09-2026):** **serie hermana de frescura** `absences_metrics_day_seconds` (equivalente de
+  `compliance_metrics_week_start_seconds`): sin ella, unas cifras congeladas por un planificador parado se leen igual que un mes sin
+  ausencias (fila en doc 02 §8.2 + publicación en `TextfileAbsenceMetrics`); **la carrera se prueba por el candado y no con dos
+  `PATCH` a la vez** (`AbsenceConcurrencyTest` usa `FOR UPDATE NOWAIT` desde una segunda conexión; el escenario HTTP real iría con
+  `ParallelRequests`); `translate()` distingue `absences_chk_superseded_consistency` por el nombre de la restricción en el mensaje del
+  driver; `PeriodReportVolumeTest` no siembra `absences` (comprobar con ~500 empleados que el `LEFT JOIN` usa el índice parcial);
+  los 21 mutantes sin cubrir de `Absence`/`AbsenceType`/`AbsenteeismRule`; el respaldo inalcanzable de `ApplyAbsenceImport` salta la
+  fila sin dejar rastro (coherente con los otros dos); sin captura nueva en la guía (se regenera con las demás, resto de 5.11);
+  ausencias en el portal del empleado, aviso al responsable al registrar una de su gente y ausencias por horas: fuera de alcance
+  (decisión 12); el derecho de acceso (art. 15) se atiende con `GET /absences?employee_uuid=…&status=all` desde `rrhh` (runbook §3),
+  no hay exportación por interesado.
 - **3.8 (restos, 22-09-2026):** **RS-11 sigue pendiente del tercero**: el informe interno, el paquete del revisor y la evidencia están,
   la revisión externa no; **⑧b de esta rama es la primera que toma la rama «+1 asiento» de U3** (H-14): mirarla en la CI manual antes
   de integrar; **deuda hermana de H-14**: `update.sh:1874`, `install.sh:1294` y `doctor.sh:266` siguen con `2>/dev/null || true` (sin
@@ -861,7 +914,8 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   (`AlertmanagerConfigTest` valida con el parser de Symfony, más laxo); `render-config.sh` sin prueba de sus `die` de plantilla
   ausente; las variables de plantilla de Grafana (`label_values`) y los `legendFormat` no se contrastan con el §8.2 ni con la regla
   dura 21; «incidencias por antigüedad» del cuadro de integridad es una aproximación (`incidents_open` en el tiempo: no hay serie por
-  edad); «Negocio» no muestra horas contratadas, absentismo ni impuntualidad (sin serie: 3.10/3.13); `kiosk_last_seen_seconds` vive
+  edad); «Negocio» no muestra horas contratadas ni impuntualidad (sin serie: 3.13; el absentismo ya tiene `absences_current` desde la
+  3.10); `kiosk_last_seen_seconds` vive
   en Redis y un quiosco callado ANTES de un `FLUSHALL` desaparece de la serie (segunda red: `kiosk:health`); `QuioscoSinLatido`
   lleva 600 s literal atados por prueba al valor por defecto de `KIOSK_HEALTH_SILENT_AFTER_SECONDS`, pero cambiar la variable en una
   instalación no mueve la regla; las alertas de TLS no ven validez ni cadena ni CN (`insecure_skip_verify`; doc 07 A-8, candidata a
@@ -934,8 +988,8 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   cabecera de `instalacion.md` §1.2 y §1.3 quedó sin el bloque duplicado de `--check-only`.
 - **5.11b (restos):** los cuatro recorridos por una persona ajena siguiendo solo las guías (decisión 11); **deuda de producto que
   la guía destapó** (decisión 13): no hay pantalla de contratos en el panel (endpoints sí), `reissue` en un acto es solo de API (el
-  panel emite siempre con `reissue: false`), tres tipos de incidencia del filtro sin productor hasta la Fase 3; al cerrar la 3.10,
-  apartado de ausencias en `guia-rrhh.md` y `en/hr-guide.md`; **catorce rutas de gestión siguen sin zona de límite de
+  panel emite siempre con `reissue: false`), tres tipos de incidencia del filtro sin productor hasta la Fase 3 (el apartado de
+  ausencias de `guia-rrhh.md` y `en/hr-guide.md` ya está: 3.10); **catorce rutas de gestión siguen sin zona de límite de
   aplicación** (`POST/PATCH /employees`, `/contracts`, `/offboard`, `/pin/deliver`, `/pin/reset`, `/departments`, `/site`,
   `GET /reports/legal-export`, `/auth/logout`, `/auth/me`): solo las frena Nginx por IP; una prueba que exija zona por ruta hoy
   fallaría en ellas; autorización negativa del `429` de credenciales con token de quiosco/portal; prueba de «una cara» con nombre de marca de 60 caracteres y
@@ -948,12 +1002,13 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   unificar el valor; `ErrorLevel` critical de servidor no distingue un `5xx` puntual de una tormenta (la alerta cuenta grupos
   nuevos y basta por ahora); el saneado convierte los identificadores SQL entrecomillados en `'…'` (decisión: seguridad sobre
   detalle); dos comprobaciones de `doctor` más de las que citan las guías si enumeran su número.
-- **Fase 3:** `holidayCalendar` de `CompliancePolicy` sigue sin consumidor (3.10); RN-12 ya deriva del ajuste
+- **Fase 3:** `holidayCalendar` ya lo consume el informe por periodo (3.10; ninguna regla de incumplimiento lo lee); RN-12 ya deriva del ajuste
   `ATTENDANCE_BREAK_CLOCKING` (3.5) y el descanso intra-día de RN-10 queda fuera por decisión (3.5, decisión 9); RNF-D-03 fallback de colas Redis→BD; pasada k6 en Linux para el p95
   (RNF-P-02/06); la puerta de cobertura (`make coverage`) no corre en CI.
 - **Decisiones de producto abiertas:** **cuentas de gestión: DECIDIDO el 22-09-2026, habrá pantalla** (ver «3.8 (restos)»; por consola ya existen
   `identity:deactivate-user` e `identity:reset-password`); si el portal muestra incidencias (hoy `incidents: []` siempre; si
-  se activa, solo resueltas); si el `responsable_departamento` ve credenciales de su gente; códigos de
+  se activa, solo resueltas) **y si muestra ausencias** (3.10: no, decisión 1; si se activa, sin la nota); si el
+  `responsable_departamento` ve credenciales de su gente; códigos de
   recuperación de 2FA (hoy solo `identity:2fa-reset` por consola); si la baja revoca la credencial
   automáticamente; `POST /me/logout` (hoy el token del portal vive hasta caducar, máx. 2 h); la mitad de
   aplicación de RF-ID-08 (requisitos extra de contraseña al exponer el portal a internet).
@@ -985,6 +1040,14 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 
 ## Trampas del entorno — leer antes de operar
 
+- **Hay una sola base de datos de pruebas en el contenedor `app`, y las suites con `RefreshDatabase` se pisan entre procesos**: una
+  pasada `--testsuite=Integration|Feature` lanzada mientras un agente (o un revisor) ejecuta pruebas filtradas da decenas de fallos
+  falsos (retención, licencia, informe de volumen). La pasada completa se ejecuta en solitario; la mutación (`--testsuite=Unit`,
+  sin BD) sí puede ir en paralelo, y `make mutate MUTATE_PATHS="a.php,b.php"` la acota a ficheros concretos (3.10).
+- **`perl -0pi` con `open "<:encoding(UTF-8)"` sobre un fichero leído en bytes duplica la codificación del fichero entero**
+  (803 líneas cambiadas en el plan): el inserto se lee con `<:raw` y el patrón se escribe con escapes `\xc3\xb3`. Y un *heredoc*
+  entrecomillado con comillas simples dentro no pasa por la herramienta Bash de esta sesión: para textos largos, el fichero se
+  escribe con `Write` y se empalma con perl (3.10).
 - **Una tubería `cmd | grep -q` bajo `pipefail` responde NO cuando la respuesta es SÍ**: `grep -q` cierra la entrada al primer acierto, el
   productor (el cliente de Docker volcando `artisan list --raw`) muere de EPIPE y sale 1; medido 5/40 en local. La pregunta «¿existe
   este comando?» se hace con `kq_app_knows_command` (`infra/scripts/lib/app-commands.sh`), nunca con una tubería y nunca con

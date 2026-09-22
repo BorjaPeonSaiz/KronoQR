@@ -34,6 +34,20 @@ return [
         'open_shifts_included' => 'Days with a shift still open contribute the minutes already closed; the shift in progress adds nothing until it is closed.',
 
         'iso_week' => 'Weeks start on Monday (ISO 8601) and are clipped to the requested range.',
+
+        /*
+         * The three of RF-GP-04 (task 3.10, decision 7). THEY READ AS A SINGLE
+         * PARAGRAPH, which is why they sit together: the first two say what has
+         * been discounted from absenteeism and the third says what could not be.
+         * Moving the third one elsewhere would leave "unexplained absence"
+         * looking like a count of missed shifts, which it is not.
+         */
+
+        'absences' => 'Recorded absences (holiday, sick leave, leave of absence) count as justified days and not as absenteeism: they have their own column. When an absence falls on a public holiday, the day counts as an absence and is not counted twice.',
+
+        'holidays' => 'There are :count public holiday(s) from the ":profile" compliance profile within the period. They do not count as absenteeism and have their own column.',
+
+        'no_roster' => 'The product does not know the shift roster: it cannot tell which days each person was due to work. Weekly rest days therefore count as unexplained absence. Check that column against the shift schedule before using it.',
     ],
 
     /*
@@ -137,5 +151,13 @@ return [
         'incident_days' => 'Days with an incident',
 
         'days_without_contract' => 'Days without contract',
+
+        /* RF-GP-04. See the `criteria` block above for the reasoning behind each. */
+
+        'absence_days' => 'Absence days',
+
+        'holiday_days' => 'Public holidays',
+
+        'unjustified_absence_days' => 'Unexplained absence',
     ],
 ];

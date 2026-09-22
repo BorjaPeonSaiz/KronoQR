@@ -101,6 +101,12 @@ function textfileSeries(): array
         'compliance_findings_last_week',
         'compliance_employees_affected_last_week',
         'compliance_metrics_week_start_seconds',
+        // Reporting\Infrastructure\Metrics\TextfileAbsenceMetrics (tarea 3.10, decision 8)
+        //
+        // Mismo patron y misma cadencia que las tres de arriba, y el §8.2 lo dice
+        // por escrito para esta serie: la publica un comando programado que corre
+        // y termina, y sale por el colector *textfile*, no por `/metrics`.
+        'absences_current',
     ];
 }
 

@@ -779,6 +779,7 @@ incidents_open{type,severity}                            gauge
 incidents_metrics_timestamp_seconds                      gauge
 manual_corrections_total{reason_code}                    counter
 anomalous_patterns_detected_total{pattern}               counter
+absences_current{type}                                   gauge
 
 # Impacto y adopción — alimentan RF-IN-08
 scans_by_origin_total{origin}                            counter
@@ -862,6 +863,8 @@ de respaldo servida por el proceso que hay que restaurar no vale nada.
 `employees_without_delivered_credential` es la métrica operativa de la entrega: cuenta a quienes están de alta pero **todavía no pueden fichar**. Debe llegar a cero antes del primer día de cada incorporación.
 
 Una subida de `pin_fallback_scans_total` indica un problema con la emisión, el estado de las tarjetas o la disciplina de la plantilla. Es un termómetro barato.
+
+**`absences_current{type}` cuenta, para la fecha civil de hoy en la zona del centro, a las personas de alta con una ausencia activa que la cubre, por tipo** (`vacation`, `sick_leave`, `leave`, `other`; las cuatro etiquetas salen siempre presentes, aunque valgan cero — sin ellas una ausencia por baja médica que nunca aparece se confunde con «no hay datos»). La publica `Reporting` (`PublishAbsenceMetrics`, tarea 3.10, RF-GP-04) con el mismo patrón y la misma cadencia programada que `PublishComplianceMetrics`: *gauge* de fichero `.prom`, servido por el colector *textfile* de `node-exporter`, no por `/metrics`. La serie no lleva ninguna etiqueta que identifique a una persona (regla dura 21). Es un indicador de RRHH, no un fallo de operación: **no lleva alerta de Prometheus**, porque no hay runbook que sostenga avisar a nadie a las 06:30 de que alguien está de vacaciones (§8.4, «una alerta sin runbook es ruido»).
 
 `kronoqr_auth_attempts_total{channel,outcome}` es la única señal barata que distingue «hoy la gente se equivoca más» de «alguien está probando credenciales». `channel` es `management`, `portal` o `kiosk_pin`; `outcome` es `success`, `failure` o `lockout`. Los tres canales la alimentan y **ninguna etiqueta identifica a nadie** (regla dura 21): una serie por persona sería un registro paralelo de quién se equivoca al entrar. `outcome="lockout"` cuenta los intentos que **ABREN** un bloqueo —uno por bloqueo abierto, no uno por intento rechazado— y deja además su asiento `auth.lockout_started` en `audit_log`; **todo lo demás que no acaba en sesión cuenta como `failure`**, incluido el intento que llega con un bloqueo ya activo (`App\Modules\Shared\Domain\ValueObject\AuthOutcome`). Contado así, `lockout` casa uno a uno con `auth.lockout_started`, y `KronoqrAuthLockouts` (`infra/observability/prometheus/rules/auth.yml`) puede leer «tres o más en quince minutos» como tres cuentas distintas alcanzando su límite, no como una sola persona insistiendo contra la suya.
 

@@ -7,6 +7,7 @@
     "nav": {
       "label": "Console sections",
       "employees": "Workforce",
+      "absences": "Absences",
       "credentials": "Credentials",
       "legalExport": "Inspectorate",
       "live": "Presence",
@@ -286,6 +287,141 @@
     "announce": {
       "reset": "PIN reset. It is shown once only.",
       "delivered": "PIN handover recorded."
+    }
+  },
+  "absences": {
+    "title": "Absences",
+    "subtitle": "Holiday, sick leave and time off. Recorded as a fact: no approval workflow.",
+    "loading": "Loading absences…",
+    "actions": {
+      "register": "Register",
+      "import": "Import",
+      "correct": "Correct",
+      "void": "Void",
+      "history": "History"
+    },
+    "filters": {
+      "legend": "Absence filters",
+      "from": "From",
+      "to": "To",
+      "department": "Department",
+      "departmentAll": "All departments",
+      "type": "Type",
+      "typeAll": "All types",
+      "includeAllStatuses": "Include corrected and voided"
+    },
+    "types": {
+      "vacation": "Holiday",
+      "sick_leave": "Sick leave",
+      "leave": "Time off",
+      "other": "Other"
+    },
+    "status": {
+      "active": "Current",
+      "superseded": "Corrected",
+      "voided": "Voided"
+    },
+    "fields": {
+      "type": "Type",
+      "startsOn": "From",
+      "endsOn": "To",
+      "note": "Note",
+      "departmentNone": "No department"
+    },
+    "table": {
+      "caption": "Recorded absences, with their type, dates and days.",
+      "person": "Person",
+      "code": "Code",
+      "department": "Department",
+      "type": "Type",
+      "from": "From",
+      "to": "To",
+      "days": "Days",
+      "note": "Note",
+      "actions": "Actions"
+    },
+    "pagination": {
+      "label": "Absence pagination"
+    },
+    "empty": {
+      "title": "No absences to show",
+      "description": "No absence has been recorded yet for the chosen period.",
+      "filtered": "No absence matches the chosen filters. Try clearing them."
+    },
+    "announce": {
+      "results": "Absences found: {count}.",
+      "registered": "The absence has been registered.",
+      "corrected": "The correction has been saved.",
+      "voided": "The absence has been voided."
+    },
+    "register": {
+      "heading": "Register an absence",
+      "personLabel": "Person",
+      "personHint": "Search by name or employee code. Only people currently employed.",
+      "searching": "Searching…",
+      "personSelected": "Selected person: {name}.",
+      "typePlaceholder": "Choose a type",
+      "endsOnHint": "Inclusive: the last day of the absence counts.",
+      "noteHint": "Optional. No health data or diagnoses: a sick leave does not need to be explained here.",
+      "noteRequiredHint": "Required with \"Other\": it is the time off that is none of the rest, and without a note it explains nothing.",
+      "submit": "Register"
+    },
+    "correct": {
+      "heading": "Correct an absence",
+      "previewCaption": "What changes in this absence",
+      "noChange": "Change at least one field to save: a correction that changes nothing is a row that lies.",
+      "reasonLabel": "Reason for the correction",
+      "reasonHint": "Between 3 and 500 characters. Kept in the audit log.",
+      "conflict": "This absence is no longer the current version, or the correction overlaps with another active one. Close the dialog and try again against the current data.",
+      "submit": "Correct"
+    },
+    "void": {
+      "heading": "Void an absence",
+      "explanation": "This will void {name}'s absence: {type}, from {from} to {to}. The version it had is kept and can still be consulted in the history.",
+      "reasonLabel": "Reason for the void",
+      "reasonHint": "Between 3 and 500 characters. Kept in the audit log.",
+      "notice": "It cannot be repeated or undone. The absence stops counting in reports from this moment on.",
+      "action": "Void"
+    },
+    "history": {
+      "dialogHeading": "Absence history",
+      "loading": "Loading the history…",
+      "notice": "Nothing has been deleted: every correction keeps the previous version, with its reason and moment.",
+      "registered": "Absence registered",
+      "correctedToVersion": "Correction (version {version})",
+      "at": "On {moment}",
+      "reason": "Reason",
+      "caption": "What changed on {moment}",
+      "voided": "Absence voided"
+    },
+    "dialog": {
+      "contextEmployee": "{name} ({code})."
+    },
+    "import": {
+      "heading": "Import absences",
+      "intro": "Two steps: the file is validated first without writing anything, and only after reviewing the report is it applied.",
+      "fileLabel": "File (CSV or XLSX)",
+      "fileHint": "Columns: employee code, type, start date, end date, note (optional). Spanish column names are also accepted.",
+      "validate": "Validate",
+      "validating": "Validating…",
+      "apply": "Apply",
+      "applying": "Applying…",
+      "truncated": "The file has more rows than can be shown here. Split it and try again.",
+      "fileWarnings": "Whole-file warnings",
+      "validatedSummary": "Simulation: {create} to create, {unchanged} unchanged, {reject} rejected.",
+      "appliedSummary": "Applied: {create} created, {unchanged} unchanged, {reject} rejected.",
+      "tableCaption": "Import result, row by row.",
+      "columns": {
+        "line": "Line",
+        "label": "Employee code",
+        "outcome": "Outcome",
+        "messages": "Messages"
+      },
+      "outcomes": {
+        "create": "Create",
+        "unchanged": "Unchanged",
+        "reject": "Rejected"
+      }
     }
   },
   "credentials": {
@@ -574,7 +710,13 @@
       "daysWithoutActivity": "Days without activity",
       "openShiftDays": "Days with an open shift",
       "incidentDays": "Days with an incident",
-      "withoutDepartment": "No department"
+      "withoutDepartment": "No department",
+      "absenceDays": "Absence days",
+      "absenceDaysTitle": "Employed person-days covered by a recorded absence (holiday, sick leave or time off). They do not count as unexplained absence.",
+      "holidayDays": "Public holidays",
+      "holidayDaysTitle": "Employed days that are a public holiday in the compliance profile's calendar and are not covered by an absence. They do not count as unexplained absence either.",
+      "unjustifiedAbsenceDays": "Unexplained absence",
+      "unjustifiedAbsenceDaysTitle": "Employed days with no activity, no recorded absence and no public holiday. The product does not know the shift roster: cross-check this figure against the shift calendar."
     }
   },
   "workdays": {
@@ -863,7 +1005,7 @@
     "pendingDetectionWarning": "You are about to change an incident detection threshold. From the next daily review, different working days will be flagged than are flagged today.",
     "complianceViewEffect": "This affects the compliance view, not the incident inbox: the reckoning under art. 34.1 ET is annual, so the weekly alert is informative.",
     "retentionWarning": "You are about to change how many years records are kept. Lowering it widens what the purge treats as expired, over data you are legally required to keep. No purge runs on its own: the retention command proposes in simulation first and requires an explicit confirmation.",
-    "notAppliedYet": "The holiday calendar is stored and audited, but no rule applies it yet: the absence log will be the first to use it.",
+    "notAppliedYet": "The holiday calendar is applied by the period hours report (RF-GP-04): public holidays do not count as unexplained absence. It does not affect any incident.",
     "save": "Save profile",
     "saving": "Saving…",
     "saved": "Profile saved. The change is recorded in the audit trail.",

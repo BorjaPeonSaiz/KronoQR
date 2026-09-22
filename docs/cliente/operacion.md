@@ -867,8 +867,9 @@ administra el servidor.
 
 Un único fichero ZIP, `kronoqr-export-<versión>-<fecha UTC>.zip`, con **todo**
 lo que hay en tu instalación en formatos abiertos: un CSV por tabla (plantilla,
-contratos, tarjetas, quioscos, tramos con todas sus versiones, correcciones con
-autor y motivo, totales, incidencias, escaneos, auditoría completa con su
+contratos, ausencias con todas sus versiones, tarjetas, quioscos, tramos con
+todas sus versiones, correcciones con autor y motivo, totales, incidencias,
+escaneos, auditoría completa con su
 cadena de hash, cuentas de gestión, accesos de soporte), JSON para la
 configuración, el perfil de cumplimiento y la licencia, un `manifest.json` con
 el número de filas y la huella `sha256` de cada fichero, y un `README.md` que

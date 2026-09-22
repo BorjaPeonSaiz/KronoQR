@@ -10,6 +10,7 @@
 import AxeBuilder from '@axe-core/playwright'
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
+import type { Absence } from '@/shared/api/types'
 import {
   DATA_EXPORT_RUNNING,
   DATA_EXPORT_UUID,
@@ -22,6 +23,29 @@ import {
   USER,
   WORKDAYS_WITH_BREAK,
 } from './support/admin'
+
+/** Una ausencia de ejemplo, para que la pantalla de listado no salga vacía (RF-GP-04, tarea 3.10). */
+const ABSENCE_EXAMPLE: Absence = {
+  uuid: '0199f8d2-0009-7a10-9c60-6d7e8f9a0b12',
+  employee_uuid: EMPLOYEE_UUID,
+  employee_code: 'E7QK2MXPR',
+  employee_name: 'Youssef Amrani',
+  department_id: 3,
+  department_name: 'Recepción',
+  type: 'vacation',
+  starts_on: '2026-03-02',
+  ends_on: '2026-03-06',
+  days: 5,
+  note: null,
+  status: 'active',
+  version: 1,
+  supersedes_uuid: null,
+  superseded_by_uuid: null,
+  change_reason: null,
+  voided_at: null,
+  void_reason: null,
+  created_at: '2026-02-20T09:14:02.118000Z',
+}
 import { stubErrorEventsApi } from './support/errors'
 import { stubOnboardingApi } from './support/setupWizard'
 
@@ -68,6 +92,28 @@ test('la plantilla tampoco', { tag: ['@RF-GP-01'] }, async ({ page }) => {
 
   await expectNoBlockingViolations(page)
 })
+
+test('las ausencias tampoco', { tag: ['@RF-GP-04'] }, async ({ page }) => {
+  await stubManagementApi(page, { absences: [ABSENCE_EXAMPLE] })
+  await logIn(page)
+  await page.goto('/absences')
+  await expect(page.getByRole('table')).toBeVisible()
+
+  await expectNoBlockingViolations(page)
+})
+
+test(
+  'el dialogo de registrar una ausencia tampoco, con el foco dentro',
+  { tag: ['@RF-GP-04'] },
+  async ({ page }) => {
+    await logIn(page)
+    await page.goto('/absences')
+    await page.getByTestId('absences-register').click()
+    await expect(page.getByRole('dialog')).toBeVisible()
+
+    await expectNoBlockingViolations(page)
+  },
+)
 
 test('la ficha de una persona tampoco', { tag: ['@RF-GP-01'] }, async ({ page }) => {
   await logIn(page)

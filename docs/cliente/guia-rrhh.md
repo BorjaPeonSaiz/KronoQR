@@ -12,7 +12,7 @@ falta saber nada de sistemas.**
 > [`obligaciones-legales.md`](obligaciones-legales.md). Cada cosa se explica en
 > un solo sitio; aquí se enlaza.
 
-Los nueve apartados de esta guía, por si buscas uno concreto:
+Los diez apartados de esta guía, por si buscas uno concreto:
 
 1. [El vocabulario, primero](#1-el-vocabulario-primero)
 2. [Alta de una persona, de principio a fin](#2-alta-de-una-persona-de-principio-a-fin)
@@ -20,6 +20,7 @@ Los nueve apartados de esta guía, por si buscas uno concreto:
 4. [La bandeja de incidencias](#4-la-bandeja-de-incidencias)
     - [4 bis. La vista de cumplimiento](#4-bis-la-vista-de-cumplimiento)
 5. [Correcciones: cambiar una hora sin romper el registro](#5-correcciones-cambiar-una-hora-sin-romper-el-registro)
+    - [5 bis. Ausencias: vacaciones, bajas y permisos](#5-bis-ausencias-vacaciones-bajas-y-permisos)
 6. [Informes, exportaciones y la entrega a la Inspección](#6-informes-exportaciones-y-la-entrega-a-la-inspección)
 7. [El perfil de cumplimiento](#7-el-perfil-de-cumplimiento)
 8. [Qué hacer si…](#8-qué-hacer-si)
@@ -725,6 +726,226 @@ que sí puede hacer es avisar, y RRHH corrige con su firma.
 
 ---
 
+## 5 bis. Ausencias: vacaciones, bajas y permisos
+
+**Ausencias** es la pantalla donde queda anotado que una persona no estuvo y por
+qué. Está en el menú justo detrás de «Empleados», porque una ausencia es de la
+plantilla y no de un día suelto del registro.
+
+Sirve para una cosa, y conviene decirla antes que ninguna otra: **que los
+informes no cuenten como falta injustificada un día en el que la persona no
+tenía que estar**. Sin ausencias registradas, el informe de horas por periodo
+solo sabe que ese día no hubo ningún fichaje, y no puede distinguir unas
+vacaciones de una falta.
+
+### 5 bis.1 Qué es una ausencia y qué no
+
+Una ausencia es **un hecho que se anota**, no una solicitud que se tramita.
+
+**No hay flujo de aprobación.** No existe «pendiente de aprobar», ni «aprobada»,
+ni un botón de aprobar, y no es un descuido: la decisión se toma fuera del
+sistema —al cerrar el cuadrante, hablando con la persona, con el parte médico
+delante— y aquí solo queda escrita. Quien registra una ausencia está diciendo
+«esto ya está decidido», no «esto está pedido».
+
+Hay cuatro tipos, y no se pueden añadir más:
+
+| Tipo | Cuándo se usa |
+| --- | --- |
+| **Vacaciones** | Vacaciones ya concedidas, del periodo que sea |
+| **Baja médica** | Incapacidad temporal, accidente, cualquier baja con parte |
+| **Permiso** | Permisos retribuidos y no retribuidos: mudanza, examen, asuntos propios, cuidado de un familiar |
+| **Otro** | Ninguno de los anteriores. **Obliga a escribir una nota** que diga de qué se trata |
+
+El resto de lo que hay que saber cabe en una lista:
+
+- **Solo días completos.** Se indica el primer día y el último, y **los dos
+  cuentan**: una ausencia del 3 al 5 son tres días. No hay medias jornadas ni
+  ausencias por horas. Si alguien falta media tarde, eso no es una ausencia: es
+  una jornada más corta, y se ve en su registro.
+- **Se registra hacia atrás y hacia delante.** Una baja médica casi siempre se
+  conoce después de haber empezado, y unas vacaciones se anotan meses antes. Las
+  dos cosas valen, y ninguna espera a que llegue el día.
+- **Registrar una ausencia no impide fichar.** Si esa persona aparece y pasa la
+  tarjeta, el fichaje se registra con normalidad: la ausencia no lo bloquea ni
+  abre por sí sola ninguna incidencia. Lo que hay que aclarar entonces es el
+  hecho, no el sistema — y si la ausencia estaba mal anotada, se corrige
+  (§5 bis.2).
+- **No lleva el saldo de vacaciones ni avisa a nadie.** El producto no calcula
+  cuántos días le quedan a cada persona ni manda ningún aviso al responsable
+  cuando se registra una ausencia de su gente.
+- **El empleado no las ve en su portal.** El portal es su registro horario y
+  nada más ([`guia-portal-empleado.md`](guia-portal-empleado.md)). Las
+  ausencias las consultan RRHH y su responsable.
+
+### 5 bis.2 Registrar, corregir y anular
+
+Tres acciones, y ninguna de ellas borra nada:
+
+| Acción | Cuándo |
+| --- | --- |
+| **«Registrar»** | Anotar una ausencia nueva: persona, tipo, primer día, último día y, si hace falta, una nota |
+| **«Corregir»** | Las fechas o el tipo no son los que fueron: la baja duró dos días más, o se anotó como permiso lo que eran vacaciones |
+| **«Anular»** | La ausencia no debería existir: la persona sí trabajó esos días, o se registró sobre la persona equivocada |
+
+**Al registrar**, se busca a la persona por su nombre o por su código y se
+indican los días. Si esas fechas se pisan con otra ausencia ya vigente de la
+misma persona, **no se guarda y la pantalla lo dice**: dos ausencias solapadas
+harían que un mismo día contara dos veces en el informe.
+
+**Al corregir**, la pantalla enseña **de qué valor a cuál** antes de que
+confirmes —el tipo de antes y el de ahora, las fechas de antes y las de ahora— y
+**pide un motivo**. Eso no es burocracia: es lo que se lee seis meses después
+para entender por qué el informe de marzo dice hoy algo distinto de lo que decía
+en marzo.
+
+**Nada se borra.** Corregir no reescribe la ausencia: crea una versión nueva y
+conserva la anterior, con quién la hizo, cuándo y por qué. Al abrir una ausencia
+se ve su historial completo, de la primera versión a la vigente, igual que el
+historial de correcciones de una jornada (§5.3).
+
+**Anular también pide motivo, y tampoco borra.** La ausencia se queda donde
+estaba, marcada como anulada, con quién la anuló, cuándo y por qué. Deja de
+contar en los informes desde ese momento, pero sigue consultable — que es
+justamente lo que permite explicar por qué un informe de la semana pasada traía
+un día de ausencia que el de hoy ya no trae.
+
+> **Anular no es lo mismo que corregir.** Si lo que quieres es cambiar unas
+> fechas o el tipo, **corrige**: la ausencia existió y sigue existiendo, solo
+> que dice otra cosa. **Anula** solo lo que no debería haberse registrado nunca.
+
+### 5 bis.3 Carga por fichero
+
+Para una tanda grande —las vacaciones de todo el verano, el histórico del año
+que llevabais en una hoja de cálculo— hay carga desde un fichero CSV o Excel,
+con **los mismos dos pasos que la carga de plantilla**: primero se comprueba,
+después se aplica.
+
+1. **Comprobar.** Subes el fichero y el sistema lo lee entero **sin guardar
+   nada**: te devuelve, línea a línea, cuáles entrarían y cuáles no y por qué.
+2. **Aplicar.** Solo si lo confirmas. Se registran las líneas válidas y se
+   rechazan las demás, con el mismo detalle.
+
+La primera fila son los **nombres de las columnas**. El orden da igual y sobrar
+columnas no molesta:
+
+| Campo | Obligatorio | Nombres que se reconocen |
+| --- | --- | --- |
+| Código de empleado | **Sí** | `employee_code`, `codigo` |
+| Tipo de ausencia | **Sí** | `type`, `tipo` |
+| Primer día | **Sí** | `starts_on`, `desde` |
+| Último día | **Sí** | `ends_on`, `hasta` |
+| Nota | No, salvo en «Otro» | `note`, `nota` |
+
+- **El código de empleado** es el que el sistema generó al dar de alta a la
+  persona y que va impreso en su tarjeta. Lo tienes en la lista de empleados.
+- **El tipo se escribe por su nombre**: `vacaciones`, `baja`, `permiso` u
+  `otro`, o sus equivalentes en inglés `vacation`, `sick_leave`, `leave` y
+  `other`.
+- **Las fechas** se aceptan como `2026-07-01` o como `01/07/2026`. Nunca
+  mes/día/año, por lo mismo que en la carga de plantilla.
+- **El separador y la codificación se detectan solos**, igual que allí: lo
+  explica [`configuracion.md`](configuracion.md) §3 ter.3.
+
+**Volver a subir el mismo fichero es seguro.** Una línea idéntica a una ausencia
+ya registrada —misma persona, mismo tipo, mismas fechas— **no da error y no la
+duplica**: sale marcada como «sin cambios» y se pasa a la siguiente. Es lo que
+permite arreglar tres líneas de un fichero de doscientas y volver a subirlo
+entero sin pensárselo.
+
+Una línea se rechaza cuando el código de empleado no existe, cuando las fechas
+están al revés o no se entienden, cuando el tipo no es uno de los cuatro, cuando
+la ausencia se pisa con otra ya registrada de esa persona **o con otra línea del
+mismo fichero**, o cuando el tipo es «Otro» y no trae nota.
+
+> **El fichero no se guarda en el servidor.** Se lee, se aplica y se descarta.
+> Lo que queda es cada ausencia registrada, con su anotación (§5 bis.6).
+
+### 5 bis.4 Qué cambia en el informe de horas por periodo
+
+El informe de horas por periodo (§6.1) trae **tres columnas** que dependen de lo
+que se haya registrado aquí:
+
+| Columna | Qué cuenta |
+| --- | --- |
+| **Días de ausencia** | Días en que la persona estaba de alta y había una ausencia registrada, hubiera fichajes o no |
+| **Festivos** | Días de alta que figuran en el calendario de festivos del perfil de cumplimiento (§7) y **no** están ya cubiertos por una ausencia |
+| **Absentismo no justificado** | Días de alta **sin ningún fichaje, sin ausencia y sin festivo** |
+
+Cada día se cuenta **en una sola columna**: si un festivo cae dentro de unas
+vacaciones, ese día es día de ausencia y no festivo. Y solo cuentan los días en
+que la persona estaba de alta, igual que en el resto del informe: lo anterior a
+su fecha de alta o posterior a su baja no aparece en ninguna de las tres.
+
+> **⚠️ El límite que hay que conocer antes de enseñarle este informe a nadie.**
+> **El producto no conoce vuestro cuadrante.** Sabe cuándo se ha fichado, no qué
+> días libra cada persona. Así que **los días de descanso semanal salen contados
+> como absentismo no justificado**, exactamente igual que una falta: nadie fichó
+> y no hay ausencia ni festivo que lo explique. No es un fallo: es lo único que
+> el sistema puede saber con lo que tiene. Esa columna es **un punto de
+> partida** —los días que nadie ha explicado—, y hay que contrastarla con el
+> calendario de turnos antes de sacar ninguna conclusión sobre una persona. Si
+> alguien la lee como «días de falta», el número estará mal siempre.
+
+Dos cosas más:
+
+- **El informe no desglosa por tipo, y es a propósito.** No hay columna de «días
+  de baja médica» por departamento: sería un dato de salud agregado que nadie ha
+  pedido y que acabaría en una hoja de cálculo compartida. El detalle por tipo
+  se ve en la pantalla de **Ausencias**, con el alcance de cada quien
+  (§5 bis.5).
+- **Las tres columnas salen también en CSV, en Excel y en PDF**, y los criterios
+  que el informe declara debajo de la tabla dicen cuántos festivos del perfil
+  han caído en el periodo y repiten el aviso del cuadrante.
+
+### 5 bis.5 Quién ve qué
+
+| Quién | Qué puede hacer |
+| --- | --- |
+| **RRHH** y **administrador** | Ven todas las ausencias, con su nota. Registran, corrigen y anulan |
+| **Responsable de departamento** | Ve las de su gente, con su tipo y sus fechas. **No ve la nota**, y no puede registrar, corregir ni anular |
+| **Auditor** y **empleado** | No entran en esta pantalla |
+
+El responsable **sí** ve el tipo, y es deliberado: quien organiza un turno tiene
+que saber quién falta y por qué categoría, o no puede cubrirlo. La **nota** no
+le llega —ni vacía ni tachada: el campo no existe para él, para que nadie
+confunda «no me la enseñan» con «no hay nota».
+
+> **La baja médica es un dato de salud. Escribe lo justo.**
+> **No pongas el diagnóstico ni el motivo médico en la nota.** Con el tipo
+> **Baja médica** basta: es lo que el informe necesita y lo único que hace falta
+> para cubrir el turno. Lo mismo vale para el motivo de una corrección o de una
+> anulación, que además **queda en el registro legal y puede leerlo una
+> inspección**, igual que los motivos de corrección del §5.2: sin datos de salud
+> y sin juicios de valor sobre la persona.
+>
+> El parte médico, el justificante y todo lo que os obligue a conservar la
+> normativa se guardan donde guardéis el expediente de la persona, no aquí. Qué
+> podéis guardar y durante cuánto lo explica
+> [`obligaciones-legales.md`](obligaciones-legales.md).
+
+### 5 bis.6 Qué queda anotado
+
+**Cada alta, cada corrección y cada anulación deja asiento en el registro de
+auditoría**, con quién lo hizo, cuándo, qué cambió y por qué. En una corrección
+el asiento lleva **los valores de antes y los de después**, de modo que la
+historia completa de una ausencia se puede reconstruir sin abrir la pantalla.
+
+Una carga por fichero deja **un asiento por cada ausencia registrada**, no uno
+de resumen: cien ausencias importadas son cien anotaciones.
+
+**La nota nunca entra en el asiento.** Puede llevar información sobre la salud
+de una persona, y la anotación no la necesita para explicar qué pasó: le basta
+el tipo, las fechas, quién y cuándo. Por el mismo motivo, ni el tipo ni la nota
+aparecen en los registros técnicos del sistema ni en el paquete de diagnóstico
+que se le manda al fabricante.
+
+Y lo de siempre: **nada se borra**. Una ausencia corregida conserva todas sus
+versiones, y una ausencia anulada sigue estando, marcada como tal. Es la misma
+regla que hace que el registro horario valga ante una inspección (§1).
+
+---
+
 ## 6. Informes, exportaciones y la entrega a la Inspección
 
 Son dos cosas distintas y se confunden con facilidad:
@@ -751,6 +972,11 @@ Dos avisos que conviene leer:
   todavía va a cambiar. Para una nómina, ciérralos antes.
 - **«Días-persona sin contrato registrado»**: esas filas tienen las horas
   trabajadas bien y la desviación incompleta (§2.3).
+
+El informe trae además **tres columnas que salen de las ausencias**: días de
+ausencia, festivos y absentismo no justificado. Qué cuenta exactamente cada una
+—y, sobre todo, **lo que el producto no puede saber** de los días de descanso—
+está en el §5 bis.4. Léelo antes de enseñarle esa última columna a nadie.
 
 ### 6.2 La exportación para la Inspección
 
@@ -806,9 +1032,11 @@ jornadas se marcan para revisión**. Es un cambio con efecto legal, y por eso:
 diaria máxima mueven las dos cosas: la bandeja de incidencias (§4) y la vista de
 cumplimiento (§4 bis). La **jornada semanal ordinaria** y el **día de inicio de
 semana** los aplica solo la vista de cumplimiento, que avisa pero no abre
-incidencia. El **calendario de festivos** se guarda y se audita desde hoy, pero
-**todavía no lo aplica ninguna regla**: lo estrenará la gestión de ausencias de
-una versión posterior, y la pantalla lo indica al lado del campo.
+incidencia. El **calendario de festivos** lo aplica el **informe de horas por
+periodo**: los días que figuren en él no se cuentan como absentismo no
+justificado (§5 bis.4). **No abre ni cierra ninguna incidencia** y no cambia ni
+una hora del registro; si lo dejas vacío, el informe sencillamente no descuenta
+ningún festivo.
 
 **`break_required_after_hours` —el tramo máximo sin pausa— depende además de un
 ajuste que no está en esta pantalla.** Solo se aplica si el hotel tiene activado
