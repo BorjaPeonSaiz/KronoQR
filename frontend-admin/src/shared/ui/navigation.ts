@@ -20,6 +20,7 @@ import {
   CREDENTIALS_MANAGE,
   DIAGNOSTICS_MANAGE,
   EMPLOYEES_MANAGE,
+  EMPLOYEES_READ,
   INCIDENTS_MANAGE,
   LICENSE_MANAGE,
   REPORTS_LEGAL,
@@ -39,6 +40,17 @@ export interface NavigationSection {
 /** El menu completo, en el orden en que se ofrece (`AppShellView.vue`). */
 export const NAVIGATION_SECTIONS: readonly NavigationSection[] = [
   { name: 'employees', labelKey: 'app.nav.employees', abilities: [EMPLOYEES_MANAGE] },
+  {
+    // Ausencias (RF-GP-04, tarea 3.10): vacaciones, baja medica y permiso,
+    // sin flujo de aprobacion (doc 05 §8, Fase 4). Ambito de LECTURA de
+    // plantilla y no `EMPLOYEES_MANAGE`: es lo que le abre la pantalla a un
+    // `responsable_departamento`, que no lleva la familia completa. Las
+    // acciones de escritura del listado se ocultan aparte, con
+    // `EMPLOYEES_MANAGE` (`AbsenceListView.vue`).
+    name: 'absences',
+    labelKey: 'app.nav.absences',
+    abilities: [EMPLOYEES_READ],
+  },
   { name: 'live', labelKey: 'app.nav.live', abilities: [ATTENDANCE_READ] },
   { name: 'incidents', labelKey: 'app.nav.incidents', abilities: [INCIDENTS_MANAGE] },
   {

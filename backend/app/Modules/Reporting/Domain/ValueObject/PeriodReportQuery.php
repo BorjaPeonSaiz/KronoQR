@@ -63,5 +63,67 @@ final readonly class PeriodReportQuery
          * cuenta igualmente como dia con actividad y sale en `open_shift_days`.
          */
         public bool $includeOpenShifts = false,
+        /**
+         * Los festivos del perfil de cumplimiento, **ya resueltos**, como fechas
+         * ISO `AAAA-MM-DD` (RF-GP-04, RF-PD-07).
+         *
+         * **Quien pide el informe no los elige**, igual que no elige su alcance:
+         * los pone el servidor. Llegan aqui porque el informe los necesita para
+         * no contar un festivo como absentismo, y llegan **resueltos** porque el
+         * dominio no consulta configuracion (regla dura 14): los busca
+         * `GeneratePeriodReport` por el puerto `CompliancePolicyProvider` y los
+         * mete con {@see self::withHolidays()}.
+         *
+         * Vacio por omision y no nulo: un centro sin festivos cargados y un
+         * informe al que nadie se los paso tienen que contar lo mismo, y un nulo
+         * obligaria a cada consumidor a decidir cual de los dos era.
+         *
+         * @var list<string>
+         */
+        public array $holidays = [],
     ) {}
+
+    /**
+     * La misma consulta con el calendario de festivos ya resuelto.
+     *
+     * Existe para que el caso de uso pueda resolverlo **despues** de que la capa
+     * HTTP construya la consulta: el centro —y por tanto el perfil— lo decide el
+     * servidor, no la peticion. Devuelve otra instancia porque esto es un objeto
+     * de valor.
+     *
+     * @param  list<string>  $holidays  fechas ISO `AAAA-MM-DD`
+     */
+    public function withHolidays(array $holidays): self
+    {
+        return new self(
+            scope: $this->scope,
+            range: $this->range,
+            granularity: $this->granularity,
+            grouping: $this->grouping,
+            departmentId: $this->departmentId,
+            employeeUuid: $this->employeeUuid,
+            includeOpenShifts: $this->includeOpenShifts,
+            holidays: $holidays,
+        );
+    }
+
+    /**
+     * Los festivos que caen **dentro** del rango pedido.
+     *
+     * El calendario del perfil cubre años enteros; lo que el informe cuenta —y
+     * lo que dice `meta.criteria`— son solo los del periodo. Comparacion de
+     * cadenas ISO, que en ese formato ordena igual que el calendario.
+     *
+     * @return list<string>
+     */
+    public function holidaysInRange(): array
+    {
+        $from = $this->range->isoFrom();
+        $to = $this->range->isoTo();
+
+        return array_values(array_filter(
+            $this->holidays,
+            static fn (string $day): bool => $day >= $from && $day <= $to,
+        ));
+    }
 }

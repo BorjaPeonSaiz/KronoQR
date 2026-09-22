@@ -61,6 +61,34 @@ use Throwable;
  * `60.0` y no `60`: en PostgreSQL, `60 / 7` entre enteros es `8`, y el informe
  * saldria con un 6 % de menos sin que nada fallara.
  *
+ * ## Ausencias y festivos, en el mismo `SELECT` (RF-GP-04)
+ *
+ * Los tres contadores de absentismo salen de la **misma** pasada, con `FILTER`,
+ * y no de una segunda consulta que despues hubiera que casar por sujeto y por
+ * cubo. El enunciado de los tres no esta aqui: esta en
+ * `Reporting\Domain\Policy\AbsenteeismRule` —nombrado en prosa porque un `use`
+ * de una clase que solo aparece en un comentario lo borra Pint—, y este SQL es su
+ * traduccion. Una prueba de integracion compara las dos sobre el mismo caso,
+ * igual que con el prorrateo de contratos.
+ *
+ * Las ausencias entran por `LEFT JOIN` y no por un `EXISTS` correlacionado:
+ * sobre una fila por dia y persona, el subconsulta se evaluaria una vez por dia
+ * -persona. Que el `LEFT JOIN` no pueda multiplicar filas **lo garantiza el
+ * esquema**, no este fichero: `absences_no_overlap` es una restriccion de
+ * exclusion que impide dos ausencias activas solapadas de la misma persona, asi
+ * que cada dia-persona encuentra como mucho una. Es la misma apuesta que con
+ * `employment_contracts_no_overlap`.
+ *
+ * Los festivos llegan como **parametro**, nunca de la base: los resuelve el caso
+ * de uso por `CompliancePolicyProvider` (regla dura 14). Viajan como literal de
+ * `date[]` porque un `IN (?, ?, ?)` obligaria a componer el texto de la consulta
+ * segun cuantos festivos tenga el perfil, y un plan distinto por cada longitud
+ * de calendario es un plan que no se puede cachear. `= ANY('{}'::date[])` es
+ * falso para todo, que es exactamente lo que un centro sin festivos necesita.
+ *
+ * **Y aqui tampoco hay ningun `AT TIME ZONE`**: `starts_on`, `ends_on` y los
+ * festivos son fechas civiles, igual que `work_date`.
+ *
  * ## El alcance entra en el `WHERE`
  *
  * RF-ID-03. Nunca se filtra un agregado ya calculado: el total por centro de
@@ -239,7 +267,14 @@ final readonly class DatabasePeriodReportReader implements PeriodReportReader
                        COALESCE(dt.has_incident, FALSE)   AS has_incident,
                        ec.weekly_hours,
                        (g.work_date >= g.hired_on
-                        AND (g.terminated_on IS NULL OR g.work_date <= g.terminated_on)) AS employed
+                        AND (g.terminated_on IS NULL OR g.work_date <= g.terminated_on)) AS employed,
+                       -- RF-GP-04. El calendario del perfil viaja como literal de
+                       -- `date[]` y no como una lista de `?`: asi el texto de la
+                       -- consulta no depende de cuantos festivos tenga cargados
+                       -- el cliente. Con el calendario vacio esto es falso para
+                       -- todos los dias, que es lo correcto.
+                       (g.work_date = ANY(?::date[])) AS holiday,
+                       (ab.id IS NOT NULL)            AS on_absence
                   FROM grid g
                   LEFT JOIN daily_totals dt
                          ON dt.employee_id = g.employee_id
@@ -262,6 +297,23 @@ final readonly class DatabasePeriodReportReader implements PeriodReportReader
                         -- vida laboral aporta uno o dos a cualquier informe.
                         AND ec.valid_from <= ?::date
                         AND (ec.valid_to IS NULL OR ec.valid_to >= ?::date)
+                  LEFT JOIN absences ab
+                         ON ab.employee_id = g.employee_id
+                        -- Solo las VIGENTES: una ausencia corregida deja la
+                        -- version anterior en `superseded` y una anulada en
+                        -- `voided`, y ninguna de las dos justifica ya nada
+                        -- (regla dura 5: nada se borra, pero solo cuenta la
+                        -- version vigente).
+                        AND ab.status = 'active'
+                        -- Inclusiva en los dos extremos, como `AbsenteeismRule::covers()`.
+                        AND g.work_date BETWEEN ab.starts_on AND ab.ends_on
+                        -- Lo mismo que arriba: redundante para el resultado y
+                        -- decisivo para el plan. Sin estas dos lineas, el indice
+                        -- parcial `(starts_on, ends_on) WHERE status = 'active'`
+                        -- no se puede usar, porque `g.work_date` sale de
+                        -- `generate_series` y de ahi no se deduce ningun rango.
+                        AND ab.starts_on <= ?::date
+                        AND ab.ends_on >= ?::date
             )
             SELECT {$select}
                    d.period_start,
@@ -273,7 +325,18 @@ final readonly class DatabasePeriodReportReader implements PeriodReportReader
                    COALESCE(sum(d.total_minutes) FILTER (WHERE {$counted}), 0) AS worked_minutes,
                    COALESCE(sum(d.shift_count) FILTER (WHERE {$counted}), 0)   AS total_shifts,
                    ROUND(COALESCE(sum(d.weekly_hours), 0) * 60.0 / 7)    AS contracted_minutes,
-                   count(*) FILTER (WHERE d.weekly_hours IS NULL AND d.employed) AS days_without_contract
+                   count(*) FILTER (WHERE d.weekly_hours IS NULL AND d.employed) AS days_without_contract,
+                   -- Los tres de RF-GP-04, traduccion literal de
+                   -- `AbsenteeismRule`. «De alta» es condicion previa de los
+                   -- tres, igual que en `days_without_contract`.
+                   count(*) FILTER (WHERE d.employed AND d.on_absence) AS absence_days,
+                   -- Cuando un festivo cae dentro de una ausencia gana la
+                   -- ausencia: los dos contadores de dias justificados son
+                   -- disjuntos, o sumarlos contaria el dia dos veces.
+                   count(*) FILTER (WHERE d.employed AND d.holiday AND NOT d.on_absence) AS holiday_days,
+                   count(*) FILTER (
+                       WHERE d.employed AND d.shift_count = 0 AND NOT d.on_absence AND NOT d.holiday
+                   ) AS unjustified_absence_days
               FROM d
              GROUP BY {$groupBy} d.period_start, d.period_end
              ORDER BY {$this->orderBy($query->grouping)}
@@ -302,6 +365,9 @@ final readonly class DatabasePeriodReportReader implements PeriodReportReader
             // El recorte del cubo, que las cuatro granularidades usan salvo la
             // diaria: ahi el cubo es el propio dia y ya cae dentro del rango.
             ...($query->granularity === ReportGranularity::Day ? [] : $range),
+            // El calendario de festivos, que aparece en la lista de columnas de
+            // `d` y por tanto ANTES que sus `LEFT JOIN` (RF-GP-04).
+            $this->asDateArrayLiteral($query->holidays),
             // Los dos acotes redundantes del `LEFT JOIN` con `daily_totals`.
             ...$range,
             // Y los del contrato, **en el orden invertido**: `valid_from <= to`
@@ -309,7 +375,31 @@ final readonly class DatabasePeriodReportReader implements PeriodReportReader
             // texto.
             $query->range->isoTo(),
             $query->range->isoFrom(),
+            // Los de la ausencia, con el mismo orden invertido y por lo mismo.
+            $query->range->isoTo(),
+            $query->range->isoFrom(),
         ];
+    }
+
+    /**
+     * El calendario de festivos como literal de `date[]` de PostgreSQL.
+     *
+     * Se compone a mano y no con `IN (?, ?, …)` para que el texto de la consulta
+     * no dependa de cuantos festivos tenga cargados el cliente: un plan distinto
+     * por cada longitud de calendario no lo cachea nadie.
+     *
+     * **No es concatenacion de entrada del cliente.** El calendario lo resuelve
+     * el servidor por `CompliancePolicyProvider` y `HolidayCalendar` ya ha
+     * descartado todo lo que no tenga forma de fecha ISO —expresion regular mas
+     * `checkdate()`—, asi que aqui no puede llegar nada que no sean diez
+     * caracteres de `AAAA-MM-DD`. Aun asi el literal viaja **enlazado** como un
+     * parametro mas, no pegado al texto de la consulta.
+     *
+     * @param  list<string>  $holidays
+     */
+    private function asDateArrayLiteral(array $holidays): string
+    {
+        return '{'.implode(',', $holidays).'}';
     }
 
     /**
@@ -467,6 +557,9 @@ final readonly class DatabasePeriodReportReader implements PeriodReportReader
             incidentDays: $reader->int('incident_days'),
             contractedMinutes: $reader->int('contracted_minutes'),
             daysWithoutContract: $reader->int('days_without_contract'),
+            absenceDays: $reader->int('absence_days'),
+            holidayDays: $reader->int('holiday_days'),
+            unjustifiedAbsenceDays: $reader->int('unjustified_absence_days'),
         );
     }
 

@@ -22,6 +22,11 @@ use DateTimeImmutable;
  * traduccion es de la capa de presentacion, que es la que sabe en que idioma
  * esta hablando. El dominio no tiene idioma.
  *
+ * Desde RF-GP-04 la clave puede llevar ademas sus sustituciones —«N festivos del
+ * perfil X en el periodo»—, y por eso cada criterio es un
+ * {@see ReportCriterion} y no una cadena. Lo que no cambia es que aqui no hay
+ * ni una frase traducida.
+ *
  * ## Es el mismo objeto que consumira la exportacion de la tarea 2.9
  *
  * CSV, XLSX y PDF (RF-IN-04) se generan **desde aqui**, no desde otra consulta.
@@ -34,8 +39,9 @@ final readonly class PeriodReport
 {
     /**
      * @param  list<PeriodReportRow>  $rows
-     * @param  list<string>  $criteria  Claves de `lang/*\/reports.php`, en el orden en el que se
-     *                                  leen. Nunca texto ya traducido.
+     * @param  list<ReportCriterion>  $criteria  Claves de `lang/*\/reports.php` con sus
+     *                                           sustituciones, en el orden en el que se leen.
+     *                                           Nunca texto ya traducido.
      */
     public function __construct(
         public array $rows,

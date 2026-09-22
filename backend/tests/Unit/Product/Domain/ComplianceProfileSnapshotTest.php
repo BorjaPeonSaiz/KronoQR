@@ -299,21 +299,48 @@ it('deriva la suspension de un unico sitio, para que el ajuste la reactive sin t
     'con fichaje de pausa' => [true],
 ])->group('RF-PD-07', 'RN-12', 'RN-17', 'RF-AT-12');
 
-it('declara cuales de sus campos todavia no aplica ninguna regla', function (): void {
+it('ya no tiene ningun campo que no aplique nadie', function (): void {
     // Prometer un efecto que hoy no existe es peor que no ofrecer el campo: el
     // panel lo dice a partir de aqui, no de una lista propia.
     //
-    // **Queda uno.** La tarea 3.4 estreno `max_weekly_hours` y `week_starts_on`
-    // con RN-17; `holiday_calendar` sigue sin consumidor a proposito, porque
-    // ninguna de las cuatro reglas lee festivos —la semanal mide la semana
-    // trabajada, no los dias laborables— y lo estrena la 3.10 (ausencias).
+    // **Ya no queda ninguno.** La tarea 3.4 estreno `max_weekly_hours` y
+    // `week_starts_on` con RN-17, y la 3.10 estrena `holiday_calendar`: el
+    // informe por periodo no cuenta un festivo del perfil como absentismo
+    // (RF-GP-04). Era la ultima promesa pendiente del doc 05 §9 —«lo estrenara
+    // la gestion de ausencias»— y esta prueba es donde se cierra.
+    //
+    // La lista vacia no hace inutil el predicado: afirma que ningun campo
+    // editable del perfil es decorativo, y el dia que se añada uno antes que su
+    // consumidor, esta prueba es la que lo obliga a declararse.
     $pending = array_values(array_filter(
         ComplianceProfileField::cases(),
         static fn (ComplianceProfileField $field): bool => $field->hasNoConsumerYet(),
     ));
 
-    expect($pending)->toBe([ComplianceProfileField::HolidayCalendar]);
-})->group('RF-PD-07');
+    expect($pending)->toBe([]);
+})->group('RF-PD-07', 'RF-GP-04');
+
+it('aplica los festivos sin que abran ninguna incidencia', function (): void {
+    // El matiz que la tarea 3.10 no puede perder: `holiday_calendar` ya lo lee
+    // alguien —el informe por periodo—, pero lo que lee es un INFORME, no la
+    // revision diaria. Si `affects_incident_detection` pasara a `true`, el
+    // asiento de auditoria de un cambio de festivos afirmaria que mueve las
+    // alertas que RRHH revisa, y eso seria falso dentro de un registro con valor
+    // legal.
+    $festivos = ComplianceProfileField::HolidayCalendar;
+
+    expect($festivos->hasNoConsumerYet())->toBeFalse();
+
+    expect($festivos->affectsIncidentDetection(withBreakClocking()))->toBeFalse()
+        ->and($festivos->affectsIncidentDetection(withoutBreakClocking()))->toBeFalse()
+        // Tampoco cambia lo que enseña la vista de cumplimiento ni lo que la
+        // purga considera vencido: no gobierna ninguna de las cuatro reglas del
+        // perfil, y los años de retencion son otro campo.
+        ->and($festivos->affectsComplianceView())->toBeFalse()
+        ->and($festivos->affectsRetention())->toBeFalse()
+        ->and($festivos->governsSuspendedRule(withoutBreakClocking()))->toBeFalse()
+        ->and($festivos->complianceRule())->toBeNull();
+})->group('RF-PD-07', 'RF-GP-04');
 
 it('rechaza justo por encima del maximo de cada campo', function (string $field, int $value): void {
     // El vecino del limite, y no un valor absurdo: con solo «200 horas

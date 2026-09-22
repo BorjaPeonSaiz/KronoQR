@@ -46,6 +46,8 @@ use App\Modules\Reporting\Http\Controller\MyWorkDayController;
 use App\Modules\Reporting\Http\Controller\MyWorkDayExportController;
 use App\Modules\Reporting\Http\Controller\PeriodReportController;
 use App\Modules\Reporting\Http\Controller\PeriodReportExportController;
+use App\Modules\Workforce\Http\Controller\AbsenceController;
+use App\Modules\Workforce\Http\Controller\AbsenceImportController;
 use App\Modules\Workforce\Http\Controller\DepartmentController;
 use App\Modules\Workforce\Http\Controller\EmployeeController;
 use App\Modules\Workforce\Http\Controller\EmployeeImportController;
@@ -844,6 +846,31 @@ Route::middleware([
     Route::get('/employees/{uuid}', [EmployeeController::class, 'show'])
         ->whereUuid('uuid')
         ->name('employees.show');
+
+    /*
+     * Lectura de ausencias (tarea 3.10, RF-GP-04).
+     *
+     * AQUI Y NO EN EL GRUPO DE ESCRITURA, aunque `/absences` sea un recurso de
+     * primer nivel: el Anexo B del doc 01 situa la pantalla en «manager+» y el
+     * `responsable_departamento` tiene que poder verla —acotada a su
+     * departamento— porque quien organiza el turno tiene que saber quien falta.
+     * Su token lleva `employees:read` y no `employees:*` (§7.3), asi que este es
+     * el unico grupo por el que puede pasar.
+     *
+     * EL ALCANCE NO SE COMPRUEBA AQUI: se aplica **dentro de la consulta**
+     * (`EloquentAbsenceRepository::withinScope()`) para el listado, y con
+     * `ScopeGuard` contra la ausencia ya cargada para el detalle. Un filtro
+     * posterior daria un `meta.total` que describe a personas que quien pregunta
+     * no puede ver.
+     *
+     * LA NOTA NO VIAJA PARA EL RESPONSABLE, y eso no lo decide la ruta sino
+     * `AbsencePolicy::viewNote()`: es autorizacion, no presentacion. Una baja
+     * medica es dato de salud (regla dura 21).
+     */
+    Route::get('/absences', [AbsenceController::class, 'index'])->name('absences.index');
+    Route::get('/absences/{uuid}', [AbsenceController::class, 'show'])
+        ->whereUuid('uuid')
+        ->name('absences.show');
 });
 
 /*
@@ -967,6 +994,49 @@ Route::middleware([
     Route::post('/employees/{uuid}/contracts', [EmploymentContractController::class, 'store'])
         ->whereUuid('uuid')
         ->name('employees.contracts.store');
+
+    /*
+     * Escritura de ausencias (tarea 3.10, RF-GP-04).
+     *
+     * AMBITO `employees:*` Y NO UNO PROPIO: registrar una ausencia es mantener
+     * la situacion de una persona de la plantilla, no generar un informe. Quien
+     * lo hace es quien mantiene la plantilla. Con `reports:*`, alguien que solo
+     * puede mirar cifras podria cambiar la cifra de absentismo que mira.
+     *
+     * `AbsencePolicy` comprueba ademas el rol —`{admin, rrhh}`, regla dura 18— y
+     * es la mitad que deja fuera al `responsable_departamento`, que si lee: el
+     * ambito estrecho y la policy dicen lo mismo, que es como tiene que ser.
+     *
+     * NO HAY `DELETE` (regla dura 5). Quitar una ausencia es `POST …/void`: un
+     * hecho con nombre, autor, motivo y asiento en `audit_log`, igual que
+     * `POST /shift-entries/{uuid}/void`.
+     *
+     * `import` ANTES DE `{uuid}` NO HACE FALTA: `{uuid}` lleva `whereUuid()`,
+     * asi que `import` no puede casar con esa ruta. Se declara aqui, junto al
+     * alta individual, porque hace lo mismo y comparte ambito, policy y roles.
+     *
+     * LA ZONA LA PONE EL GRUPO (`throttle:management`), incluida la carga por
+     * fichero: comparte cupo con el resto de la gestion y no tiene uno propio,
+     * porque un techo por ruta es un techo que se rodea alternando URL. Y porque
+     * es la misma clase de peticion cara que `/employees/import`: lee un fichero,
+     * abre una transaccion y toma el candado global de `audit_log` (ADR-010),
+     * detras del cual se serializa cada fichaje del hotel.
+     */
+    Route::post('/absences', [AbsenceController::class, 'store'])->name('absences.store');
+
+    Route::post('/absences/import', AbsenceImportController::class)
+        ->name('absences.import');
+
+    // `PATCH` y no `PUT`: corregir manda solo lo que cambia. Y no sobrescribe
+    // —crea una version nueva y conserva la anterior (RN-13)—, que es la razon
+    // por la que la respuesta lleva un `uuid` distinto del de la ruta.
+    Route::patch('/absences/{uuid}', [AbsenceController::class, 'update'])
+        ->whereUuid('uuid')
+        ->name('absences.update');
+
+    Route::post('/absences/{uuid}/void', [AbsenceController::class, 'void'])
+        ->whereUuid('uuid')
+        ->name('absences.void');
 
     Route::get('/departments', [DepartmentController::class, 'index'])->name('departments.index');
     Route::post('/departments', [DepartmentController::class, 'store'])->name('departments.store');

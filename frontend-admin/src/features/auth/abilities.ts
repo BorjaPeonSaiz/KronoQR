@@ -7,6 +7,19 @@
 /** Gestion de plantilla, departamentos y centros. */
 export const EMPLOYEES_MANAGE = 'employees:*'
 
+/**
+ * Lectura de plantilla: ver la plantilla y las fichas, con el alcance del rol
+ * (RF-ID-03).
+ *
+ * Es el ambito ESTRECHO a proposito (tarea 2.1, migracion
+ * `2026_08_30_100100_grant_read_ability.php`): lo lleva tambien
+ * `responsable_departamento`, que no lleva `employees:*`. `admin` y `rrhh`
+ * llevan los dos. Gobierna la pantalla de ausencias (RF-GP-04, tarea 3.10):
+ * el responsable la ve, acotada a su departamento y sin nota; las acciones de
+ * escritura de esa misma pantalla se ocultan aparte, con `EMPLOYEES_MANAGE`.
+ */
+export const EMPLOYEES_READ = 'employees:read'
+
 /** Emision, impresion, entrega y revocacion de credenciales. */
 export const CREDENTIALS_MANAGE = 'credentials:*'
 

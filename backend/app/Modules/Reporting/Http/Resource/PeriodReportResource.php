@@ -6,6 +6,7 @@ namespace App\Modules\Reporting\Http\Resource;
 
 use App\Modules\Reporting\Domain\ValueObject\PeriodReport;
 use App\Modules\Reporting\Domain\ValueObject\PeriodReportRow;
+use App\Modules\Reporting\Domain\ValueObject\ReportCriterion;
 use App\Modules\Reporting\Domain\ValueObject\ReportedDuration;
 use App\Modules\Reporting\Http\Support\PeriodReportLayout;
 use Illuminate\Http\Request;
@@ -116,6 +117,14 @@ final class PeriodReportResource extends JsonResource
             'overtime_minutes' => $row->overtimeMinutes(),
             'overtime' => ReportedDuration::ofMinutes($row->overtimeMinutes())->toClockText(),
             'days_without_contract' => $row->daysWithoutContract,
+            // RF-GP-04. Los tres van juntos y siempre: `absence_days` y
+            // `holiday_days` son los dias justificados —disjuntos entre si— y
+            // `unjustified_absence_days` es lo que queda. Que
+            // `unjustified_absence_days` no sea «dias que faltó a trabajar» lo
+            // dice `meta.criteria`, no un nombre de campo.
+            'absence_days' => $row->absenceDays,
+            'holiday_days' => $row->holidayDays,
+            'unjustified_absence_days' => $row->unjustifiedAbsenceDays,
         ];
     }
 
@@ -129,7 +138,10 @@ final class PeriodReportResource extends JsonResource
         // propia copia del mismo metodo: dos formas de fallar cuando falta un
         // texto es una de mas, y la del layout es la que ya cubren sus pruebas.
         return array_map(
-            static fn (string $key): string => PeriodReportLayout::text($key),
+            static fn (ReportCriterion $criterion): string => PeriodReportLayout::text(
+                $criterion->key,
+                $criterion->replacements,
+            ),
             $report->criteria,
         );
     }

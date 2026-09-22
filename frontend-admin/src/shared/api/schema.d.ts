@@ -2298,6 +2298,14 @@ export interface paths {
          *     - **Los dias con un turno todavia abierto no aportan minutos** salvo que
          *       se pida `include_open_shifts`; en los dos casos cuentan como dia con
          *       actividad y salen en `open_shift_days`.
+         *     - **Las ausencias registradas y los festivos del perfil no cuentan como
+         *       absentismo** (RF-GP-04): salen en `absence_days` y `holiday_days`, que
+         *       son disjuntos entre si —si coinciden, gana la ausencia—, y lo que queda
+         *       es `unjustified_absence_days`.
+         *     - **El producto no conoce el cuadrante de turnos**, y `meta.criteria` lo
+         *       dice: los dias de descanso semanal caen dentro de
+         *       `unjustified_absence_days`. Es una cifra que se contrasta con el
+         *       calendario de turnos, no un recuento de faltas.
          *
          *     ## Las horas, dos veces
          *
@@ -3742,6 +3750,271 @@ export interface paths {
          *     cifras y la huella del fichero — nunca con nombres.
          */
         post: operations["importEmployees"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/absences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listado de ausencias
+         * @description Ausencias registradas cuyo intervalo **toca** el periodo consultado
+         *     (**RF-GP-04**). Una ausencia del 28 de febrero al 3 de marzo aparece
+         *     preguntando por marzo, aunque empezara antes: lo contrario obligaria a
+         *     quien mira un mes a adivinar que hay algo colgando del anterior.
+         *
+         *     ## Que es una ausencia en este producto
+         *
+         *     Un **hecho registrado**, no una solicitud: vacaciones, baja medica o
+         *     permiso que ya se sabe que ocurrieron u ocurriran. **No hay flujo de
+         *     aprobacion** —ni estado «pendiente», ni «aprobada», ni boton de aprobar—
+         *     porque el documento 05 §8 acota el alcance con esas palabras y la
+         *     aprobacion es de una fase posterior.
+         *
+         *     **Solo dias completos.** `starts_on` y `ends_on` son fechas civiles
+         *     **inclusivas**: una ausencia del 1 al 3 cubre el 1, el 2 y el 3, y `days`
+         *     vale 3. No hay medias jornadas.
+         *
+         *     ## El alcance por departamento se aplica en el `WHERE`
+         *
+         *     Un `responsable_departamento` recibe una pagina que solo contiene
+         *     ausencias de la gente de los departamentos que dirige —`meta.total`
+         *     incluido— y `admin` y `rrhh` la ven entera (RF-ID-03). Filtrar despues de
+         *     contar daria un `meta.total` que describe a personas que quien pregunta
+         *     no puede ver, que es una fuga por si misma. Un responsable **sin ningun
+         *     departamento asignado** recibe una pagina vacia, no todas las ausencias.
+         *
+         *     ## `note` no viaja para el responsable
+         *
+         *     Y el campo **desaparece del objeto** en lugar de llegar a `null`: la
+         *     diferencia importa porque `null` significa «no hay nota» y aqui lo cierto
+         *     es «no te corresponde». Una baja medica es dato de salud (regla dura 21)
+         *     y la nota puede llevar un diagnostico que nadie deberia escribir ahi pero
+         *     que alguien escribira.
+         *
+         *     **El `type` si lo ve el responsable**: quien organiza el turno tiene que
+         *     saber quien falta y por que categoria, y esa es justo la informacion que
+         *     la pantalla existe para dar.
+         *
+         *     ## Versiones y anulaciones
+         *
+         *     Por omision se devuelven solo las **activas**. Con `status=all` entran
+         *     tambien las supersedidas por una correccion y las anuladas, que siguen en
+         *     la tabla para siempre (regla dura 5): nada se borra, y lo que fue verdad
+         *     sigue constando.
+         */
+        get: operations["listAbsences"];
+        put?: never;
+        /**
+         * Registrar una ausencia
+         * @description Registra que una persona no estuvo —o no estara— entre dos fechas
+         *     (**RF-GP-04**).
+         *
+         *     **Se admite hacia atras y hacia delante.** Una baja se conoce despues de
+         *     empezar y las vacaciones se registran antes: rechazar cualquiera de los
+         *     dos sentidos dejaria fuera la mitad de los casos reales.
+         *
+         *     **`employee_uuid` va en el cuerpo y no en la ruta**, al contrario que en
+         *     los contratos, porque `/absences` es un recurso de primer nivel (Anexo B
+         *     del documento 01) y una ausencia se registra desde una pantalla
+         *     transversal con buscador de persona, no desde la ficha de nadie. Por eso
+         *     un empleado inexistente es `422` sobre ese campo y no `404`: hay un campo
+         *     que corregir en el formulario.
+         *
+         *     **Tipo `other` exige `note`.** Los tres primeros tipos se explican solos;
+         *     `other` existe para el permiso que no es ninguno de ellos y sin texto no
+         *     describe nada.
+         *
+         *     **La nota no es un diagnostico.** Una baja medica es dato de salud (regla
+         *     dura 21): el asiento de `audit_log` guarda `has_note` y nunca su
+         *     contenido, la nota no llega al `responsable_departamento` y no aparece en
+         *     ningun registro tecnico. La guia de RRHH lo dice con todas las letras.
+         */
+        post: operations["createAbsence"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/absences/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Carga de ausencias por fichero
+         * @description Carga ausencias desde un CSV o un XLSX (**RF-GP-04**). Es la via por la
+         *     que entra un cuadrante de vacaciones entero, que es como lo tiene RRHH:
+         *     en una hoja de calculo.
+         *
+         *     **Calcado de `POST /api/v1/employees/import`** —dos fases, `sha256` de
+         *     confirmacion y ningun fichero guardado en el servidor entre ellas— y por
+         *     las mismas razones, que estan escritas alli. Con `mode: validate` no se
+         *     escribe nada; con `mode: apply` hace falta `confirm_checksum` con el
+         *     `file.sha256` que devolvio la validacion, y el fichero se vuelve a subir.
+         *
+         *     ## Columnas y alias
+         *
+         *     `employee_code`, `type`, `starts_on`, `ends_on` y `note`, con los alias
+         *     de serie en castellano —`codigo`, `tipo`, `desde`, `hasta`, `nota`— y el
+         *     tipo tambien por su nombre en castellano: `vacaciones`, `baja`, `permiso`
+         *     y `otro`. Los alias son **configuracion** (regla dura 13,
+         *     `config/workforce.php`): quien tenga una exportacion con nombres propios
+         *     añade los suyos sin tocar el repositorio.
+         *
+         *     **La persona se identifica por su `employee_code`**, que es lo unico
+         *     estable y publico que el fichero puede traer: el nombre se repite y el
+         *     documento de identidad no se almacena (RL-08). El codigo va impreso en la
+         *     tarjeta, asi que quien rellena el cuadrante lo tiene.
+         *
+         *     ## Que se rechaza y que sale como `unchanged`
+         *
+         *     Se rechaza la linea con empleado desconocido, tipo no reconocido, fechas
+         *     incoherentes, `other` sin nota, solape con una ausencia activa ya
+         *     registrada o solape con **otra linea del mismo fichero**.
+         *
+         *     Y una linea **identica** a una ausencia activa ya registrada —misma
+         *     persona, mismo tipo, mismas dos fechas— sale como `unchanged` y **no**
+         *     como solape. Sin esa distincion, reimportar el mismo cuadrante con una
+         *     fila corregida daria treinta y nueve conflictos donde no hay ninguno, y
+         *     en la practica lleva a que alguien borre lineas en vez de corregirlas.
+         *
+         *     **La importacion no corrige ausencias.** No existe el desenlace `update`:
+         *     corregir es crear una version nueva con motivo (RN-13) y eso se hace en
+         *     `PATCH /api/v1/absences/{uuid}`, a conciencia y una a una, no de pasada
+         *     en un fichero de cuarenta lineas.
+         *
+         *     Cada linea aplicada deja su propio `absence.registered` en `audit_log`
+         *     con `source: import` y la huella del fichero — nunca con nombres.
+         */
+        post: operations["importAbsences"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/absences/{uuid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** de la ausencia (`absences.uuid`, UUID v7).
+                 *
+                 *     **Identifica una version, no una ausencia a lo largo del tiempo**, con el
+                 *     mismo criterio que `ShiftEntryUuid` (ADR-035, RN-13). Corregir crea una
+                 *     fila nueva con `uuid` propio y deja esta como historico, asi que el
+                 *     identificador que devolvio una correccion es el que hay que usar en la
+                 *     siguiente: reutilizar el anterior responde `409`.
+                 *
+                 *     El `GET` si admite el de cualquier version —un enlace guardado tiene que
+                 *     seguir llevando a algun sitio—; las dos escrituras exigen el vigente.
+                 * @example 0199f4a1-6c22-7e10-9b40-2a3b4c5d6e70
+                 */
+                uuid: components["parameters"]["AbsenceUuid"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Detalle de una ausencia, con su historial
+         * @description La ausencia y **todas sus versiones anteriores** (RF-GP-04, RN-13).
+         *
+         *     `history` va de la mas antigua a la mas reciente y **no incluye la
+         *     propia**: es lo que se enseña en la pantalla para responder «¿que decia
+         *     antes y quien lo cambio?». Nada se borra ni se sobrescribe (regla dura
+         *     5), asi que la serie esta completa desde la version 1.
+         *
+         *     Se puede pedir por el `uuid` de **cualquier** version, no solo de la
+         *     vigente: un enlace guardado hace tres meses tiene que seguir llevando a
+         *     algun sitio. Lo que devuelve es esa version con su propio historial.
+         */
+        get: operations["getAbsence"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Corregir una ausencia
+         * @description Crea una **version nueva** de la ausencia y deja la anterior como
+         *     historico (**RN-13**, regla dura 5, mismo patron que las correcciones de
+         *     `shift_entries`, ADR-026 y ADR-035).
+         *
+         *     **No es un `UPDATE`.** La respuesta lleva un `uuid` **nuevo**, con
+         *     `version + 1` y `supersedes_uuid` igual al de la ruta; la fila anterior
+         *     pasa a `superseded` y conserva su tipo, sus fechas, su nota, su autor y
+         *     su momento sin tocar. Lo unico que se escribe sobre ella son las dos
+         *     columnas de estado.
+         *
+         *     **`reason` es obligatorio** y es texto libre de 3 a 500 caracteres. No
+         *     hay catalogo de motivos como en las correcciones del registro horario
+         *     porque alli hay nueve causas tipificadas que defender ante Inspeccion y
+         *     aqui no hay ninguna.
+         *
+         *     Los campos omitidos **conservan su valor**. Enviar `note: null` si la
+         *     borra: ahi `null` es una instruccion y no una ausencia de dato, que es
+         *     justo la distincion que un `PATCH` tiene que poder expresar.
+         */
+        patch: operations["correctAbsence"];
+        trace?: never;
+    };
+    "/api/v1/absences/{uuid}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** de la ausencia (`absences.uuid`, UUID v7).
+                 *
+                 *     **Identifica una version, no una ausencia a lo largo del tiempo**, con el
+                 *     mismo criterio que `ShiftEntryUuid` (ADR-035, RN-13). Corregir crea una
+                 *     fila nueva con `uuid` propio y deja esta como historico, asi que el
+                 *     identificador que devolvio una correccion es el que hay que usar en la
+                 *     siguiente: reutilizar el anterior responde `409`.
+                 *
+                 *     El `GET` si admite el de cualquier version —un enlace guardado tiene que
+                 *     seguir llevando a algun sitio—; las dos escrituras exigen el vigente.
+                 * @example 0199f4a1-6c22-7e10-9b40-2a3b4c5d6e70
+                 */
+                uuid: components["parameters"]["AbsenceUuid"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Anular una ausencia
+         * @description Declara que esa ausencia **no ocurrio** (RF-GP-04). El caso tipico es la
+         *     baja que se tecleo a la persona equivocada o las vacaciones que al final
+         *     no se cogieron.
+         *
+         *     **No se borra nada** (regla dura 5): la fila se queda con su tipo, sus
+         *     fechas, su autor y su momento, y lo unico que cambia es que sale del
+         *     conjunto vigente. Con eso deja de contar como ausencia justificada en el
+         *     informe por periodo y libera esos dias para otra ausencia.
+         *
+         *     **No crea version nueva**, y esa es toda la diferencia con corregir: no
+         *     hay una version posterior de un hecho que no paso. Por eso
+         *     `superseded_by_uuid` sigue a `null` y `version` no sube.
+         *
+         *     Es `POST` y no `DELETE` porque en esta API no hay ningun `DELETE`: anular
+         *     es un hecho con nombre propio, con su autor, su motivo y su asiento en
+         *     `audit_log`.
+         */
+        post: operations["voidAbsence"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6046,7 +6319,10 @@ export interface components {
             /**
              * @description Dia en que empieza la semana, en numeracion **ISO-8601**: 1 es lunes
              *     y 7 domingo. 1 en `ES-hosteleria`, que es lo que ya usan los informes
-             *     por periodo. Todavia no lo lee ninguna regla.
+             *     por periodo. Lo lee **RN-17** desde la vista de cumplimiento: mover el
+             *     inicio de semana cambia que siete jornadas se suman y, con ello, que
+             *     semanas salen señaladas. No abre ninguna incidencia — el art. 34.1 ET
+             *     fija la jornada semanal en computo anual.
              */
             week_starts_on: number;
             /**
@@ -6054,7 +6330,14 @@ export interface components {
              *     proposito**: los festivos dependen del municipio y del año, asi que un
              *     calendario concreto dentro del producto caducaria el 31 de diciembre y
              *     seria un dato de cliente en el codigo (regla dura 13). Lo carga el
-             *     cliente. Todavia no lo lee ninguna regla.
+             *     cliente.
+             *
+             *     **Lo aplica el informe por periodo** (`GET /reports/period`, RF-GP-04):
+             *     un dia festivo de esta lista no cuenta como absentismo y sale en
+             *     `holiday_days`. **No abre ni cierra ninguna incidencia**: ninguna de
+             *     las cuatro reglas del perfil lee festivos, asi que cambiar esta lista
+             *     no mueve nada en la bandeja ni en la vista de cumplimiento. El asiento
+             *     de auditoria del cambio lo dice con `affects_incident_detection: false`.
              * @example []
              */
             holiday_calendar: string[];
@@ -7641,6 +7924,401 @@ export interface components {
             valid_from: string;
         };
         /**
+         * AbsenceType
+         * @description Categoria de una ausencia (RF-GP-04, documento 01 §5.5).
+         *
+         *     **Catalogo cerrado y no configurable**, con el mismo criterio que el de
+         *     tipos de incidencia: es lo que hace comparables los informes de dos
+         *     clientes. No contradice ADR-017 —que exige que toda diferencia entre
+         *     clientes sea configuracion— porque esto no es una diferencia entre
+         *     clientes: es el vocabulario del producto.
+         *
+         *     **En ingles**, al contrario que `ScheduleType`. Aquel es el catalogo
+         *     literal que el documento 01 §5.5 fija para su columna; este no lo fija
+         *     ningun documento, asi que vale la regla general —identificadores en
+         *     ingles— y el castellano vive en `i18n` y en los alias de la importacion.
+         *
+         *     Los tres primeros son el catalogo comercial del documento 05 §5.5
+         *     —vacaciones, baja, permiso—. **`other` existe para el permiso que no es
+         *     ninguno de ellos y exige `note`**: sin texto no describe nada, y una
+         *     categoria que no describe nada acaba usandose para todo.
+         * @example vacation
+         * @enum {string}
+         */
+        AbsenceType: "vacation" | "sick_leave" | "leave" | "other";
+        /**
+         * AbsenceStatus
+         * @description Situacion de una version de la ausencia (regla dura 5, RN-13).
+         *
+         *     `active` es la vigente y la unica que cuenta para el informe.
+         *     `superseded` es la que sustituyo una correccion —conserva intactos su
+         *     tipo, sus fechas, su nota, su autor y su momento— y `voided` es la
+         *     anulada, que declara que el hecho no ocurrio.
+         *
+         *     **Las tres viven en la tabla para siempre.** Nada se borra: lo unico que
+         *     cambia es cual entra en el conjunto vigente.
+         * @example active
+         * @enum {string}
+         */
+        AbsenceStatus: "active" | "superseded" | "voided";
+        /**
+         * Absence
+         * @description Una ausencia registrada (**RF-GP-04**, documento 01 §5.5).
+         *
+         *     **Es un hecho, no una solicitud**: no hay estado «pendiente» ni
+         *     «aprobada» porque este producto registra ausencias sin flujo de
+         *     aprobacion (documento 05 §8).
+         *
+         *     **`note` puede no venir**, y no es lo mismo que venir a `null`. Ausente
+         *     significa «no te corresponde» —es lo que recibe el
+         *     `responsable_departamento`, porque una baja medica es dato de salud
+         *     (regla dura 21)— y `null` significa «no hay nota». Por eso el campo no
+         *     esta en `required`.
+         */
+        Absence: {
+            /**
+             * Format: uuid
+             * @description Identificador publico de **esta version** (ADR-035). Corregir devuelve
+             *     uno nuevo; el anterior sigue resolviendo en el `GET` de detalle.
+             */
+            uuid: string;
+            /**
+             * Format: uuid
+             * @description Identificador publico de la persona. La clave interna no sale del producto.
+             */
+            employee_uuid: string;
+            /**
+             * @description Codigo opaco de la persona, el que va impreso en su tarjeta. Viaja
+             *     porque es la clave con la que se rellena el fichero de importacion y
+             *     con la que RRHH busca en el panel.
+             * @example E7QK2MXPR
+             */
+            employee_code: string;
+            /**
+             * @description Nombre y apellidos, **solo para pintar la fila**. No entra en
+             *     `audit_log`, ni en `error_events`, ni en ningun registro tecnico
+             *     (regla dura 21): ahi la persona viaja por su UUID publico.
+             * @example Youssef Amrani
+             */
+            employee_name: string;
+            /**
+             * Format: int64
+             * @description Departamento al que esta adscrita la persona, o `null` si no tiene
+             *     ninguno. Es el eje sobre el que se resuelve el alcance (RF-ID-03).
+             */
+            department_id: number | null;
+            department_name: string | null;
+            type: components["schemas"]["AbsenceType"];
+            /**
+             * Format: date
+             * @description Primer dia de la ausencia, **inclusive**.
+             */
+            starts_on: string;
+            /**
+             * Format: date
+             * @description Ultimo dia de la ausencia, **inclusive**. Un solo dia es `starts_on === ends_on`.
+             */
+            ends_on: string;
+            /**
+             * @description Dias naturales que cubre, con los dos extremos dentro. Se deriva de
+             *     las fechas y no se guarda: una columna aparte podria quedarse
+             *     desincronizada.
+             *
+             *     **Son dias naturales, no dias laborables.** Este producto no conoce
+             *     el cuadrante de nadie, asi que no puede descontar los descansos
+             *     semanales; `meta.criteria` del informe por periodo lo dice con todas
+             *     las letras.
+             * @example 5
+             */
+            days: number;
+            /**
+             * @description Texto libre de quien la registro. **Solo la reciben `admin` y
+             *     `rrhh`**: para el `responsable_departamento` el campo **no viaja**,
+             *     porque una baja medica es dato de salud y la nota puede llevar un
+             *     diagnostico que nadie deberia escribir ahi pero que alguien
+             *     escribira.
+             *
+             *     Obligatoria cuando `type` es `other`.
+             */
+            note?: string | null;
+            status: components["schemas"]["AbsenceStatus"];
+            /**
+             * @description Empieza en 1 y sube con cada correccion. **Anular no la sube**: no
+             *     hay una version posterior de un hecho que no paso.
+             */
+            version: number;
+            /**
+             * Format: uuid
+             * @description La version a la que esta sustituye, o `null` si es la original.
+             */
+            supersedes_uuid: string | null;
+            /**
+             * Format: uuid
+             * @description La version que sustituyo a esta, o `null` si sigue siendo la vigente
+             *     o si esta anulada.
+             */
+            superseded_by_uuid: string | null;
+            /**
+             * @description Por que se corrigio, obligatorio a partir de la version 2 y `null` en
+             *     la 1. Texto libre y no un catalogo como en las correcciones del
+             *     registro horario: alli hay nueve causas tipificadas que defender ante
+             *     Inspeccion y aqui no hay ninguna.
+             */
+            change_reason: string | null;
+            /**
+             * Format: date-time
+             * @description Instante en que se anulo, en UTC, o `null`.
+             */
+            voided_at: string | null;
+            void_reason: string | null;
+            /**
+             * Format: date-time
+             * @description Instante en que se registro **esta version**, en UTC.
+             */
+            created_at: string;
+        };
+        /**
+         * AbsenceDetail
+         * @description Una ausencia con **todas sus versiones anteriores** (RN-13, regla dura 5).
+         *
+         *     Es lo que sostiene «de que valor a cual» en la pantalla: sin el historial,
+         *     una correccion seria indistinguible de una reescritura.
+         */
+        AbsenceDetail: {
+            absence: components["schemas"]["Absence"];
+            /**
+             * @description Las versiones anteriores, **de la mas antigua a la mas reciente** y
+             *     **sin incluir la propia**. Vacio cuando la ausencia nunca se ha
+             *     corregido.
+             */
+            history: components["schemas"]["Absence"][];
+        };
+        /**
+         * AbsenceCollection
+         * @description Pagina de ausencias. Misma forma que `EmployeeCollection` y con el mismo
+         *     `PageMeta`: **`meta.total` cuenta lo que quien pregunta puede ver**, no
+         *     lo que hay (RF-ID-03).
+         */
+        AbsenceCollection: {
+            data: components["schemas"]["Absence"][];
+            meta: components["schemas"]["PageMeta"];
+        };
+        /**
+         * CreateAbsenceRequest
+         * @description Alta de una ausencia (RF-GP-04).
+         *
+         *     **`employee_uuid` va en el cuerpo** porque `/absences` es un recurso de
+         *     primer nivel y se registra desde una pantalla transversal con buscador de
+         *     persona, no desde la ficha de nadie. Por eso un empleado inexistente es
+         *     `422` sobre este campo y no `404`.
+         *
+         *     **No admite `status`, `version` ni ningun campo de versionado**: los
+         *     escribe el servidor. Dejarlos entrar permitiria registrar una ausencia ya
+         *     anulada, que es un estado que nadie sabria interpretar.
+         */
+        CreateAbsenceRequest: {
+            /** Format: uuid */
+            employee_uuid: string;
+            type: components["schemas"]["AbsenceType"];
+            /**
+             * Format: date
+             * @example 2026-03-02
+             */
+            starts_on: string;
+            /**
+             * Format: date
+             * @description Inclusive, y **no anterior** a `starts_on`. La misma afirmacion esta
+             *     en el `CHECK` del esquema: aqui da un `422` con el campo señalado y
+             *     alli protege de lo que no pasa por la API.
+             * @example 2026-03-06
+             */
+            ends_on: string;
+            /**
+             * @description **Obligatoria con `type: other`.** No escribas aqui un diagnostico:
+             *     es dato de salud y este campo no esta pensado para guardarlo.
+             */
+            note?: string | null;
+        };
+        /**
+         * CorrectAbsenceRequest
+         * @description Correccion de una ausencia (**RN-13**). Crea una version nueva y conserva
+         *     la anterior: no sobrescribe nada.
+         *
+         *     **Los campos omitidos conservan su valor.** `note: null` si la borra: ahi
+         *     el nulo es una instruccion y no una ausencia de dato.
+         *
+         *     **No admite `employee_uuid`.** Corregir a quien pertenece una ausencia no
+         *     es corregirla: es anular esta y registrar otra, que es lo que deja el
+         *     rastro correcto de que hubo dos personas implicadas.
+         */
+        CorrectAbsenceRequest: {
+            type?: components["schemas"]["AbsenceType"];
+            /** Format: date */
+            starts_on?: string;
+            /** Format: date */
+            ends_on?: string;
+            note?: string | null;
+            /**
+             * @description Por que se corrige. **Obligatorio**, texto libre: sin catalogo, porque
+             *     no hay causas tipificadas que defender ante Inspeccion como en las
+             *     correcciones del registro horario.
+             * @example El parte de baja se prorrogo una semana.
+             */
+            reason: string;
+        };
+        /**
+         * VoidAbsenceRequest
+         * @description Anulacion de una ausencia. No lleva ningun dato mas: no hay nada que
+         *     rectificar, solo hace falta saber cual, quien y por que.
+         */
+        VoidAbsenceRequest: {
+            /** @example Se registro a la persona equivocada. */
+            reason: string;
+        };
+        /**
+         * AbsenceImportOutcome
+         * @description Que se hace —o que se haria, en simulacion— con la linea.
+         *
+         *     **No existe `update`, al contrario que en la importacion de plantilla**, y
+         *     es deliberado: corregir una ausencia crea una version nueva con motivo
+         *     (RN-13), y eso no se hace de pasada en un fichero de cuarenta lineas. Una
+         *     linea que coincide exactamente con una ausencia activa sale como
+         *     `unchanged`; una que la pisa sin coincidir, como `reject`.
+         * @enum {string}
+         */
+        AbsenceImportOutcome: "create" | "unchanged" | "reject";
+        /**
+         * AbsenceImportMessage
+         * @description Por que se rechaza una linea, o que conviene saber de ella.
+         *
+         *     **`code` es lo estable y `detail` es lo legible**, igual que en la
+         *     importacion de plantilla: el panel decide por el codigo y el texto viaja
+         *     traducido al idioma negociado.
+         *
+         *     **Nunca lleva el valor de la celda.** Con el codigo y la columna basta
+         *     para arreglarlo, y quien lo arregla tiene el fichero delante.
+         */
+        AbsenceImportMessage: {
+            /**
+             * @description Cada codigo tiene una accion distinta detras, que es el criterio de
+             *     admision de esta lista: `unknown_employee` se arregla mirando el
+             *     codigo en la ficha, `unknown_type` corrigiendo la celda,
+             *     `overlapping_absence` revisando el historial de esa persona y
+             *     `duplicate_in_file` borrando una de las dos lineas. Un unico
+             *     `invalid_row` obligaria a llamar por telefono.
+             *
+             *     **`note_too_long` se comprueba en la fase de revision y no al
+             *     escribir**, aunque el esquema tambien lo declare: una nota puede
+             *     llevar texto libre sobre la salud de alguien, y dejar que el rechazo
+             *     lo diera la base de datos metia ese texto en el mensaje del error y
+             *     de ahi en el registro tecnico del servidor (regla dura 21).
+             *
+             *     **`duplicate_in_file` es el solape entre dos lineas del propio
+             *     fichero** y `overlapping_absence` el choque con algo ya registrado.
+             *     Se rechaza la **segunda** aparicion y no la primera: aplicar las dos
+             *     dejaria el resultado a merced del orden de las filas.
+             *
+             *     **`unknown_column` viaja en `file.warnings`, no en una fila**: es del
+             *     fichero entero y no impide nada.
+             * @enum {string}
+             */
+            code: "missing_employee_code" | "unknown_employee" | "missing_type" | "unknown_type" | "missing_starts_on" | "missing_ends_on" | "invalid_starts_on" | "invalid_ends_on" | "inverted_period" | "note_required" | "note_too_long" | "overlapping_absence" | "duplicate_in_file" | "unknown_column";
+            /** @enum {string} */
+            severity: "error" | "warning";
+            column: string | null;
+            /** @description Texto para quien esta importando, **que dice que hacer** y no solo que fallo. */
+            detail: string;
+        };
+        /**
+         * AbsenceImportRow
+         * @description Una linea del fichero y su desenlace.
+         *
+         *     **`label` es el codigo de empleado de la linea, no su nombre**, y esa es
+         *     la diferencia con `EmployeeImportRow`. Aqui el codigo basta para
+         *     localizar la fila —es la columna que la identifica— y no hace falta
+         *     mover el nombre de nadie por una respuesta que acaba en una tabla junto a
+         *     una categoria que puede ser una baja medica.
+         */
+        AbsenceImportRow: {
+            /**
+             * @description Numero de linea **del fichero**, contando la cabecera: la primera fila
+             *     de datos es la 2, que es lo que la persona ve en su hoja de calculo.
+             */
+            line: number;
+            /** @description Codigo de empleado leido de la linea, para poder localizarla. */
+            label: string;
+            outcome: components["schemas"]["AbsenceImportOutcome"];
+            /**
+             * Format: uuid
+             * @description UUID de la ausencia: la ya existente cuando la linea es `unchanged`, y
+             *     la recien creada cuando `mode` es `apply` y la linea es `create`.
+             *     `null` en simulacion, porque todavia no existe.
+             */
+            absence_uuid: string | null;
+            messages: components["schemas"]["AbsenceImportMessage"][];
+        };
+        /**
+         * AbsenceImportRequest
+         * @description El fichero y el modo. **Multipart y no JSON con el contenido dentro**,
+         *     por lo mismo que en la importacion de plantilla: el fichero se lee en
+         *     streaming desde disco y nunca se carga entero en memoria.
+         */
+        AbsenceImportRequest: {
+            /**
+             * Format: binary
+             * @description CSV o XLSX, con las columnas `employee_code`, `type`, `starts_on`,
+             *     `ends_on` y `note` —o sus alias en castellano—. El delimitador y la
+             *     codificacion **se detectan**, no se configuran.
+             */
+            file: string;
+            mode: components["schemas"]["EmployeeImportMode"];
+            /**
+             * @description **Obligatorio con `mode: apply`**: el `file.sha256` que devolvio la
+             *     validacion. Si no coincide con el fichero enviado, se responde `409`
+             *     sin escribir nada.
+             */
+            confirm_checksum?: string;
+        };
+        /**
+         * AbsenceImportReport
+         * @description El informe linea a linea de la carga de ausencias, en los dos modos.
+         *
+         *     **Misma forma que `EmployeeImportReport`** —`mode`, `file`, `summary`,
+         *     `rows`, `truncated`— para que el panel reutilice el mismo componente de
+         *     revision en dos pasos. Lo unico que cambia es el desenlace: aqui no hay
+         *     `update`.
+         */
+        AbsenceImportReport: {
+            mode: components["schemas"]["EmployeeImportMode"];
+            file: {
+                /**
+                 * @description Huella del fichero recibido. Se devuelve para confirmarla en la
+                 *     fase de aplicacion y queda en el asiento de `audit_log`. **El
+                 *     nombre del fichero no se devuelve ni se audita**: lo pone quien
+                 *     sube y puede llevar dentro el nombre de una persona.
+                 */
+                sha256: string;
+                rows: number;
+                /**
+                 * @description Avisos del fichero entero, no de una linea: hoy, las columnas que
+                 *     el importador no reconoce.
+                 */
+                warnings: components["schemas"]["AbsenceImportMessage"][];
+            };
+            summary: {
+                create: number;
+                unchanged: number;
+                reject: number;
+            };
+            rows: components["schemas"]["AbsenceImportRow"][];
+            /**
+             * @description `true` si el fichero traia mas lineas que el maximo admitido y se
+             *     dejaron de leer. **Con `truncated: true` no se aplica nada**: se
+             *     parte el fichero y se importa por trozos.
+             */
+            truncated: boolean;
+        };
+        /**
          * ComplianceRuleName
          * @description Que regla del perfil de cumplimiento se ha superado (RF-PA-06). Los
          *     nombres son los de `incidents.type` cuando la regla abre incidencia,
@@ -8008,6 +8686,23 @@ export interface components {
          *
          *     **Cada duracion sale dos veces**: los minutos enteros para quien calcula y
          *     el `HH:MM` para quien lee. Nunca una hora decimal.
+         *
+         *     ## Los tres contadores de absentismo (RF-GP-04)
+         *
+         *     `absence_days` y `holiday_days` son los dias **justificados** y son
+         *     **disjuntos**: cuando un festivo cae dentro de una ausencia gana la
+         *     ausencia, de modo que sumarlos nunca cuenta el dia dos veces.
+         *     `unjustified_absence_days` es lo que queda.
+         *
+         *     Los tres exigen que la persona estuviera **de alta** ese dia —entre
+         *     `hired_at` y `terminated_at`, igual que `days_without_contract`—, asi que
+         *     `absence_days + holiday_days + unjustified_absence_days` **no** tiene por
+         *     que sumar `days_in_period`.
+         *
+         *     **`unjustified_absence_days` no es «dias que faltó a trabajar».** El
+         *     producto no conoce el cuadrante de turnos, asi que los dias de descanso
+         *     semanal caen ahi dentro. `meta.criteria` lo dice en el idioma de la
+         *     peticion y el cliente debe enseñarlo junto a la columna.
          */
         PeriodReportRow: {
             /**
@@ -8042,6 +8737,12 @@ export interface components {
             /**
              * @description Aparecen con cero y no se omiten: para un informe de absentismo,
              *     omitirlos es un error.
+             *
+             *     **No es absentismo.** Aqui entran tambien los dias anteriores al alta
+             *     o posteriores al cese, los festivos y los dias cubiertos por una
+             *     ausencia registrada. Lo que se parece a absentismo es
+             *     `unjustified_absence_days`, que es siempre menor o igual que este
+             *     numero (RF-GP-04).
              */
             days_without_activity: number;
             /**
@@ -8082,6 +8783,42 @@ export interface components {
              *     informan, no se suponen.
              */
             days_without_contract: number;
+            /**
+             * @description Dias-persona de alta cubiertos por una **ausencia registrada vigente**
+             *     (vacaciones, baja medica, permiso u otro), tengan o no actividad
+             *     (RF-GP-04). Solo cuentan las ausencias vigentes: una corregida deja la
+             *     version anterior guardada y una anulada sigue en el historico, pero
+             *     ninguna de las dos justifica ya nada.
+             *
+             *     **No hay desglose por tipo**, a proposito: una fila por departamento
+             *     con «dias de baja medica» es un agregado de dato de salud. El detalle
+             *     por tipo vive en la pantalla de ausencias, con su alcance.
+             */
+            absence_days: number;
+            /**
+             * @description Dias-persona de alta que son **festivo del perfil de cumplimiento** y
+             *     **no** estan cubiertos por una ausencia (RF-GP-04, RF-PD-07). Si
+             *     coinciden, el dia cuenta como ausencia y no como festivo: asi los dos
+             *     contadores de dias justificados se pueden sumar sin contar ninguno dos
+             *     veces.
+             *
+             *     Sale de `holiday_calendar` del perfil vigente del centro. Un centro
+             *     que no haya cargado sus festivos tendra siempre `0`.
+             */
+            holiday_days: number;
+            /**
+             * @description Dias-persona de alta **sin actividad, sin ausencia registrada y sin
+             *     festivo** (RF-GP-04). Siempre menor o igual que `days_without_activity`.
+             *
+             *     **No significa «faltó a trabajar».** El producto no modela el cuadrante
+             *     de turnos: no sabe que dias le tocaba trabajar a cada persona, asi que
+             *     **los dias de descanso semanal cuentan aqui**. En un hotel con turnos
+             *     rotatorios eso son dos dias por persona y semana. `meta.criteria` lleva
+             *     la advertencia en el idioma de la peticion y el cliente debe enseñarla
+             *     junto a esta columna: es la cifra que se contrasta con el calendario de
+             *     turnos, no la que se lleva a una conversacion disciplinaria.
+             */
+            unjustified_absence_days: number;
         };
         /**
          * ContractCoverage
@@ -8683,11 +9420,15 @@ export interface components {
          *
          *     `row_counts` es un objeto con una clave por fichero del ZIP
          *     (`employees`, `shift_entries`, `audit_log`, …) y el numero de filas de
-         *     datos que contiene. Las tablas que no existen en esta version
-         *     (`absences`) no aparecen aqui y constan como `not_installed` en el
-         *     `manifest.json` del propio ZIP. `error_events` si viaja desde la tarea
-         *     5.12: es el historico tecnico del cliente y forma parte de «todos sus
-         *     datos» (RL-20).
+         *     datos que contiene.
+         *
+         *     **Desde la tarea 3.10 no queda ninguna tabla sin exportar**: `absences`
+         *     entra como un fichero mas —con su `note`, porque este ZIP se queda con
+         *     el cliente, que es el responsable del tratamiento (RL-16)— y con todas
+         *     sus versiones, las supersedidas y las anuladas incluidas (regla dura 5).
+         *     `error_events` viaja desde la tarea 5.12 por la misma razon. El
+         *     mecanismo de `not_installed` del `manifest.json` sigue existiendo para
+         *     cuando vuelva a hacer falta, pero hoy no lo usa ningun conjunto.
          */
         DataExport: {
             /** Format: uuid */
@@ -9322,6 +10063,20 @@ export interface components {
          */
         ShiftEntryUuid: string;
         /**
+         * @description Identificador **publico** de la ausencia (`absences.uuid`, UUID v7).
+         *
+         *     **Identifica una version, no una ausencia a lo largo del tiempo**, con el
+         *     mismo criterio que `ShiftEntryUuid` (ADR-035, RN-13). Corregir crea una
+         *     fila nueva con `uuid` propio y deja esta como historico, asi que el
+         *     identificador que devolvio una correccion es el que hay que usar en la
+         *     siguiente: reutilizar el anterior responde `409`.
+         *
+         *     El `GET` si admite el de cualquier version —un enlace guardado tiene que
+         *     seguir llevando a algun sitio—; las dos escrituras exigen el vigente.
+         * @example 0199f4a1-6c22-7e10-9b40-2a3b4c5d6e70
+         */
+        AbsenceUuid: string;
+        /**
          * @description Identificador **publico** de la concesion de soporte (`support_grants.uuid`).
          *     Por lo mismo que el del quiosco: la clave interna no sale de la base de
          *     datos, y un numero secuencial en la URL diria cuantas veces ha entrado
@@ -9383,6 +10138,53 @@ export interface components {
          * @example issued
          */
         PinStatusFilter: components["schemas"]["PinStatus"];
+        /**
+         * @description Primer dia del periodo consultado, inclusive (RF-GP-04).
+         *
+         *     **Opcional, y por omision el primer dia del mes en curso** en la zona del
+         *     centro, que es lo que RRHH mira al abrir la pantalla. Se devuelven las
+         *     ausencias cuyo intervalo **toca** el periodo, no solo las que empiezan
+         *     dentro: una ausencia del 28 de febrero al 3 de marzo aparece preguntando
+         *     por marzo.
+         *
+         *     **El periodo no puede pasar de dos años.** No es una regla de negocio:
+         *     es lo que impide que una URL manipulada pida diez años de historico a una
+         *     consulta paginada que acaba pintando una tabla.
+         * @example 2026-03-01
+         */
+        AbsenceFrom: string;
+        /**
+         * @description Ultimo dia del periodo consultado, inclusive. Por omision, **un año menos
+         *     un dia** despues de `from`: la pantalla de ausencias se usa tanto para el
+         *     mes en curso como para el cuadrante de vacaciones del año, y un mes por
+         *     omision escondia la mitad de lo registrado.
+         * @example 2026-03-31
+         */
+        AbsenceTo: string;
+        /**
+         * @description Limita el resultado a una persona. **Sigue sujeto al alcance**
+         *     (RF-ID-03): un responsable que pregunte por alguien de otro departamento
+         *     recibe una pagina vacia, no un `403` — el listado se acota en la consulta
+         *     y no revela que esa persona existe.
+         * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+         */
+        AbsenceEmployeeFilter: string;
+        /**
+         * @description Limita el resultado a una categoria de ausencia.
+         * @example sick_leave
+         */
+        AbsenceTypeFilter: components["schemas"]["AbsenceType"];
+        /**
+         * @description Situacion de la ausencia. **`active` por omision**, que es lo unico que
+         *     cuenta para el informe y lo que la pantalla enseña.
+         *
+         *     `all` añade las supersedidas por una correccion y las anuladas, que
+         *     siguen en la tabla para siempre (regla dura 5). No es un filtro
+         *     decorativo: es como se responde «¿quien cambio esto y que decia antes?»
+         *     sin abrir el detalle una por una.
+         * @example active
+         */
+        AbsenceStatusFilter: "active" | "superseded" | "voided" | "all";
         /**
          * @description Situacion de presencia (RF-PA-02). **`present` por omision**, que es la
          *     pregunta que hace quien abre el panel en un cambio de turno: quien esta
@@ -13178,6 +13980,343 @@ export interface operations {
             /**
              * @description `confirm_checksum` no coincide con el fichero enviado: **no es el que
              *     se valido**. Se vuelve a validar y se aplica con el resumen nuevo.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listAbsences: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Primer dia del periodo consultado, inclusive (RF-GP-04).
+                 *
+                 *     **Opcional, y por omision el primer dia del mes en curso** en la zona del
+                 *     centro, que es lo que RRHH mira al abrir la pantalla. Se devuelven las
+                 *     ausencias cuyo intervalo **toca** el periodo, no solo las que empiezan
+                 *     dentro: una ausencia del 28 de febrero al 3 de marzo aparece preguntando
+                 *     por marzo.
+                 *
+                 *     **El periodo no puede pasar de dos años.** No es una regla de negocio:
+                 *     es lo que impide que una URL manipulada pida diez años de historico a una
+                 *     consulta paginada que acaba pintando una tabla.
+                 * @example 2026-03-01
+                 */
+                from?: components["parameters"]["AbsenceFrom"];
+                /**
+                 * @description Ultimo dia del periodo consultado, inclusive. Por omision, **un año menos
+                 *     un dia** despues de `from`: la pantalla de ausencias se usa tanto para el
+                 *     mes en curso como para el cuadrante de vacaciones del año, y un mes por
+                 *     omision escondia la mitad de lo registrado.
+                 * @example 2026-03-31
+                 */
+                to?: components["parameters"]["AbsenceTo"];
+                /**
+                 * @description Limita el resultado a una persona. **Sigue sujeto al alcance**
+                 *     (RF-ID-03): un responsable que pregunte por alguien de otro departamento
+                 *     recibe una pagina vacia, no un `403` — el listado se acota en la consulta
+                 *     y no revela que esa persona existe.
+                 * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                 */
+                employee_uuid?: components["parameters"]["AbsenceEmployeeFilter"];
+                /**
+                 * @description Limita el resultado al departamento indicado.
+                 * @example 3
+                 */
+                department_id?: components["parameters"]["DepartmentFilter"];
+                /**
+                 * @description Limita el resultado a una categoria de ausencia.
+                 * @example sick_leave
+                 */
+                type?: components["parameters"]["AbsenceTypeFilter"];
+                /**
+                 * @description Situacion de la ausencia. **`active` por omision**, que es lo unico que
+                 *     cuenta para el informe y lo que la pantalla enseña.
+                 *
+                 *     `all` añade las supersedidas por una correccion y las anuladas, que
+                 *     siguen en la tabla para siempre (regla dura 5). No es un filtro
+                 *     decorativo: es como se responde «¿quien cambio esto y que decia antes?»
+                 *     sin abrir el detalle una por una.
+                 * @example active
+                 */
+                status?: components["parameters"]["AbsenceStatusFilter"];
+                /**
+                 * @description Pagina solicitada, empezando en 1.
+                 * @example 1
+                 */
+                page?: components["parameters"]["Page"];
+                /**
+                 * @description Elementos por pagina. El techo es deliberado: una plantilla de 600
+                 *     personas no se sirve entera en una respuesta, y el panel virtualiza la
+                 *     lista (documento 02, Anexo A).
+                 * @example 25
+                 */
+                per_page?: components["parameters"]["PerPage"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pagina de ausencias del periodo. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AbsenceCollection"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    createAbsence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAbsenceRequest"];
+            };
+        };
+        responses: {
+            /** @description Ausencia registrada, en su version 1. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Absence"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /**
+             * @description Ya hay una ausencia **activa** de esa persona que pisa alguno de esos
+             *     dias. La invariante la hace cumplir PostgreSQL con
+             *     `absences_no_overlap`, no una consulta previa: dos altas simultaneas
+             *     pasarian las dos.
+             *
+             *     `409` y no `422`: el cuerpo es valido, lo que no encaja es el estado,
+             *     y la accion siguiente es releer las ausencias de esa persona en lugar
+             *     de reescribir el formulario.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    importAbsences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["AbsenceImportRequest"];
+            };
+        };
+        responses: {
+            /**
+             * @description Informe de la carga. **`200` tambien cuando hay lineas rechazadas**:
+             *     el informe es el resultado esperado del endpoint, no un error de la
+             *     peticion.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AbsenceImportReport"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /**
+             * @description `confirm_checksum` no coincide con el fichero enviado: **no es el que
+             *     se valido**. Se vuelve a validar y se aplica con el resumen nuevo.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getAbsence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** de la ausencia (`absences.uuid`, UUID v7).
+                 *
+                 *     **Identifica una version, no una ausencia a lo largo del tiempo**, con el
+                 *     mismo criterio que `ShiftEntryUuid` (ADR-035, RN-13). Corregir crea una
+                 *     fila nueva con `uuid` propio y deja esta como historico, asi que el
+                 *     identificador que devolvio una correccion es el que hay que usar en la
+                 *     siguiente: reutilizar el anterior responde `409`.
+                 *
+                 *     El `GET` si admite el de cualquier version —un enlace guardado tiene que
+                 *     seguir llevando a algun sitio—; las dos escrituras exigen el vigente.
+                 * @example 0199f4a1-6c22-7e10-9b40-2a3b4c5d6e70
+                 */
+                uuid: components["parameters"]["AbsenceUuid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description La ausencia con sus versiones anteriores. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AbsenceDetail"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    correctAbsence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** de la ausencia (`absences.uuid`, UUID v7).
+                 *
+                 *     **Identifica una version, no una ausencia a lo largo del tiempo**, con el
+                 *     mismo criterio que `ShiftEntryUuid` (ADR-035, RN-13). Corregir crea una
+                 *     fila nueva con `uuid` propio y deja esta como historico, asi que el
+                 *     identificador que devolvio una correccion es el que hay que usar en la
+                 *     siguiente: reutilizar el anterior responde `409`.
+                 *
+                 *     El `GET` si admite el de cualquier version —un enlace guardado tiene que
+                 *     seguir llevando a algun sitio—; las dos escrituras exigen el vigente.
+                 * @example 0199f4a1-6c22-7e10-9b40-2a3b4c5d6e70
+                 */
+                uuid: components["parameters"]["AbsenceUuid"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CorrectAbsenceRequest"];
+            };
+        };
+        responses: {
+            /**
+             * @description **La version nueva**, con `uuid` propio. El panel sustituye la fila
+             *     con este objeto y usa este `uuid` en la correccion siguiente:
+             *     reutilizar el anterior responde `409`.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Absence"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /**
+             * @description **Dos causas, las dos con el mismo `type`**
+             *     `urn:kronoqr:problem:conflict`: la ausencia de la ruta ya no es la
+             *     version vigente —se corrigio o se anulo mientras tanto— o las fechas
+             *     nuevas pisan otra ausencia activa de la misma persona. En los dos
+             *     casos hay que releer su historial antes de volver a intentarlo.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    voidAbsence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** de la ausencia (`absences.uuid`, UUID v7).
+                 *
+                 *     **Identifica una version, no una ausencia a lo largo del tiempo**, con el
+                 *     mismo criterio que `ShiftEntryUuid` (ADR-035, RN-13). Corregir crea una
+                 *     fila nueva con `uuid` propio y deja esta como historico, asi que el
+                 *     identificador que devolvio una correccion es el que hay que usar en la
+                 *     siguiente: reutilizar el anterior responde `409`.
+                 *
+                 *     El `GET` si admite el de cualquier version —un enlace guardado tiene que
+                 *     seguir llevando a algun sitio—; las dos escrituras exigen el vigente.
+                 * @example 0199f4a1-6c22-7e10-9b40-2a3b4c5d6e70
+                 */
+                uuid: components["parameters"]["AbsenceUuid"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoidAbsenceRequest"];
+            };
+        };
+        responses: {
+            /** @description Ausencia anulada, con su autor, su momento y su motivo. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Absence"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /**
+             * @description Esa ausencia ya estaba anulada o ya fue sustituida por una version
+             *     posterior. Vuelve a leer su historial.
              */
             409: {
                 headers: {

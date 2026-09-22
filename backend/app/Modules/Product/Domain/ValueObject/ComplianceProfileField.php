@@ -52,7 +52,7 @@ enum ComplianceProfileField: string
     /** RN-17: dia en que empieza la semana del perfil, ISO-8601. */
     case WeekStartsOn = 'week_starts_on';
 
-    /** Festivos del centro. Sin consumidor hasta la tarea 3.10 (ausencias). */
+    /** RF-GP-04: festivos del centro. Los aplica el informe por periodo desde la tarea 3.10. */
     case HolidayCalendar = 'holiday_calendar';
 
     /** RL-02: años que se conserva el registro horario antes de poder purgarlo. */
@@ -109,8 +109,13 @@ enum ComplianceProfileField: string
 
     /**
      * La regla del **perfil de cumplimiento** cuyo umbral fija este campo, o
-     * `null` si el campo no gobierna ninguna regla (el nombre del convenio, los
-     * años de retencion y los festivos, que todavia no lee nadie).
+     * `null` si el campo no gobierna ninguna regla: el nombre del convenio, los
+     * años de retencion y los festivos. Los festivos **si tienen consumidor**
+     * desde la tarea 3.10 —el informe por periodo no los cuenta como absentismo
+     * (RF-GP-04)—, pero no son el umbral de ninguna de las cuatro reglas del
+     * perfil, asi que aqui siguen en `null` y {@see self::affectsIncidentDetection()}
+     * sigue siendo `false` para ellos: ningun festivo abre ni cierra una
+     * incidencia.
      *
      * Es el vocabulario de `Shared`, que es el unico que este modulo comparte con
      * `Attendance` y con `Reporting` (doc 02 §1.6). Sirve para saber si la regla
@@ -234,23 +239,35 @@ enum ComplianceProfileField: string
     }
 
     /**
-     * Si el producto lo guarda pero todavia **no lo aplica ninguna regla**.
+     * Si el producto lo guarda pero todavia **no lo aplica nadie**.
      *
-     * Queda **uno solo**: los festivos. La tarea 3.4 estreno `max_weekly_hours` y
-     * `week_starts_on` con RN-17, y `holiday_calendar` sigue aqui a proposito
-     * —ninguna de las cuatro reglas lee festivos, porque la semanal mide la
-     * semana trabajada y no los dias laborables—. Lo estrena la tarea 3.10
-     * (ausencias). Se declara aqui —y viaja al panel— para no prometer un efecto
-     * que hoy no existe.
+     * **Ya no queda ninguno, y eso es el final de una promesa concreta.** Este
+     * predicado nacio con tres campos, la tarea 3.4 estreno `max_weekly_hours` y
+     * `week_starts_on` con RN-17, y `holiday_calendar` —el ultimo— lo estrena la
+     * tarea 3.10: el informe por periodo no cuenta un festivo del perfil como
+     * absentismo (RF-GP-04, `Reporting\Domain\Policy\AbsenteeismRule`, nombrada
+     * en prosa porque `Product` no ve `Reporting`). El doc 05 §9 prometia que
+     * «lo estrenara la gestion de ausencias», y esto es eso.
      *
-     * **No confundir con {@see self::governsSuspendedRule()}.** Este no lo lee
-     * **nadie**; `break_required_after_hours` lo lee RN-12, que se evalua y tiene
-     * sus pruebas — lo unico suspendido es que abra incidencia. Meterlos en el
-     * mismo saco haria que la pantalla dijera «no lo aplica ninguna regla» de una
-     * regla que si se aplica, que es mentir en la otra direccion.
+     * **No se borra el metodo.** Devolver `false` siempre no es codigo muerto:
+     * es la afirmacion —verificada por `ComplianceProfileSnapshotTest`— de que
+     * ningun campo editable del perfil es decorativo. El dia que se añada uno
+     * antes que su consumidor, este es el sitio donde se declara, y el panel lo
+     * pinta sin tocar nada mas.
+     *
+     * **Aplicar no es abrir incidencias.** `holiday_calendar` lo lee ahora un
+     * informe, no la revision diaria: {@see self::affectsIncidentDetection()}
+     * sigue siendo `false` para el, porque ningun festivo abre ni cierra nada en
+     * la bandeja.
+     *
+     * **No confundir con {@see self::governsSuspendedRule()}.** Aquel dice que un
+     * campo gobierna una regla que si se evalua y cuya **apertura de incidencia**
+     * esta suspendida (RN-12 mientras el quiosco no registre la pausa, ADR-024).
+     * Meterlos en el mismo saco haria que la pantalla dijera «no lo aplica
+     * ninguna regla» de una regla que si se aplica.
      */
     public function hasNoConsumerYet(): bool
     {
-        return $this === self::HolidayCalendar;
+        return false;
     }
 }

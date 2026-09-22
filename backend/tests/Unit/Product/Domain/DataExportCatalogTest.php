@@ -181,7 +181,7 @@ it('declara la marca de redaccion junto al valor de la configuracion', function 
         ->toBe(['key', 'value', 'value_redacted', 'updated_at', 'updated_by_user_uuid']);
 })->group('RF-PD-14', 'RL-20', 'RF-KI-08');
 
-it('declara los diecinueve conjuntos de la ficha, sin efimeros ni fontaneria', function (): void {
+it('declara los veinte conjuntos del catalogo, sin efimeros ni fontaneria', function (): void {
     // El catalogo completo, valor a valor: añadir o quitar un conjunto tiene que
     // ser un cambio visible que alguien revise, no un efecto colateral.
     expect(DataExportCatalog::names())->toBe([
@@ -189,6 +189,7 @@ it('declara los diecinueve conjuntos de la ficha, sin efimeros ni fontaneria', f
         'departments',
         'employees',
         'employment_contracts',
+        'absences',
         'credentials',
         'devices',
         'shift_entries',
@@ -215,19 +216,55 @@ it('declara los diecinueve conjuntos de la ficha, sin efimeros ni fontaneria', f
     }
 })->group('RF-PD-14', 'RL-20');
 
-it('declara `absences` como no instalado, no como vacio', function (): void {
-    // La diferencia importa: un `absences.csv` con cero filas dice «no tienes
-    // ausencias registradas», y lo cierto es «esta version no registra
-    // ausencias».
+it('ya no declara ningun conjunto como no instalado', function (): void {
+    // `absences` estuvo en esta lista hasta la tarea 3.10, que creo la tabla
+    // (RF-GP-04), y `error_events` hasta la 5.12. Los dos **tienen que salir del
+    // `not_installed`** en cuanto existen: decirle al cliente que su instalacion
+    // no registra ausencias cuando si lo hace es exactamente la mentira que este
+    // mecanismo existe para evitar, solo que al reves.
     //
-    // `error_events` estuvo en esta misma lista hasta la tarea 5.12, que creo la
-    // tabla: ahora es un conjunto mas y **tiene que salir del `not_installed`**,
-    // porque decirle al cliente que su instalacion no registra errores cuando si
-    // lo hace es exactamente la mentira que este mecanismo existe para evitar.
-    expect(DataExportCatalog::notInstalled())->toBe(['absences'])
-        ->and(DataExportCatalog::dataset('absences'))->toBeNull()
-        ->and(DataExportCatalog::dataset('error_events'))->not->toBeNull();
-})->group('RF-PD-14', 'RF-PD-15');
+    // La lista se queda vacia y el metodo se queda: que el producto declare una
+    // tabla en el doc 01 antes de implementarla ha pasado dos veces.
+    expect(DataExportCatalog::notInstalled())->toBe([]);
+
+    expect(DataExportCatalog::dataset('absences'))->not->toBeNull();
+    expect(DataExportCatalog::dataset('error_events'))->not->toBeNull();
+})->group('RF-PD-14', 'RF-GP-04', 'RF-PD-15');
+
+it('exporta todas las versiones de una ausencia, con su nota', function (): void {
+    // Regla dura 5 y RL-04: una exportacion que enseñara solo la version vigente
+    // seria un registro reescrito. `version`, `supersedes_uuid`, `change_reason`
+    // y la anulacion entera tienen que estar, igual que en `shift_entries`.
+    //
+    // Y `note` sale, que es la unica excepcion al cuidado con el que el resto
+    // del producto la protege: este ZIP se queda con el cliente, que es el
+    // responsable del tratamiento (RL-16) y a quien RL-20 obliga a entregar
+    // todos sus datos. El que viaja al fabricante es otro, y va anonimizado.
+    $absences = DataExportCatalog::dataset('absences');
+
+    expect($absences)->not->toBeNull();
+
+    expect($absences?->columns())->toBe([
+        'uuid',
+        'employee_uuid',
+        'type',
+        'starts_on',
+        'ends_on',
+        'note',
+        'status',
+        'version',
+        'supersedes_uuid',
+        'change_reason',
+        'voided_at',
+        'void_reason',
+        'created_at',
+        'created_by_user_uuid',
+    ]);
+
+    // Ni un identificador interno: la referencia a la version anterior sale como
+    // UUID, como toda referencia de esta exportacion (doc 01 §5.5).
+    expect($absences?->columns())->not->toContain('supersedes_id');
+})->group('RF-PD-14', 'RF-GP-04', 'RL-20');
 
 it('usa JSON solo donde hay documentos anidados y CSV para el resto', function (): void {
     // CSV y no XLSX porque XLSX topa en 1.048.576 filas y cuatro años de

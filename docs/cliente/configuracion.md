@@ -262,7 +262,7 @@ Se entrega el perfil **`ES-hosteleria`**, con estos valores:
 | `updated_at` | vacío | Solo lectura: cuándo se ajustó por última vez. **Vacío significa «tal como se instaló»** | — |
 | `max_weekly_hours` | `40` | Jornada semanal ordinaria. **Lo aplica la vista de cumplimiento** del panel: avisa de las semanas que lo superan, **sin abrir incidencia** (ver abajo) | Art. 34.1 ET |
 | `week_starts_on` | `1` (lunes) | Día en que empieza la semana. **Define la semana que mide la vista de cumplimiento** | ISO 8601 |
-| `holiday_calendar` | vacío | Festivos del centro, una fecha por línea. **Todavía no lo aplica ninguna regla** | Lo cargas tú |
+| `holiday_calendar` | vacío | Festivos del centro, una fecha por línea. **Lo aplica el informe de horas por periodo**: esos días no cuentan como absentismo no justificado. **No abre ni cierra ninguna incidencia** | Lo cargas tú |
 | `retention_years` | `4` | Años que hay que conservar el registro antes de poder purgarlo | Art. 34.9 ET |
 | `name` | `ES-hosteleria` | Cómo se llama el convenio que el perfil describe | Lo pones tú |
 
@@ -282,10 +282,30 @@ del municipio y del año: un calendario metido dentro del producto caducaría ca
 31 de diciembre y sería incorrecto para la mitad de los clientes. Lo cargas tú,
 una vez al año, pegando las fechas.
 
-**Un campo se guarda y todavía no se aplica**: el calendario de festivos. La
-pantalla lo dice al lado del campo. Puedes dejarlo ya cargado: lo estrena la
-gestión de ausencias de una versión posterior, y los cambios quedan auditados
-desde hoy.
+**Dónde se nota el calendario de festivos, exactamente.** Lo aplica el **informe
+de horas por periodo**: los días que figuren en él **no se cuentan como
+absentismo no justificado**, y salen en su propia columna. Ese es su único
+efecto. **No afecta a ninguna incidencia** —ningún festivo abre ni cierra nada
+en la bandeja— y no cambia ni una hora del registro. Como el informe se calcula
+en el momento de pedirlo, cargar o quitar fechas cambia también lo que digan los
+informes de periodos ya pasados, y el cambio queda auditado. Lo explica
+[`guia-rrhh.md`](guia-rrhh.md) §5 bis.4.
+
+**Los cuatro tipos de ausencia tampoco se configuran.** El catálogo es cerrado,
+por la misma razón que el de motivos de corrección: unos tipos a medida de cada
+hotel harían incomparables dos instalaciones y obligarían a tocar el producto
+para vender al siguiente cliente.
+
+| Tipo | Qué es |
+| --- | --- |
+| **Vacaciones** | Vacaciones ya concedidas |
+| **Baja médica** | Incapacidad temporal, accidente, cualquier baja con parte |
+| **Permiso** | Permisos retribuidos y no retribuidos |
+| **Otro** | Ninguno de los anteriores. **Exige escribir una nota** |
+
+No hay flujo de aprobación, ni saldo de vacaciones, ni parámetros que tocar aquí.
+Cómo se registran, se corrigen, se anulan y se cargan desde un fichero, y qué ve
+cada rol, está en [`guia-rrhh.md`](guia-rrhh.md) §5 bis.
 
 **La jornada semanal y el día de inicio de semana sí se aplican ya**, en la
 **vista de cumplimiento** del panel: señala las semanas que superan la jornada

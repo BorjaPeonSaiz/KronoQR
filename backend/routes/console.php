@@ -327,6 +327,51 @@ $complianceMetrics = Schedule::command('reporting:compliance-metrics')
 $complianceMetrics->onFailure(LogScheduledCommandFailure::of('reporting:compliance-metrics', $complianceMetrics));
 
 /*
+ * Personas ausentes hoy (doc 02 §8.2, RF-GP-04, tarea 3.10, decision 8).
+ *
+ *   reporting:absence-metrics
+ *
+ *   absences_current{type}
+ *
+ * DIARIA, a las 04:55 UTC: la misma cadencia que `reporting:compliance-metrics`,
+ * que es lo que la ficha fija, y un hueco propio detras de las metricas de
+ * adopcion (04:50) para no solapar tres escrituras del colector textfile en el
+ * mismo minuto.
+ *
+ * NO DEPENDE DE LA DETECCION NI DE LA RECONCILIACION, al contrario que sus dos
+ * vecinas: lo que cuenta son filas de `absences`, que no las toca ninguna tarea
+ * nocturna. Se deja aqui por orden de lectura, no por precedencia.
+ *
+ * MIDE HOY, NO AYER, y esa es la diferencia con casi todo lo demas de este
+ * fichero: la pregunta es «¿quien esta de vacaciones o de baja ahora mismo?», y
+ * la respuesta de ayer no sirve para organizar el turno de hoy. El dia es el
+ * civil del centro (ADR-040), resuelto con el puerto `Clock`: a las 04:55 UTC en
+ * Madrid ya son las 05:55 o las 06:55, asi que el dia del centro es el correcto
+ * en las dos estaciones.
+ *
+ * UNA VEZ AL DIA Y NO MAS. Una ausencia se registra con dias o semanas de
+ * antelacion —o despues, cuando se conoce la baja—, y su efecto sobre «quien
+ * falta hoy» no cambia a media mañana. Publicarla cada cinco minutos solo
+ * engordaria la base de metricas con la misma cifra.
+ *
+ * SE RECALCULA ENTERA, NUNCA SE INCREMENTA (regla dura 7 aplicada a la
+ * instrumentacion). Repetirla es seguro: da el mismo numero.
+ *
+ * SIN ALERTA: es un indicador de RRHH, no un fallo de operacion, y no hay
+ * runbook que sostenga avisar a nadie a las 06:30 de que alguien esta de
+ * vacaciones (doc 02 §8.4).
+ *
+ * `onFailure()` deja el codigo de salida en el log (ver la cabecera del
+ * fichero), NUNCA su salida: el comando no imprime ni tipos de ausencia ni
+ * nombres, pero la regla dura 21 gobierna el habito.
+ */
+$absenceMetrics = Schedule::command('reporting:absence-metrics')
+    ->dailyAt('04:55')
+    ->withoutOverlapping()
+    ->runInBackground();
+$absenceMetrics->onFailure(LogScheduledCommandFailure::of('reporting:absence-metrics', $absenceMetrics));
+
+/*
  * Metrica de incidencias abiertas (doc 02 §8.2, doc 01 §9.2, tarea 2.6).
  *
  *   incidents_open{type,severity}

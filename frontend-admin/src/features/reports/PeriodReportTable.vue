@@ -92,8 +92,33 @@ const hasSubjectColumn = computed(() => props.rows.some((row) => row.subject.kin
         <th scope="col" class="py-2 pr-3 text-right font-semibold">
           {{ t('reports.table.openShiftDays') }}
         </th>
-        <th scope="col" class="py-2 text-right font-semibold">
+        <th scope="col" class="py-2 pr-3 text-right font-semibold">
           {{ t('reports.table.incidentDays') }}
+        </th>
+        <!-- RF-GP-04 (tarea 3.10): las ausencias registradas no cuentan como
+             absentismo no justificado, y el calendario de festivos del
+             perfil de cumplimiento tampoco. `title` explica cada columna:
+             son tres numeros que se prestan a confundirse entre si. -->
+        <th
+          scope="col"
+          class="py-2 pr-3 text-right font-semibold"
+          :title="t('reports.table.absenceDaysTitle')"
+        >
+          {{ t('reports.table.absenceDays') }}
+        </th>
+        <th
+          scope="col"
+          class="py-2 pr-3 text-right font-semibold"
+          :title="t('reports.table.holidayDaysTitle')"
+        >
+          {{ t('reports.table.holidayDays') }}
+        </th>
+        <th
+          scope="col"
+          class="py-2 text-right font-semibold"
+          :title="t('reports.table.unjustifiedAbsenceDaysTitle')"
+        >
+          {{ t('reports.table.unjustifiedAbsenceDays') }}
         </th>
       </tr>
     </thead>
@@ -133,7 +158,10 @@ const hasSubjectColumn = computed(() => props.rows.some((row) => row.subject.kin
         <td class="py-2 pr-3 text-right tabular-nums">{{ row.days_with_activity }}</td>
         <td class="py-2 pr-3 text-right tabular-nums">{{ row.days_without_activity }}</td>
         <td class="py-2 pr-3 text-right tabular-nums">{{ row.open_shift_days }}</td>
-        <td class="py-2 text-right tabular-nums">{{ row.incident_days }}</td>
+        <td class="py-2 pr-3 text-right tabular-nums">{{ row.incident_days }}</td>
+        <td class="py-2 pr-3 text-right tabular-nums">{{ row.absence_days }}</td>
+        <td class="py-2 pr-3 text-right tabular-nums">{{ row.holiday_days }}</td>
+        <td class="py-2 text-right tabular-nums">{{ row.unjustified_absence_days }}</td>
       </tr>
     </tbody>
   </table>

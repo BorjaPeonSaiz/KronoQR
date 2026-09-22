@@ -38,6 +38,23 @@ use InvalidArgumentException;
  *   un error. Los produce `generate_series`, de modo que
  *   `daysWithActivity + daysWithoutActivity` es siempre `daysInPeriod`.
  *
+ * ## Ausencias, festivos y absentismo (RF-GP-04)
+ *
+ * Los tres contadores nuevos los define `Reporting\Domain\Policy\AbsenteeismRule`
+ * —nombrado en prosa y no con `{@see}` porque Pint lo resolveria a un `use` que
+ * despues borraria por no usarse en codigo—, y esa clase es el enunciado: aqui
+ * solo se transportan. En resumen: `absenceDays` son dias-persona de alta
+ * cubiertos por una ausencia activa, `holidayDays` son de alta, festivos del
+ * perfil y **sin** ausencia —si coinciden gana la ausencia, para que los dos
+ * contadores de dias justificados sean disjuntos— y `unjustifiedAbsenceDays` son
+ * de alta, sin actividad, sin ausencia y sin festivo.
+ *
+ * **`unjustifiedAbsenceDays` no es «dias que faltó a trabajar».** El producto no
+ * conoce el cuadrante, asi que los dias de descanso semanal caen ahi dentro. El
+ * limite esta explicado en `AbsenteeismRule` y viaja ademas en
+ * `meta.criteria`, en el idioma de quien pide el informe: un numero asi no puede
+ * salir de la API sin su advertencia al lado.
+ *
  * ## Lo contratado y su desviacion (RF-IN-03)
  *
  * `contractedMinutes` es la suma, dia a dia del periodo, de las horas semanales
@@ -74,6 +91,12 @@ final readonly class PeriodReportRow
         public int $contractedMinutes,
         /** Dias del periodo en los que la persona estaba de alta y sin contrato vigente. */
         public int $daysWithoutContract,
+        /** Dias-persona de alta cubiertos por una ausencia activa (RF-GP-04). */
+        public int $absenceDays,
+        /** Dias-persona de alta, festivos del perfil y sin ausencia que los cubra (RF-GP-04). */
+        public int $holidayDays,
+        /** Dias-persona de alta, sin actividad, sin ausencia y sin festivo (RF-GP-04). */
+        public int $unjustifiedAbsenceDays,
     ) {
         if ($this->periodStart > $this->periodEnd) {
             throw new InvalidArgumentException('El periodo de una fila no puede terminar antes de empezar.');
@@ -81,6 +104,18 @@ final readonly class PeriodReportRow
 
         if ($this->daysWithActivity > $this->daysInPeriod) {
             throw new InvalidArgumentException('Una fila no puede tener mas dias con actividad que dias.');
+        }
+
+        // La invariante que ata el contador nuevo al que ya existia: el
+        // absentismo no justificado es un SUBCONJUNTO de los dias sin actividad
+        // —exige ademas estar de alta, sin ausencia y sin festivo—, asi que no
+        // puede superarlo. Si alguna vez lo hiciera, el `FILTER` del SQL habria
+        // dejado de exigir alguna de las tres condiciones y el informe estaria
+        // acusando de absentismo dias con fichajes.
+        if ($this->unjustifiedAbsenceDays > $this->daysWithoutActivity()) {
+            throw new InvalidArgumentException(
+                'Una fila no puede tener mas dias de absentismo no justificado que dias sin actividad.'
+            );
         }
     }
 

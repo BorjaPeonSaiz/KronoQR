@@ -6,6 +6,7 @@ namespace App\Modules\Reporting\Http\Support;
 
 use App\Modules\Reporting\Domain\ValueObject\PeriodReport;
 use App\Modules\Reporting\Domain\ValueObject\PeriodReportRow;
+use App\Modules\Reporting\Domain\ValueObject\ReportCriterion;
 
 /**
  * La huella SHA-256 **del contenido** de un informe por periodo (**RF-IN-04**).
@@ -45,17 +46,27 @@ use App\Modules\Reporting\Domain\ValueObject\PeriodReportRow;
  * presentacion y los minutos son el dato.
  *
  * ```
- * kronoqr-period-report/1
+ * kronoqr-period-report/2
  * range<US>2026-03-01<US>2026-03-31
  * shape<US>month<US>employee<US>Europe/Madrid
  * criteria<US>criteria.source<US>criteria.work_date<US>…
- * row<US>employee<US>0199…<US>739104<US>3<US>Lucía Amrani<US>2026-03-01<US>2026-03-31<US>9720<US>9257<US>21<US>31<US>21<US>0<US>1<US>0
+ * row<US>employee<US>0199…<US>739104<US>3<US>Lucía Amrani<US>2026-03-01<US>2026-03-31<US>9720<US>9257<US>21<US>31<US>21<US>0<US>1<US>0<US>3<US>1<US>6
  * …
  * ```
  *
  * La version de la primera linea existe para que el dia que haya que añadir una
  * columna se pueda decir «esto es v2» en lugar de que las huellas empiecen a no
- * cuadrar sin explicacion.
+ * cuadrar sin explicacion. **Y ese dia llego**: RF-GP-04 añade tres contadores a
+ * cada fila —ausencias, festivos y absentismo no justificado— y son contenido
+ * del documento, no presentacion: dos informes iguales en horas y distintos en
+ * ausencias no son el mismo informe. De ahi `/2`: la huella de un informe de
+ * marzo sacado antes y despues de esta version **no coincide**, y la version lo
+ * explica en lugar de dejarlo como un misterio.
+ *
+ * De la linea de criterios entra **la clave**, no el texto traducido, por lo
+ * mismo que las duraciones entran en minutos: el mismo informe descargado en
+ * castellano y en ingles tiene la misma huella. Lo que si entra son las
+ * sustituciones —«cuantos festivos»—, porque cambian lo que el informe afirma.
  *
  * ## Por que vive en `Http/Support` y no en el dominio
  *
@@ -66,7 +77,7 @@ use App\Modules\Reporting\Domain\ValueObject\PeriodReportRow;
 final readonly class PeriodReportDigest
 {
     /** Version del formato canonico. Ver el docblock. */
-    private const string VERSION = 'kronoqr-period-report/1';
+    private const string VERSION = 'kronoqr-period-report/2';
 
     /** Separador de unidad de ASCII: no aparece en ningun valor del informe. */
     private const string SEPARATOR = "\x1F";
@@ -97,7 +108,7 @@ final readonly class PeriodReportDigest
             self::VERSION,
             self::line(['range', $report->range->isoFrom(), $report->range->isoTo()]),
             self::line(['shape', $report->granularity->value, $report->grouping->value, $report->timeZone]),
-            self::line(['criteria', ...$report->criteria]),
+            self::line(['criteria', ...self::criteria($report)]),
         ];
 
         foreach ($report->rows as $row) {
@@ -105,6 +116,38 @@ final readonly class PeriodReportDigest
         }
 
         return implode("\n", $lines);
+    }
+
+    /**
+     * Los criterios por su clave, con las sustituciones pegadas detras.
+     *
+     * `criteria.holidays=count:1|profile:ES-hosteleria`. El texto traducido no
+     * entra —el mismo informe en dos idiomas tiene la misma huella—, pero el
+     * valor si: «hay 1 festivo» y «hay 4 festivos» no son la misma afirmacion.
+     *
+     * @return list<string>
+     */
+    private static function criteria(PeriodReport $report): array
+    {
+        return array_map(static function (ReportCriterion $criterion): string {
+            if ($criterion->replacements === []) {
+                return $criterion->key;
+            }
+
+            $pairs = [];
+
+            // Ordenadas por clave: dos informes identicos no pueden dar huellas
+            // distintas porque quien compuso el criterio escribiera los
+            // marcadores en otro orden.
+            $replacements = $criterion->replacements;
+            ksort($replacements);
+
+            foreach ($replacements as $name => $value) {
+                $pairs[] = $name.':'.$value;
+            }
+
+            return $criterion->key.'='.implode('|', $pairs);
+        }, $report->criteria);
     }
 
     /**
@@ -133,6 +176,11 @@ final readonly class PeriodReportDigest
             (string) $row->openShiftDays,
             (string) $row->incidentDays,
             (string) $row->daysWithoutContract,
+            // RF-GP-04, y por eso la version subio a `/2`: dos informes iguales
+            // en horas pero distintos en ausencias no son el mismo informe.
+            (string) $row->absenceDays,
+            (string) $row->holidayDays,
+            (string) $row->unjustifiedAbsenceDays,
         ];
     }
 

@@ -7,6 +7,7 @@ use App\Modules\Reporting\Domain\ValueObject\ContractCoverage;
 use App\Modules\Reporting\Domain\ValueObject\DateRange;
 use App\Modules\Reporting\Domain\ValueObject\PeriodReport;
 use App\Modules\Reporting\Domain\ValueObject\PeriodReportRow;
+use App\Modules\Reporting\Domain\ValueObject\ReportCriterion;
 use App\Modules\Reporting\Domain\ValueObject\ReportGranularity;
 use App\Modules\Reporting\Domain\ValueObject\ReportGrouping;
 use App\Modules\Reporting\Domain\ValueObject\ReportSubject;
@@ -78,6 +79,9 @@ function informeSellable(int $workedMinutes = 9720): PeriodReport
                 incidentDays: 1,
                 contractedMinutes: 9257,
                 daysWithoutContract: 0,
+                absenceDays: 3,
+                holidayDays: 1,
+                unjustifiedAbsenceDays: 6,
             ),
         ],
         range: DateRange::between('2026-03-01', '2026-03-31'),
@@ -87,7 +91,7 @@ function informeSellable(int $workedMinutes = 9720): PeriodReport
         // 07:12 en Madrid: si el sello saliera en UTC diria 05:12 y pareceria
         // generado por otro sistema (regla dura 3, ADR-040).
         generatedAt: new DateTimeImmutable('2026-04-01T05:12:03Z', new DateTimeZone('UTC')),
-        criteria: ['criteria.source', 'criteria.work_date'],
+        criteria: ReportCriterion::listOf(['criteria.source', 'criteria.work_date']),
         contractCoverage: new ContractCoverage(0, 0),
     );
 }

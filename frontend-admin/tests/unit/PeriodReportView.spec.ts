@@ -48,6 +48,11 @@ function row(overrides: Partial<PeriodReportRow> = {}): PeriodReportRow {
     overtime_minutes: 463,
     overtime: '07:43',
     days_without_contract: 0,
+    // RF-GP-04 (tarea 3.10): sin ninguna ausencia en este doble, los diez
+    // dias sin actividad son, de momento, absentismo sin explicar.
+    absence_days: 0,
+    holiday_days: 0,
+    unjustified_absence_days: 10,
     ...overrides,
   }
 }

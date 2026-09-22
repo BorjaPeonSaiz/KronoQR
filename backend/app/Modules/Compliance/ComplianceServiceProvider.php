@@ -47,6 +47,7 @@ use App\Modules\Compliance\Infrastructure\Console\VerifyAuditChainCommand;
 use App\Modules\Compliance\Infrastructure\Export\CsvLegalExportWriter;
 use App\Modules\Compliance\Infrastructure\Listener\NotifyIncidentAssignees;
 use App\Modules\Compliance\Infrastructure\Listener\OpenIncidentOnAnomalyDetected;
+use App\Modules\Compliance\Infrastructure\Listener\RecordAbsenceChange;
 use App\Modules\Compliance\Infrastructure\Listener\RecordComplianceProfileChange;
 use App\Modules\Compliance\Infrastructure\Listener\RecordCredentialLifecycle;
 use App\Modules\Compliance\Infrastructure\Listener\RecordDataExportDownloaded;
@@ -113,6 +114,9 @@ use App\Modules\Shared\Application\Port\AuthenticationJournal;
 use App\Modules\Shared\Application\Port\AuthorizationJournal;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
+use App\Modules\Workforce\Domain\Event\AbsenceCorrected;
+use App\Modules\Workforce\Domain\Event\AbsenceRegistered;
+use App\Modules\Workforce\Domain\Event\AbsenceVoided;
 use App\Modules\Workforce\Domain\Event\EmployeePinDelivered;
 use App\Modules\Workforce\Domain\Event\EmployeePinIssued;
 use App\Modules\Workforce\Domain\Event\EmployeesImported;
@@ -295,6 +299,7 @@ final class ComplianceServiceProvider extends ServiceProvider
         $this->recordDeviceProvisioning();
         $this->recordEmployeePinLifecycle();
         $this->recordEmploymentContractChanges();
+        $this->recordAbsenceChanges();
         $this->recordSiteConfiguration();
         $this->recordEmployeeImports();
         $this->recordSetupCompletion();
@@ -631,6 +636,32 @@ final class ComplianceServiceProvider extends ServiceProvider
     private function recordEmploymentContractChanges(): void
     {
         Event::listen(EmploymentContractRegistered::class, [RecordEmploymentContractChange::class, 'handle']);
+    }
+
+    /**
+     * El mapa evento -> asiento de las **ausencias** (tarea 3.10, RF-GP-04).
+     *
+     * Misma familia del bloque D que el contrato: una ausencia registrada cambia
+     * el resultado del informe de absentismo, y quien la registra puede
+     * convertir cinco faltas en cinco dias de vacaciones sin tocar un fichaje.
+     *
+     * **Tres acciones y no una**, aunque las tres hablen del mismo recurso:
+     * registrar, corregir —que crea version y lleva el antes completo (RN-13)—
+     * y anular, que va en el sentido contrario y devuelve esos dias al
+     * absentismo no justificado. Con un solo valor habria que filtrar por el
+     * contenido del JSON para distinguirlas, que es justo lo que un catalogo
+     * cerrado existe para evitar.
+     *
+     * Sincrono, sin `ShouldQueue` y sin `afterCommit`: si el asiento falla, la
+     * ausencia no se registra (ADR-027). **Tambien las de la carga por fichero**,
+     * que publican un evento por linea aplicada dentro de la transaccion del
+     * lote: ahi tampoco hay ningun otro rastro por el que se sepa quien las metio.
+     */
+    private function recordAbsenceChanges(): void
+    {
+        Event::listen(AbsenceRegistered::class, [RecordAbsenceChange::class, 'registered']);
+        Event::listen(AbsenceCorrected::class, [RecordAbsenceChange::class, 'corrected']);
+        Event::listen(AbsenceVoided::class, [RecordAbsenceChange::class, 'voided']);
     }
 
     /**

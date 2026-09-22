@@ -887,8 +887,9 @@ administers the server changes them.
 
 A single ZIP file, `kronoqr-export-<versión>-<fecha UTC>.zip`, with
 **everything** in your installation in open formats: one CSV per table
-(workforce, contracts, cards, kiosks, shift entries with all their versions,
-corrections with author and reason, totals, incidents, scans, the complete
+(workforce, contracts, absences with all their versions, cards, kiosks, shift
+entries with all their versions, corrections with author and reason, totals,
+incidents, scans, the complete
 audit trail with its hash chain, management accounts, support access grants),
 JSON for the configuration, the compliance profile and the licence, a
 `manifest.json` with the row count and the `sha256` fingerprint of each file,

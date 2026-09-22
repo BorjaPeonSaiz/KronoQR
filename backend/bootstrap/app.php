@@ -51,8 +51,10 @@ use App\Modules\Reporting\Domain\Exception\ReportTooLargeForSynchronousDelivery;
 use App\Modules\Shared\Domain\Exception\AccessOutOfScope;
 use App\Modules\Shared\Domain\Exception\FeatureNotLicensed;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
+use App\Modules\Workforce\Domain\Exception\AbsenceRequiresNote;
 use App\Modules\Workforce\Domain\Exception\EmployeeAlreadyTerminated;
 use App\Modules\Workforce\Domain\Exception\ImportTooLarge;
+use App\Modules\Workforce\Domain\Exception\InvalidAbsencePeriod;
 use App\Modules\Workforce\Domain\Exception\InvalidEmploymentContract;
 use App\Modules\Workforce\Domain\Exception\InvalidEmploymentPeriod;
 use App\Modules\Workforce\Domain\Exception\UnknownTimezone;
@@ -526,6 +528,34 @@ return Application::configure(basePath: dirname(__DIR__))
          */
         $exceptions->render(static fn (InvalidEmploymentContract $exception): mixed => ProblemDetails::validationFailed([
             'weekly_hours' => [$exception->getMessage()],
+        ]));
+
+        /*
+         * Ausencias (tarea 3.10, RF-GP-04).
+         *
+         * `422` PARA LO QUE ES UNA ERRATA —un periodo invertido, una ausencia
+         * registrada fuera de la relacion laboral, un `other` sin nota—: hay un
+         * campo que corregir y quien lo recibe puede hacerlo sin releer nada. El
+         * `FormRequest` atrapa casi todo antes con el campo señalado; esto cubre
+         * el camino que no pasa por el —una carga por fichero, un comando— para
+         * que no salga como `500`.
+         *
+         * LOS CONFLICTOS NO ENTRAN AQUI: `OverlappingAbsence` y
+         * `AbsenceNotActive` son `WorkforceConflict` y salen `409` por la linea
+         * de mas arriba, que es lo correcto. El cuerpo es valido; lo que no
+         * encaja es el estado, y la accion siguiente es releer el historial de
+         * esa persona en vez de reescribir el formulario.
+         *
+         * Se señala `ends_on` en el periodo porque es el campo que casi siempre
+         * se corrige —una baja que se prorroga, unas vacaciones que se acortan—
+         * y `note` en la nota que falta, que es el unico campo posible.
+         */
+        $exceptions->render(static fn (InvalidAbsencePeriod $exception): mixed => ProblemDetails::validationFailed([
+            'ends_on' => [$exception->getMessage()],
+        ]));
+
+        $exceptions->render(static fn (AbsenceRequiresNote $exception): mixed => ProblemDetails::validationFailed([
+            'note' => [$exception->getMessage()],
         ]));
 
         /*

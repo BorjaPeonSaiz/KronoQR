@@ -174,6 +174,7 @@ Política por tipo de dato, que es la que aplica el sistema:
 | Histórico de errores | **90 días** | Tu instalación |
 | Copias de seguridad | 30 días de serie | Tu instalación (`BACKUP_RETENTION_DAYS`) |
 | Datos de contrato (horas pactadas, tipo de jornada, vigencia) | **Relación laboral + 4 años**, orientativo | **Pendiente de confirmar con tu asesoría laboral.** Hoy **se conservan**: el sistema no los purga |
+| Ausencias (tipo, fechas, nota, versiones y anulaciones) | **Relación laboral + 4 años**, orientativo | **Pendiente de confirmar con tu asesoría laboral.** Hoy **se conservan**: el sistema no las purga. **Contienen dato de salud** |
 
 **Los datos de contrato todavía no tienen purga automática, y es deliberado.** El
 plazo orientativo —la duración de la relación laboral más cuatro años, por
@@ -181,6 +182,16 @@ referencia al art. 21 de la LISOS— **no está validado**, y borrar por un plaz
 que luego resulte corto es peor que conservar de más un tiempo acotado.
 Confírmalo con tu asesoría laboral; hasta entonces esos datos permanecen y
 aparecen en cualquier respuesta a un derecho de acceso.
+
+**Las ausencias van por el mismo camino, y con un motivo más para no improvisar
+el plazo.** Tampoco tienen purga automática ni plazo validado, y además el tipo
+«Baja médica» es **dato de salud** —categoría especial del art. 9 del RGPD—, lo
+que obliga a justificar el plazo mejor, no peor. Hasta que tu asesoría lo fije,
+las ausencias se conservan y aparecen en cualquier respuesta a un derecho de
+acceso, **incluida la nota, que se entrega tal como esté escrita**. Por eso la
+guía de RRHH pide no escribir el diagnóstico ni el motivo médico en esa nota
+([`guia-rrhh.md`](guia-rrhh.md) §5 bis.5): lo que no se escribe no hay que
+conservarlo, ni entregarlo, ni explicarlo.
 
 **La purga nunca es automática** (RF-PR-03). El sistema **propone** cada semana y
 deja un informe; borrar exige una confirmación explícita del responsable y una

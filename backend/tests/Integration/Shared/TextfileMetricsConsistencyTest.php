@@ -134,6 +134,8 @@ it('ningun adaptador textfile escribe su propio fichero', function (): void {
         'app/Modules/Compliance/Infrastructure/Metrics/TextfileLegalExportMetrics.php',
         'app/Modules/Compliance/Infrastructure/Metrics/TextfileRetentionMetrics.php',
         'app/Modules/Identity/Infrastructure/Metrics/TextfileCredentialMetrics.php',
+        // TextfileAbsenceMetrics (tarea 3.10): `absences_current{type}`.
+        'app/Modules/Reporting/Infrastructure/Metrics/TextfileAbsenceMetrics.php',
         'app/Modules/Reporting/Infrastructure/Metrics/TextfileAdoptionMetrics.php',
         'app/Modules/Reporting/Infrastructure/Metrics/TextfileComplianceMetrics.php',
         'app/Modules/Reporting/Infrastructure/Metrics/TextfilePresenceMetrics.php',

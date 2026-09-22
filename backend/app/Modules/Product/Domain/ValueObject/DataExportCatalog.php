@@ -66,15 +66,34 @@ namespace App\Modules\Product\Domain\ValueObject;
  *   columna `roles` de `users.csv`, que es lo que responde la pregunta; las
  *   tablas de union son un detalle de implementacion de la libreria de permisos.
  *
- * ## `absences`
+ * ## Ya no hay ningun conjunto «no instalado»
  *
- * **No existe todavia en este esquema**, y el manifiesto la declara
- * `not_installed` en lugar de escribir un fichero vacio. La diferencia importa:
- * un `absences.csv` con cero filas le dice al cliente «no tienes ausencias
- * registradas», y lo cierto es «esta version no registra ausencias».
+ * `absences` fue el ultimo, y entra como un conjunto mas desde la tarea 3.10,
+ * que creo la tabla (RF-GP-04). Antes el manifiesto la declaraba
+ * `not_installed` en lugar de escribir un fichero vacio, y la diferencia
+ * importaba: un `absences.csv` con cero filas le dice al cliente «no tienes
+ * ausencias registradas», y lo cierto era «esta version no registra ausencias».
+ * `error_events` recorrio el mismo camino en la tarea 5.12.
  *
- * `error_events` estuvo en esa misma lista hasta la tarea 5.12, que creo la
- * tabla. Ahora entra como un conjunto mas.
+ * {@see self::notInstalled()} **sigue existiendo y devuelve una lista vacia**:
+ * el mecanismo tiene que estar el dia que el producto declare una tabla antes de
+ * implementarla, que es lo que ha pasado dos veces.
+ *
+ * ## `absences` lleva `note`, y es la excepcion que merece explicacion
+ *
+ * En todas las demas superficies del producto la nota de una ausencia se
+ * protege: no viaja al `responsable_departamento`, no entra en `audit_log` —de
+ * ella solo consta `has_note`— y no aparece en ningun log tecnico, porque una
+ * baja medica es dato de salud (regla dura 21). Aqui si sale, por lo mismo que
+ * `error_events` sale entero: **este ZIP se queda con el cliente**, que es el
+ * responsable del tratamiento (RL-16) y a quien RL-20 obliga a entregar todos
+ * sus datos. Lo que no puede salir son secretos y credenciales, no los datos
+ * propios. La diferencia con el paquete de diagnostico es exactamente esa:
+ * aquel va hacia el fabricante y por eso va anonimizado (ADR-020).
+ *
+ * Y salen **todas las versiones** —`superseded` y `voided` incluidas— con su
+ * `version`, su `supersedes_uuid` y su motivo, igual que `shift_entries`: una
+ * exportacion que enseñara solo la ultima version seria un registro reescrito.
  *
  * ## Dominio puro
  *
@@ -148,6 +167,35 @@ final class DataExportCatalog
                 'schedule_type',
                 'valid_from',
                 'valid_to',
+                'created_at',
+                'created_by_user_uuid',
+            ]),
+
+            /*
+             * Las ausencias registradas (RF-GP-04, tarea 3.10).
+             *
+             * **Todas las versiones** —`superseded` y `voided` incluidas— con su
+             * `version`, su `supersedes_uuid`, su motivo de cambio y su
+             * anulacion, igual que `shift_entries` y por la misma razon (regla
+             * dura 5, RL-04).
+             *
+             * **`note` sale**: ver el docblock de la clase. Es la exportacion de
+             * los datos del propio cliente (RL-16, RL-20), no un paquete que
+             * viaje al fabricante.
+             */
+            ExportedDataset::csv('absences', [
+                'uuid',
+                'employee_uuid',
+                'type',
+                'starts_on',
+                'ends_on',
+                'note',
+                'status',
+                'version',
+                'supersedes_uuid',
+                'change_reason',
+                'voided_at',
+                'void_reason',
                 'created_at',
                 'created_by_user_uuid',
             ]),
@@ -425,11 +473,17 @@ final class DataExportCatalog
      * Lo que esta version **no** registra todavia. Ver el docblock de la clase:
      * `not_installed` en el manifiesto no es lo mismo que un fichero vacio.
      *
+     * **Hoy esta vacia**, y el metodo se queda. `error_events` salio de aqui en
+     * la tarea 5.12 y `absences` en la 3.10; que el producto declare una tabla
+     * en el doc 01 antes de implementarla ha pasado dos veces, y el dia que
+     * vuelva a pasar el mecanismo tiene que estar. Quitarlo obligaria ademas a
+     * tocar el manifiesto, la guia del ZIP y sus dos traducciones.
+     *
      * @return list<string>
      */
     public static function notInstalled(): array
     {
-        return ['absences'];
+        return [];
     }
 
     /**

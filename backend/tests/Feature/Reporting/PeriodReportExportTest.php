@@ -179,6 +179,60 @@ it('descarga el informe como CSV con BOM, punto y coma y las horas en HH:MM', fu
         ->and($cuerpo)->not->toContain("'-");
 })->group('RF-IN-04');
 
+it('saca las tres columnas de absentismo en el CSV, con sus rotulos y sus cifras', function (): void {
+    // RF-GP-04, decision 7: «las tres columnas salen tambien en CSV, XLSX y
+    // PDF». Los tres formatos recorren la misma lista de columnas
+    // (`PeriodReportLayout::COLUMNS`), asi que basta comprobar aqui los rotulos
+    // y que las cifras llegan; los otros dos casos comprueban que la lista se
+    // escribe entera en su formato.
+    $contexto = contextoDeDescargaDeInforme();
+
+    // Una baja de dos dias y un festivo del perfil dentro de la semana del 1 al
+    // 7 de marzo, que es la que descarga `descargaDeMarzo()`.
+    PeriodReportFixtures::absence($contexto['employee'], 'vacation', '2026-03-06', '2026-03-07');
+
+    DB::table('compliance_profiles')
+        ->where('is_default', true)
+        ->update(['holiday_calendar' => json_encode(['2026-03-04'], JSON_THROW_ON_ERROR)]);
+
+    $cuerpo = cuerpoDeLaDescarga(
+        Api::as($contexto['token'])
+            ->get('/api/v1/reports/period/export', descargaDeMarzo('csv'))
+            ->assertOk(),
+    );
+
+    // Los rotulos, en el orden de la lista de columnas y en castellano. Van
+    // entrecomillados los que llevan espacios, que es lo que hace `fputcsv`; «Festivos» no los lleva y va sin comillas.
+    expect($cuerpo)->toContain('"Días de ausencia";Festivos;"Absentismo no justificado"');
+
+    // Y las cifras: 2 de ausencia, 1 festivo y 1 sin justificar —de los siete
+    // dias, tres se ficharon—.
+    expect($cuerpo)->toContain(';2;1;1');
+
+    // El aviso del cuadrante viaja con los criterios, VISIBLE dentro del
+    // fichero: quien lo abra dentro de dos años no tiene a nadie al lado que se
+    // lo explique.
+    expect($cuerpo)->toContain('no conoce el cuadrante');
+})->group('RF-GP-04', 'RF-IN-04');
+
+it('saca las tres columnas de absentismo tambien en ingles', function (): void {
+    // El idioma del documento es configuracion de la instalacion (ADR-017): si
+    // los rotulos nuevos solo existieran en castellano, un cliente en ingles
+    // recibiria tres columnas sin cabecera y nadie se enteraria hasta la demo.
+    $contexto = contextoDeDescargaDeInforme();
+
+    InstallationLocale::set('en');
+
+    $cuerpo = cuerpoDeLaDescarga(
+        Api::as($contexto['token'])
+            ->get('/api/v1/reports/period/export', descargaDeMarzo('csv'))
+            ->assertOk(),
+    );
+
+    expect($cuerpo)->toContain('"Absence days","Public holidays","Unexplained absence"')
+        ->and($cuerpo)->toContain('does not know the shift roster');
+})->group('RF-GP-04', 'RF-IN-04');
+
 it('cambia el separador del CSV cuando la instalacion habla ingles', function (): void {
     // El punto y coma no es una preferencia: es lo que Excel espera cuando la
     // coma es el separador decimal. En una instalacion en ingles no lo es, y un
@@ -259,7 +313,17 @@ it('descarga el informe como XLSX legible, con las horas como texto', function (
         // Y ninguna celda ha acabado siendo una hora del reloj o un decimal.
         ->and(implode('|', $datos))->not->toContain('22,5')
         ->and(implode('|', $datos))->not->toContain('22.5');
-})->group('RF-IN-04');
+
+    // RF-GP-04: las tres columnas nuevas estan, con su rotulo y su ancho. Una
+    // columna rotulada en el CSV y ausente en el XLSX es justo lo que
+    // `PeriodReportLayout` existe para impedir.
+    expect($rotulos)->toContain('Días de ausencia')
+        ->and($rotulos)->toContain('Festivos')
+        ->and($rotulos)->toContain('Absentismo no justificado')
+        // Tantos rotulos como celdas de datos: si los anchos y las columnas se
+        // hubieran separado, la fila saldria mas corta que la cabecera.
+        ->and(\count($datos))->toBe(\count($rotulos));
+})->group('RF-IN-04', 'RF-GP-04');
 
 it('descarga el informe como PDF, con su tipo y su nombre de fichero', function (): void {
     $contexto = contextoDeDescargaDeInforme();
@@ -287,11 +351,19 @@ it('descarga el informe como PDF, con su tipo y su nombre de fichero', function 
         // Sin nada configurado es el nombre del producto: el valor por defecto ES
         // el producto, nunca la marca de otro cliente.
         ->and($html)->toContain('KronoQR')
+        // RF-GP-04: las tres columnas nuevas tambien en el PDF, y el aviso del
+        // cuadrante con los criterios. Un informe impreso que enseñara «días sin
+        // justificar» sin decir que el producto no conoce el cuadrante es la
+        // unica de las tres salidas que nadie puede volver a consultar.
+        ->and($html)->toContain('Días de ausencia')
+        ->and($html)->toContain('Festivos')
+        ->and($html)->toContain('Absentismo no justificado')
+        ->and($html)->toContain('no conoce el cuadrante')
         // Sin ninguna referencia a la red: el producto se instala en servidores
         // sin salida a internet (ADR-016).
         ->and($html)->not->toContain('http://')
         ->and($html)->not->toContain('https://');
-})->group('RF-IN-04', 'RF-PD-08');
+})->group('RF-IN-04', 'RF-PD-08', 'RF-GP-04');
 
 it('encabeza el informe con la marca del cliente y su logotipo incrustado', function (): void {
     // El logotipo va en base64 y NUNCA por URL: el PDF lo dibuja un Chromium sin

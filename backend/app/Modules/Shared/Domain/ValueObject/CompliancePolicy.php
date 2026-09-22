@@ -25,16 +25,18 @@ use InvalidArgumentException;
  * porque Shared no puede depender de un modulo (doc 02 §1.6). Quien evalua la
  * regla lo convierte a `WorkedDuration` al recibirlo.
  *
- * ## Un campo sin consumidor todavia, y por que esta
+ * ## Ya no queda ningun campo sin consumidor
  *
- * `maximumWeeklyMinutes` y `weekStartsOn` los **estreno la tarea 3.4** (RN-17 y
- * la vista de cumplimiento, RF-PA-06). `holidayCalendar` sigue sin consumidor a
- * proposito: ninguna de las cuatro reglas lee festivos —la semanal mide la
- * semana trabajada, no los dias laborables— y fingir lo contrario seria prometer
- * un efecto que no existe. Lo estrena la tarea 3.10 (ausencias).
+ * `maximumWeeklyMinutes` y `weekStartsOn` los estreno la tarea 3.4 (RN-17 y la
+ * vista de cumplimiento, RF-PA-06), y `holidayCalendar` la **3.10**: el informe
+ * por periodo lo resuelve en `GeneratePeriodReport` y se lo pasa a la consulta,
+ * de modo que un festivo del perfil deja de contar como absentismo no
+ * justificado (RF-GP-04, decision 7 de la ficha).
  *
- * **Que no haya consumidor no lo hace decorativo**: se guarda, se valida, se
- * audita y se sirve. Lo unico que falta es la regla que lo lea.
+ * **Ninguna de las cuatro reglas de incumplimiento lo lee, y sigue siendo
+ * correcto**: la semanal mide la semana trabajada, no los dias laborables, y
+ * ningun festivo abre ni cierra una incidencia. Lo que cambio es que ahora hay
+ * un informe que si lo aplica.
  *
  * ## Una comparacion, un sitio
  *

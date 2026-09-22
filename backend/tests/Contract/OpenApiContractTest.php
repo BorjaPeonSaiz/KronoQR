@@ -271,6 +271,29 @@ it('describe solo los endpoints cuya tarea existe, y todos bajo /api/v1', functi
         // `multipart/form-data`: el fichero se lee en streaming desde disco y no
         // se carga entero en memoria.
         '/api/v1/employees/import',
+        /*
+         * Tarea 3.10: registro de ausencias (RF-GP-04).
+         *
+         * DE PRIMER NIVEL y no colgando de `/employees`, al contrario que los
+         * contratos: el Anexo B del doc 01 las lista asi, y la pantalla es
+         * transversal a la plantilla —se abre para ver el cuadro del mes, no la
+         * ficha de nadie—. Por eso `employee_uuid` va en el cuerpo del `POST` y
+         * un empleado inexistente es `422` y no `404`.
+         *
+         * LECTURA CON `employees:read` Y ESCRITURA CON `employees:*`: el
+         * `responsable_departamento` ve las ausencias de su gente —acotadas en el
+         * `WHERE`, RF-ID-03— y no puede escribir ninguna. La nota no le viaja,
+         * porque una baja medica es dato de salud (regla dura 21).
+         *
+         * SIN `DELETE` (regla dura 5): quitar una ausencia es `POST …/void`, un
+         * hecho con autor, motivo y asiento, igual que en `/shift-entries`. Y el
+         * `PATCH` devuelve un `uuid` NUEVO, porque corregir crea version (RN-13,
+         * ADR-035).
+         */
+        '/api/v1/absences',
+        '/api/v1/absences/import',
+        '/api/v1/absences/{uuid}',
+        '/api/v1/absences/{uuid}/void',
     ]);
 })->group('RQ-06');
 

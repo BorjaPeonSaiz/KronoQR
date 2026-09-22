@@ -258,6 +258,67 @@ enum AuditAction: string
     case EmploymentContractRegistered = 'employment_contract.registered';
 
     /**
+     * Se ha registrado una ausencia de una persona (RF-GP-04, tarea 3.10).
+     *
+     * **Misma familia que el contrato y por la misma razon.** Una ausencia
+     * registrada cambia el resultado del informe de absentismo: los dias que
+     * cubre dejan de contar como no justificados. Eso tiene consecuencias
+     * laborales —un expediente disciplinario se sostiene sobre faltas no
+     * justificadas— asi que es un parametro del calculo sobre una persona
+     * concreta, exactamente como `weekly_hours`.
+     *
+     * **Sujeto propio (`absence`) y no `employment_contract`**: son dos hechos
+     * que se consultan por separado. «¿Quien le cambio las horas contratadas?» y
+     * «¿quien le registro esta baja?» son dos preguntas, y unirlas obligaria a
+     * filtrar por el contenido del JSON en lugar de por la columna indexada.
+     *
+     * **El payload lleva el tipo, pero NUNCA la nota** (regla dura 21, decision
+     * 6 de la ficha 3.10). El tipo tiene que entrar: sin el, el asiento no
+     * describe el hecho —«hubo una ausencia de cinco dias» no dice nada— y
+     * `audit_log` es el registro legal con acceso restringido, no un log
+     * tecnico. La nota es otra cosa: puede llevar un diagnostico, y el trail no
+     * la necesita para reconstruir el cambio. De ella solo consta `has_note`.
+     *
+     * **La carga por fichero escribe uno por ausencia aplicada**, con
+     * `source: import` y la huella del fichero, y **no** un asiento resumen como
+     * `employee.imported`. La razon es que alli cada alta deja ademas su propio
+     * rastro por el camino de siempre y aqui no hay ningun otro: sin un asiento
+     * por ausencia, una carga de cuarenta bajas seria una sola fila del trail.
+     */
+    case AbsenceRegistered = 'absence.registered';
+
+    /**
+     * Se ha corregido una ausencia (RF-GP-04, **RN-13**, regla dura 5).
+     *
+     * **Accion propia y no un `absence.registered` de la version nueva**, aunque
+     * lo que ocurre por debajo sea una insercion. Lo que distingue a las dos es
+     * lo que responde cada una: «¿quien registro esta ausencia?» y «¿quien la
+     * cambio, de que a que y por que?». Con un solo valor, la segunda obligaria
+     * a comparar dos filas del trail y a deducir que una sustituye a la otra.
+     *
+     * El payload lleva `supersedes_uuid`, el **antes completo**
+     * —`previous_type`, `previous_starts_on`, `previous_ends_on`— y `reason`.
+     * Ese «antes» es lo que convierte el asiento en algo reconstruible sin
+     * recorrer la cadena de versiones desde la primera, con el mismo criterio
+     * que `previous_weekly_hours` en el contrato.
+     */
+    case AbsenceCorrected = 'absence.corrected';
+
+    /**
+     * Se ha anulado una ausencia: se declara que **no ocurrio** (RF-GP-04).
+     *
+     * **Tercera accion y no una correccion mas**, porque va en el sentido
+     * contrario: anular devuelve esos dias al absentismo no justificado. Con una
+     * sola accion, la consulta «¿que ausencias se han quitado este mes y quien
+     * las quito?» habria que responderla filtrando por el contenido del JSON.
+     *
+     * No crea version —de un hecho que no paso no hay version posterior— asi que
+     * el payload no lleva `supersedes_uuid`: el `absence_uuid` es el de la misma
+     * fila, que sigue en la tabla con todo lo que tenia.
+     */
+    case AbsenceVoided = 'absence.voided';
+
+    /**
      * La reconciliacion nocturna ha corregido un agregado de `daily_totals`
      * (RF-PR-02, tarea 2.7). Misma familia que un cambio de parametro del
      * calculo: el agregado es el RESULTADO del calculo de la jornada, y lo que
@@ -580,6 +641,12 @@ enum AuditAction: string
         // El contrato fija las horas contra las que se mide la jornada de una
         // persona (RF-IN-03): es un parametro del calculo, con sujeto propio.
         'employment_contract' => AuditableEvent::AuthorityOrCalculationChange,
+        // La ausencia registrada decide que dias del informe por periodo cuentan
+        // como absentismo y cuales no (RF-GP-04, tarea 3.10): como el contrato,
+        // mueve el resultado de un informe con consecuencias laborales sin tocar
+        // un solo fichaje. Es un parametro del calculo con sujeto propio, no un
+        // acceso a datos personales ni un acto del ciclo de vida de nadie.
+        'absence' => AuditableEvent::AuthorityOrCalculationChange,
         // La proyeccion es el resultado del calculo; corregirla es un cambio
         // del calculo que nadie pidio (RF-PR-02, tarea 2.7).
         'projection' => AuditableEvent::AuthorityOrCalculationChange,

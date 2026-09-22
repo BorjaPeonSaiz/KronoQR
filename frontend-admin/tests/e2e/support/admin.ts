@@ -11,13 +11,18 @@
 import type { Page, Route } from '@playwright/test'
 import { minutesBetween } from '@kronoqr/web-kit/datetime'
 import type {
+  Absence,
+  AbsenceCollection,
+  AbsenceDetail,
   AddShiftEntryRequest,
   Branding,
   ComplianceProfile,
   ComplianceSummary,
+  CorrectAbsenceRequest,
   CorrectedShiftEntry,
   CorrectionAction,
   CorrectShiftEntryRequest,
+  CreateAbsenceRequest,
   CreateEmployeeRequest,
   CredentialStatusBoard,
   DataExport,
@@ -38,12 +43,14 @@ import type {
   ManagementUser,
   PairingConfirmed,
   PeriodReport,
+  PeriodReportRow,
   Session,
   SetupStatus,
   Site,
   SupportGrant,
   TwoFactorChallenge,
   TwoFactorEnrolment,
+  VoidAbsenceRequest,
   VoidShiftEntryRequest,
   WorkDayDetail,
   WorkDayShiftEntry,
@@ -322,7 +329,16 @@ export const MANAGER_USER: ManagementUser = {
   email: 'cocina@hotel.example',
   locale: 'es',
   roles: ['responsable_departamento'],
-  abilities: ['attendance:read', 'attendance:correct', 'incidents:*'],
+  abilities: [
+    'attendance:read',
+    'attendance:correct',
+    'incidents:*',
+    // Lectura de plantilla (RF-ID-03, migracion
+    // `2026_08_30_100100_grant_read_ability.php`): el responsable la lleva
+    // desde la tarea 2.1, aunque hasta la 3.10 nada del panel la consumiera.
+    // Es lo que le abre «Ausencias», acotada a su departamento y sin nota.
+    'employees:read',
+  ],
   scope: { kind: 'departments', department_ids: [3] },
 }
 
@@ -709,6 +725,11 @@ export const PERIOD_REPORT: PeriodReport = {
       overtime_minutes: 1663,
       overtime: '27:43',
       days_without_contract: 0,
+      // Sin ninguna ausencia registrada en este doble estatico, los diez dias
+      // sin actividad son, de momento, absentismo sin explicar.
+      absence_days: 0,
+      holiday_days: 0,
+      unjustified_absence_days: 10,
     },
   ],
   meta: {
@@ -750,6 +771,67 @@ function periodReportFor(requestLocale: 'es' | 'en'): PeriodReport {
     ...PERIOD_REPORT,
     meta: { ...PERIOD_REPORT.meta, criteria: [...PERIOD_REPORT_CRITERIA_EN] },
   }
+}
+
+/**
+ * Filas dia a dia para el rango `[from, to]`, con el mismo empleado que
+ * `PERIOD_REPORT` (RF-GP-04, tarea 3.10): lo que hace falta para probar que
+ * registrar una ausencia cambia `absence_days`/`unjustified_absence_days` del
+ * dia que cubre y deja intactos el dia anterior y el posterior
+ * (`absences.spec.ts`, `@RF-GP-04`). Sin actividad ni festivo en este doble:
+ * un dia sin ausencia es absentismo sin explicar, y uno cubierto no.
+ */
+function dayRangeReportRows(
+  from: string,
+  to: string,
+  absencesState: readonly Absence[],
+): PeriodReportRow[] {
+  const rows: PeriodReportRow[] = []
+  let cursor = from
+
+  while (cursor <= to) {
+    const covered = absencesState.some(
+      (absence) =>
+        absence.status === 'active' &&
+        absence.employee_uuid === EMPLOYEE_UUID &&
+        absence.starts_on <= cursor &&
+        cursor <= absence.ends_on,
+    )
+
+    rows.push({
+      period: { from: cursor, to: cursor },
+      subject: {
+        kind: 'employee',
+        employee_uuid: EMPLOYEE_UUID,
+        employee_code: 'E7QK2MXPR',
+        full_name: 'Youssef El Amrani',
+        department_id: 3,
+        label: 'Youssef El Amrani',
+      },
+      worked_minutes: 0,
+      worked: '0:00',
+      shift_count: 0,
+      days_in_period: 1,
+      days_with_activity: 0,
+      days_without_activity: 1,
+      open_shift_days: 0,
+      incident_days: 0,
+      contracted_minutes: 0,
+      contracted: '0:00',
+      deviation_minutes: 0,
+      deviation: '0:00',
+      overtime_minutes: 0,
+      overtime: '0:00',
+      days_without_contract: 0,
+      absence_days: covered ? 1 : 0,
+      holiday_days: 0,
+      unjustified_absence_days: covered ? 0 : 1,
+    })
+
+    cursor = nextCivilDay(cursor)
+  }
+
+  return rows
 }
 
 /**
@@ -1042,6 +1124,15 @@ export interface ManagementApiOptions {
   /** El registro horario que devuelve `GET /employees/{uuid}/workdays`. Por omision, `WORKDAYS`. */
   readonly workdays?: EmployeeWorkDays
   /**
+   * Las ausencias de partida (RF-GP-04, tarea 3.10). Por omision, ninguna: la
+   * mayoria de los recorridos no pasan por «Ausencias». El doble mantiene el
+   * conjunto mutable -`POST`, `PATCH` y `.../void` lo cambian exactamente
+   * como lo haria el servidor-, y `GET /reports/period` con `granularity=day`
+   * lo lee para que `absences.spec.ts` (`@RF-GP-04`) pueda comprobar que
+   * registrar una ausencia cambia el informe del mismo periodo.
+   */
+  readonly absences?: Absence[]
+  /**
    * Como responde `GET /reports/period/export` (RF-IN-04). `forbidden` sirve
    * para el recorrido en el que la descarga se deniega **despues** de haber
    * generado el informe: es lo que pasa si a alguien le retiran el ambito con la
@@ -1243,6 +1334,33 @@ function syntheticShiftEntryUuid(): string {
   return `0199f7c1-${String(syntheticShiftEntrySeed).padStart(4, '0')}-7a10-9c50-6d7e8f9a0b11`
 }
 
+let syntheticAbsenceSeed = 0
+
+/** Un `uuid` distinto en cada llamada, para cada version nueva de una ausencia (RF-GP-04, RN-13). */
+function syntheticAbsenceUuid(): string {
+  syntheticAbsenceSeed += 1
+
+  return `0199f8d2-${String(syntheticAbsenceSeed).padStart(4, '0')}-7a10-9c60-6d7e8f9a0b12`
+}
+
+/** Dias naturales entre dos fechas civiles `AAAA-MM-DD`, con los dos extremos dentro (RF-GP-04). */
+function daysBetweenInclusive(from: string, to: string): number {
+  const [fromYear, fromMonth, fromDay] = from.split('-').map(Number)
+  const [toYear, toMonth, toDay] = to.split('-').map(Number)
+  const start = Date.UTC(fromYear ?? 1970, (fromMonth ?? 1) - 1, fromDay ?? 1)
+  const end = Date.UTC(toYear ?? 1970, (toMonth ?? 1) - 1, toDay ?? 1)
+
+  return Math.round((end - start) / 86_400_000) + 1
+}
+
+/** La fecha civil `AAAA-MM-DD` siguiente a `date`, sin zona horaria: aritmetica de calendario. */
+function nextCivilDay(date: string): string {
+  const [year, month, day] = date.split('-').map(Number)
+  const next = new Date(Date.UTC(year ?? 1970, (month ?? 1) - 1, (day ?? 1) + 1))
+
+  return next.toISOString().slice(0, 10)
+}
+
 function findShiftEntry(
   workdays: EmployeeWorkDays,
   uuid: string,
@@ -1357,6 +1475,48 @@ export async function stubManagementApi(
   // sitio; sin esta copia, una prueba dejaria su tramo añadido o corregido
   // dentro de la constante compartida y contaminaria el resto del fichero.
   const workdaysState: EmployeeWorkDays = structuredClone(options.workdays ?? WORKDAYS)
+
+  // Las ausencias (RF-GP-04, tarea 3.10): mutable, y con TODAS las versiones
+  // que hayan existido -como la tabla de verdad, regla dura 5-, no solo las
+  // vigentes. `absenceForResponse` es lo que retira `note` para quien no
+  // lleva `employees:*` (decision 5 de la ficha): el campo desaparece del
+  // objeto, nunca llega a `null`.
+  const absencesState: Absence[] = (options.absences ?? []).map((candidate) => ({ ...candidate }))
+
+  function canWriteEmployees(): boolean {
+    return currentUser.abilities.includes('*') || currentUser.abilities.includes('employees:*')
+  }
+
+  function absenceForResponse(absence: Absence): Absence {
+    if (canWriteEmployees()) {
+      return absence
+    }
+
+    const withoutNote: Absence = { ...absence }
+
+    delete withoutNote.note
+
+    return withoutNote
+  }
+
+  /** Las versiones anteriores de `current`, de la mas antigua a la mas reciente (contrato, `GET /absences/{uuid}`). */
+  function historyOfAbsence(current: Absence): Absence[] {
+    const history: Absence[] = []
+    let cursor = current.supersedes_uuid
+
+    while (cursor !== null) {
+      const previous = absencesState.find((candidate) => candidate.uuid === cursor)
+
+      if (previous === undefined) {
+        break
+      }
+
+      history.unshift(previous)
+      cursor = previous.supersedes_uuid
+    }
+
+    return history
+  }
 
   // La exportacion integra (RF-PD-14, RL-20, tarea 5.10): mutable, y con una
   // progresion de estado atada al reloj de VERDAD (no al de Playwright), para
@@ -1951,6 +2111,132 @@ export async function stubManagementApi(
         return
       }
 
+      // El detalle, la correccion y la anulacion de una ausencia llevan un
+      // `uuid` dinamico en la ruta (RF-GP-04, tarea 3.10, RN-13).
+      const absenceVoidMatch = /^\/api\/v1\/absences\/([0-9a-f-]+)\/void$/.exec(url.pathname)
+      const absenceDetailMatch =
+        absenceVoidMatch === null ? /^\/api\/v1\/absences\/([0-9a-f-]+)$/.exec(url.pathname) : null
+
+      if (method === 'GET' && absenceDetailMatch !== null) {
+        const uuid = absenceDetailMatch[1] ?? ''
+        const found = absencesState.find((candidate) => candidate.uuid === uuid)
+
+        if (found === undefined) {
+          await problem(
+            route,
+            404,
+            'urn:kronoqr:problem:not-found',
+            'No encontrado',
+            'Esa ausencia no existe.',
+          )
+
+          return
+        }
+
+        const detail: AbsenceDetail = {
+          absence: absenceForResponse(found),
+          history: historyOfAbsence(found).map(absenceForResponse),
+        }
+
+        await json(route, 200, detail)
+        return
+      }
+
+      if (method === 'PATCH' && absenceDetailMatch !== null) {
+        const uuid = absenceDetailMatch[1] ?? ''
+        const found = absencesState.find((candidate) => candidate.uuid === uuid)
+
+        if (found === undefined || found.status !== 'active') {
+          await problem(
+            route,
+            409,
+            'urn:kronoqr:problem:conflict',
+            'Conflicto con el estado actual',
+            'Esa ausencia ya no es la version vigente. Vuelve a cargar su historial antes de corregirla.',
+          )
+
+          return
+        }
+
+        const payload = request.postDataJSON() as CorrectAbsenceRequest
+        const newStartsOn = payload.starts_on ?? found.starts_on
+        const newEndsOn = payload.ends_on ?? found.ends_on
+        const newType = payload.type ?? found.type
+        const newNote = 'note' in payload ? (payload.note ?? null) : (found.note ?? null)
+
+        const overlapsAnotherActive = absencesState.some(
+          (candidate) =>
+            candidate.uuid !== found.uuid &&
+            candidate.employee_uuid === found.employee_uuid &&
+            candidate.status === 'active' &&
+            candidate.starts_on <= newEndsOn &&
+            candidate.ends_on >= newStartsOn,
+        )
+
+        if (overlapsAnotherActive) {
+          await problem(
+            route,
+            409,
+            'urn:kronoqr:problem:conflict',
+            'Conflicto con el estado actual',
+            'Esas fechas se solapan con otra ausencia activa de la misma persona.',
+          )
+
+          return
+        }
+
+        const corrected: Absence = {
+          ...found,
+          uuid: syntheticAbsenceUuid(),
+          type: newType,
+          starts_on: newStartsOn,
+          ends_on: newEndsOn,
+          days: daysBetweenInclusive(newStartsOn, newEndsOn),
+          note: newNote,
+          status: 'active',
+          version: found.version + 1,
+          supersedes_uuid: found.uuid,
+          superseded_by_uuid: null,
+          change_reason: payload.reason,
+          voided_at: null,
+          void_reason: null,
+          created_at: CORRECTION_NOW,
+        }
+
+        found.status = 'superseded'
+        found.superseded_by_uuid = corrected.uuid
+        absencesState.push(corrected)
+
+        await json(route, 200, absenceForResponse(corrected))
+        return
+      }
+
+      if (method === 'POST' && absenceVoidMatch !== null) {
+        const uuid = absenceVoidMatch[1] ?? ''
+        const found = absencesState.find((candidate) => candidate.uuid === uuid)
+
+        if (found === undefined || found.status !== 'active') {
+          await problem(
+            route,
+            409,
+            'urn:kronoqr:problem:conflict',
+            'Conflicto con el estado actual',
+            'Esa ausencia ya estaba anulada o ya fue sustituida por una version posterior.',
+          )
+
+          return
+        }
+
+        const payload = request.postDataJSON() as VoidAbsenceRequest
+
+        found.status = 'voided'
+        found.voided_at = CORRECTION_NOW
+        found.void_reason = payload.reason
+
+        await json(route, 200, absenceForResponse(found))
+        return
+      }
+
       switch (`${method} ${url.pathname}`) {
         case 'GET /api/v1/devices':
           await json(route, 200, { devices, meta: devicesMeta })
@@ -2301,6 +2587,137 @@ export async function stubManagementApi(
         case 'GET /api/v1/employees':
           await json(route, 200, EMPLOYEES)
           return
+        case 'GET /api/v1/absences': {
+          // Listado de ausencias (RF-GP-04, tarea 3.10). El alcance por
+          // departamento de RF-ID-03 no se simula aqui -eso se prueba en el
+          // backend, regla dura 18-: el doble solo aplica los filtros que el
+          // panel manda, para comprobar que los manda.
+          const from = url.searchParams.get('from')
+          const to = url.searchParams.get('to')
+          const employeeUuid = url.searchParams.get('employee_uuid')
+          const departmentId = url.searchParams.get('department_id')
+          const type = url.searchParams.get('type')
+          const status = url.searchParams.get('status') ?? 'active'
+          const page = Number(url.searchParams.get('page') ?? '1')
+          // 30: mismo tamaño de pagina por omision que `ABSENCE_LIST_PER_PAGE`
+          // (`features/absences/absences.api.ts`). Este fichero de soporte no
+          // importa modulos de una feature (solo `@/shared/api/types`), asi
+          // que el numero se repite aqui, no se importa.
+          const perPage = Number(url.searchParams.get('per_page') ?? '30')
+
+          const filtered = absencesState.filter((absence) => {
+            if (status !== 'all' && absence.status !== status) {
+              return false
+            }
+
+            if (employeeUuid !== null && absence.employee_uuid !== employeeUuid) {
+              return false
+            }
+
+            if (departmentId !== null && String(absence.department_id) !== departmentId) {
+              return false
+            }
+
+            if (type !== null && absence.type !== type) {
+              return false
+            }
+
+            if (
+              from !== null &&
+              to !== null &&
+              !(absence.starts_on <= to && absence.ends_on >= from)
+            ) {
+              return false
+            }
+
+            return true
+          })
+
+          const start = (page - 1) * perPage
+          const collection: AbsenceCollection = {
+            data: filtered.slice(start, start + perPage).map(absenceForResponse),
+            meta: {
+              page,
+              per_page: perPage,
+              total: filtered.length,
+              total_pages: Math.max(1, Math.ceil(filtered.length / perPage)),
+            },
+          }
+
+          await json(route, 200, collection)
+          return
+        }
+        case 'POST /api/v1/absences': {
+          // Registro de una ausencia (RF-GP-04). `other` exige nota, y el
+          // solape con otra activa del mismo empleado es `409`, no `422`
+          // (mismo criterio que `absences_no_overlap`, decision 3 de la
+          // ficha).
+          const payload = request.postDataJSON() as CreateAbsenceRequest
+
+          if (
+            payload.type === 'other' &&
+            (payload.note === undefined || payload.note === null || payload.note.trim() === '')
+          ) {
+            await validationProblem(
+              route,
+              'urn:kronoqr:problem:validation-failed',
+              'No se puede procesar la solicitud',
+              { note: ['La nota es obligatoria para el tipo «Otro».'] },
+            )
+
+            return
+          }
+
+          const overlapsActive = absencesState.some(
+            (absence) =>
+              absence.employee_uuid === payload.employee_uuid &&
+              absence.status === 'active' &&
+              absence.starts_on <= payload.ends_on &&
+              absence.ends_on >= payload.starts_on,
+          )
+
+          if (overlapsActive) {
+            await problem(
+              route,
+              409,
+              'urn:kronoqr:problem:conflict',
+              'Conflicto con el estado actual',
+              'Esa persona ya tiene una ausencia registrada en alguno de esos dias. Revisa su historial antes de registrar otra.',
+            )
+
+            return
+          }
+
+          const department = DEPARTMENTS.data.find(
+            (candidate) => candidate.id === EMPLOYEE.department_id,
+          )
+
+          const created: Absence = {
+            uuid: syntheticAbsenceUuid(),
+            employee_uuid: payload.employee_uuid,
+            employee_code: EMPLOYEE.employee_code,
+            employee_name: `${EMPLOYEE.first_name} ${EMPLOYEE.last_name}`,
+            department_id: EMPLOYEE.department_id,
+            department_name: department?.name ?? null,
+            type: payload.type,
+            starts_on: payload.starts_on,
+            ends_on: payload.ends_on,
+            days: daysBetweenInclusive(payload.starts_on, payload.ends_on),
+            note: payload.note ?? null,
+            status: 'active',
+            version: 1,
+            supersedes_uuid: null,
+            superseded_by_uuid: null,
+            change_reason: null,
+            voided_at: null,
+            void_reason: null,
+            created_at: CORRECTION_NOW,
+          }
+
+          absencesState.push(created)
+          await json(route, 201, absenceForResponse(created))
+          return
+        }
         case 'POST /api/v1/employees': {
           // Alta de empleado (RF-GP-01): el PIN se emite en la MISMA transaccion
           // y viaja en la respuesta una sola vez (RF-ID-09). El contenido de
@@ -2513,14 +2930,40 @@ export async function stubManagementApi(
         case 'GET /api/v1/attendance/live':
           await json(route, 200, options.liveBoard ?? LIVE_BOARD)
           return
-        case 'GET /api/v1/reports/period':
+        case 'GET /api/v1/reports/period': {
           // Informe de horas por periodo (RF-IN-01..03, tarea 2.8). Un mes de
           // una persona con un cambio de contrato a mitad de mes, que es el caso
           // en el que lo contratado NO es una regla de tres sobre el ultimo
           // contrato. Los criterios de `meta` viajan en el idioma de quien pide
           // el informe, igual que hace el servidor de verdad (hallazgo 7).
+          //
+          // `granularity=day` (RF-GP-04, tarea 3.10): el unico caso en que este
+          // doble SI lee el estado -las ausencias registradas-, para que
+          // `absences.spec.ts` (`@RF-GP-04`) pueda comprobar que una baja
+          // cambia `absence_days`/`unjustified_absence_days` del dia que cubre
+          // y deja intactos el dia anterior y el posterior.
+          const granularity = url.searchParams.get('granularity')
+          const from = url.searchParams.get('from')
+          const to = url.searchParams.get('to')
+
+          if (granularity === 'day' && from !== null && to !== null) {
+            const rows = dayRangeReportRows(from, to, absencesState)
+
+            await json(route, 200, {
+              from,
+              to,
+              granularity: 'day',
+              group_by: 'employee',
+              data: rows,
+              meta: { ...PERIOD_REPORT.meta, row_count: rows.length },
+            })
+
+            return
+          }
+
           await json(route, 200, periodReportFor(requestLocaleOf(request)))
           return
+        }
         case 'GET /api/v1/reports/period/export':
           // La descarga del mismo informe (RF-IN-04, tarea 2.9). El cuerpo es un
           // fichero y aqui da igual cual: lo que el E2E comprueba es el recorrido

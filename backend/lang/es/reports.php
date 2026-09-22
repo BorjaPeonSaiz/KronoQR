@@ -42,6 +42,20 @@ return [
         'open_shifts_included' => 'Los días con un turno todavía abierto aportan los minutos que ya tienen cerrados; el turno en curso no suma nada hasta que se cierre.',
 
         'iso_week' => 'Las semanas empiezan en lunes (semana ISO 8601) y se recortan al rango pedido.',
+
+        /*
+         * Las tres de RF-GP-04 (tarea 3.10, decision 7). SE LEEN COMO UN SOLO
+         * PARRAFO y por eso van seguidas: las dos primeras dicen que se ha
+         * descontado del absentismo y la tercera dice lo que NO se ha podido
+         * descontar. Sacar la tercera de aqui dejaria «absentismo no justificado»
+         * pareciendo una cifra de faltas al trabajo, que no es.
+         */
+
+        'absences' => 'Las ausencias registradas (vacaciones, baja médica, permiso) cuentan como días justificados y no como absentismo: se muestran en su propia columna. Si una ausencia coincide con un festivo, el día cuenta como ausencia y no se cuenta dos veces.',
+
+        'holidays' => 'Hay :count día(s) festivo(s) del perfil de cumplimiento «:profile» dentro del periodo. No cuentan como absentismo y se muestran en su propia columna.',
+
+        'no_roster' => 'El producto no conoce el cuadrante de turnos: no sabe qué días le tocaba trabajar a cada persona. Por eso los días de descanso semanal se cuentan como absentismo no justificado. Contraste esa columna con el calendario de turnos antes de usarla.',
     ],
 
     /*
@@ -169,5 +183,13 @@ return [
         'incident_days' => 'Días con incidencia',
 
         'days_without_contract' => 'Días sin contrato',
+
+        /* RF-GP-04. Ver el bloque `criteria` de arriba para el porqué de cada una. */
+
+        'absence_days' => 'Días de ausencia',
+
+        'holiday_days' => 'Festivos',
+
+        'unjustified_absence_days' => 'Absentismo no justificado',
     ],
 ];

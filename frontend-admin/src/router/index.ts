@@ -6,6 +6,7 @@ import {
   CREDENTIALS_MANAGE,
   DIAGNOSTICS_MANAGE,
   EMPLOYEES_MANAGE,
+  EMPLOYEES_READ,
   INCIDENTS_MANAGE,
   LICENSE_MANAGE,
   REPORTS_LEGAL,
@@ -13,6 +14,7 @@ import {
   SETTINGS_MANAGE,
   SUPPORT_MANAGE,
 } from '@/features/auth/abilities'
+import AbsenceListView from '@/features/absences/AbsenceListView.vue'
 import LoginView from '@/features/auth/LoginView.vue'
 import ComplianceView from '@/features/compliance/ComplianceView.vue'
 import CredentialBoardView from '@/features/credentials/CredentialBoardView.vue'
@@ -101,6 +103,20 @@ export const routes: RouteRecordRaw[] = [
         component: EmployeeDetailView,
         props: true,
         meta: { ability: EMPLOYEES_MANAGE, section: 'employees' },
+      },
+      {
+        // Ausencias (RF-GP-04, tarea 3.10): vacaciones, baja medica y permiso,
+        // registradas como hecho y sin flujo de aprobacion (doc 05 §8, Fase
+        // 4). Ambito `employees:read`, el mismo con el que se abre la
+        // pantalla en `navigation.ts`: lo lleva tambien
+        // `responsable_departamento` (RF-ID-03), que ve su departamento sin
+        // nota. Las acciones de escritura exigen ademas `employees:*`
+        // (`EMPLOYEES_MANAGE`), y `AbsenceListView` las oculta por su cuenta;
+        // la policy del servidor es la que autoriza de verdad (regla dura 18).
+        path: 'absences',
+        name: 'absences',
+        component: AbsenceListView,
+        meta: { ability: EMPLOYEES_READ },
       },
       {
         // El registro horario de una persona (RF-PA-03). Cuelga de la ficha y no

@@ -112,4 +112,55 @@ return [
         'extra_column_aliases' => (string) env('WORKFORCE_IMPORT_COLUMN_ALIASES', ''),
     ],
 
+    /*
+     * Carga de ausencias por fichero (RF-GP-04, tarea 3.10).
+     *
+     * BLOQUE PROPIO Y NO UNA CLAVE MAS DENTRO DE `import`, aunque comparta el
+     * lector y los dos limites de tamaño. El motivo es que lo que se mapea es
+     * otra cosa: `tipo`, `desde` y `hasta` no existen en un fichero de plantilla,
+     * y `nombre` no existe en uno de ausencias. Con un mapa compartido, el aviso
+     * de «columna no reconocida» —que es el que caza el `e-mail` escrito donde se
+     * esperaba `email`— dejaria de avisar de la mitad de los casos, porque
+     * cualquier cabecera de los dos ficheros seria «reconocida» en los dos.
+     *
+     * LOS LIMITES SI SE COMPARTEN (`import.max_rows` y
+     * `import.max_file_kilobytes`): es el mismo lector, el mismo informe en
+     * memoria y el mismo tamaño de instalacion. Dos parametros para lo mismo
+     * serian dos cosas que se separan.
+     *
+     * NO HAY ALIAS PARA LOS VALORES DEL TIPO, y es deliberado: el nombre de una
+     * columna depende del sistema del que salga el fichero, pero el conjunto de
+     * categorias es el catalogo cerrado del producto (decision 2 de la ficha
+     * 3.10). Los nombres castellanos que se aceptan —`vacaciones`, `baja`,
+     * `permiso`, `otro`— viven en `AbsenceType::fromImportLabel()` y no aqui: un
+     * alias configurable para un valor seria una categoria nueva por la puerta de
+     * atras, y con ella los informes de dos clientes dejarian de ser comparables.
+     */
+    'absence_import' => [
+
+        /*
+         * Nombres de columna que la carga de ausencias reconoce, por campo.
+         *
+         * `employee_code` SI SE MAPEA AQUI, al contrario que en la carga de
+         * plantilla, donde no existe. La diferencia es de que habla cada fichero:
+         * uno da de alta a gente —y el codigo lo genera el servidor, opaco (doc
+         * 01 §5.5)— y el otro habla de gente que **ya existe**, donde el codigo
+         * es lo unico estable y publico con lo que referirse a ella. El nombre se
+         * repite y el documento de identidad no se almacena (RL-08).
+         */
+        'column_aliases' => [
+            'employee_code' => ['codigo', 'codigo_empleado', 'employee_code', 'code', 'staff_code'],
+            'type' => ['tipo', 'type', 'motivo', 'absence_type'],
+            'starts_on' => ['desde', 'fecha_inicio', 'inicio', 'starts_on', 'start_date', 'from'],
+            'ends_on' => ['hasta', 'fecha_fin', 'fin', 'ends_on', 'end_date', 'to'],
+            'note' => ['nota', 'observaciones', 'note', 'notes', 'comment'],
+        ],
+
+        /*
+         * Alias adicionales del cliente, formato `campo=cabecera` separado por
+         * `;`. Cadena vacia de serie: la mayoria no necesita ninguno.
+         */
+        'extra_column_aliases' => (string) env('WORKFORCE_ABSENCE_IMPORT_COLUMN_ALIASES', ''),
+    ],
+
 ];
