@@ -72,8 +72,8 @@ prueba falló en `main` en el run 35731421172, antes de esta rama—: tras `runF
 hasta la ruta interceptada y la prueba leía el contador en la misma vuelta; corregido con `expect.poll` en el portal y en el panel
 (misma prueba, mismo patrón), 20/20 y 30/30 en local con `--repeat-each`, en un segundo commit `fix(pruebas): …`.
 
-**Siguiente acción:** el usuario integra la PR #76 de la 3.10 (commit `a336e59` + el `fix(pruebas)` de la E2E del portal, CI manual
-lanzada tras el segundo push) con *merge commit* y borra la rama. **Con migración** (`2026_09_22_100000_absences.php`): tras integrar, `git pull`
+**Siguiente acción:** el usuario integra la PR #76 de la 3.10 (commit `a336e59` + `23000ff` con el `fix(pruebas)` de la E2E del
+portal; **CI manual 35776674369 en verde en todos los jobs**) con *merge commit* y borra la rama. **Con migración** (`2026_09_22_100000_absences.php`): tras integrar, `git pull`
 y `make up`, y comprobar `php artisan migrate:status` y el fichero `kronoqr_absences.prom` tras la primera ejecución de
 `reporting:absence-metrics`. Después,
 la **3.9** «Informes asíncronos con enlace de descarga caducable y exportación configurable para nómina» (`backend-laravel` +
