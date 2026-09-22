@@ -70,20 +70,17 @@ updates:
       # rompia lint, tipos y unitarias de los cuatro paquetes por el desajuste
       # entre ejecutor y cobertura. Con el grupo, la proxima mayor llega en
       # una sola PR coherente.
+      #
+      # El grupo SIGUE HACIENDO FALTA tras migrar a Vitest 5 (tarea 3.7,
+      # 18-09-2026): los dos paquetes se declaran en los CUATRO manifiestos
+      # (`frontend-kiosk`, `frontend-admin`, `frontend-portal`,
+      # `packages/web-kit`) y `vitest` exige de su `@vitest/*` la version
+      # EXACTA (`"@vitest/coverage-v8": "5.0.1"` en sus peerDependencies), asi
+      # que una mayor suelta de cualquiera de los dos deja un arbol que
+      # `npm ci` no resuelve.
       vitest-mayor:
         patterns: ["vitest", "@vitest/*"]
         update-types: ["major"]
-    # Vitest 5 se APLAZA (decision del 16-09-2026): es una dependencia de
-    # desarrollo sin efecto en el producto ni en RS-10, y la migracion exige
-    # revisar las unitarias de los cuatro paquetes (`sequential` retirado,
-    # `toHaveTextContent` estricto, entradas obsoletas). Se aborda a proposito
-    # en la 3.7 o al cierre de la Fase 3; hasta entonces, sin PR automaticas
-    # de mayor. Menores y parches de la rama 4 siguen llegando.
-    ignore:
-      - dependency-name: "vitest"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "@vitest/*"
-        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"

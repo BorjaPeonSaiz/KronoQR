@@ -68,7 +68,7 @@
     },
     "rejected": {
       "title": "Invalid code",
-      "body": "The record could not be saved. Please tell the front desk."
+      "body": "You may have mistyped it. Try again; if it keeps happening, tell the front desk."
     },
     "srAnnouncement": "Scan result"
   },

@@ -1,6 +1,7 @@
 // Soporte del E2E del fichaje por PIN (tarea 1.12, RF-AT-11).
 
 import type { Page, Route } from '@playwright/test'
+import { expect } from '@playwright/test'
 import { pairDevice, stubScanApi } from './kiosk'
 import { stubBatchApi } from './offlineQueue'
 
@@ -144,6 +145,7 @@ export async function stubPinScanApi(
     })
 
     if (delayMs > 0) {
+      // eslint-disable-next-line no-restricted-syntax -- el retraso es del servidor simulado, no una espera de la prueba
       await new Promise((resolve) => setTimeout(resolve, delayMs))
     }
 
@@ -196,4 +198,41 @@ export async function pressPinDigits(page: Page, pin: string): Promise<void> {
   for (const digit of pin) {
     await page.getByRole('button', { name: digit, exact: true }).click()
   }
+}
+
+/**
+ * Un ciclo completo del teclado del PIN, desde la pantalla de fichaje, hasta
+ * el rechazo. No espera a la vuelta automatica tras el rechazo
+ * (`CONFIRMATION_DISPLAY_MS.rejected`, 5 s) -eso seria un `sleep`
+ * disfrazado-: fuerza la vuelta navegando de nuevo a `/`.
+ */
+async function attemptRejectedPin(page: Page, employeeCode: string, pin: string): Promise<string> {
+  await page.goto('/')
+  await page.getByTestId('pin-entry-link').click()
+  await enterEmployeeCode(page, employeeCode)
+  await pressPinDigits(page, pin)
+  await page.getByTestId('pin-confirm').click()
+  await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'rejected', {
+    timeout: 10_000,
+  })
+  return (await page.getByTestId('confirmation-headline').textContent()) ?? ''
+}
+
+/**
+ * Repite `attemptRejectedPin` `times` veces seguidas y devuelve el titular
+ * mostrado en cada una, en orden. `pin-lockout.spec.ts` compara esa lista
+ * para afirmar que ninguna intentona -tampoco la que en el servidor real
+ * coincidiria con un bloqueo ya activo- distingue nada por texto.
+ */
+export async function consecutiveRejections(
+  page: Page,
+  times: number,
+  employeeCode: string,
+  pin: string,
+): Promise<string[]> {
+  const headlines: string[] = []
+  for (let attempt = 0; attempt < times; attempt += 1) {
+    headlines.push(await attemptRejectedPin(page, employeeCode, pin))
+  }
+  return headlines
 }

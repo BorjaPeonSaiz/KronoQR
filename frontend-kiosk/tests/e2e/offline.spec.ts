@@ -156,6 +156,16 @@ test(
     const IRRECONCILABLE_SCAN_ID = '0199f300-8a11-7c42-9f01-abcdef123456'
 
     await page.route('**/api/v1/scan', async (route) => route.abort('failed'))
+    // Tambien se aborta `/scan/batch` desde el principio, no solo `/scan`
+    // (revision de la tarea 3.7): el navegador nunca se marca offline de
+    // verdad en esta prueba, asi que `syncRunner` podria reintentar en
+    // segundo plano por su propio retroceso ANTES del `announceOnline` de
+    // mas abajo y drenar el PRIMER fichaje (el de la camara) el solo -la
+    // misma familia de carrera que el parrafo de arriba, por el lado del
+    // lote en vez de por el de la siembra-. Un fallo de transporte YA deja
+    // la cola intacta («se reintenta», ver la prueba de arriba): no hace
+    // falta un `503` a medida, es la MISMA instruccion que ya usa `/scan`
+    // en la linea de encima.
     await page.route('**/api/v1/scan/batch', async (route) => route.abort('failed'))
     await delayCameraStart(page, 1_500)
     // Registrado ANTES de sembrar nada: `stubKioskApi` (del `beforeEach`) ya

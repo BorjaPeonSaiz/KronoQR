@@ -557,8 +557,21 @@ export async function submitLoginForm(
   await page.locator('form button[type="submit"]').click()
 }
 
+/**
+ * La forma minima de `ClientErrorReport` (contrato `docs/api/openapi.yaml`)
+ * que hace falta para leer el mensaje enviado, copiada aqui en vez de
+ * importada de `@/shared/api/types`: este doble solo necesita mirar lo que
+ * el cliente mando, no el contrato entero.
+ */
+interface RecordedClientErrorReport {
+  readonly code: string
+  readonly context: Readonly<Record<string, string | number | boolean>>
+}
+
 export interface ClientErrorsEndpointStub {
   readonly count: () => number
+  /** El campo `message` (dentro de `context`) de cada envio recibido, en orden. */
+  readonly messages: () => readonly string[]
 }
 
 /**
@@ -571,9 +584,17 @@ export interface ClientErrorsEndpointStub {
  */
 export function stubClientErrorsEndpoint(page: Page): ClientErrorsEndpointStub {
   let count = 0
+  const messages: string[] = []
 
   void page.route('**/api/v1/client-errors', async (route: Route) => {
     count += 1
+
+    const body = route.request().postDataJSON() as { errors: readonly RecordedClientErrorReport[] }
+    for (const report of body.errors) {
+      const message = report.context['message']
+      if (typeof message === 'string') messages.push(message)
+    }
+
     await route.fulfill({
       status: 500,
       contentType: 'application/problem+json',
@@ -581,5 +602,5 @@ export function stubClientErrorsEndpoint(page: Page): ClientErrorsEndpointStub {
     })
   })
 
-  return { count: () => count }
+  return { count: () => count, messages: () => [...messages] }
 }

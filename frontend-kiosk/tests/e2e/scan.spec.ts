@@ -7,16 +7,45 @@
 // Etiquetas del doc 02 §9.6.
 
 import { expect, test } from '@playwright/test'
-import { FIXTURE_PAYLOAD, stubKioskApi, stubScanApi } from './support/kiosk'
+import { installAudioProbe } from './support/audio'
+import { FIXTURE_PAYLOAD, delayCameraStart, stubKioskApi, stubScanApi } from './support/kiosk'
 import { stubKioskApiWithPin } from './support/pin'
+import { expectTouchTargets } from './support/touchTargets'
 
 test.beforeEach(async ({ page }) => {
   await stubKioskApi(page)
 })
 
+/**
+ * Comprueba que no llega mas de `maxRecorded` fichajes mientras pasan
+ * `durationMs` de tiempo REAL. La camara falsa entrega fotogramas por el
+ * pipeline de medios de Chromium, no por un temporizador de pagina: no hay
+ * ninguna condicion de `page.clock` que adelantar, asi que hace falta dejar
+ * pasar el tiempo de verdad. Lo que SI mejora sobre un `waitForTimeout` a
+ * ciegas es volver a comprobar la invariante en cada tramo, para fallar en
+ * cuanto se rompe y no solo al final (decision 10 de la tarea 3.7).
+ */
+async function expectNoAdditionalScans(
+  stub: { readonly recorded: ReadonlyArray<unknown> },
+  durationMs: number,
+  maxRecorded: number,
+): Promise<void> {
+  const stepMs = 100
+  const steps = Math.ceil(durationMs / stepMs)
+  for (let step = 0; step < steps; step += 1) {
+    expect(
+      stub.recorded.length,
+      'la camara en bucle disparo mas fichajes de los tolerados',
+    ).toBeLessThanOrEqual(maxRecorded)
+    // eslint-disable-next-line no-restricted-syntax -- no hay condicion observable: se afirma que NO ocurre nada y la camara falsa no pasa por temporizadores de pagina
+    await new Promise((resolve) => setTimeout(resolve, stepMs))
+  }
+  expect(stub.recorded.length).toBeLessThanOrEqual(maxRecorded)
+}
+
 test(
   'arranca la camara y decodifica sin que nadie toque la pantalla',
-  { tag: ['@RF-KI-01', '@RF-KI-02'] },
+  { tag: ['@RQ-04', '@RF-KI-01', '@RF-KI-02'] },
   async ({ page }) => {
     const stub = await stubScanApi(page, { outcome: 'clock_in', displayName: 'Lucia G.' })
 
@@ -84,6 +113,7 @@ test(
   async ({ page }) => {
     // El servidor tarda tres segundos: el empleado no puede esperarlo.
     await page.route('**/api/v1/scan', async (route) => {
+      // eslint-disable-next-line no-restricted-syntax -- el retraso es del servidor simulado, no una espera de la prueba
       await new Promise((resolve) => setTimeout(resolve, 3_000))
       await route.abort('failed')
     })
@@ -151,9 +181,8 @@ test(
 
     // ...y despues se deja correr el video, que esta en bucle: la tarjeta sigue
     // delante del objetivo y el anti-rebote tiene que absorber cada relectura.
-    await page.waitForTimeout(2_000)
+    await expectNoAdditionalScans(stub, 2_000, 2)
 
-    expect(stub.recorded.length).toBeLessThanOrEqual(2)
     expect(stub.recorded[0]?.scanId).toBeTruthy()
   },
 )
@@ -273,20 +302,52 @@ test('los objetivos tactiles miden al menos 48 px', { tag: ['@RF-KI-06'] }, asyn
   await stubScanApi(page)
   await page.goto('/')
 
-  const interactive = page.locator('button:visible, a[href]:visible')
-  const count = await interactive.count()
-  expect(count).toBeGreaterThan(0)
-
-  for (let index = 0; index < count; index += 1) {
-    const box = await interactive.nth(index).boundingBox()
-    expect(box, `elemento interactivo ${index} sin caja`).not.toBeNull()
-    expect(box?.height ?? 0).toBeGreaterThanOrEqual(48)
-    expect(box?.width ?? 0).toBeGreaterThanOrEqual(48)
-  }
+  await expectTouchTargets(page.locator('button:visible, a[href]:visible'))
 })
 
 test(
-  'los textos de confirmacion miden al menos 24 px',
+  'el enlace de PIN y el boton de pausa tambien miden al menos 48 px',
+  { tag: ['@RF-KI-06'] },
+  async ({ page }) => {
+    // La pantalla de espera «desnuda» (sin PIN, sin pausa) ya la cubre la
+    // prueba de arriba. Estos dos aparecen solo con ciertos ajustes de la
+    // instalacion (RF-AT-11, RF-AT-12) y no estan en el `button:visible,
+    // a[href]:visible` generico si nadie los activa antes de medir.
+    //
+    // La camara real decodifica la tarjeta del video en cuanto arranca -sin
+    // retraso, en menos de un segundo-, y eso sustituye la pantalla de
+    // espera (con el enlace de PIN y el boton de pausa) por la confirmacion:
+    // sin `delayCameraStart` esta prueba mide objetivos que ya no estan en
+    // pantalla, una carrera que se ve con un build real y no con uno en cache
+    // (mismo patron que `accessibility.spec.ts`, boton «Pausa»).
+    await delayCameraStart(page, 3_000)
+    await stubKioskApiWithPin(page, { breakClockingEnabled: true })
+    await stubScanApi(page, { outcome: 'offline' })
+    await page.goto('/')
+
+    const pinLink = page.getByTestId('pin-entry-link')
+    const breakToggle = page.getByTestId('break-toggle')
+    await expect(pinLink).toBeVisible()
+    await expect(breakToggle).toBeVisible()
+
+    await expectTouchTargets(pinLink)
+    await expectTouchTargets(breakToggle)
+  },
+)
+
+/** El texto de `testId` mide al menos 24 px (RF-KI-06). */
+async function expectConfirmationTextSize(
+  page: import('@playwright/test').Page,
+  testId: string,
+): Promise<void> {
+  const size = await page
+    .getByTestId(testId)
+    .evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize))
+  expect(size, `${testId} por debajo del minimo de RF-KI-06`).toBeGreaterThanOrEqual(24)
+}
+
+test(
+  'los textos de confirmacion miden al menos 24 px (aceptado)',
   { tag: ['@RF-KI-06'] },
   async ({ page }) => {
     await stubScanApi(page, { outcome: 'clock_out', workedMinutes: 360 })
@@ -295,10 +356,87 @@ test(
     await expect(page.getByTestId('scan-confirmation')).toBeVisible()
 
     for (const testId of ['confirmation-headline', 'confirmation-detail', 'confirmation-total']) {
-      const size = await page
-        .getByTestId(testId)
-        .evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize))
-      expect(size, `${testId} por debajo del minimo de RF-KI-06`).toBeGreaterThanOrEqual(24)
+      await expectConfirmationTextSize(page, testId)
     }
+  },
+)
+
+test(
+  'los textos del rechazo tambien miden al menos 24 px, y es el mas largo de los tres',
+  { tag: ['@RF-KI-06'] },
+  async ({ page }) => {
+    // El texto del rechazo (`scan.rejected.body`) es el mas largo de los que
+    // pinta el panel: si algo va a desbordar o a encogerse por CSS, es el
+    // primer sitio donde se notaria.
+    await stubScanApi(page, { outcome: 'rejected' })
+    await page.goto('/')
+
+    await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'rejected')
+
+    for (const testId of ['confirmation-headline', 'confirmation-detail']) {
+      await expectConfirmationTextSize(page, testId)
+    }
+  },
+)
+
+test('los textos de «pendiente» miden al menos 24 px', { tag: ['@RF-KI-06'] }, async ({ page }) => {
+  await stubScanApi(page, { outcome: 'offline' })
+  await page.goto('/')
+
+  await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'pending')
+
+  for (const testId of ['confirmation-headline', 'confirmation-pending-badge']) {
+    await expectConfirmationTextSize(page, testId)
+  }
+})
+
+test(
+  'la confirmacion en pantalla va acompanada de un sonido, siempre (RF-KI-06)',
+  { tag: ['@RF-KI-06'] },
+  async ({ page }) => {
+    // Doble canal (doc 01 §6.5): el escaneo NUNCA es solo visual. La
+    // confirmacion local es siempre «pendiente» en el momento de decodificar
+    // -el servidor es quien decide entrada, salida o rechazo (`scanPipeline.ts`,
+    // regla dura 19)-, y ese primer pintado es tambien el primer sonido.
+    const { readTones } = await installAudioProbe(page)
+    await stubScanApi(page, { outcome: 'clock_in' })
+
+    await page.goto('/')
+    await expect(page.getByTestId('scan-confirmation')).toBeVisible()
+
+    const tones = await readTones()
+    expect(tones.length, 'no sono nada al confirmar el fichaje').toBeGreaterThan(0)
+    // `TONES.pending` en `useScanSound.ts`: dos toques de 587 Hz en triangulo.
+    expect(tones[0]?.type).toBe('triangle')
+    expect(tones[0]?.frequency).toBe(587)
+
+    // El desenlace real (aceptado) llega despues por `settle()`, y NO repite
+    // sonido: el «pendiente» de arriba ya fue el unico pitido de este
+    // fichaje -doble pitido seria una molestia, no informacion nueva-.
+    await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'accepted')
+    expect(await readTones()).toEqual(tones)
+  },
+)
+
+test(
+  'un rechazo de tarjeta SI suena, distinto del «pendiente» inicial (RF-KI-06)',
+  { tag: ['@RF-KI-06'] },
+  async ({ page }) => {
+    // Opcion B de la revision de `ui-ux`: `useScanSession.settle()` reproduce
+    // el tono de error cuando el desenlace asentado es un rechazo -el
+    // «pendiente» inicial no decia nada del resultado, asi que no sonar aqui
+    // dejaria al empleado sin saber que su tarjeta no ficho-.
+    const { readTones } = await installAudioProbe(page)
+    await stubScanApi(page, { outcome: 'rejected' })
+
+    await page.goto('/')
+    await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'rejected')
+
+    const tones = await readTones()
+    // `TONES.pending` (587/587, triangulo) seguido de `TONES.error`
+    // (196/147, cuadrada): dos firmas inconfundibles, no un doble pitido del
+    // mismo tono.
+    expect(tones.map((tone) => tone.type)).toEqual(['triangle', 'triangle', 'square', 'square'])
+    expect(tones.map((tone) => tone.frequency)).toEqual([587, 587, 196, 147])
   },
 )

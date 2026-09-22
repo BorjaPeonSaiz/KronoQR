@@ -3948,10 +3948,12 @@ paths:
         **ningun escaneo la alcanzaba**: no habia hash por el que resolverla. A
         partir del `200` puede fichar.
 
-        **El QR se genera con correccion de errores nivel Q** (RF-QR-05). El
-        doc 02 §5.1 justifica el margen: *«es lo que permite que una tarjeta
-        sobreviva una temporada de uso diario en una cocina, con roces, grasa y
-        dobleces»*.
+        **El QR se genera con correccion de errores nivel Q y tamaño minimo
+        garantizado** (RF-QR-05). El nivel es una propiedad del simbolo, no una
+        garantia de durabilidad: **el producto no promete ninguna tolerancia al
+        desgaste**, porque el soporte fisico lo elige el cliente. Una tarjeta que
+        deja de leerse se repone —revocar, reemitir e imprimir en el dia— y hasta
+        entonces se ficha con el PIN de respaldo (RF-AT-11).
 
         **Es un `POST` y no un `GET` aunque devuelva un documento**, y esa es la
         parte que importa: esta llamada **cambia el estado del sistema de forma

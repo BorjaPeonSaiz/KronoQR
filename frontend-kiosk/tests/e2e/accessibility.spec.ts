@@ -71,6 +71,35 @@ test(
   },
 )
 
+test(
+  'la pantalla de rechazo tampoco (cubre tambien «unreadable»)',
+  { tag: ['@RF-KI-06', '@RS-03'] },
+  async ({ page }) => {
+    // `unreadable` (QR con formato ilegible) no tiene prueba propia: renderiza
+    // por la MISMA rama de `ScanConfirmationPanel.vue` que `rejected` -mismo
+    // titulo, mismo cuerpo, mismo tono `error`, misma variante- por diseno
+    // (regla dura 17: un QR ilegible y uno rechazado no pueden distinguirse).
+    // Cubrir `rejected` cubre estructuralmente los dos.
+    await stubScanApi(page, { outcome: 'rejected' })
+    await page.goto('/')
+    await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'rejected')
+
+    const results = await new AxeBuilder({ page })
+      .withTags(WCAG_TAGS)
+      .disableRules(DISABLED_RULES)
+      .analyze()
+
+    const blocking = results.violations.filter(
+      (violation) => violation.impact === 'critical' || violation.impact === 'serious',
+    )
+
+    expect(
+      blocking,
+      blocking.map((violation) => `${violation.id}: ${violation.help}`).join('\n'),
+    ).toEqual([])
+  },
+)
+
 test('en ingles tampoco', { tag: ['@RF-KI-05', '@RF-KI-06'] }, async ({ page }) => {
   await stubScanApi(page, { outcome: 'offline' })
   await page.goto('/')

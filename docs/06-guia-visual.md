@@ -131,6 +131,25 @@ Tabla completa, una fila por pareja declarada en `themePairs.ts` (la prueba fall
 
 **Parejas que no existen a propósito** (y que la prueba obliga a añadir, y medir, antes de usarlas): `primary-strong` como texto sobre `surface-alt` o sobre `primary-soft` (4,24 y 4,34:1, ambas por debajo); `accent` como componente sobre `surface`; cualquier texto sobre `primary` o sobre `accent` sólidos.
 
+### 2.1 Texto sobre el visor de cámara (caso especial, fuera de `themePairs.ts`)
+
+`ScanView.vue` (~325-338) pinta el título y el subtítulo de la pantalla ociosa sobre `bg-kq-kiosk-surface/80`: una banda **semitransparente** (80 % de opacidad de `kiosk-surface`, no sólida), superpuesta al `<video>` de la cámara en directo. Es una decisión del cliente («la cámara se ve limpia, nada de "agujero" con capa oscura sobre el fotograma entero»), documentada en el propio componente. Esta pareja no vive en `themePairs.ts` ni la mide `theme.spec.ts` porque no es un fondo sólido: su color efectivo depende de lo que la cámara esté mostrando en cada instante, y por eso no se puede declarar como una pareja fija de tokens.
+
+**Por qué esto no lo verifica axe, y por qué la comprobación tiene que ser aritmética.** El algoritmo `color-contrast` de axe-core necesita un color de fondo determinado para calcular una razón de contraste. Un elemento con fondo translúcido compuesto sobre un `<video>` con contenido dinámico no tiene un color de fondo fijo: axe-core lo señala como resultado **`incomplete`** («no se puede determinar»), no como `violation`. Las cuatro suites de accesibilidad de esta rama (`frontend-kiosk/tests/e2e/accessibility.spec.ts` y las pasadas incrustadas en `pin.spec.ts`, `pairing.spec.ts`, `diagnostics.spec.ts`) solo inspeccionan `results.violations`; nunca leen `results.incomplete`. El resultado es que esta pareja **pasa la CI en silencio sin haber sido verificada nunca contra un caso real** —el fixture de vídeo del E2E, además, solo reproduce el patrón fijo del QR de prueba (mayormente blanco), no la variedad de fondos que una cámara en directo mostraría (piel, uniforme oscuro, luz de cocina). Por eso el cálculo aquí es manual, contra los dos extremos matemáticos, no contra una muestra del vídeo.
+
+**Por qué negro puro y blanco puro bastan como límites del peor caso.** El color efectivo de la banda es una mezcla lineal por canal: `efectivo = α·banda + (1−α)·fondo`, con `α = 0,8` (el modificador `/80` de Tailwind) y `banda = kiosk-surface` (`#241a15`). La luminancia relativa de WCAG es una suma ponderada con coeficientes positivos de esos mismos canales, así que es monótona en cada canal de `fondo`: se maximiza cuando los tres canales del fondo son máximos a la vez (blanco puro, `#ffffff`) y se minimiza cuando son mínimos a la vez (negro puro, `#000000`). Ningún fotograma real de la cámara —por saturado o brillante que sea— puede producir un color efectivo con más luminancia que el compuesto sobre blanco puro, ni con menos que el compuesto sobre negro puro. Verificar los dos extremos verifica, por construcción, todos los casos intermedios.
+
+**Cálculo** (`--kq-color-kiosk-surface` `#241a15`, α = 0,8; texto real usado en esos dos bloques: `kiosk-text` `#fff7ed` en el título por herencia del `text-kq-kiosk-text` del contenedor `<main>`, `kiosk-text-muted` `#d4c3b5` en el subtítulo):
+
+| Fondo real tras la banda | Color efectivo de la banda (`0,8·#241a15 + 0,2·fondo`) | `kiosk-text` sobre ese efectivo | `kiosk-text-muted` sobre ese efectivo |
+|---|---|---|---|
+| Negro puro `#000000` (peor caso oscuro) | `#1d1511` | **16,94:1** | **10,51:1** |
+| Blanco puro `#ffffff` (peor caso claro) | `#504844` | **8,41:1** | **5,22:1** |
+
+**Resultado: cumple ≥ 4,5:1 en los dos extremos, sin necesitar ninguna mitigación.** El caso más ajustado es `kiosk-text-muted` (el subtítulo) contra el peor fondo claro posible: 5,22:1, un 16 % por encima del mínimo exigido — no es un margen enorme, pero es real y está calculado contra el extremo matemático, no contra una muestra favorable.
+
+**Guardarraíl para no perder el margen sin darse cuenta.** El punto de ruptura de esta pareja (`kiosk-text-muted` sobre el fondo claro peor caso) está en **α ≈ 76 %**: por debajo de esa opacidad de banda, el subtítulo deja de cumplir 4,5:1 contra un fondo de cámara muy claro. El valor actual, **`/80` (80 %), es el mínimo de opacidad que `ScanView.vue` puede usar para esta banda sin recalcular este apartado.** Cambio propuesto para `frontend-quiosco`: no es necesario tocar `bg-kq-kiosk-surface/80` — el valor ya en producción es el correcto y el mínimo seguro es 80 %, no una cifra inferior; si en el futuro se pide "menos velo" sobre la cámara, cualquier valor por debajo de `/80` tiene que volver a pasar por este cálculo antes de aplicarse (no basta con mirarlo).
+
 ## 3. Tipografía
 
 | Token | Valor | Uso |

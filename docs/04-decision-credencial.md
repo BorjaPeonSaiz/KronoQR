@@ -104,7 +104,7 @@ Con tarjeta, la cuestión no se plantea. Para un producto B2B esto importa doble
 
 ### 4.4 Entorno físico
 
-Una tarjeta PVC plastificada aguanta una cocina, humedad, grasa y caídas durante toda una temporada. Cuesta un euro reponerla, y el QR se genera con **corrección de errores nivel Q**, que tolera hasta un 25 % de degradación.
+Una tarjeta PVC plastificada aguanta una cocina, humedad, grasa y caídas mucho mejor que un cristal, y **cuesta alrededor de un euro reponerla**. El QR se genera con **corrección de errores nivel Q**, pero el producto no promete ninguna tolerancia concreta al desgaste: el soporte físico lo elige el cliente, y la respuesta operativa a una tarjeta que ya no se lee es reponerla y fichar entretanto con el PIN de respaldo (§8).
 
 Un móvil en el mismo entorno presenta tres problemas de lectura: reflejos en la pantalla bajo la iluminación del vestíbulo de servicio, grasa y suciedad en el cristal, y **pantallas agrietadas**, que en hostelería son la norma y no la excepción.
 
@@ -187,7 +187,7 @@ La credencial en móvil **no es funcionalidad prevista del producto**. Se evalua
 | Aspecto | Resolución |
 |---|---|
 | **Formato del payload** | `FH1.<key_id>.<token>.<sig>`, opaco y firmado con HMAC-SHA256. Sin PII, no enumerable |
-| **Corrección de errores** | Nivel Q: tolera un 25 % de degradación, que es lo que permite a la tarjeta sobrevivir una temporada de uso diario |
+| **Corrección de errores** | Nivel Q y tamaño mínimo garantizado (RF-QR-05). La versión del símbolo la fija el codificador según la longitud del payload. **No se promete ninguna tolerancia al desgaste**: la respuesta a una tarjeta ilegible es la reposición, y el PIN de respaldo cubre el intervalo |
 | **Formatos de impresión** | Tarjeta de crédito (85,6 × 54 mm) para impresora PVC, y hoja A4 con varias por página para impresión convencional |
 | **Contenido de la tarjeta** | Nombre, departamento, centro y QR. Marca del cliente configurable |
 | **Registro de entrega** | Fecha y responsable, auditado. Distingue "se perdió antes de entregarla" de "el empleado la perdió", que son incidencias distintas |

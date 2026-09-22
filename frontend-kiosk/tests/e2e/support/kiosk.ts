@@ -53,6 +53,8 @@ interface RecordedScan {
   readonly occurredAt: string
   readonly idempotencyKey: string | undefined
   readonly intent: string | undefined
+  /** El payload QR tal y como lo decodifico la camara (`degraded.spec.ts`, `worn.spec.ts`). */
+  readonly qrPayload: string | undefined
 }
 
 export interface ScanStub {
@@ -76,12 +78,14 @@ export async function stubScanApi(page: Page, options: ScanStubOptions = {}): Pr
       scan_id: string
       occurred_at: string
       intent?: string
+      qr_payload?: string
     }
     recorded.push({
       scanId: body.scan_id,
       occurredAt: body.occurred_at,
       idempotencyKey: route.request().headers()['idempotency-key'],
       intent: body.intent,
+      qrPayload: body.qr_payload,
     })
 
     if (outcome === 'offline') {

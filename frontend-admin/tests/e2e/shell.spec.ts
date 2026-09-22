@@ -9,11 +9,29 @@
 //   pruebas cuentan enlaces (`toHaveCount(0)`) dando eso por hecho.
 //
 // El backend no participa: dobles de `support/admin.ts`.
+//
+// Sin etiqueta de requisito a proposito (tarea 3.7, decision 10 de la ficha):
+// `docs/requisitos.yaml` no tiene un RF/RN/RQ para «el menu de navegacion del
+// panel» en si mismo -RF-PA-01 es la vista en vivo de presencia, no el menu-;
+// lo unico que rige esta pantalla es la guia visual (doc 06 §6 regla 11, que
+// no es un requisito con `id`) y el WCAG 2.2 AA general (doc 01 §6.5, sin
+// `id` propio en el catalogo). Inventar una etiqueta aqui falsearia la
+// matriz de trazabilidad.
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
 import { EMPLOYEE_UUID, logInAsAdmin, stubManagementApi } from './support/admin'
 
 const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
+
+type BoundingBox = { x: number; y: number; width: number; height: number }
+
+/**
+ * Afirma que la caja se ha pintado, sin aserciones no nulas (`!`, prohibidas
+ * por ESLint) ni un `if` con logica en el cuerpo de la prueba (doc 02 §3.5).
+ */
+function assertPainted(box: BoundingBox | null, label: string): asserts box is BoundingBox {
+  expect(box, `${label} no se ha pintado: no hay caja que medir.`).not.toBeNull()
+}
 
 const SECTIONS = [
   'Plantilla',
@@ -80,9 +98,8 @@ test('por debajo de md el menu se apila y las catorce secciones siguen visibles'
   const header = await banner.boundingBox()
   const main = await page.getByRole('main').boundingBox()
 
-  if (header === null || main === null) {
-    throw new Error('La cabecera o el contenido no se han pintado: no hay caja que medir.')
-  }
+  assertPainted(header, 'La cabecera')
+  assertPainted(main, 'El contenido')
   expect(main.y).toBeGreaterThanOrEqual(header.y + header.height)
   expect(header.x + header.width).toBeLessThanOrEqual(700)
   expect(main.x + main.width).toBeLessThanOrEqual(700)

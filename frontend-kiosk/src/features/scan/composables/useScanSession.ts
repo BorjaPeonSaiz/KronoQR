@@ -89,10 +89,17 @@ export function useScanSession(options: UseScanSessionOptions): ScanSession {
     settle(next) {
       const current = confirmation.value
       if (current === null || current.scanId !== next.scanId) return
-      // El sonido ya ha sonado al confirmar en local. Repetirlo al llegar la
-      // respuesta del servidor haria sonar dos pitidos por un unico fichaje, y
-      // el segundo llegaria cuando la persona ya se ha dado la vuelta.
-      show(next, false)
+      // El sonido de «pendiente» (o «Comprobando…») ya sono al confirmar en
+      // local: para un desenlace ACEPTADO repetirlo seria un doble pitido por
+      // un unico fichaje, y el segundo llegaria cuando la persona ya se ha
+      // dado la vuelta -eso no cambia-. Pero ese sonido inicial es NEUTRO, no
+      // dice nada del resultado: si el desenlace real es un RECHAZO
+      // (`rejected`/`unreadable`), el empleado necesita el aviso
+      // inconfundible de error (`TONES.error`, doc 01 §6.5) antes de irse, y
+      // esta es la UNICA vez que puede sonar, porque el rechazo nunca sono
+      // antes -opcion B de la revision de `ui-ux`-.
+      const isRejection = next.kind === 'rejected' || next.kind === 'unreadable'
+      show(next, isRejection)
     },
 
     dismiss() {

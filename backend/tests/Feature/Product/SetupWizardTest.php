@@ -524,4 +524,4 @@ it('sirve el estado del asistente en el idioma negociado', function (): void {
     $errors = $response->json('errors');
 
     expect($errors['state'][0])->toContain('cannot be skipped');
-})->group('RF-PD-03', 'RQ-04');
+})->group('RF-PD-03');

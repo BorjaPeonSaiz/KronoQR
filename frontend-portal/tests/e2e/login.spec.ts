@@ -100,7 +100,7 @@ test(
 
 test(
   'el bloqueo por intentos fallidos avisa de "demasiados intentos", nunca confirma que la cuenta existe',
-  { tag: ['@RL-05', '@RF-ID-06'] },
+  { tag: ['@RL-05', '@RF-ID-06', '@RS-12'] },
   async ({ page }) => {
     await stubPortalApi(page, { locale: 'es', loginOutcome: 'rateLimited' })
 
