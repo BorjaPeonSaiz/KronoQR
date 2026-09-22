@@ -289,13 +289,15 @@ resolver solo. Se llena sola cada madrugada, al revisar el registro.
 | **Desfase de reloj** | Baja | La tablet tenía la hora desviada al fichar | **El fichaje se registró igual.** Es un aviso para IT sobre esa tablet, no un problema de la persona |
 | **Salida sin fichar** | Media | Describe un olvido de salida **ya cerrado a mano** | **No la abre nadie automáticamente.** Mientras el turno sigue abierto, lo que hay es «Turno abierto sin cerrar» |
 | **Sin pausa registrada** | Media | Un tramo continuo por encima del umbral del convenio | **Se abre solo si el hotel tiene activado el fichaje de pausa.** Sin él, el sistema no puede distinguir «no descansó» de «descansó y no lo fichó», y no avisa de ninguna |
+| **Fichaje fuera de orden** | Media | Llegó un fichaje que no cabe en el registro de esa persona: una **salida** con hora anterior a la entrada que ya estaba abierta, o una **entrada** que caería dentro o antes de un tramo ya cerrado —aunque el tramo sea de otra jornada, como después de un turno de noche— | Casi siempre, una tablet que estuvo sin red: su cola llegó con retraso y desordenada. **El fichaje queda guardado y señalado para revisión, y la jornada no cambia sola** (§4.4) |
 | **Patrón anómalo de uso de la credencial** | Alta | — | **Hoy no se abre ninguna.** El detector llega en una versión posterior |
 
-> **El filtro «Tipo» enseña los ocho, y cuántos se abren solos depende de un
-> ajuste.** Cinco lo hacen siempre —descanso insuficiente, turno abierto,
-> jornada demasiado larga, jornada demasiado corta y desfase de reloj—, y
-> **«Sin pausa registrada» se suma a ellos en cuanto el hotel activa el fichaje
-> de pausa** (Panel → «Ajustes operativos» → «Fichaje de pausa»; lo explica
+> **El filtro «Tipo» enseña los nueve, y cuántos se abren solos depende de un
+> ajuste.** Seis lo hacen siempre —descanso insuficiente, turno abierto,
+> jornada demasiado larga, jornada demasiado corta, desfase de reloj y fichaje
+> fuera de orden—, y **«Sin pausa registrada» se suma a ellos en cuanto el hotel
+> activa el fichaje de pausa** (Panel → «Ajustes operativos» → «Fichaje de
+> pausa»; lo explica
 > [`configuracion.md`](configuracion.md) §2.1). Los otros dos están en la lista
 > porque el sistema tiene que poder registrarlos sin cambiar nada cuando llegue
 > su momento. No es un fallo de la instalación.
@@ -359,6 +361,102 @@ jefe de sala» sí.
 
 Si dos personas la resuelven a la vez, el sistema avisa de quién la cerró antes
 y con qué desenlace, en lugar de pisar el trabajo de nadie.
+
+### 4.4 «Fichaje fuera de orden»: un fichaje que no cabe en la jornada
+
+Es el único tipo de la tabla que no describe un exceso ni un olvido, sino un
+fichaje que **llegó tarde y desordenado**, así que merece su propio apartado.
+
+**Qué ha pasado.** Cuando una tablet se queda sin red no deja de fichar: guarda
+cada escaneo con su **hora real** y los envía en cuanto la recupera. Casi
+siempre encajan sin más. De vez en cuando llega uno que **no cabe en ninguna
+jornada**, y pasa de dos maneras:
+
+- **Una salida anterior a la entrada que ya estaba abierta.** La persona tiene
+  un turno abierto desde las 14:00 y, desde la cola de una tablet que estuvo sin
+  red, llega su salida de las 13:40. Sería un tramo que termina antes de
+  empezar.
+- **Una entrada que cae dentro o antes de un tramo ya cerrado.** La persona
+  fichó de 09:00 a 13:00 en la tablet de recepción y, por la tarde, la tablet de
+  cocina vacía su cola con una entrada de las 08:00. Serían dos tramos pisándose
+  el mismo rato.
+
+En los dos casos el resultado sería un registro imposible, y **no hay ninguna
+hora que el sistema pueda calcular** a partir de ese fichaje. Así que no la
+inventa.
+
+**Qué hace el sistema con él.** Tres cosas, y conviene saber las tres:
+
+- **Lo guarda**, con su hora tal y como llegó, y lo **señala para revisión**. No
+  se descarta en silencio ni se ajusta para que cuadre. Esa hora te llega en la
+  incidencia, no en la jornada: la razón, un poco más abajo.
+- **No toca la jornada.** Los tramos y los totales de ese día siguen siendo
+  exactamente los que eran. Nada se cierra, nada se inventa.
+- **No lo reintenta.** La tablet deja de insistir con ese fichaje y su cola se
+  vacía con normalidad; el resto de fichajes de esa misma cola se registran sin
+  problema.
+
+A la madrugada siguiente, la revisión abre la incidencia **«Fichaje fuera de
+orden»** sobre esa persona y esa jornada: una sola, aunque hayan llegado varios.
+
+**Dónde está la hora: en la incidencia, no en el registro horario.** Es lo
+primero que hay que saber, porque ahorra buscar donde no está. El registro
+horario de una persona enseña **los tramos de su jornada**, no los escaneos: ese
+fichaje **no aparece ahí**, y la jornada se ve exactamente igual que antes de
+que llegara.
+
+Lo que sí lleva el dato es la **propia incidencia**. Pulsa «Resolver» sobre su
+fila y, encima del formulario, la ventana **«Cerrar incidencia»** muestra:
+
+| Lo que dice | Qué es |
+| --- | --- |
+| **Hora del fichaje** | La hora real con la que llegó, **en el horario del centro**. Es la pista de lo que de verdad pasó |
+| **Identificador del escaneo** | El código de ese fichaje concreto. Cópialo si vas a escribir un parte o preguntar a IT |
+| **Escaneos fuera de orden** | Cuántos llegaron así en esa jornada. La incidencia es una sola aunque fueran varios, y la hora que se muestra es la del primero |
+
+**Abrir esa ventana no resuelve nada**: puedes leer los datos y cerrarla sin
+elegir desenlace ni escribir nota. Resolver es pulsar el botón de confirmar, no
+abrir el diálogo.
+
+**Cómo se resuelve.** Cuatro pasos, y el orden ahorra trabajo:
+
+1. **Abre «Resolver» y apunta la hora del fichaje.** Cierra la ventana sin
+   confirmar.
+2. **Abre el registro horario de la persona** en esa jornada y compara esa hora
+   con los tramos del día. Si hace falta, pregunta a la persona o a su
+   responsable.
+3. **Corrige el registro** (§5) con la acción que corresponda: **«Añadir un
+   tramo»** si faltaba una entrada más temprana, **«Corregir las horas»** si el
+   tramo existente no tiene las horas reales, o **«Anular el tramo»** si el que
+   sobra es ese. El motivo suele ser **«Fallo técnico del quiosco»**, **«Olvido
+   de fichaje de entrada»** o **«Escaneo duplicado»**.
+4. **Vuelve a «Resolver» y cierra la incidencia** con su nota (§4.3). Si al
+   final el registro era correcto, «Revisada: no había nada que corregir» es un
+   desenlace legítimo y queda explicado.
+
+> **El registro legal no se cambia solo, tampoco aquí.** El sistema registra lo
+> que llegó y avisa; la hora la firma una persona, con su nombre y su motivo, y
+> el valor anterior se conserva (§5.3).
+
+**Si se repite siempre en la misma tablet** no es un problema de la plantilla,
+es de red o de la hora de ese punto: pásaselo a IT con el nombre del quiosco y
+la fecha. El procedimiento es
+[`../runbooks/cola-offline-atascada.md`](../runbooks/cola-offline-atascada.md).
+
+> **Lo que ocurrió antes de esta versión no está en el registro.** Hasta ahora,
+> un fichaje así no llegaba a guardarse: la tablet lo reintentaba una y otra vez
+> y el servidor no lo aceptaba nunca. **No hay nada anterior que revisar ni que
+> recuperar**, y no se reprocesa ningún día pasado.
+>
+> **Pero sí vas a ver incidencias con fecha antigua los primeros días, y no es
+> un error.** Lo que decide si un fichaje se revisa es **cuándo llega al
+> servidor**, no de cuándo es su hora. Las tablets que llevaban semanas con uno
+> atascado lo entregan en cuanto se actualiza el servidor, así que **entran en la
+> revisión de esa misma madrugada** — y la incidencia se abre sobre **la jornada
+> a la que pertenece esa hora real**, que puede ser la de hace dos semanas. Se
+> resuelven igual que las del día: ábrelas, compara y corrige. Cuando las
+> tablets terminen de vaciarse, este tipo vuelve a aparecer solo de vez en
+> cuando.
 
 ---
 

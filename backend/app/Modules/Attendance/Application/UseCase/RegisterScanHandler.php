@@ -17,7 +17,6 @@ use App\Modules\Attendance\Application\Port\SiteCalendar;
 use App\Modules\Attendance\Application\Port\WorkDayRepository;
 use App\Modules\Attendance\Application\Support\ClockingPolicies;
 use App\Modules\Attendance\Domain\Event\ScanRejected;
-use App\Modules\Attendance\Domain\Exception\ClockOutBeforeClockIn;
 use App\Modules\Attendance\Domain\Exception\OverlappingShiftEntry;
 use App\Modules\Attendance\Domain\Exception\ShiftAlreadyOpen;
 use App\Modules\Attendance\Domain\Model\WorkDay;
@@ -27,7 +26,9 @@ use App\Modules\Attendance\Domain\Policy\ScanIntentPolicy;
 use App\Modules\Attendance\Domain\ValueObject\AcceptedScan;
 use App\Modules\Attendance\Domain\ValueObject\ClockingResolution;
 use App\Modules\Attendance\Domain\ValueObject\ClockSkew;
+use App\Modules\Attendance\Domain\ValueObject\OutOfOrderScan;
 use App\Modules\Attendance\Domain\ValueObject\ScanRejectionReason;
+use App\Modules\Attendance\Domain\ValueObject\TimeRange;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Attendance\Domain\ValueObject\WorkedDuration;
 use App\Modules\Shared\Application\Port\Clock;
@@ -128,12 +129,17 @@ use RuntimeException;
  * que la regla dura 19 exige: el empleado no tiene la culpa de haber pasado la
  * tarjeta a la vez que su companero.
  *
- * `ClockOutBeforeClockIn` entra en el mismo reintento por lo mismo: bajo
- * concurrencia no describe un dato imposible, sino una lectura que se quedo
- * vieja entre dos consultas de la misma transaccion. El orden de lecturas de
- * {@see processResolved()} hace que no deba ocurrir; reintentarla es la red por
- * si algun camino futuro vuelve a abrir esa ventana, y despues de
- * `MAX_ATTEMPTS` sigue saliendo a la superficie en vez de quedar enterrada.
+ * **`ClockOutBeforeClockIn` ya NO entra en ese reintento** (RN-18, tarea ad hoc
+ * del 18-09-2026). Entraba porque era la unica forma de sobrevivir a un escaneo
+ * cuya hora no cuadraba con el turno abierto, y el precio era el peor posible:
+ * la transaccion revertia tres veces, el lote devolvia `503`, el quiosco lo
+ * reintentaba para siempre y **no quedaba ni una linea** de un fichaje real
+ * (regla dura 19). Ahora esa situacion la decide el agregado **dentro** de la
+ * transaccion —{@see WorkDay::outOfOrderScanFor()}— y se registra como
+ * `rejected_out_of_order`, asi que la excepcion vuelve a significar lo unico que
+ * deberia: que alguien intento cerrar un tramo por un camino que no pregunto. Es
+ * un defecto, y un defecto sale a la superficie —`500`, `error_events`,
+ * alerta— en vez de disfrazarse de contencion y perderse en un reintento.
  *
  * ## Lo que NUNCA hace
  *
@@ -252,7 +258,7 @@ final readonly class RegisterScanHandler
                         previous: $replayed,
                     );
                 }
-            } catch (ShiftAlreadyOpen|OverlappingShiftEntry|ClockOutBeforeClockIn $race) {
+            } catch (ShiftAlreadyOpen|OverlappingShiftEntry $race) {
                 if ($attempt >= self::MAX_ATTEMPTS) {
                     throw $race;
                 }
@@ -428,6 +434,74 @@ final readonly class RegisterScanHandler
 
         if ($suppressor instanceof AcceptedScan) {
             return $this->debounce($command, $recordedAt, $employee, $workDay, $suppressor->occurredAt, $flaggedForReview);
+        }
+
+        // RN-18, el **fichaje irreconciliable**. Se pregunta al agregado —que es
+        // quien sabe que tramos tiene esta jornada y en que estado— si este
+        // escaneo puede llegar a encajar en ella, y si no puede se resuelve aqui
+        // de una vez.
+        //
+        // **La accion decidida viaja en la pregunta** porque hay dos formas de no
+        // encajar, una por camino: al cerrar, no ser posterior a la entrada del
+        // turno abierto (RN-03); al abrir, pisar un tramo **ya cerrado** que
+        // sigue vivo despues (RN-02). Las dos las contesta
+        // {@see WorkDay::outOfOrderScanFor()}, que es el unico sitio donde estan
+        // escritas, con sus dos limites opuestos.
+        //
+        // **Por que despues del anti-rebote y antes de decidir nada mas.** Un
+        // reenvio dentro de la ventana de gracia sigue siendo anti-rebote y viaja
+        // en su `200` (RF-AT-06, ADR-031): comprobar RN-18 antes convertiria en
+        // rechazo el reintento de un fichaje que ya se acepto. Y se comprueba
+        // antes de tocar la jornada porque a partir de aqui todo camino escribe.
+        //
+        // Lo que sigue **no lo reintenta nadie**: por eso es un rechazo con su
+        // propio resultado, marcado para revision (RN-15 marca por desfase; aqui
+        // la marca es la regla misma), y no una excepcion que el `catch` de
+        // carreras confundiria con contencion.
+        //
+        // **Lo que NO es un fichaje irreconciliable: la carrera.** La decision de
+        // abrir o cerrar se tomo con `hasOpenEntry` leido antes, y la jornada
+        // destino se carga despues, con una instantanea mas nueva: diez lecturas
+        // simultaneas de la misma tarjeta —`ScanIdempotencyConcurrencyTest`—
+        // producen a menudo una que decidio «abrir» sin ver turno abierto y se
+        // encuentra con el tramo del ganador ya abierto. Ese escaneo tiene que
+        // chocar contra RN-01, reintentar y salir por el anti-rebote, no llevarse
+        // un `422` por haber pasado la tarjeta a la vez que su companero (regla
+        // dura 19). Quien lo garantiza es el agregado, que en el camino de
+        // apertura **solo mira los tramos cerrados**; aqui no hace falta ninguna
+        // condicion, y ponerla dejaria RN-18 sin la mitad que cubre RN-02.
+        $outOfOrder = $workDay->outOfOrderScanFor($resolution->action, $command->occurredAt);
+
+        // **Y la mitad que el agregado no puede ver.** RN-02 es por empleado y
+        // **a traves de jornadas**; el agregado solo conoce la suya. Un turno de
+        // noche cerrado el 14 a las 22:00 y terminado el 15 a las 06:00 vive en
+        // la jornada del 14 (RN-05, regla dura 4), asi que una entrada encolada
+        // con `occurred_at` a las 02:00 del 15 carga una jornada vacia, no
+        // encuentra nada que contradecir y llega a `clockIn()` — donde la
+        // restriccion de exclusion la aborta con un `500`, tres reintentos y un
+        // `503` por elemento. Ese era el defecto original de RN-18, intacto por
+        // el otro lado.
+        //
+        // Se pregunta **solo al abrir**, que es cuando puede pasar: si esta
+        // resolucion cierra, hay un turno abierto, y ningun tramo cerrado vigente
+        // puede terminar despues de su entrada sin haber violado ya RN-02. Una
+        // consulta de mas por cada salida del cambio de turno no la paga nadie.
+        if (! $outOfOrder instanceof OutOfOrderScan && $resolution->opensEntry()) {
+            $overlapped = $this->workDays->closedEntryEndingAfter($employee->employeeUuid, $command->occurredAt);
+
+            if ($overlapped instanceof TimeRange) {
+                $outOfOrder = OutOfOrderScan::overlappingClosedEntry($overlapped, $command->occurredAt);
+            }
+        }
+
+        if ($outOfOrder instanceof OutOfOrderScan) {
+            return $this->reject(
+                $command,
+                $recordedAt,
+                $employee->employeeUuid,
+                ScanResult::REJECTED_OUT_OF_ORDER,
+                flaggedForReview: true,
+            );
         }
 
         if ($resolution->opensEntry()) {
@@ -630,12 +704,31 @@ final readonly class RegisterScanHandler
     /**
      * El escaneo no produjo tramo. La causa se escribe en `scan_events.result` y
      * viaja en el evento; **no sale por la API** (RS-03, regla dura 17).
+     *
+     * **`flaggedForReview` es de RN-18 y por omision es `false`.** Los cuatro
+     * rechazos de credencial no se marcan: `flagged_for_review` alimenta una
+     * bandeja de FICHAJES que validar, y una tarjeta que no resuelve no describe
+     * el fichaje de nadie. El fichaje irreconciliable si: ahi hubo una persona
+     * pasando su tarjeta y lo unico que falta es decidir que tramo describe.
+     *
+     * **Que lee la revision diaria.** Para el desfase de reloj (RN-15), la marca.
+     * Para RN-18, `result = 'rejected_out_of_order'` **y** la marca: el resultado
+     * es lo que identifica el hallazgo —la marca la comparten fichajes por PIN y
+     * escaneos con el reloj desviado— y la marca es lo que hace alcanzable el
+     * indice parcial `scan_events_flagged_for_review_index`, que es por donde
+     * entra la consulta. Escribir solo una de las dos dejaria la incidencia sin
+     * abrir o la pasada nocturna recorriendo la tabla entera.
+     *
+     * `worked_minutes` se queda **nulo en todos los casos**, tambien en el de
+     * RN-18: la respuesta es el `422` generico y no lleva acumulado que
+     * reconstruir, y el `CHECK scan_events_chk_worked_minutes` lo exige.
      */
     private function reject(
         RegisterScanCommand $command,
         DateTimeImmutable $recordedAt,
         ?string $employeeUuid,
         ScanResult $result,
+        bool $flaggedForReview = false,
     ): RegisterScanResult {
         $fingerprint = $this->fingerprintOf($command->qrPayload);
 
@@ -650,9 +743,10 @@ final readonly class RegisterScanHandler
             result: $result,
             payloadFingerprint: $fingerprint,
             clockSkewSeconds: ClockSkew::between($command->occurredAt, $recordedAt)->seconds,
-            // Un rechazo no se marca: `flagged_for_review` alimenta una bandeja
-            // de FICHAJES que validar y aqui no hay tramo que validar. El rastro
-            // del intento esta en `scan_events.result` y en la metrica.
+            // Ver el docblock: un rechazo de credencial no se marca; el de RN-18
+            // si, y es lo que lo convierte en incidencia sin evento ni listener
+            // nuevos. `worked_minutes` no viaja en ninguno de los dos.
+            flaggedForReview: $flaggedForReview,
             clientMeta: $command->clientMeta,
         ));
 
@@ -806,12 +900,24 @@ final readonly class RegisterScanHandler
         return $qrPayload === null ? null : hash('sha256', $qrPayload);
     }
 
+    /**
+     * El motivo de dominio que corresponde al valor que se acaba de escribir en
+     * la columna.
+     *
+     * El `default` cubre los cuatro desenlaces **aceptados** y
+     * `rejected_unknown`, que comparten motivo porque nunca llegan aqui salvo el
+     * ultimo. RN-18 lleva rama propia y no cae en el `default` a proposito: con
+     * el motivo equivocado, el evento `ScanRejected` —y con el la metrica y el
+     * log— diria «credencial desconocida» de un fichaje cuya credencial resolvio
+     * perfectamente, y el diagnostico empezaria buscando una tarjeta rota.
+     */
     private function rejectionReasonOf(ScanResult $result): ScanRejectionReason
     {
         return match ($result) {
             ScanResult::REJECTED_REVOKED => ScanRejectionReason::REVOKED_CREDENTIAL,
             ScanResult::REJECTED_SIGNATURE => ScanRejectionReason::INVALID_SIGNATURE,
             ScanResult::REJECTED_DEBOUNCE => ScanRejectionReason::DEBOUNCE,
+            ScanResult::REJECTED_OUT_OF_ORDER => ScanRejectionReason::OUT_OF_ORDER,
             default => ScanRejectionReason::UNKNOWN_CREDENTIAL,
         };
     }

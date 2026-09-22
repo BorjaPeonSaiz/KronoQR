@@ -797,6 +797,27 @@ export const INCIDENT_CLOSED_BY_OTHER: Incident = {
   resolution_note: 'Ya se habia revisado en el cambio de turno.',
 }
 
+/**
+ * RN-18 «Fichaje irreconciliable»: un escaneo cuyo `occurred_at` es anterior
+ * al inicio del tramo abierto no puede producir tramo (`shift_entry_uuid:
+ * null`, como el resto de tipos sin tramo, p. ej. `open_shift_expired`).
+ * `context` lleva exactamente lo que confirma el contrato para este tipo: el
+ * `scan_id` y el `occurred_at` del primer escaneo que no cuadro, y `scans`,
+ * el recuento.
+ */
+export const OUT_OF_ORDER_INCIDENT: Incident = {
+  ...OPEN_INCIDENT,
+  id: 413,
+  type: 'out_of_order_scan',
+  severity: 'medium',
+  shift_entry_uuid: null,
+  context: {
+    scan_id: '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90',
+    occurred_at: '2026-03-14T13:50:00Z',
+    scans: 2,
+  },
+}
+
 /** Una sola pagina, que es lo unico que necesita el E2E: nunca hay mas de 25 filas de mentira. */
 function incidentPage(data: Incident[]): IncidentCollection {
   return {
@@ -814,6 +835,8 @@ function incidentPage(data: Incident[]): IncidentCollection {
 
 export const INCIDENT_BOARD = incidentPage([OPEN_INCIDENT])
 export const EMPTY_INCIDENT_BOARD = incidentPage([])
+/** Dos incidencias abiertas de tipos distintos, para el filtro y la lista. */
+export const INCIDENT_BOARD_WITH_OUT_OF_ORDER = incidentPage([OPEN_INCIDENT, OUT_OF_ORDER_INCIDENT])
 
 // --- Quioscos y emparejamiento por codigo (RF-PA-07, RF-PD-06, tarea 5.6) ---
 
@@ -1008,6 +1031,14 @@ export interface ManagementApiOptions {
    * la incidencia ya cerrada por `INCIDENT_CLOSED_BY_OTHER`.
    */
   readonly resolveOutcome?: 'ok' | 'conflict'
+  /**
+   * La pagina que devuelve `GET /incidents` mientras nada se ha resuelto
+   * (`status=open`). Por omision, `INCIDENT_BOARD` (una sola fila). No filtra
+   * por tipo/severidad/departamento de verdad -esto es un doble, no el
+   * servidor-: el filtro solo comprueba que el panel manda el parametro
+   * correcto (ver el primer caso de `incidents.spec.ts`).
+   */
+  readonly incidentBoard?: IncidentCollection
   /** El registro horario que devuelve `GET /employees/{uuid}/workdays`. Por omision, `WORKDAYS`. */
   readonly workdays?: EmployeeWorkDays
   /**
@@ -1278,6 +1309,7 @@ export async function stubManagementApi(
   const loginOutcome = options.loginOutcome ?? 'ok'
   const twoFactor = options.twoFactor ?? 'off'
   const resolveOutcome = options.resolveOutcome ?? 'ok'
+  const incidentBoard = options.incidentBoard ?? INCIDENT_BOARD
   const exportOutcome = options.exportOutcome ?? 'ok'
   const correctionOutcome = options.correctionOutcome ?? 'ok'
   const baseUser =
@@ -1584,7 +1616,7 @@ export async function stubManagementApi(
             status === 'resolved' ? incidentPage([INCIDENT_CLOSED_BY_OTHER]) : EMPTY_INCIDENT_BOARD,
           )
         } else {
-          await json(route, 200, status === 'open' ? INCIDENT_BOARD : EMPTY_INCIDENT_BOARD)
+          await json(route, 200, status === 'open' ? incidentBoard : EMPTY_INCIDENT_BOARD)
         }
 
         return

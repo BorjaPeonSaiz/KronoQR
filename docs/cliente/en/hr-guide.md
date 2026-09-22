@@ -297,13 +297,14 @@ its own. It fills itself every night, when the record is reviewed.
 | **Clock skew** | Low | The tablet's clock was off when the clocking happened | **The clocking was recorded all the same.** It is a warning for IT about that tablet, not a problem for the person |
 | **Missing clock-out** | Medium | It describes a forgotten clock-out **already closed by hand** | **Nobody opens it automatically.** While the shift is still open, what you have is "Open shift not closed" |
 | **No break registered** | Medium | A continuous entry above the collective agreement's threshold | **It only opens by itself if the hotel has break clocking turned on.** Without it, the system cannot tell "they did not rest" from "they rested and did not clock it", and warns about none |
+| **Out-of-order clocking** | Medium | A clocking arrived that does not fit that person's record: a **clock-out** with a time earlier than the clock-in that was already open, or a **clock-in** that would fall inside or before an entry that is already closed —even if that entry belongs to another working day, such as after a night shift— | Almost always, a tablet that was offline: its queue arrived late and out of order. **The clocking is kept and flagged for review, and the working day does not change on its own** (§4.4) |
 | **Anomalous credential usage pattern** | High | — | **None is opened today.** The detector arrives in a later version |
 
-> **The "Type" filter shows all eight, and how many open by themselves depends
-> on a setting.** Five always do —insufficient rest, open shift, shift too long,
-> shift too short and clock skew—, and **"No break registered" joins them as
-> soon as the hotel turns on break clocking** (Panel → "Operational settings" →
-> "Break clocking"; it is explained in
+> **The "Type" filter shows all nine, and how many open by themselves depends
+> on a setting.** Six always do —insufficient rest, open shift, shift too long,
+> shift too short, clock skew and out-of-order clocking—, and **"No break
+> registered" joins them as soon as the hotel turns on break clocking** (Panel →
+> "Operational settings" → "Break clocking"; it is explained in
 > [`configuration.md`](configuration.md) §2.1). The other two are in the list
 > because the system has to be able to record them without changing anything
 > when their time comes. It is not a fault in the installation.
@@ -368,6 +369,104 @@ head waiter" does.
 
 If two people resolve it at the same time, the system tells you who closed it
 first and with which outcome, instead of overwriting anybody's work.
+
+### 4.4 "Out-of-order clocking": a clocking that does not fit the working day
+
+It is the only type in the table that does not describe an excess or a
+forgotten action, but a clocking that **arrived late and out of order**, so it
+deserves its own section.
+
+**What happened.** When a tablet loses the network it does not stop clocking:
+it saves every scan with its **real time** and sends them as soon as it gets
+the network back. Almost always they fit without further ado. Every now and
+then one arrives that **does not fit into any working day**, and it happens in
+two ways:
+
+- **A clock-out earlier than the clock-in that was already open.** The person
+  has a shift open since 14:00 and, from the queue of a tablet that was offline,
+  their 13:40 clock-out arrives. It would be an entry that ends before it
+  begins.
+- **A clock-in that falls inside or before an entry that is already closed.**
+  The person clocked from 09:00 to 13:00 on the reception tablet and, in the
+  afternoon, the kitchen tablet empties its queue with an 08:00 clock-in. It
+  would be two entries stepping on the same stretch of time.
+
+In both cases the result would be an impossible record, and **there is no hour
+the system can calculate** out of that clocking. So it does not invent one.
+
+**What the system does with it.** Three things, and all three are worth
+knowing:
+
+- **It keeps it**, with its time exactly as it arrived, and **flags it for
+  review**. It is not silently discarded, and it is not adjusted to make it
+  fit. That time reaches you in the incident, not in the working day: the
+  reason is just below.
+- **It does not touch the working day.** That day's entries and totals stay
+  exactly as they were. Nothing is closed, nothing is invented.
+- **It does not retry it.** The tablet stops insisting on that clocking and its
+  queue empties normally; the rest of the clockings in that same queue are
+  recorded without any problem.
+
+The following night, the review opens the **"Out-of-order clocking"** incident
+for that person and that working day: one only, even if several arrived.
+
+**Where the time is: in the incident, not in the time record.** It is the first
+thing to know, because it saves you looking where it is not. A person's time
+record shows **the entries of their working day**, not the scans: that clocking
+**does not appear there**, and the working day looks exactly as it did before it
+arrived.
+
+What does carry the data is the **incident itself**. Press "Resolve" on its row
+and, above the form, the **"Close incident"** window shows:
+
+| What it says | What it is |
+| --- | --- |
+| **Clock time** | The real time it arrived with, **in the site's time zone**. It is the clue to what really happened |
+| **Scan ID** | The code of that particular clocking. Copy it if you are going to write a report or ask IT |
+| **Out-of-order scans** | How many arrived like that on that working day. The incident is a single one even if there were several, and the time shown is that of the first |
+
+**Opening that window does not resolve anything**: you can read the data and
+close it without choosing an outcome or writing a note. Resolving is pressing
+the confirm button, not opening the dialog.
+
+**How it is resolved.** Four steps, and the order saves work:
+
+1. **Open "Resolve" and note down the clock time.** Close the window without
+   confirming.
+2. **Open the person's time record** for that working day and compare that time
+   with the day's entries. If you need to, ask the person or their manager.
+3. **Correct the record** (§5) with whichever action applies: **"Add an entry"**
+   if an earlier clock-in was missing, **"Correct the times"** if the existing
+   entry does not have the real hours, or **"Void the entry"** if that is the
+   surplus one. The reason is usually **"Kiosk technical failure"**, **"Missed
+   clock-in"** or **"Duplicate scan"**.
+4. **Go back to "Resolve" and close the incident** with its note (§4.3). If in
+   the end the record was right, "Reviewed: there was nothing to correct" is a
+   legitimate outcome and it stays explained.
+
+> **The legal record does not change on its own here either.** The system
+> records what arrived and warns; the hour is signed by a person, with their
+> name and their reason, and the previous value is kept (§5.3).
+
+**If it always happens on the same tablet** it is not a problem with the staff,
+it is the network or the clock at that point: pass it on to IT with the kiosk's
+name and the date. The procedure is
+[`../../runbooks/cola-offline-atascada.md`](../../runbooks/cola-offline-atascada.md)
+(in Spanish).
+
+> **What happened before this version is not in the record.** Until now a
+> clocking like this never got saved: the tablet retried it over and over and
+> the server never accepted it. **There is nothing earlier to review or to
+> recover**, and no past day is reprocessed.
+>
+> **But you will see incidents with old dates in the first few days, and that is
+> not a mistake.** What decides whether a clocking is reviewed is **when it
+> reaches the server**, not what its time says. Tablets that had been stuck with
+> one for weeks hand it over as soon as the server is updated, so **they go into
+> that very night's review** — and the incident is opened on **the working day
+> that real time belongs to**, which may be the one from a fortnight ago. They
+> are resolved just like today's: open, compare and correct. Once the tablets
+> have finished emptying, this type shows up only now and then again.
 
 ---
 

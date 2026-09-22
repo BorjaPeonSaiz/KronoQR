@@ -220,7 +220,7 @@ final readonly class DatabaseIncidentBoard implements IncidentBoard
 
     private function hydrate(Row $row): IncidentBoardRow
     {
-        /** @var array<string, int> $context */
+        /** @var array<string, int|string> $context */
         $context = $row->json('context') ?? [];
 
         return new IncidentBoardRow(

@@ -43,7 +43,9 @@ const conflictClosed = ref(false)
 const noteId = useId()
 const counterId = useId()
 
-const contextLines = computed(() => describeIncidentContext(props.incident.context, t))
+const contextLines = computed(() =>
+  describeIncidentContext(props.incident.context, t, props.timeZone, locale.value),
+)
 
 const noteLength = computed(() => note.value.trim().length)
 const noteTooShort = computed(() => noteLength.value > 0 && noteLength.value < NOTE_MIN)

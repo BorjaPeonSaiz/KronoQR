@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Modules\Attendance\Application\Port;
 
 use App\Modules\Attendance\Domain\Model\WorkDay;
+use App\Modules\Attendance\Domain\ValueObject\TimeRange;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
+use DateTimeImmutable;
 
 /**
  * Persistencia del agregado `WorkDay`.
@@ -112,4 +114,37 @@ interface WorkDayRepository
      * 450 y no en 930.
      */
     public function save(WorkDay $workDay): void;
+
+    /**
+     * El tramo **cerrado y vigente** de esa persona que sigue vivo despues de
+     * `$at` —en **cualquier jornada**—, o `null` si no hay ninguno.
+     *
+     * ## Por que hace falta, si el agregado ya contesta eso
+     *
+     * Porque no contesta lo mismo. `WorkDay::outOfOrderScanFor()` mira los
+     * tramos de **su** jornada, y RN-02 es por **empleado y a traves de
+     * jornadas**: un turno de noche del dia 14 que termina a las 06:00 del 15
+     * vive en la jornada del 14 (RN-05, regla dura 4), asi que un `clock_in`
+     * encolado con `occurred_at` a las 02:00 del 15 carga una jornada del 15
+     * vacia, no encuentra nada que contradecir y se va derecho a `clockIn()`.
+     * Ahi lo para `shift_entries_no_overlap` con una excepcion, tres reintentos
+     * y un `503` por elemento: el fichaje que la cola reintentaba para siempre y
+     * del que no quedaba ni una linea, que es justo lo que RN-18 existe para
+     * cerrar (regla dura 19).
+     *
+     * **Solo los CERRADOS**, igual que el agregado y por lo mismo: un tramo
+     * abierto en este camino no describe un fichaje irreconciliable sino la
+     * carrera de dos tarjetas a la vez, que resuelve RN-01 con un reintento.
+     *
+     * **Vive en este puerto y no en {@see WorkDayLedger}** aunque solo lea:
+     * aquel existe para la revision diaria —recorre a toda la plantilla y su
+     * docblock lo dice—, y esta pregunta es del camino de fichaje, de una sola
+     * persona y del mismo puerto que ya traduce las violaciones de RN-01 y
+     * RN-02. Es la version que **pregunta** lo que `save()` tendria que
+     * **traducir**.
+     *
+     * Devuelve el primero que estorba —el de salida mas temprana posterior a
+     * `$at`— porque es el que una persona mira primero al trabajar la incidencia.
+     */
+    public function closedEntryEndingAfter(string $employeeUuid, DateTimeImmutable $at): ?TimeRange;
 }

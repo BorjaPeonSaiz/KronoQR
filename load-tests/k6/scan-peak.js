@@ -24,7 +24,8 @@
 //   resend      0,5/s  un fichaje y su reenvio identico (regla dura 8, RQ-03).
 //   reject      1/s    las tres clases de rechazo, comparadas ENTRE SI (RS-03).
 //   batch       1 lote de 50 por minuto: 25 pares entrada/salida del MISMO
-//                      empleado, enviados en orden inverso a su `occurred_at`.
+//                      empleado, enviados en orden inverso a su `occurred_at`,
+//                      con UN elemento imposible de reconciliar (RN-18).
 //   compliance  0,5/s  solo en la instancia de panel, con token de gestion.
 //
 // NADIE REPITE TARJETA DENTRO DE LA VENTANA DEL ANTI-REBOTE. El reparto de
@@ -120,7 +121,7 @@ const SCENARIOS = {
     duration: DURATION,
     preAllocatedVUs: 2,
     maxVUs: 8,
-    tags: { requirements: 'RF-KI-04' },
+    tags: { requirements: 'RF-KI-04 RN-18' },
   },
   compliance: {
     executor: 'constant-arrival-rate',
@@ -189,6 +190,9 @@ const resendMatches = new Counter('resend_matches')
 
 /** Elementos de lote, por desenlace (RF-KI-04). */
 const batchOutcomes = new Counter('batch_outcomes')
+
+/** Que le paso al elemento imposible que cada lote lleva a proposito (RN-18). */
+const batchImpossible = new Counter('batch_impossible')
 
 // --- Todo lo que se resuelve UNA vez ----------------------------------------
 
@@ -469,15 +473,65 @@ export function offlineBatch() {
   // dentro del anti-rebote y el par saldria `debounced` en lugar de abrir y
   // cerrar tramo.
   const start = (BATCH_START + iteration * BATCH_PAIRS) % CARDS.batch.length
+
+  // --- El elemento IMPOSIBLE del lote (RN-18) --------------------------------
+  //
+  // Un elemento que no se puede reconciliar —una salida cuyo `occurred_at` es
+  // ANTERIOR a la entrada del turno que tendria que cerrar— ya no responde
+  // `503`, que significaba «no lo he procesado, conservalo en la cola»: responde
+  // `422` con el cuerpo generico y deja fila `rejected_out_of_order` marcada
+  // para revision. La diferencia no es cosmetica. Con el `503`, la cola de un
+  // quiosco se quedaba reintentando **para siempre** un elemento que jamas
+  // podria cuadrar, y ese bucle es el origen de RN-18.
+  //
+  // COMO SE FABRICA, Y POR QUE HACE FALTA UNA PETICION PREVIA. Dentro de un
+  // mismo lote no se puede: el servidor lo ordena por `occurred_at`, asi que un
+  // cierre nunca llega antes que la entrada que le toca. La contradiccion tiene
+  // que venir de FUERA del lote, que es exactamente lo que pasa en la vida real
+  // —alguien ficha en el quiosco de al lado mientras este drena una cola vieja—.
+  // Por eso se abre antes un tramo con un escaneo normal, fechado ENTRE los dos
+  // elementos del par sacrificado:
+  //
+  //   impossibleAt ......... cierre imposible (anterior a la entrada del tramo)
+  //   seedAt = +D+10 s ..... el escaneo que abre el tramo
+  //   validCloseAt = +2D+20  el cierre que si cuadra
+  //
+  // Las separaciones superan la ventana del anti-rebote (D) en los dos saltos:
+  // con menos, el segundo elemento saldria `debounced` y no cerraria nada.
+  const impossibleAt = now - BATCH_BACKLOG_SECONDS * 1000
+  const seedAt = impossibleAt + (DEBOUNCE_SECONDS + 10) * 1000
+  const validCloseAt = impossibleAt + (2 * DEBOUNCE_SECONDS + 20) * 1000
+  const sacrificialPayload = CARDS.batch[start % CARDS.batch.length]
+  const seedScanId = uuidv7()
+
+  const seed = http.post(
+    `${BASE}/api/v1/scan`,
+    scanBody(seedScanId, sacrificialPayload, utc(seedAt)),
+    { headers: kioskHeaders(deviceToken(iteration), seedScanId), tags: { phase: 'batch_seed' } },
+  )
+
+  // Si el borde freno el escaneo previo, o si no abrio tramo, el elemento de
+  // abajo deja de ser imposible: no hay nada que contradecir. El desenlace se
+  // cuenta aparte y no se juzga, en vez de darlo por bueno o por malo.
+  const seedOpened = seed.status === 200 && ['clock_in', 'break_start'].includes(outcomeOf(seed))
   const scans = []
+  let impossibleScanId = null
 
   for (let pair = 0; pair < BATCH_PAIRS; pair++) {
     const payload = CARDS.batch[(start + pair) % CARDS.batch.length]
-    const clockInAt = now - (BATCH_BACKLOG_SECONDS - pair * BATCH_PAIR_SPACING_SECONDS) * 1000
-    const clockOutAt = clockInAt + BATCH_PAIR_GAP_SECONDS * 1000
+    const sacrificed = pair === 0
+    const clockInAt = sacrificed
+      ? impossibleAt
+      : now - (BATCH_BACKLOG_SECONDS - pair * BATCH_PAIR_SPACING_SECONDS) * 1000
+    const clockOutAt = sacrificed ? validCloseAt : clockInAt + BATCH_PAIR_GAP_SECONDS * 1000
+    const firstScanId = uuidv7()
+
+    if (sacrificed) {
+      impossibleScanId = firstScanId
+    }
 
     scans.push(
-      { scan_id: uuidv7(), occurred_at: utc(clockInAt), qr_payload: payload, intent: 'auto', at: clockInAt },
+      { scan_id: firstScanId, occurred_at: utc(clockInAt), qr_payload: payload, intent: 'auto', at: clockInAt },
       { scan_id: uuidv7(), occurred_at: utc(clockOutAt), qr_payload: payload, intent: 'auto', at: clockOutAt },
     )
   }
@@ -502,19 +556,61 @@ export function offlineBatch() {
     const action = result.status === 200 ? String(result.outcome.action) : `http_${result.status}`
 
     batchOutcomes.add(1, { action })
+
+    // Al pico de RNF-P-06 solo van las respuestas que producen tramo; un
+    // irreconciliable no lo produce y ya se cuenta por su lado.
     shiftOutcomes.add(1, { phase: 'batch', action })
+
+    if (result.scan_id === impossibleScanId) {
+      batchImpossible.add(1, { outcome: outcomeOfImpossible(result, seedOpened) })
+    }
   }
 
   check(response, {
     'el lote responde 207 con un resultado por elemento': (r) =>
       unanswered(r) || (r.status === 207 && results.length === BATCH_SIZE),
-    // Solo el `4xx` es un rechazo: un `503` significa «no lo he procesado,
-    // conservalo en la cola» y es la degradacion que la regla dura 19 pide, no
-    // una jornada perdida. Confundir los dos convertiria en fallo lo que el
-    // producto hace bien.
-    'ningun elemento del lote se rechaza': () =>
-      results.every((result) => result.status < 400 || result.status >= 500),
+    // TRES DESENLACES Y NO DOS. El `503` significa «no lo he procesado,
+    // conservalo en la cola» y es la degradacion que pide la regla dura 19. El
+    // `422` de RN-18 significa lo contrario: SI lo he procesado, queda
+    // registrado como irreconciliable y marcado para revision, y el quiosco
+    // tiene que SACARLO de la cola. Solo el resto de los `4xx` es un fichaje que
+    // se pierde sin dejar rastro, y solo eso falla aqui.
+    'ningun elemento del lote se pierde sin registrar': () =>
+      results.every((result) => result.status < 400 || result.status >= 500 || result.status === 422),
   })
+}
+
+/**
+ * Que le paso al elemento imposible.
+ *
+ * `retried` es el desenlace que RN-18 vino a eliminar: un `503` devuelve el
+ * elemento a la cola de un quiosco que lo reintentara indefinidamente, porque
+ * jamas va a poder cuadrar.
+ */
+function outcomeOfImpossible(result, seedOpened) {
+  // EL `422` SE CUENTA SIEMPRE, mire lo que mire el escaneo previo: es la prueba
+  // de que el caso existio —el servidor no responde `rejected_out_of_order` a un
+  // elemento que se pueda reconciliar—. La comprobacion de que el guion monto el
+  // caso solo hace falta para los OTROS desenlaces, donde un tramo que no se
+  // abrio los explicaria sin que el producto tenga culpa. (La tarjeta puede
+  // llegar con un tramo abierto de una pasada anterior, y entonces el escaneo
+  // previo cierra en vez de abrir.)
+  if (result.status === 422) {
+    return 'unreconcilable'
+  }
+
+  if (!seedOpened) {
+    return 'not_set_up'
+  }
+
+  if (result.status >= 500) {
+    return 'retried'
+  }
+
+  // Un `debounced` significa que las separaciones de arriba no dieron de si en
+  // esta instalacion: el guion no monto el caso, y eso no se le imputa al
+  // producto.
+  return result.status === 200 && String(result.outcome.action) === 'debounced' ? 'inconclusive' : 'accepted'
 }
 
 // --- compliance: la vista de cumplimiento en paralelo (RF-PA-06) -------------

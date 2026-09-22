@@ -53,6 +53,17 @@ enum IncidentType: string
     case AnomalousPattern = 'anomalous_pattern';
 
     /**
+     * RN-18: **fichaje irreconciliable**. Un escaneo llego con una hora que no
+     * podia cuadrar con el turno abierto de esa persona y quedo registrado sin
+     * tramo (`rejected_out_of_order`).
+     *
+     * La abre la revision diaria leyendo `scan_events`, igual que `ClockSkew`, y
+     * se cierra con una correccion (RN-13): crear el tramo que falta o anular lo
+     * que sobra. **Sin `shift_entry_id`**, porque el escaneo no produjo ninguno.
+     */
+    case OutOfOrderScan = 'out_of_order_scan';
+
+    /**
      * Con que urgencia entra en la bandeja.
      *
      * **La decide el tipo y no quien detecta**, que es lo que impide que dos
@@ -66,7 +77,10 @@ enum IncidentType: string
      *     persona que no puede quedarse sin revisar (RF-PR-06).
      *   - `medium` — el registro horario esta incompleto o dice algo que no
      *     cuadra, y alguien tiene que corregirlo con traza (RN-13). Es la
-     *     severidad de la alerta «Turnos abiertos > 12 h» del doc 01 §9.3.
+     *     severidad de la alerta «Turnos abiertos > 12 h» del doc 01 §9.3, y la
+     *     del fichaje irreconciliable de RN-18: hay un fichaje real que **falta**
+     *     en el registro, que es exactamente «incompleto y hay que corregirlo»,
+     *     no una norma incumplida ni un dato meramente raro.
      *   - `low` — el registro es valido y el dato es raro. Se mira cuando se
      *     puede.
      */
@@ -74,7 +88,8 @@ enum IncidentType: string
     {
         return match ($this) {
             self::InsufficientRest, self::AnomalousPattern => IncidentSeverity::High,
-            self::OpenShiftExpired, self::LongShift, self::MissingBreak, self::MissingClockOut => IncidentSeverity::Medium,
+            self::OpenShiftExpired, self::LongShift, self::MissingBreak,
+            self::MissingClockOut, self::OutOfOrderScan => IncidentSeverity::Medium,
             self::ShortShift, self::ClockSkew => IncidentSeverity::Low,
         };
     }

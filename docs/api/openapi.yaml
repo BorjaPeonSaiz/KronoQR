@@ -363,6 +363,18 @@ paths:
         contrato convertiria «formato invalido» en un `400` distinguible de un `422`,
         que es la misma fuga que el codigo se cuida de no cometer.
 
+        **Que cubre exactamente la garantia de tiempo constante.** Los rechazos **de
+        credencial**, que son los cinco de arriba: entre ellos no hay diferencia
+        medible, porque es ahi donde una diferencia diria si un codigo existe o esta
+        revocado. El rechazo de RN-18 —el fichaje que no puede cuadrar con el
+        registro— tambien responde este mismo `422`, pero llega **despues** de
+        resolver la credencial y de cargar la jornada, asi que su latencia se parece
+        a la del camino aceptado y no a la de los otros rechazos. No abre ningun
+        oraculo: para provocarlo hacen falta un token de quiosco valido, una
+        credencial que resuelve y un `occurred_at` fabricado, y lo unico que se
+        averigua es sobre la jornada de la persona **cuya tarjeta se tiene en la
+        mano**.
+
         **El quiosco no espera a esta respuesta** (regla dura 19, documento 02 §6).
         Confirma al empleado en local en menos de 300 ms y encola; esta llamada
         sincroniza. Un fallo de red no puede impedir fichar.
@@ -485,14 +497,26 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '422':
           description: |
-            **Escaneo rechazado.** Respuesta unica, generica y de tiempo constante
-            para toda causa de rechazo (regla dura 17, RS-03, documento 02 §5.2).
+            **Escaneo rechazado.** Respuesta unica y generica para toda causa de
+            rechazo, y de tiempo constante entre las de credencial (regla dura 17,
+            RS-03, documento 02 §5.2; el matiz, arriba en la descripcion del
+            endpoint).
             El cuerpo esta fijado campo a campo en el esquema y no admite miembros
             adicionales: el contrato hace **imposible** describir la causa, que es
             el unico modo de garantizar que nadie la filtre por descuido.
 
             El quiosco muestra su propio texto de i18n a partir de `type`. Nunca
             debe mostrar `title` ni `detail`, que son texto para quien depura.
+
+            **Tambien responde asi el fichaje irreconciliable** (RN-18), en sus dos
+            formas: un escaneo cuya hora real **no es posterior** a la entrada del
+            turno abierto —no puede cerrarlo (RN-03)— y una entrada que **pisaria un
+            tramo ya cerrado** de esa persona, en cualquier jornada —el tramo que
+            abriria nace sin salida y se extiende hacia delante (RN-02)—. Los dos
+            quedan registrados, marcados para revision y convertidos en incidencia, y
+            el cliente recibe este mismo cuerpo. **No se distingue desde fuera**, y no
+            es un descuido: distinguirlo daria un canal por el que averiguar el
+            estado de la jornada de otra persona pasando su tarjeta.
           content:
             application/problem+json:
               schema:
@@ -543,6 +567,27 @@ paths:
         cual (regla dura 9, RF-AT-09). El retraso se mide y se publica como
         `sync_delay_seconds`; en la Fase 2 abrira una incidencia de revision humana
         (RN-15). En ningun caso se descarta un fichaje por llegar tarde.
+
+        **Un elemento que no puede cuadrar se resuelve de una vez** (RN-18, *fichaje
+        irreconciliable*). Una cola desordenada o dos tablets con relojes distintos
+        traen escaneos que ya no caben, y hay **dos formas** de no caber:
+
+        - **Al cerrar**: la hora real **no es posterior** a la entrada del turno que
+          esa persona tiene abierto. RN-03 exige salida estrictamente posterior.
+        - **Al abrir**: el tramo que la entrada crearia —que nace sin salida, asi que
+          se extiende hacia delante— **pisaria un tramo ya cerrado** de esa persona,
+          en cualquier jornada. Lo prohibe RN-02. Es el caso de la tablet que encola
+          la entrada de las 08:00 mientras la persona ficha de 09:00 a 13:00 en otro
+          quiosco, y tambien el del turno de noche del dia anterior, que pertenece a
+          la jornada en que empezo (RN-05) y sigue vivo de madrugada.
+
+        Ninguno de los dos puede producir tramo y reintentarlos no lo va a arreglar:
+        se registran en el log con resultado propio y marcados para revision, su
+        elemento responde el `422` generico de siempre, y la revision diaria abre una
+        incidencia `out_of_order_scan` para que una persona lo cuadre con una
+        correccion (RN-13, RF-PA-04). **El resto del lote se procesa con normalidad y
+        lo que ya estaba registrado no se toca.** Para el quiosco no hay nada nuevo
+        que programar: ya descarta lo que responde `422`.
 
         **El lote es de 50 como maximo.** Es el tamano que usa el quiosco al drenar
         (§6) y el techo existe para que un lote no monopolice un trabajador de PHP
@@ -685,6 +730,12 @@ paths:
         abre, porque el empleado no esta activo o porque **el bloqueo por intentos esta
         activo** (RS-12). La causa concreta solo existe en `scan_events.result` y en el
         log del servidor.
+
+        La garantia de **tiempo constante** cubre esas cinco, que son las que hablan
+        de la credencial. El rechazo de RN-18 —un fichaje que no puede cuadrar con el
+        registro— viaja en el mismo `422` pero se decide despues de identificar a la
+        persona y de cargar su jornada, asi que tarda lo que el camino aceptado.
+        Exige un PIN correcto, de modo que no dice nada de nadie mas.
 
         **Bloqueo creciente por intentos** (RS-12, documento 02 §7.5): 3 fallos bloquean
         5 minutos, 5 fallos 15 minutos y 10 fallos 60 minutos, **por empleado y por
@@ -8724,6 +8775,15 @@ components:
         existio. Las dos opciones pierden jornadas, y la regla dura 19 no lo
         permite.
 
+        **Solo lo transitorio llega aqui.** Un escaneo que no puede cuadrar por mas
+        veces que se envie **no** es un `503`: se registra, se responde con el `422`
+        generico y se abre una incidencia para que lo resuelva una persona. Son las
+        dos formas de RN-18 —una hora que no es posterior a la entrada del turno
+        abierto (RN-03) y una entrada que pisaria un tramo ya cerrado de esa persona,
+        en cualquier jornada (RN-02)—, y las dos caian antes en este esquema: el
+        resultado era una cola que no vaciaba nunca y un fichaje del que no quedaba
+        ni una linea.
+
         `503` y no `500` porque describe la accion siguiente del cliente: reintentar
         con retroceso, no descartar. **Nunca aparece en `POST /api/v1/scan`**, que
         con un fallo asi responde `500` y el quiosco reintenta el envio completo.
@@ -8812,6 +8872,14 @@ components:
             elemento: `200` si se proceso —incluido el anti-rebote, que es un
             desenlace aceptado (ADR-031)—, `422` si se rechazo y `503` si no se pudo
             procesar y hay que reintentarlo.
+
+            El `422` cubre **dos** situaciones que para el cliente son la misma y
+            se tratan igual: la credencial no valia (RS-03) y el escaneo **no
+            puede cuadrar con el registro y queda como incidencia** (RN-18, en sus
+            dos formas: su hora real no es posterior a la entrada del turno abierto,
+            o la entrada pisaria un tramo ya cerrado de esa persona en cualquier
+            jornada; ningun reintento cambia ni una ni otra). El quiosco lo descarta
+            en los dos casos, que es justo lo que hace que la cola vacie.
 
             El quiosco decide con este numero que hace con el elemento de su cola:
             `200` y `422` lo sacan de la cola, `503` lo conserva.
@@ -12924,6 +12992,22 @@ components:
         - `anomalous_pattern`: patron anomalo de uso de credencial (RF-PR-06,
           RN-16). Su detector llega en la Fase 3; el catalogo lo admite desde
           ahora para que la bandeja no necesite una migracion cuando exista.
+        - `out_of_order_scan`: **fichaje irreconciliable** (RN-18). Llego un
+          escaneo que no podia encajar en el registro y se guardo con
+          `rejected_out_of_order`, sin tramo. Son dos situaciones con dos limites
+          opuestos: su hora real **no era posterior** a la entrada del turno
+          abierto —RN-03 exige salida estrictamente posterior— o la entrada
+          **pisaba un tramo ya cerrado** de esa persona, en cualquier jornada
+          —RN-02, con limites `[inicio, fin)`: entrar a la hora exacta en que se
+          salio si cuadra—. **El fichaje ocurrio**: alguien paso su
+          tarjeta, y lo que falta es decidir con una correccion (RN-13, RF-PA-04)
+          que tramo describe. Una por empleado y jornada: dice «revisa esta
+          jornada», no «revisa este escaneo», y por eso llega sin
+          `shift_entry_uuid`.
+
+        **Ampliar este enum es aditivo** (ADR-012): un cliente que no conozca un
+        valor lo enseña tal cual en la bandeja, y ninguna respuesta cambia de
+        forma.
       enum:
         - open_shift_expired
         - short_shift
@@ -12933,6 +13017,7 @@ components:
         - clock_skew
         - missing_clock_out
         - anomalous_pattern
+        - out_of_order_scan
       example: insufficient_rest
 
     IncidentSeverity:
@@ -13069,12 +13154,30 @@ components:
         `worked_minutes`/`threshold_minutes`, `skew_seconds`...— y el panel las
         pinta como pares.
 
-        **Nunca lleva datos personales** (regla dura 21): solo enteros.
+        **Nunca lleva datos personales** (regla dura 21.) Nacio admitiendo
+        **solo enteros**, que era la forma mas corta de garantizarlo, y RN-18
+        lo amplio a **entero o cadena**: la incidencia `out_of_order_scan` lleva
+        el `scan_id` del primer escaneo que no cuadro y su `occurred_at`, que es
+        lo unico con lo que una persona encuentra el fichaje en el log para
+        corregirlo (RN-13). Ninguno de los dos identifica a nadie: uno es un UUID
+        generado por la tablet y el otro un instante.
+
+        **El cambio es aditivo** (ADR-012): todo contexto que ya existia sigue
+        siendo valido, y un cliente que solo supiera pintar numeros no deja de
+        recibir los suyos. Lo que se admite es un valor **escalar** y nada mas —
+        ni objetos ni listas—, de modo que no hay donde alojar una estructura con
+        un nombre dentro.
       additionalProperties:
-        type: integer
+        anyOf:
+          - type: integer
+          - type: string
+            maxLength: 64
       examples:
         - rest_minutes: 420
           threshold_minutes: 720
+        - scan_id: 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+          occurred_at: '2026-03-14T13:50:00Z'
+          scans: 2
 
     Incident:
       type: object

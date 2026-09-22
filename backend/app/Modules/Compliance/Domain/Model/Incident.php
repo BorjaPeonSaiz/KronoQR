@@ -46,7 +46,7 @@ use DateTimeZone;
 final readonly class Incident
 {
     /**
-     * @param  array<string, int>  $context  Minutos medidos y umbral aplicado. Nunca datos personales.
+     * @param  array<string, int|string>  $context  Los hechos que lo sostienen: minutos, umbral o el `scan_id` de RN-18. Nunca datos personales.
      */
     private function __construct(
         public IncidentType $type,
@@ -82,7 +82,7 @@ final readonly class Incident
      * asignar hasta que alguien lo nombre. Perder el hallazgo por un hueco de
      * configuracion seria exactamente lo contrario de para lo que existe.
      *
-     * @param  array<string, int>  $context
+     * @param  array<string, int|string>  $context
      */
     public static function open(
         IncidentType $type,
@@ -169,7 +169,7 @@ final readonly class Incident
      * con un instante que no es UTC no es una incidencia que alguien pueda
      * trabajar, venga de donde venga.
      *
-     * @param  array<string, int>  $context
+     * @param  array<string, int|string>  $context
      */
     public static function restore(
         IncidentType $type,

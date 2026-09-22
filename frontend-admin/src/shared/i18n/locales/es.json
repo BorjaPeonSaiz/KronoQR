@@ -757,7 +757,8 @@
       "insufficient_rest": "Descanso insuficiente",
       "clock_skew": "Desfase de reloj",
       "missing_clock_out": "Salida sin fichar",
-      "anomalous_pattern": "Patrón anómalo de uso de la credencial"
+      "anomalous_pattern": "Patrón anómalo de uso de la credencial",
+      "out_of_order_scan": "Fichaje fuera de orden"
     },
     "outcomes": {
       "resolved": "Resuelta",
@@ -809,10 +810,14 @@
     },
     "context": {
       "pair": "{metric} {value} de {threshold}",
+      "metric": "{metric}: {value}",
       "raw": "{key}: {value}",
       "metrics": {
         "rest_minutes": "descanso",
-        "worked_minutes": "trabajado"
+        "worked_minutes": "trabajado",
+        "occurred_at": "hora del fichaje",
+        "scan_id": "identificador del escaneo",
+        "scans": "escaneos fuera de orden"
       }
     },
     "employeeFilter": {

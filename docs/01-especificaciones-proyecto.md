@@ -278,7 +278,7 @@ Nomenclatura: `RF-<módulo>-<nº>`. Prioridad MoSCoW: **M**ust / **S**hould / **
 
 Estas reglas viven en el **núcleo de dominio** y deben estar cubiertas por pruebas unitarias puras.
 
-> Los umbrales de RN-10, RN-11, RN-12 y RN-17 provienen del Estatuto de los Trabajadores español, pero **son parámetros del perfil de cumplimiento** (RF-PD-07), no constantes. Lo invariable es la forma de la regla; configurable es el número. RN-01 a RN-09 y RN-13 a RN-15 son estructurales y no se configuran.
+> Los umbrales de RN-10, RN-11, RN-12 y RN-17 provienen del Estatuto de los Trabajadores español, pero **son parámetros del perfil de cumplimiento** (RF-PD-07), no constantes. Lo invariable es la forma de la regla; configurable es el número. RN-01 a RN-09, RN-13 a RN-15 y RN-18 son estructurales y no se configuran.
 >
 > **Las cuatro configurables alertan, pero solo tres abren incidencia.** RN-17 se señala en la vista de cumplimiento (RF-PA-06) y no llega a la bandeja, porque el cómputo del art. 34.1 ET es anual: el porqué está en su nota. La distinción vive en un solo sitio del dominio, `ComplianceRule::opensIncident()`, y de ahí la derivan la revisión diaria, el asiento de auditoría del cambio de umbral y la pantalla del perfil.
 >
@@ -307,6 +307,7 @@ Estas reglas viven en el **núcleo de dominio** y deben estar cubiertas por prue
 | RN-15 | El horario de un fichaje offline es el `occurred_at` del dispositivo, marcado con su retraso de sincronización. Si supera el umbral, requiere validación del responsable. |
 | RN-16 | **Secuencia imposible de credencial**: dos escaneos de la misma credencial en **dispositivos distintos** separados por menos del tiempo mínimo de tránsito entre ellos (configurable, `ATTENDANCE_MIN_TRANSIT_SECONDS`). Genera incidencia `anomalous_pattern` para revisión humana. **Nunca anula el fichaje ni concluye que ha habido fraude** (RF-PR-06). **No se evalúa** si alguno de los dos escaneos tiene incidencia `clock_skew` (RF-AT-10) o llegó en un lote cuyo retraso de sincronización supera el umbral (RN-15). |
 | RN-17 | **Jornada semanal ordinaria**: se señala si la suma de las jornadas de una semana supera la **jornada semanal ordinaria** del perfil de cumplimiento del centro (`max_weekly_hours`; **40 h** en `ES-hosteleria`, art. 34.1 ET). La semana son **siete fechas civiles** (`work_date`) a partir del día que fija el perfil (`week_starts_on`, ISO 8601: 1 lunes … 7 domingo), y se evalúa completa aunque el periodo consultado la corte. El límite es abierto: 40 h exactas no se señalan y 40 h 1 min sí. **Es informativa y no abre incidencia** — ver la nota de más abajo. |
+| RN-18 | **Fichaje irreconciliable**: un fichaje que **no puede encajar en la jornada** no produce tramo. Son dos situaciones: su hora real (`occurred_at`) **no es posterior** a la entrada del turno que el empleado tiene abierto, o **abriría un tramo solapado** con otro ya cerrado de esa persona que termina después de esa hora. Se registra igualmente en el log de escaneos con resultado propio —`rejected_out_of_order`, sin tramo asociado— y **marcado para revisión**, y abre incidencia `out_of_order_scan` para que una persona lo resuelva con una corrección (RN-13). **No se reintenta**: el quiosco recibe el mismo rechazo genérico que cualquier otro (RS-03) y vacía ese fichaje de su cola. Nunca se descarta en silencio, nunca bloquea al quiosco y nunca anula lo que el empleado sí fichó. |
 
 > **Sobre RN-10: qué compara el sistema, qué NO compara, y qué queda por tanto sin cubrir.** La detección automática (RF-PR-01) compara **la última salida de una jornada con la primera entrada de la jornada siguiente**. Eso es todo lo que mide. **El hueco entre dos tramos de la misma jornada no se evalúa**, y «misma jornada» aquí es lo que RN-05 define: la fecha civil del tramo que la abrió, más los tramos que la continúan (la vuelta de una pausa, RF-AT-12). Consecuencia concreta: salir a las 15:00 y volver a entrar a las 23:00 del mismo día son dos tramos de la misma `work_date` con 8 h de por medio y **el sistema no avisa**; si esa segunda entrada cayera a las 00:30, sería otra jornada y sí avisaría.
 >
@@ -329,6 +330,23 @@ Estas reglas viven en el **núcleo de dominio** y deben estar cubiertas por prue
 > La consecuencia práctica está declarada en el dominio: `ComplianceRule::opensIncident()` es falso solo para RN-17, y de ahí se derivan el asiento de `audit_log` de un cambio de `max_weekly_hours` o de `week_starts_on` —`affects_incident_detection: false` con `affects_compliance_view: true`— y lo que la pantalla del perfil promete. **No es lo mismo que la suspensión de RN-12**, que depende de un ajuste de la instalación: aquella se levanta en cuanto se activa el fichaje de pausa —y vuelve a bajar si se desactiva—, y esta no se levanta nunca porque describe lo que la regla significa.
 >
 > **La semana no se desplaza con el cambio de hora** (RN-09): se compone de `work_date`, que son fechas civiles del centro con RN-05 ya aplicada, así que no hay ninguna conversión de zona horaria por medio. El domingo del cambio de marzo tiene 23 h reales y sigue siendo el séptimo día de su semana. Y `week_starts_on` no es siempre el lunes: un convenio que empiece la semana en domingo cambia el perfil, no el código ([ADR-017](adr/ADR-017-nada-especifico-de-cliente-en-el-codigo.md)).
+
+> **Sobre RN-18: las dos formas de no encajar, por qué no se reintenta y por qué queda incidencia.** Un fichaje irreconciliable no es un fallo pasajero: describe un estado que **no puede cuadrar por mucho que se repita**. Toma dos formas, y las dos llegan por el mismo sitio —un lote de la cola offline que se sincroniza desordenado, o dos tablets con relojes distintos (RF-AT-09, RN-15)—:
+>
+> - **Al cerrar**: la salida llega con una hora que no es posterior a la entrada del turno abierto. Lo prohíbe RN-03, que exige salida estrictamente posterior.
+> - **Al abrir**: la entrada llega tarde y el tramo que crearía —que nace sin salida, así que se extiende hacia delante— pisaría a un tramo ya cerrado **de esa persona, en cualquier jornada**. Lo prohíbe RN-02, que es por empleado y no por jornada: un turno de noche que entró el día 14 a las 22:00 y salió el 15 a las 06:00 pertenece a la jornada del 14 (RN-05), y una entrada encolada con hora de las 02:00 del 15 lo pisa aunque su día natural sea otro. El caso típico: la tablet de la puerta se queda sin red y encola la entrada de las 08:00; la persona ficha su jornada entera en otro quiosco, de 09:00 a 13:00; cuando la primera recupera la conexión, su fichaje ya no cabe en ningún sitio.
+>
+> Tratarlas como errores temporales es lo que dejaba al quiosco reintentándolas indefinidamente contra un servidor que siempre iba a decir lo mismo, con dos efectos: la cola nunca vaciaba —y su antigüedad envenenaba la salud del quiosco (RF-PA-07)— y, como cada intento revertía entero, **el escaneo no dejaba ni una línea** en el log. Por eso RN-18 lo resuelve de una vez: se registra, se responde con el rechazo genérico de RS-03 y el fichaje sale de la cola.
+>
+> **Registrar no es aceptar, y descartar no es una opción** (regla dura 19). El sistema no puede inventar a qué hora entró o salió esa persona: adivinarlo escribiría en un registro con valor legal un dato que nadie produjo. Tampoco puede olvidarlo, porque detrás hay un fichaje real de alguien. Lo único honesto es dejar constancia de que llegó, decir que no se pudo cuadrar y **pasárselo a una persona**: la incidencia `out_of_order_scan` se abre en la revisión diaria leyendo el resultado del escaneo —sin evento ni proceso nuevos, igual que `clock_skew`— y se cierra creando o rectificando el tramo que faltaba mediante una corrección trazada (RN-13, RF-PA-04). Una por empleado y jornada: la incidencia dice «revisa esta jornada», no «revisa este escaneo».
+>
+> **Los dos límites exactos se comportan al revés, y no es una incoherencia: son dos reglas.** Un fichaje cuya hora coincide al segundo con la entrada del turno abierto **sí es irreconciliable**, porque daría un tramo de duración cero y RN-03 exige salida *estrictamente* posterior. Una entrada que coincide al segundo con la salida del tramo anterior **no lo es**: entrar a las 13:00 habiendo salido a las 13:00 no es solapar, porque RN-02 trata los tramos como intervalos `[inicio, fin)` —igual que la restricción de exclusión de la base de datos— y esa es la jornada partida de toda la vida. Lo normal es que el primero ni siquiera llegue a evaluarse: dos lecturas separadas por segundos son el mismo gesto y las resuelve antes el periodo de gracia de RF-AT-06, que va por delante de esta regla.
+>
+> **Un turno abierto nunca es un fichaje irreconciliable en el camino de apertura.** Si al abrir tramo la persona ya tiene uno sin cerrar, eso no es un lote desordenado: es la carrera de diez personas pasando la tarjeta a la vez en un cambio de turno. La resuelve RN-01 —el intento perdedor se reintenta y a la segunda ve el tramo del ganador, con lo que acaba en el periodo de gracia de RF-AT-06— y convertirla en RN-18 dejaría sin fichar a quien llegó segundo.
+>
+> **La revisión diaria acota su lectura por `recorded_at`, no por `occurred_at`** — y es la única regla del §4 que lo hace. Las demás miran jornadas ya registradas; esta mira escaneos que **no llegaron al registro**, y su caso típico llega con días de retraso: elementos atascados en la cola de un quiosco que solo drenan cuando el servidor se actualiza. Acotando por la hora del fichaje, un escaneo de hace dos semanas que entra hoy caería fuera de la ventana de `COMPLIANCE_INCIDENT_LOOKBACK_DAYS` y **no abriría incidencia nunca**: se habría registrado para que nadie lo mirara. Acotando por el momento de llegada, la pasada siguiente lo ve.
+>
+> **La jornada de la incidencia es la fecha civil del `occurred_at` en la zona del centro**, y en un turno de noche puede no coincidir con la jornada que RN-05 le habría dado al tramo: un fichaje de las 02:00 pertenecería a la jornada del día anterior si hubiera tramo que continuar, pero aquí **no hay tramo**, así que no hay nada de donde heredar la fecha. Se acepta y se dice: la incidencia señala el día en que ocurrió el fichaje que no cuadró, que es lo que quien la revisa necesita para encontrarlo, y la corrección que la resuelve sí sitúa el tramo en la jornada que le toca.
 
 > **Sobre el cambio de umbral: rige desde que se cambia, y no hacia atrás** (tarea 5.2). Cambiar `min_rest_hours`, `max_daily_hours` o `break_required_after_hours` en el perfil de cumplimiento **no reprocesa el pasado**. La revisión diaria vuelve a evaluar su ventana de `COMPLIANCE_INCIDENT_LOOKBACK_DAYS` (7 días de serie) con el umbral vigente **en el momento de la pasada**; nada anterior a esa ventana se recalcula, ninguna incidencia ya abierta se cierra y ninguna ya resuelta se reabre.
 >
@@ -483,9 +501,11 @@ Motor: **PostgreSQL 17**. Los tipos se expresan en su nomenclatura. El Anexo D d
 *Una sola fila `pending`/`running` a la vez (índice único parcial). El fichero —un ZIP con un CSV por tabla, JSON para lo estructurado, `manifest.json` y `README.md`— caduca a los `PRODUCT_DATA_EXPORT_RETENTION_DAYS` y se purga; **la fila no se borra nunca** (regla dura 5): queda como `purged` con sus recuentos y su huella. Pedir, generar y descargar dejan asiento (`data_export.requested|generated|downloaded`, familia `legal_export`).*
 
 **`scan_events`** — log inmutable de todo escaneo, aceptado o no
-`id`, `scan_id` (UUID v7 generado en cliente, UNIQUE → idempotencia), `device_id`, `employee_id` (nullable si no resuelve), `occurred_at` (TIMESTAMPTZ), `recorded_at` (TIMESTAMPTZ), `origin`, `intent` (`auto`|`break_start`|`break_end`; **lo declara el cliente**, `auto` por defecto), `result` (`clock_in`|`clock_out`|`break_start`|`break_end`|`rejected_unknown`|`rejected_revoked`|`rejected_debounce`|`rejected_signature`), `shift_entry_id`, `payload_fingerprint`, `client_meta` (JSONB)
+`id`, `scan_id` (UUID v7 generado en cliente, UNIQUE → idempotencia), `device_id`, `employee_id` (nullable si no resuelve), `occurred_at` (TIMESTAMPTZ), `recorded_at` (TIMESTAMPTZ), `origin`, `intent` (`auto`|`break_start`|`break_end`; **lo declara el cliente**, `auto` por defecto), `result` (`clock_in`|`clock_out`|`break_start`|`break_end`|`rejected_unknown`|`rejected_revoked`|`rejected_debounce`|`rejected_signature`|`rejected_out_of_order`), `shift_entry_id`, `payload_fingerprint`, `client_meta` (JSONB)
 
 > **`intent` frente a `result`.** `intent` es lo que el quiosco **pide** y viaja en la petición; `result` es lo que el servidor **decidió** y viaja en la respuesta. Son dos campos porque con la pausa modelada como dos tramos (ADR-024) el servidor no puede deducir si un cierre de tramo es una pausa o un fin de jornada: son estructuralmente idénticos. `auto` preserva el comportamiento de un cliente que no declara intención, de modo que ampliar el enum es aditivo y no rompe la v1 (ADR-012).
+>
+> **`rejected_out_of_order` es el resultado de RN-18.** Como todo rechazo deja `shift_entry_id` en nulo y no guarda el acumulado del día —la respuesta es genérica por RS-03, así que no hay nada que reconstruir—, y a diferencia de los otros tres **queda marcado para revisión y abre incidencia**: describe un fichaje real de una persona que no se pudo cuadrar, no una credencial que no valía.
 
 **`shift_entries`**
 `id`, `uuid`, `employee_id`, `site_id`, `work_date` (DATE, jornada según RN-05), `clocked_in_at` (TIMESTAMPTZ), `clocked_out_at` (TIMESTAMPTZ NULL), `duration_minutes` (INT NULL, derivada), `status` (`open`|`closed`|`anomalous`|`voided`|`superseded`), `clock_in_source`, `clock_out_source`, `version`, `superseded_by_id`, `created_at`, `updated_at`
@@ -519,7 +539,7 @@ ALTER TABLE shift_entries ADD CONSTRAINT shift_entries_chk_order
 
 **`shift_corrections`** — `id`, `shift_entry_id`, `performed_by_user_id`, `action`, `before` (JSONB), `after` (JSONB), `reason_code`, `reason_text`, `created_at`
 
-**`incidents`** — `id`, `employee_id`, `work_date`, `shift_entry_id` (NULL cuando la incidencia describe la jornada entera y no un tramo), `type` (`open_shift_expired`|`short_shift`|`long_shift`|`missing_break`|`insufficient_rest`|`clock_skew`|`missing_clock_out`|`anomalous_pattern`), `severity` (`low`|`medium`|`high`), `status` (`open`|`resolved`|`dismissed`), `assigned_to_user_id`, `detected_at`, `context` (JSONB, **sin datos personales**: minutos y umbrales, nunca nombres), `notified_at`, `resolved_at`, `resolved_by_user_id`, `resolution_note`, `created_at`, `updated_at`. UNIQUE `one_incident_per_finding (employee_id, work_date, type, shift_entry_id) NULLS NOT DISTINCT`, sobre **todos** los estados.
+**`incidents`** — `id`, `employee_id`, `work_date`, `shift_entry_id` (NULL cuando la incidencia describe la jornada entera y no un tramo), `type` (`open_shift_expired`|`short_shift`|`long_shift`|`missing_break`|`insufficient_rest`|`clock_skew`|`missing_clock_out`|`anomalous_pattern`|`out_of_order_scan`), `severity` (`low`|`medium`|`high`), `status` (`open`|`resolved`|`dismissed`), `assigned_to_user_id`, `detected_at`, `context` (JSONB, **sin datos personales**: minutos, umbrales y referencias al propio registro —el `scan_id` y el `occurred_at` de RN-18—, siempre escalares y nunca nombres), `notified_at`, `resolved_at`, `resolved_by_user_id`, `resolution_note`, `created_at`, `updated_at`. UNIQUE `one_incident_per_finding (employee_id, work_date, type, shift_entry_id) NULLS NOT DISTINCT`, sobre **todos** los estados.
 
 > **Las columnas que el enunciado original no tenía** las añade la tarea 2.6, que es la que crea la tabla, y cada una responde a una pregunta que si no está en el esquema hay que resolver a mano:
 >
@@ -529,7 +549,7 @@ ALTER TABLE shift_entries ADD CONSTRAINT shift_entries_chk_order
 > - **`notified_at`** evita que el aviso al responsable (RF-PR-01) se envíe dos veces, y que se pierda si el correo falla: se sella cuando el resumen sale, no cuando la incidencia se abre.
 > - **`resolved_by_user_id`** responde «quién dio esto por resuelto», que es la mitad de la traza que RN-13 exige para cualquier intervención humana sobre el registro.
 >
-> **`missing_break`** es el tipo que faltaba para RN-12. Con [ADR-024](adr/ADR-024-la-pausa-son-dos-tramos.md), «sin pausa registrada» significa exactamente «un solo tramo continuo por encima del umbral»; colapsarlo en `long_shift` haría indistinguible en la bandeja «ha trabajado 9 h y media hoy» de «lleva 6 h y media sin parar», y se resuelven de forma distinta. **`anomalous_pattern`** y **`missing_clock_out`** siguen en el catálogo sin detector: el primero es RF-PR-06 (Fase 3) y el segundo describe el olvido ya corregido a mano, no lo que la detección automática ve.
+> **`missing_break`** es el tipo que faltaba para RN-12. Con [ADR-024](adr/ADR-024-la-pausa-son-dos-tramos.md), «sin pausa registrada» significa exactamente «un solo tramo continuo por encima del umbral»; colapsarlo en `long_shift` haría indistinguible en la bandeja «ha trabajado 9 h y media hoy» de «lleva 6 h y media sin parar», y se resuelven de forma distinta. **`out_of_order_scan`** es el de RN-18: lo abre la revisión diaria leyendo `scan_events.result`, describe **la jornada** y no un tramo —`shift_entry_id` nulo, una por empleado y jornada— y se resuelve creando o rectificando el tramo que falta (RN-13). **`anomalous_pattern`** y **`missing_clock_out`** siguen en el catálogo sin detector: el primero es RF-PR-06 (Fase 3) y el segundo describe el olvido ya corregido a mano, no lo que la detección automática ve.
 
 **`absences`** — `id`, `employee_id`, `type`, `starts_on`, `ends_on`, `note`
 
@@ -886,6 +906,29 @@ Escenario: Reloj del quiosco desviado
   Y se crea una incidencia de tipo clock_skew para revisión del responsable
   Y en ningún caso se rechaza el fichaje
 
+Escenario: Fichaje irreconciliable en un lote de la cola offline
+  Dado un empleado "Nadia" con un tramo abierto con entrada a las 14:00
+  Y un lote de la cola offline con dos fichajes suyos
+  Cuando se sincroniza el lote y el primer elemento es una salida con occurred_at a las 13:50
+  Entonces ese elemento no crea ni cierra ningún tramo
+  Y queda registrado con resultado rejected_out_of_order y marcado para revisión
+  Y la respuesta de ese elemento es un rechazo genérico, no un error temporal
+  Y el quiosco lo elimina de su cola y no lo reintenta
+  Y el segundo elemento del lote se registra con normalidad
+  Y la detección diaria abre una incidencia de tipo out_of_order_scan para esa jornada
+  Y el tramo abierto de las 14:00 sigue abierto e intacto
+
+Escenario: Fichaje irreconciliable por una entrada que llega tarde
+  Dado un empleado "Iker" cuya tablet de la puerta se quedó sin red y encoló su entrada de las 08:00
+  Y que fichó su jornada entera en el quiosco de cocina, de 09:00 a 13:00
+  Cuando la tablet de la puerta recupera la conexión y envía la entrada de las 08:00
+  Entonces no se crea ningún tramo
+  Y el escaneo queda registrado con resultado rejected_out_of_order y marcado para revisión
+  Y el tramo de 09:00 a 13:00 no se modifica
+  Y el quiosco lo elimina de su cola y no lo reintenta
+  Y la detección diaria abre una incidencia de tipo out_of_order_scan para esa jornada
+  Y una entrada de las 13:00 en punto sí habría abierto tramo, porque salir y entrar a la misma hora no es solapar
+
 Escenario: Patrón anómalo de uso de credencial
   Dados dos fichajes de entrada de empleados distintos en el mismo quiosco separados por 4 segundos
   Y repetidos en las mismas dos personas durante cinco días
@@ -1016,6 +1059,7 @@ Escenario: Semana por encima de la jornada ordinaria
 | **Tramo** | Par entrada/salida. Unidad mínima de tiempo trabajado. |
 | **Jornada** | Conjunto de tramos atribuidos a una fecha civil según RN-05. |
 | **Total diario** | Suma de las duraciones de los tramos de una jornada. Proyección reconstruible. |
+| **Fichaje irreconciliable** | Escaneo que no puede encajar en la jornada —ni cerrando el turno abierto, ni abriendo un tramo sin pisar a otro ya cerrado—: no produce tramo, se registra con `rejected_out_of_order` y queda como incidencia para revisión humana (RN-18). En el código, `OutOfOrderScan`. |
 | **Incidencia** | Situación detectada que requiere intervención humana. |
 | **Corrección** | Modificación de un registro por parte de una persona autorizada, siempre trazada y motivada. |
 | **Credencial** | Vínculo entre un empleado y un payload QR firmado, materializado en una tarjeta física. Revocable. |
@@ -1045,7 +1089,7 @@ Orden de ejecución: **0 → 1 → 2 → 5 → 3 → 4**.
 | **Fase 1 — MVP de fichaje** | RF-AT-01..09, RF-AT-11, RF-QR-01..06, RF-QR-08, RF-ID-01..02 (**autenticación de gestión básica, sin 2FA**), RF-ID-04..09, RF-KI-01..06, RF-KI-09, RF-GP-01, RF-GP-03, RF-PA-03..04, RF-IN-05, RF-PR-04, RN-01..09, RN-13, RN-15, RL-01, RL-03..06, RL-09, RL-12, RS-01..04, RS-07, RS-12, **RS-13**, RNF-D-02, **RNF-P-01**, **RNF-P-03**, **RNF-D-04**, **RNF-D-05**, **RQ-01..03**, **RQ-05**, **RQ-07**, **RQ-09**, **RQ-10** |
 | **Fase 2 — Gestión y cumplimiento** | RF-PA-01..02, RF-PA-05, RF-IN-01..04, RF-GP-02, RF-PR-01..03, RF-QR-07, RF-ID-01..03 (**completos: 2FA y ámbito por departamento**), RN-10..12, RN-14, RL-02, RL-07..08, RL-10..11, RL-13..15, RS-05..06, **RNF-P-04..05**, **RNF-D-03** |
 | **Fase 5 — Productización** | RF-PD-01..15, RL-16..21, RQ-11, **RF-GP-05** |
-| **Fase 3 — Operación y refuerzo** | RF-PA-06..07, RF-KI-07..08, RF-AT-10, RF-AT-12, RF-IN-06..08, RF-GP-04, RF-PR-05..06, **RN-16..17**, §9 completo, RS-11, **RNF-P-02**, **RNF-P-06**, **RNF-D-01**, **RQ-04**, **RQ-08** |
+| **Fase 3 — Operación y refuerzo** | RF-PA-06..07, RF-KI-07..08, RF-AT-10, RF-AT-12, RF-IN-06..08, RF-GP-04, RF-PR-05..06, **RN-16..18**, §9 completo, RS-11, **RNF-P-02**, **RNF-P-06**, **RNF-D-01**, **RQ-04**, **RQ-08** |
 | **Fase 4 — Evolución** | Cuadrantes, vacaciones con aprobación, integración de nómina |
 
 > **Los 21 requisitos en negrita se añadieron el 14 de agosto de 2026, y no son requisitos nuevos.** Existían desde la primera redacción, con su enunciado en las secciones §6.1, §6.2 y §10, pero **este anexo no los repartía a ninguna fase**. Lo detectó `qa:traceability` al construirse en la tarea 0.7, y no como una curiosidad: el comando avisó de que había pruebas ya escritas citando `RNF-D-01` y `RQ-07` que el catálogo no reconocía.

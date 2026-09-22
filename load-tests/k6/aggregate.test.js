@@ -121,7 +121,37 @@ function greenRun(overrides = {}) {
       tags: { match: 'yes' },
     }),
     row({ metric: 'checks', value: 1, check: 'el rechazo es 422 problem+json', scenario: 'reject' }),
+    // El elemento imposible que cada lote lleva a proposito (RN-18): registrado
+    // como irreconciliable, que es lo que se espera.
+    row({
+      metric: 'batch_impossible',
+      value: overrides.impossibleUnreconcilable ?? 2,
+      scenario: 'batch',
+      tags: { outcome: 'unreconcilable' },
+    }),
   ]
+
+  if (overrides.impossibleRetried) {
+    lines.push(
+      row({
+        metric: 'batch_impossible',
+        value: overrides.impossibleRetried,
+        scenario: 'batch',
+        tags: { outcome: 'retried' },
+      }),
+    )
+  }
+
+  if (overrides.batchUnreconcilableItems) {
+    lines.push(
+      row({
+        metric: 'batch_outcomes',
+        value: overrides.batchUnreconcilableItems,
+        scenario: 'batch',
+        tags: { action: 'http_422' },
+      }),
+    )
+  }
 
   if (overrides.resendDivergent) {
     lines.push(
@@ -202,7 +232,59 @@ test('da verde cuando todo esta dentro de presupuesto', () => {
   assert.equal(statusOf(summary, 'RQ-03'), 'pass')
   assert.equal(statusOf(summary, 'RS-03'), 'pass')
   assert.equal(statusOf(summary, 'CHECKS'), 'pass')
+  assert.equal(statusOf(summary, 'RN-18'), 'pass')
   assert.equal(exitCodeOf(summary), 0)
+})
+
+// --- RN-18: el irreconciliable se registra, no se reintenta ------------------
+
+test('un 422 en un elemento de lote es registro y no rechazo al empleado', () => {
+  // RN-18: el elemento queda como `rejected_out_of_order` marcado para revision
+  // y el quiosco lo SACA de la cola. Ni es un fichaje perdido ni es degradacion.
+  const summary = runAnalysis(greenRun({ batchUnreconcilableItems: 3 }))
+
+  assert.equal(summary.totals.batch_unreconcilable, 3)
+  assert.equal(summary.totals.batch_rejected, 0)
+  assert.equal(summary.totals.batch_retryable, 0)
+  assert.equal(statusOf(summary, 'RN-18'), 'pass')
+  assert.equal(exitCodeOf(summary), 0)
+})
+
+test('falla RN-18 si el elemento imposible vuelve a la cola con un 5xx', () => {
+  // Es el bucle de reintentos infinito que RN-18 vino a eliminar: un elemento
+  // que jamas podra cuadrar y que el quiosco conserva para siempre.
+  const summary = runAnalysis(greenRun({ impossibleRetried: 1 }))
+
+  assert.equal(statusOf(summary, 'RN-18'), 'fail')
+  assert.match(summary.verdicts['RN-18'].detail, /1 devueltos a la cola con 5xx/)
+  assert.equal(exitCodeOf(summary), 1)
+})
+
+test('falla RN-18 si el servidor acepta el elemento imposible', () => {
+  const lines = greenRun({ impossibleUnreconcilable: 0 })
+
+  lines.push(
+    row({ metric: 'batch_impossible', value: 1, scenario: 'batch', tags: { outcome: 'accepted' } }),
+  )
+
+  const summary = runAnalysis(lines)
+
+  assert.equal(statusOf(summary, 'RN-18'), 'fail')
+  assert.equal(exitCodeOf(summary), 1)
+})
+
+test('declara RN-18 no evaluable cuando ningun lote llego a montar el caso', () => {
+  const lines = greenRun({ impossibleUnreconcilable: 0 })
+
+  lines.push(
+    row({ metric: 'batch_impossible', value: 4, scenario: 'batch', tags: { outcome: 'not_set_up' } }),
+  )
+
+  const summary = runAnalysis(lines)
+
+  assert.equal(statusOf(summary, 'RN-18'), 'unmeasurable')
+  assert.match(summary.verdicts['RN-18'].detail, /RN-18 no se ha ejercitado/)
+  assert.equal(exitCodeOf(summary), 2)
 })
 
 test('publica en el resumen de quien y de donde salio la medida', () => {
@@ -272,6 +354,49 @@ test('falla RNF-P-06 con un solo 403 entre fichajes validos', () => {
 
   assert.equal(statusOf(summary, 'RNF-P-06'), 'fail')
   assert.match(summary.verdicts['RNF-P-06'].detail, /rechazos al empleado 1/)
+})
+
+test('falla SERVICIO cuando el servidor contesta 5xx a los fichajes', () => {
+  // El caso que se colo el 18-09-2026: un metodo de dominio inexistente hacia
+  // que TODO cierre de turno devolviera 500, y la pasada terminaba en verde
+  // porque los cuadres comparaban cero con cero y RNF-P-06 no era evaluable.
+  const lines = greenRun()
+
+  lines.push(...scanRows({ count: 60, durationMs: 40, status: '500' }))
+
+  const summary = runAnalysis(lines, { offeredRate: 6 })
+
+  assert.equal(statusOf(summary, 'RNF-P-06'), 'unmeasurable')
+  assert.equal(statusOf(summary, 'SERVICIO'), 'fail')
+  assert.match(summary.verdicts.SERVICIO.detail, /60 de 120 fichajes/)
+  assert.equal(exitCodeOf(summary), 1)
+})
+
+test('SERVICIO tolera un 5xx suelto en una maquina saturada', () => {
+  // Bajo presion de CPU, el borde devuelve algun `504` por agotarse el tiempo
+  // del upstream. En la pasada llena del runner fueron 14 de 6.600 (0,2 %): eso
+  // no es un servidor roto y no puede teñir la pasada de rojo.
+  const lines = greenRun()
+
+  lines.push(...scanRows({ count: 240, durationMs: 100 }))
+  lines.push(...scanRows({ count: 1, durationMs: 40, status: '503' }))
+
+  const summary = runAnalysis(lines)
+
+  assert.equal(statusOf(summary, 'SERVICIO'), 'pass')
+  assert.match(summary.verdicts.SERVICIO.detail, /1 de 301 fichajes/)
+})
+
+test('SERVICIO no culpa al servidor de lo que freno el borde', () => {
+  // Un `429` no llego a ejecutar codigo: es capacidad, y de eso responde
+  // RNF-P-06. Aqui no cuenta ni arriba ni abajo.
+  const lines = greenRun()
+
+  lines.push(...scanRows({ count: 300, durationMs: 1, status: '429' }))
+
+  const summary = runAnalysis(lines)
+
+  assert.equal(statusOf(summary, 'SERVICIO'), 'pass')
 })
 
 test('falla CHECKS cuando una comprobacion de contrato no pasa bajo carga', () => {

@@ -15,7 +15,14 @@
 
 import { expect, test } from '@playwright/test'
 import { FIXTURE_PAYLOAD, delayCameraStart, stubKioskApi } from './support/kiosk'
-import { announceOnline, readQueue, seedQueue, stubBatchApi } from './support/offlineQueue'
+import {
+  announceOnline,
+  queueStoreReady,
+  readQueue,
+  seedQueue,
+  stubBatchApi,
+  stubHeartbeatQueueCapture,
+} from './support/offlineQueue'
 
 test.beforeEach(async ({ page }) => {
   await stubKioskApi(page)
@@ -125,6 +132,116 @@ test(
     // El servidor no decidio nada sobre este escaneo: sigue en disco.
     const after = await readQueue(page)
     expect(after.some((row) => row.scan_id === before[0]?.scan_id)).toBe(true)
+  },
+)
+
+test(
+  'un fichaje que jamas podra cuadrar sale de la cola con el `422` del lote, y el resto se consolida (RN-18)',
+  { tag: ['@RN-18', '@RF-KI-04', '@RF-KI-03'] },
+  async ({ page }) => {
+    // El quiosco es SIEMPRE ajeno a por que el servidor rechaza un elemento
+    // (RS-03, regla dura 17): un fichaje «irreconciliable» (RN-18, occurred_at
+    // anterior al tramo abierto) no se distingue en el cliente de cualquier
+    // otro `422` -mismo cuerpo generico `ScanRejected`-.
+    //
+    // ORDEN CRITICO (asi fallo en la CI real, no solo en teoria): el imposible
+    // se siembra ANTES de que la camara -retrasada con `delayCameraStart`-
+    // decodifique nada, y se espera por LECTURA DE DISCO (no por tiempo) a
+    // que los DOS fichajes esten en la cola antes de reconectar. La version
+    // anterior sembraba el imposible DESPUES de ver el escaneo de la camara
+    // en la cola y confiaba el margen a `FIRST_RETRY_DELAY_MS` (1 s): en un
+    // runner lento el primer reintento automatico de la camara podia ganarle
+    // la mano al sembrado desde Node y partir el lote en dos peticiones
+    // (`consolidatedIn.scans.length` salio `1` en la CI de la PR #69).
+    const IRRECONCILABLE_SCAN_ID = '0199f300-8a11-7c42-9f01-abcdef123456'
+
+    await page.route('**/api/v1/scan', async (route) => route.abort('failed'))
+    await page.route('**/api/v1/scan/batch', async (route) => route.abort('failed'))
+    await delayCameraStart(page, 1_500)
+    // Registrado ANTES de sembrar nada: `stubKioskApi` (del `beforeEach`) ya
+    // dejo un latido que contesta bien, este solo cambia lo que INTERCEPTA.
+    const heartbeatQueue = await stubHeartbeatQueueCapture(page)
+
+    await page.goto('/')
+
+    // El almacen de la cola (Dexie) existe en cuanto la app arranca, ANTES de
+    // que la camara -retrasada 1,5 s- decodifique nada: se siembra en cuanto
+    // se puede escribir, condicion comprobada por lectura, no por reloj.
+    await expect.poll(() => queueStoreReady(page)).toBe(true)
+    await seedQueue(page, [
+      {
+        scan_id: IRRECONCILABLE_SCAN_ID,
+        occurred_at: '2026-08-01T04:00:00.000Z',
+        qr_payload: FIXTURE_PAYLOAD,
+      },
+    ])
+    await expect.poll(async () => (await readQueue(page)).length).toBe(1)
+
+    // La camara, retrasada, decodifica DESPUES: cuando lo haga, se une al
+    // imposible en la MISMA cola. Se espera a verlo en disco, no un plazo.
+    await expect.poll(async () => (await readQueue(page)).length).toBe(2)
+    const beforeReconnect = await readQueue(page)
+    const cameraScanId = beforeReconnect.find(
+      (row) => row.scan_id !== IRRECONCILABLE_SCAN_ID,
+    )?.scan_id
+    expect(cameraScanId).toBeDefined()
+
+    // Los DOS fichajes estan en disco antes de reconectar (RQ-05): ahora se
+    // levanta la red y se anuncia. El drenaje reclama la cola entera de una
+    // vez (`ignoreSchedule: true` en el primer `claim()` de la pasada,
+    // `syncRunner.ts`), asi que el `422` del imposible y el `200` del otro
+    // viajan, en consecuencia de ESTE orden -no de una coincidencia de
+    // tiempos-, en el mismo `207`.
+    await page.unroute('**/api/v1/scan')
+    await page.unroute('**/api/v1/scan/batch')
+    const batch = await stubBatchApi(page, (scanId) =>
+      scanId === IRRECONCILABLE_SCAN_ID ? 422 : 200,
+    )
+    await announceOnline(page)
+
+    // Lo que RN-18 exige, y solo eso: la cola queda a cero.
+    await expect.poll(async () => (await readQueue(page)).length).toBe(0)
+
+    // El imposible SE ENVIO (recibio su `422` genuino, no un silencio) y el
+    // otro tambien: ninguno de los dos se perdio por el camino.
+    const sentScanIds = batch.calls.flatMap((call) => call.scans.map((scan) => scan.scan_id))
+    expect(sentScanIds).toContain(IRRECONCILABLE_SCAN_ID)
+    expect(sentScanIds).toContain(cameraScanId)
+
+    // Bonus, no el requisito: como los dos estaban en disco ANTES de
+    // reconectar, viajaron en el MISMO lote (`207` mixto: `422` + `200`).
+    const callWithBoth = batch.calls.find(
+      (call) =>
+        call.scans.some((scan) => scan.scan_id === IRRECONCILABLE_SCAN_ID) &&
+        call.scans.some((scan) => scan.scan_id === cameraScanId),
+    )
+    expect(callWithBoth).toBeDefined()
+
+    // Nunca se reintenta: el `422` YA es un desenlace (regla dura 8, al reves
+    // de un `503`, que si se conserva -ver la prueba de arriba-). La ausencia
+    // no se prueba con un plazo fijo, sino con la MISMA condicion que ya hace
+    // falta para lo siguiente: el latido posterior a un reinicio de la
+    // tablet. Si algo se hubiera reintentado tras el `422`, `batch.calls.length`
+    // habria crecido ANTES de que ese latido llegara.
+    const callsAfterConsolidation = batch.calls.length
+
+    // El latido siguiente -tras un reinicio de la tablet, la misma condicion
+    // de supervivencia que el resto de este fichero- declara la cola tal y
+    // como quedo: cero pendientes, sin `oldest_pending_at` (ausente, no nulo:
+    // `buildHeartbeatBody` en `heartbeat.ts`).
+    const heartbeatsBeforeReload = heartbeatQueue.calls.length
+    await page.reload()
+    await expect.poll(() => heartbeatQueue.calls.length).toBeGreaterThan(heartbeatsBeforeReload)
+    const nextHeartbeat = heartbeatQueue.calls[heartbeatQueue.calls.length - 1]
+    expect(nextHeartbeat?.pendingQueueSize).toBe(0)
+    expect(nextHeartbeat?.oldestPendingAt).toBeUndefined()
+
+    // Y con la tablet ya reiniciada -tiempo real transcurrido de sobra para
+    // cualquier reintento que hubiera quedado programado-, el lote sigue en
+    // el mismo numero de llamadas: la no-repeticion determinista (fijada en
+    // `tests/unit/syncRunner.spec.ts`, `scheduleNext()` con la cola a `0`) se
+    // sostiene tambien de negro.
+    expect(batch.calls.length).toBe(callsAfterConsolidation)
   },
 )
 

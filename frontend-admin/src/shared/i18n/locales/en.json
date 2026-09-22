@@ -757,7 +757,8 @@
       "insufficient_rest": "Insufficient rest",
       "clock_skew": "Clock skew",
       "missing_clock_out": "Missing clock-out",
-      "anomalous_pattern": "Anomalous credential usage pattern"
+      "anomalous_pattern": "Anomalous credential usage pattern",
+      "out_of_order_scan": "Out-of-order clocking"
     },
     "outcomes": {
       "resolved": "Resolved",
@@ -809,10 +810,14 @@
     },
     "context": {
       "pair": "{metric} {value} of {threshold}",
+      "metric": "{metric}: {value}",
       "raw": "{key}: {value}",
       "metrics": {
         "rest_minutes": "rest",
-        "worked_minutes": "worked"
+        "worked_minutes": "worked",
+        "occurred_at": "clock time",
+        "scan_id": "scan ID",
+        "scans": "out-of-order scans"
       }
     },
     "employeeFilter": {

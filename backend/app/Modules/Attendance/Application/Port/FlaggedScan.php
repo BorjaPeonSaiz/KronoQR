@@ -20,10 +20,12 @@ namespace App\Modules\Attendance\Application\Port;
  *
  * **Cuatro campos y ni uno mas.** Nacio con siete —`scan_id`, `site_id` y
  * `occurred_at` ademas de estos— y ninguno de los tres lo leia nadie: el centro
- * es uno por instalacion (ADR-040) y lo resuelve el caso de uso, y el momento y
- * el identificador del escaneo no caben en `incidents.context`, que el contrato
- * declara como **enteros y nada mas** —es una garantia de privacidad, no un
- * detalle de tipos—. Quien revise un `clock_skew` llega al escaneo que lo
+ * es uno por instalacion (ADR-040) y lo resuelve el caso de uso, y ni el momento
+ * ni el identificador del escaneo hacen falta para explicar un desfase de reloj,
+ * que se explica con segundos y umbral. (RN-18 amplio despues
+ * `incidents.context` a entero **o cadena** para su propio hallazgo, que si los
+ * necesita y los lee de {@see RejectedOutOfOrderScan}; este sigue sin usarlos.)
+ * Quien revise un `clock_skew` llega al escaneo que lo
  * origino por el tramo y la jornada, que si viajan: `scan_events` esta indexada
  * por `(employee_id, occurred_at)`. Un campo que nadie lee es un campo que
  * alguien acaba leyendo mal.
