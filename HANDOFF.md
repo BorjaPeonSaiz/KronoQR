@@ -33,13 +33,26 @@ ver Trampas): `kq_app_knows_command` en `update.sh` y en U3 de `ci.yml` con cuat
 doc 01 §8.1 nota ATT&CK; runbooks `saturacion-del-borde.md`, `renovacion-certificado-tls.md` §3.4, `ataque-a-credenciales.md` §8,
 `brecha-de-seguridad.md`. Cifras (22-09-2026, esta máquina): `sh-lint`, `api-lint`, Pint, PHPStan 9, Deptrac (0/0), `observability-check` (13 ficheros de reglas, 14 de pruebas), `docs:consistency` y `qa:traceability --check` en verde; **matriz 3551 (Pest 3301, Playwright 244, k6 6)**; Unit 2018 (6,2 s con la máquina cargada: presupuesto de 5 s a remedir en reposo), Integration 663, Contract 60, Feature 1813, Architecture 589 (+ `SourceDiscoveryTest` conocido); mutación acotada: 17/17 en los dos handlers de cuentas; k6 `aggregate.test.js` 38; lint, `vue-tsc` y unitarias de las SPA: web-kit 212, quiosco 505, panel 547, portal 81; evidencia automática toda a 0 (`docs/seguridad/evidencia/2026-09-22.md`).
 
-**Confirmada en commit único (`feat(seguridad): tarea 3.8 …`), rama empujada, CI manual lanzada tras el push y PR abierta contra
-`main` (ver el número en la PR).** **Siguiente acción:** mirar en esa CI el job **⑧b** (primera vez que U3 toma la rama «+1 asiento»
-de H-14) y el de seguridad; si todo está en verde, el usuario integra la PR con *merge commit* y borra la rama (sin migración; tras
-integrar basta `git pull`; los contenedores `prometheus` de dev se recrean con `make up` porque `prometheus.yml` es ahora plantilla).
-Después, la **3.9** «Informes asíncronos con enlace de descarga caducable y exportación configurable para nómina» (`backend-laravel`
-+ `/informe-nuevo`, RF-IN-06/07) o la **3.10** «Registro de ausencias» (3–4 h, RF-GP-04, desbloquea el apartado pendiente de las
-guías de RRHH); las dos están prometidas en el doc 05.
+**PR #74 INTEGRADA en `main` (`e32dfc8`, 22-09-2026) con la CI manual 35718569275 en verde en los 21 jobs, ⑧b incluido: primera vez
+que U3 toma la rama «+1 asiento» de H-14.** Después, `d5c07bc` (`docs(handoff)` con las tres decisiones del usuario) fue directo a `main`
+porque la copia local ya estaba ahí; el usuario lo dio por bueno. `make up` hecho sobre `main`: pila sana, Prometheus rendido desde la
+plantilla con las tres alertas nuevas y el job TLS verificado omitido a propósito (`TLS_ALLOW_SELF_SIGNED=true` en dev).
+
+**Rama `chore/restos-3.8` creada (desde `main` `d5c07bc`). Siguiente acción, decidida por el usuario el 22-09-2026: tres restos cortos
+en esta rama y después la tarea grande (3.9 o 3.10).** (1) **Contenedores `node-kiosk`/`node-admin`/`node-portal` de dev en bucle de
+reinicio** (`vite: not found`, desde el workspace de npm: montan solo su carpeta y `vite` vive en el `node_modules` de la raíz; Nginx
+de dev reenvía `/kiosk/`, `/admin/` y `/portal/` a ellos, así que las tres URL de `make up` no responden y la tablet real no puede
+abrir el quiosco por HTTPS desde esta máquina): `devops-observabilidad` monta la raíz como `/app` con `working_dir` por SPA y un
+volumen con nombre en `/app/node_modules` (los binarios nativos de tu `node_modules` son de Windows; el contenedor hace su `npm ci`
+la primera vez), actualiza `infra/docker/node/entrypoint.sh`, doc 02 §10.2 y añade una prueba de arquitectura que lo ate; hoy están
+parados con `docker compose stop`. (2) **Línea base del runner**: pasada de `load-test.yml` lanzada en `main` tras integrar la 3.8
+(run **35724101995**, perfil de 3 instancias y 120 s, el mismo de `baseline.json`): copiar su `summary.json` (artefacto `.results/`) a
+`load-tests/k6/baseline.json` como en la 3.6, y leer ahí la primera cifra de `reject_out_of_order` para A-13 (doc 07 §6).
+(3) **Fila nueva del modelo de amenazas** «Manipulación del reloj del quiosco» en doc 01 §8.1 (detalle en «3.8 (restos)»), su fila en
+doc 07 §4 y «once» → «doce» en la ficha 3.8 y en el informe de `docs/seguridad/`; `docs:consistency` en verde. Commit único
+`chore(restos-3.8): …`, CI manual, PR con *merge commit*. Después: la **3.10** «Registro de ausencias» (3–4 h, RF-GP-04, desbloquea
+el apartado pendiente de las guías de RRHH) o la **3.9** «Informes asíncronos con enlace de descarga caducable y exportación
+configurable para nómina» (`backend-laravel` + `/informe-nuevo`, RF-IN-06/07); las dos están prometidas en el doc 05.
 
 **Rama `feat/tarea-3.7-e2e-accesibilidad` (desde el commit de RN-18 `d326406`; PR #69 integrada en `main` el 22-09-2026, `91db9eb`). Tarea 3.7 «E2E con cámara simulada y suite de accesibilidad» (RQ-04, RQ-05, RF-QR-05, RS-12, RF-AT-11,
 RF-KI-06) IMPLEMENTADA, REVISADA (dos vueltas: `seguridad-cumplimiento`, `ui-ux`, `qa-testing`) y PROBADA el 18-09-2026; verificada
