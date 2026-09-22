@@ -66,10 +66,14 @@ Integration 684, Contract 60, Architecture 610 (+ `SourceDiscoveryTest` conocido
 `AbsenceType` y `AbsenteeismRule`: **MSI 83,46 %** (127 mutantes, 21 sin cubrir); `qa:traceability --check`, `docs:consistency`,
 `ClientDocumentationTest` (75) y `observability-check` en verde; matriz **3663 (Pest 3407, Playwright 250, k6 6)**; panel: lint, `vue-tsc`, 556 unitarias, 138 E2E
 (6 nuevas `@RF-GP-04`); quiosco y portal: tipos regenerados, `vue-tsc` y lint en verde. El diff de `openapi.yaml` parece una
-reordenación (+2492/−1277) y no lo es: con `git diff --patience` es +1222/−7.
+reordenación (+2492/−1277) y no lo es: con `git diff --patience` es +1222/−7. **La CI manual 35757184533 salió roja solo en
+⑦ E2E del portal** por `client-errors.spec.ts` («no reintenta en bucle»: esperaba 2 y recibía 1), una intermitencia previa —la misma
+prueba falló en `main` en el run 35731421172, antes de esta rama—: tras `runFor` el `fetch` del temporizador viaja de forma asíncrona
+hasta la ruta interceptada y la prueba leía el contador en la misma vuelta; corregido con `expect.poll` en el portal y en el panel
+(misma prueba, mismo patrón), 20/20 y 30/30 en local con `--repeat-each`, en un segundo commit `fix(pruebas): …`.
 
-**Siguiente acción:** el usuario integra la PR de la 3.10 (commit único `feat(3.10): …`, CI manual lanzada tras el push; el número
-está en GitHub) con *merge commit* y borra la rama. **Con migración** (`2026_09_22_100000_absences.php`): tras integrar, `git pull`
+**Siguiente acción:** el usuario integra la PR #76 de la 3.10 (commit `a336e59` + el `fix(pruebas)` de la E2E del portal, CI manual
+lanzada tras el segundo push) con *merge commit* y borra la rama. **Con migración** (`2026_09_22_100000_absences.php`): tras integrar, `git pull`
 y `make up`, y comprobar `php artisan migrate:status` y el fichero `kronoqr_absences.prom` tras la primera ejecución de
 `reporting:absence-metrics`. Después,
 la **3.9** «Informes asíncronos con enlace de descarga caducable y exportación configurable para nómina» (`backend-laravel` +
