@@ -717,6 +717,8 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 
 ### Del usuario
 
+- **Decididas el 22-09-2026 (3.8):** pantalla de cuentas de gestión en el panel (sí), regenerar la línea base del runner de k6 tras
+  integrar la 3.8, y una fila nueva en el modelo de amenazas (reloj del quiosco). Detalle y reparto en «3.8 (restos)».
 - **Generar el par ed25519 una vez** (`php tools/license-issuer/generate-keypair.php`), privada al
   gestor de secretos, pública como valor por defecto de `env('LICENSE_PUBLIC_KEY', '')` en
   `backend/config/license.php`. `make release-gate` lo exige en cada etiqueta `vX.Y.Z`.
@@ -748,8 +750,17 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   cuántos hashes viejos quedan); `SaturacionDelBordeEnElFichaje` mide la capa de aplicación (no hay exportador de Nginx: los `429` de
   `limit_req` siguen sin métrica); umbral de `RechazoDeFirmaQr` (> 20 en 15 min) sin validar con tráfico real; `render-config.sh` de
   Prometheus sin prueba Pest propia (verificado a mano en los cuatro casos); DAST aplazado al cierre de la Fase 3 con dueño
-  (`devops-observabilidad`, `make dast` manual); las candidatas a fila nueva del modelo de amenazas (manipulación del reloj del
-  quiosco; repudio de la lectura de datos por un responsable) son decisión del usuario; `SecurityReviewEvidenceTest` no exige que los
+  (`devops-observabilidad`, `make dast` manual); **decisiones del usuario (22-09-2026)**: (a) **sí habrá pantalla de cuentas de gestión en el panel** (listar, dar de baja,
+  restablecer contraseña) más `identity:list-users`: tarea ad hoc «cuentas de gestión en el panel», contrato primero (endpoints de cuentas
+  con policy de `admin` y autorización negativa por rol; las bajas por API deben colapsar los desenlaces «no existe»/«ya inactiva» en
+  una sola respuesta, RS-03), `backend-laravel` + `frontend-panel`, y de paso el cambio de contraseña por la propia persona; (b) **la
+  línea base del runner se regenera** con la primera pasada de `load-test.yml` tras integrar la 3.8 (recomendación: la actual se
+  tomó sin el escenario `reject-out-of-order` y compararía perfiles distintos; copiar el `summary.json` a `baseline.json` en una PR
+  pequeña, como en la 3.6); (c) **el modelo de amenazas gana una fila** «Manipulación del reloj del quiosco» (STRIDE Manipulación;
+  mitigación: `recorded_at` es la hora del servidor, desfase tolerado y aviso de RF-AT-10 (3.5), incidencia y anti-rebote; ATT&CK
+  T1070.006 *Timestomp*) en doc 01 §8.1, con su fila en doc 07 §4 y «once» → «doce» en la ficha 3.8; el repudio de la lectura de datos
+  por un responsable NO se añade (ya lo cubre RS-05 con `personal_data.accessed`). (b) y (c) caben en el arranque de la
+  siguiente tarea o en el cierre de la Fase 3; `SecurityReviewEvidenceTest` no exige que los
   `BLOQUEANTE` del informe estén cerrados (el §8 no tiene formato fijo); el escenario `reject-out-of-order` deja 50 turnos abiertos
   permanentes en empleados reservados de k6 (deliberado, regla 5); `docs/runbooks/brecha-de-seguridad.md` menciona el paquete del
   revisor sin enlazarlo (no viaja al cliente).
@@ -926,9 +937,8 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 - **Fase 3:** `holidayCalendar` de `CompliancePolicy` sigue sin consumidor (3.10); RN-12 ya deriva del ajuste
   `ATTENDANCE_BREAK_CLOCKING` (3.5) y el descanso intra-día de RN-10 queda fuera por decisión (3.5, decisión 9); RNF-D-03 fallback de colas Redis→BD; pasada k6 en Linux para el p95
   (RNF-P-02/06); la puerta de cobertura (`make coverage`) no corre en CI.
-- **Decisiones de producto abiertas:** **cuentas de gestión** (desde la 3.8 existen `identity:deactivate-user` e `identity:reset-password` por
-  consola con asiento; falta la pantalla del panel con listado de cuentas, `identity:list-users` y el cambio de contraseña por la
-  propia persona); si el portal muestra incidencias (hoy `incidents: []` siempre; si
+- **Decisiones de producto abiertas:** **cuentas de gestión: DECIDIDO el 22-09-2026, habrá pantalla** (ver «3.8 (restos)»; por consola ya existen
+  `identity:deactivate-user` e `identity:reset-password`); si el portal muestra incidencias (hoy `incidents: []` siempre; si
   se activa, solo resueltas); si el `responsable_departamento` ve credenciales de su gente; códigos de
   recuperación de 2FA (hoy solo `identity:2fa-reset` por consola); si la baja revoca la credencial
   automáticamente; `POST /me/logout` (hoy el token del portal vive hasta caducar, máx. 2 h); la mitad de
