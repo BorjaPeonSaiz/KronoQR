@@ -30,6 +30,15 @@ use DateTimeImmutable;
  * deducir cual fue el primero ordenando por fecha y confiando en que no falte
  * ninguno.
  *
+ * ## `addedInExcess` es lo que hace posible el asiento de un LOTE
+ *
+ * Una importacion de plantilla (RF-GP-05) da de alta a cientos de personas de
+ * una vez y deja **un solo** asiento (H-04, tarea 3.8). `reached` dice cuanta
+ * gente hay al terminar y `contracted` cuanta cabia; lo que faltaba era cuantas
+ * de las que acaban de entrar quedaron por encima del plan, que es lo que
+ * distingue una carga de 300 de treinta cargas de 10. En el alta de una en una
+ * vale siempre 1, y ahi no aporta nada: existe por el lote.
+ *
  * ## Sin datos personales
  *
  * Aqui no hay nombres ni UUID de empleado: viajan cifras. Quien se dio de alta
@@ -43,6 +52,8 @@ final readonly class PlanLimitExceeded implements DomainEvent
         public int $contracted,
         public int $reached,
         public bool $firstCrossing,
+        /** Cuantas de las altas de esta misma operacion quedaron por encima del plan. */
+        public int $addedInExcess,
         public string $licenseId,
         public ?int $actorUserId,
         private DateTimeImmutable $occurredAt,

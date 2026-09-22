@@ -30,6 +30,16 @@ export default defineConfigWithVueTs(
       // que el doc 02 §3.5 nombra explicitamente, y no debe caerse sin que
       // alguien lo decida.
       '@typescript-eslint/no-explicit-any': 'error',
+
+      // H-07 de la revision interna ASVS de 2026-09, y la mitad de frontend de la
+      // guarda que `BladeTemplatesTest` pone sobre Blade: `v-html` no escapa.
+      //
+      // `flat/recommended` ya la trae, pero como `warn`: hoy bloquea solo
+      // porque el `script` de lint lleva `--max-warnings 0`, asi que la guarda
+      // de seguridad dependia de una bandera de estilo. Quien un dia relajara
+      // esa bandera para desatascar la CI abriria un sumidero de HTML sin
+      // enterarse. Aqui se declara como lo que es: un error (RS-04).
+      'vue/no-v-html': 'error',
     },
   },
   {

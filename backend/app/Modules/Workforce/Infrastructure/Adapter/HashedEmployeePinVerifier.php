@@ -196,7 +196,48 @@ final readonly class HashedEmployeePinVerifier implements EmployeePinVerifier
         // mal dia.
         $this->attempts->clear($employee['uuid']);
 
+        $this->rehashIfStale($employee, $pin);
+
         return PinVerification::verified($employee['uuid']);
+    }
+
+    /**
+     * Vuelve a hashear el PIN si el hash guardado se quedo por debajo del coste
+     * vigente (hallazgo **H-13** de la revision interna ASVS de 2026-09).
+     *
+     * Misma razon que en el acceso de gestion —nombrada en prosa y sin `@see`,
+     * porque una referencia resoluble a `Identity` seria una dependencia entre
+     * modulos que el §1.6 no concede—: el coste esta fijado y verificado, pero
+     * sin esto no existe el camino para cambiarlo, y el PIN es la credencial que
+     * mas veces al dia se comprueba en una instalacion.
+     *
+     * **Solo en el camino del acierto, y despues de responder al contador.** Los
+     * cinco rechazos de arriba no pasan por aqui, que es lo que impide que este
+     * `bcrypt` de mas convierta el acierto y el fallo en dos tiempos distintos
+     * medibles desde fuera (RS-03, regla dura 17). Quien acierta ya se distingue
+     * por el desenlace, asi que ahi no hay nada que igualar.
+     *
+     * **Se escribe por la tabla y no por el modelo**, con el mismo criterio con
+     * el que se lee: `Employee` tiene `pin_hash` fuera de `$fillable` y en
+     * `$hidden` justamente para que no salga por un `toArray()`, y traerlo a un
+     * objeto para guardarlo rompe esa promesa sin ganar nada. Tampoco se toca
+     * `updated_at`: el PIN de la persona no ha cambiado, solo su hash.
+     *
+     * @param  array{uuid: string, status: string, pin_hash: string|null}  $employee
+     */
+    private function rehashIfStale(array $employee, #[SensitiveParameter] string $pin): void
+    {
+        $hash = $employee['pin_hash'];
+
+        // El señuelo no llega aqui: solo se rehashea el PIN de quien acerto el
+        // suyo, y para acertarlo tiene que haber uno emitido.
+        if ($hash === null || ! Hash::needsRehash($hash)) {
+            return;
+        }
+
+        DB::table('employees')
+            ->where('uuid', $employee['uuid'])
+            ->update(['pin_hash' => Hash::make($pin)]);
     }
 
     /**

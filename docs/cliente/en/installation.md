@@ -215,6 +215,16 @@ the tablets would warn about an unsafe site every morning and someone would end
 up turning the certificate check off on them. From that day on, nobody protects
 the channel the clock-ins travel through.
 
+**Since task 3.8, `APP_URL` and `TLS_ALLOW_SELF_SIGNED` also reach
+Prometheus** (if the `observability` profile is on): they are the two
+variables that govern the `CertificadoTlsNoVerificable` alert (probes
+`APP_URL` with identity verification on; it is skipped entirely if you
+declared `TLS_ALLOW_SELF_SIGNED=true`). No new variable and no extra step
+needed — you already filled in both above, and they reach it on their own.
+Detail in [`operation.md`](operation.md) §10.4 and
+[`../../runbooks/renovacion-certificado-tls.md`](../../runbooks/renovacion-certificado-tls.md)
+§3.4 (in Spanish).
+
 **`APP_TIMEZONE=UTC` is never touched.** Times are always stored in UTC and
 shown in each site's time zone, which is configured afterwards, in the panel.
 Changing this variable invalidates the working-day calculation.
@@ -861,11 +871,20 @@ person would be a way of creating a new administrator without credentials.
 If you have also lost the password:
 
 ```bash
-# Create another management account (asks for the password on the console, without echo)
-docker compose exec app php artisan identity:create-user --role=admin
+# Generate a new password for the account that already exists. It is shown ONCE:
+# write it down before closing the console, because it cannot be looked up again
+docker compose exec app php artisan identity:reset-password direccion@tuhotel.example
 
-# Or remove the second factor from the account that already exists, to set it up again
+# Or remove the second factor from that account, to set it up again
 docker compose exec app php artisan identity:2fa-reset
+```
+
+Creating another account is **not** the recommended way out: two accounts for the
+same person split in two the answer to "who corrected this working day?". If one
+more is still needed:
+
+```bash
+docker compose exec app php artisan identity:create-user --role=admin
 ```
 
 ### …the wizard does not appear and the panel asks me for credentials

@@ -327,6 +327,42 @@ history -c
 La **simulación** (`--dry-run`), que es la que corre sola cada lunes, **no
 necesita nada de esto**: solo cuenta, y cuenta con el rol de la aplicación.
 
+### Las cuentas del panel: alta, baja y contraseña
+
+Las cuentas de gestión se crean por consola y **se retiran por consola**. En esta
+versión **no hay pantalla de cuentas de gestión en el panel**, y por eso estas
+cuatro órdenes son todo el ciclo de vida de una cuenta. Las cuatro dejan
+constancia en el registro de auditoría, con su autor, su fecha y su motivo.
+
+```bash
+# Alta de una cuenta con su rol. Pide la contraseña por consola, sin eco
+docker compose exec app php artisan identity:create-user --role=rrhh
+
+# Baja. Deja de poder entrar, y sus sesiones abiertas dejan de valer al instante
+docker compose exec app php artisan identity:deactivate-user persona@tuhotel.example --reason="Baja del hotel"
+
+# Contraseña nueva, generada y mostrada UNA sola vez
+docker compose exec app php artisan identity:reset-password persona@tuhotel.example
+
+# Retirar el segundo factor a quien perdió el móvil, para que lo dé de alta otra vez
+docker compose exec app php artisan identity:2fa-reset 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+```
+
+Tres cosas que conviene saber de la baja:
+
+- **No borra nada.** La cuenta se queda con todo su historial, que es justo lo
+  que permite responder meses después a «¿quién corrigió esta jornada?». Lo único
+  que pierde es la capacidad de entrar.
+- **Tiene efecto en la petición siguiente**, no cuando caduque la sesión: si esa
+  persona tenía el panel abierto en una tablet, deja de funcionar al instante.
+- **No reabre la creación del primer administrador.** Aunque des de baja a la
+  última cuenta que queda, esa puerta sigue cerrada — si se reabriera, dar de
+  baja a alguien sería una forma de crear un administrador sin credenciales.
+
+La contraseña que genera `identity:reset-password` **no se puede volver a
+consultar**: el producto guarda su huella, no la contraseña. Anótala al
+ejecutarlo y entrégala en mano, nunca por correo ni por mensajería.
+
 ---
 
 ## 10. La observabilidad, y qué pierdes si la apagas
@@ -497,6 +533,9 @@ la alimenta dejó de ejecutarse):
 | `SondaDelBordeFallida` | El servidor no responde, `for: 5m` | Crítica | IT | [`errores-en-el-panel.md`](../runbooks/errores-en-el-panel.md) | `docker compose ps` y los registros de `postgres`/`redis`, antes que el panel |
 | `CertificadoTlsProximoACaducar` | < 21 días | Alta | IT | [`renovacion-certificado-tls.md`](../runbooks/renovacion-certificado-tls.md) | Empieza el trámite de renovación con el emisor de tu certificado |
 | `CertificadoTlsCaducado` | Caducado | Crítica | IT | [`renovacion-certificado-tls.md`](../runbooks/renovacion-certificado-tls.md) | Todos los quioscos afectados: coloca el certificado renovado y recarga Nginx |
+| `CertificadoTlsNoVerificable` | No verifica contra `APP_URL` (cadena, nombre o emisor), `for: 15m` | Crítica | IT | [`renovacion-certificado-tls.md`](../runbooks/renovacion-certificado-tls.md) §3.4 | Revisa cadena, nombre y emisor con `openssl -verify_return_error`; no dispara si declaraste `TLS_ALLOW_SELF_SIGNED=true` |
+| `SaturacionDelBordeEnElFichaje` | > 20 respuestas `429` en 5 min en las rutas de fichaje | Alta | IT | [`saturacion-del-borde.md`](../runbooks/saturacion-del-borde.md) | Mide solo la capa de aplicación (sin exportador de Nginx todavía); revisa si es un dispositivo concreto o un origen fuera de la VLAN |
+| `RechazoDeFirmaQr` | > 20 escaneos con firma inválida en 15 min | Crítica | Seguridad | [`ataque-a-credenciales.md`](../runbooks/ataque-a-credenciales.md) §8 | Es un incidente, no una avería: preserva evidencia antes de tocar nada |
 | `EspacioEnDiscoBajo` | < 20 % libre en `/` | Alta | IT | [`espacio-en-disco.md`](../runbooks/espacio-en-disco.md) | `docker system df`; libera imágenes antiguas antes que nada del registro |
 | `MetricasDelAnfitrionAusentes` | Sin métricas del anfitrión | Media | IT | [`espacio-en-disco.md`](../runbooks/espacio-en-disco.md) | Comprueba que `node-exporter` sigue en pie |
 | `TurnoAbiertoProlongado` | Turno abierto > 12 h | Media | RRHH | [`turno-abierto-prolongado.md`](../runbooks/turno-abierto-prolongado.md) | Pregunta a la persona a qué hora salió; el sistema nunca cierra el turno solo |
@@ -522,20 +561,32 @@ la alimenta dejó de ejecutarse):
 | `KronoqrAuthFailureSpike` | > 100 fallos en 5 min, un canal | Crítica | Seguridad | [`ataque-a-credenciales.md`](../runbooks/ataque-a-credenciales.md) | Preserva la evidencia antes de bloquear el origen en el borde |
 | `VentanaDeMantenimientoActiva` | Mientras dura una actualización, tope 2 h | Info (no notifica) | — | [`actualizacion-cliente.md`](../runbooks/actualizacion-cliente.md) | Nada: solo silencia otras alertas mientras dura |
 
-**Lo que las alertas de certificado NO vigilan.** `CertificadoTlsProximoACaducar`
-y `CertificadoTlsCaducado` miran únicamente la **fecha de caducidad** — es lo
-único que mide `probe_ssl_earliest_cert_expiry`. La sonda que la alimenta
-sondea con `insecure_skip_verify: true` (tarea 3.1, deliberado: el
-certificado del servidor de un hotel puede ser autofirmado o de una CA
-propia, y verificar la cadena o el nombre daría siempre un falso negativo),
-así que **la validez de la cadena, quién la firmó y si el nombre (`CN`)
-coincide con tu dominio no los vigila ninguna alerta**. Si alguien sustituye
-tu certificado por uno que no corresponde, no verás una alerta de
-certificado por ello — verás que las tablets dejan de conectar
-(`QuioscoSinLatido`, y con el tiempo `ColaOfflineAtascada`), porque son ellas
-las que sí validan la identidad del servidor. Revisar la cadena a mano es
-parte de la lista trimestral de endurecimiento
-([`endurecimiento.md`](endurecimiento.md)).
+**Lo que las alertas de certificado vigilan, y desde cuándo.**
+`CertificadoTlsProximoACaducar` y `CertificadoTlsCaducado` miran únicamente
+la **fecha de caducidad** — es lo único que mide
+`probe_ssl_earliest_cert_expiry`. La sonda que la alimenta sondea con
+`insecure_skip_verify: true` (tarea 3.1, deliberado: el certificado del
+servidor de un hotel puede ser autofirmado o de una CA propia, y verificar la
+cadena o el nombre desde **dentro** de la red de contenedores daría siempre
+un falso negativo), así que esas dos alertas nunca ven la cadena, el emisor
+ni el nombre.
+
+**Desde la tarea 3.8, una tercera alerta sí vigila eso: `CertificadoTlsNoVerificable`.**
+Sondea contra `APP_URL` — el dominio público real, por el que llegan tus
+clientes — con `insecure_skip_verify: false`: exige cadena completa, emisor
+de confianza y nombre coincidente, igual que un navegador de verdad. Si
+alguien sustituye tu certificado por uno que no corresponde, o falta un
+intermedio en la cadena, ahora **sí** recibes una alerta por ello, sin
+esperar a que las tablets dejen de conectar (`QuioscoSinLatido`, y con el
+tiempo `ColaOfflineAtascada` — eso seguía siendo la única señal antes de la
+3.8). Esta tercera alerta necesita que `APP_URL` esté configurada: si tu
+instalación declaró `TLS_ALLOW_SELF_SIGNED=true` a propósito (solo válido en
+entornos de prueba), la sonda ni se levanta — un certificado autofirmado
+elegido a conciencia nunca pasaría esta verificación, así que sondearlo
+igual solo produciría una alerta permanente por algo ya conocido y aceptado.
+Revisar la cadena a mano sigue formando parte de la lista trimestral de
+endurecimiento ([`endurecimiento.md`](endurecimiento.md)), como red de
+seguridad adicional.
 
 **Si conectas un webhook a un servicio externo** (`ALERT_WEBHOOK_IT` y las
 otras dos), las etiquetas y los textos de cada alerta que dispare —el nombre
@@ -1365,6 +1416,7 @@ ella. Si el fichero no está, la herramienta se limita a aplicar el presupuesto
 | **Fichajes sueltos que fallan con un error de servidor**, mientras el resto va bien | Una transacción se quedó colgada y los demás esperaban por ella; los topes de la base de datos (§17.4) la cortan | Nada urgente: el quiosco **encola y reenvía**, y nadie se queda sin fichar. Si se repite, sigue el `trace_id` de una de esas peticiones en el registro técnico (§10.3) |
 | **Respuestas `429` sobre fichajes válidos** | El límite del borde o el de por dispositivo están frenando | Comprueba que los quioscos caen dentro de `KIOSK_VLAN_CIDR` ([`instalacion.md`](instalacion.md) §6). Es la causa en la inmensa mayoría de los casos |
 | **Un rechazo tarda claramente más o menos que otro** | Es un fallo del producto, no de tu servidor | Abre incidencia con el fabricante y adjunta `summary.json`: un rechazo que se distingue por el tiempo permitiría averiguar desde fuera qué tarjetas existen |
+| **`reject_out_of_order` sale con una separación grande** (veredicto `RS-03-RN-18`) | **Es información, no un veredicto que bloquee.** Esa clave mide cuánto se aparta un fichaje rechazado por llegar fuera de orden de los tres rechazos de tarjeta —firma, tarjeta desconocida y tarjeta revocada—, con la diferencia firmada: positiva si el primero tarda más | Nada. Guárdalo con el acta. Esa diferencia está aceptada a propósito: un fichaje fuera de orden no dice nada sobre qué tarjetas existen, que es lo que el tiempo constante protege. La cifra está ahí para poder revisar esa decisión con datos el día que haga falta |
 
 **Subir `PHP_FPM_MAX_CHILDREN` no mueve la cifra si la CPU está saturada**, y
 conviene verlo con números antes de gastar una tarde en ello. Estas medidas son

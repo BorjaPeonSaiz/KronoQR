@@ -31,5 +31,18 @@ final readonly class RegisterEmployeeCommand
          * El alta individual no lo pasa y se comporta como siempre.
          */
         public ?PinMaterial $pinMaterial = null,
+        /**
+         * El alta forma parte de una carga masiva (RF-GP-05).
+         *
+         * Viaja hasta `EmployeeHired` y **no cambia nada del alta**: la persona
+         * entra igual, con su PIN y su asiento. Lo unico que decide es quien
+         * cuenta el uso del plan: con el lote, la cuenta la hace una sola vez el
+         * evento de la importacion (ADR-028, H-04 de la 3.8), en vez de una vez
+         * por fila bajo el candado global de `audit_log` (ADR-010).
+         *
+         * Por defecto `false`, que es el seguro: un camino nuevo que se olvide
+         * de declararlo cuenta de mas, nunca de menos.
+         */
+        public bool $viaImport = false,
     ) {}
 }

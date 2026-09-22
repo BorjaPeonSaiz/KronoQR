@@ -335,6 +335,43 @@ The **simulation** (`--dry-run`), which is the one that runs on its own every
 Monday, **needs none of this**: it only counts, and it counts with the
 application role.
 
+### The panel accounts: creating, deactivating and the password
+
+Management accounts are created from the console and **are withdrawn from the
+console**. This version has **no management-accounts screen in the panel**, which
+is why these four orders are the whole life cycle of an account. All four leave a
+record in the audit log, with their author, their date and their reason.
+
+```bash
+# Alta de una cuenta con su rol. Pide la contraseña por consola, sin eco
+docker compose exec app php artisan identity:create-user --role=rrhh
+
+# Baja. Deja de poder entrar, y sus sesiones abiertas dejan de valer al instante
+docker compose exec app php artisan identity:deactivate-user persona@tuhotel.example --reason="Baja del hotel"
+
+# Contraseña nueva, generada y mostrada UNA sola vez
+docker compose exec app php artisan identity:reset-password persona@tuhotel.example
+
+# Retirar el segundo factor a quien perdió el móvil, para que lo dé de alta otra vez
+docker compose exec app php artisan identity:2fa-reset 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+```
+
+Three things worth knowing about deactivation:
+
+- **It deletes nothing.** The account keeps its whole history, which is exactly
+  what makes it possible to answer, months later, "who corrected this working
+  day?". The only thing it loses is the ability to sign in.
+- **It takes effect on the next request**, not when the session expires: if that
+  person had the panel open on a tablet, it stops working immediately.
+- **It does not reopen the creation of the first administrator.** Even if you
+  deactivate the last account left, that door stays closed — if it reopened,
+  removing someone would be a way of creating an administrator without
+  credentials.
+
+The password that `identity:reset-password` generates **cannot be looked up
+again**: the product stores its digest, not the password. Write it down when you
+run it and hand it over in person, never by email or messaging.
+
 ---
 
 ## 10. Observability, and what you lose if you switch it off
@@ -505,6 +542,9 @@ stopped running):
 | `SondaDelBordeFallida` | The server is not responding, `for: 5m` | Critical | IT | [`errores-en-el-panel.md`](../../runbooks/errores-en-el-panel.md) (in Spanish) | `docker compose ps` and the `postgres`/`redis` logs, before the panel |
 | `CertificadoTlsProximoACaducar` | < 21 days | High | IT | [`renovacion-certificado-tls.md`](../../runbooks/renovacion-certificado-tls.md) (in Spanish) | Start the renewal process with your certificate's issuer |
 | `CertificadoTlsCaducado` | Expired | Critical | IT | [`renovacion-certificado-tls.md`](../../runbooks/renovacion-certificado-tls.md) (in Spanish) | All kiosks affected: place the renewed certificate and reload Nginx |
+| `CertificadoTlsNoVerificable` | Does not verify against `APP_URL` (chain, name or issuer), `for: 15m` | Critical | IT | [`renovacion-certificado-tls.md`](../../runbooks/renovacion-certificado-tls.md) §3.4 (in Spanish) | Check chain, name and issuer with `openssl -verify_return_error`; does not fire if you declared `TLS_ALLOW_SELF_SIGNED=true` |
+| `SaturacionDelBordeEnElFichaje` | > 20 `429` responses in 5 min on the clock-in routes | High | IT | [`saturacion-del-borde.md`](../../runbooks/saturacion-del-borde.md) (in Spanish) | Only measures the application layer (no Nginx exporter yet); check whether it is one device or an origin outside the VLAN |
+| `RechazoDeFirmaQr` | > 20 scans with an invalid signature in 15 min | Critical | Security | [`ataque-a-credenciales.md`](../../runbooks/ataque-a-credenciales.md) §8 (in Spanish) | It is an incident, not an outage: preserve evidence before touching anything |
 | `EspacioEnDiscoBajo` | < 20 % free on `/` | High | IT | [`espacio-en-disco.md`](../../runbooks/espacio-en-disco.md) (in Spanish) | `docker system df`; free up old images before touching anything in the record |
 | `MetricasDelAnfitrionAusentes` | No host metrics | Medium | IT | [`espacio-en-disco.md`](../../runbooks/espacio-en-disco.md) (in Spanish) | Check that `node-exporter` is still up |
 | `TurnoAbiertoProlongado` | Shift open > 12 h | Medium | HR | [`turno-abierto-prolongado.md`](../../runbooks/turno-abierto-prolongado.md) (in Spanish) | Ask the person what time they left; the system never closes the shift on its own |
@@ -530,19 +570,30 @@ stopped running):
 | `KronoqrAuthFailureSpike` | > 100 failures in 5 min, one channel | Critical | Security | [`ataque-a-credenciales.md`](../../runbooks/ataque-a-credenciales.md) (in Spanish) | Preserve evidence before blocking the origin at the edge |
 | `VentanaDeMantenimientoActiva` | While an update lasts, capped at 2 h | Info (does not notify) | — | [`actualizacion-cliente.md`](../../runbooks/actualizacion-cliente.md) (in Spanish) | Nothing: it only silences other alerts while it lasts |
 
-**What the certificate alerts do NOT watch.** `CertificadoTlsProximoACaducar`
-and `CertificadoTlsCaducado` look only at the **expiry date** — that is all
-`probe_ssl_earliest_cert_expiry` measures. The probe that feeds it uses
-`insecure_skip_verify: true` (task 3.1, on purpose: a hotel's server
-certificate can be self-signed or from your own CA, and verifying the chain
-or the name would always give a false negative), so **no alert watches the
-validity of the chain, who signed it, or whether the name (`CN`) matches
-your domain**. If someone replaces your certificate with one that does not
-belong, you will not see a certificate alert for it — you will see the
-tablets stop connecting (`QuioscoSinLatido`, and over time
-`ColaOfflineAtascada`), because they are the ones that do validate the
-server's identity. Checking the chain by hand is part of the quarterly
-hardening checklist ([`hardening.md`](hardening.md)).
+**What the certificate alerts watch, and since when.**
+`CertificadoTlsProximoACaducar` and `CertificadoTlsCaducado` look only at the
+**expiry date** — that is all `probe_ssl_earliest_cert_expiry` measures. The
+probe that feeds it uses `insecure_skip_verify: true` (task 3.1, on purpose: a
+hotel's server certificate can be self-signed or from your own CA, and
+verifying the chain or the name from **inside** the container network would
+always give a false negative), so those two alerts never see the chain, the
+issuer or the name.
+
+**Since task 3.8, a third alert does watch that: `CertificadoTlsNoVerificable`.**
+It probes `APP_URL` — the real public domain your clients reach — with
+`insecure_skip_verify: false`: it requires a complete chain, a trusted issuer
+and a matching name, exactly what a real browser requires. If someone
+replaces your certificate with one that does not belong, or an intermediate
+is missing from the chain, you now **do** get an alert for it, without
+waiting for the tablets to stop connecting (`QuioscoSinLatido`, and over time
+`ColaOfflineAtascada` — that remained the only signal before task 3.8). This
+third alert needs `APP_URL` to be configured: if your installation declared
+`TLS_ALLOW_SELF_SIGNED=true` on purpose (only valid in test environments),
+the probe does not even come up — a deliberately chosen self-signed
+certificate would never pass this verification, so probing it anyway would
+only produce a permanent alert for something already known and accepted.
+Checking the chain by hand still remains part of the quarterly hardening
+checklist ([`hardening.md`](hardening.md)), as an extra safety net.
 
 **If you point a webhook at an external service** (`ALERT_WEBHOOK_IT` and
 the other two), the labels and text of every alert it fires — the site
@@ -1395,6 +1446,7 @@ clock-ins/s — and compares with nothing.
 | **Isolated clock-ins failing with a server error**, while the rest goes fine | A transaction got stuck and the others were waiting behind it; the database timeouts (§17.4) cut it off | Nothing urgent: the kiosk **queues and resends**, and nobody is left unable to clock in. If it repeats, follow the `trace_id` of one of those requests in the technical log (§10.3) |
 | **`429` responses on valid clock-ins** | The edge limit or the per-device one is throttling | Check that the kiosks fall inside `KIOSK_VLAN_CIDR` ([`installation.md`](installation.md) §6). That is the cause in the vast majority of cases |
 | **One kind of rejection clearly takes more or less time than another** | It is a product defect, not a problem with your server | Open an incident with the vendor and attach `summary.json`: a rejection that can be told apart by timing would allow working out from outside which cards exist |
+| **`reject_out_of_order` comes out with a large separation** (verdict `RS-03-RN-18`) | **It is information, not a verdict that blocks.** That key measures how far a clocking rejected for arriving out of order sits from the three card rejections — signature, unknown card and revoked card —, with the signed difference: positive if the former takes longer | Nothing. Keep it with the record. That difference is accepted on purpose: a clocking out of order says nothing about which cards exist, which is what constant timing protects. The figure is there so that the decision can be reviewed with data the day it is needed |
 
 **Raising `PHP_FPM_MAX_CHILDREN` does not move the figure if the CPU is
 saturated**, and it is worth seeing that with numbers before spending an

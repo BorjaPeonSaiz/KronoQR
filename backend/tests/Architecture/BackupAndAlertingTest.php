@@ -191,7 +191,10 @@ it('publica el resultado de la copia como metrica, no solo en un log', function 
     // tarea 3.2 ese node-exporter sirve mucho mas que copias —espacio en disco
     // del anfitrion y la marca de mantenimiento del actualizador—, y las alertas
     // casan por nombre de serie, no por `job`.
-    expect(backupFile('infra/observability/prometheus/prometheus.yml'))
+    // `.yml.template` desde la tarea 3.8 (H-05): `render-config.sh` resuelve
+    // `prometheus.yml` contra `APP_URL` antes de que Prometheus arranque,
+    // pero este job y el bloque `alertmanagers` no cambiaron ni una linea.
+    expect(backupFile('infra/observability/prometheus/prometheus.yml.template'))
         ->toContain('job_name: kronoqr-node')
         ->toContain('alertmanagers');
 })->group('RF-PR-04');

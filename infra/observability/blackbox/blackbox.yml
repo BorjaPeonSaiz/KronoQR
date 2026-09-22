@@ -25,6 +25,33 @@
 #
 # No hay modulo en texto plano: ninguna sonda del producto habla con
 # PHP-FPM sin pasar por las guardas del bloque 443 (TLS, `limit_req`).
+#
+# SEGUNDO MODULO, `http_2xx_tls_verified` (tarea 3.8, hallazgo H-05 de
+# docs/seguridad/revision-interna-asvs-2026-09.md). `http_2xx_tls` de arriba
+# comprueba DISPONIBILIDAD desde DENTRO de la red de contenedores, a proposito
+# sin verificar identidad: el nombre `nginx` nunca coincide con el certificado
+# del hotel. Ese diseno deja un hueco real: nada comprueba la CADENA, el
+# EMISOR o el NOMBRE del certificado tal como los ve un cliente real, que
+# llega por `APP_URL` y SI valida la identidad del servidor. Un certificado
+# con la cadena incompleta, sustituido por otro de emisor distinto, o cuyo
+# nombre dejo de coincidir con `APP_URL` tras un cambio de dominio, no
+# disparaba NINGUNA alerta con un solo modulo: el sintoma le llegaba primero
+# al empleado (aviso del navegador) que al IT del cliente.
+#
+# `insecure_skip_verify: false` es la diferencia entera con el modulo de
+# arriba: aqui SI se verifica la cadena completa, el emisor y que el nombre
+# (`CN`/SAN) del certificado coincide con el host al que se apunta. El
+# `target` de este modulo lo fija `prometheus.yml.template` con `APP_URL`
+# (nunca un literal aqui: regla dura 13, nada especifico de un cliente en el
+# repositorio) y SOLO se scrapea cuando la instalacion no declaro
+# `TLS_ALLOW_SELF_SIGNED=true` (`render-config.sh` de prometheus/, decision de
+# la tarea 3.8): un certificado autofirmado elegido a proposito NUNCA supera
+# esta verificacion, asi que sondearlo igualmente solo produciria una alerta
+# permanente en una instalacion que ya sabe y acepto que su certificado no es
+# verificable por una CA publica. Con el objetivo condicionado y ausente, la
+# alerta `CertificadoTlsNoVerificable` (rules/tls.yml) no tiene serie que
+# evaluar y por tanto no dispara — la forma mas honesta de tolerar el modo
+# autofirmado declarado sin fingir una verificacion que nunca podria pasar.
 modules:
   http_2xx_tls:
     prober: http
@@ -36,3 +63,14 @@ modules:
       fail_if_not_ssl: true
       tls_config:
         insecure_skip_verify: true
+
+  http_2xx_tls_verified:
+    prober: http
+    timeout: 5s
+    http:
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      method: GET
+      preferred_ip_protocol: "ip4"
+      fail_if_not_ssl: true
+      tls_config:
+        insecure_skip_verify: false

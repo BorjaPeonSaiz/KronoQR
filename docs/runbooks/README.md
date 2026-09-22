@@ -73,9 +73,10 @@ fallo*. Se escriben en la tarea que los introduce.
 | Runbook | Cuándo se usa | Lo escribió |
 |---|---|---|
 | [`fallo-de-ci.md`](fallo-de-ci.md) | Una etapa del pipeline está en rojo, o la puerta de versión bloquea una etiqueta | Fase 0 · tarea 0.4 |
-| [`ataque-a-credenciales.md`](ataque-a-credenciales.md) | Alertas `KronoqrAuthFailureBurst`/`KronoqrAuthLockouts`/`KronoqrAuthFailureSpike` (OWASP A09) | SSDLC · pipeline de seguridad |
+| [`ataque-a-credenciales.md`](ataque-a-credenciales.md) | Alertas `KronoqrAuthFailureBurst`/`KronoqrAuthLockouts`/`KronoqrAuthFailureSpike` (OWASP A09) y `RechazoDeFirmaQr` (T1606, tarea 3.8) | SSDLC · pipeline de seguridad · §8 ampliada en la tarea 3.8 |
 | [`triaje-hallazgos-seguridad.md`](triaje-hallazgos-seguridad.md) | Un hallazgo de Semgrep comunitario o Trivy en modo informe del job `security` | SSDLC · pipeline de seguridad |
 | [`entrega-de-alertas.md`](entrega-de-alertas.md) | Alertas `EnrutadoDeAlertasCaido`/`EntregaDeAlertasFallando`: Alertmanager caído o sin poder entregar. No responde a una fila del catálogo del doc 01 §9.3, responde a un fallo de la propia infraestructura de alertas | Fase 3 · tarea 3.2 (segunda vuelta, revisión de seguridad) |
+| [`saturacion-del-borde.md`](saturacion-del-borde.md) | Alerta `SaturacionDelBordeEnElFichaje` (T1499.002): `429` por encima de lo normal en las rutas de fichaje | Fase 3 · tarea 3.8 (hallazgo H-10) |
 
 ## Qué debe contener un runbook
 

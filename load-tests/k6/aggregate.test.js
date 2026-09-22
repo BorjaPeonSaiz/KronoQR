@@ -9,6 +9,13 @@
 // un `check()` de contrato fallido. Asi el fallo senala la condicion y no «algo
 // del agregado».
 //
+// EL CUARTO RECHAZO SE PRUEBA AL REVES QUE LOS DEMAS. `RS-03-RN-18` es
+// INFORMATIVO —A-13 del doc 07 §6 acepto la diferencia sin suelo de tiempo— asi
+// que lo que hay que demostrar no es que sepa fallar, sino que **no puede**: la
+// pasada verde lleva el cuarto rechazo 20 ms por encima de las tres clases de
+// credencial, y hay una prueba que lo sube a medio segundo y sigue esperando
+// verde. Si alguien lo convierte en un presupuesto, esas pruebas se ponen rojas.
+//
 // Se corre a mano; `make` no la ejecuta porque no hay etapa de Node para
 // `load-tests/`:
 //
@@ -96,6 +103,22 @@ function rejectRows({ rejectClass, durations, status = '422' }) {
 }
 
 /**
+ * El CUARTO rechazo, el de RN-18: otra fase y ninguna `reject_class`, que es lo
+ * que lo mantiene fuera del veredicto de RS-03.
+ */
+function outOfOrderRows({ durations, status = '422' }) {
+  return durations.map((durationMs) =>
+    row({
+      metric: 'http_req_duration',
+      value: durationMs,
+      scenario: 'reject-out-of-order',
+      status,
+      tags: { requirements: 'RS-03 RN-18', phase: 'reject_out_of_order' },
+    }),
+  )
+}
+
+/**
  * Una pasada VERDE, con las cifras justas por encima de cada suelo. Cada prueba
  * la muta en un solo punto.
  */
@@ -108,6 +131,7 @@ function greenRun(overrides = {}) {
       durations: Array(overrides.unknownSamples ?? 20).fill(30),
     }),
     ...rejectRows({ rejectClass: 'revoked', durations: overrides.revokedDurations ?? Array(20).fill(30) }),
+    ...outOfOrderRows({ durations: overrides.outOfOrderDurations ?? Array(20).fill(50) }),
     row({
       metric: 'scan_outcomes',
       value: overrides.shiftProducing ?? 60,
@@ -441,6 +465,86 @@ test('un rojo manda sobre un no evaluable', () => {
   assert.equal(statusOf(summary, 'RS-03'), 'unmeasurable')
   assert.equal(statusOf(summary, 'RNF-P-02'), 'fail')
   assert.equal(exitCodeOf(summary), 1)
+})
+
+// --- RS-03-RN-18: la cifra de A-13, informativa y nunca bloqueante -----------
+
+test('publica la separacion del cuarto rechazo frente a las tres clases de credencial', () => {
+  // La pasada verde trae RN-18 a 50 ms y las tres clases a 30: veinte milisegundos
+  // de separacion, en mediana y en minimo, frente a cada una de las tres.
+  const summary = runAnalysis(greenRun())
+
+  assert.equal(summary.reject_out_of_order.samples, 20)
+  assert.equal(summary.reject_out_of_order.p50, 50)
+  assert.equal(summary.reject_out_of_order.min, 50)
+  assert.deepEqual(summary.reject_out_of_order.separation_ms.median, {
+    signature: 20,
+    unknown: 20,
+    revoked: 20,
+  })
+  assert.deepEqual(summary.reject_out_of_order.separation_ms.minimum, {
+    signature: 20,
+    unknown: 20,
+    revoked: 20,
+  })
+})
+
+test('el cuarto rechazo no entra en el veredicto de RS-03', () => {
+  // Es la razon de que sea un escenario aparte: veinte milisegundos por encima
+  // del tope de separacion de RS-03 y RS-03 sigue verde, porque lo que compara
+  // son las tres clases de CREDENCIAL entre si.
+  const summary = runAnalysis(greenRun({ outOfOrderDurations: Array(20).fill(300) }))
+
+  assert.equal(statusOf(summary, 'RS-03'), 'pass')
+  assert.equal(summary.reject_out_of_order.separation_ms.median.revoked, 270)
+})
+
+test('una separacion enorme del cuarto rechazo sigue dando verde', () => {
+  // A-13 (doc 07 §6) esta aceptada SIN suelo de tiempo: lo que faltaba era la
+  // cifra, no una puerta. Medio segundo de diferencia se publica y no falla.
+  const summary = runAnalysis(greenRun({ outOfOrderDurations: Array(20).fill(530) }))
+
+  assert.equal(statusOf(summary, 'RS-03-RN-18'), 'info')
+  assert.equal(summary.reject_out_of_order.separation_ms.median.signature, 500)
+  assert.match(summary.verdicts['RS-03-RN-18'].detail, /INFORMATIVO/)
+  assert.equal(exitCodeOf(summary), 0)
+})
+
+test('sin muestras del cuarto rechazo la pasada no se declara no fiable', () => {
+  // Un `info` sin datos no es un `unmeasurable`: no puede convertir en «vuelve a
+  // medir» una pasada en la que todo lo que se juzga salio bien.
+  const lines = greenRun({ outOfOrderDurations: [] })
+
+  const summary = runAnalysis(lines)
+
+  assert.equal(statusOf(summary, 'RS-03-RN-18'), 'info')
+  assert.equal(summary.reject_out_of_order.samples, 0)
+  assert.match(summary.verdicts['RS-03-RN-18'].detail, /sin cifra que publicar/)
+  assert.equal(exitCodeOf(summary), 0)
+})
+
+test('cuenta aparte los escaneos de RN-18 que si se pudieron reconciliar', () => {
+  // Un `200` significa que el turno sembrado dejo de estar abierto: la medida no
+  // se monto. No es un rechazo al empleado y no puede pasar por uno.
+  const lines = greenRun()
+
+  lines.push(...outOfOrderRows({ durations: [40, 41], status: '200' }))
+
+  const summary = runAnalysis(lines)
+
+  assert.equal(summary.reject_out_of_order.reconciled, 2)
+  assert.equal(summary.reject_out_of_order.samples, 20)
+  assert.equal(summary.reject_out_of_order.offered, 22)
+  assert.equal(statusOf(summary, 'RNF-P-06'), 'pass')
+  assert.equal(exitCodeOf(summary), 0)
+})
+
+test('avisa de que la cifra es orientativa cuando hay pocas muestras', () => {
+  const summary = runAnalysis(greenRun({ outOfOrderDurations: Array(19).fill(50) }))
+
+  assert.equal(summary.reject_out_of_order.firm, false)
+  assert.match(summary.verdicts['RS-03-RN-18'].detail, /la cifra es orientativa/)
+  assert.equal(exitCodeOf(summary), 0)
 })
 
 // --- Linea base: avisa, no falla ---------------------------------------------

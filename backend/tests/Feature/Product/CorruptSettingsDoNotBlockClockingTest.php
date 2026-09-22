@@ -164,7 +164,7 @@ it('anuncia el descarte en el log, sin el valor guardado', function (): void {
 
     expect($context)->toContain('BRANDING_APP_NAME')
         ->and($context)->not->toContain(str_repeat('N', 120));
-})->group('RF-PD-01', 'RS-11');
+})->group('RF-PD-01', 'RL-19');
 
 it('resuelve una incoherencia de idiomas sin romper, y la anota', function (): void {
     // Invariante ENTRE claves. Al leer se aplica el primer idioma disponible; al

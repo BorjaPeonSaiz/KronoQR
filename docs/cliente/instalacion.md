@@ -213,6 +213,16 @@ avisarían de sitio no seguro cada mañana y alguien acabaría desactivando la
 comprobación de certificado en ellas. Desde ese día, el canal por el que viajan
 los fichajes no lo protege nadie.
 
+**Desde la tarea 3.8, `APP_URL` y `TLS_ALLOW_SELF_SIGNED` también llegan a
+Prometheus** (si el perfil `observability` está encendido): son las dos
+variables que gobiernan la alerta `CertificadoTlsNoVerificable` (sondea
+contra `APP_URL` con verificación de identidad activa; se omite por completo
+si declaraste `TLS_ALLOW_SELF_SIGNED=true`). No hace falta ninguna variable
+nueva ni ningún paso adicional — las dos ya las rellenaste arriba, y llegan
+solas hasta ahí. Detalle en
+[`operacion.md`](operacion.md) §10.4 y
+[`../runbooks/renovacion-certificado-tls.md`](../runbooks/renovacion-certificado-tls.md) §3.4.
+
 **`APP_TIMEZONE=UTC` no se toca nunca.** Las horas se guardan siempre en UTC y
 se muestran en la zona horaria de cada centro, que se configura después, en el
 panel. Cambiar esta variable invalida el cálculo de la jornada.
@@ -843,11 +853,20 @@ sería una forma de crear un administrador nuevo sin credenciales.
 Si además has perdido la contraseña:
 
 ```bash
-# Crea otra cuenta de gestión (pide la contraseña por consola, sin eco)
-docker compose exec app php artisan identity:create-user --role=admin
+# Genera una contraseña nueva para la cuenta que ya existe. Se enseña UNA vez:
+# anótala antes de cerrar la consola, porque no se puede volver a consultar
+docker compose exec app php artisan identity:reset-password direccion@tuhotel.example
 
-# O retira el segundo factor de la cuenta que ya existe, para volver a darlo de alta
+# O retira el segundo factor de esa cuenta, para volver a darlo de alta
 docker compose exec app php artisan identity:2fa-reset
+```
+
+Crear otra cuenta **no** es la salida recomendada: dos cuentas para la misma
+persona parten en dos la respuesta a «¿quién corrigió esta jornada?». Si aun así
+hace falta una más:
+
+```bash
+docker compose exec app php artisan identity:create-user --role=admin
 ```
 
 ### …el asistente no aparece y el panel me pide credenciales

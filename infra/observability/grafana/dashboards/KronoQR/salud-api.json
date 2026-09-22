@@ -545,6 +545,52 @@
         "dedupStrategy": "none",
         "sortOrder": "Descending"
       }
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Respuestas 429 en el fichaje (5 min)",
+      "description": "Tarea 3.8, hallazgo H-10 (T1499.002). Umbral de la alerta SaturacionDelBordeEnElFichaje: > 20 en 5 min, alta. Mide solo la capa de aplicación (http_requests_total, Laravel): los 429 que Nginx rechaza con limit_req antes de llegar a PHP-FPM no están aquí, no hay exportador de Nginx en esta pila todavía.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 44 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "sum(increase(http_requests_total{route=~\"attendance\\\\.scan(\\\\..*)?\",status=\"429\"}[5m]))",
+          "legendFormat": "429 en 5 min"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "pointSize": 5,
+            "stacking": { "mode": "none", "group": "A" },
+            "axisPlacement": "auto",
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 20 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
     }
   ]
 }

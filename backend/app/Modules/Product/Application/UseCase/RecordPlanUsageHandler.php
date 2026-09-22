@@ -42,9 +42,24 @@ use App\Modules\Shared\Application\Port\Clock;
  *
  * ## El cruce se deduce, no se guarda
  *
- * `firstCrossing` es `actual === contratado + 1`. No hace falta recordar nada
- * entre ejecuciones, y ademas es lo correcto cuando el exceso se corrige y se
- * vuelve a producir: son dos cruces y los dos merecen su asiento con fecha.
+ * `firstCrossing` es «antes de esta operacion se cabia en el plan»
+ * ({@see PlanUsage::crossedBy()}). No hace falta recordar nada entre
+ * ejecuciones, y ademas es lo correcto cuando el exceso se corrige y se vuelve a
+ * producir: son dos cruces y los dos merecen su asiento con fecha.
+ *
+ * ## Una evaluacion por OPERACION, no por unidad (H-04, tarea 3.8)
+ *
+ * {@see self::handle()} es el alta de una en una y {@see self::handleBatch()} la
+ * importacion de plantilla (RF-GP-05), que entra **entera** con una sola
+ * evaluacion. Hasta la 3.8 el lote se evaluaba fila a fila y un hotel con plan
+ * de 80 que importara 300 personas escribia trescientos asientos casi
+ * identicos, todos bajo el `pg_advisory_xact_lock` global de `audit_log`
+ * (ADR-010) —el mismo candado por el que pasa cada fichaje del hotel—, y con
+ * `firstCrossing` en falso en todos, porque cada fila veia ya el recuento final.
+ *
+ * No bloqueaba a nadie: los quioscos encolan (regla dura 19). Era carga
+ * evitable en el unico candado que el producto no puede permitirse
+ * congestionar, y una evidencia comercial peor de la que se podia escribir.
  */
 final readonly class RecordPlanUsageHandler
 {
@@ -56,7 +71,38 @@ final readonly class RecordPlanUsageHandler
         private Clock $clock,
     ) {}
 
+    /**
+     * El alta de una en una: `POST /api/v1/employees` y el emparejamiento de un
+     * quiosco. Una unidad, una evaluacion.
+     */
     public function handle(PlanLimit $limit, ?int $actorUserId = null): void
+    {
+        $this->record($limit, added: 1, actorUserId: $actorUserId);
+    }
+
+    /**
+     * La operacion que añade **varias unidades de golpe**: hoy, la importacion
+     * de plantilla (RF-GP-05).
+     *
+     * Se llama **una vez, con el lote ya confirmado**, y por eso `$added` es lo
+     * que de verdad entro —las filas `create` del informe—, no lo que traia el
+     * fichero: las lineas rechazadas no dan de alta a nadie y no pueden ocupar
+     * plaza del plan.
+     *
+     * Sin altas no hay nada que evaluar. Una importacion que solo modifica fichas
+     * no cambia el recuento, y escribir un asiento de exceso por ella diria que
+     * alguien se paso del plan el dia que corrigio cuarenta apellidos.
+     */
+    public function handleBatch(PlanLimit $limit, int $added, ?int $actorUserId = null): void
+    {
+        if ($added < 1) {
+            return;
+        }
+
+        $this->record($limit, added: $added, actorUserId: $actorUserId);
+    }
+
+    private function record(PlanLimit $limit, int $added, ?int $actorUserId): void
     {
         $license = $this->status->handle()->license;
 
@@ -79,7 +125,8 @@ final readonly class RecordPlanUsageHandler
             limit: $limit->value,
             contracted: (int) $usage->contracted,
             reached: $usage->actual,
-            firstCrossing: $usage->excess() === 1,
+            firstCrossing: $usage->crossedBy($added),
+            addedInExcess: $usage->excessAmong($added),
             licenseId: $license->licenseId,
             actorUserId: $actorUserId,
             occurredAt: $this->clock->now(),

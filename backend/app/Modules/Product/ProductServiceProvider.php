@@ -155,6 +155,7 @@ use App\Modules\Shared\Application\Port\LocalePolicyProvider;
 use App\Modules\Shared\Application\Port\ManagementActor;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
 use App\Modules\Workforce\Domain\Event\EmployeeHired;
+use App\Modules\Workforce\Domain\Event\EmployeesImported;
 use App\Support\Locale\NegotiableLocales;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Bus\Dispatcher as BusDispatcher;
@@ -1613,12 +1614,25 @@ final class ProductServiceProvider extends ServiceProvider
      *
      * Y es la otra mitad de la promesa. Ninguno de los dos modulos importa nada
      * de `Product`: publican su evento como ya hacian para la auditoria, y quien
-     * cuenta es este modulo. Sin aristas nuevas en el §1.6 mas alla de los dos
+     * cuenta es este modulo. Sin aristas nuevas en el §1.6 mas alla de los tres
      * eventos, que es la misma concesion por la que `Compliance` sella el alta.
+     *
+     * ## Tres eventos, y el del lote no es un capricho
+     *
+     * `EmployeesImported` entra con la 3.8 (H-04): la importacion de plantilla
+     * publica igualmente un `EmployeeHired` por fila —el alta es la de siempre—,
+     * pero el conteo del plan se hace **una vez**, con el numero de altas
+     * confirmadas. Contarlo por fila escribia un asiento por cada una bajo el
+     * candado global de `audit_log` (ADR-010), que es el mismo por el que pasa
+     * cada fichaje del hotel.
      */
     private function observePlanLimits(): void
     {
         Event::listen(EmployeeHired::class, [ObservePlanLimits::class, 'onEmployeeHired']);
+        // La carga masiva de plantilla se cuenta por el evento del LOTE y no por
+        // sus filas, que llegan igualmente como `EmployeeHired` y el listener
+        // descarta por `viaImport` (H-04 de la 3.8, ADR-010).
+        Event::listen(EmployeesImported::class, [ObservePlanLimits::class, 'onEmployeesImported']);
         Event::listen(DeviceTokenIssued::class, [ObservePlanLimits::class, 'onDeviceTokenIssued']);
     }
 

@@ -395,3 +395,121 @@ it('no falla si el directorio de metricas no existe: no hay a quien avisar', fun
         ->and($resultado->getOutput())->toContain('sin-error')
         ->and(is_dir($directorio))->toBeFalse('write_maintenance_metric no debe crear el directorio: solo escribe si ya existe.');
 })->group('RF-PD-10');
+
+/*
+ * ------------------------------------------------------------------------
+ * `kq_app_knows_command` — «la version que esta en pie, ¿conoce este comando?»
+ *
+ * Es la pregunta de la que depende que la vuelta atras deje o no el asiento
+ * `system.restored_from_backup` (regla dura 6, RF-PD-10, RS-07): el unico
+ * rastro, dentro del propio registro legal, de que un intervalo de fichajes
+ * reales quedo fuera de la base que sirve ahora.
+ *
+ * Hasta el 22-09-2026 se preguntaba con `artisan list --raw | grep -q`, y esa
+ * tuberia responde NO cuando la respuesta es SI: `grep -q` cierra el tubo al
+ * encontrar la linea, el cliente de Docker recibe EPIPE mientras vuelca el
+ * resto del catalogo y termina con 1, y `pipefail` hace valer ese 1. La etapa
+ * 8b tenia la misma tuberia copiada en ci.yml, asi que el paso pasaba o
+ * fallaba segun a cual de las dos copias le tocara equivocarse (ejecuciones
+ * 35697335929 en verde y 35700735466 en rojo, con el MISMO codigo de la
+ * version anterior).
+ * ------------------------------------------------------------------------
+ */
+
+it('dice que SI conoce el comando aunque el catalogo no quepa en un tubo', function (): void {
+    // El relleno pasa de 140 KiB: mas que el buffer de una tuberia de Linux
+    // (64 KiB), asi que con la forma antigua el productor SIEMPRE muere de
+    // SIGPIPE. Con el catalogo capturado en una variable, nadie cierra nada.
+    $fragmento = <<<'BASH'
+        falso() {
+          printf "about  Muestra informacion\n"
+          printf "compliance:record-system-event  Deja en audit_log\n"
+          printf "relleno:%05d pad\n" {1..8000}
+        }
+        estado=0; kq_app_knows_command falso compliance:record-system-event || estado=$?
+        echo "FUNCION=${estado}"
+        if falso exec -T app php artisan list --raw 2>/dev/null | grep -q "^compliance:record-system-event"; then
+          echo "TUBERIA=SI"
+        else
+          echo "TUBERIA=NO"
+        fi
+        BASH;
+
+    $resultado = bashConElActualizador($fragmento);
+
+    expect($resultado->getExitCode())->toBe(0, $resultado->getErrorOutput())
+        ->and($resultado->getOutput())->toContain('FUNCION=0')
+        // Control negativo: la forma que tenia update.sh sobre EL MISMO
+        // catalogo responde NO. Si algun dia esta linea pasara a decir SI,
+        // la prueba de arriba habria dejado de demostrar nada.
+        ->and($resultado->getOutput())->toContain('TUBERIA=NO');
+})->group('RF-PD-10', 'RS-07');
+
+it('dice que NO lo conoce solo cuando artisan responde y el nombre no esta', function (): void {
+    // Comparacion por campo exacto, no por prefijo: `...eventual` no es
+    // `...event`. Con una expresion regular sobre un nombre con `:` y `-`
+    // esto se decide por accidente.
+    $fragmento = <<<'BASH'
+        sin_comando() { printf "about  x\ncompliance:record-system-eventual  parecido\n"; }
+        estado=0; kq_app_knows_command sin_comando compliance:record-system-event || estado=$?
+        echo "NO_LO_CONOCE=${estado}"
+        BASH;
+
+    $resultado = bashConElActualizador($fragmento);
+
+    expect($resultado->getExitCode())->toBe(0, $resultado->getErrorOutput())
+        ->and($resultado->getOutput())->toContain('NO_LO_CONOCE=1');
+})->group('RF-PD-10', 'RS-07');
+
+it('distingue «no lo conoce» de «no he podido preguntar» y conserva el error', function (): void {
+    // El `2>/dev/null` de la version anterior convertia cualquier fallo real
+    // —contenedor que aun no acepta `exec`, demonio caido— en un «no lo
+    // conoce» indistinguible, y con el un asiento legal que nadie sabe que
+    // falta. Aqui sale 2, con su mensaje propio y el error a la vista.
+    $fragmento = <<<'BASH'
+        roto() { printf "Error response from daemon: container is not running\n" >&2; return 1; }
+        KQ_APP_COMMAND_ATTEMPTS=1
+        estado=0; kq_app_knows_command roto compliance:record-system-event || estado=$?
+        echo "NO_SE_PUDO=${estado}"
+        echo "ERROR=${KQ_APP_COMMAND_ERROR}"
+        BASH;
+
+    $resultado = bashConElActualizador($fragmento);
+
+    expect($resultado->getExitCode())->toBe(0, $resultado->getErrorOutput())
+        ->and($resultado->getOutput())->toContain('NO_SE_PUDO=2')
+        ->and($resultado->getOutput())->toContain('ERROR=Error response from daemon');
+
+    // Y el actualizador tiene un mensaje distinto para ese desenlace, en los
+    // dos idiomas: «no se ha podido preguntar» no se le cuenta al IT del
+    // hotel como «tu version no lo conoce».
+    $mensajes = (string) file_get_contents(Repo::file('infra/scripts/lib/messages-update.sh'));
+    expect($mensajes)->toContain('KQ_MSG_ES[u_rollback_audit_entry_unknown]=')
+        ->and($mensajes)->toContain('KQ_MSG_EN[u_rollback_audit_entry_unknown]=');
+})->group('RF-PD-10', 'RS-07');
+
+it('pregunta lo mismo y con la misma funcion en update.sh y en la etapa 8b', function (): void {
+    // Dos copias de la misma pregunta es como se llego al fallo: no basta con
+    // arreglar una. Ni el script ni el workflow pueden volver a preguntarlo
+    // con una tuberia, ni tapar el error con 2>/dev/null.
+    $actualizador = (string) file_get_contents(Repo::file('infra/scripts/update.sh'));
+    $workflow = (string) file_get_contents(Repo::file('.github/workflows/ci.yml'));
+
+    expect($actualizador)->toContain('lib/app-commands.sh')
+        ->and($actualizador)->toContain('kq_app_knows_command compose_rollback compliance:record-system-event')
+        ->and($workflow)->toContain('infra/scripts/lib/app-commands.sh')
+        ->and($workflow)->toContain('kq_app_knows_command compose compliance:record-system-event');
+
+    foreach (['update.sh' => $actualizador, 'ci.yml' => $workflow] as $nombre => $contenido) {
+        expect(preg_match('/artisan list --raw[^\n]*\|[^\n]*grep/', $contenido))->toBe(
+            0,
+            $nombre.' vuelve a preguntar por un comando con `artisan list --raw | grep`: esa tuberia '
+            .'responde NO cuando la respuesta es SI. Usa kq_app_knows_command (infra/scripts/lib/app-commands.sh).'
+        );
+    }
+
+    // La biblioteca compartida viaja en el paquete de entrega (package.sh
+    // copia lib/ entero), o el actualizador del hotel no arrancaria.
+    expect((string) file_get_contents(Repo::file('infra/scripts/package.sh')))
+        ->toContain('infra/scripts/lib');
+})->group('RF-PD-10', 'RS-07');

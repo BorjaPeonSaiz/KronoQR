@@ -317,12 +317,64 @@ function installationSettingsEndpoints(): array
     ];
 }
 
+/**
+ * Los portadores autenticados que NO son el administrador de la instalacion.
+ *
+ * Existe porque los tres bloques de arriba —emparejamiento, perfil de
+ * cumplimiento y configuracion— solo se probaban contra `rrhh` (H-02 de la
+ * revision interna ASVS de 2026-09). `rrhh` es el vecino mas cercano del rol
+ * autorizado y por eso era el caso elegido, pero elegir el mas parecido deja sin
+ * comprobar a los cuatro que llegan por otra puerta: el token de la tablet
+ * colgada en la pared, el auditor, la cuenta de una persona de la plantilla y la
+ * sesion que todavia no ha pasado el segundo factor.
+ *
+ * Los nombres se resuelven en {@see tokenDeActorSinPotestad()} y no se pasan
+ * como cierres para que el conjunto se lea en la salida de la suite —«con un
+ * token de quiosco / ver la configuracion»— y para que el `match` sin `default`
+ * reviente si alguien anade un actor y se olvida de darle token.
+ *
+ * `rrhh` no entra aqui: ya tiene su prueba propia por bloque, con su motivo
+ * escrito.
+ *
+ * @return array<string, array{0: string}>
+ */
+function actoresSinPotestadDeAdministracion(): array
+{
+    return [
+        'con un token de quiosco' => ['quiosco'],
+        'con un auditor' => ['auditor'],
+        'con una cuenta de empleado' => ['empleado'],
+        'con una sesion pendiente de segundo factor' => ['2fa pendiente'],
+    ];
+}
+
+/**
+ * El token de cada uno de esos actores, emitido como lo emitiria el producto.
+ *
+ * La sesion pendiente cuelga de una cuenta de `rrhh` —que SI lleva todos los
+ * ambitos de gestion— a proposito: asi lo que deniega es el estado de la sesion
+ * y no la falta de permisos (RS-06).
+ */
+function tokenDeActorSinPotestad(string $actor): string
+{
+    return match ($actor) {
+        'quiosco' => ManagementUsers::kioskToken(),
+        'auditor' => ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::AUDITOR)),
+        'empleado' => ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::EMPLEADO)),
+        '2fa pendiente' => ManagementUsers::pendingTokenFor(ManagementUsers::withRole(UserRole::RRHH)),
+        // Un actor nuevo en el conjunto sin token que emitirle revienta aqui, en
+        // voz alta y con su nombre. Devolver un token cualquiera —el de `rrhh`,
+        // por ejemplo— habria dado verde a una pareja que nadie estaba probando.
+        default => throw new RuntimeException('No hay token definido para el actor «'.$actor.'».'),
+    };
+}
+
 it('deniega a un token de quiosco cualquier endpoint de gestion', function (string $method, string $uri, array $body): void {
     // RS-04 y §7.3: «un token de quiosco comprometido NO da acceso a la
     // plantilla completa». Es el caso que mas importa de todo este fichero: el
     // token vive en una tablet compartida colgada en una pared.
     Api::as(ManagementUsers::kioskToken())->call($method, $uri, $body)->assertStatus(403);
-})->with(managementEndpoints())->group('RS-04', 'RQ-07', 'RF-ID-04');
+})->with(managementEndpoints())->group('RS-04', 'RS-05', 'RQ-07', 'RF-ID-04');
 
 it('deniega a un auditor escribir o leer plantilla', function (string $method, string $uri, array $body): void {
     // El auditor es de solo lectura y su ambito es `attendance:read`,
@@ -330,7 +382,7 @@ it('deniega a un auditor escribir o leer plantilla', function (string $method, s
     $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::AUDITOR));
 
     Api::as($token)->call($method, $uri, $body)->assertStatus(403);
-})->with(managementEndpoints())->group('RQ-07', 'RF-ID-02');
+})->with(managementEndpoints())->group('RS-05', 'RQ-07', 'RF-ID-02');
 
 /**
  * Los endpoints de gestion que un `responsable_departamento` **sigue** sin poder
@@ -382,7 +434,7 @@ it('deniega a un responsable de departamento todo lo que no sea leer su plantill
     $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RESPONSABLE_DEPARTAMENTO));
 
     Api::as($token)->call($method, $uri, $body)->assertStatus(403);
-})->with(endpointsDeniedToDepartmentManager())->group('RQ-07', 'RF-ID-03');
+})->with(endpointsDeniedToDepartmentManager())->group('RS-05', 'RQ-07', 'RF-ID-03');
 
 it('deniega a una cuenta con rol de empleado el acceso al panel', function (string $method, string $uri, array $body): void {
     // El empleado consulta lo suyo en el portal, con ambito `self:read`
@@ -390,7 +442,7 @@ it('deniega a una cuenta con rol de empleado el acceso al panel', function (stri
     $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::EMPLEADO));
 
     Api::as($token)->call($method, $uri, $body)->assertStatus(403);
-})->with(managementEndpoints())->group('RQ-07', 'RF-ID-07');
+})->with(managementEndpoints())->group('RS-05', 'RQ-07', 'RF-ID-07');
 
 it('deniega a una sesion pendiente de segundo factor cualquier endpoint de gestion', function (string $method, string $uri, array $body): void {
     // RS-06: el token del `202` de `/auth/login` lleva un unico ambito,
@@ -404,13 +456,13 @@ it('deniega a una sesion pendiente de segundo factor cualquier endpoint de gesti
     $pending = ManagementUsers::pendingTokenFor(ManagementUsers::withRole(UserRole::RRHH));
 
     Api::as($pending)->call($method, $uri, $body)->assertStatus(403);
-})->with(managementEndpoints())->group('RQ-07', 'RS-06', 'RF-ID-01');
+})->with(managementEndpoints())->group('RS-05', 'RQ-07', 'RS-06', 'RF-ID-01');
 
 it('deniega el acceso sin token', function (string $method, string $uri, array $body): void {
     Api::guest()->call($method, $uri, $body)
         ->assertStatus(401)
         ->assertJsonPath('type', 'urn:kronoqr:problem:unauthenticated');
-})->with(managementEndpoints())->group('RQ-07');
+})->with(managementEndpoints())->group('RS-05', 'RQ-07');
 
 it('deniega el acceso con un token que ya no vale', function (): void {
     $user = ManagementUsers::withRole(UserRole::RRHH);
@@ -583,6 +635,25 @@ it('deniega a RRHH la configuracion de la instalacion', function (string $method
     Api::as($token)->call($method, $uri, $body)->assertStatus(403);
 })->with(installationSettingsEndpoints())->group('RF-PD-01', 'RS-05', 'RQ-07');
 
+it('deniega la configuracion de la instalacion a todo portador que no es el administrador', function (string $actor, string $method, string $uri, array $body): void {
+    // Los otros cuatro actores de la matriz general, sobre el bloque que hasta
+    // ahora solo se probaba contra `rrhh`. El que mas pesa es el token de
+    // quiosco: detras de `PATCH /settings` esta el anti-rebote, la jornada
+    // maxima y la marca de la instalacion (RF-PD-01, ADR-017), y la tablet que
+    // lo lleva esta colgada de una pared en un pasillo de servicio.
+    Api::as(tokenDeActorSinPotestad($actor))->call($method, $uri, $body)->assertStatus(403);
+})->with(actoresSinPotestadDeAdministracion())->with(installationSettingsEndpoints())
+    ->group('RF-PD-01', 'RS-04', 'RS-05', 'RQ-07');
+
+it('deniega la configuracion de la instalacion sin token', function (string $method, string $uri, array $body): void {
+    // El sexto actor, y el unico que no responde `403`: sin credenciales la
+    // respuesta es `401` y lo dice con su tipo de problema, no con un cuerpo
+    // vacio.
+    Api::guest()->call($method, $uri, $body)
+        ->assertStatus(401)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:unauthenticated');
+})->with(installationSettingsEndpoints())->group('RF-PD-01', 'RS-05', 'RQ-07');
+
 it('deniega a RRHH el perfil de cumplimiento', function (string $method, string $uri, array $body): void {
     // Mismo caso y mismo motivo que el de arriba, sobre los umbrales LEGALES.
     // `rrhh` corrige fichajes con motivo y traza sobre una jornada; bajar
@@ -592,6 +663,23 @@ it('deniega a RRHH el perfil de cumplimiento', function (string $method, string 
     $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RRHH));
 
     Api::as($token)->call($method, $uri, $body)->assertStatus(403);
+})->with(complianceProfileEndpoints())->group('RF-PD-07', 'RS-05', 'RQ-07');
+
+it('deniega el perfil de cumplimiento a todo portador que no es el administrador', function (string $actor, string $method, string $uri, array $body): void {
+    // Lo mismo sobre los umbrales LEGALES. Aqui el actor que mas incomoda es el
+    // **auditor**: es el rol que existe para mirar el cumplimiento, y por esa
+    // cercania es el que nadie comprobaria. Mirar si una jornada incumple y
+    // **decidir a partir de cuando incumple** son dos potestades distintas: la
+    // segunda cambia `min_rest_hours` y `retention_years` para toda la plantilla
+    // hacia delante (RL-01, RL-02, regla dura 14).
+    Api::as(tokenDeActorSinPotestad($actor))->call($method, $uri, $body)->assertStatus(403);
+})->with(actoresSinPotestadDeAdministracion())->with(complianceProfileEndpoints())
+    ->group('RF-PD-07', 'RS-04', 'RS-05', 'RQ-07');
+
+it('deniega el perfil de cumplimiento sin token', function (string $method, string $uri, array $body): void {
+    Api::guest()->call($method, $uri, $body)
+        ->assertStatus(401)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:unauthenticated');
 })->with(complianceProfileEndpoints())->group('RF-PD-07', 'RS-05', 'RQ-07');
 
 it('deja pasar al administrador a la configuracion, que es el control positivo de la 5.1', function (): void {
@@ -619,6 +707,29 @@ it('deniega a RRHH el emparejamiento y la flota de quioscos', function (string $
 
     Api::as($token)->call($method, $uri, $body)->assertStatus(403);
 })->with(kioskPairingEndpoints())->group('RF-PD-06', 'RS-04', 'RQ-07');
+
+it('deniega el emparejamiento y la flota de quioscos a todo portador que no es el administrador', function (string $actor, string $method, string $uri, array $body): void {
+    // Y aqui el actor decisivo es el propio **token de quiosco**, porque es el
+    // unico caso de toda la matriz en el que el portador comprometido y el
+    // recurso son la misma familia de cosas: si una tablet pudiera confirmar
+    // emparejamientos, quien se llevara una podria dar de alta las suyas —origen
+    // de fichajes nuevos— o desvincular las del hotel en pleno cambio de turno
+    // (RF-PD-06, §7.3 nota 5).
+    Api::as(tokenDeActorSinPotestad($actor))->call($method, $uri, $body)->assertStatus(403);
+})->with(actoresSinPotestadDeAdministracion())->with(kioskPairingEndpoints())
+    ->group('RF-PD-06', 'RS-04', 'RS-05', 'RQ-07');
+
+it('deniega el emparejamiento y la flota de quioscos sin token', function (string $method, string $uri, array $body): void {
+    // `POST /kiosk/pair/confirm` sin token entra como caso propio y no por
+    // descuido: la ruta HERMANA, `POST /kiosk/pair`, es publica a proposito
+    // —quien pide el codigo todavia no tiene token— y estan a dos lineas de
+    // distancia en `api_v1.php`. Que `confirm` se quedara fuera de la guarda por
+    // copiar el grupo de al lado es el error mas facil de cometer de todo el
+    // fichero de rutas.
+    Api::guest()->call($method, $uri, $body)
+        ->assertStatus(401)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:unauthenticated');
+})->with(kioskPairingEndpoints())->group('RF-PD-06', 'RS-05', 'RQ-07');
 
 it('deja pasar al administrador a vincular y gestionar quioscos, control positivo de la 5.6', function (): void {
     // Sin esto, los `403` de arriba pasarian identicos si las tres rutas

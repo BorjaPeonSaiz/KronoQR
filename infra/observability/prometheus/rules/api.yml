@@ -40,6 +40,17 @@
 # base de datos y el borde; el runbook `errores-en-el-panel.md` ya las lista
 # en su tabla de sintomas (tarea 5.12) y aqui es donde nacen las reglas.
 #
+# `SondaDelBordeFallida` SOLO MIRA `job="kronoqr-uptime"` (tarea 3.8, correccion
+# necesaria para H-05). Desde que existe un segundo job de sonda
+# (`kronoqr-uptime-tls-verified`, `prometheus.yml.template`, la sonda que SI
+# verifica el certificado), `probe_success` sin filtrar por `job` tambien casa
+# con ese segundo job: sin este filtro, un certificado simplemente no
+# verificable (cadena incompleta, nombre distinto) habria disparado ADEMAS
+# esta alerta —"el borde no responde"—, que describe un hecho distinto ("nada
+# llega a PHP-FPM") del que de verdad esta pasando ("el borde responde, pero
+# un cliente que valida identidad no confia en el"). Esa segunda situacion
+# tiene su propia alerta, `CertificadoTlsNoVerificable` (rules/tls.yml).
+#
 # IMPACTO EN EL FICHAJE: DIRECTO. A diferencia de la mayoria de alertas de
 # este catalogo —que vigilan proyecciones, auditoria o trabajo pendiente sin
 # tocar el acto de fichar—, estas tres SI describen al fichaje fallando o
@@ -108,7 +119,7 @@ groups:
       # proceso.
       #------------------------------------------------------------------------
       - alert: SondaDelBordeFallida
-        expr: probe_success == 0
+        expr: probe_success{job="kronoqr-uptime"} == 0
         for: 5m
         labels:
           severity: critical

@@ -115,6 +115,8 @@ readonly SCRIPT_DIR
 . "${SCRIPT_DIR}/lib/env-file.sh"
 # shellcheck source=lib/fs.sh disable=SC1091
 . "${SCRIPT_DIR}/lib/fs.sh"
+# shellcheck source=lib/app-commands.sh disable=SC1091
+. "${SCRIPT_DIR}/lib/app-commands.sh"
 
 # Las comparaciones de nombres de migracion y de fronteras usan `[[ a < b ]]`,
 # cuyo orden depende de la colacion. Se fija a la de bytes para que no dependa
@@ -2010,7 +2012,7 @@ rollback_incomplete() {
 
 rollback_and_die() {
   local reason="$1" reason_code="${2:-unexpected_error}" code=0 body reported from_date to_date
-  local failed_step audit_json audit_status audit_output
+  local failed_step audit_json audit_status audit_output audit_known
 
   # SOLO EN EL PROCESO PRINCIPAL. Con `set -E` el trap se hereda en las
   # subshells de `$(...)`; deshacer desde ahi restauraria la base y el padre
@@ -2150,7 +2152,16 @@ rollback_and_die() {
   # queda en pie tiene el comando (lo tiene desde la misma version que la
   # accion); si no, no se escribe, y el informe dice que hay que escribirlo a
   # mano tras la proxima actualizacion, con los datos de este mismo informe.
-  if compose_rollback exec -T app php artisan list --raw 2>/dev/null | grep -q '^compliance:record-system-event'; then
+  # La pregunta la hace `kq_app_knows_command` (lib/app-commands.sh), la MISMA
+  # funcion que usa el paso U3 de la etapa 8b: aqui habia una tuberia contra
+  # `grep -q` que respondia NO cuando la respuesta era SI (SIGPIPE en el
+  # cliente de Docker; el detalle, en la cabecera de la biblioteca), asi que el
+  # asiento no se escribia NUNCA. Tres desenlaces, tres caminos: lo conoce, no
+  # lo conoce, y no se ha podido preguntar —que no es lo mismo que no conocerlo
+  # y no se cuenta como tal—.
+  audit_known=0
+  kq_app_knows_command compose_rollback compliance:record-system-event || audit_known=$?
+  if [ "${audit_known}" -eq 0 ]; then
     audit_status=0
     audit_output="$(compose_new run --rm --no-deps -T app php artisan compliance:record-system-event system.restored_from_backup --data="${audit_json}" 2>&1)" ||
       audit_status=$?
@@ -2163,10 +2174,15 @@ rollback_and_die() {
       err "$(kq_format u_rollback_audit_entry_failed "${audit_status}")"
       remember_check "audit-entry-rollback" "$(kq_text u_report_failed) (${audit_status})"
     fi
-  else
+  elif [ "${audit_known}" -eq 1 ]; then
     detail_note "${audit_json}"
     err "$(kq_format u_rollback_audit_entry_skipped "${SOURCE_VERSION}")"
     remember_check "audit-entry-rollback" "$(kq_format u_rollback_audit_entry_skipped "${SOURCE_VERSION}")"
+  else
+    detail_note "${audit_json}"
+    detail_note "artisan list: ${KQ_APP_COMMAND_ERROR}"
+    err "$(kq_format u_rollback_audit_entry_unknown "${SOURCE_VERSION}")"
+    remember_check "audit-entry-rollback" "$(kq_format u_rollback_audit_entry_unknown "${SOURCE_VERSION}")"
   fi
 
   # daily_totals es una proyeccion reconstruible (regla dura 7): se reconcilian

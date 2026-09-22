@@ -1,0 +1,112 @@
+# KronoQR — pruebas unitarias de
+# infra/observability/prometheus/rules/threat-detection.yml (tarea 3.8,
+# hallazgo H-10). Mismo `evaluation_interval` que el `interval:` del grupo de
+# reglas (60s / 1m): ver la cabecera de tls-verificado.test.yml para el
+# porque de hacerlos coincidir (limitacion del arnes de pruebas de
+# `promtool`, no del producto).
+rule_files:
+  - ../rules/threat-detection.yml
+
+evaluation_interval: 1m
+
+tests:
+  #-----------------------------------------------------------------------------
+  # SaturacionDelBordeEnElFichaje: 25 respuestas 429 en cualquier ventana de 5
+  # min (5/min sostenido), por encima de las 20 del umbral. `sum(...)` sin
+  # `by()` agrega TODAS las etiquetas de la serie de origen: la alerta no
+  # lleva `route`/`method`/`status`, a proposito — lo que importa es el total
+  # en las tres rutas de fichaje juntas, no una en concreto.
+  #-----------------------------------------------------------------------------
+  - name: saturacion_dispara
+    interval: 1m
+    input_series:
+      - series: 'http_requests_total{route="attendance.scan", method="POST", status="429"}'
+        values: "0+5x60"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: SaturacionDelBordeEnElFichaje
+        exp_alerts:
+          - exp_labels:
+              severity: high
+              destinatario: it-cliente
+              component: api
+              mitre_attack: T1499.002
+            exp_annotations:
+              summary: "Mas de 20 respuestas 429 en 5 min en las rutas de fichaje"
+              description: >-
+                MITRE ATT&CK T1499.002 (DoS de punto final: inundacion de
+                servicio). Las rutas attendance.scan, attendance.scan.batch y
+                attendance.scan.pin estan devolviendo 429 por encima de lo
+                que produce un uso legitimo (el limite por dispositivo es
+                120/min de serie). Nadie se ha quedado sin fichar: RN-19
+                encola y confirma localmente en el quiosco. Esta serie mide
+                SOLO la capa de aplicacion (no hay exportador de Nginx en
+                esta pila todavia): un 429 rechazado por limit_req antes de
+                llegar a PHP-FPM no esta aqui. Determina si es un quiosco con
+                un fallo de reintento o un origen insistiendo desde fuera de
+                la VLAN.
+              runbook_url: docs/runbooks/saturacion-del-borde.md
+
+  #-----------------------------------------------------------------------------
+  # Valor limite justo por debajo: exactamente 20 en CUALQUIER ventana de 5
+  # min (4/min sostenido, 4*5=20). El umbral es `> 20` estricto: nunca
+  # dispara.
+  #-----------------------------------------------------------------------------
+  - name: saturacion_boundary
+    interval: 1m
+    input_series:
+      - series: 'http_requests_total{route="attendance.scan", method="POST", status="429"}'
+        values: "0+4x60"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: SaturacionDelBordeEnElFichaje
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # RechazoDeFirmaQr: 45 rechazos por firma en 15 min (3/min sostenido), por
+  # encima de los 20 del umbral. `sum(...)` sin `by()` agrega tambien
+  # `device`/`result`, a proposito: un atacante que reparte el intento entre
+  # varios quioscos no debe diluir la señal por dispositivo.
+  #-----------------------------------------------------------------------------
+  - name: rechazo_firma_dispara
+    interval: 1m
+    input_series:
+      - series: 'scans_total{device="kiosk-recepcion", result="rejected_signature"}'
+        values: "0+3x60"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: RechazoDeFirmaQr
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              destinatario: seguridad
+              component: scan
+              mitre_attack: T1606
+            exp_annotations:
+              summary: "Mas de 20 escaneos con firma HMAC invalida en 15 min"
+              description: >-
+                MITRE ATT&CK T1606 (Forjado de credenciales web). Mas de 20
+                escaneos rechazados por firma HMAC invalida
+                (scans_total{result="rejected_signature"}) en 15 minutos. Una
+                tarjeta impresa por el propio sistema nunca produce este
+                rechazo salvo dano fisico puntual: un volumen sostenido es
+                alguien probando payloads de QR que el sistema no firmo.
+                Regla dura 17: el rechazo que recibio quien escaneo fue
+                generico y de tiempo constante — no sabe que fallo por firma
+                y no por otra causa. Este es el unico sitio donde el
+                desenlace detallado existe; es un incidente de seguridad, no
+                una averia: preserva la evidencia antes de tocar nada.
+              runbook_url: docs/runbooks/ataque-a-credenciales.md
+
+  #-----------------------------------------------------------------------------
+  # Ritmo bajo, tipico de una tarjeta dañada puntual: no dispara.
+  #-----------------------------------------------------------------------------
+  - name: rechazo_firma_no_dispara_ritmo_bajo
+    interval: 1m
+    input_series:
+      - series: 'scans_total{device="kiosk-recepcion", result="rejected_signature"}'
+        values: "0+0.5x60"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: RechazoDeFirmaQr
+        exp_alerts: []

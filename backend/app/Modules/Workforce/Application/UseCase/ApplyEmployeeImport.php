@@ -47,10 +47,14 @@ use Illuminate\Database\ConnectionInterface;
  *
  * {@see RegisterEmployeeHandler} y {@see UpdateEmployeeHandler}, no un camino
  * propio. Un alta por importacion tiene que emitir su PIN —con su asiento
- * `pin.issued`—, publicar `EmployeeHired` —del que cuelga el conteo de uso del
- * plan— y generar su codigo opaco reintentando contra el `UNIQUE`, exactamente
- * igual que un alta desde el panel. Un camino paralelo seria un alta de segunda
- * categoria, y las personas que entraran por el tendrian medio ciclo de vida.
+ * `pin.issued`—, publicar `EmployeeHired` y generar su codigo opaco reintentando
+ * contra el `UNIQUE`, exactamente igual que un alta desde el panel. Un camino
+ * paralelo seria un alta de segunda categoria, y las personas que entraran por
+ * el tendrian medio ciclo de vida.
+ *
+ * Lo unico que se declara distinto es el **origen** (`viaImport`), y no cambia
+ * el alta en nada: sirve para que el uso del plan se cuente **una vez por
+ * importacion** y no una vez por fila (ADR-028, H-04 de la revision de la 3.8).
  *
  * ## Lo que esta importacion NO hace
  *
@@ -92,6 +96,12 @@ final readonly class ApplyEmployeeImport
         // dejaria en el trail una plantilla que no existe. Los asientos de cada
         // alta si van dentro, porque los publica `RegisterEmployeeHandler` en su
         // propia transaccion anidada (ADR-027).
+        //
+        // De este evento cuelga ademas el **unico** conteo de uso del plan de la
+        // importacion (ADR-028): `created` es lo que de verdad entro, ya
+        // confirmado, y por eso es la cifra correcta contra la que comparar. Este
+        // modulo sigue sin saber nada de licencias — publica el hecho y quien
+        // cuenta es `Product` (doc 02 §1.6).
         $this->events->publish(new EmployeesImported(
             fileSha256: $report->sha256,
             created: $report->countOf(ImportOutcome::CREATE),
@@ -203,6 +213,15 @@ final readonly class ApplyEmployeeImport
             // importacion lenta a una fila sin PIN, que es una persona que no
             // puede fichar por respaldo (RF-AT-11) ni entrar al portal (RL-05).
             pinMaterial: $material,
+            // Marca de origen, y no un alta distinta: lo unico que cambia es que
+            // el uso del plan se cuenta UNA VEZ por importacion —desde
+            // `EmployeesImported`, mas abajo— en lugar de una vez por fila. Con
+            // la cuenta por fila, un hotel con plan de 80 que importara 300
+            // personas escribia trescientos asientos `license.plan_exceeded`
+            // casi identicos, todos bajo el `pg_advisory_xact_lock` global de
+            // `audit_log` (ADR-010), que es el mismo por el que pasa cada fichaje
+            // del hotel (H-04 de la revision de la 3.8).
+            viaImport: true,
         ));
 
         return $row->appliedAs($registered->employee->uuid);
