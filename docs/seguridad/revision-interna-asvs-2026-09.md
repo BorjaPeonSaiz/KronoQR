@@ -160,6 +160,7 @@ Los seis `REVISAR` se agrupan en tres familias: **techos de aplicación que falt
 - **Consecuencia:** ninguna técnica; ruido en la revisión externa.
 - **Corrección:** corregir el número en la ficha. Candidatas a fila nueva, si el usuario quiere ampliar el modelo: manipulación del reloj del quiosco (cubierta por RF-AT-12) y repudio de la lectura de datos por un responsable. Agente: documentación.
 - **Requisito:** doc 01 §8.1.
+- **Cierre (restos de la 3.8, 22-09-2026):** el número de la ficha se corrigió en la propia 3.8. Decisión del usuario sobre las candidatas: **se añade** «Manipulación del reloj del quiosco» (`T1070.006`; la mitigación es RF-AT-09/RF-AT-10, no RF-AT-12: el desfase se tolera, se avisa y abre incidencia `clock_skew` sin rechazar) y **no se añade** el repudio de la lectura de datos por un responsable, que RS-05 ya cubre con el asiento `personal_data.accessed`. El modelo tiene doce filas; la doceava está en el §4.
 
 ### H-13 · Sin `needsRehash` de contraseñas ni de PIN al iniciar sesión
 
@@ -206,7 +207,7 @@ Los seis `REVISAR` se agrupan en tres familias: **techos de aplicación que falt
 
 ---
 
-## §4 STRIDE × las once filas del doc 01 §8.1
+## §4 STRIDE × las doce filas del doc 01 §8.1
 
 | # | Categoría | Vector | Control existente, con evidencia | Estado | Hueco |
 |---|---|---|---|---|---|
@@ -221,6 +222,7 @@ Los seis `REVISAR` se agrupan en tres familias: **techos de aplicación que falt
 | 9 | Denegación | Inundación del fichaje | Dos zonas de borde según origen, `limit_conn`, `throttle:scan`/`scan-batch`/`scan-pin`, colas, modo offline (regla dura 19). | **Cubierta** (mitigación) · **sin cubrir** (detección) | Ninguna alerta de saturación (H-10); rutas de gestión sin techo de aplicación (H-01). |
 | 10 | Elevación | Token de quiosco contra gestión | `ability` + policy en cada ruta; tres ámbitos exactos; `AuthorizationNegativeTest` prueba el 403 del token de quiosco (`RS-04`). | **Cubierta** (mitigación) · **sin cubrir** (detección) | Un 403 por ámbito no deja asiento ni alerta (H-10, decisión: no se añade asiento); cobertura negativa manual (H-02). |
 | 11 | Elevación | Acceso de soporte fuera del incidente | Concesión expresa, temporal, de alcance limitado y revocable; `RecordSupportAccess` en el grupo entero; `DataExportPolicy` rechaza a todo actor de soporte. | **Cubierta** | Agrupación de 900 s aceptada y alineada con el cliente; `audit:read` sin consumidor, aceptado hasta el primer endpoint de auditoría. |
+| 12 | Manipulación | Reloj del quiosco movido (fila añadida el 22-09-2026 en los restos de la tarea, H-12) | `recorded_at` lo pone el servidor (RF-AT-09). Desfase tolerado hasta `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES` (`ClockSkew` en el dominio de Attendance); por encima, el fichaje se registra igual con `clock_skew_seconds`, incidencia `clock_skew` y aviso en el quiosco (RF-AT-10; `ClockSkewIncidentTest`). Anti-rebote (RF-AT-06) y RN-16 acotan el efecto. Nunca rechaza (regla dura 19). | **Cubierta** (mitigación) · **parcial** (detección) | La señal es la incidencia en la bandeja (`incidents_open{type="clock_skew"}`), sin alerta a propósito: la juzga una persona. Sin hallazgo. |
 
 ---
 

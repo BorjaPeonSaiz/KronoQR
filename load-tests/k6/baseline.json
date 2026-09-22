@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-09-17T22:10:47.861Z",
-  "git_sha": "5a8d130fc41aa948898946fc15286657972e93aa",
+  "generated_at": "2026-09-22T11:59:07.364Z",
+  "git_sha": "d5c07bcfe0bc09fb362e6ad8a8256ff7b34449bb",
   "runner": "github-Linux-X64",
   "k6_version": "k6 v2.2.0 (commit/00a9a1b7f5, go1.26.5, linux/amd64)",
   "k6_image": "grafana/k6:2.2.0@sha256:9bd01d6941fca969cb61bb57d2da5ee9b385fe2aa8881df3798c196564d6ace6",
@@ -20,16 +20,18 @@
   "scenarios": {
     "batch": {
       "requirements": [
-        "RF-KI-04"
+        "RF-KI-04",
+        "RN-18"
       ],
-      "samples": 7,
-      "answered_samples": 7,
-      "p50": 3243.5,
-      "p95": 4664.5,
-      "p99": 4664.5,
-      "max": 4664.5,
+      "samples": 18,
+      "answered_samples": 18,
+      "p50": 503.8,
+      "p95": 5080.9,
+      "p99": 5080.9,
+      "max": 5080.9,
       "statuses": {
-        "207": 7
+        "200": 9,
+        "207": 9
       }
     },
     "compliance": {
@@ -38,10 +40,10 @@
       ],
       "samples": 61,
       "answered_samples": 61,
-      "p50": 309.4,
-      "p95": 503.3,
-      "p99": 738.6,
-      "max": 738.6,
+      "p50": 286.3,
+      "p95": 680.5,
+      "p99": 904.2,
+      "max": 904.2,
       "statuses": {
         "200": 61
       }
@@ -50,14 +52,29 @@
       "requirements": [
         "RS-03"
       ],
-      "samples": 362,
-      "answered_samples": 362,
-      "p50": 99.2,
-      "p95": 275.7,
-      "p99": 552.6,
-      "max": 624,
+      "samples": 363,
+      "answered_samples": 363,
+      "p50": 116.5,
+      "p95": 343.9,
+      "p99": 695.3,
+      "max": 897.2,
       "statuses": {
-        "422": 362
+        "422": 363
+      }
+    },
+    "reject-out-of-order": {
+      "requirements": [
+        "RS-03",
+        "RN-18"
+      ],
+      "samples": 183,
+      "answered_samples": 183,
+      "p50": 197,
+      "p95": 391.1,
+      "p99": 817.4,
+      "max": 908,
+      "statuses": {
+        "422": 183
       }
     },
     "resend": {
@@ -65,14 +82,14 @@
         "RQ-03",
         "RF-AT-07"
       ],
-      "samples": 366,
-      "answered_samples": 366,
-      "p50": 187.2,
-      "p95": 361.4,
-      "p99": 667.2,
-      "max": 750.6,
+      "samples": 364,
+      "answered_samples": 364,
+      "p50": 240.8,
+      "p95": 433.1,
+      "p99": 871.2,
+      "max": 1125.8,
       "statuses": {
-        "200": 366
+        "200": 364
       }
     },
     "scan": {
@@ -81,95 +98,125 @@
         "RNF-P-02",
         "RQ-08"
       ],
-      "samples": 2163,
-      "answered_samples": 2163,
-      "p50": 109.3,
-      "p95": 367.4,
-      "p99": 678.6,
-      "max": 849.3,
+      "samples": 2162,
+      "answered_samples": 2162,
+      "p50": 115.2,
+      "p95": 468.8,
+      "p99": 852.5,
+      "max": 1046,
       "statuses": {
-        "200": 2163
+        "200": 2162
       }
     }
   },
   "reject_classes": {
     "signature": {
-      "samples": 122,
-      "offered": 122,
-      "min": 72.9,
-      "p50": 101.9,
-      "p95": 279.4,
-      "max": 427.7,
+      "samples": 123,
+      "offered": 123,
+      "min": 79.1,
+      "p50": 118.7,
+      "p95": 301.8,
+      "max": 656.1,
       "measurable": true
     },
     "unknown": {
       "samples": 120,
       "offered": 120,
-      "min": 75.3,
-      "p50": 103.7,
-      "p95": 253.1,
-      "max": 624,
+      "min": 78.5,
+      "p50": 115.2,
+      "p95": 351,
+      "max": 695.3,
       "measurable": true
     },
     "revoked": {
       "samples": 120,
       "offered": 120,
-      "min": 72.9,
-      "p50": 94.2,
-      "p95": 218.2,
-      "max": 612.9,
+      "min": 76.9,
+      "p50": 121.5,
+      "p95": 331.3,
+      "max": 897.2,
       "measurable": true
     }
   },
+  "reject_out_of_order": {
+    "samples": 183,
+    "offered": 183,
+    "reconciled": 0,
+    "min": 93.3,
+    "p50": 197,
+    "p95": 391.1,
+    "max": 908,
+    "firm": true,
+    "separation_ms": {
+      "median": {
+        "signature": 78.3,
+        "unknown": 81.8,
+        "revoked": 75.5
+      },
+      "minimum": {
+        "signature": 14.1,
+        "unknown": 14.7,
+        "revoked": 16.3
+      }
+    }
+  },
   "checks": {
-    "total": 3145,
+    "total": 3515,
     "failed": []
   },
   "totals": {
-    "shift_producing_realtime": 2346,
-    "shift_entries_per_second": 19.6,
-    "shift_producing_batch": 350,
-    "batch_entries_per_second": 2.9,
+    "shift_producing_realtime": 2344,
+    "shift_entries_per_second": 19.5,
+    "shift_producing_batch": 441,
+    "batch_entries_per_second": 3.7,
     "debounced": 0,
     "debounced_ratio": 0,
     "queueable_degradation": 0,
     "employee_refusals": 0,
-    "resend_identical": 183,
+    "resend_identical": 182,
     "resend_divergent": 0,
     "resend_skipped": 0,
-    "batch_accepted": 350,
+    "batch_accepted": 441,
     "batch_debounced": 0,
     "batch_retryable": 0,
+    "batch_unreconcilable": 9,
     "batch_rejected": 0,
-    "compliance_p95": 503.3,
+    "batch_impossible": {
+      "unreconcilable": 9,
+      "retried": 0,
+      "accepted": 0,
+      "inconclusive": 0,
+      "not_set_up": 0
+    },
+    "compliance_p95": 680.5,
     "dropped_iterations": 0,
     "dropped_iterations_by_scenario": {}
   },
   "write_path": {
-    "samples": 2346,
-    "min": 74.4,
-    "p50": 111.7,
-    "p95": 367.4,
-    "p99": 678.6,
-    "max": 849.3,
+    "samples": 2344,
+    "min": 81.7,
+    "p50": 120.8,
+    "p95": 468.8,
+    "p99": 852.5,
+    "max": 1125.8,
     "per_instance": [
       {
         "instance": "0",
-        "samples": 782,
-        "p95": 352.3,
-        "p99": 680.4
+        "samples": 781,
+        "p95": 423.7,
+        "p99": 857
       },
       {
         "instance": "1",
         "samples": 782,
-        "p95": 380.6,
-        "p99": 692.1
+        "p95": 480.8,
+        "p99": 852.5
       },
       {
         "instance": "2",
-        "samples": 782,
-        "p95": 382.2,
-        "p99": 677.8
+        "samples": 781,
+        "p95": 475.3,
+        "p99": 868.7
       }
     ]
   },
@@ -182,28 +229,40 @@
   "verdicts": {
     "CHECKS": {
       "status": "pass",
-      "detail": "3145 comprobaciones de k6, 0 con fallos"
+      "detail": "3515 comprobaciones de k6, 0 con fallos"
     },
     "RNF-P-02": {
-      "status": "unmeasurable",
-      "detail": "la linea base no es comparable con esta pasada (instancias: 10 frente a 3). Mide con los mismos parametros o regenera la linea base. El umbral de RNF-P-02 y RNF-P-06 NO se juzga en este runner (decision 19): solo en hardware de referencia con make load-test."
+      "status": "fail",
+      "detail": "p95 468.8 ms sobre 2344 fichajes atendidos, frente a un maximo de 459.3 ms (1.25x la linea base del runner: p95 367.4 ms, 19.6 tramos/s (git_sha 5a8d130fc41aa948898946fc15286657972e93aa)). El umbral de RNF-P-02 y RNF-P-06 NO se juzga en este runner (decision 19): solo en hardware de referencia con make load-test."
     },
     "RNF-P-06": {
-      "status": "unmeasurable",
-      "detail": "la carga ofrecida son 18/s y el umbral es 50/s: sube INSTANCES o SCAN_RATE para poder juzgarlo"
+      "status": "pass",
+      "detail": "2344 tramos en tiempo real en 120 s = 19.5/s (ofrecidos 18/s); anti-rebote 0.0 %; degradacion encolable 0 (0.00 %); rechazos al empleado 0; minimo 15.7/s (0.8x la linea base del runner: p95 367.4 ms, 19.6 tramos/s (git_sha 5a8d130fc41aa948898946fc15286657972e93aa)). El umbral de RNF-P-02 y RNF-P-06 NO se juzga en este runner (decision 19): solo en hardware de referencia con make load-test."
+    },
+    "SERVICIO": {
+      "status": "pass",
+      "detail": "0 de 2544 fichajes que llegaron al servidor terminaron en 5xx (0.00 %, tope 1 %)"
     },
     "RQ-03": {
       "status": "pass",
-      "detail": "183 reenvios identicos al original, 0 distintos, 0 sin respuesta del servidor en alguno de los dos envios"
+      "detail": "182 reenvios identicos al original, 0 distintos, 0 sin respuesta del servidor en alguno de los dos envios"
     },
     "RS-03": {
       "status": "pass",
-      "detail": "separacion de medianas 9.6 ms y de minimos 2.4 ms (tope 20); suelo de 25 ms respetado sobre el minimo de cada clase"
+      "detail": "separacion de medianas 6.3 ms y de minimos 2.2 ms (tope 20); suelo de 25 ms respetado sobre el minimo de cada clase"
+    },
+    "RS-03-RN-18": {
+      "status": "info",
+      "detail": "mediana 197 ms y minimo 93.3 ms sobre 183 rechazos de RN-18. Separacion de medianas frente a la credencial: signature 78.3, unknown 81.8, revoked 75.5; de minimos: signature 14.1, unknown 14.7, revoked 16.3. INFORMATIVO: A-13 acepta esta diferencia sin suelo de tiempo (doc 07 §6), asi que la cifra no cambia el veredicto"
+    },
+    "RN-18": {
+      "status": "pass",
+      "detail": "9 elementos imposibles registrados como irreconciliables (422), 0 devueltos a la cola con 5xx y 0 aceptados. Un 5xx aqui es el bucle de reintentos infinito que RN-18 vino a eliminar."
     }
   },
   "baseline": {
-    "note": "p95 de scan 367.4 ms frente a 26279.3 ms de la linea base (-98.6 %)",
-    "regression": false,
-    "ratio": 0.014
+    "note": "p95 de scan 468.8 ms frente a 367.4 ms de la linea base (27.6 %) — AVISO: empeora mas del 25 %",
+    "regression": true,
+    "ratio": 1.276
   }
 }

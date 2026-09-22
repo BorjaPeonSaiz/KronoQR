@@ -1070,6 +1070,8 @@ Etapas 1–3 en cada *push* (retroalimentación en menos de 4 minutos). Etapa 8 
 
 La semilla de desarrollo debe incluir los casos límite desde el principio. Un dataset de datos "bonitos" oculta exactamente los errores que este dominio produce.
 
+En Local, las tres SPA corren desde el workspace de npm de la raíz del repositorio (ADR-036) dentro de los contenedores `node-kiosk`, `node-admin` y `node-portal`, con el `node_modules` de cada uno en un volumen de Docker (nunca el del host, que es Windows en la máquina de referencia); la primera vez que se arranca el entorno, uno de esos contenedores instala las dependencias del workspace completo antes de servir Vite.
+
 ### 10.3 Definición de Preparado y de Terminado
 
 **Preparado (para entrar en una iteración):**

@@ -348,6 +348,52 @@ services:
         condition: service_healthy
 
   #--- 8 · Vite del quiosco ---------------------------------------------------
+  #
+  # LAS TRES SPA VIVEN EN UN WORKSPACE DE NPM (ADR-036): un unico
+  # package-lock.json en la raiz del repositorio gobierna frontend-kiosk,
+  # frontend-admin, frontend-portal y packages/web-kit, y los binarios -vite
+  # incluido- se hozan en /app/node_modules/.bin, no en el node_modules de
+  # cada SPA. Por eso el bind mount es la RAIZ DEL REPOSITORIO (antes de esta
+  # correccion era `../frontend-kiosk:/app` suelto, y por eso `vite` no
+  # aparecia: `npm ci --prefix /app` ya no tiene sentido en un workspace) y
+  # `working_dir` mueve el arranque de Vite al directorio de la SPA dentro de
+  # ese arbol.
+  #
+  # CINCO VOLUMENES CON NOMBRE, NO UNO: ademas del node_modules de la raiz
+  # (node-modules-root), CADA subdirectorio del workspace que ya tiene su
+  # propio node_modules EN EL HOST (frontend-kiosk, frontend-admin,
+  # frontend-portal, packages/web-kit -comprobado con `ls`: npm crea un
+  # node_modules anidado cuando una dependencia no se puede hozar a la raiz,
+  # tipicamente binarios nativos especificos de plataforma como los de esbuild
+  # o rollup) necesita el suyo. El del HOST se instalo en Windows: sus
+  # binarios nativos no valen en el contenedor Linux, y sin un volumen que lo
+  # tape, el bind mount de la raiz dejaria pasar esos binarios de Windows tal
+  # cual -la otra cara del mismo problema que ya resolvio backend-vendor con
+  # vendor/ mas arriba, y detallado en B.6/B.7 de
+  # `plan implementacion/01-herramientas-y-entorno.md`-.
+  #
+  # LOS CINCO VOLUMENES SE MONTAN EN LOS TRES SERVICIOS por simetria: la
+  # resolucion de modulos de Node, al importar @kronoqr/web-kit desde
+  # cualquiera de las tres SPA, puede acabar leyendo dentro de
+  # packages/web-kit/node_modules, asi que ese y el de la raiz los necesitan
+  # los tres si o si. Que node-admin o node-portal tambien vean el
+  # node_modules de frontend-kiosk no hace nada -nadie resuelve modulos
+  # cruzando al arbol de una SPA hermana- pero mantiene el bloque de
+  # `volumes:` identico y reutilizable con un solo anclado YAML
+  # (&node-workspace-volumes), en vez de un bloque distinto por servicio que
+  # alguien puede desincronizar sin querer.
+  #
+  # INSTALACION: SOLO node-kiosk EJECUTA `npm ci` (ver el comentario de
+  # infra/docker/node/entrypoint.sh). Se eligio un ROL DESIGNADO dentro del
+  # entrypoint compartido -no un cuarto servicio de un solo disparo- porque es
+  # el MISMO patron que ya usa infra/docker/php/entrypoint.sh para vendor/ (el
+  # rol fpm instala, horizon/reverb/scheduler esperan sondeando el mismo
+  # fichero): un patron nuevo para un problema identico habria sido la unica
+  # diferencia sin motivo. node-admin y node-portal ya dependian de
+  # node-kiosk (`depends_on`, mas abajo) desde antes de esta correccion; ese
+  # orden de arranque no basta por si solo -Compose solo garantiza que el
+  # contenedor EMPEZO, no que termino de instalar-, por eso el sondeo vive en
+  # el entrypoint y no en `depends_on`.
   node-kiosk:
     build:
       context: ..
@@ -356,8 +402,17 @@ services:
     container_name: kronoqr-node-kiosk
     environment:
       FRONTEND_NAME: kiosk
-    volumes:
-      - ../frontend-kiosk:/app
+      # Unico de los tres con esta variable a "true": el que ejecuta
+      # `npm ci` en la raiz del workspace. Ver el comentario de arriba.
+      NODE_WORKSPACE_INSTALLER: "true"
+    working_dir: /app/frontend-kiosk
+    volumes: &node-workspace-volumes
+      - ..:/app
+      - node-modules-root:/app/node_modules
+      - node-modules-kiosk:/app/frontend-kiosk/node_modules
+      - node-modules-admin:/app/frontend-admin/node_modules
+      - node-modules-portal:/app/frontend-portal/node_modules
+      - node-modules-web-kit:/app/packages/web-kit/node_modules
     ports:
       - "127.0.0.1:5173:5173"
     networks:
@@ -373,8 +428,8 @@ services:
     container_name: kronoqr-node-admin
     environment:
       FRONTEND_NAME: admin
-    volumes:
-      - ../frontend-admin:/app
+    working_dir: /app/frontend-admin
+    volumes: *node-workspace-volumes
     ports:
       - "127.0.0.1:5174:5173"
     networks:
@@ -392,8 +447,8 @@ services:
     container_name: kronoqr-node-portal
     environment:
       FRONTEND_NAME: portal
-    volumes:
-      - ../frontend-portal:/app
+    working_dir: /app/frontend-portal
+    volumes: *node-workspace-volumes
     ports:
       - "127.0.0.1:5175:5173"
     networks:
@@ -713,3 +768,14 @@ volumes:
   # WAL archivado. Separado del anterior porque lo escribe el usuario postgres
   # y porque su ciclo de vida es otro: se purga por dias, no por copias.
   wal-archive:
+  # Workspace de npm de los tres frontends (ADR-036, servicios node-kiosk/
+  # node-admin/node-portal). Volumenes con nombre, nunca el node_modules del
+  # HOST: la maquina de desarrollo es Windows y sus binarios nativos (esbuild,
+  # rollup...) no valen en el contenedor Linux -mismo criterio que
+  # backend-vendor, arriba-. Solo node-kiosk escribe (`npm ci`); node-admin y
+  # node-portal solo leen del mismo arbol.
+  node-modules-root:
+  node-modules-kiosk:
+  node-modules-admin:
+  node-modules-portal:
+  node-modules-web-kit:
