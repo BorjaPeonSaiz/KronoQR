@@ -3,12 +3,13 @@
 // CERO violaciones criticas o graves en cada pantalla. Las de impacto menor
 // se listan en la salida para que se vean, pero no bloquean.
 //
-// `@axe-core/playwright` no esta declarado en `package.json` de este
-// paquete: llega HOISTED a la raiz del workspace porque `frontend-admin` ya
-// lo declara (mismo arbol de dependencias, ADR-036). Añadirlo aqui tambien
-// exigiria un `npm install` que, en Windows con `node_modules/` presente,
-// rompe los binarios nativos de `@tailwindcss/oxide` (ver HANDOFF.md ->
-// "Trampas del entorno"): se importa tal cual, sin declararlo.
+// `@axe-core/playwright` esta declarado en `package.json` de este paquete
+// desde la tarea 3.7 (antes llegaba HOISTED a la raiz del workspace porque
+// solo `frontend-admin` lo declaraba, mismo arbol de dependencias,
+// ADR-036): la migracion a Vitest 5 de esta misma tarea regenero el lock
+// desde Linux, asi que declararlo ya no exige el `npm install` que en
+// Windows con `node_modules/` presente rompia los binarios nativos de
+// `@tailwindcss/oxide` (ver HANDOFF.md -> "Trampas del entorno").
 import AxeBuilder from '@axe-core/playwright'
 import type { Page, Route } from '@playwright/test'
 import { expect, test } from '@playwright/test'

@@ -6,6 +6,7 @@
 
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
+import { installAudioProbe } from './support/audio'
 import { readQueue } from './support/offlineQueue'
 import {
   enterEmployeeCode,
@@ -14,6 +15,7 @@ import {
   stubKioskApiWithPin,
   stubPinScanApi,
 } from './support/pin'
+import { expectTouchTargets } from './support/touchTargets'
 
 const EMPLOYEE_CODE = 'E7QK2MXPR'
 const RAW_PIN = '483920'
@@ -102,22 +104,24 @@ test(
     await pressPinDigits(page, RAW_PIN)
     await page.getByTestId('pin-confirm').click()
 
-    // Se muestrea el estado del panel varias veces mientras se asienta: si
-    // «Comprobando…» llegara a aparecer, aunque fuera un instante, quedaria
-    // atrapado aqui.
+    // Se muestrea el `data-kind` del panel repetidas veces mientras se
+    // asienta, acumulando en un conjunto: si «Comprobando…» llegara a
+    // aparecer, aunque fuera un instante, se quedaria dentro para siempre y
+    // el conjunto YA NO PODRIA valer nunca `['accepted']` a solas -el `poll`
+    // expira por plazo en vez de conformarse con un valor que no es el
+    // esperado, que es justo lo que hace fallar la prueba si el parpadeo
+    // reaparece-.
     const kindsSeen = new Set<string>()
-    for (let sample = 0; sample < 25; sample += 1) {
-      const kind = await page.getByTestId('scan-confirmation').getAttribute('data-kind')
-      if (kind !== null) kindsSeen.add(kind)
-      await page.waitForTimeout(20)
-    }
-
-    expect([...kindsSeen]).not.toContain('verifying')
-    expect(kindsSeen.has('accepted')).toBe(true)
-
-    // Un unico pintado: el panel llega directamente al desenlace real, sin
-    // pasar por ningun estado intermedio.
-    expect([...kindsSeen]).toEqual(['accepted'])
+    await expect
+      .poll(
+        async () => {
+          const kind = await page.getByTestId('scan-confirmation').getAttribute('data-kind')
+          kindsSeen.add(kind ?? 'kind-attribute-missing')
+          return [...kindsSeen]
+        },
+        { intervals: [20], timeout: 1_000 },
+      )
+      .toEqual(['accepted'])
 
     await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'accepted')
     await expect(page.getByTestId('confirmation-headline')).not.toHaveText('Comprobando…')
@@ -198,6 +202,70 @@ test(
 )
 
 test(
+  'la entrada y el rechazo del fichaje por PIN disparan tonos distintos, ademas del visual (RF-KI-06)',
+  { tag: ['@RF-KI-06'] },
+  async ({ page }) => {
+    // A diferencia del escaneo de tarjeta (ver el comentario del final de
+    // `scan.spec.ts`), el PIN SI pinta el desenlace real con su propio
+    // sonido: `PinView.vue` llama a `session.present()` -que SI suena- para
+    // el resultado definitivo, nunca a `session.settle()` sin sonido, salvo
+    // que ya hubiera sonado un aviso neutro antes (`verifying`/`pending`).
+    // Es la unica via del producto donde hoy se puede demostrar de extremo a
+    // extremo lo que pide el principio de diseno: firmas distintas para la
+    // entrada y para el rechazo.
+    const { readTones, reset } = await installAudioProbe(page)
+    await stubKioskApiWithPin(page)
+    await stubPinScanApi(page, 'clock_in')
+
+    // `stubKioskApiWithPin` deja el trafico de fondo del ESCANEO DE TARJETA
+    // corriendo en la MISMA pagina (el video de camara del proyecto
+    // `kiosk-qr` decodifica solo, ver `support/pin.ts`), y ese fichaje de
+    // fondo suena tambien -su propio «pendiente»-, sin relacion con el PIN.
+    // Con `retries: 0` una relectura de fondo podia colarse justo entre el
+    // desenlace del PIN y la lectura del registro (hallazgo de la revision
+    // QA sobre `3d004f4`: dos tonos 587/587 en vez de los del PIN). Por eso
+    // se vacia el registro justo ANTES del ultimo gesto -pulsar «Comprobar»-,
+    // lo mas cerca posible del sonido que interesa, y se lee el registro
+    // COMPLETO despues: si algo de fondo se colara igualmente, la asercion de
+    // longitud fallaria en vez de comparar contra un tono equivocado en
+    // silencio.
+    await page.goto('/')
+    await page.getByTestId('pin-entry-link').click()
+    await enterEmployeeCode(page, EMPLOYEE_CODE)
+    await pressPinDigits(page, RAW_PIN)
+    await reset()
+    await page.getByTestId('pin-confirm').click()
+
+    await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'accepted', {
+      timeout: 10_000,
+    })
+    const acceptedTones = await readTones()
+    // `TONES.entry` en `useScanSound.ts`: 784 Hz seguido de 1175 Hz, sinusoidal.
+    expect(acceptedTones.map((tone) => tone.type)).toEqual(['sine', 'sine'])
+    expect(acceptedTones.map((tone) => tone.frequency)).toEqual([784, 1175])
+
+    await page.unroute('**/api/v1/scan/pin')
+    await stubPinScanApi(page, 'rejected')
+
+    await page.goto('/')
+    await page.getByTestId('pin-entry-link').click()
+    await enterEmployeeCode(page, EMPLOYEE_CODE)
+    await pressPinDigits(page, RAW_PIN)
+    await reset()
+    await page.getByTestId('pin-confirm').click()
+
+    await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'rejected', {
+      timeout: 10_000,
+    })
+    const rejectedTones = await readTones()
+    // `TONES.error`: 196 Hz seguido de 147 Hz, onda cuadrada -inconfundible
+    // frente al tono ascendente y sinusoidal de la entrada de arriba-.
+    expect(rejectedTones.map((tone) => tone.type)).toEqual(['square', 'square'])
+    expect(rejectedTones.map((tone) => tone.frequency)).toEqual([196, 147])
+  },
+)
+
+test(
   'la pantalla de PIN no tiene violaciones de accesibilidad criticas ni graves',
   { tag: ['@RF-KI-06'] },
   async ({ page }) => {
@@ -232,5 +300,19 @@ test(
       pinBlocking,
       pinBlocking.map((violation) => `${violation.id}: ${violation.help}`).join('\n'),
     ).toEqual([])
+  },
+)
+
+test(
+  'el teclado numerico del PIN mide al menos 48 px por digito',
+  { tag: ['@RF-KI-06'] },
+  async ({ page }) => {
+    await stubKioskApiWithPin(page)
+    await page.goto('/')
+    await page.getByTestId('pin-entry-link').click()
+    await enterEmployeeCode(page, EMPLOYEE_CODE)
+    await expect(page.getByTestId('pin-step-pin')).toBeVisible()
+
+    await expectTouchTargets(page.getByTestId('pin-step-pin').getByRole('button'))
   },
 )

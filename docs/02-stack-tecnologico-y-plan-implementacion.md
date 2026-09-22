@@ -546,7 +546,7 @@ sig      Primeros 16 caracteres base64url de HMAC-SHA256(key[key_id], "FH1." + k
 Ejemplo: FH1.a3.7QK2mXpR9vLdN4tZbYcF1w.k9Xm2pQrT5vN8wLa
 ```
 
-Unos 50 caracteres: cabe holgadamente en un QR versión 3 con **corrección de errores nivel Q**, legible desde 20 cm con una cámara de tablet modesta y tolerante a un 25 % de degradación. Ese margen es lo que permite que una tarjeta sobreviva una temporada de uso diario en una cocina, con roces, grasa y dobleces.
+Unos 50 caracteres: cabe holgadamente en un QR con **corrección de errores nivel Q** y el tamaño mínimo garantizado de RF-QR-05, legible desde 20 cm con una cámara de tablet modesta. La **versión** del símbolo la fija el codificador según la longitud del payload; lo que el producto decide es el nivel de corrección, no un tamaño concreto. Y **no se promete ninguna tolerancia al desgaste**: el soporte físico —papel, cartulina o PVC— lo elige el cliente, así que una tarjeta que deja de leerse se repone (revocar, reemitir e imprimir en el día) y hasta entonces se ficha con el PIN de respaldo (RF-AT-11).
 
 ### 5.2 Verificación en el servidor
 
@@ -571,7 +571,7 @@ Dos claves activas simultáneamente (`current` y `previous`) en el gestor de sec
 | Enumerar empleados probando códigos | ✅ Sí. 128 bits de espacio más rate limiting |
 | Filtrar PII en el propio QR | ✅ Sí. Payload opaco |
 | Reemitir sin invalidar la anterior | ✅ Sí. Revocación por credencial |
-| Deterioro por uso diario | ✅ Sí. Corrección de errores nivel Q |
+| Deterioro por uso diario | 🟡 **Parcial.** El nivel Q da margen, pero cuánto aguanta una tarjeta depende del soporte que elija el cliente y **el producto no promete ninguna tolerancia**: la respuesta es **reposición** —revocar, reemitir e imprimir en el día— y **PIN de respaldo** (RF-AT-11) mientras llega la nueva |
 | **Prestar la tarjeta a un compañero** | ❌ **No.** Pero es **autolimitado**: el titular se queda sin la suya, exige entrega y devolución, y solo funciona si el titular no piensa fichar. Se combate con supervisión y con la detección automática de patrones anómalos (RF-PR-06) |
 
 ### 5.5 Ciclo de vida de la credencial
@@ -907,7 +907,7 @@ Reglas anti-fatiga: agrupación por dispositivo, silenciamiento durante ventanas
 
 ```
                     ╱╲
-                   ╱E2E╲              ~25 escenarios · Playwright · minutos
+                   ╱E2E╲              ~25 recorridos críticos · Playwright · min
                   ╱──────╲            Flujo de quiosco con cámara simulada,
                  ╱ Feature╲           panel, portal, offline→sync
                 ╱  + API   ╲          ~120 pruebas · Pest + BD real · ~2 min
@@ -919,6 +919,8 @@ Reglas anti-fatiga: agrupación por dispositivo, silenciamiento durante ventanas
           ╱  Arquitectura + SAST ╲    Fronteras, tipos, dependencias
          ╱────────────────────────╲
 ```
+
+**Qué cuentan esos «~25».** Son **~25 recorridos críticos de usuario más la rejilla de accesibilidad y las variantes por pantalla**, no el total de pruebas E2E. Un recorrido crítico es algo que un cliente hace y que no puede romperse —fichar con la tarjeta delante de la cámara, volver de un corte de red, corregir una jornada, descargar el registro propio—; a esos recorridos se les suman la pasada de `axe` por cada pantalla de las tres SPA y las variantes de cada una (idioma, marca, rol, sin red, sin ámbito), que son las que explican que la suite tenga varias veces esa cifra. La lista de recorridos críticos, con la *spec* que cubre cada uno y lo que falta, vive en la ficha de la **tarea 3.7** del plan de la Fase 3, y es lo que la CI no puede perder.
 
 ### 9.2 Herramientas y umbrales
 

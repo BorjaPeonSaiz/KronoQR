@@ -216,7 +216,7 @@ test(
 
 // --- Marca de la instalacion (RF-PD-08, tarea 5.8) --------------------------
 
-test('la pantalla de marca tampoco', { tag: ['@RF-PD-08', '@RQ-04'] }, async ({ page }) => {
+test('la pantalla de marca tampoco', { tag: ['@RF-PD-08'] }, async ({ page }) => {
   await stubManagementApi(page, { role: 'admin' })
   await logInAsAdmin(page)
   await page.goto('/branding')
@@ -227,7 +227,7 @@ test('la pantalla de marca tampoco', { tag: ['@RF-PD-08', '@RQ-04'] }, async ({ 
 
 test(
   'la pantalla de marca con el aviso de contraste visible tampoco',
-  { tag: ['@RF-PD-08', '@RQ-04'] },
+  { tag: ['@RF-PD-08'] },
   async ({ page }) => {
     await stubManagementApi(page, { role: 'admin' })
     await logInAsAdmin(page)
@@ -420,7 +420,7 @@ test(
   },
 )
 
-// --- Asistente de puesta en marcha (RF-PD-03, RQ-04, tarea 5.5) -------------
+// --- Asistente de puesta en marcha (RF-PD-03, tarea 5.5) --------------------
 //
 // Es la PRIMERA pantalla del producto: cero violaciones criticas o graves en
 // CADA paso, no solo en el asistente en general. Cada prueba aterriza
@@ -429,7 +429,7 @@ test(
 
 test(
   'el paso del primer administrador no tiene violaciones',
-  { tag: ['@RQ-04'] },
+  { tag: ['@RF-PD-03'] },
   async ({ page }) => {
     await stubOnboardingApi(page)
     await page.goto('/setup')
@@ -441,7 +441,7 @@ test(
 
 test(
   'el alta del segundo factor del primer administrador tampoco, con el QR',
-  { tag: ['@RQ-04'] },
+  { tag: ['@RF-PD-03'] },
   async ({ page }) => {
     await stubOnboardingApi(page)
     await page.goto('/setup')
@@ -455,7 +455,7 @@ test(
   },
 )
 
-test('el paso de organizacion no tiene violaciones', { tag: ['@RQ-04'] }, async ({ page }) => {
+test('el paso de organizacion no tiene violaciones', { tag: ['@RF-PD-03'] }, async ({ page }) => {
   await stubOnboardingApi(page, { administratorAlreadyDone: true })
   await page.goto('/setup')
   await expect(page.getByRole('heading', { name: 'Organización' })).toBeVisible()
@@ -463,7 +463,7 @@ test('el paso de organizacion no tiene violaciones', { tag: ['@RQ-04'] }, async 
   await expectNoBlockingViolations(page)
 })
 
-test('el paso del centro de trabajo tampoco', { tag: ['@RQ-04'] }, async ({ page }) => {
+test('el paso del centro de trabajo tampoco', { tag: ['@RF-PD-03'] }, async ({ page }) => {
   await stubOnboardingApi(page, {
     administratorAlreadyDone: true,
     stepsDone: { organisation: 'completed' },
@@ -474,7 +474,7 @@ test('el paso del centro de trabajo tampoco', { tag: ['@RQ-04'] }, async ({ page
   await expectNoBlockingViolations(page)
 })
 
-test('el paso de departamentos tampoco', { tag: ['@RQ-04'] }, async ({ page }) => {
+test('el paso de departamentos tampoco', { tag: ['@RF-PD-03'] }, async ({ page }) => {
   await stubOnboardingApi(page, {
     administratorAlreadyDone: true,
     siteDone: true,
@@ -488,7 +488,7 @@ test('el paso de departamentos tampoco', { tag: ['@RQ-04'] }, async ({ page }) =
 
 test(
   'el paso del perfil de convenio tampoco, con el aviso de RL-21',
-  { tag: ['@RQ-04'] },
+  { tag: ['@RF-PD-03'] },
   async ({ page }) => {
     await stubOnboardingApi(page, {
       administratorAlreadyDone: true,
@@ -504,7 +504,7 @@ test(
 
 test(
   'el paso de plantilla tampoco, con el informe de importacion',
-  { tag: ['@RQ-04'] },
+  { tag: ['@RF-PD-03'] },
   async ({ page }) => {
     await stubOnboardingApi(page, {
       administratorAlreadyDone: true,
@@ -531,7 +531,7 @@ test(
 
 test(
   'el paso de licencia tampoco, con la pantalla de activacion incrustada',
-  { tag: ['@RQ-04'] },
+  { tag: ['@RF-PD-03'] },
   async ({ page }) => {
     await stubOnboardingApi(page, {
       administratorAlreadyDone: true,
@@ -550,7 +550,7 @@ test(
   },
 )
 
-test('el paso del primer quiosco tampoco', { tag: ['@RQ-04'] }, async ({ page }) => {
+test('el paso del primer quiosco tampoco', { tag: ['@RF-PD-03'] }, async ({ page }) => {
   await stubOnboardingApi(page, {
     administratorAlreadyDone: true,
     siteDone: true,
@@ -568,7 +568,7 @@ test('el paso del primer quiosco tampoco', { tag: ['@RQ-04'] }, async ({ page })
   await expectNoBlockingViolations(page)
 })
 
-test('la revision final tampoco', { tag: ['@RQ-04'] }, async ({ page }) => {
+test('la revision final tampoco', { tag: ['@RF-PD-03'] }, async ({ page }) => {
   await stubOnboardingApi(page, {
     administratorAlreadyDone: true,
     siteDone: true,
@@ -587,7 +587,7 @@ test('la revision final tampoco', { tag: ['@RQ-04'] }, async ({ page }) => {
   await expectNoBlockingViolations(page)
 })
 
-test('el resumen final de cierre tampoco', { tag: ['@RQ-04'] }, async ({ page }) => {
+test('el resumen final de cierre tampoco', { tag: ['@RF-PD-03'] }, async ({ page }) => {
   await stubOnboardingApi(page, {
     administratorAlreadyDone: true,
     siteDone: true,

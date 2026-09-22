@@ -425,13 +425,16 @@ return [
 
             /*
              * Nivel de correccion de errores del QR. `Q` es el valor del Anexo B
-             * y el que exige RF-QR-05: recupera hasta el 25 % de los modulos
-             * dañados.
+             * y el que exige RF-QR-05, junto con el tamaño minimo garantizado.
              *
-             * El doc 02 §5.1 justifica el margen: «es lo que permite que una
-             * tarjeta sobreviva una temporada de uso diario en una cocina, con
-             * roces, grasa y dobleces». `L` o `M` producen un QR mas pequeño y
-             * una tarjeta que deja de leerse en marzo; `H` obliga a un modulo mas
+             * El 25 % del nivel Q es la REDUNDANCIA que el simbolo lleva dentro,
+             * no lo que el decodificador recupera, y cuanto aguanta una tarjeta
+             * depende sobre todo del soporte fisico, que elige el cliente: el
+             * producto NO promete ninguna tolerancia al desgaste (decision del
+             * 18-09-2026, doc 01 §3.2 y doc 07 §6 A-14). La respuesta a una
+             * tarjeta ilegible es reponerla y fichar entretanto con el PIN de
+             * respaldo (RF-AT-11). Aun asi, el nivel importa: `L` o `M` producen
+             * un QR mas pequeño y con menos margen, y `H` obliga a un modulo mas
              * grande sin ganancia practica sobre `Q` para 47 caracteres.
              *
              * Es configuracion y no una constante (regla dura 13) porque un

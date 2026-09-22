@@ -68,7 +68,7 @@
     },
     "rejected": {
       "title": "Código no válido",
-      "body": "No se ha podido registrar el fichaje. Avisa a recepción."
+      "body": "Puede que te hayas equivocado. Inténtalo de nuevo; si persiste, avisa a recepción."
     },
     "srAnnouncement": "Resultado del escaneo"
   },

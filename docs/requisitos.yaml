@@ -67,7 +67,7 @@
 - { id: RF-QR-02,  fase: 1, titulo: "El sistema valida la firma del payload antes de resolver el empleado" }
 - { id: RF-QR-03,  fase: 1, titulo: "Las credenciales son revocables y reemitibles (pérdida, robo, deterioro, baja) con invalidación inmediata de la anterior" }
 - { id: RF-QR-04,  fase: 1, titulo: "Generación de tarjetas imprimibles en PDF: formato tarjeta de crédito (85,6 × 54 mm) y hoja A4 con varias por página" }
-- { id: RF-QR-05,  fase: 1, titulo: "El QR se genera con corrección de errores nivel Q y tamaño mínimo garantizado, para tolerar el desgaste de una tarjeta en uso diario durante una te..." }
+- { id: RF-QR-05,  fase: 1, titulo: "El QR se genera con corrección de errores nivel Q y tamaño mínimo garantizado." }
 - { id: RF-QR-06,  fase: 1, titulo: "Registro de entrega: RRHH marca la tarjeta como entregada, con fecha y responsable" }
 - { id: RF-QR-08,  fase: 1, titulo: "Panel de estado de credenciales: quién la tiene emitida, pendiente de imprimir, pendiente de entregar o revocada" }
 - { id: RL-01,     fase: 1, titulo: "Registro diario con hora concreta de inicio y fin de la jornada de cada persona trabajadora" }

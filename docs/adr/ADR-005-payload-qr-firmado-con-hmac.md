@@ -37,7 +37,7 @@ sig      16 caracteres base64url de HMAC-SHA256(key[key_id], "FH1." + key_id + "
 Ejemplo: FH1.a3.7QK2mXpR9vLdN4tZbYcF1w.k9Xm2pQrT5vN8wLa
 ```
 
-Unos 50 caracteres, que caben en un QR versión 3 con **corrección de errores nivel Q** (RF-QR-05): tolera un 25 % de degradación, que es lo que permite a una tarjeta sobrevivir una temporada en una cocina.
+Unos 50 caracteres, que caben holgadamente en un QR con **corrección de errores nivel Q** y el tamaño mínimo garantizado de RF-QR-05. La **versión** del símbolo no la fija este ADR: la determina el codificador a partir de la longitud del payload, y lo que aquí se decide es el nivel de corrección. El producto **no promete ninguna tolerancia al desgaste** —el soporte físico lo elige el cliente—: una tarjeta que deja de leerse se repone, y hasta que llega la nueva se ficha con el PIN de respaldo (RF-AT-11).
 
 **La verificación en el servidor es una secuencia fija de seis pasos** (§5.2): prefijo, resolución de la clave por `key_id`, recálculo del HMAC comparado en tiempo constante con `hash_equals`, búsqueda de la credencial por **hash** del token —nunca se almacena el token en claro—, comprobación de revocación y de estado del empleado, y **respuesta idéntica y de igual duración para todos los rechazos** (RS-03, regla dura 17). El detalle solo va al log del servidor y a `scan_events.result`.
 

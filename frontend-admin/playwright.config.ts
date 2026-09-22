@@ -22,7 +22,9 @@ export default defineConfig({
   outputDir: './test-results',
   fullyParallel: false,
   forbidOnly: process.env['CI'] === 'true',
-  retries: process.env['CI'] === 'true' ? 1 : 0,
+  // Una prueba intermitente es un defecto y se arregla, no se reintenta
+  // (doc 02 §9.2 «cero pruebas intermitentes»; decision 9 de la ficha 3.7).
+  retries: 0,
   workers: 1,
   reporter: process.env['CI'] === 'true' ? [['github'], ['list']] : [['list']],
   timeout: 45_000,

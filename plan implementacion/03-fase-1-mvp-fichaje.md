@@ -1309,7 +1309,7 @@ Resultado esperado: el E2E completo en verde; el tramo consolidado con el `occur
 
 **Pasos.** Sin skill asignada. Orden derivado del **ciclo de vida del §5.5**, del prompt §6.3 y del Anexo C del doc 02.
 
-1. **Generación del QR** con `endroid/qr-code` ^5.0 (§3.1), **corrección de errores nivel Q** y tamaño mínimo garantizado (RF-QR-05, `QR_ERROR_CORRECTION=Q` del Anexo B). El §5.1 justifica el margen: *«es lo que permite que una tarjeta sobreviva una temporada de uso diario en una cocina, con roces, grasa y dobleces»*.
+1. **Generación del QR** con `endroid/qr-code` ^5.0 (§3.1), **corrección de errores nivel Q** y tamaño mínimo garantizado (RF-QR-05, `QR_ERROR_CORRECTION=Q` del Anexo B). El §5.1 justificaba el margen: *«es lo que permite que una tarjeta sobreviva una temporada de uso diario en una cocina, con roces, grasa y dobleces»* — **(promesa retirada el 18-09-2026, tarea 3.7: el producto no promete tolerancia al desgaste; la respuesta es reposición y PIN de respaldo. Doc 07 §6 A-14.)**
 2. **PDF con `spatie/laravel-pdf`** (Browsershot, §3.1) en los **dos formatos** de RF-QR-04 y del prompt §6.3:
    - **Formato tarjeta de crédito: 85,6 × 54 mm**
    - **Hoja A4 con varias tarjetas por página**

@@ -12,19 +12,43 @@ import { expect, test } from '@playwright/test'
 import { stubKioskApi, stubScanApi } from './support/kiosk'
 import { announceOnline, readQueue, seedQueue } from './support/offlineQueue'
 import { stubPairing } from './support/pairing'
+import { expectTouchTargets } from './support/touchTargets'
 
 const DEVICE_ID = 'e2e-diagnostics-device'
 const SERVICE_CODE = '48392017'
 
-/** Mantiene pulsado el reloj los 3 s que exige `useLongPress` (decision 8). */
+/**
+ * Que paginas ya tienen el reloj falso instalado: `page.clock.install()`
+ * fija el instante de partida en el momento de la llamada, asi que volver a
+ * instalarlo en una SEGUNDA apertura del diagnostico (la prueba «sin red, la
+ * pantalla se sigue abriendo» abre dos veces) reinicia ese instante y el
+ * reloj de la pagina retrocede los 3 s que ya habian avanzado en la primera
+ * apertura -hallazgo de la revision QA sobre `3d004f4`-. Se instala UNA vez
+ * por prueba; las aperturas siguientes solo adelantan (`runFor`) el reloj ya
+ * instalado.
+ */
+const clockInstalledOn = new WeakSet<Page>()
+
+/**
+ * Mantiene pulsado el reloj los 3 s que exige `useLongPress` (decision 8,
+ * tarea 3.3) -sin esperarlos de verdad (decision 10, tarea 3.7): el gesto en
+ * si (`mouse.down()`/`mouse.up()`) sigue siendo real, pero el temporizador
+ * `setTimeout` de `useLongPress.ts` que cuenta los 3 000 ms se adelanta con
+ * `page.clock`, que lo dispara al instante en vez de esperar un runner que
+ * puede ir cargado. `resume()` devuelve la pagina al tiempo real justo
+ * despues: el resto de la prueba (latidos, cola offline) no se ve afectado.
+ */
 async function openDiagnostics(page: Page): Promise<void> {
   const trigger = page.getByTestId('diagnostics-trigger')
   await trigger.hover()
+  if (!clockInstalledOn.has(page)) {
+    await page.clock.install()
+    clockInstalledOn.add(page)
+  }
   await page.mouse.down()
-  // 600 ms de holgura sobre los 3 000 ms del gesto: en un runner cargado el
-  // `mouse.up()` no debe adelantarse al temporizador de `useLongPress`.
-  await page.waitForTimeout(3_600)
+  await page.clock.runFor(3_000)
   await page.mouse.up()
+  await page.clock.resume()
   await expect(page).toHaveURL(/\/diagnostics$/)
 }
 
@@ -287,3 +311,20 @@ test.describe('accesibilidad (RF-KI-08, RF-KI-06)', () => {
     },
   )
 })
+
+test(
+  'los objetivos tactiles del contenido del diagnostico miden al menos 48 px',
+  { tag: ['@RF-KI-08', '@RF-KI-06'] },
+  async ({ page }) => {
+    await stubKioskApi(page, { serviceCode: { deviceId: DEVICE_ID, code: SERVICE_CODE } })
+    await stubScanApi(page, { outcome: 'offline' })
+    await page.goto('/')
+    await openDiagnostics(page)
+    await enterServiceCode(page, SERVICE_CODE)
+    await expect(page.getByTestId('diagnostics-content')).toBeVisible()
+
+    await expectTouchTargets(
+      page.getByTestId('diagnostics-content').locator('button:visible, a[href]:visible'),
+    )
+  },
+)

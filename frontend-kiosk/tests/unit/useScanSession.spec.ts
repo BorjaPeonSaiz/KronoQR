@@ -23,6 +23,10 @@ function accepted(scanId: string): ScanConfirmation {
   }
 }
 
+function rejected(scanId: string): ScanConfirmation {
+  return { kind: 'rejected', scanId, occurredAt: at }
+}
+
 function soundSpy(): { sound: ScanSound; played: FeedbackTone[] } {
   const played: FeedbackTone[] = []
   return {
@@ -89,6 +93,19 @@ describe('sesion de escaneo', () => {
     // Un unico pitido por fichaje: el segundo llegaria cuando la persona ya se
     // ha dado la vuelta.
     expect(played).toEqual(['pending'])
+  })
+
+  it('suena el tono de error cuando el desenlace real es un rechazo (opcion B, doc 01 §6.5)', () => {
+    const { sound, played } = soundSpy()
+    const session = useScanSession({ pipeline: pipelineReturning(pending('s1')), sound })
+
+    session.accept('FH1.a3.token.sig')
+    session.settle(rejected('s1'))
+
+    expect(session.confirmation.value?.kind).toBe('rejected')
+    // El «pendiente» inicial no decia nada del resultado: el rechazo SI suena,
+    // porque es la unica vez que el empleado oye que algo salio mal.
+    expect(played).toEqual(['pending', 'error'])
   })
 
   it('una respuesta tardia NO pisa la confirmacion de la siguiente persona', () => {

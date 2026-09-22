@@ -149,7 +149,7 @@ Bloquearlo dejaría al hotel incumpliendo la ley por una acción del proveedor, 
 | Emisión | Cada empleado tiene una credencial firmada, sin datos personales en el código |
 | Impresión | PDF en formato tarjeta de crédito (85,6 × 54 mm) y hoja A4 con varias por página |
 | Diseño | Nombre, departamento, centro y QR. Con el logotipo y colores del hotel |
-| Resistencia | Nivel de corrección de errores alto: la tarjeta sigue leyéndose con hasta un 25 % de deterioro, que es lo que permite que sobreviva una temporada en una cocina |
+| Resistencia y reposición | El código se imprime con **corrección de errores de nivel alto (Q)** y un tamaño mínimo garantizado. Cuánto aguanta depende del soporte que elija el hotel —papel, cartulina o PVC plastificado—, así que **el producto no promete ninguna tolerancia al desgaste**: una tarjeta que deja de leerse se repone, cuesta alrededor de un euro y se revoca, emite e imprime el mismo día. Mientras tanto, esa persona **ficha con su código de empleado y su PIN**, así que no hay ni una jornada sin registro |
 | Registro de entrega | Fecha y responsable de la entrega, con traza |
 | Revocación | Pérdida, robo o baja: la tarjeta deja de funcionar de inmediato y se emite otra el mismo día |
 | Panel de estado | Emitida / pendiente de imprimir / pendiente de entregar / revocada. Responde a "¿quién no puede fichar todavía?" |

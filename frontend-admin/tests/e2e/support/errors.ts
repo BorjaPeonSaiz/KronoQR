@@ -156,22 +156,57 @@ export async function stubErrorEventsApi(
   )
 }
 
+/** Un elemento del lote (`ClientErrorReportPayload`, `clientErrorTransport.ts`). */
+export interface RecordedClientError {
+  readonly code?: string
+  readonly occurred_at?: string
+  readonly app_version?: string
+  /** El mensaje saneado viaja aqui (`context.message`), nunca como campo propio. */
+  readonly context?: Readonly<Record<string, string | number | boolean>>
+}
+
+/** El cuerpo tal cual lo manda el transporte: siempre un lote, aunque sea de uno. */
+interface RecordedClientErrorBatch {
+  readonly errors?: readonly RecordedClientError[]
+}
+
 export interface ClientErrorsEndpointStub {
   /** Cuantas peticiones ha recibido `POST /api/v1/client-errors`. */
   readonly count: () => number
+  /** Los mensajes saneados de todos los lotes recibidos, en orden de llegada. */
+  readonly messages: () => readonly string[]
 }
 
 /**
  * Intercepta `POST /api/v1/client-errors` (el canal del panel y del portal,
  * decision 7 de la ficha 5.12) y responde SIEMPRE `500`: sirve para comprobar
  * que un fallo al reportar un error de cliente no bloquea el panel y que el
- * transporte no reintenta en bucle (`clientErrorTransport.ts`).
+ * transporte no reintenta en bucle (`clientErrorTransport.ts`), y para leer el
+ * cuerpo que de verdad ha mandado el transporte (la captura de un error real).
  */
 export function stubClientErrorsEndpoint(page: Page): ClientErrorsEndpointStub {
   let count = 0
+  const messages: string[] = []
 
   void page.route('**/api/v1/client-errors', async (route: Route) => {
     count += 1
+
+    let body: RecordedClientErrorBatch | null = null
+
+    try {
+      body = route.request().postDataJSON() as RecordedClientErrorBatch
+    } catch {
+      body = null
+    }
+
+    for (const item of body?.errors ?? []) {
+      const message = item.context?.['message']
+
+      if (typeof message === 'string') {
+        messages.push(message)
+      }
+    }
+
     await route.fulfill({
       status: 500,
       contentType: 'application/problem+json',
@@ -183,5 +218,5 @@ export function stubClientErrorsEndpoint(page: Page): ClientErrorsEndpointStub {
     })
   })
 
-  return { count: () => count }
+  return { count: () => count, messages: () => messages }
 }

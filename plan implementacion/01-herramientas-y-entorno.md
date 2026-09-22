@@ -43,7 +43,7 @@ Verificado ejecutando comandos en la máquina, no supuesto.
 | Git 2.54.0.windows.1 | ✅ instalado | — |
 | Docker 29.5.3 + Docker Compose v5.1.4 | ⚠️ instalado, daemon PARADO | `docker info` falla: `npipe:////./pipe/dockerDesktopLinuxEngine` no responde |
 | WSL 2 | ⚠️ presente | Única distro: `docker-desktop` (Stopped). Sin distro Linux de usuario |
-| Node 24.17.0 + npm 11.13.0 | ✅ instalado | Cubre Vite 8, Vitest 4, Playwright; `vue-i18n` 11 exige Node ≥ 22 |
+| Node 24.17.0 + npm 11.13.0 | ✅ instalado | Cubre Vite 8, Vitest 5, Playwright; `vue-i18n` 11 exige Node ≥ 22 |
 | PHP 8.3.31 CLI (ZTS, VC++ 2019 x64, WinGet) | ⚠️ versión inferior | El doc 02 §3.1 pide 8.4 (mínimo 8.3). Extensiones presentes: bcmath, curl, gd, intl, mbstring, openssl, zip. **Faltan: pdo_pgsql, pgsql, redis, sodium** |
 | Composer | ❌ no instalado | — |
 | GNU Make | ❌ no instalado | **Bloquea los comandos `make up`, `make test`, `make quality`, `make mutate`, `make e2e` de `CLAUDE.md`** |

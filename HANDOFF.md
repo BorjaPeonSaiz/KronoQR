@@ -7,6 +7,44 @@
 
 ## Estado y objetivo actual
 
+**Rama `feat/tarea-3.7-e2e-accesibilidad` (desde el commit de RN-18 `d326406`; PR #69 abierta con CI manual 35340175817 en verde,
+pendiente de integrar). Tarea 3.7 «E2E con cámara simulada y suite de accesibilidad» (RQ-04, RQ-05, RF-QR-05, RS-12, RF-AT-11,
+RF-KI-06) IMPLEMENTADA, REVISADA (dos vueltas: `seguridad-cumplimiento`, `ui-ux`, `qa-testing`) y PROBADA el 18-09-2026; verificada
+de nuevo íntegra el 22-09-2026 antes del commit.** Trece decisiones en la ficha (plan 06 → «Tarea 3.7» → «Decisiones tomadas»; las 3
+y 4 se corrigieron al ejecutar) más la tabla de 27 recorridos críticos y las comprobaciones manuales en tablet. Era **tarea de cierre,
+no de construcción**: cámara simulada, vídeo degradado, ciclo offline y axe ya existían. Lo que importa: **`RQ-04` reetiquetado** (13
+pruebas del asistente → `@RF-PD-03`, `SetupWizardTest` sin él; `@RQ-04` solo en las del quiosco que decodifican vídeo: `scan`,
+`degraded`, `worn`); **bloqueo del PIN** (`pin-lockout.spec.ts`, `@RS-12 @RF-AT-11`): el contrato ya decía que el bloqueo comparte el
+`422` genérico —un `429` con `Retry-After` sería el oráculo de RS-03—, así que las E2E prueban el comportamiento real y un control
+negativo con el oráculo prohibido en el doble; **desgaste repartido** (`KIOSK_E2E_QR_WEAR` con semilla, proyecto `kiosk-qr-worn`,
+`worn.spec.ts`): la medición inicial contaba la zona tranquila (símbolo real versión 5/134 palabras, no 7/196) y se rehizo con asertos
+en el generador; **decisión del usuario: el producto no documenta tolerancia al desgaste** (reposición + PIN de respaldo; el 25 %
+retirado de doc 05, ADR-005, doc 04, doc 02 y doc 01; cifras solo en el README de fixtures); **canal sonoro**: la tarjeta nunca sonaba
+diferenciada (`settle()` no reproducía el desenlace; código muerto en `useScanSound`) → opción B de `ui-ux`: tono de error al
+asentarse un rechazo, sin doble pitido en aceptado, con doble de `AudioContext` en E2E; axe también sobre rechazos y bloqueo;
+objetivos táctiles ≥ 48 px en PIN, bloqueo y diagnóstico (`support/touchTargets.ts`); texto ≥ 24 px en todas las variantes; contraste
+de la banda sobre vídeo calculado en doc 06; **`retries: 0`** en las tres apps y `waitForTimeout` fuera (regla de ESLint
+`kronoqr/e2e-sin-esperas-por-reloj` en `tests/e2e/**` de las tres SPA); **Vitest 5** en los cuatro paquetes sin tocar una spec (lock
+regenerado desde `node:24-alpine`, `@axe-core/playwright` declarado en el portal, `dependabot.yml` sin `ignore`);
+`QrFixturePayloadShapeTest` ata el formato del fixture al del producto; doc 02 §9.1 «~25 recorridos críticos»; paso 9 de la ficha: ⑦
+vive en `ci.yml`; doc 07 A-14 (tarjetas desgastadas, resuelto) y A-15 (`fake-timers` vendorizado). Trampas nuevas: con `page.clock`,
+un `setTimeout` que lanza no dispara `window.error` (usar `ErrorEvent`); dos pruebas del menú del panel quedan sin etiqueta porque
+no existe requisito con id para la navegación. Cifras (22-09-2026, esta máquina): `docs:consistency` sin divergencias,
+`qa:traceability --check` en verde, **matriz 3478 (Pest 3229, Playwright 244, k6 5)** —la revisión QA contó 235 de Playwright sobre el
+wip; las 9 de más son las que añadió la segunda vuelta (accesibilidad del quiosco, `scan`, `diagnostics`, `pin`, errores del panel y del
+portal)—; Pint y PHPStan 9 sin errores; Architecture 576 (+ `SourceDiscoveryTest` conocido del bind mount); `QrPayloadTest` 19 y `SetupWizardTest` 27 (las dos suites que la tarea toca en backend);
+lint, `vue-tsc` y unitarias: web-kit 212, quiosco 505, panel 547, portal 81; E2E sin reintentos: quiosco 86 en 182 s, panel 132 en
+117 s, portal 30 en 21 s (presupuesto de ⑦: 300 s por app); las 246 E2E del árbol son 244 etiquetadas + las 2 del menú.
+
+**Confirmada en commit único (`feat(pruebas): tarea 3.7 …`) sobre `d326406`, rama empujada, CI manual lanzada tras el push y PR
+abierta contra `main` (ver el número en la PR).** **Siguiente acción:** el usuario integra primero la **PR #69 de RN-18** (con migración:
+tras integrar, `git pull` y `make up`) y después la PR de la 3.7 (sin migración; lleva el lock de npm regenerado: `npm ci` en la raíz
+tras el `git pull`), las dos con *merge commit*, y borra las ramas; el worktree `KronoQR-rn18` ya está retirado.
+Después, la **3.8** «Revisión de seguridad externa y corrección de hallazgos» (`seguridad-cumplimiento`; RS-11 con una sola prueba y
+las «pruebas de abuso» anotadas al cerrar la 3.6 son su punto de partida; doc 07 A-8 sobre TLS sin verificación es candidata), o, si
+se prioriza lo prometido en el doc 05, la **3.10** «Registro de ausencias» (3–4 h, desbloquea el apartado pendiente de las guías de
+RRHH).
+
 **Rama `feat/fichaje-irreconciliable` (desde la rama de restos de la 3.6, PR #68 ya integrada en `main`). Tarea ad hoc
 «fichaje irreconciliable», RN-18 (derivada de la 3.6; decisión 20 de su ficha), IMPLEMENTADA, REVISADA (tres vueltas) y PROBADA el 18-09-2026.** Once decisiones en Engram
 (`attendance/fichaje-irreconciliable`, `…/ejecucion`); ejecutada con la skill `/nueva-regla-de-negocio` (documentar → probar →
@@ -659,6 +697,23 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 
 ### Por tarea
 
+- **3.7 (restos, 18/22-09-2026):** la **licencia** (activación fuera del asistente, renovación, degradación honesta: RF-PD-04/05) no tiene
+  recorrido E2E, solo una pasada de axe (fila «pendiente» de la tabla de recorridos de la ficha; la regla dura 15 tampoco tiene E2E:
+  propuesta `admin/license.spec.ts` + un fichaje del quiosco con licencia caducada, `producto-licencia` + `qa-testing`); una tarjeta
+  tan deteriorada que ZXing nunca decodifica deja el quiosco en `scan-idle` en silencio (cumple la regla 19 pero no dice nada:
+  candidato a aviso pasivo «¿No te reconoce? Usa tu PIN» tras N s sin lectura, tarea ad hoc de `frontend-quiosco` + `ui-ux`); las
+  dos pruebas del menú lateral de `shell.spec.ts` siguen sin etiqueta (no existe requisito con id para la navegación del panel: darlo
+  de alta en doc 01 si se quiere trazar); `@sinonjs/fake-timers` va vendorizado dentro de `vitest` y ni `npm audit` ni Dependabot lo
+  ven (control: el `integrity` del tarball y el grupo `vitest-mayor`; doc 07 A-15); las tres optimizaciones que sugiere Vitest 5
+  (`fsModuleCache`, `vmThreads`, `isolate: false`) quedan sin evaluar a propósito (comparten estado entre ficheros); el `type-check`
+  de quiosco y panel incluye `tsconfig.e2e.json`; el presupuesto de ⑦ sigue siendo aviso (300 s por app); cobertura y MSI oficiales
+  se leen de la CI; comprobaciones en tablet real (ficha, decisión 12 ampliada por `ui-ux`: extractores de cocina, tarjeta de una
+  temporada, contraluz) siguen siendo manuales; el doc 04/ADR-014 no dice nada del acabado de la tarjeta (mate/brillo) ni de cuándo
+  reponerla por criterio visual: decisión del cliente, sin promesa; la regla ESLint `kronoqr/e2e-sin-esperas-por-reloj` va replicada
+  byte a byte en los tres `eslint.config.js` (no hay config compartida de ESLint) y no ve un `setTimeout` envuelto en un helper;
+  `config/identity.php` conserva un comentario largo sobre la redundancia del nivel Q (explicación, no promesa); los seis requisitos
+  de la Fase 3 sin prueba (RF-GP-04, RF-IN-06/07, RF-KI-07, RF-PR-05, RN-16) son de 3.9–3.12 y `RS-11` con una sola prueba es de la
+  3.8 (decisión 13).
 - **RN-18 (restos, 18-09-2026):** la salvaguarda de la carrera y el puerto `closedEntryEndingAfter` no tienen unitaria de Application
   (el handler exige un `ConnectionInterface` falso; lo determinista lo cubren dos Feature con `StaleOpenWorkDayRepository`); la
   E2E de la bandeja del panel no usa dobles por tipo (solo `OPEN_INCIDENT`); `verify-after-load.php` compara `filas >= contadas`
@@ -720,7 +775,7 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   en los cuatro paquetes. **Decisión del usuario (16-09): APLAZAR.** `dependabot.yml` ignora las mayores de `vitest` y `@vitest/*`
   y las agrupa (`vitest-mayor`) para que, al levantar el `ignore`, lleguen en una sola PR coherente; #60 y #61 cerradas. La
   migración a Vitest 5 se aborda a propósito en la 3.7 o al cierre de la Fase 3 (`qa-testing`, rama única con los dos paquetes,
-  lock regenerado desde Linux). Recordar la trampa del lock (`npm install` solo desde Linux y sin `node_modules`).
+  lock regenerado desde Linux). Recordar la trampa del lock (`npm install` solo desde Linux y sin `node_modules`). **Hecho en la 3.7 (18-09-2026):** Vitest 5 en los cuatro paquetes, `ignore` levantado y grupo `vitest-mayor` conservado.
 - **3.2 (restos, 10-09-2026):** `amtool check-config` solo corre en `make observability-check`, en la CI y al arrancar el contenedor
   (`AlertmanagerConfigTest` valida con el parser de Symfony, más laxo); `render-config.sh` sin prueba de sus `die` de plantilla
   ausente; las variables de plantilla de Grafana (`label_values`) y los `legendFormat` no se contrastan con el §8.2 ni con la regla
@@ -849,6 +904,23 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   asumir que vuelve a ser invisible.
 
 ## Trampas del entorno — leer antes de operar
+
+- **`QRCodeWriter.encode(…, 0, 0)` de `@zxing/library` devuelve la matriz CON zona tranquila (4 módulos por lado)**: un guion que
+  derive la versión del símbolo del ancho de esa matriz se equivoca dos escalones (45 → versión 7 cuando el símbolo real de 37 es
+  versión 5) y «daña» celdas del margen. Restar la zona tranquila y afirmar que cada celda tocada cae dentro del símbolo (3.7).
+- **El 25 % del nivel Q es redundancia, no tolerancia**: ante errores de posición desconocida (un módulo sucio no es un borrado
+  conocido) Reed-Solomon corrige como máximo la mitad (medido: 20/134 palabras decodifica siempre, 24 nunca). No prometer
+  porcentajes de desgaste; el producto repone la tarjeta y mientras tanto se ficha con PIN (3.7).
+- **Con `page.clock` instalado, `window.setTimeout(() => { throw … }, 0)` no produce evento `error` de `window`** (el reloj falso
+  ejecuta el callback por llamada directa): provocar errores globales con `window.dispatchEvent(new ErrorEvent('error', …))`;
+  `page.clock.install()` no pausa el reloj, así que `runFor(INTERVALO - 1)` no demuestra nada (usar `pauseAt` o afirmar un reintento
+  por intervalo); la cámara falsa NO pasa por temporizadores de página, así que `page.clock` no sirve para esperar fotogramas (3.7).
+- **`npm ci` de otro agente en el mismo árbol reinstala `node_modules` entero** y tumba cualquier `vitest`/`playwright` en vuelo:
+  coordinar la migración de dependencias antes de lanzar E2E en paralelo (3.7).
+- **Un commit provisional cuyo mensaje empieza por `#` se vuelve vacío al reaplicarlo en un rebase** (git lo trata como comentario):
+  `git -c core.commentChar=';' rebase --continue` o un mensaje que no empiece por `#` (3.7).
+- **Playwright local en Windows: los navegadores viven en `~/AppData/Local/ms-playwright` y el binario en el `node_modules` de la raíz**
+  (workspace de npm): `npm --prefix frontend-x run test:e2e` funciona; buscar `frontend-x/node_modules/.bin/playwright` no (22-09).
 
 - **`shift_entries_no_overlap` cruza jornadas y el agregado `WorkDay` solo ve la suya**: una regla enunciada sobre «el turno abierto»
   o sobre «los tramos de la jornada» deja fuera el turno de noche cerrado de la jornada anterior; en el camino de apertura hay que

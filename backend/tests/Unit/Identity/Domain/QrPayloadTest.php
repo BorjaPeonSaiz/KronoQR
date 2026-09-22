@@ -71,8 +71,8 @@ it('devuelve null en lugar de lanzar cuando quien lee es el verificador', functi
 })->group('RS-03');
 
 it('mantiene las longitudes que hacen que el QR quepa en una version 3', function (): void {
-    // 46 caracteres: el margen que permite corregir errores a nivel Q y que una
-    // tarjeta sobreviva una temporada en una cocina (§5.1).
+    // 46 caracteres, la longitud que fija el §5.1: cabe con correccion de
+    // errores nivel Q. No hay tolerancia al desgaste prometida (doc 01 §3.2).
     expect(QrPayload::PREFIX)->toBe('FH1')
         ->and(QrPayload::KEY_ID_LENGTH)->toBe(2)
         ->and(QrPayload::TOKEN_LENGTH)->toBe(22)
