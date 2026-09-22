@@ -84,9 +84,8 @@ function bloqueDeVolumenesNombrados(string $compose): string
 it('node-kiosk monta la raiz del workspace, no frontend-kiosk suelto', function (): void {
     $bloque = bloqueDeServicioNode('infra/compose.dev.yaml', 'node-kiosk');
 
-    expect($bloque)
-        ->toContain('- ..:/app')
-        ->not->toContain('../frontend-kiosk:/app');
+    expect($bloque)->toContain('- ..:/app');
+    expect($bloque)->not->toContain('../frontend-kiosk:/app');
 })->group('RNF-M-04', 'RNF-M-06');
 
 it('node-kiosk arranca Vite desde working_dir dentro del workspace', function (): void {
@@ -121,9 +120,9 @@ it('node-admin y node-portal comparten el mismo arbol del workspace, sin instala
     expect($bloque)
         ->toContain('working_dir: /app/frontend-'.$frontend)
         ->toContain('volumes: *node-workspace-volumes')
-        ->not->toContain('NODE_WORKSPACE_INSTALLER')
         ->toContain('depends_on:')
         ->toContain('node-kiosk');
+    expect($bloque)->not->toContain('NODE_WORKSPACE_INSTALLER');
 })->with([
     ['node-admin', 'admin'],
     ['node-portal', 'portal'],
@@ -150,7 +149,6 @@ it('el entrypoint de node ya no invoca npm con --prefix (roto por el workspace d
     // cabecera de este mismo fichero la menciona a proposito al explicar el
     // fallo -y una prueba que no distinguiera las dos cosas se rompería con
     // su propia documentacion-.
-    expect($entrypoint)
-        ->not->toContain('npm ci --prefix')
-        ->not->toContain('npm --prefix');
+    expect($entrypoint)->not->toContain('npm ci --prefix');
+    expect($entrypoint)->not->toContain('npm --prefix');
 })->group('RNF-M-04', 'RNF-M-06');
