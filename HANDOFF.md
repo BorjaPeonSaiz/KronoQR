@@ -7,6 +7,40 @@
 
 ## Estado y objetivo actual
 
+**Rama `feat/tarea-3.8-revision-seguridad` (desde `main` `3bbf478`, PR #72 de la 3.7 ya integrada). Tarea 3.8 «Revisión de seguridad
+externa y corrección de hallazgos» (RS-11) IMPLEMENTADA, REVISADA y PROBADA el 22-09-2026.** Veintiuna decisiones en la ficha (plan
+06 → «Tarea 3.8» → «Decisiones tomadas»). Lo que importa: **la revisión externa la hace un tercero y RS-11 queda preparada, no
+cerrada** (decisión 1): `seguridad-cumplimiento` hizo en solo lectura la revisión interna a nivel ASVS 2 (0 BLOQUEANTE, 6 REVISAR, 7
+OBSERVACIÓN, más H-14 destapado por la evidencia de la CI) y el informe vive en **`docs/seguridad/revision-interna-asvs-2026-09.md`**
+con `paquete-revisor.md` (calendario: externa antes de la primera versión comercial; siguiente anual con límite 2027-09-22) y
+`evidencia/2026-09-22.md` (composer/npm audit, Semgrep propio y comunitario, gitleaks 264 commits, Trivy fs: todo 0; `docs/seguridad/`
+nunca entra en `package.sh`). Cada hallazgo se cerró por el agente que corresponde con una prueba que falla antes (§8 del informe):
+**H-01** dieciséis rutas de gestión sin zona (`throttle:management` en el grupo `employees:*`, `legal-export` y `auth/me`; `logout`
+exenta con motivo; `RouteRateLimitZonesTest` enumera el router, Feature porque Architecture no arranca el framework);
+**H-02** `ScanBatchAuthorizationTest` (11: `/scan/batch` no tenía ninguna prueba negativa), `AuthorizationNegativeTest` +28 casos;
+**H-03** `identity:deactivate-user` e `identity:reset-password` con asientos `user.deactivated`/`user.password_reset`, revocación de
+tokens, la sesión abierta deja de valer en la petición siguiente, el alta pública del primer administrador sigue cerrada, unitarias
+con MSI 100 % sobre los dos handlers, guías sin `psql` (la pantalla del panel sigue siendo decisión de producto); **H-04** un asiento
+`license.plan_exceeded` por importación; **H-05** módulo blackbox `http_2xx_tls_verified` contra `APP_URL` (omitido con
+`TLS_ALLOW_SELF_SIGNED`; `prometheus.yml` es ahora plantilla con `render-config.sh` propio) y alerta `CertificadoTlsNoVerificable`;
+**H-06** SRI retirado del doc 02 §7.1; **H-07** `BladeTemplatesTest` + `vue/no-v-html: 'error'` explícito; **H-08** escenario k6
+`reject-out-of-order` con veredicto informativo `RS-03-RN-18`; **H-09** DAST reaceptado con dueño; **H-10** alertas
+`SaturacionDelBordeEnElFichaje` y `RechazoDeFirmaQr` con runbooks, `T1550.001` sin asiento (ADR-037, A-16); **H-11** `RS-11` mal
+etiquetado → `RL-19` y `SecurityReviewEvidenceTest` (8); **H-12** once filas, no doce; **H-13** `needsRehash` en gestión y PIN;
+**H-14** la vuelta atrás del actualizador nunca escribía `system.restored_from_backup` (`artisan list | grep -q` bajo `pipefail`,
+ver Trampas): `kq_app_knows_command` en `update.sh` y en U3 de `ci.yml` con cuatro pruebas en `UpdateScriptTest`. Docs: doc 02
+§7.1/§9.4 (el 403 escribe asiento solo por alcance)/§11 (`seguridad-cumplimiento` no escribe)/§11.6.5; doc 07 §6 fila por fila;
+doc 01 §8.1 nota ATT&CK; runbooks `saturacion-del-borde.md`, `renovacion-certificado-tls.md` §3.4, `ataque-a-credenciales.md` §8,
+`brecha-de-seguridad.md`. Cifras (22-09-2026, esta máquina): `sh-lint`, `api-lint`, Pint, PHPStan 9, Deptrac (0/0), `observability-check` (13 ficheros de reglas, 14 de pruebas), `docs:consistency` y `qa:traceability --check` en verde; **matriz 3551 (Pest 3301, Playwright 244, k6 6)**; Unit 2018 (6,2 s con la máquina cargada: presupuesto de 5 s a remedir en reposo), Integration 663, Contract 60, Feature 1813, Architecture 589 (+ `SourceDiscoveryTest` conocido); mutación acotada: 17/17 en los dos handlers de cuentas; k6 `aggregate.test.js` 38; lint, `vue-tsc` y unitarias de las SPA: web-kit 212, quiosco 505, panel 547, portal 81; evidencia automática toda a 0 (`docs/seguridad/evidencia/2026-09-22.md`).
+
+**Confirmada en commit único (`feat(seguridad): tarea 3.8 …`), rama empujada, CI manual lanzada tras el push y PR abierta contra
+`main` (ver el número en la PR).** **Siguiente acción:** mirar en esa CI el job **⑧b** (primera vez que U3 toma la rama «+1 asiento»
+de H-14) y el de seguridad; si todo está en verde, el usuario integra la PR con *merge commit* y borra la rama (sin migración; tras
+integrar basta `git pull`; los contenedores `prometheus` de dev se recrean con `make up` porque `prometheus.yml` es ahora plantilla).
+Después, la **3.9** «Informes asíncronos con enlace de descarga caducable y exportación configurable para nómina» (`backend-laravel`
++ `/informe-nuevo`, RF-IN-06/07) o la **3.10** «Registro de ausencias» (3–4 h, RF-GP-04, desbloquea el apartado pendiente de las
+guías de RRHH); las dos están prometidas en el doc 05.
+
 **Rama `feat/tarea-3.7-e2e-accesibilidad` (desde el commit de RN-18 `d326406`; PR #69 integrada en `main` el 22-09-2026, `91db9eb`). Tarea 3.7 «E2E con cámara simulada y suite de accesibilidad» (RQ-04, RQ-05, RF-QR-05, RS-12, RF-AT-11,
 RF-KI-06) IMPLEMENTADA, REVISADA (dos vueltas: `seguridad-cumplimiento`, `ui-ux`, `qa-testing`) y PROBADA el 18-09-2026; verificada
 de nuevo íntegra el 22-09-2026 antes del commit.** Trece decisiones en la ficha (plan 06 → «Tarea 3.7» → «Decisiones tomadas»; las 3
@@ -700,6 +734,25 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 
 ### Por tarea
 
+- **3.8 (restos, 22-09-2026):** **RS-11 sigue pendiente del tercero**: el informe interno, el paquete del revisor y la evidencia están,
+  la revisión externa no; **⑧b de esta rama es la primera que toma la rama «+1 asiento» de U3** (H-14): mirarla en la CI manual antes
+  de integrar; **deuda hermana de H-14**: `update.sh:1874`, `install.sh:1294` y `doctor.sh:266` siguen con `2>/dev/null || true` (sin
+  SIGPIPE, pero un fallo real de `docker compose exec` se lee como «el paquete no trae el comando»): migrarlas a `kq_app_knows_command`
+  es tarea propia con su prueba; **`baseline.json` del runner** puede avisar de regresión por el perfil nuevo (+0,5 r/s por origen del
+  escenario `reject-out-of-order`): decidir si se regenera en el mismo runner con la primera pasada de `load-test.yml`, que es también
+  la que da la cifra de A-13; **pantalla de cuentas del panel** (listar, dar de baja, restablecer contraseña) y **`identity:list-users`**
+  (la fila 17 de `endurecimiento.md` ya no enseña `psql` y el producto no enumera cuentas): decisiones de producto; **cambio de
+  contraseña por la propia persona** no existe (la de `identity:reset-password` es definitiva hasta el siguiente restablecimiento);
+  `identity:deactivate-user` identifica por correo (el docblock lo justifica) y `identity:2fa-reset` por UUID: unificar si
+  `seguridad-cumplimiento` lo prefiere; sin métrica ni span nuevos para los comandos de consola (un contador de rehash publicaría
+  cuántos hashes viejos quedan); `SaturacionDelBordeEnElFichaje` mide la capa de aplicación (no hay exportador de Nginx: los `429` de
+  `limit_req` siguen sin métrica); umbral de `RechazoDeFirmaQr` (> 20 en 15 min) sin validar con tráfico real; `render-config.sh` de
+  Prometheus sin prueba Pest propia (verificado a mano en los cuatro casos); DAST aplazado al cierre de la Fase 3 con dueño
+  (`devops-observabilidad`, `make dast` manual); las candidatas a fila nueva del modelo de amenazas (manipulación del reloj del
+  quiosco; repudio de la lectura de datos por un responsable) son decisión del usuario; `SecurityReviewEvidenceTest` no exige que los
+  `BLOQUEANTE` del informe estén cerrados (el §8 no tiene formato fijo); el escenario `reject-out-of-order` deja 50 turnos abiertos
+  permanentes en empleados reservados de k6 (deliberado, regla 5); `docs/runbooks/brecha-de-seguridad.md` menciona el paquete del
+  revisor sin enlazarlo (no viaja al cliente).
 - **3.7 (restos, 18/22-09-2026):** la **licencia** (activación fuera del asistente, renovación, degradación honesta: RF-PD-04/05) no tiene
   recorrido E2E, solo una pasada de axe (fila «pendiente» de la tabla de recorridos de la ficha; la regla dura 15 tampoco tiene E2E:
   propuesta `admin/license.spec.ts` + un fichaje del quiosco con licencia caducada, `producto-licencia` + `qa-testing`); una tarjeta
@@ -873,9 +926,9 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 - **Fase 3:** `holidayCalendar` de `CompliancePolicy` sigue sin consumidor (3.10); RN-12 ya deriva del ajuste
   `ATTENDANCE_BREAK_CLOCKING` (3.5) y el descanso intra-día de RN-10 queda fuera por decisión (3.5, decisión 9); RNF-D-03 fallback de colas Redis→BD; pasada k6 en Linux para el p95
   (RNF-P-02/06); la puerta de cobertura (`make coverage`) no corre en CI.
-- **Decisiones de producto abiertas:** **baja de cuentas de gestión** (no existe ni pantalla ni comando; `users.is_active` nunca pasa a
-  `false`; la guía de endurecimiento lo declara como límite de la 2.1 y remite al fabricante — hace falta
-  `identity:deactivate-user` o una pantalla, y el cambio de contraseña por consola); si el portal muestra incidencias (hoy `incidents: []` siempre; si
+- **Decisiones de producto abiertas:** **cuentas de gestión** (desde la 3.8 existen `identity:deactivate-user` e `identity:reset-password` por
+  consola con asiento; falta la pantalla del panel con listado de cuentas, `identity:list-users` y el cambio de contraseña por la
+  propia persona); si el portal muestra incidencias (hoy `incidents: []` siempre; si
   se activa, solo resueltas); si el `responsable_departamento` ve credenciales de su gente; códigos de
   recuperación de 2FA (hoy solo `identity:2fa-reset` por consola); si la baja revoca la credencial
   automáticamente; `POST /me/logout` (hoy el token del portal vive hasta caducar, máx. 2 h); la mitad de
@@ -907,6 +960,21 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   asumir que vuelve a ser invisible.
 
 ## Trampas del entorno — leer antes de operar
+
+- **Una tubería `cmd | grep -q` bajo `pipefail` responde NO cuando la respuesta es SÍ**: `grep -q` cierra la entrada al primer acierto, el
+  productor (el cliente de Docker volcando `artisan list --raw`) muere de EPIPE y sale 1; medido 5/40 en local. La pregunta «¿existe
+  este comando?» se hace con `kq_app_knows_command` (`infra/scripts/lib/app-commands.sh`), nunca con una tubería y nunca con
+  `2>/dev/null`. Y dos copias de la misma comprobación en `update.sh` y en `ci.yml` no son una verificación: ⑧b salía verde o rojo
+  según a cuál le tocara equivocarse (3.8, H-14).
+- **`php artisan test --filter=X` sin `--testsuite=Architecture` no encuentra las pruebas de Architecture** en el contenedor local:
+  usar `--testsuite=Architecture --filter=…` (3.8).
+- **Trivy en Windows**: `make trivy-fs` cae por el tope de 10 min del recorrido sobre el *bind mount* y por cachés que otros procesos
+  reescriben durante el escaneo (`backend/storage/framework/cache/phpstan`, `.claude/`, `backend/.deptrac.cache`): repetir a mano con
+  `--timeout 40m --skip-dirs …,backend/storage,.claude --skip-files backend/.deptrac.cache`; el veredicto que vale es el de la CI (3.8).
+- **Dos suites Pest con base de datos a la vez se pisan** (`RefreshDatabase` hace `migrate:fresh` por proceso): con varios agentes,
+  oleadas: primero los que solo ejecutan Architecture/Unit o `node --test`, después uno solo con Feature/Integration (3.8).
+- **`prometheus.yml` ya es plantilla** (`prometheus.yml.template` + `render-config.sh` propio): el job verificado contra `APP_URL` se
+  omite cuando `TLS_ALLOW_SELF_SIGNED=true` o `APP_URL` está vacía; editar la plantilla, no el fichero rendido del volumen (3.8).
 
 - **Una PR de Dependabot de npm integrada en `main` mientras otra rama lleva el lock regenerado deja esa PR en conflicto** sobre
   los `package.json` y `package-lock.json`, y el lock no se resuelve a mano: fusionar `main`, tomar los manifiestos de `main`,

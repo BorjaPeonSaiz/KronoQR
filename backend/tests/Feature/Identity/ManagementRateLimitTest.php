@@ -150,3 +150,46 @@ it('comparte el cupo entre la gestion de plantilla y la de credenciales', functi
 
     Api::as($token)->get('/api/v1/credentials/status')->assertStatus(429);
 })->group('RS-02', 'RF-QR-04');
+
+it('cubre con el mismo cupo la exportacion legal y el alta de plantilla', function (): void {
+    /*
+     * **Hallazgo H-01 de la revision interna ASVS de 2026-09.** Hasta la tarea
+     * 3.8, `GET /reports/legal-export` y las trece rutas del grupo `employees:*`
+     * —salvo `import`— no declaraban zona de limite de APLICACION: lo unico que
+     * las frenaba era Nginx, que cuenta por ORIGEN y no lee el token, de modo que
+     * en un hotel todo el personal compartia un cubo detras del mismo NAT.
+     *
+     * La ruta que mas duele de las dieciseis es la exportacion legal, porque
+     * devuelve **el registro horario completo de toda la plantilla**: sin techo
+     * por cuenta, un token de `rrhh` robado se lleva el registro entero a la
+     * velocidad de la red y ningun control de la aplicacion distingue quien lo
+     * pide ni cuantas veces.
+     *
+     * El cupo se agota con `GET /employees`, que ya llevaba zona, y se comprueba
+     * en las dos rutas que la ganan: **una sola zona para toda la gestion**, como
+     * en las dos pruebas de arriba. Un techo por ruta seria un techo que se rodea
+     * alternando URL.
+     *
+     * `RouteRateLimitZonesTest` afirma que la zona esta declarada; esta afirma
+     * que de verdad corta.
+     */
+    config()->set('identity.management.rate_limit_per_minute', 2);
+
+    WorkforceFixtures::site();
+
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RRHH));
+
+    Api::as($token)->get('/api/v1/employees')->assertStatus(200);
+    Api::as($token)->get('/api/v1/employees')->assertStatus(200);
+
+    Api::as($token)->get('/api/v1/reports/legal-export', ['from' => '2026-09-01', 'to' => '2026-09-30'])
+        ->assertStatus(429)
+        ->assertHeader('Retry-After');
+
+    // Y el alta de plantilla, que es la otra mitad del hallazgo: el grupo entero
+    // comparte zona, asi que cambiar de verbo y de recurso no devuelve cupo.
+    // Cuerpo vacio a proposito —igual que en la prueba de las correcciones—: si
+    // la peticion llegara al validador responderia `422`, asi que el `429`
+    // demuestra que el limitador contesto antes.
+    Api::as($token)->post('/api/v1/employees', [])->assertStatus(429);
+})->group('RS-02', 'RS-05', 'RL-06');

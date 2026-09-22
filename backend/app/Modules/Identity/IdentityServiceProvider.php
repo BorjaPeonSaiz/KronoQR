@@ -16,6 +16,7 @@ use App\Modules\Identity\Application\Port\DeviceTokenIssuer;
 use App\Modules\Identity\Application\Port\IdentityEventPublisher;
 use App\Modules\Identity\Application\Port\InstructionsSheetRenderer;
 use App\Modules\Identity\Application\Port\LoginAttempts;
+use App\Modules\Identity\Application\Port\ManagementAccountLifecycle;
 use App\Modules\Identity\Application\Port\ManagementAccountRegistry;
 use App\Modules\Identity\Application\Port\PortalAddressProvider;
 use App\Modules\Identity\Application\Port\QrKeyProvider;
@@ -54,10 +55,12 @@ use App\Modules\Identity\Infrastructure\Adapter\SanctumAccessTokenIssuer;
 use App\Modules\Identity\Infrastructure\Adapter\SanctumDeviceTokenIssuer;
 use App\Modules\Identity\Infrastructure\Console\CreateManagementUserCommand;
 use App\Modules\Identity\Infrastructure\Console\CredentialStatusCommand;
+use App\Modules\Identity\Infrastructure\Console\DeactivateManagementUserCommand;
 use App\Modules\Identity\Infrastructure\Console\DeliverCredentialCommand;
 use App\Modules\Identity\Infrastructure\Console\IssueCredentialCommand;
 use App\Modules\Identity\Infrastructure\Console\PrintCredentialBatchCommand;
 use App\Modules\Identity\Infrastructure\Console\PrintCredentialCommand;
+use App\Modules\Identity\Infrastructure\Console\ResetManagementPasswordCommand;
 use App\Modules\Identity\Infrastructure\Console\ResetTwoFactorCommand;
 use App\Modules\Identity\Infrastructure\Console\RetireSigningKeyCommand;
 use App\Modules\Identity\Infrastructure\Console\RevokeCredentialCommand;
@@ -66,6 +69,7 @@ use App\Modules\Identity\Infrastructure\Metrics\TextfileCredentialMetrics;
 use App\Modules\Identity\Infrastructure\Persistence\Device;
 use App\Modules\Identity\Infrastructure\Persistence\EloquentCredentialRepository;
 use App\Modules\Identity\Infrastructure\Persistence\EloquentDeviceRepository;
+use App\Modules\Identity\Infrastructure\Persistence\EloquentManagementAccountLifecycle;
 use App\Modules\Identity\Infrastructure\Persistence\EloquentManagementAccountRegistry;
 use App\Modules\Identity\Infrastructure\Persistence\EloquentTwoFactorSecrets;
 use App\Modules\Identity\Infrastructure\Persistence\EloquentUserAccounts;
@@ -161,6 +165,17 @@ final class IdentityServiceProvider extends ServiceProvider
          */
         $this->app->bind(ManagementAccountRegistry::class, EloquentManagementAccountRegistry::class);
 
+        /*
+         * Baja de la cuenta y sustitucion de su contrasena (tarea 3.8, H-03 de la
+         * revision interna ASVS de 2026-09).
+         *
+         * TERCER puerto sobre la misma tabla, y no dos metodos mas en los otros
+         * dos. `UserAccounts` es «las cuentas vistas por quien autentica» y no
+         * tiene ninguna escritura; `ManagementAccountRegistry` es el alta, y quien
+         * da de alta no tiene por que poder cerrarle la puerta a nadie.
+         */
+        $this->app->bind(ManagementAccountLifecycle::class, EloquentManagementAccountLifecycle::class);
+
         $this->app->bind(AccessTokenIssuer::class, SanctumAccessTokenIssuer::class);
 
         $this->app->bind(
@@ -195,6 +210,18 @@ final class IdentityServiceProvider extends ServiceProvider
                 // manos de un administrador comprometido, la forma mas comoda de
                 // preparar el acceso a la cuenta de otro.
                 ResetTwoFactorCommand::class,
+                /*
+                 * Ciclo de vida de la cuenta de gestion (tarea 3.8, H-03).
+                 * Tampoco tienen endpoint, y por el mismo motivo que el de
+                 * arriba: no hay ninguna ruta de gestion de usuarios en el Anexo
+                 * B, y «da de baja a esta persona» o «cambiale la contrasena» por
+                 * API serian, en manos de un `admin` comprometido, la forma mas
+                 * comoda de quedarse solo en la instalacion o de prepararse el
+                 * acceso a la cuenta de otro. La pantalla del panel es una
+                 * decision de producto pendiente (ficha 3.8, decision 16).
+                 */
+                DeactivateManagementUserCommand::class,
+                ResetManagementPasswordCommand::class,
                 IssueCredentialCommand::class,
                 PrintCredentialCommand::class,
                 PrintCredentialBatchCommand::class,

@@ -130,7 +130,7 @@ tests:
   #-----------------------------------------------------------------------------
   - interval: 1m
     input_series:
-      - series: 'probe_success{instance="https://nginx:8443/api/v1/health"}'
+      - series: 'probe_success{job="kronoqr-uptime", instance="https://nginx:8443/api/v1/health"}'
         values: "0x10"
     alert_rule_test:
       - eval_time: 4m
@@ -143,6 +143,7 @@ tests:
               severity: critical
               destinatario: it-cliente
               component: api
+              job: kronoqr-uptime
               instance: "https://nginx:8443/api/v1/health"
             exp_annotations:
               summary: "La sonda de disponibilidad de https://nginx:8443/api/v1/health no responde"
@@ -162,8 +163,27 @@ tests:
   #-----------------------------------------------------------------------------
   - interval: 1m
     input_series:
-      - series: 'probe_success{instance="https://nginx:8443/api/v1/health"}'
+      - series: 'probe_success{job="kronoqr-uptime", instance="https://nginx:8443/api/v1/health"}'
         values: "1x30"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: SondaDelBordeFallida
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # SondaDelBordeFallida NO dispara por el fallo del OTRO job de sonda (tarea
+  # 3.8, correccion de H-05). `probe_success` sin `job="kronoqr-uptime"` en la
+  # expresion tambien habria casado con `kronoqr-uptime-tls-verified` (la
+  # sonda que SI verifica el certificado): un certificado no verificable
+  # habria hecho sonar ADEMAS "el borde no responde", que no es lo que esta
+  # pasando (el borde responde; lo que falla es la confianza en su
+  # certificado desde fuera). Con el filtro por `job`, esta serie no
+  # pertenece a esta regla.
+  #-----------------------------------------------------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="kronoqr-uptime-tls-verified", instance="https://fichaje.example-hotel.invalid/api/v1/health"}'
+        values: "0x30"
     alert_rule_test:
       - eval_time: 20m
         alertname: SondaDelBordeFallida

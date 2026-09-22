@@ -421,15 +421,26 @@ services:
       timeout: 5s
       retries: 3
 
-  #--- 12 · Metricas ----------------------------------------------------------
+  #--- 12 · Metricas ------------------------------------------------------------
+  #
+  # ENTRYPOINT DE RENDERIZADO (tarea 3.8, hallazgo H-05): mismo mecanismo que
+  # Alertmanager, mas abajo — ver su comentario para el porque completo.
+  # `/etc/prometheus/prometheus.yml.template` se resuelve contra `APP_URL` y
+  # `TLS_ALLOW_SELF_SIGNED` del entorno del contenedor, y el resultado se
+  # escribe en `/prometheus/prometheus.yml` (el volumen de datos, nunca la
+  # plantilla de solo lectura).
   prometheus:
     image: prom/prometheus:v3.1.0
     container_name: kronoqr-prometheus
+    entrypoint: ["/etc/prometheus/render-config.sh"]
     command:
-      - --config.file=/etc/prometheus/prometheus.yml
+      - --config.file=/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
       - --storage.tsdb.retention.time=30d
       - --web.enable-lifecycle
+    environment:
+      APP_URL: ${APP_URL:-}
+      TLS_ALLOW_SELF_SIGNED: ${TLS_ALLOW_SELF_SIGNED:-false}
     volumes:
       - ./observability/prometheus:/etc/prometheus:ro
       - prometheus-data:/prometheus

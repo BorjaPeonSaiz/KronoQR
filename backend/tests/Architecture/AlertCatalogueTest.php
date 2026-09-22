@@ -231,7 +231,10 @@ it('escribe en cada alerta nueva el umbral literal que publica el catalogo', fun
     '5xx: el uno por ciento' => ['ErroresDeServidorEnElFichaje', '> 0.01'],
     'latencia: el percentil 95' => ['LatenciaDelFichajeAlta', 'histogram_quantile(0.95'],
     'latencia: los 500 ms' => ['LatenciaDelFichajeAlta', '> 0.5'],
-    'sonda: el borde no responde' => ['SondaDelBordeFallida', 'probe_success == 0'],
+    // DECISION de la tarea 3.8 (H-05): la expresion gano `{job="kronoqr-uptime"}`
+    // para no casar tambien con el segundo job de sonda que verifica el
+    // certificado (`kronoqr-uptime-tls-verified`); ver rules/api.yml.
+    'sonda: el borde no responde' => ['SondaDelBordeFallida', 'probe_success{job="kronoqr-uptime"} == 0'],
     'tls: la serie de la sonda' => ['CertificadoTlsProximoACaducar', 'probe_ssl_earliest_cert_expiry'],
     'tls: los 21 dias' => ['CertificadoTlsProximoACaducar', '21'],
     // DECISION 17(h): el suelo. Sin el, un certificado ya caducado enciende las
@@ -289,7 +292,12 @@ it('raspa al propio Alertmanager, sin lo cual la alerta que lo vigila no se eval
     // `job`, la regla se evalua siempre a nada y el vigilante del vigilante es
     // un fichero de texto — el mismo modo de fallo mudo que la revision
     // encontro en el contenedor.
-    expect(Repo::contents('infra/observability/prometheus/prometheus.yml'))
+    //
+    // `.yml.template` y no `.yml` desde la tarea 3.8 (H-05): `prometheus.yml`
+    // ahora es una PLANTILLA que `render-config.sh` resuelve contra `APP_URL`
+    // antes de que Prometheus arranque (mismo mecanismo que Alertmanager). El
+    // resto de `scrape_configs`, incluido este job, no cambio ni una linea.
+    expect(Repo::contents('infra/observability/prometheus/prometheus.yml.template'))
         ->toContain('job_name: alertmanager');
 })->group('RNF-D-01', 'RF-PR-04');
 

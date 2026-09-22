@@ -1,0 +1,147 @@
+# KronoQR — pruebas unitarias del grupo `kronoqr-tls-verificado` de
+# infra/observability/prometheus/rules/tls.yml (tarea 3.8, hallazgo H-05).
+#
+# FICHERO APARTE, Y NO MAS BLOQUES EN tls.test.yml: `promtool test rules`
+# evalua TODOS los bloques de un mismo fichero de pruebas al paso fijado por
+# el `evaluation_interval` DECLARADO EN ESE FICHERO DE PRUEBAS —comprobado
+# empiricamente contra promtool v3.1.0—, sin importar el `interval:` que cada
+# grupo declare en el fichero de reglas real ni el `interval:` de cada bloque
+# de prueba. `tls.test.yml` fija `evaluation_interval: 1h` porque las dos
+# alertas de caducidad viven en un grupo `interval: 1h` (el margen es de dias,
+# no de minutos). El grupo nuevo, `kronoqr-tls-verificado`, declara
+# `interval: 5m` en el fichero de reglas real — la sonda verificada se
+# scrapea cada 30 s y esta alerta tiene que reaccionar en minutos, no en
+# horas — y necesita por tanto su PROPIO fichero de pruebas con
+# `evaluation_interval: 5m` para poder comprobar el limite exacto de `for:
+# 15m`. En el Prometheus real, cada grupo respeta su propio `interval:`
+# pase lo que pase aqui: esto es una limitacion del arnes de pruebas de
+# `promtool`, no del producto.
+rule_files:
+  - ../rules/tls.yml
+
+evaluation_interval: 5m
+
+tests:
+  #-----------------------------------------------------------------------------
+  # CertificadoTlsNoVerificable: dispara. El probe verificado falla, el borde
+  # SI responde (probe_success{job="kronoqr-uptime"} = 1, el borde no esta
+  # caido) y el certificado NO ha caducado por fecha (le quedan 90 dias, para
+  # no confundirse con `CertificadoTlsProximoACaducar` ni con
+  # `CertificadoTlsCaducado`, que viven en el otro grupo de este mismo
+  # fichero de reglas).
+  #-----------------------------------------------------------------------------
+  - name: no_verificable_fires
+    interval: 5m
+    input_series:
+      - series: 'probe_success{job="kronoqr-uptime-tls-verified", instance="https://fichaje.example-hotel.invalid/api/v1/health"}'
+        values: "0x10"
+      - series: 'probe_success{job="kronoqr-uptime", instance="https://nginx:8443/api/v1/health"}'
+        values: "1x10"
+      - series: 'probe_ssl_earliest_cert_expiry{instance="https://nginx:8443/api/v1/health"}'
+        values: "7776000+300x10"
+    alert_rule_test:
+      # Antes de los 15 min de `for`: todavia pendiente, no dispara.
+      - eval_time: 10m
+        alertname: CertificadoTlsNoVerificable
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: CertificadoTlsNoVerificable
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              destinatario: it-cliente
+              component: tls
+            exp_annotations:
+              summary: "El certificado TLS del borde no verifica contra APP_URL (cadena, nombre o emisor)"
+              description: >-
+                La sonda que SI valida identidad (contra APP_URL, con
+                insecure_skip_verify: false) no logra establecer una conexion
+                de confianza, y no es por caducidad (esa la cubren las dos
+                alertas de arriba) ni porque el borde este caido (responde
+                por HTTPS desde dentro de la red de contenedores). Revisa la
+                cadena completa del certificado (faltan los intermedios),
+                quien lo emitio, y si el nombre (CN/SAN) sigue coincidiendo
+                con APP_URL: un navegador real vera exactamente este mismo
+                rechazo.
+              runbook_url: docs/runbooks/renovacion-certificado-tls.md
+
+  #-----------------------------------------------------------------------------
+  # No dispara si el probe verificado SI tiene exito: certificado correcto.
+  #-----------------------------------------------------------------------------
+  - name: no_verificable_no_dispara_si_verifica
+    interval: 5m
+    input_series:
+      - series: 'probe_success{job="kronoqr-uptime-tls-verified", instance="https://fichaje.example-hotel.invalid/api/v1/health"}'
+        values: "1x10"
+      - series: 'probe_success{job="kronoqr-uptime", instance="https://nginx:8443/api/v1/health"}'
+        values: "1x10"
+      - series: 'probe_ssl_earliest_cert_expiry{instance="https://nginx:8443/api/v1/health"}'
+        values: "7776000+300x10"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: CertificadoTlsNoVerificable
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # AUTOFIRMADO DECLARADO A PROPOSITO: no dispara. `render-config.sh` omite el
+  # job `kronoqr-uptime-tls-verified` por completo cuando la instalacion
+  # declaro `TLS_ALLOW_SELF_SIGNED=true` (ver blackbox/blackbox.yml y
+  # prometheus.yml.template): esta prueba simula justo esa ausencia — ninguna
+  # serie de ese job en absoluto — que es como se ve de verdad esa instalacion
+  # para Prometheus. Sin el lado izquierdo del `and`, el resultado esta
+  # siempre vacio, sea cual sea el estado del borde o del certificado. Es la
+  # prueba que demuestra que el modo autofirmado declarado NO dispara la
+  # alerta (tarea 3.8, decision de tolerancia con el target condicionado).
+  #-----------------------------------------------------------------------------
+  - name: no_verificable_no_dispara_autofirmado_declarado
+    interval: 5m
+    input_series:
+      - series: 'probe_success{job="kronoqr-uptime", instance="https://nginx:8443/api/v1/health"}'
+        values: "1x10"
+      - series: 'probe_ssl_earliest_cert_expiry{instance="https://nginx:8443/api/v1/health"}'
+        values: "7776000+300x10"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: CertificadoTlsNoVerificable
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # El borde entero caido: el probe SIN verificar TAMBIEN falla. No dispara
+  # esta alerta (lo hace SondaDelBordeFallida, en rules/api.yml): lo que aqui
+  # ocurre no es "certificado no verificable", es "no hay borde que sondear".
+  #-----------------------------------------------------------------------------
+  - name: no_verificable_no_dispara_si_borde_caido
+    interval: 5m
+    input_series:
+      - series: 'probe_success{job="kronoqr-uptime-tls-verified", instance="https://fichaje.example-hotel.invalid/api/v1/health"}'
+        values: "0x10"
+      - series: 'probe_success{job="kronoqr-uptime", instance="https://nginx:8443/api/v1/health"}'
+        values: "0x10"
+      - series: 'probe_ssl_earliest_cert_expiry{instance="https://nginx:8443/api/v1/health"}'
+        values: "7776000+300x10"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: CertificadoTlsNoVerificable
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # Certificado YA CADUCADO: no duplica con CertificadoTlsCaducado. La
+  # caducidad tambien hace fallar la verificacion de cadena (Go la trata como
+  # un error de verificacion mas), asi que sin la tercera condicion de la
+  # expresion esta alerta sonaria a la vez que la de caducidad — la misma
+  # emergencia contada dos veces (mismo problema que la decision 17h ya
+  # resolvio entre las dos alertas del otro grupo).
+  #-----------------------------------------------------------------------------
+  - name: no_verificable_no_duplica_caducado
+    interval: 5m
+    input_series:
+      - series: 'probe_success{job="kronoqr-uptime-tls-verified", instance="https://fichaje.example-hotel.invalid/api/v1/health"}'
+        values: "0x10"
+      - series: 'probe_success{job="kronoqr-uptime", instance="https://nginx:8443/api/v1/health"}'
+        values: "1x10"
+      - series: 'probe_ssl_earliest_cert_expiry{instance="https://nginx:8443/api/v1/health"}'
+        values: "-3600+300x10"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: CertificadoTlsNoVerificable
+        exp_alerts: []

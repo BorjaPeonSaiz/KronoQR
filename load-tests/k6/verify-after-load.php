@@ -14,9 +14,11 @@ declare(strict_types=1);
  *   RQ-03     ningun empleado con dos tramos abiertos.
  *   RF-KI-04  los lotes llegaron con la salida ANTES que la entrada y el
  *             servidor los ordeno: el empleado acabo con un tramo cerrado.
- *   RN-18     el elemento imposible del lote quedo REGISTRADO como
- *             `rejected_out_of_order` y marcado para revision, no devuelto a la
- *             cola con un 503 que el quiosco reintentaria para siempre.
+ *   RN-18     el elemento imposible del lote —y cada peticion del escenario
+ *             `reject-out-of-order`, que mide la separacion de tiempos de A-13—
+ *             quedo REGISTRADO como `rejected_out_of_order` y marcado para
+ *             revision, no devuelto a la cola con un 503 que el quiosco
+ *             reintentaria para siempre.
  *   RNF-P-02  las dos consultas calientes del fichaje resuelven por
  *             `scan_events_employee_id_occurred_at_index`.
  *
@@ -504,10 +506,19 @@ $outOfOrderRows = (int) ($outOfOrder->total ?? 0);
 $outOfOrderFlagged = (int) ($outOfOrder->flagged ?? 0);
 $reportedUnreconcilable = $summary['totals']['batch_unreconcilable'] ?? null;
 
+// El escenario `reject-out-of-order` produce sus propias filas a proposito
+// (H-08 / A-13): son la medida de RN-18 frente a los tres rechazos de
+// credencial. Se cuentan aparte para que la holgura de abajo no las confunda con
+// filas que nadie sabe de donde salieron.
+$reportedOutOfOrderScenario = $summary['reject_out_of_order']['samples'] ?? null;
+$reportedTotal = (is_numeric($reportedUnreconcilable) ? (int) $reportedUnreconcilable : 0)
+    + (is_numeric($reportedOutOfOrderScenario) ? (int) $reportedOutOfOrderScenario : 0);
+
 $report['out_of_order'] = [
     'filas' => $outOfOrderRows,
     'marcadas_para_revision' => $outOfOrderFlagged,
     'contadas_por_k6' => $reportedUnreconcilable,
+    'contadas_por_k6_escenario_rn18' => $reportedOutOfOrderScenario,
 ];
 
 if (! is_numeric($reportedUnreconcilable)) {
@@ -522,16 +533,17 @@ if (! is_numeric($reportedUnreconcilable)) {
 $check(
     'RN-18',
     $outOfOrderRows === $outOfOrderFlagged
-    && (! is_numeric($reportedUnreconcilable) || $outOfOrderRows >= (int) $reportedUnreconcilable),
-    'k6 conto '.($reportedUnreconcilable ?? 'n/d').' elementos irreconciliables (422) en los lotes y la '
-    .'base guarda '.$outOfOrderRows.' filas rejected_out_of_order, '.$outOfOrderFlagged
+    && (! is_numeric($reportedUnreconcilable) || $outOfOrderRows >= $reportedTotal),
+    'k6 conto '.($reportedUnreconcilable ?? 'n/d').' elementos irreconciliables (422) en los lotes y '
+    .($reportedOutOfOrderScenario ?? 'n/d').' en el escenario reject-out-of-order; la base guarda '
+    .$outOfOrderRows.' filas rejected_out_of_order, '.$outOfOrderFlagged
     .' de ellas marcadas para revision'
 );
 
-if (is_numeric($reportedUnreconcilable) && $outOfOrderRows !== (int) $reportedUnreconcilable) {
-    $warn('RN-18: hay '.($outOfOrderRows - (int) $reportedUnreconcilable).' filas rejected_out_of_order '
-        .'de mas respecto a los elementos de lote. Lo esperable es que salgan del escaneo previo del caso '
-        .'imposible; si son muchas mas, mira que otro camino las esta produciendo.');
+if ($reportedTotal > 0 && $outOfOrderRows !== $reportedTotal) {
+    $warn('RN-18: hay '.($outOfOrderRows - $reportedTotal).' filas rejected_out_of_order de mas respecto a '
+        .'lo que conto k6. Lo esperable es que salgan del escaneo previo del caso imposible del lote; si son '
+        .'muchas mas, mira que otro camino las esta produciendo.');
 }
 
 // --- Lo que k6 dijo frente a lo que la base guarda ---------------------------

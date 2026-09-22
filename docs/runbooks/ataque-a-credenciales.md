@@ -1,21 +1,30 @@
-# Runbook — ataque a credenciales (fuerza bruta / credential stuffing)
+# Runbook — ataque a credenciales (fuerza bruta / credential stuffing / forjado de firma QR)
 
-**Alertas que llevan aquí** (OWASP A09, doc 02 §8.2), definidas en
-[`infra/observability/prometheus/rules/auth.yml`](../../infra/observability/prometheus/rules/auth.yml):
+**Alertas que llevan aquí** (OWASP A09, doc 02 §8.2, más una cuarta de la
+tarea 3.8): las tres primeras en
+[`infra/observability/prometheus/rules/auth.yml`](../../infra/observability/prometheus/rules/auth.yml),
+la cuarta en
+[`infra/observability/prometheus/rules/threat-detection.yml`](../../infra/observability/prometheus/rules/threat-detection.yml):
 
 | Alerta | Umbral | Severidad | MITRE ATT&CK | Sección |
 | --- | --- | --- | --- | --- |
 | `KronoqrAuthFailureBurst` | > 20 fallos en 5 min por canal, `for: 1m` | Advertencia | T1110 (Brute Force) | [§4](#4-diagnóstico) |
 | `KronoqrAuthLockouts` | ≥ 3 bloqueos en 15 min por canal, `for: 1m` | Advertencia | T1110.004 (Credential Stuffing) | [§4](#4-diagnóstico) |
 | `KronoqrAuthFailureSpike` | > 100 fallos en 5 min por canal, `for: 1m` | Crítica | T1110 (posible T1110.004) | [§4](#4-diagnóstico) |
+| `RechazoDeFirmaQr` | > 20 escaneos con firma HMAC inválida en 15 min, `for: 5m` | Crítica | T1606 (Forjado de credenciales web) | [§8](#8-rechazodefirmaqr-t1606-alguien-prueba-payloads-de-qr-que-el-sistema-no-firmó) |
 
 **Impacto en el fichaje, que es lo primero que hay que saber: ninguno.** Estas
-tres alertas nunca impiden fichar. `KronoqrAuthLockouts` sí puede significar
+cuatro alertas nunca impiden fichar. `KronoqrAuthLockouts` sí puede significar
 que **una o varias personas concretas** no pueden entrar al panel, al portal o
 fichar por PIN hasta que expire su bloqueo — eso es RS-12 y RN-15 funcionando
-como deben, no una avería que arreglar. El fichaje por QR, que es el camino que
-usa el 99 % de la plantilla en el quiosco, no pasa por ninguna de las tres
-puertas de este runbook y sigue intacto pase lo que pase aquí.
+como deben, no una avería que arreglar. `RechazoDeFirmaQr` tampoco bloquea a
+nadie: cada escaneo rechazado recibió el mismo mensaje genérico y de tiempo
+constante que cualquier otro rechazo (regla dura 17, RS-03), y quien tiene una
+tarjeta legítima puede reintentar con normalidad. El fichaje por QR, que es el
+camino que usa el 99 % de la plantilla en el quiosco, no pasa por ninguna de
+las tres puertas de autenticación de este runbook — pero **sí** es el que
+alimenta `RechazoDeFirmaQr` (§8): son cosas distintas, no lo confundas con
+`KronoqrAuthFailureSpike`.
 
 Destinatario: **responsable de seguridad**, con el mismo criterio que
 [`rotura-cadena-auditoria.md`](rotura-cadena-auditoria.md) — la respuesta a un
@@ -289,7 +298,108 @@ tenido éxito.
 | `KronoqrAuthFailureBurst` | Responsable de seguridad | Dentro de la jornada |
 | `KronoqrAuthLockouts` | Responsable de seguridad | Dentro de la jornada; inmediato si afecta a `management` |
 | `KronoqrAuthFailureSpike` | Responsable de seguridad **y** IT del cliente (para el bloqueo de §5) | Inmediato |
+| `RechazoDeFirmaQr` (§8) | Responsable de seguridad | Inmediato — es un incidente, no una avería |
 | Confirmado un `success` tras fallos sospechosos (§6) | Responsable de seguridad + persona titular de la cuenta | Inmediato |
+
+---
+
+## 8. `RechazoDeFirmaQr` (T1606): alguien prueba payloads de QR que el sistema no firmó
+
+**Añadida en la tarea 3.8** (hallazgo H-10 de la revisión interna de
+seguridad; doc 01 §8.1 ya señalaba T1606 como «los rechazos de firma se
+cuentan como métrica, sin alerta»). Esta sección es independiente de las
+§1-§7: no comparte canal, métrica ni destinatario por defecto con las tres
+alertas de arriba, aunque vive en el mismo runbook por ser el mismo tipo de
+incidente — alguien probando credenciales que no le pertenecen.
+
+### 8.1 Qué mide
+
+`scans_total{device, result="rejected_signature"}` (`MetricCatalogue.php`),
+un escaneo cuyo payload `FH1.<key_id>.<token>.<sig>` **no verificó** contra
+`hash_equals` (`Identity/Domain/ValueObject/QrSigningKey.php`). La alerta
+suma **todos** los dispositivos a propósito (`sum(...)` sin `by (device)`):
+un atacante que reparte el intento entre varios quioscos no debe diluir la
+señal por debajo del umbral.
+
+### 8.2 Por qué esto casi nunca es una tarjeta dañada
+
+A diferencia de las tres alertas de arriba (donde una persona equivocándose
+de contraseña es el ruido normal), **una tarjeta impresa por el propio
+sistema nunca produce `rejected_signature` en operación normal**:
+
+- La firma HMAC de un QR es válida mientras la tarjeta física exista — no
+  caduca por el paso del tiempo.
+- La rotación de clave (`docs/runbooks/rotacion-clave-qr.md`) es
+  **progresiva y sin dejar a nadie sin fichar**: las claves antiguas siguen
+  aceptadas durante la transición, así que una rotación en curso tampoco
+  explica este rechazo.
+- Un QR físicamente dañado o mal impreso normalmente **no llega a
+  parsearse** como `FH1.<key_id>.<token>.<sig>` en absoluto (el lector no
+  reconoce nada, no hay intento de verificar firma) — y si llega a
+  parsearse pero está corrupto, es un suceso aislado, no sostenido.
+
+Un **volumen sostenido** de `rejected_signature` — el umbral por defecto son
+más de 20 en 15 minutos — es, por tanto, la firma de alguien sometiendo
+payloads que el sistema no generó: enumeración, fuerza bruta contra la firma,
+o un intento de reproducir el formato del QR sin conocer la clave.
+
+### 8.3 Qué NO puedes ver, y por qué (regla dura 17, RS-03)
+
+**La persona que escaneó no sabe que fue un rechazo por firma.** El
+quiosco muestra el mismo mensaje genérico que cualquier otro rechazo
+(credencial revocada, desconocida, mal formada), con el mismo suelo de
+tiempo constante — es la regla dura 17, a propósito: revelar el motivo
+exacto de puertas afuera ayudaría a quien está tanteando a averiguar qué
+está probando mal. `scans_total{result}` es el **único** sitio donde el
+desenlace detallado existe; de ahí que esta sea la única señal posible para
+T1606.
+
+### 8.4 Diagnóstico
+
+```bash
+# Total en las ultimas 2 horas, por minuto:
+#   sum(increase(scans_total{result="rejected_signature"}[2h]))
+# Por dispositivo, para saber si es un unico quiosco o varios a la vez:
+#   sum by (device) (increase(scans_total{result="rejected_signature"}[15m]))
+```
+
+En Grafana → Explore, o `curl` directo contra Prometheus (igual que en
+[`operacion.md`](../cliente/operacion.md) §10.4).
+
+- **¿Concentrado en un único dispositivo?** Es más probable un problema
+  físico con ese lector, o alguien probando físicamente contra ese quiosco
+  en concreto — revisa la cámara/ubicación si el hotel tiene vigilancia en
+  recepción.
+- **¿Repartido entre varios dispositivos a la vez?** Alguien está probando
+  contra la API directamente (`POST /api/v1/scan`), no leyendo tarjetas
+  físicas — mucho más serio: revisa si el origen coincide con la VLAN de
+  quioscos o viene de fuera (mismo procedimiento del §4.3 de arriba,
+  recalculando `ip_hash` sobre los accesos de ese periodo).
+
+### 8.5 Qué preservar antes de tocar nada
+
+Esto **es** un incidente de seguridad (Crítica, no Advertencia): preserva,
+antes de rotar ninguna clave o bloquear ningún origen:
+
+1. El resultado de la consulta del §8.4 (por dispositivo y en total), con
+   marca de tiempo.
+2. Los accesos de Nginx del periodo (`docker compose exec -T nginx cat
+   /var/log/nginx/access.log`, filtrando por la ventana de la alerta).
+3. Si hay sospecha de que la clave de firma (`APP_KEY` derivada,
+   `Identity/Domain/ValueObject/QrSigningKey.php`) pudo filtrarse: **no la
+   rotes todavía** — sigue el procedimiento de
+   [`rotacion-clave-qr.md`](rotacion-clave-qr.md), que está diseñado para no
+   dejar a nadie sin fichar durante la transición, y coordina con IT del
+   cliente antes de iniciarlo.
+
+### 8.6 Cómo bloquear un origen, si hace falta
+
+Mismo mecanismo que el §5 de arriba (firewall del host, nunca tocar
+`limit_req_zone` a mano) y el mismo que
+[`saturacion-del-borde.md`](saturacion-del-borde.md) §5: es el procedimiento
+único de bloqueo en el borde de todo el producto, no se duplica aquí.
+
+---
 
 **El fabricante no accede a los datos del cliente** (ADR-020, regla dura 16).
 Los logs estructurados de este runbook se pueden compartir con el fabricante

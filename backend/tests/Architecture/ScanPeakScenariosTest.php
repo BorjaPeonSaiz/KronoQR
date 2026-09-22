@@ -16,15 +16,19 @@ declare(strict_types=1);
  * esa mentira.
  *
  * LO QUE SE COMPRUEBA, Y NADA MAS. No se valida que la carga sea correcta —eso
- * lo dice el veredicto de la pasada— sino que el guion esta VIVO: los cinco
+ * lo dice el veredicto de la pasada— sino que el guion esta VIVO: los seis
  * escenarios existen, piden trafico, alguien los lanza y su `exec` apunta a
  * codigo de verdad. Y que `run.sh` lanza k6 con el uid del invocante, porque sin
  * eso el contenedor no puede escribir su CSV en un runner de Linux y la pasada
  * entera se queda sin muestras sin que nada falle.
  */
 
-/** Los cinco escenarios de la decision 2 de la ficha 3.6, con su requisito. */
-const ESCENARIOS_DE_CARGA = ['scan', 'resend', 'reject', 'batch', 'compliance'];
+/**
+ * Los escenarios de la decision 2 de la ficha 3.6, con su requisito, mas el
+ * cuarto rechazo que anadio la decision 14 de la 3.8 (`reject-out-of-order`,
+ * RS-03 y RN-18: la medicion que A-13 del doc 07 §6 prometia).
+ */
+const ESCENARIOS_DE_CARGA = ['scan', 'resend', 'reject', 'reject-out-of-order', 'batch', 'compliance'];
 
 function fuenteDeCarga(string $fichero): string
 {
@@ -52,10 +56,19 @@ function fuenteDeCarga(string $fichero): string
  *
  * Se recorta desde la clave hasta la linea que cierra al mismo nivel de
  * indentacion, que es como esta escrito el fichero.
+ *
+ * LA CLAVE PUEDE IR ENTRECOMILLADA, y no es un capricho de estilo:
+ * `reject-out-of-order` lleva guiones y JavaScript no admite ese identificador
+ * sin comillas. Se buscan las dos formas para que el nombre del escenario pueda
+ * ser el mismo en el guion, en la etiqueta del CSV y en el `summary.json`.
  */
 function escenarioDeCarga(string $fuente, string $nombre): string
 {
     $inicio = strpos($fuente, "\n  {$nombre}: {");
+
+    if ($inicio === false) {
+        $inicio = strpos($fuente, "\n  '{$nombre}': {");
+    }
 
     expect($inicio)->not->toBeFalse('El escenario «'.$nombre.'» no existe en scan-peak.js');
 
@@ -105,7 +118,7 @@ function tasaDeCarga(string $fuente, string $escenario): int
     );
 }
 
-it('declara los cinco escenarios de la prueba de carga y todos piden trafico', function (string $nombre): void {
+it('declara los seis escenarios de la prueba de carga y todos piden trafico', function (string $nombre): void {
     // Un escenario a cero sigue saliendo en la matriz de trazabilidad como
     // cobertura de su requisito, y no ejecuta ni una peticion.
     $fuente = fuenteDeCarga('scan-peak.js');
@@ -149,7 +162,7 @@ it('asigna cada escenario a un rol y lanza los dos roles desde run.sh', function
     $asignados = [];
 
     foreach ($roles as $rol) {
-        preg_match_all("/'([a-z]+)'/", $rol[2], $nombres);
+        preg_match_all("/'([a-z][a-z-]*)'/", $rol[2], $nombres);
 
         $asignados = array_merge($asignados, $nombres[1]);
 

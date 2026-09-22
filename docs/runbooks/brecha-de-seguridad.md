@@ -558,3 +558,12 @@ como forma de «limpiar» nada.
 que se le envía es el paquete de diagnóstico anonimizado; **el extracto de
 `audit_log`, los logs con IP y la copia de la base no salen de la instalación**
 salvo concesión expresa, temporal y auditada del cliente.
+
+---
+
+**Relacionado.** Un hallazgo de Semgrep o Trivy en la CI no es una brecha: se tría con
+[`triaje-hallazgos-seguridad.md`](triaje-hallazgos-seguridad.md). La última revisión de
+seguridad del producto (interna, nivel ASVS 2, y la externa que exige RS-11) y su calendario
+viven en el repositorio del fabricante (`docs/seguridad/paquete-revisor.md`), que no forma
+parte de este paquete: si el DPO del cliente la necesita para valorar una brecha, la pide al
+fabricante por el canal de soporte.

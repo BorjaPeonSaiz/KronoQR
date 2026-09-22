@@ -1,8 +1,25 @@
 # KronoQR — configuracion base de Prometheus (doc 02 §8.1).
 #
 # El catalogo completo de alertas del doc 01 §9.3 (tarea 3.2) vive en rules/:
-# once ficheros, uno por componente, con cabecera propia que cita la fila del
-# catalogo que implementa.
+# varios ficheros, uno por componente, con cabecera propia que cita la fila
+# del catalogo que implementa.
+#
+# PLANTILLA, NO CONFIGURACION DIRECTA (tarea 3.8, hallazgo H-05). Prometheus,
+# a diferencia de Alertmanager, no necesita casi ninguna variable de
+# instalacion — salvo una: `APP_URL`, el dominio publico por el que los
+# clientes reales llegan al hotel, que hace falta para la sonda TLS que SI
+# verifica identidad (`http_2xx_tls_verified`, `blackbox/blackbox.yml`).
+# `APP_URL` es especifico de cada cliente (regla dura 13: nada de eso vive en
+# el repositorio del fabricante), asi que este fichero es una PLANTILLA con
+# una unica marca, `@@KRONOQR_UPTIME_TLS_VERIFIED_JOB@@`, que
+# `render-config.sh` (mismo mecanismo que `infra/observability/alertmanager/`,
+# ver su cabecera para el porque de un script y no un `sed`) resuelve contra
+# el entorno del contenedor ANTES de que el binario arranque, y escribe el
+# resultado en `/prometheus/prometheus.yml` — el volumen de datos, de lectura
+# y escritura, nunca este `.template`, que viaja de solo lectura. El resto del
+# fichero (scrape_configs, alerting, rule_files) es identico linea a linea a
+# lo que habia antes de la tarea 3.8: NINGUNA otra parte de Prometheus
+# necesita renderizado.
 
 global:
   scrape_interval: 15s
@@ -130,3 +147,23 @@ scrape_configs:
         target_label: instance
       - target_label: __address__
         replacement: blackbox-exporter:9115
+
+  # SEGUNDA SONDA DE TLS, LA QUE SI VERIFICA IDENTIDAD (tarea 3.8, H-05).
+  # `kronoqr-uptime` de arriba entra por la red de contenedores contra
+  # `nginx:8443`, con `insecure_skip_verify: true` a proposito: nunca podria
+  # comprobar la cadena o el nombre sin dar SIEMPRE un falso negativo. Este
+  # job hace lo que el otro no puede: llega por `APP_URL`, el dominio publico
+  # real, y con `http_2xx_tls_verified` (`insecure_skip_verify: false`)
+  # exige cadena completa, emisor de confianza y nombre coincidente — la
+  # alerta `CertificadoTlsNoVerificable` (rules/tls.yml) vive de esta serie.
+  #
+  # LA LINEA SIGUIENTE ES LA MARCA QUE RENDERIZA `render-config.sh`, NO YAML
+  # VALIDO POR SI SOLA. Se sustituye por el bloque `- job_name: ...` completo
+  # cuando `APP_URL` esta configurada y la instalacion NO declaro
+  # `TLS_ALLOW_SELF_SIGNED=true`, o por un comentario vacio en caso contrario
+  # (target condicionado: la forma mas honesta de tolerar el autofirmado
+  # declarado a proposito, ver la cabecera de `blackbox/blackbox.yml`). Un
+  # fichero SIN este job es YAML valido igual: `scrape_configs` sencillamente
+  # tiene un elemento menos, y la ausencia de la serie es justo lo que hace
+  # que la alerta no dispare en esa instalacion.
+@@KRONOQR_UPTIME_TLS_VERIFIED_JOB@@

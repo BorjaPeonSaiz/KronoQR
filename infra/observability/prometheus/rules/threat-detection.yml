@@ -1,0 +1,123 @@
+# KronoQR — señales que faltaban del modelo de amenazas (doc 01 §8.1, tarea
+# 3.8, hallazgo H-10 de docs/seguridad/revision-interna-asvs-2026-09.md).
+#
+# Doc 01 §8.1 señalaba tres técnicas MITRE ATT&CK del modelo de amenazas sin
+# ninguna señal observable: «un control sin señal no distingue "nadie lo
+# intentó" de "lo intentaron y falló"». Dos de las tres ganan alerta aquí:
+#
+#   T1499.002   DoS de punto final: inundación de servicio — el borde responde
+#               429, pero nada lo contaba hasta ahora («la alerta de
+#               saturación llega con la tarea 3.2», doc 01 §8.1; la 3.2 cerró
+#               sin ella).
+#   T1606       Forjado de credenciales web — un QR con firma HMAC inválida,
+#               es decir, alguien probando payloads que no firmó el sistema.
+#
+# La tercera, T1550.001 (token de quiosco usado contra endpoints de gestión),
+# NO gana alerta ni asiento de auditoría (decisión 18 de la ficha 3.8,
+# ADR-037): un 403 por ámbito es un hecho que controla el propio atacante —
+# basta con que pruebe una ruta más — y cada asiento de `audit_log` toma el
+# candado global de ADR-010, el mismo por el que pasa cada fichaje. La
+# detección de ese vector queda donde ya estaba: la política de cada endpoint
+# y `AuthorizationNegativeTest` (RS-04), que prueban que el 403 ocurre, no que
+# se cuente indefinidamente. Doc 01 §8.1 lo documenta así.
+#
+# NO HAY SONDA DE NGINX EN ESTA PILA (decisión honesta de la tarea 3.8, no un
+# hueco silencioso). `infra/observability/` no despliega un exportador de
+# Nginx (ni `stub_status`, ni el módulo VTS): la única fuente de `429` que
+# existe HOY es `http_requests_total{status="429"}`, que escribe
+# `RecordHttpMetrics` (middleware GLOBAL de Laravel, `bootstrap/app.php`) para
+# TODA petición que llega a PHP-FPM, incluida la que devuelve 429 por
+# `throttle:scan`/`scan-batch`/`scan-pin` (RateLimiter de la aplicación,
+# `AttendanceServiceProvider.php`). Lo que esta serie NO ve son los `429` que
+# `limit_req zone=scan_kiosk_vlan`/`scan_other` de Nginx rechaza ANTES de que
+# la petición llegue a PHP-FPM (`infra/docker/nginx/templates/
+# kronoqr.conf.template`): esos nunca tocan la aplicación y hoy no tienen
+# métrica. `SaturacionDelBordeEnElFichaje` es, por tanto, una señal de
+# saturación en la CAPA DE APLICACIÓN, no en el borde de Nginx en sentido
+# estricto — el runbook lo dice con esas palabras y explica cómo comprobar la
+# otra mitad a mano mientras no exista un exportador de Nginx.
+groups:
+  - name: kronoqr-threat-detection
+    interval: 60s
+    rules:
+      #------------------------------------------------------------------------
+      # SaturacionDelBordeEnElFichaje (T1499.002). Umbral por defecto: > 20
+      # respuestas 429 en 5 min en las tres rutas de fichaje (las mismas que
+      # `ErroresDeServidorEnElFichaje`/`LatenciaDelFichajeAlta`, rules/api.yml).
+      # 20 en 5 min es un umbral deliberadamente bajo frente a la capacidad real
+      # del sistema: el límite por dispositivo de `scan` es 120/min de serie
+      # (`config/kiosk.php` → `rate_limits.scan_per_device`), así que un
+      # quiosco sano no se acerca ni de lejos a generar 429 en operación
+      # normal — RN-19 protege al empleado (encola y confirma localmente) pero
+      # un 429 sostenido significa que ALGO está insistiendo por encima de lo
+      # que un uso legítimo produce. El valor vive en este fichero, editable
+      # por la instalación (regla dura 13: nada específico de un cliente en el
+      # repositorio del fabricante; `infra/observability/` viaja en el
+      # paquete y se puede ajustar sin tocar el producto).
+      #------------------------------------------------------------------------
+      - alert: SaturacionDelBordeEnElFichaje
+        expr: >-
+          sum(increase(http_requests_total{route=~"attendance\\.scan(\\..*)?", status="429"}[5m])) > 20
+        for: 2m
+        labels:
+          severity: high
+          destinatario: it-cliente
+          component: api
+          mitre_attack: T1499.002
+        annotations:
+          summary: "Mas de 20 respuestas 429 en 5 min en las rutas de fichaje"
+          description: >-
+            MITRE ATT&CK T1499.002 (DoS de punto final: inundacion de
+            servicio). Las rutas attendance.scan, attendance.scan.batch y
+            attendance.scan.pin estan devolviendo 429 por encima de lo que
+            produce un uso legitimo (el limite por dispositivo es 120/min de
+            serie). Nadie se ha quedado sin fichar: RN-19 encola y confirma
+            localmente en el quiosco. Esta serie mide SOLO la capa de
+            aplicacion (no hay exportador de Nginx en esta pila todavia): un
+            429 rechazado por limit_req antes de llegar a PHP-FPM no esta
+            aqui. Determina si es un quiosco con un fallo de reintento o un
+            origen insistiendo desde fuera de la VLAN.
+          runbook_url: docs/runbooks/saturacion-del-borde.md
+
+      #------------------------------------------------------------------------
+      # RechazoDeFirmaQr (T1606). Umbral por defecto: > 20 rechazos por firma
+      # invalida en 15 min, en total (no por dispositivo: un atacante que
+      # reparte el intento entre varios quioscos no debe diluir la señal). A
+      # diferencia de un fallo de autenticacion (auth.yml), una tarjeta
+      # legitima NUNCA produce `rejected_signature`: la firma HMAC de un QR
+      # impreso por el propio sistema es valida mientras la tarjeta exista, y
+      # la rotacion de clave es progresiva (docs/runbooks/rotacion-clave-qr.md,
+      # "sin dejar a nadie sin fichar") — las claves antiguas siguen aceptadas
+      # durante la transicion, asi que una rotacion en curso tampoco explica
+      # este rechazo. Un volumen sostenido es someter payloads que el sistema
+      # no firmo: enumeracion o fuerza bruta contra la firma del QR.
+      #
+      # `for: 5m` y el umbral en 15 min (no 5): una tarjeta dañada o mal
+      # impresa puede fallar una vez de forma aislada (RS-03: el rechazo es
+      # generico, la persona simplemente reintenta o pide ayuda) y eso no debe
+      # despertar a nadie; lo que importa es el VOLUMEN sostenido, no el
+      # primer fallo.
+      #------------------------------------------------------------------------
+      - alert: RechazoDeFirmaQr
+        expr: sum(increase(scans_total{result="rejected_signature"}[15m])) > 20
+        for: 5m
+        labels:
+          severity: critical
+          destinatario: seguridad
+          component: scan
+          mitre_attack: T1606
+        annotations:
+          summary: "Mas de 20 escaneos con firma HMAC invalida en 15 min"
+          description: >-
+            MITRE ATT&CK T1606 (Forjado de credenciales web). Mas de 20
+            escaneos rechazados por firma HMAC invalida
+            (scans_total{result="rejected_signature"}) en 15 minutos. Una
+            tarjeta impresa por el propio sistema nunca produce este rechazo
+            salvo dano fisico
+            puntual: un volumen sostenido es alguien probando payloads de QR
+            que el sistema no firmo. Regla dura 17: el rechazo que recibio
+            quien escaneo fue generico y de tiempo constante — no sabe que
+            fallo por firma y no por otra causa. Este es el unico sitio donde
+            el desenlace detallado existe; es un incidente de seguridad, no
+            una averia: preserva la evidencia antes de tocar nada.
+          runbook_url: docs/runbooks/ataque-a-credenciales.md

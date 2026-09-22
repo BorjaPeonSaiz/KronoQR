@@ -663,7 +663,7 @@ sequenceDiagram
 | **Borde (Nginx)** | Rate limiting por zona: fichaje **600 r/m con ráfaga de 50 desde el CIDR de la VLAN de quioscos**, y **30 r/m con ráfaga de 10 desde cualquier otro origen**; autenticación 5 r/m; portal 10 r/m; resto 120 r/m. Límite de tamaño de cuerpo. Cabeceras de seguridad |
 | **Aplicación** | Throttling por `device_id` y por IP en el camino de fichaje, y por empleado en el PIN (ADR-038: **no** por credencial en el escaneo de tarjeta); zonas propias por **cuenta** además de por IP para el segundo factor (`2fa`, 5 r/m, clave = dueño del reto) y para las rutas de gestión que leen o corrigen datos de terceros (`management`, 120 r/m), porque el borde no puede acotar por cuenta; autorización por policy en **cada** endpoint; validación estricta; respuestas de tiempo constante en el camino de fichaje y en el rechazo del código TOTP; bloqueo escalonado por intentos en el PIN y por cuenta (nunca por IP) en el código TOTP; denegaciones por ámbito repetidas agrupadas por ventana antes de escribir en `audit_log` (ADR-037) |
 | **Datos** | Usuario de base de datos con permisos mínimos (sin DDL, sin `UPDATE` ni `DELETE` en `audit_log`), DNI hasheado, copias cifradas con clave separada |
-| **Cliente** | CSP estricta sin `unsafe-inline`, `Permissions-Policy: camera=(self)`, SRI en assets, padrón cacheado cifrado con clave derivada del token del dispositivo |
+| **Cliente** | CSP estricta sin `unsafe-inline`, `Permissions-Policy: camera=(self)`, padrón cacheado cifrado con clave derivada del token del dispositivo. **Sin SRI en assets, a propósito** (tarea 3.8, H-06): los assets son del mismo origen, los sirve el mismo Nginx que la API y no hay CDN, con `script-src 'self'` sin `unsafe-inline`; si algún día un asset saliera del origen, SRI vuelve como requisito, no como promesa |
 
 > **Por qué la zona de fichaje distingue el origen.** Los 30 r/m por IP son un control pensado para internet, y **todos los quioscos de un hotel salen por la misma IP**. Aplicado sin distinción, el propio Nginx frenaría el sistema tres órdenes de magnitud por debajo de lo que exige RNF-P-06 —50 fichajes por segundo—, y el síntoma en producción sería «el quiosco va lento a las 06:00» en el cambio de turno, que es justo el pico que el producto existe para absorber.
 >
@@ -969,7 +969,7 @@ Una cobertura del 90 % dice qué líneas se ejecutan, no si las aserciones detec
 | **Ciclo offline completo** | Playwright con red desconectada: fichar, verificar cola en IndexedDB, reconectar, verificar consolidación con el `occurred_at` original |
 | **Cámara simulada** | Chromium con `--use-fake-device-for-media-stream --use-file-for-fake-video-capture=e2e/fixtures/qr-video.y4m`, alimentando un vídeo generado a partir de un QR real de prueba |
 | **QR degradado** | Vídeo con el QR parcialmente ocluido, para verificar que el nivel de corrección de errores Q cumple lo prometido |
-| **Autorización negativa** | Para cada endpoint y cada rol que **no** debe acceder, una prueba que verifica 403 y su registro en auditoría. Obligatorio: los fallos de autorización son silenciosos |
+| **Autorización negativa** | Para cada endpoint y cada rol que **no** debe acceder, una prueba que verifica 403, y asiento `access.denied` en `audit_log` cuando la denegación es por alcance (`ScopeGuard`); los 403 por rol o por ámbito de token no escriben asiento: RS-05 registra divulgaciones, no intentos. Obligatorio: los fallos de autorización son silenciosos |
 | **Bloqueo del PIN** | Intentos fallidos consecutivos activan el bloqueo creciente, por empleado y por IP |
 | **Reconciliación** | Corromper deliberadamente `daily_totals`, ejecutar `attendance:reconcile`, verificar corrección y alerta |
 | **Cadena de auditoría** | Modificar una fila por SQL directo, verificar que `verify-audit-chain` la detecta |
@@ -1241,7 +1241,7 @@ Convierte el sistema en un producto que un tercero puede comprar, instalar y ope
 | 3.5 | Fichaje de pausa y validación de desfase de reloj | 8–10 | RF-AT-10, RF-AT-12 | `arquitecto-dominio` → `backend-laravel` |
 | 3.6 | Pruebas de carga k6 y ajuste de rendimiento | 4–6 | RNF-P-06 | `qa-testing` + `devops-observabilidad` |
 | 3.7 | E2E con cámara simulada y suite de accesibilidad | 6–8 | RQ-04 | `qa-testing` |
-| 3.8 | Revisión de seguridad externa y corrección de hallazgos | 8–12 | RS-11 | `seguridad-cumplimiento` (preparación y corrección) |
+| 3.8 | Revisión de seguridad externa y corrección de hallazgos | 8–12 | RS-11 | `seguridad-cumplimiento` (preparación y verificación) + el agente de cada hallazgo |
 | 3.9 | Informes asíncronos con enlace de descarga caducable y exportación configurable para nómina | 6–8 | RF-IN-06..07 | `backend-laravel` + `/informe-nuevo` |
 | 3.10 | Registro de ausencias | 3–4 | RF-GP-04 | `backend-laravel` + `frontend-panel` |
 | 3.11 | Detección de patrones anómalos de uso de credencial, con incidencia y bandeja | 5–7 | RF-PR-06 | `backend-laravel`, revisión de `seguridad-cumplimiento` |
@@ -1408,6 +1408,8 @@ Un cliente puede estar en la 1.2.0 cuando ya va la 1.6.0. El actualizador debe e
 ### 11.6.5 Matriz de versiones soportadas
 
 Se publica y se cumple: la versión menor vigente y las dos anteriores reciben correcciones de seguridad; el salto de versión mayor tiene ventana de migración anunciada con antelación. Sin esta disciplina, con veinte clientes se acaba manteniendo veinte productos.
+
+**Revisión de seguridad externa (RS-11).** Se repite **cada 12 meses y en cada versión mayor**; la primera, **antes de la primera versión comercial**, y la siguiente a los 12 meses de esa fecha. El calendario y la fecha límite vigente viven en `docs/seguridad/paquete-revisor.md` (hoy: revisión interna previa hecha el 22-09-2026, externa inicial pendiente del tercero, límite de la siguiente 2027-09-22) y los vigila `SecurityReviewEvidenceTest`: pasado el límite sin un informe más reciente, la prueba falla y RS-11 se queda sin evidencia en `qa:traceability --check`. No es un cron: es un compromiso de publicación (tarea 3.8, decisión 8).
 
 ### 11.6.6 Paquete de diagnóstico
 

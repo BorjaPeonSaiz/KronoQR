@@ -38,6 +38,11 @@ declare(strict_types=1);
  *                           secreto que NO esta en la base: `rejected_unknown`;
  *   - `revoked_payloads`    credenciales de empleados RESERVADOS, que no entran
  *                           en ninguna rebanada: `rejected_revoked`;
+ *   - `out_of_order_scans`  `{qr_payload, occurred_at}` de otros empleados
+ *                           RESERVADOS, a los que este script deja con un turno
+ *                           ABIERTO: el instante es anterior a esa entrada, asi
+ *                           que el escaneo no puede cuadrar y sale
+ *                           `rejected_out_of_order` (RN-18);
  *   - `management_token`    sesion de un `responsable_departamento` emitida por
  *                           el propio servidor con las abilities de su rol;
  *   - `geometry`            el reparto de tarjetas por instancia, que calcula
@@ -56,6 +61,8 @@ declare(strict_types=1);
  * herramienta de entorno de pruebas, no un camino del producto.
  */
 
+use App\Modules\Attendance\Application\Command\RegisterScanCommand;
+use App\Modules\Attendance\Application\UseCase\RegisterScanHandler;
 use App\Modules\Identity\Application\Command\IssueDeviceTokenCommand;
 use App\Modules\Identity\Application\Port\AccessTokenIssuer;
 use App\Modules\Identity\Application\Port\UserAccounts;
@@ -94,6 +101,16 @@ $intEnv = static function (string $name, int $fallback): int {
 $employeeTarget = max(1, $intEnv('K6_EMPLOYEES', 5_560));
 $deviceTarget = max(1, $intEnv('K6_DEVICES', 80));
 $rejectTarget = max(1, $intEnv('K6_REJECT_PAYLOADS', 200));
+
+/*
+ * Los empleados del escenario `reject-out-of-order` (RN-18, H-08 / A-13).
+ *
+ * RESERVADOS como los del rechazo por credencial: no entran en ninguna rebanada
+ * de tarjetas, asi que nadie ficha con ellos y su turno abierto no distorsiona
+ * ni el pico de RNF-P-06 ni el cuadre de `verify-after-load.php`.
+ */
+$outOfOrderTarget = max(1, $intEnv('K6_OUT_OF_ORDER_PAYLOADS', 50));
+
 $historyDays = $intEnv('K6_HISTORY_DAYS', 365);
 $historyEmployees = $intEnv('K6_HISTORY_EMPLOYEES', 200);
 
@@ -227,12 +244,14 @@ if ($departmentId === null) {
 
 // --- Empleados sinteticos ----------------------------------------------------
 
-// Los de las tarjetas de la carga MAS los reservados para el escenario de
+// Los de las tarjetas de la carga MAS los reservados para los DOS escenarios de
 // rechazo, que no entran en ninguna rebanada: si un empleado con tarjeta
 // revocada estuviera ademas en la rebanada de `scan`, el mismo empleado
 // recibiria fichajes validos y rechazos a la vez y ni el anti-rebote ni el
-// cuadre posterior significarian nada.
-$totalNeeded = $employeeTarget + $rejectTarget;
+// cuadre posterior significarian nada. Lo mismo, y peor, con los de RN-18: su
+// turno ABIERTO haria que un fichaje valido cerrara el tramo que el escenario
+// necesita encontrar abierto.
+$totalNeeded = $employeeTarget + $rejectTarget + $outOfOrderTarget;
 $existing = k6_load_employees($departmentId);
 $toCreate = max(0, $totalNeeded - $existing->count());
 
@@ -295,9 +314,11 @@ if ($everyone->count() < $totalNeeded) {
 
 $carriers = $everyone->take($employeeTarget)->values();
 $revokedOwners = $everyone->slice($employeeTarget, $rejectTarget)->values();
+$outOfOrderOwners = $everyone->slice($employeeTarget + $rejectTarget, $outOfOrderTarget)->values();
 
 $say('Empleados creados en esta pasada: '.$created.'. '
-    .$carriers->count().' con tarjeta viva y '.$revokedOwners->count().' reservados para el rechazo.');
+    .$carriers->count().' con tarjeta viva, '.$revokedOwners->count().' reservados para el rechazo '
+    .'por credencial y '.$outOfOrderOwners->count().' para el irreconciliable de RN-18.');
 
 // --- Credenciales vivas cuyo secreto se conoce -------------------------------
 
@@ -387,7 +408,29 @@ foreach ($revokedOwners as $owner) {
 
 $flushCredentials($revokedRows);
 
-$say('Payloads de rechazo: '.count($unknownPayloads).' desconocidos y '.count($revokedPayloads).' revocados.');
+// IRRECONCILIABLE (RN-18): tarjetas VIVAS de los empleados reservados para ese
+// escenario. Lo que hace imposible el fichaje no es la credencial —que es
+// perfecta— sino el estado del registro: mas abajo, cuando el anti-rebote de la
+// instalacion ya se conoce, a cada uno de estos empleados se le deja un turno
+// ABIERTO y se publica un `occurred_at` anterior a su entrada.
+$outOfOrderPayloads = [];
+$outOfOrderCredentialRows = [];
+
+foreach ($outOfOrderOwners as $owner) {
+    [$row, $payload] = $issueCard($owner, false);
+
+    $outOfOrderCredentialRows[] = $row;
+    $outOfOrderPayloads[] = $payload;
+
+    if (count($outOfOrderCredentialRows) === 1_000) {
+        $flushCredentials($outOfOrderCredentialRows);
+    }
+}
+
+$flushCredentials($outOfOrderCredentialRows);
+
+$say('Payloads de rechazo: '.count($unknownPayloads).' desconocidos, '.count($revokedPayloads)
+    .' revocados y '.count($outOfOrderPayloads).' vivos para el irreconciliable de RN-18.');
 
 // --- Quioscos sinteticos -----------------------------------------------------
 
@@ -563,6 +606,99 @@ $debounceSeconds = app(OperationalSettingsProvider::class)->forSite($siteId)->de
 $say('Umbrales de la instalacion: suelo de rechazo '.$rejectionFloorMs.' ms, '
     .'anti-rebote '.$debounceSeconds.' s.');
 
+// --- El turno abierto que hace imposible el escaneo de RN-18 -----------------
+
+/*
+ * El escenario `reject-out-of-order` de `scan-peak.js` (H-08, A-13 del doc 07
+ * §6) necesita que cada peticion sea, sin lugar a duda, un cierre que no puede
+ * ser posterior a su entrada. Eso no se consigue con una tarjeta especial: se
+ * consigue con el ESTADO DEL REGISTRO.
+ *
+ * SE SIEMBRA CON EL CASO DE USO DEL PRODUCTO, no con un `INSERT`. `clockIn()`
+ * escribe el tramo, recalcula `daily_totals` en la misma transaccion (regla dura
+ * 7) y deja su fila en `scan_events`: por eso el cuadre de
+ * `verify-after-load.php` —«tantos tramos creados en la ventana como respuestas
+ * que abren tramo»— sigue saliendo. Un tramo insertado a mano lo habria roto,
+ * porque no habria ningun `clock_in` detras.
+ *
+ * EL INSTANTE NO SE SUPONE, SE LEE. Despues de sembrar se vuelve a consultar la
+ * base y el `occurred_at` que se publica sale de la hora REAL de la entrada
+ * abierta, menos la ventana del anti-rebote de esta instalacion mas diez
+ * minutos. Los dos margenes importan: por debajo de la entrada para que RN-18 se
+ * cumpla, y lejos del ultimo escaneo aceptado para que la respuesta no sea el
+ * `200` del anti-rebote (RF-AT-06) en lugar del `422`.
+ *
+ * ES IDEMPOTENTE ENTRE PASADAS. Quien ya arrastra un turno abierto de la pasada
+ * anterior no se vuelve a sembrar —volver a fichar lo CERRARIA— y se reutiliza
+ * su entrada tal cual. Solo se publican los empleados que acaban con turno
+ * abierto de verdad: lo que el guion recibe es lo que la base tiene.
+ *
+ * QUIOSCO PROPIO, y no el del historico: `$alreadyImported` cuenta los escaneos
+ * del dispositivo `k6-history` para no duplicar el historico, y meterle fichajes
+ * por ahi haria que la siguiente pasada creyera que el historico ya existe.
+ */
+$outOfOrderDeviceUuid = $deviceUuidOf($siteId, K6_DEVICE_PREFIX.'out-of-order', $stamp);
+$outOfOrderDeviceId = (int) DB::table('devices')->where('uuid', $outOfOrderDeviceUuid)->value('id');
+$outOfOrderIds = $outOfOrderOwners->pluck('id')->all();
+
+$openEntriesOf = static fn (array $ids): array => $ids === [] ? [] : DB::table('shift_entries')
+    ->whereIn('employee_id', $ids)
+    ->where('status', 'open')
+    ->whereNull('superseded_by_id')
+    ->pluck('clocked_in_at', 'employee_id')
+    ->all();
+
+$alreadyOpen = $openEntriesOf($outOfOrderIds);
+$seeded = 0;
+
+foreach ($outOfOrderOwners as $index => $owner) {
+    if (isset($alreadyOpen[$owner->id])) {
+        continue;
+    }
+
+    app(RegisterScanHandler::class)->handle(new RegisterScanCommand(
+        scanId: Str::uuid7()->toString(),
+        qrPayload: $outOfOrderPayloads[$index],
+        occurredAt: new DateTimeImmutable(gmdate('Y-m-d\TH:i:s\Z'), new DateTimeZone('UTC')),
+        deviceId: $outOfOrderDeviceId,
+        deviceUuid: $outOfOrderDeviceUuid,
+    ));
+
+    $seeded++;
+}
+
+// La holgura sobre el anti-rebote, en los dos sentidos: el escaneo cae ANTES de
+// la entrada (RN-18) y lo bastante lejos del ultimo aceptado como para que
+// RF-AT-06 no lo suprima.
+$outOfOrderGapSeconds = $debounceSeconds + 600;
+$openNow = $openEntriesOf($outOfOrderIds);
+$outOfOrderScans = [];
+
+foreach ($outOfOrderOwners as $index => $owner) {
+    $openedAt = $openNow[$owner->id] ?? null;
+
+    if ($openedAt === null) {
+        continue;
+    }
+
+    $outOfOrderScans[] = [
+        'qr_payload' => $outOfOrderPayloads[$index],
+        'occurred_at' => gmdate('Y-m-d\TH:i:s\Z', strtotime((string) $openedAt) - $outOfOrderGapSeconds),
+    ];
+}
+
+if ($outOfOrderScans === []) {
+    throw new RuntimeException(
+        'Ningun empleado reservado para RN-18 acabo con un turno abierto: el escenario '
+        ."reject-out-of-order no tendria nada que enviar.\n"
+        .'QUE HACER: mira la salida de arriba; lo normal es que el fichaje de siembra fallara.'
+    );
+}
+
+$say('Irreconciliables de RN-18: '.count($outOfOrderScans).' empleados con turno abierto ('
+    .$seeded.' sembrados en esta pasada, '.(count($outOfOrderScans) - $seeded).' que ya lo traian); '
+    .'el escaneo va '.$outOfOrderGapSeconds.' s antes de su entrada.');
+
 // --- El contador de divergencias ANTES de la carga ---------------------------
 
 // `projection_divergence_total` es un contador ACUMULADO que sobrevive a los
@@ -600,6 +736,10 @@ file_put_contents($outputPath, json_encode([
     'device_tokens' => $deviceTokens,
     'unknown_payloads' => $unknownPayloads,
     'revoked_payloads' => $revokedPayloads,
+    // El cuarto rechazo (RN-18): tarjeta VIVA y el instante exacto que la hace
+    // irreconciliable, leido de la entrada abierta que se acaba de sembrar. El
+    // guion no calcula nada: envia esto tal cual.
+    'out_of_order_scans' => $outOfOrderScans,
     'management_token' => $managementToken,
     'rejection_floor_ms' => $rejectionFloorMs,
     'debounce_seconds' => $debounceSeconds,

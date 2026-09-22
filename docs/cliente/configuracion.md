@@ -1153,6 +1153,8 @@ Si además has perdido la contraseña, se restablece desde el servidor:
 
 ```bash
 docker compose exec app php artisan identity:create-user   # crea otra cuenta de gestión
+docker compose exec app php artisan identity:reset-password # contraseña nueva, mostrada una vez
+docker compose exec app php artisan identity:deactivate-user # da de baja una cuenta
 docker compose exec app php artisan identity:2fa-reset     # retira un segundo factor
 ```
 

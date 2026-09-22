@@ -5,7 +5,7 @@
 # UNA INSTANCIA DE K6 ES UN ORIGEN (una IP) y el pico se compone sumando
 # origenes, como en un hotel de verdad. El presupuesto por origen sale del cubo
 # con fuga del borde —un permiso cada 100 ms con rafaga de 50, no una ventana
-# fija de 600 por minuto—, asi que se deja un 20 % de margen: ~8 peticiones/s
+# fija de 600 por minuto—, asi que se deja un 15 % de margen: ~8,5 peticiones/s
 # por instancia. Con INSTANCES=10 y SCAN_RATE=6 salen 60 fichajes validos/s.
 #
 # Este script lanza las instancias, agrega las muestras crudas de todas y,
@@ -61,6 +61,10 @@ K6_ACKNOWLEDGE_TEST_DATABASE="${K6_ACKNOWLEDGE_TEST_DATABASE:-yes}"
 K6_HISTORY_DAYS="${K6_HISTORY_DAYS:-365}"
 K6_HISTORY_EMPLOYEES="${K6_HISTORY_EMPLOYEES:-200}"
 K6_REJECT_PAYLOADS="${K6_REJECT_PAYLOADS:-200}"
+# Empleados reservados para el cuarto rechazo, el irreconciliable de RN-18
+# (H-08 / A-13). El aprovisionamiento les deja un turno ABIERTO y publica el
+# instante que lo contradice; el escenario `reject-out-of-order` solo lo envia.
+K6_OUT_OF_ORDER_PAYLOADS="${K6_OUT_OF_ORDER_PAYLOADS:-50}"
 
 # El certificado de la pila de desarrollo y el del paquete recien instalado son
 # autofirmados. Contra un entorno de pruebas con certificado real se lanza con
@@ -274,7 +278,8 @@ tinker provision-fixtures.php \
   -e K6_BATCH_CARDS="${batch_cards}" \
   -e K6_HISTORY_DAYS="${K6_HISTORY_DAYS}" \
   -e K6_HISTORY_EMPLOYEES="${K6_HISTORY_EMPLOYEES}" \
-  -e K6_REJECT_PAYLOADS="${K6_REJECT_PAYLOADS}" || true
+  -e K6_REJECT_PAYLOADS="${K6_REJECT_PAYLOADS}" \
+  -e K6_OUT_OF_ORDER_PAYLOADS="${K6_OUT_OF_ORDER_PAYLOADS}" || true
 
 compose exec -T "${K6_APP_SERVICE}" test -f /tmp/k6/k6-fixtures.json ||
   fail_unreliable "el aprovisionamiento no dejo fixtures; revisa la salida de arriba."

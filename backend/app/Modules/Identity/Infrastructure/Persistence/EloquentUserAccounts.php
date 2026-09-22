@@ -10,6 +10,7 @@ use App\Modules\Identity\Domain\ValueObject\TokenAbility;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use DateTimeImmutable;
 use Illuminate\Support\Facades\Hash;
+use SensitiveParameter;
 use Spatie\Permission\Models\Permission;
 
 /**
@@ -48,7 +49,49 @@ final readonly class EloquentUserAccounts implements UserAccounts
             return null;
         }
 
+        $this->rehashIfStale($user, $password);
+
         return $this->toAuthenticatedUser($user);
+    }
+
+    /**
+     * Vuelve a hashear la contrasena si el hash guardado se quedo por debajo del
+     * coste vigente (hallazgo **H-13** de la revision interna ASVS de 2026-09,
+     * OWASP A07).
+     *
+     * **El coste correcto no sirve de nada si no hay camino para cambiarlo.** El
+     * producto usa `bcrypt` con coste 12 y lo tiene probado, pero hasta esta
+     * tarea no existia ni un solo `needsRehash` en todo `backend/app`: el dia que
+     * 12 se quede corto —y se quedara— la instalacion no tendria forma de migrar
+     * los hashes sin un restablecimiento masivo de contrasenas, es decir, sin
+     * dejar al cliente sin panel durante una tarde.
+     *
+     * **Aqui y no en otro sitio, porque este es el unico momento en el que existe
+     * la contrasena en claro.** Sin ella no se puede calcular el hash nuevo, asi
+     * que la migracion solo puede ocurrir cuando alguien acierta.
+     *
+     * **Solo en el camino del acceso CORRECTO**, nunca en un rechazo: un rechazo
+     * no tiene con que rehashear, y darle trabajo extra a una rama y no a la otra
+     * es exactamente la asimetria medible que RS-03 saca del camino de los
+     * rechazos.
+     *
+     * **En la misma transaccion que el acceso**: si quien llama abrio una, esta
+     * escritura entra en ella; si no, un `UPDATE` solo ya es atomico. Lo que no
+     * ocurre en ningun caso es diferirlo a una cola, que dejaria la contrasena en
+     * claro viajando hasta un trabajador.
+     *
+     * **`save()` y no `update()`**: el cast `hashed` del modelo es quien aplica el
+     * algoritmo y el coste configurados, y el constructor de consultas se lo
+     * saltaria dejando la contrasena en claro en la columna.
+     */
+    private function rehashIfStale(User $user, #[SensitiveParameter] string $password): void
+    {
+        if (! Hash::needsRehash($user->password)) {
+            return;
+        }
+
+        $user->password = $password;
+        $user->save();
     }
 
     public function findByUuid(string $uuid): ?AuthenticatedUser

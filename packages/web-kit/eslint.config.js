@@ -20,6 +20,11 @@ export default defineConfigWithVueTs(
     name: 'kronoqr/rules',
     rules: {
       '@typescript-eslint/no-explicit-any': 'error',
+      // Identica a la de las tres SPA y por el mismo motivo (RS-04, H-07):
+      // `flat/recommended` la declara `warn` y solo bloqueaba por
+      // `--max-warnings 0`. Y aqui pesa mas que en ninguna: lo que se escriba
+      // con `v-html` en un componente compartido se renderiza en las tres.
+      'vue/no-v-html': 'error',
     },
   },
   skipFormatting,

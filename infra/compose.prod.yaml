@@ -280,13 +280,27 @@ services:
       postgres:
         condition: service_healthy
 
+  # ENTRYPOINT DE RENDERIZADO (tarea 3.8, hallazgo H-05). Mismo mecanismo que
+  # Alertmanager (ver el comentario de ese servicio, mas abajo, para el
+  # porque): `APP_URL` es especifica de esta instalacion (regla dura 13) y
+  # Prometheus no expande variables de entorno en `scrape_configs`, asi que
+  # `/etc/prometheus/prometheus.yml.template` se resuelve contra el entorno
+  # ANTES de que el binario arranque y el resultado se escribe en
+  # `/prometheus/prometheus.yml` — el volumen de datos, nunca la plantilla de
+  # solo lectura. Sin `APP_URL`, o con `TLS_ALLOW_SELF_SIGNED=true`, el job de
+  # la sonda TLS verificada se omite (target condicionado): Prometheus arranca
+  # igual, solo que sin esa serie.
   prometheus:
     profiles: [observability]
     image: prom/prometheus:v3.1.0
+    entrypoint: ["/etc/prometheus/render-config.sh"]
     command:
-      - --config.file=/etc/prometheus/prometheus.yml
+      - --config.file=/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
       - --storage.tsdb.retention.time=90d
+    environment:
+      APP_URL: ${APP_URL:-}
+      TLS_ALLOW_SELF_SIGNED: ${TLS_ALLOW_SELF_SIGNED:-false}
     volumes:
       - ./observability/prometheus:/etc/prometheus:ro
       - prometheus-data:/prometheus

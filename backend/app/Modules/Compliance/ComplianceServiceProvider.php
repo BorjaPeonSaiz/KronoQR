@@ -88,6 +88,8 @@ use App\Modules\Identity\Domain\Event\CredentialPrinted;
 use App\Modules\Identity\Domain\Event\CredentialRevoked;
 use App\Modules\Identity\Domain\Event\DeviceTokenIssued;
 use App\Modules\Identity\Domain\Event\DeviceTokenRevoked;
+use App\Modules\Identity\Domain\Event\ManagementAccountDeactivated;
+use App\Modules\Identity\Domain\Event\ManagementPasswordReset;
 use App\Modules\Identity\Domain\Event\ManagementRoleAssigned;
 use App\Modules\Identity\Domain\Event\SigningKeyRetired;
 use App\Modules\Identity\Domain\Event\SigningKeyRotated;
@@ -870,5 +872,19 @@ final class ComplianceServiceProvider extends ServiceProvider
         Event::listen(TwoFactorEnabled::class, [RecordManagementAccountLifecycle::class, 'handleTwoFactorEnabled']);
         Event::listen(TwoFactorReset::class, [RecordManagementAccountLifecycle::class, 'handleTwoFactorReset']);
         Event::listen(ManagementRoleAssigned::class, [RecordManagementAccountLifecycle::class, 'handleRoleAssigned']);
+
+        // La baja de la cuenta y la sustitucion de su contrasena (tarea 3.8,
+        // H-03 de la revision interna ASVS). Sincronos como los tres de arriba:
+        // si el asiento falla, la cuenta sigue activa y la contrasena sigue
+        // siendo la anterior. Una baja sin traza es el hecho que alguien querria
+        // que no constara.
+        Event::listen(
+            ManagementAccountDeactivated::class,
+            [RecordManagementAccountLifecycle::class, 'handleAccountDeactivated'],
+        );
+        Event::listen(
+            ManagementPasswordReset::class,
+            [RecordManagementAccountLifecycle::class, 'handlePasswordReset'],
+        );
     }
 }

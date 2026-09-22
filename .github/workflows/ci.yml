@@ -1977,7 +1977,25 @@ jobs:
           # al publicar la siguiente, la primera. Las dos se exigen, no se toleran.
           test "$(grep '^users=' conteos-antes-u3.txt)" = "$(grep '^users=' conteos-despues-u3.txt)"
           antes="$(sed -n 's/^audit_log=//p' conteos-antes-u3.txt)"; despues="$(sed -n 's/^audit_log=//p' conteos-despues-u3.txt)"
-          if compose exec -T app php artisan list --raw | grep -q '^compliance:record-system-event'; then
+          # LA MISMA pregunta que hace update.sh y CON LA MISMA FUNCION
+          # (infra/scripts/lib/app-commands.sh). Habia dos copias de la misma
+          # tuberia contra `grep -q`, y esa tuberia responde NO cuando la
+          # respuesta es SI: `grep -q` cierra el tubo al encontrar la linea y el
+          # cliente de Docker, que aun esta volcando el catalogo, termina con 1.
+          # Las dos copias no tienen por que equivocarse a la vez, asi que este
+          # paso pasaba o fallaba segun a cual le tocara (35697335929 en verde,
+          # 35700735466 en rojo, con el mismo codigo de la version anterior).
+          # Si la funcion sale con 2 -no se ha podido preguntar- el paso falla:
+          # no hay respuesta valida, y tolerarlo devolveria la no-determinacion.
+          # shellcheck source=infra/scripts/lib/app-commands.sh
+          . infra/scripts/lib/app-commands.sh
+          # La biblioteca fija IFS (doc 02 3.5: un fichero que se carga con `.` se
+          # lo impone a quien lo carga); el resto del paso sigue con el de bash.
+          unset IFS
+          conoce=0
+          kq_app_knows_command compose compliance:record-system-event || conoce=$?
+          test "${conoce}" -ne 2 || { echo "No se ha podido preguntar a la version anterior si conoce compliance:record-system-event: ${KQ_APP_COMMAND_ERROR}"; exit 1; }
+          if [ "${conoce}" -eq 0 ]; then
             test "$despues" -eq "$((antes + 1))" || { echo "audit_log paso de ${antes} a ${despues}: se esperaba exactamente un asiento system.restored_from_backup mas"; exit 1; }
             consulta "SELECT action FROM audit_log ORDER BY id DESC LIMIT 1" | grep -qx 'system.restored_from_backup'
           else

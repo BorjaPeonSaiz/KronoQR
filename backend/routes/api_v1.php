@@ -455,6 +455,18 @@ Route::get('/reports/legal-export', LegalExportController::class)
     ->middleware([
         'auth:sanctum',
         'ability:'.TokenAbility::REPORTS_LEGAL->value.','.TokenAbility::REPORTS_ALL->value,
+        /*
+         * `throttle:management` POR LA REVISION INTERNA ASVS DE 2026-09 (H-01).
+         * Faltaba, y era la ausencia mas cara del contrato: esta ruta devuelve
+         * **el registro horario completo de toda la plantilla**, y lo unico que
+         * la frenaba era la zona de Nginx, que cuenta por ORIGEN y en un hotel
+         * es un cubo compartido por NAT entre todo el personal. La zona de
+         * aplicacion es la unica que cuenta por CUENTA, que es lo que convierte
+         * «tengo un token de `rrhh` robado» en «puedo llevarme la plantilla
+         * entera a la velocidad de la red». Misma zona que
+         * `/reports/period/export`, que si la llevaba desde el principio.
+         */
+        'throttle:management',
         // Es un documento para la Inspeccion: idioma de la instalacion.
         'locale.installation',
     ])
@@ -687,6 +699,20 @@ Route::prefix('auth')->group(function (): void {
      * El cierre de sesion SI acepta un token pendiente, a proposito: abandonar un
      * acceso a medias es lo que hace el panel cuando alguien cancela la pantalla
      * del codigo, y negarselo dejaria el reto vivo hasta que caduque.
+     *
+     * LA UNICA RUTA AUTENTICADA DE LA API SIN ZONA DE LIMITE, Y ESTA DECIDIDO
+     * ASI (revision interna ASVS de 2026-09, H-01; decision 11 de la ficha 3.8).
+     * `Tests\Feature\Identity\RouteRateLimitZonesTest` la lleva en una lista
+     * cerrada de una sola entrada: cualquier otra ruta que aparezca sin zona
+     * rompe esa prueba.
+     *
+     * El motivo es que aqui un techo no frena ningun abuso y si hace daño. Esta
+     * ruta revoca **el token del que llama** y nada mas: no lleva `ability:`, no
+     * lee ni escribe ningun dato del cliente y acepta a proposito la sesion
+     * pendiente de segundo factor. Quien agotara el cupo solo se estaria cerrando
+     * la sesion a si mismo; lo que si produciria el techo es dejar a una persona
+     * **sin poder cerrar sesion** justo en el momento en que mas lo necesita, que
+     * es cuando sospecha que su token esta comprometido.
      */
     Route::post('/logout', LogoutController::class)
         ->middleware('auth:sanctum')
@@ -700,9 +726,15 @@ Route::prefix('auth')->group(function (): void {
      * este seria el unico endpoint alcanzable con media autenticacion, y lo que
      * adelantaria —rol y alcance por departamento— es justo lo que ayuda a decidir
      * a que cuenta merece la pena seguir atacando (RS-06).
+     *
+     * `throttle:management` POR LA REVISION INTERNA ASVS DE 2026-09 (H-01): el
+     * mismo criterio que `/attendance/live`. Lo que esta respuesta adelanta
+     * —rol y alcance por departamento— es justo lo que sirve para elegir a que
+     * cuenta atacar, asi que no puede quedar acotada solo por la zona de Nginx,
+     * que cuenta por origen y no sabe que token trae la peticion.
      */
     Route::get('/me', CurrentUserController::class)
-        ->middleware(['auth:sanctum', 'session.complete'])
+        ->middleware(['auth:sanctum', 'session.complete', 'throttle:management'])
         ->name('auth.me');
 });
 
@@ -814,7 +846,30 @@ Route::middleware([
         ->name('employees.show');
 });
 
-Route::middleware(['auth:sanctum', 'ability:'.TokenAbility::EMPLOYEES_ALL->value])->group(function (): void {
+/*
+ * Mantenimiento de la plantilla, de los departamentos y del centro.
+ *
+ * `throttle:management` EN EL GRUPO ENTERO, Y NO SOLO EN `import` (revision
+ * interna ASVS de 2026-09, H-01; decision 11 de la ficha 3.8). Hasta esta
+ * tarea, las trece rutas de aqui dependian en exclusiva de la zona de Nginx, y
+ * esa zona **cuenta por origen**: en un hotel, donde toda la gestion sale por la
+ * misma linea, es un cubo compartido por NAT entre todo el personal y no
+ * distingue dos sesiones. La zona de aplicacion es la unica capa que cuenta por
+ * CUENTA, ademas de por origen.
+ *
+ * Y no es solo caudal: estas rutas pasan por `ScopeGuard`, cuyas denegaciones
+ * escriben `access.denied` en `audit_log` bajo el `pg_advisory_xact_lock` global
+ * de ADR-010 —el mismo por el que pasa cada fichaje—. Sin techo, un bucle sobre
+ * UUID ajenos mete escrituras serializadas en el camino critico del cambio de
+ * turno. El argumento que antes justificaba el hueco («escribe fichas de una en
+ * una y ya esta acotado por Nginx») era exactamente el que `RouteRateLimitZonesTest`
+ * existe para que nadie vuelva a escribir.
+ */
+Route::middleware([
+    'auth:sanctum',
+    'ability:'.TokenAbility::EMPLOYEES_ALL->value,
+    'throttle:management',
+])->group(function (): void {
     Route::post('/employees', [EmployeeController::class, 'store'])->name('employees.store');
 
     /*
@@ -836,17 +891,20 @@ Route::middleware(['auth:sanctum', 'ability:'.TokenAbility::EMPLOYEES_ALL->value
      * dejar en disco un fichero con los nombres y los documentos de identidad de
      * la plantilla esperando a que alguien confirme.
      *
-     * `throttle:management` SOLO EN ESTA RUTA del grupo, y no en el grupo entero
-     * —que escribe fichas de una en una y ya esta acotado por Nginx—: una
-     * importacion es la peticion mas cara del producto. Lee un fichero de hasta
-     * 4 MB, calcula 500 hashes de bcrypt y abre una transaccion que toma el
-     * candado global de `audit_log` (ADR-010), **detras del cual se serializa
-     * cada fichaje del hotel**. Sin techo, un bucle de reintentos del navegador
-     * —o un doble clic con un fichero grande— deja la tablet de la entrada
-     * esperando. El `429` ya esta declarado en el contrato para esta ruta.
+     * LA ZONA LA PONE EL GRUPO, y desde la revision interna ASVS de 2026-09 la
+     * comparten las trece rutas. Antes se declaraba aqui sola, con el argumento
+     * de que el resto del grupo «escribe fichas de una en una y ya esta acotado
+     * por Nginx»: ese argumento era el hueco H-01 y ha dejado de valer, porque
+     * Nginx cuenta por origen y no por cuenta.
+     *
+     * Lo que sigue siendo cierto es que esta ruta es la peticion mas cara del
+     * producto —lee un fichero de hasta 4 MB, calcula 500 hashes de bcrypt y
+     * abre una transaccion que toma el candado global de `audit_log` (ADR-010),
+     * detras del cual se serializa cada fichaje del hotel—, asi que comparte
+     * cupo con el resto de la gestion y no tiene uno propio: un techo por ruta
+     * es un techo que se rodea alternando URL.
      */
     Route::post('/employees/import', EmployeeImportController::class)
-        ->middleware('throttle:management')
         ->name('employees.import');
     Route::patch('/employees/{uuid}', [EmployeeController::class, 'update'])
         ->whereUuid('uuid')

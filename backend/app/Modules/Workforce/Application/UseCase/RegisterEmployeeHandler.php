@@ -108,6 +108,10 @@ final readonly class RegisterEmployeeHandler
                 siteId: $employee->siteId,
                 departmentId: $employee->departmentId,
                 occurredAt: $this->clock->now(),
+                // Se propaga tal cual: el alta es identica venga de donde venga,
+                // y lo unico que cambia es quien cuenta el uso del plan —una vez
+                // por lote y no una por fila (ADR-028, H-04 de la 3.8)—.
+                viaImport: $command->viaImport,
             ));
 
             return new RegisteredEmployee($employee, $pin);

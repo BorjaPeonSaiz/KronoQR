@@ -43,4 +43,50 @@ final readonly class PlanUsage
     {
         return $this->contracted === null ? 0 : max(0, $this->actual - $this->contracted);
     }
+
+    /**
+     * De las `$added` unidades que **acaba de añadir una sola operacion**,
+     * cuantas quedan por encima del plan.
+     *
+     * ## Por que hace falta contar esto
+     *
+     * Porque una importacion de plantilla (RF-GP-05) da de alta a cientos de
+     * personas de una vez y produce **un solo asiento** (H-04 de la revision de
+     * la 3.8): sin esta cifra, ese asiento diria cuanta gente sobra en total
+     * pero no cuanta metio la operacion que lo escribio, que es justo lo que
+     * pregunta quien lo lee —«¿cuantos de esos 220 entraron con aquel fichero?»—
+     * y lo unico que distingue importar 300 de golpe de importar 30 diez veces.
+     *
+     * Es un `min` y no una resta: si la instalacion ya estaba en exceso antes de
+     * la operacion, las unidades en exceso de esta son **todas** las que
+     * entraron, no la diferencia con el tope.
+     */
+    public function excessAmong(int $added): int
+    {
+        return min(max(0, $added), $this->excess());
+    }
+
+    /**
+     * ¿Fue **esta** operacion la que cruzo el umbral?
+     *
+     * ADR-028 pide distinguir el cruce —la fecha desde la que el cliente opera
+     * fuera de contrato, que es la que sostiene una reclamacion— de las altas
+     * posteriores en exceso, que dan la magnitud.
+     *
+     * Vale igual para un alta de una en una (`$added = 1`, y entonces esto es
+     * exactamente «el exceso es de uno») y para un lote: con `$added` altas de
+     * golpe, el umbral lo cruzo esta operacion si **antes** de ella se cabia en
+     * el plan. Calcularlo con el exceso total, como se hacia hasta la 3.8, es
+     * correcto solo cuando las unidades entran de una en una: en un lote lo
+     * cumplia por casualidad la fila que resultara ser la primera pasada del
+     * tope, y nunca la importacion entera.
+     */
+    public function crossedBy(int $added): bool
+    {
+        $contracted = $this->contracted;
+
+        return $contracted !== null
+            && $this->actual > $contracted
+            && $this->actual - max(0, $added) <= $contracted;
+    }
 }

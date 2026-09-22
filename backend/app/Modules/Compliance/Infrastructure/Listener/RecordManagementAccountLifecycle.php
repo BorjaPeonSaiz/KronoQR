@@ -11,6 +11,8 @@ use App\Modules\Compliance\Domain\ValueObject\AuditActor;
 use App\Modules\Compliance\Domain\ValueObject\AuditPayload;
 use App\Modules\Compliance\Domain\ValueObject\AuditSubject;
 use App\Modules\Compliance\Infrastructure\Audit\ManagementUserDirectory;
+use App\Modules\Identity\Domain\Event\ManagementAccountDeactivated;
+use App\Modules\Identity\Domain\Event\ManagementPasswordReset;
 use App\Modules\Identity\Domain\Event\ManagementRoleAssigned;
 use App\Modules\Identity\Domain\Event\TwoFactorEnabled;
 use App\Modules\Identity\Domain\Event\TwoFactorReset;
@@ -24,8 +26,15 @@ use App\Modules\Identity\Domain\Event\TwoFactorReset;
  * Compliance`, asi que `Identity` publica su evento y este listener lo traduce al
  * vocabulario cerrado de {@see AuditAction}.
  *
+ * **Desde la tarea 3.8 sella tambien la baja de la cuenta y la sustitucion de su
+ * contrasena** (`user.deactivated` y `user.password_reset`, hallazgo H-03 de la
+ * revision interna ASVS de 2026-09). Son el resto del ciclo de vida que esta
+ * clase contaba a medias: sabia decir quien recibio un rol y quien perdio su
+ * segundo factor, pero no quien dejo de tener acceso, cuando ni por orden de
+ * quien.
+ *
  * **Por que un listener nuevo y no un metodo mas en el de credenciales.** Porque
- * las tres acciones de aqui **no son todas de la misma familia del bloque D**: el
+ * las acciones de aqui **no son todas de la misma familia del bloque D**: el
  * segundo factor es ciclo de vida de una credencial y el rol es «cambia roles,
  * permisos o configuracion». Meterlas en la clase que se llama «credential
  * lifecycle» haria que su nombre mintiera sobre la mitad de lo que hace.
@@ -77,6 +86,36 @@ final readonly class RecordManagementAccountLifecycle
             payload: AuditPayload::of([
                 'user_uuid' => $event->userUuid,
                 'reason' => $event->reason,
+            ]),
+            occurredAt: $event->occurredAt(),
+        ));
+    }
+
+    public function handleAccountDeactivated(ManagementAccountDeactivated $event): void
+    {
+        $this->audit->handle(new RecordAuditEntryCommand(
+            actor: $this->actor($event->actorUuid),
+            action: AuditAction::ManagementAccountDeactivated,
+            subject: AuditSubject::of('user', $this->users->idOf($event->userUuid)),
+            payload: AuditPayload::of([
+                'user_uuid' => $event->userUuid,
+                'reason' => $event->reason,
+            ]),
+            occurredAt: $event->occurredAt(),
+        ));
+    }
+
+    public function handlePasswordReset(ManagementPasswordReset $event): void
+    {
+        $this->audit->handle(new RecordAuditEntryCommand(
+            actor: $this->actor($event->actorUuid),
+            action: AuditAction::ManagementPasswordReset,
+            subject: AuditSubject::of('user', $this->users->idOf($event->userUuid)),
+            // Solo el uuid, y ni siquiera un motivo: el hecho auditable es que la
+            // credencial se sustituyo. La contrasena, su longitud y cualquier
+            // derivado suyo se quedan fuera del payload a proposito.
+            payload: AuditPayload::of([
+                'user_uuid' => $event->userUuid,
             ]),
             occurredAt: $event->occurredAt(),
         ));

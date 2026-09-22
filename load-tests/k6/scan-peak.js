@@ -9,20 +9,30 @@
 //   `limit_req_zone … rate=600r/m` NO significa «600 en cada minuto». Nginx
 //   convierte la tasa a UN PERMISO CADA 100 ms y acumula como mucho `burst=50`
 //   permisos sin usar. Dos peticiones separadas por 40 ms gastan ráfaga aunque
-//   el minuto entero vaya a quedarse en 300. Con cuatro planificadores
-//   independientes —`scan`, `resend`, `reject` y `batch`— los solapamientos son
-//   inevitables, asi que el presupuesto no puede rozar el techo.
+//   el minuto entero vaya a quedarse en 300. Con cinco planificadores
+//   independientes —`scan`, `resend`, los dos de rechazo y `batch`— los
+//   solapamientos son inevitables, asi que el presupuesto no puede rozar el
+//   techo.
 //
-//   Por eso: 6 fichajes/s + 1 r/s de reenvio + 1 r/s de rechazo + un lote por
-//   minuto ≈ 8 r/s = 480/min por origen, un 20 % por debajo de los 600 del
-//   borde. Con INSTANCES=10 salen 60 fichajes validos/s, por encima de los 50
-//   de RNF-P-06.
+//   Por eso: 6 fichajes/s + 1 r/s de reenvio + 1 r/s de rechazo de credencial +
+//   0,5 r/s de rechazo irreconciliable + un lote por minuto ≈ 8,5 r/s = 510/min
+//   por origen, un 15 % por debajo de los 600 del borde. Con INSTANCES=10 salen
+//   60 fichajes validos/s, por encima de los 50 de RNF-P-06.
 //
-// CINCO ESCENARIOS, Y NINGUNO ES DECORATIVO:
+// SEIS ESCENARIOS, Y NINGUNO ES DECORATIVO:
 //
 //   scan        6/s    fichajes validos. Es la cifra de RNF-P-06.
 //   resend      0,5/s  un fichaje y su reenvio identico (regla dura 8, RQ-03).
-//   reject      1/s    las tres clases de rechazo, comparadas ENTRE SI (RS-03).
+//   reject      1/s    las tres clases de rechazo de CREDENCIAL, comparadas
+//                      ENTRE SI (RS-03).
+//   reject-out-of-order
+//               0,5/s  el CUARTO rechazo, el de RN-18: un fichaje que no se
+//                      puede reconciliar con el registro. Tarda mas que los
+//                      tres de credencial porque llega por otro camino —tarjeta
+//                      ya resuelta, ajustes leidos, jornada cargada— y A-13
+//                      (doc 07 §6) acepto esa diferencia SIN suelo de tiempo.
+//                      Lo que faltaba era la cifra: este escenario la produce y
+//                      `aggregate.js` la publica como INFORMATIVA (H-08).
 //   batch       1 lote de 50 por minuto: 25 pares entrada/salida del MISMO
 //                      empleado, enviados en orden inverso a su `occurred_at`,
 //                      con UN elemento imposible de reconciliar (RN-18).
@@ -75,7 +85,7 @@ const BATCH_BACKLOG_SECONDS = 600
 const BATCH_PAIR_SPACING_SECONDS = 20
 
 /**
- * Los cinco escenarios, con su etiqueta de requisito.
+ * Los seis escenarios, con su etiqueta de requisito.
  *
  * `tags.requirements` es ETIQUETA NATIVA DE K6: viaja en cada muestra del CSV
  * —de ahi que el agregado pueda dar el veredicto por requisito— y es ademas el
@@ -113,6 +123,33 @@ const SCENARIOS = {
     maxVUs: 30,
     tags: { requirements: 'RS-03' },
   },
+  /*
+   * El CUARTO rechazo: RN-18, el fichaje irreconciliable (H-08 de la revision
+   * interna de seguridad, A-13 del doc 07 §6).
+   *
+   * POR QUE ES UN ESCENARIO APARTE Y NO UNA CLASE MAS DE `reject`. Las tres
+   * clases de `reject` son rechazos de CREDENCIAL y se cortan antes de tocar el
+   * registro; `ConstantTimeFloor` las iguala entre si a proposito. El `422` de
+   * RN-18 comparte el cuerpo generico pero **no el reloj**: llega con la tarjeta
+   * ya resuelta, los ajustes leidos y la jornada del empleado cargada. Meterlo
+   * en `REJECT_CLASSES` pondria en rojo el veredicto de RS-03 por una diferencia
+   * que A-13 acepto con argumento; medirlo aparte publica la cifra que esa
+   * aceptacion prometia y no tenia.
+   *
+   * MEDIO r/s Y NO UNO: el presupuesto por origen sale del cubo con fuga del
+   * borde (arriba) y ya iba al 80 %. Con 0,5/s una pasada de 120 s deja 60
+   * rechazos por instancia, tres veces el suelo de muestras del agregado.
+   */
+  'reject-out-of-order': {
+    executor: 'constant-arrival-rate',
+    exec: 'outOfOrderRejection',
+    rate: 1,
+    timeUnit: '2s',
+    duration: DURATION,
+    preAllocatedVUs: 5,
+    maxVUs: 30,
+    tags: { requirements: 'RS-03 RN-18' },
+  },
   batch: {
     executor: 'constant-arrival-rate',
     exec: 'offlineBatch',
@@ -145,7 +182,7 @@ const SCENARIOS = {
  * asiento bajo el candado de la cadena de auditoria (ADR-010, ADR-027).
  */
 const SCENARIOS_BY_ROLE = {
-  kiosk: ['scan', 'resend', 'reject', 'batch'],
+  kiosk: ['scan', 'resend', 'reject', 'reject-out-of-order', 'batch'],
   panel: ['compliance'],
 }
 
@@ -254,6 +291,34 @@ const DEVICE_TOKENS = (() => {
 
 /** Origen de la ventana de lotes, distinto en cada minuto (ver `offlineBatch`). */
 const BATCH_START = Math.floor(Date.now() / 60_000) * BATCH_PAIRS
+
+/**
+ * Los escaneos irreconciliables que preparo el aprovisionamiento (RN-18).
+ *
+ * CADA ELEMENTO ES `{ qr_payload, occurred_at }` Y EL INSTANTE VIENE DADO. No se
+ * calcula aqui, y esa es la diferencia entre una medida y una casualidad:
+ * `provision-fixtures.php` deja a estos empleados —RESERVADOS, fuera de toda
+ * rebanada— con un turno ABIERTO, lee de la base la hora real de esa entrada y
+ * publica un `occurred_at` ANTERIOR a ella con holgura sobre la ventana del
+ * anti-rebote. Con eso, cada peticion de este escenario es un cierre que no
+ * puede ser posterior a su entrada: `rejected_out_of_order`, siempre, sin que el
+ * guion tenga que adivinar el estado de nadie.
+ *
+ * NO CAMBIA NADA EN EL SERVIDOR: un rechazo de RN-18 deja fila en `scan_events`
+ * y no toca `shift_entries` ni `daily_totals`, asi que el turno abierto sigue
+ * igual peticion tras peticion y el escenario es repetible dentro de la pasada.
+ */
+const OUT_OF_ORDER_SCANS = (() => {
+  const scans = DATA.out_of_order_scans ?? []
+
+  if (SCENARIOS_BY_ROLE[ROLE].includes('reject-out-of-order') && scans.length === 0) {
+    throw new Error(
+      'Los fixtures no traen `out_of_order_scans`: regenera con provision-fixtures.php.',
+    )
+  }
+
+  return scans
+})()
 
 const UNKNOWN_PAYLOADS = DATA.unknown_payloads
 const REVOKED_PAYLOADS = DATA.revoked_payloads
@@ -409,6 +474,11 @@ export function idempotentResend() {
  * iguala rechazos entre si a proposito, y un fichaje aceptado hace mas trabajo
  * —escribe tramo, proyeccion y asiento—, asi que exigirle el mismo tiempo seria
  * exigir un suelo que se notaria en el cambio de turno.
+ *
+ * SON TRES Y NO CUATRO: el rechazo de RN-18 tiene su propio escenario. Meterlo
+ * aqui pondria en rojo el veredicto de RS-03 por una diferencia que doc 07 §6
+ * acepto con argumento (A-13), y el veredicto dejaria de significar «los
+ * rechazos de credencial son indistinguibles».
  */
 const REJECT_CLASSES = ['signature', 'unknown', 'revoked']
 
@@ -446,6 +516,55 @@ export function genericRejection() {
   check(response, {
     'el rechazo es 422 problem+json': (r) => r.status === 422 || unanswered(r),
     'el cuerpo es el generico, con el scan_id como unica variacion': (r) =>
+      r.status !== 422 ||
+      (body !== null &&
+        body.type === 'urn:kronoqr:problem:scan-rejected' &&
+        body.status === 422 &&
+        body.scan_id === scanId &&
+        Object.keys(body).sort().join(',') === 'detail,scan_id,status,title,type'),
+  })
+}
+
+// --- reject-out-of-order: el cuarto rechazo, el de RN-18 (RS-03, RN-18) ------
+
+/**
+ * Un fichaje que NO se puede reconciliar con el registro.
+ *
+ * QUE SE MIDE Y QUE NO. No se juzga aqui ninguna separacion de tiempos: eso lo
+ * hace `aggregate.js`, y lo hace de forma INFORMATIVA porque A-13 (doc 07 §6)
+ * acepto que este camino tarde mas que los tres rechazos de credencial, con
+ * argumento y sin suelo de tiempo. Lo que este escenario aporta es la cifra que
+ * aquella aceptacion prometia «revisar con la medicion real» y nunca tuvo.
+ *
+ * LO QUE SI SE AFIRMA, Y ES BLOQUEANTE: que el rechazo es `422` —y no el `503`
+ * que dejaba a la cola del quiosco reintentando para siempre— y que su cuerpo es
+ * el mismo generico que devuelve una tarjeta revocada. Un cuerpo distinto seria
+ * un oraculo: diria «esta tarjeta es de alguien con un turno abierto».
+ *
+ * EL DESPLAZAMIENTO POR INSTANCIA reparte las tarjetas entre los origenes. No es
+ * por el anti-rebote —un rechazo no lo alimenta— sino para no concentrar todas
+ * las instancias en la misma fila de `employees`.
+ */
+export function outOfOrderRejection() {
+  const iteration = exec.scenario.iterationInTest
+  const seeded = OUT_OF_ORDER_SCANS[(INSTANCE + iteration) % OUT_OF_ORDER_SCANS.length]
+  const scanId = uuidv7()
+
+  const response = http.post(
+    `${BASE}/api/v1/scan`,
+    scanBody(scanId, seeded.qr_payload, seeded.occurred_at),
+    {
+      headers: kioskHeaders(deviceToken(iteration), scanId),
+      tags: { phase: 'reject_out_of_order' },
+    },
+  )
+
+  const body = response.status === 422 ? response.json() : null
+
+  check(response, {
+    'el fichaje irreconciliable se rechaza con 422 y no con 503 (RN-18)': (r) =>
+      r.status === 422 || unanswered(r),
+    'el 422 de RN-18 lleva el mismo cuerpo generico que un rechazo de credencial (RS-03)': (r) =>
       r.status !== 422 ||
       (body !== null &&
         body.type === 'urn:kronoqr:problem:scan-rejected' &&

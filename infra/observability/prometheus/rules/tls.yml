@@ -81,3 +81,81 @@ groups:
             este es el escenario que la alerta de 21 dias existia para
             evitar. Renueva el certificado de inmediato.
           runbook_url: docs/runbooks/renovacion-certificado-tls.md
+
+  #----------------------------------------------------------------------------
+  # SEGUNDO GRUPO: LA VALIDEZ DEL CERTIFICADO, NO SU FECHA (tarea 3.8, hallazgo
+  # H-05 de docs/seguridad/revision-interna-asvs-2026-09.md). Las dos reglas de
+  # arriba viven de `probe_ssl_earliest_cert_expiry`, que sale de
+  # `kronoqr-uptime` (modulo `http_2xx_tls`, `insecure_skip_verify: true`): esa
+  # sonda mide FECHA, nunca IDENTIDAD, y a proposito — el nombre `nginx` nunca
+  # coincide con el certificado del hotel. Una cadena incompleta, un
+  # certificado sustituido por otro de emisor distinto, o un nombre que dejo
+  # de coincidir con `APP_URL` tras un cambio de dominio, NO son "fecha": son
+  # exactamente lo que esta regla vigila.
+  #
+  # LA METRICA: `probe_success{job="kronoqr-uptime-tls-verified"}`, del
+  # segundo job de `prometheus.yml.template` (modulo `http_2xx_tls_verified`,
+  # `insecure_skip_verify: false`, `blackbox/blackbox.yml`). Ese job SOLO
+  # existe cuando la instalacion configuro `APP_URL` y NO declaro
+  # `TLS_ALLOW_SELF_SIGNED=true` (`render-config.sh`): sin la serie, esta regla
+  # no tiene nada que evaluar y no dispara — la forma en que se tolera el modo
+  # autofirmado declarado a proposito sin fingir una verificacion que nunca
+  # podria pasar (decision de la tarea 3.8; ver la cabecera de
+  # `blackbox/blackbox.yml` para el razonamiento completo).
+  #
+  # POR QUE TRES CONDICIONES A LA VEZ, Y NO SOLO "el probe verificado fallo".
+  # Sin las otras dos, esta alerta duplicaria las dos de arriba:
+  #
+  #   1. `min(probe_success{job="kronoqr-uptime-tls-verified"}) == 0` — la
+  #      conexion CON verificacion de identidad activa ha fallado.
+  #   2. `and on() min(probe_success{job="kronoqr-uptime"}) == 1` — el borde
+  #      SI responde por HTTPS desde dentro de la red de contenedores. Sin
+  #      esto, un servidor completamente caido (Nginx parado, red del hotel
+  #      cortada) haria fallar TAMBIEN el probe verificado, y esta alerta
+  #      sonaria a la vez que `SondaDelBordeFallida` por el mismo hecho: el
+  #      borde caido, no un certificado no verificable.
+  #   3. `and on() (min(probe_ssl_earliest_cert_expiry) - time() >= 0)` — el
+  #      certificado, por fecha, TODAVIA no ha caducado. Un certificado
+  #      caducado tambien falla la verificacion de cadena (Go trata la
+  #      caducidad como un error de verificacion mas), asi que sin esta
+  #      condicion un certificado caducado encenderia esta alerta A LA VEZ que
+  #      `CertificadoTlsCaducado` — la misma emergencia contada dos veces, el
+  #      mismo problema que la decision 17(h) ya resolvio entre las dos reglas
+  #      de arriba.
+  #
+  # `and on()`: los tres lados son vectores de un solo elemento sin etiquetas
+  # (tras `min(...)`), asi que `on()` los empareja sin comparar ninguna
+  # etiqueta — lo que se necesita para combinar series de jobs distintos con
+  # nombres de instancia distintos.
+  #
+  # DESTINATARIO: IT del cliente, igual que las dos alertas de arriba (doc 01
+  # §9.3: gestiona el certificado del servidor). SEVERIDAD: critica, igual que
+  # `CertificadoTlsCaducado` y no que la de "proximo a caducar": el impacto
+  # para quien llega por `APP_URL` desde fuera es el mismo aviso de conexion
+  # no segura del navegador, hoy, no dentro de 21 dias.
+  #----------------------------------------------------------------------------
+  - name: kronoqr-tls-verificado
+    interval: 5m
+    rules:
+      - alert: CertificadoTlsNoVerificable
+        expr: >-
+          min(probe_success{job="kronoqr-uptime-tls-verified"}) == 0
+          and on() min(probe_success{job="kronoqr-uptime"}) == 1
+          and on() (min(probe_ssl_earliest_cert_expiry) - time() >= 0)
+        for: 15m
+        labels:
+          severity: critical
+          destinatario: it-cliente
+          component: tls
+        annotations:
+          summary: "El certificado TLS del borde no verifica contra APP_URL (cadena, nombre o emisor)"
+          description: >-
+            La sonda que SI valida identidad (contra APP_URL, con
+            insecure_skip_verify: false) no logra establecer una conexion de
+            confianza, y no es por caducidad (esa la cubren las dos alertas
+            de arriba) ni porque el borde este caido (responde por HTTPS
+            desde dentro de la red de contenedores). Revisa la cadena
+            completa del certificado (faltan los intermedios), quien lo
+            emitio, y si el nombre (CN/SAN) sigue coincidiendo con APP_URL:
+            un navegador real vera exactamente este mismo rechazo.
+          runbook_url: docs/runbooks/renovacion-certificado-tls.md

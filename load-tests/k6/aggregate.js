@@ -18,6 +18,28 @@
 // cumple tambien sin haber comparado ninguno. Un requisito no evaluable termina
 // con salida 2, que es «vuelve a medir», y nunca con 0.
 //
+// Y UNO MAS QUE NO ES UN DESENLACE: `info`. Lo lleva `RS-03-RN-18`, que publica
+// cuanto se separa el `422` de RN-18 de los tres rechazos de credencial. A-13
+// (doc 07 §6) acepto esa diferencia SIN suelo de tiempo y pidio la cifra, no una
+// puerta: por eso `info` no entra en el codigo de salida ni en el «VEREDICTO».
+//
+// QUE PUBLICA `summary.json`, ademas de lo evidente:
+//
+//   verdicts['<requisito>']       `{ status, detail }`. `status` es `pass`,
+//                                 `fail`, `unmeasurable` o —solo en
+//                                 `RS-03-RN-18`— `info`.
+//   reject_classes.<clase>        `signature`, `unknown` y `revoked`: muestras,
+//                                 minimo y percentiles del rechazo de
+//                                 credencial. Es lo que compara RS-03.
+//   reject_out_of_order           el CUARTO rechazo (RN-18): `samples`,
+//                                 `offered`, `reconciled` (las que si cuadraron
+//                                 y por tanto no miden nada), `min`, `p50`,
+//                                 `p95`, `max`, `firm` (si hay muestras
+//                                 bastantes) y `separation_ms`, con la
+//                                 diferencia FIRMADA —positiva si RN-18 tarda
+//                                 mas— de la mediana y del minimo frente a cada
+//                                 una de las tres clases de credencial.
+//
 // Uso:
 //   node aggregate.js <directorio con instance-*.csv> --duration=120 --instances=10
 //        [--scan-rate 6] [--rejection-floor-ms 25] [--debounce-seconds 60]
@@ -91,6 +113,24 @@ const REALTIME_PHASES = new Set(['scan', 'resend_original'])
 const VALID_SCAN_PHASES = new Set(['scan', 'resend_original', 'resend_replay', 'batch', 'batch_seed'])
 
 const REJECT_CLASSES = ['signature', 'unknown', 'revoked']
+
+/**
+ * La fase del escenario `reject-out-of-order`: el CUARTO rechazo, el de RN-18.
+ *
+ * NO ES UNA CLASE MAS DE `REJECT_CLASSES`, Y ESO ES LA MITAD DEL ASUNTO. Las
+ * tres de arriba son rechazos de CREDENCIAL y `ConstantTimeFloor` las iguala
+ * entre si; el `422` de RN-18 comparte el cuerpo generico pero llega por otro
+ * camino —tarjeta ya resuelta, ajustes leidos, jornada cargada— y tarda mas.
+ * A-13 (doc 07 §6) acepto esa diferencia con argumento y **sin suelo de tiempo**,
+ * a condicion de revisarla «con la medicion real que produzca la prueba de
+ * carga». Esa medicion es lo que falta y lo que esta fase aporta.
+ *
+ * POR ESO SU VEREDICTO ES `info` Y NUNCA `fail`: publicar la cifra es el
+ * encargo; poner una puerta donde la decision dice que no la hay seria inventar
+ * un requisito. Si algun dia se decide lo contrario, lo que cambia es la
+ * decision de doc 07 §6, y entonces esto pasa a ser un presupuesto.
+ */
+const OUT_OF_ORDER_PHASE = 'reject_out_of_order'
 
 /**
  * Los dos modos de juzgar la latencia y el pico.
@@ -683,6 +723,83 @@ function analyse(results, options = {}) {
         `${rejectionFloorMs} ms ${floorRespected ? 'respetado' : 'NO respetado'} sobre el minimo de cada clase`,
   )
 
+  // --- RS-03-RN-18: la separacion del cuarto rechazo, INFORMATIVA -------------
+
+  // QUE SE PUBLICA Y POR QUE NO SE JUZGA. A-13 del doc 07 §6 acepto que el `422`
+  // de RN-18 tarde mas que los tres rechazos de credencial, con un argumento que
+  // se sostiene —para provocarlo hace falta un token de quiosco valido Y un
+  // `occurred_at` anterior a la entrada abierta de una persona concreta— y **sin
+  // suelo de tiempo anadido**, porque anadirlo gastaria latencia en el cambio de
+  // turno sin cerrar el oraculo mas limpio que ya existe (el `200` del
+  // anti-rebote, ADR-031). Lo que aquella aceptacion prometia era revisarse «con
+  // la medicion real de la prueba de carga», y esa cifra no existia (H-08).
+  //
+  // Aqui esta. Con `verdict: 'info'`: no entra en `exitCodeOf()`, no tiñe la
+  // pasada de rojo y no la declara no fiable. Si alguna vez se decide poner un
+  // suelo, lo que cambia primero es la fila de doc 07 §6.
+  const outOfOrderAnswered = percentiles(
+    valuesWhere((sample) => sample.phase === OUT_OF_ORDER_PHASE && sample.status === '422'),
+  )
+  const outOfOrderOffered = durations.filter((sample) => sample.phase === OUT_OF_ORDER_PHASE).length
+
+  // Un `200` aqui significa que el escaneo SI se pudo reconciliar: o el turno
+  // sembrado dejo de estar abierto, o la respuesta salio por el anti-rebote. No
+  // es un fallo del producto, es la medida que no se monto, y se cuenta aparte
+  // en vez de mezclarse con los rechazos.
+  const outOfOrderReconciled = durations.filter(
+    (sample) => sample.phase === OUT_OF_ORDER_PHASE && isAttended(sample.status),
+  ).length
+
+  // LA SEPARACION VA FIRMADA. Un positivo es «RN-18 tarda mas», que es lo que
+  // A-13 predice; un negativo seria la sorpresa, y redondear el valor absoluto
+  // la escondera.
+  const separationOf = (statistic) =>
+    Object.fromEntries(
+      REJECT_CLASSES.map((rejectClass) => {
+        const mine = outOfOrderAnswered[statistic]
+        const theirs = rejectStats[rejectClass].raw[statistic]
+
+        return [rejectClass, mine === null || theirs === null ? null : round(mine - theirs)]
+      }),
+    )
+
+  const outOfOrderSeparation = { median: separationOf('p50'), minimum: separationOf('min') }
+  const outOfOrderFirm = outOfOrderAnswered.samples >= REJECT_SAMPLES_FLOOR
+  const separationText = (bucket) =>
+    REJECT_CLASSES.map(
+      (rejectClass) =>
+        `${rejectClass} ${bucket[rejectClass] === null ? 'n/d' : bucket[rejectClass].toFixed(1)}`,
+    ).join(', ')
+
+  verdict(
+    'RS-03-RN-18',
+    'info',
+    outOfOrderAnswered.samples === 0
+      ? `el escenario reject-out-of-order no dejo ninguna respuesta 422 de ${outOfOrderOffered} ` +
+        `peticiones (${outOfOrderReconciled} se pudieron reconciliar): sin cifra que publicar`
+      : `mediana ${round(outOfOrderAnswered.p50)} ms y minimo ${round(outOfOrderAnswered.min)} ms sobre ` +
+        `${outOfOrderAnswered.samples} rechazos de RN-18. Separacion de medianas frente a la credencial: ` +
+        `${separationText(outOfOrderSeparation.median)}; de minimos: ` +
+        `${separationText(outOfOrderSeparation.minimum)}. INFORMATIVO: A-13 acepta esta diferencia sin ` +
+        'suelo de tiempo (doc 07 §6), asi que la cifra no cambia el veredicto' +
+        (outOfOrderFirm
+          ? ''
+          : ` — con solo ${outOfOrderAnswered.samples} muestras la cifra es orientativa ` +
+            `(${REJECT_SAMPLES_FLOOR} para que sea firme)`),
+  )
+
+  const outOfOrder = {
+    samples: outOfOrderAnswered.samples,
+    offered: outOfOrderOffered,
+    reconciled: outOfOrderReconciled,
+    min: round(outOfOrderAnswered.min),
+    p50: round(outOfOrderAnswered.p50),
+    p95: round(outOfOrderAnswered.p95),
+    max: round(outOfOrderAnswered.max),
+    firm: outOfOrderFirm,
+    separation_ms: outOfOrderSeparation,
+  }
+
   // --- Informativos ----------------------------------------------------------
 
   const batchAccepted = countersWhere('batch_outcomes', (tags) => SHIFT_ACTIONS.has(tags.action))
@@ -793,6 +910,10 @@ function analyse(results, options = {}) {
         return [rejectClass, published]
       }),
     ),
+    // La cifra que A-13 (doc 07 §6) prometia y no tenia, publicada aparte de
+    // `reject_classes` porque no es una clase mas: `verdicts['RS-03-RN-18']`
+    // lleva su lectura y vale siempre `info`.
+    reject_out_of_order: outOfOrder,
     checks: {
       total: totalChecks,
       failed: failedChecks,
@@ -846,6 +967,12 @@ function analyse(results, options = {}) {
  * Un rojo manda sobre un «no evaluable»: si algo se midio y se salio del
  * presupuesto, eso es lo que hay que contar aunque otra cosa no se pudiera
  * medir.
+ *
+ * **`info` no es un cuarto desenlace de esta funcion, y es a proposito.** Un
+ * veredicto informativo —hoy solo `RS-03-RN-18`— publica una cifra que una
+ * decision aceptada con argumento pidio medir; convertirla en codigo de salida
+ * seria crear el presupuesto que esa decision dice que no hay. Se ve en el
+ * informe y en `summary.json`, y no en el `exit`.
  */
 function exitCodeOf(summary) {
   const statuses = Object.values(summary.verdicts).map((entry) => entry.status)
@@ -863,7 +990,7 @@ function formatReport(summary) {
   const lines = []
   const say = (line) => lines.push(line)
   const fmt = (value) => (value === null || value === undefined ? '     n/d' : value.toFixed(1).padStart(8))
-  const label = { pass: 'OK   ', fail: 'FALLA', unmeasurable: 'S/MED' }
+  const label = { pass: 'OK   ', fail: 'FALLA', unmeasurable: 'S/MED', info: 'INFO ' }
 
   say(
     `Instancias: ${summary.instance_ids.join(', ')}   duracion: ${summary.duration_seconds} s   ` +
@@ -880,7 +1007,7 @@ function formatReport(summary) {
 
   for (const [scenario, stats] of Object.entries(summary.scenarios)) {
     say(
-      `  ${scenario.padEnd(11)} n=${String(stats.answered_samples).padStart(6)}/${String(stats.samples).padStart(6)}  ` +
+      `  ${scenario.padEnd(19)} n=${String(stats.answered_samples).padStart(6)}/${String(stats.samples).padStart(6)}  ` +
         `p50 ${fmt(stats.p50)}  p95 ${fmt(stats.p95)}  p99 ${fmt(stats.p99)}  max ${fmt(stats.max)}` +
         (stats.requirements.length > 0 ? `   [${stats.requirements.join(' ')}]` : ''),
     )
@@ -891,7 +1018,7 @@ function formatReport(summary) {
 
   for (const [scenario, stats] of Object.entries(summary.scenarios)) {
     say(
-      `  ${scenario.padEnd(11)} ${Object.entries(stats.statuses)
+      `  ${scenario.padEnd(19)} ${Object.entries(stats.statuses)
         .map(([status, count]) => `${status}:${count}`)
         .join('  ')}`,
     )
@@ -935,9 +1062,23 @@ function formatReport(summary) {
     )
   }
 
+  // El cuarto rechazo va en la MISMA tabla y en una fila aparte: es la unica
+  // forma de ver de un vistazo lo que A-13 dice —que RN-18 tarda mas— sin
+  // sugerir que sea una clase de credencial comparable con las otras tres.
+  const outOfOrder = summary.reject_out_of_order
+
+  say(
+    `  ${'RN-18'.padEnd(11)} n=${String(outOfOrder.samples).padStart(5)}/` +
+      `${String(outOfOrder.offered).padStart(5)}  min ${fmt(outOfOrder.min)}  p50 ${fmt(outOfOrder.p50)}  ` +
+      `p95 ${fmt(outOfOrder.p95)}  max ${fmt(outOfOrder.max)}` +
+      (outOfOrder.reconciled > 0 ? `   (+${outOfOrder.reconciled} que si cuadraron)` : ''),
+  )
+
   const rejectVerdict = summary.verdicts['RS-03']
+  const outOfOrderVerdict = summary.verdicts['RS-03-RN-18']
 
   say(`${label[rejectVerdict.status]} RS-03: ${rejectVerdict.detail}`)
+  say(`${label[outOfOrderVerdict.status]} RS-03-RN-18: ${outOfOrderVerdict.detail}`)
   say('')
   say(
     `INFO RF-KI-04: ${summary.totals.batch_accepted} elementos con tramo, ` +

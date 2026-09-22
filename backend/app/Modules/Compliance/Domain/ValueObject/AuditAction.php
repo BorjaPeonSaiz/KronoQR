@@ -116,6 +116,36 @@ enum AuditAction: string
     case TwoFactorEnabled = 'auth.two_factor_enabled';
     case TwoFactorReset = 'auth.two_factor_reset';
 
+    // --- Ciclo de vida de la cuenta de gestion (RS-05, RS-06, RL-16) ---------
+
+    /**
+     * Se ha dado de baja una cuenta de gestion (`identity:deactivate-user`).
+     *
+     * **Es el asiento que faltaba y que dejaba RS-06 a medias.** Hasta la tarea
+     * 3.8, `users.is_active` se consultaba al autenticar pero nada lo ponia a
+     * `false`: una cuenta de `rrhh` solo se podia retirar editando la fila a mano
+     * en PostgreSQL, es decir, sin dejar ninguna traza dentro del producto. La
+     * pregunta «¿cuando dejo de tener acceso quien se fue del hotel, y quien lo
+     * decidio?» no tenia respuesta, y es la primera que se hace cuando aparece
+     * una correccion de jornada firmada por alguien que ya no trabaja aqui.
+     *
+     * Lleva el motivo y el `uuid` publico de la cuenta. Nunca el nombre ni el
+     * correo (regla dura 21).
+     */
+    case ManagementAccountDeactivated = 'user.deactivated';
+
+    /**
+     * Se ha restablecido la contrasena de una cuenta de gestion
+     * (`identity:reset-password`).
+     *
+     * El asiento dice **que se sustituyo la credencial y quien lo hizo**, nunca
+     * la contrasena ni nada derivado de ella. Existe por la misma razon que
+     * `auth.two_factor_reset`: cambiarle la contrasena a otra persona es la via
+     * mas comoda de prepararse el acceso a su cuenta, asi que quien lo hace
+     * queda escrito.
+     */
+    case ManagementPasswordReset = 'user.password_reset';
+
     // --- Acceso denegado por alcance (RF-ID-03, RS-05, tarea 2.1) -----------
 
     case AccessDenied = 'access.denied';
@@ -503,6 +533,19 @@ enum AuditAction: string
         // nueva del bloque D, abre vocabulario, y por eso se decide aqui y no en
         // Identity.
         'auth' => AuditableEvent::CredentialLifecycle,
+        // La cuenta de gestion es, para el bloque D, el soporte del que cuelgan
+        // todas sus credenciales: darla de baja retira de golpe la contrasena, el
+        // segundo factor y las sesiones vivas, y restablecer la contrasena
+        // sustituye una de ellas. Comparte familia con `auth` por lo mismo que
+        // aquella la comparte con la tarjeta y con el PIN —es otro soporte de la
+        // misma potestad— y responde a la misma pregunta: «¿que accesos se
+        // abrieron y se cerraron, cuando y por orden de quien?».
+        //
+        // NO cae en `AuthorityOrCalculationChange`, donde si esta
+        // `role_assignment.changed`: aquella familia responde a «¿quien movio las
+        // reglas o repartio potestades?», y estas dos no reparten ninguna —no
+        // cambian lo que la cuenta PUEDE hacer, cambian si puede ENTRAR—.
+        'user' => AuditableEvent::CredentialLifecycle,
         'device' => AuditableEvent::DeviceLifecycle,
         'personal_data' => AuditableEvent::PersonalDataAccess,
         // El intento de acceder a datos de terceros cae en la misma familia que

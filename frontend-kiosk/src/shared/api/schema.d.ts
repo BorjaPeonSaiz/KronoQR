@@ -870,6 +870,14 @@ export interface paths {
          *     Es idempotente en la practica: repetir la llamada con un token ya
          *     revocado devuelve `401`, que es lo que el cliente debe interpretar como
          *     «ya no hay sesion».
+         *
+         *     **La unica ruta autenticada sin zona de limitacion de aplicacion, y es
+         *     deliberado** (revision interna ASVS de 2026-09, H-01). No lleva ambito,
+         *     acepta a proposito la sesion pendiente de segundo factor y no lee ni
+         *     escribe ningun dato del cliente: un techo aqui no frena ningun abuso
+         *     —quien agotara el cupo solo se cerraria la sesion a si mismo— y si
+         *     dejaria a una persona sin poder cerrar sesion justo cuando sospecha que
+         *     su token esta comprometido. Por eso **no declara `429`**.
          */
         post: operations["logOut"];
         delete?: never;
@@ -904,6 +912,12 @@ export interface paths {
          *     **Una sesion pendiente de segundo factor no llega aqui.** Su token solo
          *     lleva `2fa:pending` y este endpoint exige una sesion completa: mientras
          *     el segundo factor no se verifique, no hay nada que contar sobre nadie.
+         *
+         *     **Zona de limitacion `management`**, la misma que el resto de la API de
+         *     gestion (revision interna ASVS de 2026-09, H-01): el techo se cuenta por
+         *     cuenta y por origen, porque el borde solo sabe contar por origen. Lo que
+         *     devuelve esta respuesta —rol y alcance— es justo lo que ayuda a decidir a
+         *     que cuenta merece la pena seguir atacando (RS-06).
          */
         get: operations["getCurrentUser"];
         put?: never;
@@ -10352,6 +10366,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     logInToPortal: {
