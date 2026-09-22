@@ -7,8 +7,7 @@
 
 ## Estado y objetivo actual
 
-**Rama `feat/tarea-3.7-e2e-accesibilidad` (desde el commit de RN-18 `d326406`; PR #69 abierta con CI manual 35340175817 en verde,
-pendiente de integrar). Tarea 3.7 «E2E con cámara simulada y suite de accesibilidad» (RQ-04, RQ-05, RF-QR-05, RS-12, RF-AT-11,
+**Rama `feat/tarea-3.7-e2e-accesibilidad` (desde el commit de RN-18 `d326406`; PR #69 integrada en `main` el 22-09-2026, `91db9eb`). Tarea 3.7 «E2E con cámara simulada y suite de accesibilidad» (RQ-04, RQ-05, RF-QR-05, RS-12, RF-AT-11,
 RF-KI-06) IMPLEMENTADA, REVISADA (dos vueltas: `seguridad-cumplimiento`, `ui-ux`, `qa-testing`) y PROBADA el 18-09-2026; verificada
 de nuevo íntegra el 22-09-2026 antes del commit.** Trece decisiones en la ficha (plan 06 → «Tarea 3.7» → «Decisiones tomadas»; las 3
 y 4 se corrigieron al ejecutar) más la tabla de 27 recorridos críticos y las comprobaciones manuales en tablet. Era **tarea de cierre,
@@ -37,9 +36,13 @@ lint, `vue-tsc` y unitarias: web-kit 212, quiosco 505, panel 547, portal 81; E2E
 117 s, portal 30 en 21 s (presupuesto de ⑦: 300 s por app); las 246 E2E del árbol son 244 etiquetadas + las 2 del menú.
 
 **Confirmada en commit único (`feat(pruebas): tarea 3.7 …`) sobre `d326406`, rama empujada, CI manual lanzada tras el push y PR
-abierta contra `main` (ver el número en la PR).** **Siguiente acción:** el usuario integra primero la **PR #69 de RN-18** (con migración:
-tras integrar, `git pull` y `make up`) y después la PR de la 3.7 (sin migración; lleva el lock de npm regenerado: `npm ci` en la raíz
-tras el `git pull`), las dos con *merge commit*, y borra las ramas; el worktree `KronoQR-rn18` ya está retirado.
+abierta contra `main` (ver el número en la PR).** **PR #72.** La #71 de Dependabot (vite 8.3.0, `@vitejs/plugin-vue` 6.0.9, dexie 4.4.6, `@types/node`, `@tanstack/vue-virtual`) entró en
+`main` después de abrirla y dejó la PR en conflicto sobre los cuatro `package.json` y el lock: fusión de `main` en la rama (manifiestos
+de `main` con Vitest 5 y axe del portal reaplicados; lock regenerado desde `node:24-alpine` con `--package-lock-only` sobre una
+copia con solo los manifiestos), verificada de nuevo en local (lint, tipos, unitarias y E2E de los cuatro paquetes tras `npm ci`;
+`composer install`, migraciones de RN-18, Pint, PHPStan 9 y Architecture con la guarda del lock) y CI manual relanzada tras el push.
+**Siguiente acción:** el usuario integra la PR #72 con *merge commit* cuando su CI esté en verde y borra la rama (sin migración;
+lleva el lock de npm regenerado: `npm ci` en la raíz tras el `git pull`); el worktree `KronoQR-rn18` ya está retirado.
 Después, la **3.8** «Revisión de seguridad externa y corrección de hallazgos» (`seguridad-cumplimiento`; RS-11 con una sola prueba y
 las «pruebas de abuso» anotadas al cerrar la 3.6 son su punto de partida; doc 07 A-8 sobre TLS sin verificación es candidata), o, si
 se prioriza lo prometido en el doc 05, la **3.10** «Registro de ausencias» (3–4 h, desbloquea el apartado pendiente de las guías de
@@ -905,6 +908,11 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 
 ## Trampas del entorno — leer antes de operar
 
+- **Una PR de Dependabot de npm integrada en `main` mientras otra rama lleva el lock regenerado deja esa PR en conflicto** sobre
+  los `package.json` y `package-lock.json`, y el lock no se resuelve a mano: fusionar `main`, tomar los manifiestos de `main`,
+  reaplicar lo propio y regenerar el lock desde Linux (`node:24-alpine`, `npm install --package-lock-only --ignore-scripts` sobre una
+  copia con solo `package.json` raíz, lock y los cuatro manifiestos; sin `node_modules`). Si una tarea va a tocar el lock, integrar
+  o aplazar las PRs de Dependabot de npm antes de abrir la suya (3.7, 22-09).
 - **`QRCodeWriter.encode(…, 0, 0)` de `@zxing/library` devuelve la matriz CON zona tranquila (4 módulos por lado)**: un guion que
   derive la versión del símbolo del ancho de esa matriz se equivoca dos escalones (45 → versión 7 cuando el símbolo real de 37 es
   versión 5) y «daña» celdas del margen. Restar la zona tranquila y afirmar que cada celda tocada cae dentro del símbolo (3.7).
