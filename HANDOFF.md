@@ -167,8 +167,8 @@ Architecture 641 (+ `SourceDiscoveryTest` conocido); mutación acotada: `Credent
 `CredentialPatternThresholds` y `PatternReviewState` 100 %; `qa:traceability --check`, `docs:consistency` y `observability-check` en
 verde; matriz **3847 (Pest 3582, Playwright 259, k6 6)**; panel: lint, `vue-tsc`, 576 unitarias, 147 E2E; quiosco y portal: tipos regenerados, lint y `vue-tsc`.
 
-**Siguiente acción:** commit único `feat(3.11): …`, push, CI manual y PR contra `main` con *merge commit*; después un
-`docs(handoff)` con los números. **Sin migración**; variables nuevas con valor de serie (`COMPLIANCE_PATTERN_LOOKBACK_DAYS`; los dos
+**Siguiente acción:** el usuario integra la **PR #78** de la 3.11 (commit `08a13eb`; **CI manual 35853369572 en verde en todos los
+jobs**) con *merge commit* y borra la rama. **Sin migración**; variables nuevas con valor de serie (`COMPLIANCE_PATTERN_LOOKBACK_DAYS`; los dos
 ajustes viven en el panel): tras integrar basta `git pull` y `make up`; comprobar la primera pasada de `attendance:detect-patterns`
 (`php artisan attendance:detect-patterns` a mano, `kronoqr_pattern_detection.prom` y la serie en Prometheus). Después, la **3.12** «Resumen semanal por correo y ventana
 controlada de actualización del quiosco» (RF-PR-05, RF-KI-07; `backend-laravel` + `frontend-quiosco`).
