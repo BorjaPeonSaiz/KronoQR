@@ -6,6 +6,8 @@
 import type { components } from './schema'
 
 type Schemas = components['schemas']
+/** Parametros con forma cerrada declarados aparte de los esquemas (p. ej. los enums de `GET /reports/payroll-export`). */
+type Parameters_ = components['parameters']
 
 export type ManagementUser = Schemas['ManagementUser']
 export type UserRole = Schemas['UserRole']
@@ -212,6 +214,24 @@ export type IssuedSupportGrant = Schemas['IssuedSupportGrant']
 export type DataExport = Schemas['DataExport']
 export type DataExportResource = Schemas['DataExportResource']
 export type DataExportCollection = Schemas['DataExportCollection']
+
+// Informes generados en diferido (RF-IN-06, RF-IN-07, ADR-041, tarea 3.9): el
+// informe por periodo y la salida a nomina comparten el mismo ciclo de vida.
+// `download` solo lo emite `GET /reports/exports/{uuid}` (`ShowReportExport`,
+// decision 3 de la ficha): nunca la lista ni el `202` de la peticion.
+export type ReportExportRequest = Schemas['ReportExportRequest']
+export type ReportExportDownload = Schemas['ReportExportDownload']
+export type ReportExport = Schemas['ReportExport']
+export type ReportExportParameters = Schemas['ReportExportParameters']
+export type ReportExportResource = Schemas['ReportExportResource']
+export type ReportExportCollection = Schemas['ReportExportCollection']
+
+// Salida a nomina sincrona (RF-IN-07, `operationId: exportPayroll`). `csv`/`xlsx`
+// nada mas -un PDF no lo importa ningun programa de nomina- y tres
+// granularidades, `range` por omision (al contrario que el informe por
+// periodo, donde `day` es el grano de la fuente).
+export type PayrollExportFormat = Parameters_['PayrollExportFormat']
+export type PayrollExportGranularity = Parameters_['PayrollGranularity']
 
 // Historico de errores agrupado por huella (RF-PD-15, tarea 5.12). El envio de
 // los tres clientes (`ClientErrorReport`/`ClientErrorBatch`/

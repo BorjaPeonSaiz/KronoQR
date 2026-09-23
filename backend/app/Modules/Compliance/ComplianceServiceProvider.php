@@ -64,6 +64,7 @@ use App\Modules\Compliance\Infrastructure\Listener\RecordManagementAccountLifecy
 use App\Modules\Compliance\Infrastructure\Listener\RecordPersonalDataIncludedInDiagnostics;
 use App\Modules\Compliance\Infrastructure\Listener\RecordPlanLimitExcess;
 use App\Modules\Compliance\Infrastructure\Listener\RecordProjectionReconciliationAudit;
+use App\Modules\Compliance\Infrastructure\Listener\RecordReportExportLifecycle;
 use App\Modules\Compliance\Infrastructure\Listener\RecordSetupCompletion;
 use App\Modules\Compliance\Infrastructure\Listener\RecordShiftEntryAudit;
 use App\Modules\Compliance\Infrastructure\Listener\RecordSiteConfiguration;
@@ -110,6 +111,9 @@ use App\Modules\Product\Domain\Event\SetupCompleted;
 use App\Modules\Product\Domain\Event\SupportAccessGranted;
 use App\Modules\Product\Domain\Event\SupportAccessRevoked;
 use App\Modules\Product\Domain\Event\SupportAccessUsed;
+use App\Modules\Reporting\Domain\Event\ReportExportDownloaded;
+use App\Modules\Reporting\Domain\Event\ReportExportGenerated;
+use App\Modules\Reporting\Domain\Event\ReportExportRequested;
 use App\Modules\Shared\Application\Port\AuthenticationJournal;
 use App\Modules\Shared\Application\Port\AuthorizationJournal;
 use App\Modules\Shared\Application\Port\Clock;
@@ -309,6 +313,7 @@ final class ComplianceServiceProvider extends ServiceProvider
         $this->recordDiagnosticsBundles();
         $this->recordSupportAccess();
         $this->recordDataExports();
+        $this->recordReportExports();
         $this->recordManagementAccountLifecycle();
         $this->openAndNotifyIncidents();
 
@@ -848,6 +853,34 @@ final class ComplianceServiceProvider extends ServiceProvider
         Event::listen(DataExportRequested::class, [RecordDataExportRequested::class, 'handle']);
         Event::listen(DataExportGenerated::class, [RecordDataExportGenerated::class, 'handle']);
         Event::listen(DataExportDownloaded::class, [RecordDataExportDownloaded::class, 'handle']);
+    }
+
+    /**
+     * El mapa evento -> asiento de los **informes en diferido** (tarea 3.9,
+     * RF-IN-06, RF-IN-07, RS-05, ADR-041).
+     *
+     * Familia `PersonalDataAccess`, la misma que `personal_data.accessed`, y
+     * **no** la de la exportacion integra: la pregunta que responden estos tres
+     * es «alguien consulto las horas de estas personas, en este periodo, con este
+     * alcance», que es exactamente la del informe sincrono. Que el resultado
+     * quede en un fichero durante unos dias es un detalle de implementacion, no
+     * un hecho distinto. Ver el mapa de sujetos en `AuditAction`.
+     *
+     * **Un listener con tres metodos**, al contrario que la exportacion integra:
+     * alli los actores se resuelven distinto y aqui los tres son la misma cuenta
+     * —quien pidio el informe—, tambien en la descarga, que va **sin sesion**
+     * (ADR-041) y por tanto no tiene de donde sacar otro.
+     *
+     * Sincronos, sin `ShouldQueue` y sin `afterCommit`: si el asiento falla, el
+     * informe no se crea, no se marca como terminado y no se entrega (ADR-027).
+     * Un fichero con las horas nominales de la plantilla no sale de aqui sin
+     * rastro (regla dura 6).
+     */
+    private function recordReportExports(): void
+    {
+        Event::listen(ReportExportRequested::class, [RecordReportExportLifecycle::class, 'requested']);
+        Event::listen(ReportExportGenerated::class, [RecordReportExportLifecycle::class, 'generated']);
+        Event::listen(ReportExportDownloaded::class, [RecordReportExportLifecycle::class, 'downloaded']);
     }
 
     /**

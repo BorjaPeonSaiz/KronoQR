@@ -422,6 +422,22 @@ final class UpdateSettingsRequest extends FormRequest
     {
         $rules = ['string', 'filled', 'distinct'];
 
+        // Una lista CON ROTULO —`id` o `id=Etiqueta`, la plantilla de la salida a
+        // nomina (RF-IN-07)— no la puede validar `in:`, porque la mitad de la
+        // entrada es texto libre. La forma la **deriva la propia definicion**
+        // ({@see SettingDefinition::labelledItemPattern()}), que es la misma que
+        // valida en el dominio: sin eso, el catalogo de columnas estaria escrito
+        // dos veces y el `422` del borde se desincronizaria del real.
+        //
+        // `distinct` solo caza la entrada repetida entera; que `worked_hours` y
+        // `worked_hours=Horas` son la misma columna lo dice el dominio, que es
+        // quien sabe separar el identificador del rotulo.
+        $pattern = $definition->labelledItemPattern();
+
+        if ($pattern !== null) {
+            return [...$rules, 'regex:'.$pattern];
+        }
+
         if ($definition->allowed !== null) {
             $rules[] = Rule::in($definition->allowed);
         }

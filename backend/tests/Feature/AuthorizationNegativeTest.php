@@ -6,6 +6,7 @@ use App\Modules\Identity\Application\Port\CardRenderer;
 use App\Modules\Identity\Application\Port\InstructionsSheetRenderer;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Queue;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\FakeCardRenderer;
@@ -197,6 +198,48 @@ function managementEndpoints(): array
         // obligatorio, y sin el la peticion moriria en el `FormRequest` con un
         // `422` que esconderia si la autorizacion funciona.
         'descargar el informe por periodo' => ['GET', '/api/v1/reports/period/export?format=csv&from=2026-03-01&to=2026-03-31', []],
+
+        // La salida a nomina (tarea 3.9, RF-IN-07). ENTRA COMO PAREJA PROPIA por
+        // lo mismo que la descarga de arriba —otra ruta, otro `FormRequest`, otro
+        // `authorize()`— y ademas porque su policy es OTRA:
+        // `PayrollExportPolicy` y no `PeriodReportPolicy`. Hoy dicen lo mismo
+        // (`{admin, rrhh}`), y el dia que un responsable pueda ver las horas de su
+        // equipo esa concesion no puede arrastrar consigo el fichero con el que se
+        // paga. Si las dos policies se fusionaran, este par lo detecta.
+        //
+        // Con `format`, `from` y `to` en la URL a proposito: son obligatorios, y
+        // sin ellos la peticion moriria en el `FormRequest` con un `422` que
+        // esconderia si la autorizacion funciona.
+        'descargar la salida a nomina' => ['GET', '/api/v1/reports/payroll-export?format=csv&from=2026-03-01&to=2026-03-31', []],
+
+        /*
+         * Los informes generados en diferido (tarea 3.9, RF-IN-06, ADR-041).
+         *
+         * LAS TRES DE GESTION ENTRAN UNA A UNA, por lo mismo que la consulta y su
+         * descarga: son tres rutas con su propio `authorize()` —dos en el
+         * controlador y uno en el `FormRequest`—, asi que una policy olvidada en
+         * cualquiera de ellas seria invisible desde las otras dos. Y lo que
+         * reparten no es menos que el informe sincrono: es **el mismo informe**,
+         * con el agravante de que aqui queda un fichero en el disco durante dias.
+         *
+         * LA CUARTA RUTA —la descarga— NO ESTA AQUI, y es deliberado: va sin
+         * sesion a proposito (ADR-041), asi que no tiene policy que probar en
+         * negativo. Lo que la protege es el token de un solo uso, y eso lo cubren
+         * `ReportExportEndpointTest` —enlace gastado, caducado, ajeno y sin
+         * token— y la zona `throttle:report-download`.
+         *
+         * El `POST` con `kind: payroll` entra ademas por separado mas abajo: su
+         * policy es otra (`requestPayroll`) y una fusion de las dos seria
+         * invisible desde esta fila.
+         */
+        'pedir un informe en diferido' => ['POST', '/api/v1/reports/exports', [
+            'kind' => 'period',
+            'format' => 'csv',
+            'from' => '2026-03-01',
+            'to' => '2026-03-31',
+        ]],
+        'listar los informes en diferido' => ['GET', '/api/v1/reports/exports', []],
+        'consultar un informe en diferido' => ['GET', '/api/v1/reports/exports/019a12b4-5c6d-7e8f-9012-3456789abcde', []],
 
         // Contratos historizados (tarea 2.8, RF-GP-02). Ambito `employees:*` y
         // policy propia: las condiciones laborales pactadas son de `rrhh+`.
@@ -675,7 +718,20 @@ it('deja pasar a RRHH al informe por periodo y a los contratos, control positivo
         ->assertStatus(201);
 
     Api::as($token)->get('/api/v1/employees/'.$employee.'/contracts')->assertStatus(200);
-})->group('RQ-07', 'RF-IN-01', 'RF-IN-04', 'RF-GP-02');
+
+    // Y la salida a nomina de la 3.9 (RF-IN-07), por lo mismo: sin este control,
+    // los `403` sobre `/reports/payroll-export` pasarian igual si esa ruta
+    // estuviera rota. `rrhh` es la otra mitad de «rrhh+», y es la cuenta que de
+    // verdad la usa: `admin` tiene su propio control positivo en
+    // `PayrollExportTest`.
+    Api::as($token)
+        ->get('/api/v1/reports/payroll-export', [
+            'format' => 'csv',
+            'from' => '2026-03-01',
+            'to' => '2026-03-31',
+        ])
+        ->assertStatus(200);
+})->group('RQ-07', 'RF-IN-01', 'RF-IN-04', 'RF-IN-07', 'RF-GP-02');
 
 it('deniega a un token de quiosco emitir o revocar credenciales', function (string $uri, array $body): void {
     // RS-04 con nombre y apellidos. El token del quiosco lleva `scan:write`,
@@ -834,3 +890,59 @@ it('deja pasar al administrador al perfil de cumplimiento, que es el control pos
         ->patch('/api/v1/compliance-profile', ['min_rest_hours' => 11])
         ->assertStatus(200);
 })->group('RF-PD-07', 'RQ-07');
+
+/*
+ * ---------------------------------------------------------------------------
+ * La salida a nomina EN DIFERIDO tiene su propia policy (tarea 3.9, RF-IN-07)
+ * ---------------------------------------------------------------------------
+ *
+ * `POST /api/v1/reports/exports` corre una policy u otra segun `kind`:
+ * `request` para el informe de horas y `requestPayroll` para la nomina (Anexo B
+ * del doc 01: rol `rrhh`). Hoy las dos dicen lo mismo —`{admin, rrhh}`— y por
+ * eso esta prueba parece redundante; deja de serlo el dia en que un
+ * `responsable_departamento` reciba `reports:*` para ver las horas de su equipo,
+ * que es a donde apunta RF-ID-03. Ese dia entrara en `request` y **no** en
+ * `requestPayroll`, y si alguien hubiera fusionado las dos policies esta fila lo
+ * detecta.
+ */
+it('deniega al responsable de departamento pedir la nomina en diferido', function (): void {
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RESPONSABLE_DEPARTAMENTO));
+
+    Api::as($token)->post('/api/v1/reports/exports', [
+        'kind' => 'payroll',
+        'format' => 'csv',
+        'from' => '2026-03-01',
+        'to' => '2026-03-31',
+    ])->assertStatus(403);
+})->group('RF-IN-07', 'RF-ID-03', 'RS-05', 'RQ-07');
+
+it('deniega al auditor pedir la nomina en diferido', function (): void {
+    // El `auditor` lleva `reports:legal`, el ambito estrecho: lo suyo es el
+    // registro normalizado para un requerimiento (RF-IN-05), no el fichero con el
+    // que se paga.
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::AUDITOR));
+
+    Api::as($token)->post('/api/v1/reports/exports', [
+        'kind' => 'payroll',
+        'format' => 'csv',
+        'from' => '2026-03-01',
+        'to' => '2026-03-31',
+    ])->assertStatus(403);
+})->group('RF-IN-07', 'RS-05', 'RQ-07');
+
+it('deja pasar a RRHH a pedir un informe en diferido, que es el control positivo de la 3.9', function (): void {
+    // Sin esto, los `403` de arriba pasarian identicos si la ruta estuviera rota o
+    // no existiera: un endpoint que revienta y uno que deniega se parecen mucho
+    // desde una prueba que solo mira que no sea 200.
+    WorkforceFixtures::site();
+    Queue::fake();
+
+    Api::as(ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RRHH)))
+        ->post('/api/v1/reports/exports', [
+            'kind' => 'period',
+            'format' => 'csv',
+            'from' => '2026-03-01',
+            'to' => '2026-03-31',
+        ])
+        ->assertStatus(202);
+})->group('RF-IN-06', 'RQ-07');

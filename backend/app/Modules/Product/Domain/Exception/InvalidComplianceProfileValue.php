@@ -31,7 +31,7 @@ final class InvalidComplianceProfileValue extends ProductDomainException
     private function __construct(
         public readonly string $translationKey,
         public readonly array $parameters,
-        public readonly ?ComplianceProfileField $field,
+        public readonly ComplianceProfileField $field,
         string $message,
     ) {
         parent::__construct($message);

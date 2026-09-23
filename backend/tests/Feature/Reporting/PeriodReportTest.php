@@ -320,7 +320,9 @@ it('rechaza un rango de mas de tres meses remitiendo a la generacion en diferido
     Api::as($contexto['token'])
         ->get('/api/v1/reports/period', ['from' => '2026-01-01', 'to' => '2026-06-30', 'granularity' => 'month'])
         ->assertStatus(422)
-        ->assertJsonPath('type', 'urn:kronoqr:problem:validation-failed')
+        //  PROPIO y no el de validacion generico: el panel tiene que poder
+        // ofrecer «generar en segundo plano» sin analizar una frase en castellano.
+        ->assertJsonPath('type', 'urn:kronoqr:problem:report-too-large')
         ->assertJsonPath('errors.to.0', fn (mixed $mensaje): bool => \is_string($mensaje)
             && str_contains($mensaje, 'diferido'));
 })->group('RF-IN-01', 'RNF-P-05');

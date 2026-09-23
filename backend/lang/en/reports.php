@@ -160,4 +160,54 @@ return [
 
         'unjustified_absence_days' => 'Unexplained absence',
     ],
+
+    /*
+     * PAYROLL EXPORT (RF-IN-07, task 3.9). English counterpart of the `payroll`
+     * block in `lang/es/reports.php`; see that file for the reasoning.
+     */
+    'payroll' => [
+
+        'columns' => [
+
+            'employee_code' => 'Employee code',
+
+            'employee_uuid' => 'Identifier',
+
+            'last_name' => 'Surname',
+
+            'first_name' => 'First name',
+
+            'full_name' => 'Full name',
+
+            'department' => 'Department',
+
+            'period_from' => 'From',
+
+            'period_to' => 'To',
+
+            'days_in_period' => 'Days in period',
+
+            'days_with_activity' => 'Days with activity',
+
+            'shift_count' => 'Shift entries',
+
+            'worked_hours' => 'Hours worked',
+
+            'contracted_hours' => 'Contracted hours',
+
+            'deviation_hours' => 'Deviation',
+
+            'overtime_hours' => 'Hours above contract',
+
+            'absence_days' => 'Absence days',
+
+            'holiday_days' => 'Public holidays',
+
+            'unjustified_absence_days' => 'Unexplained absence',
+
+            'days_without_contract' => 'Days without contract',
+
+            'time_zone' => 'Time zone',
+        ],
+    ],
 ];

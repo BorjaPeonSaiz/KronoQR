@@ -19,6 +19,8 @@ import {
   HOTEL_BRANDING,
   logIn,
   logInAsAdmin,
+  REPORT_EXPORT_COMPLETED,
+  REPORT_EXPORT_UUID,
   stubManagementApi,
   USER,
   WORKDAYS_WITH_BREAK,
@@ -338,6 +340,38 @@ test('la pantalla de credenciales tampoco', { tag: ['@RF-QR-07'] }, async ({ pag
   await logIn(page)
   await page.goto('/credentials')
   await expect(page.getByRole('heading', { level: 1, name: 'Credenciales' })).toBeVisible()
+
+  await expectNoBlockingViolations(page)
+})
+
+// --- Informes: horas por periodo y salida a nomina (RF-IN-06, RF-IN-07,
+// tarea 3.9) -------------------------------------------------------------------
+
+test(
+  'el informe de horas por periodo y su bloque de exportaciones tampoco',
+  { tag: ['@RF-IN-06'] },
+  async ({ page }) => {
+    await stubManagementApi(page, { reportExports: [REPORT_EXPORT_COMPLETED] })
+    await logIn(page)
+    await page.goto('/reports')
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Informe de horas por periodo' }),
+    ).toBeVisible()
+    // El bloque de exportaciones en segundo plano esta SIEMPRE visible en
+    // esta pantalla, con una fila ya completada para que la tabla entera
+    // -estados, descarga, criterios desplegables- entre en el analisis.
+    await expect(page.getByTestId(`status-${REPORT_EXPORT_UUID}`)).toBeVisible()
+
+    await expectNoBlockingViolations(page)
+  },
+)
+
+test('la salida a nomina tampoco', { tag: ['@RF-IN-07'] }, async ({ page }) => {
+  await stubManagementApi(page, { role: 'admin' })
+  await logInAsAdmin(page)
+  await page.goto('/reports/payroll')
+  await expect(page.getByRole('heading', { level: 1, name: 'Salida a nómina' })).toBeVisible()
+  await expect(page.getByTestId('payroll-columns-preview')).toBeVisible()
 
   await expectNoBlockingViolations(page)
 })

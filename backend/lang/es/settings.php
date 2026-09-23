@@ -112,6 +112,13 @@ return [
         'BRANDING_ACCENT_COLOR' => 'color de acento',
         'LOCALE_DEFAULT' => 'idioma por defecto',
         'LOCALE_AVAILABLE' => 'idiomas disponibles',
+        /* La salida a nómina (RF-IN-07, tarea 3.9). */
+        'PAYROLL_EXPORT_COLUMNS' => 'columnas del fichero de nómina',
+        'PAYROLL_EXPORT_DELIMITER' => 'separador del fichero de nómina',
+        'PAYROLL_EXPORT_HOURS_FORMAT' => 'formato de las horas en el fichero de nómina',
+        'PAYROLL_EXPORT_DATE_FORMAT' => 'formato de las fechas en el fichero de nómina',
+        'PAYROLL_EXPORT_ENCODING' => 'codificación del fichero de nómina',
+        'PAYROLL_EXPORT_HEADER_ROW' => 'fila de cabecera del fichero de nómina',
     ],
 
 ];

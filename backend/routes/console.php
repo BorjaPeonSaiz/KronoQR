@@ -458,6 +458,38 @@ Schedule::command('product:export-all', ['--purge'])
     ->runInBackground();
 
 /*
+ * Purga de los informes generados en diferido (RF-IN-06, ADR-041, tarea 3.9).
+ *
+ * SOLO PURGA Y DESATASCA, NUNCA GENERA, por lo mismo que la linea de arriba: un
+ * informe con las horas nominales de la plantilla que apareciera solo en el
+ * disco cada noche seria un fichero que nadie pidio y que nadie sabe que existe.
+ * Generar es un acto deliberado, con su asiento.
+ *
+ * DIARIA Y NO HORARIA, al contrario que la exportacion integra, y la diferencia
+ * es deliberada. Alli una fila atascada bloquea la instalacion **entera** —solo
+ * cabe una exportacion en curso— y aqui bloquea **a una sola persona**, que
+ * ademas se desatasca sola en cuanto vuelve a pedir un informe: la mitad del
+ * trabajo lo hace `RequestReportExport` antes de crear. Y lo que se borra es un
+ * informe acotado por periodo y por alcance, no una copia completa de todo. Una
+ * pasada horaria sobre una tabla que casi siempre no tiene nada que hacer seria
+ * trabajo sin lector.
+ *
+ * A LAS 04:25 UTC: despues de la copia diaria y de la verificacion de la cadena,
+ * y lejisimos del cambio de turno de las 06:00 (RNF-P-02, regla dura 19).
+ *
+ * NADA SE BORRA DE LA BASE DE DATOS (regla dura 5). La fila pasa a `purged` y
+ * sigue en la lista con sus fechas, su huella y su recuento.
+ *
+ * `withoutOverlapping` es higiene y no correccion: repetir la pasada es seguro
+ * —marcar una fila ya purgada no cambia nada— pero dos a la vez borrando los
+ * mismos ficheros no aporta nada.
+ */
+Schedule::command('reporting:purge-expired-exports')
+    ->dailyAt('04:25')
+    ->withoutOverlapping()
+    ->runInBackground();
+
+/*
  * Telemetria opcional (RF-PD-12, ADR-020, ADR-023, tarea 5.10).
  *
  * SEMANAL, Y NO DIARIA NI HORARIA. Lo que este documento contiene -version,

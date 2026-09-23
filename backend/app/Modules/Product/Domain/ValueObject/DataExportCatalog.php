@@ -110,8 +110,13 @@ final class DataExportCatalog
      * fichero que se parte en dos—, no cuando se publica una version de KronoQR.
      * Va en `manifest.json` para que un cliente que guarda exportaciones de
      * varios años sepa por que dos de ellas no tienen las mismas columnas.
+     *
+     * **`2` desde la tarea 3.9**: el ZIP gana `report_exports.csv`, el registro
+     * de los informes generados en segundo plano (RF-IN-06). Un fichero nuevo es
+     * un cambio de forma, y quien compare una exportacion de este año con una del
+     * anterior tiene que poder explicarse la diferencia sin abrir las dos.
      */
-    public const string SCHEMA_VERSION = '1';
+    public const string SCHEMA_VERSION = '2';
 
     /**
      * Los conjuntos de datos que van al ZIP, **en el orden en que se escriben**.
@@ -396,6 +401,61 @@ final class DataExportCatalog
                 'last_seen_at',
                 'resolved_at',
                 'resolved_by_user_uuid',
+            ]),
+
+            /*
+             * LOS INFORMES GENERADOS EN SEGUNDO PLANO (tarea 3.9, RF-IN-06).
+             *
+             * Sale el **registro** de que se generaron, no los ficheros: el ZIP de
+             * RL-20 lleva los datos del cliente, y el contenido de cada informe ya
+             * esta ahi —`shift_entries`, `daily_totals`, `employment_contracts`—.
+             * Reempaquetar cada CSV generado en los ultimos años seria multiplicar
+             * la misma informacion y hacer el ZIP inmanejable.
+             *
+             * Lo que si responde este fichero es «¿que informes con horas de mi
+             * plantilla salieron de aqui, quien los pidio y quien se los llevo?»,
+             * que es exactamente lo que la fila conserva para siempre (regla dura
+             * 5) y lo que una revision de accesos pregunta.
+             *
+             * **Fuera tres columnas y las tres por el mismo motivo**: `id` es la
+             * clave interna y ningun identificador interno sale del producto (doc
+             * 01 §5.5); `file_path` es una ruta del servidor —topologia de la
+             * maquina del cliente, inutil fuera y util para quien no deberia—; y
+             * `download_token_hash` es material de un secreto vivo, igual que
+             * `pin_hash` o `token_hash`, y un ZIP se guarda y se reenvia durante
+             * años.
+             *
+             * `requested_by_user_uuid` y no `requested_by_user_id`, como toda
+             * referencia a `users` en esta exportacion.
+             *
+             * Las filas ya purgadas salen **minimizadas**, que es como estan
+             * guardadas (RL-11): sin `scope` y sin los filtros por persona o
+             * departamento dentro de `parameters`.
+             */
+            ExportedDataset::csv('report_exports', [
+                'uuid',
+                'kind',
+                'format',
+                'status',
+                'parameters',
+                'scope',
+                'requested_by_user_uuid',
+                'requested_at',
+                'started_at',
+                'completed_at',
+                'failed_at',
+                'failure_reason',
+                'file_name',
+                'size_bytes',
+                'sha256',
+                'row_count',
+                'criteria',
+                'expires_at',
+                'purged_at',
+                'downloaded_at',
+                'download_count',
+                'notified_at',
+                'notification_channel',
             ]),
 
             // --- La configuracion del producto --------------------------------

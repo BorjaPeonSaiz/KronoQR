@@ -468,6 +468,35 @@ return [
             ],
         ],
 
+        'report_exports' => [
+            'summary' => 'The reports you requested **in the background** and that were downloaded with a temporary link: who asked for them, what period they covered, when they were generated and how many times someone took a copy. **The files are not here**: what they contained is already in this same package, in `shift_entries.csv`, `daily_totals.csv` and `employment_contracts.csv`. What this file answers is which reports with your staff hours left this installation, and at whose request.',
+            'columns' => [
+                'uuid' => 'Report identifier. The same one that appeared on screen and in the download link.',
+                'kind' => '`period` for the hours report, `payroll` for the payroll output.',
+                'format' => 'Which format it was generated in: `csv`, `xlsx` or `pdf`.',
+                'status' => '`completed` if it was generated and is still downloadable, `purged` if it expired and the file was deleted, `failed` if it could not be generated, `pending` or `running` if it never finished.',
+                'parameters' => 'What was requested, in JSON: dates, granularity, grouping and filters. **Expired reports no longer carry the per-person or per-department filters**: they are removed along with the file, because they are no longer needed for anything.',
+                'scope' => 'Which part of the staff the requester could reach, in JSON. **Empty for expired reports**, for the same reason as above. The full record remains in the audit trail.',
+                'requested_by_user_uuid' => 'Who requested it. Also the only person who could see and download it.',
+                'requested_at' => 'When it was requested.',
+                'started_at' => 'When generation started. Empty if it never started.',
+                'completed_at' => 'When it became ready to download.',
+                'failed_at' => 'When it was given up as failed, if it failed.',
+                'failure_reason' => 'Why it failed, as a code: `write_failed` (could not write, almost always a full disk), `query_timeout` (the period was too large), `database_error`, `stale` (it stalled and nobody finished it) or `unexpected`.',
+                'file_name' => 'The name it was downloaded with. It never contains anyone name.',
+                'size_bytes' => 'How large the file was.',
+                'sha256' => 'File digest. Use it to confirm that a copy you kept is exactly the one that left this installation.',
+                'row_count' => 'How many data rows it contained.',
+                'criteria' => 'The report inclusion criteria, in JSON: what counts and what does not. They live here because the payroll file does not carry them inside.',
+                'expires_at' => 'Until when it could be downloaded. After that date the file is deleted automatically.',
+                'purged_at' => 'When the file was deleted on expiry. The row stays forever; the file does not.',
+                'downloaded_at' => 'The last time someone downloaded it.',
+                'download_count' => 'How many times it was downloaded in total. Every download is also in the audit trail.',
+                'notified_at' => 'When the ready notice was sent.',
+                'notification_channel' => '`mail` if an email also went out, `panel` if the notice was only on screen, which is what happens when the installation has no mail server configured.',
+            ],
+        ],
+
         'installation_settings' => [
             'summary' => 'Installation configuration as you left it in the panel: languages, branding, operational thresholds.',
             'columns' => [

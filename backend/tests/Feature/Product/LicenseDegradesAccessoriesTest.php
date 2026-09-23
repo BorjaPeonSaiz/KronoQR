@@ -6,6 +6,7 @@ use App\Modules\Product\Application\Command\ActivateLicenseCommand;
 use App\Modules\Product\Application\UseCase\ActivateLicenseHandler;
 use App\Modules\Shared\Application\Port\FeatureGate;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
+use Illuminate\Support\Facades\Queue;
 use Spectator\Spectator;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
@@ -140,6 +141,68 @@ it('degradar el informe NO degrada la exportacion legal ni la consulta del regis
         ->get('/api/v1/reports/legal-export?from=2026-06-01&to=2026-06-07')
         ->assertOk();
 })->group('RF-PD-05', 'RL-06');
+
+// --- 3.9: salida a nomina (RF-IN-07) -----------------------------------------
+
+it('la salida a nomina funciona con la funcionalidad contratada', function (): void {
+    // `payroll_export` estaba en el catalogo de ADR-023 desde la 5.3 sin que nada
+    // la consultara. Este endpoint es su PRIMER CONSUMIDOR, y sin este control
+    // positivo los `402` de abajo pasarian identicos si la ruta no existiera.
+    conFuncionalidades(['payroll_export']);
+
+    Api::as(reportsToken())
+        ->get('/api/v1/reports/payroll-export?from=2026-06-01&to=2026-06-07&format=csv')
+        ->assertOk();
+})->group('RF-PD-05', 'RF-IN-07');
+
+it('CON LA LICENCIA CADUCADA la salida a nomina responde 402 con el aviso', function (): void {
+    // Es funcionalidad de gestion, no registro legal: se degrada. Y con `402` y
+    // no `403`, porque no tener contratada la exportacion para nomina y no tener
+    // permiso para pedirla son dos cosas distintas.
+    conLicenciaCaducada();
+
+    $response = Api::as(reportsToken())
+        ->withHeaders(['Accept-Language' => 'es'])
+        ->get('/api/v1/reports/payroll-export?from=2026-06-01&to=2026-06-07&format=csv')
+        ->assertStatus(402);
+
+    expect($response->json('feature'))->toBe('payroll_export')
+        ->and($response->json('restriction'))->toBe('license_expired');
+})->group('RF-PD-05', 'RF-IN-07');
+
+it('la salida a nomina no se enciende con los informes avanzados contratados', function (): void {
+    // DOS FUNCIONALIDADES DISTINTAS del catalogo de ADR-023, y la distincion
+    // importa comercialmente: un plan puede llevar los informes y no la conexion
+    // con la nomina. Si compartieran bandera, contratar uno regalaria el otro.
+    conFuncionalidades(['advanced_reports']);
+
+    $response = Api::as(reportsToken())
+        ->get('/api/v1/reports/payroll-export?from=2026-06-01&to=2026-06-07&format=csv')
+        ->assertStatus(402);
+
+    expect($response->json('feature'))->toBe('payroll_export')
+        ->and($response->json('restriction'))->toBe('not_in_plan');
+
+    // Y al reves: los informes siguen funcionando sin la nomina contratada.
+    Api::as(reportsToken())
+        ->get('/api/v1/reports/period?from=2026-06-01&to=2026-06-07&granularity=range&group_by=employee')
+        ->assertOk();
+})->group('RF-PD-05', 'RF-IN-07');
+
+it('degradar la nomina NO degrada la exportacion legal', function (): void {
+    // Regla dura 15 y ADR-019: la caducidad de la licencia jamas bloquea el
+    // registro legal. La salida a nomina es comodidad de gestion; el registro que
+    // se entrega a la Inspeccion no.
+    conLicenciaCaducada();
+
+    Api::as(reportsToken())
+        ->get('/api/v1/reports/payroll-export?from=2026-06-01&to=2026-06-07&format=csv')
+        ->assertStatus(402);
+
+    Api::as(ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::AUDITOR)))
+        ->get('/api/v1/reports/legal-export?from=2026-06-01&to=2026-06-07')
+        ->assertOk();
+})->group('RF-PD-05', 'RF-IN-07', 'RL-06');
 
 // --- 2.4: presencia en tiempo real -------------------------------------------
 
@@ -314,3 +377,66 @@ it('el aviso sale con la fecha en el formato del idioma que se pide', function (
         ->and($es->json('since'))->toBe($en->json('since'))
         ->and($es->json('since'))->toStartWith('2025-12-31');
 })->group('RF-PD-05');
+
+// --- 3.9: informes generados en diferido (RF-IN-06) --------------------------
+
+it('pedir un informe en diferido se degrada igual que el informe sincrono', function (): void {
+    /*
+     * La licencia se comprueba **al pedir** y no al generar (decision 6 de la
+     * ficha 3.9): la degradacion tiene que notarse donde alguien pulsa el boton,
+     * no en la lista media hora despues con una fila `failed`.
+     *
+     * Y es la MISMA funcionalidad que la consulta —`advanced_reports`— porque lo
+     * que sale es exactamente lo mismo: el `422` del informe sincrono remite
+     * aqui, asi que un camino en diferido con la degradacion mas floja seria la
+     * forma de saltarse la degradacion entera.
+     */
+    conLicenciaCaducada();
+
+    $response = Api::as(reportsToken())
+        ->withHeaders(['Accept-Language' => 'es'])
+        ->post('/api/v1/reports/exports', [
+            'kind' => 'period',
+            'format' => 'csv',
+            'from' => '2026-06-01',
+            'to' => '2026-06-07',
+        ])
+        ->assertStatus(402);
+
+    expect($response->json('feature'))->toBe('advanced_reports');
+})->group('RF-PD-05', 'RF-IN-06');
+
+it('la nomina en diferido se degrada con payroll_export y no con advanced_reports', function (): void {
+    // Dos funcionalidades distintas para dos potestades distintas: un cliente
+    // puede tener informes avanzados y no haber comprado la salida a nomina.
+    conFuncionalidades(['advanced_reports']);
+
+    $response = Api::as(reportsToken())
+        ->withHeaders(['Accept-Language' => 'es'])
+        ->post('/api/v1/reports/exports', [
+            'kind' => 'payroll',
+            'format' => 'csv',
+            'from' => '2026-06-01',
+            'to' => '2026-06-07',
+        ])
+        ->assertStatus(402);
+
+    expect($response->json('feature'))->toBe('payroll_export')
+        ->and($response->json('restriction'))->toBe('not_in_plan');
+})->group('RF-PD-05', 'RF-IN-07');
+
+it('con las dos funcionalidades contratadas el informe en diferido se acepta', function (): void {
+    // Control positivo: sin el, los dos `402` de arriba pasarian identicos si la
+    // ruta estuviera rota o no existiera.
+    Queue::fake();
+    conFuncionalidades(['advanced_reports', 'payroll_export']);
+
+    Api::as(reportsToken())
+        ->post('/api/v1/reports/exports', [
+            'kind' => 'period',
+            'format' => 'csv',
+            'from' => '2026-06-01',
+            'to' => '2026-06-07',
+        ])
+        ->assertStatus(202);
+})->group('RF-PD-05', 'RF-IN-06');

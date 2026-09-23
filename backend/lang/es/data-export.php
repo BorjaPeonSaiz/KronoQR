@@ -493,6 +493,35 @@ return [
             ],
         ],
 
+        'report_exports' => [
+            'summary' => 'Los informes que pediste **en segundo plano** y que se descargaron con un enlace temporal: quien los pidio, que periodo cubrian, cuando se generaron y cuantas veces se los llevo alguien. **No estan los ficheros**: lo que contenian ya esta en este mismo paquete, en `shift_entries.csv`, `daily_totals.csv` y `employment_contracts.csv`. Lo que responde este fichero es que informes con horas de tu plantilla salieron de aqui y a peticion de quien.',
+            'columns' => [
+                'uuid' => 'Identificador del informe. Es el que aparecia en la pantalla y en el enlace de descarga.',
+                'kind' => '`period` si era el informe de horas y `payroll` si era la salida a nomina.',
+                'format' => 'En que formato se genero: `csv`, `xlsx` o `pdf`.',
+                'status' => '`completed` si se genero y sigue descargable, `purged` si ya caduco y se borro el fichero, `failed` si no se pudo generar, y `pending` o `running` si se quedo a medias.',
+                'parameters' => 'Que se pidio, en formato JSON: fechas, granularidad, agrupacion y filtros. **En los informes ya caducados no lleva los filtros por persona ni por departamento**: se borran junto con el fichero, porque ya no hacen falta para nada.',
+                'scope' => 'A que parte de la plantilla alcanzaba quien lo pidio, en formato JSON. **Vacio en los informes ya caducados**, por lo mismo que el anterior. El dato completo sigue en el registro de auditoria.',
+                'requested_by_user_uuid' => 'Quien lo pidio. Es tambien la unica persona que podia verlo y descargarlo.',
+                'requested_at' => 'Cuando se pidio.',
+                'started_at' => 'Cuando empezo a generarse. Vacio si nunca llego a empezar.',
+                'completed_at' => 'Cuando quedo listo para descargar.',
+                'failed_at' => 'Cuando se dio por fallido, si fallo.',
+                'failure_reason' => 'Por que fallo, como codigo: `write_failed` (no se pudo escribir, casi siempre disco lleno), `query_timeout` (el periodo era demasiado grande), `database_error`, `stale` (se quedo a medias y nadie lo termino) o `unexpected`.',
+                'file_name' => 'Nombre con el que se descargaba. No lleva el nombre de ninguna persona.',
+                'size_bytes' => 'Cuanto ocupaba el fichero.',
+                'sha256' => 'Huella del fichero. Sirve para comprobar que una copia que tengas guardada es exactamente la que salio de aqui.',
+                'row_count' => 'Cuantas filas de datos llevaba.',
+                'criteria' => 'Los criterios de inclusion del informe, en formato JSON: que cuenta y que no. Van aqui porque el fichero de nomina no los lleva dentro.',
+                'expires_at' => 'Hasta cuando se podia descargar. Pasada esa fecha el fichero se borra solo.',
+                'purged_at' => 'Cuando se borro el fichero por caducidad. La linea se queda para siempre; el fichero no.',
+                'downloaded_at' => 'La ultima vez que alguien se lo descargo.',
+                'download_count' => 'Cuantas veces se descargo en total. Cada descarga queda ademas en el registro de auditoria.',
+                'notified_at' => 'Cuando se aviso de que estaba listo.',
+                'notification_channel' => '`mail` si ademas salio un correo y `panel` si el aviso fue solo la pantalla, que es lo que ocurre cuando la instalacion no tiene servidor de correo configurado.',
+            ],
+        ],
+
         'installation_settings' => [
             'summary' => 'La configuracion de la instalacion tal como la dejaste desde el panel: idiomas, marca, umbrales operativos.',
             'columns' => [

@@ -30,6 +30,7 @@ All of this runs on its own in the `scheduler` container. What appears in the
 | Monday 05:10 UTC | **Retention proposal**: report of what would be purged | Read it once something has expired |
 | Hourly | Credential metrics and clean-up of temporary files | Nothing |
 | Hourly | Expired full data exports are purged: the ZIP is deleted, the record of it stays (§13) | Nothing |
+| 04:25 UTC, daily | Expired reports generated in the background are purged: the file is deleted, the record of it stays (§6 and §13) | Nothing |
 | Monday 05:40 UTC | **Telemetry**, only if you have enabled it (§13.4): the weekly report is sent to the destination you set | Nothing |
 | Quarterly | — | **Restore drill** of the backup |
 | Quarterly | — | **Go through the hardening checklist** ([`hardening.md`](hardening.md), last section): network, certificate, accounts, tablets, backups off the server |
@@ -161,6 +162,26 @@ Metrics published for the `node-exporter` collector
 | `COMPLIANCE_RETENTION_REPORT_PATH` | `storage/app/retention-reports` | Where the reports are left. **They are not cleaned up on their own**: they are the evidence of the purge |
 | `DB_MAINTENANCE_USERNAME` | `fichaje_maintenance` | Role that runs the audit purge |
 | `DB_MAINTENANCE_PASSWORD` | *(empty)* | **Not set in the `.env`.** It is supplied when the purge is run |
+
+**Reports generated in the background** (HR asks for them from the panel:
+[`hr-guide.md`](hr-guide.md) §6.3) have their own six parameters and their own
+purge. The files are **per requesting person**, they live in
+`REPORTING_EXPORT_PATH` and the scheduler deletes them at 04:25 UTC as soon as
+they expire; the record that they existed is always kept. If you ever need to bring
+it forward:
+
+```bash
+docker compose exec app php artisan reporting:purge-expired-exports
+```
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `REPORTING_EXPORT_PATH` | `storage/app/reports` | Where those files are written. **Never inside `BACKUP_PATH`**: they expire on their own and must not go into the backup |
+| `REPORTING_EXPORT_RETENTION_DAYS` | `7` | Days the file can be downloaded before the daily purge deletes it |
+| `REPORTING_EXPORT_LINK_TTL_MINUTES` | `15` | Minutes the download link is valid for; it is also **single-use** |
+| `REPORTING_EXPORT_TIMEOUT_SECONDS` | `600` | Limit on the deferred report's query. Raise it if a large export fails on time |
+| `REPORTING_EXPORT_STALE_AFTER` | `3600` | Seconds after which an interrupted generation is given up as failed and lets another one be requested. Do not lower it below what your largest report takes |
+| `REPORTING_EXPORT_DOWNLOAD_RATE_LIMIT` | `30` | Downloads per minute and per IP address on the download route, which is opened without a session |
 
 ---
 
@@ -883,13 +904,36 @@ administers the server changes them.
 
 ## 13. Taking all your data with you: the full data export
 
+> **This is not the reports HR generates in the background**, and it is worth not
+> mixing them up when somebody asks about "an export that never arrives". They
+> are two different mechanisms, with two different folders and two different
+> purges:
+>
+> | | **Full data export** (this section) | **Background report** (§6) |
+> | --- | --- | --- |
+> | What it is | A ZIP with the **whole** installation | A CSV, Excel or PDF of a report or of the payroll export |
+> | Who asks for it | Only the installation administrator | Whoever generates reports: HR, administration and managers |
+> | How many at a time | One **in the whole installation** | One **per requesting person**: nobody gets in anybody's way |
+> | Who downloads it | The administrator, with their panel session | **Only the person who asked for it**, with a **single-use** link that expires in minutes and carries no session |
+> | How long the file lasts | `PRODUCT_DATA_EXPORT_RETENTION_DAYS` (7 days) | `REPORTING_EXPORT_RETENTION_DAYS` (7 days) |
+> | Who purges it | The hourly task | The daily task |
+>
+> What they do share: **the file is deleted and the record that it existed is
+> not**, and every download is logged.
+>
+> With one detail specific to the background report: when the file is deleted,
+> the record **also loses the employee and the scope that were queried**. That
+> detail is not lost —it lives in the audit trail, which is where it has a legal
+> retention period and write protection— but it stops sitting in an operational
+> table where nobody needs it any more.
+
 ### 13.1 What it is
 
 A single ZIP file, `kronoqr-export-<versión>-<fecha UTC>.zip`, with
 **everything** in your installation in open formats: one CSV per table
 (workforce, contracts, absences with all their versions, cards, kiosks, shift
 entries with all their versions, corrections with author and reason, totals,
-incidents, scans, the complete
+incidents, scans, reports generated in the background, the complete
 audit trail with its hash chain, management accounts, support access grants),
 JSON for the configuration, the compliance profile and the licence, a
 `manifest.json` with the row count and the `sha256` fingerprint of each file,

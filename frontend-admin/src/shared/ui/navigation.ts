@@ -64,6 +64,16 @@ export const NAVIGATION_SECTIONS: readonly NavigationSection[] = [
   },
   { name: 'credentials', labelKey: 'app.nav.credentials', abilities: [CREDENTIALS_MANAGE] },
   { name: 'reports', labelKey: 'app.nav.reports', abilities: [REPORTS_MANAGE] },
+  {
+    // Salida a nomina (RF-IN-07, tarea 3.9): subentrada de «Informes», con el
+    // mismo ambito. Solo `admin` y `rrhh` lo llevan hoy (doc 02 §7.3), asi que
+    // un `responsable_departamento` no la ve, tal como pide la ficha
+    // («solo rrhh+»): no hace falta un ambito propio para eso, ya lo hace
+    // `reports:*`.
+    name: 'payroll-export',
+    labelKey: 'app.nav.payrollExport',
+    abilities: [REPORTS_MANAGE],
+  },
   { name: 'legal-export', labelKey: 'app.nav.legalExport', abilities: [REPORTS_LEGAL] },
   {
     // El perfil de cumplimiento (RF-PD-07, tarea 5.2): los umbrales LEGALES del
@@ -121,7 +131,7 @@ function section(name: string): NavigationSection {
  * -no el del menu-: la primera seccion de esta lista que la sesion alcanza es
  * a donde va quien pide una pantalla fuera de su ambito.
  *
- * Es un SUBCONJUNTO deliberado y no las catorce secciones: basta con que cubra a
+ * Es un SUBCONJUNTO deliberado y no las dieciséis secciones: basta con que cubra a
  * los cuatro roles de gestion (`admin`, `rrhh`, `responsable_departamento`,
  * `auditor`), y una lista mas larga no cambiaria a donde aterriza ninguno de
  * los cuatro, solo tardaria mas en decidirlo.

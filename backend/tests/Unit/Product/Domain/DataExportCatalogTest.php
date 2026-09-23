@@ -181,7 +181,7 @@ it('declara la marca de redaccion junto al valor de la configuracion', function 
         ->toBe(['key', 'value', 'value_redacted', 'updated_at', 'updated_by_user_uuid']);
 })->group('RF-PD-14', 'RL-20', 'RF-KI-08');
 
-it('declara los veinte conjuntos del catalogo, sin efimeros ni fontaneria', function (): void {
+it('declara los veintiun conjuntos del catalogo, sin efimeros ni fontaneria', function (): void {
     // El catalogo completo, valor a valor: añadir o quitar un conjunto tiene que
     // ser un cambio visible que alguien revise, no un efecto colateral.
     expect(DataExportCatalog::names())->toBe([
@@ -202,6 +202,12 @@ it('declara los veinte conjuntos del catalogo, sin efimeros ni fontaneria', func
         'users',
         'support_grants',
         'error_events',
+        // Tarea 3.9: el registro de los informes generados en segundo plano
+        // (RF-IN-06). Los FICHEROS no entran —su contenido ya esta en
+        // `shift_entries`, `daily_totals` y `employment_contracts`—; lo que
+        // entra es que informes con horas de la plantilla salieron de aqui y a
+        // peticion de quien.
+        'report_exports',
         'installation_settings',
         'compliance_profiles',
         'license',

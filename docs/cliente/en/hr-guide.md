@@ -969,14 +969,19 @@ same rule that makes the working-time record hold up in an inspection (§1).
 
 ## 6. Reports, exports and the Labour Inspectorate hand-over
 
-They are two different things and they are easily confused:
+They are three different things and they are easily confused:
 
-| | **Hours-per-period report** | **Labour Inspectorate export** |
-| --- | --- | --- |
-| What for | Management: how much has been worked, by whom, with what deviation | Meeting a requirement under art. 34.9 of the Spanish Workers' Statute |
-| Where | Reports | Inspectorate |
-| What it carries | Totals aggregated by person, department or site | **Every entry, one by one, and every correction with its author and its reason** |
-| Format | CSV, Excel or PDF | Normalised CSV, with its criteria and its legal basis declared inside |
+| | **Hours-per-period report** | **Labour Inspectorate export** | **Payroll export** |
+| --- | --- | --- | --- |
+| What for | Management: how much has been worked, by whom, with what deviation | Meeting a requirement under art. 34.9 of the Spanish Workers' Statute | Taking the month's hours to the hotel's payroll software |
+| Where | Reports | Inspectorate | Reports → **Payroll** tab |
+| What it carries | Totals aggregated by person, department or site | **Every entry, one by one, and every correction with its author and its reason** | One row per person and period: hours worked, contracted, excess and absences. **No amounts** |
+| Format | CSV, Excel or PDF | Normalised CSV, with its criteria and its legal basis declared inside | CSV or Excel, with the columns, the separator and the hours format your payroll software asks for |
+
+The hours report and the payroll export are downloaded on the spot almost
+always; when the period or the workforce are large, they are **generated in the
+background** (§6.3). The Labour Inspectorate export does not change: it is
+always generated on the spot.
 
 ### 6.1 The hours-per-period report
 
@@ -1024,6 +1029,120 @@ blank, the whole workforce comes out. What the file contains:
 > [`../../runbooks/requerimiento-inspeccion.md`](../../runbooks/requerimiento-inspeccion.md)
 > (in Spanish).** Read it **before** the requirement arrives, not when it
 > arrives: it is five minutes that save the hour.
+
+### 6.3 Large reports: in the background
+
+**When it happens.** When you ask for an hours-per-period report or a payroll
+export, the panel may tell you that **that period or that workforce does not fit
+on the spot**. It is not an error nor a fault in the installation: a report
+calculated while you wait has a time limit, and above it the system would rather
+tell you than leave the screen hanging. It mostly happens with periods of
+several months and with large workforces.
+
+**What to do.** The notice itself carries the **"Generate in the background"**
+button, with the same parameters you had already chosen: nothing has to be filled
+in again. When you press it, the request goes into the **"Background exports"**
+block on that same screen.
+
+**How you follow it.** That list refreshes on its own while something is running
+and shows the state of each request: "Queued", "Generating", **"Ready to
+download"**, "Failed" or "Expired". You can close the screen, leave the panel and
+come back later: the work carries on in the server. Only **one request of
+yours** is processed at a time; if you ask for another before the previous one is done, the
+panel shows you the one already under way instead of starting a second.
+
+**The email notice, if your installation sends email.** When the file is ready
+you get a notice at the address of your management account. That message
+**carries neither the file nor the download link**: it carries the link to the
+reports screen, and the download is requested from there. If your installation
+has no outgoing email, nothing is lost: the screen is the source, the message
+only saves you from watching. Whether there is email or not is decided by IT at
+installation time.
+
+**Downloading.** When the row says "Ready to download", the **"Download"** button
+fetches the file. Two things worth knowing before pressing it:
+
+- **The link expires after 15 minutes and is good for one use only.** As soon as
+  it is used, it stops working: open it again and the answer says that link has
+  already been spent and that you should ask for another. There is no point in
+  saving it, forwarding it by email or pasting it into a chat: by the time the
+  other person opens it, it will no longer be valid.
+- **If the download is cut off** —the wifi drops, you close the laptop— nothing
+  is lost: go back to the screen and press "Download" again. A fresh link is
+  issued over the same file, which has not been generated again.
+
+**How long the file lasts.** It is kept for **7 days** and then disappears on its
+own. The row stays in the list saying that it expired, with what was asked for
+and when, so that there is a record; what is no longer there is the file. If you
+need it later, ask for it again: the same result comes out, unless something in
+the record has been corrected in the meantime.
+
+**Who can see it.** **Only the person who asked for it**, even if the person
+looking is an administrator. It is not a shared folder: it is your request and
+your file. If a colleague needs that same report, she asks for it herself, with
+her account and her scope —a department manager always gets only her own people—.
+
+**What is logged.** That you asked for it, which period and which scope; that it
+was generated, with how many rows; and **every download, one by one**, with who
+and when. That is what makes it possible to answer "who took what" if one day it
+has to be answered.
+
+> The deadlines —the 15 minutes of the link and the 7 days of the file— can be
+> adjusted by IT on the server. They are in
+> [`configuration.md`](configuration.md) §6.25.
+
+### 6.4 The payroll export
+
+**What it exports.** One row per person and period with the **hours worked**, the
+**contracted hours**, the **excess** over what was contracted and the **absence
+days**. The hours are exactly the ones the hours-per-period report shows (§6.1):
+it is not a second calculation that could give a different number.
+
+**What it does NOT do, and it is worth saying out loud.** It does not calculate
+amounts, bonuses, supplements, seniority, social security, or anything carrying a
+currency sign. The hotel's payroll software does that; this hands it the starting
+hours. If somebody expects a payslip out of this, they expect something this
+product does not do and has never promised to do.
+
+**Where it is and who can.** Reports → **"Payroll"** tab. You choose the period
+and the granularity, you see the configured columns before downloading anything,
+and there are two buttons: **"Download"**, which fetches it on the spot, and
+**"Generate in the background"** for large periods (§6.3). The tab is seen by
+**HR and administration**; a department manager does not see it, although she
+does see the hours report for her people.
+
+**IT configures the format once.** Which columns come out and in what order, how
+hours and dates are written, which separator the CSV carries and which encoding
+it is written with are installation settings, not monthly decisions: they are
+tuned on the day the payroll software is connected and are not touched again.
+They are explained one by one in [`configuration.md`](configuration.md) §2.5. If
+your payroll software rejects the file, that is what to look at.
+
+**The criteria do not go inside the file, and that is on purpose.** The
+hours-per-period report carries its criteria printed below the table; this one
+does not, because a line of explanation in the middle of a CSV breaks the import
+into the payroll software. The criteria are shown **on the screen, next to the
+download button**. Copy them and keep them with the file you send: they are what
+lets a number be explained six months later, and the file alone does not explain
+it.
+
+**What to cross-check before sending it.** Five minutes here save a payroll
+correction later:
+
+- **Days with an open shift.** A working day with no clock-out has a total that
+  is still going to change. Look at them in the incident inbox (§4) and close
+  them before exporting.
+- **Unresolved incidents** in the period. Each one is an hour that may move when
+  somebody resolves it.
+- **Days with no contract on record.** In those rows the hours worked are right,
+  but the contracted hours and the excess are incomplete (§2.3).
+- **Absences up to date.** Holidays, sick leave and leave in the period have to
+  be recorded first (§5 bis), or the absence column will come out short.
+
+> **It is an accessory feature.** If the licence expires, the payroll export may
+> become unavailable until it is renewed. The time record, clocking in and the
+> Labour Inspectorate export **are never stopped because of that** (§8, "there is
+> a licence notice in the panel").
 
 ---
 

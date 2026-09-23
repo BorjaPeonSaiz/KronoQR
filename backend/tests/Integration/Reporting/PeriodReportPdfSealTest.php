@@ -12,8 +12,8 @@ use App\Modules\Reporting\Domain\ValueObject\ReportGranularity;
 use App\Modules\Reporting\Domain\ValueObject\ReportGrouping;
 use App\Modules\Reporting\Domain\ValueObject\ReportSubject;
 use App\Modules\Reporting\Http\Response\PeriodReportPdf;
-use App\Modules\Reporting\Http\Support\PeriodReportDigest;
 use App\Modules\Reporting\Infrastructure\Adapter\BrowsershotReportRenderer;
+use App\Modules\Reporting\Infrastructure\Export\PeriodReportDigest;
 use Illuminate\Support\Facades\App;
 use Tests\Support\Reporting\FakeReportDocumentRenderer;
 

@@ -565,7 +565,11 @@ it('rechaza un rango por encima del techo sincrono igual que la consulta', funct
             'to' => '2026-12-31',
         ])
         ->assertStatus(422)
-        ->assertJsonPath('type', 'urn:kronoqr:problem:validation-failed');
+        // `type` PROPIO y no el de validacion generico: «has escrito mal una
+        // fecha» y «esto no cabe, pidelo en segundo plano» son dos desenlaces con
+        // dos acciones distintas, y el cliente no puede distinguirlos leyendo
+        // prosa en castellano.
+        ->assertJsonPath('type', 'urn:kronoqr:problem:report-too-large');
 })->group('RF-IN-04', 'RNF-P-05');
 
 it('no deja el nombre de nadie en el nombre del fichero', function (): void {

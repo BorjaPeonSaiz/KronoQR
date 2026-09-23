@@ -52,6 +52,7 @@ import type {
   TwoFactorEnrolment,
   VoidAbsenceRequest,
   VoidShiftEntryRequest,
+  ReportExport,
   WorkDayDetail,
   WorkDayShiftEntry,
 } from '@/shared/api/types'
@@ -844,6 +845,68 @@ function requestLocaleOf(request: import('@playwright/test').Request): 'es' | 'e
   return request.headers()['accept-language']?.startsWith('en') === true ? 'en' : 'es'
 }
 
+// --- Exportaciones de informes en segundo plano y salida a nomina (RF-IN-06,
+// RF-IN-07, tarea 3.9) --------------------------------------------------------
+
+/**
+ * El mensaje de campo de `ReportTooLargeForSynchronousDelivery` (backend,
+ * RF-IN-06): el `422` que devuelve lleva el `type`
+ * `urn:kronoqr:problem:report-too-large` -que es lo que reconoce
+ * `reportExceedsSynchronousBudget` (`reportExports.api.ts`)-, y este texto de
+ * campo es solo la explicacion que acompaña, para quien lee `ErrorNotice`.
+ */
+function tooLargeMessage(field: string): Record<string, string[]> {
+  return {
+    [field]: [
+      'El informe abarca 181 dias y el maximo que se entrega en el acto es 92. ' +
+        'Reduce el rango o pide la generacion en diferido.',
+    ],
+  }
+}
+
+export const REPORT_EXPORT_UUID = '0199f7b1-1a2b-7c3d-9e4f-5a6b7c8d9e02'
+
+/** Los criterios de una exportacion de horas por periodo, igual que `PERIOD_REPORT.meta.criteria`. */
+const REPORT_EXPORT_CRITERIA = [...PERIOD_REPORT.meta.criteria]
+
+/** Una exportacion `period` ya `completed`, para las pruebas que no pasan por «pedir». */
+export const REPORT_EXPORT_COMPLETED: ReportExport = {
+  uuid: REPORT_EXPORT_UUID,
+  kind: 'period',
+  format: 'csv',
+  status: 'completed',
+  parameters: {
+    from: '2026-01-01',
+    to: '2026-06-30',
+    granularity: 'month',
+    group_by: 'employee',
+    include_open_shifts: false,
+    department_id: null,
+    employee_uuid: null,
+  },
+  scope: 'all',
+  requested_by: { uuid: USER.uuid, name: USER.name },
+  requested_at: '2026-07-01T08:00:00.000000Z',
+  started_at: '2026-07-01T08:00:02.000000Z',
+  completed_at: '2026-07-01T08:00:40.000000Z',
+  failed_at: null,
+  failure_reason: null,
+  file_name: 'kronoqr-horas-2026-01-01_2026-06-30.csv',
+  size_bytes: 1_048_576,
+  sha256: '0'.repeat(64),
+  row_count: 620,
+  criteria: REPORT_EXPORT_CRITERIA,
+  expires_at: '2026-07-08T08:00:40.000000Z',
+  purged_at: null,
+  downloaded_at: null,
+  download_count: 0,
+  notified_at: '2026-07-01T08:00:40.000000Z',
+  notification_channel: 'panel',
+  // `download` NUNCA sale de la lista con un enlace listo (decision 3 de la
+  // ficha): solo `GET /reports/exports/{uuid}` lo emite, y de un solo uso.
+  download: null,
+}
+
 // --- Bandeja de incidencias (RF-PA-05, RF-PR-01) -----------------------------
 
 export const INCIDENT_ID = 412
@@ -1140,6 +1203,32 @@ export interface ManagementApiOptions {
    */
   readonly exportOutcome?: 'ok' | 'forbidden'
   /**
+   * `tooLarge` hace que `GET /reports/period`, `GET /reports/period/export` y
+   * `GET /reports/payroll-export` respondan el `422` de
+   * `ReportTooLargeForSynchronousDelivery` (RF-IN-06, tarea 3.9) en vez del
+   * informe: es lo que dispara la oferta «Generar en segundo plano» en
+   * `PeriodReportView`/`PayrollExportView`. Por omision, `ok`.
+   */
+  readonly periodReportOutcome?: 'ok' | 'tooLarge'
+  /**
+   * Como responde `GET /reports/payroll-export` (RF-IN-07, tarea 3.9), aparte
+   * del `tooLarge` de `periodReportOutcome`, que tambien lo alcanza (el mismo
+   * informe, el mismo `422`). `licenseRequired` simula que `payroll_export` no
+   * esta en el plan (`402`, ADR-019, regla dura 15).
+   */
+  readonly payrollExportOutcome?: 'ok' | 'licenseRequired'
+  /**
+   * Las exportaciones de informes en segundo plano de partida (RF-IN-06,
+   * RF-IN-07, tarea 3.9): horas por periodo y salida a nomina comparten el
+   * mismo ciclo de vida (`report_exports`, decision 1 de la ficha). Por
+   * omision, ninguna. El doble la mantiene mutable: `POST` crea una fila
+   * `pending` que progresa sola con el reloj de VERDAD hasta `completed`, y
+   * cada `GET /reports/exports/{uuid}` de una fila `completed` emite un
+   * token de descarga nuevo que invalida el anterior (decision 3 de la
+   * ficha, ADR-041): reutilizarlo da `410`.
+   */
+  readonly reportExports?: ReportExport[]
+  /**
    * El tablero de credenciales. Por omision, `CREDENTIAL_BOARD`: sin ninguna
    * rotacion de clave abierta, que es el estado normal (RF-QR-07).
    */
@@ -1189,6 +1278,13 @@ export interface ManagementApiOptions {
     readonly breakClocking?: 'enabled' | 'disabled'
     readonly localeDefault?: string
     readonly localeAvailable?: string[]
+    /** `PAYROLL_EXPORT_COLUMNS` (RF-IN-07, tarea 3.9). Por omision, las diez columnas de serie de la decision 5 de la ficha. */
+    readonly payrollColumns?: string[]
+    readonly payrollDelimiter?: 'semicolon' | 'comma' | 'tab'
+    readonly payrollHoursFormat?: 'hhmm' | 'decimal_dot' | 'decimal_comma'
+    readonly payrollDateFormat?: 'iso' | 'dmy'
+    readonly payrollEncoding?: 'utf8_bom' | 'utf8' | 'latin1'
+    readonly payrollHeaderRow?: 'enabled' | 'disabled'
   }
   /**
    * Lo que devuelve `GET /api/v1/license` (RF-PD-04, RF-PD-05, tarea 5.3).
@@ -1429,6 +1525,8 @@ export async function stubManagementApi(
   const resolveOutcome = options.resolveOutcome ?? 'ok'
   const incidentBoard = options.incidentBoard ?? INCIDENT_BOARD
   const exportOutcome = options.exportOutcome ?? 'ok'
+  const periodReportOutcome = options.periodReportOutcome ?? 'ok'
+  const payrollExportOutcome = options.payrollExportOutcome ?? 'ok'
   const correctionOutcome = options.correctionOutcome ?? 'ok'
   const baseUser =
     options.role === 'manager'
@@ -1562,6 +1660,61 @@ export async function stubManagementApi(
     })
   }
 
+  // Exportaciones de informes en segundo plano (RF-IN-06, RF-IN-07, tarea
+  // 3.9): mutable, con la MISMA progresion atada al reloj real que
+  // `dataExports`, pero mas corta -el sondeo real del panel es cada 10 s
+  // (decision 8 de la ficha), asi que conviene que la fila ya este
+  // `completed` bastante antes del primer sondeo, para que una prueba no
+  // tenga que esperar dos vueltas enteras.
+  const reportExports: ReportExport[] = (options.reportExports ?? []).map((candidate) => ({
+    ...candidate,
+  }))
+  const reportExportCreatedAt = new Map<string, number>()
+  /**
+   * El token vigente de descarga de cada fila `completed` (decision 3 de la
+   * ficha, ADR-041): `uuid -> token`. Minarlo (`GET .../exports/{uuid}`)
+   * SOBRESCRIBE el anterior -que deja de valer, aunque no se hubiera
+   * consumido-, y descargarlo lo borra del mapa: un token que ya no esta aqui
+   * es un `410`, sea porque se consumio o porque una peticion de estado
+   * posterior lo invalido.
+   */
+  const reportExportDownloadTokens = new Map<string, string>()
+  let reportExportTokenSequence = 0
+
+  /** El estado de cada fila EN ESTE INSTANTE: pending -> running -> completed. */
+  function currentReportExports(): ReportExport[] {
+    const now = Date.now()
+
+    return reportExports.map((row) => {
+      const createdAt = reportExportCreatedAt.get(row.uuid)
+
+      if (createdAt === undefined) {
+        return row
+      }
+
+      const elapsedMs = now - createdAt
+
+      if (elapsedMs < 300) {
+        return { ...row, status: 'pending' }
+      }
+
+      if (elapsedMs < 800) {
+        return { ...row, status: 'running', started_at: row.requested_at }
+      }
+
+      return {
+        ...row,
+        status: 'completed',
+        started_at: row.requested_at,
+        completed_at: row.requested_at,
+        file_name: `kronoqr-${row.kind}-export.${row.format}`,
+        size_bytes: 51_200,
+        row_count: 42,
+        expires_at: '2026-07-08T08:00:00.000000Z',
+      }
+    })
+  }
+
   // La marca de la instalacion (RF-PD-08, tarea 5.8): mutable, para que
   // `PATCH /api/v1/settings` la actualice exactamente como lo haria el
   // servidor y `GET /api/v1/branding` -que `branding.store.load()` vuelve a
@@ -1588,6 +1741,26 @@ export async function stubManagementApi(
   let localeAvailable = options.operationalSettings?.localeAvailable ?? ['es', 'en']
   let kioskServiceCode = options.operationalSettings?.kioskServiceCode ?? ''
   let attendanceBreakClocking = options.operationalSettings?.breakClocking ?? 'disabled'
+
+  // Salida a nomina (RF-IN-07, tarea 3.9): las seis claves `PAYROLL_EXPORT_*`,
+  // con los mismos valores de serie que declara la decision 5 de la ficha.
+  let payrollColumns = options.operationalSettings?.payrollColumns ?? [
+    'employee_code',
+    'last_name',
+    'first_name',
+    'department',
+    'period_from',
+    'period_to',
+    'worked_hours',
+    'contracted_hours',
+    'overtime_hours',
+    'absence_days',
+  ]
+  let payrollDelimiter = options.operationalSettings?.payrollDelimiter ?? 'semicolon'
+  let payrollHoursFormat = options.operationalSettings?.payrollHoursFormat ?? 'hhmm'
+  let payrollDateFormat = options.operationalSettings?.payrollDateFormat ?? 'iso'
+  let payrollEncoding = options.operationalSettings?.payrollEncoding ?? 'utf8_bom'
+  let payrollHeaderRow = options.operationalSettings?.payrollHeaderRow ?? 'enabled'
 
   /** El catalogo completo de `installation_settings`, con la forma de `GET/PATCH /settings`. */
   function settingsCatalog(): unknown {
@@ -1699,6 +1872,85 @@ export async function stubManagementApi(
               ? 'product_default'
               : 'installation',
           constraints: { allowed: ['es', 'en'] },
+        },
+        // Salida a nomina (RF-IN-07, tarea 3.9): impacto `presentation` en las
+        // seis (decision 5 de la ficha, ninguna mueve un calculo).
+        {
+          key: 'PAYROLL_EXPORT_COLUMNS',
+          value: payrollColumns,
+          type: 'text_list',
+          impact: 'presentation',
+          affects_worked_hours: false,
+          source: 'installation',
+          constraints: {
+            allowed: [
+              'employee_code',
+              'employee_uuid',
+              'last_name',
+              'first_name',
+              'full_name',
+              'department',
+              'period_from',
+              'period_to',
+              'days_in_period',
+              'days_with_activity',
+              'shift_count',
+              'worked_hours',
+              'contracted_hours',
+              'deviation_hours',
+              'overtime_hours',
+              'absence_days',
+              'holiday_days',
+              'unjustified_absence_days',
+              'days_without_contract',
+              'time_zone',
+            ],
+          },
+        },
+        {
+          key: 'PAYROLL_EXPORT_DELIMITER',
+          value: payrollDelimiter,
+          type: 'text',
+          impact: 'presentation',
+          affects_worked_hours: false,
+          source: payrollDelimiter === 'semicolon' ? 'product_default' : 'installation',
+          constraints: { allowed: ['semicolon', 'comma', 'tab'] },
+        },
+        {
+          key: 'PAYROLL_EXPORT_HOURS_FORMAT',
+          value: payrollHoursFormat,
+          type: 'text',
+          impact: 'presentation',
+          affects_worked_hours: false,
+          source: payrollHoursFormat === 'hhmm' ? 'product_default' : 'installation',
+          constraints: { allowed: ['hhmm', 'decimal_dot', 'decimal_comma'] },
+        },
+        {
+          key: 'PAYROLL_EXPORT_DATE_FORMAT',
+          value: payrollDateFormat,
+          type: 'text',
+          impact: 'presentation',
+          affects_worked_hours: false,
+          source: payrollDateFormat === 'iso' ? 'product_default' : 'installation',
+          constraints: { allowed: ['iso', 'dmy'] },
+        },
+        {
+          key: 'PAYROLL_EXPORT_ENCODING',
+          value: payrollEncoding,
+          type: 'text',
+          impact: 'presentation',
+          affects_worked_hours: false,
+          source: payrollEncoding === 'utf8_bom' ? 'product_default' : 'installation',
+          constraints: { allowed: ['utf8_bom', 'utf8', 'latin1'] },
+        },
+        {
+          key: 'PAYROLL_EXPORT_HEADER_ROW',
+          value: payrollHeaderRow,
+          type: 'text',
+          impact: 'presentation',
+          affects_worked_hours: false,
+          source: payrollHeaderRow === 'enabled' ? 'product_default' : 'installation',
+          constraints: { allowed: ['enabled', 'disabled'] },
         },
       ],
       meta: { unknown_keys: [], invalid_keys: [] },
@@ -1872,6 +2124,101 @@ export async function stubManagementApi(
             'X-Kronoqr-Export-Rows': '60317',
           },
           body: Buffer.from('contenido-de-prueba-del-zip-de-exportacion'),
+        })
+
+        return
+      }
+
+      // El estado de UNA exportacion de informe en segundo plano
+      // (`GET /reports/exports/{uuid}`, RF-IN-06, RF-IN-07): cada llamada, si
+      // la fila esta `completed`, MINTA un enlace de descarga nuevo que
+      // invalida el anterior (decision 3 de la ficha, ADR-041). Va ANTES del
+      // `switch`: lleva un `uuid` dinamico en la ruta.
+      const reportExportStatusMatch = /^\/api\/v1\/reports\/exports\/([0-9a-f-]+)$/.exec(
+        url.pathname,
+      )
+
+      if (method === 'GET' && reportExportStatusMatch !== null) {
+        const target = currentReportExports().find(
+          (candidate) => candidate.uuid === reportExportStatusMatch[1],
+        )
+
+        if (target === undefined) {
+          await problem(route, 404, 'urn:kronoqr:problem:not-found', 'Exportación no encontrada')
+
+          return
+        }
+
+        let download: { url: string; expires_at: string } | null = null
+
+        if (target.status === 'completed') {
+          reportExportTokenSequence += 1
+
+          const token = `token-${target.uuid}-${reportExportTokenSequence}`
+
+          // Sobrescribe el anterior: el que hubiera antes deja de valer,
+          // aunque nadie lo hubiera consumido todavia (decision 3 de la
+          // ficha: «cada peticion emite uno nuevo que invalida el anterior»).
+          reportExportDownloadTokens.set(target.uuid, token)
+          download = {
+            url: `/api/v1/reports/exports/${target.uuid}/download?token=${token}`,
+            expires_at: '2026-07-01T08:15:00.000000Z',
+          }
+        }
+
+        await json(route, 200, { data: { ...target, download } })
+        return
+      }
+
+      // La descarga de UNA exportacion de informe en segundo plano
+      // (`GET /reports/exports/{uuid}/download`, RF-IN-06, RF-IN-07): **sin
+      // sesion** (decision 3 de la ficha, ADR-041), de un solo uso. Un token
+      // que no este vigente para este `uuid` -consumido, invalidado por una
+      // peticion de estado posterior, o directamente inventado- es `410`.
+      const reportExportDownloadMatch =
+        /^\/api\/v1\/reports\/exports\/([0-9a-f-]+)\/download$/.exec(url.pathname)
+
+      if (method === 'GET' && reportExportDownloadMatch !== null) {
+        const uuid = reportExportDownloadMatch[1] ?? ''
+        const target = currentReportExports().find((candidate) => candidate.uuid === uuid)
+        const token = url.searchParams.get('token')
+        const validToken = reportExportDownloadTokens.get(uuid)
+
+        if (target === undefined || token === null || token !== validToken) {
+          await route.fulfill({
+            status: 410,
+            contentType: 'application/problem+json',
+            body: JSON.stringify({
+              type: 'urn:kronoqr:problem:report-export-link-used',
+              title: 'El enlace de descarga ya no vale',
+              status: 410,
+              detail:
+                'Este enlace ya se usó, o ha caducado. Pide la exportación de nuevo desde el panel.',
+            }),
+          })
+
+          return
+        }
+
+        // De un solo uso: se borra en cuanto se consume (decision 3 de la
+        // ficha). Volver a pedir el mismo `token` a partir de aqui es el
+        // `410` de arriba.
+        reportExportDownloadTokens.delete(uuid)
+
+        const contentType =
+          target.format === 'xlsx'
+            ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            : target.format === 'pdf'
+              ? 'application/pdf'
+              : 'text/csv; charset=utf-8'
+
+        await route.fulfill({
+          status: 200,
+          contentType,
+          headers: {
+            'Content-Disposition': `attachment; filename=${target.file_name ?? `kronoqr-export.${target.format}`}`,
+          },
+          body: 'contenido-de-prueba',
         })
 
         return
@@ -2521,6 +2868,67 @@ export async function stubManagementApi(
             errors['settings'] = ['El idioma por defecto tiene que estar entre los disponibles.']
           }
 
+          // Salida a nomina (RF-IN-07, tarea 3.9): las seis claves
+          // `PAYROLL_EXPORT_*`. `PAYROLL_EXPORT_COLUMNS` valida cada `id`
+          // (antes del `=`, si lo lleva) contra el catalogo cerrado; las
+          // otras cinco, contra su conjunto cerrado -mismo criterio que
+          // `ATTENDANCE_BREAK_CLOCKING`.
+          const PAYROLL_COLUMN_CATALOG = [
+            'employee_code',
+            'employee_uuid',
+            'last_name',
+            'first_name',
+            'full_name',
+            'department',
+            'period_from',
+            'period_to',
+            'days_in_period',
+            'days_with_activity',
+            'shift_count',
+            'worked_hours',
+            'contracted_hours',
+            'deviation_hours',
+            'overtime_hours',
+            'absence_days',
+            'holiday_days',
+            'unjustified_absence_days',
+            'days_without_contract',
+            'time_zone',
+          ]
+
+          const payrollColumnsRaw = patch.settings['PAYROLL_EXPORT_COLUMNS']
+          const nextPayrollColumns = Array.isArray(payrollColumnsRaw)
+            ? payrollColumnsRaw.filter((entry): entry is string => typeof entry === 'string')
+            : payrollColumns
+
+          if (Array.isArray(payrollColumnsRaw)) {
+            const unknown = nextPayrollColumns.some((entry) => {
+              const id = entry.includes('=') ? entry.slice(0, entry.indexOf('=')) : entry
+
+              return !PAYROLL_COLUMN_CATALOG.includes(id)
+            })
+
+            if (nextPayrollColumns.length === 0 || unknown) {
+              errors['settings.PAYROLL_EXPORT_COLUMNS'] = [
+                'Alguna columna no esta en el catalogo, o la lista esta vacia.',
+              ]
+            }
+          }
+
+          function checkClosedText(key: string, allowed: readonly string[]): void {
+            const raw = patch.settings[key]
+
+            if (typeof raw === 'string' && !allowed.includes(raw)) {
+              errors[`settings.${key}`] = [`El valor tiene que ser uno de: ${allowed.join(', ')}.`]
+            }
+          }
+
+          checkClosedText('PAYROLL_EXPORT_DELIMITER', ['semicolon', 'comma', 'tab'])
+          checkClosedText('PAYROLL_EXPORT_HOURS_FORMAT', ['hhmm', 'decimal_dot', 'decimal_comma'])
+          checkClosedText('PAYROLL_EXPORT_DATE_FORMAT', ['iso', 'dmy'])
+          checkClosedText('PAYROLL_EXPORT_ENCODING', ['utf8_bom', 'utf8', 'latin1'])
+          checkClosedText('PAYROLL_EXPORT_HEADER_ROW', ['enabled', 'disabled'])
+
           if (Object.keys(errors).length > 0) {
             await validationProblem(
               route,
@@ -2530,6 +2938,34 @@ export async function stubManagementApi(
             )
 
             return
+          }
+
+          payrollColumns = nextPayrollColumns
+
+          const payrollDelimiterRaw = patch.settings['PAYROLL_EXPORT_DELIMITER']
+          const payrollHoursFormatRaw = patch.settings['PAYROLL_EXPORT_HOURS_FORMAT']
+          const payrollDateFormatRaw = patch.settings['PAYROLL_EXPORT_DATE_FORMAT']
+          const payrollEncodingRaw = patch.settings['PAYROLL_EXPORT_ENCODING']
+          const payrollHeaderRowRaw = patch.settings['PAYROLL_EXPORT_HEADER_ROW']
+
+          if (typeof payrollDelimiterRaw === 'string') {
+            payrollDelimiter = payrollDelimiterRaw as typeof payrollDelimiter
+          }
+
+          if (typeof payrollHoursFormatRaw === 'string') {
+            payrollHoursFormat = payrollHoursFormatRaw as typeof payrollHoursFormat
+          }
+
+          if (typeof payrollDateFormatRaw === 'string') {
+            payrollDateFormat = payrollDateFormatRaw as typeof payrollDateFormat
+          }
+
+          if (typeof payrollEncodingRaw === 'string') {
+            payrollEncoding = payrollEncodingRaw as typeof payrollEncoding
+          }
+
+          if (typeof payrollHeaderRowRaw === 'string') {
+            payrollHeaderRow = payrollHeaderRowRaw as typeof payrollHeaderRow
           }
 
           if (maxShiftHours !== undefined) {
@@ -2942,6 +3378,20 @@ export async function stubManagementApi(
           // `absences.spec.ts` (`@RF-GP-04`) pueda comprobar que una baja
           // cambia `absence_days`/`unjustified_absence_days` del dia que cubre
           // y deja intactos el dia anterior y el posterior.
+          // RF-IN-06 (tarea 3.9): el periodo no cabe en una respuesta
+          // sincrona. Es el `422` que dispara la oferta «Generar en segundo
+          // plano» de `PeriodReportView`.
+          if (periodReportOutcome === 'tooLarge') {
+            await validationProblem(
+              route,
+              'urn:kronoqr:problem:report-too-large',
+              'El informe no cabe en una respuesta al momento',
+              tooLargeMessage('to'),
+            )
+
+            return
+          }
+
           const granularity = url.searchParams.get('granularity')
           const from = url.searchParams.get('from')
           const to = url.searchParams.get('to')
@@ -2979,6 +3429,17 @@ export async function stubManagementApi(
             return
           }
 
+          if (periodReportOutcome === 'tooLarge') {
+            await validationProblem(
+              route,
+              'urn:kronoqr:problem:report-too-large',
+              'El informe no cabe en una respuesta al momento',
+              tooLargeMessage('to'),
+            )
+
+            return
+          }
+
           await route.fulfill({
             status: 200,
             contentType: 'text/csv; charset=utf-8',
@@ -2993,6 +3454,162 @@ export async function stubManagementApi(
           })
 
           return
+        case 'GET /api/v1/reports/payroll-export': {
+          // Salida a nomina, sincrona (RF-IN-07, tarea 3.9): el mismo `422`
+          // de tamaño que el informe por periodo (misma consulta, decision 5
+          // de la ficha) y el `402` de licencia (ADR-019, regla dura 15).
+          if (payrollExportOutcome === 'licenseRequired') {
+            await route.fulfill({
+              status: 402,
+              contentType: 'application/problem+json',
+              body: JSON.stringify({
+                type: 'urn:kronoqr:problem:feature-not-licensed',
+                title: 'Funcionalidad no incluida en el plan',
+                status: 402,
+                feature: 'payroll_export',
+                restriction: 'not_in_plan',
+              }),
+            })
+
+            return
+          }
+
+          if (periodReportOutcome === 'tooLarge') {
+            await validationProblem(
+              route,
+              'urn:kronoqr:problem:report-too-large',
+              'El informe no cabe en una respuesta al momento',
+              tooLargeMessage('to'),
+            )
+
+            return
+          }
+
+          // Los criterios, en la MISMA cabecera y codificacion que publica el
+          // servidor de verdad (contrato: base64 de UTF-8, unido por `\n`).
+          const criteriaHeader = Buffer.from(REPORT_EXPORT_CRITERIA.join('\n'), 'utf8').toString(
+            'base64',
+          )
+          const payrollFormat = url.searchParams.get('format') ?? 'csv'
+
+          // El CONTENIDO refleja los ajustes `PAYROLL_EXPORT_*` de VERDAD
+          // (RF-IN-07, tarea 3.9): el separador y las etiquetas de columna, no
+          // un fichero fijo -para que `payroll-export.spec.ts` (`@RF-IN-07`)
+          // pueda comprobar que cambiar un ajuste cambia la descarga, y no
+          // solo la pantalla.
+          const delimiterChar =
+            payrollDelimiter === 'comma' ? ',' : payrollDelimiter === 'tab' ? '\t' : ';'
+          const headerLabels = payrollColumns.map((entry) => {
+            const separatorIndex = entry.indexOf('=')
+
+            return separatorIndex === -1 ? entry : entry.slice(separatorIndex + 1)
+          })
+          const csvBody =
+            payrollHeaderRow === 'enabled' ? `${headerLabels.join(delimiterChar)}\n` : ''
+
+          await route.fulfill({
+            status: 200,
+            contentType:
+              payrollFormat === 'xlsx'
+                ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                : 'text/csv; charset=utf-8',
+            headers: {
+              'Content-Disposition':
+                `attachment; filename=kronoqr-nomina-${url.searchParams.get('from') ?? ''}_` +
+                `${url.searchParams.get('to') ?? ''}.${payrollFormat}`,
+              'Cache-Control': 'no-store, private',
+              'X-Kronoqr-Export-Criteria': criteriaHeader,
+              'X-Kronoqr-Export-Rows': String(payrollColumns.length > 0 ? 42 : 0),
+            },
+            body: csvBody === '' ? 'contenido-de-prueba' : csvBody,
+          })
+
+          return
+        }
+        case 'GET /api/v1/reports/exports':
+          // Las 20 mas recientes DEL SOLICITANTE (RF-IN-06, RF-IN-07, decision
+          // 2 de la ficha): el doble no distingue solicitantes -es de un solo
+          // actor por sesion de prueba-, asi que basta con la lista completa.
+          // Nunca lleva `download`: eso solo lo emite el estado de una fila.
+          await json(route, 200, {
+            data: currentReportExports().map((row) => ({ ...row, download: null })),
+          })
+          return
+        case 'POST /api/v1/reports/exports': {
+          const payload = request.postDataJSON() as {
+            kind?: 'period' | 'payroll'
+            format?: 'csv' | 'xlsx' | 'pdf'
+            from?: string
+            to?: string
+            granularity?: string
+            group_by?: string
+            include_open_shifts?: boolean
+            department_id?: number
+            employee_uuid?: string
+          }
+
+          const inProgress = currentReportExports().find(
+            (row) => row.status === 'pending' || row.status === 'running',
+          )
+
+          if (inProgress !== undefined) {
+            await route.fulfill({
+              status: 409,
+              contentType: 'application/problem+json',
+              body: JSON.stringify({
+                type: 'urn:kronoqr:problem:report-export-in-progress',
+                title: 'Ya tienes una exportación en curso',
+                status: 409,
+                detail: `Espera a que termine la exportación pedida a las ${inProgress.requested_at}.`,
+                export: { ...inProgress, download: null },
+              }),
+            })
+
+            return
+          }
+
+          const uuid = `0199f7b1-${String(reportExports.length).padStart(4, '0')}-7c3d-9e4f-5a6b7c8d9e02`
+          const created: ReportExport = {
+            uuid,
+            kind: payload.kind === 'payroll' ? 'payroll' : 'period',
+            format: payload.format ?? 'csv',
+            status: 'pending',
+            parameters: {
+              from: payload.from ?? '',
+              to: payload.to ?? '',
+              granularity:
+                (payload.granularity as ReportExport['parameters']['granularity']) ?? 'month',
+              group_by: (payload.group_by as ReportExport['parameters']['group_by']) ?? 'employee',
+              include_open_shifts: payload.include_open_shifts === true,
+              department_id: payload.department_id ?? null,
+              employee_uuid: payload.employee_uuid ?? null,
+            },
+            scope: 'all',
+            requested_by: { uuid: currentUser.uuid, name: currentUser.name },
+            requested_at: '2026-07-01T08:00:00.000000Z',
+            started_at: null,
+            completed_at: null,
+            failed_at: null,
+            failure_reason: null,
+            file_name: null,
+            size_bytes: null,
+            sha256: null,
+            row_count: null,
+            criteria: [...REPORT_EXPORT_CRITERIA],
+            expires_at: null,
+            purged_at: null,
+            downloaded_at: null,
+            download_count: 0,
+            notified_at: null,
+            notification_channel: 'panel',
+            download: null,
+          }
+
+          reportExports.unshift(created)
+          reportExportCreatedAt.set(created.uuid, Date.now())
+          await json(route, 202, { data: created })
+          return
+        }
         case 'GET /api/v1/reports/legal-export':
           // Exportacion normalizada para la Inspeccion de Trabajo (RF-IN-05,
           // RL-06). Igual que el informe de periodo: aqui no importa el

@@ -4,7 +4,32 @@ import PeriodReportView from '@/features/reports/PeriodReportView.vue'
 import type { PeriodReport, PeriodReportRow } from '@/shared/api/types'
 import es from '@/shared/i18n/locales/es.json'
 import { announcement, clearAnnouncement } from '@kronoqr/web-kit/announcer'
-import { jsonResponse, mountView, problemResponse, settle, stubFetch } from './support/harness'
+import type { FetchHandler } from './support/harness'
+import {
+  jsonResponse,
+  mountView,
+  problemResponse,
+  settle,
+  stubFetch as stubFetchRaw,
+} from './support/harness'
+
+/**
+ * Como `stubFetch`, pero responde con una lista vacía a
+ * `GET /reports/exports` antes de llamar al doble de cada prueba (RF-IN-06,
+ * tarea 3.9): `ReportExportsPanel` vive siempre al pie de esta pantalla y la
+ * pide al montar, y ninguna prueba de este fichero tiene algo que decir sobre
+ * las exportaciones en segundo plano — sustituir `stubFetch` aquí, una sola
+ * vez, evita tener que enseñar esa ruta en cada doble de abajo.
+ */
+function stubFetch(handler: FetchHandler): ReturnType<typeof stubFetchRaw> {
+  return stubFetchRaw((input, init) => {
+    if (String(input).includes('/reports/exports')) {
+      return jsonResponse({ data: [] })
+    }
+
+    return handler(String(input), init)
+  })
+}
 
 // La pantalla de informes por periodo (RF-IN-01, RF-IN-02, RF-IN-03).
 //
@@ -373,8 +398,9 @@ describe('descarga del informe por periodo', () => {
     await wrapper.find('[data-test="export-csv"]').trigger('click')
     await settle()
 
-    const call = fetchSpy.mock.calls.find((entry) => String(entry[0]).includes('/export')) as
-      [string, RequestInit] | undefined
+    const call = fetchSpy.mock.calls.find((entry) =>
+      String(entry[0]).includes('/reports/period/export'),
+    ) as [string, RequestInit] | undefined
 
     expect(call).toBeDefined()
 
@@ -402,7 +428,9 @@ describe('descarga del informe por periodo', () => {
     await settle()
 
     const url = String(
-      fetchSpy.mock.calls.map((entry) => String(entry[0])).find((it) => it.includes('/export')),
+      fetchSpy.mock.calls
+        .map((entry) => String(entry[0]))
+        .find((it) => it.includes('/reports/period/export')),
     )
 
     expect(url).toContain('from=2026-03-01')

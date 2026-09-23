@@ -384,7 +384,12 @@ it('responde 422 cuando el rango supera el presupuesto sincrono', function (): v
     Api::as($escenario['token'])
         ->get('/api/v1/compliance/summary', ['from' => '2025-12-29', 'to' => '2026-03-31'])
         ->assertStatus(422)
-        ->assertJsonPath('type', 'urn:kronoqr:problem:validation-failed');
+        // `report-too-large` y no `validation-failed` desde la tarea 3.9: es la
+        // misma excepcion de dominio que el informe por periodo —«esto no cabe en
+        // una respuesta inmediata»— y por tanto el mismo `type`. Aqui no hay
+        // generacion en diferido a la que remitir, asi que la salida es la que
+        // dice el `detail`: acortar el rango.
+        ->assertJsonPath('type', 'urn:kronoqr:problem:report-too-large');
 })->group('RF-PA-06');
 
 it('responde 422 con solo from cuando el hoy del centro deja el rango demasiado ancho', function (): void {

@@ -72,6 +72,17 @@ final class SettingsSurface
         // (RF-KI-08, tarea 3.3). Va con los umbrales operativos y no con la
         // marca: es operacion de los quioscos, no imagen.
         'KIOSK_SERVICE_CODE' => ['view' => 'OperationalSettingsView.vue', 'route' => '/settings'],
+        // La salida a nomina (RF-IN-07, tarea 3.9). Las seis van con los umbrales
+        // operativos y no en una pantalla propia: son ajustes de la instalacion
+        // que se tocan una vez, al conectar el producto con el programa de nomina
+        // del hotel, y no material de la pantalla de informes, donde estarian al
+        // alcance de quien descarga cada mes.
+        'PAYROLL_EXPORT_COLUMNS' => ['view' => 'OperationalSettingsView.vue', 'route' => '/settings'],
+        'PAYROLL_EXPORT_DELIMITER' => ['view' => 'OperationalSettingsView.vue', 'route' => '/settings'],
+        'PAYROLL_EXPORT_HOURS_FORMAT' => ['view' => 'OperationalSettingsView.vue', 'route' => '/settings'],
+        'PAYROLL_EXPORT_DATE_FORMAT' => ['view' => 'OperationalSettingsView.vue', 'route' => '/settings'],
+        'PAYROLL_EXPORT_ENCODING' => ['view' => 'OperationalSettingsView.vue', 'route' => '/settings'],
+        'PAYROLL_EXPORT_HEADER_ROW' => ['view' => 'OperationalSettingsView.vue', 'route' => '/settings'],
     ];
 
     /** La pantalla pactada para una clave, o cadena vacia si nadie la ha decidido. */

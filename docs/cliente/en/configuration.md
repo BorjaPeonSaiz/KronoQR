@@ -371,6 +371,149 @@ report. Even so, it is the only field of the profile whose mistake is paid for
 with data that does not come back. If your advisers tell you your period is
 different, change it; if not, leave it alone.
 
+### 2.5 Payroll export
+
+**What it is for.** The payroll export is a file with **hours per person and
+period** that you hand over to the hotel's payroll software. **It exports hours,
+not amounts**: no salaries, no bonuses, no supplements and no social security
+are calculated here. Your payroll software does that; this gives it the starting
+numbers.
+
+**Where it is changed.** Panel → **Operational settings** (`/settings`), in the
+payroll export block, with an **installation administrator** account. These are
+six database keys, **not** `.env` variables: they are saved from the panel, they
+take effect on the next request, they require no restart and they are audited
+like any other setting. Whoever generates the file afterwards —HR and
+administration— does not need to touch them: they are configured once, at
+roll-out.
+
+| Key | Default | Values | What happens if you change it |
+| --- | --- | --- | --- |
+| `PAYROLL_EXPORT_COLUMNS` | `employee_code`, `last_name`, `first_name`, `department`, `period_from`, `period_to`, `worked_hours`, `contracted_hours`, `overtime_hours`, `absence_days` | A list of identifiers from the catalogue below, in the order you want the columns. Each entry is `id` or `id=Label` | It changes **which columns the file carries and in what order**. An identifier that is not in the catalogue is rejected on save (code 422), naming the one that fails. It changes not one hour of the record |
+| `PAYROLL_EXPORT_DELIMITER` | `semicolon` | `semicolon`, `comma`, `tab` | Field separator of the CSV. `semicolon` by default because that is what Excel expects under a Spanish regional configuration and what most payroll packages here ask for |
+| `PAYROLL_EXPORT_HOURS_FORMAT` | `hhmm` | `hhmm`, `decimal_dot`, `decimal_comma` | How hours are written: `168:30`, `168.50` or `168,50`. Read the warning further down before touching it |
+| `PAYROLL_EXPORT_DATE_FORMAT` | `iso` | `iso`, `dmy` | How dates are written: `2026-09-30` or `30/09/2026` |
+| `PAYROLL_EXPORT_ENCODING` | `utf8_bom` | `utf8_bom`, `utf8`, `latin1` | File encoding. `utf8_bom` is UTF-8 with a byte order mark, which is what makes Excel open accented characters correctly without asking anything |
+| `PAYROLL_EXPORT_HEADER_ROW` | `enabled` | `enabled`, `disabled` | Whether the first line carries the column names. Set it to `disabled` only if your payroll software imports by position and chokes on the header |
+
+#### The column catalogue, one by one
+
+These are **all** the columns that can be requested. There are no others: adding
+a new one means changing the product, not the configuration.
+
+| Identifier | Default label | What it carries | Where it comes from |
+| --- | --- | --- | --- |
+| `employee_code` | Employee code | The employee code: the same one that person uses to sign in to the portal | The person's record |
+| `employee_uuid` | Identifier | Internal, stable identifier of the person, with no personal data inside. Useful if your payroll software matches on an identifier that never changes | The person's record |
+| `last_name` | Surname | Surname | The person's record |
+| `first_name` | First name | First name | The person's record |
+| `full_name` | Full name | First name and surname in a single cell | The person's record |
+| `department` | Department | The person's **current** department, not the one they had during the period | The person's record |
+| `period_from` | From | First day of the span the row describes | The period requested, split by the granularity chosen |
+| `period_to` | To | Last day of the span the row describes | Idem |
+| `days_in_period` | Days in period | Calendar days the row spans | Idem |
+| `days_with_activity` | Days with activity | Days with at least one working day on record | The working-day projection |
+| `shift_count` | Shift entries | Number of entries recorded in the row | The working-day projection |
+| `worked_hours` | Hours worked | Hours actually worked | **The working-day projection**: the current, already closed entries, with corrections applied. It is the same number as the hours-per-period report |
+| `contracted_hours` | Contracted hours | Hours due under contract | **The contract in force on each day** of the span. Days with no contract on record add nothing |
+| `deviation_hours` | Deviation | Worked minus contracted. It can be negative | Calculated from the two above |
+| `overtime_hours` | Hours above contract | Only the positive part of the deviation | Idem |
+| `absence_days` | Absence days | Days of recorded absence, of any type | **The absence record** |
+| `holiday_days` | Public holidays | Days in the span that are public holidays at the site | The holiday calendar of the compliance profile (section 2.4) |
+| `unjustified_absence_days` | Unexplained absence | Days with no activity, no recorded absence and no public holiday | The three above, subtracted |
+| `days_without_contract` | Days without contract | Days of the span with no contract on record. **If this figure is not zero, that row's contracted and deviation figures are incomplete** | The contract in force on each day |
+| `time_zone` | Time zone | The site's time zone, the one the hours were calculated with | The site |
+
+**The default label comes out in the installation's language** (`LOCALE_DEFAULT`,
+section 2.3): on a Spanish installation the first column is labelled `Código de
+empleado`. If your payroll software imports by column name, do not leave that to
+chance: set the label yourself, as explained right below. A custom label **is
+never translated**, precisely so that changing the panel language does not break
+an import that already worked.
+
+#### Giving a column the name your payroll software expects
+
+Just write the label after an equals sign (up to 60 characters). The identifier
+is still the one from the catalogue; what changes is what gets printed in the
+header row:
+
+```text
+worked_hours=Hours
+```
+
+A full list with custom labels is written like this, one entry per line in the
+panel editor:
+
+```text
+employee_code=Code
+last_name=Surname
+first_name=First name
+period_from=From
+period_to=To
+worked_hours=Hours
+contracted_hours=Contract hours
+overtime_hours=Overtime
+```
+
+#### Two example files
+
+**With the default template** —the ten columns above, semicolon, `HH:MM` hours,
+ISO dates and a header with each column's default label, on an English
+installation—:
+
+```text
+Employee code;Surname;First name;Department;From;To;Hours worked;Contracted hours;Hours above contract;Absence days
+E-0142;García Ruiz;Marta;Reception;2026-09-01;2026-09-30;168:30;160:00;8:30;2
+E-0207;Novoa Prado;Iván;Kitchen;2026-09-01;2026-09-30;152:15;160:00;0:00;5
+```
+
+**With decimal hours and a decimal comma**, custom labels and `dd/mm/yyyy`
+dates —`PAYROLL_EXPORT_HOURS_FORMAT` at `decimal_comma`,
+`PAYROLL_EXPORT_DATE_FORMAT` at `dmy` and the separator left where it was—:
+
+```text
+Code;Surname;First name;From;To;Hours;Contract hours;Overtime
+E-0142;García Ruiz;Marta;01/09/2026;30/09/2026;168,50;160,00;8,50
+E-0207;Novoa Prado;Iván;01/09/2026;30/09/2026;152,25;160,00;0,00
+```
+
+> **A decimal comma and a comma separator do not mix.** With hours in
+> `decimal_comma`, leave the separator at `semicolon` or at `tab`: with `comma`,
+> every hour figure would split the row into two columns. The system lets you
+> save that combination —it cannot know what your payroll software expects— but
+> the file will come out unreadable.
+
+#### The decimal format exists for the machine, not for people
+
+Everywhere else this product writes durations as `HH:MM` and never in decimal,
+because `7.75` reads badly and argues worse in front of somebody claiming their
+hours. The payroll export is the only exception, and it has a concrete reason:
+**this file is read by a program**, and many payroll packages only accept
+decimal hours.
+
+In practice: **set `decimal_dot` or `decimal_comma` only if your payroll
+software demands it.** For any file a person is going to read —the
+hours-per-period report, the Labour Inspectorate export, the employee portal—
+hours stay as `HH:MM`, and that is not configurable. The chosen format is
+recorded in the export itself and in the audit trail, so a year later it is
+possible to know under which writing convention a number came out.
+
+#### What happens with `latin1` and the characters it does not have
+
+`latin1` (ISO-8859-1) is there for old payroll packages that do not understand
+UTF-8. Accented characters and the ñ fit in it without trouble, but not
+everything a name can contain: an **ř**, an **ł**, an **ș** or a typographic dash
+do not exist in `latin1`. **The file is still generated, never fails and never
+stops halfway**, in two steps: first the character is transliterated to the
+closest Latin one (**ř** comes out as `r`) and then, whatever has no possible
+transliteration, is replaced by `?`. A payroll run held up by one letter is worse
+than a surname with a question mark in it.
+
+In practice: with an international workforce, `latin1` **mangles surnames**. If
+your payroll software matches on name rather than on code, that will show; if it
+matches on `employee_code` —which is the sensible choice— nothing happens.
+Before settling on it, generate a test file for a short period and open it.
+
 ---
 
 ## 3. How it is changed
@@ -495,6 +638,7 @@ features stop being available:
 | Stops working | Keeps working instead |
 | --- | --- |
 | **Reports by period** and their comparison with the contracted hours | Looking up each person's record, the export for the Labour Inspectorate and the employee portal |
+| **The payroll export** (section 2.5), both the immediate download and the background generation | Looking up each person's record and the export for the Labour Inspectorate, which are never degraded |
 | **Real-time presence**: it switches to **polling**, it does not switch off. The screen still shows who is in, a few seconds behind, and says so | — |
 
 And these are **never** affected, whatever the state of the licence:
@@ -1176,6 +1320,28 @@ afterwards from the panel —the site, the departments, the collective agreement
 profile, the licence—, and every change is recorded with its author and its
 date, which is precisely what a reopenable wizard could not guarantee.
 
+### …the payroll software will not read the payroll export file
+
+It is almost always one of these five, and all of them are fixed from the panel
+without touching the server (section 2.5). Open the file with a plain text
+editor —not with Excel, which hides exactly what you need to see— and compare:
+
+| What you see | What to change |
+| --- | --- |
+| Everything in a single column, or fields split in the wrong places | `PAYROLL_EXPORT_DELIMITER`. And if your hours are in `decimal_comma`, the separator cannot be `comma` |
+| Accented characters come out as strange symbols | `PAYROLL_EXPORT_ENCODING`. Try `utf8_bom` first; if your payroll software is old, `latin1` |
+| The payroll software says the hours are not a number | `PAYROLL_EXPORT_HOURS_FORMAT`. Many do not accept `168:30` but do accept `168.50` or `168,50` |
+| The payroll software complains about the first line, or imports the header as if it were a person | `PAYROLL_EXPORT_HEADER_ROW` set to `disabled`, or put in the labels it expects with `id=Label` |
+| Columns are missing, left over, or in a different order | `PAYROLL_EXPORT_COLUMNS`. The order of the list is the order of the file |
+
+**What you will NOT find inside the file are the calculation criteria**, and that
+is on purpose: a comment line would break the import. The criteria are shown on
+the screen, next to the download button ([`hr-guide.md`](hr-guide.md) §6.4).
+
+If it still will not go in after that, ask your payroll provider for a sample
+file of the kind it does import and compare it with yours line by line: the six
+keys cover every difference in shape that this product knows how to produce.
+
 ### …I cannot sign in and the wizard says there is already an account
 
 What happened to you is the most common thing: you created the first
@@ -1262,9 +1428,9 @@ sudo docker compose exec app php artisan product:doctor
 > means whoever has one can read the backups, sign cards or open the sealed
 > PINs of the other.
 
-### 6.0 The eleven keys that are NOT environment variables
+### 6.0 The seventeen keys that are NOT environment variables
 
-Eleven properties of the installation do not live in the `.env` but in the
+Seventeen properties of the installation do not live in the `.env` but in the
 `installation_settings` table, are edited **from the panel** and take effect on
 the next request without restarting anything:
 
@@ -1281,6 +1447,12 @@ the next request without restarting anything:
 | `LOCALE_DEFAULT` | Panel → **Operational settings** (`/settings`) | Section 2.3 |
 | `LOCALE_AVAILABLE` | Panel → **Operational settings** (`/settings`) | Section 2.3 |
 | `KIOSK_SERVICE_CODE` | Panel → **Operational settings** (`/settings`) | Section 6.0, right here |
+| `PAYROLL_EXPORT_COLUMNS` | Panel → **Operational settings** (`/settings`) | Section 2.5 |
+| `PAYROLL_EXPORT_DELIMITER` | Panel → **Operational settings** (`/settings`) | Section 2.5 |
+| `PAYROLL_EXPORT_HOURS_FORMAT` | Panel → **Operational settings** (`/settings`) | Section 2.5 |
+| `PAYROLL_EXPORT_DATE_FORMAT` | Panel → **Operational settings** (`/settings`) | Section 2.5 |
+| `PAYROLL_EXPORT_ENCODING` | Panel → **Operational settings** (`/settings`) | Section 2.5 |
+| `PAYROLL_EXPORT_HEADER_ROW` | Panel → **Operational settings** (`/settings`) | Section 2.5 |
 
 **`KIOSK_SERVICE_CODE` — the tablet service code.** It is the numeric code, 8 to
 12 digits, that opens a kiosk's **diagnostics screen** (long press on the clock).
@@ -1310,11 +1482,14 @@ recorded in the audit trail with your name, the date and the previous value. If
 you cannot see those entries in the menu, they are not missing: your account is
 not an administrator one.
 
-**The database wins** (section 1). Six of the eleven —the branding ones, the
-language ones and the service code— do not exist as environment variables: the
-first five were removed so that there were not two places to write the same piece
-of data, and the last one never had one, because a secret in the `.env` is a
-secret that ends up in an unencrypted backup.
+**The database wins** (section 1). Twelve of the seventeen —the branding ones,
+the language ones, the service code and the six payroll export ones— do not
+exist as environment variables: the branding and language ones were removed so
+that there were not two places to write the same piece of data; the service code
+never had one, because a secret in the `.env` is a secret that ends up in an
+unencrypted backup; and the six payroll export ones never had one either,
+because the format a payroll package asks for is tuned by trial and error on
+roll-out day and cannot demand a container restart on every attempt.
 
 **The five `ATTENDANCE_*` do still appear in `.env.example`, and it is worth
 knowing exactly what they are:** a copy of the default value, written there so
@@ -1729,6 +1904,24 @@ background jobs, the scheduler and live presence run without them on purpose: a
 aborting it with a timeout meant to stop anyone waiting in front of a kiosk
 would turn a slow backup into a backup that does not exist. See
 [`operation.md`](operation.md) §17.4.
+
+### 6.25 Reports generated in the background
+
+A period report or a payroll export that does not fit on the spot is generated
+on a queue and downloaded afterwards with a single-use link. Who uses it and how
+it looks from the panel is in [`hr-guide.md`](hr-guide.md) §6.3; the daily purge
+and what to look at when one stalls, in [`operation.md`](operation.md) §6 and
+§13. **Not to be confused with the full export** (section 3 quater): that one is
+a ZIP with the whole installation and only the administrator generates it.
+
+| Variable | Mark | What it does | Default | When to change it | Does it affect the hours calculation? |
+| --- | --- | --- | --- | --- | --- |
+| `REPORTING_EXPORT_PATH` | — | Where the files generated in the background are written. **Outside the public folder on purpose**: the file is only reachable with its single-use link | `storage/app/reports` (inside the container) | Almost never, and **never inside `BACKUP_PATH`**: these are files that expire and must not go into the backup | No |
+| `REPORTING_EXPORT_RETENTION_DAYS` | — | Days the file can be downloaded before the daily purge deletes it. The record that it existed is always kept | `7` | If your people need more room to fetch it. Raising it leaves files with workforce data on disk for longer | No |
+| `REPORTING_EXPORT_LINK_TTL_MINUTES` | — | Minutes the download link is valid for. The link is also **single-use**: using it consumes it, and asking for the status again issues another one | `15` | Almost never. It is the only secret that opens that file and it travels with no session: the shorter, the better | No |
+| `REPORTING_EXPORT_TIMEOUT_SECONDS` | — | Time limit the database gives the deferred report's query. It is much larger than the one for the report calculated while you wait, which is precisely why the deferred one exists | `600` | Raise it if a large export fails on time and the server has room | No |
+| `REPORTING_EXPORT_STALE_AFTER` | — | Seconds after which an interrupted generation —you stopped the containers, the queue worker restarted— is given up as failed and lets another one be requested | `3600` | **Never below what your largest report takes**: you would give up for dead a generation that is still writing | No |
+| `REPORTING_EXPORT_DOWNLOAD_RATE_LIMIT` | — | Downloads per minute and per IP address on the download route. It is separate from the rest because that route is opened **without a session**, with the single-use link | `30` | Almost never | No |
 
 ---
 

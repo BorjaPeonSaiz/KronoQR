@@ -8,7 +8,7 @@ use App\Modules\Reporting\Domain\ValueObject\PeriodReport;
 use App\Modules\Reporting\Domain\ValueObject\PeriodReportRow;
 use App\Modules\Reporting\Domain\ValueObject\ReportCriterion;
 use App\Modules\Reporting\Domain\ValueObject\ReportedDuration;
-use App\Modules\Reporting\Http\Support\PeriodReportLayout;
+use App\Modules\Reporting\Infrastructure\Export\PeriodReportLayout;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 

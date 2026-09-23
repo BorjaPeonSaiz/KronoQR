@@ -60,6 +60,13 @@ return [
         'BRANDING_ACCENT_COLOR' => 'accent colour',
         'LOCALE_DEFAULT' => 'default language',
         'LOCALE_AVAILABLE' => 'available languages',
+        /* Payroll export (RF-IN-07, task 3.9). */
+        'PAYROLL_EXPORT_COLUMNS' => 'payroll file columns',
+        'PAYROLL_EXPORT_DELIMITER' => 'payroll file delimiter',
+        'PAYROLL_EXPORT_HOURS_FORMAT' => 'hour format in the payroll file',
+        'PAYROLL_EXPORT_DATE_FORMAT' => 'date format in the payroll file',
+        'PAYROLL_EXPORT_ENCODING' => 'payroll file encoding',
+        'PAYROLL_EXPORT_HEADER_ROW' => 'payroll file header row',
     ],
 
 ];

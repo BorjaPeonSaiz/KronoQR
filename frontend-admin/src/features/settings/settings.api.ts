@@ -6,7 +6,12 @@
 // gobernara la pantalla de marca de la tarea 5.8, y las dos deben leer y
 // escribir por el mismo sitio para no divergir.
 import { requestJson } from '@kronoqr/web-kit/http'
-import type { InstallationSettings, UpdateSettingsRequest } from '@/shared/api/types'
+import type {
+  InstallationSettings,
+  SettingKey,
+  SettingValue,
+  UpdateSettingsRequest,
+} from '@/shared/api/types'
 
 export function fetchInstallationSettings(): Promise<InstallationSettings> {
   return requestJson<InstallationSettings>('/api/v1/settings')
@@ -33,4 +38,15 @@ export function stringValue(catalog: InstallationSettings, key: string): string 
   const found = catalog.data.find((entry) => entry.key === key)
 
   return typeof found?.value === 'string' ? found.value : ''
+}
+
+/**
+ * El valor en bruto de una clave del catalogo ya cargado, sea cual sea su
+ * tipo, o `null` si la clave no tiene fila o su valor esta redactado (tarea
+ * 3.3).
+ */
+export function settingValue(catalog: InstallationSettings, key: SettingKey): SettingValue | null {
+  const found = catalog.data.find((entry) => entry.key === key)
+
+  return found?.value ?? null
 }

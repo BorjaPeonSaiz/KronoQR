@@ -72,12 +72,58 @@ prueba falló en `main` en el run 35731421172, antes de esta rama—: tras `runF
 hasta la ruta interceptada y la prueba leía el contador en la misma vuelta; corregido con `expect.poll` en el portal y en el panel
 (misma prueba, mismo patrón), 20/20 y 30/30 en local con `--repeat-each`, en un segundo commit `fix(pruebas): …`.
 
-**Siguiente acción:** el usuario integra la PR #76 de la 3.10 (commit `a336e59` + `23000ff` con el `fix(pruebas)` de la E2E del
-portal; **CI manual 35776674369 en verde en todos los jobs**) con *merge commit* y borra la rama. **Con migración** (`2026_09_22_100000_absences.php`): tras integrar, `git pull`
-y `make up`, y comprobar `php artisan migrate:status` y el fichero `kronoqr_absences.prom` tras la primera ejecución de
-`reporting:absence-metrics`. Después,
-la **3.9** «Informes asíncronos con enlace de descarga caducable y exportación configurable para nómina» (`backend-laravel` +
-`/informe-nuevo`, RF-IN-06/07) o la **3.11** «Patrones anómalos de uso de credencial» (RN-16).
+**PR #76 INTEGRADA en `main` (`2e93585`, 22-09-2026) con la CI manual 35776674369 en verde.** Las migraciones de la 3.10 y la 3.9
+se aplicaron en dev el 23-09-2026 con `make migrate` (el usuario `app` no tiene `CREATE` sobre `public`: `php artisan migrate` a secas
+falla con `42501`; el objetivo `make migrate` usa `--database=pgsql_migrator`).
+
+**Rama `feat/tarea-3.9-informes-asincronos` (nació sobre la cabeza de la 3.10 y se adelantó a `main` `2e93585` por fast-forward el
+23-09-2026). Tarea 3.9 «Informes asíncronos con enlace de descarga caducable y exportación configurable para nómina» (RF-IN-06/07)
+IMPLEMENTADA, REVISADA (dos vueltas: `revisor-codigo` y `seguridad-cumplimiento`) y PROBADA el 23-09-2026; ver «Siguiente acción».**
+Doce decisiones en la ficha (plan 06 → «Tarea 3.9» → «Decisiones tomadas»). Lo que importa: **el patrón asíncrono es el de la
+exportación íntegra** (`data_exports`), calcado en `report_exports` (`Reporting`): `kind` `period|payroll`, `parameters` más **`scope`
+como instantánea del alcance al pedir** (el trabajo la aplica tal cual y nunca la recalcula, RF-ID-03), estados
+`pending|running|completed|failed|purged` con `CHECK`, una en curso **por persona** (`409 …report-export-in-progress`, índice único
+parcial), `failure_reason` de catálogo cerrado (nunca el mensaje de la excepción). **El trabajo no calcula nada nuevo**:
+`GenerateReportExportHandler` llama al mismo `GeneratePeriodReport` del panel sin los dos techos síncronos y con `statement_timeout`
+propio (`REPORTING_EXPORT_TIMEOUT_SECONDS`), escribe en streaming en `REPORTING_EXPORT_PATH` con los mismos escritores CSV/XLSX/PDF de
+la 2.9 (movidos a la capa Deptrac nueva `ReportingExport`, `Infrastructure/Export`, porque `Http` no puede depender de
+`Infrastructure`), cierra la fila **sobre relectura bloqueada** (`lockByUuid` y `complete()` exige `running`), publica
+`report_export.generated` en la misma transacción y **avisa fuera del `try`** (bloqueante de la revisión: un fallo del correo borraba
+un fichero ya generado y anunciado en `audit_log` y marcaba `failed` una fila `completed`); el fichero a medias se borra antes de
+marcar `failed`. **Enlace de descarga (ADR-041)**: cada `GET /reports/exports/{uuid}` de una `completed` emite un token nuevo de 32
+bytes (en la fila solo su `sha256`, `hash_equals`), caduca a `REPORTING_EXPORT_LINK_TTL_MINUTES` (15) y se consume en la primera
+descarga; `410 …link-used` **solo con `downloaded_at`** y `404` en lo demás (token rotado, inventado o ajeno: nada se confirma); la
+ruta va sin sesión, zona `throttle:report-download` (30 r/m por IP); solo el solicitante ve y descarga, también si es `admin`; el
+correo (`ReportExportReadyNotification`, idioma de la cuenta) lleva el enlace **a la pantalla**, nunca el token. **Nómina (RF-IN-07,
+ADR-017)**: el informe por periodo por empleado pasado por una plantilla configurable en los seis ajustes `PAYROLL_EXPORT_*` de
+`installation_settings` (columnas `id=Etiqueta` del catálogo cerrado `PayrollColumn`, delimitador, formato de horas y de fecha,
+codificación; `SettingImpact::PRESENTATION`), con `PayrollLayout`/`PayrollColumn` en `Shared\Domain` porque el puerto
+`PayrollLayoutProvider` es de `Shared`; `/reports/payroll-export` síncrono y `kind: payroll` en diferido tras `Feature::PayrollExport`
+(primer consumidor); `kind: period` es `rrhh+` (no manager+: `PeriodReportPolicy` y §7.3). Criterios y fichero en el idioma de la
+instalación. **Auditoría**: `report_export.requested|generated|downloaded` (familia `PersonalDataAccess`; `generated` con la lista
+acotada de `employee_uuid`, mismo tope que `GeneratePeriodReport`) y `personal_data.accessed` con conjunto `payroll_export`; nunca la
+ruta absoluta. **Retención (RL-11)**: purga diaria 04:25 UTC a `REPORTING_EXPORT_RETENTION_DAYS` (7) y **al purgar la fila pierde
+`employee_uuid`, `department_id` y `scope`** (`parameters->minimised()`, `CHECK report_exports_chk_purged_is_minimised`) en lugar de un
+`RetentionScope` nuevo; `report_exports` entra en `DataExportCatalog` (esquema `2`). `422` por tamaño con `type` propio
+`urn:kronoqr:problem:report-too-large` (el panel lo detectaba por una frase en castellano) y `queue_jobs_failed_total` incrementada
+desde el `catch` del job (capturaba y devolvía: la serie no se movía). Panel: «Generar en segundo plano» ante el 422, bloque
+«Exportaciones en segundo plano» con sondeo cada 10 s, pestaña «Nómina», los seis ajustes en «Ajustes operativos»; tipos derivados de
+`@/shared/api/types`. Docs: `configuracion.md` «2.5 Salida a nómina» y `REPORTING_EXPORT_*` en §6, `guia-rrhh.md` «6.3»/«6.4»,
+`operacion.md` §6 (ES/EN), doc 01 §5.5 (`report_exports`), §8.1 (**fila 14, `T1528`**, mitigada) y Anexo B, doc 07 §6, ADR-041 (con
+la entropía dicha sin inflar: ~74 bits aleatorios del `uuid` v7 más 256 del token, no «122 bits»). Riesgos aceptados: el correo de
+aviso llega aunque la cuenta se desactive entre pedir y generar (sin enlace ni datos); la instantánea de `scope` es hoy inerte porque
+solo `rrhh+` pide. Cifras (23-09-2026, esta máquina): `make quality` en verde (Rector informativo); Unit 2181 (6,8 s en reposo: por encima del presupuesto de 5 s de `make test-unit` en esta máquina, que la CI mide en Linux;
+ver Pendiente), Integration 703, Contract 63, Feature 1975, Architecture 633 (+
+`SourceDiscoveryTest` conocido); mutación acotada a `ReportExport`, `ReportExportParameters` y `ReportExportStatus`: **MSI 85,37 %**
+(41 mutantes, 6 sin cubrir); `qa:traceability --check` y `docs:consistency` en verde; matriz **3791 (Pest 3530, Playwright 255, k6
+6)**; panel: lint, `vue-tsc`, 570 unitarias, 143 E2E (5 `@RF-IN-06`/`@RF-IN-07`); quiosco y portal: tipos regenerados, lint y
+`vue-tsc` en verde. El diff de `openapi.yaml` es +1066/−2 también con `--patience`: dos rutas aditivas y esquemas nuevos.
+
+**Siguiente acción:** commit único `feat(3.9): …`, push, CI manual y PR contra `main` con *merge commit*; después un
+`docs(handoff)` con los números de CI y PR. **Con migración** (`2026_09_22_110000_report_exports.php`) y **variables nuevas**
+(`REPORTING_EXPORT_*`, todas con valor de serie): tras integrar, `git pull`, `make up` y `make migrate`; comprobar `php artisan
+migrate:status` y, tras la primera exportación en diferido, que Horizon la atendió en `default` y que `storage/app/reports` tiene el
+fichero. Después, la **3.11** «Patrones anómalos de uso de credencial» (RN-16).
 
 **Rama `chore/restos-3.8` (desde `main` `d5c07bc`). Los tres restos de la 3.8 HECHOS el 22-09-2026 en un commit único
 `chore(restos-3.8): …`, CI manual tras el push y PR contra `main` (*merge commit*). Sin migración: basta `git pull` y `make up`, que
@@ -793,6 +839,16 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 
 ### Por tarea
 
+- **3.9 (restos, 23-09-2026):** **cola `reports` propia** para los informes en diferido (hoy todo va a `default`; exige publicar la
+  configuración de Horizon y un proceso que la atienda); **`REPORTING_EXPORT_PATH` y `PRODUCT_DATA_EXPORT_PATH` no se validan contra
+  `public/` ni `BACKUP_PATH`** (deuda compartida: una comprobación en `doctor` que avise); la instantánea de `scope` es hoy inerte (solo
+  `rrhh+` pide exportaciones, alcance sin restricción): el día que el responsable reciba `reports:*`, decidir si un cambio de ámbito
+  invalida una exportación en cola; **concurrencia real** de dos descargas del mismo enlace y de dos `POST` de la misma cuenta (hoy
+  secuencial + `FOR UPDATE` + índice único parcial); agotar la zona `report-download` (30 r/m por IP) no está probado, solo declarado; las
+  ocho situaciones de `/informe-nuevo` se prueban sobre el camino síncrono que el diferido reutiliza, no repetidas en diferido; 6 mutantes (`ReportExport` 135, 248, 364-365; `ReportExportStatus` 71)
+  sin cubrir en `ReportExport`; `ComplianceSummary` emite `report-too-large` sin diferido al que remitir (acortar el rango); riesgo
+  aceptado: el correo de aviso llega aunque la cuenta se desactive entre pedir y generar (sin enlace ni datos); exportación para la
+  Inspección en diferido, plantillas libres de nómina, envío por correo/SFTP y centro de notificaciones: fuera de alcance (decisión 12); **presupuesto de la suite unitaria**: 2181 pruebas en 6,8 s en reposo en esta máquina frente a los 5 s de `make test-unit` (la CI la mide en Linux y pasó con 2072): si la CI la rechaza, medir qué ficheros pesan antes de subir el presupuesto.
 - **3.10 (restos, 22-09-2026):** **serie hermana de frescura** `absences_metrics_day_seconds` (equivalente de
   `compliance_metrics_week_start_seconds`): sin ella, unas cifras congeladas por un planificador parado se leen igual que un mes sin
   ausencias (fila en doc 02 §8.2 + publicación en `TextfileAbsenceMetrics`); **la carrera se prueba por el candado y no con dos

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Modules\Reporting\Http\Support;
+namespace App\Modules\Reporting\Infrastructure\Export;
 
 use App\Modules\Reporting\Domain\ValueObject\PeriodReport;
 use App\Modules\Reporting\Domain\ValueObject\PeriodReportRow;

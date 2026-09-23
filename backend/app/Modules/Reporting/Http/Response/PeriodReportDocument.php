@@ -7,7 +7,7 @@ namespace App\Modules\Reporting\Http\Response;
 use App\Modules\Reporting\Application\Port\ReportIssuerDirectory;
 use App\Modules\Reporting\Application\Support\ReportDelivery;
 use App\Modules\Reporting\Domain\ValueObject\PeriodReport;
-use App\Modules\Reporting\Http\Support\PeriodReportDigest;
+use App\Modules\Reporting\Infrastructure\Export\PeriodReportDigest;
 use LogicException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
