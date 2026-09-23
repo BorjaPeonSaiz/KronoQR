@@ -1077,7 +1077,32 @@
         "worked_minutes": "trabajado",
         "occurred_at": "hora del fichaje",
         "scan_id": "identificador del escaneo",
-        "scans": "escaneos fuera de orden"
+        "scans": "escaneos fuera de orden",
+        "device_name": "quiosco",
+        "first_coincidence_at": "primera coincidencia",
+        "last_coincidence_at": "última coincidencia",
+        "from_device_name": "quiosco de origen",
+        "to_device_name": "quiosco de destino",
+        "first_occurred_at": "primer fichaje",
+        "second_occurred_at": "segundo fichaje",
+        "first_scan_id": "identificador del primer escaneo",
+        "second_scan_id": "identificador del segundo escaneo"
+      },
+      "patternLine": "Patrón: {pattern}",
+      "patterns": {
+        "kiosk_coincidence": "coincidencia en el mismo quiosco",
+        "impossible_sequence": "secuencia imposible entre dos quioscos"
+      },
+      "kioskCoincidence": {
+        "counterpartLink": "Con otra persona ({uuid}) — ver sus incidencias en la bandeja",
+        "counterpartLinkOneMore": "Con otra persona y una más ({uuid}) — ver sus incidencias en la bandeja",
+        "counterpartLinkManyMore": "Con otra persona y {count} más ({uuid}) — ver sus incidencias en la bandeja",
+        "coincidenceDays": "Días con coincidencia: {days} de un mínimo de {min}",
+        "windowSeconds": "Ventana aplicada: {seconds} s o menos entre los dos fichajes",
+        "gapRange": "Hueco más estrecho de la serie: {min} s · último día: {last} s"
+      },
+      "impossibleSequence": {
+        "gap": "Intervalo entre los dos fichajes: {gap} s (mínimo de tránsito: {min} s)"
       }
     },
     "employeeFilter": {
@@ -1324,6 +1349,8 @@
       "debounceSeconds": "Ventana anti-rebote (s)",
       "maxClockSkewMinutes": "Desfase de reloj tolerado (min)",
       "minTransitSeconds": "Tránsito mínimo entre quioscos (s)",
+      "patternWindowSeconds": "Ventana de coincidencia entre dos personas (s)",
+      "patternMinRepeats": "Días de coincidencia antes de incidencia",
       "kioskServiceCode": "Código de servicio del quiosco",
       "breakClocking": "Fichaje de pausa",
       "localeDefault": "Idioma por defecto",
@@ -1340,6 +1367,8 @@
       "debounceSeconds": "Ventana de gracia: dos escaneos de la misma persona dentro de esta ventana cuentan como uno. Ponlo a 0 para desactivarla. Rango admitido: {minimum}–{maximum} segundos.",
       "maxClockSkewMinutes": "Desfase tolerado entre el reloj de la tablet y el del servidor antes de marcar el fichaje para revisión. Nunca rechaza un fichaje, solo lo señala. Rango admitido: {minimum}–{maximum} minutos.",
       "minTransitSeconds": "Tiempo mínimo creíble para ir de un quiosco a otro. Por debajo, se abre incidencia. Ponlo a 0 si hay dos tablets en la misma puerta. Rango admitido: {minimum}–{maximum} segundos.",
+      "patternWindowSeconds": "Segundos por debajo de los cuales dos fichajes consecutivos de dos personas en el mismo quiosco cuentan como coincidencia; 0 desactiva. Rango admitido: {minimum}–{maximum} segundos.",
+      "patternMinRepeats": "Días distintos con coincidencia entre las mismas dos personas antes de abrir una incidencia. Rango admitido: {minimum}–{maximum} días.",
       "kioskServiceCode": "Con él se abre la pantalla de diagnóstico de la tablet. Vacío: la pantalla se abre sin código. Solo cifras, de 8 a 12.",
       "kioskServiceCodeRedacted": "No visible con este tipo de acceso: quien entra como soporte no ve ni puede cambiar el código de servicio.",
       "breakClocking": "Activado: la tablet enseña el botón «Pausa» y, a partir de la próxima revisión nocturna, un tramo continuo sin pausa (RN-12) empieza a abrir incidencias y a contarse en la vista de cumplimiento. Desactivado: el botón desaparece de la tablet y RN-12 vuelve a quedar suspendida, sin cerrar ninguna incidencia ya abierta.",

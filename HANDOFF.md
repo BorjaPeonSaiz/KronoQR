@@ -119,11 +119,59 @@ ver Pendiente), Integration 703, Contract 63, Feature 1975, Architecture 633 (+
 6)**; panel: lint, `vue-tsc`, 570 unitarias, 143 E2E (5 `@RF-IN-06`/`@RF-IN-07`); quiosco y portal: tipos regenerados, lint y
 `vue-tsc` en verde. El diff de `openapi.yaml` es +1066/−2 también con `--patience`: dos rutas aditivas y esquemas nuevos.
 
-**Siguiente acción:** el usuario integra la **PR #77** de la 3.9 (commit `a52464a`; **CI manual 35831869626 en verde en todos los
-jobs**, presupuesto de la suite unitaria incluido) con *merge commit* y borra la rama. **Con migración** (`2026_09_22_110000_report_exports.php`) y **variables nuevas**
-(`REPORTING_EXPORT_*`, todas con valor de serie): tras integrar, `git pull`, `make up` y `make migrate`; comprobar `php artisan
-migrate:status` y, tras la primera exportación en diferido, que Horizon la atendió en `default` y que `storage/app/reports` tiene el
-fichero. Después, la **3.11** «Patrones anómalos de uso de credencial» (RN-16).
+**PR #77 INTEGRADA en `main` (`0de42f1`, 23-09-2026).** Tras integrar: `git pull`, `make up`, `make migrate` (nada pendiente) y comprobada la
+primera exportación en diferido en dev: Horizon la atendió en `default` en 2 s, fila `completed` con 284 filas, CSV en
+`storage/app/reports/<uuid>/`, dos asientos `report_export.requested|generated` y el correo en Mailpit.
+
+**Rama `feat/tarea-3.11-patrones-anomalos` (desde `main` `0de42f1`, PR #77 de la 3.9 integrada). Tarea 3.11 «Detección de
+patrones anómalos de uso de credencial» (RF-PR-06, RN-16) IMPLEMENTADA, REVISADA (dos vueltas: `revisor-codigo` y
+`seguridad-cumplimiento`) y PROBADA el 23-09-2026; ver «Siguiente acción».** Dieciocho decisiones en la ficha (plan 06 → «Tarea
+3.11» → «Decisiones tomadas» y «Segunda vuelta»). Lo que importa: **la cadena de detección ya existía** (`DetectedAnomaly` →
+`AttendanceAnomalyDetected` → `OpenIncidentOnAnomalyDetected` con asiento en la misma transacción, asignación al responsable,
+`one_incident_per_finding`, resumen al responsable) y la 3.11 la reutiliza desde un caso de uso nuevo `DetectCredentialPatterns`
+(`Attendance`) con una regla pura `CredentialPatternPolicy` y **dos hallazgos bajo el tipo `anomalous_pattern`** (`context.pattern`):
+**`kiosk_coincidence`** —dos personas distintas en el mismo quiosco a menos de `ATTENDANCE_PATTERN_WINDOW_SECONDS` (10; estricto),
+contada como mucho una por par y día civil del centro, hallazgo con `ATTENDANCE_PATTERN_MIN_REPEATS` (3) **días**— y
+**`impossible_sequence`** (RN-16: misma persona en dos quioscos a menos de `ATTENDANCE_MIN_TRANSIT_SECONDS`, 120; un solo caso basta;
+un hallazgo por persona y jornada). **Tras la revisión el hallazgo de coincidencia es por persona, no por par**: el `minRepeats`-ésimo
+día como ancla avanzaba cada noche al saturarse la ventana de 30 días (dos incidencias `high` nuevas por noche, reproducido) y dos pares
+de la misma persona chocaban en `one_incident_per_finding` y el segundo se descartaba mudo; ahora `work_date` es el último día con
+coincidencia, el contexto lleva la contraparte principal por `uuid`, `counterpart_count`, `coincidence_days`,
+`first/last_coincidence_at`, `last_gap_seconds` y `min_gap_seconds` (escalares: `IncidentContext` no admite listas, ADR-012), y el
+puerto `AnomalousPatternHistory` (adaptador en `Attendance/Infrastructure`, único sitio que Deptrac permite) silencia a quien ya tiene
+una abierta y, tras una resolución, exige `minRepeats` días **nuevos**; `DatabaseIncidentLedger` distingue «ya existía el mismo» de
+«colisión con otro hallazgo» (`Shared\Domain\Exception\ConflictingFinding`, contada como fallo con log
+`attendance.pattern_incident_collided`). **`rejected_debounce` entra** en la consulta (el anti-rebote es por persona, no por quiosco:
+sin él RN-16 solo veía la franja [60 s, 120 s)); `rejected_unknown|revoked|signature`, manuales e importados no. **RN-16 excluye solo
+por desfase de reloj** con el criterio de `ReviewPolicy` (no por `flagged_for_review`, que es verdadero para todo PIN) y quita el
+escaneo dudoso antes de emparejar. Severidad `high` (la fija `IncidentType::defaultSeverity()` desde la 2.5). **Nada toca
+`shift_entries`** (la integración compara la tabla antes y después), nada se marca ni se anula (reglas 5 y 19), y **los hallazgos no
+alertan a propósito** (bandeja; doc 01 §9.3). Comando `attendance:detect-patterns {--days=}` a las **04:35 UTC** con
+`COMPLIANCE_PATTERN_LOOKBACK_DAYS` (30); los dos ajustes nuevos en `installation_settings` (`COMPLIANCE_REVIEW`, panel «Ajustes
+operativos», `configuracion.md` §2.1/§6); series `pattern_detection_last_run_timestamp_seconds`/`_last_failures` (textfile) con alertas
+`DeteccionDePatronesAusente`/`ConFallos` al IT del cliente, y `anomalous_patterns_detected_total{pattern}` con las dos etiquetas. Panel:
+`describeIncidentContext` describe los dos patrones sin calificar (quiosco por nombre, «con otra persona y N más» enlazando la principal
+al filtro de la bandeja, hueco más estrecho y del último día, momentos con segundos en RN-16). Docs: runbook
+**`patron-anomalo-credencial.md`** (indicio ≠ conclusión; quién conduce la conversación; de-duplicación; art. 15 sin la contraparte),
+guía de RRHH §4.5, `operacion.md` §1/§6/§10.4, `configuracion.md`, **`obligaciones-legales.md`** (la EIPD ya no dice «no hay perfiles»:
+describe la detección, no es decisión automatizada del art. 22, y hay que informarla a la plantilla y a su representación),
+`solicitud-derechos-rgpd.md` §3 (cómo se extraen las incidencias y que la contraparte no se entrega, art. 15.4),
+`alta-nuevo-quiosco.md` (el rótulo nombra un sitio, no a una persona), doc 01 (nota de RF-PR-06, §5.5, §8.1, §9.3), doc 02 §8.2,
+**doc 07 §6 A-18** (el indicio usado como prueba disciplinaria sin procedimiento: riesgo organizativo del cliente aceptado). Ratificado
+por `seguridad-cumplimiento`: `device_name` en el contexto (excepción declarada en `IncidentContextKeysTest`) y
+`counterpart_employee_uuid` acotado por el `WHERE` de alcance de la bandeja; la retención de la incidencia la cubre `WorkRecords`.
+Hallazgo colateral cerrado: `IncidentContextKeysTest` cortaba en el primer `;` aunque estuviera en un comentario y apagaba la
+comprobación de privacidad de un tipo entero sin ruido; ahora extrae sobre el fuente sin comentarios. Sin migración. Cifras
+(23-09-2026, esta máquina): `make quality` en verde; Unit 2241 (6,6 s en reposo, sobre el presupuesto de 5 s de `make test-unit` en esta máquina; la CI lo mide en Linux), Integration 713 (`TextfileMetricsConsistencyTest` exigía registrar el adaptador nuevo en su lista), Contract 63, Feature 1979,
+Architecture 641 (+ `SourceDiscoveryTest` conocido); mutación acotada: `CredentialPatternPolicy` **85,44 %**, `CredentialScan`,
+`CredentialPatternThresholds` y `PatternReviewState` 100 %; `qa:traceability --check`, `docs:consistency` y `observability-check` en
+verde; matriz **3847 (Pest 3582, Playwright 259, k6 6)**; panel: lint, `vue-tsc`, 576 unitarias, 147 E2E; quiosco y portal: tipos regenerados, lint y `vue-tsc`.
+
+**Siguiente acción:** el usuario integra la **PR #78** de la 3.11 (commit `08a13eb`; **CI manual 35853369572 en verde en todos los
+jobs**) con *merge commit* y borra la rama. **Sin migración**; variables nuevas con valor de serie (`COMPLIANCE_PATTERN_LOOKBACK_DAYS`; los dos
+ajustes viven en el panel): tras integrar basta `git pull` y `make up`; comprobar la primera pasada de `attendance:detect-patterns`
+(`php artisan attendance:detect-patterns` a mano, `kronoqr_pattern_detection.prom` y la serie en Prometheus). Después, la **3.12** «Resumen semanal por correo y ventana
+controlada de actualización del quiosco» (RF-PR-05, RF-KI-07; `backend-laravel` + `frontend-quiosco`).
 
 **Rama `chore/restos-3.8` (desde `main` `d5c07bc`). Los tres restos de la 3.8 HECHOS el 22-09-2026 en un commit único
 `chore(restos-3.8): …`, CI manual tras el push y PR contra `main` (*merge commit*). Sin migración: basta `git pull` y `make up`, que
@@ -849,6 +897,20 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   sin cubrir en `ReportExport`; `ComplianceSummary` emite `report-too-large` sin diferido al que remitir (acortar el rango); riesgo
   aceptado: el correo de aviso llega aunque la cuenta se desactive entre pedir y generar (sin enlace ni datos); exportación para la
   Inspección en diferido, plantillas libres de nómina, envío por correo/SFTP y centro de notificaciones: fuera de alcance (decisión 12); **presupuesto de la suite unitaria**: 2181 pruebas en 6,8 s en reposo en esta máquina frente a los 5 s de `make test-unit` (la CI la mide en Linux y la pasó con 2181 en el run 35831869626): si algún día la rechaza, medir qué ficheros pesan antes de subir el presupuesto.
+- **3.11 (restos, 23-09-2026):** **índice parcial sobre `scan_events(occurred_at)`** para la consulta nocturna de patrones (hoy recorre la
+  tabla: aceptado por nocturno y fuera del fichaje; con ~1,2 M de filas a cuatro años en un hotel de 200 personas, si la pasada supera
+  unos minutos, migración `CONCURRENTLY` con `/migracion-segura`); **prueba de volumen** de `EloquentCredentialScans` a 30 días ×
+  plantilla grande; el desfase de reloj excluye solo RN-16, no las coincidencias (una línea si se quiere); `publishEach()`/`tally()`/
+  `measure()` son ya la tercera copia (`DetectAttendanceAnomalies`, `DetectCredentialPatterns`): a la cuarta, extraer; el adaptador
+  `EloquentAnomalousPatternHistory` lee `incidents` desde `Attendance/Infrastructure` (pendiente de que `arquitecto-dominio` lo
+  ratifique o abra la arista en Deptrac); `turno-abierto-prolongado.md` §5 cita `OBSERVABILITY_METRICS_ENABLED`, que no existe (la real
+  es `METRICS_TEXTFILE_ENABLED`); la guía de RRHH §4 bis dice «ocho tipos de incidencia» y la tabla tiene nueve; verificación visual de
+  la fila nueva de `integridad-dato.json` en Grafana; casos sin prueba fija: coincidencia a caballo de medianoche civil (se atribuye al
+  día del escaneo anterior), escaneo justo en el borde de la ventana, par repartido entre dos quioscos sin alcanzar el umbral en ninguno;
+  `OperationalSettings` lleva seis enteros posicionales (un cambio de orden pasa PHPStan); fuera de alcance (decisión 12): detección en
+  el momento del fichaje, coincidencias entre más de dos personas como hallazgo propio, umbrales por departamento o quiosco, acción
+  automática, correo por hallazgo, patrón sobre fichajes manuales o importados.
+
 - **3.10 (restos, 22-09-2026):** **serie hermana de frescura** `absences_metrics_day_seconds` (equivalente de
   `compliance_metrics_week_start_seconds`): sin ella, unas cifras congeladas por un planificador parado se leen igual que un mes sin
   ausencias (fila en doc 02 §8.2 + publicación en `TextfileAbsenceMetrics`); **la carrera se prueba por el candado y no con dos

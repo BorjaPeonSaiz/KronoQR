@@ -59,6 +59,11 @@ final class SettingsSurface
         'ATTENDANCE_DEBOUNCE_SECONDS' => ['view' => 'OperationalSettingsView.vue', 'route' => '/settings'],
         'ATTENDANCE_MAX_CLOCK_SKEW_MINUTES' => ['view' => 'OperationalSettingsView.vue', 'route' => '/settings'],
         'ATTENDANCE_MIN_TRANSIT_SECONDS' => ['view' => 'OperationalSettingsView.vue', 'route' => '/settings'],
+        // Los dos de la deteccion de patrones anomalos (RF-PR-06, tarea 3.11).
+        // Van con los umbrales operativos y con el transito minimo, que es su
+        // tercer umbral: los tres describen la misma regla y se tocan juntos.
+        'ATTENDANCE_PATTERN_WINDOW_SECONDS' => ['view' => 'OperationalSettingsView.vue', 'route' => '/settings'],
+        'ATTENDANCE_PATTERN_MIN_REPEATS' => ['view' => 'OperationalSettingsView.vue', 'route' => '/settings'],
         // El fichaje de pausa (RF-AT-12, ADR-024, tarea 3.5). Va con los
         // umbrales operativos y no con el perfil de cumplimiento: lo decide el
         // hotel y no el convenio, aunque reactive RN-12.

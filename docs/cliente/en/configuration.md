@@ -56,6 +56,26 @@ only the ones you need.
 | `ATTENDANCE_DEBOUNCE_SECONDS` | `60` | 0 – 3600 | Grace window: two scans by the same person within that window count as one. **This key changes the recorded hours** — see the warning below. `0` disables it. |
 | `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES` | `15` | 1 – 1440 | Drift tolerated between the tablet's clock and the server's before flagging the clock-in for review. **It never rejects a clock-in**, it only flags it. It is also the threshold at which **the tablet itself warns** that its clock has drifted. |
 | `ATTENDANCE_MIN_TRANSIT_SECONDS` | `120` | 0 – 3600 | Minimum credible time to get from one kiosk to another. Below it, an incident is opened. Set it to `0` if you have two tablets at the same door; raise it if there are two buildings. |
+| `ATTENDANCE_PATTERN_WINDOW_SECONDS` | `10` | 0 – 300 | Seconds below which two clock-ins by **two different people at the same kiosk** count as one **coincidence** (at most one per pair and day). **It opens no incident on its own**: the same pair has to accumulate the days of the next key. `0` disables this pattern. |
+| `ATTENDANCE_PATTERN_MIN_REPEATS` | `3` | 1 – 30 | Days with a coincidence that the same pair has to accumulate, within the last 30 days, for the "Anomalous credential usage pattern" incident to open —**one for each person**—. Raise it if entering in a group through the same door is normal at your site; lower it to `1` only if you want to see every pair of back-to-back scans. **The incident cancels no clocking and labels nobody**: the manager reviews it ([`hr-guide.md`](hr-guide.md) §4.5). |
+
+> **The last three keys adjust a monitoring system over the staff, not a
+> technical parameter.** The detection of credential usage patterns is part of
+> what has to be communicated beforehand to the workers and their
+> representatives (art. 20.3 of the Workers' Statute and arts. 87 to 91
+> LOPDGDD; [`legal-obligations.md`](legal-obligations.md) §3). Lowering
+> `ATTENDANCE_PATTERN_MIN_REPEATS` or raising `ATTENDANCE_PATTERN_WINDOW_SECONDS`
+> **tightens** that monitoring: do it as a documented and communicated
+> decision, not "to see more". Every change is recorded in the audit trail
+> with author, previous and new value (section 4, "…I need to know who changed
+> a threshold and when").
+>
+> **The name of each kiosk travels in these incidents and in the audit trail.**
+> When you register a tablet ([`../../runbooks/alta-nuevo-quiosco.md`](../../runbooks/alta-nuevo-quiosco.md)
+> §3.2, in Spanish), its label names **a place** —"Reception", "Staff
+> entrance"—, **never a person** ("María's tablet"): the label is written into
+> the context of every incident and into the audit entries, which admit no
+> names.
 
 **`ATTENDANCE_BREAK_CLOCKING` — exactly what changes.** It is set in
 Panel → **Operational settings** (`/settings`) → "Break clocking", where the two
@@ -1428,9 +1448,9 @@ sudo docker compose exec app php artisan product:doctor
 > means whoever has one can read the backups, sign cards or open the sealed
 > PINs of the other.
 
-### 6.0 The seventeen keys that are NOT environment variables
+### 6.0 The nineteen keys that are NOT environment variables
 
-Seventeen properties of the installation do not live in the `.env` but in the
+Nineteen properties of the installation do not live in the `.env` but in the
 `installation_settings` table, are edited **from the panel** and take effect on
 the next request without restarting anything:
 
@@ -1441,6 +1461,8 @@ the next request without restarting anything:
 | `ATTENDANCE_DEBOUNCE_SECONDS` | Panel → **Operational settings** (`/settings`) | Section 2.1 |
 | `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES` | Panel → **Operational settings** (`/settings`) | Section 2.1 |
 | `ATTENDANCE_MIN_TRANSIT_SECONDS` | Panel → **Operational settings** (`/settings`) | Section 2.1 |
+| `ATTENDANCE_PATTERN_WINDOW_SECONDS` | Panel → **Operational settings** (`/settings`) | Section 2.1 |
+| `ATTENDANCE_PATTERN_MIN_REPEATS` | Panel → **Operational settings** (`/settings`) | Section 2.1 |
 | `BRANDING_APP_NAME` | Panel → **Branding** (`/branding`) | Section 2.2 |
 | `BRANDING_LOGO_PATH` | Panel → **Branding** (`/branding`) | Section 2.2 |
 | `BRANDING_ACCENT_COLOR` | Panel → **Branding** (`/branding`) | Section 2.2 |
@@ -1482,7 +1504,7 @@ recorded in the audit trail with your name, the date and the previous value. If
 you cannot see those entries in the menu, they are not missing: your account is
 not an administrator one.
 
-**The database wins** (section 1). Twelve of the seventeen —the branding ones,
+**The database wins** (section 1). Twelve of the nineteen —the branding ones,
 the language ones, the service code and the six payroll export ones— do not
 exist as environment variables: the branding and language ones were removed so
 that there were not two places to write the same piece of data; the service code
@@ -1606,7 +1628,7 @@ is needed.
 
 ### 6.7 Clocking rules
 
-**The first five are changed in the panel, not here** (section 6.0). The `.env`
+**All seven are changed in the panel, not here** (section 6.0). The `.env`
 line is a copy of the default value and **editing it does nothing**.
 
 | Variable | Marker | What it does | Default | When to change it | Affects hours calculation? |
@@ -1616,8 +1638,8 @@ line is a copy of the default value and **editing it does nothing**.
 | `ATTENDANCE_MAX_SHIFT_HOURS` | — | Duration from which a closed shift entry is anomalous. See **section 2.1** | `12` | In the panel. Here, never | **Yes** (opens incidents) |
 | `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES` | — | Drift tolerated between the tablet's clock and the server's. **Raises an incident, never rejects the clock-in** (RF-AT-10). See **section 2.1** | `15` | In the panel. Here, never | **Yes** (opens incidents) |
 | `ATTENDANCE_MIN_TRANSIT_SECONDS` | — | Minimum credible transit between two kiosks. See **section 2.1** | `120` | In the panel. Here, never | **Yes** (opens incidents) |
-| `ATTENDANCE_PATTERN_WINDOW_SECONDS` | — | Seconds below which two consecutive clock-ins at the same kiosk will be considered an anomalous pattern | `10` | **Nothing reads it yet**: that detector arrives in a later version. The variable is reserved so the file does not have to change then | Not yet |
-| `ATTENDANCE_PATTERN_MIN_REPEATS` | — | Systematic coincidences between two people before opening an incident | `3` | Same as the previous one | Not yet |
+| `ATTENDANCE_PATTERN_WINDOW_SECONDS` | — | Seconds below which two clock-ins by two different people at the same kiosk count as one coincidence. See **section 2.1** | `10` | In the panel. Here, never | It moves no minutes; **it does open incidents** (together with the next one) |
+| `ATTENDANCE_PATTERN_MIN_REPEATS` | — | Days with a coincidence by the same pair before the "Anomalous credential usage pattern" incident opens. See **section 2.1** | `3` | In the panel. Here, never | It moves no minutes; **it does open incidents** |
 
 ### 6.8 Access to the management panel
 
@@ -1752,6 +1774,7 @@ The three ranges are explained in detail, with symptoms and checks, in
 | `COMPLIANCE_LEGAL_EXPORT_TEMP_RETENTION_HOURS` | — | Hours an orphaned temporary file from the legal export download may live before it is deleted automatically. **It does not affect** the deliberate copy generated by the export command: that one is kept by whoever generated it | `6` | Almost never | No |
 | `COMPLIANCE_AUTHZ_DENIAL_WINDOW_SECONDS` | — | Window in which repeated denials for the same actor are grouped into a single audit entry. Protects the audit chain from an enumeration | `60` | Set it to `0` if you are investigating an incident and want one entry per denial | No |
 | `COMPLIANCE_INCIDENT_LOOKBACK_DAYS` | — | Days back that the daily incident detection reviews. Shift entries **still open** are always reviewed, whatever their date | `7` | Almost never. **Raising it can open incidents for working days already handed to the staff or to the Labour Inspectorate**, which is exactly what the window avoids | **Yes** (opens incidents) |
+| `COMPLIANCE_PATTERN_LOOKBACK_DAYS` | — | Days back that the nightly detection of anomalous credential usage patterns reviews (04:35 UTC). It is longer than the previous one because "systematic" needs more than a week. See [`operation.md`](operation.md) §6 | `30` | Almost never. Raising it lengthens the nightly query and may open incidents over weeks already reviewed; lowering it below what a pair takes to accumulate `ATTENDANCE_PATTERN_MIN_REPEATS` days leaves the pattern undetectable | It moves no minutes; **it does open incidents** |
 | `REPORTING_COMPLIANCE_MAX_RANGE_DAYS` | — | Maximum days a compliance view query may span ([`hr-guide.md`](hr-guide.md) §4 bis). Above that, the screen says so and does not query | `92` | Almost never. Raising it makes the query longer and brings the limit of the next variable closer; if you need a longer period, ask for two | No |
 | `REPORTING_COMPLIANCE_TIMEOUT_SECONDS` | — | Seconds granted to that query inside PostgreSQL before giving it up. It protects the rest of the system: nothing is blocked and the screen asks for a shorter period | `10` | Only if your server is slow and the screen fails with legitimate periods. If you have to raise it a lot, the problem is the database, not this number | No |
 

@@ -53,6 +53,26 @@ function catalog(
         source: 'product_default',
         constraints: { minimum: 0, maximum: 3600 },
       },
+      // RF-PR-06/RN-16, tarea 3.11, decision 7 de la ficha: ya en el enum
+      // `SettingKey` del contrato (segunda vuelta, decision 17).
+      {
+        key: 'ATTENDANCE_PATTERN_WINDOW_SECONDS',
+        value: 10,
+        type: 'integer',
+        impact: 'compliance_review',
+        affects_worked_hours: false,
+        source: 'product_default',
+        constraints: { minimum: 0, maximum: 300 },
+      },
+      {
+        key: 'ATTENDANCE_PATTERN_MIN_REPEATS',
+        value: 3,
+        type: 'integer',
+        impact: 'compliance_review',
+        affects_worked_hours: false,
+        source: 'product_default',
+        constraints: { minimum: 1, maximum: 30 },
+      },
       {
         key: 'BRANDING_APP_NAME',
         value: 'KronoQR',

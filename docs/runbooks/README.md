@@ -53,7 +53,7 @@ Asignación literal del plan de implementación
 | 9 | [`tarjeta-perdida-o-rota.md`](tarjeta-perdida-o-rota.md) | Revocación, reemisión e impresión de la nueva en el día. Incluye el caso «impresión fallida» de ADR-034 (decisión arquitectónica del fabricante; no viaja en el paquete) | ✅ Fase 5 · tarea 5.11b (era 1.10; lo cita el contrato de `print`) |
 | 10 | [`rotacion-clave-qr.md`](rotacion-clave-qr.md) | Reimpresión progresiva sin dejar a nadie sin fichar | ✅ Fase 2 · tarea 2.12 |
 | 11 | [`requerimiento-inspeccion.md`](requerimiento-inspeccion.md) | **Cómo generar la exportación legal en menos de 1 hora** | ✅ Fase 1 · tarea 1.17 (era 2.9, adelantada por ADR-032) |
-| 12 | `patron-anomalo-credencial.md` | Revisar una incidencia `anomalous_pattern` sin convertir un indicio en una acusación | Fase 3 · tarea 3.11 |
+| 12 | [`patron-anomalo-credencial.md`](patron-anomalo-credencial.md) | Revisar una incidencia `anomalous_pattern` sin convertir un indicio en una acusación. Destinatario el responsable del departamento y RRHH; el IT solo por su §5, si la detección no corre | ✅ Fase 3 · tarea 3.11 |
 | 13 | [`solicitud-derechos-rgpd.md`](solicitud-derechos-rgpd.md) | Acceso, rectificación, portabilidad — y la supresión que **no procede** mientras dure el deber de conservación | ✅ Fase 2 · tarea 2.10 |
 | 14 | [`brecha-de-seguridad.md`](brecha-de-seguridad.md) | **Incidente de seguridad.** Procedimiento de 72 h del art. 33 RGPD, con el alcance acotado desde `audit_log` | ✅ Fase 2 · cierre (RL-15) · revisado en 3.10 |
 | 15 | [`actualizacion-cliente.md`](actualizacion-cliente.md) | Procedimiento y vuelta atrás | ✅ Fase 5 · tarea 5.7 (esqueleto desde la 5.4, porque `install.sh` remite aquí al salir con código `3`) |

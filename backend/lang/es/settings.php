@@ -107,6 +107,8 @@ return [
         'ATTENDANCE_DEBOUNCE_SECONDS' => 'ventana anti-rebote entre dos escaneos (segundos)',
         'ATTENDANCE_MAX_CLOCK_SKEW_MINUTES' => 'desfase de reloj tolerado (minutos)',
         'ATTENDANCE_MIN_TRANSIT_SECONDS' => 'tránsito mínimo entre dos quioscos (segundos)',
+        'ATTENDANCE_PATTERN_WINDOW_SECONDS' => 'ventana de coincidencia en el mismo quiosco (segundos)',
+        'ATTENDANCE_PATTERN_MIN_REPEATS' => 'días con coincidencia antes de abrir incidencia',
         'BRANDING_APP_NAME' => 'nombre de la aplicación',
         'BRANDING_LOGO_PATH' => 'ruta del logotipo en el servidor',
         'BRANDING_ACCENT_COLOR' => 'color de acento',

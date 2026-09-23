@@ -5,13 +5,16 @@ declare(strict_types=1);
 namespace App\Modules\Attendance;
 
 use App\Http\RateLimiting\KioskRateLimit;
+use App\Modules\Attendance\Application\Port\AnomalousPatternHistory;
 use App\Modules\Attendance\Application\Port\AnomalyMetrics;
 use App\Modules\Attendance\Application\Port\CorrectionMetrics;
+use App\Modules\Attendance\Application\Port\CredentialScans;
 use App\Modules\Attendance\Application\Port\DailyTotalsProjection;
 use App\Modules\Attendance\Application\Port\EventPublisher;
 use App\Modules\Attendance\Application\Port\FlaggedScans;
 use App\Modules\Attendance\Application\Port\IncidentDetectionMetrics;
 use App\Modules\Attendance\Application\Port\OutOfOrderScans;
+use App\Modules\Attendance\Application\Port\PatternDetectionMetrics;
 use App\Modules\Attendance\Application\Port\ProjectionMetrics;
 use App\Modules\Attendance\Application\Port\ScanLog;
 use App\Modules\Attendance\Application\Port\ScanMetrics;
@@ -25,13 +28,17 @@ use App\Modules\Attendance\Http\Policy\ScanPolicy;
 use App\Modules\Attendance\Http\Policy\ShiftEntryPolicy;
 use App\Modules\Attendance\Infrastructure\Adapter\LaravelEventBus;
 use App\Modules\Attendance\Infrastructure\Console\DetectIncidentsCommand;
+use App\Modules\Attendance\Infrastructure\Console\DetectPatternsCommand;
 use App\Modules\Attendance\Infrastructure\Console\ReconcileProjectionsCommand;
 use App\Modules\Attendance\Infrastructure\Metrics\RedisAnomalyMetrics;
 use App\Modules\Attendance\Infrastructure\Metrics\RedisCorrectionMetrics;
 use App\Modules\Attendance\Infrastructure\Metrics\RedisScanMetrics;
 use App\Modules\Attendance\Infrastructure\Metrics\TextfileIncidentDetectionMetrics;
+use App\Modules\Attendance\Infrastructure\Metrics\TextfilePatternDetectionMetrics;
 use App\Modules\Attendance\Infrastructure\Metrics\TextfileProjectionMetrics;
 use App\Modules\Attendance\Infrastructure\Persistence\DatabaseShiftCorrectionLedger;
+use App\Modules\Attendance\Infrastructure\Persistence\EloquentAnomalousPatternHistory;
+use App\Modules\Attendance\Infrastructure\Persistence\EloquentCredentialScans;
 use App\Modules\Attendance\Infrastructure\Persistence\EloquentFlaggedScans;
 use App\Modules\Attendance\Infrastructure\Persistence\EloquentOutOfOrderScans;
 use App\Modules\Attendance\Infrastructure\Persistence\EloquentScanLog;
@@ -109,6 +116,22 @@ final class AttendanceServiceProvider extends ServiceProvider
         // cada uno trae solo lo que su hallazgo necesita.
         $this->app->bind(OutOfOrderScans::class, EloquentOutOfOrderScans::class);
 
+        // RF-PR-06 y RN-16 (tarea 3.11): los usos de credencial en quiosco sobre
+        // los que la deteccion de patrones busca coincidencias sistematicas y
+        // secuencias imposibles. Tercer puerto de lectura de `scan_events` y no
+        // un metodo mas de los otros dos: aquellos traen escaneos SENALADOS —por
+        // desfase o por irreconciliables— y este trae los normales, que son
+        // justamente los que nadie habia mirado.
+        $this->app->bind(CredentialScans::class, EloquentCredentialScans::class);
+
+        // Que hay ya en la bandeja sobre los indicios de patron de cada persona
+        // (decision 13c de la ficha 3.11). Es el unico puerto del modulo cuyo
+        // adaptador lee una tabla de otro —`incidents`, de `Compliance`—, y esa
+        // excepcion acotada esta razonada en su propio docblock: Deptrac no le
+        // concede a `Compliance` la capa `Attendance\Application\Port`, asi que
+        // el adaptador no puede vivir alli.
+        $this->app->bind(AnomalousPatternHistory::class, EloquentAnomalousPatternHistory::class);
+
         // De quien es un tramo, para autorizar la correccion antes de ejecutarla
         // (RF-ID-03). Puerto propio y no un metodo mas del anterior: aquel existe
         // para elegir entre 404 y 409 y lo dice de si mismo.
@@ -165,6 +188,17 @@ final class AttendanceServiceProvider extends ServiceProvider
          * instalacion tranquila.
          */
         $this->app->singleton(IncidentDetectionMetrics::class, TextfileIncidentDetectionMetrics::class);
+
+        /*
+         * El desenlace de la deteccion de patrones (doc 02 §8.2, tarea 3.11).
+         *
+         * Fichero propio —`kronoqr_pattern_detection.prom`— y no dos series mas
+         * en el de las incidencias: son dos pasadas distintas, a horas
+         * distintas, y una de ellas puede dejar de correr sin que la otra se
+         * entere. Compartir fichero haria que la que escribiera la segunda
+         * borrase la frescura de la primera.
+         */
+        $this->app->singleton(PatternDetectionMetrics::class, TextfilePatternDetectionMetrics::class);
     }
 
     public function boot(): void
@@ -222,7 +256,11 @@ final class AttendanceServiceProvider extends ServiceProvider
              * quien sabe sumarla es este modulo (RN-06). La traza de la
              * correccion la escribe `Compliance` reaccionando a su evento.
              */
-            $this->commands([DetectIncidentsCommand::class, ReconcileProjectionsCommand::class]);
+            $this->commands([
+                DetectIncidentsCommand::class,
+                DetectPatternsCommand::class,
+                ReconcileProjectionsCommand::class,
+            ]);
         }
     }
 

@@ -58,9 +58,14 @@ final class DetectIncidentsCommand extends Command
     {
         $days = $this->lookbackDays();
 
-        if ($days === null) {
+        if ($days === null || $days < 1) {
+            // `< 1` tambien aqui y no solo en `DetectAnomaliesCommand` (decision
+            // 17 de la ficha 3.11, deuda heredada): dejarselo a la excepcion del
+            // comando de dominio convertia un `--days=0` escrito de mas en una
+            // traza de PHP en el log del planificador, y una traza no dice que
+            // corregir.
             $this->error(
-                '--days espera un numero entero de dias y ha llegado «'.(string) $this->option('days').'». '
+                '--days espera un numero entero de dias mayor que cero y ha llegado «'.(string) $this->option('days').'». '
                 .'Sin valor valido no se adivina la ventana: revisar de mas abre incidencias sobre '
                 .'jornadas ya entregadas, y revisar de menos las deja sin abrir.'
             );

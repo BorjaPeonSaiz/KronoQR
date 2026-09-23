@@ -1,11 +1,20 @@
 <script setup lang="ts">
-// Ajustes operativos de la instalacion: los cuatro umbrales `ATTENDANCE_*` y
-// los dos idiomas `LOCALE_*` (RF-PD-01, tarea 5.13, hallazgo B1 del cierre de
-// la Fase 5). Hasta ahora estas seis claves solo se podian cambiar por
+// Ajustes operativos de la instalacion: los umbrales `ATTENDANCE_*` y los dos
+// idiomas `LOCALE_*` (RF-PD-01, tarea 5.13, hallazgo B1 del cierre de la
+// Fase 5). Hasta ahora estas seis claves solo se podian cambiar por
 // `PATCH /api/v1/settings` a mano o por el asistente de puesta en marcha (una
 // sola vez, solo tres de las seis): ninguna pantalla del panel las volvia a
 // enseñar, y `docs/cliente/configuracion.md` §6.0 y §2.1 prometian «se editan
 // desde el panel» sin que hubiera panel.
+//
+// `ATTENDANCE_PATTERN_WINDOW_SECONDS` y `ATTENDANCE_PATTERN_MIN_REPEATS`
+// (RF-PR-06, RN-16, tarea 3.11, decision 7 de la ficha) se suman a las cuatro
+// de siempre por el MISMO camino generico -`FormField` mas `errorsFor`,
+// rango tomado de `constraints`, nunca copiado-. Las dos YA estan en el enum
+// `SettingKey` del contrato (segunda vuelta de la tarea 3.11, decision 17):
+// `ATTENDANCE_FIELDS` tipa `key` contra ese enum con `satisfies`, igual que
+// `BREAK_CLOCKING_KEY` mas abajo, para que un cambio de nombre en el contrato
+// falle aqui.
 //
 // Cuatro decisiones que esta pantalla dice en voz alta, en vez de dejarlas
 // implicitas:
@@ -123,7 +132,15 @@ const DEFAULT_PAYROLL_COLUMNS: readonly string[] = [
   'absence_days',
 ]
 
-/** Las cuatro claves `ATTENDANCE_*`, en el orden en que las declara el catalogo. */
+/**
+ * Las seis claves `ATTENDANCE_*`, en el orden en que las declara el catalogo.
+ * `key` se tipa contra `SettingKey` con `satisfies` (segunda vuelta de la
+ * tarea 3.11, decision 17): las dos ultimas ya estan en el enum del contrato,
+ * y un cambio de nombre ahi falla aqui en vez de en `changes[field.key]`. El
+ * `as const` de al lado conserva los seis literales -no el tipo `SettingKey`
+ * entero- para que `AttendanceKey` siga siendo solo estas seis, y `form` no
+ * tenga que llevar una entrada por cada clave del catalogo.
+ */
 const ATTENDANCE_FIELDS = [
   { key: 'ATTENDANCE_MAX_SHIFT_HOURS', testId: 'max-shift-hours', i18n: 'maxShiftHours' },
   { key: 'ATTENDANCE_DEBOUNCE_SECONDS', testId: 'debounce-seconds', i18n: 'debounceSeconds' },
@@ -137,7 +154,19 @@ const ATTENDANCE_FIELDS = [
     testId: 'min-transit-seconds',
     i18n: 'minTransitSeconds',
   },
-] as const
+  // Los valores de serie del catalogo (decision 7 de la ficha 3.11): 10 s de
+  // ventana, 3 dias de repeticion.
+  {
+    key: 'ATTENDANCE_PATTERN_WINDOW_SECONDS',
+    testId: 'pattern-window-seconds',
+    i18n: 'patternWindowSeconds',
+  },
+  {
+    key: 'ATTENDANCE_PATTERN_MIN_REPEATS',
+    testId: 'pattern-min-repeats',
+    i18n: 'patternMinRepeats',
+  },
+] as const satisfies ReadonlyArray<{ key: SettingKey; testId: string; i18n: string }>
 
 type AttendanceKey = (typeof ATTENDANCE_FIELDS)[number]['key']
 
@@ -152,6 +181,8 @@ const form = ref<Record<AttendanceKey, number | string>>({
   ATTENDANCE_DEBOUNCE_SECONDS: '',
   ATTENDANCE_MAX_CLOCK_SKEW_MINUTES: '',
   ATTENDANCE_MIN_TRANSIT_SECONDS: '',
+  ATTENDANCE_PATTERN_WINDOW_SECONDS: '',
+  ATTENDANCE_PATTERN_MIN_REPEATS: '',
 })
 const localeDefault = ref('')
 const localeAvailable = ref<string[]>([])
@@ -385,6 +416,10 @@ const fieldLabels = computed<Record<string, string>>(() => ({
   'settings.ATTENDANCE_DEBOUNCE_SECONDS': t('operationalSettings.fields.debounceSeconds'),
   'settings.ATTENDANCE_MAX_CLOCK_SKEW_MINUTES': t('operationalSettings.fields.maxClockSkewMinutes'),
   'settings.ATTENDANCE_MIN_TRANSIT_SECONDS': t('operationalSettings.fields.minTransitSeconds'),
+  'settings.ATTENDANCE_PATTERN_WINDOW_SECONDS': t(
+    'operationalSettings.fields.patternWindowSeconds',
+  ),
+  'settings.ATTENDANCE_PATTERN_MIN_REPEATS': t('operationalSettings.fields.patternMinRepeats'),
   'settings.KIOSK_SERVICE_CODE': t('operationalSettings.fields.kioskServiceCode'),
   'settings.ATTENDANCE_BREAK_CLOCKING': t('operationalSettings.fields.breakClocking'),
   'settings.LOCALE_DEFAULT': t('operationalSettings.fields.localeDefault'),

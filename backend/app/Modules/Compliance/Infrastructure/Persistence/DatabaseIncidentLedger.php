@@ -10,6 +10,7 @@ use App\Modules\Compliance\Domain\Model\Incident;
 use App\Modules\Compliance\Domain\ValueObject\IncidentSeverity;
 use App\Modules\Compliance\Domain\ValueObject\IncidentType;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Domain\Exception\ConflictingFinding;
 use Illuminate\Database\ConnectionInterface;
 use RuntimeException;
 
@@ -92,7 +93,77 @@ final readonly class DatabaseIncidentLedger implements IncidentLedger
             $now,
         ]);
 
-        return $inserted === [] ? null : $inserted[0]->id;
+        if ($inserted !== []) {
+            return $inserted[0]->id;
+        }
+
+        $this->assertItIsTheSameFinding($incident, $employeeId);
+
+        return null;
+    }
+
+    /**
+     * Cuando el `ON CONFLICT` no inserto, distingue **«ya estaba ese mismo
+     * hallazgo»** —silencio, que es lo idempotente— de **«otro hallazgo distinto
+     * ocupa esa cuadrupla»**, que se lanza (decision 13d de la ficha 3.11).
+     *
+     * ## Por que hizo falta
+     *
+     * La cuadrupla de `one_incident_per_finding` identifica al hallazgo mientras
+     * el tipo lo describe entero. `anomalous_pattern` rompio eso: dos indicios
+     * distintos de la misma persona y el mismo dia —una coincidencia sistematica
+     * y una secuencia imposible, o dos contrapartes distintas— comparten
+     * cuadrupla con `shift_entry_id` nulo, y el segundo desaparecia **sin fila,
+     * sin asiento, sin fallo y sin log**.
+     *
+     * **No se repara: se hace visible.** Seguir teniendo una sola incidencia es
+     * correcto —la bandeja no puede tener dos filas ahi—; lo que no puede ser es
+     * que nadie lo sepa. La pasada lo cuenta como fallo, deja una linea en el log
+     * y `pattern_detection_last_failures` sube.
+     *
+     * La comparacion se hace en SQL con `->>` y no decodificando el JSON en PHP
+     * porque el operador ya devuelve `NULL` para la clave ausente, que es
+     * exactamente lo que lleva cualquier incidencia que no sea de patron: asi las
+     * seis de la revision nocturna comparan `NULL` con `NULL` y siguen en
+     * silencio, sin un solo cambio de comportamiento.
+     */
+    private function assertItIsTheSameFinding(Incident $incident, int $employeeId): void
+    {
+        /** @var list<object{pattern: string|null, counterpart: string|null}> $existing */
+        $existing = $this->connection->select(<<<'SQL'
+            SELECT context ->> 'pattern' AS pattern,
+                   context ->> 'counterpart_employee_uuid' AS counterpart
+              FROM incidents
+             WHERE employee_id = ?
+               AND work_date = ?
+               AND type = ?
+               AND shift_entry_id IS NOT DISTINCT FROM ?
+        SQL, [
+            $employeeId,
+            $incident->workDate,
+            $incident->type->value,
+            $this->shiftEntryIdOf($incident->shiftEntryUuid),
+        ]);
+
+        if ($existing === []) {
+            // No inserto y tampoco esta: otra transaccion la borro entre las dos
+            // sentencias. No pasa —nada borra de `incidents`— y si pasara, lo
+            // honesto es el silencio: no hay ningun hallazgo perdido que contar.
+            return;
+        }
+
+        $pattern = $incident->context['pattern'] ?? null;
+        $counterpart = $incident->context['counterpart_employee_uuid'] ?? null;
+
+        if ($existing[0]->pattern === $pattern && $existing[0]->counterpart === $counterpart) {
+            return;
+        }
+
+        throw ConflictingFinding::onTheSameFinding(
+            $incident->employeeUuid,
+            $incident->workDate,
+            $incident->type->value,
+        );
     }
 
     public function openTally(): array

@@ -55,6 +55,25 @@ Se cambian solo las que hagan falta.
 | `ATTENDANCE_DEBOUNCE_SECONDS` | `60` | 0 – 3600 | Ventana de gracia: dos escaneos de la misma persona dentro de esa ventana cuentan como uno. **Esta clave cambia las horas registradas** — ver el aviso de abajo. `0` la desactiva. |
 | `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES` | `15` | 1 – 1440 | Desfase tolerado entre el reloj de la tablet y el del servidor antes de marcar el fichaje para revisión. **Nunca rechaza un fichaje**, solo lo señala. Es además el umbral con el que **la propia tablet avisa** de que su hora se ha ido. |
 | `ATTENDANCE_MIN_TRANSIT_SECONDS` | `120` | 0 – 3600 | Tiempo mínimo creíble para ir de un quiosco a otro. Por debajo, se abre incidencia. Ponlo a `0` si tienes dos tablets en la misma puerta; súbelo si hay dos edificios. |
+| `ATTENDANCE_PATTERN_WINDOW_SECONDS` | `10` | 0 – 300 | Segundos por debajo de los cuales dos fichajes de **dos personas distintas en el mismo quiosco** cuentan como una **coincidencia** (como mucho una por pareja y día). **No abre incidencia por sí sola**: hace falta que la misma pareja acumule los días de la clave siguiente. `0` desactiva este patrón. |
+| `ATTENDANCE_PATTERN_MIN_REPEATS` | `3` | 1 – 30 | Días con coincidencia que tiene que acumular la misma pareja, dentro de los últimos 30 días, para que se abra la incidencia «Patrón anómalo de uso de la credencial» —**una a cada persona**—. Súbelo si en tu centro es normal entrar en grupo por la misma puerta; bájalo a `1` solo si quieres ver cada pareja de escaneos seguidos. **La incidencia no anula ningún fichaje ni califica a nadie**: la revisa el responsable ([`guia-rrhh.md`](guia-rrhh.md) §4.5). |
+
+> **Las tres últimas claves ajustan un sistema de control sobre la plantilla,
+> no un parámetro técnico.** La detección de patrones de uso de credencial forma
+> parte de lo que hay que informar previamente a las personas trabajadoras y a
+> su representación (art. 20.3 ET y arts. 87 a 91 LOPDGDD;
+> [`obligaciones-legales.md`](obligaciones-legales.md) §3). Bajar
+> `ATTENDANCE_PATTERN_MIN_REPEATS` o subir `ATTENDANCE_PATTERN_WINDOW_SECONDS`
+> **endurece** ese control: hazlo como decisión documentada y comunicada, no
+> para «ver más». Cada cambio queda en la auditoría con autor, valor anterior y
+> nuevo (sección 4, «…necesito saber quién cambió un umbral y cuándo»).
+>
+> **El nombre de cada quiosco viaja en estas incidencias y en la auditoría.**
+> Cuando des de alta una tablet ([`../runbooks/alta-nuevo-quiosco.md`](../runbooks/alta-nuevo-quiosco.md)
+> §3.2), su rótulo nombra **un sitio** —«Recepción», «Entrada de personal»—,
+> **nunca a una persona** («Tablet de María»): el rótulo se escribe en el
+> contexto de cada incidencia y en los asientos de auditoría, que no admiten
+> nombres.
 
 **`ATTENDANCE_BREAK_CLOCKING` — qué cambia exactamente.** Se pone en
 Panel → **Ajustes operativos** (`/settings`) → «Fichaje de pausa», donde las dos
@@ -1407,9 +1426,9 @@ sudo docker compose exec app php artisan product:doctor
 > significa que quien tenga uno puede leer las copias, firmar tarjetas o abrir
 > los PIN sellados del otro.
 
-### 6.0 Las diecisiete claves que NO son variables de entorno
+### 6.0 Las diecinueve claves que NO son variables de entorno
 
-Diecisiete propiedades de la instalación no viven en el `.env` sino en la tabla
+Diecinueve propiedades de la instalación no viven en el `.env` sino en la tabla
 `installation_settings`, se editan **desde el panel** y surten efecto en la
 petición siguiente sin reiniciar nada:
 
@@ -1420,6 +1439,8 @@ petición siguiente sin reiniciar nada:
 | `ATTENDANCE_DEBOUNCE_SECONDS` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.1 |
 | `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.1 |
 | `ATTENDANCE_MIN_TRANSIT_SECONDS` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.1 |
+| `ATTENDANCE_PATTERN_WINDOW_SECONDS` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.1 |
+| `ATTENDANCE_PATTERN_MIN_REPEATS` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.1 |
 | `BRANDING_APP_NAME` | Panel → **Marca** (`/branding`) | Sección 2.2 |
 | `BRANDING_LOGO_PATH` | Panel → **Marca** (`/branding`) | Sección 2.2 |
 | `BRANDING_ACCENT_COLOR` | Panel → **Marca** (`/branding`) | Sección 2.2 |
@@ -1462,7 +1483,7 @@ queda auditado con tu nombre, la fecha y el valor anterior. Si no ves esas
 entradas en el menú, no es que falten: es que tu cuenta no es de
 administrador.
 
-**Manda la base de datos** (sección 1). Doce de las diecisiete —las de marca,
+**Manda la base de datos** (sección 1). Doce de las diecinueve —las de marca,
 las de idioma, el código de servicio y las seis de la salida a nómina— no
 existen como variable de entorno: las de marca y las de idioma se retiraron para
 que no hubiera dos sitios donde escribir el mismo dato; el código de servicio
@@ -1587,8 +1608,8 @@ salida a internet.
 
 ### 6.7 Reglas de fichaje
 
-**Las cinco primeras se cambian en el panel, no aquí** (sección 6.0). La línea
-del `.env` es una copia del valor de serie y **editarla no hace nada**.
+**Las siete se cambian en el panel, no aquí** (sección 6.0). La línea del
+`.env` es una copia del valor de serie y **editarla no hace nada**.
 
 | Variable | Marca | Qué hace | De serie | Cuándo cambiarla | ¿Afecta al cálculo de horas? |
 | --- | --- | --- | --- | --- | --- |
@@ -1597,8 +1618,8 @@ del `.env` es una copia del valor de serie y **editarla no hace nada**.
 | `ATTENDANCE_MAX_SHIFT_HOURS` | — | Duración a partir de la cual un tramo cerrado es anómalo. Ver **sección 2.1** | `12` | En el panel. Aquí, nunca | **Sí** (abre incidencias) |
 | `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES` | — | Desfase tolerado entre el reloj de la tablet y el del servidor. **Genera incidencia, nunca rechaza el fichaje** (RF-AT-10). Ver **sección 2.1** | `15` | En el panel. Aquí, nunca | **Sí** (abre incidencias) |
 | `ATTENDANCE_MIN_TRANSIT_SECONDS` | — | Tránsito mínimo creíble entre dos quioscos. Ver **sección 2.1** | `120` | En el panel. Aquí, nunca | **Sí** (abre incidencias) |
-| `ATTENDANCE_PATTERN_WINDOW_SECONDS` | — | Segundos por debajo de los cuales dos fichajes consecutivos en el mismo quiosco se considerarán un patrón anómalo | `10` | **Todavía no la lee nada**: ese detector llega en una versión posterior. La variable está reservada para no tener que cambiar el fichero entonces | No, todavía |
-| `ATTENDANCE_PATTERN_MIN_REPEATS` | — | Coincidencias sistemáticas entre dos personas antes de abrir una incidencia | `3` | Íd. que la anterior | No, todavía |
+| `ATTENDANCE_PATTERN_WINDOW_SECONDS` | — | Segundos por debajo de los cuales dos fichajes de dos personas distintas en el mismo quiosco cuentan como una coincidencia. Ver **sección 2.1** | `10` | En el panel. Aquí, nunca | No mueve minutos; **sí abre incidencias** (junto con la siguiente) |
+| `ATTENDANCE_PATTERN_MIN_REPEATS` | — | Días con coincidencia de la misma pareja antes de abrir la incidencia «Patrón anómalo de uso de la credencial». Ver **sección 2.1** | `3` | En el panel. Aquí, nunca | No mueve minutos; **sí abre incidencias** |
 
 ### 6.8 Acceso al panel de gestión
 
@@ -1732,6 +1753,7 @@ Los tres rangos están explicados con detalle, con síntomas y comprobaciones, e
 | `COMPLIANCE_LEGAL_EXPORT_TEMP_RETENTION_HOURS` | — | Horas que puede vivir un temporal huérfano de la descarga de la exportación legal antes de que se borre solo. **No afecta** a la copia deliberada que genera el comando de exportación: esa la custodia quien la generó | `6` | Casi nunca | No |
 | `COMPLIANCE_AUTHZ_DENIAL_WINDOW_SECONDS` | — | Ventana en la que las denegaciones repetidas de un mismo actor se agrupan en un solo asiento de auditoría. Protege la cadena de auditoría de una enumeración | `60` | Ponla a `0` si estás investigando un incidente y quieres un asiento por denegación | No |
 | `COMPLIANCE_INCIDENT_LOOKBACK_DAYS` | — | Días hacia atrás que revisa la detección diaria de incidencias. Los tramos **todavía abiertos** se revisan siempre, sea cual sea su fecha | `7` | Casi nunca. **Subirlo puede abrir incidencias de jornadas ya entregadas a la plantilla o a la Inspección**, que es justo lo que la ventana evita | **Sí** (abre incidencias) |
+| `COMPLIANCE_PATTERN_LOOKBACK_DAYS` | — | Días hacia atrás que revisa la detección nocturna de patrones anómalos de uso de credencial (04:35 UTC). Es más larga que la anterior porque «sistemático» necesita más de una semana. Ver [`operacion.md`](operacion.md) §6 | `30` | Casi nunca. Subirlo alarga la consulta nocturna y puede abrir incidencias sobre semanas ya revisadas; bajarlo por debajo de lo que tarda una pareja en acumular `ATTENDANCE_PATTERN_MIN_REPEATS` días deja el patrón sin poder detectarse | No mueve minutos; **sí abre incidencias** |
 | `REPORTING_COMPLIANCE_MAX_RANGE_DAYS` | — | Días como máximo que puede abarcar una consulta de la vista de cumplimiento ([`guia-rrhh.md`](guia-rrhh.md) §4 bis). Por encima, la pantalla lo dice y no consulta | `92` | Casi nunca. Subirlo alarga la consulta y acerca el límite de la variable siguiente; si necesitas un periodo mayor, pide dos | No |
 | `REPORTING_COMPLIANCE_TIMEOUT_SECONDS` | — | Segundos que se le conceden a esa consulta dentro de PostgreSQL antes de abandonarla. Protege al resto del sistema: nada se bloquea y la pantalla pide un periodo más corto | `10` | Solo si tu servidor es lento y la pantalla falla con periodos legítimos. Si tienes que subirlo mucho, el problema es la base de datos, no este número | No |
 

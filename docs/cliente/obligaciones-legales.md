@@ -111,11 +111,28 @@ hacérsela.
 **Con este producto, la respuesta habitual es que no es obligatoria, pero sí
 recomendable.** Los factores que disparan el riesgo alto no están: no hay
 biometría (ADR-009: no es una opción desactivada, no existe), no hay
-geolocalización por persona, no hay elaboración de perfiles ni decisiones
-automatizadas, y los datos no salen de tu infraestructura —con la única
-excepción del correo de incidencias descrito arriba—. Lo que queda es el dato
-mínimo —quién ficha, cuándo y en qué dispositivo— tratado con la base jurídica
-del art. 6.1.c.
+geolocalización por persona, no hay decisiones automatizadas con efectos sobre
+nadie, y los datos no salen de tu infraestructura —con la única excepción del
+correo de incidencias descrito arriba—. Lo que queda es el dato mínimo —quién
+ficha, cuándo y en qué dispositivo— tratado con la base jurídica del art.
+6.1.c.
+
+**Hay un tratamiento que tiene que entrar en ese análisis con nombre propio: la
+detección automática de patrones de uso de credencial.** Cada madrugada el
+sistema revisa los fichajes de las tablets de los últimos 30 días y abre una
+incidencia cuando dos personas fichan en la misma tablet con segundos de
+diferencia varios días, o cuando una misma tarjeta se pasa en dos tablets con
+menos tiempo del que se tarda en ir de una a otra
+([`guia-rrhh.md`](guia-rrhh.md) §4.5). **No es una decisión automatizada del
+art. 22 RGPD**: no produce ningún efecto sin intervención humana —no anula ni
+marca ningún fichaje, no sanciona, no bloquea ninguna tarjeta y no avisa a
+nadie fuera de la bandeja del responsable—; lo único que hace es poner un
+indicio delante de una persona, que lo revisa con un procedimiento escrito que
+prohíbe tratarlo como conclusión. **Si constituye o no una elaboración de
+perfiles en el sentido del art. 4.4 lo tiene que valorar tu asesoría y tu
+delegado de protección de datos**, no este documento: descríbelo en la EIPD tal
+como es —qué observa, con qué umbrales, quién lo revisa, qué no hace— y deja
+constancia de la conclusión.
 
 **Lo que sí tienes que hacer**, y es tuyo porque eres el responsable del
 tratamiento:
@@ -150,6 +167,16 @@ entrega a petición un resumen de las medidas de seguridad del producto).
   RGPD). Es una comunicación tuya, no del producto.
 - **Consulta a la representación legal** de las personas trabajadoras sobre la
   organización y documentación del registro, como exige el propio art. 34.9.
+- **Informa también de la detección de patrones de uso de credencial, y de
+  cómo se revisa.** Es un sistema de control sobre la actividad laboral y entra
+  en lo que el art. 20.3 ET y los arts. 87 a 91 LOPDGDD obligan a comunicar
+  previamente a la plantilla y a su representación: qué observa (coincidencias
+  en la misma tablet, secuencias imposibles entre dos), con qué umbrales, que
+  abre una incidencia que revisa el responsable del departamento, que no anula
+  ni sanciona nada por sí sola, y qué procedimiento sigue esa revisión
+  ([`guia-rrhh.md`](guia-rrhh.md) §4.5). Si después cambias los umbrales para
+  endurecerlo ([`configuracion.md`](configuracion.md) §2.1), es un cambio de
+  ese sistema y se comunica igual.
 - **Da acceso al propio registro**: el portal del empleado existe para eso
   (código de empleado y PIN, ADR-015). Que exista no sustituye a informar de que
   existe.

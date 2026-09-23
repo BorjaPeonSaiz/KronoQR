@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Domain\ValueObject;
 
+use App\Modules\Attendance\Domain\Policy\CredentialPatternPolicy;
 use App\Modules\Shared\Domain\ValueObject\ComplianceRule;
 use App\Modules\Shared\Domain\ValueObject\ComplianceRuleSuspension;
 
@@ -84,6 +85,28 @@ enum AnomalyType: string
     case OUT_OF_ORDER_SCAN = 'out_of_order_scan';
 
     /**
+     * RF-PR-06 y RN-16: **un indicio de uso anomalo de la credencial**, no una
+     * conclusion (tarea 3.11).
+     *
+     * Dos formas, que `context.pattern` distingue: `kiosk_coincidence` —dos
+     * personas coinciden sistematicamente en el mismo quiosco separadas por
+     * segundos— e `impossible_sequence` —la misma credencial en dos quioscos sin
+     * tiempo material para ir de uno a otro, RN-16—. Las emite
+     * {@see CredentialPatternPolicy}.
+     *
+     * **Es la contrapartida explicita de haber descartado la biometria**
+     * (ADR-009, regla dura 20): el prestamo fisico de la tarjeta es el unico
+     * fraude que la firma HMAC no impide, y sin una regla con umbral y bandeja
+     * esa mitigacion no existiria en el producto.
+     *
+     * **Nunca anula ni marca un fichaje** (reglas duras 5 y 19): el registro no
+     * se toca, y lo que llega a la bandeja son los numeros que sostienen el
+     * indicio para que una persona lo contraste con la supervision presencial
+     * (doc 01 §8.1, runbook `patron-anomalo-credencial.md`).
+     */
+    case ANOMALOUS_PATTERN = 'anomalous_pattern';
+
+    /**
      * La regla del **perfil de cumplimiento** cuyo umbral gobierna este hallazgo,
      * o `null` si el umbral que lo decide es operativo y no legal.
      *
@@ -98,6 +121,12 @@ enum AnomalyType: string
      * jurisdiccion. `LONG_SHIFT` devuelve RN-11 porque es el unico de sus dos
      * origenes que sale del perfil.
      *
+     * `ANOMALOUS_PATTERN` es `null` por la primera razon: sus tres umbrales
+     * —ventana, repeticiones y transito minimo— los fija el hotel en
+     * `installation_settings`, no el convenio. Suspenderlo desde el perfil de
+     * cumplimiento no tendria sentido: para apagarlo se pone a cero la ventana o
+     * el transito, que es lo que `configuracion.md` §2.1 ya documenta.
+     *
      * `OUT_OF_ORDER_SCAN` tambien es `null`, y ahi no hay umbral de ninguna
      * clase: RN-18 es **estructural** (doc 01 §4, como RN-01 y RN-02) y no se
      * configura. Suspenderla equivaldria a decidir que un fichaje real de alguien
@@ -110,7 +139,7 @@ enum AnomalyType: string
             self::LONG_SHIFT => ComplianceRule::MaximumDailyWorkingTime,
             self::MISSING_BREAK => ComplianceRule::BreakInContinuousShift,
             self::OPEN_SHIFT_EXPIRED, self::SHORT_SHIFT, self::CLOCK_SKEW,
-            self::OUT_OF_ORDER_SCAN => null,
+            self::OUT_OF_ORDER_SCAN, self::ANOMALOUS_PATTERN => null,
         };
     }
 

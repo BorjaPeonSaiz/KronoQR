@@ -963,6 +963,89 @@ export const OUT_OF_ORDER_INCIDENT: Incident = {
   },
 }
 
+/**
+ * `anomalous_pattern` (RF-PR-06, tarea 3.11; rediseño de la segunda vuelta,
+ * decision 13): un hallazgo por PERSONA, con `counterpart_employee_uuid` la
+ * contraparte PRINCIPAL (la de mas dias) y `counterpart_count` cuantas
+ * personas distintas coincidieron en total. `severity: 'high'` porque es lo
+ * que emite `IncidentType::defaultSeverity()` para `anomalous_pattern` (R-2
+ * de la revision, decision 18). `counterpart_count: 1` aqui -sin «y N mas»
+ * en el panel-; `KIOSK_COINCIDENCE_INCIDENT_WITH_OTHERS` mas abajo prueba el
+ * plural. Aqui solo viaja lo que el contexto SI puede llevar por contrato
+ * -sin una lista de ocurrencias, que `IncidentContext` no admite (ver la
+ * nota de cabecera de `incidentContext.ts`)-. `counterpart_employee_uuid` es
+ * una persona distinta de `EMPLOYEE_UUID`, nunca su nombre (regla dura 21).
+ */
+export const KIOSK_COINCIDENCE_INCIDENT: Incident = {
+  ...OPEN_INCIDENT,
+  id: 414,
+  type: 'anomalous_pattern',
+  severity: 'high',
+  shift_entry_uuid: null,
+  context: {
+    pattern: 'kiosk_coincidence',
+    device_id: 3,
+    device_name: 'Recepción',
+    counterpart_employee_uuid: '0199f0aa-4444-7000-8000-0123456789ae',
+    counterpart_count: 1,
+    coincidence_days: 5,
+    min_repeats: 3,
+    window_seconds: 10,
+    // El detalle dia a dia no viaja en el contexto -`IncidentContext` solo
+    // admite escalares, nunca listas (ADR-012)-, asi que la serie de cinco
+    // dias del Gherkin (doc 01 §11) se resume en el primer y el ultimo dia
+    // de TODA la serie de la persona, y en el hueco mas estrecho de la serie
+    // frente al del ultimo dia -`last_gap_seconds` no es un maximo-.
+    first_coincidence_at: '2026-03-10T05:00:00Z',
+    last_coincidence_at: '2026-03-14T05:02:00Z',
+    last_gap_seconds: 4,
+    min_gap_seconds: 3,
+  },
+}
+
+/**
+ * La misma persona, pero coincidiendo con MAS de una contraparte
+ * (`counterpart_count: 2`): prueba el plural «con otra persona y una más»
+ * del panel (decision 13). Mismo quiosco y umbrales, solo cambia el numero
+ * de personas y el identificador de la incidencia.
+ */
+export const KIOSK_COINCIDENCE_INCIDENT_WITH_OTHERS: Incident = {
+  ...KIOSK_COINCIDENCE_INCIDENT,
+  id: 416,
+  context: {
+    ...KIOSK_COINCIDENCE_INCIDENT.context,
+    counterpart_count: 2,
+  },
+}
+
+/**
+ * `anomalous_pattern` / `impossible_sequence` (RN-16, tarea 3.11): dos
+ * escaneos aceptados de la misma credencial en dispositivos distintos
+ * separados por menos del tiempo minimo de transito. Un solo caso basta -no
+ * es una frecuencia-, asi que no hay contrapartida que enlazar.
+ * `severity: 'high'` por el mismo motivo que `KIOSK_COINCIDENCE_INCIDENT`.
+ */
+export const IMPOSSIBLE_SEQUENCE_INCIDENT: Incident = {
+  ...OPEN_INCIDENT,
+  id: 415,
+  type: 'anomalous_pattern',
+  severity: 'high',
+  shift_entry_uuid: '0199f2c1-9b21-7b40-9c50-6d7e8f9a0b22',
+  context: {
+    pattern: 'impossible_sequence',
+    from_device_id: 3,
+    from_device_name: 'Recepción',
+    to_device_id: 5,
+    to_device_name: 'Cocina',
+    first_occurred_at: '2026-03-14T13:50:00Z',
+    second_occurred_at: '2026-03-14T13:50:45Z',
+    gap_seconds: 45,
+    transit_seconds: 120,
+    first_scan_id: '0199f0c2-2a5b-7c3e-9b21-4d5e6f7a8ba1',
+    second_scan_id: '0199f0c2-3b6c-7c3e-9b21-4d5e6f7a8bb2',
+  },
+}
+
 /** Una sola pagina, que es lo unico que necesita el E2E: nunca hay mas de 25 filas de mentira. */
 function incidentPage(data: Incident[]): IncidentCollection {
   return {
@@ -982,6 +1065,15 @@ export const INCIDENT_BOARD = incidentPage([OPEN_INCIDENT])
 export const EMPTY_INCIDENT_BOARD = incidentPage([])
 /** Dos incidencias abiertas de tipos distintos, para el filtro y la lista. */
 export const INCIDENT_BOARD_WITH_OUT_OF_ORDER = incidentPage([OPEN_INCIDENT, OUT_OF_ORDER_INCIDENT])
+/** RF-PR-06: las dos incidencias `anomalous_pattern`, una de cada patron. */
+export const INCIDENT_BOARD_WITH_ANOMALOUS_PATTERNS = incidentPage([
+  KIOSK_COINCIDENCE_INCIDENT,
+  IMPOSSIBLE_SEQUENCE_INCIDENT,
+])
+/** RF-PR-06, decision 13: una `kiosk_coincidence` con mas de una contraparte, para probar el plural del panel. */
+export const INCIDENT_BOARD_WITH_KIOSK_COINCIDENCE_OTHERS = incidentPage([
+  KIOSK_COINCIDENCE_INCIDENT_WITH_OTHERS,
+])
 
 // --- Quioscos y emparejamiento por codigo (RF-PA-07, RF-PD-06, tarea 5.6) ---
 
@@ -1267,6 +1359,14 @@ export interface ManagementApiOptions {
     readonly debounceSeconds?: number
     readonly maxClockSkewMinutes?: number
     readonly minTransitSeconds?: number
+    /**
+     * `ATTENDANCE_PATTERN_WINDOW_SECONDS`/`ATTENDANCE_PATTERN_MIN_REPEATS`
+     * (RF-PR-06, RN-16, tarea 3.11, decision 7 de la ficha). Por omision, los
+     * valores de serie (10 s, 3 dias): una instalacion recien puesta en
+     * marcha, sin nada configurado.
+     */
+    readonly patternWindowSeconds?: number
+    readonly patternMinRepeats?: number
     /** `KIOSK_SERVICE_CODE` (RF-KI-08, tarea 3.3). Por omision, cadena vacia: sin codigo, de serie. */
     readonly kioskServiceCode?: string
     /**
@@ -1737,6 +1837,8 @@ export async function stubManagementApi(
   let attendanceDebounceSeconds = options.operationalSettings?.debounceSeconds ?? 60
   let attendanceMaxClockSkewMinutes = options.operationalSettings?.maxClockSkewMinutes ?? 15
   let attendanceMinTransitSeconds = options.operationalSettings?.minTransitSeconds ?? 120
+  let attendancePatternWindowSeconds = options.operationalSettings?.patternWindowSeconds ?? 10
+  let attendancePatternMinRepeats = options.operationalSettings?.patternMinRepeats ?? 3
   let localeDefault = options.operationalSettings?.localeDefault ?? 'es'
   let localeAvailable = options.operationalSettings?.localeAvailable ?? ['es', 'en']
   let kioskServiceCode = options.operationalSettings?.kioskServiceCode ?? ''
@@ -1801,6 +1903,26 @@ export async function stubManagementApi(
           affects_worked_hours: false,
           source: attendanceMinTransitSeconds === 120 ? 'product_default' : 'installation',
           constraints: { minimum: 0, maximum: 3600 },
+        },
+        // RF-PR-06/RN-16, tarea 3.11, decision 7 de la ficha, ya en el enum
+        // `SettingKey` del contrato.
+        {
+          key: 'ATTENDANCE_PATTERN_WINDOW_SECONDS',
+          value: attendancePatternWindowSeconds,
+          type: 'integer',
+          impact: 'compliance_review',
+          affects_worked_hours: false,
+          source: attendancePatternWindowSeconds === 10 ? 'product_default' : 'installation',
+          constraints: { minimum: 0, maximum: 300 },
+        },
+        {
+          key: 'ATTENDANCE_PATTERN_MIN_REPEATS',
+          value: attendancePatternMinRepeats,
+          type: 'integer',
+          impact: 'compliance_review',
+          affects_worked_hours: false,
+          source: attendancePatternMinRepeats === 3 ? 'product_default' : 'installation',
+          constraints: { minimum: 1, maximum: 30 },
         },
         {
           key: 'BRANDING_APP_NAME',
@@ -2811,6 +2933,8 @@ export async function stubManagementApi(
           const debounceSeconds = checkInteger('ATTENDANCE_DEBOUNCE_SECONDS', 0, 3600)
           const maxClockSkewMinutes = checkInteger('ATTENDANCE_MAX_CLOCK_SKEW_MINUTES', 1, 1440)
           const minTransitSeconds = checkInteger('ATTENDANCE_MIN_TRANSIT_SECONDS', 0, 3600)
+          const patternWindowSeconds = checkInteger('ATTENDANCE_PATTERN_WINDOW_SECONDS', 0, 300)
+          const patternMinRepeats = checkInteger('ATTENDANCE_PATTERN_MIN_REPEATS', 1, 30)
 
           const serviceCodeRaw = patch.settings['KIOSK_SERVICE_CODE']
 
@@ -2982,6 +3106,14 @@ export async function stubManagementApi(
 
           if (minTransitSeconds !== undefined) {
             attendanceMinTransitSeconds = minTransitSeconds
+          }
+
+          if (patternWindowSeconds !== undefined) {
+            attendancePatternWindowSeconds = patternWindowSeconds
+          }
+
+          if (patternMinRepeats !== undefined) {
+            attendancePatternMinRepeats = patternMinRepeats
           }
 
           localeDefault = nextLocaleDefault

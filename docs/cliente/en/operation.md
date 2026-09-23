@@ -27,6 +27,7 @@ All of this runs on its own in the `scheduler` container. What appears in the
 | 03:15 UTC, daily | Logical backup | Take it off the server |
 | 04:05 UTC, daily | The audit hash chain is verified | Act on the alert if it fires: it is critical |
 | 04:30 UTC, daily | Record review: open shifts, rest periods, anomalous working days | Resolve the incidents in the panel |
+| 04:35 UTC, daily | Detection of anomalous credential usage patterns over the kiosk clockings of the last 30 days (§6) | Nothing: the incidents go to the department manager, not to IT |
 | Monday 05:10 UTC | **Retention proposal**: report of what would be purged | Read it once something has expired |
 | Hourly | Credential metrics and clean-up of temporary files | Nothing |
 | Hourly | Expired full data exports are purged: the ZIP is deleted, the record of it stays (§13) | Nothing |
@@ -162,6 +163,37 @@ Metrics published for the `node-exporter` collector
 | `COMPLIANCE_RETENTION_REPORT_PATH` | `storage/app/retention-reports` | Where the reports are left. **They are not cleaned up on their own**: they are the evidence of the purge |
 | `DB_MAINTENANCE_USERNAME` | `fichaje_maintenance` | Role that runs the audit purge |
 | `DB_MAINTENANCE_PASSWORD` | *(empty)* | **Not set in the `.env`.** It is supplied when the purge is run |
+
+**The detection of anomalous credential usage patterns** is a separate pass
+from the 04:30 review: it runs at **04:35 UTC**, between that review and the
+compliance metrics calculation, and opens the "Anomalous credential usage
+pattern" incidents that the department manager sees in their inbox
+([`hr-guide.md`](hr-guide.md) §4.5). **IT gets nothing for what it finds**: a
+clue about two specific people is reviewed in the inbox, not in an on-call
+channel. What two alerts (§10.4) do watch is that the pass runs and finishes:
+`DeteccionDePatronesAusente` (more than 26 hours without running) and
+`DeteccionDePatronesConFallos` (the last pass left some finding without turning
+it into an incident), both over the series
+`pattern_detection_last_run_timestamp_seconds` and
+`pattern_detection_last_failures` in the file
+`BACKUP_PATH/metrics/kronoqr_pattern_detection.prom`. The thresholds of what is
+looked for —seconds window, minimum days and transit between kiosks— are
+changed in the panel, not here ([`configuration.md`](configuration.md) §2.1).
+If you need to run it by hand (it is idempotent: it does not duplicate what it
+already opened):
+
+```bash
+docker compose exec app php artisan attendance:detect-patterns
+```
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `COMPLIANCE_PATTERN_LOOKBACK_DAYS` | `30` | Days back that this pass reviews. It is longer than the 7 of the incident review because "systematic" needs more than a week. It can be narrowed for one run with `--days=` |
+
+The procedure when one of the two alerts fires, and the one for reviewing the
+incident itself, is
+[`../../runbooks/patron-anomalo-credencial.md`](../../runbooks/patron-anomalo-credencial.md)
+(in Spanish).
 
 **Reports generated in the background** (HR asks for them from the panel:
 [`hr-guide.md`](hr-guide.md) §6.3) have their own six parameters and their own
@@ -572,6 +604,8 @@ stopped running):
 | `DescansoEntreJornadasInsuficiente` | Rest below the legal minimum | Medium | HR | [`turno-abierto-prolongado.md`](../../runbooks/turno-abierto-prolongado.md) (in Spanish) | Check that the hours are correct before treating it as a scheduling matter |
 | `MetricaDeIncidenciasAusente` / `DeteccionDeIncidenciasAusente` | Silence of the nightly detection | Medium | IT | [`turno-abierto-prolongado.md`](../../runbooks/turno-abierto-prolongado.md) (in Spanish) | Check that the `scheduler` is still alive |
 | `DeteccionDeIncidenciasConFallos` | Last night's run failed | High | IT | [`errores-en-el-panel.md`](../../runbooks/errores-en-el-panel.md) (in Spanish) | `product:doctor`, and if it points at the reconciliation, follow that runbook instead |
+| `DeteccionDePatronesAusente` | More than 26 h without the detection of anomalous credential usage patterns running (04:35 UTC) | Medium | IT | [`patron-anomalo-credencial.md`](../../runbooks/patron-anomalo-credencial.md) §5 (in Spanish) | Check that the `scheduler` is still alive and run `attendance:detect-patterns` by hand. **It is not about any person**: it means nobody is looking |
+| `DeteccionDePatronesConFallos` | Last night's pattern pass left some finding without turning it into an incident | High | IT | [`patron-anomalo-credencial.md`](../../runbooks/patron-anomalo-credencial.md) §5 (in Spanish) | `product:doctor`, fix the cause and repeat the command: it is idempotent |
 | `ErroresCriticosNuevos` | New or reopened `critical` group in 5 min | High | IT | [`errores-en-el-panel.md`](../../runbooks/errores-en-el-panel.md) (in Spanish) | Open "Errors" in the panel and follow the "What to do" column for that row |
 | `DivergenciaEnReconciliacionNocturna` | Any | Critical | IT | [`divergencia-proyeccion.md`](../../runbooks/divergencia-proyeccion.md) (in Spanish) | The fix is already applied; find out who wrote outside the recalculation |
 | `ReconciliacionConFallos` | Last night's run failed | High | IT | [`divergencia-proyeccion.md`](../../runbooks/divergencia-proyeccion.md) (in Spanish) | Run `attendance:reconcile` by hand and check the reason for the failure |

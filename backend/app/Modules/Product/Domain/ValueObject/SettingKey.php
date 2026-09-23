@@ -66,6 +66,25 @@ enum SettingKey: string
     case ATTENDANCE_MIN_TRANSIT_SECONDS = 'ATTENDANCE_MIN_TRANSIT_SECONDS';
 
     /**
+     * RF-PR-06: separacion por debajo de la cual dos fichajes de personas
+     * distintas en el mismo quiosco cuentan como una coincidencia (tarea 3.11).
+     *
+     * Cero la desactiva. No rechaza ni marca ningun fichaje: solo decide que se
+     * cuenta como coincidencia antes de mirar si se repite.
+     */
+    case ATTENDANCE_PATTERN_WINDOW_SECONDS = 'ATTENDANCE_PATTERN_WINDOW_SECONDS';
+
+    /**
+     * RF-PR-06: **dias** con coincidencia que tiene que acumular un par de
+     * personas antes de que se abra la incidencia (tarea 3.11).
+     *
+     * Dias y no coincidencias sueltas: la cola del quiosco al cambio de turno
+     * produce pares de segundos todos los dias entre companeros que llegan
+     * juntos, y «sistematico» es «varios dias».
+     */
+    case ATTENDANCE_PATTERN_MIN_REPEATS = 'ATTENDANCE_PATTERN_MIN_REPEATS';
+
+    /**
      * RF-AT-12: si el quiosco ofrece fichar la pausa en esta instalacion
      * (ADR-024, tarea 3.5).
      *
@@ -293,6 +312,18 @@ enum SettingKey: string
             // Cero es legitimo: dos tablets contiguas en la misma puerta.
             self::ATTENDANCE_MIN_TRANSIT_SECONDS->value => SettingDefinition::integer(
                 120, 0, 3600, SettingImpact::COMPLIANCE_REVIEW,
+            ),
+            // RF-PR-06. Cero es legitimo: apaga la coincidencia de quiosco. El
+            // maximo son cinco minutos, porque una ventana mayor deja de
+            // describir «fichajes consecutivos separados por segundos» y empieza
+            // a emparejar a todo el turno que entra a la misma hora.
+            self::ATTENDANCE_PATTERN_WINDOW_SECONDS->value => SettingDefinition::integer(
+                10, 0, 300, SettingImpact::COMPLIANCE_REVIEW,
+            ),
+            // RF-PR-06. Minimo 1 y no 0: «sistematico» con cero repeticiones no
+            // significa nada. Para apagar el hallazgo se pone la ventana a cero.
+            self::ATTENDANCE_PATTERN_MIN_REPEATS->value => SettingDefinition::integer(
+                3, 1, 30, SettingImpact::COMPLIANCE_REVIEW,
             ),
             // `choice` de dos valores y no un tipo booleano nuevo: anadir
             // `SettingType::BOOLEAN` obligaria a ampliar el enum, el contrato,

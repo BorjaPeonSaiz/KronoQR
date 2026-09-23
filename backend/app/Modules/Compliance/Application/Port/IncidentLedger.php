@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Compliance\Application\Port;
 
 use App\Modules\Compliance\Domain\Model\Incident;
+use App\Modules\Shared\Domain\Exception\ConflictingFinding;
 
 /**
  * El libro de incidencias: donde se abren y desde donde se cuentan (RF-PR-01).
@@ -36,6 +37,17 @@ interface IncidentLedger
      *
      * Que devuelva `null` en vez de fallar es lo que hace idempotente al
      * comando: repetir la pasada no crea nada y tampoco es un error.
+     *
+     * **Pero no todo conflicto es idempotencia** (decision 13d de la ficha
+     * 3.11). Desde `anomalous_pattern`, el tipo dejo de describir el hallazgo
+     * entero: dos indicios distintos de la misma persona y el mismo dia
+     * comparten cuadrupla con `shift_entry_id` nulo. Cuando la fila que ya
+     * estaba describe **otro** hallazgo —distinto `context.pattern` o distinta
+     * contraparte— se lanza {@see ConflictingFinding} en vez de devolver `null`:
+     * seguir teniendo una sola incidencia es correcto, pero que el segundo
+     * indicio desapareciera sin fila, sin asiento, sin fallo y sin log no lo es.
+     *
+     * @throws ConflictingFinding cuando la cuadrupla ya la ocupa un hallazgo distinto
      */
     public function openIfAbsent(Incident $incident): ?int;
 

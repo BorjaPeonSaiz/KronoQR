@@ -71,4 +71,173 @@ describe('describeIncidentContext', () => {
       { key: 'scans', text: 'escaneos fuera de orden: 2' },
     ])
   })
+
+  // RF-PR-06, RN-16 (tarea 3.11): los dos patrones anomalos de uso de
+  // credencial que distingue `context.pattern`. `kiosk_coincidence` no lleva
+  // una lista de ocurrencias -`IncidentContext` no admite objetos ni listas,
+  // ver la nota de cabecera de `incidentContext.ts`-: el backend resume la
+  // serie en `first_coincidence_at`/`last_coincidence_at`/`last_gap_seconds`/
+  // `min_gap_seconds`, los cuatro escalares que se prueban aqui.
+  describe('RF-PR-06: kiosk_coincidence', () => {
+    it('quiosco por nombre, enlace a la contraparte principal, dias frente al minimo, ventana y el hueco mas estrecho de la serie', () => {
+      const lines = describeWithZone({
+        pattern: 'kiosk_coincidence',
+        device_id: 3,
+        device_name: 'Recepción',
+        counterpart_employee_uuid: '0199f0aa-4444-7000-8000-0123456789ae',
+        // Una sola contraparte (segunda vuelta, decision 13): sin «y N más».
+        counterpart_count: 1,
+        coincidence_days: 5,
+        min_repeats: 3,
+        window_seconds: 10,
+        first_coincidence_at: '2026-03-10T05:00:00Z',
+        last_coincidence_at: '2026-03-14T05:02:00Z',
+        last_gap_seconds: 4,
+        min_gap_seconds: 3,
+      })
+
+      expect(lines).toEqual([
+        { key: 'pattern', text: 'Patrón: coincidencia en el mismo quiosco' },
+        { key: 'device_name', text: 'quiosco: Recepción' },
+        {
+          key: 'counterpart_employee_uuid',
+          text: 'Con otra persona (0199f0aa…) — ver sus incidencias en la bandeja',
+          counterpartEmployeeUuid: '0199f0aa-4444-7000-8000-0123456789ae',
+        },
+        { key: 'coincidence_days', text: 'Días con coincidencia: 5 de un mínimo de 3' },
+        { key: 'window_seconds', text: 'Ventana aplicada: 10 s o menos entre los dos fichajes' },
+        { key: 'first_coincidence_at', text: 'primera coincidencia: 10/3/26, 6:00' },
+        { key: 'last_coincidence_at', text: 'última coincidencia: 14/3/26, 6:02' },
+        // `last_gap_seconds` NO es un maximo: es el hueco del ultimo dia, que
+        // puede ser mayor que el mas estrecho de toda la serie (aqui, 4 s
+        // frente a los 3 s mas ajustados que se vieron en algun dia anterior).
+        {
+          key: 'last_gap_seconds',
+          text: 'Hueco más estrecho de la serie: 3 s · último día: 4 s',
+        },
+      ])
+
+      // `device_id` y `counterpart_count` no se repiten en bruto.
+      expect(lines.some((line) => line.key === 'device_id')).toBe(false)
+      expect(lines.some((line) => line.key === 'counterpart_count')).toBe(false)
+    })
+
+    it('counterpart_count = 2: «y una más», en singular', () => {
+      const lines = describeWithZone({
+        pattern: 'kiosk_coincidence',
+        device_name: 'Recepción',
+        counterpart_employee_uuid: '0199f0aa-4444-7000-8000-0123456789ae',
+        counterpart_count: 2,
+        coincidence_days: 3,
+        min_repeats: 3,
+        window_seconds: 10,
+      })
+
+      const counterpartLine = lines.find((line) => line.key === 'counterpart_employee_uuid')
+
+      expect(counterpartLine?.text).toBe(
+        'Con otra persona y una más (0199f0aa…) — ver sus incidencias en la bandeja',
+      )
+      expect(counterpartLine?.counterpartEmployeeUuid).toBe('0199f0aa-4444-7000-8000-0123456789ae')
+    })
+
+    it('counterpart_count = 4: «y 3 más», en plural', () => {
+      const lines = describeWithZone({
+        pattern: 'kiosk_coincidence',
+        device_name: 'Recepción',
+        counterpart_employee_uuid: '0199f0aa-4444-7000-8000-0123456789ae',
+        counterpart_count: 4,
+        coincidence_days: 3,
+        min_repeats: 3,
+        window_seconds: 10,
+      })
+
+      const counterpartLine = lines.find((line) => line.key === 'counterpart_employee_uuid')
+
+      expect(counterpartLine?.text).toBe(
+        'Con otra persona y 3 más (0199f0aa…) — ver sus incidencias en la bandeja',
+      )
+    })
+
+    it('sin ninguna palabra que califique: nunca «fraude» ni «sospechoso»', () => {
+      const lines = describeWithZone({
+        pattern: 'kiosk_coincidence',
+        device_name: 'Cocina',
+        counterpart_employee_uuid: '0199f0aa-4444-7000-8000-0123456789ae',
+        counterpart_count: 3,
+        coincidence_days: 4,
+        min_repeats: 3,
+        window_seconds: 9,
+      })
+      const text = lines.map((line) => line.text).join(' ')
+
+      expect(text).not.toMatch(/fraude/i)
+      expect(text).not.toMatch(/sospechos/i)
+      expect(text).not.toMatch(/enga(ñ|n)/i)
+    })
+  })
+
+  describe('RN-16: impossible_sequence', () => {
+    it('los dos quioscos, los dos momentos y el intervalo frente al minimo de transito', () => {
+      const lines = describeWithZone({
+        pattern: 'impossible_sequence',
+        from_device_id: '0199f3c9-1b7d-7a44-8e02-3c4d5e6f7a81',
+        from_device_name: 'Recepción',
+        to_device_id: '0199f3c9-2c8e-7a44-8e02-3c4d5e6f7a92',
+        to_device_name: 'Cocina',
+        first_occurred_at: '2026-03-14T13:50:00Z',
+        second_occurred_at: '2026-03-14T13:50:45Z',
+        gap_seconds: 45,
+        transit_seconds: 120,
+        first_scan_id: '0199f0c2-2a5b-7c3e-9b21-4d5e6f7a8ba1',
+        second_scan_id: '0199f0c2-3b6c-7c3e-9b21-4d5e6f7a8bb2',
+      })
+
+      expect(lines).toEqual([
+        { key: 'pattern', text: 'Patrón: secuencia imposible entre dos quioscos' },
+        { key: 'from_device_name', text: 'quiosco de origen: Recepción' },
+        { key: 'to_device_name', text: 'quiosco de destino: Cocina' },
+        // Con segundos (decision 14): sin ellos, 45 s de diferencia se leerian
+        // como la misma hora, que es exactamente lo que RN-16 no puede decir.
+        { key: 'first_occurred_at', text: 'primer fichaje: 14/3/26, 14:50:00' },
+        { key: 'second_occurred_at', text: 'segundo fichaje: 14/3/26, 14:50:45' },
+        {
+          key: 'gap_seconds',
+          text: 'Intervalo entre los dos fichajes: 45 s (mínimo de tránsito: 120 s)',
+        },
+        {
+          key: 'first_scan_id',
+          text: 'identificador del primer escaneo: 0199f0c2-2a5b-7c3e-9b21-4d5e6f7a8ba1',
+        },
+        {
+          key: 'second_scan_id',
+          text: 'identificador del segundo escaneo: 0199f0c2-3b6c-7c3e-9b21-4d5e6f7a8bb2',
+        },
+      ])
+
+      // La misma persona en dos quioscos: ninguna linea enlaza a una contrapartida.
+      expect(lines.every((line) => line.counterpartEmployeeUuid === undefined)).toBe(true)
+    })
+  })
+
+  it('mezcla claves conocidas de un patron con una clave que el contrato no ha confirmado nunca', () => {
+    const lines = describeWithZone({
+      pattern: 'kiosk_coincidence',
+      device_name: 'Recepción',
+      coincidence_days: 3,
+      min_repeats: 3,
+      window_seconds: 10,
+      // Una clave inventada, como si el contrato creciera manana sin que este
+      // modulo se hubiera enterado: cae al bruto, con su nombre tal cual.
+      confidence_score: 87,
+    })
+
+    expect(lines).toEqual([
+      { key: 'pattern', text: 'Patrón: coincidencia en el mismo quiosco' },
+      { key: 'device_name', text: 'quiosco: Recepción' },
+      { key: 'coincidence_days', text: 'Días con coincidencia: 3 de un mínimo de 3' },
+      { key: 'window_seconds', text: 'Ventana aplicada: 10 s o menos entre los dos fichajes' },
+      { key: 'confidence_score', text: 'confidence_score: 87' },
+    ])
+  })
 })

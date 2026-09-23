@@ -75,7 +75,69 @@ function incidentContextCatalogue(): array
             'occurred_at' => ['type' => 'string', 'maxLength' => 64],
             'scans' => $minutos,
         ],
+        // RF-PR-06 y RN-16 (tarea 3.11). Un solo tipo de incidencia con DOS
+        // formas, que `pattern` distingue, asi que esta entrada es la union de
+        // las dos. Las cadenas son de tres clases y ninguna identifica a nadie:
+        //
+        //   - `pattern`, un valor de un catalogo cerrado de dos.
+        //   - los instantes y los `scan_id`, con los que una persona encuentra
+        //     los fichajes en el log para contrastarlos. Mismo argumento que en
+        //     RN-18.
+        //   - los rotulos de quiosco. **Un dispositivo no es una persona**: es
+        //     el nombre de una sala que pone quien administra, y sin el la
+        //     incidencia obliga a traducir un numero a mano. Viaja recortado a
+        //     los 64 del esquema `IncidentContext` —`devices.name` admite 120—
+        //     por {@see \App\Modules\Attendance\Domain\ValueObject\CredentialScan}.
+        //
+        // `counterpart_employee_uuid` es la otra persona del par, como UUID: sin
+        // ella la incidencia no se puede revisar —nadie sabria con quien se
+        // coincidio—, y el nombre lo resuelve el panel con su directorio.
+        'ANOMALOUS_PATTERN' => [
+            'pattern' => ['type' => 'string', 'maxLength' => 32],
+            'device_id' => $minutos,
+            'device_name' => ['type' => 'string', 'maxLength' => 64],
+            'counterpart_employee_uuid' => ['type' => 'string', 'maxLength' => 64],
+            'counterpart_count' => $minutos,
+            'coincidence_days' => $minutos,
+            'window_seconds' => $minutos,
+            'min_repeats' => $minutos,
+            'first_coincidence_at' => ['type' => 'string', 'maxLength' => 64],
+            'last_coincidence_at' => ['type' => 'string', 'maxLength' => 64],
+            'last_gap_seconds' => $minutos,
+            'min_gap_seconds' => $minutos,
+            'from_device_id' => $minutos,
+            'from_device_name' => ['type' => 'string', 'maxLength' => 64],
+            'to_device_id' => $minutos,
+            'to_device_name' => ['type' => 'string', 'maxLength' => 64],
+            'first_occurred_at' => ['type' => 'string', 'maxLength' => 64],
+            'second_occurred_at' => ['type' => 'string', 'maxLength' => 64],
+            'gap_seconds' => $minutos,
+            'transit_seconds' => $minutos,
+            'first_scan_id' => ['type' => 'string', 'maxLength' => 64],
+            'second_scan_id' => ['type' => 'string', 'maxLength' => 64],
+        ],
     ];
+}
+
+/**
+ * Las claves que llevan «name» y SI pueden estar, con su justificacion.
+ *
+ * La lista negra de abajo existe para que un `employee_name` no entre en
+ * `incidents.context` sin que falle nada. Estas tres son rotulos de
+ * **dispositivo** —`devices.name`, el nombre de la sala donde esta la tablet—,
+ * no de persona: sin ellos, la incidencia de RF-PR-06 obliga a quien la revisa a
+ * traducir un identificador numerico a mano, que es justo lo que el runbook
+ * `patron-anomalo-credencial.md` intenta evitar.
+ *
+ * **Es una lista cerrada y se declara aqui**, no un patron: la unica forma de
+ * anadir una es escribir por que ese dato no identifica a nadie, que es en lo
+ * que consiste la revision.
+ *
+ * @return list<string>
+ */
+function contextKeysAllowedToCarryAName(): array
+{
+    return ['device_name', 'from_device_name', 'to_device_name'];
 }
 
 /**
@@ -116,7 +178,7 @@ function incidentContextKeysInCode(): array
     $found = [];
 
     foreach (anomalySourceFiles() as $file) {
-        $code = (string) file_get_contents($file);
+        $code = withoutComments((string) file_get_contents($file));
 
         foreach (contextLiteralsIn($code) as [$type, $keys]) {
             foreach ($keys as $key) {
@@ -134,6 +196,38 @@ function incidentContextKeysInCode(): array
     ksort($found);
 
     return $found;
+}
+
+/**
+ * El mismo fuente **sin comentarios**.
+ *
+ * NO ES COSMETICA: {@see arrayLiteralsAfter()} acota la busqueda al primer `;`,
+ * y un punto y coma escrito dentro de un comentario **en medio de la llamada que
+ * construye el hallazgo** cortaba la sentencia antes del contexto. El efecto no
+ * era un fallo ruidoso: era que ese tipo de incidencia dejaba de aportar claves
+ * y la comprobacion de privacidad se apagaba sola para el. Paso de verdad con
+ * `anomalous_pattern` (tarea 3.11), y lo unico que lo delato fue la
+ * comprobacion en la otra direccion.
+ *
+ * Se conservan los saltos de linea para no mover los numeros de linea.
+ */
+function withoutComments(string $code): string
+{
+    $clean = '';
+
+    foreach (token_get_all($code) as $token) {
+        if (! \is_array($token)) {
+            $clean .= $token;
+
+            continue;
+        }
+
+        $clean .= \in_array($token[0], [T_COMMENT, T_DOC_COMMENT], true)
+            ? str_repeat("\n", substr_count($token[1], "\n"))
+            : $token[1];
+    }
+
+    return $clean;
 }
 
 /**
@@ -317,6 +411,10 @@ it('no admite en el contexto ninguna clave que suene a dato personal', function 
     }
 
     foreach (array_unique($claves) as $key) {
+        if (\in_array($key, contextKeysAllowedToCarryAName(), true)) {
+            continue;
+        }
+
         foreach (forbiddenContextFragments() as $fragment) {
             if (str_contains($key, $fragment)) {
                 $sospechosas[] = $key.' contiene «'.$fragment.'»';

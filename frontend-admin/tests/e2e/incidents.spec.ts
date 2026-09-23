@@ -7,8 +7,11 @@
 import { expect, test } from '@playwright/test'
 import {
   EMPLOYEE_UUID,
+  INCIDENT_BOARD_WITH_ANOMALOUS_PATTERNS,
+  INCIDENT_BOARD_WITH_KIOSK_COINCIDENCE_OTHERS,
   INCIDENT_BOARD_WITH_OUT_OF_ORDER,
   INCIDENT_CLOSED_BY_OTHER,
+  KIOSK_COINCIDENCE_INCIDENT,
   logIn,
   logInAsManager,
   OPEN_INCIDENT,
@@ -201,6 +204,115 @@ test(
       `identificador del escaneo: ${String(OUT_OF_ORDER_INCIDENT.context['scan_id'])}`,
     )
     await expect(dialog).toContainText('escaneos fuera de orden: 2')
+  },
+)
+
+test(
+  'RF-PR-06: la coincidencia en el mismo quiosco enseña quiosco, dias frente al minimo y enlaza a la otra persona',
+  { tag: ['@RF-PR-06'] },
+  async ({ page }) => {
+    const api = await stubManagementApi(page, {
+      incidentBoard: INCIDENT_BOARD_WITH_ANOMALOUS_PATTERNS,
+    })
+    await logIn(page)
+    await page.goto('/incidents')
+
+    const row = page
+      .getByTestId('incident-row')
+      .filter({ hasText: 'Patrón anómalo de uso de la credencial' })
+      .first()
+    await expect(row).toBeVisible()
+
+    await row.getByTestId('resolve-button').click()
+    const dialog = page.getByRole('dialog', { name: 'Cerrar incidencia' })
+
+    await expect(dialog).toContainText('Patrón: coincidencia en el mismo quiosco')
+    await expect(dialog).toContainText('quiosco: Recepción')
+    await expect(dialog).toContainText('Días con coincidencia: 5 de un mínimo de 3')
+    await expect(dialog).toContainText('Ventana aplicada: 10 s o menos')
+    // El detalle dia a dia no viaja en el contexto (`IncidentContext` solo
+    // admite escalares, ADR-012): el primer y el ultimo dia de la serie, y el
+    // hueco mas estrecho de la serie frente al del ultimo dia -que NO es un
+    // maximo (decision 13 de la segunda vuelta)-.
+    await expect(dialog).toContainText('primera coincidencia: 10/3/26')
+    await expect(dialog).toContainText('última coincidencia: 14/3/26')
+    await expect(dialog).toContainText('Hueco más estrecho de la serie: 3 s · último día: 4 s')
+
+    // El indicio nunca califica: ninguna palabra de acusacion en el detalle.
+    await expect(dialog).not.toContainText(/fraude/i)
+    await expect(dialog).not.toContainText(/sospechos/i)
+
+    // «Con otra persona» enlaza al filtro por empleado de la bandeja con el
+    // uuid del contrafuerte -nunca su nombre, regla dura 21-, sin pedir nada
+    // nuevo al servidor (mismo destino que desde el detalle de jornada).
+    const counterpartLink = dialog.getByRole('link', { name: /Con otra persona/ })
+    await expect(counterpartLink).toBeVisible()
+    await expect(counterpartLink).toHaveAttribute(
+      'href',
+      `/incidents?employee=${KIOSK_COINCIDENCE_INCIDENT.context['counterpart_employee_uuid']}`,
+    )
+    await counterpartLink.click()
+    await expect(page).toHaveURL(/\/incidents\?employee=0199f0aa-4444/)
+    expect(api.requests.some((request) => request.path.includes('/employees/'))).toBe(false)
+  },
+)
+
+test(
+  'RF-PR-06, decisión 13: con más de una contraparte, el enlace dice «y una más»',
+  { tag: ['@RF-PR-06'] },
+  async ({ page }) => {
+    await stubManagementApi(page, {
+      incidentBoard: INCIDENT_BOARD_WITH_KIOSK_COINCIDENCE_OTHERS,
+    })
+    await logIn(page)
+    await page.goto('/incidents')
+
+    await page.getByTestId('resolve-button').click()
+    const dialog = page.getByRole('dialog', { name: 'Cerrar incidencia' })
+
+    const counterpartLink = dialog.getByRole('link', { name: /Con otra persona y una más/ })
+    await expect(counterpartLink).toBeVisible()
+    // Sigue enlazando a la contraparte PRINCIPAL, no a un listado de las dos.
+    await expect(counterpartLink).toHaveAttribute(
+      'href',
+      `/incidents?employee=${KIOSK_COINCIDENCE_INCIDENT.context['counterpart_employee_uuid']}`,
+    )
+  },
+)
+
+test(
+  'RN-16: la secuencia imposible entre dos quioscos enseña los dos momentos y el intervalo frente al minimo',
+  { tag: ['@RF-PR-06', '@RN-16'] },
+  async ({ page }) => {
+    await stubManagementApi(page, { incidentBoard: INCIDENT_BOARD_WITH_ANOMALOUS_PATTERNS })
+    await logIn(page)
+    await page.goto('/incidents')
+
+    const row = page
+      .getByTestId('incident-row')
+      .filter({ hasText: 'Patrón anómalo de uso de la credencial' })
+      .nth(1)
+    await expect(row).toBeVisible()
+
+    await row.getByTestId('resolve-button').click()
+    const dialog = page.getByRole('dialog', { name: 'Cerrar incidencia' })
+
+    await expect(dialog).toContainText('Patrón: secuencia imposible entre dos quioscos')
+    await expect(dialog).toContainText('quiosco de origen: Recepción')
+    await expect(dialog).toContainText('quiosco de destino: Cocina')
+    // Con segundos (decision 14): sin ellos los 45 s de diferencia se leerian
+    // como la misma hora dos veces.
+    await expect(dialog).toContainText('primer fichaje: 14/3/26, 14:50:00')
+    await expect(dialog).toContainText('segundo fichaje: 14/3/26, 14:50:45')
+    await expect(dialog).toContainText(
+      'Intervalo entre los dos fichajes: 45 s (mínimo de tránsito: 120 s)',
+    )
+
+    await expect(dialog).not.toContainText(/fraude/i)
+    await expect(dialog).not.toContainText(/sospechos/i)
+
+    // Es la misma persona en dos quioscos: no hay contrapartida que enlazar.
+    await expect(dialog.getByRole('link', { name: /Con otra persona/ })).toHaveCount(0)
   },
 )
 

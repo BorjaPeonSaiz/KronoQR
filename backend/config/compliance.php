@@ -113,6 +113,31 @@ return [
     ],
 
     /*
+     * Deteccion de patrones anomalos de uso de credencial (RF-PR-06, RN-16,
+     * tarea 3.11).
+     *
+     * TREINTA DIAS Y NO SIETE, al contrario que su hermana de arriba. Lo que
+     * esta pasada busca es lo «sistematico» (RF-PR-06, doc 05 §12): que dos
+     * personas coincidan en el mismo quiosco separadas por segundos VARIOS DIAS.
+     * Sobre una semana eso no se puede afirmar -el Gherkin del doc 01 §11 ya
+     * habla de cinco dias de repeticion-, y una ventana corta convertiria la
+     * regla en un detector de companeros que llegan juntos el mismo lunes.
+     *
+     * NO ABRE INCIDENCIAS SOBRE EL PASADO por mirar mas atras: lo que mira son
+     * escaneos, no jornadas, y el hallazgo se fecha en el dia en que el par
+     * alcanzo el umbral. La incidencia describe un habito en curso, no una
+     * jornada ya entregada.
+     *
+     * NO ES UN UMBRAL: no dice cuando algo es anomalo -eso lo dicen los tres
+     * ajustes de `installation_settings`: ventana, repeticiones y transito
+     * minimo (regla dura 14)- sino hasta donde mira el proceso. Por eso vive
+     * aqui y no en una tabla, igual que `incident_detection`.
+     */
+    'pattern_detection' => [
+        'lookback_days' => (int) env('COMPLIANCE_PATTERN_LOOKBACK_DAYS', 30),
+    ],
+
+    /*
      * Retencion por tipo de dato (RL-11, RF-PR-03, tarea 2.10).
      *
      * AQUI NO ESTAN LOS ANOS DEL REGISTRO DE JORNADA NI DE `audit_log`, y no es

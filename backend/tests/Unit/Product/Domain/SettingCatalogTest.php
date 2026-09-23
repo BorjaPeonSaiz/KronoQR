@@ -51,6 +51,28 @@ it('conserva las cuatro claves operativas que sembro la migracion, con su valor 
     'transito minimo entre quioscos (RN-16)' => ['ATTENDANCE_MIN_TRANSIT_SECONDS', 120],
 ])->group('RF-PD-01');
 
+it('conserva los dos umbrales de la deteccion de patrones, con su valor del Anexo B', function (string $key, int $expected): void {
+    // RF-PR-06 (tarea 3.11). Los dos valores estan en el Anexo B del doc 02 y en
+    // `.env.example` desde la Fase 0; lo que la 3.11 anade es que alguien los
+    // lea. Si esta prueba cambia, hay que cambiar tambien el Anexo B.
+    expect(SettingKey::fromString($key)->definition()->default)->toBe($expected);
+})->with([
+    'ventana de coincidencia en el mismo quiosco' => ['ATTENDANCE_PATTERN_WINDOW_SECONDS', 10],
+    'dias con coincidencia antes de abrir incidencia' => ['ATTENDANCE_PATTERN_MIN_REPEATS', 3],
+])->group('RF-PD-01', 'RF-PR-06');
+
+it('admite el cero solo en la ventana de coincidencia, no en los dias', function (): void {
+    // El cero de la ventana APAGA el hallazgo, que es una decision legitima de un
+    // centro. El cero en los dias no significa nada: «sistematico» con cero
+    // repeticiones abriria incidencia sin haber observado nada.
+    $window = SettingKey::ATTENDANCE_PATTERN_WINDOW_SECONDS;
+    $repeats = SettingKey::ATTENDANCE_PATTERN_MIN_REPEATS;
+
+    expect($window->definition()->validate($window, 0))->toBe(0)
+        ->and(fn (): mixed => $repeats->definition()->validate($repeats, 0))
+        ->toThrow(InvalidSettingValue::class);
+})->group('RF-PD-01', 'RF-PR-06');
+
 it('marca como clave que afecta al calculo de horas exactamente la ventana anti-rebote', function (): void {
     // Es la unica que cambia los minutos registrados: un escaneo que la ventana
     // se traga no cierra el tramo. Las otras tres abren o dejan de abrir
@@ -69,6 +91,11 @@ it('clasifica el impacto de cada clave', function (SettingKey $key, SettingImpac
     'el maximo de tramo abre incidencia, no cambia minutos' => [SettingKey::ATTENDANCE_MAX_SHIFT_HOURS, SettingImpact::COMPLIANCE_REVIEW],
     'el desfase de reloj nunca rechaza el fichaje' => [SettingKey::ATTENDANCE_MAX_CLOCK_SKEW_MINUTES, SettingImpact::COMPLIANCE_REVIEW],
     'el transito minimo abre incidencia (RN-16)' => [SettingKey::ATTENDANCE_MIN_TRANSIT_SECONDS, SettingImpact::COMPLIANCE_REVIEW],
+    // RF-PR-06. Cambian que se pone en la bandeja para revision humana y no
+    // mueven ni un minuto: la deteccion de patrones nunca anula ni marca un
+    // fichaje (reglas duras 5 y 19).
+    'la ventana de coincidencia abre incidencia (RF-PR-06)' => [SettingKey::ATTENDANCE_PATTERN_WINDOW_SECONDS, SettingImpact::COMPLIANCE_REVIEW],
+    'los dias con coincidencia abren incidencia (RF-PR-06)' => [SettingKey::ATTENDANCE_PATTERN_MIN_REPEATS, SettingImpact::COMPLIANCE_REVIEW],
     'el nombre de la aplicacion solo se ve' => [SettingKey::BRANDING_APP_NAME, SettingImpact::PRESENTATION],
     'el logotipo solo se ve' => [SettingKey::BRANDING_LOGO_PATH, SettingImpact::PRESENTATION],
     'el color de acento solo se ve' => [SettingKey::BRANDING_ACCENT_COLOR, SettingImpact::PRESENTATION],

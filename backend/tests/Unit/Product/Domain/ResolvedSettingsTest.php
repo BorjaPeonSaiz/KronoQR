@@ -111,6 +111,9 @@ it('acepta el cero en las dos claves donde apagar la comprobacion es legitimo', 
 })->with([
     'anti-rebote' => ['ATTENDANCE_DEBOUNCE_SECONDS'],
     'transito minimo' => ['ATTENDANCE_MIN_TRANSIT_SECONDS'],
+    // RF-PR-06 (tarea 3.11): la tercera que admite el cero, y lo hace por lo
+    // mismo que las otras dos — apaga la comprobacion.
+    'ventana de coincidencia' => ['ATTENDANCE_PATTERN_WINDOW_SECONDS'],
 ])->group('RF-PD-01');
 
 it('resuelve al LEER un idioma por defecto que no esta entre los disponibles', function (): void {

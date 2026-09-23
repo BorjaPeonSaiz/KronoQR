@@ -299,16 +299,17 @@ its own. It fills itself every night, when the record is reviewed.
 | **Missing clock-out** | Medium | It describes a forgotten clock-out **already closed by hand** | **Nobody opens it automatically.** While the shift is still open, what you have is "Open shift not closed" |
 | **No break registered** | Medium | A continuous entry above the collective agreement's threshold | **It only opens by itself if the hotel has break clocking turned on.** Without it, the system cannot tell "they did not rest" from "they rested and did not clock it", and warns about none |
 | **Out-of-order clocking** | Medium | A clocking arrived that does not fit that person's record: a **clock-out** with a time earlier than the clock-in that was already open, or a **clock-in** that would fall inside or before an entry that is already closed —even if that entry belongs to another working day, such as after a night shift— | Almost always, a tablet that was offline: its queue arrived late and out of order. **The clocking is kept and flagged for review, and the working day does not change on its own** (§4.4) |
-| **Anomalous credential usage pattern** | High | — | **None is opened today.** The detector arrives in a later version |
+| **Anomalous credential usage pattern** | High | Two cards of two different people are scanned **at the same tablet seconds apart on several days** (3 out of the box), or the **same card** is scanned at **two different tablets** sooner than it takes to walk from one to the other | Almost always, two colleagues who come in together, or two tablets too close to each other. **It is a clue for a person to look at, not a conclusion.** It changes no clocking and nobody outside the inbox sees it (§4.5) |
 
 > **The "Type" filter shows all nine, and how many open by themselves depends
-> on a setting.** Six always do —insufficient rest, open shift, shift too long,
-> shift too short, clock skew and out-of-order clocking—, and **"No break
-> registered" joins them as soon as the hotel turns on break clocking** (Panel →
-> "Operational settings" → "Break clocking"; it is explained in
-> [`configuration.md`](configuration.md) §2.1). The other two are in the list
-> because the system has to be able to record them without changing anything
-> when their time comes. It is not a fault in the installation.
+> on a setting.** Seven always do —insufficient rest, open shift, shift too
+> long, shift too short, clock skew, out-of-order clocking and anomalous
+> credential usage pattern—, and **"No break registered" joins them as soon as
+> the hotel turns on break clocking** (Panel → "Operational settings" → "Break
+> clocking"; it is explained in
+> [`configuration.md`](configuration.md) §2.1). "Missing clock-out" is in the
+> list because the system has to be able to record it without changing anything
+> when its time comes. It is not a fault in the installation.
 >
 > **Turning break clocking on does not flood the inbox at once.** The review
 > starts opening "No break registered" on its next pass and only over the last
@@ -468,6 +469,71 @@ name and the date. The procedure is
 > that real time belongs to**, which may be the one from a fortnight ago. They
 > are resolved just like today's: open, compare and correct. Once the tablets
 > have finished emptying, this type shows up only now and then again.
+
+### 4.5 "Anomalous credential usage pattern": what you will see and what to do
+
+It is the only incident in the inbox that **talks about two people at once**,
+and that is why it gets its own section. It is opened by a review of its own,
+every night, over the clockings made at the tablets during the last 30 days.
+There are two variants, and the **"Close incident"** window tells you which one
+it is and shows you what was observed:
+
+| Variant | What was observed | What the screen shows you |
+| --- | --- | --- |
+| **Coincidence at the same tablet** | Two different people scanned their card or PIN at **the same tablet less than 10 seconds apart** (adjustable), and that happened on **several days** (3 out of the box; it counts as at most one day even if they coincided twice the same morning) | The tablet; **the other person**, with a link to their inbox, and "and N more people" if there are several; **how many days had a coincidence against how many are needed**; the seconds window applied; and four figures instead of a list: the **first** and the **last** coincidence, the **gap on the last day** and the **smallest gap** in the whole series. That last one is the one that matters: 9 seconds every day is a queue; 1 second one day is a question |
+| **Impossible sequence between two tablets** | The **same card** (or PIN) was scanned at **two different tablets** in less time than it takes to walk from one to the other (120 seconds out of the box, adjustable). Once is enough. The second scan that the tablet did not accept for coming too soon after the first counts too. Any clocking whose time is in doubt because that tablet's clock had drifted **is not looked at** | The two tablets, the moment of each clocking **with seconds**, the gap between them and the minimum transit that was applied |
+
+**In the coincidence there is one incident per person**, each in the inbox of
+the manager of **their** department, and each one names the person they
+coincide with most and says whether there are more. If they belong to
+different departments, each manager sees their own: talk to each other before
+talking to anybody else, and piece the group together between you, not from a
+single incident.
+
+**And it does not come back every night.** While you have one of these open on
+a person, no other one is opened on them. Once you close it, **3 new days** with
+a coincidence (the ones after the closing) will be needed for it to show up
+again: if the pattern was "they come in the same car" and it goes on, you will
+see it again in a few days with new data, and you will close it the same way.
+
+**What this incident does NOT say.** It does not say who lent anything to whom,
+nor that anybody lent anything. Two colleagues who arrive in the same car and
+walk in together produce **exactly** the same clue every day, and two tablets
+at the same door produce "impossible" sequences that are perfectly possible.
+The system cannot tell the difference from the tablet; you can, because you
+have the rota and the shift leader.
+
+**What the system does not do, and will not do:** it cancels or flags no
+clocking, changes no hour, imposes no penalty, blocks no card and warns nobody
+outside the inbox. It puts the clue in front of a person and stops there. It
+is, on purpose, what there is instead of a machine deciding who scanned.
+
+**What to do, in this order:**
+
+1. **Rota.** Did the two people have the same shift on those days? If so, the
+   coincidence is what you would expect.
+2. **Shift leader.** Was the person at their post on those days? If they were,
+   they scanned the card themselves.
+3. **In the impossible sequence, look at the tablets first.** If you really can
+   get from one to the other in less than the setting says, the problem is the
+   setting: ask IT to lower it in Operational settings
+   ([`configuration.md`](configuration.md) §2.1) and close the incident saying
+   so.
+4. **Only if something is still unclear after that** do you ask the person,
+   openly and describing what was observed ("on these days your card and X's
+   were scanned seconds apart; do you come in together?"). Whoever asks is the
+   company following its own procedure —you, or HR—, **never "the system"**.
+   And nothing is decided on the incident alone.
+5. **Close the incident** (§4.3), almost always as "Reviewed: there was nothing
+   to correct". **The note describes what you checked, not what you concluded
+   about anybody**: "same morning shift according to the rota, they walk in
+   together from the car park, confirmed with the head waitress" is useful two
+   years from now; a label is not. The person can read that note if they ask
+   for access to their data.
+
+The full procedure, with what may be asked and what may not, is in
+[`../../runbooks/patron-anomalo-credencial.md`](../../runbooks/patron-anomalo-credencial.md)
+(in Spanish).
 
 ---
 
