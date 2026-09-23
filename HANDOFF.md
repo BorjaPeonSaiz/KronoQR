@@ -119,8 +119,8 @@ ver Pendiente), Integration 703, Contract 63, Feature 1975, Architecture 633 (+
 6)**; panel: lint, `vue-tsc`, 570 unitarias, 143 E2E (5 `@RF-IN-06`/`@RF-IN-07`); quiosco y portal: tipos regenerados, lint y
 `vue-tsc` en verde. El diff de `openapi.yaml` es +1066/−2 también con `--patience`: dos rutas aditivas y esquemas nuevos.
 
-**Siguiente acción:** commit único `feat(3.9): …`, push, CI manual y PR contra `main` con *merge commit*; después un
-`docs(handoff)` con los números de CI y PR. **Con migración** (`2026_09_22_110000_report_exports.php`) y **variables nuevas**
+**Siguiente acción:** el usuario integra la **PR #77** de la 3.9 (commit `a52464a`; **CI manual 35831869626 en verde en todos los
+jobs**, presupuesto de la suite unitaria incluido) con *merge commit* y borra la rama. **Con migración** (`2026_09_22_110000_report_exports.php`) y **variables nuevas**
 (`REPORTING_EXPORT_*`, todas con valor de serie): tras integrar, `git pull`, `make up` y `make migrate`; comprobar `php artisan
 migrate:status` y, tras la primera exportación en diferido, que Horizon la atendió en `default` y que `storage/app/reports` tiene el
 fichero. Después, la **3.11** «Patrones anómalos de uso de credencial» (RN-16).
@@ -848,7 +848,7 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   ocho situaciones de `/informe-nuevo` se prueban sobre el camino síncrono que el diferido reutiliza, no repetidas en diferido; 6 mutantes (`ReportExport` 135, 248, 364-365; `ReportExportStatus` 71)
   sin cubrir en `ReportExport`; `ComplianceSummary` emite `report-too-large` sin diferido al que remitir (acortar el rango); riesgo
   aceptado: el correo de aviso llega aunque la cuenta se desactive entre pedir y generar (sin enlace ni datos); exportación para la
-  Inspección en diferido, plantillas libres de nómina, envío por correo/SFTP y centro de notificaciones: fuera de alcance (decisión 12); **presupuesto de la suite unitaria**: 2181 pruebas en 6,8 s en reposo en esta máquina frente a los 5 s de `make test-unit` (la CI la mide en Linux y pasó con 2072): si la CI la rechaza, medir qué ficheros pesan antes de subir el presupuesto.
+  Inspección en diferido, plantillas libres de nómina, envío por correo/SFTP y centro de notificaciones: fuera de alcance (decisión 12); **presupuesto de la suite unitaria**: 2181 pruebas en 6,8 s en reposo en esta máquina frente a los 5 s de `make test-unit` (la CI la mide en Linux y la pasó con 2181 en el run 35831869626): si algún día la rechaza, medir qué ficheros pesan antes de subir el presupuesto.
 - **3.10 (restos, 22-09-2026):** **serie hermana de frescura** `absences_metrics_day_seconds` (equivalente de
   `compliance_metrics_week_start_seconds`): sin ella, unas cifras congeladas por un planificador parado se leen igual que un mes sin
   ausencias (fila en doc 02 §8.2 + publicación en `TextfileAbsenceMetrics`); **la carrera se prueba por el candado y no con dos
