@@ -62,15 +62,26 @@ in your record of processing activities under art. 30 of the GDPR (RGPD):
 this matters: nobody can refuse to clock in, and there is no need to ask
 permission to record the working day.
 
-### The only thing that leaves the server on its own: the incident email
+### What leaves the server on its own: two emails
 
-Everything else stays in your installation. **Every night** the system sends a
-summary of the pending incidents to the **manager of each department**, and
-that email carries **the date, the person's name and the incident type** of
-each line. Nothing else: no specific hours, no contract data, no full
-working-time record.
+Everything else stays in your installation. Two things go out by email, and
+both go **to the manager of each department** and **only with their scope**:
 
-Three consequences that are yours, not the vendor's:
+- **The daily incident notice.** Every night, a summary of the pending
+  incidents with **the date, the person's name and the incident type** of each
+  line. Nothing else: no specific hours, no contract data, no full working-time
+  record. It ships enabled, because it is the "the manager is notified" half of
+  incident detection.
+- **The weekly hours summary.** On Mondays, and only if you enable it —**it
+  ships switched off**, and switching it on is an audited change
+  ([`configuration.md`](configuration.md) §2.1)—, one line per person with
+  **name, hours worked, contracted and deviation, days with activity, and the
+  number of absences and public holidays** of the week. They are counts:
+  **never the type of absence**, so no health data leaves through here. At most
+  50 lines; the rest is read in the panel. Neither HR nor administration
+  receive it: they have the whole panel.
+
+Three consequences that are yours, not the vendor's, and that apply to both:
 
 1. **If the email is delivered by a third party's server** — Microsoft 365,
    Google Workspace, your hosting provider's SMTP — that third party is a
@@ -84,13 +95,16 @@ Three consequences that are yours, not the vendor's:
    "if possible", and with a relay that does not offer it the email travels
    across the network in the clear.
 3. **Every send is recorded** in the audit trail, with who received it and
-   which people it concerned. That is what lets you answer if one day you have
+   which people it concerned —in the weekly summary, one by one when the scope
+   has 50 people or fewer, and by count and department above that—. That is what lets you answer if one day you have
    to reconstruct where some data went out.
 
 The notice is a convenience, not the record: **no incident is lost or changes
 state because the email does not go out**. They all remain in the panel's
 inbox, which is where they are worked on, and the next night's summary includes
-them again. If you decide not to use the email channel, discuss it with whoever
+them again. The same goes for the weekly summary: if it does not go out, the
+report is still in the panel and the week is resent by hand. If you decide not
+to use the email channel, discuss it with whoever
 installs the system for you: it is a configuration decision for your
 installation.
 
@@ -185,6 +199,11 @@ request).
   ([`hr-guide.md`](hr-guide.md) §4.5). If you later change the thresholds to
   tighten it ([`configuration.md`](configuration.md) §2.1), that is a change to
   that system and is communicated the same way.
+- **Inform them that their manager receives their hours by email every week**,
+  if you enable the weekly summary. It is information about the recipients of
+  the data (art. 13 GDPR), not a new monitoring system —the manager already
+  sees those same hours in the panel—: it is enough to include it in the
+  information you give the staff, with no further formality.
 - **Give access to their own record**: the employee portal exists for that
   purpose (employee code and PIN, ADR-015). That it exists does not replace
   informing people that it exists.
@@ -211,6 +230,14 @@ Policy per data type, which is the one the system applies:
 | Backups | 30 days by default | Your installation (`BACKUP_RETENTION_DAYS`) |
 | Contract data (agreed hours, type of working day, validity period) | **Employment relationship + 4 years**, indicative | **Pending confirmation with your employment law advisers.** Today **it is kept**: the system does not purge it |
 | Absences (type, dates, note, versions and voidings) | **Employment relationship + 4 years**, indicative | **Pending confirmation with your employment law advisers.** Today **they are kept**: the system does not purge them. **They contain health data** |
+| Record of weekly summary sends (`weekly_summary_deliveries`) | **No automatic purge** | It keeps counts and the recipient account; **no data about the staff** |
+
+**A weekly summary email that has been delivered is a copy outside the
+product.** It lives in the manager's mailbox, it can be forwarded and printed,
+and **its retention period is set by that mailbox, not by the system's
+retention policy**: no purge of the product reaches there. If you enable the
+summary, decide with your advisers what the manager does with those emails and
+when they delete them, and tell them.
 
 **Contract data still has no automatic purge, and that is deliberate.** The
 indicative period — the duration of the employment relationship plus four

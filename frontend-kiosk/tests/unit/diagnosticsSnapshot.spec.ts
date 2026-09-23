@@ -20,6 +20,7 @@ function baseSources(): DiagnosticsSources {
     wakeLock: { supported: true, active: true },
     pendingErrors: 0,
     privacyControllerConfigured: false,
+    update: { pending: false, window: { start: '03:00', end: '05:00' } },
   }
 }
 
@@ -143,5 +144,15 @@ describe('ensamblado del diagnostico (RF-KI-08, tarea 3.3)', () => {
     expect(snapshot.wakeLock).toEqual(sources.wakeLock)
     expect(snapshot.pendingErrors).toBe(0)
     expect(snapshot.appVersion).toBe('2.4.0')
+    expect(snapshot.update).toEqual(sources.update)
+  })
+
+  it('pasa el estado de la actualizacion tal cual (RF-KI-07/RF-KI-08, tarea 3.12)', () => {
+    const snapshot = buildDiagnosticsSnapshot({
+      ...baseSources(),
+      update: { pending: true, window: { start: '22:00', end: '01:00' } },
+    })
+
+    expect(snapshot.update).toEqual({ pending: true, window: { start: '22:00', end: '01:00' } })
   })
 })

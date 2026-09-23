@@ -11,6 +11,7 @@
 // quien ficha (regla dura 21).
 
 import type { CameraState } from '@/features/scan/composables/useCamera'
+import type { UpdateWindow } from '@/features/offline/domain/updateWindow'
 
 /**
  * Umbral del paso 4 de la tarea (doc 02, decision de la 3.3): por debajo de
@@ -94,6 +95,12 @@ export interface DiagnosticsSources {
   readonly wakeLock: { readonly supported: boolean; readonly active: boolean }
   readonly pendingErrors: number
   readonly privacyControllerConfigured: boolean
+  /** Estado de la actualizacion del quiosco (RF-KI-07/RF-KI-08, tarea 3.12). */
+  readonly update: {
+    readonly pending: boolean
+    /** Ventana vigente (cacheada del ultimo latido, o la de serie si ninguno la trajo todavia). */
+    readonly window: UpdateWindow
+  }
 }
 
 export interface DiagnosticsSnapshot {
@@ -112,6 +119,7 @@ export interface DiagnosticsSnapshot {
   readonly wakeLock: DiagnosticsSources['wakeLock']
   readonly pendingErrors: number
   readonly privacyControllerConfigured: boolean
+  readonly update: DiagnosticsSources['update']
 }
 
 /**
@@ -134,5 +142,6 @@ export function buildDiagnosticsSnapshot(sources: DiagnosticsSources): Diagnosti
     wakeLock: sources.wakeLock,
     pendingErrors: sources.pendingErrors,
     privacyControllerConfigured: sources.privacyControllerConfigured,
+    update: sources.update,
   }
 }

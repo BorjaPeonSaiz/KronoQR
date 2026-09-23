@@ -44,11 +44,25 @@ guarda en `localStorage` (`kronoqr.kiosk.branding`) y los reaplica de inmediato 
 antes de que el service worker o la red hayan contestado nada. Lo unico que SI depende del
 service worker es el logotipo, porque sus bytes no caben en `localStorage`.
 
-## Lo que falta
+## Ventana de actualizacion (RF-KI-07, tarea 3.12)
 
-**Ventana configurable de actualizacion** (RF-KI-07, tarea 3.12): la version nueva se
-descarga cuando toca, pero no se aplica dentro de la franja de cambio de turno. La mitad que
-no se podia dejar para despues —que no se aplique nada sin que alguien lo decida— ya esta.
+La franja YA NO esta en el codigo: la declara el centro (`KIOSK_UPDATE_WINDOW`,
+`KIOSK_UPDATE_QUIET_MINUTES` en `installation_settings`) y viaja en cada latido
+(`KioskHeartbeat.update_window`), cacheada en `shared/telemetry/deviceIdentity.ts` para que
+la puerta funcione sin red. `features/offline/domain/updateWindow.ts` -> `canApplyUpdate` es
+verdadera solo si la cola esta vacia, no hubo ningun escaneo en los ultimos `quiet_minutes`
+minutos, y la hora LOCAL de la tablet cae dentro de la ventana (que puede cruzar la
+medianoche). Sin configuracion recibida todavia, la ventana de serie es `03:00-05:00` con 10
+minutos de silencio.
 
-Cuando eso exija un service worker propio, se pasa a `strategies: 'injectManifest'` y el
+Como una tablet de quiosco no vuelve a navegar en dias, `registerServiceWorker()` no confia en
+la deteccion por defecto del navegador: comprueba si hay version nueva cada hora
+(`registration.update()`) y, en cuanto hay una pendiente, reevalua la puerta cada minuto y
+aplica en el instante en que la deja pasar. Si la ventana se cierra antes de que la cola se
+vacie, simplemente espera al minuto siguiente.
+
+La pantalla de diagnostico (RF-KI-08) enseña, junto a la version, si hay una actualizacion
+pendiente y en que ventana se aplicara.
+
+Cuando esto exija un service worker propio, se pasa a `strategies: 'injectManifest'` y el
 fuente vive en esta carpeta.

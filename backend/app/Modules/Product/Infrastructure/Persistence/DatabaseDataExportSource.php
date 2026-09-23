@@ -277,6 +277,7 @@ final readonly class DatabaseDataExportSource implements DataExportSource
         'support_grants' => self::SUPPORT_GRANTS,
         'error_events' => self::ERROR_EVENTS,
         'report_exports' => self::REPORT_EXPORTS,
+        'weekly_summary_deliveries' => self::WEEKLY_SUMMARY_DELIVERIES,
         // `installation_settings` NO esta aqui: es la unica consulta que se
         // compone, en `installationSettingsSql()`.
         'compliance_profiles' => self::COMPLIANCE_PROFILES,
@@ -683,6 +684,34 @@ final readonly class DatabaseDataExportSource implements DataExportSource
           FROM report_exports e
           LEFT JOIN users u ON u.id = e.requested_by_user_id
          ORDER BY e.id
+        SQL;
+
+    /*
+     * Los resumenes semanales que salieron por correo (RF-PR-05, tarea 3.12).
+     *
+     * El hecho del envio y nada mas: a que cuenta de gestion, de que semana y
+     * cuantas lineas llevaba. **El contenido no esta** —las horas que iban
+     * dentro ya estan en `daily_totals.csv` y `shift_entries.csv`— y **no hay
+     * ningun dato de ningun empleado**, porque la tabla no lo guarda: de quien
+     * eran esas horas consta en `audit_log.csv`, que va en el mismo ZIP.
+     *
+     * `week_start` sale como fecha civil `AAAA-MM-DD` y sin hora, que es lo que
+     * es: la semana no tiene zona horaria. Los dos instantes, en UTC como todo
+     * lo demas del paquete.
+     *
+     * Sin `id`, la clave interna (doc 01 §5.5), y con el `uuid` de la cuenta y
+     * no su identificador, como toda referencia a `users` aqui.
+     */
+    private const string WEEKLY_SUMMARY_DELIVERIES = <<<'SQL'
+        SELECT u.uuid::text            AS manager_user_uuid,
+               to_char(w.week_start, 'YYYY-MM-DD') AS week_start,
+               to_char(w.sent_at    AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS sent_at,
+               w.employee_count::text  AS employee_count,
+               w.row_count::text       AS row_count,
+               to_char(w.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at
+          FROM weekly_summary_deliveries w
+          LEFT JOIN users u ON u.id = w.manager_user_id
+         ORDER BY w.id
         SQL;
 
     private const string COMPLIANCE_PROFILES = <<<'SQL'

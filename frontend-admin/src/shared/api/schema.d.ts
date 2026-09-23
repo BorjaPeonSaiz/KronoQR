@@ -5023,6 +5023,49 @@ export interface components {
              */
             clock_skew_tolerance_seconds: number;
             /**
+             * @description La franja en la que la tablet **puede** aplicar una version nueva de
+             *     la PWA (**RF-KI-07**, ajustes `KIOSK_UPDATE_WINDOW` y
+             *     `KIOSK_UPDATE_QUIET_MINUTES`, tarea 3.12), en **hora local del
+             *     centro**.
+             *
+             *     **Es una ventana de PERMISO, no de bloqueo**: fuera de ella la tablet
+             *     sigue fichando y sigue encolando con normalidad; lo unico que no hace
+             *     es recargarse (regla dura 19). Una actualizacion a las 06:00 con
+             *     treinta personas delante es exactamente el fallo que RF-KI-07 existe
+             *     para evitar.
+             *
+             *     **La declara el cliente y no la infiere la tablet.** El quiosco no
+             *     detecta el cambio de turno: la franja es configuracion por centro
+             *     (regla dura 13, ADR-017). Viaja en el latido por lo mismo que
+             *     `service_code_hash` —el unico canal autenticado que la tablet repite
+             *     cada minuto— y la tablet la persiste en local para que valga tambien
+             *     sin red.
+             *
+             *     `start` y `end` pueden cruzar la medianoche (`23:00-02:00` es una
+             *     ventana valida). `quiet_minutes` son los minutos **sin ningun
+             *     escaneo** que la tablet exige ademas antes de aplicar: cubre el turno
+             *     que entra antes de lo previsto sin tener que saber cuando empieza.
+             *     `0` la desactiva, y entonces solo mandan la franja y la cola vacia.
+             */
+            update_window: {
+                /**
+                 * @description Inicio de la franja, `HH:MM` en hora local del centro.
+                 * @example 03:00
+                 */
+                start: string;
+                /**
+                 * @description Fin de la franja, `HH:MM` en hora local del centro.
+                 * @example 05:00
+                 */
+                end: string;
+                /**
+                 * @description Minutos sin ningun escaneo en la tablet antes de aplicar una
+                 *     version pendiente, aunque la franja este abierta.
+                 * @example 10
+                 */
+                quiet_minutes: number;
+            };
+            /**
              * @description Hora del servidor en el momento de atender el latido. La tablet la compara
              *     con la suya para saber si su reloj se ha ido y avisar (RF-AT-10).
              *
@@ -6318,9 +6361,32 @@ export interface components {
          *
          *     Los dos ultimos no se aplican al XLSX: aquel es UTF-8 por definicion y no
          *     tiene separador de campos.
+         *
+         *     `WEEKLY_SUMMARY_EMAIL` (tarea 3.12, RF-PR-05) enciende el **resumen
+         *     semanal por correo** al responsable de cada departamento: `disabled` de
+         *     serie —el doc 05 §5.7 lo vende como «correo opcional»— o `enabled`. Con
+         *     `enabled`, `reporting:weekly-summary` envia cada lunes un correo por
+         *     responsable activo con direccion, **con el alcance de su cuenta aplicado
+         *     en la consulta** (RF-ID-03): el de Cocina no ve a nadie de Recepcion.
+         *     `rrhh` y `admin` no lo reciben —tienen el panel entero, y un correo
+         *     semanal con toda la plantilla seria una copia periodica del registro
+         *     fuera del sistema—. Sin SMTP configurado la pasada termina bien y no
+         *     envia nada: el producto no depende del correo (regla dura 12). Cada envio
+         *     deja su asiento `personal_data.accessed` con el conjunto
+         *     `weekly_summary` (RS-05).
+         *
+         *     `KIOSK_UPDATE_WINDOW` y `KIOSK_UPDATE_QUIET_MINUTES` (tarea 3.12,
+         *     RF-KI-07) son la **ventana de actualizacion de la tablet**, que el
+         *     quiosco recibe en cada latido (`update_window`). La primera es
+         *     `HH:MM-HH:MM` en hora local del centro —`03:00-05:00` de serie, y puede
+         *     cruzar la medianoche—; la segunda, los minutos sin ningun escaneo que la
+         *     tablet exige ademas antes de aplicar (10 de serie; `0` la desactiva). Las
+         *     dos son `presentation`: no mueven ni un minuto del registro. La franja se
+         *     **declara** y no se infiere (regla dura 13), y fuera de ella la tablet
+         *     sigue fichando y encolando: lo unico que no hace es recargarse.
          * @enum {string}
          */
-        SettingKey: "ATTENDANCE_MAX_SHIFT_HOURS" | "ATTENDANCE_DEBOUNCE_SECONDS" | "ATTENDANCE_MAX_CLOCK_SKEW_MINUTES" | "ATTENDANCE_MIN_TRANSIT_SECONDS" | "ATTENDANCE_PATTERN_WINDOW_SECONDS" | "ATTENDANCE_PATTERN_MIN_REPEATS" | "ATTENDANCE_BREAK_CLOCKING" | "BRANDING_APP_NAME" | "BRANDING_LOGO_PATH" | "BRANDING_ACCENT_COLOR" | "LOCALE_DEFAULT" | "LOCALE_AVAILABLE" | "KIOSK_SERVICE_CODE" | "PAYROLL_EXPORT_COLUMNS" | "PAYROLL_EXPORT_DELIMITER" | "PAYROLL_EXPORT_HOURS_FORMAT" | "PAYROLL_EXPORT_DATE_FORMAT" | "PAYROLL_EXPORT_ENCODING" | "PAYROLL_EXPORT_HEADER_ROW";
+        SettingKey: "ATTENDANCE_MAX_SHIFT_HOURS" | "ATTENDANCE_DEBOUNCE_SECONDS" | "ATTENDANCE_MAX_CLOCK_SKEW_MINUTES" | "ATTENDANCE_MIN_TRANSIT_SECONDS" | "ATTENDANCE_PATTERN_WINDOW_SECONDS" | "ATTENDANCE_PATTERN_MIN_REPEATS" | "ATTENDANCE_BREAK_CLOCKING" | "BRANDING_APP_NAME" | "BRANDING_LOGO_PATH" | "BRANDING_ACCENT_COLOR" | "LOCALE_DEFAULT" | "LOCALE_AVAILABLE" | "KIOSK_SERVICE_CODE" | "PAYROLL_EXPORT_COLUMNS" | "PAYROLL_EXPORT_DELIMITER" | "PAYROLL_EXPORT_HOURS_FORMAT" | "PAYROLL_EXPORT_DATE_FORMAT" | "PAYROLL_EXPORT_ENCODING" | "PAYROLL_EXPORT_HEADER_ROW" | "WEEKLY_SUMMARY_EMAIL" | "KIOSK_UPDATE_WINDOW" | "KIOSK_UPDATE_QUIET_MINUTES";
         /**
          * SettingValue
          * @description El valor de una clave. `installation_settings.value` es `JSONB` porque el
@@ -6351,15 +6417,23 @@ export interface components {
          *     - `compliance_review` — no mueve minutos, pero cambia **que incidencias
          *       se abren** para revision humana (RN-08, RN-16, RF-AT-10).
          *     - `presentation` — solo altera lo que se ve (RF-PD-08).
+         *     - `data_disclosure` — no toca el registro horario, pero **enciende o
+         *       apaga una salida de datos personales de la instalacion**. Hoy lo lleva
+         *       `WEEKLY_SUMMARY_EMAIL` (RF-PR-05, tarea 3.12): activarlo hace que cada
+         *       lunes salgan por SMTP los nombres y las horas de la plantilla hacia el
+         *       buzon de cada responsable de departamento. Es el cambio con mas
+         *       consecuencias en privacidad que un administrador puede hacer desde el
+         *       panel, y en el mismo cajon que un logotipo no se distingue de el.
          *
-         *     Son tres y no un booleano porque marcar los tres umbrales de revision
+         *     Son cuatro y no un booleano porque marcar los tres umbrales de revision
          *     como «afecta a las horas» diluiria la señal justo donde importa, y
          *     marcarlos como «no afecta» perderia que alteran el expediente de
          *     cumplimiento. El booleano que el asiento de auditoria necesita sigue
-         *     existiendo, y es `affects_worked_hours`.
+         *     existiendo, y es `affects_worked_hours`: **`data_disclosure` tampoco lo
+         *     enciende**, porque no mueve ni un minuto.
          * @enum {string}
          */
-        SettingImpact: "worked_hours" | "compliance_review" | "presentation";
+        SettingImpact: "worked_hours" | "compliance_review" | "presentation" | "data_disclosure";
         /**
          * SettingSource
          * @description Que escalon de la cascada ha ganado: `installation` si hay fila guardada,

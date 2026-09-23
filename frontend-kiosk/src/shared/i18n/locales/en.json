@@ -179,7 +179,9 @@
       },
       "version": {
         "app": "App version",
-        "serviceWorker": "Service worker active"
+        "serviceWorker": "Service worker active",
+        "updateStatus": "Update",
+        "updateWindow": "Update window"
       },
       "battery": {
         "level": "Level",
@@ -203,7 +205,9 @@
       "memory": "In memory (fallback)",
       "configured": "Configured",
       "notConfigured": "Not configured",
-      "unpaired": "This tablet is not paired: there is no roster to show."
+      "unpaired": "This tablet is not paired: there is no roster to show.",
+      "updatePending": "Pending: will apply within the {start}–{end} window.",
+      "updateUpToDate": "Up to date."
     },
     "warnings": {
       "background_blur": "The system is blurring the video background. Turn off the operating system's camera effects.",

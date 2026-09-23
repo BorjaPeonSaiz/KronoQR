@@ -77,6 +77,7 @@ use App\Modules\Product\Infrastructure\Adapter\DbKioskServiceCodeProvider;
 use App\Modules\Product\Infrastructure\Adapter\DbLocalePolicyProvider;
 use App\Modules\Product\Infrastructure\Adapter\DbOperationalSettingsProvider;
 use App\Modules\Product\Infrastructure\Adapter\DbPayrollLayoutProvider;
+use App\Modules\Product\Infrastructure\Adapter\DbWeeklySummaryPreference;
 use App\Modules\Product\Infrastructure\Adapter\Ed25519LicenseVerifier;
 use App\Modules\Product\Infrastructure\Adapter\LaravelProductEventPublisher;
 use App\Modules\Product\Infrastructure\Adapter\LicensedBrandingProvider;
@@ -156,6 +157,7 @@ use App\Modules\Shared\Application\Port\LocalePolicyProvider;
 use App\Modules\Shared\Application\Port\ManagementActor;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
 use App\Modules\Shared\Application\Port\PayrollLayoutProvider;
+use App\Modules\Shared\Application\Port\WeeklySummaryPreference;
 use App\Modules\Workforce\Domain\Event\EmployeeHired;
 use App\Modules\Workforce\Domain\Event\EmployeesImported;
 use App\Support\Locale\NegotiableLocales;
@@ -350,6 +352,21 @@ final class ProductServiceProvider extends ServiceProvider
         $this->app->bind(
             KioskServiceCodeProvider::class,
             static fn (Application $app): DbKioskServiceCodeProvider => new DbKioskServiceCodeProvider(
+                $app->make(GetSettingsHandler::class),
+            ),
+        );
+
+        /*
+         * El interruptor del resumen semanal por correo (RF-PR-05,
+         * `WEEKLY_SUMMARY_EMAIL`, tarea 3.12).
+         *
+         * Mismo reparto que el de arriba —puerto en `Shared`, adaptador aqui—
+         * porque `Reporting` tampoco puede importar `Product`. `bind` y no
+         * `scoped`: se pide una vez por pasada semanal.
+         */
+        $this->app->bind(
+            WeeklySummaryPreference::class,
+            static fn (Application $app): DbWeeklySummaryPreference => new DbWeeklySummaryPreference(
                 $app->make(GetSettingsHandler::class),
             ),
         );

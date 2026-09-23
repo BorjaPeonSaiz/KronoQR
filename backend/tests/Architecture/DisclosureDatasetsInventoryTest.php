@@ -123,6 +123,29 @@ it('los incluye tambien en la consulta que acota el alcance por bloque', functio
      */
     $nominales = ['employee_workdays', 'incident_digest', 'incident'];
 
+    /*
+     * Y los NOMINALES ACOTADOS, que son otra cosa y estan en las dos listas.
+     *
+     * `weekly_summary` (tarea 3.12) enumera los `employee_uuid` **solo cuando el
+     * alcance tiene 50 personas o menos**; por encima, el asiento lleva
+     * `employees`, `scope`, `manager_user_id` y `week_start` y ni un
+     * identificador. Tratarlo como nominal a secas —como estaba— daba por hecho
+     * que la consulta (a) del §4.1, la que filtra por persona, lo encuentra
+     * siempre, y con un departamento de doscientas personas no encuentra nada:
+     * quien acota el alcance de una brecha en el plazo del art. 33 creeria que
+     * el resumen semanal de ese departamento no divulgo a nadie.
+     *
+     * Por eso tiene que estar **tambien** en el `IN (...)` de la consulta (b),
+     * que es la que va por conjunto, y por eso no entra en la excepcion de
+     * arriba.
+     */
+    $nominalesAcotados = ['weekly_summary'];
+
+    expect(array_intersect($nominales, $nominalesAcotados))->toBe(
+        [],
+        'Un conjunto no puede ser nominal incondicional y acotado a la vez: o la consulta (a) lo encuentra siempre, o hace falta la (b).'
+    );
+
     $runbook = Repo::contents('docs/runbooks/brecha-de-seguridad.md');
 
     // El bloque del `IN (...)` de la consulta (b) de §4.1, tal cual esta escrito.
@@ -143,4 +166,34 @@ it('los incluye tambien en la consulta que acota el alcance por bloque', functio
         'Estos conjuntos se divulgan en bloque y la consulta de §4.1 no los busca: '
         .implode(', ', $ausentes).'. Quien la ejecute vera filas y creera que las ha visto todas.'
     );
+
+    // Y los acotados, de los que el runbook tiene que decir ADEMAS cuando
+    // enumeran y cuando no: sin esa frase, quien lee el asiento de un
+    // departamento grande deduce que no habia nadie dentro.
+    foreach ($nominalesAcotados as $dataset) {
+        expect($enLaConsulta)->toContain("'".$dataset."'");
+
+        // Y su fila tiene que decir el corte. `50` es el tope de
+        // `GeneratePeriodReport::MAX_ENUMERATED_SUBJECTS`: si algun dia cambia,
+        // esto se pone rojo y obliga a corregir el runbook a la vez que el
+        // codigo, que es justo lo que una lista escrita a mano no hace sola.
+        expect(str_contains(filaDelRunbook($runbook, $dataset), '50'))->toBeTrue(
+            'La fila de «'.$dataset.'» en el §4.1 no dice a partir de cuantas personas deja de '
+            .'enumerar a los afectados, y sin eso un asiento sin lista se lee como «no divulgo a nadie».'
+        );
+    }
 })->group('RS-05', 'RL-15');
+
+/**
+ * La fila de la tabla del §4.1 que describe un conjunto, o cadena vacia.
+ */
+function filaDelRunbook(string $runbook, string $dataset): string
+{
+    foreach (explode("\n", $runbook) as $linea) {
+        if (str_starts_with($linea, '| `'.$dataset.'` |')) {
+            return $linea;
+        }
+    }
+
+    return '';
+}

@@ -36,3 +36,11 @@ pantalla, errores pendientes de enviar y responsable del tratamiento. Todo por
 `device_id`, nunca por nombre (regla dura 21). Boton «Volver a fichar» y vuelta
 automatica a los 120 s sin interaccion: el fichaje nunca depende de esta
 pantalla (regla dura 19).
+
+## Actualizacion del quiosco (RF-KI-07, tarea 3.12)
+
+Junto a la version, la seccion `version` enseña si hay una actualizacion pendiente -y en que
+ventana se aplicara- o «al dia», y la ventana de actualizacion vigente. `isUpdatePending()`
+(`src/sw/registerServiceWorker.ts`, singleton de modulo, mismo patron que
+`getLastHeartbeatResult`) y `readUpdateWindow()` (`shared/telemetry/deviceIdentity.ts`,
+cacheada del ultimo latido) se leen UNA VEZ al abrir, como `serviceWorkerActive`.

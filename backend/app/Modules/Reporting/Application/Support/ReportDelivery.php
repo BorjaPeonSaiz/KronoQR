@@ -38,4 +38,17 @@ enum ReportDelivery: string
     case Xlsx = 'xlsx';
 
     case Pdf = 'pdf';
+
+    /**
+     * El cuerpo de un correo: hoy solo el resumen semanal (RF-PR-05, tarea
+     * 3.12).
+     *
+     * **No es un formato de fichero y por eso no aparece en ningun `format=` de
+     * la API**: ni `ExportPeriodReportRequest` ni `ExportPayrollRequest` lo
+     * admiten, porque nadie puede pedir «mandamelo por correo» desde un
+     * endpoint. Es la cuarta forma en la que las horas de alguien salen de la
+     * instalacion, y la unica que ocurre **sin nadie delante** — que es
+     * exactamente lo que el asiento tiene que poder decir.
+     */
+    case Mail = 'mail';
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Kiosk\Application\UseCase;
 
 use App\Modules\Shared\Application\Port\ErrorEventSink;
+use App\Modules\Shared\Domain\ValueObject\KioskUpdateWindow;
 use DateTimeImmutable;
 
 /**
@@ -78,5 +79,28 @@ final readonly class HeartbeatOutcome
          * serie vive donde tiene que vivir: en el catalogo de `SettingKey`.
          */
         public int $clockSkewToleranceSeconds,
+        /**
+         * RF-KI-07: la franja en la que la tablet **puede** aplicar una version
+         * nueva de la PWA (`KIOSK_UPDATE_WINDOW`, tarea 3.12).
+         *
+         * Viaja por el latido por lo mismo que los dos de arriba: es el unico
+         * canal autenticado que la tablet repite cada minuto, y la tablet la
+         * persiste para que valga tambien sin red. **Es permiso y no bloqueo**
+         * (regla dura 19): fuera de ella se sigue fichando y encolando; lo unico
+         * que no ocurre es la recarga.
+         *
+         * La declara el cliente y no la infiere la tablet (regla dura 13): el
+         * producto no adivina el cambio de turno, y equivocarse significa
+         * recargar el quiosco con cola de gente delante.
+         */
+        public KioskUpdateWindow $updateWindow,
+        /**
+         * RF-KI-07: minutos sin ningun escaneo que la tablet exige ademas de la
+         * franja antes de aplicar (`KIOSK_UPDATE_QUIET_MINUTES`).
+         *
+         * Cubre el turno que entra antes de lo previsto sin que el producto
+         * tenga que saber cuando empieza. Cero lo desactiva.
+         */
+        public int $updateQuietMinutes,
     ) {}
 }

@@ -6,6 +6,7 @@ namespace App\Modules\Reporting\Application\Query;
 
 use App\Modules\Reporting\Application\Port\ComplianceProfileReference;
 use App\Modules\Reporting\Application\Port\PeriodReportReader;
+use App\Modules\Reporting\Application\Support\ComposedPeriodReport;
 use App\Modules\Reporting\Application\Support\ReportDataset;
 use App\Modules\Reporting\Application\Support\ReportDelivery;
 use App\Modules\Reporting\Domain\Exception\ReportTooLargeForSynchronousDelivery;
@@ -141,6 +142,16 @@ final readonly class GeneratePeriodReport
      *                                  contenido: separa en el trail «miro el cuadro de horas» de «se
      *                                  llevo el fichero para el programa de nomina» (RF-IN-07, RS-05).
      *                                  Ver {@see ReportDataset}.
+     * @param  array<string, scalar>  $disclosureContext  Lo que este informe tiene de particular y el
+     *                                                    asiento canonico no sabe decir. Hoy solo lo usa
+     *                                                    el resumen semanal (RF-PR-05), que es el unico
+     *                                                    informe sin nadie delante: sin `manager_user_id`
+     *                                                    ni `week_start`, su asiento no respondería **a
+     *                                                    quien** se le fueron los datos, que es justo la
+     *                                                    pregunta que RL-15 obliga a contestar. **No puede
+     *                                                    pisar ninguna clave canonica** ni llevar datos
+     *                                                    personales (regla dura 21). Ver
+     *                                                    {@see recordDisclosure()}.
      *
      * @throws InstallationSiteMissing antes de la puesta en marcha, cuando no hay centro
      *                                 del que tomar la zona horaria (RF-PD-03)
@@ -152,7 +163,52 @@ final readonly class GeneratePeriodReport
         int $maxRows,
         ReportDelivery $delivery = ReportDelivery::Json,
         ReportDataset $dataset = ReportDataset::PeriodReport,
+        array $disclosureContext = [],
     ): PeriodReport {
+        $composed = $this->compose($query, $maxRangeDays, $maxRows, $delivery, $dataset, $disclosureContext);
+
+        $this->disclosures->recordDisclosure(
+            $composed->dataset->value,
+            $composed->recordCount(),
+            $composed->disclosure,
+        );
+
+        return $composed->report;
+    }
+
+    /**
+     * El mismo informe, **con el asiento calculado y sin escribir** (decision 13
+     * de la ficha 3.12).
+     *
+     * ## Un solo llamante, y por un motivo muy concreto
+     *
+     * `SendWeeklySummaries`. Aquel compone el informe, se lo manda por correo al
+     * responsable y **solo entonces** deja constancia. Si el asiento se
+     * escribiera aqui, quedaria dentro de la misma transaccion que despues
+     * habla con el SMTP del cliente, y esa transaccion retiene el candado de la
+     * cadena de auditoria —el mismo por el que pasa cada fichaje (ADR-010)—
+     * hasta el commit. Ver {@see ComposedPeriodReport}, donde esta el argumento
+     * entero.
+     *
+     * **No es un modo «sin auditoria»**: quien llama recibe el contexto ya
+     * resuelto y esta obligado a registrarlo en cuanto la divulgacion se
+     * consuma. El contenido del asiento es exactamente el mismo que escribe
+     * {@see self::handle()}, y eso es lo que hace que los dos caminos no puedan
+     * contar historias distintas.
+     *
+     * @param  array<string, scalar>  $disclosureContext
+     *
+     * @throws InstallationSiteMissing
+     * @throws ReportTooLargeForSynchronousDelivery
+     */
+    public function compose(
+        PeriodReportQuery $query,
+        int $maxRangeDays,
+        int $maxRows,
+        ReportDelivery $delivery = ReportDelivery::Json,
+        ReportDataset $dataset = ReportDataset::PeriodReport,
+        array $disclosureContext = [],
+    ): ComposedPeriodReport {
         $site = $this->installation->installationSite();
 
         if ($site === null) {
@@ -182,9 +238,11 @@ final readonly class GeneratePeriodReport
             contractCoverage: $coverage,
         );
 
-        $this->recordDisclosure($query, $report, $delivery, $dataset);
-
-        return $report;
+        return new ComposedPeriodReport(
+            $report,
+            $dataset,
+            $this->disclosureContextFor($query, $report, $delivery, $disclosureContext),
+        );
     }
 
     /**
@@ -256,15 +314,29 @@ final readonly class GeneratePeriodReport
         return $criteria;
     }
 
-    private function recordDisclosure(
+    /**
+     * El contexto del asiento de `personal_data.accessed`, **calculado en un
+     * solo sitio** para los dos caminos: el que lo escribe en el acto
+     * ({@see self::handle()}) y el que lo escribe despues de entregar
+     * ({@see self::compose()}).
+     *
+     * @param  array<string, scalar>  $extra
+     * @return array<string, scalar>
+     */
+    private function disclosureContextFor(
         PeriodReportQuery $query,
         PeriodReport $report,
         ReportDelivery $delivery,
-        ReportDataset $dataset,
-    ): void {
+        array $extra,
+    ): array {
         $uuids = $report->employeeUuids();
 
-        $this->disclosures->recordDisclosure($dataset->value, $report->rowCount(), [
+        // Lo particular va PRIMERO y lo canonico despues, para que quien pase un
+        // contexto extra no pueda cambiar lo que el asiento dice del alcance
+        // —`scope`, `employees`, el periodo— ni por descuido ni a proposito. El
+        // asiento de una divulgacion no lo redacta quien divulga.
+        return [
+            ...$extra,
             // EN QUE se lo llevaron (RF-IN-04). Un asiento por divulgacion y no
             // dos: la descarga y la consulta son el mismo acceso a los mismos
             // datos, y separarlas obligaria a quien lee el trail a emparejar dos
@@ -286,7 +358,7 @@ final readonly class GeneratePeriodReport
             // de la plantilla entera».
             'employees' => \count($uuids),
             ...$this->affectedSubjects($uuids),
-        ]);
+        ];
     }
 
     /**

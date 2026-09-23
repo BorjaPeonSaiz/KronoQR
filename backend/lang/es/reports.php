@@ -257,4 +257,54 @@ return [
             'time_zone' => 'Zona horaria',
         ],
     ],
+
+    /*
+     * EL RESUMEN SEMANAL POR CORREO (RF-PR-05, tarea 3.12).
+     *
+     * Se escribe para el responsable de un departamento de hotel, no para quien
+     * programo esto: dice que trabajo su gente la semana pasada y que tenia
+     * contratado, y nada mas.
+     *
+     * TRES COSAS QUE ESTE TEXTO NO HACE, Y NO SON ESTILO:
+     *
+     *   · No compara ni ordena a nadie. No hay «el que mas», ni «por debajo de
+     *     la media», ni un ranking: este producto registra jornada, no valora el
+     *     trabajo de nadie (doc 01 §12).
+     *   · No llama «horas extra» a la desviacion positiva. Que una hora sea
+     *     extraordinaria lo decide el convenio, con compensaciones y periodos de
+     *     referencia que el producto no modela.
+     *   · No pide corregir nada. Detectar no corrige (RN-08) y una correccion la
+     *     hace una persona, con su motivo, en el panel.
+     *
+     * Las duraciones llegan ya como `HH:MM` (`ReportedDuration`): nunca
+     * decimales, que se leen mal y dependen de la configuracion regional.
+     */
+    'weekly_summary' => [
+
+        'subject' => 'KronoQR · resumen de la semana del :from al :to',
+
+        'greeting' => 'Hola:',
+
+        'intro' => 'Este es el resumen de la semana :week (del :from al :to) de :departments.',
+
+        'people' => 'Personas en tu ámbito esta semana: :count.',
+
+        'line' => ':employee · trabajadas :worked de :contracted contratadas (:deviation) · :days día(s) con actividad · :absences de ausencia · :holidays festivo(s)',
+
+        'more' => 'Y :count persona(s) más, que puedes ver en el panel.',
+
+        'totals' => 'Total del ámbito: trabajadas :worked de :contracted contratadas (:deviation).',
+
+        'incidents' => 'Tienes :count incidencia(s) sin resolver en la bandeja.',
+
+        'incidents_none' => 'No tienes ninguna incidencia sin resolver.',
+
+        'action' => 'Puedes verlo con el detalle día a día en el panel, en «Informes», eligiendo del :from al :to.',
+
+        'not_a_ranking' => 'Las cifras salen del registro horario ya consolidado. El resumen no ordena ni compara a nadie, y la desviación no es una cantidad de horas extraordinarias: eso lo determina el convenio.',
+
+        'footer' => 'Recibes este correo cada lunes porque tu instalación tiene activado el resumen semanal. Se envía una sola vez por semana.',
+
+        'no_department' => 'tu ámbito',
+    ],
 ];

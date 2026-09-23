@@ -90,19 +90,34 @@ final class UpdateSettingsRequest extends FormRequest
     }
 
     /**
-     * Las claves que **el actor de soporte no puede escribir** porque deciden
-     * que jornadas se marcan (RF-AT-12, RF-PD-11, ADR-020).
+     * Las claves **reservadas al cliente**: las que el actor de soporte no puede
+     * escribir (RF-PD-11, ADR-020, regla dura 16).
+     *
+     * **Se llamaba `COMPLIANCE_GOVERNING_KEYS`** y el nombre dejo de ser cierto
+     * en la tarea 3.12: la segunda clave no decide que jornadas se marcan, sino
+     * a donde van los datos de la plantilla. Lo que las dos comparten —y lo que
+     * esta lista significa de verdad— es que deciden algo que es **del hotel** y
+     * no de quien mantiene el producto.
      *
      * @var list<string>
      */
-    private const array COMPLIANCE_GOVERNING_KEYS = [
-        // Activarla reactiva RN-12 sobre la plantilla del cliente y
+    private const array CUSTOMER_RESERVED_KEYS = [
+        // RF-AT-12: activarla reactiva RN-12 sobre la plantilla del cliente y
         // desactivarla la silencia. Es la misma potestad que
         // `ComplianceProfilePolicy` le niega al fabricante sobre el perfil.
         //
         // Por el enum y no como cadena suelta: si alguien renombrara la clave,
         // esto deja de compilar en lugar de convertirse en una guarda muda.
         SettingKey::ATTENDANCE_BREAK_CLOCKING->value,
+        // RF-PR-05 (tarea 3.12): encenderla hace que cada lunes salgan por SMTP
+        // nombres y horas de la plantilla hacia los buzones de sus responsables
+        // —una copia fuera del producto, cuyo plazo fija ese buzon—. Quien
+        // decide que los datos de su gente salgan de la instalacion es el
+        // cliente; el fabricante configura y diagnostica.
+        //
+        // Y apagarla tampoco: dejaria sin un aviso que el hotel decidio tener,
+        // en silencio y desde fuera.
+        SettingKey::WEEKLY_SUMMARY_EMAIL->value,
     ];
 
     public function authorize(): bool
@@ -132,39 +147,43 @@ final class UpdateSettingsRequest extends FormRequest
         }
 
         /*
-         * La tercera puerta (tarea 3.5, RF-AT-12): las claves que deciden **que
-         * es una incidencia**.
+         * La tercera puerta (tarea 3.5, RF-AT-12; ampliada en la 3.12,
+         * RF-PR-05): las claves **reservadas al cliente**.
          *
          * Mismo mecanismo y mismo motivo que la anterior, con otra pregunta
          * detras: `ComplianceProfilePolicy` ya le niega al actor de soporte el
-         * perfil de cumplimiento entero, y `ATTENDANCE_BREAK_CLOCKING` hace lo
-         * mismo desde otra tabla — reactiva o suspende RN-12 sobre la plantilla
-         * del cliente. Ver {@see SettingsPolicy::updateComplianceGoverning()}.
+         * perfil de cumplimiento entero, y estas dos hacen lo suyo desde otra
+         * tabla —una decide que jornadas se marcan y la otra que los datos de la
+         * plantilla salgan por correo—. Ver
+         * {@see SettingsPolicy::updateCustomerReserved()}.
          *
          * Tambien `403` antes de validar, por lo mismo: quien no puede tocar una
          * clave no tiene por que aprender que valores admite.
          */
-        return ! $this->touchesComplianceGoverningKey()
-            || Gate::allows('updateComplianceGoverning', ResolvedSettings::class);
+        return ! $this->touchesCustomerReservedKey()
+            || Gate::allows('updateCustomerReserved', ResolvedSettings::class);
     }
 
     /**
-     * Si el cuerpo pretende cambiar alguna clave que decide **que es una
-     * incidencia** (RF-AT-12, tarea 3.5).
+     * Si el cuerpo pretende cambiar alguna clave **reservada al cliente**
+     * (RF-AT-12, RF-PR-05).
      *
      * Lista explicita y no una propiedad del catalogo, a diferencia de
-     * `confidential`. No es pereza: las dos alternativas mienten. `confidential`
-     * ademas **redacta el valor** al leerlo, y este ajuste lo tiene que ver el
-     * panel; y `SettingImpact::COMPLIANCE_REVIEW` lo llevan cuatro claves, tres
-     * de las cuales son parametros operativos que el soporte si debe poder
-     * ajustar (RF-PD-11). Cuando haya una segunda clave asi, esta lista crece —y
-     * si llegara a haber cinco, habra ganado el derecho a ser una propiedad del
-     * dominio.
+     * `confidential`. No es pereza: las tres alternativas mienten.
+     * `confidential` ademas **redacta el valor** al leerlo, y estos dos ajustes
+     * los tiene que ver el panel; `SettingImpact::COMPLIANCE_REVIEW` lo llevan
+     * cuatro claves, tres de las cuales son parametros operativos que el soporte
+     * si debe poder ajustar (RF-PD-11); y derivar la puerta de
+     * `SettingImpact::DATA_DISCLOSURE` ataria «quien puede cambiarla» a «que
+     * consecuencia tiene», que son dos preguntas distintas.
+     *
+     * Con dos claves la lista sigue siendo mas honesta que una regla; si llegara
+     * a haber cinco, habra ganado el derecho a ser una propiedad del dominio.
      */
-    private function touchesComplianceGoverningKey(): bool
+    private function touchesCustomerReservedKey(): bool
     {
         foreach ($this->submittedKeys() as $name) {
-            if (in_array($name, self::COMPLIANCE_GOVERNING_KEYS, true)) {
+            if (in_array($name, self::CUSTOMER_RESERVED_KEYS, true)) {
                 return true;
             }
         }

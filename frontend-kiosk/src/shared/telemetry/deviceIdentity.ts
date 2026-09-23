@@ -24,6 +24,12 @@
 // sin consecuencias. La cola es registro legal sin escribir y va a IndexedDB.
 
 import { uuidV7 } from '@/shared/ids/uuidV7'
+import type { UpdateWindow } from '@/features/offline/domain/updateWindow'
+import {
+  DEFAULT_UPDATE_QUIET_MINUTES,
+  DEFAULT_UPDATE_WINDOW,
+  isValidUpdateWindow,
+} from '@/features/offline/domain/updateWindow'
 
 const DEVICE_ID_KEY = 'kronoqr.kiosk.device_id'
 
@@ -69,6 +75,33 @@ const SERVICE_CODE_HASH_KEY = 'kronoqr.kiosk.service_code_hash'
  */
 const BREAK_CLOCKING_ENABLED_KEY = 'kronoqr.kiosk.break_clocking_enabled'
 const CLOCK_SKEW_TOLERANCE_SECONDS_KEY = 'kronoqr.kiosk.clock_skew_tolerance_seconds'
+
+/**
+ * Ventana de actualizacion del quiosco (`KioskHeartbeat.update_window`,
+ * RF-KI-07, tarea 3.12). MISMO PATRON que `service_code_hash` y los dos
+ * ajustes de arriba: el planificador del latido (`heartbeat.ts`) la cachea
+ * tras cada `200` para que la puerta de `features/offline/domain/
+ * updateWindow.ts` funcione sin red. `localStorage` y no Dexie: es
+ * preferencia de instalacion (36 bytes), no registro legal — el mismo
+ * criterio de la cabecera de este fichero, no el de la cola.
+ */
+const UPDATE_WINDOW_KEY = 'kronoqr.kiosk.update_window'
+const UPDATE_QUIET_MINUTES_KEY = 'kronoqr.kiosk.update_quiet_minutes'
+
+/**
+ * Instante del ULTIMO escaneo que ha pasado por esta tablet (RF-KI-07, tarea
+ * 3.12): lo escribe `features/offline/useOfflineQueue.ts` en cuanto el
+ * empleado ficha -exito, rechazo o encolado, da igual: lo que importa es que
+ * hubo alguien delante de la camara-, y lo lee la puerta de actualizacion
+ * para no aplicar nada dentro de los `quiet_minutes` siguientes.
+ * `localStorage`, no memoria: SOBREVIVE AL REINICIO de la tablet, que es
+ * justo cuando mas importa -una version pendiente que se comprueba de nuevo
+ * al arrancar no puede olvidar que hubo alguien fichando cinco minutos antes
+ * de apagarse-. `null` = ningun escaneo conocido (tablet nueva, o
+ * `localStorage` vacio), que la puerta trata como «sin escaneo» (nunca como
+ * «hace mucho»).
+ */
+const LAST_SCAN_AT_KEY = 'kronoqr.kiosk.last_scan_at'
 
 /** Version de la PWA. La inyecta Vite desde `package.json` (ver `vite.config.ts`). */
 export const APP_VERSION: string = __APP_VERSION__
@@ -235,6 +268,96 @@ export function storeClockSkewToleranceSeconds(seconds: number): void {
     storage.setItem(CLOCK_SKEW_TOLERANCE_SECONDS_KEY, String(seconds))
   } catch {
     // El aviso se queda con el umbral que ya tenia cacheado (degradacion honesta).
+  }
+}
+
+/**
+ * Ventana de actualizacion vigente (RF-KI-07, tarea 3.12). SIEMPRE devuelve
+ * una ventana valida: `DEFAULT_UPDATE_WINDOW` mientras esta tablet no haya
+ * latido nunca con una version que la trajera -«sin configuracion recibida
+ * todavia, la de serie», decision 9 de la tarea-, nunca `null`: a diferencia
+ * de `readClockSkewToleranceSeconds`, aqui no hay un estado «sin banda» que
+ * pintar, hay una puerta que decidir, y decidirla exige una ventana con la
+ * que comparar.
+ */
+export function readUpdateWindow(): UpdateWindow {
+  const storage = safeStorage()
+  if (storage === null) return DEFAULT_UPDATE_WINDOW
+  try {
+    const stored = storage.getItem(UPDATE_WINDOW_KEY)
+    if (stored === null || stored === '') return DEFAULT_UPDATE_WINDOW
+    const parsed: unknown = JSON.parse(stored)
+    return isValidUpdateWindow(parsed) ? parsed : DEFAULT_UPDATE_WINDOW
+  } catch {
+    return DEFAULT_UPDATE_WINDOW
+  }
+}
+
+/** Lo llama SOLO el planificador del latido, tras cada `200` que traiga `update_window`. */
+export function storeUpdateWindow(window: UpdateWindow): void {
+  const storage = safeStorage()
+  if (storage === null) return
+  try {
+    storage.setItem(UPDATE_WINDOW_KEY, JSON.stringify(window))
+  } catch {
+    // La puerta se queda con la ventana que ya tenia cacheada (degradacion honesta).
+  }
+}
+
+/** Minutos de silencio vigentes (RF-KI-07, tarea 3.12). Igual criterio que `readUpdateWindow`: nunca `null`. */
+export function readUpdateQuietMinutes(): number {
+  const storage = safeStorage()
+  if (storage === null) return DEFAULT_UPDATE_QUIET_MINUTES
+  try {
+    const stored = storage.getItem(UPDATE_QUIET_MINUTES_KEY)
+    if (stored === null || stored === '') return DEFAULT_UPDATE_QUIET_MINUTES
+    const parsed = Number(stored)
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_UPDATE_QUIET_MINUTES
+  } catch {
+    return DEFAULT_UPDATE_QUIET_MINUTES
+  }
+}
+
+/** Lo llama SOLO el planificador del latido, tras cada `200` que traiga `update_window`. */
+export function storeUpdateQuietMinutes(minutes: number): void {
+  const storage = safeStorage()
+  if (storage === null) return
+  try {
+    storage.setItem(UPDATE_QUIET_MINUTES_KEY, String(minutes))
+  } catch {
+    // Degradacion honesta, igual que el resto de ajustes de este fichero.
+  }
+}
+
+/**
+ * Instante ISO del ultimo escaneo (RF-KI-07, tarea 3.12). Sobrevive al
+ * reinicio de la tablet (`localStorage`, ver `LAST_SCAN_AT_KEY`). `null` =
+ * ningun escaneo conocido todavia -la puerta de actualizacion lo trata como
+ * «sin escaneo», nunca como «hace mucho»-.
+ */
+export function readLastScanAt(): string | null {
+  const storage = safeStorage()
+  if (storage === null) return null
+  try {
+    const stored = storage.getItem(LAST_SCAN_AT_KEY)
+    return stored === null || stored === '' ? null : stored
+  } catch {
+    return null
+  }
+}
+
+/** Lo llama SOLO `features/offline/useOfflineQueue.ts`, en cada escaneo que pasa por la cola. */
+export function storeLastScanAt(occurredAtIso: string): void {
+  const storage = safeStorage()
+  if (storage === null) return
+  try {
+    storage.setItem(LAST_SCAN_AT_KEY, occurredAtIso)
+  } catch {
+    // La puerta de actualizacion se queda con el ultimo escaneo que ya tenia
+    // cacheado (degradacion honesta): en el peor caso, trata un escaneo
+    // reciente como si no hubiera ocurrido, y eso solo puede hacer la puerta
+    // MAS permisiva, nunca menos -el resto de condiciones (cola vacia,
+    // ventana) siguen aplicando igual.
   }
 }
 

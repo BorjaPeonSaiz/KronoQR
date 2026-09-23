@@ -487,6 +487,57 @@ it('no deja que un actor de soporte active ni apague el fichaje de pausa', funct
     'diagnostico' => [SupportScope::Diagnostics],
 ])->group('RF-PD-11', 'RF-AT-12', 'RS-04');
 
+it('no deja que un actor de soporte encienda ni apague el resumen semanal por correo', function (SupportScope $alcance): void {
+    // RF-PR-05, RF-PD-11, ADR-020 y regla dura 16. Encender esta clave hace que
+    // cada lunes salgan por SMTP **nombres y horas de la plantilla del cliente**
+    // hacia los buzones de sus responsables: una copia fuera del producto, cuyo
+    // plazo de conservacion lo fija ese buzon y no la retencion del sistema.
+    // Quien decide que los datos de su gente salgan de la instalacion es el
+    // hotel; el fabricante configura y diagnostica.
+    //
+    // Y apagarla tampoco: dejaria al cliente sin un aviso que decidio tener, en
+    // silencio y desde fuera.
+    $token = SupportGrants::tokenFor($alcance);
+
+    Api::as($token)
+        ->patch('/api/v1/settings', ['settings' => ['WEEKLY_SUMMARY_EMAIL' => 'enabled']])
+        ->assertStatus(403);
+
+    // Ni mezclada con una clave que si puede tocar: la peticion entera cae, y no
+    // se escribe ninguna de las dos.
+    Api::as($token)
+        ->patch('/api/v1/settings', [
+            'settings' => [
+                'ATTENDANCE_DEBOUNCE_SECONDS' => 90,
+                'WEEKLY_SUMMARY_EMAIL' => 'disabled',
+            ],
+        ])
+        ->assertStatus(403);
+
+    expect(DB::table('installation_settings')->where('key', 'WEEKLY_SUMMARY_EMAIL')->exists())->toBeFalse()
+        ->and(DB::table('installation_settings')->where('key', 'ATTENDANCE_DEBOUNCE_SECONDS')->exists())->toBeFalse();
+})->with([
+    'configuracion' => [SupportScope::Configuration],
+    'diagnostico' => [SupportScope::Diagnostics],
+])->group('RF-ID-02', 'RS-05', 'RF-PD-11', 'RF-PR-05');
+
+it('el actor de soporte sigue pudiendo ajustar los umbrales operativos que si son suyos', function (): void {
+    // La otra mitad, y la que impide que la puerta se convierta en «soporte no
+    // toca nada»: el alcance `configuration` existe para que el fabricante pueda
+    // ajustar la instalacion mientras diagnostica (RF-PD-11). Lo que se le niega
+    // son las dos claves reservadas al cliente, no la configuracion entera.
+    $token = SupportGrants::tokenFor(SupportScope::Configuration);
+
+    Api::as($token)
+        ->patch('/api/v1/settings', ['settings' => [
+            'ATTENDANCE_DEBOUNCE_SECONDS' => 90,
+            'ATTENDANCE_MAX_SHIFT_HOURS' => 10,
+        ]])
+        ->assertStatus(200);
+
+    expect(DB::table('installation_settings')->where('key', 'ATTENDANCE_DEBOUNCE_SECONDS')->exists())->toBeTrue();
+})->group('RF-ID-02', 'RF-PD-11');
+
 it('sigue enseñando y dejando cambiar el fichaje de pausa al administrador del cliente', function (): void {
     // La otra mitad, y la que impide «arreglarlo» marcando la clave como
     // confidencial: el ajuste NO es un secreto —el panel lo pinta, la guia de

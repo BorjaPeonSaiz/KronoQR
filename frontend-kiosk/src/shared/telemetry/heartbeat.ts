@@ -27,10 +27,14 @@ import type { ClientErrorReport, KioskHeartbeatRequest } from '@/shared/api/type
 import type { Clock } from '@/shared/time/clock'
 import { systemClock } from '@/shared/time/clock'
 import { exceedsClockSkewTolerance } from '@/features/scan/domain/clockSkewMessage'
+import { isValidUpdateWindow } from '@/features/offline/domain/updateWindow'
+import type { UpdateWindow } from '@/features/offline/domain/updateWindow'
 import {
   storeBreakClockingEnabled,
   storeClockSkewToleranceSeconds,
   storeServiceCodeHash,
+  storeUpdateQuietMinutes,
+  storeUpdateWindow,
 } from './deviceIdentity'
 import type { ClientErrorEvent, ErrorReporter } from './errorReporter'
 
@@ -87,6 +91,35 @@ function toClientErrorReport(event: ClientErrorEvent): ClientErrorReport {
     app_version: event.app_version,
     context: event.context,
   }
+}
+
+/**
+ * Lee `update_window` de un `200` de `POST /kiosk/heartbeat` de forma
+ * DEFENSIVA (RF-KI-07, tarea 3.12), aunque el contrato ya lo declare
+ * obligatorio en `KioskHeartbeat` (`schema.d.ts`): `result.data` se trata como
+ * `unknown` en vez de confiar ciegamente en el tipo estatico porque el
+ * SERVIDOR puede no cumplirlo -una instalacion sin actualizar todavia a la
+ * version que envia este campo, o un doble de pruebas que no lo simula-, y un
+ * campo obligatorio en el contrato no es una garantia de que TODO servidor en
+ * produccion ya lo mande. `null` si el campo no viene o si su forma no
+ * encaja: en los dos casos el llamante NO toca lo cacheado, y la puerta sigue
+ * con la ultima ventana que conoce -o con la de serie, si nunca latio con una
+ * version que la trajera-.
+ */
+export function parseUpdateWindowFromHeartbeatData(
+  data: unknown,
+): { readonly window: UpdateWindow; readonly quietMinutes: number } | null {
+  if (typeof data !== 'object' || data === null) return null
+  const raw = (data as Record<string, unknown>)['update_window']
+  if (typeof raw !== 'object' || raw === null) return null
+
+  const quietMinutes = (raw as Record<string, unknown>)['quiet_minutes']
+  if (typeof quietMinutes !== 'number' || !Number.isFinite(quietMinutes) || quietMinutes < 0) {
+    return null
+  }
+  if (!isValidUpdateWindow(raw)) return null
+
+  return { window: { start: raw.start, end: raw.end }, quietMinutes }
 }
 
 export function buildHeartbeatBody(
@@ -282,6 +315,15 @@ export function createHeartbeatScheduler(options: HeartbeatSchedulerOptions): He
       breakClockingEnabled: result.data.break_clocking_enabled,
       clockSkewToleranceSeconds: result.data.clock_skew_tolerance_seconds,
     })
+
+    // Ventana de actualizacion (RF-KI-07, tarea 3.12), MISMO PATRON: se
+    // cachea en CADA `200` que la traiga, para que `features/offline/domain/
+    // updateWindow.ts` decida sin red. Ver `parseUpdateWindowFromHeartbeatData`.
+    const updateWindow = parseUpdateWindowFromHeartbeatData(result.data)
+    if (updateWindow !== null) {
+      storeUpdateWindow(updateWindow.window)
+      storeUpdateQuietMinutes(updateWindow.quietMinutes)
+    }
 
     const skew = clockSkewSeconds(clock.now(), result.data.server_time)
     lastHeartbeatResult = { beatAt: clock.now().toISOString(), skewSeconds: skew }

@@ -264,3 +264,34 @@ it('deja asiento de impacto de cumplimiento al activar el fichaje de pausa', fun
     // Y la cadena sigue intacta: un asiento nuevo no la rompe (regla dura 6).
     expect(app(VerifyAuditChain::class)->handle()->isIntact())->toBeTrue();
 })->group('RF-PD-01', 'RF-AT-12', 'RL-04');
+
+it('separa en el asiento el interruptor del resumen semanal de un cambio de marca', function (): void {
+    // Tarea 3.12, decision 14 de la segunda vuelta. `WEEKLY_SUMMARY_EMAIL` es el
+    // cambio con mas consecuencias en privacidad que un administrador puede
+    // hacer desde el panel: encenderlo saca cada lunes nombres y horas de la
+    // plantilla por SMTP, hacia un buzon cuyo plazo de conservacion no controla
+    // el producto. Con `impact: presentation` —como estaba— ese asiento quedaba
+    // en el trail indistinguible de un cambio de color, y quien audita
+    // proteccion de datos tiene que poder separarlos con una sola consulta.
+    //
+    // Y `affects_worked_hours` sigue siendo `false`: no mueve ni un minuto del
+    // registro. Las dos cosas a la vez son justamente lo que el enumerado de
+    // cuatro casos permite decir y un booleano no.
+    $admin = ManagementUsers::withRole(UserRole::ADMIN);
+
+    Api::as(ManagementUsers::tokenFor($admin))
+        ->patch('/api/v1/settings', ['settings' => ['WEEKLY_SUMMARY_EMAIL' => 'enabled']])
+        ->assertStatus(200);
+
+    $entries = settingAuditEntries();
+
+    expect($entries)->toHaveCount(1)
+        ->and(auditPayload($entries[0]))->toBe([
+            'affects_worked_hours' => false,
+            'impact' => 'data_disclosure',
+            'key' => 'WEEKLY_SUMMARY_EMAIL',
+            'new_value' => 'enabled',
+            'previous_value' => 'disabled',
+            'was_product_default' => true,
+        ]);
+})->group('RF-PD-01', 'RF-PR-05', 'RL-04');

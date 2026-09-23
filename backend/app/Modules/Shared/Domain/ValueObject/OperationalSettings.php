@@ -21,7 +21,14 @@ use InvalidArgumentException;
  * siembran en la tarea 1.3 y se editan desde el panel en la 5.1;
  * `ATTENDANCE_BREAK_CLOCKING` se anade en la 3.5, y
  * `ATTENDANCE_PATTERN_WINDOW_SECONDS` y `ATTENDANCE_PATTERN_MIN_REPEATS` en la
- * 3.11.
+ * 3.11, y `KIOSK_UPDATE_WINDOW` y `KIOSK_UPDATE_QUIET_MINUTES` en la 3.12.
+ *
+ * **Las dos ultimas no las consume el servidor**: viajan al quiosco por el
+ * latido (RF-KI-07) y quien decide con ellas es la tablet. Entran igualmente por
+ * aqui porque son configuracion operativa del centro y porque el latido ya
+ * resuelve este objeto para llevarse el fichaje de pausa y la tolerancia de
+ * desfase; un puerto aparte para dos claves que se leen en el mismo sitio y en
+ * el mismo momento habria sido una segunda cascada que mantener.
  */
 final readonly class OperationalSettings
 {
@@ -72,6 +79,26 @@ final readonly class OperationalSettings
          * sin ofrecerla.
          */
         public bool $breakClockingEnabled,
+        /**
+         * RF-KI-07: la franja en la que una tablet puede aplicar una version
+         * nueva de la PWA (`KIOSK_UPDATE_WINDOW`, tarea 3.12).
+         *
+         * **No gobierna al servidor en absoluto**: viaja al quiosco por el
+         * latido y la decision es suya. Esta aqui —y no en un puerto propio—
+         * porque es configuracion operativa del centro, como las seis de arriba,
+         * y porque el latido ya resuelve este objeto para llevarse los otros dos
+         * ajustes de la tablet.
+         */
+        public KioskUpdateWindow $kioskUpdateWindow,
+        /**
+         * RF-KI-07: minutos **sin ningun escaneo** que la tablet exige ademas de
+         * la franja antes de aplicar (`KIOSK_UPDATE_QUIET_MINUTES`).
+         *
+         * Cero es legitimo y la desactiva: entonces mandan la franja y la cola
+         * vacia. Cubre el turno que entra antes de lo previsto sin obligar al
+         * producto a saber cuando empieza (paso 6 de la ficha 3.12).
+         */
+        public int $kioskUpdateQuietMinutes,
     ) {
         $this->positive($anomalousShiftMinutes, 'la duracion anomala de tramo (RN-08)');
         $this->notNegative($debounceSeconds, 'la ventana anti-rebote (RF-AT-06)');
@@ -79,6 +106,9 @@ final readonly class OperationalSettings
         $this->notNegative($minimumTransitSeconds, 'el transito minimo entre quioscos (RN-16)');
         $this->notNegative($patternWindowSeconds, 'la ventana de coincidencia en quiosco (RF-PR-06)');
         $this->positive($patternMinRepeats, 'los dias con coincidencia que abren incidencia (RF-PR-06)');
+        // Cero es legitimo, como el anti-rebote: apaga la guarda de silencio y
+        // deja mandar a la franja y a la cola vacia (RF-KI-07).
+        $this->notNegative($kioskUpdateQuietMinutes, 'los minutos sin escaneo antes de actualizar el quiosco (RF-KI-07)');
     }
 
     private function positive(int $value, string $what): void

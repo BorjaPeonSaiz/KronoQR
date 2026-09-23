@@ -639,3 +639,64 @@ it('no deja ningun runbook enlazado desde otro que no exista', function (): void
         );
     }
 })->group('RL-15');
+
+it('programa el resumen semanal los lunes, sin solaparse y registrando su fallo', function (): void {
+    // Tarea 3.12, decision 1. **Aqui la prueba importa MAS que en las otras**,
+    // y no menos: el resumen semanal es lo unico del planificador que **no
+    // tiene alerta** (decision 8, §8.4: una alerta sin runbook es ruido). Si
+    // alguien quitara la linea, ninguna regla de Prometheus sonaria y lo unico
+    // que delataria la ausencia seria una serie `.prom` que nadie mira. Esta
+    // prueba es entonces el unico guardian de que la tarea sigue programada.
+    $scheduler = backupFile('backend/routes/console.php');
+
+    expect($scheduler)->toContain("Schedule::command('reporting:weekly-summary')");
+
+    $bloque = bloqueProgramado($scheduler, 'reporting:weekly-summary');
+
+    // LUNES A LAS 06:00 UTC, sobre la semana ISO anterior. `weeklyOn(1, ...)` y
+    // no `dailyAt`: un resumen «semanal» que saliera cada dia seria siete veces
+    // el mismo correo con los mismos nombres de la plantilla.
+    expect($bloque)->toContain("->weeklyOn(1, '06:00')");
+
+    // `withoutOverlapping()` esta por no duplicar el trabajo, no por
+    // correccion: la idempotencia la garantiza el `UNIQUE` de
+    // `weekly_summary_deliveries`. `->onFailure()` es lo unico que convierte en
+    // localizable un comando que muere con `runInBackground()`.
+    expect(str_contains($bloque, '->withoutOverlapping()'))->toBeTrue(
+        'reporting:weekly-summary puede solaparse consigo misma y componer dos veces el mismo informe.'
+    );
+    expect(str_contains($bloque, '->runInBackground()'))->toBeTrue(
+        'reporting:weekly-summary retendria al planificador mientras habla con el SMTP del cliente.'
+    );
+    expect(str_contains($bloque, '->onFailure('))->toBeTrue(
+        'reporting:weekly-summary no registra su fallo: con runInBackground() nadie se entera de que murio.'
+    );
+})->group('RF-PR-05');
+
+it('no alerta por el resumen semanal, que es accesorio y opcional', function (): void {
+    // Decision 8 de la ficha 3.12, afirmada para que anadir una alerta sea una
+    // DECISION y no un descuido. Las dos series de `kronoqr_weekly_summary.prom`
+    // existen para poder mirar «¿corrio el lunes?» cuando alguien pregunta por
+    // su correo; nadie tiene que levantarse a las 06:30 porque un correo de
+    // gestion no haya salido, y que la pasada FALLE ya lo recoge
+    // `scheduler.command_failed`.
+    $sobreElResumen = array_values(array_filter(
+        array_map(
+            static fn (array $regla): string => $regla['alert'],
+            AlertRules::all(),
+        ),
+        static fn (string $alerta): bool => $alerta !== '' && str_contains($alerta, 'Resumen'),
+    ));
+
+    $porSerie = array_values(array_filter(
+        array_map(
+            static fn (array $regla): string => $regla['expr'],
+            AlertRules::all(),
+        ),
+        static fn (string $expr): bool => str_contains($expr, 'weekly_summary'),
+    ));
+
+    expect($porSerie)->toBe([], 'Ninguna regla puede mirar las series del resumen semanal (decision 8 de la ficha 3.12).');
+
+    expect($sobreElResumen)->toBe([], 'El resumen semanal no alerta: es accesorio y opcional (decision 8 de la ficha 3.12).');
+})->group('RF-PR-05');

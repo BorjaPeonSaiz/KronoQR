@@ -992,6 +992,10 @@ paths:
                     service_code_hash: null
                     break_clocking_enabled: false
                     clock_skew_tolerance_seconds: 900
+                    update_window:
+                      start: '03:00'
+                      end: '05:00'
+                      quiet_minutes: 10
                 con-errores:
                   value:
                     server_time: '2026-09-09T06:00:03.114Z'
@@ -999,6 +1003,10 @@ paths:
                     service_code_hash: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
                     break_clocking_enabled: false
                     clock_skew_tolerance_seconds: 900
+                    update_window:
+                      start: '23:30'
+                      end: '02:00'
+                      quiet_minutes: 15
         '400':
           $ref: '#/components/responses/InvalidRequest'
         '401':
@@ -10371,6 +10379,7 @@ components:
         - service_code_hash
         - break_clocking_enabled
         - clock_skew_tolerance_seconds
+        - update_window
       properties:
         service_code_hash:
           type: ['string', 'null']
@@ -10427,6 +10436,56 @@ components:
             vez de con una constante propia (regla dura 13). El aviso nunca
             impide fichar.
           example: 900
+        update_window:
+          type: object
+          additionalProperties: false
+          required:
+            - start
+            - end
+            - quiet_minutes
+          description: |
+            La franja en la que la tablet **puede** aplicar una version nueva de
+            la PWA (**RF-KI-07**, ajustes `KIOSK_UPDATE_WINDOW` y
+            `KIOSK_UPDATE_QUIET_MINUTES`, tarea 3.12), en **hora local del
+            centro**.
+
+            **Es una ventana de PERMISO, no de bloqueo**: fuera de ella la tablet
+            sigue fichando y sigue encolando con normalidad; lo unico que no hace
+            es recargarse (regla dura 19). Una actualizacion a las 06:00 con
+            treinta personas delante es exactamente el fallo que RF-KI-07 existe
+            para evitar.
+
+            **La declara el cliente y no la infiere la tablet.** El quiosco no
+            detecta el cambio de turno: la franja es configuracion por centro
+            (regla dura 13, ADR-017). Viaja en el latido por lo mismo que
+            `service_code_hash` —el unico canal autenticado que la tablet repite
+            cada minuto— y la tablet la persiste en local para que valga tambien
+            sin red.
+
+            `start` y `end` pueden cruzar la medianoche (`23:00-02:00` es una
+            ventana valida). `quiet_minutes` son los minutos **sin ningun
+            escaneo** que la tablet exige ademas antes de aplicar: cubre el turno
+            que entra antes de lo previsto sin tener que saber cuando empieza.
+            `0` la desactiva, y entonces solo mandan la franja y la cola vacia.
+          properties:
+            start:
+              type: string
+              pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+              description: Inicio de la franja, `HH:MM` en hora local del centro.
+              example: '03:00'
+            end:
+              type: string
+              pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+              description: Fin de la franja, `HH:MM` en hora local del centro.
+              example: '05:00'
+            quiet_minutes:
+              type: integer
+              minimum: 0
+              maximum: 120
+              description: |
+                Minutos sin ningun escaneo en la tablet antes de aplicar una
+                version pendiente, aunque la franja este abierta.
+              example: 10
 
         server_time:
           allOf:
@@ -12096,6 +12155,29 @@ components:
 
         Los dos ultimos no se aplican al XLSX: aquel es UTF-8 por definicion y no
         tiene separador de campos.
+
+        `WEEKLY_SUMMARY_EMAIL` (tarea 3.12, RF-PR-05) enciende el **resumen
+        semanal por correo** al responsable de cada departamento: `disabled` de
+        serie —el doc 05 §5.7 lo vende como «correo opcional»— o `enabled`. Con
+        `enabled`, `reporting:weekly-summary` envia cada lunes un correo por
+        responsable activo con direccion, **con el alcance de su cuenta aplicado
+        en la consulta** (RF-ID-03): el de Cocina no ve a nadie de Recepcion.
+        `rrhh` y `admin` no lo reciben —tienen el panel entero, y un correo
+        semanal con toda la plantilla seria una copia periodica del registro
+        fuera del sistema—. Sin SMTP configurado la pasada termina bien y no
+        envia nada: el producto no depende del correo (regla dura 12). Cada envio
+        deja su asiento `personal_data.accessed` con el conjunto
+        `weekly_summary` (RS-05).
+
+        `KIOSK_UPDATE_WINDOW` y `KIOSK_UPDATE_QUIET_MINUTES` (tarea 3.12,
+        RF-KI-07) son la **ventana de actualizacion de la tablet**, que el
+        quiosco recibe en cada latido (`update_window`). La primera es
+        `HH:MM-HH:MM` en hora local del centro —`03:00-05:00` de serie, y puede
+        cruzar la medianoche—; la segunda, los minutos sin ningun escaneo que la
+        tablet exige ademas antes de aplicar (10 de serie; `0` la desactiva). Las
+        dos son `presentation`: no mueven ni un minuto del registro. La franja se
+        **declara** y no se infiere (regla dura 13), y fuera de ella la tablet
+        sigue fichando y encolando: lo unico que no hace es recargarse.
       enum:
         - ATTENDANCE_MAX_SHIFT_HOURS
         - ATTENDANCE_DEBOUNCE_SECONDS
@@ -12116,6 +12198,9 @@ components:
         - PAYROLL_EXPORT_DATE_FORMAT
         - PAYROLL_EXPORT_ENCODING
         - PAYROLL_EXPORT_HEADER_ROW
+        - WEEKLY_SUMMARY_EMAIL
+        - KIOSK_UPDATE_WINDOW
+        - KIOSK_UPDATE_QUIET_MINUTES
 
     SettingValue:
       title: SettingValue
@@ -12154,13 +12239,21 @@ components:
         - `compliance_review` — no mueve minutos, pero cambia **que incidencias
           se abren** para revision humana (RN-08, RN-16, RF-AT-10).
         - `presentation` — solo altera lo que se ve (RF-PD-08).
+        - `data_disclosure` — no toca el registro horario, pero **enciende o
+          apaga una salida de datos personales de la instalacion**. Hoy lo lleva
+          `WEEKLY_SUMMARY_EMAIL` (RF-PR-05, tarea 3.12): activarlo hace que cada
+          lunes salgan por SMTP los nombres y las horas de la plantilla hacia el
+          buzon de cada responsable de departamento. Es el cambio con mas
+          consecuencias en privacidad que un administrador puede hacer desde el
+          panel, y en el mismo cajon que un logotipo no se distingue de el.
 
-        Son tres y no un booleano porque marcar los tres umbrales de revision
+        Son cuatro y no un booleano porque marcar los tres umbrales de revision
         como «afecta a las horas» diluiria la señal justo donde importa, y
         marcarlos como «no afecta» perderia que alteran el expediente de
         cumplimiento. El booleano que el asiento de auditoria necesita sigue
-        existiendo, y es `affects_worked_hours`.
-      enum: [worked_hours, compliance_review, presentation]
+        existiendo, y es `affects_worked_hours`: **`data_disclosure` tampoco lo
+        enciende**, porque no mueve ni un minuto.
+      enum: [worked_hours, compliance_review, presentation, data_disclosure]
 
     SettingSource:
       type: string
@@ -12860,6 +12953,9 @@ components:
               - PAYROLL_EXPORT_DATE_FORMAT
               - PAYROLL_EXPORT_ENCODING
               - PAYROLL_EXPORT_HEADER_ROW
+              - WEEKLY_SUMMARY_EMAIL
+              - KIOSK_UPDATE_WINDOW
+              - KIOSK_UPDATE_QUIET_MINUTES
           additionalProperties:
             $ref: '#/components/schemas/SettingValue'
           examples:

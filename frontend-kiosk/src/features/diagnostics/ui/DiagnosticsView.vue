@@ -37,6 +37,7 @@ import {
   readDeviceToken,
   readDeviceTokenExpiresAt,
   readServiceCodeHash,
+  readUpdateWindow,
   resolveDeviceId,
 } from '@/shared/telemetry/deviceIdentity'
 import { getErrorReporter } from '@/shared/telemetry/errorReporter'
@@ -48,6 +49,7 @@ import { EMPTY_STATS } from '@/features/offline/application/scanQueue'
 import { useCamera } from '@/features/scan/composables/useCamera'
 import { useWakeLock } from '@/features/scan/composables/useWakeLock'
 import PinNumericKeypad from '@/features/pin/ui/PinNumericKeypad.vue'
+import { isUpdatePending } from '@/sw/registerServiceWorker'
 import type { ServiceCodeAttemptResult } from '../application/serviceCodeGate'
 import { createServiceCodeGate } from '../application/serviceCodeGate'
 import { buildDiagnosticsSnapshot } from '../application/diagnosticsSnapshot'
@@ -287,6 +289,13 @@ const serviceWorkerActive =
     ? navigator.serviceWorker.controller !== null
     : null
 const privacyConfig = readPrivacyNoticeConfig()
+// Actualizacion del quiosco (RF-KI-07/RF-KI-08, tarea 3.12). `isUpdatePending`
+// es el singleton de `registerServiceWorker.ts` (mismo criterio que
+// `getLastHeartbeatResult`); la ventana viene de lo que cache el ultimo
+// latido, o la de serie si esta tablet nunca latio con una version que la
+// trajera. Leidos una vez al abrir, como `serviceWorkerActive`.
+const updatePending = isUpdatePending()
+const updateWindow = readUpdateWindow()
 
 const snapshot = computed(() =>
   buildDiagnosticsSnapshot({
@@ -329,6 +338,7 @@ const snapshot = computed(() =>
     wakeLock: { supported: wakeLock.supported, active: wakeLock.active.value },
     pendingErrors: reporter.size(),
     privacyControllerConfigured: privacyConfig.controller !== null,
+    update: { pending: updatePending, window: updateWindow },
   }),
 )
 
@@ -650,6 +660,21 @@ onBeforeUnmount(() => {
           <dd data-testid="diagnostics-app-version">{{ snapshot.appVersion }}</dd>
           <dt>{{ t('diagnostics.rows.version.serviceWorker') }}</dt>
           <dd>{{ yesNo(snapshot.serviceWorkerActive) }}</dd>
+          <dt>{{ t('diagnostics.rows.version.updateStatus') }}</dt>
+          <dd data-testid="diagnostics-update-status">
+            {{
+              snapshot.update.pending
+                ? t('diagnostics.values.updatePending', {
+                    start: snapshot.update.window.start,
+                    end: snapshot.update.window.end,
+                  })
+                : t('diagnostics.values.updateUpToDate')
+            }}
+          </dd>
+          <dt>{{ t('diagnostics.rows.version.updateWindow') }}</dt>
+          <dd data-testid="diagnostics-update-window">
+            {{ snapshot.update.window.start }}–{{ snapshot.update.window.end }}
+          </dd>
         </dl>
       </article>
 

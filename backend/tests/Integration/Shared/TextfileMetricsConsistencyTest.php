@@ -141,6 +141,8 @@ it('ningun adaptador textfile escribe su propio fichero', function (): void {
         'app/Modules/Reporting/Infrastructure/Metrics/TextfileAdoptionMetrics.php',
         'app/Modules/Reporting/Infrastructure/Metrics/TextfileComplianceMetrics.php',
         'app/Modules/Reporting/Infrastructure/Metrics/TextfilePresenceMetrics.php',
+        // TextfileWeeklySummaryMetrics (tarea 3.12): `weekly_summary_last_run_timestamp_seconds` y `_last_sent`.
+        'app/Modules/Reporting/Infrastructure/Metrics/TextfileWeeklySummaryMetrics.php',
     ];
 
     // Que esten TODOS: si aparece uno nuevo sin anadirlo aqui, esta lista deja

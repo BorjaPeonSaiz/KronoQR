@@ -1210,6 +1210,60 @@ correction later:
 > Labour Inspectorate export **are never stopped because of that** (§8, "there is
 > a licence notice in the panel").
 
+### 6.5 The weekly summary by email
+
+**What it is.** An **optional** email that every department manager receives on
+Monday morning with the previous week —Monday to Sunday— for their team. It is a
+summary to read in two minutes, not a report: it is there so you can spot a
+deviation or an incident early without having to open the panel every Monday,
+and for nothing else.
+
+**Who receives it.** Department managers with an active account and an email
+address, and **each one only their own**: the Kitchen manager sees nobody from
+Reception, exactly as in the panel. HR and administration do not receive it:
+they have the whole panel, and a weekly email with the entire workforce would be
+a periodic copy of the record outside the system.
+
+**What it carries.**
+
+- One line per person with the **hours worked**, the **contracted hours** and
+  the **deviation**, the **days with activity**, the **absences** and the
+  **public holidays** of the week. They are the same columns as the
+  hours-per-period report (§6.1), calculated the same way and with the same
+  caveats (§5 bis.4): the email calculates nothing new.
+- The department **totals**.
+- The **number of open incidents** in the department, with no detail: the
+  detail already arrives in the daily incident notice and is in the inbox (§4).
+- **Where to see it in full**: "Panel → Reports, from <start> to <end>". It is
+  a pointer, not a link: the email carries no addresses to click on.
+
+If the department has more than **50 people**, the email carries the first 50
+and says how many are left: the rest is in the panel.
+
+**What it is not.** It does not replace the panel or the report: days with an
+open shift do not count, and a correction or an incident resolved after Monday
+changes the report, but not the email that already went out. No text in the
+email compares people with each other or rates them: they are the same numbers
+as the screen, in your inbox.
+
+**How it is enabled.** From **Operational settings**, with an administrator
+account, "Weekly summary by email" → "Enabled". It ships switched off. The
+installation needs outgoing email —IT decides that at installation time, as
+with the notice for background reports (§6.3)— and the licence needs to include
+this feature; if either is missing, nothing happens: the email does not arrive
+and everything else carries on as usual. It is enabled for every manager at
+once; in this version there is no individual opt-out.
+
+> **That email carries people's names and hours, and it leaves the system.**
+> That is why every send is recorded as an access to personal data, just like
+> downloading a report: who it was sent to, which week and which people it
+> included. It is an internal communication that is legitimate for its
+> purpose, but it is worth treating it as what it is: do not forward it outside
+> the hotel or print it to leave it on a noticeboard. And once delivered **it is
+> a copy outside the product**: it lives in your mailbox, and how long it stays
+> there is decided by the hotel with its advisers, not by the system's retention
+> ([`legal-obligations.md`](legal-obligations.md) §4).
+
 ---
 
 ## 7. The compliance profile

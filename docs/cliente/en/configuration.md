@@ -58,6 +58,9 @@ only the ones you need.
 | `ATTENDANCE_MIN_TRANSIT_SECONDS` | `120` | 0 – 3600 | Minimum credible time to get from one kiosk to another. Below it, an incident is opened. Set it to `0` if you have two tablets at the same door; raise it if there are two buildings. |
 | `ATTENDANCE_PATTERN_WINDOW_SECONDS` | `10` | 0 – 300 | Seconds below which two clock-ins by **two different people at the same kiosk** count as one **coincidence** (at most one per pair and day). **It opens no incident on its own**: the same pair has to accumulate the days of the next key. `0` disables this pattern. |
 | `ATTENDANCE_PATTERN_MIN_REPEATS` | `3` | 1 – 30 | Days with a coincidence that the same pair has to accumulate, within the last 30 days, for the "Anomalous credential usage pattern" incident to open —**one for each person**—. Raise it if entering in a group through the same door is normal at your site; lower it to `1` only if you want to see every pair of back-to-back scans. **The incident cancels no clocking and labels nobody**: the manager reviews it ([`hr-guide.md`](hr-guide.md) §4.5). |
+| `WEEKLY_SUMMARY_EMAIL` | `disabled` | `enabled` or `disabled` | Turns on the **weekly summary by email**: on Mondays at 06:00 UTC, every active department manager with an email address receives the previous week **for their own scope and nobody else's**. It requires outgoing email to be configured (section 6.21) and the `weekly_email_summary` feature in the licence; without either of them **the system works exactly the same** and the send is skipped, leaving a record. See below the table. |
+| `KIOSK_UPDATE_WINDOW` | `03:00-05:00` | `HH:MM-HH:MM`, site local time | Slot in which the tablets **are allowed** to install a new version of the kiosk app. Outside it they never update, even if the version has been waiting for days. It may cross midnight (`23:30-01:30`). See below the table. |
+| `KIOSK_UPDATE_QUIET_MINUTES` | `10` | 0 – 120 | Minutes **without a single clocking** that the tablet demands, on top of being inside the window and having an empty queue, before updating. It covers the shift that starts earlier than planned. `0` leaves only the other two conditions. |
 
 > **The last three keys adjust a monitoring system over the staff, not a
 > technical parameter.** The detection of credential usage patterns is part of
@@ -137,6 +140,50 @@ shift entries with their break in between.
 > **does not discard it**: those twenty seconds are lost, not the whole
 > afternoon. What the window still discards is the accidental double scan, which
 > is what it exists for.
+
+**`WEEKLY_SUMMARY_EMAIL` — who gets it and what it carries.** It is set in Panel
+→ **Operational settings** (`/settings`) → "Weekly summary by email". With
+`enabled`, every Monday at 06:00 UTC the system sends **one email per department
+manager** with an active account and an email address, and each one receives
+**only their own scope**: the Kitchen manager sees nobody from Reception. HR and
+administration do not receive it —they have the whole panel, and a weekly email
+with the entire workforce would be a periodic copy of the record outside the
+system—. It carries the previous week, Monday to Sunday: one line per person
+with hours worked, contracted and deviation, days with activity, absences and
+public holidays; the totals; the number of open incidents; and where to see it in full ("Panel →
+Reports, from <start> to <end>": a pointer, not a link). What each column means is in
+[`hr-guide.md`](hr-guide.md) §6.5.
+
+- **It needs outgoing email** (section 6.21) **and the `weekly_email_summary`
+  feature in the licence plan** (section 3 bis.4). If either is missing, nothing
+  fails: Monday's pass finishes fine, sends nothing and notes it in the
+  technical log with the reason ([`operation.md`](operation.md) §6). Clocking,
+  the panel and the reports do not depend on this email.
+- **That email carries names from your workforce and leaves your server**, like
+  the daily incident notice: every send leaves an audit entry with the
+  recipient, the week and the identifiers of the people included —never their
+  names—. The same applies as for that one: if your mail relay belongs to a
+  third party, it is a data processor
+  ([`legal-obligations.md`](legal-obligations.md) §2).
+- **It is per installation, not per department**: it is switched on for every
+  manager or for none, and in this version there is no individual opt-out. The
+  change is audited like any other setting.
+
+**`KIOSK_UPDATE_WINDOW` and `KIOSK_UPDATE_QUIET_MINUTES` — when the tablet
+changes version.** The kiosk app checks every hour whether there is a new
+version on the server and, when there is, **it does not install it right away**:
+it waits until **three conditions hold at the same time** —the site's local
+time is inside the window, the queue of unsent clockings is empty and there has
+been no clocking in the last `KIOSK_UPDATE_QUIET_MINUTES` minutes— and only then
+does it reload with the new version, in a few seconds. If the window closes
+before they hold, it waits for the next one. Both values reach the tablets in
+the heartbeat —in under a minute, without touching them— and every tablet
+stores them, so they hold even if there is no network at that moment; a tablet
+that has not received any yet uses the defaults. Put the window in the deadest
+slot of your site and **never over a shift change**: the tablet does not guess
+your schedule, and an update with thirty people at the door is exactly what
+these two keys prevent. The detail —and what the diagnostic screen shows while
+a version is waiting— is in [`operation.md`](operation.md) §11.1.
 
 ### 2.2 Branding
 
@@ -1448,9 +1495,9 @@ sudo docker compose exec app php artisan product:doctor
 > means whoever has one can read the backups, sign cards or open the sealed
 > PINs of the other.
 
-### 6.0 The nineteen keys that are NOT environment variables
+### 6.0 The twenty-two keys that are NOT environment variables
 
-Nineteen properties of the installation do not live in the `.env` but in the
+Twenty-two properties of the installation do not live in the `.env` but in the
 `installation_settings` table, are edited **from the panel** and take effect on
 the next request without restarting anything:
 
@@ -1463,6 +1510,9 @@ the next request without restarting anything:
 | `ATTENDANCE_MIN_TRANSIT_SECONDS` | Panel → **Operational settings** (`/settings`) | Section 2.1 |
 | `ATTENDANCE_PATTERN_WINDOW_SECONDS` | Panel → **Operational settings** (`/settings`) | Section 2.1 |
 | `ATTENDANCE_PATTERN_MIN_REPEATS` | Panel → **Operational settings** (`/settings`) | Section 2.1 |
+| `WEEKLY_SUMMARY_EMAIL` | Panel → **Operational settings** (`/settings`) → "Weekly summary by email" | Section 2.1 |
+| `KIOSK_UPDATE_WINDOW` | Panel → **Operational settings** (`/settings`) | Section 2.1 |
+| `KIOSK_UPDATE_QUIET_MINUTES` | Panel → **Operational settings** (`/settings`) | Section 2.1 |
 | `BRANDING_APP_NAME` | Panel → **Branding** (`/branding`) | Section 2.2 |
 | `BRANDING_LOGO_PATH` | Panel → **Branding** (`/branding`) | Section 2.2 |
 | `BRANDING_ACCENT_COLOR` | Panel → **Branding** (`/branding`) | Section 2.2 |
@@ -1504,14 +1554,18 @@ recorded in the audit trail with your name, the date and the previous value. If
 you cannot see those entries in the menu, they are not missing: your account is
 not an administrator one.
 
-**The database wins** (section 1). Twelve of the nineteen —the branding ones,
-the language ones, the service code and the six payroll export ones— do not
-exist as environment variables: the branding and language ones were removed so
-that there were not two places to write the same piece of data; the service code
-never had one, because a secret in the `.env` is a secret that ends up in an
-unencrypted backup; and the six payroll export ones never had one either,
-because the format a payroll package asks for is tuned by trial and error on
-roll-out day and cannot demand a container restart on every attempt.
+**The database wins** (section 1). Fifteen of the twenty-two —the branding ones,
+the language ones, the service code, the six payroll export ones, the weekly
+summary and the two for the kiosk update window— do not exist as environment
+variables: the branding and language ones were removed so that there were not
+two places to write the same piece of data; the service code never had one,
+because a secret in the `.env` is a secret that ends up in an unencrypted
+backup; the six payroll export ones never had one either, because the format a
+payroll package asks for is tuned by trial and error on roll-out day and cannot
+demand a container restart on every attempt; and the last three were born in
+the panel, because they are operating decisions of the hotel —whether an email
+with names goes out, and at what time a tablet may restart— and not deployment
+ones.
 
 **The five `ATTENDANCE_*` do still appear in `.env.example`, and it is worth
 knowing exactly what they are:** a copy of the default value, written there so

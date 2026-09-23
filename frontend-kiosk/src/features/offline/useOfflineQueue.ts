@@ -19,7 +19,13 @@ import type { RosterLookupPort, ScanSubmissionPort } from '@/features/scan/appli
 import type { ApiClient } from '@/shared/api/client'
 import type { ConnectivityController } from '@/shared/connectivity/useConnectivity'
 import type { ClientErrorCode, ErrorReporter } from '@/shared/telemetry/errorReporter'
-import { readDeviceToken } from '@/shared/telemetry/deviceIdentity'
+import {
+  readDeviceToken,
+  readLastScanAt,
+  readUpdateQuietMinutes,
+  readUpdateWindow,
+  storeLastScanAt,
+} from '@/shared/telemetry/deviceIdentity'
 import type { KioskTelemetrySnapshot } from '@/shared/telemetry/heartbeat'
 import type { CachedRoster, RosterDiagnostic } from './application/cachedRoster'
 import { createCachedRoster, ROSTER_REFRESH_MS } from './application/cachedRoster'
@@ -184,7 +190,18 @@ export function createOfflineQueueController(options: OfflineQueueOptions): Offl
   }, ROSTER_REFRESH_MS)
 
   return {
-    submission: { submit: (scan) => runner.submit(scan) },
+    submission: {
+      // `storeLastScanAt` ANTES de someterlo al drenaje, y con el `occurred_at`
+      // del propio escaneo -no un `Date.now()` aparte-: es el instante real de
+      // «hubo alguien delante de la camara», que es lo unico que le importa a
+      // la puerta de actualizacion (RF-KI-07, tarea 3.12). Se anota pase lo
+      // que pase despues -exito, rechazo o encolado-: los tres son la MISMA
+      // senal de «esta tablet esta en uso ahora mismo».
+      submit: (scan) => {
+        storeLastScanAt(scan.occurred_at)
+        return runner.submit(scan)
+      },
+    },
     roster: roster.port,
     pinSealingPublicKey: () => roster.pinSealingPublicKey(),
     rosterSettled: () => roster.settled(),
@@ -237,7 +254,14 @@ export function createOfflineQueueController(options: OfflineQueueOptions): Offl
     },
 
     canUpdateNow(now = new Date()) {
-      return canApplyUpdate({ now, pendingScans: queue.stats().size })
+      const lastScanAtIso = readLastScanAt()
+      return canApplyUpdate({
+        now,
+        pendingScans: queue.stats().size,
+        lastScanAt: lastScanAtIso === null ? null : new Date(lastScanAtIso),
+        window: readUpdateWindow(),
+        quietMinutes: readUpdateQuietMinutes(),
+      })
     },
 
     wakeNow: wake,

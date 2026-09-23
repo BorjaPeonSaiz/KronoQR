@@ -5,6 +5,7 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"]
   },
   "include": [
+    "env.d.ts",
     "playwright.config.ts",
     "playwright.screenshots.config.ts",
     "tests/e2e/**/*.ts",

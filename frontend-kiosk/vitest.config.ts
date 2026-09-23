@@ -1,6 +1,12 @@
 import { fileURLToPath } from 'node:url'
 import { configDefaults, defineConfig, mergeConfig } from 'vitest/config'
-import viteConfig from './vite.config.ts'
+import viteConfigFn from './vite.config.ts'
+
+// `vite.config.ts` exporta una FUNCION (necesita `mode` para decidir
+// `__KRONOQR_TEST_HOOKS__`, RF-KI-07, tarea 3.12, decision 16): se invoca a
+// mano con `mode: 'test'` -Vitest, igual que el E2E con `--mode test`, no es
+// el build de produccion- antes de fusionarla con los ajustes de pruebas.
+const viteConfig = await viteConfigFn({ mode: 'test', command: 'serve' })
 
 export default mergeConfig(
   viteConfig,

@@ -33,4 +33,22 @@ enum ReportDataset: string
 
     /** `GET /api/v1/reports/payroll-export` y su generacion en diferido (RF-IN-07). */
     case PayrollExport = 'payroll_export';
+
+    /**
+     * El resumen semanal que sale por correo al responsable de cada
+     * departamento (**RF-PR-05**, `reporting:weekly-summary`, tarea 3.12).
+     *
+     * Es el mismo informe por periodo de arriba, con la semana pasada y el
+     * alcance de esa cuenta, **pero no es la misma divulgacion**: aqui nadie
+     * pulso ningun boton y los datos salen del servidor por SMTP hacia una
+     * bandeja de entrada que se puede reenviar. Ante una brecha (RL-15), «RRHH
+     * miro el cuadro de horas» y «el sistema mando cada lunes las horas de
+     * Cocina al correo de su responsable» son dos hechos que hay que poder
+     * separar con una sola consulta al trail.
+     *
+     * Su asiento es ademas el unico que lleva `manager_user_id`: es el que
+     * responde **a quien** se le fueron los datos, que en los otros dos es
+     * siempre el actor de la peticion.
+     */
+    case WeeklySummary = 'weekly_summary';
 }

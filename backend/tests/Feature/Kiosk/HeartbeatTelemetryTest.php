@@ -341,3 +341,71 @@ it('lleva a la tablet el fichaje de pausa activado y el umbral cambiado', functi
         ->assertValidResponse()
         ->assertJsonPath('break_clocking_enabled', false);
 })->group('RF-AT-12', 'RF-AT-10', 'RF-PD-01');
+
+// --- La ventana de actualizacion de la tablet (RF-KI-07, tarea 3.12) --------
+
+it('entrega la ventana de actualizacion de serie en cada latido', function (): void {
+    // RF-KI-07 dice «ventana de actualizacion **configurable**», asi que la
+    // franja la declara el cliente y viaja por el unico canal autenticado que la
+    // tablet repite cada minuto. Antes de esta tarea el quiosco llevaba tres
+    // franjas de cambio de turno escritas en su propio codigo, que es
+    // exactamente lo que la regla dura 13 prohibe.
+    $quiosco = quioscoConMetricas();
+
+    Api::as($quiosco['token'])->post('/api/v1/kiosk/heartbeat', [
+        'app_version' => '2.2.0',
+        'pending_queue_size' => 0,
+    ])
+        ->assertOk()
+        ->assertValidRequest()
+        ->assertValidResponse()
+        ->assertJsonPath('update_window.start', '03:00')
+        ->assertJsonPath('update_window.end', '05:00')
+        ->assertJsonPath('update_window.quiet_minutes', 10);
+})->group('RF-KI-07', 'RF-PD-01');
+
+it('lleva a la tablet la ventana de actualizacion cambiada, incluso cruzando la medianoche', function (): void {
+    // Cambiarla en el panel llega a todas las tablets en sesenta segundos, sin
+    // reinstalar nada y sin tocar la tablet. Y la franja puede cruzar las doce:
+    // un hotel con turno de noche tiene su hueco tranquilo ahi.
+    $quiosco = quioscoConMetricas();
+
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN));
+
+    Api::as($token)->patch('/api/v1/settings', ['settings' => [
+        SettingKey::KIOSK_UPDATE_WINDOW->value => '23:30-02:15',
+        SettingKey::KIOSK_UPDATE_QUIET_MINUTES->value => 0,
+    ]])->assertStatus(200);
+
+    // `OperationalSettingsProvider` esta enlazado con `scoped()`: memoria por
+    // PETICION, que en produccion muere con ella.
+    app()->forgetScopedInstances();
+
+    Api::as($quiosco['token'])->post('/api/v1/kiosk/heartbeat', [
+        'app_version' => '2.2.0',
+        'pending_queue_size' => 0,
+    ])
+        ->assertOk()
+        ->assertValidResponse()
+        ->assertJsonPath('update_window.start', '23:30')
+        ->assertJsonPath('update_window.end', '02:15')
+        // Cero es legitimo: apaga la guarda de silencio y deja mandar a la
+        // franja y a la cola vacia.
+        ->assertJsonPath('update_window.quiet_minutes', 0);
+})->group('RF-KI-07', 'RF-PD-01');
+
+it('rechaza una ventana de actualizacion que no es HH:MM-HH:MM', function (string $window): void {
+    // El `422` llega con una persona delante, que es donde sirve. Si la forma se
+    // comprobara solo al leerla, el quiosco recibiria la de serie y nadie
+    // entenderia por que su franja «no se aplica».
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN));
+
+    Api::as($token)
+        ->patch('/api/v1/settings', ['settings' => [SettingKey::KIOSK_UPDATE_WINDOW->value => $window]])
+        ->assertStatus(422);
+})->with([
+    'hora que no existe' => ['24:00-05:00'],
+    'sin ceros a la izquierda' => ['3:00-5:00'],
+    'un solo extremo' => ['03:00'],
+    'vacia' => [''],
+])->group('RF-KI-07', 'RF-PD-01');

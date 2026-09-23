@@ -1340,7 +1340,9 @@
     "intro": "Los umbrales con los que se decide si un tramo es anómalo, qué escaneos se descartan como rebote y qué desfase de reloj o de tránsito abre una incidencia; y los idiomas que ofrece esta instalación. Ningún umbral legal vive aquí: eso es «Perfil de cumplimiento».",
     "loading": "Cargando los ajustes…",
     "attendanceHeading": "Fichaje",
+    "weeklySummaryHeading": "Resumen semanal",
     "diagnosticsHeading": "Diagnóstico",
+    "kioskHeading": "Quiosco",
     "localesHeading": "Idiomas",
     "payrollHeading": "Salida a nómina",
     "payrollIntro": "El formato del fichero que exporta «Nómina» (RF-IN-07): qué columnas lleva, en qué orden, con qué separador y cómo se escriben las horas y las fechas. Un cliente con otro programa de nómina cambia esto, no el producto.",
@@ -1353,6 +1355,9 @@
       "patternMinRepeats": "Días de coincidencia antes de incidencia",
       "kioskServiceCode": "Código de servicio del quiosco",
       "breakClocking": "Fichaje de pausa",
+      "weeklySummaryEmail": "Resumen semanal por correo",
+      "kioskUpdateWindow": "Ventana de actualización del quiosco",
+      "kioskUpdateQuietMinutes": "Minutos sin fichajes antes de actualizar",
       "localeDefault": "Idioma por defecto",
       "localeAvailable": "Idiomas disponibles",
       "payrollColumns": "Columnas del fichero",
@@ -1372,6 +1377,9 @@
       "kioskServiceCode": "Con él se abre la pantalla de diagnóstico de la tablet. Vacío: la pantalla se abre sin código. Solo cifras, de 8 a 12.",
       "kioskServiceCodeRedacted": "No visible con este tipo de acceso: quien entra como soporte no ve ni puede cambiar el código de servicio.",
       "breakClocking": "Activado: la tablet enseña el botón «Pausa» y, a partir de la próxima revisión nocturna, un tramo continuo sin pausa (RN-12) empieza a abrir incidencias y a contarse en la vista de cumplimiento. Desactivado: el botón desaparece de la tablet y RN-12 vuelve a quedar suspendida, sin cerrar ninguna incidencia ya abierta.",
+      "weeklySummaryEmail": "Activado: cada lunes a las 06:00 UTC, cada responsable de departamento activo y con correo recibe la semana anterior de su ámbito y de nadie más: horas trabajadas, contratadas y desviación, días con actividad, ausencias y festivos. Exige tener la salida de correo del centro configurada y la funcionalidad incluida en la licencia; sin alguna de las dos, el envío se omite sin error.",
+      "kioskUpdateWindow": "Franja en la que la tablet tiene permiso para instalar una versión nueva. Fuera de ella no se actualiza nunca, aunque la versión lleve días esperando; dentro, solo lo hace si además la cola de fichajes está vacía y no ha habido ningún escaneo reciente. Formato HH:MM-HH:MM; puede cruzar la medianoche (por ejemplo 23:00-02:00).",
+      "kioskUpdateQuietMinutes": "Minutos sin ningún fichaje que la tablet exige, además de estar dentro de la ventana y con la cola vacía, antes de actualizarse. Cubre el turno que empieza antes de lo previsto; 0 deja solo las otras dos condiciones. Rango admitido: {minimum}–{maximum} minutos.",
       "localeDefault": "Idioma con el que se sirven las tres aplicaciones y los documentos cuando nadie elige otro. Tiene que estar entre los idiomas disponibles.",
       "localeAvailable": "Idiomas que ofrece esta instalación. Al menos uno, y el idioma por defecto siempre tiene que quedar entre los marcados.",
       "payrollColumns": "Una columna por línea, en el orden en que aparecen en el fichero. Cada línea es el identificador tal cual (por ejemplo «worked_hours») o el identificador seguido de «=» y la etiqueta de cabecera que quieras usar (por ejemplo «worked_hours=Horas trabajadas»). Un identificador que no esté en el catálogo de abajo se rechaza al guardar.",
@@ -1383,6 +1391,10 @@
       "payrollHeaderRow": "Con la fila desactivada, el fichero empieza directamente por los datos: algunos programas de importación automática la rechazan si la llevan."
     },
     "breakClockingOptions": {
+      "enabled": "Activado",
+      "disabled": "Desactivado"
+    },
+    "weeklySummaryEmailOptions": {
       "enabled": "Activado",
       "disabled": "Desactivado"
     },
@@ -1404,7 +1416,8 @@
       "notAWholeNumber": "Escribe un número entero, sin decimales ni letras.",
       "notAServiceCode": "Escribe un código de 8 a 12 cifras, o déjalo vacío para no usar ninguno.",
       "empty": "Escribe al menos una columna, una por línea.",
-      "unknownColumn": "Alguna línea usa un identificador que no está en el catálogo de columnas."
+      "unknownColumn": "Alguna línea usa un identificador que no está en el catálogo de columnas.",
+      "invalidUpdateWindowFormat": "Escribe la ventana con el formato HH:MM-HH:MM, por ejemplo 03:00-05:00."
     },
     "affectsWorkedHoursWarning": "Vas a cambiar un umbral que puede modificar los minutos que quedan registrados. El cambio queda auditado con tu nombre, la fecha, el valor anterior y el nuevo.",
     "audited": "Cada clave modificada deja su propio apunte en el trail de auditoría (calculation_setting.changed) con el valor anterior, el nuevo, quién lo cambió y cuándo.",

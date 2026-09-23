@@ -16,6 +16,7 @@ use App\Modules\Reporting\Application\Port\ComplianceMetrics;
 use App\Modules\Reporting\Application\Port\ComplianceProfileReference;
 use App\Modules\Reporting\Application\Port\EmployeeAttribution;
 use App\Modules\Reporting\Application\Port\LivePresenceReader;
+use App\Modules\Reporting\Application\Port\OpenIncidentCount;
 use App\Modules\Reporting\Application\Port\PayrollDocumentWriter;
 use App\Modules\Reporting\Application\Port\PeriodReportReader;
 use App\Modules\Reporting\Application\Port\PresenceMetrics;
@@ -32,6 +33,10 @@ use App\Modules\Reporting\Application\Port\ReportExportRepository;
 use App\Modules\Reporting\Application\Port\ReportExportStorage;
 use App\Modules\Reporting\Application\Port\ReportingEventPublisher;
 use App\Modules\Reporting\Application\Port\ReportIssuerDirectory;
+use App\Modules\Reporting\Application\Port\WeeklySummaryDeliveries;
+use App\Modules\Reporting\Application\Port\WeeklySummaryMailer;
+use App\Modules\Reporting\Application\Port\WeeklySummaryMetrics;
+use App\Modules\Reporting\Application\Port\WeeklySummaryRecipients;
 use App\Modules\Reporting\Application\Port\WorkDayCompletionReader;
 use App\Modules\Reporting\Application\Port\WorkDayJournalReader;
 use App\Modules\Reporting\Application\Port\WorkedTimeMetrics;
@@ -39,6 +44,7 @@ use App\Modules\Reporting\Application\Query\GeneratePeriodReport;
 use App\Modules\Reporting\Application\UseCase\GenerateReportExportHandler;
 use App\Modules\Reporting\Application\UseCase\PurgeExpiredReportExports;
 use App\Modules\Reporting\Application\UseCase\RequestReportExport;
+use App\Modules\Reporting\Application\UseCase\SendWeeklySummaries;
 use App\Modules\Reporting\Application\UseCase\ShowReportExport;
 use App\Modules\Reporting\Domain\Model\ReportExport;
 use App\Modules\Reporting\Domain\ValueObject\ComplianceSummary;
@@ -62,6 +68,7 @@ use App\Modules\Reporting\Infrastructure\Console\AdoptionMetricsCommand;
 use App\Modules\Reporting\Infrastructure\Console\ComplianceMetricsCommand;
 use App\Modules\Reporting\Infrastructure\Console\PresenceMetricsCommand;
 use App\Modules\Reporting\Infrastructure\Console\PurgeExpiredReportExportsCommand;
+use App\Modules\Reporting\Infrastructure\Console\WeeklySummaryCommand;
 use App\Modules\Reporting\Infrastructure\Export\ConfigurablePayrollDocumentWriter;
 use App\Modules\Reporting\Infrastructure\Export\PeriodReportCriteriaNarrator;
 use App\Modules\Reporting\Infrastructure\Export\PeriodReportDocumentWriters;
@@ -73,23 +80,30 @@ use App\Modules\Reporting\Infrastructure\Metrics\TextfileAbsenceMetrics;
 use App\Modules\Reporting\Infrastructure\Metrics\TextfileAdoptionMetrics;
 use App\Modules\Reporting\Infrastructure\Metrics\TextfileComplianceMetrics;
 use App\Modules\Reporting\Infrastructure\Metrics\TextfilePresenceMetrics;
+use App\Modules\Reporting\Infrastructure\Metrics\TextfileWeeklySummaryMetrics;
 use App\Modules\Reporting\Infrastructure\Notification\MailReportExportNotifier;
+use App\Modules\Reporting\Infrastructure\Notification\MailWeeklySummaryNotifier;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseAbsenceCensusReader;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseComplianceFactsReader;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseComplianceIncidentLinks;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseComplianceProfileReference;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseEmployeeAttribution;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseLivePresenceReader;
+use App\Modules\Reporting\Infrastructure\Persistence\DatabaseOpenIncidentCount;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabasePeriodReportReader;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseReportExportRecipients;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseReportExportRepository;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseReportIssuerDirectory;
+use App\Modules\Reporting\Infrastructure\Persistence\DatabaseWeeklySummaryDeliveries;
+use App\Modules\Reporting\Infrastructure\Persistence\DatabaseWeeklySummaryRecipients;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseWorkDayCompletionReader;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseWorkDayJournalReader;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
+use App\Modules\Shared\Application\Port\FeatureGate;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
+use App\Modules\Shared\Application\Port\WeeklySummaryPreference;
 use App\Modules\Shared\Domain\ValueObject\PayrollLayout;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Foundation\Application;
@@ -121,6 +135,18 @@ use Illuminate\Support\ServiceProvider;
  */
 final class ReportingServiceProvider extends ServiceProvider
 {
+    /**
+     * El informe por periodo **del camino sin nadie delante**: el mismo del
+     * panel, con el `statement_timeout` de la generacion en diferido (600 s).
+     *
+     * Un enlace con nombre y no una clase propia porque es exactamente el mismo
+     * caso de uso con otro lector: lo comparten la generacion en diferido
+     * (RF-IN-06) y el resumen semanal (RF-PR-05), y compartirlo es lo que impide
+     * que uno de los dos se quede con un colaborador antiguo. Ver
+     * {@see self::deferredPeriodReport()}.
+     */
+    public const string DEFERRED_PERIOD_REPORT = 'reporting.period_report.deferred';
+
     public function register(): void
     {
         // RF-PA-03. El adaptador es SQL plano sobre la conexion —cuatro consultas
@@ -171,6 +197,7 @@ final class ReportingServiceProvider extends ServiceProvider
 
         $this->registerPeriodReport();
         $this->registerComplianceSummary();
+        $this->registerWeeklySummary();
     }
 
     public function boot(): void
@@ -242,6 +269,7 @@ final class ReportingServiceProvider extends ServiceProvider
                 ComplianceMetricsCommand::class,
                 PresenceMetricsCommand::class,
                 PurgeExpiredReportExportsCommand::class,
+                WeeklySummaryCommand::class,
             ]);
         }
     }
@@ -277,6 +305,63 @@ final class ReportingServiceProvider extends ServiceProvider
         $this->app->bind(EmployeeAttribution::class, DatabaseEmployeeAttribution::class);
 
         $this->registerPeriodReportExport();
+    }
+
+    /**
+     * El resumen semanal por correo (RF-PR-05, tarea 3.12).
+     *
+     * **Se compone a mano y no se deja al contenedor** por un solo colaborador:
+     * `MAIL_MAILER`. El caso de uso necesita saber si el transporte es de verdad
+     * —`log` y `array` no lo son— y `Application` no lee configuracion (regla
+     * dura 14, doc 02 §3.5), asi que el valor entra ya resuelto por aqui, igual
+     * que en `MailReportExportNotifier`.
+     *
+     * **El informe es el MISMO objeto del panel**, resuelto del contenedor: los
+     * criterios, los festivos, la zona horaria y el asiento de divulgacion tienen
+     * que ser los de la pantalla, o el correo del lunes y el informe que alguien
+     * abra a continuacion contarian cosas distintas de la misma semana. Lo unico
+     * que cambia es que los dos techos sincronos no aplican, y eso lo decide el
+     * caso de uso, no este enlace.
+     */
+    private function registerWeeklySummary(): void
+    {
+        $this->app->bind(
+            self::DEFERRED_PERIOD_REPORT,
+            fn (Application $app): GeneratePeriodReport => $this->deferredPeriodReport($app),
+        );
+
+        $this->app->bind(WeeklySummaryRecipients::class, DatabaseWeeklySummaryRecipients::class);
+        $this->app->bind(WeeklySummaryDeliveries::class, DatabaseWeeklySummaryDeliveries::class);
+        $this->app->bind(OpenIncidentCount::class, DatabaseOpenIncidentCount::class);
+        $this->app->bind(WeeklySummaryMailer::class, MailWeeklySummaryNotifier::class);
+
+        // Fichero para el colector *textfile*, con el mismo patron que las de
+        // ausencias y cumplimiento: lo publica un comando que corre y termina.
+        $this->app->bind(WeeklySummaryMetrics::class, TextfileWeeklySummaryMetrics::class);
+
+        $this->app->bind(
+            SendWeeklySummaries::class,
+            static fn (Application $app): SendWeeklySummaries => new SendWeeklySummaries(
+                $app->make(WeeklySummaryRecipients::class),
+                $app->make(WeeklySummaryDeliveries::class),
+                $app->make(WeeklySummaryMailer::class),
+                // El informe **del lector diferido** (600 s) y no el del panel
+                // (10 s): esto corre sin nadie delante y el informe de un
+                // departamento grande de una semana entera no tiene por que
+                // caber en el presupuesto de una respuesta HTTP. Si aun asi lo
+                // agota, es el fallo de ESE destinatario y no de la pasada.
+                $app->make(self::DEFERRED_PERIOD_REPORT),
+                $app->make(OpenIncidentCount::class),
+                $app->make(PersonalDataAccessLog::class),
+                $app->make(WeeklySummaryMetrics::class),
+                $app->make(FeatureGate::class),
+                $app->make(WeeklySummaryPreference::class),
+                $app->make(InstallationSiteProvider::class),
+                $app->make(Clock::class),
+                $app->make(ConnectionInterface::class),
+                Config::string('mail.default'),
+            ),
+        );
     }
 
     /**
@@ -475,7 +560,7 @@ final class ReportingServiceProvider extends ServiceProvider
             GenerateReportExportHandler::class,
             fn (Application $app): GenerateReportExportHandler => new GenerateReportExportHandler(
                 $app->make(ReportExportRepository::class),
-                $this->deferredPeriodReport($app),
+                $app->make(self::DEFERRED_PERIOD_REPORT),
                 $app->make(ReportExportDocumentWriter::class),
                 $app->make(PayrollDocumentWriter::class),
                 $app->make(ReportCriteriaNarrator::class),
@@ -497,6 +582,14 @@ final class ReportingServiceProvider extends ServiceProvider
      * colaboradores son los que ya usa la consulta sincrona, y eso es lo que
      * garantiza que el fichero y la pantalla digan lo mismo (criterios, festivos,
      * zona horaria y asiento de divulgacion incluidos).
+     *
+     * **Dos consumidores desde la tarea 3.12** y por eso hay un enlace con
+     * nombre ({@see self::DEFERRED_PERIOD_REPORT}) y no una llamada suelta: la
+     * generacion en diferido (RF-IN-06) y el resumen semanal (RF-PR-05). Los dos
+     * corren sin nadie delante, asi que los techos de la respuesta sincrona no
+     * les aplican y el que si importa es el del servidor. Con dos copias de esta
+     * composicion, el dia que cambiara un colaborador una de ellas se quedaria
+     * atras en silencio.
      */
     private function deferredPeriodReport(Application $app): GeneratePeriodReport
     {

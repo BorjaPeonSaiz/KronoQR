@@ -233,3 +233,93 @@ test(
     await expect(page.getByTestId('kiosk-service-code')).toHaveValue('')
   },
 )
+
+// --- Ventana de actualizacion del quiosco (RF-KI-07, tarea 3.12) -----------
+//
+// La tablet solo aplica una version nueva dentro de esta franja, con la cola
+// vacia y sin fichajes recientes (decision 9 de la ficha); aqui solo se
+// prueba el lado del panel -que la ventana y los minutos de silencio se
+// guardan y persisten, y que un formato invalido no llega al servidor-. El
+// recorrido de la tablet aplicando (o no) la actualizacion es de
+// `frontend-kiosk`.
+
+test(
+  'cambiar la ventana de actualizacion del quiosco y los minutos de silencio los guarda y persiste',
+  { tag: ['@RF-KI-07'] },
+  async ({ page }) => {
+    await stubManagementApi(page, { role: 'admin' })
+    await logInAsAdmin(page)
+
+    await page.goto('/settings')
+
+    await expect(page.getByTestId('kiosk-update-window')).toHaveValue('03:00-05:00')
+    await expect(page.getByTestId('kiosk-update-quiet-minutes')).toHaveValue('10')
+
+    const [patchRequest] = await Promise.all([
+      page.waitForRequest(
+        (request) => request.url().includes('/api/v1/settings') && request.method() === 'PATCH',
+      ),
+      (async () => {
+        // La nueva ventana cruza la medianoche a proposito: es el caso que
+        // demuestra que el formato lo permite (decision 9 de la ficha).
+        await page.getByTestId('kiosk-update-window').fill('23:00-02:00')
+        await page.getByTestId('kiosk-update-quiet-minutes').fill('20')
+        await page.getByTestId('save').click()
+      })(),
+    ])
+
+    expect(patchRequest.postDataJSON()).toEqual({
+      settings: { KIOSK_UPDATE_WINDOW: '23:00-02:00', KIOSK_UPDATE_QUIET_MINUTES: 20 },
+    })
+
+    await expect(page.getByTestId('saved')).toBeVisible()
+
+    // El cambio persiste tras recargar: lo guardo el servidor.
+    await page.reload()
+    await expect(page.getByTestId('kiosk-update-window')).toHaveValue('23:00-02:00')
+    await expect(page.getByTestId('kiosk-update-quiet-minutes')).toHaveValue('20')
+  },
+)
+
+test(
+  'una ventana con formato invalido no deja guardar, sin llegar al servidor',
+  { tag: ['@RF-KI-07'] },
+  async ({ page }) => {
+    await stubManagementApi(page, { role: 'admin' })
+    await logInAsAdmin(page)
+
+    await page.goto('/settings')
+
+    await page.getByTestId('kiosk-update-window').fill('25:99-05:00')
+
+    await expect(page.getByText('Escribe la ventana con el formato HH:MM-HH:MM')).toBeVisible()
+    await expect(page.getByTestId('save')).toBeDisabled()
+  },
+)
+
+// --- Resumen semanal por correo (RF-PR-05, tarea 3.12) ----------------------
+//
+// Opcional y apagado de serie (doc 05 §5.7 «correo opcional»); aqui solo se
+// prueba que el ajuste se guarda y persiste. El contenido del correo y el
+// envio en si son del backend.
+
+test(
+  'activar el resumen semanal por correo persiste tras recargar',
+  { tag: ['@RF-PR-05'] },
+  async ({ page }) => {
+    await stubManagementApi(page, { role: 'admin' })
+    await logInAsAdmin(page)
+
+    await page.goto('/settings')
+
+    await expect(page.getByTestId('weekly-summary-email')).toHaveValue('disabled')
+
+    await page.getByTestId('weekly-summary-email').selectOption('enabled')
+    await page.getByTestId('save').click()
+
+    await expect(page.getByTestId('saved')).toBeVisible()
+
+    await page.reload()
+    await expect(page.getByTestId('weekly-summary-email')).toHaveValue('enabled')
+  },
+)

@@ -83,6 +83,19 @@ const SERVICE_CODE_PATTERN = /^[0-9]{8,12}$/
 /** Tipada con el enum del contrato (RF-AT-12, tarea 3.5): un cambio de nombre en `SettingKey` falla aqui. */
 const BREAK_CLOCKING_KEY: SettingKey = 'ATTENDANCE_BREAK_CLOCKING'
 
+// --- Resumen semanal (RF-PR-05) y ventana de actualizacion del quiosco
+// (RF-KI-07), tarea 3.12 --------------------------------------------------
+//
+// Las tres claves ya estan en el enum `SettingKey` del contrato (segunda
+// vuelta de la tarea 3.12): `satisfies SettingKey` hace que un cambio de
+// nombre ahi falle aqui, mismo criterio que `BREAK_CLOCKING_KEY`.
+const WEEKLY_SUMMARY_EMAIL_KEY = 'WEEKLY_SUMMARY_EMAIL' satisfies SettingKey
+const KIOSK_UPDATE_WINDOW_KEY = 'KIOSK_UPDATE_WINDOW' satisfies SettingKey
+const KIOSK_UPDATE_QUIET_MINUTES_KEY = 'KIOSK_UPDATE_QUIET_MINUTES' satisfies SettingKey
+
+/** `HH:MM-HH:MM`, la misma forma que valida el servidor (decision 9 de la ficha 3.12): puede cruzar la medianoche, eso no lo dice el formato, lo permite. */
+const UPDATE_WINDOW_PATTERN = /^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$/
+
 // --- Salida a nomina (RF-IN-07, tarea 3.9) -----------------------------------
 //
 // Las seis claves `PAYROLL_EXPORT_*` TODAVIA NO ESTAN en el enum `SettingKey`
@@ -189,6 +202,13 @@ const localeAvailable = ref<string[]>([])
 const serviceCode = ref('')
 /** `enabled`/`disabled` (RF-AT-12, tarea 3.5). `disabled` de serie, como en el catalogo. */
 const breakClocking = ref('disabled')
+
+/** `disabled`/`enabled` (RF-PR-05, tarea 3.12). `disabled` de serie: el resumen es opcional (doc 05 §5.7). */
+const weeklySummaryEmail = ref('disabled')
+/** `HH:MM-HH:MM` en hora local del centro (RF-KI-07, tarea 3.12). `03:00-05:00` de serie. */
+const kioskUpdateWindow = ref('03:00-05:00')
+/** Entero 0-120 (RF-KI-07, tarea 3.12), como cadena para `v-model`. `10` de serie. */
+const kioskUpdateQuietMinutes = ref<number | string>('10')
 /**
  * Guardado DEFENSIVO (segunda vuelta de la tarea 3.3): el contrato de hoy
  * (`SettingValue = number | string | string[]`) no admite `null`, pero un
@@ -301,6 +321,11 @@ const payrollHeaderRowOptions = computed(() =>
   allowedValuesOf(settings.value, 'PAYROLL_EXPORT_HEADER_ROW'),
 )
 
+/** Los dos valores que el catalogo admite para `WEEKLY_SUMMARY_EMAIL` (RF-PR-05, tarea 3.12), mismo criterio que `breakClockingOptions`. */
+const weeklySummaryEmailOptions = computed(() =>
+  allowedValuesOf(settings.value, WEEKLY_SUMMARY_EMAIL_KEY),
+)
+
 /** Las columnas ya guardadas, o las de serie mientras la clave no tenga fila propia. */
 function payrollColumnsValueOf(catalog: InstallationSettings): readonly string[] {
   const value = entryOf(catalog, 'PAYROLL_EXPORT_COLUMNS')?.value
@@ -382,6 +407,13 @@ function fill(catalog: InstallationSettings): void {
 
   breakClocking.value = breakClockingValueOf(catalog)
 
+  weeklySummaryEmail.value = closedTextValueOf(catalog, WEEKLY_SUMMARY_EMAIL_KEY, 'disabled')
+  kioskUpdateWindow.value = closedTextValueOf(catalog, KIOSK_UPDATE_WINDOW_KEY, '03:00-05:00')
+  // Sin `fallback` (segunda vuelta, hallazgo del revisor en la 3.11
+  // aplicado aqui): si la clave no tiene fila propia se ve `0`, no un
+  // valor de serie que nadie ha configurado.
+  kioskUpdateQuietMinutes.value = integerValue(catalog, KIOSK_UPDATE_QUIET_MINUTES_KEY)
+
   payrollColumnsText.value = payrollColumnsValueOf(catalog).join('\n')
   payrollDelimiter.value = closedTextValueOf(catalog, 'PAYROLL_EXPORT_DELIMITER', 'semicolon')
   payrollHoursFormat.value = closedTextValueOf(catalog, 'PAYROLL_EXPORT_HOURS_FORMAT', 'hhmm')
@@ -422,6 +454,9 @@ const fieldLabels = computed<Record<string, string>>(() => ({
   'settings.ATTENDANCE_PATTERN_MIN_REPEATS': t('operationalSettings.fields.patternMinRepeats'),
   'settings.KIOSK_SERVICE_CODE': t('operationalSettings.fields.kioskServiceCode'),
   'settings.ATTENDANCE_BREAK_CLOCKING': t('operationalSettings.fields.breakClocking'),
+  'settings.WEEKLY_SUMMARY_EMAIL': t('operationalSettings.fields.weeklySummaryEmail'),
+  'settings.KIOSK_UPDATE_WINDOW': t('operationalSettings.fields.kioskUpdateWindow'),
+  'settings.KIOSK_UPDATE_QUIET_MINUTES': t('operationalSettings.fields.kioskUpdateQuietMinutes'),
   'settings.LOCALE_DEFAULT': t('operationalSettings.fields.localeDefault'),
   'settings.LOCALE_AVAILABLE': t('operationalSettings.fields.localeAvailable'),
   'settings.PAYROLL_EXPORT_COLUMNS': t('operationalSettings.fields.payrollColumns'),
@@ -446,14 +481,22 @@ function asInteger(raw: number | string): number | undefined {
   return /^-?\d+$/.test(trimmed) ? Number.parseInt(trimmed, 10) : undefined
 }
 
-function issueOf(key: AttendanceKey): 'required' | 'notAWholeNumber' | null {
-  const raw = form.value[key]
-
+/**
+ * `required`/`notAWholeNumber`, o `null` si es un entero valido -sin mirar
+ * rango, eso lo decide el `422` del servidor-. Pura: no lee `form`, para que
+ * la reuse cualquier campo entero de la pantalla (los seis `ATTENDANCE_*` de
+ * `issueOf` y `KIOSK_UPDATE_QUIET_MINUTES` de la tarea 3.12).
+ */
+function wholeNumberIssueOf(raw: number | string): 'required' | 'notAWholeNumber' | null {
   if (raw === '' || raw === null) {
     return 'required'
   }
 
   return asInteger(raw) === undefined ? 'notAWholeNumber' : null
+}
+
+function issueOf(key: AttendanceKey): 'required' | 'notAWholeNumber' | null {
+  return wholeNumberIssueOf(form.value[key])
 }
 
 function errorsFor(key: AttendanceKey): readonly string[] {
@@ -466,6 +509,36 @@ function errorsFor(key: AttendanceKey): readonly string[] {
 const invalidFields = computed(() =>
   ATTENDANCE_FIELDS.filter((field) => issueOf(field.key) !== null),
 )
+
+/** `KIOSK_UPDATE_QUIET_MINUTES` (RF-KI-07, tarea 3.12): mismo criterio que `issueOf`, sin rango -eso lo decide el `422`-. */
+const kioskUpdateQuietMinutesIssue = computed<'required' | 'notAWholeNumber' | null>(() =>
+  wholeNumberIssueOf(kioskUpdateQuietMinutes.value),
+)
+
+const kioskUpdateQuietMinutesErrors = computed<readonly string[]>(() => {
+  const issue = kioskUpdateQuietMinutesIssue.value
+  const local = issue === null ? [] : [t(`operationalSettings.errors.${issue}`)]
+
+  return [...local, ...serverFieldErrors(KIOSK_UPDATE_QUIET_MINUTES_KEY)]
+})
+
+/**
+ * `invalidUpdateWindowFormat`, o `null` si el texto cumple `HH:MM-HH:MM`
+ * (RF-KI-07, tarea 3.12): la misma forma que valida el servidor, comprobada
+ * en el cliente para no mandar una peticion que ya se sabe invalida.
+ */
+const kioskUpdateWindowLocalIssue = computed<'invalidUpdateWindowFormat' | null>(() =>
+  UPDATE_WINDOW_PATTERN.test(kioskUpdateWindow.value.trim()) ? null : 'invalidUpdateWindowFormat',
+)
+
+const kioskUpdateWindowErrors = computed<readonly string[]>(() => {
+  const local =
+    kioskUpdateWindowLocalIssue.value === null
+      ? []
+      : [t(`operationalSettings.errors.${kioskUpdateWindowLocalIssue.value}`)]
+
+  return [...local, ...serverFieldErrors(KIOSK_UPDATE_WINDOW_KEY)]
+})
 
 /**
  * `null` (valido) con el campo vacio -«sin codigo, la pantalla se abre sin
@@ -566,6 +639,32 @@ const pendingChanges = computed<UpdateSettingsRequest['settings']>(() => {
     changes['ATTENDANCE_BREAK_CLOCKING'] = breakClocking.value
   }
 
+  // Resumen semanal (RF-PR-05) y ventana de actualizacion del quiosco
+  // (RF-KI-07), tarea 3.12.
+  const previousWeeklySummaryEmail = closedTextValueOf(
+    current,
+    WEEKLY_SUMMARY_EMAIL_KEY,
+    'disabled',
+  )
+
+  if (weeklySummaryEmail.value !== previousWeeklySummaryEmail) {
+    changes[WEEKLY_SUMMARY_EMAIL_KEY] = weeklySummaryEmail.value
+  }
+
+  const trimmedUpdateWindow = kioskUpdateWindow.value.trim()
+  const previousUpdateWindow = closedTextValueOf(current, KIOSK_UPDATE_WINDOW_KEY, '03:00-05:00')
+
+  if (kioskUpdateWindowLocalIssue.value === null && trimmedUpdateWindow !== previousUpdateWindow) {
+    changes[KIOSK_UPDATE_WINDOW_KEY] = trimmedUpdateWindow
+  }
+
+  const quietMinutesValue = asInteger(kioskUpdateQuietMinutes.value)
+  const previousQuietMinutes = entryOf(current, KIOSK_UPDATE_QUIET_MINUTES_KEY)?.value
+
+  if (quietMinutesValue !== undefined && quietMinutesValue !== previousQuietMinutes) {
+    changes[KIOSK_UPDATE_QUIET_MINUTES_KEY] = quietMinutesValue
+  }
+
   const trimmedDefault = localeDefault.value.trim()
   const previousDefault = entryOf(current, 'LOCALE_DEFAULT')?.value
 
@@ -643,6 +742,8 @@ const canSave = computed(
     serviceCodeLocalIssue.value === null &&
     localeAvailable.value.length > 0 &&
     payrollColumnsLocalIssue.value === null &&
+    kioskUpdateWindowLocalIssue.value === null &&
+    kioskUpdateQuietMinutesIssue.value === null &&
     !saving.value,
 )
 
@@ -760,6 +861,35 @@ async function save(): Promise<void> {
         {{ t('operationalSettings.affectsWorkedHoursWarning') }}
       </p>
 
+      <!-- Resumen semanal por correo (RF-PR-05, tarea 3.12): opcional y
+           apagado de serie (doc 05 §5.7 «correo opcional»). -->
+      <fieldset class="flex flex-col gap-4" data-test="weekly-summary-settings">
+        <legend class="text-lg font-medium text-kq-text">
+          {{ t('operationalSettings.weeklySummaryHeading') }}
+        </legend>
+
+        <FormField
+          :label="t('operationalSettings.fields.weeklySummaryEmail')"
+          :hint="t('operationalSettings.hints.weeklySummaryEmail')"
+          :errors="serverFieldErrors(WEEKLY_SUMMARY_EMAIL_KEY)"
+        >
+          <template #default="{ id, describedBy, invalid }">
+            <select
+              :id="id"
+              v-model="weeklySummaryEmail"
+              data-test="weekly-summary-email"
+              :aria-describedby="describedBy"
+              :aria-invalid="invalid"
+              class="w-48 rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text"
+            >
+              <option v-for="option of weeklySummaryEmailOptions" :key="option" :value="option">
+                {{ t(`operationalSettings.weeklySummaryEmailOptions.${option}`) }}
+              </option>
+            </select>
+          </template>
+        </FormField>
+      </fieldset>
+
       <fieldset class="flex flex-col gap-4">
         <legend class="text-lg font-medium text-kq-text">
           {{ t('operationalSettings.diagnosticsHeading') }}
@@ -788,6 +918,61 @@ async function save(): Promise<void> {
               :aria-describedby="describedBy"
               :aria-invalid="invalid"
               class="w-40 rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 font-mono text-kq-text disabled:cursor-not-allowed disabled:opacity-60"
+            />
+          </template>
+        </FormField>
+      </fieldset>
+
+      <!-- Ventana de actualizacion del quiosco (RF-KI-07, tarea 3.12): la
+           tablet solo aplica una version nueva dentro de esta franja, con la
+           cola vacia y sin fichajes recientes (decision 9 de la ficha). -->
+      <fieldset class="flex flex-col gap-4" data-test="kiosk-update-settings">
+        <legend class="text-lg font-medium text-kq-text">
+          {{ t('operationalSettings.kioskHeading') }}
+        </legend>
+
+        <FormField
+          :label="t('operationalSettings.fields.kioskUpdateWindow')"
+          :hint="t('operationalSettings.hints.kioskUpdateWindow')"
+          :errors="kioskUpdateWindowErrors"
+        >
+          <template #default="{ id, describedBy, invalid }">
+            <input
+              :id="id"
+              v-model="kioskUpdateWindow"
+              type="text"
+              inputmode="text"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="03:00-05:00"
+              data-test="kiosk-update-window"
+              :aria-describedby="describedBy"
+              :aria-invalid="invalid"
+              class="w-40 rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 font-mono text-kq-text"
+            />
+          </template>
+        </FormField>
+
+        <FormField
+          :label="t('operationalSettings.fields.kioskUpdateQuietMinutes')"
+          :hint="
+            t('operationalSettings.hints.kioskUpdateQuietMinutes', {
+              minimum: rangeOf(settings, KIOSK_UPDATE_QUIET_MINUTES_KEY).minimum,
+              maximum: rangeOf(settings, KIOSK_UPDATE_QUIET_MINUTES_KEY).maximum,
+            })
+          "
+          :errors="kioskUpdateQuietMinutesErrors"
+        >
+          <template #default="{ id, describedBy, invalid }">
+            <input
+              :id="id"
+              v-model="kioskUpdateQuietMinutes"
+              type="number"
+              inputmode="numeric"
+              data-test="kiosk-update-quiet-minutes"
+              :aria-describedby="describedBy"
+              :aria-invalid="invalid"
+              class="w-32 rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text"
             />
           </template>
         </FormField>

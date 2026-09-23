@@ -1,16 +1,26 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  DEFAULT_UPDATE_QUIET_MINUTES,
+  DEFAULT_UPDATE_WINDOW,
+} from '@/features/offline/domain/updateWindow'
+import {
   persistPairedDevice,
   readBreakClockingEnabled,
   readClockSkewToleranceSeconds,
   readDeviceName,
   readDeviceToken,
   readDeviceTokenExpiresAt,
+  readLastScanAt,
   readServiceCodeHash,
+  readUpdateQuietMinutes,
+  readUpdateWindow,
   resolveDeviceId,
   storeBreakClockingEnabled,
   storeClockSkewToleranceSeconds,
+  storeLastScanAt,
   storeServiceCodeHash,
+  storeUpdateQuietMinutes,
+  storeUpdateWindow,
 } from '@/shared/telemetry/deviceIdentity'
 
 const KEYS = [
@@ -21,6 +31,9 @@ const KEYS = [
   'kronoqr.kiosk.service_code_hash',
   'kronoqr.kiosk.break_clocking_enabled',
   'kronoqr.kiosk.clock_skew_tolerance_seconds',
+  'kronoqr.kiosk.update_window',
+  'kronoqr.kiosk.update_quiet_minutes',
+  'kronoqr.kiosk.last_scan_at',
 ]
 
 afterEach(() => {
@@ -84,5 +97,39 @@ describe('fichaje de pausa y umbral de desfase (RF-AT-12, RF-AT-10, tarea 3.5)',
   it('storeClockSkewToleranceSeconds guarda el umbral de la instalacion', () => {
     storeClockSkewToleranceSeconds(600)
     expect(readClockSkewToleranceSeconds()).toBe(600)
+  })
+})
+
+describe('ventana de actualizacion y ultimo escaneo (RF-KI-07, tarea 3.12)', () => {
+  it('sin latido todavia, la ventana y los minutos son los de serie, nunca `null`', () => {
+    expect(readUpdateWindow()).toEqual(DEFAULT_UPDATE_WINDOW)
+    expect(readUpdateQuietMinutes()).toBe(DEFAULT_UPDATE_QUIET_MINUTES)
+  })
+
+  it('storeUpdateWindow guarda la ventana que declara el latido', () => {
+    storeUpdateWindow({ start: '22:00', end: '01:00' })
+    expect(readUpdateWindow()).toEqual({ start: '22:00', end: '01:00' })
+  })
+
+  it('storeUpdateQuietMinutes guarda los minutos que declara el latido', () => {
+    storeUpdateQuietMinutes(15)
+    expect(readUpdateQuietMinutes()).toBe(15)
+  })
+
+  it('un valor corrupto en disco no rompe nada: se cae a la ventana de serie', () => {
+    localStorage.setItem('kronoqr.kiosk.update_window', '{no es json')
+    expect(readUpdateWindow()).toEqual(DEFAULT_UPDATE_WINDOW)
+
+    localStorage.setItem('kronoqr.kiosk.update_window', '{"start":"25:00","end":"05:00"}')
+    expect(readUpdateWindow()).toEqual(DEFAULT_UPDATE_WINDOW)
+  })
+
+  it('sin ningun escaneo todavia, `null`', () => {
+    expect(readLastScanAt()).toBeNull()
+  })
+
+  it('storeLastScanAt guarda el `occurred_at` del ultimo escaneo', () => {
+    storeLastScanAt('2026-08-14T05:58:31.000Z')
+    expect(readLastScanAt()).toBe('2026-08-14T05:58:31.000Z')
   })
 })

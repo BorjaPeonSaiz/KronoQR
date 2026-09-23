@@ -7,6 +7,7 @@ use App\Modules\Shared\Domain\ValueObject\CredentialRejectionReason;
 use App\Modules\Shared\Domain\ValueObject\CredentialResolution;
 use App\Modules\Shared\Domain\ValueObject\EmployeeSnapshot;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
+use App\Modules\Shared\Domain\ValueObject\KioskUpdateWindow;
 use App\Modules\Shared\Domain\ValueObject\OperationalSettings;
 
 /*
@@ -133,8 +134,12 @@ it('conserva la jornada semanal, el inicio de semana y los festivos', function (
 })->group('RF-PD-07');
 
 it('rechaza una configuracion operativa con un umbral que no puede ser cero', function (int $anomalous, int $debounce, int $skew, int $transit, int $window, int $repeats): void {
-    expect(fn (): OperationalSettings => new OperationalSettings($anomalous, $debounce, $skew, $transit, $window, $repeats, breakClockingEnabled: false))
-        ->toThrow(InvalidArgumentException::class);
+    expect(fn (): OperationalSettings => new OperationalSettings(
+        $anomalous, $debounce, $skew, $transit, $window, $repeats,
+        breakClockingEnabled: false,
+        kioskUpdateWindow: KioskUpdateWindow::fromRange('03:00-05:00'),
+        kioskUpdateQuietMinutes: 10,
+    ))->toThrow(InvalidArgumentException::class);
 })->with([
     'sin duracion anomala de tramo' => [0, 60, 10, 120, 10, 3],
     'sin tolerancia de desfase de reloj' => [720, 60, 0, 120, 10, 3],
@@ -152,9 +157,17 @@ it('admite apagar el anti-rebote y el transito minimo con un cero', function ():
     // Cero es legitimo en los dos que desactivan una comprobacion: un centro
     // puede querer el anti-rebote apagado, o dos quioscos contiguos donde el
     // transito real es de segundos.
-    $settings = new OperationalSettings(720, 0, 10, 0, 0, 1, breakClockingEnabled: false);
+    $settings = new OperationalSettings(
+        720, 0, 10, 0, 0, 1,
+        breakClockingEnabled: false,
+        kioskUpdateWindow: KioskUpdateWindow::fromRange('03:00-05:00'),
+        // RF-KI-07 (tarea 3.12): el cuarto que admite el cero. Apaga la guarda
+        // de silencio y deja mandar a la franja y a la cola vacia.
+        kioskUpdateQuietMinutes: 0,
+    );
 
-    expect($settings->debounceSeconds)->toBe(0)
+    expect($settings->kioskUpdateQuietMinutes)->toBe(0)
+        ->and($settings->debounceSeconds)->toBe(0)
         ->and($settings->minimumTransitSeconds)->toBe(0)
         // RF-PR-06: la tercera que admite el cero, y lo apaga igual que las
         // otras dos (tarea 3.11).
@@ -164,7 +177,12 @@ it('admite apagar el anti-rebote y el transito minimo con un cero', function ():
 })->group('RF-AT-06');
 
 it('acepta un umbral operativo de exactamente una unidad', function (): void {
-    $settings = new OperationalSettings(1, 1, 1, 1, 1, 1, breakClockingEnabled: true);
+    $settings = new OperationalSettings(
+        1, 1, 1, 1, 1, 1,
+        breakClockingEnabled: true,
+        kioskUpdateWindow: KioskUpdateWindow::fromRange('03:00-05:00'),
+        kioskUpdateQuietMinutes: 1,
+    );
 
     expect($settings->anomalousShiftMinutes)->toBe(1)
         ->and($settings->maximumClockSkewMinutes)->toBe(1)
@@ -274,7 +292,12 @@ it('transporta el fichaje de pausa sin suponer ningun valor', function (bool $en
     // la que ganaria en silencio el dia que el adaptador se olvidara de leer la
     // clave: el hotel activaria la pausa en el panel y el quiosco seguiria sin
     // ofrecerla.
-    $settings = new OperationalSettings(720, 60, 15, 120, 10, 3, breakClockingEnabled: $enabled);
+    $settings = new OperationalSettings(
+        720, 60, 15, 120, 10, 3,
+        breakClockingEnabled: $enabled,
+        kioskUpdateWindow: KioskUpdateWindow::fromRange('03:00-05:00'),
+        kioskUpdateQuietMinutes: 10,
+    );
 
     expect($settings->breakClockingEnabled)->toBe($enabled);
 })->with([

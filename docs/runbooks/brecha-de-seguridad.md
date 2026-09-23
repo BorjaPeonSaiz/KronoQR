@@ -233,8 +233,9 @@ UUID='<employee_uuid de la persona>'   # se ve en su ficha del panel
 
 # a) Accesos NOMINALES: alguien fue a por los datos de ESA persona.
 #    Cubre employee_workdays (su registro), incident_digest (el resumen que sale
-#    por correo), la exportación legal por empleado y las denegaciones sobre su
-#    ficha.
+#    por correo), weekly_summary SOLO cuando el alcance tenía 50 personas o
+#    menos (por encima no nombra: ver b), la exportación legal por empleado y
+#    las denegaciones sobre su ficha.
 docker compose --env-file .env -f infra/compose.prod.yaml exec -T postgres \
   psql -U fichaje_app -d fichaje -c "
   SELECT occurred_at, action, actor_type, actor_id,
@@ -248,6 +249,9 @@ docker compose --env-file .env -f infra/compose.prod.yaml exec -T postgres \
 # b) Accesos EN BLOQUE que la contenían. No nombran a nadie a propósito —el
 #    padrón o el directorio en audit_log serían una segunda copia del padrón—,
 #    así que aquí el alcance se acota por CONJUNTO y por VENTANA, no por persona.
+#    weekly_summary entra aquí cuando el alcance superó las 50 personas: el
+#    asiento lleva employees, scope, manager_user_id y week_start, sin lista, y
+#    el departamento del responsable dice quién iba dentro.
 docker compose --env-file .env -f infra/compose.prod.yaml exec -T postgres \
   psql -U fichaje_app -d fichaje -c "
   SELECT occurred_at, actor_type, actor_id,
@@ -259,7 +263,7 @@ docker compose --env-file .env -f infra/compose.prod.yaml exec -T postgres \
    WHERE action = 'personal_data.accessed'
      AND payload->>'dataset' IN ('employee_directory','kiosk_roster','credential_status',
                                  'incident_board','period_report','live_presence',
-                                 'compliance_summary','absence_register')
+                                 'compliance_summary','absence_register','weekly_summary')
      AND occurred_at BETWEEN '<inicio de la ventana>' AND '<fin de la ventana>'
    ORDER BY occurred_at;"
 ```
@@ -281,6 +285,7 @@ centro: si el padrón se descargó, esa persona estaba dentro.
 | `credential_status` | Bandeja de credenciales | No (recuento y alcance) |
 | `incident_board` | Bandeja de incidencias | No (recuento y alcance) |
 | `incident_digest` | **Resumen que sale por correo** (RF-PR-01) | **Sí**: `employee_uuids` |
+| `weekly_summary` | **Resumen semanal que sale por correo** al responsable de departamento (RF-PR-05) | **Solo si el alcance tiene 50 personas o menos**: `employee_uuids`. Por encima, `employees` (recuento), `scope`, `manager_user_id` y `week_start`, sin lista: se resuelve por departamento con la consulta (b) |
 | `employee_workdays` | Registro horario de una persona | **Sí**: `employee_uuid` |
 | `period_report` | Informe de periodo, en pantalla o descargado | No (recuento, `format`, alcance) |
 | `live_presence` | Presencia en vivo del panel | No. **Agrupado por ventana de 15 min** |
@@ -341,8 +346,12 @@ docker compose --env-file .env -f infra/compose.prod.yaml exec -T postgres \
    `storage/app/legal-exports/` y **no lo limpia ningún cron**: compruébalo.
 2. `personal_data.accessed` con `dataset = period_report` y un `format` de
    descarga — se llevaron un fichero con horas de plantilla, no una pantalla.
-3. `dataset = incident_digest` — **salió por correo**, a otra máquina. Los
-   `employee_uuids` afectados están en el asiento.
+3. `dataset = incident_digest` o `weekly_summary` — **salió por correo**, a otra
+   máquina. Los `employee_uuids` afectados están en el asiento; en
+   `weekly_summary` **solo cuando el alcance tenía 50 personas o menos**. Si el
+   asiento trae `employees` y `scope` sin lista, **no concluyas que los datos
+   de una persona no salieron** porque no encuentres su identificador: resuelve
+   el departamento del responsable con la consulta (b).
 4. `dataset = employee_directory` o `kiosk_roster` con `record_count` alto —
    alguien tuvo la plantilla entera delante.
 

@@ -21,7 +21,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * falta. Con el `uuid` dentro, la huella es distinta en cada quiosco: una tabla
  * precalculada no sirve para la tablet de al lado.
  *
- * **Cinco campos, y los cinco obligatorios.**
+ * **Seis campos, y los seis obligatorios.**
  *
  * - `server_time` es con lo que la tablet mide su propio desfase de reloj y avisa
  *   (RF-AT-10), que es la mitad de cliente de esa incidencia. Nunca le impide
@@ -38,6 +38,12 @@ use Illuminate\Http\Resources\Json\JsonResource;
  *   boton «Pausa», y con el segundo decide cuando avisar de que su reloj esta
  *   desviado — el mismo umbral con el que el servidor marca el escaneo, de modo
  *   que las dos pantallas no puedan contar historias distintas.
+ * - `update_window` es la franja en la que la tablet **puede** aplicar una
+ *   version nueva (RF-KI-07, tarea 3.12), en hora local del centro, mas los
+ *   minutos de silencio que exige ademas. La declara el cliente en
+ *   `KIOSK_UPDATE_WINDOW` y `KIOSK_UPDATE_QUIET_MINUTES`; el producto no infiere
+ *   el cambio de turno (regla dura 13). Fuera de ella el quiosco sigue fichando
+ *   y encolando: lo unico que no hace es recargarse.
  *
  * **No devuelve el estado del dispositivo**, ni su nombre, ni su centro, ni
  * cuando caduca su token. Un latido es una escritura, no una consulta, y cada
@@ -78,6 +84,19 @@ final class KioskHeartbeatResource extends JsonResource
             // constante de 15 minutos que esta tarea vino a retirar.
             'break_clocking_enabled' => $outcome->breakClockingEnabled,
             'clock_skew_tolerance_seconds' => $outcome->clockSkewToleranceSeconds,
+            // **La ventana de actualizacion** (RF-KI-07, tarea 3.12), tambien
+            // obligatoria y por lo mismo: sin ella la tablet tendria que elegir
+            // una por su cuenta, y eso es volver a las tres franjas de cambio de
+            // turno que esta tarea vino a retirar del codigo (regla dura 13).
+            //
+            // Los dos extremos por separado y no la cadena `HH:MM-HH:MM`: quien
+            // lo consume compara horas, y obligar al cliente a partir una cadena
+            // es repartir el parseo entre las tres SPA.
+            'update_window' => [
+                'start' => $outcome->updateWindow->start,
+                'end' => $outcome->updateWindow->end,
+                'quiet_minutes' => $outcome->updateQuietMinutes,
+            ],
         ];
     }
 }
