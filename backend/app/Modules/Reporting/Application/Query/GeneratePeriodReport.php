@@ -6,6 +6,7 @@ namespace App\Modules\Reporting\Application\Query;
 
 use App\Modules\Reporting\Application\Port\ComplianceProfileReference;
 use App\Modules\Reporting\Application\Port\PeriodReportReader;
+use App\Modules\Reporting\Application\Support\ReportDataset;
 use App\Modules\Reporting\Application\Support\ReportDelivery;
 use App\Modules\Reporting\Domain\Exception\ReportTooLargeForSynchronousDelivery;
 use App\Modules\Reporting\Domain\ValueObject\ComplianceProfileRef;
@@ -92,9 +93,6 @@ use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
  */
 final readonly class GeneratePeriodReport
 {
-    /** Vocabulario estable del `audit_log`, en ingles y sin datos dentro. */
-    private const string DATASET = 'period_report';
-
     /**
      * Hasta cuantos afectados se enumeran en el asiento. Ver
      * {@see self::affectedSubjects()}.
@@ -139,6 +137,10 @@ final readonly class GeneratePeriodReport
      * @param  ReportDelivery  $delivery  Como sale el informe de la instalacion. Solo afecta al
      *                                    asiento de `audit_log`: el contenido es el mismo para los
      *                                    cuatro. Ver {@see ReportDelivery} y {@see recordDisclosure()}.
+     * @param  ReportDataset  $dataset  Que conjunto de datos personales se divulga. Tampoco cambia el
+     *                                  contenido: separa en el trail «miro el cuadro de horas» de «se
+     *                                  llevo el fichero para el programa de nomina» (RF-IN-07, RS-05).
+     *                                  Ver {@see ReportDataset}.
      *
      * @throws InstallationSiteMissing antes de la puesta en marcha, cuando no hay centro
      *                                 del que tomar la zona horaria (RF-PD-03)
@@ -149,6 +151,7 @@ final readonly class GeneratePeriodReport
         int $maxRangeDays,
         int $maxRows,
         ReportDelivery $delivery = ReportDelivery::Json,
+        ReportDataset $dataset = ReportDataset::PeriodReport,
     ): PeriodReport {
         $site = $this->installation->installationSite();
 
@@ -179,7 +182,7 @@ final readonly class GeneratePeriodReport
             contractCoverage: $coverage,
         );
 
-        $this->recordDisclosure($query, $report, $delivery);
+        $this->recordDisclosure($query, $report, $delivery, $dataset);
 
         return $report;
     }
@@ -253,11 +256,15 @@ final readonly class GeneratePeriodReport
         return $criteria;
     }
 
-    private function recordDisclosure(PeriodReportQuery $query, PeriodReport $report, ReportDelivery $delivery): void
-    {
+    private function recordDisclosure(
+        PeriodReportQuery $query,
+        PeriodReport $report,
+        ReportDelivery $delivery,
+        ReportDataset $dataset,
+    ): void {
         $uuids = $report->employeeUuids();
 
-        $this->disclosures->recordDisclosure(self::DATASET, $report->rowCount(), [
+        $this->disclosures->recordDisclosure($dataset->value, $report->rowCount(), [
             // EN QUE se lo llevaron (RF-IN-04). Un asiento por divulgacion y no
             // dos: la descarga y la consulta son el mismo acceso a los mismos
             // datos, y separarlas obligaria a quien lee el trail a emparejar dos

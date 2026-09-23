@@ -276,6 +276,7 @@ final readonly class DatabaseDataExportSource implements DataExportSource
         'users' => self::USERS,
         'support_grants' => self::SUPPORT_GRANTS,
         'error_events' => self::ERROR_EVENTS,
+        'report_exports' => self::REPORT_EXPORTS,
         // `installation_settings` NO esta aqui: es la unica consulta que se
         // compone, en `installationSettingsSql()`.
         'compliance_profiles' => self::COMPLIANCE_PROFILES,
@@ -633,6 +634,54 @@ final readonly class DatabaseDataExportSource implements DataExportSource
                u.uuid::text          AS resolved_by_user_uuid
           FROM error_events e
           LEFT JOIN users u ON u.id = e.resolved_by_user_id
+         ORDER BY e.id
+        SQL;
+
+    /*
+     * Los informes generados en segundo plano (RF-IN-06, tarea 3.9).
+     *
+     * Sale el **registro** de que se generaron y no los ficheros: el contenido de
+     * cada informe ya esta en este mismo ZIP, en `shift_entries`, `daily_totals` y
+     * `employment_contracts`. Ver el docblock del conjunto en
+     * `DataExportCatalog`, nombrado en prosa porque `Infrastructure` no necesita
+     * importarlo para escribir una consulta.
+     *
+     * **Sin `id`, sin `file_path` y sin `download_token_hash`**: la clave interna
+     * no sale del producto (doc 01 §5.5), la ruta describe la maquina del cliente
+     * y la huella del token es material de un secreto vivo. Las tres ausencias las
+     * vigila `DataExportCatalogTest`.
+     *
+     * `parameters`, `scope` y `criteria` salen como texto JSON en una celda, que
+     * es lo correcto para una hoja de calculo; el `README` explica que hay dentro.
+     * En las filas ya purgadas, `scope` viene vacio y `parameters` sin los filtros
+     * por persona o departamento: asi es como estan guardadas (RL-11).
+     */
+    private const string REPORT_EXPORTS = <<<'SQL'
+        SELECT e.uuid::text        AS uuid,
+               e.kind,
+               e.format,
+               e.status,
+               e.parameters::text  AS parameters,
+               e.scope::text       AS scope,
+               u.uuid::text        AS requested_by_user_uuid,
+               to_char(e.requested_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS requested_at,
+               to_char(e.started_at   AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS started_at,
+               to_char(e.completed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS completed_at,
+               to_char(e.failed_at    AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS failed_at,
+               e.failure_reason,
+               e.file_name,
+               e.size_bytes::text  AS size_bytes,
+               e.sha256,
+               e.row_count::text   AS row_count,
+               e.criteria::text    AS criteria,
+               to_char(e.expires_at   AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS expires_at,
+               to_char(e.purged_at    AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS purged_at,
+               to_char(e.downloaded_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS downloaded_at,
+               e.download_count::text AS download_count,
+               to_char(e.notified_at  AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS notified_at,
+               e.notification_channel
+          FROM report_exports e
+          LEFT JOIN users u ON u.id = e.requested_by_user_id
          ORDER BY e.id
         SQL;
 

@@ -2443,6 +2443,98 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reports/payroll-export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Salida a nomina en el formato configurado por la instalacion
+         * @description El informe de horas **por empleado** pasado por la plantilla configurable
+         *     del cliente, listo para cargarlo en el programa de nomina del hotel
+         *     (RF-IN-07).
+         *
+         *     ## Exporta horas; **no calcula la nomina**
+         *
+         *     Ni importes, ni pluses, ni complementos, ni prorrateos de convenio. Salen
+         *     las horas trabajadas, las contratadas, la desviacion y los dias
+         *     justificados; lo demas lo decide la herramienta de nomina, que es la que
+         *     conoce el convenio.
+         *
+         *     ## No es otra consulta: es el informe por periodo
+         *
+         *     Misma consulta que `GET /api/v1/reports/period` con `group_by=employee`,
+         *     mismos presupuestos sincronos y el mismo `422` cuando no cabe. Si tuviera
+         *     SQL propia, el fichero que se importa en la nomina y el cuadro que RRHH
+         *     mira en pantalla podrian discrepar, y el que se creeria seria el
+         *     equivocado.
+         *
+         *     ## El formato del fichero **no se pide aqui**: se configura
+         *
+         *     Ni un solo parametro de esta peticion toca el formato. Lo gobiernan seis
+         *     claves de `installation_settings`, editables en
+         *     `PATCH /api/v1/settings` y auditadas como cualquier ajuste (RF-PD-01,
+         *     [ADR-017](../adr/ADR-017-nada-especifico-de-cliente-en-el-codigo.md)):
+         *
+         *     | Clave | Que decide | De serie |
+         *     |---|---|---|
+         *     | `PAYROLL_EXPORT_COLUMNS` | Que columnas, en que orden y con que rotulo | ver abajo |
+         *     | `PAYROLL_EXPORT_DELIMITER` | `semicolon`, `comma` o `tab` | `semicolon` |
+         *     | `PAYROLL_EXPORT_HOURS_FORMAT` | `hhmm`, `decimal_dot` o `decimal_comma` | `hhmm` |
+         *     | `PAYROLL_EXPORT_DATE_FORMAT` | `iso` o `dmy` | `iso` |
+         *     | `PAYROLL_EXPORT_ENCODING` | `utf8_bom`, `utf8` o `latin1` | `utf8_bom` |
+         *     | `PAYROLL_EXPORT_HEADER_ROW` | `enabled` o `disabled` | `enabled` |
+         *
+         *     Que no se pueda pedir «dame el CSV con comas» es deliberado: el formato lo
+         *     fija quien administra la instalacion **una vez**, porque lo que tiene que
+         *     encajar es el importador del programa de nomina y no el gusto de quien
+         *     descarga cada mes.
+         *
+         *     ## Las horas pueden salir en decimal, y es la unica salida del producto donde pueden
+         *
+         *     El resto de informes escribe `HH:MM` sin excepcion, porque los lee una
+         *     persona. Este fichero lo importa un programa que multiplica por un precio
+         *     hora, y entregarle `07:45` obliga a convertir a mano en una hoja aparte,
+         *     que es donde se cometen los errores. **`hhmm` sigue siendo el valor de
+         *     serie**, el separador decimal se elige (no se hereda de la configuracion
+         *     regional) y el redondeo a dos decimales se hace **una sola vez, al final**.
+         *
+         *     ## Los criterios van en una **cabecera**, no dentro del fichero
+         *
+         *     Una linea de comentario antes de la cabecera rompe la importacion: el
+         *     importador la lee como una fila de datos o da de alta un empleado llamado
+         *     «Criterios de este informe». Viajan en `X-Kronoqr-Export-Criteria`, y
+         *     tambien en la pantalla del panel y en la exportacion en diferido.
+         *
+         *     ## Licencia, autorizacion y auditoria
+         *
+         *     Funcionalidad **accesoria**
+         *     ([ADR-023](../adr/ADR-023-frontera-de-degradacion-por-licencia.md)): sin
+         *     `payroll_export` en el plan responde `402`. Esto **no** afecta al registro
+         *     legal — `GET /api/v1/reports/legal-export` no se degrada jamas.
+         *
+         *     Ambito `reports:*` y rol `rrhh+` (`admin`, `rrhh`), con policy propia y no
+         *     la del informe por periodo: el dia que un responsable pueda ver las horas
+         *     de su equipo, esa concesion no puede arrastrar consigo el fichero con el
+         *     que se paga. El alcance por departamento entra **dentro** de la consulta
+         *     (RF-ID-03).
+         *
+         *     Descargarlo es un acceso a datos personales de terceros y **queda
+         *     registrado en `audit_log`** con el conjunto `payroll_export`, su periodo,
+         *     su alcance y cuantas personas — nunca un nombre ni una hora (RS-05, regla
+         *     dura 6).
+         */
+        get: operations["exportPayroll"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reports/legal-export": {
         parameters: {
             query?: never;
@@ -2489,6 +2581,241 @@ export interface paths {
          *     puede ser anonimo.
          */
         get: operations["generateLegalExport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/exports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Informes en diferido recientes
+         * @description Los 20 informes en diferido mas recientes **de quien pregunta**, del mas
+         *     nuevo al mas antiguo, con su estado, su periodo, sus criterios, su tamaño
+         *     y su caducidad (RF-IN-06). Es lo que la pantalla de informes sondea
+         *     mientras haya alguno `pending` o `running`.
+         *
+         *     **Solo los propios, tambien si quien pregunta es `admin`.** Un informe en
+         *     diferido contiene las horas nominales del conjunto de personas que eligio
+         *     quien lo pidio; que un administrador viera —y pudiera pedir enlace de— los
+         *     ficheros que genero RRHH seria una via de acceso a datos personales que
+         *     nadie ha autorizado. El filtro por dueño entra en la consulta.
+         *
+         *     **Esta lista NUNCA lleva enlaces de descarga.** Si los llevara, un sondeo
+         *     cada diez segundos acuñaria veinte enlaces vivos a la vez e invalidaria el
+         *     que alguien estuviera usando. El enlace lo emite
+         *     `GET /api/v1/reports/exports/{uuid}`, que es un acto deliberado (ADR-041).
+         *
+         *     Las filas **no se borran nunca** (regla dura 5): un informe cuyo fichero ya
+         *     se purgo sigue en la lista como `purged`, con sus fechas, su huella y su
+         *     recuento. El historico completo esta en `audit_log`
+         *     (`report_export.requested`, `report_export.generated`,
+         *     `report_export.downloaded`).
+         *
+         *     Rol `{admin, rrhh}` con ambito `reports:*` (documento 02 §7.3; regla dura
+         *     18), el mismo que el informe sincrono: lo que sale es exactamente lo
+         *     mismo.
+         */
+        get: operations["listReportExports"];
+        put?: never;
+        /**
+         * Generar un informe en segundo plano
+         * @description Pide que el informe de horas por periodo se genere **en segundo plano** y
+         *     se avise con un enlace de descarga caducable (RF-IN-06). Es la salida que
+         *     ofrece el `422` de `GET /api/v1/reports/period` y de
+         *     `GET /api/v1/reports/period/export` cuando el periodo no cabe en una
+         *     respuesta sincrona.
+         *
+         *     **Es el mismo informe**, con los mismos parametros, los mismos criterios
+         *     de inclusion, los mismos festivos del perfil (RF-GP-04) y el mismo alcance
+         *     por departamento (RF-ID-03). Lo unico que desaparecen son los dos techos
+         *     sincronos —rango y filas—; el techo de calendario de 366 dias sigue en
+         *     pie, asi que mas de un año son dos informes.
+         *
+         *     **Asincrono.** Esta ruta **encola** y responde `202` con la fila recien
+         *     creada en `pending`. La pantalla sondea `GET /api/v1/reports/exports` hasta
+         *     verla `completed`, pide entonces el enlace con
+         *     `GET /api/v1/reports/exports/{uuid}` y descarga.
+         *
+         *     **Uno en curso por PERSONA**, no por instalacion: si quien pide ya tiene
+         *     uno `pending` o `running`, responde `409`
+         *     `urn:kronoqr:problem:report-export-in-progress` con esa fila en `export`.
+         *     Dos responsables generando a la vez no se estorban; lo que se impide es
+         *     llenar la cola pulsando el boton diez veces porque la pantalla tarda en
+         *     refrescar. Lo garantiza un indice unico parcial de la base de datos, no
+         *     una comprobacion en PHP: dos pestañas pulsando a la vez pasarian cualquier
+         *     `SELECT` previo.
+         *
+         *     **`kind`** elige que se genera. `period` es el informe de horas
+         *     (RF-IN-01..03), rol `{admin, rrhh}` y funcionalidad `advanced_reports`;
+         *     `payroll` es la salida configurable para nomina (RF-IN-07), rol `rrhh` del
+         *     Anexo B y funcionalidad `payroll_export`. La licencia se comprueba **al
+         *     pedir**: sin ella, `402` (ADR-019, ADR-023). Un trabajo ya encolado termina
+         *     aunque la licencia caduque entre medias — un fichero a medias no le sirve a
+         *     nadie. **La exportacion para la Inspeccion no se degrada jamas** y no se
+         *     pide por aqui: es `GET /api/v1/reports/legal-export` (RL-06, regla dura 15).
+         *
+         *     **`payroll` no admite `pdf`**: un programa de nomina no importa un PDF.
+         *
+         *     El fichero se escribe fuera de `public/`, caduca a los
+         *     `REPORTING_EXPORT_RETENTION_DAYS` (7 de serie) y se purga solo; la fila
+         *     queda. Pedirlo, generarlo y descargarlo dejan asiento en `audit_log`
+         *     (RS-05, regla dura 6).
+         */
+        post: operations["requestReportExport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/exports/{uuid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** del informe generado en diferido
+                 *     (`report_exports.uuid`). La clave interna no sale de la base de datos,
+                 *     como en el resto de la API.
+                 *
+                 *     Es ademas **la mitad del secreto de la ruta de descarga** (ADR-041): de
+                 *     los 122 bits de un UUID v7, 48 son marca de tiempo y por tanto
+                 *     adivinables, asi que lo que aporta son ~74 bits aleatorios. La otra mitad
+                 *     son los 256 bits del token de un solo uso.
+                 * @example 019a12b4-5c6d-7e8f-9012-3456789abcde
+                 */
+                uuid: components["parameters"]["ReportExportUuid"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Estado de un informe en diferido y su enlace de descarga
+         * @description Devuelve el estado del informe y, **si esta `completed` y su fichero no ha
+         *     caducado, un enlace de descarga recien acuñado** en `download`
+         *     (RF-IN-06, ADR-041).
+         *
+         *     ## Este `GET` escribe, y esta declarado
+         *
+         *     Cada llamada sobre un informe descargable **emite un token nuevo de 32
+         *     bytes e invalida el anterior**. La fila guarda solo su `sha256`, nunca el
+         *     token. Eso consigue cuatro cosas: el enlace no existe hasta que alguien
+         *     mira la pantalla, vive `REPORTING_EXPORT_LINK_TTL_MINUTES` (15 de serie),
+         *     el anterior deja de valer, y quien lea la base de datos ve una huella y no
+         *     una llave.
+         *
+         *     Es la misma forma que `GET /api/v1/credentials/{uuid}/print`, que sella la
+         *     impresion al servirla: consultar tiene un efecto, y esconderlo seria peor
+         *     que declararlo.
+         *
+         *     ## `download: null` no es un error
+         *
+         *     Sale asi con la exportacion `pending`, `running`, `failed`, `purged` o
+         *     cuyo fichero ya caduco. La pantalla enseña el estado y sigue sondeando.
+         *
+         *     ## `404` para la exportacion de otra persona
+         *
+         *     Y no `403`: un `403` confirmaria que existe. Solo el solicitante consulta
+         *     la suya, tambien si quien pregunta es `admin` (decision 2 de la ficha 3.9).
+         *
+         *     Rol `{admin, rrhh}` con ambito `reports:*`.
+         */
+        get: operations["showReportExport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/exports/{uuid}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** del informe generado en diferido
+                 *     (`report_exports.uuid`). La clave interna no sale de la base de datos,
+                 *     como en el resto de la API.
+                 *
+                 *     Es ademas **la mitad del secreto de la ruta de descarga** (ADR-041): de
+                 *     los 122 bits de un UUID v7, 48 son marca de tiempo y por tanto
+                 *     adivinables, asi que lo que aporta son ~74 bits aleatorios. La otra mitad
+                 *     son los 256 bits del token de un solo uso.
+                 * @example 019a12b4-5c6d-7e8f-9012-3456789abcde
+                 */
+                uuid: components["parameters"]["ReportExportUuid"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Descargar el fichero de un informe en diferido
+         * @description Entrega el fichero (CSV, XLSX o PDF) de un informe `completed`, y
+         *     **consume el enlace** (RF-IN-06, ADR-041).
+         *
+         *     ## Es la unica ruta de la API que no lleva sesion
+         *
+         *     No admite `Authorization`: la autoriza el `token` de un solo uso que emite
+         *     `GET /api/v1/reports/exports/{uuid}`. El motivo es practico —un enlace que
+         *     se abre con un clic no lleva cabecera, y exigirla obligaria al panel a
+         *     traerse el fichero entero en memoria antes de ofrecerlo— y es precisamente
+         *     lo que exige que el enlace sea corto, de un solo uso y ligado a una fila:
+         *     la misma tecnica que las URL firmadas, con un secreto por descarga en
+         *     lugar de la clave de la aplicacion.
+         *
+         *     Lo que la protege son tres cosas a la vez: el `uuid` v7 —~74 bits
+         *     aleatorios, porque 48 de sus 122 son marca de tiempo—, el token de 256
+         *     bits que se consume, y la zona de limitacion propia de 30 peticiones por
+         *     minuto **por direccion IP**, que es el unico eje que queda sin sesion
+         *     (RS-02).
+         *
+         *     ## Dos cabeceras para comprobar que llego entero
+         *
+         *     `X-Kronoqr-Export-Sha256`, la huella del fichero tal como consta en la fila
+         *     y en `audit_log`, y `X-Kronoqr-Export-Rows`, las filas de datos que lleva.
+         *     `Cache-Control: no-store, private` siempre: el cuerpo lleva horas de
+         *     personas identificadas y la URL lleva el token dentro.
+         *
+         *     ## Los desenlaces
+         *
+         *     - `410` `urn:kronoqr:problem:report-export-link-used` — el enlace ya se
+         *       uso. El fichero **sigue existiendo**: la salida es volver a la pantalla y
+         *       pedir otro. Por eso `410` y no `404`.
+         *     - `410` `urn:kronoqr:problem:report-export-link-expired` — se le paso el
+         *       plazo. Misma salida.
+         *     - `404` — el `uuid` no existe, el informe fallo, se purgo por caducidad
+         *       (la fila sigue en la lista como `purged`), sigue en curso, el fichero ya
+         *       no esta en el disco, o **el token no es el vigente y hay otro vivo**
+         *       —el caso de un enlace ya rotado por una consulta posterior—. Sin
+         *       detalle: enumerar la causa confirmaria que ese identificador existe.
+         *
+         *     La frontera entre `410` y `404` es exacta, y es deliberadamente estrecha:
+         *     `410 …link-used` solo se afirma cuando la fila **no tiene ningun enlace
+         *     vivo y ademas consta al menos una descarga** (`downloaded_at`). Es lo
+         *     unico que permite decir «ese enlace se gasto» sin inventarselo.
+         *
+         *     Con un enlace vigente distinto del presentado —uno ya rotado por una
+         *     consulta posterior—, o sobre una exportacion de la que **nunca se emitio
+         *     ningun enlace**, la respuesta es `404`. Lo segundo importa: componer a
+         *     mano una URL de descarga sobre un `uuid` y recibir `410` en lugar de `404`
+         *     diria que esa exportacion existe y esta lista, que es exactamente el
+         *     oraculo que no se puede dar en una ruta sin sesion.
+         *
+         *     **Cada descarga se audita** (`report_export.downloaded`, RS-05) **antes**
+         *     de entregar el fichero: una descarga cortada a la mitad sacaria del
+         *     servidor las horas de la plantilla sin dejar rastro. El asiento se atribuye
+         *     a quien pidio el informe, que es quien recibio el enlace.
+         */
+        get: operations["downloadReportExport"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5945,9 +6272,41 @@ export interface components {
          *     una sola clave no justifica ampliar `SettingType`. Se desactiva de serie
          *     porque activarla en una plantilla que no ficha la pausa abriria
          *     incidencias contra gente que descanso sin fichar.
+         *
+         *     Las **seis `PAYROLL_EXPORT_*`** (tarea 3.9, RF-IN-07) gobiernan el fichero
+         *     de `GET /api/v1/reports/payroll-export` y solo ese fichero: ninguna mueve
+         *     un minuto ni abre una incidencia, y por eso las seis son `presentation`.
+         *     Existen porque el doc 05 promete «el formato que necesite la herramienta
+         *     de nomina del hotel», y cada hotel tiene la suya: si el formato viviera en
+         *     el codigo, vender a un cliente nuevo obligaria a tocar el repositorio
+         *     (ADR-017).
+         *
+         *     - `PAYROLL_EXPORT_COLUMNS` (`text_list`) — que columnas, **en que orden** y
+         *       con que rotulo. Cada entrada es `id` o `id=Etiqueta de cabecera`. El
+         *       catalogo de `id` es cerrado y viaja en `constraints.allowed`; un `id`
+         *       desconocido o repetido es `422`, y el rotulo admite hasta
+         *       `constraints.maximum_length` caracteres y **no puede contener `=`**. Con
+         *       rotulo configurado gana ese y no se traduce: esta escrito para encajar
+         *       con la plantilla de importacion del programa de nomina. De serie:
+         *       `employee_code`, `last_name`, `first_name`, `department`, `period_from`,
+         *       `period_to`, `worked_hours`, `contracted_hours`, `overtime_hours`,
+         *       `absence_days`.
+         *     - `PAYROLL_EXPORT_DELIMITER` — `semicolon` (de serie), `comma` o `tab`.
+         *     - `PAYROLL_EXPORT_HOURS_FORMAT` — `hhmm` (de serie), `decimal_dot` (`7.75`)
+         *       o `decimal_comma` (`7,75`). **La unica salida del producto que admite
+         *       horas decimales**, y solo porque la importa un programa.
+         *     - `PAYROLL_EXPORT_DATE_FORMAT` — `iso` (de serie, `2026-03-01`) o `dmy`
+         *       (`01/03/2026`).
+         *     - `PAYROLL_EXPORT_ENCODING` — `utf8_bom` (de serie), `utf8` o `latin1`. El
+         *       ultimo transcodifica y sustituye por `?` lo que no cabe, sin fallar
+         *       nunca.
+         *     - `PAYROLL_EXPORT_HEADER_ROW` — `enabled` (de serie) o `disabled`.
+         *
+         *     Los dos ultimos no se aplican al XLSX: aquel es UTF-8 por definicion y no
+         *     tiene separador de campos.
          * @enum {string}
          */
-        SettingKey: "ATTENDANCE_MAX_SHIFT_HOURS" | "ATTENDANCE_DEBOUNCE_SECONDS" | "ATTENDANCE_MAX_CLOCK_SKEW_MINUTES" | "ATTENDANCE_MIN_TRANSIT_SECONDS" | "ATTENDANCE_BREAK_CLOCKING" | "BRANDING_APP_NAME" | "BRANDING_LOGO_PATH" | "BRANDING_ACCENT_COLOR" | "LOCALE_DEFAULT" | "LOCALE_AVAILABLE" | "KIOSK_SERVICE_CODE";
+        SettingKey: "ATTENDANCE_MAX_SHIFT_HOURS" | "ATTENDANCE_DEBOUNCE_SECONDS" | "ATTENDANCE_MAX_CLOCK_SKEW_MINUTES" | "ATTENDANCE_MIN_TRANSIT_SECONDS" | "ATTENDANCE_BREAK_CLOCKING" | "BRANDING_APP_NAME" | "BRANDING_LOGO_PATH" | "BRANDING_ACCENT_COLOR" | "LOCALE_DEFAULT" | "LOCALE_AVAILABLE" | "KIOSK_SERVICE_CODE" | "PAYROLL_EXPORT_COLUMNS" | "PAYROLL_EXPORT_DELIMITER" | "PAYROLL_EXPORT_HOURS_FORMAT" | "PAYROLL_EXPORT_DATE_FORMAT" | "PAYROLL_EXPORT_ENCODING" | "PAYROLL_EXPORT_HEADER_ROW";
         /**
          * SettingValue
          * @description El valor de una clave. `installation_settings.value` es `JSONB` porque el
@@ -9411,6 +9770,268 @@ export interface components {
             };
         };
         /**
+         * ReportExportRequest
+         * @description Lo que se pide al generar un informe en diferido (RF-IN-06, RF-IN-07).
+         *
+         *     **Son los mismos parametros que `GET /api/v1/reports/period`**, mas `kind`
+         *     y `format`. No es una coincidencia: la generacion en diferido reutiliza la
+         *     misma consulta, con los mismos criterios y los mismos festivos. Si aqui
+         *     hubiera un filtro de mas o de menos, el fichero que llega por el enlace
+         *     describiria un informe distinto del que se estaba mirando en pantalla.
+         *
+         *     **El alcance no se pide.** Lo resuelve el servidor a partir del token
+         *     (RF-ID-03) y queda **congelado** en la fila: el trabajo lo aplica tal cual
+         *     y nunca lo recalcula, de modo que el fichero describe el alcance con el
+         *     que se autorizo, que es el unico que quedo en `audit_log`.
+         */
+        ReportExportRequest: {
+            /**
+             * @description `period` es el informe de horas (RF-IN-01..03): rol `{admin, rrhh}` y
+             *     funcionalidad `advanced_reports`. `payroll` es la salida configurable
+             *     para nomina (RF-IN-07): rol `rrhh` del Anexo B y funcionalidad
+             *     `payroll_export`.
+             * @enum {string}
+             */
+            kind: "period" | "payroll";
+            /**
+             * @description **Obligatorio y sin valor por omision**: quien pulsa un boton de
+             *     descarga ya ha elegido formato, y suponer CSV seria decidir por el.
+             *
+             *     `pdf` **solo con `kind: period`**. Un programa de nomina no importa un
+             *     PDF, asi que ofrecerlo produciria ficheros inservibles; con
+             *     `kind: payroll` es `422`.
+             * @enum {string}
+             */
+            format: "csv" | "xlsx" | "pdf";
+            /**
+             * Format: date
+             * @description Primer dia del periodo, en la zona del centro. Fecha civil, no instante.
+             * @example 2026-03-01
+             */
+            from: string;
+            /**
+             * Format: date
+             * @description Ultimo dia del periodo, inclusive. El rango no puede superar los 366
+             *     dias: mas de un año son dos informes. **Los techos sincronos —tres
+             *     meses y veinte mil filas— no aplican aqui**: son exactamente lo que
+             *     esta ruta existe para saltarse.
+             * @example 2026-05-31
+             */
+            to: string;
+            /**
+             * @default day
+             * @enum {string}
+             */
+            granularity: "day" | "week" | "month" | "range";
+            /**
+             * @default employee
+             * @enum {string}
+             */
+            group_by: "employee" | "department" | "site";
+            /** @default false */
+            include_open_shifts: boolean;
+            /**
+             * @description Filtro, no autorizacion: uno fuera del alcance produce un resultado
+             *     vacio, nunca `403`.
+             */
+            department_id?: number;
+            /**
+             * Format: uuid
+             * @description Identificador publico de una persona, para el informe de una sola.
+             */
+            employee_uuid?: string;
+        };
+        /**
+         * ReportExportDownload
+         * @description El enlace de descarga **recien acuñado** (RF-IN-06, ADR-041).
+         *
+         *     Solo aparece en `GET /api/v1/reports/exports/{uuid}` y solo cuando la
+         *     exportacion esta `completed` y su fichero no ha caducado. **La lista nunca
+         *     lo trae**: un sondeo cada diez segundos dejaria veinte enlaces vivos e
+         *     invalidaria el que alguien estuviera usando.
+         *
+         *     Es **de un solo uso**: la descarga lo consume y repetir la URL responde
+         *     `410`. Volver a consultar el estado acuña otro e invalida este.
+         */
+        ReportExportDownload: {
+            /**
+             * @description Ruta **relativa** a este mismo servidor, con el token en la cadena de
+             *     consulta. Relativa y no absoluta porque el panel de cada cliente vive
+             *     en un dominio distinto (ADR-016, ADR-017).
+             * @example /api/v1/reports/exports/019a12b4-5c6d-7e8f-9012-3456789abcde/download?token=3d9c8f0a…
+             */
+            url: string;
+            expires_at: components["schemas"]["UtcTimestamp"];
+        };
+        /**
+         * ReportExport
+         * @description Un informe generado en diferido (RF-IN-06, RF-IN-07, ADR-041): quien lo
+         *     pidio, que pidio, en que estado esta, cuanto ocupa, que huella tiene,
+         *     cuando caduca y cuantas veces se ha descargado.
+         *
+         *     La fila se conserva para siempre (regla dura 5): cuando el fichero caduca
+         *     pasa a `purged` y sigue apareciendo, porque «¿salio de aqui un informe con
+         *     las horas de mi plantilla, cuando y a peticion de quien?» hay que poder
+         *     contestarlo despues.
+         *
+         *     **Lo que no sale:** la ruta del fichero en el servidor —no le sirve a un
+         *     navegador y si diria donde mirar a quien no debe—, la huella del token de
+         *     descarga, el identificador interno y cualquier nombre de empleado (regla
+         *     dura 21). Lo mas parecido es el `employee_uuid` del filtro, que es un
+         *     identificador publico.
+         */
+        ReportExport: {
+            /** Format: uuid */
+            uuid: string;
+            /** @enum {string} */
+            kind: "period" | "payroll";
+            /** @enum {string} */
+            format: "csv" | "xlsx" | "pdf";
+            /**
+             * @description `pending` espera al trabajador de cola; `running` esta generando;
+             *     `completed` se puede descargar; `failed` no se genero (la causa, sin
+             *     datos personales, en `failure_reason`); `purged` existio y su fichero
+             *     se borro por caducidad.
+             *
+             *     **`purged` no es `failed`**: confundirlos seria decirle a quien lo
+             *     pidio que su informe nunca se hizo cuando se hizo y se lo pudo llevar.
+             * @enum {string}
+             */
+            status: "pending" | "running" | "completed" | "failed" | "purged";
+            parameters: components["schemas"]["ReportExportParameters"];
+            /**
+             * @description El alcance con el que se autorizo (RF-ID-03), **congelado** en el
+             *     momento de pedirlo. Distingue «RRHH pidio el hotel entero» de «alguien
+             *     pidio sus departamentos», que ante una brecha (RL-15) no es lo mismo.
+             *     Nunca la lista de identificadores.
+             *
+             *     **Nulo en las exportaciones `purged`** (RL-11): al borrarse el fichero,
+             *     la fila se minimiza y pierde los tres campos que señalan a personas
+             *     —este y los filtros `employee_uuid` y `department_id` de
+             *     `parameters`—. Es la razon por la que la fila puede conservarse sin
+             *     plazo; el hecho completo sigue en `audit_log`.
+             * @enum {string|null}
+             */
+            scope: "all" | "departments" | null;
+            /**
+             * @description La cuenta de gestion que lo pidio, que es la unica que lo ve y lo
+             *     descarga. `null` solo si esa cuenta ya no se puede resolver.
+             */
+            requested_by: {
+                /** Format: uuid */
+                uuid: string;
+                name: string;
+            } | null;
+            requested_at: components["schemas"]["UtcTimestamp"];
+            started_at: components["schemas"]["UtcTimestamp"] | null;
+            completed_at: components["schemas"]["UtcTimestamp"] | null;
+            failed_at: components["schemas"]["UtcTimestamp"] | null;
+            /**
+             * @description Por que no se genero, como **codigo estable**. Nulo mientras no haya
+             *     fallado.
+             *
+             *     Ni el mensaje del error —un mensaje de base de datos puede llevar
+             *     dentro el valor de una fila (regla dura 21)— ni el nombre de la clase
+             *     de la excepcion, que no le dice nada a quien lee el panel y cambiaria
+             *     con cualquier refactor. La clase real se queda en el log tecnico del
+             *     servidor, junto al `uuid`.
+             *
+             *     Cada codigo lleva a una accion distinta, y el panel los traduce:
+             *
+             *     - `write_failed` — no se pudo escribir el fichero. Casi siempre disco
+             *       lleno o permisos de `REPORTING_EXPORT_PATH`.
+             *     - `query_timeout` — PostgreSQL cancelo la consulta al agotar
+             *       `REPORTING_EXPORT_TIMEOUT_SECONDS`. No hay nada roto: el periodo es
+             *       demasiado grande y la salida es pedir dos mas cortos.
+             *     - `database_error` — cualquier otro fallo de la base de datos.
+             *     - `stale` — se quedo a medias y nadie lo termino: el trabajador de cola
+             *       murio o el servidor se paro. Se vuelve a pedir.
+             *     - `unexpected` — cualquier otra cosa. Es la unica que justifica generar
+             *       un paquete de diagnostico.
+             * @enum {string|null}
+             */
+            failure_reason: "write_failed" | "query_timeout" | "database_error" | "stale" | "unexpected" | null;
+            /**
+             * @description `kronoqr-horas-<desde>_<hasta>.<ext>`. **Sin ningun nombre de persona**
+             *     (regla dura 21): viaja en `Content-Disposition` y acaba en el historial
+             *     de descargas de un navegador que puede ser compartido. Nulo hasta que
+             *     termina.
+             * @example kronoqr-horas-2026-03-01_2026-05-31.csv
+             */
+            file_name: string | null;
+            size_bytes: number | null;
+            /** @description Huella del **fichero**, para comprobar que la descarga llego entera. */
+            sha256: string | null;
+            row_count: number | null;
+            /**
+             * @description Los criterios de inclusion **ya traducidos**, en el idioma de la
+             *     instalacion.
+             *
+             *     Viajan aqui porque el fichero de **nomina no los lleva dentro**: una
+             *     fila de comentario al principio rompe la importacion de la herramienta
+             *     de nomina. Y un informe de horas sin sus criterios es una tabla de
+             *     numeros que cada persona interpreta a su manera.
+             *
+             *     Vacio mientras no ha terminado.
+             */
+            criteria: string[];
+            /**
+             * @description Hasta cuando existe el fichero. Pasada, se purga y la fila pasa a
+             *     `purged`.
+             */
+            expires_at: components["schemas"]["UtcTimestamp"] | null;
+            purged_at: components["schemas"]["UtcTimestamp"] | null;
+            /** @description Ultima descarga. Cada una deja `report_export.downloaded` en `audit_log`. */
+            downloaded_at: components["schemas"]["UtcTimestamp"] | null;
+            download_count: number;
+            notified_at: components["schemas"]["UtcTimestamp"] | null;
+            /**
+             * @description Por donde se aviso. `panel` es el canal de serie —la pantalla sondea y
+             *     enseña «lista para descargar»— y **no significa «no se aviso»**;
+             *     `mail` significa que ademas salio un correo. Sin transporte de correo
+             *     configurado, sin direccion en la cuenta o si el envio fallo, queda
+             *     `panel`: el producto no depende del correo (regla dura 12).
+             *
+             *     El correo **nunca lleva el enlace de descarga**, lleva el enlace a la
+             *     pantalla.
+             * @enum {string|null}
+             */
+            notification_channel: "panel" | "mail" | null;
+            /**
+             * @description Solo en `GET /api/v1/reports/exports/{uuid}`, y solo cuando hay fichero
+             *     que entregar. En la lista y en el `202` es siempre ausente o `null`.
+             */
+            download?: components["schemas"]["ReportExportDownload"] | null;
+        };
+        /**
+         * ReportExportParameters
+         * @description Lo que se pidio, tal cual se pidio. Son las mismas claves que acepta
+         *     `POST /api/v1/reports/exports`, para que la fila y la peticion se lean
+         *     igual.
+         */
+        ReportExportParameters: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            /** @enum {string} */
+            granularity: "day" | "week" | "month" | "range";
+            /** @enum {string} */
+            group_by: "employee" | "department" | "site";
+            include_open_shifts: boolean;
+            department_id: number | null;
+            /** Format: uuid */
+            employee_uuid: string | null;
+        };
+        /** ReportExportResource */
+        ReportExportResource: {
+            data: components["schemas"]["ReportExport"];
+        };
+        /** ReportExportCollection */
+        ReportExportCollection: {
+            data: components["schemas"]["ReportExport"][];
+        };
+        /**
          * DataExport
          * @description Una exportacion integra de los datos de la instalacion (RF-PD-14,
          *     RL-20): quien la pidio y por donde, en que estado esta, cuanto ocupa,
@@ -10092,6 +10713,18 @@ export interface components {
          */
         DataExportUuid: string;
         /**
+         * @description Identificador **publico** del informe generado en diferido
+         *     (`report_exports.uuid`). La clave interna no sale de la base de datos,
+         *     como en el resto de la API.
+         *
+         *     Es ademas **la mitad del secreto de la ruta de descarga** (ADR-041): de
+         *     los 122 bits de un UUID v7, 48 son marca de tiempo y por tanto
+         *     adivinables, asi que lo que aporta son ~74 bits aleatorios. La otra mitad
+         *     son los 256 bits del token de un solo uso.
+         * @example 019a12b4-5c6d-7e8f-9012-3456789abcde
+         */
+        ReportExportUuid: string;
+        /**
          * @description Identificador **publico** del dispositivo de quiosco (`devices.uuid`). Por
          *     lo mismo que el del empleado y el de la credencial: la clave interna no
          *     sale de la base de datos, y un identificador secuencial en una URL diria
@@ -10392,6 +11025,45 @@ export interface components {
          * @example xlsx
          */
         PeriodReportExportFormat: "csv" | "xlsx" | "pdf";
+        /**
+         * @description Formato del fichero de nomina. **Dos y no tres**: un PDF no se importa en
+         *     ninguna nomina, y ofrecerlo arrancaria un Chromium para producir un
+         *     fichero que nadie puede usar.
+         *
+         *     - **`csv`** — el que importa el programa de nomina. Su separador, su
+         *       codificacion, sus columnas y sus rotulos salen de los seis ajustes
+         *       `PAYROLL_EXPORT_*` de la instalacion, **no de esta peticion**.
+         *     - **`xlsx`** — la misma plantilla en hoja de calculo, con todas las celdas
+         *       como texto. Dos ajustes no aplican: `PAYROLL_EXPORT_DELIMITER`, porque
+         *       un XLSX no tiene separador de campos, y `PAYROLL_EXPORT_ENCODING`,
+         *       porque el formato es UTF-8 por definicion.
+         *
+         *     **Sin valor por omision**: quien pulsa un boton de descarga ya ha elegido
+         *     formato, y suponer CSV seria decidir por el.
+         * @example csv
+         */
+        PayrollExportFormat: "csv" | "xlsx";
+        /**
+         * @description Grano de agrupacion de la salida a nomina. **Tres de los cuatro del
+         *     informe, y por omision `range`.**
+         *
+         *     - `range` — una fila por persona con el periodo entero. Es la pregunta
+         *       normal de una nomina y por eso es el valor por omision, al contrario que
+         *       en el informe por periodo, donde `day` es el grano de la fuente.
+         *     - `month` — una fila por persona y mes, para periodos que cruzan varios.
+         *     - `day` — una fila por persona y jornada, para los programas que cargan el
+         *       detalle diario.
+         *
+         *     **`week` no se admite**: los periodos de nomina son el mes o un rango
+         *     libre, nunca la semana ISO, y las semanas a caballo de dos meses producen
+         *     filas que ningun importador sabe repartir.
+         *
+         *     El agrupamiento es **siempre por empleado** y no se pide: una nomina se
+         *     paga a personas, y un fichero agregado por departamento no se puede
+         *     importar en ningun sitio.
+         * @example range
+         */
+        PayrollGranularity: "range" | "month" | "day";
         /**
          * @description Identificador de la incidencia (`incidents.id`).
          *
@@ -11850,7 +12522,29 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
-            422: components["responses"]["ValidationFailed"];
+            /**
+             * @description La peticion no es valida —rango invertido, fechas mal formadas— **o**
+             *     el periodo no cabe en una respuesta sincrona (RNF-P-05): mas de
+             *     `REPORTING_COMPLIANCE_MAX_RANGE_DAYS`, o la consulta agoto su
+             *     `statement_timeout`.
+             *
+             *     **Los dos casos se distinguen por el `type`**:
+             *     `urn:kronoqr:problem:validation-failed` el primero y
+             *     `urn:kronoqr:problem:report-too-large` el segundo. El cuerpo es el
+             *     mismo `ValidationProblem`, con las cifras concretas en `errors.to`.
+             *
+             *     **Esta vista no tiene generacion en diferido** —solo la tienen el
+             *     informe por periodo y la nomina (RF-IN-06)—, asi que ante el segundo
+             *     la unica salida es acortar el rango.
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ValidationProblem"];
+                };
+            };
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -12800,7 +13494,20 @@ export interface operations {
              *     no se puede es atender esa peticion en el acto. El `detail` dice con
              *     cifras si sobra rango, si sobran filas o si la consulta agoto su
              *     tiempo, y en los tres casos la salida es reducir el rango, subir la
-             *     granularidad o esperar a la generacion en diferido de RF-IN-06.
+             *     granularidad o **generarlo en segundo plano**.
+             *
+             *     **Desde la tarea 3.9 ese camino existe**: `POST /api/v1/reports/exports`
+             *     con estos mismos parametros y `kind: period` (RF-IN-06). Alli no
+             *     aplican los dos techos sincronos, se avisa al terminar y se descarga
+             *     con un enlace de un solo uso (ADR-041).
+             *
+             *     **Los dos casos se distinguen por el `type`**, no por el texto: una
+             *     peticion invalida es `urn:kronoqr:problem:validation-failed` y el
+             *     informe que no cabe es `urn:kronoqr:problem:report-too-large`. El
+             *     cuerpo es el mismo `ValidationProblem` —con las cifras concretas en
+             *     `errors.to`—, asi que el cliente generado no necesita dos formas; lo
+             *     que cambia es que ante el segundo hay que **ofrecer la generacion en
+             *     segundo plano** en lugar de pedir que se corrija un campo.
              */
             422: {
                 headers: {
@@ -12982,6 +13689,15 @@ export interface operations {
              * @description La peticion no es valida —formato desconocido, rango invertido— **o**
              *     el informe no cabe en una respuesta sincrona (RNF-P-05), igual que en
              *     la consulta JSON.
+             *
+             *     **Desde la tarea 3.9, lo segundo tiene salida**: `POST
+             *     /api/v1/reports/exports` con estos mismos parametros, `kind: period` y
+             *     el mismo `format` lo genera en segundo plano (RF-IN-06) y lo entrega
+             *     con un enlace de descarga de un solo uso (ADR-041).
+             *
+             *     **Los dos casos se distinguen por el `type`**: `…validation-failed` si
+             *     la peticion es invalida y `urn:kronoqr:problem:report-too-large` si el
+             *     informe no cabe. Mismo cuerpo, distinta accion.
              */
             422: {
                 headers: {
@@ -13009,6 +13725,196 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+        };
+    };
+    exportPayroll: {
+        parameters: {
+            query: {
+                /**
+                 * @description Formato del fichero de nomina. **Dos y no tres**: un PDF no se importa en
+                 *     ninguna nomina, y ofrecerlo arrancaria un Chromium para producir un
+                 *     fichero que nadie puede usar.
+                 *
+                 *     - **`csv`** — el que importa el programa de nomina. Su separador, su
+                 *       codificacion, sus columnas y sus rotulos salen de los seis ajustes
+                 *       `PAYROLL_EXPORT_*` de la instalacion, **no de esta peticion**.
+                 *     - **`xlsx`** — la misma plantilla en hoja de calculo, con todas las celdas
+                 *       como texto. Dos ajustes no aplican: `PAYROLL_EXPORT_DELIMITER`, porque
+                 *       un XLSX no tiene separador de campos, y `PAYROLL_EXPORT_ENCODING`,
+                 *       porque el formato es UTF-8 por definicion.
+                 *
+                 *     **Sin valor por omision**: quien pulsa un boton de descarga ya ha elegido
+                 *     formato, y suponer CSV seria decidir por el.
+                 * @example csv
+                 */
+                format: components["parameters"]["PayrollExportFormat"];
+                /**
+                 * @description Primera **jornada** del informe, inclusive. Es una fecha civil en la zona
+                 *     del centro, no un instante: agrupar por jornada y no por la hora de las
+                 *     marcas es lo que mantiene entero un turno que cruza la medianoche (RN-05,
+                 *     regla dura 4).
+                 *
+                 *     **Obligatoria**, al contrario que en `GET /api/v1/employees/{uuid}/workdays`.
+                 *     Alli tiene omision porque la pantalla se abre sola con el ultimo mes; aqui
+                 *     quien pide un informe de horas ha elegido un periodo, y un informe sobre un
+                 *     rango que nadie pidio es exactamente la cifra que despues alguien lleva a
+                 *     una reunion de nomina creyendo que es otra.
+                 * @example 2026-03-01
+                 */
+                from: components["parameters"]["PeriodReportFrom"];
+                /**
+                 * @description Ultima jornada del informe, inclusive. Obligatoria, por lo mismo que
+                 *     `from`.
+                 *
+                 *     El rango no puede exceder **tres meses** en la respuesta sincrona: por
+                 *     encima, el informe se pide en diferido (RF-IN-06). El techo es
+                 *     configuracion de la instalacion, no una regla de negocio.
+                 * @example 2026-03-31
+                 */
+                to: components["parameters"]["PeriodReportTo"];
+                /**
+                 * @description Grano de agrupacion de la salida a nomina. **Tres de los cuatro del
+                 *     informe, y por omision `range`.**
+                 *
+                 *     - `range` — una fila por persona con el periodo entero. Es la pregunta
+                 *       normal de una nomina y por eso es el valor por omision, al contrario que
+                 *       en el informe por periodo, donde `day` es el grano de la fuente.
+                 *     - `month` — una fila por persona y mes, para periodos que cruzan varios.
+                 *     - `day` — una fila por persona y jornada, para los programas que cargan el
+                 *       detalle diario.
+                 *
+                 *     **`week` no se admite**: los periodos de nomina son el mes o un rango
+                 *     libre, nunca la semana ISO, y las semanas a caballo de dos meses producen
+                 *     filas que ningun importador sabe repartir.
+                 *
+                 *     El agrupamiento es **siempre por empleado** y no se pide: una nomina se
+                 *     paga a personas, y un fichero agregado por departamento no se puede
+                 *     importar en ningun sitio.
+                 * @example range
+                 */
+                granularity?: components["parameters"]["PayrollGranularity"];
+                /**
+                 * @description Acota el informe a un departamento.
+                 *
+                 *     **Es un filtro, no una autorizacion.** Un departamento inexistente es un
+                 *     `422` —hay una errata que corregir— y uno existente pero fuera del alcance
+                 *     de quien pregunta devuelve un informe vacio, no un `403`: responder `403`
+                 *     confirmaria que ese departamento existe y convertiria el desplegable del
+                 *     panel en un generador de errores.
+                 * @example 3
+                 */
+                department_id?: components["parameters"]["ReportDepartmentId"];
+                /**
+                 * @description Acota el informe a una persona, por su identificador **publico**.
+                 *
+                 *     Filtro y no autorizacion, igual que `department_id`: alguien fuera del
+                 *     alcance devuelve un informe vacio.
+                 * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                 */
+                employee_uuid?: components["parameters"]["ReportEmployeeUuid"];
+                /**
+                 * @description Si los dias con un turno todavia abierto aportan los minutos que **ya
+                 *     tienen cerrados**.
+                 *
+                 *     Por omision `false`. Un tramo sin cerrar vale cero en la proyeccion
+                 *     —todavia no ha terminado—, asi que ese dia daria una cifra a medias justo
+                 *     en la comparacion contra lo contratado. En los dos casos el dia cuenta
+                 *     como dia con actividad y sale en `open_shift_days`, y el criterio aplicado
+                 *     se escribe en `meta.criteria`.
+                 *
+                 *     Ni con `true` se estima nada del turno en curso: se suma lo que ya esta
+                 *     cerrado y nada mas.
+                 * @example false
+                 */
+                include_open_shifts?: components["parameters"]["ReportIncludeOpenShifts"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description El fichero, transmitido en streaming. El tipo de contenido depende de
+             *     `format` y, en CSV, tambien de `PAYROLL_EXPORT_ENCODING`
+             *     (`text/csv; charset=iso-8859-1` con `latin1`).
+             *
+             *     Un periodo sin nadie produce un fichero con su fila de cabecera y
+             *     ninguna fila de datos: «no hay horas que pagar» tambien es una
+             *     afirmacion que hay que poder importar.
+             */
+            200: {
+                headers: {
+                    /**
+                     * @description Adjunto, con un nombre que **no lleva ningun nombre de persona ni
+                     *     ningun identificador**: solo el periodo (regla dura 21). Dice
+                     *     `nomina` y no `horas` para que no se confunda en una carpeta de
+                     *     descargas con el informe por periodo, que lleva las mismas fechas
+                     *     y otro contenido.
+                     */
+                    "Content-Disposition"?: string;
+                    /** @description Siempre `no-store`: el cuerpo lleva horas de personas identificadas. */
+                    "Cache-Control"?: string;
+                    /**
+                     * @description Los criterios de inclusion del informe, ya traducidos al idioma de
+                     *     la instalacion, unidos por `\n` y codificados en **base64 de
+                     *     UTF-8**: una cabecera HTTP no admite ni acentos ni saltos de
+                     *     linea, y los criterios llevan los dos.
+                     *
+                     *     Van aqui y no dentro del fichero a proposito: una fila de
+                     *     comentario rompe la importacion del programa de nomina.
+                     * @example RGF0b3MgZGUgbGEgcHJveWVjY2lvbiBkaWFyaWEu
+                     */
+                    "X-Kronoqr-Export-Criteria"?: string;
+                    /**
+                     * @description Filas de datos del fichero, sin contar la cabecera. Permite comprobar que la descarga esta completa.
+                     * @example 87
+                     */
+                    "X-Kronoqr-Export-Rows"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            402: components["responses"]["FeatureNotLicensed"];
+            403: components["responses"]["Forbidden"];
+            /**
+             * @description La instalacion todavia no tiene centro configurado, asi que no hay
+             *     zona horaria en la que expresar las jornadas (RF-PD-03, ADR-040).
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description La peticion no es valida —formato desconocido, granularidad `week`,
+             *     rango invertido— **o** el informe no cabe en una respuesta sincrona
+             *     (RNF-P-05), igual que en el informe por periodo.
+             *
+             *     En el segundo caso la salida es pedirlo en diferido:
+             *     `POST /api/v1/reports/exports` con `kind: payroll` (RF-IN-06), que no
+             *     tiene techo de rango ni de filas.
+             *
+             *     **Los dos casos se distinguen por el `type`**: `…validation-failed` si
+             *     la peticion es invalida y `urn:kronoqr:problem:report-too-large` si el
+             *     informe no cabe. Mismo cuerpo, distinta accion.
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ValidationProblem"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
         };
     };
     generateLegalExport: {
@@ -13071,6 +13977,193 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listReportExports: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Los informes en diferido del solicitante, del mas reciente al mas antiguo. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportExportCollection"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    requestReportExport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportExportRequest"];
+            };
+        };
+        responses: {
+            /**
+             * @description Informe encolado. La fila viene en `pending` y sin `download`; su
+             *     `uuid` es el que se sondea y el que se consulta para obtener el
+             *     enlace.
+             */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportExportResource"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            402: components["responses"]["FeatureNotLicensed"];
+            403: components["responses"]["Forbidden"];
+            /**
+             * @description Quien pide ya tiene un informe `pending` o `running`. El cuerpo lleva
+             *     esa fila en `export` para que la pantalla la enseñe en lugar de pedir
+             *     otro.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        export: components["schemas"]["ReportExport"];
+                    };
+                };
+            };
+            /**
+             * @description La peticion no es valida: rango invertido o por encima de los 366 dias
+             *     del calendario, granularidad o agrupacion desconocidas, o un `format`
+             *     que esa clase de informe no admite (`pdf` con `kind: payroll`).
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ValidationProblem"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    showReportExport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** del informe generado en diferido
+                 *     (`report_exports.uuid`). La clave interna no sale de la base de datos,
+                 *     como en el resto de la API.
+                 *
+                 *     Es ademas **la mitad del secreto de la ruta de descarga** (ADR-041): de
+                 *     los 122 bits de un UUID v7, 48 son marca de tiempo y por tanto
+                 *     adivinables, asi que lo que aporta son ~74 bits aleatorios. La otra mitad
+                 *     son los 256 bits del token de un solo uso.
+                 * @example 019a12b4-5c6d-7e8f-9012-3456789abcde
+                 */
+                uuid: components["parameters"]["ReportExportUuid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description El informe, con `download` cuando hay fichero que entregar. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportExportResource"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    downloadReportExport: {
+        parameters: {
+            query: {
+                /**
+                 * @description El token de un solo uso que devolvio `download.url`. Hexadecimal de 64
+                 *     caracteres (32 bytes). No se puede reutilizar y caduca en minutos.
+                 */
+                token: string;
+            };
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** del informe generado en diferido
+                 *     (`report_exports.uuid`). La clave interna no sale de la base de datos,
+                 *     como en el resto de la API.
+                 *
+                 *     Es ademas **la mitad del secreto de la ruta de descarga** (ADR-041): de
+                 *     los 122 bits de un UUID v7, 48 son marca de tiempo y por tanto
+                 *     adivinables, asi que lo que aporta son ~74 bits aleatorios. La otra mitad
+                 *     son los 256 bits del token de un solo uso.
+                 * @example 019a12b4-5c6d-7e8f-9012-3456789abcde
+                 */
+                uuid: components["parameters"]["ReportExportUuid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description El fichero, como descarga. El tipo de contenido depende de `format`. */
+            200: {
+                headers: {
+                    /**
+                     * @description Adjunto, con un nombre que **no lleva ningun nombre de persona** ni
+                     *     ningun identificador de empleado: solo el periodo (regla dura 21).
+                     */
+                    "Content-Disposition"?: string;
+                    /** @description Siempre `no-store`: el cuerpo lleva horas de personas identificadas. */
+                    "Cache-Control"?: string;
+                    /** @description Huella SHA-256 del fichero, en hexadecimal. */
+                    "X-Kronoqr-Export-Sha256"?: string;
+                    /** @description Filas de datos que lleva el fichero. */
+                    "X-Kronoqr-Export-Rows"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                    "application/pdf": string;
+                };
+            };
+            404: components["responses"]["NotFound"];
+            /**
+             * @description El enlace existio y ya no sirve: se uso (`…report-export-link-used`) o
+             *     caduco (`…report-export-link-expired`). El fichero sigue ahi mientras
+             *     no caduque; la salida es pedir otro enlace desde la pantalla.
+             */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             429: components["responses"]["TooManyRequests"];
         };
     };

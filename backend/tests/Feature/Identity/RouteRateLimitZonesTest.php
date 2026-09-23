@@ -203,3 +203,48 @@ it('exige que cada zona usada por el router tenga su limitador registrado', func
         'Zona(s) de limitacion sin `RateLimiter::for()` que las declare: '.implode(', ', $huerfanas),
     );
 })->group('RS-02', 'RS-04', 'RS-05');
+
+/*
+ * ---------------------------------------------------------------------------
+ * La descarga de un informe en diferido (tarea 3.9, RF-IN-06, ADR-041)
+ * ---------------------------------------------------------------------------
+ *
+ * Es la unica ruta de la API **sin `auth:sanctum`** que reparte datos de la
+ * plantilla, asi que el recorrido de arriba no la ve: aquel enumera las rutas
+ * con sesion. Y precisamente por no tener sesion es donde una zona olvidada
+ * costaria mas caro — no hay cuenta por la que contar, y lo unico que queda
+ * entre un `uuid` conocido y una prueba de tokens a la velocidad de la red es
+ * este techo por origen.
+ *
+ * Se comprueba aparte y con nombre, no por el recorrido general, para que el dia
+ * que alguien la mueva al grupo autenticado —o le quite el `throttle`— esta
+ * prueba lo diga con una frase y no con una lista.
+ */
+it('exige zona propia por IP a la descarga de informes en diferido, que no lleva sesion', function (): void {
+    $descarga = null;
+
+    foreach (Router::getRoutes()->getRoutes() as $route) {
+        if ($route->uri() === 'api/v1/reports/exports/{uuid}/download') {
+            $descarga = $route;
+        }
+    }
+
+    expect($descarga)->not->toBeNull('La ruta de descarga de informes en diferido ha desaparecido del router.');
+
+    /** @var Route $descarga */
+    expect(zonaDeLimiteDe($descarga))->toBe(
+        'report-download',
+        'La descarga de informes en diferido va sin sesion (ADR-041): sin zona propia, lo unico que la '
+        .'frena es Nginx, que cuenta por origen y en un hotel es un cubo compartido por NAT.',
+    );
+
+    // Y la zona existe de verdad: `throttle:inventada` no revienta al registrar la
+    // ruta, se descubre con un `500` en produccion.
+    expect(RateLimiter::limiter('report-download'))->not->toBeNull();
+
+    // La otra mitad de la decision: **no** lleva `auth:sanctum`, y eso es
+    // deliberado (ADR-041). Si alguien se la pusiera, el enlace de un solo uso
+    // dejaria de poder abrirse con un clic y el panel tendria que traerse el
+    // fichero entero en memoria.
+    expect($descarga->gatherMiddleware())->not->toContain('auth:sanctum');
+})->group('RS-02', 'RF-IN-06');

@@ -13,6 +13,7 @@
       "live": "Presencia",
       "incidents": "Incidencias",
       "reports": "Informes",
+      "payrollExport": "Nómina",
       "compliance": "Cumplimiento",
       "complianceProfile": "Perfil de cumplimiento",
       "operationalSettings": "Ajustes operativos",
@@ -695,6 +696,13 @@
       },
       "announce": {
         "results": "El informe tiene {count} filas."
+      },
+      "background": {
+        "offer": "Este periodo no cabe en una respuesta al momento. Puedes pedir que se genere en segundo plano: se avisa en el panel en cuanto está listo, con un enlace de descarga que caduca.",
+        "generate": "Generar en segundo plano",
+        "requesting": "Pidiendo la generación…",
+        "requested": "Exportación pedida. Aparecerá en el bloque de exportaciones en cuanto empiece a procesarse.",
+        "seeExports": "Ver las exportaciones en segundo plano"
       }
     },
     "table": {
@@ -717,6 +725,116 @@
       "holidayDaysTitle": "Días de alta que son festivo del calendario del perfil de cumplimiento y no están cubiertos por una ausencia. Tampoco cuentan como absentismo no justificado.",
       "unjustifiedAbsenceDays": "Absentismo no justificado",
       "unjustifiedAbsenceDaysTitle": "Días de alta sin actividad, sin ausencia registrada y sin ser festivo. El producto no conoce el cuadrante: contrasta esta cifra con el calendario de turnos."
+    }
+  },
+  "reportExports": {
+    "heading": "Exportaciones en segundo plano",
+    "intro": "Los informes que no caben en una respuesta al momento se generan aquí. Cada enlace de descarga es de un solo uso y caduca: si lo necesitas otra vez, pídelo de nuevo.",
+    "kind": {
+      "period": "Horas por periodo",
+      "payroll": "Nómina"
+    },
+    "status": {
+      "pending": "En cola",
+      "running": "Generando",
+      "completed": "Lista para descargar",
+      "failed": "Fallida",
+      "purged": "Caducada"
+    },
+    "list": {
+      "loading": "Cargando las exportaciones…",
+      "lastUpdatedAt": "Actualizado a las {moment}.",
+      "caption": "Exportaciones en segundo plano, de la más reciente a la más antigua.",
+      "columns": {
+        "status": "Estado",
+        "kind": "Tipo",
+        "format": "Formato",
+        "period": "Periodo",
+        "size": "Tamaño",
+        "rows": "Filas",
+        "expiresAt": "Caduca",
+        "actions": "Acciones"
+      },
+      "period": "{from} — {to}",
+      "rows": "{count} fila(s)",
+      "download": "Descargar",
+      "downloading": "Descargando…",
+      "downloaded": "Descarga de «{filename}» lista.",
+      "criteriaToggle": "Ver los criterios",
+      "readyAnnounce": "Una exportación está lista para descargar.",
+      "failedReason": "No se pudo generar: {reason}",
+      "purgedNotice": "El fichero ya se purgó por antigüedad. La fila queda como constancia, pero no se puede volver a descargar.",
+      "failureReasons": {
+        "write_failed": "no se pudo escribir el fichero.",
+        "database_error": "un error de base de datos interrumpió la generación.",
+        "query_timeout": "la consulta superó el tiempo máximo.",
+        "stale": "se quedó a medias más tiempo del previsto y se dio por fallida.",
+        "unexpected": "un error inesperado interrumpió la generación."
+      },
+      "empty": {
+        "title": "Todavía no hay ninguna exportación en segundo plano",
+        "description": "Cuando un informe no quepa en una respuesta al momento, o pidas la salida a nómina en segundo plano, aparecerá aquí."
+      }
+    }
+  },
+  "payrollExport": {
+    "title": "Salida a nómina",
+    "subtitle": "Horas trabajadas y contratadas por empleado y periodo, en el formato que necesite tu programa de nómina. Aquí no se calculan pluses ni complementos: eso lo hace la herramienta de nómina del hotel.",
+    "download": "Descargar",
+    "downloading": "Descargando…",
+    "downloaded": "Descarga de la salida a nómina lista.",
+    "downloadFailed": "No se ha podido descargar la salida a nómina.",
+    "backgroundRequested": "Salida a nómina pedida en segundo plano.",
+    "licenseRequired": "La salida a nómina no está incluida en tu licencia actual.",
+    "filters": {
+      "legend": "Periodo y alcance de la salida a nómina",
+      "from": "Desde",
+      "to": "Hasta",
+      "granularity": "Granularidad",
+      "employee": "Empleado (opcional)"
+    },
+    "granularity": {
+      "range": "Todo el periodo",
+      "month": "Mes",
+      "day": "Día"
+    },
+    "delimiter": {
+      "semicolon": "punto y coma",
+      "comma": "coma",
+      "tab": "tabulador"
+    },
+    "hoursFormat": {
+      "hhmm": "HH:MM",
+      "decimal_dot": "decimal con punto",
+      "decimal_comma": "decimal con coma"
+    },
+    "preview": {
+      "heading": "Columnas de este fichero",
+      "intro": "Con los ajustes actuales: separador de {delimiter}, horas en formato {hours}. Se puede cambiar en «Ajustes operativos».",
+      "loading": "Cargando la configuración…",
+      "editLink": "Cambiar las columnas y el formato"
+    },
+    "columns": {
+      "employee_code": "Código de empleado",
+      "employee_uuid": "Identificador",
+      "last_name": "Apellidos",
+      "first_name": "Nombre",
+      "full_name": "Nombre completo",
+      "department": "Departamento",
+      "period_from": "Desde",
+      "period_to": "Hasta",
+      "days_in_period": "Días del periodo",
+      "days_with_activity": "Días con actividad",
+      "shift_count": "Tramos",
+      "worked_hours": "Horas trabajadas",
+      "contracted_hours": "Horas contratadas",
+      "deviation_hours": "Desviación",
+      "overtime_hours": "Exceso de jornada",
+      "absence_days": "Días de ausencia",
+      "holiday_days": "Festivos",
+      "unjustified_absence_days": "Absentismo no justificado",
+      "days_without_contract": "Días sin contrato",
+      "time_zone": "Zona horaria"
     }
   },
   "workdays": {
@@ -1199,6 +1317,8 @@
     "attendanceHeading": "Fichaje",
     "diagnosticsHeading": "Diagnóstico",
     "localesHeading": "Idiomas",
+    "payrollHeading": "Salida a nómina",
+    "payrollIntro": "El formato del fichero que exporta «Nómina» (RF-IN-07): qué columnas lleva, en qué orden, con qué separador y cómo se escriben las horas y las fechas. Un cliente con otro programa de nómina cambia esto, no el producto.",
     "fields": {
       "maxShiftHours": "Duración máxima de un tramo (h)",
       "debounceSeconds": "Ventana anti-rebote (s)",
@@ -1207,7 +1327,13 @@
       "kioskServiceCode": "Código de servicio del quiosco",
       "breakClocking": "Fichaje de pausa",
       "localeDefault": "Idioma por defecto",
-      "localeAvailable": "Idiomas disponibles"
+      "localeAvailable": "Idiomas disponibles",
+      "payrollColumns": "Columnas del fichero",
+      "payrollDelimiter": "Separador",
+      "payrollHoursFormat": "Formato de las horas",
+      "payrollDateFormat": "Formato de las fechas",
+      "payrollEncoding": "Codificación",
+      "payrollHeaderRow": "Fila de cabecera"
     },
     "hints": {
       "maxShiftHours": "A partir de esta duración, un tramo cerrado se marca como anómalo y se abre una incidencia para revisión. No cierra ningún turno por su cuenta. Rango admitido: {minimum}–{maximum} horas.",
@@ -1218,16 +1344,38 @@
       "kioskServiceCodeRedacted": "No visible con este tipo de acceso: quien entra como soporte no ve ni puede cambiar el código de servicio.",
       "breakClocking": "Activado: la tablet enseña el botón «Pausa» y, a partir de la próxima revisión nocturna, un tramo continuo sin pausa (RN-12) empieza a abrir incidencias y a contarse en la vista de cumplimiento. Desactivado: el botón desaparece de la tablet y RN-12 vuelve a quedar suspendida, sin cerrar ninguna incidencia ya abierta.",
       "localeDefault": "Idioma con el que se sirven las tres aplicaciones y los documentos cuando nadie elige otro. Tiene que estar entre los idiomas disponibles.",
-      "localeAvailable": "Idiomas que ofrece esta instalación. Al menos uno, y el idioma por defecto siempre tiene que quedar entre los marcados."
+      "localeAvailable": "Idiomas que ofrece esta instalación. Al menos uno, y el idioma por defecto siempre tiene que quedar entre los marcados.",
+      "payrollColumns": "Una columna por línea, en el orden en que aparecen en el fichero. Cada línea es el identificador tal cual (por ejemplo «worked_hours») o el identificador seguido de «=» y la etiqueta de cabecera que quieras usar (por ejemplo «worked_hours=Horas trabajadas»). Un identificador que no esté en el catálogo de abajo se rechaza al guardar.",
+      "payrollColumnsCatalogToggle": "Ver el catálogo de columnas y su significado",
+      "payrollDelimiter": "El carácter que separa una columna de la siguiente en el CSV.",
+      "payrollHoursFormat": "«HH:MM» es el que lee una persona sin ambigüedad. Los formatos decimales existen porque muchos programas de nómina los exigen para sumarlos automáticamente.",
+      "payrollDateFormat": "«ISO» es AAAA-MM-DD; «DMY» es DD/MM/AAAA.",
+      "payrollEncoding": "«UTF-8 con BOM» es lo que espera Excel en Windows sin preguntar la codificación. Con «Latin-1», un carácter que no exista en esa codificación se sustituye por «?» sin que falle la descarga.",
+      "payrollHeaderRow": "Con la fila desactivada, el fichero empieza directamente por los datos: algunos programas de importación automática la rechazan si la llevan."
     },
     "breakClockingOptions": {
       "enabled": "Activado",
       "disabled": "Desactivado"
     },
+    "payrollDateFormatOptions": {
+      "iso": "ISO (AAAA-MM-DD)",
+      "dmy": "DD/MM/AAAA"
+    },
+    "payrollEncodingOptions": {
+      "utf8_bom": "UTF-8 con BOM",
+      "utf8": "UTF-8 sin BOM",
+      "latin1": "Latin-1 (ISO-8859-1)"
+    },
+    "payrollHeaderRowOptions": {
+      "enabled": "Con fila de cabecera",
+      "disabled": "Sin fila de cabecera"
+    },
     "errors": {
       "required": "Este campo no puede quedarse vacío.",
       "notAWholeNumber": "Escribe un número entero, sin decimales ni letras.",
-      "notAServiceCode": "Escribe un código de 8 a 12 cifras, o déjalo vacío para no usar ninguno."
+      "notAServiceCode": "Escribe un código de 8 a 12 cifras, o déjalo vacío para no usar ninguno.",
+      "empty": "Escribe al menos una columna, una por línea.",
+      "unknownColumn": "Alguna línea usa un identificador que no está en el catálogo de columnas."
     },
     "affectsWorkedHoursWarning": "Vas a cambiar un umbral que puede modificar los minutos que quedan registrados. El cambio queda auditado con tu nombre, la fecha, el valor anterior y el nuevo.",
     "audited": "Cada clave modificada deja su propio apunte en el trail de auditoría (calculation_setting.changed) con el valor anterior, el nuevo, quién lo cambió y cuándo.",

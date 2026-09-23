@@ -30,6 +30,7 @@ Todo esto corre solo en el contenedor `scheduler`. Lo que aparece en la columna
 | Lunes 05:10 UTC | **Propuesta de retención**: informe de lo que se purgaría | Leerlo cuando haya algo vencido |
 | Cada hora | Métricas de credenciales y limpieza de temporales | Nada |
 | Cada hora | Se purgan las exportaciones íntegras caducadas: se borra el ZIP, la anotación queda (§13) | Nada |
+| 04:25 UTC, a diario | Se purgan los informes generados en segundo plano que han caducado: se borra el fichero, la anotación queda (§6 y §13) | Nada |
 | Lunes 05:40 UTC | **Telemetría**, solo si la has activado (§13.4): se envía el informe semanal al destino que fijaste | Nada |
 | Trimestral | — | **Simulacro de restauración** de la copia |
 | Trimestral | — | **Repasar la lista de comprobación de endurecimiento** ([`endurecimiento.md`](endurecimiento.md), último apartado): red, certificado, cuentas, tablets, copias fuera del servidor |
@@ -156,6 +157,26 @@ Métricas publicadas para el colector de `node-exporter`
 | `COMPLIANCE_RETENTION_REPORT_PATH` | `storage/app/retention-reports` | Dónde quedan los informes. **No se limpian solos**: son la constancia de la purga |
 | `DB_MAINTENANCE_USERNAME` | `fichaje_maintenance` | Rol que ejecuta la purga de auditoría |
 | `DB_MAINTENANCE_PASSWORD` | *(vacía)* | **No se pone en el `.env`.** Se aporta al ejecutar la purga |
+
+**Los informes generados en segundo plano** (RRHH los pide desde el panel:
+[`guia-rrhh.md`](guia-rrhh.md) §6.3) tienen sus propios seis parámetros y su
+propia purga. Los ficheros son **por persona solicitante**, viven en
+`REPORTING_EXPORT_PATH` y los borra el planificador a las 04:25 UTC en cuanto
+caducan; la anotación de que existieron se conserva siempre. Si alguna vez
+necesitas adelantarla:
+
+```bash
+docker compose exec app php artisan reporting:purge-expired-exports
+```
+
+| Variable | De serie | Qué hace |
+| --- | --- | --- |
+| `REPORTING_EXPORT_PATH` | `storage/app/reports` | Dónde se escriben esos ficheros. **Nunca dentro de `BACKUP_PATH`**: caducan solos y no deben entrar en la copia |
+| `REPORTING_EXPORT_RETENTION_DAYS` | `7` | Días que el fichero se puede descargar antes de que la purga diaria lo borre |
+| `REPORTING_EXPORT_LINK_TTL_MINUTES` | `15` | Minutos que vale el enlace de descarga, que además es **de un solo uso** |
+| `REPORTING_EXPORT_TIMEOUT_SECONDS` | `600` | Tope de la consulta del informe en diferido. Súbelo si una exportación grande falla por tiempo |
+| `REPORTING_EXPORT_STALE_AFTER` | `3600` | Segundos tras los que una generación interrumpida se da por fallida y deja pedir otra. No lo bajes por debajo de lo que tarda tu informe más grande |
+| `REPORTING_EXPORT_DOWNLOAD_RATE_LIMIT` | `30` | Descargas por minuto y por dirección IP en la ruta de descarga, que se abre sin sesión |
 
 ---
 
@@ -863,13 +884,35 @@ administra el servidor.
 
 ## 13. Llevarte todos tus datos: la exportación íntegra
 
+> **Esto no son los informes que RRHH genera en segundo plano**, y conviene no
+> mezclarlos cuando alguien pregunte por «una exportación que no llega». Son dos
+> mecanismos distintos, con dos carpetas distintas y dos purgas distintas:
+>
+> | | **Exportación íntegra** (este apartado) | **Informe en segundo plano** (§6) |
+> | --- | --- | --- |
+> | Qué es | Un ZIP con **toda** la instalación | Un CSV, Excel o PDF de un informe o de la salida a nómina |
+> | Quién la pide | Solo el administrador de instalación | Quien genera informes: RRHH, administración y responsables |
+> | Cuántas a la vez | Una **en toda la instalación** | Una **por persona solicitante**: nadie estorba a nadie |
+> | Quién la descarga | El administrador, con su sesión del panel | **Solo quien la pidió**, con un enlace **de un solo uso** que caduca en minutos y no lleva sesión |
+> | Cuánto dura el fichero | `PRODUCT_DATA_EXPORT_RETENTION_DAYS` (7 días) | `REPORTING_EXPORT_RETENTION_DAYS` (7 días) |
+> | Quién la purga | La tarea horaria | La tarea diaria |
+>
+> Lo que sí comparten: **el fichero se borra y la anotación de que existió no**,
+> y cada descarga queda registrada.
+>
+> Con un matiz propio del informe en segundo plano: al borrar el fichero, la
+> anotación **se queda además sin el empleado ni el alcance que se consultaron**.
+> Ese detalle no se pierde —vive en el registro de auditoría, que es donde tiene
+> plazo legal y protección contra escritura—, pero deja de estar en una tabla
+> operativa donde nadie lo necesita ya.
+
 ### 13.1 Qué es
 
 Un único fichero ZIP, `kronoqr-export-<versión>-<fecha UTC>.zip`, con **todo**
 lo que hay en tu instalación en formatos abiertos: un CSV por tabla (plantilla,
 contratos, ausencias con todas sus versiones, tarjetas, quioscos, tramos con
 todas sus versiones, correcciones con autor y motivo, totales, incidencias,
-escaneos, auditoría completa con su
+escaneos, informes generados en segundo plano, auditoría completa con su
 cadena de hash, cuentas de gestión, accesos de soporte), JSON para la
 configuración, el perfil de cumplimiento y la licencia, un `manifest.json` con
 el número de filas y la huella `sha256` de cada fichero, y un `README.md` que

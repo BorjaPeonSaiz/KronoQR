@@ -41,6 +41,7 @@ const SECTIONS = [
   'Cumplimiento',
   'Credenciales',
   'Informes',
+  'Nómina',
   'Inspección',
   'Perfil de cumplimiento',
   'Ajustes operativos',
@@ -78,7 +79,7 @@ test('la seccion activa lleva aria-current, tambien desde la ficha de un emplead
   await expect(employees).not.toHaveAttribute('aria-current')
 })
 
-test('por debajo de md el menu se apila y las quince secciones siguen visibles', async ({
+test('por debajo de md el menu se apila y las dieciséis secciones siguen visibles', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 700, height: 900 })

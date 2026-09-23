@@ -26,6 +26,7 @@ import IncidentsView from '@/features/incidents/IncidentsView.vue'
 import LivePresenceView from '@/features/live/LivePresenceView.vue'
 import OnboardingView from '@/features/onboarding/OnboardingView.vue'
 import LegalExportView from '@/features/reports/LegalExportView.vue'
+import PayrollExportView from '@/features/reports/PayrollExportView.vue'
 import PeriodReportView from '@/features/reports/PeriodReportView.vue'
 import BrandingView from '@/features/settings/BrandingView.vue'
 import ComplianceProfileView from '@/features/settings/ComplianceProfileView.vue'
@@ -181,6 +182,19 @@ export const routes: RouteRecordRaw[] = [
         name: 'reports',
         component: PeriodReportView,
         meta: { ability: REPORTS_MANAGE },
+      },
+      {
+        // Salida a nomina (RF-IN-07, tarea 3.9): horas por periodo y por
+        // empleado en el formato configurable de «Ajustes operativos».
+        // Ambito `reports:*`, el mismo que «Informes»: hoy solo lo llevan
+        // `admin` y `rrhh` (doc 02 §7.3), asi que exigirlo ya deja fuera al
+        // `responsable_departamento` y al `auditor` sin necesitar un ambito
+        // propio. La policy del servidor (rol `rrhh+`, Anexo B) es la que
+        // autoriza de verdad (regla dura 18).
+        path: 'reports/payroll',
+        name: 'payroll-export',
+        component: PayrollExportView,
+        meta: { ability: REPORTS_MANAGE, section: 'reports' },
       },
       {
         // La exportacion para la Inspeccion (RF-IN-05). Ambito `reports:legal`:

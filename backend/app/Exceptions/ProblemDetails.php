@@ -112,6 +112,68 @@ final class ProblemDetails
     public const string TYPE_DATA_EXPORT_NOT_READY = 'urn:kronoqr:problem:data-export-not-ready';
 
     /**
+     * Quien pide ya tiene un informe en diferido `pending` o `running`
+     * (**RF-IN-06**, tarea 3.9).
+     *
+     * **Tipo propio y no `TYPE_CONFLICT`**, aunque los dos sean `409`, y **tipo
+     * distinto del de la exportacion integra** aunque se parezcan: aquel dice
+     * «la instalacion esta ocupada» y este dice «**tu** ya tienes uno en curso».
+     * La accion que le toca a quien lo recibe es la misma —esperar— pero el
+     * mensaje no: dos responsables generando a la vez no se estorban, y decirle a
+     * uno que espere por el otro seria falso.
+     *
+     * El panel enseña esa exportacion en lugar de pedir otra, y para eso la fila
+     * viaja en el cuerpo.
+     */
+    public const string TYPE_REPORT_EXPORT_IN_PROGRESS = 'urn:kronoqr:problem:report-export-in-progress';
+
+    /**
+     * El informe no cabe en una respuesta sincrona (RNF-P-05, RF-IN-06).
+     *
+     * **`422` con `type` propio, y no el de validacion generico.** Sigue siendo un
+     * `422` —el servicio esta bien, lo que no cabe es esa peticion— pero es un
+     * desenlace distinto de «has escrito mal una fecha»: aqui no hay nada que
+     * corregir, hay que **generar el informe en segundo plano**
+     * (`POST /api/v1/reports/exports`).
+     *
+     * Antes salia como `urn:kronoqr:problem:validation-failed` y el panel lo
+     * distinguia **analizando una frase en castellano** del `detail`. Eso se rompe
+     * el dia que alguien mejore la redaccion, y no funciona en ingles: el `type`
+     * existe exactamente para que un cliente pueda reaccionar sin leer prosa.
+     *
+     * El cuerpo no cambia —`ValidationProblem` con `errors.to`— para que el
+     * cliente generado no necesite una forma nueva.
+     */
+    public const string TYPE_REPORT_TOO_LARGE = 'urn:kronoqr:problem:report-too-large';
+
+    /**
+     * El enlace de descarga de un informe en diferido **ya se uso**
+     * (**RF-IN-06**, ADR-041).
+     *
+     * `410 Gone` y no `404`, porque a quien lo recibe le cambia la accion: el
+     * fichero **sigue existiendo** mientras no caduque, y la salida es volver a la
+     * pantalla de informes y pedir otro enlace. Un `404` diria «esto no existe,
+     * deja de intentarlo».
+     *
+     * Sale al repetir la misma URL —volver atras en el navegador, reenviarla— y es
+     * la prueba de que el enlace es de un solo uso de verdad.
+     */
+    public const string TYPE_REPORT_EXPORT_LINK_USED = 'urn:kronoqr:problem:report-export-link-used';
+
+    /**
+     * El enlace de descarga de un informe en diferido **ha caducado**
+     * (**RF-IN-06**, ADR-041).
+     *
+     * `410` por lo mismo que el anterior, y **tipo distinto** porque la causa que
+     * se le cuenta a quien lo recibe es otra: ahi gasto el enlace y aqui se le paso
+     * el plazo de `REPORTING_EXPORT_LINK_TTL_MINUTES`. Distinguirlos no es un
+     * oraculo —quien llega ha presentado un `uuid` v7 correcto, que solo tiene
+     * quien recibio el enlace— y es la diferencia entre «vuelve a pulsar» y «se te
+     * ha quedado la pestaña abierta demasiado tiempo».
+     */
+    public const string TYPE_REPORT_EXPORT_LINK_EXPIRED = 'urn:kronoqr:problem:report-export-link-expired';
+
+    /**
      * El `{uuid}` de la correccion existio y **ya no es la version vigente**:
      * otra persona lo corrigio o lo anulo antes (ADR-035, tarea 5.11b tras la
      * revision de codigo).
@@ -228,6 +290,29 @@ final class ProblemDetails
     }
 
     /**
+     * `422` porque el informe no cabe en el acto (RNF-P-05, RF-IN-06).
+     *
+     * Mismo cuerpo que una validacion —`errors.to` con las cifras concretas— y
+     * `type` propio, para que el panel pueda ofrecer «generar en segundo plano»
+     * sin analizar una frase en castellano. Ver
+     * {@see self::TYPE_REPORT_TOO_LARGE}.
+     *
+     * **Se señala `to`** porque el rango es lo unico que quien pregunta puede
+     * acortar siempre; la granularidad y el departamento no estan en todas las
+     * peticiones.
+     */
+    public static function reportTooLarge(string $detail): JsonResponse
+    {
+        return self::response(
+            self::TYPE_REPORT_TOO_LARGE,
+            'El informe no cabe en una respuesta inmediata',
+            JsonResponse::HTTP_UNPROCESSABLE_ENTITY,
+            $detail,
+            ['to' => [$detail]],
+        );
+    }
+
+    /**
      * La peticion no cumple el contrato: `400`.
      *
      * Lo usa el borde del quiosco, donde el `422` significa otra cosa. El
@@ -285,6 +370,53 @@ final class ProblemDetails
             'La exportacion todavia no ha terminado',
             JsonResponse::HTTP_CONFLICT,
             'Sigue en curso. Vuelve a consultarla dentro de unos segundos.',
+        );
+    }
+
+    /**
+     * `409` al pedir un informe en diferido teniendo ya uno en curso (RF-IN-06).
+     *
+     * **Recibe un array y no el modelo de dominio**, y no es pereza: esta clase
+     * vive fuera de los modulos a proposito —tiene que poder usarse desde
+     * `bootstrap/app.php`— y Deptrac le prohibe nombrar un tipo de
+     * `App\Modules\*`. Quien la llama es el controlador, que si puede serializar.
+     *
+     * @param  array<string, mixed>  $export  La fila ya serializada con la forma del contrato.
+     */
+    public static function reportExportInProgress(string $detail, array $export): JsonResponse
+    {
+        $response = self::response(
+            self::TYPE_REPORT_EXPORT_IN_PROGRESS,
+            'Ya tienes un informe en curso',
+            JsonResponse::HTTP_CONFLICT,
+            $detail,
+        );
+
+        /** @var array<string, mixed> $body */
+        $body = $response->getData(true);
+
+        return $response->setData([...$body, 'export' => $export]);
+    }
+
+    /** `410` al reutilizar un enlace de descarga ya consumido (RF-IN-06, ADR-041). */
+    public static function reportExportLinkUsed(): JsonResponse
+    {
+        return self::response(
+            self::TYPE_REPORT_EXPORT_LINK_USED,
+            'Ese enlace de descarga ya se ha usado',
+            JsonResponse::HTTP_GONE,
+            'Cada enlace sirve para una sola descarga. Vuelve a la pantalla de informes y pulsa «Descargar» otra vez.',
+        );
+    }
+
+    /** `410` cuando el enlace de descarga ha caducado (RF-IN-06, ADR-041). */
+    public static function reportExportLinkExpired(): JsonResponse
+    {
+        return self::response(
+            self::TYPE_REPORT_EXPORT_LINK_EXPIRED,
+            'Ese enlace de descarga ha caducado',
+            JsonResponse::HTTP_GONE,
+            'Los enlaces caducan a los pocos minutos. Vuelve a la pantalla de informes y pulsa «Descargar» otra vez.',
         );
     }
 

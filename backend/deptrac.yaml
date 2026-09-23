@@ -285,7 +285,23 @@ parameters:
     - name: ReportingInfrastructure
       collectors:
         - type: classNameRegex
-          value: '#^App\\Modules\\Reporting\\Infrastructure\\(?!Persistence\\)#'
+          value: '#^App\\Modules\\Reporting\\Infrastructure\\(?!Persistence\\|Export\\)#'
+
+    # Los escritores de fichero del modulo (`Reporting\Infrastructure\Export`).
+    # Mismo argumento y misma forma que SharedExport: NO son adaptadores de
+    # ningun puerto, son la FORMA de un fichero —que columnas, con que separador,
+    # en que codificacion—, y quien los usa es tanto el controlador que sirve la
+    # descarga sincrona como el trabajo en cola que la genera en diferido.
+    #
+    # Se declara como capa propia, con sus aristas nombradas una a una, en lugar
+    # de abrir ReportingInfrastructure entera a Http: ahi viven los adaptadores
+    # —Browsershot, Reverb, los lectores de Redis— que ningun controlador debe
+    # poder alcanzar. Separarlos es lo que permite conceder lo segundo sin
+    # conceder lo primero.
+    - name: ReportingExport
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Reporting\\Infrastructure\\Export\\#'
     - name: ReportingHttp
       collectors:
         - type: classNameRegex
@@ -681,6 +697,14 @@ parameters:
       # `DeviceProvisioned` y nada mas: sigue siendo de solo lectura y solo sobre
       # EVENTOS.
       - KioskDomainEvent
+      # `ReportingDomainEvent` entra con la tarea 3.9, **sexta vez por la misma
+      # via y el mismo motivo**: RF-IN-06 y RS-05 exigen que pedir, generar y
+      # descargar un informe con las horas de la plantilla queden en `audit_log`
+      # —el fichero sale del servidor y ante una brecha (RL-15) hay que poder
+      # decir quien se lo llevo— y `Reporting` no puede importar `Compliance`
+      # (§1.6). El listener `RecordReportExportLifecycle` lee los tres eventos y
+      # nada mas: sigue siendo de solo lectura y solo sobre EVENTOS.
+      - ReportingDomainEvent
 
     # Http entra por Application. Alcanza Persistence solo por los idiomas de
     # Laravel que lo necesitan (route-model binding y Resources), nunca
@@ -734,6 +758,11 @@ parameters:
       # Tarea 5.6: el mapa evento -> listener del alta de un quiosco nombra
       # `DeviceProvisioned` (RF-PD-06, regla dura 6).
       - KioskDomainEvent
+      # Tarea 3.9: el mapa evento -> asiento del informe en diferido nombra sus
+      # tres eventos (RF-IN-06, RS-05). Solo el mapa: el listener que los lee
+      # vive en ComplianceInfrastructure, que tiene la misma arista y por el
+      # mismo motivo.
+      - ReportingDomainEvent
 
     # --------------------------------------------------------------- Workforce
 
@@ -1034,11 +1063,30 @@ parameters:
       - Eloquent
       - ExternalCode
 
+    # Los escritores de fichero del modulo. Alcanzan el dominio —de donde salen
+    # las celdas—, los objetos de valor de Shared —la plantilla de nomina—, el
+    # dialecto CSV compartido y la libreria de hojas de calculo. NI Http, NI
+    # Persistence, NI los adaptadores: un escritor no consulta nada, recibe un
+    # informe ya construido y una ruta.
+    ReportingExport:
+      - ReportingDomain
+      - ReportingDomainEvent
+      - ReportingApplicationPort
+      - ReportingApplication
+      - SharedDomain
+      - SharedDomainEvent
+      - SharedApplicationPort
+      - SharedExport
+      - Laravel
+      - LaravelFacade
+      - ExternalCode
+
     ReportingInfrastructure:
       - ReportingDomain
       - ReportingDomainEvent
       - ReportingApplicationPort
       - ReportingApplication
+      - ReportingExport
       - SharedDomain
       - SharedDomainEvent
       - SharedApplication
@@ -1075,6 +1123,13 @@ parameters:
       # de la Inspeccion. Ver la capa SharedExport: es la forma de un fichero,
       # no un adaptador, y por eso la arista llega a Export y para ahi.
       - SharedExport
+      # Y lo mismo con los escritores del propio modulo (ReportingExport):
+      # `PayrollExportDocument` sirve la descarga sincrona con EL MISMO escritor
+      # que usa la generacion en diferido (RF-IN-07, tarea 3.9). Dos
+      # implementaciones entregarian ficheros distintos segun por donde se
+      # pidieran. La arista llega a Export y para ahi: los adaptadores del modulo
+      # siguen fuera del alcance de Http.
+      - ReportingExport
       - Laravel
       - LaravelFacade
       - Eloquent
@@ -1090,6 +1145,7 @@ parameters:
       - ReportingApplication
       - ReportingPersistence
       - ReportingInfrastructure
+      - ReportingExport
       - ReportingHttp
       - SharedDomain
       - SharedDomainEvent

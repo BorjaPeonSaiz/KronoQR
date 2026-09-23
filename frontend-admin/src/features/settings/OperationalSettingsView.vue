@@ -74,6 +74,55 @@ const SERVICE_CODE_PATTERN = /^[0-9]{8,12}$/
 /** Tipada con el enum del contrato (RF-AT-12, tarea 3.5): un cambio de nombre en `SettingKey` falla aqui. */
 const BREAK_CLOCKING_KEY: SettingKey = 'ATTENDANCE_BREAK_CLOCKING'
 
+// --- Salida a nomina (RF-IN-07, tarea 3.9) -----------------------------------
+//
+// Las seis claves `PAYROLL_EXPORT_*` TODAVIA NO ESTAN en el enum `SettingKey`
+// del contrato en el momento de escribir esta pantalla: dos agentes de
+// `backend-laravel` lo redactan en paralelo (decision 5 de la ficha). Por eso
+// aqui abajo se usan como cadenas sueltas y no como `SettingKey` -igual que ya
+// hace `KIOSK_SERVICE_CODE` en el resto de este fichero, que tampoco se tipa
+// contra el enum en cada sitio- y `entryOf`/`stringValue` aceptan `key:
+// string` a proposito. En cuanto el contrato las declare y se regeneren los
+// tipos, nada de esto cambia: sigue siendo una clave mas del catalogo.
+
+/** El catalogo cerrado de columnas (decision 5 de la ficha): el mismo que valida el servidor. Un `id` fuera de esta lista es `422` al guardar, aqui y en el backend. */
+const PAYROLL_COLUMN_IDS = [
+  'employee_code',
+  'employee_uuid',
+  'last_name',
+  'first_name',
+  'full_name',
+  'department',
+  'period_from',
+  'period_to',
+  'days_in_period',
+  'days_with_activity',
+  'shift_count',
+  'worked_hours',
+  'contracted_hours',
+  'deviation_hours',
+  'overtime_hours',
+  'absence_days',
+  'holiday_days',
+  'unjustified_absence_days',
+  'days_without_contract',
+  'time_zone',
+] as const
+
+/** Las columnas de serie (decision 5 de la ficha), para cuando el catalogo todavia no trae fila propia. */
+const DEFAULT_PAYROLL_COLUMNS: readonly string[] = [
+  'employee_code',
+  'last_name',
+  'first_name',
+  'department',
+  'period_from',
+  'period_to',
+  'worked_hours',
+  'contracted_hours',
+  'overtime_hours',
+  'absence_days',
+]
+
 /** Las cuatro claves `ATTENDANCE_*`, en el orden en que las declara el catalogo. */
 const ATTENDANCE_FIELDS = [
   { key: 'ATTENDANCE_MAX_SHIFT_HOURS', testId: 'max-shift-hours', i18n: 'maxShiftHours' },
@@ -120,6 +169,22 @@ const breakClocking = ref('disabled')
  * que ya lo sirva asi sin que `schema.d.ts` lo sepa todavia.
  */
 const serviceCodeRedacted = ref(false)
+
+// --- Salida a nomina (RF-IN-07, tarea 3.9) -----------------------------------
+//
+// `payrollColumnsText` es UNA LINEA POR COLUMNA, no un `string[]` como
+// `localeAvailable`: la lista importa el ORDEN -es el orden de las columnas
+// del fichero- y cada entrada puede llevar su propia etiqueta (`id` o
+// `id=Etiqueta`), que el editor de casillas de `LOCALE_AVAILABLE` no puede
+// expresar. Un `<textarea>` con una entrada por linea es el control minimo
+// que sostiene las dos cosas a la vez.
+const payrollColumnsText = ref('')
+const payrollDelimiter = ref('semicolon')
+const payrollHoursFormat = ref('hhmm')
+const payrollDateFormat = ref('iso')
+const payrollEncoding = ref('utf8_bom')
+/** `enabled`/`disabled`: si el fichero lleva fila de cabecera. `enabled` de serie. */
+const payrollHeaderRow = ref('enabled')
 
 /** La fila de una clave del catalogo ya cargado, o `undefined` si no llego a resolverse. */
 function entryOf(catalog: InstallationSettings, key: string): InstallationSetting | undefined {
@@ -170,6 +235,78 @@ function breakClockingValueOf(catalog: InstallationSettings): string {
   return stored === '' ? 'disabled' : stored
 }
 
+/**
+ * El mismo patron que `breakClockingValueOf`, generalizado para las CUATRO
+ * claves `PAYROLL_EXPORT_*` de conjunto cerrado (delimitador, formato de
+ * horas, formato de fecha, codificacion y cabecera): `fallback` es el valor de
+ * serie de cada una (decision 5 de la ficha), usado mientras la clave no tenga
+ * fila propia. Usada en `fill()` y en `pendingChanges` para que las dos
+ * comparen siempre la misma normalizacion.
+ */
+function closedTextValueOf(catalog: InstallationSettings, key: string, fallback: string): string {
+  const stored = stringValue(catalog, key)
+
+  return stored === '' ? fallback : stored
+}
+
+/** Los valores admitidos de una clave de conjunto cerrado (`constraints.allowed`), nunca un catalogo duplicado en el cliente. */
+function allowedValuesOf(catalog: InstallationSettings | null, key: string): readonly string[] {
+  return catalog === null ? [] : (entryOf(catalog, key)?.constraints?.allowed ?? [])
+}
+
+const payrollDelimiterOptions = computed(() =>
+  allowedValuesOf(settings.value, 'PAYROLL_EXPORT_DELIMITER'),
+)
+const payrollHoursFormatOptions = computed(() =>
+  allowedValuesOf(settings.value, 'PAYROLL_EXPORT_HOURS_FORMAT'),
+)
+const payrollDateFormatOptions = computed(() =>
+  allowedValuesOf(settings.value, 'PAYROLL_EXPORT_DATE_FORMAT'),
+)
+const payrollEncodingOptions = computed(() =>
+  allowedValuesOf(settings.value, 'PAYROLL_EXPORT_ENCODING'),
+)
+const payrollHeaderRowOptions = computed(() =>
+  allowedValuesOf(settings.value, 'PAYROLL_EXPORT_HEADER_ROW'),
+)
+
+/** Las columnas ya guardadas, o las de serie mientras la clave no tenga fila propia. */
+function payrollColumnsValueOf(catalog: InstallationSettings): readonly string[] {
+  const value = entryOf(catalog, 'PAYROLL_EXPORT_COLUMNS')?.value
+
+  return Array.isArray(value) && value.length > 0 ? value : DEFAULT_PAYROLL_COLUMNS
+}
+
+/** Una entrada por linea, sin lineas en blanco: la forma que exige el `<textarea>` del editor. */
+function parsePayrollColumnsText(text: string): string[] {
+  return text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '')
+}
+
+/** El `id` de una entrada `id` o `id=Etiqueta`, para validarlo contra el catalogo cerrado. */
+function payrollColumnId(entry: string): string {
+  const separatorIndex = entry.indexOf('=')
+
+  return separatorIndex === -1 ? entry : entry.slice(0, separatorIndex)
+}
+
+type PayrollColumnId = (typeof PAYROLL_COLUMN_IDS)[number]
+
+function isKnownPayrollColumn(id: string): id is PayrollColumnId {
+  return (PAYROLL_COLUMN_IDS as readonly string[]).includes(id)
+}
+
+/**
+ * El catalogo cerrado de columnas, con su etiqueta legible (`payrollExport.columns.*`,
+ * el mismo catalogo que previsualiza `PayrollExportView`): la ayuda en linea
+ * que exige la ficha, sin duplicar los textos en dos sitios.
+ */
+const payrollExportColumnCatalog = computed<Readonly<Record<string, string>>>(() =>
+  Object.fromEntries(PAYROLL_COLUMN_IDS.map((id) => [id, t(`payrollExport.columns.${id}`)])),
+)
+
 /** Como se llama un idioma, en el idioma de la interfaz. Sin traduccion propia, el codigo tal cual: no debería pasar con el catalogo de serie (`es`, `en`). */
 function localeLabel(code: string): string {
   return code === 'es' || code === 'en' ? t(`common.locales.${code}`) : code
@@ -213,6 +350,13 @@ function fill(catalog: InstallationSettings): void {
   serviceCode.value = serviceCodeRedacted.value ? '' : stringValue(catalog, 'KIOSK_SERVICE_CODE')
 
   breakClocking.value = breakClockingValueOf(catalog)
+
+  payrollColumnsText.value = payrollColumnsValueOf(catalog).join('\n')
+  payrollDelimiter.value = closedTextValueOf(catalog, 'PAYROLL_EXPORT_DELIMITER', 'semicolon')
+  payrollHoursFormat.value = closedTextValueOf(catalog, 'PAYROLL_EXPORT_HOURS_FORMAT', 'hhmm')
+  payrollDateFormat.value = closedTextValueOf(catalog, 'PAYROLL_EXPORT_DATE_FORMAT', 'iso')
+  payrollEncoding.value = closedTextValueOf(catalog, 'PAYROLL_EXPORT_ENCODING', 'utf8_bom')
+  payrollHeaderRow.value = closedTextValueOf(catalog, 'PAYROLL_EXPORT_HEADER_ROW', 'enabled')
 }
 
 async function load(): Promise<void> {
@@ -245,6 +389,12 @@ const fieldLabels = computed<Record<string, string>>(() => ({
   'settings.ATTENDANCE_BREAK_CLOCKING': t('operationalSettings.fields.breakClocking'),
   'settings.LOCALE_DEFAULT': t('operationalSettings.fields.localeDefault'),
   'settings.LOCALE_AVAILABLE': t('operationalSettings.fields.localeAvailable'),
+  'settings.PAYROLL_EXPORT_COLUMNS': t('operationalSettings.fields.payrollColumns'),
+  'settings.PAYROLL_EXPORT_DELIMITER': t('operationalSettings.fields.payrollDelimiter'),
+  'settings.PAYROLL_EXPORT_HOURS_FORMAT': t('operationalSettings.fields.payrollHoursFormat'),
+  'settings.PAYROLL_EXPORT_DATE_FORMAT': t('operationalSettings.fields.payrollDateFormat'),
+  'settings.PAYROLL_EXPORT_ENCODING': t('operationalSettings.fields.payrollEncoding'),
+  'settings.PAYROLL_EXPORT_HEADER_ROW': t('operationalSettings.fields.payrollHeaderRow'),
 }))
 
 /**
@@ -300,6 +450,36 @@ const serviceCodeErrors = computed<readonly string[]>(() => {
       : [t(`operationalSettings.errors.${serviceCodeLocalIssue.value}`)]
 
   return [...local, ...serverFieldErrors('KIOSK_SERVICE_CODE')]
+})
+
+/** Las entradas escritas en el editor, una por linea (RF-IN-07). */
+const payrollColumnsEntries = computed(() => parsePayrollColumnsText(payrollColumnsText.value))
+
+/**
+ * `null` (valido), `empty` sin ninguna columna, o `unknownColumn` si algun
+ * `id` no esta en el catalogo cerrado. El `422` del servidor sigue mandando
+ * (`serverFieldErrors('PAYROLL_EXPORT_COLUMNS')` lo añade), esto es solo para
+ * no descargar la peticion con una lista que ya se sabe invalida.
+ */
+const payrollColumnsLocalIssue = computed<'empty' | 'unknownColumn' | null>(() => {
+  const entries = payrollColumnsEntries.value
+
+  if (entries.length === 0) {
+    return 'empty'
+  }
+
+  return entries.some((entry) => !isKnownPayrollColumn(payrollColumnId(entry)))
+    ? 'unknownColumn'
+    : null
+})
+
+const payrollColumnsErrors = computed<readonly string[]>(() => {
+  const local =
+    payrollColumnsLocalIssue.value === null
+      ? []
+      : [t(`operationalSettings.errors.${payrollColumnsLocalIssue.value}`)]
+
+  return [...local, ...serverFieldErrors('PAYROLL_EXPORT_COLUMNS')]
 })
 
 /** Un idioma no se puede desmarcar si es el que esta activo por defecto (mismo patron que `OrganisationStep`). */
@@ -369,6 +549,53 @@ const pendingChanges = computed<UpdateSettingsRequest['settings']>(() => {
     changes['LOCALE_AVAILABLE'] = localeAvailable.value
   }
 
+  // Salida a nomina (RF-IN-07, tarea 3.9): las seis claves `PAYROLL_EXPORT_*`.
+  // El ORDEN importa en `PAYROLL_EXPORT_COLUMNS` -es el orden del fichero-,
+  // asi que la comparacion es posicional y no un conjunto ordenado como
+  // `LOCALE_AVAILABLE`.
+  const previousColumns = payrollColumnsValueOf(current)
+
+  if (
+    payrollColumnsLocalIssue.value === null &&
+    JSON.stringify(payrollColumnsEntries.value) !== JSON.stringify(previousColumns)
+  ) {
+    changes['PAYROLL_EXPORT_COLUMNS'] = payrollColumnsEntries.value
+  }
+
+  const payrollClosedFields: ReadonlyArray<[key: string, value: string, previousValue: string]> = [
+    [
+      'PAYROLL_EXPORT_DELIMITER',
+      payrollDelimiter.value,
+      closedTextValueOf(current, 'PAYROLL_EXPORT_DELIMITER', 'semicolon'),
+    ],
+    [
+      'PAYROLL_EXPORT_HOURS_FORMAT',
+      payrollHoursFormat.value,
+      closedTextValueOf(current, 'PAYROLL_EXPORT_HOURS_FORMAT', 'hhmm'),
+    ],
+    [
+      'PAYROLL_EXPORT_DATE_FORMAT',
+      payrollDateFormat.value,
+      closedTextValueOf(current, 'PAYROLL_EXPORT_DATE_FORMAT', 'iso'),
+    ],
+    [
+      'PAYROLL_EXPORT_ENCODING',
+      payrollEncoding.value,
+      closedTextValueOf(current, 'PAYROLL_EXPORT_ENCODING', 'utf8_bom'),
+    ],
+    [
+      'PAYROLL_EXPORT_HEADER_ROW',
+      payrollHeaderRow.value,
+      closedTextValueOf(current, 'PAYROLL_EXPORT_HEADER_ROW', 'enabled'),
+    ],
+  ]
+
+  for (const [key, value, previousValue] of payrollClosedFields) {
+    if (value !== previousValue) {
+      changes[key] = value
+    }
+  }
+
   return changes
 })
 
@@ -380,6 +607,7 @@ const canSave = computed(
     invalidFields.value.length === 0 &&
     serviceCodeLocalIssue.value === null &&
     localeAvailable.value.length > 0 &&
+    payrollColumnsLocalIssue.value === null &&
     !saving.value,
 )
 
@@ -581,6 +809,159 @@ async function save(): Promise<void> {
             {{ serverFieldErrors('LOCALE_AVAILABLE').join(' ') }}
           </p>
         </fieldset>
+      </fieldset>
+
+      <!-- Salida a nomina (RF-IN-07, tarea 3.9): las seis claves
+           `PAYROLL_EXPORT_*`. Ninguna cambia un calculo (impacto
+           `presentation`, decision 5 de la ficha), asi que este bloque no
+           dispara `affectsWorkedHoursWarning`. -->
+      <fieldset class="flex flex-col gap-4" data-test="payroll-export-settings">
+        <legend class="text-lg font-medium text-kq-text">
+          {{ t('operationalSettings.payrollHeading') }}
+        </legend>
+        <p class="text-sm text-kq-text-muted">{{ t('operationalSettings.payrollIntro') }}</p>
+
+        <FormField
+          :label="t('operationalSettings.fields.payrollColumns')"
+          :hint="t('operationalSettings.hints.payrollColumns')"
+          :errors="payrollColumnsErrors"
+        >
+          <template #default="{ id, describedBy, invalid }">
+            <textarea
+              :id="id"
+              v-model="payrollColumnsText"
+              rows="6"
+              data-test="payroll-columns"
+              :aria-describedby="describedBy"
+              :aria-invalid="invalid"
+              class="w-full max-w-md rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 font-mono text-sm text-kq-text"
+            ></textarea>
+          </template>
+        </FormField>
+
+        <!-- El catalogo de columnas y su significado, para quien escribe el
+             editor de arriba (requisito de la ficha: «ayuda en linea con el
+             catalogo de columnas y su significado»). -->
+        <details data-test="payroll-columns-catalog">
+          <summary class="cursor-pointer text-sm font-medium text-kq-text">
+            {{ t('operationalSettings.hints.payrollColumnsCatalogToggle') }}
+          </summary>
+          <dl
+            class="mt-2 grid grid-cols-1 gap-x-4 gap-y-1 text-sm text-kq-text-muted sm:grid-cols-2"
+          >
+            <template v-for="key of Object.keys(payrollExportColumnCatalog)" :key="key">
+              <dt class="font-mono">{{ key }}</dt>
+              <dd>{{ payrollExportColumnCatalog[key] }}</dd>
+            </template>
+          </dl>
+        </details>
+
+        <div class="grid gap-4 sm:grid-cols-2">
+          <FormField
+            :label="t('operationalSettings.fields.payrollDelimiter')"
+            :hint="t('operationalSettings.hints.payrollDelimiter')"
+            :errors="serverFieldErrors('PAYROLL_EXPORT_DELIMITER')"
+          >
+            <template #default="{ id, describedBy, invalid }">
+              <select
+                :id="id"
+                v-model="payrollDelimiter"
+                data-test="payroll-delimiter"
+                :aria-describedby="describedBy"
+                :aria-invalid="invalid"
+                class="w-full rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text"
+              >
+                <option v-for="option of payrollDelimiterOptions" :key="option" :value="option">
+                  {{ t(`payrollExport.delimiter.${option}`) }}
+                </option>
+              </select>
+            </template>
+          </FormField>
+
+          <FormField
+            :label="t('operationalSettings.fields.payrollHoursFormat')"
+            :hint="t('operationalSettings.hints.payrollHoursFormat')"
+            :errors="serverFieldErrors('PAYROLL_EXPORT_HOURS_FORMAT')"
+          >
+            <template #default="{ id, describedBy, invalid }">
+              <select
+                :id="id"
+                v-model="payrollHoursFormat"
+                data-test="payroll-hours-format"
+                :aria-describedby="describedBy"
+                :aria-invalid="invalid"
+                class="w-full rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text"
+              >
+                <option v-for="option of payrollHoursFormatOptions" :key="option" :value="option">
+                  {{ t(`payrollExport.hoursFormat.${option}`) }}
+                </option>
+              </select>
+            </template>
+          </FormField>
+
+          <FormField
+            :label="t('operationalSettings.fields.payrollDateFormat')"
+            :hint="t('operationalSettings.hints.payrollDateFormat')"
+            :errors="serverFieldErrors('PAYROLL_EXPORT_DATE_FORMAT')"
+          >
+            <template #default="{ id, describedBy, invalid }">
+              <select
+                :id="id"
+                v-model="payrollDateFormat"
+                data-test="payroll-date-format"
+                :aria-describedby="describedBy"
+                :aria-invalid="invalid"
+                class="w-full rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text"
+              >
+                <option v-for="option of payrollDateFormatOptions" :key="option" :value="option">
+                  {{ t(`operationalSettings.payrollDateFormatOptions.${option}`) }}
+                </option>
+              </select>
+            </template>
+          </FormField>
+
+          <FormField
+            :label="t('operationalSettings.fields.payrollEncoding')"
+            :hint="t('operationalSettings.hints.payrollEncoding')"
+            :errors="serverFieldErrors('PAYROLL_EXPORT_ENCODING')"
+          >
+            <template #default="{ id, describedBy, invalid }">
+              <select
+                :id="id"
+                v-model="payrollEncoding"
+                data-test="payroll-encoding"
+                :aria-describedby="describedBy"
+                :aria-invalid="invalid"
+                class="w-full rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text"
+              >
+                <option v-for="option of payrollEncodingOptions" :key="option" :value="option">
+                  {{ t(`operationalSettings.payrollEncodingOptions.${option}`) }}
+                </option>
+              </select>
+            </template>
+          </FormField>
+
+          <FormField
+            :label="t('operationalSettings.fields.payrollHeaderRow')"
+            :hint="t('operationalSettings.hints.payrollHeaderRow')"
+            :errors="serverFieldErrors('PAYROLL_EXPORT_HEADER_ROW')"
+          >
+            <template #default="{ id, describedBy, invalid }">
+              <select
+                :id="id"
+                v-model="payrollHeaderRow"
+                data-test="payroll-header-row"
+                :aria-describedby="describedBy"
+                :aria-invalid="invalid"
+                class="w-full rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text"
+              >
+                <option v-for="option of payrollHeaderRowOptions" :key="option" :value="option">
+                  {{ t(`operationalSettings.payrollHeaderRowOptions.${option}`) }}
+                </option>
+              </select>
+            </template>
+          </FormField>
+        </div>
       </fieldset>
 
       <p class="text-sm text-kq-text-muted" data-test="audited">

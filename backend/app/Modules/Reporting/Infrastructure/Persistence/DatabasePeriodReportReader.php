@@ -572,6 +572,11 @@ final readonly class DatabasePeriodReportReader implements PeriodReportReader
                 fullName: trim($reader->string('first_name').' '.$reader->string('last_name')),
                 departmentId: $reader->nullableInt('department_id'),
                 departmentName: $reader->nullableString('department_name'),
+                // Ademas de juntos, por separado: la salida a nomina los pide en
+                // columnas distintas y partir el nombre completo seria adivinar
+                // (RF-IN-07). Ver `ReportSubject`.
+                firstName: $reader->string('first_name'),
+                lastName: $reader->string('last_name'),
             ),
             ReportGrouping::Department => ReportSubject::department(
                 $reader->nullableInt('department_id'),

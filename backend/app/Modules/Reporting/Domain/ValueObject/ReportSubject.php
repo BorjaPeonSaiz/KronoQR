@@ -33,6 +33,21 @@ final readonly class ReportSubject
         public ?int $departmentId,
         /** Nombre del departamento, o del centro cuando la fila es del centro. */
         public ?string $label,
+        /**
+         * Nombre y apellidos **por separado**, ademas de juntos (RF-IN-07).
+         *
+         * Los tres y no solo `fullName`, porque la salida a nomina los pide en
+         * columnas distintas: casi todo programa de nomina tiene un campo de
+         * apellidos y otro de nombre, y partir `fullName` por el primer espacio
+         * seria adivinar —«Maria del Carmen Fernandez de la Vega» no se parte por
+         * ningun sitio evidente—. Se leen de la ficha, que es donde estan ya
+         * separados, y se transportan tal cual.
+         *
+         * `null` en los agregados por departamento y por centro, donde no hay
+         * ninguna persona a la que atribuirlos.
+         */
+        public ?string $firstName = null,
+        public ?string $lastName = null,
     ) {}
 
     public static function employee(
@@ -41,12 +56,23 @@ final readonly class ReportSubject
         string $fullName,
         ?int $departmentId,
         ?string $departmentName,
+        ?string $firstName = null,
+        ?string $lastName = null,
     ): self {
         if ($uuid === '') {
             throw new InvalidArgumentException('Una fila de empleado necesita su UUID publico.');
         }
 
-        return new self(ReportGrouping::Employee, $uuid, $employeeCode, $fullName, $departmentId, $departmentName);
+        return new self(
+            ReportGrouping::Employee,
+            $uuid,
+            $employeeCode,
+            $fullName,
+            $departmentId,
+            $departmentName,
+            $firstName,
+            $lastName,
+        );
     }
 
     /**

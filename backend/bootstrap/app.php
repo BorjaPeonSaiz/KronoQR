@@ -759,10 +759,18 @@ return Application::configure(basePath: dirname(__DIR__))
          * SE SEÑALA `to` porque el rango es lo unico que quien pregunta puede
          * acortar siempre; la granularidad y el departamento no estan en todas
          * las peticiones.
+         *
+         * `type` PROPIO Y NO EL DE VALIDACION GENERICO (revision de la 3.9).
+         * Salia como `urn:kronoqr:problem:validation-failed`, indistinguible de
+         * «has escrito mal una fecha», y el panel lo reconocia **analizando una
+         * frase en castellano** del `detail` para ofrecer «generar en segundo
+         * plano». Eso se rompe en cuanto alguien mejora la redaccion, y no
+         * funciona en ingles. El cuerpo no cambia —sigue siendo
+         * `ValidationProblem` con `errors.to`—, solo el `type`.
          */
-        $exceptions->render(static fn (ReportTooLargeForSynchronousDelivery $exception): mixed => ProblemDetails::validationFailed([
-            'to' => [$exception->getMessage()],
-        ]));
+        $exceptions->render(static fn (ReportTooLargeForSynchronousDelivery $exception): mixed => ProblemDetails::reportTooLarge(
+            $exception->getMessage(),
+        ));
 
         /*
          * El motor de PDF no esta disponible (tarea 2.9, RF-IN-04).
@@ -889,7 +897,7 @@ return Application::configure(basePath: dirname(__DIR__))
          * afirmacion es sobre la coherencia de dos campos.
          */
         $exceptions->render(static fn (InvalidComplianceProfileValue $exception): mixed => ProblemDetails::validationFailed([
-            $exception->field?->value ?? 'compliance_profile' => [ProblemDetails::translated(
+            $exception->field->value => [ProblemDetails::translated(
                 $exception->translationKey,
                 $exception->parameters,
                 $exception->getMessage(),
@@ -966,7 +974,7 @@ return Application::configure(basePath: dirname(__DIR__))
             return ProblemDetails::featureNotLicensed(
                 ProblemDetails::translated(
                     $exception->translationKey(),
-                    $exception->parameters(is_string($legible) ? $legible : ''),
+                    $exception->parameters($legible),
                     $exception->getMessage(),
                 ),
                 $exception->feature->value,

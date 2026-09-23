@@ -16,37 +16,64 @@ use App\Modules\Reporting\Application\Port\ComplianceMetrics;
 use App\Modules\Reporting\Application\Port\ComplianceProfileReference;
 use App\Modules\Reporting\Application\Port\EmployeeAttribution;
 use App\Modules\Reporting\Application\Port\LivePresenceReader;
+use App\Modules\Reporting\Application\Port\PayrollDocumentWriter;
 use App\Modules\Reporting\Application\Port\PeriodReportReader;
 use App\Modules\Reporting\Application\Port\PresenceMetrics;
+use App\Modules\Reporting\Application\Port\QueuedJobFailureMetrics;
 use App\Modules\Reporting\Application\Port\RealtimeConnectionCounter;
+use App\Modules\Reporting\Application\Port\ReportCriteriaNarrator;
 use App\Modules\Reporting\Application\Port\ReportDocumentRenderer;
+use App\Modules\Reporting\Application\Port\ReportExportDocumentWriter;
 use App\Modules\Reporting\Application\Port\ReportExportMetrics;
+use App\Modules\Reporting\Application\Port\ReportExportNotifier;
+use App\Modules\Reporting\Application\Port\ReportExportQueue;
+use App\Modules\Reporting\Application\Port\ReportExportRecipients;
+use App\Modules\Reporting\Application\Port\ReportExportRepository;
+use App\Modules\Reporting\Application\Port\ReportExportStorage;
+use App\Modules\Reporting\Application\Port\ReportingEventPublisher;
 use App\Modules\Reporting\Application\Port\ReportIssuerDirectory;
 use App\Modules\Reporting\Application\Port\WorkDayCompletionReader;
 use App\Modules\Reporting\Application\Port\WorkDayJournalReader;
 use App\Modules\Reporting\Application\Port\WorkedTimeMetrics;
+use App\Modules\Reporting\Application\Query\GeneratePeriodReport;
+use App\Modules\Reporting\Application\UseCase\GenerateReportExportHandler;
+use App\Modules\Reporting\Application\UseCase\PurgeExpiredReportExports;
+use App\Modules\Reporting\Application\UseCase\RequestReportExport;
+use App\Modules\Reporting\Application\UseCase\ShowReportExport;
+use App\Modules\Reporting\Domain\Model\ReportExport;
 use App\Modules\Reporting\Domain\ValueObject\ComplianceSummary;
 use App\Modules\Reporting\Domain\ValueObject\PeriodReport;
 use App\Modules\Reporting\Domain\ValueObject\PresenceBoard;
 use App\Modules\Reporting\Domain\ValueObject\WorkDayJournal;
 use App\Modules\Reporting\Http\Policy\ComplianceSummaryPolicy;
 use App\Modules\Reporting\Http\Policy\LivePresencePolicy;
+use App\Modules\Reporting\Http\Policy\PayrollExportPolicy;
 use App\Modules\Reporting\Http\Policy\PeriodReportPolicy;
+use App\Modules\Reporting\Http\Policy\ReportExportPolicy;
 use App\Modules\Reporting\Http\Policy\WorkDayJournalPolicy;
 use App\Modules\Reporting\Infrastructure\Adapter\BrowsershotReportRenderer;
+use App\Modules\Reporting\Infrastructure\Adapter\FilesystemReportExportStorage;
+use App\Modules\Reporting\Infrastructure\Adapter\LaravelReportingEventPublisher;
+use App\Modules\Reporting\Infrastructure\Adapter\QueuedReportExportDispatcher;
 use App\Modules\Reporting\Infrastructure\Adapter\ReverbConnectionCounter;
 use App\Modules\Reporting\Infrastructure\Broadcasting\BroadcastPresenceChange;
 use App\Modules\Reporting\Infrastructure\Console\AbsenceMetricsCommand;
 use App\Modules\Reporting\Infrastructure\Console\AdoptionMetricsCommand;
 use App\Modules\Reporting\Infrastructure\Console\ComplianceMetricsCommand;
 use App\Modules\Reporting\Infrastructure\Console\PresenceMetricsCommand;
+use App\Modules\Reporting\Infrastructure\Console\PurgeExpiredReportExportsCommand;
+use App\Modules\Reporting\Infrastructure\Export\ConfigurablePayrollDocumentWriter;
+use App\Modules\Reporting\Infrastructure\Export\PeriodReportCriteriaNarrator;
+use App\Modules\Reporting\Infrastructure\Export\PeriodReportDocumentWriters;
 use App\Modules\Reporting\Infrastructure\Listener\RecordWorkedMinutes;
+use App\Modules\Reporting\Infrastructure\Metrics\RedisQueuedJobFailureMetrics;
 use App\Modules\Reporting\Infrastructure\Metrics\RedisReportExportMetrics;
 use App\Modules\Reporting\Infrastructure\Metrics\RedisWorkedTimeMetrics;
 use App\Modules\Reporting\Infrastructure\Metrics\TextfileAbsenceMetrics;
 use App\Modules\Reporting\Infrastructure\Metrics\TextfileAdoptionMetrics;
 use App\Modules\Reporting\Infrastructure\Metrics\TextfileComplianceMetrics;
 use App\Modules\Reporting\Infrastructure\Metrics\TextfilePresenceMetrics;
+use App\Modules\Reporting\Infrastructure\Notification\MailReportExportNotifier;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseAbsenceCensusReader;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseComplianceFactsReader;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseComplianceIncidentLinks;
@@ -54,14 +81,24 @@ use App\Modules\Reporting\Infrastructure\Persistence\DatabaseComplianceProfileRe
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseEmployeeAttribution;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseLivePresenceReader;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabasePeriodReportReader;
+use App\Modules\Reporting\Infrastructure\Persistence\DatabaseReportExportRecipients;
+use App\Modules\Reporting\Infrastructure\Persistence\DatabaseReportExportRepository;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseReportIssuerDirectory;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseWorkDayCompletionReader;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseWorkDayJournalReader;
+use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
+use App\Modules\Shared\Application\Port\InstallationSiteProvider;
+use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
+use App\Modules\Shared\Domain\ValueObject\PayrollLayout;
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Database\ConnectionInterface;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
 /**
@@ -158,6 +195,19 @@ final class ReportingServiceProvider extends ServiceProvider
         Gate::policy(PeriodReport::class, PeriodReportPolicy::class);
 
         /*
+         * La salida a nomina (RF-IN-07, tarea 3.9). «rrhh+» del Anexo B, que aqui
+         * vuelve a ser `{admin, rrhh}` — y aun asi es una policy propia y no la
+         * de arriba: el dia que un responsable pueda ver las horas de su equipo,
+         * esa concesion no puede arrastrar consigo el fichero con el que se paga.
+         * Ver {@see PayrollExportPolicy}.
+         *
+         * Se registra contra la PLANTILLA y no contra el informe, que es el tipo
+         * propio de esta salida: dos policies sobre la misma clase habria que
+         * distinguirlas por el nombre de la habilidad, que es como se confunden.
+         */
+        Gate::policy(PayrollLayout::class, PayrollExportPolicy::class);
+
+        /*
          * La vista de cumplimiento (RF-PA-06, tarea 3.4). «manager+» del Anexo B,
          * que aqui es `{admin, rrhh, responsable_departamento}` —el mismo conjunto
          * que la presencia y que la bandeja de incidencias, porque esta pantalla
@@ -166,8 +216,24 @@ final class ReportingServiceProvider extends ServiceProvider
          */
         Gate::policy(ComplianceSummary::class, ComplianceSummaryPolicy::class);
 
+        /*
+         * El informe generado en diferido (RF-IN-06, RF-IN-07, tarea 3.9).
+         *
+         * `{admin, rrhh}` para las dos clases de informe, que es lo mismo que
+         * pide el sincrono y lo que el Anexo B llama «rol rrhh» para la nomina.
+         * El `responsable_departamento` no llega: no lleva `reports:*` en su
+         * token (§7.3). Ver `ReportExportPolicy`, que explica por que `request` y
+         * `requestPayroll` son dos metodos aunque hoy coincidan.
+         *
+         * **No autoriza la descarga**: aquella va sin sesion y la autoriza un
+         * token de un solo uso (ADR-041). Lo que estas policies protegen es pedir
+         * el informe y pedir el enlace.
+         */
+        Gate::policy(ReportExport::class, ReportExportPolicy::class);
+
         $this->broadcastPresenceChanges();
         $this->recordWorkedMinutes();
+        $this->limitReportDownloads();
 
         if ($this->app->runningInConsole()) {
             $this->commands([
@@ -175,6 +241,7 @@ final class ReportingServiceProvider extends ServiceProvider
                 AdoptionMetricsCommand::class,
                 ComplianceMetricsCommand::class,
                 PresenceMetricsCommand::class,
+                PurgeExpiredReportExportsCommand::class,
             ]);
         }
     }
@@ -276,6 +343,205 @@ final class ReportingServiceProvider extends ServiceProvider
         // *textfile*, como sus hermanas: `HINCRBY` es atomico y dos procesos PHP
         // no pueden pisarse reescribiendo el mismo fichero.
         $this->app->bind(ReportExportMetrics::class, RedisReportExportMetrics::class);
+
+        /*
+         * Los criterios de inclusion ya traducidos (RF-IN-06, RF-IN-07).
+         *
+         * UNA SOLA FUENTE para los tres sitios donde se leen: el bloque de
+         * cabecera del informe por periodo, la cabecera
+         * `X-Kronoqr-Export-Criteria` de la salida a nomina —cuyo fichero no los
+         * lleva dentro, decision 5 de la ficha 3.9— y la columna `criteria` de la
+         * exportacion en diferido. Con tres composiciones distintas, el fichero y
+         * la pantalla acabarian diciendo cosas distintas sobre el mismo informe.
+         */
+        $this->app->bind(ReportCriteriaNarrator::class, PeriodReportCriteriaNarrator::class);
+
+        $this->registerDeferredReportExports();
+    }
+
+    /**
+     * Los informes generados **en diferido** (RF-IN-06, RF-IN-07, ADR-041,
+     * tarea 3.9).
+     *
+     * ## Todo lo que se construye a mano se construye por lo mismo
+     *
+     * Ninguno de estos cuatro objetos puede resolverse solo, y en los cuatro el
+     * motivo es el mismo: **`Application` no lee configuracion** (doc 02 §3.5,
+     * regla dura 14). El plazo de retencion, el minuto de caducidad del enlace,
+     * el umbral de obsolescencia y el `MAIL_MAILER` entran ya resueltos por quien
+     * construye, y eso es ademas lo que permite que una prueba fije «cero
+     * minutos» o «un segundo» sin tocar el estado global del proceso.
+     *
+     * ## El lector del diferido es OTRA instancia, y esa es la clave
+     *
+     * `GenerateReportExportHandler` recibe un {@see GeneratePeriodReport}
+     * construido sobre un {@see DatabasePeriodReportReader} con
+     * `reporting.export.statement_timeout_seconds` —diez minutos— en lugar de los
+     * diez segundos del sincrono. **La consulta sincrona conserva el suyo
+     * intacto**: son dos instancias del mismo adaptador con dos techos, no un
+     * techo que cambia segun quien llame. Si fuera lo segundo, una peticion
+     * concurrente del panel heredaria el techo del trabajo en cola.
+     *
+     * Los otros dos techos sincronos —rango y filas— los quita el propio caso de
+     * uso pasando `PHP_INT_MAX`: no son del adaptador.
+     *
+     * ## La nomina entra por un puerto aparte
+     *
+     * {@see PayrollDocumentWriter} es la costura con la plantilla configurable de
+     * RF-IN-07, y la sirve {@see ConfigurablePayrollDocumentWriter} con **los
+     * mismos escritores** que la descarga sincrona: con dos implementaciones, el
+     * fichero que RRHH descarga desde la pantalla y el que llega por el enlace del
+     * informe en diferido podrian llevar columnas distintas, y una exportacion de
+     * nomina equivocada no se descubre hasta la nomina siguiente.
+     *
+     * **Una sola implementacion y ninguna de reserva.** Si la plantilla no se
+     * puede resolver —una instalacion sin centro—, el adaptador **falla en voz
+     * alta**: caer a la disposicion por omision produciria un fichero con otras
+     * columnas de las configuradas, que alguien importaria en la herramienta de
+     * nomina sin notarlo.
+     */
+    private function registerDeferredReportExports(): void
+    {
+        $this->app->bind(
+            ReportExportRepository::class,
+            static fn (Application $app): DatabaseReportExportRepository => new DatabaseReportExportRepository(
+                $app->make(ConnectionInterface::class),
+                $app->make(Clock::class),
+            ),
+        );
+
+        $this->app->bind(ReportExportQueue::class, QueuedReportExportDispatcher::class);
+        $this->app->bind(ReportingEventPublisher::class, LaravelReportingEventPublisher::class);
+        $this->app->bind(ReportExportDocumentWriter::class, PeriodReportDocumentWriters::class);
+        $this->app->bind(PayrollDocumentWriter::class, ConfigurablePayrollDocumentWriter::class);
+        $this->app->bind(ReportExportRecipients::class, DatabaseReportExportRecipients::class);
+
+        $this->app->bind(
+            ReportExportStorage::class,
+            static fn (): FilesystemReportExportStorage => new FilesystemReportExportStorage(
+                Config::string('reporting.export.path'),
+            ),
+        );
+
+        $this->app->bind(
+            ReportExportNotifier::class,
+            static fn (Application $app): MailReportExportNotifier => new MailReportExportNotifier(
+                $app->make(ReportExportRecipients::class),
+                Config::string('mail.default'),
+            ),
+        );
+
+        $this->app->bind(
+            RequestReportExport::class,
+            static fn (Application $app): RequestReportExport => new RequestReportExport(
+                $app->make(ReportExportRepository::class),
+                $app->make(ReportExportQueue::class),
+                $app->make(ReportingEventPublisher::class),
+                $app->make(Clock::class),
+                $app->make(ConnectionInterface::class),
+                Config::integer('reporting.export.stale_after_seconds'),
+            ),
+        );
+
+        $this->app->bind(
+            ShowReportExport::class,
+            static fn (Application $app): ShowReportExport => new ShowReportExport(
+                $app->make(ReportExportRepository::class),
+                $app->make(Clock::class),
+                $app->make(ConnectionInterface::class),
+                Config::integer('reporting.export.link_ttl_minutes'),
+            ),
+        );
+
+        /*
+         * `queue_jobs_failed_total{job}` para el trabajo que **captura** su
+         * excepcion. Ver el puerto: sin esto, una generacion fallida dejaba la
+         * fila en `failed` y no movia ninguna serie, que es justo el caso que la
+         * alerta de cola existe para ver.
+         */
+        $this->app->bind(QueuedJobFailureMetrics::class, RedisQueuedJobFailureMetrics::class);
+
+        $this->app->bind(
+            PurgeExpiredReportExports::class,
+            static fn (Application $app): PurgeExpiredReportExports => new PurgeExpiredReportExports(
+                $app->make(ReportExportRepository::class),
+                $app->make(ReportExportStorage::class),
+                $app->make(Clock::class),
+                Config::integer('reporting.export.stale_after_seconds'),
+            ),
+        );
+
+        $this->app->bind(
+            GenerateReportExportHandler::class,
+            fn (Application $app): GenerateReportExportHandler => new GenerateReportExportHandler(
+                $app->make(ReportExportRepository::class),
+                $this->deferredPeriodReport($app),
+                $app->make(ReportExportDocumentWriter::class),
+                $app->make(PayrollDocumentWriter::class),
+                $app->make(ReportCriteriaNarrator::class),
+                $app->make(ReportExportStorage::class),
+                $app->make(ReportExportNotifier::class),
+                $app->make(ReportingEventPublisher::class),
+                $app->make(Clock::class),
+                $app->make(ConnectionInterface::class),
+                Config::integer('reporting.export.retention_days'),
+            ),
+        );
+    }
+
+    /**
+     * El mismo informe del panel, con el `statement_timeout` del diferido.
+     *
+     * Se compone a mano —en lugar de resolver `GeneratePeriodReport` del
+     * contenedor— **solo** para sustituir el lector: todos los demas
+     * colaboradores son los que ya usa la consulta sincrona, y eso es lo que
+     * garantiza que el fichero y la pantalla digan lo mismo (criterios, festivos,
+     * zona horaria y asiento de divulgacion incluidos).
+     */
+    private function deferredPeriodReport(Application $app): GeneratePeriodReport
+    {
+        return new GeneratePeriodReport(
+            new DatabasePeriodReportReader(
+                $app->make(ConnectionInterface::class),
+                Config::integer('reporting.export.statement_timeout_seconds'),
+            ),
+            $app->make(InstallationSiteProvider::class),
+            $app->make(Clock::class),
+            $app->make(PersonalDataAccessLog::class),
+            $app->make(CompliancePolicyProvider::class),
+            $app->make(ComplianceProfileReference::class),
+        );
+    }
+
+    /**
+     * La zona de limitacion de la **descarga sin sesion** (ADR-041, RS-02).
+     *
+     * ## Por IP y no por cuenta, porque aqui no hay cuenta
+     *
+     * Es la unica zona del producto que no puede contar por actor: la ruta va
+     * fuera del grupo autenticado a proposito —un enlace que se abre con un clic
+     * no lleva cabecera `Authorization`—. El eje que queda es el origen, y esto
+     * es lo que impide que alguien que conozca un `uuid` pruebe tokens a la
+     * velocidad de la red. El resto de la defensa es el tamaño del secreto: ~74
+     * bits aleatorios del `uuid` v7 —48 de sus 122 son marca de tiempo— mas 256
+     * bits de token, y un solo uso.
+     *
+     * ## Treinta y no tres
+     *
+     * La misma cifra que la zona de la exportacion integra, y por el mismo
+     * motivo de campo: en un hotel, recepcion, direccion y el despacho de RRHH
+     * salen a internet por **la misma IP publica**. Con el techo de la zona de
+     * diagnostico —tres— tres personas descargando informes a la vez se
+     * cortarian entre si, y ese `429` no protege nada: lo que de verdad limita
+     * aqui es que cada enlace sirve una sola vez.
+     *
+     * Es configuracion y no una constante (regla dura 13).
+     */
+    private function limitReportDownloads(): void
+    {
+        RateLimiter::for('report-download', static fn (Request $request): Limit => Limit::perMinute(
+            max(1, Config::integer('reporting.export.download_rate_limit_per_minute', 30)),
+        )->by('report-download-ip:'.(string) $request->ip()));
     }
 
     /**

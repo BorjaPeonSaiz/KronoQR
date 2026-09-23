@@ -139,3 +139,29 @@ it('no repite ningun valor en el catalogo', function (): void {
 
     expect(array_unique($values))->toHaveCount(\count($values));
 })->group('RS-07');
+
+it('no abre familia nueva del bloque D al anadir los informes en diferido', function (): void {
+    /*
+     * Los tres caen en `PersonalDataAccess` y **no** con la exportacion integra
+     * (tarea 3.9, RF-IN-06).
+     *
+     * La pregunta que responden es la misma que `personal_data.accessed`:
+     * «alguien consulto las horas de estas personas, en este periodo, con este
+     * alcance». Que el resultado quede en un fichero durante unos dias es un
+     * detalle de implementacion —cabia o no cabia en una respuesta sincrona—, no
+     * un hecho distinto.
+     *
+     * Ponerlos en `LegalExport`, donde estan `legal_export.*` y `data_export.*`,
+     * partiria en dos la consulta con la que se responde «que hizo esa cuenta con
+     * las horas de la plantilla»: la mitad en la familia de accesos y la mitad en
+     * la de salidas del registro, segun el tamaño del periodo.
+     */
+    expect(AuditAction::ReportExportRequested->event())->toBe(AuditableEvent::PersonalDataAccess)
+        ->and(AuditAction::ReportExportGenerated->event())->toBe(AuditableEvent::PersonalDataAccess)
+        ->and(AuditAction::ReportExportDownloaded->event())->toBe(AuditableEvent::PersonalDataAccess);
+
+    // Y ninguno es una accion de sistema: los tres tienen detras la cuenta que
+    // pidio el informe, tambien el de la descarga —que va sin sesion y por eso se
+    // atribuye a quien recibio el enlace—.
+    expect(AuditAction::ReportExportDownloaded->requiresSystemActor())->toBeFalse();
+})->group('RS-07', 'RF-IN-06');

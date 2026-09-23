@@ -149,8 +149,36 @@ it('describe solo los endpoints cuya tarea existe, y todos bajo /api/v1', functi
         // mezclarlas obligaria al cliente generado a elegir entre cuatro tipos de
         // contenido en una sola operacion.
         '/api/v1/reports/period/export',
+        // Tarea 3.9: la salida a nomina (RF-IN-07). Ruta propia y no un `format`
+        // mas de la de arriba: no es otro fichero del mismo informe, es el mismo
+        // informe pasado por una plantilla que el cliente configura, con otro rol
+        // —`rrhh+`—, otra funcionalidad de licencia —`payroll_export`— y otro
+        // conjunto en el asiento de divulgacion. Compartir ruta habria obligado a
+        // una sola policy para dos potestades distintas.
+        '/api/v1/reports/payroll-export',
         // Tarea 1.17: exportacion normalizada para la Inspeccion (RF-IN-05).
         '/api/v1/reports/legal-export',
+        // Tarea 3.9: informes generados en diferido (RF-IN-06, ADR-041). Es la
+        // salida que el `422` de `/reports/period` lleva prometiendo desde la 2.8:
+        // por encima del techo sincrono, el informe se genera en cola y se
+        // descarga con un enlace caducable.
+        //
+        // CUATRO RUTAS Y NO TRES. Las tres primeras son de gestion —pedir, listar
+        // y consultar el estado— y la cuarta es la descarga, **la unica ruta de
+        // toda la API que no lleva sesion**: la autoriza un token de un solo uso
+        // en la cadena de consulta, porque un enlace que se abre con un clic no
+        // lleva cabecera `Authorization`. Esa ausencia es lo que exige que el
+        // enlace sea corto, de un solo uso y ligado a una fila.
+        //
+        // `GET /reports/exports/{uuid}` ESCRIBE aunque sea un `GET`: acuña el
+        // enlace y rota el anterior. Esta declarado en su descripcion, igual que
+        // en `GET /credentials/{uuid}/print`, que sella la impresion al servirla.
+        //
+        // Sin `DELETE`: un informe no se borra, caduca solo y su fila queda como
+        // `purged` (regla dura 5).
+        '/api/v1/reports/exports',
+        '/api/v1/reports/exports/{uuid}',
+        '/api/v1/reports/exports/{uuid}/download',
         // Tarea 2.5: bandeja de incidencias y su flujo de resolucion (RF-PA-05).
         // Es la unica ruta del producto cuyo `{id}` es la clave interna: una
         // incidencia no es una persona ni una tarjeta, y su numero no revela
@@ -554,6 +582,20 @@ it('declara todos los ambitos de token del documento 02 §7.3', function (): voi
     $declarados = [];
 
     foreach (Contract::keys('components', 'securitySchemes') as $scheme) {
+        /*
+         * `reportDownloadToken` no tiene `flows` y no es un olvido: es el unico
+         * esquema del contrato que **no es un token de sesion** (ADR-041, tarea
+         * 3.9). Es un `apiKey` en la cadena de consulta, de un solo uso y ligado a
+         * una fila, que autoriza la descarga de un informe generado en diferido
+         * porque un enlace que se abre con un clic no lleva `Authorization`.
+         *
+         * No concede ningun ambito del §7.3 —no abre nada mas que ese fichero— y
+         * por eso no aporta ninguna cadena a esta lista.
+         */
+        if (! Contract::has('components', 'securitySchemes', $scheme, 'flows')) {
+            continue;
+        }
+
         foreach (Contract::keys('components', 'securitySchemes', $scheme, 'flows') as $flow) {
             $declarados = [
                 ...$declarados,
@@ -1478,3 +1520,70 @@ it('no admite json como formato de descarga', function (): void {
     expect(Contract::value('components', 'parameters', 'PeriodReportExportFormat', 'schema', 'enum'))
         ->toBe(['csv', 'xlsx', 'pdf']);
 })->group('RF-IN-04', 'RQ-06');
+
+it('sirve la salida a nomina con el mismo ambito y solo en dos formatos', function (): void {
+    // RF-IN-07. Mismo ambito `reports:*` que el informe del que sale —lo que
+    // cambia es el ROL, que es de la policy y no del contrato— y **dos** tipos de
+    // contenido: un PDF no se importa en ninguna nomina y ofrecerlo arrancaria un
+    // Chromium para producir un fichero que nadie puede usar.
+    expect(Contract::value('paths', '/api/v1/reports/payroll-export', 'get', 'security'))
+        ->toBe([['managementToken' => ['reports:*']]])
+        ->and(Contract::keys('paths', '/api/v1/reports/payroll-export', 'get', 'responses', '200', 'content'))
+        ->toBe([
+            'text/csv',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ])
+        ->and(Contract::value('components', 'parameters', 'PayrollExportFormat', 'schema', 'enum'))
+        ->toBe(['csv', 'xlsx']);
+})->group('RF-IN-07', 'RQ-06');
+
+it('no ofrece la semana como granularidad de nomina ni deja elegir el agrupamiento', function (): void {
+    // DOS AUSENCIAS DELIBERADAS. `week` no esta porque los periodos de nomina son
+    // el mes o un rango libre, y una semana a caballo de dos meses produce filas
+    // que ningun importador sabe repartir. Y `group_by` no esta en absoluto: una
+    // nomina se paga a personas, asi que el agrupamiento es siempre `employee` y
+    // lo fija el servidor. Ofrecerlo seria una forma silenciosa de generar un
+    // fichero que no se puede importar.
+    expect(Contract::value('components', 'parameters', 'PayrollGranularity', 'schema', 'enum'))
+        ->toBe(['range', 'month', 'day'])
+        ->and(Contract::value('components', 'parameters', 'PayrollGranularity', 'schema', 'default'))
+        ->toBe('range');
+
+    $parametros = Contract::value('paths', '/api/v1/reports/payroll-export', 'get', 'parameters');
+
+    expect($parametros)->toBe([
+        ['$ref' => '#/components/parameters/PayrollExportFormat'],
+        ['$ref' => '#/components/parameters/PeriodReportFrom'],
+        ['$ref' => '#/components/parameters/PeriodReportTo'],
+        ['$ref' => '#/components/parameters/PayrollGranularity'],
+        ['$ref' => '#/components/parameters/ReportDepartmentId'],
+        ['$ref' => '#/components/parameters/ReportEmployeeUuid'],
+        ['$ref' => '#/components/parameters/ReportIncludeOpenShifts'],
+    ]);
+})->group('RF-IN-07', 'RQ-06');
+
+it('declara las seis claves de nomina en el catalogo y en el cuerpo del PATCH', function (): void {
+    // RF-IN-07 y ADR-017: el formato del fichero de nomina es CONFIGURACION. Las
+    // dos listas del contrato —el enumerado `SettingKey` y las claves que admite
+    // `PATCH /api/v1/settings`— tienen que coincidir, porque una clave que el
+    // catalogo publica y el `PATCH` no admite es una que el cliente ve y no puede
+    // cambiar (que es el agujero que `SettingsSurfaceTest` cerro desde el otro
+    // lado).
+    $catalogo = Contract::value('components', 'schemas', 'SettingKey', 'enum');
+    $admitidas = Contract::value(
+        'components', 'schemas', 'UpdateSettingsRequest', 'properties', 'settings', 'propertyNames', 'enum',
+    );
+
+    $nomina = [
+        'PAYROLL_EXPORT_COLUMNS',
+        'PAYROLL_EXPORT_DELIMITER',
+        'PAYROLL_EXPORT_HOURS_FORMAT',
+        'PAYROLL_EXPORT_DATE_FORMAT',
+        'PAYROLL_EXPORT_ENCODING',
+        'PAYROLL_EXPORT_HEADER_ROW',
+    ];
+
+    expect($catalogo)->toContain(...$nomina)
+        ->and($admitidas)->toContain(...$nomina)
+        ->and($admitidas)->toBe($catalogo);
+})->group('RF-IN-07', 'RF-PD-01', 'RQ-06');

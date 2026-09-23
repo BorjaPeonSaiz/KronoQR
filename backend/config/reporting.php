@@ -103,4 +103,107 @@ return [
          */
         'statement_timeout_seconds' => (int) env('REPORTING_COMPLIANCE_TIMEOUT_SECONDS', 10),
     ],
+
+    /*
+     * INFORMES EN DIFERIDO (RF-IN-06, RF-IN-07, ADR-041, tarea 3.9).
+     *
+     * Los seis son presupuestos de RECURSOS y plazos de RETENCION, nunca reglas
+     * de negocio: un cliente con un servidor mas grande, una plantilla mayor o
+     * una politica de retencion propia los ajusta en su `.env` sin tocar el
+     * repositorio (ADR-017, regla dura 13). LOS UMBRALES LEGALES NO ESTAN AQUI
+     * —se leen del perfil de cumplimiento (regla dura 14)—, y el FORMATO de la
+     * salida a nomina tampoco: ese vive en los ajustes con ambito de la 5.1,
+     * porque lo cambia una persona desde el panel y no quien administra el
+     * servidor.
+     */
+    'export' => [
+
+        /*
+         * Donde se escriben los ficheros generados en diferido.
+         *
+         * **Fuera de `public/`**, y eso no es configurable en la practica: el
+         * fichero lleva las horas de personas identificadas, y servido por el
+         * servidor web sin pasar por la aplicacion no habria enlace de un solo
+         * uso, ni caducidad, ni asiento en `audit_log` — habria una URL
+         * adivinable. El unico camino hacia esos bytes es
+         * `GET /reports/exports/{uuid}/download` con su token (ADR-041).
+         *
+         * Directorio a `0700` y fichero a `0600`, como la exportacion integra.
+         */
+        'path' => env('REPORTING_EXPORT_PATH', storage_path('app/reports')),
+
+        /*
+         * Dias que vive el fichero antes de que la purga diaria lo borre.
+         *
+         * Siete, el mismo plazo que la exportacion integra y el paquete de
+         * diagnostico con datos personales, y por el mismo motivo: la retencion
+         * de un fichero con datos de la plantilla no puede depender de que
+         * alguien se acuerde de borrarlo. Quien lo necesite mas tiempo lo saca
+         * del servidor, que es lo que se espera que haga con el.
+         *
+         * **La fila no se borra nunca** (regla dura 5): pasa a `purged` y se
+         * queda con sus fechas, su huella y su recuento.
+         */
+        'retention_days' => (int) env('REPORTING_EXPORT_RETENTION_DAYS', 7),
+
+        /*
+         * Minutos que vive el enlace de descarga (ADR-041).
+         *
+         * Quince. El enlace va **sin sesion** —un clic desde la pantalla no lleva
+         * cabecera `Authorization`— y esa es exactamente la razon por la que tiene
+         * que ser corto ademas de de un solo uso. Quince minutos es de sobra para
+         * pulsar el boton y que la descarga empiece, y poco para que sirva de algo
+         * en un historial de navegador compartido.
+         *
+         * Subirlo no da mas comodidad: cada consulta del estado acuña uno nuevo.
+         */
+        'link_ttl_minutes' => (int) env('REPORTING_EXPORT_LINK_TTL_MINUTES', 15),
+
+        /*
+         * `statement_timeout` de la consulta **en diferido**, en segundos.
+         *
+         * Diez minutos, sesenta veces el techo sincrono, y no es lo mismo que «sin
+         * techo»: la consulta corre contra la base de datos por la que pasa cada
+         * fichaje (ADR-010, RNF-P-02, regla dura 19), asi que quien la corta tiene
+         * que ser PostgreSQL —que libera la conexion— y no el trabajador, que la
+         * dejaria colgando.
+         *
+         * Se aplica SOLO a esta consulta, con `SET LOCAL` en su transaccion. La
+         * cancelacion deja la fila en `failed` con motivo `query_timeout`, que en
+         * la pantalla se lee como «pide dos periodos mas cortos».
+         */
+        'statement_timeout_seconds' => (int) env('REPORTING_EXPORT_TIMEOUT_SECONDS', 600),
+
+        /*
+         * Segundos tras los cuales un informe sin terminar se declara ATASCADO y
+         * pasa a `failed` con motivo `stale`.
+         *
+         * Una hora, el doble largo que el `statement_timeout` de arriba mas el
+         * margen de escribir el fichero: **por debajo de lo que tarda el informe
+         * mas grande, se daria por muerto uno que sigue escribiendo**.
+         *
+         * PARA QUE SIRVE: solo puede haber un informe en curso **por persona**. Si
+         * el servidor se para mientras se genera uno —una actualizacion, un corte
+         * de luz—, esa fila se quedaria «en curso» para siempre y esa persona no
+         * podria pedir otro. Pasado este plazo, la proxima vez que pida uno —o en
+         * la purga de la madrugada siguiente— la fila se marca como fallida y se
+         * desbloquea sola.
+         */
+        'stale_after_seconds' => (int) env('REPORTING_EXPORT_STALE_AFTER', 3600),
+
+        /*
+         * Peticiones por minuto a la ruta de descarga, POR DIRECCION IP.
+         *
+         * Treinta, la misma cifra que la zona de la exportacion integra. Es por IP
+         * y no por cuenta porque **esta ruta no tiene sesion** (ADR-041): no hay
+         * cuenta por la que contar. Es la unica defensa de volumen que queda, y lo
+         * que impide que alguien que conozca un `uuid` pruebe tokens a la
+         * velocidad de la red; el resto de la defensa es el tamaño del secreto.
+         *
+         * No lo bajes a tres como el diagnostico: en un hotel, recepcion y
+         * direccion salen a internet por la misma IP publica, y tres personas
+         * descargando informes a la vez se cortarian entre si.
+         */
+        'download_rate_limit_per_minute' => (int) env('REPORTING_EXPORT_DOWNLOAD_RATE_LIMIT', 30),
+    ],
 ];

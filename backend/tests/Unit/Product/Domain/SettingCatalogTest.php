@@ -75,6 +75,15 @@ it('clasifica el impacto de cada clave', function (SettingKey $key, SettingImpac
     'el idioma por defecto solo se ve' => [SettingKey::LOCALE_DEFAULT, SettingImpact::PRESENTATION],
     'los idiomas disponibles solo se ven' => [SettingKey::LOCALE_AVAILABLE, SettingImpact::PRESENTATION],
     'el codigo de servicio no mueve ni un minuto' => [SettingKey::KIOSK_SERVICE_CODE, SettingImpact::PRESENTATION],
+    // Las seis de la salida a nomina (RF-IN-07, tarea 3.9). Ninguna mueve un
+    // minuto ni abre una incidencia: cambian como se ESCRIBE el fichero, nunca
+    // lo que el informe calcula.
+    'las columnas del fichero de nomina solo cambian el fichero' => [SettingKey::PAYROLL_EXPORT_COLUMNS, SettingImpact::PRESENTATION],
+    'el separador de nomina solo cambia el fichero' => [SettingKey::PAYROLL_EXPORT_DELIMITER, SettingImpact::PRESENTATION],
+    'el formato de horas de nomina solo cambia el fichero' => [SettingKey::PAYROLL_EXPORT_HOURS_FORMAT, SettingImpact::PRESENTATION],
+    'el formato de fechas de nomina solo cambia el fichero' => [SettingKey::PAYROLL_EXPORT_DATE_FORMAT, SettingImpact::PRESENTATION],
+    'la codificacion de nomina solo cambia el fichero' => [SettingKey::PAYROLL_EXPORT_ENCODING, SettingImpact::PRESENTATION],
+    'la fila de cabecera de nomina solo cambia el fichero' => [SettingKey::PAYROLL_EXPORT_HEADER_ROW, SettingImpact::PRESENTATION],
 ])->group('RF-PD-01');
 
 // --- El codigo de servicio del quiosco (RF-KI-08, tarea 3.3) ----------------

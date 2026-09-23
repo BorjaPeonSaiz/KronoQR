@@ -494,6 +494,61 @@ enum AuditAction: string
      */
     case DataExportDownloaded = 'data_export.downloaded';
 
+    /**
+     * Se ha pedido un informe de horas **en diferido** (**RF-IN-06**, RS-05,
+     * tarea 3.9).
+     *
+     * **Se audita el acto de pedirlo y no solo el de generarlo** por lo mismo que
+     * en la exportacion integra: entre uno y otro esta la cola, y una generacion
+     * puede fallar. Con un solo asiento al final, un intento de sacar las horas
+     * nominales de la plantilla entera que revienta al minuto no dejaria ningun
+     * rastro — y la intencion es justo lo que busca quien revisa accesos masivos a
+     * datos personales.
+     *
+     * El payload lleva el `uuid`, la clase de informe (`period` o `payroll`), el
+     * formato, los parametros del periodo y el **alcance** con el que se autorizo
+     * (`all` o `departments`). Nunca un nombre y nunca una hora.
+     */
+    case ReportExportRequested = 'report_export.requested';
+
+    /**
+     * El fichero del informe en diferido existe en el disco (**RF-IN-06**).
+     *
+     * **El actor es quien lo PIDIO, aunque el asiento lo escriba el trabajador de
+     * cola.** Sin eso saldria firmado como `system` —en la cola no hay sesion— y
+     * responder «¿quien se llevo estas horas?» exigiria emparejar a mano este
+     * asiento con el `report_export.requested` de unos minutos antes.
+     *
+     * El payload lleva el recuento de filas, la huella, el tamaño, la caducidad
+     * y, cuando el informe es por empleado, **la lista acotada de
+     * `employee_uuid`**: mismo tope y mismo motivo que el informe sincrono —por
+     * debajo de el, saber de quien eran las horas es la pregunta que RL-15 obliga
+     * a contestar; por encima, enumerarlos convertiria el trail en una segunda
+     * copia de la plantilla—.
+     *
+     * **Nunca la ruta absoluta del fichero**, solo su nombre (regla dura 21).
+     */
+    case ReportExportGenerated = 'report_export.generated';
+
+    /**
+     * Alguien se ha llevado el fichero del informe en diferido (**RF-IN-06**,
+     * RS-05, ADR-041).
+     *
+     * **Es el mas importante de los tres.** Generar el fichero lo deja en un
+     * directorio del servidor, fuera de `public/`; descargarlo lo saca de ahi, y
+     * lleva las horas de personas identificadas.
+     *
+     * Y aqui el asiento es lo unico que ata la descarga a una persona: la ruta va
+     * **sin sesion** y la autoriza un token de un solo uso, asi que el actor sale
+     * de la fila —quien pidio el informe es quien recibio el enlace—. Dicho de
+     * otro modo: el asiento dice a quien se le entrego el enlace, que es de quien
+     * se responde.
+     *
+     * El payload lleva el recuento de descargas y la huella, para poder confirmar
+     * que el fichero que alguien tiene delante es el que salio de aqui.
+     */
+    case ReportExportDownloaded = 'report_export.downloaded';
+
     // --- Ciclo de vida de la instalacion (RF-PD-10, RL-04, RS-07, tarea 5.7) --
 
     /**
@@ -692,6 +747,21 @@ enum AuditAction: string
         // fabricante, sale hacia el propio cliente, que es el responsable del
         // tratamiento (RL-16, regla dura 16).
         'data_export' => AuditableEvent::LegalExport,
+        // El informe en diferido cae en `PersonalDataAccess` y **no** con la
+        // exportacion integra, aunque las dos produzcan un fichero. La diferencia
+        // es la pregunta que responden: `data_export` y `legal_export` son «una
+        // copia del REGISTRO sale de aqui» —integra o normalizada, pero del
+        // registro entero—, y esto es «alguien consulto las horas de estas
+        // personas, en este periodo, con este alcance». Es exactamente el mismo
+        // hecho que `personal_data.accessed` del informe sincrono, con la unica
+        // diferencia de que el resultado queda en un fichero durante unos dias.
+        //
+        // Ponerlo en `LegalExport` partiria en dos la consulta con la que se
+        // responde «que hizo esa cuenta con las horas de la plantilla»: la mitad
+        // en la familia de accesos y la mitad en la de salidas del registro,
+        // segun si el periodo cabia en una respuesta sincrona — que es un detalle
+        // de implementacion y no un hecho distinto.
+        'report_export' => AuditableEvent::PersonalDataAccess,
         // Actualizar el producto y restaurar una copia son los dos hechos que
         // pueden cambiar —o hacer desaparecer— el resto del trail. No son una
         // purga de retencion (aquella es planificada y sellada) ni un cambio de

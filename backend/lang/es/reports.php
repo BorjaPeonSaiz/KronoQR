@@ -192,4 +192,69 @@ return [
 
         'unjustified_absence_days' => 'Absentismo no justificado',
     ],
+
+    /*
+     * LA SALIDA A NOMINA (RF-IN-07, tarea 3.9).
+     *
+     * Rótulos POR OMISIÓN de las columnas del fichero de nómina. Se usan solo
+     * cuando el cliente no ha escrito el suyo en `PAYROLL_EXPORT_COLUMNS`
+     * (`id=Etiqueta`): ese rótulo configurado gana siempre y NO se traduce,
+     * porque está escrito para encajar con la plantilla de importación de su
+     * programa de nómina y traducirlo la rompería al cambiar el idioma del panel.
+     *
+     * SON DISTINTOS DE LOS DE `columns` DE ARRIBA aunque varias midan lo mismo, y
+     * es deliberado: aquellos rotulan un informe que lee una persona y estos, un
+     * fichero que carga un programa. Aquí importa que la cabecera diga
+     * inequívocamente de qué columna se trata —«Horas trabajadas» y no
+     * «Trabajado»—, porque quien la mapea en el importador no tiene el resto del
+     * informe delante.
+     *
+     * El idioma es el de la INSTALACIÓN, no el del navegador (regla dura 13): la
+     * ruta lleva `locale.installation`.
+     */
+    'payroll' => [
+
+        'columns' => [
+
+            'employee_code' => 'Código de empleado',
+
+            'employee_uuid' => 'Identificador',
+
+            'last_name' => 'Apellidos',
+
+            'first_name' => 'Nombre',
+
+            'full_name' => 'Nombre completo',
+
+            'department' => 'Departamento',
+
+            'period_from' => 'Desde',
+
+            'period_to' => 'Hasta',
+
+            'days_in_period' => 'Días del periodo',
+
+            'days_with_activity' => 'Días con actividad',
+
+            'shift_count' => 'Tramos',
+
+            'worked_hours' => 'Horas trabajadas',
+
+            'contracted_hours' => 'Horas contratadas',
+
+            'deviation_hours' => 'Desviación',
+
+            'overtime_hours' => 'Exceso de jornada',
+
+            'absence_days' => 'Días de ausencia',
+
+            'holiday_days' => 'Festivos',
+
+            'unjustified_absence_days' => 'Absentismo no justificado',
+
+            'days_without_contract' => 'Días sin contrato',
+
+            'time_zone' => 'Zona horaria',
+        ],
+    ],
 ];

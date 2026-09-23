@@ -13,6 +13,7 @@
       "live": "Presence",
       "incidents": "Incidents",
       "reports": "Reports",
+      "payrollExport": "Payroll",
       "compliance": "Compliance",
       "complianceProfile": "Compliance profile",
       "operationalSettings": "Operational settings",
@@ -695,6 +696,13 @@
       },
       "announce": {
         "results": "The report has {count} rows."
+      },
+      "background": {
+        "offer": "This period does not fit in an immediate response. You can ask for it to be generated in the background: you will be notified in the panel as soon as it is ready, with a download link that expires.",
+        "generate": "Generate in the background",
+        "requesting": "Requesting the generation…",
+        "requested": "Export requested. It will appear in the background exports block as soon as it starts processing.",
+        "seeExports": "See the background exports"
       }
     },
     "table": {
@@ -717,6 +725,116 @@
       "holidayDaysTitle": "Employed days that are a public holiday in the compliance profile's calendar and are not covered by an absence. They do not count as unexplained absence either.",
       "unjustifiedAbsenceDays": "Unexplained absence",
       "unjustifiedAbsenceDaysTitle": "Employed days with no activity, no recorded absence and no public holiday. The product does not know the shift roster: cross-check this figure against the shift calendar."
+    }
+  },
+  "reportExports": {
+    "heading": "Background exports",
+    "intro": "Reports that do not fit in an immediate response are generated here. Every download link is single-use and expires: ask again if you need it a second time.",
+    "kind": {
+      "period": "Hours by period",
+      "payroll": "Payroll"
+    },
+    "status": {
+      "pending": "Queued",
+      "running": "Generating",
+      "completed": "Ready to download",
+      "failed": "Failed",
+      "purged": "Expired"
+    },
+    "list": {
+      "loading": "Loading the exports…",
+      "lastUpdatedAt": "Updated at {moment}.",
+      "caption": "Background exports, from newest to oldest.",
+      "columns": {
+        "status": "Status",
+        "kind": "Type",
+        "format": "Format",
+        "period": "Period",
+        "size": "Size",
+        "rows": "Rows",
+        "expiresAt": "Expires",
+        "actions": "Actions"
+      },
+      "period": "{from} — {to}",
+      "rows": "{count} row(s)",
+      "download": "Download",
+      "downloading": "Downloading…",
+      "downloaded": "Download of “{filename}” ready.",
+      "criteriaToggle": "See the criteria",
+      "readyAnnounce": "An export is ready to download.",
+      "failedReason": "It could not be generated: {reason}",
+      "purgedNotice": "The file has already been purged for age. The row stays as a record, but it can no longer be downloaded.",
+      "failureReasons": {
+        "write_failed": "the file could not be written.",
+        "database_error": "a database error interrupted the generation.",
+        "query_timeout": "the query exceeded the maximum time.",
+        "stale": "it stayed half-done longer than expected and was given up as failed.",
+        "unexpected": "an unexpected error interrupted the generation."
+      },
+      "empty": {
+        "title": "No background export yet",
+        "description": "When a report does not fit in an immediate response, or you request the payroll export in the background, it will show up here."
+      }
+    }
+  },
+  "payrollExport": {
+    "title": "Payroll export",
+    "subtitle": "Worked and contracted hours by employee and period, in the format your payroll tool needs. Bonuses and allowances are not calculated here: that is done by the hotel's payroll tool.",
+    "download": "Download",
+    "downloading": "Downloading…",
+    "downloaded": "Download of the payroll export ready.",
+    "downloadFailed": "The payroll export could not be downloaded.",
+    "backgroundRequested": "Payroll export requested in the background.",
+    "licenseRequired": "Payroll export is not included in your current licence.",
+    "filters": {
+      "legend": "Period and scope of the payroll export",
+      "from": "From",
+      "to": "To",
+      "granularity": "Granularity",
+      "employee": "Employee (optional)"
+    },
+    "granularity": {
+      "range": "Whole period",
+      "month": "Month",
+      "day": "Day"
+    },
+    "delimiter": {
+      "semicolon": "semicolon",
+      "comma": "comma",
+      "tab": "tab"
+    },
+    "hoursFormat": {
+      "hhmm": "HH:MM",
+      "decimal_dot": "decimal with a dot",
+      "decimal_comma": "decimal with a comma"
+    },
+    "preview": {
+      "heading": "Columns in this file",
+      "intro": "With the current settings: {delimiter} delimiter, hours in {hours} format. This can be changed in “Operational settings”.",
+      "loading": "Loading the configuration…",
+      "editLink": "Change the columns and the format"
+    },
+    "columns": {
+      "employee_code": "Employee code",
+      "employee_uuid": "Identifier",
+      "last_name": "Surname",
+      "first_name": "First name",
+      "full_name": "Full name",
+      "department": "Department",
+      "period_from": "From",
+      "period_to": "To",
+      "days_in_period": "Days in period",
+      "days_with_activity": "Days with activity",
+      "shift_count": "Shift entries",
+      "worked_hours": "Hours worked",
+      "contracted_hours": "Contracted hours",
+      "deviation_hours": "Deviation",
+      "overtime_hours": "Hours above contract",
+      "absence_days": "Absence days",
+      "holiday_days": "Public holidays",
+      "unjustified_absence_days": "Unexplained absence",
+      "days_without_contract": "Days without contract",
+      "time_zone": "Time zone"
     }
   },
   "workdays": {
@@ -1199,6 +1317,8 @@
     "attendanceHeading": "Attendance",
     "diagnosticsHeading": "Diagnostics",
     "localesHeading": "Languages",
+    "payrollHeading": "Payroll export",
+    "payrollIntro": "The format of the file that «Payroll» exports (RF-IN-07): which columns it carries, in which order, with which delimiter, and how hours and dates are written. A customer with a different payroll tool changes this, not the product.",
     "fields": {
       "maxShiftHours": "Maximum shift entry duration (h)",
       "debounceSeconds": "Anti-bounce window (s)",
@@ -1207,7 +1327,13 @@
       "kioskServiceCode": "Kiosk service code",
       "breakClocking": "Break clocking",
       "localeDefault": "Default language",
-      "localeAvailable": "Available languages"
+      "localeAvailable": "Available languages",
+      "payrollColumns": "File columns",
+      "payrollDelimiter": "Delimiter",
+      "payrollHoursFormat": "Hours format",
+      "payrollDateFormat": "Date format",
+      "payrollEncoding": "Encoding",
+      "payrollHeaderRow": "Header row"
     },
     "hints": {
       "maxShiftHours": "Past this duration, a closed shift entry is flagged as anomalous and an incident is opened for review. It never closes a shift on its own. Accepted range: {minimum}–{maximum} hours.",
@@ -1218,16 +1344,38 @@
       "kioskServiceCodeRedacted": "Not visible with this kind of access: someone signing in as support cannot see or change the service code.",
       "breakClocking": "Enabled: the tablet shows the «Break» button and, from the next nightly review, a continuous stretch with no break (RN-12) starts opening incidents and counting in the compliance view. Disabled: the button disappears from the tablet and RN-12 is suspended again, without closing any incident already open.",
       "localeDefault": "The language the three applications and the documents are served in when nobody picks another. It has to be among the available languages.",
-      "localeAvailable": "Languages this installation offers. At least one, and the default language always has to stay checked."
+      "localeAvailable": "Languages this installation offers. At least one, and the default language always has to stay checked.",
+      "payrollColumns": "One column per line, in the order they appear in the file. Each line is either the identifier as-is (for example «worked_hours») or the identifier followed by «=» and the header label you want (for example «worked_hours=Worked hours»). An identifier that is not in the catalogue below is rejected when saving.",
+      "payrollColumnsCatalogToggle": "See the column catalogue and what it means",
+      "payrollDelimiter": "The character that separates one column from the next in the CSV.",
+      "payrollHoursFormat": "«HH:MM» is what a person reads without ambiguity. The decimal formats exist because many payroll tools require them to add hours up automatically.",
+      "payrollDateFormat": "«ISO» is YYYY-MM-DD; «DMY» is DD/MM/YYYY.",
+      "payrollEncoding": "«UTF-8 with BOM» is what Excel on Windows expects without asking for the encoding. With «Latin-1», a character that does not exist in that encoding is replaced with «?» without failing the download.",
+      "payrollHeaderRow": "With the header row disabled, the file starts straight with the data: some automated import tools reject it if it carries one."
     },
     "breakClockingOptions": {
       "enabled": "Enabled",
       "disabled": "Disabled"
     },
+    "payrollDateFormatOptions": {
+      "iso": "ISO (YYYY-MM-DD)",
+      "dmy": "DD/MM/YYYY"
+    },
+    "payrollEncodingOptions": {
+      "utf8_bom": "UTF-8 with BOM",
+      "utf8": "UTF-8 without BOM",
+      "latin1": "Latin-1 (ISO-8859-1)"
+    },
+    "payrollHeaderRowOptions": {
+      "enabled": "With header row",
+      "disabled": "Without header row"
+    },
     "errors": {
       "required": "This field cannot be left empty.",
       "notAWholeNumber": "Enter a whole number, with no decimals or letters.",
-      "notAServiceCode": "Enter a code with 8 to 12 digits, or leave it empty to use none."
+      "notAServiceCode": "Enter a code with 8 to 12 digits, or leave it empty to use none.",
+      "empty": "Enter at least one column, one per line.",
+      "unknownColumn": "Some line uses an identifier that is not in the column catalogue."
     },
     "affectsWorkedHoursWarning": "You are about to change a threshold that can change the minutes recorded. The change is audited with your name, the date, the previous value and the new one.",
     "audited": "Every changed key leaves its own audit trail entry (calculation_setting.changed) with the previous value, the new one, who changed it and when.",

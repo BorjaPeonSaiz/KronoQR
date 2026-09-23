@@ -948,14 +948,19 @@ regla que hace que el registro horario valga ante una inspección (§1).
 
 ## 6. Informes, exportaciones y la entrega a la Inspección
 
-Son dos cosas distintas y se confunden con facilidad:
+Son tres cosas distintas y se confunden con facilidad:
 
-| | **Informe de horas por periodo** | **Exportación para la Inspección** |
-| --- | --- | --- |
-| Para qué | Gestión: cuánto se ha trabajado, por quién, con qué desviación | Cumplir un requerimiento del art. 34.9 del Estatuto de los Trabajadores |
-| Dónde | Informes | Inspección |
-| Qué lleva | Totales agregados por persona, departamento o centro | **Todos los tramos, uno a uno, y todas las correcciones con su autor y su motivo** |
-| Formato | CSV, Excel o PDF | CSV normalizado, con sus criterios y su base legal declarados dentro |
+| | **Informe de horas por periodo** | **Exportación para la Inspección** | **Salida a nómina** |
+| --- | --- | --- | --- |
+| Para qué | Gestión: cuánto se ha trabajado, por quién, con qué desviación | Cumplir un requerimiento del art. 34.9 del Estatuto de los Trabajadores | Llevarle las horas del mes al programa de nómina del hotel |
+| Dónde | Informes | Inspección | Informes → pestaña **Nómina** |
+| Qué lleva | Totales agregados por persona, departamento o centro | **Todos los tramos, uno a uno, y todas las correcciones con su autor y su motivo** | Una fila por persona y periodo: horas trabajadas, contratadas, exceso y ausencias. **Ningún importe** |
+| Formato | CSV, Excel o PDF | CSV normalizado, con sus criterios y su base legal declarados dentro | CSV o Excel, con las columnas, el separador y el formato de horas que pida tu programa de nómina |
+
+El informe de horas y la salida a nómina se descargan al instante casi siempre;
+cuando el periodo o la plantilla son grandes, **se generan en segundo plano**
+(§6.3). La exportación para la Inspección no cambia: se genera siempre en el
+acto.
 
 ### 6.1 El informe de horas por periodo
 
@@ -1002,6 +1007,116 @@ alcance.
 > [`../runbooks/requerimiento-inspeccion.md`](../runbooks/requerimiento-inspeccion.md).**
 > Léelo **antes** de que llegue el requerimiento, no cuando llegue: son cinco
 > minutos que ahorran la hora.
+
+### 6.3 Informes grandes: en segundo plano
+
+**Cuándo pasa.** Al pedir un informe de horas por periodo o una salida a nómina,
+el panel puede avisarte de que **ese periodo o esa plantilla no caben en el
+acto**. No es un error ni un fallo de la instalación: un informe que se calcula
+mientras esperas tiene un tiempo máximo, y por encima de él el sistema prefiere
+decírtelo a dejarte la pantalla colgada. Pasa sobre todo con periodos de varios
+meses y con plantillas grandes.
+
+**Qué hacer.** El propio aviso trae el botón **«Generar en segundo plano»**, con
+los mismos parámetros que ya habías elegido: no hay que volver a rellenar nada.
+Al pulsarlo, la petición entra en el bloque **«Exportaciones en segundo plano»**
+de esa misma pantalla.
+
+**Cómo se sigue.** Esa lista se refresca sola mientras haya algo en curso y
+enseña el estado de cada petición: «En cola», «Generando», **«Lista para
+descargar»**, «Fallida» o «Caducada». Puedes cerrar la pantalla, salir del panel
+y volver más tarde: el trabajo sigue en el servidor. Solo se procesa **una
+petición tuya a la vez**; si pides otra sin que haya acabado la anterior, el
+panel te enseña la que ya está en marcha en lugar de empezar una segunda.
+
+**El aviso por correo, si tu instalación envía correo.** Cuando el fichero está
+listo te llega un aviso a la dirección de tu cuenta de gestión. Ese mensaje **no
+lleva el fichero ni el enlace de descarga**: lleva el enlace a la pantalla de
+informes, y la descarga se pide desde allí. Si tu instalación no tiene salida de
+correo, no pasa nada: la pantalla es la fuente, el correo solo te ahorra estar
+mirando. Que haya o no correo lo decide IT al instalar.
+
+**Descargar.** Cuando la fila diga «Lista para descargar», el botón
+**«Descargar»** trae el fichero. Dos cosas que conviene saber antes de pulsarlo:
+
+- **El enlace caduca a los 15 minutos y vale una sola vez.** En cuanto se usa,
+  deja de servir: si vuelves a abrirlo, la respuesta dice que ese enlace ya se
+  gastó y que pidas otro. No sirve de nada guardarlo, ni reenviarlo por correo,
+  ni pegarlo en un chat: cuando la otra persona lo abra, ya no valdrá.
+- **Si la descarga se corta** —se cae la wifi, cierras el portátil— no se pierde
+  nada: vuelve a la pantalla y pulsa «Descargar» otra vez. Se emite un enlace
+  nuevo sobre el mismo fichero, que no se ha vuelto a generar.
+
+**Cuánto dura el fichero.** Se conserva **7 días** y después desaparece solo. La
+fila sigue en la lista diciendo que caducó, con lo que se pidió y cuándo, para
+que quede constancia; lo que ya no está es el fichero. Si lo necesitas más tarde,
+vuelve a pedirlo: sale el mismo resultado, salvo que entre medias se haya
+corregido algo del registro.
+
+**Quién lo ve.** **Solo quien lo pidió**, incluso si quien mira es
+administrador. No es una carpeta compartida: es tu petición y tu fichero. Si tu
+compañera necesita ese mismo informe, lo pide ella, con su cuenta y con su
+alcance —un responsable de departamento recibe siempre solo lo suyo—.
+
+**Qué queda anotado.** Que lo pediste, qué periodo y qué alcance; que se generó,
+con cuántas filas; y **cada descarga, una a una**, con quién y cuándo. Es lo que
+permite responder «quién se llevó qué» si algún día hay que responderlo.
+
+> Los plazos —los 15 minutos del enlace y los 7 días del fichero— los puede
+> ajustar IT en el servidor. Están en
+> [`configuracion.md`](configuracion.md) §6.25.
+
+### 6.4 La salida a nómina
+
+**Qué exporta.** Una fila por persona y periodo con las **horas trabajadas**, las
+**horas contratadas**, el **exceso** sobre lo contratado y los **días de
+ausencia**. Las horas son exactamente las mismas que enseña el informe de horas
+por periodo (§6.1): no es un segundo cálculo que pueda dar otro número.
+
+**Qué NO hace, y conviene decirlo en voz alta.** No calcula importes, ni pluses,
+ni complementos, ni antigüedad, ni cotizaciones, ni nada que lleve un símbolo de
+euro. Eso lo hace el programa de nómina del hotel; esto le entrega las horas de
+partida. Si alguien espera de aquí una nómina, espera algo que este producto no
+hace y nunca ha prometido hacer.
+
+**Dónde está y quién puede.** Informes → pestaña **«Nómina»**. Se elige el
+periodo y la granularidad, se ven las columnas configuradas antes de descargar
+nada, y hay dos botones: **«Descargar»**, que la trae en el acto, y **«Generar en
+segundo plano»** para los periodos grandes (§6.3). La pestaña la ven **RRHH y
+administración**; un responsable de departamento no, aunque sí ve el informe de
+horas de su gente.
+
+**El formato lo configura IT una vez.** Qué columnas salen y en qué orden, cómo
+se escriben las horas y las fechas, qué separador lleva el CSV y con qué
+codificación se graba son ajustes de la instalación, no decisiones de cada mes:
+se afinan el día que se conecta el programa de nómina y no se vuelven a tocar.
+Están explicados uno a uno en [`configuracion.md`](configuracion.md) §2.5. Si tu
+programa de nómina rechaza el fichero, eso es lo que hay que mirar.
+
+**Los criterios no van dentro del fichero, y es a propósito.** El informe de
+horas por periodo lleva sus criterios impresos debajo de la tabla; este no,
+porque una línea de explicación en mitad de un CSV rompe la importación en el
+programa de nómina. Los criterios se enseñan **en la pantalla, al lado del botón
+de descarga**. Cópialos y guárdalos junto al fichero que envíes: son lo que
+permite explicar un número seis meses después, y el fichero solo no lo explica.
+
+**Qué contrastar antes de enviarla.** Cinco minutos aquí ahorran una corrección
+de nómina después:
+
+- **Días con turno abierto.** Una jornada sin salida fichada tiene un total que
+  todavía va a cambiar. Míralos en la bandeja de incidencias (§4) y ciérralos
+  antes de exportar.
+- **Incidencias sin resolver** del periodo. Cada una es una hora que puede
+  moverse cuando alguien la resuelva.
+- **Días sin contrato registrado.** En esas filas las horas trabajadas son
+  correctas, pero las contratadas y el exceso están incompletos (§2.3).
+- **Ausencias al día.** Vacaciones, bajas y permisos del periodo tienen que estar
+  registrados antes (§5 bis), o la columna de ausencias saldrá corta.
+
+> **Es una funcionalidad accesoria.** Si la licencia caduca, la salida a nómina
+> puede dejar de estar disponible hasta renovarla. El registro horario, el
+> fichaje y la exportación para la Inspección **no se detienen nunca por eso**
+> (§8, «hay un aviso de licencia en el panel»).
 
 ---
 

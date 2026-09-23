@@ -62,6 +62,16 @@ use App\Modules\Product\Domain\Exception\InvalidSettingValue;
 final readonly class SettingDefinition
 {
     /**
+     * Lo que separa el identificador de su rotulo en una lista con rotulo:
+     * `id=Etiqueta` (ver {@see self::labelledChoiceList()}).
+     *
+     * Aqui y no en quien la consume, para que la validacion del ajuste y el
+     * parseo de la plantilla usen el mismo caracter. Que los dos sitios
+     * coincidan lo ata una prueba unitaria, no la buena voluntad.
+     */
+    public const string LABEL_SEPARATOR = '=';
+
+    /**
      * @param  int|string|list<string>  $default
      * @param  list<string>|null  $allowed
      */
@@ -76,6 +86,7 @@ final readonly class SettingDefinition
         public int $maximumLength,
         public bool $allowsEmpty,
         public bool $confidential = false,
+        public bool $allowsLabels = false,
     ) {}
 
     /**
@@ -138,6 +149,79 @@ final readonly class SettingDefinition
     public static function choiceList(array $default, array $allowed, SettingImpact $impact): self
     {
         return new self(SettingType::TEXT_LIST, $default, $impact, null, null, null, $allowed, 0, false);
+    }
+
+    /**
+     * Una lista ordenada de un conjunto cerrado en la que **cada entrada puede
+     * llevar su propio rotulo**: `id` o `id=Etiqueta` (RF-IN-07, ADR-017).
+     *
+     * ## Por que no basta con {@see self::choiceList()}
+     *
+     * La plantilla de la salida a nomina necesita dos cosas del cliente a la vez:
+     * **que columnas y en que orden** —que es una eleccion de un catalogo cerrado,
+     * porque el significado de cada columna lo fija el producto— y **como se
+     * llama cada una en la cabecera**, que es texto libre porque tiene que casar
+     * con la plantilla de importacion de su programa de nomina. Con dos claves
+     * separadas —una lista y un mapa— habria dos filas que pueden dejar de
+     * corresponderse, y el dia que no lo hagan el fichero saldra con un rotulo
+     * pegado a la columna equivocada.
+     *
+     * Aqui el identificador y su rotulo son **la misma entrada**, asi que no
+     * pueden descuadrar.
+     *
+     * ## Lo que se valida, y lo que no
+     *
+     * El identificador tiene que estar en `$allowed` y no puede repetirse: una
+     * columna que no existe produciria una celda vacia que nadie ve hasta que el
+     * gestor cuadra la nomina, y una repetida descuadra la importacion. El rotulo
+     * se acota en longitud y **no puede contener el delimitador**, porque si lo
+     * contuviera la entrada tendria dos lecturas posibles.
+     *
+     * Lo que **no** se valida es el contenido del rotulo: es texto que el cliente
+     * escribe para su programa, y limitarlo a un alfabeto seria decidir por el.
+     * La neutralizacion de formulas de la hoja de calculo la hace el escritor, que
+     * es donde corresponde.
+     *
+     * @param  list<string>  $default
+     * @param  list<string>  $allowed  identificadores admitidos, sin rotulo
+     * @param  int  $maximumLabelLength  cuanto puede medir el rotulo configurado
+     */
+    public static function labelledChoiceList(
+        array $default,
+        array $allowed,
+        SettingImpact $impact,
+        int $maximumLabelLength,
+    ): self {
+        return new self(
+            SettingType::TEXT_LIST, $default, $impact, null, null, null, $allowed,
+            $maximumLabelLength, false, false, allowsLabels: true,
+        );
+    }
+
+    /**
+     * La forma que admite **una entrada** de una lista con rotulo, como
+     * expresion regular.
+     *
+     * Existe para que el `FormRequest` pueda señalar el elemento exacto del array
+     * en el `422` sin escribir una segunda copia del catalogo: la regla que valida
+     * en el borde se **deriva** de la misma definicion que valida en el dominio.
+     * Devuelve `null` cuando la definicion no admite rotulos, que es donde la
+     * regla `in:` de toda la vida sigue sirviendo.
+     */
+    public function labelledItemPattern(): ?string
+    {
+        if (! $this->allowsLabels || $this->allowed === null) {
+            return null;
+        }
+
+        $ids = implode('|', array_map(
+            static fn (string $id): string => preg_quote($id, '/'),
+            $this->allowed,
+        ));
+
+        // El rotulo: de uno a `maximumLength` caracteres, ninguno el
+        // delimitador. `u` porque los rotulos llevan acentos.
+        return '/^(?:'.$ids.')(?:=[^=]{1,'.max(1, $this->maximumLength).'})?$/u';
     }
 
     /**
@@ -214,23 +298,74 @@ final readonly class SettingDefinition
         }
 
         $values = [];
+        $identifiers = [];
 
         foreach ($raw as $item) {
             if (! is_string($item)) {
                 throw InvalidSettingValue::notAListOfText($key, get_debug_type($item));
             }
 
-            $this->assertAllowed($key, $item);
+            $identifiers[] = $this->validatedListItem($key, $item);
             $values[] = $item;
         }
 
         // Sin repetidos: una lista con «es» dos veces no significa nada distinto
-        // de tenerlo una, pero dibuja el selector de idioma dos veces.
-        if (count(array_unique($values)) !== count($values)) {
+        // de tenerlo una, pero dibuja el selector de idioma dos veces. En una
+        // lista con rotulo se compara el IDENTIFICADOR y no la entrada entera:
+        // `worked_hours` y `worked_hours=Horas` son la misma columna dos veces, y
+        // aceptarlas descuadraria la plantilla de importacion del programa de
+        // nomina sin que se note.
+        if (count(array_unique($identifiers)) !== count($identifiers)) {
             throw InvalidSettingValue::duplicated($key);
         }
 
         return $values;
+    }
+
+    /**
+     * Una entrada de la lista, validada. Devuelve el **identificador**, que es
+     * la entrada entera salvo en las listas con rotulo.
+     */
+    private function validatedListItem(SettingKey $key, string $item): string
+    {
+        if (! $this->allowsLabels) {
+            $this->assertAllowed($key, $item);
+
+            return $item;
+        }
+
+        $position = mb_strpos($item, self::LABEL_SEPARATOR);
+
+        if ($position === false) {
+            $this->assertAllowed($key, $item);
+
+            return $item;
+        }
+
+        $identifier = mb_substr($item, 0, $position);
+        $label = mb_substr($item, $position + 1);
+
+        $this->assertAllowed($key, $identifier);
+
+        // Un rotulo vacio —`worked_hours=`— no es «sin rotulo»: es una plantilla
+        // a medias que dejaria una cabecera en blanco donde el importador espera
+        // un nombre de campo. Se rechaza en vez de caer al rotulo del producto,
+        // que seria adivinar lo que quiso decir quien lo escribio.
+        if ($label === '') {
+            throw InvalidSettingValue::notEmpty($key);
+        }
+
+        if ($this->maximumLength > 0 && mb_strlen($label) > $this->maximumLength) {
+            throw InvalidSettingValue::tooLong($key, mb_strlen($label), $this->maximumLength);
+        }
+
+        // Un segundo delimitador dentro del rotulo daria dos lecturas posibles a
+        // la misma entrada.
+        if (str_contains($label, self::LABEL_SEPARATOR)) {
+            throw InvalidSettingValue::malformed($key, $this->labelledItemPattern() ?? self::LABEL_SEPARATOR);
+        }
+
+        return $identifier;
     }
 
     private function assertAllowed(SettingKey $key, string $value): void

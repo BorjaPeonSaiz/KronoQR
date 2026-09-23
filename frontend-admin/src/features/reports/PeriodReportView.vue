@@ -24,14 +24,26 @@ import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
 import { formatInstant } from '@kronoqr/web-kit/datetime'
 import { downloadDocument } from '@kronoqr/web-kit/downloadDocument'
-import { useQuery } from '@tanstack/vue-query'
+import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { listDepartments } from '@/shared/api/organisation.api'
-import type { PeriodReport, ReportGranularity, ReportGrouping } from '@/shared/api/types'
+import type {
+  PeriodReport,
+  ReportExport,
+  ReportExportCollection,
+  ReportGranularity,
+  ReportGrouping,
+} from '@/shared/api/types'
 import PeriodReportTable from './PeriodReportTable.vue'
 import { generatePeriodReport, type PeriodReportQuery } from './periodReport.api'
 import { downloadPeriodReport, type PeriodReportFormat } from './periodReportExport.api'
+import ReportExportsPanel from './ReportExportsPanel.vue'
+import {
+  reportExceedsSynchronousBudget,
+  requestReportExport,
+  REPORT_EXPORTS_QUERY_KEY,
+} from './reportExports.api'
 
 const GRANULARITIES: readonly ReportGranularity[] = ['day', 'week', 'month', 'range']
 const GROUPINGS: readonly ReportGrouping[] = ['employee', 'department', 'site']
@@ -93,8 +105,77 @@ const generatedQuery = ref<PeriodReportQuery | null>(null)
 const downloading = ref<PeriodReportFormat | null>(null)
 const downloadError = ref<unknown>(null)
 
+const queryClient = useQueryClient()
+
+/**
+ * El periodo que acaba de resultar demasiado grande para una respuesta
+ * sincrona (RF-IN-06, `422` de `ReportTooLargeForSynchronousDelivery`), tanto
+ * al generar la tabla como al descargarla. `null` mientras no haya pasado.
+ */
+const oversizedQuery = ref<PeriodReportQuery | null>(null)
+/**
+ * El formato con el que se intento la descarga que resulto demasiado grande.
+ * `null` cuando lo que fallo fue la CONSULTA (no hay tabla que ver: el
+ * formulario no elige un formato de fichero, asi que hay que preguntarlo antes
+ * de pedir la generacion en diferido).
+ */
+const oversizedFixedFormat = ref<PeriodReportFormat | null>(null)
+/** El formato elegido para la generacion en diferido cuando lo fallado fue la consulta, no la descarga. */
+const backgroundFormatChoice = ref<PeriodReportFormat>('csv')
+const backgroundRequesting = ref(false)
+const backgroundError = ref<unknown>(null)
+const backgroundRequested = ref<ReportExport | null>(null)
+
+const backgroundFormat = computed<PeriodReportFormat>(
+  () => oversizedFixedFormat.value ?? backgroundFormatChoice.value,
+)
+
 /** Sin las dos fechas no hay informe: el servidor las exige y el boton tambien. */
 const canSubmit = computed(() => from.value !== '' && to.value !== '' && !loading.value)
+
+/**
+ * Pide la MISMA consulta que acaba de resultar demasiado grande, pero en
+ * segundo plano (RF-IN-06): el servidor la ejecuta sin los presupuestos
+ * sincronos y avisa cuando el fichero esta listo (`ReportExportsPanel`, mas
+ * abajo en esta misma pantalla).
+ */
+async function requestBackgroundGeneration(): Promise<void> {
+  const query = oversizedQuery.value
+
+  if (query === null || backgroundRequesting.value) {
+    return
+  }
+
+  backgroundRequesting.value = true
+  backgroundError.value = null
+
+  try {
+    const resource = await requestReportExport({
+      ...query,
+      kind: 'period',
+      format: backgroundFormat.value,
+    })
+
+    backgroundRequested.value = resource.data
+
+    // Se enseña en el bloque de exportaciones EN EL ACTO, sin esperar al
+    // primer sondeo de `ReportExportsPanel` (mismo patron que
+    // `DataExportPanel.confirmRequest`, tarea 5.10): tanto si es la fila
+    // recien creada como si es la que ya estaba en curso (409, decision 2 de
+    // la ficha), es la misma forma y el mismo sitio en la lista.
+    queryClient.setQueryData<ReportExportCollection>(REPORT_EXPORTS_QUERY_KEY, (previous) => {
+      const rest = (previous?.data ?? []).filter((row) => row.uuid !== resource.data.uuid)
+
+      return { data: [resource.data, ...rest].slice(0, 20) }
+    })
+
+    announce(t('reports.period.background.requested'))
+  } catch (failure) {
+    backgroundError.value = failure
+  } finally {
+    backgroundRequesting.value = false
+  }
+}
 
 function currentQuery(): PeriodReportQuery {
   return {
@@ -117,6 +198,13 @@ async function submit(): Promise<void> {
   loading.value = true
   error.value = null
   downloadError.value = null
+  // Un nuevo intento retira la oferta de generacion en diferido anterior: si
+  // este periodo si cabe en el acto, la oferta de la vez pasada ya no pinta
+  // nada.
+  oversizedQuery.value = null
+  oversizedFixedFormat.value = null
+  backgroundRequested.value = null
+  backgroundError.value = null
 
   try {
     report.value = await generatePeriodReport(query)
@@ -130,6 +218,14 @@ async function submit(): Promise<void> {
     report.value = null
     generatedQuery.value = null
     error.value = caught
+
+    // RF-IN-06: la consulta no cabe en una respuesta sincrona. La tabla no
+    // tiene formato de fichero propio, asi que aqui se pregunta cual (por
+    // omision CSV) antes de poder pedir la generacion en diferido.
+    if (reportExceedsSynchronousBudget(caught)) {
+      oversizedQuery.value = query
+      oversizedFixedFormat.value = null
+    }
   } finally {
     loading.value = false
   }
@@ -152,6 +248,10 @@ async function download(format: PeriodReportFormat): Promise<void> {
 
   downloading.value = format
   downloadError.value = null
+  oversizedQuery.value = null
+  oversizedFixedFormat.value = null
+  backgroundRequested.value = null
+  backgroundError.value = null
 
   try {
     const downloaded = await downloadPeriodReport(query, format)
@@ -161,6 +261,14 @@ async function download(format: PeriodReportFormat): Promise<void> {
   } catch (caught) {
     downloadError.value = caught
     announce(t('reports.period.export.failed'))
+
+    // RF-IN-06: aqui SI hay un formato -es el que se acaba de pulsar-, asi
+    // que la oferta de generacion en diferido no pregunta nada: reusa el
+    // mismo.
+    if (reportExceedsSynchronousBudget(caught)) {
+      oversizedQuery.value = query
+      oversizedFixedFormat.value = format
+    }
   } finally {
     downloading.value = null
   }
@@ -254,12 +362,61 @@ const fieldClass =
 
     <LoadingPanel v-if="loading" :label="t('reports.period.loading')" class="mt-4" />
 
-    <ErrorNotice
-      v-else-if="error !== null"
-      :error="error"
-      :field-labels="fieldLabels"
-      class="mt-4"
-    />
+    <template v-else-if="error !== null">
+      <ErrorNotice :error="error" :field-labels="fieldLabels" class="mt-4" />
+
+      <!-- RF-IN-06: el periodo pedido no cabe en una respuesta sincrona. La
+           tabla no tiene formato de fichero propio, asi que aqui se pregunta
+           cual antes de poder pedir la generacion en diferido. -->
+      <section
+        v-if="oversizedQuery !== null"
+        class="mt-3 flex flex-col gap-3 rounded-kq border border-kq-border bg-kq-surface-alt p-4"
+        data-test="oversized-offer"
+      >
+        <p>{{ t('reports.period.background.offer') }}</p>
+
+        <div class="flex flex-wrap items-end gap-3">
+          <div class="flex flex-col gap-1">
+            <label for="background-format" class="font-medium">
+              {{ t('reports.period.export.label') }}
+            </label>
+            <select
+              id="background-format"
+              v-model="backgroundFormatChoice"
+              :class="fieldClass"
+              data-test="background-format"
+            >
+              <option v-for="format of FORMATS" :key="format" :value="format">
+                {{ t(`reports.period.export.format.${format}`) }}
+              </option>
+            </select>
+          </div>
+
+          <button
+            type="button"
+            class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-kq-on-primary hover:brightness-95 disabled:opacity-60"
+            :disabled="backgroundRequesting || backgroundRequested !== null"
+            data-test="request-background"
+            @click="requestBackgroundGeneration"
+          >
+            {{
+              backgroundRequesting
+                ? t('reports.period.background.requesting')
+                : t('reports.period.background.generate')
+            }}
+          </button>
+        </div>
+
+        <ErrorNotice v-if="backgroundError !== null" :error="backgroundError" />
+
+        <p v-if="backgroundRequested !== null" role="status" data-test="background-requested">
+          {{ t('reports.period.background.requested') }}
+          <a href="#report-exports" class="font-medium underline">
+            {{ t('reports.period.background.seeExports') }}
+          </a>
+        </p>
+      </section>
+    </template>
 
     <template v-else-if="report !== null">
       <!-- El aviso de cobertura va ANTES de la tabla y no en una nota al pie:
@@ -307,6 +464,42 @@ const fieldClass =
         class="mt-3"
       />
 
+      <!-- RF-IN-06: la descarga que se acaba de pedir no cabe en el acto.
+           Aqui SI hay un formato -es el que se acaba de pulsar-, asi que la
+           oferta reusa el mismo sin preguntar de nuevo. -->
+      <section
+        v-if="oversizedQuery !== null && oversizedFixedFormat !== null"
+        class="mt-3 flex flex-col gap-3 rounded-kq border border-kq-border bg-kq-surface-alt p-4"
+        data-test="oversized-offer"
+      >
+        <p>{{ t('reports.period.background.offer') }}</p>
+
+        <div>
+          <button
+            type="button"
+            class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-kq-on-primary hover:brightness-95 disabled:opacity-60"
+            :disabled="backgroundRequesting || backgroundRequested !== null"
+            data-test="request-background"
+            @click="requestBackgroundGeneration"
+          >
+            {{
+              backgroundRequesting
+                ? t('reports.period.background.requesting')
+                : t('reports.period.background.generate')
+            }}
+          </button>
+        </div>
+
+        <ErrorNotice v-if="backgroundError !== null" :error="backgroundError" />
+
+        <p v-if="backgroundRequested !== null" role="status" data-test="background-requested">
+          {{ t('reports.period.background.requested') }}
+          <a href="#report-exports" class="font-medium underline">
+            {{ t('reports.period.background.seeExports') }}
+          </a>
+        </p>
+      </section>
+
       <EmptyState
         v-if="report.data.length === 0"
         class="mt-4"
@@ -335,5 +528,12 @@ const fieldClass =
         </ul>
       </section>
     </template>
+
+    <!-- Bloque «Exportaciones en segundo plano» (RF-IN-06, RF-IN-07): SIEMPRE
+         visible en esta pantalla, no solo tras un `422` -tambien enseña las
+         exportaciones de nomina que se pidieron desde `PayrollExportView`,
+         porque comparten el mismo ciclo de vida (`report_exports`, decision 1
+         de la ficha). -->
+    <ReportExportsPanel class="mt-8" />
   </section>
 </template>

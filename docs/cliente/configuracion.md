@@ -363,6 +363,148 @@ de ese informe. Aun así, es el único campo del perfil cuyo error se paga con
 datos que no vuelven. Si tu asesoría te dice que tu plazo es otro, cámbialo; si
 no, no lo toques.
 
+### 2.5 Salida a nómina
+
+**Para qué sirve.** La salida a nómina es un fichero con **horas por persona y
+periodo** que se le entrega al programa de nómina del hotel. **Exporta horas, no
+importes**: aquí no se calculan salarios, pluses, complementos ni cotizaciones.
+Eso lo hace tu programa de nómina; esto le da los números de partida.
+
+**Dónde se cambia.** Panel → **Ajustes operativos** (`/settings`), en el bloque
+de la salida a nómina, con cuenta de **administrador de instalación**. Son seis
+claves de base de datos, **no** variables del `.env`: se guardan desde el panel,
+surten efecto
+en la petición siguiente, no exigen reiniciar nada y quedan auditadas como
+cualquier otro ajuste. Quien genera el fichero después —RRHH y administración—
+no necesita tocarlas: se configuran una vez, al implantar.
+
+| Clave | De serie | Valores | Qué pasa si la cambias |
+| --- | --- | --- | --- |
+| `PAYROLL_EXPORT_COLUMNS` | `employee_code`, `last_name`, `first_name`, `department`, `period_from`, `period_to`, `worked_hours`, `contracted_hours`, `overtime_hours`, `absence_days` | Una lista de identificadores del catálogo de abajo, en el orden en que quieres las columnas. Cada entrada es `id` o `id=Etiqueta` | Cambia **qué columnas lleva el fichero y en qué orden**. Un identificador que no esté en el catálogo se rechaza al guardar (código 422) diciendo cuál falla. No cambia ni una hora del registro |
+| `PAYROLL_EXPORT_DELIMITER` | `semicolon` | `semicolon`, `comma`, `tab` | Separador de campos del CSV. `semicolon` de serie porque es lo que espera Excel en configuración regional española y lo que piden la mayoría de los programas de nómina de aquí |
+| `PAYROLL_EXPORT_HOURS_FORMAT` | `hhmm` | `hhmm`, `decimal_dot`, `decimal_comma` | Cómo se escriben las horas: `168:30`, `168.50` o `168,50`. Lee el aviso de más abajo antes de tocarlo |
+| `PAYROLL_EXPORT_DATE_FORMAT` | `iso` | `iso`, `dmy` | Cómo se escriben las fechas: `2026-09-30` o `30/09/2026` |
+| `PAYROLL_EXPORT_ENCODING` | `utf8_bom` | `utf8_bom`, `utf8`, `latin1` | Codificación del fichero. `utf8_bom` es UTF-8 con marca de orden, que es lo que hace que Excel abra las tildes bien sin preguntar nada |
+| `PAYROLL_EXPORT_HEADER_ROW` | `enabled` | `enabled`, `disabled` | Si la primera línea lleva los nombres de las columnas. Ponlo en `disabled` solo si tu programa de nómina importa por posición y se atraganta con la cabecera |
+
+#### El catálogo de columnas, una por una
+
+Estas son **todas** las columnas que se pueden pedir. No hay más: añadir una
+nueva es cambiar el producto, no la configuración.
+
+| Identificador | Rótulo de serie | Qué lleva | De dónde sale |
+| --- | --- | --- | --- |
+| `employee_code` | Código de empleado | El código de empleado: el mismo con el que esa persona entra al portal | La ficha de la persona |
+| `employee_uuid` | Identificador | Identificador interno y estable de la persona, sin ningún dato personal dentro. Útil si tu programa de nómina cruza por un identificador que no cambia nunca | La ficha de la persona |
+| `last_name` | Apellidos | Apellidos | La ficha de la persona |
+| `first_name` | Nombre | Nombre | La ficha de la persona |
+| `full_name` | Nombre completo | Nombre y apellidos en una sola celda | La ficha de la persona |
+| `department` | Departamento | Departamento **actual** de la persona, no el que tuviera durante el periodo | La ficha de la persona |
+| `period_from` | Desde | Primer día del tramo que describe la fila | El periodo que se pidió, partido por la granularidad elegida |
+| `period_to` | Hasta | Último día del tramo que describe la fila | Íd. |
+| `days_in_period` | Días del periodo | Días naturales que abarca la fila | Íd. |
+| `days_with_activity` | Días con actividad | Días con al menos una jornada registrada | La proyección de jornadas |
+| `shift_count` | Tramos | Número de tramos registrados en la fila | La proyección de jornadas |
+| `worked_hours` | Horas trabajadas | Horas efectivamente trabajadas | **La proyección de jornadas**: los tramos vigentes ya cerrados, con las correcciones aplicadas. Es el mismo número que el informe de horas por periodo |
+| `contracted_hours` | Horas contratadas | Horas que correspondían según contrato | **El contrato vigente cada día** del tramo. Los días sin contrato registrado no suman |
+| `deviation_hours` | Desviación | Trabajadas menos contratadas. Puede ser negativa | Cálculo de las dos anteriores |
+| `overtime_hours` | Exceso de jornada | Solo la parte positiva de la desviación | Íd. |
+| `absence_days` | Días de ausencia | Días de ausencia registrada, del tipo que sea | **El registro de ausencias** |
+| `holiday_days` | Festivos | Días del tramo que son festivo del centro | El calendario de festivos del perfil de cumplimiento (sección 2.4) |
+| `unjustified_absence_days` | Absentismo no justificado | Días sin actividad, sin ausencia registrada y sin festivo | Los tres anteriores, restados |
+| `days_without_contract` | Días sin contrato | Días del tramo sin contrato registrado. **Si esta cifra no es cero, la de contratadas y la de desviación de esa fila están incompletas** | El contrato vigente cada día |
+| `time_zone` | Zona horaria | Zona horaria del centro con la que se han calculado las horas | El centro |
+
+**El rótulo de serie va en el idioma de la instalación** (`LOCALE_DEFAULT`,
+sección 2.3): en una instalación en inglés, la primera columna se rotula
+`Employee code`. Si tu programa de nómina importa por nombre de columna, no
+dejes eso al azar: ponle tú la etiqueta, como se explica justo debajo. Una
+etiqueta propia **no se traduce nunca**, precisamente para que cambiar el idioma
+del panel no rompa una importación que ya funcionaba.
+
+#### Ponerle a una columna el nombre que tu programa de nómina espera
+
+Basta con escribir la etiqueta detrás de un igual (hasta 60 caracteres). El
+identificador sigue siendo el del catálogo; lo que cambia es lo que se imprime
+en la fila de cabecera:
+
+```text
+worked_hours=Horas
+```
+
+Una lista completa con etiquetas propias se escribe así, una entrada por línea
+en el editor del panel:
+
+```text
+employee_code=Código
+last_name=Apellidos
+first_name=Nombre
+period_from=Desde
+period_to=Hasta
+worked_hours=Horas
+contracted_hours=Horas contrato
+overtime_hours=Extra
+```
+
+#### Dos ejemplos de fichero
+
+**Con la plantilla de serie** —las diez columnas de arriba, punto y coma, horas
+`HH:MM`, fechas ISO y cabecera con el rótulo de serie de cada columna, en una
+instalación en español—:
+
+```text
+Código de empleado;Apellidos;Nombre;Departamento;Desde;Hasta;Horas trabajadas;Horas contratadas;Exceso de jornada;Días de ausencia
+E-0142;García Ruiz;Marta;Recepción;2026-09-01;2026-09-30;168:30;160:00;8:30;2
+E-0207;Novoa Prado;Iván;Cocina;2026-09-01;2026-09-30;152:15;160:00;0:00;5
+```
+
+**Con horas decimales y coma decimal**, etiquetas propias y fechas
+`dd/mm/aaaa` —`PAYROLL_EXPORT_HOURS_FORMAT` en `decimal_comma`,
+`PAYROLL_EXPORT_DATE_FORMAT` en `dmy` y el separador donde estaba—:
+
+```text
+Código;Apellidos;Nombre;Desde;Hasta;Horas;Horas contrato;Extra
+E-0142;García Ruiz;Marta;01/09/2026;30/09/2026;168,50;160,00;8,50
+E-0207;Novoa Prado;Iván;01/09/2026;30/09/2026;152,25;160,00;0,00
+```
+
+> **Coma decimal y coma como separador no se llevan.** Con las horas en
+> `decimal_comma`, deja el separador en `semicolon` o en `tab`: con `comma`,
+> cada hora partiría la fila en dos columnas. El sistema te deja guardar esa
+> combinación —no puede saber qué espera tu programa de nómina— pero el fichero
+> saldrá ilegible.
+
+#### El formato decimal existe para la máquina, no para las personas
+
+En todo lo demás, este producto escribe las duraciones en `HH:MM` y nunca en
+decimal, porque `7,75` se lee mal y se discute peor delante de quien reclama sus
+horas. La salida a nómina es la única excepción, y tiene un motivo concreto:
+**este fichero lo lee un programa**, y muchos programas de nómina solo aceptan
+horas decimales.
+
+Consecuencia práctica: **pon `decimal_dot` o `decimal_comma` solo si tu programa
+de nómina lo exige.** Para cualquier fichero que vaya a leer una persona
+—informe de horas por periodo, exportación para la Inspección, portal del
+empleado— las horas siguen siendo `HH:MM`, y eso no se configura. El formato
+elegido queda anotado en la propia exportación y en la auditoría, así que dentro
+de un año se puede saber con qué convenio de escritura salió un número.
+
+#### Qué pasa con `latin1` y los caracteres que no existen en él
+
+`latin1` (ISO-8859-1) está para los programas de nómina antiguos que no entienden
+UTF-8. Las tildes y las eñes caben en él sin problema, pero no todo lo que puede
+aparecer en un nombre: una **ř**, una **ł**, una **ș** o un guion tipográfico no
+existen en `latin1`. **El fichero se genera igual, nunca falla y nunca se queda a
+medias**, en dos escalones: primero se transcribe al carácter latino más parecido
+(la **ř** sale como `r`) y, lo que no tiene transcripción posible, se sustituye
+por `?`. Una nómina detenida por una letra es peor que un apellido con un
+interrogante.
+
+Consecuencia práctica: con plantilla internacional, `latin1` **deforma
+apellidos**. Si tu programa de nómina cruza por nombre y no por código, eso se
+va a notar; si cruza por `employee_code` —que es lo recomendable— no pasa nada.
+Antes de dejarlo fijo, genera un fichero de prueba con un periodo corto y ábrelo.
+
 ---
 
 ## 3. Cómo se cambia
@@ -488,6 +630,7 @@ funcionalidades dejan de estar disponibles:
 | Deja de funcionar | Sigue funcionando en su lugar |
 | --- | --- |
 | **Informes por periodo** y su comparativa con las horas contratadas | La consulta del registro de cada persona, la exportación para la Inspección y el portal del empleado |
+| **La salida a nómina** (sección 2.5), tanto la descarga inmediata como la generación en segundo plano | La consulta del registro de cada persona y la exportación para la Inspección, que no se degradan nunca |
 | **Presencia en tiempo real**: pasa a **actualizarse por sondeo**, no se apaga. La pantalla sigue enseñando quién está dentro, con unos segundos de retraso, y lo dice | — |
 
 Y estas **nunca** se ven afectadas, con la licencia como esté:
@@ -1161,6 +1304,29 @@ desde el panel —el centro, los departamentos, el perfil de convenio, la
 licencia—, y cada cambio queda registrado con su autor y su fecha, que es
 precisamente lo que un asistente reabrible no podría garantizar.
 
+### …el programa de nómina no lee el fichero de la salida a nómina
+
+Casi siempre es una de estas cinco, y se arreglan todas desde el panel sin
+tocar el servidor (sección 2.5). Abre el fichero con un editor de texto plano
+—no con Excel, que te esconde justo lo que necesitas ver— y compara:
+
+| Lo que ves | Qué cambiar |
+| --- | --- |
+| Todo en una sola columna, o los campos partidos donde no toca | `PAYROLL_EXPORT_DELIMITER`. Si además tienes las horas en `decimal_comma`, el separador no puede ser `comma` |
+| Las tildes y las eñes salen como símbolos raros | `PAYROLL_EXPORT_ENCODING`. Prueba `utf8_bom` primero; si tu programa de nómina es antiguo, `latin1` |
+| El programa de nómina dice que las horas no son un número | `PAYROLL_EXPORT_HOURS_FORMAT`. Muchos no aceptan `168:30` y sí `168.50` o `168,50` |
+| El programa de nómina se queja de la primera línea, o importa la cabecera como si fuera una persona | `PAYROLL_EXPORT_HEADER_ROW` a `disabled`, o pon las etiquetas que espera con `id=Etiqueta` |
+| Faltan columnas, sobran, o están en otro orden | `PAYROLL_EXPORT_COLUMNS`. El orden de la lista es el orden del fichero |
+
+**Lo que NO vas a encontrar dentro del fichero son los criterios de cálculo**, y
+es a propósito: una línea de comentario rompería la importación. Los criterios se
+ven en la pantalla, junto al botón de descarga
+([`guia-rrhh.md`](guia-rrhh.md) §6.4).
+
+Si después de esto sigue sin entrar, pídele a tu proveedor de nómina un fichero
+de ejemplo de los que sí importa y compáralo línea a línea con el tuyo: las seis
+claves cubren todas las diferencias de forma que este producto sabe producir.
+
 ### …no puedo entrar y el asistente dice que ya hay una cuenta
 
 Te pasó lo más común: creaste el primer administrador y se cerró la pantalla
@@ -1241,9 +1407,9 @@ sudo docker compose exec app php artisan product:doctor
 > significa que quien tenga uno puede leer las copias, firmar tarjetas o abrir
 > los PIN sellados del otro.
 
-### 6.0 Las once claves que NO son variables de entorno
+### 6.0 Las diecisiete claves que NO son variables de entorno
 
-Once propiedades de la instalación no viven en el `.env` sino en la tabla
+Diecisiete propiedades de la instalación no viven en el `.env` sino en la tabla
 `installation_settings`, se editan **desde el panel** y surten efecto en la
 petición siguiente sin reiniciar nada:
 
@@ -1260,6 +1426,12 @@ petición siguiente sin reiniciar nada:
 | `LOCALE_DEFAULT` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.3 |
 | `LOCALE_AVAILABLE` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.3 |
 | `KIOSK_SERVICE_CODE` | Panel → **Ajustes operativos** (`/settings`) | Sección 6.0, aquí mismo |
+| `PAYROLL_EXPORT_COLUMNS` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.5 |
+| `PAYROLL_EXPORT_DELIMITER` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.5 |
+| `PAYROLL_EXPORT_HOURS_FORMAT` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.5 |
+| `PAYROLL_EXPORT_DATE_FORMAT` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.5 |
+| `PAYROLL_EXPORT_ENCODING` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.5 |
+| `PAYROLL_EXPORT_HEADER_ROW` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.5 |
 
 **`KIOSK_SERVICE_CODE` — el código de servicio de la tablet.** Es el código
 numérico, de 8 a 12 cifras, con el que se abre la **pantalla de diagnóstico** de
@@ -1290,11 +1462,14 @@ queda auditado con tu nombre, la fecha y el valor anterior. Si no ves esas
 entradas en el menú, no es que falten: es que tu cuenta no es de
 administrador.
 
-**Manda la base de datos** (sección 1). Seis de las once —las de marca, las de
-idioma y el código de servicio— no existen como variable de entorno: las cinco
-primeras se retiraron para que no hubiera dos sitios donde escribir el mismo
-dato, y la última nunca la tuvo, porque un secreto en el `.env` es un secreto que
-acaba en una copia de seguridad sin cifrar.
+**Manda la base de datos** (sección 1). Doce de las diecisiete —las de marca,
+las de idioma, el código de servicio y las seis de la salida a nómina— no
+existen como variable de entorno: las de marca y las de idioma se retiraron para
+que no hubiera dos sitios donde escribir el mismo dato; el código de servicio
+nunca la tuvo, porque un secreto en el `.env` es un secreto que acaba en una
+copia de seguridad sin cifrar; y las seis de la salida a nómina tampoco, porque
+el formato que pide un programa de nómina se ajusta a prueba y error el día de
+la implantación y no puede exigir reiniciar los contenedores en cada intento.
 
 **Las cinco `ATTENDANCE_*` sí siguen apareciendo en `.env.example`, y conviene
 saber exactamente qué son:** una copia del valor de serie, escrita ahí para que
@@ -1707,6 +1882,24 @@ ellos a propósito: un `pg_dump` de una base grande tarda legítimamente mucho m
 de un minuto, y abortarlo por un tope pensado para que nadie espere delante de
 un quiosco convertiría una copia lenta en una copia que no existe. Ver
 [`operacion.md`](operacion.md) §17.4.
+
+### 6.25 Informes generados en segundo plano
+
+Un informe de periodo o una salida a nómina que no cabe en el acto se genera en
+cola y se descarga después con un enlace de un solo uso. Quién lo usa y cómo se
+ve desde el panel está en [`guia-rrhh.md`](guia-rrhh.md) §6.3; la purga diaria y
+qué mirar cuando uno se queda a medias, en [`operacion.md`](operacion.md) §6
+y §13. **No confundir con la exportación íntegra** (sección 3 quater): aquella es
+un ZIP con toda la instalación y solo la genera el administrador.
+
+| Variable | Marca | Qué hace | De serie | Cuándo cambiarla | ¿Afecta al cálculo de horas? |
+| --- | --- | --- | --- | --- | --- |
+| `REPORTING_EXPORT_PATH` | — | Dónde se escriben los ficheros generados en segundo plano. **Fuera de la carpeta pública a propósito**: al fichero solo se llega con su enlace de un solo uso | `storage/app/reports` (en el contenedor) | Casi nunca, y **nunca dentro de `BACKUP_PATH`**: son ficheros que caducan y no deben entrar en la copia | No |
+| `REPORTING_EXPORT_RETENTION_DAYS` | — | Días que el fichero se puede descargar antes de que la purga diaria lo borre. La anotación de que existió se conserva siempre | `7` | Si tu gente necesita más margen para bajarlo. Subirlo deja más tiempo en disco ficheros con datos de la plantilla | No |
+| `REPORTING_EXPORT_LINK_TTL_MINUTES` | — | Minutos que vale el enlace de descarga. El enlace es además **de un solo uso**: al usarlo se consume, y volver a pedir el estado emite otro | `15` | Casi nunca. Es el único secreto que abre ese fichero y viaja sin sesión: cuanto más corto, mejor | No |
+| `REPORTING_EXPORT_TIMEOUT_SECONDS` | — | Tope de tiempo que la base de datos le da a la consulta del informe en diferido. Es mucho mayor que el del informe que se calcula mientras esperas, que es justo el motivo de que exista el diferido | `600` | Súbelo si una exportación grande falla por tiempo y el servidor tiene margen | No |
+| `REPORTING_EXPORT_STALE_AFTER` | — | Segundos tras los que una generación interrumpida —paraste los contenedores, se reinició el trabajador de cola— se da por fallida y deja pedir otra | `3600` | **Nunca por debajo de lo que tarda tu informe más grande**: darías por muerta una generación que sigue escribiendo | No |
+| `REPORTING_EXPORT_DOWNLOAD_RATE_LIMIT` | — | Descargas por minuto y por dirección IP en la ruta de descarga. Va aparte del resto porque esa ruta se abre **sin sesión**, con el enlace de un solo uso | `30` | Casi nunca | No |
 
 ---
 

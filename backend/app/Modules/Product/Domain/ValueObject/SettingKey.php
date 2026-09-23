@@ -5,6 +5,12 @@ declare(strict_types=1);
 namespace App\Modules\Product\Domain\ValueObject;
 
 use App\Modules\Product\Domain\Exception\UnknownSettingKey;
+use App\Modules\Shared\Domain\ValueObject\PayrollColumn;
+use App\Modules\Shared\Domain\ValueObject\PayrollDateFormat;
+use App\Modules\Shared\Domain\ValueObject\PayrollDelimiter;
+use App\Modules\Shared\Domain\ValueObject\PayrollEncoding;
+use App\Modules\Shared\Domain\ValueObject\PayrollHoursFormat;
+use App\Modules\Shared\Domain\ValueObject\PayrollLayout;
 
 /**
  * El catalogo de claves de configuracion de la instalacion (RF-PD-01, ADR-017).
@@ -165,6 +171,69 @@ enum SettingKey: string
     case KIOSK_SERVICE_CODE = 'KIOSK_SERVICE_CODE';
 
     /**
+     * RF-IN-07: **que columnas lleva la salida a nomina, en que orden y con que
+     * rotulo**.
+     *
+     * ## Es configuracion porque el formato es del cliente, no del producto
+     *
+     * El doc 05 §5.4 promete «exportacion de horas en el formato que necesite la
+     * herramienta de nomina del hotel». Cada hotel tiene la suya —A3, Sage,
+     * Meta4, la hoja que le mantiene su gestoria— y cada una espera unas columnas
+     * distintas en un orden distinto con unos nombres de campo distintos. Si eso
+     * viviera en el codigo, vender a un cliente nuevo obligaria a tocar el
+     * repositorio, que es literalmente lo que ADR-017 y la regla dura 13
+     * prohiben, y a la tercera venta habria una rama por cliente.
+     *
+     * Lo que **no** es del cliente es el significado de cada columna: eso lo fija
+     * el producto y por eso el catalogo de identificadores es cerrado
+     * ({@see PayrollColumn}). El cliente elige **cuales**, **en que orden** y
+     * **como se llaman**; nunca **que miden**.
+     *
+     * ## Impacto `PRESENTATION`, y no es un descuido
+     *
+     * Ninguna de las seis claves `PAYROLL_EXPORT_*` mueve un minuto ni abre una
+     * incidencia: el informe que se exporta es exactamente el mismo con cualquier
+     * plantilla, y lo unico que cambia es como se escribe en el fichero. El
+     * asiento de `installation_setting.changed` se escribe igual —RL-04 no
+     * distingue— pero con `affects_worked_hours: false`, que es la verdad.
+     */
+    case PAYROLL_EXPORT_COLUMNS = 'PAYROLL_EXPORT_COLUMNS';
+
+    /** RF-IN-07: separador de campos del fichero de nomina. Ver {@see PayrollDelimiter}. */
+    case PAYROLL_EXPORT_DELIMITER = 'PAYROLL_EXPORT_DELIMITER';
+
+    /**
+     * RF-IN-07: como se escribe una duracion en el fichero de nomina.
+     *
+     * **La unica excepcion del producto al «horas como `HH:MM`, nunca decimal»**
+     * del paso 6 de `/informe-nuevo`, y esta razonada en
+     * {@see PayrollHoursFormat}: esa regla protege a quien lee, y este fichero lo
+     * lee un programa que multiplica por un precio hora. `hhmm` sigue siendo el
+     * valor de serie.
+     */
+    case PAYROLL_EXPORT_HOURS_FORMAT = 'PAYROLL_EXPORT_HOURS_FORMAT';
+
+    /** RF-IN-07: `AAAA-MM-DD` o `DD/MM/AAAA`. Ver {@see PayrollDateFormat}. */
+    case PAYROLL_EXPORT_DATE_FORMAT = 'PAYROLL_EXPORT_DATE_FORMAT';
+
+    /**
+     * RF-IN-07: codificacion del fichero de nomina.
+     *
+     * `latin1` existe porque los programas de nomina del sector llevan decadas
+     * instalados y varios solo importan ISO-8859-1. Ver {@see PayrollEncoding}.
+     */
+    case PAYROLL_EXPORT_ENCODING = 'PAYROLL_EXPORT_ENCODING';
+
+    /**
+     * RF-IN-07: si el fichero de nomina lleva fila de rotulos.
+     *
+     * `enabled` de serie —es lo que espera una persona que lo abra para
+     * comprobarlo— y `disabled` para los importadores que tratan la primera linea
+     * como datos y acaban dando de alta a un empleado llamado «Codigo».
+     */
+    case PAYROLL_EXPORT_HEADER_ROW = 'PAYROLL_EXPORT_HEADER_ROW';
+
+    /**
      * Los idiomas que el producto trae traducidos.
      *
      * No es configuracion del cliente: es lo que hay en `lang/` y en los `i18n`
@@ -276,6 +345,39 @@ enum SettingKey: string
             // paquete de diagnostico. Ver el docblock de la clave.
             self::KIOSK_SERVICE_CODE->value => SettingDefinition::optionalText(
                 '', 12, SettingImpact::PRESENTATION, '/^[0-9]{8,12}$/', confidential: true,
+            ),
+            // LA SALIDA A NOMINA (RF-IN-07, tarea 3.9). Las seis son
+            // `PRESENTATION`: cambian como se escribe el fichero, nunca lo que
+            // el informe calcula.
+            //
+            // **Los valores de serie y el catalogo de columnas viven en
+            // `Shared/Domain`** y no aqui, porque los necesitan los dos lados de
+            // la frontera —`Reporting` para escribir el fichero y `Product` para
+            // construir la plantilla— y ninguno puede importar al otro (doc 02
+            // §1.6, ADR-025). Copiarlos aqui daria dos plantillas de serie y
+            // ganaria la que nadie mira.
+            self::PAYROLL_EXPORT_COLUMNS->value => SettingDefinition::labelledChoiceList(
+                PayrollLayout::DEFAULT_COLUMNS,
+                PayrollColumn::ids(),
+                SettingImpact::PRESENTATION,
+                PayrollLayout::MAXIMUM_LABEL_LENGTH,
+            ),
+            self::PAYROLL_EXPORT_DELIMITER->value => SettingDefinition::choice(
+                PayrollDelimiter::Semicolon->value, PayrollDelimiter::names(), SettingImpact::PRESENTATION,
+            ),
+            self::PAYROLL_EXPORT_HOURS_FORMAT->value => SettingDefinition::choice(
+                PayrollHoursFormat::HoursMinutes->value, PayrollHoursFormat::names(), SettingImpact::PRESENTATION,
+            ),
+            self::PAYROLL_EXPORT_DATE_FORMAT->value => SettingDefinition::choice(
+                PayrollDateFormat::Iso->value, PayrollDateFormat::names(), SettingImpact::PRESENTATION,
+            ),
+            self::PAYROLL_EXPORT_ENCODING->value => SettingDefinition::choice(
+                PayrollEncoding::Utf8Bom->value, PayrollEncoding::names(), SettingImpact::PRESENTATION,
+            ),
+            self::PAYROLL_EXPORT_HEADER_ROW->value => SettingDefinition::choice(
+                PayrollLayout::HEADER_ROW_ENABLED,
+                [PayrollLayout::HEADER_ROW_ENABLED, PayrollLayout::HEADER_ROW_DISABLED],
+                SettingImpact::PRESENTATION,
             ),
         ];
     }

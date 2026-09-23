@@ -76,6 +76,7 @@ use App\Modules\Product\Infrastructure\Adapter\DbCompliancePolicyProvider;
 use App\Modules\Product\Infrastructure\Adapter\DbKioskServiceCodeProvider;
 use App\Modules\Product\Infrastructure\Adapter\DbLocalePolicyProvider;
 use App\Modules\Product\Infrastructure\Adapter\DbOperationalSettingsProvider;
+use App\Modules\Product\Infrastructure\Adapter\DbPayrollLayoutProvider;
 use App\Modules\Product\Infrastructure\Adapter\Ed25519LicenseVerifier;
 use App\Modules\Product\Infrastructure\Adapter\LaravelProductEventPublisher;
 use App\Modules\Product\Infrastructure\Adapter\LicensedBrandingProvider;
@@ -154,6 +155,7 @@ use App\Modules\Shared\Application\Port\KioskServiceCodeProvider;
 use App\Modules\Shared\Application\Port\LocalePolicyProvider;
 use App\Modules\Shared\Application\Port\ManagementActor;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
+use App\Modules\Shared\Application\Port\PayrollLayoutProvider;
 use App\Modules\Workforce\Domain\Event\EmployeeHired;
 use App\Modules\Workforce\Domain\Event\EmployeesImported;
 use App\Support\Locale\NegotiableLocales;
@@ -309,6 +311,26 @@ final class ProductServiceProvider extends ServiceProvider
         $this->app->scoped(
             OperationalSettingsProvider::class,
             static fn (Application $app): DbOperationalSettingsProvider => new DbOperationalSettingsProvider(
+                $app->make(GetSettingsHandler::class),
+            ),
+        );
+
+        /*
+         * La plantilla de la salida a nomina (RF-IN-07, tarea 3.9).
+         *
+         * **El puerto vive en `Shared` y el adaptador aqui**, igual que los
+         * umbrales operativos y por el mismo motivo: quien escribe el fichero es
+         * `Reporting` y quien tiene `installation_settings` es `Product`, y
+         * ninguno de los dos puede importar al otro (doc 02 §1.6, ADR-025).
+         *
+         * `scoped` y no `bind`: el endpoint sincrono y el trabajo en cola piden
+         * la misma plantilla dentro de la misma peticion, y resolver la cascada
+         * dos veces no aporta nada. Muere con la peticion, asi que un cambio en
+         * el panel se aplica en la siguiente descarga.
+         */
+        $this->app->scoped(
+            PayrollLayoutProvider::class,
+            static fn (Application $app): DbPayrollLayoutProvider => new DbPayrollLayoutProvider(
                 $app->make(GetSettingsHandler::class),
             ),
         );

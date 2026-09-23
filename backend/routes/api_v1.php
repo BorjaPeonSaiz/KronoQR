@@ -44,8 +44,11 @@ use App\Modules\Reporting\Http\Controller\EmployeeWorkDayController;
 use App\Modules\Reporting\Http\Controller\LivePresenceController;
 use App\Modules\Reporting\Http\Controller\MyWorkDayController;
 use App\Modules\Reporting\Http\Controller\MyWorkDayExportController;
+use App\Modules\Reporting\Http\Controller\PayrollExportController;
 use App\Modules\Reporting\Http\Controller\PeriodReportController;
 use App\Modules\Reporting\Http\Controller\PeriodReportExportController;
+use App\Modules\Reporting\Http\Controller\ReportExportController;
+use App\Modules\Reporting\Http\Controller\ReportExportDownloadController;
 use App\Modules\Workforce\Http\Controller\AbsenceController;
 use App\Modules\Workforce\Http\Controller\AbsenceImportController;
 use App\Modules\Workforce\Http\Controller\DepartmentController;
@@ -473,6 +476,148 @@ Route::get('/reports/legal-export', LegalExportController::class)
         'locale.installation',
     ])
     ->name('compliance.reports.legal-export');
+
+/*
+ * ---------------------------------------------------------------------------
+ * INFORMES GENERADOS EN DIFERIDO (tarea 3.9, RF-IN-06, RF-IN-07, ADR-041)
+ * ---------------------------------------------------------------------------
+ *
+ * Cuando el informe por periodo no cabe en una respuesta sincrona,
+ * `GET /reports/period` y su descarga responden `422` **remitiendo aqui**: se
+ * pide, se genera en cola y se avisa con un enlace de descarga caducable
+ * (RF-IN-06). Es el mismo informe, con los mismos criterios y el mismo alcance;
+ * lo unico que cambia es que nadie espera con una pestaña abierta.
+ *
+ * CUATRO RUTAS Y NO TRES. Las tres primeras son de gestion —pedir, listar,
+ * consultar— y la cuarta es la descarga, que va **aparte y sin sesion**. Ver mas
+ * abajo.
+ *
+ * AMBITO `reports:*` EN LAS TRES DE GESTION, el mismo que el informe sincrono y
+ * no `reports:legal`: lo que sale es exactamente lo que sale por aquel. El
+ * `auditor` lleva el estrecho y se queda en el middleware; el
+ * `responsable_departamento` no lleva ninguno de los dos (§7.3). La otra mitad es
+ * `ReportExportPolicy` (regla dura 18), que ademas distingue `kind: payroll`
+ * —rol `rrhh`, Anexo B— de `kind: period`.
+ *
+ * SOLO EL SOLICITANTE VE LO SUYO, tambien si es `admin` (decision 2 de la ficha).
+ * El filtro por dueño entra en la consulta y una exportacion ajena responde
+ * `404`, no `403`: un `403` confirmaria que existe.
+ *
+ * `throttle:management` EN LAS TRES DE GESTION. La pantalla sondea la lista cada
+ * diez segundos mientras haya algo en curso, asi que una zona estrecha la
+ * bloquearia sola; y lo que de verdad impide que alguien llene la cola no es este
+ * limite, es el indice unico parcial que solo admite una exportacion en curso por
+ * persona.
+ *
+ * `GET /reports/exports/{uuid}` ES UN `GET` QUE ESCRIBE, y esta declarado asi en
+ * el contrato: **acuña el enlace de descarga y rota el anterior** (ADR-041).
+ * Misma forma que `GET /credentials/{uuid}/print`, que sella la impresion al
+ * servirla. Lo que no se admite en ningun caso es que la LISTA acuñe enlaces: un
+ * sondeo cada diez segundos dejaria veinte tokens vivos y mataria el que alguien
+ * este usando.
+ *
+ * SIN `DELETE`. Un informe no se borra: caduca solo a los
+ * `REPORTING_EXPORT_RETENTION_DAYS` y su fila queda como `purged` con sus fechas,
+ * su huella y su recuento (regla dura 5). Que no exista el verbo es lo que impide
+ * que aparezca uno «para hacer sitio».
+ */
+Route::middleware([
+    'auth:sanctum',
+    'ability:'.TokenAbility::REPORTS_ALL->value,
+    'throttle:management',
+])->group(function (): void {
+    Route::get('/reports/exports', [ReportExportController::class, 'index'])
+        ->name('reporting.reports.exports.index');
+    Route::post('/reports/exports', [ReportExportController::class, 'store'])
+        ->name('reporting.reports.exports.store');
+    Route::get('/reports/exports/{uuid}', [ReportExportController::class, 'show'])
+        ->whereUuid('uuid')
+        ->name('reporting.reports.exports.show');
+});
+
+/*
+ * GET /api/v1/reports/exports/{uuid}/download?token=… — el fichero (ADR-041).
+ *
+ * FUERA DEL GRUPO DE ARRIBA, Y ESO ES LA DECISION. No lleva `auth:sanctum`, no
+ * lleva `ability:` y no tiene policy: la autorizacion es el token de un solo uso
+ * que emite `GET /reports/exports/{uuid}` y que esta ruta **consume**.
+ *
+ * El motivo es practico y esta en ADR-041: un enlace que se abre con un clic
+ * —desde la pantalla, desde el historial del navegador— no lleva cabecera
+ * `Authorization`, y exigirla obligaria al panel a descargar el fichero entero en
+ * memoria con `fetch` antes de ofrecerlo. Es precisamente esa ausencia la que
+ * exige que el enlace sea corto, de un solo uso y ligado a una fila: la misma
+ * tecnica que las URL firmadas de Laravel, hecha a mano para que el secreto no
+ * sea `APP_KEY` sino un token por descarga que se consume.
+ *
+ * `throttle:report-download` Y NO `throttle:management`: 30 r/m **por IP**, que
+ * es el unico eje que queda sin sesion. Es lo que impide que alguien que conozca
+ * un `uuid` pruebe tokens a la velocidad de la red; el resto de la defensa es el
+ * tamaño del secreto —~74 bits aleatorios del `uuid` v7 (48 de sus 122 son marca
+ * de tiempo) mas 256 bits de token— y que cada enlace sirva una sola vez.
+ *
+ * `locale.installation` PORQUE ES UN DOCUMENTO: los `problem+json` de esta ruta
+ * salen en el idioma de la instalacion, como el resto de las descargas (regla
+ * dura 13). No hay negociacion posible: aqui no hay sesion de la que deducir
+ * preferencia.
+ *
+ * CADA DESCARGA SE AUDITA (`report_export.downloaded`, RS-05) **antes** de
+ * entregar el fichero: una descarga cortada a la mitad sacaria del servidor las
+ * horas de la plantilla sin dejar rastro.
+ */
+Route::get('/reports/exports/{uuid}/download', ReportExportDownloadController::class)
+    ->middleware(['throttle:report-download', 'locale.installation'])
+    ->whereUuid('uuid')
+    ->name('reporting.reports.exports.download');
+
+/*
+ * GET /api/v1/reports/payroll-export — la salida a nomina, en el acto (RF-IN-07,
+ * tarea 3.9).
+ *
+ * ES EL INFORME POR PERIODO POR EMPLEADO PASADO POR UNA PLANTILLA CONFIGURABLE.
+ * Misma consulta, mismos presupuestos sincronos y el mismo `422` que remite a la
+ * generacion en diferido. Lo que cambia es el fichero: columnas, orden, rotulos,
+ * separador, formato de horas y de fechas, codificacion y fila de cabecera salen
+ * de los seis ajustes `PAYROLL_EXPORT_*` de `installation_settings` (ADR-017,
+ * regla dura 13). NINGUN PARAMETRO DE LA PETICION TOCA EL FORMATO: lo fija quien
+ * administra la instalacion una vez, porque lo que tiene que encajar es el
+ * importador del programa de nomina del hotel, no el gusto de quien descarga.
+ *
+ * `reports:*` Y ROL `rrhh+`, QUE AQUI ES `{admin, rrhh}` (Anexo B, regla dura
+ * 18). El `responsable_departamento` no lleva ningun ambito de informes (§7.3) y
+ * el `auditor` lleva el estrecho —`reports:legal`—, asi que ninguno de los dos
+ * pasa del middleware. `PayrollExportPolicy` dice lo mismo desde el otro lado, y
+ * es POLICY PROPIA y no la del informe por periodo: el dia que un responsable
+ * pueda ver las horas de su equipo, esa concesion no puede arrastrar consigo el
+ * fichero con el que se paga.
+ *
+ * `Feature::PayrollExport` POR ENCIMA, Y RESPONDE `402`, NO `403`. Es
+ * funcionalidad accesoria (ADR-023) y su primera consumidora. No tener contratada
+ * la salida a nomina y no tener permiso para pedirla son dos cosas distintas.
+ * ESTO NO ES EL REGISTRO LEGAL: la exportacion para la Inspeccion es la ruta de
+ * arriba y no se degrada jamas (RL-06, regla dura 15).
+ *
+ * `throttle:management` POR LO QUE CUESTA Y POR LO QUE ESCRIBE, igual que sus dos
+ * hermanas: cruza la plantilla con el calendario y deja ademas su asiento de
+ * divulgacion, que toma el candado global de ADR-010 — el mismo por el que pasa
+ * cada fichaje.
+ *
+ * ES UN `GET` AUNQUE QUEDE AUDITADO. Solo lee; que sacar un fichero con datos de
+ * terceros deje asiento en `audit_log` (RS-05, conjunto `payroll_export`) no lo
+ * convierte en una escritura.
+ */
+Route::get('/reports/payroll-export', PayrollExportController::class)
+    ->middleware([
+        'auth:sanctum',
+        'ability:'.TokenAbility::REPORTS_ALL->value,
+        'throttle:management',
+        // Es un documento: los rotulos de las columnas que el cliente no haya
+        // renombrado salen en el idioma de la INSTALACION, no en el del
+        // navegador (regla dura 13; UseInstallationLocale). El fichero lo abre
+        // un programa de nomina, no el navegador que lo descargo.
+        'locale.installation',
+    ])
+    ->name('reporting.reports.payroll-export');
 
 /*
  * La bandeja de incidencias y su resolucion (RF-PA-05, tarea 2.5).

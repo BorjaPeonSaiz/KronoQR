@@ -11,7 +11,7 @@ use App\Modules\Reporting\Domain\ValueObject\ReportGranularity;
 use App\Modules\Reporting\Domain\ValueObject\ReportGrouping;
 use App\Modules\Reporting\Http\Response\PeriodReportCsv;
 use App\Modules\Reporting\Http\Response\PeriodReportXlsx;
-use App\Modules\Reporting\Http\Support\PeriodReportDigest;
+use App\Modules\Reporting\Infrastructure\Export\PeriodReportDigest;
 use App\Modules\Shared\Domain\ValueObject\AccessScope;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\DB;
