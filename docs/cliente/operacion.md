@@ -27,6 +27,7 @@ Todo esto corre solo en el contenedor `scheduler`. Lo que aparece en la columna
 | 03:15 UTC, a diario | Copia de seguridad lógica | Sacarla del servidor |
 | 04:05 UTC, a diario | Se verifica la cadena de hash de la auditoría | Atender la alerta si suena: es crítica |
 | 04:30 UTC, a diario | Revisión del registro: turnos abiertos, descansos, jornadas anómalas | Resolver las incidencias en el panel |
+| 04:35 UTC, a diario | Detección de patrones anómalos de uso de credencial sobre los fichajes de quiosco de los últimos 30 días (§6) | Nada: las incidencias le llegan al responsable del departamento, no a IT |
 | Lunes 05:10 UTC | **Propuesta de retención**: informe de lo que se purgaría | Leerlo cuando haya algo vencido |
 | Cada hora | Métricas de credenciales y limpieza de temporales | Nada |
 | Cada hora | Se purgan las exportaciones íntegras caducadas: se borra el ZIP, la anotación queda (§13) | Nada |
@@ -157,6 +158,35 @@ Métricas publicadas para el colector de `node-exporter`
 | `COMPLIANCE_RETENTION_REPORT_PATH` | `storage/app/retention-reports` | Dónde quedan los informes. **No se limpian solos**: son la constancia de la purga |
 | `DB_MAINTENANCE_USERNAME` | `fichaje_maintenance` | Rol que ejecuta la purga de auditoría |
 | `DB_MAINTENANCE_PASSWORD` | *(vacía)* | **No se pone en el `.env`.** Se aporta al ejecutar la purga |
+
+**La detección de patrones anómalos de uso de credencial** es una pasada
+aparte de la revisión de las 04:30: corre a las **04:35 UTC**, entre esa
+revisión y el cálculo de métricas de cumplimiento, y abre las incidencias
+«Patrón anómalo de uso de la credencial» que ve el responsable del departamento
+en su bandeja ([`guia-rrhh.md`](guia-rrhh.md) §4.5). **A IT no le llega ninguna
+por lo que encuentra**: un indicio sobre dos personas concretas se revisa en la
+bandeja, no en un canal de guardia. Lo que sí vigilan dos alertas (§10.4) es
+que la pasada corra y termine: `DeteccionDePatronesAusente` (más de 26 horas
+sin ejecutarse) y `DeteccionDePatronesConFallos` (la última pasada dejó algún
+hallazgo sin convertir en incidencia), las dos sobre las series
+`pattern_detection_last_run_timestamp_seconds` y
+`pattern_detection_last_failures` del fichero
+`BACKUP_PATH/metrics/kronoqr_pattern_detection.prom`. Los umbrales de lo que se
+busca —ventana de segundos, días mínimos y tránsito entre quioscos— se cambian
+en el panel, no aquí ([`configuracion.md`](configuracion.md) §2.1). Si necesitas
+lanzarla a mano (es idempotente: no duplica lo que ya abrió):
+
+```bash
+docker compose exec app php artisan attendance:detect-patterns
+```
+
+| Variable | De serie | Qué hace |
+| --- | --- | --- |
+| `COMPLIANCE_PATTERN_LOOKBACK_DAYS` | `30` | Días hacia atrás que revisa esa pasada. Es más larga que los 7 de la revisión de incidencias porque «sistemático» necesita más de una semana. Se puede acotar en una ejecución concreta con `--days=` |
+
+El procedimiento cuando una de las dos alertas suena, y el de revisión de la
+propia incidencia, es
+[`../runbooks/patron-anomalo-credencial.md`](../runbooks/patron-anomalo-credencial.md).
 
 **Los informes generados en segundo plano** (RRHH los pide desde el panel:
 [`guia-rrhh.md`](guia-rrhh.md) §6.3) tienen sus propios seis parámetros y su
@@ -563,6 +593,8 @@ la alimenta dejó de ejecutarse):
 | `DescansoEntreJornadasInsuficiente` | Descanso por debajo del mínimo legal | Media | RRHH | [`turno-abierto-prolongado.md`](../runbooks/turno-abierto-prolongado.md) | Comprueba que las horas son correctas antes de tratarlo como planificación |
 | `MetricaDeIncidenciasAusente` / `DeteccionDeIncidenciasAusente` | Silencio de la detección nocturna | Media | IT | [`turno-abierto-prolongado.md`](../runbooks/turno-abierto-prolongado.md) | Comprueba que el `scheduler` sigue vivo |
 | `DeteccionDeIncidenciasConFallos` | La pasada de anoche falló | Alta | IT | [`errores-en-el-panel.md`](../runbooks/errores-en-el-panel.md) | `product:doctor`, y si señala a la reconciliación, sigue ese runbook en su lugar |
+| `DeteccionDePatronesAusente` | Más de 26 h sin ejecutarse la detección de patrones anómalos de uso de credencial (04:35 UTC) | Media | IT | [`patron-anomalo-credencial.md`](../runbooks/patron-anomalo-credencial.md) §5 | Comprueba que el `scheduler` sigue vivo y lanza `attendance:detect-patterns` a mano. **No es sobre ninguna persona**: es que nadie está mirando |
+| `DeteccionDePatronesConFallos` | La pasada de patrones de anoche dejó algún hallazgo sin convertir en incidencia | Alta | IT | [`patron-anomalo-credencial.md`](../runbooks/patron-anomalo-credencial.md) §5 | `product:doctor`, corrige la causa y repite el comando: es idempotente |
 | `ErroresCriticosNuevos` | Grupo `critical` nuevo o reabierto en 5 min | Alta | IT | [`errores-en-el-panel.md`](../runbooks/errores-en-el-panel.md) | Abre «Errores» en el panel y sigue la columna «Qué hacer» de esa fila |
 | `DivergenciaEnReconciliacionNocturna` | Cualquiera | Crítica | IT | [`divergencia-proyeccion.md`](../runbooks/divergencia-proyeccion.md) | La corrección ya está hecha; averigua quién escribió fuera del recálculo |
 | `ReconciliacionConFallos` | La pasada de anoche falló | Alta | IT | [`divergencia-proyeccion.md`](../runbooks/divergencia-proyeccion.md) | Ejecuta `attendance:reconcile` a mano y mira el motivo del fallo |

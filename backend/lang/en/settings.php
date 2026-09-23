@@ -55,6 +55,8 @@ return [
         'ATTENDANCE_DEBOUNCE_SECONDS' => 'debounce window between two scans (seconds)',
         'ATTENDANCE_MAX_CLOCK_SKEW_MINUTES' => 'tolerated clock skew (minutes)',
         'ATTENDANCE_MIN_TRANSIT_SECONDS' => 'minimum transit time between two kiosks (seconds)',
+        'ATTENDANCE_PATTERN_WINDOW_SECONDS' => 'coincidence window at the same kiosk (seconds)',
+        'ATTENDANCE_PATTERN_MIN_REPEATS' => 'days with a coincidence before raising an incident',
         'BRANDING_APP_NAME' => 'application name',
         'BRANDING_LOGO_PATH' => 'logo path on the server',
         'BRANDING_ACCENT_COLOR' => 'accent colour',

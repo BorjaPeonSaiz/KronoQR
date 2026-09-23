@@ -215,7 +215,10 @@ Con una cuenta de **administrador** (ningún otro rol puede hacerlo):
 Sobre el nombre, que es lo único que va a dar guerra dentro de seis meses:
 
 - Describe **el sitio**, no el aparato: `Recepción`, `Entrada de personal`,
-  `Cocina`, `Office de pisos`. Nunca `Tablet 3` ni un número de serie.
+  `Cocina`, `Office de pisos`. Nunca `Tablet 3` ni un número de serie. Y
+  **nunca a una persona** (`Tablet de María`): el rótulo se escribe en el
+  contexto de las incidencias de patrón anómalo (RF-PR-06) y en los asientos de
+  auditoría, que no admiten nombres (regla dura 21).
 - **Único entre los quioscos activos.** Si el nombre está libre porque el
   anterior se desvinculó, el sistema **reactiva ese mismo quiosco** y conserva su
   historia (§5).

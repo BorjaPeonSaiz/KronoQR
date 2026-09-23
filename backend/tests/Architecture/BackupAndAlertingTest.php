@@ -318,6 +318,15 @@ it('dirige la alerta de turnos abiertos a RRHH, con runbook y sin cierre automat
         // como «no hay turnos abiertos».
         'DeteccionDeIncidenciasConFallos',
         'DeteccionDeIncidenciasAusente',
+        // Tarea 3.11, decision 8. Las mismas dos mitades del silencio para la
+        // deteccion de PATRONES (RF-PR-06, RN-16), que es la contrapartida de
+        // haber descartado la biometria: si esa pasada deja de correr, el
+        // prestamo de credencial deja de vigilarse y no lo nota nadie. Lo que
+        // **no** alerta, a proposito, es el hallazgo (decision 9): un indicio
+        // sobre dos personas concretas se revisa en la bandeja, no en un canal
+        // de guardia.
+        'DeteccionDePatronesConFallos',
+        'DeteccionDePatronesAusente',
     ]);
 
     expect($porNombre['DeteccionDeIncidenciasConFallos']['expr'] ?? '')
@@ -437,6 +446,75 @@ it('programa la deteccion de incidencias y su metrica, que es lo que las hace ex
         );
     }
 })->group('RF-PR-01', 'RL-11');
+
+it('vigila el silencio y los fallos de la deteccion de patrones, y solo eso', function (): void {
+    // Tarea 3.11, decisiones 8 y 9. La deteccion de patrones es la contrapartida
+    // de haber descartado la biometria (ADR-009): si su pasada deja de correr,
+    // el prestamo de credencial deja de vigilarse y no lo nota nadie, porque el
+    // silencio se lee igual que «no hay ningun patron».
+    //
+    // LO QUE NO ALERTA, A PROPOSITO, ES EL HALLAZGO. Un indicio sobre dos
+    // personas concretas se revisa en la bandeja por quien conoce el turno, no
+    // se enruta a un canal de guardia: por eso no hay ninguna regla sobre
+    // `anomalous_patterns_detected_total`, y esta prueba lo afirma para que
+    // anadirla sea una decision y no un descuido.
+    $porNombre = [];
+
+    foreach (AlertRules::inFile('infra/observability/prometheus/rules/incidents.yml') as $regla) {
+        $porNombre[$regla['alert'] ?? ''] = $regla;
+    }
+
+    expect($porNombre['DeteccionDePatronesConFallos']['expr'] ?? '')
+        ->toContain('pattern_detection_last_failures > 0');
+    expect($porNombre['DeteccionDePatronesConFallos']['labels']['destinatario'] ?? '')->toBe('it-cliente');
+    expect($porNombre['DeteccionDePatronesAusente']['expr'] ?? '')
+        ->toContain('pattern_detection_last_run_timestamp_seconds');
+    expect($porNombre['DeteccionDePatronesAusente']['labels']['destinatario'] ?? '')->toBe('it-cliente');
+
+    $sobreHallazgos = array_filter(
+        $porNombre,
+        static fn (array $regla): bool => str_contains((string) ($regla['expr'] ?? ''), 'anomalous_patterns_detected_total'),
+    );
+
+    expect($sobreHallazgos)->toBe([], 'El hallazgo de RF-PR-06 no alerta: se revisa en la bandeja (decision 9).');
+})->group('RF-PR-06', 'RN-16');
+
+it('programa la deteccion de patrones a su hora, sin solaparse y registrando su fallo', function (): void {
+    // Tarea 3.11, decision 6 y R5 de la revision. Las dos alertas de arriba
+    // —`DeteccionDePatronesAusente` y `ConFallos`— vigilan una pasada que nadie
+    // habia fijado aqui: sin esta prueba, quitar la linea del planificador
+    // apagaba la deteccion de RF-PR-06 y las dos alertas sonaban por una causa
+    // que nadie podria distinguir de un despliegue a medias.
+    $scheduler = backupFile('backend/routes/console.php');
+
+    expect($scheduler)
+        ->toContain("Schedule::command('attendance:detect-patterns')")
+        ->toMatch('/attendance:detect-patterns\'\)\s*\n\s*->dailyAt\(/');
+
+    $bloque = bloqueProgramado($scheduler, 'attendance:detect-patterns');
+
+    // A LAS 04:35 Y ENTRE LAS OTRAS DOS: detras de `attendance:detect-incidents`
+    // (04:30), que escribe en la misma bandeja, y delante de
+    // `reporting:compliance-metrics` (04:45), para que el cuadro de la manana ya
+    // cuente lo de esta noche.
+    $patronesAt = horaProgramada($scheduler, 'attendance:detect-patterns');
+    $incidenciasAt = horaProgramada($scheduler, 'attendance:detect-incidents');
+
+    expect($patronesAt)->toBe('04:35')
+        ->and($incidenciasAt < $patronesAt)->toBeTrue(
+            'La deteccion de incidencias ('.$incidenciasAt.') tiene que correr antes que la de patrones ('.$patronesAt.').'
+        );
+
+    // `withoutOverlapping()` esta por no duplicar el trabajo, no por correccion:
+    // repetir la pasada es seguro. `->onFailure()` es lo unico que convierte en
+    // localizable un comando que muere con `runInBackground()`.
+    expect(str_contains($bloque, '->withoutOverlapping()'))->toBeTrue(
+        'attendance:detect-patterns puede solaparse consigo misma y repetir el trabajo de una ventana de 30 dias.'
+    );
+    expect(str_contains($bloque, '->onFailure('))->toBeTrue(
+        'attendance:detect-patterns no registra su fallo: con runInBackground() nadie se entera de que murio.'
+    );
+})->group('RF-PR-06', 'RN-16');
 
 it('dirige la alerta de errores criticos nuevos al IT del cliente, con runbook', function (): void {
     // Doc 01 §9.3, fila «Errores nuevos de severidad critica en error_events |

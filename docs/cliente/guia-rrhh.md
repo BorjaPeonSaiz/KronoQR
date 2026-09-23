@@ -291,17 +291,17 @@ resolver solo. Se llena sola cada madrugada, al revisar el registro.
 | **Salida sin fichar** | Media | Describe un olvido de salida **ya cerrado a mano** | **No la abre nadie automáticamente.** Mientras el turno sigue abierto, lo que hay es «Turno abierto sin cerrar» |
 | **Sin pausa registrada** | Media | Un tramo continuo por encima del umbral del convenio | **Se abre solo si el hotel tiene activado el fichaje de pausa.** Sin él, el sistema no puede distinguir «no descansó» de «descansó y no lo fichó», y no avisa de ninguna |
 | **Fichaje fuera de orden** | Media | Llegó un fichaje que no cabe en el registro de esa persona: una **salida** con hora anterior a la entrada que ya estaba abierta, o una **entrada** que caería dentro o antes de un tramo ya cerrado —aunque el tramo sea de otra jornada, como después de un turno de noche— | Casi siempre, una tablet que estuvo sin red: su cola llegó con retraso y desordenada. **El fichaje queda guardado y señalado para revisión, y la jornada no cambia sola** (§4.4) |
-| **Patrón anómalo de uso de la credencial** | Alta | — | **Hoy no se abre ninguna.** El detector llega en una versión posterior |
+| **Patrón anómalo de uso de la credencial** | Alta | Dos tarjetas de dos personas distintas se pasan **en la misma tablet con segundos de diferencia varios días** (3 de serie), o la **misma tarjeta** se pasa en **dos tablets distintas** antes de lo que se tarda en ir de una a otra | Casi siempre, dos compañeros que entran juntos, o dos tablets demasiado cerca. **Es un indicio para que lo mire una persona, no una conclusión.** No cambia ningún fichaje y no lo ve nadie fuera de la bandeja (§4.5) |
 
 > **El filtro «Tipo» enseña los nueve, y cuántos se abren solos depende de un
-> ajuste.** Seis lo hacen siempre —descanso insuficiente, turno abierto,
-> jornada demasiado larga, jornada demasiado corta, desfase de reloj y fichaje
-> fuera de orden—, y **«Sin pausa registrada» se suma a ellos en cuanto el hotel
-> activa el fichaje de pausa** (Panel → «Ajustes operativos» → «Fichaje de
-> pausa»; lo explica
-> [`configuracion.md`](configuracion.md) §2.1). Los otros dos están en la lista
-> porque el sistema tiene que poder registrarlos sin cambiar nada cuando llegue
-> su momento. No es un fallo de la instalación.
+> ajuste.** Siete lo hacen siempre —descanso insuficiente, turno abierto,
+> jornada demasiado larga, jornada demasiado corta, desfase de reloj, fichaje
+> fuera de orden y patrón anómalo de uso de la credencial—, y **«Sin pausa
+> registrada» se suma a ellos en cuanto el hotel activa el fichaje de pausa**
+> (Panel → «Ajustes operativos» → «Fichaje de pausa»; lo explica
+> [`configuracion.md`](configuracion.md) §2.1). «Salida sin fichar» está en la
+> lista porque el sistema tiene que poder registrarla sin cambiar nada cuando
+> llegue su momento. No es un fallo de la instalación.
 >
 > **Activar el fichaje de pausa no llena la bandeja de golpe.** La revisión
 > empieza a abrir «Sin pausa registrada» en su pasada siguiente y solo sobre los
@@ -458,6 +458,70 @@ la fecha. El procedimiento es
 > resuelven igual que las del día: ábrelas, compara y corrige. Cuando las
 > tablets terminen de vaciarse, este tipo vuelve a aparecer solo de vez en
 > cuando.
+
+### 4.5 «Patrón anómalo de uso de la credencial»: qué verás y qué hacer
+
+Es la única incidencia de la bandeja que **habla de dos personas a la vez**, y
+por eso merece un apartado. La abre una revisión propia, cada madrugada, sobre
+los fichajes hechos en las tablets durante los últimos 30 días. Hay dos
+variantes, y la ventana **«Cerrar incidencia»** te dice cuál es y te enseña lo
+que se observó:
+
+| Variante | Qué se observó | Qué te enseña la pantalla |
+| --- | --- | --- |
+| **Coincidencia en la misma tablet** | Dos personas distintas pasaron su tarjeta o su PIN en **la misma tablet con menos de 10 segundos de diferencia** (ajustable), y eso ocurrió **varios días** (3 de serie; se cuenta como mucho un día aunque coincidieran dos veces la misma mañana) | La tablet; **la otra persona**, con un enlace a su bandeja, y «y N personas más» si hay varias; **cuántos días hubo coincidencia frente a los que hacen falta**; la ventana de segundos aplicada; y cuatro datos en lugar de una lista: la **primera** y la **última** coincidencia, el **hueco del último día** y el **hueco más pequeño** de toda la serie. Ese último es el que importa: 9 segundos todos los días es una cola; 1 segundo un día es una pregunta |
+| **Secuencia imposible entre dos tablets** | La **misma tarjeta** (o PIN) se pasó en **dos tablets distintas** con menos tiempo del que se tarda en ir de una a otra (120 segundos de serie, ajustable). Basta una vez. Cuenta también la segunda pasada que la tablet no aceptó por venir demasiado seguida de la primera. **No se mira** ningún fichaje cuya hora esté en duda porque el reloj de esa tablet iba desviado | Las dos tablets, el momento de cada fichaje **con segundos**, el hueco entre ambos y el tránsito mínimo que se aplicó |
+
+**En la coincidencia hay una incidencia por persona**, cada una en la bandeja
+del responsable de **su** departamento, y cada una nombra a la persona con la
+que más coincide y dice si hay más. Si son de departamentos distintos, cada
+responsable ve la suya: hablad entre vosotros antes de hablar con nadie más,
+y reconstruid el grupo entre todos, no desde una sola incidencia.
+
+**Y no vuelve cada noche.** Mientras tengas una de estas abierta sobre una
+persona, no se abre otra sobre ella. Cuando la cierres, harán falta **3 días
+nuevos** con coincidencia (los de después del cierre) para que vuelva a
+aparecer: si el patrón era «vienen juntos en coche» y sigue, la volverás a ver
+dentro de unos días con datos nuevos, y la cerrarás igual.
+
+**Lo que esta incidencia NO dice.** No dice quién prestó nada a quién, ni que
+nadie haya prestado nada. Dos compañeros que llegan en el mismo coche y entran
+juntos producen **exactamente** el mismo indicio todos los días, y dos tablets
+en la misma puerta producen secuencias «imposibles» que son perfectamente
+posibles. El sistema no puede distinguirlo desde la tablet; tú sí, porque
+tienes el cuadrante y al jefe de turno.
+
+**Lo que el sistema no hace, y no va a hacer:** no anula ni marca ningún
+fichaje, no cambia ninguna hora, no sanciona, no bloquea ninguna tarjeta y no
+avisa a nadie fuera de la bandeja. Pone el indicio delante de una persona y se
+queda ahí. Es, a propósito, lo que hay en lugar de una máquina que decida
+quién pasó la tarjeta.
+
+**Qué hacer, en este orden:**
+
+1. **Cuadrante.** ¿Las dos personas tenían el mismo turno esos días? Si sí, la
+   coincidencia es lo esperable.
+2. **Jefe de turno.** ¿La persona estaba en su puesto esos días? Si estaba, la
+   tarjeta la pasó ella.
+3. **En la secuencia imposible, mira primero las tablets.** Si de verdad se va
+   de una a otra en menos de lo que marca el ajuste, el problema es el ajuste:
+   pídele a IT que lo baje en Ajustes operativos
+   ([`configuracion.md`](configuracion.md) §2.1) y cierra la incidencia
+   diciendo eso.
+4. **Solo si después de eso queda algo que aclarar**, se le pregunta a la
+   persona, en abierto y describiendo lo observado («estos días tu tarjeta y la
+   de X se pasaron con segundos de diferencia; ¿entráis juntos?»). Quien
+   pregunta es la empresa según su procedimiento —tú, o RRHH—, **nunca «el
+   sistema»**. Y nada se decide a partir de la incidencia sola.
+5. **Cierra la incidencia** (§4.3), casi siempre como «Revisada: no había nada
+   que corregir». **La nota describe lo que contrastaste, no lo que
+   concluiste sobre nadie**: «mismo turno de mañana según cuadrante, entran
+   juntas desde el aparcamiento, confirmado con jefa de sala» sirve dentro de
+   dos años; un calificativo no. Esa nota la puede leer la propia persona si
+   pide acceso a sus datos.
+
+El procedimiento completo, con lo que se puede preguntar y lo que no, está en
+[`../runbooks/patron-anomalo-credencial.md`](../runbooks/patron-anomalo-credencial.md).
 
 ---
 

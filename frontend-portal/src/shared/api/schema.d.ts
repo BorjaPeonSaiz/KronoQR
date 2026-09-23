@@ -6273,6 +6273,20 @@ export interface components {
          *     porque activarla en una plantilla que no ficha la pausa abriria
          *     incidencias contra gente que descanso sin fichar.
          *
+         *     `ATTENDANCE_PATTERN_WINDOW_SECONDS` y `ATTENDANCE_PATTERN_MIN_REPEATS`
+         *     (tarea 3.11, RF-PR-06) son las dos que faltaban para que la **deteccion
+         *     de patrones anomalos de uso de credencial** tenga sus tres umbrales fuera
+         *     del codigo; el tercero es `ATTENDANCE_MIN_TRANSIT_SECONDS` (RN-16), que
+         *     existia desde la 5.1 sin que lo consumiera nadie. La primera es la
+         *     separacion por debajo de la cual dos fichajes de personas distintas en el
+         *     **mismo quiosco** cuentan como una coincidencia (10 s de serie; cero la
+         *     desactiva). La segunda son los **dias** con coincidencia que tiene que
+         *     acumular un par de personas antes de abrir la incidencia (3 de serie;
+         *     nunca cero: para apagar el hallazgo se pone la ventana a cero). Las dos
+         *     son `compliance_review`: cambian que se pone en la bandeja para revision
+         *     humana y **no mueven ni un minuto del registro** — la deteccion nunca
+         *     anula ni marca un fichaje (RF-PR-06, reglas duras 5 y 19).
+         *
          *     Las **seis `PAYROLL_EXPORT_*`** (tarea 3.9, RF-IN-07) gobiernan el fichero
          *     de `GET /api/v1/reports/payroll-export` y solo ese fichero: ninguna mueve
          *     un minuto ni abre una incidencia, y por eso las seis son `presentation`.
@@ -6306,7 +6320,7 @@ export interface components {
          *     tiene separador de campos.
          * @enum {string}
          */
-        SettingKey: "ATTENDANCE_MAX_SHIFT_HOURS" | "ATTENDANCE_DEBOUNCE_SECONDS" | "ATTENDANCE_MAX_CLOCK_SKEW_MINUTES" | "ATTENDANCE_MIN_TRANSIT_SECONDS" | "ATTENDANCE_BREAK_CLOCKING" | "BRANDING_APP_NAME" | "BRANDING_LOGO_PATH" | "BRANDING_ACCENT_COLOR" | "LOCALE_DEFAULT" | "LOCALE_AVAILABLE" | "KIOSK_SERVICE_CODE" | "PAYROLL_EXPORT_COLUMNS" | "PAYROLL_EXPORT_DELIMITER" | "PAYROLL_EXPORT_HOURS_FORMAT" | "PAYROLL_EXPORT_DATE_FORMAT" | "PAYROLL_EXPORT_ENCODING" | "PAYROLL_EXPORT_HEADER_ROW";
+        SettingKey: "ATTENDANCE_MAX_SHIFT_HOURS" | "ATTENDANCE_DEBOUNCE_SECONDS" | "ATTENDANCE_MAX_CLOCK_SKEW_MINUTES" | "ATTENDANCE_MIN_TRANSIT_SECONDS" | "ATTENDANCE_PATTERN_WINDOW_SECONDS" | "ATTENDANCE_PATTERN_MIN_REPEATS" | "ATTENDANCE_BREAK_CLOCKING" | "BRANDING_APP_NAME" | "BRANDING_LOGO_PATH" | "BRANDING_ACCENT_COLOR" | "LOCALE_DEFAULT" | "LOCALE_AVAILABLE" | "KIOSK_SERVICE_CODE" | "PAYROLL_EXPORT_COLUMNS" | "PAYROLL_EXPORT_DELIMITER" | "PAYROLL_EXPORT_HOURS_FORMAT" | "PAYROLL_EXPORT_DATE_FORMAT" | "PAYROLL_EXPORT_ENCODING" | "PAYROLL_EXPORT_HEADER_ROW";
         /**
          * SettingValue
          * @description El valor de una clave. `installation_settings.value` es `JSONB` porque el
@@ -8019,6 +8033,24 @@ export interface components {
          *     recibir los suyos. Lo que se admite es un valor **escalar** y nada mas —
          *     ni objetos ni listas—, de modo que no hay donde alojar una estructura con
          *     un nombre dentro.
+         *
+         *     La incidencia `anomalous_pattern` (RF-PR-06, RN-16, tarea 3.11) lleva
+         *     ademas `pattern` —`kiosk_coincidence` o `impossible_sequence`—, el
+         *     quiosco o quioscos implicados (`device_id`/`device_name`,
+         *     `from_device_*`/`to_device_*`), los umbrales aplicados
+         *     (`window_seconds`, `min_repeats`, `transit_seconds`) y los momentos que
+         *     la sostienen. **`device_name` es el rotulo de una tablet, no una
+         *     persona**, y viaja recortado a los 64 caracteres de este esquema.
+         *
+         *     **Hay una incidencia por persona, no por pareja.** La contraparte que
+         *     mejor describe el indicio viaja como `counterpart_employee_uuid` —la de
+         *     mas dias con coincidencia— y `counterpart_count` dice con cuantas
+         *     personas distintas se alcanzo el umbral: con `counterpart_count > 1` hay
+         *     mas gente implicada, y el grupo entero se reconstruye mirando las
+         *     incidencias de sus miembros. El **nombre** de la contraparte lo resuelve
+         *     el panel con su directorio y **nunca** entra en el contexto, que se
+         *     exporta entero (RL-11) y no se entrega en una solicitud del art. 15
+         *     ajena a esa persona.
          * @example {
          *       "rest_minutes": 420,
          *       "threshold_minutes": 720
@@ -8027,6 +8059,20 @@ export interface components {
          *       "scan_id": "0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90",
          *       "occurred_at": "2026-03-14T13:50:00Z",
          *       "scans": 2
+         *     }
+         * @example {
+         *       "pattern": "kiosk_coincidence",
+         *       "device_id": 3,
+         *       "device_name": "Recepcion",
+         *       "counterpart_employee_uuid": "0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90",
+         *       "counterpart_count": 1,
+         *       "coincidence_days": 5,
+         *       "window_seconds": 10,
+         *       "min_repeats": 3,
+         *       "first_coincidence_at": "2026-03-10T05:00:00.000000Z",
+         *       "last_coincidence_at": "2026-03-14T05:02:00.000000Z",
+         *       "last_gap_seconds": 4,
+         *       "min_gap_seconds": 3
          *     }
          */
         IncidentContext: {

@@ -19,7 +19,9 @@ use InvalidArgumentException;
  * doc 02 —`ATTENDANCE_MAX_SHIFT_HOURS`, `ATTENDANCE_DEBOUNCE_SECONDS`,
  * `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES`, `ATTENDANCE_MIN_TRANSIT_SECONDS`— se
  * siembran en la tarea 1.3 y se editan desde el panel en la 5.1;
- * `ATTENDANCE_BREAK_CLOCKING` se anade en la 3.5.
+ * `ATTENDANCE_BREAK_CLOCKING` se anade en la 3.5, y
+ * `ATTENDANCE_PATTERN_WINDOW_SECONDS` y `ATTENDANCE_PATTERN_MIN_REPEATS` en la
+ * 3.11.
  */
 final readonly class OperationalSettings
 {
@@ -32,6 +34,23 @@ final readonly class OperationalSettings
         public int $maximumClockSkewMinutes,
         /** RN-16: transito minimo creible entre dos quioscos del centro. */
         public int $minimumTransitSeconds,
+        /**
+         * RF-PR-06: separacion por debajo de la cual dos fichajes de personas
+         * distintas en el mismo quiosco cuentan como una coincidencia
+         * (`ATTENDANCE_PATTERN_WINDOW_SECONDS`, tarea 3.11).
+         *
+         * Cero la desactiva, como el transito minimo y por lo mismo: es la forma
+         * de decir «esta comprobacion no aplica en mi centro».
+         */
+        public int $patternWindowSeconds,
+        /**
+         * RF-PR-06: dias con coincidencia que acumula un par de personas antes
+         * de que se abra la incidencia (`ATTENDANCE_PATTERN_MIN_REPEATS`).
+         *
+         * Al menos uno. Cero no significa nada: para apagar el hallazgo se pone
+         * la ventana a cero.
+         */
+        public int $patternMinRepeats,
         /**
          * RF-AT-12: si el quiosco ofrece fichar la pausa en esta instalacion
          * (`ATTENDANCE_BREAK_CLOCKING`, ADR-024).
@@ -58,6 +77,8 @@ final readonly class OperationalSettings
         $this->notNegative($debounceSeconds, 'la ventana anti-rebote (RF-AT-06)');
         $this->positive($maximumClockSkewMinutes, 'la tolerancia de desfase de reloj (RF-AT-10)');
         $this->notNegative($minimumTransitSeconds, 'el transito minimo entre quioscos (RN-16)');
+        $this->notNegative($patternWindowSeconds, 'la ventana de coincidencia en quiosco (RF-PR-06)');
+        $this->positive($patternMinRepeats, 'los dias con coincidencia que abren incidencia (RF-PR-06)');
     }
 
     private function positive(int $value, string $what): void

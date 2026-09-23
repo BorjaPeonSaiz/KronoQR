@@ -117,10 +117,27 @@ your entire workforce every day, so the question has to be asked.
 **With this product, the usual answer is that it is not mandatory, but it is
 advisable.** The factors that trigger high risk are absent: there is no
 biometrics (ADR-009: it is not a disabled option, it does not exist), no
-geolocation of individuals, no profiling or automated decisions, and the data
-does not leave your infrastructure — with the sole exception of the incident
-email described above. What remains is the minimum data — who clocks in, when
-and on which device — processed under the legal basis of art. 6.1.c.
+geolocation of individuals, no automated decisions with effects on anybody,
+and the data does not leave your infrastructure — with the sole exception of
+the incident email described above. What remains is the minimum data — who
+clocks in, when and on which device — processed under the legal basis of art.
+6.1.c.
+
+**One processing operation has to go into that analysis by name: the
+automatic detection of credential usage patterns.** Every night the system
+reviews the tablet clockings of the last 30 days and opens an incident when two
+people clock in at the same tablet seconds apart on several days, or when the
+same card is scanned at two tablets in less time than it takes to walk from one
+to the other ([`hr-guide.md`](hr-guide.md) §4.5). **It is not an automated
+decision under art. 22 GDPR**: it produces no effect without human
+intervention — it cancels or flags no clocking, imposes no penalty, blocks no
+card and warns nobody outside the manager's inbox —; all it does is put a clue
+in front of a person, who reviews it under a written procedure that forbids
+treating it as a conclusion. **Whether or not it amounts to profiling within
+the meaning of art. 4.4 is for your legal advisers and your data protection
+officer to assess**, not for this document: describe it in the DPIA as it is —
+what it observes, with which thresholds, who reviews it, what it does not do —
+and record the conclusion.
 
 **What you do have to do**, and it is yours because you are the controller:
 
@@ -157,6 +174,17 @@ request).
   (arts. 13 and 14 GDPR). It is your communication, not the product's.
 - **Consult the workers' legal representatives** on the organisation and
   documentation of the record, as art. 34.9 itself requires.
+- **Inform them also of the detection of credential usage patterns, and of how
+  it is reviewed.** It is a monitoring system over work activity and falls
+  within what art. 20.3 of the Workers' Statute and arts. 87 to 91 LOPDGDD
+  require you to communicate beforehand to the staff and their
+  representatives: what it observes (coincidences at the same tablet,
+  impossible sequences between two), with which thresholds, that it opens an
+  incident the department manager reviews, that it cancels or penalises nothing
+  on its own, and which procedure that review follows
+  ([`hr-guide.md`](hr-guide.md) §4.5). If you later change the thresholds to
+  tighten it ([`configuration.md`](configuration.md) §2.1), that is a change to
+  that system and is communicated the same way.
 - **Give access to their own record**: the employee portal exists for that
   purpose (employee code and PIN, ADR-015). That it exists does not replace
   informing people that it exists.

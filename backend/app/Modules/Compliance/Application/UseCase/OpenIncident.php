@@ -14,6 +14,7 @@ use App\Modules\Compliance\Domain\ValueObject\AuditActor;
 use App\Modules\Compliance\Domain\ValueObject\AuditPayload;
 use App\Modules\Compliance\Domain\ValueObject\AuditSubject;
 use App\Modules\Compliance\Domain\ValueObject\IncidentType;
+use App\Modules\Shared\Domain\Exception\ConflictingFinding;
 use Illuminate\Database\ConnectionInterface;
 
 /**
@@ -29,12 +30,28 @@ use Illuminate\Database\ConnectionInterface;
  *
  * ## La idempotencia la resuelve el esquema
  *
- * No hay ningun `SELECT` previo preguntando «¿ya existe?». Lo decide el indice
- * unico parcial de `incidents` —mismo empleado, misma jornada, mismo tipo, mismo
- * tramo, y solo entre las abiertas—, porque un `SELECT` seguido de un `INSERT`
+ * No hay ningun `SELECT` previo preguntando «¿ya existe?». Lo decide la
+ * restriccion `one_incident_per_finding` de `incidents` —mismo empleado, misma
+ * jornada, mismo tipo, mismo tramo—, porque un `SELECT` seguido de un `INSERT`
  * tiene condicion de carrera con la ejecucion manual del comando mientras el
  * planificador corre. Cuando ya existia, **tampoco se escribe asiento**: no ha
  * pasado nada nuevo que auditar.
+ *
+ * **La restriccion NO es parcial, y esa propiedad es la que importa** (O-6 de la
+ * revision de la ficha 3.11). Alcanza **todos** los estados, no solo `open`: si
+ * solo mirase las abiertas, la incidencia que un responsable descarto ayer
+ * reviviria esta noche mientras su jornada siguiera en la ventana, y la bandeja
+ * se volveria imposible de vaciar. Aqui estuvo escrito «indice unico parcial»
+ * durante dos tareas; era falso y describia justo lo contrario de la garantia.
+ *
+ * ## Cuando el conflicto **no** es idempotencia
+ *
+ * Desde la ficha 3.11 el tipo dejo de describir el hallazgo entero: dos indicios
+ * distintos de `anomalous_pattern` de la misma persona y el mismo dia comparten
+ * cuadrupla. El adaptador los distingue y lanza
+ * {@see ConflictingFinding}, que este caso
+ * de uso **propaga sin tocar**: quien puede contarlo como fallo de la pasada y
+ * dejar la linea de log es quien la lanzo, no quien abre una incidencia suelta.
  *
  * ## Sin persona detras
  *

@@ -105,10 +105,24 @@ const employeeFilterName = computed(() => {
 })
 
 function clearEmployeeFilter(): void {
-  employeeUuidFilter.value = null
   void router.replace({ query: { ...route.query, employee: undefined } })
-  submitFilters()
 }
+
+// El enlace «con otra persona» de un `kiosk_coincidence` (RF-PR-06, tarea
+// 3.11, `incidentContext.ts`) navega a esta MISMA ruta con otro `?employee=`:
+// a diferencia del enlace desde el detalle de jornada -que llega de OTRA
+// ruta y por eso remonta el componente-, aqui Vue Router reutiliza la
+// instancia. Sin este `watch` el filtro se quedaria leyendo el uuid con el
+// que se abrio la pantalla la primera vez, y la URL cambiaria sin que la
+// bandeja se moviera. Tambien es lo que ahora reacciona cuando
+// `clearEmployeeFilter` quita el parametro.
+watch(
+  () => route.query['employee'],
+  (value) => {
+    employeeUuidFilter.value = typeof value === 'string' ? value : null
+    submitFilters()
+  },
+)
 
 watch(
   () => store.meta?.total,

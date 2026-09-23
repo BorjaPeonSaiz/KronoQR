@@ -128,6 +128,8 @@ it('ningun adaptador textfile escribe su propio fichero', function (): void {
     // no es.
     $adaptadores = [
         'app/Modules/Attendance/Infrastructure/Metrics/TextfileIncidentDetectionMetrics.php',
+        // TextfilePatternDetectionMetrics (tarea 3.11): `pattern_detection_last_run_timestamp_seconds` y `_last_failures`.
+        'app/Modules/Attendance/Infrastructure/Metrics/TextfilePatternDetectionMetrics.php',
         'app/Modules/Attendance/Infrastructure/Metrics/TextfileProjectionMetrics.php',
         'app/Modules/Compliance/Infrastructure/Metrics/TextfileAuditMetrics.php',
         'app/Modules/Compliance/Infrastructure/Metrics/TextfileIncidentMetrics.php',

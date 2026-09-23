@@ -132,33 +132,43 @@ it('conserva la jornada semanal, el inicio de semana y los festivos', function (
         ->and($policy->holidayCalendar)->toBe(['2026-01-06']);
 })->group('RF-PD-07');
 
-it('rechaza una configuracion operativa con un umbral que no puede ser cero', function (int $anomalous, int $debounce, int $skew, int $transit): void {
-    expect(fn (): OperationalSettings => new OperationalSettings($anomalous, $debounce, $skew, $transit, breakClockingEnabled: false))
+it('rechaza una configuracion operativa con un umbral que no puede ser cero', function (int $anomalous, int $debounce, int $skew, int $transit, int $window, int $repeats): void {
+    expect(fn (): OperationalSettings => new OperationalSettings($anomalous, $debounce, $skew, $transit, $window, $repeats, breakClockingEnabled: false))
         ->toThrow(InvalidArgumentException::class);
 })->with([
-    'sin duracion anomala de tramo' => [0, 60, 10, 120],
-    'sin tolerancia de desfase de reloj' => [720, 60, 0, 120],
-    'con anti-rebote negativo' => [720, -1, 10, 120],
-    'con transito negativo' => [720, 60, 10, -1],
+    'sin duracion anomala de tramo' => [0, 60, 10, 120, 10, 3],
+    'sin tolerancia de desfase de reloj' => [720, 60, 0, 120, 10, 3],
+    'con anti-rebote negativo' => [720, -1, 10, 120, 10, 3],
+    'con transito negativo' => [720, 60, 10, -1, 10, 3],
+    // RF-PR-06 (tarea 3.11). La ventana de coincidencia admite el cero —apaga
+    // el hallazgo— pero no un negativo; los dias con coincidencia no admiten el
+    // cero: «sistematico» con cero repeticiones no significa nada, y para apagar
+    // el hallazgo esta la ventana.
+    'con ventana de coincidencia negativa' => [720, 60, 10, 120, -1, 3],
+    'sin dias con coincidencia que exigir' => [720, 60, 10, 120, 10, 0],
 ])->group('RF-PD-01');
 
 it('admite apagar el anti-rebote y el transito minimo con un cero', function (): void {
     // Cero es legitimo en los dos que desactivan una comprobacion: un centro
     // puede querer el anti-rebote apagado, o dos quioscos contiguos donde el
     // transito real es de segundos.
-    $settings = new OperationalSettings(720, 0, 10, 0, breakClockingEnabled: false);
+    $settings = new OperationalSettings(720, 0, 10, 0, 0, 1, breakClockingEnabled: false);
 
     expect($settings->debounceSeconds)->toBe(0)
         ->and($settings->minimumTransitSeconds)->toBe(0)
+        // RF-PR-06: la tercera que admite el cero, y lo apaga igual que las
+        // otras dos (tarea 3.11).
+        ->and($settings->patternWindowSeconds)->toBe(0)
         ->and($settings->anomalousShiftMinutes)->toBe(720)
         ->and($settings->maximumClockSkewMinutes)->toBe(10);
 })->group('RF-AT-06');
 
 it('acepta un umbral operativo de exactamente una unidad', function (): void {
-    $settings = new OperationalSettings(1, 1, 1, 1, breakClockingEnabled: true);
+    $settings = new OperationalSettings(1, 1, 1, 1, 1, 1, breakClockingEnabled: true);
 
     expect($settings->anomalousShiftMinutes)->toBe(1)
-        ->and($settings->maximumClockSkewMinutes)->toBe(1);
+        ->and($settings->maximumClockSkewMinutes)->toBe(1)
+        ->and($settings->patternMinRepeats)->toBe(1);
 })->group('RF-PD-01');
 
 it('resuelve una credencial a un empleado y a ningun motivo de rechazo', function (): void {
@@ -264,7 +274,7 @@ it('transporta el fichaje de pausa sin suponer ningun valor', function (bool $en
     // la que ganaria en silencio el dia que el adaptador se olvidara de leer la
     // clave: el hotel activaria la pausa en el panel y el quiosco seguiria sin
     // ofrecerla.
-    $settings = new OperationalSettings(720, 60, 15, 120, breakClockingEnabled: $enabled);
+    $settings = new OperationalSettings(720, 60, 15, 120, 10, 3, breakClockingEnabled: $enabled);
 
     expect($settings->breakClockingEnabled)->toBe($enabled);
 })->with([

@@ -142,6 +142,33 @@ test(
   },
 )
 
+// --- Umbrales de patrones anomalos de credencial (RF-PR-06, tarea 3.11) ----
+
+test(
+  'cambiar la ventana de coincidencia y los dias minimos los guarda y persiste',
+  { tag: ['@RF-PD-01', '@RF-PR-06'] },
+  async ({ page }) => {
+    await stubManagementApi(page, { role: 'admin' })
+    await logInAsAdmin(page)
+
+    await page.goto('/settings')
+
+    await expect(page.getByTestId('pattern-window-seconds')).toHaveValue('10')
+    await expect(page.getByTestId('pattern-min-repeats')).toHaveValue('3')
+
+    await page.getByTestId('pattern-window-seconds').fill('15')
+    await page.getByTestId('pattern-min-repeats').fill('4')
+    await page.getByTestId('save').click()
+
+    await expect(page.getByTestId('saved')).toBeVisible()
+
+    // El cambio persiste tras recargar: lo guardo el servidor.
+    await page.reload()
+    await expect(page.getByTestId('pattern-window-seconds')).toHaveValue('15')
+    await expect(page.getByTestId('pattern-min-repeats')).toHaveValue('4')
+  },
+)
+
 // --- Codigo de servicio del quiosco (RF-KI-08, tarea 3.3) -------------------
 //
 // Abre la pantalla de diagnostico de la tablet (`frontend-kiosk`); aqui solo

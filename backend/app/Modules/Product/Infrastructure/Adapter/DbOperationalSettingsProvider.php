@@ -31,8 +31,8 @@ use App\Modules\Shared\Domain\ValueObject\OperationalSettings;
  * `GET /api/v1/settings`.
  *
  * **Y solo se toman las claves que se consumen.** Del conjunto resuelto salen
- * `ATTENDANCE_*` y nada mas —cinco desde la tarea 3.5, con
- * `ATTENDANCE_BREAK_CLOCKING`—: la marca y los idiomas no entran aqui ni pueden
+ * `ATTENDANCE_*` y nada mas —siete desde la tarea 3.11, con las dos de la
+ * deteccion de patrones—: la marca y los idiomas no entran aqui ni pueden
  * influir en lo que este adaptador devuelve.
  *
  * ## La cascada, ahora con dos escalones
@@ -98,6 +98,12 @@ final class DbOperationalSettingsProvider implements OperationalSettingsProvider
             debounceSeconds: $settings->integer(SettingKey::ATTENDANCE_DEBOUNCE_SECONDS),
             maximumClockSkewMinutes: $settings->integer(SettingKey::ATTENDANCE_MAX_CLOCK_SKEW_MINUTES),
             minimumTransitSeconds: $settings->integer(SettingKey::ATTENDANCE_MIN_TRANSIT_SECONDS),
+            // RF-PR-06 (tarea 3.11). Los dos que faltaban para que la deteccion
+            // de patrones tenga sus tres umbrales fuera del codigo: el tercero
+            // es el transito minimo de la linea de arriba, que existia desde la
+            // 5.1 sin que lo consumiera nadie.
+            patternWindowSeconds: $settings->integer(SettingKey::ATTENDANCE_PATTERN_WINDOW_SECONDS),
+            patternMinRepeats: $settings->integer(SettingKey::ATTENDANCE_PATTERN_MIN_REPEATS),
             // `choice` de dos valores y no un tipo booleano nuevo (decision 7 de
             // la ficha 3.5): la comparacion con `'enabled'` es la unica
             // traduccion, y esta en un solo sitio. Cualquier otra cosa —una fila

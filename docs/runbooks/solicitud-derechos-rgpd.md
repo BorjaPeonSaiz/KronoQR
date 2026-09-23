@@ -120,9 +120,45 @@ acceso completo —y el art. 15 lo es—, hay que sacarlas aparte:
   campo de la nota no le llega, y la respuesta saldría incompleta sin que nada
   lo advierta.
 
+**Las incidencias tampoco salen en esa exportación, y también hay que añadirlas
+a mano.** La bandeja guarda sobre cada persona lo que la detección encontró y
+lo que alguien escribió al cerrarlo, y el derecho de acceso alcanza a las dos
+cosas: el contexto (`context`) y la nota de resolución (`resolution_note`), con
+su estado, su desenlace y sus fechas. Se extraen así:
+
+```bash
+docker compose --env-file .env -f infra/compose.dev.yaml exec -T app php artisan tinker --execute="
+  DB::table('incidents')
+    ->join('employees', 'employees.id', '=', 'incidents.employee_id')
+    ->where('employees.uuid', '<employee_uuid>')
+    ->orderBy('incidents.work_date')
+    ->get(['incidents.type', 'incidents.work_date', 'incidents.severity', 'incidents.status',
+           'incidents.detected_at', 'incidents.resolved_at', 'incidents.context',
+           'incidents.resolution_note'])
+    ->each(fn(\$i) => print_r(\$i));
+"
+```
+
+- **En las de tipo `anomalous_pattern` hay un dato de un tercero, y no se
+  entrega.** El contexto de una coincidencia lleva `counterpart_employee_uuid`
+  —la otra persona— y `counterpart_count`. El art. 15.4 RGPD limita el acceso
+  donde afecte a los derechos de otros: **quita el identificador de la
+  contraparte antes de entregar, y no lo traduzcas a un nombre**. Se entrega el
+  resto —quiosco, días, momentos, huecos, umbrales, estado, nota— y, si hace
+  falta, se dice que existe una contraparte sin identificarla. La nota de
+  resolución se entrega tal como esté escrita: es la razón por la que el
+  runbook [`patron-anomalo-credencial.md`](patron-anomalo-credencial.md) §4
+  exige que describa lo contrastado y no califique a nadie.
+- **`context` no lleva nombres de nadie** (regla dura 21): quioscos por su
+  rótulo, momentos, números y, en el caso anterior, el identificador que se
+  retira. No hay nada más que revisar.
+- Como con las ausencias, hazlo con `admin` o `rrhh`: el
+  `responsable_departamento` solo alcanza su departamento y la respuesta
+  saldría incompleta.
+
 **Portabilidad**: el mismo CSV sirve. Es un formato estructurado, de uso común y
-lectura mecánica (art. 20.1 RGPD). Las ausencias se adjuntan en el mismo envío,
-en el formato en que las devuelva la consulta anterior.
+lectura mecánica (art. 20.1 RGPD). Las ausencias y las incidencias se adjuntan
+en el mismo envío, en el formato en que las devuelvan las consultas anteriores.
 
 ---
 

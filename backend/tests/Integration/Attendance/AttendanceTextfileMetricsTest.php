@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Modules\Attendance\Infrastructure\Metrics\TextfileIncidentDetectionMetrics;
+use App\Modules\Attendance\Infrastructure\Metrics\TextfilePatternDetectionMetrics;
 use App\Modules\Attendance\Infrastructure\Metrics\TextfileProjectionMetrics;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Str;
@@ -156,3 +157,39 @@ it('no escribe el fichero de la revision diaria con el colector apagado', functi
 
     expect(ficheroDeAttendance('kronoqr_incident_detection.prom'))->not->toBeFile();
 })->group('RF-PR-01');
+
+// --- Deteccion de patrones anomalos (RF-PR-06, tarea 3.11) ------------------
+
+it('publica las dos series de la deteccion de patrones en su propio fichero', function (): void {
+    // FICHERO PROPIO y no dos lineas mas en el de las incidencias: son dos
+    // pasadas distintas, a horas distintas, y una puede dejar de correr sin que
+    // la otra se entere. Compartir fichero haria que la segunda en escribir
+    // borrase la frescura de la primera.
+    (new TextfilePatternDetectionMetrics)->scanCompleted(
+        failures: 2,
+        at: new DateTimeImmutable('2026-03-15T04:35:00+00:00'),
+    );
+
+    $publicado = publicadoEnAttendance('kronoqr_pattern_detection.prom');
+
+    expect($publicado)
+        ->toContain('# TYPE pattern_detection_last_run_timestamp_seconds gauge')
+        ->toContain('pattern_detection_last_run_timestamp_seconds '.strtotime('2026-03-15T04:35:00+00:00'))
+        ->toContain('# TYPE pattern_detection_last_failures gauge')
+        ->toContain('pattern_detection_last_failures 2');
+
+    // Ni una etiqueta (regla dura 21): un indicio habla de dos personas
+    // concretas, y una serie por persona seria un registro de quien es
+    // sospechoso. Con `str_contains` y no con `->not->toContain()`: sobre una
+    // expectativa de `string|null` el analisis estatico no resuelve `->not`
+    // (PHPStan 9), y una asercion que no compila no protege nada.
+    expect(str_contains($publicado, 'pattern_detection_last_failures{'))->toBeFalse();
+})->group('RF-PR-06');
+
+it('no escribe el fichero de la deteccion de patrones con el colector apagado', function (): void {
+    Config::set('observability.metrics.enabled', false);
+
+    (new TextfilePatternDetectionMetrics)->scanCompleted(0, new DateTimeImmutable('2026-03-15T04:35:00+00:00'));
+
+    expect(ficheroDeAttendance('kronoqr_pattern_detection.prom'))->not->toBeFile();
+})->group('RF-PR-06');

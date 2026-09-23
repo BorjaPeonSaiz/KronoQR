@@ -29,6 +29,20 @@
 # vigila que el comando se siga ejecutando — sin ella, la alerta de turnos
 # abiertos de aqui arriba es CIEGA: si nadie detecta, nadie encuentra turnos
 # que avisar.
+#
+# DOS REGLAS MAS, DE LA TAREA 3.11 (deteccion de patrones anomalos de uso de
+# credencial, RF-PR-06/RN-16): `DeteccionDePatronesConFallos` y
+# `DeteccionDePatronesAusente` son las mismas dos hermanas de arriba, calcadas,
+# para `attendance:detect-patterns` (04:35 UTC, entre `detect-incidents` a las
+# 04:30 y `compliance:incident-metrics` a las 04:45). IMPORTANTE, decision 9 de
+# la ficha 3.11: los HALLAZGOS de patrones (`anomalous_patterns_detected_total`)
+# NO llevan alerta a proposito. Un indicio de posible prestamo de credencial
+# senala a dos personas concretas y se revisa en la bandeja de incidencias por
+# quien conoce el turno (el responsable del departamento), no se enruta a un
+# canal de guardia como si fuera una averia. Lo que SI es operacion, y por eso
+# SI alerta, es que la pasada de anoche no corra o deje algo sin abrir: eso es
+# indistinguible de "no hay ningun patron", y sin estas dos reglas nadie lo
+# notaria hasta que alguien fuera a buscar un indicio a mano y no lo encontrara.
 
 groups:
   - name: kronoqr-incidents
@@ -158,3 +172,62 @@ groups:
             ven nada nuevo aunque el problema exista: no distinguen «no hay
             ninguna incidencia» de «nadie la ha buscado todavia».
           runbook_url: docs/runbooks/turno-abierto-prolongado.md
+
+      #------------------------------------------------------------------------
+      # Tarea 3.11: `attendance:detect-patterns` (04:35 UTC) puede terminar con
+      # codigo de salida distinto de cero cuando un hallazgo de patron
+      # (kiosk_coincidence o impossible_sequence) no se pudo convertir en
+      # incidencia `anomalous_pattern`. `pattern_detection_last_failures` es el
+      # gauge de la ULTIMA pasada (mismo patron que
+      # `incident_detection_last_failures`), publicado por textfile
+      # (kronoqr_pattern_detection.prom).
+      #
+      # Esta alerta NO es sobre el hallazgo en si (eso no alerta, decision 9 de
+      # la ficha 3.11): es sobre que la deteccion de anoche se quedo algo sin
+      # abrir, que es operacion del IT del cliente, no revision de RRHH.
+      #------------------------------------------------------------------------
+      - alert: DeteccionDePatronesConFallos
+        expr: pattern_detection_last_failures > 0
+        for: 5m
+        labels:
+          severity: high
+          destinatario: it-cliente
+          component: incidents
+        annotations:
+          summary: "La deteccion de patrones anomalos de anoche dejo {{ $value }} hallazgo(s) sin convertir"
+          description: >-
+            attendance:detect-patterns encontro al menos un hallazgo
+            (kiosk_coincidence o impossible_sequence) que no pudo convertir en
+            incidencia anomalous_pattern. El fichaje no esta afectado; lo que
+            esta en riesgo es que un indicio de posible prestamo de
+            credencial no llegue a la bandeja para que el responsable lo
+            revise. El detalle esta en el log tecnico
+            (attendance.pattern_detection, con recuentos y nunca personas).
+          runbook_url: docs/runbooks/patron-anomalo-credencial.md
+
+      #------------------------------------------------------------------------
+      # El silencio de la deteccion de patrones, no del recuento: sin esta
+      # regla, que el planificador deje de ejecutar attendance:detect-patterns
+      # es indistinguible de "no hay ningun patron anomalo que revisar", y esa
+      # es exactamente la contrapartida que el descarte de la biometria
+      # (ADR-009, regla dura 20) necesita para seguir siendo defendible.
+      #------------------------------------------------------------------------
+      - alert: DeteccionDePatronesAusente
+        expr: >-
+          absent(pattern_detection_last_run_timestamp_seconds)
+          or (time() - pattern_detection_last_run_timestamp_seconds) > 93600
+        for: 30m
+        labels:
+          severity: warning
+          destinatario: it-cliente
+          component: incidents
+        annotations:
+          summary: "Hace mas de 26 h que no se ejecuta la deteccion de patrones anomalos"
+          description: >-
+            attendance:detect-patterns deberia correr a diario. Si no lo hace,
+            un posible prestamo de credencial (dos fichajes consecutivos en el
+            mismo quiosco, coincidencias sistematicas entre dos personas,
+            secuencias imposibles de RN-16) no llega a la bandeja aunque este
+            ocurriendo: no se distingue «no hay ningun patron» de «nadie lo ha
+            buscado todavia».
+          runbook_url: docs/runbooks/patron-anomalo-credencial.md

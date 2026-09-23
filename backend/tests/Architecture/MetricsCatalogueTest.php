@@ -82,6 +82,14 @@ function textfileSeries(): array
         'incident_detection_work_days_inspected',
         'incident_detection_last_findings',
         'incident_detection_last_failures',
+        // Attendance\Infrastructure\Metrics\TextfilePatternDetectionMetrics (tarea 3.11)
+        //
+        // Dos y no cuatro, al contrario que su hermana de arriba: el §8.2 declara
+        // las que sostienen una alerta —«¿corrio anoche?» y «¿dejo algo sin
+        // abrir?»—. Cuantos escaneos se miraron ya se ve en `scans_total` y los
+        // hallazgos en `anomalous_patterns_detected_total{pattern}`.
+        'pattern_detection_last_run_timestamp_seconds',
+        'pattern_detection_last_failures',
         // Compliance\Infrastructure\Metrics\TextfileAuditMetrics
         'audit_chain_verification_failures_total',
         'audit_chain_last_verification_timestamp_seconds',

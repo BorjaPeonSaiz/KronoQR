@@ -290,6 +290,44 @@ $detectIncidents = Schedule::command('attendance:detect-incidents')
 $detectIncidents->onFailure(LogScheduledCommandFailure::of('attendance:detect-incidents', $detectIncidents));
 
 /*
+ * Deteccion de patrones anomalos de uso de credencial (RF-PR-06, RN-16,
+ * tarea 3.11).
+ *
+ *   attendance:detect-patterns
+ *
+ * DIARIA, a las 04:35 UTC: **entre** `attendance:detect-incidents` (04:30) y
+ * `reporting:compliance-metrics` (04:45). Detras de la deteccion de incidencias
+ * porque las dos escriben en la misma bandeja y el aviso al responsable sale de
+ * la segunda que termine; delante de las metricas de cumplimiento para que el
+ * cuadro de la manana ya cuente lo de esta noche.
+ *
+ * ES NOCTURNA Y NO EN EL MOMENTO DEL FICHAJE, a proposito (fuera de alcance de
+ * la ficha): lo que la regla afirma —«estas dos personas coinciden
+ * sistematicamente»— solo se puede decir mirando treinta dias hacia atras, y
+ * decidirlo en el quiosco pondria una consulta de ese tamano en el camino de
+ * fichaje, que es el minuto mas caro del dia.
+ *
+ * NO BLOQUEA, NO ANULA Y NO SANCIONA (reglas duras 5, 19 y 20): abre incidencias
+ * `anomalous_pattern` con los numeros del indicio para que una persona las
+ * revise con el runbook `patron-anomalo-credencial.md` delante. Repetirla es
+ * seguro —la idempotencia la garantiza `one_incident_per_finding`—, asi que
+ * `withoutOverlapping` esta por no duplicar el trabajo, no por correccion.
+ *
+ * `onFailure()` deja el codigo de salida en el log (ver la cabecera del
+ * fichero): con `runInBackground()`, Laravel ejecuta ese callback desde
+ * `schedule:finish`. Las alertas las disparan `pattern_detection_last_failures`
+ * y `pattern_detection_last_run_timestamp_seconds`, que delata que la pasada
+ * dejo de ejecutarse. **El HALLAZGO no alerta** (decision 9 de la ficha): un
+ * indicio sobre dos personas concretas se revisa en la bandeja por quien conoce
+ * el turno, no se enruta a un canal de guardia.
+ */
+$detectPatterns = Schedule::command('attendance:detect-patterns')
+    ->dailyAt('04:35')
+    ->withoutOverlapping()
+    ->runInBackground();
+$detectPatterns->onFailure(LogScheduledCommandFailure::of('attendance:detect-patterns', $detectPatterns));
+
+/*
  * Metricas de la vista de cumplimiento (doc 02 §8.2, RF-PA-06, tarea 3.4).
  *
  *   reporting:compliance-metrics

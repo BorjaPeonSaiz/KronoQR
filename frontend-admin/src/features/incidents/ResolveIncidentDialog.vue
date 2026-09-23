@@ -18,6 +18,7 @@ import { formatInstant } from '@kronoqr/web-kit/datetime'
 import { isApiError } from '@kronoqr/web-kit/http'
 import { computed, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { RouterLink } from 'vue-router'
 import BaseDialog from '@/shared/ui/BaseDialog.vue'
 import { describeIncidentContext } from './incidentContext'
 import { useIncidentsStore } from './incidents.store'
@@ -130,7 +131,23 @@ function conflictMoment(): string {
     </p>
 
     <ul v-if="contextLines.length > 0" class="mt-3 list-disc pl-5 text-kq-text">
-      <li v-for="line of contextLines" :key="line.key">{{ line.text }}</li>
+      <li v-for="line of contextLines" :key="line.key">
+        <!-- RF-PR-06: la linea que nombra a la otra persona de una
+             `kiosk_coincidence` es un enlace al filtro por empleado de la
+             bandeja, no texto suelto (mismo destino que `WorkDayCard.vue`).
+             El nombre no viaja en el contexto (regla dura 21) ni se resuelve
+             aqui -ver `incidentContext.ts`-, asi que el enlace lleva el uuid
+             acortado, no un nombre. -->
+        <RouterLink
+          v-if="line.counterpartEmployeeUuid !== undefined"
+          :to="{ name: 'incidents', query: { employee: line.counterpartEmployeeUuid } }"
+          class="text-kq-primary-strong underline"
+          @click="close"
+        >
+          {{ line.text }}
+        </RouterLink>
+        <template v-else>{{ line.text }}</template>
+      </li>
     </ul>
 
     <template v-if="conflictClosed">

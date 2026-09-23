@@ -1077,7 +1077,32 @@
         "worked_minutes": "worked",
         "occurred_at": "clock time",
         "scan_id": "scan ID",
-        "scans": "out-of-order scans"
+        "scans": "out-of-order scans",
+        "device_name": "kiosk",
+        "first_coincidence_at": "first coincidence",
+        "last_coincidence_at": "last coincidence",
+        "from_device_name": "originating kiosk",
+        "to_device_name": "destination kiosk",
+        "first_occurred_at": "first clock event",
+        "second_occurred_at": "second clock event",
+        "first_scan_id": "first scan ID",
+        "second_scan_id": "second scan ID"
+      },
+      "patternLine": "Pattern: {pattern}",
+      "patterns": {
+        "kiosk_coincidence": "coincidence at the same kiosk",
+        "impossible_sequence": "impossible sequence across two kiosks"
+      },
+      "kioskCoincidence": {
+        "counterpartLink": "With another person ({uuid}) — view their incidents in the inbox",
+        "counterpartLinkOneMore": "With another person and one more ({uuid}) — view their incidents in the inbox",
+        "counterpartLinkManyMore": "With another person and {count} more ({uuid}) — view their incidents in the inbox",
+        "coincidenceDays": "Days with coincidence: {days} out of a minimum of {min}",
+        "windowSeconds": "Window applied: {seconds} s or less between the two clock events",
+        "gapRange": "Narrowest gap in the series: {min} s · latest day: {last} s"
+      },
+      "impossibleSequence": {
+        "gap": "Interval between the two clock events: {gap} s (minimum transit time: {min} s)"
       }
     },
     "employeeFilter": {
@@ -1324,6 +1349,8 @@
       "debounceSeconds": "Anti-bounce window (s)",
       "maxClockSkewMinutes": "Tolerated clock skew (min)",
       "minTransitSeconds": "Minimum transit between kiosks (s)",
+      "patternWindowSeconds": "Coincidence window between two people (s)",
+      "patternMinRepeats": "Days of coincidence before an incident",
       "kioskServiceCode": "Kiosk service code",
       "breakClocking": "Break clocking",
       "localeDefault": "Default language",
@@ -1340,6 +1367,8 @@
       "debounceSeconds": "Grace window: two scans of the same person inside it count as one. Set it to 0 to disable it. Accepted range: {minimum}–{maximum} seconds.",
       "maxClockSkewMinutes": "Skew tolerated between the tablet's clock and the server's before flagging the scan for review. It never rejects a scan, only flags it. Accepted range: {minimum}–{maximum} minutes.",
       "minTransitSeconds": "The minimum believable time to walk from one kiosk to another. Below it, an incident is opened. Set it to 0 if two tablets sit at the same door. Accepted range: {minimum}–{maximum} seconds.",
+      "patternWindowSeconds": "Seconds below which two consecutive clock events by two different people at the same kiosk count as a coincidence; 0 disables it. Accepted range: {minimum}–{maximum} seconds.",
+      "patternMinRepeats": "Distinct days with a coincidence between the same two people before an incident is opened. Accepted range: {minimum}–{maximum} days.",
       "kioskServiceCode": "It opens the tablet's diagnostics screen. Empty: the screen opens with no code. Digits only, 8 to 12.",
       "kioskServiceCodeRedacted": "Not visible with this kind of access: someone signing in as support cannot see or change the service code.",
       "breakClocking": "Enabled: the tablet shows the «Break» button and, from the next nightly review, a continuous stretch with no break (RN-12) starts opening incidents and counting in the compliance view. Disabled: the button disappears from the tablet and RN-12 is suspended again, without closing any incident already open.",
