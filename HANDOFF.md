@@ -213,8 +213,8 @@ máquina): `make quality` en verde; Unit 2292 (6,5 s en reposo, sobre el presupu
 `qa:traceability --check`, `docs:consistency` y `observability-check` en verde; matriz **3908 (Pest 3636, Playwright 266, k6 6)**; panel: lint, `vue-tsc`, 584
 unitarias, 150 E2E; quiosco: lint, `vue-tsc`, 538 unitarias, 90 E2E, bundle 107 KiB / 250; portal: lint y `vue-tsc`.
 
-**Siguiente acción:** commit único `feat(3.12): …`, push, CI manual y PR contra `main` con *merge commit*; después un
-`docs(handoff)` con los números. **Con migración** (`2026_09_23_100000_weekly_summary_deliveries.php`; sin variables nuevas de `.env`:
+**Siguiente acción:** el usuario integra la **PR #79** de la 3.12 (commit `e8074b3`; **CI manual 35887267293 en verde en todos los
+jobs**) con *merge commit* y borra la rama. **Con migración** (`2026_09_23_100000_weekly_summary_deliveries.php`; sin variables nuevas de `.env`:
 los tres ajustes viven en el panel): tras integrar, `git pull`, `make up` y `make migrate`; comprobar `php artisan migrate:status`,
 que el latido de un quiosco responde `update_window`, y `php artisan reporting:weekly-summary` a mano (con el ajuste apagado responde
 `disabled` y publica `kronoqr_weekly_summary.prom`). Después, la **3.13** «Cuadro de impacto y adopción» (RF-IN-08; `backend-laravel` +
