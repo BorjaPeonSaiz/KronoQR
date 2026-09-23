@@ -88,6 +88,16 @@ final class SettingsSurface
         'PAYROLL_EXPORT_DATE_FORMAT' => ['view' => 'OperationalSettingsView.vue', 'route' => '/settings'],
         'PAYROLL_EXPORT_ENCODING' => ['view' => 'OperationalSettingsView.vue', 'route' => '/settings'],
         'PAYROLL_EXPORT_HEADER_ROW' => ['view' => 'OperationalSettingsView.vue', 'route' => '/settings'],
+        // El resumen semanal por correo (RF-PR-05, tarea 3.12). Va con los
+        // umbrales operativos y no en una pantalla propia: es un interruptor que
+        // se toca una vez, al decidir si el hotel quiere el correo.
+        'WEEKLY_SUMMARY_EMAIL' => ['view' => 'OperationalSettingsView.vue', 'route' => '/settings'],
+        // La ventana de actualizacion de la tablet (RF-KI-07, tarea 3.12). Con
+        // los operativos y junto al codigo de servicio, que es la otra clave de
+        // operacion de los quioscos: las dos las toca quien administra las
+        // tablets, no quien lleva la marca.
+        'KIOSK_UPDATE_WINDOW' => ['view' => 'OperationalSettingsView.vue', 'route' => '/settings'],
+        'KIOSK_UPDATE_QUIET_MINUTES' => ['view' => 'OperationalSettingsView.vue', 'route' => '/settings'],
     ];
 
     /** La pantalla pactada para una clave, o cadena vacia si nadie la ha decidido. */

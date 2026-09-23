@@ -1340,7 +1340,9 @@
     "intro": "The thresholds that decide whether a shift entry is anomalous, which scans are discarded as bounce, and which clock or transit skew opens an incident; and the languages this installation offers. No legal threshold lives here: that is «Compliance profile».",
     "loading": "Loading the settings…",
     "attendanceHeading": "Attendance",
+    "weeklySummaryHeading": "Weekly summary",
     "diagnosticsHeading": "Diagnostics",
+    "kioskHeading": "Kiosk",
     "localesHeading": "Languages",
     "payrollHeading": "Payroll export",
     "payrollIntro": "The format of the file that «Payroll» exports (RF-IN-07): which columns it carries, in which order, with which delimiter, and how hours and dates are written. A customer with a different payroll tool changes this, not the product.",
@@ -1353,6 +1355,9 @@
       "patternMinRepeats": "Days of coincidence before an incident",
       "kioskServiceCode": "Kiosk service code",
       "breakClocking": "Break clocking",
+      "weeklySummaryEmail": "Weekly summary by email",
+      "kioskUpdateWindow": "Kiosk update window",
+      "kioskUpdateQuietMinutes": "Minutes with no scans before updating",
       "localeDefault": "Default language",
       "localeAvailable": "Available languages",
       "payrollColumns": "File columns",
@@ -1372,6 +1377,9 @@
       "kioskServiceCode": "It opens the tablet's diagnostics screen. Empty: the screen opens with no code. Digits only, 8 to 12.",
       "kioskServiceCodeRedacted": "Not visible with this kind of access: someone signing in as support cannot see or change the service code.",
       "breakClocking": "Enabled: the tablet shows the «Break» button and, from the next nightly review, a continuous stretch with no break (RN-12) starts opening incidents and counting in the compliance view. Disabled: the button disappears from the tablet and RN-12 is suspended again, without closing any incident already open.",
+      "weeklySummaryEmail": "Enabled: every Monday at 06:00 UTC, every active department manager with an email address receives the previous week for their own scope and nobody else's: hours worked, contracted and deviation, days with activity, absences and holidays. It requires the site's outgoing email to be configured and the feature to be included in the licence; without either, the send is skipped without an error.",
+      "kioskUpdateWindow": "Slot in which the tablet is allowed to install a new version. Outside it, it never updates, even if the version has been waiting for days; inside it, it only does so if the clocking queue is also empty and there has been no recent scan. Format HH:MM-HH:MM; it can cross midnight (for example 23:00-02:00).",
+      "kioskUpdateQuietMinutes": "Minutes without a single clocking that the tablet demands, on top of being inside the window and having an empty queue, before updating. It covers the shift that starts earlier than planned; 0 leaves only the other two conditions. Accepted range: {minimum}–{maximum} minutes.",
       "localeDefault": "The language the three applications and the documents are served in when nobody picks another. It has to be among the available languages.",
       "localeAvailable": "Languages this installation offers. At least one, and the default language always has to stay checked.",
       "payrollColumns": "One column per line, in the order they appear in the file. Each line is either the identifier as-is (for example «worked_hours») or the identifier followed by «=» and the header label you want (for example «worked_hours=Worked hours»). An identifier that is not in the catalogue below is rejected when saving.",
@@ -1383,6 +1391,10 @@
       "payrollHeaderRow": "With the header row disabled, the file starts straight with the data: some automated import tools reject it if it carries one."
     },
     "breakClockingOptions": {
+      "enabled": "Enabled",
+      "disabled": "Disabled"
+    },
+    "weeklySummaryEmailOptions": {
       "enabled": "Enabled",
       "disabled": "Disabled"
     },
@@ -1404,7 +1416,8 @@
       "notAWholeNumber": "Enter a whole number, with no decimals or letters.",
       "notAServiceCode": "Enter a code with 8 to 12 digits, or leave it empty to use none.",
       "empty": "Enter at least one column, one per line.",
-      "unknownColumn": "Some line uses an identifier that is not in the column catalogue."
+      "unknownColumn": "Some line uses an identifier that is not in the column catalogue.",
+      "invalidUpdateWindowFormat": "Enter the window in the format HH:MM-HH:MM, for example 03:00-05:00."
     },
     "affectsWorkedHoursWarning": "You are about to change a threshold that can change the minutes recorded. The change is audited with your name, the date, the previous value and the new one.",
     "audited": "Every changed key leaves its own audit trail entry (calculation_setting.changed) with the previous value, the new one, who changed it and when.",

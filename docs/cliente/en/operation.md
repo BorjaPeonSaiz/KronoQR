@@ -33,6 +33,7 @@ All of this runs on its own in the `scheduler` container. What appears in the
 | Hourly | Expired full data exports are purged: the ZIP is deleted, the record of it stays (§13) | Nothing |
 | 04:25 UTC, daily | Expired reports generated in the background are purged: the file is deleted, the record of it stays (§6 and §13) | Nothing |
 | Monday 05:40 UTC | **Telemetry**, only if you have enabled it (§13.4): the weekly report is sent to the destination you set | Nothing |
+| Monday 06:00 UTC | **Weekly summary by email** to each department manager, only if it is enabled in the panel (§6) | Nothing: it goes to the manager, not to IT |
 | Quarterly | — | **Restore drill** of the backup |
 | Quarterly | — | **Go through the hardening checklist** ([`hardening.md`](hardening.md), last section): network, certificate, accounts, tablets, backups off the server |
 
@@ -214,6 +215,60 @@ docker compose exec app php artisan reporting:purge-expired-exports
 | `REPORTING_EXPORT_TIMEOUT_SECONDS` | `600` | Limit on the deferred report's query. Raise it if a large export fails on time |
 | `REPORTING_EXPORT_STALE_AFTER` | `3600` | Seconds after which an interrupted generation is given up as failed and lets another one be requested. Do not lower it below what your largest report takes |
 | `REPORTING_EXPORT_DOWNLOAD_RATE_LIMIT` | `30` | Downloads per minute and per IP address on the download route, which is opened without a session |
+
+**The weekly summary by email** ([`hr-guide.md`](hr-guide.md) §6.5) is the
+other Monday pass: at **06:00 UTC**, and only if the panel has it set to
+`enabled` (`WEEKLY_SUMMARY_EMAIL`, [`configuration.md`](configuration.md)
+§2.1), every active department manager with an email address receives the
+previous week —Monday to Sunday, in the site's calendar— for their scope. **It
+has no parameter in the `.env`**: the switch is in the panel and the email goes
+out through the same SMTP of section 6.21 of that guide. Three things worth
+knowing before somebody asks why theirs has not arrived:
+
+- **The pass never fails for being unable to send, but it does say so.** It
+  leaves in the technical log (`reporting.weekly_summary`) the counts —sent,
+  skipped, failed— and the reason when it sends nothing: `disabled` (switched
+  off in the panel), `mailer_silent` (mail is on a transport that does not
+  send, `MAIL_MAILER=log` or `array`), `not_in_plan` (the licence does not
+  include `weekly_email_summary`; the rest of the product carries on as usual)
+  or `no_recipients` (no active manager with an email address). An SMTP failure
+  with one manager is logged as `reporting.weekly_summary_not_delivered`,
+  counts as failed, **does not abort the others** and makes the command exit
+  with code `1`; that week stays pending for them and **the following Monday
+  does not catch it up**: the pass only looks at the previous week. The retry
+  is the command below with `--week`.
+- **Repeating it does not resend, and the order of the send matters.** For
+  each manager: (1) a short transaction **claims** the week in the
+  `weekly_summary_deliveries` table (manager and week; the unique index closes
+  the race); (2) the report is composed and the email is sent **outside any
+  transaction**; (3) if it went out, another short transaction writes the audit
+  entry; (4) if it did not, the claim is withdrawn and the week is free for
+  `--week`. Consequences: a second run skips what was already delivered; two
+  simultaneous passes do not duplicate —the second one sees the claim and
+  skips—; and **a failed send leaves no audit entry**, on purpose: the entry
+  describes a disclosure that happened, and counting failed attempts would
+  inflate the scope of a breach. You can run it as many times as you like.
+- **Every email leaves an audit entry** (`personal_data.accessed`, dataset
+  `weekly_summary`) with the recipient, the week and the identifiers of the
+  people included, never their names: it is the trail that answers "whose data
+  went to whom"
+  ([`../../runbooks/brecha-de-seguridad.md`](../../runbooks/brecha-de-seguridad.md)
+  §4, in Spanish). The email itself does carry names, like the daily incident
+  notice, and the same cautions about the SMTP relay apply to it
+  ([`hardening.md`](hardening.md) §7).
+
+To run last week's without waiting for Monday, or to resend one specific week
+(in ISO format, year and week number):
+
+```bash
+docker compose exec app php artisan reporting:weekly-summary
+docker compose exec app php artisan reporting:weekly-summary --week=2026-W37
+```
+
+The pass writes two textfile series —when it last ran and how many emails it
+sent— to `BACKUP_PATH/metrics/kronoqr_weekly_summary.prom`, **with no alert on
+purpose**: it is an accessory, optional feature. If the pass itself blows up, it
+shows in the error history (§15) like any other scheduled command.
 
 ---
 
@@ -771,6 +826,50 @@ one to go to first.
 **A second run** on an already updated installation: exits `3`, "already on the
 version", and touches nothing.
 
+### 11.1 The tablet app: when it changes version
+
+The above is the server. The kiosk app is a separate piece: the tablet
+downloads it from the server, and **the new version does not enter the tablet
+at the moment the server is updated**. Every tablet checks **every hour**
+whether there is a new version, downloads it in the background and leaves it
+waiting; while it waits, it keeps clocking with the usual one. It only reloads
+with the new one when **three conditions hold at the same time**, and it checks
+them every minute:
+
+1. **The site's local time is inside the window** `KIOSK_UPDATE_WINDOW`
+   (`03:00-05:00` by default; it may cross midnight).
+2. **The queue of unsent clockings is empty.** An update with clockings still
+   waiting to be uploaded would be the only way to lose one, so it is not done:
+   when the tablet updates, it has nothing to lose, by construction. The queue
+   also lives in the tablet's durable storage, and a clocking is only removed
+   from it once the server has confirmed it.
+3. **There has been no clocking in the last `KIOSK_UPDATE_QUIET_MINUTES`
+   minutes** (10 by default). It is the guard against the shift that starts
+   earlier than planned: the tablet does not know your schedule, but it does
+   know whether somebody has just presented a card.
+
+If the window closes without all three holding, it waits for tomorrow's. That is
+what makes an update invisible to the workforce: **the tablet never updates
+with people in front of it**, and when it does, the queue is empty.
+
+**Where it is set.** Both keys are in Panel → **Operational settings**
+(`/settings`), administrator role ([`configuration.md`](configuration.md) §2.1),
+and they reach the tablets on the next heartbeat —in under a minute—; every
+tablet stores them, so they hold without network, and one that has not received
+any yet uses the defaults. **It is a single window for the whole installation**:
+there is no per-kiosk one, and no way to force a tablet's update from the panel.
+If you need it to change now, move the window temporarily to the current time:
+as soon as the quiet minutes pass with an empty queue, it updates on its own.
+
+**What the tablet shows.** The diagnostic screen (§16.5), next to the installed
+version, says "up to date" or "update pending: it will be applied in the
+03:00–05:00 window", with the window in force. It is what to look at when a
+tablet has spent days on an older version than the rest: if it says pending, the
+three conditions have never held in its window —usually because there is always
+some clocking in that slot, or because the queue never empties for lack of
+network—, and the fix is to move the window or repair the network, not to
+restart the tablet.
+
 ---
 
 ## 12. Diagnostics and support: `doctor`, the bundle and the grants
@@ -902,7 +1001,7 @@ time.
 | --- | --- | --- |
 | `diagnostics` (default) | Generate the **anonymised** bundle and consult errors | See anyone |
 | `read_only` | In addition, **read** working days, workforce and audit trail | Change anything |
-| `configuration` | In addition, **change** the operational settings and pair or unlink kiosks | See working days or the workforce, or touch the compliance profile (legal thresholds and retention years are yours), **or turn break clocking on or off** (`ATTENDANCE_BREAK_CLOCKING`: it decides what counts as an incident, just like the profile; any attempt gets a 403), **or see or change the kiosk service code**: it arrives empty and marked as redacted, and any attempt to change it gets a 403 (§16.5) |
+| `configuration` | In addition, **change** the operational settings and pair or unlink kiosks | See working days or the workforce, or touch the compliance profile (legal thresholds and retention years are yours), **or turn break clocking on or off** (`ATTENDANCE_BREAK_CLOCKING`: it decides what counts as an incident, just like the profile; any attempt gets a 403), **or turn the weekly email summary on or off** (`WEEKLY_SUMMARY_EMAIL`: it decides whether your staff's names and hours go out by email every Monday; also a 403), **or see or change the kiosk service code**: it arrives empty and marked as redacted, and any attempt to change it gets a 403 (§16.5) |
 
 With no scope can it activate licences, grant or revoke access, issue or revoke
 cards, correct clock-ins, generate payroll reports or the export for the
@@ -967,8 +1066,9 @@ A single ZIP file, `kronoqr-export-<versión>-<fecha UTC>.zip`, with
 **everything** in your installation in open formats: one CSV per table
 (workforce, contracts, absences with all their versions, cards, kiosks, shift
 entries with all their versions, corrections with author and reason, totals,
-incidents, scans, reports generated in the background, the complete
-audit trail with its hash chain, management accounts, support access grants),
+incidents, scans, reports generated in the background, weekly summaries sent
+by email, the complete audit trail with its hash chain, management accounts,
+support access grants),
 JSON for the configuration, the compliance profile and the licence, a
 `manifest.json` with the row count and the `sha256` fingerprint of each file,
 and a `README.md` that explains each file and each column in the language of
@@ -1346,7 +1446,7 @@ is refused with a 403 (§12.4). The code is yours, like the compliance profile.
 | **Queue** | Pending clock-ins, how old the oldest is, whether the tablet's storage is durable and whether it is syncing right now |
 | **Roster** | How old the local copy of the workforce is and how many entries it has |
 | **Token** | Whether the tablet is paired, when its credential expires, its device identifier and the kiosk name. **The token is never shown**: only eight characters of its fingerprint, so you can compare it with the panel |
-| **Version** | The version of the PWA and the state of its background update |
+| **Version** | The version of the PWA and the state of its update: "up to date" or "update pending: it will be applied in the HH:MM–HH:MM window", with the window in force (§11.1) |
 | **Battery and screen** | Level, whether it is charging and whether the screen is being kept awake |
 | **Errors to send** | How many errors the tablet has stored without being able to report |
 
@@ -1370,6 +1470,8 @@ looking at its diagnostic screen still shows as up to date.
 | `KIOSK_HEALTH_SILENT_AFTER_SECONDS` | `600` | From how many seconds without a heartbeat it is in **failure**. **It is the same number as the `QuioscoSinLatido` alert**: both are changed together, or neither is |
 | `KIOSK_HEALTH_BATTERY_LOW_PERCENT` | `15` | Level below which, **and while not charging**, the kiosk raises a battery warning |
 | `KIOSK_SERVICE_CODE` | *(empty)* | The 8 to 12 digit code for the diagnostic screen. **It is not a `.env` variable**: it is changed in the panel, under "Operational settings", and takes effect on the next heartbeat |
+| `KIOSK_UPDATE_WINDOW` | `03:00-05:00` | Slot, in site local time, in which the tablet **may** install a new version of the app (§11.1). **It is not a `.env` variable**: it is changed in the panel |
+| `KIOSK_UPDATE_QUIET_MINUTES` | `10` | Minutes without a single clocking that the tablet demands, on top of the window and the empty queue, before updating (§11.1). Same: in the panel |
 
 ---
 

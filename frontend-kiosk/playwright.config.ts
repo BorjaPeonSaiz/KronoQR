@@ -120,7 +120,15 @@ export default defineConfig({
   webServer: {
     // Los videos se generan antes de arrancar: son deterministas y no se
     // versionan (ver `scripts/generate-qr-fixture.mjs`).
-    command: `node scripts/generate-qr-fixture.mjs && npx vite preview --port ${PORT} --host 127.0.0.1 --strictPort`,
+    //
+    // `--mode test`, no el build por defecto (RF-KI-07, tarea 3.12, decision
+    // 16): el gancho de pruebas del guardian de actualizacion
+    // (`src/sw/testHooks.ts`, `window.__kronoqrTest`) se elimina del bundle
+    // cuando `mode === 'production'` (`vite.config.ts` -> `define`), y
+    // `update-window.spec.ts` lo necesita. Sigue siendo el BUILD real -mismo
+    // codigo, mismos trozos, minificado- y no `vite dev`: `--mode` no cambia
+    // eso, solo que constante queda inlineada.
+    command: `node scripts/generate-qr-fixture.mjs && npx vite build --mode test && npx vite preview --port ${PORT} --host 127.0.0.1 --strictPort`,
     url: BASE_URL,
     reuseExistingServer: process.env['CI'] !== 'true',
     timeout: 120_000,

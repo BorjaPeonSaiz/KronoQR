@@ -57,6 +57,9 @@ Se cambian solo las que hagan falta.
 | `ATTENDANCE_MIN_TRANSIT_SECONDS` | `120` | 0 – 3600 | Tiempo mínimo creíble para ir de un quiosco a otro. Por debajo, se abre incidencia. Ponlo a `0` si tienes dos tablets en la misma puerta; súbelo si hay dos edificios. |
 | `ATTENDANCE_PATTERN_WINDOW_SECONDS` | `10` | 0 – 300 | Segundos por debajo de los cuales dos fichajes de **dos personas distintas en el mismo quiosco** cuentan como una **coincidencia** (como mucho una por pareja y día). **No abre incidencia por sí sola**: hace falta que la misma pareja acumule los días de la clave siguiente. `0` desactiva este patrón. |
 | `ATTENDANCE_PATTERN_MIN_REPEATS` | `3` | 1 – 30 | Días con coincidencia que tiene que acumular la misma pareja, dentro de los últimos 30 días, para que se abra la incidencia «Patrón anómalo de uso de la credencial» —**una a cada persona**—. Súbelo si en tu centro es normal entrar en grupo por la misma puerta; bájalo a `1` solo si quieres ver cada pareja de escaneos seguidos. **La incidencia no anula ningún fichaje ni califica a nadie**: la revisa el responsable ([`guia-rrhh.md`](guia-rrhh.md) §4.5). |
+| `WEEKLY_SUMMARY_EMAIL` | `disabled` | `enabled` o `disabled` | Enciende el **resumen semanal por correo**: los lunes a las 06:00 UTC, cada responsable de departamento activo y con correo recibe la semana anterior **de su ámbito y de nadie más**. Exige salida de correo configurada (sección 6.21) y la funcionalidad `weekly_email_summary` en la licencia; sin cualquiera de las dos **el sistema funciona igual** y el envío se omite dejando constancia. Ver debajo de la tabla. |
+| `KIOSK_UPDATE_WINDOW` | `03:00-05:00` | `HH:MM-HH:MM`, hora local del centro | Franja en la que las tablets **tienen permiso** para instalar una versión nueva de la app del quiosco. Fuera de ella no se actualizan nunca, aunque la versión lleve días esperando. Puede cruzar la medianoche (`23:30-01:30`). Ver debajo de la tabla. |
+| `KIOSK_UPDATE_QUIET_MINUTES` | `10` | 0 – 120 | Minutos **sin ningún fichaje** que la tablet exige, además de estar dentro de la ventana y con la cola vacía, antes de actualizarse. Cubre el turno que empieza antes de lo previsto. `0` deja solo las otras dos condiciones. |
 
 > **Las tres últimas claves ajustan un sistema de control sobre la plantilla,
 > no un parámetro técnico.** La detección de patrones de uso de credencial forma
@@ -133,6 +136,51 @@ reinterpretan**: siguen siendo dos tramos con su pausa en medio.
 > que la segunda intención es la contraria de la primera y **no la descarta**:
 > se pierden esos veinte segundos, no la tarde entera. Lo que la ventana sigue
 > descartando es el doble escaneo accidental, que es para lo que existe.
+
+**`WEEKLY_SUMMARY_EMAIL` — a quién llega y qué lleva.** Se pone en Panel →
+**Ajustes operativos** (`/settings`) → «Resumen semanal por correo». Con
+`enabled`, cada lunes a las 06:00 UTC el sistema envía **un correo por cada
+responsable de departamento** con cuenta activa y dirección de correo, y cada
+uno recibe **solo su ámbito**: el de Cocina no ve a nadie de Recepción. RRHH y
+administración no lo reciben —tienen el panel entero, y un correo semanal con
+toda la plantilla sería una copia periódica del registro fuera del sistema—.
+Lleva la semana anterior, de lunes a domingo: una línea por persona con horas
+trabajadas, contratadas y desviación, días con actividad, ausencias y festivos;
+los totales; el número de incidencias abiertas; y dónde verlo entero («Panel →
+Informes, del <inicio> al <fin>»: una indicación, no un enlace). Qué significa cada columna está en
+[`guia-rrhh.md`](guia-rrhh.md) §6.5.
+
+- **Hace falta correo saliente** (sección 6.21) **y la funcionalidad
+  `weekly_email_summary` en el plan de la licencia** (sección 3 bis.4). Si falta
+  cualquiera de las dos, nada falla: la pasada del lunes termina bien, no envía
+  nada y lo deja anotado en el registro técnico con el motivo
+  ([`operacion.md`](operacion.md) §6). El fichaje, el panel y los informes no
+  dependen de este correo.
+- **Ese correo lleva nombres de tu plantilla y sale de tu servidor**, como el
+  aviso diario de incidencias: cada envío deja asiento en la auditoría con el
+  destinatario, la semana y los identificadores de las personas incluidas
+  —nunca sus nombres—. Vale lo mismo que para aquel: si tu relevo de correo es
+  de un tercero, es un encargado del tratamiento
+  ([`obligaciones-legales.md`](obligaciones-legales.md) §2).
+- **Es por instalación, no por departamento**: se enciende para todos los
+  responsables o para ninguno, y en esta versión no hay baja individual. El
+  cambio queda auditado como cualquier otro ajuste.
+
+**`KIOSK_UPDATE_WINDOW` y `KIOSK_UPDATE_QUIET_MINUTES` — cuándo cambia de versión
+la tablet.** La app del quiosco comprueba cada hora si hay una versión nueva en
+el servidor y, cuando la hay, **no la instala en el acto**: espera a que se
+cumplan **tres condiciones a la vez** —la hora local del centro está dentro de
+la ventana, la cola de fichajes sin enviar está vacía y no ha habido ningún
+fichaje en los últimos `KIOSK_UPDATE_QUIET_MINUTES` minutos— y solo entonces se
+recarga con la versión nueva, en unos segundos. Si la ventana se cierra antes de
+que se cumplan, espera a la siguiente. Los dos valores llegan a las tablets en
+el latido —en menos de un minuto, sin tocarlas— y cada tablet los guarda, así
+que valen aunque en ese momento no haya red; una tablet que aún no ha recibido
+ninguno usa los de serie. Pon la ventana en la franja más muerta de tu centro y
+**nunca sobre un cambio de turno**: la tablet no adivina tu horario, y una
+actualización con treinta personas en la puerta es exactamente lo que estas dos
+claves evitan. El detalle —y qué enseña la pantalla de diagnóstico mientras hay
+una versión esperando— está en [`operacion.md`](operacion.md) §11.1.
 
 ### 2.2 Marca
 
@@ -1426,9 +1474,9 @@ sudo docker compose exec app php artisan product:doctor
 > significa que quien tenga uno puede leer las copias, firmar tarjetas o abrir
 > los PIN sellados del otro.
 
-### 6.0 Las diecinueve claves que NO son variables de entorno
+### 6.0 Las veintidós claves que NO son variables de entorno
 
-Diecinueve propiedades de la instalación no viven en el `.env` sino en la tabla
+Veintidós propiedades de la instalación no viven en el `.env` sino en la tabla
 `installation_settings`, se editan **desde el panel** y surten efecto en la
 petición siguiente sin reiniciar nada:
 
@@ -1441,6 +1489,9 @@ petición siguiente sin reiniciar nada:
 | `ATTENDANCE_MIN_TRANSIT_SECONDS` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.1 |
 | `ATTENDANCE_PATTERN_WINDOW_SECONDS` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.1 |
 | `ATTENDANCE_PATTERN_MIN_REPEATS` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.1 |
+| `WEEKLY_SUMMARY_EMAIL` | Panel → **Ajustes operativos** (`/settings`) → «Resumen semanal por correo» | Sección 2.1 |
+| `KIOSK_UPDATE_WINDOW` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.1 |
+| `KIOSK_UPDATE_QUIET_MINUTES` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.1 |
 | `BRANDING_APP_NAME` | Panel → **Marca** (`/branding`) | Sección 2.2 |
 | `BRANDING_LOGO_PATH` | Panel → **Marca** (`/branding`) | Sección 2.2 |
 | `BRANDING_ACCENT_COLOR` | Panel → **Marca** (`/branding`) | Sección 2.2 |
@@ -1483,14 +1534,18 @@ queda auditado con tu nombre, la fecha y el valor anterior. Si no ves esas
 entradas en el menú, no es que falten: es que tu cuenta no es de
 administrador.
 
-**Manda la base de datos** (sección 1). Doce de las diecinueve —las de marca,
-las de idioma, el código de servicio y las seis de la salida a nómina— no
-existen como variable de entorno: las de marca y las de idioma se retiraron para
-que no hubiera dos sitios donde escribir el mismo dato; el código de servicio
-nunca la tuvo, porque un secreto en el `.env` es un secreto que acaba en una
-copia de seguridad sin cifrar; y las seis de la salida a nómina tampoco, porque
-el formato que pide un programa de nómina se ajusta a prueba y error el día de
-la implantación y no puede exigir reiniciar los contenedores en cada intento.
+**Manda la base de datos** (sección 1). Quince de las veintidós —las de marca,
+las de idioma, el código de servicio, las seis de la salida a nómina, el resumen
+semanal y las dos de la ventana de actualización del quiosco— no existen como
+variable de entorno: las de marca y las de idioma se retiraron para que no
+hubiera dos sitios donde escribir el mismo dato; el código de servicio nunca la
+tuvo, porque un secreto en el `.env` es un secreto que acaba en una copia de
+seguridad sin cifrar; las seis de la salida a nómina tampoco, porque el formato
+que pide un programa de nómina se ajusta a prueba y error el día de la
+implantación y no puede exigir reiniciar los contenedores en cada intento; y las
+tres últimas nacieron ya en el panel, porque son decisiones de operación del
+hotel —si sale un correo con nombres, y a qué hora puede reiniciarse una
+tablet— y no de despliegue.
 
 **Las cinco `ATTENDANCE_*` sí siguen apareciendo en `.env.example`, y conviene
 saber exactamente qué son:** una copia del valor de serie, escrita ahí para que

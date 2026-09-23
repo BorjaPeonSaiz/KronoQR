@@ -8,6 +8,7 @@ use App\Modules\Product\Application\UseCase\GetSettingsHandler;
 use App\Modules\Product\Domain\ValueObject\ResolvedSettings;
 use App\Modules\Product\Domain\ValueObject\SettingKey;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
+use App\Modules\Shared\Domain\ValueObject\KioskUpdateWindow;
 use App\Modules\Shared\Domain\ValueObject\OperationalSettings;
 
 /**
@@ -31,9 +32,12 @@ use App\Modules\Shared\Domain\ValueObject\OperationalSettings;
  * `GET /api/v1/settings`.
  *
  * **Y solo se toman las claves que se consumen.** Del conjunto resuelto salen
- * `ATTENDANCE_*` y nada mas —siete desde la tarea 3.11, con las dos de la
- * deteccion de patrones—: la marca y los idiomas no entran aqui ni pueden
- * influir en lo que este adaptador devuelve.
+ * `ATTENDANCE_*` y las dos `KIOSK_UPDATE_*` de la tarea 3.12 —nueve—: la marca,
+ * los idiomas y la salida a nomina no entran aqui ni pueden influir en lo que
+ * este adaptador devuelve. Las dos ultimas no las consume el servidor: viajan al
+ * quiosco por el latido (RF-KI-07) y quien decide con ellas es la tablet; entran
+ * por aqui porque el latido ya resuelve este objeto para llevarse el fichaje de
+ * pausa y la tolerancia de desfase.
  *
  * ## La cascada, ahora con dos escalones
  *
@@ -111,6 +115,15 @@ final class DbOperationalSettingsProvider implements OperationalSettingsProvider
             // RN-12 sigue suspendida y nadie recibe incidencias por una pausa
             // que su hotel no ficha.
             breakClockingEnabled: $settings->text(SettingKey::ATTENDANCE_BREAK_CLOCKING) === 'enabled',
+            // RF-KI-07 (tarea 3.12). Los dos que el servidor **no consume**: los
+            // lleva el latido a la tablet, que es quien decide con ellos. El
+            // parseo no puede fallar aqui —`ResolvedSettings` ya descarto la fila
+            // que no cumpla el patron de la clave y habra caido al valor de
+            // serie—, y esa es la unica razon por la que este adaptador, que
+            // corre en el camino de fichaje, puede construir un objeto de valor
+            // que lanza (regla dura 19).
+            kioskUpdateWindow: KioskUpdateWindow::fromRange($settings->text(SettingKey::KIOSK_UPDATE_WINDOW)),
+            kioskUpdateQuietMinutes: $settings->integer(SettingKey::KIOSK_UPDATE_QUIET_MINUTES),
         );
     }
 }

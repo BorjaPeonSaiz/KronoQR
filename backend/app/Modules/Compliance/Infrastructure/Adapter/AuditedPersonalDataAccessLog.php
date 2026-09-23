@@ -52,10 +52,16 @@ final readonly class AuditedPersonalDataAccessLog implements PersonalDataAccessL
             // aqui el centro seria confundir el sujeto del acceso con su alcance,
             // que ya viaja en el payload.
             subject: AuditSubject::of('personal_data'),
+            // EL CONTEXTO VA PRIMERO, y no es estilo: al reves, un `dataset` o
+            // un `record_count` que llegaran dentro del contexto pisaban a los
+            // dos parametros del puerto y el asiento describia otra divulgacion.
+            // Con este orden, las dos claves canonicas ganan siempre y la
+            // promesa del puerto —«el contexto describe el alcance, no lo que se
+            // divulgo»— es cierta tambien cuando alguien se equivoca.
             payload: AuditPayload::of([
+                ...$context,
                 'dataset' => $dataset,
                 'record_count' => $recordCount,
-                ...$context,
             ]),
             ip: $this->context->ip(),
             userAgent: $this->context->userAgent(),

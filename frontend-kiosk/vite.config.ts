@@ -32,7 +32,7 @@ const appVersion =
 // que se cayera el wifi, que es exactamente cuando el modo offline existe.
 const base = process.env['KRONOQR_BASE'] ?? '/'
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   base,
   plugins: [
     vue(),
@@ -142,6 +142,14 @@ export default defineConfig({
     __VUE_I18N_LEGACY_API__: 'false',
     __INTLIFY_PROD_DEVTOOLS__: 'false',
     __APP_VERSION__: JSON.stringify(appVersion),
+    // Gancho de pruebas del guardian de actualizacion (RF-KI-07, tarea 3.12,
+    // decision 16): `false` SOLO en `mode: 'production'` -el build real que
+    // se instala en la tablet (`npm run build`, sin `--mode`)-, para que
+    // `src/sw/testHooks.ts` quede como codigo muerto y el minificador lo
+    // elimine del todo. El E2E (`playwright.config.ts`) construye con
+    // `--mode test` a proposito, para que el gancho SI este presente sin
+    // tocar el build de produccion.
+    __KRONOQR_TEST_HOOKS__: JSON.stringify(mode !== 'production'),
   },
   build: {
     target: 'es2022',
@@ -158,4 +166,4 @@ export default defineConfig({
       '/api': { target: 'https://localhost', changeOrigin: true, secure: false },
     },
   },
-})
+}))

@@ -94,6 +94,15 @@ describe('pantalla de diagnostico — sin huella cacheada (decision 7)', () => {
 
     wrapper.unmount()
   })
+
+  it('la seccion de version enseña el estado de la actualizacion y la ventana vigente (RF-KI-07, tarea 3.12)', async () => {
+    const { wrapper } = await render()
+
+    expect(wrapper.get('[data-testid="diagnostics-update-status"]').text()).toBe('Al día.')
+    expect(wrapper.get('[data-testid="diagnostics-update-window"]').text()).toBe('03:00–05:00')
+
+    wrapper.unmount()
+  })
 })
 
 describe('pantalla de diagnostico — con huella cacheada (decision 6)', () => {

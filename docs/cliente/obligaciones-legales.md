@@ -59,15 +59,26 @@ de actividades de tratamiento (art. 30 RGPD):
 esto importa: nadie puede negarse a fichar, y tampoco hace falta pedir permiso
 para registrar la jornada.
 
-### Lo único que sale del servidor por su cuenta: el correo de incidencias
+### Lo que sale del servidor por su cuenta: dos correos
 
-Todo lo demás se queda en tu instalación. El sistema envía **cada noche** un
-resumen de las incidencias pendientes al **responsable de cada departamento**, y
-ese correo lleva **la fecha, el nombre de la persona y el tipo de incidencia** de
-cada línea. Nada más: ni horas concretas, ni datos de contrato, ni el registro
-horario completo.
+Todo lo demás se queda en tu instalación. Dos cosas salen por correo, y las dos
+van **al responsable de cada departamento** y **solo con su ámbito**:
 
-Tres consecuencias que son tuyas, no del fabricante:
+- **El aviso diario de incidencias.** Cada noche, un resumen de las incidencias
+  pendientes con **la fecha, el nombre de la persona y el tipo de incidencia**
+  de cada línea. Nada más: ni horas concretas, ni datos de contrato, ni el
+  registro horario completo. Viene activado, porque es la mitad de «se notifica
+  al responsable» de la detección de incidencias.
+- **El resumen semanal de horas.** Los lunes, y solo si lo activas —**viene
+  apagado**, y encenderlo es un cambio auditado
+  ([`configuracion.md`](configuracion.md) §2.1)—, una línea por persona con
+  **nombre, horas trabajadas, contratadas y desviación, días con actividad, y
+  el número de ausencias y de festivos** de la semana. Son recuentos: **nunca
+  el tipo de ausencia**, así que por aquí no sale ningún dato de salud. Como
+  mucho 50 líneas; el resto se lee en el panel. Ni RRHH ni administración lo
+  reciben: tienen el panel entero.
+
+Tres consecuencias que son tuyas, no del fabricante, y que valen para los dos:
 
 1. **Si el correo lo entrega un servidor de un tercero** —Microsoft 365, Google
    Workspace, el SMTP de tu proveedor de hosting—, ese tercero es un **encargado
@@ -79,13 +90,15 @@ Tres consecuencias que son tuyas, no del fabricante:
    soporta, que es lo que quieres. Dejarlo vacío negocia el cifrado «si se
    puede», y con un relevo que no lo ofrezca el correo viaja legible por la red.
 3. **Cada envío queda registrado** en el trail de auditoría, con quién lo recibió
-   y de qué personas iba. Es lo que te permite responder si un día hay que
+   y de qué personas iba —en el resumen semanal, una a una cuando el ámbito
+   tiene 50 personas o menos, y por recuento y departamento por encima—. Es lo que te permite responder si un día hay que
    reconstruir por dónde salieron unos datos.
 
 El aviso es una comodidad, no el registro: **ninguna incidencia se pierde ni
 cambia de estado porque el correo no salga**. Siguen todas en la bandeja del
 panel, que es donde se trabajan, y el resumen de la noche siguiente vuelve a
-incluirlas. Si decides no usar el canal de correo, coméntalo con quien te instale
+incluirlas. Con el resumen semanal pasa lo mismo: si no sale, el informe sigue
+en el panel y la semana se reenvía a mano. Si decides no usar el canal de correo, coméntalo con quien te instale
 el sistema: es una decisión de configuración de tu instalación.
 
 
@@ -177,6 +190,11 @@ entrega a petición un resumen de las medidas de seguridad del producto).
   ([`guia-rrhh.md`](guia-rrhh.md) §4.5). Si después cambias los umbrales para
   endurecerlo ([`configuracion.md`](configuracion.md) §2.1), es un cambio de
   ese sistema y se comunica igual.
+- **Informa de que su responsable recibe cada semana sus horas por correo**,
+  si activas el resumen semanal. Es información sobre los destinatarios de los
+  datos (art. 13 RGPD), no un sistema de control nuevo —el responsable ya ve
+  esas mismas horas en el panel—: basta con incluirlo en la información que
+  das a la plantilla, sin más trámite que ese.
 - **Da acceso al propio registro**: el portal del empleado existe para eso
   (código de empleado y PIN, ADR-015). Que exista no sustituye a informar de que
   existe.
@@ -202,6 +220,14 @@ Política por tipo de dato, que es la que aplica el sistema:
 | Copias de seguridad | 30 días de serie | Tu instalación (`BACKUP_RETENTION_DAYS`) |
 | Datos de contrato (horas pactadas, tipo de jornada, vigencia) | **Relación laboral + 4 años**, orientativo | **Pendiente de confirmar con tu asesoría laboral.** Hoy **se conservan**: el sistema no los purga |
 | Ausencias (tipo, fechas, nota, versiones y anulaciones) | **Relación laboral + 4 años**, orientativo | **Pendiente de confirmar con tu asesoría laboral.** Hoy **se conservan**: el sistema no las purga. **Contienen dato de salud** |
+| Registro de envíos del resumen semanal (`weekly_summary_deliveries`) | **Sin purga automática** | Guarda recuentos y la cuenta destinataria; **ningún dato de la plantilla** |
+
+**El correo del resumen semanal ya entregado es una copia fuera del producto.**
+Vive en el buzón del responsable, se puede reenviar e imprimir, y **su plazo de
+conservación lo fija ese buzón, no la política de retención del sistema**:
+ninguna purga del producto llega hasta allí. Si activas el resumen, decide con
+tu asesoría qué hace el responsable con esos correos y cuándo los borra, y
+díselo.
 
 **Los datos de contrato todavía no tienen purga automática, y es deliberado.** El
 plazo orientativo —la duración de la relación laboral más cuatro años, por

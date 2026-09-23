@@ -167,11 +167,58 @@ Architecture 641 (+ `SourceDiscoveryTest` conocido); mutación acotada: `Credent
 `CredentialPatternThresholds` y `PatternReviewState` 100 %; `qa:traceability --check`, `docs:consistency` y `observability-check` en
 verde; matriz **3847 (Pest 3582, Playwright 259, k6 6)**; panel: lint, `vue-tsc`, 576 unitarias, 147 E2E; quiosco y portal: tipos regenerados, lint y `vue-tsc`.
 
-**Siguiente acción:** el usuario integra la **PR #78** de la 3.11 (commit `08a13eb`; **CI manual 35853369572 en verde en todos los
-jobs**) con *merge commit* y borra la rama. **Sin migración**; variables nuevas con valor de serie (`COMPLIANCE_PATTERN_LOOKBACK_DAYS`; los dos
-ajustes viven en el panel): tras integrar basta `git pull` y `make up`; comprobar la primera pasada de `attendance:detect-patterns`
-(`php artisan attendance:detect-patterns` a mano, `kronoqr_pattern_detection.prom` y la serie en Prometheus). Después, la **3.12** «Resumen semanal por correo y ventana
-controlada de actualización del quiosco» (RF-PR-05, RF-KI-07; `backend-laravel` + `frontend-quiosco`).
+**PR #78 INTEGRADA en `main` (`9fb47b5`, 23-09-2026).** Tras integrar: `git pull`, `make up` y `attendance:detect-patterns` a mano en dev:
+10 655 escaneos de 30 días, **229 hallazgos `kiosk_coincidence` sobre la semilla** (datos sintéticos con horas agrupadas: en un hotel real
+la cifra no dice nada de esta), 229 incidencias con sus 229 asientos, segunda pasada sin hallazgos (de-duplicación), textfile
+`kronoqr_pattern_detection.prom` escrito y las tres series visibles en Prometheus.
+
+**Rama `feat/tarea-3.12-resumen-semanal-y-ventana-quiosco` (desde `main` `9fb47b5`, PR #78 de la 3.11 integrada). Tarea 3.12
+«Resumen semanal por correo y ventana controlada de actualización del quiosco» (RF-PR-05, RF-KI-07) IMPLEMENTADA, REVISADA (dos
+vueltas: `revisor-codigo` y `seguridad-cumplimiento`) y PROBADA el 23-09-2026; ver «Siguiente acción».** Dieciséis decisiones en la
+ficha (plan 06 → «Tarea 3.12» → «Decisiones tomadas», «Al ejecutar la primera oleada» y «Segunda vuelta»). Lo que importa:
+**resumen semanal en `Reporting`** (`SendWeeklySummaries`, comando `reporting:weekly-summary {--week=AAAA-Www}`, **lunes 06:00 UTC**,
+semana ISO anterior en la zona del centro), **solo a los `responsable_departamento` activos con correo y solo su alcance** (por
+`departments.manager_user_id`; ni `rrhh` ni `admin`: sería una copia semanal de toda la plantilla fuera del sistema), compuesto con el
+mismo `GeneratePeriodReport` del panel (por persona: trabajadas, contratadas, desviación, días con actividad, ausencias y festivos
+**como recuento, nunca el tipo**; totales; nº de incidencias abiertas; tope de 50 líneas; sin URL: «Panel → Informes, del :from al
+:to»), **apagado de serie** (`WEEKLY_SUMMARY_EMAIL`, impacto nuevo `SettingImpact::DATA_DISCLOSURE`; un actor de soporte no puede
+tocarlo), omitido sin error con `MAIL_MAILER` en `log|array`, sin `Feature::WeeklyEmailSummary` (primer consumidor) o sin
+destinatarios. **El bloqueante de las dos revisiones**: el envío SMTP iba dentro de la transacción que escribe el asiento de
+divulgación, y ese asiento toma `AuditChainLock` (`pg_advisory_xact_lock`, se suelta con el commit): el candado por el que pasa **cada
+fichaje** quedaba retenido durante la conversación SMTP por destinatario, un lunes a las 08:00 locales. Ahora: componer sin asiento
+(`GeneratePeriodReport::compose()` devuelve `ComposedPeriodReport`) → **reclamar** la semana en `weekly_summary_deliveries`
+(`UNIQUE (manager_user_id, week_start)`, transacción de un `INSERT`; la colisión de dos pasadas cuenta `skipped`) → **enviar fuera de
+toda transacción** → asiento `personal_data.accessed` conjunto `weekly_summary` (`manager_user_id`, `week_start`, `employee_uuids`
+solo con ≤ 50) en transacción de una sentencia solo si salió; si no, se retira la reclamación y cuenta `failed` (salida 1; se reenvía
+con `--week`; **sin asiento en el fallo, a propósito**); lector diferido de 600 s (`ReportingServiceProvider::DEFERRED_PERIOD_REPORT`
+compartido con la 3.9); un fallo de un destinatario no aborta a los demás. Migración `2026_09_23_100000_weekly_summary_deliveries.php`
+(creación pura, `down()` probado por la conexión de migración); la tabla entra en `DataExportCatalog` (esquema `3`, veintidós
+conjuntos). Series textfile `weekly_summary_last_run_timestamp_seconds`/`_last_sent` **sin alerta** (accesorio). **Quiosco (RF-KI-07):
+la ventana es de PERMISO y viene del servidor**: `KIOSK_UPDATE_WINDOW` (`HH:MM-HH:MM` hora local, `03:00-05:00`, cruza la
+medianoche) y `KIOSK_UPDATE_QUIET_MINUTES` (10) en `installation_settings`; el latido responde `update_window {start, end,
+quiet_minutes}` (obligatorio en el contrato; lectura defensiva en la tablet); `updateWindow.ts` reescrito —las **tres ventanas de cambio
+de turno fijas en código desaparecen** (infringían RF-KI-07 y la regla 13)—: cola vacía **y** sin escaneo en `quiet_minutes` (un
+`lastScanAt` en el futuro cuenta como «sin escaneo») **y** dentro de la ventana; persistido en `localStorage` como los demás ajustes del
+latido (degrada hacia más permisivo); `registration.update()` cada 60 min y evaluación por minuto con `try/catch` que restaura
+`pending`; diagnóstico con «al día» / «actualización pendiente: se aplicará en la ventana HH:MM–HH:MM»; gancho de E2E fuera del bundle
+de producción (`define` de Vite, `playwright.config.ts` construye con `--mode test`). Panel: los tres ajustes en «Ajustes operativos»
+(tipados contra `SettingKey`, sin `fallback`). Docs: `configuracion.md` §2.1/§6 (veintidós claves), `operacion.md` §1/§6/§11.1/§13.1/§16,
+guía de RRHH §6.5, **`obligaciones-legales.md` §2 «dos correos», §3 (art. 13: informar a la plantilla de que su responsable recibe sus
+horas) y §4 (fila de plazos; el correo entregado es una copia fuera del producto cuyo plazo fija el buzón)**, doc 07 §6 (la fila del SMTP
+ampliada y revisada, no duplicada), runbook de brecha (`weekly_summary` con `employee_uuids` solo ≤ 50, consulta (b)), doc 01 §5.5, doc
+02 §8.2 y Anexo C. Ratificado por `seguridad-cumplimiento`: contenido y minimización del correo, destinatarios, asiento sin PII, opt-in,
+migración, puerta del quiosco; un fallo de SMTP no deja asiento (describe una divulgación consumada). Cifras (23-09-2026, esta
+máquina): `make quality` en verde; Unit 2292 (6,5 s en reposo, sobre el presupuesto de 5 s de `make test-unit` en esta máquina; la CI lo mide en Linux), Integration 736, Contract 63, Feature 1991, Architecture 653 (+
+`SourceDiscoveryTest` conocido); mutación acotada: `IsoWeek` 95 %, `WeeklySummary` 100 %, `KioskUpdateWindow` 87,5 %;
+`qa:traceability --check`, `docs:consistency` y `observability-check` en verde; matriz **3908 (Pest 3636, Playwright 266, k6 6)**; panel: lint, `vue-tsc`, 584
+unitarias, 150 E2E; quiosco: lint, `vue-tsc`, 538 unitarias, 90 E2E, bundle 107 KiB / 250; portal: lint y `vue-tsc`.
+
+**Siguiente acción:** el usuario integra la **PR #79** de la 3.12 (commit `e8074b3`; **CI manual 35887267293 en verde en todos los
+jobs**) con *merge commit* y borra la rama. **Con migración** (`2026_09_23_100000_weekly_summary_deliveries.php`; sin variables nuevas de `.env`:
+los tres ajustes viven en el panel): tras integrar, `git pull`, `make up` y `make migrate`; comprobar `php artisan migrate:status`,
+que el latido de un quiosco responde `update_window`, y `php artisan reporting:weekly-summary` a mano (con el ajuste apagado responde
+`disabled` y publica `kronoqr_weekly_summary.prom`). Después, la **3.13** «Cuadro de impacto y adopción» (RF-IN-08; `backend-laravel` +
+`frontend-panel`).
 
 **Rama `chore/restos-3.8` (desde `main` `d5c07bc`). Los tres restos de la 3.8 HECHOS el 22-09-2026 en un commit único
 `chore(restos-3.8): …`, CI manual tras el push y PR contra `main` (*merge commit*). Sin migración: basta `git pull` y `make up`, que
@@ -897,6 +944,17 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   sin cubrir en `ReportExport`; `ComplianceSummary` emite `report-too-large` sin diferido al que remitir (acortar el rango); riesgo
   aceptado: el correo de aviso llega aunque la cuenta se desactive entre pedir y generar (sin enlace ni datos); exportación para la
   Inspección en diferido, plantillas libres de nómina, envío por correo/SFTP y centro de notificaciones: fuera de alcance (decisión 12); **presupuesto de la suite unitaria**: 2181 pruebas en 6,8 s en reposo en esta máquina frente a los 5 s de `make test-unit` (la CI la mide en Linux y la pasó con 2181 en el run 35831869626): si algún día la rechaza, medir qué ficheros pesan antes de subir el presupuesto.
+- **3.12 (restos, 23-09-2026):** **concurrencia real** de dos pasadas de `reporting:weekly-summary` contra el `UNIQUE` (hoy se prueba con
+  una reclamación duplicada, no con dos procesos); una semana cuyo correo falló **no se recupera sola** el lunes siguiente (la pasada
+  calcula la semana anterior): se reenvía con `--week`; si molesta, una pasada que revise las N semanas sin fila; `registration.update()`
+  real contra un service worker de verdad no se prueba en CI (limitación del entorno): comprobar en una tablet que la comprobación
+  horaria detecta una versión publicada y que la recarga no deja fichajes en vuelo; `weekly_summary_deliveries` conserva
+  `manager_user_id` sin plazo (coherente con `report_exports`, documentado en `obligaciones-legales.md` §4); `KioskUpdateWindow` MSI
+  87,5 % (dos mutantes de formato equivalentes); `npm run test:e2e` del quiosco reconstruye con `--mode test` en cada arranque (unos
+  segundos más); fuera de alcance (decisión 12): baja individual del resumen por responsable, resumen para `rrhh`/`admin`, comparación
+  entre semanas, ventana distinta por quiosco, forzar la actualización desde el panel, enlace al informe con la semana preseleccionada
+  (`PeriodReportView` no lee `route.query`).
+
 - **3.11 (restos, 23-09-2026):** **índice parcial sobre `scan_events(occurred_at)`** para la consulta nocturna de patrones (hoy recorre la
   tabla: aceptado por nocturno y fuera del fichaje; con ~1,2 M de filas a cuatro años en un hotel de 200 personas, si la pasada supera
   unos minutos, migración `CONCURRENTLY` con `/migracion-segura`); **prueba de volumen** de `EloquentCredentialScans` a 30 días ×

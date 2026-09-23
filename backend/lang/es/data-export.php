@@ -522,6 +522,18 @@ return [
             ],
         ],
 
+        'weekly_summary_deliveries' => [
+            'summary' => 'Los **resumenes semanales que salieron por correo** al responsable de cada departamento, si tienes esa opcion activada. Una linea por responsable y por semana: a quien se le mando, de que semana era y a cuantas personas se referia. **No esta el contenido del correo**: las horas que llevaba dentro ya estan en este mismo paquete, en `daily_totals.csv` y `shift_entries.csv`, y de quien eran consta en `audit_log.csv`. Lo que responde este fichero es que informacion sobre tu plantilla salio sola de aqui, cada lunes, y hacia que buzon.',
+            'columns' => [
+                'manager_user_uuid' => 'La cuenta de gestion que recibio el resumen. Es siempre un responsable de departamento: ni recursos humanos ni administracion lo reciben, porque tienen el panel entero.',
+                'week_start' => 'El lunes de la semana resumida. La semana va de lunes a domingo, en el calendario del centro.',
+                'sent_at' => 'Cuando salio el correo, en UTC.',
+                'employee_count' => 'A cuantas personas se referia el resumen. Son las del ambito de ese responsable, nunca toda la plantilla.',
+                'row_count' => 'Cuantas lineas llevaba el informe que se resumio. Coincide con el numero de personas.',
+                'created_at' => 'Cuando se escribio esta linea. Coincide con `sent_at`: la linea se escribe al enviar, y no se modifica nunca.',
+            ],
+        ],
+
         'installation_settings' => [
             'summary' => 'La configuracion de la instalacion tal como la dejaste desde el panel: idiomas, marca, umbrales operativos.',
             'columns' => [

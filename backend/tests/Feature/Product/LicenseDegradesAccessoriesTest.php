@@ -4,8 +4,13 @@ declare(strict_types=1);
 
 use App\Modules\Product\Application\Command\ActivateLicenseCommand;
 use App\Modules\Product\Application\UseCase\ActivateLicenseHandler;
+use App\Modules\Reporting\Application\Support\WeeklySummaryReason;
+use App\Modules\Reporting\Application\UseCase\SendWeeklySummaries;
 use App\Modules\Shared\Application\Port\FeatureGate;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
+use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
 use Spectator\Spectator;
 use Tests\Support\Database\RefreshDatabase;
@@ -440,3 +445,72 @@ it('con las dos funcionalidades contratadas el informe en diferido se acepta', f
         ])
         ->assertStatus(202);
 })->group('RF-PD-05', 'RF-IN-06');
+
+// --- 3.12: resumen semanal por correo (RF-PR-05) -----------------------------
+
+/**
+ * Un responsable de departamento con correo, que es quien recibe el resumen, y
+ * la instalacion con el ajuste encendido y un transporte de correo de verdad.
+ */
+function conResumenSemanalEncendido(): void
+{
+    $site = WorkforceFixtures::onlySiteId();
+    $department = WorkforceFixtures::department($site, 'Cocina');
+    $manager = ManagementUsers::withRole(UserRole::RESPONSABLE_DEPARTAMENTO);
+
+    DB::table('departments')->where('id', $department)->update(['manager_user_id' => $manager->id]);
+
+    Api::as(ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN)))
+        ->patch('/api/v1/settings', ['settings' => ['WEEKLY_SUMMARY_EMAIL' => 'enabled']])
+        ->assertStatus(200);
+
+    app()->forgetScopedInstances();
+
+    Config::set('mail.default', 'smtp');
+    Notification::fake();
+}
+
+it('el resumen semanal se envia con la funcionalidad contratada', function (): void {
+    // `weekly_email_summary` estaba en el catalogo de ADR-023 desde la 5.3 sin
+    // que nada la consultara. Esta pasada es su PRIMER CONSUMIDOR, y sin este
+    // control positivo el caso negativo de abajo pasaria identico si el comando
+    // no hiciera nada en absoluto.
+    conFuncionalidades(['weekly_email_summary']);
+    conResumenSemanalEncendido();
+
+    $pass = app(SendWeeklySummaries::class)->handle();
+
+    expect($pass->reason)->toBe(WeeklySummaryReason::Sent)
+        ->and($pass->sent)->toBe(1);
+})->group('RF-PD-05', 'RF-PR-05');
+
+it('CON LA LICENCIA CADUCADA el resumen semanal se omite, sin error y sin correo', function (): void {
+    // Es comodidad de gestion, no registro legal: se degrada. Y **no falla**
+    // (regla dura 15): un planificador en rojo cada lunes por una licencia
+    // vencida entrena a no mirarlo, y lo que hay que mirar es el registro, que
+    // sigue intacto.
+    conLicenciaCaducada();
+    conResumenSemanalEncendido();
+
+    $pass = app(SendWeeklySummaries::class)->handle();
+
+    expect($pass->reason)->toBe(WeeklySummaryReason::NotInPlan)
+        ->and($pass->sent)->toBe(0);
+
+    Notification::assertNothingSent();
+})->group('RF-PD-05', 'RF-PR-05');
+
+it('el resumen semanal no se enciende con los informes avanzados contratados', function (): void {
+    // Dos funcionalidades distintas del catalogo de ADR-023: un plan puede
+    // llevar los informes del panel y no el correo semanal. Si compartieran
+    // bandera, contratar uno regalaria el otro.
+    conFuncionalidades(['advanced_reports']);
+    conResumenSemanalEncendido();
+
+    expect(app(SendWeeklySummaries::class)->handle()->reason)->toBe(WeeklySummaryReason::NotInPlan);
+
+    // Y al reves: el informe del panel sigue funcionando sin el correo semanal.
+    Api::as(reportsToken())
+        ->get('/api/v1/reports/period?from=2026-06-01&to=2026-06-07&granularity=range&group_by=employee')
+        ->assertOk();
+})->group('RF-PD-05', 'RF-PR-05');

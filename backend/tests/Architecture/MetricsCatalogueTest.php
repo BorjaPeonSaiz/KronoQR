@@ -115,6 +115,15 @@ function textfileSeries(): array
         // por escrito para esta serie: la publica un comando programado que corre
         // y termina, y sale por el colector *textfile*, no por `/metrics`.
         'absences_current',
+        // Reporting\Infrastructure\Metrics\TextfileWeeklySummaryMetrics (tarea 3.12, decision 8)
+        //
+        // Las dos salen SIEMPRE, tambien cuando la pasada no envia nada: sin
+        // ellas, «no habia nada que enviar» y «el planificador dejo de correr»
+        // se leerian igual. **Sin alerta a proposito** (§8.4): el resumen es
+        // accesorio y opcional, y que la pasada falle ya lo recoge
+        // `scheduler.command_failed`.
+        'weekly_summary_last_run_timestamp_seconds',
+        'weekly_summary_last_sent',
     ];
 }
 

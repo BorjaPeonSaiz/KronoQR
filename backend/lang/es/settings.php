@@ -121,6 +121,11 @@ return [
         'PAYROLL_EXPORT_DATE_FORMAT' => 'formato de las fechas en el fichero de nómina',
         'PAYROLL_EXPORT_ENCODING' => 'codificación del fichero de nómina',
         'PAYROLL_EXPORT_HEADER_ROW' => 'fila de cabecera del fichero de nómina',
+        /* El resumen semanal por correo (RF-PR-05, tarea 3.12). */
+        'WEEKLY_SUMMARY_EMAIL' => 'resumen semanal por correo al responsable de cada departamento',
+        /* La ventana de actualización del quiosco (RF-KI-07, tarea 3.12). */
+        'KIOSK_UPDATE_WINDOW' => 'franja en la que la tablet puede actualizarse (HH:MM-HH:MM, hora local)',
+        'KIOSK_UPDATE_QUIET_MINUTES' => 'minutos sin escaneos antes de actualizar la tablet',
     ],
 
 ];

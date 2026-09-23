@@ -803,6 +803,8 @@ incident_detection_last_findings                         gauge
 incident_detection_last_failures                         gauge
 pattern_detection_last_run_timestamp_seconds             gauge
 pattern_detection_last_failures                          gauge
+weekly_summary_last_run_timestamp_seconds                gauge
+weekly_summary_last_sent                                 gauge
 audit_chain_verification_failures_total                  counter
 audit_chain_last_verification_timestamp_seconds          gauge
 audit_chain_last_verification_result                     gauge
@@ -870,6 +872,8 @@ de respaldo servida por el proceso que hay que restaurar no vale nada.
 Una subida de `pin_fallback_scans_total` indica un problema con la emisión, el estado de las tarjetas o la disciplina de la plantilla. Es un termómetro barato.
 
 **`absences_current{type}` cuenta, para la fecha civil de hoy en la zona del centro, a las personas de alta con una ausencia activa que la cubre, por tipo** (`vacation`, `sick_leave`, `leave`, `other`; las cuatro etiquetas salen siempre presentes, aunque valgan cero — sin ellas una ausencia por baja médica que nunca aparece se confunde con «no hay datos»). La publica `Reporting` (`PublishAbsenceMetrics`, tarea 3.10, RF-GP-04) con el mismo patrón y la misma cadencia programada que `PublishComplianceMetrics`: *gauge* de fichero `.prom`, servido por el colector *textfile* de `node-exporter`, no por `/metrics`. La serie no lleva ninguna etiqueta que identifique a una persona (regla dura 21). Es un indicador de RRHH, no un fallo de operación: **no lleva alerta de Prometheus**, porque no hay runbook que sostenga avisar a nadie a las 06:30 de que alguien está de vacaciones (§8.4, «una alerta sin runbook es ruido»).
+
+**`weekly_summary_last_run_timestamp_seconds` y `weekly_summary_last_sent` describen la pasada del resumen semanal por correo** (`reporting:weekly-summary`, tarea 3.12, RF-PR-05). La primera dice cuándo corrió y la segunda cuántos correos salieron. Las publica `Reporting` por *textfile* (`kronoqr_weekly_summary.prom`), con el mismo patrón que las de ausencias y cumplimiento, y **las dos salen siempre**, también cuando la pasada no envía nada —el ajuste `WEEKLY_SUMMARY_EMAIL` apagado, que es como se entrega; `MAIL_MAILER` en `log` o `array`; la licencia sin `weekly_email_summary`; o ninguna cuenta de responsable de departamento—: sin eso, «no había nada que enviar» y «el planificador dejó de correr» se leerían igual. Ninguna etiqueta identifica a nadie (regla dura 21): son dos escalares. **No llevan alerta, y es deliberado** (§8.4, «una alerta sin runbook es ruido»): el resumen es accesorio y opcional (doc 05 §5.7), nadie tiene que levantarse a las 06:30 porque un correo de gestión no haya salido, y que la pasada **falle** ya lo recoge `scheduler.command_failed`. El motivo de cada pasada, con sus recuentos y sin nombres, va al log en `reporting.weekly_summary`.
 
 `kronoqr_auth_attempts_total{channel,outcome}` es la única señal barata que distingue «hoy la gente se equivoca más» de «alguien está probando credenciales». `channel` es `management`, `portal` o `kiosk_pin`; `outcome` es `success`, `failure` o `lockout`. Los tres canales la alimentan y **ninguna etiqueta identifica a nadie** (regla dura 21): una serie por persona sería un registro paralelo de quién se equivoca al entrar. `outcome="lockout"` cuenta los intentos que **ABREN** un bloqueo —uno por bloqueo abierto, no uno por intento rechazado— y deja además su asiento `auth.lockout_started` en `audit_log`; **todo lo demás que no acaba en sesión cuenta como `failure`**, incluido el intento que llega con un bloqueo ya activo (`App\Modules\Shared\Domain\ValueObject\AuthOutcome`). Contado así, `lockout` casa uno a uno con `auth.lockout_started`, y `KronoqrAuthLockouts` (`infra/observability/prometheus/rules/auth.yml`) puede leer «tres o más en quince minutos» como tres cuentas distintas alcanzando su límite, no como una sola persona insistiendo contra la suya.
 
@@ -1653,6 +1657,7 @@ php artisan compliance:verify-audit-chain       # Verifica la cadena de hash
 php artisan compliance:apply-retention --dry-run   # PROPONE la purga por retención. No borra nada
 php artisan compliance:apply-retention --confirm=PURGAR-… --responsible=<id>   # La ejecuta. Exige la frase del informe y el rol de mantenimiento
 php artisan reporting:presence-metrics          # Recalcula open_shifts_current y websocket_connections_active (§8.2)
+php artisan reporting:weekly-summary [--week=AAAA-Www]   # Resumen semanal por correo al responsable de cada departamento (RF-PR-05). Lunes 06:00 UTC en el planificador; sin SMTP, sin licencia o con el ajuste apagado sale 0 y no envía nada
 
 # Calidad y trazabilidad
 php artisan qa:traceability                     # Matriz requisito → pruebas (RQ-13)

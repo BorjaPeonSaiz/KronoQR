@@ -497,6 +497,18 @@ return [
             ],
         ],
 
+        'weekly_summary_deliveries' => [
+            'summary' => 'The **weekly summaries that went out by email** to each department manager, if you have that option switched on. One line per manager and week: who received it, which week it covered and how many people it was about. **The body of the email is not here**: the hours it carried are already in this package, in `daily_totals.csv` and `shift_entries.csv`, and whose hours they were is recorded in `audit_log.csv`. What this file answers is what information about your staff left this installation on its own, every Monday, and to which mailbox.',
+            'columns' => [
+                'manager_user_uuid' => 'The management account that received the summary. Always a department manager: neither HR nor administration receive it, because they have the whole panel.',
+                'week_start' => 'The Monday of the week summarised. Weeks run Monday to Sunday, in the site calendar.',
+                'sent_at' => 'When the email went out, in UTC.',
+                'employee_count' => 'How many people the summary was about. Only those within that manager\'s scope, never the whole staff.',
+                'row_count' => 'How many lines the summarised report had. It matches the number of people.',
+                'created_at' => 'When this line was written. It matches `sent_at`: the line is written as the email goes out, and never modified.',
+            ],
+        ],
+
         'installation_settings' => [
             'summary' => 'Installation configuration as you left it in the panel: languages, branding, operational thresholds.',
             'columns' => [

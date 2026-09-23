@@ -181,7 +181,7 @@ it('declara la marca de redaccion junto al valor de la configuracion', function 
         ->toBe(['key', 'value', 'value_redacted', 'updated_at', 'updated_by_user_uuid']);
 })->group('RF-PD-14', 'RL-20', 'RF-KI-08');
 
-it('declara los veintiun conjuntos del catalogo, sin efimeros ni fontaneria', function (): void {
+it('declara los veintidos conjuntos del catalogo, sin efimeros ni fontaneria', function (): void {
     // El catalogo completo, valor a valor: añadir o quitar un conjunto tiene que
     // ser un cambio visible que alguien revise, no un efecto colateral.
     expect(DataExportCatalog::names())->toBe([
@@ -208,6 +208,11 @@ it('declara los veintiun conjuntos del catalogo, sin efimeros ni fontaneria', fu
         // entra es que informes con horas de la plantilla salieron de aqui y a
         // peticion de quien.
         'report_exports',
+        // Tarea 3.12: los resumenes semanales que salieron por correo
+        // (RF-PR-05). Como el de arriba, entra el HECHO del envio y no el
+        // contenido —las horas ya estan en `daily_totals` y `shift_entries`—.
+        // Todo lo que la instalacion escribe entra en el ZIP (RL-20).
+        'weekly_summary_deliveries',
         'installation_settings',
         'compliance_profiles',
         'license',

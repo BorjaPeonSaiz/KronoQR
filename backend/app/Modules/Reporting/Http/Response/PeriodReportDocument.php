@@ -57,6 +57,13 @@ final readonly class PeriodReportDocument
             ReportDelivery::Json => throw new LogicException(
                 'El informe en JSON lo sirve GET /api/v1/reports/period, no la descarga.',
             ),
+            // Tampoco es un fichero: es el cuerpo del resumen semanal, que
+            // compone la notificacion y sale por SMTP sin pasar por ningun
+            // endpoint (RF-PR-05, tarea 3.12). Se declara en vez de caer a un
+            // caso por omision, por lo mismo que el JSON.
+            ReportDelivery::Mail => throw new LogicException(
+                'El resumen semanal sale por correo, no por la descarga de informes.',
+            ),
         };
 
         return $export->toResponse();

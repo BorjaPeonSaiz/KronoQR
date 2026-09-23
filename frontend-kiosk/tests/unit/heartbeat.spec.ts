@@ -1,9 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ApiClient } from '@/shared/api/client'
+import type { KioskHeartbeat } from '@/shared/api/types'
+import {
+  DEFAULT_UPDATE_QUIET_MINUTES,
+  DEFAULT_UPDATE_WINDOW,
+} from '@/features/offline/domain/updateWindow'
 import {
   readBreakClockingEnabled,
   readClockSkewToleranceSeconds,
   readServiceCodeHash,
+  readUpdateQuietMinutes,
+  readUpdateWindow,
 } from '@/shared/telemetry/deviceIdentity'
 import type { ClientErrorEvent } from '@/shared/telemetry/errorReporter'
 import { createErrorReporter } from '@/shared/telemetry/errorReporter'
@@ -12,6 +19,7 @@ import {
   clockSkewSeconds,
   createHeartbeatScheduler,
   getLastHeartbeatResult,
+  parseUpdateWindowFromHeartbeatData,
 } from '@/shared/telemetry/heartbeat'
 import { fixedClock } from '@/shared/time/clock'
 
@@ -24,7 +32,23 @@ function apiReturning(
   serviceCodeHash: string | null = null,
   breakClockingEnabled = false,
   clockSkewToleranceSeconds = DEFAULT_TOLERANCE_SECONDS,
+  updateWindow?: { start: string; end: string; quiet_minutes: number },
 ): ApiClient {
+  // `update_window` (RF-KI-07, tarea 3.12) TODAVIA no esta en `KioskHeartbeat`
+  // de `schema.d.ts` (el contrato lo añade el agente de backend): se cuela
+  // aqui como propiedad extra, exactamente como haria un servidor que ya lo
+  // declare mientras el cliente generado sigue sin conocerlo. Se construye en
+  // una variable (no un literal contextual) para no chocar con la
+  // comprobacion de propiedades excedentes de TypeScript.
+  const responseData = {
+    server_time: serverTime,
+    client_errors_accepted: clientErrorsAccepted,
+    service_code_hash: serviceCodeHash,
+    break_clocking_enabled: breakClockingEnabled,
+    clock_skew_tolerance_seconds: clockSkewToleranceSeconds,
+    ...(updateWindow === undefined ? {} : { update_window: updateWindow }),
+  }
+
   return {
     recordScan: vi.fn(),
     recordPinScan: vi.fn(),
@@ -32,13 +56,7 @@ function apiReturning(
     fetchRoster: vi.fn(),
     sendHeartbeat: vi.fn(async () => ({
       outcome: 'ok' as const,
-      data: {
-        server_time: serverTime,
-        client_errors_accepted: clientErrorsAccepted,
-        service_code_hash: serviceCodeHash,
-        break_clocking_enabled: breakClockingEnabled,
-        clock_skew_tolerance_seconds: clockSkewToleranceSeconds,
-      },
+      data: responseData as KioskHeartbeat,
     })),
     // El latido no empareja nada: estos dos no los usa ninguna prueba de aqui.
     requestPairing: vi.fn(),
@@ -109,6 +127,8 @@ describe('latido del quiosco', () => {
   afterEach(() => {
     localStorage.removeItem('kronoqr.kiosk.break_clocking_enabled')
     localStorage.removeItem('kronoqr.kiosk.clock_skew_tolerance_seconds')
+    localStorage.removeItem('kronoqr.kiosk.update_window')
+    localStorage.removeItem('kronoqr.kiosk.update_quiet_minutes')
   })
 
   it('declara version y cola pendiente', () => {
@@ -566,6 +586,72 @@ describe('latido del quiosco', () => {
 
       expect(skew).toBe(90)
       expect(reporter.size()).toBe(0)
+    })
+  })
+
+  describe('ventana de actualizacion del quiosco (RF-KI-07, tarea 3.12)', () => {
+    it('parseUpdateWindowFromHeartbeatData: `null` si el campo no viene', () => {
+      expect(parseUpdateWindowFromHeartbeatData({ server_time: 'x' })).toBeNull()
+      expect(parseUpdateWindowFromHeartbeatData(null)).toBeNull()
+      expect(parseUpdateWindowFromHeartbeatData('no es un objeto')).toBeNull()
+    })
+
+    it('parseUpdateWindowFromHeartbeatData: `null` si la forma no encaja', () => {
+      expect(
+        parseUpdateWindowFromHeartbeatData({ update_window: { start: '25:00', end: '05:00' } }),
+      ).toBeNull()
+      expect(
+        parseUpdateWindowFromHeartbeatData({
+          update_window: { start: '03:00', end: '05:00', quiet_minutes: -1 },
+        }),
+      ).toBeNull()
+      expect(
+        parseUpdateWindowFromHeartbeatData({
+          update_window: { start: '03:00', end: '05:00', quiet_minutes: 'diez' },
+        }),
+      ).toBeNull()
+    })
+
+    it('parseUpdateWindowFromHeartbeatData: valida y devuelve ventana y minutos', () => {
+      expect(
+        parseUpdateWindowFromHeartbeatData({
+          update_window: { start: '22:00', end: '01:00', quiet_minutes: 15 },
+        }),
+      ).toEqual({ window: { start: '22:00', end: '01:00' }, quietMinutes: 15 })
+    })
+
+    it('cachea la ventana de CADA `200` que la traiga', async () => {
+      const reporter = createErrorReporter({ appVersion: '1.4.2', deviceId: 'd' })
+      const scheduler = createHeartbeatScheduler({
+        api: apiReturning('2026-09-23T06:00:00.000Z', 0, null, false, DEFAULT_TOLERANCE_SECONDS, {
+          start: '22:00',
+          end: '01:00',
+          quiet_minutes: 15,
+        }),
+        reporter,
+        snapshot: () => ({ appVersion: '1.4.2', pendingQueueSize: 0 }),
+        clock: fixedClock(new Date('2026-09-23T06:00:00.000Z')),
+      })
+
+      await scheduler.beat()
+
+      expect(readUpdateWindow()).toEqual({ start: '22:00', end: '01:00' })
+      expect(readUpdateQuietMinutes()).toBe(15)
+    })
+
+    it('sin `update_window` en la respuesta, NO toca lo cacheado -se queda con la de serie-', async () => {
+      const reporter = createErrorReporter({ appVersion: '1.4.2', deviceId: 'd' })
+      const scheduler = createHeartbeatScheduler({
+        api: apiReturning('2026-09-23T06:00:00.000Z'),
+        reporter,
+        snapshot: () => ({ appVersion: '1.4.2', pendingQueueSize: 0 }),
+        clock: fixedClock(new Date('2026-09-23T06:00:00.000Z')),
+      })
+
+      await scheduler.beat()
+
+      expect(readUpdateWindow()).toEqual(DEFAULT_UPDATE_WINDOW)
+      expect(readUpdateQuietMinutes()).toBe(DEFAULT_UPDATE_QUIET_MINUTES)
     })
   })
 })

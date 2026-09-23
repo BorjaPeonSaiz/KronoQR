@@ -58,6 +58,15 @@ use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
  * adaptador del puerto devuelve `null` si la configuracion no se puede leer, y
  * sin huella la pantalla se abre sin codigo (decision 7 de la ficha).
  *
+ * ## Y desde la tarea 3.12, la ventana de actualizacion (RF-KI-07)
+ *
+ * `update_window` viaja por el mismo canal y por el mismo motivo. Aqui no se
+ * decide nada con ella: el servidor no sabe si la tablet tiene una version
+ * pendiente ni cuando fue su ultimo escaneo, asi que lo que hace es
+ * **transportar** la configuracion del centro para que decida quien si tiene los
+ * tres datos. Y es una ventana de permiso, no de bloqueo: fuera de ella el
+ * quiosco sigue fichando y encolando (regla dura 19).
+ *
  * ## Y desde la tarea 3.5, los dos ajustes de la pantalla de fichaje
  *
  * `break_clocking_enabled` (RF-AT-12) y `clock_skew_tolerance_seconds`
@@ -112,6 +121,13 @@ final readonly class RecordHeartbeat
             // segundos en el contrato porque es lo que la tablet compara con su
             // propio reloj. La conversion vive en un solo sitio.
             $settings->maximumClockSkewMinutes * 60,
+            // RF-KI-07 (tarea 3.12). La ventana de actualizacion viaja tal cual:
+            // aqui no se decide nada sobre ella —el servidor no sabe si la
+            // tablet tiene una version pendiente ni cuando fue su ultimo
+            // escaneo—, se transporta la configuracion del centro para que la
+            // decision la tome quien tiene los tres datos.
+            $settings->kioskUpdateWindow,
+            $settings->kioskUpdateQuietMinutes,
         );
     }
 }

@@ -85,6 +85,19 @@ it('marca como clave que afecta al calculo de horas exactamente la ventana anti-
     expect($affecting)->toBe([SettingKey::ATTENDANCE_DEBOUNCE_SECONDS]);
 })->group('RF-PD-01');
 
+it('la salida de datos personales no cuenta como calculo de horas', function (): void {
+    // `DATA_DISCLOSURE` describe **a donde van los datos**, no cuanto suman: un
+    // `affectsWorkedHours()` verdadero aqui llenaria de ruido la unica señal que
+    // sirve para explicar una discrepancia de nomina dos años despues.
+    $disclosure = array_values(array_filter(
+        SettingKey::cases(),
+        static fn (SettingKey $key): bool => $key->definition()->impact === SettingImpact::DATA_DISCLOSURE,
+    ));
+
+    expect($disclosure)->toBe([SettingKey::WEEKLY_SUMMARY_EMAIL])
+        ->and(SettingImpact::DATA_DISCLOSURE->affectsWorkedHours())->toBeFalse();
+})->group('RF-PD-01', 'RF-PR-05');
+
 it('clasifica el impacto de cada clave', function (SettingKey $key, SettingImpact $impact): void {
     expect($key->definition()->impact)->toBe($impact);
 })->with([
@@ -111,7 +124,63 @@ it('clasifica el impacto de cada clave', function (SettingKey $key, SettingImpac
     'el formato de fechas de nomina solo cambia el fichero' => [SettingKey::PAYROLL_EXPORT_DATE_FORMAT, SettingImpact::PRESENTATION],
     'la codificacion de nomina solo cambia el fichero' => [SettingKey::PAYROLL_EXPORT_ENCODING, SettingImpact::PRESENTATION],
     'la fila de cabecera de nomina solo cambia el fichero' => [SettingKey::PAYROLL_EXPORT_HEADER_ROW, SettingImpact::PRESENTATION],
+    // Las tres de la tarea 3.12. Ninguna mueve un minuto ni abre una incidencia:
+    // la primera decide si sale un correo y las dos ultimas, cuando puede
+    // recargarse una tablet (RF-PR-05, RF-KI-07).
+    // Y la unica `DATA_DISCLOSURE` del catalogo: no mueve minutos, pero
+    // enciende una salida de datos personales de la instalacion.
+    'el resumen semanal enciende una salida de datos' => [SettingKey::WEEKLY_SUMMARY_EMAIL, SettingImpact::DATA_DISCLOSURE],
+    'la ventana de actualizacion no toca el registro' => [SettingKey::KIOSK_UPDATE_WINDOW, SettingImpact::PRESENTATION],
+    'los minutos de silencio no tocan el registro' => [SettingKey::KIOSK_UPDATE_QUIET_MINUTES, SettingImpact::PRESENTATION],
 ])->group('RF-PD-01');
+
+// --- El resumen semanal y la ventana del quiosco (RF-PR-05, RF-KI-07) -------
+
+it('entrega el resumen semanal por correo desactivado de serie', function (): void {
+    // Doc 05 §5.7: «correo opcional». Lo que sale por SMTP son nombres de la
+    // plantilla, asi que una instalacion recien puesta en marcha no manda datos
+    // personales a ninguna parte hasta que alguien lo decide en el panel.
+    $definition = SettingKey::WEEKLY_SUMMARY_EMAIL->definition();
+
+    expect($definition->default)->toBe('disabled')
+        ->and($definition->allowed)->toBe(['enabled', 'disabled']);
+})->group('RF-PR-05', 'RF-PD-01');
+
+it('acepta como ventana de actualizacion una franja HH:MM-HH:MM y nada mas', function (string $value, bool $valid): void {
+    // La forma la presta el objeto de valor del dominio y se copia aqui para que
+    // un valor mal escrito de un `422` con una persona delante, en vez de un
+    // fallo mas adentro — donde ya no hay a quien decirselo.
+    $definition = SettingKey::KIOSK_UPDATE_WINDOW->definition();
+    $validate = fn (): int|string|array => $definition->validate(SettingKey::KIOSK_UPDATE_WINDOW, $value);
+
+    $valid
+        ? expect($validate())->toBe($value)
+        : expect($validate)->toThrow(InvalidSettingValue::class);
+})->with([
+    'la de serie' => ['03:00-05:00', true],
+    'cruzando la medianoche' => ['23:00-02:00', true],
+    'los dos extremos iguales, que es «nunca sola»' => ['04:00-04:00', true],
+    'una hora que no existe' => ['24:00-05:00', false],
+    'sin ceros a la izquierda' => ['3:00-5:00', false],
+    'un solo extremo' => ['03:00', false],
+    'vacia' => ['', false],
+])->group('RF-KI-07', 'RF-PD-01');
+
+it('entrega la ventana de actualizacion de madrugada y diez minutos de silencio', function (): void {
+    // De serie, de tres a cinco: lejos de los tres cambios de turno de un hotel
+    // y dentro de la franja en la que ya corren las tareas nocturnas. Los diez
+    // minutos de silencio cubren el turno que entra antes de lo previsto sin que
+    // el producto tenga que saber cuando empieza (RF-KI-07).
+    $quiet = SettingKey::KIOSK_UPDATE_QUIET_MINUTES->definition();
+
+    expect(SettingKey::KIOSK_UPDATE_WINDOW->definition()->default)->toBe('03:00-05:00')
+        ->and($quiet->default)->toBe(10)
+        // Cero es legitimo y la desactiva; el maximo son dos horas, porque una
+        // guarda mayor que la ventana de serie la dejaria cerrada para siempre
+        // en un hotel con actividad de madrugada.
+        ->and($quiet->minimum)->toBe(0)
+        ->and($quiet->maximum)->toBe(120);
+})->group('RF-KI-07', 'RF-PD-01');
 
 // --- El codigo de servicio del quiosco (RF-KI-08, tarea 3.3) ----------------
 

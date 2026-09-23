@@ -564,6 +564,50 @@ Schedule::command('product:telemetry', ['--send'])
     ->runInBackground();
 
 /*
+ * Resumen semanal por correo al responsable de cada departamento (RF-PR-05,
+ * tarea 3.12).
+ *
+ *   reporting:weekly-summary
+ *
+ * LUNES A LAS 06:00 UTC, sobre la SEMANA ISO ANTERIOR —lunes a domingo— en el
+ * calendario civil del centro. Es la ultima de las semanales y va detras de la
+ * propuesta de purga (05:10) y de la telemetria (05:40), que es lo mismo que le
+ * corresponde por importancia: es lo mas accesorio de la lista y lo unico que un
+ * cliente puede tener apagado a proposito.
+ *
+ * A LAS 06:00 Y NO ANTES, y esto es lo contrario de lo que se hace con el resto.
+ * Las tareas nocturnas se alejan del cambio de turno de las 06:00 porque
+ * compiten por la base de datos con el minuto mas caro del dia; esta se pone
+ * justo ahi **porque el correo tiene que llegar cuando alguien lo pueda leer**, y
+ * porque su consulta no es nocturna por necesidad: es un informe por periodo
+ * acotado al alcance de un responsable y a siete dias, sobre `daily_totals`, que
+ * es exactamente lo que el panel sirve en linea a cualquier hora. Con
+ * `runInBackground()` ademas no retiene al planificador mientras habla con el
+ * SMTP del cliente.
+ *
+ * REPETIRLA NO REENVIA NADA. La idempotencia la garantiza
+ * `weekly_summary_deliveries` con su `UNIQUE (manager_user_id, week_start)`, asi
+ * que `withoutOverlapping` esta por no duplicar el trabajo, no por correccion.
+ *
+ * NO ENVIAR NO ES UN FALLO. Con el ajuste apagado —que es como se entrega—, sin
+ * SMTP, sin la funcionalidad en la licencia o sin responsables de departamento,
+ * el comando sale 0 y deja el motivo en `reporting.weekly_summary`. Solo sale
+ * distinto de cero si algun envio fallo, y entonces esa semana sigue pendiente.
+ *
+ * `onFailure()` deja el codigo de salida en el log (ver la cabecera del
+ * fichero): con `runInBackground()`, Laravel ejecuta ese callback desde
+ * `schedule:finish`. **Sin alerta de Prometheus, a proposito** (decision 8 de la
+ * ficha): las dos series de `kronoqr_weekly_summary.prom` dicen cuando corrio y
+ * cuantos salieron, pero nadie tiene que levantarse a las 06:30 porque un correo
+ * de gestion no haya salido (§8.4: una alerta sin runbook es ruido).
+ */
+$weeklySummary = Schedule::command('reporting:weekly-summary')
+    ->weeklyOn(1, '06:00')
+    ->withoutOverlapping()
+    ->runInBackground();
+$weeklySummary->onFailure(LogScheduledCommandFailure::of('reporting:weekly-summary', $weeklySummary));
+
+/*
  * Purga del historico de errores (RF-PD-15, RL-11, tarea 5.12).
  *
  * QUE SE BORRA: los grupos de `error_events` que llevan mas de

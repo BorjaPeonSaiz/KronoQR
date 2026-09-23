@@ -33,6 +33,7 @@ Todo esto corre solo en el contenedor `scheduler`. Lo que aparece en la columna
 | Cada hora | Se purgan las exportaciones íntegras caducadas: se borra el ZIP, la anotación queda (§13) | Nada |
 | 04:25 UTC, a diario | Se purgan los informes generados en segundo plano que han caducado: se borra el fichero, la anotación queda (§6 y §13) | Nada |
 | Lunes 05:40 UTC | **Telemetría**, solo si la has activado (§13.4): se envía el informe semanal al destino que fijaste | Nada |
+| Lunes 06:00 UTC | **Resumen semanal por correo** a cada responsable de departamento, solo si está activado en el panel (§6) | Nada: le llega al responsable, no a IT |
 | Trimestral | — | **Simulacro de restauración** de la copia |
 | Trimestral | — | **Repasar la lista de comprobación de endurecimiento** ([`endurecimiento.md`](endurecimiento.md), último apartado): red, certificado, cuentas, tablets, copias fuera del servidor |
 
@@ -207,6 +208,61 @@ docker compose exec app php artisan reporting:purge-expired-exports
 | `REPORTING_EXPORT_TIMEOUT_SECONDS` | `600` | Tope de la consulta del informe en diferido. Súbelo si una exportación grande falla por tiempo |
 | `REPORTING_EXPORT_STALE_AFTER` | `3600` | Segundos tras los que una generación interrumpida se da por fallida y deja pedir otra. No lo bajes por debajo de lo que tarda tu informe más grande |
 | `REPORTING_EXPORT_DOWNLOAD_RATE_LIMIT` | `30` | Descargas por minuto y por dirección IP en la ruta de descarga, que se abre sin sesión |
+
+**El resumen semanal por correo** ([`guia-rrhh.md`](guia-rrhh.md) §6.5) es la
+otra pasada de los lunes: a las **06:00 UTC**, y solo si el panel lo tiene en
+`enabled` (`WEEKLY_SUMMARY_EMAIL`, [`configuracion.md`](configuracion.md)
+§2.1), cada responsable de departamento activo y con correo recibe la semana
+anterior —de lunes a domingo, en el calendario del centro— de su ámbito. **No
+tiene ningún parámetro en el `.env`**: el interruptor está en el panel y el
+correo sale por el mismo SMTP de la sección 6.21 de esa guía. Tres cosas que
+conviene saber antes de que alguien pregunte por qué no le ha llegado:
+
+- **La pasada nunca falla por no poder enviar, pero sí lo cuenta.** Deja en el
+  registro técnico (`reporting.weekly_summary`) los recuentos —enviados,
+  omitidos, fallidos— y el motivo cuando no manda nada: `disabled` (apagado en
+  el panel), `mailer_silent` (el correo está en un transporte que no envía,
+  `MAIL_MAILER=log` o `array`), `not_in_plan` (la licencia no incluye
+  `weekly_email_summary`; el resto del producto sigue igual) o `no_recipients`
+  (ningún responsable activo con correo). Un fallo del SMTP con un responsable
+  se anota como `reporting.weekly_summary_not_delivered`, cuenta como fallido,
+  **no aborta a los demás** y hace que el comando salga con código `1`; esa
+  semana le queda pendiente y **el lunes siguiente no la recupera**: la pasada
+  solo mira la semana anterior. El reintento es el comando de abajo con
+  `--week`.
+- **Repetirla no reenvía, y el orden del envío importa.** Para cada
+  responsable: (1) una transacción corta **reclama** la semana en la tabla
+  `weekly_summary_deliveries` (responsable y semana; el índice único cierra la
+  carrera); (2) se compone el informe y se envía el correo **fuera de toda
+  transacción**; (3) si salió, otra transacción corta escribe el asiento de
+  auditoría; (4) si no salió, se retira la reclamación y la semana queda libre
+  para `--week`. Consecuencias: una segunda ejecución salta lo ya entregado;
+  dos pasadas simultáneas no duplican —la segunda ve la reclamación y omite—; y
+  **un envío fallido no deja asiento**, a propósito: el asiento describe una
+  divulgación que ocurrió, y contar intentos fallidos inflaría el alcance de
+  una brecha. Puedes lanzarla cuantas veces quieras.
+- **Cada correo deja asiento en la auditoría** (`personal_data.accessed`,
+  conjunto `weekly_summary`) con el destinatario, la semana y los
+  identificadores de las personas incluidas, nunca sus nombres: es el rastro
+  que responde a «a quién le salieron los datos de quién»
+  ([`../runbooks/brecha-de-seguridad.md`](../runbooks/brecha-de-seguridad.md)
+  §4). El correo en sí sí lleva nombres, como el aviso diario de incidencias, y
+  valen para él las mismas cautelas sobre el relevo SMTP
+  ([`endurecimiento.md`](endurecimiento.md) §7).
+
+Para lanzar la de la semana pasada sin esperar al lunes, o reenviar una semana
+concreta (en formato ISO, año y número de semana):
+
+```bash
+docker compose exec app php artisan reporting:weekly-summary
+docker compose exec app php artisan reporting:weekly-summary --week=2026-W37
+```
+
+La pasada escribe dos series por fichero de texto —cuándo corrió por última vez
+y cuántos correos envió— en `BACKUP_PATH/metrics/kronoqr_weekly_summary.prom`,
+**sin alerta a propósito**: es una funcionalidad accesoria y opcional. Si la
+pasada en sí revienta, sale en el histórico de errores (§15) como cualquier otro
+comando programado.
 
 ---
 
@@ -757,6 +813,50 @@ dos anteriores; desde una más antigua, el script te dice a cuál ir primero.
 **Segunda ejecución** sobre una instalación ya actualizada: sale `3`, «ya está
 en la versión», y no toca nada.
 
+### 11.1 La app de la tablet: cuándo cambia de versión
+
+Lo de arriba es el servidor. La app del quiosco es otra pieza: la tablet la
+descarga del servidor, y **la versión nueva no entra en la tablet en el momento
+de actualizar el servidor**. Cada tablet comprueba **cada hora** si hay versión
+nueva, se la descarga en segundo plano y la deja esperando; mientras espera,
+sigue fichando con la de siempre. Solo se recarga con la nueva cuando se cumplen
+**tres condiciones a la vez**, y las comprueba cada minuto:
+
+1. **La hora local del centro está dentro de la ventana** `KIOSK_UPDATE_WINDOW`
+   (`03:00-05:00` de serie; puede cruzar la medianoche).
+2. **La cola de fichajes sin enviar está vacía.** Una actualización con
+   fichajes pendientes de subir sería la única forma de perder uno, así que no
+   se hace: cuando la tablet se actualiza, no tiene nada que perder, por
+   construcción. La cola vive además en el almacenamiento duradero de la tablet
+   y un fichaje solo se borra de ella cuando el servidor lo ha confirmado.
+3. **No ha habido ningún fichaje en los últimos `KIOSK_UPDATE_QUIET_MINUTES`
+   minutos** (10 de serie). Es la guarda contra el turno que empieza antes de lo
+   previsto: la tablet no sabe tu horario, pero sabe si alguien acaba de pasar
+   la tarjeta.
+
+Si la ventana se cierra sin que se hayan dado las tres, espera a la de mañana.
+Es lo que hace que una actualización sea invisible para la plantilla: **la
+tablet nunca se actualiza con gente delante**, y cuando lo hace, la cola está
+vacía.
+
+**Dónde se ajusta.** Las dos claves están en Panel → **Ajustes operativos**
+(`/settings`), rol administrador ([`configuracion.md`](configuracion.md) §2.1),
+y llegan a las tablets en el latido siguiente —en menos de un minuto—; cada
+tablet las guarda, así que valen sin red, y una que aún no ha recibido ninguna
+usa las de serie. **Es una sola ventana para toda la instalación**: no hay una
+por quiosco, ni forma de forzar la actualización de una tablet desde el panel.
+Si necesitas que cambie ya, mueve la ventana temporalmente a la hora actual: en
+cuanto pasen los minutos de calma con la cola vacía, se actualiza sola.
+
+**Qué enseña la tablet.** La pantalla de diagnóstico (§16.5), junto a la versión
+instalada, dice «al día» o «actualización pendiente: se aplicará en la ventana
+03:00–05:00», con la ventana vigente. Es lo que hay que mirar cuando una tablet
+lleva días en una versión anterior a la del resto: si dice pendiente, es que en
+su ventana nunca se han dado las tres condiciones —normalmente porque siempre
+hay algún fichaje en esa franja, o porque la cola no llega a vaciarse por falta
+de red—, y la solución es mover la ventana o arreglar la red, no reiniciar la
+tablet.
+
 ---
 
 ## 12. Diagnóstico y soporte: `doctor`, el paquete y los accesos
@@ -880,7 +980,7 @@ con motivo, alcance y duración, y lo puedes revocar en cualquier momento.
 | --- | --- | --- |
 | `diagnostics` (por defecto) | Generar el paquete **anonimizado** y consultar errores | Ver a nadie |
 | `read_only` | Además, **leer** jornadas, plantilla y auditoría | Cambiar nada |
-| `configuration` | Además, **cambiar** los ajustes operativos y emparejar o desvincular quioscos | Ver jornadas ni plantilla, ni tocar el perfil de cumplimiento (umbrales legales y años de conservación son tuyos), **ni activar o desactivar el fichaje de pausa** (`ATTENDANCE_BREAK_CLOCKING`: decide qué se considera incidencia, igual que el perfil; si lo intenta obtiene un 403), **ni ver ni cambiar el código de servicio del quiosco**: lo recibe vacío y marcado como redactado, y si intenta cambiarlo obtiene un 403 (§16.5) |
+| `configuration` | Además, **cambiar** los ajustes operativos y emparejar o desvincular quioscos | Ver jornadas ni plantilla, ni tocar el perfil de cumplimiento (umbrales legales y años de conservación son tuyos), **ni activar o desactivar el fichaje de pausa** (`ATTENDANCE_BREAK_CLOCKING`: decide qué se considera incidencia, igual que el perfil; si lo intenta obtiene un 403), **ni activar o desactivar el resumen semanal por correo** (`WEEKLY_SUMMARY_EMAIL`: decide que cada lunes salgan por correo nombres y horas de tu plantilla; también 403), **ni ver ni cambiar el código de servicio del quiosco**: lo recibe vacío y marcado como redactado, y si intenta cambiarlo obtiene un 403 (§16.5) |
 
 Con ningún alcance puede activar licencias, conceder o revocar accesos,
 emitir o revocar tarjetas, corregir fichajes, generar informes de nómina o la
@@ -944,8 +1044,9 @@ Un único fichero ZIP, `kronoqr-export-<versión>-<fecha UTC>.zip`, con **todo**
 lo que hay en tu instalación en formatos abiertos: un CSV por tabla (plantilla,
 contratos, ausencias con todas sus versiones, tarjetas, quioscos, tramos con
 todas sus versiones, correcciones con autor y motivo, totales, incidencias,
-escaneos, informes generados en segundo plano, auditoría completa con su
-cadena de hash, cuentas de gestión, accesos de soporte), JSON para la
+escaneos, informes generados en segundo plano, resúmenes semanales enviados
+por correo, auditoría completa con su cadena de hash, cuentas de gestión,
+accesos de soporte), JSON para la
 configuración, el perfil de cumplimiento y la licencia, un `manifest.json` con
 el número de filas y la huella `sha256` de cada fichero, y un `README.md` que
 explica cada fichero y cada columna en el idioma de la instalación. Las fechas
@@ -1315,7 +1416,7 @@ cumplimiento.
 | **Cola** | Fichajes pendientes, de cuándo es el más antiguo, si el almacenamiento de la tablet es duradero y si está sincronizando ahora |
 | **Padrón** | De cuándo es la copia local de la plantilla y cuántas entradas tiene |
 | **Token** | Si la tablet está vinculada, cuándo caduca su credencial, su identificador de dispositivo y el nombre del quiosco. **El token no se muestra nunca**: solo ocho caracteres de su huella, para poder compararlo con el panel |
-| **Versión** | La versión de la PWA y el estado de su actualización en segundo plano |
+| **Versión** | La versión de la PWA y el estado de su actualización: «al día» o «actualización pendiente: se aplicará en la ventana HH:MM–HH:MM», con la ventana vigente (§11.1) |
 | **Batería y pantalla** | Nivel, si carga y si la pantalla se mantiene encendida |
 | **Errores por enviar** | Cuántos errores tiene la tablet guardados sin poder reportar |
 
@@ -1339,6 +1440,8 @@ apareciendo al día.
 | `KIOSK_HEALTH_SILENT_AFTER_SECONDS` | `600` | A partir de cuántos segundos sin latido está en **fallo**. **Es el mismo número que la alerta `QuioscoSinLatido`**: los dos se cambian a la vez, o no se cambia ninguno |
 | `KIOSK_HEALTH_BATTERY_LOW_PERCENT` | `15` | Nivel por debajo del cual, **y sin cargar**, el quiosco avisa por batería |
 | `KIOSK_SERVICE_CODE` | *(vacío)* | Código de 8 a 12 dígitos de la pantalla de diagnóstico. **No es una variable del `.env`**: se cambia en el panel, en «Ajustes operativos», y surte efecto en el latido siguiente |
+| `KIOSK_UPDATE_WINDOW` | `03:00-05:00` | Franja, en hora local del centro, en la que la tablet **puede** instalar una versión nueva de la app (§11.1). **No es una variable del `.env`**: se cambia en el panel |
+| `KIOSK_UPDATE_QUIET_MINUTES` | `10` | Minutos sin ningún fichaje que la tablet exige, además de la ventana y la cola vacía, antes de actualizarse (§11.1). Íd.: en el panel |
 
 ---
 

@@ -7,7 +7,13 @@ import { pendingScanCount } from './features/offline/useOfflineQueue'
 import { createAppRouter } from './router'
 import { applyCachedBranding } from './shared/branding/useBranding'
 import { createAppI18n, initialLocale } from './shared/i18n'
-import { APP_VERSION, resolveDeviceId } from './shared/telemetry/deviceIdentity'
+import {
+  APP_VERSION,
+  readLastScanAt,
+  readUpdateQuietMinutes,
+  readUpdateWindow,
+  resolveDeviceId,
+} from './shared/telemetry/deviceIdentity'
 import { getErrorReporter } from './shared/telemetry/errorReporter'
 import { errorMessageOf, errorTypeOf } from './shared/telemetry/errorType'
 import { registerServiceWorker } from './sw/registerServiceWorker'
@@ -76,11 +82,23 @@ app.mount('#app')
 // Fuera del camino de montaje: que el service worker tarde en registrarse no
 // puede retrasar la primera pantalla.
 //
-// `canApply` es la puerta del paso 11 de la tarea 1.9: aunque alguien pida
-// aplicar una version nueva, no se recarga durante un cambio de turno ni con
-// fichajes sin sincronizar. La ventana configurable por cliente es RF-KI-07
-// (tarea 3.12); esto es lo que impide que ocurra a ciegas mientras tanto.
+// `canApply` es la puerta de la actualizacion (RF-KI-07, tarea 3.12): no se
+// recarga con fichajes sin sincronizar, ni dentro de los minutos de silencio
+// tras el ultimo escaneo, ni fuera de la ventana que declaro el centro (o la
+// de serie, si esta tablet nunca ha latido con una version que trajera otra).
+// `registerServiceWorker` la reevalua cada minuto mientras haya una version
+// pendiente (decision 10 de la tarea 3.12): si la ventana esta cerrada ahora,
+// puede abrirse dentro de poco sin que nadie tenga que volver a pedirlo.
 void registerServiceWorker({
   onError: (context) => bootReporter.report('kiosk.service_worker.failed', context),
-  canApply: () => canApplyUpdate({ now: new Date(), pendingScans: pendingScanCount() }),
+  canApply: () => {
+    const lastScanAtIso = readLastScanAt()
+    return canApplyUpdate({
+      now: new Date(),
+      pendingScans: pendingScanCount(),
+      lastScanAt: lastScanAtIso === null ? null : new Date(lastScanAtIso),
+      window: readUpdateWindow(),
+      quietMinutes: readUpdateQuietMinutes(),
+    })
+  },
 })

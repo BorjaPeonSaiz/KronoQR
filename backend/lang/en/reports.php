@@ -210,4 +210,53 @@ return [
             'time_zone' => 'Time zone',
         ],
     ],
+
+    /*
+     * THE WEEKLY EMAIL SUMMARY (RF-PR-05, task 3.12).
+     *
+     * Written for the manager of a hotel department, not for whoever wrote this
+     * code: it says what their team worked last week and what they had under
+     * contract, and nothing else.
+     *
+     * THREE THINGS THIS TEXT DOES NOT DO, AND THEY ARE NOT STYLE:
+     *
+     *   · It never compares or ranks anyone. This product records working time;
+     *     it does not rate anyone's work (doc 01 §12).
+     *   · It never calls a positive deviation «overtime». Whether an hour is
+     *     overtime is decided by the collective agreement, with offsets and
+     *     reference periods the product does not model.
+     *   · It never asks for a correction. Detecting is not correcting (RN-08),
+     *     and a correction is made by a person, with a reason, in the panel.
+     *
+     * Durations arrive already formatted as `HH:MM` (`ReportedDuration`): never
+     * decimal, which reads badly and depends on the reader's locale.
+     */
+    'weekly_summary' => [
+
+        'subject' => 'KronoQR · summary for the week of :from to :to',
+
+        'greeting' => 'Hello,',
+
+        'intro' => 'Here is the summary for week :week (:from to :to) of :departments.',
+
+        'people' => 'People within your scope this week: :count.',
+
+        'line' => ':employee · worked :worked of :contracted contracted (:deviation) · :days day(s) with activity · :absences on leave · :holidays public holiday(s)',
+
+        'more' => 'And :count more, available in the panel.',
+
+        'totals' => 'Scope total: worked :worked of :contracted contracted (:deviation).',
+
+        'incidents' => 'You have :count unresolved incident(s) in the tray.',
+
+        'incidents_none' => 'You have no unresolved incidents.',
+
+        'action' => 'You can see it day by day in the panel, under «Reports», selecting :from to :to.',
+
+        'not_a_ranking' => 'The figures come from the consolidated attendance record. This summary does not rank or compare anyone, and the deviation is not an amount of overtime: that is for the collective agreement to determine.',
+
+        'footer' => 'You get this email every Monday because your installation has the weekly summary switched on. It is sent once per week.',
+
+        'no_department' => 'your scope',
+    ],
 ];

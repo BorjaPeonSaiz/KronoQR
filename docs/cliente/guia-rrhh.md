@@ -1182,6 +1182,60 @@ de nómina después:
 > fichaje y la exportación para la Inspección **no se detienen nunca por eso**
 > (§8, «hay un aviso de licencia en el panel»).
 
+### 6.5 El resumen semanal por correo
+
+**Qué es.** Un correo, **opcional**, que cada lunes por la mañana recibe cada
+responsable de departamento con la semana anterior —de lunes a domingo— de su
+equipo. Es un resumen para leer en dos minutos, no un informe: sirve para ver
+pronto una desviación o una incidencia sin tener que abrir el panel cada lunes,
+y para nada más.
+
+**Quién lo recibe.** Los responsables de departamento con cuenta activa y
+dirección de correo, y **cada uno solo lo suyo**: el de Cocina no ve a nadie de
+Recepción, exactamente igual que en el panel. RRHH y administración no lo
+reciben: tienen el panel entero, y un correo semanal con toda la plantilla
+sería una copia periódica del registro fuera del sistema.
+
+**Qué trae.**
+
+- Una línea por persona con las **horas trabajadas**, las **contratadas** y la
+  **desviación**, los **días con actividad**, las **ausencias** y los
+  **festivos** de la semana. Son las mismas columnas del informe de horas por
+  periodo (§6.1), calculadas igual y con las mismas salvedades (§5 bis.4): el
+  correo no calcula nada nuevo.
+- Los **totales** del departamento.
+- El **número de incidencias abiertas** del departamento, sin detalle: el
+  detalle ya llega en el aviso diario de incidencias y está en la bandeja (§4).
+- **Dónde verlo entero**: «Panel → Informes, del <inicio> al <fin>». Es una
+  indicación, no un enlace: el correo no lleva direcciones en las que pulsar.
+
+Si el departamento tiene más de **50 personas**, el correo lleva las 50 primeras
+y dice cuántas quedan: el resto está en el panel.
+
+**Lo que no es.** No sustituye al panel ni al informe: los días con turno
+abierto no cuentan, y una corrección o una incidencia resuelta después del
+lunes cambia el informe, pero no el correo que ya salió. Ningún texto del correo
+compara a las personas entre sí ni las califica: son los mismos números que la
+pantalla, en la bandeja de entrada.
+
+**Cómo se activa.** Desde **Ajustes operativos**, con cuenta de administración,
+«Resumen semanal por correo» → «Activado». Se entrega apagado. Hace falta que la
+instalación tenga salida de correo —lo decide IT al instalar, como con el aviso
+de los informes en segundo plano (§6.3)— y que la licencia incluya esta
+funcionalidad; si falta cualquiera de las dos, no pasa nada: no llega el correo
+y todo lo demás sigue igual. Se activa para todos los responsables a la vez; en
+esta versión no hay baja individual.
+
+> **Ese correo lleva nombres y horas de personas, y sale del sistema.** Por eso
+> cada envío queda registrado como un acceso a datos personales, igual que
+> descargar un informe: a quién se envió, qué semana y qué personas incluía. Es
+> una comunicación interna legítima por su finalidad, pero conviene tratarlo
+> como lo que es: no lo reenvíes fuera del hotel ni lo imprimas para dejarlo en
+> un tablón. Y una vez entregado **es una copia fuera del producto**: vive en
+> tu buzón, y cuánto tiempo se guarda ahí lo decide el hotel con su asesoría,
+> no la retención del sistema ([`obligaciones-legales.md`](obligaciones-legales.md)
+> §4).
+
 ---
 
 ## 7. El perfil de cumplimiento

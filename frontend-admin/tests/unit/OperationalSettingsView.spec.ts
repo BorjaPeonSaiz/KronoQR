@@ -14,6 +14,9 @@ import { jsonResponse, mountView, problemResponse, settle, stubFetch } from './s
 function catalog(
   serviceCode = '48392017',
   breakClocking: 'enabled' | 'disabled' = 'disabled',
+  weeklySummaryEmail: 'enabled' | 'disabled' = 'disabled',
+  kioskUpdateWindow = '03:00-05:00',
+  kioskUpdateQuietMinutes = 10,
 ): unknown {
   return {
     data: [
@@ -116,6 +119,37 @@ function catalog(
         source: breakClocking === 'disabled' ? 'product_default' : 'installation',
         constraints: { allowed: ['enabled', 'disabled'] },
       },
+      // Resumen semanal (RF-PR-05) y ventana de actualizacion del quiosco
+      // (RF-KI-07), tarea 3.12: TODAVIA no en el enum `SettingKey` del
+      // contrato en el momento de escribir esta prueba (decision 9 de la
+      // ficha), como avisa el comentario de la vista.
+      {
+        key: 'WEEKLY_SUMMARY_EMAIL',
+        value: weeklySummaryEmail,
+        type: 'text',
+        impact: 'presentation',
+        affects_worked_hours: false,
+        source: weeklySummaryEmail === 'disabled' ? 'product_default' : 'installation',
+        constraints: { allowed: ['disabled', 'enabled'] },
+      },
+      {
+        key: 'KIOSK_UPDATE_WINDOW',
+        value: kioskUpdateWindow,
+        type: 'text',
+        impact: 'presentation',
+        affects_worked_hours: false,
+        source: kioskUpdateWindow === '03:00-05:00' ? 'product_default' : 'installation',
+        constraints: { pattern: '^([01]\\d|2[0-3]):[0-5]\\d-([01]\\d|2[0-3]):[0-5]\\d$' },
+      },
+      {
+        key: 'KIOSK_UPDATE_QUIET_MINUTES',
+        value: kioskUpdateQuietMinutes,
+        type: 'integer',
+        impact: 'presentation',
+        affects_worked_hours: false,
+        source: kioskUpdateQuietMinutes === 10 ? 'product_default' : 'installation',
+        constraints: { minimum: 0, maximum: 120 },
+      },
       {
         key: 'LOCALE_DEFAULT',
         value: 'es',
@@ -136,6 +170,21 @@ function catalog(
       },
     ],
     meta: { unknown_keys: [], invalid_keys: [] },
+  }
+}
+
+/**
+ * El mismo catalogo, sin la fila de `KIOSK_UPDATE_QUIET_MINUTES` (segunda
+ * vuelta de la tarea 3.12, hallazgo del revisor en la 3.11 aplicado aqui):
+ * una clave sin fila propia tiene que verse como tal -`0`-, no como un valor
+ * de serie plausible que nadie ha configurado.
+ */
+function catalogWithoutQuietMinutes(): unknown {
+  const base = catalog() as { data: Array<{ key: string }>; meta: unknown }
+
+  return {
+    data: base.data.filter((entry) => entry.key !== 'KIOSK_UPDATE_QUIET_MINUTES'),
+    meta: base.meta,
   }
 }
 
@@ -306,5 +355,152 @@ describe('OperationalSettingsView — fichaje de pausa (RF-AT-12, tarea 3.5)', (
 
     expect(wrapper.text()).toContain(es.operationalSettings.fields.breakClocking)
     expect(wrapper.text()).toContain('El valor tiene que ser válido.')
+  })
+})
+
+describe('OperationalSettingsView — resumen semanal por correo (RF-PR-05, tarea 3.12)', () => {
+  it('carga «Desactivado» de serie', async () => {
+    stubFetch(() => jsonResponse(catalog('48392017', 'disabled', 'disabled')))
+
+    const wrapper = await mountView(OperationalSettingsView)
+    await settle()
+
+    expect(wrapper.find('[data-test="weekly-summary-email"]').element).toHaveProperty(
+      'value',
+      'disabled',
+    )
+  })
+
+  it('activarlo y guardarlo manda solo esa clave', async () => {
+    const fetchSpy = stubFetch((_url, init) =>
+      init?.method === 'PATCH'
+        ? jsonResponse(catalog('48392017', 'disabled', 'enabled'))
+        : jsonResponse(catalog('48392017', 'disabled', 'disabled')),
+    )
+
+    const wrapper = await mountView(OperationalSettingsView)
+    await settle()
+
+    await wrapper.find('[data-test="weekly-summary-email"]').setValue('enabled')
+    await wrapper.find('[data-test="save"]').trigger('submit')
+    await settle()
+
+    const patch = fetchSpy.mock.calls.find(([, init]) => (init as RequestInit).method === 'PATCH')
+
+    expect(patch).toBeDefined()
+    expect(JSON.parse(String((patch?.[1] as RequestInit).body))).toEqual({
+      settings: { WEEKLY_SUMMARY_EMAIL: 'enabled' },
+    })
+  })
+})
+
+describe('OperationalSettingsView — ventana de actualizacion del quiosco (RF-KI-07, tarea 3.12)', () => {
+  it('carga la ventana y los minutos de serie', async () => {
+    stubFetch(() => jsonResponse(catalog('48392017', 'disabled', 'disabled', '03:00-05:00', 10)))
+
+    const wrapper = await mountView(OperationalSettingsView)
+    await settle()
+
+    expect(wrapper.find('[data-test="kiosk-update-window"]').element).toHaveProperty(
+      'value',
+      '03:00-05:00',
+    )
+    expect(wrapper.find('[data-test="kiosk-update-quiet-minutes"]').element).toHaveProperty(
+      'value',
+      '10',
+    )
+  })
+
+  it('sin fila propia de KIOSK_UPDATE_QUIET_MINUTES, se ve 0 explicito y no un valor de serie plausible', async () => {
+    stubFetch(() => jsonResponse(catalogWithoutQuietMinutes()))
+
+    const wrapper = await mountView(OperationalSettingsView)
+    await settle()
+
+    expect(wrapper.find('[data-test="kiosk-update-quiet-minutes"]').element).toHaveProperty(
+      'value',
+      '0',
+    )
+  })
+
+  it('una ventana que cruza la medianoche es un cambio valido', async () => {
+    const fetchSpy = stubFetch((_url, init) =>
+      init?.method === 'PATCH'
+        ? jsonResponse(catalog('48392017', 'disabled', 'disabled', '23:00-02:00', 10))
+        : jsonResponse(catalog('48392017', 'disabled', 'disabled', '03:00-05:00', 10)),
+    )
+
+    const wrapper = await mountView(OperationalSettingsView)
+    await settle()
+
+    await wrapper.find('[data-test="kiosk-update-window"]').setValue('23:00-02:00')
+    await wrapper.find('[data-test="save"]').trigger('submit')
+    await settle()
+
+    const patch = fetchSpy.mock.calls.find(([, init]) => (init as RequestInit).method === 'PATCH')
+
+    expect(patch).toBeDefined()
+    expect(JSON.parse(String((patch?.[1] as RequestInit).body))).toEqual({
+      settings: { KIOSK_UPDATE_WINDOW: '23:00-02:00' },
+    })
+  })
+
+  it('un formato invalido se rechaza en el propio panel, sin llegar al servidor', async () => {
+    stubFetch(() => jsonResponse(catalog()))
+
+    const wrapper = await mountView(OperationalSettingsView)
+    await settle()
+
+    await wrapper.find('[data-test="kiosk-update-window"]').setValue('25:99-05:00')
+    await settle()
+
+    expect(wrapper.text()).toContain(es.operationalSettings.errors.invalidUpdateWindowFormat)
+    expect(wrapper.find('[data-test="save"]').attributes('disabled')).toBeDefined()
+  })
+
+  it('cambiar los minutos de silencio manda solo esa clave', async () => {
+    const fetchSpy = stubFetch((_url, init) =>
+      init?.method === 'PATCH'
+        ? jsonResponse(catalog('48392017', 'disabled', 'disabled', '03:00-05:00', 20))
+        : jsonResponse(catalog()),
+    )
+
+    const wrapper = await mountView(OperationalSettingsView)
+    await settle()
+
+    await wrapper.find('[data-test="kiosk-update-quiet-minutes"]').setValue('20')
+    await wrapper.find('[data-test="save"]').trigger('submit')
+    await settle()
+
+    const patch = fetchSpy.mock.calls.find(([, init]) => (init as RequestInit).method === 'PATCH')
+
+    expect(patch).toBeDefined()
+    expect(JSON.parse(String((patch?.[1] as RequestInit).body))).toEqual({
+      settings: { KIOSK_UPDATE_QUIET_MINUTES: 20 },
+    })
+  })
+
+  it('unos minutos fuera de rango se rechazan con el mensaje del servidor', async () => {
+    stubFetch((_url, init) =>
+      init?.method === 'PATCH'
+        ? problemResponse(422, 'urn:kronoqr:problem:validation-failed', {
+            errors: {
+              'settings.KIOSK_UPDATE_QUIET_MINUTES': [
+                'El valor tiene que estar entre 0 y 120 minutos.',
+              ],
+            },
+          })
+        : jsonResponse(catalog()),
+    )
+
+    const wrapper = await mountView(OperationalSettingsView)
+    await settle()
+
+    await wrapper.find('[data-test="kiosk-update-quiet-minutes"]').setValue('200')
+    await wrapper.find('[data-test="save"]').trigger('submit')
+    await settle()
+
+    expect(wrapper.text()).toContain(es.operationalSettings.fields.kioskUpdateQuietMinutes)
+    expect(wrapper.text()).toContain('El valor tiene que estar entre 0 y 120 minutos.')
   })
 })

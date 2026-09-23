@@ -1385,6 +1385,18 @@ export interface ManagementApiOptions {
     readonly payrollDateFormat?: 'iso' | 'dmy'
     readonly payrollEncoding?: 'utf8_bom' | 'utf8' | 'latin1'
     readonly payrollHeaderRow?: 'enabled' | 'disabled'
+    /**
+     * `WEEKLY_SUMMARY_EMAIL` (RF-PR-05, tarea 3.12). Por omision, `disabled`:
+     * el resumen es opcional (doc 05 §5.7), apagado de serie.
+     */
+    readonly weeklySummaryEmail?: 'enabled' | 'disabled'
+    /**
+     * `KIOSK_UPDATE_WINDOW`/`KIOSK_UPDATE_QUIET_MINUTES` (RF-KI-07, tarea
+     * 3.12). Por omision, `03:00-05:00` y 10 minutos: los valores de serie
+     * de una instalacion recien puesta en marcha, sin nada configurado.
+     */
+    readonly kioskUpdateWindow?: string
+    readonly kioskUpdateQuietMinutes?: number
   }
   /**
    * Lo que devuelve `GET /api/v1/license` (RF-PD-04, RF-PD-05, tarea 5.3).
@@ -1864,6 +1876,12 @@ export async function stubManagementApi(
   let payrollEncoding = options.operationalSettings?.payrollEncoding ?? 'utf8_bom'
   let payrollHeaderRow = options.operationalSettings?.payrollHeaderRow ?? 'enabled'
 
+  // Resumen semanal (RF-PR-05) y ventana de actualizacion del quiosco
+  // (RF-KI-07), tarea 3.12: mismos valores de serie que declara el catalogo.
+  let weeklySummaryEmail = options.operationalSettings?.weeklySummaryEmail ?? 'disabled'
+  let kioskUpdateWindow = options.operationalSettings?.kioskUpdateWindow ?? '03:00-05:00'
+  let kioskUpdateQuietMinutes = options.operationalSettings?.kioskUpdateQuietMinutes ?? 10
+
   /** El catalogo completo de `installation_settings`, con la forma de `GET/PATCH /settings`. */
   function settingsCatalog(): unknown {
     return {
@@ -2073,6 +2091,39 @@ export async function stubManagementApi(
           affects_worked_hours: false,
           source: payrollHeaderRow === 'enabled' ? 'product_default' : 'installation',
           constraints: { allowed: ['enabled', 'disabled'] },
+        },
+        // Resumen semanal por correo (RF-PR-05, tarea 3.12): opcional,
+        // apagado de serie (doc 05 §5.7 «correo opcional»). Impacto
+        // `presentation`: no mueve un calculo, solo si el correo sale o no.
+        {
+          key: 'WEEKLY_SUMMARY_EMAIL',
+          value: weeklySummaryEmail,
+          type: 'text',
+          impact: 'presentation',
+          affects_worked_hours: false,
+          source: weeklySummaryEmail === 'disabled' ? 'product_default' : 'installation',
+          constraints: { allowed: ['disabled', 'enabled'] },
+        },
+        // Ventana de actualizacion del quiosco (RF-KI-07, tarea 3.12,
+        // decision 9 de la ficha): `HH:MM-HH:MM` en hora local del centro,
+        // puede cruzar la medianoche.
+        {
+          key: 'KIOSK_UPDATE_WINDOW',
+          value: kioskUpdateWindow,
+          type: 'text',
+          impact: 'presentation',
+          affects_worked_hours: false,
+          source: kioskUpdateWindow === '03:00-05:00' ? 'product_default' : 'installation',
+          constraints: { pattern: '^([01]\\d|2[0-3]):[0-5]\\d-([01]\\d|2[0-3]):[0-5]\\d$' },
+        },
+        {
+          key: 'KIOSK_UPDATE_QUIET_MINUTES',
+          value: kioskUpdateQuietMinutes,
+          type: 'integer',
+          impact: 'presentation',
+          affects_worked_hours: false,
+          source: kioskUpdateQuietMinutes === 10 ? 'product_default' : 'installation',
+          constraints: { minimum: 0, maximum: 120 },
         },
       ],
       meta: { unknown_keys: [], invalid_keys: [] },
@@ -3053,6 +3104,21 @@ export async function stubManagementApi(
           checkClosedText('PAYROLL_EXPORT_ENCODING', ['utf8_bom', 'utf8', 'latin1'])
           checkClosedText('PAYROLL_EXPORT_HEADER_ROW', ['enabled', 'disabled'])
 
+          // Resumen semanal (RF-PR-05) y ventana de actualizacion del
+          // quiosco (RF-KI-07), tarea 3.12.
+          checkClosedText('WEEKLY_SUMMARY_EMAIL', ['disabled', 'enabled'])
+
+          const UPDATE_WINDOW_PATTERN = /^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$/
+          const updateWindowRaw = patch.settings['KIOSK_UPDATE_WINDOW']
+
+          if (typeof updateWindowRaw === 'string' && !UPDATE_WINDOW_PATTERN.test(updateWindowRaw)) {
+            errors['settings.KIOSK_UPDATE_WINDOW'] = [
+              'La ventana tiene que tener la forma HH:MM-HH:MM.',
+            ]
+          }
+
+          const updateQuietMinutes = checkInteger('KIOSK_UPDATE_QUIET_MINUTES', 0, 120)
+
           if (Object.keys(errors).length > 0) {
             await validationProblem(
               route,
@@ -3125,6 +3191,20 @@ export async function stubManagementApi(
 
           if (breakClockingRaw === 'enabled' || breakClockingRaw === 'disabled') {
             attendanceBreakClocking = breakClockingRaw
+          }
+
+          const weeklySummaryEmailRaw = patch.settings['WEEKLY_SUMMARY_EMAIL']
+
+          if (weeklySummaryEmailRaw === 'enabled' || weeklySummaryEmailRaw === 'disabled') {
+            weeklySummaryEmail = weeklySummaryEmailRaw
+          }
+
+          if (typeof updateWindowRaw === 'string') {
+            kioskUpdateWindow = updateWindowRaw
+          }
+
+          if (updateQuietMinutes !== undefined) {
+            kioskUpdateQuietMinutes = updateQuietMinutes
           }
 
           const appName = patch.settings['BRANDING_APP_NAME']

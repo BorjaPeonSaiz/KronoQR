@@ -179,7 +179,9 @@
       },
       "version": {
         "app": "Versión de la aplicación",
-        "serviceWorker": "Service worker activo"
+        "serviceWorker": "Service worker activo",
+        "updateStatus": "Actualización",
+        "updateWindow": "Ventana de actualización"
       },
       "battery": {
         "level": "Nivel",
@@ -203,7 +205,9 @@
       "memory": "En memoria (respaldo)",
       "configured": "Configurado",
       "notConfigured": "Sin configurar",
-      "unpaired": "Esta tablet no está emparejada: no hay padrón que mostrar."
+      "unpaired": "Esta tablet no está emparejada: no hay padrón que mostrar.",
+      "updatePending": "Pendiente: se aplicará en la ventana {start}–{end}.",
+      "updateUpToDate": "Al día."
     },
     "warnings": {
       "background_blur": "El sistema está desenfocando el fondo de la imagen. Desactiva los efectos de cámara del sistema operativo.",

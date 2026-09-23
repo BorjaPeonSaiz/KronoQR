@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Product\Domain\ValueObject;
 
 use App\Modules\Product\Domain\Exception\UnknownSettingKey;
+use App\Modules\Shared\Domain\ValueObject\KioskUpdateWindow;
 use App\Modules\Shared\Domain\ValueObject\PayrollColumn;
 use App\Modules\Shared\Domain\ValueObject\PayrollDateFormat;
 use App\Modules\Shared\Domain\ValueObject\PayrollDelimiter;
@@ -253,6 +254,58 @@ enum SettingKey: string
     case PAYROLL_EXPORT_HEADER_ROW = 'PAYROLL_EXPORT_HEADER_ROW';
 
     /**
+     * RF-PR-05: si la instalacion envia el **resumen semanal por correo** al
+     * responsable de cada departamento (tarea 3.12).
+     *
+     * **`disabled` de serie**, porque el doc 05 §5.7 lo vende como «correo
+     * opcional» y porque lo que sale por SMTP son nombres de la plantilla: una
+     * instalacion recien puesta en marcha no manda datos personales a ninguna
+     * parte hasta que alguien lo decide en el panel.
+     *
+     * `choice` de dos valores y no un tipo booleano nuevo, por el mismo motivo
+     * que {@see self::ATTENDANCE_BREAK_CLOCKING}: una sola clave no justifica
+     * ampliar `SettingType`, y el dia que haya un tercer valor —«solo a RRHH»—
+     * el enumerado ya lo admite sin migrar lo guardado.
+     *
+     * Impacto `DATA_DISCLOSURE`, y es la unica clave que lo lleva: no mueve ni
+     * un minuto del registro ni abre ninguna incidencia, pero **enciende una
+     * salida de datos personales de la instalacion**. Lo que sale cada lunes son
+     * nombres y horas de la plantilla hacia el buzon de un responsable, que es
+     * una copia fuera del producto. En el asiento de `installation_setting.changed`
+     * no puede quedar en el mismo cajon que un color de marca.
+     */
+    case WEEKLY_SUMMARY_EMAIL = 'WEEKLY_SUMMARY_EMAIL';
+
+    /**
+     * RF-KI-07: la franja en la que una tablet puede aplicar una version nueva
+     * de la PWA, `HH:MM-HH:MM` **en hora local del centro** (tarea 3.12).
+     *
+     * `03:00-05:00` de serie, y **puede cruzar la medianoche**. Con los dos
+     * extremos iguales la franja no se abre nunca, que es la forma de decir «mis
+     * tablets las actualizo yo». La forma y su significado los fija
+     * {@see KioskUpdateWindow}, que es de
+     * donde sale tambien la expresion regular con la que se valida aqui: una
+     * segunda copia escrita a mano acabaria admitiendo lo que el objeto rechaza.
+     *
+     * **Es una ventana de permiso, no de bloqueo** (regla dura 19): fuera de
+     * ella el quiosco sigue fichando y encolando; lo unico que no hace es
+     * recargarse. Y se **declara**, no se infiere del historico de escaneos: el
+     * producto no adivina el cambio de turno (regla dura 13).
+     */
+    case KIOSK_UPDATE_WINDOW = 'KIOSK_UPDATE_WINDOW';
+
+    /**
+     * RF-KI-07: minutos sin **ningun escaneo** que la tablet exige, ademas de la
+     * franja, antes de aplicar una version pendiente (tarea 3.12).
+     *
+     * Cero la desactiva. El maximo son dos horas: una guarda mayor que la propia
+     * ventana de serie la dejaria cerrada para siempre en un hotel con actividad
+     * de madrugada, y la tablet no volveria a actualizarse sin que nadie
+     * entendiera por que.
+     */
+    case KIOSK_UPDATE_QUIET_MINUTES = 'KIOSK_UPDATE_QUIET_MINUTES';
+
+    /**
      * Los idiomas que el producto trae traducidos.
      *
      * No es configuracion del cliente: es lo que hay en `lang/` y en los `i18n`
@@ -409,6 +462,33 @@ enum SettingKey: string
                 PayrollLayout::HEADER_ROW_ENABLED,
                 [PayrollLayout::HEADER_ROW_ENABLED, PayrollLayout::HEADER_ROW_DISABLED],
                 SettingImpact::PRESENTATION,
+            ),
+            // EL RESUMEN SEMANAL (RF-PR-05, tarea 3.12). Apagado de serie: el
+            // doc 05 §5.7 lo vende como «correo opcional» y lo que sale por SMTP
+            // son nombres de la plantilla.
+            //
+            // **`DATA_DISCLOSURE` y no `PRESENTATION`** (decision 14 de la
+            // segunda vuelta): encenderla saca cada lunes nombres y horas de la
+            // plantilla por SMTP. Es el cambio con mas consecuencias en
+            // privacidad que se puede hacer desde el panel, y en el asiento no
+            // puede quedar en el mismo cajon que un logotipo.
+            self::WEEKLY_SUMMARY_EMAIL->value => SettingDefinition::choice(
+                'disabled', ['enabled', 'disabled'], SettingImpact::DATA_DISCLOSURE,
+            ),
+            // LA VENTANA DE ACTUALIZACION DE LA TABLET (RF-KI-07, tarea 3.12).
+            // La forma la presta el objeto de valor, que es quien la garantiza
+            // de verdad: aqui solo se copia para que un valor mal escrito de un
+            // `422` con una persona delante, en vez de un fallo mas adentro. Los
+            // 11 caracteres son los de `HH:MM-HH:MM`, ni uno mas.
+            self::KIOSK_UPDATE_WINDOW->value => SettingDefinition::text(
+                '03:00-05:00', 11, SettingImpact::PRESENTATION, KioskUpdateWindow::SHAPE,
+            ),
+            // Cero es legitimo: apaga la guarda de silencio y deja mandar a la
+            // franja y a la cola vacia. El maximo son dos horas, porque una
+            // guarda mayor que la ventana de serie la dejaria cerrada para
+            // siempre en un hotel con actividad de madrugada.
+            self::KIOSK_UPDATE_QUIET_MINUTES->value => SettingDefinition::integer(
+                10, 0, 120, SettingImpact::PRESENTATION,
             ),
         ];
     }

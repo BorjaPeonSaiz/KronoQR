@@ -115,8 +115,13 @@ final class DataExportCatalog
      * de los informes generados en segundo plano (RF-IN-06). Un fichero nuevo es
      * un cambio de forma, y quien compare una exportacion de este año con una del
      * anterior tiene que poder explicarse la diferencia sin abrir las dos.
+     *
+     * **`3` desde la tarea 3.12**: el ZIP gana `weekly_summary_deliveries.csv`,
+     * el registro de los resumenes semanales que salieron por correo (RF-PR-05).
+     * Mismo criterio que el salto anterior: un fichero mas es un cambio de
+     * forma, aunque ninguna columna de las que ya habia se haya movido.
      */
-    public const string SCHEMA_VERSION = '2';
+    public const string SCHEMA_VERSION = '3';
 
     /**
      * Los conjuntos de datos que van al ZIP, **en el orden en que se escriben**.
@@ -456,6 +461,42 @@ final class DataExportCatalog
                 'download_count',
                 'notified_at',
                 'notification_channel',
+            ]),
+
+            /*
+             * LOS RESUMENES SEMANALES QUE SALIERON POR CORREO (tarea 3.12,
+             * RF-PR-05).
+             *
+             * Va justo detras de los informes en diferido porque contesta la
+             * misma clase de pregunta —«¿que informacion sobre mi plantilla ha
+             * salido de aqui, a quien y cuando?»— con la diferencia de que esto
+             * **sale solo**, cada lunes y sin que nadie pulse nada. Es
+             * precisamente lo que un cliente que se lleva sus datos necesita
+             * poder reconstruir sin depender de que nadie le cuente como estaba
+             * configurado el producto.
+             *
+             * **No lleva el contenido del correo**, por lo mismo que el conjunto
+             * de arriba no lleva los ficheros: las horas que iban dentro ya estan
+             * en este ZIP, en `daily_totals.csv` y `shift_entries.csv`. Aqui esta
+             * el hecho del envio.
+             *
+             * **Fuera `id`**, la clave interna: ningun identificador interno sale
+             * del producto (doc 01 §5.5). `manager_user_uuid` y no
+             * `manager_user_id`, como toda referencia a `users` en esta
+             * exportacion.
+             *
+             * **Ni un solo dato de ningun empleado**, y no es una omision de este
+             * catalogo sino de la tabla: lo que se guarda son recuentos. De quien
+             * eran las horas que salieron por correo consta en `audit_log.csv`,
+             * que tambien va en este ZIP.
+             */
+            ExportedDataset::csv('weekly_summary_deliveries', [
+                'manager_user_uuid',
+                'week_start',
+                'sent_at',
+                'employee_count',
+                'row_count',
+                'created_at',
             ]),
 
             // --- La configuracion del producto --------------------------------

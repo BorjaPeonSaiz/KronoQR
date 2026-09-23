@@ -92,8 +92,21 @@ final class SettingsPolicy
     }
 
     /**
-     * Si ademas puede tocar una clave que **decide que es una incidencia**
-     * (tarea 3.5, RF-AT-12).
+     * Si ademas puede tocar una clave **reservada al cliente** (tarea 3.5,
+     * RF-AT-12; ampliada en la 3.12, RF-PR-05).
+     *
+     * Son las que no deciden «como funciona el producto» sino **de que responde
+     * el hotel y a donde van los datos de su gente**. Hoy son dos y por dos
+     * motivos distintos:
+     *
+     * | Clave | Que decide |
+     * |---|---|
+     * | `ATTENDANCE_BREAK_CLOCKING` | Que jornadas se marcan: reactiva o suspende RN-12 (RF-AT-12). |
+     * | `WEEKLY_SUMMARY_EMAIL` | Que cada lunes salgan por SMTP nombres y horas de la plantilla hacia buzones (RF-PR-05). |
+     *
+     * El fabricante configura la instalacion y diagnostica; no decide el
+     * cumplimiento de su cliente ni enciende una salida de datos personales de
+     * su plantilla (ADR-020, regla dura 16).
      *
      * ## El fabricante no decide el cumplimiento del cliente
      *
@@ -125,11 +138,19 @@ final class SettingsPolicy
      * ## Ni por `SettingImpact::COMPLIANCE_REVIEW`
      *
      * Cuatro claves lo llevan —la jornada maxima, la tolerancia de desfase, el
-     * transito minimo y esta— y las otras tres son parametros operativos que el
-     * soporte SI debe poder ajustar mientras diagnostica (RF-PD-11). Un impacto
-     * describe la consecuencia de un cambio, no quien puede hacerlo.
+     * transito minimo y el fichaje de pausa— y las otras tres son parametros
+     * operativos que el soporte SI debe poder ajustar mientras diagnostica
+     * (RF-PD-11). Un impacto describe la consecuencia de un cambio, no quien
+     * puede hacerlo.
+     *
+     * Lo mismo vale al reves para la segunda clave: `WEEKLY_SUMMARY_EMAIL` es la
+     * unica `DATA_DISCLOSURE` de hoy, pero la lista sigue siendo explicita y no
+     * derivada del impacto. Si mañana hubiera una salida de datos que el
+     * fabricante si debiera poder apagar mientras diagnostica —un correo que se
+     * ha desbocado, por ejemplo—, derivar la puerta del impacto lo impediria sin
+     * que nadie lo hubiera decidido.
      */
-    public function updateComplianceGoverning(ManagementActor $actor): bool
+    public function updateCustomerReserved(ManagementActor $actor): bool
     {
         return $this->update($actor) && ! $actor->isSupportActor();
     }

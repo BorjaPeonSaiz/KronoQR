@@ -69,6 +69,11 @@ return [
         'PAYROLL_EXPORT_DATE_FORMAT' => 'date format in the payroll file',
         'PAYROLL_EXPORT_ENCODING' => 'payroll file encoding',
         'PAYROLL_EXPORT_HEADER_ROW' => 'payroll file header row',
+        /* The weekly email summary (RF-PR-05, task 3.12). */
+        'WEEKLY_SUMMARY_EMAIL' => 'weekly email summary to each department manager',
+        /* The kiosk update window (RF-KI-07, task 3.12). */
+        'KIOSK_UPDATE_WINDOW' => 'window in which the tablet may update (HH:MM-HH:MM, local time)',
+        'KIOSK_UPDATE_QUIET_MINUTES' => 'minutes without scans before updating the tablet',
     ],
 
 ];
